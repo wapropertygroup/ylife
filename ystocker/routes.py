@@ -820,6 +820,7 @@ def api_fed_explain():
     dates   = body.get("dates", [])
     values  = body.get("values", [])
     label   = body.get("label", chart)
+    lang    = body.get("lang", "en")
 
     if not dates or not values:
         return jsonify({"error": "No data provided"}), 400
@@ -854,7 +855,7 @@ def api_fed_explain():
     }
     description = chart_descriptions.get(chart, label)
 
-    prompt = f"""You are a macroeconomic analyst. Explain the following Federal Reserve balance sheet data to a financial market participant in 3-4 concise paragraphs.
+    prompt = f"""You are a macroeconomic analyst. Explain the following Federal Reserve balance sheet data to a financial market participant in 3-4 concise paragraphs.{"  Respond in Simplified Chinese (中文)." if lang == "zh" else ""}
 
 Chart: {description}
 Full period: {period_summary}

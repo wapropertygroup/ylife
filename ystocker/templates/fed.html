@@ -60,13 +60,33 @@
   display: none;
 }
 .explain-panel.visible { display: block; }
+.explain-thinking {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #a78bfa;
+  font-size: 12px;
+  font-style: italic;
+}
+.explain-thinking .dot {
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: #a78bfa;
+  animation: explainBounce 1.2s infinite ease-in-out;
+}
+.explain-thinking .dot:nth-child(2) { animation-delay: 0.2s; }
+.explain-thinking .dot:nth-child(3) { animation-delay: 0.4s; }
+@keyframes explainBounce {
+  0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+  40%           { transform: scale(1.0); opacity: 1.0; }
+}
 </style>
 
 <!-- ── Header ─────────────────────────────────────────────────────────── -->
 <div class="mb-6 sm:mb-8 fade-up">
   <h1 class="text-2xl sm:text-3xl font-bold grad-text mb-1" data-i18n="fed.title">Fed Balance Sheet (H.4.1)</h1>
   <p class="text-slate-400 text-sm" data-i18n="fed.subtitle">
-    Federal Reserve weekly balance-sheet data · U.S. Treasury &amp; MBS holdings, total assets, reserve balances
+    Federal Reserve weekly balance-sheet data · assets, liabilities, reserve balances, reverse repos &amp; more
   </p>
   {% if cache_last_updated %}
   <p class="text-xs text-slate-600 mt-1">
@@ -109,7 +129,7 @@
   })();
 </script>
 {% else %}
-<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4 mb-6 sm:mb-8 fade-up" id="statCards">
+<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4 mb-4 sm:mb-5 fade-up" id="statCards">
   <div class="bg-slate-900 border border-slate-800 rounded-xl px-4 py-3">
     <div class="text-xs text-slate-500 mb-1" data-i18n="fed.stat_total">Total Assets</div>
     <div id="statTotal" class="text-xl font-bold text-slate-100">—</div>
@@ -142,6 +162,38 @@
     </div>
     <div id="statReserves" class="text-xl font-bold text-slate-100">—</div>
     <div id="statReservesChg" class="text-xs mt-0.5 text-slate-500">—</div>
+  </div>
+</div>
+
+<!-- Liabilities stat cards row -->
+<div class="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mb-6 sm:mb-8 fade-up" id="statCardsLiab">
+  <div class="bg-slate-900 border border-slate-800 rounded-xl px-4 py-3">
+    <div class="text-xs text-slate-500 mb-1 flex items-center gap-1">ON RRP
+      <span class="fed-tip text-slate-600 cursor-help text-[10px]" data-tip="Overnight reverse repos — cash absorbed from money-market funds; high RRP = excess liquidity parked at Fed">ⓘ</span>
+    </div>
+    <div id="statRrp" class="text-xl font-bold text-slate-100">—</div>
+    <div id="statRrpChg" class="text-xs mt-0.5 text-slate-500">—</div>
+  </div>
+  <div class="bg-slate-900 border border-slate-800 rounded-xl px-4 py-3">
+    <div class="text-xs text-slate-500 mb-1 flex items-center gap-1">Treasury Gen. Account
+      <span class="fed-tip text-slate-600 cursor-help text-[10px]" data-tip="Treasury's cash balance at the Fed (TGA). Large drawdowns inject liquidity into banking system">ⓘ</span>
+    </div>
+    <div id="statTga" class="text-xl font-bold text-slate-100">—</div>
+    <div id="statTgaChg" class="text-xs mt-0.5 text-slate-500">—</div>
+  </div>
+  <div class="bg-slate-900 border border-slate-800 rounded-xl px-4 py-3">
+    <div class="text-xs text-slate-500 mb-1 flex items-center gap-1">Currency in Circulation
+      <span class="fed-tip text-slate-600 cursor-help text-[10px]" data-tip="Physical currency outstanding — largest Fed liability. Grows slowly with economy">ⓘ</span>
+    </div>
+    <div id="statCurrency" class="text-xl font-bold text-slate-100">—</div>
+    <div id="statCurrencyChg" class="text-xs mt-0.5 text-slate-500">—</div>
+  </div>
+  <div class="bg-slate-900 border border-slate-800 rounded-xl px-4 py-3">
+    <div class="text-xs text-slate-500 mb-1 flex items-center gap-1">Fed Loans (incl. BTFP)
+      <span class="fed-tip text-slate-600 cursor-help text-[10px]" data-tip="Emergency loans from Federal Reserve Banks — spiked during SVB crisis (Bank Term Funding Program)">ⓘ</span>
+    </div>
+    <div id="statLoans" class="text-xl font-bold text-slate-100">—</div>
+    <div id="statLoansChg" class="text-xs mt-0.5 text-slate-500">—</div>
   </div>
 </div>
 
@@ -259,6 +311,56 @@
     <div id="pctExplainPanel" class="explain-panel"></div>
   </div>
 
+  <!-- Liabilities: ON RRP + TGA -->
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up">
+    <div class="flex flex-wrap items-start justify-between gap-2 mb-4">
+      <div>
+        <h2 class="text-base font-semibold text-slate-200">Fed Liabilities: ON RRP &amp; Treasury General Account</h2>
+        <p class="text-xs text-slate-500">Key drains on reserve liquidity — overnight reverse repos (money-market parking) and Treasury's cash balance at the Fed</p>
+      </div>
+      <div id="liabRangeSelector" class="flex flex-wrap gap-1 text-xs">
+        <button class="range-btn" data-range="52">1Y</button>
+        <button class="range-btn" data-range="104">2Y</button>
+        <button class="range-btn active" data-range="156">3Y</button>
+        <button class="range-btn" data-range="260">5Y</button>
+        <button class="range-btn" data-range="0">All</button>
+        <button class="explain-btn" onclick="explainChart('liab')">✦ Explain</button>
+      </div>
+    </div>
+    <div id="liabLoading" class="flex items-center justify-center h-48 text-slate-500 text-sm animate-pulse">
+      Loading liability data…
+    </div>
+    <div class="chart-container" style="height:260px; display:none" id="liabChartWrap">
+      <canvas id="liabChart"></canvas>
+    </div>
+    <div id="liabExplainPanel" class="explain-panel"></div>
+  </div>
+
+  <!-- Currency in Circulation + Fed Loans (BTFP) -->
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up">
+    <div class="flex flex-wrap items-start justify-between gap-2 mb-4">
+      <div>
+        <h2 class="text-base font-semibold text-slate-200">Currency in Circulation &amp; Fed Emergency Loans</h2>
+        <p class="text-xs text-slate-500">Physical currency outstanding (largest Fed liability) alongside emergency lending — BTFP spike visible post-SVB 2023</p>
+      </div>
+      <div id="currLoanRangeSelector" class="flex flex-wrap gap-1 text-xs">
+        <button class="range-btn" data-range="52">1Y</button>
+        <button class="range-btn" data-range="104">2Y</button>
+        <button class="range-btn active" data-range="156">3Y</button>
+        <button class="range-btn" data-range="260">5Y</button>
+        <button class="range-btn" data-range="0">All</button>
+        <button class="explain-btn" onclick="explainChart('currLoan')">✦ Explain</button>
+      </div>
+    </div>
+    <div id="currLoanLoading" class="flex items-center justify-center h-48 text-slate-500 text-sm animate-pulse">
+      Loading currency &amp; loans data…
+    </div>
+    <div class="chart-container" style="height:260px; display:none" id="currLoanChartWrap">
+      <canvas id="currLoanChart"></canvas>
+    </div>
+    <div id="currLoanExplainPanel" class="explain-panel"></div>
+  </div>
+
 </div>
 
 <!-- Error display -->
@@ -326,11 +428,15 @@
 
   // ── fill stat cards
   [
-    ['WALCL',   'statTotal',    'statTotalChg'],
-    ['TREAST',  'statTreasury', 'statTreasuryChg'],
-    ['WSHOSHO', 'statBills',    'statBillsChg'],
-    ['MBST',    'statMbs',      'statMbsChg'],
-    ['WRESBAL', 'statReserves', 'statReservesChg'],
+    ['WALCL',     'statTotal',    'statTotalChg'],
+    ['TREAST',    'statTreasury', 'statTreasuryChg'],
+    ['WSHOSHO',   'statBills',    'statBillsChg'],
+    ['MBST',      'statMbs',      'statMbsChg'],
+    ['WRESBAL',   'statReserves', 'statReservesChg'],
+    ['RRPONTSYD', 'statRrp',      'statRrpChg'],
+    ['WTREGEN',   'statTga',      'statTgaChg'],
+    ['WCURCIR',   'statCurrency', 'statCurrencyChg'],
+    ['WLCFLPCL',  'statLoans',    'statLoansChg'],
   ].forEach(([sid, valId, chgId]) => {
     const v = lastVal(sid);
     const p = prevVal(sid);
@@ -710,6 +816,161 @@
       pctChart.update();
     });
   }
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // Liabilities chart: ON RRP + Treasury General Account (TGA)
+  // ──────────────────────────────────────────────────────────────────────────
+  if ((s['RRPONTSYD'] && s['RRPONTSYD'].dates.length) || (s['WTREGEN'] && s['WTREGEN'].dates.length)) {
+    document.getElementById('liabLoading').style.display = 'none';
+    document.getElementById('liabChartWrap').style.display = 'block';
+
+    function buildLiabData(n) {
+      return {
+        rrp: sliceSeries('RRPONTSYD', n),
+        tga: sliceSeries('WTREGEN',   n),
+      };
+    }
+
+    let LIAB_N = 156;
+    let ld = buildLiabData(LIAB_N);
+
+    // Use longer series for labels (TGA goes further back)
+    const liabLabels = ld.tga.dates.length >= ld.rrp.dates.length ? ld.tga.dates : ld.rrp.dates;
+    registerExplainData('liab', liabLabels, ld.tga.values, 'Fed Liabilities: ON RRP & Treasury General Account (TGA)');
+
+    const liabChart = new Chart(document.getElementById('liabChart'), {
+      type: 'line',
+      data: {
+        labels: liabLabels,
+        datasets: [
+          {
+            label: 'ON RRP ($B)',
+            data: ld.rrp.values,
+            borderColor: '#fb7185', backgroundColor: 'rgba(251,113,133,0.07)',
+            borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, fill: true, tension: 0.3, spanGaps: true,
+          },
+          {
+            label: 'TGA ($B)',
+            data: ld.tga.values,
+            borderColor: '#facc15', backgroundColor: 'transparent',
+            borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 4, fill: false, tension: 0.3, spanGaps: true,
+            borderDash: [4, 3],
+          },
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { display: true, labels: { color: '#94a3b8', boxWidth: 12, font: {size: 11} } },
+          tooltip: {
+            mode: 'index', intersect: false,
+            callbacks: {
+              label: c => {
+                const v = c.raw;
+                if (v == null) return '';
+                const fmt = v >= 1000 ? '$'+(v/1000).toFixed(2)+'T' : '$'+v.toFixed(1)+'B';
+                return ` ${c.dataset.label.replace(' ($B)', '')}: ${fmt}`;
+              }
+            }
+          }
+        },
+        scales: {
+          x: { grid:{color:gridCol}, ticks:{color:tickCol, maxTicksLimit:8, maxRotation:0} },
+          y: { grid:{color:gridCol}, ticks:{color:tickCol, callback: v => v >= 1000 ? '$'+(v/1000).toFixed(1)+'T' : '$'+v+'B'} }
+        },
+        interaction: { mode:'index', intersect:false },
+      }
+    });
+
+    wireRangeSelector('liabRangeSelector', n => {
+      const d = buildLiabData(n);
+      const labels = d.tga.dates.length >= d.rrp.dates.length ? d.tga.dates : d.rrp.dates;
+      liabChart.data.labels = labels;
+      liabChart.data.datasets[0].data = d.rrp.values;
+      liabChart.data.datasets[1].data = d.tga.values;
+      liabChart.update();
+    });
+  }
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // Currency in Circulation + Fed Loans (BTFP)
+  // ──────────────────────────────────────────────────────────────────────────
+  if ((s['WCURCIR'] && s['WCURCIR'].dates.length) || (s['WLCFLPCL'] && s['WLCFLPCL'].dates.length)) {
+    document.getElementById('currLoanLoading').style.display = 'none';
+    document.getElementById('currLoanChartWrap').style.display = 'block';
+
+    function buildCurrLoanData(n) {
+      return {
+        cur:  sliceSeries('WCURCIR',  n),
+        loan: sliceSeries('WLCFLPCL', n),
+      };
+    }
+
+    let CL_N = 156;
+    let cld = buildCurrLoanData(CL_N);
+    registerExplainData('currLoan', cld.cur.dates, cld.cur.values, 'Currency in Circulation & Fed Emergency Loans (incl. BTFP)');
+
+    const currLoanChart = new Chart(document.getElementById('currLoanChart'), {
+      type: 'line',
+      data: {
+        labels: cld.cur.dates,
+        datasets: [
+          {
+            label: 'Currency in Circulation ($B)',
+            data: cld.cur.values,
+            borderColor: '#94a3b8', backgroundColor: 'rgba(148,163,184,0.06)',
+            borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, fill: true, tension: 0.3, spanGaps: true,
+            yAxisID: 'yCur',
+          },
+          {
+            label: 'Fed Loans incl. BTFP ($B)',
+            data: cld.loan.values,
+            borderColor: '#f97316', backgroundColor: 'transparent',
+            borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 4, fill: false, tension: 0.3, spanGaps: true,
+            yAxisID: 'yLoan',
+          },
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { display: true, labels: { color: '#94a3b8', boxWidth: 12, font: {size: 11} } },
+          tooltip: {
+            mode: 'index', intersect: false,
+            callbacks: {
+              label: c => {
+                const v = c.raw;
+                if (v == null) return '';
+                const fmt = v >= 1000 ? '$'+(v/1000).toFixed(2)+'T' : '$'+v.toFixed(1)+'B';
+                return ` ${c.dataset.label.replace(' ($B)', '')}: ${fmt}`;
+              }
+            }
+          }
+        },
+        scales: {
+          x: { grid:{color:gridCol}, ticks:{color:tickCol, maxTicksLimit:8, maxRotation:0} },
+          yCur: {
+            type: 'linear', position: 'left',
+            grid:{color:gridCol}, ticks:{color:'#94a3b8', callback: v => v >= 1000 ? '$'+(v/1000).toFixed(1)+'T' : '$'+v+'B'}
+          },
+          yLoan: {
+            type: 'linear', position: 'right',
+            grid:{drawOnChartArea:false}, ticks:{color:'#f97316', callback: v => '$'+v+'B'}
+          },
+        },
+        interaction: { mode:'index', intersect:false },
+      }
+    });
+
+    wireRangeSelector('currLoanRangeSelector', n => {
+      const d = buildCurrLoanData(n);
+      currLoanChart.data.labels = d.cur.dates;
+      currLoanChart.data.datasets[0].data = d.cur.values;
+      currLoanChart.data.datasets[1].data = d.loan.values;
+      currLoanChart.update();
+    });
+  }
+
 })();
 
 // ── AI Explain ────────────────────────────────────────────────────────────
@@ -738,40 +999,49 @@ function explainChart(chart) {
   }
 
   panel.classList.add('visible');
-  panel.textContent = '';
+  panel.innerHTML = '';
 
-  // Spinner while streaming starts
-  const spinner = document.createElement('span');
-  spinner.textContent = '✦ ';
-  spinner.className = 'animate-pulse text-violet-400';
-  panel.appendChild(spinner);
+  // Thinking indicator — stays until first text chunk arrives
+  const thinking = document.createElement('span');
+  thinking.className = 'explain-thinking';
+  const lang = I18n.getLang();
+  thinking.innerHTML = `<span>${lang === 'zh' ? 'AI 分析中' : 'Thinking'}</span>`
+    + `<span class="dot"></span><span class="dot"></span><span class="dot"></span>`;
+  panel.appendChild(thinking);
 
-  if (btn) btn.disabled = true;
+  if (btn) {
+    btn.disabled = true;
+    btn.dataset.origText = btn.textContent;
+    btn.textContent = lang === 'zh' ? '⏳ 分析中…' : '⏳ Thinking…';
+  }
 
   fetch('/api/fed/explain', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chart, dates: d.dates, values: d.values, label: d.label }),
+    body: JSON.stringify({ chart, dates: d.dates, values: d.values, label: d.label, lang }),
   }).then(resp => {
     if (!resp.ok) return resp.json().then(e => { throw new Error(e.error || resp.statusText); });
-    panel.textContent = '';
+    let firstChunk = true;
     const reader = resp.body.getReader();
     const decoder = new TextDecoder();
     let buf = '';
     function pump() {
       reader.read().then(({ done, value }) => {
-        if (done) { if (btn) btn.disabled = false; return; }
+        if (done) { _explainDone(btn); return; }
         buf += decoder.decode(value, { stream: true });
         const lines = buf.split('\n');
         buf = lines.pop();
         for (const line of lines) {
           if (!line.startsWith('data: ')) continue;
           const payload = line.slice(6).trim();
-          if (payload === '[DONE]') { if (btn) btn.disabled = false; return; }
+          if (payload === '[DONE]') { _explainDone(btn); return; }
           try {
             const obj = JSON.parse(payload);
-            if (obj.error) { panel.textContent = '⚠ ' + obj.error; return; }
-            if (obj.text)  { panel.appendChild(document.createTextNode(obj.text)); }
+            if (obj.error) { panel.textContent = '⚠ ' + obj.error; _explainDone(btn); return; }
+            if (obj.text) {
+              if (firstChunk) { panel.innerHTML = ''; firstChunk = false; }
+              panel.appendChild(document.createTextNode(obj.text));
+            }
           } catch {}
         }
         pump();
@@ -780,8 +1050,14 @@ function explainChart(chart) {
     pump();
   }).catch(err => {
     panel.textContent = '⚠ ' + err.message;
-    if (btn) btn.disabled = false;
+    _explainDone(btn);
   });
+}
+
+function _explainDone(btn) {
+  if (!btn) return;
+  btn.disabled = false;
+  btn.textContent = btn.dataset.origText || (I18n.t('fed.explain') || '✦ Explain');
 }
 
 // ── Stat card tooltips ────────────────────────────────────────────────────
@@ -798,7 +1074,7 @@ function explainChart(chart) {
   document.querySelectorAll('.fed-tip').forEach(el => {
     el.addEventListener('mouseenter', function(e) {
       clearTimeout(hide);
-      tip.textContent = I18n.t(this.dataset.i18nTip) || this.dataset.i18nTip;
+      tip.textContent = (this.dataset.i18nTip ? I18n.t(this.dataset.i18nTip) : null) || this.dataset.tip || this.dataset.i18nTip;
       tip.style.opacity = '1';
       move(e);
     });
