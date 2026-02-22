@@ -33,6 +33,14 @@ def create_app() -> Flask:
     """Create and configure the Flask application."""
     import datetime
 
+    # Load .env from the project root so secrets like GEMINI_API_KEY are
+    # available even when the server is started outside an interactive shell.
+    try:
+        from dotenv import load_dotenv
+        load_dotenv()
+    except ImportError:
+        pass
+
     app = Flask(__name__)
     app.secret_key = "ystocker-dev-secret"  # needed for flash messages
 

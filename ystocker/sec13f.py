@@ -467,14 +467,32 @@ def _annotate_changes(curr: List[dict], prev: List[dict]) -> List[dict]:
             h["change_pct"] = None
         else:
             prev_shares = prev_map[cusip]
-            delta = h["shares"] - prev_shares
-            h["change_pct"] = round(delta / prev_shares * 100, 1) if prev_shares else None
-            if delta > 0:
-                h["change"] = "increased"
-            elif delta < 0:
-                h["change"] = "reduced"
+            curr_shares = h["shares"]
+            delta = curr_shares - prev_shares
+            if prev_shares:
+                pct = delta / prev_shares * 100
+                # If the percentage is implausibly large (e.g. due to share-count
+                # unit changes between filings or sub-advisor restructuring), treat
+                # the position as effectively new rather than showing a misleading number.
+                if abs(pct) > 10000:
+                    h["change"] = "new"
+                    h["change_pct"] = None
+                else:
+                    h["change_pct"] = round(pct, 1)
+                    if delta > 0:
+                        h["change"] = "increased"
+                    elif delta < 0:
+                        h["change"] = "reduced"
+                    else:
+                        h["change"] = "unchanged"
             else:
-                h["change"] = "unchanged"
+                h["change_pct"] = None
+                if delta > 0:
+                    h["change"] = "increased"
+                elif delta < 0:
+                    h["change"] = "reduced"
+                else:
+                    h["change"] = "unchanged"
     return curr
 
 

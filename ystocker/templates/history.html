@@ -156,14 +156,14 @@
     <div class="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-0 sm:justify-between mb-4">
       <div>
         <h2 class="text-base font-semibold text-slate-200" data-i18n="history.fwdpe_title">Forward PE — 52 Weeks</h2>
-        <p class="text-xs text-slate-500" data-i18n="history.fwdpe_desc">TTM PE history vs current Forward PE estimate</p>
+        <p class="text-xs text-slate-500" data-i18n="history.fwdpe_desc">Price ÷ consensus forward EPS — forward valuation multiple over time</p>
       </div>
       <div class="flex items-center gap-2 flex-wrap justify-end">
         <span class="flex items-center gap-1.5 text-xs text-slate-400">
-          <span class="inline-block w-3 h-0.5 bg-brand"></span> <span data-i18n="history.pe_legend">PE (TTM)</span>
+          <span class="inline-block w-3 h-0.5" style="background:#a78bfa"></span> <span data-i18n="history.fwdpe_legend">Forward PE</span>
         </span>
         <span class="flex items-center gap-1.5 text-xs text-slate-400 mr-1">
-          <span class="inline-block w-3 h-0.5 border-dashed border border-violet-400"></span> <span data-i18n="history.fwdpe_legend">Forward PE</span>
+          <span class="inline-block w-3 h-0.5 border-dashed border border-amber-400"></span> <span data-i18n="history.current_fwdpe_legend">Current Fwd PE</span>
         </span>
         <div class="flex gap-1" id="fwdPeRangeBtns">
           <button class="range-btn" data-chart="fwdpe" data-period="1mo">1M</button>
@@ -303,6 +303,21 @@
 
 <!-- ── News panel ────────────────────────────────────────────────────── -->
 <div id="panelNews" style="display:none">
+
+  <!-- Timeline scrubber -->
+  <div id="newsTimeline" class="relative mb-5" style="display:none">
+    <div class="flex items-center gap-2 mb-2">
+      <span class="text-xs text-slate-500 font-medium" data-i18n="history.news_timeline">Timeline</span>
+      <div class="flex-1 h-px bg-slate-800"></div>
+    </div>
+    <!-- Scrollable day-segment bar -->
+    <div id="timelineBar"
+         class="flex gap-1 overflow-x-auto pb-1"
+         style="scrollbar-width:thin; scrollbar-color:#334155 transparent">
+    </div>
+  </div>
+
+  <!-- Status + refresh -->
   <div class="flex items-center justify-between mb-4">
     <div id="newsStatus" class="text-slate-500 text-sm animate-pulse" data-i18n="history.news_loading">Fetching news…</div>
     <button onclick="loadNews(true)"
@@ -310,6 +325,7 @@
                    hover:text-slate-200 hover:border-slate-500 transition px-2.5 py-1 rounded-lg"
             data-i18n="history.news_refresh">↻ Refresh</button>
   </div>
+
   <div id="newsFeed" class="space-y-3"></div>
 </div>
 
@@ -599,31 +615,20 @@ function _buildConfig(key, d, staticData) {
   if (key === 'fwdpe') {
     return {
       type: 'line',
-      data: { labels: d.dates, datasets: [{ label:'PE (TTM)', data:d.pe_history,
-        borderColor:'#6366f1', backgroundColor:'rgba(99,102,241,0.08)',
+      data: { labels: d.dates, datasets: [{ label:'Forward PE', data:d.fwd_pe_history,
+        borderColor:'#a78bfa', backgroundColor:'rgba(167,139,250,0.08)',
         borderWidth:2, pointRadius:0, pointHoverRadius:5, fill:true, tension:0.3, spanGaps:true }] },
       options: {
         responsive:true, maintainAspectRatio:false,
-        plugins:{ legend:{display:false}, tooltip:{mode:'index',intersect:false, callbacks:{label:c=>` PE: ${c.raw?.toFixed(1)}x`}} },
+        plugins:{ legend:{display:false}, tooltip:{mode:'index',intersect:false, callbacks:{label:c=>` Fwd PE: ${c.raw?.toFixed(1)}x`}} },
         scales:{ x:{grid:{color:gridCol},ticks:{color:tickCol,maxTicksLimit:8,maxRotation:0}}, y:{grid:{color:gridCol},ticks:{color:tickCol,callback:v=>v+'x'}} },
         interaction:{mode:'index',intersect:false},
       },
       plugins: [{
         afterDraw(chart) {
           const {ctx:c,chartArea:a,scales:{y}} = chart;
-          // Forward PE reference line
-          const fpe = staticData.forward_pe;
-          if (fpe != null) {
-            const fy = y.getPixelForValue(fpe);
-            if (fy >= a.top && fy <= a.bottom) {
-              c.save(); c.strokeStyle='#a78bfa88'; c.lineWidth=1.5; c.setLineDash([5,4]);
-              c.beginPath(); c.moveTo(a.left,fy); c.lineTo(a.right,fy); c.stroke();
-              c.fillStyle='#a78bfa'; c.font='11px Inter,sans-serif';
-              c.fillText('Fwd PE '+fpe.toFixed(1)+'x', a.left+6, fy-5); c.restore();
-            }
-          }
-          // Average TTM PE line
-          const vals = d.pe_history.filter(v => v != null);
+          // Average Forward PE line
+          const vals = d.fwd_pe_history.filter(v => v != null);
           if (vals.length) {
             const avg = vals.reduce((s,v) => s+v, 0) / vals.length;
             const ay = y.getPixelForValue(avg);
@@ -634,9 +639,18 @@ function _buildConfig(key, d, staticData) {
               c.fillText('Avg '+avg.toFixed(1)+'x', a.left+6, ay+12); c.restore();
             }
           }
+          // Current forward PE reference line
+          const fpe = staticData.forward_pe;
+          if (fpe == null) return;
+          const fy = y.getPixelForValue(fpe);
+          if (fy < a.top || fy > a.bottom) return;
+          c.save(); c.strokeStyle='#f59e0b88'; c.lineWidth=1.5; c.setLineDash([5,4]);
+          c.beginPath(); c.moveTo(a.left,fy); c.lineTo(a.right,fy); c.stroke();
+          c.fillStyle='#f59e0b'; c.font='11px Inter,sans-serif';
+          c.fillText('Current Fwd PE '+fpe.toFixed(1)+'x', a.left+6, fy-5); c.restore();
         }
       }],
-      _title: 'Forward PE', _desc: 'TTM PE history vs current Forward PE estimate',
+      _title: 'Forward PE', _desc: 'Price ÷ consensus forward EPS — shows how the forward valuation multiple has moved',
     };
   }
 }
@@ -783,6 +797,7 @@ function switchTab(tab) {
 // ── News feed ─────────────────────────────────────────────────────────────────
 async function loadNews(force) {
   if (!force && _newsLoaded) return;
+  if (force) _newsLoaded = false;
   const statusEl = document.getElementById('newsStatus');
   const feedEl   = document.getElementById('newsFeed');
   statusEl.textContent = I18n.t('history.news_loading') || 'Fetching news…';
@@ -790,7 +805,7 @@ async function loadNews(force) {
 
   let data;
   try {
-    const url = `/api/news/${encodeURIComponent(TICKER)}` + (force ? `?_=${Date.now()}` : '');
+    const url = `/api/news/${encodeURIComponent(TICKER)}` + (force ? `?force=1` : '');
     const resp = await fetch(url);
     data = await resp.json();
     if (!resp.ok) throw new Error(data.error || 'Failed');
@@ -807,12 +822,79 @@ async function loadNews(force) {
     statusEl.textContent = I18n.t('history.news_empty') || 'No news found.';
     statusEl.className   = 'text-slate-500 text-sm';
     feedEl.innerHTML = '';
+    document.getElementById('newsTimeline').style.display = 'none';
     return;
   }
 
   statusEl.textContent = `${articles.length} articles`;
   statusEl.className   = 'text-slate-500 text-sm';
-  feedEl.innerHTML = articles.map(a => _renderArticle(a)).join('');
+
+  // ── Build article IDs and render feed ──────────────────────────────────────
+  feedEl.innerHTML = articles.map((a, i) => _renderArticle(a, i)).join('');
+
+  // ── Build timeline scrubber ────────────────────────────────────────────────
+  _buildTimeline(articles);
+}
+
+function _buildTimeline(articles) {
+  // Group article indices by calendar date label
+  const groups = [];  // [{label, dateStr, indices:[]}]
+  const byDate  = {};
+  articles.forEach((a, i) => {
+    const label = _dateLabel(a.published);
+    if (!byDate[label]) { byDate[label] = { label, indices: [] }; groups.push(byDate[label]); }
+    byDate[label].indices.push(i);
+  });
+
+  const bar = document.getElementById('timelineBar');
+  bar.innerHTML = '';
+
+  // Compute relative widths: more articles on a day = wider segment
+  const maxCount = Math.max(...groups.map(g => g.indices.length));
+
+  groups.forEach((g, gi) => {
+    const btn = document.createElement('button');
+    // Width proportional to article count, min 40px
+    const pct  = Math.max(40, Math.round(g.indices.length / maxCount * 120));
+    btn.id = `tlBtn-${gi}`;
+    btn.style.cssText = `min-width:${pct}px; flex-shrink:0`;
+    btn.className = 'tl-seg relative flex flex-col items-center gap-0.5 px-2 py-1.5 rounded-lg border ' +
+      'border-slate-700 bg-slate-800/60 hover:border-slate-500 hover:bg-slate-700/60 transition text-left cursor-pointer';
+    btn.innerHTML =
+      `<span class="text-[10px] font-semibold text-slate-300 whitespace-nowrap">${_escHtml(g.label)}</span>` +
+      `<span class="text-[9px] text-slate-500">${g.indices.length} art.</span>` +
+      // Mini bar showing count
+      `<div class="w-full mt-0.5 h-1 rounded-full bg-slate-700 overflow-hidden">` +
+        `<div class="h-full rounded-full bg-indigo-500/70" style="width:${Math.round(g.indices.length / maxCount * 100)}%"></div>` +
+      `</div>`;
+
+    btn.addEventListener('click', () => {
+      // Scroll to first article in this group
+      const el = document.getElementById(`newsItem-${g.indices[0]}`);
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      // Highlight active segment
+      document.querySelectorAll('.tl-seg').forEach(b => {
+        b.classList.toggle('border-indigo-500', b === btn);
+        b.classList.toggle('bg-indigo-900/30', b === btn);
+        b.classList.toggle('border-slate-700', b !== btn);
+        b.classList.toggle('bg-slate-800/60',  b !== btn);
+      });
+    });
+
+    bar.appendChild(btn);
+  });
+
+  document.getElementById('newsTimeline').style.display = 'block';
+}
+
+function _dateLabel(ts) {
+  if (!ts) return '—';
+  const d = new Date(ts * 1000);
+  const now = new Date();
+  const diffDays = Math.floor((now - d) / 86400000);
+  if (diffDays === 0) return 'Today';
+  if (diffDays === 1) return 'Yesterday';
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
 function _timeAgo(ts) {
@@ -824,7 +906,7 @@ function _timeAgo(ts) {
   return Math.floor(diff / 86400) + (I18n.t('history.news_day_ago') || 'd ago');
 }
 
-function _renderArticle(a) {
+function _renderArticle(a, idx) {
   const importantBadge = a.important
     ? `<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold
                    bg-amber-900/50 text-amber-300 border border-amber-800 ml-1 align-middle">${I18n.t('history.news_important') || 'Important'}</span>`
@@ -837,7 +919,7 @@ function _renderArticle(a) {
   const meta = [a.publisher, timeAgo].filter(Boolean).join(' · ');
 
   return `
-<a href="${_escAttr(a.link)}" target="_blank" rel="noopener noreferrer"
+<a id="newsItem-${idx}" href="${_escAttr(a.link)}" target="_blank" rel="noopener noreferrer"
    class="flex gap-3 items-start bg-slate-900 border ${a.important ? 'border-amber-800/60' : 'border-slate-800'}
           rounded-xl p-3 sm:p-4 hover:border-slate-600 hover:bg-slate-800/60 transition group">
   ${thumb}
