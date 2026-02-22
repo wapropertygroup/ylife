@@ -35,7 +35,14 @@ Parameters:
   DomainName:
     Type: String
     Default: "stock.li-family.us"
-    Description: Domain name for the app (used for nginx server_name and Let's Encrypt SSL)
+    Description: Primary domain name for the app (used for nginx server_name and Let's Encrypt SSL)
+
+  DomainName2:
+    Type: String
+    Default: ""
+    Description: >
+      Optional second domain name (e.g. an alias or www. variant).
+      Leave blank to skip. Added to nginx server_name and the certbot certificate.
 
   CertEmail:
     Type: String
@@ -304,7 +311,9 @@ Resources:
             {
               echo 'server {'
               echo '    listen 80;'
-              echo "    server_name ${DomainName};"
+              DOMAIN2_PART=""
+              [ -n "${DomainName2}" ] && DOMAIN2_PART=" ${DomainName2}"
+              echo "    server_name ${DomainName}$DOMAIN2_PART;"
               echo ''
               echo '    location / {'
               echo "        proxy_pass         http://127.0.0.1:${AppPort};"
@@ -338,15 +347,18 @@ Resources:
 
             if [ -n "${DomainName}" ]; then
               MY_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)
-              echo "Waiting for DNS: ${DomainName} -> $MY_IP"
-              for i in $(seq 1 20); do
-                RESOLVED=$(dig +short ${DomainName} | tail -1)
-                if [ "$RESOLVED" = "$MY_IP" ]; then
-                  echo "DNS resolved correctly after $i attempts."
-                  break
-                fi
-                echo "  attempt $i: resolved to '$RESOLVED', expected '$MY_IP' — waiting 30s..."
-                sleep 30
+              for CHECK_DOMAIN in ${DomainName} ${DomainName2}; do
+                [ -z "$CHECK_DOMAIN" ] && continue
+                echo "Waiting for DNS: $CHECK_DOMAIN -> $MY_IP"
+                for i in $(seq 1 20); do
+                  RESOLVED=$(dig +short $CHECK_DOMAIN | tail -1)
+                  if [ "$RESOLVED" = "$MY_IP" ]; then
+                    echo "DNS resolved correctly after $i attempts."
+                    break
+                  fi
+                  echo "  attempt $i: resolved to '$RESOLVED', expected '$MY_IP' — waiting 30s..."
+                  sleep 30
+                done
               done
 
               EMAIL_FLAG=""
@@ -360,6 +372,7 @@ Resources:
                       --agree-tos \
                       $EMAIL_FLAG \
                       -d ${DomainName} \
+                      $([ -n "${DomainName2}" ] && echo "-d ${DomainName2}") \
                       --redirect || echo "Certbot failed - check /var/log/letsencrypt/letsencrypt.log"
             fi
 
@@ -389,7 +402,7 @@ Outputs:
       Name: !Sub "${AWS::StackName}-PublicIP"
 
   AppURL:
-    Description: yStocker app URL
+    Description: yStocker app URL (primary domain)
     Value: !Sub "https://${DomainName}/"
 
   AppURLFallback:

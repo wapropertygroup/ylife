@@ -2,6 +2,42 @@
 {% block title %}yStocker — {{ ticker }} PE History{% endblock %}
 
 {% block content %}
+<style>
+  .range-btn {
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 1;
+    padding: 3px 7px;
+    border-radius: 5px;
+    border: 1px solid #334155;
+    background: transparent;
+    color: #64748b;
+    cursor: pointer;
+    transition: color 0.15s, background 0.15s, border-color 0.15s;
+  }
+  .range-btn:hover {
+    color: #cbd5e1;
+    border-color: #475569;
+    background: #1e293b;
+  }
+  .range-btn.active {
+    color: #a5b4fc;
+    border-color: #6366f1;
+    background: rgba(99,102,241,0.15);
+  }
+  .expand-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 3px;
+    border: none;
+    background: transparent;
+    color: #475569;
+    cursor: pointer;
+    transition: color 0.15s;
+  }
+  .expand-btn:hover { color: #cbd5e1; }
+</style>
 
 <div class="mb-6 sm:mb-8 fade-up">
   <div class="flex items-center gap-3 mb-1">
@@ -22,7 +58,7 @@
     <span class="font-mono grad-text">{{ ticker }}</span>
     <span id="stockName" class="text-slate-400 text-lg sm:text-xl font-normal ml-2 sm:ml-3"></span>
   </h1>
-  <p class="text-slate-500 text-sm mt-1" data-i18n="history.subtitle">1-year historical PE ratio &amp; price (weekly)</p>
+  <p class="text-slate-500 text-sm mt-1" data-i18n="history.subtitle">Historical PE ratio &amp; price</p>
 </div>
 
 <!-- ── Stat cards ───────────────────────────────────────────────────── -->
@@ -71,13 +107,24 @@
         <h2 class="text-base font-semibold text-slate-200" data-i18n="history.pe_title">PE Ratio — 52 Weeks</h2>
         <p class="text-xs text-slate-500" data-i18n="history.pe_desc">Estimated from weekly closing price ÷ TTM EPS</p>
       </div>
-      <div class="flex gap-2 text-xs">
-        <span class="flex items-center gap-1.5 text-slate-400">
+      <div class="flex items-center gap-2 flex-wrap justify-end">
+        <span class="flex items-center gap-1.5 text-xs text-slate-400">
           <span class="inline-block w-3 h-0.5 bg-brand"></span> <span data-i18n="history.pe_legend">PE (TTM)</span>
         </span>
-        <span class="flex items-center gap-1.5 text-slate-400">
+        <span class="flex items-center gap-1.5 text-xs text-slate-400 mr-1">
           <span class="inline-block w-3 h-0.5 bg-amber-400 border-dashed border"></span> <span data-i18n="history.current_pe_legend">Current PE</span>
         </span>
+        <div class="flex gap-1" id="peRangeBtns">
+          <button class="range-btn active" data-chart="pe" data-period="1mo">1M</button>
+          <button class="range-btn" data-chart="pe" data-period="3mo">3M</button>
+          <button class="range-btn" data-chart="pe" data-period="6mo">6M</button>
+          <button class="range-btn active" data-chart="pe" data-period="1y">1Y</button>
+          <button class="range-btn" data-chart="pe" data-period="2y">2Y</button>
+          <button class="range-btn" data-chart="pe" data-period="5y">5Y</button>
+        </div>
+        <button onclick="expandChart('pe')" title="Expand" class="expand-btn">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
+        </button>
       </div>
     </div>
     <div id="peLoading" class="flex items-center justify-center h-36 sm:h-48 text-slate-500 text-sm animate-pulse">
@@ -95,6 +142,36 @@
         <h2 class="text-base font-semibold text-slate-200" data-i18n="history.price_title">Price — 52 Weeks</h2>
         <p class="text-xs text-slate-500" data-i18n="history.price_desc">Weekly closing price (USD)</p>
       </div>
+      <div class="flex items-center gap-2 flex-wrap justify-end">
+        <span class="flex items-center gap-1.5 text-xs text-slate-400">
+          <span class="inline-block w-3 h-0.5 bg-sky-400"></span> Price
+        </span>
+        <span id="legendTarget" style="display:none" class="items-center gap-1.5 text-xs text-slate-400 cursor-help wall-tip"
+              data-tip="Analyst consensus 12-month price target from covering analysts.">
+          <span class="inline-block w-3 h-0.5 border-dashed border border-emerald-400"></span> Target
+        </span>
+        <span id="legendCallWall" style="display:none" class="items-center gap-1.5 text-xs text-amber-400 cursor-help wall-tip"
+              data-tip="Call Wall — the option strike with the highest total call open interest across all expirations. Acts as overhead resistance: market makers delta-hedge by selling shares as the price rises toward this level, capping near-term upside.">
+          <span class="inline-block w-3 h-0.5 border-dashed border border-amber-400"></span> Call Wall
+          <span class="text-slate-500 text-[10px] ml-0.5">ⓘ</span>
+        </span>
+        <span id="legendPutWall" style="display:none" class="items-center gap-1.5 text-xs text-rose-400 cursor-help wall-tip mr-1"
+              data-tip="Put Wall — the option strike with the highest total put open interest across all expirations. Acts as a price floor: market makers delta-hedge by buying shares as the price falls toward this level, providing near-term support.">
+          <span class="inline-block w-3 h-0.5 border-dashed border border-rose-400"></span> Put Wall
+          <span class="text-slate-500 text-[10px] ml-0.5">ⓘ</span>
+        </span>
+        <div class="flex gap-1" id="priceRangeBtns">
+          <button class="range-btn" data-chart="price" data-period="1mo">1M</button>
+          <button class="range-btn" data-chart="price" data-period="3mo">3M</button>
+          <button class="range-btn" data-chart="price" data-period="6mo">6M</button>
+          <button class="range-btn active" data-chart="price" data-period="1y">1Y</button>
+          <button class="range-btn" data-chart="price" data-period="2y">2Y</button>
+          <button class="range-btn" data-chart="price" data-period="5y">5Y</button>
+        </div>
+        <button onclick="expandChart('price')" title="Expand" class="expand-btn">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
+        </button>
+      </div>
     </div>
     <div class="chart-container" style="height:200px; display:none" id="priceChartWrap">
       <canvas id="priceHistChart"></canvas>
@@ -108,13 +185,24 @@
         <h2 class="text-base font-semibold text-slate-200" data-i18n="history.peg_title">PEG Ratio — 52 Weeks</h2>
         <p class="text-xs text-slate-500" data-i18n="history.peg_desc">Estimated from weekly PE ÷ annual earnings growth rate</p>
       </div>
-      <div class="flex gap-3 text-xs">
-        <span class="flex items-center gap-1.5 text-slate-400">
+      <div class="flex items-center gap-2 flex-wrap justify-end">
+        <span class="flex items-center gap-1.5 text-xs text-slate-400">
           <span class="inline-block w-3 h-0.5 bg-emerald-400"></span> <span data-i18n="history.peg_legend">PEG</span>
         </span>
-        <span class="flex items-center gap-1.5 text-slate-400">
+        <span class="flex items-center gap-1.5 text-xs text-slate-400 mr-1">
           <span class="inline-block w-3 h-0.5 border-dashed border border-amber-400"></span> <span data-i18n="history.peg1_legend">PEG = 1</span>
         </span>
+        <div class="flex gap-1" id="pegRangeBtns">
+          <button class="range-btn" data-chart="peg" data-period="1mo">1M</button>
+          <button class="range-btn" data-chart="peg" data-period="3mo">3M</button>
+          <button class="range-btn" data-chart="peg" data-period="6mo">6M</button>
+          <button class="range-btn active" data-chart="peg" data-period="1y">1Y</button>
+          <button class="range-btn" data-chart="peg" data-period="2y">2Y</button>
+          <button class="range-btn" data-chart="peg" data-period="5y">5Y</button>
+        </div>
+        <button onclick="expandChart('peg')" title="Expand" class="expand-btn ml-1">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
+        </button>
       </div>
     </div>
     <div class="chart-container" style="height:200px" id="pegChartWrap">
@@ -122,6 +210,24 @@
     </div>
   </div>
 
+</div>
+
+<!-- ── Expand modal ──────────────────────────────────────────────────── -->
+<div id="chartModal" class="fixed inset-0 z-50 items-center justify-center bg-black/80 backdrop-blur-sm" style="display:none">
+  <div class="relative bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-[95vw] max-w-6xl p-5 sm:p-8">
+    <div class="flex items-start justify-between mb-4">
+      <div>
+        <h3 id="modalTitle" class="text-base font-semibold text-slate-200"></h3>
+        <p id="modalDesc"  class="text-xs text-slate-500 mt-0.5"></p>
+      </div>
+      <button onclick="closeModal()" class="text-slate-500 hover:text-slate-200 transition ml-4 flex-shrink-0">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div style="height:65vh; min-height:300px; position:relative">
+      <canvas id="modalCanvas"></canvas>
+    </div>
+  </div>
 </div>
 
 <!-- Institutional Holders (13F) -->
@@ -204,38 +310,92 @@ const TICKER = {{ ticker | tojson }};
   const gridCol = '#1e293b';
   const tickCol = '#64748b';
 
+  // ── Shared plugin builder for reference lines
+  function peRefLinePlugin(getCurrentPe) {
+    return {
+      afterDraw(chart) {
+        const pe = getCurrentPe();
+        if (pe == null) return;
+        const {ctx: c, chartArea: a, scales: {y}} = chart;
+        const py = y.getPixelForValue(pe);
+        if (py < a.top || py > a.bottom) return;
+        c.save();
+        c.strokeStyle = '#f59e0b88'; c.lineWidth = 1.5; c.setLineDash([5,4]);
+        c.beginPath(); c.moveTo(a.left, py); c.lineTo(a.right, py); c.stroke();
+        c.fillStyle = '#f59e0b'; c.font = '11px Inter,sans-serif';
+        c.fillText('Current PE ' + pe.toFixed(1)+'x', a.left+6, py-5);
+        c.restore();
+      }
+    };
+  }
+  function priceRefLinePlugin() {
+    return {
+      afterDraw(chart) {
+        const {ctx: c, chartArea: a, scales: {y}} = chart;
+        function drawRefLine(price, strokeColor, labelColor, label, labelOffset) {
+          if (price == null) return;
+          const py = y.getPixelForValue(price);
+          if (py < a.top || py > a.bottom) return;
+          c.save();
+          c.strokeStyle = strokeColor; c.lineWidth = 1.5; c.setLineDash([5,4]);
+          c.beginPath(); c.moveTo(a.left, py); c.lineTo(a.right, py); c.stroke();
+          c.fillStyle = labelColor; c.font = '11px Inter,sans-serif';
+          c.fillText(label, a.left+6, py + labelOffset);
+          c.restore();
+        }
+        drawRefLine(data.target_price, '#34d39988', '#34d399', 'Target $'   + data.target_price?.toFixed(2), -5);
+        drawRefLine(data.call_wall,    '#f59e0b88', '#f59e0b', 'Call Wall $' + data.call_wall?.toFixed(2),   -5);
+        drawRefLine(data.put_wall,     '#f43f5e88', '#f43f5e', 'Put Wall $'  + data.put_wall?.toFixed(2),    12);
+      }
+    };
+  }
+  function pegRefLinePlugin() {
+    return {
+      afterDraw(chart) {
+        const {ctx: c, chartArea: a, scales: {y}} = chart;
+        [1, 2].forEach((ref, i) => {
+          const py = y.getPixelForValue(ref);
+          if (py < a.top || py > a.bottom) return;
+          c.save();
+          c.strokeStyle = i === 0 ? '#f59e0b88' : '#f43f5e66';
+          c.lineWidth = 1.5; c.setLineDash([5,4]);
+          c.beginPath(); c.moveTo(a.left, py); c.lineTo(a.right, py); c.stroke();
+          c.fillStyle = i === 0 ? '#f59e0b' : '#f43f5e';
+          c.font = '11px Inter,sans-serif';
+          c.fillText('PEG = ' + ref, a.left+6, py-5);
+          c.restore();
+        });
+      }
+    };
+  }
+
   // ── PE chart
   document.getElementById('peLoading').style.display = 'none';
   document.getElementById('peChartWrap').style.display = 'block';
 
-  const peCtx = document.getElementById('peChart');
-  new Chart(peCtx, {
+  const pePlugin = peRefLinePlugin(() => data.current_pe);
+  const peCfg = {
     type: 'line',
     data: {
       labels: data.dates,
-      datasets: [
-        {
-          label: 'PE (TTM)',
-          data: data.pe_history,
-          borderColor: '#6366f1',
-          backgroundColor: 'rgba(99,102,241,0.08)',
-          borderWidth: 2,
-          pointRadius: 0,
-          pointHoverRadius: 5,
-          fill: true,
-          tension: 0.3,
-          spanGaps: true,
-        },
-      ]
+      datasets: [{
+        label: 'PE (TTM)',
+        data: data.pe_history,
+        borderColor: '#6366f1',
+        backgroundColor: 'rgba(99,102,241,0.08)',
+        borderWidth: 2,
+        pointRadius: 0,
+        pointHoverRadius: 5,
+        fill: true,
+        tension: 0.3,
+        spanGaps: true,
+      }]
     },
     options: {
       responsive: true, maintainAspectRatio: false,
       plugins: {
         legend: { display: false },
-        tooltip: {
-          mode: 'index', intersect: false,
-          callbacks: { label: c => ` PE: ${c.raw?.toFixed(1)}x` }
-        }
+        tooltip: { mode: 'index', intersect: false, callbacks: { label: c => ` PE: ${c.raw?.toFixed(1)}x` } }
       },
       scales: {
         x: { grid:{color:gridCol}, ticks:{color:tickCol, maxTicksLimit:8, maxRotation:0} },
@@ -243,26 +403,21 @@ const TICKER = {{ ticker | tojson }};
       },
       interaction: { mode:'index', intersect:false },
     },
-    plugins: [{
-      afterDraw(chart) {
-        if (data.current_pe == null) return;
-        const {ctx: c, chartArea: a, scales: {y}} = chart;
-        const py = y.getPixelForValue(data.current_pe);
-        if (py < a.top || py > a.bottom) return;
-        c.save();
-        c.strokeStyle = '#f59e0b88'; c.lineWidth = 1.5; c.setLineDash([5,4]);
-        c.beginPath(); c.moveTo(a.left, py); c.lineTo(a.right, py); c.stroke();
-        c.fillStyle = '#f59e0b'; c.font = '11px Inter,sans-serif';
-        c.fillText('Current PE ' + data.current_pe.toFixed(1)+'x', a.left+6, py-5);
-        c.restore();
-      }
-    }]
-  });
+    plugins: [pePlugin],
+    _title: 'PE Ratio — 52 Weeks',
+    _desc:  'Estimated from weekly closing price ÷ TTM EPS',
+  };
+  _registerChart('pe', peCfg);
+  new Chart(document.getElementById('peChart'), peCfg);
 
   // ── Price chart
   document.getElementById('priceChartWrap').style.display = 'block';
-  const prCtx = document.getElementById('priceHistChart');
-  new Chart(prCtx, {
+  if (data.target_price != null) document.getElementById('legendTarget').style.display   = 'flex';
+  if (data.call_wall    != null) document.getElementById('legendCallWall').style.display = 'flex';
+  if (data.put_wall     != null) document.getElementById('legendPutWall').style.display  = 'flex';
+
+  const prPlugin = priceRefLinePlugin();
+  const prCfg = {
     type: 'line',
     data: {
       labels: data.dates,
@@ -283,10 +438,7 @@ const TICKER = {{ ticker | tojson }};
       responsive: true, maintainAspectRatio: false,
       plugins: {
         legend: { display: false },
-        tooltip: {
-          mode: 'index', intersect: false,
-          callbacks: { label: c => ` $${c.raw?.toFixed(2)}` }
-        }
+        tooltip: { mode: 'index', intersect: false, callbacks: { label: c => ` $${c.raw?.toFixed(2)}` } }
       },
       scales: {
         x: { grid:{color:gridCol}, ticks:{color:tickCol, maxTicksLimit:8, maxRotation:0} },
@@ -294,27 +446,18 @@ const TICKER = {{ ticker | tojson }};
       },
       interaction: { mode:'index', intersect:false },
     },
-    plugins: [{
-      afterDraw(chart) {
-        if (data.target_price == null) return;
-        const {ctx: c, chartArea: a, scales: {y}} = chart;
-        const py = y.getPixelForValue(data.target_price);
-        if (py < a.top || py > a.bottom) return;
-        c.save();
-        c.strokeStyle = '#34d39988'; c.lineWidth = 1.5; c.setLineDash([5,4]);
-        c.beginPath(); c.moveTo(a.left, py); c.lineTo(a.right, py); c.stroke();
-        c.fillStyle = '#34d399'; c.font = '11px Inter,sans-serif';
-        c.fillText('Target $' + data.target_price.toFixed(2), a.left+6, py-5);
-        c.restore();
-      }
-    }]
-  });
+    plugins: [prPlugin],
+    _title: 'Price — 52 Weeks',
+    _desc:  'Weekly closing price (USD)',
+  };
+  _registerChart('price', prCfg);
+  new Chart(document.getElementById('priceHistChart'), prCfg);
 
   // ── PEG history chart (only when data available)
   if (data.peg_history && data.peg_history.some(v => v != null)) {
     document.getElementById('pegHistSection').style.display = 'block';
-    const pgCtx = document.getElementById('pegHistChart');
-    new Chart(pgCtx, {
+    const pgPlugin = pegRefLinePlugin();
+    const pgCfg = {
       type: 'line',
       data: {
         labels: data.dates,
@@ -335,10 +478,7 @@ const TICKER = {{ ticker | tojson }};
         responsive: true, maintainAspectRatio: false,
         plugins: {
           legend: { display: false },
-          tooltip: {
-            mode: 'index', intersect: false,
-            callbacks: { label: c => ` PEG: ${c.raw?.toFixed(2)}` }
-          }
+          tooltip: { mode: 'index', intersect: false, callbacks: { label: c => ` PEG: ${c.raw?.toFixed(2)}` } }
         },
         scales: {
           x: { grid:{color:gridCol}, ticks:{color:tickCol, maxTicksLimit:8, maxRotation:0} },
@@ -346,24 +486,12 @@ const TICKER = {{ ticker | tojson }};
         },
         interaction: { mode:'index', intersect:false },
       },
-      plugins: [{
-        afterDraw(chart) {
-          const {ctx: c, chartArea: a, scales: {y}} = chart;
-          [1, 2].forEach((ref, i) => {
-            const py = y.getPixelForValue(ref);
-            if (py < a.top || py > a.bottom) return;
-            c.save();
-            c.strokeStyle = i === 0 ? '#f59e0b88' : '#f43f5e66';
-            c.lineWidth = 1.5; c.setLineDash([5,4]);
-            c.beginPath(); c.moveTo(a.left, py); c.lineTo(a.right, py); c.stroke();
-            c.fillStyle = i === 0 ? '#f59e0b' : '#f43f5e';
-            c.font = '11px Inter,sans-serif';
-            c.fillText('PEG = ' + ref, a.left+6, py-5);
-            c.restore();
-          });
-        }
-      }]
-    });
+      plugins: [pgPlugin],
+      _title: 'PEG Ratio — 52 Weeks',
+      _desc:  'Estimated from weekly PE ÷ annual earnings growth rate',
+    };
+    _registerChart('peg', pgCfg);
+    new Chart(document.getElementById('pegHistChart'), pgCfg);
   }
   // ── Institutional holders (13F)
   if (data.institutional_holders && data.institutional_holders.length > 0) {
@@ -408,5 +536,218 @@ const TICKER = {{ ticker | tojson }};
       </tr>`;
     }).join('');
   }
+})();
+
+// ── Range buttons + expand modal ─────────────────────────────────────────────
+const _chartConfigs   = {};   // key → latest Chart.js config object
+const _chartInstances = {};   // key → live Chart instance (for inline charts)
+const _periodCache    = {};   // period → fetched data
+let   _modalChart     = null;
+let   _modalKey       = null;
+
+function _registerChart(key, cfg, instance) {
+  _chartConfigs[key]   = cfg;
+  _chartInstances[key] = instance;
+}
+
+// Fetch + cache period data
+async function _fetchPeriod(period) {
+  if (_periodCache[period]) return _periodCache[period];
+  const resp = await fetch(`/api/history/${encodeURIComponent(TICKER)}?period=${period}`);
+  const d = await resp.json();
+  if (!resp.ok) throw new Error(d.error || 'Failed');
+  _periodCache[period] = d;
+  return d;
+}
+
+// Update active state for range buttons of a given chart key
+function _setActiveBtn(chartKey, period) {
+  document.querySelectorAll(`.range-btn[data-chart="${chartKey}"]`).forEach(b => {
+    b.classList.toggle('active', b.dataset.period === period);
+  });
+}
+
+// Build a fresh Chart.js config from fetched data for a given chart key
+function _buildConfig(key, d, staticData) {
+  const gridCol = '#1e293b', tickCol = '#64748b';
+  if (key === 'pe') {
+    return {
+      type: 'line',
+      data: { labels: d.dates, datasets: [{ label:'PE (TTM)', data:d.pe_history,
+        borderColor:'#6366f1', backgroundColor:'rgba(99,102,241,0.08)',
+        borderWidth:2, pointRadius:0, pointHoverRadius:5, fill:true, tension:0.3, spanGaps:true }] },
+      options: {
+        responsive:true, maintainAspectRatio:false,
+        plugins:{ legend:{display:false}, tooltip:{mode:'index',intersect:false, callbacks:{label:c=>` PE: ${c.raw?.toFixed(1)}x`}} },
+        scales:{ x:{grid:{color:gridCol},ticks:{color:tickCol,maxTicksLimit:8,maxRotation:0}}, y:{grid:{color:gridCol},ticks:{color:tickCol,callback:v=>v+'x'}} },
+        interaction:{mode:'index',intersect:false},
+      },
+      plugins: [{
+        afterDraw(chart) {
+          const pe = staticData.current_pe;
+          if (pe == null) return;
+          const {ctx:c,chartArea:a,scales:{y}} = chart;
+          const py = y.getPixelForValue(pe);
+          if (py < a.top || py > a.bottom) return;
+          c.save(); c.strokeStyle='#f59e0b88'; c.lineWidth=1.5; c.setLineDash([5,4]);
+          c.beginPath(); c.moveTo(a.left,py); c.lineTo(a.right,py); c.stroke();
+          c.fillStyle='#f59e0b'; c.font='11px Inter,sans-serif';
+          c.fillText('Current PE '+pe.toFixed(1)+'x', a.left+6, py-5); c.restore();
+        }
+      }],
+      _title: 'PE Ratio', _desc: 'Estimated from closing price ÷ TTM EPS',
+    };
+  }
+  if (key === 'price') {
+    return {
+      type: 'line',
+      data: { labels: d.dates, datasets: [{ label:'Price', data:d.prices,
+        borderColor:'#38bdf8', backgroundColor:'rgba(56,189,248,0.07)',
+        borderWidth:2, pointRadius:0, pointHoverRadius:5, fill:true, tension:0.3, spanGaps:true }] },
+      options: {
+        responsive:true, maintainAspectRatio:false,
+        plugins:{ legend:{display:false}, tooltip:{mode:'index',intersect:false, callbacks:{label:c=>` $${c.raw?.toFixed(2)}`}} },
+        scales:{ x:{grid:{color:gridCol},ticks:{color:tickCol,maxTicksLimit:8,maxRotation:0}}, y:{grid:{color:gridCol},ticks:{color:tickCol,callback:v=>'$'+v}} },
+        interaction:{mode:'index',intersect:false},
+      },
+      plugins: [{
+        afterDraw(chart) {
+          const {ctx:c,chartArea:a,scales:{y}} = chart;
+          function drawRef(price, sc, lc, label, off) {
+            if (price == null) return;
+            const py = y.getPixelForValue(price);
+            if (py < a.top || py > a.bottom) return;
+            c.save(); c.strokeStyle=sc; c.lineWidth=1.5; c.setLineDash([5,4]);
+            c.beginPath(); c.moveTo(a.left,py); c.lineTo(a.right,py); c.stroke();
+            c.fillStyle=lc; c.font='11px Inter,sans-serif';
+            c.fillText(label, a.left+6, py+off); c.restore();
+          }
+          drawRef(staticData.target_price,'#34d39988','#34d399','Target $'+staticData.target_price?.toFixed(2),-5);
+          drawRef(staticData.call_wall,   '#f59e0b88','#f59e0b','Call Wall $'+staticData.call_wall?.toFixed(2),-5);
+          drawRef(staticData.put_wall,    '#f43f5e88','#f43f5e','Put Wall $'+staticData.put_wall?.toFixed(2),12);
+        }
+      }],
+      _title: 'Price', _desc: 'Closing price (USD)',
+    };
+  }
+  if (key === 'peg') {
+    return {
+      type: 'line',
+      data: { labels: d.dates, datasets: [{ label:'PEG', data:d.peg_history,
+        borderColor:'#34d399', backgroundColor:'rgba(52,211,153,0.07)',
+        borderWidth:2, pointRadius:0, pointHoverRadius:5, fill:true, tension:0.3, spanGaps:true }] },
+      options: {
+        responsive:true, maintainAspectRatio:false,
+        plugins:{ legend:{display:false}, tooltip:{mode:'index',intersect:false, callbacks:{label:c=>` PEG: ${c.raw?.toFixed(2)}`}} },
+        scales:{ x:{grid:{color:gridCol},ticks:{color:tickCol,maxTicksLimit:8,maxRotation:0}}, y:{grid:{color:gridCol},ticks:{color:tickCol,callback:v=>v.toFixed(1)}} },
+        interaction:{mode:'index',intersect:false},
+      },
+      plugins: [{
+        afterDraw(chart) {
+          const {ctx:c,chartArea:a,scales:{y}} = chart;
+          [1,2].forEach((ref,i) => {
+            const py = y.getPixelForValue(ref);
+            if (py < a.top || py > a.bottom) return;
+            c.save(); c.strokeStyle=i===0?'#f59e0b88':'#f43f5e66'; c.lineWidth=1.5; c.setLineDash([5,4]);
+            c.beginPath(); c.moveTo(a.left,py); c.lineTo(a.right,py); c.stroke();
+            c.fillStyle=i===0?'#f59e0b':'#f43f5e'; c.font='11px Inter,sans-serif';
+            c.fillText('PEG = '+ref, a.left+6, py-5); c.restore();
+          });
+        }
+      }],
+      _title: 'PEG Ratio', _desc: 'Estimated from PE ÷ annual earnings growth rate',
+    };
+  }
+}
+
+// Handle a range button click: fetch data, rebuild inline chart
+async function _handleRange(chartKey, period, staticData) {
+  _setActiveBtn(chartKey, period);
+  let d;
+  try { d = await _fetchPeriod(period); } catch(e) { return; }
+
+  const canvasId = { pe:'peChart', price:'priceHistChart', peg:'pegHistChart' }[chartKey];
+  if (_chartInstances[chartKey]) { _chartInstances[chartKey].destroy(); }
+  const cfg = _buildConfig(chartKey, d, staticData);
+  _chartConfigs[chartKey] = cfg;
+  _chartInstances[chartKey] = new Chart(document.getElementById(canvasId), cfg);
+
+  // If modal is open for this chart, refresh it too
+  if (_modalKey === chartKey && document.getElementById('chartModal').style.display !== 'none') {
+    _renderModal(chartKey, d, staticData);
+  }
+}
+
+function _renderModal(key, d, staticData) {
+  if (_modalChart) { _modalChart.destroy(); _modalChart = null; }
+  const cfg = _buildConfig(key, d, staticData);
+  _modalChart = new Chart(document.getElementById('modalCanvas'), cfg);
+}
+
+function expandChart(key) {
+  const cfg = _chartConfigs[key];
+  if (!cfg) return;
+  _modalKey = key;
+  const modal = document.getElementById('chartModal');
+  document.getElementById('modalTitle').textContent = cfg._title || '';
+  document.getElementById('modalDesc').textContent  = cfg._desc  || '';
+  modal.style.display = 'flex';
+  if (_modalChart) { _modalChart.destroy(); _modalChart = null; }
+  const plugins = cfg.plugins;
+  const clone = JSON.parse(JSON.stringify(cfg, (k, v) => k.startsWith('_') ? undefined : v));
+  if (plugins) clone.plugins = plugins;
+  _modalChart = new Chart(document.getElementById('modalCanvas'), clone);
+}
+
+function closeModal() {
+  document.getElementById('chartModal').style.display = 'none';
+  if (_modalChart) { _modalChart.destroy(); _modalChart = null; }
+  _modalKey = null;
+}
+
+document.getElementById('chartModal').addEventListener('click', function(e) {
+  if (e.target === this) closeModal();
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+// ── Wall tooltip ─────────────────────────────────────────────────────────────
+(function() {
+  const tip = document.createElement('div');
+  tip.id = 'wallTip';
+  tip.style.cssText = [
+    'position:fixed','z-index:9999','max-width:280px','padding:8px 12px',
+    'background:#0f172a','border:1px solid #334155','border-radius:8px',
+    'color:#cbd5e1','font-size:12px','line-height:1.5','pointer-events:none',
+    'opacity:0','transition:opacity 0.15s','box-shadow:0 4px 16px rgba(0,0,0,0.5)',
+  ].join(';');
+  document.body.appendChild(tip);
+
+  let hideTimer;
+  document.querySelectorAll('.wall-tip').forEach(el => {
+    el.addEventListener('mouseenter', function(e) {
+      clearTimeout(hideTimer);
+      tip.textContent = this.dataset.tip;
+      tip.style.opacity = '1';
+      positionTip(e);
+    });
+    el.addEventListener('mousemove', positionTip);
+    el.addEventListener('mouseleave', () => {
+      hideTimer = setTimeout(() => { tip.style.opacity = '0'; }, 100);
+    });
+  });
+
+  function positionTip(e) {
+    const pad = 12;
+    let x = e.clientX + pad;
+    let y = e.clientY + pad;
+    // keep inside viewport
+    const tw = tip.offsetWidth  || 280;
+    const th = tip.offsetHeight || 60;
+    if (x + tw > window.innerWidth  - pad) x = e.clientX - tw - pad;
+    if (y + th > window.innerHeight - pad) y = e.clientY - th - pad;
+    tip.style.left = x + 'px';
+    tip.style.top  = y + 'px';
+  }
+})();
 </script>
 {% endblock %}

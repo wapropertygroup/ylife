@@ -461,6 +461,10 @@ def _invalidate_cache():
 # Historical PE page
 # ---------------------------------------------------------------------------
 
+_HISTORY_CACHE: Dict[tuple, dict] = {}
+_HISTORY_CACHE_LOCK = threading.Lock()
+_HISTORY_CACHE_TTL = 60 * 60   # 1 hour
+
 def _get_institutional_holders(ticker: str) -> list:
     """Return list of funds (from 13F cache) that hold this ticker."""
     try:
@@ -507,14 +511,31 @@ def api_history(ticker: str):
     because yfinance does not expose historical EPS directly.
     The ttmEPS stays constant so PE tracks price movement -
     useful for visualising valuation vs price trend.
+
+    Query params:
+      period: 1mo | 3mo | 6mo | 1y | 2y | 5y  (default: 1y)
     """
     import yfinance as yf
+    from flask import request as flask_request
     ticker = ticker.strip().upper()
-    log.info("API history: %s", ticker)
+    VALID_PERIODS = {"1mo", "3mo", "6mo", "1y", "2y", "5y"}
+    period = flask_request.args.get("period", "1y")
+    if period not in VALID_PERIODS:
+        period = "1y"
+    interval = "1d" if period in ("1mo", "3mo") else "1wk"
+    log.info("API history: %s period=%s", ticker, period)
+
+    cache_key = (ticker, period)
+    with _HISTORY_CACHE_LOCK:
+        entry = _HISTORY_CACHE.get(cache_key)
+        if entry and time.time() - entry["ts"] < _HISTORY_CACHE_TTL:
+            log.debug("History cache hit: %s period=%s", ticker, period)
+            return jsonify(entry["data"])
+
     try:
         tk   = yf.Ticker(ticker)
         info = tk.info
-        hist = tk.history(period="1y", interval="1wk")
+        hist = tk.history(period=period, interval=interval)
     except Exception as exc:
         return jsonify({"error": str(exc)}), 502
 
@@ -552,7 +573,29 @@ def api_history(ticker: str):
     earnings_growth_ttm = info.get("earningsGrowth")
     earnings_growth_q   = info.get("earningsQuarterlyGrowth")
 
-    return jsonify({
+    # Options walls: strike with highest aggregate open interest across all expirations
+    call_wall = None
+    put_wall  = None
+    try:
+        expirations = tk.options  # tuple of expiration date strings
+        call_oi: dict[float, int] = {}
+        put_oi:  dict[float, int] = {}
+        for exp in expirations:
+            chain = tk.option_chain(exp)
+            for _, row in chain.calls[["strike", "openInterest"]].dropna().iterrows():
+                s, oi = float(row["strike"]), int(row["openInterest"])
+                call_oi[s] = call_oi.get(s, 0) + oi
+            for _, row in chain.puts[["strike", "openInterest"]].dropna().iterrows():
+                s, oi = float(row["strike"]), int(row["openInterest"])
+                put_oi[s] = put_oi.get(s, 0) + oi
+        if call_oi:
+            call_wall = max(call_oi, key=call_oi.__getitem__)
+        if put_oi:
+            put_wall  = max(put_oi,  key=put_oi.__getitem__)
+    except Exception:
+        log.warning("Could not fetch options walls for %s", ticker)
+
+    result = {
         "ticker":           ticker,
         "name":             name,
         "dates":            dates,
@@ -567,7 +610,12 @@ def api_history(ticker: str):
         "eps_growth_ttm":   _safe(round(earnings_growth_ttm * 100, 1)) if earnings_growth_ttm is not None else None,
         "eps_growth_q":     _safe(round(earnings_growth_q   * 100, 1)) if earnings_growth_q   is not None else None,
         "institutional_holders": _get_institutional_holders(ticker),
-    })
+        "call_wall":        _safe(call_wall),
+        "put_wall":         _safe(put_wall),
+    }
+    with _HISTORY_CACHE_LOCK:
+        _HISTORY_CACHE[cache_key] = {"ts": time.time(), "data": result}
+    return jsonify(result)
 
 
 # ---------------------------------------------------------------------------
@@ -697,6 +745,43 @@ def api_discover():
 @bp.route("/contact")
 def contact():
     return render_template("contact.html", peer_groups=list(PEER_GROUPS.keys()))
+
+
+# ---------------------------------------------------------------------------
+# Federal Reserve H.4.1 balance-sheet page
+# ---------------------------------------------------------------------------
+
+@bp.route("/fed")
+def fed():
+    """Page showing Federal Reserve balance-sheet (H.4.1) data."""
+    log.info("GET /fed")
+    from ystocker.fed import get_cache_ts, is_cache_fresh, is_warming as fed_warming_fn, SERIES
+    return render_template(
+        "fed.html",
+        peer_groups=list(PEER_GROUPS.keys()),
+        series_meta=SERIES,
+        cache_last_updated=get_cache_ts(),
+        cache_fresh=is_cache_fresh(),
+        warming=fed_warming_fn(),
+    )
+
+
+@bp.route("/fed/refresh")
+def fed_refresh():
+    """Kick off a background re-fetch of Fed H.4.1 data."""
+    from ystocker.fed import refresh_cache
+    threading.Thread(target=refresh_cache, daemon=True, name="fed-manual-refresh").start()
+    return redirect(url_for("main.fed"))
+
+
+@bp.route("/api/fed")
+def api_fed():
+    """JSON API — return Fed H.4.1 balance-sheet time-series data."""
+    from ystocker.fed import get_fed_data
+    data = get_fed_data()
+    # Strip internal _ts key from response
+    resp = {k: v for k, v in data.items() if not k.startswith("_")}
+    return jsonify(resp)
 
 
 # ---------------------------------------------------------------------------
