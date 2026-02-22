@@ -330,10 +330,25 @@ Resources:
             systemctl start ystocker
             systemctl start nginx
 
-            # -- Let's Encrypt SSL certificate (requires DNS to point to this IP)
+            # -- Let's Encrypt SSL certificate
+            # Wait for DNS to resolve to this instance's public IP before running certbot.
+            # The Elastic IP is assigned after the instance starts, and DNS may take
+            # a few minutes to propagate — retry for up to 10 minutes.
             dnf install -y python3-certbot-nginx || dnf install -y certbot python3-certbot-nginx || true
 
             if [ -n "${DomainName}" ]; then
+              MY_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)
+              echo "Waiting for DNS: ${DomainName} -> $MY_IP"
+              for i in $(seq 1 20); do
+                RESOLVED=$(dig +short ${DomainName} | tail -1)
+                if [ "$RESOLVED" = "$MY_IP" ]; then
+                  echo "DNS resolved correctly after $i attempts."
+                  break
+                fi
+                echo "  attempt $i: resolved to '$RESOLVED', expected '$MY_IP' — waiting 30s..."
+                sleep 30
+              done
+
               EMAIL_FLAG=""
               if [ -n "${CertEmail}" ]; then
                 EMAIL_FLAG="--email ${CertEmail}"
@@ -345,7 +360,7 @@ Resources:
                       --agree-tos \
                       $EMAIL_FLAG \
                       -d ${DomainName} \
-                      --redirect || echo "Certbot failed - DNS may not be pointing to this IP yet. Run manually later."
+                      --redirect || echo "Certbot failed - check /var/log/letsencrypt/letsencrypt.log"
             fi
 
             echo "yStocker bootstrap complete."
