@@ -1,0 +1,323 @@
+{% extends "base.html" %}
+{% block title %}yStocker — {{ sector_name }}{% endblock %}
+
+{% block content %}
+
+<!-- ── Header ────────────────────────────────────────────────────────── -->
+<div class="mb-8 fade-up">
+  <div class="flex items-center gap-3 mb-1">
+    <a href="{{ url_for('main.index') }}" class="text-slate-500 hover:text-slate-300 text-sm transition">← Dashboard</a>
+    <span class="text-slate-700">/</span>
+    <span class="text-slate-300 text-sm font-medium">{{ sector_name }}</span>
+  </div>
+  <h1 class="text-3xl font-bold grad-text">{{ sector_name }}</h1>
+  <p class="text-slate-400 mt-1 text-sm">Valuation analysis for this peer group</p>
+</div>
+
+<!-- ── Tab nav ───────────────────────────────────────────────────────── -->
+{% set has_upside = namespace(v=false) %}
+{% set has_peg    = namespace(v=false) %}
+{% set has_price  = namespace(v=false) %}
+{% for ticker, row in table.iterrows() %}
+  {% if row.get('Upside (%)') is not none and row.get('Upside (%)') == row.get('Upside (%)') %}{% set has_upside.v = true %}{% endif %}
+  {% if row.get('PEG') is not none and row.get('PEG') == row.get('PEG') %}{% set has_peg.v = true %}{% endif %}
+  {% if row.get('Target Price') is not none and row.get('Target Price') == row.get('Target Price') %}{% set has_price.v = true %}{% endif %}
+{% endfor %}
+
+<div x-data="{ tab: 'pe' }" class="fade-up">
+
+  <div class="flex gap-1 mb-6 bg-slate-900 border border-slate-800 rounded-xl p-1 w-fit flex-wrap">
+    <button @click="tab='pe'"
+            :class="tab==='pe' ? 'bg-brand text-white shadow' : 'text-slate-400 hover:text-slate-200'"
+            class="px-4 py-1.5 rounded-lg text-sm font-medium transition-all">
+      PE & PEG
+    </button>
+    {% if has_price.v %}
+    <button @click="tab='prices'"
+            :class="tab==='prices' ? 'bg-brand text-white shadow' : 'text-slate-400 hover:text-slate-200'"
+            class="px-4 py-1.5 rounded-lg text-sm font-medium transition-all">
+      Prices
+    </button>
+    {% endif %}
+    {% if has_upside.v %}
+    <button @click="tab='upside'"
+            :class="tab==='upside' ? 'bg-brand text-white shadow' : 'text-slate-400 hover:text-slate-200'"
+            class="px-4 py-1.5 rounded-lg text-sm font-medium transition-all">
+      Upside
+    </button>
+    {% endif %}
+    {% if has_peg.v %}
+    <button @click="tab='peg'"
+            :class="tab==='peg' ? 'bg-brand text-white shadow' : 'text-slate-400 hover:text-slate-200'"
+            class="px-4 py-1.5 rounded-lg text-sm font-medium transition-all">
+      PEG Map
+    </button>
+    {% endif %}
+    <button @click="tab='table'"
+            :class="tab==='table' ? 'bg-brand text-white shadow' : 'text-slate-400 hover:text-slate-200'"
+            class="px-4 py-1.5 rounded-lg text-sm font-medium transition-all">
+      Data Table
+    </button>
+  </div>
+
+  <!-- PE & PEG grouped bars -->
+  <div x-show="tab==='pe'" x-transition class="bg-slate-900 border border-slate-800 rounded-2xl p-6 mb-6">
+    <h2 class="text-base font-semibold text-slate-200 mb-1">PE Ratios (TTM &amp; Forward) + PEG</h2>
+    <p class="text-xs text-slate-500 mb-4">Left axis: PE ratios. Right axis (green bars): PEG ratio. Dashed line = PEG 1.0.</p>
+    <div class="chart-container" style="height:320px"><canvas id="pePegChart"></canvas></div>
+  </div>
+
+  <!-- Price vs Target -->
+  <div x-show="tab==='prices'" x-transition class="bg-slate-900 border border-slate-800 rounded-2xl p-6 mb-6">
+    <h2 class="text-base font-semibold text-slate-200 mb-1">Current Price vs Analyst 12-month Target</h2>
+    <p class="text-xs text-slate-500 mb-4">Bars = current price. Diamond markers = analyst consensus target.</p>
+    <div class="chart-container" style="height:320px"><canvas id="priceChart"></canvas></div>
+  </div>
+
+  <!-- Upside -->
+  <div x-show="tab==='upside'" x-transition class="bg-slate-900 border border-slate-800 rounded-2xl p-6 mb-6">
+    <h2 class="text-base font-semibold text-slate-200 mb-1">Implied Analyst Upside (%)</h2>
+    <p class="text-xs text-slate-500 mb-4">Implied return if stock reaches the analyst consensus 12-month target.</p>
+    <div class="chart-container" style="height:320px"><canvas id="upsideChart"></canvas></div>
+  </div>
+
+  <!-- PEG valuation map -->
+  <div x-show="tab==='peg'" x-transition class="bg-slate-900 border border-slate-800 rounded-2xl p-6 mb-6">
+    <h2 class="text-base font-semibold text-slate-200 mb-1">PEG Valuation Map</h2>
+    <p class="text-xs text-slate-500 mb-4">
+      PEG = PE ÷ EPS growth rate. &nbsp;
+      <span class="text-emerald-400">■</span> &lt;1 undervalued &nbsp;
+      <span class="text-amber-400">■</span> 1–2 moderate &nbsp;
+      <span class="text-rose-400">■</span> &gt;2 expensive
+    </p>
+    <div class="chart-container" style="height:320px"><canvas id="pegChart"></canvas></div>
+  </div>
+
+  <!-- Data Table -->
+  <div x-show="tab==='table'" x-transition class="bg-slate-900 border border-slate-800 rounded-2xl p-6 mb-6">
+    <h2 class="text-base font-semibold text-slate-200 mb-4">Data Table</h2>
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="text-xs text-slate-500 border-b border-slate-800">
+            <th class="text-left py-2 px-3 font-medium">Ticker</th>
+            {% for col in table_cols %}
+            <th class="text-right py-2 px-3 font-medium whitespace-nowrap">{{ col }}</th>
+            {% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for ticker, row in table.iterrows() %}
+          <tr class="border-b border-slate-800/60 transition">
+            <td class="py-2.5 px-3">
+              <a href="{{ url_for('main.history', ticker=ticker) }}"
+                 class="font-mono font-bold text-brand hover:underline">{{ ticker }}</a>
+            </td>
+            {% for col in table_cols %}
+              {% set val = row[col] %}
+              {% if val is none or val != val %}
+                <td class="py-2.5 px-3 text-right text-slate-600">—</td>
+              {% elif col == "Name" %}
+                <td class="py-2.5 px-3 text-right text-slate-400 text-xs max-w-[160px] truncate">{{ val }}</td>
+              {% elif col == "Current Price" or col == "Target Price" %}
+                <td class="py-2.5 px-3 text-right font-mono">${{ "%.2f"|format(val) }}</td>
+              {% elif col == "Upside (%)" %}
+                <td class="py-2.5 px-3 text-right font-semibold {{ 'text-emerald-400' if val >= 0 else 'text-rose-400' }}">
+                  {{ "%.1f"|format(val) }}%
+                </td>
+              {% elif col in ["PE (TTM)", "PE (Forward)"] %}
+                <td class="py-2.5 px-3 text-right font-mono">{{ "%.1f"|format(val) }}x</td>
+              {% elif col == "PEG" %}
+                <td class="py-2.5 px-3 text-right font-semibold
+                  {{ 'text-emerald-400' if val < 1 else ('text-amber-400' if val < 2 else 'text-rose-400') }}">
+                  {{ "%.2f"|format(val) }}
+                </td>
+              {% elif col == "Market Cap ($B)" %}
+                <td class="py-2.5 px-3 text-right font-mono">${{ "%.1f"|format(val) }}B</td>
+              {% else %}
+                <td class="py-2.5 px-3 text-right">{{ val }}</td>
+              {% endif %}
+            {% endfor %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div><!-- end x-data -->
+
+<script>
+const DATA = {{ chartdata | safe }};
+
+const labels  = DATA.map(d => d.ticker);
+const gridCol = '#1e293b';
+const tickCol = '#64748b';
+
+// Shared click-to-history plugin for every chart in this page
+function tickerClickPlugin(getLabels) {
+  return {
+    afterEvent(chart, args) {
+      const el = chart.getElementsAtEventForMode(args.event.native, 'nearest', {intersect:true}, false);
+      chart.canvas.style.cursor = el.length ? 'pointer' : 'default';
+    }
+  };
+}
+function tickerOnClick(getLabels) {
+  return function(e, elements) {
+    if (!elements.length) return;
+    const ticker = getLabels()[elements[0].index];
+    if (ticker) window.location.href = `/history/${encodeURIComponent(ticker)}`;
+  };
+}
+
+const chartDefaults = {
+  responsive: true, maintainAspectRatio: false,
+  plugins: { legend: { labels: { color: '#94a3b8', font: { size: 11 } } } },
+};
+
+// ── PE + PEG grouped bars (dual axis)
+(function(){
+  const ctx = document.getElementById('pePegChart');
+  new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: 'PE (TTM)',    data: DATA.map(d=>d.pe_ttm),  backgroundColor: '#6366f1cc', borderRadius: 4, yAxisID: 'yPE' },
+        { label: 'PE (Fwd)',   data: DATA.map(d=>d.pe_fwd),   backgroundColor: '#38bdf8cc', borderRadius: 4, yAxisID: 'yPE' },
+        { label: 'PEG',        data: DATA.map(d=>d.peg),      backgroundColor: '#34d399cc', borderRadius: 4, yAxisID: 'yPEG' },
+      ]
+    },
+    options: {
+      ...chartDefaults,
+      onClick: tickerOnClick(() => labels),
+      scales: {
+        yPE:  { position:'left',  grid:{color:gridCol}, ticks:{color:tickCol}, title:{display:true,text:'PE Ratio',color:tickCol} },
+        yPEG: { position:'right', grid:{display:false},  ticks:{color:'#34d399'}, title:{display:true,text:'PEG',color:'#34d399'} },
+        x:    { grid:{display:false}, ticks:{color:tickCol} }
+      },
+      plugins: {
+        ...chartDefaults.plugins,
+        annotation: {},
+      }
+    },
+    plugins: [tickerClickPlugin(), {
+      afterDraw(chart) {
+        const {ctx:c, chartArea:a, scales:{yPEG}} = chart;
+        if (!yPEG) return;
+        const y1 = yPEG.getPixelForValue(1);
+        if (y1 > a.top && y1 < a.bottom) {
+          c.save(); c.strokeStyle='#34d39966'; c.lineWidth=1.5; c.setLineDash([5,4]);
+          c.beginPath(); c.moveTo(a.left, y1); c.lineTo(a.right, y1); c.stroke();
+          c.fillStyle='#34d399'; c.font='10px Inter'; c.fillText('PEG = 1', a.right-50, y1-4);
+          c.restore();
+        }
+      }
+    }]
+  });
+})();
+
+// ── Price vs Target
+(function(){
+  const ctx = document.getElementById('priceChart');
+  new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label:'Current Price', data: DATA.map(d=>d.price),  backgroundColor:'#6366f1cc', borderRadius:4 },
+        { label:'Target Price',  data: DATA.map(d=>d.target), backgroundColor:'#f59e0b44',
+          borderColor:'#f59e0b', borderWidth:2, borderRadius:4 },
+      ]
+    },
+    options: {
+      ...chartDefaults,
+      onClick: tickerOnClick(() => labels),
+      scales: {
+        x: { grid:{display:false}, ticks:{color:tickCol} },
+        y: { grid:{color:gridCol}, ticks:{color:tickCol,callback:v=>'$'+v} }
+      }
+    },
+    plugins: [tickerClickPlugin()]
+  });
+})();
+
+// ── Upside horizontal bar
+(function(){
+  const ctx = document.getElementById('upsideChart');
+  const sorted = [...DATA].filter(d=>d.upside!=null).sort((a,b)=>a.upside-b.upside);
+  new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: sorted.map(d=>d.ticker),
+      datasets: [{
+        label: 'Upside %',
+        data: sorted.map(d=>d.upside),
+        backgroundColor: sorted.map(d => d.upside >= 0 ? '#34d399cc' : '#f43f5ecc'),
+        borderRadius: 4,
+      }]
+    },
+    options: {
+      ...chartDefaults,
+      indexAxis: 'y',
+      onClick: tickerOnClick(() => sorted.map(d=>d.ticker)),
+      plugins: { legend:{display:false}, tooltip:{callbacks:{label:c=>` ${c.raw?.toFixed(1)}%`}} },
+      scales: {
+        x: { grid:{color:gridCol}, ticks:{color:tickCol,callback:v=>v+'%'} },
+        y: { grid:{display:false}, ticks:{color:'#94a3b8'} }
+      }
+    },
+    plugins: [tickerClickPlugin(), {
+      afterDraw(chart){
+        const {ctx:c,chartArea:a,scales:{x}} = chart;
+        const z = x.getPixelForValue(0);
+        if(z>a.left&&z<a.right){ c.save();c.strokeStyle='#475569';c.lineWidth=1;c.beginPath();c.moveTo(z,a.top);c.lineTo(z,a.bottom);c.stroke();c.restore(); }
+      }
+    }]
+  });
+})();
+
+// ── PEG map horizontal bar
+(function(){
+  const ctx = document.getElementById('pegChart');
+  const sorted = [...DATA].filter(d=>d.peg!=null).sort((a,b)=>a.peg-b.peg);
+  new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: sorted.map(d=>d.ticker),
+      datasets: [{
+        label:'PEG',
+        data: sorted.map(d=>d.peg),
+        backgroundColor: sorted.map(d => d.peg<1?'#34d399cc':d.peg<2?'#f59e0bcc':'#f43f5ecc'),
+        borderRadius: 4,
+      }]
+    },
+    options: {
+      ...chartDefaults,
+      indexAxis:'y',
+      onClick: tickerOnClick(() => sorted.map(d=>d.ticker)),
+      plugins: { legend:{display:false}, tooltip:{callbacks:{label:c=>` PEG: ${c.raw?.toFixed(2)}`}} },
+      scales: {
+        x: { grid:{color:gridCol}, ticks:{color:tickCol} },
+        y: { grid:{display:false}, ticks:{color:'#94a3b8'} }
+      }
+    },
+    plugins: [tickerClickPlugin(), {
+      afterDraw(chart){
+        const {ctx:c,chartArea:a,scales:{x}} = chart;
+        [1,2].forEach(v=>{
+          const px = x.getPixelForValue(v);
+          if(px>a.left&&px<a.right){
+            c.save();c.strokeStyle='#47556966';c.lineWidth=1;c.setLineDash([4,3]);
+            c.beginPath();c.moveTo(px,a.top);c.lineTo(px,a.bottom);c.stroke();
+            c.fillStyle='#64748b';c.font='10px Inter';c.fillText('PEG='+v,px+3,a.top+12);
+            c.restore();
+          }
+        });
+      }
+    }]
+  });
+})();
+</script>
+{% endblock %}

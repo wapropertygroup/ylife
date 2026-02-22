@@ -1,0 +1,345 @@
+{% extends "base.html" %}
+{% block title %}yStocker — Ticker Lookup{% endblock %}
+
+{% block content %}
+
+<div class="mb-8 fade-up">
+  <h1 class="text-3xl font-bold grad-text mb-1">Ticker Lookup</h1>
+  <p class="text-slate-400 text-sm">Search any stock symbol for instant valuation metrics, or discover tickers by sector.</p>
+</div>
+
+<div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+
+  <!-- ── Left: Search ─────────────────────────────────────────────────── -->
+  <div class="space-y-6">
+
+    <!-- Search box -->
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 fade-up">
+      <h2 class="text-base font-semibold text-slate-200 mb-4">Search a Ticker</h2>
+      <div class="flex gap-3">
+        <input id="tickerInput" type="text" placeholder="e.g. AAPL, WMT, TSM …"
+               maxlength="12" autocomplete="off" spellcheck="false"
+               class="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5
+                      text-slate-100 font-mono uppercase placeholder:normal-case placeholder:text-slate-500
+                      focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent transition">
+        <button onclick="lookupTicker()"
+                class="px-5 py-2.5 bg-brand hover:bg-brand-dark text-white rounded-xl font-medium text-sm transition">
+          Look up
+        </button>
+      </div>
+      <div id="lookupResult" class="mt-4"></div>
+    </div>
+
+    <!-- Discover by sector -->
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 fade-up"
+         x-data="discoverPanel()">
+      <h2 class="text-base font-semibold text-slate-200 mb-1">Discover by Sector / Industry</h2>
+      <p class="text-xs text-slate-500 mb-4">Browse top companies from Yahoo Finance (or built-in list). Click a chip to look it up.</p>
+
+      <div class="flex gap-3 mb-4 flex-wrap">
+
+        <!-- Custom type selector -->
+        <div class="relative" @click.outside="typeOpen=false">
+          <button @click="typeOpen=!typeOpen"
+                  class="flex items-center gap-2 bg-slate-800 border border-slate-700 rounded-xl
+                         px-3 py-2.5 text-slate-300 text-sm font-medium hover:border-brand/60 transition
+                         focus:outline-none focus:ring-2 focus:ring-brand min-w-[110px]">
+            <span x-text="typeLabel"></span>
+            <svg class="w-3.5 h-3.5 ml-auto transition-transform" :class="typeOpen && 'rotate-180'"
+                 fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+          </button>
+          <div x-show="typeOpen" x-transition
+               class="absolute left-0 top-full mt-1 z-30 bg-slate-900 border border-slate-700
+                      rounded-xl shadow-xl shadow-black/40 py-1 min-w-[130px]">
+            <button @click="setType('sector','Sector')"
+                    class="w-full text-left px-4 py-2 text-sm text-slate-300 hover:text-white hover:bg-slate-800 transition flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full bg-brand/70 inline-block" x-show="typeVal==='sector'"></span>
+              <span :class="typeVal==='sector' ? 'pl-0' : 'pl-4'">Sector</span>
+            </button>
+            <button @click="setType('industry','Industry')"
+                    class="w-full text-left px-4 py-2 text-sm text-slate-300 hover:text-white hover:bg-slate-800 transition flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full bg-brand/70 inline-block" x-show="typeVal==='industry'"></span>
+              <span :class="typeVal==='industry' ? 'pl-0' : 'pl-4'">Industry</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Suggestion-aware text input -->
+        <div class="relative flex-1" @click.outside="sugOpen=false">
+          <input id="discoverName" type="text" autocomplete="off" spellcheck="false"
+                 x-model="query"
+                 @focus="sugOpen=filteredSugs.length>0"
+                 @input="sugOpen=filteredSugs.length>0"
+                 @keydown.enter.prevent="runDiscover"
+                 @keydown.escape="sugOpen=false"
+                 @keydown.arrow-down.prevent="moveSug(1)"
+                 @keydown.arrow-up.prevent="moveSug(-1)"
+                 placeholder="technology, semiconductors, biotech …"
+                 class="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5
+                        text-slate-100 placeholder:text-slate-500 text-sm
+                        focus:outline-none focus:ring-2 focus:ring-brand transition">
+          <!-- Dropdown suggestions -->
+          <div x-show="sugOpen && filteredSugs.length"
+               class="absolute left-0 top-full mt-1 w-full z-30 bg-slate-900 border border-slate-700
+                      rounded-xl shadow-xl shadow-black/50 py-1 max-h-52 overflow-y-auto">
+            <template x-for="(s, i) in filteredSugs" :key="s">
+              <button @mousedown.prevent="pickSug(s)"
+                      class="w-full text-left px-4 py-2 text-sm transition"
+                      :class="i===sugIdx
+                        ? 'bg-brand/20 text-white'
+                        : 'text-slate-300 hover:bg-slate-800 hover:text-white'">
+                <span class="font-medium" x-text="highlight(s)"></span>
+              </button>
+            </template>
+          </div>
+        </div>
+
+        <button @click="runDiscover"
+                class="px-5 py-2.5 bg-slate-700 hover:bg-brand text-slate-200 hover:text-white
+                       rounded-xl text-sm font-medium transition shrink-0">
+          Discover
+        </button>
+      </div>
+
+      <div id="discoverResult"></div>
+    </div>
+
+  </div>
+
+  <!-- ── Right: Result card ────────────────────────────────────────────── -->
+  <div id="resultPanel" class="fade-up" style="display:none">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden h-full">
+
+      <!-- Card header -->
+      <div class="bg-gradient-to-r from-brand/30 to-slate-800 px-6 py-4 flex items-center gap-4">
+        <div>
+          <a id="cardSymbol" href="#"
+             class="font-mono font-bold text-2xl text-white hover:underline block"></a>
+          <div id="cardName" class="text-slate-400 text-sm"></div>
+        </div>
+        <div class="ml-auto text-right">
+          <div id="cardPrice" class="text-2xl font-bold text-white"></div>
+          <div id="cardUpside" class="text-sm font-semibold"></div>
+        </div>
+      </div>
+
+      <!-- Metrics grid -->
+      <div class="grid grid-cols-2 gap-px bg-slate-800 border-b border-slate-800">
+        {% for id, label in [('cardCap','Market Cap'),('cardTarget','Target Price'),
+                             ('cardPeTtm','PE (TTM)'),('cardPeFwd','PE (Forward)'),
+                             ('cardPeg','PEG Ratio'),('cardSector','')] %}
+        <div class="bg-slate-900 px-5 py-3">
+          <div class="text-xs text-slate-500 mb-1">{{ label }}</div>
+          <div id="{{ id }}" class="font-semibold text-slate-100"></div>
+        </div>
+        {% endfor %}
+      </div>
+
+      <!-- Mini bar chart -->
+      <div class="p-5">
+        <p class="text-xs text-slate-500 mb-3">PE comparison</p>
+        <div style="height:120px"><canvas id="miniChart"></canvas></div>
+      </div>
+
+      <!-- Add to group -->
+      <div class="px-5 pb-5 flex items-center gap-3 flex-wrap">
+        <span class="text-xs text-slate-500">Add to group:</span>
+        <form method="post" action="{{ url_for('main.add_ticker') }}" class="flex gap-2">
+          <input type="hidden" name="ticker" id="addTickerInput">
+          <select name="group_name"
+                  class="bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-slate-300 focus:outline-none">
+            {% for g in peer_groups %}<option value="{{ g }}">{{ g }}</option>{% endfor %}
+          </select>
+          <button type="submit"
+                  class="px-4 py-1.5 bg-brand hover:bg-brand-dark text-white rounded-lg text-sm font-medium transition">
+            + Add
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Add-to-group sticky banner (mobile) -->
+<div id="addToGroupPanel" class="fixed bottom-0 left-0 right-0 z-50 hidden
+     bg-slate-900/95 backdrop-blur border-t border-slate-700 px-4 py-3 flex items-center gap-3 flex-wrap">
+  <strong id="addBannerTicker" class="font-mono text-brand"></strong>
+  <span class="text-slate-400 text-sm">→ add to group:</span>
+  <form method="post" action="{{ url_for('main.add_ticker') }}" class="flex gap-2">
+    <input type="hidden" name="ticker" id="addBannerInput">
+    <select name="group_name"
+            class="bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-slate-300">
+      {% for g in peer_groups %}<option value="{{ g }}">{{ g }}</option>{% endfor %}
+    </select>
+    <button type="submit"
+            class="px-4 py-1.5 bg-brand text-white rounded-lg text-sm font-medium">+ Add</button>
+  </form>
+  <button onclick="document.getElementById('addToGroupPanel').classList.add('hidden')"
+          class="ml-auto text-slate-500 hover:text-slate-300 text-sm">✕</button>
+</div>
+
+<script>
+let miniChartInstance = null;
+
+// ── helpers
+function fmtPrice(v){ return v==null ? '—' : '$'+v.toFixed(2); }
+function fmtPct(v){
+  if(v==null) return '—';
+  return (v>=0?'+':'')+v.toFixed(1)+'%';
+}
+function fmtPeg(v){
+  if(v==null) return '—';
+  return v.toFixed(2) + (v<1?' ✓ cheap':v<2?' fair':' rich');
+}
+
+// ── Single ticker lookup
+async function lookupTicker(symbolOverride) {
+  const input  = document.getElementById('tickerInput');
+  const ticker = (symbolOverride || input.value).trim().toUpperCase();
+  if (!ticker) return;
+  if (!symbolOverride) input.value = ticker;
+
+  const resultEl = document.getElementById('lookupResult');
+  resultEl.innerHTML = '<p class="text-slate-500 text-sm animate-pulse">Fetching ' + ticker + ' …</p>';
+
+  try {
+    const resp = await fetch(`/api/ticker/${encodeURIComponent(ticker)}`);
+    const d    = await resp.json();
+    if (!resp.ok) {
+      resultEl.innerHTML = `<p class="text-rose-400 text-sm">⚠ ${d.error}</p>`;
+      return;
+    }
+    resultEl.innerHTML = '';
+    renderCard(d);
+  } catch(e) {
+    resultEl.innerHTML = `<p class="text-rose-400 text-sm">⚠ Network error</p>`;
+  }
+}
+
+document.getElementById('tickerInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') lookupTicker();
+});
+
+// ── Render the result card
+function renderCard(d) {
+  const panel = document.getElementById('resultPanel');
+  panel.style.display = 'block';
+
+  document.getElementById('cardSymbol').textContent = d.Ticker;
+  document.getElementById('cardSymbol').href        = `/history/${d.Ticker}`;
+  document.getElementById('cardName').textContent   = d.Name || '';
+  document.getElementById('cardPrice').textContent  = fmtPrice(d['Current Price']);
+  document.getElementById('addTickerInput').value   = d.Ticker;
+
+  const upsideEl = document.getElementById('cardUpside');
+  const u = d['Upside (%)'];
+  upsideEl.textContent  = u != null ? fmtPct(u) + ' upside' : '';
+  upsideEl.className    = u != null && u >= 0 ? 'text-emerald-400 text-sm font-semibold'
+                                               : 'text-rose-400 text-sm font-semibold';
+
+  document.getElementById('cardCap').textContent    = d['Market Cap ($B)'] != null ? '$'+d['Market Cap ($B)'].toFixed(1)+'B' : '—';
+  document.getElementById('cardTarget').textContent = fmtPrice(d['Target Price']);
+  document.getElementById('cardPeTtm').textContent  = d['PE (TTM)']     != null ? d['PE (TTM)'].toFixed(1)+'x' : '—';
+  document.getElementById('cardPeFwd').textContent  = d['PE (Forward)'] != null ? d['PE (Forward)'].toFixed(1)+'x' : '—';
+  document.getElementById('cardPeg').textContent    = fmtPeg(d['PEG']);
+
+  const pegEl = document.getElementById('cardPeg');
+  const peg = d['PEG'];
+  if (peg != null) {
+    pegEl.className = peg < 1 ? 'font-semibold text-emerald-400' : peg < 2 ? 'font-semibold text-amber-400' : 'font-semibold text-rose-400';
+  }
+
+  // Mini bar chart
+  if (miniChartInstance) { miniChartInstance.destroy(); miniChartInstance = null; }
+  const ctx = document.getElementById('miniChart');
+  const metrics = ['PE (TTM)', 'PE (Forward)'];
+  const vals    = metrics.map(m => d[m]);
+  miniChartInstance = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: metrics,
+      datasets: [{
+        data: vals,
+        backgroundColor: ['#6366f1cc','#38bdf8cc'],
+        borderRadius: 6,
+      }]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false} },
+      scales:{
+        x:{ grid:{display:false}, ticks:{color:'#64748b'} },
+        y:{ grid:{color:'#1e293b'}, ticks:{color:'#64748b', callback:v=>v+'x'} }
+      }
+    }
+  });
+}
+
+// ── Discover
+async function discoverTickers() {
+  const typeEl = document.querySelector('[x-data="discoverPanel()"]');
+  const type   = typeEl ? typeEl._x_dataStack[0].typeVal : 'sector';
+  const name   = document.getElementById('discoverName').value.trim().toLowerCase();
+  const result = document.getElementById('discoverResult');
+  if (!name) return;
+  result.innerHTML = `<p class="text-slate-500 text-sm animate-pulse">Fetching "${name}" …</p>`;
+  try {
+    const resp = await fetch(`/api/discover?type=${encodeURIComponent(type)}&name=${encodeURIComponent(name)}`);
+    const data = await resp.json();
+    if (!resp.ok) { result.innerHTML=`<p class="text-rose-400 text-sm">⚠ ${data.error}</p>`; return; }
+    const badge = data.source==='built-in'
+      ? '<span class="text-xs bg-slate-700 text-slate-400 px-2 py-0.5 rounded-full">built-in</span>'
+      : '<span class="text-xs bg-emerald-900/50 text-emerald-400 px-2 py-0.5 rounded-full">Yahoo Finance</span>';
+    const chips = data.tickers.map(t =>
+      `<button onclick="quickLookup('${t}')"
+               class="px-3 py-1.5 bg-slate-800 hover:bg-brand border border-slate-700 hover:border-brand
+                      text-slate-300 hover:text-white rounded-lg font-mono text-sm font-semibold transition">
+        ${t}
+      </button>`).join('');
+    result.innerHTML = `
+      <div class="flex items-center gap-2 mb-3 text-xs text-slate-500">
+        Source: ${badge} &nbsp;· ${data.tickers.length} tickers
+      </div>
+      <div class="flex flex-wrap gap-2">${chips}</div>`;
+  } catch(e) {
+    result.innerHTML=`<p class="text-rose-400 text-sm">⚠ Network error</p>`;
+  }
+}
+
+document.addEventListener('alpine:init', () => {
+  Alpine.data('discoverPanel', () => ({
+    typeVal:  'sector',
+    typeLabel:'Sector',
+    typeOpen: false,
+    query:    '',
+    sugOpen:  false,
+    sugIdx:   -1,
+    suggestions: ['technology','healthcare','financials','consumer discretionary','consumer staples',
+                  'energy','industrials','materials','utilities','real estate','communication services',
+                  'semiconductors','software','cloud','ev','biotech','banks','insurance','retail',
+                  'airlines','defense','apparel','automotive','mining','real estate'],
+    get filteredSugs() {
+      if (!this.query) return this.suggestions;
+      const q = this.query.toLowerCase();
+      return this.suggestions.filter(s => s.includes(q));
+    },
+    setType(val, label) { this.typeVal=val; this.typeLabel=label; this.typeOpen=false; },
+    pickSug(s)  { this.query=s; this.sugOpen=false; this.sugIdx=-1; this.runDiscover(); },
+    moveSug(d)  {
+      const max = this.filteredSugs.length - 1;
+      this.sugIdx = Math.min(Math.max(this.sugIdx + d, 0), max);
+    },
+    highlight(s) { return s; },
+    runDiscover() { this.sugOpen=false; discoverTickers(); }
+  }));
+});
+
+function quickLookup(ticker) {
+  document.getElementById('tickerInput').value = ticker;
+  lookupTicker(ticker);
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+</script>
+{% endblock %}

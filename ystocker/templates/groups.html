@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}yStocker — Manage Groups{% endblock %}
+
+{% block content %}
+
+<div class="mb-8 fade-up">
+  <h1 class="text-3xl font-bold grad-text mb-1">Manage Peer Groups</h1>
+  <p class="text-slate-400 text-sm">
+    Add or remove sectors and tickers. Changes clear the cache automatically —
+    the next page load re-fetches updated data from Yahoo Finance.
+  </p>
+</div>
+
+<!-- ── Group cards ───────────────────────────────────────────────────── -->
+<div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5 mb-8 fade-up">
+  {% for group_name, tickers in groups_data.items() %}
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 flex flex-col gap-3">
+
+    <!-- Header -->
+    <div class="flex items-center justify-between">
+      <a href="{{ url_for('main.sector', sector_name=group_name) }}"
+         class="font-semibold text-slate-100 hover:text-brand transition">
+        {{ group_name }}
+      </a>
+      <form method="post" action="{{ url_for('main.delete_group') }}">
+        <input type="hidden" name="group_name" value="{{ group_name }}">
+        <button onclick="return confirm('Delete group \'{{ group_name }}\'?')"
+                class="text-xs border border-rose-800 text-rose-500 hover:bg-rose-900/50 px-2 py-1 rounded-lg transition">
+          ✕ Delete
+        </button>
+      </form>
+    </div>
+
+    <!-- Ticker tags -->
+    <div class="flex flex-wrap gap-2 min-h-[32px]">
+      {% for ticker in tickers %}
+      <span class="inline-flex items-center gap-1 bg-slate-800 border border-slate-700
+                   px-2 py-1 rounded-lg font-mono text-xs font-semibold text-slate-300">
+        <a href="{{ url_for('main.history', ticker=ticker) }}"
+           class="hover:text-brand transition">{{ ticker }}</a>
+        <form method="post" action="{{ url_for('main.remove_ticker') }}" style="display:inline">
+          <input type="hidden" name="group_name" value="{{ group_name }}">
+          <input type="hidden" name="ticker"     value="{{ ticker }}">
+          <button class="text-slate-600 hover:text-rose-400 transition leading-none">✕</button>
+        </form>
+      </span>
+      {% else %}
+      <span class="text-xs text-slate-600 italic">No tickers yet</span>
+      {% endfor %}
+    </div>
+
+    <!-- Add ticker form -->
+    <form method="post" action="{{ url_for('main.add_ticker') }}" class="flex gap-2 mt-auto">
+      <input type="hidden" name="group_name" value="{{ group_name }}">
+      <input type="text" name="ticker" placeholder="e.g. TSLA" maxlength="10"
+             style="text-transform:uppercase"
+             class="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-sm
+                    font-mono text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-brand">
+      <button type="submit"
+              class="px-3 py-1.5 bg-brand/20 hover:bg-brand border border-brand/40 text-brand hover:text-white
+                     rounded-lg text-sm font-medium transition">
+        + Add
+      </button>
+    </form>
+  </div>
+  {% endfor %}
+
+  <!-- ── New group card ─────────────────────────────────────────────── -->
+  <div class="bg-slate-900/50 border border-dashed border-slate-700 rounded-2xl p-5 flex flex-col justify-center gap-3">
+    <p class="text-sm font-semibold text-slate-400">Create new group</p>
+    <form method="post" action="{{ url_for('main.add_group') }}" class="flex gap-2">
+      <input type="text" name="group_name" placeholder="e.g. Biotech" maxlength="40" required
+             class="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-sm
+                    text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-brand">
+      <button type="submit"
+              class="px-4 py-1.5 bg-brand hover:bg-brand-dark text-white rounded-lg text-sm font-medium transition">
+        Create
+      </button>
+    </form>
+    <p class="text-xs text-slate-600">Then use + Add inside the card to add tickers.</p>
+  </div>
+</div>
+
+{% endblock %}

@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}yStocker — Loading…{% endblock %}
+{% block content %}
+<div class="max-w-lg mx-auto mt-20 fade-up text-center">
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-10">
+
+    <!-- Spinner -->
+    <div class="flex justify-center mb-6">
+      <svg class="w-12 h-12 text-brand animate-spin" fill="none" viewBox="0 0 24 24">
+        <circle class="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3"/>
+        <path class="opacity-80" fill="currentColor"
+              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+      </svg>
+    </div>
+
+    <h1 class="text-xl font-bold text-slate-100 mb-2">Warming up the cache…</h1>
+    <p class="text-slate-400 text-sm mb-6">
+      Fetching live data from Yahoo Finance for all tickers.<br>
+      This only happens on first load — the page will refresh automatically.
+    </p>
+
+    <!-- Auto-reload every 4 seconds until the cache is ready -->
+    <p class="text-xs text-slate-600">Checking again in <span id="countdown">4</span>s…</p>
+  </div>
+</div>
+
+<script>
+  let s = 4;
+  const el = document.getElementById('countdown');
+  setInterval(() => {
+    s--;
+    if (s <= 0) { window.location.reload(); }
+    else { el.textContent = s; }
+  }, 1000);
+</script>
+{% endblock %}

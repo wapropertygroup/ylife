@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}yStocker{% endblock %}</title>
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: { DEFAULT: '#6366f1', dark: '#4f46e5', light: '#a5b4fc' },
+            surface: '#0f172a',
+            panel: '#1e293b',
+            border: '#334155',
+          },
+          fontFamily: { mono: ['JetBrains Mono', 'Fira Code', 'monospace'] }
+        }
+      }
+    }
+  </script>
+
+  <!-- Alpine.js -->
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+
+  <!-- Google Font -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+    .chart-container { position: relative; }
+    /* Custom scrollbar */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #1e293b; }
+    ::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
+    /* Animate fade-in */
+    @keyframes fadeUp { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
+    .fade-up { animation: fadeUp .35s ease both; }
+    /* Gradient text */
+    .grad-text { background: linear-gradient(135deg,#6366f1,#a78bfa,#38bdf8); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
+    /* Table hover */
+    tbody tr:hover td { background: rgba(99,102,241,.08); }
+  </style>
+</head>
+
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col" x-data="{ navOpen: false }">
+
+  <!-- ── Top navigation bar ──────────────────────────────────────────── -->
+  <header class="sticky top-0 z-50 bg-slate-900/80 backdrop-blur border-b border-slate-800">
+    <div class="max-w-screen-xl mx-auto px-4 sm:px-6 flex items-center h-14 gap-4">
+
+      <!-- Logo -->
+      <a href="{{ url_for('main.index') }}" class="flex items-center gap-2 font-bold text-lg shrink-0">
+        <span class="text-brand text-xl">📈</span>
+        <span class="grad-text">yStocker</span>
+      </a>
+
+      <!-- Desktop nav -->
+      <nav class="hidden md:flex items-center gap-1 ml-4 flex-1">
+        <a href="{{ url_for('main.index') }}"
+           class="px-3 py-1.5 rounded-md text-sm text-slate-300 hover:text-white hover:bg-slate-800 transition">
+          Home
+        </a>
+
+        <!-- Sectors dropdown -->
+        <div class="relative" x-data="{ open: false }" @mouseenter="open=true" @mouseleave="open=false">
+          <button class="flex items-center gap-1 px-3 py-1.5 rounded-md text-sm text-slate-300
+                         hover:text-white hover:bg-slate-800 transition">
+            Sectors
+            <svg class="w-3.5 h-3.5 mt-0.5 transition-transform" :class="open&&'rotate-180'"
+                 fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+          </button>
+          <div x-show="open" x-transition
+               class="absolute left-0 top-full mt-1 w-52 bg-slate-900 border border-slate-700
+                      rounded-xl shadow-xl shadow-black/40 py-1 z-50">
+            {% for g in peer_groups %}
+            <a href="{{ url_for('main.sector', sector_name=g) }}"
+               class="block px-4 py-2 text-sm text-slate-300 hover:text-white hover:bg-slate-800 transition">
+              {{ g }}
+            </a>
+            {% endfor %}
+          </div>
+        </div>
+
+        <a href="{{ url_for('main.lookup') }}"
+           class="px-3 py-1.5 rounded-md text-sm text-slate-300 hover:text-white hover:bg-slate-800 transition">
+          🔍 Lookup
+        </a>
+        <a href="{{ url_for('main.groups') }}"
+           class="px-3 py-1.5 rounded-md text-sm text-slate-300 hover:text-white hover:bg-slate-800 transition">
+          ⚙ Groups
+        </a>
+      </nav>
+
+      <!-- Refresh button -->
+      <div class="relative ml-auto hidden md:block group">
+        <a href="{{ url_for('main.refresh') }}"
+           class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm border border-brand text-brand hover:bg-brand hover:text-white transition">
+          ↻ Refresh
+        </a>
+        <!-- Tooltip -->
+        <div class="absolute right-0 top-full mt-2 w-64 z-50 pointer-events-none
+                    opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+          <div class="bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-xs text-slate-300 shadow-xl shadow-black/50">
+            <p class="font-semibold text-slate-100 mb-1">Refresh data</p>
+            <p>Clears the in-memory cache and re-fetches live prices, PE ratios, and analyst targets for all tickers from Yahoo Finance.</p>
+          </div>
+          <!-- Arrow -->
+          <div class="absolute right-4 -top-1.5 w-3 h-3 bg-slate-800 border-l border-t border-slate-700 rotate-45"></div>
+        </div>
+      </div>
+
+      <!-- Mobile hamburger -->
+      <button class="md:hidden ml-auto p-2 rounded-md hover:bg-slate-800" @click="navOpen = !navOpen">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M4 6h16M4 12h16M4 18h16"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- Mobile menu -->
+    <div x-show="navOpen" x-transition class="md:hidden border-t border-slate-800 bg-slate-900 px-4 pb-3">
+      <div class="flex flex-col gap-1 pt-2">
+        <a href="{{ url_for('main.index') }}" class="px-3 py-2 rounded-md text-sm text-slate-300 hover:bg-slate-800">Home</a>
+        {% for g in peer_groups %}
+        <a href="{{ url_for('main.sector', sector_name=g) }}" class="px-3 py-2 rounded-md text-sm text-slate-300 hover:bg-slate-800">{{ g }}</a>
+        {% endfor %}
+        <a href="{{ url_for('main.lookup') }}" class="px-3 py-2 rounded-md text-sm text-slate-300 hover:bg-slate-800">🔍 Lookup</a>
+        <a href="{{ url_for('main.groups') }}" class="px-3 py-2 rounded-md text-sm text-slate-300 hover:bg-slate-800">⚙ Groups</a>
+        <a href="{{ url_for('main.refresh') }}" class="px-3 py-2 rounded-md text-sm text-brand hover:bg-slate-800">↻ Refresh</a>
+      </div>
+    </div>
+  </header>
+
+  <!-- ── Main content ─────────────────────────────────────────────────── -->
+  <main class="flex-1 max-w-screen-xl mx-auto w-full px-4 sm:px-6 py-8">
+
+    <!-- Flash messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+        <div class="mb-4 px-4 py-3 rounded-lg text-sm font-medium fade-up
+          {{ 'bg-emerald-900/50 border border-emerald-700 text-emerald-300' if category == 'success'
+             else 'bg-red-900/50 border border-red-700 text-red-300' }}">
+          {{ message }}
+        </div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <!-- Fetch-error banner -->
+    {% if fetch_errors is defined and fetch_errors %}
+    <details class="mb-6 px-4 py-3 rounded-lg bg-amber-900/40 border border-amber-700 text-amber-300 text-sm">
+      <summary class="cursor-pointer font-semibold">
+        ⚠ {{ fetch_errors|length }} ticker(s) could not be fetched — showing partial data
+      </summary>
+      <ul class="mt-2 ml-4 list-disc space-y-0.5 text-amber-400/80">
+        {% for e in fetch_errors %}<li>{{ e }}</li>{% endfor %}
+      </ul>
+    </details>
+    {% endif %}
+
+    {% block content %}{% endblock %}
+  </main>
+
+  <!-- ── Footer ───────────────────────────────────────────────────────── -->
+  <footer class="border-t border-slate-800 py-4 text-center text-xs text-slate-500">
+    Data sourced from Yahoo Finance via <code class="bg-slate-800 px-1 rounded">yfinance</code>.
+    For informational purposes only.
+  </footer>
+
+</body>
+</html>

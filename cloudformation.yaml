@@ -1,0 +1,347 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  yStocker – single EC2 instance with a public IPv4 address.
+  Runs the Flask app behind Gunicorn, managed by systemd.
+  The on-disk cache (cache/) is stored on the instance volume and
+  survives app restarts; it is lost only if the instance is terminated.
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Parameters
+# ─────────────────────────────────────────────────────────────────────────────
+Parameters:
+
+  InstanceType:
+    Type: String
+    Default: t3.small
+    AllowedValues: [t3.micro, t3.small, t3.medium, t3.large]
+    Description: EC2 instance type (t3.micro is free-tier eligible)
+
+  KeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: Name of an existing EC2 key pair for SSH access
+
+  AllowedSSHCidr:
+    Type: String
+    Default: "0.0.0.0/0"
+    Description: >
+      CIDR range allowed to SSH into the instance.
+      Restrict to your IP for better security, e.g. 203.0.113.10/32
+
+  AppPort:
+    Type: Number
+    Default: 8000
+    Description: Port Gunicorn listens on (also opened in the security group)
+
+  GitRepo:
+    Type: String
+    Default: ""
+    Description: >
+      Optional – HTTPS URL of your git repo (e.g. https://github.com/you/ystocker.git).
+      Leave blank to upload code manually via scp/rsync after launch.
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Mappings  –  latest Amazon Linux 2023 AMI per region (arm64 / x86_64)
+# ─────────────────────────────────────────────────────────────────────────────
+Mappings:
+  AmiMap:
+    us-east-1:      { AMI: ami-0c02fb55956c7d316 }
+    us-east-2:      { AMI: ami-097a2df4ac947655f }
+    us-west-1:      { AMI: ami-0d9858aa3c6322f73 }
+    us-west-2:      { AMI: ami-098e42ae54c764c35 }
+    eu-west-1:      { AMI: ami-0d71ea30463e0ff49 }
+    eu-west-2:      { AMI: ami-0b596a67a3b43daa0 }
+    eu-central-1:   { AMI: ami-06616b7884ac98cdd }
+    ap-southeast-1: { AMI: ami-0b0a1e4c4ca9c6b7a }
+    ap-southeast-2: { AMI: ami-04a81a99f5ec58529 }
+    ap-northeast-1: { AMI: ami-023ff3d4ab11b2525 }
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Resources
+# ─────────────────────────────────────────────────────────────────────────────
+Resources:
+
+  # ── VPC & networking ────────────────────────────────────────────────────────
+
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-vpc"
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-igw"
+
+  VPCGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.1.0/24
+      MapPublicIpOnLaunch: true          # <-- assigns a public IPv4 on launch
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-public-subnet"
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-rtb"
+
+  DefaultRoute:
+    Type: AWS::EC2::Route
+    DependsOn: VPCGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  SubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet
+      RouteTableId: !Ref PublicRouteTable
+
+  # ── Security group ──────────────────────────────────────────────────────────
+
+  InstanceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: yStocker – allow HTTP app port + SSH
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: !Ref AppPort
+          ToPort: !Ref AppPort
+          CidrIp: 0.0.0.0/0
+          Description: Flask/Gunicorn app
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+          Description: HTTP (nginx reverse proxy)
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref AllowedSSHCidr
+          Description: SSH
+      SecurityGroupEgress:
+        - IpProtocol: "-1"
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-sg"
+
+  # ── IAM role (SSM Session Manager – optional SSH alternative) ───────────────
+
+  InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${AWS::StackName}-ec2-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore  # SSM Session Manager
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-ec2-role"
+
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref InstanceRole
+
+  # ── EC2 instance ────────────────────────────────────────────────────────────
+
+  Instance:
+    Type: AWS::EC2::Instance
+    DependsOn: VPCGatewayAttachment
+    Properties:
+      InstanceType: !Ref InstanceType
+      KeyName: !Ref KeyName
+      ImageId: !FindInMap [AmiMap, !Ref "AWS::Region", AMI]
+      SubnetId: !Ref PublicSubnet
+      IamInstanceProfile: !Ref InstanceProfile
+      SecurityGroupIds:
+        - !Ref InstanceSecurityGroup
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: 20       # GB – enough for app + pip packages + cache
+            VolumeType: gp3
+            DeleteOnTermination: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-instance"
+
+      UserData:
+        Fn::Base64:
+          !Sub |
+            #!/bin/bash
+            set -euxo pipefail
+            exec > >(tee /var/log/ystocker-init.log | logger -t ystocker-init) 2>&1
+
+            # ── System packages
+            dnf update -y
+            dnf install -y python3.11 python3.11-pip python3.11-devel gcc git nginx
+
+            # ── App directory
+            APP_DIR=/opt/ystocker
+            APP_USER=ystocker
+
+            useradd --system --shell /sbin/nologin --home-dir "$APP_DIR" "$APP_USER" || true
+            mkdir -p "$APP_DIR"
+
+            # ── Clone or scaffold app
+            if [ -n "${GitRepo}" ]; then
+              git clone "${GitRepo}" "$APP_DIR"
+            else
+              # Placeholder – upload your code via scp/rsync after launch:
+              #   scp -r ./ystocker ec2-user@<IP>:/tmp/
+              #   sudo mv /tmp/ystocker/* /opt/ystocker/
+              echo "GitRepo not set – deploy code manually to $APP_DIR"
+              # Create minimal structure so systemd unit doesn't fail on start
+              mkdir -p "$APP_DIR/ystocker" "$APP_DIR/cache"
+              echo "from flask import Flask; app = Flask(__name__)" > "$APP_DIR/ystocker/__init__.py"
+              echo "from ystocker import create_app; app = create_app()" > "$APP_DIR/wsgi.py" 2>/dev/null || true
+            fi
+
+            # ── Python virtual environment
+            python3.11 -m venv "$APP_DIR/venv"
+            source "$APP_DIR/venv/bin/activate"
+            pip install --upgrade pip
+            pip install gunicorn
+
+            if [ -f "$APP_DIR/requirements.txt" ]; then
+              pip install -r "$APP_DIR/requirements.txt"
+            fi
+
+            # ── Cache directory (survives app restarts)
+            mkdir -p "$APP_DIR/cache"
+            chown -R "$APP_USER:$APP_USER" "$APP_DIR"
+
+            # ── Gunicorn systemd service
+            cat > /etc/systemd/system/ystocker.service <<'EOF'
+            [Unit]
+            Description=yStocker Flask app (Gunicorn)
+            After=network.target
+
+            [Service]
+            User=ystocker
+            Group=ystocker
+            WorkingDirectory=/opt/ystocker
+            Environment="PATH=/opt/ystocker/venv/bin"
+            ExecStart=/opt/ystocker/venv/bin/gunicorn \
+                      --workers 2 \
+                      --bind 127.0.0.1:${AppPort} \
+                      --timeout 120 \
+                      --access-logfile /var/log/ystocker-access.log \
+                      --error-logfile  /var/log/ystocker-error.log \
+                      "ystocker:create_app()"
+            Restart=always
+            RestartSec=5
+
+            [Install]
+            WantedBy=multi-user.target
+            EOF
+
+            systemctl daemon-reload
+            systemctl enable ystocker
+            systemctl start ystocker || true
+
+            # ── nginx reverse proxy (port 80 → gunicorn)
+            cat > /etc/nginx/conf.d/ystocker.conf <<'EOF'
+            server {
+                listen 80;
+                server_name _;
+
+                # Forward all requests to Gunicorn
+                location / {
+                    proxy_pass         http://127.0.0.1:${AppPort};
+                    proxy_set_header   Host              $host;
+                    proxy_set_header   X-Real-IP         $remote_addr;
+                    proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+                    proxy_read_timeout 120s;
+                }
+
+                # Serve static files directly
+                location /static/ {
+                    alias /opt/ystocker/ystocker/static/;
+                    expires 7d;
+                    add_header Cache-Control "public";
+                }
+            }
+            EOF
+
+            # Remove default nginx config
+            rm -f /etc/nginx/conf.d/default.conf /etc/nginx/sites-enabled/default 2>/dev/null || true
+
+            systemctl enable nginx
+            systemctl restart nginx
+
+            echo "yStocker bootstrap complete."
+
+  # ── Elastic IP – persistent public IPv4 ────────────────────────────────────
+
+  ElasticIP:
+    Type: AWS::EC2::EIP
+    DependsOn: VPCGatewayAttachment
+    Properties:
+      Domain: vpc
+      InstanceId: !Ref Instance
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-eip"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Outputs
+# ─────────────────────────────────────────────────────────────────────────────
+Outputs:
+
+  PublicIP:
+    Description: Persistent public IPv4 address (Elastic IP)
+    Value: !Ref ElasticIP
+    Export:
+      Name: !Sub "${AWS::StackName}-PublicIP"
+
+  AppURL:
+    Description: yStocker app URL
+    Value: !Sub "http://${ElasticIP}/"
+
+  AppDirectPort:
+    Description: Direct Gunicorn URL (bypass nginx)
+    Value: !Sub "http://${ElasticIP}:${AppPort}/"
+
+  SSHCommand:
+    Description: SSH into the instance
+    Value: !Sub "ssh -i ~/.ssh/${KeyName}.pem ec2-user@${ElasticIP}"
+
+  DeployCommand:
+    Description: Upload your code after stack creation
+    Value: !Sub "scp -r ./ystocker ec2-user@${ElasticIP}:/tmp/ && ssh ec2-user@${ElasticIP} 'sudo cp -r /tmp/ystocker/* /opt/ystocker/ && sudo chown -R ystocker:ystocker /opt/ystocker && sudo systemctl restart ystocker'"
+
+  LogsCommand:
+    Description: Tail app logs
+    Value: !Sub "ssh -i ~/.ssh/${KeyName}.pem ec2-user@${ElasticIP} 'sudo journalctl -u ystocker -f'"

@@ -1,0 +1,569 @@
+{% extends "base.html" %}
+{% block title %}yStocker — Dashboard{% endblock %}
+
+{% block content %}
+
+<!-- ── Fullscreen chart modal ────────────────────────────────────────── -->
+<div x-data="chartModal()"
+     x-show="open"
+     x-transition:enter="transition ease-out duration-200"
+     x-transition:enter-start="opacity-0"
+     x-transition:enter-end="opacity-100"
+     x-transition:leave="transition ease-in duration-150"
+     x-transition:leave-start="opacity-100"
+     x-transition:leave-end="opacity-0"
+     @keydown.escape.window="close()"
+     class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+     style="display:none">
+
+  <div class="relative w-full max-w-5xl bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl
+              flex flex-col"
+       style="max-height:90vh"
+       @click.stop>
+
+    <!-- Modal header -->
+    <div class="flex items-center justify-between px-6 py-4 border-b border-slate-800 shrink-0">
+      <div>
+        <h3 class="font-semibold text-slate-100" x-text="title"></h3>
+        <p class="text-xs text-slate-500 mt-0.5" x-text="subtitle"></p>
+      </div>
+      <button @click="close()"
+              class="text-slate-500 hover:text-slate-200 transition p-1 rounded-lg hover:bg-slate-800">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- Modal chart area -->
+    <div class="p-6 flex-1 min-h-0">
+      <div class="chart-container w-full h-full" style="min-height:460px">
+        <canvas id="modalCanvas"></canvas>
+      </div>
+    </div>
+
+    <!-- Legend for PEG map -->
+    <div x-show="kind==='peg'" class="px-6 pb-4 flex gap-4 text-xs shrink-0">
+      <span class="flex items-center gap-1.5 text-emerald-400"><span class="w-3 h-3 rounded-sm bg-emerald-400/70 inline-block"></span> PEG &lt; 1 — undervalued</span>
+      <span class="flex items-center gap-1.5 text-amber-400"><span class="w-3 h-3 rounded-sm bg-amber-400/70 inline-block"></span> 1–2 — moderate</span>
+      <span class="flex items-center gap-1.5 text-rose-400"><span class="w-3 h-3 rounded-sm bg-rose-400/70 inline-block"></span> &gt; 2 — expensive</span>
+    </div>
+  </div>
+</div>
+
+<!-- ── Hero ──────────────────────────────────────────────────────────── -->
+<div class="mb-10 fade-up">
+  <h1 class="text-4xl font-bold mb-2">
+    <span class="grad-text">Stock Valuation</span> Dashboard
+  </h1>
+  <p class="text-slate-400 text-lg">
+    PE ratios, PEG ratios &amp; analyst targets across {{ sector_cards|length }} peer groups.
+  </p>
+  {% if cache_last_updated %}
+  <p class="text-xs text-slate-600 mt-1">
+    Data as of {{ cache_last_updated | int | datetimeformat }}
+    {% if warming %}
+      &nbsp;·&nbsp;<span class="text-brand animate-pulse">refreshing now…</span>
+    {% else %}
+      &nbsp;·&nbsp;next refresh {{ (cache_last_updated | int + 86400) | datetimeformat }}
+    {% endif %}
+  </p>
+  {% endif %}
+</div>
+
+<!-- ── Cross-sector scatter (PE vs Upside) ───────────────────────────── -->
+<div class="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-8">
+
+  <!-- Valuation scatter — 2/3 width -->
+  <div class="xl:col-span-2 bg-slate-900 rounded-2xl border border-slate-800 p-6 fade-up">
+    <div class="flex items-start justify-between mb-1">
+      <h2 class="text-base font-semibold text-slate-200">Valuation Map</h2>
+      <div class="flex items-center gap-1">
+        <!-- Label toggle -->
+        <button id="scatterLabelToggle"
+                onclick="toggleScatterLabels()"
+                class="flex items-center gap-1 text-xs text-brand border border-brand/40 bg-brand/10
+                       hover:bg-brand hover:text-white transition px-2 py-1 rounded-lg">
+          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-5 5a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 10V5a2 2 0 012-2z"/>
+          </svg>
+          <span id="scatterLabelToggleText">Hide labels</span>
+        </button>
+        <button onclick="window._chartModal.expand('scatter')"
+                class="flex items-center gap-1 text-xs text-slate-500 hover:text-brand transition px-2 py-1
+                       rounded-lg hover:bg-slate-800">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"/>
+          </svg>
+          Expand
+        </button>
+      </div>
+    </div>
+    <p class="text-xs text-slate-500 mb-4">Forward PE vs Analyst Upside — bottom-left = cheap with upside</p>
+    <div class="chart-container" style="height:340px">
+      <canvas id="scatterChart"></canvas>
+    </div>
+  </div>
+
+  <!-- PEG Valuation Map — 1/3 width -->
+  <div class="bg-slate-900 rounded-2xl border border-slate-800 p-6 fade-up">
+    <div class="flex items-start justify-between mb-1">
+      <h2 class="text-base font-semibold text-slate-200">PEG Valuation Map</h2>
+      <button onclick="window._chartModal.expand('peg')"
+              class="flex items-center gap-1 text-xs text-slate-500 hover:text-brand transition px-2 py-1
+                     rounded-lg hover:bg-slate-800">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"/>
+        </svg>
+        Expand
+      </button>
+    </div>
+    <p class="text-xs text-slate-500 mb-4">
+      <span class="text-emerald-400">■</span> &lt;1 undervalued &nbsp;
+      <span class="text-amber-400">■</span> 1–2 moderate &nbsp;
+      <span class="text-rose-400">■</span> &gt;2 expensive
+    </p>
+    <div class="chart-container" style="height:340px">
+      <canvas id="pegMapChart"></canvas>
+    </div>
+  </div>
+</div>
+
+<!-- ── Sector cards ──────────────────────────────────────────────────── -->
+<h2 class="text-xl font-semibold text-slate-200 mb-4 fade-up">Sector Overview</h2>
+<div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5 mb-10">
+  {% for group, info in sector_cards.items() %}
+  <a href="{{ url_for('main.sector', sector_name=group) }}"
+     class="group bg-slate-900 border border-slate-800 rounded-2xl p-5 hover:border-brand/60
+            hover:shadow-lg hover:shadow-brand/10 transition-all duration-200 fade-up block">
+    <div class="flex items-start justify-between mb-3">
+      <div>
+        <h3 class="font-semibold text-slate-100 group-hover:text-brand transition">{{ group }}</h3>
+        <p class="text-xs text-slate-500 mt-0.5">{{ info.tickers | join(' · ') }}</p>
+      </div>
+      <span class="text-slate-600 group-hover:text-brand transition text-lg">→</span>
+    </div>
+    <!-- Upside / PE sparkline -->
+    <div class="chart-container" style="height:80px">
+      <canvas id="spark_{{ loop.index }}"></canvas>
+    </div>
+    <p class="spark-label text-xs text-slate-600 mt-2 text-right">analyst upside %</p>
+  </a>
+  {% endfor %}
+</div>
+
+<!-- ── Cross-sector PE heatmap table ─────────────────────────────────── -->
+<div class="bg-slate-900 rounded-2xl border border-slate-800 p-6 fade-up mb-8">
+
+  <!-- Header row -->
+  <div class="flex flex-wrap items-center gap-3 mb-4">
+    <div>
+      <h2 class="text-base font-semibold text-slate-200">PE &amp; PEG Heatmap</h2>
+      <p class="text-xs text-slate-500">Colour intensity = ratio magnitude</p>
+    </div>
+
+    <div class="ml-auto flex flex-wrap items-center gap-2">
+      <!-- Heat legend -->
+      <div class="hidden sm:flex items-center gap-1.5 text-xs text-slate-500 mr-2">
+        <span class="w-3 h-3 rounded-sm inline-block" style="background:rgba(52,211,153,0.35)"></span>Low
+        <span class="w-16 h-2 rounded-sm inline-block mx-1"
+              style="background:linear-gradient(to right,rgba(52,211,153,0.35),rgba(250,204,21,0.35),rgba(248,113,113,0.35))"></span>
+        <span class="w-3 h-3 rounded-sm inline-block" style="background:rgba(248,113,113,0.35)"></span>High PE
+      </div>
+      <!-- Sector filter -->
+      <div class="relative" id="sectorFilterWrap">
+        <select id="sectorFilter"
+                class="appearance-none bg-slate-800 border border-slate-700 rounded-lg pl-3 pr-7 py-1.5
+                       text-xs text-slate-300 focus:outline-none focus:ring-1 focus:ring-brand cursor-pointer">
+          <option value="">All sectors</option>
+        </select>
+        <svg class="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-500"
+             fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+        </svg>
+      </div>
+
+      <!-- Search -->
+      <div class="relative">
+        <svg class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-500 pointer-events-none"
+             fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"/>
+        </svg>
+        <input id="heatmapSearch" type="text" placeholder="Search ticker or name…"
+               class="bg-slate-800 border border-slate-700 rounded-lg pl-7 pr-3 py-1.5 text-xs
+                      text-slate-200 placeholder:text-slate-500 focus:outline-none focus:ring-1
+                      focus:ring-brand w-44 transition">
+      </div>
+
+      <!-- Row count -->
+      <span id="heatmapCount" class="text-xs text-slate-600 whitespace-nowrap"></span>
+    </div>
+  </div>
+
+  <div class="overflow-x-auto">
+    <table class="w-full text-sm" id="heatmapTable">
+      <thead>
+        <tr class="text-xs text-slate-500 border-b border-slate-800 select-none">
+          <th class="text-left py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-300 transition whitespace-nowrap"
+              data-col="ticker">Ticker <span class="sort-icon ml-0.5">↕</span></th>
+          <th class="text-left py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-300 transition whitespace-nowrap"
+              data-col="name">Name <span class="sort-icon ml-0.5">↕</span></th>
+          <th class="text-left py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-300 transition whitespace-nowrap"
+              data-col="sector">Sector <span class="sort-icon ml-0.5">↕</span></th>
+          <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-300 transition whitespace-nowrap"
+              data-col="pe_ttm">PE (TTM) <span class="sort-icon ml-0.5">↕</span></th>
+          <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-300 transition whitespace-nowrap"
+              data-col="pe_fwd">PE (Fwd) <span class="sort-icon ml-0.5">↕</span></th>
+          <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-300 transition whitespace-nowrap"
+              data-col="peg">PEG <span class="sort-icon ml-0.5">↕</span></th>
+          <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-300 transition whitespace-nowrap"
+              data-col="upside">Upside <span class="sort-icon ml-0.5">↕</span></th>
+          <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-300 transition whitespace-nowrap"
+              data-col="market_cap">Mkt Cap <span class="sort-icon ml-0.5">↕</span></th>
+        </tr>
+      </thead>
+      <tbody id="heatmapBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ── Chart.js scripts ───────────────────────────────────────────────── -->
+<script>
+const ALL = {{ all_chartdata | safe }};
+const PALETTE = [
+  '#6366f1','#38bdf8','#34d399','#f59e0b','#f43f5e','#a78bfa','#fb923c','#22d3ee'
+];
+
+// ─── Scatter label toggle state ─────────────────────────────────────────────
+let scatterLabelsVisible = true;
+let _inlineScatterChart = null;
+
+function toggleScatterLabels() {
+  scatterLabelsVisible = !scatterLabelsVisible;
+  const btn  = document.getElementById('scatterLabelToggle');
+  const text = document.getElementById('scatterLabelToggleText');
+  if (scatterLabelsVisible) {
+    text.textContent = 'Hide labels';
+    btn.classList.remove('bg-brand', 'text-white');
+    btn.classList.add('text-brand', 'bg-brand/10');
+  } else {
+    text.textContent = 'Show labels';
+    btn.classList.add('bg-brand', 'text-white');
+    btn.classList.remove('text-brand', 'bg-brand/10');
+  }
+  if (_inlineScatterChart) _inlineScatterChart.update();
+}
+
+// ─── Shared chart builder functions ────────────────────────────────────────
+
+function buildScatterChart(ctx) {
+  const sectors = [...new Set(ALL.map(d => d.sector))];
+  const datasets = sectors.map((sec, i) => ({
+    label: sec,
+    data: ALL.filter(d => d.sector === sec && d.pe_fwd != null && d.upside != null)
+              .map(d => ({ x: d.pe_fwd, y: d.upside, ticker: d.ticker })),
+    backgroundColor: PALETTE[i % PALETTE.length] + 'cc',
+    pointRadius: 7,
+    pointHoverRadius: 9,
+  }));
+  return new Chart(ctx, {
+    type: 'scatter',
+    data: { datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      onClick(e, elements) {
+        if (elements.length) {
+          const pt = elements[0];
+          const ticker = datasets[pt.datasetIndex].data[pt.index].ticker;
+          if (ticker) window.location.href = `/history/${encodeURIComponent(ticker)}`;
+        }
+      },
+      plugins: {
+        legend: { labels: { color: '#94a3b8', font: { size: 11 } } },
+        tooltip: { callbacks: { label: c => ` ${c.raw.ticker}  PE ${c.raw.x?.toFixed(1)}x  Upside ${c.raw.y?.toFixed(1)}%` } }
+      },
+      scales: {
+        x: { title: { display: true, text: 'Forward PE', color: '#64748b' }, grid: { color: '#1e293b' }, ticks: { color: '#64748b' } },
+        y: { title: { display: true, text: 'Upside (%)', color: '#64748b' }, grid: { color: '#1e293b' }, ticks: { color: '#64748b' } }
+      }
+    },
+    plugins: [{
+      afterDraw(chart) {
+        const {ctx: c, chartArea: a, scales: {x, y}} = chart;
+        c.save();
+        c.strokeStyle = '#334155'; c.lineWidth = 1; c.setLineDash([4,4]);
+        const z = y.getPixelForValue(0);
+        if (z > a.top && z < a.bottom) { c.beginPath(); c.moveTo(a.left, z); c.lineTo(a.right, z); c.stroke(); }
+        c.restore();
+        if (scatterLabelsVisible) {
+          chart.data.datasets.forEach(ds => {
+            ds.data.forEach(pt => {
+              const px = x.getPixelForValue(pt.x), py = y.getPixelForValue(pt.y);
+              c.save(); c.fillStyle = '#94a3b8'; c.font = '10px Inter,sans-serif';
+              c.fillText(pt.ticker, px + 8, py - 4); c.restore();
+            });
+          });
+        }
+      },
+      // Pointer cursor when hovering a point
+      afterEvent(chart, args) {
+        const el = chart.getElementsAtEventForMode(args.event.native, 'nearest', {intersect:true}, false);
+        chart.canvas.style.cursor = el.length ? 'pointer' : 'default';
+      }
+    }]
+  });
+}
+
+function buildPegChart(ctx) {
+  const seen = new Set();
+  const rows = ALL.filter(d => {
+    if (d.peg == null || seen.has(d.ticker)) return false;
+    seen.add(d.ticker); return true;
+  }).sort((a,b) => a.peg - b.peg);
+  return new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: rows.map(d => d.ticker),
+      datasets: [{
+        label: 'PEG',
+        data: rows.map(d => d.peg),
+        backgroundColor: rows.map(d => d.peg < 1 ? '#34d399cc' : d.peg < 2 ? '#f59e0bcc' : '#f43f5ecc'),
+        borderRadius: 4,
+      }]
+    },
+    options: {
+      indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+      onClick(e, elements) {
+        if (elements.length) {
+          const ticker = rows[elements[0].index]?.ticker;
+          if (ticker) window.location.href = `/history/${encodeURIComponent(ticker)}`;
+        }
+      },
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => ` PEG: ${c.raw?.toFixed(2)}` } } },
+      scales: {
+        x: { grid: { color: '#1e293b' }, ticks: { color: '#64748b' } },
+        y: { grid: { display: false }, ticks: { color: '#94a3b8', font: { size: 11 } } }
+      }
+    },
+    plugins: [{
+      afterEvent(chart, args) {
+        const el = chart.getElementsAtEventForMode(args.event.native, 'nearest', {intersect:true}, false);
+        chart.canvas.style.cursor = el.length ? 'pointer' : 'default';
+      }
+    }]
+  });
+}
+
+// ─── Render inline charts ──────────────────────────────────────────────────
+_inlineScatterChart = buildScatterChart(document.getElementById('scatterChart'));
+buildPegChart(document.getElementById('pegMapChart'));
+
+// ─── Alpine modal component ────────────────────────────────────────────────
+function chartModal() {
+  return {
+    open: false,
+    kind: '',
+    title: '',
+    subtitle: '',
+    _instance: null,
+
+    expand(kind) {
+      this.kind = kind;
+      if (kind === 'scatter') {
+        this.title    = 'Valuation Map';
+        this.subtitle = 'Forward PE vs Analyst Upside — all tickers';
+      } else {
+        this.title    = 'PEG Valuation Map';
+        this.subtitle = 'Price/Earnings-to-Growth ratio — all tickers';
+      }
+      this.open = true;
+      // Defer until the canvas is visible in the DOM
+      this.$nextTick(() => {
+        if (this._instance) { this._instance.destroy(); this._instance = null; }
+        const canvas = document.getElementById('modalCanvas');
+        canvas.width = canvas.parentElement.clientWidth;
+        canvas.height = canvas.parentElement.clientHeight;
+        this._instance = kind === 'scatter'
+          ? buildScatterChart(canvas)
+          : buildPegChart(canvas);
+      });
+    },
+
+    close() {
+      this.open = false;
+      if (this._instance) { this._instance.destroy(); this._instance = null; }
+    }
+  };
+}
+
+// Expose so the onclick buttons (outside Alpine scope) can call it
+document.addEventListener('alpine:init', () => {
+  Alpine.data('chartModal', chartModal);
+});
+// Also keep a direct handle for the onclick= attributes
+document.addEventListener('DOMContentLoaded', () => {
+  window._chartModal = document.querySelector('[x-data="chartModal()"]')?.__x?.$data
+    || { expand(k){ Alpine.$data(document.querySelector('[x-data="chartModal()"]')).expand(k); } };
+  // Patch: wait a tick for Alpine to initialise
+  setTimeout(() => {
+    const el = document.querySelector('[x-data="chartModal()"]');
+    if (el && el._x_dataStack) window._chartModal = el._x_dataStack[0];
+  }, 200);
+});
+
+// ── Sparklines per sector card
+{% for group, info in sector_cards.items() %}
+(function(){
+  const ctx = document.getElementById('spark_{{ loop.index }}');
+  if (!ctx) return;
+  const all = {{ info.chartdata | tojson }};
+  const hasUpside = all.some(d => d.upside != null);
+  const label = ctx.closest('a').querySelector('.spark-label');
+
+  let rows, getValue, getColor, tooltipFn;
+  if (hasUpside) {
+    rows      = all.filter(d => d.upside != null);
+    getValue  = d => d.upside;
+    getColor  = d => d.upside >= 0 ? '#34d39999' : '#f43f5e99';
+    tooltipFn = c => ` ${c.label}: ${c.raw?.toFixed(1)}%`;
+    if (label) label.textContent = 'analyst upside %';
+  } else {
+    rows      = all.filter(d => d.pe_fwd != null || d.pe_ttm != null);
+    getValue  = d => d.pe_fwd ?? d.pe_ttm;
+    getColor  = () => '#6366f199';
+    tooltipFn = c => ` ${c.label}: ${c.raw?.toFixed(1)}x PE`;
+    if (label) label.textContent = 'forward PE';
+  }
+  if (!rows.length) return;
+  new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: rows.map(d => d.ticker),
+      datasets: [{ data: rows.map(getValue), backgroundColor: rows.map(getColor), borderRadius: 3 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      onClick(e, elements) {
+        if (elements.length) {
+          const ticker = rows[elements[0].index]?.ticker;
+          if (ticker) window.location.href = `/history/${encodeURIComponent(ticker)}`;
+        }
+      },
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: tooltipFn } } },
+      scales: { x: { display: false }, y: { display: false } }
+    },
+    plugins: [{
+      afterEvent(chart, args) {
+        const el = chart.getElementsAtEventForMode(args.event.native, 'nearest', {intersect:true}, false);
+        chart.canvas.style.cursor = el.length ? 'pointer' : 'default';
+      }
+    }]
+  });
+})();
+{% endfor %}
+
+// ── Heatmap table (interactive: filter + sort)
+(function(){
+  // Deduplicate: keep first occurrence of each ticker (highest market cap group first)
+  const seen = new Set();
+  const baseRows = ALL.filter(d => { if (seen.has(d.ticker)) return false; seen.add(d.ticker); return true; });
+
+  // State
+  let sortCol = 'market_cap', sortDir = -1;  // -1 = desc, 1 = asc
+  let filterSector = '', filterText = '';
+
+  // Populate sector dropdown
+  const sectors = [...new Set(ALL.map(d => d.sector))].sort();
+  const sel = document.getElementById('sectorFilter');
+  sectors.forEach(s => { const o = document.createElement('option'); o.value = s; o.textContent = s; sel.appendChild(o); });
+
+  // ── Helpers
+  function heatColor(val, lo, hi) {
+    if (val == null) return '';
+    const t = Math.min(1, Math.max(0, (val - lo) / (hi - lo)));
+    const stops = [[52,211,153],[250,204,21],[248,113,113]];
+    function lerp(a,b,t){ return a.map((v,i)=>Math.round(v+(b[i]-v)*t)); }
+    const col = t < 0.5 ? lerp(stops[0],stops[1],t*2) : lerp(stops[1],stops[2],(t-0.5)*2);
+    return `background:rgba(${col[0]},${col[1]},${col[2]},0.25);color:rgb(${col[0]},${col[1]},${col[2]})`;
+  }
+  function fmtPct(v){ return v==null?'<span class="text-slate-600">—</span>':`<span class="${v>=0?'text-emerald-400':'text-rose-400'} font-medium">${v.toFixed(1)}%</span>`; }
+  function fmtPeg(v){
+    if(v==null) return '<span class="text-slate-600">—</span>';
+    const col=v<1?'text-emerald-400':v<2?'text-amber-400':'text-rose-400';
+    return `<span class="${col} font-semibold">${v.toFixed(2)}</span>`;
+  }
+  function fmtPE(v){ return v==null?'<span class="text-slate-600">—</span>':v.toFixed(1)+'x'; }
+  function fmtCap(v){ return v==null?'<span class="text-slate-600">—</span>':'$'+v.toFixed(1)+'B'; }
+
+  // ── Render
+  function render() {
+    // Filter
+    const q = filterText.toLowerCase();
+    let rows = baseRows.filter(d => {
+      if (filterSector && d.sector !== filterSector) return false;
+      if (q && !d.ticker.toLowerCase().includes(q) && !d.name.toLowerCase().includes(q)) return false;
+      return true;
+    });
+
+    // Sort — nulls always last
+    rows.sort((a, b) => {
+      let av = a[sortCol], bv = b[sortCol];
+      if (typeof av === 'string') av = av.toLowerCase();
+      if (typeof bv === 'string') bv = bv.toLowerCase();
+      if (av == null && bv == null) return 0;
+      if (av == null) return 1;
+      if (bv == null) return -1;
+      return av < bv ? -sortDir : av > bv ? sortDir : 0;
+    });
+
+    // Update sort icons
+    document.querySelectorAll('#heatmapTable th.sortable').forEach(th => {
+      const icon = th.querySelector('.sort-icon');
+      if (th.dataset.col === sortCol) {
+        icon.textContent = sortDir === -1 ? '↓' : '↑';
+        th.classList.add('text-brand');
+        th.classList.remove('text-slate-500');
+      } else {
+        icon.textContent = '↕';
+        th.classList.remove('text-brand');
+        th.classList.add('text-slate-500');
+      }
+    });
+
+    // Row count
+    document.getElementById('heatmapCount').textContent = `${rows.length} ticker${rows.length !== 1 ? 's' : ''}`;
+
+    // Rows
+    document.getElementById('heatmapBody').innerHTML = rows.length ? rows.map(d => `
+      <tr class="border-b border-slate-800/60 hover:bg-slate-800/40 transition">
+        <td class="py-2 px-3"><a href="/history/${d.ticker}" class="font-mono font-bold text-brand hover:underline">${d.ticker}</a></td>
+        <td class="py-2 px-3 text-slate-400 text-xs max-w-[140px] truncate" title="${d.name}">${d.name}</td>
+        <td class="py-2 px-3 text-xs text-slate-500">${d.sector}</td>
+        <td class="py-2 px-3 text-right font-mono text-sm" style="${heatColor(d.pe_ttm,10,60)}">${fmtPE(d.pe_ttm)}</td>
+        <td class="py-2 px-3 text-right font-mono text-sm" style="${heatColor(d.pe_fwd,10,60)}">${fmtPE(d.pe_fwd)}</td>
+        <td class="py-2 px-3 text-right">${fmtPeg(d.peg)}</td>
+        <td class="py-2 px-3 text-right">${fmtPct(d.upside)}</td>
+        <td class="py-2 px-3 text-right font-mono text-xs text-slate-400">${fmtCap(d.market_cap)}</td>
+      </tr>`).join('')
+    : '<tr><td colspan="8" class="py-8 text-center text-slate-600 text-sm">No results</td></tr>';
+  }
+
+  // ── Bind controls
+  document.querySelectorAll('#heatmapTable th.sortable').forEach(th => {
+    th.addEventListener('click', () => {
+      if (sortCol === th.dataset.col) sortDir *= -1;
+      else { sortCol = th.dataset.col; sortDir = th.dataset.col === 'ticker' || th.dataset.col === 'name' || th.dataset.col === 'sector' ? 1 : -1; }
+      render();
+    });
+  });
+  document.getElementById('sectorFilter').addEventListener('change', e => { filterSector = e.target.value; render(); });
+  document.getElementById('heatmapSearch').addEventListener('input', e => { filterText = e.target.value; render(); });
+
+  render();
+})();
+</script>
+{% endblock %}
