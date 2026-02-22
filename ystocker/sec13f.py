@@ -471,19 +471,38 @@ def fetch_fund_holdings(name: str, cik: str) -> dict:
     try:
         filings = _get_filings_list(cik)
         all_13f = [f for f in filings if f["form"] in ("13F-HR", "13F-HR/A")]
-        log.info("13F filings for %s: %s", name,
-                 [(f["accession"], f.get("primary_doc")) for f in all_13f[:5]])
-        # Filings by third-party EDGAR agents (e.g. 0001193125 = Donnelley/EdgarOnline)
-        # are cover-page-only submissions — the actual 13F data is filed by the fund itself.
-        # Prefer filings whose accession number starts with the fund's own CIK digits.
-        cik_digits = str(int(cik)).zfill(10)
-        own_filings = [f for f in all_13f if f["accession"].replace("-","")[:10] == cik_digits]
-        thirteenf_filings = own_filings if own_filings else all_13f
-        if not thirteenf_filings:
+        if not all_13f:
             return {"error": "No 13F-HR filings found", "cik": cik}
 
-        log.info("13F selected for %s: accession=%s primary_doc=%s",
-                 name, thirteenf_filings[0]["accession"], thirteenf_filings[0].get("primary_doc"))
+        log.info("13F filings for %s: %s", name,
+                 [(f["accession"], f.get("primary_doc")) for f in all_13f[:6]])
+
+        # Group by period so we can pick the best filing per quarter.
+        # Within a period, prefer the filing whose primary_doc is NOT the bare
+        # "primary_doc.xml" cover stub (agent-filed wrappers use that name).
+        from itertools import groupby
+        periods_seen: list = []
+        by_period: dict = {}
+        for f in all_13f:
+            p = f.get("period", "")
+            if p not in by_period:
+                by_period[p] = []
+                periods_seen.append(p)
+            by_period[p].append(f)
+
+        def _best_for_period(candidates):
+            # Prefer a filing whose primary_doc is NOT bare "primary_doc.xml"
+            non_cover = [c for c in candidates
+                         if c.get("primary_doc", "").lower() != "primary_doc.xml"]
+            return (non_cover or candidates)[0]
+
+        # Build ordered list: latest period first
+        thirteenf_filings = [_best_for_period(by_period[p]) for p in periods_seen]
+
+        log.info("13F selected for %s: accession=%s primary_doc=%s period=%s",
+                 name, thirteenf_filings[0]["accession"],
+                 thirteenf_filings[0].get("primary_doc"),
+                 thirteenf_filings[0].get("period"))
         latest = thirteenf_filings[0]
         prev   = thirteenf_filings[1] if len(thirteenf_filings) > 1 else None
 
