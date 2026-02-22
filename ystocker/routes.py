@@ -461,6 +461,32 @@ def _invalidate_cache():
 # Historical PE page
 # ---------------------------------------------------------------------------
 
+def _get_institutional_holders(ticker: str) -> list:
+    """Return list of funds (from 13F cache) that hold this ticker."""
+    try:
+        from ystocker.sec13f import get_all_holdings
+        all_holdings = get_all_holdings()
+        result = []
+        for fund_name, fd in all_holdings.items():
+            if fd.get("error") or not fd.get("holdings"):
+                continue
+            for h in fd["holdings"]:
+                if h.get("ticker") == ticker:
+                    result.append({
+                        "fund":         fund_name,
+                        "rank":         h["rank"],
+                        "shares":       h["shares"],
+                        "value_millions": h["value_millions"],
+                        "pct_portfolio": h["pct_portfolio"],
+                        "change":       h.get("change", "unknown"),
+                    })
+                    break
+        result.sort(key=lambda x: x["value_millions"], reverse=True)
+        return result
+    except Exception:
+        log.exception("Failed to get institutional holders for %s", ticker)
+        return []
+
 @bp.route("/history/<ticker>")
 def history(ticker: str):
     """Page showing 1-year historical PE ratio for a single ticker."""
@@ -540,6 +566,7 @@ def api_history(ticker: str):
         "eps":              _safe(eps),
         "eps_growth_ttm":   _safe(round(earnings_growth_ttm * 100, 1)) if earnings_growth_ttm is not None else None,
         "eps_growth_q":     _safe(round(earnings_growth_q   * 100, 1)) if earnings_growth_q   is not None else None,
+        "institutional_holders": _get_institutional_holders(ticker),
     })
 
 
@@ -670,3 +697,50 @@ def api_discover():
 @bp.route("/contact")
 def contact():
     return render_template("contact.html", peer_groups=list(PEER_GROUPS.keys()))
+
+
+# ---------------------------------------------------------------------------
+# 13F Institutional Holdings
+# ---------------------------------------------------------------------------
+
+@bp.route("/13f")
+def thirteenf():
+    """Page showing latest 13F holdings for top institutional investors."""
+    log.info("GET /13f")
+    from ystocker.sec13f import (
+        get_all_holdings, FUNDS, is_cache_fresh, get_cache_ts, is_warming as sec_warming
+    )
+    holdings   = get_all_holdings()
+    cache_ts   = get_cache_ts()
+    warming    = sec_warming()
+    return render_template(
+        "thirteenf.html",
+        peer_groups=list(PEER_GROUPS.keys()),
+        funds=FUNDS,
+        holdings=holdings,
+        cache_last_updated=cache_ts,
+        cache_fresh=is_cache_fresh(),
+        warming=warming,
+    )
+
+
+@bp.route("/13f/refresh")
+def thirteenf_refresh():
+    """Kick off a background re-fetch of all 13F holdings."""
+    from ystocker.sec13f import refresh_cache
+    threading.Thread(target=refresh_cache, daemon=True, name="sec13f-manual-refresh").start()
+    return redirect(url_for("main.thirteenf"))
+
+
+@bp.route("/api/13f/<path:fund_slug>")
+def api_thirteenf(fund_slug: str):
+    """JSON API — return holdings for a single fund by slug."""
+    from ystocker.sec13f import get_all_holdings, FUNDS
+    holdings = get_all_holdings()
+    name = next(
+        (n for n in FUNDS if n.lower().replace(" ", "-") == fund_slug.lower()),
+        None
+    )
+    if not name:
+        return jsonify({"error": "Fund not found"}), 404
+    return jsonify(holdings.get(name, {}))

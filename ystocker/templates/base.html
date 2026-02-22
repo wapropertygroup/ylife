@@ -62,7 +62,6 @@
 
       <!-- Logo -->
       <a href="{{ url_for('main.index') }}" class="flex items-center gap-2 font-bold text-lg shrink-0">
-        <span class="text-brand text-xl">📈</span>
         <span class="grad-text">yStocker</span>
       </a>
 
@@ -118,6 +117,9 @@
         <a href="{{ url_for('main.lookup') }}"
            class="px-3 py-1.5 rounded-md text-sm text-slate-300 hover:text-white hover:bg-slate-800 transition"
            data-i18n="nav.lookup">Lookup</a>
+        <a href="{{ url_for('main.thirteenf') }}"
+           class="px-3 py-1.5 rounded-md text-sm text-slate-300 hover:text-white hover:bg-slate-800 transition"
+           data-i18n="nav.thirteenf">13F</a>
         <a href="{{ url_for('main.groups') }}"
            class="px-3 py-1.5 rounded-md text-sm text-slate-300 hover:text-white hover:bg-slate-800 transition"
            data-i18n="nav.groups">Groups</a>
@@ -173,6 +175,7 @@
           {% endfor %}
         </div>
         <a href="{{ url_for('main.lookup') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-300 hover:bg-slate-800" data-i18n="nav.lookup">Lookup</a>
+        <a href="{{ url_for('main.thirteenf') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-300 hover:bg-slate-800" data-i18n="nav.thirteenf">13F</a>
         <a href="{{ url_for('main.groups') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-300 hover:bg-slate-800" data-i18n="nav.groups">Groups</a>
         <a href="{{ url_for('main.contact') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-300 hover:bg-slate-800" data-i18n="nav.contact">Contact</a>
         <a id="refreshBtnMobile" href="{{ url_for('main.refresh') }}" class="px-3 py-2.5 rounded-md text-sm text-brand hover:bg-slate-800" data-i18n="nav.refresh">↻ Refresh</a>
@@ -207,6 +210,7 @@
   <footer class="border-t border-slate-800 py-4 text-center text-xs text-slate-600">
     <span data-i18n="footer.text">yStocker — data via Yahoo Finance</span> &nbsp;·&nbsp;
     <a href="{{ url_for('main.contact') }}" class="hover:text-brand transition" data-i18n="footer.contact">Contact Us</a>
+    &nbsp;·&nbsp; <span data-i18n="footer.copyright">© 2025 yStocker. All rights reserved.</span>
   </footer>
 
 <script>

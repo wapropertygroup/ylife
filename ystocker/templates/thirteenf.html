@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+{% block title %}yStocker — 13F Institutional Holdings{% endblock %}
+
+{% block content %}
+
+<!-- ── Header ────────────────────────────────────────────────────────── -->
+<div class="mb-6 sm:mb-8 fade-up">
+  <h1 class="text-2xl sm:text-3xl font-bold grad-text mb-1">13F Institutional Holdings</h1>
+  <p class="text-slate-400 text-sm">Latest quarterly 13F-HR filings from SEC EDGAR · Top 50 equity positions per fund</p>
+  {% if cache_last_updated %}
+  <p class="text-xs text-slate-600 mt-1">
+    Data as of {{ cache_last_updated | int | datetimeformat }}
+    &nbsp;·&nbsp;
+    {% if warming %}
+    <span class="text-brand animate-pulse">refreshing now…</span>
+    {% else %}
+    next refresh {{ (cache_last_updated | int + 86400) | datetimeformat }}
+    {% endif %}
+    &nbsp;·&nbsp;
+    <a href="{{ url_for('main.thirteenf_refresh') }}" class="text-brand hover:underline">↻ Refresh</a>
+  </p>
+  {% else %}
+  <p class="text-xs text-slate-600 mt-1">
+    {% if warming %}
+    <span class="text-brand animate-pulse">Fetching holdings from SEC EDGAR — this may take ~30 seconds…</span>
+    {% else %}
+    <a href="{{ url_for('main.thirteenf_refresh') }}" class="text-brand hover:underline">↻ Load holdings</a>
+    {% endif %}
+  </p>
+  {% endif %}
+</div>
+
+<!-- ── Fund selector + panels ────────────────────────────────────────── -->
+{% set fund_names = funds.keys() | list %}
+{% set first_slug = fund_names[0] | lower | replace(' ', '-') if fund_names else '' %}
+
+<div x-data="{ activeFund: '{{ first_slug }}' }" class="fade-up">
+
+  <!-- Fund pill buttons -->
+  <div class="flex flex-wrap gap-2 mb-6">
+    {% for name in fund_names %}
+    {% set slug = name | lower | replace(' ', '-') %}
+    <button @click="activeFund = '{{ slug }}'"
+            :class="activeFund === '{{ slug }}'
+              ? 'border-brand bg-brand/15 text-white shadow-sm shadow-brand/20'
+              : 'border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-500'"
+            class="px-4 py-2 rounded-xl border text-sm font-medium transition-all">
+      {{ name }}
+    </button>
+    {% endfor %}
+  </div>
+
+  <!-- Per-fund panels -->
+  {% for name, cik in funds.items() %}
+  {% set slug = name | lower | replace(' ', '-') %}
+  {% set fd = holdings.get(name, {}) %}
+
+  <div x-show="activeFund === '{{ slug }}'" x-transition
+       class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6">
+
+    {% if not fd %}
+    <!-- No data yet -->
+    <div class="py-16 text-center">
+      <p class="text-slate-500 text-sm">
+        {% if warming %}
+        <span class="text-brand animate-pulse">Fetching SEC EDGAR data… this takes ~30s on first load.</span>
+        {% else %}
+        No data yet. <a href="{{ url_for('main.thirteenf_refresh') }}" class="text-brand hover:underline">Refresh to load</a>.
+        {% endif %}
+      </p>
+    </div>
+
+    {% elif fd.get('error') %}
+    <!-- Error state -->
+    <div class="py-10 text-center">
+      <p class="text-rose-400 text-sm mb-2">Failed to fetch: {{ fd.error }}</p>
+      <a href="{{ url_for('main.thirteenf_refresh') }}"
+         class="text-brand text-xs hover:underline">↻ Retry</a>
+    </div>
+
+    {% else %}
+    <!-- Fund metadata row -->
+    <div class="flex flex-wrap items-center gap-x-6 gap-y-1 mb-5 text-xs text-slate-500">
+      <span>CIK: <span class="font-mono text-slate-300">{{ cik }}</span></span>
+      <span>Filing date: <span class="text-slate-300 font-medium">{{ fd.filing_date }}</span></span>
+      <span>Period: <span class="text-slate-300 font-medium">{{ fd.period_of_report }}</span></span>
+      <span>Reported AUM:
+        <span class="text-slate-100 font-bold">
+          ${{ "{:,.0f}".format(fd.total_value_millions) }}M
+        </span>
+      </span>
+      <span>Holdings shown: <span class="text-slate-300">{{ fd.holdings | length }} / {{ fd.total_holdings }}</span></span>
+    </div>
+
+    <!-- Holdings table -->
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="text-xs text-slate-500 border-b border-slate-800 select-none">
+            <th class="text-right py-2 px-3 font-medium w-8">#</th>
+            <th class="text-left  py-2 px-3 font-medium">Ticker</th>
+            <th class="text-left  py-2 px-3 font-medium">Company</th>
+            <th class="text-right py-2 px-3 font-medium">Shares</th>
+            <th class="text-right py-2 px-3 font-medium">Value ($M)</th>
+            <th class="text-right py-2 px-3 font-medium">% Portfolio</th>
+            <th class="text-center py-2 px-3 font-medium">Change</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for h in fd.holdings %}
+          <tr class="border-b border-slate-800/50 hover:bg-slate-800/40 transition">
+            <td class="py-2.5 px-3 text-right text-slate-600 text-xs">{{ h.rank }}</td>
+            <td class="py-2.5 px-3">
+              {% if h.ticker %}
+              <a href="{{ url_for('main.history', ticker=h.ticker) }}"
+                 class="font-mono font-bold text-brand hover:underline">{{ h.ticker }}</a>
+              {% else %}
+              <span class="text-slate-600 font-mono text-xs">{{ h.cusip }}</span>
+              {% endif %}
+            </td>
+            <td class="py-2.5 px-3 text-slate-300 text-xs max-w-[220px] truncate" title="{{ h.name }}">{{ h.name }}</td>
+            <td class="py-2.5 px-3 text-right font-mono text-sm text-slate-300">
+              {{ "{:,}".format(h.shares) }}
+            </td>
+            <td class="py-2.5 px-3 text-right font-mono text-sm">
+              ${{ "{:,.1f}".format(h.value_millions) }}
+            </td>
+            <td class="py-2.5 px-3 text-right font-mono text-sm text-slate-300">
+              {{ "{:.2f}".format(h.pct_portfolio) }}%
+            </td>
+            <td class="py-2.5 px-3 text-center">
+              {% if h.change == 'new' %}
+              <span class="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-emerald-900/50 text-emerald-300 border border-emerald-800">New</span>
+              {% elif h.change == 'increased' %}
+              <span class="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-sky-900/50 text-sky-300 border border-sky-800">▲ Added</span>
+              {% elif h.change == 'reduced' %}
+              <span class="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-amber-900/50 text-amber-300 border border-amber-800">▼ Reduced</span>
+              {% elif h.change == 'closed' %}
+              <span class="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-rose-900/50 text-rose-300 border border-rose-800">Closed</span>
+              {% elif h.change == 'unchanged' %}
+              <span class="text-slate-600 text-xs">—</span>
+              {% else %}
+              <span class="text-slate-700 text-xs">?</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+
+  </div>
+  {% endfor %}
+
+</div>
+
+<!-- Legend -->
+<div class="mt-6 flex flex-wrap gap-4 text-xs text-slate-500 fade-up">
+  <span class="flex items-center gap-1.5"><span class="px-1.5 py-0.5 rounded bg-emerald-900/50 text-emerald-300 border border-emerald-800 text-[10px] font-semibold">New</span> New position this quarter</span>
+  <span class="flex items-center gap-1.5"><span class="px-1.5 py-0.5 rounded bg-sky-900/50 text-sky-300 border border-sky-800 text-[10px] font-semibold">▲ Added</span> Shares increased vs prior quarter</span>
+  <span class="flex items-center gap-1.5"><span class="px-1.5 py-0.5 rounded bg-amber-900/50 text-amber-300 border border-amber-800 text-[10px] font-semibold">▼ Reduced</span> Shares decreased vs prior quarter</span>
+  <span class="flex items-center gap-1.5"><span class="px-1.5 py-0.5 rounded bg-rose-900/50 text-rose-300 border border-rose-800 text-[10px] font-semibold">Closed</span> Position exited (prior quarter only)</span>
+  <span>· Data source: <a href="https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&type=13F" target="_blank" rel="noopener" class="text-brand hover:underline">SEC EDGAR</a></span>
+</div>
+
+{% endblock %}

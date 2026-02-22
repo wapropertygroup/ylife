@@ -57,4 +57,8 @@ def create_app() -> Flask:
     # daemon=True ensures the thread never blocks a clean shutdown.
     _start_background_thread()
 
+    # Start 13F institutional holdings cache warmer (24h TTL)
+    from ystocker.sec13f import start_background_thread as _start_sec13f_thread
+    _start_sec13f_thread()
+
     return app

@@ -1,0 +1,498 @@
+"""
+ystocker.sec13f
+~~~~~~~~~~~~~~~
+Fetches 13F institutional holdings from SEC EDGAR for a fixed list of top funds.
+
+Data flow per fund:
+  1. GET data.sec.gov/submissions/CIK{cik}.json  → find latest 13F-HR filing
+  2. GET Archives/edgar/data/{cik}/{accession}-index.json  → find infotable filename
+  3. GET Archives/edgar/data/{cik}/{accession}/{infotable}  → parse XML holdings
+  4. Repeat step 1-3 for previous quarter to compute change classification
+
+All results are cached on disk (24h TTL) and in memory.
+"""
+from __future__ import annotations
+
+import json
+import logging
+import math
+import threading
+import time
+import xml.etree.ElementTree as ET
+from pathlib import Path
+from typing import Dict, List, Optional
+
+import requests
+
+log = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Fund registry  {display_name: zero-padded CIK}
+# ---------------------------------------------------------------------------
+FUNDS: Dict[str, str] = {
+    "Berkshire Hathaway":   "0001067983",
+    "Bridgewater Associates": "0001350694",
+    "Tiger Global":         "0001167483",
+    "Citadel Advisors":     "0001423298",
+    "Third Point":          "0001040273",
+    "Pershing Square":      "0001512673",
+    "Appaloosa Management": "0000814620",
+    "Baupost Group":        "0001061768",
+}
+
+# ---------------------------------------------------------------------------
+# Static CUSIP → ticker mapping for the most common large-cap holdings
+# This avoids any on-the-fly resolution network call.
+# ---------------------------------------------------------------------------
+CUSIP_TO_TICKER: Dict[str, str] = {
+    "037833100": "AAPL",
+    "02079K305": "GOOGL",
+    "02079K107": "GOOGL",
+    "594918104": "MSFT",
+    "023135106": "AMZN",
+    "67066G104": "NVDA",
+    "30303M102": "META",
+    "88160R101": "TSLA",
+    "46090E103": "JPM",
+    "60505104":  "BAC",
+    "172967424": "BRK-B",
+    "166764100": "C",
+    "949746101": "WFC",
+    "38141G104": "GS",
+    "617446448": "MS",
+    "26441C204": "KO",
+    "713448108": "PEP",
+    "732834105": "PG",
+    "459200101": "IBM",
+    "097023105": "BA",
+    "742718109": "RTX",
+    "110122108": "BRK-A",
+    "437076102": "HD",
+    "931142103": "WMT",
+    "438516106": "HON",
+    "254687106": "DIS",
+    "912093108": "UNH",
+    "460690100": "JNJ",
+    "58933Y105": "MRK",
+    "002824100": "ABT",
+    "002921109": "ABBV",
+    "339750101": "LLY",
+    "698435105": "PFE",
+    "478160104": "JCI",
+    "92343V104": "VZ",
+    "00206R102": "T",
+    "742556105": "PRU",
+    "855244109": "SQ",
+    "064058100": "BAX",
+    "651639106": "NFLX",
+    "64110D104": "NET",
+    "023608102": "AMGN",
+    "655044105": "NKE",
+    "717081103": "PFG",
+    "891482102": "TD",
+    "25470F104": "DKNG",
+    "52736R102": "LVS",
+    "88339J105": "TMUS",
+    "025816109": "AXP",
+    "369550108": "GE",
+    "149123101": "CAT",
+    "172967304": "BRK-B",
+    "78467J100": "SPG",
+    "46625H100": "JPM",   # alternate
+    "91324P102": "UPS",
+    "268648102": "EL",
+    "404280406": "GS",    # alternate
+    "61945C103": "MS",    # alternate
+    "78462F103": "S&P",
+    "31428X106": "FDX",
+    "631103108": "NOC",
+    "526057104": "LMT",
+    "38259P508": "GOOGL", # class C
+    "57060D108": "MA",
+    "92826C839": "V",
+    "44920010":  "IAC",
+    "49456B101": "KHC",
+    "456788108": "INTU",
+    "097693109": "ADBE",
+    "40171V100": "GOOG",
+    "76657R106": "RIVN",
+    "650135108": "NIO",
+    "811156100": "SCHW",
+    "15135B101": "CEG",
+    "637640103": "NEE",
+    "03218560":  "AIG",
+    "458140100": "INTC",
+    "009728109": "AMD",
+    "72352L106": "PINS",
+    "80105N105": "SNAP",
+    "883556102": "TWTR",  # historical
+    "78410G104": "SE",
+    "74164M108": "BIDU",
+    "01609W102": "BABA",
+    "87936U109": "TME",
+    "98421M106": "VIPS",
+    "67020Y100": "NVS",
+    "145220105": "CVX",
+    "30231G102": "XOM",
+    "202795101": "COP",
+    "26875P101": "EOG",
+    "263534109": "ECL",
+    "36467W109": "GDX",
+    "742514509": "PSX",
+    "872540109": "TSN",
+    "883948100": "TGT",
+    "902494103": "TJX",
+    "460148109": "JD",
+    "548661107": "LOW",
+    "742718":    "RTX",
+    "025816109": "AXP",
+    "84265V105": "SBUX",
+    "584977":    "MMM",
+    "009158106": "ADM",
+    "06738G103": "BIIB",
+    "74159L101": "REGN",
+    "900111204": "VRTX",
+    "60871R209": "MRNA",
+    "345370860": "FCX",
+    "643659105": "NEM",
+    "670346105": "OXY",
+    "867914":    "SLB",
+    "693475105": "PSA",
+    "895126505": "WBA",
+    "500754106": "KR",
+    "78814P168": "MELI",
+    "18915M107": "CLOV",
+    "67085R104": "OKTA",
+    "09857L108": "SNOW",
+    "156700106": "CRM",
+    "67066G104": "NVDA",
+    "20030N101": "COIN",
+    "57667L107": "MSTR",
+}
+
+# ---------------------------------------------------------------------------
+# Cache
+# ---------------------------------------------------------------------------
+_CACHE_FILE = Path(__file__).parent.parent / "cache" / "sec13f_cache.json"
+_CACHE_TTL  = 24 * 60 * 60  # 24 h — 13F data changes quarterly
+
+_sec13f_lock: threading.Lock = threading.Lock()
+_sec13f_data: Optional[Dict] = None
+_sec13f_ts:   Optional[float] = None
+_sec13f_warming: bool = False
+
+# ---------------------------------------------------------------------------
+# HTTP helpers
+# ---------------------------------------------------------------------------
+_SESSION = requests.Session()
+_SESSION.headers.update({
+    "User-Agent": "yStocker/1.0 ystocker-app@example.com",
+    "Accept-Encoding": "gzip, deflate",
+})
+_LAST_REQ_TIME: float = 0.0
+_RATE_LIMIT_INTERVAL = 0.15   # seconds between requests
+
+
+def _get(url: str, **kwargs) -> requests.Response:
+    """Rate-limited GET with retry on 429."""
+    global _LAST_REQ_TIME
+    gap = time.time() - _LAST_REQ_TIME
+    if gap < _RATE_LIMIT_INTERVAL:
+        time.sleep(_RATE_LIMIT_INTERVAL - gap)
+    _LAST_REQ_TIME = time.time()
+    resp = _SESSION.get(url, timeout=20, **kwargs)
+    if resp.status_code == 429:
+        log.warning("SEC rate limit hit, sleeping 2s")
+        time.sleep(2)
+        resp = _SESSION.get(url, timeout=20, **kwargs)
+    resp.raise_for_status()
+    return resp
+
+
+# ---------------------------------------------------------------------------
+# SEC EDGAR parsing helpers
+# ---------------------------------------------------------------------------
+
+def _get_filings_list(cik: str) -> list:
+    """Return list of recent filings dicts from SEC submissions endpoint."""
+    url = f"https://data.sec.gov/submissions/CIK{cik}.json"
+    data = _get(url).json()
+    recent = data.get("filings", {}).get("recent", {})
+    forms       = recent.get("form", [])
+    accessions  = recent.get("accessionNumber", [])
+    dates       = recent.get("filingDate", [])
+    periods     = recent.get("reportDate", [])
+    return [
+        {"form": forms[i], "accession": accessions[i],
+         "filing_date": dates[i], "period": periods[i]}
+        for i in range(len(forms))
+    ]
+
+
+def _find_infotable_url(cik: str, accession: str) -> Optional[str]:
+    """Given an accession number, return the URL of the infotable XML."""
+    cik_int  = str(int(cik))           # strip leading zeros for URL path
+    acc_nodash = accession.replace("-", "")
+    idx_url = (
+        f"https://data.sec.gov/Archives/edgar/data/"
+        f"{cik_int}/{acc_nodash}-index.json"
+    )
+    idx = _get(idx_url).json()
+    for doc in idx.get("documents", []):
+        name  = (doc.get("documentDescription") or "").lower()
+        fname = (doc.get("name") or "").lower()
+        if "information table" in name or "infotable" in fname or fname.endswith("_info_table.xml"):
+            return (
+                f"https://data.sec.gov/Archives/edgar/data/"
+                f"{cik_int}/{acc_nodash}/{doc['name']}"
+            )
+    # fallback: first XML that isn't the primary document
+    for doc in idx.get("documents", []):
+        if (doc.get("name") or "").lower().endswith(".xml"):
+            return (
+                f"https://data.sec.gov/Archives/edgar/data/"
+                f"{cik_int}/{acc_nodash}/{doc['name']}"
+            )
+    return None
+
+
+def _parse_infotable(xml_text: str) -> List[dict]:
+    """Parse SEC 13F infotable XML and return list of holding dicts."""
+    root = ET.fromstring(xml_text)
+    ns_prefix = ""
+    # Detect namespace
+    if root.tag.startswith("{"):
+        ns_uri = root.tag.split("}")[0].lstrip("{")
+        ns_prefix = f"{{{ns_uri}}}"
+
+    holdings = []
+    for entry in root.iter(f"{ns_prefix}infoTable"):
+        def _t(tag: str) -> Optional[str]:
+            el = entry.find(f"{ns_prefix}{tag}")
+            return el.text.strip() if el is not None and el.text else None
+
+        # Skip options positions
+        put_call = _t("putCall")
+        if put_call:
+            continue
+
+        try:
+            value_k = int(_t("value") or "0")
+            shares_el = entry.find(f"{ns_prefix}shrsOrPrnAmt")
+            shares = int(shares_el.find(f"{ns_prefix}sshPrnamt").text) if shares_el is not None else 0
+        except (ValueError, AttributeError):
+            continue
+
+        cusip = (_t("cusip") or "").strip()
+        name  = (_t("nameOfIssuer") or "").strip()
+        ticker = CUSIP_TO_TICKER.get(cusip)
+
+        holdings.append({
+            "cusip":          cusip,
+            "name":           name,
+            "ticker":         ticker,
+            "shares":         shares,
+            "value_thousands": value_k,
+            "value_millions": round(value_k / 1000, 1),
+        })
+    return holdings
+
+
+def _annotate_changes(curr: List[dict], prev: List[dict]) -> List[dict]:
+    """Add 'change' field to each holding by comparing with previous quarter."""
+    prev_map = {h["cusip"]: h["shares"] for h in prev if h["cusip"]}
+    for h in curr:
+        cusip = h.get("cusip", "")
+        if not cusip or cusip not in prev_map:
+            h["change"] = "new"
+        else:
+            delta = h["shares"] - prev_map[cusip]
+            if delta > 0:
+                h["change"] = "increased"
+            elif delta < 0:
+                h["change"] = "reduced"
+            else:
+                h["change"] = "unchanged"
+    return curr
+
+
+# ---------------------------------------------------------------------------
+# Core fetch function
+# ---------------------------------------------------------------------------
+
+def fetch_fund_holdings(name: str, cik: str) -> dict:
+    """
+    Fetch latest 13F holdings for one fund from SEC EDGAR.
+    Returns a dict with filing metadata, top-50 holdings, and error field.
+    """
+    log.info("Fetching 13F for %s (CIK %s)", name, cik)
+    try:
+        filings = _get_filings_list(cik)
+        thirteenf_filings = [f for f in filings if f["form"] == "13F-HR"]
+        if not thirteenf_filings:
+            return {"error": "No 13F-HR filings found", "cik": cik}
+
+        latest = thirteenf_filings[0]
+        prev   = thirteenf_filings[1] if len(thirteenf_filings) > 1 else None
+
+        # Fetch latest holdings
+        info_url = _find_infotable_url(cik, latest["accession"])
+        if not info_url:
+            return {"error": "Could not locate infotable XML", "cik": cik}
+        xml_text = _get(info_url).text
+        curr_holdings = _parse_infotable(xml_text)
+
+        # Fetch previous holdings for change detection
+        if prev:
+            try:
+                prev_url = _find_infotable_url(cik, prev["accession"])
+                if prev_url:
+                    prev_xml = _get(prev_url).text
+                    prev_holdings = _parse_infotable(prev_xml)
+                    curr_holdings = _annotate_changes(curr_holdings, prev_holdings)
+                else:
+                    for h in curr_holdings:
+                        h["change"] = "unknown"
+            except Exception as exc:
+                log.warning("Could not fetch prev quarter for %s: %s", name, exc)
+                for h in curr_holdings:
+                    h["change"] = "unknown"
+        else:
+            for h in curr_holdings:
+                h["change"] = "new"
+
+        # Sort by value descending, compute portfolio %
+        curr_holdings.sort(key=lambda h: h["value_thousands"], reverse=True)
+        total_value_k = sum(h["value_thousands"] for h in curr_holdings)
+        total_millions = round(total_value_k / 1000, 1)
+
+        top50 = curr_holdings[:50]
+        for i, h in enumerate(top50, 1):
+            h["rank"] = i
+            h["pct_portfolio"] = (
+                round(h["value_thousands"] / total_value_k * 100, 2)
+                if total_value_k > 0 else 0.0
+            )
+
+        return {
+            "cik":                cik,
+            "filing_date":        latest["filing_date"],
+            "period_of_report":   latest["period"],
+            "holdings":           top50,
+            "total_holdings":     len(curr_holdings),
+            "total_value_millions": total_millions,
+            "error":              None,
+        }
+
+    except Exception as exc:
+        log.exception("Failed to fetch 13F for %s: %s", name, exc)
+        return {"error": str(exc), "cik": cik}
+
+
+# ---------------------------------------------------------------------------
+# Cache management
+# ---------------------------------------------------------------------------
+
+def _save_cache(data: dict, ts: float) -> None:
+    try:
+        _CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        payload = {"timestamp": ts, "data": data}
+        tmp = _CACHE_FILE.with_suffix(".tmp")
+        tmp.write_text(json.dumps(payload, default=str))
+        tmp.replace(_CACHE_FILE)
+        log.info("13F cache saved to %s", _CACHE_FILE)
+    except Exception:
+        log.exception("Failed to save 13F cache")
+
+
+def _load_cache() -> bool:
+    global _sec13f_data, _sec13f_ts
+    if not _CACHE_FILE.exists():
+        return False
+    try:
+        payload = json.loads(_CACHE_FILE.read_text())
+        ts  = float(payload["timestamp"])
+        age = time.time() - ts
+        if age > _CACHE_TTL:
+            log.info("13F disk cache stale (%.1fh)", age / 3600)
+            return False
+        with _sec13f_lock:
+            _sec13f_data = payload["data"]
+            _sec13f_ts   = ts
+        log.info("Loaded 13F cache (%.1fh old)", age / 3600)
+        return True
+    except Exception:
+        log.exception("Failed to load 13F cache")
+        return False
+
+
+def refresh_cache() -> None:
+    """Fetch all funds and write cache. Runs in a background thread."""
+    global _sec13f_data, _sec13f_ts, _sec13f_warming
+    with _sec13f_lock:
+        _sec13f_warming = True
+    try:
+        result = {}
+        for name, cik in FUNDS.items():
+            result[name] = fetch_fund_holdings(name, cik)
+        ts = time.time()
+        with _sec13f_lock:
+            _sec13f_data = result
+            _sec13f_ts   = ts
+            _sec13f_warming = False
+        _save_cache(result, ts)
+    except Exception:
+        log.exception("Unhandled error in 13F refresh_cache")
+        with _sec13f_lock:
+            _sec13f_warming = False
+
+
+def get_all_holdings() -> Dict[str, dict]:
+    """Return cached holdings for all funds, loading/fetching as needed."""
+    with _sec13f_lock:
+        data = _sec13f_data
+    if data is not None:
+        return data
+    if _load_cache():
+        with _sec13f_lock:
+            return _sec13f_data or {}
+    # No fresh cache — return empty; background thread will fill it
+    return {}
+
+
+def is_cache_fresh() -> bool:
+    with _sec13f_lock:
+        if _sec13f_ts is None:
+            return False
+        return (time.time() - _sec13f_ts) < _CACHE_TTL
+
+
+def get_cache_ts() -> Optional[float]:
+    with _sec13f_lock:
+        return _sec13f_ts
+
+
+def is_warming() -> bool:
+    with _sec13f_lock:
+        return _sec13f_warming
+
+
+def start_background_thread() -> None:
+    """Start background thread: load or refresh on startup, then every 24h."""
+    def _loop():
+        global _sec13f_warming
+        if not _load_cache():
+            log.info("13F: no fresh disk cache — fetching now")
+            refresh_cache()
+        while True:
+            with _sec13f_lock:
+                last = _sec13f_ts
+            sleep_for = _CACHE_TTL - (time.time() - last) if last else _CACHE_TTL
+            sleep_for = max(sleep_for, 0)
+            log.info("Next 13F refresh in %.1fh", sleep_for / 3600)
+            time.sleep(sleep_for)
+            refresh_cache()
+
+    t = threading.Thread(target=_loop, daemon=True, name="sec13f-warmer")
+    t.start()
+    log.info("13F cache warmer started (TTL 24h, file: %s)", _CACHE_FILE)

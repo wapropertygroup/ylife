@@ -18,6 +18,7 @@ const I18n = (() => {
     'nav.peer_groups':    { en: 'Peer Groups', zh: '同类组' },
     'nav.view_all':       { en: 'View all sectors ↓', zh: '查看全部板块 ↓' },
     'nav.lookup':         { en: 'Lookup',   zh: '查询' },
+    'nav.thirteenf':      { en: '13F',      zh: '13F' },
     'nav.groups':         { en: 'Groups',   zh: '分组' },
     'nav.contact':        { en: 'Contact',  zh: '联系' },
     'nav.refresh':        { en: '↻ Refresh', zh: '↻ 刷新' },
@@ -26,6 +27,7 @@ const I18n = (() => {
                             zh: '清除内存缓存，从 Yahoo Finance 重新获取所有股票的最新价格、市盈率及分析师目标价。' },
     'footer.text':        { en: 'yStocker — data via Yahoo Finance', zh: 'yStocker — 数据来源：Yahoo Finance' },
     'footer.contact':     { en: 'Contact Us', zh: '联系我们' },
+    'footer.copyright':   { en: '© 2025 yStocker. All rights reserved.', zh: '© 2025 yStocker. 保留所有权利。' },
 
     // ── index.html ─────────────────────────────────────────────────────
     'index.hero_title':   { en: 'Stock Valuation', zh: '股票估值' },

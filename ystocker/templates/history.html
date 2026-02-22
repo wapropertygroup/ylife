@@ -124,6 +124,27 @@
 
 </div>
 
+<!-- Institutional Holders (13F) -->
+<div id="instHoldersSection" class="mt-6 bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up" style="display:none">
+  <h2 class="text-base font-semibold text-slate-200 mb-1">Institutional Holdings (13F)</h2>
+  <p class="text-xs text-slate-500 mb-4">Funds reporting this position in their latest SEC 13F filing</p>
+  <div class="overflow-x-auto">
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="text-xs text-slate-500 border-b border-slate-800 select-none">
+          <th class="text-left py-2 px-3 font-medium">Fund</th>
+          <th class="text-right py-2 px-3 font-medium">Portfolio Rank</th>
+          <th class="text-right py-2 px-3 font-medium">Shares</th>
+          <th class="text-right py-2 px-3 font-medium">Value</th>
+          <th class="text-right py-2 px-3 font-medium">% of Portfolio</th>
+          <th class="text-center py-2 px-3 font-medium">Change</th>
+        </tr>
+      </thead>
+      <tbody id="instHoldersBody"></tbody>
+    </table>
+  </div>
+</div>
+
 <!-- Error -->
 <div id="histError" class="hidden mt-4 px-4 py-3 rounded-lg bg-red-900/40 border border-red-700 text-red-300 text-sm"></div>
 
@@ -344,6 +365,29 @@ const TICKER = {{ ticker | tojson }};
       }]
     });
   }
-})();
+  // ── Institutional holders (13F)
+  if (data.institutional_holders && data.institutional_holders.length > 0) {
+    const section = document.getElementById('instHoldersSection');
+    const tbody   = document.getElementById('instHoldersBody');
+    section.style.display = 'block';
+
+    const changeLabel = {
+      new:       '<span class="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-emerald-900/50 text-emerald-300 border border-emerald-800">New</span>',
+      increased: '<span class="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-sky-900/50 text-sky-300 border border-sky-800">▲ Added</span>',
+      reduced:   '<span class="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-amber-900/50 text-amber-300 border border-amber-800">▼ Reduced</span>',
+      closed:    '<span class="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-rose-900/50 text-rose-300 border border-rose-800">Closed</span>',
+      unchanged: '<span class="text-slate-600 text-xs">—</span>',
+    };
+
+    tbody.innerHTML = data.institutional_holders.map(h => `
+      <tr class="border-b border-slate-800/50 hover:bg-slate-800/40 transition">
+        <td class="py-2.5 px-3 text-slate-200 font-medium text-sm">${h.fund}</td>
+        <td class="py-2.5 px-3 text-right text-slate-500 text-xs">${h.rank}</td>
+        <td class="py-2.5 px-3 text-right font-mono text-sm text-slate-300">${h.shares.toLocaleString()}</td>
+        <td class="py-2.5 px-3 text-right font-mono text-sm">$${h.value_millions.toLocaleString(undefined,{minimumFractionDigits:1,maximumFractionDigits:1})}M</td>
+        <td class="py-2.5 px-3 text-right font-mono text-sm text-slate-300">${h.pct_portfolio.toFixed(2)}%</td>
+        <td class="py-2.5 px-3 text-center">${changeLabel[h.change] || '<span class="text-slate-700 text-xs">?</span>'}</td>
+      </tr>`).join('');
+  }
 </script>
 {% endblock %}
