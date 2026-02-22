@@ -13,14 +13,14 @@
       </svg>
     </div>
 
-    <h1 class="text-xl font-bold text-slate-100 mb-2">Warming up the cache…</h1>
+    <h1 class="text-xl font-bold text-slate-100 mb-2" data-i18n="warming.title">Warming up the cache…</h1>
     <p class="text-slate-400 text-sm mb-6">
-      Fetching live data from Yahoo Finance for all tickers.<br>
-      This only happens on first load — the page will refresh automatically.
+      <span data-i18n="warming.desc">Fetching live data from Yahoo Finance for all tickers.</span><br>
+      <span data-i18n="warming.note">This only happens on first load — the page will refresh automatically.</span>
     </p>
 
     <!-- Auto-reload every 4 seconds until the cache is ready -->
-    <p class="text-xs text-slate-600">Checking again in <span id="countdown">4</span>s…</p>
+    <p class="text-xs text-slate-600"><span data-i18n="warming.checking">Checking again in</span> <span id="countdown">4</span><span data-i18n="warming.seconds">s…</span></p>
   </div>
 </div>
 

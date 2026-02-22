@@ -6,12 +6,12 @@
 <!-- ── Header ────────────────────────────────────────────────────────── -->
 <div class="mb-6 sm:mb-8 fade-up">
   <div class="flex items-center gap-3 mb-1">
-    <a href="{{ url_for('main.index') }}" class="text-slate-500 hover:text-slate-300 text-sm transition">← Dashboard</a>
+    <a href="{{ url_for('main.index') }}" class="text-slate-500 hover:text-slate-300 text-sm transition" data-i18n="sector.dashboard">← Dashboard</a>
     <span class="text-slate-700">/</span>
     <span class="text-slate-300 text-sm font-medium">{{ sector_name }}</span>
   </div>
   <h1 class="text-2xl sm:text-3xl font-bold grad-text">{{ sector_name }}</h1>
-  <p class="text-slate-400 mt-1 text-sm">Valuation analysis for this peer group</p>
+  <p class="text-slate-400 mt-1 text-sm" data-i18n="sector.subtitle">Valuation analysis for this peer group</p>
 </div>
 
 <!-- ── Tab nav ───────────────────────────────────────────────────────── -->
@@ -29,33 +29,33 @@
   <div class="flex gap-1 mb-6 bg-slate-900 border border-slate-800 rounded-xl p-1 w-full sm:w-fit flex-wrap">
     <button @click="tab='pe'"
             :class="tab==='pe' ? 'bg-brand text-white shadow' : 'text-slate-400 hover:text-slate-200'"
-            class="px-4 py-1.5 rounded-lg text-sm font-medium transition-all">
+            class="px-4 py-1.5 rounded-lg text-sm font-medium transition-all" data-i18n="sector.tab_pe">
       PE & PEG
     </button>
     {% if has_price.v %}
     <button @click="tab='prices'"
             :class="tab==='prices' ? 'bg-brand text-white shadow' : 'text-slate-400 hover:text-slate-200'"
-            class="px-4 py-1.5 rounded-lg text-sm font-medium transition-all">
+            class="px-4 py-1.5 rounded-lg text-sm font-medium transition-all" data-i18n="sector.tab_prices">
       Prices
     </button>
     {% endif %}
     {% if has_upside.v %}
     <button @click="tab='upside'"
             :class="tab==='upside' ? 'bg-brand text-white shadow' : 'text-slate-400 hover:text-slate-200'"
-            class="px-4 py-1.5 rounded-lg text-sm font-medium transition-all">
+            class="px-4 py-1.5 rounded-lg text-sm font-medium transition-all" data-i18n="sector.tab_upside">
       Upside
     </button>
     {% endif %}
     {% if has_peg.v %}
     <button @click="tab='peg'"
             :class="tab==='peg' ? 'bg-brand text-white shadow' : 'text-slate-400 hover:text-slate-200'"
-            class="px-4 py-1.5 rounded-lg text-sm font-medium transition-all">
+            class="px-4 py-1.5 rounded-lg text-sm font-medium transition-all" data-i18n="sector.tab_peg">
       PEG Map
     </button>
     {% endif %}
     <button @click="tab='table'"
             :class="tab==='table' ? 'bg-brand text-white shadow' : 'text-slate-400 hover:text-slate-200'"
-            class="px-4 py-1.5 rounded-lg text-sm font-medium transition-all">
+            class="px-4 py-1.5 rounded-lg text-sm font-medium transition-all" data-i18n="sector.tab_table">
       Data Table
     </button>
   </div>
@@ -64,12 +64,12 @@
   <div x-show="tab==='pe'" x-transition class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 mb-6">
     <div class="flex flex-col sm:flex-row sm:items-start gap-3 sm:gap-0 sm:justify-between mb-1">
       <div>
-        <h2 class="text-base font-semibold text-slate-200">PE Ratios (TTM &amp; Forward) + PEG</h2>
-        <p class="text-xs text-slate-500 mb-2 sm:mb-4">Left axis: PE ratios. Right axis (green bars): PEG ratio. Dashed line = PEG 1.0.</p>
+        <h2 class="text-base font-semibold text-slate-200" data-i18n="sector.pe_title">PE Ratios (TTM &amp; Forward) + PEG</h2>
+        <p class="text-xs text-slate-500 mb-2 sm:mb-4" data-i18n="sector.pe_desc">Left axis: PE ratios. Right axis (green bars): PEG ratio. Dashed line = PEG 1.0.</p>
       </div>
       <div class="flex gap-2 flex-wrap">
         <div class="flex items-center gap-1 bg-slate-800 border border-slate-700 rounded-lg p-0.5">
-          <span class="text-[10px] text-slate-500 px-1.5">Sort</span>
+          <span class="text-[10px] text-slate-500 px-1.5" data-i18n="sector.sort">Sort</span>
           <button onclick="sortPeChart('pe_ttm')" id="pe-sort-pe_ttm"
                   class="pe-sort-btn text-xs px-2 py-1 rounded-md transition text-slate-400 hover:text-slate-200">
             TTM <span class="pe-sort-arrow"></span>
@@ -86,7 +86,7 @@
         <button onclick="toggleValues('pe')" data-chart="pe"
                 class="chart-toggle flex items-center gap-1 text-xs text-brand border border-brand/40 bg-brand/10
                        hover:bg-brand hover:text-white transition px-2 py-1 rounded-lg">
-          <span class="toggle-text">Hide values</span>
+          <span class="toggle-text" data-i18n="sector.hide_values">Hide values</span>
         </button>
       </div>
     </div>
@@ -97,19 +97,19 @@
   <div x-show="tab==='prices'" x-transition class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 mb-6">
     <div class="flex flex-col sm:flex-row sm:items-start gap-3 sm:gap-0 sm:justify-between mb-1">
       <div>
-        <h2 class="text-base font-semibold text-slate-200">Current Price vs Analyst 12-month Target</h2>
-        <p class="text-xs text-slate-500 mb-2 sm:mb-4">Bars = current price. Diamond markers = analyst consensus target.</p>
+        <h2 class="text-base font-semibold text-slate-200" data-i18n="sector.prices_title">Current Price vs Analyst 12-month Target</h2>
+        <p class="text-xs text-slate-500 mb-2 sm:mb-4" data-i18n="sector.prices_desc">Bars = current price. Diamond markers = analyst consensus target.</p>
       </div>
       <div class="flex gap-2">
         <button onclick="sortChart('prices')" data-chart="prices"
                 class="chart-sort flex items-center gap-1 text-xs text-slate-400 border border-slate-700 bg-slate-800
                        hover:text-slate-200 transition px-2 py-1 rounded-lg">
-          <span class="sort-text">A→Z</span>
+          <span class="sort-text" data-i18n="sector.sort_az">A→Z</span>
         </button>
         <button onclick="toggleValues('prices')" data-chart="prices"
                 class="chart-toggle flex items-center gap-1 text-xs text-brand border border-brand/40 bg-brand/10
                        hover:bg-brand hover:text-white transition px-2 py-1 rounded-lg">
-          <span class="toggle-text">Hide values</span>
+          <span class="toggle-text" data-i18n="sector.hide_values">Hide values</span>
         </button>
       </div>
     </div>
@@ -120,19 +120,19 @@
   <div x-show="tab==='upside'" x-transition class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 mb-6">
     <div class="flex flex-col sm:flex-row sm:items-start gap-3 sm:gap-0 sm:justify-between mb-1">
       <div>
-        <h2 class="text-base font-semibold text-slate-200">Implied Analyst Upside (%)</h2>
-        <p class="text-xs text-slate-500 mb-2 sm:mb-4">Implied return if stock reaches the analyst consensus 12-month target.</p>
+        <h2 class="text-base font-semibold text-slate-200" data-i18n="sector.upside_title">Implied Analyst Upside (%)</h2>
+        <p class="text-xs text-slate-500 mb-2 sm:mb-4" data-i18n="sector.upside_desc">Implied return if stock reaches the analyst consensus 12-month target.</p>
       </div>
       <div class="flex gap-2">
         <button onclick="sortChart('upside')" data-chart="upside"
                 class="chart-sort flex items-center gap-1 text-xs text-slate-400 border border-slate-700 bg-slate-800
                        hover:text-slate-200 transition px-2 py-1 rounded-lg">
-          <span class="sort-text">Lo→Hi</span>
+          <span class="sort-text" data-i18n="sector.sort_lohi">Lo→Hi</span>
         </button>
         <button onclick="toggleValues('upside')" data-chart="upside"
                 class="chart-toggle flex items-center gap-1 text-xs text-brand border border-brand/40 bg-brand/10
                        hover:bg-brand hover:text-white transition px-2 py-1 rounded-lg">
-          <span class="toggle-text">Hide values</span>
+          <span class="toggle-text" data-i18n="sector.hide_values">Hide values</span>
         </button>
       </div>
     </div>
@@ -143,29 +143,29 @@
   <div x-show="tab==='peg'" x-transition class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 mb-6">
     <div class="flex flex-col sm:flex-row sm:items-start gap-3 sm:gap-0 sm:justify-between mb-1">
       <div>
-        <h2 class="text-base font-semibold text-slate-200">PEG Valuation Map</h2>
+        <h2 class="text-base font-semibold text-slate-200" data-i18n="sector.peg_title">PEG Valuation Map</h2>
         <p class="text-xs text-slate-500 mb-2 sm:mb-4">
-          PEG = PE ÷ EPS growth rate. &nbsp;
-          <span class="text-emerald-400">■</span> &lt;1 undervalued &nbsp;
-          <span class="text-amber-400">■</span> 1-2 moderate &nbsp;
-          <span class="text-rose-400">■</span> &gt;2 expensive
+          <span data-i18n="sector.peg_desc">PEG = PE ÷ EPS growth rate.</span> &nbsp;
+          <span class="text-emerald-400">■</span> <span data-i18n="sector.peg_under">&lt;1 undervalued</span> &nbsp;
+          <span class="text-amber-400">■</span> <span data-i18n="sector.peg_moderate">1-2 moderate</span> &nbsp;
+          <span class="text-rose-400">■</span> <span data-i18n="sector.peg_expensive">&gt;2 expensive</span>
         </p>
       </div>
       <div class="flex gap-2">
         <button onclick="togglePegTickers()" id="pegTickerBtn"
                 class="flex items-center gap-1 text-xs text-slate-400 border border-slate-700 bg-slate-800
-                       hover:text-slate-200 transition px-2 py-1 rounded-lg">
+                       hover:text-slate-200 transition px-2 py-1 rounded-lg" data-i18n="sector.hide_tickers">
           Hide tickers
         </button>
         <button onclick="sortChart('peg')" data-chart="peg"
                 class="chart-sort flex items-center gap-1 text-xs text-slate-400 border border-slate-700 bg-slate-800
                        hover:text-slate-200 transition px-2 py-1 rounded-lg">
-          <span class="sort-text">Lo→Hi</span>
+          <span class="sort-text" data-i18n="sector.sort_lohi">Lo→Hi</span>
         </button>
         <button onclick="toggleValues('peg')" data-chart="peg"
                 class="chart-toggle flex items-center gap-1 text-xs text-brand border border-brand/40 bg-brand/10
                        hover:bg-brand hover:text-white transition px-2 py-1 rounded-lg">
-          <span class="toggle-text">Hide values</span>
+          <span class="toggle-text" data-i18n="sector.hide_values">Hide values</span>
         </button>
       </div>
     </div>
@@ -174,29 +174,29 @@
 
   <!-- Data Table -->
   <div x-show="tab==='table'" x-transition class="bg-slate-900 border border-slate-800 rounded-2xl p-6 mb-6">
-    <h2 class="text-base font-semibold text-slate-200 mb-4">Data Table</h2>
+    <h2 class="text-base font-semibold text-slate-200 mb-4" data-i18n="sector.table_title">Data Table</h2>
     <div class="overflow-x-auto">
       <table class="w-full text-sm" id="sectorTable">
         <thead>
           <tr class="text-xs text-slate-500 border-b border-slate-800 select-none">
             <th class="text-left py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-300 transition whitespace-nowrap"
-                data-col="ticker">Ticker <span class="sort-icon ml-0.5">&#8597;</span></th>
+                data-col="ticker"><span data-i18n="th.ticker">Ticker</span> <span class="sort-icon ml-0.5">&#8597;</span></th>
             <th class="text-left py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-300 transition whitespace-nowrap"
-                data-col="name">Name <span class="sort-icon ml-0.5">&#8597;</span></th>
+                data-col="name"><span data-i18n="th.name">Name</span> <span class="sort-icon ml-0.5">&#8597;</span></th>
             <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-300 transition whitespace-nowrap"
-                data-col="market_cap">Mkt Cap <span class="sort-icon ml-0.5">&#8597;</span></th>
+                data-col="market_cap"><span data-i18n="th.mkt_cap">Mkt Cap</span> <span class="sort-icon ml-0.5">&#8597;</span></th>
             <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-300 transition whitespace-nowrap"
-                data-col="price">Price <span class="sort-icon ml-0.5">&#8597;</span></th>
+                data-col="price"><span data-i18n="th.price">Price</span> <span class="sort-icon ml-0.5">&#8597;</span></th>
             <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-300 transition whitespace-nowrap"
-                data-col="target">Target <span class="sort-icon ml-0.5">&#8597;</span></th>
+                data-col="target"><span data-i18n="th.target">Target</span> <span class="sort-icon ml-0.5">&#8597;</span></th>
             <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-300 transition whitespace-nowrap"
-                data-col="upside">Upside <span class="sort-icon ml-0.5">&#8597;</span></th>
+                data-col="upside"><span data-i18n="th.upside">Upside</span> <span class="sort-icon ml-0.5">&#8597;</span></th>
             <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-300 transition whitespace-nowrap"
-                data-col="pe_ttm">PE (TTM) <span class="sort-icon ml-0.5">&#8597;</span></th>
+                data-col="pe_ttm"><span data-i18n="th.pe_ttm">PE (TTM)</span> <span class="sort-icon ml-0.5">&#8597;</span></th>
             <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-300 transition whitespace-nowrap"
-                data-col="pe_fwd">PE (Fwd) <span class="sort-icon ml-0.5">&#8597;</span></th>
+                data-col="pe_fwd"><span data-i18n="th.pe_fwd">PE (Fwd)</span> <span class="sort-icon ml-0.5">&#8597;</span></th>
             <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-300 transition whitespace-nowrap"
-                data-col="peg">PEG <span class="sort-icon ml-0.5">&#8597;</span></th>
+                data-col="peg"><span data-i18n="th.peg">PEG</span> <span class="sort-icon ml-0.5">&#8597;</span></th>
           </tr>
         </thead>
         <tbody id="sectorTableBody"></tbody>
@@ -271,7 +271,7 @@ function sortChart(chartKey) {
   if (chartKey === 'prices') {
     const asc = sortState.prices !== 'ticker';
     sortState.prices = asc ? 'ticker' : 'ticker_desc';
-    text.textContent = asc ? 'A→Z' : 'Z→A';
+    text.textContent = asc ? I18n.t('sector.sort_az') : I18n.t('sector.sort_za');
     const sorted = [...DATA].sort((a, b) =>
       asc ? a.ticker.localeCompare(b.ticker) : b.ticker.localeCompare(a.ticker)
     );
@@ -283,7 +283,7 @@ function sortChart(chartKey) {
     // upside / peg: toggle Lo→Hi / Hi→Lo
     const goDesc = sortState[chartKey] === 'asc';
     sortState[chartKey] = goDesc ? 'desc' : 'asc';
-    text.textContent = goDesc ? 'Hi→Lo' : 'Lo→Hi';
+    text.textContent = goDesc ? I18n.t('sector.sort_hilo') : I18n.t('sector.sort_lohi');
 
     const field = chartKey === 'upside' ? 'upside' : 'peg';
     const sorted = [...DATA]
@@ -308,7 +308,7 @@ let pegTickersVisible = true;
 function togglePegTickers() {
   pegTickersVisible = !pegTickersVisible;
   const btn = document.getElementById('pegTickerBtn');
-  btn.textContent = pegTickersVisible ? 'Hide tickers' : 'Show tickers';
+  btn.textContent = pegTickersVisible ? I18n.t('sector.hide_tickers') : I18n.t('sector.show_tickers');
   const chart = chartInstances.peg;
   if (!chart) return;
   chart.options.scales.y.ticks.display = pegTickersVisible;
@@ -320,11 +320,11 @@ function toggleValues(chartKey) {
   const btn = document.querySelector(`.chart-toggle[data-chart="${chartKey}"]`);
   const text = btn.querySelector('.toggle-text');
   if (valuesVisible[chartKey]) {
-    text.textContent = 'Hide values';
+    text.textContent = I18n.t('sector.hide_values');
     btn.classList.remove('bg-brand', 'text-white');
     btn.classList.add('text-brand', 'bg-brand/10');
   } else {
-    text.textContent = 'Show values';
+    text.textContent = I18n.t('sector.show_values');
     btn.classList.add('bg-brand', 'text-white');
     btn.classList.remove('text-brand', 'bg-brand/10');
   }

@@ -4,14 +4,14 @@
 <div class="max-w-lg mx-auto mt-16 fade-up">
   <div class="bg-slate-900 border border-rose-800/50 rounded-2xl p-8 text-center">
     <div class="text-5xl mb-4">⚠</div>
-    <h1 class="text-xl font-bold text-slate-100 mb-2">Something went wrong</h1>
+    <h1 class="text-xl font-bold text-slate-100 mb-2" data-i18n="error.title">Something went wrong</h1>
     <p class="font-mono text-sm text-rose-400 bg-rose-900/20 rounded-lg px-4 py-2 mb-4 break-all">{{ error }}</p>
     <p class="text-slate-400 text-sm mb-6">
-      This usually means Yahoo Finance could not be reached.<br>
-      Check your internet connection then try refreshing.
+      <span data-i18n="error.hint1">This usually means Yahoo Finance could not be reached.</span><br>
+      <span data-i18n="error.hint2">Check your internet connection then try refreshing.</span>
     </p>
     <a href="{{ url_for('main.refresh') }}"
-       class="inline-flex items-center gap-2 px-5 py-2.5 bg-brand hover:bg-brand-dark text-white rounded-xl font-medium transition">
+       class="inline-flex items-center gap-2 px-5 py-2.5 bg-brand hover:bg-brand-dark text-white rounded-xl font-medium transition" data-i18n="error.retry">
       ↻ Retry
     </a>
   </div>

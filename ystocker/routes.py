@@ -338,16 +338,8 @@ def sector(sector_name: str):
 
 @bp.route("/refresh")
 def refresh():
-    """Trigger an immediate background re-fetch and redirect to home."""
-    global _cache, _cache_warming
-    with _cache_lock:
-        already = _cache_warming
-        if not already:
-            _cache_warming = True
-    if not already:
-        log.info("Manual refresh triggered - spawning background fetch")
-        t = threading.Thread(target=_do_fetch, daemon=True, name="cache-manual-refresh")
-        t.start()
+    """Clear the cache and trigger an immediate background re-fetch."""
+    _invalidate_cache()
     return redirect(url_for("main.index"))
 
 

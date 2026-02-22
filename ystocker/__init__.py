@@ -25,7 +25,7 @@ PEER_GROUPS: Dict[str, List[str]] = {
     "Apparel & Footwear": ["NKE", "LULU", "UAA", "VFC", "PVH"],
     "US Broad ETFs":     ["SPY", "QQQ", "IWM", "DIA", "VTI"],
     "Sector ETFs":       ["XLK", "XLF", "XLE", "XLV", "XLI", "XLY", "XLP", "XLU", "XLB", "XLRE"],
-    "International ETFs": ["FLJP", "FLJH", "FLKR", "FLTW", "FLCA", "IXUS", "VXUS", "FLEE", "ASHS"],
+    "International ETFs": ["FLJP", "FLJH", "FLKR", "FLTW", "FLCA", "IXUS", "VXUS", "FLEE", "ASHS", "FLBR", "FLCH", "FLGR", "FLMX", "FLAX", "FLSW"],
 }
 
 

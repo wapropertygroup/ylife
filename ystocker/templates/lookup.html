@@ -4,8 +4,8 @@
 {% block content %}
 
 <div class="mb-8 fade-up">
-  <h1 class="text-3xl font-bold grad-text mb-1">Ticker Lookup</h1>
-  <p class="text-slate-400 text-sm">Search any stock symbol for instant valuation metrics, or discover tickers by sector.</p>
+  <h1 class="text-3xl font-bold grad-text mb-1" data-i18n="lookup.title">Ticker Lookup</h1>
+  <p class="text-slate-400 text-sm" data-i18n="lookup.subtitle">Search any stock symbol for instant valuation metrics, or discover tickers by sector.</p>
 </div>
 
 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -15,15 +15,16 @@
 
     <!-- Search box -->
     <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 fade-up">
-      <h2 class="text-base font-semibold text-slate-200 mb-4">Search a Ticker</h2>
+      <h2 class="text-base font-semibold text-slate-200 mb-4" data-i18n="lookup.search_title">Search a Ticker</h2>
       <div class="flex gap-3">
         <input id="tickerInput" type="text" placeholder="e.g. AAPL, WMT, TSM …"
+               data-i18n-placeholder="lookup.search_ph"
                maxlength="12" autocomplete="off" spellcheck="false"
                class="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5
                       text-slate-100 font-mono uppercase placeholder:normal-case placeholder:text-slate-500
                       focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent transition">
         <button onclick="lookupTicker()"
-                class="px-5 py-2.5 bg-brand hover:bg-brand-dark text-white rounded-xl font-medium text-sm transition">
+                class="px-5 py-2.5 bg-brand hover:bg-brand-dark text-white rounded-xl font-medium text-sm transition" data-i18n="lookup.look_up">
           Look up
         </button>
       </div>
@@ -33,8 +34,8 @@
     <!-- Discover by sector -->
     <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 fade-up"
          x-data="discoverPanel()">
-      <h2 class="text-base font-semibold text-slate-200 mb-1">Discover by Sector / Industry</h2>
-      <p class="text-xs text-slate-500 mb-4">Browse top companies from Yahoo Finance (or built-in list). Click a chip to look it up.</p>
+      <h2 class="text-base font-semibold text-slate-200 mb-1" data-i18n="lookup.discover_title">Discover by Sector / Industry</h2>
+      <p class="text-xs text-slate-500 mb-4" data-i18n="lookup.discover_desc">Browse top companies from Yahoo Finance (or built-in list). Click a chip to look it up.</p>
 
       <div class="flex gap-3 mb-4 flex-wrap">
 
@@ -56,12 +57,12 @@
             <button @click="setType('sector','Sector')"
                     class="w-full text-left px-4 py-2 text-sm text-slate-300 hover:text-white hover:bg-slate-800 transition flex items-center gap-2">
               <span class="w-2 h-2 rounded-full bg-brand/70 inline-block" x-show="typeVal==='sector'"></span>
-              <span :class="typeVal==='sector' ? 'pl-0' : 'pl-4'">Sector</span>
+              <span :class="typeVal==='sector' ? 'pl-0' : 'pl-4'" data-i18n="lookup.sector">Sector</span>
             </button>
             <button @click="setType('industry','Industry')"
                     class="w-full text-left px-4 py-2 text-sm text-slate-300 hover:text-white hover:bg-slate-800 transition flex items-center gap-2">
               <span class="w-2 h-2 rounded-full bg-brand/70 inline-block" x-show="typeVal==='industry'"></span>
-              <span :class="typeVal==='industry' ? 'pl-0' : 'pl-4'">Industry</span>
+              <span :class="typeVal==='industry' ? 'pl-0' : 'pl-4'" data-i18n="lookup.industry">Industry</span>
             </button>
           </div>
         </div>
@@ -77,6 +78,7 @@
                  @keydown.arrow-down.prevent="moveSug(1)"
                  @keydown.arrow-up.prevent="moveSug(-1)"
                  placeholder="technology, semiconductors, biotech …"
+                 data-i18n-placeholder="lookup.discover_ph"
                  class="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5
                         text-slate-100 placeholder:text-slate-500 text-sm
                         focus:outline-none focus:ring-2 focus:ring-brand transition">
@@ -98,7 +100,7 @@
 
         <button @click="runDiscover"
                 class="px-5 py-2.5 bg-slate-700 hover:bg-brand text-slate-200 hover:text-white
-                       rounded-xl text-sm font-medium transition shrink-0">
+                       rounded-xl text-sm font-medium transition shrink-0" data-i18n="lookup.discover_btn">
           Discover
         </button>
       </div>
@@ -127,25 +129,41 @@
 
       <!-- Metrics grid -->
       <div class="grid grid-cols-2 gap-px bg-slate-800 border-b border-slate-800">
-        {% for id, label in [('cardCap','Market Cap'),('cardTarget','Target Price'),
-                             ('cardPeTtm','PE (TTM)'),('cardPeFwd','PE (Forward)'),
-                             ('cardPeg','PEG Ratio'),('cardSector','')] %}
         <div class="bg-slate-900 px-5 py-3">
-          <div class="text-xs text-slate-500 mb-1">{{ label }}</div>
-          <div id="{{ id }}" class="font-semibold text-slate-100"></div>
+          <div class="text-xs text-slate-500 mb-1" data-i18n="lookup.market_cap">Market Cap</div>
+          <div id="cardCap" class="font-semibold text-slate-100"></div>
         </div>
-        {% endfor %}
+        <div class="bg-slate-900 px-5 py-3">
+          <div class="text-xs text-slate-500 mb-1" data-i18n="lookup.target_price">Target Price</div>
+          <div id="cardTarget" class="font-semibold text-slate-100"></div>
+        </div>
+        <div class="bg-slate-900 px-5 py-3">
+          <div class="text-xs text-slate-500 mb-1" data-i18n="lookup.pe_ttm">PE (TTM)</div>
+          <div id="cardPeTtm" class="font-semibold text-slate-100"></div>
+        </div>
+        <div class="bg-slate-900 px-5 py-3">
+          <div class="text-xs text-slate-500 mb-1" data-i18n="lookup.pe_fwd">PE (Forward)</div>
+          <div id="cardPeFwd" class="font-semibold text-slate-100"></div>
+        </div>
+        <div class="bg-slate-900 px-5 py-3">
+          <div class="text-xs text-slate-500 mb-1" data-i18n="lookup.peg_ratio">PEG Ratio</div>
+          <div id="cardPeg" class="font-semibold text-slate-100"></div>
+        </div>
+        <div class="bg-slate-900 px-5 py-3">
+          <div class="text-xs text-slate-500 mb-1"></div>
+          <div id="cardSector" class="font-semibold text-slate-100"></div>
+        </div>
       </div>
 
       <!-- Mini bar chart -->
       <div class="p-5">
-        <p class="text-xs text-slate-500 mb-3">PE comparison</p>
+        <p class="text-xs text-slate-500 mb-3" data-i18n="lookup.pe_comparison">PE comparison</p>
         <div style="height:120px"><canvas id="miniChart"></canvas></div>
       </div>
 
       <!-- Add to group -->
       <div class="px-5 pb-5 flex items-center gap-3 flex-wrap">
-        <span class="text-xs text-slate-500">Add to group:</span>
+        <span class="text-xs text-slate-500" data-i18n="lookup.add_to_group">Add to group:</span>
         <form method="post" action="{{ url_for('main.add_ticker') }}" class="flex gap-2">
           <input type="hidden" name="ticker" id="addTickerInput">
           <select name="group_name"
@@ -153,7 +171,7 @@
             {% for g in peer_groups %}<option value="{{ g }}">{{ g }}</option>{% endfor %}
           </select>
           <button type="submit"
-                  class="px-4 py-1.5 bg-brand hover:bg-brand-dark text-white rounded-lg text-sm font-medium transition">
+                  class="px-4 py-1.5 bg-brand hover:bg-brand-dark text-white rounded-lg text-sm font-medium transition" data-i18n="lookup.add_btn">
             + Add
           </button>
         </form>
@@ -191,7 +209,7 @@ function fmtPct(v){
 }
 function fmtPeg(v){
   if(v==null) return '—';
-  return v.toFixed(2) + (v<1?' ✓ cheap':v<2?' fair':' rich');
+  return v.toFixed(2) + (v<1?' '+(I18n.t('lookup.cheap')||'✓ cheap'):v<2?' '+(I18n.t('lookup.fair')||'fair'):' '+(I18n.t('lookup.rich')||'rich'));
 }
 
 // ── Single ticker lookup
@@ -235,7 +253,7 @@ function renderCard(d) {
 
   const upsideEl = document.getElementById('cardUpside');
   const u = d['Upside (%)'];
-  upsideEl.textContent  = u != null ? fmtPct(u) + ' upside' : '';
+  upsideEl.textContent  = u != null ? fmtPct(u) + ' ' + (I18n.t('lookup.upside') || 'upside') : '';
   upsideEl.className    = u != null && u >= 0 ? 'text-emerald-400 text-sm font-semibold'
                                                : 'text-rose-400 text-sm font-semibold';
 

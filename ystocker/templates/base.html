@@ -34,6 +34,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
 
+  <!-- i18n -->
+  <script src="{{ url_for('static', filename='i18n.js') }}"></script>
+
   <style>
     body { font-family: 'Inter', sans-serif; }
     .chart-container { position: relative; }
@@ -66,16 +69,15 @@
       <!-- Desktop nav -->
       <nav class="hidden md:flex items-center gap-1 ml-4 flex-1">
         <a href="{{ url_for('main.index') }}"
-           class="px-3 py-1.5 rounded-md text-sm text-slate-300 hover:text-white hover:bg-slate-800 transition">
-          Home
-        </a>
+           class="px-3 py-1.5 rounded-md text-sm text-slate-300 hover:text-white hover:bg-slate-800 transition"
+           data-i18n="nav.home">Home</a>
 
         <!-- Sectors dropdown -->
         <div class="relative" x-data="{ open: false }" @mouseenter="open=true" @mouseleave="open=false">
           <button class="flex items-center gap-1 px-3 py-1.5 rounded-md text-sm text-slate-300
                          hover:text-white hover:bg-slate-800 transition"
                   :class="open && 'text-white bg-slate-800'">
-            Sectors
+            <span data-i18n="nav.sectors">Sectors</span>
             <svg class="w-3.5 h-3.5 mt-0.5 transition-transform duration-200" :class="open && 'rotate-180'"
                  fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
@@ -92,7 +94,7 @@
                       rounded-2xl shadow-2xl shadow-black/60 z-50 overflow-hidden"
                style="min-width:220px">
             <div class="px-3 pt-2.5 pb-1">
-              <p class="text-[10px] font-semibold tracking-widest uppercase text-slate-500 px-1 mb-1.5">Peer Groups</p>
+              <p class="text-[10px] font-semibold tracking-widest uppercase text-slate-500 px-1 mb-1.5" data-i18n="nav.peer_groups">Peer Groups</p>
               <div class="grid grid-cols-2 gap-x-1 gap-y-0.5">
                 {% for g in peer_groups %}
                 <a href="{{ url_for('main.sector', sector_name=g) }}"
@@ -107,42 +109,45 @@
             </div>
             <div class="border-t border-slate-800 px-3 py-2 mt-1">
               <a href="{{ url_for('main.index') }}#sectors"
-                 class="flex items-center justify-center gap-1 text-xs text-slate-500 hover:text-brand transition">
-                View all sectors ↓
-              </a>
+                 class="flex items-center justify-center gap-1 text-xs text-slate-500 hover:text-brand transition"
+                 data-i18n="nav.view_all">View all sectors ↓</a>
             </div>
           </div>
         </div>
 
         <a href="{{ url_for('main.lookup') }}"
-           class="px-3 py-1.5 rounded-md text-sm text-slate-300 hover:text-white hover:bg-slate-800 transition">
-          🔍 Lookup
-        </a>
+           class="px-3 py-1.5 rounded-md text-sm text-slate-300 hover:text-white hover:bg-slate-800 transition"
+           data-i18n="nav.lookup">🔍 Lookup</a>
         <a href="{{ url_for('main.groups') }}"
-           class="px-3 py-1.5 rounded-md text-sm text-slate-300 hover:text-white hover:bg-slate-800 transition">
-          ⚙ Groups
-        </a>
+           class="px-3 py-1.5 rounded-md text-sm text-slate-300 hover:text-white hover:bg-slate-800 transition"
+           data-i18n="nav.groups">⚙ Groups</a>
         <a href="{{ url_for('main.contact') }}"
-           class="px-3 py-1.5 rounded-md text-sm text-slate-300 hover:text-white hover:bg-slate-800 transition">
-          ✉ Contact
-        </a>
+           class="px-3 py-1.5 rounded-md text-sm text-slate-300 hover:text-white hover:bg-slate-800 transition"
+           data-i18n="nav.contact">✉ Contact</a>
       </nav>
 
-      <!-- Refresh button -->
-      <div class="relative ml-auto hidden md:block group">
-        <a href="{{ url_for('main.refresh') }}"
-           class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm border border-brand text-brand hover:bg-brand hover:text-white transition">
-          ↻ Refresh
-        </a>
-        <!-- Tooltip -->
-        <div class="absolute right-0 top-full mt-2 w-64 z-50 pointer-events-none
-                    opacity-0 group-hover:opacity-100 transition-opacity duration-150">
-          <div class="bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-xs text-slate-300 shadow-xl shadow-black/50">
-            <p class="font-semibold text-slate-100 mb-1">Refresh data</p>
-            <p>Clears the in-memory cache and re-fetches live prices, PE ratios, and analyst targets for all tickers from Yahoo Finance.</p>
+      <!-- Refresh button + Language toggle -->
+      <div class="relative ml-auto hidden md:flex items-center gap-2">
+        <!-- Language toggle -->
+        <button onclick="I18n.toggle()"
+                class="lang-toggle-btn px-2.5 py-1.5 rounded-md text-sm border border-slate-700 text-slate-300
+                       hover:border-brand hover:text-brand transition font-medium">
+          中文
+        </button>
+        <div class="relative group">
+          <a href="{{ url_for('main.refresh') }}"
+             class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm border border-brand text-brand hover:bg-brand hover:text-white transition"
+             data-i18n="nav.refresh">↻ Refresh</a>
+          <!-- Tooltip -->
+          <div class="absolute right-0 top-full mt-2 w-64 z-50 pointer-events-none
+                      opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+            <div class="bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-xs text-slate-300 shadow-xl shadow-black/50">
+              <p class="font-semibold text-slate-100 mb-1" data-i18n="nav.refresh_title">Refresh data</p>
+              <p data-i18n="nav.refresh_body">Clears the in-memory cache and re-fetches live prices, PE ratios, and analyst targets for all tickers from Yahoo Finance.</p>
+            </div>
+            <!-- Arrow -->
+            <div class="absolute right-4 -top-1.5 w-3 h-3 bg-slate-800 border-l border-t border-slate-700 rotate-45"></div>
           </div>
-          <!-- Arrow -->
-          <div class="absolute right-4 -top-1.5 w-3 h-3 bg-slate-800 border-l border-t border-slate-700 rotate-45"></div>
         </div>
       </div>
 
@@ -158,18 +163,23 @@
     <!-- Mobile menu -->
     <div x-show="navOpen" x-transition class="md:hidden border-t border-slate-800 bg-slate-900 px-4 pb-4">
       <div class="flex flex-col gap-1 pt-2">
-        <a href="{{ url_for('main.index') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-300 hover:bg-slate-800">Home</a>
-        <div class="px-3 py-1.5 text-[10px] font-semibold tracking-widest uppercase text-slate-600 mt-1">Sectors</div>
+        <a href="{{ url_for('main.index') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-300 hover:bg-slate-800" data-i18n="nav.home">Home</a>
+        <div class="px-3 py-1.5 text-[10px] font-semibold tracking-widest uppercase text-slate-600 mt-1" data-i18n="nav.sectors">Sectors</div>
         <div class="grid grid-cols-2 gap-1 mb-1">
           {% for g in peer_groups %}
           <a href="{{ url_for('main.sector', sector_name=g) }}"
              class="px-3 py-2 rounded-md text-sm text-slate-300 hover:bg-slate-800 truncate">{{ g }}</a>
           {% endfor %}
         </div>
-        <a href="{{ url_for('main.lookup') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-300 hover:bg-slate-800">🔍 Lookup</a>
-        <a href="{{ url_for('main.groups') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-300 hover:bg-slate-800">⚙ Groups</a>
-        <a href="{{ url_for('main.contact') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-300 hover:bg-slate-800">✉ Contact</a>
-        <a href="{{ url_for('main.refresh') }}" class="px-3 py-2.5 rounded-md text-sm text-brand hover:bg-slate-800">↻ Refresh</a>
+        <a href="{{ url_for('main.lookup') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-300 hover:bg-slate-800" data-i18n="nav.lookup">🔍 Lookup</a>
+        <a href="{{ url_for('main.groups') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-300 hover:bg-slate-800" data-i18n="nav.groups">⚙ Groups</a>
+        <a href="{{ url_for('main.contact') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-300 hover:bg-slate-800" data-i18n="nav.contact">✉ Contact</a>
+        <a href="{{ url_for('main.refresh') }}" class="px-3 py-2.5 rounded-md text-sm text-brand hover:bg-slate-800" data-i18n="nav.refresh">↻ Refresh</a>
+        <button onclick="I18n.toggle()"
+                class="lang-toggle-btn mt-1 px-3 py-2.5 rounded-md text-sm border border-slate-700 text-slate-300
+                       hover:border-brand hover:text-brand transition text-left font-medium">
+          中文
+        </button>
       </div>
     </div>
   </header>
@@ -194,8 +204,8 @@
   </main>
 
   <footer class="border-t border-slate-800 py-4 text-center text-xs text-slate-600">
-    yStocker — data via Yahoo Finance &nbsp;·&nbsp;
-    <a href="{{ url_for('main.contact') }}" class="hover:text-brand transition">Contact Us</a>
+    <span data-i18n="footer.text">yStocker — data via Yahoo Finance</span> &nbsp;·&nbsp;
+    <a href="{{ url_for('main.contact') }}" class="hover:text-brand transition" data-i18n="footer.contact">Contact Us</a>
   </footer>
 
 </body>

@@ -4,10 +4,13 @@
 {% block content %}
 
 <div class="mb-8 fade-up">
-  <h1 class="text-3xl font-bold grad-text mb-1">Manage Peer Groups</h1>
-  <p class="text-slate-400 text-sm">
+  <h1 class="text-3xl font-bold grad-text mb-1" data-i18n="groups.title">Manage Peer Groups</h1>
+  <p class="text-slate-400 text-sm" data-i18n="groups.subtitle">
     Add or remove sectors and tickers. Changes clear the cache automatically —
     the next page load re-fetches updated data from Yahoo Finance.
+  </p>
+  <p class="text-amber-500/80 text-xs mt-1">
+    Note: changes are not persisted and will reset to defaults if the server restarts.
   </p>
 </div>
 
@@ -25,7 +28,7 @@
       <form method="post" action="{{ url_for('main.delete_group') }}">
         <input type="hidden" name="group_name" value="{{ group_name }}">
         <button onclick="return confirm('Delete group \'{{ group_name }}\'?')"
-                class="text-xs border border-rose-800 text-rose-500 hover:bg-rose-900/50 px-2 py-1 rounded-lg transition">
+                class="text-xs border border-rose-800 text-rose-500 hover:bg-rose-900/50 px-2 py-1 rounded-lg transition" data-i18n="groups.delete">
           ✕ Delete
         </button>
       </form>
@@ -45,7 +48,7 @@
         </form>
       </span>
       {% else %}
-      <span class="text-xs text-slate-600 italic">No tickers yet</span>
+      <span class="text-xs text-slate-600 italic" data-i18n="groups.no_tickers">No tickers yet</span>
       {% endfor %}
     </div>
 
@@ -53,12 +56,13 @@
     <form method="post" action="{{ url_for('main.add_ticker') }}" class="flex gap-2 mt-auto">
       <input type="hidden" name="group_name" value="{{ group_name }}">
       <input type="text" name="ticker" placeholder="e.g. TSLA" maxlength="10"
+             data-i18n-placeholder="groups.ticker_ph"
              style="text-transform:uppercase"
              class="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-sm
                     font-mono text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-brand">
       <button type="submit"
               class="px-3 py-1.5 bg-brand/20 hover:bg-brand border border-brand/40 text-brand hover:text-white
-                     rounded-lg text-sm font-medium transition">
+                     rounded-lg text-sm font-medium transition" data-i18n="groups.add_btn">
         + Add
       </button>
     </form>
@@ -67,17 +71,18 @@
 
   <!-- ── New group card ─────────────────────────────────────────────── -->
   <div class="bg-slate-900/50 border border-dashed border-slate-700 rounded-2xl p-5 flex flex-col justify-center gap-3">
-    <p class="text-sm font-semibold text-slate-400">Create new group</p>
+    <p class="text-sm font-semibold text-slate-400" data-i18n="groups.new_group">Create new group</p>
     <form method="post" action="{{ url_for('main.add_group') }}" class="flex gap-2">
       <input type="text" name="group_name" placeholder="e.g. Biotech" maxlength="40" required
+             data-i18n-placeholder="groups.group_ph"
              class="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-sm
                     text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-brand">
       <button type="submit"
-              class="px-4 py-1.5 bg-brand hover:bg-brand-dark text-white rounded-lg text-sm font-medium transition">
+              class="px-4 py-1.5 bg-brand hover:bg-brand-dark text-white rounded-lg text-sm font-medium transition" data-i18n="groups.create_btn">
         Create
       </button>
     </form>
-    <p class="text-xs text-slate-600">Then use + Add inside the card to add tickers.</p>
+    <p class="text-xs text-slate-600" data-i18n="groups.hint">Then use + Add inside the card to add tickers.</p>
   </div>
 </div>
 
