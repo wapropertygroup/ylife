@@ -648,7 +648,7 @@
         },
         scales: {
           x: { grid:{color:gridCol}, ticks:{color:tickCol, maxTicksLimit:8, maxRotation:0} },
-          y: { grid:{color:gridCol}, ticks:{ color:tickCol, callback: v => v.toFixed(0)+'%' }, min: 0, max: 100 }
+          y: { grid:{color:gridCol}, ticks:{ color:tickCol, callback: v => v.toFixed(0)+'%' } }
         },
         interaction: { mode:'index', intersect:false },
       }
