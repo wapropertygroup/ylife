@@ -356,7 +356,7 @@ def _find_infotable_url(cik: str, accession: str, primary_doc: str = "") -> Opti
                     if not f.startswith("/") else f
                     for f in rel_links
                 ]
-            log.info("13F HTML index %s → %d xml links", htm_url, len(xml_links))
+            log.info("13F HTML index %s → %d xml links: %s", htm_url, len(xml_links), xml_links[:6])
             # Prefer files with 'infotable' or 'info_table' in name
             # NB: actual filing documents must be fetched from www.sec.gov, not data.sec.gov
             for path in xml_links:
@@ -513,7 +513,10 @@ def fetch_fund_holdings(name: str, cik: str) -> dict:
         info_url = _find_infotable_url(cik, latest["accession"], latest.get("primary_doc", ""))
         if not info_url:
             return {"error": "Could not locate infotable XML", "cik": cik}
-        xml_text = _get(info_url).text
+        log.info("13F infotable URL for %s: %s", name, info_url)
+        xml_resp = _get(info_url)
+        xml_text = xml_resp.text
+        log.info("13F infotable content-type=%s first100=%s", xml_resp.headers.get('content-type'), xml_text[:100].replace('\n',' '))
         curr_holdings = _parse_infotable(xml_text)
 
         # Fetch previous holdings for change detection
