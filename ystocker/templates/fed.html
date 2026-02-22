@@ -174,12 +174,12 @@
 
   <!-- Total Assets + MBS combo -->
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up">
-    <div class="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-0 sm:justify-between mb-4">
+    <div class="flex flex-wrap items-start justify-between gap-2 mb-4">
       <div>
         <h2 class="text-base font-semibold text-slate-200" data-i18n="fed.balance_title">Balance Sheet Overview</h2>
         <p class="text-xs text-slate-500" data-i18n="fed.balance_desc">Total assets, MBS, and reserve balances ($B) — weekly</p>
       </div>
-      <div id="balanceRangeSelector" class="flex gap-1 text-xs">
+      <div id="balanceRangeSelector" class="flex flex-wrap gap-1 text-xs">
         <button class="range-btn" data-range="52">1Y</button>
         <button class="range-btn" data-range="104">2Y</button>
         <button class="range-btn active" data-range="156">3Y</button>
@@ -197,12 +197,12 @@
 
   <!-- Treasury as % of Total Assets -->
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up">
-    <div class="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-0 sm:justify-between mb-4">
+    <div class="flex flex-wrap items-start justify-between gap-2 mb-4">
       <div>
         <h2 class="text-base font-semibold text-slate-200" data-i18n="fed.pct_title">Treasury as % of Total Assets</h2>
         <p class="text-xs text-slate-500" data-i18n="fed.pct_desc">How much of the Fed's balance sheet is US Treasuries — higher = more concentrated in government debt</p>
       </div>
-      <div id="pctRangeSelector" class="flex gap-1 text-xs">
+      <div id="pctRangeSelector" class="flex flex-wrap gap-1 text-xs">
         <button class="range-btn" data-range="52">1Y</button>
         <button class="range-btn" data-range="104">2Y</button>
         <button class="range-btn active" data-range="156">3Y</button>
@@ -625,7 +625,7 @@
     };
   }
 
-  const pctInitial = buildPctData(0);
+  const pctInitial = buildPctData(156);
   if (pctInitial.values.some(v => v != null)) {
     document.getElementById('pctChartWrap').style.display = 'block';
     const pCtx = document.getElementById('pctChart');
