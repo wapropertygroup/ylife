@@ -242,11 +242,38 @@ Resources:
             mkdir -p "$APP_DIR/cache"
             chown -R "$APP_USER:$APP_USER" "$APP_DIR"
 
+            # -- Log files (must be owned by app user before gunicorn starts)
+            touch /var/log/ystocker-access.log /var/log/ystocker-error.log
+            chown "$APP_USER:$APP_USER" /var/log/ystocker-access.log /var/log/ystocker-error.log
+
+            # -- git safe.directory (needed when root pulls a repo owned by ystocker)
+            git config --global --add safe.directory /opt/ystocker
+
+            # -- Auto-update service: git pull + pip sync on every boot
+            {
+              echo '[Unit]'
+              echo 'Description=yStocker git pull on boot'
+              echo 'After=network-online.target'
+              echo 'Wants=network-online.target'
+              echo 'Before=ystocker.service'
+              echo ''
+              echo '[Service]'
+              echo 'Type=oneshot'
+              echo 'User=root'
+              echo 'WorkingDirectory=/opt/ystocker'
+              echo 'ExecStart=/bin/bash -c "git config --global --add safe.directory /opt/ystocker; git -C /opt/ystocker pull origin main && /opt/ystocker/venv/bin/pip install -q -r /opt/ystocker/requirements.txt && chown -R ystocker:ystocker /opt/ystocker && chown ystocker:ystocker /var/log/ystocker-access.log /var/log/ystocker-error.log"'
+              echo 'RemainAfterExit=yes'
+              echo ''
+              echo '[Install]'
+              echo 'WantedBy=multi-user.target'
+            } > /etc/systemd/system/ystocker-update.service
+
             # -- Gunicorn systemd service
             {
               echo '[Unit]'
               echo 'Description=yStocker Flask app (Gunicorn)'
-              echo 'After=network.target'
+              echo 'After=network.target ystocker-update.service'
+              echo 'Wants=ystocker-update.service'
               echo ''
               echo '[Service]'
               echo 'User=ystocker'
@@ -268,7 +295,9 @@ Resources:
             } > /etc/systemd/system/ystocker.service
 
             systemctl daemon-reload
+            systemctl enable ystocker-update
             systemctl enable ystocker
+            systemctl start ystocker-update
             systemctl start ystocker
 
             # -- nginx reverse proxy (port 80 -> gunicorn)
@@ -296,8 +325,10 @@ Resources:
             # Remove default nginx config
             rm -f /etc/nginx/conf.d/default.conf /etc/nginx/sites-enabled/default 2>/dev/null || true
 
+            # Start nginx after ystocker is up to avoid 502 on first request
             systemctl enable nginx
-            systemctl restart nginx
+            systemctl start ystocker
+            systemctl start nginx
 
             # -- Let's Encrypt SSL certificate (requires DNS to point to this IP)
             dnf install -y python3-certbot-nginx || dnf install -y certbot python3-certbot-nginx || true
