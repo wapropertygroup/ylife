@@ -865,7 +865,7 @@ Most recent 12 data points:
 Cover: (1) what the overall trend shows, (2) any notable recent moves, (3) what this means for monetary policy or market conditions. Be specific about the numbers. Do not use headers or bullet points."""
 
     genai.configure(api_key=api_key)
-    model = genai.GenerativeModel("gemini-1.5-flash")
+    model = genai.GenerativeModel("gemini-2.0-flash")
 
     def generate():
         try:
