@@ -243,29 +243,29 @@ Resources:
             chown -R "$APP_USER:$APP_USER" "$APP_DIR"
 
             # -- Gunicorn systemd service
-            cat > /etc/systemd/system/ystocker.service <<'EOF'
-[Unit]
-Description=yStocker Flask app (Gunicorn)
-After=network.target
-
-[Service]
-User=ystocker
-Group=ystocker
-WorkingDirectory=/opt/ystocker
-Environment="PATH=/opt/ystocker/venv/bin"
-ExecStart=/opt/ystocker/venv/bin/gunicorn \
-          --workers 2 \
-          --bind 127.0.0.1:${AppPort} \
-          --timeout 120 \
-          --access-logfile /var/log/ystocker-access.log \
-          --error-logfile  /var/log/ystocker-error.log \
-          "ystocker:create_app()"
-Restart=always
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-EOF
+            {
+              echo '[Unit]'
+              echo 'Description=yStocker Flask app (Gunicorn)'
+              echo 'After=network.target'
+              echo ''
+              echo '[Service]'
+              echo 'User=ystocker'
+              echo 'Group=ystocker'
+              echo 'WorkingDirectory=/opt/ystocker'
+              echo 'Environment="PATH=/opt/ystocker/venv/bin"'
+              echo "ExecStart=/opt/ystocker/venv/bin/gunicorn \\"
+              echo '          --workers 2 \'
+              echo "          --bind 127.0.0.1:${AppPort} \\"
+              echo '          --timeout 120 \'
+              echo '          --access-logfile /var/log/ystocker-access.log \'
+              echo '          --error-logfile  /var/log/ystocker-error.log \'
+              echo '          "ystocker:create_app()"'
+              echo 'Restart=always'
+              echo 'RestartSec=5'
+              echo ''
+              echo '[Install]'
+              echo 'WantedBy=multi-user.target'
+            } > /etc/systemd/system/ystocker.service
 
             systemctl daemon-reload
             systemctl enable ystocker
