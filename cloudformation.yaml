@@ -1,13 +1,13 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: >
-  yStocker – single EC2 instance with a public IPv4 address.
+  yStocker - single EC2 instance with a public IPv4 address.
   Runs the Flask app behind Gunicorn, managed by systemd.
   The on-disk cache (cache/) is stored on the instance volume and
   survives app restarts; it is lost only if the instance is terminated.
 
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 # Parameters
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 Parameters:
 
   InstanceType:
@@ -36,12 +36,12 @@ Parameters:
     Type: String
     Default: ""
     Description: >
-      Optional – HTTPS URL of your git repo (e.g. https://github.com/you/ystocker.git).
+      Optional - HTTPS URL of your git repo (e.g. https://github.com/you/ystocker.git).
       Leave blank to upload code manually via scp/rsync after launch.
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Mappings  –  latest Amazon Linux 2023 AMI per region (arm64 / x86_64)
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
+# Mappings  -  latest Amazon Linux 2023 AMI per region (arm64 / x86_64)
+# -----------------------------------------------------------------------------
 Mappings:
   AmiMap:
     us-east-1:      { AMI: ami-0c02fb55956c7d316 }
@@ -55,12 +55,12 @@ Mappings:
     ap-southeast-2: { AMI: ami-04a81a99f5ec58529 }
     ap-northeast-1: { AMI: ami-023ff3d4ab11b2525 }
 
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 # Resources
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 Resources:
 
-  # ── VPC & networking ────────────────────────────────────────────────────────
+  # -- VPC & networking --------------------------------------------------------
 
   VPC:
     Type: AWS::EC2::VPC
@@ -118,7 +118,7 @@ Resources:
       SubnetId: !Ref PublicSubnet
       RouteTableId: !Ref PublicRouteTable
 
-  # ── Security group ──────────────────────────────────────────────────────────
+  # -- Security group ----------------------------------------------------------
 
   InstanceSecurityGroup:
     Type: AWS::EC2::SecurityGroup
@@ -148,7 +148,7 @@ Resources:
         - Key: Name
           Value: !Sub "${AWS::StackName}-sg"
 
-  # ── IAM role (SSM Session Manager – optional SSH alternative) ───────────────
+  # -- IAM role (SSM Session Manager - optional SSH alternative) ---------------
 
   InstanceRole:
     Type: AWS::IAM::Role
@@ -173,7 +173,7 @@ Resources:
       Roles:
         - !Ref InstanceRole
 
-  # ── EC2 instance ────────────────────────────────────────────────────────────
+  # -- EC2 instance ------------------------------------------------------------
 
   Instance:
     Type: AWS::EC2::Instance
@@ -189,7 +189,7 @@ Resources:
       BlockDeviceMappings:
         - DeviceName: /dev/xvda
           Ebs:
-            VolumeSize: 20       # GB – enough for app + pip packages + cache
+            VolumeSize: 20       # GB - enough for app + pip packages + cache
             VolumeType: gp3
             DeleteOnTermination: true
       Tags:
@@ -203,32 +203,32 @@ Resources:
             set -euxo pipefail
             exec > >(tee /var/log/ystocker-init.log | logger -t ystocker-init) 2>&1
 
-            # ── System packages
+            # -- System packages
             dnf update -y
             dnf install -y python3.11 python3.11-pip python3.11-devel gcc git nginx
 
-            # ── App directory
+            # -- App directory
             APP_DIR=/opt/ystocker
             APP_USER=ystocker
 
             useradd --system --shell /sbin/nologin --home-dir "$APP_DIR" "$APP_USER" || true
             mkdir -p "$APP_DIR"
 
-            # ── Clone or scaffold app
+            # -- Clone or scaffold app
             if [ -n "${GitRepo}" ]; then
               git clone "${GitRepo}" "$APP_DIR"
             else
-              # Placeholder – upload your code via scp/rsync after launch:
+              # Placeholder - upload your code via scp/rsync after launch:
               #   scp -r ./ystocker ec2-user@<IP>:/tmp/
               #   sudo mv /tmp/ystocker/* /opt/ystocker/
-              echo "GitRepo not set – deploy code manually to $APP_DIR"
+              echo "GitRepo not set - deploy code manually to $APP_DIR"
               # Create minimal structure so systemd unit doesn't fail on start
               mkdir -p "$APP_DIR/ystocker" "$APP_DIR/cache"
               echo "from flask import Flask; app = Flask(__name__)" > "$APP_DIR/ystocker/__init__.py"
               echo "from ystocker import create_app; app = create_app()" > "$APP_DIR/wsgi.py" 2>/dev/null || true
             fi
 
-            # ── Python virtual environment
+            # -- Python virtual environment
             python3.11 -m venv "$APP_DIR/venv"
             source "$APP_DIR/venv/bin/activate"
             pip install --upgrade pip
@@ -238,11 +238,11 @@ Resources:
               pip install -r "$APP_DIR/requirements.txt"
             fi
 
-            # ── Cache directory (survives app restarts)
+            # -- Cache directory (survives app restarts)
             mkdir -p "$APP_DIR/cache"
             chown -R "$APP_USER:$APP_USER" "$APP_DIR"
 
-            # ── Gunicorn systemd service
+            # -- Gunicorn systemd service
             cat > /etc/systemd/system/ystocker.service <<'EOF'
             [Unit]
             Description=yStocker Flask app (Gunicorn)
@@ -271,7 +271,7 @@ Resources:
             systemctl enable ystocker
             systemctl start ystocker || true
 
-            # ── nginx reverse proxy (port 80 → gunicorn)
+            # -- nginx reverse proxy (port 80 → gunicorn)
             cat > /etc/nginx/conf.d/ystocker.conf <<'EOF'
             server {
                 listen 80;
@@ -303,7 +303,7 @@ Resources:
 
             echo "yStocker bootstrap complete."
 
-  # ── Elastic IP – persistent public IPv4 ────────────────────────────────────
+  # -- Elastic IP - persistent public IPv4 ------------------------------------
 
   ElasticIP:
     Type: AWS::EC2::EIP
@@ -315,9 +315,9 @@ Resources:
         - Key: Name
           Value: !Sub "${AWS::StackName}-eip"
 
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 # Outputs
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 Outputs:
 
   PublicIP:
