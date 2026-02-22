@@ -17,9 +17,9 @@ const I18n = (() => {
     'nav.sectors':        { en: 'Sectors',   zh: '板块' },
     'nav.peer_groups':    { en: 'Peer Groups', zh: '同类组' },
     'nav.view_all':       { en: 'View all sectors ↓', zh: '查看全部板块 ↓' },
-    'nav.lookup':         { en: '🔍 Lookup', zh: '🔍 查询' },
-    'nav.groups':         { en: '⚙ Groups',  zh: '⚙ 分组' },
-    'nav.contact':        { en: '✉ Contact', zh: '✉ 联系' },
+    'nav.lookup':         { en: 'Lookup',   zh: '查询' },
+    'nav.groups':         { en: 'Groups',   zh: '分组' },
+    'nav.contact':        { en: 'Contact',  zh: '联系' },
     'nav.refresh':        { en: '↻ Refresh', zh: '↻ 刷新' },
     'nav.refresh_title':  { en: 'Refresh data', zh: '刷新数据' },
     'nav.refresh_body':   { en: 'Clears the in-memory cache and re-fetches live prices, PE ratios, and analyst targets for all tickers from Yahoo Finance.',
@@ -230,7 +230,16 @@ const I18n = (() => {
     'modal.peg_expensive':  { en: '> 2 — expensive',       zh: '> 2 — 高估' },
   };
 
-  let current = localStorage.getItem('ystocker_lang') || 'en';
+  let current = (() => {
+    // 1. URL param takes top priority: ?lang=zh or ?lang=en
+    const urlLang = new URLSearchParams(window.location.search).get('lang');
+    if (urlLang === 'zh' || urlLang === 'en') {
+      localStorage.setItem('ystocker_lang', urlLang);
+      return urlLang;
+    }
+    // 2. Fallback to localStorage
+    return localStorage.getItem('ystocker_lang') || 'en';
+  })();
 
   function t(key) {
     const entry = LANGS[key];

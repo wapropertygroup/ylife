@@ -117,13 +117,13 @@
 
         <a href="{{ url_for('main.lookup') }}"
            class="px-3 py-1.5 rounded-md text-sm text-slate-300 hover:text-white hover:bg-slate-800 transition"
-           data-i18n="nav.lookup">🔍 Lookup</a>
+           data-i18n="nav.lookup">Lookup</a>
         <a href="{{ url_for('main.groups') }}"
            class="px-3 py-1.5 rounded-md text-sm text-slate-300 hover:text-white hover:bg-slate-800 transition"
-           data-i18n="nav.groups">⚙ Groups</a>
+           data-i18n="nav.groups">Groups</a>
         <a href="{{ url_for('main.contact') }}"
            class="px-3 py-1.5 rounded-md text-sm text-slate-300 hover:text-white hover:bg-slate-800 transition"
-           data-i18n="nav.contact">✉ Contact</a>
+           data-i18n="nav.contact">Contact</a>
       </nav>
 
       <!-- Refresh button + Language toggle -->
@@ -172,9 +172,9 @@
              class="px-3 py-2 rounded-md text-sm text-slate-300 hover:bg-slate-800 truncate">{{ g }}</a>
           {% endfor %}
         </div>
-        <a href="{{ url_for('main.lookup') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-300 hover:bg-slate-800" data-i18n="nav.lookup">🔍 Lookup</a>
-        <a href="{{ url_for('main.groups') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-300 hover:bg-slate-800" data-i18n="nav.groups">⚙ Groups</a>
-        <a href="{{ url_for('main.contact') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-300 hover:bg-slate-800" data-i18n="nav.contact">✉ Contact</a>
+        <a href="{{ url_for('main.lookup') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-300 hover:bg-slate-800" data-i18n="nav.lookup">Lookup</a>
+        <a href="{{ url_for('main.groups') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-300 hover:bg-slate-800" data-i18n="nav.groups">Groups</a>
+        <a href="{{ url_for('main.contact') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-300 hover:bg-slate-800" data-i18n="nav.contact">Contact</a>
         <a id="refreshBtnMobile" href="{{ url_for('main.refresh') }}" class="px-3 py-2.5 rounded-md text-sm text-brand hover:bg-slate-800" data-i18n="nav.refresh">↻ Refresh</a>
         <button onclick="I18n.toggle()"
                 class="lang-toggle-btn mt-1 px-3 py-2.5 rounded-md text-sm border border-slate-700 text-slate-300
