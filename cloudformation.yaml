@@ -32,6 +32,16 @@ Parameters:
     Default: 8000
     Description: Port Gunicorn listens on (also opened in the security group)
 
+  DomainName:
+    Type: String
+    Default: "stock.li-family.us"
+    Description: Domain name for the app (used for nginx server_name and Let's Encrypt SSL)
+
+  CertEmail:
+    Type: String
+    Default: ""
+    Description: Email address for Let's Encrypt certificate notifications (recommended)
+
   GitRepo:
     Type: String
     Default: "https://github.com/15th-Ave-NE/ystocker.git"
@@ -124,6 +134,11 @@ Resources:
           ToPort: 80
           CidrIp: 0.0.0.0/0
           Description: HTTP (nginx reverse proxy)
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+          Description: HTTPS (nginx + Let's Encrypt)
         - IpProtocol: tcp
           FromPort: 22
           ToPort: 22
@@ -256,18 +271,18 @@ Resources:
             systemctl enable ystocker
             systemctl start ystocker || true
 
-            # -- nginx reverse proxy (port 80 → gunicorn)
-            cat > /etc/nginx/conf.d/ystocker.conf <<'EOF'
+            # -- nginx reverse proxy (port 80 -> gunicorn)
+            cat > /etc/nginx/conf.d/ystocker.conf <<EOF
             server {
                 listen 80;
-                server_name _;
+                server_name ${DomainName};
 
                 # Forward all requests to Gunicorn
                 location / {
                     proxy_pass         http://127.0.0.1:${AppPort};
-                    proxy_set_header   Host              $host;
-                    proxy_set_header   X-Real-IP         $remote_addr;
-                    proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+                    proxy_set_header   Host              \$host;
+                    proxy_set_header   X-Real-IP         \$remote_addr;
+                    proxy_set_header   X-Forwarded-For   \$proxy_add_x_forwarded_for;
                     proxy_read_timeout 120s;
                 }
 
@@ -285,6 +300,24 @@ Resources:
 
             systemctl enable nginx
             systemctl restart nginx
+
+            # -- Let's Encrypt SSL certificate (requires DNS to point to this IP)
+            dnf install -y python3-certbot-nginx || dnf install -y certbot python3-certbot-nginx || true
+
+            if [ -n "${DomainName}" ]; then
+              EMAIL_FLAG=""
+              if [ -n "${CertEmail}" ]; then
+                EMAIL_FLAG="--email ${CertEmail}"
+              else
+                EMAIL_FLAG="--register-unsafely-without-email"
+              fi
+              certbot --nginx \
+                      --non-interactive \
+                      --agree-tos \
+                      $EMAIL_FLAG \
+                      -d ${DomainName} \
+                      --redirect || echo "Certbot failed - DNS may not be pointing to this IP yet. Run manually later."
+            fi
 
             echo "yStocker bootstrap complete."
 
@@ -313,6 +346,10 @@ Outputs:
 
   AppURL:
     Description: yStocker app URL
+    Value: !Sub "https://${DomainName}/"
+
+  AppURLFallback:
+    Description: Direct IP URL (before DNS is configured)
     Value: !Sub "http://${ElasticIP}/"
 
   AppDirectPort:
