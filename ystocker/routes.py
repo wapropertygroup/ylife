@@ -869,7 +869,7 @@ Cover: (1) what the overall trend shows, (2) any notable recent moves, (3) what 
     def generate():
         try:
             stream = client.models.generate_content_stream(
-                model="gemini-2.5-flash-preview-04-17", contents=prompt
+                model="gemini-2.0-flash", contents=prompt
             )
             for chunk in stream:
                 text = chunk.text
