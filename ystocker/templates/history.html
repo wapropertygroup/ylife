@@ -61,6 +61,19 @@
   <p class="text-slate-500 text-sm mt-1" data-i18n="history.subtitle">Historical PE ratio &amp; price</p>
 </div>
 
+<!-- ── Tab switcher ──────────────────────────────────────────────────── -->
+<div class="flex gap-1 mb-6 border-b border-slate-800">
+  <button id="tabChartsBtn" onclick="switchTab('charts')"
+          class="px-4 py-2 text-sm font-medium border-b-2 border-brand text-brand -mb-px transition"
+          data-i18n="history.tab_charts">Charts &amp; Holdings</button>
+  <button id="tabNewsBtn" onclick="switchTab('news')"
+          class="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-slate-200 -mb-px transition"
+          data-i18n="history.tab_news">News</button>
+</div>
+
+<!-- ── Charts panel ──────────────────────────────────────────────────── -->
+<div id="panelCharts">
+
 <!-- ── Stat cards ───────────────────────────────────────────────────── -->
 <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3 sm:gap-4 mb-6 sm:mb-8 fade-up">
   <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 sm:px-4 py-3">
@@ -135,6 +148,38 @@
     </div>
     <div class="chart-container" style="height:220px; display:none" id="peChartWrap">
       <canvas id="peChart"></canvas>
+    </div>
+  </div>
+
+  <!-- Forward PE chart -->
+  <div id="fwdPeHistSection" class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up" style="display:none">
+    <div class="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-0 sm:justify-between mb-4">
+      <div>
+        <h2 class="text-base font-semibold text-slate-200" data-i18n="history.fwdpe_title">Forward PE — 52 Weeks</h2>
+        <p class="text-xs text-slate-500" data-i18n="history.fwdpe_desc">TTM PE history vs current Forward PE estimate</p>
+      </div>
+      <div class="flex items-center gap-2 flex-wrap justify-end">
+        <span class="flex items-center gap-1.5 text-xs text-slate-400">
+          <span class="inline-block w-3 h-0.5 bg-brand"></span> <span data-i18n="history.pe_legend">PE (TTM)</span>
+        </span>
+        <span class="flex items-center gap-1.5 text-xs text-slate-400 mr-1">
+          <span class="inline-block w-3 h-0.5 border-dashed border border-violet-400"></span> <span data-i18n="history.fwdpe_legend">Forward PE</span>
+        </span>
+        <div class="flex gap-1" id="fwdPeRangeBtns">
+          <button class="range-btn" data-chart="fwdpe" data-period="1mo">1M</button>
+          <button class="range-btn" data-chart="fwdpe" data-period="3mo">3M</button>
+          <button class="range-btn" data-chart="fwdpe" data-period="6mo">6M</button>
+          <button class="range-btn active" data-chart="fwdpe" data-period="1y">1Y</button>
+          <button class="range-btn" data-chart="fwdpe" data-period="2y">2Y</button>
+          <button class="range-btn" data-chart="fwdpe" data-period="5y">5Y</button>
+        </div>
+        <button onclick="expandChart('fwdpe')" title="Expand" class="expand-btn">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="chart-container" style="height:220px" id="fwdPeChartWrap">
+      <canvas id="fwdPeChart"></canvas>
     </div>
   </div>
 
@@ -254,6 +299,20 @@
   </div>
 </div>
 
+</div><!-- end #panelCharts -->
+
+<!-- ── News panel ────────────────────────────────────────────────────── -->
+<div id="panelNews" style="display:none">
+  <div class="flex items-center justify-between mb-4">
+    <div id="newsStatus" class="text-slate-500 text-sm animate-pulse" data-i18n="history.news_loading">Fetching news…</div>
+    <button onclick="loadNews(true)"
+            class="flex items-center gap-1.5 text-xs text-slate-400 border border-slate-700 bg-slate-800
+                   hover:text-slate-200 hover:border-slate-500 transition px-2.5 py-1 rounded-lg"
+            data-i18n="history.news_refresh">↻ Refresh</button>
+  </div>
+  <div id="newsFeed" class="space-y-3"></div>
+</div>
+
 <!-- Error -->
 <div id="histError" class="hidden mt-4 px-4 py-3 rounded-lg bg-red-900/40 border border-red-700 text-red-300 text-sm"></div>
 
@@ -321,6 +380,7 @@ let   _modalKey       = null;
   _periodCache['1y'] = data;
   const staticData = {
     current_pe:   data.current_pe,
+    forward_pe:   data.forward_pe,
     target_price: data.target_price,
     call_wall:    data.call_wall,
     put_wall:     data.put_wall,
@@ -350,6 +410,13 @@ let   _modalKey       = null;
     document.getElementById('pegHistSection').style.display = 'block';
     const pgCfg = _buildConfig('peg', data, staticData);
     _registerChart('peg', pgCfg, new Chart(document.getElementById('pegHistChart'), pgCfg));
+  }
+
+  // ── Forward PE chart (only when fwd_pe_history data is available)
+  if (data.fwd_pe_history && data.fwd_pe_history.some(v => v != null)) {
+    document.getElementById('fwdPeHistSection').style.display = 'block';
+    const fwdCfg = _buildConfig('fwdpe', data, staticData);
+    _registerChart('fwdpe', fwdCfg, new Chart(document.getElementById('fwdPeChart'), fwdCfg));
   }
 
   // ── Wire up range buttons
@@ -529,14 +596,57 @@ function _buildConfig(key, d, staticData) {
       _title: 'PEG Ratio', _desc: 'Estimated from PE ÷ annual earnings growth rate',
     };
   }
+  if (key === 'fwdpe') {
+    return {
+      type: 'line',
+      data: { labels: d.dates, datasets: [{ label:'PE (TTM)', data:d.pe_history,
+        borderColor:'#6366f1', backgroundColor:'rgba(99,102,241,0.08)',
+        borderWidth:2, pointRadius:0, pointHoverRadius:5, fill:true, tension:0.3, spanGaps:true }] },
+      options: {
+        responsive:true, maintainAspectRatio:false,
+        plugins:{ legend:{display:false}, tooltip:{mode:'index',intersect:false, callbacks:{label:c=>` PE: ${c.raw?.toFixed(1)}x`}} },
+        scales:{ x:{grid:{color:gridCol},ticks:{color:tickCol,maxTicksLimit:8,maxRotation:0}}, y:{grid:{color:gridCol},ticks:{color:tickCol,callback:v=>v+'x'}} },
+        interaction:{mode:'index',intersect:false},
+      },
+      plugins: [{
+        afterDraw(chart) {
+          const {ctx:c,chartArea:a,scales:{y}} = chart;
+          // Forward PE reference line
+          const fpe = staticData.forward_pe;
+          if (fpe != null) {
+            const fy = y.getPixelForValue(fpe);
+            if (fy >= a.top && fy <= a.bottom) {
+              c.save(); c.strokeStyle='#a78bfa88'; c.lineWidth=1.5; c.setLineDash([5,4]);
+              c.beginPath(); c.moveTo(a.left,fy); c.lineTo(a.right,fy); c.stroke();
+              c.fillStyle='#a78bfa'; c.font='11px Inter,sans-serif';
+              c.fillText('Fwd PE '+fpe.toFixed(1)+'x', a.left+6, fy-5); c.restore();
+            }
+          }
+          // Average TTM PE line
+          const vals = d.pe_history.filter(v => v != null);
+          if (vals.length) {
+            const avg = vals.reduce((s,v) => s+v, 0) / vals.length;
+            const ay = y.getPixelForValue(avg);
+            if (ay >= a.top && ay <= a.bottom) {
+              c.save(); c.strokeStyle='rgba(148,163,184,0.5)'; c.lineWidth=1; c.setLineDash([4,4]);
+              c.beginPath(); c.moveTo(a.left,ay); c.lineTo(a.right,ay); c.stroke();
+              c.fillStyle='#94a3b8'; c.font='11px Inter,sans-serif';
+              c.fillText('Avg '+avg.toFixed(1)+'x', a.left+6, ay+12); c.restore();
+            }
+          }
+        }
+      }],
+      _title: 'Forward PE', _desc: 'TTM PE history vs current Forward PE estimate',
+    };
+  }
 }
 
 // Handle a range button click: fetch data, rebuild inline chart
 async function _handleRange(chartKey, period, staticData) {
   _setActiveBtn(chartKey, period);
 
-  const wrapId  = { pe:'peChartWrap', price:'priceChartWrap', peg:'pegChartWrap' }[chartKey];
-  const canvasId = { pe:'peChart', price:'priceHistChart', peg:'pegHistChart' }[chartKey];
+  const wrapId  = { pe:'peChartWrap', price:'priceChartWrap', peg:'pegChartWrap', fwdpe:'fwdPeChartWrap' }[chartKey];
+  const canvasId = { pe:'peChart', price:'priceHistChart', peg:'pegHistChart', fwdpe:'fwdPeChart' }[chartKey];
   const wrap = document.getElementById(wrapId);
 
   // Show loading overlay
@@ -642,5 +752,115 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal()
     tip.style.top  = y + 'px';
   }
 })();
+
+// ── Tab switching ─────────────────────────────────────────────────────────────
+let _newsLoaded = false;
+let _newsAutoRefresh = null;
+
+function switchTab(tab) {
+  const isCharts = tab === 'charts';
+  document.getElementById('panelCharts').style.display = isCharts ? '' : 'none';
+  document.getElementById('panelNews').style.display   = isCharts ? 'none' : '';
+
+  const chartsBtn = document.getElementById('tabChartsBtn');
+  const newsBtn   = document.getElementById('tabNewsBtn');
+  chartsBtn.className = 'px-4 py-2 text-sm font-medium border-b-2 -mb-px transition ' +
+    (isCharts ? 'border-brand text-brand' : 'border-transparent text-slate-400 hover:text-slate-200');
+  newsBtn.className   = 'px-4 py-2 text-sm font-medium border-b-2 -mb-px transition ' +
+    (!isCharts ? 'border-brand text-brand' : 'border-transparent text-slate-400 hover:text-slate-200');
+
+  if (!isCharts) {
+    if (!_newsLoaded) loadNews(false);
+    // Auto-refresh every 2 minutes while tab is visible
+    if (!_newsAutoRefresh) {
+      _newsAutoRefresh = setInterval(() => {
+        if (document.getElementById('panelNews').style.display !== 'none') loadNews(false);
+      }, 2 * 60 * 1000);
+    }
+  }
+}
+
+// ── News feed ─────────────────────────────────────────────────────────────────
+async function loadNews(force) {
+  if (!force && _newsLoaded) return;
+  const statusEl = document.getElementById('newsStatus');
+  const feedEl   = document.getElementById('newsFeed');
+  statusEl.textContent = I18n.t('history.news_loading') || 'Fetching news…';
+  statusEl.className   = 'text-slate-500 text-sm animate-pulse';
+
+  let data;
+  try {
+    const url = `/api/news/${encodeURIComponent(TICKER)}` + (force ? `?_=${Date.now()}` : '');
+    const resp = await fetch(url);
+    data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || 'Failed');
+  } catch(e) {
+    statusEl.textContent = (I18n.t('history.news_error') || 'Failed to load news.') + ' ' + e.message;
+    statusEl.className   = 'text-red-400 text-sm';
+    return;
+  }
+
+  _newsLoaded = true;
+  const articles = data.articles || [];
+
+  if (!articles.length) {
+    statusEl.textContent = I18n.t('history.news_empty') || 'No news found.';
+    statusEl.className   = 'text-slate-500 text-sm';
+    feedEl.innerHTML = '';
+    return;
+  }
+
+  statusEl.textContent = `${articles.length} articles`;
+  statusEl.className   = 'text-slate-500 text-sm';
+  feedEl.innerHTML = articles.map(a => _renderArticle(a)).join('');
+}
+
+function _timeAgo(ts) {
+  if (!ts) return '';
+  const diff = Math.floor(Date.now() / 1000) - ts;
+  if (diff < 60)         return I18n.t('history.news_just_now') || 'just now';
+  if (diff < 3600)       return Math.floor(diff / 60)   + (I18n.t('history.news_min_ago') || 'm ago');
+  if (diff < 86400)      return Math.floor(diff / 3600)  + (I18n.t('history.news_hr_ago')  || 'h ago');
+  return Math.floor(diff / 86400) + (I18n.t('history.news_day_ago') || 'd ago');
+}
+
+function _renderArticle(a) {
+  const importantBadge = a.important
+    ? `<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold
+                   bg-amber-900/50 text-amber-300 border border-amber-800 ml-1 align-middle">${I18n.t('history.news_important') || 'Important'}</span>`
+    : '';
+  const thumb = a.thumbnail
+    ? `<img src="${_escAttr(a.thumbnail)}" alt="" class="w-16 h-16 object-cover rounded-lg flex-shrink-0 opacity-80"
+             onerror="this.style.display='none'">`
+    : '';
+  const timeAgo = _timeAgo(a.published);
+  const meta = [a.publisher, timeAgo].filter(Boolean).join(' · ');
+
+  return `
+<a href="${_escAttr(a.link)}" target="_blank" rel="noopener noreferrer"
+   class="flex gap-3 items-start bg-slate-900 border ${a.important ? 'border-amber-800/60' : 'border-slate-800'}
+          rounded-xl p-3 sm:p-4 hover:border-slate-600 hover:bg-slate-800/60 transition group">
+  ${thumb}
+  <div class="flex-1 min-w-0">
+    <p class="text-sm font-medium text-slate-200 group-hover:text-white leading-snug line-clamp-2">
+      ${_escHtml(a.title)}${importantBadge}
+    </p>
+    ${a.summary ? `<p class="text-xs text-slate-500 mt-1 line-clamp-2">${_escHtml(a.summary)}</p>` : ''}
+    <p class="text-xs text-slate-600 mt-1.5">${_escHtml(meta)}</p>
+  </div>
+  <svg class="w-4 h-4 text-slate-600 group-hover:text-slate-400 flex-shrink-0 mt-0.5 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
+  </svg>
+</a>`;
+}
+
+function _escHtml(s) {
+  if (!s) return '';
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function _escAttr(s) {
+  if (!s) return '#';
+  return s.replace(/"/g,'%22').replace(/'/g,'%27');
+}
 </script>
 {% endblock %}

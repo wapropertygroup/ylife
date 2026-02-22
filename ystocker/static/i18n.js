@@ -152,6 +152,10 @@ const I18n = (() => {
     'history.current_pe_legend': { en: 'Current PE', zh: '当前市盈率' },
     'history.avg_pe_legend':     { en: 'Avg PE',     zh: '平均市盈率' },
 
+    'history.fwdpe_title':  { en: 'Forward PE — 52 Weeks', zh: '预测市盈率 — 52周' },
+    'history.fwdpe_desc':   { en: 'TTM PE history vs current Forward PE estimate', zh: 'TTM市盈率历史与当前预测市盈率对比' },
+    'history.fwdpe_legend': { en: 'Forward PE', zh: '预测市盈率' },
+
     'history.price_title':  { en: 'Price — 52 Weeks',     zh: '股价 — 52周' },
     'history.price_desc':   { en: 'Weekly closing price (USD)', zh: '每周收盘价（美元）' },
     'history.price_legend': { en: 'Price',  zh: '股价' },
@@ -183,6 +187,18 @@ const I18n = (() => {
     'history.inst_value':   { en: 'Value',            zh: '市值' },
     'history.inst_pct':     { en: '% of Portfolio',   zh: '占基金比例' },
     'history.inst_change':  { en: 'Change',           zh: '变化' },
+
+    'history.tab_charts':   { en: 'Charts & Holdings', zh: '图表与持仓' },
+    'history.tab_news':     { en: 'News',               zh: '新闻' },
+    'history.news_loading': { en: 'Fetching news…',    zh: '加载新闻…' },
+    'history.news_empty':   { en: 'No news found.',    zh: '暂无新闻。' },
+    'history.news_error':   { en: 'Failed to load news.', zh: '新闻加载失败。' },
+    'history.news_refresh': { en: '↻ Refresh',         zh: '↻ 刷新' },
+    'history.news_important': { en: 'Important',       zh: '重要' },
+    'history.news_just_now':  { en: 'just now',        zh: '刚刚' },
+    'history.news_min_ago':   { en: 'm ago',           zh: '分钟前' },
+    'history.news_hr_ago':    { en: 'h ago',           zh: '小时前' },
+    'history.news_day_ago':   { en: 'd ago',           zh: '天前' },
 
     // ── 13F page ───────────────────────────────────────────────────────
     'thirteenf.title':       { en: '13F Institutional Holdings', zh: '13F 机构持仓' },

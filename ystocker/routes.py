@@ -539,7 +539,8 @@ def api_history(ticker: str):
     except Exception as exc:
         return jsonify({"error": str(exc)}), 502
 
-    eps = info.get("trailingEps")
+    eps     = info.get("trailingEps")
+    fwd_eps = info.get("forwardEps")
     name = info.get("shortName", ticker)
 
     if hist.empty:
@@ -555,6 +556,15 @@ def api_history(ticker: str):
             pe_history.append(round(p / eps, 2))
         else:
             pe_history.append(None)
+
+    # Forward PE history: price / forwardEps (constant analyst consensus)
+    # Shows how the forward valuation multiple has expanded/compressed over time
+    fwd_pe_history = []
+    for p in prices:
+        if p is not None and fwd_eps and fwd_eps > 0:
+            fwd_pe_history.append(round(p / fwd_eps, 2))
+        else:
+            fwd_pe_history.append(None)
 
     # PEG history: PE(week) / (earnings_growth * 100)
     # earnings_growth is a single scalar from yfinance - PEG tracks PE movement
@@ -601,6 +611,7 @@ def api_history(ticker: str):
         "dates":            dates,
         "prices":           prices,
         "pe_history":       pe_history,
+        "fwd_pe_history":   fwd_pe_history,
         "peg_history":      peg_history,
         "current_pe":       current_pe,
         "current_peg":      current_peg,
@@ -798,6 +809,81 @@ def api_fed():
     return jsonify({"warming": True}), 202
 
 
+@bp.route("/api/fed/explain", methods=["POST"])
+def api_fed_explain():
+    """Stream an AI explanation of a Fed chart's recent data via SSE."""
+    import os
+    from openai import OpenAI
+
+    body = request.get_json(force=True, silent=True) or {}
+    chart   = body.get("chart", "")
+    dates   = body.get("dates", [])
+    values  = body.get("values", [])
+    label   = body.get("label", chart)
+
+    if not dates or not values:
+        return jsonify({"error": "No data provided"}), 400
+
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if not api_key:
+        return jsonify({"error": "OPENAI_API_KEY not configured"}), 503
+
+    # Build a compact data summary (last 12 points + overall trend)
+    pairs = [(d, v) for d, v in zip(dates, values) if v is not None]
+    if not pairs:
+        return jsonify({"error": "No valid data points"}), 400
+
+    first_date, first_val = pairs[0]
+    last_date,  last_val  = pairs[-1]
+    recent = pairs[-12:]  # last ~3 months of weekly data
+    recent_lines = "\n".join(f"  {d}: ${v:.1f}B" for d, v in recent)
+
+    chart_descriptions = {
+        "treasury":  "U.S. Treasury Securities Held Outright by the Federal Reserve (weekly, billions USD)",
+        "bills":     "Short-term Treasury Bills (≤1 year maturity) held by the Federal Reserve (weekly, billions USD)",
+        "balance":   "Federal Reserve Balance Sheet Overview — Total Assets, MBS holdings, and Reserve Balances (weekly, billions USD)",
+        "pct":       "U.S. Treasury Securities as a percentage of Total Federal Reserve Assets (weekly, %)",
+    }
+    description = chart_descriptions.get(chart, label)
+
+    prompt = f"""You are a macroeconomic analyst. Explain the following Federal Reserve balance sheet data to a financial market participant in 3-4 concise paragraphs.
+
+Chart: {description}
+Full period: {first_date} (${first_val:.1f}B) → {last_date} (${last_val:.1f}B)
+Total change: {last_val - first_val:+.1f}B ({(last_val - first_val) / first_val * 100:+.1f}%)
+
+Most recent 12 data points:
+{recent_lines}
+
+Cover: (1) what the overall trend shows, (2) any notable recent moves, (3) what this means for monetary policy or market conditions. Be specific about the numbers. Do not use headers or bullet points."""
+
+    client = OpenAI(api_key=api_key)
+
+    def generate():
+        try:
+            stream = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": prompt}],
+                stream=True,
+                max_tokens=500,
+            )
+            for chunk in stream:
+                delta = chunk.choices[0].delta.content
+                if delta:
+                    yield f"data: {json.dumps({'text': delta})}\n\n"
+        except Exception as exc:
+            log.error("Fed explain error: %s", exc)
+            yield f"data: {json.dumps({'error': str(exc)})}\n\n"
+        finally:
+            yield "data: [DONE]\n\n"
+
+    return bp.make_response(generate()), 200, {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        "X-Accel-Buffering": "no",
+    }
+
+
 # ---------------------------------------------------------------------------
 # 13F Institutional Holdings
 # ---------------------------------------------------------------------------
@@ -843,4 +929,100 @@ def api_thirteenf(fund_slug: str):
     if not name:
         return jsonify({"error": "Fund not found"}), 404
     return jsonify(holdings.get(name, {}))
+
+
+# ---------------------------------------------------------------------------
+# News
+# ---------------------------------------------------------------------------
+
+_NEWS_CACHE: Dict[str, dict] = {}
+_NEWS_CACHE_LOCK = threading.Lock()
+_NEWS_CACHE_TTL = 5 * 60   # 5 minutes
+
+# Keywords that indicate important/high-impact news
+_IMPORTANT_KEYWORDS = [
+    "earnings", "revenue", "guidance", "outlook", "forecast",
+    "beats", "misses", "beat", "miss", "eps", "profit", "loss",
+    "upgrade", "downgrade", "outperform", "underperform",
+    "price target", "target price", "analyst",
+    "merger", "acquisition", "buyout", "deal", "takeover",
+    "dividend", "buyback", "split",
+    "fda", "approval", "approved", "rejected",
+    "layoff", "layoffs", "ceo", "cfo", "executive",
+    "lawsuit", "investigation", "sec",
+    "record", "all-time", "ipo",
+]
+
+def _is_important(title: str) -> bool:
+    lower = title.lower()
+    return any(kw in lower for kw in _IMPORTANT_KEYWORDS)
+
+
+@bp.route("/api/news/<ticker>")
+def api_news(ticker: str):
+    """
+    JSON API - return recent news articles for a ticker via yfinance.
+    Results are sorted newest-first. Cache TTL: 5 minutes.
+    """
+    import yfinance as yf
+    ticker = ticker.strip().upper()
+    log.info("API news: %s", ticker)
+
+    with _NEWS_CACHE_LOCK:
+        entry = _NEWS_CACHE.get(ticker)
+        if entry and time.time() - entry["ts"] < _NEWS_CACHE_TTL:
+            log.debug("News cache hit: %s", ticker)
+            return jsonify(entry["data"])
+
+    try:
+        tk = yf.Ticker(ticker)
+        raw_news = tk.news or []
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 502
+
+    articles = []
+    for item in raw_news:
+        content = item.get("content", {}) or {}
+        # yfinance >= 0.2.x nests fields under "content"
+        title     = content.get("title") or item.get("title", "")
+        pub_date  = content.get("pubDate") or item.get("providerPublishTime")
+        provider  = (content.get("provider", {}) or {}).get("displayName") or item.get("publisher", "")
+        link      = (content.get("canonicalUrl", {}) or {}).get("url") or item.get("link", "")
+        summary   = content.get("summary") or item.get("summary", "")
+        thumbnail = None
+        thumb_list = (content.get("thumbnail", {}) or {}).get("resolutions") or []
+        if thumb_list:
+            thumbnail = thumb_list[0].get("url")
+        elif (item.get("thumbnail") or {}).get("resolutions"):
+            thumbnail = item["thumbnail"]["resolutions"][0].get("url")
+
+        # Normalise pub_date to a unix timestamp int
+        if isinstance(pub_date, str):
+            try:
+                from datetime import datetime
+                dt = datetime.fromisoformat(pub_date.replace("Z", "+00:00"))
+                pub_date = int(dt.timestamp())
+            except Exception:
+                pub_date = None
+
+        if not title or not link:
+            continue
+
+        articles.append({
+            "title":     title,
+            "publisher": provider,
+            "link":      link,
+            "published": pub_date,
+            "summary":   summary,
+            "thumbnail": thumbnail,
+            "important": _is_important(title),
+        })
+
+    # Sort newest-first
+    articles.sort(key=lambda a: a["published"] or 0, reverse=True)
+
+    result = {"ticker": ticker, "articles": articles}
+    with _NEWS_CACHE_LOCK:
+        _NEWS_CACHE[ticker] = {"ts": time.time(), "data": result}
+    return jsonify(result)
 
