@@ -34,10 +34,9 @@ Parameters:
 
   GitRepo:
     Type: String
-    Default: ""
+    Default: "https://github.com/15th-Ave-NE/ystocker.git"
     Description: >
-      Optional - HTTPS URL of your git repo (e.g. https://github.com/you/ystocker.git).
-      Leave blank to upload code manually via scp/rsync after launch.
+      HTTPS URL of the git repo to clone on first boot.
 
   LatestAL2023Ami:
     Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
@@ -205,16 +204,13 @@ Resources:
 
             # -- Clone or scaffold app
             if [ -n "${GitRepo}" ]; then
-              git clone "${GitRepo}" "$APP_DIR"
+              git clone "${GitRepo}" /tmp/ystocker-repo
+              cp -r /tmp/ystocker-repo/. "$APP_DIR/"
+              rm -rf /tmp/ystocker-repo
             else
-              # Placeholder - upload your code via scp/rsync after launch:
-              #   scp -r ./ystocker ec2-user@<IP>:/tmp/
-              #   sudo mv /tmp/ystocker/* /opt/ystocker/
               echo "GitRepo not set - deploy code manually to $APP_DIR"
-              # Create minimal structure so systemd unit doesn't fail on start
               mkdir -p "$APP_DIR/ystocker" "$APP_DIR/cache"
               echo "from flask import Flask; app = Flask(__name__)" > "$APP_DIR/ystocker/__init__.py"
-              echo "from ystocker import create_app; app = create_app()" > "$APP_DIR/wsgi.py" 2>/dev/null || true
             fi
 
             # -- Python virtual environment
