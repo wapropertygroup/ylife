@@ -126,18 +126,18 @@
 
 <!-- Institutional Holders (13F) -->
 <div id="instHoldersSection" class="mt-6 bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up" style="display:none">
-  <h2 class="text-base font-semibold text-slate-200 mb-1">Institutional Holdings (13F)</h2>
-  <p class="text-xs text-slate-500 mb-4">Funds reporting this position in their latest SEC 13F filing</p>
+  <h2 class="text-base font-semibold text-slate-200 mb-1" data-i18n="history.inst_title">Institutional Holdings (13F)</h2>
+  <p class="text-xs text-slate-500 mb-4" data-i18n="history.inst_desc">Funds reporting this position in their latest SEC 13F filing — sorted by position size</p>
   <div class="overflow-x-auto">
     <table class="w-full text-sm">
       <thead>
         <tr class="text-xs text-slate-500 border-b border-slate-800 select-none">
-          <th class="text-left py-2 px-3 font-medium">Fund</th>
-          <th class="text-right py-2 px-3 font-medium">Portfolio Rank</th>
-          <th class="text-right py-2 px-3 font-medium">Shares</th>
-          <th class="text-right py-2 px-3 font-medium">Value</th>
-          <th class="text-right py-2 px-3 font-medium">% of Portfolio</th>
-          <th class="text-center py-2 px-3 font-medium">Change</th>
+          <th class="text-left py-2 px-3 font-medium" data-i18n="history.inst_fund">Fund</th>
+          <th class="text-right py-2 px-3 font-medium" data-i18n="history.inst_rank">Portfolio Rank</th>
+          <th class="text-right py-2 px-3 font-medium" data-i18n="history.inst_shares">Shares</th>
+          <th class="text-right py-2 px-3 font-medium" data-i18n="history.inst_value">Value</th>
+          <th class="text-right py-2 px-3 font-medium" data-i18n="history.inst_pct">% of Portfolio</th>
+          <th class="text-center py-2 px-3 font-medium" data-i18n="history.inst_change">Change</th>
         </tr>
       </thead>
       <tbody id="instHoldersBody"></tbody>
@@ -371,23 +371,42 @@ const TICKER = {{ ticker | tojson }};
     const tbody   = document.getElementById('instHoldersBody');
     section.style.display = 'block';
 
+    // Sort by value descending (hottest = largest position first)
+    const holders = [...data.institutional_holders].sort((a, b) => b.value_millions - a.value_millions);
+
+    // Heatmap: scale intensity relative to the largest holder
+    const maxVal = Math.max(...holders.map(h => h.value_millions), 0.01);
+    function holdHeat(v) {
+      const t = Math.min(v / maxVal, 1);
+      const alpha = (0.06 + t * 0.38).toFixed(2);
+      const borderAlpha = (0.20 + t * 0.65).toFixed(2);
+      return {
+        bg:     `rgba(99,102,241,${alpha})`,
+        border: `rgba(99,102,241,${borderAlpha})`,
+        text:   t > 0.5 ? '#a5b4fc' : '#94a3b8',
+      };
+    }
+
     const changeLabel = {
-      new:       '<span class="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-emerald-900/50 text-emerald-300 border border-emerald-800">New</span>',
-      increased: '<span class="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-sky-900/50 text-sky-300 border border-sky-800">▲ Added</span>',
-      reduced:   '<span class="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-amber-900/50 text-amber-300 border border-amber-800">▼ Reduced</span>',
-      closed:    '<span class="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-rose-900/50 text-rose-300 border border-rose-800">Closed</span>',
-      unchanged: '<span class="text-slate-600 text-xs">—</span>',
+      new:       `<span class="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-emerald-900/50 text-emerald-300 border border-emerald-800">${I18n.t('inst.change_new') || 'New'}</span>`,
+      increased: `<span class="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-sky-900/50 text-sky-300 border border-sky-800">${I18n.t('inst.change_added') || '▲ Added'}</span>`,
+      reduced:   `<span class="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-amber-900/50 text-amber-300 border border-amber-800">${I18n.t('inst.change_reduced') || '▼ Reduced'}</span>`,
+      closed:    `<span class="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-rose-900/50 text-rose-300 border border-rose-800">${I18n.t('inst.change_closed') || 'Closed'}</span>`,
+      unchanged: `<span class="text-slate-600 text-xs">—</span>`,
     };
 
-    tbody.innerHTML = data.institutional_holders.map(h => `
-      <tr class="border-b border-slate-800/50 hover:bg-slate-800/40 transition">
-        <td class="py-2.5 px-3 text-slate-200 font-medium text-sm">${h.fund}</td>
+    tbody.innerHTML = holders.map(h => {
+      const heat = holdHeat(h.value_millions);
+      return `
+      <tr class="border-b border-slate-800/50 transition" style="background:${heat.bg};border-left:3px solid ${heat.border}">
+        <td class="py-2.5 px-3 font-medium text-sm" style="color:${heat.text}">${h.fund}</td>
         <td class="py-2.5 px-3 text-right text-slate-500 text-xs">${h.rank}</td>
         <td class="py-2.5 px-3 text-right font-mono text-sm text-slate-300">${h.shares.toLocaleString()}</td>
-        <td class="py-2.5 px-3 text-right font-mono text-sm">$${h.value_millions.toLocaleString(undefined,{minimumFractionDigits:1,maximumFractionDigits:1})}M</td>
+        <td class="py-2.5 px-3 text-right font-mono text-sm font-semibold" style="color:${heat.text}">$${h.value_millions.toLocaleString(undefined,{minimumFractionDigits:1,maximumFractionDigits:1})}M</td>
         <td class="py-2.5 px-3 text-right font-mono text-sm text-slate-300">${h.pct_portfolio.toFixed(2)}%</td>
         <td class="py-2.5 px-3 text-center">${changeLabel[h.change] || '<span class="text-slate-700 text-xs">?</span>'}</td>
-      </tr>`).join('');
+      </tr>`;
+    }).join('');
   }
 </script>
 {% endblock %}

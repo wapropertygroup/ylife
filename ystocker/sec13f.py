@@ -227,7 +227,7 @@ _RATE_LIMIT_INTERVAL = 0.15   # seconds between requests
 
 
 def _get(url: str, **kwargs) -> requests.Response:
-    """Rate-limited GET with retry on 429."""
+    """Rate-limited GET. Raises on non-2xx (caller must handle)."""
     global _LAST_REQ_TIME
     gap = time.time() - _LAST_REQ_TIME
     if gap < _RATE_LIMIT_INTERVAL:
@@ -238,6 +238,27 @@ def _get(url: str, **kwargs) -> requests.Response:
         log.warning("SEC rate limit hit, sleeping 2s")
         time.sleep(2)
         resp = _SESSION.get(url, timeout=20, **kwargs)
+    resp.raise_for_status()
+    return resp
+
+
+def _get_maybe(url: str, **kwargs) -> Optional[requests.Response]:
+    """
+    Rate-limited GET that returns None on 404/403 instead of raising.
+    All other errors still raise.
+    """
+    global _LAST_REQ_TIME
+    gap = time.time() - _LAST_REQ_TIME
+    if gap < _RATE_LIMIT_INTERVAL:
+        time.sleep(_RATE_LIMIT_INTERVAL - gap)
+    _LAST_REQ_TIME = time.time()
+    resp = _SESSION.get(url, timeout=20, **kwargs)
+    if resp.status_code == 429:
+        log.warning("SEC rate limit hit, sleeping 2s")
+        time.sleep(2)
+        resp = _SESSION.get(url, timeout=20, **kwargs)
+    if resp.status_code in (404, 403, 503):
+        return None
     resp.raise_for_status()
     return resp
 
@@ -272,74 +293,79 @@ def _find_infotable_url(cik: str, accession: str, primary_doc: str = "") -> Opti
     1. Try the -index.json endpoint (available for filings ~2019+)
     2. Parse the -index.htm HTML for document links (universal fallback)
     3. Try common infotable filename patterns directly (last resort)
+
+    Uses _get_maybe() for index fetches so 404 silently falls through
+    to the next strategy instead of raising.
     """
+    import re
     cik_int    = str(int(cik))
     acc_nodash = accession.replace("-", "")
     base_url   = f"https://data.sec.gov/Archives/edgar/data/{cik_int}/{acc_nodash}"
+    primary_lower = primary_doc.lower()
 
-    # ── Strategy 1: JSON index (newer filings) ──────────────────────────────
-    try:
-        idx = _get(f"{base_url}-index.json").json()
-        for doc in idx.get("documents", []):
-            desc  = (doc.get("documentDescription") or "").lower()
-            fname = (doc.get("name") or "").lower()
-            dtype = (doc.get("type") or "").upper()
-            if (dtype == "INFORMATION TABLE"
-                    or "information table" in desc
-                    or "infotable" in fname
-                    or fname.endswith("_info_table.xml")):
-                return f"{base_url}/{doc['name']}"
-        # Fallback within JSON: first XML that isn't the primary doc
-        primary_lower = primary_doc.lower()
-        for doc in idx.get("documents", []):
-            fname = (doc.get("name") or "").lower()
-            if fname.endswith(".xml") and fname != primary_lower:
-                return f"{base_url}/{doc['name']}"
-    except Exception as exc:
-        log.debug("JSON index failed for %s/%s: %s", cik_int, acc_nodash, exc)
+    # ── Strategy 1: JSON index (newer filings ~2019+) ───────────────────────
+    r = _get_maybe(f"{base_url}-index.json")
+    if r is not None:
+        try:
+            idx = r.json()
+            for doc in idx.get("documents", []):
+                desc  = (doc.get("documentDescription") or "").lower()
+                fname = (doc.get("name") or "").lower()
+                dtype = (doc.get("type") or "").upper()
+                if (dtype == "INFORMATION TABLE"
+                        or "information table" in desc
+                        or "infotable" in fname
+                        or "info_table" in fname):
+                    return f"{base_url}/{doc['name']}"
+            # fallback within JSON: first XML that isn't the primary doc
+            for doc in idx.get("documents", []):
+                fname = (doc.get("name") or "").lower()
+                if fname.endswith(".xml") and fname != primary_lower:
+                    return f"{base_url}/{doc['name']}"
+        except Exception as exc:
+            log.debug("JSON index parse failed for %s/%s: %s", cik_int, acc_nodash, exc)
 
-    # ── Strategy 2: HTML index (universal) ──────────────────────────────────
-    try:
-        htm = _get(f"https://www.sec.gov/Archives/edgar/data/{cik_int}/{acc_nodash}-index.htm").text
-        import re
-        # Find all links to XML files in the filing folder
-        xml_links = re.findall(
-            r'href="(/Archives/edgar/data/[^"]+\.xml)"',
-            htm, re.IGNORECASE
-        )
-        primary_lower = primary_doc.lower()
-        for path in xml_links:
-            fname = path.split("/")[-1].lower()
-            if fname != primary_lower and ("infotable" in fname or "info_table" in fname):
-                return "https://www.sec.gov" + path
-        # Take first non-primary XML
-        for path in xml_links:
-            fname = path.split("/")[-1].lower()
-            if fname != primary_lower:
-                return "https://www.sec.gov" + path
-    except Exception as exc:
-        log.debug("HTML index failed for %s/%s: %s", cik_int, acc_nodash, exc)
+    # ── Strategy 2: HTML index (works for all filings) ──────────────────────
+    htm_url = f"https://www.sec.gov/Archives/edgar/data/{cik_int}/{acc_nodash}-index.htm"
+    r2 = _get_maybe(htm_url)
+    if r2 is not None:
+        try:
+            xml_links = re.findall(
+                r'href="(/Archives/edgar/data/[^"]+\.xml)"',
+                r2.text, re.IGNORECASE
+            )
+            # Prefer files with 'infotable' or 'info_table' in name
+            for path in xml_links:
+                fname = path.split("/")[-1].lower()
+                if fname != primary_lower and ("infotable" in fname or "info_table" in fname):
+                    return "https://www.sec.gov" + path
+            # Take first non-primary XML
+            for path in xml_links:
+                fname = path.split("/")[-1].lower()
+                if fname != primary_lower:
+                    return "https://www.sec.gov" + path
+        except Exception as exc:
+            log.debug("HTML index parse failed for %s/%s: %s", cik_int, acc_nodash, exc)
 
     # ── Strategy 3: Try common filename patterns directly ───────────────────
-    primary_stem = primary_doc.replace(".xml", "").replace(".XML", "") if primary_doc else ""
+    primary_stem = primary_doc.rsplit(".", 1)[0] if "." in primary_doc else primary_doc
     candidates = [
-        f"{primary_stem}_infotable.xml",
-        f"{primary_stem}_info_table.xml",
         "infotable.xml",
         "information_table.xml",
         "13finfotable.xml",
         "form13fInfoTable.xml",
     ]
+    if primary_stem:
+        candidates = [f"{primary_stem}_infotable.xml", f"{primary_stem}_info_table.xml"] + candidates
     for fname in candidates:
         if not fname or fname.startswith("_"):
             continue
-        try:
-            r = _SESSION.get(f"{base_url}/{fname}", timeout=10)
-            if r.status_code == 200 and r.text.strip():
-                return f"{base_url}/{fname}"
-        except Exception:
-            pass
+        r3 = _get_maybe(f"{base_url}/{fname}")
+        if r3 is not None and r3.text.strip():
+            log.debug("Found infotable via direct guess: %s/%s", acc_nodash, fname)
+            return f"{base_url}/{fname}"
 
+    log.warning("Could not find infotable for CIK %s accession %s", cik_int, acc_nodash)
     return None
 
 
