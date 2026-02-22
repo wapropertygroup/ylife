@@ -30,14 +30,47 @@ log = logging.getLogger(__name__)
 # Fund registry  {display_name: zero-padded CIK}
 # ---------------------------------------------------------------------------
 FUNDS: Dict[str, str] = {
-    "Berkshire Hathaway":   "0001067983",
-    "Bridgewater Associates": "0001350694",
-    "Tiger Global":         "0001167483",
-    "Citadel Advisors":     "0001423298",
-    "Third Point":          "0001040273",
-    "Pershing Square":      "0001512673",
-    "Appaloosa Management": "0000814620",
-    "Baupost Group":        "0001061768",
+    # Mega funds — household names
+    "Berkshire Hathaway":       "0001067983",
+    "Vanguard Group":           "0000102909",
+    "BlackRock":                "0001364742",
+    "State Street":             "0000093751",
+    "Fidelity (FMR)":           "0000315066",
+
+    # Macro / multi-strategy
+    "Bridgewater Associates":   "0001350694",
+    "Citadel Advisors":         "0001423298",
+    "Millennium Management":    "0001273931",
+    "Point72 Asset Management": "0001603466",
+    "DE Shaw":                  "0001009207",
+
+    # Tiger cubs & growth equity
+    "Tiger Global":             "0001167483",
+    "Coatue Management":        "0001336528",
+    "Viking Global":            "0001103804",
+    "Lone Pine Capital":        "0001061165",
+    "Maverick Capital":         "0001061028",
+
+    # Value / activist
+    "Third Point":              "0001040273",
+    "Pershing Square":          "0001512673",
+    "Appaloosa Management":     "0000814620",
+    "Baupost Group":            "0001061768",
+    "Elliott Management":       "0001061219",
+    "ValueAct Capital":         "0001137448",
+    "Starboard Value":          "0001555280",
+
+    # Growth / tech focus
+    "Soros Fund Management":    "0001029160",
+    "Duquesne Family Office":   "0001536411",
+    "ARK Investment":           "0001579982",
+    "Sequoia Fund":             "0000085451",
+    "Whale Rock Capital":       "0001591698",
+
+    # Quant / systematic
+    "Renaissance Technologies": "0001037389",
+    "Two Sigma Investments":    "0001179392",
+    "AQR Capital":              "0001167557",
 }
 
 # ---------------------------------------------------------------------------
@@ -222,37 +255,91 @@ def _get_filings_list(cik: str) -> list:
     accessions  = recent.get("accessionNumber", [])
     dates       = recent.get("filingDate", [])
     periods     = recent.get("reportDate", [])
+    prim_docs   = recent.get("primaryDocument", [""] * len(forms))
     return [
         {"form": forms[i], "accession": accessions[i],
-         "filing_date": dates[i], "period": periods[i]}
+         "filing_date": dates[i], "period": periods[i],
+         "primary_doc": prim_docs[i] if i < len(prim_docs) else ""}
         for i in range(len(forms))
     ]
 
 
-def _find_infotable_url(cik: str, accession: str) -> Optional[str]:
-    """Given an accession number, return the URL of the infotable XML."""
-    cik_int  = str(int(cik))           # strip leading zeros for URL path
+def _find_infotable_url(cik: str, accession: str, primary_doc: str = "") -> Optional[str]:
+    """
+    Return the URL of the infotable XML for a given 13F-HR filing.
+
+    Strategy (most reliable first):
+    1. Try the -index.json endpoint (available for filings ~2019+)
+    2. Parse the -index.htm HTML for document links (universal fallback)
+    3. Try common infotable filename patterns directly (last resort)
+    """
+    cik_int    = str(int(cik))
     acc_nodash = accession.replace("-", "")
-    idx_url = (
-        f"https://data.sec.gov/Archives/edgar/data/"
-        f"{cik_int}/{acc_nodash}-index.json"
-    )
-    idx = _get(idx_url).json()
-    for doc in idx.get("documents", []):
-        name  = (doc.get("documentDescription") or "").lower()
-        fname = (doc.get("name") or "").lower()
-        if "information table" in name or "infotable" in fname or fname.endswith("_info_table.xml"):
-            return (
-                f"https://data.sec.gov/Archives/edgar/data/"
-                f"{cik_int}/{acc_nodash}/{doc['name']}"
-            )
-    # fallback: first XML that isn't the primary document
-    for doc in idx.get("documents", []):
-        if (doc.get("name") or "").lower().endswith(".xml"):
-            return (
-                f"https://data.sec.gov/Archives/edgar/data/"
-                f"{cik_int}/{acc_nodash}/{doc['name']}"
-            )
+    base_url   = f"https://data.sec.gov/Archives/edgar/data/{cik_int}/{acc_nodash}"
+
+    # ── Strategy 1: JSON index (newer filings) ──────────────────────────────
+    try:
+        idx = _get(f"{base_url}-index.json").json()
+        for doc in idx.get("documents", []):
+            desc  = (doc.get("documentDescription") or "").lower()
+            fname = (doc.get("name") or "").lower()
+            dtype = (doc.get("type") or "").upper()
+            if (dtype == "INFORMATION TABLE"
+                    or "information table" in desc
+                    or "infotable" in fname
+                    or fname.endswith("_info_table.xml")):
+                return f"{base_url}/{doc['name']}"
+        # Fallback within JSON: first XML that isn't the primary doc
+        primary_lower = primary_doc.lower()
+        for doc in idx.get("documents", []):
+            fname = (doc.get("name") or "").lower()
+            if fname.endswith(".xml") and fname != primary_lower:
+                return f"{base_url}/{doc['name']}"
+    except Exception as exc:
+        log.debug("JSON index failed for %s/%s: %s", cik_int, acc_nodash, exc)
+
+    # ── Strategy 2: HTML index (universal) ──────────────────────────────────
+    try:
+        htm = _get(f"https://www.sec.gov/Archives/edgar/data/{cik_int}/{acc_nodash}-index.htm").text
+        import re
+        # Find all links to XML files in the filing folder
+        xml_links = re.findall(
+            r'href="(/Archives/edgar/data/[^"]+\.xml)"',
+            htm, re.IGNORECASE
+        )
+        primary_lower = primary_doc.lower()
+        for path in xml_links:
+            fname = path.split("/")[-1].lower()
+            if fname != primary_lower and ("infotable" in fname or "info_table" in fname):
+                return "https://www.sec.gov" + path
+        # Take first non-primary XML
+        for path in xml_links:
+            fname = path.split("/")[-1].lower()
+            if fname != primary_lower:
+                return "https://www.sec.gov" + path
+    except Exception as exc:
+        log.debug("HTML index failed for %s/%s: %s", cik_int, acc_nodash, exc)
+
+    # ── Strategy 3: Try common filename patterns directly ───────────────────
+    primary_stem = primary_doc.replace(".xml", "").replace(".XML", "") if primary_doc else ""
+    candidates = [
+        f"{primary_stem}_infotable.xml",
+        f"{primary_stem}_info_table.xml",
+        "infotable.xml",
+        "information_table.xml",
+        "13finfotable.xml",
+        "form13fInfoTable.xml",
+    ]
+    for fname in candidates:
+        if not fname or fname.startswith("_"):
+            continue
+        try:
+            r = _SESSION.get(f"{base_url}/{fname}", timeout=10)
+            if r.status_code == 200 and r.text.strip():
+                return f"{base_url}/{fname}"
+        except Exception:
+            pass
+
     return None
 
 
@@ -336,7 +423,7 @@ def fetch_fund_holdings(name: str, cik: str) -> dict:
         prev   = thirteenf_filings[1] if len(thirteenf_filings) > 1 else None
 
         # Fetch latest holdings
-        info_url = _find_infotable_url(cik, latest["accession"])
+        info_url = _find_infotable_url(cik, latest["accession"], latest.get("primary_doc", ""))
         if not info_url:
             return {"error": "Could not locate infotable XML", "cik": cik}
         xml_text = _get(info_url).text
@@ -345,7 +432,7 @@ def fetch_fund_holdings(name: str, cik: str) -> dict:
         # Fetch previous holdings for change detection
         if prev:
             try:
-                prev_url = _find_infotable_url(cik, prev["accession"])
+                prev_url = _find_infotable_url(cik, prev["accession"], prev.get("primary_doc", ""))
                 if prev_url:
                     prev_xml = _get(prev_url).text
                     prev_holdings = _parse_infotable(prev_xml)
