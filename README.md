@@ -1,8 +1,9 @@
 # yStocker
 
-A Flask web application that fetches live stock data from Yahoo Finance and
-displays PE ratios, PEG ratios, and analyst target prices across configurable
-peer groups (Tech, Cloud/SaaS, Semiconductors, …).
+A Flask web application for stock research and portfolio analysis. Fetches live
+data from Yahoo Finance, tracks Federal Reserve balance sheet trends, monitors
+institutional 13F holdings, and provides AI-powered explanations — all across
+configurable peer groups.
 
 ---
 
@@ -13,22 +14,33 @@ ystocker/                   ← git repository root
 ├── run.py                  ← entry point — start the server from here
 ├── requirements.txt        ← Python dependencies
 ├── cloudformation.yaml     ← AWS deployment template
+├── deploy.sh               ← deployment helper script
 ├── .gitignore
+├── cache/                  ← persistent on-disk cache (auto-created)
+│   ├── ticker_cache.json   ← stock metrics (8h TTL)
+│   ├── peer_groups.json    ← user-managed peer groups
+│   ├── fed_cache.json      ← Federal Reserve data (24h TTL)
+│   └── sec13f_cache.json   ← SEC 13F holdings (24h TTL)
 └── ystocker/               ← Python package (the app itself)
     ├── __init__.py         ← Flask app factory + PEER_GROUPS config
     ├── data.py             ← fetches stock metrics from Yahoo Finance
-    ├── routes.py           ← URL routes / views
+    ├── routes.py           ← URL routes / views + JSON API endpoints
+    ├── fed.py              ← Federal Reserve FRED data fetching
+    ├── sec13f.py           ← SEC EDGAR 13F holdings fetching
+    ├── charts.py           ← matplotlib/seaborn chart generation
     ├── templates/
     │   ├── base.html       ← shared navbar + layout
     │   ├── index.html      ← home page (sector cards + cross-sector charts)
     │   ├── sector.html     ← per-sector detail page (charts + data table)
-    │   ├── history.html    ← single-ticker PE/PEG history charts
+    │   ├── history.html    ← single-ticker PE/PEG history + options wall
     │   ├── lookup.html     ← ticker search + discover by sector
     │   ├── groups.html     ← manage peer groups
+    │   ├── fed.html        ← Federal Reserve balance sheet charts
+    │   ├── thirteenf.html  ← institutional 13F holdings
     │   └── warming.html    ← shown while cache is warming on startup
     └── static/
-        └── css/
-            └── style.css
+        ├── css/style.css
+        └── i18n.js         ← English / Simplified Chinese translations
 ```
 
 ---
@@ -48,7 +60,19 @@ source venv/bin/activate   # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-### 3. Run the development server
+### 3. Configure API keys (optional)
+
+AI explanations require a Google Gemini API key. Create a `.env` file in the
+repository root:
+
+```
+GEMINI_API_KEY=your_key_here
+```
+
+Without this key the app runs normally; only the AI explanation panels are
+disabled.
+
+### 4. Run the development server
 
 ```bash
 python run.py
@@ -62,21 +86,93 @@ Open your browser at **http://127.0.0.1:5000**.
 
 | URL | Description |
 |-----|-------------|
-| `/` | Home — sector cards, valuation scatter, PEG map, heatmap table |
+| `/` | Home — sector cards, valuation scatter, PEG map, cross-sector heatmap |
 | `/sector/<name>` | Detail page for one peer group (PE, upside, PEG charts + data table) |
-| `/history/<ticker>` | Single-ticker PE & PEG history (52-week charts) |
-| `/lookup` | Search any ticker or discover tickers by sector/industry |
+| `/history/<ticker>` | Single-ticker PE/PEG history, options wall, institutional holders, news |
+| `/lookup` | Search any ticker or discover tickers by sector / industry |
 | `/groups` | Add, remove, and manage peer groups (changes are persisted to disk) |
+| `/fed` | Federal Reserve balance sheet charts with AI trend explanations |
+| `/13f` | Institutional 13F holdings from top hedge funds and asset managers |
 | `/refresh` | Clears the cache and triggers a background re-fetch |
+
+---
+
+## Features
+
+### Peer group valuation dashboard
+
+The home page and per-sector pages display forward PE, TTM PE, PEG ratios,
+analyst price targets, upside %, EPS growth, and market cap for every ticker in
+each peer group. Charts include bar comparisons, a valuation scatter plot
+(Forward PE vs analyst upside), and a color-coded heatmap.
+
+### Single-ticker analysis (`/history/<ticker>`)
+
+- Historical PE / PEG / price charts (configurable period: 1 month – 5 years)
+- Options wall — aggregated call/put open interest across all expirations to
+  visualise support and resistance levels
+- Institutional holders ranked by portfolio weight, value, and change
+- AI-powered chart explanation (streams via Server-Sent Events, English and
+  Chinese supported)
+- Recent news with importance scoring
+
+### Federal Reserve dashboard (`/fed`)
+
+Weekly H.4.1 data pulled directly from FRED (no API key required). Charts
+cover Total Assets, Treasury Holdings, MBS, Reserve Balances, ON RRP, and
+Currency in Circulation. AI explanations summarise the latest trends.
+
+### Institutional 13F holdings (`/13f`)
+
+Tracks 22 major funds including Berkshire Hathaway, Vanguard, BlackRock,
+Bridgewater, Citadel, Point72, Tiger Global, Elliott, and ARK. Holdings are
+sorted by value and quarter-over-quarter change is classified automatically.
+
+### AI explanations
+
+Powered by Google Gemini 2.5 Flash. Responses stream in real time and are
+available in English and Simplified Chinese. Covers both Federal Reserve data
+trends and single-stock chart analysis.
+
+### Internationalisation
+
+UI labels and AI responses support English (default) and Simplified Chinese
+(中文), toggled via the language selector in the navbar.
 
 ---
 
 ## Caching
 
 On startup the app warms an in-memory + on-disk cache (`cache/ticker_cache.json`)
-by fetching all tickers from Yahoo Finance in the background. The first page load
-shows a warming screen with an auto-reload. Once the cache is populated, all pages
-are instant. The cache expires after 24 hours and is refreshed automatically.
+by fetching all tickers from Yahoo Finance in the background. The first page
+load shows a warming screen with an auto-reload. Once the cache is populated,
+all pages are instant.
+
+| Cache | TTL | File |
+|-------|-----|------|
+| Stock metrics | 8 hours | `cache/ticker_cache.json` |
+| Fed balance sheet | 24 hours | `cache/fed_cache.json` |
+| 13F holdings | 24 hours | `cache/sec13f_cache.json` |
+| News | 5 minutes | in-memory only |
+
+The cache is also refreshed automatically every 8 hours in a background thread.
+Use `/refresh` to force an immediate re-fetch.
+
+---
+
+## API endpoints
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/cache-age` | Cache metadata and age |
+| `GET /api/ticker/<ticker>` | Single ticker metrics (JSON) |
+| `GET /api/history/<ticker>` | Historical PE / PEG / price data (JSON) |
+| `GET /api/history/<ticker>/explain` | AI chart explanation (SSE stream) |
+| `GET /api/news/<ticker>` | Recent news articles (JSON) |
+| `GET /api/discover` | Sector / industry ticker discovery (JSON) |
+| `GET /api/fed` | Federal Reserve H.4.1 data (JSON) |
+| `GET /api/fed/explain` | AI Fed data explanation (SSE stream) |
+| `GET /api/13f/<fund_slug>` | Institutional holdings for one fund (JSON) |
 
 ---
 
@@ -233,4 +329,9 @@ gunicorn "ystocker:create_app()" --bind 0.0.0.0:8000
 | `flask` | Web framework |
 | `yfinance` | Stock data (prices, PE, PEG, analyst targets) from Yahoo Finance |
 | `pandas` | Tabular data manipulation |
+| `matplotlib` / `seaborn` | Server-side chart rendering |
+| `requests` | HTTP client for FRED and SEC EDGAR |
+| `google-genai` | Google Gemini API for AI explanations |
+| `python-dotenv` | Load secrets from `.env` |
+| `boto3` | AWS SSM Parameter Store (optional secret management) |
 | `gunicorn` | Production WSGI server |
