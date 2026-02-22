@@ -3,9 +3,9 @@ ystocker.routes
 ~~~~~~~~~~~~~~~
 Flask URL routes (views).
 
-GET /                       – home page: sector cards + cross-sector charts
-GET /sector/<sector_name>   – per-sector detail: all charts + data table
-GET /refresh                – clears the data cache then redirects to /
+GET /                       - home page: sector cards + cross-sector charts
+GET /sector/<sector_name>   - per-sector detail: all charts + data table
+GET /refresh                - clears the data cache then redirects to /
 """
 from __future__ import annotations
 
@@ -31,8 +31,8 @@ log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Two-layer cache:
-#   1. In-memory dict  — zero-latency reads during a running session
-#   2. On-disk JSON    — survives server restarts; loaded on startup if fresh
+#   1. In-memory dict  - zero-latency reads during a running session
+#   2. On-disk JSON    - survives server restarts; loaded on startup if fresh
 #
 # The background thread warms / refreshes both layers every 24 hours.
 # Requests never block: they see the warming page until data is ready.
@@ -48,7 +48,7 @@ _cache_warming  = False
 _cache_last_updated: Optional[float] = None
 
 
-# ── Disk helpers ─────────────────────────────────────────────────────────────
+# -- Disk helpers -------------------------------------------------------------
 
 def _save_to_disk(data: Dict[str, Dict[str, dict]], errors: List[str], ts: float) -> None:
     """Persist the cache to a JSON file."""
@@ -76,7 +76,7 @@ def _load_from_disk() -> bool:
         ts = float(payload["timestamp"])
         age = time.time() - ts
         if age > _CACHE_TTL:
-            log.info("Disk cache is stale (%.1f h old) — will re-fetch", age / 3600)
+            log.info("Disk cache is stale (%.1f h old) - will re-fetch", age / 3600)
             return False
         with _cache_lock:
             _cache = payload["data"]
@@ -85,11 +85,11 @@ def _load_from_disk() -> bool:
         log.info("Loaded disk cache from %s (%.1f h old)", _CACHE_FILE, age / 3600)
         return True
     except Exception:
-        log.exception("Failed to read disk cache — will re-fetch")
+        log.exception("Failed to read disk cache - will re-fetch")
         return False
 
 
-# ── Peer-group persistence ────────────────────────────────────────────────────
+# -- Peer-group persistence ----------------------------------------------------
 
 def _save_groups() -> None:
     """Write the current PEER_GROUPS to disk so edits survive restarts."""
@@ -113,20 +113,20 @@ def _load_groups() -> None:
         PEER_GROUPS.update(saved)
         log.info("Loaded %d peer groups from %s", len(PEER_GROUPS), _GROUPS_FILE)
     except Exception:
-        log.exception("Failed to load peer groups from disk — using defaults")
+        log.exception("Failed to load peer groups from disk - using defaults")
 
 
-# ── Fetch / background loop ──────────────────────────────────────────────────
+# -- Fetch / background loop --------------------------------------------------
 
 def _do_fetch() -> None:
     """Fetch all tickers, update in-memory cache, and persist to disk."""
     global _cache, _fetch_errors, _cache_warming, _cache_last_updated
     all_tickers = sorted({t for tickers in PEER_GROUPS.values() for t in tickers})
-    log.info("Cache fetch started — %d tickers", len(all_tickers))
+    log.info("Cache fetch started - %d tickers", len(all_tickers))
     t0 = time.perf_counter()
     raw, errors = fetch_group(all_tickers)
     elapsed = time.perf_counter() - t0
-    log.info("Cache fetch done in %.1fs — %d ok, %d failed", elapsed, len(raw), len(errors))
+    log.info("Cache fetch done in %.1fs - %d ok, %d failed", elapsed, len(raw), len(errors))
     for err in errors:
         log.warning("Fetch error: %s", err)
 
@@ -189,7 +189,7 @@ def _start_background_thread() -> None:
     log.info("Cache warmer started (TTL %dh, file: %s)", _CACHE_TTL // 3600, _CACHE_FILE)
 
 
-# ── Public accessors ─────────────────────────────────────────────────────────
+# -- Public accessors ---------------------------------------------------------
 
 def _get_data() -> Optional[Dict[str, Dict[str, dict]]]:
     with _cache_lock:
@@ -251,11 +251,11 @@ def _df_to_chartdata(df: pd.DataFrame) -> str:
 
 @bp.route("/")
 def index():
-    """Home page — sector overview cards + cross-sector charts."""
+    """Home page - sector overview cards + cross-sector charts."""
     log.info("GET /")
     data = _get_data()
 
-    # Cache not ready yet — show a friendly loading page
+    # Cache not ready yet - show a friendly loading page
     if data is None:
         return render_template("warming.html",
                                peer_groups=list(PEER_GROUPS.keys()),
@@ -266,7 +266,7 @@ def index():
         try:
             group_dfs[g] = _raw_to_df(raw)
         except Exception:
-            log.warning("Skipping group '%s' — could not build DataFrame", g)
+            log.warning("Skipping group '%s' - could not build DataFrame", g)
 
     sector_cards = {}
     all_rows = []
@@ -284,7 +284,7 @@ def index():
         errors = _fetch_errors
         last_updated = _cache_last_updated
 
-    log.info("Home page rendered — %d groups", len(group_dfs))
+    log.info("Home page rendered - %d groups", len(group_dfs))
     return render_template(
         "index.html",
         peer_groups=list(PEER_GROUPS.keys()),
@@ -298,7 +298,7 @@ def index():
 
 @bp.route("/sector/<path:sector_name>")
 def sector(sector_name: str):
-    """Detail page for one sector — all charts + full data table."""
+    """Detail page for one sector - all charts + full data table."""
     log.info("GET /sector/%s", sector_name)
     data = _get_data()
 
@@ -345,7 +345,7 @@ def refresh():
         if not already:
             _cache_warming = True
     if not already:
-        log.info("Manual refresh triggered — spawning background fetch")
+        log.info("Manual refresh triggered - spawning background fetch")
         t = threading.Thread(target=_do_fetch, daemon=True, name="cache-manual-refresh")
         t.start()
     return redirect(url_for("main.index"))
@@ -357,7 +357,7 @@ def refresh():
 
 @bp.route("/groups", methods=["GET"])
 def groups():
-    """Interactive page — view, add, and remove peer groups and tickers."""
+    """Interactive page - view, add, and remove peer groups and tickers."""
     log.info("GET /groups")
     return render_template("groups.html",
                            peer_groups=list(PEER_GROUPS.keys()),
@@ -445,7 +445,7 @@ def _invalidate_cache():
         if not already:
             _cache_warming = True
     if not already:
-        log.info("Cache invalidated — spawning background re-fetch")
+        log.info("Cache invalidated - spawning background re-fetch")
         t = threading.Thread(target=_do_fetch, daemon=True, name="cache-invalidate-refetch")
         t.start()
     else:
@@ -470,11 +470,11 @@ def history(ticker: str):
 @bp.route("/api/history/<ticker>")
 def api_history(ticker: str):
     """
-    JSON API — return weekly closing price and estimated PE (TTM) over the past year.
+    JSON API - return weekly closing price and estimated PE (TTM) over the past year.
 
     PE is estimated as:  price / (ttmEPS from latest info)
     because yfinance does not expose historical EPS directly.
-    The ttmEPS stays constant so PE tracks price movement —
+    The ttmEPS stays constant so PE tracks price movement -
     useful for visualising valuation vs price trend.
     """
     import yfinance as yf
@@ -505,7 +505,7 @@ def api_history(ticker: str):
             pe_history.append(None)
 
     # PEG history: PE(week) / (earnings_growth * 100)
-    # earnings_growth is a single scalar from yfinance — PEG tracks PE movement
+    # earnings_growth is a single scalar from yfinance - PEG tracks PE movement
     earnings_growth = info.get("earningsGrowth") or info.get("earningsQuarterlyGrowth")
     peg_history = []
     if earnings_growth and earnings_growth > 0:
@@ -535,7 +535,7 @@ def api_history(ticker: str):
 
 
 # ---------------------------------------------------------------------------
-# Ticker lookup — interactive single-stock analysis
+# Ticker lookup - interactive single-stock analysis
 # ---------------------------------------------------------------------------
 
 @bp.route("/lookup")
@@ -550,8 +550,8 @@ def lookup():
 @bp.route("/api/ticker/<ticker>")
 def api_ticker(ticker: str):
     """
-    JSON API — fetch metrics for a single ticker.
-    Called by the browser via fetch() — no page reload needed.
+    JSON API - fetch metrics for a single ticker.
+    Called by the browser via fetch() - no page reload needed.
     The result is also merged into the live cache so subsequent page
     loads reflect the latest data without a full refresh.
 
@@ -600,7 +600,7 @@ def api_ticker(ticker: str):
 @bp.route("/api/discover")
 def api_discover():
     """
-    JSON API — return top companies for a given yfinance Sector or Industry.
+    JSON API - return top companies for a given yfinance Sector or Industry.
 
     Query params:
       type  = "sector" | "industry"

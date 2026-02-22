@@ -10,7 +10,7 @@ from typing import Dict, List
 from flask import Flask
 
 # ---------------------------------------------------------------------------
-# Peer group configuration — edit here OR use the /groups UI in the browser.
+# Peer group configuration - edit here OR use the /groups UI in the browser.
 # Each key is a group name; each value is a list of Yahoo Finance ticker symbols.
 # ---------------------------------------------------------------------------
 PEER_GROUPS: Dict[str, List[str]] = {

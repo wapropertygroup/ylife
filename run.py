@@ -1,4 +1,4 @@
-# Entry point – run this file to start the Flask development server.
+# Entry point - run this file to start the Flask development server.
 # Usage:  python run.py
 from ystocker import create_app
 

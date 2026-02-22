@@ -4,7 +4,7 @@ ystocker.charts
 All chart-generation functions.  Each function returns a base-64-encoded PNG
 string that can be embedded directly in HTML as <img src="data:image/png;base64,...">
 
-This keeps the web server stateless — no chart files are written to disk.
+This keeps the web server stateless - no chart files are written to disk.
 """
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ import io
 from typing import Dict, List
 
 import matplotlib
-matplotlib.use("Agg")  # non-interactive backend — required for server use
+matplotlib.use("Agg")  # non-interactive backend - required for server use
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 import pandas as pd
@@ -99,7 +99,7 @@ def chart_pe_peg_bars(group_name: str, df: pd.DataFrame) -> str:
     ax1.set_ylabel("PE Ratio", fontsize=10)
     ax2.set_ylabel("PEG Ratio", fontsize=10, color="#55A868")
     ax2.tick_params(axis="y", labelcolor="#55A868")
-    ax1.set_title(f"{group_name} — PE (TTM / Forward) & PEG", fontsize=13, fontweight="bold")
+    ax1.set_title(f"{group_name} - PE (TTM / Forward) & PEG", fontsize=13, fontweight="bold")
 
     handles = [bars_ttm, bars_fwd, bars_peg,
                plt.Line2D([0], [0], linestyle="-.", color="green", alpha=0.6)]
@@ -128,7 +128,7 @@ def chart_price_vs_target(group_name: str, df: pd.DataFrame) -> str:
     ax.set_xticks(x)
     ax.set_xticklabels(sub.index, rotation=0)
     ax.set_ylabel("USD")
-    ax.set_title(f"{group_name} — Current Price vs Analyst 12-month Target",
+    ax.set_title(f"{group_name} - Current Price vs Analyst 12-month Target",
                  fontsize=13, fontweight="bold")
     ax.legend(frameon=False)
     ax.yaxis.set_major_formatter(mticker.StrMethodFormatter("${x:,.0f}"))
@@ -148,7 +148,7 @@ def chart_upside(group_name: str, df: pd.DataFrame) -> str:
     ax.axvline(0, color="black", linewidth=0.8)
     ax.bar_label(bars, fmt="%.1f%%", padding=4, fontsize=9)
     ax.set_xlabel("Upside to Analyst Target (%)")
-    ax.set_title(f"{group_name} — Implied Upside to Analyst Target",
+    ax.set_title(f"{group_name} - Implied Upside to Analyst Target",
                  fontsize=13, fontweight="bold")
 
     return _fig_to_b64(fig)
@@ -169,7 +169,7 @@ def chart_peg_bars(group_name: str, df: pd.DataFrame) -> str:
     ax.axvline(2, color="grey",   linewidth=0.8, linestyle=":",  label="PEG = 2")
     ax.bar_label(bars, fmt="%.2f", padding=4, fontsize=9)
     ax.set_xlabel("PEG Ratio")
-    ax.set_title(f"{group_name} — PEG Ratios", fontsize=13, fontweight="bold")
+    ax.set_title(f"{group_name} - PEG Ratios", fontsize=13, fontweight="bold")
     ax.legend(fontsize=8, frameon=False)
 
     return _fig_to_b64(fig)
@@ -188,14 +188,14 @@ def chart_heatmap(all_dfs: Dict[str, pd.DataFrame]) -> str:
     fig, ax = plt.subplots(figsize=(6, len(heat_data) * 0.45 + 1))
     sns.heatmap(heat_data, annot=True, fmt=".1f", cmap="RdYlGn_r",
                 linewidths=0.5, ax=ax, cbar_kws={"label": "Ratio value"})
-    ax.set_title("PE & PEG Heatmap — all tickers", fontsize=13, fontweight="bold")
+    ax.set_title("PE & PEG Heatmap - all tickers", fontsize=13, fontweight="bold")
     ax.set_ylabel("")
 
     return _fig_to_b64(fig)
 
 
 def chart_scatter(all_dfs: Dict[str, pd.DataFrame]) -> str:
-    """Forward PE vs analyst upside scatter — one point per unique ticker."""
+    """Forward PE vs analyst upside scatter - one point per unique ticker."""
     palette = {"Tech": "#1f77b4", "Cloud / SaaS": "#ff7f0e", "Semiconductors": "#2ca02c"}
     seen: set[str] = set()
 
@@ -217,7 +217,7 @@ def chart_scatter(all_dfs: Dict[str, pd.DataFrame]) -> str:
     ax.axhline(0, color="grey", linewidth=0.8, linestyle="--")
     ax.set_xlabel("Forward PE Ratio",            fontsize=11)
     ax.set_ylabel("Upside to Analyst Target (%)", fontsize=11)
-    ax.set_title("Valuation Map — Forward PE vs Analyst Upside",
+    ax.set_title("Valuation Map - Forward PE vs Analyst Upside",
                  fontsize=13, fontweight="bold")
 
     # De-duplicate legend entries

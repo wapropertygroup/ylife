@@ -23,15 +23,15 @@ def fetch_ticker_data(ticker: str) -> dict:
 
     Keys returned
     -------------
-    Ticker          str   – uppercase symbol
-    Name            str   – company short name
-    Current Price   float – latest market price (USD)
-    Target Price    float – analyst consensus 12-month target (USD)
-    Upside (%)      float – (target - current) / current * 100
-    PE (TTM)        float – trailing twelve-month price/earnings
-    PE (Forward)    float – forward (next-12-month) price/earnings
-    PEG             float – PE-to-growth ratio (trailing)
-    Market Cap ($B) float – market capitalisation in billions USD
+    Ticker          str   - uppercase symbol
+    Name            str   - company short name
+    Current Price   float - latest market price (USD)
+    Target Price    float - analyst consensus 12-month target (USD)
+    Upside (%)      float - (target - current) / current * 100
+    PE (TTM)        float - trailing twelve-month price/earnings
+    PE (Forward)    float - forward (next-12-month) price/earnings
+    PEG             float - PE-to-growth ratio (trailing)
+    Market Cap ($B) float - market capitalisation in billions USD
 
     Any value that Yahoo Finance does not provide is returned as None.
     Raises FetchError if the network request fails entirely.
@@ -61,7 +61,7 @@ def fetch_ticker_data(ticker: str) -> dict:
             log.debug("%s: PEG calculated from PE(%.1f) / growth(%.1f%%) = %.2f",
                       ticker, pe_ttm, growth * 100, peg)
         else:
-            log.debug("%s: PEG unavailable — no earnings growth data", ticker)
+            log.debug("%s: PEG unavailable - no earnings growth data", ticker)
 
     upside = None
     if current_price and target_price:
@@ -85,8 +85,8 @@ def fetch_group(tickers: List[str]) -> Tuple[Dict[str, dict], List[str]]:
     Fetch data for every ticker in *tickers*.
 
     Returns (results, errors) where:
-      results – {ticker: data_dict} for every ticker that succeeded
-      errors  – list of error message strings for tickers that failed
+      results - {ticker: data_dict} for every ticker that succeeded
+      errors  - list of error message strings for tickers that failed
     """
     results: Dict[str, dict] = {}
     errors: List[str] = []
