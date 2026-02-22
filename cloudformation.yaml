@@ -201,7 +201,7 @@ Resources:
 
       UserData:
         Fn::Base64:
-          !Sub |
+          Fn::Sub: |
             #!/bin/bash
             set -euxo pipefail
             exec > >(tee /var/log/ystocker-init.log | logger -t ystocker-init) 2>&1
