@@ -334,10 +334,20 @@ def _find_infotable_url(cik: str, accession: str, primary_doc: str = "") -> Opti
         if r2 is None:
             continue
         try:
+            # Match both absolute paths (/Archives/...) and relative filenames
             xml_links = re.findall(
                 r'href="(/Archives/edgar/data/[^"]+\.xml)"',
                 r2.text, re.IGNORECASE
             )
+            # Also try relative hrefs (just filename.xml)
+            if not xml_links:
+                rel_links = re.findall(
+                    r'href="([^"/][^"]*\.xml)"',
+                    r2.text, re.IGNORECASE
+                )
+                xml_links = [f"/Archives/edgar/data/{cik_int}/{acc_nodash}/{f}" for f in rel_links]
+            log.info("HTML index %s: found xml_links=%s (raw snippet: %s)",
+                     htm_url, xml_links[:5], r2.text[200:600])
             # Prefer files with 'infotable' or 'info_table' in name
             for path in xml_links:
                 fname = path.split("/")[-1].lower()
