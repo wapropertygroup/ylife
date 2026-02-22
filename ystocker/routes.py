@@ -813,7 +813,7 @@ def api_fed():
 def api_fed_explain():
     """Stream an AI explanation of a Fed chart's recent data via SSE."""
     import os
-    import google.generativeai as genai
+    from google import genai
 
     body = request.get_json(force=True, silent=True) or {}
     chart   = body.get("chart", "")
@@ -864,12 +864,13 @@ Most recent 12 data points:
 
 Cover: (1) what the overall trend shows, (2) any notable recent moves, (3) what this means for monetary policy or market conditions. Be specific about the numbers. Do not use headers or bullet points."""
 
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel("gemini-2.0-flash")
+    client = genai.Client(api_key=api_key)
 
     def generate():
         try:
-            stream = model.generate_content(prompt, stream=True)
+            stream = client.models.generate_content_stream(
+                model="gemini-2.0-flash", contents=prompt
+            )
             for chunk in stream:
                 text = chunk.text
                 if text:
