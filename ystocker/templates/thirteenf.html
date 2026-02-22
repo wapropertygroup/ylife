@@ -32,7 +32,16 @@
 
 <!-- ── Fund selector + panels ────────────────────────────────────────── -->
 {% set fund_names = funds.keys() | list %}
-{% set first_slug = fund_names[0] | lower | replace(' ', '-') if fund_names else '' %}
+{% set first_ok = namespace(slug='') %}
+{% for name in fund_names %}
+  {% if not first_ok.slug %}
+    {% set fd = holdings.get(name, {}) %}
+    {% if fd and not fd.get('error') %}
+      {% set first_ok.slug = name | lower | replace(' ', '-') %}
+    {% endif %}
+  {% endif %}
+{% endfor %}
+{% set first_slug = first_ok.slug or (fund_names[0] | lower | replace(' ', '-') if fund_names else '') %}
 
 <div x-data="{ activeFund: '{{ first_slug }}' }" class="fade-up">
 
@@ -40,11 +49,15 @@
   <div class="flex flex-wrap gap-2 mb-6">
     {% for name in fund_names %}
     {% set slug = name | lower | replace(' ', '-') %}
+    {% set fd = holdings.get(name, {}) %}
+    {% set has_error = fd and fd.get('error') %}
     <button @click="activeFund = '{{ slug }}'"
+            {% if has_error %}disabled title="{{ fd.error }}"{% endif %}
             :class="activeFund === '{{ slug }}'
               ? 'border-brand bg-brand/15 text-white shadow-sm shadow-brand/20'
               : 'border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-500'"
-            class="px-4 py-2 rounded-xl border text-sm font-medium transition-all">
+            class="px-4 py-2 rounded-xl border text-sm font-medium transition-all
+                   {% if has_error %}opacity-30 cursor-not-allowed pointer-events-none{% endif %}">
       {{ name }}
     </button>
     {% endfor %}
