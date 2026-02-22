@@ -325,10 +325,14 @@ def _find_infotable_url(cik: str, accession: str, primary_doc: str = "") -> Opti
         except Exception as exc:
             log.debug("JSON index parse failed for %s/%s: %s", cik_int, acc_nodash, exc)
 
-    # ── Strategy 2: HTML index (works for all filings) ──────────────────────
-    htm_url = f"https://www.sec.gov/Archives/edgar/data/{cik_int}/{acc_nodash}-index.htm"
-    r2 = _get_maybe(htm_url)
-    if r2 is not None:
+    # ── Strategy 2: HTML index via data.sec.gov (avoids www.sec.gov 503s) ─────
+    for htm_url in [
+        f"https://data.sec.gov/Archives/edgar/data/{cik_int}/{acc_nodash}-index.htm",
+        f"https://www.sec.gov/Archives/edgar/data/{cik_int}/{acc_nodash}-index.htm",
+    ]:
+        r2 = _get_maybe(htm_url)
+        if r2 is None:
+            continue
         try:
             xml_links = re.findall(
                 r'href="(/Archives/edgar/data/[^"]+\.xml)"',
@@ -338,12 +342,13 @@ def _find_infotable_url(cik: str, accession: str, primary_doc: str = "") -> Opti
             for path in xml_links:
                 fname = path.split("/")[-1].lower()
                 if fname != primary_lower and ("infotable" in fname or "info_table" in fname):
-                    return "https://www.sec.gov" + path
+                    return f"https://data.sec.gov" + path
             # Take first non-primary XML
             for path in xml_links:
                 fname = path.split("/")[-1].lower()
                 if fname != primary_lower:
-                    return "https://www.sec.gov" + path
+                    return f"https://data.sec.gov" + path
+            break  # parsed OK, no XML found — don't try www fallback
         except Exception as exc:
             log.debug("HTML index parse failed for %s/%s: %s", cik_int, acc_nodash, exc)
 
@@ -354,9 +359,16 @@ def _find_infotable_url(cik: str, accession: str, primary_doc: str = "") -> Opti
         "information_table.xml",
         "13finfotable.xml",
         "form13fInfoTable.xml",
+        "informationtable.xml",
+        "InfoTable.xml",
+        "13F_InfoTable.xml",
     ]
     if primary_stem:
-        candidates = [f"{primary_stem}_infotable.xml", f"{primary_stem}_info_table.xml"] + candidates
+        candidates = [
+            f"{primary_stem}_infotable.xml",
+            f"{primary_stem}_info_table.xml",
+            f"{primary_stem}infotable.xml",
+        ] + candidates
     for fname in candidates:
         if not fname or fname.startswith("_"):
             continue
