@@ -326,11 +326,13 @@ def _find_infotable_url(cik: str, accession: str, primary_doc: str = "") -> Opti
                         or "infotable" in fname
                         or "info_table" in fname):
                     return f"{doc_base}/{dname}"
-            # fallback within JSON: first raw XML that isn't the primary doc
+            # fallback within JSON: first raw XML that isn't primary_doc.xml (cover page)
             for doc in idx.get("documents", []):
                 dname = doc.get("name") or ""
                 fname = dname.lower()
-                if fname.endswith(".xml") and fname != primary_lower and "xslform13f" not in fname:
+                if (fname.endswith(".xml")
+                        and "xslform13f" not in fname
+                        and fname.split("/")[-1] != "primary_doc.xml"):
                     return f"{doc_base}/{dname}"
         except Exception as exc:
             log.debug("JSON index parse failed for %s/%s: %s", cik_int, acc_nodash, exc)
@@ -361,19 +363,22 @@ def _find_infotable_url(cik: str, accession: str, primary_doc: str = "") -> Opti
                 ]
             log.info("13F HTML index %s → %d xml links: %s", htm_url, len(xml_links), xml_links[:6])
             # xslForm13F_X02/ paths are XSLT-rendered HTML, not raw XML — skip them.
-            # The raw data file appears both with and without the xslForm13F_X02/ prefix;
-            # prefer the one WITHOUT the prefix (no XSLT wrapper).
-            raw_links = [p for p in xml_links if "xslForm13F_X02/" not in p]
+            # primary_doc.xml at root level is the cover/header XML (edgarSubmission),
+            # not the infotable. The actual data file has a unique name (50240.xml,
+            # form13fInfoTable.xml, 20260217_FMRLLC.xml, etc.)
+            raw_links = [
+                p for p in xml_links
+                if "xslForm13F_X02/" not in p
+                and p.split("/")[-1].lower() != "primary_doc.xml"
+            ]
             # Prefer raw files with 'infotable', 'info_table', or similar in name
             for path in raw_links:
                 fname = path.split("/")[-1].lower()
-                if fname != primary_lower and ("infotable" in fname or "info_table" in fname):
+                if "infotable" in fname or "info_table" in fname:
                     return f"https://www.sec.gov" + path
-            # Take first raw non-primary XML
+            # Take first qualifying raw XML
             for path in raw_links:
-                fname = path.split("/")[-1].lower()
-                if fname != primary_lower:
-                    return f"https://www.sec.gov" + path
+                return f"https://www.sec.gov" + path
             break  # parsed OK (even if no XML found) — stop trying variants
         except Exception as exc:
             log.debug("HTML index parse failed for %s/%s: %s", cik_int, acc_nodash, exc)
