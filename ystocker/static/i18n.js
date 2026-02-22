@@ -153,8 +153,9 @@ const I18n = (() => {
     'history.avg_pe_legend':     { en: 'Avg PE',     zh: '平均市盈率' },
 
     'history.fwdpe_title':  { en: 'Forward PE — 52 Weeks', zh: '预测市盈率 — 52周' },
-    'history.fwdpe_desc':   { en: 'TTM PE history vs current Forward PE estimate', zh: 'TTM市盈率历史与当前预测市盈率对比' },
+    'history.fwdpe_desc':   { en: 'Price ÷ consensus forward EPS — forward valuation multiple over time', zh: '股价 ÷ 共识预测EPS — 预测估值倍数随时间变化' },
     'history.fwdpe_legend': { en: 'Forward PE', zh: '预测市盈率' },
+    'history.current_fwdpe_legend': { en: 'Current Fwd PE', zh: '当前预测市盈率' },
 
     'history.price_title':  { en: 'Price — 52 Weeks',     zh: '股价 — 52周' },
     'history.price_desc':   { en: 'Weekly closing price (USD)', zh: '每周收盘价（美元）' },
@@ -326,6 +327,7 @@ const I18n = (() => {
     'fed.source_note':     { en: 'Data source:', zh: '数据来源：' },
     'fed.updated_weekly':  { en: 'Updated weekly (Thursdays)', zh: '每周四更新' },
     'fed.range_all':       { en: 'All', zh: '全部' },
+    'fed.explain':         { en: '✦ Explain', zh: '✦ AI 解读' },
 
     // ── contact.html ───────────────────────────────────────────────────
     'contact.title':        { en: 'Contact Us',  zh: '联系我们' },

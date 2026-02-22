@@ -24,6 +24,42 @@
   border-color: #6366f1;
   background: rgba(99,102,241,0.12);
 }
+.explain-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 6px;
+  border: 1px solid #334155;
+  background: transparent;
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+.explain-btn:hover {
+  color: #a78bfa;
+  border-color: #7c3aed;
+}
+.explain-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.explain-panel {
+  margin-top: 12px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: rgba(167,139,250,0.06);
+  border: 1px solid rgba(167,139,250,0.2);
+  color: #cbd5e1;
+  font-size: 13px;
+  line-height: 1.65;
+  display: none;
+}
+.explain-panel.visible { display: block; }
 </style>
 
 <!-- ── Header ─────────────────────────────────────────────────────────── -->
@@ -125,6 +161,7 @@
         <button class="range-btn active" data-range="156">3Y</button>
         <button class="range-btn" data-range="260">5Y</button>
         <button class="range-btn" data-range="0" data-i18n="fed.range_all">All</button>
+        <button class="explain-btn" onclick="explainChart('treasury')" data-i18n="fed.explain">✦ Explain</button>
       </div>
     </div>
     <div id="treasuryLoading" class="flex items-center justify-center h-48 text-slate-500 text-sm animate-pulse" data-i18n="fed.loading_chart">
@@ -140,6 +177,7 @@
         <canvas id="treasuryWowChart"></canvas>
       </div>
     </div>
+    <div id="treasuryExplainPanel" class="explain-panel"></div>
 
     <!-- Bills (Short-Term) — nested under Treasury -->
     <div class="mt-6 pt-5 border-t border-slate-800/60">
@@ -154,6 +192,7 @@
           <button class="range-btn active" data-range="156">3Y</button>
           <button class="range-btn" data-range="260">5Y</button>
           <button class="range-btn" data-range="0" data-i18n="fed.range_all">All</button>
+          <button class="explain-btn" onclick="explainChart('bills')" data-i18n="fed.explain">✦ Explain</button>
         </div>
       </div>
       <div id="billsLoading" class="flex items-center justify-center h-32 text-slate-500 text-sm animate-pulse" data-i18n="fed.bills_loading">
@@ -169,6 +208,7 @@
           <canvas id="billsWowChart"></canvas>
         </div>
       </div>
+      <div id="billsExplainPanel" class="explain-panel"></div>
     </div>
   </div>
 
@@ -185,6 +225,7 @@
         <button class="range-btn active" data-range="156">3Y</button>
         <button class="range-btn" data-range="260">5Y</button>
         <button class="range-btn" data-range="0" data-i18n="fed.range_all">All</button>
+        <button class="explain-btn" onclick="explainChart('balance')" data-i18n="fed.explain">✦ Explain</button>
       </div>
     </div>
     <div id="balanceLoading" class="flex items-center justify-center h-48 text-slate-500 text-sm animate-pulse" data-i18n="fed.loading_chart">
@@ -193,6 +234,7 @@
     <div class="chart-container" style="height:260px; display:none" id="balanceChartWrap">
       <canvas id="balanceChart"></canvas>
     </div>
+    <div id="balanceExplainPanel" class="explain-panel"></div>
   </div>
 
   <!-- Treasury as % of Total Assets -->
@@ -208,11 +250,13 @@
         <button class="range-btn active" data-range="156">3Y</button>
         <button class="range-btn" data-range="260">5Y</button>
         <button class="range-btn" data-range="0" data-i18n="fed.range_all">All</button>
+        <button class="explain-btn" onclick="explainChart('pct')" data-i18n="fed.explain">✦ Explain</button>
       </div>
     </div>
     <div class="chart-container" style="height:200px; display:none" id="pctChartWrap">
       <canvas id="pctChart"></canvas>
     </div>
+    <div id="pctExplainPanel" class="explain-panel"></div>
   </div>
 
 </div>
@@ -314,6 +358,7 @@
   document.getElementById('treasuryLoading').style.display = 'none';
   document.getElementById('treasuryChartWrap').style.display = 'block';
   document.getElementById('treasuryWowWrap').classList.remove('hidden');
+  registerExplainData('treasury', sliceSeries('TREAST', 156).dates, sliceSeries('TREAST', 156).values, 'U.S. Treasury Securities Held Outright');
 
   const TREASURY_COLORS = {
     border: '#38bdf8',
@@ -448,6 +493,7 @@
     document.getElementById('billsLoading').style.display = 'none';
     document.getElementById('billsChartWrap').style.display = 'block';
     document.getElementById('billsWowWrap').classList.remove('hidden');
+    registerExplainData('bills', sliceSeries('WSHOSHO', 156).dates, sliceSeries('WSHOSHO', 156).values, 'Treasury Bills (Short-Term, ≤1Y) Held Outright');
 
     let billsRange = 156;
 
@@ -549,6 +595,8 @@
   }
 
   let bd = buildBalanceData(BALANCE_N);
+  // Register explain data: use Total Assets as the primary series for the overview
+  registerExplainData('balance', bd.walcl.dates, bd.walcl.values, 'Fed Balance Sheet Overview (Total Assets, MBS, Reserve Balances)');
   const balanceChart = new Chart(bCtx, {
     type: 'line',
     data: {
@@ -627,6 +675,7 @@
 
   const pctInitial = buildPctData(156);
   if (pctInitial.values.some(v => v != null)) {
+    registerExplainData('pct', pctInitial.dates, pctInitial.values, 'U.S. Treasuries as % of Total Fed Assets');
     document.getElementById('pctChartWrap').style.display = 'block';
     const pCtx = document.getElementById('pctChart');
     const pctChart = new Chart(pCtx, {
@@ -662,6 +711,78 @@
     });
   }
 })();
+
+// ── AI Explain ────────────────────────────────────────────────────────────
+const _explainData = {};  // populated by main IIFE via registerExplainData()
+
+function registerExplainData(chart, dates, values, label) {
+  _explainData[chart] = { dates, values, label };
+}
+
+function explainChart(chart) {
+  const panel = document.getElementById(chart + 'ExplainPanel');
+  const btn   = document.querySelector(`button.explain-btn[onclick="explainChart('${chart}')"]`);
+  if (!panel) return;
+
+  // Toggle off if already showing
+  if (panel.classList.contains('visible') && !btn?.disabled) {
+    panel.classList.remove('visible');
+    return;
+  }
+
+  const d = _explainData[chart];
+  if (!d || !d.dates.length) {
+    panel.textContent = 'No data available to explain.';
+    panel.classList.add('visible');
+    return;
+  }
+
+  panel.classList.add('visible');
+  panel.textContent = '';
+
+  // Spinner while streaming starts
+  const spinner = document.createElement('span');
+  spinner.textContent = '✦ ';
+  spinner.className = 'animate-pulse text-violet-400';
+  panel.appendChild(spinner);
+
+  if (btn) btn.disabled = true;
+
+  fetch('/api/fed/explain', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ chart, dates: d.dates, values: d.values, label: d.label }),
+  }).then(resp => {
+    if (!resp.ok) return resp.json().then(e => { throw new Error(e.error || resp.statusText); });
+    panel.textContent = '';
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+    function pump() {
+      reader.read().then(({ done, value }) => {
+        if (done) { if (btn) btn.disabled = false; return; }
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split('\n');
+        buf = lines.pop();
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const payload = line.slice(6).trim();
+          if (payload === '[DONE]') { if (btn) btn.disabled = false; return; }
+          try {
+            const obj = JSON.parse(payload);
+            if (obj.error) { panel.textContent = '⚠ ' + obj.error; return; }
+            if (obj.text)  { panel.appendChild(document.createTextNode(obj.text)); }
+          } catch {}
+        }
+        pump();
+      });
+    }
+    pump();
+  }).catch(err => {
+    panel.textContent = '⚠ ' + err.message;
+    if (btn) btn.disabled = false;
+  });
+}
 
 // ── Stat card tooltips ────────────────────────────────────────────────────
 (function() {

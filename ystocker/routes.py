@@ -20,7 +20,7 @@ import json
 import math
 
 import pandas as pd
-from flask import Blueprint, render_template, redirect, url_for, request, flash, jsonify
+from flask import Blueprint, render_template, redirect, url_for, request, flash, jsonify, Response
 
 from ystocker import PEER_GROUPS
 from ystocker.data import fetch_group
@@ -833,10 +833,19 @@ def api_fed_explain():
     if not pairs:
         return jsonify({"error": "No valid data points"}), 400
 
+    # For the PCT chart the values are percentages, not billions
+    is_pct = (chart == "pct")
+    unit = "%" if is_pct else "B"
+
     first_date, first_val = pairs[0]
     last_date,  last_val  = pairs[-1]
     recent = pairs[-12:]  # last ~3 months of weekly data
-    recent_lines = "\n".join(f"  {d}: ${v:.1f}B" for d, v in recent)
+    if is_pct:
+        recent_lines = "\n".join(f"  {d}: {v:.1f}%" for d, v in recent)
+        period_summary = f"{first_date} ({first_val:.1f}%) → {last_date} ({last_val:.1f}%)\nTotal change: {last_val - first_val:+.1f}pp"
+    else:
+        recent_lines = "\n".join(f"  {d}: ${v:.1f}B" for d, v in recent)
+        period_summary = f"{first_date} (${first_val:.1f}B) → {last_date} (${last_val:.1f}B)\nTotal change: {last_val - first_val:+.1f}B ({(last_val - first_val) / first_val * 100:+.1f}%)"
 
     chart_descriptions = {
         "treasury":  "U.S. Treasury Securities Held Outright by the Federal Reserve (weekly, billions USD)",
@@ -849,8 +858,7 @@ def api_fed_explain():
     prompt = f"""You are a macroeconomic analyst. Explain the following Federal Reserve balance sheet data to a financial market participant in 3-4 concise paragraphs.
 
 Chart: {description}
-Full period: {first_date} (${first_val:.1f}B) → {last_date} (${last_val:.1f}B)
-Total change: {last_val - first_val:+.1f}B ({(last_val - first_val) / first_val * 100:+.1f}%)
+Full period: {period_summary}
 
 Most recent 12 data points:
 {recent_lines}
@@ -877,11 +885,10 @@ Cover: (1) what the overall trend shows, (2) any notable recent moves, (3) what 
         finally:
             yield "data: [DONE]\n\n"
 
-    return bp.make_response(generate()), 200, {
-        "Content-Type": "text/event-stream",
+    return Response(generate(), mimetype="text/event-stream", headers={
         "Cache-Control": "no-cache",
         "X-Accel-Buffering": "no",
-    }
+    })
 
 
 # ---------------------------------------------------------------------------
