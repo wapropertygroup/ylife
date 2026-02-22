@@ -79,10 +79,16 @@
     <div class="flex items-start justify-between mb-1">
       <h2 class="text-base font-semibold text-slate-200" data-i18n="index.valuation_map">Valuation Map</h2>
       <div class="flex items-center gap-1">
-        <button id="scatterLabelToggle"
-                onclick="toggleScatterLabels()"
+        <button id="scatterTextToggle"
+                onclick="toggleScatterText()"
                 class="flex items-center gap-1 text-xs text-brand border border-brand/40 bg-brand/10
                        hover:bg-brand hover:text-white transition px-2 py-1 rounded-lg">
+          <span id="scatterTextToggleText" data-i18n="index.hide_labels">Hide labels</span>
+        </button>
+        <button id="scatterLabelToggle"
+                onclick="toggleScatterLabels()"
+                class="flex items-center gap-1 text-xs text-slate-400 border border-slate-700 bg-slate-800
+                       hover:text-slate-200 transition px-2 py-1 rounded-lg">
           <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                   d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-5 5a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 10V5a2 2 0 012-2z"/>
@@ -253,9 +259,27 @@ const PALETTE = [
 ];
 
 // ─── Scatter label toggle state ─────────────────────────────────────────────
-let scatterLabelsVisible = true;
+let scatterLabelsVisible = true;  // dots (tickers)
+let scatterTextVisible   = true;  // ticker text next to dots
 let _inlineScatterChart = null;
 
+// Hide labels = hide ticker text next to dots only
+function toggleScatterText() {
+  scatterTextVisible = !scatterTextVisible;
+  const btn  = document.getElementById('scatterTextToggle');
+  const text = document.getElementById('scatterTextToggleText');
+  text.textContent = I18n.t(scatterTextVisible ? 'index.hide_labels' : 'index.show_labels');
+  if (scatterTextVisible) {
+    btn.classList.remove('bg-brand', 'text-white');
+    btn.classList.add('text-brand', 'bg-brand/10');
+  } else {
+    btn.classList.add('bg-brand', 'text-white');
+    btn.classList.remove('text-brand', 'bg-brand/10');
+  }
+  if (_inlineScatterChart) _inlineScatterChart.update();
+}
+
+// Hide tickers = hide dots (and their text) via legend hidden state
 function toggleScatterLabels() {
   scatterLabelsVisible = !scatterLabelsVisible;
   const btn  = document.getElementById('scatterLabelToggle');
@@ -263,15 +287,18 @@ function toggleScatterLabels() {
   if (scatterLabelsVisible) {
     text.textContent = I18n.t('index.hide_tickers');
     btn.classList.remove('bg-brand', 'text-white');
-    btn.classList.add('text-brand', 'bg-brand/10');
+    btn.classList.add('text-slate-400', 'bg-slate-800');
+    btn.classList.remove('border-brand/40');
+    btn.classList.add('border-slate-700');
   } else {
     text.textContent = I18n.t('index.show_tickers');
     btn.classList.add('bg-brand', 'text-white');
-    btn.classList.remove('text-brand', 'bg-brand/10');
+    btn.classList.remove('text-slate-400', 'bg-slate-800');
+    btn.classList.add('border-brand/40');
+    btn.classList.remove('border-slate-700');
   }
   if (_inlineScatterChart) {
     _inlineScatterChart.data.datasets.forEach((ds, di) => {
-      // Toggle the Chart.js hidden state on the meta so legend reflects it
       _inlineScatterChart.getDatasetMeta(di).hidden = !scatterLabelsVisible;
       ds.pointRadius      = scatterLabelsVisible ? 7 : 0;
       ds.pointHoverRadius = scatterLabelsVisible ? 9 : 0;
@@ -291,7 +318,7 @@ function buildScatterChart(ctx) {
     backgroundColor: PALETTE[i % PALETTE.length] + 'cc',
     pointRadius: 7,
     pointHoverRadius: 9,
-  }));
+  })).filter(ds => ds.data.length > 0);  // skip sectors with no plottable data
   return new Chart(ctx, {
     type: 'scatter',
     data: { datasets },
@@ -323,8 +350,8 @@ function buildScatterChart(ctx) {
               const btn  = document.getElementById('scatterLabelToggle');
               const text = document.getElementById('scatterLabelToggleText');
               text.textContent = I18n.t('index.hide_tickers');
-              btn.classList.remove('bg-brand', 'text-white');
-              btn.classList.add('text-brand', 'bg-brand/10');
+              btn.classList.remove('bg-brand', 'text-white', 'border-brand/40');
+              btn.classList.add('text-slate-400', 'bg-slate-800', 'border-slate-700');
             }
             chart.update();
           }
@@ -344,7 +371,7 @@ function buildScatterChart(ctx) {
         const z = y.getPixelForValue(0);
         if (z > a.top && z < a.bottom) { c.beginPath(); c.moveTo(a.left, z); c.lineTo(a.right, z); c.stroke(); }
         c.restore();
-        if (scatterLabelsVisible) {
+        if (scatterTextVisible) {
           chart.data.datasets.forEach((ds, di) => {
             if (chart.getDatasetMeta(di).hidden) return;
             ds.data.forEach(pt => {
