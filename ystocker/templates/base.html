@@ -122,6 +122,10 @@
            class="px-3 py-1.5 rounded-md text-sm text-slate-300 hover:text-white hover:bg-slate-800 transition">
           ⚙ Groups
         </a>
+        <a href="{{ url_for('main.contact') }}"
+           class="px-3 py-1.5 rounded-md text-sm text-slate-300 hover:text-white hover:bg-slate-800 transition">
+          ✉ Contact
+        </a>
       </nav>
 
       <!-- Refresh button -->
@@ -164,6 +168,7 @@
         </div>
         <a href="{{ url_for('main.lookup') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-300 hover:bg-slate-800">🔍 Lookup</a>
         <a href="{{ url_for('main.groups') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-300 hover:bg-slate-800">⚙ Groups</a>
+        <a href="{{ url_for('main.contact') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-300 hover:bg-slate-800">✉ Contact</a>
         <a href="{{ url_for('main.refresh') }}" class="px-3 py-2.5 rounded-md text-sm text-brand hover:bg-slate-800">↻ Refresh</a>
       </div>
     </div>
@@ -189,7 +194,8 @@
   </main>
 
   <footer class="border-t border-slate-800 py-4 text-center text-xs text-slate-600">
-    yStocker — data via Yahoo Finance
+    yStocker — data via Yahoo Finance &nbsp;·&nbsp;
+    <a href="{{ url_for('main.contact') }}" class="hover:text-brand transition">Contact Us</a>
   </footer>
 
 </body>

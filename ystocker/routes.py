@@ -656,3 +656,8 @@ def api_discover():
     if tickers:
         return jsonify({"tickers": tickers, "source": "built-in"})
     return jsonify({"error": f"No built-in data for '{name}'. Try a different name."}), 404
+
+
+@bp.route("/contact")
+def contact():
+    return render_template("contact.html", peer_groups=list(PEER_GROUPS.keys()))
