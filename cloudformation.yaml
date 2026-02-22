@@ -138,7 +138,7 @@ Resources:
           FromPort: 443
           ToPort: 443
           CidrIp: 0.0.0.0/0
-          Description: HTTPS (nginx + Let's Encrypt)
+          Description: HTTPS (nginx + LetsEncrypt)
         - IpProtocol: tcp
           FromPort: 22
           ToPort: 22
