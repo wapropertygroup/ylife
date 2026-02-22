@@ -134,7 +134,7 @@ const I18n = (() => {
 
     // ── history.html ───────────────────────────────────────────────────
     'history.back':         { en: '← Back', zh: '← 返回' },
-    'history.subtitle':     { en: '1-year historical PE ratio & price (weekly)', zh: '1年历史市盈率及价格（周频）' },
+    'history.subtitle':     { en: 'Historical PE ratio & price', zh: '历史市盈率及价格' },
 
     'history.current_pe':   { en: 'Current PE',     zh: '当前市盈率' },
     'history.fwd_pe':       { en: 'Forward PE',     zh: '预测市盈率' },
@@ -150,9 +150,21 @@ const I18n = (() => {
     'history.pe_desc':      { en: 'Estimated from weekly closing price ÷ TTM EPS', zh: '由每周收盘价 ÷ 近12月EPS 估算' },
     'history.pe_legend':    { en: 'PE (TTM)',    zh: '市盈率(TTM)' },
     'history.current_pe_legend': { en: 'Current PE', zh: '当前市盈率' },
+    'history.avg_pe_legend':     { en: 'Avg PE',     zh: '平均市盈率' },
 
     'history.price_title':  { en: 'Price — 52 Weeks',     zh: '股价 — 52周' },
     'history.price_desc':   { en: 'Weekly closing price (USD)', zh: '每周收盘价（美元）' },
+    'history.price_legend': { en: 'Price',  zh: '股价' },
+    'history.target_legend':   { en: 'Target',    zh: '目标价' },
+    'history.call_wall_legend':{ en: 'Call Wall', zh: '认购墙' },
+    'history.put_wall_legend': { en: 'Put Wall',  zh: '认沽墙' },
+
+    'history.tip_target':    { en: 'Analyst consensus 12-month price target from covering analysts.',
+                                zh: '分析师对未来12个月股价的一致预测目标价。' },
+    'history.tip_call_wall': { en: 'Call Wall — the option strike with the highest total call open interest across all expirations. Acts as overhead resistance: market makers delta-hedge by selling shares as the price rises toward this level, capping near-term upside.',
+                                zh: '认购墙 — 所有到期日中总认购未平仓量最高的行权价。作为上方阻力位：当股价接近该水平时，做市商通过卖出股票进行Delta对冲，压制短期上涨空间。' },
+    'history.tip_put_wall':  { en: 'Put Wall — the option strike with the highest total put open interest across all expirations. Acts as a price floor: market makers delta-hedge by buying shares as the price falls toward this level, providing near-term support.',
+                                zh: '认沽墙 — 所有到期日中总认沽未平仓量最高的行权价。作为价格支撑位：当股价接近该水平时，做市商通过买入股票进行Delta对冲，提供短期支撑。' },
 
     'history.peg_title':    { en: 'PEG Ratio — 52 Weeks', zh: 'PEG 比率 — 52周' },
     'history.peg_desc':     { en: 'Estimated from weekly PE ÷ annual earnings growth rate',
@@ -194,6 +206,7 @@ const I18n = (() => {
     'thirteenf.th_rank':     { en: '#',                zh: '#' },
     'thirteenf.th_ticker':   { en: 'Ticker',          zh: '代码' },
     'thirteenf.th_company':  { en: 'Company',         zh: '公司' },
+    'thirteenf.th_52w':      { en: '52-week',         zh: '52周' },
     'thirteenf.th_shares':   { en: 'Shares',          zh: '股数' },
     'thirteenf.th_value':    { en: 'Value ($M)',       zh: '市值（百万$）' },
     'thirteenf.th_pct':      { en: '% Portfolio',     zh: '占比' },
@@ -250,6 +263,8 @@ const I18n = (() => {
     'groups.group_ph':      { en: 'e.g. Biotech',    zh: '例如 生物科技' },
     'groups.create_btn':    { en: 'Create',           zh: '创建' },
     'groups.hint':          { en: 'Then use + Add inside the card to add tickers.', zh: '然后在卡片中使用 + 添加 来添加股票。' },
+    'groups.persist_note':  { en: 'Note: changes are not persisted and will reset to defaults if the server restarts.',
+                               zh: '注意：更改不会持久化，服务器重启后将恢复默认设置。' },
 
     // ── fed.html ───────────────────────────────────────────────────────
     'fed.title':           { en: 'Fed Balance Sheet (H.4.1)', zh: '美联储资产负债表 (H.4.1)' },
@@ -276,6 +291,8 @@ const I18n = (() => {
                               zh: '美联储资产负债表中美国国债的占比 — 越高说明政府债务集中度越高' },
     'fed.loading_chart':   { en: 'Loading data…', zh: '加载中…' },
     'fed.source_note':     { en: 'Data source:', zh: '数据来源：' },
+    'fed.updated_weekly':  { en: 'Updated weekly (Thursdays)', zh: '每周四更新' },
+    'fed.range_all':       { en: 'All', zh: '全部' },
 
     // ── contact.html ───────────────────────────────────────────────────
     'contact.title':        { en: 'Contact Us',  zh: '联系我们' },

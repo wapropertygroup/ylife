@@ -101,7 +101,7 @@
 <div class="space-y-6">
 
   <!-- PE history line chart -->
-  <div id="peHistSection" class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up" style="display:none">
+  <div id="peHistSection" class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up">
     <div class="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-0 sm:justify-between mb-4">
       <div>
         <h2 class="text-base font-semibold text-slate-200" data-i18n="history.pe_title">PE Ratio — 52 Weeks</h2>
@@ -115,7 +115,7 @@
           <span class="inline-block w-3 h-0.5 bg-amber-400 border-dashed border"></span> <span data-i18n="history.current_pe_legend">Current PE</span>
         </span>
         <span class="flex items-center gap-1.5 text-xs text-slate-400 mr-1">
-          <span class="inline-block w-3 h-0.5 border-dashed border border-slate-400"></span> Avg PE
+          <span class="inline-block w-3 h-0.5 border-dashed border border-slate-400"></span> <span data-i18n="history.avg_pe_legend">Avg PE</span>
         </span>
         <div class="flex gap-1" id="peRangeBtns">
           <button class="range-btn" data-chart="pe" data-period="1mo">1M</button>
@@ -147,20 +147,20 @@
       </div>
       <div class="flex items-center gap-2 flex-wrap justify-end">
         <span class="flex items-center gap-1.5 text-xs text-slate-400">
-          <span class="inline-block w-3 h-0.5 bg-sky-400"></span> Price
+          <span class="inline-block w-3 h-0.5 bg-sky-400"></span> <span data-i18n="history.price_legend">Price</span>
         </span>
         <span id="legendTarget" style="display:none" class="items-center gap-1.5 text-xs text-slate-400 cursor-help wall-tip"
-              data-tip="Analyst consensus 12-month price target from covering analysts.">
-          <span class="inline-block w-3 h-0.5 border-dashed border border-emerald-400"></span> Target
+              data-tip-i18n="history.tip_target">
+          <span class="inline-block w-3 h-0.5 border-dashed border border-emerald-400"></span> <span data-i18n="history.target_legend">Target</span>
         </span>
         <span id="legendCallWall" style="display:none" class="items-center gap-1.5 text-xs text-amber-400 cursor-help wall-tip"
-              data-tip="Call Wall — the option strike with the highest total call open interest across all expirations. Acts as overhead resistance: market makers delta-hedge by selling shares as the price rises toward this level, capping near-term upside.">
-          <span class="inline-block w-3 h-0.5 border-dashed border border-amber-400"></span> Call Wall
+              data-tip-i18n="history.tip_call_wall">
+          <span class="inline-block w-3 h-0.5 border-dashed border border-amber-400"></span> <span data-i18n="history.call_wall_legend">Call Wall</span>
           <span class="text-slate-500 text-[10px] ml-0.5">ⓘ</span>
         </span>
         <span id="legendPutWall" style="display:none" class="items-center gap-1.5 text-xs text-rose-400 cursor-help wall-tip mr-1"
-              data-tip="Put Wall — the option strike with the highest total put open interest across all expirations. Acts as a price floor: market makers delta-hedge by buying shares as the price falls toward this level, providing near-term support.">
-          <span class="inline-block w-3 h-0.5 border-dashed border border-rose-400"></span> Put Wall
+              data-tip-i18n="history.tip_put_wall">
+          <span class="inline-block w-3 h-0.5 border-dashed border border-rose-400"></span> <span data-i18n="history.put_wall_legend">Put Wall</span>
           <span class="text-slate-500 text-[10px] ml-0.5">ⓘ</span>
         </span>
         <div class="flex gap-1" id="priceRangeBtns">
@@ -328,7 +328,6 @@ let   _modalKey       = null;
 
   // ── PE chart (only when data available)
   if (data.pe_history && data.pe_history.some(v => v != null)) {
-    document.getElementById('peHistSection').style.display = 'block';
     document.getElementById('peLoading').style.display = 'none';
     document.getElementById('peChartWrap').style.display = 'block';
     const peCfg = _buildConfig('pe', data, staticData);
@@ -535,10 +534,31 @@ function _buildConfig(key, d, staticData) {
 // Handle a range button click: fetch data, rebuild inline chart
 async function _handleRange(chartKey, period, staticData) {
   _setActiveBtn(chartKey, period);
-  let d;
-  try { d = await _fetchPeriod(period); } catch(e) { return; }
 
+  const wrapId  = { pe:'peChartWrap', price:'priceChartWrap', peg:'pegChartWrap' }[chartKey];
   const canvasId = { pe:'peChart', price:'priceHistChart', peg:'pegHistChart' }[chartKey];
+  const wrap = document.getElementById(wrapId);
+
+  // Show loading overlay
+  let overlay = wrap.querySelector('.chart-loading-overlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.className = 'chart-loading-overlay';
+    overlay.style.cssText = 'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(15,23,42,0.6);border-radius:8px;z-index:10;';
+    overlay.innerHTML = '<svg class="animate-spin" style="width:20px;height:20px;color:#6366f1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle style="opacity:.25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path style="opacity:.75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path></svg>';
+    wrap.style.position = 'relative';
+    wrap.appendChild(overlay);
+  } else {
+    overlay.style.display = 'flex';
+  }
+
+  let d;
+  try { d = await _fetchPeriod(period); } catch(e) {
+    overlay.style.display = 'none';
+    return;
+  }
+
+  overlay.style.display = 'none';
   if (_chartInstances[chartKey]) { _chartInstances[chartKey].destroy(); }
   const cfg = _buildConfig(chartKey, d, staticData);
   _chartConfigs[chartKey] = cfg;
@@ -598,7 +618,8 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal()
   document.querySelectorAll('.wall-tip').forEach(el => {
     el.addEventListener('mouseenter', function(e) {
       clearTimeout(hideTimer);
-      tip.textContent = this.dataset.tip;
+      const key = this.dataset.tipI18n;
+      tip.textContent = (key && I18n.t(key)) || this.dataset.tip || '';
       tip.style.opacity = '1';
       positionTip(e);
     });

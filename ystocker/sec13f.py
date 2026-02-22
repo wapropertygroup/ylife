@@ -39,7 +39,7 @@ FUNDS: Dict[str, str] = {
 
     # Macro / multi-strategy
     "Bridgewater Associates":   "0001350694",
-    "Citadel Advisors":         "0001423298",
+    "Citadel Advisors":         "0001360901",  # Citadel LP (13F filer)
     "Millennium Management":    "0001273931",
     "Point72 Asset Management": "0001603466",
     "DE Shaw":                  "0001009207",
@@ -49,22 +49,21 @@ FUNDS: Dict[str, str] = {
     "Coatue Management":        "0001336528",
     "Viking Global":            "0001103804",
     "Lone Pine Capital":        "0001061165",
-    "Maverick Capital":         "0001061028",
+    "Maverick Capital":         "0001524925",  # Maverick Capital Management, LLC
 
     # Value / activist
     "Third Point":              "0001040273",
     "Pershing Square":          "0001512673",
-    "Appaloosa Management":     "0000814620",
+    "Appaloosa Management":     "0001418121",  # corrected CIK
     "Baupost Group":            "0001061768",
-    "Elliott Management":       "0001061219",
-    "ValueAct Capital":         "0001137448",
-    "Starboard Value":          "0001555280",
+    "Elliott Management":       "0001703853",  # Elliott Investment Management L.P.
+    "ValueAct Capital":         "0001552198",  # corrected CIK
+    "Starboard Value":          "0001497135",  # Starboard Value LP (13F filer)
 
     # Growth / tech focus
     "Soros Fund Management":    "0001029160",
     "Duquesne Family Office":   "0001536411",
-    "ARK Investment":           "0001579982",
-    "Sequoia Fund":             "0000085451",
+    "ARK Investment":           "0001079142",  # ARK Investment Management LLC
     "Whale Rock Capital":       "0001591698",
 
     # Quant / systematic

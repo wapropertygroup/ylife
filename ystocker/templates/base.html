@@ -141,7 +141,7 @@
         </button>
         <div class="relative group" id="refreshWrap">
           <a id="refreshBtn"
-             href="{{ url_for('main.refresh') }}"
+             href="{{ url_for('main.thirteenf_refresh') if request.endpoint == 'main.thirteenf' else (url_for('main.fed_refresh') if request.endpoint == 'main.fed' else url_for('main.refresh')) }}"
              class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm border border-brand text-brand hover:bg-brand hover:text-white transition"
              data-i18n="nav.refresh">↻ Refresh</a>
           <!-- Tooltip -->
@@ -149,7 +149,7 @@
                       opacity-0 group-hover:opacity-100 transition-opacity duration-150">
             <div class="bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-xs text-slate-300 shadow-xl shadow-black/50">
               <p id="refreshTooltipTitle" class="font-semibold text-slate-100 mb-1" data-i18n="nav.refresh_title">Refresh data</p>
-              <p id="refreshTooltipBody" data-i18n="nav.refresh_body">Clears the in-memory cache and re-fetches live prices, PE ratios, and analyst targets for all tickers from Yahoo Finance.</p>
+              <p id="refreshTooltipBody" {% if request.endpoint not in ('main.thirteenf', 'main.fed') %}data-i18n="nav.refresh_body"{% endif %}>{% if request.endpoint == 'main.thirteenf' %}Re-fetches all 13F institutional holdings from SEC EDGAR.{% elif request.endpoint == 'main.fed' %}Re-fetches Federal Reserve balance-sheet data from FRED.{% else %}Clears the in-memory cache and re-fetches live prices, PE ratios, and analyst targets for all tickers from Yahoo Finance.{% endif %}</p>
             </div>
             <!-- Arrow -->
             <div class="absolute right-4 -top-1.5 w-3 h-3 bg-slate-800 border-l border-t border-slate-700 rotate-45"></div>
@@ -182,7 +182,7 @@
         <a href="{{ url_for('main.fed') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-300 hover:bg-slate-800" data-i18n="nav.fed">Fed</a>
         <a href="{{ url_for('main.groups') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-300 hover:bg-slate-800" data-i18n="nav.groups">Groups</a>
         <a href="{{ url_for('main.contact') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-300 hover:bg-slate-800" data-i18n="nav.contact">Contact</a>
-        <a id="refreshBtnMobile" href="{{ url_for('main.refresh') }}" class="px-3 py-2.5 rounded-md text-sm text-brand hover:bg-slate-800" data-i18n="nav.refresh">↻ Refresh</a>
+        <a id="refreshBtnMobile" href="{{ url_for('main.thirteenf_refresh') if request.endpoint == 'main.thirteenf' else (url_for('main.fed_refresh') if request.endpoint == 'main.fed' else url_for('main.refresh')) }}" class="px-3 py-2.5 rounded-md text-sm text-brand hover:bg-slate-800" data-i18n="nav.refresh">↻ Refresh</a>
         <button onclick="I18n.toggle()"
                 class="lang-toggle-btn mt-1 px-3 py-2.5 rounded-md text-sm border border-slate-700 text-slate-300
                        hover:border-brand hover:text-brand transition text-left font-medium">

@@ -69,10 +69,10 @@
       <div class="flex gap-2 items-center">
         <!-- Range selector -->
         <div id="treasuryRangeSelector" class="flex gap-1 text-xs">
-          <button class="range-btn px-2 py-1 rounded border border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-500 transition" data-range="52">1Y</button>
-          <button class="range-btn px-2 py-1 rounded border border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-500 transition" data-range="104">2Y</button>
-          <button class="range-btn px-2 py-1 rounded border border-brand bg-brand/15 text-white" data-range="260">5Y</button>
-          <button class="range-btn px-2 py-1 rounded border border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-500 transition" data-range="0">All</button>
+          <button class="range-btn" data-range="52">1Y</button>
+          <button class="range-btn" data-range="104">2Y</button>
+          <button class="range-btn active" data-range="260">5Y</button>
+          <button class="range-btn" data-range="0" data-i18n="fed.range_all">All</button>
         </div>
       </div>
     </div>
@@ -93,9 +93,17 @@
 
   <!-- Total Assets + MBS combo -->
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up">
-    <div class="mb-4">
-      <h2 class="text-base font-semibold text-slate-200" data-i18n="fed.balance_title">Balance Sheet Overview</h2>
-      <p class="text-xs text-slate-500" data-i18n="fed.balance_desc">Total assets, MBS, and reserve balances ($B) — weekly</p>
+    <div class="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-0 sm:justify-between mb-4">
+      <div>
+        <h2 class="text-base font-semibold text-slate-200" data-i18n="fed.balance_title">Balance Sheet Overview</h2>
+        <p class="text-xs text-slate-500" data-i18n="fed.balance_desc">Total assets, MBS, and reserve balances ($B) — weekly</p>
+      </div>
+      <div id="balanceRangeSelector" class="flex gap-1 text-xs">
+        <button class="range-btn" data-range="52">1Y</button>
+        <button class="range-btn" data-range="104">2Y</button>
+        <button class="range-btn active" data-range="260">5Y</button>
+        <button class="range-btn" data-range="0" data-i18n="fed.range_all">All</button>
+      </div>
     </div>
     <div id="balanceLoading" class="flex items-center justify-center h-48 text-slate-500 text-sm animate-pulse" data-i18n="fed.loading_chart">
       Loading balance-sheet data…
@@ -107,9 +115,17 @@
 
   <!-- Treasury as % of Total Assets -->
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up">
-    <div class="mb-4">
-      <h2 class="text-base font-semibold text-slate-200" data-i18n="fed.pct_title">Treasury as % of Total Assets</h2>
-      <p class="text-xs text-slate-500" data-i18n="fed.pct_desc">How much of the Fed's balance sheet is US Treasuries — higher = more concentrated in government debt</p>
+    <div class="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-0 sm:justify-between mb-4">
+      <div>
+        <h2 class="text-base font-semibold text-slate-200" data-i18n="fed.pct_title">Treasury as % of Total Assets</h2>
+        <p class="text-xs text-slate-500" data-i18n="fed.pct_desc">How much of the Fed's balance sheet is US Treasuries — higher = more concentrated in government debt</p>
+      </div>
+      <div id="pctRangeSelector" class="flex gap-1 text-xs">
+        <button class="range-btn" data-range="52">1Y</button>
+        <button class="range-btn" data-range="104">2Y</button>
+        <button class="range-btn" data-range="260">5Y</button>
+        <button class="range-btn active" data-range="0" data-i18n="fed.range_all">All</button>
+      </div>
     </div>
     <div class="chart-container" style="height:200px; display:none" id="pctChartWrap">
       <canvas id="pctChart"></canvas>
@@ -126,7 +142,7 @@
   <span data-i18n="fed.source_note">Data source:</span>
   <a href="https://www.federalreserve.gov/releases/h41/" target="_blank" rel="noopener"
      class="text-brand hover:underline ml-1">Federal Reserve H.4.1 Statistical Release</a>
-  &nbsp;·&nbsp; Updated weekly (Thursdays)
+  &nbsp;·&nbsp; <span data-i18n="fed.updated_weekly">Updated weekly (Thursdays)</span>
 </div>
 
 <script>
@@ -311,33 +327,33 @@
   });
 
   // Range selector buttons
-  document.querySelectorAll('#treasuryRangeSelector .range-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const n = +btn.dataset.range;
-      currentRange = n;
-
-      // Update button styles
-      document.querySelectorAll('#treasuryRangeSelector .range-btn').forEach(b => {
-        b.className = 'range-btn px-2 py-1 rounded border border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-500 transition text-xs';
+  function wireRangeSelector(selectorId, onRange) {
+    document.querySelectorAll(`#${selectorId} .range-btn`).forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll(`#${selectorId} .range-btn`).forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        onRange(+btn.dataset.range);
       });
-      btn.className = 'range-btn px-2 py-1 rounded border border-brand bg-brand/15 text-white text-xs';
-
-      const {dates, values} = sliceSeries('TREAST', n);
-      treasuryChart.data.labels   = dates;
-      treasuryChart.data.datasets[0].data = values;
-      treasuryChart.update();
-
-      const newWow = values.map((v, i) => {
-        if (i === 0 || v == null || values[i-1] == null) return null;
-        return +(v - values[i-1]).toFixed(2);
-      });
-      wowChart.data.labels = dates;
-      wowChart.data.datasets[0].data = newWow;
-      wowChart.data.datasets[0].backgroundColor = newWow.map(v =>
-        v == null ? 'transparent' : v >= 0 ? 'rgba(52,211,153,0.6)' : 'rgba(244,63,94,0.6)'
-      );
-      wowChart.update();
     });
+  }
+
+  wireRangeSelector('treasuryRangeSelector', n => {
+    currentRange = n;
+    const {dates, values} = sliceSeries('TREAST', n);
+    treasuryChart.data.labels = dates;
+    treasuryChart.data.datasets[0].data = values;
+    treasuryChart.update();
+
+    const newWow = values.map((v, i) => {
+      if (i === 0 || v == null || values[i-1] == null) return null;
+      return +(v - values[i-1]).toFixed(2);
+    });
+    wowChart.data.labels = dates;
+    wowChart.data.datasets[0].data = newWow;
+    wowChart.data.datasets[0].backgroundColor = newWow.map(v =>
+      v == null ? 'transparent' : v >= 0 ? 'rgba(52,211,153,0.6)' : 'rgba(244,63,94,0.6)'
+    );
+    wowChart.update();
   });
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -347,41 +363,40 @@
   document.getElementById('balanceChartWrap').style.display = 'block';
 
   const bCtx = document.getElementById('balanceChart');
-  const BALANCE_N = 260; // 5Y default for overview
+  let BALANCE_N = 260; // 5Y default
 
-  const walcl  = sliceSeries('WALCL',   BALANCE_N);
-  const mbs    = sliceSeries('MBST',    BALANCE_N);
-  const res    = sliceSeries('WRESBAL', BALANCE_N);
+  function buildBalanceData(n) {
+    return {
+      walcl: sliceSeries('WALCL',   n),
+      mbs:   sliceSeries('MBST',    n),
+      res:   sliceSeries('WRESBAL', n),
+    };
+  }
 
-  new Chart(bCtx, {
+  let bd = buildBalanceData(BALANCE_N);
+  const balanceChart = new Chart(bCtx, {
     type: 'line',
     data: {
-      labels: walcl.dates,
+      labels: bd.walcl.dates,
       datasets: [
         {
-          label: 'Total Assets',
-          data: walcl.values,
-          borderColor: '#6366f1',
-          backgroundColor: 'rgba(99,102,241,0.05)',
-          borderWidth: 2,
-          pointRadius: 0, pointHoverRadius: 4, fill: true, tension: 0.3, spanGaps: true,
+          label: I18n.t('fed.stat_total') || 'Total Assets',
+          data: bd.walcl.values,
+          borderColor: '#6366f1', backgroundColor: 'rgba(99,102,241,0.05)',
+          borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, fill: true, tension: 0.3, spanGaps: true,
         },
         {
-          label: 'MBS',
-          data: mbs.values,
-          borderColor: '#34d399',
-          backgroundColor: 'transparent',
-          borderWidth: 1.5,
-          pointRadius: 0, pointHoverRadius: 4, fill: false, tension: 0.3, spanGaps: true,
+          label: I18n.t('fed.stat_mbs') || 'MBS',
+          data: bd.mbs.values,
+          borderColor: '#34d399', backgroundColor: 'transparent',
+          borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 4, fill: false, tension: 0.3, spanGaps: true,
           borderDash: [4, 3],
         },
         {
-          label: 'Reserve Balances',
-          data: res.values,
-          borderColor: '#f59e0b',
-          backgroundColor: 'transparent',
-          borderWidth: 1.5,
-          pointRadius: 0, pointHoverRadius: 4, fill: false, tension: 0.3, spanGaps: true,
+          label: I18n.t('fed.stat_reserves') || 'Reserve Balances',
+          data: bd.res.values,
+          borderColor: '#f59e0b', backgroundColor: 'transparent',
+          borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 4, fill: false, tension: 0.3, spanGaps: true,
           borderDash: [4, 3],
         },
       ]
@@ -389,10 +404,7 @@
     options: {
       responsive: true, maintainAspectRatio: false,
       plugins: {
-        legend: {
-          display: true,
-          labels: { color: '#94a3b8', boxWidth: 12, font: {size: 11} }
-        },
+        legend: { display: true, labels: { color: '#94a3b8', boxWidth: 12, font: {size: 11} } },
         tooltip: {
           mode: 'index', intersect: false,
           callbacks: {
@@ -407,65 +419,71 @@
       },
       scales: {
         x: { grid:{color:gridCol}, ticks:{color:tickCol, maxTicksLimit:8, maxRotation:0} },
-        y: {
-          grid:{color:gridCol},
-          ticks:{
-            color:tickCol,
-            callback: v => v >= 1000 ? '$'+(v/1000).toFixed(1)+'T' : '$'+v+'B'
-          }
-        }
+        y: { grid:{color:gridCol}, ticks:{color:tickCol, callback: v => v >= 1000 ? '$'+(v/1000).toFixed(1)+'T' : '$'+v+'B'} }
       },
       interaction: { mode:'index', intersect:false },
     }
   });
 
+  wireRangeSelector('balanceRangeSelector', n => {
+    const d = buildBalanceData(n);
+    balanceChart.data.labels = d.walcl.dates;
+    balanceChart.data.datasets[0].data = d.walcl.values;
+    balanceChart.data.datasets[1].data = d.mbs.values;
+    balanceChart.data.datasets[2].data = d.res.values;
+    balanceChart.update();
+  });
+
   // ──────────────────────────────────────────────────────────────────────────
   // Treasury as % of total assets
   // ──────────────────────────────────────────────────────────────────────────
-  const walclFull   = sliceSeries('WALCL',  0);
-  const treasFull   = sliceSeries('TREAST', 0);
+  function buildPctData(n) {
+    const w = sliceSeries('WALCL',  n);
+    const t = sliceSeries('TREAST', n);
+    return {
+      dates: w.dates,
+      values: w.values.map((total, i) => {
+        const treas = t.values[i];
+        if (total == null || treas == null || total === 0) return null;
+        return +(treas / total * 100).toFixed(2);
+      }),
+    };
+  }
 
-  const pctVals = walclFull.values.map((total, i) => {
-    const treas = treasFull.values[i];
-    if (total == null || treas == null || total === 0) return null;
-    return +(treas / total * 100).toFixed(2);
-  });
-
-  if (pctVals.some(v => v != null)) {
+  const pctInitial = buildPctData(0);
+  if (pctInitial.values.some(v => v != null)) {
     document.getElementById('pctChartWrap').style.display = 'block';
     const pCtx = document.getElementById('pctChart');
-    new Chart(pCtx, {
+    const pctChart = new Chart(pCtx, {
       type: 'line',
       data: {
-        labels: walclFull.dates,
+        labels: pctInitial.dates,
         datasets: [{
-          label: 'Treasury % of Total Assets',
-          data: pctVals,
-          borderColor: '#a78bfa',
-          backgroundColor: 'rgba(167,139,250,0.07)',
-          borderWidth: 2,
-          pointRadius: 0, pointHoverRadius: 4, fill: true, tension: 0.3, spanGaps: true,
+          label: I18n.t('fed.pct_title') || 'Treasury % of Total Assets',
+          data: pctInitial.values,
+          borderColor: '#a78bfa', backgroundColor: 'rgba(167,139,250,0.07)',
+          borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, fill: true, tension: 0.3, spanGaps: true,
         }]
       },
       options: {
         responsive: true, maintainAspectRatio: false,
         plugins: {
           legend: { display: false },
-          tooltip: {
-            mode: 'index', intersect: false,
-            callbacks: { label: c => ` ${c.raw?.toFixed(1)}%` }
-          }
+          tooltip: { mode: 'index', intersect: false, callbacks: { label: c => ` ${c.raw?.toFixed(1)}%` } }
         },
         scales: {
           x: { grid:{color:gridCol}, ticks:{color:tickCol, maxTicksLimit:8, maxRotation:0} },
-          y: {
-            grid:{color:gridCol},
-            ticks:{ color:tickCol, callback: v => v.toFixed(0)+'%' },
-            min: 0, max: 100,
-          }
+          y: { grid:{color:gridCol}, ticks:{ color:tickCol, callback: v => v.toFixed(0)+'%' }, min: 0, max: 100 }
         },
         interaction: { mode:'index', intersect:false },
       }
+    });
+
+    wireRangeSelector('pctRangeSelector', n => {
+      const d = buildPctData(n);
+      pctChart.data.labels = d.dates;
+      pctChart.data.datasets[0].data = d.values;
+      pctChart.update();
     });
   }
 })();

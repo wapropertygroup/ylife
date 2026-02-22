@@ -5,28 +5,20 @@
 
 <!-- ── Header ────────────────────────────────────────────────────────── -->
 <div class="mb-6 sm:mb-8 fade-up">
-  <h1 class="text-2xl sm:text-3xl font-bold grad-text mb-1">13F Institutional Holdings</h1>
-  <p class="text-slate-400 text-sm">Latest quarterly 13F-HR filings from SEC EDGAR · Top 50 equity positions per fund</p>
+  <h1 class="text-2xl sm:text-3xl font-bold grad-text mb-1" data-i18n="thirteenf.title">13F Institutional Holdings</h1>
+  <p class="text-slate-400 text-sm" data-i18n="thirteenf.subtitle">Latest quarterly 13F-HR filings from SEC EDGAR · Top 50 equity positions per fund</p>
   {% if cache_last_updated %}
   <p class="text-xs text-slate-600 mt-1">
-    Data as of {{ cache_last_updated | int | datetimeformat }}
+    <span data-i18n="thirteenf.data_as_of">Data as of</span> {{ cache_last_updated | int | datetimeformat }}
     &nbsp;·&nbsp;
     {% if warming %}
-    <span class="text-brand animate-pulse">refreshing now…</span>
+    <span class="text-brand animate-pulse" data-i18n="thirteenf.refreshing">refreshing now…</span>
     {% else %}
-    next refresh {{ (cache_last_updated | int + 86400) | datetimeformat }}
-    {% endif %}
-    &nbsp;·&nbsp;
-    <a href="{{ url_for('main.thirteenf_refresh') }}" class="text-brand hover:underline">↻ Refresh</a>
-  </p>
-  {% else %}
-  <p class="text-xs text-slate-600 mt-1">
-    {% if warming %}
-    <span class="text-brand animate-pulse">Fetching holdings from SEC EDGAR — this may take ~30 seconds…</span>
-    {% else %}
-    <a href="{{ url_for('main.thirteenf_refresh') }}" class="text-brand hover:underline">↻ Load holdings</a>
+    <span data-i18n="thirteenf.next_refresh">next refresh</span> {{ (cache_last_updated | int + 86400) | datetimeformat }}
     {% endif %}
   </p>
+  {% elif warming %}
+  <p class="text-xs text-brand animate-pulse mt-1" data-i18n="thirteenf.loading">Fetching holdings from SEC EDGAR — this may take ~30 seconds…</p>
   {% endif %}
 </div>
 
@@ -76,7 +68,7 @@
     <div class="py-16 text-center">
       <p class="text-slate-500 text-sm">
         {% if warming %}
-        <span class="text-brand animate-pulse">Fetching SEC EDGAR data… this takes ~30s on first load.</span>
+      <span class="text-brand animate-pulse" data-i18n="thirteenf.loading">Fetching SEC EDGAR data… this takes ~30s on first load.</span>
         {% else %}
         No data yet. <a href="{{ url_for('main.thirteenf_refresh') }}" class="text-brand hover:underline">Refresh to load</a>.
         {% endif %}
@@ -86,7 +78,7 @@
     {% elif fd.get('error') %}
     <!-- Error state -->
     <div class="py-10 text-center">
-      <p class="text-rose-400 text-sm mb-2">Failed to fetch: {{ fd.error }}</p>
+      <span class="text-rose-400 text-sm mb-2"><span data-i18n="thirteenf.fetch_failed">Failed to fetch:</span> {{ fd.error }}</span>
       <a href="{{ url_for('main.thirteenf_refresh') }}"
          class="text-brand text-xs hover:underline">↻ Retry</a>
     </div>
@@ -94,15 +86,15 @@
     {% else %}
     <!-- Fund metadata row -->
     <div class="flex flex-wrap items-center gap-x-6 gap-y-1 mb-5 text-xs text-slate-500">
-      <span>CIK: <span class="font-mono text-slate-300">{{ cik }}</span></span>
-      <span>Filing date: <span class="text-slate-300 font-medium">{{ fd.filing_date }}</span></span>
-      <span>Period: <span class="text-slate-300 font-medium">{{ fd.period_of_report }}</span></span>
-      <span>Reported AUM:
+      <span><span data-i18n="thirteenf.cik">CIK:</span> <span class="font-mono text-slate-300">{{ cik }}</span></span>
+      <span><span data-i18n="thirteenf.filing_date">Filing date:</span> <span class="text-slate-300 font-medium">{{ fd.filing_date }}</span></span>
+      <span><span data-i18n="thirteenf.period">Period:</span> <span class="text-slate-300 font-medium">{{ fd.period_of_report }}</span></span>
+      <span><span data-i18n="thirteenf.aum">Reported AUM:</span>
         <span class="text-slate-100 font-bold">
           ${{ "{:,.0f}".format(fd.total_value_millions) }}M
         </span>
       </span>
-      <span>Holdings shown: <span class="text-slate-300">{{ fd.holdings | length }} / {{ fd.total_holdings }}</span></span>
+      <span><span data-i18n="thirteenf.shown">Holdings shown:</span> <span class="text-slate-300">{{ fd.holdings | length }} / {{ fd.total_holdings }}</span></span>
     </div>
 
     <!-- Holdings table -->
@@ -110,14 +102,14 @@
       <table class="w-full text-sm" data-sortable>
         <thead>
           <tr class="text-xs text-slate-500 border-b border-slate-800 select-none">
-            <th class="text-right py-2 px-3 font-medium w-8 cursor-pointer hover:text-slate-300" data-col="0"># ↕</th>
-            <th class="text-left  py-2 px-3 font-medium cursor-pointer hover:text-slate-300" data-col="1">Ticker ↕</th>
-            <th class="text-left  py-2 px-3 font-medium cursor-pointer hover:text-slate-300" data-col="2">Company ↕</th>
-            <th class="text-left  py-2 px-3 font-medium">52-week</th>
-            <th class="text-right py-2 px-3 font-medium cursor-pointer hover:text-slate-300" data-col="3">Shares ↕</th>
-            <th class="text-right py-2 px-3 font-medium cursor-pointer hover:text-slate-300" data-col="4">Value ($M) ↕</th>
-            <th class="text-right py-2 px-3 font-medium cursor-pointer hover:text-slate-300" data-col="5">% Portfolio ↕</th>
-            <th class="text-center py-2 px-3 font-medium">Change</th>
+            <th class="text-right py-2 px-3 font-medium w-8 cursor-pointer hover:text-slate-300" data-col="0"><span data-i18n="thirteenf.th_rank">#</span> ↕</th>
+            <th class="text-left  py-2 px-3 font-medium cursor-pointer hover:text-slate-300" data-col="1"><span data-i18n="thirteenf.th_ticker">Ticker</span> ↕</th>
+            <th class="text-left  py-2 px-3 font-medium cursor-pointer hover:text-slate-300" data-col="2"><span data-i18n="thirteenf.th_company">Company</span> ↕</th>
+            <th class="text-left  py-2 px-3 font-medium" data-i18n="thirteenf.th_52w">52-week</th>
+            <th class="text-right py-2 px-3 font-medium cursor-pointer hover:text-slate-300" data-col="3"><span data-i18n="thirteenf.th_shares">Shares</span> ↕</th>
+            <th class="text-right py-2 px-3 font-medium cursor-pointer hover:text-slate-300" data-col="4"><span data-i18n="thirteenf.th_value">Value ($M)</span> ↕</th>
+            <th class="text-right py-2 px-3 font-medium cursor-pointer hover:text-slate-300" data-col="5"><span data-i18n="thirteenf.th_pct">% Portfolio</span> ↕</th>
+            <th class="text-center py-2 px-3 font-medium" data-i18n="thirteenf.th_change">Change</th>
           </tr>
         </thead>
         <tbody>
@@ -158,15 +150,15 @@
             </td>
             <td class="py-2.5 px-3 text-center">
               {% if h.change == 'new' %}
-              <span class="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-emerald-900/50 text-emerald-300 border border-emerald-800">New</span>
+              <span class="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-emerald-900/50 text-emerald-300 border border-emerald-800" data-i18n="inst.change_new">New</span>
               {% elif h.change == 'increased' %}
-              <span class="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-sky-900/50 text-sky-300 border border-sky-800">▲ Added</span>
+              <span class="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-sky-900/50 text-sky-300 border border-sky-800" data-i18n="inst.change_added">▲ Added</span>
               {% if h.change_pct %}<span class="text-sky-400 text-xs font-mono ml-1">+{{ h.change_pct }}%</span>{% endif %}
               {% elif h.change == 'reduced' %}
-              <span class="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-amber-900/50 text-amber-300 border border-amber-800">▼ Reduced</span>
+              <span class="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-amber-900/50 text-amber-300 border border-amber-800" data-i18n="inst.change_reduced">▼ Reduced</span>
               {% if h.change_pct %}<span class="text-amber-400 text-xs font-mono ml-1">{{ h.change_pct }}%</span>{% endif %}
               {% elif h.change == 'closed' %}
-              <span class="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-rose-900/50 text-rose-300 border border-rose-800">Closed</span>
+              <span class="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-rose-900/50 text-rose-300 border border-rose-800" data-i18n="inst.change_closed">Closed</span>
               {% elif h.change == 'unchanged' %}
               <span class="text-slate-600 text-xs">—</span>
               {% else %}
@@ -187,11 +179,11 @@
 
 <!-- Legend -->
 <div class="mt-6 flex flex-wrap gap-4 text-xs text-slate-500 fade-up">
-  <span class="flex items-center gap-1.5"><span class="px-1.5 py-0.5 rounded bg-emerald-900/50 text-emerald-300 border border-emerald-800 text-[10px] font-semibold">New</span> New position this quarter</span>
-  <span class="flex items-center gap-1.5"><span class="px-1.5 py-0.5 rounded bg-sky-900/50 text-sky-300 border border-sky-800 text-[10px] font-semibold">▲ Added</span> Shares increased vs prior quarter</span>
-  <span class="flex items-center gap-1.5"><span class="px-1.5 py-0.5 rounded bg-amber-900/50 text-amber-300 border border-amber-800 text-[10px] font-semibold">▼ Reduced</span> Shares decreased vs prior quarter</span>
-  <span class="flex items-center gap-1.5"><span class="px-1.5 py-0.5 rounded bg-rose-900/50 text-rose-300 border border-rose-800 text-[10px] font-semibold">Closed</span> Position exited (prior quarter only)</span>
-  <span>· Data source: <a href="https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&type=13F" target="_blank" rel="noopener" class="text-brand hover:underline">SEC EDGAR</a></span>
+  <span class="flex items-center gap-1.5"><span class="px-1.5 py-0.5 rounded bg-emerald-900/50 text-emerald-300 border border-emerald-800 text-[10px] font-semibold" data-i18n="inst.change_new">New</span> <span data-i18n="thirteenf.legend_new">New position this quarter</span></span>
+  <span class="flex items-center gap-1.5"><span class="px-1.5 py-0.5 rounded bg-sky-900/50 text-sky-300 border border-sky-800 text-[10px] font-semibold" data-i18n="inst.change_added">▲ Added</span> <span data-i18n="thirteenf.legend_added">Shares increased vs prior quarter</span></span>
+  <span class="flex items-center gap-1.5"><span class="px-1.5 py-0.5 rounded bg-amber-900/50 text-amber-300 border border-amber-800 text-[10px] font-semibold" data-i18n="inst.change_reduced">▼ Reduced</span> <span data-i18n="thirteenf.legend_reduced">Shares decreased vs prior quarter</span></span>
+  <span class="flex items-center gap-1.5"><span class="px-1.5 py-0.5 rounded bg-rose-900/50 text-rose-300 border border-rose-800 text-[10px] font-semibold" data-i18n="inst.change_closed">Closed</span> <span data-i18n="thirteenf.legend_closed">Position exited (prior quarter only)</span></span>
+  <span>· <span data-i18n="thirteenf.source">Data source:</span> <a href="https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&type=13F" target="_blank" rel="noopener" class="text-brand hover:underline">SEC EDGAR</a></span>
 </div>
 
 <script>

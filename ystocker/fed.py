@@ -3,24 +3,19 @@ ystocker.fed
 ~~~~~~~~~~~~
 Fetch Federal Reserve H.4.1 balance-sheet data.
 
-Data source: Federal Reserve Data Download Programme (DDP)
-  https://www.federalreserve.gov/datadownload/
+Data source: FRED (Federal Reserve Bank of St. Louis) public CSV endpoint.
+No API key required.
 
-Series downloaded (weekly, not seasonally adjusted):
-  WALCL  — Total assets (all Federal Reserve Banks)
-  TREAST — U.S. Treasury securities held outright
-  MBST   — Mortgage-backed securities held outright
-  WRESBAL — Reserve balances with Federal Reserve Banks
+Series (weekly, not seasonally adjusted):
+  WALCL   — Total assets (all Federal Reserve Banks), millions USD
+  TREAST  — U.S. Treasury securities held outright, millions USD
+  MBST    — Mortgage-backed securities held outright, millions USD
+  WRESBAL — Reserve balances with Federal Reserve Banks, millions USD
 
-No API key needed; the Fed publishes CSV/ZIP data files freely.
-We use the H.4.1 structured data endpoint with filetype=csv.
-
-Cache TTL: 24 hours (data updates once a week, Thursday).
+Cache TTL: 24 hours (H.4.1 updates once a week, on Thursdays).
 """
 from __future__ import annotations
 
-import csv
-import io
 import json
 import logging
 import threading
@@ -35,16 +30,10 @@ log = logging.getLogger(__name__)
 _CACHE_FILE = Path(__file__).parent.parent / "cache" / "fed_cache.json"
 _CACHE_TTL  = 24 * 60 * 60   # 24 hours
 
-# Fed DDP series endpoint template.
-# obs=  — number of observations (520 ≈ 10 years of weekly data)
-# filetype=csv returns a two-header CSV
-_FED_DDP = (
-    "https://www.federalreserve.gov/datadownload/Output.aspx"
-    "?rel=H41&series={series}&lastobs=520&startdate=&enddate="
-    "&filetype=csv&label=include&layout=seriescolumn"
-)
+# FRED public CSV endpoint (no API key needed)
+_FRED_CSV = "https://fred.stlouisfed.org/graph/fredgraph.csv?id={series}"
 
-# Series IDs and human labels
+# Series IDs and display metadata
 SERIES: Dict[str, Dict[str, str]] = {
     "WALCL":   {"label": "Total Assets",              "color": "#6366f1"},
     "TREAST":  {"label": "Treasury Securities",       "color": "#38bdf8"},
@@ -57,11 +46,16 @@ SERIES: Dict[str, Dict[str, str]] = {
 # ---------------------------------------------------------------------------
 _cache_lock    = threading.Lock()
 _cache_data: Optional[Dict[str, Any]] = None
-_cache_ts: Optional[float] = None
+_cache_ts:   Optional[float]          = None
 
+_warming      = False
+_warming_lock = threading.Lock()
+
+# ---------------------------------------------------------------------------
+# Disk cache
+# ---------------------------------------------------------------------------
 
 def _load_disk_cache() -> Optional[Dict[str, Any]]:
-    """Return on-disk cache if it exists and is fresh, otherwise None."""
     try:
         if not _CACHE_FILE.exists():
             return None
@@ -92,12 +86,12 @@ _HEADERS = {
 
 def _fetch_series(series_id: str) -> Optional[Dict[str, Any]]:
     """
-    Download a single H.4.1 series from the Fed DDP and return
-    {"dates": [...], "values": [...]} where values are in billions USD.
+    Fetch a single FRED series CSV and return
+    {"dates": [...], "values": [...]} with values in billions USD.
     Returns None on error.
     """
-    url = _FED_DDP.format(series=series_id)
-    log.info("Fed: fetching %s from %s", series_id, url)
+    url = _FRED_CSV.format(series=series_id)
+    log.info("Fed: fetching %s from FRED", series_id)
     try:
         resp = requests.get(url, headers=_HEADERS, timeout=30)
         resp.raise_for_status()
@@ -106,55 +100,44 @@ def _fetch_series(series_id: str) -> Optional[Dict[str, Any]]:
         log.error("Fed: HTTP error for %s: %s", series_id, exc)
         return None
 
-    # The Fed CSV has two header rows before the data rows:
-    #   Row 0: "Series Description","<long label>"
-    #   Row 1: "Unit Multiplier","Millions of Dollars"  (or Billions)
-    #   Row 2: "Multiplier","1"
-    #   ...metadata rows...
-    #   Then a blank line, then:
-    #   "Series Description","<label>"
-    #   "<date>","<value>"
-    #   "<date>","<value>"
+    # FRED CSV format:
+    #   observation_date,<SERIES_ID>
+    #   2002-12-18,629397
     #   ...
-    #
-    # We skip every row until we find one whose first column looks like a
-    # date (YYYY-MM-DD), then treat the first column as date and second as value.
+    # Values are in millions USD; convert to billions.
 
-    dates: List[str]  = []
+    dates:  List[str]           = []
     values: List[Optional[float]] = []
 
-    multiplier = 1.0   # will update if we see "Multiplier" row
+    lines = text.strip().splitlines()
+    if not lines:
+        log.warning("Fed: empty response for %s", series_id)
+        return None
 
-    reader = csv.reader(io.StringIO(text))
-    for row in reader:
-        if not row:
+    # Skip header row
+    for line in lines[1:]:
+        parts = line.split(",")
+        if len(parts) < 2:
             continue
-        cell0 = row[0].strip().strip('"')
-        # Look for multiplier metadata
-        if cell0.lower() == "multiplier" and len(row) >= 2:
+        date_str = parts[0].strip()
+        val_str  = parts[1].strip()
+        if len(date_str) != 10 or date_str[4] != "-":
+            continue
+        dates.append(date_str)
+        if val_str in ("", ".", "ND", "N/A"):
+            values.append(None)
+        else:
             try:
-                multiplier = float(row[1].strip().strip('"'))
+                values.append(round(float(val_str) / 1000, 2))  # millions → billions
             except ValueError:
-                pass
-            continue
-        # Data rows: first cell is YYYY-MM-DD
-        if len(row) >= 2 and len(cell0) == 10 and cell0[4] == "-" and cell0[7] == "-":
-            val_str = row[1].strip().strip('"')
-            if val_str in ("", ".", "ND", "N/A"):
                 values.append(None)
-            else:
-                try:
-                    # Fed values are in millions; convert to billions
-                    values.append(round(float(val_str) * multiplier / 1000, 2))
-                except ValueError:
-                    values.append(None)
-            dates.append(cell0)
 
     if not dates:
         log.warning("Fed: no data rows parsed for %s", series_id)
         return None
 
-    log.info("Fed: %s — %d observations (%s … %s)", series_id, len(dates), dates[0], dates[-1])
+    log.info("Fed: %s — %d obs (%s … %s), latest $%.1fB",
+             series_id, len(dates), dates[0], dates[-1], values[-1] or 0)
     return {"dates": dates, "values": values}
 
 
@@ -175,10 +158,7 @@ def _build_cache() -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 def get_fed_data(force: bool = False) -> Dict[str, Any]:
-    """
-    Return cached H.4.1 data (dict with "series" key).
-    Loads from memory → disk → network, refreshing as needed.
-    """
+    """Return cached H.4.1 data. Loads memory → disk → network as needed."""
     global _cache_data, _cache_ts
 
     with _cache_lock:
@@ -197,7 +177,7 @@ def get_fed_data(force: bool = False) -> Dict[str, Any]:
                 return _cache_data
 
         # 3. Fetch from network
-        log.info("Fed: fetching fresh data from Federal Reserve DDP")
+        log.info("Fed: fetching fresh data from FRED")
         fresh = _build_cache()
         _cache_data = fresh
         _cache_ts   = fresh["_ts"]
@@ -206,15 +186,21 @@ def get_fed_data(force: bool = False) -> Dict[str, Any]:
 
 
 def get_cache_ts() -> Optional[float]:
-    """Return Unix timestamp of the last successful cache build, or None."""
-    global _cache_ts
     with _cache_lock:
         if _cache_ts:
             return _cache_ts
     disk = _load_disk_cache()
-    if disk:
-        return disk.get("_ts")
-    return None
+    return disk.get("_ts") if disk else None
+
+
+def is_cache_fresh() -> bool:
+    ts = get_cache_ts()
+    return bool(ts and (time.time() - ts) < _CACHE_TTL)
+
+
+def is_warming() -> bool:
+    with _warming_lock:
+        return _warming
 
 
 def refresh_cache() -> None:
@@ -227,17 +213,3 @@ def refresh_cache() -> None:
     finally:
         with _warming_lock:
             _warming = False
-
-
-def is_cache_fresh() -> bool:
-    ts = get_cache_ts()
-    return bool(ts and (time.time() - ts) < _CACHE_TTL)
-
-
-_warming = False
-_warming_lock = threading.Lock()
-
-
-def is_warming() -> bool:
-    with _warming_lock:
-        return _warming
