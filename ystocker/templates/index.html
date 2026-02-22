@@ -303,15 +303,23 @@ function buildScatterChart(ctx) {
           onClick(e, legendItem, legend) {
             // Default Chart.js toggle behaviour
             Chart.defaults.plugins.legend.onClick.call(this, e, legendItem, legend);
-            // Sync pointRadius with hidden state so labels also disappear
-            if (scatterLabelsVisible) {
-              const chart = legend.chart;
-              const di = legendItem.datasetIndex;
-              const hidden = chart.getDatasetMeta(di).hidden;
-              chart.data.datasets[di].pointRadius      = hidden ? 0 : 7;
-              chart.data.datasets[di].pointHoverRadius = hidden ? 0 : 9;
-              chart.update();
+            const chart = legend.chart;
+            const di    = legendItem.datasetIndex;
+            const hidden = chart.getDatasetMeta(di).hidden;
+            // Sync pointRadius for this dataset
+            chart.data.datasets[di].pointRadius      = hidden ? 0 : 7;
+            chart.data.datasets[di].pointHoverRadius = hidden ? 0 : 9;
+            // If any dataset is now visible, flip scatterLabelsVisible on
+            const anyVisible = chart.data.datasets.some((_, i) => !chart.getDatasetMeta(i).hidden);
+            if (anyVisible && !scatterLabelsVisible) {
+              scatterLabelsVisible = true;
+              const btn  = document.getElementById('scatterLabelToggle');
+              const text = document.getElementById('scatterLabelToggleText');
+              text.textContent = 'Hide tickers';
+              btn.classList.remove('bg-brand', 'text-white');
+              btn.classList.add('text-brand', 'bg-brand/10');
             }
+            chart.update();
           }
         },
         tooltip: { callbacks: { label: c => ` ${c.raw.ticker}  PE ${c.raw.x?.toFixed(1)}x  Upside ${c.raw.y?.toFixed(1)}%` } }
