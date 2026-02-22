@@ -4,4 +4,4 @@ pandas>=2.0
 matplotlib>=3.8
 seaborn>=0.13
 requests>=2.31
-openai>=1.0
+google-generativeai>=0.7

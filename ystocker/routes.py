@@ -813,7 +813,7 @@ def api_fed():
 def api_fed_explain():
     """Stream an AI explanation of a Fed chart's recent data via SSE."""
     import os
-    from openai import OpenAI
+    import google.generativeai as genai
 
     body = request.get_json(force=True, silent=True) or {}
     chart   = body.get("chart", "")
@@ -824,9 +824,9 @@ def api_fed_explain():
     if not dates or not values:
         return jsonify({"error": "No data provided"}), 400
 
-    api_key = os.environ.get("OPENAI_API_KEY")
+    api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
-        return jsonify({"error": "OPENAI_API_KEY not configured"}), 503
+        return jsonify({"error": "GEMINI_API_KEY not configured"}), 503
 
     # Build a compact data summary (last 12 points + overall trend)
     pairs = [(d, v) for d, v in zip(dates, values) if v is not None]
@@ -835,7 +835,6 @@ def api_fed_explain():
 
     # For the PCT chart the values are percentages, not billions
     is_pct = (chart == "pct")
-    unit = "%" if is_pct else "B"
 
     first_date, first_val = pairs[0]
     last_date,  last_val  = pairs[-1]
@@ -865,20 +864,16 @@ Most recent 12 data points:
 
 Cover: (1) what the overall trend shows, (2) any notable recent moves, (3) what this means for monetary policy or market conditions. Be specific about the numbers. Do not use headers or bullet points."""
 
-    client = OpenAI(api_key=api_key)
+    genai.configure(api_key=api_key)
+    model = genai.GenerativeModel("gemini-1.5-flash")
 
     def generate():
         try:
-            stream = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[{"role": "user", "content": prompt}],
-                stream=True,
-                max_tokens=500,
-            )
+            stream = model.generate_content(prompt, stream=True)
             for chunk in stream:
-                delta = chunk.choices[0].delta.content
-                if delta:
-                    yield f"data: {json.dumps({'text': delta})}\n\n"
+                text = chunk.text
+                if text:
+                    yield f"data: {json.dumps({'text': text})}\n\n"
         except Exception as exc:
             log.error("Fed explain error: %s", exc)
             yield f"data: {json.dumps({'error': str(exc)})}\n\n"
@@ -975,9 +970,11 @@ def api_news(ticker: str):
     ticker = ticker.strip().upper()
     log.info("API news: %s", ticker)
 
+    from flask import request as flask_request
+    force_refresh = flask_request.args.get("force") == "1"
     with _NEWS_CACHE_LOCK:
         entry = _NEWS_CACHE.get(ticker)
-        if entry and time.time() - entry["ts"] < _NEWS_CACHE_TTL:
+        if not force_refresh and entry and time.time() - entry["ts"] < _NEWS_CACHE_TTL:
             log.debug("News cache hit: %s", ticker)
             return jsonify(entry["data"])
 
