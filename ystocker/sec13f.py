@@ -321,13 +321,12 @@ def _find_infotable_url(cik: str, accession: str, primary_doc: str = "") -> Opti
                         or "infotable" in fname
                         or "info_table" in fname):
                     return f"{base_url}/{doc['name']}"
-            # fallback within JSON: first XML that isn't the primary doc or cover page
+            # fallback within JSON: first XML that isn't the top-level primary doc
+            # Note: xslForm13F_X02/primary_doc.xml IS the infotable (subdirectory path)
             for doc in idx.get("documents", []):
-                fname = (doc.get("name") or "").lower()
-                if (fname.endswith(".xml")
-                        and fname != primary_lower
-                        and "primary_doc" not in fname):
-                    return f"{base_url}/{doc['name']}"
+                dname = doc.get("name") or ""
+                if dname.lower().endswith(".xml") and dname.lower() != primary_lower:
+                    return f"{base_url}/{dname}"
         except Exception as exc:
             log.debug("JSON index parse failed for %s/%s: %s", cik_int, acc_nodash, exc)
 
@@ -471,20 +470,19 @@ def fetch_fund_holdings(name: str, cik: str) -> dict:
     log.info("Fetching 13F for %s (CIK %s)", name, cik)
     try:
         filings = _get_filings_list(cik)
-        # Accept 13F-HR and 13F-HR/A (amendments); exclude pure cover-only filings
-        # where primary_doc is "primary_doc.xml" (those are EDGAR cover pages, not data)
-        thirteenf_filings = [
-            f for f in filings
-            if f["form"] in ("13F-HR", "13F-HR/A")
-            and f.get("primary_doc", "").lower() != "primary_doc.xml"
-        ]
-        # If that filter leaves nothing, fall back to any 13F-HR
-        if not thirteenf_filings:
-            thirteenf_filings = [f for f in filings if f["form"] in ("13F-HR", "13F-HR/A")]
+        all_13f = [f for f in filings if f["form"] in ("13F-HR", "13F-HR/A")]
+        log.info("13F filings for %s: %s", name,
+                 [(f["accession"], f.get("primary_doc")) for f in all_13f[:5]])
+        # Filings by third-party EDGAR agents (e.g. 0001193125 = Donnelley/EdgarOnline)
+        # are cover-page-only submissions — the actual 13F data is filed by the fund itself.
+        # Prefer filings whose accession number starts with the fund's own CIK digits.
+        cik_digits = str(int(cik)).zfill(10)
+        own_filings = [f for f in all_13f if f["accession"].replace("-","")[:10] == cik_digits]
+        thirteenf_filings = own_filings if own_filings else all_13f
         if not thirteenf_filings:
             return {"error": "No 13F-HR filings found", "cik": cik}
 
-        log.info("13F latest filing for %s: accession=%s primary_doc=%s",
+        log.info("13F selected for %s: accession=%s primary_doc=%s",
                  name, thirteenf_filings[0]["accession"], thirteenf_filings[0].get("primary_doc"))
         latest = thirteenf_filings[0]
         prev   = thirteenf_filings[1] if len(thirteenf_filings) > 1 else None
