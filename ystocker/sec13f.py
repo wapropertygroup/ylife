@@ -411,10 +411,15 @@ def _parse_infotable(xml_text: str) -> List[dict]:
     """Parse SEC 13F infotable XML and return list of holding dicts."""
     root = ET.fromstring(xml_text)
     ns_prefix = ""
-    # Detect namespace
+    # Detect namespace from root tag
     if root.tag.startswith("{"):
         ns_uri = root.tag.split("}")[0].lstrip("{")
         ns_prefix = f"{{{ns_uri}}}"
+
+    # Log root tag and first child to diagnose namespace/structure issues
+    first_child = next(iter(root), None)
+    log.info("13F XML root=%s ns=%r first_child=%s",
+             root.tag, ns_prefix, first_child.tag if first_child is not None else None)
 
     holdings = []
     for entry in root.iter(f"{ns_prefix}infoTable"):
@@ -446,6 +451,7 @@ def _parse_infotable(xml_text: str) -> List[dict]:
             "value_thousands": value_k,
             "value_millions": round(value_k / 1000, 1),
         })
+    log.info("13F _parse_infotable: found %d holdings", len(holdings))
     return holdings
 
 
