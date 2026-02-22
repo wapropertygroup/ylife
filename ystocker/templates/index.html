@@ -263,9 +263,10 @@ function toggleScatterLabels() {
     btn.classList.remove('text-brand', 'bg-brand/10');
   }
   if (_inlineScatterChart) {
-    _inlineScatterChart.data.datasets.forEach(ds => {
-      ds.pointRadius      = scatterLabelsVisible ? 7 : 0;
-      ds.pointHoverRadius = scatterLabelsVisible ? 9 : 0;
+    _inlineScatterChart.data.datasets.forEach((ds, di) => {
+      const hidden = _inlineScatterChart.getDatasetMeta(di).hidden;
+      ds.pointRadius      = (scatterLabelsVisible && !hidden) ? 7 : 0;
+      ds.pointHoverRadius = (scatterLabelsVisible && !hidden) ? 9 : 0;
     });
     _inlineScatterChart.update();
   }
@@ -296,7 +297,22 @@ function buildScatterChart(ctx) {
         }
       },
       plugins: {
-        legend: { labels: { color: '#94a3b8', font: { size: 11 } } },
+        legend: {
+          labels: { color: '#94a3b8', font: { size: 11 } },
+          onClick(e, legendItem, legend) {
+            // Default Chart.js toggle behaviour
+            Chart.defaults.plugins.legend.onClick.call(this, e, legendItem, legend);
+            // Sync pointRadius with hidden state so labels also disappear
+            if (scatterLabelsVisible) {
+              const chart = legend.chart;
+              const di = legendItem.datasetIndex;
+              const hidden = chart.getDatasetMeta(di).hidden;
+              chart.data.datasets[di].pointRadius      = hidden ? 0 : 7;
+              chart.data.datasets[di].pointHoverRadius = hidden ? 0 : 9;
+              chart.update();
+            }
+          }
+        },
         tooltip: { callbacks: { label: c => ` ${c.raw.ticker}  PE ${c.raw.x?.toFixed(1)}x  Upside ${c.raw.y?.toFixed(1)}%` } }
       },
       scales: {
@@ -313,7 +329,8 @@ function buildScatterChart(ctx) {
         if (z > a.top && z < a.bottom) { c.beginPath(); c.moveTo(a.left, z); c.lineTo(a.right, z); c.stroke(); }
         c.restore();
         if (scatterLabelsVisible) {
-          chart.data.datasets.forEach(ds => {
+          chart.data.datasets.forEach((ds, di) => {
+            if (chart.getDatasetMeta(di).hidden) return;
             ds.data.forEach(pt => {
               const px = x.getPixelForValue(pt.x), py = y.getPixelForValue(pt.y);
               c.save(); c.fillStyle = '#94a3b8'; c.font = '10px Inter,sans-serif';
