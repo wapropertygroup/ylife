@@ -3,27 +3,27 @@
 
 {% block content %}
 
-<div class="mb-8 fade-up">
+<div class="mb-6 sm:mb-8 fade-up">
   <div class="flex items-center gap-3 mb-1">
     <button onclick="history.back()" class="text-slate-500 hover:text-slate-300 text-sm transition">← Back</button>
     <span class="text-slate-700">/</span>
     <span class="text-slate-300 text-sm font-mono font-semibold">{{ ticker }}</span>
   </div>
-  <h1 class="text-3xl font-bold">
+  <h1 class="text-2xl sm:text-3xl font-bold">
     <span class="font-mono grad-text">{{ ticker }}</span>
-    <span id="stockName" class="text-slate-400 text-xl font-normal ml-3"></span>
+    <span id="stockName" class="text-slate-400 text-lg sm:text-xl font-normal ml-2 sm:ml-3"></span>
   </h1>
   <p class="text-slate-500 text-sm mt-1">1-year historical PE ratio &amp; price (weekly)</p>
 </div>
 
 <!-- ── Stat cards ───────────────────────────────────────────────────── -->
-<div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8 fade-up">
+<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4 mb-6 sm:mb-8 fade-up">
   {% for id, label in [('statCurrentPe','Current PE'),('statFwdPe','Forward PE'),
                        ('statCurrentPeg','PEG Ratio'),('statTarget','Target Price'),
                        ('statEps','TTM EPS'),('statUpside','Analyst Upside')] %}
-  <div class="bg-slate-900 border border-slate-800 rounded-xl px-4 py-3">
+  <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 sm:px-4 py-3">
     <div class="text-xs text-slate-500 mb-1">{{ label }}</div>
-    <div id="{{ id }}" class="text-xl font-bold text-slate-100">—</div>
+    <div id="{{ id }}" class="text-lg sm:text-xl font-bold text-slate-100">—</div>
   </div>
   {% endfor %}
 </div>
@@ -32,8 +32,8 @@
 <div class="space-y-6">
 
   <!-- PE history line chart -->
-  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 fade-up">
-    <div class="flex items-start justify-between mb-4">
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up">
+    <div class="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-0 sm:justify-between mb-4">
       <div>
         <h2 class="text-base font-semibold text-slate-200">PE Ratio — 52 Weeks</h2>
         <p class="text-xs text-slate-500">Estimated from weekly closing price ÷ TTM EPS</p>
@@ -47,30 +47,30 @@
         </span>
       </div>
     </div>
-    <div id="peLoading" class="flex items-center justify-center h-48 text-slate-500 text-sm animate-pulse">
+    <div id="peLoading" class="flex items-center justify-center h-36 sm:h-48 text-slate-500 text-sm animate-pulse">
       Loading PE history for {{ ticker }} …
     </div>
-    <div class="chart-container" style="height:280px; display:none" id="peChartWrap">
+    <div class="chart-container" style="height:220px; display:none" id="peChartWrap">
       <canvas id="peChart"></canvas>
     </div>
   </div>
 
   <!-- Price history line chart -->
-  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 fade-up">
-    <div class="flex items-start justify-between mb-4">
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up">
+    <div class="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-0 sm:justify-between mb-4">
       <div>
         <h2 class="text-base font-semibold text-slate-200">Price — 52 Weeks</h2>
         <p class="text-xs text-slate-500">Weekly closing price (USD)</p>
       </div>
     </div>
-    <div class="chart-container" style="height:240px; display:none" id="priceChartWrap">
+    <div class="chart-container" style="height:200px; display:none" id="priceChartWrap">
       <canvas id="priceHistChart"></canvas>
     </div>
   </div>
 
   <!-- PEG history line chart -->
-  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 fade-up" id="pegHistSection" style="display:none">
-    <div class="flex items-start justify-between mb-4">
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up" id="pegHistSection" style="display:none">
+    <div class="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-0 sm:justify-between mb-4">
       <div>
         <h2 class="text-base font-semibold text-slate-200">PEG Ratio — 52 Weeks</h2>
         <p class="text-xs text-slate-500">Estimated from weekly PE ÷ annual earnings growth rate</p>
@@ -84,7 +84,7 @@
         </span>
       </div>
     </div>
-    <div class="chart-container" style="height:240px" id="pegChartWrap">
+    <div class="chart-container" style="height:200px" id="pegChartWrap">
       <canvas id="pegHistChart"></canvas>
     </div>
   </div>

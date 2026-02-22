@@ -152,21 +152,25 @@
     </div>
 
     <!-- Mobile menu -->
-    <div x-show="navOpen" x-transition class="md:hidden border-t border-slate-800 bg-slate-900 px-4 pb-3">
+    <div x-show="navOpen" x-transition class="md:hidden border-t border-slate-800 bg-slate-900 px-4 pb-4">
       <div class="flex flex-col gap-1 pt-2">
-        <a href="{{ url_for('main.index') }}" class="px-3 py-2 rounded-md text-sm text-slate-300 hover:bg-slate-800">Home</a>
-        {% for g in peer_groups %}
-        <a href="{{ url_for('main.sector', sector_name=g) }}" class="px-3 py-2 rounded-md text-sm text-slate-300 hover:bg-slate-800">{{ g }}</a>
-        {% endfor %}
-        <a href="{{ url_for('main.lookup') }}" class="px-3 py-2 rounded-md text-sm text-slate-300 hover:bg-slate-800">🔍 Lookup</a>
-        <a href="{{ url_for('main.groups') }}" class="px-3 py-2 rounded-md text-sm text-slate-300 hover:bg-slate-800">⚙ Groups</a>
-        <a href="{{ url_for('main.refresh') }}" class="px-3 py-2 rounded-md text-sm text-brand hover:bg-slate-800">↻ Refresh</a>
+        <a href="{{ url_for('main.index') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-300 hover:bg-slate-800">Home</a>
+        <div class="px-3 py-1.5 text-[10px] font-semibold tracking-widest uppercase text-slate-600 mt-1">Sectors</div>
+        <div class="grid grid-cols-2 gap-1 mb-1">
+          {% for g in peer_groups %}
+          <a href="{{ url_for('main.sector', sector_name=g) }}"
+             class="px-3 py-2 rounded-md text-sm text-slate-300 hover:bg-slate-800 truncate">{{ g }}</a>
+          {% endfor %}
+        </div>
+        <a href="{{ url_for('main.lookup') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-300 hover:bg-slate-800">🔍 Lookup</a>
+        <a href="{{ url_for('main.groups') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-300 hover:bg-slate-800">⚙ Groups</a>
+        <a href="{{ url_for('main.refresh') }}" class="px-3 py-2.5 rounded-md text-sm text-brand hover:bg-slate-800">↻ Refresh</a>
       </div>
     </div>
   </header>
 
   <!-- ── Main content ─────────────────────────────────────────────────── -->
-  <main class="flex-1 max-w-screen-xl mx-auto w-full px-4 sm:px-6 py-8">
+  <main class="flex-1 max-w-screen-xl mx-auto w-full px-4 sm:px-6 py-6 sm:py-8">
 
     <!-- Flash messages -->
     {% with messages = get_flashed_messages(with_categories=true) %}
@@ -181,25 +185,11 @@
       {% endif %}
     {% endwith %}
 
-    <!-- Fetch-error banner -->
-    {% if fetch_errors is defined and fetch_errors %}
-    <details class="mb-6 px-4 py-3 rounded-lg bg-amber-900/40 border border-amber-700 text-amber-300 text-sm">
-      <summary class="cursor-pointer font-semibold">
-        ⚠ {{ fetch_errors|length }} ticker(s) could not be fetched — showing partial data
-      </summary>
-      <ul class="mt-2 ml-4 list-disc space-y-0.5 text-amber-400/80">
-        {% for e in fetch_errors %}<li>{{ e }}</li>{% endfor %}
-      </ul>
-    </details>
-    {% endif %}
-
     {% block content %}{% endblock %}
   </main>
 
-  <!-- ── Footer ───────────────────────────────────────────────────────── -->
-  <footer class="border-t border-slate-800 py-4 text-center text-xs text-slate-500">
-    Data sourced from Yahoo Finance via <code class="bg-slate-800 px-1 rounded">yfinance</code>.
-    For informational purposes only.
+  <footer class="border-t border-slate-800 py-4 text-center text-xs text-slate-600">
+    yStocker — data via Yahoo Finance
   </footer>
 
 </body>

@@ -52,11 +52,11 @@
 </div>
 
 <!-- ── Hero ──────────────────────────────────────────────────────────── -->
-<div class="mb-10 fade-up">
-  <h1 class="text-4xl font-bold mb-2">
+<div class="mb-8 sm:mb-10 fade-up">
+  <h1 class="text-2xl sm:text-4xl font-bold mb-2">
     <span class="grad-text">Stock Valuation</span> Dashboard
   </h1>
-  <p class="text-slate-400 text-lg">
+  <p class="text-slate-400 text-base sm:text-lg">
     PE ratios, PEG ratios &amp; analyst targets across {{ sector_cards|length }} peer groups.
   </p>
   {% if cache_last_updated %}
@@ -72,10 +72,10 @@
 </div>
 
 <!-- ── Cross-sector scatter (PE vs Upside) ───────────────────────────── -->
-<div class="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-8">
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
 
   <!-- Valuation scatter — 2/3 width -->
-  <div class="xl:col-span-2 bg-slate-900 rounded-2xl border border-slate-800 p-6 fade-up">
+  <div class="lg:col-span-2 bg-slate-900 rounded-2xl border border-slate-800 p-4 sm:p-6 fade-up">
     <div class="flex items-start justify-between mb-1">
       <h2 class="text-base font-semibold text-slate-200">Valuation Map</h2>
       <div class="flex items-center gap-1">
@@ -102,13 +102,13 @@
       </div>
     </div>
     <p class="text-xs text-slate-500 mb-4">Forward PE vs Analyst Upside — bottom-left = cheap with upside</p>
-    <div class="chart-container" style="height:340px">
+    <div class="chart-container" style="height:260px; sm:height:340px">
       <canvas id="scatterChart"></canvas>
     </div>
   </div>
 
   <!-- PEG Valuation Map — 1/3 width -->
-  <div class="bg-slate-900 rounded-2xl border border-slate-800 p-6 fade-up">
+  <div class="bg-slate-900 rounded-2xl border border-slate-800 p-4 sm:p-6 fade-up">
     <div class="flex items-start justify-between mb-1">
       <h2 class="text-base font-semibold text-slate-200">PEG Valuation Map</h2>
       <div class="flex items-center gap-2">
@@ -133,15 +133,15 @@
       <span class="text-amber-400">■</span> 1–2 moderate &nbsp;
       <span class="text-rose-400">■</span> &gt;2 expensive
     </p>
-    <div class="chart-container" style="height:340px">
+    <div class="chart-container" style="height:300px">
       <canvas id="pegMapChart"></canvas>
     </div>
   </div>
 </div>
 
 <!-- ── Sector cards ──────────────────────────────────────────────────── -->
-<h2 class="text-xl font-semibold text-slate-200 mb-4 fade-up">Sector Overview</h2>
-<div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5 mb-10">
+<h2 class="text-lg sm:text-xl font-semibold text-slate-200 mb-4 fade-up">Sector Overview</h2>
+<div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5 mb-10">
   {% for group, info in sector_cards.items() %}
   <a href="{{ url_for('main.sector', sector_name=group) }}"
      class="group bg-slate-900 border border-slate-800 rounded-2xl p-5 hover:border-brand/60
@@ -163,7 +163,7 @@
 </div>
 
 <!-- ── Cross-sector PE heatmap table ─────────────────────────────────── -->
-<div class="bg-slate-900 rounded-2xl border border-slate-800 p-6 fade-up mb-8">
+<div class="bg-slate-900 rounded-2xl border border-slate-800 p-4 sm:p-6 fade-up mb-8">
 
   <!-- Header row -->
   <div class="flex flex-wrap items-center gap-3 mb-4">
@@ -200,10 +200,10 @@
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                 d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"/>
         </svg>
-        <input id="heatmapSearch" type="text" placeholder="Search ticker or name…"
+        <input id="heatmapSearch" type="text" placeholder="Search…"
                class="bg-slate-800 border border-slate-700 rounded-lg pl-7 pr-3 py-1.5 text-xs
                       text-slate-200 placeholder:text-slate-500 focus:outline-none focus:ring-1
-                      focus:ring-brand w-44 transition">
+                      focus:ring-brand w-32 sm:w-44 transition">
       </div>
 
       <!-- Row count -->
@@ -264,9 +264,10 @@ function toggleScatterLabels() {
   }
   if (_inlineScatterChart) {
     _inlineScatterChart.data.datasets.forEach((ds, di) => {
-      const hidden = _inlineScatterChart.getDatasetMeta(di).hidden;
-      ds.pointRadius      = (scatterLabelsVisible && !hidden) ? 7 : 0;
-      ds.pointHoverRadius = (scatterLabelsVisible && !hidden) ? 9 : 0;
+      // Toggle the Chart.js hidden state on the meta so legend reflects it
+      _inlineScatterChart.getDatasetMeta(di).hidden = !scatterLabelsVisible;
+      ds.pointRadius      = scatterLabelsVisible ? 7 : 0;
+      ds.pointHoverRadius = scatterLabelsVisible ? 9 : 0;
     });
     _inlineScatterChart.update();
   }
