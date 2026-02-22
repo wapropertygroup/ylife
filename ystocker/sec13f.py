@@ -33,14 +33,14 @@ FUNDS: Dict[str, str] = {
     # Mega funds — household names
     "Berkshire Hathaway":       "0001067983",
     "Vanguard Group":           "0000102909",
-    "BlackRock":                "0001364742",
+    "BlackRock":                "0002012383",  # BlackRock, Inc. (BLK) — active 13F filer, period 2025-09
     "State Street":             "0000093751",
     "Fidelity (FMR)":           "0000315066",
 
     # Macro / multi-strategy
     "Bridgewater Associates":   "0001350694",
-    "Citadel Advisors":         "0001360901",  # Citadel LP (13F filer)
-    "Millennium Management":    "0001273931",
+    "Citadel Advisors":         "0001423053",  # Citadel Advisors LLC
+    "Millennium Management":    "0001273087",  # Millennium Management LLC
     "Point72 Asset Management": "0001603466",
     "DE Shaw":                  "0001009207",
 
@@ -49,22 +49,20 @@ FUNDS: Dict[str, str] = {
     "Coatue Management":        "0001336528",
     "Viking Global":            "0001103804",
     "Lone Pine Capital":        "0001061165",
-    "Maverick Capital":         "0001524925",  # Maverick Capital Management, LLC
+    "Maverick Capital":         "0000934639",  # Maverick Capital Ltd (active, filed Feb 2026)
 
     # Value / activist
     "Third Point":              "0001040273",
-    "Pershing Square":          "0001512673",
-    "Appaloosa Management":     "0001418121",  # corrected CIK
+    "Pershing Square":          "0002026053",  # Pershing Square Holdco, L.P.
     "Baupost Group":            "0001061768",
-    "Elliott Management":       "0001703853",  # Elliott Investment Management L.P.
-    "ValueAct Capital":         "0001552198",  # corrected CIK
-    "Starboard Value":          "0001497135",  # Starboard Value LP (13F filer)
+    "Elliott Management":       "0001791786",  # Elliott Investment Management L.P.
+    "Starboard Value":          "0001517137",  # Starboard Value LP
 
     # Growth / tech focus
     "Soros Fund Management":    "0001029160",
     "Duquesne Family Office":   "0001536411",
-    "ARK Investment":           "0001079142",  # ARK Investment Management LLC
-    "Whale Rock Capital":       "0001591698",
+    "ARK Investment":           "0001697748",  # ARK Investment Management LLC
+    "Whale Rock Capital":       "0001387322",  # Whale Rock Capital Management LLC
 
     # Quant / systematic
     "Renaissance Technologies": "0001037389",

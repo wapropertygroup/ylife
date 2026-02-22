@@ -776,12 +776,26 @@ def fed_refresh():
 
 @bp.route("/api/fed")
 def api_fed():
-    """JSON API — return Fed H.4.1 balance-sheet time-series data."""
-    from ystocker.fed import get_fed_data
-    data = get_fed_data()
-    # Strip internal _ts key from response
-    resp = {k: v for k, v in data.items() if not k.startswith("_")}
-    return jsonify(resp)
+    """JSON API — return Fed H.4.1 balance-sheet time-series data.
+
+    If no cache exists yet, kick off a background fetch and return 202 so the
+    page shows a loading state rather than blocking the request thread.
+    """
+    from ystocker.fed import get_fed_data, is_cache_fresh, is_warming as fed_warming_fn, refresh_cache
+
+    # Fresh cache available — return immediately.
+    if is_cache_fresh():
+        data = get_fed_data()
+        resp = {k: v for k, v in data.items() if not k.startswith("_")}
+        return jsonify(resp)
+
+    # A background fetch is already running — tell the client to retry.
+    if fed_warming_fn():
+        return jsonify({"warming": True}), 202
+
+    # No cache and no fetch in progress — start one in the background.
+    threading.Thread(target=refresh_cache, daemon=True, name="fed-auto-warm").start()
+    return jsonify({"warming": True}), 202
 
 
 # ---------------------------------------------------------------------------
@@ -829,3 +843,4 @@ def api_thirteenf(fund_slug: str):
     if not name:
         return jsonify({"error": "Fund not found"}), 404
     return jsonify(holdings.get(name, {}))
+

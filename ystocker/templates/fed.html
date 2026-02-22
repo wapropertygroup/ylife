@@ -2,6 +2,29 @@
 {% block title %}yStocker — Fed Balance Sheet (H.4.1){% endblock %}
 
 {% block content %}
+<style>
+.range-btn {
+  padding: 3px 9px;
+  border-radius: 6px;
+  border: 1px solid #334155;
+  background: transparent;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+  letter-spacing: 0.02em;
+}
+.range-btn:hover {
+  color: #cbd5e1;
+  border-color: #64748b;
+}
+.range-btn.active {
+  color: #a5b4fc;
+  border-color: #6366f1;
+  background: rgba(99,102,241,0.12);
+}
+</style>
 
 <!-- ── Header ─────────────────────────────────────────────────────────── -->
 <div class="mb-6 sm:mb-8 fade-up">
@@ -23,34 +46,64 @@
   </p>
   {% else %}
   <p class="text-xs text-slate-600 mt-1">
-    {% if warming %}
-    <span class="text-brand animate-pulse" data-i18n="fed.loading">Fetching data from Federal Reserve — this may take a moment…</span>
-    {% else %}
     <a href="{{ url_for('main.fed_refresh') }}" class="text-brand hover:underline" data-i18n="fed.load">↻ Load data</a>
-    {% endif %}
   </p>
   {% endif %}
 </div>
 
 <!-- ── Stat cards (filled by JS) ─────────────────────────────────────── -->
-<div class="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mb-6 sm:mb-8 fade-up" id="statCards">
+{% if not cache_last_updated and warming %}
+<div id="fedLoadingPanel" class="flex flex-col items-center justify-center py-24 gap-4 fade-up">
+  <svg class="w-8 h-8 text-brand animate-spin" fill="none" viewBox="0 0 24 24">
+    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/>
+  </svg>
+  <p class="text-slate-400 text-sm animate-pulse" data-i18n="fed.loading">Fetching data from Federal Reserve — this may take a moment…</p>
+  <p class="text-xs text-slate-600" data-i18n="fed.loading_hint">This page will refresh automatically when data is ready.</p>
+</div>
+<script>
+  // Poll until data is ready, then reload the page
+  (function poll() {
+    fetch('/api/fed').then(r => r.json()).then(d => {
+      const series = d.series || {};
+      const hasData = Object.values(series).some(s => s.values && s.values.some(v => v != null));
+      if (hasData) { location.reload(); }
+      else { setTimeout(poll, 3000); }
+    }).catch(() => setTimeout(poll, 5000));
+  })();
+</script>
+{% else %}
+<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4 mb-6 sm:mb-8 fade-up" id="statCards">
   <div class="bg-slate-900 border border-slate-800 rounded-xl px-4 py-3">
     <div class="text-xs text-slate-500 mb-1" data-i18n="fed.stat_total">Total Assets</div>
     <div id="statTotal" class="text-xl font-bold text-slate-100">—</div>
     <div id="statTotalChg" class="text-xs mt-0.5 text-slate-500">—</div>
   </div>
   <div class="bg-slate-900 border border-slate-800 rounded-xl px-4 py-3">
-    <div class="text-xs text-slate-500 mb-1" data-i18n="fed.stat_treasury">Treasury Securities</div>
+    <div class="text-xs text-slate-500 mb-1 flex items-center gap-1" data-i18n="fed.stat_treasury">Treasury Securities
+      <span class="fed-tip text-slate-600 cursor-help text-[10px]" data-i18n-tip="fed.tip_treasury">ⓘ</span>
+    </div>
     <div id="statTreasury" class="text-xl font-bold text-slate-100">—</div>
     <div id="statTreasuryChg" class="text-xs mt-0.5 text-slate-500">—</div>
   </div>
   <div class="bg-slate-900 border border-slate-800 rounded-xl px-4 py-3">
-    <div class="text-xs text-slate-500 mb-1" data-i18n="fed.stat_mbs">MBS Holdings</div>
+    <div class="text-xs text-slate-500 mb-1 flex items-center gap-1" data-i18n="fed.stat_bills">Bills (Short-Term)
+      <span class="fed-tip text-slate-600 cursor-help text-[10px]" data-i18n-tip="fed.tip_bills">ⓘ</span>
+    </div>
+    <div id="statBills" class="text-xl font-bold text-slate-100">—</div>
+    <div id="statBillsChg" class="text-xs mt-0.5 text-slate-500">—</div>
+  </div>
+  <div class="bg-slate-900 border border-slate-800 rounded-xl px-4 py-3">
+    <div class="text-xs text-slate-500 mb-1 flex items-center gap-1" data-i18n="fed.stat_mbs">MBS Holdings
+      <span class="fed-tip text-slate-600 cursor-help text-[10px]" data-i18n-tip="fed.tip_mbs">ⓘ</span>
+    </div>
     <div id="statMbs" class="text-xl font-bold text-slate-100">—</div>
     <div id="statMbsChg" class="text-xs mt-0.5 text-slate-500">—</div>
   </div>
   <div class="bg-slate-900 border border-slate-800 rounded-xl px-4 py-3">
-    <div class="text-xs text-slate-500 mb-1" data-i18n="fed.stat_reserves">Reserve Balances</div>
+    <div class="text-xs text-slate-500 mb-1 flex items-center gap-1" data-i18n="fed.stat_reserves">Reserve Balances
+      <span class="fed-tip text-slate-600 cursor-help text-[10px]" data-i18n-tip="fed.tip_reserves">ⓘ</span>
+    </div>
     <div id="statReserves" class="text-xl font-bold text-slate-100">—</div>
     <div id="statReservesChg" class="text-xs mt-0.5 text-slate-500">—</div>
   </div>
@@ -59,21 +112,19 @@
 <!-- ── Charts ────────────────────────────────────────────────────────── -->
 <div class="space-y-6" id="chartsArea">
 
-  <!-- Treasury Securities (primary focus) -->
+  <!-- Treasury Securities + Bills (nested sub-section) -->
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up">
-    <div class="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-0 sm:justify-between mb-4">
+    <div class="flex flex-wrap items-start justify-between gap-2 mb-4">
       <div>
         <h2 class="text-base font-semibold text-slate-200" data-i18n="fed.treasury_title">U.S. Treasury Securities Held Outright</h2>
         <p class="text-xs text-slate-500" data-i18n="fed.treasury_desc">Weekly, $ billions — Federal Reserve balance sheet</p>
       </div>
-      <div class="flex gap-2 items-center">
-        <!-- Range selector -->
-        <div id="treasuryRangeSelector" class="flex gap-1 text-xs">
-          <button class="range-btn" data-range="52">1Y</button>
-          <button class="range-btn" data-range="104">2Y</button>
-          <button class="range-btn active" data-range="260">5Y</button>
-          <button class="range-btn" data-range="0" data-i18n="fed.range_all">All</button>
-        </div>
+      <div id="treasuryRangeSelector" class="flex flex-wrap gap-1 text-xs">
+        <button class="range-btn" data-range="52">1Y</button>
+        <button class="range-btn" data-range="104">2Y</button>
+        <button class="range-btn active" data-range="156">3Y</button>
+        <button class="range-btn" data-range="260">5Y</button>
+        <button class="range-btn" data-range="0" data-i18n="fed.range_all">All</button>
       </div>
     </div>
     <div id="treasuryLoading" class="flex items-center justify-center h-48 text-slate-500 text-sm animate-pulse" data-i18n="fed.loading_chart">
@@ -89,6 +140,36 @@
         <canvas id="treasuryWowChart"></canvas>
       </div>
     </div>
+
+    <!-- Bills (Short-Term) — nested under Treasury -->
+    <div class="mt-6 pt-5 border-t border-slate-800/60">
+      <div class="flex flex-wrap items-start justify-between gap-2 mb-3">
+        <div>
+          <h3 class="text-sm font-semibold text-slate-300" data-i18n="fed.bills_title">↳ Treasury Bills (T-Bills, ≤1Y)</h3>
+          <p class="text-xs text-slate-500" data-i18n="fed.bills_desc">Short-term T-bills maturing within 1 year — a subset of the Treasury holdings above</p>
+        </div>
+        <div id="billsRangeSelector" class="flex flex-wrap gap-1 text-xs">
+          <button class="range-btn" data-range="52">1Y</button>
+          <button class="range-btn" data-range="104">2Y</button>
+          <button class="range-btn active" data-range="156">3Y</button>
+          <button class="range-btn" data-range="260">5Y</button>
+          <button class="range-btn" data-range="0" data-i18n="fed.range_all">All</button>
+        </div>
+      </div>
+      <div id="billsLoading" class="flex items-center justify-center h-32 text-slate-500 text-sm animate-pulse" data-i18n="fed.bills_loading">
+        Loading Bills data…
+      </div>
+      <div class="chart-container" style="height:180px; display:none" id="billsChartWrap">
+        <canvas id="billsChart"></canvas>
+      </div>
+      <!-- WoW bar -->
+      <div id="billsWowWrap" class="mt-3 hidden">
+        <p class="text-xs text-slate-500 mb-2" data-i18n="fed.wow_title">Week-over-Week Change ($B)</p>
+        <div class="chart-container" style="height:70px">
+          <canvas id="billsWowChart"></canvas>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- Total Assets + MBS combo -->
@@ -101,7 +182,8 @@
       <div id="balanceRangeSelector" class="flex gap-1 text-xs">
         <button class="range-btn" data-range="52">1Y</button>
         <button class="range-btn" data-range="104">2Y</button>
-        <button class="range-btn active" data-range="260">5Y</button>
+        <button class="range-btn active" data-range="156">3Y</button>
+        <button class="range-btn" data-range="260">5Y</button>
         <button class="range-btn" data-range="0" data-i18n="fed.range_all">All</button>
       </div>
     </div>
@@ -123,8 +205,9 @@
       <div id="pctRangeSelector" class="flex gap-1 text-xs">
         <button class="range-btn" data-range="52">1Y</button>
         <button class="range-btn" data-range="104">2Y</button>
+        <button class="range-btn active" data-range="156">3Y</button>
         <button class="range-btn" data-range="260">5Y</button>
-        <button class="range-btn active" data-range="0" data-i18n="fed.range_all">All</button>
+        <button class="range-btn" data-range="0" data-i18n="fed.range_all">All</button>
       </div>
     </div>
     <div class="chart-container" style="height:200px; display:none" id="pctChartWrap">
@@ -144,6 +227,7 @@
      class="text-brand hover:underline ml-1">Federal Reserve H.4.1 Statistical Release</a>
   &nbsp;·&nbsp; <span data-i18n="fed.updated_weekly">Updated weekly (Thursdays)</span>
 </div>
+{% endif %}
 
 <script>
 (async function() {
@@ -200,6 +284,7 @@
   [
     ['WALCL',   'statTotal',    'statTotalChg'],
     ['TREAST',  'statTreasury', 'statTreasuryChg'],
+    ['WSHOSHO', 'statBills',    'statBillsChg'],
     ['MBST',    'statMbs',      'statMbsChg'],
     ['WRESBAL', 'statReserves', 'statReservesChg'],
   ].forEach(([sid, valId, chgId]) => {
@@ -235,7 +320,7 @@
     fill:   'rgba(56,189,248,0.07)',
   };
 
-  let currentRange = 260; // default 5Y
+  let currentRange = 156; // default 3Y
 
   // WoW chart data (last 52 weeks always)
   function wowData(n) {
@@ -253,7 +338,7 @@
     data: {
       labels: sliceSeries('TREAST', currentRange).dates,
       datasets: [{
-        label: 'Treasuries ($B)',
+        label: I18n.t('fed.chart_treasuries') || 'Treasuries ($B)',
         data:  sliceSeries('TREAST', currentRange).values,
         borderColor: TREASURY_COLORS.border,
         backgroundColor: TREASURY_COLORS.fill,
@@ -306,7 +391,7 @@
     data: {
       labels: wowDates,
       datasets: [{
-        label: 'WoW Change ($B)',
+        label: I18n.t('fed.chart_wow') || 'WoW Change ($B)',
         data: wowBars,
         backgroundColor: wowBars.map(v => v == null ? 'transparent' : v >= 0 ? 'rgba(52,211,153,0.6)' : 'rgba(244,63,94,0.6)'),
         borderWidth: 0,
@@ -357,13 +442,103 @@
   });
 
   // ──────────────────────────────────────────────────────────────────────────
+  // Bills (Short-Term Treasury) chart
+  // ──────────────────────────────────────────────────────────────────────────
+  if (s['WSHOSHO'] && s['WSHOSHO'].dates.length) {
+    document.getElementById('billsLoading').style.display = 'none';
+    document.getElementById('billsChartWrap').style.display = 'block';
+    document.getElementById('billsWowWrap').classList.remove('hidden');
+
+    let billsRange = 156;
+
+    const bllCtx = document.getElementById('billsChart');
+    const billsChart = new Chart(bllCtx, {
+      type: 'line',
+      data: {
+        labels: sliceSeries('WSHOSHO', billsRange).dates,
+        datasets: [{
+          label: I18n.t('fed.chart_bills') || 'Bills ($B)',
+          data:  sliceSeries('WSHOSHO', billsRange).values,
+          borderColor: '#818cf8',
+          backgroundColor: 'rgba(129,140,248,0.07)',
+          borderWidth: 2,
+          pointRadius: 0, pointHoverRadius: 5, fill: true, tension: 0.3, spanGaps: true,
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            mode: 'index', intersect: false,
+            callbacks: { label: c => { const v = c.raw; if (v == null) return ''; return ` $${v >= 1000 ? (v/1000).toFixed(2)+'T' : v.toFixed(1)+'B'}`; } }
+          }
+        },
+        scales: {
+          x: { grid:{color:gridCol}, ticks:{color:tickCol, maxTicksLimit:8, maxRotation:0} },
+          y: { grid:{color:gridCol}, ticks:{color:tickCol, callback: v => v >= 1000 ? '$'+(v/1000).toFixed(1)+'T' : '$'+v+'B'} }
+        },
+        interaction: { mode:'index', intersect:false },
+      }
+    });
+
+    const {dates: bllWowDates, values: bllWowVals} = sliceSeries('WSHOSHO', billsRange);
+    const bllWowBars = bllWowVals.map((v, i) => {
+      if (i === 0 || v == null || bllWowVals[i-1] == null) return null;
+      return +(v - bllWowVals[i-1]).toFixed(2);
+    });
+    const bllWowChart = new Chart(document.getElementById('billsWowChart'), {
+      type: 'bar',
+      data: {
+        labels: bllWowDates,
+        datasets: [{
+          label: I18n.t('fed.chart_wow') || 'WoW Change ($B)',
+          data: bllWowBars,
+          backgroundColor: bllWowBars.map(v => v == null ? 'transparent' : v >= 0 ? 'rgba(52,211,153,0.6)' : 'rgba(244,63,94,0.6)'),
+          borderWidth: 0,
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: {display:false}, tooltip: {
+          mode:'index', intersect:false,
+          callbacks: { label: c => ` ${c.raw >= 0 ? '+' : ''}${c.raw?.toFixed(1)}B` }
+        }},
+        scales: {
+          x: { display: false },
+          y: { grid:{color:gridCol}, ticks:{color:tickCol, callback: v => v+'B'} }
+        },
+        interaction: { mode:'index', intersect:false },
+      }
+    });
+
+    wireRangeSelector('billsRangeSelector', n => {
+      billsRange = n;
+      const {dates, values} = sliceSeries('WSHOSHO', n);
+      billsChart.data.labels = dates;
+      billsChart.data.datasets[0].data = values;
+      billsChart.update();
+      const newWow = values.map((v, i) => {
+        if (i === 0 || v == null || values[i-1] == null) return null;
+        return +(v - values[i-1]).toFixed(2);
+      });
+      bllWowChart.data.labels = dates;
+      bllWowChart.data.datasets[0].data = newWow;
+      bllWowChart.data.datasets[0].backgroundColor = newWow.map(v =>
+        v == null ? 'transparent' : v >= 0 ? 'rgba(52,211,153,0.6)' : 'rgba(244,63,94,0.6)'
+      );
+      bllWowChart.update();
+    });
+  }
+
+  // ──────────────────────────────────────────────────────────────────────────
   // Balance-sheet overview chart (total assets + MBS + reserves)
   // ──────────────────────────────────────────────────────────────────────────
   document.getElementById('balanceLoading').style.display = 'none';
   document.getElementById('balanceChartWrap').style.display = 'block';
 
   const bCtx = document.getElementById('balanceChart');
-  let BALANCE_N = 260; // 5Y default
+  let BALANCE_N = 156; // 3Y default
 
   function buildBalanceData(n) {
     return {
@@ -485,6 +660,36 @@
       pctChart.data.datasets[0].data = d.values;
       pctChart.update();
     });
+  }
+})();
+
+// ── Stat card tooltips ────────────────────────────────────────────────────
+(function() {
+  const tip = document.createElement('div');
+  tip.style.cssText = [
+    'position:fixed','z-index:9999','max-width:280px','padding:8px 12px',
+    'background:#0f172a','border:1px solid #334155','border-radius:8px',
+    'color:#cbd5e1','font-size:12px','line-height:1.5','pointer-events:none',
+    'opacity:0','transition:opacity 0.15s','box-shadow:0 4px 16px rgba(0,0,0,0.5)',
+  ].join(';');
+  document.body.appendChild(tip);
+  let hide;
+  document.querySelectorAll('.fed-tip').forEach(el => {
+    el.addEventListener('mouseenter', function(e) {
+      clearTimeout(hide);
+      tip.textContent = I18n.t(this.dataset.i18nTip) || this.dataset.i18nTip;
+      tip.style.opacity = '1';
+      move(e);
+    });
+    el.addEventListener('mousemove', move);
+    el.addEventListener('mouseleave', () => { hide = setTimeout(() => tip.style.opacity = '0', 100); });
+  });
+  function move(e) {
+    const pad = 12, tw = tip.offsetWidth || 280, th = tip.offsetHeight || 60;
+    let x = e.clientX + pad, y = e.clientY + pad;
+    if (x + tw > window.innerWidth  - pad) x = e.clientX - tw - pad;
+    if (y + th > window.innerHeight - pad) y = e.clientY - th - pad;
+    tip.style.left = x + 'px'; tip.style.top = y + 'px';
   }
 })();
 </script>
