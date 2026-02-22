@@ -321,10 +321,12 @@ def _find_infotable_url(cik: str, accession: str, primary_doc: str = "") -> Opti
                         or "infotable" in fname
                         or "info_table" in fname):
                     return f"{base_url}/{doc['name']}"
-            # fallback within JSON: first XML that isn't the primary doc
+            # fallback within JSON: first XML that isn't the primary doc or cover page
             for doc in idx.get("documents", []):
                 fname = (doc.get("name") or "").lower()
-                if fname.endswith(".xml") and fname != primary_lower:
+                if (fname.endswith(".xml")
+                        and fname != primary_lower
+                        and "primary_doc" not in fname):
                     return f"{base_url}/{doc['name']}"
         except Exception as exc:
             log.debug("JSON index parse failed for %s/%s: %s", cik_int, acc_nodash, exc)
@@ -469,10 +471,21 @@ def fetch_fund_holdings(name: str, cik: str) -> dict:
     log.info("Fetching 13F for %s (CIK %s)", name, cik)
     try:
         filings = _get_filings_list(cik)
-        thirteenf_filings = [f for f in filings if f["form"] == "13F-HR"]
+        # Accept 13F-HR and 13F-HR/A (amendments); exclude pure cover-only filings
+        # where primary_doc is "primary_doc.xml" (those are EDGAR cover pages, not data)
+        thirteenf_filings = [
+            f for f in filings
+            if f["form"] in ("13F-HR", "13F-HR/A")
+            and f.get("primary_doc", "").lower() != "primary_doc.xml"
+        ]
+        # If that filter leaves nothing, fall back to any 13F-HR
+        if not thirteenf_filings:
+            thirteenf_filings = [f for f in filings if f["form"] in ("13F-HR", "13F-HR/A")]
         if not thirteenf_filings:
             return {"error": "No 13F-HR filings found", "cik": cik}
 
+        log.info("13F latest filing for %s: accession=%s primary_doc=%s",
+                 name, thirteenf_filings[0]["accession"], thirteenf_filings[0].get("primary_doc"))
         latest = thirteenf_filings[0]
         prev   = thirteenf_filings[1] if len(thirteenf_filings) > 1 else None
 
