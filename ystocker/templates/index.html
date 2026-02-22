@@ -111,6 +111,12 @@
     <div class="flex items-start justify-between mb-1">
       <h2 class="text-base font-semibold text-slate-200" data-i18n="index.peg_map">PEG Valuation Map</h2>
       <div class="flex items-center gap-2">
+        <button id="pegMapLabelBtn" onclick="togglePegMapLabels()"
+                class="flex items-center gap-1 text-xs text-brand border border-brand/40 bg-brand/10
+                       hover:bg-brand hover:text-white transition px-2 py-1 rounded-lg"
+                data-i18n="index.hide_labels">
+          Hide labels
+        </button>
         <button id="pegMapTickerBtn" onclick="togglePegMapTickers()"
                 class="flex items-center gap-1 text-xs text-slate-400 border border-slate-700 bg-slate-800
                        hover:text-slate-200 transition px-2 py-1 rounded-lg"
@@ -358,6 +364,8 @@ function buildScatterChart(ctx) {
   });
 }
 
+let _pegMapLabelsVisible = true;
+
 function buildPegChart(ctx) {
   const seen = new Set();
   const rows = ALL.filter(d => {
@@ -393,6 +401,20 @@ function buildPegChart(ctx) {
       afterEvent(chart, args) {
         const el = chart.getElementsAtEventForMode(args.event.native, 'nearest', {intersect:true}, false);
         chart.canvas.style.cursor = el.length ? 'pointer' : 'default';
+      },
+      afterDatasetsDraw(chart) {
+        if (!_pegMapLabelsVisible) return;
+        const {ctx: c} = chart;
+        chart.data.datasets[0].data.forEach((val, i) => {
+          if (val == null) return;
+          const el = chart.getDatasetMeta(0).data[i];
+          c.save();
+          c.fillStyle = '#cbd5e1';
+          c.font = '10px Inter,sans-serif';
+          c.textAlign = 'left';
+          c.fillText(val.toFixed(2), el.x + 4, el.y + 3);
+          c.restore();
+        });
       }
     }]
   });
@@ -408,6 +430,20 @@ function togglePegMapTickers() {
   const btn = document.getElementById('pegMapTickerBtn');
   btn.textContent = I18n.t(_pegMapTickersVisible ? 'index.hide_tickers' : 'index.show_tickers');
   _pegMapChart.options.scales.y.ticks.display = _pegMapTickersVisible;
+  _pegMapChart.update();
+}
+
+function togglePegMapLabels() {
+  _pegMapLabelsVisible = !_pegMapLabelsVisible;
+  const btn = document.getElementById('pegMapLabelBtn');
+  btn.textContent = I18n.t(_pegMapLabelsVisible ? 'index.hide_labels' : 'index.show_labels');
+  if (_pegMapLabelsVisible) {
+    btn.classList.remove('bg-brand', 'text-white');
+    btn.classList.add('text-brand', 'bg-brand/10');
+  } else {
+    btn.classList.add('bg-brand', 'text-white');
+    btn.classList.remove('text-brand', 'bg-brand/10');
+  }
   _pegMapChart.update();
 }
 

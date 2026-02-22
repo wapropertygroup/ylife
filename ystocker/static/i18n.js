@@ -42,6 +42,8 @@ const I18n = (() => {
                                    zh: '预测市盈率 vs 分析师上涨空间 — 左下角 = 低估且有上涨空间' },
     'index.hide_tickers':       { en: 'Hide tickers', zh: '隐藏股票' },
     'index.show_tickers':       { en: 'Show tickers', zh: '显示股票' },
+    'index.hide_labels':        { en: 'Hide labels',  zh: '隐藏数值' },
+    'index.show_labels':        { en: 'Show labels',  zh: '显示数值' },
     'index.expand':             { en: 'Expand', zh: '展开' },
 
     'index.peg_map':       { en: 'PEG Valuation Map', zh: 'PEG 估值地图' },
