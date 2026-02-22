@@ -39,21 +39,10 @@ Parameters:
       Optional - HTTPS URL of your git repo (e.g. https://github.com/you/ystocker.git).
       Leave blank to upload code manually via scp/rsync after launch.
 
-# -----------------------------------------------------------------------------
-# Mappings  -  latest Amazon Linux 2023 AMI per region (arm64 / x86_64)
-# -----------------------------------------------------------------------------
-Mappings:
-  AmiMap:
-    us-east-1:      { AMI: ami-0c02fb55956c7d316 }
-    us-east-2:      { AMI: ami-097a2df4ac947655f }
-    us-west-1:      { AMI: ami-0d9858aa3c6322f73 }
-    us-west-2:      { AMI: ami-098e42ae54c764c35 }
-    eu-west-1:      { AMI: ami-0d71ea30463e0ff49 }
-    eu-west-2:      { AMI: ami-0b596a67a3b43daa0 }
-    eu-central-1:   { AMI: ami-06616b7884ac98cdd }
-    ap-southeast-1: { AMI: ami-0b0a1e4c4ca9c6b7a }
-    ap-southeast-2: { AMI: ami-04a81a99f5ec58529 }
-    ap-northeast-1: { AMI: ami-023ff3d4ab11b2525 }
+  LatestAL2023Ami:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
+    Description: Latest Amazon Linux 2023 x86_64 AMI (auto-resolved per region)
 
 # -----------------------------------------------------------------------------
 # Resources
@@ -181,7 +170,7 @@ Resources:
     Properties:
       InstanceType: !Ref InstanceType
       KeyName: !Ref KeyName
-      ImageId: !FindInMap [AmiMap, !Ref "AWS::Region", AMI]
+      ImageId: !Ref LatestAL2023Ami
       SubnetId: !Ref PublicSubnet
       IamInstanceProfile: !Ref InstanceProfile
       SecurityGroupIds:
