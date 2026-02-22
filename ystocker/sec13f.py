@@ -304,11 +304,13 @@ def _find_infotable_url(cik: str, accession: str, primary_doc: str = "") -> Opti
     # The directory uses no dashes, e.g. 000095012325002701/
     # Re-insert dashes: 18-digit → XXXXXXXXXX-YY-ZZZZZZ
     acc_dashed = f"{acc_nodash[:10]}-{acc_nodash[10:12]}-{acc_nodash[12:]}"
-    base_url   = f"https://data.sec.gov/Archives/edgar/data/{cik_int}/{acc_nodash}"
+    # data.sec.gov serves index/metadata; actual filing documents live on www.sec.gov
+    index_base = f"https://data.sec.gov/Archives/edgar/data/{cik_int}/{acc_nodash}"
+    doc_base   = f"https://www.sec.gov/Archives/edgar/data/{cik_int}/{acc_nodash}"
     primary_lower = primary_doc.lower()
 
     # ── Strategy 1: JSON index (newer filings ~2019+) ───────────────────────
-    r = _get_maybe(f"{base_url}-index.json")
+    r = _get_maybe(f"{index_base}-index.json")
     if r is not None:
         try:
             idx = r.json()
@@ -320,13 +322,13 @@ def _find_infotable_url(cik: str, accession: str, primary_doc: str = "") -> Opti
                         or "information table" in desc
                         or "infotable" in fname
                         or "info_table" in fname):
-                    return f"{base_url}/{doc['name']}"
+                    return f"{doc_base}/{doc['name']}"
             # fallback within JSON: first XML that isn't the top-level primary doc
             # Note: xslForm13F_X02/primary_doc.xml IS the infotable (subdirectory path)
             for doc in idx.get("documents", []):
                 dname = doc.get("name") or ""
                 if dname.lower().endswith(".xml") and dname.lower() != primary_lower:
-                    return f"{base_url}/{dname}"
+                    return f"{doc_base}/{dname}"
         except Exception as exc:
             log.debug("JSON index parse failed for %s/%s: %s", cik_int, acc_nodash, exc)
 
@@ -356,15 +358,16 @@ def _find_infotable_url(cik: str, accession: str, primary_doc: str = "") -> Opti
                 ]
             log.info("13F HTML index %s → %d xml links", htm_url, len(xml_links))
             # Prefer files with 'infotable' or 'info_table' in name
+            # NB: actual filing documents must be fetched from www.sec.gov, not data.sec.gov
             for path in xml_links:
                 fname = path.split("/")[-1].lower()
                 if fname != primary_lower and ("infotable" in fname or "info_table" in fname):
-                    return f"https://data.sec.gov" + path
+                    return f"https://www.sec.gov" + path
             # Take first non-primary XML
             for path in xml_links:
                 fname = path.split("/")[-1].lower()
                 if fname != primary_lower:
-                    return f"https://data.sec.gov" + path
+                    return f"https://www.sec.gov" + path
             break  # parsed OK (even if no XML found) — stop trying variants
         except Exception as exc:
             log.debug("HTML index parse failed for %s/%s: %s", cik_int, acc_nodash, exc)
@@ -389,10 +392,10 @@ def _find_infotable_url(cik: str, accession: str, primary_doc: str = "") -> Opti
     for fname in candidates:
         if not fname or fname.startswith("_"):
             continue
-        r3 = _get_maybe(f"{base_url}/{fname}")
+        r3 = _get_maybe(f"{doc_base}/{fname}")
         if r3 is not None and r3.text.strip():
             log.debug("Found infotable via direct guess: %s/%s", acc_nodash, fname)
-            return f"{base_url}/{fname}"
+            return f"{doc_base}/{fname}"
 
     log.warning("Could not find infotable for CIK %s accession %s", cik_int, acc_nodash)
     return None
