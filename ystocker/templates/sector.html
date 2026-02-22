@@ -535,7 +535,59 @@ const chartDefaults = {
   });
 })();
 
-// ---- Sortable data table ----
+// ---- Hide controls & legend entries when data is unavailable ----
+(function(){
+  const hasVal = field => DATA.some(d => d[field] != null);
+  const hide   = el => el && (el.style.display = 'none');
+
+  // PE chart: hide sort buttons for missing metrics, hide legend for missing datasets
+  const hasTtm = hasVal('pe_ttm'), hasFwd = hasVal('pe_fwd'), hasPeg = hasVal('peg');
+  if (!hasTtm) hide(document.getElementById('pe-sort-pe_ttm'));
+  if (!hasFwd) hide(document.getElementById('pe-sort-pe_fwd'));
+  if (!hasPeg) hide(document.getElementById('pe-sort-peg'));
+  // Hide the entire Sort pill if nothing to sort by
+  if (!hasTtm && !hasFwd && !hasPeg) hide(document.querySelector('.pe-sort-btn')?.closest('div'));
+  // Hide legend entries for missing datasets in PE chart
+  if (chartInstances.pe) {
+    const metas = chartInstances.pe.data.datasets.map((ds, i) => ({ds, meta: chartInstances.pe.getDatasetMeta(i)}));
+    if (!hasTtm) { metas[0].meta.hidden = true; }
+    if (!hasFwd) { metas[1].meta.hidden = true; }
+    if (!hasPeg) { metas[2].meta.hidden = true; }
+    // If all PE/PEG data missing, hide legend entirely
+    if (!hasTtm && !hasFwd && !hasPeg) {
+      chartInstances.pe.options.plugins.legend.display = false;
+    }
+    chartInstances.pe.update();
+  }
+
+  // Prices chart: hide sort button if no price/target data
+  const hasPrice  = hasVal('price');
+  const hasTarget = hasVal('target');
+  if (!hasPrice && !hasTarget) {
+    hide(document.querySelector('.chart-sort[data-chart="prices"]'));
+    hide(document.querySelector('.chart-toggle[data-chart="prices"]'));
+  }
+  if (chartInstances.prices) {
+    const pm = chartInstances.prices.data.datasets.map((ds, i) => chartInstances.prices.getDatasetMeta(i));
+    if (!hasPrice)  pm[0].hidden = true;
+    if (!hasTarget) pm[1].hidden = true;
+    if (!hasPrice && !hasTarget) chartInstances.prices.options.plugins.legend.display = false;
+    chartInstances.prices.update();
+  }
+
+  // Upside chart: hide sort button if no upside data
+  if (!hasVal('upside')) {
+    hide(document.querySelector('.chart-sort[data-chart="upside"]'));
+    hide(document.querySelector('.chart-toggle[data-chart="upside"]'));
+  }
+
+  // PEG chart: hide sort + hide tickers button if no peg data
+  if (!hasVal('peg')) {
+    hide(document.querySelector('.chart-sort[data-chart="peg"]'));
+    hide(document.querySelector('.chart-toggle[data-chart="peg"]'));
+    hide(document.getElementById('pegTickerBtn'));
+  }
+})();
 (function(){
   let sortCol = 'ticker', sortDir = 1;
 
