@@ -300,6 +300,10 @@ def _find_infotable_url(cik: str, accession: str, primary_doc: str = "") -> Opti
     import re
     cik_int    = str(int(cik))
     acc_nodash = accession.replace("-", "")
+    # SEC index filenames use the dashed accession number, e.g. 0000950123-25-002701-index.htm
+    # The directory uses no dashes, e.g. 000095012325002701/
+    # Re-insert dashes: 18-digit → XXXXXXXXXX-YY-ZZZZZZ
+    acc_dashed = f"{acc_nodash[:10]}-{acc_nodash[10:12]}-{acc_nodash[12:]}"
     base_url   = f"https://data.sec.gov/Archives/edgar/data/{cik_int}/{acc_nodash}"
     primary_lower = primary_doc.lower()
 
@@ -325,29 +329,31 @@ def _find_infotable_url(cik: str, accession: str, primary_doc: str = "") -> Opti
         except Exception as exc:
             log.debug("JSON index parse failed for %s/%s: %s", cik_int, acc_nodash, exc)
 
-    # ── Strategy 2: HTML index via data.sec.gov (avoids www.sec.gov 503s) ─────
+    # ── Strategy 2: HTML index — try both dashed filename variants ───────────
     for htm_url in [
-        f"https://data.sec.gov/Archives/edgar/data/{cik_int}/{acc_nodash}-index.htm",
+        f"https://www.sec.gov/Archives/edgar/data/{cik_int}/{acc_dashed}-index.htm",
+        f"https://data.sec.gov/Archives/edgar/data/{cik_int}/{acc_dashed}-index.htm",
         f"https://www.sec.gov/Archives/edgar/data/{cik_int}/{acc_nodash}-index.htm",
+        f"https://data.sec.gov/Archives/edgar/data/{cik_int}/{acc_nodash}-index.htm",
     ]:
         r2 = _get_maybe(htm_url)
         if r2 is None:
             continue
         try:
-            # Match both absolute paths (/Archives/...) and relative filenames
+            # Match absolute paths (/Archives/edgar/data/...) for any file type
             xml_links = re.findall(
                 r'href="(/Archives/edgar/data/[^"]+\.xml)"',
                 r2.text, re.IGNORECASE
             )
-            # Also try relative hrefs (just filename.xml)
+            # Also match relative hrefs (e.g. xslForm13F_X02/39042.xml or plain filename.xml)
             if not xml_links:
-                rel_links = re.findall(
-                    r'href="([^"/][^"]*\.xml)"',
-                    r2.text, re.IGNORECASE
-                )
-                xml_links = [f"/Archives/edgar/data/{cik_int}/{acc_nodash}/{f}" for f in rel_links]
-            log.info("HTML index %s: found xml_links=%s (raw snippet: %s)",
-                     htm_url, xml_links[:5], r2.text[200:600])
+                rel_links = re.findall(r'href="([^"]+\.xml)"', r2.text, re.IGNORECASE)
+                xml_links = [
+                    f"/Archives/edgar/data/{cik_int}/{acc_nodash}/{f}"
+                    if not f.startswith("/") else f
+                    for f in rel_links
+                ]
+            log.info("13F HTML index %s → %d xml links", htm_url, len(xml_links))
             # Prefer files with 'infotable' or 'info_table' in name
             for path in xml_links:
                 fname = path.split("/")[-1].lower()
@@ -358,7 +364,7 @@ def _find_infotable_url(cik: str, accession: str, primary_doc: str = "") -> Opti
                 fname = path.split("/")[-1].lower()
                 if fname != primary_lower:
                     return f"https://data.sec.gov" + path
-            break  # parsed OK, no XML found — don't try www fallback
+            break  # parsed OK (even if no XML found) — stop trying variants
         except Exception as exc:
             log.debug("HTML index parse failed for %s/%s: %s", cik_int, acc_nodash, exc)
 
