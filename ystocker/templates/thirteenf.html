@@ -107,21 +107,28 @@
 
     <!-- Holdings table -->
     <div class="overflow-x-auto">
-      <table class="w-full text-sm">
+      <table class="w-full text-sm" data-sortable>
         <thead>
           <tr class="text-xs text-slate-500 border-b border-slate-800 select-none">
-            <th class="text-right py-2 px-3 font-medium w-8">#</th>
-            <th class="text-left  py-2 px-3 font-medium">Ticker</th>
-            <th class="text-left  py-2 px-3 font-medium">Company</th>
-            <th class="text-right py-2 px-3 font-medium">Shares</th>
-            <th class="text-right py-2 px-3 font-medium">Value ($M)</th>
-            <th class="text-right py-2 px-3 font-medium">% Portfolio</th>
+            <th class="text-right py-2 px-3 font-medium w-8 cursor-pointer hover:text-slate-300" data-col="0"># ↕</th>
+            <th class="text-left  py-2 px-3 font-medium cursor-pointer hover:text-slate-300" data-col="1">Ticker ↕</th>
+            <th class="text-left  py-2 px-3 font-medium cursor-pointer hover:text-slate-300" data-col="2">Company ↕</th>
+            <th class="text-left  py-2 px-3 font-medium">52-week</th>
+            <th class="text-right py-2 px-3 font-medium cursor-pointer hover:text-slate-300" data-col="3">Shares ↕</th>
+            <th class="text-right py-2 px-3 font-medium cursor-pointer hover:text-slate-300" data-col="4">Value ($M) ↕</th>
+            <th class="text-right py-2 px-3 font-medium cursor-pointer hover:text-slate-300" data-col="5">% Portfolio ↕</th>
             <th class="text-center py-2 px-3 font-medium">Change</th>
           </tr>
         </thead>
         <tbody>
           {% for h in fd.holdings %}
-          <tr class="border-b border-slate-800/50 hover:bg-slate-800/40 transition">
+          <tr class="border-b border-slate-800/50 hover:bg-slate-800/40 transition"
+              data-rank="{{ h.rank }}"
+              data-ticker="{{ h.ticker or h.cusip }}"
+              data-name="{{ h.name }}"
+              data-shares="{{ h.shares }}"
+              data-value="{{ h.value_millions }}"
+              data-pct="{{ h.pct_portfolio }}">
             <td class="py-2.5 px-3 text-right text-slate-600 text-xs">{{ h.rank }}</td>
             <td class="py-2.5 px-3">
               {% if h.ticker %}
@@ -131,7 +138,15 @@
               <span class="text-slate-600 font-mono text-xs">{{ h.cusip }}</span>
               {% endif %}
             </td>
-            <td class="py-2.5 px-3 text-slate-300 text-xs max-w-[220px] truncate" title="{{ h.name }}">{{ h.name }}</td>
+            <td class="py-2.5 px-3 text-slate-300 text-xs max-w-[180px] truncate" title="{{ h.name }}">{{ h.name }}</td>
+            <td class="py-2.5 px-3">
+              {% if h.ticker %}
+              <div class="flex items-center gap-2">
+                <canvas class="sparkline" data-ticker="{{ h.ticker }}" width="80" height="28"></canvas>
+                <span class="spark-pct text-xs font-mono" data-ticker="{{ h.ticker }}"></span>
+              </div>
+              {% endif %}
+            </td>
             <td class="py-2.5 px-3 text-right font-mono text-sm text-slate-300">
               {{ "{:,}".format(h.shares) }}
             </td>
@@ -176,5 +191,93 @@
   <span class="flex items-center gap-1.5"><span class="px-1.5 py-0.5 rounded bg-rose-900/50 text-rose-300 border border-rose-800 text-[10px] font-semibold">Closed</span> Position exited (prior quarter only)</span>
   <span>· Data source: <a href="https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&type=13F" target="_blank" rel="noopener" class="text-brand hover:underline">SEC EDGAR</a></span>
 </div>
+
+<script>
+// Sortable tables — click any ↕ header to sort ascending, click again for descending
+document.querySelectorAll('table[data-sortable]').forEach(table => {
+  const KEYS = ['rank','ticker','name','shares','value','pct'];
+  const NUM  = new Set([0,3,4,5]);
+  let sortCol = -1, sortAsc = true;
+
+  table.querySelectorAll('th[data-col]').forEach(th => {
+    th.addEventListener('click', () => {
+      const col = +th.dataset.col;
+      if (sortCol === col) sortAsc = !sortAsc; else { sortCol = col; sortAsc = true; }
+      table.querySelectorAll('th[data-col]').forEach(h => {
+        const base = h.textContent.replace(/ [↑↓↕]$/, '');
+        h.textContent = base + ' ' + (+h.dataset.col === col ? (sortAsc ? '↑' : '↓') : '↕');
+      });
+      const key = KEYS[col];
+      const rows = [...table.tBodies[0].rows];
+      rows.sort((a, b) => {
+        let av = a.dataset[key] || '', bv = b.dataset[key] || '';
+        if (NUM.has(col)) { av = parseFloat(av) || 0; bv = parseFloat(bv) || 0; }
+        const cmp = NUM.has(col) ? av - bv : av.localeCompare(bv);
+        return sortAsc ? cmp : -cmp;
+      });
+      rows.forEach(r => table.tBodies[0].appendChild(r));
+    });
+  });
+});
+
+// Sparklines — fetch price history lazily for visible tickers using IntersectionObserver
+const _sparkCache = {};
+function drawSparkline(canvas, prices) {
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width, h = canvas.height;
+  const valid = prices.filter(p => p != null);
+  if (!valid.length) return;
+  const mn = Math.min(...valid), mx = Math.max(...valid);
+  const range = mx - mn || 1;
+  const first = valid[0], last = valid[valid.length - 1];
+  const color = last >= first ? '#34d399' : '#f43f5e';
+  ctx.clearRect(0, 0, w, h);
+  ctx.beginPath();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.5;
+  let drawn = false;
+  prices.forEach((p, i) => {
+    if (p == null) return;
+    const x = (i / (prices.length - 1)) * w;
+    const y = h - ((p - mn) / range) * (h - 2) - 1;
+    if (!drawn) { ctx.moveTo(x, y); drawn = true; } else ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+}
+
+async function loadSparkline(ticker) {
+  if (_sparkCache[ticker]) return _sparkCache[ticker];
+  try {
+    const r = await fetch(`/api/history/${encodeURIComponent(ticker)}`);
+    const d = await r.json();
+    _sparkCache[ticker] = d;
+    return d;
+  } catch { return null; }
+}
+
+const observer = new IntersectionObserver(async entries => {
+  for (const entry of entries) {
+    if (!entry.isIntersecting) continue;
+    const canvas = entry.target;
+    const ticker = canvas.dataset.ticker;
+    observer.unobserve(canvas);
+    const d = await loadSparkline(ticker);
+    if (!d || !d.prices) continue;
+    drawSparkline(canvas, d.prices);
+    // 52-week % change
+    const prices = d.prices.filter(p => p != null);
+    if (prices.length >= 2) {
+      const pct = (prices[prices.length-1] - prices[0]) / prices[0] * 100;
+      const el = document.querySelector(`.spark-pct[data-ticker="${ticker}"]`);
+      if (el) {
+        el.textContent = (pct >= 0 ? '+' : '') + pct.toFixed(1) + '%';
+        el.className = 'spark-pct text-xs font-mono ' + (pct >= 0 ? 'text-emerald-400' : 'text-rose-400');
+      }
+    }
+  }
+}, { rootMargin: '200px' });
+
+document.querySelectorAll('canvas.sparkline').forEach(c => observer.observe(c));
+</script>
 
 {% endblock %}
