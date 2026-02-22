@@ -461,14 +461,17 @@ def _parse_infotable(xml_text: str) -> List[dict]:
 
 
 def _annotate_changes(curr: List[dict], prev: List[dict]) -> List[dict]:
-    """Add 'change' field to each holding by comparing with previous quarter."""
+    """Add 'change' and 'change_pct' fields to each holding by comparing with previous quarter."""
     prev_map = {h["cusip"]: h["shares"] for h in prev if h["cusip"]}
     for h in curr:
         cusip = h.get("cusip", "")
         if not cusip or cusip not in prev_map:
             h["change"] = "new"
+            h["change_pct"] = None
         else:
-            delta = h["shares"] - prev_map[cusip]
+            prev_shares = prev_map[cusip]
+            delta = h["shares"] - prev_shares
+            h["change_pct"] = round(delta / prev_shares * 100, 1) if prev_shares else None
             if delta > 0:
                 h["change"] = "increased"
             elif delta < 0:

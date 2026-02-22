@@ -161,8 +161,10 @@
               <span class="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-emerald-900/50 text-emerald-300 border border-emerald-800">New</span>
               {% elif h.change == 'increased' %}
               <span class="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-sky-900/50 text-sky-300 border border-sky-800">▲ Added</span>
+              {% if h.change_pct %}<span class="text-sky-400 text-xs font-mono ml-1">+{{ h.change_pct }}%</span>{% endif %}
               {% elif h.change == 'reduced' %}
               <span class="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-amber-900/50 text-amber-300 border border-amber-800">▼ Reduced</span>
+              {% if h.change_pct %}<span class="text-amber-400 text-xs font-mono ml-1">{{ h.change_pct }}%</span>{% endif %}
               {% elif h.change == 'closed' %}
               <span class="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-rose-900/50 text-rose-300 border border-rose-800">Closed</span>
               {% elif h.change == 'unchanged' %}

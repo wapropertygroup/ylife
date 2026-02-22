@@ -388,11 +388,11 @@ const TICKER = {{ ticker | tojson }};
     }
 
     const changeLabel = {
-      new:       `<span class="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-emerald-900/50 text-emerald-300 border border-emerald-800">${I18n.t('inst.change_new') || 'New'}</span>`,
-      increased: `<span class="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-sky-900/50 text-sky-300 border border-sky-800">${I18n.t('inst.change_added') || '▲ Added'}</span>`,
-      reduced:   `<span class="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-amber-900/50 text-amber-300 border border-amber-800">${I18n.t('inst.change_reduced') || '▼ Reduced'}</span>`,
-      closed:    `<span class="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-rose-900/50 text-rose-300 border border-rose-800">${I18n.t('inst.change_closed') || 'Closed'}</span>`,
-      unchanged: `<span class="text-slate-600 text-xs">—</span>`,
+      new:       h => `<span class="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-emerald-900/50 text-emerald-300 border border-emerald-800">${I18n.t('inst.change_new') || 'New'}</span>`,
+      increased: h => `<span class="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-sky-900/50 text-sky-300 border border-sky-800">${I18n.t('inst.change_added') || '▲ Added'}</span>${h.change_pct != null ? `<span class="text-sky-400 text-xs font-mono ml-1">+${h.change_pct}%</span>` : ''}`,
+      reduced:   h => `<span class="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-amber-900/50 text-amber-300 border border-amber-800">${I18n.t('inst.change_reduced') || '▼ Reduced'}</span>${h.change_pct != null ? `<span class="text-amber-400 text-xs font-mono ml-1">${h.change_pct}%</span>` : ''}`,
+      closed:    h => `<span class="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-rose-900/50 text-rose-300 border border-rose-800">${I18n.t('inst.change_closed') || 'Closed'}</span>`,
+      unchanged: h => `<span class="text-slate-600 text-xs">—</span>`,
     };
 
     tbody.innerHTML = holders.map(h => {
@@ -404,7 +404,7 @@ const TICKER = {{ ticker | tojson }};
         <td class="py-2.5 px-3 text-right font-mono text-sm text-slate-300">${h.shares.toLocaleString()}</td>
         <td class="py-2.5 px-3 text-right font-mono text-sm font-semibold" style="color:${heat.text}">$${h.value_millions.toLocaleString(undefined,{minimumFractionDigits:1,maximumFractionDigits:1})}M</td>
         <td class="py-2.5 px-3 text-right font-mono text-sm text-slate-300">${h.pct_portfolio.toFixed(2)}%</td>
-        <td class="py-2.5 px-3 text-center">${changeLabel[h.change] || '<span class="text-slate-700 text-xs">?</span>'}</td>
+        <td class="py-2.5 px-3 text-center">${changeLabel[h.change] ? changeLabel[h.change](h) : '<span class="text-slate-700 text-xs">?</span>'}</td>
       </tr>`;
     }).join('');
   }
