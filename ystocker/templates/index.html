@@ -111,15 +111,22 @@
   <div class="bg-slate-900 rounded-2xl border border-slate-800 p-6 fade-up">
     <div class="flex items-start justify-between mb-1">
       <h2 class="text-base font-semibold text-slate-200">PEG Valuation Map</h2>
-      <button onclick="window._chartModal.expand('peg')"
-              class="flex items-center gap-1 text-xs text-slate-500 hover:text-brand transition px-2 py-1
-                     rounded-lg hover:bg-slate-800">
-        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"/>
-        </svg>
-        Expand
-      </button>
+      <div class="flex items-center gap-2">
+        <button id="pegMapTickerBtn" onclick="togglePegMapTickers()"
+                class="flex items-center gap-1 text-xs text-slate-400 border border-slate-700 bg-slate-800
+                       hover:text-slate-200 transition px-2 py-1 rounded-lg">
+          Hide tickers
+        </button>
+        <button onclick="window._chartModal.expand('peg')"
+                class="flex items-center gap-1 text-xs text-slate-500 hover:text-brand transition px-2 py-1
+                       rounded-lg hover:bg-slate-800">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"/>
+          </svg>
+          Expand
+        </button>
+      </div>
     </div>
     <p class="text-xs text-slate-500 mb-4">
       <span class="text-emerald-400">■</span> &lt;1 undervalued &nbsp;
@@ -360,7 +367,16 @@ function buildPegChart(ctx) {
 
 // ─── Render inline charts ──────────────────────────────────────────────────
 _inlineScatterChart = buildScatterChart(document.getElementById('scatterChart'));
-buildPegChart(document.getElementById('pegMapChart'));
+const _pegMapChart = buildPegChart(document.getElementById('pegMapChart'));
+
+let _pegMapTickersVisible = true;
+function togglePegMapTickers() {
+  _pegMapTickersVisible = !_pegMapTickersVisible;
+  const btn = document.getElementById('pegMapTickerBtn');
+  btn.textContent = _pegMapTickersVisible ? 'Hide tickers' : 'Show tickers';
+  _pegMapChart.options.scales.y.ticks.display = _pegMapTickersVisible;
+  _pegMapChart.update();
+}
 
 // ─── Alpine modal component ────────────────────────────────────────────────
 function chartModal() {
