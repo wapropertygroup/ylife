@@ -29,9 +29,59 @@ PEER_GROUPS: Dict[str, List[str]] = {
 }
 
 
+def _load_secrets_from_ssm() -> None:
+    """Fetch secrets from AWS SSM Parameter Store and inject into os.environ.
+
+    Only runs when boto3 is available and the parameters exist.
+    Falls back silently so local dev (plain env vars) is unaffected.
+
+    Parameters fetched:
+      /ystocker/GEMINI_API_KEY  → os.environ["GEMINI_API_KEY"]
+    """
+    import os
+    try:
+        import boto3
+        from botocore.exceptions import ClientError, NoCredentialsError
+    except ImportError:
+        return  # boto3 not installed — skip
+
+    SSM_PARAMS = {
+        "/ystocker/GEMINI_API_KEY": "GEMINI_API_KEY",
+    }
+
+    try:
+        ssm = boto3.client("ssm", region_name=os.environ.get("AWS_REGION", "us-east-1"))
+        for param_name, env_key in SSM_PARAMS.items():
+            if os.environ.get(env_key):
+                continue  # already set locally — don't overwrite
+            try:
+                resp = ssm.get_parameter(Name=param_name, WithDecryption=True)
+                os.environ[env_key] = resp["Parameter"]["Value"]
+                import logging
+                logging.getLogger(__name__).info(
+                    "SSM: loaded %s → %s", param_name, env_key
+                )
+            except ClientError as e:
+                code = e.response["Error"]["Code"]
+                if code != "ParameterNotFound":
+                    import logging
+                    logging.getLogger(__name__).warning(
+                        "SSM: could not fetch %s: %s", param_name, e
+                    )
+    except NoCredentialsError:
+        pass  # not on AWS — skip silently
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).warning("SSM: unexpected error: %s", exc)
+
+
 def create_app() -> Flask:
     """Create and configure the Flask application."""
     import datetime
+
+    # Pull secrets from AWS SSM Parameter Store (no-op outside AWS or if
+    # the env vars are already set locally).
+    _load_secrets_from_ssm()
 
     # Load .env from the project root so secrets like GEMINI_API_KEY are
     # available even when the server is started outside an interactive shell.
