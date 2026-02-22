@@ -758,6 +758,11 @@ def contact():
     return render_template("contact.html", peer_groups=list(PEER_GROUPS.keys()))
 
 
+@bp.route("/guide")
+def guide():
+    return render_template("guide.html", peer_groups=list(PEER_GROUPS.keys()))
+
+
 # ---------------------------------------------------------------------------
 # Federal Reserve H.4.1 balance-sheet page
 # ---------------------------------------------------------------------------
@@ -962,6 +967,142 @@ def _is_important(title: str) -> bool:
     return any(kw in lower for kw in _IMPORTANT_KEYWORDS)
 
 
+@bp.route("/api/history/<ticker>/explain", methods=["POST"])
+def api_history_explain(ticker: str):
+    """Stream a Gemini AI explanation of a history chart via SSE.
+
+    Results are cached to disk (cache/explain/) for 8 hours so repeated
+    requests for the same ticker/chart/period/lang are served instantly.
+    """
+    import os
+    from google import genai
+
+    ticker = ticker.strip().upper()
+    body   = request.get_json(force=True, silent=True) or {}
+    chart  = body.get("chart", "")       # pe | price | peg | fwdpe
+    dates  = body.get("dates",  [])
+    values = body.get("values", [])
+    period = body.get("period", "1y")
+    lang   = body.get("lang",   "en")
+
+    if not dates or not values:
+        return jsonify({"error": "No data provided"}), 400
+
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        return jsonify({"error": "GEMINI_API_KEY not configured"}), 503
+
+    pairs = [(d, v) for d, v in zip(dates, values) if v is not None]
+    if not pairs:
+        return jsonify({"error": "No valid data points"}), 400
+
+    # ── Disk cache ────────────────────────────────────────────────────────────
+    _EXPLAIN_CACHE_DIR = Path(__file__).parent.parent / "cache" / "explain"
+    _EXPLAIN_CACHE_TTL = 8 * 60 * 60   # 8 hours, matches main data cache
+
+    safe_ticker = ticker.replace("/", "-")
+    cache_file  = _EXPLAIN_CACHE_DIR / f"{safe_ticker}_{chart}_{period}_{lang}.json"
+
+    try:
+        if cache_file.exists():
+            payload = json.loads(cache_file.read_text())
+            age = time.time() - payload.get("ts", 0)
+            if age < _EXPLAIN_CACHE_TTL:
+                cached_text = payload.get("text", "")
+                if cached_text:
+                    log.debug("Explain cache hit: %s/%s period=%s lang=%s", ticker, chart, period, lang)
+
+                    def stream_cached():
+                        # Emit the full text as a single chunk then DONE
+                        yield f"data: {json.dumps({'text': cached_text})}\n\n"
+                        yield "data: [DONE]\n\n"
+
+                    return Response(stream_cached(), mimetype="text/event-stream", headers={
+                        "Cache-Control": "no-cache",
+                        "X-Accel-Buffering": "no",
+                    })
+    except Exception:
+        log.debug("Explain cache read failed for %s/%s — will re-generate", ticker, chart)
+
+    # ── Build prompt ──────────────────────────────────────────────────────────
+    first_date, first_val = pairs[0]
+    last_date,  last_val  = pairs[-1]
+    recent = pairs[-12:]
+
+    chart_meta = {
+        "pe":    ("PE Ratio (TTM)",        "x",  lambda v: f"{v:.1f}x"),
+        "fwdpe": ("Forward PE Ratio",      "x",  lambda v: f"{v:.1f}x"),
+        "peg":   ("PEG Ratio",             "",   lambda v: f"{v:.2f}"),
+        "price": ("Stock Price (USD)",     "$",  lambda v: f"${v:.2f}"),
+    }
+    label, _unit, fmt = chart_meta.get(chart, (chart, "", lambda v: f"{v:.2f}"))
+
+    recent_lines  = "\n".join(f"  {d}: {fmt(v)}" for d, v in recent)
+    period_change = last_val - first_val
+    pct_change    = period_change / first_val * 100 if first_val else 0
+    period_summary = (
+        f"{first_date} ({fmt(first_val)}) → {last_date} ({fmt(last_val)})\n"
+        f"Total change: {'+' if period_change >= 0 else ''}{fmt(period_change)} "
+        f"({pct_change:+.1f}%)"
+    )
+
+    chart_hints = {
+        "pe":    "Focus on whether the stock looks cheap or expensive relative to its historical PE range, and what drives the multiple expansion or compression.",
+        "fwdpe": "Focus on how the market's forward earnings expectations have repriced over time and what that implies for valuation.",
+        "peg":   "Focus on whether the PEG suggests the growth-adjusted valuation is attractive (below 1) or stretched (above 2).",
+        "price": "Focus on price trend, key support/resistance levels implied by the data, and momentum.",
+    }
+    hint = chart_hints.get(chart, "")
+
+    prompt = (
+        f"You are a sell-side equity analyst. Explain the following {label} chart for {ticker} "
+        f"over the {period} period in 2-3 concise paragraphs."
+        f"{'  Respond in Simplified Chinese (中文).' if lang == 'zh' else ''}\n\n"
+        f"Chart: {label} for {ticker}\n"
+        f"Period: {period}\n"
+        f"Full period: {period_summary}\n\n"
+        f"Most recent 12 data points:\n{recent_lines}\n\n"
+        f"{hint}\n"
+        f"Be specific about the numbers. Do not use headers or bullet points."
+    )
+
+    client = genai.Client(api_key=api_key)
+
+    def generate():
+        accumulated = []
+        try:
+            stream = client.models.generate_content_stream(
+                model="gemini-2.5-flash", contents=prompt
+            )
+            for chunk in stream:
+                text = chunk.text
+                if text:
+                    accumulated.append(text)
+                    yield f"data: {json.dumps({'text': text})}\n\n"
+        except Exception as exc:
+            log.error("History explain error for %s/%s: %s", ticker, chart, exc)
+            yield f"data: {json.dumps({'error': str(exc)})}\n\n"
+        else:
+            # Persist to disk only on clean completion
+            full_text = "".join(accumulated)
+            if full_text:
+                try:
+                    _EXPLAIN_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+                    tmp = cache_file.with_suffix(".tmp")
+                    tmp.write_text(json.dumps({"ts": time.time(), "text": full_text}))
+                    tmp.replace(cache_file)
+                    log.debug("Explain cached: %s/%s period=%s lang=%s", ticker, chart, period, lang)
+                except Exception:
+                    log.debug("Failed to write explain cache for %s/%s", ticker, chart)
+        finally:
+            yield "data: [DONE]\n\n"
+
+    return Response(generate(), mimetype="text/event-stream", headers={
+        "Cache-Control": "no-cache",
+        "X-Accel-Buffering": "no",
+    })
+
+
 @bp.route("/api/news/<ticker>")
 def api_news(ticker: str):
     """
@@ -1032,3 +1173,144 @@ def api_news(ticker: str):
         _NEWS_CACHE[ticker] = {"ts": time.time(), "data": result}
     return jsonify(result)
 
+
+# ---------------------------------------------------------------------------
+# YouTube videos
+# ---------------------------------------------------------------------------
+
+# Curated channel list: (handle, channel_id, display_name)
+_YT_CHANNELS = [
+    ("andyleegogo",       "UCwyRBuGpaLYnFuohCYyjBeQ", "Andy lee"),
+    ("RhinoFinance",      "UCFQsi7WaF5X41tcuOryDk8w", "视野环球财经"),
+    ("MeiTouNews",        "UCGpj3DO_5_TUDCNUgS9mjiQ", "美投侃新闻"),
+    ("NaNaShuoMeiGu",     "UCFhJ8ZFg9W4kLwFTBBNIjOw", "NaNa说美股"),
+    ("gendanqun",         "UCf48rlZVxa_CPsrG6LW5big", "美股短线交易"),
+    ("MeiTouJun",         "UCBUH38E0ngqvmTqdchWunwQ", "美投讲美股"),
+    ("LA_Banker",         "UCW1cHQAzfL3pwKlKNwRjelQ", "精英财经 LABanker"),
+    ("ShepherdCapital",   "UCkvZ2usiWOy1sfYmNfY9Pdw", "Shepherd Capital Markets"),
+    ("yutinghaofinance",  "UC0lbAQVpenvfA2QqzsRtL_g", "游庭皓的財經皓角"),
+    ("windkiss-cn5tu",    "UCpJPv66uSo3Tj1iT_UmfW6Q", "财经-沉默的螺旋上"),
+]
+
+_VIDEOS_CACHE: Dict[str, dict] = {}
+_VIDEOS_CACHE_LOCK = threading.Lock()
+_VIDEOS_CACHE_TTL = 30 * 60   # 30 minutes
+
+
+def _iso_duration_to_str(iso: str) -> str:
+    """Convert ISO 8601 duration like PT4M33S to '4:33'."""
+    import re
+    m = re.match(r"PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?", iso or "")
+    if not m:
+        return ""
+    h, mn, s = (int(x or 0) for x in m.groups())
+    if h:
+        return f"{h}:{mn:02d}:{s:02d}"
+    return f"{mn}:{s:02d}"
+
+
+@bp.route("/api/videos/<ticker>")
+def api_videos(ticker: str):
+    """Return recent YouTube videos for a ticker from curated channels (past ~7 days).
+
+    Requires YOUTUBE_API_KEY environment variable (YouTube Data API v3).
+    Returns {"videos": [...]} or {"videos": [], "note": "..."}.
+    """
+    import httpx
+    from datetime import datetime, timezone, timedelta
+
+    ticker = ticker.strip().upper()
+
+    # Cache check
+    with _VIDEOS_CACHE_LOCK:
+        cached = _VIDEOS_CACHE.get(ticker)
+        if cached and time.time() - cached["ts"] < _VIDEOS_CACHE_TTL:
+            return jsonify(cached["data"])
+
+    api_key = os.environ.get("YOUTUBE_API_KEY", "")
+    if not api_key:
+        result = {"ticker": ticker, "videos": [],
+                  "note": "YOUTUBE_API_KEY not set"}
+        return jsonify(result)
+
+    # Use httpx which correctly handles the system proxy (unlike urllib which
+    # tries a CONNECT tunnel that the local proxy rejects)
+    http = httpx.Client(timeout=10)
+
+    published_after = (datetime.now(timezone.utc) - timedelta(days=7)).strftime(
+        "%Y-%m-%dT%H:%M:%SZ"
+    )
+
+    # Search each curated channel for recent videos (no ticker filter —
+    # these channels discuss stocks in Chinese, not by ticker symbol)
+    all_items: list = []
+    for _handle, channel_id, _name in _YT_CHANNELS:
+        try:
+            resp = http.get("https://www.googleapis.com/youtube/v3/search", params={
+                "part": "snippet",
+                "channelId": channel_id,
+                "type": "video",
+                "order": "date",
+                "publishedAfter": published_after,
+                "maxResults": 3,
+                "key": api_key,
+            })
+            resp.raise_for_status()
+            all_items.extend(resp.json().get("items", []))
+        except Exception as e:
+            log.warning("YouTube search failed for channel %s / %s: %s", _handle, ticker, e)
+
+    if not all_items:
+        result = {"ticker": ticker, "videos": []}
+        with _VIDEOS_CACHE_LOCK:
+            _VIDEOS_CACHE[ticker] = {"ts": time.time(), "data": result}
+        return jsonify(result)
+
+    # Fetch video durations via videos.list
+    video_ids = [it["id"]["videoId"] for it in all_items if it.get("id", {}).get("videoId")]
+    duration_map: Dict[str, str] = {}
+    if video_ids:
+        try:
+            resp = http.get("https://www.googleapis.com/youtube/v3/videos", params={
+                "part": "contentDetails",
+                "id": ",".join(video_ids),
+                "key": api_key,
+            })
+            resp.raise_for_status()
+            for vi in resp.json().get("items", []):
+                vid_id = vi["id"]
+                iso = vi.get("contentDetails", {}).get("duration", "")
+                duration_map[vid_id] = _iso_duration_to_str(iso)
+        except Exception as e:
+            log.warning("YouTube video details failed for %s: %s", ticker, e)
+
+    seen: set = set()
+    videos = []
+    for it in all_items:
+        vid_id = (it.get("id") or {}).get("videoId")
+        if not vid_id or vid_id in seen:
+            continue
+        seen.add(vid_id)
+        snippet = it.get("snippet", {})
+        pub_str = snippet.get("publishedAt", "")
+        pub_ts: Optional[int] = None
+        try:
+            dt = datetime.fromisoformat(pub_str.replace("Z", "+00:00"))
+            pub_ts = int(dt.timestamp())
+        except Exception:
+            pass
+        videos.append({
+            "id":        vid_id,
+            "title":     snippet.get("title", ""),
+            "channel":   snippet.get("channelTitle", ""),
+            "published": pub_ts,
+            "duration":  duration_map.get(vid_id, ""),
+        })
+
+    # Sort newest first
+    videos.sort(key=lambda v: v["published"] or 0, reverse=True)
+
+    result = {"ticker": ticker, "videos": videos}
+    with _VIDEOS_CACHE_LOCK:
+        _VIDEOS_CACHE[ticker] = {"ts": time.time(), "data": result}
+    return jsonify(result)

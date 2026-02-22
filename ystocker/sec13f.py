@@ -265,21 +265,60 @@ def _get_maybe(url: str, **kwargs) -> Optional[requests.Response]:
 # ---------------------------------------------------------------------------
 
 def _get_filings_list(cik: str) -> list:
-    """Return list of recent filings dicts from SEC submissions endpoint."""
+    """Return list of recent filings dicts from SEC submissions endpoint.
+
+    The SEC API paginates older filings into separate JSON files listed under
+    filings.files.  For funds like Vanguard/BlackRock that file thousands of
+    forms, the 'recent' window may only contain the single latest 13F.  We
+    fetch the first extra page as well so we always have at least two
+    quarterly 13F-HR filings available for change detection.
+    """
     url = f"https://data.sec.gov/submissions/CIK{cik}.json"
     data = _get(url).json()
     recent = data.get("filings", {}).get("recent", {})
-    forms       = recent.get("form", [])
-    accessions  = recent.get("accessionNumber", [])
-    dates       = recent.get("filingDate", [])
-    periods     = recent.get("reportDate", [])
-    prim_docs   = recent.get("primaryDocument", [""] * len(forms))
-    return [
-        {"form": forms[i], "accession": accessions[i],
-         "filing_date": dates[i], "period": periods[i],
-         "primary_doc": prim_docs[i] if i < len(prim_docs) else ""}
-        for i in range(len(forms))
-    ]
+
+    def _extract(block: dict) -> list:
+        forms       = block.get("form", [])
+        accessions  = block.get("accessionNumber", [])
+        dates       = block.get("filingDate", [])
+        periods     = block.get("reportDate", [])
+        prim_docs   = block.get("primaryDocument", [""] * len(forms))
+        return [
+            {"form": forms[i], "accession": accessions[i],
+             "filing_date": dates[i], "period": periods[i],
+             "primary_doc": prim_docs[i] if i < len(prim_docs) else ""}
+            for i in range(len(forms))
+        ]
+
+    filings = _extract(recent)
+
+    # Check whether the recent window already contains at least two distinct
+    # 13F-HR periods.  If not, fetch the first pagination file so we have
+    # enough history for quarter-over-quarter change detection.
+    periods_in_recent = {
+        f["period"] for f in filings if f["form"] in ("13F-HR", "13F-HR/A")
+    }
+    if len(periods_in_recent) < 2:
+        extra_files = data.get("filings", {}).get("files", [])
+        for extra in extra_files[:2]:          # fetch at most 2 extra pages
+            extra_name = extra.get("name", "")
+            if not extra_name:
+                continue
+            extra_url = f"https://data.sec.gov/submissions/{extra_name}"
+            try:
+                extra_data = _get(extra_url).json()
+                extra_filings = _extract(extra_data)
+                filings.extend(extra_filings)
+                # Stop once we have ≥2 distinct 13F periods
+                periods_so_far = {
+                    f["period"] for f in filings if f["form"] in ("13F-HR", "13F-HR/A")
+                }
+                if len(periods_so_far) >= 2:
+                    break
+            except Exception as exc:
+                log.debug("Could not fetch extra filings page %s: %s", extra_name, exc)
+
+    return filings
 
 
 def _find_infotable_url(cik: str, accession: str, primary_doc: str = "") -> Optional[str]:
@@ -570,8 +609,12 @@ def fetch_fund_holdings(name: str, cik: str) -> dict:
                 for h in curr_holdings:
                     h["change"] = "unknown"
         else:
+            # No previous quarter filing available at all — cannot determine
+            # whether these are new positions or existing ones.  Use "unknown"
+            # so the UI doesn't misleadingly label every holding as "New".
             for h in curr_holdings:
-                h["change"] = "new"
+                h["change"] = "unknown"
+                h["change_pct"] = None
 
         # Sort by value descending, compute portfolio %
         curr_holdings.sort(key=lambda h: h["value_thousands"], reverse=True)

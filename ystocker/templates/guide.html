@@ -1,0 +1,509 @@
+{% extends "base.html" %}
+{% block title %}yStocker — User Guide{% endblock %}
+
+{% block content %}
+<style>
+.guide-section {
+  scroll-margin-top: 80px;
+}
+.tip-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: rgba(99,102,241,0.10);
+  border: 1px solid rgba(99,102,241,0.20);
+  color: #a5b4fc;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.tip-badge svg { flex-shrink: 0; }
+.screen-frame {
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid #1e293b;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  background: #0f172a;
+  position: relative;
+}
+.screen-frame .bar {
+  background: #1e293b;
+  padding: 8px 14px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-bottom: 1px solid #334155;
+}
+.screen-frame .dot { width:10px; height:10px; border-radius:50%; }
+.screen-placeholder {
+  min-height: 260px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: #475569;
+  font-size: 13px;
+  background: repeating-linear-gradient(
+    45deg,
+    transparent,
+    transparent 10px,
+    rgba(30,41,59,0.4) 10px,
+    rgba(30,41,59,0.4) 11px
+  );
+}
+.toc-link {
+  display: block;
+  padding: 5px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #64748b;
+  transition: color 0.15s, background 0.15s;
+  border-left: 2px solid transparent;
+}
+.toc-link:hover {
+  color: #a5b4fc;
+  background: rgba(99,102,241,0.08);
+  border-left-color: #6366f1;
+}
+.toc-link.active {
+  color: #a5b4fc;
+  border-left-color: #6366f1;
+  background: rgba(99,102,241,0.10);
+}
+.section-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: rgba(99,102,241,0.15);
+  border: 1px solid rgba(99,102,241,0.3);
+  color: #a5b4fc;
+  font-size: 13px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+</style>
+
+<!-- Header -->
+<div class="mb-8 fade-up">
+  <h1 class="text-2xl sm:text-3xl font-bold grad-text mb-2" data-i18n="guide.title">User Guide</h1>
+  <p class="text-slate-400 text-sm max-w-2xl" data-i18n="guide.subtitle">
+    Everything you need to know about yStocker — features, pages, and how to get the most out of each tool.
+  </p>
+</div>
+
+<div class="flex gap-8 items-start fade-up">
+
+  <!-- ── Sticky TOC sidebar (desktop) ──────────────────────────────────── -->
+  <aside class="hidden lg:block w-52 shrink-0 sticky top-20 self-start">
+    <p class="text-[10px] font-semibold tracking-widest uppercase text-slate-500 mb-3 px-2" data-i18n="guide.toc">On this page</p>
+    <nav id="guideToc" class="flex flex-col gap-0.5">
+      <a href="#s1" class="toc-link" data-i18n="guide.s1_title">1. Home — Sector Overview</a>
+      <a href="#s2" class="toc-link" data-i18n="guide.s2_title">2. Sector Detail</a>
+      <a href="#s3" class="toc-link" data-i18n="guide.s3_title">3. Ticker Lookup</a>
+      <a href="#s4" class="toc-link" data-i18n="guide.s4_title">4. 13F Holdings</a>
+      <a href="#s5" class="toc-link" data-i18n="guide.s5_title">5. Fed Balance Sheet</a>
+      <a href="#s6" class="toc-link" data-i18n="guide.s6_title">6. Groups</a>
+      <a href="#s7" class="toc-link" data-i18n="guide.s7_title">7. Language & Refresh</a>
+    </nav>
+    <a href="#" class="toc-link mt-4 text-slate-600 hover:text-slate-400" data-i18n="guide.back_to_top">↑ Back to top</a>
+  </aside>
+
+  <!-- ── Main content ───────────────────────────────────────────────────── -->
+  <div class="flex-1 min-w-0 space-y-10">
+
+    <!-- ── Section 1: Home ─────────────────────────────────────────────── -->
+    <section id="s1" class="guide-section">
+      <div class="flex items-center gap-3 mb-4">
+        <span class="section-num">1</span>
+        <h2 class="text-lg font-bold text-slate-100" data-i18n="guide.s1_title">Home — Sector Overview</h2>
+      </div>
+
+      <!-- Screenshot -->
+      <div class="screen-frame mb-5">
+        <div class="bar">
+          <span class="dot bg-red-500/70"></span>
+          <span class="dot bg-yellow-500/70"></span>
+          <span class="dot bg-green-500/70"></span>
+          <span class="ml-2 text-xs text-slate-500 font-mono">127.0.0.1:5000/</span>
+        </div>
+        {% set img_home = url_for('static', filename='img/guide/home.png') %}
+        <div id="imgWrap1">
+          <img src="{{ img_home }}" alt="Home page screenshot"
+               class="w-full block"
+               onerror="this.parentElement.innerHTML=document.getElementById('ph1').innerHTML">
+        </div>
+        <template id="ph1">
+          <div class="screen-placeholder py-16">
+            <svg class="w-10 h-10 text-slate-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                    d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+            </svg>
+            <span data-i18n="guide.screenshot_soon">Screenshot coming soon</span>
+          </div>
+        </template>
+      </div>
+
+      <p class="text-slate-300 text-sm leading-relaxed mb-4" data-i18n="guide.s1_desc">
+        The home page displays all peer groups as sortable cards. Each card shows the tickers in that group with live price, P/E ratio, analyst target, and % upside. Use the column headers to sort.
+      </p>
+      <div class="flex flex-col gap-2">
+        <div class="tip-badge">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-width="2"/><path stroke-linecap="round" stroke-width="2" d="M12 8v4m0 4h.01"/></svg>
+          <span data-i18n="guide.s1_tip1">Green rows = upside to analyst target. Red = trading above target.</span>
+        </div>
+        <div class="tip-badge">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-width="2"/><path stroke-linecap="round" stroke-width="2" d="M12 8v4m0 4h.01"/></svg>
+          <span data-i18n="guide.s1_tip2">Click ↻ Refresh to get the latest prices from Yahoo Finance.</span>
+        </div>
+        <div class="tip-badge">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-width="2"/><path stroke-linecap="round" stroke-width="2" d="M12 8v4m0 4h.01"/></svg>
+          <span data-i18n="guide.s1_tip3">Click any ticker symbol to open its detail chart page.</span>
+        </div>
+      </div>
+    </section>
+
+    <hr class="border-slate-800">
+
+    <!-- ── Section 2: Sector Detail ────────────────────────────────────── -->
+    <section id="s2" class="guide-section">
+      <div class="flex items-center gap-3 mb-4">
+        <span class="section-num">2</span>
+        <h2 class="text-lg font-bold text-slate-100" data-i18n="guide.s2_title">Sector Detail — Charts & Table</h2>
+      </div>
+
+      <div class="screen-frame mb-5">
+        <div class="bar">
+          <span class="dot bg-red-500/70"></span>
+          <span class="dot bg-yellow-500/70"></span>
+          <span class="dot bg-green-500/70"></span>
+          <span class="ml-2 text-xs text-slate-500 font-mono">127.0.0.1:5000/sector/…</span>
+        </div>
+        <div id="imgWrap2">
+          <img src="{{ url_for('static', filename='img/guide/sector.png') }}" alt="Sector detail page"
+               class="w-full block"
+               onerror="this.parentElement.innerHTML=document.getElementById('ph2').innerHTML">
+        </div>
+        <template id="ph2">
+          <div class="screen-placeholder py-16">
+            <svg class="w-10 h-10 text-slate-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                    d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+            </svg>
+            <span data-i18n="guide.screenshot_soon">Screenshot coming soon</span>
+          </div>
+        </template>
+      </div>
+
+      <p class="text-slate-300 text-sm leading-relaxed mb-4" data-i18n="guide.s2_desc">
+        Click a peer group name or any sector card to see full charts: P/E history, price history, analyst targets, and a detailed data table for every ticker in the group.
+      </p>
+      <div class="flex flex-col gap-2">
+        <div class="tip-badge">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-width="2"/><path stroke-linecap="round" stroke-width="2" d="M12 8v4m0 4h.01"/></svg>
+          <span data-i18n="guide.s2_tip1">Use the range buttons (1M 3M 6M 1Y 2Y) to zoom in/out on charts.</span>
+        </div>
+        <div class="tip-badge">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-width="2"/><path stroke-linecap="round" stroke-width="2" d="M12 8v4m0 4h.01"/></svg>
+          <span data-i18n="guide.s2_tip2">Click ✦ Explain on any chart for an AI-powered analysis of recent trends.</span>
+        </div>
+      </div>
+    </section>
+
+    <hr class="border-slate-800">
+
+    <!-- ── Section 3: Lookup ────────────────────────────────────────────── -->
+    <section id="s3" class="guide-section">
+      <div class="flex items-center gap-3 mb-4">
+        <span class="section-num">3</span>
+        <h2 class="text-lg font-bold text-slate-100" data-i18n="guide.s3_title">Ticker Lookup</h2>
+      </div>
+
+      <div class="screen-frame mb-5">
+        <div class="bar">
+          <span class="dot bg-red-500/70"></span>
+          <span class="dot bg-yellow-500/70"></span>
+          <span class="dot bg-green-500/70"></span>
+          <span class="ml-2 text-xs text-slate-500 font-mono">127.0.0.1:5000/lookup</span>
+        </div>
+        <div id="imgWrap3">
+          <img src="{{ url_for('static', filename='img/guide/lookup.png') }}" alt="Lookup page"
+               class="w-full block"
+               onerror="this.parentElement.innerHTML=document.getElementById('ph3').innerHTML">
+        </div>
+        <template id="ph3">
+          <div class="screen-placeholder py-16">
+            <svg class="w-10 h-10 text-slate-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                    d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+            </svg>
+            <span data-i18n="guide.screenshot_soon">Screenshot coming soon</span>
+          </div>
+        </template>
+      </div>
+
+      <p class="text-slate-300 text-sm leading-relaxed mb-4" data-i18n="guide.s3_desc">
+        Search any US stock ticker to see a detailed view: price, P/E, EPS, analyst target, 52-week range, market cap, dividend yield, and a 1-year price + P/E history chart.
+      </p>
+      <div class="flex flex-col gap-2">
+        <div class="tip-badge">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-width="2"/><path stroke-linecap="round" stroke-width="2" d="M12 8v4m0 4h.01"/></svg>
+          <span data-i18n="guide.s3_tip1">Type a ticker (e.g. AAPL, NVDA, TSLA) and press Enter or click Look up.</span>
+        </div>
+        <div class="tip-badge">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-width="2"/><path stroke-linecap="round" stroke-width="2" d="M12 8v4m0 4h.01"/></svg>
+          <span data-i18n="guide.s3_tip2">The page also shows institutional ownership from recent 13F filings.</span>
+        </div>
+      </div>
+    </section>
+
+    <hr class="border-slate-800">
+
+    <!-- ── Section 4: 13F ──────────────────────────────────────────────── -->
+    <section id="s4" class="guide-section">
+      <div class="flex items-center gap-3 mb-4">
+        <span class="section-num">4</span>
+        <h2 class="text-lg font-bold text-slate-100" data-i18n="guide.s4_title">13F — Institutional Holdings</h2>
+      </div>
+
+      <div class="screen-frame mb-5">
+        <div class="bar">
+          <span class="dot bg-red-500/70"></span>
+          <span class="dot bg-yellow-500/70"></span>
+          <span class="dot bg-green-500/70"></span>
+          <span class="ml-2 text-xs text-slate-500 font-mono">127.0.0.1:5000/13f</span>
+        </div>
+        <div id="imgWrap4">
+          <img src="{{ url_for('static', filename='img/guide/thirteenf.png') }}" alt="13F page"
+               class="w-full block"
+               onerror="this.parentElement.innerHTML=document.getElementById('ph4').innerHTML">
+        </div>
+        <template id="ph4">
+          <div class="screen-placeholder py-16">
+            <svg class="w-10 h-10 text-slate-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                    d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+            </svg>
+            <span data-i18n="guide.screenshot_soon">Screenshot coming soon</span>
+          </div>
+        </template>
+      </div>
+
+      <p class="text-slate-300 text-sm leading-relaxed mb-4" data-i18n="guide.s4_desc">
+        View the latest quarterly 13F-HR filings from major funds (Berkshire, Bridgewater, etc.) sourced directly from SEC EDGAR. See each fund's top 50 equity positions with shares, value, and quarter-over-quarter change.
+      </p>
+      <div class="flex flex-col gap-2">
+        <div class="tip-badge">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-width="2"/><path stroke-linecap="round" stroke-width="2" d="M12 8v4m0 4h.01"/></svg>
+          <span data-i18n="guide.s4_tip1">Use the fund tabs at the top to switch between institutions.</span>
+        </div>
+        <div class="tip-badge">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-width="2"/><path stroke-linecap="round" stroke-width="2" d="M12 8v4m0 4h.01"/></svg>
+          <span data-i18n="guide.s4_tip2">Green/red arrows in the Change column show quarter-over-quarter position changes.</span>
+        </div>
+      </div>
+    </section>
+
+    <hr class="border-slate-800">
+
+    <!-- ── Section 5: Fed ──────────────────────────────────────────────── -->
+    <section id="s5" class="guide-section">
+      <div class="flex items-center gap-3 mb-4">
+        <span class="section-num">5</span>
+        <h2 class="text-lg font-bold text-slate-100" data-i18n="guide.s5_title">Fed — Balance Sheet (H.4.1)</h2>
+      </div>
+
+      <div class="screen-frame mb-5">
+        <div class="bar">
+          <span class="dot bg-red-500/70"></span>
+          <span class="dot bg-yellow-500/70"></span>
+          <span class="dot bg-green-500/70"></span>
+          <span class="ml-2 text-xs text-slate-500 font-mono">127.0.0.1:5000/fed</span>
+        </div>
+        <div id="imgWrap5">
+          <img src="{{ url_for('static', filename='img/guide/fed.png') }}" alt="Fed balance sheet page"
+               class="w-full block"
+               onerror="this.parentElement.innerHTML=document.getElementById('ph5').innerHTML">
+        </div>
+        <template id="ph5">
+          <div class="screen-placeholder py-16">
+            <svg class="w-10 h-10 text-slate-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                    d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+            </svg>
+            <span data-i18n="guide.screenshot_soon">Screenshot coming soon</span>
+          </div>
+        </template>
+      </div>
+
+      <p class="text-slate-300 text-sm leading-relaxed mb-4" data-i18n="guide.s5_desc">
+        Weekly Federal Reserve balance sheet data from FRED. Tracks total assets, Treasury holdings, MBS, reserve balances, overnight reverse repos (ON RRP), the Treasury General Account (TGA), currency in circulation, and emergency loans (BTFP).
+      </p>
+
+      <!-- Metrics grid -->
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
+        {% set metrics = [
+          ('#6366f1', 'Total Assets', '总资产'),
+          ('#38bdf8', 'Treasury Securities', '国债'),
+          ('#34d399', 'MBS Holdings', 'MBS持仓'),
+          ('#f59e0b', 'Reserve Balances', '存款准备金'),
+          ('#fb7185', 'ON RRP', '隔夜逆回购'),
+          ('#facc15', 'Treasury Gen. Account', '财政部一般账户'),
+          ('#94a3b8', 'Currency in Circulation', '流通货币'),
+          ('#f97316', 'Fed Loans / BTFP', '美联储贷款/BTFP'),
+        ] %}
+        {% for color, label_en, label_zh in metrics %}
+        <div class="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-xs">
+          <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:{{ color }}"></span>
+          <span class="text-slate-300 en-only">{{ label_en }}</span>
+          <span class="text-slate-300 zh-only" style="display:none">{{ label_zh }}</span>
+        </div>
+        {% endfor %}
+      </div>
+
+      <div class="flex flex-col gap-2">
+        <div class="tip-badge">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-width="2"/><path stroke-linecap="round" stroke-width="2" d="M12 8v4m0 4h.01"/></svg>
+          <span data-i18n="guide.s5_tip1">ON RRP high = excess liquidity in system. TGA drawdown = Treasury spending reserves into banking system.</span>
+        </div>
+        <div class="tip-badge">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-width="2"/><path stroke-linecap="round" stroke-width="2" d="M12 8v4m0 4h.01"/></svg>
+          <span data-i18n="guide.s5_tip2">Click ✦ Explain on any chart for an AI-powered macro interpretation.</span>
+        </div>
+        <div class="tip-badge">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-width="2"/><path stroke-linecap="round" stroke-width="2" d="M12 8v4m0 4h.01"/></svg>
+          <span data-i18n="guide.s5_tip3">Data updates weekly on Thursdays when the Fed publishes the H.4.1 release.</span>
+        </div>
+      </div>
+    </section>
+
+    <hr class="border-slate-800">
+
+    <!-- ── Section 6: Groups ────────────────────────────────────────────── -->
+    <section id="s6" class="guide-section">
+      <div class="flex items-center gap-3 mb-4">
+        <span class="section-num">6</span>
+        <h2 class="text-lg font-bold text-slate-100" data-i18n="guide.s6_title">Groups — Manage Peer Groups</h2>
+      </div>
+
+      <div class="screen-frame mb-5">
+        <div class="bar">
+          <span class="dot bg-red-500/70"></span>
+          <span class="dot bg-yellow-500/70"></span>
+          <span class="dot bg-green-500/70"></span>
+          <span class="ml-2 text-xs text-slate-500 font-mono">127.0.0.1:5000/groups</span>
+        </div>
+        <div id="imgWrap6">
+          <img src="{{ url_for('static', filename='img/guide/groups.png') }}" alt="Groups page"
+               class="w-full block"
+               onerror="this.parentElement.innerHTML=document.getElementById('ph6').innerHTML">
+        </div>
+        <template id="ph6">
+          <div class="screen-placeholder py-16">
+            <svg class="w-10 h-10 text-slate-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                    d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+            </svg>
+            <span data-i18n="guide.screenshot_soon">Screenshot coming soon</span>
+          </div>
+        </template>
+      </div>
+
+      <p class="text-slate-300 text-sm leading-relaxed mb-4" data-i18n="guide.s6_desc">
+        Create and manage custom peer groups. Add any ticker to a group and it will appear on the home page sector cards and sector detail pages.
+      </p>
+      <div class="flex flex-col gap-2">
+        <div class="tip-badge">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-width="2"/><path stroke-linecap="round" stroke-width="2" d="M12 8v4m0 4h.01"/></svg>
+          <span data-i18n="guide.s6_tip1">Click "+ Add Group" to create a new peer group with a custom name.</span>
+        </div>
+        <div class="tip-badge">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-width="2"/><path stroke-linecap="round" stroke-width="2" d="M12 8v4m0 4h.01"/></svg>
+          <span data-i18n="guide.s6_tip2">Add tickers to any group by typing the symbol in the group's input field.</span>
+        </div>
+      </div>
+    </section>
+
+    <hr class="border-slate-800">
+
+    <!-- ── Section 7: Language & Refresh ───────────────────────────────── -->
+    <section id="s7" class="guide-section">
+      <div class="flex items-center gap-3 mb-4">
+        <span class="section-num">7</span>
+        <h2 class="text-lg font-bold text-slate-100" data-i18n="guide.s7_title">Language & Refresh</h2>
+      </div>
+
+      <!-- Inline UI demo instead of screenshot -->
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 mb-5 flex flex-wrap gap-4 items-center">
+        <div class="flex items-center gap-2">
+          <span class="text-slate-400 text-xs" data-i18n="guide.s7_title">Language toggle →</span>
+          <button class="px-2.5 py-1.5 rounded-md text-sm border border-slate-700 text-slate-300
+                         hover:border-brand hover:text-brand transition font-medium pointer-events-none">
+            中文 / EN
+          </button>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="text-slate-400 text-xs">Refresh →</span>
+          <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm border border-brand text-brand pointer-events-none">
+            ↻ Refresh
+          </span>
+        </div>
+      </div>
+
+      <p class="text-slate-300 text-sm leading-relaxed mb-4" data-i18n="guide.s7_desc">
+        yStocker supports English and Chinese. Click 中文/EN in the top-right corner to toggle. The ↻ Refresh button re-fetches live data for the current page.
+      </p>
+      <div class="flex flex-col gap-2">
+        <div class="tip-badge">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-width="2"/><path stroke-linecap="round" stroke-width="2" d="M12 8v4m0 4h.01"/></svg>
+          <span data-i18n="guide.s7_tip1">Refresh is rate-limited to once every 10 minutes to avoid API overuse.</span>
+        </div>
+      </div>
+    </section>
+
+  </div><!-- /main content -->
+</div><!-- /flex layout -->
+
+<script>
+// ── TOC active-link highlight on scroll ───────────────────────────────────
+(function() {
+  const sections = document.querySelectorAll('.guide-section');
+  const links    = document.querySelectorAll('#guideToc .toc-link');
+  if (!sections.length || !links.length) return;
+
+  const obs = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        links.forEach(l => l.classList.remove('active'));
+        const active = document.querySelector(`#guideToc a[href="#${e.target.id}"]`);
+        if (active) active.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-20% 0px -70% 0px' });
+
+  sections.forEach(s => obs.observe(s));
+})();
+
+// ── Sync metric label language with page language ─────────────────────────
+(function syncMetricLang() {
+  function update() {
+    const isZh = document.documentElement.lang === 'zh' ||
+                 localStorage.getItem('ystocker_lang') === 'zh';
+    document.querySelectorAll('.en-only').forEach(el => el.style.display = isZh ? 'none' : '');
+    document.querySelectorAll('.zh-only').forEach(el => el.style.display = isZh ? ''     : 'none');
+  }
+  update();
+  // Re-run whenever I18n changes lang
+  const origSetLang = I18n.setLang;
+  I18n.setLang = function(lang) {
+    origSetLang(lang);
+    update();
+  };
+})();
+</script>
+
+{% endblock %}

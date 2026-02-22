@@ -37,6 +37,41 @@
     transition: color 0.15s;
   }
   .expand-btn:hover { color: #cbd5e1; }
+  .explain-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 500;
+    padding: 3px 9px;
+    border-radius: 5px;
+    border: 1px solid #334155;
+    background: transparent;
+    color: #64748b;
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s, background 0.15s;
+  }
+  .explain-btn:hover {
+    color: #a5b4fc;
+    border-color: #6366f1;
+    background: rgba(99,102,241,0.10);
+  }
+  .explain-btn.loading {
+    pointer-events: none;
+    opacity: 0.6;
+  }
+  .explain-panel {
+    margin-top: 14px;
+    padding: 12px 14px;
+    border-radius: 10px;
+    border: 1px solid #1e293b;
+    background: rgba(99,102,241,0.04);
+    color: #94a3b8;
+    font-size: 13px;
+    line-height: 1.65;
+    white-space: pre-wrap;
+    display: none;
+  }
 </style>
 
 <div class="mb-6 sm:mb-8 fade-up">
@@ -69,6 +104,9 @@
   <button id="tabNewsBtn" onclick="switchTab('news')"
           class="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-slate-200 -mb-px transition"
           data-i18n="history.tab_news">News</button>
+  <button id="tabVideosBtn" onclick="switchTab('videos')"
+          class="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-slate-200 -mb-px transition"
+          data-i18n="history.tab_videos">Videos</button>
 </div>
 
 <!-- ── Charts panel ──────────────────────────────────────────────────── -->
@@ -141,6 +179,7 @@
         <button onclick="expandChart('pe')" title="Expand" class="expand-btn">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
         </button>
+        <button id="explainBtnPe" class="explain-btn" onclick="explainChart('pe')" data-i18n="history.explain">✦ Explain</button>
       </div>
     </div>
     <div id="peLoading" class="flex items-center justify-center h-36 sm:h-48 text-slate-500 text-sm animate-pulse">
@@ -149,6 +188,7 @@
     <div class="chart-container" style="height:220px; display:none" id="peChartWrap">
       <canvas id="peChart"></canvas>
     </div>
+    <div id="explainPanelPe" class="explain-panel"></div>
   </div>
 
   <!-- Forward PE chart -->
@@ -176,11 +216,13 @@
         <button onclick="expandChart('fwdpe')" title="Expand" class="expand-btn">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
         </button>
+        <button id="explainBtnFwdpe" class="explain-btn" onclick="explainChart('fwdpe')" data-i18n="history.explain">✦ Explain</button>
       </div>
     </div>
     <div class="chart-container" style="height:220px" id="fwdPeChartWrap">
       <canvas id="fwdPeChart"></canvas>
     </div>
+    <div id="explainPanelFwdpe" class="explain-panel"></div>
   </div>
 
   <!-- Price history line chart -->
@@ -219,11 +261,13 @@
         <button onclick="expandChart('price')" title="Expand" class="expand-btn">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
         </button>
+        <button id="explainBtnPrice" class="explain-btn" onclick="explainChart('price')" data-i18n="history.explain">✦ Explain</button>
       </div>
     </div>
     <div class="chart-container" style="height:200px; display:none" id="priceChartWrap">
       <canvas id="priceHistChart"></canvas>
     </div>
+    <div id="explainPanelPrice" class="explain-panel"></div>
   </div>
 
   <!-- PEG history line chart -->
@@ -251,11 +295,13 @@
         <button onclick="expandChart('peg')" title="Expand" class="expand-btn ml-1">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
         </button>
+        <button id="explainBtnPeg" class="explain-btn" onclick="explainChart('peg')" data-i18n="history.explain">✦ Explain</button>
       </div>
     </div>
     <div class="chart-container" style="height:200px" id="pegChartWrap">
       <canvas id="pegHistChart"></canvas>
     </div>
+    <div id="explainPanelPeg" class="explain-panel"></div>
   </div>
 
 </div>
@@ -327,6 +373,20 @@
   </div>
 
   <div id="newsFeed" class="space-y-3"></div>
+</div>
+
+<!-- ── Videos panel ──────────────────────────────────────────────── -->
+<div id="panelVideos" style="display:none">
+  <div class="flex items-center justify-between mb-4">
+    <div class="flex items-center gap-3">
+      <div id="videosStatus" class="text-slate-500 text-sm"></div>
+    </div>
+    <a id="videosYtLink" href="#" target="_blank" rel="noopener"
+       class="flex items-center gap-1.5 text-xs text-slate-400 border border-slate-700 bg-slate-800
+              hover:text-slate-200 hover:border-slate-500 transition px-2.5 py-1 rounded-lg"
+       data-i18n="history.videos_open_yt">Open on YouTube ↗</a>
+  </div>
+  <div id="videosFeed" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
 </div>
 
 <!-- Error -->
@@ -770,20 +830,26 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal()
 // ── Tab switching ─────────────────────────────────────────────────────────────
 let _newsLoaded = false;
 let _newsAutoRefresh = null;
+let _videosLoaded = false;
 
 function switchTab(tab) {
   const isCharts = tab === 'charts';
+  const isNews   = tab === 'news';
+  const isVideos = tab === 'videos';
   document.getElementById('panelCharts').style.display = isCharts ? '' : 'none';
-  document.getElementById('panelNews').style.display   = isCharts ? 'none' : '';
+  document.getElementById('panelNews').style.display   = isNews   ? '' : 'none';
+  document.getElementById('panelVideos').style.display = isVideos ? '' : 'none';
 
   const chartsBtn = document.getElementById('tabChartsBtn');
   const newsBtn   = document.getElementById('tabNewsBtn');
-  chartsBtn.className = 'px-4 py-2 text-sm font-medium border-b-2 -mb-px transition ' +
-    (isCharts ? 'border-brand text-brand' : 'border-transparent text-slate-400 hover:text-slate-200');
-  newsBtn.className   = 'px-4 py-2 text-sm font-medium border-b-2 -mb-px transition ' +
-    (!isCharts ? 'border-brand text-brand' : 'border-transparent text-slate-400 hover:text-slate-200');
+  const videosBtn = document.getElementById('tabVideosBtn');
+  const activeClass   = 'px-4 py-2 text-sm font-medium border-b-2 -mb-px transition border-brand text-brand';
+  const inactiveClass = 'px-4 py-2 text-sm font-medium border-b-2 -mb-px transition border-transparent text-slate-400 hover:text-slate-200';
+  chartsBtn.className = isCharts ? activeClass : inactiveClass;
+  newsBtn.className   = isNews   ? activeClass : inactiveClass;
+  videosBtn.className = isVideos ? activeClass : inactiveClass;
 
-  if (!isCharts) {
+  if (isNews) {
     if (!_newsLoaded) loadNews(false);
     // Auto-refresh every 2 minutes while tab is visible
     if (!_newsAutoRefresh) {
@@ -792,6 +858,7 @@ function switchTab(tab) {
       }, 2 * 60 * 1000);
     }
   }
+  if (isVideos && !_videosLoaded) loadVideos();
 }
 
 // ── News feed ─────────────────────────────────────────────────────────────────
@@ -943,6 +1010,184 @@ function _escHtml(s) {
 function _escAttr(s) {
   if (!s) return '#';
   return s.replace(/"/g,'%22').replace(/'/g,'%27');
+}
+
+// ── YouTube videos ────────────────────────────────────────────────────────────
+async function loadVideos() {
+  const statusEl = document.getElementById('videosStatus');
+  const feedEl   = document.getElementById('videosFeed');
+  const ytLink   = document.getElementById('videosYtLink');
+
+  // YouTube search URL (past week filter) for the "Open on YouTube" link
+  const ytQuery = encodeURIComponent(TICKER + ' stock');
+  // sp=EgIIAg%3D%3D is the "This week" upload date filter
+  ytLink.href = `https://www.youtube.com/results?search_query=${ytQuery}&sp=EgIIAg%3D%3D`;
+
+  statusEl.textContent = I18n.t('history.videos_loading') || 'Fetching videos…';
+  statusEl.className   = 'text-slate-500 text-sm animate-pulse';
+  feedEl.innerHTML     = '';
+
+  let data;
+  try {
+    const resp = await fetch(`/api/videos/${encodeURIComponent(TICKER)}`);
+    data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || 'Failed');
+  } catch(e) {
+    statusEl.textContent = (I18n.t('history.videos_error') || 'Failed to load videos.') + ' ' + e.message;
+    statusEl.className   = 'text-red-400 text-sm';
+    return;
+  }
+
+  _videosLoaded = true;
+  const videos = data.videos || [];
+
+  if (data.note) {
+    // API key not configured — show a prompt to search on YouTube directly
+    statusEl.textContent = '';
+    feedEl.innerHTML =
+      `<div class="col-span-full text-slate-500 text-sm py-6 text-center">
+         No <code class="text-slate-400">YOUTUBE_API_KEY</code> configured —
+         <a href="${ytLink.href}" target="_blank" rel="noopener"
+            class="text-indigo-400 hover:text-indigo-300 underline">search YouTube directly ↗</a>
+       </div>`;
+    return;
+  }
+
+  if (!videos.length) {
+    statusEl.textContent = I18n.t('history.videos_empty') || 'No videos found.';
+    statusEl.className   = 'text-slate-500 text-sm';
+    return;
+  }
+
+  statusEl.textContent = `${videos.length} videos`;
+  statusEl.className   = 'text-slate-500 text-sm';
+  feedEl.innerHTML = videos.map(v => _renderVideo(v)).join('');
+  I18n.apply(feedEl);
+}
+
+function _renderVideo(v) {
+  const ago = _timeAgo(v.published);
+  const meta = [v.channel, ago].filter(Boolean).join(' · ');
+  return `
+<a href="https://www.youtube.com/watch?v=${_escAttr(v.id)}" target="_blank" rel="noopener noreferrer"
+   class="flex flex-col bg-slate-900 border border-slate-800 rounded-xl overflow-hidden
+          hover:border-slate-600 hover:bg-slate-800/60 transition group">
+  <div class="relative w-full" style="padding-top:56.25%">
+    <img src="https://i.ytimg.com/vi/${_escAttr(v.id)}/hqdefault.jpg" alt=""
+         class="absolute inset-0 w-full h-full object-cover opacity-90 group-hover:opacity-100 transition"
+         onerror="this.src='https://i.ytimg.com/vi/${_escAttr(v.id)}/mqdefault.jpg'">
+    <div class="absolute inset-0 flex items-center justify-center">
+      <div class="w-10 h-10 rounded-full bg-black/60 flex items-center justify-center
+                  group-hover:bg-red-600/80 transition">
+        <svg class="w-5 h-5 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M8 5v14l11-7z"/>
+        </svg>
+      </div>
+    </div>
+    ${v.duration ? `<span class="absolute bottom-1.5 right-1.5 text-[10px] font-semibold
+                                 bg-black/75 text-white px-1 py-0.5 rounded">${_escHtml(v.duration)}</span>` : ''}
+  </div>
+  <div class="p-3">
+    <p class="text-sm font-medium text-slate-200 group-hover:text-white leading-snug line-clamp-2">
+      ${_escHtml(v.title)}
+    </p>
+    <p class="text-xs text-slate-500 mt-1.5">${_escHtml(meta)}</p>
+  </div>
+</a>`;
+}
+
+// ── Gemini explain hook ───────────────────────────────────────────────────────
+// Maps chart key → {btnId, panelId, dataKey}
+const _explainMeta = {
+  pe:    { btn: 'explainBtnPe',    panel: 'explainPanelPe',    key: 'pe_history'      },
+  fwdpe: { btn: 'explainBtnFwdpe', panel: 'explainPanelFwdpe', key: 'fwd_pe_history'  },
+  price: { btn: 'explainBtnPrice', panel: 'explainPanelPrice', key: 'prices'          },
+  peg:   { btn: 'explainBtnPeg',   panel: 'explainPanelPeg',   key: 'peg_history'     },
+};
+
+// Track currently displayed period per chart key (default: 1y)
+const _explainPeriod = { pe: '1y', fwdpe: '1y', price: '1y', peg: '1y' };
+
+// Keep _explainPeriod in sync when the user clicks a range button
+document.addEventListener('click', function(e) {
+  const btn = e.target.closest('.range-btn[data-chart]');
+  if (btn) _explainPeriod[btn.dataset.chart] = btn.dataset.period;
+});
+
+async function explainChart(chartKey) {
+  const meta  = _explainMeta[chartKey];
+  if (!meta) return;
+  const btn   = document.getElementById(meta.btn);
+  const panel = document.getElementById(meta.panel);
+  if (!btn || !panel) return;
+
+  // Get the data for the currently shown period
+  const period = _explainPeriod[chartKey] || '1y';
+  let d;
+  try { d = await _fetchPeriod(period); } catch(e) { return; }
+
+  const values = d[meta.key] || [];
+  const dates  = d.dates || [];
+  if (!values.some(v => v != null)) return;
+
+  // Toggle off if already showing for the same chart
+  if (panel.style.display === 'block') {
+    panel.style.display = 'none';
+    btn.textContent = I18n.t('history.explain');
+    return;
+  }
+
+  panel.style.display = 'block';
+  panel.textContent   = I18n.t('history.explain_thinking');
+  btn.classList.add('loading');
+  btn.textContent = I18n.t('history.explain_thinking');
+
+  const lang = (typeof I18n !== 'undefined') ? I18n.getLang() : 'en';
+
+  try {
+    const resp = await fetch(
+      `/api/history/${encodeURIComponent(TICKER)}/explain`,
+      {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ chart: chartKey, dates, values, period, lang }),
+      }
+    );
+
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      panel.textContent = '⚠ ' + (err.error || 'Failed to get explanation.');
+      return;
+    }
+
+    panel.textContent = '';
+    const reader  = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const lines = buf.split('\n');
+      buf = lines.pop(); // keep incomplete line
+      for (const line of lines) {
+        if (!line.startsWith('data:')) continue;
+        const raw = line.slice(5).trim();
+        if (raw === '[DONE]') break;
+        try {
+          const msg = JSON.parse(raw);
+          if (msg.error) { panel.textContent += '\n⚠ ' + msg.error; break; }
+          if (msg.text)  panel.textContent += msg.text;
+        } catch {}
+      }
+    }
+  } catch(e) {
+    panel.textContent = '⚠ Network error: ' + e.message;
+  } finally {
+    btn.classList.remove('loading');
+    btn.textContent = panel.textContent ? I18n.t('history.explain_hide') : I18n.t('history.explain');
+  }
 }
 </script>
 {% endblock %}

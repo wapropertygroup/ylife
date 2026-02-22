@@ -7,11 +7,15 @@ Data source: FRED (Federal Reserve Bank of St. Louis) public CSV endpoint.
 No API key required.
 
 Series (weekly, not seasonally adjusted):
-  WALCL   — Total assets (all Federal Reserve Banks), millions USD
-  TREAST  — U.S. Treasury securities held outright, millions USD
-  WSHOSHO — Short-term Treasury bills held outright (≤1 year), millions USD
-  MBST    — Mortgage-backed securities held outright, millions USD
-  WRESBAL — Reserve balances with Federal Reserve Banks, millions USD
+  WALCL     — Total assets (all Federal Reserve Banks), millions USD
+  TREAST    — U.S. Treasury securities held outright, millions USD
+  WSHOSHO   — Short-term Treasury bills held outright (≤1 year), millions USD
+  MBST      — Mortgage-backed securities held outright, millions USD
+  WRESBAL   — Reserve balances with Federal Reserve Banks, millions USD
+  RRPONTSYD — Overnight reverse repurchase agreements (ON RRP), billions USD
+  WTREGEN   — U.S. Treasury General Account (TGA) at Fed, millions USD
+  WCURCIR   — Currency in circulation, millions USD
+  WLCFLPCL  — Loans from Federal Reserve Banks (incl. BTFP), millions USD
 
 Cache TTL: 24 hours (H.4.1 updates once a week, on Thursdays).
 """
@@ -36,11 +40,15 @@ _FRED_CSV = "https://fred.stlouisfed.org/graph/fredgraph.csv?id={series}"
 
 # Series IDs and display metadata
 SERIES: Dict[str, Dict[str, str]] = {
-    "WALCL":   {"label": "Total Assets",              "color": "#6366f1"},
-    "TREAST":  {"label": "Treasury Securities",       "color": "#38bdf8"},
-    "WSHOSHO": {"label": "Bills (Short-Term)",        "color": "#818cf8"},
-    "MBST":    {"label": "MBS (Mortgage-Backed Sec)", "color": "#34d399"},
-    "WRESBAL": {"label": "Reserve Balances",          "color": "#f59e0b"},
+    "WALCL":     {"label": "Total Assets",              "color": "#6366f1"},
+    "TREAST":    {"label": "Treasury Securities",       "color": "#38bdf8"},
+    "WSHOSHO":   {"label": "Bills (Short-Term)",        "color": "#818cf8"},
+    "MBST":      {"label": "MBS (Mortgage-Backed Sec)", "color": "#34d399"},
+    "WRESBAL":   {"label": "Reserve Balances",          "color": "#f59e0b"},
+    "RRPONTSYD": {"label": "Overnight Reverse Repos",   "color": "#fb7185"},
+    "WTREGEN":   {"label": "Treasury General Account",  "color": "#facc15"},
+    "WCURCIR":   {"label": "Currency in Circulation",   "color": "#94a3b8"},
+    "WLCFLPCL":  {"label": "Fed Loans (incl. BTFP)",    "color": "#f97316"},
 }
 
 # ---------------------------------------------------------------------------
@@ -86,6 +94,10 @@ _HEADERS = {
 }
 
 
+# Series already in billions USD (no /1000 conversion needed)
+_SERIES_ALREADY_BILLIONS = {"RRPONTSYD"}
+
+
 def _fetch_series(series_id: str) -> Optional[Dict[str, Any]]:
     """
     Fetch a single FRED series CSV and return
@@ -93,6 +105,7 @@ def _fetch_series(series_id: str) -> Optional[Dict[str, Any]]:
     Returns None on error.
     """
     url = _FRED_CSV.format(series=series_id)
+    already_billions = series_id in _SERIES_ALREADY_BILLIONS
     log.info("Fed: fetching %s from FRED", series_id)
     try:
         resp = requests.get(url, headers=_HEADERS, timeout=30)
@@ -130,7 +143,8 @@ def _fetch_series(series_id: str) -> Optional[Dict[str, Any]]:
             values.append(None)
         else:
             try:
-                values.append(round(float(val_str) / 1000, 2))  # millions → billions
+                raw = float(val_str)
+                values.append(round(raw if already_billions else raw / 1000, 2))  # millions → billions
             except ValueError:
                 values.append(None)
 

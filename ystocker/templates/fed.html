@@ -208,9 +208,9 @@
         <p class="text-xs text-slate-500" data-i18n="fed.treasury_desc">Weekly, $ billions — Federal Reserve balance sheet</p>
       </div>
       <div id="treasuryRangeSelector" class="flex flex-wrap gap-1 text-xs">
-        <button class="range-btn" data-range="52">1Y</button>
+        <button class="range-btn active" data-range="52">1Y</button>
         <button class="range-btn" data-range="104">2Y</button>
-        <button class="range-btn active" data-range="156">3Y</button>
+        <button class="range-btn" data-range="156">3Y</button>
         <button class="range-btn" data-range="260">5Y</button>
         <button class="range-btn" data-range="0" data-i18n="fed.range_all">All</button>
         <button class="explain-btn" onclick="explainChart('treasury')" data-i18n="fed.explain">✦ Explain</button>
@@ -239,9 +239,9 @@
           <p class="text-xs text-slate-500" data-i18n="fed.bills_desc">Short-term T-bills maturing within 1 year — a subset of the Treasury holdings above</p>
         </div>
         <div id="billsRangeSelector" class="flex flex-wrap gap-1 text-xs">
-          <button class="range-btn" data-range="52">1Y</button>
+          <button class="range-btn active" data-range="52">1Y</button>
           <button class="range-btn" data-range="104">2Y</button>
-          <button class="range-btn active" data-range="156">3Y</button>
+          <button class="range-btn" data-range="156">3Y</button>
           <button class="range-btn" data-range="260">5Y</button>
           <button class="range-btn" data-range="0" data-i18n="fed.range_all">All</button>
           <button class="explain-btn" onclick="explainChart('bills')" data-i18n="fed.explain">✦ Explain</button>
@@ -272,9 +272,9 @@
         <p class="text-xs text-slate-500" data-i18n="fed.balance_desc">Total assets, MBS, and reserve balances ($B) — weekly</p>
       </div>
       <div id="balanceRangeSelector" class="flex flex-wrap gap-1 text-xs">
-        <button class="range-btn" data-range="52">1Y</button>
+        <button class="range-btn active" data-range="52">1Y</button>
         <button class="range-btn" data-range="104">2Y</button>
-        <button class="range-btn active" data-range="156">3Y</button>
+        <button class="range-btn" data-range="156">3Y</button>
         <button class="range-btn" data-range="260">5Y</button>
         <button class="range-btn" data-range="0" data-i18n="fed.range_all">All</button>
         <button class="explain-btn" onclick="explainChart('balance')" data-i18n="fed.explain">✦ Explain</button>
@@ -297,9 +297,9 @@
         <p class="text-xs text-slate-500" data-i18n="fed.pct_desc">How much of the Fed's balance sheet is US Treasuries — higher = more concentrated in government debt</p>
       </div>
       <div id="pctRangeSelector" class="flex flex-wrap gap-1 text-xs">
-        <button class="range-btn" data-range="52">1Y</button>
+        <button class="range-btn active" data-range="52">1Y</button>
         <button class="range-btn" data-range="104">2Y</button>
-        <button class="range-btn active" data-range="156">3Y</button>
+        <button class="range-btn" data-range="156">3Y</button>
         <button class="range-btn" data-range="260">5Y</button>
         <button class="range-btn" data-range="0" data-i18n="fed.range_all">All</button>
         <button class="explain-btn" onclick="explainChart('pct')" data-i18n="fed.explain">✦ Explain</button>
@@ -319,9 +319,9 @@
         <p class="text-xs text-slate-500" data-i18n="fed.liab_desc">Key drains on reserve liquidity — overnight reverse repos (money-market parking) and Treasury's cash balance at the Fed</p>
       </div>
       <div id="liabRangeSelector" class="flex flex-wrap gap-1 text-xs">
-        <button class="range-btn" data-range="52">1Y</button>
+        <button class="range-btn active" data-range="52">1Y</button>
         <button class="range-btn" data-range="104">2Y</button>
-        <button class="range-btn active" data-range="156">3Y</button>
+        <button class="range-btn" data-range="156">3Y</button>
         <button class="range-btn" data-range="260">5Y</button>
         <button class="range-btn" data-range="0" data-i18n="fed.range_all">All</button>
         <button class="explain-btn" onclick="explainChart('liab')" data-i18n="fed.explain">✦ Explain</button>
@@ -344,9 +344,9 @@
         <p class="text-xs text-slate-500" data-i18n="fed.currloan_desc">Physical currency outstanding (largest Fed liability) alongside emergency lending — BTFP spike visible post-SVB 2023</p>
       </div>
       <div id="currLoanRangeSelector" class="flex flex-wrap gap-1 text-xs">
-        <button class="range-btn" data-range="52">1Y</button>
+        <button class="range-btn active" data-range="52">1Y</button>
         <button class="range-btn" data-range="104">2Y</button>
-        <button class="range-btn active" data-range="156">3Y</button>
+        <button class="range-btn" data-range="156">3Y</button>
         <button class="range-btn" data-range="260">5Y</button>
         <button class="range-btn" data-range="0" data-i18n="fed.range_all">All</button>
         <button class="explain-btn" onclick="explainChart('currLoan')" data-i18n="fed.explain">✦ Explain</button>
@@ -464,14 +464,14 @@
   document.getElementById('treasuryLoading').style.display = 'none';
   document.getElementById('treasuryChartWrap').style.display = 'block';
   document.getElementById('treasuryWowWrap').classList.remove('hidden');
-  registerExplainData('treasury', sliceSeries('TREAST', 156).dates, sliceSeries('TREAST', 156).values, 'U.S. Treasury Securities Held Outright');
+  registerExplainData('treasury', sliceSeries('TREAST', 52).dates, sliceSeries('TREAST', 52).values, 'U.S. Treasury Securities Held Outright');
 
   const TREASURY_COLORS = {
     border: '#38bdf8',
     fill:   'rgba(56,189,248,0.07)',
   };
 
-  let currentRange = 156; // default 3Y
+  let currentRange = 52; // default 1Y
 
   // WoW chart data (last 52 weeks always)
   function wowData(n) {
@@ -599,9 +599,9 @@
     document.getElementById('billsLoading').style.display = 'none';
     document.getElementById('billsChartWrap').style.display = 'block';
     document.getElementById('billsWowWrap').classList.remove('hidden');
-    registerExplainData('bills', sliceSeries('WSHOSHO', 156).dates, sliceSeries('WSHOSHO', 156).values, 'Treasury Bills (Short-Term, ≤1Y) Held Outright');
+    registerExplainData('bills', sliceSeries('WSHOSHO', 52).dates, sliceSeries('WSHOSHO', 52).values, 'Treasury Bills (Short-Term, ≤1Y) Held Outright');
 
-    let billsRange = 156;
+    let billsRange = 52;
 
     const bllCtx = document.getElementById('billsChart');
     const billsChart = new Chart(bllCtx, {
@@ -690,7 +690,7 @@
   document.getElementById('balanceChartWrap').style.display = 'block';
 
   const bCtx = document.getElementById('balanceChart');
-  let BALANCE_N = 156; // 3Y default
+  let BALANCE_N = 52; // 1Y default
 
   function buildBalanceData(n) {
     return {
@@ -779,7 +779,7 @@
     };
   }
 
-  const pctInitial = buildPctData(156);
+  const pctInitial = buildPctData(52);
   if (pctInitial.values.some(v => v != null)) {
     registerExplainData('pct', pctInitial.dates, pctInitial.values, 'U.S. Treasuries as % of Total Fed Assets');
     document.getElementById('pctChartWrap').style.display = 'block';
@@ -831,7 +831,7 @@
       };
     }
 
-    let LIAB_N = 156;
+    let LIAB_N = 52;
     let ld = buildLiabData(LIAB_N);
 
     // Use longer series for labels (TGA goes further back)
@@ -906,7 +906,7 @@
       };
     }
 
-    let CL_N = 156;
+    let CL_N = 52;
     let cld = buildCurrLoanData(CL_N);
     registerExplainData('currLoan', cld.cur.dates, cld.cur.values, 'Currency in Circulation & Fed Emergency Loans (incl. BTFP)');
 
