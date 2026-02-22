@@ -123,7 +123,7 @@ Resources:
   InstanceSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: yStocker – allow HTTP app port + SSH
+      GroupDescription: yStocker - allow HTTP app port + SSH
       VpcId: !Ref VPC
       SecurityGroupIngress:
         - IpProtocol: tcp
