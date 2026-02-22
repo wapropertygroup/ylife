@@ -67,12 +67,22 @@
         <h2 class="text-base font-semibold text-slate-200">PE Ratios (TTM &amp; Forward) + PEG</h2>
         <p class="text-xs text-slate-500 mb-4">Left axis: PE ratios. Right axis (green bars): PEG ratio. Dashed line = PEG 1.0.</p>
       </div>
-      <div class="flex gap-2 shrink-0">
-        <button onclick="sortChart('pe')" data-chart="pe"
-                class="chart-sort flex items-center gap-1 text-xs text-slate-400 border border-slate-700 bg-slate-800
-                       hover:text-slate-200 transition px-2 py-1 rounded-lg">
-          <span class="sort-text">A→Z</span>
-        </button>
+      <div class="flex gap-2 shrink-0 flex-wrap justify-end">
+        <div class="flex items-center gap-1 bg-slate-800 border border-slate-700 rounded-lg p-0.5">
+          <span class="text-[10px] text-slate-500 px-1.5">Sort</span>
+          <button onclick="sortPeChart('pe_ttm')" id="pe-sort-pe_ttm"
+                  class="pe-sort-btn text-xs px-2 py-1 rounded-md transition text-slate-400 hover:text-slate-200">
+            TTM <span class="pe-sort-arrow"></span>
+          </button>
+          <button onclick="sortPeChart('pe_fwd')" id="pe-sort-pe_fwd"
+                  class="pe-sort-btn text-xs px-2 py-1 rounded-md transition text-slate-400 hover:text-slate-200">
+            Fwd <span class="pe-sort-arrow"></span>
+          </button>
+          <button onclick="sortPeChart('peg')" id="pe-sort-peg"
+                  class="pe-sort-btn text-xs px-2 py-1 rounded-md transition text-slate-400 hover:text-slate-200">
+            PEG <span class="pe-sort-arrow"></span>
+          </button>
+        </div>
         <button onclick="toggleValues('pe')" data-chart="pe"
                 class="chart-toggle flex items-center gap-1 text-xs text-brand border border-brand/40 bg-brand/10
                        hover:bg-brand hover:text-white transition px-2 py-1 rounded-lg">
@@ -208,9 +218,49 @@ const chartInstances = {};
 const valuesVisible  = { pe: true, prices: true, upside: true, peg: true };
 
 // ---- Sort state ----
-// For pe/prices: 'ticker' (A→Z) or 'ticker_desc' (Z→A) (sort by ticker label)
-// For upside/peg: 'asc' (Lo→Hi) or 'desc' (Hi→Lo)
-const sortState = { pe: 'ticker', prices: 'ticker', upside: 'asc', peg: 'asc' };
+const sortState = { pe: { field: null, dir: 1 }, prices: 'ticker', upside: 'asc', peg: 'asc' };
+
+function sortPeChart(field) {
+  const chart = chartInstances.pe;
+  if (!chart) return;
+
+  // Toggle direction if same field; default asc for new field
+  if (sortState.pe.field === field) {
+    sortState.pe.dir *= -1;
+  } else {
+    sortState.pe.field = field;
+    sortState.pe.dir = 1;
+  }
+  const dir = sortState.pe.dir;
+
+  // Update button styles
+  document.querySelectorAll('.pe-sort-btn').forEach(btn => {
+    const arrow = btn.querySelector('.pe-sort-arrow');
+    if (btn.id === 'pe-sort-' + field) {
+      btn.classList.add('bg-brand/20', 'text-white');
+      btn.classList.remove('text-slate-400');
+      arrow.textContent = dir === 1 ? ' ↑' : ' ↓';
+    } else {
+      btn.classList.remove('bg-brand/20', 'text-white');
+      btn.classList.add('text-slate-400');
+      arrow.textContent = '';
+    }
+  });
+
+  const sorted = [...DATA].sort((a, b) => {
+    const av = a[field], bv = b[field];
+    if (av == null && bv == null) return 0;
+    if (av == null) return 1;
+    if (bv == null) return -1;
+    return (av - bv) * dir;
+  });
+
+  chart.data.labels = sorted.map(d => d.ticker);
+  chart.data.datasets[0].data = sorted.map(d => d.pe_ttm);
+  chart.data.datasets[1].data = sorted.map(d => d.pe_fwd);
+  chart.data.datasets[2].data = sorted.map(d => d.peg);
+  chart.update();
+}
 
 function sortChart(chartKey) {
   const chart = chartInstances[chartKey];
@@ -218,24 +268,16 @@ function sortChart(chartKey) {
   const btn  = document.querySelector(`.chart-sort[data-chart="${chartKey}"]`);
   const text = btn.querySelector('.sort-text');
 
-  if (chartKey === 'pe' || chartKey === 'prices') {
-    // Toggle A→Z / Z→A (ticker label sort)
-    const asc = sortState[chartKey] !== 'ticker';
-    sortState[chartKey] = asc ? 'ticker' : 'ticker_desc';
+  if (chartKey === 'prices') {
+    const asc = sortState.prices !== 'ticker';
+    sortState.prices = asc ? 'ticker' : 'ticker_desc';
     text.textContent = asc ? 'A→Z' : 'Z→A';
-
     const sorted = [...DATA].sort((a, b) =>
       asc ? a.ticker.localeCompare(b.ticker) : b.ticker.localeCompare(a.ticker)
     );
     chart.data.labels = sorted.map(d => d.ticker);
-    if (chartKey === 'pe') {
-      chart.data.datasets[0].data = sorted.map(d => d.pe_ttm);
-      chart.data.datasets[1].data = sorted.map(d => d.pe_fwd);
-      chart.data.datasets[2].data = sorted.map(d => d.peg);
-    } else {
-      chart.data.datasets[0].data = sorted.map(d => d.price);
-      chart.data.datasets[1].data = sorted.map(d => d.target);
-    }
+    chart.data.datasets[0].data = sorted.map(d => d.price);
+    chart.data.datasets[1].data = sorted.map(d => d.target);
 
   } else {
     // upside / peg: toggle Lo→Hi / Hi→Lo
