@@ -88,7 +88,7 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                   d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-5 5a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 10V5a2 2 0 012-2z"/>
           </svg>
-          <span id="scatterLabelToggleText">Hide labels</span>
+          <span id="scatterLabelToggleText">Hide tickers</span>
         </button>
         <button onclick="window._chartModal.expand('scatter')"
                 class="flex items-center gap-1 text-xs text-slate-500 hover:text-brand transition px-2 py-1
@@ -254,15 +254,21 @@ function toggleScatterLabels() {
   const btn  = document.getElementById('scatterLabelToggle');
   const text = document.getElementById('scatterLabelToggleText');
   if (scatterLabelsVisible) {
-    text.textContent = 'Hide labels';
+    text.textContent = 'Hide tickers';
     btn.classList.remove('bg-brand', 'text-white');
     btn.classList.add('text-brand', 'bg-brand/10');
   } else {
-    text.textContent = 'Show labels';
+    text.textContent = 'Show tickers';
     btn.classList.add('bg-brand', 'text-white');
     btn.classList.remove('text-brand', 'bg-brand/10');
   }
-  if (_inlineScatterChart) _inlineScatterChart.update();
+  if (_inlineScatterChart) {
+    _inlineScatterChart.data.datasets.forEach(ds => {
+      ds.pointRadius      = scatterLabelsVisible ? 7 : 0;
+      ds.pointHoverRadius = scatterLabelsVisible ? 9 : 0;
+    });
+    _inlineScatterChart.update();
+  }
 }
 
 // ─── Shared chart builder functions ────────────────────────────────────────
