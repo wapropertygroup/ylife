@@ -19,13 +19,13 @@
       <span data-i18n="warming.note">This only happens on first load — the page will refresh automatically.</span>
     </p>
 
-    <!-- Auto-reload every 4 seconds until the cache is ready -->
-    <p class="text-xs text-slate-600"><span data-i18n="warming.checking">Checking again in</span> <span id="countdown">4</span><span data-i18n="warming.seconds">s…</span></p>
+    <!-- Auto-reload every 30 seconds until the cache is ready -->
+    <p class="text-xs text-slate-600"><span data-i18n="warming.checking">Checking again in</span> <span id="countdown">30</span><span data-i18n="warming.seconds">s…</span></p>
   </div>
 </div>
 
 <script>
-  let s = 4;
+  let s = 30;
   const el = document.getElementById('countdown');
   setInterval(() => {
     s--;

@@ -8,6 +8,15 @@
     <button onclick="history.back()" class="text-slate-500 hover:text-slate-300 text-sm transition" data-i18n="history.back">← Back</button>
     <span class="text-slate-700">/</span>
     <span class="text-slate-300 text-sm font-mono font-semibold">{{ ticker }}</span>
+    <a href="https://www.tradingview.com/chart/?symbol={{ ticker }}" target="_blank" rel="noopener"
+       class="ml-auto flex items-center gap-1 text-xs text-slate-400 border border-slate-700 bg-slate-800
+              hover:text-slate-200 hover:border-slate-500 transition px-2.5 py-1 rounded-lg">
+      <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
+      </svg>
+      <span data-i18n="history.tradingview">TradingView</span>
+    </a>
   </div>
   <h1 class="text-2xl sm:text-3xl font-bold">
     <span class="font-mono grad-text">{{ ticker }}</span>
@@ -17,7 +26,7 @@
 </div>
 
 <!-- ── Stat cards ───────────────────────────────────────────────────── -->
-<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4 mb-6 sm:mb-8 fade-up">
+<div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3 sm:gap-4 mb-6 sm:mb-8 fade-up">
   <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 sm:px-4 py-3">
     <div class="text-xs text-slate-500 mb-1" data-i18n="history.current_pe">Current PE</div>
     <div id="statCurrentPe" class="text-lg sm:text-xl font-bold text-slate-100">—</div>
@@ -41,6 +50,14 @@
   <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 sm:px-4 py-3">
     <div class="text-xs text-slate-500 mb-1" data-i18n="history.upside">Analyst Upside</div>
     <div id="statUpside" class="text-lg sm:text-xl font-bold text-slate-100">—</div>
+  </div>
+  <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 sm:px-4 py-3">
+    <div class="text-xs text-slate-500 mb-1" data-i18n="history.eps_growth_ttm">EPS Growth TTM</div>
+    <div id="statEpsGrowthTtm" class="text-lg sm:text-xl font-bold text-slate-100">—</div>
+  </div>
+  <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 sm:px-4 py-3">
+    <div class="text-xs text-slate-500 mb-1" data-i18n="history.eps_growth_q">EPS Growth Q</div>
+    <div id="statEpsGrowthQ" class="text-lg sm:text-xl font-bold text-slate-100">—</div>
   </div>
 </div>
 
@@ -152,6 +169,16 @@ const TICKER = {{ ticker | tojson }};
       upsideEl.className   = 'text-xl font-bold ' + (upside >= 0 ? 'text-emerald-400' : 'text-rose-400');
     }
   }
+
+  function setGrowthStat(elId, val) {
+    const el = document.getElementById(elId);
+    if (val != null) {
+      el.textContent = (val >= 0 ? '+' : '') + val.toFixed(1) + '%';
+      el.className   = 'text-lg sm:text-xl font-bold ' + (val >= 0 ? 'text-emerald-400' : 'text-rose-400');
+    }
+  }
+  setGrowthStat('statEpsGrowthTtm', data.eps_growth_ttm);
+  setGrowthStat('statEpsGrowthQ',   data.eps_growth_q);
 
   const gridCol = '#1e293b';
   const tickCol = '#64748b';

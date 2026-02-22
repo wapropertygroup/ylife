@@ -15,18 +15,30 @@
 </div>
 
 <!-- ── Tab nav ───────────────────────────────────────────────────────── -->
-{% set has_upside = namespace(v=false) %}
-{% set has_peg    = namespace(v=false) %}
-{% set has_price  = namespace(v=false) %}
+{% set has_upside     = namespace(v=false) %}
+{% set has_peg        = namespace(v=false) %}
+{% set has_price      = namespace(v=false) %}
+{% set has_growth     = namespace(v=false) %}
+{% set has_day_change = namespace(v=false) %}
 {% for ticker, row in table.iterrows() %}
   {% if row.get('Upside (%)') is not none and row.get('Upside (%)') == row.get('Upside (%)') %}{% set has_upside.v = true %}{% endif %}
   {% if row.get('PEG') is not none and row.get('PEG') == row.get('PEG') %}{% set has_peg.v = true %}{% endif %}
   {% if row.get('Target Price') is not none and row.get('Target Price') == row.get('Target Price') %}{% set has_price.v = true %}{% endif %}
+  {% if row.get('EPS Growth TTM (%)') is not none and row.get('EPS Growth TTM (%)') == row.get('EPS Growth TTM (%)') %}{% set has_growth.v = true %}{% endif %}
+  {% if row.get('EPS Growth Q (%)') is not none and row.get('EPS Growth Q (%)') == row.get('EPS Growth Q (%)') %}{% set has_growth.v = true %}{% endif %}
+  {% if row.get('Day Change (%)') is not none and row.get('Day Change (%)') == row.get('Day Change (%)') %}{% set has_day_change.v = true %}{% endif %}
 {% endfor %}
 
-<div x-data="{ tab: 'pe' }" class="fade-up">
+<div x-data="{ tab: 'day_change' }" class="fade-up">
 
   <div class="flex gap-1 mb-6 bg-slate-900 border border-slate-800 rounded-xl p-1 w-full sm:w-fit flex-wrap">
+    {% if has_day_change.v %}
+    <button @click="tab='day_change'"
+            :class="tab==='day_change' ? 'bg-brand text-white shadow' : 'text-slate-400 hover:text-slate-200'"
+            class="px-4 py-1.5 rounded-lg text-sm font-medium transition-all" data-i18n="sector.tab_day_change">
+      Day Change
+    </button>
+    {% endif %}
     <button @click="tab='pe'"
             :class="tab==='pe' ? 'bg-brand text-white shadow' : 'text-slate-400 hover:text-slate-200'"
             class="px-4 py-1.5 rounded-lg text-sm font-medium transition-all" data-i18n="sector.tab_pe">
@@ -53,11 +65,41 @@
       PEG Map
     </button>
     {% endif %}
+    {% if has_growth.v %}
+    <button @click="tab='growth'"
+            :class="tab==='growth' ? 'bg-brand text-white shadow' : 'text-slate-400 hover:text-slate-200'"
+            class="px-4 py-1.5 rounded-lg text-sm font-medium transition-all" data-i18n="sector.tab_growth">
+      Growth
+    </button>
+    {% endif %}
     <button @click="tab='table'"
             :class="tab==='table' ? 'bg-brand text-white shadow' : 'text-slate-400 hover:text-slate-200'"
             class="px-4 py-1.5 rounded-lg text-sm font-medium transition-all" data-i18n="sector.tab_table">
       Data Table
     </button>
+  </div>
+
+  <!-- Day Change -->
+  <div x-show="tab==='day_change'" x-transition class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 mb-6">
+    <div class="flex flex-col sm:flex-row sm:items-start gap-3 sm:gap-0 sm:justify-between mb-1">
+      <div>
+        <h2 class="text-base font-semibold text-slate-200" data-i18n="sector.day_change_title">Last Close — Day Change</h2>
+        <p class="text-xs text-slate-500 mb-2 sm:mb-4" data-i18n="sector.day_change_desc">Percentage change from previous close. Green = up, red = down.</p>
+      </div>
+      <div class="flex gap-2">
+        <button onclick="sortChart('day_change')" data-chart="day_change"
+                class="chart-sort flex items-center gap-1 text-xs text-slate-400 border border-slate-700 bg-slate-800
+                       hover:text-slate-200 transition px-2 py-1 rounded-lg">
+          <span class="sort-text">Lo→Hi</span>
+        </button>
+        <button onclick="toggleValues('day_change')" data-chart="day_change"
+                class="chart-toggle flex items-center gap-1 text-xs text-brand border border-brand/40 bg-brand/10
+                       hover:bg-brand hover:text-white transition px-2 py-1 rounded-lg">
+          <span class="toggle-text">Hide values</span>
+        </button>
+      </div>
+    </div>
+    <div class="chart-container" style="height:260px"><canvas id="dayChangeChart"></canvas></div>
   </div>
 
   <!-- PE & PEG grouped bars -->
@@ -172,6 +214,35 @@
     <div class="chart-container" style="height:260px; sm:height:320px"><canvas id="pegChart"></canvas></div>
   </div>
 
+  <!-- Growth chart -->
+  <div x-show="tab==='growth'" x-transition class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 mb-6">
+    <div class="flex flex-col sm:flex-row sm:items-start gap-3 sm:gap-0 sm:justify-between mb-1">
+      <div>
+        <h2 class="text-base font-semibold text-slate-200" data-i18n="sector.growth_title">EPS Growth</h2>
+        <p class="text-xs text-slate-500 mb-2 sm:mb-4" data-i18n="sector.growth_desc">Year-over-year earnings growth — TTM (trailing 12 months) and most recent quarter.</p>
+      </div>
+      <div class="flex gap-2 flex-wrap">
+        <div class="flex items-center gap-1 bg-slate-800 border border-slate-700 rounded-lg p-0.5">
+          <span class="text-[10px] text-slate-500 px-1.5" data-i18n="sector.sort">Sort</span>
+          <button onclick="sortGrowthChart('eps_growth_ttm')" id="growth-sort-ttm"
+                  class="growth-sort-btn text-xs px-2 py-1 rounded-md transition text-slate-400 hover:text-slate-200">
+            TTM <span class="growth-sort-arrow"></span>
+          </button>
+          <button onclick="sortGrowthChart('eps_growth_q')" id="growth-sort-q"
+                  class="growth-sort-btn text-xs px-2 py-1 rounded-md transition text-slate-400 hover:text-slate-200">
+            Q <span class="growth-sort-arrow"></span>
+          </button>
+        </div>
+        <button onclick="toggleValues('growth')" data-chart="growth"
+                class="chart-toggle flex items-center gap-1 text-xs text-brand border border-brand/40 bg-brand/10
+                       hover:bg-brand hover:text-white transition px-2 py-1 rounded-lg">
+          <span class="toggle-text" data-i18n="sector.hide_values">Hide values</span>
+        </button>
+      </div>
+    </div>
+    <div class="chart-container" style="height:{{ [table|length * 40 + 40, 200]|max }}px"><canvas id="growthChart"></canvas></div>
+  </div>
+
   <!-- Data Table -->
   <div x-show="tab==='table'" x-transition class="bg-slate-900 border border-slate-800 rounded-2xl p-6 mb-6">
     <h2 class="text-base font-semibold text-slate-200 mb-4" data-i18n="sector.table_title">Data Table</h2>
@@ -197,6 +268,10 @@
                 data-col="pe_fwd"><span data-i18n="th.pe_fwd">PE (Fwd)</span> <span class="sort-icon ml-0.5">&#8597;</span></th>
             <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-300 transition whitespace-nowrap"
                 data-col="peg"><span data-i18n="th.peg">PEG</span> <span class="sort-icon ml-0.5">&#8597;</span></th>
+            <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-300 transition whitespace-nowrap"
+                data-col="eps_growth_ttm"><span data-i18n="th.eps_growth_ttm">EPS Gr TTM</span> <span class="sort-icon ml-0.5">&#8597;</span></th>
+            <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-300 transition whitespace-nowrap"
+                data-col="eps_growth_q"><span data-i18n="th.eps_growth_q">EPS Gr Q</span> <span class="sort-icon ml-0.5">&#8597;</span></th>
           </tr>
         </thead>
         <tbody id="sectorTableBody"></tbody>
@@ -215,10 +290,51 @@ const tickCol = '#64748b';
 
 // ---- Value toggle state ----
 const chartInstances = {};
-const valuesVisible  = { pe: true, prices: true, upside: true, peg: true };
+const valuesVisible  = { pe: true, prices: true, upside: true, peg: true, growth: true, day_change: true };
 
 // ---- Sort state ----
-const sortState = { pe: { field: null, dir: 1 }, prices: 'ticker', upside: 'asc', peg: 'asc' };
+const sortState = { pe: { field: null, dir: 1 }, prices: 'ticker', upside: 'asc', peg: 'asc', growth: 'asc', day_change: 'asc' };
+
+// ---- Growth sort state ----
+const growthSortState = { field: 'eps_growth_ttm', dir: 1 };
+
+function sortGrowthChart(field) {
+  const chart = chartInstances.growth;
+  if (!chart) return;
+
+  if (growthSortState.field === field) {
+    growthSortState.dir *= -1;
+  } else {
+    growthSortState.field = field;
+    growthSortState.dir = 1;
+  }
+  const dir = growthSortState.dir;
+
+  document.querySelectorAll('.growth-sort-btn').forEach(btn => {
+    const arrow = btn.querySelector('.growth-sort-arrow');
+    if (btn.id === 'growth-sort-' + (field === 'eps_growth_ttm' ? 'ttm' : 'q')) {
+      btn.classList.add('bg-brand/20', 'text-white');
+      btn.classList.remove('text-slate-400');
+      arrow.textContent = dir === 1 ? ' ↑' : ' ↓';
+    } else {
+      btn.classList.remove('bg-brand/20', 'text-white');
+      btn.classList.add('text-slate-400');
+      arrow.textContent = '';
+    }
+  });
+
+  const sorted = [...DATA]
+    .filter(d => d[field] != null || d.eps_growth_ttm != null || d.eps_growth_q != null)
+    .sort((a, b) => {
+      const av = a[field] ?? -Infinity, bv = b[field] ?? -Infinity;
+      return (av - bv) * dir;
+    });
+
+  chart.data.labels = sorted.map(d => d.ticker);
+  chart.data.datasets[0].data = sorted.map(d => d.eps_growth_ttm);
+  chart.data.datasets[1].data = sorted.map(d => d.eps_growth_q);
+  chart.update();
+}
 
 function sortPeChart(field) {
   const chart = chartInstances.pe;
@@ -280,22 +396,38 @@ function sortChart(chartKey) {
     chart.data.datasets[1].data = sorted.map(d => d.target);
 
   } else {
-    // upside / peg: toggle Lo→Hi / Hi→Lo
+    // upside / peg / growth: toggle Lo→Hi / Hi→Lo
     const goDesc = sortState[chartKey] === 'asc';
     sortState[chartKey] = goDesc ? 'desc' : 'asc';
     text.textContent = goDesc ? I18n.t('sector.sort_hilo') : I18n.t('sector.sort_lohi');
 
-    const field = chartKey === 'upside' ? 'upside' : 'peg';
+    const field = chartKey === 'upside' ? 'upside' : chartKey === 'growth' ? 'eps_growth_ttm' : chartKey === 'day_change' ? 'day_change_pct' : 'peg';
     const sorted = [...DATA]
-      .filter(d => d[field] != null)
-      .sort((a, b) => goDesc ? b[field] - a[field] : a[field] - b[field]);
+      .filter(d => d[field] != null || (chartKey === 'growth' && d.eps_growth_q != null))
+      .sort((a, b) => {
+        const av = a[field] ?? -Infinity, bv = b[field] ?? -Infinity;
+        return goDesc ? bv - av : av - bv;
+      });
 
     chart.data.labels = sorted.map(d => d.ticker);
-    chart.data.datasets[0].data = sorted.map(d => d[field]);
-    if (chartKey === 'upside') {
+    if (chartKey === 'growth') {
+      chart.data.datasets[0].data = sorted.map(d => d.eps_growth_ttm);
+      chart.data.datasets[1].data = sorted.map(d => d.eps_growth_q);
+    } else if (chartKey === 'day_change') {
+      const maxAbs = Math.max(...sorted.map(d => Math.abs(d.day_change_pct ?? 0)), 0.01);
+      chart.data.datasets[0].data = sorted.map(d => d.day_change_pct);
+      chart.data.datasets[0].backgroundColor = sorted.map(d => {
+        const v = d.day_change_pct ?? 0;
+        const t = Math.min(Math.abs(v) / maxAbs, 1);
+        const a = (0.25 + t * 0.65).toFixed(2);
+        return v >= 0 ? `rgba(52,211,153,${a})` : `rgba(244,63,94,${a})`;
+      });
+    } else if (chartKey === 'upside') {
+      chart.data.datasets[0].data = sorted.map(d => d[field]);
       chart.data.datasets[0].backgroundColor =
         sorted.map(d => d.upside >= 0 ? '#34d399cc' : '#f43f5ecc');
     } else {
+      chart.data.datasets[0].data = sorted.map(d => d[field]);
       chart.data.datasets[0].backgroundColor =
         sorted.map(d => d.peg < 1 ? '#34d399cc' : d.peg < 2 ? '#f59e0bcc' : '#f43f5ecc');
     }
@@ -535,6 +667,111 @@ const chartDefaults = {
   });
 })();
 
+// -- Day Change horizontal bar (heatmap colouring)
+(function(){
+  const ctx = document.getElementById('dayChangeChart');
+  if (!ctx) return;
+  const sorted = [...DATA].filter(d => d.day_change_pct != null)
+                          .sort((a, b) => a.day_change_pct - b.day_change_pct);
+
+  // Heatmap colour: intensity scales with magnitude, diverging green/red
+  const maxAbs = Math.max(...sorted.map(d => Math.abs(d.day_change_pct)), 0.01);
+  function heatColor(v) {
+    const t = Math.min(Math.abs(v) / maxAbs, 1);           // 0 = near zero, 1 = extreme
+    const alpha = 0.25 + t * 0.65;                         // 0.25 → 0.90
+    return v >= 0
+      ? `rgba(52,211,153,${alpha.toFixed(2)})`             // emerald
+      : `rgba(244,63,94,${alpha.toFixed(2)})`;             // rose
+  }
+
+  chartInstances.day_change = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: sorted.map(d => d.ticker),
+      datasets: [{
+        label: 'Day Change %',
+        data: sorted.map(d => d.day_change_pct),
+        backgroundColor: sorted.map(d => heatColor(d.day_change_pct)),
+        borderRadius: 4,
+      }]
+    },
+    options: {
+      ...chartDefaults,
+      indexAxis: 'y',
+      onClick: tickerOnClick(() => chartInstances.day_change.data.labels),
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: c => ` ${c.raw >= 0 ? '+' : ''}${c.raw?.toFixed(2)}%` } }
+      },
+      scales: {
+        x: { grid:{color:gridCol}, ticks:{color:tickCol, callback: v => v+'%'} },
+        y: { grid:{display:false}, ticks:{color:'#94a3b8'} }
+      }
+    },
+    plugins: [tickerClickPlugin(), valueLabelPlugin('day_change', v => (v>=0?'+':'')+v.toFixed(2)+'%'), {
+      afterDraw(chart){
+        const {ctx:c,chartArea:a,scales:{x}} = chart;
+        const z = x.getPixelForValue(0);
+        if(z>a.left&&z<a.right){
+          c.save();c.strokeStyle='#475569';c.lineWidth=1;
+          c.beginPath();c.moveTo(z,a.top);c.lineTo(z,a.bottom);c.stroke();c.restore();
+        }
+      }
+    }]
+  });
+})();
+
+// -- Growth grouped bars (TTM + Q)
+(function(){
+  const ctx = document.getElementById('growthChart');
+  if (!ctx) return;
+  const sorted = [...DATA].filter(d => d.eps_growth_ttm != null || d.eps_growth_q != null)
+                          .sort((a, b) => (a.eps_growth_ttm ?? -Infinity) - (b.eps_growth_ttm ?? -Infinity));
+  chartInstances.growth = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: sorted.map(d => d.ticker),
+      datasets: [
+        {
+          label: 'EPS Growth TTM',
+          data: sorted.map(d => d.eps_growth_ttm),
+          backgroundColor: sorted.map(d => (d.eps_growth_ttm ?? 0) >= 0 ? '#34d399cc' : '#f43f5ecc'),
+          borderRadius: 4,
+        },
+        {
+          label: 'EPS Growth Q',
+          data: sorted.map(d => d.eps_growth_q),
+          backgroundColor: sorted.map(d => (d.eps_growth_q ?? 0) >= 0 ? '#38bdf8cc' : '#fb923ccc'),
+          borderRadius: 4,
+        },
+      ]
+    },
+    options: {
+      ...chartDefaults,
+      indexAxis: 'y',
+      onClick: tickerOnClick(() => chartInstances.growth.data.labels),
+      plugins: {
+        ...chartDefaults.plugins,
+        tooltip: { callbacks: { label: c => ` ${c.dataset.label}: ${c.raw?.toFixed(1)}%` } }
+      },
+      scales: {
+        x: { grid:{color:gridCol}, ticks:{color:tickCol, callback: v => v+'%'} },
+        y: { grid:{display:false}, ticks:{color:'#94a3b8'} }
+      }
+    },
+    plugins: [tickerClickPlugin(), valueLabelPlugin('growth', v => v.toFixed(1)+'%'), {
+      afterDraw(chart){
+        const {ctx:c,chartArea:a,scales:{x}} = chart;
+        const z = x.getPixelForValue(0);
+        if(z>a.left&&z<a.right){
+          c.save();c.strokeStyle='#475569';c.lineWidth=1;
+          c.beginPath();c.moveTo(z,a.top);c.lineTo(z,a.bottom);c.stroke();c.restore();
+        }
+      }
+    }]
+  });
+})();
+
 // ---- Hide controls & legend entries when data is unavailable ----
 (function(){
   const hasVal = field => DATA.some(d => d[field] != null);
@@ -605,6 +842,11 @@ const chartDefaults = {
     return `<span class="${col} font-semibold">${v.toFixed(2)}</span>`;
   }
   function fmtCap(v){ return v==null ? fmtNull() : '$'+v.toFixed(1)+'B'; }
+  function fmtGrowth(v){
+    if(v==null) return fmtNull();
+    const col = v>0 ? 'text-emerald-400' : 'text-rose-400';
+    return `<span class="${col}">${v.toFixed(1)}%</span>`;
+  }
 
   function render() {
     let rows = [...DATA];
@@ -642,6 +884,8 @@ const chartDefaults = {
         <td class="py-2.5 px-3 text-right font-mono">${fmtPE(d.pe_ttm)}</td>
         <td class="py-2.5 px-3 text-right font-mono">${fmtPE(d.pe_fwd)}</td>
         <td class="py-2.5 px-3 text-right">${fmtPeg(d.peg)}</td>
+        <td class="py-2.5 px-3 text-right font-mono">${fmtGrowth(d.eps_growth_ttm)}</td>
+        <td class="py-2.5 px-3 text-right font-mono">${fmtGrowth(d.eps_growth_q)}</td>
       </tr>`).join('');
   }
 

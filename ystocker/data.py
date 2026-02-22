@@ -45,17 +45,29 @@ def fetch_ticker_data(ticker: str) -> dict:
                      or info.get("regularMarketPrice")
                      or info.get("navPrice")
                      or info.get("previousClose"))
+
+    # Day change %: use Yahoo's pre-computed value first, fall back to manual calc
+    day_change_pct = info.get("regularMarketChangePercent")
+    if day_change_pct is None:
+        prev_close = info.get("regularMarketPreviousClose") or info.get("previousClose")
+        if current_price and prev_close and prev_close > 0:
+            day_change_pct = round((current_price - prev_close) / prev_close * 100, 2)
+    else:
+        day_change_pct = round(day_change_pct, 2)
+
     target_price  = info.get("targetMeanPrice")
     pe_ttm        = info.get("trailingPE")
     pe_fwd        = info.get("forwardPE")
     market_cap    = info.get("marketCap")
 
+    # Growth rates (decimal → percentage)
+    earnings_growth_ttm = info.get("earningsGrowth")           # TTM YoY, e.g. 0.25 = 25%
+    earnings_growth_q   = info.get("earningsQuarterlyGrowth")  # most recent quarter YoY
+
     # PEG: prefer yfinance's own value; fall back to PE(TTM) / (earningsGrowth * 100)
     peg = info.get("pegRatio")
     if peg is None and pe_ttm is not None:
-        growth = info.get("earningsGrowth")          # e.g. 0.25 = 25%
-        if growth is None:
-            growth = info.get("earningsQuarterlyGrowth")
+        growth = earnings_growth_ttm if earnings_growth_ttm is not None else earnings_growth_q
         if growth and growth > 0:
             peg = round(pe_ttm / (growth * 100), 2)
             log.debug("%s: PEG calculated from PE(%.1f) / growth(%.1f%%) = %.2f",
@@ -68,15 +80,18 @@ def fetch_ticker_data(ticker: str) -> dict:
         upside = (target_price - current_price) / current_price * 100
 
     return {
-        "Ticker":          ticker,
-        "Name":            info.get("shortName", ticker),
-        "Current Price":   current_price,
-        "Target Price":    target_price,
-        "Upside (%)":      upside,
-        "PE (TTM)":        pe_ttm,
-        "PE (Forward)":    pe_fwd,
-        "PEG":             peg,
-        "Market Cap ($B)": round(market_cap / 1e9, 1) if market_cap else None,
+        "Ticker":              ticker,
+        "Name":                info.get("shortName", ticker),
+        "Current Price":       current_price,
+        "Target Price":        target_price,
+        "Upside (%)":          upside,
+        "PE (TTM)":            pe_ttm,
+        "PE (Forward)":        pe_fwd,
+        "PEG":                 peg,
+        "Market Cap ($B)":     round(market_cap / 1e9, 1) if market_cap else None,
+        "EPS Growth TTM (%)":  round(earnings_growth_ttm * 100, 1) if earnings_growth_ttm is not None else None,
+        "EPS Growth Q (%)":    round(earnings_growth_q   * 100, 1) if earnings_growth_q   is not None else None,
+        "Day Change (%)":      day_change_pct,
     }
 
 

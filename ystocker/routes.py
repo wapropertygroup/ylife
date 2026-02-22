@@ -34,10 +34,10 @@ log = logging.getLogger(__name__)
 #   1. In-memory dict  - zero-latency reads during a running session
 #   2. On-disk JSON    - survives server restarts; loaded on startup if fresh
 #
-# The background thread warms / refreshes both layers every 24 hours.
+# The background thread warms / refreshes both layers every 8 hours.
 # Requests never block: they see the warming page until data is ready.
 # ---------------------------------------------------------------------------
-_CACHE_TTL      = 24 * 60 * 60          # seconds until cache is considered stale
+_CACHE_TTL      = 8 * 60 * 60           # seconds until cache is considered stale
 _CACHE_FILE     = Path(__file__).parent.parent / "cache" / "ticker_cache.json"
 _GROUPS_FILE    = Path(__file__).parent.parent / "cache" / "peer_groups.json"
 
@@ -148,7 +148,7 @@ def _background_loop() -> None:
     """
     On startup: load saved peer groups, then try the disk cache; fetch from
     Yahoo Finance only if the disk cache is missing or stale.
-    Then sleep and repeat every 24 h.
+    Then sleep and repeat every 8 h.
     """
     global _cache_warming
     _load_groups()          # restore any UI edits made before the last restart
@@ -232,15 +232,18 @@ def _df_to_chartdata(df: pd.DataFrame) -> str:
     rows = []
     for ticker, row in df.iterrows():
         rows.append({
-            "ticker":       ticker,
-            "name":         str(row.get("Name", ticker)),
-            "price":        _safe(row.get("Current Price")),
-            "target":       _safe(row.get("Target Price")),
-            "upside":       _safe(row.get("Upside (%)")),
-            "pe_ttm":       _safe(row.get("PE (TTM)")),
-            "pe_fwd":       _safe(row.get("PE (Forward)")),
-            "peg":          _safe(row.get("PEG")),
-            "market_cap":   _safe(row.get("Market Cap ($B)")),
+            "ticker":           ticker,
+            "name":             str(row.get("Name", ticker)),
+            "price":            _safe(row.get("Current Price")),
+            "target":           _safe(row.get("Target Price")),
+            "upside":           _safe(row.get("Upside (%)")),
+            "pe_ttm":           _safe(row.get("PE (TTM)")),
+            "pe_fwd":           _safe(row.get("PE (Forward)")),
+            "peg":              _safe(row.get("PEG")),
+            "market_cap":       _safe(row.get("Market Cap ($B)")),
+            "eps_growth_ttm":   _safe(row.get("EPS Growth TTM (%)")),
+            "eps_growth_q":     _safe(row.get("EPS Growth Q (%)")),
+            "day_change_pct":   _safe(row.get("Day Change (%)")),
         })
     return json.dumps(rows)
 
@@ -318,7 +321,8 @@ def sector(sector_name: str):
 
     chartdata = _df_to_chartdata(df)
     table_cols = ["Name", "Market Cap ($B)", "Current Price",
-                  "Target Price", "Upside (%)", "PE (TTM)", "PE (Forward)", "PEG"]
+                  "Target Price", "Upside (%)", "PE (TTM)", "PE (Forward)", "PEG",
+                  "EPS Growth TTM (%)", "EPS Growth Q (%)", "Day Change (%)"]
     existing_cols = [c for c in table_cols if c in df.columns]
     table_df = df[existing_cols].copy()
 
@@ -341,6 +345,15 @@ def refresh():
     """Clear the cache and trigger an immediate background re-fetch."""
     _invalidate_cache()
     return redirect(url_for("main.index"))
+
+
+@bp.route("/api/cache-age")
+def api_cache_age():
+    """Return seconds since the cache was last updated."""
+    with _cache_lock:
+        last = _cache_last_updated
+    age = int(time.time() - last) if last else None
+    return jsonify({"age_seconds": age, "last_updated": last})
 
 
 # ---------------------------------------------------------------------------
@@ -510,19 +523,23 @@ def api_history(ticker: str):
     current_pe   = _safe(info.get("trailingPE"))
     forward_pe   = _safe(info.get("forwardPE"))
     target_price = _safe(info.get("targetMeanPrice"))
+    earnings_growth_ttm = info.get("earningsGrowth")
+    earnings_growth_q   = info.get("earningsQuarterlyGrowth")
 
     return jsonify({
-        "ticker":       ticker,
-        "name":         name,
-        "dates":        dates,
-        "prices":       prices,
-        "pe_history":   pe_history,
-        "peg_history":  peg_history,
-        "current_pe":   current_pe,
-        "current_peg":  current_peg,
-        "forward_pe":   forward_pe,
-        "target_price": target_price,
-        "eps":          _safe(eps),
+        "ticker":           ticker,
+        "name":             name,
+        "dates":            dates,
+        "prices":           prices,
+        "pe_history":       pe_history,
+        "peg_history":      peg_history,
+        "current_pe":       current_pe,
+        "current_peg":      current_peg,
+        "forward_pe":       forward_pe,
+        "target_price":     target_price,
+        "eps":              _safe(eps),
+        "eps_growth_ttm":   _safe(round(earnings_growth_ttm * 100, 1)) if earnings_growth_ttm is not None else None,
+        "eps_growth_q":     _safe(round(earnings_growth_q   * 100, 1)) if earnings_growth_q   is not None else None,
     })
 
 

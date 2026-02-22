@@ -134,16 +134,17 @@
                        hover:border-brand hover:text-brand transition font-medium">
           中文
         </button>
-        <div class="relative group">
-          <a href="{{ url_for('main.refresh') }}"
+        <div class="relative group" id="refreshWrap">
+          <a id="refreshBtn"
+             href="{{ url_for('main.refresh') }}"
              class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm border border-brand text-brand hover:bg-brand hover:text-white transition"
              data-i18n="nav.refresh">↻ Refresh</a>
           <!-- Tooltip -->
-          <div class="absolute right-0 top-full mt-2 w-64 z-50 pointer-events-none
+          <div id="refreshTooltip" class="absolute right-0 top-full mt-2 w-64 z-50 pointer-events-none
                       opacity-0 group-hover:opacity-100 transition-opacity duration-150">
             <div class="bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-xs text-slate-300 shadow-xl shadow-black/50">
-              <p class="font-semibold text-slate-100 mb-1" data-i18n="nav.refresh_title">Refresh data</p>
-              <p data-i18n="nav.refresh_body">Clears the in-memory cache and re-fetches live prices, PE ratios, and analyst targets for all tickers from Yahoo Finance.</p>
+              <p id="refreshTooltipTitle" class="font-semibold text-slate-100 mb-1" data-i18n="nav.refresh_title">Refresh data</p>
+              <p id="refreshTooltipBody" data-i18n="nav.refresh_body">Clears the in-memory cache and re-fetches live prices, PE ratios, and analyst targets for all tickers from Yahoo Finance.</p>
             </div>
             <!-- Arrow -->
             <div class="absolute right-4 -top-1.5 w-3 h-3 bg-slate-800 border-l border-t border-slate-700 rotate-45"></div>
@@ -174,7 +175,7 @@
         <a href="{{ url_for('main.lookup') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-300 hover:bg-slate-800" data-i18n="nav.lookup">🔍 Lookup</a>
         <a href="{{ url_for('main.groups') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-300 hover:bg-slate-800" data-i18n="nav.groups">⚙ Groups</a>
         <a href="{{ url_for('main.contact') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-300 hover:bg-slate-800" data-i18n="nav.contact">✉ Contact</a>
-        <a href="{{ url_for('main.refresh') }}" class="px-3 py-2.5 rounded-md text-sm text-brand hover:bg-slate-800" data-i18n="nav.refresh">↻ Refresh</a>
+        <a id="refreshBtnMobile" href="{{ url_for('main.refresh') }}" class="px-3 py-2.5 rounded-md text-sm text-brand hover:bg-slate-800" data-i18n="nav.refresh">↻ Refresh</a>
         <button onclick="I18n.toggle()"
                 class="lang-toggle-btn mt-1 px-3 py-2.5 rounded-md text-sm border border-slate-700 text-slate-300
                        hover:border-brand hover:text-brand transition text-left font-medium">
@@ -207,6 +208,47 @@
     <span data-i18n="footer.text">yStocker — data via Yahoo Finance</span> &nbsp;·&nbsp;
     <a href="{{ url_for('main.contact') }}" class="hover:text-brand transition" data-i18n="footer.contact">Contact Us</a>
   </footer>
+
+<script>
+(function() {
+  // Disable refresh cooldown on local development
+  if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') return;
+
+  const COOLDOWN = 10 * 60; // 10 minutes in seconds
+  const btn       = document.getElementById('refreshBtn');
+  const btnMobile = document.getElementById('refreshBtnMobile');
+  const tipBody   = document.getElementById('refreshTooltipBody');
+
+  function disableRefresh(ageSeconds) {
+    const remaining = Math.ceil((COOLDOWN - ageSeconds) / 60);
+    const msg = `Refreshed ${Math.floor(ageSeconds / 60)}m ago. Please wait ${remaining} more minute${remaining !== 1 ? 's' : ''}.`;
+
+    [btn, btnMobile].forEach(el => {
+      if (!el) return;
+      el.removeAttribute('href');
+      el.style.cursor = 'not-allowed';
+      el.style.opacity = '0.45';
+      el.style.pointerEvents = 'none'; // disable click
+      // Keep pointer events on the wrapper for tooltip hover
+    });
+    // Re-enable hover on wrapper so tooltip still shows
+    if (btn) btn.style.pointerEvents = 'none';
+    const wrap = document.getElementById('refreshWrap');
+    if (wrap) wrap.style.pointerEvents = 'auto';
+
+    if (tipBody) tipBody.textContent = msg;
+  }
+
+  fetch('/api/cache-age')
+    .then(r => r.json())
+    .then(data => {
+      if (data.age_seconds != null && data.age_seconds < COOLDOWN) {
+        disableRefresh(data.age_seconds);
+      }
+    })
+    .catch(() => {}); // silently ignore fetch errors
+})();
+</script>
 
 </body>
 </html>

@@ -65,7 +65,7 @@
     {% if warming %}
       &nbsp;·&nbsp;<span class="text-brand animate-pulse" data-i18n="index.refreshing">refreshing now…</span>
     {% else %}
-      &nbsp;·&nbsp;<span data-i18n="index.next_refresh">next refresh</span> {{ (cache_last_updated | int + 86400) | datetimeformat }}
+      &nbsp;·&nbsp;<span data-i18n="index.next_refresh">next refresh</span> {{ (cache_last_updated | int + 28800) | datetimeformat }}
     {% endif %}
   </p>
   {% endif %}
@@ -81,9 +81,9 @@
       <div class="flex items-center gap-1">
         <button id="scatterTextToggle"
                 onclick="toggleScatterText()"
-                class="flex items-center gap-1 text-xs text-brand border border-brand/40 bg-brand/10
+                class="flex items-center gap-1 text-xs text-white border border-brand/40 bg-brand
                        hover:bg-brand hover:text-white transition px-2 py-1 rounded-lg">
-          <span id="scatterTextToggleText" data-i18n="index.hide_labels">Hide labels</span>
+          <span id="scatterTextToggleText" data-i18n="index.show_labels">Show labels</span>
         </button>
         <button id="scatterLabelToggle"
                 onclick="toggleScatterLabels()"
@@ -106,7 +106,7 @@
         </button>
       </div>
     </div>
-    <p class="text-xs text-slate-500 mb-4" data-i18n="index.valuation_map_desc">Forward PE vs Analyst Upside — bottom-left = cheap with upside</p>
+    <p class="text-xs text-slate-500 mb-4" data-i18n="index.valuation_map_desc">Forward PE vs Analyst Upside — top-left = cheap with upside</p>
     <div class="chart-container" style="height:260px; sm:height:340px">
       <canvas id="scatterChart"></canvas>
     </div>
@@ -122,12 +122,6 @@
                        hover:bg-brand hover:text-white transition px-2 py-1 rounded-lg"
                 data-i18n="index.hide_values">
           Hide values
-        </button>
-        <button id="pegMapTickerBtn" onclick="togglePegMapTickers()"
-                class="flex items-center gap-1 text-xs text-slate-400 border border-slate-700 bg-slate-800
-                       hover:text-slate-200 transition px-2 py-1 rounded-lg"
-                data-i18n="index.hide_tickers">
-          Hide tickers
         </button>
         <button onclick="window._chartModal.expand('peg')"
                 class="flex items-center gap-1 text-xs text-slate-500 hover:text-brand transition px-2 py-1
@@ -156,14 +150,15 @@
 <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5 mb-10">
   {% for group, info in sector_cards.items() %}
   <a href="{{ url_for('main.sector', sector_name=group) }}"
-     class="group bg-slate-900 border border-slate-800 rounded-2xl p-5 hover:border-brand/60
+     data-group="{{ group }}"
+     class="sector-card group bg-slate-900 border border-slate-800 rounded-2xl p-5 hover:border-brand/60
             hover:shadow-lg hover:shadow-brand/10 transition-all duration-200 fade-up block">
     <div class="flex items-start justify-between mb-3">
       <div>
         <h3 class="font-semibold text-slate-100 group-hover:text-brand transition">{{ group }}</h3>
         <p class="text-xs text-slate-500 mt-0.5">{{ info.tickers | join(' · ') }}</p>
       </div>
-      <span class="text-slate-600 group-hover:text-brand transition text-lg">→</span>
+      <span class="sector-day-chg text-xs font-semibold px-1.5 py-0.5 rounded-md transition text-slate-600"></span>
     </div>
     <div class="chart-container" style="height:80px">
       <canvas id="spark_{{ loop.index }}"></canvas>
@@ -219,6 +214,14 @@
                       focus:ring-brand w-32 sm:w-44 transition">
       </div>
 
+      <!-- Sort by day change -->
+      <button id="heatmapDayChgSort"
+              onclick="heatmapSortByDayChg()"
+              class="flex items-center gap-1 text-xs text-slate-400 border border-slate-700 bg-slate-800
+                     hover:text-slate-200 transition px-2 py-1.5 rounded-lg whitespace-nowrap">
+        Day Chg <span id="heatmapDayChgArrow">↕</span>
+      </button>
+
       <!-- Row count -->
       <span id="heatmapCount" class="text-xs text-slate-600 whitespace-nowrap"></span>
     </div>
@@ -229,24 +232,66 @@
       <thead>
         <tr class="text-xs text-slate-500 border-b border-slate-800 select-none">
           <th class="text-left py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-300 transition whitespace-nowrap"
-              data-col="ticker" data-i18n="th.ticker">Ticker <span class="sort-icon ml-0.5">↕</span></th>
+              data-col="ticker"><span data-i18n="th.ticker">Ticker</span> <span class="sort-icon ml-0.5">↕</span></th>
           <th class="text-left py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-300 transition whitespace-nowrap"
-              data-col="name" data-i18n="th.name">Name <span class="sort-icon ml-0.5">↕</span></th>
-          <th class="text-left py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-300 transition whitespace-nowrap"
-              data-col="sector" data-i18n="th.sector">Sector <span class="sort-icon ml-0.5">↕</span></th>
+              data-col="sector"><span data-i18n="th.sector">Sector</span> <span class="sort-icon ml-0.5">↕</span></th>
           <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-300 transition whitespace-nowrap"
-              data-col="pe_ttm" data-i18n="th.pe_ttm">PE (TTM) <span class="sort-icon ml-0.5">↕</span></th>
+              data-col="pe_ttm"><span data-i18n="th.pe_ttm">PE (TTM)</span> <span class="sort-icon ml-0.5">↕</span></th>
           <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-300 transition whitespace-nowrap"
-              data-col="pe_fwd" data-i18n="th.pe_fwd">PE (Fwd) <span class="sort-icon ml-0.5">↕</span></th>
+              data-col="pe_fwd"><span data-i18n="th.pe_fwd">PE (Fwd)</span> <span class="sort-icon ml-0.5">↕</span></th>
           <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-300 transition whitespace-nowrap"
-              data-col="peg" data-i18n="th.peg">PEG <span class="sort-icon ml-0.5">↕</span></th>
+              data-col="peg"><span data-i18n="th.peg">PEG</span> <span class="sort-icon ml-0.5">↕</span></th>
           <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-300 transition whitespace-nowrap"
-              data-col="upside" data-i18n="th.upside">Upside <span class="sort-icon ml-0.5">↕</span></th>
+              data-col="eps_growth_ttm"><span data-i18n="th.eps_growth_ttm">EPS Gr TTM</span> <span class="sort-icon ml-0.5">↕</span></th>
           <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-300 transition whitespace-nowrap"
-              data-col="market_cap" data-i18n="th.mkt_cap">Mkt Cap <span class="sort-icon ml-0.5">↕</span></th>
+              data-col="eps_growth_q"><span data-i18n="th.eps_growth_q">EPS Gr Q</span> <span class="sort-icon ml-0.5">↕</span></th>
+          <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-300 transition whitespace-nowrap"
+              data-col="upside"><span data-i18n="th.upside">Upside</span> <span class="sort-icon ml-0.5">↕</span></th>
+          <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-300 transition whitespace-nowrap"
+              data-col="market_cap"><span data-i18n="th.mkt_cap">Mkt Cap</span> <span class="sort-icon ml-0.5">↕</span></th>
         </tr>
       </thead>
       <tbody id="heatmapBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ── ETF PE table ──────────────────────────────────────────────────── -->
+<div class="bg-slate-900 rounded-2xl border border-slate-800 p-4 sm:p-6 fade-up mb-8">
+  <div class="flex flex-wrap items-center gap-3 mb-4">
+    <div>
+      <h2 class="text-base font-semibold text-slate-200" data-i18n="index.etf_heatmap">ETF PE Heatmap</h2>
+      <p class="text-xs text-slate-500" data-i18n="index.etf_heatmap_desc">PE ratios for ETFs — PEG and growth metrics are not applicable</p>
+    </div>
+    <div class="ml-auto flex flex-wrap items-center gap-2">
+      <div class="hidden sm:flex items-center gap-1.5 text-xs text-slate-500 mr-2">
+        <span class="w-3 h-3 rounded-sm inline-block" style="background:rgba(52,211,153,0.35)"></span><span data-i18n="index.heat_low">Low</span>
+        <span class="w-16 h-2 rounded-sm inline-block mx-1"
+              style="background:linear-gradient(to right,rgba(52,211,153,0.35),rgba(250,204,21,0.35),rgba(248,113,113,0.35))"></span>
+        <span class="w-3 h-3 rounded-sm inline-block" style="background:rgba(248,113,113,0.35)"></span><span data-i18n="index.heat_high">High PE</span>
+      </div>
+      <button id="etfDayChgSort"
+              onclick="etfSortByDayChg()"
+              class="flex items-center gap-1 text-xs text-slate-400 border border-slate-700 bg-slate-800
+                     hover:text-slate-200 transition px-2 py-1.5 rounded-lg whitespace-nowrap">
+        Day Chg <span id="etfDayChgArrow">↕</span>
+      </button>
+      <span id="etfHeatmapCount" class="text-xs text-slate-600 whitespace-nowrap"></span>
+    </div>
+  </div>
+  <div class="overflow-x-auto">
+    <table class="w-full text-sm" id="etfHeatmapTable">
+      <thead>
+        <tr class="text-xs text-slate-500 border-b border-slate-800 select-none">
+          <th class="text-left py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-300 transition whitespace-nowrap"
+              data-col="ticker"><span data-i18n="th.ticker">Ticker</span> <span class="sort-icon ml-0.5">↕</span></th>
+          <th class="text-left py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-300 transition whitespace-nowrap"
+              data-col="sector"><span data-i18n="th.sector">Sector</span> <span class="sort-icon ml-0.5">↕</span></th>
+          <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-300 transition whitespace-nowrap"
+              data-col="pe_ttm"><span data-i18n="th.pe_ttm">PE (TTM)</span> <span class="sort-icon ml-0.5">↕</span></th>
+        </tr>
+      </thead>
+      <tbody id="etfHeatmapBody"></tbody>
     </table>
   </div>
 </div>
@@ -259,8 +304,9 @@ const PALETTE = [
 ];
 
 // ─── Scatter label toggle state ─────────────────────────────────────────────
+const SCATTER_DEFAULT_SECTORS = new Set(['Tech', 'Cloud / SaaS', 'Semiconductors']);
 let scatterLabelsVisible = true;  // dots (tickers)
-let scatterTextVisible   = true;  // ticker text next to dots
+let scatterTextVisible   = false; // ticker text next to dots — hidden by default
 let _inlineScatterChart = null;
 
 // Hide labels = hide ticker text next to dots only
@@ -316,10 +362,10 @@ function buildScatterChart(ctx) {
     data: ALL.filter(d => d.sector === sec && d.pe_fwd != null && d.upside != null)
               .map(d => ({ x: d.pe_fwd, y: d.upside, ticker: d.ticker })),
     backgroundColor: PALETTE[i % PALETTE.length] + 'cc',
-    pointRadius: 7,
-    pointHoverRadius: 9,
-  })).filter(ds => ds.data.length > 0);  // skip sectors with no plottable data
-  return new Chart(ctx, {
+    pointRadius: SCATTER_DEFAULT_SECTORS.has(sec) ? 7 : 0,
+    pointHoverRadius: SCATTER_DEFAULT_SECTORS.has(sec) ? 9 : 0,
+  })).filter(ds => ds.data.length > 0);
+  const chart = new Chart(ctx, {
     type: 'scatter',
     data: { datasets },
     options: {
@@ -389,6 +435,14 @@ function buildScatterChart(ctx) {
       }
     }]
   });
+  // Hide non-default sectors on load
+  chart.data.datasets.forEach((ds, di) => {
+    if (!SCATTER_DEFAULT_SECTORS.has(ds.label)) {
+      chart.getDatasetMeta(di).hidden = true;
+    }
+  });
+  chart.update();
+  return chart;
 }
 
 let _pegMapLabelsVisible = true;
@@ -580,20 +634,90 @@ document.addEventListener('DOMContentLoaded', () => {
 })();
 {% endfor %}
 
+// ── Sector card day-change heatmap + sort
+(function(){
+  // Compute average day_change_pct per sector (deduplicated tickers)
+  const seen = new Set();
+  const sectorChanges = {};
+  ALL.forEach(d => {
+    if (seen.has(d.ticker)) return;
+    seen.add(d.ticker);
+    if (d.day_change_pct == null) return;
+    if (!sectorChanges[d.sector]) sectorChanges[d.sector] = [];
+    sectorChanges[d.sector].push(d.day_change_pct);
+  });
+  const sectorAvg = {};
+  Object.entries(sectorChanges).forEach(([s, vals]) => {
+    sectorAvg[s] = vals.reduce((a, b) => a + b, 0) / vals.length;
+  });
+
+  // Find max abs for intensity scaling
+  const maxAbs = Math.max(...Object.values(sectorAvg).map(Math.abs), 0.01);
+
+  function cardColor(avg) {
+    const t = Math.min(Math.abs(avg) / maxAbs, 1);
+    const alpha = (0.06 + t * 0.34).toFixed(2);        // 0.06 (faint) → 0.40 (dark)
+    const borderAlpha = (0.2 + t * 0.65).toFixed(2);   // 0.20 → 0.85
+    const isUp = avg >= 0;
+    return {
+      bg:     isUp ? `rgba(52,211,153,${alpha})`   : `rgba(244,63,94,${alpha})`,
+      border: isUp ? `rgba(52,211,153,${borderAlpha})` : `rgba(244,63,94,${borderAlpha})`,
+      text:   isUp ? '#34d399' : '#f43f5e',
+      label:  (avg >= 0 ? '+' : '') + avg.toFixed(2) + '%',
+    };
+  }
+
+  // Collect cards and sort by avg desc (best performers first)
+  const grid = document.querySelector('.grid.grid-cols-1.sm\\:grid-cols-2');
+  if (!grid) return;
+  const cards = [...grid.querySelectorAll('.sector-card')];
+
+  // Sort cards by avg day change descending
+  cards.sort((a, b) => {
+    const av = sectorAvg[a.dataset.group] ?? -Infinity;
+    const bv = sectorAvg[b.dataset.group] ?? -Infinity;
+    return bv - av;
+  });
+  cards.forEach(card => grid.appendChild(card));
+
+  // Apply colours
+  cards.forEach(card => {
+    const avg = sectorAvg[card.dataset.group];
+    const badge = card.querySelector('.sector-day-chg');
+    if (avg == null) return;
+    const col = cardColor(avg);
+    card.style.background = col.bg;
+    card.style.borderColor = col.border;
+    if (badge) {
+      badge.textContent = col.label;
+      badge.style.color = col.text;
+      badge.style.background = col.bg;
+    }
+  });
+})();
+
 // ── Heatmap table (interactive: filter + sort)
 (function(){
-  // Deduplicate: keep first occurrence of each ticker (highest market cap group first)
-  const seen = new Set();
-  const baseRows = ALL.filter(d => { if (seen.has(d.ticker)) return false; seen.add(d.ticker); return true; });
+  const ETF_SECTORS = new Set(['US Broad ETFs', 'Sector ETFs', 'International ETFs']);
 
-  // State
-  let sortCol = 'market_cap', sortDir = -1;  // -1 = desc, 1 = asc
+  // Deduplicate: keep first occurrence of each ticker
+  const seen = new Set();
+  const allRows = ALL.filter(d => { if (seen.has(d.ticker)) return false; seen.add(d.ticker); return true; });
+
+  const stockRows = allRows.filter(d => !ETF_SECTORS.has(d.sector));
+  const etfRows   = allRows.filter(d =>  ETF_SECTORS.has(d.sector));
+
+  // ── Stock heatmap state
+  let sortCol = 'market_cap', sortDir = -1;
   let filterSector = '', filterText = '';
 
-  // Populate sector dropdown
-  const sectors = [...new Set(ALL.map(d => d.sector))].sort();
+  // Populate sector dropdown (stocks only)
+  const sectors = [...new Set(stockRows.map(d => d.sector))].sort();
   const sel = document.getElementById('sectorFilter');
   sectors.forEach(s => { const o = document.createElement('option'); o.value = s; o.textContent = s; sel.appendChild(o); });
+
+  // ── ETF heatmap state
+  let etfSortCol = 'pe_ttm', etfSortDir = 1;
 
   // ── Helpers
   function heatColor(val, lo, hi) {
@@ -612,72 +736,152 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   function fmtPE(v){ return v==null?'<span class="text-slate-600">—</span>':v.toFixed(1)+'x'; }
   function fmtCap(v){ return v==null?'<span class="text-slate-600">—</span>':'$'+v.toFixed(1)+'B'; }
+  function fmtGrowth(v){
+    if(v==null) return '<span class="text-slate-600">—</span>';
+    const col = v>0?'text-emerald-400':'text-rose-400';
+    return `<span class="${col}">${v.toFixed(1)}%</span>`;
+  }
+  function fmtDayChg(v){
+    if(v==null) return '<span class="text-slate-600">—</span>';
+    const col = v>=0?'text-emerald-400':'text-rose-400';
+    return `<span class="${col} font-medium">${v>=0?'+':''}${v.toFixed(2)}%</span>`;
+  }
+  // Heatmap background for a cell based on day change value
+  // Compute max abs day change across all rows for dynamic scaling
+  const _maxDayChg = Math.max(...allRows.map(d => Math.abs(d.day_change_pct ?? 0)), 0.01);
 
-  // ── Render
-  function render() {
-    // Filter
-    const q = filterText.toLowerCase();
-    let rows = baseRows.filter(d => {
-      if (filterSector && d.sector !== filterSector) return false;
-      if (q && !d.ticker.toLowerCase().includes(q) && !d.name.toLowerCase().includes(q)) return false;
-      return true;
-    });
+  function dayChgHeat(v) {
+    if (v == null) return '';
+    const t = Math.min(Math.abs(v) / _maxDayChg, 1); // 0 = smallest, 1 = largest mover
+    const alpha = (0.08 + t * 0.72).toFixed(2);       // 0.08 (faint) → 0.80 (dark)
+    return v >= 0
+      ? `background:rgba(52,211,153,${alpha})`         // dark green = large up
+      : `background:rgba(244,63,94,${alpha})`;         // dark red   = large down
+  }
 
-    // Sort — nulls always last
-    rows.sort((a, b) => {
-      let av = a[sortCol], bv = b[sortCol];
+  function sortRows(rows, col, dir) {
+    return [...rows].sort((a, b) => {
+      let av = a[col], bv = b[col];
       if (typeof av === 'string') av = av.toLowerCase();
       if (typeof bv === 'string') bv = bv.toLowerCase();
       if (av == null && bv == null) return 0;
       if (av == null) return 1;
       if (bv == null) return -1;
-      return av < bv ? -sortDir : av > bv ? sortDir : 0;
+      return av < bv ? -dir : av > bv ? dir : 0;
     });
+  }
 
-    // Update sort icons
-    document.querySelectorAll('#heatmapTable th.sortable').forEach(th => {
+  function updateIcons(tableId, col, dir) {
+    document.querySelectorAll(`#${tableId} th.sortable`).forEach(th => {
       const icon = th.querySelector('.sort-icon');
-      if (th.dataset.col === sortCol) {
-        icon.textContent = sortDir === -1 ? '↓' : '↑';
-        th.classList.add('text-brand');
-        th.classList.remove('text-slate-500');
+      if (th.dataset.col === col) {
+        icon.textContent = dir === -1 ? '↓' : '↑';
+        th.classList.add('text-brand'); th.classList.remove('text-slate-500');
       } else {
         icon.textContent = '↕';
-        th.classList.remove('text-brand');
-        th.classList.add('text-slate-500');
+        th.classList.remove('text-brand'); th.classList.add('text-slate-500');
       }
     });
+  }
 
-    // Row count
+  // ── Stock render
+  function render() {
+    const q = filterText.toLowerCase();
+    let rows = stockRows.filter(d => {
+      if (filterSector && d.sector !== filterSector) return false;
+      if (q && !d.ticker.toLowerCase().includes(q) && !d.name.toLowerCase().includes(q)) return false;
+      return true;
+    });
+    rows = sortRows(rows, sortCol, sortDir);
+    updateIcons('heatmapTable', sortCol, sortDir);
     document.getElementById('heatmapCount').textContent = `${rows.length} ticker${rows.length !== 1 ? 's' : ''}`;
-
-    // Rows
-    document.getElementById('heatmapBody').innerHTML = rows.length ? rows.map(d => `
+    document.getElementById('heatmapBody').innerHTML = rows.length ? rows.map(d => {
+      const chgStyle = dayChgHeat(d.day_change_pct);
+      const chgText  = d.day_change_pct != null ? (d.day_change_pct >= 0 ? '+' : '') + d.day_change_pct.toFixed(2) + '%' : '';
+      const chgColor = d.day_change_pct == null ? '' : d.day_change_pct >= 0 ? 'color:rgb(52,211,153)' : 'color:rgb(244,63,94)';
+      return `
       <tr class="border-b border-slate-800/60 hover:bg-slate-800/40 transition">
-        <td class="py-2 px-3"><a href="/history/${d.ticker}" class="font-mono font-bold text-brand hover:underline">${d.ticker}</a></td>
-        <td class="py-2 px-3 text-slate-400 text-xs max-w-[140px] truncate" title="${d.name}">${d.name}</td>
+        <td class="py-2 px-3" style="${chgStyle}">
+          <a href="/history/${d.ticker}" class="font-mono font-bold text-slate-100 hover:underline">${d.ticker}</a>
+          <div class="text-slate-400 text-xs truncate max-w-[120px]">${d.name}</div>
+          <div class="text-[10px] font-semibold mt-0.5" style="${chgColor}">${chgText}</div>
+        </td>
         <td class="py-2 px-3 text-xs text-slate-500">${d.sector}</td>
         <td class="py-2 px-3 text-right font-mono text-sm" style="${heatColor(d.pe_ttm,10,60)}">${fmtPE(d.pe_ttm)}</td>
         <td class="py-2 px-3 text-right font-mono text-sm" style="${heatColor(d.pe_fwd,10,60)}">${fmtPE(d.pe_fwd)}</td>
         <td class="py-2 px-3 text-right">${fmtPeg(d.peg)}</td>
+        <td class="py-2 px-3 text-right font-mono text-sm">${fmtGrowth(d.eps_growth_ttm)}</td>
+        <td class="py-2 px-3 text-right font-mono text-sm">${fmtGrowth(d.eps_growth_q)}</td>
         <td class="py-2 px-3 text-right">${fmtPct(d.upside)}</td>
         <td class="py-2 px-3 text-right font-mono text-xs text-slate-400">${fmtCap(d.market_cap)}</td>
-      </tr>`).join('')
-    : `<tr><td colspan="8" class="py-8 text-center text-slate-600 text-sm">${I18n.t('index.no_results')}</td></tr>`;
+      </tr>`;
+    }).join('')
+    : `<tr><td colspan="9" class="py-8 text-center text-slate-600 text-sm">${I18n.t('index.no_results')}</td></tr>`;
   }
 
-  // ── Bind controls
+  // ── ETF render
+  function renderEtf() {
+    const rows = sortRows(etfRows, etfSortCol, etfSortDir);
+    updateIcons('etfHeatmapTable', etfSortCol, etfSortDir);
+    document.getElementById('etfHeatmapCount').textContent = `${rows.length} ETF${rows.length !== 1 ? 's' : ''}`;
+    document.getElementById('etfHeatmapBody').innerHTML = rows.map(d => {
+      const chgStyle = dayChgHeat(d.day_change_pct);
+      const chgText  = d.day_change_pct != null ? (d.day_change_pct >= 0 ? '+' : '') + d.day_change_pct.toFixed(2) + '%' : '';
+      const chgColor = d.day_change_pct == null ? '' : d.day_change_pct >= 0 ? 'color:rgb(52,211,153)' : 'color:rgb(244,63,94)';
+      return `
+      <tr class="border-b border-slate-800/60 hover:bg-slate-800/40 transition">
+        <td class="py-2 px-3" style="${chgStyle}">
+          <a href="/history/${d.ticker}" class="font-mono font-bold text-slate-100 hover:underline">${d.ticker}</a>
+          <div class="text-slate-400 text-xs truncate max-w-[120px]">${d.name}</div>
+          <div class="text-[10px] font-semibold mt-0.5" style="${chgColor}">${chgText}</div>
+        </td>
+        <td class="py-2 px-3 text-xs text-slate-500">${d.sector}</td>
+        <td class="py-2 px-3 text-right font-mono text-sm" style="${heatColor(d.pe_ttm,10,60)}">${fmtPE(d.pe_ttm)}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  // ── Bind stock controls
   document.querySelectorAll('#heatmapTable th.sortable').forEach(th => {
     th.addEventListener('click', () => {
       if (sortCol === th.dataset.col) sortDir *= -1;
-      else { sortCol = th.dataset.col; sortDir = th.dataset.col === 'ticker' || th.dataset.col === 'name' || th.dataset.col === 'sector' ? 1 : -1; }
+      else { sortCol = th.dataset.col; sortDir = ['ticker','name','sector'].includes(th.dataset.col) ? 1 : -1; }
       render();
     });
   });
   document.getElementById('sectorFilter').addEventListener('change', e => { filterSector = e.target.value; render(); });
   document.getElementById('heatmapSearch').addEventListener('input', e => { filterText = e.target.value; render(); });
 
+  // ── Bind ETF controls
+  document.querySelectorAll('#etfHeatmapTable th.sortable').forEach(th => {
+    th.addEventListener('click', () => {
+      if (etfSortCol === th.dataset.col) etfSortDir *= -1;
+      else { etfSortCol = th.dataset.col; etfSortDir = ['ticker','name','sector'].includes(th.dataset.col) ? 1 : -1; }
+      renderEtf();
+    });
+  });
+
   render();
+  renderEtf();
+
+  // ── Day Chg sort buttons
+  window.heatmapSortByDayChg = function() {
+    if (sortCol === 'day_change_pct') sortDir *= -1;
+    else { sortCol = 'day_change_pct'; sortDir = -1; }
+    document.getElementById('heatmapDayChgArrow').textContent = sortDir === -1 ? '↓' : '↑';
+    document.getElementById('heatmapDayChgSort').classList.toggle('text-brand', true);
+    document.getElementById('heatmapDayChgSort').classList.toggle('border-brand/40', true);
+    render();
+  };
+
+  window.etfSortByDayChg = function() {
+    if (etfSortCol === 'day_change_pct') etfSortDir *= -1;
+    else { etfSortCol = 'day_change_pct'; etfSortDir = -1; }
+    document.getElementById('etfDayChgArrow').textContent = etfSortDir === -1 ? '↓' : '↑';
+    document.getElementById('etfDayChgSort').classList.toggle('text-brand', true);
+    document.getElementById('etfDayChgSort').classList.toggle('border-brand/40', true);
+    renderEtf();
+  };
 })();
 </script>
 {% endblock %}
