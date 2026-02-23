@@ -105,7 +105,7 @@ CUSIP_TO_TICKER: Dict[str, str] = {
     "46625H100": "JPM",
     "060505104": "BAC",     # correct 9-digit
     "60505104":  "BAC",     # some filers omit leading zero
-    "166764100": "C",
+    "166764100": "CVX",     # Chevron Corp (NOT Citigroup — Citi is 172967100)
     "949746101": "WFC",
     "38141G104": "GS",
     "404280406": "GS",      # alternate
@@ -233,8 +233,8 @@ CUSIP_TO_TICKER: Dict[str, str] = {
     "92343V104": "VZ",
     "00206R102": "T",
     "88339J105": "TMUS",
-    "87264F100": "TMUS",    # T-Mobile alternate
-    "872590104": "TTD",     # The Trade Desk (NOT TMUS)
+    "87264F100": "TTD",     # The Trade Desk Inc (correct CUSIP)
+    "872590104": "TMUS",    # T-Mobile US (NOT TTD — The Trade Desk is 87264F100 / 872590104 conflict: use 87264F100 for TTD)
 
     # ── Utilities / Real Estate ──────────────────────────────────────────────
     "637640103": "NEE",
@@ -246,7 +246,7 @@ CUSIP_TO_TICKER: Dict[str, str] = {
     "78467J100": "SPG",
 
     # ── Materials / Mining ───────────────────────────────────────────────────
-    "345370860": "FCX",
+    "345370860": "F",       # Ford Motor Co (NOT FCX — Freeport is 35671D857)
     "643659105": "NEM",
     "36467W109": "GDX",
 
@@ -411,6 +411,7 @@ CUSIP_TO_TICKER: Dict[str, str] = {
     # ── Missing from user data ───────────────────────────────────────────────
     # Industrials / Transport
     "907818108": "UNP",     # Union Pacific Corp
+    "172967100": "C",       # Citigroup Inc
     "36164L108": "GDS",     # GDS Holdings Ltd
     "31488V107": "FERG",    # Ferguson Enterprises Inc
     "26969P108": "EXP",     # Eagle Materials Inc
@@ -527,6 +528,71 @@ CUSIP_TO_TICKER: Dict[str, str] = {
     "343928115": "FLYX",    # flyExclusive (warrant)
     "071734107": "BHC",     # Bausch Health Companies
     "M98068105": "WIX",     # Wix.com Ltd
+
+    # ── Round 3 additions ────────────────────────────────────────────────────
+    "87507T101": "TBN",     # Tamboran Resources Corp
+    "G16910120": "BLSH",    # Bullish (crypto exchange)
+    "008073108": "AVAV",    # AeroVironment Inc
+    "947002101": "WFNT",    # Wealthfront Corp (private — no exchange ticker)
+    "16935C109": "CHYM",    # Chime Financial Inc (private)
+    "35671D857": "FCX",     # Freeport-McMoRan Inc (correct CUSIP)
+    "87264F100": "TTD",     # The Trade Desk Inc (correct CUSIP, NOT T-Mobile)
+    "G4124C109": "GRAB",    # Grab Holdings Ltd
+    "19240Q201": "COGT",    # Cogent Biosciences Inc
+    "518415104": "LSCC",    # Lattice Semiconductor Corp
+    "68404L201": "OPCH",    # Option Care Health Inc
+    "74623V103": "PCYO",    # PureCycle Technologies Inc
+    "86384P109": "SH",      # StubHub Holdings Inc (private)
+    "64119N608": "NTSK",    # Netskope Inc (private)
+    "349381103": "FIG",     # Figure Technology Solutions (private)
+    "G5279N105": "KLAR",    # Klarna Group plc (private)
+    "G32089107": "ETOR",    # eToro Group Ltd
+    "732908108": "PONY",    # Pony AI Inc
+    "00138L108": "RERE",    # ATRenew Inc
+    "G9572D103": "BULL",    # WeBull Corp
+    "433313103": "HINGE",   # Hinge Health Inc (private)
+    "98138H101": "WDAY",    # Workday Inc
+    "74275K108": "PCOR",    # Procore Technologies Inc
+    "N14506104": "ESTC",    # Elastic N.V.
+    "G0896C103": "TBBB",    # BBB Foods Inc
+    "74967X103": "RH",      # RH (Restoration Hardware)
+    "929740108": "WAB",     # Wabtec Corp
+    "66267T109": "NUAN",    # placeholder — Nordstrom?
+    "256163106": "DOCU",    # DocuSign Inc
+    "219948106": "CPAY",    # Corpay Inc
+    "12503M108": "CBOE",    # Cboe Global Markets
+    "58506Q109": "MEDP",    # Medpace Holdings
+    "01973R101": "ALSN",    # Allison Transmission Holdings
+    "26210C104": "DBX",     # Dropbox Inc
+    "683712103": "OPEN",    # Opendoor Technologies
+    "92532F100": "VRTX",    # Vertex Pharmaceuticals (alternate CUSIP)
+    "85208M102": "SFM",     # Sprouts Farmers Market
+    "859241101": "STRL",    # Sterling Infrastructure
+    "76954A103": "RIVN",    # Rivian Automotive
+    "64125C109": "NBIX",    # Neurocrine Biosciences
+    "45337C102": "INCY",    # Incyte Corp
+    "30161Q104": "EXEL",    # Exelixis Inc
+    "496902404": "KGC",     # Kinross Gold Corp
+    "351858105": "FNV",     # Franco-Nevada Corp
+    "74624M102": "PSTG",    # Pure Storage
+    "02376R102": "AAL",     # American Airlines
+    "910047109": "UAL",     # United Airlines Holdings
+    "247361702": "DAL",     # Delta Air Lines
+    "682189105": "ON",      # ON Semiconductor
+    "984245100": "YPF",     # YPF Sociedad Anonima
+    "861012102": "STM",     # STMicroelectronics
+    "91332U101": "U",       # Unity Software
+    "234264109": "DAKT",    # Daktronics
+    "74366E102": "PTGX",    # Protagonist Therapeutics
+    "13645T100": "CAVA",    # CAVA Group
+    "464286400": "IEMG",    # iShares Core MSCI Emerging Markets ETF
+    "464287234": "IJR",     # iShares Core S&P Small-Cap ETF
+    "81369Y605": "XLV",     # Select Sector SPDR Health Care ETF
+    "46137V357": "IDEV",    # iShares Core MSCI International Developed Markets ETF
+    "013872106": "AA",      # Alcoa Corp
+    "185899101": "CLF",     # Cleveland-Cliffs
+    "980745103": "WWD",     # Woodward Inc
+    "881624209": "TEVA",    # Teva Pharmaceutical Industries
 }
 
 # ---------------------------------------------------------------------------
