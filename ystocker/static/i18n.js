@@ -548,6 +548,8 @@ const I18n = (() => {
     document.querySelectorAll('.lang-toggle-btn').forEach(btn => {
       btn.textContent = lang === 'zh' ? 'EN' : '中文';
     });
+    // Re-inject lang into all internal links
+    _injectLangLinks(lang);
   }
 
   function toggle() {
@@ -556,12 +558,29 @@ const I18n = (() => {
 
   function getLang() { return current; }
 
+  // Inject ?lang= into all internal links so language survives navigation
+  function _injectLangLinks(lang) {
+    document.querySelectorAll('a[href]').forEach(a => {
+      try {
+        const url = new URL(a.href, window.location.origin);
+        if (url.origin !== window.location.origin) return; // skip external
+        if (lang === 'zh') {
+          url.searchParams.set('lang', 'zh');
+        } else {
+          url.searchParams.delete('lang');
+        }
+        a.href = url.pathname + (url.search || '') + (url.hash || '');
+      } catch (_) {}
+    });
+  }
+
   // Auto-apply on DOMContentLoaded
   document.addEventListener('DOMContentLoaded', () => {
     apply();
     document.querySelectorAll('.lang-toggle-btn').forEach(btn => {
       btn.textContent = current === 'zh' ? 'EN' : '中文';
     });
+    _injectLangLinks(current);
   });
 
   return { t, apply, toggle, setLang, getLang };
