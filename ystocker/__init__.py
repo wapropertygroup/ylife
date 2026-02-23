@@ -14,7 +14,7 @@ from flask import Flask
 # Each key is a group name; each value is a list of Yahoo Finance ticker symbols.
 # ---------------------------------------------------------------------------
 PEER_GROUPS: Dict[str, List[str]] = {
-    "Tech":              ["MSFT", "AAPL", "GOOGL", "META", "NVDA"],
+    "Tech":              ["MSFT", "AAPL", "GOOGL", "META", "NVDA", "AMZN"],
     "Cloud / SaaS":      ["MSFT", "CRM", "NOW", "AMZN", "ORCL"],
     "Semiconductors":    ["NVDA", "AMD", "INTC", "QCOM", "TSM", "AVGO", "ASML"],
     "Financials":        ["JPM", "BAC", "GS", "MS", "BLK", "COF", "BRK-B", "AXP"],
