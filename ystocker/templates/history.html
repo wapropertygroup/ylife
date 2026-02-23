@@ -121,7 +121,7 @@
 <div id="panelCharts">
 
 <!-- ── Stat cards ───────────────────────────────────────────────────── -->
-<div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-11 gap-3 sm:gap-4 mb-6 sm:mb-8 fade-up">
+<div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-12 gap-3 sm:gap-4 mb-6 sm:mb-8 fade-up">
   <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 sm:px-4 py-3">
     <div class="text-xs text-slate-500 mb-1" data-i18n="history.current_pe">Current PE</div>
     <div id="statCurrentPe" class="text-sm sm:text-base font-bold text-slate-100 break-all">—</div>
@@ -165,6 +165,11 @@
   <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 sm:px-4 py-3">
     <div class="text-xs text-slate-500 mb-1" data-i18n="history.ebitda">EBITDA ($B)</div>
     <div id="statEbitda" class="text-sm sm:text-base font-bold text-slate-100 break-all">—</div>
+  </div>
+  <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 sm:px-4 py-3">
+    <div class="text-xs text-slate-500 mb-1" data-i18n="history.put_call_ratio">P/C Ratio</div>
+    <div id="statPutCallRatio" class="text-sm sm:text-base font-bold text-slate-100 break-all">—</div>
+    <div id="statPutCallLabel" class="text-[10px] mt-0.5 text-slate-600"></div>
   </div>
 </div>
 
@@ -517,6 +522,23 @@ let   _modalKey       = null;
   if (data.ebitda != null) {
     ebitdaEl.textContent = '$' + data.ebitda.toFixed(1) + 'B';
     ebitdaEl.className   = 'text-sm sm:text-base font-bold text-slate-100';
+  }
+
+  const pcEl    = document.getElementById('statPutCallRatio');
+  const pcLabel = document.getElementById('statPutCallLabel');
+  if (data.put_call_ratio != null) {
+    const pcr = data.put_call_ratio;
+    pcEl.textContent = pcr.toFixed(2);
+    if (pcr > 1.2) {
+      pcEl.className = 'text-sm sm:text-base font-bold text-rose-400';
+      pcLabel.textContent = 'Bearish';
+    } else if (pcr < 0.7) {
+      pcEl.className = 'text-sm sm:text-base font-bold text-emerald-400';
+      pcLabel.textContent = 'Bullish';
+    } else {
+      pcEl.className = 'text-sm sm:text-base font-bold text-amber-400';
+      pcLabel.textContent = 'Neutral';
+    }
   }
 
   // EV/EBITDA panel

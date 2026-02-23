@@ -619,8 +619,10 @@ def api_history(ticker: str):
     earnings_growth_q   = info.get("earningsQuarterlyGrowth")
 
     # Options walls: strike with highest aggregate open interest across all expirations
+    # Also compute put/call ratio = total put OI / total call OI
     call_wall = None
     put_wall  = None
+    put_call_ratio = None
     try:
         expirations = tk.options  # tuple of expiration date strings
         call_oi: dict[float, int] = {}
@@ -637,6 +639,10 @@ def api_history(ticker: str):
             call_wall = max(call_oi, key=call_oi.__getitem__)
         if put_oi:
             put_wall  = max(put_oi,  key=put_oi.__getitem__)
+        total_call_oi = sum(call_oi.values())
+        total_put_oi  = sum(put_oi.values())
+        if total_call_oi > 0:
+            put_call_ratio = round(total_put_oi / total_call_oi, 2)
     except Exception:
         log.warning("Could not fetch options walls for %s", ticker)
 
@@ -661,6 +667,7 @@ def api_history(ticker: str):
         "institutional_holders": _get_institutional_holders(ticker),
         "call_wall":        _safe(call_wall),
         "put_wall":         _safe(put_wall),
+        "put_call_ratio":   _safe(put_call_ratio),
     }
     with _HISTORY_CACHE_LOCK:
         _HISTORY_CACHE[cache_key] = {"ts": time.time(), "data": result}
@@ -799,6 +806,13 @@ def contact():
 @bp.route("/guide")
 def guide():
     return render_template("guide.html", peer_groups=list(PEER_GROUPS.keys()))
+
+
+@bp.route("/videos")
+def videos():
+    from ystocker import YT_CHANNELS
+    return render_template("videos.html", peer_groups=list(PEER_GROUPS.keys()),
+                           yt_channels=YT_CHANNELS)
 
 
 # ---------------------------------------------------------------------------
@@ -1345,4 +1359,68 @@ def api_videos(ticker: str):
     result = {"ticker": ticker, "videos": videos}
     with _VIDEOS_CACHE_LOCK:
         _VIDEOS_CACHE[ticker] = {"ts": time.time(), "data": result}
+    return jsonify(result)
+
+
+@bp.route("/api/videos/channel/<channel_id>")
+def api_videos_channel(channel_id: str):
+    """Return recent videos for a single YT channel (standalone videos page)."""
+    import httpx
+    from datetime import datetime, timezone, timedelta
+
+    cache_key = f"channel:{channel_id}"
+    with _VIDEOS_CACHE_LOCK:
+        cached = _VIDEOS_CACHE.get(cache_key)
+        if cached and time.time() - cached["ts"] < _VIDEOS_CACHE_TTL:
+            return jsonify(cached["data"])
+
+    api_key = os.environ.get("YOUTUBE_API_KEY", "")
+    if not api_key:
+        return jsonify({"videos": [], "note": "YOUTUBE_API_KEY not set"})
+
+    http = httpx.Client(timeout=10)
+    published_after = (datetime.now(timezone.utc) - timedelta(days=30)).strftime(
+        "%Y-%m-%dT%H:%M:%SZ"
+    )
+    try:
+        resp = http.get("https://www.googleapis.com/youtube/v3/search", params={
+            "part": "snippet",
+            "channelId": channel_id,
+            "type": "video",
+            "order": "date",
+            "publishedAfter": published_after,
+            "maxResults": 12,
+            "key": api_key,
+        })
+        resp.raise_for_status()
+        items = resp.json().get("items", [])
+    except Exception as e:
+        log.warning("YouTube channel fetch failed for %s: %s", channel_id, e)
+        return jsonify({"videos": [], "error": str(e)})
+
+    seen: set = set()
+    videos = []
+    for it in items:
+        vid_id = (it.get("id") or {}).get("videoId")
+        if not vid_id or vid_id in seen:
+            continue
+        seen.add(vid_id)
+        snippet = it.get("snippet", {})
+        pub_str = snippet.get("publishedAt", "")
+        pub_ts = None
+        try:
+            dt = datetime.fromisoformat(pub_str.replace("Z", "+00:00"))
+            pub_ts = int(dt.timestamp())
+        except Exception:
+            pass
+        videos.append({
+            "id":        vid_id,
+            "title":     snippet.get("title", ""),
+            "channel":   snippet.get("channelTitle", ""),
+            "published": pub_ts,
+        })
+    videos.sort(key=lambda v: v["published"] or 0, reverse=True)
+    result = {"channel_id": channel_id, "videos": videos}
+    with _VIDEOS_CACHE_LOCK:
+        _VIDEOS_CACHE[cache_key] = {"ts": time.time(), "data": result}
     return jsonify(result)

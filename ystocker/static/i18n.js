@@ -23,6 +23,7 @@ const I18n = (() => {
     'nav.groups':         { en: 'Groups',   zh: '分组' },
     'nav.contact':        { en: 'Contact',  zh: '联系' },
     'nav.guide':          { en: 'Guide',    zh: '使用指南' },
+    'nav.videos':         { en: 'Videos',   zh: '视频' },
     'nav.refresh':        { en: '↻ Refresh', zh: '↻ 刷新' },
     'nav.refresh_title':  { en: 'Refresh data', zh: '刷新数据' },
     'nav.refresh_body':   { en: 'Clears the in-memory cache and re-fetches live prices, PE ratios, and analyst targets for all tickers from Yahoo Finance.',
@@ -163,6 +164,7 @@ const I18n = (() => {
                                  zh: '企业价值 ÷ 息税折旧摊销前利润 — 不受资本结构影响的估值倍数。' },
     'history.ev':             { en: 'EV ($B)',         zh: '企业价值（十亿美元）' },
     'history.ebitda':         { en: 'EBITDA ($B)',     zh: 'EBITDA（十亿美元）' },
+    'history.put_call_ratio': { en: 'P/C Ratio',       zh: '认沽/认购比率' },
     'history.tradingview':    { en: 'TradingView',     zh: 'TradingView' },
 
     'history.pe_title':     { en: 'PE Ratio — 52 Weeks', zh: '市盈率 — 52周' },
@@ -517,6 +519,10 @@ const I18n = (() => {
     current = lang;
     localStorage.setItem('ystocker_lang', lang);
     apply();
+    // Update URL so the link is shareable
+    const url = new URL(window.location.href);
+    url.searchParams.set('lang', lang);
+    window.history.replaceState({}, '', url.toString());
     // Update toggle button text
     document.querySelectorAll('.lang-toggle-btn').forEach(btn => {
       btn.textContent = lang === 'zh' ? 'EN' : '中文';
