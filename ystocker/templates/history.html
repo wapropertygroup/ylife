@@ -574,10 +574,14 @@ let   _modalKey       = null;
     }
   }
 
-  // Annual Financials table
-  if (data.financials_table && data.financials_table.length > 0) {
-    document.getElementById('financialsSection').style.display = 'block';
-    const rows = data.financials_table;
+  // Annual Financials table — fetched async from dedicated endpoint
+  (async () => {
+    try {
+      const resp = await fetch(`/api/financials/${encodeURIComponent(TICKER)}`);
+      const fdata = await resp.json();
+      if (fdata.financials_table && fdata.financials_table.length > 0) {
+        document.getElementById('financialsSection').style.display = 'block';
+        const rows = fdata.financials_table;
     const METRICS = [
       { key: 'revenue',     label: 'Revenue ($B)',     est_key: 'revenue_est' },
       { key: 'gross_profit',label: 'Gross Profit ($B)',est_key: null },
@@ -606,7 +610,11 @@ let   _modalKey       = null;
         <td class="py-2.5 px-3 text-xs text-slate-400 font-medium whitespace-nowrap">${m.label}</td>${cells}
       </tr>`;
     }).join('');
-  }
+      }
+    } catch(e) {
+      console.warn('Financials fetch failed:', e);
+    }
+  })();
 
   // EV/EBITDA panel
   if (data.ev_ebitda != null || data.ev != null || data.ebitda != null) {

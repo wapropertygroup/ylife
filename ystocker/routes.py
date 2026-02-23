@@ -581,87 +581,6 @@ def api_history(ticker: str):
     if hist.empty:
         return jsonify({"error": f"No price history for '{ticker}'."}), 404
 
-    # Annual financials — past 3 years actuals + forward 2 years estimates
-    financials_table: list = []
-    try:
-        stmt = tk.income_stmt   # columns = Timestamps newest-first
-        # rows we want and their display names
-        ROW_MAP = [
-            ("Total Revenue",  "revenue"),
-            ("Gross Profit",   "gross_profit"),
-            ("EBITDA",         "ebitda_is"),
-            ("Net Income",     "net_income"),
-            ("Basic EPS",      "eps_basic"),
-            ("Diluted EPS",    "eps_diluted"),
-        ]
-        def _to_b(v):
-            """Convert raw value to billions, or return None."""
-            try:
-                f = float(v)
-                return None if (f != f) else round(f / 1e9, 2)  # NaN check
-            except Exception:
-                return None
-        def _to_f(v):
-            try:
-                f = float(v)
-                return None if (f != f) else round(f, 2)
-            except Exception:
-                return None
-
-        # Build actuals dict: {year_str: {metric: value}}
-        actuals: dict = {}
-        if not stmt.empty:
-            for col in list(stmt.columns)[:3]:    # newest 3 annual periods
-                yr = str(col.year)
-                actuals[yr] = {}
-                for src_row, key in ROW_MAP:
-                    if src_row in stmt.index:
-                        raw = stmt.loc[src_row, col]
-                        actuals[yr][key] = _to_b(raw) if key not in ("eps_basic", "eps_diluted") else _to_f(raw)
-
-        # Forward estimates from info
-        fwd_current_yr = info.get("revenuePerShare")   # not useful
-        est_revenue_cyr = info.get("revenueEstimatesCurrentYear")
-        est_revenue_nyr = info.get("revenueEstimatesNextYear")
-        est_eps_cyr = info.get("epsCurrentYear")       # yfinance 0.2+
-        est_eps_nyr = info.get("epsNextYear")
-
-        # Fallbacks via eps_trend
-        try:
-            et = tk.eps_trend
-            if et is not None and not et.empty:
-                if est_eps_cyr is None and "current" in et.columns:
-                    est_eps_cyr = _to_f(et.loc["current", "current"]) if "current" in et.index else None
-                if est_eps_nyr is None and "next" in et.columns:
-                    est_eps_nyr  = _to_f(et.loc["next", "current"]) if "next" in et.index else None
-        except Exception:
-            pass
-
-        import datetime as _dt
-        cur_year = _dt.date.today().year
-        fwd_years = [str(cur_year), str(cur_year + 1)]
-
-        fwd: dict = {}
-        if est_eps_cyr is not None:
-            fwd.setdefault(fwd_years[0], {})["eps_est"] = round(float(est_eps_cyr), 2) if est_eps_cyr else None
-        if est_eps_nyr is not None:
-            fwd.setdefault(fwd_years[1], {})["eps_est"] = round(float(est_eps_nyr), 2) if est_eps_nyr else None
-        if est_revenue_cyr is not None:
-            fwd.setdefault(fwd_years[0], {})["revenue_est"] = round(float(est_revenue_cyr) / 1e9, 2) if est_revenue_cyr else None
-        if est_revenue_nyr is not None:
-            fwd.setdefault(fwd_years[1], {})["revenue_est"] = round(float(est_revenue_nyr) / 1e9, 2) if est_revenue_nyr else None
-
-        # Combine: actuals sorted newest→oldest, then forward years
-        all_years = sorted(actuals.keys(), reverse=True) + [y for y in fwd_years if y not in actuals]
-        for yr in all_years:
-            row = {"year": yr, "is_estimate": yr in fwd_years and yr not in actuals}
-            row.update(actuals.get(yr, {}))
-            row.update(fwd.get(yr, {}))
-            financials_table.append(row)
-
-    except Exception as exc:
-        log.warning("Could not build financials table for %s: %s", ticker, exc)
-
     if hist.empty:
         return jsonify({"error": f"No price history for '{ticker}'."}), 404
 
@@ -764,7 +683,6 @@ def api_history(ticker: str):
         "put_wall":         _safe(put_wall),
         "put_call_ratio":   _safe(put_call_ratio),
         "pc_by_expiry":     pc_by_expiry,
-        "financials_table": financials_table,
     }
     with _HISTORY_CACHE_LOCK:
         _HISTORY_CACHE[cache_key] = {"ts": time.time(), "data": result}
@@ -772,8 +690,113 @@ def api_history(ticker: str):
 
 
 # ---------------------------------------------------------------------------
-# Ticker lookup - interactive single-stock analysis
+# Annual financials endpoint (separate from history to avoid slowing PE chart)
 # ---------------------------------------------------------------------------
+_FINANCIALS_CACHE: Dict[str, dict] = {}
+_FINANCIALS_CACHE_LOCK = threading.Lock()
+_FINANCIALS_CACHE_TTL  = 6 * 60 * 60   # 6 hours — changes infrequently
+
+
+@bp.route("/api/financials/<ticker>")
+def api_financials(ticker: str):
+    """
+    Return annual income-statement actuals (3 years) plus forward estimates
+    (2 years) for the given ticker. Kept separate from /api/history so the
+    heavier income_stmt fetch does not block the PE / price charts.
+    """
+    import yfinance as yf
+    import datetime as _dt
+    ticker = ticker.strip().upper()
+
+    with _FINANCIALS_CACHE_LOCK:
+        entry = _FINANCIALS_CACHE.get(ticker)
+        if entry and time.time() - entry["ts"] < _FINANCIALS_CACHE_TTL:
+            return jsonify(entry["data"])
+
+    def _to_b(v):
+        try:
+            f = float(v)
+            return None if (f != f) else round(f / 1e9, 2)
+        except Exception:
+            return None
+
+    def _to_f(v):
+        try:
+            f = float(v)
+            return None if (f != f) else round(f, 2)
+        except Exception:
+            return None
+
+    financials_table: list = []
+    try:
+        tk   = yf.Ticker(ticker)
+        info = tk.info
+
+        ROW_MAP = [
+            ("Total Revenue",  "revenue"),
+            ("Gross Profit",   "gross_profit"),
+            ("EBITDA",         "ebitda_is"),
+            ("Net Income",     "net_income"),
+            ("Basic EPS",      "eps_basic"),
+            ("Diluted EPS",    "eps_diluted"),
+        ]
+
+        actuals: dict = {}
+        try:
+            stmt = tk.income_stmt
+            if stmt is not None and not stmt.empty:
+                for col in list(stmt.columns)[:3]:
+                    yr = str(col.year)
+                    actuals[yr] = {}
+                    for src_row, key in ROW_MAP:
+                        if src_row in stmt.index:
+                            raw = stmt.loc[src_row, col]
+                            actuals[yr][key] = _to_b(raw) if key not in ("eps_basic", "eps_diluted") else _to_f(raw)
+        except Exception as exc:
+            log.warning("income_stmt fetch failed for %s: %s", ticker, exc)
+
+        # Forward estimates from info dict
+        est_eps_cyr     = info.get("epsCurrentYear")
+        est_eps_nyr     = info.get("epsNextYear")
+        est_rev_cyr     = info.get("revenueEstimatesCurrentYear")
+        est_rev_nyr     = info.get("revenueEstimatesNextYear")
+
+        # Fallback via eps_trend
+        try:
+            et = tk.eps_trend
+            if et is not None and not et.empty:
+                if est_eps_cyr is None and "current" in et.index and "current" in et.columns:
+                    est_eps_cyr = _to_f(et.loc["current", "current"])
+                if est_eps_nyr is None and "next" in et.index and "current" in et.columns:
+                    est_eps_nyr = _to_f(et.loc["next", "current"])
+        except Exception:
+            pass
+
+        cur_year  = _dt.date.today().year
+        fwd_years = [str(cur_year), str(cur_year + 1)]
+
+        fwd: dict = {}
+        for yr, eps_v, rev_v in [(fwd_years[0], est_eps_cyr, est_rev_cyr),
+                                  (fwd_years[1], est_eps_nyr, est_rev_nyr)]:
+            if eps_v is not None:
+                fwd.setdefault(yr, {})["eps_est"] = _to_f(eps_v)
+            if rev_v is not None:
+                fwd.setdefault(yr, {})["revenue_est"] = _to_b(rev_v) if rev_v > 1e6 else _to_f(rev_v)
+
+        all_years = sorted(actuals.keys(), reverse=True) + [y for y in fwd_years if y not in actuals]
+        for yr in all_years:
+            row = {"year": yr, "is_estimate": yr in fwd_years and yr not in actuals}
+            row.update(actuals.get(yr, {}))
+            row.update(fwd.get(yr, {}))
+            financials_table.append(row)
+
+    except Exception as exc:
+        log.warning("api_financials failed for %s: %s", ticker, exc)
+
+    result = {"ticker": ticker, "financials_table": financials_table}
+    with _FINANCIALS_CACHE_LOCK:
+        _FINANCIALS_CACHE[ticker] = {"ts": time.time(), "data": result}
+    return jsonify(result)
 
 @bp.route("/lookup")
 def lookup():
@@ -1286,19 +1309,35 @@ def api_news(ticker: str):
 
     articles = []
     for item in raw_news:
-        content = item.get("content", {}) or {}
-        # yfinance >= 0.2.x nests fields under "content"
-        title     = content.get("title") or item.get("title", "")
-        pub_date  = content.get("pubDate") or item.get("providerPublishTime")
-        provider  = (content.get("provider", {}) or {}).get("displayName") or item.get("publisher", "")
-        link      = (content.get("canonicalUrl", {}) or {}).get("url") or item.get("link", "")
-        summary   = content.get("summary") or item.get("summary", "")
-        thumbnail = None
-        thumb_list = (content.get("thumbnail", {}) or {}).get("resolutions") or []
-        if thumb_list:
-            thumbnail = thumb_list[0].get("url")
-        elif (item.get("thumbnail") or {}).get("resolutions"):
-            thumbnail = item["thumbnail"]["resolutions"][0].get("url")
+        try:
+            content = item.get("content") or {}
+            if not isinstance(content, dict):
+                content = {}
+            # yfinance >= 0.2.x nests fields under "content"
+            title     = content.get("title") or item.get("title", "")
+            pub_date  = content.get("pubDate") or item.get("providerPublishTime")
+            provider_obj = content.get("provider") or {}
+            if not isinstance(provider_obj, dict):
+                provider_obj = {}
+            provider  = provider_obj.get("displayName") or item.get("publisher", "")
+            canonical = content.get("canonicalUrl") or {}
+            if not isinstance(canonical, dict):
+                canonical = {}
+            link      = canonical.get("url") or item.get("link", "")
+            summary   = content.get("summary") or item.get("summary", "")
+            thumbnail = None
+            thumb_obj = content.get("thumbnail") or {}
+            if not isinstance(thumb_obj, dict):
+                thumb_obj = {}
+            thumb_list = thumb_obj.get("resolutions") or []
+            if thumb_list:
+                thumbnail = thumb_list[0].get("url")
+            elif isinstance(item.get("thumbnail"), dict):
+                resolutions = item["thumbnail"].get("resolutions") or []
+                if resolutions:
+                    thumbnail = resolutions[0].get("url")
+        except Exception:
+            continue
 
         # Normalise pub_date to a unix timestamp int
         if isinstance(pub_date, str):
@@ -1430,7 +1469,7 @@ def api_videos(ticker: str):
     seen: set = set()
     videos = []
     for it in all_items:
-        vid_id = (it.get("id") or {}).get("videoId")
+        vid_id = (it.get("id") or {}).get("videoId") if isinstance(it.get("id"), dict) else (it.get("id") or None)
         if not vid_id or vid_id in seen:
             continue
         seen.add(vid_id)
@@ -1498,7 +1537,7 @@ def api_videos_channel(channel_id: str):
     seen: set = set()
     videos = []
     for it in items:
-        vid_id = (it.get("id") or {}).get("videoId")
+        vid_id = (it.get("id") or {}).get("videoId") if isinstance(it.get("id"), dict) else (it.get("id") or None)
         if not vid_id or vid_id in seen:
             continue
         seen.add(vid_id)
@@ -1574,7 +1613,7 @@ def api_videos_all():
     seen: set = set()
     videos = []
     for it in all_items:
-        vid_id = (it.get("id") or {}).get("videoId")
+        vid_id = (it.get("id") or {}).get("videoId") if isinstance(it.get("id"), dict) else (it.get("id") or None)
         if not vid_id or vid_id in seen:
             continue
         seen.add(vid_id)
