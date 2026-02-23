@@ -96,7 +96,39 @@
         </span>
       </span>
       <span><span data-i18n="thirteenf.shown">Holdings shown:</span> <span class="text-slate-300">{{ fd.holdings | length }} / {{ fd.total_holdings }}</span></span>
+      {% set shown_total = fd.holdings | sum(attribute='value_millions') %}
+      {% set shown_pct = (shown_total / fd.total_value_millions * 100) if fd.total_value_millions else 0 %}
+      <span class="text-slate-400">·</span>
+      <span><span data-i18n="thirteenf.shown_value">Shown value:</span>
+        <span class="text-emerald-400 font-bold">${{ "{:,.0f}".format(shown_total) }}M</span>
+        <span class="text-slate-600 ml-1">({{ "{:.1f}".format(shown_pct) }}% of AUM)</span>
+      </span>
     </div>
+
+    <!-- AUM history across quarters -->
+    {% if fd.quarters and fd.quarters | length > 1 %}
+    <div class="mb-5 p-3 bg-slate-800/40 rounded-xl border border-slate-700/50">
+      <p class="text-xs text-slate-500 mb-2 font-medium" data-i18n="thirteenf.aum_history">AUM by Quarter</p>
+      <div class="flex items-end gap-3 flex-wrap">
+        {% set max_aum = fd.quarters | map(attribute='total_value_millions') | max %}
+        {% for q in fd.quarters | reverse %}
+        {% set bar_pct = (q.total_value_millions / max_aum * 100) if max_aum else 0 %}
+        {% set is_latest = loop.last %}
+        <div class="flex flex-col items-center gap-1 min-w-[60px]">
+          <span class="text-xs font-mono {% if is_latest %}text-emerald-400{% else %}text-slate-400{% endif %}">
+            ${{ "{:,.0f}".format(q.total_value_millions) }}M
+          </span>
+          <div class="w-12 bg-slate-700 rounded-t relative" style="height: 48px;">
+            <div class="absolute bottom-0 left-0 right-0 rounded-t transition-all
+                        {% if is_latest %}bg-brand{% else %}bg-slate-500{% endif %}"
+                 style="height: {{ bar_pct | round(1) }}%"></div>
+          </div>
+          <span class="text-[10px] text-slate-600">{{ q.period }}</span>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
 
     <!-- Holdings table -->
     <div class="overflow-x-auto">
@@ -171,6 +203,18 @@
           </tr>
           {% endfor %}
         </tbody>
+        <tfoot>
+          {% set total_shown_value = fd.holdings | sum(attribute='value_millions') %}
+          {% set total_shown_pct   = fd.holdings | sum(attribute='pct_portfolio') %}
+          <tr class="border-t-2 border-slate-700 bg-slate-800/30 text-xs font-semibold text-slate-300">
+            <td class="py-2.5 px-3"></td>
+            <td class="py-2.5 px-3 text-slate-400" colspan="3" data-i18n="thirteenf.total_shown">Total (shown)</td>
+            <td class="py-2.5 px-3 text-right font-mono text-slate-400">—</td>
+            <td class="py-2.5 px-3 text-right font-mono text-emerald-400">${{ "{:,.1f}".format(total_shown_value) }}</td>
+            <td class="py-2.5 px-3 text-right font-mono">{{ "{:.2f}".format(total_shown_pct) }}%</td>
+            <td class="py-2.5 px-3"></td>
+          </tr>
+        </tfoot>
       </table>
     </div>
     {% endif %}

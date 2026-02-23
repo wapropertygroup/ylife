@@ -265,6 +265,9 @@ const I18n = (() => {
     'thirteenf.legend_reduced':{ en: 'Shares decreased vs prior quarter',  zh: '较上季度减仓' },
     'thirteenf.legend_closed':{ en: 'Position exited (prior quarter only)', zh: '已清仓（仅上季度持有）' },
     'thirteenf.source':      { en: 'Data source:', zh: '数据来源：' },
+    'thirteenf.shown_value': { en: 'Shown value:', zh: '显示持仓总值：' },
+    'thirteenf.total_shown': { en: 'Total (shown)', zh: '合计（已显示）' },
+    'thirteenf.aum_history': { en: 'AUM by Quarter', zh: '按季度持仓规模' },
 
     // ── change badge labels ────────────────────────────────────────────
     'inst.change_new':     { en: 'New',       zh: '新建' },

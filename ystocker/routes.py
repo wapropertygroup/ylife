@@ -477,25 +477,44 @@ _HISTORY_CACHE_LOCK = threading.Lock()
 _HISTORY_CACHE_TTL = 60 * 60   # 1 hour
 
 def _get_institutional_holders(ticker: str) -> list:
-    """Return list of funds (from 13F cache) that hold this ticker."""
+    """Return per-fund multi-quarter position data for a ticker."""
     try:
         from ystocker.sec13f import get_all_holdings
         all_holdings = get_all_holdings()
         result = []
         for fund_name, fd in all_holdings.items():
-            if fd.get("error") or not fd.get("holdings"):
+            if fd.get("error"):
                 continue
-            for h in fd["holdings"]:
-                if h.get("ticker") == ticker:
-                    result.append({
-                        "fund":         fund_name,
-                        "rank":         h["rank"],
-                        "shares":       h["shares"],
-                        "value_millions": h["value_millions"],
-                        "pct_portfolio": h["pct_portfolio"],
-                        "change":       h.get("change", "unknown"),
-                    })
-                    break
+            quarters = fd.get("quarters") or []
+            # Build per-quarter snapshot for this ticker
+            fund_quarters = []
+            for q in quarters:
+                for h in q.get("holdings", []):
+                    if h.get("ticker") == ticker:
+                        fund_quarters.append({
+                            "period":           q["period"],
+                            "filing_date":      q["filing_date"],
+                            "shares":           h["shares"],
+                            "value_millions":   h["value_millions"],
+                            "pct_portfolio":    h["pct_portfolio"],
+                            "change":           h.get("change", "unknown"),
+                            "change_pct":       h.get("change_pct"),
+                            "rank":             h.get("rank"),
+                        })
+                        break
+            if not fund_quarters:
+                continue
+            latest_q = fund_quarters[0]
+            result.append({
+                "fund":             fund_name,
+                "rank":             latest_q["rank"],
+                "shares":           latest_q["shares"],
+                "value_millions":   latest_q["value_millions"],
+                "pct_portfolio":    latest_q["pct_portfolio"],
+                "change":           latest_q["change"],
+                "change_pct":       latest_q.get("change_pct"),
+                "quarters":         fund_quarters,   # newest first
+            })
         result.sort(key=lambda x: x["value_millions"], reverse=True)
         return result
     except Exception:
@@ -952,6 +971,14 @@ def api_thirteenf(fund_slug: str):
     if not name:
         return jsonify({"error": "Fund not found"}), 404
     return jsonify(holdings.get(name, {}))
+
+
+@bp.route("/api/13f/ticker/<ticker>")
+def api_thirteenf_ticker(ticker: str):
+    """JSON API — multi-quarter institutional holdings for a single ticker."""
+    ticker = ticker.strip().upper()
+    holders = _get_institutional_holders(ticker)
+    return jsonify({"ticker": ticker, "holders": holders})
 
 
 # ---------------------------------------------------------------------------
