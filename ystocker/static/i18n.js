@@ -165,6 +165,14 @@ const I18n = (() => {
     'history.ev':             { en: 'EV ($B)',         zh: '企业价值（十亿美元）' },
     'history.ebitda':         { en: 'EBITDA ($B)',     zh: 'EBITDA（十亿美元）' },
     'history.put_call_ratio': { en: 'P/C Ratio',       zh: '认沽/认购比率' },
+    'history.pc_title':       { en: 'Put/Call Ratio by Expiration', zh: '到期日认沽/认购比率' },
+    'history.pc_desc':        { en: 'Put OI ÷ Call OI per expiration — above 1.0 = bearish hedging, below 0.7 = bullish', zh: '各到期日认沽持仓量 ÷ 认购持仓量，高于1.0为看空对冲，低于0.7为看多' },
+    'history.pc_bearish':     { en: 'Bearish (>1.2)',  zh: '看空 (>1.2)' },
+    'history.pc_neutral':     { en: 'Neutral',         zh: '中性' },
+    'history.pc_bullish':     { en: 'Bullish (<0.7)',  zh: '看多 (<0.7)' },
+    'history.group_valuation':{ en: 'Valuation',       zh: '估值' },
+    'history.group_earnings': { en: 'Earnings',        zh: '盈利' },
+    'history.group_sentiment':{ en: 'Price & Sentiment', zh: '价格与情绪' },
     'history.tradingview':    { en: 'TradingView',     zh: 'TradingView' },
 
     'history.pe_title':     { en: 'PE Ratio — 52 Weeks', zh: '市盈率 — 52周' },
@@ -472,6 +480,17 @@ const I18n = (() => {
     'modal.peg_under':      { en: 'PEG < 1 — undervalued', zh: 'PEG < 1 — 低估' },
     'modal.peg_moderate':   { en: '1–2 — moderate',        zh: '1–2 — 合理' },
     'modal.peg_expensive':  { en: '> 2 — expensive',       zh: '> 2 — 高估' },
+
+    // ── videos.html ────────────────────────────────────────────────────
+    'videos.title':         { en: 'Market Videos',     zh: '市场视频' },
+    'videos.subtitle':      { en: 'Latest videos from curated finance channels — search by ticker or topic.',
+                               zh: '精选财经频道最新视频 — 按股票代码或主题搜索。' },
+    'videos.search_ph':     { en: 'e.g. NVDA, AAPL, Fed, earnings…', zh: '如 NVDA、AAPL、美联储、财报…' },
+    'videos.search_btn':    { en: 'Search',            zh: '搜索' },
+    'videos.empty':         { en: 'No videos found.',  zh: '未找到视频。' },
+    'videos.loading':       { en: 'Fetching videos…',  zh: '正在加载视频…' },
+    'videos.error':         { en: 'Failed to load videos.', zh: '视频加载失败。' },
+    'videos.all_channels':  { en: 'All channels',      zh: '全部频道' },
   };
 
   let current = (() => {

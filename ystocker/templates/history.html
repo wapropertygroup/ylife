@@ -121,56 +121,78 @@
 <div id="panelCharts">
 
 <!-- ── Stat cards ───────────────────────────────────────────────────── -->
-<div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-12 gap-3 sm:gap-4 mb-6 sm:mb-8 fade-up">
-  <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 sm:px-4 py-3">
-    <div class="text-xs text-slate-500 mb-1" data-i18n="history.current_pe">Current PE</div>
-    <div id="statCurrentPe" class="text-sm sm:text-base font-bold text-slate-100 break-all">—</div>
+<div class="space-y-3 mb-6 sm:mb-8 fade-up">
+
+  <!-- Valuation -->
+  <div>
+    <p class="text-[10px] font-semibold uppercase tracking-widest text-slate-600 mb-2 px-1" data-i18n="history.group_valuation">Valuation</p>
+    <div class="grid grid-cols-3 sm:grid-cols-6 gap-2 sm:gap-3">
+      <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 py-3">
+        <div class="text-xs text-slate-500 mb-1" data-i18n="history.current_pe">Current PE</div>
+        <div id="statCurrentPe" class="text-base font-bold text-slate-100">—</div>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 py-3">
+        <div class="text-xs text-slate-500 mb-1" data-i18n="history.fwd_pe">Forward PE</div>
+        <div id="statFwdPe" class="text-base font-bold text-slate-100">—</div>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 py-3">
+        <div class="text-xs text-slate-500 mb-1" data-i18n="history.peg_ratio">PEG Ratio</div>
+        <div id="statCurrentPeg" class="text-base font-bold text-slate-100">—</div>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 py-3">
+        <div class="text-xs text-slate-500 mb-1" data-i18n="history.ev_ebitda">EV/EBITDA</div>
+        <div id="statEvEbitda" class="text-base font-bold text-slate-100">—</div>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 py-3">
+        <div class="text-xs text-slate-500 mb-1" data-i18n="history.ev">EV ($B)</div>
+        <div id="statEv" class="text-base font-bold text-slate-100">—</div>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 py-3">
+        <div class="text-xs text-slate-500 mb-1" data-i18n="history.ebitda">EBITDA ($B)</div>
+        <div id="statEbitda" class="text-base font-bold text-slate-100">—</div>
+      </div>
+    </div>
   </div>
-  <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 sm:px-4 py-3">
-    <div class="text-xs text-slate-500 mb-1" data-i18n="history.fwd_pe">Forward PE</div>
-    <div id="statFwdPe" class="text-sm sm:text-base font-bold text-slate-100 break-all">—</div>
+
+  <!-- Earnings -->
+  <div>
+    <p class="text-[10px] font-semibold uppercase tracking-widest text-slate-600 mb-2 px-1" data-i18n="history.group_earnings">Earnings</p>
+    <div class="grid grid-cols-3 sm:grid-cols-3 gap-2 sm:gap-3">
+      <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 py-3">
+        <div class="text-xs text-slate-500 mb-1" data-i18n="history.ttm_eps">TTM EPS</div>
+        <div id="statEps" class="text-base font-bold text-slate-100">—</div>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 py-3">
+        <div class="text-xs text-slate-500 mb-1" data-i18n="history.eps_growth_ttm">EPS Growth TTM</div>
+        <div id="statEpsGrowthTtm" class="text-base font-bold text-slate-100">—</div>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 py-3">
+        <div class="text-xs text-slate-500 mb-1" data-i18n="history.eps_growth_q">EPS Growth Q</div>
+        <div id="statEpsGrowthQ" class="text-base font-bold text-slate-100">—</div>
+      </div>
+    </div>
   </div>
-  <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 sm:px-4 py-3">
-    <div class="text-xs text-slate-500 mb-1" data-i18n="history.peg_ratio">PEG Ratio</div>
-    <div id="statCurrentPeg" class="text-sm sm:text-base font-bold text-slate-100 break-all">—</div>
+
+  <!-- Price / Sentiment -->
+  <div>
+    <p class="text-[10px] font-semibold uppercase tracking-widest text-slate-600 mb-2 px-1" data-i18n="history.group_sentiment">Price &amp; Sentiment</p>
+    <div class="grid grid-cols-3 sm:grid-cols-3 gap-2 sm:gap-3">
+      <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 py-3">
+        <div class="text-xs text-slate-500 mb-1" data-i18n="history.target_price">Target Price</div>
+        <div id="statTarget" class="text-base font-bold text-slate-100">—</div>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 py-3">
+        <div class="text-xs text-slate-500 mb-1" data-i18n="history.upside">Analyst Upside</div>
+        <div id="statUpside" class="text-base font-bold text-slate-100">—</div>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 py-3">
+        <div class="text-xs text-slate-500 mb-1" data-i18n="history.put_call_ratio">P/C Ratio</div>
+        <div id="statPutCallRatio" class="text-base font-bold text-slate-100">—</div>
+        <div id="statPutCallLabel" class="text-[10px] mt-0.5 text-slate-600"></div>
+      </div>
+    </div>
   </div>
-  <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 sm:px-4 py-3">
-    <div class="text-xs text-slate-500 mb-1" data-i18n="history.target_price">Target Price</div>
-    <div id="statTarget" class="text-sm sm:text-base font-bold text-slate-100 break-all">—</div>
-  </div>
-  <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 sm:px-4 py-3">
-    <div class="text-xs text-slate-500 mb-1" data-i18n="history.ttm_eps">TTM EPS</div>
-    <div id="statEps" class="text-sm sm:text-base font-bold text-slate-100 break-all">—</div>
-  </div>
-  <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 sm:px-4 py-3">
-    <div class="text-xs text-slate-500 mb-1" data-i18n="history.upside">Analyst Upside</div>
-    <div id="statUpside" class="text-sm sm:text-base font-bold text-slate-100 break-all">—</div>
-  </div>
-  <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 sm:px-4 py-3">
-    <div class="text-xs text-slate-500 mb-1" data-i18n="history.eps_growth_ttm">EPS Growth TTM</div>
-    <div id="statEpsGrowthTtm" class="text-sm sm:text-base font-bold text-slate-100 break-all">—</div>
-  </div>
-  <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 sm:px-4 py-3">
-    <div class="text-xs text-slate-500 mb-1" data-i18n="history.eps_growth_q">EPS Growth Q</div>
-    <div id="statEpsGrowthQ" class="text-sm sm:text-base font-bold text-slate-100 break-all">—</div>
-  </div>
-  <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 sm:px-4 py-3">
-    <div class="text-xs text-slate-500 mb-1" data-i18n="history.ev_ebitda">EV/EBITDA</div>
-    <div id="statEvEbitda" class="text-sm sm:text-base font-bold text-slate-100 break-all">—</div>
-  </div>
-  <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 sm:px-4 py-3">
-    <div class="text-xs text-slate-500 mb-1" data-i18n="history.ev">EV ($B)</div>
-    <div id="statEv" class="text-sm sm:text-base font-bold text-slate-100 break-all">—</div>
-  </div>
-  <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 sm:px-4 py-3">
-    <div class="text-xs text-slate-500 mb-1" data-i18n="history.ebitda">EBITDA ($B)</div>
-    <div id="statEbitda" class="text-sm sm:text-base font-bold text-slate-100 break-all">—</div>
-  </div>
-  <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 sm:px-4 py-3">
-    <div class="text-xs text-slate-500 mb-1" data-i18n="history.put_call_ratio">P/C Ratio</div>
-    <div id="statPutCallRatio" class="text-sm sm:text-base font-bold text-slate-100 break-all">—</div>
-    <div id="statPutCallLabel" class="text-[10px] mt-0.5 text-slate-600"></div>
-  </div>
+
 </div>
 
 <!-- ── Charts ────────────────────────────────────────────────────────── -->
@@ -331,6 +353,33 @@
       <canvas id="pegHistChart"></canvas>
     </div>
     <div id="explainPanelPeg" class="explain-panel"></div>
+  </div>
+
+  <!-- P/C Ratio by expiration chart -->
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up" id="pcRatioSection" style="display:none">
+    <div class="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-0 sm:justify-between mb-4">
+      <div>
+        <h2 class="text-base font-semibold text-slate-200" data-i18n="history.pc_title">Put/Call Ratio by Expiration</h2>
+        <p class="text-xs text-slate-500" data-i18n="history.pc_desc">Put OI ÷ Call OI per expiration — above 1.0 = bearish hedging, below 1.0 = bullish</p>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="flex items-center gap-1.5 text-xs text-slate-400">
+          <span class="inline-block w-3 h-2 rounded-sm bg-rose-500/70"></span> <span data-i18n="history.pc_bearish">Bearish (&gt;1.2)</span>
+        </span>
+        <span class="flex items-center gap-1.5 text-xs text-slate-400">
+          <span class="inline-block w-3 h-2 rounded-sm bg-amber-400/70"></span> <span data-i18n="history.pc_neutral">Neutral</span>
+        </span>
+        <span class="flex items-center gap-1.5 text-xs text-slate-400 mr-1">
+          <span class="inline-block w-3 h-2 rounded-sm bg-emerald-400/70"></span> <span data-i18n="history.pc_bullish">Bullish (&lt;0.7)</span>
+        </span>
+        <button onclick="expandChart('pc')" title="Expand" class="expand-btn">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="chart-container" style="height:300px" id="pcChartWrap">
+      <canvas id="pcRatioChart"></canvas>
+    </div>
   </div>
 
   <!-- EV/EBITDA panel -->
@@ -530,15 +579,25 @@ let   _modalKey       = null;
     const pcr = data.put_call_ratio;
     pcEl.textContent = pcr.toFixed(2);
     if (pcr > 1.2) {
-      pcEl.className = 'text-sm sm:text-base font-bold text-rose-400';
+      pcEl.className = 'text-base font-bold text-rose-400';
       pcLabel.textContent = 'Bearish';
+      pcLabel.className = 'text-[10px] mt-0.5 text-rose-500';
     } else if (pcr < 0.7) {
-      pcEl.className = 'text-sm sm:text-base font-bold text-emerald-400';
+      pcEl.className = 'text-base font-bold text-emerald-400';
       pcLabel.textContent = 'Bullish';
+      pcLabel.className = 'text-[10px] mt-0.5 text-emerald-600';
     } else {
-      pcEl.className = 'text-sm sm:text-base font-bold text-amber-400';
+      pcEl.className = 'text-base font-bold text-amber-400';
       pcLabel.textContent = 'Neutral';
+      pcLabel.className = 'text-[10px] mt-0.5 text-amber-600';
     }
+  }
+
+  // P/C Ratio chart
+  if (data.pc_by_expiry && data.pc_by_expiry.length > 0) {
+    document.getElementById('pcRatioSection').style.display = 'block';
+    const pcCfg = _buildConfig('pc', data, {});
+    _registerChart('pc', pcCfg, new Chart(document.getElementById('pcRatioChart'), pcCfg));
   }
 
   // EV/EBITDA panel
@@ -886,14 +945,53 @@ function _buildConfig(key, d, staticData) {
       _title: 'Forward PE', _desc: 'Price ÷ consensus forward EPS — shows how the forward valuation multiple has moved',
     };
   }
+  if (key === 'pc') {
+    const rows = (d.pc_by_expiry || []).filter(r => r.ratio != null);
+    const labels = rows.map(r => r.exp);
+    const ratios = rows.map(r => r.ratio);
+    const colors = ratios.map(v => v > 1.2 ? 'rgba(239,68,68,0.7)' : v < 0.7 ? 'rgba(52,211,153,0.7)' : 'rgba(251,191,36,0.7)');
+    const borderColors = ratios.map(v => v > 1.2 ? '#ef4444' : v < 0.7 ? '#34d399' : '#fbbf24');
+    const gridCol = '#1e293b', tickCol = '#64748b';
+    return {
+      type: 'bar',
+      data: { labels, datasets: [{ label: 'P/C Ratio', data: ratios,
+        backgroundColor: colors, borderColor: borderColors, borderWidth: 1, borderRadius: 3 }] },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: { callbacks: {
+          label: c => ` P/C: ${c.raw?.toFixed(2)} — ${c.raw > 1.2 ? 'Bearish' : c.raw < 0.7 ? 'Bullish' : 'Neutral'}`
+        }}},
+        scales: {
+          x: { grid: { color: gridCol }, ticks: { color: tickCol, maxRotation: 45, font: { size: 10 } } },
+          y: { grid: { color: gridCol }, ticks: { color: tickCol }, min: 0,
+               title: { display: true, text: 'Put/Call OI Ratio', color: tickCol, font: { size: 11 } } },
+        },
+        interaction: { mode: 'index', intersect: false },
+      },
+      plugins: [{
+        afterDraw(chart) {
+          const {ctx:c, chartArea:a, scales:{y}} = chart;
+          // Reference line at 1.0
+          const y1 = y.getPixelForValue(1.0);
+          if (y1 >= a.top && y1 <= a.bottom) {
+            c.save(); c.strokeStyle = 'rgba(148,163,184,0.5)'; c.lineWidth = 1; c.setLineDash([4,4]);
+            c.beginPath(); c.moveTo(a.left, y1); c.lineTo(a.right, y1); c.stroke();
+            c.fillStyle = '#94a3b8'; c.font = '10px Inter,sans-serif';
+            c.fillText('Neutral 1.0', a.left + 6, y1 - 4); c.restore();
+          }
+        }
+      }],
+      _title: 'Put/Call Ratio by Expiration', _desc: 'Put OI ÷ Call OI per expiration date — above 1.0 = bearish hedging, below 0.7 = bullish',
+    };
+  }
 }
 
 // Handle a range button click: fetch data, rebuild inline chart
 async function _handleRange(chartKey, period, staticData) {
   _setActiveBtn(chartKey, period);
 
-  const wrapId  = { pe:'peChartWrap', price:'priceChartWrap', peg:'pegChartWrap', fwdpe:'fwdPeChartWrap' }[chartKey];
-  const canvasId = { pe:'peChart', price:'priceHistChart', peg:'pegHistChart', fwdpe:'fwdPeChart' }[chartKey];
+  const wrapId  = { pe:'peChartWrap', price:'priceChartWrap', peg:'pegChartWrap', fwdpe:'fwdPeChartWrap', pc:'pcChartWrap' }[chartKey];
+  const canvasId = { pe:'peChart', price:'priceHistChart', peg:'pegHistChart', fwdpe:'fwdPeChart', pc:'pcRatioChart' }[chartKey];
   const wrap = document.getElementById(wrapId);
 
   // Show loading overlay

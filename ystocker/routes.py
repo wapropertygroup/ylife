@@ -620,15 +620,26 @@ def api_history(ticker: str):
 
     # Options walls: strike with highest aggregate open interest across all expirations
     # Also compute put/call ratio = total put OI / total call OI
+    # And per-expiration P/C ratios for the history chart
     call_wall = None
     put_wall  = None
     put_call_ratio = None
+    pc_by_expiry: list = []   # [{exp, call_oi, put_oi, ratio}]
     try:
         expirations = tk.options  # tuple of expiration date strings
         call_oi: dict[float, int] = {}
         put_oi:  dict[float, int] = {}
         for exp in expirations:
             chain = tk.option_chain(exp)
+            exp_call_oi = int(chain.calls["openInterest"].dropna().sum())
+            exp_put_oi  = int(chain.puts["openInterest"].dropna().sum())
+            if exp_call_oi > 0 or exp_put_oi > 0:
+                pc_by_expiry.append({
+                    "exp":      exp,
+                    "call_oi":  exp_call_oi,
+                    "put_oi":   exp_put_oi,
+                    "ratio":    round(exp_put_oi / exp_call_oi, 2) if exp_call_oi > 0 else None,
+                })
             for _, row in chain.calls[["strike", "openInterest"]].dropna().iterrows():
                 s, oi = float(row["strike"]), int(row["openInterest"])
                 call_oi[s] = call_oi.get(s, 0) + oi
@@ -668,6 +679,7 @@ def api_history(ticker: str):
         "call_wall":        _safe(call_wall),
         "put_wall":         _safe(put_wall),
         "put_call_ratio":   _safe(put_call_ratio),
+        "pc_by_expiry":     pc_by_expiry,
     }
     with _HISTORY_CACHE_LOCK:
         _HISTORY_CACHE[cache_key] = {"ts": time.time(), "data": result}
@@ -1421,6 +1433,86 @@ def api_videos_channel(channel_id: str):
         })
     videos.sort(key=lambda v: v["published"] or 0, reverse=True)
     result = {"channel_id": channel_id, "videos": videos}
+    with _VIDEOS_CACHE_LOCK:
+        _VIDEOS_CACHE[cache_key] = {"ts": time.time(), "data": result}
+    return jsonify(result)
+
+
+@bp.route("/api/videos/all")
+def api_videos_all():
+    """Return recent videos from all curated channels sorted by publish time.
+
+    Preferred channels (first half of YT_CHANNELS list) are fetched first and
+    their videos float to the top when publish timestamps are equal.
+    """
+    import httpx
+    from datetime import datetime, timezone, timedelta
+
+    cache_key = "all_channels"
+    with _VIDEOS_CACHE_LOCK:
+        cached = _VIDEOS_CACHE.get(cache_key)
+        if cached and time.time() - cached["ts"] < _VIDEOS_CACHE_TTL:
+            return jsonify(cached["data"])
+
+    api_key = os.environ.get("YOUTUBE_API_KEY", "")
+    if not api_key:
+        return jsonify({"videos": [], "note": "YOUTUBE_API_KEY not set"})
+
+    http = httpx.Client(timeout=10)
+    published_after = (datetime.now(timezone.utc) - timedelta(days=30)).strftime(
+        "%Y-%m-%dT%H:%M:%SZ"
+    )
+
+    # Mark preferred channels (first half of the list)
+    preferred_ids = {ch[1] for ch in YT_CHANNELS[: len(YT_CHANNELS) // 2 + 1]}
+
+    all_items: list = []
+    for _handle, channel_id, _name in YT_CHANNELS:
+        try:
+            resp = http.get("https://www.googleapis.com/youtube/v3/search", params={
+                "part": "snippet",
+                "channelId": channel_id,
+                "type": "video",
+                "order": "date",
+                "publishedAfter": published_after,
+                "maxResults": 5,
+                "key": api_key,
+            })
+            resp.raise_for_status()
+            items = resp.json().get("items", [])
+            for it in items:
+                it["_preferred"] = channel_id in preferred_ids
+            all_items.extend(items)
+        except Exception as e:
+            log.warning("YouTube all-channels fetch failed for %s: %s", _handle, e)
+
+    seen: set = set()
+    videos = []
+    for it in all_items:
+        vid_id = (it.get("id") or {}).get("videoId")
+        if not vid_id or vid_id in seen:
+            continue
+        seen.add(vid_id)
+        snippet = it.get("snippet", {})
+        pub_str = snippet.get("publishedAt", "")
+        pub_ts = None
+        try:
+            dt = datetime.fromisoformat(pub_str.replace("Z", "+00:00"))
+            pub_ts = int(dt.timestamp())
+        except Exception:
+            pass
+        videos.append({
+            "id":        vid_id,
+            "title":     snippet.get("title", ""),
+            "channel":   snippet.get("channelTitle", ""),
+            "published": pub_ts,
+            "preferred": it.get("_preferred", False),
+        })
+
+    # Sort: primary = publish time (newest first), secondary = preferred channels first
+    videos.sort(key=lambda v: (-(v["published"] or 0), not v["preferred"]))
+
+    result = {"videos": videos}
     with _VIDEOS_CACHE_LOCK:
         _VIDEOS_CACHE[cache_key] = {"ts": time.time(), "data": result}
     return jsonify(result)
