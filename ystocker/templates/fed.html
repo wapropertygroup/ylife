@@ -595,8 +595,8 @@
   // ──────────────────────────────────────────────────────────────────────────
   // Bills (Short-Term Treasury) chart
   // ──────────────────────────────────────────────────────────────────────────
+  document.getElementById('billsLoading').style.display = 'none';
   if (s['WSHOSHO'] && s['WSHOSHO'].dates.length) {
-    document.getElementById('billsLoading').style.display = 'none';
     document.getElementById('billsChartWrap').style.display = 'block';
     document.getElementById('billsWowWrap').classList.remove('hidden');
     registerExplainData('bills', sliceSeries('WSHOSHO', 52).dates, sliceSeries('WSHOSHO', 52).values, 'Treasury Bills (Short-Term, ≤1Y) Held Outright');
@@ -820,8 +820,8 @@
   // ──────────────────────────────────────────────────────────────────────────
   // Liabilities chart: ON RRP + Treasury General Account (TGA)
   // ──────────────────────────────────────────────────────────────────────────
+  document.getElementById('liabLoading').style.display = 'none';
   if ((s['RRPONTSYD'] && s['RRPONTSYD'].dates.length) || (s['WTREGEN'] && s['WTREGEN'].dates.length)) {
-    document.getElementById('liabLoading').style.display = 'none';
     document.getElementById('liabChartWrap').style.display = 'block';
 
     function buildLiabData(n) {
@@ -895,8 +895,8 @@
   // ──────────────────────────────────────────────────────────────────────────
   // Currency in Circulation + Fed Loans (BTFP)
   // ──────────────────────────────────────────────────────────────────────────
+  document.getElementById('currLoanLoading').style.display = 'none';
   if ((s['WCURCIR'] && s['WCURCIR'].dates.length) || (s['WLCFLPCL'] && s['WLCFLPCL'].dates.length)) {
-    document.getElementById('currLoanLoading').style.display = 'none';
     document.getElementById('currLoanChartWrap').style.display = 'block';
 
     function buildCurrLoanData(n) {
