@@ -129,6 +129,9 @@
         <a href="{{ url_for('main.contact') }}"
            class="px-3 py-1.5 rounded-md text-sm text-slate-300 hover:text-white hover:bg-slate-800 transition"
            data-i18n="nav.contact">Contact</a>
+        <a href="{{ url_for('main.videos') }}"
+           class="px-3 py-1.5 rounded-md text-sm text-slate-300 hover:text-white hover:bg-slate-800 transition"
+           data-i18n="nav.videos">Videos</a>
         <a href="{{ url_for('main.guide') }}"
            class="px-3 py-1.5 rounded-md text-sm text-slate-300 hover:text-white hover:bg-slate-800 transition"
            data-i18n="nav.guide">Guide</a>
@@ -185,6 +188,7 @@
         <a href="{{ url_for('main.fed') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-300 hover:bg-slate-800" data-i18n="nav.fed">Fed</a>
         <a href="{{ url_for('main.groups') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-300 hover:bg-slate-800" data-i18n="nav.groups">Groups</a>
         <a href="{{ url_for('main.contact') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-300 hover:bg-slate-800" data-i18n="nav.contact">Contact</a>
+        <a href="{{ url_for('main.videos') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-300 hover:bg-slate-800" data-i18n="nav.videos">Videos</a>
         <a href="{{ url_for('main.guide') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-300 hover:bg-slate-800" data-i18n="nav.guide">Guide</a>
         <a id="refreshBtnMobile" href="{{ url_for('main.thirteenf_refresh') if request.endpoint == 'main.thirteenf' else (url_for('main.fed_refresh') if request.endpoint == 'main.fed' else url_for('main.refresh')) }}" class="px-3 py-2.5 rounded-md text-sm text-brand hover:bg-slate-800" data-i18n="nav.refresh">↻ Refresh</a>
         <button onclick="I18n.toggle()"

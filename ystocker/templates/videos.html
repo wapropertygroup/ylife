@@ -1,0 +1,182 @@
+{% extends "base.html" %}
+{% block title %}yStocker — Videos{% endblock %}
+
+{% block content %}
+
+<div class="mb-6 fade-up">
+  <h1 class="text-2xl sm:text-3xl font-bold grad-text mb-1" data-i18n="videos.title">Market Videos</h1>
+  <p class="text-slate-400 text-sm" data-i18n="videos.subtitle">Latest videos from curated finance channels — search by ticker or topic.</p>
+</div>
+
+<!-- Search bar -->
+<div class="flex gap-2 mb-6 fade-up">
+  <input id="videoSearch" type="text" value=""
+         class="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-100
+                placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand/50 focus:border-brand/50 transition"
+         data-i18n-placeholder="videos.search_ph"
+         placeholder="e.g. NVDA, AAPL, Fed, earnings…"
+         onkeydown="if(event.key==='Enter') loadVideos()">
+  <button onclick="loadVideos()"
+          class="px-4 py-2.5 rounded-xl bg-brand text-white text-sm font-medium hover:bg-brand/80 transition"
+          data-i18n="videos.search_btn">Search</button>
+</div>
+
+<!-- Channel chips -->
+<div class="flex flex-wrap gap-2 mb-6 fade-up" id="channelChips">
+  <button id="allChip" onclick="loadAll(this)"
+          class="chip px-3 py-1 rounded-lg text-xs border border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-500 transition"
+          data-i18n="videos.all_channels">All channels</button>
+  {% for handle, channel_id, name in yt_channels %}
+  <button onclick="loadChannel('{{ channel_id }}', this)"
+          class="chip px-3 py-1 rounded-lg text-xs border border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-500 transition">
+    {{ name }}
+  </button>
+  {% endfor %}
+</div>
+
+<!-- Status + grid -->
+<div id="videoStatus" class="text-sm text-slate-500 animate-pulse mb-4" style="display:none"></div>
+<div id="videoGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+
+<script>
+const YT_CHANNELS = {{ yt_channels | tojson }};
+let _activeChip = null;
+
+// Client-side cache: { key -> { ts, videos } }  — 10 minutes TTL
+const _VC = {};
+const _VC_TTL = 10 * 60 * 1000; // ms
+
+function _vcGet(key) {
+  const e = _VC[key];
+  if (e && Date.now() - e.ts < _VC_TTL) return e.videos;
+  return null;
+}
+function _vcSet(key, videos) { _VC[key] = { ts: Date.now(), videos }; }
+
+function setStatus(msg) {
+  const el = document.getElementById('videoStatus');
+  el.textContent = msg;
+  el.style.display = msg ? 'block' : 'none';
+}
+
+function renderVideos(videos) {
+  const grid = document.getElementById('videoGrid');
+  if (!videos || !videos.length) {
+    grid.innerHTML = `<p class="text-slate-500 text-sm col-span-3">${I18n.t('videos.empty') || 'No videos found.'}</p>`;
+    return;
+  }
+  grid.innerHTML = videos.map(v => {
+    const thumb = `https://i.ytimg.com/vi/${v.id}/hqdefault.jpg`;
+    const url   = `https://www.youtube.com/watch?v=${v.id}`;
+    const ago   = _timeAgo(v.published);
+    return `
+      <a href="${url}" target="_blank" rel="noopener"
+         class="group bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden hover:border-slate-600 transition">
+        <div class="relative aspect-video bg-slate-800">
+          <img src="${thumb}" alt="${_esc(v.title)}"
+               onerror="this.src='https://i.ytimg.com/vi/${v.id}/mqdefault.jpg'"
+               class="w-full h-full object-cover group-hover:opacity-90 transition">
+          <div class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition">
+            <div class="bg-black/60 rounded-full p-3">
+              <svg class="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+            </div>
+          </div>
+        </div>
+        <div class="p-3">
+          <p class="text-xs text-brand font-medium mb-1 truncate">${_esc(v.channel)}</p>
+          <p class="text-sm text-slate-200 leading-snug line-clamp-2">${_esc(v.title)}</p>
+          <p class="text-xs text-slate-600 mt-1">${ago}</p>
+        </div>
+      </a>`;
+  }).join('');
+}
+
+function _esc(s) {
+  return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function _timeAgo(ts) {
+  if (!ts) return '';
+  const diff = (Date.now() / 1000) - ts;
+  if (diff < 60) return I18n.t('history.news_just_now') || 'just now';
+  if (diff < 3600) return Math.floor(diff/60) + (I18n.t('history.news_min_ago') || 'm ago');
+  if (diff < 86400) return Math.floor(diff/3600) + (I18n.t('history.news_hr_ago') || 'h ago');
+  return Math.floor(diff/86400) + (I18n.t('history.news_day_ago') || 'd ago');
+}
+
+async function loadAll(btn) {
+  _clearChip();
+  if (btn) { btn.classList.add('border-brand', 'text-brand', 'bg-brand/10'); _activeChip = btn; }
+  document.getElementById('videoSearch').value = '';
+
+  const cached = _vcGet('all');
+  if (cached) { renderVideos(cached); return; }
+
+  setStatus(I18n.t('videos.loading') || 'Fetching videos…');
+  document.getElementById('videoGrid').innerHTML = '';
+  try {
+    const resp = await fetch('/api/videos/all');
+    const data = await resp.json();
+    setStatus('');
+    _vcSet('all', data.videos || []);
+    renderVideos(data.videos || []);
+  } catch(e) {
+    setStatus((I18n.t('videos.error') || 'Failed to load videos.') + ' ' + e.message);
+  }
+}
+
+async function loadVideos() {
+  const q = document.getElementById('videoSearch').value.trim();
+  if (!q) return;
+  _clearChip();
+
+  const cached = _vcGet('q:' + q);
+  if (cached) { renderVideos(cached); return; }
+
+  setStatus(I18n.t('videos.loading') || 'Fetching videos…');
+  document.getElementById('videoGrid').innerHTML = '';
+  try {
+    const resp = await fetch(`/api/videos/${encodeURIComponent(q)}`);
+    const data = await resp.json();
+    setStatus('');
+    _vcSet('q:' + q, data.videos || []);
+    renderVideos(data.videos || []);
+  } catch(e) {
+    setStatus((I18n.t('videos.error') || 'Failed to load videos.') + ' ' + e.message);
+  }
+}
+
+async function loadChannel(channelId, btn) {
+  _clearChip();
+  btn.classList.add('border-brand', 'text-brand', 'bg-brand/10');
+  _activeChip = btn;
+  document.getElementById('videoSearch').value = '';
+
+  const cached = _vcGet('ch:' + channelId);
+  if (cached) { renderVideos(cached); return; }
+
+  setStatus(I18n.t('videos.loading') || 'Fetching videos…');
+  document.getElementById('videoGrid').innerHTML = '';
+  try {
+    const resp = await fetch(`/api/videos/channel/${encodeURIComponent(channelId)}`);
+    const data = await resp.json();
+    setStatus('');
+    _vcSet('ch:' + channelId, data.videos || []);
+    renderVideos(data.videos || []);
+  } catch(e) {
+    setStatus((I18n.t('videos.error') || 'Failed to load videos.') + ' ' + e.message);
+  }
+}
+
+function _clearChip() {
+  if (_activeChip) {
+    _activeChip.classList.remove('border-brand', 'text-brand', 'bg-brand/10');
+    _activeChip = null;
+  }
+}
+
+// Auto-load all channels on page open
+loadAll(document.getElementById('allChip'));
+</script>
+
+{% endblock %}
