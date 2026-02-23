@@ -79,15 +79,26 @@
     <button onclick="history.back()" class="text-slate-500 hover:text-slate-300 text-sm transition" data-i18n="history.back">← Back</button>
     <span class="text-slate-700">/</span>
     <span class="text-slate-300 text-sm font-mono font-semibold">{{ ticker }}</span>
-    <a href="https://www.tradingview.com/chart/?symbol={{ ticker }}" target="_blank" rel="noopener"
-       class="ml-auto flex items-center gap-1 text-xs text-slate-400 border border-slate-700 bg-slate-800
-              hover:text-slate-200 hover:border-slate-500 transition px-2.5 py-1 rounded-lg">
-      <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-              d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
-      </svg>
-      <span data-i18n="history.tradingview">TradingView</span>
-    </a>
+    <div class="ml-auto flex items-center gap-2">
+      <button onclick="switchTab('videos')"
+              class="flex items-center gap-1 text-xs text-slate-400 border border-slate-700 bg-slate-800
+                     hover:text-slate-200 hover:border-slate-500 transition px-2.5 py-1 rounded-lg"
+              data-i18n="history.tab_videos">
+        <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+        </svg>
+        Videos
+      </button>
+      <a href="https://www.tradingview.com/chart/?symbol={{ ticker }}" target="_blank" rel="noopener"
+         class="flex items-center gap-1 text-xs text-slate-400 border border-slate-700 bg-slate-800
+                hover:text-slate-200 hover:border-slate-500 transition px-2.5 py-1 rounded-lg">
+        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
+        </svg>
+        <span data-i18n="history.tradingview">TradingView</span>
+      </a>
+    </div>
   </div>
   <h1 class="text-2xl sm:text-3xl font-bold">
     <span class="font-mono grad-text">{{ ticker }}</span>
@@ -104,9 +115,6 @@
   <button id="tabNewsBtn" onclick="switchTab('news')"
           class="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-slate-200 -mb-px transition"
           data-i18n="history.tab_news">News</button>
-  <button id="tabVideosBtn" onclick="switchTab('videos')"
-          class="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-slate-200 -mb-px transition"
-          data-i18n="history.tab_videos">Videos</button>
 </div>
 
 <!-- ── Charts panel ──────────────────────────────────────────────────── -->
@@ -116,47 +124,47 @@
 <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-11 gap-3 sm:gap-4 mb-6 sm:mb-8 fade-up">
   <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 sm:px-4 py-3">
     <div class="text-xs text-slate-500 mb-1" data-i18n="history.current_pe">Current PE</div>
-    <div id="statCurrentPe" class="text-lg sm:text-xl font-bold text-slate-100">—</div>
+    <div id="statCurrentPe" class="text-sm sm:text-base font-bold text-slate-100 break-all">—</div>
   </div>
   <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 sm:px-4 py-3">
     <div class="text-xs text-slate-500 mb-1" data-i18n="history.fwd_pe">Forward PE</div>
-    <div id="statFwdPe" class="text-lg sm:text-xl font-bold text-slate-100">—</div>
+    <div id="statFwdPe" class="text-sm sm:text-base font-bold text-slate-100 break-all">—</div>
   </div>
   <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 sm:px-4 py-3">
     <div class="text-xs text-slate-500 mb-1" data-i18n="history.peg_ratio">PEG Ratio</div>
-    <div id="statCurrentPeg" class="text-lg sm:text-xl font-bold text-slate-100">—</div>
+    <div id="statCurrentPeg" class="text-sm sm:text-base font-bold text-slate-100 break-all">—</div>
   </div>
   <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 sm:px-4 py-3">
     <div class="text-xs text-slate-500 mb-1" data-i18n="history.target_price">Target Price</div>
-    <div id="statTarget" class="text-lg sm:text-xl font-bold text-slate-100">—</div>
+    <div id="statTarget" class="text-sm sm:text-base font-bold text-slate-100 break-all">—</div>
   </div>
   <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 sm:px-4 py-3">
     <div class="text-xs text-slate-500 mb-1" data-i18n="history.ttm_eps">TTM EPS</div>
-    <div id="statEps" class="text-lg sm:text-xl font-bold text-slate-100">—</div>
+    <div id="statEps" class="text-sm sm:text-base font-bold text-slate-100 break-all">—</div>
   </div>
   <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 sm:px-4 py-3">
     <div class="text-xs text-slate-500 mb-1" data-i18n="history.upside">Analyst Upside</div>
-    <div id="statUpside" class="text-lg sm:text-xl font-bold text-slate-100">—</div>
+    <div id="statUpside" class="text-sm sm:text-base font-bold text-slate-100 break-all">—</div>
   </div>
   <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 sm:px-4 py-3">
     <div class="text-xs text-slate-500 mb-1" data-i18n="history.eps_growth_ttm">EPS Growth TTM</div>
-    <div id="statEpsGrowthTtm" class="text-lg sm:text-xl font-bold text-slate-100">—</div>
+    <div id="statEpsGrowthTtm" class="text-sm sm:text-base font-bold text-slate-100 break-all">—</div>
   </div>
   <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 sm:px-4 py-3">
     <div class="text-xs text-slate-500 mb-1" data-i18n="history.eps_growth_q">EPS Growth Q</div>
-    <div id="statEpsGrowthQ" class="text-lg sm:text-xl font-bold text-slate-100">—</div>
+    <div id="statEpsGrowthQ" class="text-sm sm:text-base font-bold text-slate-100 break-all">—</div>
   </div>
   <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 sm:px-4 py-3">
     <div class="text-xs text-slate-500 mb-1" data-i18n="history.ev_ebitda">EV/EBITDA</div>
-    <div id="statEvEbitda" class="text-lg sm:text-xl font-bold text-slate-100">—</div>
+    <div id="statEvEbitda" class="text-sm sm:text-base font-bold text-slate-100 break-all">—</div>
   </div>
   <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 sm:px-4 py-3">
     <div class="text-xs text-slate-500 mb-1" data-i18n="history.ev">EV ($B)</div>
-    <div id="statEv" class="text-lg sm:text-xl font-bold text-slate-100">—</div>
+    <div id="statEv" class="text-sm sm:text-base font-bold text-slate-100 break-all">—</div>
   </div>
   <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 sm:px-4 py-3">
     <div class="text-xs text-slate-500 mb-1" data-i18n="history.ebitda">EBITDA ($B)</div>
-    <div id="statEbitda" class="text-lg sm:text-xl font-bold text-slate-100">—</div>
+    <div id="statEbitda" class="text-sm sm:text-base font-bold text-slate-100 break-all">—</div>
   </div>
 </div>
 
@@ -316,6 +324,33 @@
     <div id="explainPanelPeg" class="explain-panel"></div>
   </div>
 
+  <!-- EV/EBITDA panel -->
+  <div id="evEbitdaSection" class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up" style="display:none">
+    <h2 class="text-base font-semibold text-slate-200 mb-1" data-i18n="history.ev_ebitda_title">EV / EBITDA</h2>
+    <p class="text-xs text-slate-500 mb-4" data-i18n="history.ev_ebitda_desc">Enterprise Value ÷ EBITDA — capital-structure-neutral valuation multiple.</p>
+    <div class="grid grid-cols-3 gap-3">
+      <div class="bg-slate-800/60 rounded-xl px-3 py-3">
+        <div class="text-xs text-slate-500 mb-1" data-i18n="history.ev_ebitda">EV/EBITDA</div>
+        <div id="evEbitdaVal" class="text-base font-bold text-slate-100">—</div>
+        <div id="evEbitdaBand" class="text-xs mt-0.5"></div>
+      </div>
+      <div class="bg-slate-800/60 rounded-xl px-3 py-3">
+        <div class="text-xs text-slate-500 mb-1" data-i18n="history.ev">EV ($B)</div>
+        <div id="evVal" class="text-base font-bold text-slate-100">—</div>
+      </div>
+      <div class="bg-slate-800/60 rounded-xl px-3 py-3">
+        <div class="text-xs text-slate-500 mb-1" data-i18n="history.ebitda">EBITDA ($B)</div>
+        <div id="ebitdaVal" class="text-base font-bold text-slate-100">—</div>
+      </div>
+    </div>
+    <p class="text-xs text-slate-600 mt-3">
+      <span class="text-emerald-400">■</span> &lt;8x 便宜 &nbsp;
+      <span class="text-sky-400">■</span> 8–13x 正常 &nbsp;
+      <span class="text-amber-400">■</span> 13–20x 成长型 &nbsp;
+      <span class="text-rose-400">■</span> 20x+ 高增长或泡沫
+    </p>
+  </div>
+
 </div>
 
 <!-- ── Expand modal ──────────────────────────────────────────────────── -->
@@ -336,22 +371,20 @@
   </div>
 </div>
 
-<!-- Institutional Holders (13F) -->
+<!-- Institutional Holdings (13F) -->
 <div id="instHoldersSection" class="mt-6 bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up" style="display:none">
   <h2 class="text-base font-semibold text-slate-200 mb-1" data-i18n="history.inst_title">Institutional Holdings (13F)</h2>
-  <p class="text-xs text-slate-500 mb-4" data-i18n="history.inst_desc">Funds reporting this position in their latest SEC 13F filing — sorted by position size</p>
+  <p class="text-xs text-slate-500 mb-4" data-i18n="history.inst_desc">Multi-quarter position history across tracked funds — sorted by latest position size</p>
+
+  <!-- Shares-held bar chart per quarter -->
+  <div class="mb-6">
+    <div class="chart-container" style="height:260px"><canvas id="instSharesChart"></canvas></div>
+  </div>
+
+  <!-- Multi-quarter table -->
   <div class="overflow-x-auto">
-    <table class="w-full text-sm">
-      <thead>
-        <tr class="text-xs text-slate-500 border-b border-slate-800 select-none">
-          <th class="text-left py-2 px-3 font-medium" data-i18n="history.inst_fund">Fund</th>
-          <th class="text-right py-2 px-3 font-medium" data-i18n="history.inst_rank">Portfolio Rank</th>
-          <th class="text-right py-2 px-3 font-medium" data-i18n="history.inst_shares">Shares</th>
-          <th class="text-right py-2 px-3 font-medium" data-i18n="history.inst_value">Value</th>
-          <th class="text-right py-2 px-3 font-medium" data-i18n="history.inst_pct">% of Portfolio</th>
-          <th class="text-center py-2 px-3 font-medium" data-i18n="history.inst_change">Change</th>
-        </tr>
-      </thead>
+    <table class="w-full text-sm" id="instHoldersTable">
+      <thead id="instHoldersHead"></thead>
       <tbody id="instHoldersBody"></tbody>
     </table>
   </div>
@@ -458,7 +491,7 @@ let   _modalKey       = null;
     const el = document.getElementById(elId);
     if (val != null) {
       el.textContent = (val >= 0 ? '+' : '') + val.toFixed(1) + '%';
-      el.className   = 'text-lg sm:text-xl font-bold ' + (val >= 0 ? 'text-emerald-400' : 'text-rose-400');
+      el.className   = 'text-sm sm:text-base font-bold ' + (val >= 0 ? 'text-emerald-400' : 'text-rose-400');
     }
   }
   setGrowthStat('statEpsGrowthTtm', data.eps_growth_ttm);
@@ -467,19 +500,40 @@ let   _modalKey       = null;
   const evEl = document.getElementById('statEvEbitda');
   if (data.ev_ebitda != null) {
     evEl.textContent = data.ev_ebitda.toFixed(1) + 'x';
-    evEl.className   = 'text-lg sm:text-xl font-bold text-slate-100';
+    evEl.className   = 'text-sm sm:text-base font-bold text-slate-100';
   }
 
   const evBEl = document.getElementById('statEv');
   if (data.ev != null) {
     evBEl.textContent = '$' + data.ev.toFixed(1) + 'B';
-    evBEl.className   = 'text-lg sm:text-xl font-bold text-slate-100';
+    evBEl.className   = 'text-sm sm:text-base font-bold text-slate-100';
   }
 
   const ebitdaEl = document.getElementById('statEbitda');
   if (data.ebitda != null) {
     ebitdaEl.textContent = '$' + data.ebitda.toFixed(1) + 'B';
-    ebitdaEl.className   = 'text-lg sm:text-xl font-bold text-slate-100';
+    ebitdaEl.className   = 'text-sm sm:text-base font-bold text-slate-100';
+  }
+
+  // EV/EBITDA panel
+  if (data.ev_ebitda != null || data.ev != null || data.ebitda != null) {
+    document.getElementById('evEbitdaSection').style.display = 'block';
+    if (data.ev_ebitda != null) {
+      const v = data.ev_ebitda;
+      document.getElementById('evEbitdaVal').textContent = v.toFixed(1) + 'x';
+      const band = v < 8
+        ? { label: '便宜 (Cheap)',                    cls: 'text-emerald-400' }
+        : v < 13
+        ? { label: '正常 (Fair)',                     cls: 'text-sky-400' }
+        : v < 20
+        ? { label: '成长型 (Growth)',                  cls: 'text-amber-400' }
+        : { label: '高增长或泡沫 (High growth / Bubble)', cls: 'text-rose-400' };
+      const bandEl = document.getElementById('evEbitdaBand');
+      bandEl.textContent = band.label;
+      bandEl.className   = 'text-xs mt-0.5 ' + band.cls;
+    }
+    if (data.ev != null)     document.getElementById('evVal').textContent     = '$' + data.ev.toFixed(1) + 'B';
+    if (data.ebitda != null) document.getElementById('ebitdaVal').textContent = '$' + data.ebitda.toFixed(1) + 'B';
   }
 
   // Cache 1y data and static reference values (target, walls, current_pe)
@@ -529,49 +583,112 @@ let   _modalKey       = null;
   document.querySelectorAll('.range-btn[data-chart]').forEach(btn => {
     btn.addEventListener('click', () => _handleRange(btn.dataset.chart, btn.dataset.period, staticData));
   });
-  // ── Institutional holders (13F)
-  if (data.institutional_holders && data.institutional_holders.length > 0) {
+  // ── Institutional holdings (13F) — multi-quarter
+  (function() {
     const section = document.getElementById('instHoldersSection');
+    const thead   = document.getElementById('instHoldersHead');
     const tbody   = document.getElementById('instHoldersBody');
-    section.style.display = 'block';
+    if (!section) return;
 
-    // Sort by value descending (hottest = largest position first)
-    const holders = [...data.institutional_holders].sort((a, b) => b.value_millions - a.value_millions);
+    fetch(`/api/13f/ticker/${encodeURIComponent(TICKER)}`)
+      .then(r => r.json())
+      .then(json => {
+        const holders = (json.holders || []).filter(h => h.quarters && h.quarters.length > 0);
+        if (!holders.length) return;
+        section.style.display = 'block';
 
-    // Heatmap: scale intensity relative to the largest holder
-    const maxVal = Math.max(...holders.map(h => h.value_millions), 0.01);
-    function holdHeat(v) {
-      const t = Math.min(v / maxVal, 1);
-      const alpha = (0.06 + t * 0.38).toFixed(2);
-      const borderAlpha = (0.20 + t * 0.65).toFixed(2);
-      return {
-        bg:     `rgba(99,102,241,${alpha})`,
-        border: `rgba(99,102,241,${borderAlpha})`,
-        text:   t > 0.5 ? '#a5b4fc' : '#94a3b8',
-      };
-    }
+        // Collect all unique periods across all funds, sorted newest→oldest
+        const periodSet = new Set();
+        holders.forEach(h => h.quarters.forEach(q => periodSet.add(q.period)));
+        const periods = [...periodSet].sort((a, b) => b.localeCompare(a));
 
-    const changeLabel = {
-      new:       h => `<span class="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-emerald-900/50 text-emerald-300 border border-emerald-800">${I18n.t('inst.change_new') || 'New'}</span>`,
-      increased: h => `<span class="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-sky-900/50 text-sky-300 border border-sky-800">${I18n.t('inst.change_added') || '▲ Added'}</span>${h.change_pct != null ? `<span class="text-sky-400 text-xs font-mono ml-1">+${h.change_pct}%</span>` : ''}`,
-      reduced:   h => `<span class="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-amber-900/50 text-amber-300 border border-amber-800">${I18n.t('inst.change_reduced') || '▼ Reduced'}</span>${h.change_pct != null ? `<span class="text-amber-400 text-xs font-mono ml-1">${h.change_pct}%</span>` : ''}`,
-      closed:    h => `<span class="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-rose-900/50 text-rose-300 border border-rose-800">${I18n.t('inst.change_closed') || 'Closed'}</span>`,
-      unchanged: h => `<span class="text-slate-600 text-xs">—</span>`,
-    };
+        // ── Grouped bar chart: shares held per fund per quarter ─────────────
+        const COLORS = [
+          '#818cf8','#34d399','#f472b6','#fb923c','#38bdf8',
+          '#a3e635','#c084fc','#fbbf24','#2dd4bf','#f87171',
+        ];
+        const chartCtx = document.getElementById('instSharesChart');
+        if (chartCtx) {
+          const datasets = holders.slice(0, 10).map((h, i) => ({
+            label: h.fund,
+            data: periods.map(p => {
+              const q = h.quarters.find(q => q.period === p);
+              return q ? q.shares : 0;
+            }),
+            backgroundColor: COLORS[i % COLORS.length] + '99',
+            borderColor:     COLORS[i % COLORS.length],
+            borderWidth: 1,
+          }));
+          new Chart(chartCtx, {
+            type: 'bar',
+            data: { labels: periods.map(p => p.slice(0,7)), datasets },
+            options: {
+              responsive: true, maintainAspectRatio: false,
+              plugins: {
+                legend: { labels: { color: '#94a3b8', font: { size: 11 } } },
+                tooltip: { callbacks: {
+                  label: c => ` ${c.dataset.label}: ${c.raw.toLocaleString()} shares`
+                }},
+              },
+              scales: {
+                x: { stacked: false, grid: { color: '#1e293b' }, ticks: { color: '#94a3b8' } },
+                y: { grid: { color: '#1e293b' }, ticks: { color: '#94a3b8',
+                  callback: v => v >= 1e9 ? (v/1e9).toFixed(1)+'B' :
+                                 v >= 1e6 ? (v/1e6).toFixed(1)+'M' :
+                                 v >= 1e3 ? (v/1e3).toFixed(0)+'K' : v } },
+              },
+            },
+          });
+        }
 
-    tbody.innerHTML = holders.map(h => {
-      const heat = holdHeat(h.value_millions);
-      return `
-      <tr class="border-b border-slate-800/50 transition" style="background:${heat.bg};border-left:3px solid ${heat.border}">
-        <td class="py-2.5 px-3 font-medium text-sm" style="color:${heat.text}">${h.fund}</td>
-        <td class="py-2.5 px-3 text-right text-slate-500 text-xs">${h.rank}</td>
-        <td class="py-2.5 px-3 text-right font-mono text-sm text-slate-300">${h.shares.toLocaleString()}</td>
-        <td class="py-2.5 px-3 text-right font-mono text-sm font-semibold" style="color:${heat.text}">$${h.value_millions.toLocaleString(undefined,{minimumFractionDigits:1,maximumFractionDigits:1})}M</td>
-        <td class="py-2.5 px-3 text-right font-mono text-sm text-slate-300">${h.pct_portfolio.toFixed(2)}%</td>
-        <td class="py-2.5 px-3 text-center">${changeLabel[h.change] ? changeLabel[h.change](h) : '<span class="text-slate-700 text-xs">?</span>'}</td>
-      </tr>`;
-    }).join('');
-  }
+        // ── Table: fund | Q1 shares/value/chg | Q2 | Q3 | Q4 ───────────────
+        const changeBadge = (chg, pct) => {
+          if (chg === 'new')       return `<span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-900/50 text-emerald-300 border border-emerald-800">New</span>`;
+          if (chg === 'increased') return `<span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-sky-900/50 text-sky-300 border border-sky-800">▲</span>${pct != null ? `<span class="text-sky-400 text-[10px] font-mono ml-0.5">+${pct}%</span>` : ''}`;
+          if (chg === 'reduced')   return `<span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-900/50 text-amber-300 border border-amber-800">▼</span>${pct != null ? `<span class="text-amber-400 text-[10px] font-mono ml-0.5">${pct}%</span>` : ''}`;
+          if (chg === 'closed')    return `<span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-rose-900/50 text-rose-300 border border-rose-800">Closed</span>`;
+          return `<span class="text-slate-600 text-xs">—</span>`;
+        };
+
+        // Header: Fund | period1 (×2 cols: shares, $M) | period2 ...
+        thead.innerHTML = `<tr class="text-xs text-slate-500 border-b border-slate-800 select-none">
+          <th class="text-left py-2 px-3 font-medium">Fund</th>
+          ${periods.map(p => `
+            <th class="text-right py-2 px-3 font-medium whitespace-nowrap" colspan="3">${p.slice(0,7)}</th>
+          `).join('')}
+        </tr>
+        <tr class="text-xs text-slate-600 border-b border-slate-800 select-none">
+          <th></th>
+          ${periods.map(() => `
+            <th class="text-right py-1 px-3 font-medium">Shares</th>
+            <th class="text-right py-1 px-3 font-medium">Value ($M)</th>
+            <th class="text-center py-1 px-3 font-medium">Chg</th>
+          `).join('')}
+        </tr>`;
+
+        const maxVal = Math.max(...holders.map(h => h.value_millions), 0.01);
+        tbody.innerHTML = holders.map(h => {
+          const t = Math.min(h.value_millions / maxVal, 1);
+          const bg = `rgba(99,102,241,${(0.04 + t * 0.22).toFixed(2)})`;
+          const bl = `rgba(99,102,241,${(0.15 + t * 0.55).toFixed(2)})`;
+          const tc = t > 0.5 ? '#a5b4fc' : '#94a3b8';
+          const cells = periods.map(p => {
+            const q = h.quarters.find(q => q.period === p);
+            if (!q) return `<td class="py-2 px-3 text-right text-slate-700 text-xs">—</td>
+                            <td class="py-2 px-3 text-right text-slate-700 text-xs">—</td>
+                            <td class="py-2 px-3"></td>`;
+            return `<td class="py-2 px-3 text-right font-mono text-xs text-slate-300">${q.shares.toLocaleString()}</td>
+                    <td class="py-2 px-3 text-right font-mono text-xs font-semibold" style="color:${tc}">$${q.value_millions.toFixed(1)}M</td>
+                    <td class="py-2 px-3 text-center text-xs">${changeBadge(q.change, q.change_pct)}</td>`;
+          }).join('');
+          return `<tr class="border-b border-slate-800/40 transition" style="background:${bg};border-left:3px solid ${bl}">
+            <td class="py-2.5 px-3 font-medium text-sm whitespace-nowrap" style="color:${tc}">${h.fund}</td>
+            ${cells}
+          </tr>`;
+        }).join('');
+      })
+      .catch(err => console.warn('13F fetch failed:', err));
+  })();
 })();
 
 // ── Chart config builder, range handler, modal ───────────────────────────────
@@ -872,12 +989,10 @@ function switchTab(tab) {
 
   const chartsBtn = document.getElementById('tabChartsBtn');
   const newsBtn   = document.getElementById('tabNewsBtn');
-  const videosBtn = document.getElementById('tabVideosBtn');
   const activeClass   = 'px-4 py-2 text-sm font-medium border-b-2 -mb-px transition border-brand text-brand';
   const inactiveClass = 'px-4 py-2 text-sm font-medium border-b-2 -mb-px transition border-transparent text-slate-400 hover:text-slate-200';
   chartsBtn.className = isCharts ? activeClass : inactiveClass;
   newsBtn.className   = isNews   ? activeClass : inactiveClass;
-  videosBtn.className = isVideos ? activeClass : inactiveClass;
 
   if (isNews) {
     if (!_newsLoaded) loadNews(false);

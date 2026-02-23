@@ -70,7 +70,8 @@
         {% if warming %}
       <span class="text-brand animate-pulse" data-i18n="thirteenf.loading">Fetching SEC EDGAR data… this takes ~30s on first load.</span>
         {% else %}
-        No data yet. <a href="{{ url_for('main.thirteenf_refresh') }}" class="text-brand hover:underline">Refresh to load</a>.
+        <span data-i18n="thirteenf.no_data">No data yet.</span>
+        <a href="{{ url_for('main.thirteenf_refresh') }}" class="text-brand hover:underline" data-i18n="thirteenf.refresh_to_load">Refresh to load</a>.
         {% endif %}
       </p>
     </div>
@@ -80,7 +81,7 @@
     <div class="py-10 text-center">
       <span class="text-rose-400 text-sm mb-2"><span data-i18n="thirteenf.fetch_failed">Failed to fetch:</span> {{ fd.error }}</span>
       <a href="{{ url_for('main.thirteenf_refresh') }}"
-         class="text-brand text-xs hover:underline">↻ Retry</a>
+         class="text-brand text-xs hover:underline" data-i18n="thirteenf.retry">↻ Retry</a>
     </div>
 
     {% else %}
