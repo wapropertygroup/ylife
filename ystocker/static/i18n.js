@@ -170,6 +170,8 @@ const I18n = (() => {
     'history.pc_bearish':     { en: 'Bearish (>1.2)',  zh: '看空 (>1.2)' },
     'history.pc_neutral':     { en: 'Neutral',         zh: '中性' },
     'history.pc_bullish':     { en: 'Bullish (<0.7)',  zh: '看多 (<0.7)' },
+    'history.pc_chart_title': { en: 'Put/Call Ratio by Expiration', zh: '各到期日认沽/认购比率' },
+    'history.pc_chart_desc':  { en: 'Total put OI ÷ call OI per expiry — >1.2 bearish · <0.7 bullish', zh: '各到期日总认沽持仓量÷总认购持仓量 — >1.2看空 · <0.7看多' },
     'history.financials_title': { en: 'Annual Financials', zh: '年度财务数据' },
     'history.financials_desc':  { en: '3-year actuals · 2-year forward estimates · values in $B except EPS', zh: '近3年实际数据 · 未来2年预测 · 单位十亿美元（EPS除外）' },
     'history.group_valuation':{ en: 'Valuation',       zh: '估值' },

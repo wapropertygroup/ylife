@@ -349,6 +349,22 @@
     <div id="explainPanelPeg" class="explain-panel"></div>
   </div>
 
+  <!-- P/C Ratio by Expiration chart -->
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up" id="pcChartSection" style="display:none">
+    <div class="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-0 sm:justify-between mb-4">
+      <div>
+        <h2 class="text-base font-semibold text-slate-200" data-i18n="history.pc_chart_title">Put/Call Ratio by Expiration</h2>
+        <p class="text-xs text-slate-500" data-i18n="history.pc_chart_desc">Total put OI ÷ call OI per expiry — &gt;1.2 bearish · &lt;0.7 bullish</p>
+      </div>
+      <div class="flex items-center gap-3 flex-wrap justify-end">
+        <span class="flex items-center gap-1.5 text-xs text-rose-400"><span class="inline-block w-2 h-2 rounded-sm bg-rose-500/70"></span> &gt;1.2 Bearish</span>
+        <span class="flex items-center gap-1.5 text-xs text-amber-400"><span class="inline-block w-2 h-2 rounded-sm bg-amber-500/70"></span> Neutral</span>
+        <span class="flex items-center gap-1.5 text-xs text-emerald-400"><span class="inline-block w-2 h-2 rounded-sm bg-emerald-500/70"></span> &lt;0.7 Bullish</span>
+      </div>
+    </div>
+    <div class="chart-container" style="height:280px"><canvas id="pcByExpiryChart"></canvas></div>
+  </div>
+
   <!-- Annual Financials: 3 years actuals + 2 years forward estimates -->
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up" id="financialsSection" style="display:none">
     <div class="flex items-baseline gap-3 mb-4">
@@ -678,6 +694,80 @@ let   _modalKey       = null;
     document.getElementById('fwdPeHistSection').style.display = 'block';
     const fwdCfg = _buildConfig('fwdpe', data, staticData);
     _registerChart('fwdpe', fwdCfg, new Chart(document.getElementById('fwdPeChart'), fwdCfg));
+  }
+
+  // ── P/C ratio by expiry bar chart
+  if (data.pc_by_expiry && data.pc_by_expiry.length > 0) {
+    document.getElementById('pcChartSection').style.display = 'block';
+    const pcLabels = data.pc_by_expiry.map(d => d.exp);
+    const pcRatios = data.pc_by_expiry.map(d => d.ratio);
+    const pcColors = pcRatios.map(r =>
+      r == null       ? 'rgba(100,116,139,0.5)'
+      : r > 1.2       ? 'rgba(239,68,68,0.65)'
+      : r < 0.7       ? 'rgba(52,211,153,0.65)'
+      :                  'rgba(251,191,36,0.65)'
+    );
+    const pcBorders = pcRatios.map(r =>
+      r == null       ? '#64748b'
+      : r > 1.2       ? '#ef4444'
+      : r < 0.7       ? '#34d399'
+      :                  '#fbbf24'
+    );
+    new Chart(document.getElementById('pcByExpiryChart'), {
+      type: 'bar',
+      data: {
+        labels: pcLabels,
+        datasets: [
+          {
+            label: 'P/C Ratio',
+            data: pcRatios,
+            backgroundColor: pcColors,
+            borderColor: pcBorders,
+            borderWidth: 1,
+            borderRadius: 3,
+            order: 1,
+          },
+          {
+            label: '1.2 (Bearish)',
+            data: pcLabels.map(() => 1.2),
+            type: 'line',
+            borderColor: 'rgba(239,68,68,0.45)',
+            borderWidth: 1,
+            borderDash: [4,3],
+            pointRadius: 0,
+            fill: false,
+            order: 0,
+          },
+          {
+            label: '0.7 (Bullish)',
+            data: pcLabels.map(() => 0.7),
+            type: 'line',
+            borderColor: 'rgba(52,211,153,0.45)',
+            borderWidth: 1,
+            borderDash: [4,3],
+            pointRadius: 0,
+            fill: false,
+            order: 0,
+          },
+        ],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { labels: { color: '#94a3b8', font: { size: 11 }, boxWidth: 12 } },
+          tooltip: { callbacks: {
+            label: c => c.dataset.label === 'P/C Ratio'
+              ? (c.raw == null ? 'N/A' : ` P/C: ${c.raw.toFixed(2)}`)
+              : ` ${c.dataset.label}`,
+          }},
+        },
+        scales: {
+          x: { grid: { color: '#1e293b' }, ticks: { color: '#94a3b8', maxRotation: 45, font: { size: 10 } } },
+          y: { grid: { color: '#1e293b' }, ticks: { color: '#94a3b8', font: { size: 11 } },
+               title: { display: true, text: 'P/C Ratio', color: '#64748b', font: { size: 11 } } },
+        },
+      },
+    });
   }
 
   // ── Wire up range buttons
