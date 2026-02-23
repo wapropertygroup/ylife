@@ -693,9 +693,9 @@ def _get_filings_list(cik: str) -> list:
     periods_in_recent = {
         f["period"] for f in filings if f["form"] in ("13F-HR", "13F-HR/A")
     }
-    if len(periods_in_recent) < 2:
+    if len(periods_in_recent) < 12:
         extra_files = data.get("filings", {}).get("files", [])
-        for extra in extra_files[:2]:          # fetch at most 2 extra pages
+        for extra in extra_files[:5]:          # fetch up to 5 extra pages for 12-quarter history
             extra_name = extra.get("name", "")
             if not extra_name:
                 continue
@@ -704,16 +704,74 @@ def _get_filings_list(cik: str) -> list:
                 extra_data = _get(extra_url).json()
                 extra_filings = _extract(extra_data)
                 filings.extend(extra_filings)
-                # Stop once we have ≥2 distinct 13F periods
+                # Stop once we have ≥12 distinct 13F periods
                 periods_so_far = {
                     f["period"] for f in filings if f["form"] in ("13F-HR", "13F-HR/A")
                 }
-                if len(periods_so_far) >= 2:
+                if len(periods_so_far) >= 12:
                     break
             except Exception as exc:
                 log.debug("Could not fetch extra filings page %s: %s", extra_name, exc)
 
     return filings
+
+
+def _get_aum_from_cover(cik: str, accession: str) -> Optional[float]:
+    """
+    Extract total portfolio value (AUM) from the 13F-HR cover page XML.
+    Returns value in millions USD, or None if unavailable.
+
+    The cover page XML (primary_doc.xml) contains <tableValueTotal> in thousands USD.
+    This is much faster than downloading the full infotable for historical quarters.
+    """
+    cik_int    = str(int(cik))
+    acc_nodash = accession.replace("-", "")
+    doc_base   = f"https://www.sec.gov/Archives/edgar/data/{cik_int}/{acc_nodash}"
+
+    # Try the JSON index to find the cover page document
+    index_base = f"https://data.sec.gov/Archives/edgar/data/{cik_int}/{acc_nodash}"
+    cover_url = None
+    r = _get_maybe(f"{index_base}-index.json")
+    if r is not None:
+        try:
+            idx = r.json()
+            for doc in idx.get("documents", []):
+                dtype = (doc.get("type") or "").upper()
+                dname = (doc.get("name") or "")
+                fname = dname.lower()
+                if dtype in ("13F-HR", "13F-HR/A") or fname == "primary_doc.xml":
+                    cover_url = f"{doc_base}/{dname}"
+                    break
+        except Exception:
+            pass
+
+    if not cover_url:
+        cover_url = f"{doc_base}/primary_doc.xml"
+
+    try:
+        resp = _get_maybe(cover_url)
+        if not resp:
+            return None
+        # Parse XML — look for tableValueTotal (in thousands USD)
+        xml_text = resp.text
+        # Strip namespace prefixes for easier parsing
+        xml_clean = xml_text.replace(' xmlns=', ' xmlns_ignored=')
+        try:
+            root = ET.fromstring(xml_clean)
+        except ET.ParseError:
+            return None
+        # Try multiple tag name variants used across filings
+        for tag in ("tableValueTotal", "TABLEVALUETOTAL"):
+            el = root.find(f".//{tag}")
+            if el is not None and el.text:
+                try:
+                    return round(float(el.text.replace(",", "")) / 1000, 1)  # thousands → millions
+                except ValueError:
+                    pass
+        return None
+    except Exception as exc:
+        log.debug("Could not get AUM from cover page for %s/%s: %s", cik_int, acc_nodash, exc)
+        return None
 
 
 def _find_infotable_url(cik: str, accession: str, primary_doc: str = "") -> Optional[str]:
@@ -1056,12 +1114,12 @@ def fetch_fund_holdings(name: str, cik: str) -> dict:
                  thirteenf_filings[0].get("period"))
         latest = thirteenf_filings[0]
 
-        # Select up to 4 consecutive quarters, each 60-200 days apart from
-        # the previous one.  This gives us history for the chart.
+        # Select up to 12 consecutive quarters, each 60-200 days apart from
+        # the previous one.  This gives us history for the AUM chart.
         from datetime import date
         selected_filings = [latest]
         for candidate in thirteenf_filings[1:]:
-            if len(selected_filings) >= 4:
+            if len(selected_filings) >= 12:
                 break
             cand_period = candidate.get("period", "")
             prev_period = selected_filings[-1].get("period", "")
@@ -1082,26 +1140,45 @@ def fetch_fund_holdings(name: str, cik: str) -> dict:
                  len(selected_filings), name,
                  [f["period"] for f in selected_filings])
 
-        # Fetch holdings for each selected quarter
+        # Fetch holdings for each selected quarter.
+        # Quarters 0-4 (5 most recent): full infotable for holdings + change detection.
+        # Quarters 5+: cover page only for AUM history (faster, avoids huge XML downloads).
+        FULL_HOLDINGS_LIMIT = 5
         fetched_quarters: list = []   # newest first
+        aum_history_only: list = []   # [{period, filing_date, total_value_millions}] for older quarters
         for i, filing in enumerate(selected_filings):
-            try:
-                url = _find_infotable_url(cik, filing["accession"], filing.get("primary_doc", ""))
-                if not url:
-                    log.warning("13F no infotable for %s period=%s", name, filing["period"])
-                    continue
-                xml_text = _get(url).text
-                holdings = _parse_infotable(xml_text)
-                fetched_quarters.append({
-                    "period":       filing["period"],
-                    "filing_date":  filing["filing_date"],
-                    "holdings":     holdings,
-                })
-                log.info("13F fetched %d holdings for %s period=%s",
-                         len(holdings), name, filing["period"])
-            except Exception as exc:
-                log.warning("Could not fetch holdings for %s period=%s: %s",
-                            name, filing.get("period"), exc)
+            if i < FULL_HOLDINGS_LIMIT:
+                try:
+                    url = _find_infotable_url(cik, filing["accession"], filing.get("primary_doc", ""))
+                    if not url:
+                        log.warning("13F no infotable for %s period=%s", name, filing["period"])
+                        continue
+                    xml_text = _get(url).text
+                    holdings = _parse_infotable(xml_text)
+                    fetched_quarters.append({
+                        "period":       filing["period"],
+                        "filing_date":  filing["filing_date"],
+                        "holdings":     holdings,
+                    })
+                    log.info("13F fetched %d holdings for %s period=%s",
+                             len(holdings), name, filing["period"])
+                except Exception as exc:
+                    log.warning("Could not fetch holdings for %s period=%s: %s",
+                                name, filing.get("period"), exc)
+            else:
+                # AUM-only: extract from cover page XML (much faster)
+                try:
+                    aum = _get_aum_from_cover(cik, filing["accession"])
+                    if aum is not None:
+                        aum_history_only.append({
+                            "period":               filing["period"],
+                            "filing_date":          filing["filing_date"],
+                            "total_value_millions": aum,
+                        })
+                        log.info("13F AUM-only %s period=%s aum=$%sM", name, filing["period"], aum)
+                except Exception as exc:
+                    log.warning("Could not get AUM for %s period=%s: %s",
+                                name, filing.get("period"), exc)
 
         if not fetched_quarters:
             return {"error": "Could not fetch any holdings", "cik": cik}
@@ -1117,7 +1194,7 @@ def fetch_fund_holdings(name: str, cik: str) -> dict:
             h.setdefault("change", "unknown")
             h.setdefault("change_pct", None)
 
-        # Post-process each quarter: merge tickers, sort, rank, compute pct
+        # Post-process each full quarter: merge tickers, sort, rank, compute pct
         processed_quarters = []
         for q in fetched_quarters:
             hl = _merge_by_ticker(q["holdings"])
@@ -1137,6 +1214,17 @@ def fetch_fund_holdings(name: str, cik: str) -> dict:
                 "holdings":             top50,
                 "total_holdings":       len(hl),
                 "total_value_millions": total_m,
+            })
+
+        # Append AUM-only history quarters (no holdings data, just totals for the chart)
+        for aq in aum_history_only:
+            processed_quarters.append({
+                "period":               aq["period"],
+                "filing_date":          aq["filing_date"],
+                "holdings":             [],
+                "total_holdings":       0,
+                "total_value_millions": aq["total_value_millions"],
+                "aum_only":             True,  # flag: no holdings detail available
             })
 
         latest_q = processed_quarters[0]

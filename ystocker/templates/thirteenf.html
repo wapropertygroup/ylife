@@ -107,27 +107,55 @@
 
     <!-- AUM history across quarters -->
     {% if fd.quarters and fd.quarters | length > 1 %}
+    {% set slug = name | lower | replace(' ', '-') %}
     <div class="mb-5 p-3 bg-slate-800/40 rounded-xl border border-slate-700/50">
       <p class="text-xs text-slate-500 mb-2 font-medium" data-i18n="thirteenf.aum_history">AUM by Quarter</p>
-      <div class="flex items-end gap-3 flex-wrap">
-        {% set max_aum = fd.quarters | map(attribute='total_value_millions') | max %}
-        {% for q in fd.quarters | reverse %}
-        {% set bar_pct = (q.total_value_millions / max_aum * 100) if max_aum else 0 %}
-        {% set is_latest = loop.last %}
-        <div class="flex flex-col items-center gap-1 min-w-[60px]">
-          <span class="text-xs font-mono {% if is_latest %}text-emerald-400{% else %}text-slate-400{% endif %}">
-            ${{ "{:,.0f}".format(q.total_value_millions) }}M
-          </span>
-          <div class="w-12 bg-slate-700 rounded-t relative" style="height: 48px;">
-            <div class="absolute bottom-0 left-0 right-0 rounded-t transition-all
-                        {% if is_latest %}bg-brand{% else %}bg-slate-500{% endif %}"
-                 style="height: {{ bar_pct | round(1) }}%"></div>
-          </div>
-          <span class="text-[10px] text-slate-600">{{ q.period }}</span>
-        </div>
-        {% endfor %}
+      <div style="height:120px; position:relative">
+        <canvas id="aumChart_{{ slug }}"></canvas>
       </div>
     </div>
+    <script>
+    (function(){
+      const labels = [{% for q in fd.quarters | reverse %}"{{ q.period }}"{% if not loop.last %},{% endif %}{% endfor %}];
+      const values = [{% for q in fd.quarters | reverse %}{{ q.total_value_millions }}{% if not loop.last %},{% endif %}{% endfor %}];
+      const aum_only = [{% for q in fd.quarters | reverse %}{{ 'true' if q.get('aum_only') else 'false' }}{% if not loop.last %},{% endif %}{% endfor %}];
+      const ctx = document.getElementById('aumChart_{{ slug }}');
+      if (!ctx) return;
+      const colors = values.map((v, i) => i === values.length - 1 ? '#6366f1' : 'rgba(99,102,241,0.5)');
+      new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [{
+            data: values,
+            backgroundColor: colors,
+            borderColor: colors,
+            borderWidth: 1,
+            borderRadius: 3,
+          }],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: { callbacks: {
+              label: c => {
+                const v = c.raw;
+                const suffix = aum_only[c.dataIndex] ? ' (est.)' : '';
+                return v >= 1000 ? ` $${(v/1000).toFixed(2)}T${suffix}` : ` $${v.toFixed(0)}M${suffix}`;
+              }
+            }},
+          },
+          scales: {
+            x: { grid: { color: '#1e293b' }, ticks: { color: '#64748b', font: { size: 9 }, maxRotation: 45 } },
+            y: { grid: { color: '#1e293b' }, ticks: { color: '#64748b', font: { size: 9 },
+              callback: v => v >= 1000 ? '$'+(v/1000).toFixed(1)+'T' : '$'+v+'B'
+            }},
+          },
+        },
+      });
+    })();
+    </script>
     {% endif %}
 
     <!-- Holdings table -->
