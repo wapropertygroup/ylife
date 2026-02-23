@@ -17,8 +17,9 @@ Parameters:
     Description: EC2 instance type (t3.micro is free-tier eligible)
 
   KeyName:
-    Type: AWS::EC2::KeyPair::KeyName
-    Description: Name of an existing EC2 key pair for SSH access
+    Type: String
+    Default: ""
+    Description: Name of an existing EC2 key pair for SSH access (leave blank if not needed)
 
   AllowedSSHCidr:
     Type: String
@@ -199,21 +200,21 @@ Resources:
   #   aws ssm put-parameter --name /ystocker/GEMINI_API_KEY  --value "YOUR_KEY" --type SecureString --overwrite
   #   aws ssm put-parameter --name /ystocker/YOUTUBE_API_KEY --value "YOUR_KEY" --type SecureString --overwrite
 
-  GeminiApiKeyParam:
-    Type: AWS::SSM::Parameter
-    Properties:
-      Name: /ystocker/GEMINI_API_KEY
-      Type: String          # Use SecureString via CLI (CFN cannot create SecureString)
-      Value: REPLACE_ME
-      Description: Gemini API key for yStocker Fed/history AI explanations
-
-  YoutubeApiKeyParam:
-    Type: AWS::SSM::Parameter
-    Properties:
-      Name: /ystocker/YOUTUBE_API_KEY
-      Type: String
-      Value: REPLACE_ME
-      Description: YouTube Data API v3 key for yStocker video feed
+#  GeminiApiKeyParam:
+#    Type: AWS::SSM::Parameter
+#    Properties:
+#      Name: /ystocker/GEMINI_API_KEY
+#      Type: String          # Use SecureString via CLI (CFN cannot create SecureString)
+#      Value: REPLACE_ME
+#      Description: Gemini API key for yStocker Fed/history AI explanations
+#
+#  YoutubeApiKeyParam:
+#    Type: AWS::SSM::Parameter
+#    Properties:
+#      Name: /ystocker/YOUTUBE_API_KEY
+#      Type: String
+#      Value: REPLACE_ME
+#      Description: YouTube Data API v3 key for yStocker video feed
 
   # -- EC2 instance ------------------------------------------------------------
 
