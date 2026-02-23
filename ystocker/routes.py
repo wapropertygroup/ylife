@@ -548,11 +548,16 @@ def api_history(ticker: str):
     import yfinance as yf
     from flask import request as flask_request
     ticker = ticker.strip().upper()
-    VALID_PERIODS = {"1mo", "3mo", "6mo", "1y", "2y", "5y"}
+    VALID_PERIODS = {"1mo", "3mo", "6mo", "1y", "2y", "5y", "10y"}
     period = flask_request.args.get("period", "1y")
     if period not in VALID_PERIODS:
         period = "1y"
-    interval = "1d" if period in ("1mo", "3mo") else "1wk"
+    if period in ("1mo", "3mo"):
+        interval = "1d"
+    elif period in ("6mo", "1y", "2y"):
+        interval = "1wk"
+    else:  # 5y, 10y
+        interval = "1mo"
     log.info("API history: %s period=%s", ticker, period)
 
     cache_key = (ticker, period)

@@ -195,6 +195,7 @@
           <button class="range-btn active" data-chart="pe" data-period="1y">1Y</button>
           <button class="range-btn" data-chart="pe" data-period="2y">2Y</button>
           <button class="range-btn" data-chart="pe" data-period="5y">5Y</button>
+          <button class="range-btn" data-chart="pe" data-period="10y">10Y</button>
         </div>
         <button onclick="expandChart('pe')" title="Expand" class="expand-btn">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
@@ -205,7 +206,7 @@
     <div id="peLoading" class="flex items-center justify-center h-36 sm:h-48 text-slate-500 text-sm animate-pulse">
       Loading PE history for {{ ticker }} …
     </div>
-    <div class="chart-container" style="height:220px; display:none" id="peChartWrap">
+    <div class="chart-container" style="height:300px; display:none" id="peChartWrap">
       <canvas id="peChart"></canvas>
     </div>
     <div id="explainPanelPe" class="explain-panel"></div>
@@ -232,6 +233,7 @@
           <button class="range-btn active" data-chart="fwdpe" data-period="1y">1Y</button>
           <button class="range-btn" data-chart="fwdpe" data-period="2y">2Y</button>
           <button class="range-btn" data-chart="fwdpe" data-period="5y">5Y</button>
+          <button class="range-btn" data-chart="fwdpe" data-period="10y">10Y</button>
         </div>
         <button onclick="expandChart('fwdpe')" title="Expand" class="expand-btn">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
@@ -239,7 +241,7 @@
         <button id="explainBtnFwdpe" class="explain-btn" onclick="explainChart('fwdpe')" data-i18n="history.explain">✦ Explain</button>
       </div>
     </div>
-    <div class="chart-container" style="height:220px" id="fwdPeChartWrap">
+    <div class="chart-container" style="height:300px" id="fwdPeChartWrap">
       <canvas id="fwdPeChart"></canvas>
     </div>
     <div id="explainPanelFwdpe" class="explain-panel"></div>
@@ -277,6 +279,7 @@
           <button class="range-btn active" data-chart="price" data-period="1y">1Y</button>
           <button class="range-btn" data-chart="price" data-period="2y">2Y</button>
           <button class="range-btn" data-chart="price" data-period="5y">5Y</button>
+          <button class="range-btn" data-chart="price" data-period="10y">10Y</button>
         </div>
         <button onclick="expandChart('price')" title="Expand" class="expand-btn">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
@@ -284,7 +287,7 @@
         <button id="explainBtnPrice" class="explain-btn" onclick="explainChart('price')" data-i18n="history.explain">✦ Explain</button>
       </div>
     </div>
-    <div class="chart-container" style="height:200px; display:none" id="priceChartWrap">
+    <div class="chart-container" style="height:300px; display:none" id="priceChartWrap">
       <canvas id="priceHistChart"></canvas>
     </div>
     <div id="explainPanelPrice" class="explain-panel"></div>
@@ -311,6 +314,7 @@
           <button class="range-btn active" data-chart="peg" data-period="1y">1Y</button>
           <button class="range-btn" data-chart="peg" data-period="2y">2Y</button>
           <button class="range-btn" data-chart="peg" data-period="5y">5Y</button>
+          <button class="range-btn" data-chart="peg" data-period="10y">10Y</button>
         </div>
         <button onclick="expandChart('peg')" title="Expand" class="expand-btn ml-1">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
@@ -318,7 +322,7 @@
         <button id="explainBtnPeg" class="explain-btn" onclick="explainChart('peg')" data-i18n="history.explain">✦ Explain</button>
       </div>
     </div>
-    <div class="chart-container" style="height:200px" id="pegChartWrap">
+    <div class="chart-container" style="height:300px" id="pegChartWrap">
       <canvas id="pegHistChart"></canvas>
     </div>
     <div id="explainPanelPeg" class="explain-panel"></div>
