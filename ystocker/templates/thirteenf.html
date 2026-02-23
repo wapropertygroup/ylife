@@ -161,6 +161,8 @@
               <span class="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-rose-900/50 text-rose-300 border border-rose-800" data-i18n="inst.change_closed">Closed</span>
               {% elif h.change == 'unchanged' %}
               <span class="text-slate-600 text-xs">—</span>
+              {% elif h.change == 'unknown' %}
+              <span class="text-slate-600 text-xs">—</span>
               {% else %}
               <span class="text-slate-700 text-xs">?</span>
               {% endif %}

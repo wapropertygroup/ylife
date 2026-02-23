@@ -113,7 +113,7 @@
 <div id="panelCharts">
 
 <!-- ── Stat cards ───────────────────────────────────────────────────── -->
-<div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3 sm:gap-4 mb-6 sm:mb-8 fade-up">
+<div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-11 gap-3 sm:gap-4 mb-6 sm:mb-8 fade-up">
   <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 sm:px-4 py-3">
     <div class="text-xs text-slate-500 mb-1" data-i18n="history.current_pe">Current PE</div>
     <div id="statCurrentPe" class="text-lg sm:text-xl font-bold text-slate-100">—</div>
@@ -145,6 +145,18 @@
   <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 sm:px-4 py-3">
     <div class="text-xs text-slate-500 mb-1" data-i18n="history.eps_growth_q">EPS Growth Q</div>
     <div id="statEpsGrowthQ" class="text-lg sm:text-xl font-bold text-slate-100">—</div>
+  </div>
+  <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 sm:px-4 py-3">
+    <div class="text-xs text-slate-500 mb-1" data-i18n="history.ev_ebitda">EV/EBITDA</div>
+    <div id="statEvEbitda" class="text-lg sm:text-xl font-bold text-slate-100">—</div>
+  </div>
+  <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 sm:px-4 py-3">
+    <div class="text-xs text-slate-500 mb-1" data-i18n="history.ev">EV ($B)</div>
+    <div id="statEv" class="text-lg sm:text-xl font-bold text-slate-100">—</div>
+  </div>
+  <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 sm:px-4 py-3">
+    <div class="text-xs text-slate-500 mb-1" data-i18n="history.ebitda">EBITDA ($B)</div>
+    <div id="statEbitda" class="text-lg sm:text-xl font-bold text-slate-100">—</div>
   </div>
 </div>
 
@@ -451,6 +463,24 @@ let   _modalKey       = null;
   }
   setGrowthStat('statEpsGrowthTtm', data.eps_growth_ttm);
   setGrowthStat('statEpsGrowthQ',   data.eps_growth_q);
+
+  const evEl = document.getElementById('statEvEbitda');
+  if (data.ev_ebitda != null) {
+    evEl.textContent = data.ev_ebitda.toFixed(1) + 'x';
+    evEl.className   = 'text-lg sm:text-xl font-bold text-slate-100';
+  }
+
+  const evBEl = document.getElementById('statEv');
+  if (data.ev != null) {
+    evBEl.textContent = '$' + data.ev.toFixed(1) + 'B';
+    evBEl.className   = 'text-lg sm:text-xl font-bold text-slate-100';
+  }
+
+  const ebitdaEl = document.getElementById('statEbitda');
+  if (data.ebitda != null) {
+    ebitdaEl.textContent = '$' + data.ebitda.toFixed(1) + 'B';
+    ebitdaEl.className   = 'text-lg sm:text-xl font-bold text-slate-100';
+  }
 
   // Cache 1y data and static reference values (target, walls, current_pe)
   _periodCache['1y'] = data;

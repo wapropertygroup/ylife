@@ -20,6 +20,9 @@
 {% set has_price      = namespace(v=false) %}
 {% set has_growth     = namespace(v=false) %}
 {% set has_day_change = namespace(v=false) %}
+{% set has_ev_ebitda  = namespace(v=false) %}
+{% set has_ev         = namespace(v=false) %}
+{% set has_ebitda     = namespace(v=false) %}
 {% for ticker, row in table.iterrows() %}
   {% if row.get('Upside (%)') is not none and row.get('Upside (%)') == row.get('Upside (%)') %}{% set has_upside.v = true %}{% endif %}
   {% if row.get('PEG') is not none and row.get('PEG') == row.get('PEG') %}{% set has_peg.v = true %}{% endif %}
@@ -27,6 +30,9 @@
   {% if row.get('EPS Growth TTM (%)') is not none and row.get('EPS Growth TTM (%)') == row.get('EPS Growth TTM (%)') %}{% set has_growth.v = true %}{% endif %}
   {% if row.get('EPS Growth Q (%)') is not none and row.get('EPS Growth Q (%)') == row.get('EPS Growth Q (%)') %}{% set has_growth.v = true %}{% endif %}
   {% if row.get('Day Change (%)') is not none and row.get('Day Change (%)') == row.get('Day Change (%)') %}{% set has_day_change.v = true %}{% endif %}
+  {% if row.get('EV/EBITDA') is not none and row.get('EV/EBITDA') == row.get('EV/EBITDA') %}{% set has_ev_ebitda.v = true %}{% endif %}
+  {% if row.get('EV ($B)') is not none and row.get('EV ($B)') == row.get('EV ($B)') %}{% set has_ev.v = true %}{% endif %}
+  {% if row.get('EBITDA ($B)') is not none and row.get('EBITDA ($B)') == row.get('EBITDA ($B)') %}{% set has_ebitda.v = true %}{% endif %}
 {% endfor %}
 
 <div x-data="{ tab: 'day_change' }" class="fade-up">
@@ -70,6 +76,13 @@
             :class="tab==='growth' ? 'bg-brand text-white shadow' : 'text-slate-400 hover:text-slate-200'"
             class="px-4 py-1.5 rounded-lg text-sm font-medium transition-all" data-i18n="sector.tab_growth">
       Growth
+    </button>
+    {% endif %}
+    {% if has_ev_ebitda.v %}
+    <button @click="tab='ev_ebitda'"
+            :class="tab==='ev_ebitda' ? 'bg-brand text-white shadow' : 'text-slate-400 hover:text-slate-200'"
+            class="px-4 py-1.5 rounded-lg text-sm font-medium transition-all" data-i18n="sector.tab_ev_ebitda">
+      EV/EBITDA
     </button>
     {% endif %}
     <button @click="tab='table'"
@@ -243,6 +256,49 @@
     <div class="chart-container" style="height:{{ [table|length * 40 + 40, 200]|max }}px"><canvas id="growthChart"></canvas></div>
   </div>
 
+  <!-- EV/EBITDA horizontal bar -->
+  <div x-show="tab==='ev_ebitda'" x-transition class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 mb-6">
+    <div class="flex flex-col sm:flex-row sm:items-start gap-3 sm:gap-0 sm:justify-between mb-1">
+      <div>
+        <h2 class="text-base font-semibold text-slate-200" data-i18n="sector.ev_ebitda_title">EV/EBITDA</h2>
+        <p class="text-xs text-slate-500 mb-2 sm:mb-4" data-i18n="sector.ev_ebitda_desc">Enterprise Value ÷ EBITDA — lower = cheaper relative to operating earnings (capital-structure neutral).</p>
+        <p class="text-xs text-slate-600 mb-2">
+          <span class="text-emerald-400">■</span> &lt;8x 便宜 &nbsp;
+          <span class="text-sky-400">■</span> 8–13x 正常 &nbsp;
+          <span class="text-amber-400">■</span> 13–20x 成长型 &nbsp;
+          <span class="text-rose-400">■</span> 20x+ 高增长或泡沫
+        </p>
+      </div>
+      <div class="flex gap-2">
+        <button onclick="sortChart('ev_ebitda')" data-chart="ev_ebitda"
+                class="chart-sort flex items-center gap-1 text-xs text-slate-400 border border-slate-700 bg-slate-800
+                       hover:text-slate-200 transition px-2 py-1 rounded-lg">
+          <span class="sort-text" data-i18n="sector.sort_lohi">Lo→Hi</span>
+        </button>
+        <button onclick="toggleValues('ev_ebitda')" data-chart="ev_ebitda"
+                class="chart-toggle flex items-center gap-1 text-xs text-brand border border-brand/40 bg-brand/10
+                       hover:bg-brand hover:text-white transition px-2 py-1 rounded-lg">
+          <span class="toggle-text" data-i18n="sector.hide_values">Hide values</span>
+        </button>
+      </div>
+    </div>
+    <div class="chart-container" style="height:{{ [table|length * 36 + 40, 200]|max }}px"><canvas id="evEbitdaChart"></canvas></div>
+
+    <!-- EV ($B) -->
+    <div class="mt-6">
+      <h3 class="text-sm font-semibold text-slate-300 mb-1" data-i18n="sector.ev_title">Enterprise Value ($B)</h3>
+      <p class="text-xs text-slate-500 mb-3" data-i18n="sector.ev_desc">Total enterprise value in billions USD.</p>
+      <div class="chart-container" style="height:{{ [table|length * 36 + 40, 200]|max }}px"><canvas id="evChart"></canvas></div>
+    </div>
+
+    <!-- EBITDA ($B) -->
+    <div class="mt-6">
+      <h3 class="text-sm font-semibold text-slate-300 mb-1" data-i18n="sector.ebitda_title">EBITDA ($B)</h3>
+      <p class="text-xs text-slate-500 mb-3" data-i18n="sector.ebitda_desc">Earnings before interest, taxes, depreciation &amp; amortisation, in billions USD.</p>
+      <div class="chart-container" style="height:{{ [table|length * 36 + 40, 200]|max }}px"><canvas id="ebitdaChart"></canvas></div>
+    </div>
+  </div>
+
   <!-- Data Table -->
   <div x-show="tab==='table'" x-transition class="bg-slate-900 border border-slate-800 rounded-2xl p-6 mb-6">
     <h2 class="text-base font-semibold text-slate-200 mb-4" data-i18n="sector.table_title">Data Table</h2>
@@ -272,6 +328,12 @@
                 data-col="eps_growth_ttm"><span data-i18n="th.eps_growth_ttm">EPS Gr TTM</span> <span class="sort-icon ml-0.5">&#8597;</span></th>
             <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-300 transition whitespace-nowrap"
                 data-col="eps_growth_q"><span data-i18n="th.eps_growth_q">EPS Gr Q</span> <span class="sort-icon ml-0.5">&#8597;</span></th>
+            <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-300 transition whitespace-nowrap"
+                data-col="ev_ebitda"><span data-i18n="th.ev_ebitda">EV/EBITDA</span> <span class="sort-icon ml-0.5">&#8597;</span></th>
+            <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-300 transition whitespace-nowrap"
+                data-col="ev"><span data-i18n="th.ev">EV ($B)</span> <span class="sort-icon ml-0.5">&#8597;</span></th>
+            <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-300 transition whitespace-nowrap"
+                data-col="ebitda"><span data-i18n="th.ebitda">EBITDA ($B)</span> <span class="sort-icon ml-0.5">&#8597;</span></th>
           </tr>
         </thead>
         <tbody id="sectorTableBody"></tbody>
@@ -290,10 +352,10 @@ const tickCol = '#64748b';
 
 // ---- Value toggle state ----
 const chartInstances = {};
-const valuesVisible  = { pe: true, prices: true, upside: true, peg: true, growth: true, day_change: true };
+const valuesVisible  = { pe: true, prices: true, upside: true, peg: true, growth: true, day_change: true, ev_ebitda: true };
 
 // ---- Sort state ----
-const sortState = { pe: { field: null, dir: 1 }, prices: 'ticker', upside: 'asc', peg: 'asc', growth: 'asc', day_change: 'asc' };
+const sortState = { pe: { field: null, dir: 1 }, prices: 'ticker', upside: 'asc', peg: 'asc', growth: 'asc', day_change: 'asc', ev_ebitda: 'asc' };
 
 // ---- Growth sort state ----
 const growthSortState = { field: 'eps_growth_ttm', dir: 1 };
@@ -401,7 +463,7 @@ function sortChart(chartKey) {
     sortState[chartKey] = goDesc ? 'desc' : 'asc';
     text.textContent = goDesc ? I18n.t('sector.sort_hilo') : I18n.t('sector.sort_lohi');
 
-    const field = chartKey === 'upside' ? 'upside' : chartKey === 'growth' ? 'eps_growth_ttm' : chartKey === 'day_change' ? 'day_change_pct' : 'peg';
+    const field = chartKey === 'upside' ? 'upside' : chartKey === 'growth' ? 'eps_growth_ttm' : chartKey === 'day_change' ? 'day_change_pct' : chartKey === 'ev_ebitda' ? 'ev_ebitda' : 'peg';
     const sorted = [...DATA]
       .filter(d => d[field] != null || (chartKey === 'growth' && d.eps_growth_q != null))
       .sort((a, b) => {
@@ -426,6 +488,8 @@ function sortChart(chartKey) {
       chart.data.datasets[0].data = sorted.map(d => d[field]);
       chart.data.datasets[0].backgroundColor =
         sorted.map(d => d.upside >= 0 ? '#34d399cc' : '#f43f5ecc');
+    } else if (chartKey === 'ev_ebitda') {
+      chart.data.datasets[0].data = sorted.map(d => d[field]);
     } else {
       chart.data.datasets[0].data = sorted.map(d => d[field]);
       chart.data.datasets[0].backgroundColor =
@@ -772,8 +836,146 @@ const chartDefaults = {
   });
 })();
 
-// ---- Hide controls & legend entries when data is unavailable ----
+// -- EV/EBITDA horizontal bar
 (function(){
+  const ctx = document.getElementById('evEbitdaChart');
+  if (!ctx) return;
+  const sorted = [...DATA].filter(d => d.ev_ebitda != null).sort((a, b) => a.ev_ebitda - b.ev_ebitda);
+  if (!sorted.length) return;
+  const avg = avgOf(sorted.map(d => d.ev_ebitda));
+  chartInstances.ev_ebitda = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: sorted.map(d => d.ticker),
+      datasets: [{
+        label: 'EV/EBITDA',
+        data: sorted.map(d => d.ev_ebitda),
+        backgroundColor: sorted.map(d => {
+          const v = d.ev_ebitda;
+          return v < 8 ? '#34d399cc' : v < 13 ? '#38bdf8cc' : v < 20 ? '#f59e0bcc' : '#f43f5ecc';
+        }),
+        borderRadius: 4,
+      }]
+    },
+    options: {
+      ...chartDefaults,
+      layout: { padding: { top: 18 } },
+      indexAxis: 'y',
+      onClick: tickerOnClick(() => chartInstances.ev_ebitda.data.labels),
+      plugins: { legend:{display:false}, tooltip:{callbacks:{
+        label: c => {
+          const v = c.raw;
+          if (v == null) return ' EV/EBITDA: —';
+          let band = v < 8 ? '便宜 (Cheap)' : v < 13 ? '正常 (Fair)' : v < 20 ? '成长型 (Growth)' : '高增长或泡沫 (High growth / Bubble)';
+          return [` EV/EBITDA: ${v.toFixed(1)}x`, ` ${band}`];
+        }
+      }}},
+      scales: {
+        x: { grid:{color:gridCol}, ticks:{color:tickCol, callback: v => v+'x'} },
+        y: { grid:{display:false}, ticks:{color:'#94a3b8'} }
+      }
+    },
+    plugins: [tickerClickPlugin(), valueLabelPlugin('ev_ebitda', v => v.toFixed(1)+'x'),
+              avgLinePlugin(() => avg, v => v.toFixed(1)+'x', '#94a3b8')]
+  });
+})();
+
+// -- helpers for average line
+function avgOf(arr) {
+  const vals = arr.filter(v => v != null);
+  return vals.length ? vals.reduce((s, v) => s + v, 0) / vals.length : null;
+}
+function avgLinePlugin(getAvg, fmt, color) {
+  return {
+    afterDraw(chart) {
+      const avg = getAvg();
+      if (avg == null) return;
+      const {ctx: c, chartArea: a, scales: {x}} = chart;
+      const px = x.getPixelForValue(avg);
+      if (px < a.left || px > a.right) return;
+      c.save();
+      c.strokeStyle = color;
+      c.lineWidth = 1.5;
+      c.setLineDash([5, 4]);
+      c.beginPath(); c.moveTo(px, a.top); c.lineTo(px, a.bottom); c.stroke();
+      c.fillStyle = color;
+      c.font = 'bold 10px Inter,sans-serif';
+      c.textAlign = 'center';
+      c.fillText('avg ' + fmt(avg), px, a.top - 4);
+      c.restore();
+    }
+  };
+}
+
+// -- EV ($B) horizontal bar
+(function(){
+  const ctx = document.getElementById('evChart');
+  if (!ctx) return;
+  const sorted = [...DATA].filter(d => d.ev != null).sort((a, b) => a.ev - b.ev);
+  if (!sorted.length) return;
+  const avg = avgOf(sorted.map(d => d.ev));
+  chartInstances.ev = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: sorted.map(d => d.ticker),
+      datasets: [{
+        label: 'EV ($B)',
+        data: sorted.map(d => d.ev),
+        backgroundColor: '#38bdf8cc',
+        borderRadius: 4,
+      }]
+    },
+    options: {
+      ...chartDefaults,
+      layout: { padding: { top: 18 } },
+      indexAxis: 'y',
+      onClick: tickerOnClick(() => chartInstances.ev.data.labels),
+      plugins: { legend:{display:false}, tooltip:{callbacks:{label:c=>` EV: $${c.raw?.toFixed(1)}B`}} },
+      scales: {
+        x: { grid:{color:gridCol}, ticks:{color:tickCol, callback: v => '$'+v+'B'} },
+        y: { grid:{display:false}, ticks:{color:'#94a3b8'} }
+      }
+    },
+    plugins: [tickerClickPlugin(), valueLabelPlugin('ev', v => '$'+v.toFixed(1)+'B'),
+              avgLinePlugin(() => avg, v => '$'+v.toFixed(1)+'B', '#38bdf8')]
+  });
+})();
+
+// -- EBITDA ($B) horizontal bar
+(function(){
+  const ctx = document.getElementById('ebitdaChart');
+  if (!ctx) return;
+  const sorted = [...DATA].filter(d => d.ebitda != null).sort((a, b) => a.ebitda - b.ebitda);
+  if (!sorted.length) return;
+  const avg = avgOf(sorted.map(d => d.ebitda));
+  chartInstances.ebitda = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: sorted.map(d => d.ticker),
+      datasets: [{
+        label: 'EBITDA ($B)',
+        data: sorted.map(d => d.ebitda),
+        backgroundColor: '#a78bfacc',
+        borderRadius: 4,
+      }]
+    },
+    options: {
+      ...chartDefaults,
+      layout: { padding: { top: 18 } },
+      indexAxis: 'y',
+      onClick: tickerOnClick(() => chartInstances.ebitda.data.labels),
+      plugins: { legend:{display:false}, tooltip:{callbacks:{label:c=>` EBITDA: $${c.raw?.toFixed(1)}B`}} },
+      scales: {
+        x: { grid:{color:gridCol}, ticks:{color:tickCol, callback: v => '$'+v+'B'} },
+        y: { grid:{display:false}, ticks:{color:'#94a3b8'} }
+      }
+    },
+    plugins: [tickerClickPlugin(), valueLabelPlugin('ebitda', v => '$'+v.toFixed(1)+'B'),
+              avgLinePlugin(() => avg, v => '$'+v.toFixed(1)+'B', '#a78bfa')]
+  });
+})();
+
+// ---- Hide controls & legend entries when data is unavailable ----
   const hasVal = field => DATA.some(d => d[field] != null);
   const hide   = el => el && (el.style.display = 'none');
 
@@ -824,7 +1026,7 @@ const chartDefaults = {
     hide(document.querySelector('.chart-toggle[data-chart="peg"]'));
     hide(document.getElementById('pegTickerBtn'));
   }
-})();
+
 (function(){
   let sortCol = 'ticker', sortDir = 1;
 
@@ -846,6 +1048,14 @@ const chartDefaults = {
     if(v==null) return fmtNull();
     const col = v>0 ? 'text-emerald-400' : 'text-rose-400';
     return `<span class="${col}">${v.toFixed(1)}%</span>`;
+  }
+  function fmtEvEbitda(v){
+    if(v==null) return fmtNull();
+    return `<span class="text-slate-200">${v.toFixed(1)}x</span>`;
+  }
+  function fmtBillions(v){
+    if(v==null) return fmtNull();
+    return `<span class="text-slate-200">$${v.toFixed(1)}B</span>`;
   }
 
   function render() {
@@ -886,6 +1096,9 @@ const chartDefaults = {
         <td class="py-2.5 px-3 text-right">${fmtPeg(d.peg)}</td>
         <td class="py-2.5 px-3 text-right font-mono">${fmtGrowth(d.eps_growth_ttm)}</td>
         <td class="py-2.5 px-3 text-right font-mono">${fmtGrowth(d.eps_growth_q)}</td>
+        <td class="py-2.5 px-3 text-right font-mono">${fmtEvEbitda(d.ev_ebitda)}</td>
+        <td class="py-2.5 px-3 text-right font-mono">${fmtBillions(d.ev)}</td>
+        <td class="py-2.5 px-3 text-right font-mono">${fmtBillions(d.ebitda)}</td>
       </tr>`).join('');
   }
 

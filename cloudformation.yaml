@@ -173,6 +173,17 @@ Resources:
             Action: sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore  # SSM Session Manager
+      Policies:
+        - PolicyName: ReadYstockerSecrets
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                Resource:
+                  - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ystocker/*"
       Tags:
         - Key: Name
           Value: !Sub "${AWS::StackName}-ec2-role"
@@ -182,6 +193,27 @@ Resources:
     Properties:
       Roles:
         - !Ref InstanceRole
+
+  # -- SSM Parameter Store secrets --------------------------------------------
+  # Values are placeholders — update them with the real keys BEFORE deploying:
+  #   aws ssm put-parameter --name /ystocker/GEMINI_API_KEY  --value "YOUR_KEY" --type SecureString --overwrite
+  #   aws ssm put-parameter --name /ystocker/YOUTUBE_API_KEY --value "YOUR_KEY" --type SecureString --overwrite
+
+  GeminiApiKeyParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /ystocker/GEMINI_API_KEY
+      Type: String          # Use SecureString via CLI (CFN cannot create SecureString)
+      Value: REPLACE_ME
+      Description: Gemini API key for yStocker Fed/history AI explanations
+
+  YoutubeApiKeyParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /ystocker/YOUTUBE_API_KEY
+      Type: String
+      Value: REPLACE_ME
+      Description: YouTube Data API v3 key for yStocker video feed
 
   # -- EC2 instance ------------------------------------------------------------
 
@@ -287,6 +319,7 @@ Resources:
               echo 'Group=ystocker'
               echo 'WorkingDirectory=/opt/ystocker'
               echo 'Environment="PATH=/opt/ystocker/venv/bin"'
+              echo "Environment=\"AWS_REGION=${AWS::Region}\""
               echo "ExecStart=/opt/ystocker/venv/bin/gunicorn \\"
               echo '          --workers 2 \'
               echo "          --bind 127.0.0.1:${AppPort} \\"

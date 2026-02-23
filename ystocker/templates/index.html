@@ -248,6 +248,8 @@
           <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-300 transition whitespace-nowrap"
               data-col="upside"><span data-i18n="th.upside">Upside</span> <span class="sort-icon ml-0.5">↕</span></th>
           <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-300 transition whitespace-nowrap"
+              data-col="ev_ebitda"><span data-i18n="th.ev_ebitda">EV/EBITDA</span> <span class="sort-icon ml-0.5">↕</span></th>
+          <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-300 transition whitespace-nowrap"
               data-col="market_cap"><span data-i18n="th.mkt_cap">Mkt Cap</span> <span class="sort-icon ml-0.5">↕</span></th>
         </tr>
       </thead>
@@ -813,10 +815,11 @@ document.addEventListener('DOMContentLoaded', () => {
         <td class="py-2 px-3 text-right font-mono text-sm">${fmtGrowth(d.eps_growth_ttm)}</td>
         <td class="py-2 px-3 text-right font-mono text-sm">${fmtGrowth(d.eps_growth_q)}</td>
         <td class="py-2 px-3 text-right">${fmtPct(d.upside)}</td>
+        <td class="py-2 px-3 text-right font-mono text-sm">${d.ev_ebitda != null ? d.ev_ebitda.toFixed(1)+'x' : '<span class="text-slate-600">-</span>'}</td>
         <td class="py-2 px-3 text-right font-mono text-xs text-slate-400">${fmtCap(d.market_cap)}</td>
       </tr>`;
     }).join('')
-    : `<tr><td colspan="9" class="py-8 text-center text-slate-600 text-sm">${I18n.t('index.no_results')}</td></tr>`;
+    : `<tr><td colspan="10" class="py-8 text-center text-slate-600 text-sm">${I18n.t('index.no_results')}</td></tr>`;
   }
 
   // ── ETF render

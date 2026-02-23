@@ -20,14 +20,22 @@ import json
 import math
 
 import pandas as pd
-from flask import Blueprint, render_template, redirect, url_for, request, flash, jsonify, Response
+from flask import Blueprint, render_template, redirect, url_for, request, flash, jsonify, Response, has_request_context
 
-from ystocker import PEER_GROUPS
+from ystocker import PEER_GROUPS, YT_CHANNELS
 from ystocker.data import fetch_group
 from ystocker import charts
 
 bp = Blueprint("main", __name__)
 log = logging.getLogger(__name__)
+
+
+def _flash(en: str, zh: str, category: str = "message") -> None:
+    """Flash a message in the user's preferred language (cookie: ystocker_lang)."""
+    lang = "en"
+    if has_request_context():
+        lang = request.cookies.get("ystocker_lang", "en")
+    flash(zh if lang == "zh" else en, category)
 
 # ---------------------------------------------------------------------------
 # Two-layer cache:
@@ -244,8 +252,11 @@ def _df_to_chartdata(df: pd.DataFrame) -> str:
             "eps_growth_ttm":   _safe(row.get("EPS Growth TTM (%)")),
             "eps_growth_q":     _safe(row.get("EPS Growth Q (%)")),
             "day_change_pct":   _safe(row.get("Day Change (%)")),
+            "ev_ebitda":        _safe(row.get("EV/EBITDA")),
+            "ev":               _safe(row.get("EV ($B)")),
+            "ebitda":           _safe(row.get("EBITDA ($B)")),
         })
-    return json.dumps(rows)
+    return json.dumps(rows).replace("&", r"\u0026").replace("<", r"\u003c").replace(">", r"\u003e")
 
 
 # ---------------------------------------------------------------------------
@@ -322,7 +333,7 @@ def sector(sector_name: str):
     chartdata = _df_to_chartdata(df)
     table_cols = ["Name", "Market Cap ($B)", "Current Price",
                   "Target Price", "Upside (%)", "PE (TTM)", "PE (Forward)", "PEG",
-                  "EPS Growth TTM (%)", "EPS Growth Q (%)", "Day Change (%)"]
+                  "EPS Growth TTM (%)", "EPS Growth Q (%)", "Day Change (%)", "EV/EBITDA", "EV ($B)", "EBITDA ($B)"]
     existing_cols = [c for c in table_cols if c in df.columns]
     table_df = df[existing_cols].copy()
 
@@ -374,15 +385,15 @@ def add_group():
     """Create a new empty peer group."""
     name = request.form.get("group_name", "").strip()
     if not name:
-        flash("Group name cannot be empty.", "error")
+        _flash("Group name cannot be empty.", "分组名称不能为空。", "error")
     elif name in PEER_GROUPS:
-        flash(f"Group '{name}' already exists.", "error")
+        _flash(f"Group '{name}' already exists.", f'分组\u201c{name}\u201d已存在。', "error")
     else:
         PEER_GROUPS[name] = []
         _save_groups()
         _invalidate_cache()
         log.info("Added new group '%s'", name)
-        flash(f"Group '{name}' created.", "success")
+        _flash(f"Group '{name}' created.", f'分组\u201c{name}\u201d已创建。', "success")
     return redirect(url_for("main.groups"))
 
 
@@ -395,7 +406,7 @@ def delete_group():
         _save_groups()
         _invalidate_cache()
         log.info("Deleted group '%s'", name)
-        flash(f"Group '{name}' deleted.", "success")
+        _flash(f"Group '{name}' deleted.", f'分组\u201c{name}\u201d已删除。', "success")
     return redirect(url_for("main.groups"))
 
 
@@ -405,17 +416,17 @@ def add_ticker():
     group_name = request.form.get("group_name", "").strip()
     ticker     = request.form.get("ticker", "").strip().upper()
     if group_name not in PEER_GROUPS:
-        flash(f"Group '{group_name}' not found.", "error")
+        _flash(f"Group '{group_name}' not found.", f'分组\u201c{group_name}\u201d不存在。', "error")
     elif not ticker:
-        flash("Ticker symbol cannot be empty.", "error")
+        _flash("Ticker symbol cannot be empty.", "股票代码不能为空。", "error")
     elif ticker in PEER_GROUPS[group_name]:
-        flash(f"{ticker} is already in '{group_name}'.", "error")
+        _flash(f"{ticker} is already in '{group_name}'.", f'{ticker} 已在\u201c{group_name}\u201d中。', "error")
     else:
         PEER_GROUPS[group_name].append(ticker)
         _save_groups()
         _invalidate_cache()
         log.info("Added ticker %s to group '%s'", ticker, group_name)
-        flash(f"Added {ticker} to '{group_name}'.", "success")
+        _flash(f"Added {ticker} to '{group_name}'.", f'已将 {ticker} 添加至\u201c{group_name}\u201d。', "success")
     return redirect(url_for("main.groups"))
 
 
@@ -429,7 +440,7 @@ def remove_ticker():
         _save_groups()
         _invalidate_cache()
         log.info("Removed ticker %s from group '%s'", ticker, group_name)
-        flash(f"Removed {ticker} from '{group_name}'.", "success")
+        _flash(f"Removed {ticker} from '{group_name}'.", f'已从\u201c{group_name}\u201d中移除 {ticker}。', "success")
     return redirect(url_for("main.groups"))
 
 
@@ -620,6 +631,9 @@ def api_history(ticker: str):
         "eps":              _safe(eps),
         "eps_growth_ttm":   _safe(round(earnings_growth_ttm * 100, 1)) if earnings_growth_ttm is not None else None,
         "eps_growth_q":     _safe(round(earnings_growth_q   * 100, 1)) if earnings_growth_q   is not None else None,
+        "ev_ebitda":        _safe(round(info.get("enterpriseToEbitda"), 1)) if info.get("enterpriseToEbitda") is not None else None,
+        "ev":               _safe(round(info.get("enterpriseValue") / 1e9, 1)) if info.get("enterpriseValue") else None,
+        "ebitda":           _safe(round(info.get("ebitda") / 1e9, 1)) if info.get("ebitda") else None,
         "institutional_holders": _get_institutional_holders(ticker),
         "call_wall":        _safe(call_wall),
         "put_wall":         _safe(put_wall),
@@ -1178,20 +1192,6 @@ def api_news(ticker: str):
 # YouTube videos
 # ---------------------------------------------------------------------------
 
-# Curated channel list: (handle, channel_id, display_name)
-_YT_CHANNELS = [
-    ("andyleegogo",       "UCwyRBuGpaLYnFuohCYyjBeQ", "Andy lee"),
-    ("RhinoFinance",      "UCFQsi7WaF5X41tcuOryDk8w", "视野环球财经"),
-    ("MeiTouNews",        "UCGpj3DO_5_TUDCNUgS9mjiQ", "美投侃新闻"),
-    ("NaNaShuoMeiGu",     "UCFhJ8ZFg9W4kLwFTBBNIjOw", "NaNa说美股"),
-    ("gendanqun",         "UCf48rlZVxa_CPsrG6LW5big", "美股短线交易"),
-    ("MeiTouJun",         "UCBUH38E0ngqvmTqdchWunwQ", "美投讲美股"),
-    ("LA_Banker",         "UCW1cHQAzfL3pwKlKNwRjelQ", "精英财经 LABanker"),
-    ("ShepherdCapital",   "UCkvZ2usiWOy1sfYmNfY9Pdw", "Shepherd Capital Markets"),
-    ("yutinghaofinance",  "UC0lbAQVpenvfA2QqzsRtL_g", "游庭皓的財經皓角"),
-    ("windkiss-cn5tu",    "UCpJPv66uSo3Tj1iT_UmfW6Q", "财经-沉默的螺旋上"),
-]
-
 _VIDEOS_CACHE: Dict[str, dict] = {}
 _VIDEOS_CACHE_LOCK = threading.Lock()
 _VIDEOS_CACHE_TTL = 30 * 60   # 30 minutes
@@ -1244,7 +1244,7 @@ def api_videos(ticker: str):
     # Search each curated channel for recent videos (no ticker filter —
     # these channels discuss stocks in Chinese, not by ticker symbol)
     all_items: list = []
-    for _handle, channel_id, _name in _YT_CHANNELS:
+    for _handle, channel_id, _name in YT_CHANNELS:
         try:
             resp = http.get("https://www.googleapis.com/youtube/v3/search", params={
                 "part": "snippet",

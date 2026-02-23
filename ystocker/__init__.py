@@ -28,6 +28,30 @@ PEER_GROUPS: Dict[str, List[str]] = {
     "International ETFs": ["FLJP", "FLJH", "FLKR", "FLTW", "FLCA", "IXUS", "VXUS", "FLEE", "ASHS", "FLBR", "FLCH", "FLGR", "FLMX", "FLAX", "FLSW"],
 }
 
+# ---------------------------------------------------------------------------
+# YouTube curated channels for the Videos feed.
+# Each tuple: (handle, channel_id, display_name)
+# Chinese-language channels first, then English channels.
+# ---------------------------------------------------------------------------
+YT_CHANNELS: List[tuple] = [
+    # ── Chinese-language channels ──────────────────────────────────────────
+    ("andyleegogo",       "UCwyRBuGpaLYnFuohCYyjBeQ", "Andy lee"),
+    ("RhinoFinance",      "UCFQsi7WaF5X41tcuOryDk8w", "视野环球财经"),
+    ("MeiTouNews",        "UCGpj3DO_5_TUDCNUgS9mjiQ", "美投侃新闻"),
+    ("NaNaShuoMeiGu",     "UCFhJ8ZFg9W4kLwFTBBNIjOw", "NaNa说美股"),
+    ("gendanqun",         "UCf48rlZVxa_CPsrG6LW5big", "美股短线交易"),
+    ("MeiTouJun",         "UCBUH38E0ngqvmTqdchWunwQ", "美投讲美股"),
+    ("LA_Banker",         "UCW1cHQAzfL3pwKlKNwRjelQ", "精英财经 LABanker"),
+    ("ShepherdCapital",   "UCkvZ2usiWOy1sfYmNfY9Pdw", "Shepherd Capital Markets"),
+    ("yutinghaofinance",  "UC0lbAQVpenvfA2QqzsRtL_g", "游庭皓的財經皓角"),
+    ("windkiss-cn5tu",    "UCpJPv66uSo3Tj1iT_UmfW6Q", "财经-沉默的螺旋上"),
+    # ── English-language channels ──────────────────────────────────────────
+    ("zinvestglobal1190", "UCXt4LLGqNUiRiJpBnZuqYuA", "ZInvest Global"),
+    ("Fundstrat_Direct",  "UCiWP9CSmjdaV5vJgRfDqsKA", "Fundstrat"),
+    ("TheTravelingTrader","UCe6eTFJOPJgE5GDmJTroSmA", "The Traveling Trader"),
+    ("CNBCtelevision",    "UCvJJ_dzjViJCoLf5uKUTwoA", "CNBC Television"),
+]
+
 
 def _load_secrets_from_ssm() -> None:
     """Fetch secrets from AWS SSM Parameter Store and inject into os.environ.
@@ -46,11 +70,12 @@ def _load_secrets_from_ssm() -> None:
         return  # boto3 not installed — skip
 
     SSM_PARAMS = {
-        "/ystocker/GEMINI_API_KEY": "GEMINI_API_KEY",
+        "/ystocker/GEMINI_API_KEY":  "GEMINI_API_KEY",
+        "/ystocker/YOUTUBE_API_KEY": "YOUTUBE_API_KEY",
     }
 
     try:
-        ssm = boto3.client("ssm", region_name=os.environ.get("AWS_REGION", "us-east-1"))
+        ssm = boto3.client("ssm", region_name=os.environ.get("AWS_REGION", "us-west-2"))
         for param_name, env_key in SSM_PARAMS.items():
             if os.environ.get(env_key):
                 continue  # already set locally — don't overwrite

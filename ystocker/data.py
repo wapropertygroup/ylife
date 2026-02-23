@@ -92,6 +92,9 @@ def fetch_ticker_data(ticker: str) -> dict:
         "EPS Growth TTM (%)":  round(earnings_growth_ttm * 100, 1) if earnings_growth_ttm is not None else None,
         "EPS Growth Q (%)":    round(earnings_growth_q   * 100, 1) if earnings_growth_q   is not None else None,
         "Day Change (%)":      day_change_pct,
+        "EV/EBITDA":           round(info.get("enterpriseToEbitda"), 1) if info.get("enterpriseToEbitda") is not None else None,
+        "EV ($B)":             round(info.get("enterpriseValue") / 1e9, 1) if info.get("enterpriseValue") else None,
+        "EBITDA ($B)":         round(info.get("ebitda") / 1e9, 1) if info.get("ebitda") else None,
     }
 
 

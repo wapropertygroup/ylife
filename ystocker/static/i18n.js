@@ -85,6 +85,9 @@ const I18n = (() => {
     'th.day_chg':       { en: 'Day Chg',      zh: '日涨跌' },
     'th.eps_growth_ttm':{ en: 'EPS Gr TTM',   zh: 'EPS增长TTM' },
     'th.eps_growth_q':  { en: 'EPS Gr Q',     zh: 'EPS增长Q' },
+    'th.ev_ebitda':     { en: 'EV/EBITDA',    zh: '企业价值倍数' },
+    'th.ev':            { en: 'EV ($B)',       zh: '企业价值（十亿美元）' },
+    'th.ebitda':        { en: 'EBITDA ($B)',   zh: 'EBITDA（十亿美元）' },
 
     // ── sector.html ────────────────────────────────────────────────────
     'sector.dashboard':     { en: '← Dashboard',  zh: '← 仪表盘' },
@@ -96,6 +99,15 @@ const I18n = (() => {
     'sector.tab_peg':       { en: 'PEG Map',       zh: 'PEG 地图' },
     'sector.tab_growth':    { en: 'Growth',        zh: '增长' },
     'sector.tab_table':     { en: 'Data Table',    zh: '数据表格' },
+    'sector.tab_ev_ebitda': { en: 'EV/EBITDA',     zh: '企业价值倍数' },
+    'sector.ev_ebitda_title': { en: 'EV/EBITDA', zh: '企业价值倍数 (EV/EBITDA)' },
+    'sector.ev_ebitda_desc':  { en: 'Enterprise Value ÷ EBITDA — lower = cheaper relative to operating earnings (capital-structure neutral).',
+                                 zh: '企业价值 ÷ 息税折旧摊销前利润 — 越低说明相对运营盈利越便宜（不受资本结构影响）。' },
+    'sector.ev_title':        { en: 'Enterprise Value ($B)', zh: '企业价值（十亿美元）' },
+    'sector.ev_desc':         { en: 'Total enterprise value in billions USD.', zh: '企业总价值，单位：十亿美元。' },
+    'sector.ebitda_title':    { en: 'EBITDA ($B)', zh: '息税折旧摊销前利润（十亿美元）' },
+    'sector.ebitda_desc':     { en: 'Earnings before interest, taxes, depreciation & amortisation, in billions USD.',
+                                 zh: '息税折旧摊销前利润，单位：十亿美元。' },
 
     'sector.day_change_title': { en: 'Last Close — Day Change', zh: '上次收盘 — 日涨跌' },
     'sector.day_change_desc':  { en: 'Percentage change from previous close. Green = up, red = down.',
@@ -145,6 +157,9 @@ const I18n = (() => {
     'history.upside':       { en: 'Analyst Upside', zh: '分析师上涨空间' },
     'history.eps_growth_ttm': { en: 'EPS Growth TTM', zh: 'EPS增长TTM' },
     'history.eps_growth_q':   { en: 'EPS Growth Q',   zh: 'EPS增长Q' },
+    'history.ev_ebitda':      { en: 'EV/EBITDA',      zh: '企业价值倍数' },
+    'history.ev':             { en: 'EV ($B)',         zh: '企业价值（十亿美元）' },
+    'history.ebitda':         { en: 'EBITDA ($B)',     zh: 'EBITDA（十亿美元）' },
     'history.tradingview':    { en: 'TradingView',     zh: 'TradingView' },
 
     'history.pe_title':     { en: 'PE Ratio — 52 Weeks', zh: '市盈率 — 52周' },
@@ -271,6 +286,7 @@ const I18n = (() => {
     'lookup.pe_ttm':        { en: 'PE (TTM)',      zh: '市盈率(TTM)' },
     'lookup.pe_fwd':        { en: 'PE (Forward)',  zh: '市盈率(预测)' },
     'lookup.peg_ratio':     { en: 'PEG Ratio',     zh: 'PEG 比率' },
+    'lookup.ev_ebitda':     { en: 'EV/EBITDA',     zh: '企业价值倍数' },
     'lookup.pe_comparison': { en: 'PE comparison', zh: '市盈率对比' },
     'lookup.add_to_group':  { en: 'Add to group:', zh: '添加到分组：' },
     'lookup.add_btn':       { en: '+ Add',         zh: '+ 添加' },
@@ -359,6 +375,11 @@ const I18n = (() => {
     'fed.currloan_desc':   { en: 'Physical currency outstanding (largest Fed liability) alongside emergency lending — BTFP spike visible post-SVB 2023',
                               zh: '流通中货币（最大负债）与紧急贷款对比——2023年硅谷银行危机后BTFP飙升清晰可见' },
     'fed.currloan_loading': { en: 'Loading currency & loans data…', zh: '加载货币与贷款数据…' },
+
+    'fed.chart_onrrp':     { en: 'ON RRP ($B)',                       zh: '隔夜逆回购（十亿美元）' },
+    'fed.chart_tga':       { en: 'TGA ($B)',                          zh: '财政部一般账户（十亿美元）' },
+    'fed.chart_currency':  { en: 'Currency in Circulation ($B)',      zh: '流通中货币（十亿美元）' },
+    'fed.chart_fedloans':  { en: 'Fed Loans incl. BTFP ($B)',         zh: '美联储贷款含BTFP（十亿美元）' },
 
     // ── contact.html ───────────────────────────────────────────────────
     'contact.title':        { en: 'Contact Us',  zh: '联系我们' },

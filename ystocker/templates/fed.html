@@ -844,13 +844,13 @@
         labels: liabLabels,
         datasets: [
           {
-            label: 'ON RRP ($B)',
+            label: I18n.t('fed.chart_onrrp') || 'ON RRP ($B)',
             data: ld.rrp.values,
             borderColor: '#fb7185', backgroundColor: 'rgba(251,113,133,0.07)',
             borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, fill: true, tension: 0.3, spanGaps: true,
           },
           {
-            label: 'TGA ($B)',
+            label: I18n.t('fed.chart_tga') || 'TGA ($B)',
             data: ld.tga.values,
             borderColor: '#facc15', backgroundColor: 'transparent',
             borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 4, fill: false, tension: 0.3, spanGaps: true,
@@ -916,14 +916,14 @@
         labels: cld.cur.dates,
         datasets: [
           {
-            label: 'Currency in Circulation ($B)',
+            label: I18n.t('fed.chart_currency') || 'Currency in Circulation ($B)',
             data: cld.cur.values,
             borderColor: '#94a3b8', backgroundColor: 'rgba(148,163,184,0.06)',
             borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, fill: true, tension: 0.3, spanGaps: true,
             yAxisID: 'yCur',
           },
           {
-            label: 'Fed Loans incl. BTFP ($B)',
+            label: I18n.t('fed.chart_fedloans') || 'Fed Loans incl. BTFP ($B)',
             data: cld.loan.values,
             borderColor: '#f97316', backgroundColor: 'transparent',
             borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 4, fill: false, tension: 0.3, spanGaps: true,
