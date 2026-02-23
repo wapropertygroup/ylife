@@ -349,30 +349,17 @@
     <div id="explainPanelPeg" class="explain-panel"></div>
   </div>
 
-  <!-- P/C Ratio by expiration chart -->
-  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up" id="pcRatioSection" style="display:none">
-    <div class="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-0 sm:justify-between mb-4">
-      <div>
-        <h2 class="text-base font-semibold text-slate-200" data-i18n="history.pc_title">Put/Call Ratio by Expiration</h2>
-        <p class="text-xs text-slate-500" data-i18n="history.pc_desc">Put OI ÷ Call OI per expiration — above 1.0 = bearish hedging, below 1.0 = bullish</p>
-      </div>
-      <div class="flex items-center gap-2">
-        <span class="flex items-center gap-1.5 text-xs text-slate-400">
-          <span class="inline-block w-3 h-2 rounded-sm bg-rose-500/70"></span> <span data-i18n="history.pc_bearish">Bearish (&gt;1.2)</span>
-        </span>
-        <span class="flex items-center gap-1.5 text-xs text-slate-400">
-          <span class="inline-block w-3 h-2 rounded-sm bg-amber-400/70"></span> <span data-i18n="history.pc_neutral">Neutral</span>
-        </span>
-        <span class="flex items-center gap-1.5 text-xs text-slate-400 mr-1">
-          <span class="inline-block w-3 h-2 rounded-sm bg-emerald-400/70"></span> <span data-i18n="history.pc_bullish">Bullish (&lt;0.7)</span>
-        </span>
-        <button onclick="expandChart('pc')" title="Expand" class="expand-btn">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
-        </button>
-      </div>
+  <!-- Annual Financials: 3 years actuals + 2 years forward estimates -->
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up" id="financialsSection" style="display:none">
+    <div class="flex items-baseline gap-3 mb-4">
+      <h2 class="text-base font-semibold text-slate-200" data-i18n="history.financials_title">Annual Financials</h2>
+      <span class="text-xs text-slate-500" data-i18n="history.financials_desc">3-year actuals · 2-year forward estimates · values in $B except EPS</span>
     </div>
-    <div class="chart-container" style="height:300px" id="pcChartWrap">
-      <canvas id="pcRatioChart"></canvas>
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm" id="financialsTable">
+        <thead id="financialsHead"></thead>
+        <tbody id="financialsBody"></tbody>
+      </table>
     </div>
   </div>
 
@@ -587,11 +574,38 @@ let   _modalKey       = null;
     }
   }
 
-  // P/C Ratio chart
-  if (data.pc_by_expiry && data.pc_by_expiry.length > 0) {
-    document.getElementById('pcRatioSection').style.display = 'block';
-    const pcCfg = _buildConfig('pc', data, {});
-    _registerChart('pc', pcCfg, new Chart(document.getElementById('pcRatioChart'), pcCfg));
+  // Annual Financials table
+  if (data.financials_table && data.financials_table.length > 0) {
+    document.getElementById('financialsSection').style.display = 'block';
+    const rows = data.financials_table;
+    const METRICS = [
+      { key: 'revenue',     label: 'Revenue ($B)',     est_key: 'revenue_est' },
+      { key: 'gross_profit',label: 'Gross Profit ($B)',est_key: null },
+      { key: 'ebitda_is',   label: 'EBITDA ($B)',      est_key: null },
+      { key: 'net_income',  label: 'Net Income ($B)',  est_key: null },
+      { key: 'eps_diluted', label: 'EPS (Diluted)',    est_key: 'eps_est' },
+    ];
+    // Header
+    const thead = document.getElementById('financialsHead');
+    const yearCols = rows.map(r => `<th class="py-2 px-3 text-right text-xs font-semibold ${r.is_estimate ? 'text-sky-400' : 'text-slate-400'} whitespace-nowrap">
+      ${r.year}${r.is_estimate ? '<span class="ml-1 text-[9px] text-sky-600 align-middle">EST</span>' : ''}
+    </th>`).join('');
+    thead.innerHTML = `<tr class="border-b border-slate-800"><th class="py-2 px-3 text-left text-xs text-slate-500 font-medium">Metric</th>${yearCols}</tr>`;
+    // Body
+    const tbody = document.getElementById('financialsBody');
+    const fmt = (v, isEps) => v == null ? '<span class="text-slate-700">—</span>' : (isEps ? v.toFixed(2) : v.toFixed(2));
+    tbody.innerHTML = METRICS.map((m, mi) => {
+      const cells = rows.map(r => {
+        const isEst = r.is_estimate;
+        const val = isEst ? (r[m.est_key] ?? r[m.key]) : r[m.key];
+        const cls = isEst ? 'text-sky-300 font-medium' : 'text-slate-200';
+        return `<td class="py-2.5 px-3 text-right font-mono text-sm ${cls}">${fmt(val, m.key === 'eps_diluted')}</td>`;
+      }).join('');
+      const rowBg = mi % 2 === 0 ? '' : 'bg-slate-800/20';
+      return `<tr class="border-b border-slate-800/40 ${rowBg}">
+        <td class="py-2.5 px-3 text-xs text-slate-400 font-medium whitespace-nowrap">${m.label}</td>${cells}
+      </tr>`;
+    }).join('');
   }
 
   // EV/EBITDA panel
@@ -984,8 +998,8 @@ function _buildConfig(key, d, staticData) {
 async function _handleRange(chartKey, period, staticData) {
   _setActiveBtn(chartKey, period);
 
-  const wrapId  = { pe:'peChartWrap', price:'priceChartWrap', peg:'pegChartWrap', fwdpe:'fwdPeChartWrap', pc:'pcChartWrap' }[chartKey];
-  const canvasId = { pe:'peChart', price:'priceHistChart', peg:'pegHistChart', fwdpe:'fwdPeChart', pc:'pcRatioChart' }[chartKey];
+  const wrapId  = { pe:'peChartWrap', price:'priceChartWrap', peg:'pegChartWrap', fwdpe:'fwdPeChartWrap' }[chartKey];
+  const canvasId = { pe:'peChart', price:'priceHistChart', peg:'pegHistChart', fwdpe:'fwdPeChart' }[chartKey];
   const wrap = document.getElementById(wrapId);
 
   // Show loading overlay

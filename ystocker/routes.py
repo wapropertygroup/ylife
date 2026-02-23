@@ -581,6 +581,90 @@ def api_history(ticker: str):
     if hist.empty:
         return jsonify({"error": f"No price history for '{ticker}'."}), 404
 
+    # Annual financials — past 3 years actuals + forward 2 years estimates
+    financials_table: list = []
+    try:
+        stmt = tk.income_stmt   # columns = Timestamps newest-first
+        # rows we want and their display names
+        ROW_MAP = [
+            ("Total Revenue",  "revenue"),
+            ("Gross Profit",   "gross_profit"),
+            ("EBITDA",         "ebitda_is"),
+            ("Net Income",     "net_income"),
+            ("Basic EPS",      "eps_basic"),
+            ("Diluted EPS",    "eps_diluted"),
+        ]
+        def _to_b(v):
+            """Convert raw value to billions, or return None."""
+            try:
+                f = float(v)
+                return None if (f != f) else round(f / 1e9, 2)  # NaN check
+            except Exception:
+                return None
+        def _to_f(v):
+            try:
+                f = float(v)
+                return None if (f != f) else round(f, 2)
+            except Exception:
+                return None
+
+        # Build actuals dict: {year_str: {metric: value}}
+        actuals: dict = {}
+        if not stmt.empty:
+            for col in list(stmt.columns)[:3]:    # newest 3 annual periods
+                yr = str(col.year)
+                actuals[yr] = {}
+                for src_row, key in ROW_MAP:
+                    if src_row in stmt.index:
+                        raw = stmt.loc[src_row, col]
+                        actuals[yr][key] = _to_b(raw) if key not in ("eps_basic", "eps_diluted") else _to_f(raw)
+
+        # Forward estimates from info
+        fwd_current_yr = info.get("revenuePerShare")   # not useful
+        est_revenue_cyr = info.get("revenueEstimatesCurrentYear")
+        est_revenue_nyr = info.get("revenueEstimatesNextYear")
+        est_eps_cyr = info.get("epsCurrentYear")       # yfinance 0.2+
+        est_eps_nyr = info.get("epsNextYear")
+
+        # Fallbacks via eps_trend
+        try:
+            et = tk.eps_trend
+            if et is not None and not et.empty:
+                if est_eps_cyr is None and "current" in et.columns:
+                    est_eps_cyr = _to_f(et.loc["current", "current"]) if "current" in et.index else None
+                if est_eps_nyr is None and "next" in et.columns:
+                    est_eps_nyr  = _to_f(et.loc["next", "current"]) if "next" in et.index else None
+        except Exception:
+            pass
+
+        import datetime as _dt
+        cur_year = _dt.date.today().year
+        fwd_years = [str(cur_year), str(cur_year + 1)]
+
+        fwd: dict = {}
+        if est_eps_cyr is not None:
+            fwd.setdefault(fwd_years[0], {})["eps_est"] = round(float(est_eps_cyr), 2) if est_eps_cyr else None
+        if est_eps_nyr is not None:
+            fwd.setdefault(fwd_years[1], {})["eps_est"] = round(float(est_eps_nyr), 2) if est_eps_nyr else None
+        if est_revenue_cyr is not None:
+            fwd.setdefault(fwd_years[0], {})["revenue_est"] = round(float(est_revenue_cyr) / 1e9, 2) if est_revenue_cyr else None
+        if est_revenue_nyr is not None:
+            fwd.setdefault(fwd_years[1], {})["revenue_est"] = round(float(est_revenue_nyr) / 1e9, 2) if est_revenue_nyr else None
+
+        # Combine: actuals sorted newest→oldest, then forward years
+        all_years = sorted(actuals.keys(), reverse=True) + [y for y in fwd_years if y not in actuals]
+        for yr in all_years:
+            row = {"year": yr, "is_estimate": yr in fwd_years and yr not in actuals}
+            row.update(actuals.get(yr, {}))
+            row.update(fwd.get(yr, {}))
+            financials_table.append(row)
+
+    except Exception as exc:
+        log.warning("Could not build financials table for %s: %s", ticker, exc)
+
+    if hist.empty:
+        return jsonify({"error": f"No price history for '{ticker}'."}), 404
+
     dates  = [str(d.date()) for d in hist.index]
     prices = [round(float(p), 2) if not math.isnan(float(p)) else None
               for p in hist["Close"]]
@@ -680,6 +764,7 @@ def api_history(ticker: str):
         "put_wall":         _safe(put_wall),
         "put_call_ratio":   _safe(put_call_ratio),
         "pc_by_expiry":     pc_by_expiry,
+        "financials_table": financials_table,
     }
     with _HISTORY_CACHE_LOCK:
         _HISTORY_CACHE[cache_key] = {"ts": time.time(), "data": result}

@@ -170,6 +170,8 @@ const I18n = (() => {
     'history.pc_bearish':     { en: 'Bearish (>1.2)',  zh: '看空 (>1.2)' },
     'history.pc_neutral':     { en: 'Neutral',         zh: '中性' },
     'history.pc_bullish':     { en: 'Bullish (<0.7)',  zh: '看多 (<0.7)' },
+    'history.financials_title': { en: 'Annual Financials', zh: '年度财务数据' },
+    'history.financials_desc':  { en: '3-year actuals · 2-year forward estimates · values in $B except EPS', zh: '近3年实际数据 · 未来2年预测 · 单位十亿美元（EPS除外）' },
     'history.group_valuation':{ en: 'Valuation',       zh: '估值' },
     'history.group_earnings': { en: 'Earnings',        zh: '盈利' },
     'history.group_sentiment':{ en: 'Price & Sentiment', zh: '价格与情绪' },
