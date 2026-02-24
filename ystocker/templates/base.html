@@ -29,6 +29,24 @@
 
   <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+  <script>
+  // Fix Chart.js 4 hitRadius crash: PointElement.inRange reads this.options.hitRadius
+  // but skipped/null elements may have options=undefined. Patch the prototype globally.
+  (function patchChartJs() {
+    try {
+      const PE = Chart.registry.getElement('point');
+      ['inRange','inXRange','inYRange'].forEach(method => {
+        const orig = PE.prototype[method];
+        if (orig) PE.prototype[method] = function() {
+          return this.options ? orig.apply(this, arguments) : false;
+        };
+      });
+    } catch(_) {}
+    Chart.defaults.elements.point.hitRadius  = 8;
+    Chart.defaults.elements.point.radius     = 0;
+    Chart.defaults.elements.point.hoverRadius = 4;
+  })();
+  </script>
 
   <!-- Google Font -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -70,6 +88,9 @@
         <a href="{{ url_for('main.index') }}"
            class="px-3 py-1.5 rounded-md text-sm text-slate-300 hover:text-white hover:bg-slate-800 transition"
            data-i18n="nav.home">Home</a>
+        <a href="{{ url_for('main.markets') }}"
+           class="px-3 py-1.5 rounded-md text-sm text-slate-300 hover:text-white hover:bg-slate-800 transition"
+           data-i18n="markets.nav">Markets</a>
 
         <!-- Sectors dropdown -->
         <div class="relative" x-data="{ open: false }" @mouseenter="open=true" @mouseleave="open=false">
@@ -101,7 +122,7 @@
                           hover:text-white hover:bg-brand/20 hover:border-brand/30
                           border border-transparent transition-all duration-100 truncate">
                   <span class="w-1.5 h-1.5 rounded-full bg-brand/50 shrink-0"></span>
-                  {{ g }}
+                  <span data-i18n="sector.name.{{ g }}">{{ g }}</span>
                 </a>
                 {% endfor %}
               </div>
@@ -176,11 +197,13 @@
     <div x-show="navOpen" x-transition class="md:hidden border-t border-slate-800 bg-slate-900 px-4 pb-4">
       <div class="flex flex-col gap-1 pt-2">
         <a href="{{ url_for('main.index') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-300 hover:bg-slate-800" data-i18n="nav.home">Home</a>
+        <a href="{{ url_for('main.markets') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-300 hover:bg-slate-800" data-i18n="markets.nav">Markets</a>
         <div class="px-3 py-1.5 text-[10px] font-semibold tracking-widest uppercase text-slate-600 mt-1" data-i18n="nav.sectors">Sectors</div>
         <div class="grid grid-cols-2 gap-1 mb-1">
           {% for g in peer_groups %}
           <a href="{{ url_for('main.sector', sector_name=g) }}"
-             class="px-3 py-2 rounded-md text-sm text-slate-300 hover:bg-slate-800 truncate">{{ g }}</a>
+             class="px-3 py-2 rounded-md text-sm text-slate-300 hover:bg-slate-800 truncate"
+             data-i18n="sector.name.{{ g }}">{{ g }}</a>
           {% endfor %}
         </div>
         <a href="{{ url_for('main.lookup') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-300 hover:bg-slate-800" data-i18n="nav.lookup">Lookup</a>

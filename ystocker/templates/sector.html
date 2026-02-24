@@ -8,9 +8,11 @@
   <div class="flex items-center gap-3 mb-1">
     <a href="{{ url_for('main.index') }}" class="text-slate-500 hover:text-slate-300 text-sm transition" data-i18n="sector.dashboard">← Dashboard</a>
     <span class="text-slate-700">/</span>
-    <span class="text-slate-300 text-sm font-medium">{{ sector_name }}</span>
+    <span class="text-slate-300 text-sm font-medium"
+          data-i18n="sector.name.{{ sector_name }}">{{ sector_name }}</span>
   </div>
-  <h1 class="text-2xl sm:text-3xl font-bold grad-text">{{ sector_name }}</h1>
+  <h1 class="text-2xl sm:text-3xl font-bold grad-text"
+      data-i18n="sector.name.{{ sector_name }}">{{ sector_name }}</h1>
   <p class="text-slate-400 mt-1 text-sm" data-i18n="sector.subtitle">Valuation analysis for this peer group</p>
 </div>
 
@@ -1086,7 +1088,7 @@ function avgLinePlugin(getAvg, fmt, color) {
     document.getElementById('sectorTableBody').innerHTML = rows.map(d => `
       <tr class="border-b border-slate-800/60 hover:bg-slate-800/40 transition">
         <td class="py-2.5 px-3"><a href="/history/${d.ticker}" class="font-mono font-bold text-brand hover:underline">${d.ticker}</a></td>
-        <td class="py-2.5 px-3 text-slate-400 text-xs max-w-[140px] truncate" title="${d.name}">${d.name}</td>
+        <td class="py-2.5 px-3 text-slate-400 text-xs max-w-[140px] truncate" title="${I18n.stockName(d.ticker, d.name)}">${I18n.stockName(d.ticker, d.name)}</td>
         <td class="py-2.5 px-3 text-right font-mono text-sm">${fmtCap(d.market_cap)}</td>
         <td class="py-2.5 px-3 text-right font-mono">${fmtPrice(d.price)}</td>
         <td class="py-2.5 px-3 text-right font-mono">${fmtPrice(d.target)}</td>

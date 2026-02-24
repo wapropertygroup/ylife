@@ -1,0 +1,932 @@
+{% extends "base.html" %}
+{% block title %}yStocker — Market Overview{% endblock %}
+
+{% block content %}
+<style>
+  .range-btn {
+    font-size: 11px; font-weight: 500; line-height: 1;
+    padding: 3px 7px; border-radius: 5px;
+    border: 1px solid #334155; background: transparent; color: #64748b;
+    cursor: pointer; transition: color 0.15s, background 0.15s, border-color 0.15s;
+  }
+  .range-btn:hover  { color: #cbd5e1; border-color: #475569; background: #1e293b; }
+  .range-btn.active { color: #a5b4fc; border-color: #6366f1; background: rgba(99,102,241,0.15); }
+  .idx-tab-btn {
+    padding: 8px 16px; font-size: 14px; font-weight: 500;
+    border-bottom: 2px solid transparent; color: #94a3b8;
+    cursor: pointer; transition: color 0.15s, border-color 0.15s;
+    background: transparent; border-top: none; border-left: none; border-right: none;
+  }
+  .idx-tab-btn.active { color: #a5b4fc; border-bottom-color: #6366f1; }
+  .idx-tab-btn:hover:not(.active) { color: #e2e8f0; }
+  .stat-card { background: #0f172a; border: 1px solid #1e293b; border-radius: 12px; padding: 12px 14px; }
+  .stat-label { font-size: 11px; color: #64748b; margin-bottom: 4px; }
+  .stat-val   { font-size: 16px; font-weight: 700; color: #f1f5f9; }
+  .up   { color: #34d399 !important; }
+  .down { color: #f87171 !important; }
+  .neutral { color: #94a3b8 !important; }
+  .bar-fill { height: 8px; border-radius: 4px; transition: width 0.4s; }
+  .rsi-zone { font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 4px; }
+</style>
+
+<!-- ── Header ─────────────────────────────────────────────────────────── -->
+<div class="mb-6 fade-up">
+  <h1 class="text-2xl sm:text-3xl font-bold grad-text" data-i18n="markets.title">Market Overview</h1>
+  <p class="text-slate-400 mt-1 text-sm" data-i18n="markets.subtitle">S&amp;P 500 · Nasdaq · Dow Jones — live snapshot &amp; historical charts</p>
+</div>
+
+<!-- ── Loading overlay ────────────────────────────────────────────────── -->
+<div id="marketsLoading" class="flex items-center gap-2 text-slate-500 text-sm mb-6">
+  <svg class="animate-spin w-4 h-4 text-brand" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+    <circle style="opacity:.25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+    <path style="opacity:.75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/>
+  </svg>
+  <span data-i18n="markets.loading">Loading market data…</span>
+</div>
+<div id="marketsContent" style="display:none">
+
+<!-- ── Index snapshot cards ───────────────────────────────────────────── -->
+<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3 mb-6 fade-up" id="indexCards"></div>
+
+<!-- ── VIX + sector performance row ─────────────────────────────────── -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6 fade-up">
+
+  <!-- VIX card -->
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5">
+    <div class="flex items-start justify-between mb-3">
+      <div>
+        <h2 class="text-sm font-semibold text-slate-200" data-i18n="markets.vix">VIX (Volatility)</h2>
+        <p class="text-xs text-slate-500 mt-0.5">CBOE Volatility Index — fear gauge of the S&amp;P 500</p>
+      </div>
+      <div id="vixBadge" class="text-right"></div>
+    </div>
+    <div style="height:160px"><canvas id="vixChart"></canvas></div>
+  </div>
+
+  <!-- Sector ETF performance -->
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5">
+    <h2 class="text-sm font-semibold text-slate-200 mb-3" data-i18n="markets.sector_perf">Sector Performance</h2>
+    <div id="sectorBars" class="space-y-2"></div>
+  </div>
+
+</div>
+
+<!-- ── Per-index detail tabs ──────────────────────────────────────────── -->
+<div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up">
+
+  <!-- Tab buttons (scrollable on mobile) -->
+  <div class="flex gap-1 border-b border-slate-800 mb-5 -mx-4 sm:-mx-6 px-4 sm:px-6 overflow-x-auto">
+    <button class="idx-tab-btn active whitespace-nowrap" id="tabSpx"   onclick="switchIdx('spx')"   data-i18n="markets.tab_spx">S&amp;P 500</button>
+    <button class="idx-tab-btn whitespace-nowrap"        id="tabIxic"  onclick="switchIdx('ixic')"  data-i18n="markets.tab_ixic">Nasdaq</button>
+    <button class="idx-tab-btn whitespace-nowrap"        id="tabDji"   onclick="switchIdx('dji')"   data-i18n="markets.tab_dji">Dow Jones</button>
+    <button class="idx-tab-btn whitespace-nowrap"        id="tabN225"  onclick="switchIdx('n225')"  data-i18n="markets.tab_n225">Nikkei 225</button>
+    <button class="idx-tab-btn whitespace-nowrap"        id="tabSse"   onclick="switchIdx('sse')"   data-i18n="markets.tab_sse">Shanghai</button>
+    <button class="idx-tab-btn whitespace-nowrap"        id="tabTwii"  onclick="switchIdx('twii')"  data-i18n="markets.tab_twii">Taiwan</button>
+    <button class="idx-tab-btn whitespace-nowrap"        id="tabKospi" onclick="switchIdx('kospi')" data-i18n="markets.tab_kospi">KOSPI</button>
+  </div>
+
+  <!-- Stat row (shared, updated per tab) -->
+  <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 mb-5" id="idxStats"></div>
+
+  <!-- Technical indicators -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
+    <!-- MA status -->
+    <div class="bg-slate-800/50 rounded-xl p-3">
+      <p class="text-[10px] font-semibold uppercase tracking-widest text-slate-500 mb-2">Moving Averages</p>
+      <div id="maStatus" class="space-y-1.5 text-sm"></div>
+    </div>
+    <!-- RSI gauge -->
+    <div class="bg-slate-800/50 rounded-xl p-3">
+      <p class="text-[10px] font-semibold uppercase tracking-widest text-slate-500 mb-2">RSI-14</p>
+      <div id="rsiGauge"></div>
+    </div>
+  </div>
+
+  <!-- Chart + range buttons -->
+  <div class="flex items-center justify-between mb-3">
+    <h3 class="text-sm font-semibold text-slate-300" data-i18n="markets.hist_title">Price History</h3>
+    <div class="flex gap-1" id="idxRangeBtns">
+      <button class="range-btn" data-period="1m"      onclick="switchIdxRange('1m')">1M</button>
+      <button class="range-btn" data-period="6m"      onclick="switchIdxRange('6m')">6M</button>
+      <button class="range-btn" data-period="daily"   onclick="switchIdxRange('daily')">1Y</button>
+      <button class="range-btn active" data-period="weekly"  onclick="switchIdxRange('weekly')">2Y</button>
+      <button class="range-btn" data-period="monthly" onclick="switchIdxRange('monthly')">5Y</button>
+    </div>
+  </div>
+  <div style="height:320px"><canvas id="idxChart"></canvas></div>
+
+  <!-- ── MACD ──────────────────────────────────────────────────────── -->
+  <div class="mt-5 pt-4 border-t border-slate-800">
+    <div class="flex items-center justify-between mb-2">
+      <div>
+        <span class="text-sm font-semibold text-slate-300">MACD</span>
+        <span class="text-xs text-slate-500 ml-2">12 / 26 / 9 — daily</span>
+      </div>
+      <div class="flex items-center gap-3 text-[11px]">
+        <span class="flex items-center gap-1 text-slate-400"><span class="w-3 h-0.5 inline-block" style="background:#38bdf8"></span>MACD</span>
+        <span class="flex items-center gap-1 text-slate-400"><span class="w-3 h-0.5 inline-block border-t border-dashed border-current"></span><span style="color:#fb923c">Signal</span></span>
+        <span class="flex items-center gap-1 text-slate-400"><span class="w-3 h-3 inline-block rounded-sm" style="background:#6366f144"></span>Histogram</span>
+      </div>
+    </div>
+    <div style="height:200px"><canvas id="macdChart"></canvas></div>
+  </div>
+
+  <!-- ── RSI chart ─────────────────────────────────────────────────── -->
+  <div class="mt-5 pt-4 border-t border-slate-800">
+    <div class="flex items-center justify-between mb-2">
+      <span class="text-sm font-semibold text-slate-300">RSI-14</span>
+      <div class="flex items-center gap-3 text-[11px] text-slate-500">
+        <span class="text-rose-400">70 Overbought</span>
+        <span class="text-emerald-400">30 Oversold</span>
+      </div>
+    </div>
+    <div style="height:160px"><canvas id="rsiChart"></canvas></div>
+  </div>
+
+  <!-- ── Forecast section ──────────────────────────────────────────── -->
+  <div class="mt-6 pt-5 border-t border-slate-800">
+    <div class="flex items-center justify-between mb-3">
+      <div>
+        <h3 class="text-sm font-semibold text-slate-300" data-i18n="forecast.title">Price Forecast — 90 Days</h3>
+        <p class="text-xs text-slate-500" data-i18n="forecast.desc">Statistical projections from 3 independent models. Not investment advice.</p>
+      </div>
+      <div class="flex items-center gap-3 flex-wrap justify-end text-[11px]">
+        <span class="flex items-center gap-1.5 text-slate-400"><span class="w-3 h-1 rounded-sm inline-block" style="background:#38bdf8"></span><span data-i18n="forecast.actual">Actual</span></span>
+        <span class="flex items-center gap-1.5" style="color:#a78bfa"><span class="w-3 h-1 rounded-sm inline-block" style="background:#a78bfa"></span>Prophet</span>
+        <span class="flex items-center gap-1.5" style="color:#fb923c"><span class="w-3 h-1 rounded-sm inline-block" style="background:#fb923c"></span>ARIMA</span>
+        <span class="flex items-center gap-1.5" style="color:#34d399"><span class="w-3 h-1 rounded-sm inline-block" style="background:#34d399"></span><span data-i18n="forecast.linear">Linear</span></span>
+      </div>
+    </div>
+    <div id="idxForecastLoading" class="flex items-center gap-2 text-sm text-slate-500 py-4">
+      <svg class="animate-spin w-4 h-4 text-brand" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+        <circle style="opacity:.25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+        <path style="opacity:.75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/>
+      </svg>
+      <span data-i18n="forecast.loading">Running models…</span>
+    </div>
+    <div style="height:360px; display:none" id="idxForecastWrap"><canvas id="idxForecastChart"></canvas></div>
+    <p class="text-[11px] text-slate-600 mt-2" data-i18n="forecast.disclaimer">⚠ Statistical projections only — not financial advice.</p>
+  </div>
+
+</div>
+
+</div><!-- #marketsContent -->
+
+<script>
+const TICKER = '';  // not used here but referenced by base template helpers
+
+
+let _mkData   = null;
+let _curIdx   = 'spx';
+let _curRange = 'weekly';
+let _idxChartInst     = null;
+let _macdChartInst    = null;
+let _rsiChartInst     = null;
+let _vixChartInst     = null;
+let _idxForecastInst  = null;
+let _forecastCache    = {};  // key → forecast data
+
+// Yahoo Finance symbols per index key (for forecast API)
+const IDX_SYMBOLS = {
+  spx: '%5EGSPC', ixic: '%5EIXIC', dji: '%5EDJI',
+  n225: '%5EN225', sse: '000001.SS', twii: '%5ETWII', kospi: '%5EKS11',
+};
+const IDX_COLORS = {
+  spx: '#6366f1', ixic: '#38bdf8', dji: '#fb923c',
+  n225: '#f472b6', sse: '#f87171', twii: '#34d399', kospi: '#fbbf24',
+};
+const IDX_ALL_KEYS = ['spx', 'ixic', 'dji', 'n225', 'sse', 'twii', 'kospi'];
+const IDX_LABELS = {
+  spx: 'S&P 500', ixic: 'Nasdaq', dji: 'Dow Jones',
+  n225: 'Nikkei 225', sse: 'Shanghai', twii: 'Taiwan', kospi: 'KOSPI',
+};
+function idxLabel(key) {
+  return (typeof I18n !== 'undefined' && I18n.tIdx) ? I18n.tIdx(key) : (IDX_LABELS[key] || key.toUpperCase());
+}
+const GRID_COL = '#1e293b', TICK_COL = '#64748b';
+
+function _fmt(v, prefix='', suffix='', dec=2) {
+  if (v == null) return '—';
+  const n = typeof v === 'number' ? v : parseFloat(v);
+  if (isNaN(n)) return '—';
+  return prefix + n.toLocaleString(undefined, { minimumFractionDigits: dec, maximumFractionDigits: dec }) + suffix;
+}
+function _chgClass(v) { return v == null ? 'neutral' : v >= 0 ? 'up' : 'down'; }
+function _chgSign(v)  { return v == null ? '' : v >= 0 ? '+' : ''; }
+
+// ── Compute YTD from daily data when server value is null ────────────
+function _computeYtd(d) {
+  if (d.ytd != null) return d.ytd;
+  const daily = d.daily || {};
+  const dates  = daily.dates  || [];
+  const prices = daily.prices || [];
+  if (!dates.length || !d.current) return null;
+  const thisYear = new Date().getFullYear().toString();
+  const idx = dates.findIndex(dt => dt.startsWith(thisYear));
+  if (idx < 0) return null;
+  const first = prices[idx];
+  if (!first || first <= 0) return null;
+  return Math.round((d.current - first) / first * 10000) / 100;
+}
+
+// ── Render index snapshot cards ───────────────────────────────────────
+function renderCards(data) {
+  document.getElementById('indexCards').innerHTML = IDX_ALL_KEYS.map(k => {
+    const d = data.indices[k] || {};
+    const col = IDX_COLORS[k];
+    const label = idxLabel(k);
+    const chgCls = _chgClass(d.day_chg);
+    const ytd    = _computeYtd(d);
+    const ytdCls = _chgClass(ytd);
+    return `
+    <button onclick="switchIdx('${k}')"
+            class="bg-slate-900 border border-slate-800 rounded-2xl p-4 text-left
+                   hover:border-slate-600 transition-all group">
+      <div class="flex items-center justify-between mb-1">
+        <span class="text-xs font-semibold tracking-wide truncate" style="color:${col}">${label}</span>
+        <span class="text-[10px] text-slate-600 ml-1 shrink-0">${d.symbol || ''}</span>
+      </div>
+      <div class="text-xl font-bold text-slate-100 tabular-nums">${d.current != null ? d.current.toLocaleString(undefined,{maximumFractionDigits:2}) : '—'}</div>
+      <div class="flex items-center gap-2 mt-1 flex-wrap">
+        <span class="text-sm font-semibold ${chgCls}">${_chgSign(d.day_chg)}${_fmt(d.day_chg,'','%',2)}</span>
+        <span class="text-xs ${ytdCls}">${_chgSign(ytd)}${_fmt(ytd,'','% YTD',1)}</span>
+      </div>
+    </button>`;
+  }).join('');
+}
+
+// ── VIX ──────────────────────────────────────────────────────────────
+function renderVix(vix) {
+  if (!vix) return;
+  const badgeEl = document.getElementById('vixBadge');
+  const level   = vix.current;
+  let label = '', col = '';
+  if (level < 15)      { label = 'Calm';    col = '#34d399'; }
+  else if (level < 20) { label = 'Normal';  col = '#a5b4fc'; }
+  else if (level < 30) { label = 'Elevated';col = '#fb923c'; }
+  else                  { label = 'Extreme'; col = '#f87171'; }
+
+  badgeEl.innerHTML = `
+    <div class="text-2xl font-bold tabular-nums" style="color:${col}">${level?.toFixed(2) ?? '—'}</div>
+    <div class="text-xs font-semibold mt-0.5" style="color:${col}">${label}</div>
+    <div class="text-xs text-slate-500">${_chgSign(vix.day_chg)}${_fmt(vix.day_chg, '', '%', 2)} today</div>`;
+
+  if (_vixChartInst) { _vixChartInst.destroy(); _vixChartInst = null; }
+  const dates  = vix.weekly?.dates  || [];
+  const prices = vix.weekly?.prices || [];
+  _vixChartInst = new Chart(document.getElementById('vixChart'), {
+    type: 'line',
+    data: { labels: dates, datasets: [{
+      label: 'VIX', data: prices,
+      borderColor: '#a78bfa', backgroundColor: 'rgba(167,139,250,0.07)',
+      borderWidth: 2, pointRadius: 0, fill: true, tension: 0.3, spanGaps: true,
+    }]},
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false } },
+      scales: {
+        x: { grid: { color: GRID_COL }, ticks: { color: TICK_COL, maxTicksLimit: 6, maxRotation: 0 } },
+        y: { grid: { color: GRID_COL }, ticks: { color: TICK_COL } },
+      },
+    },
+    plugins: [{
+      afterDraw(chart) {
+        const { ctx: c, chartArea: a, scales: { y } } = chart;
+        [[20, '#fb923c', 'Elevated'], [30, '#f87171', 'Extreme']].forEach(([lvl, clr, lbl]) => {
+          const py = y.getPixelForValue(lvl);
+          if (py < a.top || py > a.bottom) return;
+          c.save(); c.strokeStyle = clr + '66'; c.lineWidth = 1; c.setLineDash([4, 4]);
+          c.beginPath(); c.moveTo(a.left, py); c.lineTo(a.right, py); c.stroke();
+          c.fillStyle = clr; c.font = '10px Inter,sans-serif';
+          c.fillText(lvl + ' ' + lbl, a.right - 70, py - 3); c.restore();
+        });
+      },
+    }],
+  });
+}
+
+// ── Sector bars ───────────────────────────────────────────────────────
+function renderSectors(sectors) {
+  const el = document.getElementById('sectorBars');
+  if (!sectors || !sectors.length) { el.innerHTML = '<p class="text-xs text-slate-600">No data.</p>'; return; }
+  const sorted = [...sectors].sort((a, b) => (b.day_chg ?? -999) - (a.day_chg ?? -999));
+  const maxAbs = Math.max(...sorted.map(s => Math.abs(s.day_chg ?? 0)), 1);
+  el.innerHTML = sorted.map(s => {
+    const pct = s.day_chg;
+    const col = pct == null ? '#475569' : pct >= 0 ? '#34d399' : '#f87171';
+    const w   = pct == null ? 0 : Math.round(Math.abs(pct) / maxAbs * 100);
+    const sign = _chgSign(pct);
+    return `
+    <div class="flex items-center gap-2">
+      <span class="text-xs text-slate-400 w-28 shrink-0">${s.label}</span>
+      <div class="flex-1 bg-slate-800 rounded-full h-2 overflow-hidden">
+        <div class="bar-fill" style="width:${w}%; background:${col}"></div>
+      </div>
+      <span class="text-xs font-semibold tabular-nums w-14 text-right" style="color:${col}">
+        ${pct != null ? sign + pct.toFixed(2) + '%' : '—'}
+      </span>
+    </div>`;
+  }).join('');
+}
+
+// ── Per-index stats & chart ───────────────────────────────────────────
+function renderIdxStats(key, data) {
+  const d = data.indices[key] || {};
+  const fmtPt = v => v != null ? v.toLocaleString(undefined, { maximumFractionDigits: 2 }) : '—';
+  const fmtPct = v => v != null ? (v >= 0 ? '+' : '') + v.toFixed(2) + '%' : '—';
+  const stats = [
+    { label: I18n.t('markets.price') || 'Price',     val: fmtPt(d.current),   cls: '' },
+    { label: I18n.t('markets.day_chg') || 'Day Chg', val: fmtPct(d.day_chg), cls: _chgClass(d.day_chg) },
+    { label: 'YTD', val: fmtPct(_computeYtd(d)), cls: _chgClass(_computeYtd(d)) },
+    { label: I18n.t('markets.52w_high') || '52W Hi', val: fmtPt(d.hi52),      cls: '' },
+    { label: I18n.t('markets.52w_low')  || '52W Lo', val: fmtPt(d.lo52),      cls: '' },
+    { label: I18n.t('markets.pe')       || 'P/E',    val: d.pe != null ? d.pe.toFixed(1) + 'x' : '—', cls: '' },
+    { label: I18n.t('markets.volume')   || 'Volume', val: d.volume != null ? (d.volume / 1e9).toFixed(1) + 'B' : '—', cls: '' },
+  ];
+  document.getElementById('idxStats').innerHTML = stats.map(s => `
+    <div class="stat-card">
+      <div class="stat-label">${s.label}</div>
+      <div class="stat-val ${s.cls}">${s.val}</div>
+    </div>`).join('');
+
+  // Moving averages
+  const cur = d.current, ma50 = d.ma50, ma200 = d.ma200;
+  const maRows = [];
+  if (ma50 != null) {
+    const diff = cur != null ? ((cur - ma50) / ma50 * 100).toFixed(1) : null;
+    const cls  = cur != null && cur > ma50 ? 'up' : 'down';
+    maRows.push(`<div class="flex justify-between"><span class="text-slate-400">${I18n.t('markets.ma50') || '50-day MA'}</span>
+      <span>${fmtPt(ma50)} <span class="${cls} text-xs">(${diff != null ? (diff >= 0 ? '+' : '') + diff + '%' : '—'})</span></span></div>`);
+  }
+  if (ma200 != null) {
+    const diff = cur != null ? ((cur - ma200) / ma200 * 100).toFixed(1) : null;
+    const cls  = cur != null && cur > ma200 ? 'up' : 'down';
+    let cross = '';
+    if (ma50 != null && ma200 != null) {
+      cross = ma50 > ma200
+        ? `<span class="text-[10px] text-emerald-400 ml-1 font-semibold">${I18n.t('markets.golden_cross') || 'Golden Cross'}</span>`
+        : `<span class="text-[10px] text-rose-400 ml-1 font-semibold">${I18n.t('markets.death_cross') || 'Death Cross'}</span>`;
+    }
+    maRows.push(`<div class="flex justify-between"><span class="text-slate-400">${I18n.t('markets.ma200') || '200-day MA'}${cross}</span>
+      <span>${fmtPt(ma200)} <span class="${cls} text-xs">(${diff != null ? (diff >= 0 ? '+' : '') + diff + '%' : '—'})</span></span></div>`);
+  }
+  document.getElementById('maStatus').innerHTML = maRows.length ? maRows.join('') : '<span class="text-slate-600 text-xs">No data</span>';
+
+  // RSI gauge
+  const rsi = d.rsi14;
+  const rsiEl = document.getElementById('rsiGauge');
+  if (rsi == null) { rsiEl.innerHTML = '<span class="text-slate-600 text-xs">No data</span>'; }
+  else {
+    let zone = '', zoneCol = '';
+    if (rsi > 70)      { zone = 'Overbought'; zoneCol = '#f87171'; }
+    else if (rsi > 55) { zone = 'Bullish';    zoneCol = '#34d399'; }
+    else if (rsi > 45) { zone = 'Neutral';    zoneCol = '#94a3b8'; }
+    else if (rsi > 30) { zone = 'Bearish';    zoneCol = '#fb923c'; }
+    else                { zone = 'Oversold';  zoneCol = '#a78bfa'; }
+    const pct = Math.round(rsi);
+    rsiEl.innerHTML = `
+      <div class="flex items-center justify-between mb-2">
+        <span class="text-xl font-bold text-slate-100">${rsi.toFixed(1)}</span>
+        <span class="rsi-zone font-semibold" style="background:${zoneCol}22;color:${zoneCol}">${zone}</span>
+      </div>
+      <div class="bg-slate-700 rounded-full h-2 overflow-hidden">
+        <div class="bar-fill" style="width:${pct}%; background:${zoneCol}"></div>
+      </div>
+      <div class="flex justify-between text-[10px] text-slate-600 mt-1"><span>0</span><span>30</span><span>50</span><span>70</span><span>100</span></div>`;
+  }
+}
+
+function renderIdxChart(key, range, data) {
+  const d = data.indices[key] || {};
+  // 1M and 6M slice from daily data
+  let dates, prices;
+  if (range === '1m' || range === '6m') {
+    const src = d['daily'] || {};
+    const allDates  = src.dates  || [];
+    const allPrices = src.prices || [];
+    const cutDays   = range === '1m' ? 21 : 126;  // ~1 month or ~6 months of trading days
+    dates  = allDates.slice(-cutDays);
+    prices = allPrices.slice(-cutDays);
+  } else {
+    const series = d[range] || d['weekly'] || {};
+    dates  = series.dates  || [];
+    prices = series.prices || [];
+  }
+  const col = IDX_COLORS[key] || '#6366f1';
+
+  if (_idxChartInst) { _idxChartInst.destroy(); _idxChartInst = null; }
+  _idxChartInst = new Chart(document.getElementById('idxChart'), {
+    type: 'line',
+    data: { labels: dates, datasets: [{
+      label: idxLabel(key),
+      data: prices,
+      borderColor: col, backgroundColor: col + '0d',
+      borderWidth: 2, pointRadius: 0, pointHoverRadius: 5,
+      fill: true, tension: 0.3, spanGaps: true,
+    }]},
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { mode: 'index', intersect: false, callbacks: { label: c => ` ${c.raw?.toLocaleString(undefined, {maximumFractionDigits: 2})}` } },
+      },
+      scales: {
+        x: { grid: { color: GRID_COL }, ticks: { color: TICK_COL, maxTicksLimit: 8, maxRotation: 0 } },
+        y: { grid: { color: GRID_COL }, ticks: { color: TICK_COL, callback: v => v.toLocaleString() } },
+      },
+      interaction: { mode: 'index', intersect: false },
+    },
+    plugins: [{
+      afterDraw(chart) {
+        // Draw MA-200 and MA-50 as reference lines for daily-based ranges
+        if (range !== 'daily' && range !== '1m' && range !== '6m') return;
+        const { ctx: c, chartArea: a, scales: { y } } = chart;
+        [[d.ma50, '#34d399', I18n.t('markets.ma50') || '50MA'],
+         [d.ma200,'#fb923c', I18n.t('markets.ma200') || '200MA']].forEach(([val, clr, lbl]) => {
+          if (val == null) return;
+          const py = y.getPixelForValue(val);
+          if (py < a.top || py > a.bottom) return;
+          c.save(); c.strokeStyle = clr + '88'; c.lineWidth = 1.5; c.setLineDash([5, 4]);
+          c.beginPath(); c.moveTo(a.left, py); c.lineTo(a.right, py); c.stroke();
+          c.fillStyle = clr; c.font = '10px Inter,sans-serif';
+          c.fillText(lbl + ' ' + val.toLocaleString(undefined, {maximumFractionDigits: 0}), a.left + 6, py - 4); c.restore();
+        });
+      },
+    }],
+  });
+}
+
+// ── Technical indicator helpers ───────────────────────────────────────
+function _ema(vals, period) {
+  const k = 2 / (period + 1);
+  const result = new Array(vals.length).fill(null);
+  // Find first non-null index
+  let start = vals.findIndex(v => v != null);
+  if (start < 0) return result;
+  result[start] = vals[start];
+  for (let i = start + 1; i < vals.length; i++) {
+    if (vals[i] == null) { result[i] = result[i - 1]; continue; }
+    result[i] = vals[i] * k + result[i - 1] * (1 - k);
+  }
+  return result;
+}
+
+function _computeMacd(prices) {
+  // Returns { dates, macd, signal, histogram } aligned to original dates
+  const ema12 = _ema(prices, 12);
+  const ema26 = _ema(prices, 26);
+  const macdLine = prices.map((_, i) => (ema12[i] != null && ema26[i] != null) ? ema12[i] - ema26[i] : null);
+  const signal   = _ema(macdLine, 9);
+  const histogram = macdLine.map((v, i) => (v != null && signal[i] != null) ? v - signal[i] : null);
+  return { macdLine, signal, histogram };
+}
+
+function _computeRsiHistory(prices, period = 14) {
+  const result = new Array(prices.length).fill(null);
+  if (prices.length < period + 1) return result;
+  let gains = 0, losses = 0;
+  for (let i = 1; i <= period; i++) {
+    const diff = prices[i] - prices[i - 1];
+    if (diff > 0) gains += diff; else losses -= diff;
+  }
+  let avgGain = gains / period, avgLoss = losses / period;
+  result[period] = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
+  for (let i = period + 1; i < prices.length; i++) {
+    const diff = prices[i] - prices[i - 1];
+    const g = diff > 0 ? diff : 0;
+    const l = diff < 0 ? -diff : 0;
+    avgGain = (avgGain * (period - 1) + g) / period;
+    avgLoss = (avgLoss * (period - 1) + l) / period;
+    result[i] = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
+  }
+  return result;
+}
+
+function renderMacdChart(key, data, range) {
+  if (_macdChartInst) { _macdChartInst.destroy(); _macdChartInst = null; }
+  const d = data.indices[key] || {};
+  // Compute MACD on full daily data, then slice to the visible range
+  const dailySeries = d['daily'] || {};
+  const allDates  = dailySeries.dates  || [];
+  const allPrices = dailySeries.prices || [];
+  if (!allPrices.length) return;
+
+  // Compute on full series so EMAs are correctly warmed up, then slice view
+  const { macdLine, signal, histogram } = _computeMacd(allPrices);
+
+  let dates, macdSlice, signalSlice, histSlice;
+  const cutDays = range === '1m' ? 21 : range === '6m' ? 126 : allDates.length;
+  dates       = allDates.slice(-cutDays);
+  macdSlice   = macdLine.slice(-cutDays);
+  signalSlice = signal.slice(-cutDays);
+  histSlice   = histogram.slice(-cutDays);
+
+  // Histogram bar colors: positive = green, negative = red
+  const histColors  = histSlice.map(v => v == null ? 'transparent' : v >= 0 ? 'rgba(52,211,153,0.55)' : 'rgba(248,113,113,0.55)');
+  const histBorders = histSlice.map(v => v == null ? 'transparent' : v >= 0 ? '#34d399' : '#f87171');
+
+  _macdChartInst = new Chart(document.getElementById('macdChart'), {
+    type: 'bar',
+    data: {
+      labels: dates,
+      datasets: [
+        {
+          type: 'bar',
+          label: 'Histogram',
+          data: histSlice,
+          backgroundColor: histColors,
+          borderColor: histBorders,
+          borderWidth: 1,
+          order: 3,
+        },
+        {
+          type: 'line',
+          label: 'MACD',
+          data: macdSlice,
+          borderColor: '#38bdf8',
+          backgroundColor: 'transparent',
+          borderWidth: 1.5, pointRadius: 0, spanGaps: true, tension: 0.2, order: 1,
+          elements: { point: { hitRadius: 6, radius: 0, hoverRadius: 3 } },
+        },
+        {
+          type: 'line',
+          label: 'Signal',
+          data: signalSlice,
+          borderColor: '#fb923c',
+          backgroundColor: 'transparent',
+          borderWidth: 1.5, pointRadius: 0, spanGaps: true, tension: 0.2, order: 2,
+          borderDash: [4, 3],
+          elements: { point: { hitRadius: 6, radius: 0, hoverRadius: 3 } },
+        },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          mode: 'index', intersect: false,
+          callbacks: {
+            label: c => {
+              const v = c.raw;
+              if (v == null) return null;
+              return ` ${c.dataset.label}: ${v.toFixed(2)}`;
+            },
+          },
+        },
+      },
+      scales: {
+        x: { grid: { color: GRID_COL }, ticks: { color: TICK_COL, maxTicksLimit: 8, maxRotation: 0 } },
+        y: { grid: { color: GRID_COL }, ticks: { color: TICK_COL, callback: v => v.toFixed(1) } },
+      },
+      interaction: { mode: 'index', intersect: false },
+    },
+    plugins: [{
+      afterDraw(chart) {
+        const { ctx: c, chartArea: a, scales: { y } } = chart;
+        const z = y.getPixelForValue(0);
+        if (z >= a.top && z <= a.bottom) {
+          c.save(); c.strokeStyle = 'rgba(148,163,184,0.3)'; c.lineWidth = 1;
+          c.beginPath(); c.moveTo(a.left, z); c.lineTo(a.right, z); c.stroke(); c.restore();
+        }
+      },
+    }],
+  });
+}
+
+function renderRsiChart(key, data, range) {
+  if (_rsiChartInst) { _rsiChartInst.destroy(); _rsiChartInst = null; }
+  const d = data.indices[key] || {};
+  const dailySeries = d['daily'] || {};
+  const allDates  = dailySeries.dates  || [];
+  const allPrices = dailySeries.prices || [];
+  if (!allPrices.length) return;
+
+  // Compute on full series so warm-up is correct, then slice to view
+  const allRsi = _computeRsiHistory(allPrices, 14);
+  const cutDays = range === '1m' ? 21 : range === '6m' ? 126 : allDates.length;
+  const dates   = allDates.slice(-cutDays);
+  const rsiVals = allRsi.slice(-cutDays);
+
+  // Color the RSI line by zone
+  _rsiChartInst = new Chart(document.getElementById('rsiChart'), {
+    type: 'line',
+    data: {
+      labels: dates,
+      datasets: [{
+        label: 'RSI-14',
+        data: rsiVals,
+        borderColor: '#a78bfa',
+        backgroundColor: 'rgba(167,139,250,0.06)',
+        borderWidth: 1.5, pointRadius: 0, fill: true, tension: 0.2, spanGaps: true,
+        elements: { point: { hitRadius: 6, radius: 0, hoverRadius: 3 } },
+      }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          mode: 'index', intersect: false,
+          callbacks: { label: c => c.raw != null ? ` RSI: ${c.raw.toFixed(1)}` : null },
+        },
+      },
+      scales: {
+        x: { grid: { color: GRID_COL }, ticks: { color: TICK_COL, maxTicksLimit: 8, maxRotation: 0 } },
+        y: { grid: { color: GRID_COL }, ticks: { color: TICK_COL }, min: 0, max: 100,
+             ticks: { color: TICK_COL, stepSize: 25, callback: v => v } },
+      },
+      interaction: { mode: 'index', intersect: false },
+    },
+    plugins: [{
+      afterDraw(chart) {
+        const { ctx: c, chartArea: a, scales: { y } } = chart;
+        [[70, '#f87171', 'OB 70'], [30, '#34d399', 'OS 30']].forEach(([lvl, clr, lbl]) => {
+          const py = y.getPixelForValue(lvl);
+          if (py < a.top || py > a.bottom) return;
+          c.save();
+          c.strokeStyle = clr + '55'; c.lineWidth = 1; c.setLineDash([4, 3]);
+          c.beginPath(); c.moveTo(a.left, py); c.lineTo(a.right, py); c.stroke();
+          c.fillStyle = clr; c.font = '10px Inter,sans-serif';
+          c.fillText(lbl, a.right - 36, py - 3); c.restore();
+        });
+        // Shade overbought zone (70-100)
+        const y70 = y.getPixelForValue(70), y100 = y.getPixelForValue(100);
+        c.save(); c.fillStyle = 'rgba(248,113,113,0.05)';
+        c.fillRect(a.left, Math.min(y70, y100), a.width, Math.abs(y70 - y100)); c.restore();
+        // Shade oversold zone (0-30)
+        const y30 = y.getPixelForValue(30), y0 = y.getPixelForValue(0);
+        c.save(); c.fillStyle = 'rgba(52,211,153,0.05)';
+        c.fillRect(a.left, Math.min(y30, y0), a.width, Math.abs(y30 - y0)); c.restore();
+      },
+    }],
+  });
+}
+
+// ── Synchronized cross-chart hover ───────────────────────────────────
+// Syncs tooltips across price/MACD/RSI charts by matching the hovered date.
+// Price chart may use weekly/monthly data while MACD/RSI always use daily,
+// so we find the nearest date in the destination chart rather than using
+// the same numeric index.
+let _syncHoverCleanup = null;  // function to remove previous listeners
+
+function _syncHover() {
+  // Remove previous listeners
+  if (_syncHoverCleanup) { _syncHoverCleanup(); _syncHoverCleanup = null; }
+
+  const canvasIds = ['idxChart', 'macdChart', 'rsiChart'];
+  function _getChart(id) {
+    const c = document.getElementById(id);
+    return c ? Chart.getChart(c) : null;
+  }
+
+  const handlers = [];
+  canvasIds.forEach(srcId => {
+    const canvas = document.getElementById(srcId);
+    if (!canvas) return;
+
+    function onMove(evt) {
+      const src = _getChart(srcId);
+      if (!src) return;
+      const pts = src.getElementsAtEventForMode(evt, 'index', { intersect: false }, false);
+      const srcIdx = pts.length ? pts[0].index : null;
+      if (srcIdx == null) return;
+      const srcDate = src.data.labels[srcIdx];
+
+      canvasIds.forEach(dstId => {
+        if (dstId === srcId) return;
+        const dst = _getChart(dstId);
+        if (!dst) return;
+        const xScale = dst.scales['x'];
+        if (!xScale) return;
+
+        const dstLabels = dst.data.labels || [];
+        let dstIdx = dstLabels.indexOf(srcDate);
+        if (dstIdx < 0) {
+          const prefix = (srcDate || '').slice(0, 7);
+          dstIdx = dstLabels.findIndex(l => (l || '').startsWith(prefix));
+        }
+        if (dstIdx < 0) return;
+
+        const x = xScale.getPixelForValue(dstIdx);
+        dst.tooltip.setActiveElements(
+          dst.data.datasets.map((_, di) => ({ datasetIndex: di, index: dstIdx }))
+            .filter(pt => {
+              const meta = dst.getDatasetMeta(pt.datasetIndex);
+              return meta.visible && dst.data.datasets[pt.datasetIndex].data[dstIdx] != null;
+            }),
+          { x, y: dst.chartArea.top }
+        );
+        dst.update('none');
+      });
+    }
+
+    function onLeave() {
+      canvasIds.forEach(id => {
+        const c = _getChart(id);
+        if (c) { c.tooltip.setActiveElements([], {}); c.update('none'); }
+      });
+    }
+
+    canvas.addEventListener('mousemove', onMove);
+    canvas.addEventListener('mouseleave', onLeave);
+    handlers.push({ canvas, onMove, onLeave });
+  });
+
+  _syncHoverCleanup = () => {
+    handlers.forEach(({ canvas, onMove, onLeave }) => {
+      canvas.removeEventListener('mousemove', onMove);
+      canvas.removeEventListener('mouseleave', onLeave);
+    });
+  };
+}
+
+function switchIdx(key) {
+  _curIdx = key;
+  IDX_ALL_KEYS.forEach(k => {
+    const id = 'tab' + k.charAt(0).toUpperCase() + k.slice(1);
+    const btn = document.getElementById(id);
+    if (btn) btn.classList.toggle('active', k === key);
+  });
+  if (_mkData) {
+    renderIdxStats(key, _mkData);
+    renderIdxChart(key, _curRange, _mkData);
+    renderMacdChart(key, _mkData, _curRange);
+    renderRsiChart(key, _mkData, _curRange);
+    _syncHover();
+    loadIdxForecast(key);
+  }
+}
+
+function switchIdxRange(range) {
+  _curRange = range;
+  document.querySelectorAll('#idxRangeBtns .range-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.period === range);
+  });
+  if (_mkData) {
+    renderIdxChart(_curIdx, range, _mkData);
+    renderMacdChart(_curIdx, _mkData, range);
+    renderRsiChart(_curIdx, _mkData, range);
+    _syncHover();
+  }
+}
+
+// ── Forecast for selected index ───────────────────────────────────────
+function _buildForecastChart(result) {
+  const gridCol = GRID_COL, tickCol = TICK_COL;
+  const trainDates  = (result.train || []).map(p => p.date);
+  const trainPrices = (result.train || []).map(p => p.value);
+  const fcModels    = ['prophet', 'arima', 'linear'];
+  const modelColors = { prophet: '#a78bfa', arima: '#fb923c', linear: '#34d399' };
+
+  const firstFC  = fcModels.map(m => result[m]?.forecast || []).find(fc => fc.length > 0) || [];
+  const fcDates  = firstFC.map(p => p.date);
+  const allDates = [...trainDates, ...fcDates];
+  const actualData = [...trainPrices, ...fcDates.map(() => null)];
+
+  const fcAvailable = [];
+  const datasets = [{
+    label: I18n.t('forecast.actual') || 'Actual',
+    data: actualData,
+    borderColor: '#38bdf8', backgroundColor: 'rgba(56,189,248,0.06)',
+    borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, hitRadius: 8,
+    fill: 'origin', tension: 0.3, spanGaps: true,
+    elements: { point: { hitRadius: 8, radius: 0, hoverRadius: 4 } },
+  }];
+
+  fcModels.forEach((m, idx) => {
+    const fc = result[m]?.forecast || [];
+    if (!fc.length) return;
+    const padLen = trainDates.length > 0 ? trainDates.length - 1 : 0;
+    const col = modelColors[m];
+    const fVals  = [...Array(padLen).fill(null), trainPrices[trainPrices.length - 1], ...fc.map(p => p.value)];
+    const loVals = [...Array(padLen).fill(null), trainPrices[trainPrices.length - 1], ...fc.map(p => p.lo)];
+    const hiVals = [...Array(padLen).fill(null), trainPrices[trainPrices.length - 1], ...fc.map(p => p.hi)];
+    fcAvailable.push({ m, loVals, hiVals, color: col });
+    datasets.push({
+      label: I18n.t('forecast.' + m) || m.toUpperCase(),
+      data: fVals,
+      borderColor: col, backgroundColor: 'transparent',
+      borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, hitRadius: 8,
+      borderDash: [5, 3], tension: 0.3, spanGaps: true,
+      elements: { point: { hitRadius: 8, radius: 0, hoverRadius: 4 } },
+    });
+  });
+
+  const boundaryIdx = trainDates.length - 1;
+  return new Chart(document.getElementById('idxForecastChart'), {
+    type: 'line',
+    data: { labels: allDates, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: true, position: 'top', labels: { color: tickCol, font: { size: 10 } } },
+        tooltip: { mode: 'index', intersect: false },
+      },
+      scales: {
+        x: { grid: { color: gridCol }, ticks: { color: tickCol, maxTicksLimit: 8, maxRotation: 0 } },
+        y: { grid: { color: gridCol }, ticks: { color: tickCol, callback: v => v.toLocaleString() } },
+      },
+    },
+    plugins: [{
+      afterDraw(chart) {
+        const { ctx: c, chartArea: a, scales: { x, y } } = chart;
+        fcAvailable.forEach(({ loVals, hiVals, color }) => {
+          const len = Math.min(loVals.length, hiVals.length, allDates.length);
+          c.save(); c.beginPath();
+          let started = false;
+          for (let i = 0; i < len; i++) {
+            if (hiVals[i] == null) continue;
+            const px = x.getPixelForValue(i), py = y.getPixelForValue(hiVals[i]);
+            if (!started) { c.moveTo(px, py); started = true; } else c.lineTo(px, py);
+          }
+          for (let i = len - 1; i >= 0; i--) {
+            if (loVals[i] == null) continue;
+            c.lineTo(x.getPixelForValue(i), y.getPixelForValue(loVals[i]));
+          }
+          c.closePath(); c.fillStyle = color + '28'; c.fill(); c.restore();
+        });
+        if (boundaryIdx >= 0 && boundaryIdx < allDates.length) {
+          const bx = x.getPixelForValue(boundaryIdx);
+          if (bx >= a.left && bx <= a.right) {
+            c.save(); c.strokeStyle = 'rgba(100,116,139,0.5)'; c.lineWidth = 1; c.setLineDash([4,4]);
+            c.beginPath(); c.moveTo(bx, a.top); c.lineTo(bx, a.bottom); c.stroke();
+            c.fillStyle = '#64748b'; c.font = '10px Inter,sans-serif';
+            c.fillText('Forecast →', bx + 4, a.top + 12); c.restore();
+          }
+        }
+      },
+    }],
+  });
+}
+
+async function loadIdxForecast(key) {
+  const loadEl = document.getElementById('idxForecastLoading');
+  const wrapEl = document.getElementById('idxForecastWrap');
+  if (!loadEl || !wrapEl) return;
+
+  // Show loading, hide chart
+  loadEl.style.display = 'flex';
+  wrapEl.style.display = 'none';
+  if (_idxForecastInst) { _idxForecastInst.destroy(); _idxForecastInst = null; }
+
+  // Use cache if available
+  if (_forecastCache[key]) {
+    loadEl.style.display = 'none';
+    wrapEl.style.display = '';
+    _idxForecastInst = _buildForecastChart(_forecastCache[key]);
+    return;
+  }
+
+  const sym = IDX_SYMBOLS[key];
+  if (!sym) { loadEl.style.display = 'none'; return; }
+
+  try {
+    const resp = await fetch(`/api/forecast/${sym}`);
+    const result = await resp.json();
+    if (result.error) throw new Error(result.error);
+    _forecastCache[key] = result;
+    loadEl.style.display = 'none';
+    wrapEl.style.display = '';
+    _idxForecastInst = _buildForecastChart(result);
+  } catch(e) {
+    loadEl.innerHTML = `<span class="text-slate-600 text-xs">${I18n.t('forecast.failed') || 'Forecast unavailable.'} ${e.message}</span>`;
+  }
+}
+
+// ── Boot ──────────────────────────────────────────────────────────────
+(async function() {
+  try {
+    // Check URL hash for a specific index to start on (e.g. from home page links)
+    const hash = window.location.hash.replace('#', '');
+    if (IDX_ALL_KEYS.includes(hash)) _curIdx = hash;
+
+    const resp = await fetch('/api/markets');
+    _mkData = await resp.json();
+    if (!resp.ok) throw new Error(_mkData.error || 'Failed');
+
+    document.getElementById('marketsLoading').style.display = 'none';
+    document.getElementById('marketsContent').style.display = '';
+
+    renderCards(_mkData);
+    renderVix(_mkData.vix);
+    renderSectors(_mkData.sectors);
+    // Activate the correct tab
+    IDX_ALL_KEYS.forEach(k => {
+      const id = 'tab' + k.charAt(0).toUpperCase() + k.slice(1);
+      const btn = document.getElementById(id);
+      if (btn) btn.classList.toggle('active', k === _curIdx);
+    });
+    renderIdxStats(_curIdx, _mkData);
+    renderIdxChart(_curIdx, _curRange, _mkData);
+    renderMacdChart(_curIdx, _mkData);
+    renderRsiChart(_curIdx, _mkData);
+    _syncHover();
+    loadIdxForecast(_curIdx);   // async — non-blocking
+  } catch(err) {
+    document.getElementById('marketsLoading').textContent = '⚠ Failed to load market data: ' + err.message;
+  }
+})();
+</script>
+
+{% endblock %}

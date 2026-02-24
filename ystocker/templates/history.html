@@ -314,6 +314,55 @@
     <div id="explainPanelPrice" class="explain-panel"></div>
   </div>
 
+  <!-- ── Price Forecast chart ────────────────────────────────────────── -->
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up" id="forecastSection">
+    <div class="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-0 sm:justify-between mb-4">
+      <div>
+        <h2 class="text-base font-semibold text-slate-200" data-i18n="forecast.title">Price Forecast — 6 Months</h2>
+        <p class="text-xs text-slate-500" data-i18n="forecast.desc">Statistical projections from 3 independent models trained on 3 years of weekly data. Not investment advice.</p>
+      </div>
+      <div class="flex items-center gap-2 flex-wrap justify-end">
+        <!-- model legend chips -->
+        <span class="flex items-center gap-1.5 text-xs text-slate-400">
+          <span class="inline-block w-3 h-1 rounded-sm" style="background:#38bdf8"></span>
+          <span data-i18n="forecast.actual">Actual price</span>
+        </span>
+        <span class="flex items-center gap-1.5 text-xs" style="color:#a78bfa">
+          <span class="inline-block w-3 h-1 rounded-sm" style="background:#a78bfa"></span>
+          <span data-i18n="forecast.prophet">Prophet</span>
+        </span>
+        <span class="flex items-center gap-1.5 text-xs" style="color:#fb923c">
+          <span class="inline-block w-3 h-1 rounded-sm" style="background:#fb923c"></span>
+          <span data-i18n="forecast.arima">ARIMA</span>
+        </span>
+        <span class="flex items-center gap-1.5 text-xs" style="color:#34d399">
+          <span class="inline-block w-3 h-1 rounded-sm" style="background:#34d399"></span>
+          <span data-i18n="forecast.linear">Linear</span>
+        </span>
+        <button onclick="expandChart('forecast')" title="Expand" class="expand-btn ml-1">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
+        </button>
+      </div>
+    </div>
+    <!-- loading state -->
+    <div id="forecastLoading" class="flex items-center gap-2 text-sm text-slate-500 py-6">
+      <svg class="animate-spin w-4 h-4 text-brand" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+        <circle style="opacity:.25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+        <path style="opacity:.75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+      </svg>
+      <span data-i18n="forecast.loading">Running models…</span>
+    </div>
+    <div class="chart-container" style="height:380px; display:none" id="forecastChartWrap">
+      <canvas id="forecastChart"></canvas>
+    </div>
+    <!-- per-model status row -->
+    <div id="forecastModelStatus" class="hidden flex flex-wrap gap-3 mt-3 text-[11px]"></div>
+    <!-- disclaimer -->
+    <p class="text-[11px] text-slate-600 mt-3 leading-snug" data-i18n="forecast.disclaimer">
+      ⚠ Statistical projections only — not financial advice. Past patterns do not guarantee future results.
+    </p>
+  </div>
+
   <!-- PEG history line chart -->
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up" id="pegHistSection" style="display:none">
     <div class="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-0 sm:justify-between mb-4">
@@ -774,6 +823,55 @@ let   _modalKey       = null;
   document.querySelectorAll('.range-btn[data-chart]').forEach(btn => {
     btn.addEventListener('click', () => _handleRange(btn.dataset.chart, btn.dataset.period, staticData));
   });
+
+  // ── Forecast chart (async, non-blocking)
+  (function() {
+    const loading  = document.getElementById('forecastLoading');
+    const wrap     = document.getElementById('forecastChartWrap');
+    const statusEl = document.getElementById('forecastModelStatus');
+    if (!loading || !wrap) return;
+
+    fetch(`/api/forecast/${encodeURIComponent(TICKER)}`)
+      .then(r => r.json())
+      .then(result => {
+        loading.style.display = 'none';
+        if (result.error) {
+          loading.textContent = (I18n.t('forecast.failed') || 'Forecast unavailable.') + ' ' + result.error;
+          loading.style.display = '';
+          return;
+        }
+        // Build & render chart
+        const cfg = _buildConfig('forecast', result, staticData);
+        _chartConfigs['forecast'] = cfg;
+        wrap.style.display = '';
+        _chartInstances['forecast'] = new Chart(document.getElementById('forecastChart'), cfg);
+
+        // Per-model status chips
+        const models = { prophet: '#a78bfa', arima: '#fb923c', linear: '#34d399' };
+        const chips = Object.entries(models).map(([m, col]) => {
+          const err = result[m]?.error;
+          const pts = (result[m]?.forecast || []).length;
+          if (err) {
+            return `<span class="flex items-center gap-1" style="color:#64748b">
+                      <span class="w-2 h-2 rounded-full bg-slate-600"></span>
+                      ${I18n.t('forecast.' + m) || m}: <em>${I18n.t('forecast.model_error') || 'unavailable'}</em>
+                    </span>`;
+          }
+          return `<span class="flex items-center gap-1" style="color:${col}">
+                    <span class="w-2 h-2 rounded-full" style="background:${col}"></span>
+                    ${I18n.t('forecast.' + m) || m}: ${pts} pts
+                  </span>`;
+        });
+        statusEl.innerHTML = chips.join('');
+        statusEl.classList.remove('hidden');
+        statusEl.classList.add('flex');
+      })
+      .catch(err => {
+        loading.style.display = '';
+        loading.textContent = (I18n.t('forecast.failed') || 'Forecast unavailable.') + ' ' + err.message;
+      });
+  })();
+
   // ── Institutional holdings (13F) — multi-quarter
   (function() {
     const section = document.getElementById('instHoldersSection');
@@ -1090,6 +1188,146 @@ function _buildConfig(key, d, staticData) {
       _title: 'Put/Call Ratio by Expiration', _desc: 'Put OI ÷ Call OI per expiration date — above 1.0 = bearish hedging, below 0.7 = bullish',
     };
   }
+  // ── Forecast chart config ──────────────────────────────────────────────
+  if (key === 'forecast') {
+    // d is the full forecast result from /api/forecast
+    const gridCol = '#1e293b', tickCol = '#64748b';
+    const trainDates  = (d.train  || []).map(p => p.date);
+    const trainPrices = (d.train  || []).map(p => p.value);
+
+    // Build combined label array: all training dates + forecast dates from first available model
+    const fcModels  = ['prophet', 'arima', 'linear'];
+    const firstFC   = fcModels.map(m => d[m]?.forecast || []).find(fc => fc.length > 0) || [];
+    const fcDates   = firstFC.map(p => p.date);
+    const allDates  = [...trainDates, ...fcDates];
+
+    // Pad actual-price dataset with nulls in the forecast zone
+    const actualData = [...trainPrices, ...fcDates.map(() => null)];
+
+    // For each model: pad left with nulls (training zone), then forecast values
+    // Also build shaded CI datasets
+    function fcDataset(modelKey, color) {
+      const fc = d[modelKey]?.forecast || [];
+      if (!fc.length) return null;
+      // Align to allDates — pad training zone with null, then values
+      const padLen = trainDates.length > 0 ? trainDates.length - 1 : 0;
+      const fVals  = [...Array(padLen).fill(null), trainPrices[trainPrices.length - 1], ...fc.map(p => p.value)];
+      const loVals = [...Array(padLen).fill(null), trainPrices[trainPrices.length - 1], ...fc.map(p => p.lo)];
+      const hiVals = [...Array(padLen).fill(null), trainPrices[trainPrices.length - 1], ...fc.map(p => p.hi)];
+      return { fVals, loVals, hiVals, color };
+    }
+    const modelColors = { prophet: '#a78bfa', arima: '#fb923c', linear: '#34d399' };
+    const fcSets = {};
+    fcModels.forEach(m => { fcSets[m] = fcDataset(m, modelColors[m]); });
+
+    const datasets = [
+      // Actual price
+      {
+        label: I18n.t('forecast.actual') || 'Actual',
+        data:  actualData,
+        borderColor: '#38bdf8', backgroundColor: 'rgba(56,189,248,0.06)',
+        borderWidth: 2, pointRadius: 0, pointHoverRadius: 5, hitRadius: 8,
+        fill: 'origin', tension: 0.3, spanGaps: true, order: 10,
+        elements: { point: { hitRadius: 8, radius: 0, hoverRadius: 5 } },
+      },
+    ];
+
+    // Forecast lines (no fill — CI drawn via afterDraw plugin instead)
+    const fcAvailable = [];
+    fcModels.forEach((m, idx) => {
+      const s = fcSets[m];
+      if (!s) return;
+      fcAvailable.push({ m, s, idx });
+      datasets.push({
+        label: I18n.t('forecast.' + m) || m.toUpperCase(),
+        data: s.fVals,
+        borderColor: s.color, backgroundColor: 'transparent',
+        borderWidth: 2, pointRadius: 0, pointHoverRadius: 5, hitRadius: 8,
+        borderDash: [5, 3], tension: 0.3, spanGaps: true, order: 5 + idx,
+        elements: { point: { hitRadius: 8, radius: 0, hoverRadius: 5 } },
+      });
+    });
+
+    // Vertical divider plugin: draw a line at the train/forecast boundary
+    // Also draw CI bands as canvas fills (avoids hitRadius crash from fill: dataset)
+    const boundaryIdx = trainDates.length - 1;
+
+    return {
+      type: 'line',
+      data: { labels: allDates, datasets },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            display: true,
+            position: 'top',
+            labels: {
+              color: tickCol, font: { size: 11 },
+              filter: item => !(item.label || '').startsWith('__'),
+            },
+          },
+          tooltip: {
+            mode: 'index', intersect: false,
+            filter: item => !(item.dataset.label || '').startsWith('__'),
+            callbacks: { label: c => (c.dataset.label || '').startsWith('__') ? null : ` ${c.dataset.label}: $${c.raw?.toFixed(2)}` },
+          },
+        },
+        scales: {
+          x: { grid: { color: gridCol }, ticks: { color: tickCol, maxTicksLimit: 10, maxRotation: 0 } },
+          y: { grid: { color: gridCol }, ticks: { color: tickCol, callback: v => '$' + v } },
+        },
+        interaction: { mode: 'index', intersect: false },
+      },
+      plugins: [{
+        afterDraw(chart) {
+          const { ctx: c, chartArea: a, scales: { x, y } } = chart;
+
+          // Draw CI bands as canvas fills per model
+          fcAvailable.forEach(({ m, s }) => {
+            const col = s.color;
+            const loData = s.loVals;
+            const hiData = s.hiVals;
+            const len = Math.min(loData.length, hiData.length, allDates.length);
+            c.save();
+            c.beginPath();
+            let started = false;
+            for (let i = 0; i < len; i++) {
+              if (hiData[i] == null) continue;
+              const px = x.getPixelForValue(i);
+              const py = y.getPixelForValue(hiData[i]);
+              if (!started) { c.moveTo(px, py); started = true; }
+              else c.lineTo(px, py);
+            }
+            for (let i = len - 1; i >= 0; i--) {
+              if (loData[i] == null) continue;
+              const px = x.getPixelForValue(i);
+              const py = y.getPixelForValue(loData[i]);
+              c.lineTo(px, py);
+            }
+            c.closePath();
+            c.fillStyle = col + '28';
+            c.fill();
+            c.restore();
+          });
+
+          // Vertical boundary line
+          if (boundaryIdx < 0 || boundaryIdx >= allDates.length) return;
+          const bx = x.getPixelForValue(boundaryIdx);
+          if (bx < a.left || bx > a.right) return;
+          c.save();
+          c.strokeStyle = 'rgba(100,116,139,0.5)';
+          c.lineWidth = 1;
+          c.setLineDash([4, 4]);
+          c.beginPath(); c.moveTo(bx, a.top); c.lineTo(bx, a.bottom); c.stroke();
+          c.fillStyle = '#64748b'; c.font = '10px Inter,sans-serif';
+          c.fillText('Forecast →', bx + 4, a.top + 12);
+          c.restore();
+        },
+      }],
+      _title: 'Price Forecast — 6 Months',
+      _desc:  'Prophet / ARIMA / Linear regression with 80% confidence intervals (26-week horizon)',
+    };
+  }
 }
 
 // Handle a range button click: fetch data, rebuild inline chart
@@ -1278,6 +1516,11 @@ async function loadNews(force) {
 
   // ── Build timeline scrubber ────────────────────────────────────────────────
   _buildTimeline(articles);
+
+  // ── AI Translation (Chinese mode only) ─────────────────────────────────────
+  if (I18n.getLang() === 'zh') {
+    _translateNews(articles, feedEl, statusEl);
+  }
 }
 
 function _buildTimeline(articles) {
@@ -1387,6 +1630,63 @@ function _escHtml(s) {
 function _escAttr(s) {
   if (!s) return '#';
   return s.replace(/"/g,'%22').replace(/'/g,'%27');
+}
+
+// ── AI news translation (Chinese mode) ───────────────────────────────────────
+async function _translateNews(articles, feedEl, statusEl) {
+  if (!articles.length) return;
+
+  // Show subtle translating indicator
+  const origStatus = statusEl.textContent;
+  statusEl.textContent = origStatus + ' · ' + (I18n.t('history.news_translating') || 'Translating…');
+
+  const payload = articles.map(a => ({ link: a.link, title: a.title, summary: a.summary || null }));
+
+  let data;
+  try {
+    const resp = await fetch('/api/news/translate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ articles: payload, lang: 'zh' }),
+    });
+    data = await resp.json();
+    if (!resp.ok || data.error) throw new Error(data.error || 'Failed');
+  } catch(e) {
+    statusEl.textContent = origStatus + ' · ' + (I18n.t('history.news_trans_fail') || 'Translation unavailable');
+    return;
+  }
+
+  const transMap = {};
+  (data.translations || []).forEach(t => { if (t.link) transMap[t.link] = t; });
+
+  // Patch the DOM in-place for each article
+  articles.forEach((a, i) => {
+    const t = transMap[a.link];
+    if (!t) return;
+    const el = document.getElementById(`newsItem-${i}`);
+    if (!el) return;
+
+    // Update title
+    const titleEl = el.querySelector('p.text-sm');
+    if (titleEl && t.title_zh) {
+      // Preserve the important badge if present
+      const badge = titleEl.querySelector('span');
+      titleEl.textContent = t.title_zh;
+      if (badge) titleEl.appendChild(badge);
+    }
+
+    // Update summary
+    const summaryEl = el.querySelector('p.text-xs.text-slate-500');
+    if (summaryEl && t.summary_zh) {
+      summaryEl.textContent = t.summary_zh;
+    }
+  });
+
+  // Update status with AI attribution badge
+  statusEl.innerHTML =
+    `${_escHtml(String(articles.length) + ' ' + (I18n.t('th.name') ? '' : 'articles'))} ` +
+    `<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ` +
+    `bg-indigo-900/40 text-indigo-300 border border-indigo-800 ml-1">✦ ${_escHtml(I18n.t('history.news_translated') || 'Translated by AI')}</span>`;
 }
 
 // ── YouTube videos ────────────────────────────────────────────────────────────

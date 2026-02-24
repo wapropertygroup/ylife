@@ -225,6 +225,10 @@ const I18n = (() => {
     'history.tab_charts':   { en: 'Charts & Holdings', zh: '图表与持仓' },
     'history.tab_news':     { en: 'News',               zh: '新闻' },
     'history.tab_videos':   { en: 'Videos',             zh: '视频' },
+    'history.news_translating': { en: 'Translating headlines…', zh: '正在翻译标题…' },
+    'history.news_translated':  { en: 'Translated by AI', zh: 'AI 翻译' },
+    'history.news_trans_fail':  { en: 'Translation unavailable', zh: '翻译不可用' },
+
     'history.news_loading': { en: 'Fetching news…',    zh: '加载新闻…' },
     'history.news_empty':   { en: 'No news found.',    zh: '暂无新闻。' },
     'history.news_error':   { en: 'Failed to load news.', zh: '新闻加载失败。' },
@@ -485,6 +489,81 @@ const I18n = (() => {
     'modal.peg_moderate':   { en: '1–2 — moderate',        zh: '1–2 — 合理' },
     'modal.peg_expensive':  { en: '> 2 — expensive',       zh: '> 2 — 高估' },
 
+    // ── sector names (peer groups) ─────────────────────────────────────
+    'sector.name.Tech':              { en: 'Tech',               zh: '科技' },
+    'sector.name.Cloud / SaaS':      { en: 'Cloud / SaaS',       zh: '云计算 / SaaS' },
+    'sector.name.Semiconductors':    { en: 'Semiconductors',     zh: '半导体' },
+    'sector.name.Financials':        { en: 'Financials',         zh: '金融' },
+    'sector.name.Healthcare':        { en: 'Healthcare',         zh: '医疗健康' },
+    'sector.name.Retail':            { en: 'Retail',             zh: '零售' },
+    'sector.name.Real Estate':       { en: 'Real Estate',        zh: '房地产' },
+    'sector.name.Metals & Mining':   { en: 'Metals & Mining',    zh: '金属与矿业' },
+    'sector.name.Apparel & Footwear':{ en: 'Apparel & Footwear', zh: '服装与鞋类' },
+    'sector.name.US Broad ETFs':     { en: 'US Broad ETFs',      zh: '美国宽基ETF' },
+    'sector.name.Sector ETFs':       { en: 'Sector ETFs',        zh: '行业ETF' },
+    'sector.name.International ETFs':{ en: 'International ETFs', zh: '国际ETF' },
+
+    // ── forecast section (history.html) ───────────────────────────────
+    'forecast.title':      { en: 'Price Forecast — 6 Months', zh: '价格预测 — 6个月' },
+    'forecast.desc':       { en: 'Statistical projections from 3 independent models trained on 3 years of weekly data. Not investment advice.',
+                              zh: '基于3年周线数据训练的3个独立模型的统计预测。不构成投资建议。' },
+    'forecast.prophet':    { en: 'Prophet', zh: 'Prophet' },
+    'forecast.arima':      { en: 'ARIMA', zh: 'ARIMA' },
+    'forecast.linear':     { en: 'Linear', zh: '线性回归' },
+    'forecast.actual':     { en: 'Actual price', zh: '实际价格' },
+    'forecast.ci':         { en: '80% CI', zh: '80% 置信区间' },
+    'forecast.loading':    { en: 'Running models…', zh: '运行模型中…' },
+    'forecast.failed':     { en: 'Forecast unavailable.', zh: '预测不可用。' },
+    'forecast.disclaimer': { en: '⚠ Statistical projections only — not financial advice. Past patterns do not guarantee future results.',
+                              zh: '⚠ 仅为统计预测，不构成投资建议。历史规律不代表未来结果。' },
+    'forecast.model_error':{ en: 'model unavailable', zh: '模型不可用' },
+
+    // ── market index page ──────────────────────────────────────────────
+    'markets.title':       { en: 'Market Overview', zh: '市场概览' },
+    'markets.subtitle':    { en: 'S&P 500 · Nasdaq · Dow Jones · Nikkei · Shanghai · Taiwan · KOSPI — live snapshot & historical charts',
+                             zh: '标普500 · 纳斯达克 · 道琼斯 · 日经225 · 上证指数 · 台湾加权 · 韩国综合 — 实时快照与历史图表' },
+    'markets.spx':         { en: 'S&P 500', zh: '标普500' },
+    'markets.ixic':        { en: 'Nasdaq Composite', zh: '纳斯达克综合指数' },
+    'markets.dji':         { en: 'Dow Jones', zh: '道琼斯工业平均指数' },
+    'markets.price':       { en: 'Price', zh: '指数点位' },
+    'markets.day_chg':     { en: 'Day Change', zh: '日涨跌' },
+    'markets.ytd':         { en: 'YTD', zh: '年初至今' },
+    'markets.52w_high':    { en: '52W High', zh: '52周最高' },
+    'markets.52w_low':     { en: '52W Low', zh: '52周最低' },
+    'markets.pe':          { en: 'P/E Ratio', zh: '市盈率' },
+    'markets.volume':      { en: 'Volume', zh: '成交量' },
+    'markets.fear_greed':  { en: 'Fear & Greed', zh: '恐慌与贪婪' },
+    'markets.vix':         { en: 'VIX (Volatility)', zh: 'VIX（波动率）' },
+    'markets.breadth':     { en: 'Market Breadth', zh: '市场宽度' },
+    'markets.adv_dec':     { en: 'Advance / Decline', zh: '上涨 / 下跌' },
+    'markets.sector_perf': { en: 'Sector Performance', zh: '板块表现' },
+    'markets.tab_overview':{ en: 'Overview', zh: '概览' },
+    'markets.tab_spx':     { en: 'S&P 500',    zh: '标普500' },
+    'markets.tab_ixic':    { en: 'Nasdaq',     zh: '纳斯达克' },
+    'markets.tab_dji':     { en: 'Dow Jones',  zh: '道琼斯' },
+    'markets.tab_n225':    { en: 'Nikkei 225', zh: '日经225' },
+    'markets.tab_sse':     { en: 'Shanghai',   zh: '上证指数' },
+    'markets.tab_twii':    { en: 'Taiwan',     zh: '台湾加权' },
+    'markets.tab_kospi':   { en: 'KOSPI',      zh: '韩国综合' },
+    'markets.idx_spx':     { en: 'S&P 500',              zh: '标普500' },
+    'markets.idx_ixic':    { en: 'Nasdaq',               zh: '纳斯达克' },
+    'markets.idx_dji':     { en: 'Dow Jones',             zh: '道琼斯' },
+    'markets.idx_n225':    { en: 'Nikkei 225',            zh: '日经225' },
+    'markets.idx_sse':     { en: 'Shanghai Composite',    zh: '上证综合指数' },
+    'markets.idx_twii':    { en: 'Taiwan Weighted',       zh: '台湾加权指数' },
+    'markets.idx_kospi':   { en: 'KOSPI',                 zh: '韩国综合指数' },
+    'markets.hist_title':  { en: 'Price History', zh: '价格历史' },
+    'markets.hist_desc':   { en: 'Weekly closing level', zh: '每周收盘点位' },
+    'markets.rsi':         { en: 'RSI (14)', zh: 'RSI（14日）' },
+    'markets.ma50':        { en: '50-day MA', zh: '50日均线' },
+    'markets.ma200':       { en: '200-day MA', zh: '200日均线' },
+    'markets.golden_cross':{ en: 'Golden Cross', zh: '金叉' },
+    'markets.death_cross': { en: 'Death Cross', zh: '死叉' },
+    'markets.above_ma200': { en: 'Above 200MA', zh: '高于200日均线' },
+    'markets.below_ma200': { en: 'Below 200MA', zh: '低于200日均线' },
+    'markets.loading':     { en: 'Loading market data…', zh: '加载市场数据…' },
+    'markets.nav':         { en: 'Markets', zh: '市场' },
+
     // ── videos.html ────────────────────────────────────────────────────
     'videos.title':         { en: 'Market Videos',     zh: '市场视频' },
     'videos.subtitle':      { en: 'Latest videos from curated finance channels — search by ticker or topic.',
@@ -508,10 +587,71 @@ const I18n = (() => {
     return localStorage.getItem('ystocker_lang') || 'en';
   })();
 
+  // ── stock name translations (ticker → Chinese name) ─────────────────
+  // Used by stockName(ticker, fallback) — English falls back to the
+  // shortName from Yahoo Finance; Chinese uses this curated map.
+  const STOCK_NAMES_ZH = {
+    // Tech
+    MSFT: '微软', AAPL: '苹果', GOOGL: '谷歌', META: 'Meta', NVDA: '英伟达', AMZN: '亚马逊',
+    // Cloud / SaaS
+    CRM: 'Salesforce', NOW: 'ServiceNow', ORCL: '甲骨文',
+    // Semiconductors
+    AMD: 'AMD', INTC: '英特尔', QCOM: '高通', TSM: '台积电', AVGO: '博通', ASML: 'ASML',
+    // Financials
+    JPM: '摩根大通', BAC: '美国银行', GS: '高盛', MS: '摩根士丹利',
+    BLK: '贝莱德', COF: '第一资本', 'BRK-B': '伯克希尔·哈撒韦', AXP: '美国运通',
+    // Healthcare
+    UNH: '联合健康', JNJ: '强生', LLY: '礼来', ABBV: '艾伯维', MRK: '默克', ISRG: '直觉外科',
+    // Retail
+    WMT: '沃尔玛', COST: '好市多', TGT: '塔吉特', HD: '家得宝',
+    // Real Estate
+    AMT: '美国铁塔', PLD: '普洛斯', EQIX: '艾可迪', SPG: '西蒙地产', O: '瑞尔地产', HLT: '希尔顿',
+    // Metals & Mining
+    FCX: '自由港', NEM: '纽蒙特', AA: '美国铝业', MP: 'MP材料',
+    COPX: '铜矿ETF', GDX: '黄金矿业ETF', SIL: '白银矿业ETF', SLX: '钢铁ETF',
+    // Apparel & Footwear
+    NKE: '耐克', LULU: 'lululemon', UAA: '安德玛', VFC: 'VF集团',
+    // US Broad ETFs
+    SPY: '标普500ETF', QQQ: '纳斯达克100ETF', IWM: '罗素2000ETF', DIA: '道琼斯ETF', VTI: '全市场ETF',
+    // Sector ETFs
+    XLK: '科技ETF', XLF: '金融ETF', XLE: '能源ETF', XLV: '医疗ETF', XLI: '工业ETF',
+    XLY: '非必需消费ETF', XLP: '必需消费ETF', XLU: '公用事业ETF', XLB: '材料ETF', XLRE: '房地产ETF',
+    // International ETFs
+    FLJP: '日本ETF', FLJH: '日本对冲ETF', FLKR: '韩国ETF', FLTW: '台湾ETF',
+    FLCA: '加拿大ETF', IXUS: '国际股票ETF', VXUS: '全球除美ETF', FLEE: '欧洲ETF',
+    ASHS: 'A股小盘ETF', FLBR: '巴西ETF', FLCH: '中国ETF', FLGR: '德国ETF',
+    FLMX: '墨西哥ETF', FLAX: '澳大利亚ETF', FLSW: '瑞士ETF',
+  };
+
   function t(key) {
     const entry = LANGS[key];
     if (!entry) return null;
     return entry[current] ?? entry['en'];
+  }
+
+  /** Localized sector/peer-group name. Falls back to the raw English key. */
+  function tSector(name) {
+    const v = t('sector.name.' + name);
+    return v != null ? v : name;
+  }
+
+  /** Localized stock company name.
+   *  @param {string} ticker   - e.g. "AAPL"
+   *  @param {string} fallback - English shortName from Yahoo Finance
+   */
+  function stockName(ticker, fallback) {
+    if (current === 'zh') {
+      return STOCK_NAMES_ZH[ticker] || fallback || ticker;
+    }
+    return fallback || ticker;
+  }
+
+  /** Localized market index name. Falls back to the raw English key.
+   *  @param {string} key - e.g. "spx", "n225"
+   */
+  function tIdx(key) {
+    const v = t('markets.idx_' + key);
+    return v != null ? v : key.toUpperCase();
   }
 
   function apply(root) {
@@ -585,5 +725,5 @@ const I18n = (() => {
     _injectLangLinks(current);
   });
 
-  return { t, apply, toggle, setLang, getLang };
+  return { t, tSector, tIdx, stockName, apply, toggle, setLang, getLang };
 })();

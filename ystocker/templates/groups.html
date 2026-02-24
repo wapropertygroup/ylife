@@ -22,7 +22,8 @@
     <!-- Header -->
     <div class="flex items-center justify-between">
       <a href="{{ url_for('main.sector', sector_name=group_name) }}"
-         class="font-semibold text-slate-100 hover:text-brand transition">
+         class="font-semibold text-slate-100 hover:text-brand transition"
+         data-i18n="sector.name.{{ group_name }}">
         {{ group_name }}
       </a>
       <form method="post" action="{{ url_for('main.delete_group') }}">

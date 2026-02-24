@@ -1371,6 +1371,123 @@ def api_news(ticker: str):
 
 
 # ---------------------------------------------------------------------------
+# News translation  (Gemini batch translate)
+# ---------------------------------------------------------------------------
+
+# Cache: key = frozenset of article links → translated list
+_TRANS_CACHE: dict = {}
+_TRANS_CACHE_LOCK = threading.Lock()
+_TRANS_CACHE_TTL  = 3600 * 12   # 12 hours — translations don't change
+
+
+@bp.route("/api/news/translate", methods=["POST"])
+def api_news_translate():
+    """
+    Batch-translate news article titles and summaries to Chinese using Gemini.
+
+    Request body:
+      { "articles": [{"link": str, "title": str, "summary": str|null}, ...],
+        "lang": "zh" }
+
+    Response:
+      { "translations": [{"link": str, "title_zh": str, "summary_zh": str|null}, ...] }
+    """
+    from google import genai
+
+    body = request.get_json(force=True, silent=True) or {}
+    articles = body.get("articles", [])
+    lang     = body.get("lang", "zh")
+
+    if not articles:
+        return jsonify({"translations": []})
+
+    if lang != "zh":
+        # Only Chinese supported for now
+        return jsonify({"translations": [
+            {"link": a.get("link"), "title_zh": a.get("title"), "summary_zh": a.get("summary")}
+            for a in articles
+        ]})
+
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        return jsonify({"error": "GEMINI_API_KEY not configured"}), 503
+
+    # Check cache — return any already-translated articles from cache
+    with _TRANS_CACHE_LOCK:
+        cached_map = dict(_TRANS_CACHE)  # link → {title_zh, summary_zh}
+
+    to_translate = [a for a in articles if a.get("link") not in cached_map]
+    already_done = [
+        {"link": a["link"], "title_zh": cached_map[a["link"]]["title_zh"],
+         "summary_zh": cached_map[a["link"]]["summary_zh"]}
+        for a in articles if a.get("link") in cached_map
+    ]
+
+    if not to_translate:
+        return jsonify({"translations": already_done})
+
+    # Build a compact numbered list for Gemini to translate in one shot
+    lines = []
+    for i, a in enumerate(to_translate):
+        title   = (a.get("title")   or "").replace("\n", " ").strip()
+        summary = (a.get("summary") or "").replace("\n", " ").strip()
+        lines.append(f"{i+1}. TITLE: {title}")
+        if summary:
+            lines.append(f"   SUMMARY: {summary}")
+
+    prompt = (
+        "Translate the following financial news headlines and summaries from English to Simplified Chinese (简体中文). "
+        "Preserve the original meaning precisely. Use financial terminology naturally. "
+        "Return ONLY a JSON array with the same number of objects as the input, in the same order. "
+        "Each object must have keys: \"title_zh\" (string) and \"summary_zh\" (string or null if no summary was given). "
+        "Output nothing except valid JSON.\n\n"
+        + "\n".join(lines)
+    )
+
+    try:
+        client = genai.Client(api_key=api_key)
+        resp   = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=prompt,
+        )
+        raw = resp.text.strip()
+        # Strip markdown code fences if present
+        if raw.startswith("```"):
+            raw = raw.split("```")[1]
+            if raw.startswith("json"):
+                raw = raw[4:]
+        translated = json.loads(raw)
+    except Exception as exc:
+        log.warning("News translation failed: %s", exc)
+        return jsonify({"error": str(exc)}), 500
+
+    if not isinstance(translated, list) or len(translated) != len(to_translate):
+        return jsonify({"error": "Gemini returned unexpected format"}), 500
+
+    # Merge with links and cache
+    new_results = []
+    with _TRANS_CACHE_LOCK:
+        for a, t in zip(to_translate, translated):
+            link = a.get("link", "")
+            entry = {
+                "link":       link,
+                "title_zh":   t.get("title_zh")   or a.get("title"),
+                "summary_zh": t.get("summary_zh")  or None,
+                "ts":         time.time(),
+            }
+            if link:
+                _TRANS_CACHE[link] = entry
+            new_results.append({"link": link, "title_zh": entry["title_zh"], "summary_zh": entry["summary_zh"]})
+
+    # Merge with already-cached results
+    order_map = {a.get("link"): i for i, a in enumerate(articles)}
+    all_results = already_done + new_results
+    all_results.sort(key=lambda r: order_map.get(r.get("link"), 999))
+
+    return jsonify({"translations": all_results})
+
+
+# ---------------------------------------------------------------------------
 # YouTube videos
 # ---------------------------------------------------------------------------
 
@@ -1639,4 +1756,249 @@ def api_videos_all():
     result = {"videos": videos}
     with _VIDEOS_CACHE_LOCK:
         _VIDEOS_CACHE[cache_key] = {"ts": time.time(), "data": result}
+    return jsonify(result)
+
+
+# ---------------------------------------------------------------------------
+# Forecast API
+# ---------------------------------------------------------------------------
+
+_FORECAST_CACHE: dict = {}
+_FORECAST_CACHE_LOCK = threading.Lock()
+_FORECAST_CACHE_TTL  = 3600 * 6  # 6 hours — models are slow
+
+
+@bp.route("/api/forecast/<ticker>")
+def api_forecast(ticker: str):
+    """Run multi-model price forecast for *ticker*. Results cached 6 h."""
+    ticker = ticker.strip().upper()
+    with _FORECAST_CACHE_LOCK:
+        entry = _FORECAST_CACHE.get(ticker)
+        if entry and time.time() - entry["ts"] < _FORECAST_CACHE_TTL:
+            log.debug("Forecast cache hit: %s", ticker)
+            return jsonify(entry["data"])
+
+    from ystocker.forecast import run_forecast
+    log.info("Running forecast for %s", ticker)
+    result = run_forecast(ticker)
+
+    if "error" not in result:
+        with _FORECAST_CACHE_LOCK:
+            _FORECAST_CACHE[ticker] = {"ts": time.time(), "data": result}
+
+    return jsonify(result)
+
+
+# ---------------------------------------------------------------------------
+# Market indices page  (/markets)
+# ---------------------------------------------------------------------------
+
+_MARKETS_CACHE: dict = {}
+_MARKETS_CACHE_LOCK  = threading.Lock()
+_MARKETS_CACHE_TTL   = 900  # 15 minutes
+
+# Yahoo Finance symbols for major indices (US + international)
+_INDEX_SYMBOLS = {
+    "spx":   "^GSPC",    # S&P 500
+    "ixic":  "^IXIC",    # Nasdaq Composite
+    "dji":   "^DJI",     # Dow Jones
+    "n225":  "^N225",    # Nikkei 225
+    "sse":   "000001.SS", # Shanghai Composite
+    "twii":  "^TWII",    # Taiwan Weighted Index (FTSE TWSE 50 proxy)
+    "kospi": "^KS11",    # KOSPI
+}
+
+# SPDR sector ETFs used for sector performance
+_SECTOR_ETFS = {
+    "XLK": "Tech", "XLF": "Financials", "XLE": "Energy",
+    "XLV": "Healthcare", "XLI": "Industrials", "XLY": "Consumer Disc.",
+    "XLP": "Consumer Stap.", "XLU": "Utilities", "XLB": "Materials",
+    "XLRE": "Real Estate",
+}
+
+
+@bp.route("/markets")
+def markets():
+    """Market overview page for SPX, IXIC, DJI."""
+    return render_template("markets.html",
+                           peer_groups=list(PEER_GROUPS.keys()))
+
+
+@bp.route("/api/markets")
+def api_markets():
+    """
+    JSON snapshot for the markets page.
+
+    Returns live data for ^GSPC, ^IXIC, ^DJI plus:
+      - 1-year weekly price history per index
+      - 50-day and 200-day moving averages (last value)
+      - RSI-14 (last value)
+      - VIX snapshot (^VIX)
+      - SPDR sector ETF day-change percentages
+    """
+    import yfinance as yf
+    import numpy as np
+
+    with _MARKETS_CACHE_LOCK:
+        entry = _MARKETS_CACHE.get("data")
+        if entry and time.time() - entry["ts"] < _MARKETS_CACHE_TTL:
+            return jsonify(entry["data"])
+
+    def _rsi(prices: list, period: int = 14) -> Optional[float]:
+        if len(prices) < period + 1:
+            return None
+        arr = [p for p in prices if p is not None]
+        deltas = [arr[i] - arr[i - 1] for i in range(1, len(arr))]
+        gains  = [max(d, 0) for d in deltas]
+        losses = [abs(min(d, 0)) for d in deltas]
+        avg_g  = sum(gains[:period]) / period
+        avg_l  = sum(losses[:period]) / period
+        for g, l in zip(gains[period:], losses[period:]):
+            avg_g = (avg_g * (period - 1) + g) / period
+            avg_l = (avg_l * (period - 1) + l) / period
+        if avg_l == 0:
+            return 100.0
+        return round(100 - 100 / (1 + avg_g / avg_l), 1)
+
+    def _ma(prices: list, n: int) -> Optional[float]:
+        vals = [p for p in prices if p is not None]
+        if len(vals) < n:
+            return None
+        return round(sum(vals[-n:]) / n, 2)
+
+    def _fetch_index(symbol: str) -> dict:
+        try:
+            tk   = yf.Ticker(symbol)
+            info = tk.info
+
+            # 1-year weekly for chart + MA calculations
+            hist_wk = tk.history(period="1y", interval="1wk")
+            # 1-year daily for MA-50 / MA-200 / RSI-14
+            hist_1d = tk.history(period="1y", interval="1d")
+            # 5-year monthly for long-term chart
+            hist_5y = tk.history(period="5y", interval="1mo")
+
+            prices_wk  = [round(float(p), 2) if not math.isnan(float(p)) else None for p in hist_wk["Close"]]
+            dates_wk   = [str(d.date()) for d in hist_wk.index]
+
+            prices_1d  = [round(float(p), 2) if not math.isnan(float(p)) else None for p in hist_1d["Close"]]
+            dates_1d   = [str(d.date()) for d in hist_1d.index]
+
+            prices_5y  = [round(float(p), 2) if not math.isnan(float(p)) else None for p in hist_5y["Close"]]
+            dates_5y   = [str(d.date()) for d in hist_5y.index]
+
+            current = (info.get("regularMarketPrice")
+                       or info.get("currentPrice")
+                       or (prices_wk[-1] if prices_wk else None))
+            prev    = info.get("regularMarketPreviousClose") or info.get("previousClose")
+            day_chg = None
+            if current and prev and prev > 0:
+                day_chg = round((current - prev) / prev * 100, 2)
+
+            # YTD — find first trading day of this year in the daily history
+            ytd = None
+            try:
+                this_year = str(date.today().year)
+                for i, d_str in enumerate(dates_1d):
+                    if d_str.startswith(this_year):
+                        first_price = prices_1d[i]
+                        if first_price and first_price > 0 and current:
+                            ytd = round((current - first_price) / first_price * 100, 2)
+                        break
+            except Exception:
+                pass
+
+            ma50  = _ma(prices_1d, 50)
+            ma200 = _ma(prices_1d, 200)
+            rsi14 = _rsi(prices_1d, 14)
+
+            # 52-week high/low
+            hi52 = info.get("fiftyTwoWeekHigh")
+            lo52 = info.get("fiftyTwoWeekLow")
+
+            # Volume
+            volume = info.get("regularMarketVolume") or info.get("volume")
+
+            # P/E (indices have trailingPE in Yahoo)
+            pe = _safe(info.get("trailingPE"))
+
+            return {
+                "symbol": symbol,
+                "name":   info.get("shortName") or info.get("longName") or symbol,
+                "current":  round(float(current), 2) if current else None,
+                "day_chg":  day_chg,
+                "ytd":      ytd,
+                "hi52":     round(float(hi52), 2) if hi52 else None,
+                "lo52":     round(float(lo52), 2) if lo52 else None,
+                "pe":       pe,
+                "volume":   int(volume) if volume else None,
+                "ma50":     ma50,
+                "ma200":    ma200,
+                "rsi14":    rsi14,
+                "weekly":   {"dates": dates_wk,  "prices": prices_wk},
+                "daily":    {"dates": dates_1d,  "prices": prices_1d},
+                "monthly":  {"dates": dates_5y,  "prices": prices_5y},
+            }
+        except Exception as exc:
+            log.warning("Could not fetch index %s: %s", symbol, exc)
+            return {"symbol": symbol, "error": str(exc)}
+
+    def _fetch_vix() -> Optional[dict]:
+        try:
+            tk   = yf.Ticker("^VIX")
+            info = tk.info
+            hist = tk.history(period="1y", interval="1wk")
+            prices = [round(float(p), 2) if not math.isnan(float(p)) else None for p in hist["Close"]]
+            dates  = [str(d.date()) for d in hist.index]
+            current = info.get("regularMarketPrice") or (prices[-1] if prices else None)
+            prev    = info.get("regularMarketPreviousClose")
+            day_chg = None
+            if current and prev and prev > 0:
+                day_chg = round((current - prev) / prev * 100, 2)
+            return {
+                "current": round(float(current), 2) if current else None,
+                "day_chg": day_chg,
+                "weekly":  {"dates": dates, "prices": prices},
+            }
+        except Exception as exc:
+            log.warning("Could not fetch VIX: %s", exc)
+            return None
+
+    def _fetch_sector_etfs() -> list:
+        results = []
+        try:
+            tickers = yf.download(
+                list(_SECTOR_ETFS.keys()), period="2d", interval="1d",
+                auto_adjust=True, progress=False
+            )["Close"]
+            for sym, label in _SECTOR_ETFS.items():
+                try:
+                    col = tickers[sym] if sym in tickers.columns else tickers.get(sym)
+                    if col is None:
+                        continue
+                    vals = col.dropna().tolist()
+                    if len(vals) >= 2:
+                        chg = round((vals[-1] - vals[-2]) / vals[-2] * 100, 2)
+                    elif len(vals) == 1:
+                        chg = 0.0
+                    else:
+                        chg = None
+                    results.append({"ticker": sym, "label": label, "day_chg": chg})
+                except Exception:
+                    pass
+        except Exception as exc:
+            log.warning("Sector ETF fetch failed: %s", exc)
+        return results
+
+    # Fetch all in sequence (could parallelise but keeps it simple)
+    indices = {
+        key: _fetch_index(sym)
+        for key, sym in _INDEX_SYMBOLS.items()
+    }
+    vix     = _fetch_vix()
+    sectors = _fetch_sector_etfs()
+
+    result = {"indices": indices, "vix": vix, "sectors": sectors}
+    with _MARKETS_CACHE_LOCK:
+        _MARKETS_CACHE["data"] = {"ts": time.time(), "data": result}
     return jsonify(result)

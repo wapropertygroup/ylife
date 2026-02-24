@@ -71,6 +71,14 @@
   {% endif %}
 </div>
 
+<!-- ── Global market indices bar ─────────────────────────────────── -->
+<div id="idxBar" class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 mb-6 fade-up">
+  <!-- skeleton placeholders -->
+  {% for _ in range(7) %}
+  <div class="animate-pulse bg-slate-900 border border-slate-800 rounded-xl p-3 h-16"></div>
+  {% endfor %}
+</div>
+
 <!-- ── Cross-sector scatter (PE vs Upside) ───────────────────────────── -->
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
 
@@ -155,7 +163,8 @@
             hover:shadow-lg hover:shadow-brand/10 transition-all duration-200 fade-up block">
     <div class="flex items-start justify-between mb-3">
       <div>
-        <h3 class="font-semibold text-slate-100 group-hover:text-brand transition">{{ group }}</h3>
+        <h3 class="font-semibold text-slate-100 group-hover:text-brand transition"
+            data-i18n="sector.name.{{ group }}">{{ group }}</h3>
         <p class="text-xs text-slate-500 mt-0.5">{{ info.tickers | join(' · ') }}</p>
       </div>
       <span class="sector-day-chg text-xs font-semibold px-1.5 py-0.5 rounded-md transition text-slate-600"></span>
@@ -305,6 +314,65 @@ const PALETTE = [
   '#6366f1','#38bdf8','#34d399','#f59e0b','#f43f5e','#a78bfa','#fb923c','#22d3ee'
 ];
 
+// ── Global market indices bar ────────────────────────────────────────────────
+(function() {
+  const IDX_COLORS = {
+    spx: '#6366f1', ixic: '#38bdf8', dji: '#fb923c',
+    n225: '#f472b6', sse: '#f87171', twii: '#34d399', kospi: '#fbbf24',
+  };
+  const IDX_ORDER  = ['spx', 'ixic', 'dji', 'n225', 'sse', 'twii', 'kospi'];
+  const MKTS_URL   = "{{ url_for('main.markets') }}";
+
+  function _tIdx(key) {
+    return (typeof I18n !== 'undefined' && I18n.tIdx) ? I18n.tIdx(key) : key.toUpperCase();
+  }
+  function _cls(v)  { return v == null ? 'text-slate-500' : v >= 0 ? 'text-emerald-400' : 'text-rose-400'; }
+  function _sign(v) { return v != null && v >= 0 ? '+' : ''; }
+  function _fmt(v, dec) { return v == null ? '—' : v.toLocaleString(undefined, { minimumFractionDigits: dec, maximumFractionDigits: dec }); }
+
+  fetch('/api/markets')
+    .then(r => r.json())
+    .then(data => {
+      const bar = document.getElementById('idxBar');
+      if (!bar) return;
+      bar.innerHTML = IDX_ORDER.map(k => {
+        const d   = (data.indices || {})[k] || {};
+        const col = IDX_COLORS[k];
+        const chgCls = _cls(d.day_chg);
+        // Compute YTD from daily data if server value is null
+        let ytd = d.ytd;
+        if (ytd == null && d.daily && d.current) {
+          const dts = d.daily.dates || [], prs = d.daily.prices || [];
+          const yr = new Date().getFullYear().toString();
+          const i = dts.findIndex(dt => dt.startsWith(yr));
+          if (i >= 0 && prs[i] > 0) ytd = Math.round((d.current - prs[i]) / prs[i] * 10000) / 100;
+        }
+        const ytdCls = _cls(ytd);
+        return `
+        <a href="${MKTS_URL}#${k}"
+           class="bg-slate-900 border border-slate-800 rounded-xl p-3 hover:border-slate-600
+                  transition-all group flex flex-col gap-0.5 cursor-pointer">
+          <span class="text-[11px] font-semibold truncate" style="color:${col}">${_tIdx(k)}</span>
+          <span class="text-base font-bold text-slate-100 tabular-nums leading-tight">
+            ${d.current != null ? d.current.toLocaleString(undefined, {maximumFractionDigits: 2}) : '—'}
+          </span>
+          <span class="text-xs font-medium tabular-nums ${chgCls}">
+            ${_sign(d.day_chg)}${_fmt(d.day_chg, 2)}%
+          </span>
+          <span class="text-[10px] tabular-nums ${ytdCls}">
+            YTD ${_sign(ytd)}${_fmt(ytd, 1)}%
+          </span>
+        </a>`;
+      }).join('');
+      // Re-apply i18n in case lang is zh (to translate index names)
+      if (typeof I18n !== 'undefined') I18n.apply(bar);
+    })
+    .catch(() => {
+      const bar = document.getElementById('idxBar');
+      if (bar) bar.innerHTML = '';
+    });
+})();
+
 // ─── Scatter label toggle state ─────────────────────────────────────────────
 const SCATTER_DEFAULT_SECTORS = new Set(['Tech', 'Cloud / SaaS', 'Semiconductors']);
 let scatterLabelsVisible = true;  // dots (tickers)
@@ -360,7 +428,8 @@ function toggleScatterLabels() {
 function buildScatterChart(ctx) {
   const sectors = [...new Set(ALL.map(d => d.sector))];
   const datasets = sectors.map((sec, i) => ({
-    label: sec,
+    label: I18n.tSector(sec),
+    _key: sec,
     data: ALL.filter(d => d.sector === sec && d.pe_fwd != null && d.upside != null)
               .map(d => ({ x: d.pe_fwd, y: d.upside, ticker: d.ticker })),
     backgroundColor: PALETTE[i % PALETTE.length] + 'cc',
@@ -439,7 +508,7 @@ function buildScatterChart(ctx) {
   });
   // Hide non-default sectors on load
   chart.data.datasets.forEach((ds, di) => {
-    if (!SCATTER_DEFAULT_SECTORS.has(ds.label)) {
+    if (!SCATTER_DEFAULT_SECTORS.has(ds._key)) {
       chart.getDatasetMeta(di).hidden = true;
     }
   });
@@ -716,7 +785,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Populate sector dropdown (stocks only)
   const sectors = [...new Set(stockRows.map(d => d.sector))].sort();
   const sel = document.getElementById('sectorFilter');
-  sectors.forEach(s => { const o = document.createElement('option'); o.value = s; o.textContent = s; sel.appendChild(o); });
+  sectors.forEach(s => { const o = document.createElement('option'); o.value = s; o.textContent = I18n.tSector(s); sel.appendChild(o); });
 
   // ── ETF heatmap state
   let etfSortCol = 'pe_ttm', etfSortDir = 1;
@@ -791,7 +860,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const q = filterText.toLowerCase();
     let rows = stockRows.filter(d => {
       if (filterSector && d.sector !== filterSector) return false;
-      if (q && !d.ticker.toLowerCase().includes(q) && !d.name.toLowerCase().includes(q)) return false;
+      if (q && !d.ticker.toLowerCase().includes(q) && !d.name.toLowerCase().includes(q) && !I18n.stockName(d.ticker, '').toLowerCase().includes(q)) return false;
       return true;
     });
     rows = sortRows(rows, sortCol, sortDir);
@@ -805,10 +874,10 @@ document.addEventListener('DOMContentLoaded', () => {
       <tr class="border-b border-slate-800/60 hover:bg-slate-800/40 transition">
         <td class="py-2 px-3" style="${chgStyle}">
           <a href="/history/${d.ticker}" class="font-mono font-bold text-slate-100 hover:underline">${d.ticker}</a>
-          <div class="text-slate-400 text-xs truncate max-w-[120px]">${d.name}</div>
+          <div class="text-slate-400 text-xs truncate max-w-[120px]">${I18n.stockName(d.ticker, d.name)}</div>
           <div class="text-[10px] font-semibold mt-0.5" style="${chgColor}">${chgText}</div>
         </td>
-        <td class="py-2 px-3 text-xs text-slate-500">${d.sector}</td>
+        <td class="py-2 px-3 text-xs text-slate-500">${I18n.tSector(d.sector)}</td>
         <td class="py-2 px-3 text-right font-mono text-sm" style="${heatColor(d.pe_ttm,10,60)}">${fmtPE(d.pe_ttm)}</td>
         <td class="py-2 px-3 text-right font-mono text-sm" style="${heatColor(d.pe_fwd,10,60)}">${fmtPE(d.pe_fwd)}</td>
         <td class="py-2 px-3 text-right">${fmtPeg(d.peg)}</td>
@@ -835,10 +904,10 @@ document.addEventListener('DOMContentLoaded', () => {
       <tr class="border-b border-slate-800/60 hover:bg-slate-800/40 transition">
         <td class="py-2 px-3" style="${chgStyle}">
           <a href="/history/${d.ticker}" class="font-mono font-bold text-slate-100 hover:underline">${d.ticker}</a>
-          <div class="text-slate-400 text-xs truncate max-w-[120px]">${d.name}</div>
+          <div class="text-slate-400 text-xs truncate max-w-[120px]">${I18n.stockName(d.ticker, d.name)}</div>
           <div class="text-[10px] font-semibold mt-0.5" style="${chgColor}">${chgText}</div>
         </td>
-        <td class="py-2 px-3 text-xs text-slate-500">${d.sector}</td>
+        <td class="py-2 px-3 text-xs text-slate-500">${I18n.tSector(d.sector)}</td>
         <td class="py-2 px-3 text-right font-mono text-sm" style="${heatColor(d.pe_ttm,10,60)}">${fmtPE(d.pe_ttm)}</td>
       </tr>`;
     }).join('');
