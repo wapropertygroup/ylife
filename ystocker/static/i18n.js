@@ -577,6 +577,28 @@ const I18n = (() => {
     'markets.loading':     { en: 'Loading market data…', zh: '加载市场数据…' },
     'markets.nav':         { en: 'Markets', zh: '市场' },
 
+    // AAII Sentiment
+    'markets.aaii_title':   { en: 'AAII Sentiment',         zh: 'AAII投资者情绪' },
+    'markets.aaii_desc':    { en: 'AAII Investor Sentiment Survey — weekly', zh: 'AAII投资者情绪调查 — 每周更新' },
+    'markets.aaii_bullish': { en: 'Bullish',                zh: '看多' },
+    'markets.aaii_neutral': { en: 'Neutral',                zh: '中性' },
+    'markets.aaii_bearish': { en: 'Bearish',                zh: '看空' },
+    'markets.aaii_spread':  { en: 'Bull-Bear',              zh: '牛熊差' },
+
+    // Economic Events
+    'markets.econ_events_title': { en: 'Economic Events',         zh: '经济事件日历' },
+    'markets.econ_events_desc':  { en: 'Key macro releases & central bank decisions this week', zh: '本周重要宏观数据发布及央行决议' },
+    'markets.econ_translate':    { en: 'Translate to Chinese',    zh: '翻译为中文' },
+    'markets.econ_no_events':    { en: 'No upcoming events.',     zh: '暂无即将发布的事件。' },
+    'markets.econ_col_date':     { en: 'Date',                    zh: '日期' },
+    'markets.econ_col_time':     { en: 'Time',                    zh: '时间' },
+    'markets.econ_col_country':  { en: 'Country',                 zh: '国家' },
+    'markets.econ_col_event':    { en: 'Event',                   zh: '事件' },
+    'markets.econ_col_impact':   { en: 'Impact',                  zh: '影响' },
+    'markets.econ_col_actual':   { en: 'Actual',                  zh: '实际值' },
+    'markets.econ_col_forecast': { en: 'Forecast',                zh: '预测值' },
+    'markets.econ_col_previous': { en: 'Previous',                zh: '前值' },
+
     // ── heatmap.html ───────────────────────────────────────────────────
     'heatmap.nav':         { en: 'Heatmap',           zh: '热力图' },
     'heatmap.title':       { en: 'Sector Heatmap',    zh: '板块热力图' },

@@ -2332,6 +2332,409 @@ def api_fear_greed():
 
 
 # ---------------------------------------------------------------------------
+# AAII Sentiment Survey  (/api/aaii-sentiment)
+# ---------------------------------------------------------------------------
+
+_AAII_CACHE: dict = {}
+_AAII_CACHE_LOCK = threading.Lock()
+_AAII_CACHE_TTL  = 6 * 3600  # 6 hours (published weekly)
+
+_AAII_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/122.0.0.0 Safari/537.36"
+    ),
+    "Accept": "application/json, text/plain, */*",
+    "Referer": "https://www.aaii.com/sentimentsurvey",
+}
+
+_AAII_XLS_URL = "https://www.aaii.com/files/surveys/sentiment.xls"
+
+
+@bp.route("/api/aaii-sentiment")
+def api_aaii_sentiment():
+    """
+    Fetch AAII Investor Sentiment Survey data (weekly bulls/bears/neutral).
+
+    Returns:
+      {
+        "latest": { "date": "YYYY-MM-DD", "bullish": float, "neutral": float, "bearish": float,
+                    "bull_bear_spread": float },
+        "history": [{"date": "YYYY-MM-DD", "bullish": float, "neutral": float,
+                     "bearish": float, "bull_bear_spread": float}, ...]
+      }
+    """
+    import requests as req_lib
+    import io
+
+    with _AAII_CACHE_LOCK:
+        entry = _AAII_CACHE.get("data")
+        if entry and time.time() - entry["ts"] < _AAII_CACHE_TTL:
+            return jsonify(entry["data"])
+
+    try:
+        resp = req_lib.get(_AAII_XLS_URL, headers=_AAII_HEADERS, timeout=20)
+        resp.raise_for_status()
+        df = pd.read_excel(io.BytesIO(resp.content), header=3)
+
+        # Columns: Date, Bullish, Neutral, Bearish, Total, Bull-Bear Spread, ...
+        # Normalise column names
+        df.columns = [str(c).strip() for c in df.columns]
+        # Find key columns (header names may vary slightly)
+        col_map = {}
+        for c in df.columns:
+            cl = c.lower()
+            if "date" in cl:
+                col_map.setdefault("date", c)
+            elif "bull" in cl and "bear" not in cl and "spread" not in cl:
+                col_map.setdefault("bullish", c)
+            elif "neutral" in cl:
+                col_map.setdefault("neutral", c)
+            elif "bear" in cl and "spread" not in cl:
+                col_map.setdefault("bearish", c)
+            elif "spread" in cl:
+                col_map.setdefault("spread", c)
+
+        required = ["date", "bullish", "neutral", "bearish"]
+        if not all(k in col_map for k in required):
+            raise ValueError(f"Could not find required columns, got: {list(df.columns)}")
+
+        records = []
+        for _, row in df.iterrows():
+            try:
+                raw_date = row[col_map["date"]]
+                if pd.isna(raw_date):
+                    continue
+                if hasattr(raw_date, "strftime"):
+                    date_str = raw_date.strftime("%Y-%m-%d")
+                else:
+                    date_str = str(raw_date)[:10]
+                # Must look like a valid date
+                if len(date_str) < 8 or not date_str[0].isdigit():
+                    continue
+
+                def _pct(val):
+                    if pd.isna(val):
+                        return None
+                    v = float(val)
+                    # Already a fraction (0.xx) → convert to %
+                    return round(v * 100 if v < 2 else v, 1)
+
+                bull = _pct(row[col_map["bullish"]])
+                neu  = _pct(row[col_map["neutral"]])
+                bear = _pct(row[col_map["bearish"]])
+                spread_col = col_map.get("spread")
+                spread = None
+                if spread_col:
+                    spread = _pct(row[spread_col])
+                if spread is None and bull is not None and bear is not None:
+                    spread = round(bull - bear, 1)
+
+                records.append({
+                    "date": date_str,
+                    "bullish": bull,
+                    "neutral": neu,
+                    "bearish": bear,
+                    "bull_bear_spread": spread,
+                })
+            except Exception:
+                continue
+
+        # Sort ascending and take last 104 weeks (2 years) for chart
+        records.sort(key=lambda r: r["date"])
+        history = records[-104:] if len(records) > 104 else records
+        latest  = records[-1] if records else None
+
+        result = {"latest": latest, "history": history}
+
+    except Exception as exc:
+        log.warning("AAII sentiment fetch failed: %s", exc)
+        return jsonify({"error": str(exc)}), 502
+
+    with _AAII_CACHE_LOCK:
+        _AAII_CACHE["data"] = {"ts": time.time(), "data": result}
+
+    return jsonify(result)
+
+
+# ---------------------------------------------------------------------------
+# Economic Events Calendar  (/api/economic-events)
+# ---------------------------------------------------------------------------
+
+_ECON_TABLE_NAME    = "ystocker-economic-events"
+_econ_table         = None
+_ECON_TABLE_LOCK    = threading.Lock()
+_econ_unavail_until = 0.0
+
+_ECON_CACHE: dict = {}
+_ECON_CACHE_LOCK = threading.Lock()
+_ECON_CACHE_TTL  = 3600   # 1 hour
+
+_FINVIZ_CAL_URL = "https://finviz.com/calendar.ashx"
+_FINVIZ_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/122.0.0.0 Safari/537.36"
+    ),
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Referer": "https://finviz.com/",
+}
+
+
+def _get_econ_table():
+    """Return boto3 DynamoDB Table for economic events, or None."""
+    global _econ_table, _econ_unavail_until
+    if _econ_table is not None:
+        return _econ_table
+    if time.time() < _econ_unavail_until:
+        return None
+    with _ECON_TABLE_LOCK:
+        if _econ_table is not None:
+            return _econ_table
+        if time.time() < _econ_unavail_until:
+            return None
+        try:
+            import boto3
+            ddb = boto3.resource("dynamodb", region_name=os.environ.get("AWS_REGION", "us-west-2"))
+            _econ_table = ddb.Table(_ECON_TABLE_NAME)
+            _econ_table.load()
+            log.info("DynamoDB economic-events table connected: %s", _ECON_TABLE_NAME)
+        except Exception as exc:
+            log.warning("DynamoDB economic-events table unavailable: %s", exc)
+            _econ_table = None
+            _econ_unavail_until = time.time() + 300
+        return _econ_table
+
+
+def _econ_load_from_dynamo(date_str: str) -> list:
+    """Load economic events for a given date (YYYY-MM-DD) from DynamoDB."""
+    table = _get_econ_table()
+    if not table:
+        return []
+    try:
+        from boto3.dynamodb.conditions import Key
+        resp = table.query(KeyConditionExpression=Key("date").eq(date_str))
+        return resp.get("Items", [])
+    except Exception as exc:
+        log.warning("DynamoDB economic-events query failed: %s", exc)
+        return []
+
+
+def _econ_save_to_dynamo(events: list) -> None:
+    """Batch-write economic event items to DynamoDB."""
+    table = _get_econ_table()
+    if not table or not events:
+        return
+    try:
+        with table.batch_writer() as batch:
+            for ev in events:
+                if not ev.get("date") or not ev.get("event_id"):
+                    continue
+                item = {k: v for k, v in ev.items() if v is not None}
+                batch.put_item(Item=item)
+    except Exception as exc:
+        log.warning("DynamoDB economic-events write failed: %s", exc)
+
+
+def _scrape_finviz_calendar() -> list:
+    """Scrape finviz.com economic calendar and return list of event dicts."""
+    import requests as req_lib
+    from datetime import datetime
+
+    resp = req_lib.get(_FINVIZ_CAL_URL, headers=_FINVIZ_HEADERS, timeout=15)
+    resp.raise_for_status()
+
+    # finviz returns an HTML table; parse with pandas
+    tables = pd.read_html(resp.text)
+    if not tables:
+        return []
+
+    # The first table is the calendar
+    df = tables[0]
+    df.columns = [str(c).strip().lower() for c in df.columns]
+
+    events = []
+    current_date = None
+    for _, row in df.iterrows():
+        # Detect date row (first column contains a date like "Feb 25, 2026")
+        first_col = str(row.iloc[0]).strip() if len(row) > 0 else ""
+        try:
+            parsed = datetime.strptime(first_col, "%b %d, %Y")
+            current_date = parsed.strftime("%Y-%m-%d")
+            continue
+        except ValueError:
+            pass
+
+        if not current_date:
+            continue
+
+        try:
+            # Columns vary; try to extract: time, event_name, impact, actual, forecast, previous
+            cols = list(row.index)
+            def _get(col_hints):
+                for h in col_hints:
+                    for c in cols:
+                        if h in c:
+                            v = row[c]
+                            if isinstance(v, float) and math.isnan(v):
+                                return None
+                            s = str(v).strip()
+                            return s if s and s.lower() not in ("nan", "-", "") else None
+                return None
+
+            event_name = _get(["event", "name", "release"])
+            if not event_name:
+                continue
+
+            ev_time    = _get(["time"])
+            impact     = _get(["impact"])
+            actual     = _get(["actual"])
+            forecast   = _get(["forecast", "est"])
+            previous   = _get(["prior", "previous", "prev"])
+            country    = _get(["country", "cur"])
+
+            import hashlib
+            event_id = hashlib.md5(f"{current_date}:{ev_time}:{event_name}".encode()).hexdigest()[:16]
+
+            events.append({
+                "date":       current_date,
+                "event_id":   event_id,
+                "time":       ev_time,
+                "event":      event_name,
+                "country":    country,
+                "impact":     impact,
+                "actual":     actual,
+                "forecast":   forecast,
+                "previous":   previous,
+                "zh":         None,  # filled by AI translation
+            })
+        except Exception:
+            continue
+
+    return events
+
+
+@bp.route("/api/economic-events")
+def api_economic_events():
+    """
+    Return economic calendar events.
+
+    Query params:
+      date  - YYYY-MM-DD (default: today)
+      days  - how many days to fetch (default: 7)
+
+    Response:
+      { "events": [ {date, time, event, country, impact, actual, forecast, previous, zh}, ... ] }
+    """
+    with _ECON_CACHE_LOCK:
+        entry = _ECON_CACHE.get("data")
+        if entry and time.time() - entry["ts"] < _ECON_CACHE_TTL:
+            return jsonify(entry["data"])
+
+    try:
+        raw_events = _scrape_finviz_calendar()
+    except Exception as exc:
+        log.warning("Finviz calendar scrape failed: %s", exc)
+        raw_events = []
+
+    # Load any stored translations from DynamoDB
+    if raw_events:
+        dates = list({ev["date"] for ev in raw_events})
+        stored: dict = {}
+        for d in dates:
+            for rec in _econ_load_from_dynamo(d):
+                eid = rec.get("event_id")
+                if eid:
+                    stored[eid] = rec
+
+        # Merge stored translations
+        for ev in raw_events:
+            eid = ev.get("event_id")
+            if eid and eid in stored:
+                ev["zh"] = stored[eid].get("zh")
+
+        # Save new events that aren't in DB yet
+        new_evs = [ev for ev in raw_events if ev.get("event_id") not in stored]
+        if new_evs:
+            _econ_save_to_dynamo(new_evs)
+
+    result = {"events": raw_events}
+    with _ECON_CACHE_LOCK:
+        _ECON_CACHE["data"] = {"ts": time.time(), "data": result}
+
+    return jsonify(result)
+
+
+@bp.route("/api/economic-events/translate", methods=["POST"])
+def api_economic_events_translate():
+    """
+    Translate economic event names to Chinese using Gemini AI.
+
+    Request body: { "events": [{"event_id": str, "event": str}, ...] }
+    Response:     { "translations": {"event_id": "zh_text", ...} }
+    """
+    GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+    if not GEMINI_API_KEY:
+        return jsonify({"error": "AI translation not configured"}), 503
+
+    body = request.get_json(force=True) or {}
+    events_to_translate = body.get("events", [])
+    if not events_to_translate:
+        return jsonify({"translations": {}})
+
+    # Build prompt
+    lines = "\n".join(
+        f'{ev["event_id"]}: {ev["event"]}'
+        for ev in events_to_translate
+        if ev.get("event_id") and ev.get("event")
+    )
+    prompt = (
+        "You are a financial translator. Translate the following economic event names "
+        "from English to Simplified Chinese. Return ONLY a JSON object mapping each ID "
+        "to its Chinese translation. Do not add any explanation.\n\n"
+        + lines
+    )
+
+    try:
+        import google.generativeai as genai
+        genai.configure(api_key=GEMINI_API_KEY)
+        model = genai.GenerativeModel("gemini-1.5-flash")
+        response = model.generate_content(prompt)
+        text = response.text.strip()
+        # Strip markdown code blocks if present
+        if text.startswith("```"):
+            text = text.split("```")[1]
+            if text.startswith("json"):
+                text = text[4:]
+        translations = json.loads(text)
+    except Exception as exc:
+        log.warning("Economic events translation failed: %s", exc)
+        return jsonify({"error": str(exc)}), 500
+
+    # Persist translations back to DynamoDB
+    if translations:
+        table = _get_econ_table()
+        if table:
+            try:
+                with table.batch_writer() as batch:
+                    for ev in events_to_translate:
+                        eid = ev.get("event_id")
+                        if eid and eid in translations:
+                            batch.put_item(Item={
+                                "date":     ev.get("date", "unknown"),
+                                "event_id": eid,
+                                "event":    ev.get("event", ""),
+                                "zh":       translations[eid],
+                            })
+            except Exception as exc:
+                log.warning("DynamoDB economic-events translation save failed: %s", exc)
+
+    return jsonify({"translations": translations})
+
+
+# ---------------------------------------------------------------------------
 # Sector Heatmap  (/heatmap)
 # ---------------------------------------------------------------------------
 

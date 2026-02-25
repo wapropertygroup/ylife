@@ -48,8 +48,8 @@
 <!-- ── Index snapshot cards ───────────────────────────────────────────── -->
 <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-4 xl:grid-cols-8 gap-3 mb-6 fade-up" id="indexCards"></div>
 
-<!-- ── VIX + Fear & Greed + sector performance row ───────────────────── -->
-<div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6 fade-up">
+<!-- ── VIX + Fear & Greed + AAII Sentiment row ────────────────────── -->
+<div class="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-6 fade-up">
 
   <!-- VIX card -->
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5">
@@ -95,12 +95,65 @@
     </div>
   </div>
 
+  <!-- AAII Sentiment Survey card -->
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5">
+    <div class="flex items-start justify-between mb-3">
+      <div>
+        <h2 class="text-sm font-semibold text-slate-200" data-i18n="markets.aaii_title">AAII Sentiment</h2>
+        <p class="text-xs text-slate-500 mt-0.5" data-i18n="markets.aaii_desc">AAII Investor Sentiment Survey — weekly</p>
+      </div>
+      <div id="aaiiBadge" class="text-right"></div>
+    </div>
+    <div id="aaiiLoading" class="text-xs text-slate-600 py-2" data-i18n="markets.loading">Loading…</div>
+    <div id="aaiiBody" style="display:none">
+      <!-- Bull/Bear/Neutral bars -->
+      <div class="space-y-2 mb-3" id="aaiiBars"></div>
+      <!-- History chart -->
+      <div style="height:100px"><canvas id="aaiiChart"></canvas></div>
+    </div>
+  </div>
+
   <!-- Sector ETF performance -->
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5">
     <h2 class="text-sm font-semibold text-slate-200 mb-3" data-i18n="markets.sector_perf">Sector Performance</h2>
     <div id="sectorBars" class="space-y-2"></div>
   </div>
 
+</div>
+
+<!-- ── Economic Events Calendar ───────────────────────────────────── -->
+<div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 mb-6 fade-up">
+  <div class="flex items-center justify-between mb-4">
+    <div>
+      <h2 class="text-sm font-semibold text-slate-200" data-i18n="markets.econ_events_title">Economic Events</h2>
+      <p class="text-xs text-slate-500 mt-0.5" data-i18n="markets.econ_events_desc">Key macro releases &amp; central bank decisions this week</p>
+    </div>
+    <button id="econTranslateBtn" onclick="translateEconEvents()"
+            class="text-xs px-3 py-1.5 rounded-lg border border-slate-700 text-slate-400
+                   hover:border-indigo-500 hover:text-indigo-300 transition-all">
+      <span data-i18n="markets.econ_translate">Translate to Chinese</span>
+    </button>
+  </div>
+  <div id="econLoading" class="text-xs text-slate-600 py-2" data-i18n="markets.loading">Loading…</div>
+  <div id="econBody" style="display:none">
+    <div class="overflow-x-auto">
+      <table class="w-full text-xs text-left">
+        <thead>
+          <tr class="border-b border-slate-800 text-slate-500 text-[10px] uppercase tracking-wider">
+            <th class="pb-2 pr-3 font-medium" data-i18n="markets.econ_col_date">Date</th>
+            <th class="pb-2 pr-3 font-medium" data-i18n="markets.econ_col_time">Time</th>
+            <th class="pb-2 pr-3 font-medium" data-i18n="markets.econ_col_country">Country</th>
+            <th class="pb-2 pr-3 font-medium" data-i18n="markets.econ_col_event">Event</th>
+            <th class="pb-2 pr-3 font-medium" data-i18n="markets.econ_col_impact">Impact</th>
+            <th class="pb-2 pr-3 font-medium text-right" data-i18n="markets.econ_col_actual">Actual</th>
+            <th class="pb-2 pr-3 font-medium text-right" data-i18n="markets.econ_col_forecast">Forecast</th>
+            <th class="pb-2 font-medium text-right" data-i18n="markets.econ_col_previous">Previous</th>
+          </tr>
+        </thead>
+        <tbody id="econTableBody" class="divide-y divide-slate-800/60"></tbody>
+      </table>
+    </div>
+  </div>
 </div>
 
 <!-- ── Per-index detail tabs ──────────────────────────────────────────── -->
@@ -1041,6 +1094,185 @@ function renderFearGreed(data) {
 }
 
 
+// ── AAII Sentiment Survey ─────────────────────────────────────────
+let _aaiiChartInst = null;
+
+function renderAaii(data) {
+  if (!data || data.error) {
+    document.getElementById('aaiiLoading').textContent = data?.error || 'Unavailable';
+    return;
+  }
+
+  const latest = data.latest || {};
+  const bull = latest.bullish, bear = latest.bearish, neu = latest.neutral;
+  const spread = latest.bull_bear_spread;
+
+  // Badge: show bull-bear spread
+  const spreadCls = spread == null ? 'neutral' : spread >= 0 ? 'up' : 'down';
+  document.getElementById('aaiiBadge').innerHTML = `
+    <div class="text-sm font-bold ${spreadCls}">${spread != null ? (spread >= 0 ? '+' : '') + spread.toFixed(1) + '%' : '—'}</div>
+    <div class="text-[10px] text-slate-500" data-i18n="markets.aaii_spread">Bull-Bear</div>`;
+
+  // Bull / Neutral / Bear bars
+  const bars = [
+    { label: I18n.t('markets.aaii_bullish') || 'Bullish',  val: bull, col: '#34d399' },
+    { label: I18n.t('markets.aaii_neutral') || 'Neutral',  val: neu,  col: '#94a3b8' },
+    { label: I18n.t('markets.aaii_bearish') || 'Bearish',  val: bear, col: '#f87171' },
+  ];
+  document.getElementById('aaiiBars').innerHTML = bars.map(b => `
+    <div class="flex items-center gap-2">
+      <span class="text-[10px] text-slate-400 w-14 shrink-0">${b.label}</span>
+      <div class="flex-1 bg-slate-800 rounded-full h-2 overflow-hidden">
+        <div style="width:${b.val ?? 0}%; background:${b.col}; height:100%; border-radius:4px; transition:width 0.4s"></div>
+      </div>
+      <span class="text-[11px] font-semibold tabular-nums w-10 text-right" style="color:${b.col}">
+        ${b.val != null ? b.val.toFixed(1) + '%' : '—'}
+      </span>
+    </div>`).join('');
+
+  // History chart — stacked area: bullish (green), neutral (gray), bearish (red)
+  const hist = data.history || [];
+  if (hist.length && document.getElementById('aaiiChart')) {
+    const labels = hist.map(h => h.date);
+    if (_aaiiChartInst) { _aaiiChartInst.destroy(); _aaiiChartInst = null; }
+    _aaiiChartInst = new Chart(document.getElementById('aaiiChart'), {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          { label: I18n.t('markets.aaii_bullish') || 'Bullish', data: hist.map(h => h.bullish),
+            borderColor: '#34d399', backgroundColor: 'rgba(52,211,153,0.15)',
+            borderWidth: 1.5, pointRadius: 0, fill: true, tension: 0.3, spanGaps: true },
+          { label: I18n.t('markets.aaii_bearish') || 'Bearish', data: hist.map(h => h.bearish),
+            borderColor: '#f87171', backgroundColor: 'rgba(248,113,113,0.1)',
+            borderWidth: 1.5, pointRadius: 0, fill: true, tension: 0.3, spanGaps: true },
+        ],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            mode: 'index', intersect: false,
+            callbacks: { label: c => ` ${c.dataset.label}: ${c.raw?.toFixed(1)}%` },
+          },
+        },
+        scales: {
+          x: { grid: { color: GRID_COL }, ticks: { color: TICK_COL, maxTicksLimit: 4, maxRotation: 0 } },
+          y: { grid: { color: GRID_COL }, ticks: { color: TICK_COL, callback: v => v + '%' }, min: 0 },
+        },
+      },
+      plugins: [{
+        afterDraw(chart) {
+          const { ctx: c, chartArea: a, scales: { y } } = chart;
+          // Historical average bullish ~37.5%
+          const avg = y.getPixelForValue(37.5);
+          if (avg >= a.top && avg <= a.bottom) {
+            c.save(); c.strokeStyle = '#34d39955'; c.lineWidth = 1; c.setLineDash([4, 3]);
+            c.beginPath(); c.moveTo(a.left, avg); c.lineTo(a.right, avg); c.stroke();
+            c.fillStyle = '#34d399'; c.font = '9px Inter,sans-serif';
+            c.fillText('Avg 37.5%', a.right - 55, avg - 3); c.restore();
+          }
+        },
+      }],
+    });
+  }
+
+  document.getElementById('aaiiLoading').style.display = 'none';
+  document.getElementById('aaiiBody').style.display = '';
+}
+
+// ── Economic Events Calendar ──────────────────────────────────────
+let _econData = [];
+
+function renderEconEvents(events) {
+  if (!events || !events.length) {
+    document.getElementById('econLoading').textContent = I18n.t('markets.econ_no_events') || 'No upcoming events.';
+    return;
+  }
+  _econData = events;
+
+  // Group by date for display
+  const byDate = {};
+  events.forEach(ev => {
+    if (!byDate[ev.date]) byDate[ev.date] = [];
+    byDate[ev.date].push(ev);
+  });
+
+  const impactColor = { high: '#f87171', medium: '#fb923c', low: '#94a3b8' };
+  const impactDot = (imp) => {
+    const k = (imp || '').toLowerCase();
+    const col = k.includes('high') ? impactColor.high
+              : k.includes('med') ? impactColor.medium
+              : impactColor.low;
+    return `<span class="inline-block w-1.5 h-1.5 rounded-full" style="background:${col}"></span>`;
+  };
+
+  let rows = '';
+  const sortedDates = Object.keys(byDate).sort();
+  sortedDates.forEach(date => {
+    byDate[date].forEach((ev, i) => {
+      const nameCell = ev.zh
+        ? `<span class="text-slate-200">${ev.zh}</span><br><span class="text-slate-500 text-[10px]">${ev.event}</span>`
+        : `<span class="text-slate-200" data-event-id="${ev.event_id}">${ev.event}</span>`;
+      const actualVsForecast = (() => {
+        if (!ev.actual || !ev.forecast) return '';
+        const a = parseFloat(ev.actual), f = parseFloat(ev.forecast);
+        if (isNaN(a) || isNaN(f)) return '';
+        return a > f ? ' <span class="text-emerald-400">▲</span>' : a < f ? ' <span class="text-rose-400">▼</span>' : '';
+      })();
+      rows += `<tr class="hover:bg-slate-800/40 transition-colors">
+        <td class="py-2 pr-3 text-slate-400 whitespace-nowrap">${i === 0 ? date : ''}</td>
+        <td class="py-2 pr-3 text-slate-400 whitespace-nowrap">${ev.time || '—'}</td>
+        <td class="py-2 pr-3 text-slate-400 whitespace-nowrap">${ev.country || '—'}</td>
+        <td class="py-2 pr-3 max-w-xs">${nameCell}</td>
+        <td class="py-2 pr-3">${impactDot(ev.impact)}</td>
+        <td class="py-2 pr-3 text-right tabular-nums font-semibold ${ev.actual ? 'text-slate-200' : 'text-slate-600'}">${ev.actual || '—'}${actualVsForecast}</td>
+        <td class="py-2 pr-3 text-right tabular-nums text-slate-400">${ev.forecast || '—'}</td>
+        <td class="py-2 text-right tabular-nums text-slate-500">${ev.previous || '—'}</td>
+      </tr>`;
+    });
+  });
+
+  document.getElementById('econTableBody').innerHTML = rows;
+  document.getElementById('econLoading').style.display = 'none';
+  document.getElementById('econBody').style.display = '';
+}
+
+async function translateEconEvents() {
+  const btn = document.getElementById('econTranslateBtn');
+  if (btn) btn.disabled = true;
+
+  // Find events without Chinese translation
+  const toTranslate = _econData
+    .filter(ev => !ev.zh && ev.event && ev.event_id)
+    .map(ev => ({ event_id: ev.event_id, event: ev.event, date: ev.date }));
+
+  if (!toTranslate.length) {
+    if (btn) btn.disabled = false;
+    return;
+  }
+
+  try {
+    const resp = await fetch('/api/economic-events/translate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ events: toTranslate }),
+    });
+    const result = await resp.json();
+    if (result.translations) {
+      _econData = _econData.map(ev => ({
+        ...ev,
+        zh: result.translations[ev.event_id] || ev.zh,
+      }));
+      renderEconEvents(_econData);
+    }
+  } catch(e) {
+    console.warn('Translation failed:', e);
+  }
+  if (btn) btn.disabled = false;
+}
+
 (async function() {
   try {
     // Check URL hash for a specific index to start on (e.g. from home page links)
@@ -1062,6 +1294,16 @@ function renderFearGreed(data) {
       .then(r => r.json())
       .then(renderFearGreed)
       .catch(e => { document.getElementById('fgLoading').textContent = '⚠ ' + e.message; });
+    // AAII Sentiment — async, non-blocking
+    fetch('/api/aaii-sentiment')
+      .then(r => r.json())
+      .then(renderAaii)
+      .catch(e => { document.getElementById('aaiiLoading').textContent = '⚠ ' + e.message; });
+    // Economic Events — async, non-blocking
+    fetch('/api/economic-events')
+      .then(r => r.json())
+      .then(d => renderEconEvents(d.events || []))
+      .catch(e => { document.getElementById('econLoading').textContent = '⚠ ' + e.message; });
     // Activate the correct tab
     IDX_ALL_KEYS.forEach(k => {
       const id = 'tab' + k.charAt(0).toUpperCase() + k.slice(1);
