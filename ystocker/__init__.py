@@ -120,7 +120,7 @@ def create_app() -> Flask:
     app.secret_key = "ystocker-dev-secret"  # needed for flash messages
 
     # Register the main blueprint (routes live in routes.py)
-    from ystocker.routes import bp, _start_background_thread
+    from ystocker.routes import bp, _start_background_thread, _start_heatmap_scheduler
     app.register_blueprint(bp)
 
     # Jinja2 filter: unix timestamp → "Feb 21, 2026 15:30"
@@ -143,5 +143,8 @@ def create_app() -> Flask:
     # Start 13F institutional holdings cache warmer (24h TTL)
     from ystocker.sec13f import start_background_thread as _start_sec13f_thread
     _start_sec13f_thread()
+
+    # Start heatmap daily auto-snapshot scheduler (weekdays at 16:30 ET)
+    _start_heatmap_scheduler()
 
     return app

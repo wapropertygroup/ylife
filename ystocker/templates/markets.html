@@ -46,21 +46,53 @@
 <div id="marketsContent" style="display:none">
 
 <!-- ── Index snapshot cards ───────────────────────────────────────────── -->
-<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3 mb-6 fade-up" id="indexCards"></div>
+<div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-4 xl:grid-cols-8 gap-3 mb-6 fade-up" id="indexCards"></div>
 
-<!-- ── VIX + sector performance row ─────────────────────────────────── -->
-<div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6 fade-up">
+<!-- ── VIX + Fear & Greed + sector performance row ───────────────────── -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6 fade-up">
 
   <!-- VIX card -->
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5">
     <div class="flex items-start justify-between mb-3">
       <div>
         <h2 class="text-sm font-semibold text-slate-200" data-i18n="markets.vix">VIX (Volatility)</h2>
-        <p class="text-xs text-slate-500 mt-0.5">CBOE Volatility Index — fear gauge of the S&amp;P 500</p>
+        <p class="text-xs text-slate-500 mt-0.5" data-i18n="markets.vix_desc">CBOE Volatility Index — fear gauge of the S&amp;P 500</p>
       </div>
       <div id="vixBadge" class="text-right"></div>
     </div>
     <div style="height:160px"><canvas id="vixChart"></canvas></div>
+  </div>
+
+  <!-- CNN Fear & Greed card -->
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5">
+    <div class="flex items-start justify-between mb-3">
+      <div>
+        <h2 class="text-sm font-semibold text-slate-200" data-i18n="markets.fear_greed">Fear &amp; Greed</h2>
+        <p class="text-xs text-slate-500 mt-0.5" data-i18n="markets.fear_greed_desc">CNN Fear &amp; Greed Index — composite sentiment</p>
+      </div>
+      <div id="fgBadge" class="text-right"></div>
+    </div>
+    <div id="fgLoading" class="text-xs text-slate-600 py-2" data-i18n="markets.loading">Loading…</div>
+    <div id="fgBody" style="display:none">
+      <!-- Gauge bar -->
+      <div class="mb-3">
+        <div class="flex justify-between text-[9px] text-slate-600 mb-1">
+          <span data-i18n="markets.fg_extreme_fear">Extreme Fear</span>
+          <span data-i18n="markets.fg_fear">Fear</span>
+          <span data-i18n="markets.fg_neutral">Neutral</span>
+          <span data-i18n="markets.fg_greed">Greed</span>
+          <span data-i18n="markets.fg_extreme_greed">Extreme Greed</span>
+        </div>
+        <div class="relative h-3 rounded-full overflow-hidden" style="background:linear-gradient(to right,#7f1d1d,#ef4444,#334155,#10b981,#065f46)">
+          <div id="fgNeedle" class="absolute top-0 w-0.5 h-full bg-white/90 rounded-full transition-all duration-700" style="left:50%"></div>
+        </div>
+        <div class="flex justify-between text-[9px] text-slate-600 mt-1"><span>0</span><span>25</span><span>50</span><span>75</span><span>100</span></div>
+      </div>
+      <!-- Comparison row -->
+      <div class="grid grid-cols-4 gap-1 mb-3" id="fgCompare"></div>
+      <!-- History chart -->
+      <div style="height:90px"><canvas id="fgChart"></canvas></div>
+    </div>
   </div>
 
   <!-- Sector ETF performance -->
@@ -79,6 +111,7 @@
     <button class="idx-tab-btn active whitespace-nowrap" id="tabSpx"   onclick="switchIdx('spx')"   data-i18n="markets.tab_spx">S&amp;P 500</button>
     <button class="idx-tab-btn whitespace-nowrap"        id="tabIxic"  onclick="switchIdx('ixic')"  data-i18n="markets.tab_ixic">Nasdaq</button>
     <button class="idx-tab-btn whitespace-nowrap"        id="tabDji"   onclick="switchIdx('dji')"   data-i18n="markets.tab_dji">Dow Jones</button>
+    <button class="idx-tab-btn whitespace-nowrap"        id="tabFtse"  onclick="switchIdx('ftse')"  data-i18n="markets.tab_ftse">FTSE 100</button>
     <button class="idx-tab-btn whitespace-nowrap"        id="tabN225"  onclick="switchIdx('n225')"  data-i18n="markets.tab_n225">Nikkei 225</button>
     <button class="idx-tab-btn whitespace-nowrap"        id="tabSse"   onclick="switchIdx('sse')"   data-i18n="markets.tab_sse">Shanghai</button>
     <button class="idx-tab-btn whitespace-nowrap"        id="tabTwii"  onclick="switchIdx('twii')"  data-i18n="markets.tab_twii">Taiwan</button>
@@ -109,7 +142,7 @@
       <button class="range-btn" data-period="1m"      onclick="switchIdxRange('1m')">1M</button>
       <button class="range-btn" data-period="6m"      onclick="switchIdxRange('6m')">6M</button>
       <button class="range-btn" data-period="daily"   onclick="switchIdxRange('daily')">1Y</button>
-      <button class="range-btn active" data-period="weekly"  onclick="switchIdxRange('weekly')">2Y</button>
+      <button class="range-btn active" data-period="weekly"  onclick="switchIdxRange('weekly')">1Y W</button>
       <button class="range-btn" data-period="monthly" onclick="switchIdxRange('monthly')">5Y</button>
     </div>
   </div>
@@ -189,16 +222,16 @@ let _forecastCache    = {};  // key → forecast data
 // Yahoo Finance symbols per index key (for forecast API)
 const IDX_SYMBOLS = {
   spx: '%5EGSPC', ixic: '%5EIXIC', dji: '%5EDJI',
-  n225: '%5EN225', sse: '000001.SS', twii: '%5ETWII', kospi: '%5EKS11',
+  ftse: '%5EFTSE', n225: '%5EN225', sse: '000001.SS', twii: '%5ETWII', kospi: '%5EKS11',
 };
 const IDX_COLORS = {
   spx: '#6366f1', ixic: '#38bdf8', dji: '#fb923c',
-  n225: '#f472b6', sse: '#f87171', twii: '#34d399', kospi: '#fbbf24',
+  ftse: '#e879f9', n225: '#f472b6', sse: '#f87171', twii: '#34d399', kospi: '#fbbf24',
 };
-const IDX_ALL_KEYS = ['spx', 'ixic', 'dji', 'n225', 'sse', 'twii', 'kospi'];
+const IDX_ALL_KEYS = ['spx', 'ixic', 'dji', 'ftse', 'n225', 'sse', 'twii', 'kospi'];
 const IDX_LABELS = {
   spx: 'S&P 500', ixic: 'Nasdaq', dji: 'Dow Jones',
-  n225: 'Nikkei 225', sse: 'Shanghai', twii: 'Taiwan', kospi: 'KOSPI',
+  ftse: 'FTSE 100', n225: 'Nikkei 225', sse: 'Shanghai', twii: 'Taiwan', kospi: 'KOSPI',
 };
 function idxLabel(key) {
   return (typeof I18n !== 'undefined' && I18n.tIdx) ? I18n.tIdx(key) : (IDX_LABELS[key] || key.toUpperCase());
@@ -882,7 +915,7 @@ async function loadIdxForecast(key) {
   if (!sym) { loadEl.style.display = 'none'; return; }
 
   try {
-    const resp = await fetch(`/api/forecast/${sym}`);
+    const resp = await fetch(`/api/forecast/${encodeURIComponent(sym)}`);
     const result = await resp.json();
     if (result.error) throw new Error(result.error);
     _forecastCache[key] = result;
@@ -894,7 +927,120 @@ async function loadIdxForecast(key) {
   }
 }
 
-// ── Boot ──────────────────────────────────────────────────────────────
+// ── Fear & Greed ──────────────────────────────────────────────────────
+let _fgChartInst = null;
+
+function renderFearGreed(data) {
+  if (!data || data.error) {
+    document.getElementById('fgLoading').textContent = data?.error || 'Unavailable';
+    return;
+  }
+
+  const score  = data.score != null ? Math.round(data.score) : null;
+  const rating = data.rating || '';
+
+  // Color mapping by rating keyword
+  function _fgColor(r) {
+    const lo = (r || '').toLowerCase();
+    if (lo.includes('extreme fear')) return '#7f1d1d';
+    if (lo.includes('fear'))         return '#ef4444';
+    if (lo.includes('extreme greed'))return '#065f46';
+    if (lo.includes('greed'))        return '#10b981';
+    return '#94a3b8';
+  }
+  const col = _fgColor(rating);
+
+  // Badge
+  document.getElementById('fgBadge').innerHTML = score != null
+    ? `<div class="text-2xl font-bold tabular-nums" style="color:${col}">${score}</div>
+       <div class="text-xs font-semibold mt-0.5" style="color:${col}">${rating}</div>`
+    : '<div class="text-slate-600 text-xs">—</div>';
+
+  // Needle position (0–100 → 0–100%)
+  if (score != null) {
+    document.getElementById('fgNeedle').style.left = score + '%';
+  }
+
+  // Comparison row
+  const comps = [
+    { label: I18n.t('markets.fg_prev_close') || 'Prev Close', val: data.prev_close },
+    { label: I18n.t('markets.fg_prev_week')  || 'Prev Week',  val: data.prev_week  },
+    { label: I18n.t('markets.fg_prev_month') || 'Prev Month', val: data.prev_month },
+    { label: I18n.t('markets.fg_prev_year')  || 'Prev Year',  val: data.prev_year  },
+  ];
+  document.getElementById('fgCompare').innerHTML = comps.map(c => {
+    if (c.val == null) return '';
+    const v   = Math.round(c.val);
+    const diff = score != null ? score - v : null;
+    const col2 = diff == null ? '#94a3b8' : diff >= 0 ? '#34d399' : '#f87171';
+    const sign = diff != null && diff >= 0 ? '+' : '';
+    return `<div class="bg-slate-800/60 rounded-lg p-1.5 text-center">
+      <div class="text-[9px] text-slate-500 mb-0.5">${c.label}</div>
+      <div class="text-xs font-semibold text-slate-300">${v}</div>
+      ${diff != null ? `<div class="text-[9px]" style="color:${col2}">${sign}${diff}</div>` : ''}
+    </div>`;
+  }).join('');
+
+  // History chart
+  const hist = (data.history || []).filter(h => h.t && h.y != null);
+  if (hist.length && document.getElementById('fgChart')) {
+    const labels  = hist.map(h => {
+      const d = new Date(h.t);
+      return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: '2-digit' });
+    });
+    const values  = hist.map(h => h.y);
+    const ptColors = hist.map(h => _fgColor(h.rating));
+
+    if (_fgChartInst) { _fgChartInst.destroy(); _fgChartInst = null; }
+    _fgChartInst = new Chart(document.getElementById('fgChart'), {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [{
+          label: 'Fear & Greed',
+          data: values,
+          borderColor: '#a78bfa',
+          backgroundColor: 'rgba(167,139,250,0.07)',
+          borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 3,
+          fill: true, tension: 0.3, spanGaps: true,
+        }],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            mode: 'index', intersect: false,
+            callbacks: {
+              label: c => ` ${c.raw?.toFixed(1)} — ${hist[c.dataIndex]?.rating || ''}`,
+            },
+          },
+        },
+        scales: {
+          x: { grid: { color: GRID_COL }, ticks: { color: TICK_COL, maxTicksLimit: 4, maxRotation: 0 } },
+          y: { grid: { color: GRID_COL }, ticks: { color: TICK_COL }, min: 0, max: 100,
+               ticks: { color: TICK_COL, stepSize: 25 } },
+        },
+      },
+      plugins: [{
+        afterDraw(chart) {
+          const { ctx: c, chartArea: a, scales: { y } } = chart;
+          [[25, '#ef444444', 'Fear'], [75, '#10b98144', 'Greed']].forEach(([lvl, clr, lbl]) => {
+            const py = y.getPixelForValue(lvl);
+            if (py < a.top || py > a.bottom) return;
+            c.save(); c.strokeStyle = clr; c.lineWidth = 1; c.setLineDash([3, 3]);
+            c.beginPath(); c.moveTo(a.left, py); c.lineTo(a.right, py); c.stroke(); c.restore();
+          });
+        },
+      }],
+    });
+  }
+
+  document.getElementById('fgLoading').style.display = 'none';
+  document.getElementById('fgBody').style.display = '';
+}
+
+
 (async function() {
   try {
     // Check URL hash for a specific index to start on (e.g. from home page links)
@@ -911,6 +1057,11 @@ async function loadIdxForecast(key) {
     renderCards(_mkData);
     renderVix(_mkData.vix);
     renderSectors(_mkData.sectors);
+    // Fear & Greed — async, non-blocking
+    fetch('/api/fear-greed')
+      .then(r => r.json())
+      .then(renderFearGreed)
+      .catch(e => { document.getElementById('fgLoading').textContent = '⚠ ' + e.message; });
     // Activate the correct tab
     IDX_ALL_KEYS.forEach(k => {
       const id = 'tab' + k.charAt(0).toUpperCase() + k.slice(1);
@@ -919,8 +1070,8 @@ async function loadIdxForecast(key) {
     });
     renderIdxStats(_curIdx, _mkData);
     renderIdxChart(_curIdx, _curRange, _mkData);
-    renderMacdChart(_curIdx, _mkData);
-    renderRsiChart(_curIdx, _mkData);
+    renderMacdChart(_curIdx, _mkData, _curRange);
+    renderRsiChart(_curIdx, _mkData, _curRange);
     _syncHover();
     loadIdxForecast(_curIdx);   // async — non-blocking
   } catch(err) {

@@ -1,0 +1,382 @@
+{% extends "base.html" %}
+{% block title %}yStocker — Sector Heatmap{% endblock %}
+{% block main_class %}max-w-[1800px] mx-auto{% endblock %}
+
+{% block content %}
+<style>
+/* ── Tile colours ─────────────────────────────────────────────────────── */
+.hm-tile {
+  position: relative; border-radius: 5px; cursor: pointer; overflow: hidden;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center; padding: 4px 3px; user-select: none;
+  transition: filter .12s, transform .12s, box-shadow .12s;
+}
+.hm-tile:hover { filter: brightness(1.22); transform: scale(1.035); box-shadow: 0 0 0 2px rgba(255,255,255,.22); z-index: 3; }
+.hm-tile .ht  { font-size: 11px; font-weight: 700; line-height: 1.25; color: rgba(255,255,255,.95); }
+.hm-tile .hc  { font-size: 10px; font-weight: 600; line-height: 1.2;  color: rgba(255,255,255,.82); }
+.hm-tile .hn  { font-size: 9px;  font-weight: 400; line-height: 1.1;  color: rgba(255,255,255,.55); margin-top: 1px; }
+
+/* Colour scale */
+.cc-n5  { background: #7f1d1d; }
+.cc-n4  { background: #9b1c1c; }
+.cc-n3  { background: #b91c1c; }
+.cc-n2  { background: #dc2626; }
+.cc-n1  { background: #ef4444; }
+.cc-n05 { background: #f87171; }
+.cc-0   { background: #1e293b; }
+.cc-p05 { background: #6ee7b7; }
+.cc-p1  { background: #34d399; }
+.cc-p2  { background: #10b981; }
+.cc-p3  { background: #059669; }
+.cc-p4  { background: #047857; }
+.cc-p5  { background: #065f46; }
+
+/* Sector row */
+.sector-row { margin-bottom: 6px; }
+.sector-hdr {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 4px;
+}
+.sector-name {
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .08em; color: #475569;
+}
+.sector-avg {
+  font-size: 10px; font-weight: 600; padding: 1px 6px;
+  border-radius: 4px; min-width: 48px; text-align: right;
+}
+
+/* Tooltip */
+#hmTooltip {
+  position: fixed; z-index: 999; pointer-events: none;
+  background: #0f172a; border: 1px solid #334155;
+  border-radius: 10px; padding: 8px 12px; min-width: 140px;
+  box-shadow: 0 8px 32px rgba(0,0,0,.6);
+  font-size: 12px; color: #e2e8f0;
+  opacity: 0; transition: opacity .1s;
+}
+
+/* Legend */
+.lg-cell { height: 10px; border-radius: 2px; flex: 1; }
+
+/* Date input */
+input[type="date"] { color-scheme: dark; }
+input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(.6); }
+</style>
+
+<!-- ── Tooltip ──────────────────────────────────────────────────────────── -->
+<div id="hmTooltip">
+  <div id="ttName"  class="font-semibold text-slate-100 mb-1"></div>
+  <div id="ttTicker"class="text-xs text-slate-400 mb-2"></div>
+  <div class="flex justify-between gap-6">
+    <div><div class="text-[10px] text-slate-500 mb-0.5">Price</div><div id="ttPrice" class="font-mono"></div></div>
+    <div><div class="text-[10px] text-slate-500 mb-0.5">Day</div><div id="ttChg" class="font-semibold"></div></div>
+    <div><div class="text-[10px] text-slate-500 mb-0.5">Mkt Cap</div><div id="ttMktCap" class="font-mono"></div></div>
+  </div>
+</div>
+
+<!-- ── Header ──────────────────────────────────────────────────────────── -->
+<div class="mb-5 fade-up flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+  <div>
+    <h1 class="text-2xl sm:text-3xl font-bold grad-text" data-i18n="heatmap.title">Sector Heatmap</h1>
+    <p class="text-slate-400 mt-1 text-sm" data-i18n="heatmap.subtitle">S&amp;P 500 top stocks — color-coded by day change.</p>
+  </div>
+  <div class="flex items-center gap-2 flex-wrap shrink-0">
+    <input id="hmDatePicker" type="date"
+           class="bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-slate-200
+                  focus:outline-none focus:border-brand transition cursor-pointer"
+           onchange="loadHeatmap(this.value)">
+    <button onclick="goToday()"
+            class="px-3 py-1.5 text-sm rounded-lg border border-slate-700 text-slate-300
+                   hover:border-brand hover:text-brand transition whitespace-nowrap"
+            data-i18n="heatmap.today">Today</button>
+    <button onclick="takeSnapshot()" id="snapshotBtn"
+            class="px-3 py-1.5 text-sm rounded-lg bg-brand/20 border border-brand/40 text-brand
+                   hover:bg-brand hover:text-white transition whitespace-nowrap"
+            data-i18n="heatmap.snapshot">Save Snapshot</button>
+  </div>
+</div>
+
+<!-- ── Stats bar ────────────────────────────────────────────────────────── -->
+<div id="hmStats" style="display:none"
+     class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5 fade-up">
+  <div class="bg-slate-900 border border-slate-800 rounded-xl p-3 text-center">
+    <div class="text-[11px] text-slate-500 mb-1" data-i18n="heatmap.advancing">Advancing</div>
+    <div id="hmAdv" class="text-xl font-bold text-emerald-400">—</div>
+  </div>
+  <div class="bg-slate-900 border border-slate-800 rounded-xl p-3 text-center">
+    <div class="text-[11px] text-slate-500 mb-1" data-i18n="heatmap.declining">Declining</div>
+    <div id="hmDec" class="text-xl font-bold text-rose-400">—</div>
+  </div>
+  <div class="bg-slate-900 border border-slate-800 rounded-xl p-3 text-center">
+    <div class="text-[11px] text-slate-500 mb-1" data-i18n="heatmap.avg_chg">Avg Change</div>
+    <div id="hmAvg" class="text-xl font-bold text-slate-200">—</div>
+  </div>
+  <div class="bg-slate-900 border border-slate-800 rounded-xl p-3 text-center">
+    <div class="text-[11px] text-slate-500 mb-1" data-i18n="heatmap.best_worst">Best / Worst</div>
+    <div id="hmBW"  class="text-sm font-semibold text-slate-200 leading-snug">—</div>
+  </div>
+</div>
+
+<!-- ── Legend ───────────────────────────────────────────────────────────── -->
+<div class="flex items-center gap-2 mb-5">
+  <span class="text-[10px] text-slate-500 shrink-0 tabular-nums">≤−5%</span>
+  <div class="flex gap-px flex-1 max-w-sm">
+    <div class="lg-cell cc-n5"></div><div class="lg-cell cc-n4"></div>
+    <div class="lg-cell cc-n3"></div><div class="lg-cell cc-n2"></div>
+    <div class="lg-cell cc-n1"></div><div class="lg-cell cc-n05"></div>
+    <div class="lg-cell cc-0"></div>
+    <div class="lg-cell cc-p05"></div><div class="lg-cell cc-p1"></div>
+    <div class="lg-cell cc-p2"></div><div class="lg-cell cc-p3"></div>
+    <div class="lg-cell cc-p4"></div><div class="lg-cell cc-p5"></div>
+  </div>
+  <span class="text-[10px] text-slate-500 shrink-0 tabular-nums">≥+4%</span>
+</div>
+
+<!-- ── Loading ──────────────────────────────────────────────────────────── -->
+<div id="hmLoading" class="flex items-center gap-2 text-slate-500 text-sm py-8">
+  <svg class="animate-spin w-4 h-4 text-brand shrink-0" fill="none" viewBox="0 0 24 24">
+    <circle style="opacity:.25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+    <path style="opacity:.75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/>
+  </svg>
+  <span data-i18n="heatmap.loading">Loading heatmap…</span>
+</div>
+
+<!-- ── No-data ──────────────────────────────────────────────────────────── -->
+<div id="hmNoData" style="display:none"
+     class="py-16 text-center text-slate-500 text-sm bg-slate-900 border border-slate-800 rounded-2xl">
+  <div class="text-3xl mb-3">📅</div>
+  <p class="font-medium text-slate-300 mb-1" data-i18n="heatmap.no_data_title">No snapshot for this date</p>
+  <p class="text-xs text-slate-600 max-w-xs mx-auto" data-i18n="heatmap.no_data">
+    Only today's data can be fetched live. Past dates require a prior snapshot.
+  </p>
+</div>
+
+<!-- ── Grid ─────────────────────────────────────────────────────────────── -->
+<div id="hmGrid" style="display:none" class="fade-up space-y-1"></div>
+
+<script>
+const SECTOR_ORDER = [
+  'Technology','Communication Services','Consumer Discretionary',
+  'Financials','Healthcare','Industrials','Consumer Staples',
+  'Energy','Real Estate','Utilities','Materials',
+];
+
+const SECTOR_COLORS = {
+  'Technology':               '#6366f1',
+  'Communication Services':   '#38bdf8',
+  'Consumer Discretionary':   '#fb923c',
+  'Financials':               '#fbbf24',
+  'Healthcare':               '#34d399',
+  'Industrials':              '#94a3b8',
+  'Consumer Staples':         '#a78bfa',
+  'Energy':                   '#f87171',
+  'Real Estate':              '#f472b6',
+  'Utilities':                '#4ade80',
+  'Materials':                '#2dd4bf',
+};
+
+function _cc(v) {
+  if (v == null) return 'cc-0';
+  if (v <= -5)  return 'cc-n5';
+  if (v <= -4)  return 'cc-n4';
+  if (v <= -3)  return 'cc-n3';
+  if (v <= -2)  return 'cc-n2';
+  if (v <= -1)  return 'cc-n1';
+  if (v < -0.5) return 'cc-n05';
+  if (v < 0.5)  return 'cc-0';
+  if (v < 1)    return 'cc-p05';
+  if (v < 2)    return 'cc-p1';
+  if (v < 3)    return 'cc-p2';
+  if (v < 4)    return 'cc-p3';
+  if (v < 5)    return 'cc-p4';
+  return 'cc-p5';
+}
+
+function _span(mkt_cap) {
+  if (!mkt_cap || mkt_cap <= 0) return 2;
+  // log10 range ~1.58 (38B) to 3.52 (3300B) → span 2–7
+  const norm = Math.min(Math.max((Math.log10(mkt_cap) - 1.5) / 2.1, 0), 1);
+  return Math.round(2 + norm * 5);
+}
+
+// ── Tooltip ───────────────────────────────────────────────────────────────
+const _tt = document.getElementById('hmTooltip');
+function _ttShow(e, s) {
+  const chg = s.day_chg;
+  const chgTxt = chg != null ? (chg >= 0 ? '+' : '') + chg.toFixed(2) + '%' : '—';
+  document.getElementById('ttName').textContent   = s.name;
+  document.getElementById('ttTicker').textContent = s.ticker + ' · ' + s.sector;
+  document.getElementById('ttPrice').textContent  = s.price != null ? s.price.toLocaleString(undefined, {minimumFractionDigits:2,maximumFractionDigits:2}) : '—';
+  document.getElementById('ttChg').textContent    = chgTxt;
+  document.getElementById('ttChg').style.color    = chg == null ? '#94a3b8' : chg >= 0 ? '#34d399' : '#f87171';
+  document.getElementById('ttMktCap').textContent = s.mkt_cap != null ? '$' + s.mkt_cap.toFixed(0) + 'B' : '—';
+  _tt.style.opacity = '1';
+  _ttMove(e);
+}
+function _ttMove(e) {
+  const x = e.clientX, y = e.clientY;
+  const tw = 160, th = 90;
+  _tt.style.left = (x + 14 + tw > window.innerWidth  ? x - tw - 14 : x + 14) + 'px';
+  _tt.style.top  = (y + 14 + th > window.innerHeight ? y - th - 14 : y + 14) + 'px';
+}
+function _ttHide() { _tt.style.opacity = '0'; }
+
+// ── Render ────────────────────────────────────────────────────────────────
+function renderHeatmap(stocks) {
+  const grid = document.getElementById('hmGrid');
+  const langQ      = new URLSearchParams(window.location.search).get('lang');
+  const langSuffix = langQ ? '?lang=' + encodeURIComponent(langQ) : '';
+
+  // Group + sort within sectors
+  const bySector = {};
+  for (const s of stocks) {
+    (bySector[s.sector] = bySector[s.sector] || []).push(s);
+  }
+  for (const sec in bySector) {
+    bySector[sec].sort((a, b) => (b.mkt_cap || 0) - (a.mkt_cap || 0));
+  }
+
+  const ordered = [
+    ...SECTOR_ORDER.filter(s => bySector[s]),
+    ...Object.keys(bySector).filter(s => !SECTOR_ORDER.includes(s)),
+  ];
+
+  let html = '';
+  for (const sector of ordered) {
+    const sStocks = bySector[sector] || [];
+    if (!sStocks.length) continue;
+
+    const valid   = sStocks.filter(s => s.day_chg != null);
+    const sAvg    = valid.length ? valid.reduce((a, x) => a + x.day_chg, 0) / valid.length : null;
+    const sAvgTxt = sAvg != null ? (sAvg >= 0 ? '+' : '') + sAvg.toFixed(2) + '%' : '';
+    const sCol    = SECTOR_COLORS[sector] || '#64748b';
+    const sAvgCol = sAvg == null ? '#64748b' : sAvg >= 0 ? '#34d399' : '#f87171';
+    const sAvgBg  = sAvg == null ? '#1e293b' : sAvg >= 0 ? 'rgba(52,211,153,.12)' : 'rgba(248,113,113,.12)';
+
+    html += `
+    <div class="sector-row">
+      <div class="sector-hdr">
+        <span class="sector-name" style="color:${sCol}">${sector}</span>
+        ${sAvgTxt ? `<span class="sector-avg" style="color:${sAvgCol};background:${sAvgBg}">${sAvgTxt}</span>` : ''}
+      </div>
+      <div class="grid gap-0.5" style="grid-template-columns: repeat(auto-fill, minmax(50px, 1fr));">`;
+
+    for (const s of sStocks) {
+      const cc  = _cc(s.day_chg);
+      const chg = s.day_chg != null ? (s.day_chg >= 0 ? '+' : '') + s.day_chg.toFixed(2) + '%' : '—';
+      const sp  = _span(s.mkt_cap);
+      const minH = 44 + (sp - 2) * 6;
+      const spanCSS = sp > 1 ? `grid-column:span ${sp};` : '';
+      const showName = sp >= 4;
+
+      html += `<a href="/history/${encodeURIComponent(s.ticker)}${langSuffix}"
+         class="hm-tile ${cc}"
+         style="${spanCSS}min-height:${minH}px"
+         data-s='${JSON.stringify({ticker:s.ticker,name:s.name,sector:s.sector,price:s.price,day_chg:s.day_chg,mkt_cap:s.mkt_cap})}'>
+        <span class="ht">${s.ticker}</span>
+        <span class="hc">${chg}</span>
+        ${showName ? `<span class="hn">${s.name}</span>` : ''}
+      </a>`;
+    }
+    html += `</div></div>`;
+  }
+
+  grid.innerHTML = html;
+
+  // Attach tooltip listeners
+  grid.querySelectorAll('.hm-tile').forEach(el => {
+    const s = JSON.parse(el.dataset.s);
+    el.addEventListener('mouseenter', e => _ttShow(e, s));
+    el.addEventListener('mousemove',  e => _ttMove(e));
+    el.addEventListener('mouseleave', _ttHide);
+  });
+
+  // Stats
+  const all   = stocks.filter(s => s.day_chg != null);
+  const adv   = all.filter(s => s.day_chg > 0).length;
+  const dec   = all.filter(s => s.day_chg < 0).length;
+  const avg   = all.length ? all.reduce((a, x) => a + x.day_chg, 0) / all.length : null;
+  const best  = all.length ? all.reduce((a, b) => b.day_chg > a.day_chg ? b : a) : null;
+  const worst = all.length ? all.reduce((a, b) => b.day_chg < a.day_chg ? b : a) : null;
+
+  document.getElementById('hmAdv').textContent = adv;
+  document.getElementById('hmDec').textContent = dec;
+
+  const avgEl = document.getElementById('hmAvg');
+  avgEl.textContent = avg != null ? (avg >= 0 ? '+' : '') + avg.toFixed(2) + '%' : '—';
+  avgEl.className = 'text-xl font-bold ' + (avg == null ? 'text-slate-200' : avg >= 0 ? 'text-emerald-400' : 'text-rose-400');
+
+  document.getElementById('hmBW').innerHTML = (best && worst)
+    ? `<span class="text-emerald-400">${best.ticker} +${best.day_chg.toFixed(2)}%</span>
+       <span class="text-slate-700 mx-1">/</span>
+       <span class="text-rose-400">${worst.ticker} ${worst.day_chg.toFixed(2)}%</span>`
+    : '—';
+
+  document.getElementById('hmStats').style.display = '';
+}
+
+// ── Load ─────────────────────────────────────────────────────────────────
+async function loadHeatmap(dateStr) {
+  document.getElementById('hmLoading').style.display = 'flex';
+  document.getElementById('hmGrid').style.display    = 'none';
+  document.getElementById('hmStats').style.display   = 'none';
+  document.getElementById('hmNoData').style.display  = 'none';
+  _ttHide();
+
+  try {
+    const resp = await fetch(`/api/heatmap?date=${dateStr}`);
+    const data = await resp.json();
+    document.getElementById('hmLoading').style.display = 'none';
+
+    if (!resp.ok || !data.stocks || !data.stocks.length) {
+      document.getElementById('hmNoData').style.display = '';
+      return;
+    }
+    document.getElementById('hmGrid').style.display = '';
+    renderHeatmap(data.stocks);
+  } catch(e) {
+    document.getElementById('hmLoading').innerHTML =
+      `<span class="text-rose-400">⚠ Failed to load: ${e.message}</span>`;
+  }
+}
+
+function goToday() {
+  const today = new Date().toISOString().slice(0, 10);
+  document.getElementById('hmDatePicker').value = today;
+  loadHeatmap(today);
+}
+
+async function takeSnapshot() {
+  const btn = document.getElementById('snapshotBtn');
+  const orig = btn.getAttribute('data-orig') || btn.textContent;
+  btn.setAttribute('data-orig', orig);
+  btn.textContent = '…';
+  btn.disabled = true;
+  try {
+    const resp = await fetch('/api/heatmap/snapshot', { method: 'POST' });
+    const data = await resp.json();
+    if (resp.ok) {
+      btn.textContent = `✓ ${data.saved}`;
+      setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 3000);
+      const today = new Date().toISOString().slice(0, 10);
+      document.getElementById('hmDatePicker').value = today;
+      await loadHeatmap(today);
+    } else {
+      btn.textContent = '⚠ ' + (data.error || 'Failed');
+      setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 4000);
+    }
+  } catch(e) {
+    btn.textContent = '⚠';
+    setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 3000);
+  }
+}
+
+// Boot
+(function() {
+  const today = new Date().toISOString().slice(0, 10);
+  document.getElementById('hmDatePicker').value = today;
+  loadHeatmap(today);
+})();
+</script>
+{% endblock %}

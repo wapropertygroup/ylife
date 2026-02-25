@@ -18,6 +18,7 @@ from typing import Dict, List, Optional
 
 import json
 import math
+from decimal import Decimal
 
 import pandas as pd
 from flask import Blueprint, render_template, redirect, url_for, request, flash, jsonify, Response, has_request_context
@@ -1379,6 +1380,89 @@ _TRANS_CACHE: dict = {}
 _TRANS_CACHE_LOCK = threading.Lock()
 _TRANS_CACHE_TTL  = 3600 * 12   # 12 hours — translations don't change
 
+_DYNAMO_TABLE_NAME = "ystocker-news-translations"
+_dynamo_table      = None   # boto3 Table resource, lazily created
+_DYNAMO_LOCK       = threading.Lock()
+_dynamo_unavail_until = 0.0  # retry backoff: don't retry before this timestamp
+
+
+def _get_dynamo_table():
+    """Return a cached boto3 DynamoDB Table resource, or None if unavailable.
+    On failure, backs off for 5 minutes before retrying (so a transient error
+    at startup doesn't permanently disable DynamoDB for the process lifetime).
+    """
+    global _dynamo_table, _dynamo_unavail_until
+    if _dynamo_table is not None:
+        return _dynamo_table
+    if time.time() < _dynamo_unavail_until:
+        return None   # still in backoff window
+    with _DYNAMO_LOCK:
+        if _dynamo_table is not None:
+            return _dynamo_table
+        if time.time() < _dynamo_unavail_until:
+            return None
+        try:
+            import boto3
+            ddb = boto3.resource("dynamodb", region_name=os.environ.get("AWS_REGION", "us-west-2"))
+            _dynamo_table = ddb.Table(_DYNAMO_TABLE_NAME)
+            _dynamo_table.load()   # validates table exists; raises if not
+            log.info("DynamoDB translation table connected: %s", _DYNAMO_TABLE_NAME)
+        except Exception as exc:
+            log.warning("DynamoDB unavailable — translations use memory-only cache: %s", exc)
+            _dynamo_table = None
+            _dynamo_unavail_until = time.time() + 300  # retry in 5 minutes
+        return _dynamo_table
+
+
+def _ddb_batch_get(links: list) -> dict:
+    """Fetch translations from DynamoDB for the given links.
+    Returns {link: {title_zh, summary_zh}} for found items.
+    """
+    table = _get_dynamo_table()
+    if not table or not links:
+        return {}
+    results = {}
+    # batch_get_item can handle up to 100 keys per call
+    for i in range(0, len(links), 100):
+        chunk = links[i:i+100]
+        try:
+            resp = table.meta.client.batch_get_item(
+                RequestItems={
+                    _DYNAMO_TABLE_NAME: {
+                        "Keys": [{"link": lnk} for lnk in chunk],
+                        "ProjectionExpression": "#lk, title_zh, summary_zh",
+                        "ExpressionAttributeNames": {"#lk": "link"},
+                    }
+                }
+            )
+            for item in resp.get("Responses", {}).get(_DYNAMO_TABLE_NAME, []):
+                results[item["link"]] = {
+                    "title_zh":   item.get("title_zh"),
+                    "summary_zh": item.get("summary_zh"),
+                }
+        except Exception as exc:
+            log.warning("DynamoDB batch_get failed: %s", exc)
+    return results
+
+
+def _ddb_batch_put(items: list) -> None:
+    """Write translated articles to DynamoDB. items: [{link, title_zh, summary_zh}]"""
+    table = _get_dynamo_table()
+    if not table or not items:
+        return
+    ts = Decimal(str(time.time()))
+    try:
+        with table.batch_writer() as batch:
+            for item in items:
+                if not item.get("link"):
+                    continue
+                record = {"link": item["link"], "title_zh": item["title_zh"], "ts": ts}
+                if item.get("summary_zh"):
+                    record["summary_zh"] = item["summary_zh"]
+                batch.put_item(Item=record)
+    except Exception as exc:
+        log.warning("DynamoDB batch_put failed: %s", exc)
+
 
 @bp.route("/api/news/translate", methods=["POST"])
 def api_news_translate():
@@ -1412,11 +1496,23 @@ def api_news_translate():
     if not api_key:
         return jsonify({"error": "GEMINI_API_KEY not configured"}), 503
 
-    # Check cache — return any already-translated articles from cache
+    # L1: memory cache check
     with _TRANS_CACHE_LOCK:
         cached_map = dict(_TRANS_CACHE)  # link → {title_zh, summary_zh}
 
     to_translate = [a for a in articles if a.get("link") not in cached_map]
+
+    # L2: DynamoDB check for articles not in memory cache
+    if to_translate:
+        ddb_links = [a["link"] for a in to_translate if a.get("link")]
+        ddb_hits  = _ddb_batch_get(ddb_links)
+        if ddb_hits:
+            with _TRANS_CACHE_LOCK:
+                for lnk, t in ddb_hits.items():
+                    _TRANS_CACHE[lnk] = {"title_zh": t["title_zh"], "summary_zh": t["summary_zh"], "ts": time.time()}
+            cached_map.update(ddb_hits)
+            to_translate = [a for a in to_translate if a.get("link") not in ddb_hits]
+
     already_done = [
         {"link": a["link"], "title_zh": cached_map[a["link"]]["title_zh"],
          "summary_zh": cached_map[a["link"]]["summary_zh"]}
@@ -1478,6 +1574,9 @@ def api_news_translate():
             if link:
                 _TRANS_CACHE[link] = entry
             new_results.append({"link": link, "title_zh": entry["title_zh"], "summary_zh": entry["summary_zh"]})
+
+    # Persist new translations to DynamoDB
+    _ddb_batch_put(new_results)
 
     # Merge with already-cached results
     order_map = {a.get("link"): i for i, a in enumerate(articles)}
@@ -1799,13 +1898,14 @@ _MARKETS_CACHE_TTL   = 900  # 15 minutes
 
 # Yahoo Finance symbols for major indices (US + international)
 _INDEX_SYMBOLS = {
-    "spx":   "^GSPC",    # S&P 500
-    "ixic":  "^IXIC",    # Nasdaq Composite
-    "dji":   "^DJI",     # Dow Jones
-    "n225":  "^N225",    # Nikkei 225
+    "spx":   "^GSPC",     # S&P 500
+    "ixic":  "^IXIC",     # Nasdaq Composite
+    "dji":   "^DJI",      # Dow Jones
+    "ftse":  "^FTSE",     # FTSE 100
+    "n225":  "^N225",     # Nikkei 225
     "sse":   "000001.SS", # Shanghai Composite
-    "twii":  "^TWII",    # Taiwan Weighted Index (FTSE TWSE 50 proxy)
-    "kospi": "^KS11",    # KOSPI
+    "twii":  "^TWII",     # Taiwan Weighted Index
+    "kospi": "^KS11",     # KOSPI
 }
 
 # SPDR sector ETFs used for sector performance
@@ -1838,6 +1938,7 @@ def api_markets():
     """
     import yfinance as yf
     import numpy as np
+    from datetime import date
 
     with _MARKETS_CACHE_LOCK:
         entry = _MARKETS_CACHE.get("data")
@@ -1889,11 +1990,22 @@ def api_markets():
 
             current = (info.get("regularMarketPrice")
                        or info.get("currentPrice")
+                       or (prices_1d[-1] if prices_1d else None)
                        or (prices_wk[-1] if prices_wk else None))
             prev    = info.get("regularMarketPreviousClose") or info.get("previousClose")
+            # Always derive current and prev from daily closes — most reliable for all indices,
+            # especially 000001.SS where .info fields are often wrong or fractional.
+            valid_1d = [p for p in prices_1d if p is not None]
+            if len(valid_1d) >= 2:
+                current = valid_1d[-1]
+                prev    = valid_1d[-2]
+            elif len(valid_1d) == 1:
+                current = valid_1d[0]
             day_chg = None
             if current and prev and prev > 0:
-                day_chg = round((current - prev) / prev * 100, 2)
+                raw_chg = (current - prev) / prev * 100
+                # Sanity check: indices don't move >25% in a day
+                day_chg = round(raw_chg, 2) if abs(raw_chg) <= 25 else None
 
             # YTD — find first trading day of this year in the daily history
             ytd = None
@@ -2002,3 +2114,514 @@ def api_markets():
     with _MARKETS_CACHE_LOCK:
         _MARKETS_CACHE["data"] = {"ts": time.time(), "data": result}
     return jsonify(result)
+
+
+# ---------------------------------------------------------------------------
+# CNN Fear & Greed Index  (/api/fear-greed)
+# ---------------------------------------------------------------------------
+
+_FG_CACHE: dict = {}
+_FG_CACHE_LOCK = threading.Lock()
+_FG_CACHE_TTL  = 3600   # 1 hour
+
+# DynamoDB table for persisting daily Fear & Greed history
+_FG_TABLE_NAME    = "ystocker-fear-greed"
+_fg_table         = None
+_FG_TABLE_LOCK    = threading.Lock()
+_fg_unavail_until = 0.0
+
+
+def _get_fg_table():
+    """Return boto3 DynamoDB Table for fear-greed history, or None. Retries after 5 min."""
+    global _fg_table, _fg_unavail_until
+    if _fg_table is not None:
+        return _fg_table
+    if time.time() < _fg_unavail_until:
+        return None
+    with _FG_TABLE_LOCK:
+        if _fg_table is not None:
+            return _fg_table
+        if time.time() < _fg_unavail_until:
+            return None
+        try:
+            import boto3
+            ddb = boto3.resource("dynamodb", region_name=os.environ.get("AWS_REGION", "us-west-2"))
+            _fg_table = ddb.Table(_FG_TABLE_NAME)
+            _fg_table.load()
+            log.info("DynamoDB fear-greed table connected: %s", _FG_TABLE_NAME)
+        except Exception as exc:
+            log.warning("DynamoDB fear-greed table unavailable: %s", exc)
+            _fg_table = None
+            _fg_unavail_until = time.time() + 300
+        return _fg_table
+
+
+def _fg_load_from_dynamo() -> list:
+    """Load all stored daily fear-greed records. Returns list of {date, score, rating}."""
+    table = _get_fg_table()
+    if not table:
+        return []
+    try:
+        items = []
+        resp = table.scan(ProjectionExpression="#d, score, rating",
+                          ExpressionAttributeNames={"#d": "date"})
+        items.extend(resp.get("Items", []))
+        while "LastEvaluatedKey" in resp:
+            resp = table.scan(ProjectionExpression="#d, score, rating",
+                              ExpressionAttributeNames={"#d": "date"},
+                              ExclusiveStartKey=resp["LastEvaluatedKey"])
+            items.extend(resp.get("Items", []))
+        return [{"date": it["date"], "score": float(it["score"]), "rating": it.get("rating")}
+                for it in items if it.get("date") and it.get("score") is not None]
+    except Exception as exc:
+        log.warning("DynamoDB fear-greed scan failed: %s", exc)
+        return []
+
+
+def _fg_save_to_dynamo(history: list) -> None:
+    """Batch-write history items [{date, score, rating}] to DynamoDB."""
+    table = _get_fg_table()
+    if not table or not history:
+        return
+    try:
+        with table.batch_writer() as batch:
+            for item in history:
+                if not item.get("date") or item.get("score") is None:
+                    continue
+                batch.put_item(Item={
+                    "date":   item["date"],
+                    "score":  Decimal(str(round(float(item["score"]), 2))),
+                    "rating": item.get("rating") or "",
+                })
+    except Exception as exc:
+        log.warning("DynamoDB fear-greed write failed: %s", exc)
+
+
+_CNN_FG_URL = "https://production.dataviz.cnn.io/index/fearandgreed/graphdata"
+_CNN_FG_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/122.0.0.0 Safari/537.36"
+    ),
+    "Accept": "application/json, text/plain, */*",
+    "Referer": "https://edition.cnn.com/",
+    "Origin":  "https://edition.cnn.com",
+}
+
+
+@bp.route("/api/fear-greed")
+def api_fear_greed():
+    """
+    Return CNN Fear & Greed Index data, merging DynamoDB history with live fetch.
+
+    Strategy:
+      1. Check in-process memory cache (TTL 1h) — return immediately if fresh.
+      2. Load stored history from DynamoDB (all dates we've ever saved).
+      3. If DynamoDB has a record for today, skip CNN fetch for history.
+      4. Fetch from CNN to get current snapshot + any dates not yet in DynamoDB.
+      5. Persist only the newly seen dates back to DynamoDB.
+      6. Merge DynamoDB + CNN history, deduplicate, sort, return.
+
+    Response:
+      {
+        "score":    float,          # current score 0–100
+        "rating":   str,            # e.g. "Fear"
+        "prev_close":  float|null,
+        "prev_week":   float|null,
+        "prev_month":  float|null,
+        "prev_year":   float|null,
+        "history": [{"t": int_ms, "y": float, "rating": str}, ...]
+      }
+    """
+    import requests as req_lib
+    from datetime import datetime, timezone
+
+    # ── L1: in-process memory cache ──────────────────────────────────────
+    with _FG_CACHE_LOCK:
+        entry = _FG_CACHE.get("data")
+        if entry and time.time() - entry["ts"] < _FG_CACHE_TTL:
+            return jsonify(entry["data"])
+
+    def _cap(s):
+        return " ".join(w.capitalize() for w in (s or "").split()) if s else s
+
+    # ── L2: load history already in DynamoDB ─────────────────────────────
+    ddb_records = _fg_load_from_dynamo()   # [{date, score, rating}, ...]
+    ddb_dates   = {r["date"] for r in ddb_records}
+
+    # Convert DynamoDB records to history format (date "YYYY-MM-DD" → ms timestamp)
+    def _date_to_ms(date_str):
+        try:
+            dt = datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+            return int(dt.timestamp() * 1000)
+        except Exception:
+            return None
+
+    ddb_history = []
+    for r in ddb_records:
+        t = _date_to_ms(r["date"])
+        if t is not None:
+            ddb_history.append({"t": t, "y": r["score"], "rating": r.get("rating")})
+
+    # ── L3: fetch from CNN ────────────────────────────────────────────────
+    raw       = None
+    cnn_error = None
+
+    try:
+        resp = req_lib.get(_CNN_FG_URL, headers=_CNN_FG_HEADERS, timeout=10)
+        resp.raise_for_status()
+        raw = resp.json()
+    except Exception as exc:
+        log.warning("CNN Fear & Greed fetch failed: %s", exc)
+        cnn_error = str(exc)
+
+    if raw is None and not ddb_history:
+        return jsonify({"error": cnn_error or "No data available"}), 502
+
+    # Parse CNN response
+    fg        = (raw or {}).get("fear_and_greed", {})
+    cnn_hist  = (raw or {}).get("fear_and_greed_historical", {}).get("data", [])
+
+    # Convert CNN history to [{date, score, rating}] and find new dates
+    cnn_dated = []
+    for p in cnn_hist:
+        if p.get("x") is None or p.get("y") is None:
+            continue
+        try:
+            dt_str = datetime.fromtimestamp(int(p["x"]) / 1000, tz=timezone.utc).strftime("%Y-%m-%d")
+        except Exception:
+            continue
+        cnn_dated.append({
+            "date":   dt_str,
+            "score":  round(float(p["y"]), 2),
+            "rating": _cap(p.get("rating")),
+        })
+
+    # Persist only dates not already in DynamoDB
+    new_records = [r for r in cnn_dated if r["date"] not in ddb_dates]
+    if new_records:
+        _fg_save_to_dynamo(new_records)
+        log.info("Saved %d new Fear & Greed records to DynamoDB", len(new_records))
+
+    # Build merged history: DynamoDB + new CNN records, deduped by ms timestamp
+    cnn_history = [
+        {"t": _date_to_ms(r["date"]), "y": r["score"], "rating": r["rating"]}
+        for r in cnn_dated if _date_to_ms(r["date"]) is not None
+    ]
+    # Merge: prefer CNN data (more accurate) over DynamoDB when dates overlap
+    seen_t = {}
+    for h in ddb_history + cnn_history:
+        seen_t[h["t"]] = h   # CNN overwrites DDB for same timestamp
+    merged_history = sorted(seen_t.values(), key=lambda h: h["t"])
+
+    result = {
+        "score":      fg.get("score"),
+        "rating":     _cap(fg.get("rating")),
+        "prev_close": fg.get("previous_close"),
+        "prev_week":  fg.get("previous_1_week"),
+        "prev_month": fg.get("previous_1_month"),
+        "prev_year":  fg.get("previous_1_year"),
+        "history":    merged_history,
+    }
+
+    with _FG_CACHE_LOCK:
+        _FG_CACHE["data"] = {"ts": time.time(), "data": result}
+
+    return jsonify(result)
+
+
+# ---------------------------------------------------------------------------
+# Sector Heatmap  (/heatmap)
+# ---------------------------------------------------------------------------
+
+_HEATMAP_TABLE_NAME    = "ystocker-heatmap-snapshots"
+_heatmap_table         = None
+_HEATMAP_LOCK          = threading.Lock()
+_heatmap_unavail_until = 0.0
+
+_HEATMAP_CACHE: dict = {}
+_HEATMAP_CACHE_LOCK = threading.Lock()
+_HEATMAP_CACHE_TTL  = 15 * 60   # 15 minutes
+
+
+def _get_heatmap_table():
+    """Return a cached boto3 DynamoDB Table resource for the heatmap table, or None.
+    Backs off 5 minutes after failure before retrying."""
+    global _heatmap_table, _heatmap_unavail_until
+    if _heatmap_table is not None:
+        return _heatmap_table
+    if time.time() < _heatmap_unavail_until:
+        return None
+    with _HEATMAP_LOCK:
+        if _heatmap_table is not None:
+            return _heatmap_table
+        if time.time() < _heatmap_unavail_until:
+            return None
+        try:
+            import boto3
+            ddb = boto3.resource("dynamodb", region_name=os.environ.get("AWS_REGION", "us-west-2"))
+            _heatmap_table = ddb.Table(_HEATMAP_TABLE_NAME)
+            _heatmap_table.load()
+            log.info("DynamoDB heatmap table connected: %s", _HEATMAP_TABLE_NAME)
+        except Exception as exc:
+            log.warning("DynamoDB heatmap table unavailable: %s", exc)
+            _heatmap_table = None
+            _heatmap_unavail_until = time.time() + 300
+        return _heatmap_table
+
+
+def _heatmap_fetch_from_dynamo(date_str: str) -> Optional[list]:
+    """Query all stock items for date_str. Returns list or None if unavailable/empty."""
+    from boto3.dynamodb.conditions import Key as DKey
+    table = _get_heatmap_table()
+    if not table:
+        return None
+    try:
+        resp  = table.query(KeyConditionExpression=DKey("date").eq(date_str))
+        items = resp.get("Items", [])
+        while "LastEvaluatedKey" in resp:
+            resp  = table.query(
+                KeyConditionExpression=DKey("date").eq(date_str),
+                ExclusiveStartKey=resp["LastEvaluatedKey"],
+            )
+            items.extend(resp.get("Items", []))
+        if not items:
+            return None
+        stocks = []
+        for item in items:
+            stocks.append({
+                "ticker":  item["ticker"],
+                "name":    item.get("name", item["ticker"]),
+                "sector":  item.get("sector", ""),
+                "price":   float(item["price"])    if item.get("price")    else None,
+                "day_chg": float(item["day_chg"])  if item.get("day_chg") is not None else None,
+                "mkt_cap": float(item["mkt_cap_b"]) if item.get("mkt_cap_b") else None,
+            })
+        return stocks
+    except Exception as exc:
+        log.warning("DynamoDB heatmap query failed for %s: %s", date_str, exc)
+        return None
+
+
+def _heatmap_save_to_dynamo(date_str: str, stocks: list) -> None:
+    """Batch-write all stock items for date_str to DynamoDB."""
+    table = _get_heatmap_table()
+    if not table or not stocks:
+        return
+    ttl_epoch = int(time.time()) + 90 * 24 * 3600
+    try:
+        with table.batch_writer() as batch:
+            for s in stocks:
+                item = {
+                    "date":    date_str,
+                    "ticker":  s["ticker"],
+                    "name":    s.get("name", s["ticker"]),
+                    "sector":  s.get("sector", ""),
+                    "ts":      Decimal(str(int(time.time()))),
+                    "ttl":     ttl_epoch,
+                }
+                if s.get("price") is not None:
+                    item["price"]     = Decimal(str(round(s["price"], 4)))
+                if s.get("day_chg") is not None:
+                    item["day_chg"]   = Decimal(str(round(s["day_chg"], 4)))
+                if s.get("mkt_cap") is not None:
+                    item["mkt_cap_b"] = Decimal(str(round(s["mkt_cap"], 2)))
+                batch.put_item(Item=item)
+        log.info("Heatmap snapshot saved to DynamoDB: %s (%d stocks)", date_str, len(stocks))
+    except Exception as exc:
+        log.warning("DynamoDB heatmap batch_write failed for %s: %s", date_str, exc)
+
+
+def _heatmap_fetch_live() -> list:
+    """Fetch live price + day_chg for all heatmap tickers via yfinance batch download."""
+    import yfinance as yf
+    from ystocker.heatmap_meta import HEATMAP_META
+
+    tickers_list = list(HEATMAP_META.keys())
+    stocks = []
+    try:
+        data   = yf.download(
+            tickers_list, period="2d", interval="1d",
+            auto_adjust=True, progress=False, threads=True,
+        )
+        closes = data["Close"]
+        for ticker in tickers_list:
+            meta = HEATMAP_META[ticker]
+            try:
+                col = closes[ticker] if ticker in closes.columns else None
+                if col is None:
+                    continue
+                vals    = col.dropna().tolist()
+                price   = round(float(vals[-1]), 2) if vals else None
+                day_chg = round((vals[-1] - vals[-2]) / vals[-2] * 100, 2) if len(vals) >= 2 else None
+            except Exception:
+                price, day_chg = None, None
+            stocks.append({
+                "ticker":  ticker,
+                "name":    meta["name"],
+                "sector":  meta["sector"],
+                "price":   price,
+                "day_chg": day_chg,
+                "mkt_cap": meta.get("mkt_cap_b"),  # use static approximate value
+            })
+    except Exception as exc:
+        log.warning("Heatmap yf.download failed: %s", exc)
+        return []
+    return stocks
+
+
+@bp.route("/heatmap")
+def heatmap():
+    """Sector heatmap page."""
+    return render_template("heatmap.html", peer_groups=list(PEER_GROUPS.keys()))
+
+
+@bp.route("/api/heatmap")
+def api_heatmap():
+    """
+    Return sector heatmap data for the requested date.
+
+    Query params:
+      date: YYYY-MM-DD  (default: today)
+    """
+    import datetime as _dt
+
+    today_str = str(_dt.date.today())
+    date_str  = request.args.get("date", today_str)
+
+    try:
+        _dt.date.fromisoformat(date_str)
+    except ValueError:
+        return jsonify({"error": f"Invalid date '{date_str}'. Use YYYY-MM-DD."}), 400
+
+    # L1: memory cache
+    with _HEATMAP_CACHE_LOCK:
+        entry = _HEATMAP_CACHE.get(date_str)
+        if entry and time.time() - entry["ts"] < _HEATMAP_CACHE_TTL:
+            return jsonify({"date": date_str, "stocks": entry["stocks"]})
+
+    # L2: DynamoDB
+    stocks = _heatmap_fetch_from_dynamo(date_str)
+    if stocks:
+        log.info("Heatmap served from DynamoDB: %s (%d stocks)", date_str, len(stocks))
+        with _HEATMAP_CACHE_LOCK:
+            _HEATMAP_CACHE[date_str] = {"ts": time.time(), "stocks": stocks}
+        return jsonify({"date": date_str, "stocks": stocks})
+
+    # L3: live fetch — only for today
+    if date_str != today_str:
+        return jsonify({
+            "error": f"No snapshot found for {date_str}.",
+            "date": date_str, "stocks": [],
+        }), 404
+
+    log.info("Heatmap: no DynamoDB data for %s — fetching live", date_str)
+    stocks = _heatmap_fetch_live()
+    if not stocks:
+        return jsonify({"error": "Live fetch failed."}), 502
+
+    # Save to DynamoDB in background, cache immediately
+    threading.Thread(
+        target=_heatmap_save_to_dynamo, args=(date_str, stocks),
+        daemon=True, name="heatmap-ddb-write",
+    ).start()
+    with _HEATMAP_CACHE_LOCK:
+        _HEATMAP_CACHE[date_str] = {"ts": time.time(), "stocks": stocks}
+
+    return jsonify({"date": date_str, "stocks": stocks})
+
+
+@bp.route("/api/heatmap/snapshot", methods=["POST"])
+def api_heatmap_snapshot():
+    """
+    Trigger a fresh heatmap snapshot for today and persist to DynamoDB.
+    Optional protection: set HEATMAP_SNAPSHOT_SECRET env var.
+    """
+    import datetime as _dt
+
+    secret = os.environ.get("HEATMAP_SNAPSHOT_SECRET")
+    if secret and request.headers.get("X-Snapshot-Secret", "") != secret:
+        return jsonify({"error": "Unauthorized"}), 403
+
+    today_str = str(_dt.date.today())
+    stocks    = _heatmap_fetch_live()
+    if not stocks:
+        return jsonify({"error": "Live fetch failed — nothing written."}), 502
+
+    _heatmap_save_to_dynamo(today_str, stocks)
+
+    with _HEATMAP_CACHE_LOCK:
+        _HEATMAP_CACHE.pop(today_str, None)
+
+    return jsonify({"date": today_str, "saved": len(stocks)})
+
+
+# ---------------------------------------------------------------------------
+# Heatmap daily auto-snapshot scheduler
+# ---------------------------------------------------------------------------
+
+def _heatmap_scheduler_loop() -> None:
+    """
+    Background thread: every weekday at 16:30 US/Eastern (after market close),
+    fetch live prices and persist a snapshot to DynamoDB.
+
+    On startup it calculates the seconds until the next 16:30 ET window,
+    sleeps until then, runs the snapshot, then repeats every 24 h.
+    Weekends are skipped — yfinance returns stale data on Sat/Sun anyway.
+    """
+    import datetime as _dt
+
+    ET_OFFSET_HOURS = -5   # EST (UTC-5); during EDT (summer) this is -4.
+                            # Use -5 conservatively — 16:30 EST = 21:30 UTC,
+                            # which is after 16:00 EDT close either way.
+
+    SNAPSHOT_HOUR   = 16
+    SNAPSHOT_MINUTE = 30
+
+    def _seconds_until_next_snapshot() -> float:
+        now_utc  = _dt.datetime.utcnow()
+        now_et   = now_utc + _dt.timedelta(hours=ET_OFFSET_HOURS)
+        target   = now_et.replace(hour=SNAPSHOT_HOUR, minute=SNAPSHOT_MINUTE, second=0, microsecond=0)
+        if now_et >= target:
+            target += _dt.timedelta(days=1)
+        # Skip weekend targets (0=Mon … 6=Sun)
+        while target.weekday() >= 5:
+            target += _dt.timedelta(days=1)
+        return (target - now_et).total_seconds()
+
+    log.info("Heatmap scheduler started — daily snapshot at %02d:%02d ET on weekdays",
+             SNAPSHOT_HOUR, SNAPSHOT_MINUTE)
+
+    while True:
+        sleep_secs = _seconds_until_next_snapshot()
+        log.info("Heatmap scheduler: next snapshot in %.1f h", sleep_secs / 3600)
+        time.sleep(sleep_secs)
+
+        now_et = _dt.datetime.utcnow() + _dt.timedelta(hours=ET_OFFSET_HOURS)
+        if now_et.weekday() >= 5:
+            log.info("Heatmap scheduler: skipping weekend snapshot")
+            continue
+
+        date_str = str(now_et.date())
+        log.info("Heatmap scheduler: taking snapshot for %s", date_str)
+        try:
+            stocks = _heatmap_fetch_live()
+            if stocks:
+                _heatmap_save_to_dynamo(date_str, stocks)
+                with _HEATMAP_CACHE_LOCK:
+                    _HEATMAP_CACHE.pop(date_str, None)
+                log.info("Heatmap scheduler: saved %d stocks for %s", len(stocks), date_str)
+            else:
+                log.warning("Heatmap scheduler: live fetch returned no data for %s", date_str)
+        except Exception:
+            log.exception("Heatmap scheduler: unhandled error during snapshot for %s", date_str)
+
+        # Sleep ~23 h so we wake up slightly before the next 16:30 window
+        # (the loop will recalculate the exact sleep at the top)
+        time.sleep(23 * 3600)
+
+
+def _start_heatmap_scheduler() -> None:
+    t = threading.Thread(target=_heatmap_scheduler_loop, daemon=True, name="heatmap-scheduler")
+    t.start()
