@@ -2376,7 +2376,7 @@ def api_aaii_sentiment():
     try:
         resp = req_lib.get(_AAII_XLS_URL, headers=_AAII_HEADERS, timeout=20)
         resp.raise_for_status()
-        df = pd.read_excel(io.BytesIO(resp.content), header=3)
+        df = pd.read_excel(io.BytesIO(resp.content), header=3, engine="xlrd")
 
         # Columns: Date, Bullish, Neutral, Bearish, Total, Bull-Bear Spread, ...
         # Normalise column names
@@ -2542,76 +2542,91 @@ def _scrape_finviz_calendar() -> list:
     """Scrape finviz.com economic calendar and return list of event dicts."""
     import requests as req_lib
     from datetime import datetime
+    import hashlib
 
     resp = req_lib.get(_FINVIZ_CAL_URL, headers=_FINVIZ_HEADERS, timeout=15)
     resp.raise_for_status()
 
-    # finviz returns an HTML table; parse with pandas
-    tables = pd.read_html(resp.text)
+    # finviz returns an HTML table; parse with pandas using stdlib html.parser
+    try:
+        tables = pd.read_html(resp.text, flavor=None)  # auto-detect available parser
+    except Exception:
+        tables = []
     if not tables:
         return []
 
-    # The first table is the calendar
-    df = tables[0]
+    # The economic calendar is the largest table
+    df = max(tables, key=lambda t: len(t))
     df.columns = [str(c).strip().lower() for c in df.columns]
+
+    # Rename common finviz column names to canonical names
+    col_aliases = {
+        "date":     ["date"],
+        "time":     ["time"],
+        "country":  ["country", "cur", "currency"],
+        "event":    ["event", "release", "name", "description"],
+        "impact":   ["impact"],
+        "actual":   ["actual"],
+        "forecast": ["forecast", "estimate", "est", "expected"],
+        "previous": ["previous", "prior", "prev"],
+    }
+    col_map = {}
+    for canonical, aliases in col_aliases.items():
+        for col in df.columns:
+            if any(a in col for a in aliases):
+                col_map.setdefault(canonical, col)
+
+    def _val(row, key):
+        col = col_map.get(key)
+        if col is None:
+            return None
+        v = row.get(col)
+        if v is None or (isinstance(v, float) and math.isnan(v)):
+            return None
+        s = str(v).strip()
+        return s if s and s.lower() not in ("nan", "-", "") else None
 
     events = []
     current_date = None
     for _, row in df.iterrows():
-        # Detect date row (first column contains a date like "Feb 25, 2026")
-        first_col = str(row.iloc[0]).strip() if len(row) > 0 else ""
-        try:
-            parsed = datetime.strptime(first_col, "%b %d, %Y")
-            current_date = parsed.strftime("%Y-%m-%d")
-            continue
-        except ValueError:
-            pass
+        # Detect a date row: first non-null column looks like "Feb 25, 2026"
+        date_raw = _val(row, "date")
+        if date_raw:
+            for fmt in ("%b %d, %Y", "%B %d, %Y", "%m/%d/%Y", "%Y-%m-%d"):
+                try:
+                    current_date = datetime.strptime(date_raw, fmt).strftime("%Y-%m-%d")
+                    break
+                except ValueError:
+                    continue
 
         if not current_date:
             continue
 
-        try:
-            # Columns vary; try to extract: time, event_name, impact, actual, forecast, previous
-            cols = list(row.index)
-            def _get(col_hints):
-                for h in col_hints:
-                    for c in cols:
-                        if h in c:
-                            v = row[c]
-                            if isinstance(v, float) and math.isnan(v):
-                                return None
-                            s = str(v).strip()
-                            return s if s and s.lower() not in ("nan", "-", "") else None
-                return None
-
-            event_name = _get(["event", "name", "release"])
-            if not event_name:
-                continue
-
-            ev_time    = _get(["time"])
-            impact     = _get(["impact"])
-            actual     = _get(["actual"])
-            forecast   = _get(["forecast", "est"])
-            previous   = _get(["prior", "previous", "prev"])
-            country    = _get(["country", "cur"])
-
-            import hashlib
-            event_id = hashlib.md5(f"{current_date}:{ev_time}:{event_name}".encode()).hexdigest()[:16]
-
-            events.append({
-                "date":       current_date,
-                "event_id":   event_id,
-                "time":       ev_time,
-                "event":      event_name,
-                "country":    country,
-                "impact":     impact,
-                "actual":     actual,
-                "forecast":   forecast,
-                "previous":   previous,
-                "zh":         None,  # filled by AI translation
-            })
-        except Exception:
+        event_name = _val(row, "event")
+        if not event_name:
             continue
+
+        ev_time  = _val(row, "time")
+        country  = _val(row, "country")
+        impact   = _val(row, "impact")
+        actual   = _val(row, "actual")
+        forecast = _val(row, "forecast")
+        previous = _val(row, "previous")
+
+        event_id = hashlib.md5(f"{current_date}:{ev_time}:{event_name}".encode()).hexdigest()[:16]
+
+        events.append({
+            "date":     current_date,
+            "event_id": event_id,
+            "time":     ev_time,
+            "event":    event_name,
+            "country":  country,
+            "impact":   impact,
+            "actual":   actual,
+            "forecast": forecast,
+            "previous": previous,
+            "zh":       None,
+        })
 
     return events
 
