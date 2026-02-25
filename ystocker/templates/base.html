@@ -150,9 +150,6 @@
         <a href="{{ url_for('main.groups') }}"
            class="px-3 py-1.5 rounded-md text-sm text-slate-300 hover:text-white hover:bg-slate-800 transition"
            data-i18n="nav.groups">Groups</a>
-        <a href="{{ url_for('main.contact') }}"
-           class="px-3 py-1.5 rounded-md text-sm text-slate-300 hover:text-white hover:bg-slate-800 transition"
-           data-i18n="nav.contact">Contact</a>
         <a href="{{ url_for('main.videos') }}"
            class="px-3 py-1.5 rounded-md text-sm text-slate-300 hover:text-white hover:bg-slate-800 transition"
            data-i18n="nav.videos">Videos</a>
@@ -161,8 +158,16 @@
            data-i18n="nav.guide">Guide</a>
       </nav>
 
-      <!-- Refresh button + Language toggle -->
+      <!-- Refresh button + Search icon + Language toggle -->
       <div class="relative ml-auto hidden md:flex items-center gap-2">
+        <!-- Search / Lookup icon -->
+        <a href="{{ url_for('main.lookup') }}" title="Lookup"
+           class="p-2 rounded-md text-slate-400 hover:text-white hover:bg-slate-800 transition"
+           aria-label="Lookup">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <circle cx="11" cy="11" r="7"/><path stroke-linecap="round" d="M21 21l-4.35-4.35"/>
+          </svg>
+        </a>
         <!-- Language toggle -->
         <button onclick="I18n.toggle()"
                 class="lang-toggle-btn px-2.5 py-1.5 rounded-md text-sm border border-slate-700 text-slate-300
@@ -214,7 +219,6 @@
         <a href="{{ url_for('main.thirteenf') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-300 hover:bg-slate-800" data-i18n="nav.thirteenf">13F</a>
         <a href="{{ url_for('main.fed') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-300 hover:bg-slate-800" data-i18n="nav.fed">Fed</a>
         <a href="{{ url_for('main.groups') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-300 hover:bg-slate-800" data-i18n="nav.groups">Groups</a>
-        <a href="{{ url_for('main.contact') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-300 hover:bg-slate-800" data-i18n="nav.contact">Contact</a>
         <a href="{{ url_for('main.videos') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-300 hover:bg-slate-800" data-i18n="nav.videos">Videos</a>
         <a href="{{ url_for('main.guide') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-300 hover:bg-slate-800" data-i18n="nav.guide">Guide</a>
         <a id="refreshBtnMobile" href="{{ url_for('main.thirteenf_refresh') if request.endpoint == 'main.thirteenf' else (url_for('main.fed_refresh') if request.endpoint == 'main.fed' else url_for('main.refresh')) }}" class="px-3 py-2.5 rounded-md text-sm text-brand hover:bg-slate-800" data-i18n="nav.refresh">↻ Refresh</a>
