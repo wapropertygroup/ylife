@@ -2471,15 +2471,17 @@ _ECON_CACHE: dict = {}
 _ECON_CACHE_LOCK = threading.Lock()
 _ECON_CACHE_TTL  = 3600   # 1 hour
 
-_FINVIZ_CAL_URL = "https://finviz.com/calendar.ashx"
-_FINVIZ_HEADERS = {
+_ECON_CAL_URL = "https://tradingeconomics.com/calendar"
+_ECON_CAL_HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
         "AppleWebKit/537.36 (KHTML, like Gecko) "
         "Chrome/122.0.0.0 Safari/537.36"
     ),
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    "Referer": "https://finviz.com/",
+    "Accept": "application/json, text/javascript, */*; q=0.01",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Referer": "https://tradingeconomics.com/calendar",
+    "X-Requested-With": "XMLHttpRequest",
 }
 
 
@@ -2538,87 +2540,93 @@ def _econ_save_to_dynamo(events: list) -> None:
         log.warning("DynamoDB economic-events write failed: %s", exc)
 
 
-def _scrape_finviz_calendar() -> list:
-    """Scrape finviz.com economic calendar and return list of event dicts."""
+def _fetch_econ_calendar() -> list:
+    """
+    Fetch economic calendar from Trading Economics public JSON endpoint.
+
+    Returns list of dicts: {date, event_id, time, event, country, impact,
+                             actual, forecast, previous, zh}
+    """
     import requests as req_lib
-    from datetime import datetime
     import hashlib
+    from datetime import datetime, timedelta, timezone
 
-    resp = req_lib.get(_FINVIZ_CAL_URL, headers=_FINVIZ_HEADERS, timeout=15)
-    resp.raise_for_status()
+    # Trading Economics returns JSON when Accept: application/json is sent
+    # We request the current week's events
+    today = datetime.now(timezone.utc).date()
+    date_from = today.strftime("%Y-%m-%d")
+    date_to   = (today + timedelta(days=7)).strftime("%Y-%m-%d")
 
-    # finviz returns an HTML table; parse with pandas using stdlib html.parser
+    url = f"https://tradingeconomics.com/calendar/country/all/{date_from}/{date_to}/importance:1,2,3"
+
     try:
-        tables = pd.read_html(resp.text, flavor=None)  # auto-detect available parser
+        resp = req_lib.get(url, headers=_ECON_CAL_HEADERS, timeout=15)
+        resp.raise_for_status()
+        raw = resp.json()
     except Exception:
-        tables = []
-    if not tables:
-        return []
+        # Fallback: try the base calendar endpoint without date range
+        try:
+            resp = req_lib.get(
+                "https://tradingeconomics.com/calendar",
+                headers={**_ECON_CAL_HEADERS, "Accept": "application/json"},
+                timeout=15,
+            )
+            resp.raise_for_status()
+            raw = resp.json()
+        except Exception as exc2:
+            raise exc2
 
-    # The economic calendar is the largest table
-    df = max(tables, key=lambda t: len(t))
-    df.columns = [str(c).strip().lower() for c in df.columns]
-
-    # Rename common finviz column names to canonical names
-    col_aliases = {
-        "date":     ["date"],
-        "time":     ["time"],
-        "country":  ["country", "cur", "currency"],
-        "event":    ["event", "release", "name", "description"],
-        "impact":   ["impact"],
-        "actual":   ["actual"],
-        "forecast": ["forecast", "estimate", "est", "expected"],
-        "previous": ["previous", "prior", "prev"],
-    }
-    col_map = {}
-    for canonical, aliases in col_aliases.items():
-        for col in df.columns:
-            if any(a in col for a in aliases):
-                col_map.setdefault(canonical, col)
-
-    def _val(row, key):
-        col = col_map.get(key)
-        if col is None:
-            return None
-        v = row.get(col)
-        if v is None or (isinstance(v, float) and math.isnan(v)):
-            return None
-        s = str(v).strip()
-        return s if s and s.lower() not in ("nan", "-", "") else None
+    if not isinstance(raw, list):
+        # Some responses wrap in a dict
+        raw = raw.get("events") or raw.get("data") or []
 
     events = []
-    current_date = None
-    for _, row in df.iterrows():
-        # Detect a date row: first non-null column looks like "Feb 25, 2026"
-        date_raw = _val(row, "date")
-        if date_raw:
-            for fmt in ("%b %d, %Y", "%B %d, %Y", "%m/%d/%Y", "%Y-%m-%d"):
-                try:
-                    current_date = datetime.strptime(date_raw, fmt).strftime("%Y-%m-%d")
-                    break
-                except ValueError:
-                    continue
-
-        if not current_date:
+    for item in raw:
+        if not isinstance(item, dict):
             continue
 
-        event_name = _val(row, "event")
+        # Parse date/time from "Date" field like "2026-02-25T08:30:00"
+        raw_dt = item.get("Date") or item.get("date") or ""
+        date_str = time_str = None
+        if raw_dt:
+            try:
+                dt = datetime.fromisoformat(raw_dt.replace("Z", "+00:00"))
+                date_str = dt.strftime("%Y-%m-%d")
+                time_str = dt.strftime("%H:%M")
+            except Exception:
+                date_str = raw_dt[:10]
+
+        if not date_str:
+            continue
+
+        event_name = (
+            item.get("Event") or item.get("event") or
+            item.get("Category") or item.get("category") or ""
+        ).strip()
         if not event_name:
             continue
 
-        ev_time  = _val(row, "time")
-        country  = _val(row, "country")
-        impact   = _val(row, "impact")
-        actual   = _val(row, "actual")
-        forecast = _val(row, "forecast")
-        previous = _val(row, "previous")
+        country  = (item.get("Country") or item.get("country") or "").strip() or None
+        # Importance: 1=low, 2=medium, 3=high
+        imp_raw  = item.get("Importance") or item.get("importance")
+        impact   = {3: "High", 2: "Medium", 1: "Low"}.get(imp_raw) if imp_raw else None
 
-        event_id = hashlib.md5(f"{current_date}:{ev_time}:{event_name}".encode()).hexdigest()[:16]
+        def _clean(v):
+            if v is None:
+                return None
+            s = str(v).strip()
+            return s if s and s not in ("-", "null", "None", "") else None
+
+        actual   = _clean(item.get("Actual")   or item.get("actual"))
+        forecast = _clean(item.get("Forecast") or item.get("forecast") or item.get("TEForecast"))
+        previous = _clean(item.get("Previous") or item.get("previous"))
+
+        event_id = hashlib.md5(f"{date_str}:{time_str}:{event_name}:{country}".encode()).hexdigest()[:16]
 
         events.append({
-            "date":     current_date,
+            "date":     date_str,
             "event_id": event_id,
-            "time":     ev_time,
+            "time":     time_str,
             "event":    event_name,
             "country":  country,
             "impact":   impact,
@@ -2628,6 +2636,8 @@ def _scrape_finviz_calendar() -> list:
             "zh":       None,
         })
 
+    # Sort by date then time
+    events.sort(key=lambda e: (e["date"] or "", e["time"] or ""))
     return events
 
 
@@ -2649,9 +2659,9 @@ def api_economic_events():
             return jsonify(entry["data"])
 
     try:
-        raw_events = _scrape_finviz_calendar()
+        raw_events = _fetch_econ_calendar()
     except Exception as exc:
-        log.warning("Finviz calendar scrape failed: %s", exc)
+        log.warning("Economic calendar fetch failed: %s", exc)
         raw_events = []
 
     # Load any stored translations from DynamoDB

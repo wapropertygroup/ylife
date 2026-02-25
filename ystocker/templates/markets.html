@@ -1190,8 +1190,11 @@ function renderAaii(data) {
 let _econData = [];
 
 function renderEconEvents(events) {
+  document.getElementById('econLoading').style.display = 'none';
   if (!events || !events.length) {
-    document.getElementById('econLoading').textContent = I18n.t('markets.econ_no_events') || 'No upcoming events.';
+    const el = document.getElementById('econLoading');
+    el.style.display = '';
+    el.textContent = I18n.t('markets.econ_no_events') || 'No upcoming events.';
     return;
   }
   _econData = events;
