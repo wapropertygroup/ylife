@@ -2345,8 +2345,11 @@ _AAII_HEADERS = {
         "AppleWebKit/537.36 (KHTML, like Gecko) "
         "Chrome/122.0.0.0 Safari/537.36"
     ),
-    "Accept": "application/json, text/plain, */*",
-    "Referer": "https://www.aaii.com/sentimentsurvey",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Referer": "https://www.aaii.com/sentimentsurvey/sent_results",
+    "Connection": "keep-alive",
 }
 
 _AAII_XLS_URL = "https://www.aaii.com/files/surveys/sentiment.xls"
