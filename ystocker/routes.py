@@ -2376,6 +2376,11 @@ def api_aaii_sentiment():
     try:
         resp = req_lib.get(_AAII_XLS_URL, headers=_AAII_HEADERS, timeout=20)
         resp.raise_for_status()
+        # AAII occasionally returns an HTML error page instead of the XLS
+        if resp.content[:6] in (b'\xd0\xcf\x11\xe0\xa1\xb1', b'\x09\x08\x10\x00\x00\x06\x05\x00'):
+            pass  # valid .xls magic bytes
+        elif resp.content[:5] == b'<?xml' or resp.content[:9] == b'<!DOCTYPE' or b'<html' in resp.content[:200].lower():
+            raise ValueError("AAII returned HTML instead of XLS — try again later")
         df = pd.read_excel(io.BytesIO(resp.content), header=3, engine="xlrd")
 
         # Columns: Date, Bullish, Neutral, Bearish, Total, Bull-Bear Spread, ...
