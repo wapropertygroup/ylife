@@ -2922,7 +2922,7 @@ def api_economic_events_translate():
         log.warning("Economic events translation failed: %s", exc)
         return jsonify({"error": str(exc)}), 500
 
-    # Persist translations back to DynamoDB
+    # Persist translations to DynamoDB and patch the in-memory cache
     if translations:
         table = _get_econ_table()
         if table:
@@ -2939,6 +2939,19 @@ def api_economic_events_translate():
                             })
             except Exception as exc:
                 log.warning("DynamoDB economic-events translation save failed: %s", exc)
+
+        # Patch in-memory cache so the next /api/economic-events hit returns
+        # zh values without waiting for cache expiry + re-fetch from DynamoDB
+        with _ECON_CACHE_LOCK:
+            entry = _ECON_CACHE.get("data")
+            if entry:
+                zh_map = {ev.get("event_id"): translations[ev.get("event_id")]
+                          for ev in events_to_translate
+                          if ev.get("event_id") in translations}
+                for ev in entry["data"].get("events", []):
+                    eid = ev.get("event_id")
+                    if eid and eid in zh_map and not ev.get("zh"):
+                        ev["zh"] = zh_map[eid]
 
     return jsonify({"translations": translations})
 
