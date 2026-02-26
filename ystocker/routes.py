@@ -2905,11 +2905,13 @@ def api_economic_events_translate():
     )
 
     try:
-        import google.generativeai as genai
-        genai.configure(api_key=GEMINI_API_KEY)
-        model = genai.GenerativeModel("gemini-2.0-flash")
-        response = model.generate_content(prompt)
-        text = response.text.strip()
+        from google import genai
+        client = genai.Client(api_key=GEMINI_API_KEY)
+        resp = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=prompt,
+        )
+        text = resp.text.strip()
         # Strip markdown code blocks if present
         if text.startswith("```"):
             text = text.split("```")[1]
