@@ -588,6 +588,14 @@ const I18n = (() => {
     'markets.aaii_bearish': { en: 'Bearish',                zh: '看空' },
     'markets.aaii_spread':  { en: 'Bull-Bear',              zh: '牛熊差' },
 
+    // Put/Call Ratio
+    'markets.pcr_title':    { en: 'Put/Call Ratio',         zh: '期权看跌/看涨比' },
+    'markets.pcr_desc':     { en: 'CBOE Equity Put/Call Ratio — options sentiment', zh: 'CBOE股票期权看跌/看涨比 — 期权情绪' },
+    'markets.pcr_ma20':     { en: '20-day MA',              zh: '20日均线' },
+    'markets.pcr_bearish':  { en: 'Bearish (high put buying)', zh: '看跌（大量买入看跌期权）' },
+    'markets.pcr_neutral':  { en: 'Neutral',                zh: '中性' },
+    'markets.pcr_bullish':  { en: 'Bullish (low put buying)', zh: '看涨（看跌期权买入减少）' },
+
     // Economic Events
     'markets.econ_events_title': { en: 'Economic Events',         zh: '经济事件日历' },
     'markets.econ_events_desc':  { en: 'Key macro releases & central bank decisions this week', zh: '本周重要宏观数据发布及央行决议' },

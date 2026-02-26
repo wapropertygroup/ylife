@@ -2418,6 +2418,58 @@ def api_fear_greed():
 
 
 # ---------------------------------------------------------------------------
+# CBOE Equity Put/Call Ratio  (/api/put-call-ratio)
+# ---------------------------------------------------------------------------
+
+_PCR_CACHE: dict = {}
+_PCR_CACHE_LOCK = threading.Lock()
+_PCR_CACHE_TTL  = 4 * 3600   # 4 hours — daily data
+
+
+@bp.route("/api/put-call-ratio")
+def api_put_call_ratio():
+    """Return CBOE Equity Put/Call Ratio history (^PCCE) with 1Y daily data."""
+    with _PCR_CACHE_LOCK:
+        entry = _PCR_CACHE.get("data")
+        if entry and time.time() - entry["ts"] < _PCR_CACHE_TTL:
+            return jsonify(entry["data"])
+
+    try:
+        import yfinance as yf
+        tk   = yf.Ticker("^PCCE")
+        hist = tk.history(period="1y", interval="1d")
+        if hist.empty:
+            return jsonify({"error": "No data"}), 502
+
+        closes = [round(float(v), 3) if not math.isnan(float(v)) else None
+                  for v in hist["Close"]]
+        dates  = [str(d.date()) for d in hist.index]
+
+        current = next((v for v in reversed(closes) if v is not None), None)
+        prev    = next((v for v in reversed(closes[:-1]) if v is not None), None)
+        day_chg = round(current - prev, 3) if current and prev else None
+
+        # Simple 20-day moving average
+        valid = [v for v in closes if v is not None]
+        ma20  = round(sum(valid[-20:]) / min(len(valid), 20), 3) if valid else None
+
+        result = {
+            "current":  current,
+            "day_chg":  day_chg,
+            "ma20":     ma20,
+            "dates":    dates,
+            "closes":   closes,
+        }
+    except Exception as exc:
+        log.warning("Put/Call ratio fetch failed: %s", exc)
+        return jsonify({"error": str(exc)}), 502
+
+    with _PCR_CACHE_LOCK:
+        _PCR_CACHE["data"] = {"ts": time.time(), "data": result}
+    return jsonify(result)
+
+
+# ---------------------------------------------------------------------------
 # AAII Sentiment Survey  (/api/aaii-sentiment)
 # ---------------------------------------------------------------------------
 

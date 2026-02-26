@@ -102,8 +102,8 @@
 
 </div>
 
-<!-- ── AAII Sentiment + Sector Performance row (2 per row) ──────────── -->
-<div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6 fade-up">
+<!-- ── AAII Sentiment + Put/Call Ratio + Sector Performance row ─────── -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6 fade-up">
 
   <!-- AAII Sentiment Survey card -->
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-6">
@@ -120,6 +120,39 @@
       <div class="space-y-3 mb-4" id="aaiiBars"></div>
       <!-- History chart -->
       <div style="height:130px"><canvas id="aaiiChart"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Put/Call Ratio card -->
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-6">
+    <div class="flex items-start justify-between mb-4">
+      <div>
+        <h2 class="text-base font-semibold text-slate-200" data-i18n="markets.pcr_title">Put/Call Ratio</h2>
+        <p class="text-xs text-slate-500 mt-0.5" data-i18n="markets.pcr_desc">CBOE Equity Put/Call Ratio — options sentiment</p>
+      </div>
+      <div id="pcrBadge" class="text-right"></div>
+    </div>
+    <div id="pcrLoading" class="text-xs text-slate-600 py-2" data-i18n="markets.loading">Loading…</div>
+    <div id="pcrBody" style="display:none">
+      <!-- Gauge bar: <0.6 bullish, 0.6-0.8 neutral, >0.8 bearish -->
+      <div class="mb-4">
+        <div class="flex justify-between text-[10px] text-slate-500 mb-1.5">
+          <span data-i18n="markets.pcr_bullish">Bullish</span>
+          <span data-i18n="markets.pcr_neutral">Neutral</span>
+          <span data-i18n="markets.pcr_bearish">Bearish</span>
+        </div>
+        <div class="relative h-3.5 rounded-full overflow-hidden"
+             style="background:linear-gradient(to right,#065f46,#10b981,#334155,#ef4444,#7f1d1d)">
+          <div id="pcrNeedle" class="absolute top-0 w-0.5 h-full bg-white/90 rounded-full transition-all duration-700" style="left:50%"></div>
+        </div>
+        <div class="flex justify-between text-[10px] text-slate-500 mt-1">
+          <span>0.3</span><span>0.6</span><span>0.8</span><span>1.0</span><span>1.3</span>
+        </div>
+      </div>
+      <!-- Stats row -->
+      <div class="grid grid-cols-2 gap-3 mb-4" id="pcrStats"></div>
+      <!-- History chart -->
+      <div style="height:110px"><canvas id="pcrChart"></canvas></div>
     </div>
   </div>
 
@@ -1235,6 +1268,110 @@ function renderAaii(data) {
   document.getElementById('aaiiBody').style.display = '';
 }
 
+// ── Put/Call Ratio ────────────────────────────────────────────────
+let _pcrChartInst = null;
+
+function renderPcr(data) {
+  const loadEl = document.getElementById('pcrLoading');
+  if (!data || data.error) {
+    loadEl.textContent = data?.error || (I18n.t('markets.unavailable') || 'Unavailable');
+    return;
+  }
+
+  const val  = data.current;
+  const chg  = data.day_chg;
+  const ma20 = data.ma20;
+
+  // Badge: signal based on ratio level
+  let signal, sigCol;
+  if (val < 0.6)      { signal = I18n.t('markets.pcr_bullish') || 'Bullish';  sigCol = '#34d399'; }
+  else if (val < 0.8) { signal = I18n.t('markets.pcr_neutral') || 'Neutral';  sigCol = '#94a3b8'; }
+  else                { signal = I18n.t('markets.pcr_bearish') || 'Bearish';  sigCol = '#f87171'; }
+
+  document.getElementById('pcrBadge').innerHTML = `
+    <div class="text-2xl font-bold tabular-nums" style="color:${sigCol}">${val != null ? val.toFixed(2) : '—'}</div>
+    <div class="text-[11px] font-semibold mt-0.5" style="color:${sigCol}">${signal}</div>`;
+
+  // Needle position: map 0.3–1.3 range onto 0–100%
+  const pct = Math.max(0, Math.min(100, (val - 0.3) / 1.0 * 100));
+  document.getElementById('pcrNeedle').style.left = pct + '%';
+
+  // Stats
+  const chgCls  = chg == null ? 'text-slate-500' : chg >= 0 ? 'text-rose-400' : 'text-emerald-400';
+  const chgSign = chg == null ? '' : chg >= 0 ? '+' : '';
+  document.getElementById('pcrStats').innerHTML = `
+    <div class="stat-card">
+      <div class="stat-label">${I18n.t('markets.day_change') || 'Day Change'}</div>
+      <div class="stat-val text-sm ${chgCls}">${chgSign}${chg != null ? chg.toFixed(3) : '—'}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">${I18n.t('markets.pcr_ma20') || '20-day MA'}</div>
+      <div class="stat-val text-sm text-slate-200">${ma20 != null ? ma20.toFixed(2) : '—'}</div>
+    </div>`;
+
+  // History chart
+  if (_pcrChartInst) { _pcrChartInst.destroy(); _pcrChartInst = null; }
+  const dates  = data.dates  || [];
+  const closes = data.closes || [];
+  // Color line by zone
+  _pcrChartInst = new Chart(document.getElementById('pcrChart'), {
+    type: 'line',
+    data: { labels: dates, datasets: [
+      {
+        label: 'Put/Call',
+        data: closes,
+        borderColor: '#a5b4fc', backgroundColor: 'rgba(165,180,252,0.08)',
+        borderWidth: 1.5, pointRadius: 0, fill: true, tension: 0.3, spanGaps: true,
+      },
+      {
+        label: I18n.t('markets.pcr_ma20') || '20-day MA',
+        data: (() => {
+          const out = new Array(closes.length).fill(null);
+          for (let i = 19; i < closes.length; i++) {
+            const slice = closes.slice(i - 19, i + 1).filter(v => v != null);
+            out[i] = slice.length ? Math.round(slice.reduce((a,b) => a+b, 0) / slice.length * 1000) / 1000 : null;
+          }
+          return out;
+        })(),
+        borderColor: '#fb923c', borderWidth: 1.5, borderDash: [4,3],
+        pointRadius: 0, fill: false, tension: 0.3, spanGaps: true,
+      },
+    ]},
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { mode: 'index', intersect: false,
+          callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y?.toFixed(2)}` } },
+      },
+      scales: {
+        x: { grid: { color: GRID_COL }, ticks: { color: TICK_COL, maxTicksLimit: 6, maxRotation: 0 } },
+        y: { grid: { color: GRID_COL }, ticks: { color: TICK_COL, callback: v => v.toFixed(1) },
+             min: 0.3, max: 1.3 },
+      },
+    },
+    plugins: [{
+      afterDraw(chart) {
+        const { ctx: c, chartArea: a, scales: { y } } = chart;
+        // Draw reference lines at 0.6 and 0.8
+        [0.6, 0.8].forEach((lvl, i) => {
+          const py = y.getPixelForValue(lvl);
+          if (py >= a.top && py <= a.bottom) {
+            c.save();
+            c.strokeStyle = i === 0 ? 'rgba(52,211,153,0.4)' : 'rgba(248,113,113,0.4)';
+            c.lineWidth = 1; c.setLineDash([4,3]);
+            c.beginPath(); c.moveTo(a.left, py); c.lineTo(a.right, py); c.stroke();
+            c.restore();
+          }
+        });
+      },
+    }],
+  });
+
+  loadEl.style.display = 'none';
+  document.getElementById('pcrBody').style.display = '';
+}
+
 // ── Economic Events Calendar ──────────────────────────────────────
 let _econData = [];
 let _econFilter = 'high';
@@ -1512,6 +1649,7 @@ async function translateEconEvents() {
   const fearGreedP = fetch('/api/fear-greed').then(r => r.json());
   const aaiiP      = fetch('/api/aaii-sentiment').then(r => r.json());
   const econP      = fetch('/api/economic-events').then(r => r.json());
+  const pcrP       = fetch('/api/put-call-ratio').then(r => r.json());
 
   // Resolve each as soon as it arrives — don't wait for the slowest
   fearGreedP
@@ -1522,6 +1660,9 @@ async function translateEconEvents() {
       document.getElementById('aaiiLoading').textContent = d?.error || (I18n.t('markets.unavailable') || 'Unavailable');
     }})
     .catch(e => { document.getElementById('aaiiLoading').textContent = '⚠ ' + e.message; });
+  pcrP
+    .then(renderPcr)
+    .catch(e => { document.getElementById('pcrLoading').textContent = '⚠ ' + e.message; });
   econP
     .then(d => renderEconEvents(d.events || []))
     .catch(e => {
