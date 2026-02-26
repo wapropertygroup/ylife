@@ -1900,7 +1900,77 @@ def api_forecast(ticker: str):
 
 _MARKETS_CACHE: dict = {}
 _MARKETS_CACHE_LOCK  = threading.Lock()
-_MARKETS_CACHE_TTL   = 900  # 15 minutes
+_MARKETS_CACHE_TTL   = 300  # 5 minutes
+
+# DynamoDB table for persisting the markets snapshot across restarts
+_MARKETS_TABLE_NAME    = "ystocker-markets-cache"
+_markets_ddb_table     = None
+_markets_ddb_unavail_until = 0.0
+_MARKETS_DDB_LOCK      = threading.Lock()
+
+
+def _get_markets_ddb_table():
+    """Return boto3 DynamoDB Table for markets cache, or None if unavailable."""
+    global _markets_ddb_table, _markets_ddb_unavail_until
+    if _markets_ddb_table is not None:
+        return _markets_ddb_table
+    if time.time() < _markets_ddb_unavail_until:
+        return None
+    with _MARKETS_DDB_LOCK:
+        if _markets_ddb_table is not None:
+            return _markets_ddb_table
+        if time.time() < _markets_ddb_unavail_until:
+            return None
+        try:
+            import boto3
+            ddb = boto3.resource("dynamodb", region_name=os.environ.get("AWS_REGION", "us-west-2"))
+            tbl = ddb.Table(_MARKETS_TABLE_NAME)
+            tbl.load()
+            _markets_ddb_table = tbl
+            log.info("DynamoDB markets-cache table connected: %s", _MARKETS_TABLE_NAME)
+        except Exception as exc:
+            log.warning("DynamoDB markets-cache unavailable: %s", exc)
+            _markets_ddb_table = None
+            _markets_ddb_unavail_until = time.time() + 300
+        return _markets_ddb_table
+
+
+def _markets_load_from_dynamo() -> Optional[dict]:
+    """Load the cached markets snapshot from DynamoDB. Returns None if stale/missing."""
+    table = _get_markets_ddb_table()
+    if not table:
+        return None
+    try:
+        resp = table.get_item(Key={"pk": "snapshot"})
+        item = resp.get("Item")
+        if not item:
+            return None
+        ts = float(item.get("ts", 0))
+        if time.time() - ts > _MARKETS_CACHE_TTL:
+            return None  # stale
+        payload = item.get("payload")
+        if not payload:
+            return None
+        return {"ts": ts, "data": json.loads(payload)}
+    except Exception as exc:
+        log.warning("DynamoDB markets-cache load failed: %s", exc)
+        return None
+
+
+def _markets_save_to_dynamo(result: dict, ts: float) -> None:
+    """Persist the markets snapshot to DynamoDB with a TTL of 5 minutes."""
+    table = _get_markets_ddb_table()
+    if not table:
+        return
+    try:
+        table.put_item(Item={
+            "pk":      "snapshot",
+            "ts":      Decimal(str(round(ts, 3))),
+            "payload": json.dumps(result, default=str),
+            "ttl":     int(ts) + _MARKETS_CACHE_TTL + 60,  # DynamoDB native TTL
+        })
+    except Exception as exc:
+        log.warning("DynamoDB markets-cache save failed: %s", exc)
 
 # Yahoo Finance symbols for major indices (US + international)
 _INDEX_SYMBOLS = {
@@ -1950,6 +2020,13 @@ def api_markets():
         entry = _MARKETS_CACHE.get("data")
         if entry and time.time() - entry["ts"] < _MARKETS_CACHE_TTL:
             return jsonify(entry["data"])
+
+    # Memory miss — try DynamoDB before hitting Yahoo Finance
+    ddb_entry = _markets_load_from_dynamo()
+    if ddb_entry:
+        with _MARKETS_CACHE_LOCK:
+            _MARKETS_CACHE["data"] = ddb_entry
+        return jsonify(ddb_entry["data"])
 
     def _rsi(prices: list, period: int = 14) -> Optional[float]:
         if len(prices) < period + 1:
@@ -2117,8 +2194,11 @@ def api_markets():
     sectors = _fetch_sector_etfs()
 
     result = {"indices": indices, "vix": vix, "sectors": sectors}
+    ts = time.time()
     with _MARKETS_CACHE_LOCK:
-        _MARKETS_CACHE["data"] = {"ts": time.time(), "data": result}
+        _MARKETS_CACHE["data"] = {"ts": ts, "data": result}
+    # Persist to DynamoDB in background so the response isn't delayed
+    threading.Thread(target=_markets_save_to_dynamo, args=(result, ts), daemon=True).start()
     return jsonify(result)
 
 
