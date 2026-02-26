@@ -29,6 +29,29 @@
   .rsi-zone { font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 4px; }
 </style>
 
+<!-- ── Fullscreen chart modal ────────────────────────────────────────── -->
+<div id="mktsModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+     style="display:none" onclick="closeMktsModal()">
+  <div class="relative w-full max-w-5xl bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl flex flex-col"
+       style="max-height:90vh" onclick="event.stopPropagation()">
+    <div class="flex items-center justify-between px-6 py-4 border-b border-slate-800 shrink-0">
+      <div>
+        <h3 id="mktsModalTitle" class="font-semibold text-slate-100"></h3>
+        <p id="mktsModalSub" class="text-xs text-slate-500 mt-0.5"></p>
+      </div>
+      <button onclick="closeMktsModal()"
+              class="text-slate-500 hover:text-slate-200 transition p-1 rounded-lg hover:bg-slate-800">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+    <div class="p-6 flex-1 min-h-0" style="min-height:460px">
+      <canvas id="mktsModalCanvas"></canvas>
+    </div>
+  </div>
+</div>
+
 <!-- ── Header ─────────────────────────────────────────────────────────── -->
 <div class="mb-6 fade-up">
   <h1 class="text-xl sm:text-2xl font-bold grad-text" data-i18n="markets.title">Market Overview</h1>
@@ -62,7 +85,15 @@
         <h2 class="text-base font-semibold text-slate-200" data-i18n="markets.vix">VIX (Volatility)</h2>
         <p class="text-xs text-slate-500 mt-0.5" data-i18n="markets.vix_desc">CBOE Volatility Index — fear gauge of the S&amp;P 500</p>
       </div>
-      <div id="vixBadge" class="text-right"></div>
+      <div id="vixBadge" class="text-right flex items-start gap-2">
+        <button onclick="expandMktsChart('vix')" title="Expand"
+                class="text-slate-600 hover:text-slate-300 transition p-1 rounded-lg hover:bg-slate-800 shrink-0">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"/>
+          </svg>
+        </button>
+      </div>
     </div>
     <div id="vixSkeleton" class="animate-pulse bg-slate-800 rounded-lg" style="height:200px"></div>
     <div id="vixChartWrap" style="height:200px; display:none"><canvas id="vixChart"></canvas></div>
@@ -75,7 +106,15 @@
         <h2 class="text-base font-semibold text-slate-200" data-i18n="markets.fear_greed">Fear &amp; Greed</h2>
         <p class="text-xs text-slate-500 mt-0.5" data-i18n="markets.fear_greed_desc">CNN Fear &amp; Greed Index — composite sentiment</p>
       </div>
-      <div id="fgBadge" class="text-right"></div>
+      <div id="fgBadge" class="text-right flex items-start gap-2">
+        <button onclick="expandMktsChart('fg')" title="Expand"
+                class="text-slate-600 hover:text-slate-300 transition p-1 rounded-lg hover:bg-slate-800 shrink-0">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"/>
+          </svg>
+        </button>
+      </div>
     </div>
     <div id="fgLoading" class="text-xs text-slate-600 py-2" data-i18n="markets.loading">Loading…</div>
     <div id="fgBody" style="display:none">
@@ -112,7 +151,15 @@
         <h2 class="text-base font-semibold text-slate-200" data-i18n="markets.aaii_title">AAII Sentiment</h2>
         <p class="text-xs text-slate-500 mt-0.5" data-i18n="markets.aaii_desc">AAII Investor Sentiment Survey — weekly</p>
       </div>
-      <div id="aaiiBadge" class="text-right"></div>
+      <div id="aaiiBadge" class="text-right flex items-start gap-2">
+        <button onclick="expandMktsChart('aaii')" title="Expand"
+                class="text-slate-600 hover:text-slate-300 transition p-1 rounded-lg hover:bg-slate-800 shrink-0">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"/>
+          </svg>
+        </button>
+      </div>
     </div>
     <div id="aaiiLoading" class="text-xs text-slate-600 py-2" data-i18n="markets.loading">Loading…</div>
     <div id="aaiiBody" style="display:none">
@@ -130,7 +177,15 @@
         <h2 class="text-base font-semibold text-slate-200" data-i18n="markets.pcr_title">Put/Call Ratio</h2>
         <p class="text-xs text-slate-500 mt-0.5" data-i18n="markets.pcr_desc">CBOE Equity Put/Call Ratio — options sentiment</p>
       </div>
-      <div id="pcrBadge" class="text-right"></div>
+      <div id="pcrBadge" class="text-right flex items-start gap-2">
+        <button onclick="expandMktsChart('pcr')" title="Expand"
+                class="text-slate-600 hover:text-slate-300 transition p-1 rounded-lg hover:bg-slate-800 shrink-0">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"/>
+          </svg>
+        </button>
+      </div>
     </div>
     <div id="pcrLoading" class="text-xs text-slate-600 py-2" data-i18n="markets.loading">Loading…</div>
     <div id="pcrBody" style="display:none">
@@ -197,12 +252,21 @@
   <!-- Chart + range buttons -->
   <div class="flex items-center justify-between mb-3">
     <h3 class="text-sm font-semibold text-slate-300" data-i18n="markets.hist_title">Price History</h3>
-    <div class="flex gap-1" id="idxRangeBtns">
+    <div class="flex items-center gap-2">
+      <div class="flex gap-1" id="idxRangeBtns">
       <button class="range-btn" data-period="1m"      onclick="switchIdxRange('1m')">1M</button>
       <button class="range-btn" data-period="6m"      onclick="switchIdxRange('6m')">6M</button>
       <button class="range-btn active" data-period="daily"   onclick="switchIdxRange('daily')">1Y</button>
       <button class="range-btn" data-period="weekly"  onclick="switchIdxRange('weekly')">3Y</button>
       <button class="range-btn" data-period="monthly" onclick="switchIdxRange('monthly')">5Y</button>
+      </div>
+      <button onclick="expandMktsChart('idx')" title="Expand"
+              class="text-slate-600 hover:text-slate-300 transition p-1 rounded-lg hover:bg-slate-800">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"/>
+        </svg>
+      </button>
     </div>
   </div>
   <div style="height:320px"><canvas id="idxChart"></canvas></div>
@@ -1642,6 +1706,71 @@ async function translateEconEvents() {
     console.warn('Translation failed:', e);
   }
   if (btn) btn.disabled = false;
+}
+
+// ── Fullscreen chart modal ────────────────────────────────────────
+let _mktsModalChart = null;
+
+function closeMktsModal() {
+  document.getElementById('mktsModal').style.display = 'none';
+  if (_mktsModalChart) { _mktsModalChart.destroy(); _mktsModalChart = null; }
+}
+
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeMktsModal(); });
+
+function expandMktsChart(kind) {
+  const modal    = document.getElementById('mktsModal');
+  const canvas   = document.getElementById('mktsModalCanvas');
+  const titleEl  = document.getElementById('mktsModalTitle');
+  const subEl    = document.getElementById('mktsModalSub');
+  if (_mktsModalChart) { _mktsModalChart.destroy(); _mktsModalChart = null; }
+
+  // Clone current chart config based on kind
+  const cfg = _mktsModalConfig(kind);
+  if (!cfg) return;
+  titleEl.textContent = cfg.title;
+  subEl.textContent   = cfg.sub || '';
+  modal.style.display = 'flex';
+  _mktsModalChart = new Chart(canvas, cfg.chartConfig);
+}
+
+function _mktsModalConfig(kind) {
+  if (kind === 'vix' && _vixChartInst) {
+    return {
+      title: I18n.t('markets.vix') || 'VIX (Volatility)',
+      sub:   I18n.t('markets.vix_desc') || '',
+      chartConfig: JSON.parse(JSON.stringify(_vixChartInst.config)),
+    };
+  }
+  if (kind === 'fg' && _fgChartInst) {
+    return {
+      title: I18n.t('markets.fear_greed') || 'Fear & Greed',
+      sub:   I18n.t('markets.fear_greed_desc') || '',
+      chartConfig: JSON.parse(JSON.stringify(_fgChartInst.config)),
+    };
+  }
+  if (kind === 'aaii' && _aaiiChartInst) {
+    return {
+      title: I18n.t('markets.aaii_title') || 'AAII Sentiment',
+      sub:   I18n.t('markets.aaii_desc') || '',
+      chartConfig: JSON.parse(JSON.stringify(_aaiiChartInst.config)),
+    };
+  }
+  if (kind === 'pcr' && _pcrChartInst) {
+    return {
+      title: I18n.t('markets.pcr_title') || 'Put/Call Ratio',
+      sub:   I18n.t('markets.pcr_desc') || '',
+      chartConfig: JSON.parse(JSON.stringify(_pcrChartInst.config)),
+    };
+  }
+  if (kind === 'idx' && _idxChartInst) {
+    return {
+      title: idxLabel(_curIdx) + ' — ' + (I18n.t('markets.hist_title') || 'Price History'),
+      sub:   '',
+      chartConfig: JSON.parse(JSON.stringify(_idxChartInst.config)),
+    };
+  }
+  return null;
 }
 
 (async function() {
