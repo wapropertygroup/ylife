@@ -132,7 +132,7 @@
 </div>
 
 <!-- ── Per-index detail tabs ──────────────────────────────────────────── -->
-<div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up">
+<div id="idxDetail" class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up">
   <div class="flex gap-1 border-b border-slate-800 mb-5 -mx-4 sm:-mx-6 px-4 sm:px-6 overflow-x-auto">
     <button class="idx-tab-btn active whitespace-nowrap" id="tabSpx"   onclick="switchIdx('spx')"   data-i18n="markets.tab_spx">S&amp;P 500</button>
     <button class="idx-tab-btn whitespace-nowrap"        id="tabIxic"  onclick="switchIdx('ixic')"  data-i18n="markets.tab_ixic">Nasdaq</button>
@@ -367,9 +367,9 @@ function renderCards(data) {
     const ytd    = _computeYtd(d);
     const ytdCls = _chgClass(ytd);
     return `
-    <button onclick="switchIdx('${k}')"
+    <button onclick="switchIdx('${k}', true)"
             class="bg-slate-900 border border-slate-800 rounded-2xl p-4 text-left
-                   hover:border-slate-600 transition-all group">
+                   hover:border-slate-600 active:scale-95 transition-all cursor-pointer group">
       <div class="flex items-center justify-between mb-1">
         <span class="text-xs font-semibold tracking-wide truncate" style="color:${col}">${label}</span>
         <span class="text-[10px] text-slate-600 ml-1 shrink-0">${d.symbol || ''}</span>
@@ -871,7 +871,7 @@ function _syncHover() {
   };
 }
 
-function switchIdx(key) {
+function switchIdx(key, scroll) {
   _curIdx = key;
   IDX_ALL_KEYS.forEach(k => {
     const id = 'tab' + k.charAt(0).toUpperCase() + k.slice(1);
@@ -885,6 +885,10 @@ function switchIdx(key) {
     renderRsiChart(key, _mkData, _curRange);
     _syncHover();
     loadIdxForecast(key);
+  }
+  if (scroll) {
+    const el = document.getElementById('idxDetail');
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 }
 

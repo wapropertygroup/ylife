@@ -2424,6 +2424,7 @@ def api_fear_greed():
 _AAII_CACHE: dict = {}
 _AAII_CACHE_LOCK = threading.Lock()
 _AAII_CACHE_TTL  = 6 * 3600  # 6 hours (published weekly)
+_AAII_FILE       = Path(__file__).parent.parent / "cache" / "aaii_cache.json"
 
 # DynamoDB fallback — serves last-known-good data when live XLS is unavailable
 _AAII_TABLE_NAME       = "ystocker-aaii-sentiment"
@@ -2604,19 +2605,39 @@ def api_aaii_sentiment():
 
     except Exception as exc:
         log.warning("AAII sentiment fetch failed: %s", exc)
-        # Serve last-known-good data from DynamoDB rather than a hard error
-        cached = _aaii_load_from_dynamo()
-        if cached:
-            log.info("AAII: serving stale DynamoDB data as fallback")
-            cached["_stale"] = True
+        # Fallback priority: 1) stale in-memory  2) local file  3) DynamoDB
+        with _AAII_CACHE_LOCK:
+            stale = _AAII_CACHE.get("data")
+        fallback = stale["data"] if stale else None
+        if fallback is None:
+            try:
+                if _AAII_FILE.exists():
+                    fallback = json.loads(_AAII_FILE.read_text())
+                    log.info("AAII: serving file cache as fallback")
+            except Exception:
+                pass
+        if fallback is None:
+            fallback = _aaii_load_from_dynamo()
+            if fallback:
+                log.info("AAII: serving DynamoDB cache as fallback")
+        if fallback:
+            fallback["_stale"] = True
             with _AAII_CACHE_LOCK:
-                _AAII_CACHE["data"] = {"ts": time.time() - _AAII_CACHE_TTL + 300, "data": cached}
-            return jsonify(cached)
+                _AAII_CACHE["data"] = {"ts": time.time() - _AAII_CACHE_TTL + 300, "data": fallback}
+            return jsonify(fallback)
         return jsonify({"error": str(exc)}), 502
 
     with _AAII_CACHE_LOCK:
         _AAII_CACHE["data"] = {"ts": time.time(), "data": result}
-    threading.Thread(target=_aaii_save_to_dynamo, args=(result,), daemon=True).start()
+    # Persist to file and DynamoDB in background
+    def _persist_aaii():
+        try:
+            _AAII_FILE.parent.mkdir(parents=True, exist_ok=True)
+            _AAII_FILE.write_text(json.dumps(result, default=str))
+        except Exception:
+            pass
+        _aaii_save_to_dynamo(result)
+    threading.Thread(target=_persist_aaii, daemon=True).start()
     return jsonify(result)
 
 

@@ -71,14 +71,6 @@
   {% endif %}
 </div>
 
-<!-- ── Global market indices bar ─────────────────────────────────── -->
-<div id="idxBar" class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2 mb-6 fade-up">
-  <!-- skeleton placeholders -->
-  {% for _ in range(8) %}
-  <div class="animate-pulse bg-slate-900 border border-slate-800 rounded-xl p-3 h-20"></div>
-  {% endfor %}
-</div>
-
 <!-- ── Quick links ───────────────────────────────────────────────────── -->
 <div class="flex flex-wrap gap-2 mb-6 fade-up">
   <a href="#stock-pe"
@@ -332,77 +324,6 @@ const ALL = {{ all_chartdata | safe }};
 const PALETTE = [
   '#6366f1','#38bdf8','#34d399','#f59e0b','#f43f5e','#a78bfa','#fb923c','#22d3ee'
 ];
-
-// ── Global market indices bar ────────────────────────────────────────────────
-(function() {
-  const IDX_COLORS = {
-    spx: '#6366f1', ixic: '#38bdf8', dji: '#fb923c',
-    ftse: '#e879f9', n225: '#f472b6', sse: '#f87171', twii: '#34d399', kospi: '#fbbf24',
-  };
-  const IDX_ORDER  = ['spx', 'ixic', 'dji', 'ftse', 'n225', 'sse', 'twii', 'kospi'];
-  const MKTS_URL   = "{{ url_for('main.markets') }}";
-
-  function _tIdx(key) {
-    return (typeof I18n !== 'undefined' && I18n.tIdx) ? I18n.tIdx(key) : key.toUpperCase();
-  }
-  function _cls(v)  { return v == null ? 'text-slate-500' : v >= 0 ? 'text-emerald-400' : 'text-rose-400'; }
-  function _sign(v) { return v != null && v >= 0 ? '+' : ''; }
-  function _fmt(v, dec) { return v == null ? '—' : v.toLocaleString(undefined, { minimumFractionDigits: dec, maximumFractionDigits: dec }); }
-
-  fetch('/api/markets')
-    .then(r => r.json())
-    .then(data => {
-      const bar = document.getElementById('idxBar');
-      if (!bar) return;
-      bar.innerHTML = IDX_ORDER.map(k => {
-        const d   = (data.indices || {})[k] || {};
-        const col = IDX_COLORS[k];
-        const chgCls = _cls(d.day_chg);
-        // Compute YTD from daily data if server value is null
-        let ytd = d.ytd;
-        if (ytd == null && d.daily && d.current) {
-          const dts = d.daily.dates || [], prs = d.daily.prices || [];
-          const yr = new Date().getFullYear().toString();
-          const i = dts.findIndex(dt => dt.startsWith(yr));
-          if (i >= 0 && prs[i] > 0) ytd = Math.round((d.current - prs[i]) / prs[i] * 10000) / 100;
-        }
-        const ytdCls = _cls(ytd);
-        const isUp   = d.day_chg != null && d.day_chg >= 0;
-        const arrow  = d.day_chg == null ? '' : isUp ? '▲' : '▼';
-        return `
-        <a href="${MKTS_URL}#${k}"
-           class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden
-                  hover:border-slate-600 hover:shadow-lg transition-all group cursor-pointer">
-          <!-- colored top bar -->
-          <div style="height:3px;background:${col};opacity:0.8"></div>
-          <div class="p-3">
-            <div class="flex items-center justify-between mb-1">
-              <span class="text-[11px] font-semibold truncate" style="color:${col}"
-                    data-i18n="markets.idx_${k}">${_tIdx(k)}</span>
-              <span class="text-[9px] text-slate-600 shrink-0 ml-1">${d.symbol || ''}</span>
-            </div>
-            <div class="text-base font-bold text-slate-100 tabular-nums leading-tight mb-1">
-              ${d.current != null ? d.current.toLocaleString(undefined, {maximumFractionDigits: 2}) : '—'}
-            </div>
-            <div class="flex items-center justify-between">
-              <span class="text-xs font-semibold tabular-nums ${chgCls}">
-                ${arrow} ${_sign(d.day_chg)}${_fmt(d.day_chg, 2)}%
-              </span>
-              <span class="text-[10px] tabular-nums ${ytdCls}">
-                ${_sign(ytd)}${_fmt(ytd, 1)}% YTD
-              </span>
-            </div>
-          </div>
-        </a>`;
-      }).join('');
-      // Re-apply i18n in case lang is zh (to translate index names)
-      if (typeof I18n !== 'undefined') I18n.apply(bar);
-    })
-    .catch(() => {
-      const bar = document.getElementById('idxBar');
-      if (bar) bar.innerHTML = '';
-    });
-})();
 
 // ─── Scatter label toggle state ─────────────────────────────────────────────
 const SCATTER_DEFAULT_SECTORS = new Set(['Tech', 'Cloud / SaaS', 'Semiconductors']);
