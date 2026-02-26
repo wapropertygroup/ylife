@@ -258,7 +258,7 @@
       <!-- Region filter buttons -->
       <div id="econFilters" class="flex flex-wrap gap-1.5 mb-3">
         <button onclick="filterEcon('all')" id="econFilter-all"
-                class="econ-filter-btn active px-2.5 py-1 rounded-lg text-[11px] font-medium border border-slate-700 text-slate-300 hover:border-indigo-500 hover:text-indigo-300 transition-all"
+                class="econ-filter-btn px-2.5 py-1 rounded-lg text-[11px] font-medium border border-slate-700 text-slate-400 hover:border-indigo-500 hover:text-indigo-300 transition-all"
                 data-i18n="markets.econ_filter_all">All</button>
         <button onclick="filterEcon('us')" id="econFilter-us"
                 class="econ-filter-btn px-2.5 py-1 rounded-lg text-[11px] font-medium border border-slate-700 text-slate-400 hover:border-indigo-500 hover:text-indigo-300 transition-all">US</button>
@@ -269,7 +269,7 @@
         <button onclick="filterEcon('jp')" id="econFilter-jp"
                 class="econ-filter-btn px-2.5 py-1 rounded-lg text-[11px] font-medium border border-slate-700 text-slate-400 hover:border-indigo-500 hover:text-indigo-300 transition-all">JP</button>
         <button onclick="filterEcon('high')" id="econFilter-high"
-                class="econ-filter-btn px-2.5 py-1 rounded-lg text-[11px] font-medium border border-rose-900/60 text-rose-400 hover:border-rose-500 hover:text-rose-300 transition-all"
+                class="econ-filter-btn active px-2.5 py-1 rounded-lg text-[11px] font-medium border border-rose-500 text-rose-300 hover:border-rose-500 hover:text-rose-300 transition-all"
                 data-i18n="markets.econ_filter_high">High Impact</button>
         <label class="flex items-center gap-1.5 ml-auto text-[11px] text-slate-400 cursor-pointer select-none">
           <input type="checkbox" id="econHidePast" onchange="_renderEconTable(_econData)"
@@ -1237,7 +1237,7 @@ function renderAaii(data) {
 
 // ── Economic Events Calendar ──────────────────────────────────────
 let _econData = [];
-let _econFilter = 'all';
+let _econFilter = 'high';
 let _econCollapsed = false;
 const hidePastEl = document.getElementById('econHidePast');
 
