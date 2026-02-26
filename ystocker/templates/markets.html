@@ -1253,8 +1253,10 @@ function toggleEconSection() {
  *  Handles EDT/EST DST automatically via Intl offset detection. */
 function _econEventDate(ev) {
   if (!ev.date) return null;
-  const timeStr = ev.time || '00:00';
+  // Events with no time are treated as all-day — no precise datetime
+  if (!ev.time) return null;
   let hours = 0, minutes = 0;
+  const timeStr = ev.time;
   const ampm = timeStr.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
   const h24  = timeStr.match(/^(\d{1,2}):(\d{2})$/);
   if (ampm) {
@@ -1263,6 +1265,8 @@ function _econEventDate(ev) {
   } else if (h24) {
     hours = parseInt(h24[1], 10);
     minutes = parseInt(h24[2], 10);
+  } else {
+    return null;
   }
   // Detect actual ET UTC offset for this date using Intl (handles DST)
   try {
@@ -1270,13 +1274,15 @@ function _econEventDate(ev) {
     const etStr = probe.toLocaleString('en-US', { timeZone: 'America/New_York', hour12: false,
       year: 'numeric', month: '2-digit', day: '2-digit',
       hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    // etStr like "02/25/2026, 07:00:00"
+    // etStr like "02/25/2026, 07:00:00" — Safari may produce "24:00:00", normalize it
+    const normalized = etStr.replace(/\b24:/g, '00:');
     const utcStr = probe.toLocaleString('en-US', { timeZone: 'UTC', hour12: false,
       year: 'numeric', month: '2-digit', day: '2-digit',
       hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    const etDate  = new Date(etStr.replace(/(\d+)\/(\d+)\/(\d+)/, '$3-$1-$2'));
+    const etDate  = new Date(normalized.replace(/(\d+)\/(\d+)\/(\d+)/, '$3-$1-$2'));
     const utcDate = new Date(utcStr.replace(/(\d+)\/(\d+)\/(\d+)/, '$3-$1-$2'));
-    const offsetMs = utcDate - etDate;   // positive = ET is behind UTC
+    if (isNaN(etDate) || isNaN(utcDate)) throw new Error('bad date parse');
+    const offsetMs = utcDate - etDate;
     const offsetH  = Math.round(offsetMs / 3600000);
     const sign = offsetH >= 0 ? '-' : '+';
     const absH = Math.abs(offsetH);
@@ -1349,11 +1355,13 @@ function _renderEconTable(events) {
     filtered = events.filter(ev => _econCountryRegion(ev.country) === _econFilter);
   }
 
-  // Determine past/future for each event using client timezone
-  // Events without time default to start of day
+  // Determine past/future for each event using client timezone.
+  // Events without a time (all-day) are only considered past if their date < today.
+  const todayStr = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD in local tz
   filtered = filtered.map(ev => {
     const dt = _econEventDate(ev);
-    return { ...ev, _dt: dt, _isPast: dt ? dt < now : false };
+    const isPast = dt ? dt < now : ev.date < todayStr;
+    return { ...ev, _dt: dt, _isPast: isPast };
   });
 
   // Optionally hide past events
