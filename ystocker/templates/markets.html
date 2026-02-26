@@ -226,24 +226,26 @@
 
 <!-- ── Economic Events Calendar ──────────────────────────────────────── -->
 <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 mt-6 fade-up" id="econSection">
-  <!-- Collapsible header -->
-  <button class="w-full flex items-center justify-between text-left" onclick="toggleEconSection()">
+  <!-- Header row -->
+  <div class="flex items-center justify-between cursor-pointer" onclick="toggleEconSection()">
     <div>
       <h2 class="text-sm font-semibold text-slate-200" data-i18n="markets.econ_events_title">Economic Events</h2>
       <p class="text-xs text-slate-500 mt-0.5" data-i18n="markets.econ_events_desc">Key macro releases &amp; central bank decisions this week</p>
     </div>
-    <div class="flex items-center gap-2">
-      <button id="econTranslateBtn" onclick="event.stopPropagation(); translateEconEvents()"
+    <div class="flex items-center gap-2" onclick="event.stopPropagation()">
+      <button id="econTranslateBtn" onclick="translateEconEvents()"
               class="text-xs px-3 py-1.5 rounded-lg border border-slate-700 text-slate-400
                      hover:border-indigo-500 hover:text-indigo-300 transition-all">
         <span data-i18n="markets.econ_translate">Translate to Chinese</span>
       </button>
-      <svg id="econChevron" class="w-4 h-4 text-slate-500 transition-transform duration-200 rotate-180"
-           fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-      </svg>
+      <span onclick="event.stopPropagation(); toggleEconSection()" class="cursor-pointer p-1">
+        <svg id="econChevron" class="w-4 h-4 text-slate-500 transition-transform duration-200 rotate-180"
+             fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+        </svg>
+      </span>
     </div>
-  </button>
+  </div>
   <!-- Collapsible body -->
   <div id="econCollapse">
     <div id="econLoading" class="text-xs text-slate-600 py-2 mt-3" data-i18n="markets.loading">Loading…</div>
