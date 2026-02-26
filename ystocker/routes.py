@@ -2443,7 +2443,9 @@ def _fetch_pcr_cboe() -> dict:
     from datetime import date, timedelta
 
     url = "https://cdn.cboe.com/resources/options/xcpc_equity_put_call_ratio.csv"
-    resp = requests.get(url, headers=_PCR_HEADERS, timeout=20)
+    # Bypass any http_proxy env var — CBOE CDN must be reached directly
+    resp = requests.get(url, headers=_PCR_HEADERS, timeout=20,
+                        proxies={"http": None, "https": None})
     resp.raise_for_status()
 
     reader = csv.DictReader(io.StringIO(resp.text))
