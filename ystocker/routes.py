@@ -2425,45 +2425,93 @@ _PCR_CACHE: dict = {}
 _PCR_CACHE_LOCK = threading.Lock()
 _PCR_CACHE_TTL  = 4 * 3600   # 4 hours — daily data
 
+_PCR_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/124.0.0.0 Safari/537.36"
+    ),
+    "Accept":          "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Referer":         "https://www.cboe.com/",
+}
+
+
+def _fetch_pcr_cboe() -> dict:
+    """Fetch CBOE Equity Put/Call Ratio from CBOE's public CSV (1Y of daily data)."""
+    import requests, csv, io
+    from datetime import date, timedelta
+
+    url = "https://cdn.cboe.com/resources/options/xcpc_equity_put_call_ratio.csv"
+    resp = requests.get(url, headers=_PCR_HEADERS, timeout=20)
+    resp.raise_for_status()
+
+    reader = csv.DictReader(io.StringIO(resp.text))
+    rows = []
+    for row in reader:
+        try:
+            d   = row.get("Date", "").strip()
+            val = row.get("EQUITY_PC_RATIO", row.get("Equity", "")).strip()
+            if d and val:
+                rows.append((d, float(val)))
+        except (ValueError, KeyError):
+            continue
+
+    if not rows:
+        raise ValueError("CBOE CSV parsed 0 rows")
+
+    # Keep last 1 year
+    cutoff = str(date.today() - timedelta(days=365))
+    rows = [(d, v) for d, v in rows if d >= cutoff]
+    rows.sort(key=lambda r: r[0])
+
+    dates  = [r[0] for r in rows]
+    closes = [round(r[1], 3) for r in rows]
+    return dates, closes
+
 
 @bp.route("/api/put-call-ratio")
 def api_put_call_ratio():
-    """Return CBOE Equity Put/Call Ratio history (^PCCE) with 1Y daily data."""
+    """Return CBOE Equity Put/Call Ratio history with 1Y daily data.
+    Primary: CBOE public CSV. Fallback: yfinance ^PCCE."""
     with _PCR_CACHE_LOCK:
         entry = _PCR_CACHE.get("data")
         if entry and time.time() - entry["ts"] < _PCR_CACHE_TTL:
             return jsonify(entry["data"])
 
+    dates, closes = [], []
     try:
-        import yfinance as yf
-        tk   = yf.Ticker("^PCCE")
-        hist = tk.history(period="1y", interval="1d")
-        if hist.empty:
-            return jsonify({"error": "No data"}), 502
-
-        closes = [round(float(v), 3) if not math.isnan(float(v)) else None
-                  for v in hist["Close"]]
-        dates  = [str(d.date()) for d in hist.index]
-
-        current = next((v for v in reversed(closes) if v is not None), None)
-        prev    = next((v for v in reversed(closes[:-1]) if v is not None), None)
-        day_chg = round(current - prev, 3) if current and prev else None
-
-        # Simple 20-day moving average
-        valid = [v for v in closes if v is not None]
-        ma20  = round(sum(valid[-20:]) / min(len(valid), 20), 3) if valid else None
-
-        result = {
-            "current":  current,
-            "day_chg":  day_chg,
-            "ma20":     ma20,
-            "dates":    dates,
-            "closes":   closes,
-        }
+        dates, closes = _fetch_pcr_cboe()
+        log.info("Put/Call ratio: fetched %d rows from CBOE CSV", len(dates))
     except Exception as exc:
-        log.warning("Put/Call ratio fetch failed: %s", exc)
-        return jsonify({"error": str(exc)}), 502
+        log.warning("CBOE CSV put/call fetch failed (%s), trying yfinance", exc)
+        try:
+            import yfinance as yf
+            tk   = yf.Ticker("^PCCE")
+            hist = tk.history(period="1y", interval="1d")
+            if not hist.empty:
+                closes = [round(float(v), 3) if not math.isnan(float(v)) else None
+                          for v in hist["Close"]]
+                dates  = [str(d.date()) for d in hist.index]
+        except Exception as exc2:
+            log.warning("yfinance put/call fetch also failed: %s", exc2)
 
+    if not closes:
+        return jsonify({"error": "Put/Call ratio data unavailable"}), 502
+
+    current = next((v for v in reversed(closes) if v is not None), None)
+    prev    = next((v for v in reversed(closes[:-1]) if v is not None), None)
+    day_chg = round(current - prev, 3) if current and prev else None
+    valid   = [v for v in closes if v is not None]
+    ma20    = round(sum(valid[-20:]) / min(len(valid), 20), 3) if valid else None
+
+    result = {
+        "current": current,
+        "day_chg": day_chg,
+        "ma20":    ma20,
+        "dates":   dates,
+        "closes":  closes,
+    }
     with _PCR_CACHE_LOCK:
         _PCR_CACHE["data"] = {"ts": time.time(), "data": result}
     return jsonify(result)
