@@ -1455,6 +1455,14 @@ function renderEconEvents(events) {
   _renderEconTable(events);
   document.getElementById('econLoading').style.display = 'none';
   document.getElementById('econBody').style.display = '';
+
+  // Auto-translate and hide the manual button when lang=zh
+  const isZh = (typeof I18n !== 'undefined') && I18n.getLang() === 'zh';
+  const btn = document.getElementById('econTranslateBtn');
+  if (isZh) {
+    if (btn) btn.style.display = 'none';
+    translateEconEvents();
+  }
 }
 
 async function translateEconEvents() {
