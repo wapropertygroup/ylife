@@ -2619,16 +2619,22 @@ def _econ_load_from_dynamo(date_str: str) -> list:
 
 
 def _econ_save_to_dynamo(events: list) -> None:
-    """Batch-write economic event items to DynamoDB."""
+    """Batch-write economic event items to DynamoDB.
+
+    Only persists stable identity/translation fields — NOT actual, forecast,
+    or previous, which are live values that must always come from the scrape.
+    """
     table = _get_econ_table()
     if not table or not events:
         return
+    _STABLE_FIELDS = {"date", "event_id", "time", "event", "country", "impact", "url", "zh"}
     try:
         with table.batch_writer() as batch:
             for ev in events:
                 if not ev.get("date") or not ev.get("event_id"):
                     continue
-                item = {k: v for k, v in ev.items() if v is not None}
+                item = {k: v for k, v in ev.items()
+                        if k in _STABLE_FIELDS and v is not None}
                 batch.put_item(Item=item)
     except Exception as exc:
         log.warning("DynamoDB economic-events write failed: %s", exc)

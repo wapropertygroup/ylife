@@ -277,7 +277,7 @@
           <thead>
             <tr class="border-b border-slate-800 text-slate-500 text-[10px] uppercase tracking-wider">
               <th class="pb-2 pr-3 font-medium" data-i18n="markets.econ_col_date">Date</th>
-              <th class="pb-2 pr-3 font-medium" data-i18n="markets.econ_col_time">Time</th>
+              <th class="pb-2 pr-3 font-medium" id="econTimeColHeader"><span data-i18n="markets.econ_col_time">Time</span></th>
               <th class="pb-2 pr-3 font-medium" data-i18n="markets.econ_col_country">Country</th>
               <th class="pb-2 pr-3 font-medium" data-i18n="markets.econ_col_event">Event</th>
               <th class="pb-2 pr-3 font-medium" data-i18n="markets.econ_col_impact">Impact</th>
@@ -1233,12 +1233,11 @@ function toggleEconSection() {
   if (chevron) chevron.classList.toggle('rotate-180', !_econCollapsed);
 }
 
-/** Parse an event's datetime in ET (UTC-5/UTC-4) to a local Date object. */
+/** Parse an event's datetime (source = ET, America/New_York) to a local Date object.
+ *  Handles EDT/EST DST automatically via Intl offset detection. */
 function _econEventDate(ev) {
   if (!ev.date) return null;
-  // Time from API is in ET format HH:MM or HH:MM AM/PM
   const timeStr = ev.time || '00:00';
-  // Try to parse as 12h or 24h
   let hours = 0, minutes = 0;
   const ampm = timeStr.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
   const h24  = timeStr.match(/^(\d{1,2}):(\d{2})$/);
@@ -1249,10 +1248,38 @@ function _econEventDate(ev) {
     hours = parseInt(h24[1], 10);
     minutes = parseInt(h24[2], 10);
   }
-  // Assume ET = UTC-5 (approximate; doesn't handle DST perfectly)
-  const utcOffset = 5;
-  const isoStr = `${ev.date}T${String(hours).padStart(2,'0')}:${String(minutes).padStart(2,'0')}:00-0${utcOffset}:00`;
-  try { return new Date(isoStr); } catch(_) { return null; }
+  // Detect actual ET UTC offset for this date using Intl (handles DST)
+  try {
+    const probe = new Date(`${ev.date}T12:00:00Z`);
+    const etStr = probe.toLocaleString('en-US', { timeZone: 'America/New_York', hour12: false,
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    // etStr like "02/25/2026, 07:00:00"
+    const utcStr = probe.toLocaleString('en-US', { timeZone: 'UTC', hour12: false,
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const etDate  = new Date(etStr.replace(/(\d+)\/(\d+)\/(\d+)/, '$3-$1-$2'));
+    const utcDate = new Date(utcStr.replace(/(\d+)\/(\d+)\/(\d+)/, '$3-$1-$2'));
+    const offsetMs = utcDate - etDate;   // positive = ET is behind UTC
+    const offsetH  = Math.round(offsetMs / 3600000);
+    const sign = offsetH >= 0 ? '-' : '+';
+    const absH = Math.abs(offsetH);
+    const isoStr = `${ev.date}T${String(hours).padStart(2,'0')}:${String(minutes).padStart(2,'0')}:00${sign}${String(absH).padStart(2,'0')}:00`;
+    return new Date(isoStr);
+  } catch(_) {
+    // Fallback: assume EST (UTC-5)
+    const isoStr = `${ev.date}T${String(hours).padStart(2,'0')}:${String(minutes).padStart(2,'0')}:00-05:00`;
+    try { return new Date(isoStr); } catch(__) { return null; }
+  }
+}
+
+/** Return the user's local timezone abbreviation, e.g. "PST", "CST", "JST". */
+function _localTzAbbr() {
+  try {
+    return new Intl.DateTimeFormat('en-US', { timeZoneName: 'short' })
+      .formatToParts(new Date())
+      .find(p => p.type === 'timeZoneName')?.value || '';
+  } catch(_) { return ''; }
 }
 
 const EU_COUNTRIES = new Set(['euro area','eurozone','germany','france','italy','spain','netherlands',
@@ -1286,7 +1313,16 @@ function filterEcon(region) {
 
 function _renderEconTable(events) {
   const now = new Date();
-  const hidePastEl = document.getElementById('econHidePast');
+  const tzAbbr = _localTzAbbr();
+
+  // Update column header to show local timezone
+  const hdr = document.getElementById('econTimeColHeader');
+  if (hdr) {
+    const label = (typeof I18n !== 'undefined' ? I18n.t('markets.econ_col_time') : null) || 'Time';
+    hdr.innerHTML = tzAbbr
+      ? `<span>${label}</span> <span class="normal-case text-slate-600 font-normal">(${tzAbbr})</span>`
+      : `<span>${label}</span>`;
+  }
   const hidePast = hidePastEl ? hidePastEl.checked : true;
 
   // Apply region/impact filter
@@ -1360,10 +1396,13 @@ function _renderEconTable(events) {
       // Format time in client's local timezone
       const localTime = ev._dt
         ? ev._dt.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
-        : (ev.time || '—');
+        : (ev.time ? `${ev.time} <span class="text-slate-600">ET</span>` : '—');
+      const timeCell = ev._dt && tzAbbr
+        ? `${localTime}`
+        : localTime;
       rows += `<tr class="${rowClass}">
         <td class="py-2 pr-3 text-slate-400 whitespace-nowrap">${i === 0 ? date : ''}</td>
-        <td class="py-2 pr-3 text-slate-400 whitespace-nowrap">${localTime}${nextBadge}</td>
+        <td class="py-2 pr-3 text-slate-400 whitespace-nowrap">${timeCell}${nextBadge}</td>
         <td class="py-2 pr-3 text-slate-400 whitespace-nowrap">${ev.country || '—'}</td>
         <td class="py-2 pr-3 max-w-xs">${nameCell}</td>
         <td class="py-2 pr-3">${impactBadge(ev.impact)}</td>
