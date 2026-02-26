@@ -2926,19 +2926,23 @@ def api_economic_events_translate():
     if translations:
         table = _get_econ_table()
         if table:
-            try:
-                with table.batch_writer() as batch:
-                    for ev in events_to_translate:
-                        eid = ev.get("event_id")
-                        if eid and eid in translations:
-                            batch.put_item(Item={
-                                "date":     ev.get("date", "unknown"),
-                                "event_id": eid,
-                                "event":    ev.get("event", ""),
-                                "zh":       translations[eid],
-                            })
-            except Exception as exc:
-                log.warning("DynamoDB economic-events translation save failed: %s", exc)
+            for ev in events_to_translate:
+                eid = ev.get("event_id")
+                zh  = translations.get(eid)
+                if not eid or not zh:
+                    continue
+                item = {
+                    "date":     ev.get("date") or "unknown",
+                    "event_id": eid,
+                    "event":    ev.get("event") or "",
+                    "zh":       zh,
+                }
+                # DynamoDB rejects empty string attribute values
+                item = {k: v for k, v in item.items() if v != ""}
+                try:
+                    table.put_item(Item=item)
+                except Exception as exc:
+                    log.warning("DynamoDB econ translation save failed for %s: %s", eid, exc)
 
         # Patch in-memory cache so the next /api/economic-events hit returns
         # zh values without waiting for cache expiry + re-fetch from DynamoDB
