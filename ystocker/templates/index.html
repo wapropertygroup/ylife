@@ -164,30 +164,6 @@
   </div>
 </div>
 
-<!-- ── Sector cards ──────────────────────────────────────────────────── -->
-<h2 id="sectors" class="text-lg sm:text-xl font-semibold text-slate-200 mb-4 fade-up" data-i18n="index.sector_overview">Sector Overview</h2>
-<div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5 mb-10">
-  {% for group, info in sector_cards.items() %}
-  <a href="{{ url_for('main.sector', sector_name=group) }}"
-     data-group="{{ group }}"
-     class="sector-card group bg-slate-900 border border-slate-800 rounded-2xl p-5 hover:border-brand/60
-            hover:shadow-lg hover:shadow-brand/10 transition-all duration-200 fade-up block">
-    <div class="flex items-start justify-between mb-3">
-      <div>
-        <h3 class="font-semibold text-slate-100 group-hover:text-brand transition"
-            data-i18n="sector.name.{{ group }}">{{ group }}</h3>
-        <p class="text-xs text-slate-500 mt-0.5">{{ info.tickers | join(' · ') }}</p>
-      </div>
-      <span class="sector-day-chg text-xs font-semibold px-1.5 py-0.5 rounded-md transition text-slate-600"></span>
-    </div>
-    <div class="chart-container" style="height:80px">
-      <canvas id="spark_{{ loop.index }}"></canvas>
-    </div>
-    <p class="spark-label text-xs text-slate-400 mt-2 text-right" data-i18n="index.analyst_upside">analyst upside %</p>
-  </a>
-  {% endfor %}
-</div>
-
 <!-- ── Cross-sector PE heatmap table ─────────────────────────────────── -->
 <div id="stock-pe" class="bg-slate-900 rounded-2xl border border-slate-800 p-4 sm:p-6 fade-up mb-8">
 
@@ -316,6 +292,30 @@
       <tbody id="etfHeatmapBody"></tbody>
     </table>
   </div>
+</div>
+
+<!-- ── Sector cards ──────────────────────────────────────────────────── -->
+<h2 id="sectors" class="text-lg sm:text-xl font-semibold text-slate-200 mb-4 fade-up" data-i18n="index.sector_overview">Sector Overview</h2>
+<div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5 mb-10">
+  {% for group, info in sector_cards.items() %}
+  <a href="{{ url_for('main.sector', sector_name=group) }}"
+     data-group="{{ group }}"
+     class="sector-card group bg-slate-900 border border-slate-800 rounded-2xl p-5 hover:border-brand/60
+            hover:shadow-lg hover:shadow-brand/10 transition-all duration-200 fade-up block">
+    <div class="flex items-start justify-between mb-3">
+      <div>
+        <h3 class="font-semibold text-slate-100 group-hover:text-brand transition"
+            data-i18n="sector.name.{{ group }}">{{ group }}</h3>
+        <p class="text-xs text-slate-500 mt-0.5">{{ info.tickers | join(' · ') }}</p>
+      </div>
+      <span class="sector-day-chg text-xs font-semibold px-1.5 py-0.5 rounded-md transition text-slate-600"></span>
+    </div>
+    <div class="chart-container" style="height:80px">
+      <canvas id="spark_{{ loop.index }}"></canvas>
+    </div>
+    <p class="spark-label text-xs text-slate-400 mt-2 text-right" data-i18n="index.analyst_upside">analyst upside %</p>
+  </a>
+  {% endfor %}
 </div>
 
 <!-- ── Chart.js scripts ───────────────────────────────────────────────── -->
