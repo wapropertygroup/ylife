@@ -2425,6 +2425,66 @@ _AAII_CACHE: dict = {}
 _AAII_CACHE_LOCK = threading.Lock()
 _AAII_CACHE_TTL  = 6 * 3600  # 6 hours (published weekly)
 
+# DynamoDB fallback — serves last-known-good data when live XLS is unavailable
+_AAII_TABLE_NAME       = "ystocker-aaii-sentiment"
+_aaii_ddb_table        = None
+_aaii_ddb_unavail_until = 0.0
+_AAII_DDB_LOCK         = threading.Lock()
+
+
+def _get_aaii_ddb_table():
+    global _aaii_ddb_table, _aaii_ddb_unavail_until
+    if _aaii_ddb_table is not None:
+        return _aaii_ddb_table
+    if time.time() < _aaii_ddb_unavail_until:
+        return None
+    with _AAII_DDB_LOCK:
+        if _aaii_ddb_table is not None:
+            return _aaii_ddb_table
+        if time.time() < _aaii_ddb_unavail_until:
+            return None
+        try:
+            import boto3
+            ddb = boto3.resource("dynamodb", region_name=os.environ.get("AWS_REGION", "us-west-2"))
+            tbl = ddb.Table(_AAII_TABLE_NAME)
+            tbl.load()
+            _aaii_ddb_table = tbl
+            log.info("DynamoDB AAII table connected: %s", _AAII_TABLE_NAME)
+        except Exception as exc:
+            log.warning("DynamoDB AAII table unavailable: %s", exc)
+            _aaii_ddb_table = None
+            _aaii_ddb_unavail_until = time.time() + 300
+        return _aaii_ddb_table
+
+
+def _aaii_load_from_dynamo() -> Optional[dict]:
+    table = _get_aaii_ddb_table()
+    if not table:
+        return None
+    try:
+        resp = table.get_item(Key={"pk": "latest"})
+        item = resp.get("Item")
+        if not item or not item.get("payload"):
+            return None
+        return json.loads(item["payload"])
+    except Exception as exc:
+        log.warning("DynamoDB AAII load failed: %s", exc)
+        return None
+
+
+def _aaii_save_to_dynamo(result: dict) -> None:
+    table = _get_aaii_ddb_table()
+    if not table:
+        return
+    try:
+        table.put_item(Item={
+            "pk":      "latest",
+            "payload": json.dumps(result, default=str),
+            "ts":      Decimal(str(round(time.time(), 3))),
+        })
+    except Exception as exc:
+        log.warning("DynamoDB AAII save failed: %s", exc)
+
 _AAII_HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -2544,11 +2604,19 @@ def api_aaii_sentiment():
 
     except Exception as exc:
         log.warning("AAII sentiment fetch failed: %s", exc)
+        # Serve last-known-good data from DynamoDB rather than a hard error
+        cached = _aaii_load_from_dynamo()
+        if cached:
+            log.info("AAII: serving stale DynamoDB data as fallback")
+            cached["_stale"] = True
+            with _AAII_CACHE_LOCK:
+                _AAII_CACHE["data"] = {"ts": time.time() - _AAII_CACHE_TTL + 300, "data": cached}
+            return jsonify(cached)
         return jsonify({"error": str(exc)}), 502
 
     with _AAII_CACHE_LOCK:
         _AAII_CACHE["data"] = {"ts": time.time(), "data": result}
-
+    threading.Thread(target=_aaii_save_to_dynamo, args=(result,), daemon=True).start()
     return jsonify(result)
 
 

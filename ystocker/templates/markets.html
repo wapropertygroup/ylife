@@ -43,10 +43,14 @@
   </svg>
   <span data-i18n="markets.loading">Loading market data…</span>
 </div>
-<div id="marketsContent" style="display:none">
+<div id="marketsContent">
 
 <!-- ── Index snapshot cards ───────────────────────────────────────────── -->
-<div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-4 xl:grid-cols-8 gap-3 mb-6 fade-up" id="indexCards"></div>
+<div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-4 xl:grid-cols-8 gap-3 mb-6 fade-up" id="indexCards">
+  {% for _ in range(8) %}
+  <div class="animate-pulse bg-slate-900 border border-slate-800 rounded-xl p-3 h-24"></div>
+  {% endfor %}
+</div>
 
 <!-- ── VIX + Fear & Greed row (2 per row) ─────────────────────────── -->
 <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4 fade-up">
@@ -60,7 +64,8 @@
       </div>
       <div id="vixBadge" class="text-right"></div>
     </div>
-    <div style="height:200px"><canvas id="vixChart"></canvas></div>
+    <div id="vixSkeleton" class="animate-pulse bg-slate-800 rounded-lg" style="height:200px"></div>
+    <div id="vixChartWrap" style="height:200px; display:none"><canvas id="vixChart"></canvas></div>
   </div>
 
   <!-- CNN Fear & Greed card -->
@@ -1140,6 +1145,12 @@ function renderAaii(data) {
     document.getElementById('aaiiLoading').textContent = data?.error || I18n.t('markets.unavailable') || 'Unavailable';
     return;
   }
+  if (data._stale) {
+    const badge = document.createElement('span');
+    badge.className = 'ml-2 text-[10px] text-amber-500/70';
+    badge.textContent = '(cached)';
+    document.querySelector('[data-i18n="markets.aaii_title"]')?.appendChild(badge);
+  }
 
   const latest = data.latest || {};
   const bull = latest.bullish, bear = latest.bearish, neu = latest.neutral;
@@ -1415,6 +1426,12 @@ function _renderEconTable(events) {
   });
 
   if (!rows) {
+    // If hidePast filtered everything out, auto-uncheck and re-render showing all
+    if (hidePast && events.length > 0) {
+      if (hidePastEl) hidePastEl.checked = false;
+      _renderEconTable(_econData);
+      return;
+    }
     rows = `<tr><td colspan="8" class="py-6 text-center text-slate-600 text-xs">${I18n.t('markets.econ_no_events') || 'No events for this filter.'}</td></tr>`;
   }
 
@@ -1470,8 +1487,29 @@ async function translateEconEvents() {
 }
 
 (async function() {
+  // Fire all independent APIs in parallel immediately
+  const fearGreedP = fetch('/api/fear-greed').then(r => r.json());
+  const aaiiP      = fetch('/api/aaii-sentiment').then(r => r.json());
+  const econP      = fetch('/api/economic-events').then(r => r.json());
+
+  // Resolve each as soon as it arrives — don't wait for the slowest
+  fearGreedP
+    .then(renderFearGreed)
+    .catch(e => { document.getElementById('fgLoading').textContent = '⚠ ' + e.message; });
+  aaiiP
+    .then(d => { if (d && !d.error) renderAaii(d); else {
+      document.getElementById('aaiiLoading').textContent = d?.error || (I18n.t('markets.unavailable') || 'Unavailable');
+    }})
+    .catch(e => { document.getElementById('aaiiLoading').textContent = '⚠ ' + e.message; });
+  econP
+    .then(d => renderEconEvents(d.events || []))
+    .catch(e => {
+      const el = document.getElementById('econLoading');
+      if (el) el.textContent = '⚠ ' + e.message;
+    });
+
   try {
-    // Check URL hash for a specific index to start on (e.g. from home page links)
+    // Check URL hash for a specific index to start on
     const hash = window.location.hash.replace('#', '');
     if (IDX_ALL_KEYS.includes(hash)) _curIdx = hash;
 
@@ -1480,26 +1518,14 @@ async function translateEconEvents() {
     if (!resp.ok) throw new Error(_mkData.error || 'Failed');
 
     document.getElementById('marketsLoading').style.display = 'none';
-    document.getElementById('marketsContent').style.display = '';
 
     renderCards(_mkData);
+    // Swap VIX skeleton → chart
+    document.getElementById('vixSkeleton').style.display = 'none';
+    document.getElementById('vixChartWrap').style.display = '';
     renderVix(_mkData.vix);
     renderSectors(_mkData.sectors);
-    // Fear & Greed — async, non-blocking
-    fetch('/api/fear-greed')
-      .then(r => r.json())
-      .then(renderFearGreed)
-      .catch(e => { document.getElementById('fgLoading').textContent = '⚠ ' + e.message; });
-    // AAII Sentiment — async, non-blocking
-    fetch('/api/aaii-sentiment')
-      .then(r => r.json())
-      .then(renderAaii)
-      .catch(e => { document.getElementById('aaiiLoading').textContent = '⚠ ' + e.message; });
-    // Economic Events — async, non-blocking
-    fetch('/api/economic-events')
-      .then(r => r.json())
-      .then(d => renderEconEvents(d.events || []))
-      .catch(e => { document.getElementById('econLoading').textContent = '⚠ ' + e.message; });
+
     // Activate the correct tab
     IDX_ALL_KEYS.forEach(k => {
       const id = 'tab' + k.charAt(0).toUpperCase() + k.slice(1);
