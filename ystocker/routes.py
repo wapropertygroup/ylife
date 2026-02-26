@@ -2055,8 +2055,8 @@ def api_markets():
             tk   = yf.Ticker(symbol)
             info = tk.info
 
-            # 1-year weekly for chart + MA calculations
-            hist_wk = tk.history(period="1y", interval="1wk")
+            # 3-year weekly for medium-term chart
+            hist_wk = tk.history(period="3y", interval="1wk")
             # 1-year daily for MA-50 / MA-200 / RSI-14
             hist_1d = tk.history(period="1y", interval="1d")
             # 5-year monthly for long-term chart

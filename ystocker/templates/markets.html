@@ -167,8 +167,8 @@
     <div class="flex gap-1" id="idxRangeBtns">
       <button class="range-btn" data-period="1m"      onclick="switchIdxRange('1m')">1M</button>
       <button class="range-btn" data-period="6m"      onclick="switchIdxRange('6m')">6M</button>
-      <button class="range-btn" data-period="daily"   onclick="switchIdxRange('daily')">1Y</button>
-      <button class="range-btn active" data-period="weekly"  onclick="switchIdxRange('weekly')">1Y W</button>
+      <button class="range-btn active" data-period="daily"   onclick="switchIdxRange('daily')">1Y</button>
+      <button class="range-btn" data-period="weekly"  onclick="switchIdxRange('weekly')">3Y</button>
       <button class="range-btn" data-period="monthly" onclick="switchIdxRange('monthly')">5Y</button>
     </div>
   </div>
@@ -306,7 +306,7 @@ const TICKER = '';  // not used here but referenced by base template helpers
 
 let _mkData   = null;
 let _curIdx   = 'spx';
-let _curRange = 'weekly';
+let _curRange = 'daily';
 let _idxChartInst     = null;
 let _macdChartInst    = null;
 let _rsiChartInst     = null;
