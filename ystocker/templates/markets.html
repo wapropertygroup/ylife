@@ -31,8 +31,8 @@
 
 <!-- ── Header ─────────────────────────────────────────────────────────── -->
 <div class="mb-6 fade-up">
-  <h1 class="text-2xl sm:text-3xl font-bold grad-text" data-i18n="markets.title">Market Overview</h1>
-  <p class="text-slate-400 mt-1 text-sm" data-i18n="markets.subtitle">S&amp;P 500 · Nasdaq · Dow Jones — live snapshot &amp; historical charts</p>
+  <h1 class="text-xl sm:text-2xl font-bold grad-text" data-i18n="markets.title">Market Overview</h1>
+  <p class="text-slate-400 mt-1 text-xs" data-i18n="markets.subtitle">S&amp;P 500 · Nasdaq · Dow Jones — live snapshot &amp; historical charts</p>
 </div>
 
 <!-- ── Loading overlay ────────────────────────────────────────────────── -->
@@ -126,45 +126,8 @@
 
 </div>
 
-<!-- ── Economic Events Calendar ───────────────────────────────────── -->
-<div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 mb-6 fade-up">
-  <div class="flex items-center justify-between mb-4">
-    <div>
-      <h2 class="text-sm font-semibold text-slate-200" data-i18n="markets.econ_events_title">Economic Events</h2>
-      <p class="text-xs text-slate-500 mt-0.5" data-i18n="markets.econ_events_desc">Key macro releases &amp; central bank decisions this week</p>
-    </div>
-    <button id="econTranslateBtn" onclick="translateEconEvents()"
-            class="text-xs px-3 py-1.5 rounded-lg border border-slate-700 text-slate-400
-                   hover:border-indigo-500 hover:text-indigo-300 transition-all">
-      <span data-i18n="markets.econ_translate">Translate to Chinese</span>
-    </button>
-  </div>
-  <div id="econLoading" class="text-xs text-slate-600 py-2" data-i18n="markets.loading">Loading…</div>
-  <div id="econBody" style="display:none">
-    <div class="overflow-x-auto">
-      <table class="w-full text-xs text-left">
-        <thead>
-          <tr class="border-b border-slate-800 text-slate-500 text-[10px] uppercase tracking-wider">
-            <th class="pb-2 pr-3 font-medium" data-i18n="markets.econ_col_date">Date</th>
-            <th class="pb-2 pr-3 font-medium" data-i18n="markets.econ_col_time">Time</th>
-            <th class="pb-2 pr-3 font-medium" data-i18n="markets.econ_col_country">Country</th>
-            <th class="pb-2 pr-3 font-medium" data-i18n="markets.econ_col_event">Event</th>
-            <th class="pb-2 pr-3 font-medium" data-i18n="markets.econ_col_impact">Impact</th>
-            <th class="pb-2 pr-3 font-medium text-right" data-i18n="markets.econ_col_actual">Actual</th>
-            <th class="pb-2 pr-3 font-medium text-right" data-i18n="markets.econ_col_forecast">Forecast</th>
-            <th class="pb-2 font-medium text-right" data-i18n="markets.econ_col_previous">Previous</th>
-          </tr>
-        </thead>
-        <tbody id="econTableBody" class="divide-y divide-slate-800/60"></tbody>
-      </table>
-    </div>
-  </div>
-</div>
-
 <!-- ── Per-index detail tabs ──────────────────────────────────────────── -->
 <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up">
-
-  <!-- Tab buttons (scrollable on mobile) -->
   <div class="flex gap-1 border-b border-slate-800 mb-5 -mx-4 sm:-mx-6 px-4 sm:px-6 overflow-x-auto">
     <button class="idx-tab-btn active whitespace-nowrap" id="tabSpx"   onclick="switchIdx('spx')"   data-i18n="markets.tab_spx">S&amp;P 500</button>
     <button class="idx-tab-btn whitespace-nowrap"        id="tabIxic"  onclick="switchIdx('ixic')"  data-i18n="markets.tab_ixic">Nasdaq</button>
@@ -183,7 +146,7 @@
   <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
     <!-- MA status -->
     <div class="bg-slate-800/50 rounded-xl p-3">
-      <p class="text-[10px] font-semibold uppercase tracking-widest text-slate-500 mb-2">Moving Averages</p>
+      <p class="text-[10px] font-semibold uppercase tracking-widest text-slate-500 mb-2" data-i18n="markets.moving_avg">Moving Averages</p>
       <div id="maStatus" class="space-y-1.5 text-sm"></div>
     </div>
     <!-- RSI gauge -->
@@ -215,8 +178,8 @@
       </div>
       <div class="flex items-center gap-3 text-[11px]">
         <span class="flex items-center gap-1 text-slate-400"><span class="w-3 h-0.5 inline-block" style="background:#38bdf8"></span>MACD</span>
-        <span class="flex items-center gap-1 text-slate-400"><span class="w-3 h-0.5 inline-block border-t border-dashed border-current"></span><span style="color:#fb923c">Signal</span></span>
-        <span class="flex items-center gap-1 text-slate-400"><span class="w-3 h-3 inline-block rounded-sm" style="background:#6366f144"></span>Histogram</span>
+        <span class="flex items-center gap-1 text-slate-400"><span class="w-3 h-0.5 inline-block border-t border-dashed border-current"></span><span style="color:#fb923c" data-i18n="markets.macd_signal">Signal</span></span>
+        <span class="flex items-center gap-1 text-slate-400"><span class="w-3 h-3 inline-block rounded-sm" style="background:#6366f144"></span><span data-i18n="markets.macd_histogram">Histogram</span></span>
       </div>
     </div>
     <div style="height:200px"><canvas id="macdChart"></canvas></div>
@@ -227,8 +190,8 @@
     <div class="flex items-center justify-between mb-2">
       <span class="text-sm font-semibold text-slate-300">RSI-14</span>
       <div class="flex items-center gap-3 text-[11px] text-slate-500">
-        <span class="text-rose-400">70 Overbought</span>
-        <span class="text-emerald-400">30 Oversold</span>
+        <span class="text-rose-400" data-i18n="markets.rsi_overbought">70 Overbought</span>
+        <span class="text-emerald-400" data-i18n="markets.rsi_oversold">30 Oversold</span>
       </div>
     </div>
     <div style="height:160px"><canvas id="rsiChart"></canvas></div>
@@ -259,6 +222,73 @@
     <p class="text-[11px] text-slate-600 mt-2" data-i18n="forecast.disclaimer">⚠ Statistical projections only — not financial advice.</p>
   </div>
 
+</div>
+
+<!-- ── Economic Events Calendar ──────────────────────────────────────── -->
+<div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 mt-6 fade-up" id="econSection">
+  <!-- Collapsible header -->
+  <button class="w-full flex items-center justify-between text-left" onclick="toggleEconSection()">
+    <div>
+      <h2 class="text-sm font-semibold text-slate-200" data-i18n="markets.econ_events_title">Economic Events</h2>
+      <p class="text-xs text-slate-500 mt-0.5" data-i18n="markets.econ_events_desc">Key macro releases &amp; central bank decisions this week</p>
+    </div>
+    <div class="flex items-center gap-2">
+      <button id="econTranslateBtn" onclick="event.stopPropagation(); translateEconEvents()"
+              class="text-xs px-3 py-1.5 rounded-lg border border-slate-700 text-slate-400
+                     hover:border-indigo-500 hover:text-indigo-300 transition-all">
+        <span data-i18n="markets.econ_translate">Translate to Chinese</span>
+      </button>
+      <svg id="econChevron" class="w-4 h-4 text-slate-500 transition-transform duration-200 rotate-180"
+           fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+      </svg>
+    </div>
+  </button>
+  <!-- Collapsible body -->
+  <div id="econCollapse">
+    <div id="econLoading" class="text-xs text-slate-600 py-2 mt-3" data-i18n="markets.loading">Loading…</div>
+    <div id="econBody" style="display:none" class="mt-3">
+      <!-- Region filter buttons -->
+      <div id="econFilters" class="flex flex-wrap gap-1.5 mb-3">
+        <button onclick="filterEcon('all')" id="econFilter-all"
+                class="econ-filter-btn active px-2.5 py-1 rounded-lg text-[11px] font-medium border border-slate-700 text-slate-300 hover:border-indigo-500 hover:text-indigo-300 transition-all"
+                data-i18n="markets.econ_filter_all">All</button>
+        <button onclick="filterEcon('us')" id="econFilter-us"
+                class="econ-filter-btn px-2.5 py-1 rounded-lg text-[11px] font-medium border border-slate-700 text-slate-400 hover:border-indigo-500 hover:text-indigo-300 transition-all">US</button>
+        <button onclick="filterEcon('eu')" id="econFilter-eu"
+                class="econ-filter-btn px-2.5 py-1 rounded-lg text-[11px] font-medium border border-slate-700 text-slate-400 hover:border-indigo-500 hover:text-indigo-300 transition-all">EU</button>
+        <button onclick="filterEcon('cn')" id="econFilter-cn"
+                class="econ-filter-btn px-2.5 py-1 rounded-lg text-[11px] font-medium border border-slate-700 text-slate-400 hover:border-indigo-500 hover:text-indigo-300 transition-all">CN</button>
+        <button onclick="filterEcon('jp')" id="econFilter-jp"
+                class="econ-filter-btn px-2.5 py-1 rounded-lg text-[11px] font-medium border border-slate-700 text-slate-400 hover:border-indigo-500 hover:text-indigo-300 transition-all">JP</button>
+        <button onclick="filterEcon('high')" id="econFilter-high"
+                class="econ-filter-btn px-2.5 py-1 rounded-lg text-[11px] font-medium border border-rose-900/60 text-rose-400 hover:border-rose-500 hover:text-rose-300 transition-all"
+                data-i18n="markets.econ_filter_high">High Impact</button>
+        <label class="flex items-center gap-1.5 ml-auto text-[11px] text-slate-400 cursor-pointer select-none">
+          <input type="checkbox" id="econHidePast" onchange="_renderEconTable(_econData)"
+                 class="rounded border-slate-600 bg-slate-800 text-brand focus:ring-brand" checked>
+          <span data-i18n="markets.econ_hide_past">Hide past</span>
+        </label>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-xs text-left">
+          <thead>
+            <tr class="border-b border-slate-800 text-slate-500 text-[10px] uppercase tracking-wider">
+              <th class="pb-2 pr-3 font-medium" data-i18n="markets.econ_col_date">Date</th>
+              <th class="pb-2 pr-3 font-medium" data-i18n="markets.econ_col_time">Time</th>
+              <th class="pb-2 pr-3 font-medium" data-i18n="markets.econ_col_country">Country</th>
+              <th class="pb-2 pr-3 font-medium" data-i18n="markets.econ_col_event">Event</th>
+              <th class="pb-2 pr-3 font-medium" data-i18n="markets.econ_col_impact">Impact</th>
+              <th class="pb-2 pr-3 font-medium text-right" data-i18n="markets.econ_col_actual">Actual</th>
+              <th class="pb-2 pr-3 font-medium text-right" data-i18n="markets.econ_col_forecast">Forecast</th>
+              <th class="pb-2 font-medium text-right" data-i18n="markets.econ_col_previous">Previous</th>
+            </tr>
+          </thead>
+          <tbody id="econTableBody" class="divide-y divide-slate-800/60"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
 </div>
 
 </div><!-- #marketsContent -->
@@ -352,10 +382,10 @@ function renderVix(vix) {
   const badgeEl = document.getElementById('vixBadge');
   const level   = vix.current;
   let label = '', col = '';
-  if (level < 15)      { label = 'Calm';    col = '#34d399'; }
-  else if (level < 20) { label = 'Normal';  col = '#a5b4fc'; }
-  else if (level < 30) { label = 'Elevated';col = '#fb923c'; }
-  else                  { label = 'Extreme'; col = '#f87171'; }
+  if (level < 15)      { label = I18n.t('markets.vix_calm')    || 'Calm';     col = '#34d399'; }
+  else if (level < 20) { label = I18n.t('markets.vix_normal')  || 'Normal';   col = '#a5b4fc'; }
+  else if (level < 30) { label = I18n.t('markets.vix_elevated')|| 'Elevated'; col = '#fb923c'; }
+  else                  { label = I18n.t('markets.vix_extreme') || 'Extreme';  col = '#f87171'; }
 
   badgeEl.innerHTML = `
     <div class="text-2xl font-bold tabular-nums" style="color:${col}">${level?.toFixed(2) ?? '—'}</div>
@@ -383,7 +413,7 @@ function renderVix(vix) {
     plugins: [{
       afterDraw(chart) {
         const { ctx: c, chartArea: a, scales: { y } } = chart;
-        [[20, '#fb923c', 'Elevated'], [30, '#f87171', 'Extreme']].forEach(([lvl, clr, lbl]) => {
+        [[20, '#fb923c', I18n.t('markets.vix_elevated') || 'Elevated'], [30, '#f87171', I18n.t('markets.vix_extreme') || 'Extreme']].forEach(([lvl, clr, lbl]) => {
           const py = y.getPixelForValue(lvl);
           if (py < a.top || py > a.bottom) return;
           c.save(); c.strokeStyle = clr + '66'; c.lineWidth = 1; c.setLineDash([4, 4]);
@@ -399,7 +429,7 @@ function renderVix(vix) {
 // ── Sector bars ───────────────────────────────────────────────────────
 function renderSectors(sectors) {
   const el = document.getElementById('sectorBars');
-  if (!sectors || !sectors.length) { el.innerHTML = '<p class="text-xs text-slate-600">No data.</p>'; return; }
+  if (!sectors || !sectors.length) { el.innerHTML = '<p class="text-xs text-slate-600">' + (I18n.t('markets.no_data') || 'No data') + '.</p>'; return; }
   const sorted = [...sectors].sort((a, b) => (b.day_chg ?? -999) - (a.day_chg ?? -999));
   const maxAbs = Math.max(...sorted.map(s => Math.abs(s.day_chg ?? 0)), 1);
   el.innerHTML = sorted.map(s => {
@@ -407,9 +437,11 @@ function renderSectors(sectors) {
     const col = pct == null ? '#475569' : pct >= 0 ? '#34d399' : '#f87171';
     const w   = pct == null ? 0 : Math.round(Math.abs(pct) / maxAbs * 100);
     const sign = _chgSign(pct);
+    const labelKey = 'markets.sector.' + s.label;
+    const label = (typeof I18n !== 'undefined' && I18n.t(labelKey)) || s.label;
     return `
     <div class="flex items-center gap-2">
-      <span class="text-xs text-slate-400 w-28 shrink-0">${s.label}</span>
+      <span class="text-xs text-slate-400 w-28 shrink-0">${label}</span>
       <div class="flex-1 bg-slate-800 rounded-full h-2 overflow-hidden">
         <div class="bar-fill" style="width:${w}%; background:${col}"></div>
       </div>
@@ -461,19 +493,19 @@ function renderIdxStats(key, data) {
     maRows.push(`<div class="flex justify-between"><span class="text-slate-400">${I18n.t('markets.ma200') || '200-day MA'}${cross}</span>
       <span>${fmtPt(ma200)} <span class="${cls} text-xs">(${diff != null ? (diff >= 0 ? '+' : '') + diff + '%' : '—'})</span></span></div>`);
   }
-  document.getElementById('maStatus').innerHTML = maRows.length ? maRows.join('') : '<span class="text-slate-600 text-xs">No data</span>';
+  document.getElementById('maStatus').innerHTML = maRows.length ? maRows.join('') : `<span class="text-slate-600 text-xs">${I18n.t('markets.no_data') || 'No data'}</span>`;
 
   // RSI gauge
   const rsi = d.rsi14;
   const rsiEl = document.getElementById('rsiGauge');
-  if (rsi == null) { rsiEl.innerHTML = '<span class="text-slate-600 text-xs">No data</span>'; }
+  if (rsi == null) { rsiEl.innerHTML = `<span class="text-slate-600 text-xs">${I18n.t('markets.no_data') || 'No data'}</span>`; }
   else {
     let zone = '', zoneCol = '';
-    if (rsi > 70)      { zone = 'Overbought'; zoneCol = '#f87171'; }
-    else if (rsi > 55) { zone = 'Bullish';    zoneCol = '#34d399'; }
-    else if (rsi > 45) { zone = 'Neutral';    zoneCol = '#94a3b8'; }
-    else if (rsi > 30) { zone = 'Bearish';    zoneCol = '#fb923c'; }
-    else                { zone = 'Oversold';  zoneCol = '#a78bfa'; }
+    if (rsi > 70)      { zone = I18n.t('markets.rsi_zone_ob')      || 'Overbought'; zoneCol = '#f87171'; }
+    else if (rsi > 55) { zone = I18n.t('markets.rsi_zone_bullish') || 'Bullish';    zoneCol = '#34d399'; }
+    else if (rsi > 45) { zone = I18n.t('markets.rsi_zone_neutral') || 'Neutral';    zoneCol = '#94a3b8'; }
+    else if (rsi > 30) { zone = I18n.t('markets.rsi_zone_bearish') || 'Bearish';    zoneCol = '#fb923c'; }
+    else                { zone = I18n.t('markets.rsi_zone_os')     || 'Oversold';   zoneCol = '#a78bfa'; }
     const pct = Math.round(rsi);
     rsiEl.innerHTML = `
       <div class="flex items-center justify-between mb-2">
@@ -943,7 +975,7 @@ function _buildForecastChart(result) {
             c.save(); c.strokeStyle = 'rgba(100,116,139,0.5)'; c.lineWidth = 1; c.setLineDash([4,4]);
             c.beginPath(); c.moveTo(bx, a.top); c.lineTo(bx, a.bottom); c.stroke();
             c.fillStyle = '#64748b'; c.font = '10px Inter,sans-serif';
-            c.fillText('Forecast →', bx + 4, a.top + 12); c.restore();
+            c.fillText(I18n.t('markets.forecast_arrow') || 'Forecast →', bx + 4, a.top + 12); c.restore();
           }
         }
       },
@@ -990,7 +1022,7 @@ let _fgChartInst = null;
 
 function renderFearGreed(data) {
   if (!data || data.error) {
-    document.getElementById('fgLoading').textContent = data?.error || 'Unavailable';
+    document.getElementById('fgLoading').textContent = data?.error || I18n.t('markets.unavailable') || 'Unavailable';
     return;
   }
 
@@ -1103,7 +1135,7 @@ let _aaiiChartInst = null;
 
 function renderAaii(data) {
   if (!data || data.error) {
-    document.getElementById('aaiiLoading').textContent = data?.error || 'Unavailable';
+    document.getElementById('aaiiLoading').textContent = data?.error || I18n.t('markets.unavailable') || 'Unavailable';
     return;
   }
 
@@ -1175,7 +1207,7 @@ function renderAaii(data) {
             c.save(); c.strokeStyle = '#34d39955'; c.lineWidth = 1; c.setLineDash([4, 3]);
             c.beginPath(); c.moveTo(a.left, avg); c.lineTo(a.right, avg); c.stroke();
             c.fillStyle = '#34d399'; c.font = '9px Inter,sans-serif';
-            c.fillText('Avg 37.5%', a.right - 55, avg - 3); c.restore();
+            c.fillText(I18n.t('markets.aaii_avg') || 'Avg 37.5%', a.right - 55, avg - 3); c.restore();
           }
         },
       }],
@@ -1188,6 +1220,165 @@ function renderAaii(data) {
 
 // ── Economic Events Calendar ──────────────────────────────────────
 let _econData = [];
+let _econFilter = 'all';
+let _econCollapsed = false;
+
+function toggleEconSection() {
+  _econCollapsed = !_econCollapsed;
+  const body = document.getElementById('econCollapse');
+  const chevron = document.getElementById('econChevron');
+  if (body) body.style.display = _econCollapsed ? 'none' : '';
+  if (chevron) chevron.classList.toggle('rotate-180', !_econCollapsed);
+}
+
+/** Parse an event's datetime in ET (UTC-5/UTC-4) to a local Date object. */
+function _econEventDate(ev) {
+  if (!ev.date) return null;
+  // Time from API is in ET format HH:MM or HH:MM AM/PM
+  const timeStr = ev.time || '00:00';
+  // Try to parse as 12h or 24h
+  let hours = 0, minutes = 0;
+  const ampm = timeStr.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+  const h24  = timeStr.match(/^(\d{1,2}):(\d{2})$/);
+  if (ampm) {
+    hours = parseInt(ampm[1], 10) % 12 + (ampm[3].toUpperCase() === 'PM' ? 12 : 0);
+    minutes = parseInt(ampm[2], 10);
+  } else if (h24) {
+    hours = parseInt(h24[1], 10);
+    minutes = parseInt(h24[2], 10);
+  }
+  // Assume ET = UTC-5 (approximate; doesn't handle DST perfectly)
+  const utcOffset = 5;
+  const isoStr = `${ev.date}T${String(hours).padStart(2,'0')}:${String(minutes).padStart(2,'0')}:00-0${utcOffset}:00`;
+  try { return new Date(isoStr); } catch(_) { return null; }
+}
+
+const EU_COUNTRIES = new Set(['euro area','eurozone','germany','france','italy','spain','netherlands',
+  'belgium','portugal','ireland','greece','finland','austria','sweden','norway','denmark','switzerland',
+  'european union','eu']);
+
+function _econCountryRegion(country) {
+  if (!country) return 'other';
+  const c = country.toLowerCase();
+  if (c === 'united states' || c === 'us') return 'us';
+  if (c === 'china') return 'cn';
+  if (c === 'japan') return 'jp';
+  if (EU_COUNTRIES.has(c)) return 'eu';
+  return 'other';
+}
+
+function filterEcon(region) {
+  _econFilter = region;
+  // Update button active state
+  document.querySelectorAll('.econ-filter-btn').forEach(b => b.classList.remove('active','border-indigo-500','text-indigo-300','border-rose-500','text-rose-300'));
+  const activeBtn = document.getElementById('econFilter-' + region);
+  if (activeBtn) {
+    if (region === 'high') {
+      activeBtn.classList.add('active','border-rose-500','text-rose-300');
+    } else {
+      activeBtn.classList.add('active','border-indigo-500','text-indigo-300');
+    }
+  }
+  _renderEconTable(_econData);
+}
+
+function _renderEconTable(events) {
+  const now = new Date();
+  const hidePastEl = document.getElementById('econHidePast');
+  const hidePast = hidePastEl ? hidePastEl.checked : true;
+
+  // Apply region/impact filter
+  let filtered = events;
+  if (_econFilter === 'high') {
+    filtered = events.filter(ev => (ev.impact || '').toLowerCase() === 'high');
+  } else if (_econFilter !== 'all') {
+    filtered = events.filter(ev => _econCountryRegion(ev.country) === _econFilter);
+  }
+
+  // Determine past/future for each event using client timezone
+  // Events without time default to start of day
+  filtered = filtered.map(ev => {
+    const dt = _econEventDate(ev);
+    return { ...ev, _dt: dt, _isPast: dt ? dt < now : false };
+  });
+
+  // Optionally hide past events
+  if (hidePast) {
+    filtered = filtered.filter(ev => !ev._isPast);
+  }
+
+  // Find the next upcoming event index (first not in past)
+  let nextIdx = null;
+  for (let i = 0; i < filtered.length; i++) {
+    if (!filtered[i]._isPast) { nextIdx = i; break; }
+  }
+
+  // Group by date for display
+  const byDate = {};
+  filtered.forEach(ev => {
+    if (!byDate[ev.date]) byDate[ev.date] = [];
+    byDate[ev.date].push(ev);
+  });
+
+  const impactBadge = (imp) => {
+    const k = (imp || '').toLowerCase();
+    if (k.includes('high')) return `<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-rose-950/60 text-rose-400 border border-rose-900/50">● High</span>`;
+    if (k.includes('med')) return `<span class="inline-block w-1.5 h-1.5 rounded-full" style="background:#fb923c"></span>`;
+    return `<span class="inline-block w-1.5 h-1.5 rounded-full" style="background:#94a3b8"></span>`;
+  };
+
+  let rows = '';
+  let globalIdx = 0;
+  const sortedDates = Object.keys(byDate).sort();
+  sortedDates.forEach(date => {
+    byDate[date].forEach((ev, i) => {
+      const isHigh = (ev.impact || '').toLowerCase() === 'high';
+      const isNext = globalIdx === nextIdx;
+      const isPast = ev._isPast;
+      const rowClass = isNext
+        ? 'border-l-2 border-brand/70 bg-brand/5 transition-colors'
+        : isHigh
+          ? 'hover:bg-rose-950/30 bg-rose-950/10 transition-colors border-l-2 border-rose-800/60'
+          : isPast
+            ? 'opacity-40 transition-colors'
+            : 'hover:bg-slate-800/40 transition-colors';
+      const nameText = ev.zh
+        ? `<span class="${isHigh ? 'text-rose-200' : isNext ? 'text-brand' : 'text-slate-200'}">${ev.zh}</span><br><span class="text-slate-500 text-[10px]">${ev.event}</span>`
+        : `<span class="${isHigh ? 'text-rose-200' : isNext ? 'text-brand' : 'text-slate-200'}">${ev.event}</span>`;
+      const nameCell = ev.url
+        ? `<a href="${ev.url}" target="_blank" rel="noopener" class="hover:underline underline-offset-2">${nameText}</a>`
+        : nameText;
+      const nextBadge = isNext ? `<span class="ml-1 text-[9px] px-1 py-0.5 rounded bg-brand/20 text-brand font-semibold">Next</span>` : '';
+      const actualVsForecast = (() => {
+        if (!ev.actual || !ev.forecast) return '';
+        const a = parseFloat(ev.actual), f = parseFloat(ev.forecast);
+        if (isNaN(a) || isNaN(f)) return '';
+        return a > f ? ' <span class="text-emerald-400">▲</span>' : a < f ? ' <span class="text-rose-400">▼</span>' : '';
+      })();
+      // Format time in client's local timezone
+      const localTime = ev._dt
+        ? ev._dt.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+        : (ev.time || '—');
+      rows += `<tr class="${rowClass}">
+        <td class="py-2 pr-3 text-slate-400 whitespace-nowrap">${i === 0 ? date : ''}</td>
+        <td class="py-2 pr-3 text-slate-400 whitespace-nowrap">${localTime}${nextBadge}</td>
+        <td class="py-2 pr-3 text-slate-400 whitespace-nowrap">${ev.country || '—'}</td>
+        <td class="py-2 pr-3 max-w-xs">${nameCell}</td>
+        <td class="py-2 pr-3">${impactBadge(ev.impact)}</td>
+        <td class="py-2 pr-3 text-right tabular-nums font-semibold ${ev.actual ? (isHigh ? 'text-rose-300' : 'text-slate-200') : 'text-slate-600'}">${ev.actual || '—'}${actualVsForecast}</td>
+        <td class="py-2 pr-3 text-right tabular-nums text-slate-400">${ev.forecast || '—'}</td>
+        <td class="py-2 text-right tabular-nums text-slate-500">${ev.previous || '—'}</td>
+      </tr>`;
+      globalIdx++;
+    });
+  });
+
+  if (!rows) {
+    rows = `<tr><td colspan="8" class="py-6 text-center text-slate-600 text-xs">${I18n.t('markets.econ_no_events') || 'No events for this filter.'}</td></tr>`;
+  }
+
+  document.getElementById('econTableBody').innerHTML = rows;
+}
 
 function renderEconEvents(events) {
   document.getElementById('econLoading').style.display = 'none';
@@ -1198,50 +1389,7 @@ function renderEconEvents(events) {
     return;
   }
   _econData = events;
-
-  // Group by date for display
-  const byDate = {};
-  events.forEach(ev => {
-    if (!byDate[ev.date]) byDate[ev.date] = [];
-    byDate[ev.date].push(ev);
-  });
-
-  const impactColor = { high: '#f87171', medium: '#fb923c', low: '#94a3b8' };
-  const impactDot = (imp) => {
-    const k = (imp || '').toLowerCase();
-    const col = k.includes('high') ? impactColor.high
-              : k.includes('med') ? impactColor.medium
-              : impactColor.low;
-    return `<span class="inline-block w-1.5 h-1.5 rounded-full" style="background:${col}"></span>`;
-  };
-
-  let rows = '';
-  const sortedDates = Object.keys(byDate).sort();
-  sortedDates.forEach(date => {
-    byDate[date].forEach((ev, i) => {
-      const nameCell = ev.zh
-        ? `<span class="text-slate-200">${ev.zh}</span><br><span class="text-slate-500 text-[10px]">${ev.event}</span>`
-        : `<span class="text-slate-200" data-event-id="${ev.event_id}">${ev.event}</span>`;
-      const actualVsForecast = (() => {
-        if (!ev.actual || !ev.forecast) return '';
-        const a = parseFloat(ev.actual), f = parseFloat(ev.forecast);
-        if (isNaN(a) || isNaN(f)) return '';
-        return a > f ? ' <span class="text-emerald-400">▲</span>' : a < f ? ' <span class="text-rose-400">▼</span>' : '';
-      })();
-      rows += `<tr class="hover:bg-slate-800/40 transition-colors">
-        <td class="py-2 pr-3 text-slate-400 whitespace-nowrap">${i === 0 ? date : ''}</td>
-        <td class="py-2 pr-3 text-slate-400 whitespace-nowrap">${ev.time || '—'}</td>
-        <td class="py-2 pr-3 text-slate-400 whitespace-nowrap">${ev.country || '—'}</td>
-        <td class="py-2 pr-3 max-w-xs">${nameCell}</td>
-        <td class="py-2 pr-3">${impactDot(ev.impact)}</td>
-        <td class="py-2 pr-3 text-right tabular-nums font-semibold ${ev.actual ? 'text-slate-200' : 'text-slate-600'}">${ev.actual || '—'}${actualVsForecast}</td>
-        <td class="py-2 pr-3 text-right tabular-nums text-slate-400">${ev.forecast || '—'}</td>
-        <td class="py-2 text-right tabular-nums text-slate-500">${ev.previous || '—'}</td>
-      </tr>`;
-    });
-  });
-
-  document.getElementById('econTableBody').innerHTML = rows;
+  _renderEconTable(events);
   document.getElementById('econLoading').style.display = 'none';
   document.getElementById('econBody').style.display = '';
 }
@@ -1272,7 +1420,7 @@ async function translateEconEvents() {
         ...ev,
         zh: result.translations[ev.event_id] || ev.zh,
       }));
-      renderEconEvents(_econData);
+      _renderEconTable(_econData);
     }
   } catch(e) {
     console.warn('Translation failed:', e);

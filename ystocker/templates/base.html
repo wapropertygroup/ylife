@@ -79,18 +79,18 @@
     <div class="max-w-screen-xl mx-auto px-4 sm:px-6 flex items-center h-14 gap-4">
 
       <!-- Logo -->
-      <a href="{{ url_for('main.index') }}" class="flex items-center gap-2 font-bold text-lg shrink-0">
+      <a href="{{ url_for('main.markets') }}" class="flex items-center gap-2 font-bold text-lg shrink-0">
         <span class="grad-text">yStocker</span>
       </a>
 
       <!-- Desktop nav -->
       <nav class="hidden md:flex items-center gap-1 ml-4 flex-1">
-        <a href="{{ url_for('main.index') }}"
-           class="px-3 py-1.5 rounded-md text-sm text-slate-300 hover:text-white hover:bg-slate-800 transition"
-           data-i18n="nav.home">Home</a>
         <a href="{{ url_for('main.markets') }}"
            class="px-3 py-1.5 rounded-md text-sm text-slate-300 hover:text-white hover:bg-slate-800 transition"
            data-i18n="markets.nav">Markets</a>
+        <a href="{{ url_for('main.evaluation') }}"
+           class="px-3 py-1.5 rounded-md text-sm text-slate-300 hover:text-white hover:bg-slate-800 transition"
+           data-i18n="nav.home">Valuation</a>
         <a href="{{ url_for('main.heatmap') }}"
            class="px-3 py-1.5 rounded-md text-sm text-slate-300 hover:text-white hover:bg-slate-800 transition"
            data-i18n="heatmap.nav">Heatmap</a>
@@ -131,16 +131,13 @@
               </div>
             </div>
             <div class="border-t border-slate-800 px-3 py-2 mt-1">
-              <a href="{{ url_for('main.index') }}#sectors"
+              <a href="{{ url_for('main.evaluation') }}#sectors"
                  class="flex items-center justify-center gap-1 text-xs text-slate-500 hover:text-brand transition"
                  data-i18n="nav.view_all">View all sectors ↓</a>
             </div>
           </div>
         </div>
 
-        <a href="{{ url_for('main.lookup') }}"
-           class="px-3 py-1.5 rounded-md text-sm text-slate-300 hover:text-white hover:bg-slate-800 transition"
-           data-i18n="nav.lookup">Lookup</a>
         <a href="{{ url_for('main.thirteenf') }}"
            class="px-3 py-1.5 rounded-md text-sm text-slate-300 hover:text-white hover:bg-slate-800 transition"
            data-i18n="nav.thirteenf">13F</a>
@@ -158,16 +155,8 @@
            data-i18n="nav.guide">Guide</a>
       </nav>
 
-      <!-- Refresh button + Search icon + Language toggle -->
+      <!-- Refresh button + Language toggle -->
       <div class="relative ml-auto hidden md:flex items-center gap-2">
-        <!-- Search / Lookup icon -->
-        <a href="{{ url_for('main.lookup') }}" title="Lookup"
-           class="p-2 rounded-md text-slate-400 hover:text-white hover:bg-slate-800 transition"
-           aria-label="Lookup">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-            <circle cx="11" cy="11" r="7"/><path stroke-linecap="round" d="M21 21l-4.35-4.35"/>
-          </svg>
-        </a>
         <!-- Language toggle -->
         <button onclick="I18n.toggle()"
                 class="lang-toggle-btn px-2.5 py-1.5 rounded-md text-sm border border-slate-700 text-slate-300
@@ -204,8 +193,8 @@
     <!-- Mobile menu -->
     <div x-show="navOpen" x-transition class="md:hidden border-t border-slate-800 bg-slate-900 px-4 pb-4">
       <div class="flex flex-col gap-1 pt-2">
-        <a href="{{ url_for('main.index') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-300 hover:bg-slate-800" data-i18n="nav.home">Home</a>
         <a href="{{ url_for('main.markets') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-300 hover:bg-slate-800" data-i18n="markets.nav">Markets</a>
+        <a href="{{ url_for('main.evaluation') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-300 hover:bg-slate-800" data-i18n="nav.home">Valuation</a>
         <a href="{{ url_for('main.heatmap') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-300 hover:bg-slate-800" data-i18n="heatmap.nav">Heatmap</a>
         <div class="px-3 py-1.5 text-[10px] font-semibold tracking-widest uppercase text-slate-600 mt-1" data-i18n="nav.sectors">Sectors</div>
         <div class="grid grid-cols-2 gap-1 mb-1">
@@ -215,7 +204,6 @@
              data-i18n="sector.name.{{ g }}">{{ g }}</a>
           {% endfor %}
         </div>
-        <a href="{{ url_for('main.lookup') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-300 hover:bg-slate-800" data-i18n="nav.lookup">Lookup</a>
         <a href="{{ url_for('main.thirteenf') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-300 hover:bg-slate-800" data-i18n="nav.thirteenf">13F</a>
         <a href="{{ url_for('main.fed') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-300 hover:bg-slate-800" data-i18n="nav.fed">Fed</a>
         <a href="{{ url_for('main.groups') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-300 hover:bg-slate-800" data-i18n="nav.groups">Groups</a>

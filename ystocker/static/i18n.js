@@ -13,7 +13,7 @@ const I18n = (() => {
   const LANGS = {
 
     // ── base.html ──────────────────────────────────────────────────────
-    'nav.home':           { en: 'Home',      zh: '首页' },
+    'nav.home':           { en: 'Valuation', zh: '估值' },
     'nav.sectors':        { en: 'Sectors',   zh: '板块' },
     'nav.peer_groups':    { en: 'Peer Groups', zh: '同类组' },
     'nav.view_all':       { en: 'View all sectors ↓', zh: '查看全部板块 ↓' },
@@ -41,6 +41,9 @@ const I18n = (() => {
     'index.refreshing':   { en: 'refreshing now…', zh: '正在刷新…' },
     'index.next_refresh': { en: 'next refresh', zh: '下次刷新' },
     'index.sector_overview': { en: 'Sector Overview', zh: '板块概览' },
+    'index.jump_stock_pe':  { en: '↓ Stock PE',  zh: '↓ 个股市盈率' },
+    'index.jump_etf_pe':    { en: '↓ ETF PE',    zh: '↓ ETF市盈率' },
+    'index.jump_sectors':   { en: '↓ Sectors',   zh: '↓ 板块概览' },
 
     'index.valuation_map':      { en: 'Valuation Map', zh: '估值地图' },
     'index.valuation_map_desc': { en: 'Forward PE vs Analyst Upside — top-left = cheap with upside',
@@ -590,6 +593,9 @@ const I18n = (() => {
     'markets.econ_events_desc':  { en: 'Key macro releases & central bank decisions this week', zh: '本周重要宏观数据发布及央行决议' },
     'markets.econ_translate':    { en: 'Translate to Chinese',    zh: '翻译为中文' },
     'markets.econ_no_events':    { en: 'No upcoming events.',     zh: '暂无即将发布的事件。' },
+    'markets.econ_filter_all':   { en: 'All',         zh: '全部' },
+    'markets.econ_filter_high':  { en: 'High Impact', zh: '高影响' },
+    'markets.econ_hide_past':    { en: 'Hide past',   zh: '隐藏已过' },
     'markets.econ_col_date':     { en: 'Date',                    zh: '日期' },
     'markets.econ_col_time':     { en: 'Time',                    zh: '时间' },
     'markets.econ_col_country':  { en: 'Country',                 zh: '国家' },
@@ -599,8 +605,40 @@ const I18n = (() => {
     'markets.econ_col_forecast': { en: 'Forecast',                zh: '预测值' },
     'markets.econ_col_previous': { en: 'Previous',                zh: '前值' },
 
+    // markets.html — technical labels
+    'markets.moving_avg':       { en: 'Moving Averages',  zh: '均线' },
+    'markets.macd_signal':      { en: 'Signal',           zh: '信号线' },
+    'markets.macd_histogram':   { en: 'Histogram',        zh: '柱状图' },
+    'markets.rsi_overbought':   { en: '70 Overbought',    zh: '70 超买' },
+    'markets.rsi_oversold':     { en: '30 Oversold',      zh: '30 超卖' },
+    'markets.vix_calm':         { en: 'Calm',             zh: '平静' },
+    'markets.vix_normal':       { en: 'Normal',           zh: '正常' },
+    'markets.vix_elevated':     { en: 'Elevated',         zh: '偏高' },
+    'markets.vix_extreme':      { en: 'Extreme',          zh: '极端' },
+    'markets.rsi_zone_ob':      { en: 'Overbought',       zh: '超买' },
+    'markets.rsi_zone_bullish': { en: 'Bullish',          zh: '看多' },
+    'markets.rsi_zone_neutral': { en: 'Neutral',          zh: '中性' },
+    'markets.rsi_zone_bearish': { en: 'Bearish',          zh: '看空' },
+    'markets.rsi_zone_os':      { en: 'Oversold',         zh: '超卖' },
+    'markets.no_data':          { en: 'No data',          zh: '暂无数据' },
+    'markets.unavailable':      { en: 'Unavailable',      zh: '不可用' },
+    'markets.forecast_arrow':   { en: 'Forecast →',       zh: '预测 →' },
+    'markets.aaii_avg':         { en: 'Avg 37.5%',        zh: '均值 37.5%' },
+
     // ── heatmap.html ───────────────────────────────────────────────────
     'heatmap.nav':         { en: 'Heatmap',           zh: '热力图' },
+
+    // Sector performance bar labels (from SPDR ETFs)
+    'markets.sector.Tech':          { en: 'Tech',             zh: '科技' },
+    'markets.sector.Financials':    { en: 'Financials',       zh: '金融' },
+    'markets.sector.Energy':        { en: 'Energy',           zh: '能源' },
+    'markets.sector.Healthcare':    { en: 'Healthcare',       zh: '医疗健康' },
+    'markets.sector.Industrials':   { en: 'Industrials',      zh: '工业' },
+    'markets.sector.Consumer Disc.':{ en: 'Consumer Disc.',   zh: '非必需消费' },
+    'markets.sector.Consumer Stap.':{ en: 'Consumer Stap.',   zh: '必需消费' },
+    'markets.sector.Utilities':     { en: 'Utilities',        zh: '公用事业' },
+    'markets.sector.Materials':     { en: 'Materials',        zh: '材料' },
+    'markets.sector.Real Estate':   { en: 'Real Estate',      zh: '房地产' },
     'heatmap.title':       { en: 'Sector Heatmap',    zh: '板块热力图' },
     'heatmap.subtitle':    { en: 'S&P 500 top stocks — color-coded by day change. Click any tile to open the stock.',
                              zh: '标普500主要个股 — 按日涨跌幅着色。点击色块查看详情。' },
@@ -660,6 +698,7 @@ const I18n = (() => {
     AMT: '美国铁塔', PLD: '普洛斯', EQIX: '艾可迪', SPG: '西蒙地产', O: '瑞尔地产', HLT: '希尔顿',
     // Metals & Mining
     FCX: '自由港', NEM: '纽蒙特', AA: '美国铝业', MP: 'MP材料',
+    // Metals ETFs (in Sector ETFs group)
     COPX: '铜矿ETF', GDX: '黄金矿业ETF', SIL: '白银矿业ETF', SLX: '钢铁ETF',
     // Apparel & Footwear
     NKE: '耐克', LULU: 'lululemon', UAA: '安德玛', VFC: 'VF集团',

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}yStocker — Dashboard{% endblock %}
+{% block title %}yStocker — Valuation Dashboard{% endblock %}
 
 {% block content %}
 
@@ -52,11 +52,11 @@
 </div>
 
 <!-- ── Hero ──────────────────────────────────────────────────────────── -->
-<div class="mb-8 sm:mb-10 fade-up">
-  <h1 class="text-2xl sm:text-4xl font-bold mb-2">
+<div class="mb-6 sm:mb-8 fade-up">
+  <h1 class="text-xl sm:text-2xl font-bold mb-1.5">
     <span class="grad-text" data-i18n="index.hero_title">Stock Valuation</span> <span data-i18n="index.hero_sub">Dashboard</span>
   </h1>
-  <p class="text-slate-400 text-base sm:text-lg">
+  <p class="text-slate-400 text-sm">
     <span data-i18n="index.hero_desc">PE ratios, PEG ratios &amp; analyst targets across</span> {{ sector_cards|length }} <span data-i18n="index.peer_groups">peer groups.</span>
   </p>
   {% if cache_last_updated %}
@@ -77,6 +77,25 @@
   {% for _ in range(8) %}
   <div class="animate-pulse bg-slate-900 border border-slate-800 rounded-xl p-3 h-20"></div>
   {% endfor %}
+</div>
+
+<!-- ── Quick links ───────────────────────────────────────────────────── -->
+<div class="flex flex-wrap gap-2 mb-6 fade-up">
+  <a href="#stock-pe"
+     class="px-3 py-1.5 rounded-lg text-xs font-medium border border-slate-700 text-slate-400
+            hover:border-brand/60 hover:text-brand transition-all">
+    <span data-i18n="index.jump_stock_pe">↓ Stock PE</span>
+  </a>
+  <a href="#etf-pe"
+     class="px-3 py-1.5 rounded-lg text-xs font-medium border border-slate-700 text-slate-400
+            hover:border-brand/60 hover:text-brand transition-all">
+    <span data-i18n="index.jump_etf_pe">↓ ETF PE</span>
+  </a>
+  <a href="#sectors"
+     class="px-3 py-1.5 rounded-lg text-xs font-medium border border-slate-700 text-slate-400
+            hover:border-brand/60 hover:text-brand transition-all">
+    <span data-i18n="index.jump_sectors">↓ Sectors</span>
+  </a>
 </div>
 
 <!-- ── Cross-sector scatter (PE vs Upside) ───────────────────────────── -->
@@ -154,7 +173,7 @@
 </div>
 
 <!-- ── Sector cards ──────────────────────────────────────────────────── -->
-<h2 class="text-lg sm:text-xl font-semibold text-slate-200 mb-4 fade-up" data-i18n="index.sector_overview">Sector Overview</h2>
+<h2 id="sectors" class="text-lg sm:text-xl font-semibold text-slate-200 mb-4 fade-up" data-i18n="index.sector_overview">Sector Overview</h2>
 <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5 mb-10">
   {% for group, info in sector_cards.items() %}
   <a href="{{ url_for('main.sector', sector_name=group) }}"
@@ -178,7 +197,7 @@
 </div>
 
 <!-- ── Cross-sector PE heatmap table ─────────────────────────────────── -->
-<div class="bg-slate-900 rounded-2xl border border-slate-800 p-4 sm:p-6 fade-up mb-8">
+<div id="stock-pe" class="bg-slate-900 rounded-2xl border border-slate-800 p-4 sm:p-6 fade-up mb-8">
 
   <!-- Header row -->
   <div class="flex flex-wrap items-center gap-3 mb-4">
@@ -268,7 +287,7 @@
 </div>
 
 <!-- ── ETF PE table ──────────────────────────────────────────────────── -->
-<div class="bg-slate-900 rounded-2xl border border-slate-800 p-4 sm:p-6 fade-up mb-8">
+<div id="etf-pe" class="bg-slate-900 rounded-2xl border border-slate-800 p-4 sm:p-6 fade-up mb-8">
   <div class="flex flex-wrap items-center gap-3 mb-4">
     <div>
       <h2 class="text-base font-semibold text-slate-200" data-i18n="index.etf_heatmap">ETF PE Heatmap</h2>

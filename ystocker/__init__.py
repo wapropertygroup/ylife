@@ -21,10 +21,10 @@ PEER_GROUPS: Dict[str, List[str]] = {
     "Healthcare":        ["UNH", "JNJ", "LLY", "ABBV", "MRK", "ISRG"],
     "Retail":            ["WMT", "AMZN", "COST", "TGT", "HD"],
     "Real Estate":       ["AMT", "PLD", "EQIX", "SPG", "O", "HLT"],
-    "Metals & Mining":   ["FCX", "NEM", "AA", "MP", "COPX", "GDX", "SIL", "SLX"],
+    "Metals & Mining":   ["FCX", "NEM", "AA", "MP"],
     "Apparel & Footwear": ["NKE", "LULU", "UAA", "VFC"],
     "US Broad ETFs":     ["SPY", "QQQ", "IWM", "DIA", "VTI"],
-    "Sector ETFs":       ["XLK", "XLF", "XLE", "XLV", "XLI", "XLY", "XLP", "XLU", "XLB", "XLRE"],
+    "Sector ETFs":       ["XLK", "XLF", "XLE", "XLV", "XLI", "XLY", "XLP", "XLU", "XLB", "XLRE", "COPX", "GDX", "SIL", "SLX"],
     "International ETFs": ["FLJP", "FLJH", "FLKR", "FLTW", "FLCA", "IXUS", "VXUS", "FLEE", "ASHS", "FLBR", "FLCH", "FLGR", "FLMX", "FLAX", "FLSW"],
 }
 

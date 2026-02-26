@@ -266,8 +266,14 @@ def _df_to_chartdata(df: pd.DataFrame) -> str:
 
 @bp.route("/")
 def index():
-    """Home page - sector overview cards + cross-sector charts."""
-    log.info("GET /")
+    """Home page — redirects to markets overview."""
+    return redirect(url_for("main.markets"))
+
+
+@bp.route("/evaluation")
+def evaluation():
+    """Valuation dashboard — sector overview cards + cross-sector charts."""
+    log.info("GET /evaluation")
     data = _get_data()
 
     # Cache not ready yet - show a friendly loading page
@@ -299,7 +305,7 @@ def index():
         errors = _fetch_errors
         last_updated = _cache_last_updated
 
-    log.info("Home page rendered - %d groups", len(group_dfs))
+    log.info("Evaluation page rendered - %d groups", len(group_dfs))
     return render_template(
         "index.html",
         peer_groups=list(PEER_GROUPS.keys()),
@@ -356,7 +362,7 @@ def sector(sector_name: str):
 def refresh():
     """Clear the cache and trigger an immediate background re-fetch."""
     _invalidate_cache()
-    return redirect(url_for("main.index"))
+    return redirect(url_for("main.markets"))
 
 
 @bp.route("/api/cache-age")
@@ -1919,7 +1925,7 @@ _SECTOR_ETFS = {
 
 @bp.route("/markets")
 def markets():
-    """Market overview page for SPX, IXIC, DJI."""
+    """Market overview page — the application home."""
     return render_template("markets.html",
                            peer_groups=list(PEER_GROUPS.keys()))
 
@@ -2550,101 +2556,94 @@ def _econ_save_to_dynamo(events: list) -> None:
 
 def _fetch_econ_calendar() -> list:
     """
-    Fetch economic calendar from Trading Economics public JSON endpoint.
+    Fetch economic calendar from tradingeconomics.com by scraping the HTML page.
 
     Returns list of dicts: {date, event_id, time, event, country, impact,
-                             actual, forecast, previous, zh}
+                             actual, forecast, previous, url, zh}
     """
     import requests as req_lib
+    import re as _re
     import hashlib
     from datetime import datetime, timedelta, timezone
 
-    # Trading Economics returns JSON when Accept: application/json is sent
-    # We request the current week's events
     today = datetime.now(timezone.utc).date()
     date_from = today.strftime("%Y-%m-%d")
     date_to   = (today + timedelta(days=7)).strftime("%Y-%m-%d")
 
-    url = f"https://tradingeconomics.com/calendar/country/all/{date_from}/{date_to}/importance:1,2,3"
+    url = (
+        f"https://tradingeconomics.com/calendar/country/all"
+        f"/{date_from}/{date_to}/importance:1,2,3"
+    )
+    resp = req_lib.get(url, headers=_ECON_CAL_HEADERS, timeout=15)
+    resp.raise_for_status()
+    html = resp.text
 
-    try:
-        resp = req_lib.get(url, headers=_ECON_CAL_HEADERS, timeout=15)
-        resp.raise_for_status()
-        raw = resp.json()
-    except Exception:
-        # Fallback: try the base calendar endpoint without date range
-        try:
-            resp = req_lib.get(
-                "https://tradingeconomics.com/calendar",
-                headers={**_ECON_CAL_HEADERS, "Accept": "application/json"},
-                timeout=15,
-            )
-            resp.raise_for_status()
-            raw = resp.json()
-        except Exception as exc2:
-            raise exc2
-
-    if not isinstance(raw, list):
-        # Some responses wrap in a dict
-        raw = raw.get("events") or raw.get("data") or []
-
+    impact_map = {"1": "Low", "2": "Medium", "3": "High"}
     events = []
-    for item in raw:
-        if not isinstance(item, dict):
+
+    # Split on TR blocks that carry data-event attribute
+    for block in html.split("<tr "):
+        if 'data-event=' not in block:
             continue
 
-        # Parse date/time from "Date" field like "2026-02-25T08:30:00"
-        raw_dt = item.get("Date") or item.get("date") or ""
-        date_str = time_str = None
-        if raw_dt:
-            try:
-                dt = datetime.fromisoformat(raw_dt.replace("Z", "+00:00"))
-                date_str = dt.strftime("%Y-%m-%d")
-                time_str = dt.strftime("%H:%M")
-            except Exception:
-                date_str = raw_dt[:10]
+        # Outer TR attributes
+        attr_end = block.find(">")
+        attrs = block[:attr_end]
+
+        country_m  = _re.search(r'data-country="([^"]+)"', attrs)
+        event_m    = _re.search(r'data-event="([^"]+)"', attrs)
+        data_url_m = _re.search(r'data-url="([^"]+)"', attrs)
+        if not event_m:
+            continue
+
+        # Date: td class attribute contains YYYY-MM-DD
+        date_m  = _re.search(r"class='[^']*(\d{4}-\d{2}-\d{2})[^']*'", block)
+        if not date_m:
+            date_m = _re.search(r'class="[^"]*(\d{4}-\d{2}-\d{2})[^"]*"', block)
+
+        # Time: first AM/PM string in the block
+        time_m  = _re.search(r"(\d{1,2}:\d{2}\s*[AP]M)", block)
+
+        # Impact from calendar-date-N class (1=low 2=med 3=high)
+        impact_m = _re.search(r"calendar-date-(\d)", block)
+
+        # Values use single-quote ids: id='actual', id='previous', id='consensus'
+        actual_m   = _re.search(r"id='actual'>([^<]+)<", block)
+        previous_m = _re.search(r"id='previous'>([^<]+)<", block)
+        forecast_m = _re.search(r"id='consensus'[^>]*>([^<]+)<", block)
+
+        def _v(m):
+            if not m:
+                return None
+            s = m.group(1).strip()
+            return s if s and s not in ("-", "") else None
+
+        date_str    = date_m.group(1) if date_m else None
+        event_name  = event_m.group(1).title()
+        country     = country_m.group(1).title() if country_m else None
+        event_link  = data_url_m.group(1) if data_url_m else None
 
         if not date_str:
             continue
 
-        event_name = (
-            item.get("Event") or item.get("event") or
-            item.get("Category") or item.get("category") or ""
-        ).strip()
-        if not event_name:
-            continue
-
-        country  = (item.get("Country") or item.get("country") or "").strip() or None
-        # Importance: 1=low, 2=medium, 3=high
-        imp_raw  = item.get("Importance") or item.get("importance")
-        impact   = {3: "High", 2: "Medium", 1: "Low"}.get(imp_raw) if imp_raw else None
-
-        def _clean(v):
-            if v is None:
-                return None
-            s = str(v).strip()
-            return s if s and s not in ("-", "null", "None", "") else None
-
-        actual   = _clean(item.get("Actual")   or item.get("actual"))
-        forecast = _clean(item.get("Forecast") or item.get("forecast") or item.get("TEForecast"))
-        previous = _clean(item.get("Previous") or item.get("previous"))
-
-        event_id = hashlib.md5(f"{date_str}:{time_str}:{event_name}:{country}".encode()).hexdigest()[:16]
+        event_id = hashlib.md5(
+            f"{date_str}:{_v(time_m)}:{event_name}:{country}".encode()
+        ).hexdigest()[:16]
 
         events.append({
             "date":     date_str,
             "event_id": event_id,
-            "time":     time_str,
+            "time":     _v(time_m),
             "event":    event_name,
             "country":  country,
-            "impact":   impact,
-            "actual":   actual,
-            "forecast": forecast,
-            "previous": previous,
+            "impact":   impact_map.get(impact_m.group(1)) if impact_m else None,
+            "actual":   _v(actual_m),
+            "forecast": _v(forecast_m),
+            "previous": _v(previous_m),
+            "url":      f"https://tradingeconomics.com{event_link}" if event_link else None,
             "zh":       None,
         })
 
-    # Sort by date then time
     events.sort(key=lambda e: (e["date"] or "", e["time"] or ""))
     return events
 
