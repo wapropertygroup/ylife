@@ -282,6 +282,13 @@
         <span class="flex items-center gap-1 text-slate-400"><span class="w-3 h-0.5 inline-block" style="background:#38bdf8"></span>MACD</span>
         <span class="flex items-center gap-1 text-slate-400"><span class="w-3 h-0.5 inline-block border-t border-dashed border-current"></span><span style="color:#fb923c" data-i18n="markets.macd_signal">Signal</span></span>
         <span class="flex items-center gap-1 text-slate-400"><span class="w-3 h-3 inline-block rounded-sm" style="background:#6366f144"></span><span data-i18n="markets.macd_histogram">Histogram</span></span>
+        <button onclick="expandMktsChart('macd')" title="Expand"
+                class="text-slate-600 hover:text-slate-300 transition p-1 rounded-lg hover:bg-slate-800">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"/>
+          </svg>
+        </button>
       </div>
     </div>
     <div style="height:200px"><canvas id="macdChart"></canvas></div>
@@ -294,6 +301,13 @@
       <div class="flex items-center gap-3 text-[11px] text-slate-500">
         <span class="text-rose-400" data-i18n="markets.rsi_overbought">70 Overbought</span>
         <span class="text-emerald-400" data-i18n="markets.rsi_oversold">30 Oversold</span>
+        <button onclick="expandMktsChart('rsi')" title="Expand"
+                class="text-slate-600 hover:text-slate-300 transition p-1 rounded-lg hover:bg-slate-800">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"/>
+          </svg>
+        </button>
       </div>
     </div>
     <div style="height:160px"><canvas id="rsiChart"></canvas></div>
@@ -311,6 +325,13 @@
         <span class="flex items-center gap-1.5" style="color:#a78bfa"><span class="w-3 h-1 rounded-sm inline-block" style="background:#a78bfa"></span>Prophet</span>
         <span class="flex items-center gap-1.5" style="color:#fb923c"><span class="w-3 h-1 rounded-sm inline-block" style="background:#fb923c"></span>ARIMA</span>
         <span class="flex items-center gap-1.5" style="color:#34d399"><span class="w-3 h-1 rounded-sm inline-block" style="background:#34d399"></span><span data-i18n="forecast.linear">Linear</span></span>
+        <button onclick="expandMktsChart('forecast')" title="Expand"
+                class="text-slate-600 hover:text-slate-300 transition p-1 rounded-lg hover:bg-slate-800">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"/>
+          </svg>
+        </button>
       </div>
     </div>
     <div id="idxForecastLoading" class="flex items-center gap-2 text-sm text-slate-500 py-4">
@@ -1768,6 +1789,27 @@ function _mktsModalConfig(kind) {
       title: idxLabel(_curIdx) + ' — ' + (I18n.t('markets.hist_title') || 'Price History'),
       sub:   '',
       chartConfig: JSON.parse(JSON.stringify(_idxChartInst.config)),
+    };
+  }
+  if (kind === 'macd' && _macdChartInst) {
+    return {
+      title: idxLabel(_curIdx) + ' — MACD',
+      sub:   '12 / 26 / 9 — daily',
+      chartConfig: JSON.parse(JSON.stringify(_macdChartInst.config)),
+    };
+  }
+  if (kind === 'rsi' && _rsiChartInst) {
+    return {
+      title: idxLabel(_curIdx) + ' — RSI-14',
+      sub:   '',
+      chartConfig: JSON.parse(JSON.stringify(_rsiChartInst.config)),
+    };
+  }
+  if (kind === 'forecast' && _idxForecastInst) {
+    return {
+      title: idxLabel(_curIdx) + ' — ' + (I18n.t('forecast.title') || 'Price Forecast — 90 Days'),
+      sub:   I18n.t('forecast.desc') || '',
+      chartConfig: JSON.parse(JSON.stringify(_idxForecastInst.config)),
     };
   }
   return null;

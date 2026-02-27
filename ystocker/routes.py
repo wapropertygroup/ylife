@@ -2428,84 +2428,160 @@ _PCR_CACHE_TTL  = 4 * 3600   # 4 hours — daily data
 _PCR_HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/124.0.0.0 Safari/537.36"
+        "AppleWebKit/605.1.15 (KHTML, like Gecko) "
+        "Version/26.0.1 Safari/605.1.15"
     ),
-    "Accept":          "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept":          "*/*",
     "Accept-Language": "en-US,en;q=0.9",
+    "Origin":          "https://www.cboe.com",
     "Referer":         "https://www.cboe.com/",
+    "X-Requested-With": "XMLHttpRequest",
 }
 
+_PCR_TABLE_NAME = "ystocker-pcr-history"
+_pcr_ddb_table  = None
+_pcr_ddb_unavail_until = 0.0
+_PCR_DDB_LOCK   = threading.Lock()
 
-def _fetch_pcr_cboe() -> dict:
-    """Fetch CBOE Equity Put/Call Ratio from CBOE's public CSV (1Y of daily data)."""
-    import requests, csv, io
-    from datetime import date, timedelta
 
-    url = "https://cdn.cboe.com/resources/options/xcpc_equity_put_call_ratio.csv"
-    # Bypass any http_proxy env var — CBOE CDN must be reached directly
-    resp = requests.get(url, headers=_PCR_HEADERS, timeout=20,
-                        proxies={"http": None, "https": None})
-    resp.raise_for_status()
-
-    reader = csv.DictReader(io.StringIO(resp.text))
-    rows = []
-    for row in reader:
+def _get_pcr_ddb_table():
+    """Return boto3 DynamoDB Table for PCR history, or None if unavailable."""
+    global _pcr_ddb_table, _pcr_ddb_unavail_until
+    if _pcr_ddb_table is not None:
+        return _pcr_ddb_table
+    if time.time() < _pcr_ddb_unavail_until:
+        return None
+    with _PCR_DDB_LOCK:
+        if _pcr_ddb_table is not None:
+            return _pcr_ddb_table
+        if time.time() < _pcr_ddb_unavail_until:
+            return None
         try:
-            d   = row.get("Date", "").strip()
-            val = row.get("EQUITY_PC_RATIO", row.get("Equity", "")).strip()
-            if d and val:
-                rows.append((d, float(val)))
-        except (ValueError, KeyError):
-            continue
+            import boto3
+            ddb = boto3.resource("dynamodb", region_name=os.environ.get("AWS_REGION", "us-west-2"))
+            tbl = ddb.Table(_PCR_TABLE_NAME)
+            tbl.load()
+            _pcr_ddb_table = tbl
+            log.info("DynamoDB PCR history table connected: %s", _PCR_TABLE_NAME)
+        except Exception as exc:
+            log.warning("DynamoDB PCR history unavailable: %s", exc)
+            _pcr_ddb_table = None
+            _pcr_ddb_unavail_until = time.time() + 300
+        return _pcr_ddb_table
 
-    if not rows:
-        raise ValueError("CBOE CSV parsed 0 rows")
 
-    # Keep last 1 year
-    cutoff = str(date.today() - timedelta(days=365))
-    rows = [(d, v) for d, v in rows if d >= cutoff]
-    rows.sort(key=lambda r: r[0])
+def _pcr_load_history() -> dict[str, float]:
+    """Load all stored PCR rows from DynamoDB. Returns {date_str: value}."""
+    table = _get_pcr_ddb_table()
+    if not table:
+        return {}
+    try:
+        from boto3.dynamodb.conditions import Key
+        from datetime import date, timedelta
+        cutoff = str(date.today() - timedelta(days=366))
+        resp = table.scan(
+            FilterExpression="#d >= :cutoff",
+            ExpressionAttributeNames={"#d": "date"},
+            ExpressionAttributeValues={":cutoff": cutoff},
+        )
+        result = {}
+        for item in resp.get("Items", []):
+            result[item["date"]] = float(item["equity_pcr"])
+        return result
+    except Exception as exc:
+        log.warning("DynamoDB PCR load failed: %s", exc)
+        return {}
 
-    dates  = [r[0] for r in rows]
-    closes = [round(r[1], 3) for r in rows]
-    return dates, closes
+
+def _pcr_save_row(date_str: str, equity_pcr: float) -> None:
+    """Persist a single PCR row to DynamoDB."""
+    table = _get_pcr_ddb_table()
+    if not table:
+        return
+    try:
+        table.put_item(Item={"date": date_str, "equity_pcr": str(round(equity_pcr, 3))})
+    except Exception as exc:
+        log.warning("DynamoDB PCR save failed for %s: %s", date_str, exc)
+
+
+def _fetch_pcr_for_date(date_str: str) -> float | None:
+    """Fetch the EQUITY PUT/CALL RATIO for a single trading date from CBOE daily endpoint."""
+    import requests
+    url = f"https://cdn.cboe.com/data/us/options/market_statistics/daily/{date_str}_daily_options"
+    try:
+        resp = requests.get(url, headers=_PCR_HEADERS, timeout=15,
+                            proxies={"http": None, "https": None})
+        if resp.status_code == 403 or resp.status_code == 404:
+            return None
+        resp.raise_for_status()
+        data = resp.json()
+        for r in data.get("ratios", []):
+            if r.get("name", "").upper() == "EQUITY PUT/CALL RATIO":
+                return round(float(r["value"]), 3)
+    except Exception as exc:
+        log.debug("PCR fetch for %s failed: %s", date_str, exc)
+    return None
+
+
+def _prev_trading_days(n: int) -> list[str]:
+    """Return the last n calendar days going backwards from yesterday (skipping weekends)."""
+    from datetime import date, timedelta
+    results = []
+    d = date.today() - timedelta(days=1)
+    while len(results) < n:
+        if d.weekday() < 5:  # Mon–Fri
+            results.append(str(d))
+        d -= timedelta(days=1)
+    return results
 
 
 @bp.route("/api/put-call-ratio")
 def api_put_call_ratio():
-    """Return CBOE Equity Put/Call Ratio history with 1Y daily data.
-    Primary: CBOE public CSV. Fallback: yfinance ^PCCE."""
+    """Return CBOE Equity Put/Call Ratio history (1Y).
+    Fetches latest day from CBOE daily endpoint, persists to DynamoDB, merges for history."""
     with _PCR_CACHE_LOCK:
         entry = _PCR_CACHE.get("data")
         if entry and time.time() - entry["ts"] < _PCR_CACHE_TTL:
             return jsonify(entry["data"])
 
-    dates, closes = [], []
-    try:
-        dates, closes = _fetch_pcr_cboe()
-        log.info("Put/Call ratio: fetched %d rows from CBOE CSV", len(dates))
-    except Exception as exc:
-        log.warning("CBOE CSV put/call fetch failed (%s), trying yfinance", exc)
-        try:
-            import yfinance as yf
-            tk   = yf.Ticker("^PCCE")
-            hist = tk.history(period="1y", interval="1d")
-            if not hist.empty:
-                closes = [round(float(v), 3) if not math.isnan(float(v)) else None
-                          for v in hist["Close"]]
-                dates  = [str(d.date()) for d in hist.index]
-        except Exception as exc2:
-            log.warning("yfinance put/call fetch also failed: %s", exc2)
+    # Load stored history from DynamoDB
+    history = _pcr_load_history()
 
-    if not closes:
+    from datetime import date, timedelta
+    # Build the expected set of trading days for the last 1 year
+    expected = []
+    d = date.today()
+    cutoff_date = date.today() - timedelta(days=365)
+    while d >= cutoff_date:
+        if d.weekday() < 5:
+            expected.append(str(d))
+        d -= timedelta(days=1)
+
+    # Fetch any missing trading days (up to 5 per request to avoid latency)
+    fetched = 0
+    for candidate in expected:
+        if candidate not in history and fetched < 5:
+            val = _fetch_pcr_for_date(candidate)
+            if val is not None:
+                history[candidate] = val
+                _pcr_save_row(candidate, val)
+                log.info("PCR: fetched and saved %s = %s", candidate, val)
+            fetched += 1
+
+    if not history:
         return jsonify({"error": "Put/Call ratio data unavailable"}), 502
 
-    current = next((v for v in reversed(closes) if v is not None), None)
-    prev    = next((v for v in reversed(closes[:-1]) if v is not None), None)
-    day_chg = round(current - prev, 3) if current and prev else None
-    valid   = [v for v in closes if v is not None]
-    ma20    = round(sum(valid[-20:]) / min(len(valid), 20), 3) if valid else None
+    # Sort by date, keep last 1 year
+    cutoff = str(date.today() - timedelta(days=365))
+    rows = sorted((d, v) for d, v in history.items() if d >= cutoff)
+
+    dates  = [r[0] for r in rows]
+    closes = [r[1] for r in rows]
+
+    current = closes[-1] if closes else None
+    prev    = closes[-2] if len(closes) >= 2 else None
+    day_chg = round(current - prev, 3) if current is not None and prev is not None else None
+    ma20    = round(sum(closes[-20:]) / min(len(closes), 20), 3) if closes else None
 
     result = {
         "current": current,
