@@ -553,13 +553,25 @@ const I18n = (() => {
     'daily.fg_label':         { en: 'Fear & Greed',              zh: '恐慌与贪婪' },
     'daily.gs_avg':           { en: '2Y Avg',                    zh: '2年均值' },
     'daily.gc_avg':           { en: '2Y Avg',                    zh: '2年均值' },
-    'daily.email_title':      { en: 'Email This Report',         zh: '发送报告到邮箱' },
-    'daily.email_desc':       { en: 'Get today\'s market summary delivered to your inbox.', zh: '将今日市场摘要发送至您的邮箱。' },
+    'daily.email_title':      { en: 'Email This Report',         zh: '发送/订阅每日报告' },
+    'daily.email_desc':       { en: 'Send today\'s report to your inbox, or subscribe for future daily emails.', zh: '发送今日报告，或订阅未来每日邮件。' },
     'daily.email_ph':         { en: 'your@email.com',            zh: '您的邮箱地址' },
     'daily.email_send':       { en: 'Send',                      zh: '发送' },
     'daily.email_sending':    { en: 'Sending…',                  zh: '发送中…' },
     'daily.email_sent':       { en: '✓ Sent! Check your inbox.', zh: '✓ 已发送！请查收邮件。' },
-    'daily.email_error':      { en: 'Failed to send. Please try again.', zh: '发送失败，请重试。' },
+    'daily.email_error':      { en: 'Invalid email.',            zh: '邮箱地址无效。' },
+    'daily.subscribe':        { en: 'Subscribe',                 zh: '订阅' },
+    'daily.subscribing':      { en: 'Subscribing…',              zh: '订阅中…' },
+    'daily.subscribed':       { en: '✓ Subscribed! You\'ll receive future daily reports.', zh: '✓ 订阅成功！您将收到未来的每日报告。' },
+    'daily.already_subscribed': { en: '✓ Already subscribed.',  zh: '✓ 您已订阅。' },
+    'daily.subscribe_error':  { en: 'Subscribe failed.',         zh: '订阅失败。' },
+
+    // ── unsubscribe page ──────────────────────────────────────────────────
+    'unsub.title_success': { en: 'Unsubscribed',                       zh: '已退订' },
+    'unsub.body_success':  { en: 'You\'ve been removed from the daily report mailing list.', zh: '您已从每日报告邮件列表中退订。' },
+    'unsub.resubscribe_hint': { en: 'You can re-subscribe any time from the Daily page.', zh: '您可随时在每日报告页面重新订阅。' },
+    'unsub.title_error':   { en: 'Could not unsubscribe',             zh: '退订失败' },
+    'unsub.back':          { en: 'Back to Daily Report',              zh: '返回每日报告' },
 
     // ── forecast section (history.html) ───────────────────────────────
     'forecast.title':      { en: 'Price Forecast — 6 Months', zh: '价格预测 — 6个月' },

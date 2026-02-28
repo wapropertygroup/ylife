@@ -1584,21 +1584,44 @@ let _gsChartInst = null;
 let _gcChartInst = null;
 let _goldRatioData = null;
 
+function _sma(values, period) {
+  return values.map((_, i) => {
+    if (i < period - 1) return null;
+    const slice = values.slice(i - period + 1, i + 1).filter(v => v != null);
+    return slice.length >= Math.floor(period * 0.6)
+      ? parseFloat((slice.reduce((a, b) => a + b, 0) / slice.length).toFixed(3))
+      : null;
+  });
+}
+
 function _renderRatioChart(data, canvasId, ratioKey, color) {
   const dates  = data.dates || [];
   const ratios = data[ratioKey] || [];
+  const maData = _sma(ratios, 20);
+  const maLabel = I18n.t('daily.ma20_label') || 'MA20';
   const _inst = new Chart(document.getElementById(canvasId), {
     type: 'line',
-    data: { labels: dates, datasets: [{
-      label: ratioKey === 'gs_ratio' ? 'Gold/Silver' : 'Gold/Copper',
-      data: ratios,
-      borderColor: color, backgroundColor: color.replace(')', ',0.07)').replace('rgb', 'rgba'),
-      borderWidth: 2, pointRadius: 0, fill: true, tension: 0.3, spanGaps: true,
-    }]},
+    data: { labels: dates, datasets: [
+      {
+        label: ratioKey === 'gs_ratio' ? 'Gold/Silver' : 'Gold/Copper',
+        data: ratios,
+        borderColor: color, backgroundColor: color.replace(')', ',0.07)').replace('rgb', 'rgba'),
+        borderWidth: 2, pointRadius: 0, fill: true, tension: 0.3, spanGaps: true,
+      },
+      {
+        label: maLabel,
+        data: maData,
+        borderColor: '#94a3b8', borderWidth: 1.2, borderDash: [4, 3],
+        pointRadius: 0, fill: false, spanGaps: true,
+      },
+    ]},
     options: {
       responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: canvasId !== 'gsChart' && canvasId !== 'gcChart' },
-                 tooltip: { mode: 'index', intersect: false } },
+      plugins: {
+        legend: { display: true, position: 'bottom',
+                  labels: { color: TICK_COL, font: { size: 9 }, boxWidth: 10, padding: 6 } },
+        tooltip: { mode: 'index', intersect: false },
+      },
       scales: {
         x: { grid: { color: GRID_COL }, ticks: { color: TICK_COL, maxTicksLimit: 6, maxRotation: 0, font: { size: 9 } } },
         y: { grid: { color: GRID_COL }, ticks: { color: TICK_COL, font: { size: 9 } } },

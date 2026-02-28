@@ -132,10 +132,10 @@
   </div>
 </div>
 
-<!-- ── Email This Report ──────────────────────────────────────────── -->
+<!-- ── Email / Subscribe ───────────────────────────────────────── -->
 <div class="card mb-6 fade-up">
   <div class="card-title" data-i18n="daily.email_title">Email This Report</div>
-  <p class="text-xs text-slate-500 mb-3" data-i18n="daily.email_desc">Get today's market summary delivered to your inbox.</p>
+  <p class="text-xs text-slate-500 mb-3" data-i18n="daily.email_desc">Send today's report to your inbox, or subscribe for future daily emails.</p>
   <div class="flex gap-2">
     <input id="drEmailInput" type="email"
            class="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200
@@ -145,6 +145,9 @@
     <button id="drEmailBtn" onclick="sendDailyEmail()"
             class="px-4 py-2 text-sm rounded-lg border border-brand/50 text-brand hover:bg-brand/10 transition shrink-0"
             data-i18n="daily.email_send">Send</button>
+    <button id="drSubBtn" onclick="subscribeEmail()"
+            class="px-4 py-2 text-sm rounded-lg border border-emerald-600/50 text-emerald-400 hover:bg-emerald-900/20 transition shrink-0"
+            data-i18n="daily.subscribe">Subscribe</button>
   </div>
   <p id="drEmailStatus" class="text-xs mt-2 hidden"></p>
 </div>
@@ -626,6 +629,44 @@ async function sendDailyEmail() {
   statusEl.classList.remove('hidden');
   btn.disabled = false;
   btn.textContent = I18n.t('daily.email_send') || 'Send';
+}
+
+// ── Subscribe ─────────────────────────────────────────────────────
+async function subscribeEmail() {
+  const emailEl  = document.getElementById('drEmailInput');
+  const statusEl = document.getElementById('drEmailStatus');
+  const btn      = document.getElementById('drSubBtn');
+  const email    = emailEl.value.trim();
+
+  statusEl.classList.add('hidden');
+  if (!email || !email.includes('@')) {
+    statusEl.textContent = I18n.t('daily.email_error') || 'Invalid email.';
+    statusEl.className = 'text-xs mt-2 text-rose-400';
+    statusEl.classList.remove('hidden'); return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = I18n.t('daily.subscribing') || 'Subscribing…';
+
+  try {
+    const resp   = await fetch('/api/subscribe', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ email, lang: I18n.getLang() }),
+    });
+    const result = await resp.json();
+    if (result.error) throw new Error(result.error);
+    statusEl.textContent = result.already
+      ? (I18n.t('daily.already_subscribed') || '✓ Already subscribed.')
+      : (I18n.t('daily.subscribed') || '✓ Subscribed! You\'ll receive future daily reports.');
+    statusEl.className = 'text-xs mt-2 text-emerald-400';
+    emailEl.value = '';
+  } catch(e) {
+    statusEl.textContent = `${I18n.t('daily.subscribe_error') || 'Subscribe failed.'} (${e.message})`;
+    statusEl.className = 'text-xs mt-2 text-rose-400';
+  }
+  statusEl.classList.remove('hidden');
+  btn.disabled = false;
+  btn.textContent = I18n.t('daily.subscribe') || 'Subscribe';
 }
 
 // Boot

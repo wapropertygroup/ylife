@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Unsubscribe — yStocker{% endblock %}
+
+{% block content %}
+<div class="max-w-md mx-auto mt-16 fade-up">
+  <div class="card text-center py-10 px-8">
+    {% if success %}
+      <!-- Success state -->
+      <div class="w-14 h-14 rounded-full bg-emerald-900/40 border border-emerald-700/50 flex items-center justify-center mx-auto mb-5">
+        <svg class="w-7 h-7 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+        </svg>
+      </div>
+      <h1 class="text-xl font-bold text-slate-100 mb-2" data-i18n="unsub.title_success">Unsubscribed</h1>
+      <p class="text-slate-400 text-sm mb-1" data-i18n="unsub.body_success">You've been removed from the daily report mailing list.</p>
+      {% if email %}
+      <p class="text-slate-600 text-xs mt-1 font-mono">{{ email }}</p>
+      {% endif %}
+      <p class="text-slate-600 text-xs mt-4" data-i18n="unsub.resubscribe_hint">You can re-subscribe any time from the Daily page.</p>
+    {% else %}
+      <!-- Error state -->
+      <div class="w-14 h-14 rounded-full bg-rose-900/40 border border-rose-700/50 flex items-center justify-center mx-auto mb-5">
+        <svg class="w-7 h-7 text-rose-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </div>
+      <h1 class="text-xl font-bold text-slate-100 mb-2" data-i18n="unsub.title_error">Could not unsubscribe</h1>
+      <p class="text-slate-400 text-sm">{{ message or 'Something went wrong.' }}</p>
+    {% endif %}
+
+    <a href="{{ url_for('main.daily_report') }}"
+       class="inline-block mt-8 px-5 py-2.5 text-sm rounded-xl border border-slate-700 text-slate-300 hover:border-brand hover:text-brand transition"
+       data-i18n="unsub.back">Back to Daily Report</a>
+  </div>
+</div>
+{% endblock %}
