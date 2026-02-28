@@ -44,6 +44,19 @@
 
 <div id="drContent" style="display:none">
 
+<!-- ── AI Commentary ──────────────────────────────────────────────── -->
+<div class="card mb-6 fade-up" id="drAiCard">
+  <div class="flex items-center justify-between mb-3">
+    <div class="card-title" style="margin-bottom:0" data-i18n="daily.card_ai">AI Market Commentary</div>
+    <button id="drTranslateBtn" onclick="translateAiSummary()"
+            class="px-3 py-1 text-xs rounded-lg border border-slate-600 text-slate-400 hover:border-brand hover:text-brand transition hidden"
+            data-i18n="daily.translate">Translate</button>
+  </div>
+  <div id="drAiContent" class="text-sm text-slate-300 leading-relaxed">
+    <div class="flex items-center gap-2 text-slate-500 text-sm"><svg class="animate-spin w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24"><circle style="opacity:.25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path style="opacity:.75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/></svg><span data-i18n="daily.thinking">Thinking…</span></div>
+  </div>
+</div>
+
 <!-- ── All Indices Time Series + Sentiment ──────────────────────── -->
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6 fade-up">
   <!-- Indices day-change bar chart (2/3 width) -->
@@ -76,7 +89,7 @@
     </div>
   </div>
   <!-- Current values row -->
-  <div id="drCommodities" class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4"></div>
+  <div id="drCommodities" class="mb-4"></div>
   <!-- Charts row -->
   <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
     <div>
@@ -116,19 +129,6 @@
     <div id="drLosers" class="text-sm text-slate-400">
       <div class="flex items-center gap-2 text-slate-600 text-xs py-2"><svg class="animate-spin w-3 h-3 shrink-0" fill="none" viewBox="0 0 24 24"><circle style="opacity:.25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path style="opacity:.75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/></svg><span data-i18n="daily.loading_short">Loading…</span></div>
     </div>
-  </div>
-</div>
-
-<!-- ── AI Commentary ──────────────────────────────────────────────── -->
-<div class="card mb-6 fade-up" id="drAiCard">
-  <div class="flex items-center justify-between mb-3">
-    <div class="card-title" style="margin-bottom:0" data-i18n="daily.card_ai">AI Market Commentary</div>
-    <button id="drTranslateBtn" onclick="translateAiSummary()"
-            class="px-3 py-1 text-xs rounded-lg border border-slate-600 text-slate-400 hover:border-brand hover:text-brand transition hidden"
-            data-i18n="daily.translate">Translate</button>
-  </div>
-  <div id="drAiContent" class="text-sm text-slate-300 leading-relaxed">
-    <div class="flex items-center gap-2 text-slate-500 text-sm"><svg class="animate-spin w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24"><circle style="opacity:.25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path style="opacity:.75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/></svg><span data-i18n="daily.thinking">Thinking…</span></div>
   </div>
 </div>
 
@@ -367,23 +367,21 @@ async function loadGoldRatios() {
     _goldRatiosData = data;
 
     document.getElementById('drCommodities').innerHTML = `
-      <div class="stat-card">
-        <div class="stat-label text-[11px] text-slate-500 mb-1">${I18n.t('daily.gold') || 'Gold'}</div>
-        <div class="text-lg font-bold text-yellow-300">$${data.gold_price?.toFixed(0) ?? '—'}</div>
+      <div class="idx-row">
+        <span class="text-xs text-slate-400">${I18n.t('daily.gold') || 'Gold'}</span>
+        <span class="text-sm font-semibold text-yellow-300">$${data.gold_price?.toFixed(0) ?? '—'}</span>
       </div>
-      <div class="stat-card">
-        <div class="stat-label text-[11px] text-slate-500 mb-1">${I18n.t('daily.silver') || 'Silver'}</div>
-        <div class="text-lg font-bold text-slate-300">$${data.silver_price?.toFixed(2) ?? '—'}</div>
+      <div class="idx-row">
+        <span class="text-xs text-slate-400">${I18n.t('daily.silver') || 'Silver'}</span>
+        <span class="text-sm font-semibold text-slate-300">$${data.silver_price?.toFixed(2) ?? '—'}</span>
       </div>
-      <div class="stat-card">
-        <div class="stat-label text-[11px] text-slate-500 mb-1">${I18n.t('daily.gold_silver') || 'Gold / Silver'}</div>
-        <div class="text-lg font-bold text-yellow-300">${data.current_gs?.toFixed(1) ?? '—'}</div>
-        <div class="text-xs text-slate-500">${data.gs_day_chg != null ? (data.gs_day_chg >= 0 ? '+' : '') + data.gs_day_chg.toFixed(2) : ''} ${I18n.t('daily.today_chg') || 'today'}</div>
+      <div class="idx-row">
+        <span class="text-xs text-slate-400">${I18n.t('daily.gold_silver') || 'Gold / Silver'}</span>
+        <span class="text-sm font-semibold text-yellow-300">${data.current_gs?.toFixed(1) ?? '—'} ${data.gs_day_chg != null ? _chg(data.gs_day_chg) : ''}</span>
       </div>
-      <div class="stat-card">
-        <div class="stat-label text-[11px] text-slate-500 mb-1">${I18n.t('daily.gold_copper') || 'Gold / Copper'}</div>
-        <div class="text-lg font-bold text-orange-300">${data.current_gc?.toFixed(1) ?? '—'}</div>
-        <div class="text-xs text-slate-500">${data.gc_day_chg != null ? (data.gc_day_chg >= 0 ? '+' : '') + data.gc_day_chg.toFixed(2) : ''} ${I18n.t('daily.today_chg') || 'today'}</div>
+      <div class="idx-row">
+        <span class="text-xs text-slate-400">${I18n.t('daily.gold_copper') || 'Gold / Copper'}</span>
+        <span class="text-sm font-semibold text-orange-300">${data.current_gc?.toFixed(1) ?? '—'} ${data.gc_day_chg != null ? _chg(data.gc_day_chg) : ''}</span>
       </div>`;
 
     renderGoldCharts('6m');
@@ -496,14 +494,20 @@ async function loadEconEvents() {
     const nextLabel  = I18n.t('daily.next_high_impact') || 'Next high-impact events:';
     const labelHtml  = evLabel && evLabel !== todayLabel
       ? `<div class="text-xs text-slate-500 mb-2">${nextLabel} <span class="text-slate-300">${evLabel}</span></div>` : '';
-    evEl.innerHTML = labelHtml + `<div class="space-y-1">` + events.slice(0,15).map(ev => `
+    evEl.innerHTML = labelHtml + `<div class="space-y-1">` + events.slice(0,15).map(ev => {
+      const evName = (I18n.getLang() === 'zh' && ev.zh) ? ev.zh : (ev.event || '');
+      const impLabel = I18n.getLang() === 'zh'
+        ? ({ High: '高', Medium: '中', Low: '低' }[ev.impact] || ev.impact)
+        : ev.impact;
+      return `
       <div class="flex items-center gap-3 py-1.5 border-b border-slate-800/60 last:border-0">
         <span class="text-xs text-slate-500 whitespace-nowrap w-14 shrink-0">${ev.time || '—'}</span>
         <span class="text-xs font-medium text-slate-400 w-7 shrink-0">${ev.country || ''}</span>
-        <span class="text-sm text-slate-200 flex-1">${ev.event || ''}</span>
-        ${ev.impact ? `<span class="text-[10px] font-bold px-1 rounded shrink-0" style="color:${impColor[ev.impact]||'#64748b'}">${ev.impact}</span>` : ''}
+        <span class="text-sm text-slate-200 flex-1">${evName}</span>
+        ${ev.impact ? `<span class="text-[10px] font-bold px-1 rounded shrink-0" style="color:${impColor[ev.impact]||'#64748b'}">${impLabel}</span>` : ''}
         ${ev.actual != null ? `<span class="text-xs font-mono text-emerald-400 shrink-0">${ev.actual}</span>` : ev.forecast != null ? `<span class="text-xs font-mono text-slate-500 shrink-0">est ${ev.forecast}</span>` : ''}
-      </div>`).join('') + `</div>`;
+      </div>`;
+    }).join('') + `</div>`;
   } catch(e) {
     console.warn('Events load failed:', e.message);
   }
