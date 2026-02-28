@@ -1974,14 +1974,15 @@ def _markets_save_to_dynamo(result: dict, ts: float) -> None:
 
 # Yahoo Finance symbols for major indices (US + international)
 _INDEX_SYMBOLS = {
-    "spx":   "^GSPC",     # S&P 500
-    "ixic":  "^IXIC",     # Nasdaq Composite
-    "dji":   "^DJI",      # Dow Jones
-    "ftse":  "^FTSE",     # FTSE 100
-    "n225":  "^N225",     # Nikkei 225
-    "sse":   "000001.SS", # Shanghai Composite
-    "twii":  "^TWII",     # Taiwan Weighted Index
-    "kospi": "^KS11",     # KOSPI
+    "spx":    "^GSPC",     # S&P 500
+    "ixic":   "^IXIC",     # Nasdaq Composite
+    "dji":    "^DJI",      # Dow Jones
+    "ftse":   "^FTSE",     # FTSE 100
+    "n225":   "^N225",     # Nikkei 225
+    "sse":    "000001.SS", # Shanghai Composite
+    "csi500": "000905.SS", # CSI 500 (中证500)
+    "twii":   "^TWII",     # Taiwan Weighted Index
+    "kospi":  "^KS11",     # KOSPI
 }
 
 # SPDR sector ETFs used for sector performance
@@ -3473,8 +3474,9 @@ def api_daily_summary():
                 lines.append(f"Key US economic events: {ev_str}")
 
     else:  # market == "cn"
-        for key, label in [("sse","Shanghai Composite"), ("twii","Taiwan TWII"),
-                           ("kospi","KOSPI"), ("n225","Nikkei 225"), ("ftse","FTSE 100")]:
+        for key, label in [("sse","Shanghai Composite"), ("csi500","CSI 500 (中证500)"),
+                           ("twii","Taiwan TWII"), ("kospi","KOSPI"),
+                           ("n225","Nikkei 225"), ("ftse","FTSE 100")]:
             d = idx.get(key, {})
             if d.get("current"):
                 chg = f"{d['day_chg']:+.2f}%" if d.get("day_chg") is not None else "—"
@@ -3509,14 +3511,15 @@ def api_daily_summary():
         if lang == "zh":
             prompt = (
                 "你是一位简洁的金融分析师。请根据以下数据，用中文撰写一份简短（3-4段）的亚太市场每日评论。"
-                "重点分析上证综指、台湾加权指数、韩国综合指数、日经225及相关亚洲经济事件。"
+                "重点分析上证综指、中证500、台湾加权指数（台指）、韩国综合指数（KOSPI）、日经225、日元汇率、韩元汇率及相关亚洲经济事件。"
                 "语言要直接、有洞察力、保持中立。不要使用Markdown标题。\n\n"
                 f"市场快照：\n{snapshot}"
             )
         else:
             prompt = (
                 "You are a concise financial analyst. Write a brief (3-4 paragraph) daily Asian/Pacific markets commentary "
-                "focusing on Shanghai Composite (SSE), Taiwan Weighted (TWII), KOSPI, Nikkei 225, and "
+                "focusing on Shanghai Composite (SSE), CSI 500 (中证500), Taiwan Weighted Index (TWII), "
+                "KOSPI (South Korea), Nikkei 225 (Japan), JPY/USD, KRW/USD, and "
                 "relevant Asian/European economic events. Be direct, insightful, and neutral. "
                 "Use plain English, no markdown headers.\n\n"
                 f"Market snapshot:\n{snapshot}"
@@ -3743,7 +3746,7 @@ def _build_email_sections(
     IDX_META = [
         ('spx','S&P 500'), ('ixic','NASDAQ'), ('dji','Dow Jones'),
         ('ftse','FTSE 100'), ('n225','Nikkei 225'), ('sse','上证' if is_zh else 'Shanghai'),
-        ('twii','台湾加权' if is_zh else 'Taiwan'), ('kospi','KOSPI'),
+        ('csi500','中证500' if is_zh else 'CSI 500'), ('twii','台湾加权' if is_zh else 'Taiwan'), ('kospi','KOSPI'),
     ]
     idx_rows = ''
     for k, lbl in IDX_META:
