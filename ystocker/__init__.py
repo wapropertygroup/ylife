@@ -72,6 +72,7 @@ def _load_secrets_from_ssm() -> None:
     SSM_PARAMS = {
         "/ystocker/GEMINI_API_KEY":  "GEMINI_API_KEY",
         "/ystocker/YOUTUBE_API_KEY": "YOUTUBE_API_KEY",
+        "/ystocker/SES_FROM_EMAIL":  "SES_FROM_EMAIL",
     }
 
     try:
