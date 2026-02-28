@@ -2709,19 +2709,39 @@ def api_gold_ratios():
 
     try:
         # GC=F gold ($/troy oz), SI=F silver ($/troy oz), HG=F copper ($/lb)
-        raw = yf.download(["GC=F", "SI=F", "HG=F"],
-                          period="2y", interval="1d",
-                          auto_adjust=True, progress=False)["Close"]
+        raw_full = yf.download(["GC=F", "SI=F", "HG=F"],
+                               period="2y", interval="1d",
+                               auto_adjust=True, progress=False)
+
+        # Normalise column structure — yfinance may return MultiIndex or flat columns
+        import pandas as _pd
+        if isinstance(raw_full.columns, _pd.MultiIndex):
+            # Typical structure: ('Close','GC=F'), ('Close','HG=F'), etc.
+            close_cols = raw_full.xs("Close", axis=1, level=0, drop_level=True) \
+                         if "Close" in raw_full.columns.get_level_values(0) \
+                         else raw_full.xs("Close", axis=1, level=1, drop_level=True)
+        else:
+            close_cols = raw_full["Close"] if "Close" in raw_full.columns else raw_full
 
         def _series(sym):
-            col = raw[sym] if sym in raw.columns else raw.get(sym)
-            if col is None:
+            try:
+                if sym in close_cols.columns:
+                    col = close_cols[sym]
+                else:
+                    # Fallback: individual download for missing symbol
+                    single = yf.download(sym, period="2y", interval="1d",
+                                         auto_adjust=True, progress=False)
+                    col = single["Close"] if "Close" in single.columns else single
+                col = col.dropna()
+                if len(col) == 0:
+                    return [], []
+                dates  = [str(d.date()) for d in col.index]
+                prices = [round(float(p), 4) if not _math.isnan(float(p)) else None
+                          for p in col.values]
+                return dates, prices
+            except Exception as exc:
+                log.warning("Gold ratios _series(%r) failed: %s", sym, exc)
                 return [], []
-            col = col.dropna()
-            dates  = [str(d.date()) for d in col.index]
-            prices = [round(float(p), 4) if not _math.isnan(float(p)) else None
-                      for p in col.values]
-            return dates, prices
 
         gold_dates,   gold_prices   = _series("GC=F")
         silver_dates, silver_prices = _series("SI=F")
@@ -3324,7 +3344,7 @@ def api_daily_summary():
     """
     Generate an AI-written daily markets summary using Gemini.
 
-    Request body: { market_data: {...} }
+    Request body: { market_data: {...}, lang: "en"|"zh" }
     Response:     { summary: "...", generated_at: "..." }
     """
     from datetime import date as _date_cls
@@ -3334,12 +3354,16 @@ def api_daily_summary():
     if not GEMINI_API_KEY:
         return jsonify({"error": "GEMINI_API_KEY not configured"}), 503
 
+    payload = request.get_json(silent=True) or {}
+    lang    = payload.get("lang", "en")
+    if lang not in ("en", "zh"):
+        lang = "en"
+
     with _DAILY_SUMMARY_CACHE_LOCK:
-        entry = _DAILY_SUMMARY_CACHE.get("data")
+        entry = _DAILY_SUMMARY_CACHE.get(lang)
         if entry and _time.time() - entry["ts"] < _DAILY_SUMMARY_CACHE_TTL:
             return jsonify(entry["data"])
 
-    payload = request.get_json(silent=True) or {}
     md = payload.get("market_data", {})
 
     # Build a compact text snapshot from the provided market data
@@ -3390,12 +3414,20 @@ def api_daily_summary():
 
     snapshot = "\n".join(lines)
 
-    prompt = (
-        "You are a concise financial analyst. Write a brief (3-4 paragraph) daily markets commentary "
-        "based on the data below. Be direct, insightful, and neutral. Focus on the most important "
-        "signals and what they might mean for investors today. Use plain English, no markdown headers.\n\n"
-        f"Market snapshot:\n{snapshot}"
-    )
+    if lang == "zh":
+        prompt = (
+            "你是一位简洁的金融分析师。请根据以下数据，用中文撰写一份简短（3-4段）的每日市场评论。"
+            "语言要直接、有洞察力、保持中立。聚焦最重要的信号及其对今日投资者的意义。"
+            "使用通俗中文，不要使用Markdown标题。\n\n"
+            f"市场快照：\n{snapshot}"
+        )
+    else:
+        prompt = (
+            "You are a concise financial analyst. Write a brief (3-4 paragraph) daily markets commentary "
+            "based on the data below. Be direct, insightful, and neutral. Focus on the most important "
+            "signals and what they might mean for investors today. Use plain English, no markdown headers.\n\n"
+            f"Market snapshot:\n{snapshot}"
+        )
 
     try:
         from google import genai
@@ -3412,8 +3444,101 @@ def api_daily_summary():
         "generated_at": _dt.utcnow().strftime("%Y-%m-%d %H:%M UTC"),
     }
     with _DAILY_SUMMARY_CACHE_LOCK:
-        _DAILY_SUMMARY_CACHE["data"] = {"ts": _time.time(), "data": result}
+        _DAILY_SUMMARY_CACHE[lang] = {"ts": _time.time(), "data": result}
     return jsonify(result)
+
+
+# ---------------------------------------------------------------------------
+# Send Daily Report Email via AWS SES  (/api/send-daily-email)
+# ---------------------------------------------------------------------------
+
+@bp.route("/api/send-daily-email", methods=["POST"])
+def api_send_daily_email():
+    """
+    Send today's market summary to a user-provided email via AWS SES.
+
+    Request body: { email: "...", summary: "...", lang: "en"|"zh" }
+    Response:     { ok: true } or { error: "..." }
+    """
+    SES_FROM = os.environ.get("SES_FROM_EMAIL")
+    if not SES_FROM:
+        return jsonify({"error": "SES_FROM_EMAIL not configured"}), 503
+
+    payload = request.get_json(silent=True) or {}
+    email   = (payload.get("email") or "").strip()
+    summary = (payload.get("summary") or "").strip()
+    lang    = payload.get("lang", "en")
+
+    if not email or "@" not in email:
+        return jsonify({"error": "Invalid email address"}), 400
+    if not summary:
+        return jsonify({"error": "No summary to send — generate the AI summary first"}), 400
+
+    from datetime import date as _date_cls
+    today_str = _date_cls.today().strftime("%B %d, %Y")
+
+    if lang == "zh":
+        subject   = f"yStocker 每日市场报告 — {today_str}"
+        header    = "每日市场报告"
+        footer    = "本报告由 yStocker 自动生成。数据来自 Yahoo Finance、CBOE 及美联储。"
+        unsubscribe_note = "您收到此邮件是因为您在 yStocker 手动请求发送。"
+    else:
+        subject   = f"yStocker Daily Markets Report — {today_str}"
+        header    = "Daily Markets Report"
+        footer    = "This report is auto-generated by yStocker. Data sourced from Yahoo Finance, CBOE, and the Federal Reserve."
+        unsubscribe_note = "You received this because you manually requested it on yStocker."
+
+    # Format summary paragraphs as HTML
+    paras_html = "".join(
+        f'<p style="margin:0 0 14px 0;color:#cbd5e1;line-height:1.7">{p.strip()}</p>'
+        for p in summary.split("\n\n") if p.strip()
+    )
+
+    html_body = f"""<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{subject}</title></head>
+<body style="margin:0;padding:0;background:#0f172a;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#0f172a;padding:32px 16px">
+    <tr><td align="center">
+      <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#1e293b;border-radius:16px;overflow:hidden">
+        <tr><td style="background:linear-gradient(135deg,#1d4ed8,#7c3aed);padding:28px 32px">
+          <h1 style="margin:0;color:#fff;font-size:22px;font-weight:700">yStocker</h1>
+          <p style="margin:6px 0 0;color:#bfdbfe;font-size:15px">{header}</p>
+          <p style="margin:4px 0 0;color:#93c5fd;font-size:13px">{today_str}</p>
+        </td></tr>
+        <tr><td style="padding:28px 32px">
+          {paras_html}
+        </td></tr>
+        <tr><td style="padding:16px 32px 28px;border-top:1px solid #334155">
+          <p style="margin:0;color:#64748b;font-size:12px;line-height:1.6">{footer}</p>
+          <p style="margin:8px 0 0;color:#475569;font-size:11px">{unsubscribe_note}</p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body></html>"""
+
+    text_body = f"{header} — {today_str}\n\n{summary}\n\n{footer}"
+
+    try:
+        import boto3
+        ses = boto3.client("ses", region_name="us-east-1")
+        ses.send_email(
+            Source=SES_FROM,
+            Destination={"ToAddresses": [email]},
+            Message={
+                "Subject": {"Data": subject,   "Charset": "UTF-8"},
+                "Body": {
+                    "Html": {"Data": html_body,  "Charset": "UTF-8"},
+                    "Text": {"Data": text_body,  "Charset": "UTF-8"},
+                },
+            },
+        )
+        log.info("Daily summary email sent to %s (lang=%s)", email, lang)
+        return jsonify({"ok": True})
+    except Exception as exc:
+        log.warning("SES send_email failed: %s", exc)
+        return jsonify({"error": str(exc)}), 500
 
 
 # ---------------------------------------------------------------------------

@@ -10,19 +10,27 @@
   .up   { color:#34d399; }
   .down { color:#f87171; }
   .neutral { color:#94a3b8; }
+  .range-btn { padding:2px 9px; border-radius:6px; font-size:11px; font-weight:600; border:1px solid #334155; color:#94a3b8; background:transparent; cursor:pointer; transition:all .15s; }
+  .range-btn.active, .range-btn:hover { border-color:#6366f1; color:#a5b4fc; background:#6366f11a; }
+  .metric-chip { background:#0f172a; border:1px solid #1e293b; border-radius:10px; padding:10px 14px; }
+  .metric-chip .lbl { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:#475569; margin-bottom:4px; }
+  .metric-chip .val { font-size:20px; font-weight:800; tabular-nums; }
+  .metric-chip .sub { font-size:11px; color:#64748b; margin-top:2px; }
+  .stat-card  { background:#0f172a; border:1px solid #1e293b; border-radius:10px; padding:10px 12px; }
+  .stat-label { font-size:11px; color:#64748b; margin-bottom:4px; }
+  .stat-val   { font-size:16px; font-weight:700; color:#f1f5f9; }
 </style>
 
 <!-- Header -->
-<div class="mb-6 fade-up flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+<div class="mb-5 fade-up flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
   <div>
-    <h1 class="text-2xl sm:text-3xl font-bold grad-text">Daily Markets Report</h1>
-    <p class="text-slate-400 mt-1 text-sm" id="reportDate">Loading…</p>
+    <h1 class="text-2xl sm:text-3xl font-bold grad-text" data-i18n="daily.title">Daily Markets Report</h1>
+    <p class="text-slate-400 mt-1 text-sm" id="reportDate"></p>
   </div>
   <button onclick="location.reload()"
           class="px-4 py-2 text-sm rounded-xl border border-slate-700 text-slate-300
-                 hover:border-brand hover:text-brand transition shrink-0">
-    Refresh
-  </button>
+                 hover:border-brand hover:text-brand transition shrink-0"
+          data-i18n="daily.refresh">Refresh</button>
 </div>
 
 <!-- Loading -->
@@ -31,299 +39,461 @@
     <circle style="opacity:.25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
     <path style="opacity:.75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/>
   </svg>
-  <span>Loading market data…</span>
+  <span data-i18n="daily.loading">Loading market data…</span>
 </div>
 
 <div id="drContent" style="display:none">
 
-<!-- ── Index Snapshot ─────────────────────────────────────────────── -->
+<!-- ── All Indices Time Series + Sentiment ──────────────────────── -->
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6 fade-up">
-  <!-- US Indices -->
-  <div class="card">
-    <div class="card-title">US Indices</div>
-    <div id="drUsIndices"></div>
+  <!-- Indices day-change bar chart (2/3 width) -->
+  <div class="card lg:col-span-2">
+    <div class="card-title" data-i18n="daily.card_indices_chg">Indices — Daily Change</div>
+    <div class="chart-container" style="height:220px"><canvas id="indicesLineChart"></canvas></div>
   </div>
-  <!-- Asia/Europe Indices -->
+  <!-- Sentiment (1/3 width) -->
   <div class="card">
-    <div class="card-title">Asia / Europe</div>
-    <div id="drIntlIndices"></div>
-  </div>
-  <!-- Sentiment -->
-  <div class="card">
-    <div class="card-title">Sentiment</div>
+    <div class="card-title" data-i18n="daily.card_sentiment">Sentiment</div>
     <div id="drSentiment"></div>
   </div>
 </div>
 
 <!-- ── Sector Performance ─────────────────────────────────────────── -->
 <div class="card mb-6 fade-up">
-  <div class="card-title">Sector Performance (Day Change)</div>
+  <div class="card-title" data-i18n="daily.card_sectors">Sector Performance (Day Change)</div>
   <div id="drSectors" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2"></div>
 </div>
 
-<!-- ── Gold Ratios ────────────────────────────────────────────────── -->
+<!-- ── Commodity Ratios (with charts) ────────────────────────────── -->
 <div class="card mb-6 fade-up">
-  <div class="card-title">Commodity Ratios</div>
-  <div id="drCommodities" class="grid grid-cols-2 sm:grid-cols-4 gap-3"></div>
+  <div class="flex items-center justify-between mb-3">
+    <div class="card-title" style="margin-bottom:0" data-i18n="daily.card_commodities">Commodity Ratios</div>
+    <div class="flex gap-1" id="commodityRangeBtns">
+      <button class="range-btn" data-range="1m">1M</button>
+      <button class="range-btn active" data-range="6m">6M</button>
+      <button class="range-btn" data-range="1y">1Y</button>
+      <button class="range-btn" data-range="2y">2Y</button>
+    </div>
+  </div>
+  <!-- Current values row -->
+  <div id="drCommodities" class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4"></div>
+  <!-- Charts row -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+    <div>
+      <div class="text-xs text-slate-500 mb-2 font-semibold" data-i18n="daily.gold_silver">Gold / Silver</div>
+      <div class="chart-container" style="height:140px"><canvas id="gsChart"></canvas></div>
+    </div>
+    <div>
+      <div class="text-xs text-slate-500 mb-2 font-semibold" data-i18n="daily.gold_copper">Gold / Copper</div>
+      <div class="chart-container" style="height:140px"><canvas id="gcChart"></canvas></div>
+    </div>
+  </div>
 </div>
 
-<!-- ── Put/Call Ratio + AAII + VIX ───────────────────────────────── -->
+<!-- ── Put/Call + VIX + Fear & Greed ─────────────────────────────── -->
 <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6 fade-up">
-  <div class="card"><div class="card-title">VIX</div><div id="drVix"></div></div>
-  <div class="card"><div class="card-title">Put/Call Ratio</div><div id="drPcr"></div></div>
-  <div class="card"><div class="card-title">Fear &amp; Greed</div><div id="drFg"></div></div>
+  <div class="card"><div class="card-title" data-i18n="daily.card_vix">VIX</div><div id="drVix"></div></div>
+  <div class="card"><div class="card-title" data-i18n="daily.card_pcr">Put/Call Ratio</div><div id="drPcr"></div></div>
+  <div class="card"><div class="card-title" data-i18n="daily.card_fg">Fear &amp; Greed</div><div id="drFg"></div></div>
 </div>
 
-<!-- ── Economic Events Today ─────────────────────────────────────── -->
+<!-- ── Economic Events ─────────────────────────────────────────────── -->
 <div class="card mb-6 fade-up">
-  <div class="card-title">Economic Events</div>
+  <div class="card-title" data-i18n="daily.card_events">Economic Events</div>
   <div id="drEvents" class="text-sm text-slate-400"></div>
 </div>
 
 <!-- ── Top Movers ─────────────────────────────────────────────────── -->
 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6 fade-up">
   <div class="card">
-    <div class="card-title">Top Gainers</div>
+    <div class="card-title" data-i18n="daily.card_gainers">Top Gainers</div>
     <div id="drGainers" class="text-sm text-slate-400">
-      <div class="flex items-center gap-2 text-slate-600 text-xs py-2"><svg class="animate-spin w-3 h-3 shrink-0" fill="none" viewBox="0 0 24 24"><circle style="opacity:.25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path style="opacity:.75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/></svg>Loading…</div>
+      <div class="flex items-center gap-2 text-slate-600 text-xs py-2"><svg class="animate-spin w-3 h-3 shrink-0" fill="none" viewBox="0 0 24 24"><circle style="opacity:.25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path style="opacity:.75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/></svg><span data-i18n="daily.loading_short">Loading…</span></div>
     </div>
   </div>
   <div class="card">
-    <div class="card-title">Top Losers</div>
+    <div class="card-title" data-i18n="daily.card_losers">Top Losers</div>
     <div id="drLosers" class="text-sm text-slate-400">
-      <div class="flex items-center gap-2 text-slate-600 text-xs py-2"><svg class="animate-spin w-3 h-3 shrink-0" fill="none" viewBox="0 0 24 24"><circle style="opacity:.25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path style="opacity:.75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/></svg>Loading…</div>
+      <div class="flex items-center gap-2 text-slate-600 text-xs py-2"><svg class="animate-spin w-3 h-3 shrink-0" fill="none" viewBox="0 0 24 24"><circle style="opacity:.25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path style="opacity:.75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/></svg><span data-i18n="daily.loading_short">Loading…</span></div>
     </div>
   </div>
 </div>
 
-<!-- ── AI Summary ──────────────────────────────────────────────────── -->
+<!-- ── AI Commentary ──────────────────────────────────────────────── -->
 <div class="card mb-6 fade-up" id="drAiCard">
   <div class="flex items-center justify-between mb-3">
-    <div class="card-title" style="margin-bottom:0">AI Market Commentary</div>
-    <button id="drAiBtn" onclick="generateAiSummary()"
-            class="px-3 py-1 text-xs rounded-lg border border-brand/50 text-brand hover:bg-brand/10 transition">
-      Generate
-    </button>
+    <div class="card-title" style="margin-bottom:0" data-i18n="daily.card_ai">AI Market Commentary</div>
+    <button id="drTranslateBtn" onclick="translateAiSummary()"
+            class="px-3 py-1 text-xs rounded-lg border border-slate-600 text-slate-400 hover:border-brand hover:text-brand transition hidden"
+            data-i18n="daily.translate">Translate</button>
   </div>
   <div id="drAiContent" class="text-sm text-slate-300 leading-relaxed">
-    <span class="text-slate-600">Click "Generate" for an AI-written market summary.</span>
+    <div class="flex items-center gap-2 text-slate-500 text-sm"><svg class="animate-spin w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24"><circle style="opacity:.25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path style="opacity:.75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/></svg><span data-i18n="daily.thinking">Thinking…</span></div>
   </div>
+</div>
+
+<!-- ── Email This Report ──────────────────────────────────────────── -->
+<div class="card mb-6 fade-up">
+  <div class="card-title" data-i18n="daily.email_title">Email This Report</div>
+  <p class="text-xs text-slate-500 mb-3" data-i18n="daily.email_desc">Get today's market summary delivered to your inbox.</p>
+  <div class="flex gap-2">
+    <input id="drEmailInput" type="email"
+           class="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200
+                  placeholder-slate-600 focus:outline-none focus:border-brand transition"
+           data-i18n-placeholder="daily.email_ph"
+           placeholder="your@email.com">
+    <button id="drEmailBtn" onclick="sendDailyEmail()"
+            class="px-4 py-2 text-sm rounded-lg border border-brand/50 text-brand hover:bg-brand/10 transition shrink-0"
+            data-i18n="daily.email_send">Send</button>
+  </div>
+  <p id="drEmailStatus" class="text-xs mt-2 hidden"></p>
 </div>
 
 </div><!-- /drContent -->
 
 <script>
 const GRID_COL = '#1e293b', TICK_COL = '#64748b';
+let _goldRatiosData     = null;
+let _latestMarketData   = null;
+let _latestSentiment    = {};
+let _latestEvents       = [];
+let _moversData         = null;
+let _latestSummaryText  = '';
+let _summaryLang        = '';
+let _indicesLineChart   = null;
+let _loadsDone = 0;
+const _LOADS_NEEDED = 4; // markets, sentiment, gold, events (movers is bonus)
 
 function _chg(v, dec=2) {
   if (v == null) return '<span class="neutral">—</span>';
   const cls = v >= 0 ? 'up' : 'down';
-  const sign = v >= 0 ? '+' : '';
-  return `<span class="${cls}">${sign}${v.toFixed(dec)}%</span>`;
+  return `<span class="${cls}">${v >= 0 ? '+' : ''}${v.toFixed(dec)}%</span>`;
+}
+function _val(v, dec=2) {
+  if (v == null) return '<span class="neutral">—</span>';
+  return v.toLocaleString(undefined, {minimumFractionDigits:dec, maximumFractionDigits:dec});
+}
+function _fgColor(r) {
+  const lo = (r||'').toLowerCase();
+  if (lo.includes('extreme fear'))  return '#ef4444';
+  if (lo.includes('fear'))          return '#f87171';
+  if (lo.includes('extreme greed')) return '#10b981';
+  if (lo.includes('greed'))         return '#34d399';
+  return '#94a3b8';
 }
 
-function _val(v, dec=2, prefix='') {
-  if (v == null) return '<span class="neutral">—</span>';
-  return prefix + v.toLocaleString(undefined, {minimumFractionDigits:dec, maximumFractionDigits:dec});
+// Track loads and auto-trigger AI when ready
+function _onLoadDone() {
+  _loadsDone++;
+  if (_loadsDone >= _LOADS_NEEDED) {
+    document.getElementById('drContent').style.display = '';
+    document.getElementById('drLoading').style.display = 'none';
+    generateAiSummary();
+  }
 }
 
 // ── Markets data ──────────────────────────────────────────────────
 async function loadMarkets() {
   const resp = await fetch('/api/markets');
   const data = await resp.json();
-  const idx = data.indices || {};
-  const now = new Date();
+  const idx  = data.indices || {};
+  const now  = new Date();
   document.getElementById('reportDate').textContent =
     now.toLocaleDateString(undefined, { weekday:'long', year:'numeric', month:'long', day:'numeric' });
 
-  // US indices
-  const us = ['spx','ixic','dji'];
-  const usLabels = { spx:'S&P 500', ixic:'Nasdaq', dji:'Dow Jones' };
-  document.getElementById('drUsIndices').innerHTML = us.map(k => {
-    const d = idx[k] || {};
-    return `<div class="idx-row">
-      <span class="text-sm font-semibold text-slate-200">${usLabels[k]}</span>
-      <div class="text-right">
-        <div class="text-sm font-mono text-slate-100">${_val(d.current,2)}</div>
-        <div class="text-xs">${_chg(d.day_chg)}</div>
-      </div>
-    </div>`;
-  }).join('');
+  _latestMarketData = data;
 
-  // Intl indices
-  const intl = ['ftse','n225','sse','twii','kospi'];
-  const intlLabels = { ftse:'FTSE 100', n225:'Nikkei 225', sse:'Shanghai', twii:'Taiwan', kospi:'KOSPI' };
-  document.getElementById('drIntlIndices').innerHTML = intl.map(k => {
-    const d = idx[k] || {};
-    return `<div class="idx-row">
-      <span class="text-sm font-semibold text-slate-200">${intlLabels[k]}</span>
-      <div class="text-right">
-        <div class="text-sm font-mono text-slate-100">${_val(d.current,2)}</div>
-        <div class="text-xs">${_chg(d.day_chg)}</div>
-      </div>
-    </div>`;
-  }).join('');
-
-  // VIX
-  const vix = data.vix || {};
-  document.getElementById('drVix').innerHTML = vix.current != null ? `
-    <div class="text-3xl font-bold tabular-nums ${vix.current >= 30 ? 'text-rose-400' : vix.current >= 20 ? 'text-orange-400' : 'text-emerald-400'}">
-      ${vix.current?.toFixed(2)}
-    </div>
-    <div class="text-xs text-slate-500 mt-1">Day change: ${_chg(vix.day_chg)}</div>
-    <div class="text-xs text-slate-600 mt-1">${vix.current < 15 ? 'Calm' : vix.current < 20 ? 'Normal' : vix.current < 30 ? 'Elevated' : 'Extreme Fear'}</div>
-  ` : '<div class="text-slate-600 text-sm">—</div>';
+  // Indices day-change bar chart
+  renderIndicesLineChart();
 
   // Sectors
   const sectors = (data.sectors || []).sort((a,b) => (b.day_chg ?? -999) - (a.day_chg ?? -999));
   document.getElementById('drSectors').innerHTML = sectors.map(s => {
     const col = s.day_chg == null ? '#475569' : s.day_chg >= 0 ? '#34d399' : '#f87171';
+    const label = I18n.t('markets.sector.' + s.label) || s.label;
     return `<div class="bg-slate-800/50 rounded-xl p-2.5 text-center">
-      <div class="text-xs text-slate-400 mb-1 truncate">${s.label}</div>
+      <div class="text-xs text-slate-400 mb-1 truncate">${label}</div>
       <div class="text-sm font-bold" style="color:${col}">${s.day_chg != null ? (s.day_chg >= 0 ? '+' : '') + s.day_chg.toFixed(2) + '%' : '—'}</div>
     </div>`;
   }).join('');
 
-  document.getElementById('drContent').style.display = '';
-  document.getElementById('drLoading').style.display = 'none';
-  _latestMarketData = data;
+  // VIX card
+  const vix = data.vix || {};
+  const vixLevel = vix.current;
+  let vixLabel = '', vixCol = '';
+  if (vixLevel != null) {
+    if (vixLevel < 15)      { vixLabel = I18n.t('markets.vix_calm')    || 'Calm';     vixCol = '#34d399'; }
+    else if (vixLevel < 20) { vixLabel = I18n.t('markets.vix_normal')  || 'Normal';   vixCol = '#a5b4fc'; }
+    else if (vixLevel < 30) { vixLabel = I18n.t('markets.vix_elevated')|| 'Elevated'; vixCol = '#fb923c'; }
+    else                    { vixLabel = I18n.t('markets.vix_extreme')  || 'Extreme';  vixCol = '#f87171'; }
+  }
+  document.getElementById('drVix').innerHTML = vixLevel != null ? `
+    <div class="text-3xl font-bold tabular-nums" style="color:${vixCol}">${vixLevel.toFixed(2)}</div>
+    <div class="text-xs text-slate-500 mt-1">${I18n.t('daily.day_chg_label') || 'Day change:'} ${_chg(vix.day_chg)}</div>
+    <div class="text-xs mt-1" style="color:${vixCol}">${vixLabel}</div>
+  ` : '<div class="text-slate-600 text-sm">—</div>';
+
+  _onLoadDone();
 }
 
-// ── Helpers ───────────────────────────────────────────────────────
-function _fgColor(r) {
-  const lo = (r||'').toLowerCase();
-  if (lo.includes('extreme fear')) return '#ef4444';
-  if (lo.includes('fear'))         return '#f87171';
-  if (lo.includes('extreme greed'))return '#10b981';
-  if (lo.includes('greed'))        return '#34d399';
-  return '#94a3b8';
+// ── Indices daily-change bar chart ────────────────────────────────
+const IDX_COLORS = {
+  spx:'#6366f1', ixic:'#8b5cf6', dji:'#a78bfa',
+  ftse:'#34d399', n225:'#fbbf24', sse:'#f87171', twii:'#fb923c', kospi:'#38bdf8',
+};
+
+function renderIndicesLineChart() {
+  if (!_latestMarketData) return;
+  const idx  = _latestMarketData.indices || {};
+  const keys = ['spx','ixic','dji','ftse','n225','sse','twii','kospi'];
+
+  const labels = [], values = [], bgColors = [];
+  for (const k of keys) {
+    const d = idx[k] || {};
+    if (d.day_chg == null) continue;
+    labels.push(I18n.t('markets.tab_' + k) || k.toUpperCase());
+    values.push(parseFloat(d.day_chg.toFixed(2)));
+    bgColors.push(d.day_chg >= 0 ? '#34d39980' : '#f8717180');
+  }
+
+  if (_indicesLineChart) { _indicesLineChart.destroy(); _indicesLineChart = null; }
+  const canvas = document.getElementById('indicesLineChart');
+  if (!canvas || !values.length) return;
+
+  _indicesLineChart = new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        data: values,
+        backgroundColor: bgColors,
+        borderColor: bgColors.map(c => c.slice(0, 7)),
+        borderWidth: 1,
+        borderRadius: 4,
+        borderSkipped: false,
+      }],
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => ` ${ctx.parsed.x >= 0 ? '+' : ''}${ctx.parsed.x.toFixed(2)}%` } },
+      },
+      scales: {
+        x: {
+          grid: { color: GRID_COL },
+          ticks: { color: TICK_COL, font: { size: 9 }, callback: v => (v >= 0 ? '+' : '') + v.toFixed(1) + '%' },
+        },
+        y: { grid: { display: false }, ticks: { color: '#cbd5e1', font: { size: 10 } } },
+      },
+    },
+  });
 }
 
 // ── Sentiment data ────────────────────────────────────────────────
 async function loadSentiment() {
-  // Fetch all three independently — one failure should not block others
   const [fgResult, pcrResult, aaiiResult] = await Promise.allSettled([
     fetch('/api/fear-greed').then(r => r.json()),
     fetch('/api/put-call-ratio').then(r => r.json()),
     fetch('/api/aaii-sentiment').then(r => r.json()),
   ]);
-
   const fgResp   = fgResult.status   === 'fulfilled' ? fgResult.value   : {};
   const pcrResp  = pcrResult.status  === 'fulfilled' ? pcrResult.value  : {};
   const aaiiResp = aaiiResult.status === 'fulfilled' ? aaiiResult.value : {};
 
-  // Fear & Greed
+  // Fear & Greed card
   const fgScore = fgResp.score != null ? Math.round(fgResp.score) : null;
   document.getElementById('drFg').innerHTML = fgScore != null ? `
     <div class="text-3xl font-bold tabular-nums" style="color:${_fgColor(fgResp.rating)}">${fgScore}</div>
     <div class="text-xs mt-1" style="color:${_fgColor(fgResp.rating)}">${fgResp.rating || ''}</div>
   ` : '<div class="text-slate-600 text-sm">—</div>';
 
-  // PCR
+  // PCR card
   const pcrVal = pcrResp.current ?? null;
-  const pcrSig = pcrVal == null ? '' : pcrVal < 0.6 ? 'Bullish' : pcrVal < 0.8 ? 'Neutral' : 'Bearish';
-  const pcrCol = pcrVal == null ? '#94a3b8' : pcrVal < 0.6 ? '#34d399' : pcrVal < 0.8 ? '#94a3b8' : '#f87171';
+  let pcrSig = '', pcrCol = '#94a3b8';
+  if (pcrVal != null) {
+    if (pcrVal < 0.6)      { pcrSig = I18n.t('markets.pcr_bullish') || 'Bullish'; pcrCol = '#34d399'; }
+    else if (pcrVal < 0.8) { pcrSig = I18n.t('markets.pcr_neutral') || 'Neutral'; pcrCol = '#94a3b8'; }
+    else                   { pcrSig = I18n.t('markets.pcr_bearish') || 'Bearish'; pcrCol = '#f87171'; }
+  }
   document.getElementById('drPcr').innerHTML = pcrVal != null ? `
     <div class="text-3xl font-bold tabular-nums" style="color:${pcrCol}">${pcrVal.toFixed(2)}</div>
     <div class="text-xs mt-1" style="color:${pcrCol}">${pcrSig}</div>
-    <div class="text-xs text-slate-500 mt-1">20-day MA: ${pcrResp.ma20?.toFixed(2) ?? '—'}</div>
+    <div class="text-xs text-slate-500 mt-1">${I18n.t('daily.ma20_label') || '20-day MA:'} ${pcrResp.ma20?.toFixed(2) ?? '—'}</div>
   ` : '<div class="text-slate-600 text-sm">—</div>';
 
-  // Sentiment (AAII + FG combined in one card)
-  const latest = (aaiiResp.latest) || {};
+  // Sentiment card (AAII + FG + PCR combined)
+  const latest = aaiiResp.latest || {};
   const spread = latest.bull_bear_spread ?? null;
   document.getElementById('drSentiment').innerHTML = `
-    <div class="space-y-2">
+    <div class="space-y-1.5">
       <div class="idx-row">
-        <span class="text-xs text-slate-400">AAII Bull</span>
+        <span class="text-xs text-slate-400">${I18n.t('daily.aaii_bull') || 'AAII Bull'}</span>
         <span class="text-sm font-semibold text-emerald-400">${latest.bullish?.toFixed(1) ?? '—'}%</span>
       </div>
       <div class="idx-row">
-        <span class="text-xs text-slate-400">AAII Bear</span>
+        <span class="text-xs text-slate-400">${I18n.t('daily.aaii_bear') || 'AAII Bear'}</span>
         <span class="text-sm font-semibold text-rose-400">${latest.bearish?.toFixed(1) ?? '—'}%</span>
       </div>
       <div class="idx-row">
-        <span class="text-xs text-slate-400">Bull-Bear Spread</span>
+        <span class="text-xs text-slate-400">${I18n.t('daily.aaii_spread') || 'Bull-Bear Spread'}</span>
         <span class="text-sm font-semibold ${spread == null ? 'neutral' : spread >= 0 ? 'up' : 'down'}">
           ${spread != null ? (spread >= 0 ? '+' : '') + spread.toFixed(1) + '%' : '—'}
         </span>
       </div>
       <div class="idx-row">
-        <span class="text-xs text-slate-400">PCR</span>
+        <span class="text-xs text-slate-400">${I18n.t('daily.pcr_label') || 'PCR'}</span>
         <span class="text-sm font-semibold" style="color:${pcrCol}">${pcrVal != null ? pcrVal.toFixed(2) : '—'}</span>
       </div>
       <div class="idx-row">
-        <span class="text-xs text-slate-400">Fear &amp; Greed</span>
+        <span class="text-xs text-slate-400">${I18n.t('daily.fg_label') || 'Fear & Greed'}</span>
         <span class="text-sm font-semibold" style="color:${_fgColor(fgResp.rating)}">${fgScore ?? '—'}</span>
       </div>
     </div>`;
-  // Store for AI summary
+
   _latestSentiment = { fg: fgResp, pcr: pcrResp, aaii: latest };
+  _onLoadDone();
 }
 
 // ── Gold Ratios ───────────────────────────────────────────────────
 async function loadGoldRatios() {
   try {
     const data = await fetch('/api/gold-ratios').then(r => r.json());
-    if (data.error) return;
+    if (data.error) { _onLoadDone(); return; }
+    _goldRatiosData = data;
+
     document.getElementById('drCommodities').innerHTML = `
       <div class="stat-card">
-        <div class="stat-label text-[11px] text-slate-500 mb-1">Gold</div>
+        <div class="stat-label text-[11px] text-slate-500 mb-1">${I18n.t('daily.gold') || 'Gold'}</div>
         <div class="text-lg font-bold text-yellow-300">$${data.gold_price?.toFixed(0) ?? '—'}</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label text-[11px] text-slate-500 mb-1">Silver</div>
+        <div class="stat-label text-[11px] text-slate-500 mb-1">${I18n.t('daily.silver') || 'Silver'}</div>
         <div class="text-lg font-bold text-slate-300">$${data.silver_price?.toFixed(2) ?? '—'}</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label text-[11px] text-slate-500 mb-1">Gold / Silver</div>
+        <div class="stat-label text-[11px] text-slate-500 mb-1">${I18n.t('daily.gold_silver') || 'Gold / Silver'}</div>
         <div class="text-lg font-bold text-yellow-300">${data.current_gs?.toFixed(1) ?? '—'}</div>
-        <div class="text-xs text-slate-500">${data.gs_day_chg != null ? (data.gs_day_chg >= 0 ? '+' : '') + data.gs_day_chg.toFixed(2) : ''} today</div>
+        <div class="text-xs text-slate-500">${data.gs_day_chg != null ? (data.gs_day_chg >= 0 ? '+' : '') + data.gs_day_chg.toFixed(2) : ''} ${I18n.t('daily.today_chg') || 'today'}</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label text-[11px] text-slate-500 mb-1">Gold / Copper</div>
+        <div class="stat-label text-[11px] text-slate-500 mb-1">${I18n.t('daily.gold_copper') || 'Gold / Copper'}</div>
         <div class="text-lg font-bold text-orange-300">${data.current_gc?.toFixed(1) ?? '—'}</div>
-        <div class="text-xs text-slate-500">${data.gc_day_chg != null ? (data.gc_day_chg >= 0 ? '+' : '') + data.gc_day_chg.toFixed(2) : ''} today</div>
+        <div class="text-xs text-slate-500">${data.gc_day_chg != null ? (data.gc_day_chg >= 0 ? '+' : '') + data.gc_day_chg.toFixed(2) : ''} ${I18n.t('daily.today_chg') || 'today'}</div>
       </div>`;
+
+    renderGoldCharts('6m');
   } catch(e) {
     console.warn('Gold ratios load failed:', e.message);
   }
+  _onLoadDone();
 }
+
+function _sliceByRange(dates, values, range) {
+  const n = dates.length;
+  const cutMap = { '1m': 21, '6m': 126, '1y': 252, '2y': n };
+  const cut = cutMap[range] || n;
+  return { dates: dates.slice(-cut), values: values.slice(-cut) };
+}
+
+function _avg(arr) {
+  const valid = arr.filter(v => v != null);
+  return valid.length ? valid.reduce((a,b) => a+b, 0) / valid.length : null;
+}
+
+function _sma(values, period) {
+  return values.map((_, i) => {
+    if (i < period - 1) return null;
+    const slice = values.slice(i - period + 1, i + 1).filter(v => v != null);
+    return slice.length >= Math.floor(period * 0.6)
+      ? parseFloat((slice.reduce((a,b) => a+b, 0) / slice.length).toFixed(3))
+      : null;
+  });
+}
+
+function renderGoldCharts(range) {
+  if (!_goldRatiosData) return;
+  const { dates: allDates, gs_ratio, gc_ratio } = _goldRatiosData;
+  const gs = _sliceByRange(allDates, gs_ratio, range);
+  const gc = _sliceByRange(allDates, gc_ratio, range);
+
+  const mkChart = (canvasId, which, slicedDates, slicedVals, color) => {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    const existing = Chart.getChart(canvas);
+    if (existing) existing.destroy();
+    const label    = which === 'gs' ? (I18n.t('daily.gold_silver') || 'G/S') : (I18n.t('daily.gold_copper') || 'G/C');
+    const maLabel  = I18n.t('daily.ma20_label') || 'MA20';
+    const maData   = _sma(slicedVals, 20);
+    return new Chart(canvas, {
+      type: 'line',
+      data: {
+        labels: slicedDates,
+        datasets: [
+          { label, data: slicedVals, borderColor: color, backgroundColor: color + '15', borderWidth: 1.5, pointRadius: 0, fill: true, tension: 0.3, spanGaps: true },
+          { label: maLabel, data: maData, borderColor: '#94a3b8', borderWidth: 1.2, borderDash: [4, 3], pointRadius: 0, fill: false, spanGaps: true },
+        ],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { display: true, position: 'bottom', labels: { color: TICK_COL, font: { size: 9 }, boxWidth: 10, padding: 6 } },
+          tooltip: { mode: 'index', intersect: false, callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y?.toFixed(2) ?? '—'}` } },
+        },
+        scales: {
+          x: { grid: { color: GRID_COL }, ticks: { color: TICK_COL, maxTicksLimit: 5, maxRotation: 0, font: { size: 9 } } },
+          y: { grid: { color: GRID_COL }, ticks: { color: TICK_COL, font: { size: 9 }, maxTicksLimit: 4 } },
+        },
+      },
+    });
+  };
+
+  mkChart('gsChart', 'gs', gs.dates, gs.values, '#fbbf24');
+  mkChart('gcChart', 'gc', gc.dates, gc.values, '#fb923c');
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  // Commodity range buttons
+  document.querySelectorAll('#commodityRangeBtns .range-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#commodityRangeBtns .range-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      renderGoldCharts(btn.dataset.range);
+    });
+  });
+});
 
 // ── Economic Events ───────────────────────────────────────────────
 async function loadEconEvents() {
   try {
     const data = await fetch('/api/economic-events').then(r => r.json());
     const allEvents = data.events || [];
-    const today = new Date().toISOString().slice(0, 10);
-    const evEl = document.getElementById('drEvents');
-    _latestEvents = allEvents;
+    const today     = new Date().toISOString().slice(0, 10);
+    const evEl      = document.getElementById('drEvents');
+    _latestEvents   = allEvents;
 
-    // Get sorted unique dates starting from today
     const dates = [...new Set(allEvents.map(e => e.date))].filter(d => d >= today).sort();
-
-    // Find the nearest date with High-impact events
-    let events = [];
-    let evLabel = '';
+    let events = [], evLabel = '';
     for (const d of dates) {
       const hi = allEvents.filter(e => e.date === d && e.impact === 'High');
-      if (hi.length) { events = hi; evLabel = d === today ? 'Today' : d; break; }
+      if (hi.length) { events = hi; evLabel = d === today ? (I18n.t('daily.today_label') || 'Today') : d; break; }
     }
-    // If no High events found, show today's all events (or nearest day)
     if (!events.length && dates.length) {
       const d = dates[0];
-      events = allEvents.filter(e => e.date === d);
-      evLabel = d === today ? 'Today' : d;
+      events  = allEvents.filter(e => e.date === d);
+      evLabel = d === today ? (I18n.t('daily.today_label') || 'Today') : d;
     }
-
     if (!events.length) {
-      evEl.innerHTML = '<span class="text-slate-600">No upcoming events found.</span>';
-      return;
+      evEl.innerHTML = `<span class="text-slate-600">${I18n.t('daily.no_events') || 'No upcoming events found.'}</span>`;
+      _onLoadDone(); return;
     }
     const impColor = { High: '#f87171', Medium: '#fbbf24', Low: '#64748b' };
-    const labelHtml = evLabel && evLabel !== 'Today'
-      ? `<div class="text-xs text-slate-500 mb-2">Next high-impact events: <span class="text-slate-300">${evLabel}</span></div>` : '';
-    evEl.innerHTML = labelHtml + `<div class="space-y-1">` + events.slice(0, 15).map(ev => `
+    const todayLabel = I18n.t('daily.today_label') || 'Today';
+    const nextLabel  = I18n.t('daily.next_high_impact') || 'Next high-impact events:';
+    const labelHtml  = evLabel && evLabel !== todayLabel
+      ? `<div class="text-xs text-slate-500 mb-2">${nextLabel} <span class="text-slate-300">${evLabel}</span></div>` : '';
+    evEl.innerHTML = labelHtml + `<div class="space-y-1">` + events.slice(0,15).map(ev => `
       <div class="flex items-center gap-3 py-1.5 border-b border-slate-800/60 last:border-0">
         <span class="text-xs text-slate-500 whitespace-nowrap w-14 shrink-0">${ev.time || '—'}</span>
         <span class="text-xs font-medium text-slate-400 w-7 shrink-0">${ev.country || ''}</span>
@@ -334,10 +504,10 @@ async function loadEconEvents() {
   } catch(e) {
     console.warn('Events load failed:', e.message);
   }
+  _onLoadDone();
 }
 
 // ── Top Movers ────────────────────────────────────────────────────
-let _moversData = null;
 async function loadMovers() {
   try {
     const data = await fetch('/api/movers').then(r => r.json());
@@ -351,33 +521,32 @@ async function loadMovers() {
           <div class="text-sm font-bold ${isGain ? 'text-emerald-400' : 'text-rose-400'}">${m.day_chg >= 0 ? '+' : ''}${m.day_chg?.toFixed(2)}%</div>
         </div>
       </div>`;
-    document.getElementById('drGainers').innerHTML = (data.gainers || []).map(m => fmtMover(m, true)).join('') || '<span class="text-slate-600 text-xs">No data</span>';
-    document.getElementById('drLosers').innerHTML  = (data.losers  || []).map(m => fmtMover(m, false)).join('') || '<span class="text-slate-600 text-xs">No data</span>';
+    const noData = `<span class="text-slate-600 text-xs">${I18n.t('daily.no_data') || 'No data'}</span>`;
+    document.getElementById('drGainers').innerHTML = (data.gainers || []).map(m => fmtMover(m,true)).join('') || noData;
+    document.getElementById('drLosers').innerHTML  = (data.losers  || []).map(m => fmtMover(m,false)).join('')  || noData;
   } catch(e) {
-    console.warn('Movers load failed:', e.message);
-    document.getElementById('drGainers').innerHTML = '<span class="text-slate-600 text-xs">Unavailable</span>';
-    document.getElementById('drLosers').innerHTML  = '<span class="text-slate-600 text-xs">Unavailable</span>';
+    const unavail = `<span class="text-slate-600 text-xs">${I18n.t('daily.unavailable') || 'Unavailable'}</span>`;
+    document.getElementById('drGainers').innerHTML = unavail;
+    document.getElementById('drLosers').innerHTML  = unavail;
   }
 }
 
-// ── AI Market Summary ─────────────────────────────────────────────
+// ── AI Commentary ─────────────────────────────────────────────────
 let _summaryGenerating = false;
-let _latestMarketData  = null;
-let _latestSentiment   = {};
-let _latestEvents      = [];
 
-async function generateAiSummary() {
+async function generateAiSummary(forceLang) {
   if (_summaryGenerating) return;
   _summaryGenerating = true;
-  const btn     = document.getElementById('drAiBtn');
   const content = document.getElementById('drAiContent');
-  btn.disabled  = true;
-  btn.textContent = 'Generating…';
-  content.innerHTML = '<div class="flex items-center gap-2 text-slate-500 text-sm"><svg class="animate-spin w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24"><circle style="opacity:.25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path style="opacity:.75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/></svg>Thinking…</div>';
+  const translateBtn = document.getElementById('drTranslateBtn');
+  translateBtn.classList.add('hidden');
+
+  const lang = forceLang || I18n.getLang();
+  content.innerHTML = `<div class="flex items-center gap-2 text-slate-500 text-sm"><svg class="animate-spin w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24"><circle style="opacity:.25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path style="opacity:.75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/></svg>${I18n.t('daily.thinking') || 'Thinking…'}</div>`;
 
   try {
-    // Gather all available data for the prompt
     const body = {
+      lang,
       market_data: {
         indices: _latestMarketData?.indices || {},
         vix:     _latestMarketData?.vix || {},
@@ -387,28 +556,69 @@ async function generateAiSummary() {
         aaii:    _latestSentiment.aaii || {},
         gainers: _moversData?.gainers || [],
         losers:  _moversData?.losers  || [],
-        events:  _latestEvents.filter(e => e.impact === 'High').slice(0, 5),
+        events:  _latestEvents.filter(e => e.impact === 'High').slice(0,5),
       }
     };
-    const resp = await fetch('/api/daily-summary', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
+    const resp   = await fetch('/api/daily-summary', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
     const result = await resp.json();
     if (result.error) throw new Error(result.error);
-    // Convert newlines to paragraphs
+
+    _latestSummaryText = result.summary;
+    _summaryLang       = lang;
     const paras = result.summary.split(/\n\n+/).filter(Boolean);
     content.innerHTML = paras.map(p => `<p class="mb-3 last:mb-0">${p.replace(/\n/g,'<br>')}</p>`).join('');
     if (result.generated_at) {
       content.innerHTML += `<p class="text-xs text-slate-600 mt-3">Generated ${result.generated_at}</p>`;
     }
+    translateBtn.classList.remove('hidden');
   } catch(e) {
     content.innerHTML = `<span class="text-rose-400 text-xs">⚠ ${e.message}</span>`;
   }
-  btn.disabled    = false;
-  btn.textContent = 'Regenerate';
   _summaryGenerating = false;
+}
+
+async function translateAiSummary() {
+  const otherLang = _summaryLang === 'zh' ? 'en' : 'zh';
+  await generateAiSummary(otherLang);
+}
+
+// ── Email send ────────────────────────────────────────────────────
+async function sendDailyEmail() {
+  const emailEl  = document.getElementById('drEmailInput');
+  const statusEl = document.getElementById('drEmailStatus');
+  const btn      = document.getElementById('drEmailBtn');
+  const email    = emailEl.value.trim();
+
+  statusEl.classList.add('hidden');
+  if (!email || !email.includes('@')) {
+    statusEl.textContent = I18n.t('daily.email_error') || 'Failed to send. Please try again.';
+    statusEl.className = 'text-xs mt-2 text-rose-400'; statusEl.classList.remove('hidden'); return;
+  }
+  if (!_latestSummaryText) {
+    statusEl.textContent = I18n.getLang() === 'zh' ? '请等待AI摘要生成完成后再发送。' : 'Please wait for the AI summary to be generated first.';
+    statusEl.className = 'text-xs mt-2 text-amber-400'; statusEl.classList.remove('hidden'); return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = I18n.t('daily.email_sending') || 'Sending…';
+
+  try {
+    const resp = await fetch('/api/send-daily-email', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ email, summary: _latestSummaryText, lang: I18n.getLang() }),
+    });
+    const result = await resp.json();
+    if (result.error) throw new Error(result.error);
+    statusEl.textContent = I18n.t('daily.email_sent') || '✓ Sent! Check your inbox.';
+    statusEl.className = 'text-xs mt-2 text-emerald-400';
+    emailEl.value = '';
+  } catch(e) {
+    statusEl.textContent = `${I18n.t('daily.email_error') || 'Failed to send.'} (${e.message})`;
+    statusEl.className = 'text-xs mt-2 text-rose-400';
+  }
+  statusEl.classList.remove('hidden');
+  btn.disabled = false;
+  btn.textContent = I18n.t('daily.email_send') || 'Send';
 }
 
 // Boot

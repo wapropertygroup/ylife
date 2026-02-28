@@ -188,12 +188,17 @@
 
   <!-- Header row -->
   <div class="flex flex-wrap items-center gap-3 mb-4">
-    <div>
-      <h2 class="text-base font-semibold text-slate-200" data-i18n="index.heatmap">PE &amp; PEG Heatmap</h2>
-      <p class="text-xs text-slate-500" data-i18n="index.heatmap_desc">Colour intensity = ratio magnitude</p>
+    <div class="flex items-center gap-2 cursor-pointer select-none" onclick="toggleHeatmap('stockPeBody','stockPeChevron')">
+      <svg id="stockPeChevron" class="w-4 h-4 text-slate-500 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+      </svg>
+      <div>
+        <h2 class="text-base font-semibold text-slate-200" data-i18n="index.heatmap">PE &amp; PEG Heatmap</h2>
+        <p class="text-xs text-slate-500" data-i18n="index.heatmap_desc">Colour intensity = ratio magnitude</p>
+      </div>
     </div>
 
-    <div class="ml-auto flex flex-wrap items-center gap-2">
+    <div class="ml-auto flex flex-wrap items-center gap-2" id="stockPeControls">
       <!-- Heat legend -->
       <div class="hidden sm:flex items-center gap-1.5 text-xs text-slate-500 mr-2">
         <span class="w-3 h-3 rounded-sm inline-block" style="background:rgba(52,211,153,0.35)"></span><span data-i18n="index.heat_low">Low</span>
@@ -242,6 +247,7 @@
     </div>
   </div>
 
+  <div id="stockPeBody">
   <div class="overflow-x-auto">
     <table class="w-full text-sm" id="heatmapTable">
       <thead>
@@ -271,16 +277,22 @@
       <tbody id="heatmapBody"></tbody>
     </table>
   </div>
+  </div>
 </div>
 
 <!-- ── ETF PE table ──────────────────────────────────────────────────── -->
 <div id="etf-pe" class="bg-slate-900 rounded-2xl border border-slate-800 p-4 sm:p-6 fade-up mb-8">
   <div class="flex flex-wrap items-center gap-3 mb-4">
-    <div>
-      <h2 class="text-base font-semibold text-slate-200" data-i18n="index.etf_heatmap">ETF PE Heatmap</h2>
-      <p class="text-xs text-slate-500" data-i18n="index.etf_heatmap_desc">PE ratios for ETFs — PEG and growth metrics are not applicable</p>
+    <div class="flex items-center gap-2 cursor-pointer select-none" onclick="toggleHeatmap('etfPeBody','etfPeChevron')">
+      <svg id="etfPeChevron" class="w-4 h-4 text-slate-500 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+      </svg>
+      <div>
+        <h2 class="text-base font-semibold text-slate-200" data-i18n="index.etf_heatmap">ETF PE Heatmap</h2>
+        <p class="text-xs text-slate-500" data-i18n="index.etf_heatmap_desc">PE ratios for ETFs — PEG and growth metrics are not applicable</p>
+      </div>
     </div>
-    <div class="ml-auto flex flex-wrap items-center gap-2">
+    <div class="ml-auto flex flex-wrap items-center gap-2" id="etfPeControls">
       <div class="hidden sm:flex items-center gap-1.5 text-xs text-slate-500 mr-2">
         <span class="w-3 h-3 rounded-sm inline-block" style="background:rgba(52,211,153,0.35)"></span><span data-i18n="index.heat_low">Low</span>
         <span class="w-16 h-2 rounded-sm inline-block mx-1"
@@ -296,6 +308,7 @@
       <span id="etfHeatmapCount" class="text-xs text-slate-600 whitespace-nowrap"></span>
     </div>
   </div>
+  <div id="etfPeBody">
   <div class="overflow-x-auto">
     <table class="w-full text-sm" id="etfHeatmapTable">
       <thead>
@@ -311,6 +324,7 @@
       <tbody id="etfHeatmapBody"></tbody>
     </table>
   </div>
+  </div>
 </div>
 
 <!-- ── Chart.js scripts ───────────────────────────────────────────────── -->
@@ -319,6 +333,19 @@ const ALL = {{ all_chartdata | safe }};
 const PALETTE = [
   '#6366f1','#38bdf8','#34d399','#f59e0b','#f43f5e','#a78bfa','#fb923c','#22d3ee'
 ];
+
+// ── Collapsible heatmap sections ──────────────────────────────────────────
+window.toggleHeatmap = function(bodyId, chevronId) {
+  const body    = document.getElementById(bodyId);
+  const chevron = document.getElementById(chevronId);
+  if (!body) return;
+  const hidden = body.classList.toggle('hidden');
+  if (chevron) chevron.style.transform = hidden ? 'rotate(-90deg)' : '';
+  // Also hide/show the controls row sibling
+  const ctrlId = bodyId.replace('Body', 'Controls');
+  const ctrl = document.getElementById(ctrlId);
+  if (ctrl) ctrl.classList.toggle('hidden', hidden);
+};
 
 // ─── Scatter label toggle state ─────────────────────────────────────────────
 const SCATTER_DEFAULT_SECTORS = new Set(['Tech', 'Cloud / SaaS', 'Semiconductors']);

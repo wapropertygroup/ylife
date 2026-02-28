@@ -145,7 +145,8 @@
            class="px-3 py-1.5 rounded-md text-sm text-slate-300 hover:text-white hover:bg-slate-800 transition"
            data-i18n="nav.fed">Fed</a>
         <a href="{{ url_for('main.daily_report') }}"
-           class="px-3 py-1.5 rounded-md text-sm text-slate-300 hover:text-white hover:bg-slate-800 transition">Daily</a>
+           class="px-3 py-1.5 rounded-md text-sm text-slate-300 hover:text-white hover:bg-slate-800 transition"
+           data-i18n="nav.daily">Daily</a>
         <a href="{{ url_for('main.videos') }}"
            class="px-3 py-1.5 rounded-md text-sm text-slate-300 hover:text-white hover:bg-slate-800 transition"
            data-i18n="nav.videos">Videos</a>
@@ -159,6 +160,7 @@
         <!-- Search Ticker icon -->
         <a href="{{ url_for('main.lookup') }}"
            title="Search Ticker"
+           data-i18n-title="nav.search_ticker"
            class="p-1.5 rounded-md text-slate-500 hover:text-slate-200 hover:bg-slate-800 transition">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
