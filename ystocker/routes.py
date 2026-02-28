@@ -3211,7 +3211,9 @@ def api_economic_events_translate():
 
     try:
         from google import genai
-        client = genai.Client(api_key=GEMINI_API_KEY)
+        from google.genai import types as _genai_types
+        client = genai.Client(api_key=GEMINI_API_KEY,
+                              http_options=_genai_types.HttpOptions(timeout=20))
         resp = client.models.generate_content(
             model="gemini-2.5-flash",
             contents=prompt,
@@ -3363,7 +3365,7 @@ def _get_summaries_table():
             return None
         try:
             import boto3
-            ddb = boto3.resource("dynamodb", region_name="us-east-1")
+            ddb = boto3.resource("dynamodb", region_name=os.environ.get("AWS_REGION", "us-west-2"))
             tbl = ddb.Table(_SUMMARIES_TABLE_NAME)
             tbl.load()
             _summaries_table = tbl
@@ -3609,23 +3611,31 @@ def _get_subscribers_table():
     if _subscribers_table is not None:
         return _subscribers_table
     if time.time() < _subscribers_unavail_until:
+        remaining = int(_subscribers_unavail_until - time.time())
+        log.warning("DynamoDB subscribers in backoff, skipping (retry in %ds)", remaining)
         return None
     with _SUBSCRIBERS_LOCK:
         if _subscribers_table is not None:
             return _subscribers_table
         if time.time() < _subscribers_unavail_until:
             return None
+        region = os.environ.get("AWS_REGION", "us-west-2")
+        log.info("Connecting to DynamoDB subscribers table: %s (region=%s)",
+                 _SUBSCRIBERS_TABLE_NAME, region)
         try:
             import boto3
-            ddb = boto3.resource("dynamodb", region_name=os.environ.get("AWS_REGION", "us-east-1"))
+            ddb = boto3.resource("dynamodb", region_name=region)
             tbl = ddb.Table(_SUBSCRIBERS_TABLE_NAME)
             tbl.load()
             _subscribers_table = tbl
-            log.info("DynamoDB subscribers table connected: %s", _SUBSCRIBERS_TABLE_NAME)
+            log.info("DynamoDB subscribers table connected: %s (region=%s)",
+                     _SUBSCRIBERS_TABLE_NAME, region)
         except Exception as exc:
-            log.warning("DynamoDB subscribers unavailable: %s", exc)
+            log.error("DynamoDB subscribers unavailable (table=%s, region=%s): %s",
+                      _SUBSCRIBERS_TABLE_NAME, region, exc, exc_info=True)
             _subscribers_table = None
             _subscribers_unavail_until = time.time() + 300
+            log.warning("DynamoDB subscribers backoff set for 300s")
         return _subscribers_table
 
 
@@ -3641,16 +3651,21 @@ def api_subscribe():
     if lang not in ("en", "zh"):
         lang = "en"
 
+    log.info("Subscribe request: email=%s lang=%s", email or "(empty)", lang)
+
     if not email or "@" not in email:
+        log.warning("Subscribe rejected: invalid email %r", email)
         return jsonify({"error": "Invalid email address"}), 400
 
     table = _get_subscribers_table()
     if not table:
+        log.error("Subscribe failed: DynamoDB subscribers table unavailable (email=%s)", email)
         return jsonify({"error": "Subscriber service unavailable"}), 503
 
     try:
         existing = table.get_item(Key={"email": email}).get("Item")
         if existing and existing.get("active"):
+            log.info("Subscribe: already active (email=%s)", email)
             return jsonify({"ok": True, "already": True})
 
         token = _secrets.token_urlsafe(32)
@@ -3664,7 +3679,7 @@ def api_subscribe():
         log.info("New subscriber: %s (lang=%s)", email, lang)
         return jsonify({"ok": True, "already": False})
     except Exception as exc:
-        log.warning("Subscribe failed: %s", exc)
+        log.error("Subscribe failed for %s: %s", email, exc, exc_info=True)
         return jsonify({"error": str(exc)}), 500
 
 
