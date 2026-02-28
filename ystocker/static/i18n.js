@@ -566,6 +566,30 @@ const I18n = (() => {
     'daily.already_subscribed': { en: '✓ Already subscribed.',  zh: '✓ 您已订阅。' },
     'daily.subscribe_error':  { en: 'Subscribe failed.',         zh: '订阅失败。' },
 
+    'daily.tab_us':           { en: 'US Market',                zh: '美国市场' },
+    'daily.tab_cn':           { en: 'CN / Asia',                zh: '中国 / 亚洲' },
+    'daily.date_picker_label':{ en: 'Browse past reports',      zh: '查看历史报告' },
+    'daily.no_history':       { en: 'No summary available for this date.', zh: '该日期暂无摘要。' },
+    'daily.history_us':       { en: 'US Market (historical)',   zh: '美国市场（历史）' },
+    'daily.history_cn':       { en: 'CN / Asia (historical)',   zh: '中国 / 亚洲（历史）' },
+
+    // Economic Events — country code localization
+    'events.country.US': { en: 'US',  zh: '美国' },
+    'events.country.CN': { en: 'CN',  zh: '中国' },
+    'events.country.EU': { en: 'EU',  zh: '欧元区' },
+    'events.country.JP': { en: 'JP',  zh: '日本' },
+    'events.country.GB': { en: 'GB',  zh: '英国' },
+    'events.country.AU': { en: 'AU',  zh: '澳大利亚' },
+    'events.country.CA': { en: 'CA',  zh: '加拿大' },
+    'events.country.DE': { en: 'DE',  zh: '德国' },
+    'events.country.FR': { en: 'FR',  zh: '法国' },
+    'events.country.KR': { en: 'KR',  zh: '韩国' },
+    'events.country.TW': { en: 'TW',  zh: '台湾' },
+    'events.country.NZ': { en: 'NZ',  zh: '新西兰' },
+    'events.country.CH': { en: 'CH',  zh: '瑞士' },
+    'events.country.IN': { en: 'IN',  zh: '印度' },
+    'events.country.MX': { en: 'MX',  zh: '墨西哥' },
+
     // ── unsubscribe page ──────────────────────────────────────────────────
     'unsub.title_success': { en: 'Unsubscribed',                       zh: '已退订' },
     'unsub.body_success':  { en: 'You\'ve been removed from the daily report mailing list.', zh: '您已从每日报告邮件列表中退订。' },

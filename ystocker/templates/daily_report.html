@@ -19,13 +19,30 @@
   .stat-card  { background:#0f172a; border:1px solid #1e293b; border-radius:10px; padding:10px 12px; }
   .stat-label { font-size:11px; color:#64748b; margin-bottom:4px; }
   .stat-val   { font-size:16px; font-weight:700; color:#f1f5f9; }
+  /* Events table */
+  .ev-table { width:100%; border-collapse:collapse; font-size:12px; }
+  .ev-table th { padding:5px 8px; text-align:left; color:#475569; font-weight:700; font-size:10px; text-transform:uppercase; letter-spacing:.06em; border-bottom:1px solid #1e293b; }
+  .ev-table td { padding:6px 8px; border-bottom:1px solid #1e293b0a; color:#94a3b8; vertical-align:middle; }
+  .ev-table tr:last-child td { border-bottom:none; }
+  .ev-table tr.ev-date-header td { background:#0f172a; color:#64748b; font-size:10px; font-weight:700; padding:8px 8px 4px; border-bottom:1px solid #1e293b; }
+  .ev-table .ev-name { color:#e2e8f0; }
+  .ev-table .ev-country { font-weight:600; color:#94a3b8; }
 </style>
 
 <!-- Header -->
 <div class="mb-5 fade-up flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
   <div>
     <h1 class="text-2xl sm:text-3xl font-bold grad-text" data-i18n="daily.title">Daily Markets Report</h1>
-    <p class="text-slate-400 mt-1 text-sm" id="reportDate"></p>
+    <div class="flex items-center gap-3 mt-1 flex-wrap">
+      <p class="text-slate-400 text-sm" id="reportDate"></p>
+      <div class="flex items-center gap-2">
+        <label class="text-xs text-slate-600" data-i18n="daily.date_picker_label">Browse past reports</label>
+        <input id="drDatePicker" type="date"
+               class="bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-300
+                      focus:outline-none focus:border-brand transition"
+               style="color-scheme:dark">
+      </div>
+    </div>
   </div>
   <button onclick="location.reload()"
           class="px-4 py-2 text-sm rounded-xl border border-slate-700 text-slate-300
@@ -44,16 +61,31 @@
 
 <div id="drContent" style="display:none">
 
-<!-- ── AI Commentary ──────────────────────────────────────────────── -->
-<div class="card mb-6 fade-up" id="drAiCard">
-  <div class="flex items-center justify-between mb-3">
-    <div class="card-title" style="margin-bottom:0" data-i18n="daily.card_ai">AI Market Commentary</div>
-    <button id="drTranslateBtn" onclick="translateAiSummary()"
-            class="px-3 py-1 text-xs rounded-lg border border-slate-600 text-slate-400 hover:border-brand hover:text-brand transition hidden"
-            data-i18n="daily.translate">Translate</button>
+<!-- ── AI Commentary — two cards side by side ─────────────────────── -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6 fade-up">
+  <!-- US Market card -->
+  <div class="card" id="drAiCardUs">
+    <div class="flex items-center justify-between mb-3">
+      <div class="card-title" style="margin-bottom:0" data-i18n="daily.tab_us">US Market</div>
+      <button id="drTranslateBtnUs" onclick="translateAiSummary('us')"
+              class="px-3 py-1 text-xs rounded-lg border border-slate-600 text-slate-400 hover:border-brand hover:text-brand transition hidden"
+              data-i18n="daily.translate">Translate</button>
+    </div>
+    <div id="drAiUs" class="text-sm text-slate-300 leading-relaxed">
+      <div class="flex items-center gap-2 text-slate-500 text-sm"><svg class="animate-spin w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24"><circle style="opacity:.25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path style="opacity:.75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/></svg><span data-i18n="daily.thinking">Thinking…</span></div>
+    </div>
   </div>
-  <div id="drAiContent" class="text-sm text-slate-300 leading-relaxed">
-    <div class="flex items-center gap-2 text-slate-500 text-sm"><svg class="animate-spin w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24"><circle style="opacity:.25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path style="opacity:.75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/></svg><span data-i18n="daily.thinking">Thinking…</span></div>
+  <!-- CN / Asia card -->
+  <div class="card" id="drAiCardCn">
+    <div class="flex items-center justify-between mb-3">
+      <div class="card-title" style="margin-bottom:0" data-i18n="daily.tab_cn">CN / Asia</div>
+      <button id="drTranslateBtnCn" onclick="translateAiSummary('cn')"
+              class="px-3 py-1 text-xs rounded-lg border border-slate-600 text-slate-400 hover:border-brand hover:text-brand transition hidden"
+              data-i18n="daily.translate">Translate</button>
+    </div>
+    <div id="drAiCn" class="text-sm text-slate-300 leading-relaxed">
+      <div class="flex items-center gap-2 text-slate-500 text-sm"><svg class="animate-spin w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24"><circle style="opacity:.25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path style="opacity:.75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/></svg><span data-i18n="daily.thinking">Thinking…</span></div>
+    </div>
   </div>
 </div>
 
@@ -94,11 +126,11 @@
   <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
     <div>
       <div class="text-xs text-slate-500 mb-2 font-semibold" data-i18n="daily.gold_silver">Gold / Silver</div>
-      <div class="chart-container" style="height:140px"><canvas id="gsChart"></canvas></div>
+      <div class="chart-container" style="height:160px"><canvas id="gsChart"></canvas></div>
     </div>
     <div>
       <div class="text-xs text-slate-500 mb-2 font-semibold" data-i18n="daily.gold_copper">Gold / Copper</div>
-      <div class="chart-container" style="height:140px"><canvas id="gcChart"></canvas></div>
+      <div class="chart-container" style="height:160px"><canvas id="gcChart"></canvas></div>
     </div>
   </div>
 </div>
@@ -161,11 +193,14 @@ let _latestMarketData   = null;
 let _latestSentiment    = {};
 let _latestEvents       = [];
 let _moversData         = null;
-let _latestSummaryText  = '';
-let _summaryLang        = '';
+let _latestSummaryUs    = '';
+let _latestSummaryCn    = '';
+let _summaryLangUs      = '';
+let _summaryLangCn      = '';
+let _curAiTab           = 'us'; // kept for legacy compat, not used for tabs
 let _indicesLineChart   = null;
 let _loadsDone = 0;
-const _LOADS_NEEDED = 4; // markets, sentiment, gold, events (movers is bonus)
+const _LOADS_NEEDED = 4; // markets, sentiment, gold, events
 
 function _chg(v, dec=2) {
   if (v == null) return '<span class="neutral">—</span>';
@@ -191,18 +226,22 @@ function _onLoadDone() {
   if (_loadsDone >= _LOADS_NEEDED) {
     document.getElementById('drContent').style.display = '';
     document.getElementById('drLoading').style.display = 'none';
-    generateAiSummary();
+    generateAllSummaries();
   }
 }
+
+// ── AI Tab switching (removed — now two separate cards) ────────────
 
 // ── Markets data ──────────────────────────────────────────────────
 async function loadMarkets() {
   const resp = await fetch('/api/markets');
   const data = await resp.json();
-  const idx  = data.indices || {};
   const now  = new Date();
   document.getElementById('reportDate').textContent =
     now.toLocaleDateString(undefined, { weekday:'long', year:'numeric', month:'long', day:'numeric' });
+  // Set date picker max to today
+  const todayStr = now.toISOString().slice(0, 10);
+  document.getElementById('drDatePicker').max = todayStr;
 
   _latestMarketData = data;
 
@@ -240,11 +279,6 @@ async function loadMarkets() {
 }
 
 // ── Indices daily-change bar chart ────────────────────────────────
-const IDX_COLORS = {
-  spx:'#6366f1', ixic:'#8b5cf6', dji:'#a78bfa',
-  ftse:'#34d399', n225:'#fbbf24', sse:'#f87171', twii:'#fb923c', kospi:'#38bdf8',
-};
-
 function renderIndicesLineChart() {
   if (!_latestMarketData) return;
   const idx  = _latestMarketData.indices || {};
@@ -419,27 +453,47 @@ function renderGoldCharts(range) {
   const gs = _sliceByRange(allDates, gs_ratio, range);
   const gc = _sliceByRange(allDates, gc_ratio, range);
 
+  // MA periods and their colors
+  const MA_CONFIGS = [
+    { period:  5, color: '#38bdf8', dash: [] },
+    { period: 20, color: '#94a3b8', dash: [4, 3] },
+    { period: 60, color: '#fbbf24', dash: [4, 3] },
+    { period:120, color: '#a78bfa', dash: [4, 3] },
+  ];
+
   const mkChart = (canvasId, which, slicedDates, slicedVals, color) => {
     const canvas = document.getElementById(canvasId);
     if (!canvas) return;
     const existing = Chart.getChart(canvas);
     if (existing) existing.destroy();
-    const label    = which === 'gs' ? (I18n.t('daily.gold_silver') || 'G/S') : (I18n.t('daily.gold_copper') || 'G/C');
-    const maLabel  = I18n.t('daily.ma20_label') || 'MA20';
-    const maData   = _sma(slicedVals, 20);
+    const label = which === 'gs' ? (I18n.t('daily.gold_silver') || 'G/S') : (I18n.t('daily.gold_copper') || 'G/C');
+
+    const datasets = [
+      { label, data: slicedVals, borderColor: color, backgroundColor: color + '15',
+        borderWidth: 1.5, pointRadius: 0, fill: true, tension: 0.3, spanGaps: true },
+    ];
+
+    for (const { period, color: maColor, dash } of MA_CONFIGS) {
+      const maData = _sma(slicedVals, period);
+      datasets.push({
+        label: `MA${period}`,
+        data: maData,
+        borderColor: maColor,
+        borderWidth: 1,
+        borderDash: dash,
+        pointRadius: 0,
+        fill: false,
+        spanGaps: true,
+      });
+    }
+
     return new Chart(canvas, {
       type: 'line',
-      data: {
-        labels: slicedDates,
-        datasets: [
-          { label, data: slicedVals, borderColor: color, backgroundColor: color + '15', borderWidth: 1.5, pointRadius: 0, fill: true, tension: 0.3, spanGaps: true },
-          { label: maLabel, data: maData, borderColor: '#94a3b8', borderWidth: 1.2, borderDash: [4, 3], pointRadius: 0, fill: false, spanGaps: true },
-        ],
-      },
+      data: { labels: slicedDates, datasets },
       options: {
         responsive: true, maintainAspectRatio: false,
         plugins: {
-          legend: { display: true, position: 'bottom', labels: { color: TICK_COL, font: { size: 9 }, boxWidth: 10, padding: 6 } },
+          legend: { display: true, position: 'bottom', labels: { color: TICK_COL, font: { size: 9 }, boxWidth: 10, padding: 5 } },
           tooltip: { mode: 'index', intersect: false, callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y?.toFixed(2) ?? '—'}` } },
         },
         scales: {
@@ -463,6 +517,20 @@ document.addEventListener('DOMContentLoaded', () => {
       renderGoldCharts(btn.dataset.range);
     });
   });
+
+  // Date picker — load historical summaries
+  document.getElementById('drDatePicker').addEventListener('change', async (e) => {
+    const date = e.target.value;
+    if (!date) return;
+    const lang = I18n.getLang();
+    try {
+      const resp = await fetch(`/api/daily-summary/${date}/${lang}`);
+      const data = await resp.json();
+      renderStoredSummaries(data, date);
+    } catch(err) {
+      console.warn('History load failed:', err.message);
+    }
+  });
 });
 
 // ── Economic Events ───────────────────────────────────────────────
@@ -471,47 +539,78 @@ async function loadEconEvents() {
     const data = await fetch('/api/economic-events').then(r => r.json());
     const allEvents = data.events || [];
     const today     = new Date().toISOString().slice(0, 10);
-    const evEl      = document.getElementById('drEvents');
     _latestEvents   = allEvents;
-
-    const dates = [...new Set(allEvents.map(e => e.date))].filter(d => d >= today).sort();
-    let events = [], evLabel = '';
-    for (const d of dates) {
-      const hi = allEvents.filter(e => e.date === d && e.impact === 'High');
-      if (hi.length) { events = hi; evLabel = d === today ? (I18n.t('daily.today_label') || 'Today') : d; break; }
-    }
-    if (!events.length && dates.length) {
-      const d = dates[0];
-      events  = allEvents.filter(e => e.date === d);
-      evLabel = d === today ? (I18n.t('daily.today_label') || 'Today') : d;
-    }
-    if (!events.length) {
-      evEl.innerHTML = `<span class="text-slate-600">${I18n.t('daily.no_events') || 'No upcoming events found.'}</span>`;
-      _onLoadDone(); return;
-    }
-    const impColor = { High: '#f87171', Medium: '#fbbf24', Low: '#64748b' };
-    const todayLabel = I18n.t('daily.today_label') || 'Today';
-    const nextLabel  = I18n.t('daily.next_high_impact') || 'Next high-impact events:';
-    const labelHtml  = evLabel && evLabel !== todayLabel
-      ? `<div class="text-xs text-slate-500 mb-2">${nextLabel} <span class="text-slate-300">${evLabel}</span></div>` : '';
-    evEl.innerHTML = labelHtml + `<div class="space-y-1">` + events.slice(0,15).map(ev => {
-      const evName = (I18n.getLang() === 'zh' && ev.zh) ? ev.zh : (ev.event || '');
-      const impLabel = I18n.getLang() === 'zh'
-        ? ({ High: '高', Medium: '中', Low: '低' }[ev.impact] || ev.impact)
-        : ev.impact;
-      return `
-      <div class="flex items-center gap-3 py-1.5 border-b border-slate-800/60 last:border-0">
-        <span class="text-xs text-slate-500 whitespace-nowrap w-14 shrink-0">${ev.time || '—'}</span>
-        <span class="text-xs font-medium text-slate-400 w-7 shrink-0">${ev.country || ''}</span>
-        <span class="text-sm text-slate-200 flex-1">${evName}</span>
-        ${ev.impact ? `<span class="text-[10px] font-bold px-1 rounded shrink-0" style="color:${impColor[ev.impact]||'#64748b'}">${impLabel}</span>` : ''}
-        ${ev.actual != null ? `<span class="text-xs font-mono text-emerald-400 shrink-0">${ev.actual}</span>` : ev.forecast != null ? `<span class="text-xs font-mono text-slate-500 shrink-0">est ${ev.forecast}</span>` : ''}
-      </div>`;
-    }).join('') + `</div>`;
+    renderEventsTable(allEvents, today);
   } catch(e) {
     console.warn('Events load failed:', e.message);
   }
   _onLoadDone();
+}
+
+function _countryLabel(code) {
+  const key = 'events.country.' + code;
+  return I18n.t(key) || code;
+}
+
+function renderEventsTable(allEvents, today) {
+  const evEl = document.getElementById('drEvents');
+  if (!allEvents.length) {
+    evEl.innerHTML = `<span class="text-slate-600">${I18n.t('daily.no_events') || 'No upcoming events found.'}</span>`;
+    return;
+  }
+
+  // Show only high-impact events from today onwards
+  const futureEvents = allEvents.filter(e => (!e.date || e.date >= today) && e.impact === 'High');
+  const dates = [...new Set(futureEvents.map(e => e.date).filter(Boolean))].sort();
+
+  if (!futureEvents.length) {
+    evEl.innerHTML = `<span class="text-slate-600">${I18n.t('daily.no_events') || 'No upcoming events found.'}</span>`;
+    return;
+  }
+
+  const impColor  = { High: '#f87171', Medium: '#fbbf24', Low: '#64748b' };
+  const impLabelZh = { High: '高', Medium: '中', Low: '低' };
+  const isZh = I18n.getLang() === 'zh';
+
+  const colDate    = I18n.t('markets.econ_col_date')     || 'Date';
+  const colTime    = I18n.t('markets.econ_col_time')     || 'Time';
+  const colCountry = I18n.t('markets.econ_col_country')  || 'Country';
+  const colEvent   = I18n.t('markets.econ_col_event')    || 'Event';
+  const colImpact  = I18n.t('markets.econ_col_impact')   || 'Impact';
+  const colActFct  = (I18n.t('markets.econ_col_actual') || 'Actual') + ' / ' + (I18n.t('markets.econ_col_forecast') || 'Forecast');
+
+  let rows = `<table class="ev-table">
+    <thead><tr>
+      <th>${colTime}</th>
+      <th>${colCountry}</th>
+      <th>${colEvent}</th>
+      <th>${colActFct}</th>
+    </tr></thead>
+    <tbody>`;
+
+  for (const d of dates) {
+    const dayEvents = futureEvents.filter(e => e.date === d);
+    if (!dayEvents.length) continue;
+    const dateLabel = d === today ? (I18n.t('daily.today_label') || 'Today') + ` (${d})` : d;
+    rows += `<tr class="ev-date-header"><td colspan="4">${dateLabel}</td></tr>`;
+    for (const ev of dayEvents) {
+      const evName = (isZh && ev.zh) ? ev.zh : (ev.event || '');
+      const actFct   = ev.actual != null
+        ? `<span class="text-emerald-400 font-mono">${ev.actual}</span>`
+        : ev.forecast != null
+        ? `<span class="text-slate-500 font-mono">est ${ev.forecast}</span>`
+        : '—';
+      rows += `<tr>
+        <td class="text-slate-500 whitespace-nowrap">${ev.time || '—'}</td>
+        <td class="ev-country">${_countryLabel(ev.country || '')}</td>
+        <td class="ev-name">${evName}</td>
+        <td>${actFct}</td>
+      </tr>`;
+    }
+  }
+
+  rows += '</tbody></table>';
+  evEl.innerHTML = rows;
 }
 
 // ── Top Movers ────────────────────────────────────────────────────
@@ -539,21 +638,21 @@ async function loadMovers() {
 }
 
 // ── AI Commentary ─────────────────────────────────────────────────
-let _summaryGenerating = false;
+let _summaryGenerating = { us: false, cn: false };
 
-async function generateAiSummary(forceLang) {
-  if (_summaryGenerating) return;
-  _summaryGenerating = true;
-  const content = document.getElementById('drAiContent');
-  const translateBtn = document.getElementById('drTranslateBtn');
-  translateBtn.classList.add('hidden');
+async function generateAiSummary(forceLang, market) {
+  if (_summaryGenerating[market]) return;
+  _summaryGenerating[market] = true;
 
+  const contentEl = document.getElementById(market === 'us' ? 'drAiUs' : 'drAiCn');
   const lang = forceLang || I18n.getLang();
-  content.innerHTML = `<div class="flex items-center gap-2 text-slate-500 text-sm"><svg class="animate-spin w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24"><circle style="opacity:.25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path style="opacity:.75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/></svg>${I18n.t('daily.thinking') || 'Thinking…'}</div>`;
+  const spinner = `<div class="flex items-center gap-2 text-slate-500 text-sm"><svg class="animate-spin w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24"><circle style="opacity:.25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path style="opacity:.75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/></svg>${I18n.t('daily.thinking') || 'Thinking…'}</div>`;
+  contentEl.innerHTML = spinner;
 
   try {
     const body = {
       lang,
+      market,
       market_data: {
         indices: _latestMarketData?.indices || {},
         vix:     _latestMarketData?.vix || {},
@@ -563,30 +662,70 @@ async function generateAiSummary(forceLang) {
         aaii:    _latestSentiment.aaii || {},
         gainers: _moversData?.gainers || [],
         losers:  _moversData?.losers  || [],
-        events:  _latestEvents.filter(e => e.impact === 'High').slice(0,5),
+        events:  _latestEvents.filter(e => e.impact === 'High').slice(0, 8),
       }
     };
     const resp   = await fetch('/api/daily-summary', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
     const result = await resp.json();
     if (result.error) throw new Error(result.error);
 
-    _latestSummaryText = result.summary;
-    _summaryLang       = lang;
-    const paras = result.summary.split(/\n\n+/).filter(Boolean);
-    content.innerHTML = paras.map(p => `<p class="mb-3 last:mb-0">${p.replace(/\n/g,'<br>')}</p>`).join('');
+    const summary = result.summary;
+    if (market === 'us') { _latestSummaryUs = summary; _summaryLangUs = lang; }
+    else                 { _latestSummaryCn = summary; _summaryLangCn = lang; }
+
+    const paras = summary.split(/\n\n+/).filter(Boolean);
+    let html = paras.map(p => `<p class="mb-3 last:mb-0">${p.replace(/\n/g,'<br>')}</p>`).join('');
     if (result.generated_at) {
-      content.innerHTML += `<p class="text-xs text-slate-600 mt-3">Generated ${result.generated_at}</p>`;
+      html += `<p class="text-xs text-slate-600 mt-3">Generated ${result.generated_at}</p>`;
     }
-    translateBtn.classList.remove('hidden');
+    contentEl.innerHTML = html;
+
+    // Show per-card translate button
+    const btnId = market === 'us' ? 'drTranslateBtnUs' : 'drTranslateBtnCn';
+    document.getElementById(btnId).classList.remove('hidden');
   } catch(e) {
-    content.innerHTML = `<span class="text-rose-400 text-xs">⚠ ${e.message}</span>`;
+    contentEl.innerHTML = `<span class="text-rose-400 text-xs">⚠ ${e.message}</span>`;
   }
-  _summaryGenerating = false;
+  _summaryGenerating[market] = false;
 }
 
-async function translateAiSummary() {
-  const otherLang = _summaryLang === 'zh' ? 'en' : 'zh';
-  await generateAiSummary(otherLang);
+async function generateAllSummaries(forceLang) {
+  document.getElementById('drTranslateBtnUs').classList.add('hidden');
+  document.getElementById('drTranslateBtnCn').classList.add('hidden');
+  await Promise.all([
+    generateAiSummary(forceLang, 'us'),
+    generateAiSummary(forceLang, 'cn'),
+  ]);
+}
+
+async function translateAiSummary(market) {
+  const curLang = market === 'us' ? _summaryLangUs : _summaryLangCn;
+  const other   = curLang === 'zh' ? 'en' : 'zh';
+  await generateAiSummary(other, market);
+}
+
+// ── Render stored (historical) summaries from date picker ─────────
+function renderStoredSummaries(data, date) {
+  const isZh = I18n.getLang() === 'zh';
+  document.getElementById('drTranslateBtnUs').classList.add('hidden');
+  document.getElementById('drTranslateBtnCn').classList.add('hidden');
+  for (const market of ['us', 'cn']) {
+    const contentEl = document.getElementById(market === 'us' ? 'drAiUs' : 'drAiCn');
+    const btnId = market === 'us' ? 'drTranslateBtnUs' : 'drTranslateBtnCn';
+    const stored = data[market];
+    if (stored && stored.summary) {
+      const paras = stored.summary.split(/\n\n+/).filter(Boolean);
+      let html = paras.map(p => `<p class="mb-3 last:mb-0">${p.replace(/\n/g,'<br>')}</p>`).join('');
+      if (stored.generated_at) {
+        html += `<p class="text-xs text-slate-600 mt-3">${stored.generated_at}</p>`;
+      }
+      contentEl.innerHTML = html;
+      document.getElementById(btnId).classList.remove('hidden');
+    } else {
+      const noSummaryMsg = I18n.t('daily.no_history') || 'No summary available for this date.';
+      contentEl.innerHTML = `<span class="text-slate-600 text-sm">${noSummaryMsg}</span>`;
+    }
+  }
 }
 
 // ── Email send ────────────────────────────────────────────────────
@@ -610,7 +749,7 @@ async function sendDailyEmail() {
       body: JSON.stringify({
         email,
         lang:        I18n.getLang(),
-        summary:     _latestSummaryText,
+        summary:     _latestSummaryUs + (_latestSummaryCn ? '\n\n---\n\n' + _latestSummaryCn : ''),
         indices:     _latestMarketData?.indices  || {},
         sectors:     _latestMarketData?.sectors  || [],
         vix:         _latestMarketData?.vix      || {},
