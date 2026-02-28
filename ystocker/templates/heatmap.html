@@ -342,7 +342,7 @@ async function loadHeatmap(dateStr) {
 }
 
 function goToday() {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
   document.getElementById('hmDatePicker').value = today;
   loadHeatmap(today);
 }
@@ -359,7 +359,7 @@ async function takeSnapshot() {
     if (resp.ok) {
       btn.textContent = `✓ ${data.saved}`;
       setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 3000);
-      const today = new Date().toISOString().slice(0, 10);
+      const today = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
       document.getElementById('hmDatePicker').value = today;
       await loadHeatmap(today);
     } else {
@@ -374,7 +374,7 @@ async function takeSnapshot() {
 
 // Boot
 (function() {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
   document.getElementById('hmDatePicker').value = today;
   loadHeatmap(today);
 })();

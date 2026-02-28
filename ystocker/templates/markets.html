@@ -85,9 +85,10 @@
         <h2 class="text-base font-semibold text-slate-200" data-i18n="markets.vix">VIX (Volatility)</h2>
         <p class="text-xs text-slate-500 mt-0.5" data-i18n="markets.vix_desc">CBOE Volatility Index — fear gauge of the S&amp;P 500</p>
       </div>
-      <div id="vixBadge" class="text-right flex items-start gap-2">
+      <div class="flex items-center gap-1">
+        <div id="vixBadge" class="text-right"></div>
         <button onclick="expandMktsChart('vix')" title="Expand"
-                class="text-slate-600 hover:text-slate-300 transition p-1 rounded-lg hover:bg-slate-800 shrink-0">
+                class="text-slate-500 hover:text-slate-200 transition p-1 rounded-lg hover:bg-slate-800 shrink-0">
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                   d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"/>
@@ -106,9 +107,10 @@
         <h2 class="text-base font-semibold text-slate-200" data-i18n="markets.fear_greed">Fear &amp; Greed</h2>
         <p class="text-xs text-slate-500 mt-0.5" data-i18n="markets.fear_greed_desc">CNN Fear &amp; Greed Index — composite sentiment</p>
       </div>
-      <div id="fgBadge" class="text-right flex items-start gap-2">
+      <div class="flex items-center gap-1">
+        <div id="fgBadge" class="text-right"></div>
         <button onclick="expandMktsChart('fg')" title="Expand"
-                class="text-slate-600 hover:text-slate-300 transition p-1 rounded-lg hover:bg-slate-800 shrink-0">
+                class="text-slate-500 hover:text-slate-200 transition p-1 rounded-lg hover:bg-slate-800 shrink-0">
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                   d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"/>
@@ -151,9 +153,10 @@
         <h2 class="text-base font-semibold text-slate-200" data-i18n="markets.aaii_title">AAII Sentiment</h2>
         <p class="text-xs text-slate-500 mt-0.5" data-i18n="markets.aaii_desc">AAII Investor Sentiment Survey — weekly</p>
       </div>
-      <div id="aaiiBadge" class="text-right flex items-start gap-2">
+      <div class="flex items-center gap-1">
+        <div id="aaiiBadge" class="text-right"></div>
         <button onclick="expandMktsChart('aaii')" title="Expand"
-                class="text-slate-600 hover:text-slate-300 transition p-1 rounded-lg hover:bg-slate-800 shrink-0">
+                class="text-slate-500 hover:text-slate-200 transition p-1 rounded-lg hover:bg-slate-800 shrink-0">
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                   d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"/>
@@ -177,9 +180,10 @@
         <h2 class="text-base font-semibold text-slate-200" data-i18n="markets.pcr_title">Put/Call Ratio</h2>
         <p class="text-xs text-slate-500 mt-0.5" data-i18n="markets.pcr_desc">CBOE Equity Put/Call Ratio — options sentiment</p>
       </div>
-      <div id="pcrBadge" class="text-right flex items-start gap-2">
+      <div class="flex items-center gap-1">
+        <div id="pcrBadge" class="text-right"></div>
         <button onclick="expandMktsChart('pcr')" title="Expand"
-                class="text-slate-600 hover:text-slate-300 transition p-1 rounded-lg hover:bg-slate-800 shrink-0">
+                class="text-slate-500 hover:text-slate-200 transition p-1 rounded-lg hover:bg-slate-800 shrink-0">
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                   d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"/>
@@ -213,8 +217,72 @@
 
   <!-- Sector ETF performance -->
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-6">
-    <h2 class="text-base font-semibold text-slate-200 mb-4" data-i18n="markets.sector_perf">Sector Performance</h2>
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-base font-semibold text-slate-200" data-i18n="markets.sector_perf">Sector Performance</h2>
+      <button onclick="expandMktsChart('sectors')" title="Expand"
+              class="text-slate-600 hover:text-slate-300 transition p-1 rounded-lg hover:bg-slate-800 shrink-0">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"/>
+        </svg>
+      </button>
+    </div>
     <div id="sectorBars" class="space-y-2.5"></div>
+  </div>
+
+</div>
+
+<!-- ── Gold Ratios row ───────────────────────────────────────────────── -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6 fade-up">
+
+  <!-- Gold/Silver Ratio -->
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-6">
+    <div class="flex items-start justify-between mb-4">
+      <div>
+        <h2 class="text-base font-semibold text-slate-200">Gold / Silver Ratio</h2>
+        <p class="text-xs text-slate-500 mt-0.5">oz of silver per oz of gold — higher = gold relatively expensive</p>
+      </div>
+      <div class="flex items-center gap-1">
+        <div id="gsBadge" class="text-right"></div>
+        <button onclick="expandMktsChart('gs')" title="Expand"
+                class="text-slate-500 hover:text-slate-200 transition p-1 rounded-lg hover:bg-slate-800 shrink-0">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+    <div id="gsLoading" class="text-xs text-slate-600 py-2">Loading…</div>
+    <div id="gsBody" style="display:none">
+      <div class="grid grid-cols-3 gap-2 mb-4" id="gsStats"></div>
+      <div style="height:140px"><canvas id="gsChart"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Gold/Copper Ratio -->
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-6">
+    <div class="flex items-start justify-between mb-4">
+      <div>
+        <h2 class="text-base font-semibold text-slate-200">Gold / Copper Ratio</h2>
+        <p class="text-xs text-slate-500 mt-0.5">gold ($/oz) ÷ copper ($/lb) — economic risk indicator</p>
+      </div>
+      <div class="flex items-center gap-1">
+        <div id="gcBadge" class="text-right"></div>
+        <button onclick="expandMktsChart('gc')" title="Expand"
+                class="text-slate-500 hover:text-slate-200 transition p-1 rounded-lg hover:bg-slate-800 shrink-0">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+    <div id="gcLoading" class="text-xs text-slate-600 py-2">Loading…</div>
+    <div id="gcBody" style="display:none">
+      <div class="grid grid-cols-3 gap-2 mb-4" id="gcStats"></div>
+      <div style="height:140px"><canvas id="gcChart"></canvas></div>
+    </div>
   </div>
 
 </div>
@@ -430,7 +498,12 @@ let _macdChartInst    = null;
 let _rsiChartInst     = null;
 let _vixChartInst     = null;
 let _idxForecastInst  = null;
+let _mkSectorData     = null;   // last rendered sector data for expand
 let _forecastCache    = {};  // key → forecast data
+let _vixData          = null;
+let _fgData           = null;
+let _aaiiData         = null;
+let _pcrData          = null;
 
 // Yahoo Finance symbols per index key (for forecast API)
 const IDX_SYMBOLS = {
@@ -502,25 +575,31 @@ function renderCards(data) {
 }
 
 // ── VIX ──────────────────────────────────────────────────────────────
-function renderVix(vix) {
+function renderVix(vix, canvasId) {
   if (!vix) return;
-  const badgeEl = document.getElementById('vixBadge');
-  const level   = vix.current;
-  let label = '', col = '';
-  if (level < 15)      { label = I18n.t('markets.vix_calm')    || 'Calm';     col = '#34d399'; }
-  else if (level < 20) { label = I18n.t('markets.vix_normal')  || 'Normal';   col = '#a5b4fc'; }
-  else if (level < 30) { label = I18n.t('markets.vix_elevated')|| 'Elevated'; col = '#fb923c'; }
-  else                  { label = I18n.t('markets.vix_extreme') || 'Extreme';  col = '#f87171'; }
+  canvasId = canvasId || 'vixChart';
 
-  badgeEl.innerHTML = `
-    <div class="text-2xl font-bold tabular-nums" style="color:${col}">${level?.toFixed(2) ?? '—'}</div>
-    <div class="text-xs font-semibold mt-0.5" style="color:${col}">${label}</div>
-    <div class="text-xs text-slate-500">${_chgSign(vix.day_chg)}${_fmt(vix.day_chg, '', '%', 2)} today</div>`;
+  if (canvasId === 'vixChart') {
+    _vixData = vix;
+    const badgeEl = document.getElementById('vixBadge');
+    const level   = vix.current;
+    let label = '', col = '';
+    if (level < 15)      { label = I18n.t('markets.vix_calm')    || 'Calm';     col = '#34d399'; }
+    else if (level < 20) { label = I18n.t('markets.vix_normal')  || 'Normal';   col = '#a5b4fc'; }
+    else if (level < 30) { label = I18n.t('markets.vix_elevated')|| 'Elevated'; col = '#fb923c'; }
+    else                  { label = I18n.t('markets.vix_extreme') || 'Extreme';  col = '#f87171'; }
 
-  if (_vixChartInst) { _vixChartInst.destroy(); _vixChartInst = null; }
+    badgeEl.innerHTML = `
+      <div class="text-2xl font-bold tabular-nums" style="color:${col}">${level?.toFixed(2) ?? '—'}</div>
+      <div class="text-xs font-semibold mt-0.5" style="color:${col}">${label}</div>
+      <div class="text-xs text-slate-500">${_chgSign(vix.day_chg)}${_fmt(vix.day_chg, '', '%', 2)} today</div>`;
+
+    if (_vixChartInst) { _vixChartInst.destroy(); _vixChartInst = null; }
+  }
+
   const dates  = vix.weekly?.dates  || [];
   const prices = vix.weekly?.prices || [];
-  _vixChartInst = new Chart(document.getElementById('vixChart'), {
+  const _inst = new Chart(document.getElementById(canvasId), {
     type: 'line',
     data: { labels: dates, datasets: [{
       label: 'VIX', data: prices,
@@ -549,10 +628,13 @@ function renderVix(vix) {
       },
     }],
   });
+  if (canvasId === 'vixChart') _vixChartInst = _inst;
+  return _inst;
 }
 
 // ── Sector bars ───────────────────────────────────────────────────────
 function renderSectors(sectors) {
+  _mkSectorData = sectors;  // save for modal expand
   const el = document.getElementById('sectorBars');
   if (!sectors || !sectors.length) { el.innerHTML = '<p class="text-xs text-slate-600">' + (I18n.t('markets.no_data') || 'No data') + '.</p>'; return; }
   const sorted = [...sectors].sort((a, b) => (b.day_chg ?? -999) - (a.day_chg ?? -999));
@@ -644,7 +726,8 @@ function renderIdxStats(key, data) {
   }
 }
 
-function renderIdxChart(key, range, data) {
+function renderIdxChart(key, range, data, canvasId) {
+  canvasId = canvasId || 'idxChart';
   const d = data.indices[key] || {};
   // 1M and 6M slice from daily data
   let dates, prices;
@@ -662,8 +745,10 @@ function renderIdxChart(key, range, data) {
   }
   const col = IDX_COLORS[key] || '#6366f1';
 
-  if (_idxChartInst) { _idxChartInst.destroy(); _idxChartInst = null; }
-  _idxChartInst = new Chart(document.getElementById('idxChart'), {
+  if (canvasId === 'idxChart') {
+    if (_idxChartInst) { _idxChartInst.destroy(); _idxChartInst = null; }
+  }
+  const _inst = new Chart(document.getElementById(canvasId), {
     type: 'line',
     data: { labels: dates, datasets: [{
       label: idxLabel(key),
@@ -702,6 +787,8 @@ function renderIdxChart(key, range, data) {
       },
     }],
   });
+  if (canvasId === 'idxChart') _idxChartInst = _inst;
+  return _inst;
 }
 
 // ── Technical indicator helpers ───────────────────────────────────────
@@ -750,8 +837,11 @@ function _computeRsiHistory(prices, period = 14) {
   return result;
 }
 
-function renderMacdChart(key, data, range) {
-  if (_macdChartInst) { _macdChartInst.destroy(); _macdChartInst = null; }
+function renderMacdChart(key, data, range, canvasId) {
+  canvasId = canvasId || 'macdChart';
+  if (canvasId === 'macdChart') {
+    if (_macdChartInst) { _macdChartInst.destroy(); _macdChartInst = null; }
+  }
   const d = data.indices[key] || {};
   // Compute MACD on full daily data, then slice to the visible range
   const dailySeries = d['daily'] || {};
@@ -773,7 +863,7 @@ function renderMacdChart(key, data, range) {
   const histColors  = histSlice.map(v => v == null ? 'transparent' : v >= 0 ? 'rgba(52,211,153,0.55)' : 'rgba(248,113,113,0.55)');
   const histBorders = histSlice.map(v => v == null ? 'transparent' : v >= 0 ? '#34d399' : '#f87171');
 
-  _macdChartInst = new Chart(document.getElementById('macdChart'), {
+  const _inst = new Chart(document.getElementById(canvasId), {
     type: 'bar',
     data: {
       labels: dates,
@@ -840,10 +930,15 @@ function renderMacdChart(key, data, range) {
       },
     }],
   });
+  if (canvasId === 'macdChart') _macdChartInst = _inst;
+  return _inst;
 }
 
-function renderRsiChart(key, data, range) {
-  if (_rsiChartInst) { _rsiChartInst.destroy(); _rsiChartInst = null; }
+function renderRsiChart(key, data, range, canvasId) {
+  canvasId = canvasId || 'rsiChart';
+  if (canvasId === 'rsiChart') {
+    if (_rsiChartInst) { _rsiChartInst.destroy(); _rsiChartInst = null; }
+  }
   const d = data.indices[key] || {};
   const dailySeries = d['daily'] || {};
   const allDates  = dailySeries.dates  || [];
@@ -857,7 +952,7 @@ function renderRsiChart(key, data, range) {
   const rsiVals = allRsi.slice(-cutDays);
 
   // Color the RSI line by zone
-  _rsiChartInst = new Chart(document.getElementById('rsiChart'), {
+  const _inst = new Chart(document.getElementById(canvasId), {
     type: 'line',
     data: {
       labels: dates,
@@ -909,6 +1004,8 @@ function renderRsiChart(key, data, range) {
       },
     }],
   });
+  if (canvasId === 'rsiChart') _rsiChartInst = _inst;
+  return _inst;
 }
 
 // ── Synchronized cross-chart hover ───────────────────────────────────
@@ -1024,7 +1121,8 @@ function switchIdxRange(range) {
 }
 
 // ── Forecast for selected index ───────────────────────────────────────
-function _buildForecastChart(result) {
+function _buildForecastChart(result, canvasId) {
+  canvasId = canvasId || 'idxForecastChart';
   const gridCol = GRID_COL, tickCol = TICK_COL;
   const trainDates  = (result.train || []).map(p => p.date);
   const trainPrices = (result.train || []).map(p => p.value);
@@ -1066,7 +1164,7 @@ function _buildForecastChart(result) {
   });
 
   const boundaryIdx = trainDates.length - 1;
-  return new Chart(document.getElementById('idxForecastChart'), {
+  return new Chart(document.getElementById(canvasId), {
     type: 'line',
     data: { labels: allDates, datasets },
     options: {
@@ -1149,11 +1247,12 @@ async function loadIdxForecast(key) {
 // ── Fear & Greed ──────────────────────────────────────────────────────
 let _fgChartInst = null;
 
-function renderFearGreed(data) {
+function renderFearGreed(data, canvasId) {
   if (!data || data.error) {
     document.getElementById('fgLoading').textContent = data?.error || I18n.t('markets.unavailable') || 'Unavailable';
     return;
   }
+  canvasId = canvasId || 'fgChart';
 
   const score  = data.score != null ? Math.round(data.score) : null;
   const rating = data.rating || '';
@@ -1169,49 +1268,52 @@ function renderFearGreed(data) {
   }
   const col = _fgColor(rating);
 
-  // Badge
-  document.getElementById('fgBadge').innerHTML = score != null
-    ? `<div class="text-2xl font-bold tabular-nums" style="color:${col}">${score}</div>
-       <div class="text-xs font-semibold mt-0.5" style="color:${col}">${rating}</div>`
-    : '<div class="text-slate-600 text-xs">—</div>';
+  if (canvasId === 'fgChart') {
+    _fgData = data;
 
-  // Needle position (0–100 → 0–100%)
-  if (score != null) {
-    document.getElementById('fgNeedle').style.left = score + '%';
+    // Badge
+    document.getElementById('fgBadge').innerHTML = score != null
+      ? `<div class="text-2xl font-bold tabular-nums" style="color:${col}">${score}</div>
+         <div class="text-xs font-semibold mt-0.5" style="color:${col}">${rating}</div>`
+      : '<div class="text-slate-600 text-xs">—</div>';
+
+    // Needle position (0–100 → 0–100%)
+    if (score != null) {
+      document.getElementById('fgNeedle').style.left = score + '%';
+    }
+
+    // Comparison row
+    const comps = [
+      { label: I18n.t('markets.fg_prev_close') || 'Prev Close', val: data.prev_close },
+      { label: I18n.t('markets.fg_prev_week')  || 'Prev Week',  val: data.prev_week  },
+      { label: I18n.t('markets.fg_prev_month') || 'Prev Month', val: data.prev_month },
+      { label: I18n.t('markets.fg_prev_year')  || 'Prev Year',  val: data.prev_year  },
+    ];
+    document.getElementById('fgCompare').innerHTML = comps.map(c => {
+      if (c.val == null) return '';
+      const v   = Math.round(c.val);
+      const diff = score != null ? score - v : null;
+      const col2 = diff == null ? '#94a3b8' : diff >= 0 ? '#34d399' : '#f87171';
+      const sign = diff != null && diff >= 0 ? '+' : '';
+      return `<div class="bg-slate-800/60 rounded-lg p-1.5 text-center">
+        <div class="text-[9px] text-slate-500 mb-0.5">${c.label}</div>
+        <div class="text-xs font-semibold text-slate-300">${v}</div>
+        ${diff != null ? `<div class="text-[9px]" style="color:${col2}">${sign}${diff}</div>` : ''}
+      </div>`;
+    }).join('');
   }
-
-  // Comparison row
-  const comps = [
-    { label: I18n.t('markets.fg_prev_close') || 'Prev Close', val: data.prev_close },
-    { label: I18n.t('markets.fg_prev_week')  || 'Prev Week',  val: data.prev_week  },
-    { label: I18n.t('markets.fg_prev_month') || 'Prev Month', val: data.prev_month },
-    { label: I18n.t('markets.fg_prev_year')  || 'Prev Year',  val: data.prev_year  },
-  ];
-  document.getElementById('fgCompare').innerHTML = comps.map(c => {
-    if (c.val == null) return '';
-    const v   = Math.round(c.val);
-    const diff = score != null ? score - v : null;
-    const col2 = diff == null ? '#94a3b8' : diff >= 0 ? '#34d399' : '#f87171';
-    const sign = diff != null && diff >= 0 ? '+' : '';
-    return `<div class="bg-slate-800/60 rounded-lg p-1.5 text-center">
-      <div class="text-[9px] text-slate-500 mb-0.5">${c.label}</div>
-      <div class="text-xs font-semibold text-slate-300">${v}</div>
-      ${diff != null ? `<div class="text-[9px]" style="color:${col2}">${sign}${diff}</div>` : ''}
-    </div>`;
-  }).join('');
 
   // History chart
   const hist = (data.history || []).filter(h => h.t && h.y != null);
-  if (hist.length && document.getElementById('fgChart')) {
+  if (hist.length) {
     const labels  = hist.map(h => {
       const d = new Date(h.t);
       return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: '2-digit' });
     });
     const values  = hist.map(h => h.y);
-    const ptColors = hist.map(h => _fgColor(h.rating));
 
-    if (_fgChartInst) { _fgChartInst.destroy(); _fgChartInst = null; }
-    _fgChartInst = new Chart(document.getElementById('fgChart'), {
+    if (canvasId === 'fgChart' && _fgChartInst) { _fgChartInst.destroy(); _fgChartInst = null; }
+    const _inst = new Chart(document.getElementById(canvasId), {
       type: 'line',
       data: {
         labels,
@@ -1252,64 +1354,73 @@ function renderFearGreed(data) {
         },
       }],
     });
+    if (canvasId === 'fgChart') _fgChartInst = _inst;
+    else return _inst;
   }
 
-  document.getElementById('fgLoading').style.display = 'none';
-  document.getElementById('fgBody').style.display = '';
+  if (canvasId === 'fgChart') {
+    document.getElementById('fgLoading').style.display = 'none';
+    document.getElementById('fgBody').style.display = '';
+  }
 }
 
 
 // ── AAII Sentiment Survey ─────────────────────────────────────────
 let _aaiiChartInst = null;
 
-function renderAaii(data) {
+function renderAaii(data, canvasId) {
   if (!data || data.error) {
     document.getElementById('aaiiLoading').textContent = data?.error || I18n.t('markets.unavailable') || 'Unavailable';
     return;
   }
-  if (data._stale) {
-    const badge = document.createElement('span');
-    badge.className = 'ml-2 text-[10px] text-amber-500/70';
-    badge.textContent = '(cached)';
-    document.querySelector('[data-i18n="markets.aaii_title"]')?.appendChild(badge);
+  canvasId = canvasId || 'aaiiChart';
+
+  if (canvasId === 'aaiiChart') {
+    _aaiiData = data;
+    if (data._stale) {
+      const badge = document.createElement('span');
+      badge.className = 'ml-2 text-[10px] text-amber-500/70';
+      badge.textContent = '(cached)';
+      document.querySelector('[data-i18n="markets.aaii_title"]')?.appendChild(badge);
+    }
+
+    const latest = data.latest || {};
+    const bull = latest.bullish, bear = latest.bearish, neu = latest.neutral;
+    const spread = latest.bull_bear_spread;
+
+    // Badge: show bull-bear spread
+    const spreadCls = spread == null ? 'neutral' : spread >= 0 ? 'up' : 'down';
+    document.getElementById('aaiiBadge').innerHTML = `
+      <div class="text-sm font-bold ${spreadCls}">${spread != null ? (spread >= 0 ? '+' : '') + spread.toFixed(1) + '%' : '—'}</div>
+      <div class="text-[10px] text-slate-500" data-i18n="markets.aaii_spread">Bull-Bear</div>`;
+
+    // Bull / Neutral / Bear bars
+    const barsData = [
+      { label: I18n.t('markets.aaii_bullish') || 'Bullish',  val: bull, col: '#34d399' },
+      { label: I18n.t('markets.aaii_neutral') || 'Neutral',  val: neu,  col: '#94a3b8' },
+      { label: I18n.t('markets.aaii_bearish') || 'Bearish',  val: bear, col: '#f87171' },
+    ];
+    document.getElementById('aaiiBars').innerHTML = barsData.map(b => `
+      <div class="flex items-center gap-2">
+        <span class="text-[10px] text-slate-400 w-14 shrink-0">${b.label}</span>
+        <div class="flex-1 bg-slate-800 rounded-full h-2 overflow-hidden">
+          <div style="width:${b.val ?? 0}%; background:${b.col}; height:100%; border-radius:4px; transition:width 0.4s"></div>
+        </div>
+        <span class="text-[11px] font-semibold tabular-nums w-10 text-right" style="color:${b.col}">
+          ${b.val != null ? b.val.toFixed(1) + '%' : '—'}
+        </span>
+      </div>`).join('');
   }
-
-  const latest = data.latest || {};
-  const bull = latest.bullish, bear = latest.bearish, neu = latest.neutral;
-  const spread = latest.bull_bear_spread;
-
-  // Badge: show bull-bear spread
-  const spreadCls = spread == null ? 'neutral' : spread >= 0 ? 'up' : 'down';
-  document.getElementById('aaiiBadge').innerHTML = `
-    <div class="text-sm font-bold ${spreadCls}">${spread != null ? (spread >= 0 ? '+' : '') + spread.toFixed(1) + '%' : '—'}</div>
-    <div class="text-[10px] text-slate-500" data-i18n="markets.aaii_spread">Bull-Bear</div>`;
-
-  // Bull / Neutral / Bear bars
-  const bars = [
-    { label: I18n.t('markets.aaii_bullish') || 'Bullish',  val: bull, col: '#34d399' },
-    { label: I18n.t('markets.aaii_neutral') || 'Neutral',  val: neu,  col: '#94a3b8' },
-    { label: I18n.t('markets.aaii_bearish') || 'Bearish',  val: bear, col: '#f87171' },
-  ];
-  document.getElementById('aaiiBars').innerHTML = bars.map(b => `
-    <div class="flex items-center gap-2">
-      <span class="text-[10px] text-slate-400 w-14 shrink-0">${b.label}</span>
-      <div class="flex-1 bg-slate-800 rounded-full h-2 overflow-hidden">
-        <div style="width:${b.val ?? 0}%; background:${b.col}; height:100%; border-radius:4px; transition:width 0.4s"></div>
-      </div>
-      <span class="text-[11px] font-semibold tabular-nums w-10 text-right" style="color:${b.col}">
-        ${b.val != null ? b.val.toFixed(1) + '%' : '—'}
-      </span>
-    </div>`).join('');
 
   // History chart — stacked area: bullish (green), neutral (gray), bearish (red)
   const hist = data.history || [];
-  if (hist.length && document.getElementById('aaiiChart')) {
-    const labels = hist.map(h => h.date);
-    if (_aaiiChartInst) { _aaiiChartInst.destroy(); _aaiiChartInst = null; }
-    _aaiiChartInst = new Chart(document.getElementById('aaiiChart'), {
+  if (hist.length) {
+    const histLabels = hist.map(h => h.date);
+    if (canvasId === 'aaiiChart' && _aaiiChartInst) { _aaiiChartInst.destroy(); _aaiiChartInst = null; }
+    const _inst = new Chart(document.getElementById(canvasId), {
       type: 'line',
       data: {
-        labels,
+        labels: histLabels,
         datasets: [
           { label: I18n.t('markets.aaii_bullish') || 'Bullish', data: hist.map(h => h.bullish),
             borderColor: '#34d399', backgroundColor: 'rgba(52,211,153,0.15)',
@@ -1322,7 +1433,7 @@ function renderAaii(data) {
       options: {
         responsive: true, maintainAspectRatio: false,
         plugins: {
-          legend: { display: false },
+          legend: { display: canvasId !== 'aaiiChart' },
           tooltip: {
             mode: 'index', intersect: false,
             callbacks: { label: c => ` ${c.dataset.label}: ${c.raw?.toFixed(1)}%` },
@@ -1347,21 +1458,26 @@ function renderAaii(data) {
         },
       }],
     });
+    if (canvasId === 'aaiiChart') _aaiiChartInst = _inst;
+    else return _inst;
   }
 
-  document.getElementById('aaiiLoading').style.display = 'none';
-  document.getElementById('aaiiBody').style.display = '';
+  if (canvasId === 'aaiiChart') {
+    document.getElementById('aaiiLoading').style.display = 'none';
+    document.getElementById('aaiiBody').style.display = '';
+  }
 }
 
 // ── Put/Call Ratio ────────────────────────────────────────────────
 let _pcrChartInst = null;
 
-function renderPcr(data) {
+function renderPcr(data, canvasId) {
   const loadEl = document.getElementById('pcrLoading');
   if (!data || data.error) {
     loadEl.textContent = data?.error || (I18n.t('markets.unavailable') || 'Unavailable');
     return;
   }
+  canvasId = canvasId || 'pcrChart';
 
   const val  = data.current;
   const chg  = data.day_chg;
@@ -1373,33 +1489,37 @@ function renderPcr(data) {
   else if (val < 0.8) { signal = I18n.t('markets.pcr_neutral') || 'Neutral';  sigCol = '#94a3b8'; }
   else                { signal = I18n.t('markets.pcr_bearish') || 'Bearish';  sigCol = '#f87171'; }
 
-  document.getElementById('pcrBadge').innerHTML = `
-    <div class="text-2xl font-bold tabular-nums" style="color:${sigCol}">${val != null ? val.toFixed(2) : '—'}</div>
-    <div class="text-[11px] font-semibold mt-0.5" style="color:${sigCol}">${signal}</div>`;
+  if (canvasId === 'pcrChart') {
+    _pcrData = data;
 
-  // Needle position: map 0.3–1.3 range onto 0–100%
-  const pct = Math.max(0, Math.min(100, (val - 0.3) / 1.0 * 100));
-  document.getElementById('pcrNeedle').style.left = pct + '%';
+    document.getElementById('pcrBadge').innerHTML = `
+      <div class="text-2xl font-bold tabular-nums" style="color:${sigCol}">${val != null ? val.toFixed(2) : '—'}</div>
+      <div class="text-[11px] font-semibold mt-0.5" style="color:${sigCol}">${signal}</div>`;
 
-  // Stats
-  const chgCls  = chg == null ? 'text-slate-500' : chg >= 0 ? 'text-rose-400' : 'text-emerald-400';
-  const chgSign = chg == null ? '' : chg >= 0 ? '+' : '';
-  document.getElementById('pcrStats').innerHTML = `
-    <div class="stat-card">
-      <div class="stat-label">${I18n.t('markets.day_change') || 'Day Change'}</div>
-      <div class="stat-val text-sm ${chgCls}">${chgSign}${chg != null ? chg.toFixed(3) : '—'}</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label">${I18n.t('markets.pcr_ma20') || '20-day MA'}</div>
-      <div class="stat-val text-sm text-slate-200">${ma20 != null ? ma20.toFixed(2) : '—'}</div>
-    </div>`;
+    // Needle position: map 0.3–1.3 range onto 0–100%
+    const pct = Math.max(0, Math.min(100, (val - 0.3) / 1.0 * 100));
+    document.getElementById('pcrNeedle').style.left = pct + '%';
+
+    // Stats
+    const chgCls  = chg == null ? 'text-slate-500' : chg >= 0 ? 'text-rose-400' : 'text-emerald-400';
+    const chgSign = chg == null ? '' : chg >= 0 ? '+' : '';
+    document.getElementById('pcrStats').innerHTML = `
+      <div class="stat-card">
+        <div class="stat-label">${I18n.t('markets.day_change') || 'Day Change'}</div>
+        <div class="stat-val text-sm ${chgCls}">${chgSign}${chg != null ? chg.toFixed(3) : '—'}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">${I18n.t('markets.pcr_ma20') || '20-day MA'}</div>
+        <div class="stat-val text-sm text-slate-200">${ma20 != null ? ma20.toFixed(2) : '—'}</div>
+      </div>`;
+
+    if (_pcrChartInst) { _pcrChartInst.destroy(); _pcrChartInst = null; }
+  }
 
   // History chart
-  if (_pcrChartInst) { _pcrChartInst.destroy(); _pcrChartInst = null; }
   const dates  = data.dates  || [];
   const closes = data.closes || [];
-  // Color line by zone
-  _pcrChartInst = new Chart(document.getElementById('pcrChart'), {
+  const _inst = new Chart(document.getElementById(canvasId), {
     type: 'line',
     data: { labels: dates, datasets: [
       {
@@ -1425,7 +1545,7 @@ function renderPcr(data) {
     options: {
       responsive: true, maintainAspectRatio: false,
       plugins: {
-        legend: { display: false },
+        legend: { display: canvasId !== 'pcrChart' },
         tooltip: { mode: 'index', intersect: false,
           callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y?.toFixed(2)}` } },
       },
@@ -1452,9 +1572,86 @@ function renderPcr(data) {
       },
     }],
   });
+  if (canvasId === 'pcrChart') _pcrChartInst = _inst;
+  else return _inst;
 
   loadEl.style.display = 'none';
   document.getElementById('pcrBody').style.display = '';
+}
+
+// ── Gold Ratios ───────────────────────────────────────────────────
+let _gsChartInst = null;
+let _gcChartInst = null;
+let _goldRatioData = null;
+
+function _renderRatioChart(data, canvasId, ratioKey, color) {
+  const dates  = data.dates || [];
+  const ratios = data[ratioKey] || [];
+  const _inst = new Chart(document.getElementById(canvasId), {
+    type: 'line',
+    data: { labels: dates, datasets: [{
+      label: ratioKey === 'gs_ratio' ? 'Gold/Silver' : 'Gold/Copper',
+      data: ratios,
+      borderColor: color, backgroundColor: color.replace(')', ',0.07)').replace('rgb', 'rgba'),
+      borderWidth: 2, pointRadius: 0, fill: true, tension: 0.3, spanGaps: true,
+    }]},
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: canvasId !== 'gsChart' && canvasId !== 'gcChart' },
+                 tooltip: { mode: 'index', intersect: false } },
+      scales: {
+        x: { grid: { color: GRID_COL }, ticks: { color: TICK_COL, maxTicksLimit: 6, maxRotation: 0, font: { size: 9 } } },
+        y: { grid: { color: GRID_COL }, ticks: { color: TICK_COL, font: { size: 9 } } },
+      },
+    },
+  });
+  return _inst;
+}
+
+function renderGoldRatios(data) {
+  if (!data || data.error) {
+    document.getElementById('gsLoading').textContent = data?.error || 'Unavailable';
+    document.getElementById('gcLoading').textContent = data?.error || 'Unavailable';
+    return;
+  }
+  _goldRatioData = data;
+
+  function _ratioChg(v) {
+    if (v == null) return '<span class="text-slate-500">—</span>';
+    const cls = v >= 0 ? 'text-rose-400' : 'text-emerald-400';
+    return `<span class="${cls}">${v >= 0 ? '+' : ''}${v.toFixed(2)}</span>`;
+  }
+
+  // Gold/Silver card
+  const gs = data.current_gs;
+  const gsChg = data.gs_day_chg;
+  const gsCls = gsChg == null ? 'text-slate-200' : gsChg >= 0 ? 'text-rose-400' : 'text-emerald-400';
+  document.getElementById('gsBadge').innerHTML = `
+    <div class="text-2xl font-bold tabular-nums text-yellow-300">${gs != null ? gs.toFixed(1) : '—'}</div>
+    <div class="text-xs text-slate-500 mt-0.5">${_ratioChg(gsChg)} today</div>`;
+  document.getElementById('gsStats').innerHTML = `
+    <div class="stat-card text-center"><div class="stat-label">Gold</div><div class="stat-val text-sm text-yellow-300">$${data.gold_price?.toFixed(0) ?? '—'}</div></div>
+    <div class="stat-card text-center"><div class="stat-label">Silver</div><div class="stat-val text-sm text-slate-300">$${data.silver_price?.toFixed(2) ?? '—'}</div></div>
+    <div class="stat-card text-center"><div class="stat-label">52w Range</div><div class="stat-val text-xs text-slate-400">${data.gs_52wk_lo?.toFixed(0) ?? '—'}–${data.gs_52wk_hi?.toFixed(0) ?? '—'}</div></div>`;
+  if (_gsChartInst) { _gsChartInst.destroy(); _gsChartInst = null; }
+  _gsChartInst = _renderRatioChart(data, 'gsChart', 'gs_ratio', '#fbbf24');
+  document.getElementById('gsLoading').style.display = 'none';
+  document.getElementById('gsBody').style.display = '';
+
+  // Gold/Copper card
+  const gc = data.current_gc;
+  const gcChg = data.gc_day_chg;
+  document.getElementById('gcBadge').innerHTML = `
+    <div class="text-2xl font-bold tabular-nums text-orange-300">${gc != null ? gc.toFixed(1) : '—'}</div>
+    <div class="text-xs text-slate-500 mt-0.5">${_ratioChg(gcChg)} today</div>`;
+  document.getElementById('gcStats').innerHTML = `
+    <div class="stat-card text-center"><div class="stat-label">Gold</div><div class="stat-val text-sm text-yellow-300">$${data.gold_price?.toFixed(0) ?? '—'}</div></div>
+    <div class="stat-card text-center"><div class="stat-label">Copper</div><div class="stat-val text-sm text-orange-300">$${data.copper_price?.toFixed(3) ?? '—'}</div></div>
+    <div class="stat-card text-center"><div class="stat-label">52w Range</div><div class="stat-val text-xs text-slate-400">${data.gc_52wk_lo?.toFixed(0) ?? '—'}–${data.gc_52wk_hi?.toFixed(0) ?? '—'}</div></div>`;
+  if (_gcChartInst) { _gcChartInst.destroy(); _gcChartInst = null; }
+  _gcChartInst = _renderRatioChart(data, 'gcChart', 'gc_ratio', '#fb923c');
+  document.getElementById('gcLoading').style.display = 'none';
+  document.getElementById('gcBody').style.display = '';
 }
 
 // ── Economic Events Calendar ──────────────────────────────────────
@@ -1741,12 +1938,109 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') closeMktsMod
 
 function expandMktsChart(kind) {
   const modal    = document.getElementById('mktsModal');
-  const canvas   = document.getElementById('mktsModalCanvas');
   const titleEl  = document.getElementById('mktsModalTitle');
   const subEl    = document.getElementById('mktsModalSub');
   if (_mktsModalChart) { _mktsModalChart.destroy(); _mktsModalChart = null; }
 
-  // Clone current chart config based on kind
+  // For charts with inline plugins (functions), render fresh into modal canvas
+  if (kind === 'idx' && _mkData) {
+    titleEl.textContent = idxLabel(_curIdx) + ' — ' + (I18n.t('markets.hist_title') || 'Price History');
+    subEl.textContent   = '';
+    modal.style.display = 'flex';
+    _mktsModalChart = renderIdxChart(_curIdx, _curRange, _mkData, 'mktsModalCanvas');
+    return;
+  }
+  if (kind === 'macd' && _mkData) {
+    titleEl.textContent = idxLabel(_curIdx) + ' — MACD';
+    subEl.textContent   = '12 / 26 / 9 — daily';
+    modal.style.display = 'flex';
+    _mktsModalChart = renderMacdChart(_curIdx, _mkData, _curRange, 'mktsModalCanvas');
+    return;
+  }
+  if (kind === 'rsi' && _mkData) {
+    titleEl.textContent = idxLabel(_curIdx) + ' — RSI-14';
+    subEl.textContent   = '';
+    modal.style.display = 'flex';
+    _mktsModalChart = renderRsiChart(_curIdx, _mkData, _curRange, 'mktsModalCanvas');
+    return;
+  }
+  if (kind === 'sectors' && _mkSectorData) {
+    titleEl.textContent = I18n.t('markets.sector_perf') || 'Sector Performance';
+    subEl.textContent   = I18n.t('markets.sector_perf_sub') || 'Day change by sector ETF';
+    const sorted = [..._mkSectorData].sort((a, b) => (a.day_chg ?? -999) - (b.day_chg ?? -999));
+    const labels = sorted.map(s => (I18n.t('markets.sector.' + s.label)) || s.label);
+    const vals   = sorted.map(s => s.day_chg ?? 0);
+    const colors = vals.map(v => v >= 0 ? 'rgba(52,211,153,0.7)' : 'rgba(248,113,113,0.7)');
+    modal.style.display = 'flex';
+    _mktsModalChart = new Chart(document.getElementById('mktsModalCanvas'), {
+      type: 'bar',
+      data: { labels, datasets: [{ label: '% Change', data: vals, backgroundColor: colors, borderRadius: 4 }] },
+      options: {
+        indexAxis: 'y',
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => ` ${c.raw >= 0 ? '+' : ''}${c.raw.toFixed(2)}%` } } },
+        scales: {
+          x: { grid: { color: GRID_COL }, ticks: { color: TICK_COL, callback: v => v + '%' } },
+          y: { grid: { color: 'transparent' }, ticks: { color: '#cbd5e1', font: { size: 12 } } },
+        },
+      },
+    });
+    return;
+  }
+
+  if (kind === 'vix' && _vixData) {
+    titleEl.textContent = I18n.t('markets.vix') || 'VIX (Volatility)';
+    subEl.textContent   = I18n.t('markets.vix_desc') || '';
+    modal.style.display = 'flex';
+    _mktsModalChart = renderVix(_vixData, 'mktsModalCanvas');
+    return;
+  }
+  if (kind === 'fg' && _fgData) {
+    titleEl.textContent = I18n.t('markets.fear_greed') || 'Fear & Greed';
+    subEl.textContent   = I18n.t('markets.fear_greed_desc') || '';
+    modal.style.display = 'flex';
+    _mktsModalChart = renderFearGreed(_fgData, 'mktsModalCanvas');
+    return;
+  }
+  if (kind === 'aaii' && _aaiiData) {
+    titleEl.textContent = I18n.t('markets.aaii_title') || 'AAII Sentiment';
+    subEl.textContent   = I18n.t('markets.aaii_desc') || '';
+    modal.style.display = 'flex';
+    _mktsModalChart = renderAaii(_aaiiData, 'mktsModalCanvas');
+    return;
+  }
+  if (kind === 'pcr' && _pcrData) {
+    titleEl.textContent = I18n.t('markets.pcr_title') || 'Put/Call Ratio';
+    subEl.textContent   = I18n.t('markets.pcr_desc') || '';
+    modal.style.display = 'flex';
+    _mktsModalChart = renderPcr(_pcrData, 'mktsModalCanvas');
+    return;
+  }
+  if (kind === 'forecast' && _forecastCache[_curIdx]) {
+    titleEl.textContent = idxLabel(_curIdx) + ' — ' + (I18n.t('forecast.title') || 'Price Forecast — 90 Days');
+    subEl.textContent   = I18n.t('forecast.desc') || '';
+    modal.style.display = 'flex';
+    _mktsModalChart = _buildForecastChart(_forecastCache[_curIdx], 'mktsModalCanvas');
+    return;
+  }
+
+  if (kind === 'gs' && _goldRatioData) {
+    titleEl.textContent = 'Gold / Silver Ratio';
+    subEl.textContent   = '2-year daily — oz of silver per oz of gold';
+    modal.style.display = 'flex';
+    _mktsModalChart = _renderRatioChart(_goldRatioData, 'mktsModalCanvas', 'gs_ratio', '#fbbf24');
+    return;
+  }
+  if (kind === 'gc' && _goldRatioData) {
+    titleEl.textContent = 'Gold / Copper Ratio';
+    subEl.textContent   = '2-year daily — gold ($/oz) ÷ copper ($/lb)';
+    modal.style.display = 'flex';
+    _mktsModalChart = _renderRatioChart(_goldRatioData, 'mktsModalCanvas', 'gc_ratio', '#fb923c');
+    return;
+  }
+
+  // Fallback: sectors or unknown
+  const canvas   = document.getElementById('mktsModalCanvas');
   const cfg = _mktsModalConfig(kind);
   if (!cfg) return;
   titleEl.textContent = cfg.title;
@@ -1817,10 +2111,11 @@ function _mktsModalConfig(kind) {
 
 (async function() {
   // Fire all independent APIs in parallel immediately
-  const fearGreedP = fetch('/api/fear-greed').then(r => r.json());
-  const aaiiP      = fetch('/api/aaii-sentiment').then(r => r.json());
-  const econP      = fetch('/api/economic-events').then(r => r.json());
-  const pcrP       = fetch('/api/put-call-ratio').then(r => r.json());
+  const fearGreedP    = fetch('/api/fear-greed').then(r => r.json());
+  const aaiiP         = fetch('/api/aaii-sentiment').then(r => r.json());
+  const econP         = fetch('/api/economic-events').then(r => r.json());
+  const pcrP          = fetch('/api/put-call-ratio').then(r => r.json());
+  const goldRatiosP   = fetch('/api/gold-ratios').then(r => r.json());
 
   // Resolve each as soon as it arrives — don't wait for the slowest
   fearGreedP
@@ -1834,6 +2129,12 @@ function _mktsModalConfig(kind) {
   pcrP
     .then(renderPcr)
     .catch(e => { document.getElementById('pcrLoading').textContent = '⚠ ' + e.message; });
+  goldRatiosP
+    .then(renderGoldRatios)
+    .catch(e => {
+      document.getElementById('gsLoading').textContent = '⚠ ' + e.message;
+      document.getElementById('gcLoading').textContent = '⚠ ' + e.message;
+    });
   econP
     .then(d => renderEconEvents(d.events || []))
     .catch(e => {

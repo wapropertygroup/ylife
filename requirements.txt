@@ -12,3 +12,4 @@ pmdarima>=2.0
 statsmodels>=0.14
 numpy>=1.26
 xlrd>=2.0.1
+openpyxl>=3.1

@@ -2000,6 +2000,13 @@ def markets():
                            peer_groups=list(PEER_GROUPS.keys()))
 
 
+@bp.route("/daily")
+def daily_report():
+    """Daily markets summary report page."""
+    return render_template("daily_report.html",
+                           peer_groups=list(PEER_GROUPS.keys()))
+
+
 @bp.route("/api/markets")
 def api_markets():
     """
@@ -2680,6 +2687,103 @@ _AAII_HEADERS = {
 _AAII_XLS_URL = "https://www.aaii.com/files/surveys/sentiment.xls"
 
 
+# ---------------------------------------------------------------------------
+# Gold / Silver / Copper Ratios  (/api/gold-ratios)
+# ---------------------------------------------------------------------------
+
+_GOLD_RATIOS_CACHE: dict = {}
+_GOLD_RATIOS_CACHE_LOCK = threading.Lock()
+_GOLD_RATIOS_CACHE_TTL  = 3600  # 1 hour
+
+
+@bp.route("/api/gold-ratios")
+def api_gold_ratios():
+    """Return Gold/Silver and Gold/Copper ratio history (2Y daily)."""
+    with _GOLD_RATIOS_CACHE_LOCK:
+        entry = _GOLD_RATIOS_CACHE.get("data")
+        if entry and time.time() - entry["ts"] < _GOLD_RATIOS_CACHE_TTL:
+            return jsonify(entry["data"])
+
+    import yfinance as yf
+    import math as _math
+
+    try:
+        # GC=F gold ($/troy oz), SI=F silver ($/troy oz), HG=F copper ($/lb)
+        raw = yf.download(["GC=F", "SI=F", "HG=F"],
+                          period="2y", interval="1d",
+                          auto_adjust=True, progress=False)["Close"]
+
+        def _series(sym):
+            col = raw[sym] if sym in raw.columns else raw.get(sym)
+            if col is None:
+                return [], []
+            col = col.dropna()
+            dates  = [str(d.date()) for d in col.index]
+            prices = [round(float(p), 4) if not _math.isnan(float(p)) else None
+                      for p in col.values]
+            return dates, prices
+
+        gold_dates,   gold_prices   = _series("GC=F")
+        silver_dates, silver_prices = _series("SI=F")
+        copper_dates, copper_prices = _series("HG=F")
+
+        # Build ratio on matching dates (inner join)
+        gold_map   = dict(zip(gold_dates,   gold_prices))
+        silver_map = dict(zip(silver_dates, silver_prices))
+        copper_map = dict(zip(copper_dates, copper_prices))
+
+        all_dates = sorted(set(gold_dates) & set(silver_dates) & set(copper_dates))
+
+        gs_ratios  = []  # gold/silver
+        gc_ratios  = []  # gold/copper
+        for d in all_dates:
+            g, s, c = gold_map.get(d), silver_map.get(d), copper_map.get(d)
+            gs_ratios.append(round(g / s, 2) if g and s and s > 0 else None)
+            gc_ratios.append(round(g / c, 2) if g and c and c > 0 else None)
+
+        # Current values
+        cur_gs = next((v for v in reversed(gs_ratios) if v is not None), None)
+        cur_gc = next((v for v in reversed(gc_ratios) if v is not None), None)
+        cur_gold   = next((v for v in reversed(gold_prices)   if v is not None), None)
+        cur_silver = next((v for v in reversed(silver_prices) if v is not None), None)
+        cur_copper = next((v for v in reversed(copper_prices) if v is not None), None)
+
+        # Day change in ratio
+        valid_gs = [v for v in gs_ratios if v is not None]
+        valid_gc = [v for v in gc_ratios if v is not None]
+        gs_chg = round(valid_gs[-1] - valid_gs[-2], 2) if len(valid_gs) >= 2 else None
+        gc_chg = round(valid_gc[-1] - valid_gc[-2], 2) if len(valid_gc) >= 2 else None
+
+        # 52-week stats
+        gs_52 = [v for v in gs_ratios[-252:] if v is not None]
+        gc_52 = [v for v in gc_ratios[-252:] if v is not None]
+
+        result = {
+            "dates":         all_dates,
+            "gs_ratio":      gs_ratios,   # gold/silver
+            "gc_ratio":      gc_ratios,   # gold/copper
+            "current_gs":    cur_gs,
+            "current_gc":    cur_gc,
+            "gs_day_chg":    gs_chg,
+            "gc_day_chg":    gc_chg,
+            "gs_52wk_hi":    round(max(gs_52), 2) if gs_52 else None,
+            "gs_52wk_lo":    round(min(gs_52), 2) if gs_52 else None,
+            "gc_52wk_hi":    round(max(gc_52), 2) if gc_52 else None,
+            "gc_52wk_lo":    round(min(gc_52), 2) if gc_52 else None,
+            "gold_price":    cur_gold,
+            "silver_price":  cur_silver,
+            "copper_price":  cur_copper,
+        }
+        ts = time.time()
+        with _GOLD_RATIOS_CACHE_LOCK:
+            _GOLD_RATIOS_CACHE["data"] = {"ts": ts, "data": result}
+        return jsonify(result)
+
+    except Exception as exc:
+        log.warning("Gold ratios fetch failed: %s", exc)
+        return jsonify({"error": str(exc)}), 500
+
+
 @bp.route("/api/aaii-sentiment")
 def api_aaii_sentiment():
     """
@@ -2709,7 +2813,9 @@ def api_aaii_sentiment():
             pass  # valid .xls magic bytes
         elif resp.content[:5] == b'<?xml' or resp.content[:9] == b'<!DOCTYPE' or b'<html' in resp.content[:200].lower():
             raise ValueError("AAII returned HTML instead of XLS — try again later")
-        df = pd.read_excel(io.BytesIO(resp.content), header=3, engine="xlrd")
+        # Auto-detect XLS vs XLSX by magic bytes (PK = ZIP = xlsx)
+        _engine = "openpyxl" if resp.content[:2] == b'PK' else "xlrd"
+        df = pd.read_excel(io.BytesIO(resp.content), header=3, engine=_engine)
 
         # Columns: Date, Bullish, Neutral, Bearish, Total, Bull-Bear Spread, ...
         # Normalise column names
@@ -3136,6 +3242,178 @@ def api_economic_events_translate():
                         ev["zh"] = zh_map[eid]
 
     return jsonify({"translations": translations})
+
+
+# ---------------------------------------------------------------------------
+# Top Movers  (/api/movers)
+# ---------------------------------------------------------------------------
+
+_MOVERS_CACHE: dict = {}
+_MOVERS_CACHE_LOCK = threading.Lock()
+_MOVERS_CACHE_TTL  = 300   # 5 minutes
+
+# Curated list of large-cap US stocks to scan for movers
+_MOVER_TICKERS = [
+    "AAPL", "MSFT", "NVDA", "AMZN", "META", "GOOGL", "TSLA", "BRK-B",
+    "AVGO", "JPM", "LLY", "V", "UNH", "XOM", "WMT", "MA", "HD", "ORCL",
+    "COST", "PG", "JNJ", "ABBV", "BAC", "MRK", "CVX", "AMD", "NFLX",
+    "KO", "PEP", "ADBE", "CRM", "QCOM", "TXN", "TMO", "INTC", "GE",
+    "DIS", "CSCO", "VZ", "T", "PM", "NKE", "BMY", "MCD", "IBM",
+    "SBUX", "GS", "MS", "WFC", "C",
+]
+
+
+@bp.route("/api/movers")
+def api_movers():
+    """Return top 5 gainers and losers among major US large-cap stocks."""
+    import yfinance as yf
+
+    with _MOVERS_CACHE_LOCK:
+        entry = _MOVERS_CACHE.get("data")
+        if entry and time.time() - entry["ts"] < _MOVERS_CACHE_TTL:
+            return jsonify(entry["data"])
+
+    try:
+        tickers_str = " ".join(_MOVER_TICKERS)
+        raw = yf.download(tickers_str, period="2d", interval="1d",
+                          auto_adjust=True, progress=False)["Close"]
+
+        movers = []
+        for sym in _MOVER_TICKERS:
+            try:
+                col = raw[sym] if sym in raw.columns else raw.get(sym)
+                if col is None:
+                    continue
+                vals = col.dropna().tolist()
+                if len(vals) < 2:
+                    continue
+                prev, curr = vals[-2], vals[-1]
+                if prev <= 0:
+                    continue
+                chg = round((curr - prev) / prev * 100, 2)
+                movers.append({"ticker": sym, "price": round(curr, 2), "day_chg": chg})
+            except Exception:
+                pass
+
+        movers.sort(key=lambda x: x["day_chg"])
+        result = {
+            "losers":  movers[:5],
+            "gainers": movers[-5:][::-1],
+        }
+    except Exception as exc:
+        log.warning("Movers fetch failed: %s", exc)
+        return jsonify({"error": str(exc)}), 500
+
+    ts = time.time()
+    with _MOVERS_CACHE_LOCK:
+        _MOVERS_CACHE["data"] = {"ts": ts, "data": result}
+    return jsonify(result)
+
+
+# ---------------------------------------------------------------------------
+# Daily AI Summary  (/api/daily-summary)
+# ---------------------------------------------------------------------------
+
+_DAILY_SUMMARY_CACHE: dict = {}
+_DAILY_SUMMARY_CACHE_LOCK = threading.Lock()
+_DAILY_SUMMARY_CACHE_TTL  = 1800   # 30 minutes
+
+
+@bp.route("/api/daily-summary", methods=["POST"])
+def api_daily_summary():
+    """
+    Generate an AI-written daily markets summary using Gemini.
+
+    Request body: { market_data: {...} }
+    Response:     { summary: "...", generated_at: "..." }
+    """
+    from datetime import date as _date_cls
+    import time as _time
+
+    GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+    if not GEMINI_API_KEY:
+        return jsonify({"error": "GEMINI_API_KEY not configured"}), 503
+
+    with _DAILY_SUMMARY_CACHE_LOCK:
+        entry = _DAILY_SUMMARY_CACHE.get("data")
+        if entry and _time.time() - entry["ts"] < _DAILY_SUMMARY_CACHE_TTL:
+            return jsonify(entry["data"])
+
+    payload = request.get_json(silent=True) or {}
+    md = payload.get("market_data", {})
+
+    # Build a compact text snapshot from the provided market data
+    lines = [f"Date: {_date_cls.today().isoformat()}"]
+
+    idx = md.get("indices", {})
+    for key, label in [("spx","S&P 500"), ("ixic","Nasdaq"), ("dji","Dow Jones"),
+                       ("ftse","FTSE 100"), ("n225","Nikkei 225")]:
+        d = idx.get(key, {})
+        if d.get("current"):
+            chg = f"{d['day_chg']:+.2f}%" if d.get("day_chg") is not None else "—"
+            lines.append(f"{label}: {d['current']:,.2f} ({chg}) YTD {d.get('ytd','—')}%")
+
+    vix = md.get("vix", {})
+    if vix.get("current"):
+        lines.append(f"VIX: {vix['current']:.2f}")
+
+    fg = md.get("fg", {})
+    if fg.get("score"):
+        lines.append(f"Fear & Greed: {fg['score']:.0f} ({fg.get('rating','')})")
+
+    pcr = md.get("pcr", {})
+    if pcr.get("current"):
+        lines.append(f"Put/Call Ratio: {pcr['current']:.2f} (20d MA: {pcr.get('ma20','—')})")
+
+    aaii = md.get("aaii", {})
+    if aaii.get("bullish"):
+        lines.append(f"AAII: Bull {aaii['bullish']:.1f}% Bear {aaii['bearish']:.1f}% Spread {aaii.get('bull_bear_spread','—')}%")
+
+    sectors = md.get("sectors", [])
+    if sectors:
+        top = sorted(sectors, key=lambda s: s.get("day_chg", 0) or 0)
+        lines.append(f"Sectors — best: {top[-1]['label']} {top[-1].get('day_chg',0):+.2f}%, worst: {top[0]['label']} {top[0].get('day_chg',0):+.2f}%")
+
+    gainers = md.get("gainers", [])
+    losers  = md.get("losers", [])
+    if gainers:
+        g_str = ", ".join(f"{g['ticker']} {g['day_chg']:+.2f}%" for g in gainers[:3])
+        lines.append(f"Top gainers: {g_str}")
+    if losers:
+        l_str = ", ".join(f"{l['ticker']} {l['day_chg']:+.2f}%" for l in losers[:3])
+        lines.append(f"Top losers: {l_str}")
+
+    econ_events = md.get("events", [])
+    if econ_events:
+        ev_str = "; ".join(f"{e.get('country','')} {e.get('event','')}" for e in econ_events[:5])
+        lines.append(f"Key economic events: {ev_str}")
+
+    snapshot = "\n".join(lines)
+
+    prompt = (
+        "You are a concise financial analyst. Write a brief (3-4 paragraph) daily markets commentary "
+        "based on the data below. Be direct, insightful, and neutral. Focus on the most important "
+        "signals and what they might mean for investors today. Use plain English, no markdown headers.\n\n"
+        f"Market snapshot:\n{snapshot}"
+    )
+
+    try:
+        from google import genai
+        client = genai.Client(api_key=GEMINI_API_KEY)
+        resp = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
+        summary = resp.text.strip()
+    except Exception as exc:
+        log.warning("Daily summary Gemini call failed: %s", exc)
+        return jsonify({"error": str(exc)}), 500
+
+    from datetime import datetime as _dt
+    result = {
+        "summary":      summary,
+        "generated_at": _dt.utcnow().strftime("%Y-%m-%d %H:%M UTC"),
+    }
+    with _DAILY_SUMMARY_CACHE_LOCK:
+        _DAILY_SUMMARY_CACHE["data"] = {"ts": _time.time(), "data": result}
+    return jsonify(result)
 
 
 # ---------------------------------------------------------------------------

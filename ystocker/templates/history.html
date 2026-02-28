@@ -550,6 +550,8 @@ const _chartInstances = {};   // key → live Chart instance (for inline charts)
 const _periodCache    = {};   // period → fetched data
 let   _modalChart     = null;
 let   _modalKey       = null;
+let   _staticData     = null;   // reference values (target, walls, current_pe)
+let   _forecastResult = null;   // last forecast API response
 
 (async function() {
   let data;
@@ -711,6 +713,7 @@ let   _modalKey       = null;
     call_wall:    data.call_wall,
     put_wall:     data.put_wall,
   };
+  _staticData = staticData;
 
   // ── PE chart (only when data available)
   if (data.pe_history && data.pe_history.some(v => v != null)) {
@@ -842,6 +845,7 @@ let   _modalKey       = null;
         }
         // Build & render chart
         const cfg = _buildConfig('forecast', result, staticData);
+        _forecastResult = result;
         _chartConfigs['forecast'] = cfg;
         wrap.style.display = '';
         _chartInstances['forecast'] = new Chart(document.getElementById('forecastChart'), cfg);
@@ -1376,6 +1380,20 @@ function _renderModal(key, d, staticData) {
 }
 
 function expandChart(key) {
+  // For forecast, rebuild from stored API result to avoid Chart.js circular ref issues
+  if (key === 'forecast') {
+    if (!_forecastResult || !_staticData) return;
+    const modal = document.getElementById('chartModal');
+    const cfg = _buildConfig('forecast', _forecastResult, _staticData);
+    document.getElementById('modalTitle').textContent = cfg._title || '';
+    document.getElementById('modalDesc').textContent  = cfg._desc  || '';
+    modal.style.display = 'flex';
+    if (_modalChart) { _modalChart.destroy(); _modalChart = null; }
+    _modalKey = 'forecast';
+    _modalChart = new Chart(document.getElementById('modalCanvas'), cfg);
+    return;
+  }
+
   const cfg = _chartConfigs[key];
   if (!cfg) return;
   _modalKey = key;

@@ -112,6 +112,13 @@
                        hover:bg-brand hover:text-white transition px-2 py-1 rounded-lg">
           <span class="toggle-text">Hide values</span>
         </button>
+        <button onclick="expandSectorChart('day_change')" title="Expand"
+                class="text-slate-600 hover:text-slate-300 transition p-1 rounded-lg hover:bg-slate-800">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"/>
+          </svg>
+        </button>
       </div>
     </div>
     <div class="chart-container" style="height:260px"><canvas id="dayChangeChart"></canvas></div>
@@ -145,6 +152,13 @@
                        hover:bg-brand hover:text-white transition px-2 py-1 rounded-lg">
           <span class="toggle-text" data-i18n="sector.hide_values">Hide values</span>
         </button>
+        <button onclick="expandSectorChart('pe')" title="Expand"
+                class="text-slate-600 hover:text-slate-300 transition p-1 rounded-lg hover:bg-slate-800">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"/>
+          </svg>
+        </button>
       </div>
     </div>
     <div class="chart-container" style="height:260px; sm:height:320px"><canvas id="pePegChart"></canvas></div>
@@ -168,6 +182,13 @@
                        hover:bg-brand hover:text-white transition px-2 py-1 rounded-lg">
           <span class="toggle-text" data-i18n="sector.hide_values">Hide values</span>
         </button>
+        <button onclick="expandSectorChart('prices')" title="Expand"
+                class="text-slate-600 hover:text-slate-300 transition p-1 rounded-lg hover:bg-slate-800">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"/>
+          </svg>
+        </button>
       </div>
     </div>
     <div class="chart-container" style="height:260px; sm:height:320px"><canvas id="priceChart"></canvas></div>
@@ -190,6 +211,13 @@
                 class="chart-toggle flex items-center gap-1 text-xs text-brand border border-brand/40 bg-brand/10
                        hover:bg-brand hover:text-white transition px-2 py-1 rounded-lg">
           <span class="toggle-text" data-i18n="sector.hide_values">Hide values</span>
+        </button>
+        <button onclick="expandSectorChart('upside')" title="Expand"
+                class="text-slate-600 hover:text-slate-300 transition p-1 rounded-lg hover:bg-slate-800">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"/>
+          </svg>
         </button>
       </div>
     </div>
@@ -224,6 +252,13 @@
                        hover:bg-brand hover:text-white transition px-2 py-1 rounded-lg">
           <span class="toggle-text" data-i18n="sector.hide_values">Hide values</span>
         </button>
+        <button onclick="expandSectorChart('peg')" title="Expand"
+                class="text-slate-600 hover:text-slate-300 transition p-1 rounded-lg hover:bg-slate-800">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"/>
+          </svg>
+        </button>
       </div>
     </div>
     <div class="chart-container" style="height:260px; sm:height:320px"><canvas id="pegChart"></canvas></div>
@@ -253,6 +288,13 @@
                        hover:bg-brand hover:text-white transition px-2 py-1 rounded-lg">
           <span class="toggle-text" data-i18n="sector.hide_values">Hide values</span>
         </button>
+        <button onclick="expandSectorChart('growth')" title="Expand"
+                class="text-slate-600 hover:text-slate-300 transition p-1 rounded-lg hover:bg-slate-800">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"/>
+          </svg>
+        </button>
       </div>
     </div>
     <div class="chart-container" style="height:{{ [table|length * 40 + 40, 200]|max }}px"><canvas id="growthChart"></canvas></div>
@@ -281,6 +323,13 @@
                 class="chart-toggle flex items-center gap-1 text-xs text-brand border border-brand/40 bg-brand/10
                        hover:bg-brand hover:text-white transition px-2 py-1 rounded-lg">
           <span class="toggle-text" data-i18n="sector.hide_values">Hide values</span>
+        </button>
+        <button onclick="expandSectorChart('ev_ebitda')" title="Expand"
+                class="text-slate-600 hover:text-slate-300 transition p-1 rounded-lg hover:bg-slate-800">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"/>
+          </svg>
         </button>
       </div>
     </div>
@@ -344,6 +393,26 @@
   </div>
 
 </div><!-- end x-data -->
+
+<!-- ── Sector fullscreen modal ────────────────────────────────────────── -->
+<div id="sectorModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+     style="display:none" onclick="closeSectorModal()">
+  <div class="relative w-full max-w-5xl bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl flex flex-col"
+       style="max-height:90vh" onclick="event.stopPropagation()">
+    <div class="flex items-center justify-between px-6 py-4 border-b border-slate-800 shrink-0">
+      <h3 id="sectorModalTitle" class="font-semibold text-slate-100"></h3>
+      <button onclick="closeSectorModal()"
+              class="text-slate-500 hover:text-slate-200 transition p-1 rounded-lg hover:bg-slate-800">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+    <div class="p-6 flex-1 min-h-0" style="min-height:460px">
+      <canvas id="sectorModalCanvas"></canvas>
+    </div>
+  </div>
+</div>
 
 <script>
 const DATA = {{ chartdata | safe }};
@@ -604,7 +673,7 @@ const chartDefaults = {
     },
     options: {
       ...chartDefaults,
-      onClick: tickerOnClick(() => labels),
+      onClick: tickerOnClick(() => chartInstances.pe ? chartInstances.pe.data.labels : labels),
       scales: {
         yPE:  { position:'left',  grid:{color:gridCol}, ticks:{color:tickCol}, title:{display:true,text:'PE Ratio',color:tickCol} },
         yPEG: { position:'right', grid:{display:false},  ticks:{color:'#34d399'}, title:{display:true,text:'PEG',color:'#34d399'} },
@@ -646,7 +715,7 @@ const chartDefaults = {
     },
     options: {
       ...chartDefaults,
-      onClick: tickerOnClick(() => labels),
+      onClick: tickerOnClick(() => chartInstances.prices ? chartInstances.prices.data.labels : labels),
       scales: {
         x: { grid:{display:false}, ticks:{color:tickCol} },
         y: { grid:{color:gridCol}, ticks:{color:tickCol,callback:v=>'$'+v} }
@@ -1114,5 +1183,51 @@ function avgLinePlugin(getAvg, fmt, color) {
 
   render();
 })();
+
+// ── Sector chart expand ───────────────────────────────────────────────
+let _sectorModalChart = null;
+
+function closeSectorModal() {
+  document.getElementById('sectorModal').style.display = 'none';
+  if (_sectorModalChart) { _sectorModalChart.destroy(); _sectorModalChart = null; }
+}
+
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSectorModal(); });
+
+function expandSectorChart(kind) {
+  const chart = chartInstances[kind];
+  if (!chart) return;
+  if (_sectorModalChart) { _sectorModalChart.destroy(); _sectorModalChart = null; }
+
+  const titles = {
+    day_change: I18n.t('sector.day_change_title') || 'Day Change',
+    pe:         I18n.t('sector.pe_title') || 'PE Ratios + PEG',
+    prices:     I18n.t('sector.prices_title') || 'Price vs Target',
+    upside:     I18n.t('sector.upside_title') || 'Analyst Upside (%)',
+    peg:        I18n.t('sector.peg_title') || 'PEG Valuation Map',
+    growth:     I18n.t('sector.growth_title') || 'EPS Growth',
+    ev_ebitda:  I18n.t('sector.ev_ebitda_title') || 'EV/EBITDA',
+  };
+  document.getElementById('sectorModalTitle').textContent = titles[kind] || kind;
+
+  // Clone serializable data from chart instance
+  const data = JSON.parse(JSON.stringify({ labels: chart.data.labels, datasets: chart.data.datasets }));
+  const opts = chart.options;
+
+  document.getElementById('sectorModal').style.display = 'flex';
+  _sectorModalChart = new Chart(document.getElementById('sectorModalCanvas'), {
+    type: chart.config.type,
+    data,
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      indexAxis: opts.indexAxis || 'x',
+      plugins: { legend: { labels: { color: '#94a3b8', font: { size: 12 } } } },
+      scales: {
+        x: { grid: { color: '#1e293b' }, ticks: { color: '#64748b' } },
+        y: { grid: { color: kind === 'pe' ? '#1e293b' : 'transparent' }, ticks: { color: '#94a3b8', font: { size: 12 } } },
+      },
+    },
+  });
+}
 </script>
 {% endblock %}
