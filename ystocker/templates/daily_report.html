@@ -594,18 +594,25 @@ async function sendDailyEmail() {
     statusEl.textContent = I18n.t('daily.email_error') || 'Failed to send. Please try again.';
     statusEl.className = 'text-xs mt-2 text-rose-400'; statusEl.classList.remove('hidden'); return;
   }
-  if (!_latestSummaryText) {
-    statusEl.textContent = I18n.getLang() === 'zh' ? '请等待AI摘要生成完成后再发送。' : 'Please wait for the AI summary to be generated first.';
-    statusEl.className = 'text-xs mt-2 text-amber-400'; statusEl.classList.remove('hidden'); return;
-  }
-
   btn.disabled = true;
   btn.textContent = I18n.t('daily.email_sending') || 'Sending…';
 
   try {
     const resp = await fetch('/api/send-daily-email', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ email, summary: _latestSummaryText, lang: I18n.getLang() }),
+      body: JSON.stringify({
+        email,
+        lang:        I18n.getLang(),
+        summary:     _latestSummaryText,
+        indices:     _latestMarketData?.indices  || {},
+        sectors:     _latestMarketData?.sectors  || [],
+        vix:         _latestMarketData?.vix      || {},
+        gold_ratios: _goldRatiosData             || {},
+        sentiment:   _latestSentiment            || {},
+        events:      _latestEvents               || [],
+        gainers:     _moversData?.gainers        || [],
+        losers:      _moversData?.losers         || [],
+      }),
     });
     const result = await resp.json();
     if (result.error) throw new Error(result.error);
