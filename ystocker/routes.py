@@ -4440,27 +4440,8 @@ def api_send_daily_email():
         gainers, losers, summaries_us, summaries_cn, today_str, today_iso, lang,
     )
 
-    # ── Build recipient list ─────────────────────────────────────────────────
-    recipients = []
-    subs_table = _get_subscribers_table()
-    if subs_table:
-        try:
-            from boto3.dynamodb.conditions import Attr as _Attr
-            for item in subs_table.scan(FilterExpression=_Attr("active").eq(True)).get("Items", []):
-                recipients.append({
-                    "email": item["email"],
-                    "lang":  item.get("lang", "en"),
-                    "token": item.get("unsubscribe_token", ""),
-                })
-        except Exception as exc:
-            log.warning("Failed to fetch subscribers: %s", exc)
-
-    # Also include the one-time email from request if not already subscribed
-    if email and not any(r["email"].lower() == email.lower() for r in recipients):
-        recipients.append({"email": email, "lang": lang, "token": ""})
-
-    if not recipients:
-        return jsonify({"error": "No recipients"}), 400
+    # ── Send only to the requested email address ─────────────────────────────
+    recipients = [{"email": email, "lang": lang, "token": ""}]
 
     import boto3
     ses = boto3.client("ses", region_name="us-east-1")
