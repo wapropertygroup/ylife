@@ -2969,27 +2969,29 @@ def api_yield_curve():
     if "10Y" in us_current and "3M" in us_current:
         spread_10y_3m = round(us_current["10Y"] - us_current["3M"], 3)
 
-    # ── CN snapshot: ChinaBond public API ────────────────────────────────────
+    # ── CN snapshot: ChinaBond Government Bond YTM curve (JSON API) ─────────
+    # Endpoint returns a continuous [maturity_years, yield] curve.
+    # Curve ID 2c9081e50a2f9606010a3068cae70001 = "ChinaBond Government Bond YTM"
     CN_MAT_LABELS = ["3M", "6M", "1Y", "2Y", "3Y", "5Y", "7Y", "10Y", "30Y"]
+    CN_MAT_YEARS  = [0.25, 0.5,  1.0,  2.0,  3.0,  5.0,  7.0,  10.0,  30.0]
     cn_current: dict = {}
     try:
+        import json as _json
         today_str = _dt_mod.date.today().strftime("%Y-%m-%d")
         cb_url = (
-            "http://yield.chinabond.com.cn/cbweb-mn/yield_main"
-            f"?workTime={today_str}&provCode=0&indexid=0&periodAll=0&locale=en_US&dc=1"
+            "https://yield.chinabond.com.cn/cbweb-mn/yc/inityc"
+            f"?locale=en_US&workTime={today_str}"
+            "&ycDefIds=2c9081e50a2f9606010a3068cae70001"
         )
-        cb_resp = _req.get(cb_url, timeout=10, headers={"User-Agent": "Mozilla/5.0"})
+        cb_resp = _req.post(cb_url, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
         if cb_resp.status_code == 200:
-            import re as _re
-            # Response is JSON-like or HTML; try to parse numeric yield values
-            text = cb_resp.text
-            # Look for patterns like "3个月": 1.234 or array of yield values
-            nums = _re.findall(r'[\d]+\.[\d]+', text)
-            floats = [round(float(n), 3) for n in nums
-                      if 0.01 < float(n) < 20]
-            if len(floats) >= len(CN_MAT_LABELS):
-                cn_current = dict(zip(CN_MAT_LABELS, floats[:len(CN_MAT_LABELS)]))
-                log.info("Yield curve: CN ChinaBond data parsed (%d points)", len(cn_current))
+            cb_data = _json.loads(cb_resp.text)
+            series_data = cb_data[1][1][0]["seriesData"]
+            for label, target_yr in zip(CN_MAT_LABELS, CN_MAT_YEARS):
+                closest = min(series_data, key=lambda p: abs(p[0] - target_yr))
+                if abs(closest[0] - target_yr) < 0.15:
+                    cn_current[label] = round(closest[1], 3)
+            log.info("Yield curve: CN ChinaBond data fetched (%d points)", len(cn_current))
     except Exception as exc:
         log.warning("Yield curve: ChinaBond fetch failed: %s", exc)
 
