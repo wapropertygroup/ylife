@@ -687,6 +687,21 @@ const I18n = (() => {
     'markets.pcr_neutral':  { en: 'Neutral',                zh: '中性' },
     'markets.pcr_bullish':  { en: 'Bullish (low put buying)', zh: '看涨（看跌期权买入减少）' },
 
+    // Gold Ratios
+    'markets.gs_title':      { en: 'Gold / Silver Ratio',   zh: '金银比' },
+    'markets.gs_desc':       { en: 'oz of silver per oz of gold — higher = gold relatively expensive', zh: '每盎司黄金兑银盎司数 — 越高代表黄金相对昂贵' },
+    'markets.gc_title':      { en: 'Gold / Copper Ratio',   zh: '金铜比' },
+    'markets.gc_desc':       { en: 'gold ($/oz) ÷ copper ($/lb) — economic risk indicator', zh: '黄金（美元/盎司）÷ 铜（美元/磅）— 经济风险指标' },
+
+    // Treasury Yield Curve
+    'markets.us_yield_title': { en: 'US Treasury Yield Curve',  zh: '美国国债收益率曲线' },
+    'markets.us_yield_desc':  { en: 'Current yields by maturity — inverted curve signals recession risk', zh: '美债各期限实时收益率，曲线倒挂预示经济衰退风险' },
+    'markets.cn_yield_title': { en: 'CN Treasury Yield Curve',   zh: '中国国债收益率曲线' },
+    'markets.cn_yield_desc':  { en: 'Current CN government bond yields by maturity', zh: '中国国债各期限实时收益率' },
+    'markets.yield_inverted': { en: '⚠ Inverted',               zh: '⚠ 倒挂' },
+    'markets.yield_normal':   { en: 'Normal',                   zh: '正常' },
+    'markets.yield_spread':   { en: 'Spread',                   zh: '利差' },
+
     // Economic Events
     'markets.econ_events_title': { en: 'Economic Events',         zh: '经济事件日历' },
     'markets.econ_events_desc':  { en: 'Key macro releases & central bank decisions this week', zh: '本周重要宏观数据发布及央行决议' },

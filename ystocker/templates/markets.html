@@ -27,6 +27,24 @@
   .neutral { color: #94a3b8 !important; }
   .bar-fill { height: 8px; border-radius: 4px; transition: width 0.4s; }
   .rsi-zone { font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 4px; }
+  .yield-explain-btn {
+    font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 6px;
+    border: 1px solid #4c1d95; color: #a78bfa; background: transparent;
+    cursor: pointer; transition: all 0.15s; white-space: nowrap;
+  }
+  .yield-explain-btn:hover:not(:disabled) { background: rgba(139,92,246,0.12); border-color: #7c3aed; }
+  .yield-explain-btn:disabled { opacity: 0.5; cursor: default; }
+  .yield-explain-panel {
+    display: none; margin-top: 10px; padding: 10px 12px;
+    background: #0c0f1a; border: 1px solid #1e1b4b; border-radius: 10px;
+    font-size: 12px; line-height: 1.6; color: #c4b5fd;
+  }
+  .yield-explain-panel.visible { display: block; }
+  .yield-explain-thinking { display: inline-flex; align-items: center; gap: 4px; color: #7c3aed; font-size: 12px; }
+  .yield-explain-thinking .dot { width: 4px; height: 4px; border-radius: 50%; background: currentColor; animation: yldBounce 1.2s infinite ease-in-out; }
+  .yield-explain-thinking .dot:nth-child(2) { animation-delay: 0.2s; }
+  .yield-explain-thinking .dot:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes yldBounce { 0%,80%,100% { transform: scale(0.6); opacity:.5 } 40% { transform: scale(1); opacity:1 } }
 </style>
 
 <!-- ── Fullscreen chart modal ────────────────────────────────────────── -->
@@ -239,8 +257,8 @@
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-6">
     <div class="flex items-start justify-between mb-4">
       <div>
-        <h2 class="text-base font-semibold text-slate-200">Gold / Silver Ratio</h2>
-        <p class="text-xs text-slate-500 mt-0.5">oz of silver per oz of gold — higher = gold relatively expensive</p>
+        <h2 class="text-base font-semibold text-slate-200" data-i18n="markets.gs_title">Gold / Silver Ratio</h2>
+        <p class="text-xs text-slate-500 mt-0.5" data-i18n="markets.gs_desc">oz of silver per oz of gold — higher = gold relatively expensive</p>
       </div>
       <div class="flex items-center gap-1">
         <div id="gsBadge" class="text-right"></div>
@@ -264,8 +282,8 @@
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-6">
     <div class="flex items-start justify-between mb-4">
       <div>
-        <h2 class="text-base font-semibold text-slate-200">Gold / Copper Ratio</h2>
-        <p class="text-xs text-slate-500 mt-0.5">gold ($/oz) ÷ copper ($/lb) — economic risk indicator</p>
+        <h2 class="text-base font-semibold text-slate-200" data-i18n="markets.gc_title">Gold / Copper Ratio</h2>
+        <p class="text-xs text-slate-500 mt-0.5" data-i18n="markets.gc_desc">gold ($/oz) ÷ copper ($/lb) — economic risk indicator</p>
       </div>
       <div class="flex items-center gap-1">
         <div id="gcBadge" class="text-right"></div>
@@ -282,6 +300,69 @@
     <div id="gcBody" style="display:none">
       <div class="grid grid-cols-3 gap-2 mb-4" id="gcStats"></div>
       <div style="height:140px"><canvas id="gcChart"></canvas></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ── Treasury Yield Curve row ──────────────────────────────────────────── -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6 fade-up">
+
+  <!-- US Treasury Yield Curve -->
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-6">
+    <div class="flex items-start justify-between mb-4">
+      <div>
+        <h2 class="text-base font-semibold text-slate-200" data-i18n="markets.us_yield_title">US Treasury Yield Curve</h2>
+        <p class="text-xs text-slate-500 mt-0.5" data-i18n="markets.us_yield_desc">Current yields by maturity — inverted curve signals recession risk</p>
+      </div>
+      <div class="flex items-center gap-1">
+        <div id="usYieldBadge" class="text-right"></div>
+        <button onclick="expandMktsChart('usYield')" title="Expand"
+                class="text-slate-500 hover:text-slate-200 transition p-1 rounded-lg hover:bg-slate-800 shrink-0">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+    <div id="usYieldLoading" class="text-xs text-slate-600 py-2">Loading…</div>
+    <div id="usYieldBody" style="display:none">
+      <div id="usYieldStats" class="flex gap-3 flex-wrap mb-3"></div>
+      <div class="relative h-44"><canvas id="usYieldChart"></canvas></div>
+      <div class="mt-2">
+        <button class="yield-explain-btn" id="usYieldExplainBtn" onclick="explainYield('usYield')">✦ Explain</button>
+      </div>
+      <div class="yield-explain-panel" id="usYieldExplainPanel"></div>
+    </div>
+  </div>
+
+  <!-- CN Treasury Yield Curve -->
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-6">
+    <div class="flex items-start justify-between mb-4">
+      <div>
+        <h2 class="text-base font-semibold text-slate-200" data-i18n="markets.cn_yield_title">CN Treasury Yield Curve</h2>
+        <p class="text-xs text-slate-500 mt-0.5" data-i18n="markets.cn_yield_desc">Current CN government bond yields by maturity</p>
+      </div>
+      <div class="flex items-center gap-1">
+        <div id="cnYieldBadge" class="text-right"></div>
+        <button onclick="expandMktsChart('cnYield')" title="Expand"
+                class="text-slate-500 hover:text-slate-200 transition p-1 rounded-lg hover:bg-slate-800 shrink-0">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+    <div id="cnYieldLoading" class="text-xs text-slate-600 py-2">Loading…</div>
+    <div id="cnYieldBody" style="display:none">
+      <div id="cnYieldStats" class="flex gap-3 flex-wrap mb-3"></div>
+      <div class="relative h-44"><canvas id="cnYieldChart"></canvas></div>
+      <div class="mt-2">
+        <button class="yield-explain-btn" id="cnYieldExplainBtn" onclick="explainYield('cnYield')">✦ Explain</button>
+      </div>
+      <div class="yield-explain-panel" id="cnYieldExplainPanel"></div>
     </div>
   </div>
 
@@ -1677,8 +1758,297 @@ function renderGoldRatios(data) {
   document.getElementById('gcBody').style.display = '';
 }
 
+// ── Treasury Yield Curve ──────────────────────────────────────────
+let _yieldData = null;
+let _usYieldChartInst = null;
+let _cnYieldChartInst = null;
+
+function renderYieldCurve(data) {
+  _yieldData = data;
+  const us = data.us || {};
+  const cn = data.cn || {};
+
+  // ── US Yield Curve card ───────────────────────────────────────────
+  document.getElementById('usYieldLoading').style.display = 'none';
+  document.getElementById('usYieldBody').style.display    = '';
+
+  const cur  = us.current || {};
+  const mats = ['3M', '6M', '12M', '3Y', '5Y', '10Y', '30Y'];
+  const yields = mats.map(m => cur[m] ?? null);
+  const spread = us.spread_10y_3m;
+  const inverted = spread !== null && spread !== undefined && spread < 0;
+
+  const y10 = cur['10Y'];
+  document.getElementById('usYieldBadge').innerHTML = y10 != null
+    ? `<div class="text-sm font-bold ${inverted ? 'text-red-400' : 'text-sky-300'}">${y10.toFixed(2)}%</div>
+       <div class="text-[10px] ${inverted ? 'text-red-500' : 'text-slate-500'}">${inverted ? '⚠ Inverted' : 'Normal'}</div>`
+    : '';
+
+  const statsEl = document.getElementById('usYieldStats');
+  statsEl.innerHTML = mats.map((m, i) => yields[i] != null
+    ? `<div class="stat-card text-center"><div class="stat-label">${m}</div><div class="stat-val text-sm text-sky-300">${yields[i].toFixed(2)}%</div></div>`
+    : '').join('');
+  if (spread != null) {
+    const sc = inverted ? 'text-red-400' : 'text-emerald-400';
+    statsEl.innerHTML += `<div class="stat-card text-center"><div class="stat-label">10Y–3M</div><div class="stat-val text-sm ${sc}">${spread > 0 ? '+' : ''}${spread.toFixed(2)}%</div></div>`;
+  }
+
+  if (_usYieldChartInst) { _usYieldChartInst.destroy(); _usYieldChartInst = null; }
+  const barColors = yields.map((v, i) =>
+    (inverted && i > 0 && v != null && v < (cur['3M'] ?? 0))
+      ? 'rgba(248,113,113,0.75)' : 'rgba(56,189,248,0.75)');
+  _usYieldChartInst = new Chart(document.getElementById('usYieldChart'), {
+    type: 'bar',
+    data: { labels: mats, datasets: [
+      {
+        type: 'bar',
+        data: yields, backgroundColor: barColors,
+        borderColor: barColors.map(c => c.replace('0.75', '1')),
+        borderWidth: 1, borderRadius: 4,
+      },
+      {
+        type: 'line',
+        data: yields,
+        borderColor: 'rgba(148,163,184,0.7)',
+        borderWidth: 1.5,
+        pointRadius: 3,
+        pointBackgroundColor: 'rgba(148,163,184,0.9)',
+        pointBorderColor: 'transparent',
+        fill: false, tension: 0.4, spanGaps: true,
+      },
+    ]},
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => ` ${ctx.parsed.y?.toFixed(3)}%` } },
+      },
+      scales: {
+        x: { grid: { color: '#1e293b' }, ticks: { color: '#64748b', font: { size: 11 } } },
+        y: {
+          grid: { color: '#1e293b' },
+          ticks: { color: '#64748b', font: { size: 11 }, callback: v => v.toFixed(1) + '%' },
+          suggestedMin: Math.max(0, Math.min(...yields.filter(v => v != null)) - 0.5),
+          suggestedMax: Math.max(...yields.filter(v => v != null)) + 0.5,
+        },
+      },
+    },
+  });
+  // Store data for AI explain
+  _yieldExplainData['usYield'] = { current: cur, spread: spread };
+
+  // ── CN Yield Curve card ───────────────────────────────────────────
+  document.getElementById('cnYieldLoading').style.display = 'none';
+  document.getElementById('cnYieldBody').style.display    = '';
+
+  const cnCurrent = cn.current || {};
+  const cnMats    = ['3M', '6M', '1Y', '2Y', '3Y', '5Y', '7Y', '10Y', '30Y'];
+  const cnYields  = cnMats.map(m => cnCurrent[m] ?? null);
+  const cn10y     = cnCurrent['10Y'];
+  const cn3m      = cnCurrent['3M'];
+  const cnSpread  = (cn10y != null && cn3m != null) ? Math.round((cn10y - cn3m) * 1000) / 1000 : null;
+  const cnInverted = cnSpread !== null && cnSpread < 0;
+
+  document.getElementById('cnYieldBadge').innerHTML = cn10y != null
+    ? `<div class="text-sm font-bold ${cnInverted ? 'text-red-400' : 'text-rose-400'}">${cn10y.toFixed(2)}%</div>
+       <div class="text-[10px] ${cnInverted ? 'text-red-500' : 'text-slate-500'}">${cnInverted ? '⚠ Inverted' : 'Normal'}</div>`
+    : '';
+
+  const cnStatsEl = document.getElementById('cnYieldStats');
+  cnStatsEl.innerHTML = cnMats.map((m, i) => cnYields[i] != null
+    ? `<div class="stat-card text-center"><div class="stat-label">${m}</div><div class="stat-val text-sm text-rose-400">${cnYields[i].toFixed(2)}%</div></div>`
+    : '').join('');
+  if (cnSpread != null) {
+    const sc = cnInverted ? 'text-red-400' : 'text-emerald-400';
+    cnStatsEl.innerHTML += `<div class="stat-card text-center"><div class="stat-label">10Y–3M</div><div class="stat-val text-sm ${sc}">${cnSpread > 0 ? '+' : ''}${cnSpread.toFixed(2)}%</div></div>`;
+  }
+
+  if (_cnYieldChartInst) { _cnYieldChartInst.destroy(); _cnYieldChartInst = null; }
+  const cnBarColors = cnYields.map((v, i) =>
+    (cnInverted && i > 0 && v != null && v < (cnCurrent['3M'] ?? 0))
+      ? 'rgba(248,113,113,0.75)' : 'rgba(251,113,133,0.75)');
+  _cnYieldChartInst = new Chart(document.getElementById('cnYieldChart'), {
+    type: 'bar',
+    data: { labels: cnMats, datasets: [
+      {
+        type: 'bar',
+        data: cnYields, backgroundColor: cnBarColors,
+        borderColor: cnBarColors.map(c => c.replace('0.75', '1')),
+        borderWidth: 1, borderRadius: 4,
+      },
+      {
+        type: 'line',
+        data: cnYields,
+        borderColor: 'rgba(148,163,184,0.7)',
+        borderWidth: 1.5,
+        pointRadius: 3,
+        pointBackgroundColor: 'rgba(148,163,184,0.9)',
+        pointBorderColor: 'transparent',
+        fill: false, tension: 0.4, spanGaps: true,
+      },
+    ]},
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => ` ${ctx.parsed.y?.toFixed(3)}%` } },
+      },
+      scales: {
+        x: { grid: { color: '#1e293b' }, ticks: { color: '#64748b', font: { size: 11 } } },
+        y: {
+          grid: { color: '#1e293b' },
+          ticks: { color: '#64748b', font: { size: 11 }, callback: v => v.toFixed(1) + '%' },
+          suggestedMin: Math.max(0, Math.min(...cnYields.filter(v => v != null)) - 0.5),
+          suggestedMax: Math.max(...cnYields.filter(v => v != null)) + 0.5,
+        },
+      },
+    },
+  });
+  // Store data for AI explain
+  _yieldExplainData['cnYield'] = { current: cnCurrent, spread: cnSpread };
+}
+
+// ── Yield Curve AI Explain ──────────────────────────────────────────
+const _yieldExplainData = {};
+
+async function explainYield(chart) {
+  const panel = document.getElementById(chart + 'ExplainPanel');
+  const btn   = document.getElementById(chart + 'ExplainBtn');
+  if (!panel) return;
+
+  // Toggle off
+  if (panel.classList.contains('visible') && !btn?.disabled) {
+    panel.classList.remove('visible');
+    return;
+  }
+
+  const d = _yieldExplainData[chart];
+  if (!d || !Object.keys(d.current || {}).length) {
+    panel.textContent = 'No data available.';
+    panel.classList.add('visible');
+    return;
+  }
+
+  panel.classList.add('visible');
+  const thinking = document.createElement('span');
+  thinking.className = 'yield-explain-thinking';
+  const lang = (document.documentElement.lang || I18n?.lang || 'en') === 'zh' ? 'zh' : 'en';
+  thinking.innerHTML = `<span>${lang === 'zh' ? 'AI 分析中' : 'Thinking'}</span>`
+    + `<span class="dot"></span><span class="dot"></span><span class="dot"></span>`;
+  panel.innerHTML = '';
+  panel.appendChild(thinking);
+
+  if (btn) { btn.disabled = true; btn.textContent = lang === 'zh' ? '⏳ 分析中…' : '⏳ Thinking…'; }
+
+  try {
+    const resp = await fetch('/api/markets/explain', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chart, data: d, lang }),
+    });
+    if (!resp.ok) { const e = await resp.json(); throw new Error(e.error || resp.statusText); }
+
+    let firstChunk = true;
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+    const textNode = document.createTextNode('');
+    function pump() {
+      reader.read().then(({ done, value }) => {
+        if (done) { _yieldExplainFinish(panel, chart, lang, btn); return; }
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split('\n'); buf = lines.pop();
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const payload = line.slice(6).trim();
+          if (payload === '[DONE]') { _yieldExplainFinish(panel, chart, lang, btn); return; }
+          try {
+            const obj = JSON.parse(payload);
+            if (obj.error) { panel.textContent = '⚠ ' + obj.error; _yieldExplainDone(btn, lang); return; }
+            if (obj.text) {
+              if (firstChunk) { panel.innerHTML = ''; panel.appendChild(textNode); firstChunk = false; }
+              textNode.textContent += obj.text;
+            }
+          } catch {}
+        }
+        pump();
+      });
+    }
+    pump();
+  } catch(e) {
+    panel.textContent = '⚠ ' + e.message;
+    _yieldExplainDone(btn, lang);
+  }
+}
+
+function _yieldExplainDone(btn, lang) {
+  if (!btn) return;
+  btn.disabled = false;
+  btn.textContent = lang === 'zh' ? '✦ 解读' : '✦ Explain';
+}
+
+function _yieldExplainFinish(panel, chart, lang, btn) {
+  _yieldExplainDone(btn, lang);
+  const otherLang = lang === 'zh' ? 'en' : 'zh';
+  const label = lang === 'zh' ? '🌐 View in English' : '🌐 翻译成中文';
+  const tBtn = document.createElement('button');
+  tBtn.textContent = label;
+  tBtn.className = 'mt-3 block text-xs text-violet-400 hover:text-violet-300 underline underline-offset-2 cursor-pointer bg-transparent border-0 p-0';
+  tBtn.onclick = () => { panel.innerHTML = ''; panel.classList.add('visible'); explainYieldLang(chart, otherLang, panel, btn); };
+  panel.appendChild(document.createElement('br'));
+  panel.appendChild(tBtn);
+}
+
+async function explainYieldLang(chart, lang, panel, btn) {
+  const d = _yieldExplainData[chart];
+  const thinking = document.createElement('span');
+  thinking.className = 'yield-explain-thinking';
+  thinking.innerHTML = `<span>${lang === 'zh' ? 'AI 分析中' : 'Thinking'}</span>`
+    + `<span class="dot"></span><span class="dot"></span><span class="dot"></span>`;
+  panel.appendChild(thinking);
+  if (btn) { btn.disabled = true; btn.textContent = lang === 'zh' ? '⏳ 分析中…' : '⏳ Thinking…'; }
+
+  try {
+    const resp = await fetch('/api/markets/explain', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chart, data: d, lang }),
+    });
+    if (!resp.ok) { const e = await resp.json(); throw new Error(e.error || resp.statusText); }
+    let firstChunk = true;
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+    const textNode = document.createTextNode('');
+    function pump() {
+      reader.read().then(({ done, value }) => {
+        if (done) { _yieldExplainFinish(panel, chart, lang, btn); return; }
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split('\n'); buf = lines.pop();
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const payload = line.slice(6).trim();
+          if (payload === '[DONE]') { _yieldExplainFinish(panel, chart, lang, btn); return; }
+          try {
+            const obj = JSON.parse(payload);
+            if (obj.error) { panel.textContent = '⚠ ' + obj.error; _yieldExplainDone(btn, lang); return; }
+            if (obj.text) {
+              if (firstChunk) { panel.innerHTML = ''; panel.appendChild(textNode); firstChunk = false; }
+              textNode.textContent += obj.text;
+            }
+          } catch {}
+        }
+        pump();
+      });
+    }
+    pump();
+  } catch(e) {
+    panel.textContent = '⚠ ' + e.message;
+    _yieldExplainDone(btn, lang);
+  }
+}
+
 // ── Economic Events Calendar ──────────────────────────────────────
-let _econData = [];
 let _econFilter = 'high';
 let _econCollapsed = false;
 const hidePastEl = document.getElementById('econHidePast');
@@ -2061,6 +2431,64 @@ function expandMktsChart(kind) {
     _mktsModalChart = _renderRatioChart(_goldRatioData, 'mktsModalCanvas', 'gc_ratio', '#fb923c');
     return;
   }
+  if (kind === 'usYield' && _yieldData) {
+    titleEl.textContent = 'US Treasury Yield Curve';
+    subEl.textContent   = 'Current yields by maturity';
+    modal.style.display = 'flex';
+    const cur = (_yieldData.us || {}).current || {};
+    const mats = ['3M', '6M', '12M', '3Y', '5Y', '10Y', '30Y'];
+    const ylds = mats.map(m => cur[m] ?? null);
+    const inv  = (_yieldData.us.spread_10y_3m ?? 0) < 0;
+    const cols = ylds.map((v, i) =>
+      (inv && i > 0 && v != null && v < (cur['3M'] ?? 0))
+        ? 'rgba(248,113,113,0.75)' : 'rgba(56,189,248,0.75)');
+    _mktsModalChart = new Chart(document.getElementById('mktsModalCanvas'), {
+      type: 'bar',
+      data: { labels: mats, datasets: [
+        { type: 'bar', data: ylds, backgroundColor: cols,
+          borderColor: cols.map(c => c.replace('0.75','1')), borderWidth: 1, borderRadius: 4 },
+        { type: 'line', data: ylds, borderColor: 'rgba(148,163,184,0.7)', borderWidth: 2,
+          pointRadius: 4, pointBackgroundColor: 'rgba(148,163,184,0.9)', pointBorderColor: 'transparent',
+          fill: false, tension: 0.4, spanGaps: true },
+      ]},
+      options: { responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ` ${ctx.parsed.y?.toFixed(3)}%` } } },
+        scales: { x: { grid: { color: '#1e293b' }, ticks: { color: '#64748b' } },
+          y: { grid: { color: '#1e293b' }, ticks: { color: '#64748b', callback: v => v.toFixed(1)+'%' },
+            suggestedMin: Math.max(0, Math.min(...ylds.filter(v=>v!=null))-0.5),
+            suggestedMax: Math.max(...ylds.filter(v=>v!=null))+0.5 } } },
+    });
+    return;
+  }
+  if (kind === 'cnYield' && _yieldData) {
+    titleEl.textContent = 'CN Treasury Yield Curve';
+    subEl.textContent   = 'Current CN government bond yields by maturity';
+    modal.style.display = 'flex';
+    const cnCur  = (_yieldData.cn || {}).current || {};
+    const cnMats = ['3M', '6M', '1Y', '2Y', '3Y', '5Y', '7Y', '10Y', '30Y'];
+    const cnYlds = cnMats.map(m => cnCur[m] ?? null);
+    const cnInv  = (cnCur['10Y'] != null && cnCur['3M'] != null) && (cnCur['10Y'] - cnCur['3M'] < 0);
+    const cnCols = cnYlds.map((v, i) =>
+      (cnInv && i > 0 && v != null && v < (cnCur['3M'] ?? 0))
+        ? 'rgba(248,113,113,0.75)' : 'rgba(251,113,133,0.75)');
+    _mktsModalChart = new Chart(document.getElementById('mktsModalCanvas'), {
+      type: 'bar',
+      data: { labels: cnMats, datasets: [
+        { type: 'bar', data: cnYlds, backgroundColor: cnCols,
+          borderColor: cnCols.map(c => c.replace('0.75','1')), borderWidth: 1, borderRadius: 4 },
+        { type: 'line', data: cnYlds, borderColor: 'rgba(148,163,184,0.7)', borderWidth: 2,
+          pointRadius: 4, pointBackgroundColor: 'rgba(148,163,184,0.9)', pointBorderColor: 'transparent',
+          fill: false, tension: 0.4, spanGaps: true },
+      ]},
+      options: { responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ` ${ctx.parsed.y?.toFixed(3)}%` } } },
+        scales: { x: { grid: { color: '#1e293b' }, ticks: { color: '#64748b' } },
+          y: { grid: { color: '#1e293b' }, ticks: { color: '#64748b', callback: v => v.toFixed(1)+'%' },
+            suggestedMin: Math.max(0, Math.min(...cnYlds.filter(v=>v!=null))-0.5),
+            suggestedMax: Math.max(...cnYlds.filter(v=>v!=null))+0.5 } } },
+    });
+    return;
+  }
 
   // Fallback: sectors or unknown
   const canvas   = document.getElementById('mktsModalCanvas');
@@ -2139,6 +2567,7 @@ function _mktsModalConfig(kind) {
   const econP         = fetch('/api/economic-events').then(r => r.json());
   const pcrP          = fetch('/api/put-call-ratio').then(r => r.json());
   const goldRatiosP   = fetch('/api/gold-ratios').then(r => r.json());
+  const yieldCurveP   = fetch('/api/yield-curve').then(r => r.json());
 
   // Resolve each as soon as it arrives — don't wait for the slowest
   fearGreedP
@@ -2157,6 +2586,12 @@ function _mktsModalConfig(kind) {
     .catch(e => {
       document.getElementById('gsLoading').textContent = '⚠ ' + e.message;
       document.getElementById('gcLoading').textContent = '⚠ ' + e.message;
+    });
+  yieldCurveP
+    .then(renderYieldCurve)
+    .catch(e => {
+      document.getElementById('usYieldLoading').textContent = '⚠ ' + e.message;
+      document.getElementById('cnYieldLoading').textContent = '⚠ ' + e.message;
     });
   econP
     .then(d => renderEconEvents(d.events || []))

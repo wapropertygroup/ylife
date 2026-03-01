@@ -2805,6 +2805,306 @@ def api_gold_ratios():
         return jsonify({"error": str(exc)}), 500
 
 
+# ---------------------------------------------------------------------------
+# Treasury Yield Curve  (/api/yield-curve)
+# ---------------------------------------------------------------------------
+
+_YIELD_CURVE_CACHE: dict = {}
+_YIELD_CURVE_CACHE_LOCK = threading.Lock()
+_YIELD_CURVE_CACHE_TTL  = 3600  # 1 hour
+_YIELD_CURVE_CACHE_VER  = "v2"  # bump when maturity keys change
+_YIELD_CURVE_FILE       = Path(__file__).parent.parent / "cache" / "yield_curve_cache.json"
+
+
+def _yield_curve_load_disk() -> Optional[dict]:
+    """Load cached yield curve result from disk if younger than TTL."""
+    try:
+        if _YIELD_CURVE_FILE.exists():
+            payload = json.loads(_YIELD_CURVE_FILE.read_text())
+            if payload.get("ver") == _YIELD_CURVE_CACHE_VER and \
+               time.time() - payload.get("ts", 0) < _YIELD_CURVE_CACHE_TTL:
+                log.info("Yield curve: loaded from disk cache")
+                return payload["data"]
+    except Exception as exc:
+        log.debug("Yield curve disk load failed: %s", exc)
+    return None
+
+
+def _yield_curve_save_disk(result: dict) -> None:
+    """Persist yield curve result to disk cache in a background thread."""
+    def _write():
+        try:
+            _YIELD_CURVE_FILE.parent.mkdir(parents=True, exist_ok=True)
+            _YIELD_CURVE_FILE.write_text(json.dumps(
+                {"ver": _YIELD_CURVE_CACHE_VER, "ts": time.time(), "data": result},
+                default=str,
+            ))
+        except Exception as exc:
+            log.debug("Yield curve disk save failed: %s", exc)
+    threading.Thread(target=_write, daemon=True).start()
+
+
+@bp.route("/api/yield-curve")
+def api_yield_curve():
+    """Return US & CN Treasury yield curve snapshots + historical 10Y comparison."""
+    with _YIELD_CURVE_CACHE_LOCK:
+        entry = _YIELD_CURVE_CACHE.get(_YIELD_CURVE_CACHE_VER)
+        if entry and time.time() - entry["ts"] < _YIELD_CURVE_CACHE_TTL:
+            return jsonify(entry["data"])
+
+    # Try disk cache before hitting external APIs
+    disk_data = _yield_curve_load_disk()
+    if disk_data is not None:
+        with _YIELD_CURVE_CACHE_LOCK:
+            _YIELD_CURVE_CACHE[_YIELD_CURVE_CACHE_VER] = {"ts": time.time(), "data": disk_data}
+        return jsonify(disk_data)
+
+    import yfinance as yf
+    import pandas as _pd
+    import math as _math
+    import datetime as _dt_mod
+    import xml.etree.ElementTree as _ET
+    import requests as _req
+
+    # ── US snapshot: US Treasury XML (all maturities) ────────────────────────
+    US_MAT_MAP = {
+        "BC_3MONTH":  "3M",  "BC_6MONTH": "6M",  "BC_1YEAR":  "12M",
+        "BC_3YEAR":   "3Y",  "BC_5YEAR":  "5Y",  "BC_10YEAR": "10Y",
+        "BC_30YEAR":  "30Y",
+    }
+    us_current: dict = {}
+    try:
+        ym = _dt_mod.date.today().strftime("%Y%m")
+        treas_url = (
+            "https://home.treasury.gov/resource-center/data-chart-center/"
+            f"interest-rates/pages/xml?data=daily_treasury_yield_curve&field_tdr_date_value={ym}"
+        )
+        tr = _req.get(treas_url, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
+        if tr.status_code == 200:
+            d_ns = "http://schemas.microsoft.com/ado/2007/08/dataservices"
+            root = _ET.fromstring(tr.content)
+            latest: dict = {}
+            for props in root.iter(f"{{{d_ns}}}properties"):
+                entry_vals = {}
+                for tag, label in US_MAT_MAP.items():
+                    el = props.find(f"{{{d_ns}}}{tag}")
+                    if el is not None and el.text:
+                        try:
+                            entry_vals[label] = round(float(el.text), 3)
+                        except ValueError:
+                            pass
+                if entry_vals:
+                    latest = entry_vals   # last entry = most recent trading day
+            us_current = latest
+            log.info("Yield curve: US Treasury data fetched (%d maturities)", len(us_current))
+    except Exception as exc:
+        log.warning("Yield curve: US Treasury XML failed: %s", exc)
+
+    # ── US fallback: yfinance for 3M/5Y/10Y/30Y + FRED for 6M/12M/3Y ────────
+    us_hist_10y: dict = {"dates": [], "values": []}
+    # yfinance tickers that map to standard Treasury maturities
+    YF_TICKERS = {"^IRX": "3M", "^FVX": "5Y", "^TNX": "10Y", "^TYX": "30Y"}
+    try:
+        raw_yf = yf.download(
+            list(YF_TICKERS.keys()), period="3y", interval="1d",
+            auto_adjust=True, progress=False, group_by="ticker",
+        )
+        # Extract latest close for each ticker → fill missing maturities
+        for ticker, mat in YF_TICKERS.items():
+            try:
+                if hasattr(raw_yf.columns, "levels"):
+                    col = raw_yf[ticker]["Close"].dropna()
+                else:
+                    col = raw_yf["Close"].dropna()
+                if len(col) and mat not in us_current:
+                    us_current[mat] = round(float(col.iloc[-1]), 3)
+                # Build 10Y history for the existing historical chart
+                if mat == "10Y":
+                    us_hist_10y = {
+                        "dates":  [str(d.date()) for d in col.index],
+                        "values": [round(float(v), 3) if not _math.isnan(float(v)) else None
+                                   for v in col.values],
+                    }
+            except Exception as _exc:
+                log.debug("Yield curve: yfinance %s failed: %s", ticker, _exc)
+    except Exception as exc:
+        log.warning("Yield curve: yfinance batch failed: %s", exc)
+        # Fallback: try ^TNX alone for 10Y history
+        try:
+            raw = yf.download("^TNX", period="3y", interval="1d",
+                              auto_adjust=True, progress=False)
+            col = (raw["Close"] if "Close" in raw.columns else raw).squeeze().dropna()
+            us_hist_10y = {
+                "dates":  [str(d.date()) for d in col.index],
+                "values": [round(float(v), 3) if not _math.isnan(float(v)) else None
+                           for v in col.values],
+            }
+            if "10Y" not in us_current and len(col):
+                us_current["10Y"] = round(float(col.iloc[-1]), 3)
+        except Exception as exc2:
+            log.warning("Yield curve: ^TNX fallback failed: %s", exc2)
+
+    # FRED fallback for any maturity still missing (covers all 7)
+    FRED_IDS = {
+        "3M":  "DGS3MO", "6M": "DGS6MO", "12M": "DGS1",
+        "3Y":  "DGS3",   "5Y": "DGS5",   "10Y": "DGS10",  "30Y": "DGS30",
+    }
+    missing = [m for m in FRED_IDS if m not in us_current]
+    for mat in missing:
+        try:
+            fr = _req.get(
+                f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={FRED_IDS[mat]}",
+                timeout=8, headers={"User-Agent": "Mozilla/5.0"},
+            )
+            if fr.status_code == 200:
+                valid_lines = [l for l in fr.text.strip().splitlines()[1:]
+                               if len(l.split(",")) == 2 and l.split(",")[1].strip() not in (".", "")]
+                if valid_lines:
+                    us_current[mat] = round(float(valid_lines[-1].split(",")[1].strip()), 3)
+                    log.info("Yield curve: FRED filled %s", mat)
+        except Exception as exc:
+            log.warning("Yield curve: FRED %s failed: %s", mat, exc)
+
+    spread_10y_3m = None
+    if "10Y" in us_current and "3M" in us_current:
+        spread_10y_3m = round(us_current["10Y"] - us_current["3M"], 3)
+
+    # ── CN snapshot: ChinaBond public API ────────────────────────────────────
+    CN_MAT_LABELS = ["3M", "6M", "1Y", "2Y", "3Y", "5Y", "7Y", "10Y", "30Y"]
+    cn_current: dict = {}
+    try:
+        today_str = _dt_mod.date.today().strftime("%Y-%m-%d")
+        cb_url = (
+            "http://yield.chinabond.com.cn/cbweb-mn/yield_main"
+            f"?workTime={today_str}&provCode=0&indexid=0&periodAll=0&locale=en_US&dc=1"
+        )
+        cb_resp = _req.get(cb_url, timeout=10, headers={"User-Agent": "Mozilla/5.0"})
+        if cb_resp.status_code == 200:
+            import re as _re
+            # Response is JSON-like or HTML; try to parse numeric yield values
+            text = cb_resp.text
+            # Look for patterns like "3个月": 1.234 or array of yield values
+            nums = _re.findall(r'[\d]+\.[\d]+', text)
+            floats = [round(float(n), 3) for n in nums
+                      if 0.01 < float(n) < 20]
+            if len(floats) >= len(CN_MAT_LABELS):
+                cn_current = dict(zip(CN_MAT_LABELS, floats[:len(CN_MAT_LABELS)]))
+                log.info("Yield curve: CN ChinaBond data parsed (%d points)", len(cn_current))
+    except Exception as exc:
+        log.warning("Yield curve: ChinaBond fetch failed: %s", exc)
+
+    # ── CN historical 10Y: FRED public CSV ───────────────────────────────────
+    cn_hist_10y: dict = {"dates": [], "values": []}
+    cn_current_10y = cn_current.get("10Y")
+    try:
+        fred_resp = _req.get(
+            "https://fred.stlouisfed.org/graph/fredgraph.csv?id=IRLTLT01CNM156N",
+            timeout=10, headers={"User-Agent": "Mozilla/5.0"},
+        )
+        if fred_resp.status_code == 200:
+            dates, vals = [], []
+            for line in fred_resp.text.strip().splitlines()[1:]:
+                parts = line.split(",")
+                if len(parts) == 2 and parts[1].strip() not in (".", ""):
+                    try:
+                        dates.append(parts[0].strip())
+                        vals.append(round(float(parts[1].strip()), 3))
+                    except ValueError:
+                        pass
+            if dates:
+                cn_hist_10y = {"dates": dates, "values": vals}
+                if cn_current_10y is None:
+                    cn_current_10y = vals[-1]
+                    cn_current["10Y"] = cn_current_10y
+    except Exception as exc:
+        log.warning("Yield curve: CN FRED fetch failed: %s", exc)
+
+    result = {
+        "us": {
+            "current":       us_current,
+            "history_10y":   us_hist_10y,
+            "spread_10y_3m": spread_10y_3m,
+        },
+        "cn": {
+            "current":     cn_current,
+            "history_10y": cn_hist_10y,
+        },
+    }
+
+    with _YIELD_CURVE_CACHE_LOCK:
+        _YIELD_CURVE_CACHE[_YIELD_CURVE_CACHE_VER] = {"ts": time.time(), "data": result}
+    _yield_curve_save_disk(result)
+
+    return jsonify(result)
+
+
+# ---------------------------------------------------------------------------
+# Markets AI Explain  (/api/markets/explain)
+# ---------------------------------------------------------------------------
+
+@bp.route("/api/markets/explain", methods=["POST"])
+def api_markets_explain():
+    """Stream an AI explanation of a markets chart (yield curve snapshot) via SSE."""
+    import os
+    from google import genai
+
+    body  = request.get_json(force=True, silent=True) or {}
+    chart = body.get("chart", "")
+    data  = body.get("data", {})
+    lang  = body.get("lang", "en")
+    zh    = lang == "zh"
+
+    if not data:
+        return jsonify({"error": "No data provided"}), 400
+
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        return jsonify({"error": "GEMINI_API_KEY not configured"}), 503
+
+    if chart in ("usYield", "cnYield"):
+        current  = data.get("current", {})
+        spread   = data.get("spread")
+        inverted = spread is not None and spread < 0
+        country  = "US Treasury" if chart == "usYield" else "China Government Bond (CGBs)"
+        mats     = (["3M", "6M", "12M", "3Y", "5Y", "10Y", "30Y"]
+                    if chart == "usYield"
+                    else ["3M", "6M", "1Y", "2Y", "3Y", "5Y", "7Y", "10Y", "30Y"])
+        yield_lines = "\n".join(
+            f"  {m}: {current[m]:.3f}%"
+            for m in mats if m in current
+        )
+        spread_line = (f"\n10Y–3M Spread: {spread:+.3f}% ({'INVERTED' if inverted else 'Normal'})"
+                       if spread is not None else "")
+        prompt = f"""You are a macroeconomic analyst. Analyze the current {country} yield curve snapshot for a financial market participant in 3–4 concise paragraphs.{"  Respond in Simplified Chinese (中文)." if zh else ""}
+
+Current yields by maturity:
+{yield_lines}{spread_line}
+
+Cover: (1) the curve shape — normal, flat, or inverted — and what it signals, (2) notable features such as where the curve peaks or humps, (3) monetary policy and growth expectations implied by this shape. Be specific about the numbers. Do not use headers or bullet points."""
+    else:
+        return jsonify({"error": f"Unknown chart: {chart}"}), 400
+
+    client = genai.Client(api_key=api_key)
+
+    def generate():
+        try:
+            stream = client.models.generate_content_stream(
+                model="gemini-2.5-flash", contents=prompt
+            )
+            for chunk in stream:
+                text = chunk.text
+                if text:
+                    yield f"data: {json.dumps({'text': text})}\n\n"
+        except Exception as exc:
+            log.error("Markets explain error: %s", exc)
+            yield f"data: {json.dumps({'error': str(exc)})}\n\n"
+        finally:
+            yield "data: [DONE]\n\n"
+
+    return Response(generate(), mimetype="text/event-stream",
+                    headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache"})
+
+
 @bp.route("/api/aaii-sentiment")
 def api_aaii_sentiment():
     """
