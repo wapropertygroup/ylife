@@ -4282,8 +4282,8 @@ def _wrap_email_html(subject_str: str, header_str: str, today: str,
 <body style="margin:0;padding:0;background:#0f172a;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
   <table width="100%" cellpadding="0" cellspacing="0" style="background:#0f172a;padding:32px 16px">
     <tr><td align="center">
-      <table width="640" cellpadding="0" cellspacing="0"
-             style="max-width:640px;width:100%;background:#1e293b;border-radius:16px;overflow:hidden">
+      <table width="1200" cellpadding="0" cellspacing="0"
+             style="max-width:1200px;width:100%;background:#1e293b;border-radius:16px;overflow:hidden">
         <tr><td style="background:linear-gradient(135deg,#1d4ed8,#7c3aed);padding:28px 32px">
           <h1 style="margin:0;font-size:22px;font-weight:700">
             <a href="https://stock.li-family.us" style="color:#fff;text-decoration:none">yStocker</a>
