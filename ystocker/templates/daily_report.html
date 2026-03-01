@@ -749,7 +749,8 @@ async function sendDailyEmail() {
       body: JSON.stringify({
         email,
         lang:        I18n.getLang(),
-        summary:     _latestSummaryUs + (_latestSummaryCn ? '\n\n---\n\n' + _latestSummaryCn : ''),
+        summary_us:  _latestSummaryUs,
+        summary_cn:  _latestSummaryCn,
         indices:     _latestMarketData?.indices  || {},
         sectors:     _latestMarketData?.sectors  || [],
         vix:         _latestMarketData?.vix      || {},
