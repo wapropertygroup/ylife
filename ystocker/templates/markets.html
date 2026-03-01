@@ -1932,7 +1932,7 @@ async function explainYield(chart) {
   panel.classList.add('visible');
   const thinking = document.createElement('span');
   thinking.className = 'yield-explain-thinking';
-  const lang = (document.documentElement.lang || I18n?.lang || 'en') === 'zh' ? 'zh' : 'en';
+  const lang = (typeof I18n !== 'undefined' && I18n.getLang) ? I18n.getLang() : 'en';
   thinking.innerHTML = `<span>${lang === 'zh' ? 'AI 分析中' : 'Thinking'}</span>`
     + `<span class="dot"></span><span class="dot"></span><span class="dot"></span>`;
   panel.innerHTML = '';
