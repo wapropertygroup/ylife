@@ -1605,8 +1605,8 @@ function _renderRatioChart(data, canvasId, ratioKey, color) {
       {
         label: ratioKey === 'gs_ratio' ? 'Gold/Silver' : 'Gold/Copper',
         data: ratios,
-        borderColor: color, backgroundColor: color.replace(')', ',0.07)').replace('rgb', 'rgba'),
-        borderWidth: 2, pointRadius: 0, fill: true, tension: 0.3, spanGaps: true,
+        borderColor: color, backgroundColor: 'transparent',
+        borderWidth: 2, pointRadius: 0, fill: false, tension: 0.3, spanGaps: true,
       },
       {
         label: maLabel,
