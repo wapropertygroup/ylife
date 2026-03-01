@@ -4990,7 +4990,8 @@ def _do_auto_broadcast() -> None:
 def _daily_broadcast_loop() -> None:
     """
     Background thread: sleep until next UTC 00:00, then call _do_auto_broadcast().
-    Repeats every 24 h.
+    Repeats every 24 h, always recalculating sleep from the current time so it
+    reliably fires at UTC 00:00 regardless of how long the broadcast itself takes.
     """
     import datetime as _dt_mod
 
@@ -5010,8 +5011,9 @@ def _daily_broadcast_loop() -> None:
             _do_auto_broadcast()
         except Exception:
             log.exception("Daily broadcast: unhandled error")
-        # Sleep 1 h before recalculating (avoids double-firing at midnight boundary)
-        time.sleep(3600)
+        # Sleep 70 s to clear the midnight boundary before recalculating,
+        # ensuring _seconds_until_utc_midnight returns ~24 h not ~0 s.
+        time.sleep(70)
 
 
 def _start_daily_broadcast_scheduler() -> None:
