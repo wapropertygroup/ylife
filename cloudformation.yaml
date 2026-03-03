@@ -322,7 +322,7 @@ Resources:
               echo 'Environment="PATH=/opt/ystocker/venv/bin"'
               echo "Environment=\"AWS_REGION=${AWS::Region}\""
               echo "ExecStart=/opt/ystocker/venv/bin/gunicorn \\"
-              echo '          --workers 2 \'
+              echo '          --workers 1 \'
               echo "          --bind 127.0.0.1:${AppPort} \\"
               echo '          --timeout 120 \'
               echo '          --access-logfile /var/log/ystocker-access.log \'
