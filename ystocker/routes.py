@@ -4771,6 +4771,30 @@ def _do_auto_broadcast() -> None:
     today_str  = _dt_mod.date.today().strftime("%B %d, %Y")
     today_iso  = _dt_mod.date.today().isoformat()
 
+    # ── Dedup guard: atomic DynamoDB lock prevents duplicate sends when
+    # gunicorn runs multiple workers (each calls create_app() and starts its
+    # own scheduler thread).  Only the first process to write the sentinel
+    # item proceeds; the rest skip immediately.
+    _dedup_tbl = _get_summaries_table()
+    if _dedup_tbl:
+        try:
+            from botocore.exceptions import ClientError as _ClientError
+            _dedup_tbl.put_item(
+                Item={
+                    "date": today_iso,
+                    "lang_market": "broadcast_sent",
+                    "ts": int(_time_mod.time()),
+                    "ttl": int(_time_mod.time()) + 7 * 24 * 3600,
+                },
+                ConditionExpression="attribute_not_exists(lang_market)",
+            )
+        except Exception as _exc:
+            if hasattr(_exc, "response") and \
+                    _exc.response.get("Error", {}).get("Code") == "ConditionalCheckFailedException":
+                log.info("Auto-broadcast: already sent for %s — skipping duplicate", today_iso)
+                return
+            log.warning("Auto-broadcast: dedup guard error (proceeding anyway): %s", _exc)
+
     log.info("Auto-broadcast: starting daily report for %s", today_iso)
 
     # ── Read market data from in-memory caches ───────────────────────────────
