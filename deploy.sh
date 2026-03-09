@@ -43,6 +43,8 @@ set -euo pipefail
 APP_DIR="/opt/ystocker"
 TS() { date '+%Y-%m-%d %H:%M:%S'; }
 
+sudo git config --global --add safe.directory "$APP_DIR" 2>/dev/null || true
+
 echo "[$(TS)][1/4] Fetching latest changes from origin..."
 sudo git -C "$APP_DIR" fetch origin 2>&1
 
