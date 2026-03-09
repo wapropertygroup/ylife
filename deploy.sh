@@ -66,7 +66,43 @@ echo "[$(TS)][3/4] Installing/updating dependencies..."
 sudo "$APP_DIR/venv/bin/pip" install -q -r "$APP_DIR/requirements.txt" 2>&1
 echo "[$(TS)]    Dependencies OK"
 
-echo "[$(TS)][4/4] Restarting ystocker service..."
+echo "[$(TS)][4/5] Ensuring ystocker service is installed..."
+if ! sudo systemctl list-unit-files ystocker.service &>/dev/null || \
+   ! sudo test -f /etc/systemd/system/ystocker.service; then
+  echo "[$(TS)]    Service file missing — installing..."
+  sudo tee /etc/systemd/system/ystocker.service > /dev/null << 'SERVICE'
+[Unit]
+Description=yStocker Flask app (Gunicorn)
+After=network.target
+
+[Service]
+User=ystocker
+Group=ystocker
+WorkingDirectory=/opt/ystocker
+Environment="PATH=/opt/ystocker/venv/bin"
+ExecStart=/opt/ystocker/venv/bin/gunicorn \
+          --workers 1 \
+          --bind 127.0.0.1:8000 \
+          --timeout 120 \
+          --access-logfile /var/log/ystocker-access.log \
+          --error-logfile  /var/log/ystocker-error.log \
+          "ystocker:create_app()"
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+SERVICE
+  sudo systemctl daemon-reload
+  sudo systemctl enable ystocker
+  echo "[$(TS)]    Service file installed and enabled"
+fi
+
+# Ensure log files exist and are owned by the app user
+sudo touch /var/log/ystocker-access.log /var/log/ystocker-error.log
+sudo chown ystocker:ystocker /var/log/ystocker-access.log /var/log/ystocker-error.log 2>/dev/null || true
+
+echo "[$(TS)]    Restarting ystocker service..."
 sudo systemctl restart ystocker
 sleep 2
 
@@ -79,6 +115,53 @@ else
   echo "[$(TS)]    ✗ ystocker FAILED to start — last 30 log lines:"
   sudo journalctl -u ystocker -n 30 --no-pager
   exit 1
+fi
+
+# ── nginx ─────────────────────────────────────────────────────────────────────
+echo "[$(TS)][5/6] Ensuring nginx is configured..."
+if ! sudo test -f /etc/nginx/conf.d/ystocker.conf; then
+  echo "[$(TS)]    nginx config missing — installing..."
+  sudo tee /etc/nginx/conf.d/ystocker.conf > /dev/null << 'NGINX'
+server {
+    listen 80;
+    server_name stock.li-family.us;
+
+    location / {
+        proxy_pass         http://127.0.0.1:8000;
+        proxy_set_header   Host              $host;
+        proxy_set_header   X-Real-IP         $remote_addr;
+        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_read_timeout 120s;
+    }
+
+    location /static/ {
+        alias /opt/ystocker/ystocker/static/;
+        expires 7d;
+    }
+}
+NGINX
+  sudo rm -f /etc/nginx/conf.d/default.conf /etc/nginx/sites-enabled/default 2>/dev/null || true
+  sudo systemctl enable nginx
+  echo "[$(TS)]    nginx config installed"
+fi
+
+if sudo nginx -t 2>/dev/null; then
+  sudo systemctl restart nginx
+  echo "[$(TS)]    ✓ nginx is running"
+else
+  echo "[$(TS)]    ✗ nginx config test failed:"
+  sudo nginx -t
+  exit 1
+fi
+
+# ── SSL (Let's Encrypt) ───────────────────────────────────────────────────────
+if ! sudo test -f /etc/letsencrypt/live/stock.li-family.us/fullchain.pem; then
+  echo "[$(TS)][6/6] Installing SSL certificate via Let's Encrypt..."
+  sudo dnf install -y certbot python3-certbot-nginx -q 2>&1 | tail -1
+  sudo certbot --nginx -d stock.li-family.us --non-interactive --agree-tos -m admin@li-family.us --redirect
+  echo "[$(TS)]    ✓ SSL certificate installed"
+else
+  echo "[$(TS)][6/6] SSL certificate already present — skipping"
 fi
 REMOTE
 

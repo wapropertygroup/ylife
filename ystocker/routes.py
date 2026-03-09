@@ -2148,18 +2148,18 @@ def api_markets():
 
     def _fetch_vix() -> Optional[dict]:
         try:
-            tk   = yf.Ticker("^VIX")
-            info = tk.info
-            hist = tk.history(period="1y", interval="1wk")
-            prices = [round(float(p), 2) if not math.isnan(float(p)) else None for p in hist["Close"]]
-            dates  = [str(d.date()) for d in hist.index]
-            current = info.get("regularMarketPrice") or (prices[-1] if prices else None)
-            prev    = info.get("regularMarketPreviousClose")
-            day_chg = None
-            if current and prev and prev > 0:
-                day_chg = round((current - prev) / prev * 100, 2)
+            daily = yf.download("^VIX", period="2y", interval="1d", auto_adjust=True, progress=False)
+            if isinstance(daily.columns, pd.MultiIndex):
+                daily = daily.xs("^VIX", axis=1, level=1)
+            current = round(float(daily["Close"].iloc[-1]), 2) if not daily.empty else None
+            prev    = round(float(daily["Close"].iloc[-2]), 2) if len(daily) >= 2 else None
+            day_chg = round((current - prev) / prev * 100, 2) if current and prev and prev > 0 else None
+            # Resample daily → weekly (last close of each week) for the chart
+            weekly  = daily["Close"].resample("W").last().dropna()
+            prices  = [round(float(p), 2) for p in weekly]
+            dates   = [str(d.date()) for d in weekly.index]
             return {
-                "current": round(float(current), 2) if current else None,
+                "current": current,
                 "day_chg": day_chg,
                 "weekly":  {"dates": dates, "prices": prices},
             }
