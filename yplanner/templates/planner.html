@@ -1,0 +1,1225 @@
+{% extends "base.html" %}
+
+{% block title %}yPlanner — Trip Planner{% endblock %}
+
+{% block head %}
+<style>
+  .stop-item { transition: transform 0.15s ease, box-shadow 0.15s ease; }
+  .stop-item.dragging { opacity: 0.5; transform: scale(0.97); }
+  .stop-item.drag-over { border-color: #6366f1 !important; box-shadow: 0 0 0 2px rgba(99,102,241,0.3); }
+</style>
+{% endblock %}
+
+{% block main_class %}max-w-screen-2xl mx-auto{% endblock %}
+
+{% block content %}
+<div x-data="tripPlanner()" x-init="init()" class="flex flex-col lg:flex-row gap-4 h-[calc(100vh-8rem)] p-4">
+
+  <!-- Left Panel: Controls -->
+  <div class="lg:w-[420px] shrink-0 flex flex-col gap-4 overflow-y-auto pr-1">
+
+    <!-- Sign-in / User identity -->
+    <div x-show="!user" class="bg-white dark:bg-panel border border-slate-200 dark:border-border rounded-xl p-4">
+      <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-3" data-i18n="auth.label">Sign In</label>
+      <p class="text-xs text-slate-400 mb-3" data-i18n="auth.desc">Sign in to save and sync your trips</p>
+
+      <!-- Google Sign-In button -->
+      <div id="g_id_onload"
+           data-client_id="{{ google_client_id }}"
+           data-callback="handleGoogleSignIn"
+           data-auto_prompt="false"
+           style="display:none">
+      </div>
+      <button @click="signInWithGoogle()" x-show="googleClientId"
+              class="w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-lg border border-slate-300 dark:border-slate-600
+                     bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-sm font-medium transition mb-2">
+        <svg class="w-5 h-5" viewBox="0 0 24 24">
+          <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>
+          <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+          <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18A10.96 10.96 0 001 12c0 1.77.42 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+          <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+        </svg>
+        <span data-i18n="auth.google">Sign in with Google</span>
+      </button>
+
+      <!-- Apple Sign-In button -->
+      <button @click="signInWithApple()" x-show="appleServiceId"
+              class="w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-lg border border-slate-300 dark:border-slate-600
+                     bg-black hover:bg-gray-900 text-white text-sm font-medium transition">
+        <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M17.05 20.28c-.98.95-2.05.88-3.08.4-1.09-.5-2.08-.48-3.24 0-1.44.62-2.2.44-3.06-.4C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/>
+        </svg>
+        <span data-i18n="auth.apple">Sign in with Apple</span>
+      </button>
+
+      <p x-show="!googleClientId && !appleServiceId" class="text-xs text-slate-400 text-center py-2" data-i18n="auth.not_configured">OAuth not configured. Set GOOGLE_CLIENT_ID in .env</p>
+    </div>
+
+    <!-- Signed-in user card -->
+    <div x-show="user" class="flex items-center justify-between bg-white dark:bg-panel border border-slate-200 dark:border-border rounded-xl px-4 py-2.5">
+      <div class="flex items-center gap-2.5">
+        <!-- Avatar -->
+        <template x-if="user && user.picture">
+          <img :src="user.picture" class="w-8 h-8 rounded-full" referrerpolicy="no-referrer">
+        </template>
+        <template x-if="user && !user.picture">
+          <div class="w-8 h-8 rounded-full bg-brand/20 text-brand text-xs font-bold flex items-center justify-center"
+               x-text="user ? user.name[0].toUpperCase() : ''"></div>
+        </template>
+        <div class="min-w-0">
+          <p class="text-sm font-medium text-slate-700 dark:text-slate-200 truncate" x-text="user?.name"></p>
+          <p class="text-[10px] text-slate-400 truncate" x-text="user?.email"></p>
+        </div>
+        <!-- Provider badge -->
+        <span x-show="user?.provider === 'google'" class="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">G</span>
+        <span x-show="user?.provider === 'apple'" class="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300">A</span>
+      </div>
+      <button @click="signOut()" class="text-xs text-slate-400 hover:text-red-400 transition" data-i18n="auth.signout">Sign out</button>
+    </div>
+
+    <!-- Search box -->
+    <div class="bg-white dark:bg-panel border border-slate-200 dark:border-border rounded-xl p-4">
+      <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-2" data-i18n="search.label">Search Places</label>
+      <div class="relative">
+        <input id="place-search"
+               type="text"
+               :placeholder="I18n.get('search.placeholder')"
+               class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-4 py-2.5 text-sm
+                      text-slate-800 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500
+                      focus:outline-none focus:border-brand focus:ring-1 focus:ring-brand/50 transition">
+        <svg class="absolute right-3 top-2.5 w-5 h-5 text-slate-400 dark:text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+        </svg>
+      </div>
+    </div>
+
+    <!-- Transport mode + Departure -->
+    <div class="bg-white dark:bg-panel border border-slate-200 dark:border-border rounded-xl p-4" x-data="{ open: true }">
+      <button @click="open = !open" class="w-full flex items-center justify-between mb-0" :class="open && 'mb-3'">
+        <label class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide cursor-pointer" data-i18n="mode.label">Travel Mode</label>
+        <svg class="w-4 h-4 text-slate-400 transition-transform duration-200" :class="open && 'rotate-180'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+        </svg>
+      </button>
+      <div x-show="open" x-transition class="space-y-3">
+      <div>
+        <div class="flex gap-2">
+          <template x-for="mode in [{id:'DRIVING',icon:'car',label:'mode.driving'},{id:'WALKING',icon:'walk',label:'mode.walking'},{id:'TRANSIT',icon:'bus',label:'mode.transit'}]" :key="mode.id">
+            <button @click="setTravelMode(mode.id)"
+                    :class="travelMode === mode.id ? 'bg-brand text-white border-brand' : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:border-slate-400 dark:hover:border-slate-500'"
+                    class="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium transition">
+              <span x-text="I18n.get(mode.label)"></span>
+            </button>
+          </template>
+        </div>
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-2" data-i18n="departure.label">Departure Time</label>
+        <input type="datetime-local" x-model="departureTime" @change="calculateRoute()"
+               class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-4 py-2.5 text-sm
+                      text-slate-800 dark:text-slate-100 focus:outline-none focus:border-brand focus:ring-1 focus:ring-brand/50 transition">
+      </div>
+      </div>
+    </div>
+
+    <!-- Explore Nearby -->
+    <div class="bg-white dark:bg-panel border border-slate-200 dark:border-border rounded-xl p-4" x-data="{ open: true }">
+      <button @click="open = !open" class="w-full flex items-center justify-between mb-0" :class="open && 'mb-2'">
+        <label class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide cursor-pointer" data-i18n="nearby.label">Explore Nearby</label>
+        <svg class="w-4 h-4 text-slate-400 transition-transform duration-200" :class="open && 'rotate-180'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+        </svg>
+      </button>
+      <div x-show="open" x-transition>
+      <div class="flex flex-wrap gap-1.5 mb-3">
+        <template x-for="cat in categories" :key="cat.type">
+          <button @click="searchNearby(cat.type)"
+                  :class="activeCategory === cat.type ? 'bg-brand text-white border-brand' : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:border-brand'"
+                  class="px-2.5 py-1.5 rounded-lg border text-xs font-medium transition">
+            <span x-text="I18n.get(cat.label)"></span>
+          </button>
+        </template>
+      </div>
+      <!-- Nearby results -->
+      <div x-show="nearbyResults.length > 0" class="max-h-48 overflow-y-auto space-y-1.5">
+        <template x-for="place in nearbyResults" :key="place.place_id">
+          <div class="flex items-center gap-2 p-2 rounded-lg bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-700/50 cursor-pointer transition"
+               @click="addNearbyPlace(place)">
+            <div class="flex-1 min-w-0">
+              <p class="text-xs font-medium text-slate-700 dark:text-slate-200 truncate" x-text="place.name"></p>
+              <div class="flex items-center gap-1 mt-0.5">
+                <span x-show="place.rating" class="text-[10px] text-amber-500 font-medium" x-text="'★ ' + place.rating"></span>
+                <span class="text-[10px] text-slate-400" x-text="place.vicinity"></span>
+              </div>
+            </div>
+            <svg class="w-4 h-4 text-brand shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+            </svg>
+          </div>
+        </template>
+      </div>
+      <p x-show="nearbyLoading" class="text-xs text-slate-400 text-center py-2" data-i18n="nearby.loading">Searching...</p>
+      </div>
+    </div>
+
+    <!-- Stops list -->
+    <div class="bg-white dark:bg-panel border border-slate-200 dark:border-border rounded-xl p-4" x-data="{ open: true }">
+      <button @click="open = !open" class="w-full flex items-center justify-between mb-0" :class="open && 'mb-3'">
+        <div class="flex items-center gap-2">
+          <label class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide cursor-pointer" data-i18n="stops.label">Trip Stops</label>
+          <span class="text-xs text-slate-400 dark:text-slate-500" x-text="stops.length + ' ' + I18n.get('stops.count')"></span>
+        </div>
+        <svg class="w-4 h-4 text-slate-400 transition-transform duration-200" :class="open && 'rotate-180'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+        </svg>
+      </button>
+      <div x-show="open" x-transition>
+
+      <!-- Empty state -->
+      <div x-show="stops.length === 0" class="flex-1 flex items-center justify-center">
+        <div class="text-center py-8">
+          <svg class="w-12 h-12 mx-auto text-slate-300 dark:text-slate-700 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
+          </svg>
+          <p class="text-sm text-slate-400 dark:text-slate-500" data-i18n="stops.empty">Search above to add places to your trip</p>
+        </div>
+      </div>
+
+      <!-- Stop items -->
+      <div class="flex flex-col gap-2 overflow-y-auto max-h-[40vh]" id="stops-list">
+        <template x-for="(stop, index) in stops" :key="stop.id">
+          <div class="stop-item bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg p-3 cursor-grab active:cursor-grabbing"
+               draggable="true"
+               @dragstart="dragStart($event, index)"
+               @dragend="dragEnd($event)"
+               @dragover.prevent="dragOver($event, index)"
+               @dragleave="dragLeave($event)"
+               @drop.prevent="drop($event, index)">
+            <div class="flex items-start gap-2">
+              <span class="shrink-0 w-6 h-6 rounded-full text-white text-xs font-bold flex items-center justify-center mt-0.5"
+                    :style="`background:${legs[index]?.color || legs[index-1]?.color || '#6366f1'}`"
+                    x-text="index + 1"></span>
+              <div class="flex-1 min-w-0">
+                <p class="text-sm font-medium text-slate-700 dark:text-slate-100 truncate" x-text="stop.name"></p>
+                <p class="text-xs text-slate-400 dark:text-slate-500 truncate mt-0.5" x-text="stop.address"></p>
+                <!-- Arrive / Depart times -->
+                <div x-show="stopTimes[index]?.arrive" class="flex items-center gap-1.5 mt-1.5">
+                  <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 text-[10px] font-semibold">
+                    <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
+                    <span x-text="stopTimes[index]?.arrive"></span>
+                  </span>
+                  <span x-show="stopTimes[index]?.depart"
+                        class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 text-[10px] font-semibold">
+                    <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 10l7-7m0 0l7 7m-7-7v18"/></svg>
+                    <span x-text="stopTimes[index]?.depart"></span>
+                  </span>
+                </div>
+                <div class="flex items-center gap-2 mt-2">
+                  <svg class="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                  </svg>
+                  <select x-model="stop.stopMinutes" @change="calculateRoute(); saveTrip()"
+                          class="bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 text-xs text-slate-700 dark:text-slate-200 focus:outline-none focus:border-brand">
+                    <option value="0" x-text="I18n.get('stop.pass_through')">Pass through</option>
+                    <option value="15">15 min</option>
+                    <option value="30">30 min</option>
+                    <option value="45">45 min</option>
+                    <option value="60">1 hr</option>
+                    <option value="90">1.5 hr</option>
+                    <option value="120">2 hr</option>
+                    <option value="180">3 hr</option>
+                    <option value="240">4 hr</option>
+                    <option value="480">8 hr</option>
+                  </select>
+                </div>
+              </div>
+              <button @click="removeStop(index)"
+                      class="shrink-0 p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/30 text-slate-400 dark:text-slate-500 hover:text-red-500 dark:hover:text-red-400 transition">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+        </template>
+      </div>
+      </div>
+    </div>
+
+    <!-- Trip Summary -->
+    <div x-show="stops.length >= 2" x-transition class="bg-white dark:bg-panel border border-slate-200 dark:border-border rounded-xl p-4" x-data="{ open: true }">
+      <button @click="open = !open" class="w-full flex items-center justify-between mb-0" :class="open && 'mb-3'">
+        <label class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide cursor-pointer" data-i18n="summary.label">Trip Summary</label>
+        <svg class="w-4 h-4 text-slate-400 transition-transform duration-200" :class="open && 'rotate-180'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+        </svg>
+      </button>
+      <div x-show="open" x-transition>
+      <div class="grid grid-cols-2 gap-3">
+        <div class="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-3 text-center">
+          <p class="text-xs text-slate-400 dark:text-slate-500" data-i18n="summary.distance">Distance</p>
+          <p class="text-lg font-bold text-slate-800 dark:text-slate-100 mt-1" x-text="totalDistance || '--'"></p>
+        </div>
+        <div class="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-3 text-center">
+          <p class="text-xs text-slate-400 dark:text-slate-500" data-i18n="summary.travel_time">Travel Time</p>
+          <p class="text-lg font-bold text-slate-800 dark:text-slate-100 mt-1" x-text="totalTravelTime || '--'"></p>
+        </div>
+        <div class="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-3 text-center">
+          <p class="text-xs text-slate-400 dark:text-slate-500" data-i18n="summary.stop_time">Stop Time</p>
+          <p class="text-lg font-bold text-emerald-600 dark:text-emerald-400 mt-1" x-text="totalStopTime || '--'"></p>
+        </div>
+        <div class="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-3 text-center">
+          <p class="text-xs text-slate-400 dark:text-slate-500" data-i18n="summary.total_time">Total Time</p>
+          <p class="text-lg font-bold text-brand mt-1" x-text="totalTime || '--'"></p>
+        </div>
+      </div>
+
+      <!-- Leg details -->
+      <div x-show="legs.length > 0" class="mt-3 border-t border-slate-200 dark:border-slate-700 pt-3">
+        <template x-for="(leg, i) in legs" :key="i">
+          <div class="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 py-1">
+            <span class="w-5 h-5 rounded-full text-white text-[10px] font-bold flex items-center justify-center" :style="`background:${leg.color}`" x-text="i + 1"></span>
+            <span class="w-6 h-1 rounded-full" :style="`background:${leg.color}`"></span>
+            <span class="w-5 h-5 rounded-full text-white text-[10px] font-bold flex items-center justify-center" :style="`background:${legs[i+1]?.color || leg.color}`" x-text="i + 2"></span>
+            <span class="ml-1" x-text="leg.distance"></span>
+            <span class="text-slate-300 dark:text-slate-600">|</span>
+            <span x-text="leg.duration"></span>
+          </div>
+        </template>
+      </div>
+
+      <!-- Estimated arrival -->
+      <div x-show="estimatedArrival" class="mt-3 bg-brand/10 border border-brand/30 rounded-lg p-3 text-center">
+        <p class="text-xs text-brand" data-i18n="summary.arrival">Estimated End</p>
+        <p class="text-sm font-semibold text-slate-800 dark:text-slate-100 mt-1" x-text="estimatedArrival"></p>
+      </div>
+      </div>
+    </div>
+
+    <!-- Action buttons -->
+    <div class="flex gap-2">
+      <button x-show="stops.length >= 2" @click="openGoogleMaps()"
+              class="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-brand hover:bg-brand-dark text-white font-semibold text-sm transition shadow-lg shadow-brand/20">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l5.447 2.724A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"/>
+        </svg>
+        <span data-i18n="action.navigate">Navigate</span>
+      </button>
+      <button x-show="stops.length >= 1 && user" @click="showSaveModal = true"
+              class="px-4 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium transition"
+              :title="I18n.get('action.save')">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/>
+        </svg>
+      </button>
+      <button x-show="stops.length >= 2" @click="shareTrip()"
+              class="px-4 py-3 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-sm font-medium transition"
+              :title="I18n.get('action.share')">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/>
+        </svg>
+      </button>
+      <button x-show="stops.length > 0" @click="clearTrip()"
+              class="px-4 py-3 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-red-50 dark:hover:bg-red-900/30 border border-slate-300 dark:border-slate-700 hover:border-red-300 dark:hover:border-red-700 text-slate-500 dark:text-slate-300 hover:text-red-500 dark:hover:text-red-400 text-sm font-medium transition">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- My Trips -->
+    <div x-show="user" class="bg-white dark:bg-panel border border-slate-200 dark:border-border rounded-xl p-4">
+      <div class="flex items-center justify-between mb-2">
+        <label class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide" data-i18n="mytrips.label">My Trips</label>
+        <button @click="loadMyTrips()" class="text-xs text-brand hover:text-brand-dark transition" data-i18n="mytrips.refresh">Refresh</button>
+      </div>
+      <div x-show="myTrips.length === 0 && !myTripsLoading" class="text-xs text-slate-400 py-2 text-center" data-i18n="mytrips.empty">No saved trips yet</div>
+      <p x-show="myTripsLoading" class="text-xs text-slate-400 text-center py-2">Loading...</p>
+      <div class="space-y-1.5 max-h-40 overflow-y-auto">
+        <template x-for="trip in myTrips" :key="trip.trip_id">
+          <div class="flex items-center gap-2 p-2 rounded-lg bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-700/50 transition">
+            <div class="flex-1 min-w-0 cursor-pointer" @click="loadSavedTrip(trip.trip_id)">
+              <p class="text-xs font-medium text-slate-700 dark:text-slate-200 truncate" x-text="trip.name"></p>
+              <p class="text-[10px] text-slate-400" x-text="trip.stops_count + ' stops'"></p>
+            </div>
+            <button @click="deleteSavedTrip(trip.trip_id)"
+                    class="text-slate-400 hover:text-red-400 transition p-1">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+              </svg>
+            </button>
+          </div>
+        </template>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right Panel: Map -->
+  <div class="flex-1 rounded-xl overflow-hidden border border-slate-200 dark:border-border min-h-[300px] lg:min-h-0 relative">
+    <div id="map" class="w-full h-full"></div>
+    <!-- Map layer selector -->
+    <div class="absolute top-3 right-3 z-10" x-data="{ layerOpen: false }">
+      <button @click="layerOpen = !layerOpen"
+              class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-xs font-medium text-slate-700 dark:text-slate-200 shadow-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition flex items-center gap-1.5">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l5.447 2.724A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"/>
+        </svg>
+        <span data-i18n="layers.btn">Layers</span>
+      </button>
+      <div x-show="layerOpen" @click.away="layerOpen = false" x-transition
+           class="absolute right-0 top-full mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-xl overflow-hidden min-w-[140px]">
+        <template x-for="layer in [{id:'roadmap',label:'layers.roadmap'},{id:'satellite',label:'layers.satellite'},{id:'terrain',label:'layers.terrain'},{id:'hybrid',label:'layers.hybrid'}]" :key="layer.id">
+          <button @click="setMapType(layer.id); layerOpen = false"
+                  :class="mapType === layer.id ? 'bg-brand/10 text-brand' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'"
+                  class="w-full text-left px-3 py-2 text-xs font-medium transition"
+                  x-text="I18n.get(layer.label)"></button>
+        </template>
+        <div class="border-t border-slate-200 dark:border-slate-700">
+          <button @click="toggleTraffic()"
+                  :class="showTraffic ? 'bg-brand/10 text-brand' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'"
+                  class="w-full text-left px-3 py-2 text-xs font-medium transition flex items-center justify-between">
+            <span x-text="I18n.get('layers.traffic')"></span>
+            <span x-show="showTraffic" class="text-[10px] text-brand">ON</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Save Modal -->
+  <div x-show="showSaveModal" x-transition.opacity class="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" @click.self="showSaveModal = false">
+    <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-6 w-full max-w-sm shadow-2xl" @click.stop>
+      <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-100 mb-4" data-i18n="save.title">Save Trip</h3>
+      <input type="text" x-model="saveTripName"
+             :placeholder="I18n.get('save.placeholder')"
+             @keydown.enter="doSaveTrip()"
+             class="w-full bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg px-4 py-2.5 text-sm
+                    text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:border-brand mb-4">
+      <div class="flex gap-2">
+        <button @click="doSaveTrip()"
+                class="flex-1 px-4 py-2.5 rounded-lg bg-brand hover:bg-brand-dark text-white text-sm font-medium transition"
+                data-i18n="save.btn">Save</button>
+        <button @click="showSaveModal = false"
+                class="px-4 py-2.5 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-sm font-medium hover:bg-slate-200 dark:hover:bg-slate-600 transition"
+                data-i18n="save.cancel">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Share Modal -->
+  <div x-show="showShareModal" x-transition.opacity class="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" @click.self="showShareModal = false">
+    <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-6 w-full max-w-sm shadow-2xl" @click.stop>
+      <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-100 mb-2" data-i18n="share.title">Share Trip</h3>
+      <p class="text-xs text-slate-400 mb-4" data-i18n="share.desc">Anyone with this link can view your trip (expires in 30 days)</p>
+      <div class="flex gap-2">
+        <input type="text" x-model="shareUrl" readonly
+               class="flex-1 bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2.5 text-xs text-slate-600 dark:text-slate-300 font-mono">
+        <button @click="copyShareUrl()"
+                class="px-4 py-2.5 rounded-lg bg-brand hover:bg-brand-dark text-white text-xs font-medium transition"
+                x-text="copied ? I18n.get('share.copied') : I18n.get('share.copy')">Copy</button>
+      </div>
+      <button @click="showShareModal = false"
+              class="w-full mt-3 px-4 py-2 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-sm hover:bg-slate-200 dark:hover:bg-slate-600 transition"
+              data-i18n="share.close">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Google Maps API -->
+<script>
+// Global callback for Google Identity Services
+window.handleGoogleSignIn = function(response) {
+  // Forward to Alpine component
+  const el = document.querySelector('[x-data]');
+  if (el && el.__x) {
+    el.__x.$data.handleGoogleCredential(response);
+  }
+};
+
+// Store map objects outside Alpine to avoid Proxy wrapping
+const _mapState = {
+  map: null,
+  directionsService: null,
+  directionsRenderer: null,
+  legPolylines: [],
+  trafficLayer: null,
+  markers: [],
+  nearbyMarkers: [],
+  autocomplete: null,
+};
+
+const LEG_COLORS = [
+  '#6366f1', // indigo
+  '#f59e0b', // amber
+  '#10b981', // emerald
+  '#ef4444', // red
+  '#8b5cf6', // violet
+  '#06b6d4', // cyan
+  '#f97316', // orange
+  '#ec4899', // pink
+  '#14b8a6', // teal
+  '#a855f7', // purple
+];
+
+function tripPlanner() {
+  return {
+    stops: [],
+    travelMode: 'DRIVING',
+    departureTime: '',
+    totalDistance: '',
+    totalTravelTime: '',
+    totalStopTime: '',
+    totalTime: '',
+    estimatedArrival: '',
+    legs: [],
+    stopTimes: [],  // [{arrive: '10:00 AM', depart: '11:00 AM'}, ...]
+    dragIndex: null,
+    mapType: 'roadmap',
+    showTraffic: false,
+
+    // User (OAuth)
+    user: null,
+    googleClientId: '{{ google_client_id }}',
+    appleServiceId: '{{ apple_service_id }}',
+
+    // My Trips
+    myTrips: [],
+    myTripsLoading: false,
+
+    // Save modal
+    showSaveModal: false,
+    saveTripName: '',
+
+    // Share modal
+    showShareModal: false,
+    shareUrl: '',
+    copied: false,
+
+    // Nearby
+    categories: [
+      { type: 'restaurant', label: 'nearby.restaurant' },
+      { type: 'cafe', label: 'nearby.cafe' },
+      { type: 'tourist_attraction', label: 'nearby.attraction' },
+      { type: 'amusement_park', label: 'nearby.kids' },
+      { type: 'gas_station', label: 'nearby.gas' },
+      { type: 'lodging', label: 'nearby.hotel' },
+      { type: 'shopping_mall', label: 'nearby.shopping' },
+    ],
+    activeCategory: '',
+    nearbyResults: [],
+    nearbyLoading: false,
+
+    init() {
+      // Set default departure time
+      const now = new Date();
+      now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+      this.departureTime = now.toISOString().slice(0, 16);
+
+      // Check auth session
+      this.checkAuth();
+
+      // Load map type
+      _mapState.mapType = localStorage.getItem('yplanner_maptype') || 'roadmap';
+
+      // Load saved trip from localStorage
+      this.loadTrip();
+
+      // Load shared trip if URL has trip_id
+      const sharedTripId = '{{ shared_trip_id | default("") }}';
+      if (sharedTripId) {
+        this.loadSharedTrip(sharedTripId);
+      }
+
+      // Wait for Google Maps
+      if (window.google && window.google.maps) {
+        this.initMap();
+      } else {
+        window.initYPlannerMap = () => this.initMap();
+      }
+
+      // Listen for add-nearby events from info window links
+      document.addEventListener('add-nearby', (e) => {
+        try {
+          const place = JSON.parse(e.detail);
+          this.addNearbyPlace(place);
+          if (_mapState._openInfoWindow) _mapState._openInfoWindow.close();
+        } catch (err) {}
+      });
+
+      // Load my trips if signed in
+      // (deferred until checkAuth resolves)
+    },
+
+    initMap() {
+      const isDark = document.documentElement.classList.contains('dark');
+
+      _mapState.map = new google.maps.Map(document.getElementById('map'), {
+        center: { lat: 37.7749, lng: -122.4194 },
+        zoom: 12,
+        styles: isDark ? this.getDarkMapStyles() : [],
+        mapTypeId: _mapState.mapType,
+        mapTypeControl: false,
+        streetViewControl: false,
+        fullscreenControl: true,
+      });
+
+      _mapState.directionsService = new google.maps.DirectionsService();
+      _mapState.directionsRenderer = new google.maps.DirectionsRenderer({
+        map: _mapState.map,
+        suppressMarkers: true,
+        suppressPolylines: true,  // We draw per-leg colored polylines instead
+      });
+
+      // Traffic layer
+      _mapState.trafficLayer = new google.maps.TrafficLayer();
+
+      // Places Autocomplete
+      const input = document.getElementById('place-search');
+      _mapState.autocomplete = new google.maps.places.Autocomplete(input, {
+        fields: ['place_id', 'name', 'formatted_address', 'geometry']
+      });
+
+      _mapState.autocomplete.addListener('place_changed', () => {
+        const place = _mapState.autocomplete.getPlace();
+        if (!place.geometry) return;
+        this.addStop({
+          id: Date.now() + Math.random(),
+          placeId: place.place_id,
+          name: place.name,
+          address: place.formatted_address,
+          lat: place.geometry.location.lat(),
+          lng: place.geometry.location.lng(),
+          stopMinutes: 60,
+        });
+        input.value = '';
+      });
+
+      // Render existing stops
+      if (this.stops.length > 0) {
+        this.renderMarkers();
+        this.fitBounds();
+        if (this.stops.length >= 2) this.calculateRoute();
+      }
+
+      // Get user location and show blue dot
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition((pos) => {
+          const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+          if (this.stops.length === 0) _mapState.map.setCenter(loc);
+          // Blue dot for current location
+          new google.maps.Marker({
+            position: loc,
+            map: _mapState.map,
+            icon: {
+              path: google.maps.SymbolPath.CIRCLE,
+              scale: 8,
+              fillColor: '#4285F4',
+              fillOpacity: 1,
+              strokeColor: '#ffffff',
+              strokeWeight: 2.5,
+            },
+            title: 'You are here',
+            zIndex: 999,
+          });
+        }, () => {});
+      }
+
+      // Expose theme updater
+      window.updateMapTheme = () => {
+        const dark = document.documentElement.classList.contains('dark');
+        _mapState.map.setOptions({ styles: dark ? this.getDarkMapStyles() : [] });
+      };
+    },
+
+    // --- Stops ---
+    addStop(stop) {
+      this.stops.push(stop);
+      this.renderMarkers();
+      this.fitBounds();
+      if (this.stops.length >= 2) this.calculateRoute();
+      this.saveTrip();
+    },
+
+    removeStop(index) {
+      this.stops.splice(index, 1);
+      this.renderMarkers();
+      if (this.stops.length >= 2) {
+        this.calculateRoute();
+      } else {
+        this.clearRoute();
+      }
+      this.fitBounds();
+      this.saveTrip();
+    },
+
+    clearTrip() {
+      this.stops = [];
+      this.clearRoute();
+      this.clearMarkers();
+      this.clearNearbyMarkers();
+      this.nearbyResults = [];
+      this.activeCategory = '';
+      localStorage.removeItem('yplanner_trip');
+    },
+
+    // --- Travel mode ---
+    setTravelMode(mode) {
+      this.travelMode = mode;
+      if (this.stops.length >= 2) this.calculateRoute();
+      this.saveTrip();
+    },
+
+    // --- Map layers ---
+    setMapType(type) {
+      this.mapType = type;
+      if (_mapState.map) _mapState.map.setMapTypeId(type);
+      localStorage.setItem('yplanner_maptype', type);
+    },
+
+    toggleTraffic() {
+      this.showTraffic = !this.showTraffic;
+      if (_mapState.trafficLayer) {
+        _mapState.trafficLayer.setMap(this.showTraffic ? _mapState.map : null);
+      }
+    },
+
+    // --- Route calculation ---
+    calculateRoute() {
+      if (this.stops.length < 2 || !_mapState.directionsService) return;
+
+      const origin = { lat: this.stops[0].lat, lng: this.stops[0].lng };
+      const destination = { lat: this.stops[this.stops.length - 1].lat, lng: this.stops[this.stops.length - 1].lng };
+      const waypoints = this.stops.slice(1, -1).map(stop => ({
+        location: { lat: stop.lat, lng: stop.lng },
+        stopover: true,
+      }));
+
+      _mapState.directionsService.route({
+        origin,
+        destination,
+        waypoints,
+        travelMode: google.maps.TravelMode[this.travelMode],
+        optimizeWaypoints: false,
+      }, (result, status) => {
+        if (status === 'OK') {
+          _mapState.directionsRenderer.setDirections(result);
+          this.drawLegPolylines(result);
+          this.updateSummary(result);
+        } else {
+          this.clearRoute();
+        }
+      });
+    },
+
+    drawLegPolylines(result) {
+      this.clearLegPolylines();
+      const route = result.routes[0];
+      route.legs.forEach((leg, i) => {
+        const color = LEG_COLORS[i % LEG_COLORS.length];
+        const polyline = new google.maps.Polyline({
+          path: leg.steps.flatMap(step => step.path || [step.start_location, step.end_location]),
+          strokeColor: color,
+          strokeWeight: 5,
+          strokeOpacity: 0.85,
+          map: _mapState.map,
+        });
+        _mapState.legPolylines.push(polyline);
+      });
+    },
+
+    clearLegPolylines() {
+      _mapState.legPolylines.forEach(p => p.setMap(null));
+      _mapState.legPolylines = [];
+    },
+
+    updateSummary(result) {
+      const route = result.routes[0];
+      let totalDistanceM = 0;
+      let totalDurationS = 0;
+      this.legs = [];
+
+      route.legs.forEach((leg, i) => {
+        totalDistanceM += leg.distance.value;
+        totalDurationS += leg.duration.value;
+        this.legs.push({ distance: leg.distance.text, duration: leg.duration.text, durationValue: leg.duration.value, color: LEG_COLORS[i % LEG_COLORS.length] });
+      });
+
+      let totalStopMinutes = 0;
+      this.stops.forEach(stop => { totalStopMinutes += parseInt(stop.stopMinutes) || 0; });
+
+      this.totalDistance = this.formatDistance(totalDistanceM);
+      this.totalTravelTime = this.formatDuration(totalDurationS);
+      this.totalStopTime = this.formatDuration(totalStopMinutes * 60);
+      this.totalTime = this.formatDuration(totalDurationS + totalStopMinutes * 60);
+
+      // Compute per-stop arrive/depart times
+      this.stopTimes = [];
+      if (this.departureTime) {
+        const timeFmt = { hour: '2-digit', minute: '2-digit' };
+        let cursor = new Date(this.departureTime);
+
+        for (let i = 0; i < this.stops.length; i++) {
+          const arrive = new Date(cursor);
+          const stopMins = parseInt(this.stops[i].stopMinutes) || 0;
+          const depart = new Date(arrive.getTime() + stopMins * 60 * 1000);
+
+          this.stopTimes.push({
+            arrive: i === 0 ? cursor.toLocaleTimeString(undefined, timeFmt) : arrive.toLocaleTimeString(undefined, timeFmt),
+            depart: stopMins > 0 ? depart.toLocaleTimeString(undefined, timeFmt) : null,
+          });
+
+          // Advance cursor: depart time + travel to next stop
+          cursor = depart;
+          if (i < this.legs.length) {
+            cursor = new Date(cursor.getTime() + this.legs[i].durationValue * 1000);
+          }
+        }
+
+        const arrival = cursor;
+        this.estimatedArrival = arrival.toLocaleString(undefined, {
+          weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+        });
+      } else {
+        this.stopTimes = this.stops.map(() => ({ arrive: null, depart: null }));
+        this.estimatedArrival = '';
+      }
+    },
+
+    formatDistance(meters) {
+      return meters >= 1000 ? (meters / 1000).toFixed(1) + ' km' : meters + ' m';
+    },
+
+    formatDuration(seconds) {
+      const h = Math.floor(seconds / 3600);
+      const m = Math.round((seconds % 3600) / 60);
+      if (h > 0 && m > 0) return h + 'h ' + m + 'm';
+      if (h > 0) return h + 'h';
+      return m + 'm';
+    },
+
+    clearRoute() {
+      if (_mapState.directionsRenderer) _mapState.directionsRenderer.setDirections({ routes: [] });
+      this.clearLegPolylines();
+      this.totalDistance = '';
+      this.totalTravelTime = '';
+      this.totalStopTime = '';
+      this.totalTime = '';
+      this.estimatedArrival = '';
+      this.legs = [];
+      this.stopTimes = [];
+    },
+
+    // --- Markers ---
+    renderMarkers() {
+      this.clearMarkers();
+      this.stops.forEach((stop, index) => {
+        const marker = new google.maps.Marker({
+          position: { lat: stop.lat, lng: stop.lng },
+          map: _mapState.map,
+          label: { text: String(index + 1), color: '#fff', fontWeight: 'bold', fontSize: '12px' },
+          icon: {
+            path: google.maps.SymbolPath.CIRCLE,
+            scale: 14,
+            fillColor: '#6366f1',
+            fillOpacity: 1,
+            strokeColor: '#4f46e5',
+            strokeWeight: 2,
+          },
+        });
+        _mapState.markers.push(marker);
+      });
+    },
+
+    clearMarkers() {
+      _mapState.markers.forEach(m => m.setMap(null));
+      _mapState.markers = [];
+    },
+
+    clearNearbyMarkers() {
+      _mapState.nearbyMarkers.forEach(m => m.setMap(null));
+      _mapState.nearbyMarkers = [];
+    },
+
+    fitBounds() {
+      if (!_mapState.map || this.stops.length === 0) return;
+      if (this.stops.length === 1) {
+        _mapState.map.setCenter({ lat: this.stops[0].lat, lng: this.stops[0].lng });
+        _mapState.map.setZoom(14);
+        return;
+      }
+      const bounds = new google.maps.LatLngBounds();
+      this.stops.forEach(stop => bounds.extend({ lat: stop.lat, lng: stop.lng }));
+      _mapState.map.fitBounds(bounds, 60);
+    },
+
+    // --- Nearby Places ---
+    searchNearby(type) {
+      if (!_mapState.map) return;
+      this.activeCategory = type;
+      this.nearbyLoading = true;
+      this.nearbyResults = [];
+      this.clearNearbyMarkers();
+
+      const center = this.stops.length > 0
+        ? { lat: this.stops[this.stops.length - 1].lat, lng: this.stops[this.stops.length - 1].lng }
+        : _mapState.map.getCenter().toJSON();
+
+      const service = new google.maps.places.PlacesService(_mapState.map);
+      service.nearbySearch({
+        location: center,
+        radius: 5000,
+        type: type,
+      }, (results, status) => {
+        this.nearbyLoading = false;
+        if (status === google.maps.places.PlacesServiceStatus.OK && results) {
+          this.nearbyResults = results.slice(0, 10).map(r => ({
+            place_id: r.place_id,
+            name: r.name,
+            rating: r.rating || null,
+            vicinity: r.vicinity || '',
+            lat: r.geometry.location.lat(),
+            lng: r.geometry.location.lng(),
+          }));
+          // Show markers with info windows
+          const self = this;
+          this.nearbyResults.forEach(place => {
+            const marker = new google.maps.Marker({
+              position: { lat: place.lat, lng: place.lng },
+              map: _mapState.map,
+              icon: {
+                path: google.maps.SymbolPath.CIRCLE,
+                scale: 8,
+                fillColor: '#10b981',
+                fillOpacity: 0.9,
+                strokeColor: '#059669',
+                strokeWeight: 1.5,
+              },
+              title: place.name,
+            });
+
+            const mapsUrl = `https://www.google.com/maps/place/?q=place_id:${place.place_id}`;
+            const ratingHtml = place.rating ? `<span style="color:#f59e0b">★ ${place.rating}</span> · ` : '';
+            const infoWindow = new google.maps.InfoWindow({
+              content: `<div style="font-family:Inter,sans-serif;max-width:220px;padding:2px">
+                <p style="font-weight:600;font-size:13px;margin:0 0 4px">${place.name}</p>
+                <p style="font-size:11px;color:#6b7280;margin:0 0 6px">${ratingHtml}${place.vicinity}</p>
+                <div style="display:flex;gap:6px">
+                  <a href="${mapsUrl}" target="_blank" rel="noopener"
+                     style="font-size:11px;color:#4285F4;text-decoration:none;font-weight:500">View in Maps ↗</a>
+                  <span style="color:#d1d5db">|</span>
+                  <a href="#" onclick="event.preventDefault();document.dispatchEvent(new CustomEvent('add-nearby',{detail:${JSON.stringify(JSON.stringify(place))}}))"
+                     style="font-size:11px;color:#6366f1;text-decoration:none;font-weight:500">+ Add to trip</a>
+                </div>
+              </div>`
+            });
+
+            marker.addListener('click', () => {
+              // Close any previously open info window
+              if (_mapState._openInfoWindow) _mapState._openInfoWindow.close();
+              infoWindow.open(_mapState.map, marker);
+              _mapState._openInfoWindow = infoWindow;
+            });
+
+            _mapState.nearbyMarkers.push(marker);
+          });
+        }
+      });
+    },
+
+    addNearbyPlace(place) {
+      this.addStop({
+        id: Date.now() + Math.random(),
+        placeId: place.place_id,
+        name: place.name,
+        address: place.vicinity,
+        lat: place.lat,
+        lng: place.lng,
+        stopMinutes: 60,
+      });
+    },
+
+    // --- Navigate ---
+    openGoogleMaps() {
+      if (this.stops.length < 2) return;
+      const origin = `${this.stops[0].lat},${this.stops[0].lng}`;
+      const dest = `${this.stops[this.stops.length - 1].lat},${this.stops[this.stops.length - 1].lng}`;
+      const waypoints = this.stops.slice(1, -1).map(s => `${s.lat},${s.lng}`).join('|');
+      let url = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${dest}&travelmode=${this.travelMode.toLowerCase()}`;
+      if (waypoints) url += `&waypoints=${waypoints}`;
+      window.open(url, '_blank');
+    },
+
+    // --- Auth ---
+    async checkAuth() {
+      try {
+        const resp = await fetch('/api/auth/me');
+        if (resp.ok) {
+          const data = await resp.json();
+          this.user = data.user;
+          this.loadMyTrips();
+        }
+      } catch (e) {}
+    },
+
+    signInWithGoogle() {
+      if (!window.google?.accounts?.id) return;
+      google.accounts.id.initialize({
+        client_id: this.googleClientId,
+        callback: (response) => this.handleGoogleCredential(response),
+      });
+      google.accounts.id.prompt();
+    },
+
+    async handleGoogleCredential(response) {
+      try {
+        const resp = await fetch('/api/auth/google', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ credential: response.credential }),
+        });
+        const data = await resp.json();
+        if (data.ok) {
+          this.user = data.user;
+          this.loadMyTrips();
+        } else {
+          alert(data.error || 'Sign-in failed');
+        }
+      } catch (e) {
+        alert('Sign-in failed');
+      }
+    },
+
+    async signInWithApple() {
+      if (!window.AppleID) return;
+      try {
+        AppleID.auth.init({
+          clientId: this.appleServiceId,
+          scope: 'name email',
+          redirectURI: window.location.origin + '/',
+          usePopup: true,
+        });
+        const response = await AppleID.auth.signIn();
+        const resp = await fetch('/api/auth/apple', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id_token: response.authorization.id_token,
+            user: response.user || {},
+          }),
+        });
+        const data = await resp.json();
+        if (data.ok) {
+          this.user = data.user;
+          this.loadMyTrips();
+        } else {
+          alert(data.error || 'Sign-in failed');
+        }
+      } catch (e) {
+        if (e.error !== 'popup_closed_by_user') {
+          alert('Apple sign-in failed');
+        }
+      }
+    },
+
+    async signOut() {
+      try {
+        await fetch('/api/auth/logout', { method: 'POST' });
+      } catch (e) {}
+      this.user = null;
+      this.myTrips = [];
+    },
+
+    // --- Save/Load (DynamoDB) ---
+    async doSaveTrip() {
+      const name = this.saveTripName.trim();
+      if (!name || !this.user) return;
+
+      try {
+        const resp = await fetch('/api/trip/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            username: this.user.email,
+            name: name,
+            stops: this.stops,
+            travelMode: this.travelMode,
+            departureTime: this.departureTime,
+          }),
+        });
+        const data = await resp.json();
+        if (data.ok) {
+          this.showSaveModal = false;
+          this.saveTripName = '';
+          this.loadMyTrips();
+        } else {
+          alert(data.error || 'Failed to save');
+        }
+      } catch (e) {
+        alert('Failed to save trip');
+      }
+    },
+
+    async loadMyTrips() {
+      if (!this.user) return;
+      this.myTripsLoading = true;
+      try {
+        const resp = await fetch(`/api/trips/${encodeURIComponent(this.user.email)}`);
+        const data = await resp.json();
+        this.myTrips = data.trips || [];
+      } catch (e) {
+        this.myTrips = [];
+      }
+      this.myTripsLoading = false;
+    },
+
+    async loadSavedTrip(tripId) {
+      try {
+        const resp = await fetch(`/api/trip/${encodeURIComponent(this.user.email)}/${encodeURIComponent(tripId)}`);
+        const data = await resp.json();
+        if (data.stops) {
+          this.stops = data.stops;
+          this.travelMode = data.travelMode || 'DRIVING';
+          if (data.departureTime) this.departureTime = data.departureTime;
+          this.renderMarkers();
+          this.fitBounds();
+          if (this.stops.length >= 2) this.calculateRoute();
+          this.saveTrip();
+        }
+      } catch (e) {
+        alert('Failed to load trip');
+      }
+    },
+
+    async deleteSavedTrip(tripId) {
+      try {
+        await fetch(`/api/trip/${encodeURIComponent(this.user.email)}/${encodeURIComponent(tripId)}`, { method: 'DELETE' });
+        this.loadMyTrips();
+      } catch (e) {}
+    },
+
+    // --- Share ---
+    async shareTrip() {
+      try {
+        const resp = await fetch('/api/trip/share', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            stops: this.stops,
+            travelMode: this.travelMode,
+            departureTime: this.departureTime,
+            username: this.user?.email || 'anonymous',
+          }),
+        });
+        const data = await resp.json();
+        if (data.ok) {
+          this.shareUrl = window.location.origin + '/trip/' + data.trip_id;
+          this.showShareModal = true;
+          this.copied = false;
+        } else {
+          alert(data.error || 'Failed to share');
+        }
+      } catch (e) {
+        alert('Failed to share trip');
+      }
+    },
+
+    copyShareUrl() {
+      navigator.clipboard.writeText(this.shareUrl);
+      this.copied = true;
+      setTimeout(() => { this.copied = false; }, 2000);
+    },
+
+    async loadSharedTrip(tripId) {
+      try {
+        const resp = await fetch(`/api/shared/${tripId}`);
+        const data = await resp.json();
+        if (data.stops) {
+          this.stops = data.stops;
+          this.travelMode = data.travelMode || 'DRIVING';
+          if (data.departureTime) this.departureTime = data.departureTime;
+          // Wait for map to init
+          const tryRender = () => {
+            if (_mapState.map) {
+              this.renderMarkers();
+              this.fitBounds();
+              if (this.stops.length >= 2) this.calculateRoute();
+            } else {
+              setTimeout(tryRender, 200);
+            }
+          };
+          tryRender();
+        }
+      } catch (e) {}
+    },
+
+    // --- LocalStorage ---
+    saveTrip() {
+      const data = { stops: this.stops, travelMode: this.travelMode, departureTime: this.departureTime };
+      localStorage.setItem('yplanner_trip', JSON.stringify(data));
+    },
+
+    loadTrip() {
+      try {
+        const saved = localStorage.getItem('yplanner_trip');
+        if (saved) {
+          const data = JSON.parse(saved);
+          this.stops = data.stops || [];
+          this.travelMode = data.travelMode || 'DRIVING';
+          if (data.departureTime) this.departureTime = data.departureTime;
+        }
+      } catch (e) {}
+    },
+
+    // --- Drag & drop ---
+    dragStart(event, index) {
+      this.dragIndex = index;
+      event.target.classList.add('dragging');
+      event.dataTransfer.effectAllowed = 'move';
+    },
+    dragEnd(event) {
+      event.target.classList.remove('dragging');
+      document.querySelectorAll('.stop-item').forEach(el => el.classList.remove('drag-over'));
+    },
+    dragOver(event, index) {
+      if (index === this.dragIndex) return;
+      event.target.closest('.stop-item')?.classList.add('drag-over');
+    },
+    dragLeave(event) {
+      event.target.closest('.stop-item')?.classList.remove('drag-over');
+    },
+    drop(event, index) {
+      event.target.closest('.stop-item')?.classList.remove('drag-over');
+      if (this.dragIndex === null || this.dragIndex === index) return;
+      const item = this.stops.splice(this.dragIndex, 1)[0];
+      this.stops.splice(index, 0, item);
+      this.dragIndex = null;
+      this.renderMarkers();
+      if (this.stops.length >= 2) this.calculateRoute();
+      this.saveTrip();
+    },
+
+    // --- Map styles ---
+    getDarkMapStyles() {
+      return [
+        { elementType: 'geometry', stylers: [{ color: '#1a1a2e' }] },
+        { elementType: 'labels.text.stroke', stylers: [{ color: '#1a1a2e' }] },
+        { elementType: 'labels.text.fill', stylers: [{ color: '#8892b0' }] },
+        { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#2d2d44' }] },
+        { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#1a1a2e' }] },
+        { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#3a3a5c' }] },
+        { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0e1626' }] },
+        { featureType: 'poi', elementType: 'geometry', stylers: [{ color: '#1e293b' }] },
+        { featureType: 'poi', elementType: 'labels.text.fill', stylers: [{ color: '#6b7280' }] },
+        { featureType: 'transit', elementType: 'geometry', stylers: [{ color: '#2d2d44' }] },
+      ];
+    }
+  };
+}
+</script>
+
+<!-- Load Google Maps -->
+<script async
+  src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_api_key }}&libraries=places&callback=initYPlannerMap">
+</script>
+{% endblock %}

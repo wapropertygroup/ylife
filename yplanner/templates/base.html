@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en" class="h-full dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}yPlanner{% endblock %}</title>
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: { DEFAULT: '#6366f1', dark: '#4f46e5', light: '#a5b4fc' },
+            surface: '#0f172a',
+            panel: '#1e293b',
+            border: '#334155',
+          },
+          fontFamily: { mono: ['JetBrains Mono', 'Fira Code', 'monospace'] }
+        }
+      }
+    }
+  </script>
+
+  <!-- Theme init (before render to prevent flash) -->
+  <script>
+    (function() {
+      const theme = localStorage.getItem('yplanner_theme') || 'dark';
+      if (theme === 'light') document.documentElement.classList.remove('dark');
+    })();
+  </script>
+
+  <!-- Alpine.js -->
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+
+  <!-- Google Font -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+
+  <!-- i18n -->
+  <script src="{{ url_for('planner.static', filename='i18n.js') }}"></script>
+
+  <!-- Custom styles -->
+  <link rel="stylesheet" href="{{ url_for('planner.static', filename='css/style.css') }}">
+
+  <!-- Google Identity Services -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+
+  <!-- Apple Sign-In JS -->
+  <script src="https://appleid.cdn-apple.com/appleauth/static/jsapi/appleid/1/en_US/appleid.auth.js" async defer></script>
+
+  {% block head %}{% endblock %}
+</head>
+
+<body class="bg-white dark:bg-slate-950 text-slate-800 dark:text-slate-100 min-h-screen flex flex-col" x-data="{ navOpen: false }">
+
+  <!-- Top navigation bar -->
+  <header class="sticky top-0 z-50 bg-white/80 dark:bg-slate-900/80 backdrop-blur border-b border-slate-200 dark:border-slate-800">
+    <div class="max-w-screen-2xl mx-auto px-4 sm:px-6 flex items-center h-14 gap-4">
+
+      <!-- Logo -->
+      <a href="/" class="flex items-center gap-2 font-bold text-lg shrink-0">
+        <svg class="w-6 h-6 text-brand" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l5.447 2.724A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"/>
+        </svg>
+        <span class="grad-text">yPlanner</span>
+      </a>
+
+      <!-- Desktop nav -->
+      <nav class="hidden md:flex items-center gap-1 ml-4 flex-1">
+        <a href="/"
+           class="px-3 py-1.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+           data-i18n="nav.planner">Trip Planner</a>
+      </nav>
+
+      <!-- Controls -->
+      <div class="ml-auto hidden md:flex items-center gap-2">
+        <!-- Theme toggle -->
+        <button onclick="toggleTheme()"
+                class="theme-toggle p-2 rounded-md text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                title="Toggle theme">
+          <!-- Sun icon (shown in dark mode) -->
+          <svg class="w-5 h-5 hidden dark:block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/>
+          </svg>
+          <!-- Moon icon (shown in light mode) -->
+          <svg class="w-5 h-5 block dark:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
+          </svg>
+        </button>
+        <!-- Language toggle -->
+        <button onclick="I18n.toggle()"
+                class="lang-toggle-btn px-2.5 py-1.5 rounded-md text-sm border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300
+                       hover:border-brand hover:text-brand transition font-medium">
+          中文
+        </button>
+      </div>
+
+      <!-- Mobile hamburger -->
+      <button class="md:hidden ml-auto p-2 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800" @click="navOpen = !navOpen">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M4 6h16M4 12h16M4 18h16"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- Mobile menu -->
+    <div x-show="navOpen" x-transition class="md:hidden border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 pb-4">
+      <div class="flex flex-col gap-1 pt-2">
+        <a href="/" class="px-3 py-2.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800" data-i18n="nav.planner">Trip Planner</a>
+        <button onclick="toggleTheme()"
+                class="px-3 py-2.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 text-left"
+                data-i18n="nav.toggle_theme">Toggle Theme</button>
+        <button onclick="I18n.toggle()"
+                class="lang-toggle-btn mt-1 px-3 py-2.5 rounded-md text-sm border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300
+                       hover:border-brand hover:text-brand transition text-left font-medium">
+          中文
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main content -->
+  <main class="flex-1 {% block main_class %}{% endblock %} w-full">
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="border-t border-slate-200 dark:border-slate-800 py-3 text-center text-xs text-slate-500 dark:text-slate-600">
+    <span data-i18n="footer.text">yPlanner — powered by Google Maps</span>
+    &nbsp;&middot;&nbsp;
+    <span data-i18n="footer.copyright">&copy; 2025 yPlanner</span>
+  </footer>
+
+  <script>
+  function toggleTheme() {
+    const html = document.documentElement;
+    const isDark = html.classList.contains('dark');
+    if (isDark) {
+      html.classList.remove('dark');
+      localStorage.setItem('yplanner_theme', 'light');
+    } else {
+      html.classList.add('dark');
+      localStorage.setItem('yplanner_theme', 'dark');
+    }
+    // Notify map to update styles
+    if (window.updateMapTheme) window.updateMapTheme();
+  }
+  </script>
+
+</body>
+</html>
