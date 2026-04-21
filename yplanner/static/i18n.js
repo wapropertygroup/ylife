@@ -6,6 +6,7 @@ const I18n = {
 
   LANGS: {
     'nav.planner':       { en: 'Trip Planner',     zh: '行程规划' },
+    'nav.houses':        { en: 'Houses',           zh: '房产' },
     'nav.toggle_theme':  { en: 'Toggle Theme',     zh: '切换主题' },
     'footer.text':       { en: 'yPlanner — powered by Google Maps', zh: 'yPlanner — 由 Google Maps 提供支持' },
     'footer.copyright':  { en: '\u00a9 2025 yPlanner', zh: '\u00a9 2025 yPlanner' },
@@ -86,6 +87,24 @@ const I18n = {
     'layers.terrain':    { en: 'Terrain',          zh: '地形' },
     'layers.hybrid':     { en: 'Hybrid',           zh: '混合' },
     'layers.traffic':    { en: 'Traffic',          zh: '交通状况' },
+
+    'houses.search':     { en: 'Search Address',   zh: '搜索地址' },
+    'houses.placeholder':{ en: 'Enter an address...', zh: '输入地址...' },
+    'houses.loading':    { en: 'Loading property details...', zh: '加载房产详情...' },
+    'houses.estimate':   { en: 'Redfin Estimate',  zh: 'Redfin 估价' },
+    'houses.last_sold':  { en: 'Last sold:',       zh: '上次成交:' },
+    'houses.beds':       { en: 'Beds',             zh: '卧' },
+    'houses.baths':      { en: 'Baths',            zh: '卫' },
+    'houses.sqft':       { en: 'Sq Ft',            zh: '平方英尺' },
+    'houses.price_sqft': { en: 'Price/Sq Ft:',     zh: '每平方英尺:' },
+    'houses.scores':     { en: 'Neighborhood Scores', zh: '社区评分' },
+    'houses.walk':       { en: 'Walk',             zh: '步行' },
+    'houses.bike':       { en: 'Bike',             zh: '骑行' },
+    'houses.transit':    { en: 'Transit',          zh: '公交' },
+    'houses.view_redfin':{ en: 'View on Redfin',   zh: '在 Redfin 查看' },
+    'houses.similar':    { en: 'Similar',          zh: '类似房源' },
+    'houses.similar_listings': { en: 'Similar Listings', zh: '类似房源' },
+    'houses.empty':      { en: 'Search for an address to see property details', zh: '搜索地址以查看房产详情' },
   },
 
   get(key) {

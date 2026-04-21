@@ -127,7 +127,8 @@ Group=\${RUN_USER}
 WorkingDirectory=\${APP_DIR}
 Environment="PATH=\${APP_DIR}/venv/bin"
 ExecStart=\${APP_DIR}/venv/bin/gunicorn \\\\
-          --workers 1 \\\\
+          --workers 2 \\\\
+          --preload \\\\
           --bind 127.0.0.1:\${port} \\\\
           --timeout 120 \\\\
           --access-logfile /var/log/\${name}-access.log \\\\
@@ -156,6 +157,9 @@ SERVICEFILE
     sudo systemctl status "\$name" --no-pager -l | grep -E "Active:|Main PID:" | while read line; do
       echo "[\$(TS)]      \$line"
     done
+    # Warm up the app so first user request isn't slow
+    echo "[\$(TS)]    Warming up \$name..."
+    curl -s -m 30 -o /dev/null -w "[\$(TS)]    Warm-up: HTTP %{http_code} (%{time_total}s)\n" "http://127.0.0.1:\$port/" || true
   else
     echo "[\$(TS)]    ✗ \$name FAILED to start — last 30 log lines:"
     sudo journalctl -u "\$name" -n 30 --no-pager

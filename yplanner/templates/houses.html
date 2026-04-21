@@ -1,0 +1,339 @@
+{% extends "base.html" %}
+
+{% block title %}yPlanner — Houses{% endblock %}
+
+{% block main_class %}max-w-screen-2xl mx-auto{% endblock %}
+
+{% block content %}
+<div x-data="housesApp()" x-init="init()" class="flex flex-col lg:flex-row gap-4 h-[calc(100vh-8rem)] p-4">
+
+  <!-- Left Panel -->
+  <div class="lg:w-[420px] shrink-0 flex flex-col gap-4 overflow-y-auto pr-1">
+
+    <!-- Search -->
+    <div class="bg-white dark:bg-panel border border-slate-200 dark:border-border rounded-xl p-4">
+      <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-2" data-i18n="houses.search">Search Address</label>
+      <div class="relative">
+        <input type="text" x-model="query" @input.debounce.400ms="searchAddress()"
+               @keydown.escape="suggestions = []"
+               :placeholder="I18n.get('houses.placeholder')"
+               class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-4 py-2.5 text-sm
+                      text-slate-800 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500
+                      focus:outline-none focus:border-brand focus:ring-1 focus:ring-brand/50 transition">
+        <svg class="absolute right-3 top-2.5 w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+        </svg>
+      </div>
+      <!-- Autocomplete dropdown -->
+      <div x-show="suggestions.length > 0" class="mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-xl overflow-hidden">
+        <template x-for="s in suggestions" :key="s.url">
+          <button @click="selectProperty(s)" class="w-full text-left px-3 py-2.5 text-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition border-b border-slate-100 dark:border-slate-700 last:border-0">
+            <p class="font-medium text-slate-700 dark:text-slate-200 truncate" x-text="s.name"></p>
+            <p class="text-xs text-slate-400 truncate" x-text="s.subName"></p>
+          </button>
+        </template>
+      </div>
+    </div>
+
+    <!-- Loading -->
+    <div x-show="loading" class="text-center py-8">
+      <div class="inline-block w-6 h-6 border-2 border-brand border-t-transparent rounded-full animate-spin"></div>
+      <p class="text-xs text-slate-400 mt-2" data-i18n="houses.loading">Loading property details...</p>
+    </div>
+
+    <!-- Property detail card -->
+    <div x-show="property && !loading" x-transition class="bg-white dark:bg-panel border border-slate-200 dark:border-border rounded-xl overflow-hidden">
+      <!-- Header -->
+      <div class="bg-brand/10 dark:bg-brand/20 px-4 py-3">
+        <h2 class="text-base font-bold text-slate-800 dark:text-slate-100" x-text="property?.address"></h2>
+        <p class="text-xs text-slate-500 dark:text-slate-400" x-text="(property?.city || '') + ', ' + (property?.state || '')"></p>
+      </div>
+
+      <!-- Price -->
+      <div class="px-4 py-3 border-b border-slate-200 dark:border-slate-700">
+        <div class="flex items-baseline gap-2">
+          <span class="text-2xl font-bold text-emerald-600 dark:text-emerald-400" x-text="property?.estimate ? '$' + Number(property.estimate).toLocaleString() : 'N/A'"></span>
+          <span class="text-xs text-slate-400" data-i18n="houses.estimate">Redfin Estimate</span>
+        </div>
+        <p x-show="property?.lastSoldPrice" class="text-xs text-slate-400 mt-1">
+          <span data-i18n="houses.last_sold">Last sold:</span>
+          <span class="font-medium text-slate-600 dark:text-slate-300" x-text="'$' + Number(property?.lastSoldPrice).toLocaleString()"></span>
+        </p>
+      </div>
+
+      <!-- Stats -->
+      <div class="grid grid-cols-3 divide-x divide-slate-200 dark:divide-slate-700 border-b border-slate-200 dark:border-slate-700">
+        <div class="px-3 py-3 text-center">
+          <p class="text-lg font-bold text-slate-800 dark:text-slate-100" x-text="property?.beds ?? '—'"></p>
+          <p class="text-[10px] text-slate-400 uppercase" data-i18n="houses.beds">Beds</p>
+        </div>
+        <div class="px-3 py-3 text-center">
+          <p class="text-lg font-bold text-slate-800 dark:text-slate-100" x-text="property?.baths ?? '—'"></p>
+          <p class="text-[10px] text-slate-400 uppercase" data-i18n="houses.baths">Baths</p>
+        </div>
+        <div class="px-3 py-3 text-center">
+          <p class="text-lg font-bold text-slate-800 dark:text-slate-100" x-text="property?.sqft ? Number(property.sqft).toLocaleString() : '—'"></p>
+          <p class="text-[10px] text-slate-400 uppercase" data-i18n="houses.sqft">Sq Ft</p>
+        </div>
+      </div>
+
+      <!-- Price per sqft -->
+      <div x-show="property?.estimate && property?.sqft" class="px-4 py-2 border-b border-slate-200 dark:border-slate-700">
+        <p class="text-xs text-slate-400">
+          <span data-i18n="houses.price_sqft">Price/Sq Ft:</span>
+          <span class="font-semibold text-slate-600 dark:text-slate-300" x-text="'$' + Math.round(property.estimate / property.sqft).toLocaleString()"></span>
+        </p>
+      </div>
+
+      <!-- Walk/Bike/Transit scores -->
+      <div class="px-4 py-3 border-b border-slate-200 dark:border-slate-700" x-show="property?.walkScore">
+        <label class="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-2 block" data-i18n="houses.scores">Neighborhood Scores</label>
+        <div class="flex gap-3">
+          <div class="flex-1 text-center">
+            <div class="w-10 h-10 mx-auto rounded-full flex items-center justify-center text-sm font-bold"
+                 :class="property.walkScore >= 70 ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400' : property.walkScore >= 40 ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400' : 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400'"
+                 x-text="property.walkScore"></div>
+            <p class="text-[9px] text-slate-400 mt-1" data-i18n="houses.walk">Walk</p>
+          </div>
+          <div class="flex-1 text-center" x-show="property?.bikeScore">
+            <div class="w-10 h-10 mx-auto rounded-full flex items-center justify-center text-sm font-bold"
+                 :class="property.bikeScore >= 70 ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400' : property.bikeScore >= 40 ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400' : 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400'"
+                 x-text="property.bikeScore"></div>
+            <p class="text-[9px] text-slate-400 mt-1" data-i18n="houses.bike">Bike</p>
+          </div>
+          <div class="flex-1 text-center" x-show="property?.transitScore">
+            <div class="w-10 h-10 mx-auto rounded-full flex items-center justify-center text-sm font-bold"
+                 :class="property.transitScore >= 70 ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400' : property.transitScore >= 40 ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400' : 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400'"
+                 x-text="property.transitScore"></div>
+            <p class="text-[9px] text-slate-400 mt-1" data-i18n="houses.transit">Transit</p>
+          </div>
+        </div>
+        <p x-show="property?.walkDesc" class="text-[10px] text-slate-400 text-center mt-1" x-text="property.walkDesc"></p>
+      </div>
+
+      <!-- Actions -->
+      <div class="px-4 py-3 flex gap-2">
+        <a :href="property?.redfinUrl" target="_blank" rel="noopener"
+           class="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-medium transition">
+          <span data-i18n="houses.view_redfin">View on Redfin</span>
+          <span class="text-xs opacity-70">↗</span>
+        </a>
+        <button @click="loadSimilar()"
+                class="px-3 py-2.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-sm font-medium transition"
+                data-i18n="houses.similar">Similar</button>
+      </div>
+    </div>
+
+    <!-- Similar listings -->
+    <div x-show="similarHomes.length > 0" x-transition class="bg-white dark:bg-panel border border-slate-200 dark:border-border rounded-xl p-4" x-data="{ open: true }">
+      <button @click="open = !open" class="w-full flex items-center justify-between mb-0" :class="open && 'mb-3'">
+        <label class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide cursor-pointer" data-i18n="houses.similar_listings">Similar Listings</label>
+        <svg class="w-4 h-4 text-slate-400 transition-transform duration-200" :class="open && 'rotate-180'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+        </svg>
+      </button>
+      <div x-show="open" x-transition class="space-y-2 max-h-[50vh] overflow-y-auto">
+        <template x-for="home in similarHomes" :key="home.url">
+          <div class="flex gap-3 p-2 rounded-lg bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-700/50 cursor-pointer transition"
+               @click="home.url && window.open('https://www.redfin.com' + home.url, '_blank')">
+            <img x-show="home.photoUrl" :src="home.photoUrl" class="w-20 h-14 rounded object-cover shrink-0" loading="lazy">
+            <div class="flex-1 min-w-0">
+              <p class="text-xs font-medium text-slate-700 dark:text-slate-200 truncate" x-text="home.address"></p>
+              <p class="text-[10px] text-slate-400 truncate" x-text="home.city + ', ' + home.state + ' ' + home.zip"></p>
+              <div class="flex items-center gap-2 mt-1">
+                <span class="text-xs font-bold text-emerald-600 dark:text-emerald-400" x-text="home.price ? '$' + Number(home.price).toLocaleString() : 'N/A'"></span>
+                <span class="text-[10px] text-slate-400" x-text="(home.beds || '?') + 'bd / ' + (home.baths || '?') + 'ba'"></span>
+                <span x-show="home.sqft" class="text-[10px] text-slate-400" x-text="Number(home.sqft).toLocaleString() + ' sqft'"></span>
+              </div>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- Empty state -->
+    <div x-show="!property && !loading" class="flex-1 flex items-center justify-center">
+      <div class="text-center py-12">
+        <svg class="w-14 h-14 mx-auto text-slate-300 dark:text-slate-700 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
+        </svg>
+        <p class="text-sm text-slate-400 dark:text-slate-500" data-i18n="houses.empty">Search for an address to see property details</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right Panel: Map -->
+  <div class="flex-1 rounded-xl overflow-hidden border border-slate-200 dark:border-border min-h-[300px] lg:min-h-0">
+    <div id="houses-map" class="w-full h-full"></div>
+  </div>
+</div>
+
+<script>
+const _housesMap = { map: null, markers: [] };
+
+function housesApp() {
+  return {
+    query: '',
+    suggestions: [],
+    property: null,
+    similarHomes: [],
+    loading: false,
+
+    init() {
+      if (window.google && window.google.maps) {
+        this.initMap();
+      } else {
+        window.initHousesMap = () => this.initMap();
+        // If initYPlannerMap already set, chain
+        const origCb = window.initYPlannerMap;
+        window.initYPlannerMap = () => {
+          if (origCb) origCb();
+          this.initMap();
+        };
+      }
+    },
+
+    initMap() {
+      const isDark = document.documentElement.classList.contains('dark');
+      _housesMap.map = new google.maps.Map(document.getElementById('houses-map'), {
+        center: { lat: 37.7749, lng: -122.4194 },
+        zoom: 12,
+        styles: isDark ? this.getDarkStyles() : [],
+        mapTypeControl: false,
+        streetViewControl: false,
+      });
+
+      window.updateMapTheme = () => {
+        const dark = document.documentElement.classList.contains('dark');
+        if (_housesMap.map) _housesMap.map.setOptions({ styles: dark ? this.getDarkStyles() : [] });
+      };
+
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition((pos) => {
+          _housesMap.map.setCenter({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+        }, () => {});
+      }
+    },
+
+    async searchAddress() {
+      if (this.query.length < 3) { this.suggestions = []; return; }
+      try {
+        const resp = await fetch(`/api/houses/search?q=${encodeURIComponent(this.query)}`);
+        const data = await resp.json();
+        this.suggestions = data.results || [];
+      } catch (e) { this.suggestions = []; }
+    },
+
+    async selectProperty(s) {
+      this.suggestions = [];
+      this.query = s.name;
+      this.loading = true;
+      this.property = null;
+      this.similarHomes = [];
+      this.clearMarkers();
+
+      try {
+        const resp = await fetch(`/api/houses/detail?url=${encodeURIComponent(s.url)}`);
+        const data = await resp.json();
+        if (data.error) { this.loading = false; return; }
+        this.property = data;
+        this.loading = false;
+
+        if (data.lat && data.lng) {
+          _housesMap.map.setCenter({ lat: data.lat, lng: data.lng });
+          _housesMap.map.setZoom(15);
+
+          const marker = new google.maps.Marker({
+            position: { lat: data.lat, lng: data.lng },
+            map: _housesMap.map,
+            icon: {
+              path: google.maps.SymbolPath.CIRCLE,
+              scale: 12,
+              fillColor: '#ef4444',
+              fillOpacity: 1,
+              strokeColor: '#b91c1c',
+              strokeWeight: 2,
+            },
+            label: { text: '$', color: '#fff', fontWeight: 'bold', fontSize: '12px' },
+          });
+          _housesMap.markers.push(marker);
+        }
+      } catch (e) {
+        this.loading = false;
+      }
+    },
+
+    async loadSimilar() {
+      if (!this.property) return;
+      try {
+        const resp = await fetch(`/api/houses/similar?propertyId=${this.property.propertyId}&listingId=${this.property.listingId || ''}`);
+        const data = await resp.json();
+        this.similarHomes = data.homes || [];
+
+        // Add markers for similar homes
+        this.similarHomes.forEach((home, i) => {
+          if (!home.lat || !home.lng) return;
+          const marker = new google.maps.Marker({
+            position: { lat: home.lat, lng: home.lng },
+            map: _housesMap.map,
+            icon: {
+              path: google.maps.SymbolPath.CIRCLE,
+              scale: 8,
+              fillColor: '#6366f1',
+              fillOpacity: 0.8,
+              strokeColor: '#4f46e5',
+              strokeWeight: 1.5,
+            },
+            title: home.address,
+          });
+
+          const infoWindow = new google.maps.InfoWindow({
+            content: `<div style="font-family:Inter,sans-serif;max-width:220px">
+              <p style="font-weight:600;font-size:12px;margin:0 0 4px">${home.address}</p>
+              <p style="font-size:11px;color:#10b981;font-weight:700;margin:0 0 2px">${home.price ? '$' + Number(home.price).toLocaleString() : 'N/A'}</p>
+              <p style="font-size:10px;color:#6b7280;margin:0 0 6px">${home.beds || '?'} bd / ${home.baths || '?'} ba${home.sqft ? ' / ' + Number(home.sqft).toLocaleString() + ' sqft' : ''}</p>
+              ${home.url ? '<a href="https://www.redfin.com' + home.url + '" target="_blank" style="font-size:10px;color:#ef4444;font-weight:500;text-decoration:none">View on Redfin ↗</a>' : ''}
+            </div>`
+          });
+          marker.addListener('click', () => {
+            _housesMap.markers.forEach(m => m._iw && m._iw.close());
+            infoWindow.open(_housesMap.map, marker);
+            marker._iw = infoWindow;
+          });
+          _housesMap.markers.push(marker);
+        });
+
+        // Fit bounds
+        if (this.similarHomes.length > 0) {
+          const bounds = new google.maps.LatLngBounds();
+          if (this.property.lat) bounds.extend({ lat: this.property.lat, lng: this.property.lng });
+          this.similarHomes.forEach(h => { if (h.lat) bounds.extend({ lat: h.lat, lng: h.lng }); });
+          _housesMap.map.fitBounds(bounds, 60);
+        }
+      } catch (e) {}
+    },
+
+    clearMarkers() {
+      _housesMap.markers.forEach(m => m.setMap(null));
+      _housesMap.markers = [];
+    },
+
+    getDarkStyles() {
+      return [
+        { elementType: 'geometry', stylers: [{ color: '#1a1a2e' }] },
+        { elementType: 'labels.text.stroke', stylers: [{ color: '#1a1a2e' }] },
+        { elementType: 'labels.text.fill', stylers: [{ color: '#8892b0' }] },
+        { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#2d2d44' }] },
+        { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#3a3a5c' }] },
+        { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0e1626' }] },
+        { featureType: 'poi', elementType: 'geometry', stylers: [{ color: '#1e293b' }] },
+      ];
+    }
+  };
+}
+</script>
+
+<script async
+  src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_api_key }}&libraries=places&v=weekly&callback=initYPlannerMap">
+</script>
+{% endblock %}

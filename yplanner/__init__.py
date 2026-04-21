@@ -67,4 +67,11 @@ def create_app() -> Flask:
     from yplanner.routes import bp
     app.register_blueprint(bp)
 
+    # Eagerly init DynamoDB tables so the first request isn't slow
+    with app.app_context():
+        from yplanner.routes import _get_trips_table, _get_shared_table, _get_users_table
+        _get_trips_table()
+        _get_shared_table()
+        _get_users_table()
+
     return app

@@ -520,3 +520,165 @@ def api_get_shared_trip(trip_id: str):
     except Exception as exc:
         log.exception("Failed to get shared trip")
         return jsonify({"error": str(exc)}), 500
+
+
+# ---------------------------------------------------------------------------
+# Houses (Redfin integration)
+# ---------------------------------------------------------------------------
+_redfin_client = None
+
+
+def _get_redfin():
+    """Get Redfin client (lazy init)."""
+    global _redfin_client
+    if _redfin_client is None:
+        try:
+            from redfin import Redfin
+            _redfin_client = Redfin(request_delay=0.5)
+        except ImportError:
+            log.warning("redfin package not installed")
+            return None
+    return _redfin_client
+
+
+@bp.route("/houses")
+def houses():
+    """Houses page — Redfin property search."""
+    api_key = os.environ.get("GOOGLE_MAPS_API_KEY", "")
+    return render_template("houses.html", google_maps_api_key=api_key)
+
+
+@bp.route("/api/houses/search")
+def api_houses_search():
+    """Search for a property address via Redfin autocomplete."""
+    query = request.args.get("q", "").strip()
+    if not query or len(query) < 3:
+        return jsonify({"results": []})
+
+    client = _get_redfin()
+    if not client:
+        return jsonify({"error": "Redfin not available"}), 503
+
+    try:
+        resp = client.search(query)
+        if resp.get("resultCode") != 0:
+            return jsonify({"results": []})
+
+        results = []
+        payload = resp.get("payload", {})
+        sections = payload.get("sections", [])
+        for section in sections:
+            for row in section.get("rows", []):
+                results.append({
+                    "name": row.get("name", ""),
+                    "subName": row.get("subName", ""),
+                    "url": row.get("url", ""),
+                    "type": row.get("type", ""),
+                    "id": row.get("id", ""),
+                })
+        return jsonify({"results": results[:10]})
+    except Exception as exc:
+        log.warning("Redfin search failed: %s", exc)
+        return jsonify({"results": []})
+
+
+@bp.route("/api/houses/detail")
+def api_houses_detail():
+    """Get full property details from Redfin."""
+    url = request.args.get("url", "").strip()
+    if not url:
+        return jsonify({"error": "URL required"}), 400
+
+    client = _get_redfin()
+    if not client:
+        return jsonify({"error": "Redfin not available"}), 503
+
+    try:
+        # Get property and listing IDs
+        init = client.initial_info(url)
+        if init.get("resultCode") != 0:
+            return jsonify({"error": "Property not found"}), 404
+
+        prop_id = init["payload"]["propertyId"]
+        listing_id = init["payload"].get("listingId", "")
+
+        # Fetch AVM details
+        avm = client.avm_details(prop_id, listing_id)
+        avm_payload = avm.get("payload", {}) if avm.get("resultCode") == 0 else {}
+
+        # Fetch neighborhood stats
+        hood = client.neighborhood_stats(prop_id)
+        hood_payload = hood.get("payload", {}) if hood.get("resultCode") == 0 else {}
+
+        # Build response
+        lat_lng = avm_payload.get("latLong", {})
+        sqft = avm_payload.get("sqFt", {})
+        walk_data = hood_payload.get("walkScoreInfo", {}).get("walkScoreData", {})
+        addr_info = hood_payload.get("addressInfo", {})
+
+        result = {
+            "propertyId": prop_id,
+            "listingId": listing_id,
+            "address": avm_payload.get("streetAddress", {}).get("assembledAddress", ""),
+            "estimate": avm_payload.get("predictedValue"),
+            "estimateText": avm_payload.get("sectionPreviewText", ""),
+            "beds": avm_payload.get("numBeds"),
+            "baths": avm_payload.get("numBaths"),
+            "sqft": sqft.get("value") if sqft else None,
+            "lastSoldPrice": avm_payload.get("lastSoldPrice"),
+            "lat": lat_lng.get("latitude"),
+            "lng": lat_lng.get("longitude"),
+            "city": addr_info.get("city", ""),
+            "state": addr_info.get("state", ""),
+            "walkScore": walk_data.get("walkScore", {}).get("value"),
+            "walkDesc": walk_data.get("walkScore", {}).get("shortDescription", ""),
+            "bikeScore": walk_data.get("bikeScore", {}).get("value"),
+            "transitScore": walk_data.get("transitScore", {}).get("value"),
+            "redfinUrl": "https://www.redfin.com" + url,
+        }
+        return jsonify(result)
+    except Exception as exc:
+        log.warning("Redfin detail failed: %s", exc)
+        return jsonify({"error": str(exc)}), 500
+
+
+@bp.route("/api/houses/similar")
+def api_houses_similar():
+    """Get similar listings for a property."""
+    prop_id = request.args.get("propertyId", "")
+    listing_id = request.args.get("listingId", "")
+    if not prop_id:
+        return jsonify({"error": "propertyId required"}), 400
+
+    client = _get_redfin()
+    if not client:
+        return jsonify({"error": "Redfin not available"}), 503
+
+    try:
+        resp = client.similar_listings(prop_id, listing_id)
+        if resp.get("resultCode") != 0:
+            return jsonify({"homes": []})
+
+        homes = []
+        for home in resp.get("payload", {}).get("homes", [])[:12]:
+            info = home.get("homeData", {})
+            addr = info.get("addressInfo", {})
+            price_info = info.get("priceInfo", {})
+            homes.append({
+                "address": addr.get("formattedStreetLine", ""),
+                "city": addr.get("city", ""),
+                "state": addr.get("state", ""),
+                "zip": addr.get("zip", ""),
+                "price": price_info.get("amount"),
+                "beds": info.get("beds"),
+                "baths": info.get("baths"),
+                "sqft": info.get("sqFt", {}).get("value"),
+                "lat": addr.get("centroid", {}).get("centroid", {}).get("latitude"),
+                "lng": addr.get("centroid", {}).get("centroid", {}).get("longitude"),
+                "url": info.get("url", ""),
+                "photoUrl": info.get("mediaBrowserInfo", {}).get("photos", [{}])[0].get("photoUrls", {}).get("nonFullScreenPhotoUrl", "") if info.get("mediaBrowserInfo") else "",
+            })
+        return jsonify({"homes": homes})
+    except Exception as exc:
+        log.warning("Redfin similar failed: %s", exc)
+        return jsonify({"homes": []})
