@@ -582,19 +582,37 @@ def api_houses_search():
         return jsonify({"results": []})
 
 
-@bp.route("/api/houses/detail")
-def api_houses_detail():
-    """Get full property details from Redfin."""
-    url = request.args.get("url", "").strip()
-    if not url:
-        return jsonify({"error": "URL required"}), 400
+@bp.route("/api/houses/lookup")
+def api_houses_lookup():
+    """Lookup property by address — search Redfin then fetch details."""
+    address = request.args.get("address", "").strip()
+    if not address:
+        return jsonify({"error": "Address required"}), 400
 
     client = _get_redfin()
     if not client:
         return jsonify({"error": "Redfin not available"}), 503
 
     try:
-        # Get property and listing IDs
+        # Search for the address
+        search_resp = client.search(address)
+        if search_resp.get("resultCode") != 0:
+            return jsonify({"error": "Address not found on Redfin"}), 404
+
+        # Find first match with a URL
+        url = None
+        for section in search_resp.get("payload", {}).get("sections", []):
+            for row in section.get("rows", []):
+                if row.get("url"):
+                    url = row["url"]
+                    break
+            if url:
+                break
+
+        if not url:
+            return jsonify({"error": "No Redfin listing found"}), 404
+
+        # Get property details
         init = client.initial_info(url)
         if init.get("resultCode") != 0:
             return jsonify({"error": "Property not found"}), 404
@@ -602,30 +620,27 @@ def api_houses_detail():
         prop_id = init["payload"]["propertyId"]
         listing_id = init["payload"].get("listingId", "")
 
-        # Fetch AVM details
         avm = client.avm_details(prop_id, listing_id)
-        avm_payload = avm.get("payload", {}) if avm.get("resultCode") == 0 else {}
+        avm_p = avm.get("payload", {}) if avm.get("resultCode") == 0 else {}
 
-        # Fetch neighborhood stats
         hood = client.neighborhood_stats(prop_id)
-        hood_payload = hood.get("payload", {}) if hood.get("resultCode") == 0 else {}
+        hood_p = hood.get("payload", {}) if hood.get("resultCode") == 0 else {}
 
-        # Build response
-        lat_lng = avm_payload.get("latLong", {})
-        sqft = avm_payload.get("sqFt", {})
-        walk_data = hood_payload.get("walkScoreInfo", {}).get("walkScoreData", {})
-        addr_info = hood_payload.get("addressInfo", {})
+        lat_lng = avm_p.get("latLong", {})
+        sqft = avm_p.get("sqFt", {})
+        walk_data = hood_p.get("walkScoreInfo", {}).get("walkScoreData", {})
+        addr_info = hood_p.get("addressInfo", {})
 
-        result = {
+        return jsonify({
             "propertyId": prop_id,
             "listingId": listing_id,
-            "address": avm_payload.get("streetAddress", {}).get("assembledAddress", ""),
-            "estimate": avm_payload.get("predictedValue"),
-            "estimateText": avm_payload.get("sectionPreviewText", ""),
-            "beds": avm_payload.get("numBeds"),
-            "baths": avm_payload.get("numBaths"),
+            "address": avm_p.get("streetAddress", {}).get("assembledAddress", address),
+            "estimate": avm_p.get("predictedValue"),
+            "estimateText": avm_p.get("sectionPreviewText", ""),
+            "beds": avm_p.get("numBeds"),
+            "baths": avm_p.get("numBaths"),
             "sqft": sqft.get("value") if sqft else None,
-            "lastSoldPrice": avm_payload.get("lastSoldPrice"),
+            "lastSoldPrice": avm_p.get("lastSoldPrice"),
             "lat": lat_lng.get("latitude"),
             "lng": lat_lng.get("longitude"),
             "city": addr_info.get("city", ""),
@@ -635,10 +650,9 @@ def api_houses_detail():
             "bikeScore": walk_data.get("bikeScore", {}).get("value"),
             "transitScore": walk_data.get("transitScore", {}).get("value"),
             "redfinUrl": "https://www.redfin.com" + url,
-        }
-        return jsonify(result)
+        })
     except Exception as exc:
-        log.warning("Redfin detail failed: %s", exc)
+        log.warning("Redfin lookup failed: %s", exc)
         return jsonify({"error": str(exc)}), 500
 
 

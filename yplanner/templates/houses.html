@@ -13,25 +13,10 @@
     <!-- Search -->
     <div class="bg-white dark:bg-panel border border-slate-200 dark:border-border rounded-xl p-4">
       <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-2" data-i18n="houses.search">Search Address</label>
-      <div class="relative">
-        <input type="text" x-model="query" @input.debounce.400ms="searchAddress()"
-               @keydown.escape="suggestions = []"
-               :placeholder="I18n.get('houses.placeholder')"
+      <div id="houses-search-container" class="w-full">
+        <input type="text" placeholder="Loading..." disabled
                class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-4 py-2.5 text-sm
-                      text-slate-800 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500
-                      focus:outline-none focus:border-brand focus:ring-1 focus:ring-brand/50 transition">
-        <svg class="absolute right-3 top-2.5 w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
-        </svg>
-      </div>
-      <!-- Autocomplete dropdown -->
-      <div x-show="suggestions.length > 0" class="mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-xl overflow-hidden">
-        <template x-for="s in suggestions" :key="s.url">
-          <button @click="selectProperty(s)" class="w-full text-left px-3 py-2.5 text-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition border-b border-slate-100 dark:border-slate-700 last:border-0">
-            <p class="font-medium text-slate-700 dark:text-slate-200 truncate" x-text="s.name"></p>
-            <p class="text-xs text-slate-400 truncate" x-text="s.subName"></p>
-          </button>
-        </template>
+                      text-slate-800 dark:text-slate-100 placeholder:text-slate-400">
       </div>
     </div>
 
@@ -174,7 +159,6 @@ const _housesMap = { map: null, markers: [] };
 function housesApp() {
   return {
     query: '',
-    suggestions: [],
     property: null,
     similarHomes: [],
     loading: false,
@@ -183,13 +167,7 @@ function housesApp() {
       if (window.google && window.google.maps) {
         this.initMap();
       } else {
-        window.initHousesMap = () => this.initMap();
-        // If initYPlannerMap already set, chain
-        const origCb = window.initYPlannerMap;
-        window.initYPlannerMap = () => {
-          if (origCb) origCb();
-          this.initMap();
-        };
+        window.initYPlannerMap = () => this.initMap();
       }
     },
 
@@ -208,58 +186,88 @@ function housesApp() {
         if (_housesMap.map) _housesMap.map.setOptions({ styles: dark ? this.getDarkStyles() : [] });
       };
 
+      // Google Places Autocomplete for address search
+      const placeAutocomplete = new google.maps.places.PlaceAutocompleteElement();
+      placeAutocomplete.setAttribute('style',
+        'width:100%;--gmpx-color-surface:#1e293b;--gmpx-color-on-surface:#e2e8f0;' +
+        '--gmpx-color-on-surface-variant:#94a3b8;--gmpx-color-primary:#6366f1;' +
+        'font-family:Inter,sans-serif;border-radius:8px;');
+
+      const container = document.getElementById('houses-search-container');
+      container.innerHTML = '';
+      container.appendChild(placeAutocomplete);
+
+      placeAutocomplete.addEventListener('gmp-placeselect', async (e) => {
+        const place = e.place;
+        await place.fetchFields({ fields: ['displayName', 'formattedAddress', 'location', 'id'] });
+        if (!place.location) return;
+
+        const address = place.formattedAddress || place.displayName;
+        this.loading = true;
+        this.property = null;
+        this.similarHomes = [];
+        this.clearMarkers();
+
+        // Show on map immediately
+        const lat = place.location.lat();
+        const lng = place.location.lng();
+        _housesMap.map.setCenter({ lat, lng });
+        _housesMap.map.setZoom(15);
+
+        // Try Redfin lookup
+        try {
+          const resp = await fetch(`/api/houses/lookup?address=${encodeURIComponent(address)}`);
+          const data = await resp.json();
+          if (!data.error && data.address) {
+            this.property = data;
+          } else {
+            // Redfin unavailable — show basic info from Google
+            this.property = {
+              address: address,
+              city: '',
+              state: '',
+              lat: lat,
+              lng: lng,
+              estimate: null,
+              beds: null,
+              baths: null,
+              sqft: null,
+              walkScore: null,
+              redfinUrl: `https://www.redfin.com/search?query=${encodeURIComponent(address)}`,
+            };
+          }
+        } catch (err) {
+          this.property = {
+            address: address,
+            lat: lat,
+            lng: lng,
+            estimate: null,
+            redfinUrl: `https://www.redfin.com/search?query=${encodeURIComponent(address)}`,
+          };
+        }
+        this.loading = false;
+
+        // Add marker
+        const marker = new google.maps.Marker({
+          position: { lat: this.property.lat || lat, lng: this.property.lng || lng },
+          map: _housesMap.map,
+          icon: {
+            path: google.maps.SymbolPath.CIRCLE,
+            scale: 12,
+            fillColor: '#ef4444',
+            fillOpacity: 1,
+            strokeColor: '#b91c1c',
+            strokeWeight: 2,
+          },
+          label: { text: '$', color: '#fff', fontWeight: 'bold', fontSize: '12px' },
+        });
+        _housesMap.markers.push(marker);
+      });
+
       if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition((pos) => {
           _housesMap.map.setCenter({ lat: pos.coords.latitude, lng: pos.coords.longitude });
         }, () => {});
-      }
-    },
-
-    async searchAddress() {
-      if (this.query.length < 3) { this.suggestions = []; return; }
-      try {
-        const resp = await fetch(`/api/houses/search?q=${encodeURIComponent(this.query)}`);
-        const data = await resp.json();
-        this.suggestions = data.results || [];
-      } catch (e) { this.suggestions = []; }
-    },
-
-    async selectProperty(s) {
-      this.suggestions = [];
-      this.query = s.name;
-      this.loading = true;
-      this.property = null;
-      this.similarHomes = [];
-      this.clearMarkers();
-
-      try {
-        const resp = await fetch(`/api/houses/detail?url=${encodeURIComponent(s.url)}`);
-        const data = await resp.json();
-        if (data.error) { this.loading = false; return; }
-        this.property = data;
-        this.loading = false;
-
-        if (data.lat && data.lng) {
-          _housesMap.map.setCenter({ lat: data.lat, lng: data.lng });
-          _housesMap.map.setZoom(15);
-
-          const marker = new google.maps.Marker({
-            position: { lat: data.lat, lng: data.lng },
-            map: _housesMap.map,
-            icon: {
-              path: google.maps.SymbolPath.CIRCLE,
-              scale: 12,
-              fillColor: '#ef4444',
-              fillOpacity: 1,
-              strokeColor: '#b91c1c',
-              strokeWeight: 2,
-            },
-            label: { text: '$', color: '#fff', fontWeight: 'bold', fontSize: '12px' },
-          });
-          _housesMap.markers.push(marker);
-        }
-      } catch (e) {
-        this.loading = false;
       }
     },
 
