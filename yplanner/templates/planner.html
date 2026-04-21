@@ -964,10 +964,13 @@ function tripPlanner() {
 
     signInWithGoogle() {
       if (!window.google?.accounts?.id) return;
-      google.accounts.id.initialize({
-        client_id: this.googleClientId,
-        callback: (response) => this.handleGoogleCredential(response),
-      });
+      if (!_mapState._gsiInitialized) {
+        google.accounts.id.initialize({
+          client_id: this.googleClientId,
+          callback: (response) => this.handleGoogleCredential(response),
+        });
+        _mapState._gsiInitialized = true;
+      }
       google.accounts.id.prompt();
     },
 
