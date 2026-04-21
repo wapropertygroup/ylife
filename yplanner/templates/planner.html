@@ -220,19 +220,32 @@
                   <svg class="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
                   </svg>
-                  <select x-model="stop.stopMinutes" @change="calculateRoute(); saveTrip()"
-                          class="bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 text-xs text-slate-700 dark:text-slate-200 focus:outline-none focus:border-brand">
-                    <option value="0" x-text="I18n.get('stop.pass_through')">Pass through</option>
-                    <option value="15">15 min</option>
-                    <option value="30">30 min</option>
-                    <option value="45">45 min</option>
-                    <option value="60">1 hr</option>
-                    <option value="90">1.5 hr</option>
-                    <option value="120">2 hr</option>
-                    <option value="180">3 hr</option>
-                    <option value="240">4 hr</option>
-                    <option value="480">8 hr</option>
-                  </select>
+                  <div class="flex items-center gap-1">
+                    <select x-model="stop.stopMinutes" @change="if(stop.stopMinutes !== 'custom'){ calculateRoute(); saveTrip(); }"
+                            class="bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 text-xs text-slate-700 dark:text-slate-200 focus:outline-none focus:border-brand">
+                      <option value="0" x-text="I18n.get('stop.pass_through')">Pass through</option>
+                      <option value="15">15 min</option>
+                      <option value="30">30 min</option>
+                      <option value="45">45 min</option>
+                      <option value="60">1 hr</option>
+                      <option value="90">1.5 hr</option>
+                      <option value="120">2 hr</option>
+                      <option value="180">3 hr</option>
+                      <option value="240">4 hr</option>
+                      <option value="480">8 hr</option>
+                      <option value="custom" x-text="I18n.get('stop.custom')">Custom...</option>
+                    </select>
+                    <template x-if="stop.stopMinutes === 'custom'">
+                      <div class="flex items-center gap-1">
+                        <input type="number" x-model.number="stop.customHours" @input="applyCustomTime(stop)" min="0" max="72" placeholder="0"
+                               class="w-10 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded px-1.5 py-1 text-xs text-slate-700 dark:text-slate-200 focus:outline-none focus:border-brand text-center">
+                        <span class="text-[10px] text-slate-400">h</span>
+                        <input type="number" x-model.number="stop.customMinutes" @input="applyCustomTime(stop)" min="0" max="59" step="5" placeholder="0"
+                               class="w-10 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded px-1.5 py-1 text-xs text-slate-700 dark:text-slate-200 focus:outline-none focus:border-brand text-center">
+                        <span class="text-[10px] text-slate-400">m</span>
+                      </div>
+                    </template>
+                  </div>
                 </div>
               </div>
               <button @click="removeStop(index)"
@@ -729,6 +742,17 @@ function tripPlanner() {
       if (this.stops.length >= 2) this.calculateRoute();
     },
 
+    applyCustomTime(stop) {
+      stop._customTotal = (parseInt(stop.customHours) || 0) * 60 + (parseInt(stop.customMinutes) || 0);
+      this.calculateRoute();
+      this.saveTrip();
+    },
+
+    getStopMinutes(stop) {
+      if (stop.stopMinutes === 'custom') return stop._customTotal || 0;
+      return parseInt(stop.stopMinutes) || 0;
+    },
+
     // --- Map layers ---
     setMapType(type) {
       this.mapType = type;
@@ -805,7 +829,7 @@ function tripPlanner() {
       });
 
       let totalStopMinutes = 0;
-      this.stops.forEach(stop => { totalStopMinutes += parseInt(stop.stopMinutes) || 0; });
+      this.stops.forEach(stop => { totalStopMinutes += this.getStopMinutes(stop); });
 
       this.totalDistance = this.formatDistance(totalDistanceM);
       this.totalTravelTime = this.formatDuration(totalDurationS);
@@ -820,7 +844,7 @@ function tripPlanner() {
 
         for (let i = 0; i < this.stops.length; i++) {
           const arrive = new Date(cursor);
-          const stopMins = parseInt(this.stops[i].stopMinutes) || 0;
+          const stopMins = this.getStopMinutes(this.stops[i]);
           const depart = new Date(arrive.getTime() + stopMins * 60 * 1000);
 
           this.stopTimes.push({
