@@ -45,10 +45,8 @@ if [[ -n "$SSH_KEY" ]]; then
 fi
 
 # ── Build the APPS config string to send to remote ──────────────────────────
-APPS_CONFIG=""
-for app in "${APPS[@]}"; do
-  APPS_CONFIG="${APPS_CONFIG}${app}\n"
-done
+# Join with semicolon delimiter (safe since no field contains ;)
+APPS_CONFIG="$(IFS=';'; echo "${APPS[*]}")"
 
 # ── Deploy ───────────────────────────────────────────────────────────────────
 log "Connecting to $EC2_USER@$HOST ($APP_DIR)"
@@ -65,10 +63,12 @@ TS() { date '+%Y-%m-%d %H:%M:%S'; }
 
 # Parse apps into arrays
 NAMES=(); PORTS=(); DOMAINS=(); REQS=(); STATICS=()
-while IFS='|' read -r name port domain req static; do
+IFS=';' read -ra _APPS <<< "$APPS_RAW"
+for _app in "${_APPS[@]}"; do
+  IFS='|' read -r name port domain req static <<< "$_app"
   [[ -z "$name" ]] && continue
   NAMES+=("$name"); PORTS+=("$port"); DOMAINS+=("$domain"); REQS+=("$req"); STATICS+=("$static")
-done < <(printf "$APPS_RAW")
+done
 
 NUM_APPS=${#NAMES[@]}
 TOTAL_STEPS=$((3 + NUM_APPS + 2))  # git + deps + N services + nginx + ssl
