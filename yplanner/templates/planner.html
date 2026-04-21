@@ -81,16 +81,10 @@
     <!-- Search box -->
     <div class="bg-white dark:bg-panel border border-slate-200 dark:border-border rounded-xl p-4">
       <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-2" data-i18n="search.label">Search Places</label>
-      <div class="relative">
-        <input id="place-search"
-               type="text"
-               :placeholder="I18n.get('search.placeholder')"
+      <div id="place-search-container" class="w-full">
+        <input id="place-search" type="text" placeholder="Loading..."
                class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-4 py-2.5 text-sm
-                      text-slate-800 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500
-                      focus:outline-none focus:border-brand focus:ring-1 focus:ring-brand/50 transition">
-        <svg class="absolute right-3 top-2.5 w-5 h-5 text-slate-400 dark:text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
-        </svg>
+                      text-slate-800 dark:text-slate-100 placeholder:text-slate-400" disabled>
       </div>
     </div>
 
@@ -478,7 +472,6 @@ const _mapState = {
   trafficLayer: null,
   markers: [],
   nearbyMarkers: [],
-  autocomplete: null,
 };
 
 const LEG_COLORS = [
@@ -614,25 +607,31 @@ function tripPlanner() {
       // Traffic layer
       _mapState.trafficLayer = new google.maps.TrafficLayer();
 
-      // Places Autocomplete
-      const input = document.getElementById('place-search');
-      _mapState.autocomplete = new google.maps.places.Autocomplete(input, {
-        fields: ['place_id', 'name', 'formatted_address', 'geometry']
-      });
+      // Places Autocomplete (New API - PlaceAutocompleteElement)
+      const placeAutocomplete = new google.maps.places.PlaceAutocompleteElement();
+      placeAutocomplete.id = 'place-search-new';
+      placeAutocomplete.setAttribute('style',
+        'width:100%;--gmpx-color-surface:#1e293b;--gmpx-color-on-surface:#e2e8f0;' +
+        '--gmpx-color-on-surface-variant:#94a3b8;--gmpx-color-primary:#6366f1;' +
+        'font-family:Inter,sans-serif;border-radius:8px;');
 
-      _mapState.autocomplete.addListener('place_changed', () => {
-        const place = _mapState.autocomplete.getPlace();
-        if (!place.geometry) return;
+      const searchContainer = document.getElementById('place-search-container');
+      searchContainer.innerHTML = '';
+      searchContainer.appendChild(placeAutocomplete);
+
+      placeAutocomplete.addEventListener('gmp-placeselect', async (e) => {
+        const place = e.place;
+        await place.fetchFields({ fields: ['displayName', 'formattedAddress', 'location', 'id'] });
+        if (!place.location) return;
         this.addStop({
           id: Date.now() + Math.random(),
-          placeId: place.place_id,
-          name: place.name,
-          address: place.formatted_address,
-          lat: place.geometry.location.lat(),
-          lng: place.geometry.location.lng(),
+          placeId: place.id,
+          name: place.displayName,
+          address: place.formattedAddress,
+          lat: place.location.lat(),
+          lng: place.location.lng(),
           stopMinutes: 60,
         });
-        input.value = '';
       });
 
       // Render existing stops
@@ -671,21 +670,24 @@ function tripPlanner() {
         _mapState.map.setOptions({ styles: dark ? this.getDarkMapStyles() : [] });
       };
 
-      // Click on map POI or anywhere → show info window with "Add to trip"
-      _mapState.map.addListener('click', (e) => {
+      // Click on map POI → show info window with "Add to trip"
+      _mapState.map.addListener('click', async (e) => {
         if (_mapState._openInfoWindow) _mapState._openInfoWindow.close();
 
-        // If user clicked a POI (place), use its placeId
         if (e.placeId) {
-          e.stop();  // Prevent default info window
-          const service = new google.maps.places.PlacesService(_mapState.map);
-          service.getDetails({
-            placeId: e.placeId,
-            fields: ['place_id', 'name', 'formatted_address', 'geometry', 'rating'],
-          }, (place, status) => {
-            if (status !== 'OK' || !place) return;
-            this.showMapInfoWindow(place);
-          });
+          e.stop();
+          try {
+            const place = new google.maps.places.Place({ id: e.placeId });
+            await place.fetchFields({ fields: ['displayName', 'formattedAddress', 'location', 'rating', 'id'] });
+            this.showMapInfoWindow({
+              place_id: place.id,
+              name: place.displayName,
+              formatted_address: place.formattedAddress,
+              lat: place.location.lat(),
+              lng: place.location.lng(),
+              rating: place.rating,
+            });
+          } catch (err) {}
         }
       });
     },
@@ -693,8 +695,8 @@ function tripPlanner() {
     showMapInfoWindow(place) {
       if (_mapState._openInfoWindow) _mapState._openInfoWindow.close();
 
-      const lat = place.geometry.location.lat();
-      const lng = place.geometry.location.lng();
+      const lat = place.lat;
+      const lng = place.lng;
       const name = place.name || 'Unknown';
       const address = place.formatted_address || '';
       const rating = place.rating ? `<span style="color:#f59e0b">★ ${place.rating}</span> · ` : '';
@@ -960,8 +962,8 @@ function tripPlanner() {
       _mapState.map.fitBounds(bounds, 60);
     },
 
-    // --- Nearby Places ---
-    searchNearby(type) {
+    // --- Nearby Places (New API) ---
+    async searchNearby(type) {
       if (!_mapState.map) return;
       this.activeCategory = type;
       this.nearbyLoading = true;
@@ -972,24 +974,28 @@ function tripPlanner() {
         ? { lat: this.stops[this.stops.length - 1].lat, lng: this.stops[this.stops.length - 1].lng }
         : _mapState.map.getCenter().toJSON();
 
-      const service = new google.maps.places.PlacesService(_mapState.map);
-      service.nearbySearch({
-        location: center,
-        radius: 5000,
-        type: type,
-      }, (results, status) => {
+      try {
+        const { places } = await google.maps.places.Place.searchNearby({
+          locationRestriction: {
+            center: center,
+            radius: 5000,
+          },
+          includedPrimaryTypes: [type],
+          maxResultCount: 10,
+          fields: ['id', 'displayName', 'rating', 'formattedAddress', 'location'],
+        });
+
         this.nearbyLoading = false;
-        if (status === google.maps.places.PlacesServiceStatus.OK && results) {
-          this.nearbyResults = results.slice(0, 10).map(r => ({
-            place_id: r.place_id,
-            name: r.name,
-            rating: r.rating || null,
-            vicinity: r.vicinity || '',
-            lat: r.geometry.location.lat(),
-            lng: r.geometry.location.lng(),
+        if (places && places.length > 0) {
+          this.nearbyResults = places.map(p => ({
+            place_id: p.id,
+            name: p.displayName,
+            rating: p.rating || null,
+            vicinity: p.formattedAddress || '',
+            lat: p.location.lat(),
+            lng: p.location.lng(),
           }));
-          // Show markers with info windows
-          const self = this;
+
           this.nearbyResults.forEach(place => {
             const marker = new google.maps.Marker({
               position: { lat: place.lat, lng: place.lng },
@@ -1022,7 +1028,6 @@ function tripPlanner() {
             });
 
             marker.addListener('click', () => {
-              // Close any previously open info window
               if (_mapState._openInfoWindow) _mapState._openInfoWindow.close();
               infoWindow.open(_mapState.map, marker);
               _mapState._openInfoWindow = infoWindow;
@@ -1031,7 +1036,10 @@ function tripPlanner() {
             _mapState.nearbyMarkers.push(marker);
           });
         }
-      });
+      } catch (err) {
+        this.nearbyLoading = false;
+        console.warn('searchNearby failed:', err);
+      }
     },
 
     addNearbyPlace(place) {
@@ -1402,6 +1410,6 @@ function tripPlanner() {
 
 <!-- Load Google Maps -->
 <script async
-  src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_api_key }}&libraries=places&callback=initYPlannerMap">
+  src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_api_key }}&libraries=places&v=weekly&callback=initYPlannerMap">
 </script>
 {% endblock %}
