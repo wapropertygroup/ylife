@@ -624,6 +624,54 @@ function tripPlanner() {
         const dark = document.documentElement.classList.contains('dark');
         _mapState.map.setOptions({ styles: dark ? this.getDarkMapStyles() : [] });
       };
+
+      // Click on map POI or anywhere → show info window with "Add to trip"
+      _mapState.map.addListener('click', (e) => {
+        if (_mapState._openInfoWindow) _mapState._openInfoWindow.close();
+
+        // If user clicked a POI (place), use its placeId
+        if (e.placeId) {
+          e.stop();  // Prevent default info window
+          const service = new google.maps.places.PlacesService(_mapState.map);
+          service.getDetails({
+            placeId: e.placeId,
+            fields: ['place_id', 'name', 'formatted_address', 'geometry', 'rating'],
+          }, (place, status) => {
+            if (status !== 'OK' || !place) return;
+            this.showMapInfoWindow(place);
+          });
+        }
+      });
+    },
+
+    showMapInfoWindow(place) {
+      if (_mapState._openInfoWindow) _mapState._openInfoWindow.close();
+
+      const lat = place.geometry.location.lat();
+      const lng = place.geometry.location.lng();
+      const name = place.name || 'Unknown';
+      const address = place.formatted_address || '';
+      const rating = place.rating ? `<span style="color:#f59e0b">★ ${place.rating}</span> · ` : '';
+      const mapsUrl = `https://www.google.com/maps/place/?q=place_id:${place.place_id}`;
+      const placeData = JSON.stringify({ place_id: place.place_id, name, vicinity: address, lat, lng });
+
+      const infoWindow = new google.maps.InfoWindow({
+        position: { lat, lng },
+        content: `<div style="font-family:Inter,sans-serif;max-width:240px;padding:2px">
+          <p style="font-weight:600;font-size:13px;margin:0 0 4px">${name}</p>
+          <p style="font-size:11px;color:#6b7280;margin:0 0 8px">${rating}${address}</p>
+          <div style="display:flex;gap:8px">
+            <a href="${mapsUrl}" target="_blank" rel="noopener"
+               style="font-size:11px;color:#4285F4;text-decoration:none;font-weight:500">View in Maps ↗</a>
+            <span style="color:#d1d5db">|</span>
+            <a href="#" onclick="event.preventDefault();document.dispatchEvent(new CustomEvent('add-nearby',{detail:${JSON.stringify(placeData)}}))"
+               style="font-size:11px;color:#6366f1;text-decoration:none;font-weight:500">+ Add to trip</a>
+          </div>
+        </div>`
+      });
+
+      infoWindow.open(_mapState.map);
+      _mapState._openInfoWindow = infoWindow;
     },
 
     // --- Stops ---
