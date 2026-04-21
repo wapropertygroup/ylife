@@ -781,7 +781,10 @@ function tripPlanner() {
     },
 
     formatDistance(meters) {
-      return meters >= 1000 ? (meters / 1000).toFixed(1) + ' km' : meters + ' m';
+      const km = meters / 1000;
+      const mi = km * 0.621371;
+      if (km >= 1) return km.toFixed(1) + ' km / ' + mi.toFixed(1) + ' mi';
+      return meters + ' m';
     },
 
     formatDuration(seconds) {
