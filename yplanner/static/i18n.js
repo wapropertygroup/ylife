@@ -76,6 +76,10 @@ const I18n = {
     'share.copied':      { en: 'Copied!',          zh: '已复制!' },
     'share.close':       { en: 'Close',            zh: '关闭' },
 
+    'shared.banner':     { en: 'Shared by',        zh: '分享自' },
+    'shared.save':       { en: 'Save to My Trips', zh: '保存到我的行程' },
+    'shared.signin_to_save': { en: 'Sign in to save this trip', zh: '登录以保存此行程' },
+
     'layers.btn':        { en: 'Layers',           zh: '图层' },
     'layers.roadmap':    { en: 'Roadmap',          zh: '路线图' },
     'layers.satellite':  { en: 'Satellite',        zh: '卫星' },
