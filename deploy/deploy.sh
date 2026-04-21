@@ -114,9 +114,8 @@ ensure_service() {
 
   echo "[\$(TS)][\$step/\$TOTAL_STEPS] Ensuring \$name service..."
 
-  if ! sudo test -f "/etc/systemd/system/\${name}.service"; then
-    echo "[\$(TS)]    Service file missing — installing..."
-    sudo tee "/etc/systemd/system/\${name}.service" > /dev/null <<SERVICEFILE
+  echo "[\$(TS)]    Writing \$name service file..."
+  sudo tee "/etc/systemd/system/\${name}.service" > /dev/null <<SERVICEFILE
 [Unit]
 Description=\${name} Flask app (Gunicorn)
 After=network.target
@@ -140,10 +139,8 @@ RestartSec=5
 [Install]
 WantedBy=multi-user.target
 SERVICEFILE
-    sudo systemctl daemon-reload
-    sudo systemctl enable "\$name"
-    echo "[\$(TS)]    Service file installed and enabled"
-  fi
+  sudo systemctl daemon-reload
+  sudo systemctl enable "\$name"
 
   sudo touch "/var/log/\${name}-access.log" "/var/log/\${name}-error.log"
   sudo chown "\${RUN_USER}:\${RUN_USER}" "/var/log/\${name}-access.log" "/var/log/\${name}-error.log" 2>/dev/null || true
