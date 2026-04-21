@@ -2896,7 +2896,8 @@ def api_yield_curve():
                 if entry_vals:
                     latest = entry_vals   # last entry = most recent trading day
             us_current = latest
-            log.info("Yield curve: US Treasury data fetched (%d maturities)", len(us_current))
+            log.info("Yield curve: US Treasury data fetched (%d maturities: %s)",
+                     len(us_current), ", ".join(sorted(us_current.keys())))
     except Exception as exc:
         log.warning("Yield curve: US Treasury XML failed: %s", exc)
 
@@ -2950,10 +2951,14 @@ def api_yield_curve():
         "3Y":  "DGS3",   "5Y": "DGS5",   "10Y": "DGS10",  "30Y": "DGS30",
     }
     missing = [m for m in FRED_IDS if m not in us_current]
+    if missing:
+        log.info("Yield curve: missing after Treasury+yfinance: %s — trying FRED", ", ".join(missing))
     for mat in missing:
+        fred_id = FRED_IDS[mat]
+        # Try FRED CSV first (last 10 observations to handle weekends/holidays)
         try:
             fr = _req.get(
-                f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={FRED_IDS[mat]}",
+                f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={fred_id}",
                 timeout=8, headers={"User-Agent": "Mozilla/5.0"},
             )
             if fr.status_code == 200:
@@ -2961,9 +2966,34 @@ def api_yield_curve():
                                if len(l.split(",")) == 2 and l.split(",")[1].strip() not in (".", "")]
                 if valid_lines:
                     us_current[mat] = round(float(valid_lines[-1].split(",")[1].strip()), 3)
-                    log.info("Yield curve: FRED filled %s", mat)
+                    log.info("Yield curve: FRED CSV filled %s = %s", mat, us_current[mat])
+                    continue
         except Exception as exc:
-            log.warning("Yield curve: FRED %s failed: %s", mat, exc)
+            log.warning("Yield curve: FRED CSV %s failed: %s", mat, exc)
+
+        # Try FRED JSON API as second fallback
+        try:
+            end = _dt_mod.date.today()
+            start = end - _dt_mod.timedelta(days=10)
+            fj = _req.get(
+                f"https://api.stlouisfed.org/fred/series/observations"
+                f"?series_id={fred_id}&file_type=json&sort_order=desc&limit=5"
+                f"&observation_start={start.strftime('%Y-%m-%d')}"
+                f"&observation_end={end.strftime('%Y-%m-%d')}"
+                f"&api_key=DEMO_KEY",
+                timeout=8, headers={"User-Agent": "Mozilla/5.0"},
+            )
+            if fj.status_code == 200:
+                import json as _json_mod
+                obs = _json_mod.loads(fj.text).get("observations", [])
+                for ob in obs:
+                    val = ob.get("value", ".")
+                    if val not in (".", ""):
+                        us_current[mat] = round(float(val), 3)
+                        log.info("Yield curve: FRED JSON filled %s = %s", mat, us_current[mat])
+                        break
+        except Exception as exc:
+            log.warning("Yield curve: FRED JSON %s failed: %s", mat, exc)
 
     spread_10y_3m = None
     if "10Y" in us_current and "3M" in us_current:
