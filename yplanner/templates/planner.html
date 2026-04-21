@@ -366,7 +366,7 @@
           <div class="flex items-center gap-2 p-2 rounded-lg bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-700/50 transition">
             <div class="flex-1 min-w-0 cursor-pointer" @click="loadSavedTrip(trip.trip_id)">
               <p class="text-xs font-medium text-slate-700 dark:text-slate-200 truncate" x-text="trip.name"></p>
-              <p class="text-[10px] text-slate-400" x-text="trip.stops_count + ' stops'"></p>
+              <p class="text-[10px] text-slate-400" x-text="trip.stops_count + ' stops · ' + formatTimestamp(trip.updated_at)"></p>
             </div>
             <button @click="deleteSavedTrip(trip.trip_id)"
                     class="text-slate-400 hover:text-red-400 transition p-1">
@@ -905,6 +905,13 @@ function tripPlanner() {
       if (h > 0 && m > 0) return h + 'h ' + m + 'm';
       if (h > 0) return h + 'h';
       return m + 'm';
+    },
+
+    formatTimestamp(ts) {
+      if (!ts) return '';
+      const d = new Date(ts * 1000);
+      return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + ' ' +
+             d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
     },
 
     clearRoute() {
