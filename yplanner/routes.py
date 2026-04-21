@@ -41,7 +41,12 @@ def _get_dynamodb():
         return None
     try:
         import boto3
-        return boto3.resource("dynamodb", region_name=os.environ.get("AWS_REGION", "us-west-2"))
+        from botocore.config import Config
+        return boto3.resource(
+            "dynamodb",
+            region_name=os.environ.get("AWS_REGION", "us-west-2"),
+            config=Config(connect_timeout=3, read_timeout=5, retries={"max_attempts": 1}),
+        )
     except Exception as exc:
         log.warning("DynamoDB unavailable: %s", exc)
         _dynamo_unavail_until = time.time() + _DYNAMO_BACKOFF

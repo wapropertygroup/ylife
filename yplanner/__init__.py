@@ -14,28 +14,36 @@ def _load_secrets_from_ssm() -> None:
     """Fetch secrets from AWS SSM Parameter Store and inject into os.environ."""
     try:
         import boto3
+        from botocore.config import Config
         from botocore.exceptions import ClientError, NoCredentialsError
     except ImportError:
         return
 
     SSM_PARAMS = {
-        "/yplanner/GOOGLE_CLIENT_ID":  "GOOGLE_CLIENT_ID",
+        "/yplanner/GOOGLE_CLIENT_ID":    "GOOGLE_CLIENT_ID",
         "/yplanner/GOOGLE_MAPS_API_KEY": "GOOGLE_MAPS_API_KEY",
-        "/yplanner/APPLE_SERVICE_ID":  "APPLE_SERVICE_ID",
+        "/yplanner/APPLE_SERVICE_ID":    "APPLE_SERVICE_ID",
         "/yplanner/YPLANNER_SECRET_KEY": "YPLANNER_SECRET_KEY",
     }
 
+    # Skip params already set in env
+    needed = {k: v for k, v in SSM_PARAMS.items() if not os.environ.get(v)}
+    if not needed:
+        return
+
     try:
-        ssm = boto3.client("ssm", region_name=os.environ.get("AWS_REGION", "us-west-2"))
-        for param_name, env_key in SSM_PARAMS.items():
-            if os.environ.get(env_key):
-                continue
-            try:
-                resp = ssm.get_parameter(Name=param_name, WithDecryption=True)
-                os.environ[env_key] = resp["Parameter"]["Value"]
-            except ClientError:
-                pass
-    except NoCredentialsError:
+        ssm = boto3.client(
+            "ssm",
+            region_name=os.environ.get("AWS_REGION", "us-west-2"),
+            config=Config(connect_timeout=3, read_timeout=3, retries={"max_attempts": 1}),
+        )
+        # Batch fetch all params in one API call
+        resp = ssm.get_parameters(Names=list(needed.keys()), WithDecryption=True)
+        for param in resp.get("Parameters", []):
+            env_key = needed.get(param["Name"])
+            if env_key and param.get("Value"):
+                os.environ[env_key] = param["Value"]
+    except (NoCredentialsError, ClientError):
         pass
     except Exception:
         pass
