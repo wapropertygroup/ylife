@@ -81,7 +81,7 @@
       <div x-show="property?.estimate && property?.sqft" class="px-4 py-2 border-b border-slate-200 dark:border-slate-700">
         <p class="text-xs text-slate-400">
           <span data-i18n="houses.price_sqft">Price/Sq Ft:</span>
-          <span class="font-semibold text-slate-600 dark:text-slate-300" x-text="'$' + Math.round(property.estimate / property.sqft).toLocaleString()"></span>
+          <span class="font-semibold text-slate-600 dark:text-slate-300" x-text="property?.estimate && property?.sqft ? '$' + Math.round(property.estimate / property.sqft).toLocaleString() : ''"></span>
         </p>
       </div>
 
@@ -91,24 +91,24 @@
         <div class="flex gap-3">
           <div class="flex-1 text-center">
             <div class="w-10 h-10 mx-auto rounded-full flex items-center justify-center text-sm font-bold"
-                 :class="property.walkScore >= 70 ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400' : property.walkScore >= 40 ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400' : 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400'"
-                 x-text="property.walkScore"></div>
+                 :class="(property?.walkScore || 0) >= 70 ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400' : (property?.walkScore || 0) >= 40 ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400' : 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400'"
+                 x-text="property?.walkScore ?? ''"></div>
             <p class="text-[9px] text-slate-400 mt-1" data-i18n="houses.walk">Walk</p>
           </div>
           <div class="flex-1 text-center" x-show="property?.bikeScore">
             <div class="w-10 h-10 mx-auto rounded-full flex items-center justify-center text-sm font-bold"
-                 :class="property.bikeScore >= 70 ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400' : property.bikeScore >= 40 ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400' : 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400'"
-                 x-text="property.bikeScore"></div>
+                 :class="(property?.bikeScore || 0) >= 70 ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400' : (property?.bikeScore || 0) >= 40 ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400' : 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400'"
+                 x-text="property?.bikeScore ?? ''"></div>
             <p class="text-[9px] text-slate-400 mt-1" data-i18n="houses.bike">Bike</p>
           </div>
           <div class="flex-1 text-center" x-show="property?.transitScore">
             <div class="w-10 h-10 mx-auto rounded-full flex items-center justify-center text-sm font-bold"
-                 :class="property.transitScore >= 70 ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400' : property.transitScore >= 40 ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400' : 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400'"
-                 x-text="property.transitScore"></div>
+                 :class="(property?.transitScore || 0) >= 70 ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400' : (property?.transitScore || 0) >= 40 ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400' : 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400'"
+                 x-text="property?.transitScore ?? ''"></div>
             <p class="text-[9px] text-slate-400 mt-1" data-i18n="houses.transit">Transit</p>
           </div>
         </div>
-        <p x-show="property?.walkDesc" class="text-[10px] text-slate-400 text-center mt-1" x-text="property.walkDesc"></p>
+        <p x-show="property?.walkDesc" class="text-[10px] text-slate-400 text-center mt-1" x-text="property?.walkDesc ?? ''"></p>
       </div>
 
       <!-- Actions -->
