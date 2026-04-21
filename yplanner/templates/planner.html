@@ -99,9 +99,26 @@
       </div>
       <div>
         <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-2" data-i18n="departure.label">Departure Time</label>
-        <input type="datetime-local" x-model="departureTime" @change="calculateRoute()"
-               class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-4 py-2.5 text-sm
-                      text-slate-800 dark:text-slate-100 focus:outline-none focus:border-brand focus:ring-1 focus:ring-brand/50 transition">
+        <div class="flex gap-2">
+          <input type="date" x-model="departureDate" @change="updateDepartureTime()"
+                 class="flex-1 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2.5 text-sm
+                        text-slate-800 dark:text-slate-100 focus:outline-none focus:border-brand focus:ring-1 focus:ring-brand/50 transition">
+          <select x-model="departureHour" @change="updateDepartureTime()"
+                  class="bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-2 py-2.5 text-sm
+                         text-slate-800 dark:text-slate-100 focus:outline-none focus:border-brand">
+            <template x-for="h in 24" :key="h">
+              <option :value="String(h).padStart(2,'0')" x-text="String(h).padStart(2,'0')"></option>
+            </template>
+          </select>
+          <span class="text-slate-400 self-center">:</span>
+          <select x-model="departureMinute" @change="updateDepartureTime()"
+                  class="bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-2 py-2.5 text-sm
+                         text-slate-800 dark:text-slate-100 focus:outline-none focus:border-brand">
+            <template x-for="m in ['00','15','30','45']" :key="m">
+              <option :value="m" x-text="m"></option>
+            </template>
+          </select>
+        </div>
       </div>
       </div>
     </div>
@@ -451,6 +468,9 @@ function tripPlanner() {
     stops: [],
     travelMode: 'DRIVING',
     departureTime: '',
+    departureDate: '',
+    departureHour: '09',
+    departureMinute: '00',
     totalDistance: '',
     totalTravelTime: '',
     totalStopTime: '',
@@ -497,8 +517,10 @@ function tripPlanner() {
     init() {
       // Set default departure time
       const now = new Date();
-      now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-      this.departureTime = now.toISOString().slice(0, 16);
+      this.departureDate = now.toISOString().slice(0, 10);
+      this.departureHour = String(now.getHours()).padStart(2, '0');
+      this.departureMinute = String(Math.floor(now.getMinutes() / 15) * 15).padStart(2, '0');
+      this.updateDepartureTime();
 
       // Check auth session
       this.checkAuth();
@@ -700,6 +722,11 @@ function tripPlanner() {
       this.travelMode = mode;
       if (this.stops.length >= 2) this.calculateRoute();
       this.saveTrip();
+    },
+
+    updateDepartureTime() {
+      this.departureTime = `${this.departureDate}T${this.departureHour}:${this.departureMinute}`;
+      if (this.stops.length >= 2) this.calculateRoute();
     },
 
     // --- Map layers ---
@@ -1229,7 +1256,17 @@ function tripPlanner() {
           const data = JSON.parse(saved);
           this.stops = data.stops || [];
           this.travelMode = data.travelMode || 'DRIVING';
-          if (data.departureTime) this.departureTime = data.departureTime;
+          if (data.departureTime) {
+            this.departureTime = data.departureTime;
+            // Parse back into date/hour/minute fields
+            const parts = data.departureTime.split('T');
+            if (parts.length === 2) {
+              this.departureDate = parts[0];
+              const timeParts = parts[1].split(':');
+              this.departureHour = timeParts[0] || '09';
+              this.departureMinute = timeParts[1] || '00';
+            }
+          }
         }
       } catch (e) {}
     },
