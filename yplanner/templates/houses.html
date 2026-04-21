@@ -36,14 +36,21 @@
 
       <!-- Price -->
       <div class="px-4 py-3 border-b border-slate-200 dark:border-slate-700">
-        <div class="flex items-baseline gap-2">
-          <span class="text-2xl font-bold text-emerald-600 dark:text-emerald-400" x-text="property?.estimate ? '$' + Number(property.estimate).toLocaleString() : 'N/A'"></span>
-          <span class="text-xs text-slate-400" data-i18n="houses.estimate">Redfin Estimate</span>
-        </div>
-        <p x-show="property?.lastSoldPrice" class="text-xs text-slate-400 mt-1">
-          <span data-i18n="houses.last_sold">Last sold:</span>
-          <span class="font-medium text-slate-600 dark:text-slate-300" x-text="'$' + Number(property?.lastSoldPrice).toLocaleString()"></span>
-        </p>
+        <template x-if="property?.estimate">
+          <div>
+            <div class="flex items-baseline gap-2">
+              <span class="text-2xl font-bold text-emerald-600 dark:text-emerald-400" x-text="'$' + Number(property.estimate).toLocaleString()"></span>
+              <span class="text-xs text-slate-400" data-i18n="houses.estimate">Redfin Estimate</span>
+            </div>
+            <p x-show="property?.lastSoldPrice" class="text-xs text-slate-400 mt-1">
+              <span data-i18n="houses.last_sold">Last sold:</span>
+              <span class="font-medium text-slate-600 dark:text-slate-300" x-text="'$' + Number(property?.lastSoldPrice).toLocaleString()"></span>
+            </p>
+          </div>
+        </template>
+        <template x-if="!property?.estimate">
+          <p class="text-xs text-slate-400 italic" data-i18n="houses.no_data">Property data unavailable from server — click below to view on Redfin or Zillow</p>
+        </template>
       </div>
 
       <!-- Stats -->
@@ -97,15 +104,25 @@
       </div>
 
       <!-- Actions -->
-      <div class="px-4 py-3 flex gap-2">
+      <div class="px-4 py-3 flex flex-col gap-2">
         <a :href="property?.redfinUrl" target="_blank" rel="noopener"
-           class="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-medium transition">
+           class="flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-medium transition">
           <span data-i18n="houses.view_redfin">View on Redfin</span>
           <span class="text-xs opacity-70">↗</span>
         </a>
-        <button @click="loadSimilar()"
-                class="px-3 py-2.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-sm font-medium transition"
-                data-i18n="houses.similar">Similar</button>
+        <div class="flex gap-2">
+          <a :href="property?.zillowUrl || ('https://www.zillow.com/homes/' + encodeURIComponent(property?.address || '') + '_rb/')" target="_blank" rel="noopener"
+             class="flex-1 flex items-center justify-center gap-1 px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium transition">
+            Zillow ↗
+          </a>
+          <a :href="property?.googleMapsUrl || ('https://www.google.com/maps/search/' + encodeURIComponent(property?.address || ''))" target="_blank" rel="noopener"
+             class="flex-1 flex items-center justify-center gap-1 px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-xs font-medium transition">
+            Google Maps ↗
+          </a>
+          <button x-show="property?.propertyId" @click="loadSimilar()"
+                  class="flex-1 px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-xs font-medium transition"
+                  data-i18n="houses.similar">Similar</button>
+        </div>
       </div>
     </div>
 
@@ -199,55 +216,57 @@ function housesApp() {
 
       placeAutocomplete.addEventListener('gmp-placeselect', async (e) => {
         const place = e.place;
-        await place.fetchFields({ fields: ['displayName', 'formattedAddress', 'location', 'id'] });
+        await place.fetchFields({ fields: ['displayName', 'formattedAddress', 'location', 'id', 'rating', 'websiteURI', 'googleMapsURI'] });
         if (!place.location) return;
 
         const address = place.formattedAddress || place.displayName;
+        const lat = place.location.lat();
+        const lng = place.location.lng();
+
         this.loading = true;
         this.property = null;
         this.similarHomes = [];
         this.clearMarkers();
 
-        // Show on map immediately
-        const lat = place.location.lat();
-        const lng = place.location.lng();
         _housesMap.map.setCenter({ lat, lng });
         _housesMap.map.setZoom(15);
 
-        // Try Redfin lookup
+        // Try Redfin lookup (may fail if blocked from server IP)
+        let redfin = null;
         try {
           const resp = await fetch(`/api/houses/lookup?address=${encodeURIComponent(address)}`);
           const data = await resp.json();
-          if (!data.error && data.address) {
-            this.property = data;
-          } else {
-            // Redfin unavailable — show basic info from Google
-            this.property = {
-              address: address,
-              city: '',
-              state: '',
-              lat: lat,
-              lng: lng,
-              estimate: null,
-              beds: null,
-              baths: null,
-              sqft: null,
-              walkScore: null,
-              redfinUrl: `https://www.redfin.com/search?query=${encodeURIComponent(address)}`,
-            };
-          }
-        } catch (err) {
+          if (!data.error && data.address) redfin = data;
+        } catch (err) {}
+
+        if (redfin) {
+          this.property = redfin;
+        } else {
+          // Parse city/state from formatted address
+          const parts = address.split(',').map(s => s.trim());
+          const state = parts.length >= 3 ? parts[parts.length - 2]?.split(' ')[0] : '';
+          const city = parts.length >= 2 ? parts[parts.length - 3] || parts[parts.length - 2] : '';
+
           this.property = {
             address: address,
+            city: city,
+            state: state,
             lat: lat,
             lng: lng,
             estimate: null,
+            beds: null,
+            baths: null,
+            sqft: null,
+            walkScore: null,
+            bikeScore: null,
+            transitScore: null,
             redfinUrl: `https://www.redfin.com/search?query=${encodeURIComponent(address)}`,
+            zillowUrl: `https://www.zillow.com/homes/${encodeURIComponent(address)}_rb/`,
+            googleMapsUrl: place.googleMapsURI || `https://www.google.com/maps/place/?q=place_id:${place.id}`,
           };
         }
         this.loading = false;
 
-        // Add marker
         const marker = new google.maps.Marker({
           position: { lat: this.property.lat || lat, lng: this.property.lng || lng },
           map: _housesMap.map,

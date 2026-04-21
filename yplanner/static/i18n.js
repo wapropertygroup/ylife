@@ -105,6 +105,7 @@ const I18n = {
     'houses.similar':    { en: 'Similar',          zh: '类似房源' },
     'houses.similar_listings': { en: 'Similar Listings', zh: '类似房源' },
     'houses.empty':      { en: 'Search for an address to see property details', zh: '搜索地址以查看房产详情' },
+    'houses.no_data':    { en: 'Property data unavailable from server — click below to view on Redfin or Zillow', zh: '无法从服务器获取房产数据 — 点击下方在 Redfin 或 Zillow 查看' },
   },
 
   get(key) {
