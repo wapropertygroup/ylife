@@ -13,6 +13,7 @@ import string
 import random
 
 from flask import Blueprint, render_template, request, jsonify, session
+from urllib.parse import quote as requests_quote
 
 bp = Blueprint("planner", __name__, template_folder="templates", static_folder="static")
 log = logging.getLogger(__name__)
@@ -584,75 +585,59 @@ def api_houses_search():
 
 @bp.route("/api/houses/lookup")
 def api_houses_lookup():
-    """Lookup property by address — search Redfin then fetch details."""
+    """Lookup property by address — try Zillow autocomplete for zpid + metadata."""
     address = request.args.get("address", "").strip()
     if not address:
         return jsonify({"error": "Address required"}), 400
 
-    client = _get_redfin()
-    if not client:
-        return jsonify({"error": "Redfin not available"}), 503
-
+    # Zillow autocomplete works from server IPs (unlike their other APIs)
     try:
-        # Search for the address
-        search_resp = client.search(address)
-        if search_resp.get("resultCode") != 0:
-            return jsonify({"error": "Address not found on Redfin"}), 404
+        import requests as http_req
+        resp = http_req.get(
+            "https://www.zillowstatic.com/autocomplete/v3/suggestions",
+            params={"q": address},
+            headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"},
+            timeout=8,
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            results = data.get("results", [])
+            # Find first address result
+            for r in results:
+                meta = r.get("metaData", {})
+                zpid = meta.get("zpid")
+                if not zpid:
+                    continue
 
-        # Find first match with a URL
-        url = None
-        for section in search_resp.get("payload", {}).get("sections", []):
-            for row in section.get("rows", []):
-                if row.get("url"):
-                    url = row["url"]
-                    break
-            if url:
-                break
+                # Build Zillow URL from zpid
+                street = f"{meta.get('streetNumber', '')} {meta.get('streetName', '')}".strip()
+                city = meta.get("city", "")
+                state = meta.get("state", "")
+                zipcode = meta.get("zipCode", "")
+                slug = f"{street}-{city}-{state}-{zipcode}".replace(" ", "-").replace(",", "")
 
-        if not url:
-            return jsonify({"error": "No Redfin listing found"}), 404
+                return jsonify({
+                    "address": r.get("display", address),
+                    "city": city,
+                    "state": state,
+                    "zip": zipcode,
+                    "lat": meta.get("lat"),
+                    "lng": meta.get("lng"),
+                    "zpid": zpid,
+                    "addressType": meta.get("addressType", ""),
+                    "zillowUrl": f"https://www.zillow.com/homedetails/{slug}/{zpid}_zpid/",
+                    "redfinUrl": f"https://www.redfin.com/search?query={requests_quote(address)}",
+                    # These would be populated if we could access Zillow's detail API
+                    "estimate": None,
+                    "beds": None,
+                    "baths": None,
+                    "sqft": None,
+                    "walkScore": None,
+                })
 
-        # Get property details
-        init = client.initial_info(url)
-        if init.get("resultCode") != 0:
-            return jsonify({"error": "Property not found"}), 404
-
-        prop_id = init["payload"]["propertyId"]
-        listing_id = init["payload"].get("listingId", "")
-
-        avm = client.avm_details(prop_id, listing_id)
-        avm_p = avm.get("payload", {}) if avm.get("resultCode") == 0 else {}
-
-        hood = client.neighborhood_stats(prop_id)
-        hood_p = hood.get("payload", {}) if hood.get("resultCode") == 0 else {}
-
-        lat_lng = avm_p.get("latLong", {})
-        sqft = avm_p.get("sqFt", {})
-        walk_data = hood_p.get("walkScoreInfo", {}).get("walkScoreData", {})
-        addr_info = hood_p.get("addressInfo", {})
-
-        return jsonify({
-            "propertyId": prop_id,
-            "listingId": listing_id,
-            "address": avm_p.get("streetAddress", {}).get("assembledAddress", address),
-            "estimate": avm_p.get("predictedValue"),
-            "estimateText": avm_p.get("sectionPreviewText", ""),
-            "beds": avm_p.get("numBeds"),
-            "baths": avm_p.get("numBaths"),
-            "sqft": sqft.get("value") if sqft else None,
-            "lastSoldPrice": avm_p.get("lastSoldPrice"),
-            "lat": lat_lng.get("latitude"),
-            "lng": lat_lng.get("longitude"),
-            "city": addr_info.get("city", ""),
-            "state": addr_info.get("state", ""),
-            "walkScore": walk_data.get("walkScore", {}).get("value"),
-            "walkDesc": walk_data.get("walkScore", {}).get("shortDescription", ""),
-            "bikeScore": walk_data.get("bikeScore", {}).get("value"),
-            "transitScore": walk_data.get("transitScore", {}).get("value"),
-            "redfinUrl": "https://www.redfin.com" + url,
-        })
+        return jsonify({"error": "Address not found"}), 404
     except Exception as exc:
-        log.warning("Redfin lookup failed: %s", exc)
+        log.warning("Zillow lookup failed: %s", exc)
         return jsonify({"error": str(exc)}), 500
 
 
