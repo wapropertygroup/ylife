@@ -24,12 +24,6 @@
       <p class="text-xs text-slate-400 mb-3" data-i18n="auth.desc">Sign in to save and sync your trips</p>
 
       <!-- Google Sign-In button -->
-      <div id="g_id_onload"
-           data-client_id="{{ google_client_id }}"
-           data-callback="handleGoogleSignIn"
-           data-auto_prompt="false"
-           style="display:none">
-      </div>
       <button @click="signInWithGoogle()" x-show="googleClientId"
               class="w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-lg border border-slate-300 dark:border-slate-600
                      bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-sm font-medium transition mb-2">
