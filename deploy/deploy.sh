@@ -174,14 +174,21 @@ done
 NGINX_STEP=\$((4 + NUM_APPS))
 echo "[\$(TS)][\$NGINX_STEP/\$TOTAL_STEPS] Ensuring nginx is configured..."
 NGINX_CHANGED=false
+CERTBOT_DOMAINS=()
 
 ensure_nginx() {
   local name="\$1" port="\$2" domain="\$3" static="\$4"
-
   local CONF="/etc/nginx/conf.d/\${name}.conf"
 
+  # Skip if config exists, has the right domain, AND passes syntax check
+  if sudo test -f "\$CONF" \
+     && sudo grep -q "server_name \${domain};" "\$CONF" \
+     && sudo nginx -t 2>/dev/null; then
+    echo "[\$(TS)]    \$name nginx config up to date"
+    return
+  fi
+
   echo "[\$(TS)]    \$name nginx config writing..."
-  # Always overwrite — certbot will re-add SSL in the SSL step
   sudo tee "\$CONF" > /dev/null <<NGINXCONF
 server {
     listen 80;
@@ -202,6 +209,7 @@ server {
 }
 NGINXCONF
   NGINX_CHANGED=true
+  CERTBOT_DOMAINS+=("\$domain")
   echo "[\$(TS)]    \$name nginx config updated"
 }
 
@@ -227,16 +235,17 @@ fi
 SSL_STEP=\$((5 + NUM_APPS))
 echo "[\$(TS)][\$SSL_STEP/\$TOTAL_STEPS] Ensuring SSL certificates..."
 
-sudo dnf install -y certbot python3-certbot-nginx -q 2>&1 | tail -1
-
-# Run certbot per-domain to avoid conflicts with existing certs
-for domain in "\${DOMAINS[@]}"; do
-  echo "[\$(TS)]    Certbot: \$domain"
-  sudo certbot --nginx --cert-name "\$domain" -d "\$domain" \
-    --non-interactive --agree-tos -m "\$CERT_EMAIL" --redirect \
-    2>&1 | grep -E "^(Saving|Successfully|Certificate|Deploying|Redirect)" || true
-done
-echo "[\$(TS)]    ✓ SSL certificates installed"
+if [[ \${#CERTBOT_DOMAINS[@]} -gt 0 ]]; then
+  sudo dnf install -y certbot python3-certbot-nginx -q 2>&1 | tail -1
+  for domain in "\${CERTBOT_DOMAINS[@]}"; do
+    echo "[\$(TS)]    Certbot: \$domain"
+    sudo certbot --nginx --cert-name "\$domain" -d "\$domain" \
+      --non-interactive --agree-tos -m "\$CERT_EMAIL" --redirect 2>&1 | tail -3
+  done
+  echo "[\$(TS)]    ✓ SSL certificates installed"
+else
+  echo "[\$(TS)]    All nginx configs unchanged — SSL intact"
+fi
 REMOTE
 
 log "✓ Deploy complete"
