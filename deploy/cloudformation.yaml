@@ -37,7 +37,7 @@ Parameters:
 
   DomainYPlanter:
     Type: String
-    Default: "plant.li-family.us"
+    Default: "planter.li-family.us"
     Description: Domain for yPlanter
 
   CertEmail:
