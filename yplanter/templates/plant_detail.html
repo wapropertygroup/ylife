@@ -190,10 +190,10 @@
           "When should I plant this in Seattle?",
           "What are common problems and how to fix them?",
           "How do I harvest and store it?",
-          "What's the best soil mix for PNW?",
+          "Best soil mix for PNW?",
         ] %}
         {% for q in suggestions %}
-        <button @click="question = '{{ q }}'; ask()"
+        <button @click="question = &quot;{{ q }}&quot;; ask()"
                 class="px-2.5 py-1 rounded-full text-xs border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-brand hover:text-brand transition">
           {{ q }}
         </button>
