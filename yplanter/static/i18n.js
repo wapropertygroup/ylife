@@ -48,6 +48,11 @@ const I18n = {
     'resources.title':    { en: 'PNW Gardening Resources',          zh: '太平洋西北园艺资源' },
     'resources.subtitle': { en: 'Useful websites, tools, and local organizations for Seattle gardeners.', zh: '对西雅图园丁有用的网站、工具和本地组织。' },
 
+    'nav.history':        { en: 'Chat History',          zh: '对话历史' },
+
+    'chat.title':         { en: 'Garden AI',              zh: '园艺 AI' },
+    'chat.hint':          { en: 'Ask me anything about gardening in Seattle / Pacific Northwest!', zh: '问我任何关于西雅图/太平洋西北地区园艺的问题！' },
+
     'footer.text':        { en: 'yPlanter — Seattle / PNW Garden Guide (USDA Zone 8b)', zh: 'yPlanter — 西雅图/太平洋西北种植指南（USDA 8b区）' },
     'footer.copyright':   { en: '\u00a9 2025 yPlanter', zh: '\u00a9 2025 yPlanter' },
   },

@@ -1,6 +1,14 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
-  <circle cx="32" cy="32" r="30" fill="#16a34a"/>
-  <path d="M32 48V24" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
-  <path d="M32 24c0-8 6-14 14-14-2 8-8 14-14 14z" fill="#86efac"/>
-  <path d="M32 30c0-6-5-11-11-11 1.5 6.5 6 11 11 11z" fill="#4ade80"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <rect width="64" height="64" rx="14" fill="#16a34a"/>
+  <!-- Pot -->
+  <path d="M22 40h20l-3 12H25l-3-12z" fill="#a16207" opacity="0.9"/>
+  <rect x="20" y="37" width="24" height="5" rx="2" fill="#ca8a04" opacity="0.9"/>
+  <!-- Stem -->
+  <path d="M32 38V26" stroke="#bbf7d0" stroke-width="2.5" stroke-linecap="round"/>
+  <!-- Right leaf -->
+  <path d="M32 28c0-9 7-15 15-15-1.5 9-7.5 15-15 15z" fill="#bbf7d0" opacity="0.95"/>
+  <path d="M32 28c2-7 7-12 13-14" stroke="#16a34a" stroke-width="1" stroke-linecap="round" opacity="0.4"/>
+  <!-- Left leaf -->
+  <path d="M32 32c0-7-5.5-12-12-12 1 7 5.5 12 12 12z" fill="#4ade80" opacity="0.95"/>
+  <path d="M32 32c-1.5-5.5-5.5-9.5-10.5-11" stroke="#16a34a" stroke-width="1" stroke-linecap="round" opacity="0.4"/>
 </svg>

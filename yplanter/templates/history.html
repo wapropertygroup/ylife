@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}Chat History — yPlanter{% endblock %}
+
+{% block content %}
+<div class="fade-up max-w-3xl mx-auto" x-data="historyPage()">
+  <h1 class="text-2xl font-bold mb-2 flex items-center gap-2">
+    <span>💬</span> Chat History
+  </h1>
+  <p class="text-sm text-slate-500 dark:text-slate-400 mb-8">
+    Your past questions answered by the garden AI, saved automatically.
+  </p>
+
+  <div x-show="loading" class="text-center py-12 text-sm text-slate-500">Loading...</div>
+
+  <div x-show="!loading && items.length === 0" class="text-center py-12">
+    <p class="text-4xl mb-3">🌱</p>
+    <p class="text-sm text-slate-500 dark:text-slate-400">No questions asked yet. Visit a plant page and ask the AI a question!</p>
+  </div>
+
+  <div x-show="!loading && items.length > 0" class="space-y-4">
+    <template x-for="item in items" :key="item.timestamp">
+      <div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50">
+        <div class="flex items-start justify-between gap-3 mb-2">
+          <div>
+            <template x-if="item.plant_name">
+              <a :href="'/plant/' + item.plant_id" class="text-xs text-brand hover:underline" x-text="'About: ' + item.plant_name"></a>
+            </template>
+            <template x-if="!item.plant_name">
+              <span class="text-xs text-slate-500">General question</span>
+            </template>
+            <span class="text-xs text-slate-400 ml-2" x-text="formatTime(item.timestamp)"></span>
+          </div>
+          <button @click="deleteItem(item.timestamp)"
+                  class="p-1 rounded text-slate-400 hover:text-red-500 transition shrink-0" title="Delete">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+        <p class="text-sm font-medium mb-2" x-text="item.question"></p>
+        <div class="text-sm text-slate-600 dark:text-slate-400 prose prose-sm dark:prose-invert max-w-none"
+             x-html="formatMarkdown(item.answer)"></div>
+      </div>
+    </template>
+  </div>
+
+  <div class="mt-6 text-center">
+    <a href="/" class="text-sm text-brand hover:underline">← Back to all plants</a>
+  </div>
+</div>
+
+<script>
+function historyPage() {
+  return {
+    items: [],
+    loading: true,
+    init() {
+      fetch('/api/history')
+        .then(r => r.json())
+        .then(data => { this.items = data.history || []; this.loading = false; })
+        .catch(() => { this.loading = false; });
+    },
+    deleteItem(ts) {
+      fetch(`/api/history/${ts}`, { method: 'DELETE' })
+        .then(() => { this.items = this.items.filter(i => i.timestamp !== ts); })
+        .catch(() => {});
+    },
+    formatTime(ts) {
+      return new Date(ts).toLocaleString();
+    },
+    formatMarkdown(text) {
+      if (!text) return '';
+      return text
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*(.*?)\*/g, '<em>$1</em>')
+        .replace(/\n\n/g, '</p><p>')
+        .replace(/\n/g, '<br>')
+        .replace(/^/, '<p>').replace(/$/, '</p>');
+    }
+  }
+}
+</script>
+{% endblock %}

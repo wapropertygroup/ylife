@@ -678,6 +678,49 @@ ALL_PLANTS = VEGETABLES + HOUSEPLANTS
 CATEGORIES = {"vegetable": "Vegetables", "fruit": "Fruit", "herb": "Herbs", "houseplant": "Houseplants"}
 DIFFICULTIES = ["easy", "moderate", "hard"]
 
+# Wikipedia article names for fetching thumbnail images (client-side)
+# and YouTube search queries for growing guides
+_MEDIA: dict[str, dict] = {
+    "tomato":             {"wiki": "Tomato",               "yt": "how to grow tomatoes seattle pacific northwest"},
+    "kale":               {"wiki": "Kale",                 "yt": "how to grow kale pacific northwest year round"},
+    "lettuce":            {"wiki": "Lettuce",              "yt": "growing lettuce seattle cool weather"},
+    "sugar-snap-peas":    {"wiki": "Snap_pea",             "yt": "growing sugar snap peas pacific northwest"},
+    "zucchini":           {"wiki": "Zucchini",             "yt": "how to grow zucchini squash seattle"},
+    "garlic":             {"wiki": "Garlic",               "yt": "planting garlic fall pacific northwest"},
+    "blueberries":        {"wiki": "Blueberry",            "yt": "growing blueberries pacific northwest acidic soil"},
+    "strawberries":       {"wiki": "Strawberry",           "yt": "growing strawberries seattle hood variety"},
+    "herbs-basil":        {"wiki": "Basil",                "yt": "growing basil seattle pacific northwest"},
+    "herbs-rosemary":     {"wiki": "Rosemary",             "yt": "growing rosemary outdoors pacific northwest"},
+    "beans-green":        {"wiki": "Green_bean",           "yt": "growing green beans pole bush pacific northwest"},
+    "carrots":            {"wiki": "Carrot",               "yt": "growing carrots pacific northwest raised bed"},
+    "potatoes":           {"wiki": "Potato",               "yt": "growing potatoes seattle raised bed container"},
+    "beets":              {"wiki": "Beetroot",             "yt": "growing beets pacific northwest garden"},
+    "cucumber":           {"wiki": "Cucumber",             "yt": "growing cucumbers seattle pacific northwest"},
+    "chard":              {"wiki": "Chard",                "yt": "growing swiss chard pacific northwest"},
+    "monstera-deliciosa": {"wiki": "Monstera_deliciosa",   "yt": "monstera deliciosa care indoor plant"},
+    "pothos-golden":      {"wiki": "Epipremnum_aureum",    "yt": "golden pothos care tips low light"},
+    "snake-plant":        {"wiki": "Dracaena_trifasciata", "yt": "snake plant care beginner houseplant"},
+    "fiddle-leaf-fig":    {"wiki": "Ficus_lyrata",         "yt": "fiddle leaf fig care tips indoor"},
+    "ferns":              {"wiki": "Nephrolepis_exaltata", "yt": "boston fern care indoor humidity"},
+    "peace-lily":         {"wiki": "Spathiphyllum",        "yt": "peace lily care low light indoor plant"},
+    "pilea":              {"wiki": "Pilea_peperomioides",   "yt": "pilea peperomioides care propagation"},
+    "calathea":           {"wiki": "Goeppertia",           "yt": "calathea prayer plant care humidity"},
+}
+
+
+def _enrich(plant: dict) -> dict:
+    """Add media URLs to a plant dict."""
+    pid = plant["id"]
+    media = _MEDIA.get(pid, {})
+    plant["wiki"] = media.get("wiki", plant["name"].replace(" ", "_"))
+    plant["youtube_search"] = media.get("yt", f"how to grow {plant['name']} pacific northwest")
+    return plant
+
+
+# Enrich all plants at import time
+for _p in ALL_PLANTS:
+    _enrich(_p)
+
 
 def search_all(query: str = "", category: str = "", difficulty: str = "") -> list[dict]:
     """Search across all plants."""

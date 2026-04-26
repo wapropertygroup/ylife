@@ -66,6 +66,8 @@
            data-i18n="nav.yard">Yard Ideas</a>
         <a href="/resources" class="px-3 py-1.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition"
            data-i18n="nav.resources">Resources</a>
+        <a href="/history" class="px-3 py-1.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+           data-i18n="nav.history">Chat History</a>
       </nav>
 
       <div class="ml-auto hidden md:flex items-center gap-2">
@@ -99,6 +101,7 @@
         <a href="/calendar" class="px-3 py-2.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800" data-i18n="nav.calendar">Planting Calendar</a>
         <a href="/yard" class="px-3 py-2.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800" data-i18n="nav.yard">Yard Ideas</a>
         <a href="/resources" class="px-3 py-2.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800" data-i18n="nav.resources">Resources</a>
+        <a href="/history" class="px-3 py-2.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800" data-i18n="nav.history">Chat History</a>
         <button onclick="toggleTheme()" class="px-3 py-2.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 text-left" data-i18n="nav.toggle_theme">Toggle Theme</button>
         <button onclick="I18n.toggle()" class="lang-toggle-btn mt-1 px-3 py-2.5 rounded-md text-sm border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-brand hover:text-brand transition text-left font-medium">中文</button>
       </div>
@@ -125,6 +128,97 @@
     } else {
       html.classList.add('dark');
       localStorage.setItem('yplanter_theme', 'dark');
+    }
+  }
+  </script>
+
+  <!-- Floating AI Chat Widget -->
+  <div x-data="floatingChat()" class="fixed bottom-4 right-4 z-50">
+    <!-- Chat panel -->
+    <div x-show="open" x-transition
+         class="mb-3 w-80 sm:w-96 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xl overflow-hidden">
+      <div class="px-4 py-3 bg-brand text-white flex items-center justify-between">
+        <span class="font-semibold text-sm flex items-center gap-2">🤖 <span data-i18n="chat.title">Garden AI</span></span>
+        <button @click="open = false" class="p-1 hover:bg-white/20 rounded transition">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+      <div class="p-4 max-h-80 overflow-y-auto">
+        <div x-show="!answer && !loading" class="text-xs text-slate-500 dark:text-slate-400 mb-3" data-i18n="chat.hint">
+          Ask me anything about gardening in Seattle / Pacific Northwest!
+        </div>
+        <div x-show="answer" class="text-sm prose prose-sm dark:prose-invert max-w-none mb-3" x-html="formatMd(answer)"></div>
+        <div x-show="error" class="text-xs text-red-500 mb-3" x-text="error"></div>
+      </div>
+      <div class="px-4 pb-4">
+        <div class="flex gap-2">
+          <input type="text" x-model="question" @keydown.enter="ask()"
+                 placeholder="e.g. What should I plant in April?"
+                 class="flex-1 px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm focus:ring-2 focus:ring-brand/40 outline-none">
+          <button @click="ask()" :disabled="loading"
+                  class="px-3 py-2 rounded-lg bg-brand text-white text-sm font-medium hover:bg-brand-dark transition disabled:opacity-50">
+            <span x-show="!loading">Ask</span>
+            <span x-show="loading">...</span>
+          </button>
+        </div>
+      </div>
+    </div>
+    <!-- FAB button -->
+    <button @click="open = !open"
+            class="w-14 h-14 rounded-full bg-brand text-white shadow-lg hover:shadow-xl hover:scale-105 transition-all flex items-center justify-center text-2xl">
+      <span x-show="!open">🤖</span>
+      <span x-show="open">✕</span>
+    </button>
+  </div>
+
+  <script>
+  function floatingChat() {
+    return {
+      open: false,
+      question: '',
+      answer: '',
+      loading: false,
+      error: '',
+      ask() {
+        if (!this.question.trim() || this.loading) return;
+        this.loading = true;
+        this.answer = '';
+        this.error = '';
+        const lang = (typeof I18n !== 'undefined' && I18n.lang === 'zh') ? 'zh' : 'en';
+        fetch('/api/ask', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ question: this.question, lang }),
+        }).then(resp => {
+          const reader = resp.body.getReader();
+          const decoder = new TextDecoder();
+          const read = () => {
+            reader.read().then(({ done, value }) => {
+              if (done) { this.loading = false; return; }
+              for (const line of decoder.decode(value).split('\n')) {
+                if (!line.startsWith('data: ')) continue;
+                const p = line.slice(6).trim();
+                if (p === '[DONE]') { this.loading = false; return; }
+                try {
+                  const d = JSON.parse(p);
+                  if (d.text) this.answer += d.text;
+                  if (d.error) this.error = d.error;
+                } catch(e) {}
+              }
+              read();
+            });
+          };
+          read();
+        }).catch(e => { this.error = e.message; this.loading = false; });
+      },
+      formatMd(t) {
+        return t.replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>')
+                .replace(/\*(.*?)\*/g,'<em>$1</em>')
+                .replace(/\n\n/g,'</p><p>').replace(/\n/g,'<br>')
+                .replace(/^/,'<p>').replace(/$/,'</p>');
+      }
     }
   }
   </script>
