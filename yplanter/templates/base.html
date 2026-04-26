@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en" class="h-full dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}yPlanter — Seattle Garden Guide{% endblock %}</title>
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('planter.static', filename='favicon.svg') }}">
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: { DEFAULT: '#16a34a', dark: '#15803d', light: '#86efac' },
+            surface: '#0f172a',
+            panel: '#1e293b',
+            border: '#334155',
+          },
+          fontFamily: { mono: ['JetBrains Mono', 'Fira Code', 'monospace'] }
+        }
+      }
+    }
+  </script>
+
+  <script>
+    (function() {
+      const theme = localStorage.getItem('yplanter_theme') || 'dark';
+      if (theme === 'light') document.documentElement.classList.remove('dark');
+    })();
+  </script>
+
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+
+  <script src="{{ url_for('planter.static', filename='i18n.js') }}"></script>
+  <link rel="stylesheet" href="{{ url_for('planter.static', filename='css/style.css') }}">
+
+  {% block head %}{% endblock %}
+</head>
+
+<body class="bg-white dark:bg-slate-950 text-slate-800 dark:text-slate-100 min-h-screen flex flex-col" x-data="{ navOpen: false }">
+
+  <header class="sticky top-0 z-50 bg-white/80 dark:bg-slate-900/80 backdrop-blur border-b border-slate-200 dark:border-slate-800">
+    <div class="max-w-screen-xl mx-auto px-4 sm:px-6 flex items-center h-14 gap-4">
+
+      <a href="/" class="flex items-center gap-2 font-bold text-lg shrink-0">
+        <svg class="w-6 h-6 text-brand" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M12 19.5c-4.5 0-7-3-7-7 0-5 4-9 7-11 3 2 7 6 7 11 0 4-2.5 7-7 7z"/>
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M12 19.5V10"/>
+        </svg>
+        <span class="grad-text" data-i18n="nav.brand">yPlanter</span>
+      </a>
+
+      <nav class="hidden md:flex items-center gap-1 ml-4 flex-1">
+        <a href="/" class="px-3 py-1.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+           data-i18n="nav.browse">Browse Plants</a>
+        <a href="/calendar" class="px-3 py-1.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+           data-i18n="nav.calendar">Planting Calendar</a>
+        <a href="/yard" class="px-3 py-1.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+           data-i18n="nav.yard">Yard Ideas</a>
+        <a href="/resources" class="px-3 py-1.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+           data-i18n="nav.resources">Resources</a>
+      </nav>
+
+      <div class="ml-auto hidden md:flex items-center gap-2">
+        <button onclick="toggleTheme()"
+                class="p-2 rounded-md text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                title="Toggle theme">
+          <svg class="w-5 h-5 hidden dark:block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/>
+          </svg>
+          <svg class="w-5 h-5 block dark:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
+          </svg>
+        </button>
+        <button onclick="I18n.toggle()"
+                class="lang-toggle-btn px-2.5 py-1.5 rounded-md text-sm border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300
+                       hover:border-brand hover:text-brand transition font-medium">
+          中文
+        </button>
+      </div>
+
+      <button class="md:hidden ml-auto p-2 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800" @click="navOpen = !navOpen">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+        </svg>
+      </button>
+    </div>
+
+    <div x-show="navOpen" x-transition class="md:hidden border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 pb-4">
+      <div class="flex flex-col gap-1 pt-2">
+        <a href="/" class="px-3 py-2.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800" data-i18n="nav.browse">Browse Plants</a>
+        <a href="/calendar" class="px-3 py-2.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800" data-i18n="nav.calendar">Planting Calendar</a>
+        <a href="/yard" class="px-3 py-2.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800" data-i18n="nav.yard">Yard Ideas</a>
+        <a href="/resources" class="px-3 py-2.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800" data-i18n="nav.resources">Resources</a>
+        <button onclick="toggleTheme()" class="px-3 py-2.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 text-left" data-i18n="nav.toggle_theme">Toggle Theme</button>
+        <button onclick="I18n.toggle()" class="lang-toggle-btn mt-1 px-3 py-2.5 rounded-md text-sm border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-brand hover:text-brand transition text-left font-medium">中文</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="flex-1 {% block main_class %}max-w-screen-xl mx-auto{% endblock %} w-full px-4 sm:px-6 py-6 sm:py-8">
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="border-t border-slate-200 dark:border-slate-800 py-3 text-center text-xs text-slate-500 dark:text-slate-600">
+    <span data-i18n="footer.text">yPlanter — Seattle / PNW Garden Guide (USDA Zone 8b)</span>
+    &nbsp;&middot;&nbsp;
+    <span data-i18n="footer.copyright">&copy; 2025 yPlanter</span>
+  </footer>
+
+  <script>
+  function toggleTheme() {
+    const html = document.documentElement;
+    const isDark = html.classList.contains('dark');
+    if (isDark) {
+      html.classList.remove('dark');
+      localStorage.setItem('yplanter_theme', 'light');
+    } else {
+      html.classList.add('dark');
+      localStorage.setItem('yplanter_theme', 'dark');
+    }
+  }
+  </script>
+</body>
+</html>

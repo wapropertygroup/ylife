@@ -1,0 +1,281 @@
+{% extends "base.html" %}
+{% block title %}yPlanter — Seattle Garden Guide{% endblock %}
+
+{% block content %}
+<!-- Hero -->
+<div class="text-center mb-10 fade-up">
+  <h1 class="text-3xl sm:text-4xl font-bold mb-3">
+    <span class="grad-text" data-i18n="hero.title">Seattle Garden Guide</span> 🌱
+  </h1>
+  <p class="text-slate-600 dark:text-slate-400 max-w-2xl mx-auto" data-i18n="hero.subtitle">
+    What to plant, when to plant it, and how to grow it in the Pacific Northwest.
+    Vegetables, herbs, fruit, houseplants & yard ideas for USDA Zone 8b.
+  </p>
+</div>
+
+<!-- Search & Filter Bar -->
+<div class="mb-8 fade-up" style="animation-delay: .05s" x-data="plantSearch()">
+  <div class="flex flex-col sm:flex-row gap-3">
+    <div class="flex-1 relative">
+      <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+      </svg>
+      <input type="text"
+             x-model="query"
+             @input.debounce.300ms="search()"
+             placeholder="Search plants, vegetables, herbs..."
+             data-i18n-placeholder="search.placeholder"
+             class="w-full pl-10 pr-4 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm focus:ring-2 focus:ring-brand/40 focus:border-brand outline-none transition">
+    </div>
+    <select x-model="category" @change="search()"
+            class="px-3 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm">
+      <option value="" data-i18n="filter.all_types">All Types</option>
+      <option value="vegetable" data-i18n="filter.vegetable">Vegetables</option>
+      <option value="fruit" data-i18n="filter.fruit">Fruit</option>
+      <option value="herb" data-i18n="filter.herb">Herbs</option>
+      <option value="houseplant" data-i18n="filter.houseplant">Houseplants</option>
+    </select>
+    <select x-model="difficulty" @change="search()"
+            class="px-3 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm">
+      <option value="" data-i18n="filter.all_levels">All Levels</option>
+      <option value="easy" data-i18n="filter.easy">Easy</option>
+      <option value="moderate" data-i18n="filter.moderate">Moderate</option>
+      <option value="hard" data-i18n="filter.hard">Hard</option>
+    </select>
+  </div>
+</div>
+
+<!-- Quick Jump Tabs -->
+<div class="flex flex-wrap gap-2 mb-8 fade-up" style="animation-delay: .1s">
+  <a href="#vegetables" class="px-3 py-1.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-900/50 transition">🥬 Vegetables</a>
+  <a href="#fruit" class="px-3 py-1.5 rounded-full text-xs font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900/50 transition">🍓 Fruit</a>
+  <a href="#herbs" class="px-3 py-1.5 rounded-full text-xs font-medium bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-200 dark:hover:bg-emerald-900/50 transition">🌿 Herbs</a>
+  <a href="#houseplants" class="px-3 py-1.5 rounded-full text-xs font-medium bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-400 hover:bg-teal-200 dark:hover:bg-teal-900/50 transition">🪴 Houseplants</a>
+  <a href="#calendar-preview" class="px-3 py-1.5 rounded-full text-xs font-medium bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 hover:bg-amber-200 dark:hover:bg-amber-900/50 transition">📅 Calendar</a>
+  <a href="#yard-ideas" class="px-3 py-1.5 rounded-full text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-900/50 transition">🏡 Yard Ideas</a>
+</div>
+
+<!-- ── Vegetables ─────────────────────────────────────────────────── -->
+<section id="vegetables" class="mb-12 fade-up" style="animation-delay: .15s">
+  <h2 class="text-xl font-bold mb-4 flex items-center gap-2">
+    <span>🥬</span> <span data-i18n="section.vegetables">Vegetables & Edibles for Seattle</span>
+  </h2>
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+    {% for plant in vegetables %}
+    {% if plant.category == 'vegetable' %}
+    <a href="/plant/{{ plant.id }}" class="plant-card group block p-4 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-brand/50 dark:hover:border-brand/50 bg-white dark:bg-slate-900/50 hover:shadow-lg hover:shadow-brand/5 transition-all duration-200">
+      <div class="flex items-start gap-3">
+        <span class="text-3xl">{{ plant.emoji }}</span>
+        <div class="flex-1 min-w-0">
+          <h3 class="font-semibold text-sm group-hover:text-brand transition">{{ plant.name }}</h3>
+          <div class="flex items-center gap-2 mt-1 text-xs text-slate-500 dark:text-slate-400">
+            <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-{{ 'green' if plant.difficulty == 'easy' else ('amber' if plant.difficulty == 'moderate' else 'red') }}-100 dark:bg-{{ 'green' if plant.difficulty == 'easy' else ('amber' if plant.difficulty == 'moderate' else 'red') }}-900/30 text-{{ 'green' if plant.difficulty == 'easy' else ('amber' if plant.difficulty == 'moderate' else 'red') }}-700 dark:text-{{ 'green' if plant.difficulty == 'easy' else ('amber' if plant.difficulty == 'moderate' else 'red') }}-400">
+              {{ plant.difficulty | capitalize }}
+            </span>
+            {% if plant.frost_hardy %}<span class="text-blue-500">❄️ Frost Hardy</span>{% endif %}
+          </div>
+          <p class="mt-2 text-xs text-slate-600 dark:text-slate-400 line-clamp-2">{{ plant.pnw_notes }}</p>
+          {% if plant.harvest %}
+          <p class="mt-1 text-xs text-brand font-medium">Harvest: {{ plant.harvest }}</p>
+          {% endif %}
+        </div>
+      </div>
+    </a>
+    {% endif %}
+    {% endfor %}
+  </div>
+</section>
+
+<!-- ── Fruit ──────────────────────────────────────────────────────── -->
+<section id="fruit" class="mb-12 fade-up" style="animation-delay: .2s">
+  <h2 class="text-xl font-bold mb-4 flex items-center gap-2">
+    <span>🍓</span> <span data-i18n="section.fruit">Fruit for PNW Gardens</span>
+  </h2>
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+    {% for plant in vegetables %}
+    {% if plant.category == 'fruit' %}
+    <a href="/plant/{{ plant.id }}" class="plant-card group block p-4 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-brand/50 dark:hover:border-brand/50 bg-white dark:bg-slate-900/50 hover:shadow-lg hover:shadow-brand/5 transition-all duration-200">
+      <div class="flex items-start gap-3">
+        <span class="text-3xl">{{ plant.emoji }}</span>
+        <div class="flex-1 min-w-0">
+          <h3 class="font-semibold text-sm group-hover:text-brand transition">{{ plant.name }}</h3>
+          <div class="flex items-center gap-2 mt-1 text-xs text-slate-500 dark:text-slate-400">
+            <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">{{ plant.difficulty | capitalize }}</span>
+          </div>
+          <p class="mt-2 text-xs text-slate-600 dark:text-slate-400 line-clamp-2">{{ plant.pnw_notes }}</p>
+          <p class="mt-1 text-xs text-brand font-medium">Harvest: {{ plant.harvest }}</p>
+        </div>
+      </div>
+    </a>
+    {% endif %}
+    {% endfor %}
+  </div>
+</section>
+
+<!-- ── Herbs ──────────────────────────────────────────────────────── -->
+<section id="herbs" class="mb-12 fade-up" style="animation-delay: .25s">
+  <h2 class="text-xl font-bold mb-4 flex items-center gap-2">
+    <span>🌿</span> <span data-i18n="section.herbs">Herbs</span>
+  </h2>
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+    {% for plant in vegetables %}
+    {% if plant.category == 'herb' %}
+    <a href="/plant/{{ plant.id }}" class="plant-card group block p-4 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-brand/50 dark:hover:border-brand/50 bg-white dark:bg-slate-900/50 hover:shadow-lg hover:shadow-brand/5 transition-all duration-200">
+      <div class="flex items-start gap-3">
+        <span class="text-3xl">{{ plant.emoji }}</span>
+        <div class="flex-1 min-w-0">
+          <h3 class="font-semibold text-sm group-hover:text-brand transition">{{ plant.name }}</h3>
+          <div class="flex items-center gap-2 mt-1 text-xs text-slate-500 dark:text-slate-400">
+            <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">{{ plant.difficulty | capitalize }}</span>
+            {% if plant.frost_hardy %}<span class="text-blue-500">❄️ Perennial in PNW</span>{% endif %}
+          </div>
+          <p class="mt-2 text-xs text-slate-600 dark:text-slate-400 line-clamp-2">{{ plant.pnw_notes }}</p>
+        </div>
+      </div>
+    </a>
+    {% endif %}
+    {% endfor %}
+  </div>
+</section>
+
+<!-- ── Houseplants ────────────────────────────────────────────────── -->
+<section id="houseplants" class="mb-12 fade-up" style="animation-delay: .3s">
+  <h2 class="text-xl font-bold mb-4 flex items-center gap-2">
+    <span>🪴</span> <span data-i18n="section.houseplants">Indoor Plants for PNW Homes</span>
+  </h2>
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+    {% for plant in houseplants %}
+    <a href="/plant/{{ plant.id }}" class="plant-card group block p-4 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-brand/50 dark:hover:border-brand/50 bg-white dark:bg-slate-900/50 hover:shadow-lg hover:shadow-brand/5 transition-all duration-200">
+      <div class="flex items-start gap-3">
+        <span class="text-3xl">{{ plant.emoji }}</span>
+        <div class="flex-1 min-w-0">
+          <h3 class="font-semibold text-sm group-hover:text-brand transition">{{ plant.name }}</h3>
+          <div class="flex items-center gap-2 mt-1 text-xs text-slate-500 dark:text-slate-400">
+            <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-{{ 'green' if plant.difficulty == 'easy' else ('amber' if plant.difficulty == 'moderate' else 'red') }}-100 dark:bg-{{ 'green' if plant.difficulty == 'easy' else ('amber' if plant.difficulty == 'moderate' else 'red') }}-900/30 text-{{ 'green' if plant.difficulty == 'easy' else ('amber' if plant.difficulty == 'moderate' else 'red') }}-700 dark:text-{{ 'green' if plant.difficulty == 'easy' else ('amber' if plant.difficulty == 'moderate' else 'red') }}-400">
+              {{ plant.difficulty | capitalize }}
+            </span>
+            {% if not plant.toxic_pets %}<span class="text-green-500">🐾 Pet Safe</span>{% endif %}
+          </div>
+          <p class="mt-2 text-xs text-slate-600 dark:text-slate-400 line-clamp-2">{{ plant.pnw_notes }}</p>
+        </div>
+      </div>
+    </a>
+    {% endfor %}
+  </div>
+</section>
+
+<!-- ── Planting Calendar Preview ──────────────────────────────────── -->
+<section id="calendar-preview" class="mb-12 fade-up" style="animation-delay: .35s">
+  <div class="flex items-center justify-between mb-4">
+    <h2 class="text-xl font-bold flex items-center gap-2">
+      <span>📅</span> <span data-i18n="section.calendar">Seattle Planting Calendar</span>
+    </h2>
+    <a href="/calendar" class="text-sm text-brand hover:underline" data-i18n="section.view_all">View full calendar →</a>
+  </div>
+
+  <!-- Show current month + next 2 -->
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+    {% set ns = namespace(shown=0) %}
+    {% for month in calendar %}
+    {% if ns.shown < 3 %}
+    <div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50">
+      <h3 class="font-semibold text-sm mb-3 flex items-center gap-2">
+        <span>{{ month.emoji }}</span> {{ month.month }}
+      </h3>
+      <ul class="space-y-1.5">
+        {% for task in month.tasks[:4] %}
+        <li class="text-xs text-slate-600 dark:text-slate-400 flex items-start gap-2">
+          <span class="text-brand mt-0.5">•</span>
+          <span>{{ task }}</span>
+        </li>
+        {% endfor %}
+        {% if month.tasks | length > 4 %}
+        <li class="text-xs text-slate-500">+ {{ month.tasks | length - 4 }} more...</li>
+        {% endif %}
+      </ul>
+    </div>
+    {% set ns.shown = ns.shown + 1 %}
+    {% endif %}
+    {% endfor %}
+  </div>
+</section>
+
+<!-- ── Yard Ideas Preview ────────────────────────────────────────── -->
+<section id="yard-ideas" class="mb-12 fade-up" style="animation-delay: .4s">
+  <div class="flex items-center justify-between mb-4">
+    <h2 class="text-xl font-bold flex items-center gap-2">
+      <span>🏡</span> <span data-i18n="section.yard">Yard Ideas for Seattle</span>
+    </h2>
+    <a href="/yard" class="text-sm text-brand hover:underline" data-i18n="section.view_all">View all ideas →</a>
+  </div>
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+    {% for suggestion in yard_suggestions[:3] %}
+    <a href="/yard#{{ suggestion.id }}" class="group block p-5 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-brand/50 dark:hover:border-brand/50 bg-white dark:bg-slate-900/50 hover:shadow-lg hover:shadow-brand/5 transition-all duration-200">
+      <span class="text-2xl">{{ suggestion.emoji }}</span>
+      <h3 class="font-semibold text-sm mt-2 group-hover:text-brand transition">{{ suggestion.title }}</h3>
+      <p class="mt-1 text-xs text-slate-600 dark:text-slate-400 line-clamp-2">{{ suggestion.description }}</p>
+      <div class="flex flex-wrap gap-1 mt-3">
+        {% for benefit in suggestion.benefits[:2] %}
+        <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-brand/10 text-brand">{{ benefit }}</span>
+        {% endfor %}
+      </div>
+    </a>
+    {% endfor %}
+  </div>
+</section>
+
+<!-- My Collection (localStorage-based) -->
+<section id="collection" class="mb-12 fade-up" style="animation-delay: .45s" x-data="myCollection()">
+  <h2 class="text-xl font-bold mb-4 flex items-center gap-2">
+    <span>📋</span> <span data-i18n="section.collection">My Collection</span>
+    <span class="text-xs font-normal text-slate-500 dark:text-slate-400" data-i18n="section.collection_note">(saved locally in your browser)</span>
+  </h2>
+  <div x-show="items.length === 0" class="text-center py-8 text-sm text-slate-500 dark:text-slate-400">
+    <p data-i18n="collection.empty">Browse plants above and click "Add to Collection" on any plant detail page to track your garden.</p>
+  </div>
+  <div x-show="items.length > 0" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+    <template x-for="item in items" :key="item.id">
+      <div class="flex items-center gap-3 p-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50">
+        <span class="text-2xl" x-text="item.emoji"></span>
+        <div class="flex-1 min-w-0">
+          <a :href="'/plant/' + item.id" class="font-medium text-sm hover:text-brand transition" x-text="item.name"></a>
+          <p class="text-xs text-slate-500" x-text="item.category"></p>
+        </div>
+        <button @click="remove(item.id)" class="p-1 rounded text-slate-400 hover:text-red-500 transition" title="Remove">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+    </template>
+  </div>
+</section>
+
+<script>
+function plantSearch() {
+  return {
+    query: '{{ query }}',
+    category: '{{ selected_category }}',
+    difficulty: '{{ selected_difficulty }}',
+    search() {
+      const params = new URLSearchParams();
+      if (this.query) params.set('q', this.query);
+      if (this.category) params.set('category', this.category);
+      if (this.difficulty) params.set('difficulty', this.difficulty);
+      const qs = params.toString();
+      window.location.href = '/' + (qs ? '?' + qs : '');
+    }
+  }
+}
+
+function myCollection() {
+  return {
+    items: JSON.parse(localStorage.getItem('yplanter_collection') || '[]'),
+    remove(id) {
+      this.items = this.items.filter(i => i.id !== id);
+      localStorage.setItem('yplanter_collection', JSON.stringify(this.items));
+    }
+  }
+}
+</script>
+{% endblock %}

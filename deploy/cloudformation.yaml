@@ -35,6 +35,11 @@ Parameters:
     Default: "planner.li-family.us"
     Description: Domain for yPlanner
 
+  DomainYPlanter:
+    Type: String
+    Default: "plant.li-family.us"
+    Description: Domain for yPlanter
+
   CertEmail:
     Type: String
     Default: "admin@li-family.us"
@@ -195,11 +200,12 @@ Resources:
             # ── Configuration ────────────────────────────────────────────
             # Add new apps here: NAME|PORT|DOMAIN|STATIC_DIR
             APPS="ystocker|8000|${DomainYStocker}|ystocker/static
-            yplanner|8001|${DomainYPlanner}|yplanner/static"
+            yplanner|8001|${DomainYPlanner}|yplanner/static
+            yplanter|8002|${DomainYPlanter}|yplanter/static"
 
             APP_DIR=/opt/ystocker
             APP_USER=ystocker
-            REQ_FILES="requirements.txt requirements_planner.txt"
+            REQ_FILES="requirements.txt requirements_planner.txt requirements_planter.txt"
 
             # ── System packages ──────────────────────────────────────────
             dnf update -y
@@ -242,7 +248,7 @@ Resources:
             ExecStart=/bin/bash -c '\
               git config --global --add safe.directory /opt/ystocker; \
               git -C /opt/ystocker fetch origin && git -C /opt/ystocker reset --hard origin/main; \
-              for r in requirements.txt requirements_planner.txt; do \
+              for r in requirements.txt requirements_planner.txt requirements_planter.txt; do \
                 [ -f /opt/ystocker/$r ] && /opt/ystocker/venv/bin/pip install -q -r /opt/ystocker/$r; \
               done; \
               chown -R ystocker:ystocker /opt/ystocker'
@@ -383,6 +389,9 @@ Outputs:
   YPlannerURL:
     Value: !Sub "https://${DomainYPlanner}/"
 
+  YPlanterURL:
+    Value: !Sub "https://${DomainYPlanter}/"
+
   DirectIPURL:
     Description: Direct IP URL (before DNS)
     Value: !Sub "http://${ElasticIP}/"
@@ -391,4 +400,4 @@ Outputs:
     Value: !Sub "ssh -i ~/.ssh/${KeyName}.pem ec2-user@${ElasticIP}"
 
   LogsCommand:
-    Value: !Sub "ssh ec2-user@${ElasticIP} 'sudo journalctl -u ystocker -u yplanner -f'"
+    Value: !Sub "ssh ec2-user@${ElasticIP} 'sudo journalctl -u ystocker -u yplanner -u yplanter -f'"

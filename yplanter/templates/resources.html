@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}Resources — yPlanter{% endblock %}
+
+{% block content %}
+<div class="fade-up max-w-3xl mx-auto">
+  <h1 class="text-2xl font-bold mb-2 flex items-center gap-2">
+    <span>🔗</span> <span data-i18n="resources.title">PNW Gardening Resources</span>
+  </h1>
+  <p class="text-sm text-slate-500 dark:text-slate-400 mb-8" data-i18n="resources.subtitle">
+    Useful websites, tools, and local organizations for Seattle gardeners.
+  </p>
+
+  <!-- Seed & Plant Sources -->
+  <h2 class="text-lg font-semibold mb-3 mt-6">🌱 Seeds & Plants</h2>
+  <div class="space-y-3 mb-8">
+    {% for r in resources[:4] %}
+    <a href="{{ r.url }}" target="_blank" rel="noopener"
+       class="group flex items-start gap-3 p-4 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-brand/50 dark:hover:border-brand/50 bg-white dark:bg-slate-900/50 hover:shadow-md transition-all">
+      <div class="w-8 h-8 rounded-lg bg-brand/10 flex items-center justify-center shrink-0 group-hover:bg-brand/20 transition">
+        <svg class="w-4 h-4 text-brand" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
+        </svg>
+      </div>
+      <div>
+        <p class="font-medium text-sm group-hover:text-brand transition">{{ r.name }}</p>
+        <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{{ r.desc }}</p>
+      </div>
+    </a>
+    {% endfor %}
+  </div>
+
+  <!-- Community & Education -->
+  <h2 class="text-lg font-semibold mb-3">🏫 Community & Education</h2>
+  <div class="space-y-3 mb-8">
+    {% for r in resources[4:8] %}
+    <a href="{{ r.url }}" target="_blank" rel="noopener"
+       class="group flex items-start gap-3 p-4 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-brand/50 dark:hover:border-brand/50 bg-white dark:bg-slate-900/50 hover:shadow-md transition-all">
+      <div class="w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center shrink-0 group-hover:bg-blue-200 dark:group-hover:bg-blue-900/50 transition">
+        <svg class="w-4 h-4 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
+        </svg>
+      </div>
+      <div>
+        <p class="font-medium text-sm group-hover:text-blue-600 dark:group-hover:text-blue-400 transition">{{ r.name }}</p>
+        <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{{ r.desc }}</p>
+      </div>
+    </a>
+    {% endfor %}
+  </div>
+
+  <!-- Digital Tools -->
+  <h2 class="text-lg font-semibold mb-3">🛠️ Digital Tools</h2>
+  <div class="space-y-3 mb-8">
+    {% for r in resources[8:] %}
+    <a href="{{ r.url }}" target="_blank" rel="noopener"
+       class="group flex items-start gap-3 p-4 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-brand/50 dark:hover:border-brand/50 bg-white dark:bg-slate-900/50 hover:shadow-md transition-all">
+      <div class="w-8 h-8 rounded-lg bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center shrink-0 group-hover:bg-purple-200 dark:group-hover:bg-purple-900/50 transition">
+        <svg class="w-4 h-4 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
+        </svg>
+      </div>
+      <div>
+        <p class="font-medium text-sm group-hover:text-purple-600 dark:group-hover:text-purple-400 transition">{{ r.name }}</p>
+        <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{{ r.desc }}</p>
+      </div>
+    </a>
+    {% endfor %}
+  </div>
+
+  <!-- Chinese Resources Section -->
+  <h2 class="text-lg font-semibold mb-3">🇨🇳 中文园艺资源</h2>
+  <div class="space-y-3 mb-8">
+    <div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50">
+      <p class="font-medium text-sm">踏花帮 / 藏花阁</p>
+      <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">国内老牌园艺论坛，寻找本地种植经验、求种或参与品种团购</p>
+    </div>
+    <div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50">
+      <p class="font-medium text-sm">小红书 "我在阳台种菜"</p>
+      <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">实时性强，图片直观，获取阳台美化灵感和避坑指南</p>
+    </div>
+    <div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50">
+      <p class="font-medium text-sm">iNaturalist</p>
+      <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">加州科学院和国家地理学会联合支持的公民科学平台，用于户外植物识别</p>
+    </div>
+  </div>
+
+  <div class="mt-6 text-center">
+    <a href="/" class="text-sm text-brand hover:underline">← Back to all plants</a>
+  </div>
+</div>
+{% endblock %}

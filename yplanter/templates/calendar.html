@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Planting Calendar — yPlanter{% endblock %}
+
+{% block content %}
+<div class="fade-up">
+  <h1 class="text-2xl font-bold mb-2 flex items-center gap-2">
+    <span>📅</span> <span data-i18n="calendar.title">Seattle Planting Calendar</span>
+  </h1>
+  <p class="text-sm text-slate-500 dark:text-slate-400 mb-8" data-i18n="calendar.subtitle">
+    Month-by-month guide for USDA Zone 8b (Seattle / Puget Sound region).
+    Last frost: ~April 15 · First frost: ~November 15
+  </p>
+
+  <div class="space-y-6">
+    {% for month in calendar %}
+    <div class="p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 fade-up" style="animation-delay: {{ loop.index * 0.03 }}s">
+      <h2 class="text-lg font-semibold mb-3 flex items-center gap-2">
+        <span class="text-xl">{{ month.emoji }}</span>
+        {{ month.month }}
+      </h2>
+      <ul class="space-y-2">
+        {% for task in month.tasks %}
+        <li class="flex items-start gap-2.5 text-sm text-slate-700 dark:text-slate-300">
+          <span class="text-brand mt-0.5 shrink-0">•</span>
+          <span>{{ task }}</span>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="mt-8 p-5 rounded-xl bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800/30">
+    <h3 class="text-sm font-semibold text-blue-800 dark:text-blue-400 mb-2">💡 PNW Gardening Tips</h3>
+    <ul class="space-y-1 text-sm text-blue-700 dark:text-blue-300">
+      <li>• <strong>Seattle's dry summers</strong> surprise newcomers — water consistently Jul–Sep</li>
+      <li>• <strong>Slugs are a fact of life</strong> — organic slug bait (iron phosphate) is safe for pets</li>
+      <li>• <strong>Fall is planting season</strong> for trees, shrubs, and perennials — roots establish over winter</li>
+      <li>• <strong>Cover crops</strong> in empty beds prevent erosion during rainy winters</li>
+      <li>• <strong>Buy local seeds</strong> from Territorial Seed, Uprising Seeds, or Adaptive Seeds for PNW-adapted varieties</li>
+    </ul>
+  </div>
+
+  <div class="mt-6 text-center">
+    <a href="/" class="text-sm text-brand hover:underline">← Back to all plants</a>
+  </div>
+</div>
+{% endblock %}
