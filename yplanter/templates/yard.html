@@ -25,14 +25,14 @@
 
       <!-- Plants list -->
       <div class="mb-4">
-        <h3 class="text-sm font-semibold mb-2 text-slate-700 dark:text-slate-300">Suggested Plants</h3>
+        <h3 class="text-sm font-semibold mb-2 text-slate-700 dark:text-slate-300" data-t="lbl_plants_{{ s.id }}">Suggested Plants</h3>
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
           {% for p in s.plants %}
           <div class="flex items-start gap-2 p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/50">
             <span class="text-brand mt-0.5 shrink-0">🌱</span>
             <div>
-              <p class="text-sm font-medium">{{ p.name }}</p>
-              <p class="text-xs text-slate-500 dark:text-slate-400">{{ p.notes }}</p>
+              <p class="text-sm font-medium" data-t="plant_{{ s.id }}_{{ loop.index }}_name">{{ p.name }}</p>
+              <p class="text-xs text-slate-500 dark:text-slate-400" data-t="plant_{{ s.id }}_{{ loop.index }}_notes">{{ p.notes }}</p>
             </div>
           </div>
           {% endfor %}
@@ -42,22 +42,69 @@
       <!-- Benefits -->
       <div class="flex flex-wrap gap-2 mb-3">
         {% for benefit in s.benefits %}
-        <span class="text-xs px-2 py-1 rounded-full bg-brand/10 text-brand font-medium">✓ {{ benefit }}</span>
+        <span class="text-xs px-2 py-1 rounded-full bg-brand/10 text-brand font-medium" data-t="ben_{{ s.id }}_{{ loop.index }}">✓ {{ benefit }}</span>
         {% endfor %}
       </div>
 
       <!-- Tip -->
       {% if s.tip %}
-      <div class="p-3 rounded-lg bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800/30">
+      <div class="p-3 rounded-lg bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800/30 mb-4">
         <p class="text-xs text-amber-700 dark:text-amber-300" data-t="tip_{{ s.id }}"><strong>💡 Tip:</strong> {{ s.tip }}</p>
       </div>
       {% endif %}
+
+      <!-- YouTube Videos -->
+      <div x-data="yardVideos('{{ s.id }}')" x-init="load()">
+        <div x-show="videos.length > 0" class="mt-4">
+          <h3 class="text-sm font-semibold mb-2 text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+            <svg class="w-4 h-4 text-red-500" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+            Video Guides
+          </h3>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <template x-for="v in videos" :key="v.id">
+              <div class="rounded-lg overflow-hidden border border-slate-200 dark:border-slate-800">
+                <div class="aspect-video">
+                  <iframe :src="'https://www.youtube.com/embed/' + v.id" class="w-full h-full" frameborder="0"
+                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                          allowfullscreen loading="lazy"></iframe>
+                </div>
+                <p class="p-2 text-xs font-medium line-clamp-2" x-text="v.title"></p>
+              </div>
+            </template>
+          </div>
+        </div>
+      </div>
     </div>
     {% endfor %}
   </div>
 
   <div class="mt-8 text-center">
-    <a href="/" class="text-sm text-brand hover:underline">← Back to all plants</a>
+    <a href="/" class="text-sm text-brand hover:underline" data-i18n="nav.back">← Back to all plants</a>
   </div>
 </div>
+
+<script>
+const YARD_QUERIES = {
+  'native-garden':     'pacific northwest native plant garden design seattle',
+  'rain-garden':       'rain garden seattle pacific northwest how to build',
+  'edible-landscape':  'edible landscaping seattle front yard food garden',
+  'pollinator-garden': 'pollinator garden pacific northwest bees butterflies',
+  'raised-beds':       'raised bed vegetable garden seattle pacific northwest',
+  'japanese-garden':   'japanese garden design pacific northwest seattle',
+};
+
+function yardVideos(id) {
+  return {
+    videos: [],
+    load() {
+      const q = YARD_QUERIES[id];
+      if (!q) return;
+      fetch(`/api/youtube?q=${encodeURIComponent(q)}&max=2`)
+        .then(r => r.json())
+        .then(d => { this.videos = d.videos || []; })
+        .catch(() => {});
+    }
+  }
+}
+</script>
 {% endblock %}
