@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Planting Calendar — yPlanter{% endblock %}
+{% block page_key %}calendar{% endblock %}
 
 {% block content %}
 <div class="fade-up">
@@ -22,7 +23,7 @@
         {% for task in month.tasks %}
         <li class="flex items-start gap-2.5 text-sm text-slate-700 dark:text-slate-300">
           <span class="text-brand mt-0.5 shrink-0">•</span>
-          <span>{{ task }}</span>
+          <span data-t="{{ month.month }}_{{ loop.index }}">{{ task }}</span>
         </li>
         {% endfor %}
       </ul>

@@ -28,7 +28,9 @@ log = logging.getLogger(__name__)
 # DynamoDB helpers (lazy init with backoff, same pattern as yPlanner)
 # ---------------------------------------------------------------------------
 _HISTORY_TABLE_NAME = "yplanter-history"
+_TRANSLATIONS_TABLE_NAME = "yplanter-translations"
 _history_table = None
+_translations_table = None
 _dynamo_unavail_until = 0.0
 _DYNAMO_BACKOFF = 300
 
@@ -65,6 +67,23 @@ def _get_history_table():
         return _history_table
     except Exception as exc:
         log.warning("Cannot load table %s: %s", _HISTORY_TABLE_NAME, exc)
+        return None
+
+
+def _get_translations_table():
+    global _translations_table
+    if _translations_table is not None:
+        return _translations_table
+    ddb = _get_dynamodb()
+    if not ddb:
+        return None
+    try:
+        table = ddb.Table(_TRANSLATIONS_TABLE_NAME)
+        table.load()
+        _translations_table = table
+        return _translations_table
+    except Exception as exc:
+        log.warning("Cannot load table %s: %s", _TRANSLATIONS_TABLE_NAME, exc)
         return None
 
 
@@ -344,6 +363,91 @@ def api_delete_history(timestamp: int):
         return jsonify({"ok": True})
     except Exception as exc:
         log.exception("Failed to delete history")
+        return jsonify({"error": str(exc)}), 500
+
+
+# ---------------------------------------------------------------------------
+# API: Gemini-powered content translation (cached in DynamoDB)
+# ---------------------------------------------------------------------------
+
+@bp.route("/api/translate", methods=["POST"])
+def api_translate():
+    """Translate a batch of content strings to Chinese via Gemini.
+
+    Request:  { "page_key": "plant:tomato", "texts": {"field1": "English text", ...} }
+    Response: { "translations": {"field1": "中文翻译", ...} }
+
+    Results cached in DynamoDB so each page_key only translates once.
+    """
+    from google import genai
+
+    body = request.get_json(force=True, silent=True) or {}
+    page_key = body.get("page_key", "").strip()
+    texts = body.get("texts", {})
+    if not page_key or not texts:
+        return jsonify({"error": "page_key and texts required"}), 400
+
+    # Check DynamoDB cache first
+    table = _get_translations_table()
+    if table:
+        try:
+            resp = table.get_item(Key={"page_key": page_key})
+            item = resp.get("Item")
+            if item and item.get("translations"):
+                cached = json.loads(item["translations"])
+                if set(texts.keys()).issubset(set(cached.keys())):
+                    return jsonify({"translations": cached})
+        except Exception as exc:
+            log.warning("Translation cache read failed: %s", exc)
+
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        return jsonify({"error": "GEMINI_API_KEY not configured"}), 503
+
+    numbered = {i: (k, v) for i, (k, v) in enumerate(texts.items())}
+    lines = "\n".join(f"[{i}] {v}" for i, (_, v) in numbered.items())
+
+    prompt = f"""Translate the following English gardening/plant content to Chinese (简体中文).
+Keep plant variety names, brand names, and scientific names in English.
+Keep numbers, dates, and units as-is.
+Return ONLY a JSON object mapping the same numbered keys to Chinese translations.
+Do not add any explanation.
+
+{lines}
+
+Return format: {{"0": "中文翻译", "1": "中文翻译", ...}}"""
+
+    try:
+        client = genai.Client(api_key=api_key)
+        resp = client.models.generate_content(
+            model="gemini-2.5-flash", contents=prompt
+        )
+        raw = resp.text.strip()
+        if raw.startswith("```"):
+            raw = raw.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+        result_map = json.loads(raw)
+
+        translations = {}
+        for i_str, zh_text in result_map.items():
+            idx = int(i_str)
+            if idx in numbered:
+                field_key = numbered[idx][0]
+                translations[field_key] = zh_text
+
+        # Cache in DynamoDB
+        if table and translations:
+            try:
+                table.put_item(Item={
+                    "page_key": page_key,
+                    "translations": json.dumps(translations, ensure_ascii=False),
+                    "updated_at": int(time.time()),
+                })
+            except Exception as exc:
+                log.warning("Translation cache write failed: %s", exc)
+
+        return jsonify({"translations": translations})
+    except Exception as exc:
+        log.exception("Translation failed")
         return jsonify({"error": str(exc)}), 500
 
 

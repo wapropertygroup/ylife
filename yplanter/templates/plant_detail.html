@@ -1,16 +1,16 @@
 {% extends "base.html" %}
 {% block title %}{{ plant.name }} — yPlanter{% endblock %}
+{% block page_key %}plant:{{ plant.id }}{% endblock %}
 
 {% block content %}
 <div class="max-w-3xl mx-auto fade-up">
   <nav class="text-xs text-slate-500 dark:text-slate-400 mb-6">
-    <a href="/" class="hover:text-brand transition">Home</a> /
-    <span>{{ plant.name }}</span>
+    <a href="/" class="hover:text-brand transition" data-i18n="nav.home_link">Home</a> /
+    <span data-t="name">{{ plant.name }}</span>
   </nav>
 
   <!-- Header with image -->
   <div class="flex flex-col sm:flex-row gap-5 mb-6">
-    <!-- Plant image (loaded from Wikipedia) -->
     <div class="w-full sm:w-48 h-48 rounded-xl bg-slate-100 dark:bg-slate-800 overflow-hidden shrink-0 flex items-center justify-center"
          x-data="wikiImage('{{ plant.wiki }}')" >
       <img x-show="src" :src="src" :alt="'{{ plant.name }}'"
@@ -19,28 +19,25 @@
     </div>
 
     <div class="flex-1">
-      <h1 class="text-2xl font-bold">{{ plant.name }}</h1>
+      <h1 class="text-2xl font-bold" data-t="name">{{ plant.name }}</h1>
       {% if plant.get('varieties') %}
       <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">
-        <span class="font-medium">Best varieties:</span> {{ plant.varieties | join(', ') }}
+        <span class="font-medium" data-t="lbl_varieties">Best varieties:</span> {{ plant.varieties | join(', ') }}
       </p>
       {% endif %}
       <div class="flex flex-wrap gap-2 mt-2">
-        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-{{ 'green' if plant.difficulty == 'easy' else ('amber' if plant.difficulty == 'moderate' else 'red') }}-100 dark:bg-{{ 'green' if plant.difficulty == 'easy' else ('amber' if plant.difficulty == 'moderate' else 'red') }}-900/30 text-{{ 'green' if plant.difficulty == 'easy' else ('amber' if plant.difficulty == 'moderate' else 'red') }}-700 dark:text-{{ 'green' if plant.difficulty == 'easy' else ('amber' if plant.difficulty == 'moderate' else 'red') }}-400">
-          {{ plant.difficulty | capitalize }}
-        </span>
-        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-          {{ plant.category | capitalize }}
-        </span>
+        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-{{ 'green' if plant.difficulty == 'easy' else ('amber' if plant.difficulty == 'moderate' else 'red') }}-100 dark:bg-{{ 'green' if plant.difficulty == 'easy' else ('amber' if plant.difficulty == 'moderate' else 'red') }}-900/30 text-{{ 'green' if plant.difficulty == 'easy' else ('amber' if plant.difficulty == 'moderate' else 'red') }}-700 dark:text-{{ 'green' if plant.difficulty == 'easy' else ('amber' if plant.difficulty == 'moderate' else 'red') }}-400"
+              data-t="difficulty">{{ plant.difficulty | capitalize }}</span>
+        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300"
+              data-t="category">{{ plant.category | capitalize }}</span>
         {% if plant.get('frost_hardy') %}
-        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400">❄️ Frost Hardy</span>
+        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400" data-t="frost_hardy">❄️ Frost Hardy</span>
         {% endif %}
         {% if plant.get('toxic_pets') is defined and not plant.toxic_pets %}
-        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">🐾 Pet Safe</span>
+        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400" data-t="pet_safe">🐾 Pet Safe</span>
         {% endif %}
       </div>
 
-      <!-- Action buttons -->
       <div class="flex flex-wrap gap-2 mt-4">
         <div x-data="collectionButton('{{ plant.id }}', '{{ plant.name }}', '{{ plant.emoji }}', '{{ plant.category }}')">
           <button @click="toggle()"
@@ -53,7 +50,7 @@
            target="_blank" rel="noopener"
            class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition">
           <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
-          YouTube Guides
+          YouTube
         </a>
         <a href="https://en.wikipedia.org/wiki/{{ plant.wiki }}"
            target="_blank" rel="noopener"
@@ -67,8 +64,8 @@
   <!-- PNW Notes -->
   {% if plant.get('pnw_notes') %}
   <div class="mb-6 p-4 rounded-xl bg-green-50 dark:bg-green-900/10 border border-green-200 dark:border-green-800/30">
-    <h2 class="text-sm font-semibold text-green-800 dark:text-green-400 mb-1">🌲 PNW Growing Notes</h2>
-    <p class="text-sm text-green-700 dark:text-green-300">{{ plant.pnw_notes }}</p>
+    <h2 class="text-sm font-semibold text-green-800 dark:text-green-400 mb-1" data-t="lbl_pnw">🌲 PNW Growing Notes</h2>
+    <p class="text-sm text-green-700 dark:text-green-300" data-t="pnw_notes">{{ plant.pnw_notes }}</p>
   </div>
   {% endif %}
 
@@ -76,38 +73,38 @@
   <div class="grid grid-cols-2 md:grid-cols-3 gap-3 mb-8">
     {% if plant.get('sun') or plant.get('light') %}
     <div class="p-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50">
-      <p class="text-xs text-slate-500 dark:text-slate-400 mb-1">☀️ Light</p>
-      <p class="text-sm font-medium">{{ plant.get('sun') or plant.get('light') }}</p>
+      <p class="text-xs text-slate-500 dark:text-slate-400 mb-1" data-t="lbl_light">☀️ Light</p>
+      <p class="text-sm font-medium" data-t="light">{{ plant.get('sun') or plant.get('light') }}</p>
     </div>
     {% endif %}
     {% if plant.get('water') %}
     <div class="p-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50">
-      <p class="text-xs text-slate-500 dark:text-slate-400 mb-1">💧 Water</p>
-      <p class="text-sm font-medium">{{ plant.water }}</p>
+      <p class="text-xs text-slate-500 dark:text-slate-400 mb-1" data-t="lbl_water">💧 Water</p>
+      <p class="text-sm font-medium" data-t="water">{{ plant.water }}</p>
     </div>
     {% endif %}
     {% if plant.get('soil') %}
     <div class="p-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50">
-      <p class="text-xs text-slate-500 dark:text-slate-400 mb-1">🪨 Soil</p>
-      <p class="text-sm font-medium">{{ plant.soil }}</p>
+      <p class="text-xs text-slate-500 dark:text-slate-400 mb-1" data-t="lbl_soil">🪨 Soil</p>
+      <p class="text-sm font-medium" data-t="soil">{{ plant.soil }}</p>
     </div>
     {% endif %}
     {% if plant.get('humidity') %}
     <div class="p-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50">
-      <p class="text-xs text-slate-500 dark:text-slate-400 mb-1">💨 Humidity</p>
-      <p class="text-sm font-medium">{{ plant.humidity }}</p>
+      <p class="text-xs text-slate-500 dark:text-slate-400 mb-1" data-t="lbl_humidity">💨 Humidity</p>
+      <p class="text-sm font-medium" data-t="humidity">{{ plant.humidity }}</p>
     </div>
     {% endif %}
     {% if plant.get('temp') %}
     <div class="p-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50">
-      <p class="text-xs text-slate-500 dark:text-slate-400 mb-1">🌡️ Temperature</p>
-      <p class="text-sm font-medium">{{ plant.temp }}</p>
+      <p class="text-xs text-slate-500 dark:text-slate-400 mb-1" data-t="lbl_temp">🌡️ Temperature</p>
+      <p class="text-sm font-medium" data-t="temp">{{ plant.temp }}</p>
     </div>
     {% endif %}
     {% if plant.get('spacing_in') %}
     <div class="p-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50">
-      <p class="text-xs text-slate-500 dark:text-slate-400 mb-1">📏 Spacing</p>
-      <p class="text-sm font-medium">{{ plant.spacing_in }}" apart</p>
+      <p class="text-xs text-slate-500 dark:text-slate-400 mb-1" data-t="lbl_spacing">📏 Spacing</p>
+      <p class="text-sm font-medium" data-t="spacing">{{ plant.spacing_in }}" apart</p>
     </div>
     {% endif %}
   </div>
@@ -115,62 +112,60 @@
   <!-- Planting Timeline -->
   {% if plant.get('start_indoors') or plant.get('direct_sow') or plant.get('transplant') or plant.get('harvest') %}
   <div class="mb-8">
-    <h2 class="text-lg font-semibold mb-3">📅 Planting Timeline (Seattle)</h2>
+    <h2 class="text-lg font-semibold mb-3" data-t="lbl_timeline">📅 Planting Timeline (Seattle)</h2>
     <div class="space-y-2">
       {% if plant.get('start_indoors') %}
       <div class="flex items-center gap-3 p-3 rounded-lg bg-purple-50 dark:bg-purple-900/10 border border-purple-200 dark:border-purple-800/30">
         <span class="text-xl">🏠</span>
-        <div><p class="text-xs text-purple-600 dark:text-purple-400 font-medium">Start Indoors</p><p class="text-sm">{{ plant.start_indoors }}</p></div>
+        <div><p class="text-xs text-purple-600 dark:text-purple-400 font-medium" data-t="lbl_indoors">Start Indoors</p><p class="text-sm">{{ plant.start_indoors }}</p></div>
       </div>
       {% endif %}
       {% if plant.get('direct_sow') %}
       <div class="flex items-center gap-3 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800/30">
         <span class="text-xl">🌱</span>
-        <div><p class="text-xs text-amber-600 dark:text-amber-400 font-medium">Direct Sow</p><p class="text-sm">{{ plant.direct_sow }}</p></div>
+        <div><p class="text-xs text-amber-600 dark:text-amber-400 font-medium" data-t="lbl_sow">Direct Sow</p><p class="text-sm">{{ plant.direct_sow }}</p></div>
       </div>
       {% endif %}
       {% if plant.get('transplant') %}
       <div class="flex items-center gap-3 p-3 rounded-lg bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800/30">
         <span class="text-xl">🪴</span>
-        <div><p class="text-xs text-blue-600 dark:text-blue-400 font-medium">Transplant Outdoors</p><p class="text-sm">{{ plant.transplant }}</p></div>
+        <div><p class="text-xs text-blue-600 dark:text-blue-400 font-medium" data-t="lbl_transplant">Transplant Outdoors</p><p class="text-sm">{{ plant.transplant }}</p></div>
       </div>
       {% endif %}
       {% if plant.get('harvest') %}
       <div class="flex items-center gap-3 p-3 rounded-lg bg-green-50 dark:bg-green-900/10 border border-green-200 dark:border-green-800/30">
         <span class="text-xl">🧺</span>
-        <div><p class="text-xs text-green-600 dark:text-green-400 font-medium">Harvest</p><p class="text-sm">{{ plant.harvest }}</p></div>
+        <div><p class="text-xs text-green-600 dark:text-green-400 font-medium" data-t="lbl_harvest">Harvest</p><p class="text-sm">{{ plant.harvest }}</p></div>
       </div>
       {% endif %}
     </div>
   </div>
   {% endif %}
 
-  <!-- Fertilizer & Tip -->
   {% if plant.get('fertilizer') %}
   <div class="mb-6 p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50">
-    <h2 class="text-sm font-semibold mb-1">🧪 Fertilizer</h2>
-    <p class="text-sm text-slate-600 dark:text-slate-400">{{ plant.fertilizer }}</p>
+    <h2 class="text-sm font-semibold mb-1" data-t="lbl_fertilizer">🧪 Fertilizer</h2>
+    <p class="text-sm text-slate-600 dark:text-slate-400" data-t="fertilizer">{{ plant.fertilizer }}</p>
   </div>
   {% endif %}
   {% if plant.get('tip') %}
   <div class="mb-6 p-4 rounded-xl bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800/30">
-    <h2 class="text-sm font-semibold text-amber-800 dark:text-amber-400 mb-1">💡 Pro Tip</h2>
-    <p class="text-sm text-amber-700 dark:text-amber-300">{{ plant.tip }}</p>
+    <h2 class="text-sm font-semibold text-amber-800 dark:text-amber-400 mb-1" data-t="lbl_tip">💡 Pro Tip</h2>
+    <p class="text-sm text-amber-700 dark:text-amber-300" data-t="tip">{{ plant.tip }}</p>
   </div>
   {% endif %}
 
-  <!-- Companion Planting -->
   {% if plant.get('companions') %}
   <div class="mb-8">
-    <h2 class="text-lg font-semibold mb-3">🤝 Companion Planting</h2>
+    <h2 class="text-lg font-semibold mb-3" data-t="lbl_companion">🤝 Companion Planting</h2>
     <div class="grid grid-cols-2 gap-3">
       <div class="p-3 rounded-lg border border-green-200 dark:border-green-800/30 bg-green-50 dark:bg-green-900/10">
-        <p class="text-xs font-medium text-green-700 dark:text-green-400 mb-1">✅ Good Companions</p>
+        <p class="text-xs font-medium text-green-700 dark:text-green-400 mb-1" data-t="lbl_good">✅ Good Companions</p>
         <p class="text-sm">{{ plant.companions | join(', ') }}</p>
       </div>
       {% if plant.get('avoid_near') and plant.avoid_near %}
       <div class="p-3 rounded-lg border border-red-200 dark:border-red-800/30 bg-red-50 dark:bg-red-900/10">
-        <p class="text-xs font-medium text-red-700 dark:text-red-400 mb-1">❌ Keep Away From</p>
+        <p class="text-xs font-medium text-red-700 dark:text-red-400 mb-1" data-t="lbl_avoid">❌ Keep Away From</p>
         <p class="text-sm">{{ plant.avoid_near | join(', ') }}</p>
       </div>
       {% endif %}
@@ -178,13 +173,12 @@
   </div>
   {% endif %}
 
-  <!-- AI Chat: Ask about this plant -->
+  <!-- AI Chat -->
   <div class="mb-8" x-data="plantChat('{{ plant.id }}')">
     <h2 class="text-lg font-semibold mb-3 flex items-center gap-2">
-      <span>🤖</span> Ask AI about {{ plant.name }}
+      <span>🤖</span> <span data-t="lbl_ask">Ask AI about {{ plant.name }}</span>
     </h2>
     <div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50">
-      <!-- Suggested questions -->
       <div class="flex flex-wrap gap-2 mb-3" x-show="!answer">
         {% set suggestions = [
           "When should I plant this in Seattle?",
@@ -209,12 +203,10 @@
           <span x-show="!loading">Ask</span>
           <span x-show="loading" class="flex items-center gap-1">
             <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-            Thinking...
           </span>
         </button>
       </div>
 
-      <!-- AI Response -->
       <div x-show="answer" x-transition class="mt-4 p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50 text-sm prose prose-sm dark:prose-invert max-w-none">
         <div x-html="formatMarkdown(answer)"></div>
       </div>
@@ -223,7 +215,7 @@
   </div>
 
   <div class="pt-4 border-t border-slate-200 dark:border-slate-800">
-    <a href="/" class="text-sm text-brand hover:underline">← Back to all plants</a>
+    <a href="/" class="text-sm text-brand hover:underline" data-i18n="nav.back">← Back to all plants</a>
   </div>
 </div>
 
@@ -263,54 +255,42 @@ function collectionButton(id, name, emoji, category) {
 
 function plantChat(plantId) {
   return {
-    question: '',
-    answer: '',
-    loading: false,
-    error: '',
+    question: '', answer: '', loading: false, error: '',
     ask() {
       if (!this.question.trim() || this.loading) return;
-      this.loading = true;
-      this.answer = '';
-      this.error = '';
+      this.loading = true; this.answer = ''; this.error = '';
       const lang = (typeof I18n !== 'undefined' && I18n.lang === 'zh') ? 'zh' : 'en';
-      const body = JSON.stringify({ question: this.question, lang });
-
       fetch(`/api/plant/${plantId}/ask`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body,
+        body: JSON.stringify({ question: this.question, lang }),
       }).then(resp => {
         const reader = resp.body.getReader();
         const decoder = new TextDecoder();
         const read = () => {
           reader.read().then(({ done, value }) => {
             if (done) { this.loading = false; return; }
-            const text = decoder.decode(value);
-            for (const line of text.split('\n')) {
+            for (const line of decoder.decode(value).split('\n')) {
               if (!line.startsWith('data: ')) continue;
-              const payload = line.slice(6).trim();
-              if (payload === '[DONE]') { this.loading = false; return; }
+              const p = line.slice(6).trim();
+              if (p === '[DONE]') { this.loading = false; return; }
               try {
-                const data = JSON.parse(payload);
-                if (data.text) this.answer += data.text;
-                if (data.error) this.error = data.error;
+                const d = JSON.parse(p);
+                if (d.text) this.answer += d.text;
+                if (d.error) this.error = d.error;
               } catch(e) {}
             }
             read();
           });
         };
         read();
-      }).catch(e => {
-        this.error = e.message;
-        this.loading = false;
-      });
+      }).catch(e => { this.error = e.message; this.loading = false; });
     },
     formatMarkdown(text) {
       return text
         .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
         .replace(/\*(.*?)\*/g, '<em>$1</em>')
-        .replace(/\n\n/g, '</p><p>')
-        .replace(/\n/g, '<br>')
+        .replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br>')
         .replace(/^/, '<p>').replace(/$/, '</p>');
     }
   }

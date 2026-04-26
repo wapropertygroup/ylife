@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Yard Ideas — yPlanter{% endblock %}
+{% block page_key %}yard{% endblock %}
 
 {% block content %}
 <div class="fade-up">
@@ -17,8 +18,8 @@
       <div class="flex items-start gap-3 mb-4">
         <span class="text-3xl">{{ s.emoji }}</span>
         <div>
-          <h2 class="text-lg font-bold">{{ s.title }}</h2>
-          <p class="text-sm text-slate-600 dark:text-slate-400 mt-1">{{ s.description }}</p>
+          <h2 class="text-lg font-bold" data-t="title_{{ s.id }}">{{ s.title }}</h2>
+          <p class="text-sm text-slate-600 dark:text-slate-400 mt-1" data-t="desc_{{ s.id }}">{{ s.description }}</p>
         </div>
       </div>
 
@@ -48,7 +49,7 @@
       <!-- Tip -->
       {% if s.tip %}
       <div class="p-3 rounded-lg bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800/30">
-        <p class="text-xs text-amber-700 dark:text-amber-300"><strong>💡 Tip:</strong> {{ s.tip }}</p>
+        <p class="text-xs text-amber-700 dark:text-amber-300" data-t="tip_{{ s.id }}"><strong>💡 Tip:</strong> {{ s.tip }}</p>
       </div>
       {% endif %}
     </div>

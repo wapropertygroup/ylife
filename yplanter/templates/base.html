@@ -42,7 +42,7 @@
   {% block head %}{% endblock %}
 </head>
 
-<body class="bg-white dark:bg-slate-950 text-slate-800 dark:text-slate-100 min-h-screen flex flex-col" x-data="{ navOpen: false }">
+<body class="bg-white dark:bg-slate-950 text-slate-800 dark:text-slate-100 min-h-screen flex flex-col" x-data="{ navOpen: false }" data-page-key="{% block page_key %}{% endblock %}">
 
   <header class="sticky top-0 z-50 bg-white/80 dark:bg-slate-900/80 backdrop-blur border-b border-slate-200 dark:border-slate-800">
     <div class="max-w-screen-xl mx-auto px-4 sm:px-6 flex items-center h-14 gap-4">
@@ -221,6 +221,83 @@
       }
     }
   }
+  </script>
+
+  <!-- Auto-translate dynamic content via Gemini -->
+  <script>
+  const ContentTranslator = {
+    cache: JSON.parse(localStorage.getItem('yplanter_tr_cache') || '{}'),
+
+    async translatePage(pageKey) {
+      if (!pageKey) return;
+      const els = document.querySelectorAll('[data-t]');
+      if (!els.length) return;
+
+      const texts = {};
+      els.forEach(el => {
+        const key = el.getAttribute('data-t');
+        if (!el._origText) el._origText = el.textContent;
+        texts[key] = el._origText;
+      });
+
+      if (this.cache[pageKey]) {
+        this._apply(els, this.cache[pageKey]);
+        return;
+      }
+
+      els.forEach(el => el.style.opacity = '0.5');
+
+      try {
+        const resp = await fetch('/api/translate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ page_key: pageKey, texts }),
+        });
+        const data = await resp.json();
+        if (data.translations) {
+          this.cache[pageKey] = data.translations;
+          const keys = Object.keys(this.cache);
+          if (keys.length > 500) keys.slice(0, keys.length - 500).forEach(k => delete this.cache[k]);
+          localStorage.setItem('yplanter_tr_cache', JSON.stringify(this.cache));
+          this._apply(els, data.translations);
+        }
+      } catch(e) {
+        console.warn('Translation failed:', e);
+      } finally {
+        els.forEach(el => el.style.opacity = '');
+      }
+    },
+
+    restoreOriginals() {
+      document.querySelectorAll('[data-t]').forEach(el => {
+        if (el._origText) el.textContent = el._origText;
+      });
+    },
+
+    _apply(els, translations) {
+      els.forEach(el => {
+        const key = el.getAttribute('data-t');
+        if (translations[key]) el.textContent = translations[key];
+      });
+    }
+  };
+
+  const _origI18nToggle = I18n.toggle.bind(I18n);
+  I18n.toggle = function() {
+    _origI18nToggle();
+    const pageKey = document.body.getAttribute('data-page-key');
+    if (I18n.lang === 'zh') {
+      ContentTranslator.translatePage(pageKey);
+    } else {
+      ContentTranslator.restoreOriginals();
+    }
+  };
+  document.addEventListener('DOMContentLoaded', () => {
+    if (I18n.lang === 'zh') {
+      const pageKey = document.body.getAttribute('data-page-key');
+      ContentTranslator.translatePage(pageKey);
+    }
+  });
   </script>
 </body>
 </html>
