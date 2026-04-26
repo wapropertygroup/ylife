@@ -179,15 +179,9 @@ ensure_nginx() {
   local name="\$1" port="\$2" domain="\$3" static="\$4"
 
   local CONF="/etc/nginx/conf.d/\${name}.conf"
-  local DESIRED="server_name \${domain};"
-
-  if sudo test -f "\$CONF" && sudo grep -q "\$DESIRED" "\$CONF"; then
-    echo "[\$(TS)]    \$name nginx config up to date"
-    return
-  fi
 
   echo "[\$(TS)]    \$name nginx config writing..."
-  # Overwrite entirely — certbot will re-add SSL in the SSL step
+  # Always overwrite — certbot will re-add SSL in the SSL step
   sudo tee "\$CONF" > /dev/null <<NGINXCONF
 server {
     listen 80;
