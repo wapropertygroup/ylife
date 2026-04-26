@@ -225,22 +225,20 @@ fi
 
 # ── SSL (Let's Encrypt) ───────────────────────────────────────────────────────
 SSL_STEP=\$((5 + NUM_APPS))
-echo "[\$(TS)][\$SSL_STEP/\$TOTAL_STEPS] Checking SSL certificates..."
-CERTBOT_DOMAINS=""
+echo "[\$(TS)][\$SSL_STEP/\$TOTAL_STEPS] Ensuring SSL certificates..."
 
+# Always run certbot for all domains — it's idempotent: requests new certs
+# if missing, re-installs into nginx if configs were rewritten.
+ALL_CERT_DOMAINS=""
 for domain in "\${DOMAINS[@]}"; do
-  if ! sudo test -f "/etc/letsencrypt/live/\${domain}/fullchain.pem"; then
-    CERTBOT_DOMAINS="\$CERTBOT_DOMAINS -d \$domain"
-  fi
+  ALL_CERT_DOMAINS="\$ALL_CERT_DOMAINS -d \$domain"
 done
 
-if [[ -n "\$CERTBOT_DOMAINS" ]]; then
-  echo "[\$(TS)]    Installing SSL certificate(s) via Let's Encrypt..."
+if [[ -n "\$ALL_CERT_DOMAINS" ]]; then
+  echo "[\$(TS)]    Running certbot for all domains..."
   sudo dnf install -y certbot python3-certbot-nginx -q 2>&1 | tail -1
-  sudo certbot --nginx \$CERTBOT_DOMAINS --non-interactive --agree-tos -m "\$CERT_EMAIL" --redirect
-  echo "[\$(TS)]    ✓ SSL certificate(s) installed"
-else
-  echo "[\$(TS)]    SSL certificates already present — skipping"
+  sudo certbot --nginx \$ALL_CERT_DOMAINS --non-interactive --agree-tos -m "\$CERT_EMAIL" --redirect
+  echo "[\$(TS)]    ✓ SSL certificates installed"
 fi
 REMOTE
 
