@@ -178,8 +178,6 @@ NGINX_CHANGED=false
 ensure_nginx() {
   local name="\$1" port="\$2" domain="\$3" static="\$4"
 
-  # Always regenerate the base HTTP config so domain/port changes take effect.
-  # Certbot adds its own SSL server block — we only touch the port-80 block.
   local CONF="/etc/nginx/conf.d/\${name}.conf"
   local DESIRED="server_name \${domain};"
 
@@ -189,20 +187,8 @@ ensure_nginx() {
   fi
 
   echo "[\$(TS)]    \$name nginx config writing..."
-  # Strip any existing plain-HTTP server block but keep certbot SSL blocks
-  if sudo test -f "\$CONF"; then
-    # Remove only the managed block (between markers), keep certbot blocks
-    sudo python3 -c "
-import re, sys
-txt = open(sys.argv[1]).read()
-# Remove all non-SSL server blocks (listen 80) — certbot blocks use listen 443
-cleaned = re.sub(r'server\s*\{[^}]*listen\s+80;[^}]*\}', '', txt)
-open(sys.argv[1], 'w').write(cleaned)
-" "\$CONF"
-  fi
-
-  # Append the managed HTTP block
-  sudo tee -a "\$CONF" > /dev/null <<NGINXCONF
+  # Overwrite entirely — certbot will re-add SSL in the SSL step
+  sudo tee "\$CONF" > /dev/null <<NGINXCONF
 server {
     listen 80;
     server_name \${domain};
