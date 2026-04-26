@@ -367,6 +367,49 @@ def api_delete_history(timestamp: int):
 
 
 # ---------------------------------------------------------------------------
+# API: YouTube video search
+# ---------------------------------------------------------------------------
+
+@bp.route("/api/youtube")
+def api_youtube():
+    """Search YouTube for gardening videos."""
+    query = request.args.get("q", "").strip()
+    max_results = min(int(request.args.get("max", "4")), 8)
+    if not query:
+        return jsonify({"videos": []})
+
+    api_key = os.environ.get("YOUTUBE_API_KEY", "")
+    if not api_key:
+        return jsonify({"videos": []})
+
+    try:
+        import requests as http_req
+        resp = http_req.get("https://www.googleapis.com/youtube/v3/search", params={
+            "part": "snippet",
+            "q": query,
+            "type": "video",
+            "maxResults": max_results,
+            "key": api_key,
+            "relevanceLanguage": "en",
+            "safeSearch": "strict",
+        }, timeout=8)
+        if resp.status_code != 200:
+            return jsonify({"videos": []})
+
+        videos = []
+        for item in resp.json().get("items", []):
+            videos.append({
+                "id": item["id"]["videoId"],
+                "title": item["snippet"]["title"],
+                "thumbnail": item["snippet"]["thumbnails"].get("medium", {}).get("url", ""),
+            })
+        return jsonify({"videos": videos})
+    except Exception as exc:
+        log.warning("YouTube search failed: %s", exc)
+        return jsonify({"videos": []})
+
+
+# ---------------------------------------------------------------------------
 # API: Gemini-powered content translation (cached in DynamoDB)
 # ---------------------------------------------------------------------------
 

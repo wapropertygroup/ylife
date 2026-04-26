@@ -3,3 +3,4 @@ python-dotenv>=1.0
 gunicorn>=21.2
 google-genai>=1.0
 boto3>=1.34
+requests>=2.31

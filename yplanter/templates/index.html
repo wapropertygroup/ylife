@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}yPlanter — Seattle Garden Guide{% endblock %}
+{% block page_key %}index{% endblock %}
 
 {% block content %}
 <!-- Hero -->
@@ -20,23 +21,19 @@
       <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
       </svg>
-      <input type="text"
-             x-model="query"
-             @input.debounce.300ms="search()"
+      <input type="text" x-model="query" @input.debounce.300ms="search()"
              placeholder="Search plants, vegetables, herbs..."
              data-i18n-placeholder="search.placeholder"
              class="w-full pl-10 pr-4 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm focus:ring-2 focus:ring-brand/40 focus:border-brand outline-none transition">
     </div>
-    <select x-model="category" @change="search()"
-            class="px-3 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm">
+    <select x-model="category" @change="search()" class="px-3 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm">
       <option value="" data-i18n="filter.all_types">All Types</option>
       <option value="vegetable" data-i18n="filter.vegetable">Vegetables</option>
       <option value="fruit" data-i18n="filter.fruit">Fruit</option>
       <option value="herb" data-i18n="filter.herb">Herbs</option>
       <option value="houseplant" data-i18n="filter.houseplant">Houseplants</option>
     </select>
-    <select x-model="difficulty" @change="search()"
-            class="px-3 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm">
+    <select x-model="difficulty" @change="search()" class="px-3 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm">
       <option value="" data-i18n="filter.all_levels">All Levels</option>
       <option value="easy" data-i18n="filter.easy">Easy</option>
       <option value="moderate" data-i18n="filter.moderate">Moderate</option>
@@ -47,12 +44,12 @@
 
 <!-- Quick Jump Tabs -->
 <div class="flex flex-wrap gap-2 mb-8 fade-up" style="animation-delay: .1s">
-  <a href="#vegetables" class="px-3 py-1.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-900/50 transition">🥬 Vegetables</a>
-  <a href="#fruit" class="px-3 py-1.5 rounded-full text-xs font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900/50 transition">🍓 Fruit</a>
-  <a href="#herbs" class="px-3 py-1.5 rounded-full text-xs font-medium bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-200 dark:hover:bg-emerald-900/50 transition">🌿 Herbs</a>
-  <a href="#houseplants" class="px-3 py-1.5 rounded-full text-xs font-medium bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-400 hover:bg-teal-200 dark:hover:bg-teal-900/50 transition">🪴 Houseplants</a>
-  <a href="#calendar-preview" class="px-3 py-1.5 rounded-full text-xs font-medium bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 hover:bg-amber-200 dark:hover:bg-amber-900/50 transition">📅 Calendar</a>
-  <a href="#yard-ideas" class="px-3 py-1.5 rounded-full text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-900/50 transition">🏡 Yard Ideas</a>
+  <a href="#vegetables" class="px-3 py-1.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-900/50 transition" data-t="tab_veg">🥬 Vegetables</a>
+  <a href="#fruit" class="px-3 py-1.5 rounded-full text-xs font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900/50 transition" data-t="tab_fruit">🍓 Fruit</a>
+  <a href="#herbs" class="px-3 py-1.5 rounded-full text-xs font-medium bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-200 dark:hover:bg-emerald-900/50 transition" data-t="tab_herbs">🌿 Herbs</a>
+  <a href="#houseplants" class="px-3 py-1.5 rounded-full text-xs font-medium bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-400 hover:bg-teal-200 dark:hover:bg-teal-900/50 transition" data-t="tab_house">🪴 Houseplants</a>
+  <a href="#calendar-preview" class="px-3 py-1.5 rounded-full text-xs font-medium bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 hover:bg-amber-200 dark:hover:bg-amber-900/50 transition" data-t="tab_cal">📅 Calendar</a>
+  <a href="#yard-ideas" class="px-3 py-1.5 rounded-full text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-900/50 transition" data-t="tab_yard">🏡 Yard Ideas</a>
 </div>
 
 <!-- ── Vegetables ─────────────────────────────────────────────────── -->
@@ -67,16 +64,15 @@
       <div class="flex items-start gap-3">
         <span class="text-3xl">{{ plant.emoji }}</span>
         <div class="flex-1 min-w-0">
-          <h3 class="font-semibold text-sm group-hover:text-brand transition">{{ plant.name }}</h3>
+          <h3 class="font-semibold text-sm group-hover:text-brand transition" data-t="name_{{ plant.id }}">{{ plant.name }}</h3>
           <div class="flex items-center gap-2 mt-1 text-xs text-slate-500 dark:text-slate-400">
-            <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-{{ 'green' if plant.difficulty == 'easy' else ('amber' if plant.difficulty == 'moderate' else 'red') }}-100 dark:bg-{{ 'green' if plant.difficulty == 'easy' else ('amber' if plant.difficulty == 'moderate' else 'red') }}-900/30 text-{{ 'green' if plant.difficulty == 'easy' else ('amber' if plant.difficulty == 'moderate' else 'red') }}-700 dark:text-{{ 'green' if plant.difficulty == 'easy' else ('amber' if plant.difficulty == 'moderate' else 'red') }}-400">
-              {{ plant.difficulty | capitalize }}
-            </span>
-            {% if plant.frost_hardy %}<span class="text-blue-500">❄️ Frost Hardy</span>{% endif %}
+            <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-{{ 'green' if plant.difficulty == 'easy' else ('amber' if plant.difficulty == 'moderate' else 'red') }}-100 dark:bg-{{ 'green' if plant.difficulty == 'easy' else ('amber' if plant.difficulty == 'moderate' else 'red') }}-900/30 text-{{ 'green' if plant.difficulty == 'easy' else ('amber' if plant.difficulty == 'moderate' else 'red') }}-700 dark:text-{{ 'green' if plant.difficulty == 'easy' else ('amber' if plant.difficulty == 'moderate' else 'red') }}-400"
+                  data-t="diff_{{ plant.id }}">{{ plant.difficulty | capitalize }}</span>
+            {% if plant.frost_hardy %}<span class="text-blue-500" data-t="frost_{{ plant.id }}">❄️ Frost Hardy</span>{% endif %}
           </div>
-          <p class="mt-2 text-xs text-slate-600 dark:text-slate-400 line-clamp-2">{{ plant.pnw_notes }}</p>
+          <p class="mt-2 text-xs text-slate-600 dark:text-slate-400 line-clamp-2" data-t="notes_{{ plant.id }}">{{ plant.pnw_notes }}</p>
           {% if plant.harvest %}
-          <p class="mt-1 text-xs text-brand font-medium">Harvest: {{ plant.harvest }}</p>
+          <p class="mt-1 text-xs text-brand font-medium" data-t="harvest_{{ plant.id }}">Harvest: {{ plant.harvest }}</p>
           {% endif %}
         </div>
       </div>
@@ -98,12 +94,12 @@
       <div class="flex items-start gap-3">
         <span class="text-3xl">{{ plant.emoji }}</span>
         <div class="flex-1 min-w-0">
-          <h3 class="font-semibold text-sm group-hover:text-brand transition">{{ plant.name }}</h3>
+          <h3 class="font-semibold text-sm group-hover:text-brand transition" data-t="name_{{ plant.id }}">{{ plant.name }}</h3>
           <div class="flex items-center gap-2 mt-1 text-xs text-slate-500 dark:text-slate-400">
-            <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">{{ plant.difficulty | capitalize }}</span>
+            <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400" data-t="diff_{{ plant.id }}">{{ plant.difficulty | capitalize }}</span>
           </div>
-          <p class="mt-2 text-xs text-slate-600 dark:text-slate-400 line-clamp-2">{{ plant.pnw_notes }}</p>
-          <p class="mt-1 text-xs text-brand font-medium">Harvest: {{ plant.harvest }}</p>
+          <p class="mt-2 text-xs text-slate-600 dark:text-slate-400 line-clamp-2" data-t="notes_{{ plant.id }}">{{ plant.pnw_notes }}</p>
+          <p class="mt-1 text-xs text-brand font-medium" data-t="harvest_{{ plant.id }}">Harvest: {{ plant.harvest }}</p>
         </div>
       </div>
     </a>
@@ -124,12 +120,12 @@
       <div class="flex items-start gap-3">
         <span class="text-3xl">{{ plant.emoji }}</span>
         <div class="flex-1 min-w-0">
-          <h3 class="font-semibold text-sm group-hover:text-brand transition">{{ plant.name }}</h3>
+          <h3 class="font-semibold text-sm group-hover:text-brand transition" data-t="name_{{ plant.id }}">{{ plant.name }}</h3>
           <div class="flex items-center gap-2 mt-1 text-xs text-slate-500 dark:text-slate-400">
-            <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">{{ plant.difficulty | capitalize }}</span>
-            {% if plant.frost_hardy %}<span class="text-blue-500">❄️ Perennial in PNW</span>{% endif %}
+            <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400" data-t="diff_{{ plant.id }}">{{ plant.difficulty | capitalize }}</span>
+            {% if plant.frost_hardy %}<span class="text-blue-500" data-t="frost_{{ plant.id }}">❄️ Perennial in PNW</span>{% endif %}
           </div>
-          <p class="mt-2 text-xs text-slate-600 dark:text-slate-400 line-clamp-2">{{ plant.pnw_notes }}</p>
+          <p class="mt-2 text-xs text-slate-600 dark:text-slate-400 line-clamp-2" data-t="notes_{{ plant.id }}">{{ plant.pnw_notes }}</p>
         </div>
       </div>
     </a>
@@ -149,14 +145,13 @@
       <div class="flex items-start gap-3">
         <span class="text-3xl">{{ plant.emoji }}</span>
         <div class="flex-1 min-w-0">
-          <h3 class="font-semibold text-sm group-hover:text-brand transition">{{ plant.name }}</h3>
+          <h3 class="font-semibold text-sm group-hover:text-brand transition" data-t="name_{{ plant.id }}">{{ plant.name }}</h3>
           <div class="flex items-center gap-2 mt-1 text-xs text-slate-500 dark:text-slate-400">
-            <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-{{ 'green' if plant.difficulty == 'easy' else ('amber' if plant.difficulty == 'moderate' else 'red') }}-100 dark:bg-{{ 'green' if plant.difficulty == 'easy' else ('amber' if plant.difficulty == 'moderate' else 'red') }}-900/30 text-{{ 'green' if plant.difficulty == 'easy' else ('amber' if plant.difficulty == 'moderate' else 'red') }}-700 dark:text-{{ 'green' if plant.difficulty == 'easy' else ('amber' if plant.difficulty == 'moderate' else 'red') }}-400">
-              {{ plant.difficulty | capitalize }}
-            </span>
-            {% if not plant.toxic_pets %}<span class="text-green-500">🐾 Pet Safe</span>{% endif %}
+            <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-{{ 'green' if plant.difficulty == 'easy' else ('amber' if plant.difficulty == 'moderate' else 'red') }}-100 dark:bg-{{ 'green' if plant.difficulty == 'easy' else ('amber' if plant.difficulty == 'moderate' else 'red') }}-900/30 text-{{ 'green' if plant.difficulty == 'easy' else ('amber' if plant.difficulty == 'moderate' else 'red') }}-700 dark:text-{{ 'green' if plant.difficulty == 'easy' else ('amber' if plant.difficulty == 'moderate' else 'red') }}-400"
+                  data-t="diff_{{ plant.id }}">{{ plant.difficulty | capitalize }}</span>
+            {% if not plant.toxic_pets %}<span class="text-green-500" data-t="pet_{{ plant.id }}">🐾 Pet Safe</span>{% endif %}
           </div>
-          <p class="mt-2 text-xs text-slate-600 dark:text-slate-400 line-clamp-2">{{ plant.pnw_notes }}</p>
+          <p class="mt-2 text-xs text-slate-600 dark:text-slate-400 line-clamp-2" data-t="notes_{{ plant.id }}">{{ plant.pnw_notes }}</p>
         </div>
       </div>
     </a>
@@ -172,21 +167,19 @@
     </h2>
     <a href="/calendar" class="text-sm text-brand hover:underline" data-i18n="section.view_all">View full calendar →</a>
   </div>
-
-  <!-- Show current month + next 2 -->
   <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
     {% set ns = namespace(shown=0) %}
     {% for month in calendar %}
     {% if ns.shown < 3 %}
     <div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50">
       <h3 class="font-semibold text-sm mb-3 flex items-center gap-2">
-        <span>{{ month.emoji }}</span> {{ month.month }}
+        <span>{{ month.emoji }}</span> <span data-t="month_{{ month.month }}">{{ month.month }}</span>
       </h3>
       <ul class="space-y-1.5">
         {% for task in month.tasks[:4] %}
         <li class="text-xs text-slate-600 dark:text-slate-400 flex items-start gap-2">
           <span class="text-brand mt-0.5">•</span>
-          <span>{{ task }}</span>
+          <span data-t="cal_{{ month.month }}_{{ loop.index }}">{{ task }}</span>
         </li>
         {% endfor %}
         {% if month.tasks | length > 4 %}
@@ -212,11 +205,11 @@
     {% for suggestion in yard_suggestions[:3] %}
     <a href="/yard#{{ suggestion.id }}" class="group block p-5 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-brand/50 dark:hover:border-brand/50 bg-white dark:bg-slate-900/50 hover:shadow-lg hover:shadow-brand/5 transition-all duration-200">
       <span class="text-2xl">{{ suggestion.emoji }}</span>
-      <h3 class="font-semibold text-sm mt-2 group-hover:text-brand transition">{{ suggestion.title }}</h3>
-      <p class="mt-1 text-xs text-slate-600 dark:text-slate-400 line-clamp-2">{{ suggestion.description }}</p>
+      <h3 class="font-semibold text-sm mt-2 group-hover:text-brand transition" data-t="yard_title_{{ suggestion.id }}">{{ suggestion.title }}</h3>
+      <p class="mt-1 text-xs text-slate-600 dark:text-slate-400 line-clamp-2" data-t="yard_desc_{{ suggestion.id }}">{{ suggestion.description }}</p>
       <div class="flex flex-wrap gap-1 mt-3">
         {% for benefit in suggestion.benefits[:2] %}
-        <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-brand/10 text-brand">{{ benefit }}</span>
+        <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-brand/10 text-brand" data-t="yard_ben_{{ suggestion.id }}_{{ loop.index }}">{{ benefit }}</span>
         {% endfor %}
       </div>
     </a>
@@ -224,7 +217,7 @@
   </div>
 </section>
 
-<!-- My Collection (localStorage-based) -->
+<!-- My Collection -->
 <section id="collection" class="mb-12 fade-up" style="animation-delay: .45s" x-data="myCollection()">
   <h2 class="text-xl font-bold mb-4 flex items-center gap-2">
     <span>📋</span> <span data-i18n="section.collection">My Collection</span>

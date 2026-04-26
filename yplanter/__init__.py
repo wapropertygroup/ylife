@@ -22,6 +22,7 @@ def _load_secrets_from_ssm() -> None:
 
     SSM_PARAMS = {
         "/ystocker/GEMINI_API_KEY": "GEMINI_API_KEY",
+        "/ystocker/YOUTUBE_API_KEY": "YOUTUBE_API_KEY",
     }
 
     needed = {k: v for k, v in SSM_PARAMS.items() if not os.environ.get(v)}
