@@ -227,19 +227,16 @@ fi
 SSL_STEP=\$((5 + NUM_APPS))
 echo "[\$(TS)][\$SSL_STEP/\$TOTAL_STEPS] Ensuring SSL certificates..."
 
-# Always run certbot for all domains — it's idempotent: requests new certs
-# if missing, re-installs into nginx if configs were rewritten.
-ALL_CERT_DOMAINS=""
-for domain in "\${DOMAINS[@]}"; do
-  ALL_CERT_DOMAINS="\$ALL_CERT_DOMAINS -d \$domain"
-done
+sudo dnf install -y certbot python3-certbot-nginx -q 2>&1 | tail -1
 
-if [[ -n "\$ALL_CERT_DOMAINS" ]]; then
-  echo "[\$(TS)]    Running certbot for all domains..."
-  sudo dnf install -y certbot python3-certbot-nginx -q 2>&1 | tail -1
-  sudo certbot --nginx \$ALL_CERT_DOMAINS --non-interactive --agree-tos -m "\$CERT_EMAIL" --redirect
-  echo "[\$(TS)]    ✓ SSL certificates installed"
-fi
+# Run certbot per-domain to avoid conflicts with existing certs
+for domain in "\${DOMAINS[@]}"; do
+  echo "[\$(TS)]    Certbot: \$domain"
+  sudo certbot --nginx --cert-name "\$domain" -d "\$domain" \
+    --non-interactive --agree-tos -m "\$CERT_EMAIL" --redirect \
+    2>&1 | grep -E "^(Saving|Successfully|Certificate|Deploying|Redirect)" || true
+done
+echo "[\$(TS)]    ✓ SSL certificates installed"
 REMOTE
 
 log "✓ Deploy complete"
