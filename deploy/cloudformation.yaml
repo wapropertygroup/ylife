@@ -42,7 +42,7 @@ Parameters:
 
   DomainYHome:
     Type: String
-    Default: "www.li-family.us"
+    Default: "home.li-family.us"
     Description: Domain for yHome (landing page)
 
   CertEmail:
