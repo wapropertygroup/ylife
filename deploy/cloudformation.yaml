@@ -1,7 +1,7 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: >
-  Multi-app Flask hosting — single EC2 instance running yStocker + yPlanner
-  (and any future apps). Each app gets its own Gunicorn process, systemd
+  Multi-app Flask hosting — single EC2 instance running yStocker, yPlanner,
+  yPlanter, and yHome. Each app gets its own Gunicorn process, systemd
   service, and nginx vhost with automatic Let's Encrypt SSL.
 
 # -----------------------------------------------------------------------------
@@ -40,6 +40,11 @@ Parameters:
     Default: "planter.li-family.us"
     Description: Domain for yPlanter
 
+  DomainYHome:
+    Type: String
+    Default: "www.li-family.us"
+    Description: Domain for yHome (landing page)
+
   CertEmail:
     Type: String
     Default: "admin@li-family.us"
@@ -47,7 +52,7 @@ Parameters:
 
   GitRepo:
     Type: String
-    Default: "https://github.com/15th-Ave-NE/ystocker.git"
+    Default: "https://github.com/15th-Ave-NE/ylife.git"
     Description: HTTPS URL of the git repo to clone on first boot
 
   LatestAL2023Ami:
@@ -203,11 +208,12 @@ Resources:
             # Add new apps here: NAME|PORT|DOMAIN|STATIC_DIR
             APPS="ystocker|8000|${DomainYStocker}|ystocker/static
             yplanner|8001|${DomainYPlanner}|yplanner/static
-            yplanter|8002|${DomainYPlanter}|yplanter/static"
+            yplanter|8002|${DomainYPlanter}|yplanter/static
+            yhome|8003|${DomainYHome}|yhome/static"
 
             APP_DIR=/opt/ystocker
             APP_USER=ystocker
-            REQ_FILES="requirements.txt requirements_planner.txt requirements_planter.txt"
+            REQ_FILES="requirements_stocker.txt requirements_planner.txt requirements_planter.txt requirements_home.txt"
 
             # ── System packages ──────────────────────────────────────────
             dnf update -y
@@ -250,7 +256,7 @@ Resources:
             ExecStart=/bin/bash -c '\
               git config --global --add safe.directory /opt/ystocker; \
               git -C /opt/ystocker fetch origin && git -C /opt/ystocker reset --hard origin/main; \
-              for r in requirements.txt requirements_planner.txt requirements_planter.txt; do \
+              for r in requirements_stocker.txt requirements_planner.txt requirements_planter.txt requirements_home.txt; do \
                 [ -f /opt/ystocker/$r ] && /opt/ystocker/venv/bin/pip install -q -r /opt/ystocker/$r; \
               done; \
               chown -R ystocker:ystocker /opt/ystocker'
@@ -394,6 +400,9 @@ Outputs:
   YPlanterURL:
     Value: !Sub "https://${DomainYPlanter}/"
 
+  YHomeURL:
+    Value: !Sub "https://${DomainYHome}/"
+
   DirectIPURL:
     Description: Direct IP URL (before DNS)
     Value: !Sub "http://${ElasticIP}/"
@@ -402,4 +411,4 @@ Outputs:
     Value: !Sub "ssh -i ~/.ssh/${KeyName}.pem ec2-user@${ElasticIP}"
 
   LogsCommand:
-    Value: !Sub "ssh ec2-user@${ElasticIP} 'sudo journalctl -u ystocker -u yplanner -u yplanter -f'"
+    Value: !Sub "ssh ec2-user@${ElasticIP} 'sudo journalctl -u ystocker -u yplanner -u yplanter -u yhome -f'"
