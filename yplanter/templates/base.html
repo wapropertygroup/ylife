@@ -223,10 +223,37 @@
   }
   </script>
 
+  <!-- Translation status banner -->
+  <div id="tr-banner" class="hidden fixed top-14 inset-x-0 z-40 pointer-events-none">
+    <div class="max-w-screen-xl mx-auto px-4 sm:px-6">
+      <div id="tr-banner-inner" class="mt-2 px-4 py-2.5 rounded-lg text-sm font-medium flex items-center gap-2 shadow-lg pointer-events-auto"></div>
+    </div>
+  </div>
+
   <!-- Auto-translate dynamic content via Gemini -->
   <script>
   const ContentTranslator = {
     cache: JSON.parse(localStorage.getItem('yplanter_tr_cache') || '{}'),
+
+    _showBanner(msg, type) {
+      const b = document.getElementById('tr-banner');
+      const inner = document.getElementById('tr-banner-inner');
+      if (!b || !inner) return;
+      inner.className = 'mt-2 px-4 py-2.5 rounded-lg text-sm font-medium flex items-center gap-2 shadow-lg pointer-events-auto';
+      if (type === 'loading') {
+        inner.classList.add('bg-blue-50','dark:bg-blue-900/30','text-blue-700','dark:text-blue-300','border','border-blue-200','dark:border-blue-800/30');
+        inner.innerHTML = '<svg class="animate-spin w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg><span>' + msg + '</span>';
+      } else if (type === 'error') {
+        inner.classList.add('bg-amber-50','dark:bg-amber-900/30','text-amber-700','dark:text-amber-300','border','border-amber-200','dark:border-amber-800/30');
+        inner.innerHTML = '<span>\u26a0\ufe0f ' + msg + '</span>';
+      }
+      b.classList.remove('hidden');
+    },
+
+    _hideBanner() {
+      const b = document.getElementById('tr-banner');
+      if (b) b.classList.add('hidden');
+    },
 
     async translatePage(pageKey) {
       if (!pageKey) return;
@@ -241,10 +268,14 @@
       });
 
       if (this.cache[pageKey]) {
-        this._apply(els, this.cache[pageKey]);
-        return;
+        const allPresent = Object.keys(texts).every(k => this.cache[pageKey][k]);
+        if (allPresent) {
+          this._apply(els, this.cache[pageKey]);
+          return;
+        }
       }
 
+      this._showBanner('\u6b63\u5728\u52a0\u8f7d\u4e2d\u6587\u7ffb\u8bd1\u2026 / Loading Chinese translation\u2026', 'loading');
       els.forEach(el => el.style.opacity = '0.5');
 
       try {
@@ -260,15 +291,30 @@
           if (keys.length > 500) keys.slice(0, keys.length - 500).forEach(k => delete this.cache[k]);
           localStorage.setItem('yplanter_tr_cache', JSON.stringify(this.cache));
           this._apply(els, data.translations);
+
+          let missing = 0;
+          els.forEach(el => { if (!data.translations[el.getAttribute('data-t')]) missing++; });
+          if (missing > 0) {
+            this._showBanner(missing + ' \u9879\u5185\u5bb9\u7ffb\u8bd1\u6682\u4e0d\u53ef\u7528 / ' + missing + ' items not yet translated', 'error');
+            setTimeout(() => this._hideBanner(), 5000);
+          } else {
+            this._hideBanner();
+          }
+        } else {
+          this._showBanner('\u7ffb\u8bd1\u6682\u4e0d\u53ef\u7528 / Translation unavailable', 'error');
+          setTimeout(() => this._hideBanner(), 5000);
         }
       } catch(e) {
         console.warn('Translation failed:', e);
+        this._showBanner('\u7ffb\u8bd1\u6682\u4e0d\u53ef\u7528 / Translation unavailable', 'error');
+        setTimeout(() => this._hideBanner(), 5000);
       } finally {
         els.forEach(el => el.style.opacity = '');
       }
     },
 
     restoreOriginals() {
+      this._hideBanner();
       document.querySelectorAll('[data-t]').forEach(el => {
         if (el._origText) el.textContent = el._origText;
       });
