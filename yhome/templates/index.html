@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en" class="h-full dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Li Family — Home</title>
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('home.static', filename='favicon.svg') }}">
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            surface: '#0f172a',
+            panel: '#1e293b',
+            border: '#334155',
+          },
+          fontFamily: { mono: ['JetBrains Mono', 'Fira Code', 'monospace'] }
+        }
+      }
+    }
+  </script>
+
+  <script>
+    (function() {
+      const theme = localStorage.getItem('yhome_theme') || 'dark';
+      if (theme === 'light') document.documentElement.classList.remove('dark');
+    })();
+  </script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="{{ url_for('home.static', filename='css/style.css') }}">
+</head>
+
+<body class="bg-white dark:bg-slate-950 text-slate-800 dark:text-slate-100 min-h-screen flex flex-col font-[Inter]">
+
+  <!-- Header -->
+  <header class="sticky top-0 z-50 bg-white/80 dark:bg-slate-900/80 backdrop-blur border-b border-slate-200 dark:border-slate-800">
+    <div class="max-w-screen-xl mx-auto px-4 sm:px-6 flex items-center h-14 gap-4">
+      <a href="/" class="flex items-center gap-2 font-bold text-lg">
+        <span class="text-2xl">&#x1f3e0;</span>
+        <span class="bg-gradient-to-r from-blue-500 via-violet-500 to-green-500 bg-clip-text text-transparent">Li Family</span>
+      </a>
+      <div class="ml-auto flex items-center gap-2">
+        <button onclick="toggleTheme()"
+                class="p-2 rounded-md text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                title="Toggle theme">
+          <svg class="w-5 h-5 hidden dark:block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/>
+          </svg>
+          <svg class="w-5 h-5 block dark:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="flex-1 max-w-screen-xl mx-auto w-full px-4 sm:px-6 py-10 sm:py-16">
+
+    <!-- Hero -->
+    <div class="text-center mb-14 fade-up">
+      <h1 class="text-4xl sm:text-5xl font-extrabold mb-4 tracking-tight">
+        <span class="bg-gradient-to-r from-blue-500 via-violet-500 to-green-500 bg-clip-text text-transparent">li-family.us</span>
+      </h1>
+      <p class="text-lg sm:text-xl text-slate-500 dark:text-slate-400 max-w-2xl mx-auto leading-relaxed">
+        Our family toolkit — apps we built for investing, traveling, and gardening in the Pacific Northwest.
+      </p>
+    </div>
+
+    <!-- App Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-16">
+      {% for app in apps %}
+      <a href="{{ app.url }}" target="_blank" rel="noopener"
+         class="app-card group block rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50
+                hover:border-{{ app.color }}-400/50 dark:hover:border-{{ app.color }}-500/30
+                hover:shadow-xl hover:shadow-{{ app.color }}-500/10 transition-all duration-300 overflow-hidden">
+
+        <!-- Color accent bar -->
+        <div class="h-1 bg-gradient-to-r
+          {% if app.color == 'blue' %}from-blue-400 to-cyan-400
+          {% elif app.color == 'violet' %}from-violet-400 to-fuchsia-400
+          {% elif app.color == 'green' %}from-green-400 to-emerald-400
+          {% endif %}
+          opacity-60 group-hover:opacity-100 transition-opacity"></div>
+
+        <div class="p-6">
+          <!-- Icon + Name -->
+          <div class="flex items-center gap-3 mb-3">
+            <span class="text-3xl">{{ app.emoji }}</span>
+            <div>
+              <h2 class="text-lg font-bold group-hover:text-{{ app.color }}-500 transition">{{ app.name }}</h2>
+              <p class="text-xs text-slate-500 dark:text-slate-400 font-medium tracking-wide uppercase">{{ app.tagline }}</p>
+            </div>
+          </div>
+
+          <!-- Description -->
+          <p class="text-sm text-slate-600 dark:text-slate-400 leading-relaxed mb-4">{{ app.description }}</p>
+
+          <!-- Features -->
+          <div class="flex flex-wrap gap-1.5 mb-4">
+            {% for feature in app.features %}
+            <span class="text-[10px] px-2 py-0.5 rounded-full font-medium
+              bg-{{ app.color }}-50 dark:bg-{{ app.color }}-900/20
+              text-{{ app.color }}-600 dark:text-{{ app.color }}-400">{{ feature }}</span>
+            {% endfor %}
+          </div>
+
+          <!-- CTA -->
+          <div class="flex items-center gap-1 text-sm font-medium text-{{ app.color }}-500 group-hover:gap-2 transition-all">
+            <span>Open {{ app.name }}</span>
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/>
+            </svg>
+          </div>
+        </div>
+      </a>
+      {% endfor %}
+    </div>
+
+    <!-- Quick Links -->
+    <div class="text-center fade-up">
+      <p class="text-xs text-slate-400 dark:text-slate-600 mb-3 uppercase tracking-widest font-medium">Quick Links</p>
+      <div class="flex flex-wrap justify-center gap-3">
+        {% for app in apps %}
+        <a href="{{ app.url }}" target="_blank" rel="noopener"
+           class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium
+                  border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400
+                  hover:border-{{ app.color }}-300 dark:hover:border-{{ app.color }}-700
+                  hover:text-{{ app.color }}-500 transition">
+          <span>{{ app.emoji }}</span> {{ app.name }}
+        </a>
+        {% endfor %}
+      </div>
+    </div>
+
+  </main>
+
+  <footer class="border-t border-slate-200 dark:border-slate-800 py-4 text-center text-xs text-slate-400 dark:text-slate-600">
+    <p>&copy; 2025 Li Family &middot; Seattle, WA</p>
+  </footer>
+
+  <script>
+  function toggleTheme() {
+    const html = document.documentElement;
+    const isDark = html.classList.contains('dark');
+    if (isDark) {
+      html.classList.remove('dark');
+      localStorage.setItem('yhome_theme', 'light');
+    } else {
+      html.classList.add('dark');
+      localStorage.setItem('yhome_theme', 'dark');
+    }
+  }
+  </script>
+</body>
+</html>
