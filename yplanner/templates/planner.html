@@ -704,39 +704,34 @@ function tripPlanner() {
         searchInput.value = '';
       });
 
-      // Enter key: if user presses Enter without selecting a dropdown item, do a text search
+      // Enter key: if no dropdown selection, use classic PlacesService.textSearch
       searchInput.addEventListener('keydown', (e) => {
         if (e.key !== 'Enter') return;
-        // Small delay to let place_changed fire first if a dropdown item was selected
-        const self = this;
+        e.preventDefault();  // prevent form submission
         const query = searchInput.value.trim();
         if (!query) return;
-        setTimeout(async () => {
+        const self = this;
+        setTimeout(() => {
           // If place_changed already handled it (input was cleared), skip
           if (!searchInput.value.trim()) return;
-          try {
-            const { places } = await google.maps.places.Place.searchByText({
-              textQuery: query,
-              maxResultCount: 1,
-              fields: ['id', 'displayName', 'formattedAddress', 'location'],
-            });
-            if (places && places.length > 0) {
-              const p = places[0];
+          // Use classic PlacesService.textSearch — reliable, no new API needed
+          const service = new google.maps.places.PlacesService(_mapState.map);
+          service.textSearch({ query: query }, (results, status) => {
+            if (status === google.maps.places.PlacesServiceStatus.OK && results && results.length > 0) {
+              const p = results[0];
               self.addStop({
                 id: Date.now() + Math.random(),
-                placeId: p.id,
-                name: p.displayName,
-                address: p.formattedAddress,
-                lat: p.location.lat(),
-                lng: p.location.lng(),
+                placeId: p.place_id,
+                name: p.name,
+                address: p.formatted_address,
+                lat: p.geometry.location.lat(),
+                lng: p.geometry.location.lng(),
                 stopMinutes: 60,
               });
-              self.fetchSearchSuggestions(p.location.lat(), p.location.lng());
+              self.fetchSearchSuggestions(p.geometry.location.lat(), p.geometry.location.lng());
               searchInput.value = '';
             }
-          } catch (err) {
-            console.warn('Text search on Enter failed:', err);
-          }
+          });
         }, 300);
       });
 
