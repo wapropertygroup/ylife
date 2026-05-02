@@ -333,7 +333,7 @@ def api_add_item():
 
     # Record first price point
     if product.get("price"):
-        _record_price(store, item_id, product["price"], now)
+        _record_price(store, item_id, product["price"], now, snapshot=product)
 
     return jsonify({"item": _decimal_to_float(item)}), 201
 
@@ -381,7 +381,11 @@ def api_prices(store: str, item_id: str):
         )
         prices = _decimal_to_float([
             {"timestamp": int(p["timestamp"]), "price": float(p["price"]),
-             "formatted_date": _format_ts(int(p["timestamp"]))}
+             "formatted_date": _format_ts(int(p["timestamp"])),
+             "title": p.get("title", ""),
+             "image_url": p.get("image_url", ""),
+             "item_url": p.get("item_url", ""),
+             "store": p.get("store", ""),}
             for p in resp.get("Items", []) if p.get("price")
         ])
         return jsonify({"prices": prices})
@@ -580,7 +584,8 @@ def api_add_alt_url(store: str, item_id: str):
 
         # Record price if available
         if new_entry["price"]:
-            _record_price(alt_store, alt_item_id, new_entry["price"])
+            _record_price(alt_store, alt_item_id, new_entry["price"],
+                          snapshot=product if product else None)
 
         return jsonify({"alt_urls": alt_urls, "added": new_entry}), 201
     except Exception as exc:
@@ -651,7 +656,8 @@ def api_check_alt_urls(store: str, item_id: str):
                     price_changed = abs(new_alt - (old_alt or 0)) >= 0.005
                     au["price"] = new_alt
                     if price_changed or not old_alt:
-                        _record_price(au["store"], au["item_id"], new_alt, now)
+                        _record_price(au["store"], au["item_id"], new_alt, now,
+                                      snapshot=product)
             updated.append(au)
             time.sleep(2)  # Rate limit
 
@@ -822,18 +828,29 @@ Be concise (2-3 paragraphs). {lang_instruction}"""
 # Price recording + checking logic
 # ---------------------------------------------------------------------------
 
-def _record_price(store: str, item_id: str, price: float, ts: int = None) -> None:
-    """Record a price point in the prices table."""
+def _record_price(store: str, item_id: str, price: float, ts: int = None,
+                   snapshot: dict | None = None) -> None:
+    """Record a price point with an optional product snapshot."""
     table = _get_prices_table()
     if not table or not price:
         return
     try:
-        table.put_item(Item={
+        record = {
             "store_item_id": f"{store}#{item_id}",
             "timestamp": ts or _now_ts(),
             "price": Decimal(str(round(price, 2))),
             "store": store,
-        })
+        }
+        if snapshot:
+            if snapshot.get("title"):
+                record["title"] = snapshot["title"][:300]
+            if snapshot.get("image_url"):
+                record["image_url"] = snapshot["image_url"]
+            if snapshot.get("item_url"):
+                record["item_url"] = snapshot["item_url"]
+            if snapshot.get("currency"):
+                record["currency"] = snapshot["currency"]
+        table.put_item(Item=record)
     except Exception as exc:
         log.warning("Failed to record price for %s#%s: %s", store, item_id, exc)
 
@@ -900,7 +917,7 @@ def _check_single_item(item: dict) -> dict | None:
 
         # Only add a new price record when the price actually changed
         if price_changed or old_price == 0:
-            _record_price(store, item_id, new_price, now)
+            _record_price(store, item_id, new_price, now, snapshot=product)
 
         # Send notification if price dropped
         if is_drop and item.get("notify_enabled") and item.get("notify_email"):
@@ -942,7 +959,8 @@ def _check_single_item(item: dict) -> dict | None:
                         price_changed = abs(new_alt - (old_alt or 0)) >= 0.005
                         au["price"] = new_alt
                         if price_changed or not old_alt:
-                            _record_price(au["store"], au["item_id"], new_alt, au_now)
+                            _record_price(au["store"], au["item_id"], new_alt, au_now,
+                                          snapshot=au_product)
                 alt_updated = True
                 time.sleep(2)
             except Exception as exc:

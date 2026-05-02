@@ -52,6 +52,7 @@ const I18n = {
     'detail.tracking_history': { en: '📋 Tracking History', zh: '📋 追踪记录' },
     'history.empty':        { en: 'No price checks recorded yet. Click "Check Price Now" above to start.', zh: '暂无价格检查记录。点击上方"立即查价"开始。' },
     'history.date':         { en: 'Date & Time',           zh: '日期时间' },
+    'history.snapshot':     { en: 'Snapshot',              zh: '快照' },
     'history.price':        { en: 'Price',                 zh: '价格' },
     'history.change':       { en: 'Change',                zh: '变动' },
     'history.note':         { en: 'Note',                  zh: '备注' },

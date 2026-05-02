@@ -82,154 +82,11 @@
     <div class="bg-white dark:bg-panel border border-slate-200 dark:border-border rounded-xl p-4">
       <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-2" data-i18n="search.label">Search Places</label>
       <div id="place-search-container" class="w-full">
-        <input id="place-search" type="text" placeholder="Loading..."
+        <input id="place-search" type="text"
+               :placeholder="I18n.get('search.placeholder')"
                class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-4 py-2.5 text-sm
-                      text-slate-800 dark:text-slate-100 placeholder:text-slate-400" disabled>
-      </div>
-    </div>
-
-    <!-- Search Suggestions (related places after selecting from search) -->
-    <div x-show="showSearchSuggestions" x-transition
-         class="bg-white dark:bg-panel border border-slate-200 dark:border-border rounded-xl p-4">
-      <div class="flex items-center justify-between mb-2">
-        <label class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide"
-               data-i18n="suggestions.label">Related Places Nearby</label>
-        <button @click="dismissSearchSuggestions()"
-                class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition p-0.5">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-          </svg>
-        </button>
-      </div>
-      <!-- Category filter pills -->
-      <div x-show="searchSuggestions.length > 0" class="flex flex-wrap gap-1.5 mb-2">
-        <button @click="activeRelatedCategory = ''"
-                :class="!activeRelatedCategory ? 'bg-brand text-white border-brand' : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:border-brand'"
-                class="px-2.5 py-1 rounded-lg border text-xs font-medium transition"
-                x-text="I18n.get('related.all')">All</button>
-        <template x-for="cat in searchSuggestionsCategories" :key="cat.type">
-          <button @click="activeRelatedCategory = cat.type"
-                  x-show="searchSuggestions.some(p => p.type === cat.type)"
-                  :class="activeRelatedCategory === cat.type ? 'bg-brand text-white border-brand' : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:border-brand'"
-                  class="px-2.5 py-1 rounded-lg border text-xs font-medium transition"
-                  x-text="I18n.get(cat.label)"></button>
-        </template>
-      </div>
-      <!-- Results list -->
-      <div x-show="getFilteredSuggestions().length > 0" class="max-h-48 overflow-y-auto space-y-1.5">
-        <template x-for="place in getFilteredSuggestions()" :key="place.place_id">
-          <div class="flex items-center gap-2 p-2 rounded-lg bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-700/50 cursor-pointer transition"
-               @click="addSearchSuggestion(place)">
-            <div class="flex-1 min-w-0">
-              <div class="flex items-center gap-1.5">
-                <p class="text-xs font-medium text-slate-700 dark:text-slate-200 truncate" x-text="place.name"></p>
-                <span class="shrink-0 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400"
-                      x-text="I18n.get(place.typeLabel)"></span>
-              </div>
-              <div class="flex items-center gap-1 mt-0.5">
-                <span x-show="place.rating" class="text-[10px] text-amber-500 font-medium" x-text="'★ ' + place.rating"></span>
-                <span class="text-[10px] text-slate-400 truncate" x-text="place.vicinity"></span>
-              </div>
-            </div>
-            <svg class="w-4 h-4 text-brand shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-            </svg>
-          </div>
-        </template>
-      </div>
-      <p x-show="searchSuggestionsLoading" class="text-xs text-slate-400 text-center py-2"
-         data-i18n="suggestions.loading">Finding related places...</p>
-      <p x-show="!searchSuggestionsLoading && searchSuggestions.length > 0 && getFilteredSuggestions().length === 0"
-         class="text-xs text-slate-400 text-center py-2"
-         data-i18n="related.none">No results in this category</p>
-      <p x-show="!searchSuggestionsLoading && searchSuggestions.length === 0"
-         class="text-xs text-slate-400 text-center py-2"
-         data-i18n="suggestions.empty">No related places found</p>
-    </div>
-
-    <!-- Transport mode + Departure -->
-    <div class="bg-white dark:bg-panel border border-slate-200 dark:border-border rounded-xl p-4" x-data="{ open: true }">
-      <button @click="open = !open" class="w-full flex items-center justify-between mb-0" :class="open && 'mb-3'">
-        <label class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide cursor-pointer" data-i18n="mode.label">Travel Mode</label>
-        <svg class="w-4 h-4 text-slate-400 transition-transform duration-200" :class="open && 'rotate-180'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-        </svg>
-      </button>
-      <div x-show="open" x-transition class="space-y-3">
-      <div>
-        <div class="flex gap-2">
-          <template x-for="mode in [{id:'DRIVING',icon:'car',label:'mode.driving'},{id:'WALKING',icon:'walk',label:'mode.walking'},{id:'TRANSIT',icon:'bus',label:'mode.transit'}]" :key="mode.id">
-            <button @click="setTravelMode(mode.id)"
-                    :class="travelMode === mode.id ? 'bg-brand text-white border-brand' : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:border-slate-400 dark:hover:border-slate-500'"
-                    class="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium transition">
-              <span x-text="I18n.get(mode.label)"></span>
-            </button>
-          </template>
-        </div>
-      </div>
-      <div>
-        <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-2" data-i18n="departure.label">Departure Time</label>
-        <div class="flex gap-2">
-          <input type="date" x-model="departureDate" @change="updateDepartureTime()"
-                 class="flex-1 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2.5 text-sm
-                        text-slate-800 dark:text-slate-100 focus:outline-none focus:border-brand focus:ring-1 focus:ring-brand/50 transition">
-          <select x-model="departureHour" @change="updateDepartureTime()"
-                  class="bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-2 py-2.5 text-sm
-                         text-slate-800 dark:text-slate-100 focus:outline-none focus:border-brand">
-            <template x-for="h in 24" :key="h">
-              <option :value="String(h).padStart(2,'0')" x-text="String(h).padStart(2,'0')"></option>
-            </template>
-          </select>
-          <span class="text-slate-400 self-center">:</span>
-          <select x-model="departureMinute" @change="updateDepartureTime()"
-                  class="bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-2 py-2.5 text-sm
-                         text-slate-800 dark:text-slate-100 focus:outline-none focus:border-brand">
-            <template x-for="m in ['00','15','30','45']" :key="m">
-              <option :value="m" x-text="m"></option>
-            </template>
-          </select>
-        </div>
-      </div>
-      </div>
-    </div>
-
-    <!-- Explore Nearby -->
-    <div class="bg-white dark:bg-panel border border-slate-200 dark:border-border rounded-xl p-4" x-data="{ open: true }">
-      <button @click="open = !open" class="w-full flex items-center justify-between mb-0" :class="open && 'mb-2'">
-        <label class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide cursor-pointer" data-i18n="nearby.label">Explore Nearby</label>
-        <svg class="w-4 h-4 text-slate-400 transition-transform duration-200" :class="open && 'rotate-180'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-        </svg>
-      </button>
-      <div x-show="open" x-transition>
-      <div class="flex flex-wrap gap-1.5 mb-3">
-        <template x-for="cat in categories" :key="cat.type">
-          <button @click="searchNearby(cat.type)"
-                  :class="activeCategory === cat.type ? 'bg-brand text-white border-brand' : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:border-brand'"
-                  class="px-2.5 py-1.5 rounded-lg border text-xs font-medium transition">
-            <span x-text="I18n.get(cat.label)"></span>
-          </button>
-        </template>
-      </div>
-      <!-- Nearby results -->
-      <div x-show="nearbyResults.length > 0" class="max-h-48 overflow-y-auto space-y-1.5">
-        <template x-for="place in nearbyResults" :key="place.place_id">
-          <div class="flex items-center gap-2 p-2 rounded-lg bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-700/50 cursor-pointer transition"
-               @click="addNearbyPlace(place)">
-            <div class="flex-1 min-w-0">
-              <p class="text-xs font-medium text-slate-700 dark:text-slate-200 truncate" x-text="place.name"></p>
-              <div class="flex items-center gap-1 mt-0.5">
-                <span x-show="place.rating" class="text-[10px] text-amber-500 font-medium" x-text="'★ ' + place.rating"></span>
-                <span class="text-[10px] text-slate-400" x-text="place.vicinity"></span>
-              </div>
-            </div>
-            <svg class="w-4 h-4 text-brand shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-            </svg>
-          </div>
-        </template>
-      </div>
-      <p x-show="nearbyLoading" class="text-xs text-slate-400 text-center py-2" data-i18n="nearby.loading">Searching...</p>
+                      text-slate-800 dark:text-slate-100 placeholder:text-slate-400
+                      focus:outline-none focus:border-brand focus:ring-1 focus:ring-brand/50 transition">
       </div>
     </div>
 
@@ -413,6 +270,146 @@
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
         </svg>
       </button>
+    </div>
+
+    <!-- Transport mode + Departure (collapsed by default) -->
+    <div class="bg-white dark:bg-panel border border-slate-200 dark:border-border rounded-xl p-4" x-data="{ open: false }">
+      <button @click="open = !open" class="w-full flex items-center justify-between mb-0" :class="open && 'mb-3'">
+        <label class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide cursor-pointer" data-i18n="mode.label">Travel Mode</label>
+        <svg class="w-4 h-4 text-slate-400 transition-transform duration-200" :class="open && 'rotate-180'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+        </svg>
+      </button>
+      <div x-show="open" x-transition class="space-y-3">
+        <div class="flex gap-2">
+          <template x-for="mode in [{id:'DRIVING',icon:'car',label:'mode.driving'},{id:'WALKING',icon:'walk',label:'mode.walking'},{id:'TRANSIT',icon:'bus',label:'mode.transit'}]" :key="mode.id">
+            <button @click="setTravelMode(mode.id)"
+                    :class="travelMode === mode.id ? 'bg-brand text-white border-brand' : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:border-slate-400 dark:hover:border-slate-500'"
+                    class="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium transition">
+              <span x-text="I18n.get(mode.label)"></span>
+            </button>
+          </template>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-2" data-i18n="departure.label">Departure Time</label>
+          <div class="flex gap-2">
+            <input type="date" x-model="departureDate" @change="updateDepartureTime()"
+                   class="flex-1 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2.5 text-sm
+                          text-slate-800 dark:text-slate-100 focus:outline-none focus:border-brand focus:ring-1 focus:ring-brand/50 transition">
+            <select x-model="departureHour" @change="updateDepartureTime()"
+                    class="bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-2 py-2.5 text-sm
+                           text-slate-800 dark:text-slate-100 focus:outline-none focus:border-brand">
+              <template x-for="h in 24" :key="h">
+                <option :value="String(h).padStart(2,'0')" x-text="String(h).padStart(2,'0')"></option>
+              </template>
+            </select>
+            <span class="text-slate-400 self-center">:</span>
+            <select x-model="departureMinute" @change="updateDepartureTime()"
+                    class="bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-2 py-2.5 text-sm
+                           text-slate-800 dark:text-slate-100 focus:outline-none focus:border-brand">
+              <template x-for="m in ['00','15','30','45']" :key="m">
+                <option :value="m" x-text="m"></option>
+              </template>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Explore Nearby (collapsed by default) -->
+    <div class="bg-white dark:bg-panel border border-slate-200 dark:border-border rounded-xl p-4" x-data="{ open: false }">
+      <button @click="open = !open" class="w-full flex items-center justify-between mb-0" :class="open && 'mb-2'">
+        <label class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide cursor-pointer" data-i18n="nearby.label">Explore Nearby</label>
+        <svg class="w-4 h-4 text-slate-400 transition-transform duration-200" :class="open && 'rotate-180'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+        </svg>
+      </button>
+      <div x-show="open" x-transition>
+        <div class="flex flex-wrap gap-1.5 mb-3">
+          <template x-for="cat in categories" :key="cat.type">
+            <button @click="searchNearby(cat.type)"
+                    :class="activeCategory === cat.type ? 'bg-brand text-white border-brand' : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:border-brand'"
+                    class="px-2.5 py-1.5 rounded-lg border text-xs font-medium transition">
+              <span x-text="I18n.get(cat.label)"></span>
+            </button>
+          </template>
+        </div>
+        <div x-show="nearbyResults.length > 0" class="max-h-48 overflow-y-auto space-y-1.5">
+          <template x-for="place in nearbyResults" :key="place.place_id">
+            <div class="flex items-center gap-2 p-2 rounded-lg bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-700/50 cursor-pointer transition"
+                 @click="addNearbyPlace(place)">
+              <div class="flex-1 min-w-0">
+                <p class="text-xs font-medium text-slate-700 dark:text-slate-200 truncate" x-text="place.name"></p>
+                <div class="flex items-center gap-1 mt-0.5">
+                  <span x-show="place.rating" class="text-[10px] text-amber-500 font-medium" x-text="'★ ' + place.rating"></span>
+                  <span class="text-[10px] text-slate-400" x-text="place.vicinity"></span>
+                </div>
+              </div>
+              <svg class="w-4 h-4 text-brand shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+              </svg>
+            </div>
+          </template>
+        </div>
+        <p x-show="nearbyLoading" class="text-xs text-slate-400 text-center py-2" data-i18n="nearby.loading">Searching...</p>
+      </div>
+    </div>
+
+    <!-- Search Suggestions (related places — auto-shown after search) -->
+    <div x-show="showSearchSuggestions" x-transition
+         class="bg-white dark:bg-panel border border-slate-200 dark:border-border rounded-xl p-4">
+      <div class="flex items-center justify-between mb-2">
+        <label class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide"
+               data-i18n="suggestions.label">Related Places Nearby</label>
+        <button @click="dismissSearchSuggestions()"
+                class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition p-0.5">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+      <div x-show="searchSuggestions.length > 0" class="flex flex-wrap gap-1.5 mb-2">
+        <button @click="activeRelatedCategory = ''"
+                :class="!activeRelatedCategory ? 'bg-brand text-white border-brand' : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:border-brand'"
+                class="px-2.5 py-1 rounded-lg border text-xs font-medium transition"
+                x-text="I18n.get('related.all')">All</button>
+        <template x-for="cat in searchSuggestionsCategories" :key="cat.type">
+          <button @click="activeRelatedCategory = cat.type"
+                  x-show="searchSuggestions.some(p => p.type === cat.type)"
+                  :class="activeRelatedCategory === cat.type ? 'bg-brand text-white border-brand' : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:border-brand'"
+                  class="px-2.5 py-1 rounded-lg border text-xs font-medium transition"
+                  x-text="I18n.get(cat.label)"></button>
+        </template>
+      </div>
+      <div x-show="getFilteredSuggestions().length > 0" class="max-h-48 overflow-y-auto space-y-1.5">
+        <template x-for="place in getFilteredSuggestions()" :key="place.place_id">
+          <div class="flex items-center gap-2 p-2 rounded-lg bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-700/50 cursor-pointer transition"
+               @click="addSearchSuggestion(place)">
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-1.5">
+                <p class="text-xs font-medium text-slate-700 dark:text-slate-200 truncate" x-text="place.name"></p>
+                <span class="shrink-0 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400"
+                      x-text="I18n.get(place.typeLabel)"></span>
+              </div>
+              <div class="flex items-center gap-1 mt-0.5">
+                <span x-show="place.rating" class="text-[10px] text-amber-500 font-medium" x-text="'★ ' + place.rating"></span>
+                <span class="text-[10px] text-slate-400 truncate" x-text="place.vicinity"></span>
+              </div>
+            </div>
+            <svg class="w-4 h-4 text-brand shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+            </svg>
+          </div>
+        </template>
+      </div>
+      <p x-show="searchSuggestionsLoading" class="text-xs text-slate-400 text-center py-2"
+         data-i18n="suggestions.loading">Finding related places...</p>
+      <p x-show="!searchSuggestionsLoading && searchSuggestions.length > 0 && getFilteredSuggestions().length === 0"
+         class="text-xs text-slate-400 text-center py-2"
+         data-i18n="related.none">No results in this category</p>
+      <p x-show="!searchSuggestionsLoading && searchSuggestions.length === 0"
+         class="text-xs text-slate-400 text-center py-2"
+         data-i18n="suggestions.empty">No related places found</p>
     </div>
 
     <!-- My Trips -->
@@ -684,36 +681,39 @@ function tripPlanner() {
       // Traffic layer
       _mapState.trafficLayer = new google.maps.TrafficLayer();
 
-      // Places Autocomplete (New API - PlaceAutocompleteElement)
-      const placeAutocomplete = new google.maps.places.PlaceAutocompleteElement();
-      placeAutocomplete.id = 'place-search-new';
-      placeAutocomplete.setAttribute('style',
-        'width:100%;--gmpx-color-surface:#1e293b;--gmpx-color-on-surface:#e2e8f0;' +
-        '--gmpx-color-on-surface-variant:#94a3b8;--gmpx-color-primary:#6366f1;' +
-        'font-family:Inter,sans-serif;border-radius:8px;');
+      // Places Autocomplete (classic API — works with our own <input>)
+      const searchInput = document.getElementById('place-search');
+      const autocomplete = new google.maps.places.Autocomplete(searchInput, {
+        fields: ['place_id', 'name', 'formatted_address', 'geometry'],
+      });
 
-      const searchContainer = document.getElementById('place-search-container');
-      searchContainer.innerHTML = '';
-      searchContainer.appendChild(placeAutocomplete);
+      // When user selects from the dropdown
+      autocomplete.addListener('place_changed', () => {
+        const place = autocomplete.getPlace();
+        if (!place.geometry || !place.geometry.location) return;
+        this.addStop({
+          id: Date.now() + Math.random(),
+          placeId: place.place_id,
+          name: place.name,
+          address: place.formatted_address,
+          lat: place.geometry.location.lat(),
+          lng: place.geometry.location.lng(),
+          stopMinutes: 60,
+        });
+        this.fetchSearchSuggestions(place.geometry.location.lat(), place.geometry.location.lng());
+        searchInput.value = '';
+      });
 
-      // Track whether gmp-placeselect fires (dropdown click)
-      let _placeSelectFired = false;
-
-      // Enter key handler: text search when user presses Enter without selecting a dropdown suggestion
-      placeAutocomplete.addEventListener('keydown', (e) => {
+      // Enter key: if user presses Enter without selecting a dropdown item, do a text search
+      searchInput.addEventListener('keydown', (e) => {
         if (e.key !== 'Enter') return;
-        _placeSelectFired = false;
+        // Small delay to let place_changed fire first if a dropdown item was selected
         const self = this;
+        const query = searchInput.value.trim();
+        if (!query) return;
         setTimeout(async () => {
-          if (_placeSelectFired) return; // dropdown selection already handled it
-          // Read the typed text from the autocomplete's shadow DOM input
-          let query = '';
-          try {
-            const input = placeAutocomplete.shadowRoot?.querySelector('input');
-            query = input?.value?.trim() || '';
-          } catch (err) {}
-          if (!query) return;
-          // Use Text Search API to find the top match
+          // If place_changed already handled it (input was cleared), skip
+          if (!searchInput.value.trim()) return;
           try {
             const { places } = await google.maps.places.Place.searchByText({
               textQuery: query,
@@ -732,34 +732,12 @@ function tripPlanner() {
                 stopMinutes: 60,
               });
               self.fetchSearchSuggestions(p.location.lat(), p.location.lng());
-              // Clear the input
-              try {
-                const input = placeAutocomplete.shadowRoot?.querySelector('input');
-                if (input) input.value = '';
-              } catch (err) {}
+              searchInput.value = '';
             }
           } catch (err) {
             console.warn('Text search on Enter failed:', err);
           }
-        }, 400);
-      });
-
-      placeAutocomplete.addEventListener('gmp-placeselect', async (e) => {
-        _placeSelectFired = true;
-        const place = e.place;
-        await place.fetchFields({ fields: ['displayName', 'formattedAddress', 'location', 'id'] });
-        if (!place.location) return;
-        this.addStop({
-          id: Date.now() + Math.random(),
-          placeId: place.id,
-          name: place.displayName,
-          address: place.formattedAddress,
-          lat: place.location.lat(),
-          lng: place.location.lng(),
-          stopMinutes: 60,
-        });
-        // Fetch related places nearby the selected place
-        this.fetchSearchSuggestions(place.location.lat(), place.location.lng());
+        }, 300);
       });
 
       // Render existing stops

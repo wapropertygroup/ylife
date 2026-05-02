@@ -251,6 +251,7 @@
           <thead>
             <tr class="border-b border-slate-200 dark:border-slate-800">
               <th class="text-left py-2.5 px-3 text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider" data-i18n="history.date">Date &amp; Time</th>
+              <th class="text-left py-2.5 px-3 text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider" data-i18n="history.snapshot">Snapshot</th>
               <th class="text-right py-2.5 px-3 text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider" data-i18n="history.price">Price</th>
               <th class="text-right py-2.5 px-3 text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider" data-i18n="history.change">Change</th>
               <th class="text-center py-2.5 px-3 text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider" data-i18n="history.note">Note</th>
@@ -264,6 +265,14 @@
                 <td class="py-2.5 px-3 whitespace-nowrap">
                   <div class="text-slate-700 dark:text-slate-200" x-text="row.dateStr"></div>
                   <div class="text-[10px] text-slate-400 dark:text-slate-500" x-text="row.timeStr"></div>
+                </td>
+                <!-- Snapshot -->
+                <td class="py-2.5 px-3">
+                  <div class="flex items-center gap-2 max-w-[200px]">
+                    <img x-show="row.image_url" :src="row.image_url" class="w-8 h-8 rounded object-contain border border-slate-200 dark:border-slate-700 shrink-0" loading="lazy">
+                    <span x-show="row.title" class="text-[11px] text-slate-500 dark:text-slate-400 truncate" x-text="row.title"></span>
+                    <span x-show="!row.title && !row.image_url" class="text-[10px] text-slate-400">—</span>
+                  </div>
                 </td>
                 <!-- Price -->
                 <td class="py-2.5 px-3 text-right whitespace-nowrap">
@@ -404,6 +413,9 @@ function itemDetail() {
         return {
           timestamp: p.timestamp,
           price: p.price,
+          title: p.title || '',
+          image_url: p.image_url || '',
+          item_url: p.item_url || '',
           dateStr: dt.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }),
           timeStr: dt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
           delta,
