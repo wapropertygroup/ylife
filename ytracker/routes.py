@@ -91,12 +91,81 @@ def _get_prices_table():
 
 
 def _get_session_id() -> str:
-    """Get or create a persistent session ID for tracking items."""
-    sid = session.get("session_id")
-    if not sid:
-        sid = str(uuid.uuid4())[:12]
-        session["session_id"] = sid
-    return sid
+    """Shared user ID — all users see the same tracked items."""
+    return "default"
+
+
+def _get_current_user() -> dict:
+    """Get the logged-in user, or anonymous."""
+    email = session.get("user_email")
+    if email:
+        return {
+            "email": email,
+            "name": session.get("user_name", email.split("@")[0]),
+            "picture": session.get("user_picture", ""),
+        }
+    return {"email": "", "name": "Anonymous", "picture": ""}
+
+
+# ---------------------------------------------------------------------------
+# Auth routes (Google Sign-In)
+# ---------------------------------------------------------------------------
+
+@bp.route("/api/auth/google", methods=["POST"])
+def auth_google():
+    """Verify Google ID token and create session."""
+    data = request.get_json(force=True, silent=True) or {}
+    credential = data.get("credential", "")
+    if not credential:
+        return jsonify({"error": "No credential provided"}), 400
+
+    google_client_id = os.environ.get("GOOGLE_CLIENT_ID", "")
+    if not google_client_id:
+        return jsonify({"error": "Google sign-in not configured"}), 503
+
+    try:
+        from google.oauth2 import id_token
+        from google.auth.transport import requests as google_requests
+        idinfo = id_token.verify_oauth2_token(
+            credential, google_requests.Request(), google_client_id
+        )
+
+        email = idinfo.get("email", "")
+        name = idinfo.get("name", email.split("@")[0])
+        picture = idinfo.get("picture", "")
+
+        if not email:
+            return jsonify({"error": "No email in token"}), 400
+
+        session["user_email"] = email
+        session["user_name"] = name
+        session["user_picture"] = picture
+
+        return jsonify({
+            "ok": True,
+            "user": {"email": email, "name": name, "picture": picture},
+        })
+    except ValueError as exc:
+        log.warning("Google token verification failed: %s", exc)
+        return jsonify({"error": "Invalid Google token"}), 401
+    except Exception as exc:
+        log.exception("Google auth error")
+        return jsonify({"error": str(exc)}), 500
+
+
+@bp.route("/api/auth/me")
+def auth_me():
+    """Get current user info."""
+    return jsonify({"user": _get_current_user()})
+
+
+@bp.route("/api/auth/logout", methods=["POST"])
+def auth_logout():
+    """Log out."""
+    session.pop("user_email", None)
+    session.pop("user_name", None)
+    session.pop("user_picture", None)
+    return jsonify({"ok": True})
 
 
 # ---------------------------------------------------------------------------
@@ -130,13 +199,17 @@ def _format_ts(ts_ms: int) -> str:
 
 @bp.route("/")
 def index():
-    return render_template("index.html", store_names=STORE_NAMES, store_colors=STORE_COLORS)
+    google_client_id = os.environ.get("GOOGLE_CLIENT_ID", "")
+    return render_template("index.html", store_names=STORE_NAMES, store_colors=STORE_COLORS,
+                           google_client_id=google_client_id)
 
 
 @bp.route("/item/<store>/<item_id>")
 def item_detail(store: str, item_id: str):
+    google_client_id = os.environ.get("GOOGLE_CLIENT_ID", "")
     return render_template("item_detail.html", store=store, item_id=item_id,
-                           store_names=STORE_NAMES, store_colors=STORE_COLORS)
+                           store_names=STORE_NAMES, store_colors=STORE_COLORS,
+                           google_client_id=google_client_id)
 
 
 # ---------------------------------------------------------------------------
@@ -242,6 +315,8 @@ def api_add_item():
         "currency": product.get("currency", "USD"),
         "added_at": now,
         "last_checked": now,
+        "added_by_name": _get_current_user()["name"],
+        "added_by_email": _get_current_user()["email"],
         "notify_email": "",
         "notify_enabled": False,
     }

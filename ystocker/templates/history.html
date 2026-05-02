@@ -319,31 +319,24 @@
     <div id="explainPanelPrice" class="explain-panel"></div>
   </div>
 
-  <!-- Altman Z-Score chart -->
+  <!-- Price Z-Score -->
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up" id="zscoreSection" style="display:none">
     <div class="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-0 sm:justify-between mb-4">
       <div>
-        <h2 class="text-base font-semibold text-slate-200" data-i18n="history.zscore_title">Altman Z-Score</h2>
-        <p class="text-xs text-slate-500" data-i18n="history.zscore_desc">Bankruptcy risk indicator — combines 5 financial ratios to assess financial health</p>
+        <h2 class="text-base font-semibold text-slate-200" data-i18n="history.zscore_title">Price Z-Score</h2>
+        <p class="text-xs text-slate-500" data-i18n="history.zscore_desc">How far the current price is from the 52-week average, measured in standard deviations</p>
       </div>
       <div class="flex items-center gap-3 flex-wrap justify-end">
-        <span class="flex items-center gap-1.5 text-xs text-emerald-400"><span class="inline-block w-2 h-2 rounded-sm bg-emerald-500/70"></span> <span data-i18n="history.zscore_safe">&gt;3.0 Safe</span></span>
-        <span class="flex items-center gap-1.5 text-xs text-amber-400"><span class="inline-block w-2 h-2 rounded-sm bg-amber-500/70"></span> <span data-i18n="history.zscore_grey">1.8–3.0 Grey</span></span>
-        <span class="flex items-center gap-1.5 text-xs text-rose-400"><span class="inline-block w-2 h-2 rounded-sm bg-rose-500/70"></span> <span data-i18n="history.zscore_distress">&lt;1.8 Distress</span></span>
+        <span class="flex items-center gap-1.5 text-xs text-rose-400"><span class="inline-block w-2 h-2 rounded-sm bg-rose-500/70"></span> <span data-i18n="history.zscore_high">&gt;2σ Overbought</span></span>
+        <span class="flex items-center gap-1.5 text-xs text-emerald-400"><span class="inline-block w-2 h-2 rounded-sm bg-emerald-500/70"></span> <span data-i18n="history.zscore_normal">-1σ to 1σ Normal</span></span>
+        <span class="flex items-center gap-1.5 text-xs text-sky-400"><span class="inline-block w-2 h-2 rounded-sm bg-sky-500/70"></span> <span data-i18n="history.zscore_low">&lt;-2σ Oversold</span></span>
         <button onclick="expandChart('zscore')" title="Expand" class="expand-btn">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
         </button>
       </div>
     </div>
-    <div class="chart-container" style="height:300px" id="zscoreChartWrap">
-      <canvas id="zscoreChart"></canvas>
-    </div>
-    <!-- Component breakdown table -->
-    <div id="zscoreComponents" class="overflow-x-auto mt-4" style="display:none">
-      <table class="w-full text-sm">
-        <thead id="zscoreHead"></thead>
-        <tbody id="zscoreBody"></tbody>
-      </table>
+    <!-- Z-Score details card -->
+    <div id="zscoreDetails" class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
     </div>
   </div>
 

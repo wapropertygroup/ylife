@@ -124,7 +124,11 @@
               <span data-i18n="card.last_check">Last checked</span>:
               <span x-text="formatDate(item.last_checked)"></span>
             </span>
-            <span x-show="item.notify_enabled" title="Email alerts enabled">&#x1f514;</span>
+            <div class="flex items-center gap-1">
+              <span x-show="item.notify_enabled" title="Email alerts enabled">&#x1f514;</span>
+              <span x-show="item.added_by_name" x-text="item.added_by_name" class="truncate max-w-[80px]" :title="item.added_by_email || ''"></span>
+              <span x-show="!item.added_by_name">Anonymous</span>
+            </div>
           </div>
         </div>
       </a>

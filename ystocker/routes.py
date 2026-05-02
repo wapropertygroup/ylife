@@ -800,94 +800,42 @@ def api_financials(ticker: str):
     except Exception as exc:
         log.warning("api_financials failed for %s: %s", ticker, exc)
 
-    # ── Altman Z-Score ────────────────────────────────────────────────
-    # Z = 1.2*X1 + 1.4*X2 + 3.3*X3 + 0.6*X4 + 1.0*X5
-    #   X1 = Working Capital / Total Assets
-    #   X2 = Retained Earnings / Total Assets
-    #   X3 = EBIT / Total Assets
-    #   X4 = Market Cap / Total Liabilities
-    #   X5 = Revenue / Total Assets
-    altman_zscore: list = []   # [{year, z, x1..x5, zone, components:{...}}]
+    # ── Price Z-Score (statistical) ─────────────────────────────────
+    # z = (current_price - mean_52w) / stdev_52w
+    # Measures how far the current price is from the 52-week average
+    # in standard deviations.  Positive = above mean, negative = below.
+    price_zscore: dict = {}   # {z, mean, stdev, current, high_52w, low_52w, weeks}
     try:
         if "tk" not in dir():
             import yfinance as yf
             tk   = yf.Ticker(ticker)
             info = tk.info
 
-        bs   = tk.balance_sheet     # annual balance sheet
-        stmt = tk.income_stmt       # annual income statement
-        mkt_cap = info.get("marketCap")  # current market cap (latest)
-
-        if bs is not None and not bs.empty and stmt is not None and not stmt.empty:
-            def _get(frame, row_name, col, default=None):
-                """Safely get a value from a DataFrame."""
-                if row_name in frame.index:
-                    try:
-                        v = float(frame.loc[row_name, col])
-                        return v if v == v else default   # NaN check
-                    except Exception:
-                        pass
-                return default
-
-            # Iterate over available years (columns are Timestamps)
-            for col in list(bs.columns)[:4]:    # up to 4 years
-                yr = str(col.year)
-
-                total_assets      = _get(bs, "Total Assets", col)
-                current_assets    = _get(bs, "Current Assets", col)
-                current_liab      = _get(bs, "Current Liabilities", col)
-                retained_earnings = _get(bs, "Retained Earnings", col)
-                total_liab        = _get(bs, "Total Liabilities Net Minority Interest", col) \
-                                    or _get(bs, "Total Liabilities", col)
-
-                # Income statement items for same year
-                revenue = _get(stmt, "Total Revenue", col) if col in stmt.columns else None
-                ebit    = _get(stmt, "EBIT", col) if col in stmt.columns else None
-
-                if not total_assets or total_assets <= 0:
-                    continue
-
-                working_capital = None
-                if current_assets is not None and current_liab is not None:
-                    working_capital = current_assets - current_liab
-
-                x1 = round(working_capital / total_assets, 4)  if working_capital is not None else None
-                x2 = round(retained_earnings / total_assets, 4) if retained_earnings is not None else None
-                x3 = round(ebit / total_assets, 4)             if ebit is not None else None
-                x4 = round(mkt_cap / total_liab, 4)            if mkt_cap and total_liab and total_liab > 0 else None
-                x5 = round(revenue / total_assets, 4)          if revenue is not None else None
-
-                # Compute Z only if all 5 components available
-                if all(v is not None for v in [x1, x2, x3, x4, x5]):
-                    z = round(1.2*x1 + 1.4*x2 + 3.3*x3 + 0.6*x4 + 1.0*x5, 2)
-                    zone = "safe" if z > 3.0 else ("grey" if z >= 1.8 else "distress")
-                    altman_zscore.append({
-                        "year": yr,
-                        "z":    z,
-                        "zone": zone,
-                        "x1":   round(1.2 * x1, 3),   # weighted contribution
-                        "x2":   round(1.4 * x2, 3),
-                        "x3":   round(3.3 * x3, 3),
-                        "x4":   round(0.6 * x4, 3),
-                        "x5":   round(1.0 * x5, 3),
-                        "components": {
-                            "working_capital":   round(working_capital / 1e9, 2) if working_capital else None,
-                            "retained_earnings": round(retained_earnings / 1e9, 2) if retained_earnings else None,
-                            "ebit":              round(ebit / 1e9, 2) if ebit else None,
-                            "total_assets":      round(total_assets / 1e9, 2),
-                            "total_liabilities": round(total_liab / 1e9, 2) if total_liab else None,
-                            "revenue":           round(revenue / 1e9, 2) if revenue else None,
-                            "market_cap":        round(mkt_cap / 1e9, 2) if mkt_cap else None,
-                        },
-                    })
-
-            # Sort oldest → newest for charting
-            altman_zscore.sort(key=lambda r: r["year"])
-
+        hist = tk.history(period="1y", interval="1wk")
+        if hist is not None and len(hist) >= 4:
+            closes = hist["Close"].dropna().tolist()
+            current = closes[-1] if closes else None
+            if current and len(closes) >= 4:
+                import statistics
+                mean_val  = statistics.mean(closes)
+                stdev_val = statistics.stdev(closes)
+                if stdev_val > 0:
+                    z = round((current - mean_val) / stdev_val, 2)
+                    zone = "high" if z > 2.0 else ("elevated" if z > 1.0 else ("low" if z < -2.0 else ("depressed" if z < -1.0 else "normal")))
+                    price_zscore = {
+                        "z":       z,
+                        "zone":    zone,
+                        "mean":    round(mean_val, 2),
+                        "stdev":   round(stdev_val, 2),
+                        "current": round(current, 2),
+                        "high_52w": round(max(closes), 2),
+                        "low_52w":  round(min(closes), 2),
+                        "weeks":   len(closes),
+                    }
     except Exception as exc:
-        log.warning("Altman Z-Score failed for %s: %s", ticker, exc)
+        log.warning("Price Z-Score failed for %s: %s", ticker, exc)
 
-    result = {"ticker": ticker, "financials_table": financials_table, "altman_zscore": altman_zscore}
+    result = {"ticker": ticker, "financials_table": financials_table, "price_zscore": price_zscore}
     with _FINANCIALS_CACHE_LOCK:
         _FINANCIALS_CACHE[ticker] = {"ts": time.time(), "data": result}
     return jsonify(result)
@@ -5116,8 +5064,121 @@ def _daily_broadcast_loop() -> None:
     Background thread: sleep until next UTC 00:00, then call _do_auto_broadcast().
     Repeats every 24 h, always recalculating sleep from the current time so it
     reliably fires at UTC 00:00 regardless of how long the broadcast itself takes.
+    Skips weekends (Sat/Sun) and US stock market holidays.
     """
     import datetime as _dt_mod
+
+    # US stock market holidays (fixed-date, checked by month-day).
+    # Holidays that fall on weekends are observed on Mon/Fri but the weekend
+    # skip already handles Sat/Sun, so we list the standard weekday dates.
+    def _us_market_holidays(year: int) -> set:
+        """Return a set of date objects for US market holidays in the given year."""
+        from datetime import date as _date, timedelta as _td
+        holidays = set()
+
+        # New Year's Day — Jan 1 (if Mon–Fri)
+        d = _date(year, 1, 1)
+        if d.weekday() < 5:
+            holidays.add(d)
+        elif d.weekday() == 6:  # Sun → observed Mon
+            holidays.add(d + _td(days=1))
+
+        # MLK Day — 3rd Monday of January
+        d = _date(year, 1, 1)
+        mondays = 0
+        while mondays < 3:
+            if d.weekday() == 0:
+                mondays += 1
+                if mondays == 3:
+                    break
+            d += _td(days=1)
+        holidays.add(d)
+
+        # Presidents' Day — 3rd Monday of February
+        d = _date(year, 2, 1)
+        mondays = 0
+        while mondays < 3:
+            if d.weekday() == 0:
+                mondays += 1
+                if mondays == 3:
+                    break
+            d += _td(days=1)
+        holidays.add(d)
+
+        # Good Friday — 2 days before Easter Sunday
+        # Easter algorithm (Anonymous Gregorian)
+        a = year % 19
+        b, c = divmod(year, 100)
+        d_v, e = divmod(b, 4)
+        f = (b + 8) // 25
+        g = (b - f + 1) // 3
+        h = (19 * a + b - d_v - g + 15) % 30
+        i, k = divmod(c, 4)
+        l = (32 + 2 * e + 2 * i - h - k) % 7
+        m = (a + 11 * h + 22 * l) // 451
+        month = (h + l - 7 * m + 114) // 31
+        day = ((h + l - 7 * m + 114) % 31) + 1
+        easter = _date(year, month, day)
+        holidays.add(easter - _td(days=2))  # Good Friday
+
+        # Memorial Day — last Monday of May
+        d = _date(year, 5, 31)
+        while d.weekday() != 0:
+            d -= _td(days=1)
+        holidays.add(d)
+
+        # Juneteenth — Jun 19
+        d = _date(year, 6, 19)
+        if d.weekday() == 5:    # Sat → observed Fri
+            holidays.add(d - _td(days=1))
+        elif d.weekday() == 6:  # Sun → observed Mon
+            holidays.add(d + _td(days=1))
+        else:
+            holidays.add(d)
+
+        # Independence Day — Jul 4
+        d = _date(year, 7, 4)
+        if d.weekday() == 5:
+            holidays.add(d - _td(days=1))
+        elif d.weekday() == 6:
+            holidays.add(d + _td(days=1))
+        else:
+            holidays.add(d)
+
+        # Labor Day — 1st Monday of September
+        d = _date(year, 9, 1)
+        while d.weekday() != 0:
+            d += _td(days=1)
+        holidays.add(d)
+
+        # Thanksgiving — 4th Thursday of November
+        d = _date(year, 11, 1)
+        thursdays = 0
+        while thursdays < 4:
+            if d.weekday() == 3:
+                thursdays += 1
+                if thursdays == 4:
+                    break
+            d += _td(days=1)
+        holidays.add(d)
+
+        # Christmas — Dec 25
+        d = _date(year, 12, 25)
+        if d.weekday() == 5:
+            holidays.add(d - _td(days=1))
+        elif d.weekday() == 6:
+            holidays.add(d + _td(days=1))
+        else:
+            holidays.add(d)
+
+        return holidays
+
+    def _is_trading_day(dt_obj) -> bool:
+        """Check if a date is a US stock market trading day."""
+        if dt_obj.weekday() >= 5:  # weekend
+            return False
+        holidays = _us_market_holidays(dt_obj.year)
+        return dt_obj not in holidays
 
     def _seconds_until_utc_midnight() -> float:
         now = _dt_mod.datetime.utcnow()
@@ -5126,11 +5187,25 @@ def _daily_broadcast_loop() -> None:
         )
         return (tomorrow - now).total_seconds()
 
-    log.info("Daily broadcast scheduler started — will fire at UTC 00:00 each day")
+    log.info("Daily broadcast scheduler started — will fire at UTC 00:00 on trading days")
     while True:
         secs = _seconds_until_utc_midnight()
-        log.info("Daily broadcast: next send in %.1f h", secs / 3600)
+        log.info("Daily broadcast: next wake in %.1f h", secs / 3600)
         time.sleep(secs)
+
+        # Check if the previous US trading day just ended (UTC 00:00 = ~ET 19:00/20:00).
+        # The report covers the day that just closed, which is the UTC date minus 1 day
+        # (ET perspective).  We check if that was a trading day.
+        ET_OFFSET = -5  # conservative EST
+        now_utc = _dt_mod.datetime.utcnow()
+        now_et  = now_utc + _dt_mod.timedelta(hours=ET_OFFSET)
+        report_date = now_et.date()
+
+        if not _is_trading_day(report_date):
+            log.info("Daily broadcast: skipping %s (not a trading day)", report_date)
+            time.sleep(70)
+            continue
+
         try:
             _do_auto_broadcast()
         except Exception:

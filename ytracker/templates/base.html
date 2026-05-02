@@ -33,6 +33,9 @@
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  {% if google_client_id %}
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  {% endif %}
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
@@ -43,7 +46,8 @@
   {% block head %}{% endblock %}
 </head>
 
-<body class="bg-white dark:bg-slate-950 text-slate-800 dark:text-slate-100 min-h-screen flex flex-col font-[Inter]" x-data="{ navOpen: false }">
+<body class="bg-white dark:bg-slate-950 text-slate-800 dark:text-slate-100 min-h-screen flex flex-col font-[Inter]"
+      x-data="{ navOpen: false, user: null }" x-init="fetch('/api/auth/me').then(r=>r.json()).then(d=>{user=d.user})">
 
   <header class="sticky top-0 z-50 bg-white/80 dark:bg-slate-900/80 backdrop-blur border-b border-slate-200 dark:border-slate-800">
     <div class="max-w-screen-xl mx-auto px-4 sm:px-6 flex items-center h-14 gap-4">
@@ -61,6 +65,24 @@
       </nav>
 
       <div class="ml-auto hidden md:flex items-center gap-2">
+        <!-- User auth -->
+        <div x-show="user && user.email" class="flex items-center gap-2">
+          <img x-show="user?.picture" :src="user?.picture" class="w-7 h-7 rounded-full border border-slate-300 dark:border-slate-600">
+          <span class="text-xs text-slate-500 dark:text-slate-400" x-text="user?.name"></span>
+          <button @click="fetch('/api/auth/logout',{method:'POST'}).then(()=>{user={email:'',name:'Anonymous',picture:''}})"
+                  class="text-xs text-slate-400 hover:text-red-500 transition">Logout</button>
+        </div>
+        <div x-show="!user || !user.email">
+          {% if google_client_id %}
+          <div id="g_id_onload"
+               data-client_id="{{ google_client_id }}"
+               data-callback="handleGoogleLogin"
+               data-auto_prompt="false"></div>
+          <div class="g_id_signin" data-type="icon" data-shape="circle" data-size="medium"></div>
+          {% else %}
+          <span class="text-xs text-slate-400">Anonymous</span>
+          {% endif %}
+        </div>
         <button onclick="toggleTheme()"
                 class="p-2 rounded-md text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
                 title="Toggle theme">
@@ -115,6 +137,27 @@
       html.classList.add('dark');
       localStorage.setItem('ytracker_theme', 'dark');
     }
+  }
+
+  function handleGoogleLogin(response) {
+    fetch('/api/auth/google', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ credential: response.credential }),
+    }).then(r => r.json()).then(data => {
+      if (data.ok && data.user) {
+        // Update Alpine.js state on body element
+        const body = document.querySelector('body');
+        if (body.__x) {
+          body.__x.$data.user = data.user;
+        } else {
+          // Alpine v3
+          document.querySelectorAll('[x-data]').forEach(el => {
+            if (el._x_dataStack) el._x_dataStack[0].user = data.user;
+          });
+        }
+      }
+    });
   }
   </script>
 
