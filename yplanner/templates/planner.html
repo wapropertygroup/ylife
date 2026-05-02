@@ -239,6 +239,9 @@
         <div class="flex items-center gap-2">
           <label class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide cursor-pointer" data-i18n="stops.label">Trip Stops</label>
           <span class="text-xs text-slate-400 dark:text-slate-500" x-text="stops.length + ' ' + I18n.get('stops.count')"></span>
+          <button x-show="stops.length > 0" @click.stop="clearTrip()"
+                  class="text-[10px] text-slate-400 hover:text-red-500 dark:hover:text-red-400 transition px-1.5 py-0.5 rounded hover:bg-red-50 dark:hover:bg-red-900/20"
+                  data-i18n="stops.clear_all">Clear all</button>
         </div>
         <svg class="w-4 h-4 text-slate-400 transition-transform duration-200" :class="open && 'rotate-180'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
@@ -693,7 +696,56 @@ function tripPlanner() {
       searchContainer.innerHTML = '';
       searchContainer.appendChild(placeAutocomplete);
 
+      // Track whether gmp-placeselect fires (dropdown click)
+      let _placeSelectFired = false;
+
+      // Enter key handler: text search when user presses Enter without selecting a dropdown suggestion
+      placeAutocomplete.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter') return;
+        _placeSelectFired = false;
+        const self = this;
+        setTimeout(async () => {
+          if (_placeSelectFired) return; // dropdown selection already handled it
+          // Read the typed text from the autocomplete's shadow DOM input
+          let query = '';
+          try {
+            const input = placeAutocomplete.shadowRoot?.querySelector('input');
+            query = input?.value?.trim() || '';
+          } catch (err) {}
+          if (!query) return;
+          // Use Text Search API to find the top match
+          try {
+            const { places } = await google.maps.places.Place.searchByText({
+              textQuery: query,
+              maxResultCount: 1,
+              fields: ['id', 'displayName', 'formattedAddress', 'location'],
+            });
+            if (places && places.length > 0) {
+              const p = places[0];
+              self.addStop({
+                id: Date.now() + Math.random(),
+                placeId: p.id,
+                name: p.displayName,
+                address: p.formattedAddress,
+                lat: p.location.lat(),
+                lng: p.location.lng(),
+                stopMinutes: 60,
+              });
+              self.fetchSearchSuggestions(p.location.lat(), p.location.lng());
+              // Clear the input
+              try {
+                const input = placeAutocomplete.shadowRoot?.querySelector('input');
+                if (input) input.value = '';
+              } catch (err) {}
+            }
+          } catch (err) {
+            console.warn('Text search on Enter failed:', err);
+          }
+        }, 400);
+      });
+
       placeAutocomplete.addEventListener('gmp-placeselect', async (e) => {
+        _placeSelectFired = true;
         const place = e.place;
         await place.fetchFields({ fields: ['displayName', 'formattedAddress', 'location', 'id'] });
         if (!place.location) return;

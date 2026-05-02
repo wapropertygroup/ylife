@@ -59,6 +59,7 @@ const I18n = {
     'stops.label':       { en: 'Trip Stops',       zh: '行程站点' },
     'stops.count':       { en: 'stops',            zh: '个站点' },
     'stops.empty':       { en: 'Search above to add places to your trip', zh: '在上方搜索以添加地点到行程' },
+    'stops.clear_all':   { en: 'Clear all', zh: '清除全部' },
 
     'stop.pass_through': { en: 'Pass through',     zh: '途经' },
     'stop.custom':       { en: 'Custom...',        zh: '自定义...' },
