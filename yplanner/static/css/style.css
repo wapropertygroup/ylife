@@ -4,6 +4,11 @@ body {
   font-family: 'Inter', sans-serif;
 }
 
+/* Thin scrollbar utility */
+.scrollbar-thin::-webkit-scrollbar { width: 4px; }
+.scrollbar-thin::-webkit-scrollbar-thumb { background: #64748b; border-radius: 2px; }
+.dark .scrollbar-thin::-webkit-scrollbar-thumb { background: #475569; }
+
 /* Custom scrollbar (dark mode) */
 .dark ::-webkit-scrollbar { width: 6px; height: 6px; }
 .dark ::-webkit-scrollbar-track { background: #1e293b; }
