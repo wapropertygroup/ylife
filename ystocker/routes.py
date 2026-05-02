@@ -848,12 +848,16 @@ def api_financials(ticker: str):
             # Also compute a 14-day smoothed Z-Score (moving average of Z)
             zs_ma  = zs_raw.rolling(window=14, min_periods=1).mean()
 
+            # Align price series with the Z-Score dates
+            price_aligned = dc.reindex(zs_raw.index)
+
             zscore_history = []
-            for dt, zv, zmv in zip(zs_raw.index, zs_raw.values, zs_ma.values):
+            for dt, zv, zmv, pv in zip(zs_raw.index, zs_raw.values, zs_ma.values, price_aligned.values):
                 zscore_history.append({
                     "date":  str(dt.date()),
                     "z":     round(float(zv), 3),
                     "z_ma":  round(float(zmv), 3),
+                    "price": round(float(pv), 2) if not np.isnan(pv) else None,
                 })
             price_zscore["history"] = zscore_history
     except Exception as exc:

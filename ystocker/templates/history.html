@@ -771,6 +771,7 @@ let   _forecastResult = null;   // last forecast API response
           const labels = zs.history.map(h => h.date);
           const zVals  = zs.history.map(h => h.z);
           const zMA    = zs.history.map(h => h.z_ma);
+          const prices = zs.history.map(h => h.price);
 
           const zsCfg = {
             type: 'line',
@@ -787,6 +788,7 @@ let   _forecastResult = null;   // last forecast API response
                   pointHoverRadius: 4,
                   fill: false,
                   tension: 0.3,
+                  yAxisID: 'y',
                 },
                 {
                   label: '14d MA of Z',
@@ -798,13 +800,26 @@ let   _forecastResult = null;   // last forecast API response
                   pointHoverRadius: 4,
                   fill: false,
                   tension: 0.3,
+                  yAxisID: 'y',
                 },
-                // Horizontal reference lines
-                { label: '+2σ', data: labels.map(() => 2),  borderColor: 'rgba(244,63,94,0.4)',  borderWidth: 1, borderDash: [4,4], pointRadius: 0, pointHoverRadius: 0, fill: false },
-                { label: '+1σ', data: labels.map(() => 1),  borderColor: 'rgba(251,191,36,0.3)', borderWidth: 1, borderDash: [4,4], pointRadius: 0, pointHoverRadius: 0, fill: false },
-                { label: '0',   data: labels.map(() => 0),  borderColor: 'rgba(148,163,184,0.3)', borderWidth: 1, pointRadius: 0, pointHoverRadius: 0, fill: false },
-                { label: '-1σ', data: labels.map(() => -1), borderColor: 'rgba(251,191,36,0.3)', borderWidth: 1, borderDash: [4,4], pointRadius: 0, pointHoverRadius: 0, fill: false },
-                { label: '-2σ', data: labels.map(() => -2), borderColor: 'rgba(56,189,248,0.4)', borderWidth: 1, borderDash: [4,4], pointRadius: 0, pointHoverRadius: 0, fill: false },
+                {
+                  label: 'Price',
+                  data: prices,
+                  borderColor: 'rgba(56,189,248,0.6)',
+                  backgroundColor: 'rgba(56,189,248,0.06)',
+                  borderWidth: 1.2,
+                  pointRadius: 0,
+                  pointHoverRadius: 3,
+                  fill: true,
+                  tension: 0.3,
+                  yAxisID: 'yPrice',
+                },
+                // Horizontal reference lines (on Z-Score axis)
+                { label: '+2σ', data: labels.map(() => 2),  borderColor: 'rgba(244,63,94,0.4)',  borderWidth: 1, borderDash: [4,4], pointRadius: 0, pointHoverRadius: 0, fill: false, yAxisID: 'y' },
+                { label: '+1σ', data: labels.map(() => 1),  borderColor: 'rgba(251,191,36,0.3)', borderWidth: 1, borderDash: [4,4], pointRadius: 0, pointHoverRadius: 0, fill: false, yAxisID: 'y' },
+                { label: '0',   data: labels.map(() => 0),  borderColor: 'rgba(148,163,184,0.3)', borderWidth: 1, pointRadius: 0, pointHoverRadius: 0, fill: false, yAxisID: 'y' },
+                { label: '-1σ', data: labels.map(() => -1), borderColor: 'rgba(251,191,36,0.3)', borderWidth: 1, borderDash: [4,4], pointRadius: 0, pointHoverRadius: 0, fill: false, yAxisID: 'y' },
+                { label: '-2σ', data: labels.map(() => -2), borderColor: 'rgba(56,189,248,0.4)', borderWidth: 1, borderDash: [4,4], pointRadius: 0, pointHoverRadius: 0, fill: false, yAxisID: 'y' },
               ],
             },
             options: {
@@ -816,7 +831,7 @@ let   _forecastResult = null;   // last forecast API response
                   display: true,
                   labels: {
                     color: '#94a3b8', boxWidth: 14, font: { size: 11 },
-                    filter: (item) => item.datasetIndex < 2,  // Only show Z-Score + MA in legend
+                    filter: (item) => item.datasetIndex < 3,  // Show Z-Score, MA, and Price in legend
                   },
                 },
                 tooltip: {
@@ -825,9 +840,12 @@ let   _forecastResult = null;   // last forecast API response
                   bodyColor: '#cbd5e1',
                   borderColor: '#334155',
                   borderWidth: 1,
-                  filter: (item) => item.datasetIndex < 2,  // Only tooltip for Z-Score + MA
+                  filter: (item) => item.datasetIndex < 3,  // Tooltip for Z-Score, MA, and Price
                   callbacks: {
-                    label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y >= 0 ? '+' : ''}${ctx.parsed.y.toFixed(2)}σ`,
+                    label: (ctx) => {
+                      if (ctx.datasetIndex === 2) return `Price: $${ctx.parsed.y.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+                      return `${ctx.dataset.label}: ${ctx.parsed.y >= 0 ? '+' : ''}${ctx.parsed.y.toFixed(2)}σ`;
+                    },
                   },
                 },
               },
@@ -837,12 +855,22 @@ let   _forecastResult = null;   // last forecast API response
                   grid: { color: 'rgba(51,65,85,0.3)' },
                 },
                 y: {
+                  position: 'left',
                   ticks: {
                     color: '#64748b',
                     font: { size: 10 },
                     callback: (v) => (v >= 0 ? '+' : '') + v.toFixed(1) + 'σ',
                   },
                   grid: { color: 'rgba(51,65,85,0.3)' },
+                },
+                yPrice: {
+                  position: 'right',
+                  ticks: {
+                    color: 'rgba(56,189,248,0.6)',
+                    font: { size: 10 },
+                    callback: (v) => '$' + v.toLocaleString(),
+                  },
+                  grid: { drawOnChartArea: false },
                 },
               },
             },
