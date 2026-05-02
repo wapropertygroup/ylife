@@ -668,7 +668,7 @@ let   _forecastResult = null;   // last forecast API response
   }
 
   // Z-Score stat card — populated later from financials fetch
-  // (placeholder — filled by the Altman Z-Score async block below)
+  // (placeholder — filled by the Price Z-Score async block below)
 
   // Annual Financials table — fetched async from dedicated endpoint
   (async () => {
@@ -708,141 +708,57 @@ let   _forecastResult = null;   // last forecast API response
     }).join('');
       }
 
-      // ── Altman Z-Score chart + stat card (from same financials response) ──
-      const zData = fdata.altman_zscore || [];
-      if (zData.length > 0) {
+      // ── Price Z-Score stat card + detail panel ──
+      const zs = fdata.price_zscore;
+      if (zs && zs.z != null) {
         // Stat card
-        const latest = zData[zData.length - 1];
         const zsEl    = document.getElementById('statZscore');
         const zsLabel = document.getElementById('statZscoreLabel');
-        zsEl.textContent = latest.z.toFixed(2);
-        if (latest.zone === 'safe') {
-          zsEl.className = 'text-base font-bold text-emerald-400';
-          zsLabel.textContent = I18n.t('history.zscore_safe') || '>3.0 Safe';
-          zsLabel.className = 'text-[10px] mt-0.5 text-emerald-600';
-        } else if (latest.zone === 'grey') {
-          zsEl.className = 'text-base font-bold text-amber-400';
-          zsLabel.textContent = I18n.t('history.zscore_grey') || '1.8–3.0 Grey';
-          zsLabel.className = 'text-[10px] mt-0.5 text-amber-600';
-        } else {
+        zsEl.textContent = (zs.z >= 0 ? '+' : '') + zs.z.toFixed(2) + 'σ';
+        if (zs.z > 2.0) {
           zsEl.className = 'text-base font-bold text-rose-400';
-          zsLabel.textContent = I18n.t('history.zscore_distress') || '<1.8 Distress';
+          zsLabel.textContent = I18n.t('history.zscore_high') || '>2σ Overbought';
           zsLabel.className = 'text-[10px] mt-0.5 text-rose-500';
+        } else if (zs.z > 1.0) {
+          zsEl.className = 'text-base font-bold text-amber-400';
+          zsLabel.textContent = I18n.t('history.zscore_elevated') || '>1σ Above Mean';
+          zsLabel.className = 'text-[10px] mt-0.5 text-amber-600';
+        } else if (zs.z < -2.0) {
+          zsEl.className = 'text-base font-bold text-sky-400';
+          zsLabel.textContent = I18n.t('history.zscore_low') || '<-2σ Oversold';
+          zsLabel.className = 'text-[10px] mt-0.5 text-sky-500';
+        } else if (zs.z < -1.0) {
+          zsEl.className = 'text-base font-bold text-sky-300';
+          zsLabel.textContent = I18n.t('history.zscore_depressed') || '<-1σ Below Mean';
+          zsLabel.className = 'text-[10px] mt-0.5 text-sky-600';
+        } else {
+          zsEl.className = 'text-base font-bold text-emerald-400';
+          zsLabel.textContent = I18n.t('history.zscore_normal') || 'Normal';
+          zsLabel.className = 'text-[10px] mt-0.5 text-emerald-600';
         }
 
-        // Show chart section
+        // Show detail section
         document.getElementById('zscoreSection').style.display = 'block';
-
-        // Stacked bar chart: 5 components per year
-        const years = zData.map(d => d.year);
-        const zoneColors = zData.map(d =>
-          d.zone === 'safe' ? 'rgba(52,211,153,0.8)' :
-          d.zone === 'grey' ? 'rgba(251,191,36,0.8)' : 'rgba(239,68,68,0.8)'
-        );
-        const zoneBorders = zData.map(d =>
-          d.zone === 'safe' ? '#34d399' : d.zone === 'grey' ? '#fbbf24' : '#ef4444'
-        );
-
-        const x1Label = 'X1: ' + (I18n.t('history.zscore_x1') || 'Working Capital / Assets');
-        const x2Label = 'X2: ' + (I18n.t('history.zscore_x2') || 'Retained Earnings / Assets');
-        const x3Label = 'X3: ' + (I18n.t('history.zscore_x3') || 'EBIT / Assets');
-        const x4Label = 'X4: ' + (I18n.t('history.zscore_x4') || 'Market Cap / Liabilities');
-        const x5Label = 'X5: ' + (I18n.t('history.zscore_x5') || 'Revenue / Assets');
-
-        const zCfg = {
-          type: 'bar',
-          data: {
-            labels: years,
-            datasets: [
-              { label: x1Label, data: zData.map(d => d.x1), backgroundColor: 'rgba(99,102,241,0.7)',  borderColor: '#6366f1', borderWidth: 1, borderRadius: 2 },
-              { label: x2Label, data: zData.map(d => d.x2), backgroundColor: 'rgba(139,92,246,0.7)',  borderColor: '#8b5cf6', borderWidth: 1, borderRadius: 2 },
-              { label: x3Label, data: zData.map(d => d.x3), backgroundColor: 'rgba(236,72,153,0.7)',  borderColor: '#ec4899', borderWidth: 1, borderRadius: 2 },
-              { label: x4Label, data: zData.map(d => d.x4), backgroundColor: 'rgba(14,165,233,0.7)',  borderColor: '#0ea5e9', borderWidth: 1, borderRadius: 2 },
-              { label: x5Label, data: zData.map(d => d.x5), backgroundColor: 'rgba(20,184,166,0.7)',  borderColor: '#14b8a6', borderWidth: 1, borderRadius: 2 },
-            ],
-          },
-          options: {
-            responsive: true, maintainAspectRatio: false,
-            plugins: {
-              legend: { labels: { color: '#94a3b8', font: { size: 10 }, boxWidth: 12 } },
-              tooltip: {
-                mode: 'index', intersect: false,
-                callbacks: {
-                  afterBody: (items) => {
-                    const idx = items[0]?.dataIndex;
-                    if (idx == null) return '';
-                    const d = zData[idx];
-                    const zoneLabel = d.zone === 'safe'
-                      ? (I18n.t('history.zscore_safe') || '>3.0 Safe')
-                      : d.zone === 'grey'
-                      ? (I18n.t('history.zscore_grey') || '1.8–3.0 Grey')
-                      : (I18n.t('history.zscore_distress') || '<1.8 Distress');
-                    return '\n  Z = ' + d.z.toFixed(2) + '  (' + zoneLabel + ')';
-                  },
-                },
-              },
-            },
-            scales: {
-              x: { stacked: true, grid: { color: '#1e293b' }, ticks: { color: '#94a3b8' } },
-              y: { stacked: true, grid: { color: '#1e293b' }, ticks: { color: '#94a3b8' },
-                   title: { display: true, text: 'Altman Z-Score', color: '#64748b', font: { size: 11 } } },
-            },
-          },
-          plugins: [{
-            afterDraw(chart) {
-              const { ctx: c, chartArea: a, scales: { y } } = chart;
-              // Safe zone line (3.0)
-              const y3 = y.getPixelForValue(3.0);
-              if (y3 >= a.top && y3 <= a.bottom) {
-                c.save(); c.strokeStyle = 'rgba(52,211,153,0.6)'; c.lineWidth = 1.5; c.setLineDash([5, 3]);
-                c.beginPath(); c.moveTo(a.left, y3); c.lineTo(a.right, y3); c.stroke();
-                c.fillStyle = '#34d399'; c.font = '10px Inter,sans-serif';
-                c.fillText('3.0 ' + (I18n.t('history.zscore_safe_label') || 'Safe'), a.left + 6, y3 - 4);
-                c.restore();
-              }
-              // Distress zone line (1.8)
-              const y18 = y.getPixelForValue(1.8);
-              if (y18 >= a.top && y18 <= a.bottom) {
-                c.save(); c.strokeStyle = 'rgba(239,68,68,0.6)'; c.lineWidth = 1.5; c.setLineDash([5, 3]);
-                c.beginPath(); c.moveTo(a.left, y18); c.lineTo(a.right, y18); c.stroke();
-                c.fillStyle = '#ef4444'; c.font = '10px Inter,sans-serif';
-                c.fillText('1.8 ' + (I18n.t('history.zscore_distress_label') || 'Distress'), a.left + 6, y18 + 12);
-                c.restore();
-              }
-            },
-          }],
-          _title: I18n.t('history.zscore_title') || 'Altman Z-Score',
-          _desc:  I18n.t('history.zscore_desc') || 'Bankruptcy risk indicator — 5 financial ratios',
-        };
-        _registerChart('zscore', zCfg, new Chart(document.getElementById('zscoreChart'), zCfg));
-
-        // Component breakdown table
-        const compSec = document.getElementById('zscoreComponents');
-        const zHead   = document.getElementById('zscoreHead');
-        const zBody   = document.getElementById('zscoreBody');
-        compSec.style.display = 'block';
-
-        const yrCols = zData.map(d => {
-          const cls = d.zone === 'safe' ? 'text-emerald-400' : d.zone === 'grey' ? 'text-amber-400' : 'text-rose-400';
-          return `<th class="py-2 px-3 text-right text-xs font-semibold ${cls} whitespace-nowrap">${d.year}<br><span class="text-[10px] font-mono">Z = ${d.z.toFixed(2)}</span></th>`;
-        }).join('');
-        zHead.innerHTML = `<tr class="border-b border-slate-800"><th class="py-2 px-3 text-left text-xs text-slate-500 font-medium">${I18n.t('history.zscore_component') || 'Component'}</th>${yrCols}</tr>`;
-
-        const COMP_ROWS = [
-          { key: 'x1', label: x1Label, w: 1.2 },
-          { key: 'x2', label: x2Label, w: 1.4 },
-          { key: 'x3', label: x3Label, w: 3.3 },
-          { key: 'x4', label: x4Label, w: 0.6 },
-          { key: 'x5', label: x5Label, w: 1.0 },
-        ];
-        zBody.innerHTML = COMP_ROWS.map((r, ri) => {
-          const cells = zData.map(d => {
-            const v = d[r.key];
-            return `<td class="py-2 px-3 text-right font-mono text-sm text-slate-200">${v != null ? v.toFixed(3) : '—'}</td>`;
-          }).join('');
-          const bg = ri % 2 === 0 ? '' : 'bg-slate-800/20';
-          return `<tr class="border-b border-slate-800/40 ${bg}"><td class="py-2 px-3 text-xs text-slate-400 font-medium whitespace-nowrap">${r.label}</td>${cells}</tr>`;
-        }).join('');
+        const detailEl = document.getElementById('zscoreDetails');
+        const fmtP = (v) => v != null ? '$' + v.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '—';
+        detailEl.innerHTML = `
+          <div class="bg-slate-800/50 rounded-lg p-3 text-center">
+            <p class="text-[10px] text-slate-500 mb-1">${I18n.t('history.zscore_current') || 'Current Price'}</p>
+            <p class="text-sm font-bold text-slate-100">${fmtP(zs.current)}</p>
+          </div>
+          <div class="bg-slate-800/50 rounded-lg p-3 text-center">
+            <p class="text-[10px] text-slate-500 mb-1">${I18n.t('history.zscore_mean') || '52w Mean'}</p>
+            <p class="text-sm font-bold text-slate-100">${fmtP(zs.mean)}</p>
+          </div>
+          <div class="bg-slate-800/50 rounded-lg p-3 text-center">
+            <p class="text-[10px] text-slate-500 mb-1">${I18n.t('history.zscore_stdev') || '52w Std Dev'}</p>
+            <p class="text-sm font-bold text-slate-100">${fmtP(zs.stdev)}</p>
+          </div>
+          <div class="bg-slate-800/50 rounded-lg p-3 text-center">
+            <p class="text-[10px] text-slate-500 mb-1">${I18n.t('history.zscore_range') || '52w Range'}</p>
+            <p class="text-sm font-bold text-slate-100">${fmtP(zs.low_52w)} – ${fmtP(zs.high_52w)}</p>
+          </div>
+        `;
       }
     } catch(e) {
       console.warn('Financials fetch failed:', e);
