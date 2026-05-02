@@ -799,6 +799,12 @@ let   _forecastResult = null;   // last forecast API response
                   fill: false,
                   tension: 0.3,
                 },
+                // Horizontal reference lines
+                { label: '+2σ', data: labels.map(() => 2),  borderColor: 'rgba(244,63,94,0.4)',  borderWidth: 1, borderDash: [4,4], pointRadius: 0, pointHoverRadius: 0, fill: false },
+                { label: '+1σ', data: labels.map(() => 1),  borderColor: 'rgba(251,191,36,0.3)', borderWidth: 1, borderDash: [4,4], pointRadius: 0, pointHoverRadius: 0, fill: false },
+                { label: '0',   data: labels.map(() => 0),  borderColor: 'rgba(148,163,184,0.3)', borderWidth: 1, pointRadius: 0, pointHoverRadius: 0, fill: false },
+                { label: '-1σ', data: labels.map(() => -1), borderColor: 'rgba(251,191,36,0.3)', borderWidth: 1, borderDash: [4,4], pointRadius: 0, pointHoverRadius: 0, fill: false },
+                { label: '-2σ', data: labels.map(() => -2), borderColor: 'rgba(56,189,248,0.4)', borderWidth: 1, borderDash: [4,4], pointRadius: 0, pointHoverRadius: 0, fill: false },
               ],
             },
             options: {
@@ -808,7 +814,10 @@ let   _forecastResult = null;   // last forecast API response
               plugins: {
                 legend: {
                   display: true,
-                  labels: { color: '#94a3b8', boxWidth: 14, font: { size: 11 } },
+                  labels: {
+                    color: '#94a3b8', boxWidth: 14, font: { size: 11 },
+                    filter: (item) => item.datasetIndex < 2,  // Only show Z-Score + MA in legend
+                  },
                 },
                 tooltip: {
                   backgroundColor: '#1e293b',
@@ -816,17 +825,9 @@ let   _forecastResult = null;   // last forecast API response
                   bodyColor: '#cbd5e1',
                   borderColor: '#334155',
                   borderWidth: 1,
+                  filter: (item) => item.datasetIndex < 2,  // Only tooltip for Z-Score + MA
                   callbacks: {
                     label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y >= 0 ? '+' : ''}${ctx.parsed.y.toFixed(2)}σ`,
-                  },
-                },
-                annotation: {
-                  annotations: {
-                    band2pos:  { type: 'line', yMin:  2, yMax:  2, borderColor: 'rgba(244,63,94,0.4)',  borderWidth: 1, borderDash: [4,4], label: { display: false } },
-                    band1pos:  { type: 'line', yMin:  1, yMax:  1, borderColor: 'rgba(251,191,36,0.3)', borderWidth: 1, borderDash: [4,4], label: { display: false } },
-                    bandZero:  { type: 'line', yMin:  0, yMax:  0, borderColor: 'rgba(148,163,184,0.3)', borderWidth: 1, label: { display: false } },
-                    band1neg:  { type: 'line', yMin: -1, yMax: -1, borderColor: 'rgba(251,191,36,0.3)', borderWidth: 1, borderDash: [4,4], label: { display: false } },
-                    band2neg:  { type: 'line', yMin: -2, yMax: -2, borderColor: 'rgba(56,189,248,0.4)', borderWidth: 1, borderDash: [4,4], label: { display: false } },
                   },
                 },
               },
