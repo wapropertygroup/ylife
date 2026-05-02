@@ -43,6 +43,19 @@ const I18n = {
     'nearby.shopping':   { en: 'Shopping',         zh: '购物' },
     'nearby.loading':    { en: 'Searching...',     zh: '搜索中...' },
 
+    'suggestions.label':   { en: 'Related Places Nearby', zh: '附近相关地点' },
+    'suggestions.loading': { en: 'Finding related places...', zh: '正在查找相关地点...' },
+    'suggestions.empty':   { en: 'No related places found', zh: '未找到相关地点' },
+
+    'related.all':         { en: 'All',       zh: '全部' },
+    'related.restaurant':  { en: 'Dining',    zh: '餐饮' },
+    'related.cafe':        { en: 'Cafes',     zh: '咖啡' },
+    'related.attraction':  { en: 'Sights',    zh: '景点' },
+    'related.hotel':       { en: 'Hotels',    zh: '酒店' },
+    'related.shopping':    { en: 'Shopping',  zh: '购物' },
+    'related.park':        { en: 'Parks',     zh: '公园' },
+    'related.none':        { en: 'No results in this category', zh: '该分类暂无结果' },
+
     'stops.label':       { en: 'Trip Stops',       zh: '行程站点' },
     'stops.count':       { en: 'stops',            zh: '个站点' },
     'stops.empty':       { en: 'Search above to add places to your trip', zh: '在上方搜索以添加地点到行程' },

@@ -800,7 +800,94 @@ def api_financials(ticker: str):
     except Exception as exc:
         log.warning("api_financials failed for %s: %s", ticker, exc)
 
-    result = {"ticker": ticker, "financials_table": financials_table}
+    # ── Altman Z-Score ────────────────────────────────────────────────
+    # Z = 1.2*X1 + 1.4*X2 + 3.3*X3 + 0.6*X4 + 1.0*X5
+    #   X1 = Working Capital / Total Assets
+    #   X2 = Retained Earnings / Total Assets
+    #   X3 = EBIT / Total Assets
+    #   X4 = Market Cap / Total Liabilities
+    #   X5 = Revenue / Total Assets
+    altman_zscore: list = []   # [{year, z, x1..x5, zone, components:{...}}]
+    try:
+        if "tk" not in dir():
+            import yfinance as yf
+            tk   = yf.Ticker(ticker)
+            info = tk.info
+
+        bs   = tk.balance_sheet     # annual balance sheet
+        stmt = tk.income_stmt       # annual income statement
+        mkt_cap = info.get("marketCap")  # current market cap (latest)
+
+        if bs is not None and not bs.empty and stmt is not None and not stmt.empty:
+            def _get(frame, row_name, col, default=None):
+                """Safely get a value from a DataFrame."""
+                if row_name in frame.index:
+                    try:
+                        v = float(frame.loc[row_name, col])
+                        return v if v == v else default   # NaN check
+                    except Exception:
+                        pass
+                return default
+
+            # Iterate over available years (columns are Timestamps)
+            for col in list(bs.columns)[:4]:    # up to 4 years
+                yr = str(col.year)
+
+                total_assets      = _get(bs, "Total Assets", col)
+                current_assets    = _get(bs, "Current Assets", col)
+                current_liab      = _get(bs, "Current Liabilities", col)
+                retained_earnings = _get(bs, "Retained Earnings", col)
+                total_liab        = _get(bs, "Total Liabilities Net Minority Interest", col) \
+                                    or _get(bs, "Total Liabilities", col)
+
+                # Income statement items for same year
+                revenue = _get(stmt, "Total Revenue", col) if col in stmt.columns else None
+                ebit    = _get(stmt, "EBIT", col) if col in stmt.columns else None
+
+                if not total_assets or total_assets <= 0:
+                    continue
+
+                working_capital = None
+                if current_assets is not None and current_liab is not None:
+                    working_capital = current_assets - current_liab
+
+                x1 = round(working_capital / total_assets, 4)  if working_capital is not None else None
+                x2 = round(retained_earnings / total_assets, 4) if retained_earnings is not None else None
+                x3 = round(ebit / total_assets, 4)             if ebit is not None else None
+                x4 = round(mkt_cap / total_liab, 4)            if mkt_cap and total_liab and total_liab > 0 else None
+                x5 = round(revenue / total_assets, 4)          if revenue is not None else None
+
+                # Compute Z only if all 5 components available
+                if all(v is not None for v in [x1, x2, x3, x4, x5]):
+                    z = round(1.2*x1 + 1.4*x2 + 3.3*x3 + 0.6*x4 + 1.0*x5, 2)
+                    zone = "safe" if z > 3.0 else ("grey" if z >= 1.8 else "distress")
+                    altman_zscore.append({
+                        "year": yr,
+                        "z":    z,
+                        "zone": zone,
+                        "x1":   round(1.2 * x1, 3),   # weighted contribution
+                        "x2":   round(1.4 * x2, 3),
+                        "x3":   round(3.3 * x3, 3),
+                        "x4":   round(0.6 * x4, 3),
+                        "x5":   round(1.0 * x5, 3),
+                        "components": {
+                            "working_capital":   round(working_capital / 1e9, 2) if working_capital else None,
+                            "retained_earnings": round(retained_earnings / 1e9, 2) if retained_earnings else None,
+                            "ebit":              round(ebit / 1e9, 2) if ebit else None,
+                            "total_assets":      round(total_assets / 1e9, 2),
+                            "total_liabilities": round(total_liab / 1e9, 2) if total_liab else None,
+                            "revenue":           round(revenue / 1e9, 2) if revenue else None,
+                            "market_cap":        round(mkt_cap / 1e9, 2) if mkt_cap else None,
+                        },
+                    })
+
+            # Sort oldest → newest for charting
+            altman_zscore.sort(key=lambda r: r["year"])
+
+    except Exception as exc:
+        log.warning("Altman Z-Score failed for %s: %s", ticker, exc)
+
+    result = {"ticker": ticker, "financials_table": financials_table, "altman_zscore": altman_zscore}
     with _FINANCIALS_CACHE_LOCK:
         _FINANCIALS_CACHE[ticker] = {"ts": time.time(), "data": result}
     return jsonify(result)
@@ -2295,8 +2382,8 @@ _CNN_FG_URL = "https://production.dataviz.cnn.io/index/fearandgreed/graphdata"
 _CNN_FG_HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/122.0.0.0 Safari/537.36"
+        "AppleWebKit/605.1.15 (KHTML, like Gecko) "
+        "Version/18.4 Safari/605.1.15"
     ),
     "Accept": "application/json, text/plain, */*",
     "Referer": "https://edition.cnn.com/",
@@ -2437,7 +2524,7 @@ _PCR_HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
         "AppleWebKit/605.1.15 (KHTML, like Gecko) "
-        "Version/26.0.1 Safari/605.1.15"
+        "Version/18.4 Safari/605.1.15"
     ),
     "Accept":          "*/*",
     "Accept-Language": "en-US,en;q=0.9",
@@ -2675,8 +2762,8 @@ def _aaii_save_to_dynamo(result: dict) -> None:
 _AAII_HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/122.0.0.0 Safari/537.36"
+        "AppleWebKit/605.1.15 (KHTML, like Gecko) "
+        "Version/18.4 Safari/605.1.15"
     ),
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "Accept-Language": "en-US,en;q=0.9",
@@ -3295,8 +3382,8 @@ _ECON_CAL_URL = "https://tradingeconomics.com/calendar"
 _ECON_CAL_HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/122.0.0.0 Safari/537.36"
+        "AppleWebKit/605.1.15 (KHTML, like Gecko) "
+        "Version/18.4 Safari/605.1.15"
     ),
     "Accept": "application/json, text/javascript, */*; q=0.01",
     "Accept-Language": "en-US,en;q=0.9",

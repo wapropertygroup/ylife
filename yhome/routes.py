@@ -44,6 +44,18 @@ APPS = [
         "features": ["50+ PNW plants", "Planting calendar", "Yard design ideas",
                      "AI garden chat", "YouTube guides"],
     },
+    {
+        "id": "tracker",
+        "name": "yTracker",
+        "emoji": "\U0001f3f7️",
+        "tagline": "Price Tracker",
+        "description": "Track prices from Amazon, Walmart, and Uber Eats. "
+                       "Get email alerts on price drops and discover record-low deals.",
+        "url": "https://tracker.li-family.us",
+        "color": "amber",
+        "features": ["Multi-store tracking", "Price drop alerts", "Record-low detection",
+                     "Price history charts", "AI analysis"],
+    },
 ]
 
 

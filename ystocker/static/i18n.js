@@ -253,6 +253,23 @@ const I18n = (() => {
     'history.explain_hide':   { en: '✦ Hide',           zh: '✦ 收起' },
     'history.explain_thinking':{ en: '✦ Generating…',  zh: '✦ 生成中…' },
 
+    // Altman Z-Score (history.html)
+    'history.zscore':              { en: 'Z-Score',              zh: 'Z分数' },
+    'history.zscore_title':        { en: 'Altman Z-Score',       zh: 'Altman Z分数' },
+    'history.zscore_desc':         { en: 'Bankruptcy risk indicator — combines 5 financial ratios to assess financial health',
+                                      zh: '破产风险指标 — 综合5项财务比率评估企业财务健康状况' },
+    'history.zscore_safe':         { en: '>3.0 Safe',            zh: '>3.0 安全' },
+    'history.zscore_grey':         { en: '1.8–3.0 Grey',         zh: '1.8–3.0 灰色地带' },
+    'history.zscore_distress':     { en: '<1.8 Distress',        zh: '<1.8 危险' },
+    'history.zscore_safe_label':   { en: 'Safe',                 zh: '安全' },
+    'history.zscore_distress_label': { en: 'Distress',           zh: '危险' },
+    'history.zscore_component':    { en: 'Component',            zh: '组成部分' },
+    'history.zscore_x1':           { en: 'Working Capital / Assets',      zh: '营运资金 / 总资产' },
+    'history.zscore_x2':           { en: 'Retained Earnings / Assets',    zh: '留存收益 / 总资产' },
+    'history.zscore_x3':           { en: 'EBIT / Assets',                 zh: '息税前利润 / 总资产' },
+    'history.zscore_x4':           { en: 'Market Cap / Liabilities',      zh: '市值 / 总负债' },
+    'history.zscore_x5':           { en: 'Revenue / Assets',              zh: '营业收入 / 总资产' },
+
     // ── 13F page ───────────────────────────────────────────────────────
     'thirteenf.title':       { en: '13F Institutional Holdings', zh: '13F 机构持仓' },
     'thirteenf.subtitle':    { en: 'Latest quarterly 13F-HR filings from SEC EDGAR · Top 50 equity positions per fund',

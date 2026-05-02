@@ -1,0 +1,721 @@
+{% extends "base.html" %}
+
+{% block title %}yTracker — Item Detail{% endblock %}
+
+{% block content %}
+<div x-data="itemDetail()" x-init="init()">
+
+  <!-- Back link -->
+  <a href="/" class="inline-flex items-center gap-1 text-sm text-slate-500 dark:text-slate-400 hover:text-brand transition mb-6">
+    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+    </svg>
+    <span data-i18n="detail.back">Back to Dashboard</span>
+  </a>
+
+  <!-- Loading -->
+  <div x-show="loading" class="text-center py-20">
+    <svg class="animate-spin w-8 h-8 mx-auto text-brand" fill="none" viewBox="0 0 24 24">
+      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+    </svg>
+  </div>
+
+  <div x-show="!loading && item" class="fade-up">
+
+    <!-- Record Low Banner -->
+    <div x-show="item && item.is_record_low"
+         class="mb-6 p-4 rounded-2xl bg-gradient-to-r from-amber-50 to-yellow-50 dark:from-amber-900/20 dark:to-yellow-900/20 border border-amber-300 dark:border-amber-700/50 text-center record-low-banner">
+      <div class="text-3xl mb-1">&#x1f3c6;</div>
+      <div class="font-bold text-amber-700 dark:text-amber-300 text-lg" data-i18n="detail.record_low_banner">This is the lowest price ever recorded!</div>
+    </div>
+
+    <!-- Product Header -->
+    <div class="flex flex-col sm:flex-row gap-6 mb-8">
+      <div class="w-32 h-32 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden shrink-0 bg-slate-50 dark:bg-slate-800 flex items-center justify-center">
+        <img x-show="item && item.image_url" :src="item?.image_url" :alt="item?.title"
+             class="w-full h-full object-contain">
+        <span x-show="!item?.image_url" class="text-5xl">&#x1f4e6;</span>
+      </div>
+      <div class="flex-1">
+        <div class="flex items-center gap-2 mb-2">
+          <span class="w-3 h-3 rounded-full shrink-0" :style="'background:' + storeColor"></span>
+          <span class="text-sm font-medium text-slate-500 dark:text-slate-400" x-text="storeName"></span>
+        </div>
+        <!-- Editable title -->
+        <div class="mb-3 flex items-center gap-2">
+          <h1 x-show="!editingTitle" class="text-xl sm:text-2xl font-bold" x-text="item?.title"></h1>
+          <button x-show="!editingTitle" @click="editingTitle = true; editTitle = item?.title || ''"
+                  class="p-1 rounded text-slate-400 hover:text-brand hover:bg-slate-100 dark:hover:bg-slate-800 transition" title="Edit title">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+            </svg>
+          </button>
+          <div x-show="editingTitle" class="flex-1 flex gap-2">
+            <input type="text" x-model="editTitle"
+                   @keydown.enter="saveTitle()" @keydown.escape="editingTitle = false"
+                   class="flex-1 px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-lg font-bold focus:ring-2 focus:ring-brand/40 outline-none">
+            <button @click="saveTitle()" class="px-3 py-1.5 rounded-lg bg-brand text-white text-sm font-medium hover:bg-brand-dark transition">Save</button>
+            <button @click="editingTitle = false" class="px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 text-sm text-slate-500 hover:text-slate-700 transition">Cancel</button>
+          </div>
+        </div>
+        <div class="flex flex-wrap gap-2">
+          <a :href="item?.item_url" target="_blank" rel="noopener"
+             class="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium text-white transition"
+             :style="'background:' + storeColor">
+            <span data-i18n="detail.view_on">View on</span> <span x-text="storeName"></span>
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
+            </svg>
+          </a>
+          <button @click="checkPrice()" :disabled="checking"
+                  class="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-brand hover:text-brand transition">
+            <span x-show="!checking" data-i18n="detail.check_now">&#x1f504; Check Price Now</span>
+            <span x-show="checking">Checking...</span>
+          </button>
+          <button @click="fetchLive()" :disabled="fetching"
+                  class="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium bg-brand text-white hover:bg-brand-dark transition">
+            <svg x-show="!fetching" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+            </svg>
+            <svg x-show="fetching" class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+            </svg>
+            <span x-show="!fetching" data-i18n="detail.fetch_live">Fetch Current Info</span>
+            <span x-show="fetching" data-i18n="detail.fetching">Fetching…</span>
+          </button>
+          <button @click="deleteItem()"
+                  class="inline-flex items-center gap-1 px-3 py-2 rounded-lg text-sm font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+            </svg>
+            <span data-i18n="detail.delete">Delete</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- No Price Banner -->
+    <div x-show="item && !item.current_price && !liveProduct"
+         class="mb-6 p-4 rounded-2xl bg-slate-100 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 text-center">
+      <p class="text-sm text-slate-500 dark:text-slate-400 mb-2" data-i18n="detail.no_price">Price not available — the store may have blocked the initial scrape.</p>
+      <button @click="fetchLive()" :disabled="fetching"
+              class="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg bg-brand text-white text-sm font-medium hover:bg-brand-dark transition">
+        <svg x-show="!fetching" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+        </svg>
+        <svg x-show="fetching" class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+        </svg>
+        <span x-show="!fetching" data-i18n="detail.fetch_live">Fetch Current Info</span>
+        <span x-show="fetching" data-i18n="detail.fetching">Fetching…</span>
+      </button>
+    </div>
+
+    <!-- Live-Fetched Price Result -->
+    <div x-show="liveProduct"
+         class="mb-6 p-4 rounded-2xl bg-green-50 dark:bg-green-900/15 border border-green-300 dark:border-green-700/50">
+      <div class="flex items-center gap-2 mb-2">
+        <span class="text-green-600 dark:text-green-400 text-sm font-semibold" data-i18n="detail.live_price">&#x2713; Live Price from Store</span>
+        <span class="text-xs text-slate-400" x-text="liveTs"></span>
+      </div>
+      <div class="flex flex-wrap items-baseline gap-4">
+        <div class="text-3xl font-bold text-green-600 dark:text-green-400" x-text="liveProduct ? '$' + Number(liveProduct.price).toFixed(2) : ''"></div>
+        <div class="text-sm text-slate-500 dark:text-slate-400 truncate max-w-md" x-text="liveProduct?.title"></div>
+      </div>
+      <div x-show="fetchError" class="mt-2 text-sm text-red-500" x-text="fetchError"></div>
+    </div>
+
+    <!-- Fetch Error (no result) -->
+    <div x-show="fetchError && !liveProduct"
+         class="mb-6 p-3 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700/50 text-sm text-red-600 dark:text-red-400" x-text="fetchError"></div>
+
+    <!-- Stats Cards -->
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
+      <div class="stat-card rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 p-4">
+        <div class="text-[11px] text-slate-500 dark:text-slate-400 uppercase mb-1" data-i18n="stats.current">Current Price</div>
+        <div class="text-2xl font-bold" :class="item?.is_record_low ? 'text-amber-500' : 'text-slate-900 dark:text-white'"
+             x-text="item?.current_price ? '$' + Number(item.current_price).toFixed(2) : 'N/A'"></div>
+      </div>
+      <div class="stat-card rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 p-4">
+        <div class="text-[11px] text-slate-500 dark:text-slate-400 uppercase mb-1" data-i18n="stats.record_low">Record Low</div>
+        <div class="text-2xl font-bold text-green-500" x-text="item?.record_low_price ? '$' + Number(item.record_low_price).toFixed(2) : 'N/A'"></div>
+      </div>
+      <div class="stat-card rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 p-4">
+        <div class="text-[11px] text-slate-500 dark:text-slate-400 uppercase mb-1" data-i18n="stats.record_high">Record High</div>
+        <div class="text-2xl font-bold text-red-400" x-text="item?.record_high_price ? '$' + Number(item.record_high_price).toFixed(2) : 'N/A'"></div>
+      </div>
+      <div class="stat-card rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 p-4">
+        <div class="text-[11px] text-slate-500 dark:text-slate-400 uppercase mb-1" data-i18n="stats.average">Average</div>
+        <div class="text-2xl font-bold text-slate-600 dark:text-slate-300"
+             x-text="avgPrice ? '$' + avgPrice : 'N/A'"></div>
+      </div>
+    </div>
+
+    <!-- Compare Prices Across Stores -->
+    <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 p-6 mb-8">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-lg font-bold" data-i18n="detail.compare">&#x1f4ca; Compare Prices</h2>
+        <button x-show="altUrls.length > 0" @click="checkAltUrls()" :disabled="checkingAlts"
+                class="px-3 py-1 rounded-lg text-xs font-medium border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-brand hover:text-brand transition">
+          <span x-show="!checkingAlts">&#x1f504; Check All</span>
+          <span x-show="checkingAlts">Checking...</span>
+        </button>
+      </div>
+
+      <!-- Primary store (always shown) -->
+      <div class="space-y-2 mb-4">
+        <div class="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700">
+          <span class="w-3 h-3 rounded-full shrink-0" :style="'background:' + storeColor"></span>
+          <span class="text-sm font-semibold" x-text="storeName"></span>
+          <span class="text-xs px-2 py-0.5 rounded-full bg-brand/10 text-brand font-medium">Primary</span>
+          <span class="ml-auto text-lg font-bold font-mono"
+                x-text="item?.current_price ? '$' + Number(item.current_price).toFixed(2) : 'N/A'"></span>
+          <a :href="item?.item_url" target="_blank" rel="noopener" class="text-slate-400 hover:text-brand transition">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+          </a>
+        </div>
+
+        <!-- Alt URLs -->
+        <template x-for="(alt, idx) in altUrls" :key="idx">
+          <div class="flex items-center gap-3 p-3 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition">
+            <span class="w-3 h-3 rounded-full shrink-0" :style="'background:' + altStoreColor(alt.store)"></span>
+            <div class="flex-1 min-w-0">
+              <span class="text-sm font-semibold" x-text="altStoreName(alt.store)"></span>
+              <span x-show="alt.title" class="text-xs text-slate-400 dark:text-slate-500 ml-1 truncate" x-text="alt.title ? '— ' + alt.title.substring(0, 40) : ''"></span>
+            </div>
+            <span class="text-lg font-bold font-mono"
+                  :class="alt.price && item?.current_price && alt.price < item.current_price ? 'text-green-500' : alt.price && item?.current_price && alt.price > item.current_price ? 'text-red-400' : ''"
+                  x-text="alt.price ? '$' + Number(alt.price).toFixed(2) : 'N/A'"></span>
+            <a :href="alt.url" target="_blank" rel="noopener" class="text-slate-400 hover:text-brand transition">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+            </a>
+            <button @click="removeAltUrl(idx)" class="text-slate-400 hover:text-red-500 transition p-1">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+          </div>
+        </template>
+      </div>
+
+      <!-- Add alt URL -->
+      <div class="flex gap-2">
+        <input type="text" x-model="newAltUrl"
+               @keydown.enter="addAltUrl()"
+               placeholder="Add URL from another store..."
+               class="flex-1 px-4 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm focus:ring-2 focus:ring-brand/40 outline-none">
+        <button @click="addAltUrl()" :disabled="addingAlt || !newAltUrl.trim()"
+                class="px-4 py-2.5 rounded-lg bg-brand text-white text-sm font-medium hover:bg-brand-dark transition disabled:opacity-50 whitespace-nowrap">
+          <span x-show="!addingAlt">+ Add Store</span>
+          <span x-show="addingAlt">Adding...</span>
+        </button>
+      </div>
+      <p x-show="altError" x-text="altError" class="mt-2 text-sm text-red-500"></p>
+      <p x-show="altSuccess" class="mt-2 text-sm text-green-500" x-text="altSuccess"></p>
+    </div>
+
+    <!-- Price History Chart -->
+    <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 p-6 mb-8">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-lg font-bold" data-i18n="detail.price_history">Price History</h2>
+        <div class="flex gap-1">
+          <template x-for="d in [7, 30, 90, 365]" :key="d">
+            <button @click="setDays(d)"
+                    :class="days === d ? 'bg-brand text-white' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'"
+                    class="px-3 py-1 rounded-lg text-xs font-medium transition"
+                    x-text="d + 'd'"></button>
+          </template>
+        </div>
+      </div>
+      <div style="height:300px">
+        <canvas id="priceChart"></canvas>
+      </div>
+    </div>
+
+    <!-- Tracking History Table -->
+    <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 p-6 mb-8">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-lg font-bold" data-i18n="detail.tracking_history">&#x1f4cb; Tracking History</h2>
+        <span class="text-xs text-slate-400 dark:text-slate-500" x-text="prices.length + ' records'"></span>
+      </div>
+
+      <!-- Empty state -->
+      <div x-show="prices.length === 0" class="text-center py-8 text-sm text-slate-400 dark:text-slate-500">
+        <span data-i18n="history.empty">No price checks recorded yet. Click "Check Price Now" above to start.</span>
+      </div>
+
+      <!-- Table -->
+      <div x-show="prices.length > 0" class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="border-b border-slate-200 dark:border-slate-800">
+              <th class="text-left py-2.5 px-3 text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider" data-i18n="history.date">Date &amp; Time</th>
+              <th class="text-right py-2.5 px-3 text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider" data-i18n="history.price">Price</th>
+              <th class="text-right py-2.5 px-3 text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider" data-i18n="history.change">Change</th>
+              <th class="text-center py-2.5 px-3 text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider" data-i18n="history.note">Note</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="(row, idx) in historyRows" :key="row.timestamp">
+              <tr class="border-b border-slate-100 dark:border-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors"
+                  :class="row.isRecordLow ? 'bg-amber-50/50 dark:bg-amber-900/10' : ''">
+                <!-- Date -->
+                <td class="py-2.5 px-3 whitespace-nowrap">
+                  <div class="text-slate-700 dark:text-slate-200" x-text="row.dateStr"></div>
+                  <div class="text-[10px] text-slate-400 dark:text-slate-500" x-text="row.timeStr"></div>
+                </td>
+                <!-- Price -->
+                <td class="py-2.5 px-3 text-right whitespace-nowrap">
+                  <span class="font-mono font-semibold"
+                        :class="row.isRecordLow ? 'text-amber-600 dark:text-amber-400' : 'text-slate-800 dark:text-slate-100'"
+                        x-text="'$' + row.price.toFixed(2)"></span>
+                </td>
+                <!-- Change -->
+                <td class="py-2.5 px-3 text-right whitespace-nowrap">
+                  <template x-if="row.delta !== null">
+                    <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-xs font-semibold"
+                          :class="row.delta < 0
+                            ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400'
+                            : row.delta > 0
+                              ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400'
+                              : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'">
+                      <span x-show="row.delta < 0">&#x2193;</span>
+                      <span x-show="row.delta > 0">&#x2191;</span>
+                      <span x-show="row.delta === 0">&#x2500;</span>
+                      <span x-text="row.deltaStr"></span>
+                    </span>
+                  </template>
+                  <template x-if="row.delta === null">
+                    <span class="text-[10px] text-slate-400 dark:text-slate-500">&mdash;</span>
+                  </template>
+                </td>
+                <!-- Note / Badge -->
+                <td class="py-2.5 px-3 text-center whitespace-nowrap">
+                  <span x-show="row.isRecordLow"
+                        class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-700/50">
+                    &#x1f3c6; <span data-i18n="history.record_low">Record Low</span>
+                  </span>
+                  <span x-show="!row.isRecordLow && row.delta !== null && row.delta < 0 && row.deltaPct <= -5"
+                        class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">
+                    &#x1f525; <span data-i18n="history.big_drop">Big Drop</span>
+                  </span>
+                  <span x-show="idx === 0 && !row.isRecordLow"
+                        class="text-[10px] text-slate-400 dark:text-slate-500" data-i18n="history.first_check">First check</span>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Show more / less -->
+      <div x-show="prices.length > historyPageSize" class="mt-4 text-center">
+        <button @click="historyShowAll = !historyShowAll"
+                class="px-4 py-1.5 rounded-lg text-xs font-medium border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-brand hover:text-brand transition">
+          <span x-show="!historyShowAll" x-text="'Show all ' + prices.length + ' records'"></span>
+          <span x-show="historyShowAll" data-i18n="history.show_less">Show less</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Notification Settings -->
+    <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 p-6 mb-8">
+      <h2 class="text-lg font-bold mb-4" data-i18n="detail.notifications">&#x1f514; Price Drop Alerts</h2>
+      <div class="flex flex-col sm:flex-row gap-3">
+        <input type="email" x-model="notifyEmail"
+               placeholder="your@email.com"
+               class="flex-1 px-4 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm focus:ring-2 focus:ring-brand/40 outline-none">
+        <label class="inline-flex items-center gap-2 cursor-pointer">
+          <input type="checkbox" x-model="notifyEnabled" class="w-4 h-4 rounded border-slate-300 text-brand focus:ring-brand">
+          <span class="text-sm" data-i18n="detail.enable_alerts">Enable email alerts</span>
+        </label>
+        <button @click="saveNotify()"
+                class="px-4 py-2.5 rounded-lg bg-brand text-white text-sm font-medium hover:bg-brand-dark transition">
+          <span data-i18n="detail.save">Save</span>
+        </button>
+      </div>
+      <p x-show="notifyMsg" x-text="notifyMsg" class="mt-2 text-sm text-green-500"></p>
+    </div>
+
+    <!-- AI Analysis -->
+    <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 p-6 mb-8">
+      <h2 class="text-lg font-bold mb-4" data-i18n="detail.ai_analysis">&#x1f916; AI Price Analysis</h2>
+      <div x-show="!aiResult && !aiLoading">
+        <button @click="askAI()"
+                class="px-4 py-2.5 rounded-lg bg-gradient-to-r from-brand to-orange-400 text-white text-sm font-medium hover:shadow-lg hover:shadow-brand/20 transition">
+          <span data-i18n="detail.analyze">Analyze Price Trends</span>
+        </button>
+      </div>
+      <div x-show="aiLoading" class="flex items-center gap-2 text-sm text-slate-500">
+        <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+        <span data-i18n="detail.analyzing">Analyzing...</span>
+      </div>
+      <div x-show="aiResult" class="prose prose-sm dark:prose-invert max-w-none" x-html="formatMd(aiResult)"></div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function itemDetail() {
+  const store = '{{ store }}';
+  const itemId = '{{ item_id }}';
+
+  return {
+    item: null,
+    prices: [],
+    loading: true,
+    checking: false,
+    days: 90,
+    chart: null,
+    notifyEmail: '',
+    notifyEnabled: false,
+    notifyMsg: '',
+    aiResult: '',
+    aiLoading: false,
+    avgPrice: null,
+    historyShowAll: false,
+    historyPageSize: 15,
+    fetching: false,
+    liveProduct: null,
+    liveTs: '',
+    fetchError: '',
+    editingTitle: false,
+    editTitle: '',
+    altUrls: [],
+    newAltUrl: '',
+    addingAlt: false,
+    altError: '',
+    altSuccess: '',
+    checkingAlts: false,
+
+    get historyRows() {
+      // Build rows from prices (newest first), compute deltas
+      const sorted = [...this.prices].reverse();
+      const rows = sorted.map((p, i) => {
+        const dt = new Date(p.timestamp);
+        const prev = sorted[i + 1]; // previous check (older)
+        const delta = prev ? p.price - prev.price : null;
+        const deltaPct = prev && prev.price > 0 ? (delta / prev.price) * 100 : 0;
+        const recordLow = this.item?.record_low_price;
+        return {
+          timestamp: p.timestamp,
+          price: p.price,
+          dateStr: dt.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }),
+          timeStr: dt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+          delta,
+          deltaPct,
+          deltaStr: delta !== null ? ('$' + Math.abs(delta).toFixed(2) + ' (' + (delta <= 0 ? '' : '+') + deltaPct.toFixed(1) + '%)') : '',
+          isRecordLow: recordLow != null && Math.abs(p.price - Number(recordLow)) < 0.005,
+        };
+      });
+      return this.historyShowAll ? rows : rows.slice(0, this.historyPageSize);
+    },
+
+    get storeName() {
+      const names = {{ store_names | tojson }};
+      return names[store] || store;
+    },
+
+    get storeColor() {
+      const colors = {{ store_colors | tojson }};
+      return colors[store] || '#94a3b8';
+    },
+
+    async init() {
+      await this.loadItem();
+      await this.loadPrices();
+      await this.loadAltUrls();
+      this.loading = false;
+    },
+
+    async loadItem() {
+      try {
+        const resp = await fetch('/api/items');
+        const data = await resp.json();
+        const key = store + '#' + itemId;
+        this.item = (data.items || []).find(i => i.item_key === key);
+        if (this.item) {
+          this.notifyEmail = this.item.notify_email || '';
+          this.notifyEnabled = this.item.notify_enabled || false;
+        }
+      } catch(e) { console.error(e); }
+    },
+
+    async loadPrices() {
+      try {
+        const resp = await fetch(`/api/item/${store}/${itemId}/prices?days=${this.days}`);
+        const data = await resp.json();
+        this.prices = data.prices || [];
+        if (this.prices.length > 0) {
+          const sum = this.prices.reduce((a, p) => a + p.price, 0);
+          this.avgPrice = (sum / this.prices.length).toFixed(2);
+        }
+        this.$nextTick(() => this.drawChart());
+      } catch(e) { console.error(e); }
+    },
+
+    async setDays(d) {
+      this.days = d;
+      await this.loadPrices();
+    },
+
+    drawChart() {
+      const canvas = document.getElementById('priceChart');
+      if (!canvas || this.prices.length === 0) return;
+      if (this.chart) this.chart.destroy();
+
+      const labels = this.prices.map(p => {
+        const d = new Date(p.timestamp);
+        return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      });
+      const data = this.prices.map(p => p.price);
+      const minP = Math.min(...data);
+      const isRecordLow = this.item?.is_record_low;
+
+      this.chart = new Chart(canvas.getContext('2d'), {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [{
+            label: 'Price ($)',
+            data,
+            borderColor: isRecordLow ? '#f59e0b' : this.storeColor,
+            borderWidth: 2,
+            fill: true,
+            backgroundColor: (isRecordLow ? '#f59e0b' : this.storeColor) + '15',
+            pointRadius: data.length < 30 ? 3 : 0,
+            pointHoverRadius: 5,
+            tension: 0.3,
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: (ctx) => '$' + ctx.parsed.y.toFixed(2)
+              }
+            }
+          },
+          scales: {
+            x: {
+              grid: { display: false },
+              ticks: { font: { size: 10 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 8 },
+            },
+            y: {
+              grid: { color: 'rgba(148,163,184,0.1)' },
+              ticks: { font: { size: 10 }, callback: v => '$' + v.toFixed(0) },
+            }
+          },
+          interaction: { mode: 'nearest', axis: 'x', intersect: false },
+        }
+      });
+    },
+
+    async checkPrice() {
+      if (this.checking) return;
+      this.checking = true;
+      try {
+        const resp = await fetch(`/api/item/${store}/${itemId}/check`, { method: 'POST' });
+        const data = await resp.json();
+        if (data.item) this.item = data.item;
+        await this.loadPrices();
+      } catch(e) { console.error(e); }
+      this.checking = false;
+    },
+
+    async fetchLive() {
+      if (this.fetching) return;
+      this.fetching = true;
+      this.fetchError = '';
+      this.liveProduct = null;
+      try {
+        const resp = await fetch(`/api/item/${store}/${itemId}/fetch-live`, { method: 'POST' });
+        const data = await resp.json();
+        if (!resp.ok) {
+          this.fetchError = data.error || 'Fetch failed';
+        } else {
+          this.liveProduct = data.product || null;
+          this.liveTs = new Date().toLocaleTimeString();
+
+          // If the backend returned the updated DynamoDB item, use it
+          // This has all fields: current_price, record_low, record_high, title, image, etc.
+          if (data.item) {
+            this.item = data.item;
+            this.notifyEmail = this.item.notify_email || '';
+            this.notifyEnabled = this.item.notify_enabled || false;
+          } else if (data.product && this.item) {
+            // Fallback: patch from scraped product directly
+            if (data.product.title) this.item.title = data.product.title;
+            if (data.product.image_url) this.item.image_url = data.product.image_url;
+            if (data.product.price) {
+              this.item.current_price = data.product.price;
+              if (!this.item.record_low_price || data.product.price < this.item.record_low_price) {
+                this.item.record_low_price = data.product.price;
+                this.item.is_record_low = true;
+              }
+              if (!this.item.record_high_price || data.product.price > this.item.record_high_price) {
+                this.item.record_high_price = data.product.price;
+              }
+            }
+          }
+          // Reload price history
+          await this.loadPrices();
+        }
+      } catch(e) {
+        this.fetchError = 'Network error: ' + e.message;
+      }
+      this.fetching = false;
+    },
+
+    async saveTitle() {
+      const title = this.editTitle.trim();
+      if (!title) return;
+      try {
+        const resp = await fetch(`/api/item/${store}/${itemId}/title`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title }),
+        });
+        const data = await resp.json();
+        if (resp.ok && this.item) {
+          this.item.title = title;
+        }
+      } catch(e) { console.error(e); }
+      this.editingTitle = false;
+    },
+
+    altStoreName(s) {
+      const names = {{ store_names | tojson }};
+      return names[s] || s;
+    },
+
+    altStoreColor(s) {
+      const colors = {{ store_colors | tojson }};
+      return colors[s] || '#94a3b8';
+    },
+
+    async loadAltUrls() {
+      try {
+        const resp = await fetch(`/api/item/${store}/${itemId}/alt-urls`);
+        const data = await resp.json();
+        this.altUrls = data.alt_urls || [];
+      } catch(e) { console.error(e); }
+    },
+
+    async addAltUrl() {
+      if (!this.newAltUrl.trim() || this.addingAlt) return;
+      this.addingAlt = true;
+      this.altError = '';
+      this.altSuccess = '';
+      try {
+        const resp = await fetch(`/api/item/${store}/${itemId}/alt-urls`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: this.newAltUrl }),
+        });
+        const data = await resp.json();
+        if (resp.ok) {
+          this.altUrls = data.alt_urls || [];
+          this.newAltUrl = '';
+          const added = data.added;
+          this.altSuccess = `Added ${this.altStoreName(added?.store)}` + (added?.price ? ` — $${Number(added.price).toFixed(2)}` : '');
+          setTimeout(() => this.altSuccess = '', 4000);
+        } else {
+          this.altError = data.error || 'Failed to add';
+          setTimeout(() => this.altError = '', 5000);
+        }
+      } catch(e) {
+        this.altError = 'Network error: ' + e.message;
+      }
+      this.addingAlt = false;
+    },
+
+    async removeAltUrl(idx) {
+      if (!confirm('Remove this store from comparison?')) return;
+      try {
+        const resp = await fetch(`/api/item/${store}/${itemId}/alt-urls/${idx}`, { method: 'DELETE' });
+        const data = await resp.json();
+        if (resp.ok) this.altUrls = data.alt_urls || [];
+      } catch(e) { console.error(e); }
+    },
+
+    async checkAltUrls() {
+      if (this.checkingAlts) return;
+      this.checkingAlts = true;
+      try {
+        const resp = await fetch(`/api/item/${store}/${itemId}/alt-urls/check`, { method: 'POST' });
+        const data = await resp.json();
+        if (data.alt_urls) this.altUrls = data.alt_urls;
+      } catch(e) { console.error(e); }
+      this.checkingAlts = false;
+    },
+
+    async deleteItem() {
+      if (!confirm('Remove this item from tracking?')) return;
+      try {
+        await fetch(`/api/item/${store}/${itemId}`, { method: 'DELETE' });
+        window.location.href = '/';
+      } catch(e) { console.error(e); }
+    },
+
+    async saveNotify() {
+      try {
+        await fetch(`/api/item/${store}/${itemId}/notify`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: this.notifyEmail, enabled: this.notifyEnabled }),
+        });
+        this.notifyMsg = 'Saved!';
+        setTimeout(() => this.notifyMsg = '', 3000);
+      } catch(e) { this.notifyMsg = 'Failed to save'; }
+    },
+
+    async askAI() {
+      this.aiLoading = true;
+      this.aiResult = '';
+      const lang = (typeof I18n !== 'undefined' && I18n.lang === 'zh') ? 'zh' : 'en';
+      try {
+        const resp = await fetch(`/api/item/${store}/${itemId}/ai-analysis`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ lang }),
+        });
+        const reader = resp.body.getReader();
+        const decoder = new TextDecoder();
+        const read = () => {
+          reader.read().then(({ done, value }) => {
+            if (done) { this.aiLoading = false; return; }
+            for (const line of decoder.decode(value).split('\n')) {
+              if (!line.startsWith('data: ')) continue;
+              const p = line.slice(6).trim();
+              if (p === '[DONE]') { this.aiLoading = false; return; }
+              try {
+                const d = JSON.parse(p);
+                if (d.text) this.aiResult += d.text;
+              } catch(e) {}
+            }
+            read();
+          });
+        };
+        read();
+      } catch(e) { this.aiResult = 'Analysis failed: ' + e.message; this.aiLoading = false; }
+    },
+
+    formatMd(t) {
+      if (!t) return '';
+      return t.replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>')
+              .replace(/\*(.*?)\*/g,'<em>$1</em>')
+              .replace(/\n\n/g,'</p><p>').replace(/\n/g,'<br>')
+              .replace(/^/,'<p>').replace(/$/,'</p>');
+    },
+  };
+}
+</script>
+{% endblock %}

@@ -16,6 +16,7 @@ APPS=(
   "yplanner|8001|planner.li-family.us|requirements_planner.txt|yplanner/static"
   "yplanter|8002|planter.li-family.us|requirements_planter.txt|yplanter/static"
   "yhome|8003|home.li-family.us|requirements_home.txt|yhome/static"
+  "ytracker|8004|tracker.li-family.us|requirements_tracker.txt|ytracker/static"
 )
 
 LOG_PREFIX="[deploy $(date '+%Y-%m-%d %H:%M:%S')]"

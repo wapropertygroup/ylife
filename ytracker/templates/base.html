@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en" class="h-full dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}yTracker — Price Tracker{% endblock %}</title>
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('tracker.static', filename='favicon.svg') }}">
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: { DEFAULT: '#f59e0b', dark: '#d97706', light: '#fbbf24' },
+            surface: '#0f172a',
+            panel: '#1e293b',
+            border: '#334155',
+          },
+          fontFamily: { mono: ['JetBrains Mono', 'Fira Code', 'monospace'] }
+        }
+      }
+    }
+  </script>
+
+  <script>
+    (function() {
+      const theme = localStorage.getItem('ytracker_theme') || 'dark';
+      if (theme === 'light') document.documentElement.classList.remove('dark');
+    })();
+  </script>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+
+  <script src="{{ url_for('tracker.static', filename='i18n.js') }}"></script>
+  <link rel="stylesheet" href="{{ url_for('tracker.static', filename='css/style.css') }}">
+
+  {% block head %}{% endblock %}
+</head>
+
+<body class="bg-white dark:bg-slate-950 text-slate-800 dark:text-slate-100 min-h-screen flex flex-col font-[Inter]" x-data="{ navOpen: false }">
+
+  <header class="sticky top-0 z-50 bg-white/80 dark:bg-slate-900/80 backdrop-blur border-b border-slate-200 dark:border-slate-800">
+    <div class="max-w-screen-xl mx-auto px-4 sm:px-6 flex items-center h-14 gap-4">
+
+      <a href="/" class="flex items-center gap-2 font-bold text-lg shrink-0">
+        <svg class="w-6 h-6 text-brand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A2 2 0 013 12V7a4 4 0 014-4z"/>
+        </svg>
+        <span class="grad-text" data-i18n="nav.brand">yTracker</span>
+      </a>
+
+      <nav class="hidden md:flex items-center gap-1 ml-4 flex-1">
+        <a href="/" class="px-3 py-1.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+           data-i18n="nav.dashboard">Dashboard</a>
+      </nav>
+
+      <div class="ml-auto hidden md:flex items-center gap-2">
+        <button onclick="toggleTheme()"
+                class="p-2 rounded-md text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                title="Toggle theme">
+          <svg class="w-5 h-5 hidden dark:block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/>
+          </svg>
+          <svg class="w-5 h-5 block dark:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
+          </svg>
+        </button>
+        <button onclick="I18n.toggle()"
+                class="lang-toggle-btn px-2.5 py-1.5 rounded-md text-sm border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300
+                       hover:border-brand hover:text-brand transition font-medium">
+          中文
+        </button>
+      </div>
+
+      <button class="md:hidden ml-auto p-2 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800" @click="navOpen = !navOpen">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+        </svg>
+      </button>
+    </div>
+
+    <div x-show="navOpen" x-transition class="md:hidden border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 pb-4">
+      <div class="flex flex-col gap-1 pt-2">
+        <a href="/" class="px-3 py-2.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800" data-i18n="nav.dashboard">Dashboard</a>
+        <button onclick="toggleTheme()" class="px-3 py-2.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 text-left" data-i18n="nav.toggle_theme">Toggle Theme</button>
+        <button onclick="I18n.toggle()" class="lang-toggle-btn mt-1 px-3 py-2.5 rounded-md text-sm border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-brand hover:text-brand transition text-left font-medium">中文</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="flex-1 max-w-screen-xl mx-auto w-full px-4 sm:px-6 py-6 sm:py-8">
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="border-t border-slate-200 dark:border-slate-800 py-3 text-center text-xs text-slate-500 dark:text-slate-600">
+    <span data-i18n="footer.text">yTracker — Price Tracker for Amazon, Walmart & Uber Eats</span>
+    &nbsp;&middot;&nbsp;
+    <span data-i18n="footer.copyright">&copy; 2025 yTracker</span>
+  </footer>
+
+  <script>
+  function toggleTheme() {
+    const html = document.documentElement;
+    const isDark = html.classList.contains('dark');
+    if (isDark) {
+      html.classList.remove('dark');
+      localStorage.setItem('ytracker_theme', 'light');
+    } else {
+      html.classList.add('dark');
+      localStorage.setItem('ytracker_theme', 'dark');
+    }
+  }
+  </script>
+
+  {% block scripts %}{% endblock %}
+</body>
+</html>

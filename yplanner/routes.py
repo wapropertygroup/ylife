@@ -596,7 +596,7 @@ def api_houses_lookup():
         resp = http_req.get(
             "https://www.zillowstatic.com/autocomplete/v3/suggestions",
             params={"q": address},
-            headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"},
+            headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.4 Safari/605.1.15"},
             timeout=8,
         )
         if resp.status_code == 200:

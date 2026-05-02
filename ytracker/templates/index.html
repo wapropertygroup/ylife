@@ -1,0 +1,295 @@
+{% extends "base.html" %}
+
+{% block title %}yTracker — Dashboard{% endblock %}
+
+{% block content %}
+<div x-data="dashboard()">
+
+  <!-- Hero -->
+  <div class="text-center mb-10 fade-up">
+    <h1 class="text-3xl sm:text-4xl font-extrabold mb-3 tracking-tight">
+      <span class="grad-text" data-i18n="hero.title">Price Tracker</span>
+    </h1>
+    <p class="text-base sm:text-lg text-slate-500 dark:text-slate-400 max-w-2xl mx-auto leading-relaxed" data-i18n="hero.subtitle">
+      Track prices from Amazon, Walmart & Uber Eats. Get notified when prices drop. Never miss a deal.
+    </p>
+  </div>
+
+  <!-- Supported Stores -->
+  <div class="flex flex-wrap justify-center gap-2 mb-8 fade-up">
+    {% for key, name in store_names.items() %}
+    <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+      <span class="w-2 h-2 rounded-full" style="background:{{ store_colors[key] }}"></span> {{ name }}
+    </span>
+    {% endfor %}
+  </div>
+
+  <!-- Add Item Form -->
+  <div class="max-w-2xl mx-auto mb-10 fade-up">
+    <div class="flex gap-2">
+      <input type="text" x-model="newUrl"
+             @keydown.enter="addItem()"
+             data-i18n-placeholder="add.placeholder"
+             placeholder="Paste a product URL from any supported store..."
+             class="flex-1 px-4 py-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm
+                    focus:ring-2 focus:ring-brand/40 focus:border-brand outline-none transition">
+      <button @click="addItem()" :disabled="adding"
+              class="px-5 py-3 rounded-xl bg-brand text-white text-sm font-semibold hover:bg-brand-dark transition disabled:opacity-50 whitespace-nowrap">
+        <span x-show="!adding" data-i18n="add.button">Track Item</span>
+        <span x-show="adding" class="flex items-center gap-2">
+          <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+          Adding...
+        </span>
+      </button>
+    </div>
+    <p x-show="addError" x-text="addError" class="mt-2 text-sm text-red-500"></p>
+    <p x-show="addSuccess" class="mt-2 text-sm text-green-500" data-i18n="add.success">Item added successfully!</p>
+  </div>
+
+  <!-- Actions Bar -->
+  <div x-show="items.length > 0" class="flex items-center justify-between mb-6">
+    <h2 class="text-lg font-bold">
+      <span data-i18n="dashboard.tracked">Tracked Items</span>
+      <span class="text-sm font-normal text-slate-500 dark:text-slate-400" x-text="'(' + items.length + ')'"></span>
+    </h2>
+    <button @click="checkAll()" :disabled="checkingAll"
+            class="px-3 py-1.5 rounded-lg text-xs font-medium border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-brand hover:text-brand transition">
+      <span x-show="!checkingAll" data-i18n="dashboard.check_all">&#x1f504; Check All Prices</span>
+      <span x-show="checkingAll">Checking...</span>
+    </button>
+  </div>
+
+  <!-- Item Cards Grid -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+    <template x-for="item in items" :key="item.item_key">
+      <a :href="'/item/' + item.store + '/' + item.item_id"
+         class="item-card group block rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50
+                hover:shadow-xl hover:shadow-brand/10 transition-all duration-300 overflow-hidden relative">
+
+        <!-- Store color accent -->
+        <div class="h-1 transition-opacity opacity-60 group-hover:opacity-100"
+             :style="'background:' + storeColor(item.store)"></div>
+
+        <!-- Record Low Badge -->
+        <div x-show="item.is_record_low" class="absolute top-3 right-3 z-10">
+          <span class="record-low-badge inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-700/50">
+            &#x1f3c6; <span data-i18n="card.record_low">Record Low!</span>
+          </span>
+        </div>
+
+        <div class="p-4">
+          <!-- Image + Title -->
+          <div class="flex gap-3 mb-3">
+            <div class="w-16 h-16 rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden shrink-0 bg-slate-50 dark:bg-slate-800 flex items-center justify-center">
+              <img x-show="item.image_url" :src="item.image_url" :alt="item.title"
+                   class="w-full h-full object-contain" loading="lazy">
+              <span x-show="!item.image_url" class="text-2xl">&#x1f4e6;</span>
+            </div>
+            <div class="min-w-0 flex-1">
+              <h3 class="text-sm font-semibold line-clamp-2 group-hover:text-brand transition" x-text="item.title"></h3>
+              <div class="flex items-center gap-1.5 mt-1">
+                <span class="w-2 h-2 rounded-full shrink-0" :style="'background:' + storeColor(item.store)"></span>
+                <span class="text-[11px] text-slate-500 dark:text-slate-400" x-text="storeName(item.store)"></span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Price + Change -->
+          <div class="flex items-end justify-between mb-3">
+            <div>
+              <div class="text-[11px] text-slate-500 dark:text-slate-400 uppercase" data-i18n="card.current">Current Price</div>
+              <div class="text-xl font-bold" :class="item.is_record_low ? 'text-amber-500' : 'text-slate-900 dark:text-white'"
+                   x-text="item.current_price ? '$' + Number(item.current_price).toFixed(2) : 'N/A'"></div>
+            </div>
+            <div x-show="item.previous_price && item.previous_price > 0 && item.current_price != item.previous_price">
+              <span x-show="item.current_price < item.previous_price"
+                    class="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400">
+                &#x2193; <span x-text="(((item.previous_price - item.current_price) / item.previous_price) * 100).toFixed(1) + '%'"></span>
+              </span>
+              <span x-show="item.current_price > item.previous_price"
+                    class="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400">
+                &#x2191; <span x-text="(((item.current_price - item.previous_price) / item.previous_price) * 100).toFixed(1) + '%'"></span>
+              </span>
+            </div>
+          </div>
+
+          <!-- Sparkline -->
+          <div x-show="item.sparkline && item.sparkline.length > 1" class="mb-2">
+            <canvas :id="'spark-' + item.store + '-' + item.item_id" height="40"></canvas>
+          </div>
+
+          <!-- Footer -->
+          <div class="flex items-center justify-between text-[10px] text-slate-400 dark:text-slate-500">
+            <span>
+              <span data-i18n="card.last_check">Last checked</span>:
+              <span x-text="formatDate(item.last_checked)"></span>
+            </span>
+            <span x-show="item.notify_enabled" title="Email alerts enabled">&#x1f514;</span>
+          </div>
+        </div>
+      </a>
+    </template>
+  </div>
+
+  <!-- Empty State -->
+  <div x-show="!loading && items.length === 0" class="text-center py-20 fade-up">
+    <div class="text-6xl mb-4">&#x1f3f7;</div>
+    <h3 class="text-lg font-semibold mb-2" data-i18n="empty.title">No items tracked yet</h3>
+    <p class="text-sm text-slate-500 dark:text-slate-400 max-w-md mx-auto" data-i18n="empty.subtitle">
+      Paste a product URL from Amazon, Walmart, or Uber Eats above to start tracking prices.
+    </p>
+  </div>
+
+  <!-- Loading -->
+  <div x-show="loading" class="text-center py-20">
+    <svg class="animate-spin w-8 h-8 mx-auto text-brand" fill="none" viewBox="0 0 24 24">
+      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+    </svg>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function dashboard() {
+  return {
+    items: [],
+    loading: true,
+    newUrl: '',
+    adding: false,
+    addError: '',
+    addSuccess: false,
+    checkingAll: false,
+    sparkCharts: {},
+
+    init() {
+      this.loadItems();
+    },
+
+    async loadItems() {
+      this.loading = true;
+      try {
+        const resp = await fetch('/api/items');
+        const data = await resp.json();
+        if (data.items) {
+          this.items = data.items;
+        }
+        this.$nextTick(() => this.drawSparklines());
+      } catch(e) {
+        console.error('Failed to load items:', e);
+      }
+      this.loading = false;
+    },
+
+    async addItem() {
+      if (!this.newUrl.trim() || this.adding) return;
+      this.adding = true;
+      this.addError = '';
+      this.addSuccess = false;
+
+      try {
+        const resp = await fetch('/api/item/add', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: this.newUrl }),
+        });
+        const data = await resp.json();
+        if (resp.ok && data.item) {
+          // Immediately show the new item in the list
+          const newItem = data.item;
+          newItem.sparkline = newItem.current_price
+            ? [{ t: Date.now(), p: Number(newItem.current_price) }]
+            : [];
+          this.items.unshift(newItem);
+          this.addSuccess = true;
+          this.newUrl = '';
+          setTimeout(() => this.addSuccess = false, 3000);
+          // Refresh in background for full sparkline data
+          this.loadItems();
+        } else {
+          this.addError = data.error || 'Failed to add item';
+        }
+      } catch(e) {
+        this.addError = 'Network error: ' + e.message;
+      }
+      this.adding = false;
+    },
+
+    async checkAll() {
+      if (this.checkingAll) return;
+      this.checkingAll = true;
+      try {
+        await fetch('/api/check-all', { method: 'POST' });
+        await this.loadItems();
+      } catch(e) {
+        console.error('Check all failed:', e);
+      }
+      this.checkingAll = false;
+    },
+
+    storeName(store) {
+      const names = {{ store_names | tojson }};
+      return names[store] || store;
+    },
+
+    storeColor(store) {
+      const colors = {{ store_colors | tojson }};
+      return colors[store] || '#94a3b8';
+    },
+
+    formatDate(ts) {
+      if (!ts) return 'Never';
+      const d = new Date(ts);
+      const now = new Date();
+      const diff = now - d;
+      if (diff < 60000) return 'Just now';
+      if (diff < 3600000) return Math.floor(diff / 60000) + 'm ago';
+      if (diff < 86400000) return Math.floor(diff / 3600000) + 'h ago';
+      return d.toLocaleDateString();
+    },
+
+    drawSparklines() {
+      this.items.forEach(item => {
+        if (!item.sparkline || item.sparkline.length < 2) return;
+        const id = 'spark-' + item.store + '-' + item.item_id;
+        const canvas = document.getElementById(id);
+        if (!canvas) return;
+
+        // Destroy existing chart
+        if (this.sparkCharts[id]) this.sparkCharts[id].destroy();
+
+        const ctx = canvas.getContext('2d');
+        const prices = item.sparkline.map(p => p.p);
+        const minP = Math.min(...prices);
+        const color = item.is_record_low ? '#f59e0b' : (prices[prices.length-1] < prices[0] ? '#16a34a' : '#ef4444');
+
+        this.sparkCharts[id] = new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels: item.sparkline.map((_, i) => i),
+            datasets: [{
+              data: prices,
+              borderColor: color,
+              borderWidth: 1.5,
+              fill: true,
+              backgroundColor: color + '15',
+              pointRadius: 0,
+              tension: 0.3,
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false }, tooltip: { enabled: false } },
+            scales: { x: { display: false }, y: { display: false } },
+            animation: false,
+          }
+        });
+      });
+    },
+  };
+}
+</script>
+{% endblock %}

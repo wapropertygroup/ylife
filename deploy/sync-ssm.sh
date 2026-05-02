@@ -107,6 +107,26 @@ else
   fi
 fi
 
+# ── Auto-generate YTRACKER_SECRET_KEY if missing ─────────────────────────────
+YTRACKER_KEY_PATH="/ytracker/YTRACKER_SECRET_KEY"
+if [[ "$DRY_RUN" == "true" ]]; then
+  echo "  [DRY] YTRACKER_SECRET_KEY → $YTRACKER_KEY_PATH (auto-generated if missing)"
+else
+  if ! aws ssm get-parameter --name "$YTRACKER_KEY_PATH" --region "$REGION" --no-cli-pager &>/dev/null; then
+    secret=$(python3 -c 'import secrets; print(secrets.token_hex(32))')
+    aws ssm put-parameter \
+      --name "$YTRACKER_KEY_PATH" \
+      --value "$secret" \
+      --type SecureString \
+      --region "$REGION" \
+      --no-cli-pager > /dev/null
+    echo "  NEW   YTRACKER_SECRET_KEY → $YTRACKER_KEY_PATH (auto-generated)"
+    uploaded=$((uploaded + 1))
+  else
+    echo "  OK    YTRACKER_SECRET_KEY → $YTRACKER_KEY_PATH (already exists)"
+  fi
+fi
+
 echo ""
 echo "Done: $uploaded uploaded, $skipped skipped (region: $REGION)"
 if [[ "$DRY_RUN" == "true" ]]; then

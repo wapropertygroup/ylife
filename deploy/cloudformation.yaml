@@ -45,6 +45,11 @@ Parameters:
     Default: "home.li-family.us"
     Description: Domain for yHome (landing page)
 
+  DomainYTracker:
+    Type: String
+    Default: "tracker.li-family.us"
+    Description: Domain for yTracker (price tracker)
+
   CertEmail:
     Type: String
     Default: "admin@li-family.us"
@@ -155,6 +160,7 @@ Resources:
                   - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ystocker/*"
                   - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/yplanner/*"
                   - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/yplanter/*"
+                  - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ytracker/*"
         - PolicyName: DynamoDBAccess
           PolicyDocument:
             Version: "2012-10-17"
@@ -174,6 +180,7 @@ Resources:
                   - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/ystocker-*"
                   - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/yplanner-*"
                   - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/yplanter-*"
+                  - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/ytracker-*"
 
   InstanceProfile:
     Type: AWS::IAM::InstanceProfile
@@ -209,11 +216,12 @@ Resources:
             APPS="ystocker|8000|${DomainYStocker}|ystocker/static
             yplanner|8001|${DomainYPlanner}|yplanner/static
             yplanter|8002|${DomainYPlanter}|yplanter/static
-            yhome|8003|${DomainYHome}|yhome/static"
+            yhome|8003|${DomainYHome}|yhome/static
+            ytracker|8004|${DomainYTracker}|ytracker/static"
 
             APP_DIR=/opt/ystocker
             APP_USER=ystocker
-            REQ_FILES="requirements_stocker.txt requirements_planner.txt requirements_planter.txt requirements_home.txt"
+            REQ_FILES="requirements_stocker.txt requirements_planner.txt requirements_planter.txt requirements_home.txt requirements_tracker.txt"
 
             # ── System packages ──────────────────────────────────────────
             dnf update -y
@@ -256,7 +264,7 @@ Resources:
             ExecStart=/bin/bash -c '\
               git config --global --add safe.directory /opt/ystocker; \
               git -C /opt/ystocker fetch origin && git -C /opt/ystocker reset --hard origin/main; \
-              for r in requirements_stocker.txt requirements_planner.txt requirements_planter.txt requirements_home.txt; do \
+              for r in requirements_stocker.txt requirements_planner.txt requirements_planter.txt requirements_home.txt requirements_tracker.txt; do \
                 [ -f /opt/ystocker/$r ] && /opt/ystocker/venv/bin/pip install -q -r /opt/ystocker/$r; \
               done; \
               chown -R ystocker:ystocker /opt/ystocker'
@@ -403,6 +411,9 @@ Outputs:
   YHomeURL:
     Value: !Sub "https://${DomainYHome}/"
 
+  YTrackerURL:
+    Value: !Sub "https://${DomainYTracker}/"
+
   DirectIPURL:
     Description: Direct IP URL (before DNS)
     Value: !Sub "http://${ElasticIP}/"
@@ -411,4 +422,4 @@ Outputs:
     Value: !Sub "ssh -i ~/.ssh/${KeyName}.pem ec2-user@${ElasticIP}"
 
   LogsCommand:
-    Value: !Sub "ssh ec2-user@${ElasticIP} 'sudo journalctl -u ystocker -u yplanner -u yplanter -u yhome -f'"
+    Value: !Sub "ssh ec2-user@${ElasticIP} 'sudo journalctl -u ystocker -u yplanner -u yplanter -u yhome -u ytracker -f'"
