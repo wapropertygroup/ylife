@@ -278,9 +278,21 @@ _PRICE_SELECTORS: dict[str, list[tuple[str, Optional[str]]]] = {
         ("#tp_price_block_total_price_ww span.a-offscreen", None),
     ],
     "walmart": [
+        # itemprop="price" with content attribute is most reliable
         ("span[itemprop='price']", "content"),
+        ("[itemprop='price']", "content"),
+        # aria-label on price container often has full "Now $24.98"
+        ("[data-testid='price-wrap']", "aria-label"),
+        ("[data-automation-id='product-price']", "aria-label"),
+        # Full text of the price wrap (may include "Now $24.98")
         ("span[itemprop='price']", None),
-        ("[data-testid='price-wrap'] span", None),
+        # Hero price display
+        ("[data-seo-id='hero-price']", None),
+        ("[data-testid='hero-price']", None),
+        # Current (2025) Walmart price format with data-testid
+        ("[data-testid='product-price'] span", None),
+        # Walmart Plus price
+        ("[data-testid='price-wrap'] [aria-hidden='true']", None),
     ],
     "bestbuy": [
         ("div.priceView-hero-price span[aria-hidden='true']", None),
@@ -326,7 +338,7 @@ _PRICE_SELECTORS: dict[str, list[tuple[str, Optional[str]]]] = {
 
 _TITLE_SELECTORS: dict[str, list[str]] = {
     "amazon":    ["#productTitle", "#title", "h1 span#productTitle"],
-    "walmart":   ["h1[itemprop='name']", "h1"],
+    "walmart":   ["h1[itemprop='name']", "[data-testid='product-title']", "h1"],
     "bestbuy":   ["h1.heading-5", "h1"],
     "nike":      ["h1#pdp_product_title", "h1"],
     "lululemon": ["h1.pdp-title", "h1"],
@@ -339,7 +351,7 @@ _TITLE_SELECTORS: dict[str, list[str]] = {
 
 _IMAGE_SELECTORS: dict[str, list[tuple[str, Optional[str]]]] = {
     "amazon":    [("#landingImage", "data-old-hires"), ("#landingImage", "src"), ("#imgBlkFront", "src")],
-    "walmart":   [("img[data-testid='hero-image']", "src"), ("img.db", "src")],
+    "walmart":   [("img[data-testid='hero-image']", "src"), ("[data-testid='media-thumbnail'] img", "src"), ("img.db", "src")],
     "bestbuy":   [("img.primary-image", "src"), ("img[data-testid='image-media']", "src")],
     "nike":      [("img[data-testid='HeroImg']", "src"), ("picture img", "src")],
     "lululemon": [("img.carousel-image", "src"), (".pdp-image img", "src")],
@@ -360,13 +372,67 @@ def _css_extract_price(soup: BeautifulSoup, store: str) -> Optional[float]:
             p = _clean_price(text)
             if p:
                 return p
-    # Last resort: scan all elements for a dollar-amount pattern
+
+    # ── Walmart split-price handler ─────────────────────────────────────
+    # Walmart renders price as separate spans: "$" + "24" + "98" for $24.98
+    # The characteristic (dollars) has a large font class, mantissa (cents) smaller.
+    if store == "walmart":
+        price = _walmart_split_price(soup)
+        if price:
+            return price
+
+    # Last resort: scan all elements for a dollar-amount pattern.
+    # Require price > $2 to avoid picking up "$1" shipping/membership badges.
     for el in soup.select("span, div"):
         text = el.get_text(strip=True)
         if text.startswith("$") and 3 < len(text) < 12:
             p = _clean_price(text)
-            if p and 0.5 < p < 100000:
+            if p and p > 2.0 and p < 100000:
                 return p
+    return None
+
+
+def _walmart_split_price(soup: BeautifulSoup) -> Optional[float]:
+    """Handle Walmart's split-price spans: characteristic (dollars) + mantissa (cents).
+
+    Walmart renders prices like:
+      <span data-testid="price-wrap">
+        <span aria-hidden="true">
+          <span>Now</span> <span>$</span>
+          <span class="...f1...">24</span>      ← dollars (large font)
+          <span class="...f6...">98</span>      ← cents  (small font)
+        </span>
+      </span>
+    """
+    # Try price-wrap containers
+    for selector in ["[data-testid='price-wrap']", "[data-automation-id='product-price']"]:
+        wrap = soup.select_one(selector)
+        if not wrap:
+            continue
+
+        # First check aria-label (most reliable: "Now $24.98" or "current price $24.98")
+        label = wrap.get("aria-label", "")
+        p = _clean_price(label)
+        if p and p > 1:
+            return p
+
+        # Get all text content and try to find a price pattern
+        full_text = wrap.get_text(separator=" ", strip=True)
+        # Look for "$XX.XX" or "$XX XX" (space between dollars and cents)
+        m = re.search(r'\$\s*(\d[\d,]*)\s*[.\s]\s*(\d{2})\b', full_text)
+        if m:
+            try:
+                dollars = m.group(1).replace(",", "")
+                cents = m.group(2)
+                return float(f"{dollars}.{cents}")
+            except ValueError:
+                pass
+
+        # Fallback: just try to extract any dollar amount from full text
+        p = _clean_price(full_text)
+        if p and p > 1:
+            return p
+
     return None
 
 
