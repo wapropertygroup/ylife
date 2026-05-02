@@ -577,8 +577,9 @@ function itemDetail() {
               }
             }
           }
-          // Reload price history
+          // Reload price history and alt URLs
           await this.loadPrices();
+          await this.loadAltUrls();
         }
       } catch(e) {
         this.fetchError = 'Network error: ' + e.message;

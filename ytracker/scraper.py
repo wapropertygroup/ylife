@@ -37,6 +37,7 @@ STORE_NAMES = {
     "bestbuy":   "Best Buy",
     "safeway":   "Safeway",
     "costco":    "Costco",
+    "temu":      "Temu",
 }
 
 STORE_COLORS = {
@@ -48,6 +49,7 @@ STORE_COLORS = {
     "bestbuy":   "#0046be",
     "safeway":   "#e21a2c",
     "costco":    "#e31837",
+    "temu":      "#fb7701",
 }
 
 # hostname fragments → store key
@@ -63,6 +65,7 @@ _STORE_DOMAINS: list[tuple[str, str]] = [
     ("bestbuy.com",   "bestbuy"),
     ("safeway.com",   "safeway"),
     ("costco.com",    "costco"),
+    ("temu.com",      "temu"),
 ]
 
 # ---------------------------------------------------------------------------
@@ -303,6 +306,11 @@ _PRICE_SELECTORS: dict[str, list[tuple[str, Optional[str]]]] = {
         ("div.price span", None),
         (".your-price span", None),
     ],
+    "temu": [
+        ("span.goods-price", None),
+        ("[data-testid='price'] span", None),
+        ("div.price span", None),
+    ],
 }
 
 _TITLE_SELECTORS: dict[str, list[str]] = {
@@ -314,6 +322,7 @@ _TITLE_SELECTORS: dict[str, list[str]] = {
     "safeway":   ["h1.product-title", "h1"],
     "ubereats":  ["h1", "[data-testid='store-title']"],
     "costco":    ["h1.product-title", "h1", "meta[name='title']"],
+    "temu":      ["h1.goods-name", "h1", "title"],
 }
 
 _IMAGE_SELECTORS: dict[str, list[tuple[str, Optional[str]]]] = {
@@ -325,6 +334,7 @@ _IMAGE_SELECTORS: dict[str, list[tuple[str, Optional[str]]]] = {
     "safeway":   [("img.product-image", "src")],
     "ubereats":  [("img[role='presentation']", "src"), ("img", "src")],
     "costco":    [("img.product-image", "src"), ("img[data-testid='product-image']", "src")],
+    "temu":      [("img.goods-img", "src"), ("img[data-testid='product-image']", "src")],
 }
 
 
@@ -439,6 +449,7 @@ def _build_url(store: str, item_id: str) -> str:
         "lululemon": f"https://shop.lululemon.com/{item_id}",
         "safeway":   f"https://www.safeway.com/shop/product-detail.{item_id}.html",
         "costco":    f"https://www.costco.com/{item_id}.product.html",
+        "temu":      f"https://www.temu.com/{item_id}.html",
     }
     return urls.get(store, "")
 
