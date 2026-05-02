@@ -76,17 +76,49 @@ ytracker/               Price tracker (routes.py, scraper.py, DynamoDB)
 
 ## Production Deployment
 
-```bash
-# Deploy all apps via SSH to EC2
-bash deploy/deploy.sh
+### Deploy all 5 apps to EC2
 
-# Infrastructure: CloudFormation → EC2 + nginx + Gunicorn + Let's Encrypt SSL
+```bash
+bash deploy/deploy.sh -i ~/Downloads/my-key-pair.pem
+```
+
+This single command SSHs into the EC2 instance and:
+1. `git fetch` + `git reset --hard origin/main`
+2. Installs pip dependencies for all 5 apps
+3. Creates/updates systemd Gunicorn services (ports 8000-8004)
+4. Configures nginx reverse proxy vhosts
+5. Provisions Let's Encrypt SSL via certbot
+6. Warms up each app with a health-check curl
+
+The `-i` flag specifies the SSH key. If omitted, the script auto-detects from `~/.ssh/*.pem`.
+
+### Deploy infrastructure (first time only)
+
+```bash
 aws cloudformation deploy --template-file deploy/cloudformation.yaml \
-  --stack-name ystocker --parameter-overrides KeyName=my-key \
+  --stack-name ystocker --parameter-overrides KeyName=my-key-pair \
   --capabilities CAPABILITY_NAMED_IAM
 ```
 
-Each app runs on Gunicorn (ports 8000-8004), fronted by nginx reverse proxy with SSL.
+### Sync secrets to AWS SSM
+
+```bash
+bash deploy/sync-ssm.sh          # reads .env, writes to SSM Parameter Store
+bash deploy/sync-ssm.sh --dry-run  # preview without writing
+```
+
+### Production architecture
+
+```
+nginx (port 80/443, SSL)
+  ├─ stock.li-family.us    → gunicorn :8000 (ystocker)
+  ├─ planner.li-family.us  → gunicorn :8001 (yplanner)
+  ├─ plant.li-family.us    → gunicorn :8002 (yplanter)
+  ├─ home.li-family.us     → gunicorn :8003 (yhome)
+  └─ tracker.li-family.us  → gunicorn :8004 (ytracker)
+```
+
+Each app runs as a systemd service with 2 Gunicorn workers, 120s timeout, auto-restart.
 
 ## Code Conventions
 
