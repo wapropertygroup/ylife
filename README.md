@@ -1,51 +1,83 @@
-# yStocker
+# Li Family Apps
 
-A Flask web application for stock research and portfolio analysis. Fetches live
-data from Yahoo Finance, tracks Federal Reserve balance sheet trends, monitors
-institutional 13F holdings, and provides AI-powered explanations — all across
-configurable peer groups.
+A monorepo of Flask web applications built for the Li family — covering stock
+research, trip planning, gardening, and price tracking.
+
+**Live at [li-family.us](https://li-family.us)**
+
+| App | URL | Description |
+|-----|-----|-------------|
+| **yStocker** | [stock.li-family.us](https://stock.li-family.us) | Stock research & portfolio analysis |
+| **yPlanner** | [planner.li-family.us](https://planner.li-family.us) | AI-powered trip planner |
+| **yPlanter** | [plant.li-family.us](https://plant.li-family.us) | Pacific Northwest gardening guide |
+| **yTracker** | [tracker.li-family.us](https://tracker.li-family.us) | Multi-store price tracker with alerts |
+| **yHome** | [li-family.us](https://li-family.us) | Landing page / app directory |
 
 ---
 
 ## Project structure
 
 ```
-ystocker/                   ← git repository root
-├── run.py                  ← entry point — start the server from here
-├── requirements.txt        ← Python dependencies
-├── cloudformation.yaml     ← AWS deployment template
-├── deploy.sh               ← deployment helper script
-├── .gitignore
-├── cache/                  ← persistent on-disk cache (auto-created)
-│   ├── ticker_cache.json   ← stock metrics (8h TTL)
-│   ├── peer_groups.json    ← user-managed peer groups
-│   ├── fed_cache.json      ← Federal Reserve data (24h TTL)
-│   └── sec13f_cache.json   ← SEC 13F holdings (24h TTL)
-└── ystocker/               ← Python package (the app itself)
-    ├── __init__.py         ← Flask app factory + PEER_GROUPS config
-    ├── data.py             ← fetches stock metrics from Yahoo Finance
-    ├── routes.py           ← URL routes / views + JSON API endpoints
-    ├── fed.py              ← Federal Reserve FRED data fetching
-    ├── sec13f.py           ← SEC EDGAR 13F holdings fetching
-    ├── charts.py           ← matplotlib/seaborn chart generation
-    ├── templates/
-    │   ├── base.html       ← shared navbar + layout
-    │   ├── index.html      ← home page (sector cards + cross-sector charts)
-    │   ├── sector.html     ← per-sector detail page (charts + data table)
-    │   ├── history.html    ← single-ticker PE/PEG history + options wall
-    │   ├── lookup.html     ← ticker search + discover by sector
-    │   ├── groups.html     ← manage peer groups
-    │   ├── fed.html        ← Federal Reserve balance sheet charts
-    │   ├── thirteenf.html  ← institutional 13F holdings
-    │   └── warming.html    ← shown while cache is warming on startup
-    └── static/
-        ├── css/style.css
-        └── i18n.js         ← English / Simplified Chinese translations
+ystocker/                       <- git repository root
+|
++-- run/                        <- entry points (one per app)
+|   +-- run_stocker.py          <- yStocker dev server
+|   +-- run_home.py             <- yHome dev server
+|   +-- run_planner.py          <- yPlanner dev server
+|   +-- run_planter.py          <- yPlanter dev server
+|   +-- run_tracker.py          <- yTracker dev server
+|
++-- ystocker/                   <- stock research app
+|   +-- __init__.py             <- Flask factory + peer-group config
+|   +-- routes.py               <- URL routes, JSON API, background jobs
+|   +-- data.py                 <- Yahoo Finance data fetching
+|   +-- fed.py                  <- Federal Reserve FRED data
+|   +-- sec13f.py               <- SEC EDGAR 13F institutional holdings
+|   +-- forecast.py             <- Prophet / ARIMA / linear price forecasting
+|   +-- charts.py               <- matplotlib / seaborn chart generation
+|   +-- heatmap_meta.py         <- S&P 500 metadata for the market heatmap
+|   +-- templates/              <- 17 Jinja2 templates
+|   |   +-- base.html           <- shared navbar + layout
+|   |   +-- index.html          <- home (sector cards, cross-sector charts)
+|   |   +-- sector.html         <- per-sector detail (charts + data table)
+|   |   +-- history.html        <- single-ticker deep dive
+|   |   +-- lookup.html         <- ticker search + discover by sector
+|   |   +-- groups.html         <- manage peer groups
+|   |   +-- fed.html            <- Federal Reserve balance sheet charts
+|   |   +-- thirteenf.html      <- institutional 13F holdings
+|   |   +-- heatmap.html        <- S&P 500 market heatmap
+|   |   +-- markets.html        <- broad market overview
+|   |   +-- daily_report.html   <- email digest template
+|   |   +-- guide.html          <- help / documentation
+|   |   +-- videos.html         <- curated YouTube finance feed
+|   |   +-- warming.html        <- cache warming screen
+|   |   +-- error.html          <- error page
+|   |   +-- contact.html        <- contact form
+|   |   +-- unsubscribe.html    <- email unsubscribe
+|   +-- static/
+|       +-- css/style.css
+|       +-- i18n.js             <- English / Simplified Chinese translations
+|
++-- yhome/                      <- landing page app
++-- yplanner/                   <- trip planner app
++-- yplanter/                   <- gardening app
++-- ytracker/                   <- price tracker app
+|
++-- cache/                      <- persistent on-disk cache (auto-created)
+|   +-- ticker_cache.json       <- stock metrics (8 h TTL)
+|   +-- peer_groups.json        <- user-managed peer groups
+|   +-- fed_cache.json          <- Federal Reserve data (24 h TTL)
+|   +-- sec13f_cache.json       <- SEC 13F holdings (24 h TTL)
+|
++-- deploy/                     <- deployment configs
++-- requirements_stocker.txt    <- yStocker Python dependencies
++-- cloudformation.yaml         <- AWS deployment template
++-- .env                        <- local secrets (not committed)
 ```
 
 ---
 
-## Quick start
+## Quick start (yStocker)
 
 ### 1. Create a virtual environment
 
@@ -57,7 +89,7 @@ source venv/bin/activate   # Windows: venv\Scripts\activate
 ### 2. Install dependencies
 
 ```bash
-pip install -r requirements.txt
+pip install -r requirements_stocker.txt
 ```
 
 ### 3. Configure API keys (optional)
@@ -75,52 +107,54 @@ disabled.
 ### 4. Run the development server
 
 ```bash
-python run.py
+python run/run_stocker.py
 ```
 
 Open your browser at **http://127.0.0.1:5000**.
 
 ---
 
-## Pages
-
-| URL | Description |
-|-----|-------------|
-| `/` | Home — sector cards, valuation scatter, PEG map, cross-sector heatmap |
-| `/sector/<name>` | Detail page for one peer group (PE, upside, PEG charts + data table) |
-| `/history/<ticker>` | Single-ticker PE/PEG history, options wall, institutional holders, news |
-| `/lookup` | Search any ticker or discover tickers by sector / industry |
-| `/groups` | Add, remove, and manage peer groups (changes are persisted to disk) |
-| `/fed` | Federal Reserve balance sheet charts with AI trend explanations |
-| `/13f` | Institutional 13F holdings from top hedge funds and asset managers |
-| `/refresh` | Clears the cache and triggers a background re-fetch |
-
----
-
-## Features
+## yStocker features
 
 ### Peer group valuation dashboard
 
 The home page and per-sector pages display forward PE, TTM PE, PEG ratios,
 analyst price targets, upside %, EPS growth, and market cap for every ticker in
 each peer group. Charts include bar comparisons, a valuation scatter plot
-(Forward PE vs analyst upside), and a color-coded heatmap.
+(Forward PE vs analyst upside), and a colour-coded heatmap.
 
 ### Single-ticker analysis (`/history/<ticker>`)
 
-- Historical PE / PEG / price charts (configurable period: 1 month – 5 years)
-- Options wall — aggregated call/put open interest across all expirations to
+- Historical PE / PEG / price charts (configurable period: 1 month - 5 years)
+- Options wall - aggregated call/put open interest across all expirations to
   visualise support and resistance levels
 - Institutional holders ranked by portfolio weight, value, and change
 - AI-powered chart explanation (streams via Server-Sent Events, English and
   Chinese supported)
 - Recent news with importance scoring
 
+### Market heatmap (`/heatmap`)
+
+S&P 500 sector heatmap with ~105 large-cap stocks. Tile size reflects market
+cap; colour reflects daily price change. Auto-snapshots at market close on
+weekdays.
+
+### Broad market overview (`/markets`)
+
+Indices, commodities, crypto, gold ratios, Fear & Greed index, and put/call
+ratio - all on a single page.
+
+### Price forecasting (`/api/forecast/<ticker>`)
+
+Multi-model 6-month forward forecast using Prophet, ARIMA (AutoARIMA via
+pmdarima), and linear regression. Includes 80% confidence intervals.
+
 ### Federal Reserve dashboard (`/fed`)
 
 Weekly H.4.1 data pulled directly from FRED (no API key required). Charts
-cover Total Assets, Treasury Holdings, MBS, Reserve Balances, ON RRP, and
-Currency in Circulation. AI explanations summarise the latest trends.
+cover Total Assets, Treasury Holdings, MBS, Reserve Balances, ON RRP, Treasury
+General Account, Currency in Circulation, and Fed Loans. AI explanations
+summarise the latest trends.
 
 ### Institutional 13F holdings (`/13f`)
 
@@ -131,22 +165,93 @@ sorted by value and quarter-over-quarter change is classified automatically.
 ### AI explanations
 
 Powered by Google Gemini 2.5 Flash. Responses stream in real time and are
-available in English and Simplified Chinese. Covers both Federal Reserve data
-trends and single-stock chart analysis.
+available in English and Simplified Chinese. Covers Federal Reserve data
+trends, single-stock chart analysis, and news translation.
 
 ### Internationalisation
 
 UI labels and AI responses support English (default) and Simplified Chinese
 (中文), toggled via the language selector in the navbar.
 
+### Daily email digest
+
+Automated daily market report emailed to subscribers at UTC 00:00, summarising
+key metrics across all tracked peer groups.
+
+---
+
+## Pages
+
+| URL | Description |
+|-----|-------------|
+| `/` | Home - sector cards, valuation scatter, PEG map, cross-sector heatmap |
+| `/sector/<name>` | Detail page for one peer group (PE, upside, PEG charts + data table) |
+| `/history/<ticker>` | Single-ticker PE/PEG history, options wall, holders, news, AI |
+| `/lookup` | Search any ticker or discover tickers by sector / industry |
+| `/groups` | Add, remove, and manage peer groups (persisted to disk) |
+| `/fed` | Federal Reserve balance sheet charts with AI trend explanations |
+| `/13f` | Institutional 13F holdings from top hedge funds and asset managers |
+| `/heatmap` | S&P 500 market heatmap by sector |
+| `/markets` | Broad market overview (indices, commodities, crypto, ratios) |
+| `/guide` | Help documentation and feature overview |
+| `/videos` | Curated YouTube finance channels |
+| `/refresh` | Clears the cache and triggers a background re-fetch |
+
+---
+
+## API endpoints
+
+### Stock data
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/cache-age` | GET | Cache metadata and age |
+| `/api/ticker/<ticker>` | GET | Single ticker metrics |
+| `/api/history/<ticker>` | GET | Historical PE / PEG / price data |
+| `/api/history/<ticker>/explain` | POST | AI chart explanation (SSE stream) |
+| `/api/financials/<ticker>` | GET | Income statement, balance sheet |
+| `/api/discover` | GET | Sector / industry ticker discovery |
+| `/api/forecast/<ticker>` | GET | 6-month price forecast (Prophet / ARIMA / linear) |
+
+### Market data
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/markets` | GET | Broad market indices |
+| `/api/fear-greed` | GET | CNN Fear & Greed index |
+| `/api/put-call-ratio` | GET | Options sentiment |
+| `/api/gold-ratios` | GET | Precious metals ratios |
+
+### News & media
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/news/<ticker>` | GET | Recent news articles |
+| `/api/news/translate` | POST | AI news translation |
+| `/api/videos/<ticker>` | GET | Financial videos for ticker |
+| `/api/videos/channel/<id>` | GET | Videos from a channel |
+
+### Federal Reserve
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/fed` | GET | H.4.1 balance sheet data |
+| `/api/fed/explain` | POST | AI Fed data explanation (SSE stream) |
+
+### Institutional 13F
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/13f/<fund_slug>` | GET | Holdings for one fund |
+| `/api/13f/ticker/<ticker>` | GET | Which funds own this stock |
+
 ---
 
 ## Caching
 
-On startup the app warms an in-memory + on-disk cache (`cache/ticker_cache.json`)
-by fetching all tickers from Yahoo Finance in the background. The first page
-load shows a warming screen with an auto-reload. Once the cache is populated,
-all pages are instant.
+On startup the app warms an in-memory + on-disk cache by fetching all tickers
+from Yahoo Finance in the background. The first page load shows a warming
+screen with an auto-reload. Once the cache is populated, all pages are instant.
 
 | Cache | TTL | File |
 |-------|-----|------|
@@ -155,30 +260,24 @@ all pages are instant.
 | 13F holdings | 24 hours | `cache/sec13f_cache.json` |
 | News | 5 minutes | in-memory only |
 
-The cache is also refreshed automatically every 8 hours in a background thread.
-Use `/refresh` to force an immediate re-fetch.
+### Background tasks
 
----
+| Task | Frequency | Description |
+|------|-----------|-------------|
+| Stock data cache warming | Every 8 hours | Fetches all peer group tickers from Yahoo |
+| Fed data refresh | Every 24 hours | FRED series updates |
+| 13F holdings refresh | Every 24 hours | SEC EDGAR fund holdings |
+| Heatmap daily snapshot | Weekdays 16:30 ET | Stores heatmap state for historical view |
+| Email broadcast | Daily 00:00 UTC | Sends daily market report emails |
 
-## API endpoints
-
-| Endpoint | Description |
-|----------|-------------|
-| `GET /api/cache-age` | Cache metadata and age |
-| `GET /api/ticker/<ticker>` | Single ticker metrics (JSON) |
-| `GET /api/history/<ticker>` | Historical PE / PEG / price data (JSON) |
-| `GET /api/history/<ticker>/explain` | AI chart explanation (SSE stream) |
-| `GET /api/news/<ticker>` | Recent news articles (JSON) |
-| `GET /api/discover` | Sector / industry ticker discovery (JSON) |
-| `GET /api/fed` | Federal Reserve H.4.1 data (JSON) |
-| `GET /api/fed/explain` | AI Fed data explanation (SSE stream) |
-| `GET /api/13f/<fund_slug>` | Institutional holdings for one fund (JSON) |
+All background tasks run as daemon threads (non-blocking shutdown). Use
+`/refresh` to force an immediate re-fetch.
 
 ---
 
 ## Customising peer groups
 
-Peer groups can be managed live via the `/groups` page — changes are saved to
+Peer groups can be managed live via the `/groups` page - changes are saved to
 `cache/peer_groups.json` and survive restarts.
 
 To set the defaults, edit `PEER_GROUPS` in `ystocker/__init__.py`:
@@ -199,7 +298,7 @@ PEER_GROUPS: dict[str, list[str]] = {
 
 - VPC with a public subnet and Internet Gateway
 - EC2 instance (Amazon Linux 2023) with a persistent **Elastic IP**
-- nginx reverse proxy (port 80) → Gunicorn (port 8000)
+- nginx reverse proxy (port 80) -> Gunicorn (port 8000)
 - systemd service (`ystocker`) that starts on boot and auto-restarts
 - IAM role with SSM Session Manager (optional SSH-free access)
 - Security group: ports 22 (SSH), 80 (HTTP), 8000 (direct Gunicorn)
@@ -207,7 +306,7 @@ PEER_GROUPS: dict[str, list[str]] = {
 ### Prerequisites
 
 1. [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) installed and configured (`aws configure`)
-2. An existing EC2 key pair in your target region — create one in the AWS Console under **EC2 → Key Pairs** if needed
+2. An existing EC2 key pair in your target region - create one in the AWS Console under **EC2 -> Key Pairs** if needed
 
 ### Parameters
 
@@ -219,7 +318,7 @@ PEER_GROUPS: dict[str, list[str]] = {
 | `AppPort` | `8000` | Port Gunicorn listens on |
 | `GitRepo` | *(empty)* | Optional HTTPS git URL to clone on first boot |
 
-### Option A — deploy via AWS CLI
+### Deploy via AWS CLI
 
 ```bash
 aws cloudformation deploy \
@@ -242,11 +341,9 @@ aws cloudformation describe-stacks \
   --output table
 ```
 
-The `AppURL` output gives you the public URL, e.g. `http://54.x.x.x/`.
+### Deploy via AWS Console
 
-### Option B — deploy via AWS Console
-
-1. Open **CloudFormation → Stacks → Create stack → With new resources**
+1. Open **CloudFormation -> Stacks -> Create stack -> With new resources**
 2. Choose **Upload a template file** and select `cloudformation.yaml`
 3. Fill in the parameters (at minimum, set `KeyName`)
 4. On the **Capabilities** page check **"I acknowledge that AWS CloudFormation might create IAM resources with custom names"**
@@ -264,15 +361,15 @@ scp -i ~/.ssh/my-key-pair.pem -r ./ystocker ec2-user@$ELASTIC_IP:/tmp/
 
 ssh -i ~/.ssh/my-key-pair.pem ec2-user@$ELASTIC_IP \
   'sudo cp -r /tmp/ystocker/* /opt/ystocker/ \
-   && sudo pip install -r /opt/ystocker/requirements.txt \
+   && sudo pip install -r /opt/ystocker/requirements_stocker.txt \
    && sudo chown -R ystocker:ystocker /opt/ystocker \
    && sudo systemctl restart ystocker'
 ```
 
 If you provided a `GitRepo` URL, the instance clones it automatically on first
-boot and installs `requirements.txt`. No manual upload needed.
+boot and installs dependencies. No manual upload needed.
 
-### Useful commands after deployment
+### Useful commands
 
 ```bash
 # SSH into the instance
@@ -289,16 +386,6 @@ ssh -i ~/.ssh/my-key-pair.pem ec2-user@$ELASTIC_IP \
 # Check nginx status
 ssh -i ~/.ssh/my-key-pair.pem ec2-user@$ELASTIC_IP \
   'sudo systemctl status nginx'
-```
-
-### Updating the app
-
-```bash
-scp -i ~/.ssh/my-key-pair.pem -r ./ystocker ec2-user@$ELASTIC_IP:/tmp/
-ssh -i ~/.ssh/my-key-pair.pem ec2-user@$ELASTIC_IP \
-  'sudo cp -r /tmp/ystocker/* /opt/ystocker/ \
-   && sudo chown -R ystocker:ystocker /opt/ystocker \
-   && sudo systemctl restart ystocker'
 ```
 
 ### Tearing down
@@ -334,4 +421,14 @@ gunicorn "ystocker:create_app()" --bind 0.0.0.0:8000
 | `google-genai` | Google Gemini API for AI explanations |
 | `python-dotenv` | Load secrets from `.env` |
 | `boto3` | AWS SSM Parameter Store (optional secret management) |
+| `prophet` | Facebook/Meta time-series forecasting |
+| `pmdarima` | AutoARIMA model selection |
+| `statsmodels` | Statistical modelling |
+| `numpy` | Numerical computing |
 | `gunicorn` | Production WSGI server |
+
+---
+
+## License
+
+[MIT](LICENSE)

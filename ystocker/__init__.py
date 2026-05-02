@@ -5,15 +5,13 @@ Flask application factory + peer-group configuration.
 """
 from __future__ import annotations
 
-from typing import Dict, List
-
 from flask import Flask
 
 # ---------------------------------------------------------------------------
 # Peer group configuration - edit here OR use the /groups UI in the browser.
 # Each key is a group name; each value is a list of Yahoo Finance ticker symbols.
 # ---------------------------------------------------------------------------
-PEER_GROUPS: Dict[str, List[str]] = {
+PEER_GROUPS: dict[str, list[str]] = {
     "Tech":              ["MSFT", "AAPL", "GOOGL", "META", "NVDA", "AMZN"],
     "Cloud / SaaS":      ["MSFT", "CRM", "NOW", "AMZN", "ORCL"],
     "Semiconductors":    ["NVDA", "AMD", "INTC", "QCOM", "TSM", "AVGO", "ASML"],
@@ -33,7 +31,7 @@ PEER_GROUPS: Dict[str, List[str]] = {
 # Each tuple: (handle, channel_id, display_name)
 # Chinese-language channels first, then English channels.
 # ---------------------------------------------------------------------------
-YT_CHANNELS: List[tuple] = [
+YT_CHANNELS: list[tuple[str, str, str]] = [
     # ── Chinese-language channels ──────────────────────────────────────────
     ("andyleegogo",       "UCwyRBuGpaLYnFuohCYyjBeQ", "Andy lee"),
     ("RhinoFinance",      "UCFQsi7WaF5X41tcuOryDk8w", "视野环球财经"),
@@ -62,7 +60,11 @@ def _load_secrets_from_ssm() -> None:
     Parameters fetched:
       /ystocker/GEMINI_API_KEY  → os.environ["GEMINI_API_KEY"]
     """
+    import logging
     import os
+
+    log = logging.getLogger(__name__)
+
     try:
         import boto3
         from botocore.exceptions import ClientError, NoCredentialsError
@@ -83,22 +85,15 @@ def _load_secrets_from_ssm() -> None:
             try:
                 resp = ssm.get_parameter(Name=param_name, WithDecryption=True)
                 os.environ[env_key] = resp["Parameter"]["Value"]
-                import logging
-                logging.getLogger(__name__).info(
-                    "SSM: loaded %s → %s", param_name, env_key
-                )
+                log.info("SSM: loaded %s → %s", param_name, env_key)
             except ClientError as e:
                 code = e.response["Error"]["Code"]
                 if code != "ParameterNotFound":
-                    import logging
-                    logging.getLogger(__name__).warning(
-                        "SSM: could not fetch %s: %s", param_name, e
-                    )
+                    log.warning("SSM: could not fetch %s: %s", param_name, e)
     except NoCredentialsError:
         pass  # not on AWS — skip silently
     except Exception as exc:
-        import logging
-        logging.getLogger(__name__).warning("SSM: unexpected error: %s", exc)
+        log.warning("SSM: unexpected error: %s", exc)
 
 
 def create_app() -> Flask:

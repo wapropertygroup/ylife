@@ -6,7 +6,6 @@ Fetches financial metrics from Yahoo Finance for a single ticker.
 from __future__ import annotations
 
 import logging
-from typing import Dict, List, Tuple
 
 import yfinance as yf
 
@@ -98,7 +97,7 @@ def fetch_ticker_data(ticker: str) -> dict:
     }
 
 
-def fetch_group(tickers: List[str]) -> Tuple[Dict[str, dict], List[str]]:
+def fetch_group(tickers: list[str]) -> tuple[dict[str, dict], list[str]]:
     """
     Fetch data for every ticker in *tickers*.
 
@@ -106,8 +105,8 @@ def fetch_group(tickers: List[str]) -> Tuple[Dict[str, dict], List[str]]:
       results - {ticker: data_dict} for every ticker that succeeded
       errors  - list of error message strings for tickers that failed
     """
-    results: Dict[str, dict] = {}
-    errors: List[str] = []
+    results: dict[str, dict] = {}
+    errors: list[str] = []
     for t in tickers:
         try:
             results[t] = fetch_ticker_data(t)

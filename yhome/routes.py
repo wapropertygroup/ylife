@@ -49,7 +49,7 @@ APPS = [
         "name": "yTracker",
         "emoji": "\U0001f3f7️",
         "tagline": "Price Tracker",
-        "description": "Track prices from Amazon, Walmart, and Uber Eats. "
+        "description": "Track prices from Amazon, Walmart, Home Depot, and more. "
                        "Get email alerts on price drops and discover record-low deals.",
         "url": "https://tracker.li-family.us",
         "color": "amber",

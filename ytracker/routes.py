@@ -2,7 +2,7 @@
 ytracker.routes
 ~~~~~~~~~~~~~~~
 URL routes for the yTracker price tracker.
-Supports Amazon, Walmart, and Uber Eats.
+Supports Amazon, Walmart, Uber Eats, Home Depot, and more.
 """
 from __future__ import annotations
 
@@ -344,7 +344,11 @@ def api_add_item():
 
 @bp.route("/api/item/<store>/<item_id>", methods=["DELETE"])
 def api_delete_item(store: str, item_id: str):
-    """Remove a tracked item."""
+    """Remove a tracked item. Requires login."""
+    user = _get_current_user()
+    if not user.get("email"):
+        return jsonify({"error": "Please sign in to delete items"}), 401
+
     table = _get_items_table()
     if not table:
         return jsonify({"error": "Database unavailable"}), 503
@@ -595,7 +599,11 @@ def api_add_alt_url(store: str, item_id: str):
 
 @bp.route("/api/item/<store>/<item_id>/alt-urls/<int:idx>", methods=["DELETE"])
 def api_delete_alt_url(store: str, item_id: str, idx: int):
-    """Remove an alternate URL by index."""
+    """Remove an alternate URL by index. Requires login."""
+    user = _get_current_user()
+    if not user.get("email"):
+        return jsonify({"error": "Please sign in to remove stores"}), 401
+
     table = _get_items_table()
     if not table:
         return jsonify({"error": "Database unavailable"}), 503

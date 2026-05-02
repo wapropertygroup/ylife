@@ -23,10 +23,11 @@ from __future__ import annotations
 
 import json
 import logging
+import tempfile
 import threading
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 import requests
 
@@ -39,7 +40,7 @@ _CACHE_TTL  = 24 * 60 * 60   # 24 hours
 _FRED_CSV = "https://fred.stlouisfed.org/graph/fredgraph.csv?id={series}"
 
 # Series IDs and display metadata
-SERIES: Dict[str, Dict[str, str]] = {
+SERIES: dict[str, dict[str, str]] = {
     "WALCL":     {"label": "Total Assets",              "color": "#6366f1"},
     "TREAST":    {"label": "Treasury Securities",       "color": "#38bdf8"},
     "WSHOSHO":   {"label": "Bills (Short-Term)",        "color": "#818cf8"},
@@ -55,7 +56,7 @@ SERIES: Dict[str, Dict[str, str]] = {
 # In-memory cache
 # ---------------------------------------------------------------------------
 _cache_lock    = threading.Lock()
-_cache_data: Optional[Dict[str, Any]] = None
+_cache_data: Optional[dict[str, Any]] = None
 _cache_ts:   Optional[float]          = None
 
 _warming      = False
@@ -65,7 +66,7 @@ _warming_lock = threading.Lock()
 # Disk cache
 # ---------------------------------------------------------------------------
 
-def _load_disk_cache() -> Optional[Dict[str, Any]]:
+def _load_disk_cache() -> Optional[dict[str, Any]]:
     try:
         if not _CACHE_FILE.exists():
             return None
@@ -77,10 +78,18 @@ def _load_disk_cache() -> Optional[Dict[str, Any]]:
     return None
 
 
-def _save_disk_cache(data: Dict[str, Any]) -> None:
+def _save_disk_cache(data: dict[str, Any]) -> None:
+    """Atomically write cache to disk using temp file + rename."""
     try:
         _CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
-        _CACHE_FILE.write_text(json.dumps(data))
+        fd, tmp = tempfile.mkstemp(dir=_CACHE_FILE.parent, suffix=".tmp")
+        try:
+            with open(fd, "w") as f:
+                json.dump(data, f)
+            Path(tmp).replace(_CACHE_FILE)
+        except BaseException:
+            Path(tmp).unlink(missing_ok=True)
+            raise
     except Exception as exc:
         log.warning("Fed: failed to write disk cache: %s", exc)
 
@@ -98,7 +107,7 @@ _HEADERS = {
 _SERIES_ALREADY_BILLIONS = {"RRPONTSYD"}
 
 
-def _fetch_series(series_id: str) -> Optional[Dict[str, Any]]:
+def _fetch_series(series_id: str) -> Optional[dict[str, Any]]:
     """
     Fetch a single FRED series CSV and return
     {"dates": [...], "values": [...]} with values in billions USD.
@@ -121,8 +130,8 @@ def _fetch_series(series_id: str) -> Optional[Dict[str, Any]]:
     #   ...
     # Values are in millions USD; convert to billions.
 
-    dates:  List[str]           = []
-    values: List[Optional[float]] = []
+    dates:  list[str]           = []
+    values: list[Optional[float]] = []
 
     lines = text.strip().splitlines()
     if not lines:
@@ -157,9 +166,9 @@ def _fetch_series(series_id: str) -> Optional[Dict[str, Any]]:
     return {"dates": dates, "values": values}
 
 
-def _build_cache() -> Dict[str, Any]:
+def _build_cache() -> dict[str, Any]:
     """Fetch all series and return the full cache payload."""
-    result: Dict[str, Any] = {"_ts": time.time(), "series": {}}
+    result: dict[str, Any] = {"_ts": time.time(), "series": {}}
     for sid in SERIES:
         data = _fetch_series(sid)
         if data:
@@ -173,7 +182,7 @@ def _build_cache() -> Dict[str, Any]:
 # Public API
 # ---------------------------------------------------------------------------
 
-def get_fed_data(force: bool = False) -> Dict[str, Any]:
+def get_fed_data(force: bool = False) -> dict[str, Any]:
     """Return cached H.4.1 data. Loads memory → disk → network as needed."""
     global _cache_data, _cache_ts
 

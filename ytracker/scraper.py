@@ -2,7 +2,8 @@
 ytracker.scraper
 ~~~~~~~~~~~~~~~~
 Multi-store price scraper.
-Supports: Amazon, Walmart, Uber Eats, Nike, Lululemon, Best Buy, Safeway.
+Supports: Amazon, Walmart, Uber Eats, Nike, Lululemon, Best Buy, Safeway,
+          Costco, Temu, Home Depot.
 
 Strategy per page:
   1. JSON-LD structured data  (most reliable)
@@ -38,6 +39,7 @@ STORE_NAMES = {
     "safeway":   "Safeway",
     "costco":    "Costco",
     "temu":      "Temu",
+    "homedepot": "Home Depot",
 }
 
 STORE_COLORS = {
@@ -50,6 +52,7 @@ STORE_COLORS = {
     "safeway":   "#e21a2c",
     "costco":    "#e31837",
     "temu":      "#fb7701",
+    "homedepot": "#f96302",
 }
 
 # hostname fragments → store key
@@ -66,6 +69,7 @@ _STORE_DOMAINS: list[tuple[str, str]] = [
     ("safeway.com",   "safeway"),
     ("costco.com",    "costco"),
     ("temu.com",      "temu"),
+    ("homedepot.com", "homedepot"),
 ]
 
 # ---------------------------------------------------------------------------
@@ -311,6 +315,13 @@ _PRICE_SELECTORS: dict[str, list[tuple[str, Optional[str]]]] = {
         ("[data-testid='price'] span", None),
         ("div.price span", None),
     ],
+    "homedepot": [
+        ("span.sui-font-bold.sui-text-primary-regular", None),
+        ("[data-testid='price-format'] span", None),
+        ("div.price-format__main-price span", None),
+        ("span.price-format__large", None),
+        ("#standard-price span", None),
+    ],
 }
 
 _TITLE_SELECTORS: dict[str, list[str]] = {
@@ -323,6 +334,7 @@ _TITLE_SELECTORS: dict[str, list[str]] = {
     "ubereats":  ["h1", "[data-testid='store-title']"],
     "costco":    ["h1.product-title", "h1", "meta[name='title']"],
     "temu":      ["h1.goods-name", "h1", "title"],
+    "homedepot": ["h1.sui-font-regular", "h1[class*='product-title']", "h1"],
 }
 
 _IMAGE_SELECTORS: dict[str, list[tuple[str, Optional[str]]]] = {
@@ -335,6 +347,7 @@ _IMAGE_SELECTORS: dict[str, list[tuple[str, Optional[str]]]] = {
     "ubereats":  [("img[role='presentation']", "src"), ("img", "src")],
     "costco":    [("img.product-image", "src"), ("img[data-testid='product-image']", "src")],
     "temu":      [("img.goods-img", "src"), ("img[data-testid='product-image']", "src")],
+    "homedepot": [("img[data-testid='hero-image']", "src"), ("img.mediabrowser-image", "src"), (".media-viewer img", "src")],
 }
 
 
@@ -395,6 +408,7 @@ _ASIN_RE = re.compile(r"/(?:dp|gp/product)/([A-Z0-9]{10})")
 _RAW_ASIN_RE = re.compile(r"^[A-Z0-9]{10}$")
 _WALMART_ID_RE = re.compile(r"/ip/[^/]*/(\d+)|/ip/(\d+)")
 _UBEREATS_ID_RE = re.compile(r"/store/[^/]+/([a-f0-9-]+)")
+_HOMEDEPOT_ID_RE = re.compile(r"/p/[^/]+/(\d{9})|/p/(\d{9})")
 
 
 def extract_item_id(url: str, store: str) -> Optional[str]:
@@ -416,6 +430,16 @@ def extract_item_id(url: str, store: str) -> Optional[str]:
 
     if store == "ubereats":
         m = _UBEREATS_ID_RE.search(url)
+        if m:
+            return m.group(1)
+
+    if store == "homedepot":
+        # Home Depot URLs: /p/Product-Name/123456789
+        m = _HOMEDEPOT_ID_RE.search(url)
+        if m:
+            return m.group(1) or m.group(2)
+        # Fallback: look for a 9-digit numeric segment in the path
+        m = re.search(r"/(\d{9})(?:[/?#]|$)", url)
         if m:
             return m.group(1)
 
@@ -450,6 +474,7 @@ def _build_url(store: str, item_id: str) -> str:
         "safeway":   f"https://www.safeway.com/shop/product-detail.{item_id}.html",
         "costco":    f"https://www.costco.com/{item_id}.product.html",
         "temu":      f"https://www.temu.com/{item_id}.html",
+        "homedepot": f"https://www.homedepot.com/p/{item_id}",
     }
     return urls.get(store, "")
 

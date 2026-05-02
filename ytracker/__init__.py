@@ -2,7 +2,7 @@
 ytracker package
 ~~~~~~~~~~~~~~~~
 Flask application factory for the yTracker price tracking app.
-Track prices from Amazon, Walmart, and Uber Eats — get notified on drops.
+Track prices from Amazon, Walmart, Home Depot, and more — get notified on drops.
 """
 from __future__ import annotations
 

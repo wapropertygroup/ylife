@@ -13,10 +13,10 @@
 {% block main_class %}max-w-screen-2xl mx-auto{% endblock %}
 
 {% block content %}
-<div x-data="tripPlanner()" x-init="init()" class="flex flex-col lg:flex-row gap-4 h-[calc(100vh-8rem)] p-4">
+<div x-data="tripPlanner()" x-init="init()" class="flex flex-col md:flex-row gap-4 h-[calc(100vh-7.5rem)] p-4">
 
   <!-- Left Panel: Controls -->
-  <div class="lg:w-[420px] shrink-0 flex flex-col gap-4 overflow-y-auto pr-1">
+  <div class="md:w-[360px] lg:w-[420px] shrink-0 flex flex-col gap-4 overflow-y-auto pr-1 max-h-[45vh] md:max-h-none">
 
     <!-- Sign-in / User identity -->
     <div x-show="!user" class="bg-white dark:bg-panel border border-slate-200 dark:border-border rounded-xl p-4">
@@ -440,7 +440,7 @@
   </div>
 
   <!-- Right Panel: Map -->
-  <div class="flex-1 rounded-xl overflow-hidden border border-slate-200 dark:border-border min-h-[300px] lg:min-h-0 relative">
+  <div class="flex-1 rounded-xl overflow-hidden border border-slate-200 dark:border-border min-h-[55vh] md:min-h-0 relative order-first md:order-last">
     <div id="map" class="w-full h-full"></div>
     <!-- Map layer selector -->
     <div class="absolute top-3 right-3 z-10" x-data="{ layerOpen: false }">

@@ -832,6 +832,30 @@ def api_financials(ticker: str):
                         "low_52w":  round(min(closes), 2),
                         "weeks":   len(closes),
                     }
+
+        # ── Rolling 14-day Z-Score history ─────────────────────────
+        # Fetch daily prices for 1 year, compute a 14-day rolling
+        # mean / stdev, then z = (close - SMA14) / rolling_stdev_14.
+        daily = tk.history(period="1y", interval="1d")
+        if daily is not None and len(daily) >= 20:
+            import numpy as np
+            dc = daily["Close"].dropna()
+            sma14  = dc.rolling(window=14, min_periods=14).mean()
+            std14  = dc.rolling(window=14, min_periods=14).std()
+            zs_raw = (dc - sma14) / std14
+            zs_raw = zs_raw.dropna()
+
+            # Also compute a 14-day smoothed Z-Score (moving average of Z)
+            zs_ma  = zs_raw.rolling(window=14, min_periods=1).mean()
+
+            zscore_history = []
+            for dt, zv, zmv in zip(zs_raw.index, zs_raw.values, zs_ma.values):
+                zscore_history.append({
+                    "date":  str(dt.date()),
+                    "z":     round(float(zv), 3),
+                    "z_ma":  round(float(zmv), 3),
+                })
+            price_zscore["history"] = zscore_history
     except Exception as exc:
         log.warning("Price Z-Score failed for %s: %s", ticker, exc)
 

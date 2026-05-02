@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import base64
 import io
-from typing import Dict, List
 
 import matplotlib
 matplotlib.use("Agg")  # non-interactive backend - required for server use
@@ -36,7 +35,7 @@ def _fig_to_b64(fig: plt.Figure) -> str:
     return base64.b64encode(buf.read()).decode("utf-8")
 
 
-def _to_numeric_df(df: pd.DataFrame, cols: List[str]) -> pd.DataFrame:
+def _to_numeric_df(df: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
     """Return a copy of *df* with *cols* coerced to float (None → NaN)."""
     out = df[cols].copy()
     for c in cols:
@@ -175,7 +174,7 @@ def chart_peg_bars(group_name: str, df: pd.DataFrame) -> str:
     return _fig_to_b64(fig)
 
 
-def chart_heatmap(all_dfs: Dict[str, pd.DataFrame]) -> str:
+def chart_heatmap(all_dfs: dict[str, pd.DataFrame]) -> str:
     """PE & PEG heatmap across all unique tickers from every peer group."""
     rows = []
     for df in all_dfs.values():
@@ -194,9 +193,18 @@ def chart_heatmap(all_dfs: Dict[str, pd.DataFrame]) -> str:
     return _fig_to_b64(fig)
 
 
-def chart_scatter(all_dfs: Dict[str, pd.DataFrame]) -> str:
+def chart_scatter(all_dfs: dict[str, pd.DataFrame]) -> str:
     """Forward PE vs analyst upside scatter - one point per unique ticker."""
-    palette = {"Tech": "#1f77b4", "Cloud / SaaS": "#ff7f0e", "Semiconductors": "#2ca02c"}
+    # Dynamic palette — cycles through a colour list for any number of sectors
+    _COLORS = [
+        "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd",
+        "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf",
+        "#aec7e8", "#ffbb78", "#98df8a", "#ff9896", "#c5b0d5",
+    ]
+    palette: dict[str, str] = {}
+    for i, sector in enumerate(all_dfs):
+        palette[sector] = _COLORS[i % len(_COLORS)]
+
     seen: set[str] = set()
 
     fig, ax = plt.subplots(figsize=(9, 6))

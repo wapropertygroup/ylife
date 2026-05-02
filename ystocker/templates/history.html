@@ -338,6 +338,10 @@
     <!-- Z-Score details card -->
     <div id="zscoreDetails" class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
     </div>
+    <!-- Z-Score rolling history chart -->
+    <div class="chart-container" style="height:260px; display:none" id="zscoreChartWrap">
+      <canvas id="zscoreHistChart"></canvas>
+    </div>
   </div>
 
   <!-- ── Price Forecast chart ────────────────────────────────────────── -->
@@ -759,6 +763,91 @@ let   _forecastResult = null;   // last forecast API response
             <p class="text-sm font-bold text-slate-100">${fmtP(zs.low_52w)} – ${fmtP(zs.high_52w)}</p>
           </div>
         `;
+
+        // ── Z-Score rolling 14-day history chart ──
+        if (zs.history && zs.history.length > 0) {
+          const wrap = document.getElementById('zscoreChartWrap');
+          wrap.style.display = 'block';
+          const labels = zs.history.map(h => h.date);
+          const zVals  = zs.history.map(h => h.z);
+          const zMA    = zs.history.map(h => h.z_ma);
+
+          const zsCfg = {
+            type: 'line',
+            data: {
+              labels,
+              datasets: [
+                {
+                  label: 'Z-Score (14d)',
+                  data: zVals,
+                  borderColor: '#818cf8',
+                  backgroundColor: 'rgba(129,140,248,0.08)',
+                  borderWidth: 1.5,
+                  pointRadius: 0,
+                  pointHoverRadius: 4,
+                  fill: false,
+                  tension: 0.3,
+                },
+                {
+                  label: '14d MA of Z',
+                  data: zMA,
+                  borderColor: '#facc15',
+                  borderWidth: 2,
+                  borderDash: [6, 3],
+                  pointRadius: 0,
+                  pointHoverRadius: 4,
+                  fill: false,
+                  tension: 0.3,
+                },
+              ],
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              interaction: { mode: 'index', intersect: false },
+              plugins: {
+                legend: {
+                  display: true,
+                  labels: { color: '#94a3b8', boxWidth: 14, font: { size: 11 } },
+                },
+                tooltip: {
+                  backgroundColor: '#1e293b',
+                  titleColor: '#e2e8f0',
+                  bodyColor: '#cbd5e1',
+                  borderColor: '#334155',
+                  borderWidth: 1,
+                  callbacks: {
+                    label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y >= 0 ? '+' : ''}${ctx.parsed.y.toFixed(2)}σ`,
+                  },
+                },
+                annotation: {
+                  annotations: {
+                    band2pos:  { type: 'line', yMin:  2, yMax:  2, borderColor: 'rgba(244,63,94,0.4)',  borderWidth: 1, borderDash: [4,4], label: { display: false } },
+                    band1pos:  { type: 'line', yMin:  1, yMax:  1, borderColor: 'rgba(251,191,36,0.3)', borderWidth: 1, borderDash: [4,4], label: { display: false } },
+                    bandZero:  { type: 'line', yMin:  0, yMax:  0, borderColor: 'rgba(148,163,184,0.3)', borderWidth: 1, label: { display: false } },
+                    band1neg:  { type: 'line', yMin: -1, yMax: -1, borderColor: 'rgba(251,191,36,0.3)', borderWidth: 1, borderDash: [4,4], label: { display: false } },
+                    band2neg:  { type: 'line', yMin: -2, yMax: -2, borderColor: 'rgba(56,189,248,0.4)', borderWidth: 1, borderDash: [4,4], label: { display: false } },
+                  },
+                },
+              },
+              scales: {
+                x: {
+                  ticks: { color: '#64748b', maxTicksLimit: 8, font: { size: 10 } },
+                  grid: { color: 'rgba(51,65,85,0.3)' },
+                },
+                y: {
+                  ticks: {
+                    color: '#64748b',
+                    font: { size: 10 },
+                    callback: (v) => (v >= 0 ? '+' : '') + v.toFixed(1) + 'σ',
+                  },
+                  grid: { color: 'rgba(51,65,85,0.3)' },
+                },
+              },
+            },
+          };
+          _registerChart('zscore', zsCfg, new Chart(document.getElementById('zscoreHistChart'), zsCfg));
+        }
       }
     } catch(e) {
       console.warn('Financials fetch failed:', e);
