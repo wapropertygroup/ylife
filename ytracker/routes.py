@@ -114,6 +114,7 @@ def _get_current_user() -> dict:
 @bp.route("/api/auth/google", methods=["POST"])
 def auth_google():
     """Verify Google ID token and create session."""
+    log.info("API auth/google")
     data = request.get_json(force=True, silent=True) or {}
     credential = data.get("credential", "")
     if not credential:
@@ -156,12 +157,14 @@ def auth_google():
 @bp.route("/api/auth/me")
 def auth_me():
     """Get current user info."""
+    log.debug("API auth/me")
     return jsonify({"user": _get_current_user()})
 
 
 @bp.route("/api/auth/logout", methods=["POST"])
 def auth_logout():
     """Log out."""
+    log.info("API auth/logout")
     session.pop("user_email", None)
     session.pop("user_name", None)
     session.pop("user_picture", None)
@@ -204,6 +207,16 @@ def index():
                            google_client_id=google_client_id)
 
 
+@bp.route("/login")
+def login():
+    """Dedicated sign-in page."""
+    from flask import redirect
+    if session.get("user_email"):
+        return redirect("/")
+    google_client_id = os.environ.get("GOOGLE_CLIENT_ID", "")
+    return render_template("login.html", google_client_id=google_client_id)
+
+
 @bp.route("/item/<store>/<item_id>")
 def item_detail(store: str, item_id: str):
     google_client_id = os.environ.get("GOOGLE_CLIENT_ID", "")
@@ -219,6 +232,7 @@ def item_detail(store: str, item_id: str):
 @bp.route("/api/items")
 def api_items():
     """List all tracked items for the current session."""
+    log.info("API items")
     table = _get_items_table()
     if not table:
         return jsonify({"error": "Database unavailable", "items": []}), 503
@@ -267,6 +281,7 @@ def api_add_item():
     """Add an item to track. Body: {"url": "https://..."} """
     body = request.get_json(force=True, silent=True) or {}
     url = body.get("url", "").strip()
+    log.info("API item/add: url=%s", url[:100] if url else "(empty)")
     if not url:
         return jsonify({"error": "URL is required"}), 400
 
@@ -345,6 +360,7 @@ def api_add_item():
 @bp.route("/api/item/<store>/<item_id>", methods=["DELETE"])
 def api_delete_item(store: str, item_id: str):
     """Remove a tracked item. Requires login."""
+    log.info("API item/delete: %s/%s", store, item_id)
     user = _get_current_user()
     if not user.get("email"):
         return jsonify({"error": "Please sign in to delete items"}), 401
@@ -369,6 +385,7 @@ def api_delete_item(store: str, item_id: str):
 @bp.route("/api/item/<store>/<item_id>/prices")
 def api_prices(store: str, item_id: str):
     """Get price history for an item, including alt URL prices."""
+    log.info("API prices: %s/%s", store, item_id)
     table = _get_prices_table()
     if not table:
         return jsonify({"error": "Database unavailable", "prices": []}), 503
@@ -433,6 +450,7 @@ def api_prices(store: str, item_id: str):
 @bp.route("/api/item/<store>/<item_id>/check", methods=["POST"])
 def api_check_price(store: str, item_id: str):
     """Force an immediate price check for one item."""
+    log.info("API item/check: %s/%s", store, item_id)
     table = _get_items_table()
     if not table:
         return jsonify({"error": "Database unavailable"}), 503
@@ -513,6 +531,7 @@ def api_fetch_live(store: str, item_id: str):
 @bp.route("/api/item/<store>/<item_id>/title", methods=["POST"])
 def api_update_title(store: str, item_id: str):
     """Update the item title. Body: {"title": "..."}"""
+    log.info("API item/title: %s/%s", store, item_id)
     table = _get_items_table()
     if not table:
         return jsonify({"error": "Database unavailable"}), 503
@@ -542,6 +561,7 @@ def api_update_title(store: str, item_id: str):
 @bp.route("/api/item/<store>/<item_id>/alt-urls", methods=["GET"])
 def api_get_alt_urls(store: str, item_id: str):
     """Get alternate URLs for an item."""
+    log.info("API alt-urls/get: %s/%s", store, item_id)
     table = _get_items_table()
     if not table:
         return jsonify({"error": "Database unavailable", "alt_urls": []}), 503
@@ -561,6 +581,7 @@ def api_get_alt_urls(store: str, item_id: str):
 @bp.route("/api/item/<store>/<item_id>/alt-urls", methods=["POST"])
 def api_add_alt_url(store: str, item_id: str):
     """Add an alternate URL for the same product. Body: {"url": "https://..."}"""
+    log.info("API alt-urls/add: %s/%s", store, item_id)
     table = _get_items_table()
     if not table:
         return jsonify({"error": "Database unavailable"}), 503
@@ -628,6 +649,7 @@ def api_add_alt_url(store: str, item_id: str):
 @bp.route("/api/item/<store>/<item_id>/alt-urls/<int:idx>", methods=["DELETE"])
 def api_delete_alt_url(store: str, item_id: str, idx: int):
     """Remove an alternate URL by index. Requires login."""
+    log.info("API alt-urls/delete: %s/%s idx=%d", store, item_id, idx)
     user = _get_current_user()
     if not user.get("email"):
         return jsonify({"error": "Please sign in to remove stores"}), 401
@@ -664,6 +686,7 @@ def api_delete_alt_url(store: str, item_id: str, idx: int):
 @bp.route("/api/item/<store>/<item_id>/alt-urls/check", methods=["POST"])
 def api_check_alt_urls(store: str, item_id: str):
     """Check prices for all alternate URLs."""
+    log.info("API alt-urls/check: %s/%s", store, item_id)
     table = _get_items_table()
     if not table:
         return jsonify({"error": "Database unavailable"}), 503
@@ -715,6 +738,7 @@ def api_check_alt_urls(store: str, item_id: str):
 @bp.route("/api/check-all", methods=["POST"])
 def api_check_all():
     """Trigger price check for all tracked items."""
+    log.info("API check-all")
     table = _get_items_table()
     if not table:
         return jsonify({"error": "Database unavailable"}), 503
@@ -748,6 +772,7 @@ def api_check_all():
 @bp.route("/api/item/<store>/<item_id>/notify", methods=["POST"])
 def api_set_notify(store: str, item_id: str):
     """Set notification email for an item. Body: {"email": "...", "enabled": true}"""
+    log.info("API item/notify: %s/%s", store, item_id)
     table = _get_items_table()
     if not table:
         return jsonify({"error": "Database unavailable"}), 503
@@ -776,6 +801,7 @@ def api_set_notify(store: str, item_id: str):
 @bp.route("/api/item/<store>/<item_id>/ai-analysis", methods=["POST"])
 def api_ai_analysis(store: str, item_id: str):
     """Stream a Gemini AI analysis of price trends via SSE."""
+    log.info("API ai-analysis: %s/%s", store, item_id)
     from google import genai
 
     body = request.get_json(force=True, silent=True) or {}

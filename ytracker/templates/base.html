@@ -72,16 +72,14 @@
           <button @click="fetch('/api/auth/logout',{method:'POST'}).then(()=>{user={email:'',name:'Anonymous',picture:''}})"
                   class="text-xs text-slate-400 hover:text-red-500 transition">Logout</button>
         </div>
-        <div x-show="!user || !user.email">
-          {% if google_client_id %}
-          <div id="g_id_onload"
-               data-client_id="{{ google_client_id }}"
-               data-callback="handleGoogleLogin"
-               data-auto_prompt="false"></div>
-          <div class="g_id_signin" data-type="icon" data-shape="circle" data-size="medium"></div>
-          {% else %}
-          <span class="text-xs text-slate-400">Anonymous</span>
-          {% endif %}
+        <div x-show="!user || !user.email" class="flex items-center gap-2">
+          <a href="/login"
+             class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-brand text-white hover:bg-brand-dark transition">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"/>
+            </svg>
+            <span data-i18n="nav.sign_in">Sign In</span>
+          </a>
         </div>
         <button onclick="toggleTheme()"
                 class="p-2 rounded-md text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition"

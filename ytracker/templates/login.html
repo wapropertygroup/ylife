@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+
+{% block title %}yTracker — Sign In{% endblock %}
+
+{% block content %}
+<div class="min-h-[70vh] flex items-center justify-center">
+  <div class="w-full max-w-sm">
+
+    <!-- Logo + Title -->
+    <div class="text-center mb-8 fade-up">
+      <div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-brand to-orange-400 shadow-lg shadow-brand/20 mb-4">
+        <svg class="w-8 h-8 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A2 2 0 013 12V7a4 4 0 014-4z"/>
+        </svg>
+      </div>
+      <h1 class="text-2xl font-extrabold tracking-tight mb-1">
+        <span class="grad-text">yTracker</span>
+      </h1>
+      <p class="text-sm text-slate-500 dark:text-slate-400" data-i18n="login.subtitle">Sign in to manage your tracked items</p>
+    </div>
+
+    <!-- Sign-In Card -->
+    <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 p-6 shadow-sm fade-up">
+
+      {% if google_client_id %}
+      <!-- Google Sign-In -->
+      <div class="mb-4">
+        <div id="g_id_onload"
+             data-client_id="{{ google_client_id }}"
+             data-callback="handleGoogleLoginRedirect"
+             data-auto_prompt="false"></div>
+        <div class="flex justify-center">
+          <div class="g_id_signin"
+               data-type="standard"
+               data-shape="pill"
+               data-theme="outline"
+               data-text="signin_with"
+               data-size="large"
+               data-width="320"></div>
+        </div>
+      </div>
+
+      <div class="relative my-5">
+        <div class="absolute inset-0 flex items-center"><div class="w-full border-t border-slate-200 dark:border-slate-700"></div></div>
+        <div class="relative flex justify-center text-xs">
+          <span class="bg-white dark:bg-slate-900/50 px-3 text-slate-400 dark:text-slate-500" data-i18n="login.or">or</span>
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- Continue as Guest -->
+      <a href="/"
+         class="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 text-sm font-medium text-slate-600 dark:text-slate-300 hover:border-brand hover:text-brand transition">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+        </svg>
+        <span data-i18n="login.guest">Continue as Guest</span>
+      </a>
+
+      {% if not google_client_id %}
+      <div class="mt-4 p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/50">
+        <p class="text-xs text-amber-700 dark:text-amber-300">
+          <strong>Google Sign-In not configured.</strong> Set <code class="text-[11px]">GOOGLE_CLIENT_ID</code> in your <code class="text-[11px]">.env</code> file to enable login.
+        </p>
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Features Preview -->
+    <div class="mt-6 space-y-2 fade-up">
+      <p class="text-center text-xs text-slate-400 dark:text-slate-500 uppercase tracking-wider font-medium mb-3" data-i18n="login.why_sign_in">Why sign in?</p>
+      <div class="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/30">
+        <span class="text-lg">&#x1f4e7;</span>
+        <span class="text-xs text-slate-600 dark:text-slate-400" data-i18n="login.feature_alerts">Get email alerts when prices drop</span>
+      </div>
+      <div class="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/30">
+        <span class="text-lg">&#x1f5d1;</span>
+        <span class="text-xs text-slate-600 dark:text-slate-400" data-i18n="login.feature_delete">Delete items you no longer need to track</span>
+      </div>
+      <div class="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/30">
+        <span class="text-lg">&#x1f4ca;</span>
+        <span class="text-xs text-slate-600 dark:text-slate-400" data-i18n="login.feature_compare">Compare prices across multiple stores</span>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function handleGoogleLoginRedirect(response) {
+  fetch('/api/auth/google', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ credential: response.credential }),
+  }).then(r => r.json()).then(data => {
+    if (data.ok) {
+      // Redirect to dashboard after successful login
+      const next = new URLSearchParams(window.location.search).get('next') || '/';
+      window.location.href = next;
+    } else {
+      alert(data.error || 'Login failed');
+    }
+  }).catch(e => {
+    alert('Login failed: ' + e.message);
+  });
+}
+</script>
+{% endblock %}
