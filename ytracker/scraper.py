@@ -654,6 +654,167 @@ def extract_item_id(url: str, store: str) -> Optional[str]:
 
 
 # ---------------------------------------------------------------------------
+# Walmart API fallback (bypasses bot detection)
+# ---------------------------------------------------------------------------
+
+def _walmart_api_fetch(item_id: str) -> Optional[dict]:
+    """Fetch Walmart product data via their internal BE API.
+
+    Walmart's HTML pages are behind PerimeterX bot detection, but their
+    backend API endpoints are more permissive.  We try multiple endpoints
+    in order of reliability.
+    """
+    _rate_limit()
+    no_proxy = {"http": None, "https": None}
+
+    headers = {
+        "User-Agent": random.choice(USER_AGENTS),
+        "Accept": "application/json",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Connection": "keep-alive",
+        "Referer": "https://www.walmart.com/",
+        "Origin": "https://www.walmart.com",
+    }
+
+    # ── Strategy 1: Walmart's product page BE API ─────────────────────
+    # This returns the same data as __NEXT_DATA__ but as a direct JSON call
+    api_url = f"https://www.walmart.com/orchestra/home/auto/product/{item_id}"
+    try:
+        resp = requests.get(api_url, headers=headers, timeout=15,
+                            proxies=no_proxy, allow_redirects=True)
+        if resp.status_code == 200:
+            data = resp.json()
+            result = _parse_walmart_api(data, item_id)
+            if result and result.get("price"):
+                log.info("Walmart API (orchestra): %s price=$%s", item_id, result["price"])
+                return result
+    except Exception as exc:
+        log.debug("Walmart orchestra API failed for %s: %s", item_id, exc)
+
+    # ── Strategy 2: Walmart search API with item ID ───────────────────
+    search_url = f"https://www.walmart.com/search?q={item_id}"
+    search_api = f"https://www.walmart.com/orchestra/snb/graphql"
+    try:
+        gql_headers = {**headers, "Content-Type": "application/json"}
+        payload = {
+            "query": "query($query:String!){search(query:$query,count:1){searchResult{itemStacks{items{id name price imageInfo{thumbnailUrl}}}}}}",
+            "variables": {"query": item_id},
+        }
+        resp = requests.post(search_api, json=payload, headers=gql_headers,
+                             timeout=15, proxies=no_proxy)
+        if resp.status_code == 200:
+            data = resp.json()
+            items = (data.get("data", {}).get("search", {})
+                     .get("searchResult", {}).get("itemStacks", [{}])[0]
+                     .get("items", []))
+            if items:
+                item = items[0]
+                price = item.get("price")
+                if isinstance(price, (int, float)) and price > 0:
+                    log.info("Walmart GraphQL search: %s price=$%s", item_id, price)
+                    return {
+                        "item_id": item_id,
+                        "store": "walmart",
+                        "title": (item.get("name") or "Walmart Product")[:300],
+                        "price": float(price),
+                        "currency": "USD",
+                        "image_url": item.get("imageInfo", {}).get("thumbnailUrl", ""),
+                        "item_url": f"https://www.walmart.com/ip/{item_id}",
+                    }
+    except Exception as exc:
+        log.debug("Walmart GraphQL search failed for %s: %s", item_id, exc)
+
+    # ── Strategy 3: Mobile endpoint (lighter page, sometimes less bot detection)
+    mobile_url = f"https://www.walmart.com/ip/seort/{item_id}"
+    try:
+        mobile_headers = {
+            **headers,
+            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.4 Mobile/15E148 Safari/604.1",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        }
+        resp = requests.get(mobile_url, headers=mobile_headers, timeout=15,
+                            proxies=no_proxy, allow_redirects=True)
+        if resp.status_code == 200 and "robot or human" not in resp.text.lower():
+            soup = BeautifulSoup(resp.text, "html.parser")
+            # Try __NEXT_DATA__ from mobile page
+            nextdata = _extract_nextdata(soup, "walmart")
+            if nextdata.get("price"):
+                log.info("Walmart mobile page: %s price=$%s", item_id, nextdata["price"])
+                return {
+                    "item_id": item_id,
+                    "store": "walmart",
+                    "title": (nextdata.get("title") or "Walmart Product")[:300],
+                    "price": nextdata["price"],
+                    "currency": nextdata.get("currency", "USD"),
+                    "image_url": nextdata.get("image", ""),
+                    "item_url": f"https://www.walmart.com/ip/{item_id}",
+                }
+            # Try JSON-LD and meta from mobile page
+            ld = _extract_jsonld(soup)
+            if ld.get("price"):
+                return {
+                    "item_id": item_id,
+                    "store": "walmart",
+                    "title": (ld.get("title") or "Walmart Product")[:300],
+                    "price": ld["price"],
+                    "currency": ld.get("currency", "USD"),
+                    "image_url": ld.get("image", ""),
+                    "item_url": f"https://www.walmart.com/ip/{item_id}",
+                }
+    except Exception as exc:
+        log.debug("Walmart mobile fetch failed for %s: %s", item_id, exc)
+
+    log.warning("All Walmart API strategies failed for %s", item_id)
+    return None
+
+
+def _parse_walmart_api(data: dict, item_id: str) -> Optional[dict]:
+    """Parse Walmart orchestra API response into a product dict."""
+    try:
+        # Navigate the response — structure varies
+        product = data.get("product", data)
+
+        # Sometimes wrapped in initialData
+        if "initialData" in data:
+            product = data["initialData"].get("data", {}).get("product", {})
+
+        title = product.get("name", "Walmart Product")
+        price_info = product.get("priceInfo", {})
+        current = price_info.get("currentPrice", {})
+        price = current.get("price")
+
+        if not price:
+            price = price_info.get("unitPrice", {}).get("price")
+        if not price:
+            pr = price_info.get("priceRange", {})
+            price = pr.get("minPrice") or pr.get("maxPrice")
+
+        image = ""
+        img_info = product.get("imageInfo", {})
+        if img_info.get("thumbnailUrl"):
+            image = img_info["thumbnailUrl"]
+        elif img_info.get("allImages"):
+            imgs = img_info["allImages"]
+            if imgs:
+                image = imgs[0].get("url", "") if isinstance(imgs[0], dict) else str(imgs[0])
+
+        if price and float(price) > 0:
+            return {
+                "item_id": item_id,
+                "store": "walmart",
+                "title": str(title)[:300],
+                "price": float(price),
+                "currency": current.get("currencyCode", "USD"),
+                "image_url": image,
+                "item_url": f"https://www.walmart.com/ip/{item_id}",
+            }
+    except Exception as exc:
+        log.debug("Walmart API parse failed: %s", exc)
+    return None
+
+
+# ---------------------------------------------------------------------------
 # URL builders for re-checking
 # ---------------------------------------------------------------------------
 
@@ -704,7 +865,26 @@ def fetch_product(url_or_id: str, store: Optional[str] = None) -> Optional[dict]
     if not url:
         return None
 
+    # ── Walmart: try API first (HTML scraping hits bot detection) ────────
+    if store == "walmart":
+        result = _walmart_api_fetch(item_id)
+        if result and result.get("price"):
+            result["item_url"] = url
+            return result
+        # API failed — fall through to HTML scraping as backup
+
     soup = _fetch_page(url)
+
+    # Detect bot-detection pages and bail early
+    if soup:
+        page_text = soup.get_text(separator=" ", strip=True)[:500].lower()
+        if any(phrase in page_text for phrase in ("robot or human", "are you a robot", "captcha", "press and hold", "verify you are human")):
+            log.warning("Bot detection page for %s/%s — scraping blocked", store, item_id)
+            # For Walmart, we already tried the API above. For others, return None.
+            if store == "walmart":
+                return None
+            soup = None
+
     if not soup:
         return None
 
