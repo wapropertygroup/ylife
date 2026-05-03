@@ -72,13 +72,19 @@ function pdfToImage() {
       form.append('file', this.file); form.append('format', this.fmt); form.append('dpi', this.dpi);
       try {
         const resp = await fetch('/api/pdf-to-image', {method:'POST', body:form});
-        if(!resp.ok){const d=await resp.json();this.error=d.error||'Failed';this.processing=false;return;}
+        if(!resp.ok){
+          try { const d=await resp.json(); this.error=d.error||'Failed'; } catch(_) { this.error='Server error'; }
+          this.processing=false; return;
+        }
         const blob = await resp.blob();
-        const cd = resp.headers.get('Content-Disposition')||'';
-        const name = cd.match(/filename="?([^"]+)"?/)?.[1] || `pages.${blob.type.includes('zip')?'zip':this.fmt}`;
+        const isZip = blob.type.includes('zip') || blob.size > 500000;
+        const ext = isZip ? 'zip' : this.fmt === 'png' ? 'png' : 'jpg';
+        const base = (this.file.name || 'document').replace(/\.[^.]+$/, '').replace(/[^\w.-]/g, '_');
+        const name = isZip ? `${base}_images.${ext}` : `${base}_page1.${ext}`;
         const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();
+        URL.revokeObjectURL(a.href);
         this.result=true;
-      } catch(e){this.error='Network error: '+e.message;}
+      } catch(e){this.error='Error: '+e.message;}
       this.processing=false;
     },
   };

@@ -77,6 +77,12 @@ def _get_upload(name: str = "file", allowed_types: list[str] | None = None) -> t
     if not f or not f.filename:
         return None, None, (jsonify(error="No file uploaded"), 400)
 
+    # Sanitize filename: keep only safe ASCII chars
+    import re as _re
+    safe_name = _re.sub(r'[^\w.\-]', '_', f.filename)
+    if not safe_name or safe_name.startswith('.'):
+        safe_name = "upload" + ("." + f.filename.rsplit(".", 1)[-1] if "." in f.filename else "")
+
     if allowed_types:
         ext = f.filename.rsplit(".", 1)[-1].lower() if "." in f.filename else ""
         if ext not in allowed_types:
@@ -86,7 +92,7 @@ def _get_upload(name: str = "file", allowed_types: list[str] | None = None) -> t
     if not data:
         return None, None, (jsonify(error="Uploaded file is empty"), 400)
 
-    return data, f.filename, None
+    return data, safe_name, None
 
 
 # ---------------------------------------------------------------------------
