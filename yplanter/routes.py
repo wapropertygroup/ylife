@@ -160,6 +160,7 @@ def api_plants():
     q = request.args.get("q", "").strip()
     cat = request.args.get("category", "")
     diff = request.args.get("difficulty", "")
+    log.info("API plants: q=%s cat=%s diff=%s", q or "(all)", cat or "(all)", diff or "(all)")
     results = search_all(query=q, category=cat, difficulty=diff)
     return jsonify({"plants": results})
 
@@ -180,14 +181,8 @@ def api_plant_ask(plant_id: str):
     body = request.get_json(force=True, silent=True) or {}
     question = body.get("question", "").strip()
     lang = body.get("lang", "en")
-    if not question:
-        return jsonify({"error": "No question provided"}), 400
-
-    api_key = os.environ.get("GEMINI_API_KEY")
-    if not api_key:
-        return jsonify({"error": "GEMINI_API_KEY not configured"}), 503
-
-    plant_context = f"""Plant: {plant['name']}
+    log.info("API plant/ask: plant=%s lang=%s q=%s", plant_id, lang, question[:80] if question else "(empty)")
+    if not question: = f"""Plant: {plant['name']}
 Category: {plant.get('category', 'unknown')}
 Difficulty: {plant.get('difficulty', 'unknown')}
 PNW Notes: {plant.get('pnw_notes', 'N/A')}

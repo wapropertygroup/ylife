@@ -167,6 +167,7 @@ def _get_session_user():
 @bp.route("/api/auth/google", methods=["POST"])
 def auth_google():
     """Verify Google ID token and create session."""
+    log.info("API auth/google")
     data = request.get_json()
     credential = data.get("credential", "") if data else ""
     if not credential:
@@ -199,6 +200,7 @@ def auth_google():
         # Upsert in DynamoDB
         _upsert_user(email, name, picture, "google")
 
+        log.info("API auth/google: success email=%s", email)
         return jsonify({
             "ok": True,
             "user": {"email": email, "name": name, "picture": picture, "provider": "google"},
@@ -214,6 +216,7 @@ def auth_google():
 @bp.route("/api/auth/apple", methods=["POST"])
 def auth_apple():
     """Verify Apple ID token and create session."""
+    log.info("API auth/apple")
     data = request.get_json()
     id_token_str = data.get("id_token", "") if data else ""
     if not id_token_str:
@@ -302,13 +305,16 @@ def auth_me():
     """Return current session user."""
     user = _get_session_user()
     if not user:
+        log.debug("API auth/me: not authenticated")
         return jsonify({"error": "Not authenticated"}), 401
+    log.debug("API auth/me: %s", user["email"])
     return jsonify({"user": user})
 
 
 @bp.route("/api/auth/logout", methods=["POST"])
 def auth_logout():
     """Clear session."""
+    log.info("API auth/logout")
     session.clear()
     return jsonify({"ok": True})
 
@@ -349,6 +355,7 @@ def shared_trip(trip_id: str):
 @bp.route("/api/trip/save", methods=["POST"])
 def api_save_trip():
     """Save a trip for a user."""
+    log.info("API trip/save")
     table = _get_trips_table()
     if not table:
         return jsonify({"error": "Database unavailable"}), 503
@@ -396,6 +403,7 @@ def api_save_trip():
 @bp.route("/api/trips/<username>")
 def api_list_trips(username: str):
     """List all trips for a user."""
+    log.info("API trips: user=%s", username)
     table = _get_trips_table()
     if not table:
         return jsonify({"error": "Database unavailable"}), 503
@@ -423,6 +431,7 @@ def api_list_trips(username: str):
 @bp.route("/api/trip/<username>/<trip_id>")
 def api_get_trip(username: str, trip_id: str):
     """Get a specific trip."""
+    log.info("API trip/get: user=%s trip=%s", username, trip_id)
     table = _get_trips_table()
     if not table:
         return jsonify({"error": "Database unavailable"}), 503
@@ -448,6 +457,7 @@ def api_get_trip(username: str, trip_id: str):
 @bp.route("/api/trip/<username>/<trip_id>", methods=["DELETE"])
 def api_delete_trip(username: str, trip_id: str):
     """Delete a saved trip."""
+    log.info("API trip/delete: user=%s trip=%s", username, trip_id)
     table = _get_trips_table()
     if not table:
         return jsonify({"error": "Database unavailable"}), 503
@@ -467,6 +477,7 @@ def api_delete_trip(username: str, trip_id: str):
 @bp.route("/api/trip/share", methods=["POST"])
 def api_share_trip():
     """Create a shareable trip link."""
+    log.info("API trip/share")
     table = _get_shared_table()
     if not table:
         return jsonify({"error": "Database unavailable"}), 503
@@ -501,6 +512,7 @@ def api_share_trip():
 @bp.route("/api/shared/<trip_id>")
 def api_get_shared_trip(trip_id: str):
     """Get a shared trip by ID."""
+    log.info("API shared/get: trip=%s", trip_id)
     table = _get_shared_table()
     if not table:
         return jsonify({"error": "Database unavailable"}), 503
@@ -553,6 +565,7 @@ def houses():
 def api_houses_search():
     """Search for a property address via Redfin autocomplete."""
     query = request.args.get("q", "").strip()
+    log.info("API houses/search: q=%s", query)
     if not query or len(query) < 3:
         return jsonify({"results": []})
 
@@ -587,6 +600,7 @@ def api_houses_search():
 def api_houses_lookup():
     """Lookup property by address — try Zillow autocomplete for zpid + metadata."""
     address = request.args.get("address", "").strip()
+    log.info("API houses/lookup: address=%s", address)
     if not address:
         return jsonify({"error": "Address required"}), 400
 
@@ -646,6 +660,7 @@ def api_houses_similar():
     """Get similar listings for a property."""
     prop_id = request.args.get("propertyId", "")
     listing_id = request.args.get("listingId", "")
+    log.info("API houses/similar: propertyId=%s", prop_id)
     if not prop_id:
         return jsonify({"error": "propertyId required"}), 400
 

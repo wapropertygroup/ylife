@@ -371,6 +371,7 @@ def api_cache_age():
     with _cache_lock:
         last = _cache_last_updated
     age = int(time.time() - last) if last else None
+    log.info("API cache-age: %s seconds", age)
     return jsonify({"age_seconds": age, "last_updated": last})
 
 
@@ -1045,13 +1046,16 @@ def api_fed():
     if is_cache_fresh():
         data = get_fed_data()
         resp = {k: v for k, v in data.items() if not k.startswith("_")}
+        log.info("API fed: served from cache (%d series)", len(resp.get("series", {})))
         return jsonify(resp)
 
     # A background fetch is already running — tell the client to retry.
     if fed_warming_fn():
+        log.info("API fed: warming in progress, returning 202")
         return jsonify({"warming": True}), 202
 
     # No cache and no fetch in progress — start one in the background.
+    log.info("API fed: no cache, starting background fetch")
     threading.Thread(target=refresh_cache, daemon=True, name="fed-auto-warm").start()
     return jsonify({"warming": True}), 202
 
@@ -1068,12 +1072,14 @@ def api_fed_explain():
     values  = body.get("values", [])
     label   = body.get("label", chart)
     lang    = body.get("lang", "en")
+    log.info("API fed/explain: chart=%s lang=%s points=%d", chart, lang, len(dates))
 
     if not dates or not values:
         return jsonify({"error": "No data provided"}), 400
 
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
+        log.warning("API fed/explain: GEMINI_API_KEY not configured")
         return jsonify({"error": "GEMINI_API_KEY not configured"}), 503
 
     # Build a compact data summary (last 12 points + overall trend)
@@ -1171,6 +1177,7 @@ def thirteenf_refresh():
 @bp.route("/api/13f/<path:fund_slug>")
 def api_thirteenf(fund_slug: str):
     """JSON API — return holdings for a single fund by slug."""
+    log.info("API 13f: fund=%s", fund_slug)
     from ystocker.sec13f import get_all_holdings, FUNDS
     holdings = get_all_holdings()
     name = next(
@@ -1178,6 +1185,7 @@ def api_thirteenf(fund_slug: str):
         None
     )
     if not name:
+        log.warning("API 13f: fund not found: %s", fund_slug)
         return jsonify({"error": "Fund not found"}), 404
     return jsonify(holdings.get(name, {}))
 
@@ -1186,6 +1194,7 @@ def api_thirteenf(fund_slug: str):
 def api_thirteenf_ticker(ticker: str):
     """JSON API — multi-quarter institutional holdings for a single ticker."""
     ticker = ticker.strip().upper()
+    log.info("API 13f/ticker: %s", ticker)
     holders = _get_institutional_holders(ticker)
     return jsonify({"ticker": ticker, "holders": holders})
 
@@ -1234,6 +1243,7 @@ def api_history_explain(ticker: str):
     values = body.get("values", [])
     period = body.get("period", "1y")
     lang   = body.get("lang",   "en")
+    log.info("API history/explain: ticker=%s chart=%s period=%s lang=%s", ticker, chart, period, lang)
 
     if not dates or not values:
         return jsonify({"error": "No data provided"}), 400
@@ -1550,6 +1560,7 @@ def api_news_translate():
     body = request.get_json(force=True, silent=True) or {}
     articles = body.get("articles", [])
     lang     = body.get("lang", "zh")
+    log.info("API news/translate: %d articles, lang=%s", len(articles), lang)
 
     if not articles:
         return jsonify({"translations": []})
@@ -1687,6 +1698,7 @@ def api_videos(ticker: str):
     from datetime import datetime, timezone, timedelta
 
     ticker = ticker.strip().upper()
+    log.info("API videos: ticker=%s", ticker)
 
     # Cache check
     with _VIDEOS_CACHE_LOCK:
@@ -1788,6 +1800,7 @@ def api_videos_channel(channel_id: str):
     """Return recent videos for a single YT channel (standalone videos page)."""
     import httpx
     from datetime import datetime, timezone, timedelta
+    log.info("API videos/channel: %s", channel_id)
 
     cache_key = f"channel:{channel_id}"
     with _VIDEOS_CACHE_LOCK:
@@ -1856,6 +1869,7 @@ def api_videos_all():
     """
     import httpx
     from datetime import datetime, timezone, timedelta
+    log.info("API videos/all")
 
     cache_key = "all_channels"
     with _VIDEOS_CACHE_LOCK:
@@ -2090,11 +2104,13 @@ def api_markets():
     with _MARKETS_CACHE_LOCK:
         entry = _MARKETS_CACHE.get("data")
         if entry and time.time() - entry["ts"] < _MARKETS_CACHE_TTL:
+            log.info("API markets: served from memory cache")
             return jsonify(entry["data"])
 
     # Memory miss — try DynamoDB before hitting Yahoo Finance
     ddb_entry = _markets_load_from_dynamo()
     if ddb_entry:
+        log.info("API markets: served from DynamoDB cache")
         with _MARKETS_CACHE_LOCK:
             _MARKETS_CACHE["data"] = ddb_entry
         return jsonify(ddb_entry["data"])
@@ -2393,6 +2409,7 @@ def api_fear_greed():
     """
     import requests as req_lib
     from datetime import datetime, timezone
+    log.info("API fear-greed")
 
     # ── L1: in-process memory cache ──────────────────────────────────────
     with _FG_CACHE_LOCK:
@@ -2610,6 +2627,7 @@ def _prev_trading_days(n: int) -> list[str]:
 def api_put_call_ratio():
     """Return CBOE Equity Put/Call Ratio history (1Y).
     Fetches latest day from CBOE daily endpoint, persists to DynamoDB, merges for history."""
+    log.info("API put-call-ratio")
     with _PCR_CACHE_LOCK:
         entry = _PCR_CACHE.get("data")
         if entry and time.time() - entry["ts"] < _PCR_CACHE_TTL:
@@ -2763,6 +2781,7 @@ _GOLD_RATIOS_CACHE_TTL  = 3600  # 1 hour
 @bp.route("/api/gold-ratios")
 def api_gold_ratios():
     """Return Gold/Silver and Gold/Copper ratio history (2Y daily)."""
+    log.info("API gold-ratios")
     with _GOLD_RATIOS_CACHE_LOCK:
         entry = _GOLD_RATIOS_CACHE.get("data")
         if entry and time.time() - entry["ts"] < _GOLD_RATIOS_CACHE_TTL:
@@ -2910,6 +2929,7 @@ def _yield_curve_save_disk(result: dict) -> None:
 @bp.route("/api/yield-curve")
 def api_yield_curve():
     """Return US & CN Treasury yield curve snapshots + historical 10Y comparison."""
+    log.info("API yield-curve")
     with _YIELD_CURVE_CACHE_LOCK:
         entry = _YIELD_CURVE_CACHE.get(_YIELD_CURVE_CACHE_VER)
         if entry and time.time() - entry["ts"] < _YIELD_CURVE_CACHE_TTL:
@@ -3148,6 +3168,7 @@ def api_markets_explain():
     data  = body.get("data", {})
     lang  = body.get("lang", "en")
     zh    = lang == "zh"
+    log.info("API markets/explain: chart=%s lang=%s", chart, lang)
 
     if not data:
         return jsonify({"error": "No data provided"}), 400
@@ -3213,6 +3234,7 @@ def api_aaii_sentiment():
                      "bearish": float, "bull_bear_spread": float}, ...]
       }
     """
+    log.info("API aaii-sentiment")
     import requests as req_lib
     import io
 
@@ -3535,6 +3557,7 @@ def api_economic_events():
     Response:
       { "events": [ {date, time, event, country, impact, actual, forecast, previous, zh}, ... ] }
     """
+    log.info("API economic-events")
     with _ECON_CACHE_LOCK:
         entry = _ECON_CACHE.get("data")
         if entry and time.time() - entry["ts"] < _ECON_CACHE_TTL:
@@ -3588,6 +3611,7 @@ def api_economic_events_translate():
 
     body = request.get_json(force=True) or {}
     events_to_translate = body.get("events", [])
+    log.info("API economic-events/translate: %d events", len(events_to_translate))
     if not events_to_translate:
         return jsonify({"translations": {}})
 
@@ -3685,6 +3709,7 @@ _MOVER_TICKERS = [
 def api_movers():
     """Return top 5 gainers and losers among major US large-cap stocks."""
     import yfinance as yf
+    log.info("API movers")
 
     with _MOVERS_CACHE_LOCK:
         entry = _MOVERS_CACHE.get("data")
@@ -3794,6 +3819,7 @@ def api_daily_summary():
         lang = "en"
     if market not in ("us", "cn"):
         market = "us"
+    log.info("API daily-summary: lang=%s market=%s", lang, market)
 
     cache_key  = f"{lang}_{market}"
     today_str  = _date_cls.today().isoformat()
@@ -3964,6 +3990,7 @@ def api_daily_summary_history(date, lang):
 
     Response: { us: "...", cn: "...", generated_at: "...", date: "..." }
     """
+    log.info("API daily-summary/history: date=%s lang=%s", date, lang)
     import re
     if not re.match(r"^\d{4}-\d{2}-\d{2}$", date):
         return jsonify({"error": "Invalid date format"}), 400
@@ -4491,11 +4518,13 @@ def api_send_daily_email():
     """
     SES_FROM = os.environ.get("SES_FROM_EMAIL")
     if not SES_FROM:
+        log.warning("API send-daily-email: SES_FROM_EMAIL not configured")
         return jsonify({"error": "SES_FROM_EMAIL not configured"}), 503
 
     payload        = request.get_json(silent=True) or {}
     email          = (payload.get("email") or "").strip()
     lang           = payload.get("lang", "en")
+    log.info("API send-daily-email: email=%s lang=%s", email or "(broadcast)", lang)
     summary_us_raw = (payload.get("summary_us") or "").strip()
     summary_cn_raw = (payload.get("summary_cn") or "").strip()
     indices        = payload.get("indices", {})
@@ -4703,6 +4732,7 @@ def api_heatmap():
 
     today_str = str(_dt.date.today())
     date_str  = request.args.get("date", today_str)
+    log.info("API heatmap: date=%s", date_str)
 
     try:
         _dt.date.fromisoformat(date_str)
@@ -4753,6 +4783,7 @@ def api_heatmap_snapshot():
     Optional protection: set HEATMAP_SNAPSHOT_SECRET env var.
     """
     import datetime as _dt
+    log.info("API heatmap/snapshot: triggered")
 
     secret = os.environ.get("HEATMAP_SNAPSHOT_SECRET")
     if secret and request.headers.get("X-Snapshot-Secret", "") != secret:
