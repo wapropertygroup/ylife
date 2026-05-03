@@ -111,6 +111,13 @@ for req in "\${REQS[@]}"; do
   fi
 done
 
+# Install Playwright Chromium browser (for headless scraping fallback)
+if sudo "\$APP_DIR/venv/bin/pip" show playwright >/dev/null 2>&1; then
+  echo "[\$(TS)]    Installing Playwright Chromium browser..."
+  sudo "\$APP_DIR/venv/bin/playwright" install chromium --with-deps 2>&1 | tail -3
+  echo "[\$(TS)]    Playwright Chromium OK"
+fi
+
 # ── Service setup (function) ─────────────────────────────────────────────────
 ensure_service() {
   local name="\$1" port="\$2" step="\$3"

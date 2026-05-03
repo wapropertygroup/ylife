@@ -3,12 +3,12 @@ ytracker.scraper
 ~~~~~~~~~~~~~~~~
 Multi-store price scraper.
 Supports: Amazon, Walmart, Uber Eats, Nike, Lululemon, Best Buy, Safeway,
-          Costco, Temu, Home Depot.
+          Costco, Temu, Home Depot, Target.
 
-Strategy per page:
-  1. JSON-LD structured data  (most reliable)
-  2. <meta> tags              (og:price:amount, product:price:amount)
-  3. Store-specific CSS selectors (fallback)
+Strategy per page (layered fallback):
+  1. HTTP fetch  →  JSON-LD / __NEXT_DATA__ / <meta> / CSS selectors
+  2. If HTTP fails (bot detection, no price, JS-only rendering)
+     → Playwright headless Chromium renders the page, then same extractors.
 """
 from __future__ import annotations
 
@@ -16,6 +16,7 @@ import json
 import logging
 import random
 import re
+import threading
 import time
 from typing import Optional
 from urllib.parse import urlparse, parse_qs
@@ -32,6 +33,7 @@ log = logging.getLogger(__name__)
 STORE_NAMES = {
     "amazon":    "Amazon",
     "walmart":   "Walmart",
+    "target":    "Target",
     "ubereats":  "Uber Eats",
     "nike":      "Nike",
     "lululemon": "Lululemon",
@@ -45,6 +47,7 @@ STORE_NAMES = {
 STORE_COLORS = {
     "amazon":    "#ff9900",
     "walmart":   "#0071dc",
+    "target":    "#cc0000",
     "ubereats":  "#06c167",
     "nike":      "#111111",
     "lululemon": "#d31334",
@@ -62,6 +65,7 @@ _STORE_DOMAINS: list[tuple[str, str]] = [
     ("amzn.com",      "amazon"),
     ("a.co",          "amazon"),
     ("walmart.com",   "walmart"),
+    ("target.com",    "target"),
     ("ubereats.com",  "ubereats"),
     ("nike.com",      "nike"),
     ("lululemon.com", "lululemon"),
@@ -142,6 +146,139 @@ def _fetch_page(url: str, timeout: int = 15) -> Optional[BeautifulSoup]:
         if attempt == 0:
             time.sleep(1 + random.random())
     return None
+
+
+# ---------------------------------------------------------------------------
+# Playwright headless browser fallback
+# ---------------------------------------------------------------------------
+# Lazy-loaded single browser instance shared across all requests.
+# Falls back gracefully if playwright is not installed.
+
+_browser_lock = threading.Lock()
+_browser = None          # playwright Browser instance
+_playwright_obj = None   # playwright Playwright instance
+_pw_available: Optional[bool] = None  # None = not checked yet
+
+
+def _is_playwright_available() -> bool:
+    """Check once if playwright + chromium are installed."""
+    global _pw_available
+    if _pw_available is not None:
+        return _pw_available
+    try:
+        import playwright.sync_api  # noqa: F401
+        _pw_available = True
+        log.info("Playwright available — headless browser fallback enabled")
+    except ImportError:
+        _pw_available = False
+        log.info("Playwright not installed — headless browser fallback disabled")
+    return _pw_available
+
+
+def _get_browser():
+    """Lazy-init a shared Chromium browser instance (thread-safe)."""
+    global _browser, _playwright_obj
+    if _browser and _browser.is_connected():
+        return _browser
+    with _browser_lock:
+        if _browser and _browser.is_connected():
+            return _browser
+        try:
+            from playwright.sync_api import sync_playwright
+            _playwright_obj = sync_playwright().start()
+            _browser = _playwright_obj.chromium.launch(
+                headless=True,
+                args=[
+                    "--no-sandbox",
+                    "--disable-dev-shm-usage",
+                    "--disable-gpu",
+                    "--disable-extensions",
+                    "--disable-blink-features=AutomationControlled",
+                ],
+            )
+            log.info("Playwright Chromium browser launched")
+            return _browser
+        except Exception as exc:
+            log.warning("Failed to launch Playwright browser: %s", exc)
+            return None
+
+
+def _fetch_page_browser(url: str, store: str, timeout: int = 30) -> Optional[BeautifulSoup]:
+    """Fetch a page using headless Chromium (Playwright).
+
+    Renders JavaScript, waits for network idle, then returns the fully
+    rendered DOM as BeautifulSoup.
+    """
+    if not _is_playwright_available():
+        return None
+
+    browser = _get_browser()
+    if not browser:
+        return None
+
+    context = None
+    page = None
+    try:
+        context = browser.new_context(
+            user_agent=random.choice(USER_AGENTS),
+            viewport={"width": 1440, "height": 900},
+            locale="en-US",
+            timezone_id="America/Los_Angeles",
+            # Hide automation signals
+            extra_http_headers={
+                "Accept-Language": "en-US,en;q=0.9",
+            },
+        )
+        # Remove webdriver flag that sites detect
+        context.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+
+        page = context.new_page()
+        log.info("Browser fetch: %s", url[:80])
+
+        resp = page.goto(url, wait_until="networkidle", timeout=timeout * 1000)
+        status = resp.status if resp else 0
+        log.info("Browser navigation: %s → %d", url[:60], status)
+
+        # Grab content
+        html = page.content()
+        log.info("Browser fetch complete: %d bytes", len(html))
+        return BeautifulSoup(html, "html.parser")
+
+    except Exception as exc:
+        # Try to grab whatever content we have even on error
+        try:
+            if page:
+                html = page.content()
+                if html and len(html) > 1000:
+                    log.info("Browser partial content salvaged: %d bytes", len(html))
+                    return BeautifulSoup(html, "html.parser")
+        except Exception:
+            pass
+        log.warning("Browser fetch failed for %s: %s", url[:60], exc)
+        return None
+    finally:
+        try:
+            if page:
+                page.close()
+        except Exception:
+            pass
+        try:
+            if context:
+                context.close()
+        except Exception:
+            pass
+
+
+def _is_bot_page(soup: BeautifulSoup) -> bool:
+    """Detect bot-detection / CAPTCHA pages."""
+    if not soup:
+        return False
+    page_text = soup.get_text(separator=" ", strip=True)[:500].lower()
+    return any(phrase in page_text for phrase in (
+        "robot or human", "are you a robot", "captcha",
+        "press and hold", "verify you are human",
+        "access denied", "please verify",
+    ))
 
 
 # ---------------------------------------------------------------------------
@@ -336,6 +473,15 @@ _PRICE_SELECTORS: dict[str, list[tuple[str, Optional[str]]]] = {
         ("span.price-format__large", None),
         ("#standard-price span", None),
     ],
+    "target": [
+        ("[data-test='product-price']", None),
+        ("span[data-test='product-price']", None),
+        ("div[data-test='product-price'] span", None),
+        ("[data-test='product-regular-price']", None),
+        ("[data-test='product-sale-price']", None),
+        ("span[class*='CurrentPrice']", None),
+        ("div[class*='price-wrapper'] span", None),
+    ],
 }
 
 _TITLE_SELECTORS: dict[str, list[str]] = {
@@ -349,6 +495,7 @@ _TITLE_SELECTORS: dict[str, list[str]] = {
     "costco":    ["h1.product-title", "h1", "meta[name='title']"],
     "temu":      ["h1.goods-name", "h1", "title"],
     "homedepot": ["h1.sui-font-regular", "h1[class*='product-title']", "h1"],
+    "target":    ["h1[data-test='product-title']", "span[data-test='product-title']", "h1"],
 }
 
 _IMAGE_SELECTORS: dict[str, list[tuple[str, Optional[str]]]] = {
@@ -362,6 +509,7 @@ _IMAGE_SELECTORS: dict[str, list[tuple[str, Optional[str]]]] = {
     "costco":    [("img.product-image", "src"), ("img[data-testid='product-image']", "src")],
     "temu":      [("img.goods-img", "src"), ("img[data-testid='product-image']", "src")],
     "homedepot": [("img[data-testid='hero-image']", "src"), ("img.mediabrowser-image", "src"), (".media-viewer img", "src")],
+    "target":    [("img[data-test='product-hero']", "src"), ("div[data-test='image-gallery'] img", "src"), ("picture img", "src")],
 }
 
 
@@ -606,6 +754,7 @@ _RAW_ASIN_RE = re.compile(r"^[A-Z0-9]{10}$")
 _WALMART_ID_RE = re.compile(r"/ip/[^/]*/(\d+)|/ip/(\d+)")
 _UBEREATS_ID_RE = re.compile(r"/store/[^/]+/([a-f0-9-]+)")
 _HOMEDEPOT_ID_RE = re.compile(r"/p/[^/]+/(\d{9})|/p/(\d{9})")
+_TARGET_ID_RE = re.compile(r"/A-(\d{8,9})")
 
 
 def extract_item_id(url: str, store: str) -> Optional[str]:
@@ -639,6 +788,17 @@ def extract_item_id(url: str, store: str) -> Optional[str]:
         m = re.search(r"/(\d{9})(?:[/?#]|$)", url)
         if m:
             return m.group(1)
+
+    if store == "target":
+        # Target URLs: /p/product-name/-/A-12345678
+        m = _TARGET_ID_RE.search(url)
+        if m:
+            return m.group(1)
+        # Fallback: look for TCIN in query string
+        qs = parse_qs(urlparse(url).query)
+        tcin = qs.get("tcin", qs.get("TCIN", [None]))[0]
+        if tcin:
+            return tcin
 
     # Generic: use the last meaningful path segment as item ID
     # Works for Nike (/t/PRODUCT_NAME/SKU), Lululemon (/prod123), Best Buy (/site/.../SKU.p),
@@ -827,6 +987,68 @@ def _parse_walmart_api(data: dict, item_id: str) -> Optional[dict]:
 
 
 # ---------------------------------------------------------------------------
+# Target API (redsky.target.com — public product API, no auth needed)
+# ---------------------------------------------------------------------------
+
+_TARGET_REDSKY_KEY = "9f36aeafbe60771e321a7cc95a78140772ab3e96"  # public browser key
+
+
+def _target_api_fetch(item_id: str) -> Optional[dict]:
+    """Fetch Target product data via their public Redsky API."""
+    _rate_limit()
+    session = requests.Session()
+    session.trust_env = False
+
+    api_url = (
+        f"https://redsky.target.com/redsky_aggregations/v1/web/pdp_client_v1"
+        f"?key={_TARGET_REDSKY_KEY}&tcin={item_id}"
+        f"&pricing_store_id=3991&has_pricing_store_id=true"
+    )
+    headers = {
+        "User-Agent": random.choice(USER_AGENTS),
+        "Accept": "application/json",
+        "Origin": "https://www.target.com",
+        "Referer": "https://www.target.com/",
+    }
+    try:
+        log.info("Target API (redsky): tcin=%s", item_id)
+        resp = session.get(api_url, headers=headers, timeout=15)
+        log.info("  → %d (%d bytes)", resp.status_code, len(resp.text))
+        if resp.status_code == 200:
+            data = resp.json()
+            product = data.get("data", {}).get("product", {})
+            if not product:
+                log.info("  → No product in response")
+                return None
+
+            title = product.get("item", {}).get("product_description", {}).get("title", "Target Product")
+            price_data = product.get("price", {})
+            price = price_data.get("formatted_current_price") or price_data.get("current_retail") or price_data.get("reg_retail")
+            if isinstance(price, str):
+                price = _clean_price(price)
+            elif isinstance(price, (int, float)):
+                price = float(price)
+            else:
+                price = None
+
+            images = product.get("item", {}).get("enrichment", {}).get("images", {})
+            image_url = images.get("primary_image_url", "")
+
+            if price and price > 0:
+                log.info("  → SUCCESS: $%s — %s", price, str(title)[:60])
+                return {
+                    "item_id": item_id, "store": "target",
+                    "title": str(title)[:300], "price": float(price),
+                    "currency": "USD", "image_url": image_url,
+                    "item_url": f"https://www.target.com/p/-/A-{item_id}",
+                }
+            log.info("  → Product found but no price extracted")
+    except Exception as exc:
+        log.info("  → FAILED: %s", exc)
+    return None
+
+
+# ---------------------------------------------------------------------------
 # URL builders for re-checking
 # ---------------------------------------------------------------------------
 
@@ -843,6 +1065,7 @@ def _build_url(store: str, item_id: str) -> str:
         "costco":    f"https://www.costco.com/{item_id}.product.html",
         "temu":      f"https://www.temu.com/{item_id}.html",
         "homedepot": f"https://www.homedepot.com/p/{item_id}",
+        "target":    f"https://www.target.com/p/-/A-{item_id}",
     }
     return urls.get(store, "")
 
@@ -885,50 +1108,60 @@ def fetch_product(url_or_id: str, store: Optional[str] = None) -> Optional[dict]
             return result
         # API failed — fall through to HTML scraping as backup
 
+    # ── Target: try Redsky API first (reliable, no bot detection) ─────
+    if store == "target":
+        result = _target_api_fetch(item_id)
+        if result and result.get("price"):
+            result["item_url"] = url
+            return result
+
     soup = _fetch_page(url)
+    used_browser = False
 
-    # Detect bot-detection pages and bail early
-    if soup:
-        page_text = soup.get_text(separator=" ", strip=True)[:500].lower()
-        if any(phrase in page_text for phrase in ("robot or human", "are you a robot", "captcha", "press and hold", "verify you are human")):
-            log.warning("Bot detection page for %s/%s — scraping blocked", store, item_id)
-            # For Walmart, we already tried the API above. For others, return None.
-            if store == "walmart":
-                return None
-            soup = None
+    if _is_bot_page(soup):
+        log.warning("Bot detection via HTTP for %s/%s — will try browser", store, item_id)
+        soup = None
 
-    if not soup:
+    # ── Phase 2: Extract from HTTP response ─────────────────────────────
+    result = _extract_product_from_soup(soup, store) if soup else None
+
+    # ── Phase 3: Browser fallback if HTTP failed or got no price ────────
+    if not result or not result.get("price"):
+        reason = "no page" if not soup else "no price"
+        log.info("HTTP insufficient for %s/%s (%s) — trying browser", store, item_id, reason)
+        browser_soup = _fetch_page_browser(url, store)
+        if browser_soup and not _is_bot_page(browser_soup):
+            used_browser = True
+            browser_result = _extract_product_from_soup(browser_soup, store)
+            if browser_result and browser_result.get("price"):
+                result = browser_result
+        elif browser_soup:
+            log.warning("Browser also got bot page for %s/%s", store, item_id)
+
+    if not result:
         return None
 
-    # ── Layer 1: JSON-LD ──
+    method = "browser" if used_browser else "http"
+    log.info("Scraped %s/%s [%s]: title=%s, price=%s",
+             store, item_id, method, result.get("title", "?")[:50], result.get("price"))
+    result["item_id"] = item_id
+    result["store"] = store
+    result["item_url"] = url
+    return result
+
+
+def _extract_product_from_soup(soup: BeautifulSoup, store: str) -> Optional[dict]:
+    """Run all extraction layers on a BeautifulSoup page."""
+    if not soup:
+        return None
     ld = _extract_jsonld(soup)
-
-    # ── Layer 1b: __NEXT_DATA__ (Next.js hydration data — Walmart, etc.) ──
     nextdata = _extract_nextdata(soup, store)
-
-    # ── Layer 2: <meta> tags ──
     meta = _extract_meta(soup)
-
-    # ── Layer 3: CSS selectors ──
     css_price = _css_extract_price(soup, store)
     css_title = _css_extract_title(soup, store)
     css_image = _css_extract_image(soup, store)
-
-    # ── Merge (prefer JSON-LD > __NEXT_DATA__ > meta > CSS) ──
     title = ld.get("title") or nextdata.get("title") or meta.get("title") or css_title or f"{STORE_NAMES.get(store, store)} Product"
     price = ld.get("price") or nextdata.get("price") or meta.get("price") or css_price
     image = ld.get("image") or nextdata.get("image") or meta.get("image") or css_image or ""
     currency = ld.get("currency") or nextdata.get("currency") or "USD"
-
-    log.info("Scraped %s/%s: title=%s, price=%s, image=%s",
-             store, item_id, title[:50], price, bool(image))
-
-    return {
-        "item_id": item_id,
-        "store": store,
-        "title": title[:300],
-        "price": price,
-        "currency": currency,
-        "image_url": image,
-        "item_url": url,
-    }
+    return {"title": title[:300], "price": price, "currency": currency, "image_url": image}
