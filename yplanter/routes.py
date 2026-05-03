@@ -182,7 +182,14 @@ def api_plant_ask(plant_id: str):
     question = body.get("question", "").strip()
     lang = body.get("lang", "en")
     log.info("API plant/ask: plant=%s lang=%s q=%s", plant_id, lang, question[:80] if question else "(empty)")
-    if not question: = f"""Plant: {plant['name']}
+    if not question:
+        return jsonify({"error": "No question provided"}), 400
+
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        return jsonify({"error": "GEMINI_API_KEY not configured"}), 503
+
+    plant_context = f"""Plant: {plant['name']}
 Category: {plant.get('category', 'unknown')}
 Difficulty: {plant.get('difficulty', 'unknown')}
 PNW Notes: {plant.get('pnw_notes', 'N/A')}
@@ -241,6 +248,7 @@ def api_ask():
     body = request.get_json(force=True, silent=True) or {}
     question = body.get("question", "").strip()
     lang = body.get("lang", "en")
+    log.info("API ask: lang=%s q=%s", lang, question[:80] if question else "(empty)")
     if not question:
         return jsonify({"error": "No question provided"}), 400
 
@@ -317,6 +325,7 @@ def _save_history(session_id: str, plant_id: str | None, plant_name: str | None,
 @bp.route("/api/history")
 def api_history():
     """List chat history for the current session."""
+    log.info("API history")
     table = _get_history_table()
     if not table:
         return jsonify({"error": "Database unavailable"}), 503
@@ -348,6 +357,7 @@ def api_history():
 @bp.route("/api/history/<int:timestamp>", methods=["DELETE"])
 def api_delete_history(timestamp: int):
     """Delete a single history item."""
+    log.info("API history/delete: ts=%d", timestamp)
     table = _get_history_table()
     if not table:
         return jsonify({"error": "Database unavailable"}), 503
@@ -370,6 +380,7 @@ def api_youtube():
     """Search YouTube for gardening videos."""
     query = request.args.get("q", "").strip()
     max_results = min(int(request.args.get("max", "4")), 8)
+    log.info("API youtube: q=%s max=%d", query, max_results)
     if not query:
         return jsonify({"videos": []})
 
@@ -459,6 +470,7 @@ def api_translate():
 
     Results cached in DynamoDB so each page_key only translates once.
     """
+    log.info("API translate")
     from google import genai
 
     body = request.get_json(force=True, silent=True) or {}
@@ -639,6 +651,7 @@ def _build_all_page_texts():
 @bp.route("/api/prewarm", methods=["POST"])
 def api_prewarm():
     """Pre-warm all translation caches via SSE progress stream."""
+    log.info("API prewarm")
     from google import genai
 
     api_key = os.environ.get("GEMINI_API_KEY")
@@ -710,6 +723,7 @@ def api_prewarm():
 @bp.route("/api/collection/export")
 def api_collection_export():
     ids = request.args.get("ids", "")
+    log.info("API collection/export: ids=%s", ids[:80] if ids else "(empty)")
     if not ids:
         return jsonify({"plants": []})
     plant_ids = [i.strip() for i in ids.split(",") if i.strip()]
