@@ -1,0 +1,204 @@
+{% extends "base.html" %}
+{% block title %}yBG — Rental Application{% endblock %}
+
+{% block content %}
+<div x-data="applyForm()" class="max-w-2xl mx-auto">
+
+  <!-- Header -->
+  <div class="text-center mb-8 fade-up">
+    <div class="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-sky-500 to-blue-500 shadow-lg shadow-sky-500/20 mb-4">
+      <svg class="w-7 h-7 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+      </svg>
+    </div>
+    <h1 class="text-2xl font-extrabold mb-1">Rental Application</h1>
+    <p class="text-sm text-slate-500 dark:text-slate-400">Complete this form to apply for the rental property</p>
+  </div>
+
+  <!-- Success -->
+  <div x-show="submitted" class="text-center py-16">
+    <div class="text-6xl mb-4">&#x2705;</div>
+    <h2 class="text-xl font-bold mb-2">Application Submitted!</h2>
+    <p class="text-sm text-slate-500 dark:text-slate-400 max-w-md mx-auto">
+      Thank you for applying. The landlord will review your application and background check results.
+      You'll be notified by email once a decision is made.
+    </p>
+    <p class="text-xs text-slate-400 dark:text-slate-500 mt-4">Application ID: <span class="font-mono" x-text="appId"></span></p>
+  </div>
+
+  <!-- Form -->
+  <form x-show="!submitted" @submit.prevent="submitApp()" class="space-y-6">
+
+    <!-- Personal Info -->
+    <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 p-6">
+      <h2 class="text-sm font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-4">Personal Information</h2>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">First Name *</label>
+          <input type="text" x-model="form.first_name" required
+                 class="w-full px-3 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm focus:ring-2 focus:ring-brand/40 outline-none">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Last Name *</label>
+          <input type="text" x-model="form.last_name" required
+                 class="w-full px-3 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm focus:ring-2 focus:ring-brand/40 outline-none">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Email *</label>
+          <input type="email" x-model="form.email" required
+                 class="w-full px-3 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm focus:ring-2 focus:ring-brand/40 outline-none">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Phone *</label>
+          <input type="tel" x-model="form.phone" required placeholder="(206) 555-0100"
+                 class="w-full px-3 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm focus:ring-2 focus:ring-brand/40 outline-none">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Date of Birth *</label>
+          <input type="date" x-model="form.dob" required
+                 class="w-full px-3 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm focus:ring-2 focus:ring-brand/40 outline-none">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">SSN (last 4 digits)</label>
+          <input type="text" x-model="form.ssn_last4" maxlength="4" pattern="\d{4}" placeholder="1234"
+                 class="w-full px-3 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm focus:ring-2 focus:ring-brand/40 outline-none">
+        </div>
+      </div>
+    </div>
+
+    <!-- Current Address -->
+    <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 p-6">
+      <h2 class="text-sm font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-4">Current Address</h2>
+      <textarea x-model="form.current_address" rows="2" placeholder="Street, City, State, ZIP"
+                class="w-full px-3 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm focus:ring-2 focus:ring-brand/40 outline-none resize-none"></textarea>
+    </div>
+
+    <!-- Employment & Income -->
+    <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 p-6">
+      <h2 class="text-sm font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-4">Employment & Income</h2>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Employer</label>
+          <input type="text" x-model="form.employer" placeholder="Company name"
+                 class="w-full px-3 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm focus:ring-2 focus:ring-brand/40 outline-none">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Annual Income ($)</label>
+          <input type="number" x-model="form.annual_income" min="0" placeholder="85000"
+                 class="w-full px-3 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm focus:ring-2 focus:ring-brand/40 outline-none">
+        </div>
+      </div>
+    </div>
+
+    <!-- Move-in Details -->
+    <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 p-6">
+      <h2 class="text-sm font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-4">Move-in Details</h2>
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div>
+          <label class="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Desired Move-in Date</label>
+          <input type="date" x-model="form.move_in_date"
+                 class="w-full px-3 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm focus:ring-2 focus:ring-brand/40 outline-none">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Number of Occupants</label>
+          <input type="number" x-model="form.num_occupants" min="1" max="10" placeholder="2"
+                 class="w-full px-3 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm focus:ring-2 focus:ring-brand/40 outline-none">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Pets</label>
+          <input type="text" x-model="form.pets" placeholder="None / 1 cat / 2 dogs"
+                 class="w-full px-3 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm focus:ring-2 focus:ring-brand/40 outline-none">
+        </div>
+      </div>
+    </div>
+
+    <!-- References -->
+    <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 p-6">
+      <h2 class="text-sm font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-4">References</h2>
+      <template x-for="(ref, i) in form.references" :key="i">
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/30">
+          <input type="text" x-model="ref.name" placeholder="Name"
+                 class="px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm focus:ring-2 focus:ring-brand/40 outline-none">
+          <input type="text" x-model="ref.phone" placeholder="Phone"
+                 class="px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm focus:ring-2 focus:ring-brand/40 outline-none">
+          <input type="text" x-model="ref.relationship" placeholder="Relationship (landlord, employer)"
+                 class="px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm focus:ring-2 focus:ring-brand/40 outline-none">
+        </div>
+      </template>
+      <button type="button" @click="form.references.push({name:'',phone:'',relationship:''})"
+              x-show="form.references.length < 3"
+              class="text-xs text-brand hover:text-brand-dark transition">+ Add reference</button>
+    </div>
+
+    <!-- Consent -->
+    <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 p-6">
+      <label class="flex items-start gap-3 cursor-pointer">
+        <input type="checkbox" x-model="form.consent" class="mt-0.5 w-5 h-5 rounded border-slate-300 text-brand focus:ring-brand">
+        <div>
+          <p class="text-sm font-medium">I consent to a background check *</p>
+          <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+            I authorize the landlord to obtain a consumer report and/or investigative consumer report
+            for the purpose of evaluating my rental application. I understand this may include criminal
+            history, credit history, eviction records, and identity verification.
+          </p>
+        </div>
+      </label>
+    </div>
+
+    <!-- Submit -->
+    <div class="flex gap-3">
+      <button type="submit" :disabled="submitting || !form.consent"
+              class="flex-1 px-6 py-3 rounded-xl bg-gradient-to-r from-sky-500 to-blue-500 text-white text-sm font-semibold hover:from-sky-600 hover:to-blue-600 transition disabled:opacity-50 shadow-lg shadow-sky-500/20">
+        <span x-show="!submitting">Submit Application</span>
+        <span x-show="submitting" class="flex items-center justify-center gap-2">
+          <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+          Submitting...
+        </span>
+      </button>
+    </div>
+    <p x-show="error" x-text="error" class="text-sm text-red-500 text-center"></p>
+  </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function applyForm() {
+  return {
+    form: {
+      first_name: '', last_name: '', email: '', phone: '', dob: '',
+      ssn_last4: '', current_address: '', employer: '', annual_income: '',
+      move_in_date: '', num_occupants: 1, pets: 'None',
+      references: [{ name: '', phone: '', relationship: '' }],
+      consent: false,
+    },
+    submitting: false,
+    submitted: false,
+    appId: '',
+    error: '',
+
+    async submitApp() {
+      if (this.submitting) return;
+      this.submitting = true;
+      this.error = '';
+      try {
+        const token = '{{ token }}';
+        const r = await fetch('/api/apply/' + token, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(this.form),
+        });
+        const d = await r.json();
+        if (r.ok) {
+          this.submitted = true;
+          this.appId = d.app_id;
+        } else {
+          this.error = d.error || 'Submission failed';
+        }
+      } catch(e) { this.error = 'Network error: ' + e.message; }
+      this.submitting = false;
+    },
+  };
+}
+</script>
+{% endblock %}

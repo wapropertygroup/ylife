@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}yBG — Application Status{% endblock %}
+
+{% block content %}
+<div x-data="statusApp()" x-init="init()" class="max-w-lg mx-auto">
+  <div class="text-center py-12">
+    <div x-show="loading">
+      <svg class="animate-spin w-8 h-8 mx-auto text-brand" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+    </div>
+
+    <div x-show="!loading && app">
+      <div class="text-5xl mb-4"
+           x-text="app.status === 'approved' ? '&#x2705;' : app.status === 'denied' ? '&#x274c;' : '&#x1f50d;'"></div>
+      <h1 class="text-xl font-bold mb-2" x-text="'Application ' + app.status.charAt(0).toUpperCase() + app.status.slice(1)"></h1>
+      <p class="text-sm text-slate-500 dark:text-slate-400 mb-4" x-text="app.property_address"></p>
+      <p class="text-xs text-slate-400" x-text="'Submitted: ' + new Date(app.submitted_at || app.created_at).toLocaleDateString()"></p>
+    </div>
+
+    <div x-show="!loading && !app" class="text-slate-400">Application not found.</div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function statusApp() {
+  return {
+    app: null, loading: true,
+    async init() {
+      try {
+        const r = await fetch('/api/application/{{ app_id }}');
+        const d = await r.json();
+        this.app = d.application;
+      } catch(e) {}
+      this.loading = false;
+    },
+  };
+}
+</script>
+{% endblock %}

@@ -80,6 +80,18 @@ APPS = [
         "features": ["Compress PDF", "PDF to Image", "Crop & Passport",
                      "Trim transparency", "Layer analysis"],
     },
+    {
+        "id": "bg",
+        "name": "yBG",
+        "emoji": "\U0001f50d",
+        "tagline": "Tenant Background Check",
+        "description": "Screen rental applicants with background checks via Checkr API. "
+                       "Send application links, review results, and approve or deny tenants.",
+        "url": "https://ybackground.li-family.us",
+        "color": "blue",
+        "features": ["Checkr background checks", "Tenant application portal",
+                     "Criminal & eviction search", "Income-to-rent analysis"],
+    },
 ]
 
 

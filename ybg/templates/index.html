@@ -1,0 +1,239 @@
+{% extends "base.html" %}
+{% block title %}yBG — Dashboard{% endblock %}
+
+{% block content %}
+<div x-data="dashboard()">
+
+  <!-- Header -->
+  <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-4">
+    <div>
+      <h1 class="text-2xl sm:text-3xl font-extrabold tracking-tight">
+        <span class="bg-gradient-to-r from-sky-400 to-blue-500 bg-clip-text text-transparent">Tenant Applications</span>
+      </h1>
+      <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">Manage rental applications and background checks</p>
+    </div>
+    <div class="flex gap-2">
+      <button @click="showInvite = true"
+              class="px-4 py-2.5 rounded-xl bg-gradient-to-r from-sky-500 to-blue-500 text-white text-sm font-semibold hover:from-sky-600 hover:to-blue-600 transition shadow-lg shadow-sky-500/20">
+        + New Application Link
+      </button>
+      <a href="/logout" class="px-3 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 text-sm text-slate-500 hover:text-red-500 transition">
+        Logout
+      </a>
+    </div>
+  </div>
+
+  {% if not checkr_configured %}
+  <div class="mb-6 p-4 rounded-2xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/50">
+    <div class="flex items-center gap-3">
+      <span class="text-2xl">&#x26a0;</span>
+      <div>
+        <p class="text-sm font-semibold text-amber-700 dark:text-amber-300">Checkr API not configured</p>
+        <p class="text-xs text-amber-600 dark:text-amber-400 mt-0.5">
+          Applications will be collected but background checks won't run automatically.
+          Add <code class="bg-amber-100 dark:bg-amber-900/40 px-1 rounded">CHECKR_API_KEY</code> to your <code>.env</code> to enable.
+          Sign up at <a href="https://checkr.com" target="_blank" class="underline">checkr.com</a>.
+        </p>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Create Invite Modal -->
+  <div x-show="showInvite" x-transition class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
+    <div class="w-full max-w-md bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6" @click.outside="showInvite = false">
+      <h2 class="text-lg font-bold mb-4">Create Application Link</h2>
+      <div class="space-y-3">
+        <div>
+          <label class="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Property Address *</label>
+          <input type="text" x-model="inviteAddress" placeholder="123 Main St, Seattle, WA 98101"
+                 class="w-full px-3 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm focus:ring-2 focus:ring-brand/40 outline-none">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Monthly Rent ($)</label>
+          <input type="number" x-model="inviteRent" placeholder="2500" min="0"
+                 class="w-full px-3 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm focus:ring-2 focus:ring-brand/40 outline-none">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Notes</label>
+          <textarea x-model="inviteNotes" rows="2" placeholder="Any notes about the property or requirements..."
+                    class="w-full px-3 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm focus:ring-2 focus:ring-brand/40 outline-none resize-none"></textarea>
+        </div>
+      </div>
+      <div class="flex gap-2 mt-4">
+        <button @click="createInvite()" :disabled="creatingInvite || !inviteAddress.trim()"
+                class="flex-1 px-4 py-2.5 rounded-xl bg-brand text-white text-sm font-semibold hover:bg-brand-dark transition disabled:opacity-50">
+          <span x-show="!creatingInvite">Generate Link</span>
+          <span x-show="creatingInvite">Creating...</span>
+        </button>
+        <button @click="showInvite = false" class="px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 text-sm text-slate-500 transition">Cancel</button>
+      </div>
+      <p x-show="inviteError" x-text="inviteError" class="mt-2 text-sm text-red-500"></p>
+      <!-- Generated link -->
+      <div x-show="inviteUrl" class="mt-4 p-3 rounded-xl bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700/50">
+        <p class="text-xs text-green-600 dark:text-green-400 font-semibold mb-1">Application link created!</p>
+        <div class="flex gap-2">
+          <input type="text" :value="inviteUrl" readonly class="flex-1 px-2 py-1.5 rounded-lg bg-white dark:bg-slate-800 text-xs font-mono border border-slate-200 dark:border-slate-700">
+          <button @click="navigator.clipboard.writeText(inviteUrl)" class="px-3 py-1.5 rounded-lg bg-green-500 text-white text-xs font-semibold hover:bg-green-600 transition">Copy</button>
+        </div>
+        <p class="text-[10px] text-slate-400 mt-1">Send this link to your tenant applicant.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
+    <div class="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 p-4">
+      <div class="text-[11px] text-slate-500 dark:text-slate-400 uppercase mb-1">Total</div>
+      <div class="text-2xl font-bold text-slate-900 dark:text-white" x-text="apps.length"></div>
+    </div>
+    <div class="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 p-4">
+      <div class="text-[11px] text-slate-500 dark:text-slate-400 uppercase mb-1">Pending</div>
+      <div class="text-2xl font-bold text-amber-500" x-text="apps.filter(a => ['invited','submitted','pending'].includes(a.status)).length"></div>
+    </div>
+    <div class="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 p-4">
+      <div class="text-[11px] text-slate-500 dark:text-slate-400 uppercase mb-1">Approved</div>
+      <div class="text-2xl font-bold text-green-500" x-text="apps.filter(a => a.status === 'approved').length"></div>
+    </div>
+    <div class="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 p-4">
+      <div class="text-[11px] text-slate-500 dark:text-slate-400 uppercase mb-1">Denied</div>
+      <div class="text-2xl font-bold text-red-400" x-text="apps.filter(a => a.status === 'denied').length"></div>
+    </div>
+  </div>
+
+  <!-- Applications List -->
+  <div class="space-y-3">
+    <template x-for="app in apps" :key="app.app_id">
+      <a :href="'/review/' + app.app_id"
+         class="block rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 hover:shadow-lg hover:shadow-brand/10 transition-all duration-300 overflow-hidden">
+        <div class="flex items-center gap-4 p-5">
+          <!-- Status icon -->
+          <div class="w-10 h-10 rounded-full flex items-center justify-center shrink-0"
+               :class="{
+                 'bg-amber-100 dark:bg-amber-900/30 text-amber-600': ['invited','started'].includes(app.status),
+                 'bg-blue-100 dark:bg-blue-900/30 text-blue-600': ['submitted','pending'].includes(app.status),
+                 'bg-green-100 dark:bg-green-900/30 text-green-600': app.status === 'approved',
+                 'bg-red-100 dark:bg-red-900/30 text-red-600': app.status === 'denied',
+               }">
+            <span x-show="['invited','started'].includes(app.status)">&#x1f4e8;</span>
+            <span x-show="['submitted','pending'].includes(app.status)">&#x1f50d;</span>
+            <span x-show="app.status === 'approved'">&#x2705;</span>
+            <span x-show="app.status === 'denied'">&#x274c;</span>
+          </div>
+
+          <!-- Info -->
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2 mb-0.5">
+              <h3 class="text-sm font-bold truncate"
+                  x-text="app.first_name ? (app.first_name + ' ' + app.last_name) : 'Awaiting applicant'"></h3>
+              <span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase"
+                    :class="{
+                      'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400': ['invited','started'].includes(app.status),
+                      'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400': ['submitted','pending'].includes(app.status),
+                      'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400': app.status === 'approved',
+                      'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400': app.status === 'denied',
+                    }"
+                    x-text="app.status"></span>
+            </div>
+            <p class="text-xs text-slate-500 dark:text-slate-400 truncate" x-text="app.property_address"></p>
+            <p class="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">
+              <span x-text="app.email || ''"></span>
+              <span x-show="app.rent"> &middot; $<span x-text="Number(app.rent).toLocaleString()"></span>/mo</span>
+              <span> &middot; <span x-text="formatDate(app.created_at)"></span></span>
+            </p>
+          </div>
+
+          <!-- Arrow -->
+          <svg class="w-5 h-5 text-slate-300 dark:text-slate-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+          </svg>
+        </div>
+      </a>
+    </template>
+  </div>
+
+  <!-- Empty state -->
+  <div x-show="!loading && apps.length === 0" class="text-center py-20">
+    <div class="text-6xl mb-4">&#x1f50d;</div>
+    <h3 class="text-lg font-semibold mb-2">No applications yet</h3>
+    <p class="text-sm text-slate-500 dark:text-slate-400 max-w-md mx-auto mb-4">
+      Create an application link and send it to your tenant applicant to get started.
+    </p>
+    <button @click="showInvite = true"
+            class="px-5 py-2.5 rounded-xl bg-brand text-white text-sm font-semibold hover:bg-brand-dark transition">
+      + Create Application Link
+    </button>
+  </div>
+
+  <!-- Loading -->
+  <div x-show="loading" class="text-center py-20">
+    <svg class="animate-spin w-8 h-8 mx-auto text-brand" fill="none" viewBox="0 0 24 24">
+      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+    </svg>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function dashboard() {
+  return {
+    apps: [],
+    loading: true,
+    showInvite: false,
+    inviteAddress: '',
+    inviteRent: '',
+    inviteNotes: '',
+    inviteUrl: '',
+    inviteError: '',
+    creatingInvite: false,
+
+    async init() {
+      await this.loadApps();
+      this.loading = false;
+    },
+
+    async loadApps() {
+      try {
+        const r = await fetch('/api/applications');
+        const d = await r.json();
+        this.apps = d.applications || [];
+      } catch(e) { console.error(e); }
+    },
+
+    async createInvite() {
+      if (!this.inviteAddress.trim() || this.creatingInvite) return;
+      this.creatingInvite = true;
+      this.inviteError = '';
+      this.inviteUrl = '';
+      try {
+        const r = await fetch('/api/invite', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            property_address: this.inviteAddress,
+            rent: parseFloat(this.inviteRent) || 0,
+            notes: this.inviteNotes,
+          }),
+        });
+        const d = await r.json();
+        if (r.ok) {
+          this.inviteUrl = d.apply_url;
+          this.loadApps();
+        } else {
+          this.inviteError = d.error || 'Failed to create invite';
+        }
+      } catch(e) { this.inviteError = e.message; }
+      this.creatingInvite = false;
+    },
+
+    formatDate(ts) {
+      if (!ts) return '';
+      const d = new Date(ts);
+      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    },
+  };
+}
+</script>
+{% endblock %}

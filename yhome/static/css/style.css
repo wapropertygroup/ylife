@@ -16,6 +16,9 @@
 .app-card:nth-child(3) { animation-delay: .15s; }
 .app-card:nth-child(4) { animation-delay: .2s; }
 .app-card:nth-child(5) { animation-delay: .25s; }
+.app-card:nth-child(6) { animation-delay: .3s; }
+.app-card:nth-child(7) { animation-delay: .35s; }
+.app-card:nth-child(8) { animation-delay: .4s; }
 
 body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;

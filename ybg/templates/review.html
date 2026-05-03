@@ -1,0 +1,205 @@
+{% extends "base.html" %}
+{% block title %}yBG — Review Application{% endblock %}
+
+{% block content %}
+<div x-data="reviewApp()" x-init="init()">
+
+  <a href="/" class="inline-flex items-center gap-1 text-sm text-slate-500 dark:text-slate-400 hover:text-brand transition mb-6">
+    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+    Back to Dashboard
+  </a>
+
+  <div x-show="loading" class="text-center py-20">
+    <svg class="animate-spin w-8 h-8 mx-auto text-brand" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+  </div>
+
+  <div x-show="!loading && app">
+
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row items-start justify-between gap-4 mb-6">
+      <div>
+        <h1 class="text-2xl font-extrabold" x-text="(app.first_name || 'Awaiting') + ' ' + (app.last_name || 'Applicant')"></h1>
+        <p class="text-sm text-slate-500 dark:text-slate-400" x-text="app.property_address"></p>
+      </div>
+      <div class="flex gap-2">
+        <span class="px-3 py-1 rounded-full text-xs font-bold uppercase"
+              :class="{
+                'bg-amber-100 dark:bg-amber-900/30 text-amber-600': ['invited','started'].includes(app.status),
+                'bg-blue-100 dark:bg-blue-900/30 text-blue-600': ['submitted','pending'].includes(app.status),
+                'bg-green-100 dark:bg-green-900/30 text-green-600': app.status === 'approved',
+                'bg-red-100 dark:bg-red-900/30 text-red-600': app.status === 'denied',
+              }" x-text="app.status"></span>
+      </div>
+    </div>
+
+    <!-- Applicant Details -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+      <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 p-5">
+        <h2 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">Contact</h2>
+        <div class="space-y-2 text-sm">
+          <div class="flex justify-between"><span class="text-slate-500">Email</span><span class="font-medium" x-text="app.email || '—'"></span></div>
+          <div class="flex justify-between"><span class="text-slate-500">Phone</span><span class="font-medium" x-text="app.phone || '—'"></span></div>
+          <div class="flex justify-between"><span class="text-slate-500">DOB</span><span class="font-medium" x-text="app.dob || '—'"></span></div>
+          <div class="flex justify-between"><span class="text-slate-500">SSN (last 4)</span><span class="font-mono" x-text="app.ssn_last4 ? '***-**-' + app.ssn_last4 : '—'"></span></div>
+        </div>
+      </div>
+      <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 p-5">
+        <h2 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">Employment & Housing</h2>
+        <div class="space-y-2 text-sm">
+          <div class="flex justify-between"><span class="text-slate-500">Employer</span><span class="font-medium" x-text="app.employer || '—'"></span></div>
+          <div class="flex justify-between"><span class="text-slate-500">Annual Income</span><span class="font-medium" x-text="app.annual_income ? '$' + Number(app.annual_income).toLocaleString() : '—'"></span></div>
+          <div class="flex justify-between"><span class="text-slate-500">Move-in</span><span class="font-medium" x-text="app.move_in_date || '—'"></span></div>
+          <div class="flex justify-between"><span class="text-slate-500">Occupants</span><span class="font-medium" x-text="app.num_occupants || '—'"></span></div>
+          <div class="flex justify-between"><span class="text-slate-500">Pets</span><span class="font-medium" x-text="app.pets || 'None'"></span></div>
+          <div class="flex justify-between"><span class="text-slate-500">Rent</span><span class="font-medium" x-text="app.rent ? '$' + Number(app.rent).toLocaleString() + '/mo' : '—'"></span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Income-to-Rent Ratio -->
+    <div x-show="app.annual_income && app.rent" class="mb-6 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 p-5">
+      <h2 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">Income Analysis</h2>
+      <div class="flex items-center gap-4">
+        <div class="text-3xl font-bold" :class="incomeRatio >= 3 ? 'text-green-500' : incomeRatio >= 2 ? 'text-amber-500' : 'text-red-500'"
+             x-text="incomeRatio.toFixed(1) + 'x'"></div>
+        <div class="text-sm text-slate-500 dark:text-slate-400">
+          <p>Income-to-rent ratio <span class="font-medium" :class="incomeRatio >= 3 ? 'text-green-500' : 'text-amber-500'"
+             x-text="incomeRatio >= 3 ? '(Good — meets 3x requirement)' : incomeRatio >= 2 ? '(Below 3x — review carefully)' : '(Below 2x — high risk)'"></span></p>
+          <p class="text-xs text-slate-400 mt-0.5" x-text="'$' + Number(app.annual_income).toLocaleString() + '/yr income vs $' + Number(app.rent * 12).toLocaleString() + '/yr rent'"></p>
+        </div>
+      </div>
+    </div>
+
+    <!-- References -->
+    <div x-show="refs.length > 0" class="mb-6 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 p-5">
+      <h2 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">References</h2>
+      <div class="space-y-2">
+        <template x-for="ref in refs" :key="ref.name">
+          <div class="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/30">
+            <div class="w-8 h-8 rounded-full bg-brand/10 text-brand flex items-center justify-center text-sm font-bold" x-text="(ref.name || '?')[0].toUpperCase()"></div>
+            <div class="flex-1">
+              <div class="text-sm font-medium" x-text="ref.name"></div>
+              <div class="text-xs text-slate-400" x-text="ref.relationship"></div>
+            </div>
+            <a :href="'tel:' + ref.phone" class="text-xs text-brand hover:underline" x-text="ref.phone"></a>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- Background Check -->
+    <div class="mb-6 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 p-5">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-xs font-bold uppercase tracking-wider text-slate-400">Background Check</h2>
+        <button @click="runCheck()" :disabled="checkingBg"
+                class="px-3 py-1 rounded-lg text-xs font-medium bg-brand text-white hover:bg-brand-dark transition disabled:opacity-50">
+          <span x-show="!checkingBg">Run Check</span>
+          <span x-show="checkingBg">Running...</span>
+        </button>
+      </div>
+      <div x-show="app.checkr_status" class="space-y-2 text-sm">
+        <div class="flex justify-between"><span class="text-slate-500">Status</span>
+          <span class="font-medium" :class="{'text-green-500': app.checkr_status === 'clear', 'text-red-500': app.checkr_status === 'consider', 'text-amber-500': app.checkr_status === 'pending'}"
+                x-text="app.checkr_status"></span>
+        </div>
+        <div x-show="app.checkr_invitation_url" class="flex justify-between">
+          <span class="text-slate-500">Tenant verification</span>
+          <a :href="app.checkr_invitation_url" target="_blank" class="text-brand text-xs hover:underline">Open Checkr link</a>
+        </div>
+      </div>
+      <div x-show="!app.checkr_status" class="text-xs text-slate-400">No background check initiated yet.</div>
+      <p x-show="bgError" x-text="bgError" class="mt-2 text-xs text-red-500"></p>
+    </div>
+
+    <!-- Decision -->
+    <div class="rounded-2xl border-2 border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 p-6">
+      <h2 class="text-sm font-bold mb-4">Landlord Decision</h2>
+      <div class="flex gap-3 mb-4">
+        <button @click="setDecision('approved')"
+                class="flex-1 px-4 py-3 rounded-xl text-sm font-semibold transition"
+                :class="app.decision === 'approved' ? 'bg-green-500 text-white' : 'border border-green-300 dark:border-green-700 text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20'">
+          Approve
+        </button>
+        <button @click="setDecision('denied')"
+                class="flex-1 px-4 py-3 rounded-xl text-sm font-semibold transition"
+                :class="app.decision === 'denied' ? 'bg-red-500 text-white' : 'border border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20'">
+          Deny
+        </button>
+      </div>
+      <textarea x-model="decisionNotes" rows="2" placeholder="Notes about this decision..."
+                class="w-full px-3 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm focus:ring-2 focus:ring-brand/40 outline-none resize-none"></textarea>
+
+      <!-- Delete -->
+      <div class="mt-4 pt-4 border-t border-slate-200 dark:border-slate-800">
+        <button @click="deleteApp()" class="text-xs text-red-400 hover:text-red-500 transition">Delete this application</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function reviewApp() {
+  const appId = '{{ app_id }}';
+  return {
+    app: null, loading: true, refs: [],
+    decisionNotes: '', checkingBg: false, bgError: '',
+
+    get incomeRatio() {
+      if (!this.app?.annual_income || !this.app?.rent) return 0;
+      return Number(this.app.annual_income) / (Number(this.app.rent) * 12);
+    },
+
+    async init() {
+      try {
+        const r = await fetch('/api/application/' + appId);
+        const d = await r.json();
+        this.app = d.application;
+        if (this.app?.references_json) {
+          try { this.refs = JSON.parse(this.app.references_json); } catch(e) {}
+        }
+        this.decisionNotes = this.app?.decision_notes || '';
+      } catch(e) { console.error(e); }
+      this.loading = false;
+    },
+
+    async setDecision(decision) {
+      try {
+        await fetch('/api/application/' + appId + '/decision', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ decision, notes: this.decisionNotes }),
+        });
+        this.app.status = decision;
+        this.app.decision = decision;
+      } catch(e) { console.error(e); }
+    },
+
+    async runCheck() {
+      this.checkingBg = true;
+      this.bgError = '';
+      try {
+        const r = await fetch('/api/application/' + appId + '/check', { method: 'POST' });
+        const d = await r.json();
+        if (d.result?.status === 'initiated') {
+          this.app.checkr_status = 'pending';
+          if (d.result.invitation_url) this.app.checkr_invitation_url = d.result.invitation_url;
+        } else if (d.result?.status === 'skipped') {
+          this.bgError = d.result.reason;
+        } else {
+          this.bgError = d.error || d.result?.detail || 'Check failed';
+        }
+      } catch(e) { this.bgError = e.message; }
+      this.checkingBg = false;
+    },
+
+    async deleteApp() {
+      if (!confirm('Delete this application permanently?')) return;
+      await fetch('/api/application/' + appId, { method: 'DELETE' });
+      window.location.href = '/';
+    },
+  };
+}
+</script>
+{% endblock %}
