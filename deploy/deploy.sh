@@ -18,6 +18,7 @@ APPS=(
   "yhome|8003|home.li-family.us|requirements_home.txt|yhome/static"
   "ytracker|8004|tracker.li-family.us|requirements_tracker.txt|ytracker/static"
   "ypay|8005|pay.li-family.us|requirements_pay.txt|ypay/static"
+  "yimage|8006|image.li-family.us|requirements_image.txt|yimage/static"
 )
 
 LOG_PREFIX="[deploy $(date '+%Y-%m-%d %H:%M:%S')]"

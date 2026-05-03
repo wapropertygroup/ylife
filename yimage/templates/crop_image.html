@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% block title %}Crop Image — yImage{% endblock %}
+{% block content %}
+<div x-data="cropTool()">
+  <div class="max-w-3xl mx-auto">
+    <a href="/" class="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-brand transition mb-4">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg> All Tools
+    </a>
+    <h1 class="text-2xl font-extrabold mb-2">✂️ Crop Image</h1>
+    <p class="text-sm text-slate-500 dark:text-slate-400 mb-6">Draw a rectangle on your image to crop it. The full-resolution result is processed server-side.</p>
+
+    <div x-show="!imageSrc" class="drop-zone rounded-2xl border-2 border-dashed border-slate-300 dark:border-slate-700 p-10 text-center cursor-pointer transition hover:border-brand"
+         @click="$refs.fi.click()" @dragover.prevent @drop.prevent="handleDrop($event)">
+      <input type="file" accept="image/*" x-ref="fi" @change="loadImage($event.target.files[0])" class="hidden">
+      <svg class="w-12 h-12 mx-auto mb-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+      <p class="text-sm text-slate-500">Drop an image here or <span class="text-brand font-medium">browse</span></p>
+    </div>
+
+    <!-- Crop Canvas -->
+    <div x-show="imageSrc" class="relative">
+      <div class="flex items-center justify-between mb-2">
+        <span class="text-xs text-slate-400" x-text="cropInfo"></span>
+        <button @click="reset()" class="text-xs text-slate-400 hover:text-red-500">Change image</button>
+      </div>
+      <div class="relative inline-block border border-slate-700 rounded-lg overflow-hidden" style="max-width:100%">
+        <canvas x-ref="canvas"
+                @mousedown="startCrop($event)" @mousemove="moveCrop($event)" @mouseup="endCrop()"
+                @touchstart.prevent="startCrop($event.touches[0])" @touchmove.prevent="moveCrop($event.touches[0])" @touchend="endCrop()"
+                class="block max-w-full cursor-crosshair"></canvas>
+      </div>
+
+      <button @click="process()" :disabled="processing || !hasCrop"
+              class="mt-4 w-full py-3 rounded-xl bg-brand text-white font-semibold hover:bg-brand-dark transition disabled:opacity-50">
+        <span x-show="!processing">Download Cropped Image</span>
+        <span x-show="processing" class="flex items-center justify-center gap-2">
+          <svg class="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+          Processing...
+        </span>
+      </button>
+    </div>
+    <p x-show="error" class="mt-4 text-sm text-red-500" x-text="error"></p>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+function cropTool() {
+  return {
+    file: null, imageSrc: null, imgEl: null,
+    crop: {x:0,y:0,w:0,h:0}, dragging: false, startX:0, startY:0,
+    processing: false, error: '',
+    get hasCrop() { return this.crop.w > 5 && this.crop.h > 5; },
+    get cropInfo() {
+      if (!this.hasCrop) return 'Click and drag to select crop area';
+      return `Crop: ${Math.round(this.crop.w)}×${Math.round(this.crop.h)}px`;
+    },
+
+    handleDrop(e) { this.loadImage(e.dataTransfer.files[0]); },
+    loadImage(f) {
+      if (!f) return;
+      this.file = f; this.error = '';
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        this.imageSrc = e.target.result;
+        const img = new window.Image();
+        img.onload = () => {
+          this.imgEl = img;
+          this.$nextTick(() => this.drawCanvas());
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(f);
+    },
+
+    drawCanvas() {
+      const canvas = this.$refs.canvas;
+      if (!canvas || !this.imgEl) return;
+      const maxW = Math.min(this.imgEl.width, 800);
+      const scale = maxW / this.imgEl.width;
+      canvas.width = this.imgEl.width * scale;
+      canvas.height = this.imgEl.height * scale;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(this.imgEl, 0, 0, canvas.width, canvas.height);
+      if (this.hasCrop) {
+        // Darken outside crop
+        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        // Clear crop area
+        ctx.clearRect(this.crop.x, this.crop.y, this.crop.w, this.crop.h);
+        ctx.drawImage(this.imgEl, this.crop.x/scale*scale, this.crop.y/scale*scale, this.crop.w, this.crop.h,
+                      this.crop.x, this.crop.y, this.crop.w, this.crop.h);
+        // Crop border
+        ctx.strokeStyle = '#7c3aed'; ctx.lineWidth = 2; ctx.setLineDash([5,3]);
+        ctx.strokeRect(this.crop.x, this.crop.y, this.crop.w, this.crop.h);
+        ctx.setLineDash([]);
+      }
+    },
+
+    _getPos(e) {
+      const r = this.$refs.canvas.getBoundingClientRect();
+      return { x: e.clientX - r.left, y: e.clientY - r.top };
+    },
+    startCrop(e) { const p = this._getPos(e); this.startX=p.x; this.startY=p.y; this.dragging=true; this.crop={x:p.x,y:p.y,w:0,h:0}; },
+    moveCrop(e) {
+      if (!this.dragging) return;
+      const p = this._getPos(e);
+      this.crop.w = p.x - this.startX; this.crop.h = p.y - this.startY;
+      // Normalize for negative drag
+      if (this.crop.w < 0) { this.crop.x = p.x; this.crop.w = Math.abs(this.crop.w); }
+      if (this.crop.h < 0) { this.crop.y = p.y; this.crop.h = Math.abs(this.crop.h); }
+      this.drawCanvas();
+    },
+    endCrop() { this.dragging = false; },
+    reset() { this.file=null; this.imageSrc=null; this.imgEl=null; this.crop={x:0,y:0,w:0,h:0}; this.error=''; },
+
+    async process() {
+      if (!this.file || !this.hasCrop || this.processing) return;
+      this.processing = true; this.error = '';
+      const canvas = this.$refs.canvas;
+      const form = new FormData();
+      form.append('file', this.file);
+      form.append('x', this.crop.x); form.append('y', this.crop.y);
+      form.append('w', this.crop.w); form.append('h', this.crop.h);
+      form.append('canvas_w', canvas.width); form.append('canvas_h', canvas.height);
+      try {
+        const resp = await fetch('/api/crop-image', {method:'POST', body:form});
+        if (!resp.ok) { const d = await resp.json(); this.error = d.error||'Failed'; this.processing=false; return; }
+        const blob = await resp.blob();
+        const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='cropped_'+this.file.name; a.click();
+      } catch(e) { this.error='Network error: '+e.message; }
+      this.processing = false;
+    },
+  };
+}
+</script>
+{% endblock %}

@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}Image to PDF — yImage{% endblock %}
+{% block content %}
+<div x-data="imgToPdf()">
+  <div class="max-w-2xl mx-auto">
+    <a href="/" class="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-brand transition mb-4">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg> All Tools
+    </a>
+    <h1 class="text-2xl font-extrabold mb-2">📄 Image to PDF</h1>
+    <p class="text-sm text-slate-500 dark:text-slate-400 mb-6">Upload multiple images and merge them into a single PDF. Drag to reorder pages.</p>
+
+    <div class="drop-zone rounded-2xl border-2 border-dashed border-slate-300 dark:border-slate-700 p-10 text-center cursor-pointer transition hover:border-brand"
+         @click="$refs.fi.click()" @dragover.prevent @drop.prevent="addDropped($event)">
+      <input type="file" accept="image/*" multiple x-ref="fi" @change="addFiles($event.target.files)" class="hidden">
+      <svg class="w-12 h-12 mx-auto mb-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+      <p class="text-sm text-slate-500">Drop images here or <span class="text-brand font-medium">browse</span></p>
+      <p class="text-xs text-slate-400 mt-1">JPEG, PNG, WebP — multiple files allowed</p>
+    </div>
+
+    <!-- Image list (reorderable) -->
+    <div x-show="images.length>0" class="mt-4 space-y-2">
+      <p class="text-xs text-slate-400 mb-1">Drag to reorder. Click ✕ to remove.</p>
+      <template x-for="(img, idx) in images" :key="img.id">
+        <div class="flex items-center gap-3 p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/50 cursor-move"
+             draggable="true"
+             @dragstart="dragIdx=idx" @dragover.prevent @drop.prevent="reorder(idx)">
+          <span class="text-xs text-slate-400 font-mono w-5" x-text="idx+1"></span>
+          <img :src="img.preview" class="w-10 h-10 rounded object-cover border border-slate-200 dark:border-slate-700">
+          <span class="text-sm truncate flex-1" x-text="img.name"></span>
+          <span class="text-xs text-slate-400" x-text="(img.size/1024).toFixed(0)+'KB'"></span>
+          <button @click="images.splice(idx,1)" class="text-slate-400 hover:text-red-500 text-sm">✕</button>
+        </div>
+      </template>
+    </div>
+
+    <button x-show="images.length>0" @click="process()" :disabled="processing"
+            class="mt-4 w-full py-3 rounded-xl bg-brand text-white font-semibold hover:bg-brand-dark transition disabled:opacity-50">
+      <span x-show="!processing" x-text="'Merge ' + images.length + ' images into PDF'"></span>
+      <span x-show="processing" class="flex items-center justify-center gap-2">
+        <svg class="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+        Merging...
+      </span>
+    </button>
+
+    <div x-show="result" class="mt-4 p-4 rounded-xl bg-green-50 dark:bg-green-900/15 border border-green-300 dark:border-green-700/50">
+      <p class="text-sm font-semibold text-green-600 dark:text-green-400">PDF created and downloaded!</p>
+    </div>
+    <p x-show="error" class="mt-4 text-sm text-red-500" x-text="error"></p>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+function imgToPdf() {
+  let _id = 0;
+  return {
+    images: [], processing: false, error: '', result: false, dragIdx: -1,
+    addFiles(files) {
+      for (const f of files) {
+        const reader = new FileReader();
+        const id = ++_id;
+        reader.onload = (e) => { this.images.push({id, name:f.name, size:f.size, file:f, preview:e.target.result}); };
+        reader.readAsDataURL(f);
+      }
+      this.result=false; this.error='';
+    },
+    addDropped(e) { this.addFiles(e.dataTransfer.files); },
+    reorder(toIdx) {
+      if (this.dragIdx<0||this.dragIdx===toIdx) return;
+      const item = this.images.splice(this.dragIdx, 1)[0];
+      this.images.splice(toIdx, 0, item);
+      this.dragIdx = -1;
+    },
+    async process() {
+      if(!this.images.length||this.processing) return;
+      this.processing=true; this.error=''; this.result=false;
+      const form = new FormData();
+      this.images.forEach(img => form.append('files', img.file));
+      try {
+        const resp = await fetch('/api/image-to-pdf', {method:'POST', body:form});
+        if(!resp.ok){const d=await resp.json();this.error=d.error||'Failed';this.processing=false;return;}
+        const blob = await resp.blob();
+        const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='merged.pdf';a.click();
+        this.result=true;
+      } catch(e){this.error='Network error: '+e.message;}
+      this.processing=false;
+    },
+  };
+}
+</script>
+{% endblock %}

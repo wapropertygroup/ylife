@@ -68,6 +68,18 @@ APPS = [
         "features": ["Stripe Checkout", "One-time payments", "Custom amounts",
                      "Apple Pay & Google Pay"],
     },
+    {
+        "id": "image",
+        "name": "yImage",
+        "emoji": "\U0001f4f7",
+        "tagline": "Image & PDF Tools",
+        "description": "Free browser-based tools: compress PDF, convert PDF to images, "
+                       "crop photos, make passport photos, extract text, and more.",
+        "url": "https://image.li-family.us",
+        "color": "violet",
+        "features": ["Compress PDF", "PDF to Image", "Crop & Passport",
+                     "Trim transparency", "Layer analysis"],
+    },
 ]
 
 
