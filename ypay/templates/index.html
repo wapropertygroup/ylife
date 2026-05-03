@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+
+{% block title %}yPay — Support Li Family Apps{% endblock %}
+
+{% block content %}
+<div x-data="paymentApp()">
+
+  <!-- Hero -->
+  <div class="text-center mb-12 fade-up">
+    <div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-500 shadow-lg shadow-indigo-500/20 mb-4">
+      <svg class="w-8 h-8 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/>
+      </svg>
+    </div>
+    <h1 class="text-3xl sm:text-4xl font-extrabold mb-3 tracking-tight">
+      <span class="bg-gradient-to-r from-indigo-400 to-violet-400 bg-clip-text text-transparent">Support Li Family Apps</span>
+    </h1>
+    <p class="text-base sm:text-lg text-slate-500 dark:text-slate-400 max-w-2xl mx-auto leading-relaxed">
+      Help keep yStocker, yPlanner, yPlanter, yTracker, and yHome running.
+      Every contribution goes directly to hosting and development.
+    </p>
+  </div>
+
+  {% if not stripe_configured %}
+  <!-- Stripe not configured banner -->
+  <div class="max-w-2xl mx-auto mb-8 p-4 rounded-2xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/50">
+    <div class="flex items-center gap-3">
+      <span class="text-2xl">&#x26a0;</span>
+      <div>
+        <p class="text-sm font-semibold text-amber-700 dark:text-amber-300">Stripe not configured</p>
+        <p class="text-xs text-amber-600 dark:text-amber-400 mt-0.5">
+          Add <code class="bg-amber-100 dark:bg-amber-900/40 px-1 rounded">STRIPE_SECRET_KEY</code> and
+          <code class="bg-amber-100 dark:bg-amber-900/40 px-1 rounded">STRIPE_PUBLISHABLE_KEY</code> to your <code>.env</code> file.
+          Get keys at <a href="https://dashboard.stripe.com/apikeys" target="_blank" class="underline">dashboard.stripe.com</a>.
+        </p>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Payment Cards -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 max-w-4xl mx-auto mb-12">
+    {% for item in items %}
+    <div class="payment-card group rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50
+                hover:border-brand/40 hover:shadow-xl hover:shadow-brand/10 transition-all duration-300 overflow-hidden
+                {% if item.id == 'custom' %}col-span-1 sm:col-span-2 lg:col-span-4{% endif %}">
+
+      <div class="h-1 bg-gradient-to-r from-indigo-400 to-violet-400 opacity-60 group-hover:opacity-100 transition-opacity"></div>
+
+      <div class="p-6 {% if item.id == 'custom' %}flex flex-col sm:flex-row items-center gap-6{% endif %}">
+        {% if item.id != 'custom' %}
+        <!-- Fixed-amount card -->
+        <div class="text-center">
+          <div class="text-4xl mb-3">{{ item.emoji }}</div>
+          <h3 class="text-lg font-bold mb-1">{{ item.name }}</h3>
+          <p class="text-sm text-slate-500 dark:text-slate-400 mb-4">{{ item.description }}</p>
+          <div class="text-3xl font-extrabold mb-4">
+            <span class="text-slate-400 text-lg">$</span>{{ "%.0f" | format(item.price) }}
+          </div>
+          <button @click="checkout('{{ item.id }}')" :disabled="loading"
+                  class="w-full px-4 py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-violet-500 text-white text-sm font-semibold
+                         hover:from-indigo-600 hover:to-violet-600 transition disabled:opacity-50">
+            <span x-show="!loading || selectedId !== '{{ item.id }}'">Pay ${{ "%.0f" | format(item.price) }}</span>
+            <span x-show="loading && selectedId === '{{ item.id }}'" class="flex items-center justify-center gap-2">
+              <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+              Processing...
+            </span>
+          </button>
+        </div>
+        {% else %}
+        <!-- Custom amount card -->
+        <div class="text-4xl shrink-0">{{ item.emoji }}</div>
+        <div class="flex-1 text-center sm:text-left">
+          <h3 class="text-lg font-bold mb-1">{{ item.name }}</h3>
+          <p class="text-sm text-slate-500 dark:text-slate-400">{{ item.description }}</p>
+        </div>
+        <div class="flex items-center gap-3">
+          <div class="relative">
+            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold">$</span>
+            <input type="number" x-model="customAmount" min="1" max="9999" step="1" placeholder="10"
+                   class="w-28 pl-7 pr-3 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800
+                          text-lg font-bold text-center focus:ring-2 focus:ring-brand/40 outline-none">
+          </div>
+          <button @click="checkout('custom')" :disabled="loading || !customAmount || customAmount < 1"
+                  class="px-6 py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-violet-500 text-white text-sm font-semibold
+                         hover:from-indigo-600 hover:to-violet-600 transition disabled:opacity-50 whitespace-nowrap">
+            <span x-show="!loading || selectedId !== 'custom'">Pay Now</span>
+            <span x-show="loading && selectedId === 'custom'" class="flex items-center gap-2">
+              <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+              Processing...
+            </span>
+          </button>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- Error message -->
+  <div x-show="error" x-text="error"
+       class="max-w-2xl mx-auto mb-8 p-3 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700/50 text-sm text-red-600 dark:text-red-400 text-center"></div>
+
+  <!-- Security badges -->
+  <div class="text-center mb-8">
+    <div class="flex flex-wrap justify-center gap-4 text-xs text-slate-400 dark:text-slate-500">
+      <span class="inline-flex items-center gap-1.5">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+        Secure checkout via Stripe
+      </span>
+      <span class="inline-flex items-center gap-1.5">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+        SSL encrypted
+      </span>
+      <span class="inline-flex items-center gap-1.5">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/></svg>
+        Visa, Mastercard, Amex, Apple Pay
+      </span>
+    </div>
+  </div>
+
+  <!-- Powered by apps -->
+  <div class="text-center">
+    <p class="text-xs text-slate-400 dark:text-slate-600 mb-3 uppercase tracking-widest font-medium">Powering these apps</p>
+    <div class="flex flex-wrap justify-center gap-3">
+      <a href="https://stock.li-family.us" target="_blank" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-indigo-300 dark:hover:border-indigo-700 hover:text-indigo-500 transition">
+        &#x1f4c8; yStocker
+      </a>
+      <a href="https://planner.li-family.us" target="_blank" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-indigo-300 dark:hover:border-indigo-700 hover:text-indigo-500 transition">
+        &#x1f5fa; yPlanner
+      </a>
+      <a href="https://plant.li-family.us" target="_blank" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-indigo-300 dark:hover:border-indigo-700 hover:text-indigo-500 transition">
+        &#x1f331; yPlanter
+      </a>
+      <a href="https://tracker.li-family.us" target="_blank" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-indigo-300 dark:hover:border-indigo-700 hover:text-indigo-500 transition">
+        &#x1f3f7; yTracker
+      </a>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function paymentApp() {
+  return {
+    loading: false,
+    selectedId: '',
+    customAmount: 10,
+    error: '',
+
+    async checkout(itemId) {
+      if (this.loading) return;
+      this.loading = true;
+      this.selectedId = itemId;
+      this.error = '';
+
+      try {
+        const resp = await fetch('/api/checkout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            item_id: itemId,
+            amount: itemId === 'custom' ? this.customAmount : undefined,
+          }),
+        });
+        const data = await resp.json();
+
+        if (resp.ok && data.checkout_url) {
+          // Redirect to Stripe Checkout
+          window.location.href = data.checkout_url;
+        } else {
+          this.error = data.error || 'Something went wrong';
+          this.loading = false;
+        }
+      } catch(e) {
+        this.error = 'Network error: ' + e.message;
+        this.loading = false;
+      }
+    },
+  };
+}
+</script>
+{% endblock %}

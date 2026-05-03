@@ -56,6 +56,18 @@ APPS = [
         "features": ["Multi-store tracking", "Price drop alerts", "Record-low detection",
                      "Price history charts", "AI analysis"],
     },
+    {
+        "id": "pay",
+        "name": "yPay",
+        "emoji": "\U0001f4b3",
+        "tagline": "Payments",
+        "description": "Support the Li Family apps with a one-time contribution. "
+                       "Secure payments powered by Stripe.",
+        "url": "https://pay.li-family.us",
+        "color": "violet",
+        "features": ["Stripe Checkout", "One-time payments", "Custom amounts",
+                     "Apple Pay & Google Pay"],
+    },
 ]
 
 
