@@ -2,62 +2,94 @@
 {% block title %}Passport Photo — yImage{% endblock %}
 {% block content %}
 <div x-data="passportTool()">
-  <div class="max-w-2xl mx-auto">
+  <div class="max-w-3xl mx-auto">
     <a href="/" class="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-brand transition mb-4">
       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg> All Tools
     </a>
     <h1 class="text-2xl font-extrabold mb-2">🪪 Passport Photo</h1>
-    <p class="text-sm text-slate-500 dark:text-slate-400 mb-6">Upload a portrait, auto-detect face, and generate a standard passport photo with the correct size and background.</p>
+    <p class="text-sm text-slate-500 dark:text-slate-400 mb-6">Upload a portrait, auto-detect face, adjust crop, and generate passport photos for any standard size. Print-ready layouts for 4x6 and 5x7 paper.</p>
 
+    <!-- Upload -->
     <div x-show="!preview" class="drop-zone rounded-2xl border-2 border-dashed border-slate-300 dark:border-slate-700 p-10 text-center cursor-pointer transition hover:border-brand"
-         @click="$refs.fi.click()" @dragover.prevent @drop.prevent="loadFile(event.dataTransfer.files[0])">
+         @click="$refs.fi.click()" @dragover.prevent @drop.prevent="loadFile($event.dataTransfer.files[0])">
       <input type="file" accept="image/*" x-ref="fi" @change="loadFile($event.target.files[0])" class="hidden">
       <svg class="w-12 h-12 mx-auto mb-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
       <p class="text-sm text-slate-500">Upload a portrait photo</p>
       <p class="text-xs text-slate-400 mt-1">Face should be clearly visible, frontal view</p>
     </div>
 
-    <!-- Preview + Options -->
+    <!-- Preview + Manual Crop + Options -->
     <div x-show="preview" class="space-y-4">
-      <div class="flex items-start gap-4">
-        <div class="relative shrink-0">
-          <img :src="preview" class="w-48 h-auto rounded-xl border border-slate-700" alt="Preview">
-          <div x-show="faceBox" class="absolute border-2 border-brand rounded"
-               :style="`left:${faceBox?.x*100}%;top:${faceBox?.y*100}%;width:${faceBox?.w*100}%;height:${faceBox?.h*100}%`"></div>
+      <div class="flex flex-col sm:flex-row gap-4">
+        <!-- Canvas for manual crop -->
+        <div class="shrink-0">
+          <p class="text-xs text-slate-400 mb-1">Drag to adjust face crop area:</p>
+          <div class="relative inline-block border border-slate-700 rounded-lg overflow-hidden">
+            <canvas x-ref="canvas" width="300" height="400"
+                    @mousedown="startCrop($event)" @mousemove="moveCrop($event)" @mouseup="endCrop()"
+                    @touchstart.prevent="startCrop($event.touches[0])" @touchmove.prevent="moveCrop($event.touches[0])" @touchend="endCrop()"
+                    class="block cursor-crosshair"></canvas>
+          </div>
+          <button @click="detectFace()" class="mt-1 text-xs text-brand hover:underline">Auto-detect face</button>
+          &middot;
+          <button @click="reset()" class="text-xs text-slate-400 hover:text-red-500">Change photo</button>
         </div>
+
+        <!-- Options -->
         <div class="flex-1 space-y-3">
           <div>
-            <label class="text-xs font-medium block mb-1">Photo Size</label>
+            <label class="text-xs font-medium block mb-1" data-i18n="passport.size">Photo Size</label>
             <select x-model="size" class="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm">
-              <option value="us_2x2">US Passport (2×2 in / 51×51mm)</option>
-              <option value="eu_35x45">EU / International (35×45mm)</option>
-              <option value="cn_33x48">China (33×48mm)</option>
-              <option value="uk_35x45">UK (35×45mm)</option>
+              <option value="us_2x2">US Passport (2x2 in / 51x51mm)</option>
+              <option value="eu_35x45">EU / International (35x45mm)</option>
+              <option value="cn_33x48">China (33x48mm)</option>
+              <option value="uk_35x45">UK (35x45mm)</option>
             </select>
           </div>
+
           <div>
-            <label class="text-xs font-medium block mb-1">Background Color</label>
+            <label class="text-xs font-medium block mb-1" data-i18n="passport.bg">Background Color</label>
             <div class="flex gap-2">
               <button @click="bgColor='#ffffff'" :class="bgColor==='#ffffff'?'ring-2 ring-brand':''" class="w-8 h-8 rounded-full bg-white border border-slate-300" title="White"></button>
               <button @click="bgColor='#dbeafe'" :class="bgColor==='#dbeafe'?'ring-2 ring-brand':''" class="w-8 h-8 rounded-full bg-blue-100 border border-slate-300" title="Light Blue"></button>
-              <button @click="bgColor='#e0e7ff'" :class="bgColor==='#e0e7ff'?'ring-2 ring-brand':''" class="w-8 h-8 rounded-full bg-indigo-100 border border-slate-300" title="Light Indigo"></button>
+              <button @click="bgColor='#dc2626'" :class="bgColor==='#dc2626'?'ring-2 ring-brand':''" class="w-8 h-8 rounded-full bg-red-600 border border-slate-300" title="Red (China)"></button>
               <button @click="bgColor='#f1f5f9'" :class="bgColor==='#f1f5f9'?'ring-2 ring-brand':''" class="w-8 h-8 rounded-full bg-slate-100 border border-slate-300" title="Light Gray"></button>
+              <input type="color" x-model="bgColor" class="w-8 h-8 rounded cursor-pointer border-0" title="Custom">
             </div>
           </div>
-          <div x-show="faceBox" class="text-xs text-green-500">Face detected (confidence: <span x-text="(faceBox?.confidence*100).toFixed(0)+'%'"></span>)</div>
-          <div x-show="detecting" class="text-xs text-slate-400">Detecting face...</div>
-          <button @click="reset()" class="text-xs text-slate-400 hover:text-red-500">Change photo</button>
+
+          <div>
+            <label class="text-xs font-medium block mb-1" data-i18n="passport.print">Print Layout</label>
+            <select x-model="printLayout" class="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm">
+              <option value="single">Single photo (download one)</option>
+              <option value="4x6">4x6" sheet (fits 2-8 photos)</option>
+              <option value="5x7">5x7" sheet (fits 2-12 photos)</option>
+              <option value="a4">A4 sheet (fits 4-16 photos)</option>
+            </select>
+          </div>
+
+          <div x-show="faceBox" class="text-xs text-green-500">
+            Face detected (confidence: <span x-text="(faceBox?.confidence*100).toFixed(0)+'%'"></span>)
+          </div>
+          <div x-show="detecting" class="text-xs text-slate-400" data-i18n="passport.detect">Detecting face...</div>
         </div>
       </div>
 
-      <button @click="generate()" :disabled="processing"
-              class="w-full py-3 rounded-xl bg-brand text-white font-semibold hover:bg-brand-dark transition disabled:opacity-50">
-        <span x-show="!processing">Generate Passport Photo</span>
-        <span x-show="processing" class="flex items-center justify-center gap-2">
-          <svg class="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-          Generating...
-        </span>
-      </button>
+      <!-- Action buttons -->
+      <div class="flex gap-2">
+        <button @click="generate()" :disabled="processing"
+                class="flex-1 py-3 rounded-xl bg-brand text-white font-semibold hover:bg-brand-dark transition disabled:opacity-50">
+          <span x-show="!processing" data-i18n="passport.generate">Generate Passport Photo</span>
+          <span x-show="processing" class="flex items-center justify-center gap-2">
+            <svg class="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+            Generating...
+          </span>
+        </button>
+        <button x-show="printLayout !== 'single'" @click="generatePrint()" :disabled="processing"
+                class="py-3 px-5 rounded-xl border border-brand text-brand font-semibold hover:bg-brand hover:text-white transition disabled:opacity-50">
+          <span data-i18n="passport.print_btn">Print Sheet</span>
+        </button>
+      </div>
     </div>
 
     <p x-show="error" class="mt-4 text-sm text-red-500" x-text="error"></p>
@@ -69,39 +101,159 @@
 function passportTool() {
   return {
     file: null, preview: null, faceBox: null, detecting: false,
-    size: 'us_2x2', bgColor: '#ffffff', processing: false, error: '',
+    size: 'us_2x2', bgColor: '#ffffff', printLayout: 'single',
+    processing: false, error: '',
+    // Crop state
+    crop: {x:0, y:0, w:0, h:0}, dragging: false, dragMode: '', startX:0, startY:0,
+    imgEl: null, canvasW: 300, canvasH: 400,
+
     loadFile(f) {
       if (!f) return;
       this.file = f; this.error = ''; this.faceBox = null;
       const reader = new FileReader();
-      reader.onload = (e) => { this.preview = e.target.result; this.detectFace(); };
+      reader.onload = (e) => {
+        this.preview = e.target.result;
+        const img = new window.Image();
+        img.onload = () => {
+          this.imgEl = img;
+          // Fit canvas to image aspect ratio
+          const aspect = img.width / img.height;
+          this.canvasW = Math.min(300, img.width);
+          this.canvasH = Math.round(this.canvasW / aspect);
+          this.$nextTick(() => {
+            const c = this.$refs.canvas;
+            c.width = this.canvasW; c.height = this.canvasH;
+            // Default crop: center 60% of image
+            this.crop = {x: this.canvasW*0.2, y: this.canvasH*0.05, w: this.canvasW*0.6, h: this.canvasH*0.8};
+            this.drawCanvas();
+            this.detectFace();
+          });
+        };
+        img.src = e.target.result;
+      };
       reader.readAsDataURL(f);
     },
+
+    drawCanvas() {
+      const c = this.$refs.canvas;
+      if (!c || !this.imgEl) return;
+      const ctx = c.getContext('2d');
+      ctx.drawImage(this.imgEl, 0, 0, c.width, c.height);
+      // Darken outside crop
+      ctx.fillStyle = 'rgba(0,0,0,0.45)';
+      ctx.fillRect(0, 0, c.width, c.height);
+      // Show crop area
+      const cr = this.crop;
+      ctx.clearRect(cr.x, cr.y, cr.w, cr.h);
+      ctx.drawImage(this.imgEl, cr.x * this.imgEl.width/c.width, cr.y * this.imgEl.height/c.height,
+                    cr.w * this.imgEl.width/c.width, cr.h * this.imgEl.height/c.height,
+                    cr.x, cr.y, cr.w, cr.h);
+      // Border
+      ctx.strokeStyle = '#7c3aed'; ctx.lineWidth = 2; ctx.setLineDash([4,3]);
+      ctx.strokeRect(cr.x, cr.y, cr.w, cr.h);
+      ctx.setLineDash([]);
+      // Corner handles
+      const hs = 6;
+      ctx.fillStyle = '#7c3aed';
+      [[cr.x,cr.y],[cr.x+cr.w,cr.y],[cr.x,cr.y+cr.h],[cr.x+cr.w,cr.y+cr.h]].forEach(([px,py]) => {
+        ctx.fillRect(px-hs/2, py-hs/2, hs, hs);
+      });
+    },
+
+    _getPos(e) { const r = this.$refs.canvas.getBoundingClientRect(); return {x:e.clientX-r.left, y:e.clientY-r.top}; },
+
+    startCrop(e) {
+      const p = this._getPos(e);
+      const cr = this.crop;
+      const margin = 12;
+      // Check if near a corner (resize) or inside (move)
+      if (Math.abs(p.x-cr.x)<margin && Math.abs(p.y-cr.y)<margin) { this.dragMode='tl'; }
+      else if (Math.abs(p.x-(cr.x+cr.w))<margin && Math.abs(p.y-cr.y)<margin) { this.dragMode='tr'; }
+      else if (Math.abs(p.x-cr.x)<margin && Math.abs(p.y-(cr.y+cr.h))<margin) { this.dragMode='bl'; }
+      else if (Math.abs(p.x-(cr.x+cr.w))<margin && Math.abs(p.y-(cr.y+cr.h))<margin) { this.dragMode='br'; }
+      else if (p.x>cr.x && p.x<cr.x+cr.w && p.y>cr.y && p.y<cr.y+cr.h) { this.dragMode='move'; }
+      else { this.dragMode='new'; this.crop = {x:p.x,y:p.y,w:0,h:0}; }
+      this.startX=p.x; this.startY=p.y;
+      this.dragging=true;
+    },
+
+    moveCrop(e) {
+      if (!this.dragging) return;
+      const p = this._getPos(e);
+      const dx = p.x-this.startX, dy = p.y-this.startY;
+      const cr = this.crop;
+      if (this.dragMode==='move') {
+        cr.x = Math.max(0, Math.min(this.canvasW-cr.w, cr.x+dx));
+        cr.y = Math.max(0, Math.min(this.canvasH-cr.h, cr.y+dy));
+      } else if (this.dragMode==='br') { cr.w=Math.max(20,cr.w+dx); cr.h=Math.max(20,cr.h+dy); }
+      else if (this.dragMode==='tl') { cr.x+=dx; cr.y+=dy; cr.w-=dx; cr.h-=dy; }
+      else if (this.dragMode==='tr') { cr.y+=dy; cr.w+=dx; cr.h-=dy; }
+      else if (this.dragMode==='bl') { cr.x+=dx; cr.w-=dx; cr.h+=dy; }
+      else if (this.dragMode==='new') { cr.w=p.x-cr.x; cr.h=p.y-cr.y; }
+      this.startX=p.x; this.startY=p.y;
+      this.drawCanvas();
+    },
+    endCrop() { this.dragging=false; },
+
     async detectFace() {
       this.detecting = true;
       const form = new FormData(); form.append('file', this.file);
       try {
         const resp = await fetch('/api/passport-photo/detect', {method:'POST', body:form});
         const data = await resp.json();
-        if (resp.ok) this.faceBox = data;
-        else this.error = data.error || 'Face detection failed';
-      } catch(e) { this.error = 'Detection error: ' + e.message; }
+        if (resp.ok && data.x != null) {
+          this.faceBox = data;
+          // Update crop to center on detected face
+          const c = this.$refs.canvas;
+          const fx = data.x * c.width, fy = data.y * c.height;
+          const fw = data.w * c.width, fh = data.h * c.height;
+          // Expand face box for passport framing
+          const expand = 1.8;
+          const cw = fw * expand, ch = fh * expand * 1.3;
+          this.crop = {
+            x: Math.max(0, fx + fw/2 - cw/2),
+            y: Math.max(0, fy - fh * 0.3),
+            w: Math.min(c.width, cw),
+            h: Math.min(c.height, ch),
+          };
+          this.drawCanvas();
+        }
+      } catch(e) { /* silent */ }
       this.detecting = false;
     },
-    async generate() {
+
+    async generate() { await this._doGenerate('single'); },
+    async generatePrint() { await this._doGenerate(this.printLayout); },
+
+    async _doGenerate(layout) {
       if (!this.file || this.processing) return;
       this.processing = true; this.error = '';
       const form = new FormData();
-      form.append('file', this.file); form.append('size', this.size); form.append('bg_color', this.bgColor);
+      form.append('file', this.file);
+      form.append('size', this.size);
+      form.append('bg_color', this.bgColor);
+      form.append('print_layout', layout);
+      // Send crop coordinates (as fractions of canvas)
+      const c = this.$refs.canvas;
+      form.append('crop_x', (this.crop.x / c.width).toFixed(4));
+      form.append('crop_y', (this.crop.y / c.height).toFixed(4));
+      form.append('crop_w', (this.crop.w / c.width).toFixed(4));
+      form.append('crop_h', (this.crop.h / c.height).toFixed(4));
       try {
         const resp = await fetch('/api/passport-photo', {method:'POST', body:form});
-        if (!resp.ok) { const d = await resp.json(); this.error = d.error||'Failed'; this.processing=false; return; }
+        if (!resp.ok) {
+          try { const d = await resp.json(); this.error = d.error||'Failed'; } catch(_) { this.error='Server error'; }
+          this.processing=false; return;
+        }
         const blob = await resp.blob();
-        const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`passport_${this.size}.jpg`; a.click();
-      } catch(e) { this.error='Network error: '+e.message; }
+        const name = layout === 'single' ? `passport_${this.size}.jpg` : `passport_${layout}_sheet.jpg`;
+        const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click();
+        URL.revokeObjectURL(a.href);
+      } catch(e) { this.error='Error: '+e.message; }
       this.processing = false;
     },
-    reset() { this.file=null; this.preview=null; this.faceBox=null; this.error=''; },
+
+    reset() { this.file=null; this.preview=null; this.faceBox=null; this.error=''; this.imgEl=null; },
   };
 }
 </script>

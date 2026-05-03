@@ -250,19 +250,34 @@ def api_passport_detect():
 
 @bp.route("/api/passport-photo", methods=["POST"])
 def api_passport_photo():
-    """Generate a passport photo."""
+    """Generate a passport photo with optional manual crop and print sheet layout."""
     data, filename, err = _get_upload(allowed_types=["jpg", "jpeg", "png", "webp"])
     if err:
         return err
 
     size = request.form.get("size", "us_2x2")
     bg_color = request.form.get("bg_color", "#ffffff")
+    print_layout = request.form.get("print_layout", "single")
 
-    log.info("Passport photo: %s (size=%s, bg=%s)", filename, size, bg_color)
+    # Manual crop coordinates (fractions 0-1)
+    crop_rect = None
+    try:
+        cx = float(request.form.get("crop_x", ""))
+        cy = float(request.form.get("crop_y", ""))
+        cw = float(request.form.get("crop_w", ""))
+        ch = float(request.form.get("crop_h", ""))
+        if cw > 0 and ch > 0:
+            crop_rect = (cx, cy, cw, ch)
+    except (ValueError, TypeError):
+        pass
+
+    log.info("Passport photo: %s (size=%s, bg=%s, layout=%s, crop=%s)",
+             filename, size, bg_color, print_layout, crop_rect)
 
     try:
         from yimage.processing import make_passport_photo
-        result = make_passport_photo(data, size, bg_color)
+        result = make_passport_photo(data, size, bg_color, crop_rect=crop_rect,
+                                     print_layout=print_layout)
         return send_file(
             BytesIO(result), mimetype="image/jpeg",
             as_attachment=True, download_name=f"passport_{size}.jpg",

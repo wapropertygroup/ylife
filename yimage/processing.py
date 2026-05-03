@@ -222,6 +222,13 @@ _PASSPORT_SIZES = {
     "uk_35x45": (413, 531),   # same as EU
 }
 
+# Print sheet sizes in pixels at 300 DPI
+_PRINT_SHEETS = {
+    "4x6": (1800, 1200),   # 6x4 inches at 300 DPI (landscape)
+    "5x7": (2100, 1500),   # 7x5 inches at 300 DPI (landscape)
+    "a4":  (3508, 2480),   # A4 landscape at 300 DPI
+}
+
 
 def detect_face(data: bytes) -> Optional[dict]:
     """Detect face in image, return bounding box as fractions of image dimensions."""
@@ -257,50 +264,98 @@ def detect_face(data: bytes) -> Optional[dict]:
 
 
 def make_passport_photo(data: bytes, size: str = "us_2x2",
-                        bg_color: str = "#ffffff") -> bytes:
-    """Generate a passport photo: detect face, crop, add background."""
+                        bg_color: str = "#ffffff",
+                        crop_rect: tuple | None = None,
+                        print_layout: str = "single") -> bytes:
+    """Generate a passport photo with optional manual crop and print sheet layout.
+
+    Args:
+        crop_rect: (x, y, w, h) as fractions of image dimensions (from canvas UI)
+        print_layout: 'single', '4x6', '5x7', or 'a4'
+    """
     img = Image.open(io.BytesIO(data)).convert("RGB")
     target_w, target_h = _PASSPORT_SIZES.get(size, (600, 600))
-
-    # Detect face
-    face = detect_face(data)
-    if not face:
-        # No face detected — center crop
-        face = {"x": 0.25, "y": 0.1, "w": 0.5, "h": 0.7}
-
-    # Calculate crop region centered on face
-    face_cx = (face["x"] + face["w"] / 2) * img.width
-    face_cy = (face["y"] + face["h"] / 2) * img.height
-    face_h = face["h"] * img.height
-
-    # Passport standards: head should be ~70% of frame height,
-    # with ~15% margin above head
-    frame_h = face_h / 0.55  # face is about 55% of total height
-    frame_w = frame_h * (target_w / target_h)
-
-    # Top of frame: head top with ~15% margin
-    head_top = face["y"] * img.height
-    top = head_top - frame_h * 0.15
-    left = face_cx - frame_w / 2
-
-    # Clamp
-    left = max(0, min(img.width - frame_w, left))
-    top = max(0, min(img.height - frame_h, top))
-
-    right = left + frame_w
-    bottom = top + frame_h
-
-    cropped = img.crop((int(left), int(top), int(right), int(bottom)))
-    cropped = cropped.resize((target_w, target_h), Image.Resampling.LANCZOS)
-
-    # Apply background color (replace near-edge pixels if needed)
     bg_rgb = tuple(int(bg_color.lstrip("#")[i:i + 2], 16) for i in (0, 2, 4))
+
+    if crop_rect and crop_rect[2] > 0 and crop_rect[3] > 0:
+        # Use manual crop from canvas UI
+        cx, cy, cw, ch = crop_rect
+        left = int(cx * img.width)
+        upper = int(cy * img.height)
+        right = int((cx + cw) * img.width)
+        lower = int((cy + ch) * img.height)
+        cropped = img.crop((max(0, left), max(0, upper), min(img.width, right), min(img.height, lower)))
+    else:
+        # Auto-detect face and crop
+        face = detect_face(data)
+        if not face:
+            face = {"x": 0.25, "y": 0.1, "w": 0.5, "h": 0.7}
+
+        face_cx = (face["x"] + face["w"] / 2) * img.width
+        face_h = face["h"] * img.height
+
+        frame_h = face_h / 0.55
+        frame_w = frame_h * (target_w / target_h)
+
+        head_top = face["y"] * img.height
+        top = head_top - frame_h * 0.15
+        left = face_cx - frame_w / 2
+
+        left = max(0, min(img.width - frame_w, left))
+        top = max(0, min(img.height - frame_h, top))
+
+        cropped = img.crop((int(left), int(top), int(left + frame_w), int(top + frame_h)))
+
+    # Resize to target passport dimensions
+    photo = cropped.resize((target_w, target_h), Image.Resampling.LANCZOS)
+
+    # Apply background color
     canvas = Image.new("RGB", (target_w, target_h), bg_rgb)
-    canvas.paste(cropped, (0, 0))
+    canvas.paste(photo, (0, 0))
+    photo = canvas
+
+    # Generate print sheet if requested
+    if print_layout in _PRINT_SHEETS:
+        photo = _make_print_sheet(photo, print_layout, bg_rgb)
 
     buf = io.BytesIO()
-    canvas.save(buf, format="JPEG", quality=95)
+    photo.save(buf, format="JPEG", quality=95)
     return buf.getvalue()
+
+
+def _make_print_sheet(photo: Image.Image, layout: str, bg_rgb: tuple) -> Image.Image:
+    """Tile a passport photo onto a print sheet (4x6, 5x7, A4)."""
+    sheet_w, sheet_h = _PRINT_SHEETS[layout]
+    pw, ph = photo.size
+
+    # Add small gap between photos (2mm ~ 24px at 300 DPI)
+    gap = 24
+
+    # Calculate grid
+    cols = (sheet_w + gap) // (pw + gap)
+    rows = (sheet_h + gap) // (ph + gap)
+
+    if cols < 1:
+        cols = 1
+    if rows < 1:
+        rows = 1
+
+    # Center the grid on the sheet
+    total_w = cols * pw + (cols - 1) * gap
+    total_h = rows * ph + (rows - 1) * gap
+    offset_x = (sheet_w - total_w) // 2
+    offset_y = (sheet_h - total_h) // 2
+
+    sheet = Image.new("RGB", (sheet_w, sheet_h), bg_rgb)
+    for r in range(rows):
+        for c in range(cols):
+            x = offset_x + c * (pw + gap)
+            y = offset_y + r * (ph + gap)
+            sheet.paste(photo, (x, y))
+
+    log.info("Print sheet %s: %dx%d grid (%d photos) on %dx%d",
+             layout, cols, rows, cols * rows, sheet_w, sheet_h)
+    return sheet
 
 
 # ---------------------------------------------------------------------------
