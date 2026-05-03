@@ -363,6 +363,135 @@ _IMAGE_SELECTORS: dict[str, list[tuple[str, Optional[str]]]] = {
 }
 
 
+# ---------------------------------------------------------------------------
+# __NEXT_DATA__ extraction (Next.js apps: Walmart, etc.)
+# ---------------------------------------------------------------------------
+
+def _extract_nextdata(soup: BeautifulSoup, store: str) -> dict:
+    """Extract product data from Next.js __NEXT_DATA__ hydration JSON.
+
+    Many modern retail sites (Walmart, etc.) use Next.js and embed product
+    data in <script id="__NEXT_DATA__">.  The price is often NOT in the
+    rendered HTML, only in this JSON blob.
+    """
+    result: dict = {"title": None, "price": None, "image": None, "currency": None}
+    try:
+        script = soup.select_one('script#__NEXT_DATA__')
+        if not script or not script.string:
+            return result
+        data = json.loads(script.string)
+    except Exception:
+        return result
+
+    if store == "walmart":
+        _nextdata_walmart(data, result)
+    else:
+        # Generic: walk the JSON looking for price-like structures
+        _nextdata_generic(data, result)
+
+    if result["price"]:
+        log.info("__NEXT_DATA__ extracted %s price: %s", store, result["price"])
+    return result
+
+
+def _nextdata_walmart(data: dict, result: dict) -> None:
+    """Extract Walmart product info from __NEXT_DATA__ JSON."""
+    try:
+        # Navigate Walmart's Next.js data structure
+        # Path: props.pageProps.initialData.data.product
+        page_props = data.get("props", {}).get("pageProps", {})
+        init_data = page_props.get("initialData", {}).get("data", {})
+
+        # Try multiple paths Walmart has used
+        product = (
+            init_data.get("product")
+            or init_data.get("contentLayout", {}).get("modules", [{}])[0].get("data", {}).get("product")
+            or {}
+        )
+
+        # Title
+        result["title"] = result["title"] or product.get("name")
+
+        # Price — multiple possible locations
+        price_info = product.get("priceInfo", {})
+        current = price_info.get("currentPrice", {})
+        result["price"] = result["price"] or current.get("price")
+
+        if not result["price"]:
+            # Try unitPrice or was price
+            result["price"] = price_info.get("unitPrice", {}).get("price")
+        if not result["price"]:
+            # Try priceRange
+            pr = price_info.get("priceRange", {})
+            result["price"] = pr.get("minPrice") or pr.get("maxPrice")
+        if not result["price"]:
+            # Try offers inside product
+            offers = product.get("offers", [])
+            if offers and isinstance(offers, list):
+                result["price"] = _clean_price(str(offers[0].get("price", "")))
+
+        # Currency
+        result["currency"] = current.get("currencyCode") or "USD"
+
+        # Image
+        images = product.get("imageInfo", {}).get("thumbnailUrl") or product.get("imageInfo", {}).get("allImages", [])
+        if isinstance(images, str):
+            result["image"] = images
+        elif isinstance(images, list) and images:
+            img = images[0]
+            result["image"] = img.get("url") if isinstance(img, dict) else str(img)
+
+        # Also try the idml path
+        if not result["price"]:
+            idml = init_data.get("idml", {})
+            for key in idml:
+                mod = idml[key]
+                if isinstance(mod, dict):
+                    p = mod.get("price") or mod.get("currentPrice")
+                    if p:
+                        result["price"] = _clean_price(str(p)) if isinstance(p, str) else p
+                        break
+
+    except (KeyError, IndexError, TypeError) as exc:
+        log.debug("Walmart __NEXT_DATA__ parse failed: %s", exc)
+
+
+def _nextdata_generic(data: dict, result: dict) -> None:
+    """Generic extraction: walk JSON looking for price/name/image keys."""
+    try:
+        text = json.dumps(data)
+        # Quick check: does it even contain price-like content?
+        if '"price"' not in text.lower():
+            return
+
+        def _walk(obj: dict | list, depth: int = 0) -> None:
+            if depth > 8 or result["price"]:
+                return
+            if isinstance(obj, dict):
+                # Check for price-like keys
+                for key in ("price", "currentPrice", "salePrice", "finalPrice"):
+                    val = obj.get(key)
+                    if val and not result["price"]:
+                        p = _clean_price(str(val)) if isinstance(val, str) else val
+                        if isinstance(p, (int, float)) and 0.5 < p < 100000:
+                            result["price"] = float(p)
+                # Title
+                if not result["title"]:
+                    result["title"] = obj.get("productName") or obj.get("name") or obj.get("title")
+                # Recurse
+                for v in obj.values():
+                    if isinstance(v, (dict, list)):
+                        _walk(v, depth + 1)
+            elif isinstance(obj, list):
+                for item in obj[:10]:  # limit list traversal
+                    if isinstance(item, (dict, list)):
+                        _walk(item, depth + 1)
+
+        _walk(data)
+    except Exception:
+        pass
+
+
 def _css_extract_price(soup: BeautifulSoup, store: str) -> Optional[float]:
     """Fallback: extract price via store-specific CSS selectors."""
     for selector, attr in _PRICE_SELECTORS.get(store, []):
@@ -582,6 +711,9 @@ def fetch_product(url_or_id: str, store: Optional[str] = None) -> Optional[dict]
     # ── Layer 1: JSON-LD ──
     ld = _extract_jsonld(soup)
 
+    # ── Layer 1b: __NEXT_DATA__ (Next.js hydration data — Walmart, etc.) ──
+    nextdata = _extract_nextdata(soup, store)
+
     # ── Layer 2: <meta> tags ──
     meta = _extract_meta(soup)
 
@@ -590,11 +722,11 @@ def fetch_product(url_or_id: str, store: Optional[str] = None) -> Optional[dict]
     css_title = _css_extract_title(soup, store)
     css_image = _css_extract_image(soup, store)
 
-    # ── Merge (prefer JSON-LD > meta > CSS) ──
-    title = ld.get("title") or meta.get("title") or css_title or f"{STORE_NAMES.get(store, store)} Product"
-    price = ld.get("price") or meta.get("price") or css_price
-    image = ld.get("image") or meta.get("image") or css_image or ""
-    currency = ld.get("currency") or "USD"
+    # ── Merge (prefer JSON-LD > __NEXT_DATA__ > meta > CSS) ──
+    title = ld.get("title") or nextdata.get("title") or meta.get("title") or css_title or f"{STORE_NAMES.get(store, store)} Product"
+    price = ld.get("price") or nextdata.get("price") or meta.get("price") or css_price
+    image = ld.get("image") or nextdata.get("image") or meta.get("image") or css_image or ""
+    currency = ld.get("currency") or nextdata.get("currency") or "USD"
 
     log.info("Scraped %s/%s: title=%s, price=%s, image=%s",
              store, item_id, title[:50], price, bool(image))

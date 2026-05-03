@@ -368,7 +368,7 @@ def api_delete_item(store: str, item_id: str):
 
 @bp.route("/api/item/<store>/<item_id>/prices")
 def api_prices(store: str, item_id: str):
-    """Get price history for an item."""
+    """Get price history for an item, including alt URL prices."""
     table = _get_prices_table()
     if not table:
         return jsonify({"error": "Database unavailable", "prices": []}), 503
@@ -378,11 +378,39 @@ def api_prices(store: str, item_id: str):
 
     try:
         from boto3.dynamodb.conditions import Key
+
+        # 1. Fetch primary item prices
         key = f"{store}#{item_id}"
         resp = table.query(
             KeyConditionExpression=Key("store_item_id").eq(key) & Key("timestamp").gte(since),
             ScanIndexForward=True,
         )
+        all_prices = list(resp.get("Items", []))
+
+        # 2. Also fetch prices for all alternate URLs
+        items_table = _get_items_table()
+        if items_table:
+            try:
+                session_id = _get_session_id()
+                item_resp = items_table.get_item(
+                    Key={"user_id": session_id, "item_key": f"{store}#{item_id}"}
+                )
+                item = item_resp.get("Item")
+                if item:
+                    alt_urls_raw = item.get("alt_urls", "[]")
+                    alt_urls = json.loads(alt_urls_raw) if isinstance(alt_urls_raw, str) else (alt_urls_raw or [])
+                    for au in alt_urls:
+                        alt_key = f'{au.get("store")}#{au.get("item_id")}'
+                        alt_resp = table.query(
+                            KeyConditionExpression=Key("store_item_id").eq(alt_key) & Key("timestamp").gte(since),
+                            ScanIndexForward=True,
+                        )
+                        all_prices.extend(alt_resp.get("Items", []))
+            except Exception as exc:
+                log.debug("Failed to fetch alt URL prices: %s", exc)
+
+        # 3. Sort all prices by timestamp and format
+        all_prices.sort(key=lambda p: int(p.get("timestamp", 0)))
         prices = _decimal_to_float([
             {"timestamp": int(p["timestamp"]), "price": float(p["price"]),
              "formatted_date": _format_ts(int(p["timestamp"])),
@@ -390,7 +418,7 @@ def api_prices(store: str, item_id: str):
              "image_url": p.get("image_url", ""),
              "item_url": p.get("item_url", ""),
              "store": p.get("store", ""),}
-            for p in resp.get("Items", []) if p.get("price")
+            for p in all_prices if p.get("price")
         ])
         return jsonify({"prices": prices})
     except Exception as exc:

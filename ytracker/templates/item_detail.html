@@ -263,8 +263,16 @@
                   :class="row.isRecordLow ? 'bg-amber-50/50 dark:bg-amber-900/10' : ''">
                 <!-- Date -->
                 <td class="py-2.5 px-3 whitespace-nowrap">
-                  <div class="text-slate-700 dark:text-slate-200" x-text="row.dateStr"></div>
-                  <div class="text-[10px] text-slate-400 dark:text-slate-500" x-text="row.timeStr"></div>
+                  <div class="flex items-center gap-1.5">
+                    <span x-show="row.isAlt" class="w-2 h-2 rounded-full shrink-0" :style="'background:' + row.storeColor"></span>
+                    <div>
+                      <div class="text-slate-700 dark:text-slate-200" x-text="row.dateStr"></div>
+                      <div class="text-[10px] text-slate-400 dark:text-slate-500">
+                        <span x-text="row.timeStr"></span>
+                        <span x-show="row.isAlt" class="ml-1 font-medium" :style="'color:' + row.storeColor" x-text="row.storeName"></span>
+                      </div>
+                    </div>
+                  </div>
                 </td>
                 <!-- Snapshot -->
                 <td class="py-2.5 px-3">
@@ -405,18 +413,25 @@ function itemDetail() {
     get historyRows() {
       // Build rows from prices (newest first), compute deltas
       const sorted = [...this.prices].reverse();
+      const storeNames = {{ store_names | tojson }};
+      const storeColors = {{ store_colors | tojson }};
       const rows = sorted.map((p, i) => {
         const dt = new Date(p.timestamp);
         const prev = sorted[i + 1]; // previous check (older)
         const delta = prev ? p.price - prev.price : null;
         const deltaPct = prev && prev.price > 0 ? (delta / prev.price) * 100 : 0;
         const recordLow = this.item?.record_low_price;
+        const pStore = p.store || store;
         return {
           timestamp: p.timestamp,
           price: p.price,
           title: p.title || '',
           image_url: p.image_url || '',
           item_url: p.item_url || '',
+          store: pStore,
+          storeName: storeNames[pStore] || pStore,
+          storeColor: storeColors[pStore] || '#94a3b8',
+          isAlt: pStore !== store,
           dateStr: dt.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }),
           timeStr: dt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
           delta,
@@ -487,38 +502,79 @@ function itemDetail() {
       if (!canvas || this.prices.length === 0) return;
       if (this.chart) this.chart.destroy();
 
+      const storeColors = {{ store_colors | tojson }};
+      const storeNames = {{ store_names | tojson }};
+
+      // Group prices by store for multi-line chart
+      const storeGroups = {};
+      this.prices.forEach(p => {
+        const s = p.store || store;
+        if (!storeGroups[s]) storeGroups[s] = [];
+        storeGroups[s].push(p);
+      });
+
+      // Build unified labels (all unique dates in order)
       const labels = this.prices.map(p => {
         const d = new Date(p.timestamp);
         return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
       });
-      const data = this.prices.map(p => p.price);
-      const minP = Math.min(...data);
-      const isRecordLow = this.item?.is_record_low;
+      const timestamps = this.prices.map(p => p.timestamp);
+
+      const datasets = [];
+      const stores = Object.keys(storeGroups);
+
+      if (stores.length <= 1) {
+        // Single store — simple chart
+        const data = this.prices.map(p => p.price);
+        const isRecordLow = this.item?.is_record_low;
+        datasets.push({
+          label: storeNames[store] || 'Price',
+          data,
+          borderColor: isRecordLow ? '#f59e0b' : this.storeColor,
+          borderWidth: 2,
+          fill: true,
+          backgroundColor: (isRecordLow ? '#f59e0b' : this.storeColor) + '15',
+          pointRadius: data.length < 30 ? 3 : 0,
+          pointHoverRadius: 5,
+          tension: 0.3,
+        });
+      } else {
+        // Multi-store — one line per store, aligned to unified timeline
+        stores.forEach(s => {
+          const color = storeColors[s] || '#94a3b8';
+          const isPrimary = s === store;
+          // Map store prices to the unified timeline (null where no data)
+          const dataMap = {};
+          storeGroups[s].forEach(p => { dataMap[p.timestamp] = p.price; });
+          const data = timestamps.map(t => dataMap[t] ?? null);
+
+          datasets.push({
+            label: storeNames[s] || s,
+            data,
+            borderColor: color,
+            borderWidth: isPrimary ? 2.5 : 1.5,
+            fill: isPrimary,
+            backgroundColor: isPrimary ? color + '15' : 'transparent',
+            pointRadius: 0,
+            pointHoverRadius: 5,
+            tension: 0.3,
+            spanGaps: true,
+            borderDash: isPrimary ? [] : [4, 2],
+          });
+        });
+      }
 
       this.chart = new Chart(canvas.getContext('2d'), {
         type: 'line',
-        data: {
-          labels,
-          datasets: [{
-            label: 'Price ($)',
-            data,
-            borderColor: isRecordLow ? '#f59e0b' : this.storeColor,
-            borderWidth: 2,
-            fill: true,
-            backgroundColor: (isRecordLow ? '#f59e0b' : this.storeColor) + '15',
-            pointRadius: data.length < 30 ? 3 : 0,
-            pointHoverRadius: 5,
-            tension: 0.3,
-          }]
-        },
+        data: { labels, datasets },
         options: {
           responsive: true,
           maintainAspectRatio: false,
           plugins: {
-            legend: { display: false },
+            legend: { display: datasets.length > 1, labels: { color: '#94a3b8', boxWidth: 14, font: { size: 10 } } },
             tooltip: {
               callbacks: {
-                label: (ctx) => '$' + ctx.parsed.y.toFixed(2)
+                label: (ctx) => (ctx.dataset.label || '') + ': $' + ctx.parsed.y.toFixed(2)
               }
             }
           },
