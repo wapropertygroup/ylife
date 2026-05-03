@@ -330,6 +330,12 @@
         <span class="flex items-center gap-1.5 text-xs text-rose-400"><span class="inline-block w-2 h-2 rounded-sm bg-rose-500/70"></span> <span data-i18n="history.zscore_high">&gt;2σ Overbought</span></span>
         <span class="flex items-center gap-1.5 text-xs text-emerald-400"><span class="inline-block w-2 h-2 rounded-sm bg-emerald-500/70"></span> <span data-i18n="history.zscore_normal">-1σ to 1σ Normal</span></span>
         <span class="flex items-center gap-1.5 text-xs text-sky-400"><span class="inline-block w-2 h-2 rounded-sm bg-sky-500/70"></span> <span data-i18n="history.zscore_low">&lt;-2σ Oversold</span></span>
+        <div class="flex gap-1" id="zscoreRangeBtns">
+          <button class="range-btn" data-chart="zscore" data-period="1mo">1M</button>
+          <button class="range-btn" data-chart="zscore" data-period="3mo">3M</button>
+          <button class="range-btn" data-chart="zscore" data-period="6mo">6M</button>
+          <button class="range-btn active" data-chart="zscore" data-period="1y">1Y</button>
+        </div>
         <button onclick="expandChart('zscore')" title="Expand" class="expand-btn">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
         </button>
@@ -766,116 +772,163 @@ let   _forecastResult = null;   // last forecast API response
 
         // ── Z-Score rolling 14-day history chart ──
         if (zs.history && zs.history.length > 0) {
-          const wrap = document.getElementById('zscoreChartWrap');
-          wrap.style.display = 'block';
-          const labels = zs.history.map(h => h.date);
-          const zVals  = zs.history.map(h => h.z);
-          const zMA    = zs.history.map(h => h.z_ma);
-          const prices = zs.history.map(h => h.price);
+          // Store full history for range filtering
+          window._zscoreFullHistory = zs.history;
 
-          const zsCfg = {
-            type: 'line',
-            data: {
-              labels,
-              datasets: [
-                {
-                  label: 'Z-Score (14d)',
-                  data: zVals,
-                  borderColor: '#818cf8',
-                  backgroundColor: 'rgba(129,140,248,0.08)',
-                  borderWidth: 1.5,
-                  pointRadius: 0,
-                  pointHoverRadius: 4,
-                  fill: false,
-                  tension: 0.3,
-                  yAxisID: 'y',
-                },
-                {
-                  label: '14d MA of Z',
-                  data: zMA,
-                  borderColor: '#facc15',
-                  borderWidth: 2,
-                  borderDash: [6, 3],
-                  pointRadius: 0,
-                  pointHoverRadius: 4,
-                  fill: false,
-                  tension: 0.3,
-                  yAxisID: 'y',
-                },
-                {
-                  label: 'Price',
-                  data: prices,
-                  borderColor: 'rgba(56,189,248,0.6)',
-                  backgroundColor: 'rgba(56,189,248,0.06)',
-                  borderWidth: 1.2,
-                  pointRadius: 0,
-                  pointHoverRadius: 3,
-                  fill: true,
-                  tension: 0.3,
-                  yAxisID: 'yPrice',
-                },
-                // Horizontal reference lines (on Z-Score axis)
-                { label: '+2σ', data: labels.map(() => 2),  borderColor: 'rgba(244,63,94,0.4)',  borderWidth: 1, borderDash: [4,4], pointRadius: 0, pointHoverRadius: 0, fill: false, yAxisID: 'y' },
-                { label: '+1σ', data: labels.map(() => 1),  borderColor: 'rgba(251,191,36,0.3)', borderWidth: 1, borderDash: [4,4], pointRadius: 0, pointHoverRadius: 0, fill: false, yAxisID: 'y' },
-                { label: '0',   data: labels.map(() => 0),  borderColor: 'rgba(148,163,184,0.3)', borderWidth: 1, pointRadius: 0, pointHoverRadius: 0, fill: false, yAxisID: 'y' },
-                { label: '-1σ', data: labels.map(() => -1), borderColor: 'rgba(251,191,36,0.3)', borderWidth: 1, borderDash: [4,4], pointRadius: 0, pointHoverRadius: 0, fill: false, yAxisID: 'y' },
-                { label: '-2σ', data: labels.map(() => -2), borderColor: 'rgba(56,189,248,0.4)', borderWidth: 1, borderDash: [4,4], pointRadius: 0, pointHoverRadius: 0, fill: false, yAxisID: 'y' },
-              ],
-            },
-            options: {
-              responsive: true,
-              maintainAspectRatio: false,
-              interaction: { mode: 'index', intersect: false },
-              plugins: {
-                legend: {
-                  display: true,
-                  labels: {
-                    color: '#94a3b8', boxWidth: 14, font: { size: 11 },
-                    filter: (item) => item.datasetIndex < 3,  // Show Z-Score, MA, and Price in legend
+          function _renderZscoreChart(histData) {
+            const wrap = document.getElementById('zscoreChartWrap');
+            wrap.style.display = 'block';
+
+            // Destroy previous instance
+            if (_chartInstances['zscore']) { _chartInstances['zscore'].destroy(); _chartInstances['zscore'] = null; }
+
+            const labels = histData.map(h => h.date);
+            const zVals  = histData.map(h => h.z);
+            const zMA    = histData.map(h => h.z_ma);
+            const prices = histData.map(h => h.price);
+            // Diff = Z-Score minus 14d-MA  (momentum indicator)
+            const diff   = histData.map(h => h.z != null && h.z_ma != null ? +(h.z - h.z_ma).toFixed(3) : null);
+            const diffColors = diff.map(d => d != null && d >= 0 ? 'rgba(52,211,153,0.55)' : 'rgba(244,63,94,0.55)');
+
+            const zsCfg = {
+              type: 'line',
+              data: {
+                labels,
+                datasets: [
+                  // Bar: diff (Z minus MA) — drawn first so lines sit on top
+                  {
+                    label: 'Z − MA',
+                    type: 'bar',
+                    data: diff,
+                    backgroundColor: diffColors,
+                    borderWidth: 0,
+                    borderRadius: 1,
+                    barPercentage: 0.8,
+                    categoryPercentage: 0.9,
+                    yAxisID: 'y',
+                    order: 2,
                   },
-                },
-                tooltip: {
-                  backgroundColor: '#1e293b',
-                  titleColor: '#e2e8f0',
-                  bodyColor: '#cbd5e1',
-                  borderColor: '#334155',
-                  borderWidth: 1,
-                  filter: (item) => item.datasetIndex < 3,  // Tooltip for Z-Score, MA, and Price
-                  callbacks: {
-                    label: (ctx) => {
-                      if (ctx.datasetIndex === 2) return `Price: $${ctx.parsed.y.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}`;
-                      return `${ctx.dataset.label}: ${ctx.parsed.y >= 0 ? '+' : ''}${ctx.parsed.y.toFixed(2)}σ`;
+                  {
+                    label: 'Z-Score (14d)',
+                    data: zVals,
+                    borderColor: '#818cf8',
+                    backgroundColor: 'rgba(129,140,248,0.08)',
+                    borderWidth: 1.5,
+                    pointRadius: 0,
+                    pointHoverRadius: 4,
+                    fill: false,
+                    tension: 0.3,
+                    yAxisID: 'y',
+                    order: 1,
+                  },
+                  {
+                    label: '14d MA of Z',
+                    data: zMA,
+                    borderColor: '#facc15',
+                    borderWidth: 2,
+                    borderDash: [6, 3],
+                    pointRadius: 0,
+                    pointHoverRadius: 4,
+                    fill: false,
+                    tension: 0.3,
+                    yAxisID: 'y',
+                    order: 1,
+                  },
+                  {
+                    label: 'Price',
+                    data: prices,
+                    borderColor: 'rgba(56,189,248,0.6)',
+                    backgroundColor: 'rgba(56,189,248,0.06)',
+                    borderWidth: 1.2,
+                    pointRadius: 0,
+                    pointHoverRadius: 3,
+                    fill: true,
+                    tension: 0.3,
+                    yAxisID: 'yPrice',
+                    order: 1,
+                  },
+                  // Horizontal reference lines (on Z-Score axis)
+                  { label: '+2σ', data: labels.map(() => 2),  borderColor: 'rgba(244,63,94,0.4)',  borderWidth: 1, borderDash: [4,4], pointRadius: 0, pointHoverRadius: 0, fill: false, yAxisID: 'y', order: 0 },
+                  { label: '+1σ', data: labels.map(() => 1),  borderColor: 'rgba(251,191,36,0.3)', borderWidth: 1, borderDash: [4,4], pointRadius: 0, pointHoverRadius: 0, fill: false, yAxisID: 'y', order: 0 },
+                  { label: '0',   data: labels.map(() => 0),  borderColor: 'rgba(148,163,184,0.3)', borderWidth: 1, pointRadius: 0, pointHoverRadius: 0, fill: false, yAxisID: 'y', order: 0 },
+                  { label: '-1σ', data: labels.map(() => -1), borderColor: 'rgba(251,191,36,0.3)', borderWidth: 1, borderDash: [4,4], pointRadius: 0, pointHoverRadius: 0, fill: false, yAxisID: 'y', order: 0 },
+                  { label: '-2σ', data: labels.map(() => -2), borderColor: 'rgba(56,189,248,0.4)', borderWidth: 1, borderDash: [4,4], pointRadius: 0, pointHoverRadius: 0, fill: false, yAxisID: 'y', order: 0 },
+                ],
+              },
+              options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                  legend: {
+                    display: true,
+                    labels: {
+                      color: '#94a3b8', boxWidth: 14, font: { size: 11 },
+                      filter: (item) => item.datasetIndex < 4,  // Z−MA, Z-Score, MA, Price
+                    },
+                  },
+                  tooltip: {
+                    backgroundColor: '#1e293b',
+                    titleColor: '#e2e8f0',
+                    bodyColor: '#cbd5e1',
+                    borderColor: '#334155',
+                    borderWidth: 1,
+                    filter: (item) => item.datasetIndex < 4,
+                    callbacks: {
+                      label: (ctx) => {
+                        if (ctx.datasetIndex === 3) return `Price: $${ctx.parsed.y.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+                        const v = ctx.parsed.y;
+                        return `${ctx.dataset.label}: ${v >= 0 ? '+' : ''}${v.toFixed(2)}σ`;
+                      },
                     },
                   },
                 },
-              },
-              scales: {
-                x: {
-                  ticks: { color: '#64748b', maxTicksLimit: 8, font: { size: 10 } },
-                  grid: { color: 'rgba(51,65,85,0.3)' },
-                },
-                y: {
-                  position: 'left',
-                  ticks: {
-                    color: '#64748b',
-                    font: { size: 10 },
-                    callback: (v) => (v >= 0 ? '+' : '') + v.toFixed(1) + 'σ',
+                scales: {
+                  x: {
+                    ticks: { color: '#64748b', maxTicksLimit: 8, font: { size: 10 } },
+                    grid: { color: 'rgba(51,65,85,0.3)' },
                   },
-                  grid: { color: 'rgba(51,65,85,0.3)' },
-                },
-                yPrice: {
-                  position: 'right',
-                  ticks: {
-                    color: 'rgba(56,189,248,0.6)',
-                    font: { size: 10 },
-                    callback: (v) => '$' + v.toLocaleString(),
+                  y: {
+                    position: 'left',
+                    ticks: {
+                      color: '#64748b',
+                      font: { size: 10 },
+                      callback: (v) => (v >= 0 ? '+' : '') + v.toFixed(1) + 'σ',
+                    },
+                    grid: { color: 'rgba(51,65,85,0.3)' },
                   },
-                  grid: { drawOnChartArea: false },
+                  yPrice: {
+                    position: 'right',
+                    ticks: {
+                      color: 'rgba(56,189,248,0.6)',
+                      font: { size: 10 },
+                      callback: (v) => '$' + v.toLocaleString(),
+                    },
+                    grid: { drawOnChartArea: false },
+                  },
                 },
               },
-            },
-          };
-          _registerChart('zscore', zsCfg, new Chart(document.getElementById('zscoreHistChart'), zsCfg));
+            };
+            _registerChart('zscore', zsCfg, new Chart(document.getElementById('zscoreHistChart'), zsCfg));
+          }
+
+          // Render with full data initially
+          _renderZscoreChart(zs.history);
+
+          // Wire up Z-Score range buttons (client-side filtering)
+          const ZSCORE_DAYS = { '1mo': 22, '3mo': 66, '6mo': 132, '1y': 9999 };
+          document.querySelectorAll('#zscoreRangeBtns .range-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+              const period = btn.dataset.period;
+              // Update active state
+              document.querySelectorAll('#zscoreRangeBtns .range-btn').forEach(b => b.classList.toggle('active', b === btn));
+              // Slice data
+              const days = ZSCORE_DAYS[period] || 9999;
+              const full = window._zscoreFullHistory;
+              const sliced = days >= full.length ? full : full.slice(-days);
+              _renderZscoreChart(sliced);
+            });
+          });
         }
       }
     } catch(e) {
@@ -1022,8 +1075,9 @@ let   _forecastResult = null;   // last forecast API response
     });
   }
 
-  // ── Wire up range buttons
+  // ── Wire up range buttons (exclude zscore — handled separately with client-side filtering)
   document.querySelectorAll('.range-btn[data-chart]').forEach(btn => {
+    if (btn.dataset.chart === 'zscore') return;
     btn.addEventListener('click', () => _handleRange(btn.dataset.chart, btn.dataset.period, staticData));
   });
 

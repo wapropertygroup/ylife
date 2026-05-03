@@ -1,124 +1,121 @@
-# Li Family Apps Monorepo
+# CLAUDE.md
 
-A Flask-based monorepo hosting 5 web applications for the Li family at **li-family.us**.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Apps
+## Project Overview
 
-| App | Dir | Port | URL | Purpose |
-|-----|-----|------|-----|---------|
-| **yStocker** | `ystocker/` | 5000 | stock.li-family.us | Stock research, valuation, Fed, 13F, forecasts |
-| **yPlanner** | `yplanner/` | 5001 | planner.li-family.us | AI trip planning with Google Maps |
-| **yPlanter** | `yplanter/` | 5002 | plant.li-family.us | PNW gardening guide (50+ plants) |
-| **yHome** | `yhome/` | 5003 | li-family.us | Landing page / navigation hub |
-| **yTracker** | `ytracker/` | 5004 | tracker.li-family.us | Multi-store price tracking & alerts |
+Flask monorepo hosting 5 web apps for the Li family at **li-family.us**:
 
-## Quick Start
+| App | Dir | Dev Port | Prod Port | URL | Storage |
+|-----|-----|----------|-----------|-----|---------|
+| **yStocker** | `ystocker/` | 5000 | 8000 | stock.li-family.us | JSON cache files |
+| **yPlanner** | `yplanner/` | 5001 | 8001 | planner.li-family.us | DynamoDB |
+| **yPlanter** | `yplanter/` | 5002 | 8002 | plant.li-family.us | DynamoDB |
+| **yHome** | `yhome/` | 5003 | 8003 | li-family.us | None |
+| **yTracker** | `ytracker/` | 5004 | 8004 | tracker.li-family.us | DynamoDB |
 
+## Commands
+
+### Run locally
 ```bash
 python3 -m venv venv && source venv/bin/activate
 pip install -r requirements_stocker.txt   # or requirements_{planner,planter,tracker,home}.txt
 python run/run_stocker.py                 # starts on http://127.0.0.1:5000
 ```
 
-Optional: create `.env` with `GEMINI_API_KEY=...` for AI features.
-
-## Repository Structure
-
-```
-run/                    Entry points (run_stocker.py, run_planner.py, etc.)
-deploy/                 CloudFormation, deploy.sh, sync-ssm.sh
-cache/                  On-disk JSON caches (auto-created, gitignored)
-requirements_*.txt      Per-app Python dependencies
-
-ystocker/               Stock research app
-  __init__.py           App factory, PEER_GROUPS config, YT_CHANNELS
-  routes.py             All routes + API endpoints (5200+ lines)
-  data.py               Yahoo Finance data fetching
-  fed.py                Federal Reserve H.4.1 from FRED
-  sec13f.py             SEC EDGAR 13F institutional holdings
-  forecast.py           Prophet / ARIMA / Linear price forecasting
-  charts.py             Matplotlib/Seaborn chart generation (base64 PNG)
-  heatmap_meta.py       S&P 500 metadata for market heatmap
-  templates/            17 Jinja2 templates
-  static/               CSS, i18n.js, favicon
-
-yhome/                  Landing page (minimal: __init__.py, routes.py, 1 template)
-yplanner/               Trip planner (routes.py, DynamoDB, Google/Apple Sign-In)
-yplanter/               Garden guide (routes.py, plants_db.py, DynamoDB)
-ytracker/               Price tracker (routes.py, scraper.py, DynamoDB)
-```
-
-## Architecture Patterns
-
-- **Caching**: Two-tier (in-memory dict + on-disk JSON) with TTLs (8h stock, 24h Fed/13F)
-- **Thread safety**: `threading.Lock` on all cache reads/writes
-- **Atomic writes**: Temp file + `os.replace()` for crash-safe disk persistence
-- **Background tasks**: Daemon threads for cache warming, 13F refresh, heatmap snapshots, email broadcast
-- **Auth**: Google/Apple Sign-In (yPlanner, yTracker); public (yStocker, yPlanter, yHome)
-- **Storage**: DynamoDB (yPlanner, yPlanter, yTracker); file-based JSON cache (yStocker)
-- **Secrets**: AWS SSM Parameter Store (prod) / `.env` (dev)
-- **i18n**: English + Simplified Chinese via `i18n.js` in each app
-
-## Key APIs (yStocker)
-
-| Endpoint | Description |
-|----------|-------------|
-| `GET /api/ticker/<t>` | Single stock metrics |
-| `GET /api/history/<t>` | Price + PE history + options data |
-| `GET /api/financials/<t>` | Income statement (3y actual + 2y estimates) |
-| `GET /api/forecast/<t>` | 6-month price forecast (Prophet/ARIMA/Linear) |
-| `GET /api/fed` | Federal Reserve H.4.1 balance sheet |
-| `GET /api/13f/<fund>` | Institutional 13F holdings |
-| `GET /api/13f/ticker/<t>` | Which funds hold this stock |
-| `POST /api/history/<t>/explain` | AI chart analysis (SSE stream) |
-| `GET /api/news/<t>` | Recent news articles |
-| `GET /api/markets` | Broad market indices + commodities |
-
-## Production Deployment
-
-### Deploy all 5 apps to EC2
-
+### Deploy to production (via SSH)
 ```bash
 bash deploy/deploy.sh -i ~/Downloads/my-key-pair.pem
 ```
 
-This single command SSHs into the EC2 instance and:
-1. `git fetch` + `git reset --hard origin/main`
-2. Installs pip dependencies for all 5 apps
-3. Creates/updates systemd Gunicorn services (ports 8000-8004)
-4. Configures nginx reverse proxy vhosts
-5. Provisions Let's Encrypt SSL via certbot
-6. Warms up each app with a health-check curl
-
-The `-i` flag specifies the SSH key. If omitted, the script auto-detects from `~/.ssh/*.pem`.
-
-### Deploy infrastructure (first time only)
-
+### Deploy via AWS SSM (no SSH key needed)
 ```bash
-aws cloudformation deploy --template-file deploy/cloudformation.yaml \
-  --stack-name ystocker --parameter-overrides KeyName=my-key-pair \
-  --capabilities CAPABILITY_NAMED_IAM
+aws ssm send-command --instance-ids i-02c9614bcde54dd59 --region us-west-2 \
+  --document-name AWS-RunShellScript \
+  --parameters '{"commands":["cd /opt/ystocker && sudo git fetch origin && sudo git reset --hard origin/main && sudo systemctl restart ystocker yplanner yplanter yhome ytracker"]}'
 ```
 
-### Sync secrets to AWS SSM
+### Deploy a single app via SSM
+```bash
+aws ssm send-command --instance-ids i-02c9614bcde54dd59 --region us-west-2 \
+  --document-name AWS-RunShellScript \
+  --parameters '{"commands":["cd /opt/ystocker && sudo git fetch origin && sudo git reset --hard origin/main && sudo systemctl restart yplanner"]}'
+```
 
+### Check deploy result
+```bash
+aws ssm get-command-invocation --command-id <CMD_ID> --instance-id i-02c9614bcde54dd59 \
+  --region us-west-2 --query "[Status, StandardOutputContent]" --output text
+```
+
+### Sync secrets
 ```bash
 bash deploy/sync-ssm.sh          # reads .env, writes to SSM Parameter Store
-bash deploy/sync-ssm.sh --dry-run  # preview without writing
+bash deploy/sync-ssm.sh --dry-run
 ```
 
-### Production architecture
+## Architecture
 
-```
-nginx (port 80/443, SSL)
-  ├─ stock.li-family.us    → gunicorn :8000 (ystocker)
-  ├─ planner.li-family.us  → gunicorn :8001 (yplanner)
-  ├─ plant.li-family.us    → gunicorn :8002 (yplanter)
-  ├─ home.li-family.us     → gunicorn :8003 (yhome)
-  └─ tracker.li-family.us  → gunicorn :8004 (ytracker)
-```
+### App structure
+Each app follows the same pattern:
+- `{app}/__init__.py` — Flask factory (`create_app()`) + SSM secret loading
+- `{app}/routes.py` — Blueprint with all routes and API endpoints
+- `{app}/templates/` — Jinja2 templates extending `base.html`
+- `{app}/static/` — CSS, `i18n.js` (EN + ZH translations), favicon
+- `run/run_{app}.py` — Dev entry point (adds project root to `sys.path`)
 
-Each app runs as a systemd service with 2 Gunicorn workers, 120s timeout, auto-restart.
+### yStocker-specific modules
+- `data.py` — Yahoo Finance fetching (`fetch_ticker_data`, `FetchError`)
+- `fed.py` — Federal Reserve H.4.1 from FRED (no API key needed)
+- `sec13f.py` — SEC EDGAR 13F institutional holdings (22 funds tracked)
+- `forecast.py` — Prophet / ARIMA / Linear price forecasting
+- `charts.py` — Matplotlib/Seaborn → base64 PNG (server-side, no disk I/O)
+- `heatmap_meta.py` — Static S&P 500 metadata for market heatmap tile sizing
+
+### Caching (yStocker)
+Two-tier: in-memory dict + on-disk JSON in `cache/`. All cache access guarded by `threading.Lock`. Disk writes use atomic temp file + `os.replace()`.
+
+| Cache | TTL | File |
+|-------|-----|------|
+| Stock metrics | 8 hours | `cache/ticker_cache.json` |
+| Fed balance sheet | 24 hours | `cache/fed_cache.json` |
+| 13F holdings | 24 hours | `cache/sec13f_cache.json` |
+| Peer groups | persistent | `cache/peer_groups.json` |
+
+### Background threads (yStocker)
+Started in `create_app()`, all daemon threads:
+- Stock cache warming (every 8h)
+- 13F holdings refresh (every 24h)
+- Heatmap daily snapshot (weekdays 16:30 ET)
+- Daily email broadcast (UTC 00:00)
+
+### Frontend
+- **Tailwind CSS** via CDN (`<script src="https://cdn.tailwindcss.com">`)
+- **Alpine.js** for yPlanner interactivity
+- **Chart.js 4** for yStocker charts
+- **Google Maps API** for yPlanner
+- **i18n**: Each app has `static/i18n.js` with EN + ZH translations, toggled via `I18n.toggle()`
+
+### Auth
+- yPlanner/yTracker: Google Sign-In + Apple Sign-In → Flask session → DynamoDB users table
+- yStocker/yPlanter/yHome: Public, no auth
+
+### Secrets flow
+1. `_load_secrets_from_ssm()` in each app's `__init__.py` tries AWS SSM first
+2. Falls back to `python-dotenv` loading `.env` from project root
+3. Key secrets: `GEMINI_API_KEY`, `GOOGLE_MAPS_API_KEY`, `GOOGLE_CLIENT_ID`, `YOUTUBE_API_KEY`, `SES_FROM_EMAIL`
+
+## Production
+
+### Infrastructure
+- **Region**: us-west-2
+- **EC2 Instance**: `i-02c9614bcde54dd59` (Amazon Linux 2023, `t3.small`)
+- **App directory**: `/opt/ystocker`
+- **Process model**: nginx → 5 Gunicorn systemd services (ports 8000-8004, 2 workers each)
+- **SSL**: Let's Encrypt via certbot
+
+### Deployment flow
+`deploy/deploy.sh` SSHs to EC2 and: git pull → pip install → restart systemd services → nginx reload → certbot SSL → health check curl. Alternative: use SSM `send-command` (see commands above).
 
 ## Code Conventions
 
@@ -127,4 +124,11 @@ Each app runs as a systemd service with 2 Gunicorn workers, 120s timeout, auto-r
 - All modules have docstrings and structured logging (`logging.getLogger(__name__)`)
 - Private helpers prefixed with `_`
 - No bare `except:` — always catch specific exceptions
-- Templates extend `base.html` with Tailwind CSS
+- Templates extend `base.html` with Tailwind CSS dark mode (`class="dark"`)
+
+## Known Pitfalls
+
+- **Nested `<button>` elements** break DOM structure in templates — browsers auto-close the outer button, causing sibling sections to escape their parent container. Always use `<div>` or `<span>` for clickable elements inside buttons.
+- **`routes.py` is monolithic** (5200+ lines in yStocker) — all routes, API endpoints, cache logic, and background tasks in one file.
+- **Google Maps API** on yPlanner requires a valid billing-enabled API key; errors show "Oops! Something went wrong" with a purple stripe.
+- **SSH deploy** requires a `.pem` key file; the `id_ed25519` key on this machine doesn't have EC2 access. Use SSM `send-command` instead.
