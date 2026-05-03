@@ -110,17 +110,17 @@ def _get_headers() -> dict:
 
 def _fetch_page(url: str, timeout: int = 15) -> Optional[BeautifulSoup]:
     """Fetch URL → BeautifulSoup, with one retry.
-    Bypasses HTTP_PROXY / HTTPS_PROXY to avoid corporate proxy blocking stores.
+    Bypasses system proxy entirely via trust_env=False session.
     Uses realistic browser headers to avoid bot detection.
     """
     _rate_limit()
-    # Bypass proxy — store sites must be fetched directly
-    no_proxy = {"http": None, "https": None}
+
+    session = requests.Session()
+    session.trust_env = False  # Ignore system/corporate proxy completely
 
     for attempt in range(2):
         try:
             headers = _get_headers()
-            # Safari-style headers (Safari does NOT send Sec-CH-UA)
             headers.update({
                 "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
                 "Accept-Language": "en-US,en;q=0.9",
@@ -130,8 +130,10 @@ def _fetch_page(url: str, timeout: int = 15) -> Optional[BeautifulSoup]:
                 "Sec-Fetch-Mode": "navigate",
                 "Sec-Fetch-Site": "none",
             })
-            resp = requests.get(url, headers=headers, timeout=timeout,
-                                allow_redirects=True, proxies=no_proxy)
+            resp = session.get(url, headers=headers, timeout=timeout,
+                               allow_redirects=True)
+            log.info("Fetch %s → %d (%d bytes, attempt %d)",
+                     url[:80], resp.status_code, len(resp.text), attempt + 1)
             if resp.status_code == 200:
                 return BeautifulSoup(resp.text, "html.parser")
             log.warning("Fetch %s returned %d (attempt %d)", url, resp.status_code, attempt + 1)
@@ -665,7 +667,9 @@ def _walmart_api_fetch(item_id: str) -> Optional[dict]:
     in order of reliability.
     """
     _rate_limit()
-    no_proxy = {"http": None, "https": None}
+
+    session = requests.Session()
+    session.trust_env = False  # Bypass corporate proxy
 
     headers = {
         "User-Agent": random.choice(USER_AGENTS),
@@ -678,31 +682,32 @@ def _walmart_api_fetch(item_id: str) -> Optional[dict]:
     }
 
     # ── Strategy 1: Walmart's product page BE API ─────────────────────
-    # This returns the same data as __NEXT_DATA__ but as a direct JSON call
     api_url = f"https://www.walmart.com/orchestra/home/auto/product/{item_id}"
     try:
-        resp = requests.get(api_url, headers=headers, timeout=15,
-                            proxies=no_proxy, allow_redirects=True)
+        log.info("Walmart strategy 1 (orchestra API): %s", api_url)
+        resp = session.get(api_url, headers=headers, timeout=15, allow_redirects=True)
+        log.info("  → %d (%d bytes)", resp.status_code, len(resp.text))
         if resp.status_code == 200:
             data = resp.json()
             result = _parse_walmart_api(data, item_id)
             if result and result.get("price"):
-                log.info("Walmart API (orchestra): %s price=$%s", item_id, result["price"])
+                log.info("  → SUCCESS: $%s — %s", result["price"], result.get("title", "")[:60])
                 return result
+            log.info("  → JSON parsed but no price found")
     except Exception as exc:
-        log.debug("Walmart orchestra API failed for %s: %s", item_id, exc)
+        log.info("  → FAILED: %s", exc)
 
     # ── Strategy 2: Walmart search API with item ID ───────────────────
-    search_url = f"https://www.walmart.com/search?q={item_id}"
-    search_api = f"https://www.walmart.com/orchestra/snb/graphql"
+    search_api = "https://www.walmart.com/orchestra/snb/graphql"
     try:
+        log.info("Walmart strategy 2 (GraphQL search): %s", item_id)
         gql_headers = {**headers, "Content-Type": "application/json"}
         payload = {
             "query": "query($query:String!){search(query:$query,count:1){searchResult{itemStacks{items{id name price imageInfo{thumbnailUrl}}}}}}",
             "variables": {"query": item_id},
         }
-        resp = requests.post(search_api, json=payload, headers=gql_headers,
-                             timeout=15, proxies=no_proxy)
+        resp = session.post(search_api, json=payload, headers=gql_headers, timeout=15)
+        log.info("  → %d (%d bytes)", resp.status_code, len(resp.text))
         if resp.status_code == 200:
             data = resp.json()
             items = (data.get("data", {}).get("search", {})
@@ -712,7 +717,7 @@ def _walmart_api_fetch(item_id: str) -> Optional[dict]:
                 item = items[0]
                 price = item.get("price")
                 if isinstance(price, (int, float)) and price > 0:
-                    log.info("Walmart GraphQL search: %s price=$%s", item_id, price)
+                    log.info("  → SUCCESS: $%s — %s", price, item.get("name", "")[:60])
                     return {
                         "item_id": item_id,
                         "store": "walmart",
@@ -722,25 +727,27 @@ def _walmart_api_fetch(item_id: str) -> Optional[dict]:
                         "image_url": item.get("imageInfo", {}).get("thumbnailUrl", ""),
                         "item_url": f"https://www.walmart.com/ip/{item_id}",
                     }
+            log.info("  → No matching items found")
     except Exception as exc:
-        log.debug("Walmart GraphQL search failed for %s: %s", item_id, exc)
+        log.info("  → FAILED: %s", exc)
 
     # ── Strategy 3: Mobile endpoint (lighter page, sometimes less bot detection)
     mobile_url = f"https://www.walmart.com/ip/seort/{item_id}"
     try:
+        log.info("Walmart strategy 3 (mobile page): %s", mobile_url)
         mobile_headers = {
             **headers,
             "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.4 Mobile/15E148 Safari/604.1",
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         }
-        resp = requests.get(mobile_url, headers=mobile_headers, timeout=15,
-                            proxies=no_proxy, allow_redirects=True)
+        resp = session.get(mobile_url, headers=mobile_headers, timeout=15, allow_redirects=True)
+        log.info("  → %d (%d bytes)", resp.status_code, len(resp.text))
         if resp.status_code == 200 and "robot or human" not in resp.text.lower():
             soup = BeautifulSoup(resp.text, "html.parser")
             # Try __NEXT_DATA__ from mobile page
             nextdata = _extract_nextdata(soup, "walmart")
             if nextdata.get("price"):
-                log.info("Walmart mobile page: %s price=$%s", item_id, nextdata["price"])
+                log.info("  → SUCCESS via __NEXT_DATA__: $%s", nextdata["price"])
                 return {
                     "item_id": item_id,
                     "store": "walmart",
@@ -753,6 +760,7 @@ def _walmart_api_fetch(item_id: str) -> Optional[dict]:
             # Try JSON-LD and meta from mobile page
             ld = _extract_jsonld(soup)
             if ld.get("price"):
+                log.info("  → SUCCESS via JSON-LD: $%s", ld["price"])
                 return {
                     "item_id": item_id,
                     "store": "walmart",
@@ -762,8 +770,12 @@ def _walmart_api_fetch(item_id: str) -> Optional[dict]:
                     "image_url": ld.get("image", ""),
                     "item_url": f"https://www.walmart.com/ip/{item_id}",
                 }
+            log.info("  → Page loaded but no price extracted (bot page? %s)",
+                     "yes" if "robot" in resp.text.lower() else "no")
+        elif resp.status_code == 200:
+            log.info("  → Bot detection page returned")
     except Exception as exc:
-        log.debug("Walmart mobile fetch failed for %s: %s", item_id, exc)
+        log.info("  → FAILED: %s", exc)
 
     log.warning("All Walmart API strategies failed for %s", item_id)
     return None
