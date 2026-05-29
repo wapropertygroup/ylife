@@ -9,7 +9,6 @@ No API key required.
 Series (weekly, not seasonally adjusted):
   WALCL     — Total assets (all Federal Reserve Banks), millions USD
   TREAST    — U.S. Treasury securities held outright, millions USD
-  WSHOSHO   — Short-term Treasury bills held outright (≤1 year), millions USD
   MBST      — Mortgage-backed securities held outright, millions USD
   WRESBAL   — Reserve balances with Federal Reserve Banks, millions USD
   RRPONTSYD — Overnight reverse repurchase agreements (ON RRP), billions USD
@@ -43,7 +42,6 @@ _FRED_CSV = "https://fred.stlouisfed.org/graph/fredgraph.csv?id={series}"
 SERIES: dict[str, dict[str, str]] = {
     "WALCL":     {"label": "Total Assets",              "color": "#6366f1"},
     "TREAST":    {"label": "Treasury Securities",       "color": "#38bdf8"},
-    "WSHOSHO":   {"label": "Bills (Short-Term)",        "color": "#818cf8"},
     "MBST":      {"label": "MBS (Mortgage-Backed Sec)", "color": "#34d399"},
     "WRESBAL":   {"label": "Reserve Balances",          "color": "#f59e0b"},
     "RRPONTSYD": {"label": "Overnight Reverse Repos",   "color": "#fb7185"},

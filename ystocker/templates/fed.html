@@ -143,11 +143,11 @@
     <div id="statTreasuryChg" class="text-xs mt-0.5 text-slate-500">—</div>
   </div>
   <div class="bg-slate-900 border border-slate-800 rounded-xl px-4 py-3">
-    <div class="text-xs text-slate-500 mb-1 flex items-center gap-1" data-i18n="fed.stat_bills">Bills (Short-Term)
-      <span class="fed-tip text-slate-600 cursor-help text-[10px]" data-i18n-tip="fed.tip_bills">ⓘ</span>
+    <div class="text-xs text-slate-500 mb-1 flex items-center gap-1" data-i18n="fed.stat_other_assets">Other Assets
+      <span class="fed-tip text-slate-600 cursor-help text-[10px]" title="Repos, swaps, foreign currency assets, premium on securities, gold/SDR, accrued interest, etc. Computed: Total Assets − Treasuries − MBS − Loans">ⓘ</span>
     </div>
-    <div id="statBills" class="text-xl font-bold text-slate-100">—</div>
-    <div id="statBillsChg" class="text-xs mt-0.5 text-slate-500">—</div>
+    <div id="statOtherAssets" class="text-xl font-bold text-slate-100">—</div>
+    <div id="statOtherAssetsChg" class="text-xs mt-0.5 text-slate-500">—</div>
   </div>
   <div class="bg-slate-900 border border-slate-800 rounded-xl px-4 py-3">
     <div class="text-xs text-slate-500 mb-1 flex items-center gap-1" data-i18n="fed.stat_mbs">MBS Holdings
@@ -197,6 +197,65 @@
   </div>
 </div>
 
+<!-- ── Balance Sheet Identity (Assets = Liabilities + Capital) ───────── -->
+<div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 mb-6 fade-up">
+  <div class="flex items-start justify-between gap-3 mb-3 flex-wrap">
+    <div>
+      <h2 class="text-sm font-semibold text-slate-200 flex items-center gap-2">
+        <span>🧮</span>
+        <span data-i18n="fed.balance_title">Balance Sheet Identity</span>
+      </h2>
+      <p class="text-[11px] text-slate-500 mt-0.5" data-i18n="fed.balance_desc">
+        Assets must equal Liabilities + Capital. Items not in our cards are grouped as "Other".
+      </p>
+    </div>
+    <span class="text-[10px] uppercase tracking-wider text-slate-500" id="balanceSheetWeek">—</span>
+  </div>
+
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+    <!-- Assets side -->
+    <div class="bg-slate-950/50 border border-slate-800 rounded-xl p-3">
+      <div class="flex items-center justify-between mb-2 pb-2 border-b border-slate-800">
+        <span class="text-xs font-semibold text-slate-400 uppercase tracking-wide">Assets</span>
+        <span id="balanceTotalAssets" class="font-mono font-bold text-slate-100">—</span>
+      </div>
+      <ul class="space-y-1 text-xs text-slate-400">
+        <li class="flex justify-between"><span>• Treasury Securities</span><span id="balanceTreas" class="font-mono text-slate-300">—</span></li>
+        <li class="flex justify-between"><span>• MBS Holdings</span><span id="balanceMbs" class="font-mono text-slate-300">—</span></li>
+        <li class="flex justify-between"><span>• Fed Loans (BTFP, etc.)</span><span id="balanceLoans" class="font-mono text-slate-300">—</span></li>
+        <li class="flex justify-between border-t border-slate-800 pt-1 mt-1">
+          <span class="text-slate-500">• Other (Repos, swaps, premium, gold...)</span>
+          <span id="balanceOtherA" class="font-mono text-slate-300">—</span>
+        </li>
+      </ul>
+    </div>
+
+    <!-- Liabilities + Capital side -->
+    <div class="bg-slate-950/50 border border-slate-800 rounded-xl p-3">
+      <div class="flex items-center justify-between mb-2 pb-2 border-b border-slate-800">
+        <span class="text-xs font-semibold text-slate-400 uppercase tracking-wide">Liabilities + Capital</span>
+        <span id="balanceTotalLiab" class="font-mono font-bold text-slate-100">—</span>
+      </div>
+      <ul class="space-y-1 text-xs text-slate-400">
+        <li class="flex justify-between"><span>• Reserve Balances</span><span id="balanceRes" class="font-mono text-slate-300">—</span></li>
+        <li class="flex justify-between"><span>• Currency in Circulation</span><span id="balanceCurr" class="font-mono text-slate-300">—</span></li>
+        <li class="flex justify-between"><span>• Treasury General Account</span><span id="balanceTga" class="font-mono text-slate-300">—</span></li>
+        <li class="flex justify-between"><span>• Overnight Reverse Repos</span><span id="balanceRrp" class="font-mono text-slate-300">—</span></li>
+        <li class="flex justify-between border-t border-slate-800 pt-1 mt-1">
+          <span class="text-slate-500">• Other liab. + Capital (~$45B)</span>
+          <span id="balanceOtherL" class="font-mono text-slate-300">—</span>
+        </li>
+      </ul>
+    </div>
+  </div>
+
+  <p class="text-[11px] text-slate-500 mt-3 leading-relaxed">
+    <span class="text-slate-400">💡 Why it matters:</span>
+    Total Assets can drop while Treasuries rise — for example when the Fed lets repos roll off,
+    swap lines unwind, or as QE-era bond premiums amortize. The "Other" lines capture these moves.
+  </p>
+</div>
+
 <!-- ── Charts ────────────────────────────────────────────────────────── -->
 <div class="space-y-6" id="chartsArea">
 
@@ -230,38 +289,6 @@
       </div>
     </div>
     <div id="treasuryExplainPanel" class="explain-panel"></div>
-
-    <!-- Bills (Short-Term) — nested under Treasury -->
-    <div class="mt-6 pt-5 border-t border-slate-800/60">
-      <div class="flex flex-wrap items-start justify-between gap-2 mb-3">
-        <div>
-          <h3 class="text-sm font-semibold text-slate-300" data-i18n="fed.bills_title">↳ Treasury Bills (T-Bills, ≤1Y)</h3>
-          <p class="text-xs text-slate-500" data-i18n="fed.bills_desc">Short-term T-bills maturing within 1 year — a subset of the Treasury holdings above</p>
-        </div>
-        <div id="billsRangeSelector" class="flex flex-wrap gap-1 text-xs">
-          <button class="range-btn active" data-range="52">1Y</button>
-          <button class="range-btn" data-range="104">2Y</button>
-          <button class="range-btn" data-range="156">3Y</button>
-          <button class="range-btn" data-range="260">5Y</button>
-          <button class="range-btn" data-range="0" data-i18n="fed.range_all">All</button>
-          <button class="explain-btn" onclick="explainChart('bills')" data-i18n="fed.explain">✦ Explain</button>
-        </div>
-      </div>
-      <div id="billsLoading" class="flex items-center justify-center h-32 text-slate-500 text-sm animate-pulse" data-i18n="fed.bills_loading">
-        Loading Bills data…
-      </div>
-      <div class="chart-container" style="height:180px; display:none" id="billsChartWrap">
-        <canvas id="billsChart"></canvas>
-      </div>
-      <!-- WoW bar -->
-      <div id="billsWowWrap" class="mt-3 hidden">
-        <p class="text-xs text-slate-500 mb-2" data-i18n="fed.wow_title">Week-over-Week Change ($B)</p>
-        <div class="chart-container" style="height:70px">
-          <canvas id="billsWowChart"></canvas>
-        </div>
-      </div>
-      <div id="billsExplainPanel" class="explain-panel"></div>
-    </div>
   </div>
 
   <!-- Total Assets + MBS combo -->
@@ -430,7 +457,6 @@
   [
     ['WALCL',     'statTotal',    'statTotalChg'],
     ['TREAST',    'statTreasury', 'statTreasuryChg'],
-    ['WSHOSHO',   'statBills',    'statBillsChg'],
     ['MBST',      'statMbs',      'statMbsChg'],
     ['WRESBAL',   'statReserves', 'statReservesChg'],
     ['RRPONTSYD', 'statRrp',      'statRrpChg'],
@@ -448,6 +474,49 @@
       chgEl.className   = 'text-xs mt-0.5 ' + chgClass(v, p);
     }
   });
+
+  // ── Compute "Other Assets" = Total Assets − tracked assets
+  //    (catches Repos, Central Bank Liquidity Swaps, premium on securities,
+  //     foreign currency assets, gold/SDR/coin certs, accrued interest, etc.)
+  function _v(sid) { const x = lastVal(sid); return x == null ? 0 : x; }
+  function _p(sid) { const x = prevVal(sid); return x == null ? 0 : x; }
+
+  const otherAssetsNow  = _v('WALCL') - _v('TREAST') - _v('MBST') - _v('WLCFLPCL');
+  const otherAssetsPrev = _p('WALCL') - _p('TREAST') - _p('MBST') - _p('WLCFLPCL');
+  const otherAEl  = document.getElementById('statOtherAssets');
+  const otherAChg = document.getElementById('statOtherAssetsChg');
+  if (otherAEl)  otherAEl.textContent  = fmtB(otherAssetsNow);
+  if (otherAChg) {
+    otherAChg.textContent = fmtChg(otherAssetsNow, otherAssetsPrev);
+    otherAChg.className   = 'text-xs mt-0.5 ' + chgClass(otherAssetsNow, otherAssetsPrev);
+  }
+
+  // ── Populate Balance Sheet Identity panel
+  const totA = _v('WALCL');
+  const liabSum = _v('WRESBAL') + _v('WCURCIR') + _v('WTREGEN') + _v('RRPONTSYD');
+  const otherL  = totA - liabSum;  // foreign deposits + capital + other accrued
+
+  const bsMap = {
+    balanceTotalAssets: totA,
+    balanceTreas:       _v('TREAST'),
+    balanceMbs:         _v('MBST'),
+    balanceLoans:       _v('WLCFLPCL'),
+    balanceOtherA:      otherAssetsNow,
+    balanceTotalLiab:   totA,  // by definition equals Total Assets
+    balanceRes:         _v('WRESBAL'),
+    balanceCurr:        _v('WCURCIR'),
+    balanceTga:         _v('WTREGEN'),
+    balanceRrp:         _v('RRPONTSYD'),
+    balanceOtherL:      otherL,
+  };
+  Object.entries(bsMap).forEach(([id, v]) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = fmtB(v);
+  });
+  // Show the as-of week
+  const wkDates = s['WALCL']?.dates || [];
+  const weekEl = document.getElementById('balanceSheetWeek');
+  if (weekEl && wkDates.length) weekEl.textContent = 'As of ' + wkDates[wkDates.length - 1];
 
   // ── helper: slice series to last N weeks (0 = all)
   function sliceSeries(sid, n) {
@@ -591,97 +660,6 @@
     );
     wowChart.update();
   });
-
-  // ──────────────────────────────────────────────────────────────────────────
-  // Bills (Short-Term Treasury) chart
-  // ──────────────────────────────────────────────────────────────────────────
-  document.getElementById('billsLoading').style.display = 'none';
-  if (s['WSHOSHO'] && s['WSHOSHO'].dates.length) {
-    document.getElementById('billsChartWrap').style.display = 'block';
-    document.getElementById('billsWowWrap').classList.remove('hidden');
-    registerExplainData('bills', sliceSeries('WSHOSHO', 52).dates, sliceSeries('WSHOSHO', 52).values, 'Treasury Bills (Short-Term, ≤1Y) Held Outright');
-
-    let billsRange = 52;
-
-    const bllCtx = document.getElementById('billsChart');
-    const billsChart = new Chart(bllCtx, {
-      type: 'line',
-      data: {
-        labels: sliceSeries('WSHOSHO', billsRange).dates,
-        datasets: [{
-          label: I18n.t('fed.chart_bills') || 'Bills ($B)',
-          data:  sliceSeries('WSHOSHO', billsRange).values,
-          borderColor: '#818cf8',
-          backgroundColor: 'rgba(129,140,248,0.07)',
-          borderWidth: 2,
-          pointRadius: 0, pointHoverRadius: 5, fill: true, tension: 0.3, spanGaps: true,
-        }]
-      },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        plugins: {
-          legend: { display: false },
-          tooltip: {
-            mode: 'index', intersect: false,
-            callbacks: { label: c => { const v = c.raw; if (v == null) return ''; return ` $${v >= 1000 ? (v/1000).toFixed(2)+'T' : v.toFixed(1)+'B'}`; } }
-          }
-        },
-        scales: {
-          x: { grid:{color:gridCol}, ticks:{color:tickCol, maxTicksLimit:8, maxRotation:0} },
-          y: { grid:{color:gridCol}, ticks:{color:tickCol, callback: v => v >= 1000 ? '$'+(v/1000).toFixed(1)+'T' : '$'+v+'B'} }
-        },
-        interaction: { mode:'index', intersect:false },
-      }
-    });
-
-    const {dates: bllWowDates, values: bllWowVals} = sliceSeries('WSHOSHO', billsRange);
-    const bllWowBars = bllWowVals.map((v, i) => {
-      if (i === 0 || v == null || bllWowVals[i-1] == null) return null;
-      return +(v - bllWowVals[i-1]).toFixed(2);
-    });
-    const bllWowChart = new Chart(document.getElementById('billsWowChart'), {
-      type: 'bar',
-      data: {
-        labels: bllWowDates,
-        datasets: [{
-          label: I18n.t('fed.chart_wow') || 'WoW Change ($B)',
-          data: bllWowBars,
-          backgroundColor: bllWowBars.map(v => v == null ? 'transparent' : v >= 0 ? 'rgba(52,211,153,0.6)' : 'rgba(244,63,94,0.6)'),
-          borderWidth: 0,
-        }]
-      },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        plugins: { legend: {display:false}, tooltip: {
-          mode:'index', intersect:false,
-          callbacks: { label: c => ` ${c.raw >= 0 ? '+' : ''}${c.raw?.toFixed(1)}B` }
-        }},
-        scales: {
-          x: { display: false },
-          y: { grid:{color:gridCol}, ticks:{color:tickCol, callback: v => v+'B'} }
-        },
-        interaction: { mode:'index', intersect:false },
-      }
-    });
-
-    wireRangeSelector('billsRangeSelector', n => {
-      billsRange = n;
-      const {dates, values} = sliceSeries('WSHOSHO', n);
-      billsChart.data.labels = dates;
-      billsChart.data.datasets[0].data = values;
-      billsChart.update();
-      const newWow = values.map((v, i) => {
-        if (i === 0 || v == null || values[i-1] == null) return null;
-        return +(v - values[i-1]).toFixed(2);
-      });
-      bllWowChart.data.labels = dates;
-      bllWowChart.data.datasets[0].data = newWow;
-      bllWowChart.data.datasets[0].backgroundColor = newWow.map(v =>
-        v == null ? 'transparent' : v >= 0 ? 'rgba(52,211,153,0.6)' : 'rgba(244,63,94,0.6)'
-      );
-      bllWowChart.update();
-    });
-  }
 
   // ──────────────────────────────────────────────────────────────────────────
   // Balance-sheet overview chart (total assets + MBS + reserves)
