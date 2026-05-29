@@ -10,6 +10,7 @@ Series (weekly, not seasonally adjusted):
   WALCL     — Total assets (all Federal Reserve Banks), millions USD
   TREAST    — U.S. Treasury securities held outright, millions USD
   MBST      — Mortgage-backed securities held outright, millions USD
+  WSHOSHO   — U.S. Treasury bills outstanding (market-wide, NOT Fed-held), millions USD
   WRESBAL   — Reserve balances with Federal Reserve Banks, millions USD
   RRPONTSYD — Overnight reverse repurchase agreements (ON RRP), billions USD
   WTREGEN   — U.S. Treasury General Account (TGA) at Fed, millions USD
@@ -43,6 +44,7 @@ SERIES: dict[str, dict[str, str]] = {
     "WALCL":     {"label": "Total Assets",              "color": "#6366f1"},
     "TREAST":    {"label": "Treasury Securities",       "color": "#38bdf8"},
     "MBST":      {"label": "MBS (Mortgage-Backed Sec)", "color": "#34d399"},
+    "WSHOSHO":   {"label": "T-Bills Outstanding",       "color": "#818cf8"},
     "WRESBAL":   {"label": "Reserve Balances",          "color": "#f59e0b"},
     "RRPONTSYD": {"label": "Overnight Reverse Repos",   "color": "#fb7185"},
     "WTREGEN":   {"label": "Treasury General Account",  "color": "#facc15"},

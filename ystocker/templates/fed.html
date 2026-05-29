@@ -144,7 +144,7 @@
   </div>
   <div class="bg-slate-900 border border-slate-800 rounded-xl px-4 py-3">
     <div class="text-xs text-slate-500 mb-1 flex items-center gap-1" data-i18n="fed.stat_other_assets">Other Assets
-      <span class="fed-tip text-slate-600 cursor-help text-[10px]" title="Repos, swaps, foreign currency assets, premium on securities, gold/SDR, accrued interest, etc. Computed: Total Assets − Treasuries − MBS − Loans">ⓘ</span>
+      <span class="fed-tip text-slate-600 cursor-help text-[10px]" data-i18n-tip="fed.tip_other_assets" title="Repos, swaps, foreign currency assets, premium on securities, gold/SDR, accrued interest, etc. Computed: Total Assets − Treasuries − MBS − Loans">ⓘ</span>
     </div>
     <div id="statOtherAssets" class="text-xl font-bold text-slate-100">—</div>
     <div id="statOtherAssetsChg" class="text-xs mt-0.5 text-slate-500">—</div>
@@ -203,9 +203,9 @@
     <div>
       <h2 class="text-sm font-semibold text-slate-200 flex items-center gap-2">
         <span>🧮</span>
-        <span data-i18n="fed.balance_title">Balance Sheet Identity</span>
+        <span data-i18n="fed.balance_id_title">Balance Sheet Identity</span>
       </h2>
-      <p class="text-[11px] text-slate-500 mt-0.5" data-i18n="fed.balance_desc">
+      <p class="text-[11px] text-slate-500 mt-0.5" data-i18n="fed.balance_id_desc">
         Assets must equal Liabilities + Capital. Items not in our cards are grouped as "Other".
       </p>
     </div>
@@ -216,15 +216,15 @@
     <!-- Assets side -->
     <div class="bg-slate-950/50 border border-slate-800 rounded-xl p-3">
       <div class="flex items-center justify-between mb-2 pb-2 border-b border-slate-800">
-        <span class="text-xs font-semibold text-slate-400 uppercase tracking-wide">Assets</span>
+        <span class="text-xs font-semibold text-slate-400 uppercase tracking-wide" data-i18n="fed.balance_assets">Assets</span>
         <span id="balanceTotalAssets" class="font-mono font-bold text-slate-100">—</span>
       </div>
       <ul class="space-y-1 text-xs text-slate-400">
-        <li class="flex justify-between"><span>• Treasury Securities</span><span id="balanceTreas" class="font-mono text-slate-300">—</span></li>
-        <li class="flex justify-between"><span>• MBS Holdings</span><span id="balanceMbs" class="font-mono text-slate-300">—</span></li>
-        <li class="flex justify-between"><span>• Fed Loans (BTFP, etc.)</span><span id="balanceLoans" class="font-mono text-slate-300">—</span></li>
+        <li class="flex justify-between"><span data-i18n="fed.balance_li_treas">• Treasury Securities</span><span id="balanceTreas" class="font-mono text-slate-300">—</span></li>
+        <li class="flex justify-between"><span data-i18n="fed.balance_li_mbs">• MBS Holdings</span><span id="balanceMbs" class="font-mono text-slate-300">—</span></li>
+        <li class="flex justify-between"><span data-i18n="fed.balance_li_loans">• Fed Loans (BTFP, etc.)</span><span id="balanceLoans" class="font-mono text-slate-300">—</span></li>
         <li class="flex justify-between border-t border-slate-800 pt-1 mt-1">
-          <span class="text-slate-500">• Other (Repos, swaps, premium, gold...)</span>
+          <span class="text-slate-500" data-i18n="fed.balance_li_othera">• Other (Repos, swaps, premium, gold...)</span>
           <span id="balanceOtherA" class="font-mono text-slate-300">—</span>
         </li>
       </ul>
@@ -233,16 +233,16 @@
     <!-- Liabilities + Capital side -->
     <div class="bg-slate-950/50 border border-slate-800 rounded-xl p-3">
       <div class="flex items-center justify-between mb-2 pb-2 border-b border-slate-800">
-        <span class="text-xs font-semibold text-slate-400 uppercase tracking-wide">Liabilities + Capital</span>
+        <span class="text-xs font-semibold text-slate-400 uppercase tracking-wide" data-i18n="fed.balance_liab">Liabilities + Capital</span>
         <span id="balanceTotalLiab" class="font-mono font-bold text-slate-100">—</span>
       </div>
       <ul class="space-y-1 text-xs text-slate-400">
-        <li class="flex justify-between"><span>• Reserve Balances</span><span id="balanceRes" class="font-mono text-slate-300">—</span></li>
-        <li class="flex justify-between"><span>• Currency in Circulation</span><span id="balanceCurr" class="font-mono text-slate-300">—</span></li>
-        <li class="flex justify-between"><span>• Treasury General Account</span><span id="balanceTga" class="font-mono text-slate-300">—</span></li>
-        <li class="flex justify-between"><span>• Overnight Reverse Repos</span><span id="balanceRrp" class="font-mono text-slate-300">—</span></li>
+        <li class="flex justify-between"><span data-i18n="fed.balance_li_res">• Reserve Balances</span><span id="balanceRes" class="font-mono text-slate-300">—</span></li>
+        <li class="flex justify-between"><span data-i18n="fed.balance_li_curr">• Currency in Circulation</span><span id="balanceCurr" class="font-mono text-slate-300">—</span></li>
+        <li class="flex justify-between"><span data-i18n="fed.balance_li_tga">• Treasury General Account</span><span id="balanceTga" class="font-mono text-slate-300">—</span></li>
+        <li class="flex justify-between"><span data-i18n="fed.balance_li_rrp">• Overnight Reverse Repos</span><span id="balanceRrp" class="font-mono text-slate-300">—</span></li>
         <li class="flex justify-between border-t border-slate-800 pt-1 mt-1">
-          <span class="text-slate-500">• Other liab. + Capital (~$45B)</span>
+          <span class="text-slate-500" data-i18n="fed.balance_li_otherl">• Other liab. + Capital (~$45B)</span>
           <span id="balanceOtherL" class="font-mono text-slate-300">—</span>
         </li>
       </ul>
@@ -250,11 +250,122 @@
   </div>
 
   <p class="text-[11px] text-slate-500 mt-3 leading-relaxed">
-    <span class="text-slate-400">💡 Why it matters:</span>
-    Total Assets can drop while Treasuries rise — for example when the Fed lets repos roll off,
-    swap lines unwind, or as QE-era bond premiums amortize. The "Other" lines capture these moves.
+    <span class="text-slate-400" data-i18n="fed.balance_why_label">💡 Why it matters:</span>
+    <span data-i18n="fed.balance_why">Total Assets can drop while Treasuries rise — for example when the Fed lets repos roll off, swap lines unwind, or as QE-era bond premiums amortize. The "Other" lines capture these moves.</span>
   </p>
 </div>
+
+<!-- ── Other Assets Breakdown (educational) ──────────────────────────── -->
+<div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 mb-6 fade-up">
+  <h2 class="text-sm font-semibold text-slate-200 flex items-center gap-2 mb-3">
+    <span>📚</span>
+    <span data-i18n="fed.other_assets_title">What's in "Other Assets"?</span>
+  </h2>
+  <p class="text-xs text-slate-500 mb-4 leading-relaxed" data-i18n="fed.other_assets_intro">
+    The Fed's balance sheet has more line items than the cards above. The "Other Assets" total is the sum of everything we don't break out individually. Here's what's typically in it:
+  </p>
+  <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+    <div class="bg-slate-950/50 border border-slate-800 rounded-lg p-3">
+      <div class="flex items-start gap-2">
+        <span class="text-base shrink-0">🔁</span>
+        <div>
+          <p class="text-xs font-semibold text-slate-300" data-i18n="fed.other_repos">Repurchase Agreements</p>
+          <p class="text-[11px] text-slate-500 mt-0.5 leading-relaxed" data-i18n="fed.other_repos_desc">Fed lends cash overnight, takes Treasuries as collateral. Currently small (~$0–$50B), historically up to $500B.</p>
+        </div>
+      </div>
+    </div>
+    <div class="bg-slate-950/50 border border-slate-800 rounded-lg p-3">
+      <div class="flex items-start gap-2">
+        <span class="text-base shrink-0">🌐</span>
+        <div>
+          <p class="text-xs font-semibold text-slate-300" data-i18n="fed.other_swaps">Central Bank Liquidity Swaps</p>
+          <p class="text-[11px] text-slate-500 mt-0.5 leading-relaxed" data-i18n="fed.other_swaps_desc">USD lent to foreign central banks (ECB, BoJ, BoE, SNB, BoC). Spikes during global dollar shortages.</p>
+        </div>
+      </div>
+    </div>
+    <div class="bg-slate-950/50 border border-slate-800 rounded-lg p-3">
+      <div class="flex items-start gap-2">
+        <span class="text-base shrink-0">📈</span>
+        <div>
+          <p class="text-xs font-semibold text-slate-300" data-i18n="fed.other_premium">Unamortized Premium on Securities</p>
+          <p class="text-[11px] text-slate-500 mt-0.5 leading-relaxed" data-i18n="fed.other_premium_desc">QE-era bonds bought above face value. Amortizes down each week (~$300–$400B currently).</p>
+        </div>
+      </div>
+    </div>
+    <div class="bg-slate-950/50 border border-slate-800 rounded-lg p-3">
+      <div class="flex items-start gap-2">
+        <span class="text-base shrink-0">💰</span>
+        <div>
+          <p class="text-xs font-semibold text-slate-300" data-i18n="fed.other_fx">Foreign Currency Assets</p>
+          <p class="text-[11px] text-slate-500 mt-0.5 leading-relaxed" data-i18n="fed.other_fx_desc">EUR, JPY, and other foreign currency holdings (~$20B).</p>
+        </div>
+      </div>
+    </div>
+    <div class="bg-slate-950/50 border border-slate-800 rounded-lg p-3">
+      <div class="flex items-start gap-2">
+        <span class="text-base shrink-0">🏆</span>
+        <div>
+          <p class="text-xs font-semibold text-slate-300" data-i18n="fed.other_gold">Gold &amp; SDR Certificates</p>
+          <p class="text-[11px] text-slate-500 mt-0.5 leading-relaxed" data-i18n="fed.other_gold_desc">Gold certificate account (~$11B) + SDR certificates (~$5B). Mostly historical, doesn't change.</p>
+        </div>
+      </div>
+    </div>
+    <div class="bg-slate-950/50 border border-slate-800 rounded-lg p-3">
+      <div class="flex items-start gap-2">
+        <span class="text-base shrink-0">📋</span>
+        <div>
+          <p class="text-xs font-semibold text-slate-300" data-i18n="fed.other_misc">Other Federal Reserve Assets</p>
+          <p class="text-[11px] text-slate-500 mt-0.5 leading-relaxed" data-i18n="fed.other_misc_desc">Accrued interest, premises (Fed offices), other items. Usually a few billion.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Treasury Issuance (T-Bills outstanding — market-wide, NOT Fed-held) ── -->
+<div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 mb-6 fade-up">
+  <div class="flex items-start justify-between gap-3 mb-3 flex-wrap">
+    <div>
+      <h2 class="text-sm font-semibold text-slate-200 flex items-center gap-2">
+        <span>📜</span>
+        <span data-i18n="fed.tbills_outstanding_title">U.S. Treasury Bills Outstanding</span>
+      </h2>
+      <p class="text-[11px] text-slate-500 mt-0.5" data-i18n="fed.tbills_outstanding_desc">
+        Total short-term Treasury bills issued market-wide (≤1 year maturity). NOT Fed-held — held by everyone (banks, MMFs, foreign investors, retail).
+      </p>
+    </div>
+    <span class="text-[10px] uppercase tracking-wider text-slate-500" id="tbillsAsOf">—</span>
+  </div>
+
+  <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+    <div class="bg-slate-950/50 border border-slate-800 rounded-lg p-3">
+      <div class="text-[11px] text-slate-500 mb-1" data-i18n="fed.tbills_total">Total Outstanding</div>
+      <div id="tbillsTotal" class="text-lg font-bold text-slate-100 font-mono">—</div>
+      <div id="tbillsTotalChg" class="text-[11px] mt-0.5 text-slate-500">—</div>
+    </div>
+    <div class="bg-slate-950/50 border border-slate-800 rounded-lg p-3">
+      <div class="text-[11px] text-slate-500 mb-1" data-i18n="fed.tbills_wow">Week-over-Week</div>
+      <div id="tbillsWow" class="text-lg font-bold text-slate-100 font-mono">—</div>
+      <div class="text-[11px] mt-0.5 text-slate-500" data-i18n="fed.tbills_wow_desc">Last 7 days</div>
+    </div>
+    <div class="bg-slate-950/50 border border-slate-800 rounded-lg p-3">
+      <div class="text-[11px] text-slate-500 mb-1" data-i18n="fed.tbills_yoy">Year-over-Year</div>
+      <div id="tbillsYoy" class="text-lg font-bold text-slate-100 font-mono">—</div>
+      <div class="text-[11px] mt-0.5 text-slate-500" data-i18n="fed.tbills_yoy_desc">vs 52 weeks ago</div>
+    </div>
+    <div class="bg-slate-950/50 border border-slate-800 rounded-lg p-3">
+      <div class="text-[11px] text-slate-500 mb-1" data-i18n="fed.tbills_pct_assets">% of Fed Assets</div>
+      <div id="tbillsPctAssets" class="text-lg font-bold text-slate-100 font-mono">—</div>
+      <div class="text-[11px] mt-0.5 text-slate-500" data-i18n="fed.tbills_pct_desc">If Fed held them all</div>
+    </div>
+  </div>
+
+  <p class="text-[11px] text-slate-500 mt-3 leading-relaxed">
+    <span class="text-slate-400" data-i18n="fed.tbills_why_label">💡 Why it matters:</span>
+    <span data-i18n="fed.tbills_why">Rapid growth in T-bills outstanding = Treasury financing more deficit short-term (cheaper but rate-sensitive). Money market funds absorb most of this supply.</span>
+  </p>
+</div>
+<!-- end Treasury Issuance -->
 
 <!-- ── Charts ────────────────────────────────────────────────────────── -->
 <div class="space-y-6" id="chartsArea">
@@ -516,7 +627,48 @@
   // Show the as-of week
   const wkDates = s['WALCL']?.dates || [];
   const weekEl = document.getElementById('balanceSheetWeek');
-  if (weekEl && wkDates.length) weekEl.textContent = 'As of ' + wkDates[wkDates.length - 1];
+  const asOfLabel = (typeof I18n !== 'undefined' && I18n.t('fed.as_of')) || 'As of';
+  if (weekEl && wkDates.length) weekEl.textContent = asOfLabel + ' ' + wkDates[wkDates.length - 1];
+
+  // ── T-Bills Outstanding metrics
+  const tb = s['WSHOSHO'];
+  if (tb && tb.values && tb.values.length > 0) {
+    const vals = tb.values;
+    const dates = tb.dates;
+    const last  = vals[vals.length - 1];
+    const prev  = vals.length > 1 ? vals[vals.length - 2] : null;
+    const yearAgo = vals.length > 52 ? vals[vals.length - 53] : null;
+    const totA = _v('WALCL') || 0;
+
+    function _set(id, txt, cls) {
+      const el = document.getElementById(id);
+      if (el) {
+        el.textContent = txt;
+        if (cls) el.className = el.className.replace(/text-(emerald|rose|slate)-\d+/g, '') + ' ' + cls;
+      }
+    }
+    _set('tbillsTotal', fmtB(last));
+    _set('tbillsTotalChg', fmtChg(last, prev), 'text-[11px] mt-0.5 ' + chgClass(last, prev));
+
+    if (prev != null && last != null) {
+      const wowDiff = last - prev;
+      _set('tbillsWow',
+        (wowDiff >= 0 ? '+' : '') + (Math.abs(wowDiff) >= 1000 ? (wowDiff/1000).toFixed(2)+'T' : wowDiff.toFixed(1)+'B'),
+        'text-lg font-bold font-mono ' + (wowDiff >= 0 ? 'text-emerald-400' : 'text-rose-400'));
+    }
+    if (yearAgo != null && last != null) {
+      const yoyPct = ((last - yearAgo) / yearAgo) * 100;
+      _set('tbillsYoy',
+        (yoyPct >= 0 ? '+' : '') + yoyPct.toFixed(1) + '%',
+        'text-lg font-bold font-mono ' + (yoyPct >= 0 ? 'text-emerald-400' : 'text-rose-400'));
+    }
+    if (totA > 0 && last != null) {
+      const pct = (last / totA) * 100;
+      _set('tbillsPctAssets', pct.toFixed(1) + '%', 'text-lg font-bold font-mono text-slate-100');
+    }
+    const asOfEl = document.getElementById('tbillsAsOf');
+    if (asOfEl && dates.length) asOfEl.textContent = asOfLabel + ' ' + dates[dates.length - 1];
+  }
 
   // ── helper: slice series to last N weeks (0 = all)
   function sliceSeries(sid, n) {
