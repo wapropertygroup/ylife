@@ -113,11 +113,20 @@ for req in "\${REQS[@]}"; do
   fi
 done
 
-# Install Playwright Chromium browser (for headless scraping fallback)
+# Install Playwright Chromium browser (for headless scraping fallback).
+# Amazon Linux 2023 uses dnf, not apt — we install system deps manually
+# via dnf and then run `playwright install chromium` WITHOUT --with-deps.
 if sudo "\$APP_DIR/venv/bin/pip" show playwright >/dev/null 2>&1; then
-  echo "[\$(TS)]    Installing Playwright Chromium browser..."
-  sudo "\$APP_DIR/venv/bin/playwright" install chromium --with-deps 2>&1 | tail -3
-  echo "[\$(TS)]    Playwright Chromium OK"
+  echo "[\$(TS)]    Installing Chromium system dependencies via dnf..."
+  sudo dnf install -y -q \\
+      alsa-lib atk at-spi2-atk at-spi2-core cairo cups-libs dbus-libs \\
+      gtk3 libdrm libxkbcommon libXcomposite libXcursor libXdamage \\
+      libXext libXfixes libXi libXrandr libXScrnSaver libXtst mesa-libgbm \\
+      nspr nss pango xdg-utils 2>&1 | tail -3 || true
+  echo "[\$(TS)]    Installing Playwright Chromium browser binary..."
+  sudo "\$APP_DIR/venv/bin/playwright" install chromium 2>&1 | tail -3 || \\
+      echo "[\$(TS)]    ⚠ Playwright install failed — Walmart scraping may fall back to API only"
+  echo "[\$(TS)]    Playwright Chromium step complete"
 fi
 
 # ── Service setup (function) ─────────────────────────────────────────────────
