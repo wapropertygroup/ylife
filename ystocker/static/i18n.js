@@ -493,6 +493,26 @@ const I18n = (() => {
     'fed.tbills_why':         { en: 'Rapid growth in T-bills outstanding = Treasury financing more deficit short-term (cheaper but rate-sensitive). Money market funds absorb most of this supply.',
                                   zh: '短期国库券发行量快速增长 = 财政部更多通过短期债务融资赤字（成本较低但对利率敏感）。货币市场基金吸收了大部分此类供给。' },
 
+    // ── fed.html: Currency in Circulation — Growth Speed metrics ──────
+    'fed.curr_speed_title':       { en: 'Currency in Circulation — Growth Speed', zh: '流通中货币 — 增长速度' },
+    'fed.curr_speed_desc':        { en: 'How fast physical currency (banknotes & coins) is being injected into the economy. Rapid growth often coincides with cash-hoarding episodes; flat or negative deltas signal de-circulation.',
+                                     zh: '实物货币（纸币和硬币）注入经济的速度。快速增长通常伴随现金囤积；持平或负值则表明现金回笼。' },
+    'fed.curr_speed_total':       { en: 'Current Level',     zh: '当前水平' },
+    'fed.curr_speed_total_desc':  { en: 'Outstanding',       zh: '存量' },
+    'fed.curr_speed_wow':         { en: 'Δ Week (WoW)',      zh: '周环比 (Δ)' },
+    'fed.curr_speed_wow_desc':    { en: 'Last 7 days',       zh: '最近7天' },
+    'fed.curr_speed_4w':          { en: 'Δ 4-Week',          zh: '4周变化' },
+    'fed.curr_speed_4w_desc':     { en: '~Last month',       zh: '约近1个月' },
+    'fed.curr_speed_13w':         { en: 'Δ 13-Week',         zh: '13周变化' },
+    'fed.curr_speed_13w_desc':    { en: '~Last quarter',     zh: '约近1季度' },
+    'fed.curr_speed_yoy':         { en: 'Δ 52-Week (YoY)',   zh: '52周变化（年同比）' },
+    'fed.curr_speed_yoy_desc':    { en: 'vs 52w ago',        zh: '相比52周前' },
+    'fed.curr_speed_yoy_pct':     { en: 'YoY %',             zh: '年同比 %' },
+    'fed.curr_speed_yoy_pct_desc':{ en: 'Annualized speed',  zh: '年化速度' },
+    'fed.curr_speed_why_label':   { en: '💡 Why it matters:', zh: '💡 这有什么意义：' },
+    'fed.curr_speed_why':         { en: 'Currency in circulation grows slowly with nominal GDP (~5-7%/yr historically). Sudden spikes (COVID 2020, banking stress 2023) signal flight-to-cash; sustained slowdowns can indicate digital-payment displacement or weakening cash demand.',
+                                     zh: '流通中货币通常与名义GDP同步缓慢增长（历史约每年5-7%）。突发性激增（如2020年新冠、2023年银行业危机）反映避险囤现金；持续放缓可能反映数字支付替代或现金需求疲弱。' },
+
     // ── contact.html ───────────────────────────────────────────────────
     'contact.title':        { en: 'Contact Us',  zh: '联系我们' },
 
@@ -576,6 +596,7 @@ const I18n = (() => {
 
     // ── sector names (peer groups) ─────────────────────────────────────
     'sector.name.Tech':              { en: 'Tech',               zh: '科技' },
+    'sector.name.Software (IGV)':    { en: 'Software (IGV)',     zh: '软件 (IGV)' },
     'sector.name.Cloud / SaaS':      { en: 'Cloud / SaaS',       zh: '云计算 / SaaS' },
     'sector.name.Semiconductors':    { en: 'Semiconductors',     zh: '半导体' },
     'sector.name.Financials':        { en: 'Financials',         zh: '金融' },
@@ -746,6 +767,11 @@ const I18n = (() => {
     'markets.tab_sse':     { en: 'Shanghai',   zh: '上证指数' },
     'markets.tab_twii':    { en: 'Taiwan',     zh: '台湾加权' },
     'markets.tab_kospi':   { en: 'KOSPI',      zh: '韩国综合' },
+    'markets.tab_gold':    { en: 'Gold',       zh: '黄金' },
+    'markets.tab_silver':  { en: 'Silver',     zh: '白银' },
+    'markets.tab_oil':     { en: 'Crude Oil',  zh: '原油' },
+    'markets.tab_natgas':  { en: 'Nat Gas',    zh: '天然气' },
+    'markets.tab_copper':  { en: 'Copper',     zh: '铜' },
     'markets.idx_spx':     { en: 'S&P 500',              zh: '标普500' },
     'markets.idx_ixic':    { en: 'Nasdaq',               zh: '纳斯达克' },
     'markets.idx_dji':     { en: 'Dow Jones',             zh: '道琼斯' },
@@ -754,6 +780,11 @@ const I18n = (() => {
     'markets.idx_sse':     { en: 'Shanghai Composite',    zh: '上证综合指数' },
     'markets.idx_twii':    { en: 'Taiwan Weighted',       zh: '台湾加权指数' },
     'markets.idx_kospi':   { en: 'KOSPI',                 zh: '韩国综合指数' },
+    'markets.idx_gold':    { en: 'Gold (COMEX GC=F)',     zh: '黄金 (COMEX GC=F)' },
+    'markets.idx_silver':  { en: 'Silver (COMEX SI=F)',   zh: '白银 (COMEX SI=F)' },
+    'markets.idx_oil':     { en: 'WTI Crude Oil (CL=F)',  zh: 'WTI 原油 (CL=F)' },
+    'markets.idx_natgas':  { en: 'Natural Gas (NG=F)',    zh: '天然气 (NG=F)' },
+    'markets.idx_copper':  { en: 'Copper (HG=F)',         zh: '铜 (HG=F)' },
     'markets.hist_title':  { en: 'Price History', zh: '价格历史' },
     'markets.hist_desc':   { en: 'Weekly closing level', zh: '每周收盘点位' },
     'markets.rsi':         { en: 'RSI (14)', zh: 'RSI（14日）' },
