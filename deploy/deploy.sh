@@ -113,10 +113,14 @@ for req in "\${REQS[@]}"; do
   fi
 done
 
-# Install Playwright Chromium browser (for headless scraping fallback).
-# Amazon Linux 2023 uses dnf, not apt — we install system deps manually
-# via dnf and then run `playwright install chromium` WITHOUT --with-deps.
-if sudo "\$APP_DIR/venv/bin/pip" show playwright >/dev/null 2>&1; then
+# Playwright Chromium browser install — DISABLED.
+# Reason: the Azure CDN (playwright.azureedge.net) frequently returns 400
+# errors for Mac/Linux ARM builds, breaking the deploy. The Walmart and
+# Target scrapers already have multiple API fallback strategies that work
+# without a browser, so Playwright is no longer required on EC2.
+# To re-enable, set INSTALL_PLAYWRIGHT=1 in this shell before running deploy.
+if [[ "\${INSTALL_PLAYWRIGHT:-0}" == "1" ]] \
+   && sudo "\$APP_DIR/venv/bin/pip" show playwright >/dev/null 2>&1; then
   echo "[\$(TS)]    Installing Chromium system dependencies via dnf..."
   sudo dnf install -y -q \\
       alsa-lib atk at-spi2-atk at-spi2-core cairo cups-libs dbus-libs \\
@@ -125,8 +129,7 @@ if sudo "\$APP_DIR/venv/bin/pip" show playwright >/dev/null 2>&1; then
       nspr nss pango xdg-utils 2>&1 | tail -3 || true
   echo "[\$(TS)]    Installing Playwright Chromium browser binary..."
   sudo "\$APP_DIR/venv/bin/playwright" install chromium 2>&1 | tail -3 || \\
-      echo "[\$(TS)]    ⚠ Playwright install failed — Walmart scraping may fall back to API only"
-  echo "[\$(TS)]    Playwright Chromium step complete"
+      echo "[\$(TS)]    ⚠ Playwright install failed — Walmart scraping uses API fallbacks"
 fi
 
 # ── Service setup (function) ─────────────────────────────────────────────────
