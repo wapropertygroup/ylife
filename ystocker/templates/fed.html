@@ -210,7 +210,10 @@
       </p>
     </div>
     <div class="flex items-center gap-2 flex-wrap">
-      <span class="text-[10px] uppercase tracking-wider text-slate-500" id="balanceSheetWeek">—</span>
+      <span class="text-[10px] uppercase tracking-wider text-slate-500">
+        <span data-i18n="fed.as_of">As of</span>
+        <span id="balanceSheetWeek">—</span>
+      </span>
       <button class="explain-btn" onclick="explainChart('balanceId')" data-i18n="fed.explain">✦ Explain</button>
     </div>
   </div>
@@ -392,7 +395,10 @@
         Total short-term Treasury bills issued market-wide (≤1 year maturity). NOT Fed-held — held by everyone (banks, MMFs, foreign investors, retail).
       </p>
     </div>
-    <span class="text-[10px] uppercase tracking-wider text-slate-500" id="tbillsAsOf">—</span>
+    <span class="text-[10px] uppercase tracking-wider text-slate-500">
+      <span data-i18n="fed.as_of">As of</span>
+      <span id="tbillsAsOf">—</span>
+    </span>
   </div>
 
   <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
@@ -437,7 +443,10 @@
         Selected line items inside the "Other Assets" bucket — Central Bank Liquidity Swaps (USD lent to foreign central banks), and the legacy Gold &amp; SDR certificate accounts.
       </p>
     </div>
-    <span class="text-[10px] uppercase tracking-wider text-slate-500" id="otherDetailAsOf">—</span>
+    <span class="text-[10px] uppercase tracking-wider text-slate-500">
+      <span data-i18n="fed.as_of">As of</span>
+      <span id="otherDetailAsOf">—</span>
+    </span>
   </div>
 
   <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -550,7 +559,10 @@
         How fast physical currency (banknotes &amp; coins) is being injected into the economy. Rapid growth often coincides with cash-hoarding episodes; flat or negative deltas signal de-circulation.
       </p>
     </div>
-    <span class="text-[10px] uppercase tracking-wider text-slate-500" id="currSpeedAsOf">—</span>
+    <span class="text-[10px] uppercase tracking-wider text-slate-500">
+      <span data-i18n="fed.as_of">As of</span>
+      <span id="currSpeedAsOf">—</span>
+    </span>
   </div>
 
   <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 text-sm">
@@ -874,8 +886,7 @@
   // Show the as-of week
   const wkDates = s['WALCL']?.dates || [];
   const weekEl = document.getElementById('balanceSheetWeek');
-  const asOfLabel = (typeof I18n !== 'undefined' && I18n.t('fed.as_of')) || 'As of';
-  if (weekEl && wkDates.length) weekEl.textContent = asOfLabel + ' ' + wkDates[wkDates.length - 1];
+  if (weekEl && wkDates.length) weekEl.textContent = wkDates[wkDates.length - 1];
 
   // ── Register full balance-sheet snapshot for AI Explain
   _explainData['balanceId'] = {
@@ -954,7 +965,7 @@
       _set('tbillsPctAssets', pct.toFixed(1) + '%', 'text-lg font-bold font-mono text-slate-100');
     }
     const asOfEl = document.getElementById('tbillsAsOf');
-    if (asOfEl && dates.length) asOfEl.textContent = asOfLabel + ' ' + dates[dates.length - 1];
+    if (asOfEl && dates.length) asOfEl.textContent = dates[dates.length - 1];
   }
 
   // ── Currency in Circulation — Growth Speed metrics
@@ -1010,7 +1021,7 @@
     }
 
     const asOfElCur = document.getElementById('currSpeedAsOf');
-    if (asOfElCur && cd.length) asOfElCur.textContent = asOfLabel + ' ' + cd[cd.length - 1];
+    if (asOfElCur && cd.length) asOfElCur.textContent = cd[cd.length - 1];
   }
 
   // ── Other Assets — Detailed Breakdown (Swaps / Gold / SDR)
@@ -1085,21 +1096,36 @@
     _setText('goldCurrent', '—');
   }
 
-  // SDR (WSDRAL)
+  // SDR (WSDRAL) — FRED may not always publish this as a standalone series
   const sdr = _seriesMetrics('WSDRAL');
-  if (sdr) {
+  if (sdr && sdr.last != null) {
     _setText('sdrCurrent', _fmtSmall(sdr.last));
     _setText('sdrWow',     _fmtSmallDelta(sdr.wow), _smallDeltaCls(sdr.wow));
     _setText('sdrHigh52',  _fmtSmall(sdr.high52));
     _setText('sdrLow52',   _fmtSmall(sdr.low52));
   } else {
-    _setText('sdrCurrent', '—');
+    // Series unavailable — replace the metrics grid with an inline note so
+    // the card still looks intentional rather than broken.
+    const sdrCard = document.getElementById('sdrCurrent')?.closest('.bg-slate-950\\/50');
+    if (sdrCard) {
+      const grid = sdrCard.querySelector('.grid');
+      if (grid) {
+        grid.innerHTML = `
+          <div class="col-span-2 text-[11px] text-slate-500 italic" data-i18n="fed.sdr_unavailable">
+            FRED does not publish this line item as a standalone series. The
+            balance is roughly $5.2B and is included inside "Other Assets"
+            above.
+          </div>
+        `;
+        if (typeof I18n !== 'undefined' && I18n.apply) I18n.apply(grid);
+      }
+    }
   }
 
   // Use the latest available as-of from any of the three series
   const detailAsOf = (swaps?.asOf) || (gold?.asOf) || (sdr?.asOf);
   const asOfElDetail = document.getElementById('otherDetailAsOf');
-  if (asOfElDetail && detailAsOf) asOfElDetail.textContent = asOfLabel + ' ' + detailAsOf;
+  if (asOfElDetail && detailAsOf) asOfElDetail.textContent = detailAsOf;
 
   // ── helper: slice series to last N weeks (0 = all)
   function sliceSeries(sid, n) {

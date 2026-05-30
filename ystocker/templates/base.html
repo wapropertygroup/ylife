@@ -53,7 +53,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
 
   <!-- i18n -->
-  <script src="{{ url_for('static', filename='i18n.js') }}"></script>
+  <script src="{{ url_for('static', filename='i18n.js') }}?v={{ cache_bust or 'dev' }}"></script>
 
   <style>
     body { font-family: 'Inter', sans-serif; }

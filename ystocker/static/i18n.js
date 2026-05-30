@@ -544,6 +544,8 @@ const I18n = (() => {
     'fed.sdr_wow':              { en: 'Δ Week (WoW)',    zh: '周环比 (Δ)' },
     'fed.sdr_high52':           { en: '52w High',        zh: '52周高点' },
     'fed.sdr_low52':            { en: '52w Low',         zh: '52周低点' },
+    'fed.sdr_unavailable':      { en: 'FRED does not publish this line item as a standalone series. The balance is roughly $5.2B and is included inside "Other Assets" above.',
+                                   zh: 'FRED 未将此项目作为独立序列发布。该余额约为 52 亿美元，已包含在上方的"其他资产"中。' },
 
     // ── contact.html ───────────────────────────────────────────────────
     'contact.title':        { en: 'Contact Us',  zh: '联系我们' },

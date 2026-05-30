@@ -171,6 +171,19 @@ def create_app() -> Flask:
     def datetimeformat(ts):
         return datetime.datetime.fromtimestamp(float(ts)).strftime("%b %d, %Y %H:%M")
 
+    # Cache-busting token for static assets. Uses the file mtime of i18n.js
+    # so browsers re-download translations whenever they change.
+    import os
+    _i18n_path = os.path.join(app.static_folder, "i18n.js")
+    try:
+        _cache_bust = str(int(os.path.getmtime(_i18n_path)))
+    except OSError:
+        _cache_bust = str(int(datetime.datetime.now().timestamp()))
+
+    @app.context_processor
+    def _inject_cache_bust():
+        return {"cache_bust": _cache_bust}
+
     # Configure logging so INFO messages appear in the terminal
     import logging
     logging.basicConfig(
