@@ -88,7 +88,7 @@
 
 <!-- ── Index snapshot cards ───────────────────────────────────────────── -->
 <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-4 xl:grid-cols-8 gap-3 mb-6 fade-up" id="indexCards">
-  {% for _ in range(8) %}
+  {% for _ in range(13) %}
   <div class="animate-pulse bg-slate-900 border border-slate-800 rounded-xl p-3 h-24"></div>
   {% endfor %}
 </div>
@@ -379,6 +379,12 @@
     <button class="idx-tab-btn whitespace-nowrap"        id="tabSse"   onclick="switchIdx('sse')"   data-i18n="markets.tab_sse">Shanghai</button>
     <button class="idx-tab-btn whitespace-nowrap"        id="tabTwii"  onclick="switchIdx('twii')"  data-i18n="markets.tab_twii">Taiwan</button>
     <button class="idx-tab-btn whitespace-nowrap"        id="tabKospi" onclick="switchIdx('kospi')" data-i18n="markets.tab_kospi">KOSPI</button>
+    <span class="self-center mx-1 h-5 w-px bg-slate-700/70" aria-hidden="true"></span>
+    <button class="idx-tab-btn whitespace-nowrap"        id="tabGold"   onclick="switchIdx('gold')"   data-i18n="markets.tab_gold">Gold</button>
+    <button class="idx-tab-btn whitespace-nowrap"        id="tabSilver" onclick="switchIdx('silver')" data-i18n="markets.tab_silver">Silver</button>
+    <button class="idx-tab-btn whitespace-nowrap"        id="tabOil"    onclick="switchIdx('oil')"    data-i18n="markets.tab_oil">Crude Oil</button>
+    <button class="idx-tab-btn whitespace-nowrap"        id="tabNatgas" onclick="switchIdx('natgas')" data-i18n="markets.tab_natgas">Nat Gas</button>
+    <button class="idx-tab-btn whitespace-nowrap"        id="tabCopper" onclick="switchIdx('copper')" data-i18n="markets.tab_copper">Copper</button>
   </div>
 
   <!-- Stat row (shared, updated per tab) -->
@@ -590,15 +596,20 @@ let _pcrData          = null;
 const IDX_SYMBOLS = {
   spx: '%5EGSPC', ixic: '%5EIXIC', dji: '%5EDJI',
   ftse: '%5EFTSE', n225: '%5EN225', sse: '000001.SS', twii: '%5ETWII', kospi: '%5EKS11',
+  // Commodity futures (=F → URL-encoded as %3DF)
+  gold: 'GC%3DF', silver: 'SI%3DF', oil: 'CL%3DF', natgas: 'NG%3DF', copper: 'HG%3DF',
 };
 const IDX_COLORS = {
   spx: '#6366f1', ixic: '#38bdf8', dji: '#fb923c',
   ftse: '#e879f9', n225: '#f472b6', sse: '#f87171', twii: '#34d399', kospi: '#fbbf24',
+  gold: '#facc15', silver: '#cbd5e1', oil: '#14b8a6', natgas: '#60a5fa', copper: '#d97706',
 };
-const IDX_ALL_KEYS = ['spx', 'ixic', 'dji', 'ftse', 'n225', 'sse', 'twii', 'kospi'];
+const IDX_ALL_KEYS = ['spx', 'ixic', 'dji', 'ftse', 'n225', 'sse', 'twii', 'kospi',
+                      'gold', 'silver', 'oil', 'natgas', 'copper'];
 const IDX_LABELS = {
   spx: 'S&P 500', ixic: 'Nasdaq', dji: 'Dow Jones',
   ftse: 'FTSE 100', n225: 'Nikkei 225', sse: 'Shanghai', twii: 'Taiwan', kospi: 'KOSPI',
+  gold: 'Gold', silver: 'Silver', oil: 'Crude Oil', natgas: 'Natural Gas', copper: 'Copper',
 };
 function idxLabel(key) {
   return (typeof I18n !== 'undefined' && I18n.tIdx) ? I18n.tIdx(key) : (IDX_LABELS[key] || key.toUpperCase());

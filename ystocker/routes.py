@@ -1041,6 +1041,73 @@ def fed_refresh():
     return redirect(url_for("main.fed"))
 
 
+def _build_balance_snapshot_prompt(snapshot: dict, lang: str) -> str:
+    """Build a Gemini prompt that explains the Fed's full balance-sheet identity.
+
+    The snapshot is a dict with ``asOf``, ``assets``, ``liabilities``, and
+    ``weekly_changes`` sub-dicts (all values in $ billions). Used by the
+    Balance Sheet Identity AI Explain button on the Fed page.
+    """
+    as_of  = snapshot.get("asOf", "latest")
+    assets = snapshot.get("assets") or {}
+    liab   = snapshot.get("liabilities") or {}
+    chg    = snapshot.get("weekly_changes") or {}
+
+    def _fmt(v):
+        if v is None:
+            return "n/a"
+        if abs(v) >= 1000:
+            return f"${v/1000:.2f}T"
+        return f"${v:.1f}B"
+
+    def _chg(v):
+        if v is None:
+            return "n/a"
+        sign = "+" if v >= 0 else ""
+        if abs(v) >= 1000:
+            return f"{sign}${v/1000:.2f}T WoW"
+        return f"{sign}${v:.1f}B WoW"
+
+    asset_block = (
+        f"  Total Assets:                  {_fmt(assets.get('total'))}    ({_chg(chg.get('total'))})\n"
+        f"  • Treasury Securities:         {_fmt(assets.get('treasuries'))}    ({_chg(chg.get('treasuries'))})\n"
+        f"  • MBS Holdings:                {_fmt(assets.get('mbs'))}    ({_chg(chg.get('mbs'))})\n"
+        f"  • Fed Loans (BTFP, etc.):      {_fmt(assets.get('loans'))}    ({_chg(chg.get('loans'))})\n"
+        f"  • Other (repos, swaps, gold…): {_fmt(assets.get('other'))}    ({_chg(chg.get('other_assets'))})\n"
+        f"      ↳ Central Bank Liq. Swaps: {_fmt(assets.get('swaps'))}    ({_chg(chg.get('swaps'))})\n"
+        f"      ↳ Gold Certificate Acct.:  {_fmt(assets.get('gold'))}    ({_chg(chg.get('gold'))})\n"
+        f"      ↳ SDR Certificate Acct.:   {_fmt(assets.get('sdr'))}    ({_chg(chg.get('sdr'))})"
+    )
+    liab_block = (
+        f"  Total Liabilities + Capital:   {_fmt(assets.get('total'))}    (must equal Total Assets)\n"
+        f"  • Reserve Balances:            {_fmt(liab.get('reserves'))}    ({_chg(chg.get('reserves'))})\n"
+        f"  • Currency in Circulation:     {_fmt(liab.get('currency'))}    ({_chg(chg.get('currency'))})\n"
+        f"  • Treasury General Account:    {_fmt(liab.get('tga'))}    ({_chg(chg.get('tga'))})\n"
+        f"  • Overnight Reverse Repos:     {_fmt(liab.get('rrp'))}    ({_chg(chg.get('rrp'))})\n"
+        f"  • Other liab. + Capital:       {_fmt(liab.get('other'))}"
+    )
+
+    lang_instr = "Respond in Simplified Chinese (中文)." if lang == "zh" else ""
+
+    return f"""You are a macroeconomic analyst explaining the Federal Reserve's balance sheet to a financial market participant.
+
+Snapshot as of {as_of} — the full balance sheet identity (Assets = Liabilities + Capital):
+
+ASSETS
+{asset_block}
+
+LIABILITIES + CAPITAL
+{liab_block}
+
+In 3-5 concise paragraphs, cover:
+(1) What the overall size and composition tell us — is the Fed currently in QT or QE? How does the asset mix (Treasuries vs MBS vs other) reflect monetary policy? Notice that Treasuries and MBS together usually dominate assets.
+(2) The notable week-over-week moves — which line items are moving the most, and what is driving them? Pay attention to directionally interesting combinations: e.g. shrinking Total Assets while a single line is rising, or unwinding emergency loans.
+(3) The liability side — what does the split between Reserve Balances, Currency in Circulation, TGA, and ON RRP say about banking-system liquidity? Are reserves still abundant? Is the Treasury draining or rebuilding TGA? Is RRP nearly empty?
+(4) Implications for monetary policy and markets — risk assets, money-market rates, dollar liquidity, and overall financial conditions.
+
+Be specific about the numbers and use the exact figures provided. Do not use bullet points or markdown headers in your response — just flowing prose paragraphs. {lang_instr}"""
+
+
 @bp.route("/api/fed")
 def api_fed():
     """JSON API — return Fed H.4.1 balance-sheet time-series data.
@@ -1070,53 +1137,68 @@ def api_fed():
 
 @bp.route("/api/fed/explain", methods=["POST"])
 def api_fed_explain():
-    """Stream an AI explanation of a Fed chart's recent data via SSE."""
+    """Stream an AI explanation of a Fed chart's recent data via SSE.
+
+    Two payload modes:
+      • Time-series mode: ``dates`` + ``values`` arrays (one chart line)
+      • Snapshot mode:    ``snapshot`` dict with full balance-sheet
+                          identity (assets / liabilities + WoW deltas)
+    """
     import os
     from google import genai
 
     body = request.get_json(force=True, silent=True) or {}
-    chart   = body.get("chart", "")
-    dates   = body.get("dates", [])
-    values  = body.get("values", [])
-    label   = body.get("label", chart)
-    lang    = body.get("lang", "en")
-    log.info("API fed/explain: chart=%s lang=%s points=%d", chart, lang, len(dates))
-
-    if not dates or not values:
-        return jsonify({"error": "No data provided"}), 400
+    chart    = body.get("chart", "")
+    dates    = body.get("dates", [])
+    values   = body.get("values", [])
+    label    = body.get("label", chart)
+    lang     = body.get("lang", "en")
+    snapshot = body.get("snapshot")
+    log.info(
+        "API fed/explain: chart=%s lang=%s points=%d snapshot=%s",
+        chart, lang, len(dates), bool(snapshot),
+    )
 
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
         log.warning("API fed/explain: GEMINI_API_KEY not configured")
         return jsonify({"error": "GEMINI_API_KEY not configured"}), 503
 
-    # Build a compact data summary (last 12 points + overall trend)
-    pairs = [(d, v) for d, v in zip(dates, values) if v is not None]
-    if not pairs:
-        return jsonify({"error": "No valid data points"}), 400
-
-    # For the PCT chart the values are percentages, not billions
-    is_pct = (chart == "pct")
-
-    first_date, first_val = pairs[0]
-    last_date,  last_val  = pairs[-1]
-    recent = pairs[-12:]  # last ~3 months of weekly data
-    if is_pct:
-        recent_lines = "\n".join(f"  {d}: {v:.1f}%" for d, v in recent)
-        period_summary = f"{first_date} ({first_val:.1f}%) → {last_date} ({last_val:.1f}%)\nTotal change: {last_val - first_val:+.1f}pp"
+    if snapshot:
+        prompt = _build_balance_snapshot_prompt(snapshot, lang)
     else:
-        recent_lines = "\n".join(f"  {d}: ${v:.1f}B" for d, v in recent)
-        period_summary = f"{first_date} (${first_val:.1f}B) → {last_date} (${last_val:.1f}B)\nTotal change: {last_val - first_val:+.1f}B ({(last_val - first_val) / first_val * 100:+.1f}%)"
+        if not dates or not values:
+            return jsonify({"error": "No data provided"}), 400
 
-    chart_descriptions = {
-        "treasury":  "U.S. Treasury Securities Held Outright by the Federal Reserve (weekly, billions USD)",
-        "bills":     "Short-term Treasury Bills (≤1 year maturity) held by the Federal Reserve (weekly, billions USD)",
-        "balance":   "Federal Reserve Balance Sheet Overview — Total Assets, MBS holdings, and Reserve Balances (weekly, billions USD)",
-        "pct":       "U.S. Treasury Securities as a percentage of Total Federal Reserve Assets (weekly, %)",
-    }
-    description = chart_descriptions.get(chart, label)
+        # Build a compact data summary (last 12 points + overall trend)
+        pairs = [(d, v) for d, v in zip(dates, values) if v is not None]
+        if not pairs:
+            return jsonify({"error": "No valid data points"}), 400
 
-    prompt = f"""You are a macroeconomic analyst. Explain the following Federal Reserve balance sheet data to a financial market participant in 3-4 concise paragraphs.{"  Respond in Simplified Chinese (中文)." if lang == "zh" else ""}
+        # For the PCT chart the values are percentages, not billions
+        is_pct = (chart == "pct")
+
+        first_date, first_val = pairs[0]
+        last_date,  last_val  = pairs[-1]
+        recent = pairs[-12:]  # last ~3 months of weekly data
+        if is_pct:
+            recent_lines = "\n".join(f"  {d}: {v:.1f}%" for d, v in recent)
+            period_summary = f"{first_date} ({first_val:.1f}%) → {last_date} ({last_val:.1f}%)\nTotal change: {last_val - first_val:+.1f}pp"
+        else:
+            recent_lines = "\n".join(f"  {d}: ${v:.1f}B" for d, v in recent)
+            period_summary = f"{first_date} (${first_val:.1f}B) → {last_date} (${last_val:.1f}B)\nTotal change: {last_val - first_val:+.1f}B ({(last_val - first_val) / first_val * 100:+.1f}%)"
+
+        chart_descriptions = {
+            "treasury":  "U.S. Treasury Securities Held Outright by the Federal Reserve (weekly, billions USD)",
+            "bills":     "Short-term Treasury Bills (≤1 year maturity) held by the Federal Reserve (weekly, billions USD)",
+            "balance":   "Federal Reserve Balance Sheet Overview — Total Assets, MBS holdings, and Reserve Balances (weekly, billions USD)",
+            "pct":       "U.S. Treasury Securities as a percentage of Total Federal Reserve Assets (weekly, %)",
+            "liab":      "Federal Reserve Liabilities — ON RRP and Treasury General Account (weekly, billions USD)",
+            "currLoan":  "Currency in Circulation and Federal Reserve Emergency Loans incl. BTFP (weekly, billions USD)",
+        }
+        description = chart_descriptions.get(chart, label)
+
+        prompt = f"""You are a macroeconomic analyst. Explain the following Federal Reserve balance sheet data to a financial market participant in 3-4 concise paragraphs.{"  Respond in Simplified Chinese (中文)." if lang == "zh" else ""}
 
 Chart: {description}
 Full period: {period_summary}
@@ -2150,7 +2232,7 @@ def _markets_save_to_dynamo(result: dict, ts: float) -> None:
     except Exception as exc:
         log.warning("DynamoDB markets-cache save failed: %s", exc)
 
-# Yahoo Finance symbols for major indices (US + international)
+# Yahoo Finance symbols for major indices (US + international) and commodities
 _INDEX_SYMBOLS = {
     "spx":    "^GSPC",     # S&P 500
     "ixic":   "^IXIC",     # Nasdaq Composite
@@ -2161,6 +2243,12 @@ _INDEX_SYMBOLS = {
     "csi500": "000905.SS", # CSI 500 (中证500)
     "twii":   "^TWII",     # Taiwan Weighted Index
     "kospi":  "^KS11",     # KOSPI
+    # Commodities (continuous front-month futures)
+    "gold":   "GC=F",      # COMEX Gold
+    "silver": "SI=F",      # COMEX Silver
+    "oil":    "CL=F",      # WTI Crude Oil
+    "natgas": "NG=F",      # Henry Hub Natural Gas
+    "copper": "HG=F",      # COMEX Copper
 }
 
 # SPDR sector ETFs used for sector performance
@@ -4974,17 +5062,153 @@ def _start_heatmap_scheduler() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Daily email auto-broadcast scheduler  (UTC 00:00 every day)
+# Daily email auto-broadcast scheduler  (post-close on US trading days)
 # ---------------------------------------------------------------------------
+#
+# Trading-day helpers are exposed at module level so the broadcast loop and
+# _do_auto_broadcast() can share the same definition.  The Daily Markets
+# Report only fires when the US stock market was open that day — weekends
+# and US-market holidays are skipped, since fresh data is only available
+# on actual trading days.
+
+
+def _us_market_holidays(year: int) -> set:
+    """
+    Return a set of date objects for fixed-date US stock market holidays
+    in the given year, with weekend observance applied.
+    """
+    from datetime import date as _date, timedelta as _td
+    holidays: set = set()
+
+    # New Year's Day — Jan 1 (with weekend observance)
+    d = _date(year, 1, 1)
+    if d.weekday() < 5:
+        holidays.add(d)
+    elif d.weekday() == 6:  # Sun → observed Mon
+        holidays.add(d + _td(days=1))
+
+    # MLK Day — 3rd Monday of January
+    d = _date(year, 1, 1)
+    mondays = 0
+    while mondays < 3:
+        if d.weekday() == 0:
+            mondays += 1
+            if mondays == 3:
+                break
+        d += _td(days=1)
+    holidays.add(d)
+
+    # Presidents' Day — 3rd Monday of February
+    d = _date(year, 2, 1)
+    mondays = 0
+    while mondays < 3:
+        if d.weekday() == 0:
+            mondays += 1
+            if mondays == 3:
+                break
+        d += _td(days=1)
+    holidays.add(d)
+
+    # Good Friday — 2 days before Easter Sunday (Anonymous Gregorian algorithm)
+    a = year % 19
+    b, c = divmod(year, 100)
+    d_v, e = divmod(b, 4)
+    f = (b + 8) // 25
+    g = (b - f + 1) // 3
+    h = (19 * a + b - d_v - g + 15) % 30
+    i, k = divmod(c, 4)
+    l = (32 + 2 * e + 2 * i - h - k) % 7
+    m = (a + 11 * h + 22 * l) // 451
+    month = (h + l - 7 * m + 114) // 31
+    day = ((h + l - 7 * m + 114) % 31) + 1
+    easter = _date(year, month, day)
+    holidays.add(easter - _td(days=2))  # Good Friday
+
+    # Memorial Day — last Monday of May
+    d = _date(year, 5, 31)
+    while d.weekday() != 0:
+        d -= _td(days=1)
+    holidays.add(d)
+
+    # Juneteenth — Jun 19 (with weekend observance)
+    d = _date(year, 6, 19)
+    if d.weekday() == 5:
+        holidays.add(d - _td(days=1))
+    elif d.weekday() == 6:
+        holidays.add(d + _td(days=1))
+    else:
+        holidays.add(d)
+
+    # Independence Day — Jul 4 (with weekend observance)
+    d = _date(year, 7, 4)
+    if d.weekday() == 5:
+        holidays.add(d - _td(days=1))
+    elif d.weekday() == 6:
+        holidays.add(d + _td(days=1))
+    else:
+        holidays.add(d)
+
+    # Labor Day — 1st Monday of September
+    d = _date(year, 9, 1)
+    while d.weekday() != 0:
+        d += _td(days=1)
+    holidays.add(d)
+
+    # Thanksgiving — 4th Thursday of November
+    d = _date(year, 11, 1)
+    thursdays = 0
+    while thursdays < 4:
+        if d.weekday() == 3:
+            thursdays += 1
+            if thursdays == 4:
+                break
+        d += _td(days=1)
+    holidays.add(d)
+
+    # Christmas — Dec 25 (with weekend observance)
+    d = _date(year, 12, 25)
+    if d.weekday() == 5:
+        holidays.add(d - _td(days=1))
+    elif d.weekday() == 6:
+        holidays.add(d + _td(days=1))
+    else:
+        holidays.add(d)
+
+    return holidays
+
+
+def _is_us_trading_day(dt_obj) -> bool:
+    """
+    Return True iff `dt_obj` (a `date`) is a US stock market trading day —
+    a weekday that is not a US-market holiday.
+    """
+    if dt_obj.weekday() >= 5:  # Sat / Sun
+        return False
+    return dt_obj not in _us_market_holidays(dt_obj.year)
+
 
 def _do_auto_broadcast() -> None:
     """
     Collect market data from in-memory caches, get/generate AI summaries,
     and send the daily report email to all active subscribers.
-    Called by the scheduler at UTC 00:00.
+
+    Only runs on US stock market trading days — if the market was closed
+    today (weekend or holiday) the broadcast is skipped, since fresh
+    market data is only available while the market is open / freshly closed.
+    Called by the scheduler shortly after the US market close (16:45 ET).
     """
     import datetime as _dt_mod
     import time as _time_mod
+
+    # ── Trading-day guard ────────────────────────────────────────────────────
+    # Conservative ET offset (-5 = EST) works for both EST and EDT since the
+    # broadcast fires at 16:45 ET, well before midnight in either zone.
+    _et_now = _dt_mod.datetime.utcnow() + _dt_mod.timedelta(hours=-5)
+    _today_et = _et_now.date()
+    if not _is_us_trading_day(_today_et):
+        log.info("Auto-broadcast: %s is not a US trading day (market closed) — skipping daily report",
+                 _today_et)
+        return
 
     SES_FROM = os.environ.get("SES_FROM_EMAIL")
     if not SES_FROM:
@@ -5221,148 +5445,55 @@ def _do_auto_broadcast() -> None:
 
 def _daily_broadcast_loop() -> None:
     """
-    Background thread: sleep until next UTC 00:00, then call _do_auto_broadcast().
-    Repeats every 24 h, always recalculating sleep from the current time so it
-    reliably fires at UTC 00:00 regardless of how long the broadcast itself takes.
-    Skips weekends (Sat/Sun) and US stock market holidays.
+    Background thread: sleep until the next US market post-close window
+    (16:45 ET on the next trading day), then call _do_auto_broadcast().
+
+    The Daily Markets Report is only generated on US stock market trading
+    days — weekends and US-market holidays are skipped, since fresh market
+    data is only available while the market is open.  Firing at 16:45 ET
+    (15 min after close, after the heatmap snapshot at 16:30 ET) ensures
+    the in-memory caches reflect a finalised trading day.
     """
     import datetime as _dt_mod
 
-    # US stock market holidays (fixed-date, checked by month-day).
-    # Holidays that fall on weekends are observed on Mon/Fri but the weekend
-    # skip already handles Sat/Sun, so we list the standard weekday dates.
-    def _us_market_holidays(year: int) -> set:
-        """Return a set of date objects for US market holidays in the given year."""
-        from datetime import date as _date, timedelta as _td
-        holidays = set()
+    BROADCAST_HOUR_ET   = 16
+    BROADCAST_MINUTE_ET = 45
+    # Conservative ET offset (-5 = EST).  Using EST year-round means during
+    # EDT (summer) the broadcast fires at 17:45 EDT = 21:45 UTC — still
+    # safely after the 16:00 EDT close.  This keeps the math timezone-free.
+    ET_OFFSET_HOURS = -5
 
-        # New Year's Day — Jan 1 (if Mon–Fri)
-        d = _date(year, 1, 1)
-        if d.weekday() < 5:
-            holidays.add(d)
-        elif d.weekday() == 6:  # Sun → observed Mon
-            holidays.add(d + _td(days=1))
-
-        # MLK Day — 3rd Monday of January
-        d = _date(year, 1, 1)
-        mondays = 0
-        while mondays < 3:
-            if d.weekday() == 0:
-                mondays += 1
-                if mondays == 3:
-                    break
-            d += _td(days=1)
-        holidays.add(d)
-
-        # Presidents' Day — 3rd Monday of February
-        d = _date(year, 2, 1)
-        mondays = 0
-        while mondays < 3:
-            if d.weekday() == 0:
-                mondays += 1
-                if mondays == 3:
-                    break
-            d += _td(days=1)
-        holidays.add(d)
-
-        # Good Friday — 2 days before Easter Sunday
-        # Easter algorithm (Anonymous Gregorian)
-        a = year % 19
-        b, c = divmod(year, 100)
-        d_v, e = divmod(b, 4)
-        f = (b + 8) // 25
-        g = (b - f + 1) // 3
-        h = (19 * a + b - d_v - g + 15) % 30
-        i, k = divmod(c, 4)
-        l = (32 + 2 * e + 2 * i - h - k) % 7
-        m = (a + 11 * h + 22 * l) // 451
-        month = (h + l - 7 * m + 114) // 31
-        day = ((h + l - 7 * m + 114) % 31) + 1
-        easter = _date(year, month, day)
-        holidays.add(easter - _td(days=2))  # Good Friday
-
-        # Memorial Day — last Monday of May
-        d = _date(year, 5, 31)
-        while d.weekday() != 0:
-            d -= _td(days=1)
-        holidays.add(d)
-
-        # Juneteenth — Jun 19
-        d = _date(year, 6, 19)
-        if d.weekday() == 5:    # Sat → observed Fri
-            holidays.add(d - _td(days=1))
-        elif d.weekday() == 6:  # Sun → observed Mon
-            holidays.add(d + _td(days=1))
-        else:
-            holidays.add(d)
-
-        # Independence Day — Jul 4
-        d = _date(year, 7, 4)
-        if d.weekday() == 5:
-            holidays.add(d - _td(days=1))
-        elif d.weekday() == 6:
-            holidays.add(d + _td(days=1))
-        else:
-            holidays.add(d)
-
-        # Labor Day — 1st Monday of September
-        d = _date(year, 9, 1)
-        while d.weekday() != 0:
-            d += _td(days=1)
-        holidays.add(d)
-
-        # Thanksgiving — 4th Thursday of November
-        d = _date(year, 11, 1)
-        thursdays = 0
-        while thursdays < 4:
-            if d.weekday() == 3:
-                thursdays += 1
-                if thursdays == 4:
-                    break
-            d += _td(days=1)
-        holidays.add(d)
-
-        # Christmas — Dec 25
-        d = _date(year, 12, 25)
-        if d.weekday() == 5:
-            holidays.add(d - _td(days=1))
-        elif d.weekday() == 6:
-            holidays.add(d + _td(days=1))
-        else:
-            holidays.add(d)
-
-        return holidays
-
-    def _is_trading_day(dt_obj) -> bool:
-        """Check if a date is a US stock market trading day."""
-        if dt_obj.weekday() >= 5:  # weekend
-            return False
-        holidays = _us_market_holidays(dt_obj.year)
-        return dt_obj not in holidays
-
-    def _seconds_until_utc_midnight() -> float:
-        now = _dt_mod.datetime.utcnow()
-        tomorrow = (now + _dt_mod.timedelta(days=1)).replace(
-            hour=0, minute=0, second=0, microsecond=0
+    def _seconds_until_next_broadcast() -> float:
+        now_utc = _dt_mod.datetime.utcnow()
+        now_et  = now_utc + _dt_mod.timedelta(hours=ET_OFFSET_HOURS)
+        target  = now_et.replace(
+            hour=BROADCAST_HOUR_ET, minute=BROADCAST_MINUTE_ET,
+            second=0, microsecond=0,
         )
-        return (tomorrow - now).total_seconds()
+        if now_et >= target:
+            target += _dt_mod.timedelta(days=1)
+        # Skip non-trading days (weekends + holidays)
+        while not _is_us_trading_day(target.date()):
+            target += _dt_mod.timedelta(days=1)
+        return (target - now_et).total_seconds()
 
-    log.info("Daily broadcast scheduler started — will fire at UTC 00:00 on trading days")
+    log.info(
+        "Daily broadcast scheduler started — will fire at %02d:%02d ET on US trading days only",
+        BROADCAST_HOUR_ET, BROADCAST_MINUTE_ET,
+    )
+
     while True:
-        secs = _seconds_until_utc_midnight()
-        log.info("Daily broadcast: next wake in %.1f h", secs / 3600)
+        secs = _seconds_until_next_broadcast()
+        log.info("Daily broadcast: next fire in %.1f h", secs / 3600)
         time.sleep(secs)
 
-        # Check if the previous US trading day just ended (UTC 00:00 = ~ET 19:00/20:00).
-        # The report covers the day that just closed, which is the UTC date minus 1 day
-        # (ET perspective).  We check if that was a trading day.
-        ET_OFFSET = -5  # conservative EST
-        now_utc = _dt_mod.datetime.utcnow()
-        now_et  = now_utc + _dt_mod.timedelta(hours=ET_OFFSET)
+        # Re-check trading day at fire time (in case the wake crossed a
+        # boundary or a holiday wasn't accounted for).
+        now_et = _dt_mod.datetime.utcnow() + _dt_mod.timedelta(hours=ET_OFFSET_HOURS)
         report_date = now_et.date()
 
-        if not _is_trading_day(report_date):
-            log.info("Daily broadcast: skipping %s (not a trading day)", report_date)
+        if not _is_us_trading_day(report_date):
+            log.info("Daily broadcast: skipping %s (market closed today)", report_date)
             time.sleep(70)
             continue
 
@@ -5370,8 +5501,8 @@ def _daily_broadcast_loop() -> None:
             _do_auto_broadcast()
         except Exception:
             log.exception("Daily broadcast: unhandled error")
-        # Sleep 70 s to clear the midnight boundary before recalculating,
-        # ensuring _seconds_until_utc_midnight returns ~24 h not ~0 s.
+        # Sleep 70 s to clear the fire boundary before recalculating,
+        # ensuring _seconds_until_next_broadcast returns ~24 h not ~0 s.
         time.sleep(70)
 
 

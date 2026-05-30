@@ -513,6 +513,38 @@ const I18n = (() => {
     'fed.curr_speed_why':         { en: 'Currency in circulation grows slowly with nominal GDP (~5-7%/yr historically). Sudden spikes (COVID 2020, banking stress 2023) signal flight-to-cash; sustained slowdowns can indicate digital-payment displacement or weakening cash demand.',
                                      zh: '流通中货币通常与名义GDP同步缓慢增长（历史约每年5-7%）。突发性激增（如2020年新冠、2023年银行业危机）反映避险囤现金；持续放缓可能反映数字支付替代或现金需求疲弱。' },
 
+    // ── fed.html: Other Assets — Detailed Breakdown (live numbers) ────
+    'fed.other_detail_title':   { en: 'Other Assets — Live Numbers', zh: '其他资产 — 实时数据' },
+    'fed.other_detail_desc':    { en: 'Selected line items inside the "Other Assets" bucket — Central Bank Liquidity Swaps (USD lent to foreign central banks), and the legacy Gold & SDR certificate accounts.',
+                                   zh: '"其他资产"中的关键明细——央行流动性互换（向外国央行借出的美元），以及历史遗留的黄金与SDR凭证账户。' },
+    'fed.other_detail_why_label':{ en: '💡 Why it matters:', zh: '💡 这有什么意义：' },
+    'fed.other_detail_why':     { en: 'Liquidity swaps spike when foreign banks struggle to fund USD assets — early-warning signal for global dollar stress. Gold & SDR certificates are mostly inert legacy items, but they sit on the asset side and round out the balance-sheet identity.',
+                                   zh: '当外国银行难以为美元资产融资时，流动性互换会激增——是全球美元紧张的预警信号。黄金与SDR凭证基本上是惰性的历史遗留项目，但它们位于资产端，构成资产负债表恒等式的一部分。' },
+    // Central Bank Liquidity Swaps
+    'fed.swaps_title':          { en: 'Central Bank Liquidity Swaps', zh: '央行流动性互换' },
+    'fed.swaps_desc':           { en: 'USD lent to foreign central banks (ECB, BoJ, BoE, SNB, BoC). Spikes during global dollar shortages.',
+                                   zh: '向外国央行（欧央行、日本央行、英国央行、瑞士国民银行、加拿大央行）借出的美元。全球美元短缺时会激增。' },
+    'fed.swaps_current':        { en: 'Current',         zh: '当前' },
+    'fed.swaps_wow':            { en: 'Δ Week (WoW)',    zh: '周环比 (Δ)' },
+    'fed.swaps_high52':         { en: '52w High',        zh: '52周高点' },
+    'fed.swaps_yoy':            { en: 'YoY Δ',           zh: '年同比 Δ' },
+    // Gold Certificate Account
+    'fed.gold_title':           { en: 'Gold Certificate Account', zh: '黄金凭证账户' },
+    'fed.gold_desc':            { en: 'Treasury-issued certificates backed by U.S. gold reserves at $42.22/oz statutory price. Mostly historical — barely changes week-to-week.',
+                                   zh: '财政部依法以每盎司42.22美元的法定价格、以美国黄金储备为抵押发行的凭证。基本是历史遗留——几乎不会逐周变化。' },
+    'fed.gold_current':         { en: 'Current',         zh: '当前' },
+    'fed.gold_wow':             { en: 'Δ Week (WoW)',    zh: '周环比 (Δ)' },
+    'fed.gold_high52':          { en: '52w High',        zh: '52周高点' },
+    'fed.gold_low52':           { en: '52w Low',         zh: '52周低点' },
+    // SDR Certificate Account
+    'fed.sdr_title':            { en: 'SDR Certificate Account', zh: 'SDR凭证账户' },
+    'fed.sdr_desc':             { en: 'Special Drawing Rights certificates issued by the Treasury against the IMF\'s reserve asset. Stable balance, rarely adjusted.',
+                                   zh: '财政部以IMF储备资产（特别提款权）为抵押发行的凭证。余额稳定，极少调整。' },
+    'fed.sdr_current':          { en: 'Current',         zh: '当前' },
+    'fed.sdr_wow':              { en: 'Δ Week (WoW)',    zh: '周环比 (Δ)' },
+    'fed.sdr_high52':           { en: '52w High',        zh: '52周高点' },
+    'fed.sdr_low52':            { en: '52w Low',         zh: '52周低点' },
+
     // ── contact.html ───────────────────────────────────────────────────
     'contact.title':        { en: 'Contact Us',  zh: '联系我们' },
 

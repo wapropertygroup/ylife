@@ -209,7 +209,10 @@
         Assets must equal Liabilities + Capital. Items not in our cards are grouped as "Other".
       </p>
     </div>
-    <span class="text-[10px] uppercase tracking-wider text-slate-500" id="balanceSheetWeek">—</span>
+    <div class="flex items-center gap-2 flex-wrap">
+      <span class="text-[10px] uppercase tracking-wider text-slate-500" id="balanceSheetWeek">—</span>
+      <button class="explain-btn" onclick="explainChart('balanceId')" data-i18n="fed.explain">✦ Explain</button>
+    </div>
   </div>
 
   <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
@@ -217,15 +220,39 @@
     <div class="bg-slate-950/50 border border-slate-800 rounded-xl p-3">
       <div class="flex items-center justify-between mb-2 pb-2 border-b border-slate-800">
         <span class="text-xs font-semibold text-slate-400 uppercase tracking-wide" data-i18n="fed.balance_assets">Assets</span>
-        <span id="balanceTotalAssets" class="font-mono font-bold text-slate-100">—</span>
+        <span class="font-mono text-right">
+          <span id="balanceTotalAssets" class="font-bold text-slate-100">—</span>
+          <span id="balanceTotalAssetsChg" class="text-[10px] block text-slate-500">—</span>
+        </span>
       </div>
-      <ul class="space-y-1 text-xs text-slate-400">
-        <li class="flex justify-between"><span data-i18n="fed.balance_li_treas">• Treasury Securities</span><span id="balanceTreas" class="font-mono text-slate-300">—</span></li>
-        <li class="flex justify-between"><span data-i18n="fed.balance_li_mbs">• MBS Holdings</span><span id="balanceMbs" class="font-mono text-slate-300">—</span></li>
-        <li class="flex justify-between"><span data-i18n="fed.balance_li_loans">• Fed Loans (BTFP, etc.)</span><span id="balanceLoans" class="font-mono text-slate-300">—</span></li>
-        <li class="flex justify-between border-t border-slate-800 pt-1 mt-1">
+      <ul class="space-y-1.5 text-xs text-slate-400">
+        <li class="flex justify-between gap-2">
+          <span data-i18n="fed.balance_li_treas">• Treasury Securities</span>
+          <span class="font-mono text-right">
+            <span id="balanceTreas" class="text-slate-300">—</span>
+            <span id="balanceTreasChg" class="text-[10px] block text-slate-500">—</span>
+          </span>
+        </li>
+        <li class="flex justify-between gap-2">
+          <span data-i18n="fed.balance_li_mbs">• MBS Holdings</span>
+          <span class="font-mono text-right">
+            <span id="balanceMbs" class="text-slate-300">—</span>
+            <span id="balanceMbsChg" class="text-[10px] block text-slate-500">—</span>
+          </span>
+        </li>
+        <li class="flex justify-between gap-2">
+          <span data-i18n="fed.balance_li_loans">• Fed Loans (BTFP, etc.)</span>
+          <span class="font-mono text-right">
+            <span id="balanceLoans" class="text-slate-300">—</span>
+            <span id="balanceLoansChg" class="text-[10px] block text-slate-500">—</span>
+          </span>
+        </li>
+        <li class="flex justify-between gap-2 border-t border-slate-800 pt-1.5 mt-1.5">
           <span class="text-slate-500" data-i18n="fed.balance_li_othera">• Other (Repos, swaps, premium, gold...)</span>
-          <span id="balanceOtherA" class="font-mono text-slate-300">—</span>
+          <span class="font-mono text-right">
+            <span id="balanceOtherA" class="text-slate-300">—</span>
+            <span id="balanceOtherAChg" class="text-[10px] block text-slate-500">—</span>
+          </span>
         </li>
       </ul>
     </div>
@@ -234,16 +261,46 @@
     <div class="bg-slate-950/50 border border-slate-800 rounded-xl p-3">
       <div class="flex items-center justify-between mb-2 pb-2 border-b border-slate-800">
         <span class="text-xs font-semibold text-slate-400 uppercase tracking-wide" data-i18n="fed.balance_liab">Liabilities + Capital</span>
-        <span id="balanceTotalLiab" class="font-mono font-bold text-slate-100">—</span>
+        <span class="font-mono text-right">
+          <span id="balanceTotalLiab" class="font-bold text-slate-100">—</span>
+          <span id="balanceTotalLiabChg" class="text-[10px] block text-slate-500">—</span>
+        </span>
       </div>
-      <ul class="space-y-1 text-xs text-slate-400">
-        <li class="flex justify-between"><span data-i18n="fed.balance_li_res">• Reserve Balances</span><span id="balanceRes" class="font-mono text-slate-300">—</span></li>
-        <li class="flex justify-between"><span data-i18n="fed.balance_li_curr">• Currency in Circulation</span><span id="balanceCurr" class="font-mono text-slate-300">—</span></li>
-        <li class="flex justify-between"><span data-i18n="fed.balance_li_tga">• Treasury General Account</span><span id="balanceTga" class="font-mono text-slate-300">—</span></li>
-        <li class="flex justify-between"><span data-i18n="fed.balance_li_rrp">• Overnight Reverse Repos</span><span id="balanceRrp" class="font-mono text-slate-300">—</span></li>
-        <li class="flex justify-between border-t border-slate-800 pt-1 mt-1">
+      <ul class="space-y-1.5 text-xs text-slate-400">
+        <li class="flex justify-between gap-2">
+          <span data-i18n="fed.balance_li_res">• Reserve Balances</span>
+          <span class="font-mono text-right">
+            <span id="balanceRes" class="text-slate-300">—</span>
+            <span id="balanceResChg" class="text-[10px] block text-slate-500">—</span>
+          </span>
+        </li>
+        <li class="flex justify-between gap-2">
+          <span data-i18n="fed.balance_li_curr">• Currency in Circulation</span>
+          <span class="font-mono text-right">
+            <span id="balanceCurr" class="text-slate-300">—</span>
+            <span id="balanceCurrChg" class="text-[10px] block text-slate-500">—</span>
+          </span>
+        </li>
+        <li class="flex justify-between gap-2">
+          <span data-i18n="fed.balance_li_tga">• Treasury General Account</span>
+          <span class="font-mono text-right">
+            <span id="balanceTga" class="text-slate-300">—</span>
+            <span id="balanceTgaChg" class="text-[10px] block text-slate-500">—</span>
+          </span>
+        </li>
+        <li class="flex justify-between gap-2">
+          <span data-i18n="fed.balance_li_rrp">• Overnight Reverse Repos</span>
+          <span class="font-mono text-right">
+            <span id="balanceRrp" class="text-slate-300">—</span>
+            <span id="balanceRrpChg" class="text-[10px] block text-slate-500">—</span>
+          </span>
+        </li>
+        <li class="flex justify-between gap-2 border-t border-slate-800 pt-1.5 mt-1.5">
           <span class="text-slate-500" data-i18n="fed.balance_li_otherl">• Other liab. + Capital (~$45B)</span>
-          <span id="balanceOtherL" class="font-mono text-slate-300">—</span>
+          <span class="font-mono text-right">
+            <span id="balanceOtherL" class="text-slate-300">—</span>
+            <span id="balanceOtherLChg" class="text-[10px] block text-slate-500">—</span>
+          </span>
         </li>
       </ul>
     </div>
@@ -253,6 +310,7 @@
     <span class="text-slate-400" data-i18n="fed.balance_why_label">💡 Why it matters:</span>
     <span data-i18n="fed.balance_why">Total Assets can drop while Treasuries rise — for example when the Fed lets repos roll off, swap lines unwind, or as QE-era bond premiums amortize. The "Other" lines capture these moves.</span>
   </p>
+  <div id="balanceIdExplainPanel" class="explain-panel"></div>
 </div>
 
 <!-- ── Other Assets Breakdown (educational) ──────────────────────────── -->
@@ -366,6 +424,174 @@
   </p>
 </div>
 <!-- end Treasury Issuance -->
+
+<!-- ── Other Assets — Detailed Breakdown (live numbers) ─────────────── -->
+<div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 mb-6 fade-up">
+  <div class="flex items-start justify-between gap-3 mb-3 flex-wrap">
+    <div>
+      <h2 class="text-sm font-semibold text-slate-200 flex items-center gap-2">
+        <span>🔍</span>
+        <span data-i18n="fed.other_detail_title">Other Assets — Live Numbers</span>
+      </h2>
+      <p class="text-[11px] text-slate-500 mt-0.5" data-i18n="fed.other_detail_desc">
+        Selected line items inside the "Other Assets" bucket — Central Bank Liquidity Swaps (USD lent to foreign central banks), and the legacy Gold &amp; SDR certificate accounts.
+      </p>
+    </div>
+    <span class="text-[10px] uppercase tracking-wider text-slate-500" id="otherDetailAsOf">—</span>
+  </div>
+
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+
+    <!-- ── Central Bank Liquidity Swaps ── -->
+    <div class="bg-slate-950/50 border border-slate-800 rounded-xl p-4">
+      <div class="flex items-start gap-2 mb-3">
+        <span class="text-base shrink-0">🌐</span>
+        <div class="flex-1">
+          <p class="text-xs font-semibold text-slate-300" data-i18n="fed.swaps_title">Central Bank Liquidity Swaps</p>
+          <p class="text-[10px] text-slate-500 mt-0.5" data-i18n="fed.swaps_desc">USD lent to foreign central banks (ECB, BoJ, BoE, SNB, BoC). Spikes during global dollar shortages.</p>
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-2 text-xs">
+        <div>
+          <div class="text-[10px] text-slate-500" data-i18n="fed.swaps_current">Current</div>
+          <div id="swapsCurrent" class="text-base font-bold font-mono text-slate-100">—</div>
+        </div>
+        <div>
+          <div class="text-[10px] text-slate-500" data-i18n="fed.swaps_wow">Δ Week (WoW)</div>
+          <div id="swapsWow" class="text-base font-bold font-mono text-slate-300">—</div>
+        </div>
+        <div>
+          <div class="text-[10px] text-slate-500" data-i18n="fed.swaps_high52">52w High</div>
+          <div id="swapsHigh52" class="text-sm font-mono text-slate-400">—</div>
+        </div>
+        <div>
+          <div class="text-[10px] text-slate-500" data-i18n="fed.swaps_yoy">YoY Δ</div>
+          <div id="swapsYoy" class="text-sm font-mono text-slate-400">—</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Gold Certificate Account ── -->
+    <div class="bg-slate-950/50 border border-slate-800 rounded-xl p-4">
+      <div class="flex items-start gap-2 mb-3">
+        <span class="text-base shrink-0">🏆</span>
+        <div class="flex-1">
+          <p class="text-xs font-semibold text-slate-300" data-i18n="fed.gold_title">Gold Certificate Account</p>
+          <p class="text-[10px] text-slate-500 mt-0.5" data-i18n="fed.gold_desc">Treasury-issued certificates backed by U.S. gold reserves at $42.22/oz statutory price. Mostly historical — barely changes week-to-week.</p>
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-2 text-xs">
+        <div>
+          <div class="text-[10px] text-slate-500" data-i18n="fed.gold_current">Current</div>
+          <div id="goldCurrent" class="text-base font-bold font-mono text-slate-100">—</div>
+        </div>
+        <div>
+          <div class="text-[10px] text-slate-500" data-i18n="fed.gold_wow">Δ Week (WoW)</div>
+          <div id="goldWow" class="text-base font-bold font-mono text-slate-300">—</div>
+        </div>
+        <div>
+          <div class="text-[10px] text-slate-500" data-i18n="fed.gold_high52">52w High</div>
+          <div id="goldHigh52" class="text-sm font-mono text-slate-400">—</div>
+        </div>
+        <div>
+          <div class="text-[10px] text-slate-500" data-i18n="fed.gold_low52">52w Low</div>
+          <div id="goldLow52" class="text-sm font-mono text-slate-400">—</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── SDR Certificate Account ── -->
+    <div class="bg-slate-950/50 border border-slate-800 rounded-xl p-4">
+      <div class="flex items-start gap-2 mb-3">
+        <span class="text-base shrink-0">💎</span>
+        <div class="flex-1">
+          <p class="text-xs font-semibold text-slate-300" data-i18n="fed.sdr_title">SDR Certificate Account</p>
+          <p class="text-[10px] text-slate-500 mt-0.5" data-i18n="fed.sdr_desc">Special Drawing Rights certificates issued by the Treasury against the IMF's reserve asset. Stable balance, rarely adjusted.</p>
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-2 text-xs">
+        <div>
+          <div class="text-[10px] text-slate-500" data-i18n="fed.sdr_current">Current</div>
+          <div id="sdrCurrent" class="text-base font-bold font-mono text-slate-100">—</div>
+        </div>
+        <div>
+          <div class="text-[10px] text-slate-500" data-i18n="fed.sdr_wow">Δ Week (WoW)</div>
+          <div id="sdrWow" class="text-base font-bold font-mono text-slate-300">—</div>
+        </div>
+        <div>
+          <div class="text-[10px] text-slate-500" data-i18n="fed.sdr_high52">52w High</div>
+          <div id="sdrHigh52" class="text-sm font-mono text-slate-400">—</div>
+        </div>
+        <div>
+          <div class="text-[10px] text-slate-500" data-i18n="fed.sdr_low52">52w Low</div>
+          <div id="sdrLow52" class="text-sm font-mono text-slate-400">—</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <p class="text-[11px] text-slate-500 mt-3 leading-relaxed">
+    <span class="text-slate-400" data-i18n="fed.other_detail_why_label">💡 Why it matters:</span>
+    <span data-i18n="fed.other_detail_why">Liquidity swaps spike when foreign banks struggle to fund USD assets — early-warning signal for global dollar stress. Gold &amp; SDR certificates are mostly inert legacy items, but they sit on the asset side and round out the balance-sheet identity.</span>
+  </p>
+</div>
+<!-- end Other Assets Detailed Breakdown -->
+
+<!-- ── Currency in Circulation — Growth Speed metrics ──────────────── -->
+<div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 mb-6 fade-up">
+  <div class="flex items-start justify-between gap-3 mb-3 flex-wrap">
+    <div>
+      <h2 class="text-sm font-semibold text-slate-200 flex items-center gap-2">
+        <span>💵</span>
+        <span data-i18n="fed.curr_speed_title">Currency in Circulation — Growth Speed</span>
+      </h2>
+      <p class="text-[11px] text-slate-500 mt-0.5" data-i18n="fed.curr_speed_desc">
+        How fast physical currency (banknotes &amp; coins) is being injected into the economy. Rapid growth often coincides with cash-hoarding episodes; flat or negative deltas signal de-circulation.
+      </p>
+    </div>
+    <span class="text-[10px] uppercase tracking-wider text-slate-500" id="currSpeedAsOf">—</span>
+  </div>
+
+  <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 text-sm">
+    <div class="bg-slate-950/50 border border-slate-800 rounded-lg p-3">
+      <div class="text-[11px] text-slate-500 mb-1" data-i18n="fed.curr_speed_total">Current Level</div>
+      <div id="currSpeedTotal" class="text-lg font-bold text-slate-100 font-mono">—</div>
+      <div class="text-[11px] mt-0.5 text-slate-500" data-i18n="fed.curr_speed_total_desc">Outstanding</div>
+    </div>
+    <div class="bg-slate-950/50 border border-slate-800 rounded-lg p-3">
+      <div class="text-[11px] text-slate-500 mb-1" data-i18n="fed.curr_speed_wow">Δ Week (WoW)</div>
+      <div id="currSpeedWow" class="text-lg font-bold text-slate-100 font-mono">—</div>
+      <div class="text-[11px] mt-0.5 text-slate-500" data-i18n="fed.curr_speed_wow_desc">Last 7 days</div>
+    </div>
+    <div class="bg-slate-950/50 border border-slate-800 rounded-lg p-3">
+      <div class="text-[11px] text-slate-500 mb-1" data-i18n="fed.curr_speed_4w">Δ 4-Week</div>
+      <div id="currSpeed4w" class="text-lg font-bold text-slate-100 font-mono">—</div>
+      <div class="text-[11px] mt-0.5 text-slate-500" data-i18n="fed.curr_speed_4w_desc">~Last month</div>
+    </div>
+    <div class="bg-slate-950/50 border border-slate-800 rounded-lg p-3">
+      <div class="text-[11px] text-slate-500 mb-1" data-i18n="fed.curr_speed_13w">Δ 13-Week</div>
+      <div id="currSpeed13w" class="text-lg font-bold text-slate-100 font-mono">—</div>
+      <div class="text-[11px] mt-0.5 text-slate-500" data-i18n="fed.curr_speed_13w_desc">~Last quarter</div>
+    </div>
+    <div class="bg-slate-950/50 border border-slate-800 rounded-lg p-3">
+      <div class="text-[11px] text-slate-500 mb-1" data-i18n="fed.curr_speed_yoy">Δ 52-Week (YoY)</div>
+      <div id="currSpeedYoy" class="text-lg font-bold text-slate-100 font-mono">—</div>
+      <div class="text-[11px] mt-0.5 text-slate-500" data-i18n="fed.curr_speed_yoy_desc">vs 52w ago</div>
+    </div>
+    <div class="bg-slate-950/50 border border-slate-800 rounded-lg p-3">
+      <div class="text-[11px] text-slate-500 mb-1" data-i18n="fed.curr_speed_yoy_pct">YoY %</div>
+      <div id="currSpeedYoyPct" class="text-lg font-bold text-slate-100 font-mono">—</div>
+      <div class="text-[11px] mt-0.5 text-slate-500" data-i18n="fed.curr_speed_yoy_pct_desc">Annualized speed</div>
+    </div>
+  </div>
+
+  <p class="text-[11px] text-slate-500 mt-3 leading-relaxed">
+    <span class="text-slate-400" data-i18n="fed.curr_speed_why_label">💡 Why it matters:</span>
+    <span data-i18n="fed.curr_speed_why">Currency in circulation grows slowly with nominal GDP (~5-7%/yr historically). Sudden spikes (COVID 2020, banking stress 2023) signal flight-to-cash; sustained slowdowns can indicate digital-payment displacement or weakening cash demand.</span>
+  </p>
+</div>
+<!-- end Currency Growth Speed -->
 
 <!-- ── Charts ────────────────────────────────────────────────────────── -->
 <div class="space-y-6" id="chartsArea">
@@ -606,29 +832,90 @@
   const totA = _v('WALCL');
   const liabSum = _v('WRESBAL') + _v('WCURCIR') + _v('WTREGEN') + _v('RRPONTSYD');
   const otherL  = totA - liabSum;  // foreign deposits + capital + other accrued
+  const totAprev   = _p('WALCL');
+  const liabSumPrev = _p('WRESBAL') + _p('WCURCIR') + _p('WTREGEN') + _p('RRPONTSYD');
+  const otherLprev = totAprev - liabSumPrev;
 
   const bsMap = {
-    balanceTotalAssets: totA,
-    balanceTreas:       _v('TREAST'),
-    balanceMbs:         _v('MBST'),
-    balanceLoans:       _v('WLCFLPCL'),
-    balanceOtherA:      otherAssetsNow,
-    balanceTotalLiab:   totA,  // by definition equals Total Assets
-    balanceRes:         _v('WRESBAL'),
-    balanceCurr:        _v('WCURCIR'),
-    balanceTga:         _v('WTREGEN'),
-    balanceRrp:         _v('RRPONTSYD'),
-    balanceOtherL:      otherL,
+    balanceTotalAssets: [totA,            totAprev],
+    balanceTreas:       [_v('TREAST'),    _p('TREAST')],
+    balanceMbs:         [_v('MBST'),      _p('MBST')],
+    balanceLoans:       [_v('WLCFLPCL'),  _p('WLCFLPCL')],
+    balanceOtherA:      [otherAssetsNow,  otherAssetsPrev],
+    balanceTotalLiab:   [totA,            totAprev],          // by definition equals Total Assets
+    balanceRes:         [_v('WRESBAL'),   _p('WRESBAL')],
+    balanceCurr:        [_v('WCURCIR'),   _p('WCURCIR')],
+    balanceTga:         [_v('WTREGEN'),   _p('WTREGEN')],
+    balanceRrp:         [_v('RRPONTSYD'), _p('RRPONTSYD')],
+    balanceOtherL:      [otherL,          otherLprev],
   };
-  Object.entries(bsMap).forEach(([id, v]) => {
+
+  function _fmtInlineDelta(v) {
+    if (v == null || isNaN(v)) return '';
+    const sign = v >= 0 ? '+' : '';
+    if (Math.abs(v) >= 1000) return sign + '$' + (v/1000).toFixed(2) + 'T WoW';
+    return sign + '$' + v.toFixed(1) + 'B WoW';
+  }
+  function _inlineDeltaCls(v) {
+    if (v == null || isNaN(v) || Math.abs(v) < 0.05) return 'text-[10px] block text-slate-500';
+    return 'text-[10px] block ' + (v >= 0 ? 'text-emerald-400' : 'text-rose-400');
+  }
+
+  Object.entries(bsMap).forEach(([id, [v, p]]) => {
     const el = document.getElementById(id);
     if (el) el.textContent = fmtB(v);
+    const chgEl = document.getElementById(id + 'Chg');
+    if (chgEl) {
+      const d = (v != null && p != null) ? (v - p) : null;
+      chgEl.textContent = _fmtInlineDelta(d);
+      chgEl.className   = _inlineDeltaCls(d);
+    }
   });
   // Show the as-of week
   const wkDates = s['WALCL']?.dates || [];
   const weekEl = document.getElementById('balanceSheetWeek');
   const asOfLabel = (typeof I18n !== 'undefined' && I18n.t('fed.as_of')) || 'As of';
   if (weekEl && wkDates.length) weekEl.textContent = asOfLabel + ' ' + wkDates[wkDates.length - 1];
+
+  // ── Register full balance-sheet snapshot for AI Explain
+  _explainData['balanceId'] = {
+    snapshot: {
+      asOf: wkDates.length ? wkDates[wkDates.length - 1] : null,
+      assets: {
+        total:      _v('WALCL'),
+        treasuries: _v('TREAST'),
+        mbs:        _v('MBST'),
+        loans:      _v('WLCFLPCL'),
+        other:      otherAssetsNow,
+        // Optional sub-components inside "other"
+        swaps:      _v('SWPT'),
+        gold:       _v('WGCAL'),
+        sdr:        _v('WSDRAL'),
+      },
+      liabilities: {
+        reserves: _v('WRESBAL'),
+        currency: _v('WCURCIR'),
+        tga:      _v('WTREGEN'),
+        rrp:      _v('RRPONTSYD'),
+        other:    otherL,
+      },
+      weekly_changes: {
+        total:        _v('WALCL')    - _p('WALCL'),
+        treasuries:   _v('TREAST')   - _p('TREAST'),
+        mbs:          _v('MBST')     - _p('MBST'),
+        loans:        _v('WLCFLPCL') - _p('WLCFLPCL'),
+        other_assets: otherAssetsNow - otherAssetsPrev,
+        reserves:     _v('WRESBAL')  - _p('WRESBAL'),
+        currency:     _v('WCURCIR')  - _p('WCURCIR'),
+        tga:          _v('WTREGEN')  - _p('WTREGEN'),
+        rrp:          _v('RRPONTSYD') - _p('RRPONTSYD'),
+        swaps:        _v('SWPT')     - _p('SWPT'),
+        gold:         _v('WGCAL')    - _p('WGCAL'),
+        sdr:          _v('WSDRAL')   - _p('WSDRAL'),
+      }
+    },
+    label: 'Fed Balance Sheet Snapshot (Assets vs Liabilities + Capital)'
+  };
 
   // ── T-Bills Outstanding metrics
   const tb = s['WSHOSHO'];
@@ -669,6 +956,150 @@
     const asOfEl = document.getElementById('tbillsAsOf');
     if (asOfEl && dates.length) asOfEl.textContent = asOfLabel + ' ' + dates[dates.length - 1];
   }
+
+  // ── Currency in Circulation — Growth Speed metrics
+  const cur = s['WCURCIR'];
+  if (cur && cur.values && cur.values.length > 0) {
+    const cv = cur.values;
+    const cd = cur.dates;
+    const cLast = cv[cv.length - 1];
+    const cPrev1  = cv.length > 1  ? cv[cv.length - 2]  : null;
+    const cPrev4  = cv.length > 4  ? cv[cv.length - 5]  : null;
+    const cPrev13 = cv.length > 13 ? cv[cv.length - 14] : null;
+    const cPrev52 = cv.length > 52 ? cv[cv.length - 53] : null;
+
+    function _setSpeed(id, txt, cls) {
+      const el = document.getElementById(id);
+      if (el) {
+        el.textContent = txt;
+        if (cls) el.className = cls;
+      }
+    }
+    function _fmtDelta(v) {
+      if (v == null) return '—';
+      const sign = v >= 0 ? '+' : '';
+      if (Math.abs(v) >= 1000) return sign + '$' + (v/1000).toFixed(2) + 'T';
+      return sign + '$' + v.toFixed(1) + 'B';
+    }
+    function _deltaClass(v) {
+      if (v == null) return 'text-lg font-bold font-mono text-slate-100';
+      return 'text-lg font-bold font-mono ' + (v >= 0 ? 'text-emerald-400' : 'text-rose-400');
+    }
+
+    _setSpeed('currSpeedTotal', fmtB(cLast), 'text-lg font-bold font-mono text-slate-100');
+
+    if (cPrev1 != null && cLast != null) {
+      const d = cLast - cPrev1;
+      _setSpeed('currSpeedWow', _fmtDelta(d), _deltaClass(d));
+    }
+    if (cPrev4 != null && cLast != null) {
+      const d = cLast - cPrev4;
+      _setSpeed('currSpeed4w', _fmtDelta(d), _deltaClass(d));
+    }
+    if (cPrev13 != null && cLast != null) {
+      const d = cLast - cPrev13;
+      _setSpeed('currSpeed13w', _fmtDelta(d), _deltaClass(d));
+    }
+    if (cPrev52 != null && cLast != null) {
+      const d = cLast - cPrev52;
+      _setSpeed('currSpeedYoy', _fmtDelta(d), _deltaClass(d));
+      const pct = (d / cPrev52) * 100;
+      _setSpeed('currSpeedYoyPct',
+        (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%',
+        'text-lg font-bold font-mono ' + (pct >= 0 ? 'text-emerald-400' : 'text-rose-400'));
+    }
+
+    const asOfElCur = document.getElementById('currSpeedAsOf');
+    if (asOfElCur && cd.length) asOfElCur.textContent = asOfLabel + ' ' + cd[cd.length - 1];
+  }
+
+  // ── Other Assets — Detailed Breakdown (Swaps / Gold / SDR)
+  function _fmtSmall(v) {
+    if (v == null) return '—';
+    if (Math.abs(v) >= 1000) return '$' + (v/1000).toFixed(2) + 'T';
+    if (Math.abs(v) >= 1)    return '$' + v.toFixed(1) + 'B';
+    if (Math.abs(v) >= 0.1)  return '$' + v.toFixed(2) + 'B';
+    if (Math.abs(v) === 0)   return '$0';
+    return '$' + (v * 1000).toFixed(0) + 'M';
+  }
+  function _fmtSmallDelta(v) {
+    if (v == null || isNaN(v)) return '—';
+    const sign = v >= 0 ? '+' : '';
+    if (Math.abs(v) >= 1)   return sign + '$' + v.toFixed(1) + 'B';
+    if (Math.abs(v) >= 0.1) return sign + '$' + v.toFixed(2) + 'B';
+    if (Math.abs(v) === 0)  return '$0';
+    return sign + '$' + (v * 1000).toFixed(0) + 'M';
+  }
+  function _smallDeltaCls(v) {
+    if (v == null || isNaN(v) || Math.abs(v) < 0.001) {
+      return 'text-base font-bold font-mono text-slate-300';
+    }
+    return 'text-base font-bold font-mono ' + (v >= 0 ? 'text-emerald-400' : 'text-rose-400');
+  }
+  function _seriesMetrics(sid) {
+    const d = s[sid];
+    if (!d || !d.values || !d.values.length) return null;
+    const vals = d.values;
+    const dates = d.dates;
+    const last  = vals[vals.length - 1];
+    const prev1 = vals.length > 1  ? vals[vals.length - 2]  : null;
+    const prev52 = vals.length > 52 ? vals[vals.length - 53] : null;
+    const window52 = vals.slice(-52).filter(v => v != null);
+    const high52 = window52.length ? Math.max(...window52) : null;
+    const low52  = window52.length ? Math.min(...window52) : null;
+    return {
+      last,
+      wow: (last != null && prev1 != null) ? (last - prev1) : null,
+      yoy: (last != null && prev52 != null) ? (last - prev52) : null,
+      high52, low52,
+      asOf: dates && dates.length ? dates[dates.length - 1] : null,
+    };
+  }
+
+  function _setText(id, txt, cls) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = txt;
+    if (cls) el.className = cls;
+  }
+
+  // Swaps (SWPT)
+  const swaps = _seriesMetrics('SWPT');
+  if (swaps) {
+    _setText('swapsCurrent',  _fmtSmall(swaps.last));
+    _setText('swapsWow',      _fmtSmallDelta(swaps.wow), _smallDeltaCls(swaps.wow));
+    _setText('swapsHigh52',   _fmtSmall(swaps.high52));
+    _setText('swapsYoy',      _fmtSmallDelta(swaps.yoy));
+  } else {
+    _setText('swapsCurrent', '—');
+  }
+
+  // Gold (WGCAL)
+  const gold = _seriesMetrics('WGCAL');
+  if (gold) {
+    _setText('goldCurrent', _fmtSmall(gold.last));
+    _setText('goldWow',     _fmtSmallDelta(gold.wow), _smallDeltaCls(gold.wow));
+    _setText('goldHigh52',  _fmtSmall(gold.high52));
+    _setText('goldLow52',   _fmtSmall(gold.low52));
+  } else {
+    _setText('goldCurrent', '—');
+  }
+
+  // SDR (WSDRAL)
+  const sdr = _seriesMetrics('WSDRAL');
+  if (sdr) {
+    _setText('sdrCurrent', _fmtSmall(sdr.last));
+    _setText('sdrWow',     _fmtSmallDelta(sdr.wow), _smallDeltaCls(sdr.wow));
+    _setText('sdrHigh52',  _fmtSmall(sdr.high52));
+    _setText('sdrLow52',   _fmtSmall(sdr.low52));
+  } else {
+    _setText('sdrCurrent', '—');
+  }
+
+  // Use the latest available as-of from any of the three series
+  const detailAsOf = (swaps?.asOf) || (gold?.asOf) || (sdr?.asOf);
+  const asOfElDetail = document.getElementById('otherDetailAsOf');
+  if (asOfElDetail && detailAsOf) asOfElDetail.textContent = asOfLabel + ' ' + detailAsOf;
 
   // ── helper: slice series to last N weeks (0 = all)
   function sliceSeries(sid, n) {
@@ -1120,7 +1551,9 @@ function _runExplain(chart, lang) {
   const panel = document.getElementById(chart + 'ExplainPanel');
   const btn   = document.querySelector(`button.explain-btn[onclick="explainChart('${chart}')"]`);
   const d = _explainData[chart];
-  if (!panel || !d || !d.dates.length) return;
+  if (!panel || !d) return;
+  const hasSnapshot = !!d.snapshot;
+  if (!hasSnapshot && (!d.dates || !d.dates.length)) return;
 
   panel.classList.add('visible');
   panel.innerHTML = '';
@@ -1138,10 +1571,14 @@ function _runExplain(chart, lang) {
     btn.textContent = lang === 'zh' ? '⏳ 分析中…' : '⏳ Thinking…';
   }
 
+  const payload = hasSnapshot
+    ? { chart, snapshot: d.snapshot, label: d.label, lang }
+    : { chart, dates: d.dates, values: d.values, label: d.label, lang };
+
   fetch('/api/fed/explain', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chart, dates: d.dates, values: d.values, label: d.label, lang }),
+    body: JSON.stringify(payload),
   }).then(resp => {
     if (!resp.ok) return resp.json().then(e => { throw new Error(e.error || resp.statusText); });
     let firstChunk = true;
@@ -1203,7 +1640,7 @@ function explainChart(chart) {
   }
 
   const d = _explainData[chart];
-  if (!d || !d.dates.length) {
+  if (!d || (!d.snapshot && (!d.dates || !d.dates.length))) {
     panel.textContent = 'No data available to explain.';
     panel.classList.add('visible');
     return;

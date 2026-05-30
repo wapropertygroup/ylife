@@ -16,6 +16,9 @@ Series (weekly, not seasonally adjusted):
   WTREGEN   — U.S. Treasury General Account (TGA) at Fed, millions USD
   WCURCIR   — Currency in circulation, millions USD
   WLCFLPCL  — Loans from Federal Reserve Banks (incl. BTFP), millions USD
+  SWPT      — Central Bank Liquidity Swaps, millions USD
+  WGCAL     — Gold Certificate Account, millions USD
+  WSDRAL    — Special Drawing Rights Certificate Account, millions USD
 
 Cache TTL: 24 hours (H.4.1 updates once a week, on Thursdays).
 """
@@ -50,6 +53,9 @@ SERIES: dict[str, dict[str, str]] = {
     "WTREGEN":   {"label": "Treasury General Account",  "color": "#facc15"},
     "WCURCIR":   {"label": "Currency in Circulation",   "color": "#94a3b8"},
     "WLCFLPCL":  {"label": "Fed Loans (incl. BTFP)",    "color": "#f97316"},
+    "SWPT":      {"label": "Central Bank Liquidity Swaps", "color": "#a78bfa"},
+    "WGCAL":     {"label": "Gold Certificate Account",  "color": "#fbbf24"},
+    "WSDRAL":    {"label": "SDR Certificate Account",   "color": "#facc15"},
 }
 
 # ---------------------------------------------------------------------------
@@ -71,8 +77,15 @@ def _load_disk_cache() -> Optional[dict[str, Any]]:
         if not _CACHE_FILE.exists():
             return None
         payload = json.loads(_CACHE_FILE.read_text())
-        if time.time() - payload.get("_ts", 0) < _CACHE_TTL:
-            return payload
+        if time.time() - payload.get("_ts", 0) >= _CACHE_TTL:
+            return None
+        # Schema check: if SERIES expanded since cache was written, force a refetch
+        cached_series = payload.get("series", {})
+        if not all(sid in cached_series for sid in SERIES):
+            missing = [s for s in SERIES if s not in cached_series]
+            log.info("Fed: disk cache missing series %s — will refetch", missing)
+            return None
+        return payload
     except Exception as exc:
         log.warning("Fed: failed to read disk cache: %s", exc)
     return None
