@@ -291,6 +291,7 @@ def evaluation():
 
     sector_cards = {}
     all_rows = []
+    seen_tickers: set[str] = set()  # dedup for the cross-sector scatter / heatmap
     for group, df in group_dfs.items():
         cd = json.loads(_df_to_chartdata(df))
         sector_cards[group] = {
@@ -298,8 +299,15 @@ def evaluation():
             "chartdata": cd,
         }
         for row in cd:
+            ticker = row.get("ticker") or row.get("Ticker")
+            if ticker in seen_tickers:
+                # Already added under an earlier sector — skip the duplicate so
+                # the Valuation Map plots one point per ticker.
+                continue
             row["sector"] = group
             all_rows.append(row)
+            if ticker:
+                seen_tickers.add(ticker)
 
     with _cache_lock:
         errors = _fetch_errors
