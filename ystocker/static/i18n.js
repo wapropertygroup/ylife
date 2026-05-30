@@ -512,6 +512,14 @@ const I18n = (() => {
     'fed.curr_speed_why_label':   { en: '💡 Why it matters:', zh: '💡 这有什么意义：' },
     'fed.curr_speed_why':         { en: 'Currency in circulation grows slowly with nominal GDP (~5-7%/yr historically). Sudden spikes (COVID 2020, banking stress 2023) signal flight-to-cash; sustained slowdowns can indicate digital-payment displacement or weakening cash demand.',
                                      zh: '流通中货币通常与名义GDP同步缓慢增长（历史约每年5-7%）。突发性激增（如2020年新冠、2023年银行业危机）反映避险囤现金；持续放缓可能反映数字支付替代或现金需求疲弱。' },
+    // ── fed.html: Currency in Circulation — Growth-Speed TREND chart ──
+    'fed.curr_speed_trend_title':   { en: 'Growth-Speed Trend (annualized %)', zh: '增长速度趋势（年化 %）' },
+    'fed.curr_speed_trend_desc':    { en: 'Year-over-year (52w), quarter (13w), and month (4w) growth rates plotted as annualized percentages. The historical baseline is roughly 5-7%/yr — sharp upward moves flag flight-to-cash, persistent dips below baseline flag de-circulation.',
+                                       zh: '将52周（年同比）、13周（季度）、4周（月度）增长率统一换算为年化百分比绘制。历史基准约为每年 5-7%——突发上行反映避险囤现金，长期低于基准则提示去现金化。' },
+    'fed.curr_speed_trend_loading': { en: 'Loading growth-rate history…', zh: '正在加载增长率历史…' },
+    'fed.curr_speed_trend_4w':      { en: '4W ann. %',   zh: '4周年化 %' },
+    'fed.curr_speed_trend_13w':     { en: '13W ann. %',  zh: '13周年化 %' },
+    'fed.curr_speed_trend_yoy':     { en: 'YoY %',       zh: '年同比 %' },
 
     // ── fed.html: Other Assets — Detailed Breakdown (live numbers) ────
     'fed.other_detail_title':   { en: 'Other Assets — Live Numbers', zh: '其他资产 — 实时数据' },
