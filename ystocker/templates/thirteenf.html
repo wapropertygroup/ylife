@@ -109,9 +109,26 @@
     {% if fd.quarters and fd.quarters | length > 1 %}
     {% set slug = name | lower | replace(' ', '-') %}
     <div class="mb-5 p-3 bg-slate-800/40 rounded-xl border border-slate-700/50">
-      <p class="text-xs text-slate-500 mb-2 font-medium" data-i18n="thirteenf.aum_history">AUM by Quarter</p>
+      <div class="flex items-center justify-between mb-2">
+        <p class="text-xs text-slate-500 font-medium" data-i18n="thirteenf.aum_history">AUM by Quarter</p>
+        <button onclick="explainAum('{{ slug }}', '{{ name | e }}')"
+                class="explain-aum-btn text-[11px] inline-flex items-center gap-1 px-2 py-1 rounded-md
+                       border border-violet-700/40 bg-violet-900/20 text-violet-300
+                       hover:bg-violet-900/40 hover:text-violet-200 transition">
+          <span>✦</span>
+          <span data-i18n="thirteenf.explain_aum">AI Explain</span>
+        </button>
+      </div>
       <div style="height:120px; position:relative">
         <canvas id="aumChart_{{ slug }}"></canvas>
+      </div>
+      <!-- AI explain output panel (hidden until clicked) -->
+      <div id="aumExplain_{{ slug }}" class="hidden mt-3 p-3 rounded-lg bg-violet-950/30 border border-violet-800/40 text-xs text-slate-300 leading-relaxed">
+        <div class="flex items-center gap-2 text-violet-300 mb-1.5 text-[11px] font-medium">
+          <span>✦</span>
+          <span data-i18n="thirteenf.ai_analysis">AI Analysis</span>
+        </div>
+        <div id="aumExplainText_{{ slug }}"></div>
       </div>
     </div>
     <script>
@@ -347,6 +364,64 @@ const observer = new IntersectionObserver(async entries => {
 }, { rootMargin: '200px' });
 
 document.querySelectorAll('canvas.sparkline').forEach(c => observer.observe(c));
+
+// ── AI Explain for AUM by Quarter ──────────────────────────────────────────
+async function explainAum(slug, fundName) {
+  const panel = document.getElementById('aumExplain_' + slug);
+  const out   = document.getElementById('aumExplainText_' + slug);
+  if (!panel || !out) return;
+
+  // Toggle: if already showing, just hide
+  if (!panel.classList.contains('hidden') && out.dataset.loaded === 'true') {
+    panel.classList.add('hidden');
+    return;
+  }
+
+  panel.classList.remove('hidden');
+  out.textContent = (typeof I18n !== 'undefined' && I18n.t('thirteenf.analyzing')) || 'Analyzing AUM trend…';
+  out.dataset.loaded = '';
+
+  try {
+    const lang = (typeof I18n !== 'undefined' && I18n.lang === 'zh') ? 'zh' : 'en';
+    const resp = await fetch('/api/13f/aum-explain', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fund: fundName, lang }),
+    });
+
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      out.textContent = '⚠ ' + (err.error || 'Could not analyze');
+      return;
+    }
+
+    // Stream the SSE response
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    out.textContent = '';
+    let buffer = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const payload = line.slice(6).trim();
+        if (payload === '[DONE]') break;
+        try {
+          const d = JSON.parse(payload);
+          if (d.text) out.textContent += d.text;
+          if (d.error) { out.textContent = '⚠ ' + d.error; break; }
+        } catch (_) {}
+      }
+    }
+    out.dataset.loaded = 'true';
+  } catch (e) {
+    out.textContent = '⚠ ' + e.message;
+  }
+}
 </script>
 
 {% endblock %}

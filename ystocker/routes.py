@@ -1149,9 +1149,102 @@ Cover: (1) what the overall trend shows, (2) any notable recent moves, (3) what 
     })
 
 
-# ---------------------------------------------------------------------------
-# 13F Institutional Holdings
-# ---------------------------------------------------------------------------
+@bp.route("/api/13f/aum-explain", methods=["POST"])
+def api_13f_aum_explain():
+    """Stream an AI explanation of a fund's quarterly AUM trend via SSE."""
+    import os
+    from google import genai
+    from ystocker.sec13f import get_all_holdings
+
+    body = request.get_json(force=True, silent=True) or {}
+    fund = (body.get("fund") or "").strip()
+    lang = body.get("lang", "en")
+    log.info("API 13f/aum-explain: fund=%s lang=%s", fund, lang)
+
+    if not fund:
+        return jsonify({"error": "fund name required"}), 400
+
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        return jsonify({"error": "GEMINI_API_KEY not configured"}), 503
+
+    # Get the fund's quarterly AUM history
+    try:
+        all_data = get_all_holdings()
+        fund_data = all_data.get(fund, {})
+        quarters = fund_data.get("quarters", [])
+    except Exception as exc:
+        log.exception("13f aum-explain: data fetch failed")
+        return jsonify({"error": str(exc)}), 500
+
+    if not quarters or len(quarters) < 2:
+        return jsonify({"error": "Not enough quarterly history available"}), 400
+
+    # Reverse to chronological order (oldest first)
+    chronological = list(reversed(quarters))
+    # Format quarterly data
+    aum_lines = []
+    prev_aum = None
+    for q in chronological:
+        period = q.get("period", "?")
+        aum_m  = float(q.get("total_value_millions") or 0)
+        aum_b  = aum_m / 1000
+        change_str = ""
+        if prev_aum and prev_aum > 0:
+            pct = (aum_m - prev_aum) / prev_aum * 100
+            change_str = f" ({pct:+.1f}% QoQ)"
+        aum_lines.append(f"  {period}: ${aum_b:,.1f}B{change_str}")
+        prev_aum = aum_m
+
+    first_aum_b = float(chronological[0].get("total_value_millions", 0)) / 1000
+    last_aum_b  = float(chronological[-1].get("total_value_millions", 0)) / 1000
+    overall_pct = ((last_aum_b - first_aum_b) / first_aum_b * 100) if first_aum_b else 0
+
+    summary = (
+        f"From {chronological[0].get('period')} to {chronological[-1].get('period')}: "
+        f"${first_aum_b:,.1f}B → ${last_aum_b:,.1f}B "
+        f"({overall_pct:+.1f}% total)"
+    )
+
+    aum_block = "\n".join(aum_lines)
+    lang_instr = "Respond in Simplified Chinese (中文)." if lang == "zh" else ""
+
+    prompt = f"""You are a hedge-fund analyst explaining 13F AUM (Assets Under Management) trends.
+
+Fund: {fund}
+{summary}
+
+Quarterly AUM history (oldest first):
+{aum_block}
+
+Explain in 2-3 concise paragraphs:
+1. What the trend shows — is AUM growing, shrinking, or volatile? Look at both the overall direction and quarter-by-quarter swings.
+2. Why AUM might fluctuate — possible drivers (market gains/losses, investor inflows/outflows, position concentration, rebalancing, redemptions, fund splits/mergers, confidential treatment exemptions hiding holdings).
+3. What investors should know — what the trend says about the fund's strategy or scale.
+
+Be specific about the numbers. Do not use headers or bullet points. {lang_instr}"""
+
+    client = genai.Client(api_key=api_key)
+
+    def generate():
+        try:
+            stream = client.models.generate_content_stream(
+                model="gemini-2.5-flash", contents=prompt
+            )
+            for chunk in stream:
+                text = chunk.text
+                if text:
+                    yield f"data: {json.dumps({'text': text})}\n\n"
+        except Exception as exc:
+            log.error("13f aum-explain error: %s", exc)
+            yield f"data: {json.dumps({'error': str(exc)})}\n\n"
+        finally:
+            yield "data: [DONE]\n\n"
+
+    return Response(generate(), mimetype="text/event-stream", headers={
+        "Cache-Control": "no-cache",
+        "X-Accel-Buffering": "no",
+    })
 
 @bp.route("/13f")
 def thirteenf():

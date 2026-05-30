@@ -306,6 +306,9 @@ const I18n = (() => {
     'thirteenf.shown_value': { en: 'Shown value:', zh: '显示持仓总值：' },
     'thirteenf.total_shown': { en: 'Total (shown)', zh: '合计（已显示）' },
     'thirteenf.aum_history': { en: 'AUM by Quarter', zh: '按季度持仓规模' },
+    'thirteenf.explain_aum': { en: 'AI Explain',      zh: 'AI 解读' },
+    'thirteenf.analyzing':   { en: 'Analyzing AUM trend…', zh: '正在分析持仓规模趋势…' },
+    'thirteenf.ai_analysis': { en: 'AI Analysis',     zh: 'AI 分析' },
 
     // ── change badge labels ────────────────────────────────────────────
     'inst.change_new':     { en: 'New',       zh: '新建' },

@@ -30,44 +30,70 @@ log = logging.getLogger(__name__)
 # Fund registry  {display_name: zero-padded CIK}
 # ---------------------------------------------------------------------------
 FUNDS: Dict[str, str] = {
-    # Mega funds — household names
+    # ─── Tier 1: Mega funds (household names, biggest AUM) ──────────────────
     "Berkshire Hathaway":       "0001067983",
     "Vanguard Group":           "0000102909",
-    "BlackRock":                "0002012383",  # BlackRock, Inc. (BLK) — active 13F filer, period 2025-09
+    "BlackRock":                "0002012383",  # BlackRock, Inc. (BLK)
     "State Street":             "0000093751",
     "Fidelity (FMR)":           "0000315066",
+    "T. Rowe Price":            "0001113169",  # T. Rowe Price Associates
+    "Capital Group":            "0001000275",  # Capital Research Global Investors
+    "Wellington Management":    "0000902219",
+    "Northern Trust":           "0000073124",
+    "Geode Capital":            "0001364742",  # Geode Capital Management
 
-    # Macro / multi-strategy
+    # ─── Tier 2: Macro / multi-strategy hedge funds ─────────────────────────
     "Bridgewater Associates":   "0001350694",
-    "Citadel Advisors":         "0001423053",  # Citadel Advisors LLC
-    "Millennium Management":    "0001273087",  # Millennium Management LLC
+    "Citadel Advisors":         "0001423053",
+    "Millennium Management":    "0001273087",
     "Point72 Asset Management": "0001603466",
     "DE Shaw":                  "0001009207",
+    "Balyasny Asset Mgmt":      "0001244466",  # Balyasny Asset Management
+    "Brevan Howard":            "0001577528",
+    "Marshall Wace":            "0001417718",
 
-    # Tiger cubs & growth equity
+    # ─── Tier 3: Tiger cubs & growth equity ──────────────────────────────────
     "Tiger Global":             "0001167483",
     "Coatue Management":        "0001336528",
     "Viking Global":            "0001103804",
     "Lone Pine Capital":        "0001061165",
-    "Maverick Capital":         "0000934639",  # Maverick Capital Ltd (active, filed Feb 2026)
+    "Maverick Capital":         "0000934639",
+    "D1 Capital":               "0001752538",  # D1 Capital Partners
+    "Light Street Capital":     "0001517413",
+    "Tiger Cub Hill House":     "0001645010",  # Hillhouse Capital
 
-    # Value / activist
+    # ─── Tier 4: Value / activist investors ──────────────────────────────────
     "Third Point":              "0001040273",
-    "Pershing Square":          "0002026053",  # Pershing Square Holdco, L.P.
+    "Pershing Square":          "0002026053",  # Pershing Square Holdco
     "Baupost Group":            "0001061768",
-    "Elliott Management":       "0001791786",  # Elliott Investment Management L.P.
-    "Starboard Value":          "0001517137",  # Starboard Value LP
+    "Elliott Management":       "0001791786",
+    "Starboard Value":          "0001517137",
+    "Icahn Capital":            "0000921669",  # Icahn Associates
+    "Trian Partners":           "0001345471",
+    "Carl Icahn":               "0000921669",  # alias for Icahn Capital
 
-    # Growth / tech focus
+    # ─── Tier 5: Famous individual investor / family office vehicles ────────
     "Soros Fund Management":    "0001029160",
     "Duquesne Family Office":   "0001536411",
-    "ARK Investment":           "0001697748",  # ARK Investment Management LLC
-    "Whale Rock Capital":       "0001387322",  # Whale Rock Capital Management LLC
+    "Appaloosa (Tepper)":       "0001656456",  # Appaloosa LP - David Tepper
+    "Greenlight Capital (Einhorn)": "0001079114",
+    "Pabrai Investment Funds":  "0001173334",  # Mohnish Pabrai
+    "Buffett Family Office":    "0001067983",  # alias — same as Berkshire
 
-    # Quant / systematic
+    # ─── Tier 6: Growth / tech focus ────────────────────────────────────────
+    "ARK Investment":           "0001697748",
+    "Whale Rock Capital":       "0001387322",
+    "Altimeter Capital":        "0001541996",
+    "Tudor Investment":         "0000928063",  # Paul Tudor Jones
+    "Druckenmiller Family Office": "0001536411",  # alias for Duquesne
+
+    # ─── Tier 7: Quant / systematic ─────────────────────────────────────────
     "Renaissance Technologies": "0001037389",
     "Two Sigma Investments":    "0001179392",
     "AQR Capital":              "0001167557",
+    "Susquehanna":              "0001505123",  # Susquehanna International Group
+    "Jane Street":              "0001624865",
+    "Hudson Bay Capital":       "0001528885",
 }
 
 # ---------------------------------------------------------------------------
@@ -141,6 +167,7 @@ CUSIP_TO_TICKER: Dict[str, str] = {
     "339750101": "LLY",
     "532457108": "LLY",     # alternate
     "698435105": "PFE",
+    "G0593M107": "AZN",     # AstraZeneca PLC (UK ADR)
     "023608102": "AEE",     # Ameren Corp (NOT AMGN)
     "031162100": "AMGN",    # Amgen correct CUSIP
     "06738G103": "BIIB",
@@ -228,6 +255,12 @@ CUSIP_TO_TICKER: Dict[str, str] = {
     "573874104": "MRVL",    # Marvell
     "N6596X109": "NXPI",    # NXP Semiconductors
     "N07059210": "ASML",    # ASML
+    "482480100": "KLAC",    # KLA Corp
+    "55024U109": "LITE",    # Lumentum Holdings (optical/laser components)
+    "98954M101": "ZG",      # Zillow Group Class C
+    "98954M200": "Z",       # Zillow Group Class A
+    "98980G102": "ZS",      # Zscaler
+    "47215P106": "JD",      # JD.com
 
     # ── Telecom ──────────────────────────────────────────────────────────────
     "92343V104": "VZ",
@@ -656,6 +689,128 @@ def _get_maybe(url: str, **kwargs) -> Optional[requests.Response]:
 
 
 # ---------------------------------------------------------------------------
+# CUSIP auto-resolver via OpenFIGI (free, no API key required)
+# ---------------------------------------------------------------------------
+
+_CUSIP_CACHE_FILE = Path(__file__).parent.parent / "cache" / "cusip_cache.json"
+_cusip_cache: Optional[dict] = None
+_cusip_cache_lock = threading.Lock()
+# Track CUSIPs we've already tried but couldn't resolve, so we don't re-query
+_cusip_unresolved: set = set()
+
+
+def _load_cusip_cache() -> dict:
+    """Load the persistent CUSIP→ticker cache from disk (one-time per process)."""
+    global _cusip_cache
+    if _cusip_cache is not None:
+        return _cusip_cache
+    try:
+        if _CUSIP_CACHE_FILE.exists():
+            _cusip_cache = json.loads(_CUSIP_CACHE_FILE.read_text())
+        else:
+            _cusip_cache = {}
+    except Exception:
+        _cusip_cache = {}
+    return _cusip_cache
+
+
+def _save_cusip_cache() -> None:
+    """Persist the CUSIP cache to disk atomically."""
+    if _cusip_cache is None:
+        return
+    try:
+        _CUSIP_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        tmp = _CUSIP_CACHE_FILE.with_suffix(".tmp")
+        tmp.write_text(json.dumps(_cusip_cache, sort_keys=True, indent=0))
+        tmp.replace(_CUSIP_CACHE_FILE)
+    except Exception as exc:
+        log.debug("CUSIP cache save failed: %s", exc)
+
+
+def _resolve_cusip_to_ticker(cusip: str) -> Optional[str]:
+    """Resolve an unknown CUSIP to a ticker via OpenFIGI.
+
+    OpenFIGI is Bloomberg's free open data service — no API key required for
+    light usage (≤25 requests / 6s window).  We cache successes (and known
+    failures, in-process only) so each CUSIP is queried at most once.
+    """
+    if not cusip or len(cusip) != 9:
+        return None
+
+    cache = _load_cusip_cache()
+    with _cusip_cache_lock:
+        if cusip in cache:
+            return cache[cusip] or None
+        if cusip in _cusip_unresolved:
+            return None  # already failed this run, don't retry
+
+    # Query OpenFIGI
+    try:
+        resp = _SESSION.post(
+            "https://api.openfigi.com/v3/mapping",
+            json=[{"idType": "ID_CUSIP", "idValue": cusip}],
+            headers={"Content-Type": "application/json"},
+            timeout=10,
+        )
+        if resp.status_code == 429:
+            log.warning("OpenFIGI rate-limited; will retry CUSIP %s later", cusip)
+            return None  # don't cache — try again next run
+        if resp.status_code != 200:
+            log.debug("OpenFIGI HTTP %d for %s", resp.status_code, cusip)
+            with _cusip_cache_lock:
+                _cusip_unresolved.add(cusip)
+            return None
+
+        data = resp.json()
+        if not data or not isinstance(data, list):
+            with _cusip_cache_lock:
+                _cusip_unresolved.add(cusip)
+            return None
+
+        first = data[0]
+        if "data" not in first or not first["data"]:
+            # No match — cache the negative so we don't re-query
+            with _cusip_cache_lock:
+                cache[cusip] = ""
+                _cusip_unresolved.add(cusip)
+            _save_cusip_cache()
+            return None
+
+        # Pick the US-listed common stock ticker if available
+        ticker = None
+        for entry in first["data"]:
+            t = entry.get("ticker", "")
+            sec_type = entry.get("securityType2", "") or entry.get("securityType", "")
+            ex_code = entry.get("exchCode", "")
+            if t and ex_code in ("US", "UN", "UQ", "UF", "UA", "UR", "UV", "UD", "UW", "UP"):
+                # US exchange — prefer Common Stock / ADR / ETP
+                if sec_type in ("Common Stock", "Depositary Receipt", "ADR", "ETP", ""):
+                    ticker = t.upper()
+                    break
+
+        # Fallback: just use the first entry's ticker
+        if not ticker and first["data"][0].get("ticker"):
+            ticker = first["data"][0]["ticker"].upper()
+
+        with _cusip_cache_lock:
+            cache[cusip] = ticker or ""
+        _save_cusip_cache()
+
+        if ticker:
+            log.info("OpenFIGI resolved CUSIP %s → %s", cusip, ticker)
+        else:
+            with _cusip_cache_lock:
+                _cusip_unresolved.add(cusip)
+        return ticker
+
+    except Exception as exc:
+        log.debug("OpenFIGI resolve failed for %s: %s", cusip, exc)
+        with _cusip_cache_lock:
+            _cusip_unresolved.add(cusip)
+        return None
+
+
+# ---------------------------------------------------------------------------
 # SEC EDGAR parsing helpers
 # ---------------------------------------------------------------------------
 
@@ -693,9 +848,9 @@ def _get_filings_list(cik: str) -> list:
     periods_in_recent = {
         f["period"] for f in filings if f["form"] in ("13F-HR", "13F-HR/A")
     }
-    if len(periods_in_recent) < 12:
+    if len(periods_in_recent) < 16:
         extra_files = data.get("filings", {}).get("files", [])
-        for extra in extra_files[:5]:          # fetch up to 5 extra pages for 12-quarter history
+        for extra in extra_files[:12]:         # fetch up to 12 extra pages for ≥4 years history
             extra_name = extra.get("name", "")
             if not extra_name:
                 continue
@@ -704,11 +859,11 @@ def _get_filings_list(cik: str) -> list:
                 extra_data = _get(extra_url).json()
                 extra_filings = _extract(extra_data)
                 filings.extend(extra_filings)
-                # Stop once we have ≥12 distinct 13F periods
+                # Stop once we have ≥16 distinct 13F periods (~4 years)
                 periods_so_far = {
                     f["period"] for f in filings if f["form"] in ("13F-HR", "13F-HR/A")
                 }
-                if len(periods_so_far) >= 12:
+                if len(periods_so_far) >= 16:
                     break
             except Exception as exc:
                 log.debug("Could not fetch extra filings page %s: %s", extra_name, exc)
@@ -942,6 +1097,10 @@ def _parse_infotable(xml_text: str) -> List[dict]:
         name  = (_t("nameOfIssuer") or "").strip()
         ticker = CUSIP_TO_TICKER.get(cusip)
 
+        # Auto-resolve unknown CUSIPs via OpenFIGI (cached to disk)
+        if not ticker and cusip:
+            ticker = _resolve_cusip_to_ticker(cusip)
+
         raw_holdings.append({
             "cusip":          cusip,
             "name":           name,
@@ -1091,19 +1250,31 @@ def fetch_fund_holdings(name: str, cik: str) -> dict:
                  [(f["accession"], f.get("primary_doc")) for f in all_13f[:6]])
 
         # Group by period so we can pick the best filing per quarter.
-        periods_seen: list = []
         by_period: dict = {}
         for f in all_13f:
             p = f.get("period", "")
+            if not p:
+                continue
             if p not in by_period:
                 by_period[p] = []
-                periods_seen.append(p)
             by_period[p].append(f)
 
         def _best_for_period(candidates):
-            non_cover = [c for c in candidates
+            # Prefer the AMENDMENT (13F-HR/A) — usually contains the most
+            # complete data after confidential-treatment expirations are
+            # disclosed.  Among same-form filings, prefer non-cover-only docs.
+            amended = [c for c in candidates if c.get("form") == "13F-HR/A"]
+            originals = [c for c in candidates if c.get("form") == "13F-HR"]
+            preferred = amended or originals or candidates
+            non_cover = [c for c in preferred
                          if c.get("primary_doc", "").lower() != "primary_doc.xml"]
-            return (non_cover or candidates)[0]
+            return (non_cover or preferred)[0]
+
+        # Sort periods CHRONOLOGICALLY (newest first), not by filing date.
+        # This is critical: amended filings (13F-HR/A) for old periods can be
+        # filed years later, so filing-date order would put 2023-Q3 amendments
+        # AFTER 2024-Q1 originals, breaking the gap detection logic.
+        periods_seen = sorted(by_period.keys(), reverse=True)
 
         # Build ordered list: latest period first
         thirteenf_filings = [_best_for_period(by_period[p]) for p in periods_seen]
@@ -1114,27 +1285,44 @@ def fetch_fund_holdings(name: str, cik: str) -> dict:
                  thirteenf_filings[0].get("period"))
         latest = thirteenf_filings[0]
 
-        # Select up to 12 consecutive quarters, each 60-200 days apart from
-        # the previous one.  This gives us history for the AUM chart.
+        # Select up to 12 quarters of 13F-HR filings going back ~4 years.
+        # Be GAP-TOLERANT: if a fund skipped a quarter (e.g., confidential
+        # treatment from the SEC, or a delayed amendment), we should still
+        # show all the surrounding quarters, not stop at the first gap.
         from datetime import date
+        MAX_LOOKBACK_DAYS = 365 * 4   # 4 years max
+        latest_period = None
+        try:
+            latest_period = date.fromisoformat(latest.get("period", ""))
+        except (ValueError, TypeError):
+            pass
+
         selected_filings = [latest]
         for candidate in thirteenf_filings[1:]:
             if len(selected_filings) >= 12:
                 break
             cand_period = candidate.get("period", "")
-            prev_period = selected_filings[-1].get("period", "")
-            if not cand_period or not prev_period:
-                break
+            if not cand_period:
+                continue
             try:
-                pp = date.fromisoformat(prev_period)
                 cp = date.fromisoformat(cand_period)
-                delta_days = (pp - cp).days
-                if 60 <= delta_days <= 200:
-                    selected_filings.append(candidate)
-                elif delta_days > 200:
+                # Hard limit: don't go further back than ~4 years
+                if latest_period and (latest_period - cp).days > MAX_LOOKBACK_DAYS:
                     break
+                # Skip if duplicate period (already selected this quarter)
+                if any(_f.get("period") == cand_period for _f in selected_filings):
+                    continue
+                # Skip if same OR forward in time (shouldn't happen but safe)
+                prev_period_str = selected_filings[-1].get("period", "")
+                pp = date.fromisoformat(prev_period_str)
+                if cp >= pp:
+                    continue
+                # Append this candidate even if there's a gap.
+                # Tolerating big gaps means if Berkshire's Q3/Q4 2023 are
+                # missing/confidential, we still get earlier quarters.
+                selected_filings.append(candidate)
             except ValueError:
-                break
+                continue
 
         log.info("13F fetching %d quarters for %s: %s",
                  len(selected_filings), name,
