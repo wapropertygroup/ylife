@@ -630,7 +630,7 @@ const I18n = (() => {
 
     // ── sector names (peer groups) ─────────────────────────────────────
     'sector.name.Tech':              { en: 'Tech',               zh: '科技' },
-    'sector.name.Software (IGV)':    { en: 'Software (IGV)',     zh: '软件 (IGV)' },
+    'sector.name.Software':          { en: 'Software',           zh: '软件' },
     'sector.name.Cloud / SaaS':      { en: 'Cloud / SaaS',       zh: '云计算 / SaaS' },
     'sector.name.Semiconductors':    { en: 'Semiconductors',     zh: '半导体' },
     'sector.name.Financials':        { en: 'Financials',         zh: '金融' },

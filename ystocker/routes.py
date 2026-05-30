@@ -76,6 +76,11 @@ def _load_from_disk() -> bool:
     """
     Load the on-disk cache into memory if it exists and is not stale.
     Returns True if a valid, fresh cache was loaded.
+
+    Note: the cache is stored keyed by group name, but PEER_GROUPS may have
+    been edited (new sectors added) since the cache was written. We rebuild
+    the in-memory structure to match the CURRENT PEER_GROUPS so new sectors
+    appear immediately — without waiting for a network refresh.
     """
     global _cache, _fetch_errors, _cache_last_updated
     if not _CACHE_FILE.exists():
@@ -87,11 +92,40 @@ def _load_from_disk() -> bool:
         if age > _CACHE_TTL:
             log.info("Disk cache is stale (%.1f h old) - will re-fetch", age / 3600)
             return False
+        disk_data = payload["data"]
+
+        # Flatten all known ticker data from any group, then re-distribute
+        # according to the current PEER_GROUPS. This lets new sectors that
+        # only contain already-cached tickers render immediately.
+        ticker_pool: dict = {}
+        for group_data in disk_data.values():
+            if isinstance(group_data, dict):
+                ticker_pool.update(group_data)
+
+        rebuilt = {
+            group: {t: ticker_pool[t] for t in tickers if t in ticker_pool}
+            for group, tickers in PEER_GROUPS.items()
+        }
+
+        # Report any new sectors that need a refresh to populate fully
+        missing_groups = [g for g, td in rebuilt.items() if not td]
+        partial_groups = [
+            g for g, td in rebuilt.items()
+            if td and len(td) < len(PEER_GROUPS[g])
+        ]
+        if missing_groups:
+            log.info("Disk cache: %d groups have no cached tickers yet: %s",
+                     len(missing_groups), missing_groups)
+        if partial_groups:
+            log.info("Disk cache: %d groups partially cached (will fill on next refresh)",
+                     len(partial_groups))
+
         with _cache_lock:
-            _cache = payload["data"]
+            _cache = rebuilt
             _fetch_errors = payload.get("errors", [])
             _cache_last_updated = ts
-        log.info("Loaded disk cache from %s (%.1f h old)", _CACHE_FILE, age / 3600)
+        log.info("Loaded disk cache from %s (%.1f h old, %d groups, %d unique tickers)",
+                 _CACHE_FILE, age / 3600, len(rebuilt), len(ticker_pool))
         return True
     except Exception:
         log.exception("Failed to read disk cache - will re-fetch")

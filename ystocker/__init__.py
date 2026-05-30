@@ -13,7 +13,7 @@ from flask import Flask
 # ---------------------------------------------------------------------------
 PEER_GROUPS: dict[str, list[str]] = {
     "Tech":              ["MSFT", "AAPL", "GOOGL", "META", "NVDA", "AMZN", "TSLA", "NFLX", "ADBE", "CRM", "PLTR", "ORCL"],
-    "Software (IGV)":    ["MSFT", "ORCL", "CRM", "ADBE", "PLTR", "INTU", "NOW", "CRWD", "PANW",
+    "Software":          ["MSFT", "ORCL", "CRM", "ADBE", "PLTR", "INTU", "NOW", "CRWD", "PANW",
                           "ADSK", "SNPS", "CDNS", "ROP", "WDAY", "TEAM", "ANSS", "HUBS", "DDOG",
                           "SNOW", "MDB", "ZS", "NET", "OKTA", "VEEV", "PTC", "TYL", "FTNT", "FFIV",
                           "BSY", "DOCU", "TWLO", "ZM", "U", "GTLB", "S", "DT", "PATH", "AI",
