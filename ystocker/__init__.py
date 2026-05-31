@@ -38,7 +38,7 @@ PEER_GROUPS: dict[str, list[str]] = {
                           "WEC", "ES", "AWK", "ETR", "CMS", "FE", "XLU"],
     "AI / Robotics":     ["NVDA", "MSFT", "GOOGL", "META", "AMZN", "PLTR", "AI", "SMCI",
                           "ANET", "ARM", "DELL", "TSM", "AVGO", "IRBT"],
-    "US Broad ETFs":     ["SPY", "QQQ", "IWM", "DIA", "VTI", "VOO", "VXUS", "BND", "AGG", "TLT",
+    "US Broad ETFs":     ["SPY", "QQQ", "IWM", "DIA", "VTI", "VOO", "VXUS", "BND", "AGG",
                           "SHY", "IEF", "HYG", "LQD", "RSP"],
     "Sector ETFs":       ["XLK", "XLF", "XLE", "XLV", "XLI", "XLY", "XLP", "XLU"],
     "International ETFs":["EWJ", "FXI", "MCHI", "EEM", "VWO", "IXUS", "VXUS", "EWZ", "INDA", "EWY"],
