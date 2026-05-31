@@ -2644,6 +2644,14 @@ function _mktsModalConfig(kind) {
   } catch(err) {
     document.getElementById('marketsLoading').textContent = '⚠ Failed to load market data: ' + err.message;
   }
+
+  // ── Hashchange: switch tab in-place when nav dropdown link is clicked ──
+  window.addEventListener('hashchange', () => {
+    const h = (window.location.hash || '').replace('#', '');
+    if (h && IDX_ALL_KEYS.includes(h) && h !== _curIdx && _mkData) {
+      switchIdx(h, true);
+    }
+  });
 })();
 </script>
 

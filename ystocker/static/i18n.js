@@ -17,6 +17,8 @@ const I18n = (() => {
     'nav.sectors':        { en: 'Sectors',   zh: '板块' },
     'nav.peer_groups':    { en: 'Peer Groups', zh: '同类组' },
     'nav.view_all':       { en: 'View all sectors ↓', zh: '查看全部板块 ↓' },
+    'nav.commodities':    { en: 'Commodities', zh: '大宗商品' },
+    'nav.commodities_futures': { en: 'Futures', zh: '期货合约' },
     'nav.lookup':         { en: 'Lookup',   zh: '查询' },
     'nav.thirteenf':      { en: '13F',      zh: '13F' },
     'nav.fed':            { en: 'Fed',      zh: '美联储' },

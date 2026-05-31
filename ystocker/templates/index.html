@@ -158,8 +158,8 @@
         <button id="pegMapLabelBtn" onclick="togglePegMapLabels()"
                 class="flex items-center gap-1 text-xs text-brand border border-brand/40 bg-brand/10
                        hover:bg-brand hover:text-white transition px-2 py-1 rounded-lg"
-                data-i18n="index.hide_values">
-          Hide values
+                data-i18n="index.show_values">
+          Show values
         </button>
         <button onclick="window._chartModal.expand('peg')"
                 class="flex items-center gap-1 text-xs text-slate-500 hover:text-brand transition px-2 py-1
@@ -490,7 +490,7 @@ function buildScatterChart(ctx) {
   return chart;
 }
 
-let _pegMapLabelsVisible = true;
+let _pegMapLabelsVisible = false;
 
 function buildPegChart(ctx) {
   const seen = new Set();
@@ -779,6 +779,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const col=v<1?'text-emerald-400':v<2?'text-amber-400':'text-rose-400';
     return `<span class="${col} font-semibold">${v.toFixed(2)}</span>`;
   }
+  // Heat background for PEG cell (0 = green/cheap, 1 = amber, 2+ = red/expensive)
+  function pegHeat(v){
+    if (v == null) return '';
+    // Map PEG: 0 → green, 1 → amber, 2 → red, clamp at 2.5
+    const t = Math.min(1, Math.max(0, v / 2.5));
+    const stops = [[52,211,153],[250,204,21],[248,113,113]];
+    function lerp(a,b,t){ return a.map((x,i)=>Math.round(x+(b[i]-x)*t)); }
+    const col = t < 0.5 ? lerp(stops[0],stops[1],t*2) : lerp(stops[1],stops[2],(t-0.5)*2);
+    return `background:rgba(${col[0]},${col[1]},${col[2]},0.22)`;
+  }
   function fmtPE(v){ return v==null?'<span class="text-slate-600">—</span>':v.toFixed(1)+'x'; }
   function fmtCap(v){ return v==null?'<span class="text-slate-600">—</span>':'$'+v.toFixed(1)+'B'; }
   function fmtGrowth(v){
@@ -854,7 +864,7 @@ document.addEventListener('DOMContentLoaded', () => {
         <td class="py-2 px-3 text-xs text-slate-500">${I18n.tSector(d.sector)}</td>
         <td class="py-2 px-3 text-right font-mono text-sm" style="${heatColor(d.pe_ttm,10,60)}">${fmtPE(d.pe_ttm)}</td>
         <td class="py-2 px-3 text-right font-mono text-sm" style="${heatColor(d.pe_fwd,10,60)}">${fmtPE(d.pe_fwd)}</td>
-        <td class="py-2 px-3 text-right">${fmtPeg(d.peg)}</td>
+        <td class="py-2 px-3 text-right" style="${pegHeat(d.peg)}">${fmtPeg(d.peg)}</td>
         <td class="py-2 px-3 text-right font-mono text-sm">${fmtGrowth(d.eps_growth_ttm)}</td>
         <td class="py-2 px-3 text-right font-mono text-sm">${fmtGrowth(d.eps_growth_q)}</td>
         <td class="py-2 px-3 text-right">${fmtPct(d.upside)}</td>
