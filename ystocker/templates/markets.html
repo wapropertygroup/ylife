@@ -88,7 +88,7 @@
 
 <!-- ── Index snapshot cards ───────────────────────────────────────────── -->
 <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-4 xl:grid-cols-8 gap-3 mb-6 fade-up" id="indexCards">
-  {% for _ in range(13) %}
+  {% for _ in range(16) %}
   <div class="animate-pulse bg-slate-900 border border-slate-800 rounded-xl p-3 h-24"></div>
   {% endfor %}
 </div>
@@ -604,12 +604,13 @@ const IDX_COLORS = {
   ftse: '#e879f9', n225: '#f472b6', sse: '#f87171', twii: '#34d399', kospi: '#fbbf24',
   gold: '#facc15', silver: '#cbd5e1', oil: '#14b8a6', natgas: '#60a5fa', copper: '#d97706',
 };
-const IDX_ALL_KEYS = ['spx', 'ixic', 'dji', 'ftse', 'n225', 'sse', 'twii', 'kospi',
-                      'gold', 'silver', 'oil', 'natgas', 'copper'];
+const IDX_ALL_KEYS = ['spx', 'ixic', 'dji', 'ftse', 'n225', 'sse', 'csi500', 'twii', 'kospi',
+                      'gold', 'silver', 'oil', 'brent', 'natgas', 'copper', 'dxy'];
 const IDX_LABELS = {
   spx: 'S&P 500', ixic: 'Nasdaq', dji: 'Dow Jones',
-  ftse: 'FTSE 100', n225: 'Nikkei 225', sse: 'Shanghai', twii: 'Taiwan', kospi: 'KOSPI',
-  gold: 'Gold', silver: 'Silver', oil: 'Crude Oil', natgas: 'Natural Gas', copper: 'Copper',
+  ftse: 'FTSE 100', n225: 'Nikkei 225', sse: 'Shanghai', csi500: 'CSI 500', twii: 'Taiwan', kospi: 'KOSPI',
+  gold: 'Gold', silver: 'Silver', oil: 'WTI Crude', brent: 'Brent Crude', natgas: 'Natural Gas', copper: 'Copper',
+  dxy: 'US Dollar Index',
 };
 function idxLabel(key) {
   return (typeof I18n !== 'undefined' && I18n.tIdx) ? I18n.tIdx(key) : (IDX_LABELS[key] || key.toUpperCase());

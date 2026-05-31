@@ -21,7 +21,7 @@ import math
 from decimal import Decimal
 
 import pandas as pd
-from flask import Blueprint, render_template, redirect, url_for, request, flash, jsonify, Response, has_request_context
+from flask import Blueprint, render_template, redirect, url_for, request, flash, jsonify, Response, has_request_context, session
 
 from ystocker import PEER_GROUPS, YT_CHANNELS
 from ystocker.data import fetch_group
@@ -29,6 +29,94 @@ from ystocker import charts
 
 bp = Blueprint("main", __name__)
 log = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Auth helpers (Google Sign-In) — same pattern as yPlanner / yTracker.
+# yStocker stays public, but signed-in users get a personalized header chip
+# (and lays the groundwork for future watchlist / alert features).
+# ---------------------------------------------------------------------------
+
+def _get_current_user() -> dict:
+    """Return the logged-in user dict, or an anonymous placeholder."""
+    email = session.get("user_email")
+    if email:
+        return {
+            "email":   email,
+            "name":    session.get("user_name", email.split("@")[0]),
+            "picture": session.get("user_picture", ""),
+        }
+    return {"email": "", "name": "Anonymous", "picture": ""}
+
+
+@bp.route("/login")
+def login():
+    """Dedicated sign-in page."""
+    if session.get("user_email"):
+        return redirect(url_for("main.markets"))
+    return render_template(
+        "login.html",
+        google_client_id=os.environ.get("GOOGLE_CLIENT_ID", ""),
+    )
+
+
+@bp.route("/api/auth/google", methods=["POST"])
+def auth_google():
+    """Verify a Google ID token and create a session."""
+    log.info("API auth/google")
+    data = request.get_json(force=True, silent=True) or {}
+    credential = data.get("credential", "")
+    if not credential:
+        return jsonify({"error": "No credential provided"}), 400
+
+    google_client_id = os.environ.get("GOOGLE_CLIENT_ID", "")
+    if not google_client_id:
+        return jsonify({"error": "Google sign-in not configured"}), 503
+
+    try:
+        from google.oauth2 import id_token
+        from google.auth.transport import requests as google_requests
+        idinfo = id_token.verify_oauth2_token(
+            credential, google_requests.Request(), google_client_id
+        )
+
+        email   = idinfo.get("email", "")
+        name    = idinfo.get("name", email.split("@")[0] if email else "")
+        picture = idinfo.get("picture", "")
+
+        if not email:
+            return jsonify({"error": "No email in token"}), 400
+
+        session["user_email"]   = email
+        session["user_name"]    = name
+        session["user_picture"] = picture
+
+        return jsonify({
+            "ok": True,
+            "user": {"email": email, "name": name, "picture": picture},
+        })
+    except ValueError as exc:
+        log.warning("Google token verification failed: %s", exc)
+        return jsonify({"error": "Invalid Google token"}), 401
+    except Exception as exc:
+        log.exception("Google auth error")
+        return jsonify({"error": str(exc)}), 500
+
+
+@bp.route("/api/auth/me")
+def auth_me():
+    """Return the current user's session info (or anonymous)."""
+    return jsonify({"user": _get_current_user()})
+
+
+@bp.route("/api/auth/logout", methods=["POST"])
+def auth_logout():
+    """Clear the auth session."""
+    log.info("API auth/logout")
+    session.pop("user_email",   None)
+    session.pop("user_name",    None)
+    session.pop("user_picture", None)
+    return jsonify({"ok": True})
 
 
 def _flash(en: str, zh: str, category: str = "message") -> None:
@@ -2281,8 +2369,11 @@ _INDEX_SYMBOLS = {
     "gold":   "GC=F",      # COMEX Gold
     "silver": "SI=F",      # COMEX Silver
     "oil":    "CL=F",      # WTI Crude Oil
+    "brent":  "BZ=F",      # Brent Crude Oil
     "natgas": "NG=F",      # Henry Hub Natural Gas
     "copper": "HG=F",      # COMEX Copper
+    # Macro / dollar
+    "dxy":    "DX-Y.NYB",  # US Dollar Index
 }
 
 # SPDR sector ETFs used for sector performance
@@ -2299,6 +2390,298 @@ def markets():
     """Market overview page — the application home."""
     return render_template("markets.html",
                            peer_groups=list(PEER_GROUPS.keys()))
+
+
+# ---------------------------------------------------------------------------
+# Commodities  (/commodities)
+# ---------------------------------------------------------------------------
+
+# Symbol map: key → (Yahoo symbol, display name, unit, emoji, group)
+_COMMODITY_SYMBOLS: dict[str, tuple[str, str, str, str, str]] = {
+    # Precious metals
+    "gold":       ("GC=F", "Gold",         "$/oz",    "🪙", "metals"),
+    "silver":     ("SI=F", "Silver",       "$/oz",    "🥈", "metals"),
+    "platinum":   ("PL=F", "Platinum",     "$/oz",    "💍", "metals"),
+    "palladium":  ("PA=F", "Palladium",    "$/oz",    "💎", "metals"),
+    # Industrial metals
+    "copper":     ("HG=F", "Copper",       "$/lb",    "🟠", "industrial"),
+    # Energy
+    "oil_wti":    ("CL=F", "WTI Crude",    "$/bbl",   "🛢️", "energy"),
+    "oil_brent":  ("BZ=F", "Brent Crude",  "$/bbl",   "🛢️", "energy"),
+    "natgas":     ("NG=F", "Natural Gas",  "$/MMBtu", "🔥", "energy"),
+    "gasoline":   ("RB=F", "Gasoline",     "$/gal",   "⛽", "energy"),
+    "heating":    ("HO=F", "Heating Oil",  "$/gal",   "🔥", "energy"),
+    # Agriculture
+    "wheat":      ("ZW=F", "Wheat",        "¢/bu",    "🌾", "agri"),
+    "corn":       ("ZC=F", "Corn",         "¢/bu",    "🌽", "agri"),
+    "soybeans":   ("ZS=F", "Soybeans",     "¢/bu",    "🫘", "agri"),
+    "coffee":     ("KC=F", "Coffee",       "¢/lb",    "☕", "agri"),
+    "sugar":      ("SB=F", "Sugar",        "¢/lb",    "🍬", "agri"),
+}
+
+# 15-minute in-memory cache for the commodities snapshot (yfinance is slow)
+_COMMODITIES_CACHE: dict[str, dict] = {}
+_COMMODITIES_CACHE_LOCK = threading.Lock()
+_COMMODITIES_CACHE_TTL  = 15 * 60  # 15 minutes
+
+
+@bp.route("/commodities")
+def commodities():
+    """Commodities overview page — futures across metals, energy, and ag."""
+    return render_template("commodities.html",
+                           peer_groups=list(PEER_GROUPS.keys()))
+
+
+@bp.route("/api/commodities")
+def api_commodities():
+    """JSON snapshot for the commodities page.
+
+    Returns price history (daily 1y, weekly 5y) plus computed metrics for
+    each commodity in ``_COMMODITY_SYMBOLS``. Bulk-downloads via yfinance
+    for speed and caches in-memory for 15 minutes.
+    """
+    import yfinance as yf
+    import numpy as np
+
+    with _COMMODITIES_CACHE_LOCK:
+        entry = _COMMODITIES_CACHE.get("data")
+        if entry and time.time() - entry["ts"] < _COMMODITIES_CACHE_TTL:
+            log.info("API commodities: served from memory cache")
+            return jsonify(entry["data"])
+
+    log.info("API commodities: fetching fresh data from Yahoo Finance")
+
+    def _rsi(prices: list, period: int = 14) -> Optional[float]:
+        arr = [p for p in prices if p is not None]
+        if len(arr) < period + 1:
+            return None
+        deltas = [arr[i] - arr[i - 1] for i in range(1, len(arr))]
+        gains  = [max(d, 0) for d in deltas]
+        losses = [abs(min(d, 0)) for d in deltas]
+        avg_g  = sum(gains[:period]) / period
+        avg_l  = sum(losses[:period]) / period
+        for g, l in zip(gains[period:], losses[period:]):
+            avg_g = (avg_g * (period - 1) + g) / period
+            avg_l = (avg_l * (period - 1) + l) / period
+        if avg_l == 0:
+            return 100.0
+        return round(100 - 100 / (1 + avg_g / avg_l), 1)
+
+    def _ma(prices: list, n: int) -> Optional[float]:
+        vals = [p for p in prices if p is not None]
+        if len(vals) < n:
+            return None
+        return round(sum(vals[-n:]) / n, 4)
+
+    def _idx_back(prices: list, days: int) -> Optional[float]:
+        """Return the last non-null close N trading days back, or None."""
+        if days >= len(prices):
+            return None
+        v = prices[-(days + 1)]
+        return v if v is not None else None
+
+    def _ytd_value(dates: list, prices: list) -> Optional[float]:
+        """First non-null close of the current calendar year."""
+        from datetime import date
+        year = str(date.today().year)
+        for d, p in zip(dates, prices):
+            if d.startswith(year) and p is not None:
+                return p
+        return None
+
+    symbols = [v[0] for v in _COMMODITY_SYMBOLS.values()]
+    keys    = list(_COMMODITY_SYMBOLS.keys())
+    sym_to_key = {v[0]: k for k, v in _COMMODITY_SYMBOLS.items()}
+
+    # Bulk download — daily 1y for short-term metrics
+    try:
+        raw_1y = yf.download(symbols, period="1y", interval="1d",
+                             group_by="ticker", auto_adjust=False,
+                             progress=False, threads=True)
+    except Exception as exc:
+        log.error("Commodities: yfinance 1y download failed: %s", exc)
+        return jsonify({"error": "Failed to fetch commodity data"}), 502
+
+    # 5y weekly for the long-term chart
+    try:
+        raw_5y = yf.download(symbols, period="5y", interval="1wk",
+                             group_by="ticker", auto_adjust=False,
+                             progress=False, threads=True)
+    except Exception:
+        raw_5y = None
+
+    out: dict[str, Any] = {}
+
+    def _close_series(raw, sym):
+        """Pull (dates, prices) from a multi-ticker yfinance frame."""
+        try:
+            if hasattr(raw.columns, "levels"):
+                # Multi-index: ('GC=F','Close')
+                if (sym, "Close") in raw.columns:
+                    s = raw[(sym, "Close")]
+                elif sym in raw.columns.get_level_values(0):
+                    sub = raw[sym]
+                    if "Close" in sub.columns:
+                        s = sub["Close"]
+                    else:
+                        return [], []
+                else:
+                    return [], []
+            else:
+                s = raw["Close"]
+        except Exception:
+            return [], []
+        dates = [str(d.date()) for d in s.index]
+        prices = []
+        for v in s.tolist():
+            try:
+                f = float(v)
+                prices.append(round(f, 4) if not math.isnan(f) and not math.isinf(f) else None)
+            except (TypeError, ValueError):
+                prices.append(None)
+        return dates, prices
+
+    for sym in symbols:
+        key = sym_to_key[sym]
+        meta = _COMMODITY_SYMBOLS[key]
+        d1, p1 = _close_series(raw_1y, sym)
+        if not p1:
+            out[key] = {
+                "symbol": sym, "name": meta[1], "unit": meta[2],
+                "emoji": meta[3], "group": meta[4],
+                "error": "No data",
+            }
+            continue
+
+        # Strip leading None values for cleaner metrics
+        valid = [(d, p) for d, p in zip(d1, p1) if p is not None]
+        if not valid:
+            continue
+
+        last      = valid[-1][1]
+        prev      = valid[-2][1] if len(valid) > 1 else None
+        day_chg   = (last - prev) if (last is not None and prev is not None) else None
+        day_chg_pct = (day_chg / prev * 100) if (day_chg is not None and prev) else None
+
+        win52  = [v for _, v in valid[-252:]]
+        high52 = max(win52) if win52 else None
+        low52  = min(win52) if win52 else None
+        # current position in 52w range as 0-100
+        pos52  = None
+        if high52 is not None and low52 is not None and high52 > low52:
+            pos52 = round((last - low52) / (high52 - low52) * 100, 1)
+
+        # Period-return helpers (pct vs N days back)
+        def _ret(days):
+            v = _idx_back(p1, days)
+            if v is None or v == 0 or last is None:
+                return None
+            return round((last - v) / v * 100, 2)
+
+        ret_1w  = _ret(5)
+        ret_1m  = _ret(21)
+        ret_3m  = _ret(63)
+        ret_6m  = _ret(126)
+        ret_1y  = _ret(252)
+        ytd_v   = _ytd_value(d1, p1)
+        ret_ytd = (round((last - ytd_v) / ytd_v * 100, 2)
+                   if ytd_v is not None and ytd_v != 0 else None)
+
+        ma_50  = _ma(p1, 50)
+        ma_200 = _ma(p1, 200)
+        rsi_14 = _rsi(p1, 14)
+
+        # 5y weekly history for long-term chart
+        d5, p5 = _close_series(raw_5y, sym) if raw_5y is not None else ([], [])
+
+        out[key] = {
+            "symbol":      sym,
+            "name":        meta[1],
+            "unit":        meta[2],
+            "emoji":       meta[3],
+            "group":       meta[4],
+            "last":        last,
+            "prev":        prev,
+            "day_chg":     day_chg,
+            "day_chg_pct": day_chg_pct,
+            "high52":      high52,
+            "low52":       low52,
+            "pos52":       pos52,
+            "ret_1w":      ret_1w,
+            "ret_1m":      ret_1m,
+            "ret_3m":      ret_3m,
+            "ret_6m":      ret_6m,
+            "ret_ytd":     ret_ytd,
+            "ret_1y":      ret_1y,
+            "ma_50":       ma_50,
+            "ma_200":      ma_200,
+            "rsi_14":      rsi_14,
+            "above_ma_50":  (last is not None and ma_50  is not None and last > ma_50),
+            "above_ma_200": (last is not None and ma_200 is not None and last > ma_200),
+            "dates_1y":    d1,
+            "prices_1y":   p1,
+            "dates_5y":    d5,
+            "prices_5y":   p5,
+        }
+
+    # ── Cross-commodity ratios (computed from full daily history when present)
+    def _ratio_series(num_key: str, den_key: str):
+        a = out.get(num_key, {}); b = out.get(den_key, {})
+        a_d, a_p = a.get("dates_1y", []), a.get("prices_1y", [])
+        b_d, b_p = b.get("dates_1y", []), b.get("prices_1y", [])
+        bm = dict(zip(b_d, b_p))
+        dates, ratios = [], []
+        for d, p in zip(a_d, a_p):
+            q = bm.get(d)
+            if p is None or q is None or q == 0:
+                continue
+            dates.append(d); ratios.append(round(p / q, 4))
+        return dates, ratios
+
+    ratios = {}
+    if "gold" in out and "silver" in out:
+        d, r = _ratio_series("gold", "silver")
+        ratios["gold_silver"] = {
+            "label": "Gold / Silver",
+            "desc":  "Ounces of silver per ounce of gold — historic mean ≈55. High = silver cheap relative to gold.",
+            "dates": d, "values": r,
+            "current": r[-1] if r else None,
+        }
+    if "gold" in out and "oil_wti" in out:
+        d, r = _ratio_series("gold", "oil_wti")
+        ratios["gold_oil"] = {
+            "label": "Gold / Oil",
+            "desc":  "Barrels of WTI crude per ounce of gold — inflation gauge. Historic mean ≈18.",
+            "dates": d, "values": r,
+            "current": r[-1] if r else None,
+        }
+    if "gold" in out and "copper" in out:
+        d, r = _ratio_series("gold", "copper")
+        ratios["gold_copper"] = {
+            "label": "Gold / Copper",
+            "desc":  "Risk-off indicator. Rising = flight to safety; falling = economic optimism.",
+            "dates": d, "values": r,
+            "current": r[-1] if r else None,
+        }
+    if "oil_wti" in out and "natgas" in out:
+        d, r = _ratio_series("oil_wti", "natgas")
+        ratios["oil_natgas"] = {
+            "label": "Oil / Nat Gas",
+            "desc":  "Energy spread (WTI per MMBtu). Historic ≈10. Wide = oil rich vs gas.",
+            "dates": d, "values": r,
+            "current": r[-1] if r else None,
+        }
+
+    payload = {
+        "commodities": out,
+        "ratios":      ratios,
+        "ts":          int(time.time()),
+    }
+
+    with _COMMODITIES_CACHE_LOCK:
+        _COMMODITIES_CACHE["data"] = {"ts": time.time(), "data": payload}
+
+    return jsonify(payload)
 
 
 @bp.route("/daily")

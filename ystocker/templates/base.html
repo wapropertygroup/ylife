@@ -55,6 +55,11 @@
   <!-- i18n -->
   <script src="{{ url_for('static', filename='i18n.js') }}?v={{ cache_bust or 'dev' }}"></script>
 
+  <!-- Google Identity Services (only when configured) -->
+  {% if google_client_id %}
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  {% endif %}
+
   <style>
     body { font-family: 'Inter', sans-serif; }
     .chart-container { position: relative; }
@@ -69,10 +74,13 @@
     .grad-text { background: linear-gradient(135deg,#6366f1,#a78bfa,#38bdf8); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
     /* Table hover */
     tbody tr:hover td { background: rgba(99,102,241,.08); }
+    /* Hide x-cloak elements until Alpine.js initializes */
+    [x-cloak] { display: none !important; }
   </style>
 </head>
 
-<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col" x-data="{ navOpen: false }">
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col"
+      x-data='{ navOpen: false, user: {{ current_user|tojson if current_user is defined else "{\"email\":\"\",\"name\":\"\",\"picture\":\"\"}"|safe }} }'>
 
   <!-- ── Top navigation bar ──────────────────────────────────────────── -->
   <header class="sticky top-0 z-50 bg-slate-900/80 backdrop-blur border-b border-slate-800">
@@ -157,9 +165,16 @@
                       rounded-2xl shadow-2xl shadow-black/60 z-50 overflow-hidden"
                style="min-width:210px">
             <div class="px-3 pt-2.5 pb-2">
-              <p class="text-[10px] font-semibold tracking-widest uppercase text-slate-500 px-1 mb-1.5"
+              <a href="{{ url_for('main.commodities') }}"
+                 class="flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs text-brand
+                        hover:text-white hover:bg-brand/20 border border-transparent hover:border-brand/30
+                        transition-all duration-100 font-semibold mb-1">
+                <span class="flex-1" data-i18n="nav.commodities_overview">📊 Overview &amp; Detail</span>
+                <span class="text-[10px] text-slate-500">→</span>
+              </a>
+              <p class="text-[10px] font-semibold tracking-widest uppercase text-slate-500 px-1 mb-1.5 mt-1.5"
                  data-i18n="nav.commodities_futures">Futures</p>
-              <a href="{{ url_for('main.markets') }}#gold"
+              <a href="{{ url_for('main.commodities') }}#gold"
                  class="flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs text-slate-300
                         hover:text-white hover:bg-brand/20 border border-transparent hover:border-brand/30
                         transition-all duration-100">
@@ -167,7 +182,7 @@
                 <span class="flex-1" data-i18n="markets.tab_gold">Gold</span>
                 <span class="text-[10px] text-slate-600 font-mono">GC=F</span>
               </a>
-              <a href="{{ url_for('main.markets') }}#silver"
+              <a href="{{ url_for('main.commodities') }}#silver"
                  class="flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs text-slate-300
                         hover:text-white hover:bg-brand/20 border border-transparent hover:border-brand/30
                         transition-all duration-100">
@@ -175,7 +190,7 @@
                 <span class="flex-1" data-i18n="markets.tab_silver">Silver</span>
                 <span class="text-[10px] text-slate-600 font-mono">SI=F</span>
               </a>
-              <a href="{{ url_for('main.markets') }}#oil"
+              <a href="{{ url_for('main.commodities') }}#oil"
                  class="flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs text-slate-300
                         hover:text-white hover:bg-brand/20 border border-transparent hover:border-brand/30
                         transition-all duration-100">
@@ -183,7 +198,7 @@
                 <span class="flex-1" data-i18n="markets.tab_oil">Crude Oil</span>
                 <span class="text-[10px] text-slate-600 font-mono">CL=F</span>
               </a>
-              <a href="{{ url_for('main.markets') }}#natgas"
+              <a href="{{ url_for('main.commodities') }}#natgas"
                  class="flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs text-slate-300
                         hover:text-white hover:bg-brand/20 border border-transparent hover:border-brand/30
                         transition-all duration-100">
@@ -191,7 +206,7 @@
                 <span class="flex-1" data-i18n="markets.tab_natgas">Nat Gas</span>
                 <span class="text-[10px] text-slate-600 font-mono">NG=F</span>
               </a>
-              <a href="{{ url_for('main.markets') }}#copper"
+              <a href="{{ url_for('main.commodities') }}#copper"
                  class="flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs text-slate-300
                         hover:text-white hover:bg-brand/20 border border-transparent hover:border-brand/30
                         transition-all duration-100">
@@ -232,6 +247,25 @@
                   d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
           </svg>
         </a>
+
+        <!-- Auth: signed-in chip / sign-in button -->
+        <div x-show="user && user.email" class="flex items-center gap-2" x-cloak>
+          <img x-show="user && user.picture" :src="user && user.picture" class="w-7 h-7 rounded-full border border-slate-700" referrerpolicy="no-referrer">
+          <span class="text-xs text-slate-400 max-w-[8rem] truncate" x-text="user && user.name"></span>
+          <button @click="fetch('/api/auth/logout',{method:'POST'}).then(()=>{user={email:'',name:'',picture:''}})"
+                  class="text-xs text-slate-500 hover:text-red-400 transition"
+                  data-i18n="nav.logout">Logout</button>
+        </div>
+        <div x-show="!user || !user.email" x-cloak>
+          <a href="{{ url_for('main.login') }}"
+             class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium border border-brand text-brand hover:bg-brand hover:text-white transition">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"/>
+            </svg>
+            <span data-i18n="nav.sign_in">Sign In</span>
+          </a>
+        </div>
+
         <!-- Language toggle -->
         <button onclick="I18n.toggle()"
                 class="lang-toggle-btn px-2.5 py-1.5 rounded-md text-sm border border-slate-700 text-slate-300
@@ -280,17 +314,30 @@
         </div>
         <div class="px-3 py-1.5 text-[10px] font-semibold tracking-widest uppercase text-slate-600 mt-1" data-i18n="nav.commodities">Commodities</div>
         <div class="grid grid-cols-2 gap-1 mb-1">
-          <a href="{{ url_for('main.markets') }}#gold"   class="px-3 py-2 rounded-md text-sm text-slate-300 hover:bg-slate-800 truncate" data-i18n="markets.tab_gold">Gold</a>
-          <a href="{{ url_for('main.markets') }}#silver" class="px-3 py-2 rounded-md text-sm text-slate-300 hover:bg-slate-800 truncate" data-i18n="markets.tab_silver">Silver</a>
-          <a href="{{ url_for('main.markets') }}#oil"    class="px-3 py-2 rounded-md text-sm text-slate-300 hover:bg-slate-800 truncate" data-i18n="markets.tab_oil">Crude Oil</a>
-          <a href="{{ url_for('main.markets') }}#natgas" class="px-3 py-2 rounded-md text-sm text-slate-300 hover:bg-slate-800 truncate" data-i18n="markets.tab_natgas">Nat Gas</a>
-          <a href="{{ url_for('main.markets') }}#copper" class="px-3 py-2 rounded-md text-sm text-slate-300 hover:bg-slate-800 truncate" data-i18n="markets.tab_copper">Copper</a>
+          <a href="{{ url_for('main.commodities') }}#gold"   class="px-3 py-2 rounded-md text-sm text-slate-300 hover:bg-slate-800 truncate" data-i18n="markets.tab_gold">Gold</a>
+          <a href="{{ url_for('main.commodities') }}#silver" class="px-3 py-2 rounded-md text-sm text-slate-300 hover:bg-slate-800 truncate" data-i18n="markets.tab_silver">Silver</a>
+          <a href="{{ url_for('main.commodities') }}#oil"    class="px-3 py-2 rounded-md text-sm text-slate-300 hover:bg-slate-800 truncate" data-i18n="markets.tab_oil">Crude Oil</a>
+          <a href="{{ url_for('main.commodities') }}#natgas" class="px-3 py-2 rounded-md text-sm text-slate-300 hover:bg-slate-800 truncate" data-i18n="markets.tab_natgas">Nat Gas</a>
+          <a href="{{ url_for('main.commodities') }}#copper" class="px-3 py-2 rounded-md text-sm text-slate-300 hover:bg-slate-800 truncate" data-i18n="markets.tab_copper">Copper</a>
         </div>
         <a href="{{ url_for('main.thirteenf') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-300 hover:bg-slate-800" data-i18n="nav.thirteenf">13F</a>
         <a href="{{ url_for('main.fed') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-300 hover:bg-slate-800" data-i18n="nav.fed">Fed</a>
         <a href="{{ url_for('main.videos') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-300 hover:bg-slate-800" data-i18n="nav.videos">Videos</a>
         <a href="{{ url_for('main.guide') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-300 hover:bg-slate-800" data-i18n="nav.guide">Guide</a>
         <a id="refreshBtnMobile" href="{{ url_for('main.thirteenf_refresh') if request.endpoint == 'main.thirteenf' else (url_for('main.fed_refresh') if request.endpoint == 'main.fed' else url_for('main.refresh')) }}" class="px-3 py-2.5 rounded-md text-sm text-brand hover:bg-slate-800" data-i18n="nav.refresh">↻ Refresh</a>
+
+        <!-- Mobile auth -->
+        <div x-show="user && user.email" class="flex items-center gap-2 px-3 py-2.5 border-t border-slate-800 mt-1 pt-3" x-cloak>
+          <img x-show="user && user.picture" :src="user && user.picture" class="w-7 h-7 rounded-full border border-slate-700" referrerpolicy="no-referrer">
+          <span class="text-xs text-slate-300 flex-1 truncate" x-text="user && user.name"></span>
+          <button @click="fetch('/api/auth/logout',{method:'POST'}).then(()=>{user={email:'',name:'',picture:''}})"
+                  class="text-xs text-slate-400 hover:text-red-400" data-i18n="nav.logout">Logout</button>
+        </div>
+        <a x-show="!user || !user.email" x-cloak
+           href="{{ url_for('main.login') }}"
+           class="px-3 py-2.5 rounded-md text-sm border border-brand text-brand hover:bg-brand hover:text-white transition mt-1 text-center"
+           data-i18n="nav.sign_in">Sign In</a>
+
         <button onclick="I18n.toggle()"
                 class="lang-toggle-btn mt-1 px-3 py-2.5 rounded-md text-sm border border-slate-700 text-slate-300
                        hover:border-brand hover:text-brand transition text-left font-medium">
@@ -365,6 +412,8 @@
     .catch(() => {}); // silently ignore fetch errors
 })();
 </script>
+
+{% block scripts %}{% endblock %}
 
 </body>
 </html>
