@@ -96,9 +96,11 @@ def _load_secrets_from_ssm() -> None:
         return  # boto3 not installed — skip
 
     SSM_PARAMS = {
-        "/ystocker/GEMINI_API_KEY":  "GEMINI_API_KEY",
-        "/ystocker/YOUTUBE_API_KEY": "YOUTUBE_API_KEY",
-        "/ystocker/SES_FROM_EMAIL":  "SES_FROM_EMAIL",
+        "/ystocker/GEMINI_API_KEY":     "GEMINI_API_KEY",
+        "/ystocker/YOUTUBE_API_KEY":    "YOUTUBE_API_KEY",
+        "/ystocker/SES_FROM_EMAIL":     "SES_FROM_EMAIL",
+        "/ystocker/GOOGLE_CLIENT_ID":   "GOOGLE_CLIENT_ID",
+        "/ystocker/YSTOCKER_SECRET_KEY": "YSTOCKER_SECRET_KEY",
     }
 
     try:
@@ -137,7 +139,10 @@ def create_app() -> Flask:
         pass
 
     app = Flask(__name__)
-    app.secret_key = "ystocker-dev-secret"  # needed for flash messages
+    import os as _os
+    app.secret_key = _os.environ.get("YSTOCKER_SECRET_KEY", "ystocker-dev-secret")  # needed for flash + session
+    app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+    app.config["SESSION_COOKIE_HTTPONLY"] = True
 
     # Register the main blueprint (routes live in routes.py)
     from ystocker.routes import bp, _start_background_thread, _start_heatmap_scheduler, _start_daily_broadcast_scheduler
@@ -160,6 +165,24 @@ def create_app() -> Flask:
     @app.context_processor
     def _inject_cache_bust():
         return {"cache_bust": _cache_bust}
+
+    @app.context_processor
+    def _inject_auth_context():
+        """Make google_client_id + current_user available in every template."""
+        from flask import session
+        email = session.get("user_email")
+        if email:
+            current_user = {
+                "email":   email,
+                "name":    session.get("user_name", email.split("@")[0]),
+                "picture": session.get("user_picture", ""),
+            }
+        else:
+            current_user = {"email": "", "name": "", "picture": ""}
+        return {
+            "google_client_id": os.environ.get("GOOGLE_CLIENT_ID", ""),
+            "current_user":     current_user,
+        }
 
     # Configure logging so INFO messages appear in the terminal
     import logging
