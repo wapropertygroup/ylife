@@ -91,9 +91,6 @@
         <a href="{{ url_for('main.evaluation') }}"
            class="px-3 py-1.5 rounded-md text-sm text-slate-300 hover:text-white hover:bg-slate-800 transition"
            data-i18n="nav.home">Valuation</a>
-        <a href="{{ url_for('main.heatmap') }}"
-           class="px-3 py-1.5 rounded-md text-sm text-slate-300 hover:text-white hover:bg-slate-800 transition"
-           data-i18n="heatmap.nav">Heatmap</a>
 
         <!-- Sectors dropdown -->
         <div class="relative" x-data="{ open: false }" @mouseenter="open=true" @mouseleave="open=false">
@@ -273,7 +270,6 @@
       <div class="flex flex-col gap-1 pt-2">
         <a href="{{ url_for('main.markets') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-300 hover:bg-slate-800" data-i18n="markets.nav">Markets</a>
         <a href="{{ url_for('main.evaluation') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-300 hover:bg-slate-800" data-i18n="nav.home">Valuation</a>
-        <a href="{{ url_for('main.heatmap') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-300 hover:bg-slate-800" data-i18n="heatmap.nav">Heatmap</a>
         <div class="px-3 py-1.5 text-[10px] font-semibold tracking-widest uppercase text-slate-600 mt-1" data-i18n="nav.sectors">Sectors</div>
         <div class="grid grid-cols-2 gap-1 mb-1">
           {% for g in peer_groups %}
