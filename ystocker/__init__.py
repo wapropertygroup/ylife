@@ -19,7 +19,7 @@ PEER_GROUPS: dict[str, list[str]] = {
     "Semiconductors":    ["NVDA", "AMD", "TSM", "AVGO", "ASML", "INTC", "QCOM", "MU"],
     "Financials":        ["JPM", "BAC", "GS", "MS", "BLK", "BRK-B", "V", "MA", "WFC", "AXP"],
     "Healthcare":        ["UNH", "JNJ", "LLY", "ABBV", "MRK", "ISRG", "PFE", "TMO", "ABT", "DHR"],
-    "Biotech":           ["LLY", "AMGN", "VRTX", "REGN", "GILD", "BIIB", "MRNA", "BNTX", "ILMN", "IBB"],
+    "Biotech":           ["LLY", "AMGN", "VRTX", "REGN", "GILD", "BIIB", "ILMN"],
     "Retail":            ["WMT", "AMZN", "COST", "TGT", "HD", "LOW", "TJX", "DG"],
     "E-commerce":        ["AMZN", "SHOP", "MELI", "EBAY", "ETSY", "CHWY", "W", "PDD", "JD", "BABA"],
     "Streaming / Media": ["NFLX", "DIS", "WBD", "PARA", "CMCSA", "SPOT", "ROKU", "FUBO", "TME", "BIDU"],
