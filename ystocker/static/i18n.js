@@ -681,7 +681,6 @@ const I18n = (() => {
     'sector.name.US Broad ETFs':     { en: 'US Broad ETFs',      zh: '美国宽基ETF' },
     'sector.name.Sector ETFs':       { en: 'Sector ETFs',        zh: '行业ETF' },
     'sector.name.International ETFs':{ en: 'International ETFs', zh: '国际ETF' },
-    'sector.name.Bonds / Fixed Income': { en: 'Bonds / Fixed Income', zh: '债券 / 固定收益' },
     'sector.name.Commodities ETFs':  { en: 'Commodities ETFs',   zh: '大宗商品ETF' },
     'sector.name.China Tech':        { en: 'China Tech',         zh: '中概科技股' },
 
