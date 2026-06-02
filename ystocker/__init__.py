@@ -42,8 +42,7 @@ PEER_GROUPS: dict[str, list[str]] = {
     "International ETFs":["EWJ", "FXI", "MCHI", "EEM", "VWO", "IXUS", "VXUS", "EWZ", "INDA", "EWY"],
     "Commodities ETFs":  ["GLD", "SLV", "USO", "UNG", "DBC", "PDBC", "URA", "WEAT", "CORN", "SOYB",
                           "PPLT", "PALL", "CPER"],
-    "China Tech":        ["BABA", "JD", "PDD", "BIDU", "TME", "TCEHY", "NTES", "BILI", "NIO", "XPEV",
-                          "LI", "FXI", "MCHI", "KWEB", "ASHR"],
+    "China Tech":        ["BABA", "JD", "PDD", "BIDU", "TME", "TCEHY", "NTES", "BILI"],
 }
 
 # ---------------------------------------------------------------------------
