@@ -285,7 +285,10 @@
           <span class="inline-block w-3 h-0.5 bg-sky-400"></span> <span data-i18n="history.price_legend">Price</span>
         </span>
         <span class="flex items-center gap-1.5 text-xs text-amber-400">
-          <span class="inline-block w-3 h-0.5 border-dashed border border-amber-400"></span> <span>Δ</span>
+          <span class="inline-block w-3 h-0.5 border-dashed border border-amber-400"></span> <span>MA20</span>
+        </span>
+        <span class="flex items-center gap-1.5 text-xs text-rose-400">
+          <span class="inline-block w-3 h-0.5 border-dashed border border-rose-400"></span> <span>MA50</span>
         </span>
         <span id="legendTarget" style="display:none" class="items-center gap-1.5 text-xs text-slate-400 cursor-help wall-tip"
               data-tip-i18n="history.tip_target">
@@ -320,6 +323,23 @@
       <canvas id="priceHistChart"></canvas>
     </div>
     <div id="explainPanelPrice" class="explain-panel"></div>
+  </div>
+
+  <!-- Price Delta chart -->
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up" id="priceDeltaSection" style="display:none">
+    <div class="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-0 sm:justify-between mb-3">
+      <div>
+        <h2 class="text-base font-semibold text-slate-200">Price Change (Δ)</h2>
+        <p class="text-xs text-slate-500">Period-over-period price delta (USD)</p>
+      </div>
+      <div class="flex items-center gap-2 flex-wrap justify-end">
+        <span class="flex items-center gap-1.5 text-xs text-emerald-400"><span class="inline-block w-2 h-2 rounded-sm bg-emerald-500/70"></span> Up</span>
+        <span class="flex items-center gap-1.5 text-xs text-rose-400"><span class="inline-block w-2 h-2 rounded-sm bg-rose-500/70"></span> Down</span>
+      </div>
+    </div>
+    <div class="chart-container" style="height:140px" id="priceDeltaChartWrap">
+      <canvas id="priceDeltaHistChart"></canvas>
+    </div>
   </div>
 
   <!-- Price Z-Score -->
@@ -990,6 +1010,11 @@ let   _forecastResult = null;   // last forecast API response
   const prCfg = _buildConfig('price', data, staticData);
   _registerChart('price', prCfg, new Chart(document.getElementById('priceHistChart'), prCfg));
 
+  // ── Price delta chart (synced to price range)
+  document.getElementById('priceDeltaSection').style.display = 'block';
+  const dlCfg = _buildConfig('delta', data, staticData);
+  _registerChart('delta', dlCfg, new Chart(document.getElementById('priceDeltaHistChart'), dlCfg));
+
   // ── PEG history chart (only when data available)
   if (data.peg_history && data.peg_history.some(v => v != null)) {
     document.getElementById('pegHistSection').style.display = 'block';
@@ -1310,30 +1335,50 @@ function _buildConfig(key, d, staticData) {
     };
   }
   if (key === 'price') {
-    const deltas = d.prices.map((p,i) => i===0||p==null||d.prices[i-1]==null ? null : parseFloat((p - d.prices[i-1]).toFixed(2)));
+    function rollingMa(data, n) {
+      const out = new Array(data.length).fill(null);
+      let sum = 0, cnt = 0;
+      for (let i = 0; i < data.length; i++) {
+        const p = data[i];
+        if (p != null) { sum += p; cnt++; }
+        if (i >= n) { const old = data[i - n]; if (old != null) { sum -= old; cnt--; } }
+        if (i >= n - 1 && cnt >= n * 0.6) out[i] = sum / Math.min(n, cnt);
+      }
+      return out;
+    }
+    function maLabel(n, dates) {
+      if (!dates || dates.length < 2) return `MA${n}`;
+      const diff = (new Date(dates[1]) - new Date(dates[0])) / 86400000;
+      if (diff <= 2) return `${n}d MA`;
+      if (diff <= 10) return `${n}w MA`;
+      return `${n}m MA`;
+    }
+    const ma20 = rollingMa(d.prices, 20);
+    const ma50 = rollingMa(d.prices, 50);
+    const lbl20 = maLabel(20, d.dates);
+    const lbl50 = maLabel(50, d.dates);
     return {
       type: 'line',
       data: { labels: d.dates, datasets: [
         { label:'Price', data:d.prices,
           borderColor:'#38bdf8', backgroundColor:'rgba(56,189,248,0.07)',
-          borderWidth:2, pointRadius:0, pointHoverRadius:5, fill:true, tension:0.3, spanGaps:true,
-          yAxisID:'y' },
-        { label:'Δ Price', data:deltas,
-          borderColor:'rgba(251,191,36,0.65)', backgroundColor:'rgba(251,191,36,0.04)',
-          borderWidth:1.5, pointRadius:0, pointHoverRadius:4, fill:false, tension:0.2, spanGaps:true,
-          yAxisID:'yDelta', borderDash:[3,3] },
+          borderWidth:2, pointRadius:0, pointHoverRadius:5, fill:true, tension:0.3, spanGaps:true },
+        { label:lbl20, data:ma20,
+          borderColor:'#fbbf24', backgroundColor:'transparent',
+          borderWidth:1.5, pointRadius:0, pointHoverRadius:0, fill:false, tension:0.3, spanGaps:true,
+          borderDash:[4,3] },
+        { label:lbl50, data:ma50,
+          borderColor:'#f87171', backgroundColor:'transparent',
+          borderWidth:1.5, pointRadius:0, pointHoverRadius:0, fill:false, tension:0.3, spanGaps:true,
+          borderDash:[4,3] },
       ]},
       options: {
         responsive:true, maintainAspectRatio:false,
         plugins:{ legend:{display:false}, tooltip:{mode:'index',intersect:false, callbacks:{label:c=>{
-          if (c.dataset.yAxisID==='yDelta') { if (c.raw==null) return ''; return ` Δ ${c.raw>=0?'+':''}$${c.raw.toFixed(2)}`; }
-          return ` $${c.raw?.toFixed(2)}`;
+          if (c.raw==null) return '';
+          return ` ${c.dataset.label}: $${c.raw.toFixed(2)}`;
         }}}},
-        scales:{
-          x:{grid:{color:gridCol},ticks:{color:tickCol,maxTicksLimit:8,maxRotation:0}},
-          y:{grid:{color:gridCol},ticks:{color:tickCol,callback:v=>'$'+v}},
-          yDelta:{position:'right',grid:{drawOnChartArea:false},ticks:{color:'rgba(251,191,36,0.45)',callback:v=>(v>=0?'+':'')+v.toFixed(2)},title:{display:false}},
-        },
+        scales:{ x:{grid:{color:gridCol},ticks:{color:tickCol,maxTicksLimit:8,maxRotation:0}}, y:{grid:{color:gridCol},ticks:{color:tickCol,callback:v=>'$'+v}} },
         interaction:{mode:'index',intersect:false},
       },
       plugins: [{
@@ -1354,6 +1399,32 @@ function _buildConfig(key, d, staticData) {
         }
       }],
       _title: 'Price', _desc: 'Closing price (USD)',
+    };
+  }
+  if (key === 'delta') {
+    const deltas = d.prices.map((p,i) => i===0||p==null||d.prices[i-1]==null ? null : parseFloat((p - d.prices[i-1]).toFixed(2)));
+    return {
+      type: 'bar',
+      data: { labels: d.dates, datasets: [{
+        label: 'Δ Price',
+        data: deltas,
+        backgroundColor: deltas.map(v => v == null ? 'transparent' : v >= 0 ? 'rgba(52,211,153,0.7)' : 'rgba(248,113,113,0.7)'),
+        borderColor:     deltas.map(v => v == null ? 'transparent' : v >= 0 ? '#34d399' : '#f87171'),
+        borderWidth: 1,
+        borderRadius: 2,
+      }]},
+      options: {
+        responsive:true, maintainAspectRatio:false,
+        plugins:{ legend:{display:false}, tooltip:{mode:'index',intersect:false, callbacks:{
+          label: c => c.raw==null ? '' : ` Δ ${c.raw>=0?'+':''}$${c.raw.toFixed(2)}`
+        }}},
+        scales:{
+          x:{grid:{color:gridCol},ticks:{color:tickCol,maxTicksLimit:8,maxRotation:0}},
+          y:{grid:{color:gridCol},ticks:{color:tickCol,callback:v=>(v>=0?'+':'')+v.toFixed(2)}},
+        },
+        interaction:{mode:'index',intersect:false},
+      },
+      _title: 'Price Change', _desc: 'Period-over-period price delta',
     };
   }
   if (key === 'peg') {
@@ -1638,6 +1709,14 @@ async function _handleRange(chartKey, period, staticData) {
   const cfg = _buildConfig(chartKey, d, staticData);
   _chartConfigs[chartKey] = cfg;
   _chartInstances[chartKey] = new Chart(document.getElementById(canvasId), cfg);
+
+  // Keep price delta chart in sync whenever the price range changes
+  if (chartKey === 'price') {
+    if (_chartInstances['delta']) { _chartInstances['delta'].destroy(); delete _chartInstances['delta']; }
+    const dlCfg = _buildConfig('delta', d, staticData);
+    _chartConfigs['delta'] = dlCfg;
+    _chartInstances['delta'] = new Chart(document.getElementById('priceDeltaHistChart'), dlCfg);
+  }
 
   // If modal is open for this chart, refresh it too
   if (_modalKey === chartKey && document.getElementById('chartModal').style.display !== 'none') {
