@@ -710,6 +710,31 @@ _HISTORY_CACHE: Dict[tuple, dict] = {}
 _HISTORY_CACHE_LOCK = threading.Lock()
 _HISTORY_CACHE_TTL = 60 * 60   # 1 hour
 
+def _get_insider_trades(ticker: str) -> list[dict]:
+    """Return the most recent 10 insider transactions for *ticker*."""
+    try:
+        import yfinance as yf
+        tk = yf.Ticker(ticker)
+        df = tk.insider_transactions
+        if df is None or df.empty:
+            return []
+        # Normalise column names (yfinance sometimes returns camelCase)
+        df = df.head(10).copy()
+        rows = []
+        for _, row in df.iterrows():
+            rows.append({
+                "date":        str(row.get("Start Date") or row.get("startDate") or ""),
+                "insider":     str(row.get("Name") or row.get("name") or "—"),
+                "title":       str(row.get("Title") or row.get("title") or "—"),
+                "transaction": str(row.get("Transaction") or row.get("transaction") or "—"),
+                "shares":      int(row.get("Shares") or row.get("shares") or 0),
+                "value":       int(row.get("Value") or row.get("value") or 0),
+            })
+        return rows
+    except Exception:
+        return []
+
+
 def _get_institutional_holders(ticker: str) -> list:
     """Return per-fund multi-quarter position data for a ticker."""
     try:
@@ -971,6 +996,25 @@ def api_history(ticker: str):
         # High/Low series for Stochastic Oscillator
         "highs":             [round(float(v), 2) if not math.isnan(float(v)) else None for v in hist["High"]],
         "lows":              [round(float(v), 2) if not math.isnan(float(v)) else None for v in hist["Low"]],
+        # Analyst consensus
+        "recommendation":    info.get("recommendationKey"),
+        "recommendation_mean": _safe(round(info.get("recommendationMean"), 2)) if info.get("recommendationMean") else None,
+        "analyst_count":     info.get("numberOfAnalystOpinions"),
+        "target_high":       _safe(info.get("targetHighPrice")),
+        "target_low":        _safe(info.get("targetLowPrice")),
+        "target_median":     _safe(info.get("targetMedianPrice")),
+        # Insider transactions (most recent 10)
+        "insider_trades":    _get_insider_trades(ticker),
+        # Relative performance vs sector (current day_chg - sector ETF day_chg)
+        "revenue_growth":    _safe(round(info.get("revenueGrowth") * 100, 1)) if info.get("revenueGrowth") else None,
+        "operating_margin":  _safe(round(info.get("operatingMargins") * 100, 1)) if info.get("operatingMargins") else None,
+        "roa":               _safe(round(info.get("returnOnAssets") * 100, 1)) if info.get("returnOnAssets") else None,
+        "current_ratio":     _safe(round(info.get("currentRatio"), 2)) if info.get("currentRatio") else None,
+        "shares_outstanding":_safe(round(info.get("sharesOutstanding") / 1e9, 2)) if info.get("sharesOutstanding") else None,
+        "float_shares":      _safe(round(info.get("floatShares") / 1e9, 2)) if info.get("floatShares") else None,
+        "week52_high":       _safe(info.get("fiftyTwoWeekHigh")),
+        "week52_low":        _safe(info.get("fiftyTwoWeekLow")),
+        "avg_volume":        _safe(info.get("averageVolume")),
         # Relative strength vs SPY (normalised to 100 at start)
         "relative_strength": relative_strength,
         "spy_prices":        spy_prices_list,
@@ -3292,20 +3336,31 @@ _CREDIT_SPREAD_CACHE_TTL  = 3600 * 4  # 4 hours
 @bp.route("/api/credit-spread")
 def api_credit_spread():
     """
-    Return 1-year weekly price history for HYG and TLT plus the HYG/TLT ratio
-    (a proxy for credit-spread risk appetite: higher ratio = tighter spreads).
+    Return weekly/monthly HYG and TLT price history plus the HYG/TLT ratio.
+
+    Query params:
+      period: 1y | 2y | 3y | 5y | 10y  (default: 1y)
     """
     import yfinance as yf
+    from flask import request as _req
 
+    VALID_PERIODS = {"1y", "2y", "3y", "5y", "10y"}
+    period = _req.args.get("period", "1y")
+    if period not in VALID_PERIODS:
+        period = "1y"
+    # Use weekly for ≤3y, monthly for longer so the chart stays readable
+    interval = "1wk" if period in ("1y", "2y", "3y") else "1mo"
+
+    cache_key = period
     with _CREDIT_SPREAD_CACHE_LOCK:
-        entry = _CREDIT_SPREAD_CACHE.get("data")
+        entry = _CREDIT_SPREAD_CACHE.get(cache_key)
         if entry and time.time() - entry["ts"] < _CREDIT_SPREAD_CACHE_TTL:
             return jsonify(entry["data"])
 
     def _fetch_etf(symbol: str) -> dict:
         try:
             tk = yf.Ticker(symbol)
-            hist = tk.history(period="1y", interval="1wk")
+            hist = tk.history(period=period, interval=interval)
             prices = [round(float(p), 4) if not math.isnan(float(p)) else None for p in hist["Close"]]
             dates  = [str(d.date()) for d in hist.index]
             valid  = [p for p in prices if p is not None]
@@ -3338,6 +3393,8 @@ def api_credit_spread():
         spread.append(round(h / t, 6) if h is not None and t is not None and t > 0 else None)
 
     result = {
+        "period":       period,
+        "interval":     interval,
         "hyg":          hyg,
         "tlt":          tlt,
         "spread_dates": common_dates,
@@ -3346,7 +3403,7 @@ def api_credit_spread():
 
     ts = time.time()
     with _CREDIT_SPREAD_CACHE_LOCK:
-        _CREDIT_SPREAD_CACHE["data"] = {"ts": ts, "data": result}
+        _CREDIT_SPREAD_CACHE[cache_key] = {"ts": ts, "data": result}
 
     return jsonify(result)
 

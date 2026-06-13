@@ -166,7 +166,7 @@
 </div>
 
 <!-- Liabilities stat cards row -->
-<div class="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mb-6 sm:mb-8 fade-up" id="statCardsLiab">
+<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4 mb-6 sm:mb-8 fade-up" id="statCardsLiab">
   <div class="bg-slate-900 border border-slate-800 rounded-xl px-4 py-3">
     <div class="text-xs text-slate-500 mb-1 flex items-center gap-1" data-i18n="fed.stat_rrp">ON RRP
       <span class="fed-tip text-slate-600 cursor-help text-[10px]" data-i18n-tip="fed.tip_rrp">ⓘ</span>
@@ -194,6 +194,15 @@
     </div>
     <div id="statLoans" class="text-xl font-bold text-slate-100">—</div>
     <div id="statLoansChg" class="text-xs mt-0.5 text-slate-500">—</div>
+  </div>
+  <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 py-3">
+    <div class="text-xs text-slate-500 mb-1" data-i18n="fed.m2_supply">M2 Money Supply</div>
+    <div id="fedM2Latest" class="text-base font-bold text-sky-400">—</div>
+    <div id="fedM2Yoy" class="text-[11px] text-slate-500 mt-0.5"></div>
+  </div>
+  <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 py-3">
+    <div class="text-xs text-slate-500 mb-1" data-i18n="fed.m2_yoy">M2 YoY Growth</div>
+    <div id="fedM2YoyVal" class="text-base font-bold text-slate-100">—</div>
   </div>
 </div>
 
@@ -869,6 +878,45 @@
     otherAChg.textContent = fmtChg(otherAssetsNow, otherAssetsPrev);
     otherAChg.className   = 'text-xs mt-0.5 ' + chgClass(otherAssetsNow, otherAssetsPrev);
   }
+
+  // ── M2 Money Supply cards (monthly series)
+  (function() {
+    const m2 = s['M2SL'];
+    if (!m2 || !m2.values || !m2.values.length) return;
+    const vals  = m2.values.filter(v => v != null);
+    const dates = m2.dates;
+    if (!vals.length) return;
+
+    const latest    = vals[vals.length - 1];                         // billions USD
+    const momPrev   = vals.length >= 2  ? vals[vals.length - 2] : null;   // 1 month ago
+    const yoyPrev   = vals.length >= 13 ? vals[vals.length - 13] : null;  // 12 months ago
+
+    // Display as $T with 2 decimal places
+    const latestT = (latest / 1000).toFixed(2);
+    const latestEl = document.getElementById('fedM2Latest');
+    if (latestEl) latestEl.textContent = '$' + latestT + 'T';
+
+    // YoY growth %
+    const yoyEl  = document.getElementById('fedM2YoyVal');
+    const yoySub = document.getElementById('fedM2Yoy');
+    if (yoyPrev != null && yoyPrev !== 0) {
+      const yoyPct = ((latest - yoyPrev) / yoyPrev * 100).toFixed(1);
+      const sign   = parseFloat(yoyPct) >= 0 ? '+' : '';
+      if (yoyEl) {
+        yoyEl.textContent = sign + yoyPct + '%';
+        yoyEl.className   = 'text-base font-bold ' + (parseFloat(yoyPct) >= 0 ? 'text-emerald-400' : 'text-rose-400');
+      }
+    }
+    // MoM subtitle under the supply card
+    if (momPrev != null && momPrev !== 0) {
+      const momPct = ((latest - momPrev) / momPrev * 100).toFixed(2);
+      const sign   = parseFloat(momPct) >= 0 ? '+' : '';
+      if (yoySub) {
+        yoySub.textContent = sign + momPct + '% MoM';
+        yoySub.className   = 'text-[11px] mt-0.5 ' + (parseFloat(momPct) >= 0 ? 'text-emerald-400' : 'text-rose-400');
+      }
+    }
+  })();
 
   // ── Populate Balance Sheet Identity panel
   const totA = _v('WALCL');

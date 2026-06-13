@@ -141,6 +141,29 @@
     <div class="mt-2 text-xs text-slate-600 px-1" id="etfMeta"></div>
   </div>
 
+  <!-- Analyst Consensus -->
+  <div id="analystSection" style="display:none">
+    <p class="text-[10px] font-semibold uppercase tracking-widest text-slate-600 mb-2 px-1" data-i18n="history.group_analyst">Analyst Consensus</p>
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
+      <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 py-3">
+        <div class="text-xs text-slate-500 mb-1" data-i18n="history.analyst_rating">Rating</div>
+        <div id="statRating" class="text-base font-bold text-slate-100">—</div>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 py-3">
+        <div class="text-xs text-slate-500 mb-1" data-i18n="history.analyst_count">Analysts</div>
+        <div id="statAnalystCount" class="text-base font-bold text-slate-100">—</div>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 py-3">
+        <div class="text-xs text-slate-500 mb-1" data-i18n="history.target_high">Target High</div>
+        <div id="statTargetHigh" class="text-base font-bold text-emerald-400">—</div>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 py-3">
+        <div class="text-xs text-slate-500 mb-1" data-i18n="history.target_low">Target Low</div>
+        <div id="statTargetLow" class="text-base font-bold text-rose-400">—</div>
+      </div>
+    </div>
+  </div>
+
   <!-- Key Dates (shown when available) -->
   <div id="keyDatesSection" style="display:none">
     <p class="text-[10px] font-semibold uppercase tracking-widest text-slate-600 mb-2 px-1" data-i18n="history.group_dates">Key Dates</p>
@@ -271,6 +294,20 @@
         <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 py-3">
           <div class="text-xs text-slate-500 mb-1" data-i18n="history.beta">Beta</div>
           <div id="statBeta" class="text-base font-bold text-slate-100">—</div>
+        </div>
+      </div>
+      <div class="grid grid-cols-3 sm:grid-cols-3 gap-2 sm:gap-3 mt-2">
+        <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 py-3">
+          <div class="text-xs text-slate-500 mb-1" data-i18n="history.operating_margin">Op. Margin</div>
+          <div id="statOpMargin" class="text-base font-bold text-slate-100">—</div>
+        </div>
+        <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 py-3">
+          <div class="text-xs text-slate-500 mb-1" data-i18n="history.roa">ROA</div>
+          <div id="statRoa" class="text-base font-bold text-slate-100">—</div>
+        </div>
+        <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 py-3">
+          <div class="text-xs text-slate-500 mb-1" data-i18n="history.current_ratio">Current Ratio</div>
+          <div id="statCurrentRatio" class="text-base font-bold text-slate-100">—</div>
         </div>
       </div>
     </div>
@@ -494,6 +531,15 @@
         <span class="flex items-center gap-1.5 text-xs text-emerald-400"><span class="inline-block w-2 h-2 rounded-sm bg-emerald-500/70"></span> <span data-i18n="history.delta_up">Up</span></span>
         <span class="flex items-center gap-1.5 text-xs text-rose-400"><span class="inline-block w-2 h-2 rounded-sm bg-rose-500/70"></span> <span data-i18n="history.delta_down">Down</span></span>
         <span class="flex items-center gap-1.5 text-xs text-sky-400"><span class="inline-block w-3 h-0.5 border-dashed border border-sky-400"></span> <span data-i18n="history.delta_ma">MA</span></span>
+        <div class="flex gap-1">
+          <button class="range-btn" data-chart="price" data-period="1mo">1M</button>
+          <button class="range-btn" data-chart="price" data-period="3mo">3M</button>
+          <button class="range-btn" data-chart="price" data-period="6mo">6M</button>
+          <button class="range-btn active" data-chart="price" data-period="1y">1Y</button>
+          <button class="range-btn" data-chart="price" data-period="2y">2Y</button>
+          <button class="range-btn" data-chart="price" data-period="5y">5Y</button>
+          <button class="range-btn" data-chart="price" data-period="10y">10Y</button>
+        </div>
         <button onclick="expandChart('delta')" title="Expand" class="expand-btn">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
         </button>
@@ -515,6 +561,15 @@
         <span class="flex items-center gap-1.5 text-xs text-emerald-400"><span class="inline-block w-2 h-2 rounded-sm bg-emerald-500/70"></span> <span data-i18n="history.volume_up">Up</span></span>
         <span class="flex items-center gap-1.5 text-xs text-rose-400"><span class="inline-block w-2 h-2 rounded-sm bg-rose-500/70"></span> <span data-i18n="history.volume_down">Down</span></span>
         <span class="flex items-center gap-1.5 text-xs text-amber-400"><span class="inline-block w-3 h-0.5 border-dashed border border-amber-400"></span> <span data-i18n="history.volume_ma20">MA20</span></span>
+        <div class="flex gap-1">
+          <button class="range-btn" data-chart="price" data-period="1mo">1M</button>
+          <button class="range-btn" data-chart="price" data-period="3mo">3M</button>
+          <button class="range-btn" data-chart="price" data-period="6mo">6M</button>
+          <button class="range-btn active" data-chart="price" data-period="1y">1Y</button>
+          <button class="range-btn" data-chart="price" data-period="2y">2Y</button>
+          <button class="range-btn" data-chart="price" data-period="5y">5Y</button>
+          <button class="range-btn" data-chart="price" data-period="10y">10Y</button>
+        </div>
         <button onclick="expandChart('volume')" title="Expand" class="expand-btn">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
         </button>
@@ -522,6 +577,9 @@
     </div>
     <div class="chart-container" style="height:140px" id="volumeChartWrap">
       <canvas id="volumeHistChart"></canvas>
+    </div>
+    <div class="mt-3 text-[11px] text-slate-500 leading-relaxed border-t border-slate-800 pt-3">
+      <p data-i18n="history.volume_explain_body"><strong class="text-slate-300">Volume</strong> confirms price moves. <strong class="text-emerald-400">Green bars</strong> = price closed up that period; <strong class="text-rose-400">red bars</strong> = price closed down. High volume on a price move = conviction; low volume = weak move, possible reversal. Volume declining during a rally = weakening uptrend. The <strong class="text-amber-400">MA20 line</strong> shows the average volume — spikes above it signal unusual activity (earnings, news, institutional buying/selling).</p>
     </div>
   </div>
 
@@ -535,6 +593,15 @@
       <div class="flex items-center gap-2 flex-wrap justify-end">
         <span class="flex items-center gap-1.5 text-xs text-rose-400"><span class="inline-block w-2 h-0.5 bg-rose-400"></span> <span data-i18n="history.rsi_ob">70 Overbought</span></span>
         <span class="flex items-center gap-1.5 text-xs text-emerald-400"><span class="inline-block w-2 h-0.5 bg-emerald-400"></span> <span data-i18n="history.rsi_os">30 Oversold</span></span>
+        <div class="flex gap-1">
+          <button class="range-btn" data-chart="price" data-period="1mo">1M</button>
+          <button class="range-btn" data-chart="price" data-period="3mo">3M</button>
+          <button class="range-btn" data-chart="price" data-period="6mo">6M</button>
+          <button class="range-btn active" data-chart="price" data-period="1y">1Y</button>
+          <button class="range-btn" data-chart="price" data-period="2y">2Y</button>
+          <button class="range-btn" data-chart="price" data-period="5y">5Y</button>
+          <button class="range-btn" data-chart="price" data-period="10y">10Y</button>
+        </div>
         <button onclick="expandChart('rsi')" title="Expand" class="expand-btn">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
         </button>
@@ -542,6 +609,9 @@
     </div>
     <div class="chart-container" style="height:160px" id="rsiChartWrap">
       <canvas id="rsiHistChart"></canvas>
+    </div>
+    <div class="mt-3 text-[11px] text-slate-500 leading-relaxed border-t border-slate-800 pt-3">
+      <p data-i18n="history.rsi_explain_body"><strong class="text-slate-300">RSI (Relative Strength Index)</strong> measures momentum on a 0–100 scale. It compares the average gain vs average loss over the past 14 periods. Above <strong class="text-rose-400">70</strong> = overbought (momentum may be exhausted, watch for reversal). Below <strong class="text-emerald-400">30</strong> = oversold (selling may be overdone, watch for bounce). RSI can stay extreme in strong trends — use alongside price action and volume for confirmation.</p>
     </div>
   </div>
 
@@ -555,6 +625,15 @@
       <div class="flex items-center gap-2 flex-wrap justify-end">
         <span class="flex items-center gap-1.5 text-xs text-sky-400"><span class="inline-block w-3 h-0.5 bg-sky-400"></span> MACD</span>
         <span class="flex items-center gap-1.5 text-xs text-orange-400"><span class="inline-block w-3 h-0.5 border-dashed border border-orange-400"></span> <span data-i18n="history.macd_signal">Signal</span></span>
+        <div class="flex gap-1">
+          <button class="range-btn" data-chart="price" data-period="1mo">1M</button>
+          <button class="range-btn" data-chart="price" data-period="3mo">3M</button>
+          <button class="range-btn" data-chart="price" data-period="6mo">6M</button>
+          <button class="range-btn active" data-chart="price" data-period="1y">1Y</button>
+          <button class="range-btn" data-chart="price" data-period="2y">2Y</button>
+          <button class="range-btn" data-chart="price" data-period="5y">5Y</button>
+          <button class="range-btn" data-chart="price" data-period="10y">10Y</button>
+        </div>
         <button onclick="expandChart('macd')" title="Expand" class="expand-btn">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
         </button>
@@ -562,6 +641,9 @@
     </div>
     <div class="chart-container" style="height:160px" id="macdChartWrap">
       <canvas id="macdHistChart"></canvas>
+    </div>
+    <div class="mt-3 text-[11px] text-slate-500 leading-relaxed border-t border-slate-800 pt-3">
+      <p data-i18n="history.macd_explain_body"><strong class="text-slate-300">MACD</strong> shows momentum by subtracting the 26-period EMA from the 12-period EMA. <strong class="text-sky-400">MACD line</strong> crossing above the <strong class="text-orange-400">signal line</strong> (9-period EMA of MACD) is bullish; crossing below is bearish. The <strong class="text-slate-300">histogram</strong> (green/red bars) shows the gap between them — widening = strengthening momentum, shrinking = momentum fading. A zero-line cross confirms trend direction change.</p>
     </div>
   </div>
 
@@ -575,6 +657,15 @@
       <div class="flex items-center gap-2 flex-wrap justify-end">
         <span class="flex items-center gap-1.5 text-xs text-violet-400"><span class="inline-block w-3 h-0.5 bg-violet-400"></span> <span data-i18n="history.rs_legend">Rel. Strength</span></span>
         <span class="flex items-center gap-1.5 text-xs text-slate-500"><span class="inline-block w-3 h-0.5 border-dashed border border-slate-500"></span> 100</span>
+        <div class="flex gap-1">
+          <button class="range-btn" data-chart="price" data-period="1mo">1M</button>
+          <button class="range-btn" data-chart="price" data-period="3mo">3M</button>
+          <button class="range-btn" data-chart="price" data-period="6mo">6M</button>
+          <button class="range-btn active" data-chart="price" data-period="1y">1Y</button>
+          <button class="range-btn" data-chart="price" data-period="2y">2Y</button>
+          <button class="range-btn" data-chart="price" data-period="5y">5Y</button>
+          <button class="range-btn" data-chart="price" data-period="10y">10Y</button>
+        </div>
         <button onclick="expandChart('rsstrength')" title="Expand" class="expand-btn">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
         </button>
@@ -595,6 +686,15 @@
       <div class="flex items-center gap-2 flex-wrap justify-end">
         <span class="flex items-center gap-1.5 text-xs text-emerald-400"><span class="inline-block w-3 h-0.5 bg-emerald-400"></span> %K</span>
         <span class="flex items-center gap-1.5 text-xs text-amber-400"><span class="inline-block w-3 h-0.5 border-dashed border border-amber-400"></span> %D</span>
+        <div class="flex gap-1">
+          <button class="range-btn" data-chart="price" data-period="1mo">1M</button>
+          <button class="range-btn" data-chart="price" data-period="3mo">3M</button>
+          <button class="range-btn" data-chart="price" data-period="6mo">6M</button>
+          <button class="range-btn active" data-chart="price" data-period="1y">1Y</button>
+          <button class="range-btn" data-chart="price" data-period="2y">2Y</button>
+          <button class="range-btn" data-chart="price" data-period="5y">5Y</button>
+          <button class="range-btn" data-chart="price" data-period="10y">10Y</button>
+        </div>
         <button onclick="expandChart('stoch')" title="Expand" class="expand-btn">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
         </button>
@@ -619,6 +719,15 @@
       <div class="flex items-center gap-2 flex-wrap justify-end">
         <span class="flex items-center gap-1.5 text-xs text-amber-400"><span class="inline-block w-3 h-0.5 bg-amber-400"></span> <span data-i18n="history.hv20">HV20</span></span>
         <span class="flex items-center gap-1.5 text-xs text-violet-400"><span class="inline-block w-3 h-0.5 border-dashed border border-violet-400"></span> <span data-i18n="history.hv60">HV60</span></span>
+        <div class="flex gap-1">
+          <button class="range-btn" data-chart="price" data-period="1mo">1M</button>
+          <button class="range-btn" data-chart="price" data-period="3mo">3M</button>
+          <button class="range-btn" data-chart="price" data-period="6mo">6M</button>
+          <button class="range-btn active" data-chart="price" data-period="1y">1Y</button>
+          <button class="range-btn" data-chart="price" data-period="2y">2Y</button>
+          <button class="range-btn" data-chart="price" data-period="5y">5Y</button>
+          <button class="range-btn" data-chart="price" data-period="10y">10Y</button>
+        </div>
         <button onclick="expandChart('hv')" title="Expand" class="expand-btn">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
         </button>
@@ -626,6 +735,9 @@
     </div>
     <div class="chart-container" style="height:160px" id="hvChartWrap">
       <canvas id="hvHistChart"></canvas>
+    </div>
+    <div class="mt-3 text-[11px] text-slate-500 leading-relaxed border-t border-slate-800 pt-3">
+      <p data-i18n="history.hv_explain_body"><strong class="text-slate-300">Historical Volatility (HV)</strong> measures how much the stock's price has moved, expressed as an annualized percentage. <strong class="text-amber-400">HV20</strong> = 20-period rolling volatility (short-term); <strong class="text-violet-400">HV60</strong> = 60-period (longer-term). Rising HV = increasing uncertainty/risk. Low HV followed by a spike often precedes a big move. Options traders use HV to assess whether options implied volatility (IV) is cheap or expensive relative to realized moves.</p>
     </div>
   </div>
 
@@ -645,6 +757,8 @@
           <button class="range-btn" data-chart="zscore" data-period="3mo">3M</button>
           <button class="range-btn" data-chart="zscore" data-period="6mo">6M</button>
           <button class="range-btn active" data-chart="zscore" data-period="1y">1Y</button>
+          <button class="range-btn" data-chart="zscore" data-period="2y">2Y</button>
+          <button class="range-btn" data-chart="zscore" data-period="5y">5Y</button>
         </div>
         <button onclick="expandChart('zscore')" title="Expand" class="expand-btn">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
@@ -832,6 +946,29 @@
     <div style="height:65vh; min-height:300px; position:relative">
       <canvas id="modalCanvas"></canvas>
     </div>
+  </div>
+</div>
+
+<!-- Insider Transactions -->
+<div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up" id="insiderSection" style="display:none">
+  <div class="flex items-baseline gap-3 mb-3">
+    <h2 class="text-base font-semibold text-slate-200" data-i18n="history.insider_title">Insider Transactions</h2>
+    <span class="text-xs text-slate-500" data-i18n="history.insider_desc">Most recent 10 reported trades by company insiders</span>
+  </div>
+  <div class="overflow-x-auto">
+    <table class="w-full text-xs" id="insiderTable">
+      <thead>
+        <tr class="border-b border-slate-800 text-slate-500">
+          <th class="text-left py-2 px-2 font-medium" data-i18n="history.insider_date">Date</th>
+          <th class="text-left py-2 px-2 font-medium" data-i18n="history.insider_name">Insider</th>
+          <th class="text-left py-2 px-2 font-medium hidden sm:table-cell" data-i18n="history.insider_title_col">Title</th>
+          <th class="text-left py-2 px-2 font-medium" data-i18n="history.insider_txn">Transaction</th>
+          <th class="text-right py-2 px-2 font-medium" data-i18n="history.insider_shares">Shares</th>
+          <th class="text-right py-2 px-2 font-medium" data-i18n="history.insider_value">Value ($)</th>
+        </tr>
+      </thead>
+      <tbody id="insiderTableBody"></tbody>
+    </table>
   </div>
 </div>
 
@@ -1038,6 +1175,34 @@ let   _forecastResult = null;   // last forecast API response
     if (data.nav_price     != null) document.getElementById('statNav').textContent          = '$' + data.nav_price.toFixed(2);
     const meta = [data.fund_family, data.category].filter(Boolean).join(' · ');
     if (meta) document.getElementById('etfMeta').textContent = meta;
+  }
+
+  // Analyst Consensus
+  if (data.recommendation || data.analyst_count) {
+    document.getElementById('analystSection').style.display = 'block';
+    const RATING_MAP = {
+      strongBuy:    { label: 'Strong Buy',  cls: 'text-emerald-400' },
+      buy:          { label: 'Buy',         cls: 'text-emerald-400' },
+      hold:         { label: 'Hold',        cls: 'text-amber-400' },
+      underperform: { label: 'Underperform',cls: 'text-rose-400' },
+      sell:         { label: 'Sell',        cls: 'text-rose-400' },
+    };
+    const rec = data.recommendation?.toLowerCase().replace('_', '');
+    const ratingInfo = RATING_MAP[rec] || RATING_MAP[data.recommendation] || { label: data.recommendation || '—', cls: 'text-slate-100' };
+    const rEl = document.getElementById('statRating');
+    rEl.textContent = ratingInfo.label;
+    rEl.className = 'text-base font-bold ' + ratingInfo.cls;
+    if (data.analyst_count != null) document.getElementById('statAnalystCount').textContent = data.analyst_count + ' analysts';
+    if (data.target_high   != null) document.getElementById('statTargetHigh').textContent  = '$' + data.target_high.toFixed(2);
+    if (data.target_low    != null) document.getElementById('statTargetLow').textContent   = '$' + data.target_low.toFixed(2);
+  }
+  // Extra profitability
+  setPct('statOpMargin', data.operating_margin);
+  setPct('statRoa',      data.roa);
+  if (data.current_ratio != null) {
+    const el = document.getElementById('statCurrentRatio');
+    el.textContent = data.current_ratio.toFixed(2) + 'x';
+    el.className = 'text-base font-bold ' + (data.current_ratio >= 2 ? 'text-emerald-400' : data.current_ratio >= 1 ? 'text-amber-400' : 'text-rose-400');
   }
 
   // Key dates
@@ -1334,7 +1499,7 @@ let   _forecastResult = null;   // last forecast API response
           _renderZscoreChart(zs.history);
 
           // Wire up Z-Score range buttons (client-side filtering)
-          const ZSCORE_DAYS = { '1mo': 22, '3mo': 66, '6mo': 132, '1y': 9999 };
+          const ZSCORE_DAYS = { '1mo': 22, '3mo': 66, '6mo': 132, '1y': 9999, '2y': 9999, '5y': 9999 };
           document.querySelectorAll('#zscoreRangeBtns .range-btn').forEach(btn => {
             btn.addEventListener('click', () => {
               const period = btn.dataset.period;
@@ -1460,6 +1625,27 @@ let   _forecastResult = null;   // last forecast API response
         loading.textContent = (I18n.t('forecast.failed') || 'Forecast unavailable.') + ' ' + err.message;
       });
   })();
+
+  // ── Insider Transactions
+  if (data.insider_trades && data.insider_trades.length > 0) {
+    document.getElementById('insiderSection').style.display = 'block';
+    const tbody = document.getElementById('insiderTableBody');
+    const fmtShares = n => n >= 1e6 ? (n/1e6).toFixed(2)+'M' : n >= 1e3 ? (n/1e3).toFixed(0)+'K' : String(n);
+    const fmtVal   = n => n >= 1e9 ? '$'+(n/1e9).toFixed(1)+'B' : n >= 1e6 ? '$'+(n/1e6).toFixed(1)+'M' : n >= 1e3 ? '$'+(n/1e3).toFixed(0)+'K' : n > 0 ? '$'+n : '—';
+    tbody.innerHTML = data.insider_trades.map(t => {
+      const isBuy = /buy|purchase|acquisition/i.test(t.transaction);
+      const isSell = /sell|sale/i.test(t.transaction);
+      const txCls = isBuy ? 'text-emerald-400' : isSell ? 'text-rose-400' : 'text-slate-400';
+      return `<tr class="border-b border-slate-800/40 hover:bg-slate-800/30">
+        <td class="py-1.5 px-2 text-slate-400 whitespace-nowrap">${t.date?.slice(0,10) || '—'}</td>
+        <td class="py-1.5 px-2 text-slate-200 font-medium">${t.insider}</td>
+        <td class="py-1.5 px-2 text-slate-500 hidden sm:table-cell">${t.title}</td>
+        <td class="py-1.5 px-2 ${txCls}">${t.transaction}</td>
+        <td class="py-1.5 px-2 text-right font-mono">${fmtShares(t.shares)}</td>
+        <td class="py-1.5 px-2 text-right font-mono">${fmtVal(t.value)}</td>
+      </tr>`;
+    }).join('');
+  }
 
   // ── Institutional holdings (13F) — multi-quarter
   (function() {

@@ -264,6 +264,29 @@ const I18n = (() => {
     'history.macd_title':   { en: 'MACD',            zh: 'MACD' },
     'history.macd_desc':    { en: 'Moving Average Convergence/Divergence (12/26 EMA, 9 signal)', zh: '指数平滑异同移动平均线（12/26 EMA，9信号线）' },
     'history.macd_signal':  { en: 'Signal',          zh: '信号线' },
+    // Analyst consensus stat group
+    'history.group_analyst':    { en: 'Analyst Consensus', zh: '分析师共识' },
+    'history.analyst_rating':   { en: 'Rating',       zh: '评级' },
+    'history.analyst_count':    { en: 'Analysts',     zh: '分析师数量' },
+    'history.target_high':      { en: 'Target High',  zh: '目标价上限' },
+    'history.target_low':       { en: 'Target Low',   zh: '目标价下限' },
+    // Extra profitability stats
+    'history.operating_margin': { en: 'Op. Margin',   zh: '营业利润率' },
+    'history.current_ratio':    { en: 'Current Ratio',zh: '流动比率' },
+    // Insider transactions
+    'history.insider_title':    { en: 'Insider Transactions', zh: '内部人交易' },
+    'history.insider_desc':     { en: 'Most recent 10 reported trades by company insiders', zh: '最近10笔内部人员申报交易' },
+    'history.insider_date':     { en: 'Date',         zh: '日期' },
+    'history.insider_name':     { en: 'Insider',      zh: '内部人员' },
+    'history.insider_title_col':{ en: 'Title',        zh: '职务' },
+    'history.insider_txn':      { en: 'Transaction',  zh: '交易类型' },
+    'history.insider_shares':   { en: 'Shares',       zh: '股数' },
+    'history.insider_value':    { en: 'Value ($)',     zh: '金额（美元）' },
+    // Educational panels for charts
+    'history.volume_explain_body': { en: 'Volume confirms price moves. Green bars = price closed up; red = down. High volume on a price move = conviction. The MA20 line shows average volume — spikes above it signal unusual institutional activity.', zh: '成交量确认价格走势。绿色柱 = 收涨，红色柱 = 收跌。放量上涨说明资金流入有支撑，MA20显示平均成交量，突破均线代表异常交投活动。' },
+    'history.rsi_explain_body':    { en: 'RSI measures momentum on a 0–100 scale. Above 70 = overbought (possible pullback); below 30 = oversold (possible bounce). RSI can stay extreme in strong trends — use with price action and volume for confirmation.', zh: 'RSI在0–100区间衡量动量。高于70为超买（可能回调），低于30为超卖（可能反弹）。强趋势中RSI可持续处于极端区域，需结合价格和成交量综合判断。' },
+    'history.macd_explain_body':   { en: 'MACD subtracts the 26-period EMA from the 12-period EMA. MACD crossing above the signal line (9-period EMA) is bullish; below is bearish. The histogram shows the gap — widening = strengthening momentum, shrinking = fading.', zh: 'MACD = 12期EMA − 26期EMA。MACD上穿信号线（9期EMA）为看多，下穿为看空。柱状图显示差距：扩大表示动量增强，收窄表示动量减弱。' },
+    'history.hv_explain_body':     { en: 'Historical Volatility measures how much the stock has moved, annualized as a percentage. HV20 = short-term; HV60 = longer-term. Rising HV = increasing uncertainty. Low HV followed by a spike often precedes a big price move.', zh: '历史波动率衡量股票的价格波动幅度，以年化百分比表示。HV20为短期，HV60为中长期。波动率上升代表不确定性增加；低波动率后骤然上升往往预示大行情。' },
     // ETF info + key dates stat cards
     'history.group_etf':        { en: 'ETF Info',         zh: 'ETF 信息' },
     'history.expense_ratio':    { en: 'Expense Ratio',    zh: '费用率' },
@@ -693,6 +716,10 @@ const I18n = (() => {
     'fed.sdr_low52':            { en: '52w Low',         zh: '52周低点' },
     'fed.sdr_unavailable':      { en: 'FRED does not publish this line item as a standalone series. The balance is roughly $5.2B and is included inside "Other Assets" above.',
                                    zh: 'FRED 未将此项目作为独立序列发布。该余额约为 52 亿美元，已包含在上方的"其他资产"中。' },
+
+    // ── fed.html: M2 Money Supply cards ───────────────────────────────
+    'fed.m2_supply':            { en: 'M2 Money Supply',    zh: 'M2货币供应量' },
+    'fed.m2_yoy':               { en: 'M2 YoY Growth',      zh: 'M2同比增速' },
 
     // ── contact.html ───────────────────────────────────────────────────
     'contact.title':        { en: 'Contact Us',  zh: '联系我们' },

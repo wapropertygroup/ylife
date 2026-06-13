@@ -1503,3 +1503,390 @@ def set_pdf_metadata(
     src.save(buf)
     src.close()
     return buf.getvalue()
+
+
+# ---------------------------------------------------------------------------
+# 28. Blur / Pixelate Image
+# ---------------------------------------------------------------------------
+
+def blur_image(
+    data: bytes,
+    mode: str = "gaussian",
+    strength: int = 10,
+) -> tuple[bytes, str]:
+    """Apply blur or pixelate effect to an image.
+
+    Args:
+        mode:     'gaussian' or 'pixelate'.
+        strength: Gaussian radius (1-50) or pixel-block size (2-50).
+    """
+    from PIL import ImageFilter
+
+    img = Image.open(io.BytesIO(data))
+    orig_fmt = (img.format or "PNG").upper()
+
+    strength = max(1, min(100, strength))
+
+    if mode == "pixelate":
+        # Downscale then upscale with nearest-neighbour
+        block = max(2, strength)
+        small = img.resize(
+            (max(1, img.width // block), max(1, img.height // block)),
+            Image.Resampling.BOX,
+        )
+        img = small.resize(img.size, Image.Resampling.NEAREST)
+    else:
+        img = img.filter(ImageFilter.GaussianBlur(radius=strength))
+
+    save_fmt = orig_fmt if orig_fmt in ("JPEG", "PNG", "WEBP") else "PNG"
+    if save_fmt == "JPEG" and img.mode not in ("RGB", "L"):
+        img = img.convert("RGB")
+    mime_map = {"JPEG": "image/jpeg", "PNG": "image/png", "WEBP": "image/webp"}
+    mime = mime_map.get(save_fmt, "image/png")
+
+    buf = io.BytesIO()
+    img.save(buf, format=save_fmt, quality=93 if save_fmt == "JPEG" else None)
+    return buf.getvalue(), mime
+
+
+# ---------------------------------------------------------------------------
+# 29. Animated GIF Creator
+# ---------------------------------------------------------------------------
+
+def create_gif(
+    images_data: list[bytes],
+    delay: int = 500,
+    loop: int = 0,
+    max_size: int = 400,
+) -> bytes:
+    """Create an animated GIF from a list of images.
+
+    Args:
+        delay:    Frame delay in milliseconds.
+        loop:     Number of loops (0 = infinite).
+        max_size: Max width or height in pixels (GIFs are palette-limited).
+    """
+    if not images_data:
+        raise ValueError("No images provided")
+
+    frames: list[Image.Image] = []
+    for raw in images_data:
+        img = Image.open(io.BytesIO(raw)).convert("RGBA")
+        # Resize to fit max_size while keeping aspect ratio
+        if max(img.width, img.height) > max_size:
+            ratio = max_size / max(img.width, img.height)
+            img = img.resize(
+                (max(1, int(img.width * ratio)), max(1, int(img.height * ratio))),
+                Image.Resampling.LANCZOS,
+            )
+        # Convert to palette (P mode) with dithering for GIF
+        frames.append(img.convert("P", palette=Image.Palette.ADAPTIVE, dither=1))
+
+    buf = io.BytesIO()
+    frames[0].save(
+        buf,
+        format="GIF",
+        save_all=True,
+        append_images=frames[1:],
+        loop=loop,
+        duration=delay,
+        disposal=2,
+    )
+    return buf.getvalue()
+
+
+# ---------------------------------------------------------------------------
+# 30. Add Text to Image
+# ---------------------------------------------------------------------------
+
+def add_text_to_image(
+    data: bytes,
+    text: str,
+    x_pct: float = 0.5,
+    y_pct: float = 0.9,
+    font_size: int = 40,
+    color: str = "#ffffff",
+    opacity: int = 90,
+    stroke_width: int = 0,
+    stroke_color: str = "#000000",
+) -> tuple[bytes, str]:
+    """Overlay text at a proportional position on an image.
+
+    Args:
+        x_pct, y_pct: Position as fraction of image dimensions (0.0–1.0).
+        stroke_width: Outline width in pixels (0 = no outline).
+    """
+    from PIL import ImageDraw, ImageFont
+
+    img = Image.open(io.BytesIO(data)).convert("RGBA")
+    orig_fmt = (img.format or "PNG").upper()
+
+    overlay = Image.new("RGBA", img.size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(overlay)
+
+    r = int(color.lstrip("#")[0:2], 16)
+    g = int(color.lstrip("#")[2:4], 16)
+    b = int(color.lstrip("#")[4:6], 16)
+    a = int(opacity / 100 * 255)
+
+    sr = int(stroke_color.lstrip("#")[0:2], 16)
+    sg = int(stroke_color.lstrip("#")[2:4], 16)
+    sb = int(stroke_color.lstrip("#")[4:6], 16)
+
+    # Try to load a bold font
+    font: ImageFont.ImageFont | ImageFont.FreeTypeFont
+    try:
+        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", font_size)
+    except (IOError, OSError):
+        try:
+            font = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", font_size)
+        except (IOError, OSError):
+            font = ImageFont.load_default()
+
+    bbox = draw.textbbox((0, 0), text, font=font)
+    tw = bbox[2] - bbox[0]
+    th = bbox[3] - bbox[1]
+
+    x = int(img.width * x_pct - tw / 2)
+    y = int(img.height * y_pct - th / 2)
+    x = max(0, min(img.width - tw, x))
+    y = max(0, min(img.height - th, y))
+
+    if stroke_width > 0:
+        for dx in range(-stroke_width, stroke_width + 1):
+            for dy in range(-stroke_width, stroke_width + 1):
+                if dx != 0 or dy != 0:
+                    draw.text((x + dx, y + dy), text, font=font, fill=(sr, sg, sb, a))
+    draw.text((x, y), text, font=font, fill=(r, g, b, a))
+
+    out = Image.alpha_composite(img, overlay)
+
+    save_fmt = orig_fmt if orig_fmt in ("JPEG", "PNG", "WEBP") else "PNG"
+    if save_fmt == "JPEG":
+        out = out.convert("RGB")
+    mime_map = {"JPEG": "image/jpeg", "PNG": "image/png", "WEBP": "image/webp"}
+    mime = mime_map.get(save_fmt, "image/png")
+
+    buf = io.BytesIO()
+    out.save(buf, format=save_fmt, quality=95 if save_fmt == "JPEG" else None)
+    return buf.getvalue(), mime
+
+
+# ---------------------------------------------------------------------------
+# 31. Image to Base64
+# ---------------------------------------------------------------------------
+
+def image_to_base64(data: bytes, filename: str = "image") -> dict:
+    """Return base64-encoded image and data URL."""
+    import base64
+
+    img = Image.open(io.BytesIO(data))
+    fmt = img.format or "PNG"
+    mime_map = {
+        "JPEG": "image/jpeg", "PNG": "image/png", "WEBP": "image/webp",
+        "GIF": "image/gif", "BMP": "image/bmp",
+    }
+    mime = mime_map.get(fmt.upper(), "image/png")
+
+    b64 = base64.b64encode(data).decode()
+    data_url = f"data:{mime};base64,{b64}"
+
+    return {
+        "base64":   b64,
+        "data_url": data_url,
+        "mime":     mime,
+        "format":   fmt,
+        "width":    img.width,
+        "height":   img.height,
+        "size":     len(data),
+        "b64_size": len(b64),
+    }
+
+
+# ---------------------------------------------------------------------------
+# 32. PDF Rotate Pages
+# ---------------------------------------------------------------------------
+
+def rotate_pdf_pages(
+    data: bytes,
+    angle: int = 90,
+    page_indices: list[int] | None = None,
+) -> bytes:
+    """Rotate PDF pages by 90, 180, or 270 degrees.
+
+    Args:
+        angle:        Rotation in degrees (must be a multiple of 90).
+        page_indices: 0-based page indices to rotate (None = all pages).
+    """
+    import fitz
+
+    angle = (angle // 90 * 90) % 360  # snap to nearest 90
+
+    doc = fitz.open(stream=data, filetype="pdf")
+    target = set(page_indices) if page_indices is not None else set(range(len(doc)))
+
+    for i, page in enumerate(doc):
+        if i in target:
+            current = page.rotation
+            page.set_rotation((current + angle) % 360)
+
+    buf = io.BytesIO()
+    doc.save(buf)
+    doc.close()
+    return buf.getvalue()
+
+
+# ---------------------------------------------------------------------------
+# 33. Invert / Negate Image Colors
+# ---------------------------------------------------------------------------
+
+def invert_colors(data: bytes) -> tuple[bytes, str]:
+    """Invert every pixel channel (creates a negative/negate effect)."""
+    from PIL import ImageOps
+
+    img = Image.open(io.BytesIO(data))
+    orig_fmt = (img.format or "PNG").upper()
+
+    if img.mode == "RGBA":
+        r, g, b, a = img.split()
+        inv = ImageOps.invert(Image.merge("RGB", (r, g, b)))
+        out = Image.merge("RGBA", (*inv.split(), a))
+    else:
+        mode = img.mode if img.mode in ("RGB", "L") else "RGB"
+        out = ImageOps.invert(img.convert(mode))
+
+    save_fmt = orig_fmt if orig_fmt in ("JPEG", "PNG", "WEBP") else "PNG"
+    if save_fmt == "JPEG" and out.mode != "RGB":
+        out = out.convert("RGB")
+    mime_map = {"JPEG": "image/jpeg", "PNG": "image/png", "WEBP": "image/webp"}
+    mime = mime_map.get(save_fmt, "image/png")
+
+    buf2 = io.BytesIO()
+    out.save(buf2, format=save_fmt, quality=95 if save_fmt == "JPEG" else None)
+    return buf2.getvalue(), mime
+
+
+# ---------------------------------------------------------------------------
+# 34. PDF Watermark (diagonal text on every page)
+# ---------------------------------------------------------------------------
+
+def stamp_pdf_watermark(
+    data: bytes,
+    text: str = "CONFIDENTIAL",
+    opacity: int = 20,
+    angle: int = 45,
+    font_size: int = 60,
+    color_hex: str = "#888888",
+) -> bytes:
+    """Stamp a diagonal text watermark on every page of a PDF."""
+    import fitz
+    import math
+
+    doc = fitz.open(stream=data, filetype="pdf")
+    r = int(color_hex.lstrip("#")[0:2], 16) / 255
+    g = int(color_hex.lstrip("#")[2:4], 16) / 255
+    b = int(color_hex.lstrip("#")[4:6], 16) / 255
+    alpha = max(0.01, min(1.0, opacity / 100))
+
+    for page in doc:
+        pw, ph = page.rect.width, page.rect.height
+        cx, cy = pw / 2, ph / 2
+        rad = math.radians(-angle)
+        cos_a, sin_a = math.cos(rad), math.sin(rad)
+        tw = len(text) * font_size * 0.5
+        sx = cx - tw / 2
+        sy = cy + font_size / 4
+        rx = cos_a * (sx - cx) - sin_a * (sy - cy) + cx
+        ry = sin_a * (sx - cx) + cos_a * (sy - cy) + cy
+        page.insert_text(
+            point=fitz.Point(rx, ry),
+            text=text,
+            fontsize=font_size,
+            color=(r, g, b),
+            rotate=angle,
+            fill_opacity=alpha,
+        )
+
+    buf2 = io.BytesIO()
+    doc.save(buf2)
+    doc.close()
+    return buf2.getvalue()
+
+
+# ---------------------------------------------------------------------------
+# 35. Extract Images from PDF
+# ---------------------------------------------------------------------------
+
+def extract_pdf_images(data: bytes, filename: str = "document.pdf") -> bytes:
+    """Extract all embedded images from a PDF. Returns a ZIP of image files."""
+    import fitz
+
+    doc = fitz.open(stream=data, filetype="pdf")
+    base = filename.rsplit(".", 1)[0] if "." in filename else filename
+    extracted: list[tuple[str, bytes]] = []
+    seq = 0
+
+    for page_num, page in enumerate(doc, start=1):
+        for img_info in page.get_images(full=True):
+            xref = img_info[0]
+            try:
+                base_img = doc.extract_image(xref)
+                img_bytes = base_img["image"]
+                ext = base_img.get("ext", "png")
+                seq += 1
+                extracted.append((f"{base}_p{page_num:02d}_img{seq:03d}.{ext}", img_bytes))
+            except Exception:
+                continue
+
+    doc.close()
+
+    if not extracted:
+        raise ValueError("No images found in this PDF")
+
+    zip_buf = io.BytesIO()
+    with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for name, img_data in extracted:
+            zf.writestr(name, img_data)
+    return zip_buf.getvalue()
+
+
+# ---------------------------------------------------------------------------
+# 36. Image Stitch (horizontal or vertical join)
+# ---------------------------------------------------------------------------
+
+def stitch_images(
+    images_data: list[bytes],
+    direction: str = "horizontal",
+    gap: int = 0,
+    gap_color: str = "#ffffff",
+    align: str = "center",
+) -> tuple[bytes, str]:
+    """Join multiple images side-by-side or top-to-bottom."""
+    if not images_data:
+        raise ValueError("No images provided")
+
+    bg = tuple(int(gap_color.lstrip("#")[i:i + 2], 16) for i in (0, 2, 4))
+    imgs = [Image.open(io.BytesIO(d)).convert("RGB") for d in images_data]
+
+    if direction == "horizontal":
+        max_h   = max(im.height for im in imgs)
+        total_w = sum(im.width for im in imgs) + gap * (len(imgs) - 1)
+        canvas  = Image.new("RGB", (total_w, max_h), bg)
+        x = 0
+        for im in imgs:
+            y = (max_h - im.height) // 2 if align == "center" else (max_h - im.height if align == "end" else 0)
+            canvas.paste(im, (x, y))
+            x += im.width + gap
+    else:
+        max_w   = max(im.width  for im in imgs)
+        total_h = sum(im.height for im in imgs) + gap * (len(imgs) - 1)
+        canvas  = Image.new("RGB", (max_w, total_h), bg)
+        y = 0
+        for im in imgs:
+            x = (max_w - im.width) // 2 if align == "center" else (max_w - im.width if align == "end" else 0)
+            canvas.paste(im, (x, y))
+            y += im.height + gap
+
+    buf2 = io.BytesIO()
+    canvas.save(buf2, format="JPEG", quality=92)
+    return buf2.getvalue(), "image/jpeg"

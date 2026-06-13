@@ -158,6 +158,51 @@ def page_pdf_metadata():
     return render_template("pdf_metadata.html")
 
 
+@bp.route("/blur-image")
+def page_blur_image():
+    return render_template("blur_image.html")
+
+
+@bp.route("/gif-creator")
+def page_gif_creator():
+    return render_template("gif_creator.html")
+
+
+@bp.route("/add-text")
+def page_add_text():
+    return render_template("add_text.html")
+
+
+@bp.route("/image-base64")
+def page_image_base64():
+    return render_template("image_base64.html")
+
+
+@bp.route("/pdf-rotate")
+def page_pdf_rotate():
+    return render_template("pdf_rotate.html")
+
+
+@bp.route("/invert-colors")
+def page_invert_colors():
+    return render_template("invert_colors.html")
+
+
+@bp.route("/pdf-watermark")
+def page_pdf_watermark():
+    return render_template("pdf_watermark.html")
+
+
+@bp.route("/extract-pdf-images")
+def page_extract_pdf_images():
+    return render_template("extract_pdf_images.html")
+
+
+@bp.route("/stitch-images")
+def page_stitch_images():
+    return render_template("stitch_images.html")
+
+
 # ---------------------------------------------------------------------------
 # Helper: validate upload
 # ---------------------------------------------------------------------------
@@ -1199,4 +1244,223 @@ def api_pdf_metadata_save():
         )
     except Exception as exc:
         log.exception("PDF metadata save failed")
+        return jsonify(error=str(exc)), 500
+
+
+# ---------------------------------------------------------------------------
+# API: Blur / Pixelate Image
+# ---------------------------------------------------------------------------
+
+@bp.route("/api/blur-image", methods=["POST"])
+def api_blur_image():
+    """Apply blur or pixelate to an image."""
+    data, filename, err = _get_upload(
+        allowed_types=["jpg", "jpeg", "png", "webp", "bmp"]
+    )
+    if err:
+        return err
+
+    mode = request.form.get("mode", "gaussian")
+    try:
+        strength = int(float(request.form.get("strength", "10")))
+    except (ValueError, TypeError):
+        strength = 10
+    strength = max(1, min(100, strength))
+
+    log.info("Blur image: %s (mode=%s, strength=%d)", filename, mode, strength)
+
+    try:
+        from yimage.processing import blur_image
+        result, mime = blur_image(data, mode, strength)
+        _ext = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}
+        out_ext = _ext.get(mime, filename.rsplit(".", 1)[-1] if "." in filename else "jpg")
+        base = filename.rsplit(".", 1)[0] if "." in filename else filename
+        return send_file(
+            BytesIO(result), mimetype=mime,
+            as_attachment=True, download_name=f"blurred_{base}.{out_ext}",
+        )
+    except Exception as exc:
+        log.exception("Blur image failed")
+        return jsonify(error=str(exc)), 500
+
+
+# ---------------------------------------------------------------------------
+# API: Animated GIF Creator
+# ---------------------------------------------------------------------------
+
+@bp.route("/api/gif-creator", methods=["POST"])
+def api_gif_creator():
+    """Create an animated GIF from multiple images."""
+    files = request.files.getlist("files")
+    if not files:
+        return jsonify(error="No files uploaded"), 400
+
+    images_data = []
+    for f in files:
+        if f and f.filename:
+            chunk = f.read()
+            if chunk:
+                images_data.append(chunk)
+
+    if len(images_data) < 2:
+        return jsonify(error="Please upload at least 2 images"), 400
+    if len(images_data) > 30:
+        return jsonify(error="Too many images (max 30)"), 400
+
+    try:
+        delay    = int(float(request.form.get("delay",    "500")))
+        max_size = int(float(request.form.get("max_size", "400")))
+        loop     = int(float(request.form.get("loop",     "0")))
+    except (ValueError, TypeError):
+        delay, max_size, loop = 500, 400, 0
+
+    delay    = max(50, min(5000, delay))
+    max_size = max(100, min(800,  max_size))
+    loop     = max(0,  min(100,  loop))
+
+    log.info("GIF creator: %d images, delay=%d, size=%d", len(images_data), delay, max_size)
+
+    try:
+        from yimage.processing import create_gif
+        result = create_gif(images_data, delay, loop, max_size)
+        return send_file(
+            BytesIO(result), mimetype="image/gif",
+            as_attachment=True, download_name="animated.gif",
+        )
+    except Exception as exc:
+        log.exception("GIF creation failed")
+        return jsonify(error=str(exc)), 500
+
+
+# ---------------------------------------------------------------------------
+# API: Add Text to Image
+# ---------------------------------------------------------------------------
+
+@bp.route("/api/add-text", methods=["POST"])
+def api_add_text():
+    """Overlay custom text on an image."""
+    data, filename, err = _get_upload(
+        allowed_types=["jpg", "jpeg", "png", "webp", "bmp"]
+    )
+    if err:
+        return err
+
+    text = request.form.get("text", "").strip()
+    if not text:
+        return jsonify(error="Text cannot be empty"), 400
+
+    color        = request.form.get("color",        "#ffffff")
+    stroke_color = request.form.get("stroke_color", "#000000")
+
+    try:
+        x_pct        = float(request.form.get("x_pct",        "0.5"))
+        y_pct        = float(request.form.get("y_pct",        "0.9"))
+        font_size    = int(float(request.form.get("font_size",    "40")))
+        opacity      = int(float(request.form.get("opacity",      "90")))
+        stroke_width = int(float(request.form.get("stroke_width", "0")))
+    except (ValueError, TypeError):
+        x_pct, y_pct, font_size, opacity, stroke_width = 0.5, 0.9, 40, 90, 0
+
+    x_pct        = max(0.0, min(1.0, x_pct))
+    y_pct        = max(0.0, min(1.0, y_pct))
+    font_size    = max(8,  min(250, font_size))
+    opacity      = max(10, min(100, opacity))
+    stroke_width = max(0,  min(10,  stroke_width))
+
+    log.info("Add text: %s (text=%r, pos=(%.2f,%.2f))", filename, text, x_pct, y_pct)
+
+    try:
+        from yimage.processing import add_text_to_image
+        result, mime = add_text_to_image(
+            data, text, x_pct, y_pct, font_size, color, opacity, stroke_width, stroke_color
+        )
+        _ext = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}
+        out_ext = _ext.get(mime, filename.rsplit(".", 1)[-1] if "." in filename else "jpg")
+        base = filename.rsplit(".", 1)[0] if "." in filename else filename
+        return send_file(
+            BytesIO(result), mimetype=mime,
+            as_attachment=True, download_name=f"text_{base}.{out_ext}",
+        )
+    except Exception as exc:
+        log.exception("Add text failed")
+        return jsonify(error=str(exc)), 500
+
+
+# ---------------------------------------------------------------------------
+# API: Image to Base64
+# ---------------------------------------------------------------------------
+
+@bp.route("/api/image-base64", methods=["POST"])
+def api_image_base64():
+    """Return image as base64 data URL."""
+    data, filename, err = _get_upload(
+        allowed_types=["jpg", "jpeg", "png", "webp", "gif", "bmp", "svg"]
+    )
+    if err:
+        return err
+
+    log.info("Image to base64: %s (%d bytes)", filename, len(data))
+
+    try:
+        from yimage.processing import image_to_base64
+        return jsonify(image_to_base64(data, filename))
+    except Exception as exc:
+        log.exception("Image to base64 failed")
+        return jsonify(error=str(exc)), 500
+
+
+# ---------------------------------------------------------------------------
+# API: PDF Rotate Pages
+# ---------------------------------------------------------------------------
+
+@bp.route("/api/pdf-rotate", methods=["POST"])
+def api_pdf_rotate():
+    """Rotate PDF pages by 90/180/270 degrees."""
+    data, filename, err = _get_upload(allowed_types=["pdf"])
+    if err:
+        return err
+
+    try:
+        angle = int(float(request.form.get("angle", "90")))
+    except (ValueError, TypeError):
+        angle = 90
+
+    angle = (angle // 90 * 90) % 360  # snap to 0/90/180/270
+
+    import json as _json
+    page_indices = None
+    pages_raw = request.form.get("pages", "all").strip()
+    if pages_raw == "all":
+        page_indices = None  # all pages
+    elif pages_raw == "odd":
+        # Odd-numbered pages (1-based): indices 0, 2, 4, …
+        import pikepdf as _pik
+        src_doc = _pik.open(BytesIO(data))
+        n = len(src_doc.pages)
+        src_doc.close()
+        page_indices = list(range(0, n, 2))   # page 1, 3, 5 … (0-based even = 1-based odd)
+    elif pages_raw == "even":
+        import pikepdf as _pik
+        src_doc = _pik.open(BytesIO(data))
+        n = len(src_doc.pages)
+        src_doc.close()
+        page_indices = list(range(1, n, 2))   # page 2, 4, 6 … (0-based odd = 1-based even)
+    else:
+        try:
+            page_indices = [int(i) for i in _json.loads(pages_raw)]
+        except (ValueError, TypeError):
+            page_indices = None
+
+    log.info("PDF rotate: %s (angle=%d, pages=%s)", filename, angle, page_indices or "all")
+
+    try:
+        from yimage.processing import rotate_pdf_pages
+        result = rotate_pdf_pages(data, angle, page_indices)
+        base = filename.rsplit(".", 1)[0] if "." in filename else filename
+        return send_file(
+            BytesIO(result), mimetype="application/pdf",
+            as_attachment=True, download_name=f"rotated_{base}.pdf",
+        )
+    except Exception as exc:
+        log.exception("PDF rotate failed")
         return jsonify(error=str(exc)), 500

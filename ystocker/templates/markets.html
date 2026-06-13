@@ -314,10 +314,17 @@
     </div>
     <div class="flex items-center gap-2 flex-wrap justify-end">
       <span id="hygCard" class="flex items-center gap-1.5 text-xs text-slate-400"></span>
-      <span id="tltCard" class="flex items-center gap-1.5 text-xs text-slate-400"></span>
+      <span id="tltCard" class="flex items-center gap-1.5 text-xs text-slate-400 mr-1"></span>
+      <div class="flex gap-1" id="creditRangeBtns">
+        <button class="range-btn active" data-period="1y" onclick="loadCreditSpread('1y')">1Y</button>
+        <button class="range-btn"        data-period="2y" onclick="loadCreditSpread('2y')">2Y</button>
+        <button class="range-btn"        data-period="3y" onclick="loadCreditSpread('3y')">3Y</button>
+        <button class="range-btn"        data-period="5y" onclick="loadCreditSpread('5y')">5Y</button>
+        <button class="range-btn"        data-period="10y" onclick="loadCreditSpread('10y')">10Y</button>
+      </div>
     </div>
   </div>
-  <div class="chart-container" style="height:200px" id="creditChartWrap">
+  <div class="relative chart-container" style="height:200px" id="creditChartWrap">
     <canvas id="creditSpreadChart"></canvas>
   </div>
 </div>
@@ -2679,28 +2686,56 @@ function _mktsModalConfig(kind) {
   });
 })();
 
-// ── Credit Spread chart (HYG / TLT ratio)
-(async function() {
+// ── Credit Spread chart (HYG / TLT ratio) — multi-period
+let _creditChart = null;
+const _creditCache = {};
+
+async function loadCreditSpread(period) {
+  // Update active button state
+  document.querySelectorAll('#creditRangeBtns .range-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.period === period);
+  });
+
+  // Show loading overlay while fetching
+  const wrap = document.getElementById('creditChartWrap');
+  let overlay = wrap.querySelector('.chart-loading-overlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.className = 'chart-loading-overlay';
+    overlay.style.cssText = 'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(15,23,42,0.55);border-radius:8px;z-index:10;';
+    overlay.innerHTML = '<svg class="animate-spin" style="width:20px;height:20px;color:#22d3ee" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle style="opacity:.25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path style="opacity:.75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path></svg>';
+    wrap.appendChild(overlay);
+  } else {
+    overlay.style.display = 'flex';
+  }
+
   try {
-    const resp = await fetch('/api/credit-spread');
-    if (!resp.ok) return;
-    const cs = await resp.json();
+    let cs = _creditCache[period];
+    if (!cs) {
+      const resp = await fetch(`/api/credit-spread?period=${period}`);
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      cs = await resp.json();
+      _creditCache[period] = cs;
+    }
+    overlay.style.display = 'none';
     if (!cs.spread || !cs.spread_dates) return;
 
-    // Mini stat chips
-    function fmtChip(id, ticker, data) {
-      const el = document.getElementById(id);
-      if (!el || !data) return;
-      const pct = data.day_chg_pct;
-      const cls = pct == null ? 'text-slate-400' : pct >= 0 ? 'text-emerald-400' : 'text-rose-400';
-      const sign = pct == null ? '' : pct >= 0 ? '+' : '';
-      el.innerHTML = `<span class="font-mono font-semibold text-slate-200">${ticker}</span><span class="${cls} text-[11px]">${pct!=null ? sign+pct.toFixed(2)+'%' : ''}</span>`;
+    // Update HYG / TLT chips only on first load (they reflect latest price)
+    if (period === '1y') {
+      function fmtChip(id, ticker, data) {
+        const el = document.getElementById(id);
+        if (!el || !data) return;
+        const pct = data.day_chg_pct;
+        const cls = pct == null ? 'text-slate-400' : pct >= 0 ? 'text-emerald-400' : 'text-rose-400';
+        const sign = pct == null ? '' : pct >= 0 ? '+' : '';
+        el.innerHTML = `<span class="font-mono font-semibold text-slate-200">${ticker}</span><span class="${cls} text-[11px] ml-1">${pct!=null ? sign+pct.toFixed(2)+'%' : ''}</span>`;
+      }
+      fmtChip('hygCard', 'HYG', cs.hyg);
+      fmtChip('tltCard', 'TLT', cs.tlt);
     }
-    fmtChip('hygCard', 'HYG', cs.hyg);
-    fmtChip('tltCard', 'TLT', cs.tlt);
 
     const gridCol = '#1e293b', tickCol = '#64748b';
-    new Chart(document.getElementById('creditSpreadChart'), {
+    const cfg = {
       type: 'line',
       data: {
         labels: cs.spread_dates,
@@ -2728,11 +2763,23 @@ function _mktsModalConfig(kind) {
         },
         interaction: { mode: 'index', intersect: false },
       },
-    });
+    };
+
+    if (_creditChart) {
+      _creditChart.data    = cfg.data;
+      _creditChart.options = cfg.options;
+      _creditChart.update('none');
+    } else {
+      _creditChart = new Chart(document.getElementById('creditSpreadChart'), cfg);
+    }
   } catch(e) {
+    overlay.style.display = 'none';
     document.getElementById('creditSpreadSection').style.display = 'none';
   }
-})();
+}
+
+// Initial load
+loadCreditSpread('1y');
 </script>
 
 {% endblock %}

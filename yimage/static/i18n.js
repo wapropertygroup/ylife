@@ -78,6 +78,66 @@ const I18n = (() => {
       "pdfmeta.save_btn":       "Save & Download",
       "pdfmeta.strip_btn":      "Strip All Metadata",
 
+      // Round 6 tool names
+      "tool.blur_image":   "Blur / Pixelate",
+      "tool.gif_creator":  "GIF Creator",
+      "tool.add_text":     "Add Text",
+      "tool.image_base64": "Image → Base64",
+      "tool.pdf_rotate":   "PDF Rotate",
+
+      // Blur / Pixelate
+      "blur.title":    "🫥 Blur / Pixelate Image",
+      "blur.desc":     "Apply Gaussian blur or pixelate effect. Great for hiding faces, license plates, or sensitive information.",
+      "blur.mode":     "Effect",
+      "blur.gaussian": "Gaussian Blur",
+      "blur.pixelate": "Pixelate",
+      "blur.strength": "Strength",
+      "blur.button":   "Apply Effect & Download",
+      "blur.done":     "✓ Effect applied and downloaded!",
+
+      // GIF Creator
+      "gif.title":         "🎞️ Animated GIF Creator",
+      "gif.desc":          "Turn multiple images into an animated GIF. Control frame speed and size.",
+      "gif.hint":          "2–30 frames · Order determines animation sequence",
+      "gif.delay":         "Frame Delay",
+      "gif.max_size":      "Max Size",
+      "gif.loop":          "Loop",
+      "gif.loop_infinite": "Infinite",
+      "gif.loop_once":     "Once",
+      "gif.loop_3":        "3 Times",
+      "gif.button":        "Create GIF & Download",
+      "gif.need_two":      "Add at least 2 frames to create a GIF.",
+
+      // Add Text
+      "addtext.title":      "✏️ Add Text to Image",
+      "addtext.desc":       "Overlay custom text on your image. Set position, font size, color, opacity, and stroke outline.",
+      "addtext.text":       "Text",
+      "addtext.click_hint": "Click on the image to set text position",
+      "addtext.stroke":     "Stroke",
+      "addtext.position":   "Position",
+      "addtext.button":     "Apply Text & Download",
+      "addtext.done":       "✓ Text added and downloaded!",
+
+      // Image → Base64
+      "b64.title":    "🔢 Image → Base64",
+      "b64.desc":     "Convert an image to a Base64 data URL for embedding in HTML, CSS, or JavaScript.",
+      "b64.new_image":"New image",
+      "b64.data_url": "Data URL",
+      "b64.raw_b64":  "Raw Base64",
+      "b64.img_tag":  "HTML <img>",
+      "b64.css_bg":   "CSS bg",
+
+      // PDF Rotate
+      "pdfrotate.title":       "🔃 PDF Rotate Pages",
+      "pdfrotate.desc":        "Rotate all pages or specific pages in a PDF by 90°, 180°, or 270°.",
+      "pdfrotate.angle":       "Rotation Angle",
+      "pdfrotate.which_pages": "Apply to",
+      "pdfrotate.all_pages":   "All pages",
+      "pdfrotate.odd_pages":   "Odd pages",
+      "pdfrotate.even_pages":  "Even pages",
+      "pdfrotate.button":      "Rotate & Download",
+      "pdfrotate.done":        "✓ Rotated PDF downloaded!",
+
       // PDF Stamp
       "stamp.title":    "🔢 PDF Page Numbers",
       "stamp.desc":     "Stamp page numbers or custom text on every page. Use {n} for current page and {total} for total.",
@@ -525,6 +585,66 @@ const I18n = (() => {
       "pdfmeta.keywords_field": "关键词",
       "pdfmeta.save_btn":       "保存并下载",
       "pdfmeta.strip_btn":      "清除全部元数据",
+
+      // Round 6 工具名称
+      "tool.blur_image":   "模糊 / 像素化",
+      "tool.gif_creator":  "GIF 动图创建",
+      "tool.add_text":     "添加文字",
+      "tool.image_base64": "图片转 Base64",
+      "tool.pdf_rotate":   "PDF 旋转页面",
+
+      // 模糊 / 像素化
+      "blur.title":    "🫥 模糊 / 像素化图片",
+      "blur.desc":     "应用高斯模糊或像素化效果，非常适合隐藏人脸、车牌或敏感信息。",
+      "blur.mode":     "效果",
+      "blur.gaussian": "高斯模糊",
+      "blur.pixelate": "像素化",
+      "blur.strength": "强度",
+      "blur.button":   "应用效果并下载",
+      "blur.done":     "✓ 效果已应用并下载！",
+
+      // GIF 动图
+      "gif.title":         "🎞️ GIF 动图创建器",
+      "gif.desc":          "将多张图片合成为 GIF 动图，控制帧速和画面大小。",
+      "gif.hint":          "2–30 帧 · 顺序决定动画播放顺序",
+      "gif.delay":         "帧延迟",
+      "gif.max_size":      "最大尺寸",
+      "gif.loop":          "循环",
+      "gif.loop_infinite": "无限循环",
+      "gif.loop_once":     "播放一次",
+      "gif.loop_3":        "循环 3 次",
+      "gif.button":        "创建 GIF 并下载",
+      "gif.need_two":      "请至少添加 2 帧图片来创建 GIF。",
+
+      // 添加文字
+      "addtext.title":      "✏️ 添加文字到图片",
+      "addtext.desc":       "在图片上叠加自定义文字，设置位置、字体大小、颜色、透明度和描边。",
+      "addtext.text":       "文字内容",
+      "addtext.click_hint": "点击图片设置文字位置",
+      "addtext.stroke":     "描边",
+      "addtext.position":   "位置",
+      "addtext.button":     "添加文字并下载",
+      "addtext.done":       "✓ 文字已添加并下载！",
+
+      // 图片转 Base64
+      "b64.title":    "🔢 图片转 Base64",
+      "b64.desc":     "将图片转换为 Base64 数据 URL，直接嵌入 HTML、CSS 或 JavaScript，无需文件托管。",
+      "b64.new_image":"换图片",
+      "b64.data_url": "Data URL",
+      "b64.raw_b64":  "纯 Base64",
+      "b64.img_tag":  "HTML &lt;img&gt;",
+      "b64.css_bg":   "CSS 背景",
+
+      // PDF 旋转
+      "pdfrotate.title":       "🔃 PDF 旋转页面",
+      "pdfrotate.desc":        "将 PDF 所有页面或指定页面旋转 90°、180° 或 270°。",
+      "pdfrotate.angle":       "旋转角度",
+      "pdfrotate.which_pages": "应用到",
+      "pdfrotate.all_pages":   "所有页面",
+      "pdfrotate.odd_pages":   "奇数页",
+      "pdfrotate.even_pages":  "偶数页",
+      "pdfrotate.button":      "旋转并下载",
+      "pdfrotate.done":        "✓ 已下载旋转后的 PDF！",
 
       // PDF 页码标注
       "stamp.title":    "🔢 PDF 页码标注",

@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% block title %}GIF Creator — yImage{% endblock %}
+{% block content %}
+<div x-data="gifTool()">
+  <div class="max-w-2xl mx-auto">
+    <a href="/" class="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-brand transition mb-4">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+      <span data-i18n="common.all_tools">All Tools</span>
+    </a>
+    <h1 class="text-2xl font-extrabold mb-2" data-i18n="gif.title">🎞️ Animated GIF Creator</h1>
+    <p class="text-sm text-slate-500 dark:text-slate-400 mb-6" data-i18n="gif.desc">Turn multiple images into an animated GIF. Control frame speed and size.</p>
+
+    <!-- Drop Zone -->
+    <div class="drop-zone rounded-2xl border-2 border-dashed border-slate-300 dark:border-slate-700 p-8 text-center cursor-pointer transition hover:border-brand"
+         @click="$refs.fi.click()"
+         @dragover.prevent="dragOver=true" @dragleave="dragOver=false"
+         @drop.prevent="dragOver=false; handleDrop($event)"
+         :class="dragOver ? 'border-brand bg-violet-50 dark:bg-violet-900/10' : ''">
+      <input type="file" accept="image/*" multiple x-ref="fi" @change="addFiles($event.target.files)" class="hidden">
+      <svg class="w-10 h-10 mx-auto mb-2 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z"/>
+      </svg>
+      <p class="text-sm text-slate-500"><span data-i18n="common.upload">Drop images here or</span> <span class="text-brand font-medium" data-i18n="common.browse">browse</span></p>
+      <p class="text-xs text-slate-400 mt-1" data-i18n="gif.hint">2–30 frames · Order determines animation sequence</p>
+    </div>
+
+    <!-- Frame thumbnails -->
+    <div x-show="images.length > 0" class="mt-4">
+      <div class="flex items-center justify-between mb-2">
+        <p class="text-sm font-medium" x-text="images.length + ' frames'"></p>
+        <button @click="images=[]" class="text-xs text-slate-400 hover:text-red-500" data-i18n="merge.clear_all">Clear all</button>
+      </div>
+      <div class="flex flex-wrap gap-2">
+        <template x-for="(img, idx) in images" :key="img.id">
+          <div class="relative group">
+            <img :src="img.preview" class="w-16 h-16 object-cover rounded-lg border-2 border-slate-200 dark:border-slate-700">
+            <div class="absolute -top-1.5 -left-1.5 w-5 h-5 bg-slate-700 text-white text-xs rounded-full flex items-center justify-center" x-text="idx+1"></div>
+            <button @click="images.splice(idx,1)"
+                    class="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-xs rounded-full hidden group-hover:flex items-center justify-center">✕</button>
+          </div>
+        </template>
+        <button @click="$refs.fi.click()"
+                class="w-16 h-16 rounded-lg border-2 border-dashed border-slate-300 dark:border-slate-700 flex items-center justify-center text-slate-400 hover:border-brand hover:text-brand transition text-2xl">+</button>
+      </div>
+    </div>
+
+    <!-- Options -->
+    <div x-show="images.length > 0" class="mt-4 p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 space-y-4">
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="text-sm font-medium mb-1 block">
+            <span data-i18n="gif.delay">Frame Delay</span>: <span x-text="delay + 'ms'"></span>
+          </label>
+          <input type="range" x-model.number="delay" min="50" max="3000" step="50"
+                 class="w-full accent-violet-500">
+          <p class="text-xs text-slate-400 mt-0.5" x-text="(1000/delay).toFixed(1) + ' fps'"></p>
+        </div>
+        <div>
+          <label class="text-sm font-medium mb-1 block">
+            <span data-i18n="gif.max_size">Max Size</span>: <span x-text="maxSize + 'px'"></span>
+          </label>
+          <input type="range" x-model.number="maxSize" min="100" max="800" step="50"
+                 class="w-full accent-violet-500">
+        </div>
+      </div>
+      <div>
+        <label class="text-sm font-medium mb-2 block" data-i18n="gif.loop">Loop</label>
+        <div class="flex gap-2">
+          <button @click="loop=0"
+                  :class="loop===0 ? 'bg-brand text-white' : 'bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700'"
+                  class="px-3 py-1.5 rounded-lg text-sm font-medium transition"
+                  data-i18n="gif.loop_infinite">Infinite</button>
+          <button @click="loop=1"
+                  :class="loop===1 ? 'bg-brand text-white' : 'bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700'"
+                  class="px-3 py-1.5 rounded-lg text-sm font-medium transition"
+                  data-i18n="gif.loop_once">Once</button>
+          <button @click="loop=3"
+                  :class="loop===3 ? 'bg-brand text-white' : 'bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700'"
+                  class="px-3 py-1.5 rounded-lg text-sm font-medium transition"
+                  data-i18n="gif.loop_3">3 Times</button>
+        </div>
+      </div>
+    </div>
+
+    <button x-show="images.length >= 2" @click="process()" :disabled="processing"
+            class="mt-4 w-full py-3 rounded-xl bg-brand text-white font-semibold hover:bg-brand-dark transition disabled:opacity-50">
+      <span x-show="!processing" data-i18n="gif.button">Create GIF & Download</span>
+      <span x-show="processing" class="flex items-center justify-center gap-2">
+        <svg class="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+        <span data-i18n="common.processing">Processing...</span>
+      </span>
+    </button>
+    <p x-show="images.length === 1" class="mt-2 text-xs text-amber-500 text-center" data-i18n="gif.need_two">Add at least 2 frames to create a GIF.</p>
+    <p x-show="error" class="mt-4 text-sm text-red-500" x-text="error"></p>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+function gifTool() {
+  let _id = 0;
+  return {
+    images: [], dragOver: false,
+    delay: 500, maxSize: 400, loop: 0,
+    processing: false, error: '',
+
+    handleDrop(e) { this.addFiles(e.dataTransfer.files); },
+    addFiles(files) {
+      for (const f of files) {
+        if (this.images.length >= 30) break;
+        const id = ++_id;
+        const reader = new FileReader();
+        reader.onload = e => this.images.push({ id, name: f.name, _file: f, preview: e.target.result });
+        reader.readAsDataURL(f);
+      }
+      this.error = '';
+    },
+
+    async process() {
+      if (this.images.length < 2 || this.processing) return;
+      this.processing = true; this.error = '';
+      const form = new FormData();
+      this.images.forEach(img => form.append('files', img._file));
+      form.append('delay',    this.delay);
+      form.append('max_size', this.maxSize);
+      form.append('loop',     this.loop);
+      try {
+        const resp = await fetch('/api/gif-creator', { method: 'POST', body: form });
+        if (!resp.ok) { const d = await resp.json(); this.error = d.error || 'Failed'; this.processing = false; return; }
+        const blob = await resp.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href = url; a.download = 'animated.gif'; a.click();
+        URL.revokeObjectURL(url);
+      } catch(e) { this.error = 'Network error: ' + e.message; }
+      this.processing = false;
+    },
+  };
+}
+</script>
+{% endblock %}

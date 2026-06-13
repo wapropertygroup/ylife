@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+{% block title %}Add Text to Image — yImage{% endblock %}
+{% block content %}
+<div x-data="addTextTool()">
+  <div class="max-w-2xl mx-auto">
+    <a href="/" class="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-brand transition mb-4">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+      <span data-i18n="common.all_tools">All Tools</span>
+    </a>
+    <h1 class="text-2xl font-extrabold mb-2" data-i18n="addtext.title">✏️ Add Text to Image</h1>
+    <p class="text-sm text-slate-500 dark:text-slate-400 mb-6" data-i18n="addtext.desc">Overlay custom text on your image. Set position, font size, color, opacity, and stroke outline.</p>
+
+    <!-- Upload Zone -->
+    <div class="drop-zone rounded-2xl border-2 border-dashed border-slate-300 dark:border-slate-700 p-10 text-center cursor-pointer transition hover:border-brand"
+         @click="$refs.fi.click()"
+         @dragover.prevent="dragOver=true" @dragleave="dragOver=false"
+         @drop.prevent="dragOver=false; handleDrop($event)"
+         :class="dragOver ? 'border-brand bg-violet-50 dark:bg-violet-900/10' : ''">
+      <input type="file" accept="image/*" x-ref="fi" @change="loadFile($event.target.files[0])" class="hidden">
+      <div x-show="!previewSrc">
+        <svg class="w-12 h-12 mx-auto mb-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+        </svg>
+        <p class="text-sm text-slate-500"><span data-i18n="common.upload">Drop an image here or</span> <span class="text-brand font-medium" data-i18n="common.browse">browse</span></p>
+        <p class="text-xs text-slate-400 mt-1">JPEG · PNG · WebP · <span data-i18n="common.max_size">Max 50 MB</span></p>
+      </div>
+      <div x-show="previewSrc" class="space-y-2">
+        <!-- Click on preview to set position -->
+        <div class="relative inline-block rounded-xl overflow-hidden border border-slate-700 cursor-crosshair"
+             @click="setPosFromClick($event)">
+          <img :src="previewSrc" class="block max-h-48 max-w-full object-contain" x-ref="previewImg">
+          <!-- Text dot indicator -->
+          <div class="absolute w-2 h-2 bg-brand rounded-full -translate-x-1/2 -translate-y-1/2 pointer-events-none"
+               :style="`left:${xPct*100}%; top:${yPct*100}%`"></div>
+        </div>
+        <p class="text-xs text-slate-400" data-i18n="addtext.click_hint">Click on the image to set text position</p>
+        <button @click.stop="reset()" class="text-xs text-slate-400 hover:text-red-500" data-i18n="common.change">Change image</button>
+      </div>
+    </div>
+
+    <!-- Options -->
+    <div x-show="file" class="mt-4 space-y-4 p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50">
+
+      <div>
+        <label class="text-sm font-medium mb-1 block" data-i18n="addtext.text">Text</label>
+        <input type="text" x-model="textVal" maxlength="200" placeholder="Your text here..."
+               class="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-sm focus:border-brand focus:outline-none">
+      </div>
+
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="text-sm font-medium mb-1 block">
+            <span data-i18n="wm.size">Font Size</span>: <span x-text="fontSize + 'pt'"></span>
+          </label>
+          <input type="range" x-model.number="fontSize" min="8" max="200" step="2"
+                 class="w-full accent-violet-500">
+        </div>
+        <div>
+          <label class="text-sm font-medium mb-1 block">
+            <span data-i18n="wm.opacity">Opacity</span>: <span x-text="opacity + '%'"></span>
+          </label>
+          <input type="range" x-model.number="opacity" min="10" max="100" step="5"
+                 class="w-full accent-violet-500">
+        </div>
+      </div>
+
+      <div class="flex gap-4">
+        <div class="flex-1">
+          <label class="text-sm font-medium mb-1 block" data-i18n="wm.color">Text Color</label>
+          <div class="flex items-center gap-2">
+            <input type="color" x-model="color"
+                   class="w-9 h-9 rounded cursor-pointer border border-slate-300 dark:border-slate-700 p-0.5 bg-white">
+            <input type="text" x-model="color" maxlength="7"
+                   class="flex-1 px-2 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-mono focus:border-brand focus:outline-none">
+          </div>
+        </div>
+        <div class="flex-1">
+          <label class="text-sm font-medium mb-1 block" data-i18n="addtext.stroke">Stroke</label>
+          <div class="flex items-center gap-2">
+            <input type="number" x-model.number="strokeWidth" min="0" max="10"
+                   class="w-14 px-2 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs text-center focus:border-brand focus:outline-none">
+            <span class="text-xs text-slate-400">px</span>
+            <input type="color" x-model="strokeColor" x-show="strokeWidth > 0"
+                   class="w-9 h-9 rounded cursor-pointer border border-slate-300 dark:border-slate-700 p-0.5 bg-white">
+          </div>
+        </div>
+      </div>
+
+      <!-- Position -->
+      <div>
+        <label class="text-sm font-medium mb-2 block" data-i18n="addtext.position">Position (X: <span x-text="(xPct*100).toFixed(0)+'%'"></span>, Y: <span x-text="(yPct*100).toFixed(0)+'%'"></span>)</label>
+        <div class="flex gap-2 flex-wrap text-xs">
+          <template x-for="p in positions" :key="p.v">
+            <button @click="xPct=p.x; yPct=p.y"
+                    class="px-2 py-1 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-brand hover:text-brand transition"
+                    x-text="p.l"></button>
+          </template>
+        </div>
+      </div>
+    </div>
+
+    <button x-show="file" @click="process()" :disabled="processing || !textVal.trim()"
+            class="mt-4 w-full py-3 rounded-xl bg-brand text-white font-semibold hover:bg-brand-dark transition disabled:opacity-50">
+      <span x-show="!processing" data-i18n="addtext.button">Apply Text & Download</span>
+      <span x-show="processing" class="flex items-center justify-center gap-2">
+        <svg class="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+        <span data-i18n="common.processing">Processing...</span>
+      </span>
+    </button>
+    <div x-show="done" class="mt-4 p-4 rounded-xl bg-green-50 dark:bg-green-900/15 border border-green-300 dark:border-green-700/50">
+      <p class="text-sm font-semibold text-green-600 dark:text-green-400" data-i18n="addtext.done">✓ Text added and downloaded!</p>
+    </div>
+    <p x-show="error" class="mt-4 text-sm text-red-500" x-text="error"></p>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+function addTextTool() {
+  return {
+    file: null, previewSrc: '', dragOver: false,
+    textVal: '', fontSize: 40, opacity: 90,
+    color: '#ffffff', strokeWidth: 2, strokeColor: '#000000',
+    xPct: 0.5, yPct: 0.9,
+    processing: false, error: '', done: false,
+    positions: [
+      {v:'tl', l:'↖ Top Left',     x:0.1,  y:0.1},
+      {v:'tc', l:'↑ Top Center',   x:0.5,  y:0.1},
+      {v:'tr', l:'↗ Top Right',    x:0.9,  y:0.1},
+      {v:'ml', l:'← Mid Left',     x:0.1,  y:0.5},
+      {v:'mc', l:'⊕ Center',       x:0.5,  y:0.5},
+      {v:'mr', l:'→ Mid Right',    x:0.9,  y:0.5},
+      {v:'bl', l:'↙ Bottom Left',  x:0.1,  y:0.9},
+      {v:'bc', l:'↓ Bottom Center',x:0.5,  y:0.9},
+      {v:'br', l:'↘ Bottom Right', x:0.9,  y:0.9},
+    ],
+
+    handleDrop(e) { this.loadFile(e.dataTransfer.files[0]); },
+    loadFile(f) {
+      if (!f) return; this.file = f; this.done = false; this.error = '';
+      this.previewSrc = URL.createObjectURL(f);
+    },
+    reset() { this.file = null; this.previewSrc = ''; this.done = false; this.error = ''; },
+
+    setPosFromClick(e) {
+      const rect = e.currentTarget.getBoundingClientRect();
+      this.xPct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+      this.yPct = Math.max(0, Math.min(1, (e.clientY - rect.top)  / rect.height));
+    },
+
+    async process() {
+      if (!this.file || !this.textVal.trim() || this.processing) return;
+      this.processing = true; this.error = ''; this.done = false;
+      const form = new FormData();
+      form.append('file',         this.file);
+      form.append('text',         this.textVal);
+      form.append('x_pct',        this.xPct);
+      form.append('y_pct',        this.yPct);
+      form.append('font_size',    this.fontSize);
+      form.append('opacity',      this.opacity);
+      form.append('color',        this.color);
+      form.append('stroke_width', this.strokeWidth);
+      form.append('stroke_color', this.strokeColor);
+      try {
+        const resp = await fetch('/api/add-text', { method: 'POST', body: form });
+        if (!resp.ok) { const d = await resp.json(); this.error = d.error || 'Failed'; this.processing = false; return; }
+        const blob = await resp.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href = url; a.download = 'text_' + this.file.name; a.click();
+        URL.revokeObjectURL(url); this.done = true;
+      } catch(e) { this.error = 'Network error: ' + e.message; }
+      this.processing = false;
+    },
+  };
+}
+</script>
+{% endblock %}

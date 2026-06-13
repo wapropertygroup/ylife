@@ -20,6 +20,10 @@ Series (weekly, not seasonally adjusted):
   WGCAL     — Gold Certificate Account, millions USD
   WSDRAL    — Special Drawing Rights Certificate Account, millions USD
 
+Series (monthly):
+  M2SL      — M2 Money Supply, billions USD (seasonally adjusted)
+  M2V       — Velocity of M2 Money Stock, ratio (quarterly, not seasonally adjusted)
+
 Cache TTL: 24 hours (H.4.1 updates once a week, on Thursdays).
 """
 from __future__ import annotations
@@ -56,6 +60,9 @@ SERIES: dict[str, dict[str, str]] = {
     "SWPT":      {"label": "Central Bank Liquidity Swaps", "color": "#a78bfa"},
     "WGCAL":     {"label": "Gold Certificate Account",  "color": "#fbbf24"},
     "WSDRAL":    {"label": "SDR Certificate Account",   "color": "#facc15"},
+    # Monthly series
+    "M2SL":      {"label": "M2 Money Supply",            "color": "#22d3ee"},
+    "M2V":       {"label": "Velocity of M2",             "color": "#a3e635"},
 }
 
 # ---------------------------------------------------------------------------
@@ -117,7 +124,10 @@ _HEADERS = {
 
 
 # Series already in billions USD (no /1000 conversion needed)
-_SERIES_ALREADY_BILLIONS = {"RRPONTSYD"}
+_SERIES_ALREADY_BILLIONS = {"RRPONTSYD", "M2SL"}
+
+# Series that are dimensionless ratios (stored as-is, no unit conversion)
+_SERIES_RAW_RATIO = {"M2V"}
 
 
 def _fetch_series(series_id: str) -> Optional[dict[str, Any]]:
@@ -128,6 +138,7 @@ def _fetch_series(series_id: str) -> Optional[dict[str, Any]]:
     """
     url = _FRED_CSV.format(series=series_id)
     already_billions = series_id in _SERIES_ALREADY_BILLIONS
+    raw_ratio        = series_id in _SERIES_RAW_RATIO
     log.info("Fed: fetching %s from FRED", series_id)
     try:
         resp = requests.get(url, headers=_HEADERS, timeout=30)
@@ -166,7 +177,10 @@ def _fetch_series(series_id: str) -> Optional[dict[str, Any]]:
         else:
             try:
                 raw = float(val_str)
-                values.append(round(raw if already_billions else raw / 1000, 2))  # millions → billions
+                if raw_ratio:
+                    values.append(round(raw, 4))          # dimensionless ratio, store as-is
+                else:
+                    values.append(round(raw if already_billions else raw / 1000, 2))  # millions → billions
             except ValueError:
                 values.append(None)
 
@@ -174,8 +188,9 @@ def _fetch_series(series_id: str) -> Optional[dict[str, Any]]:
         log.warning("Fed: no data rows parsed for %s", series_id)
         return None
 
-    log.info("Fed: %s — %d obs (%s … %s), latest $%.1fB",
-             series_id, len(dates), dates[0], dates[-1], values[-1] or 0)
+    log.info("Fed: %s — %d obs (%s … %s), latest %s",
+             series_id, len(dates), dates[0], dates[-1],
+             f"{values[-1]:.4f}" if raw_ratio else f"${values[-1] or 0:.1f}B")
     return {"dates": dates, "values": values}
 
 
