@@ -869,6 +869,15 @@ def api_history(ticker: str):
         # Key dates
         "earnings_date":     _fmt_ts(info.get("earningsTimestamps") or info.get("earningsDate")),
         "ex_dividend_date":  _fmt_ts_single(info.get("exDividendDate")),
+        # Profitability & risk
+        "gross_margin":      _safe(round(info.get("grossMargins") * 100, 1)) if info.get("grossMargins") else None,
+        "net_margin":        _safe(round(info.get("profitMargins") * 100, 1)) if info.get("profitMargins") else None,
+        "roe":               _safe(round(info.get("returnOnEquity") * 100, 1)) if info.get("returnOnEquity") else None,
+        "debt_equity":       _safe(round(info.get("debtToEquity"), 2)) if info.get("debtToEquity") else None,
+        "beta":              _safe(round(info.get("beta"), 2)) if info.get("beta") else None,
+        # High/Low series for Stochastic Oscillator
+        "highs":             [round(float(v), 2) if not math.isnan(float(v)) else None for v in hist["High"]],
+        "lows":              [round(float(v), 2) if not math.isnan(float(v)) else None for v in hist["Low"]],
     }
     with _HISTORY_CACHE_LOCK:
         _HISTORY_CACHE[cache_key] = {"ts": time.time(), "data": result}
@@ -974,6 +983,10 @@ def api_financials(ticker: str):
             row = {"year": yr, "is_estimate": yr in fwd_years and yr not in actuals}
             row.update(actuals.get(yr, {}))
             row.update(fwd.get(yr, {}))
+            # Compute margin percentages
+            if row.get("revenue") and row["revenue"] != 0:
+                row["gross_margin_pct"] = round(row.get("gross_profit", 0) / row["revenue"] * 100, 1) if row.get("gross_profit") else None
+                row["net_margin_pct"]   = round(row.get("net_income",  0) / row["revenue"] * 100, 1) if row.get("net_income")  else None
             financials_table.append(row)
 
     except Exception as exc:
@@ -2429,7 +2442,7 @@ _SECTOR_ETFS = {
     "XLK": "Tech", "XLF": "Financials", "XLE": "Energy",
     "XLV": "Healthcare", "XLI": "Industrials", "XLY": "Consumer Disc.",
     "XLP": "Consumer Stap.", "XLU": "Utilities", "XLB": "Materials",
-    "XLRE": "Real Estate",
+    "XLRE": "Real Estate", "XLC": "Comm.", "XTL": "Telecom",
 }
 
 

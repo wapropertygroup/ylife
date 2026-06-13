@@ -262,6 +262,18 @@ const I18n = (() => {
     // Historical Volatility chart
     'history.hv_title':         { en: 'Historical Volatility', zh: '历史波动率' },
     'history.hv_desc':          { en: 'Annualized rolling volatility from log returns (%)', zh: '对数收益率的年化滚动波动率（%）' },
+    // Profitability & risk stat group
+    'history.group_profitability': { en: 'Profitability & Risk', zh: '盈利能力与风险' },
+    'history.gross_margin':     { en: 'Gross Margin',     zh: '毛利率' },
+    'history.net_margin':       { en: 'Net Margin',       zh: '净利率' },
+    'history.roe':              { en: 'ROE',              zh: '净资产收益率' },
+    'history.debt_equity':      { en: 'D/E Ratio',        zh: '负债权益比' },
+    'history.beta':             { en: 'Beta',             zh: 'Beta系数' },
+    // 52-week range bar
+    'history.range_bar_label':  { en: '52-Week Range',    zh: '52周价格区间' },
+    // Stochastic Oscillator
+    'history.stoch_title':      { en: 'Stochastic Oscillator', zh: '随机指标' },
+    'history.stoch_desc':       { en: '%K (14) and %D (3) — overbought >80 / oversold <20', zh: '%K（14）与 %D（3）— 超买>80 / 超卖<20' },
     'history.target_legend':   { en: 'Target',    zh: '目标价' },
     'history.call_wall_legend':{ en: 'Call Wall', zh: '认购墙' },
     'history.put_wall_legend': { en: 'Put Wall',  zh: '认沽墙' },
