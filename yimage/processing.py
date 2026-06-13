@@ -1890,3 +1890,206 @@ def stitch_images(
     buf2 = io.BytesIO()
     canvas.save(buf2, format="JPEG", quality=92)
     return buf2.getvalue(), "image/jpeg"
+
+
+# ---------------------------------------------------------------------------
+# 37. Round Corners
+# ---------------------------------------------------------------------------
+
+def round_corners(
+    data: bytes,
+    radius: int = 30,
+    bg_color: str | None = None,
+) -> tuple[bytes, str]:
+    """Apply rounded corners to an image.
+
+    Args:
+        radius:   Corner radius in pixels.
+        bg_color: If set, fill corners with this solid colour instead of transparency
+                  (required for JPEG output since JPEG has no alpha).
+    """
+    from PIL import ImageDraw
+
+    img = Image.open(io.BytesIO(data)).convert("RGBA")
+    radius = max(1, min(radius, min(img.width, img.height) // 2))
+
+    # Rounded corner mask
+    mask = Image.new("L", img.size, 0)
+    draw = ImageDraw.Draw(mask)
+    draw.rounded_rectangle([(0, 0), (img.width - 1, img.height - 1)], radius=radius, fill=255)
+    img.putalpha(mask)
+
+    if bg_color:
+        r = int(bg_color.lstrip("#")[0:2], 16)
+        g = int(bg_color.lstrip("#")[2:4], 16)
+        b = int(bg_color.lstrip("#")[4:6], 16)
+        canvas = Image.new("RGBA", img.size, (r, g, b, 255))
+        canvas.paste(img, mask=img)
+        out = canvas.convert("RGB")
+        buf = io.BytesIO()
+        out.save(buf, format="JPEG", quality=95)
+        return buf.getvalue(), "image/jpeg"
+    else:
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        return buf.getvalue(), "image/png"
+
+
+# ---------------------------------------------------------------------------
+# 38. Remove Solid Background Color
+# ---------------------------------------------------------------------------
+
+def remove_bg_color(
+    data: bytes,
+    bg_color: str = "#ffffff",
+    tolerance: int = 30,
+) -> bytes:
+    """Replace pixels within `tolerance` of `bg_color` with transparency.
+
+    Returns PNG with alpha channel.
+    """
+    import numpy as np
+
+    img = Image.open(io.BytesIO(data)).convert("RGBA")
+    arr = np.array(img, dtype=np.int32)
+
+    bg = [int(bg_color.lstrip("#")[i:i + 2], 16) for i in (0, 2, 4)]
+    diff = np.abs(arr[:, :, :3] - np.array(bg, dtype=np.int32))
+    mask = np.all(diff <= tolerance, axis=2)
+    arr[:, :, 3][mask] = 0
+    arr = arr.clip(0, 255).astype(np.uint8)
+
+    out = Image.fromarray(arr, "RGBA")
+    buf = io.BytesIO()
+    out.save(buf, format="PNG")
+    return buf.getvalue()
+
+
+# ---------------------------------------------------------------------------
+# 39. Duotone Effect
+# ---------------------------------------------------------------------------
+
+def apply_duotone(
+    data: bytes,
+    shadow_color: str = "#0d1b6e",
+    highlight_color: str = "#f7941d",
+) -> tuple[bytes, str]:
+    """Apply a duotone (two-colour gradient map) effect to an image.
+
+    Shadows map to `shadow_color`; highlights map to `highlight_color`.
+    """
+    import numpy as np
+
+    img = Image.open(io.BytesIO(data)).convert("RGB")
+    orig_fmt = (img.format or "JPEG").upper()
+
+    gray = np.array(img.convert("L"), dtype=np.float32) / 255.0  # 0.0 → 1.0
+
+    c1 = [int(shadow_color.lstrip("#")[i:i + 2], 16) / 255.0 for i in (0, 2, 4)]
+    c2 = [int(highlight_color.lstrip("#")[i:i + 2], 16) / 255.0 for i in (0, 2, 4)]
+
+    h, w = gray.shape
+    result = np.zeros((h, w, 3), dtype=np.float32)
+    for ch in range(3):
+        result[:, :, ch] = c1[ch] * (1 - gray) + c2[ch] * gray
+
+    out = Image.fromarray((result * 255).clip(0, 255).astype(np.uint8), "RGB")
+
+    save_fmt = orig_fmt if orig_fmt in ("JPEG", "PNG", "WEBP") else "JPEG"
+    mime_map = {"JPEG": "image/jpeg", "PNG": "image/png", "WEBP": "image/webp"}
+    mime = mime_map.get(save_fmt, "image/jpeg")
+
+    buf = io.BytesIO()
+    out.save(buf, format=save_fmt, quality=92 if save_fmt == "JPEG" else None)
+    return buf.getvalue(), mime
+
+
+# ---------------------------------------------------------------------------
+# 40. PDF Extract Page Range
+# ---------------------------------------------------------------------------
+
+def extract_pdf_pages(
+    data: bytes,
+    start_page: int,
+    end_page: int,
+    filename: str = "document.pdf",
+) -> tuple[bytes, int]:
+    """Extract a contiguous page range from a PDF (1-based page numbers).
+
+    Returns (pdf_bytes, total_pages_in_source).
+    """
+    import fitz
+
+    doc = fitz.open(stream=data, filetype="pdf")
+    total = len(doc)
+    start = max(0, start_page - 1)
+    end   = min(total - 1, end_page - 1)
+
+    out = fitz.open()
+    out.insert_pdf(doc, from_page=start, to_page=end)
+    doc.close()
+
+    buf = io.BytesIO()
+    out.save(buf)
+    out.close()
+    return buf.getvalue(), total
+
+
+# ---------------------------------------------------------------------------
+# 41. Photo Caption Strip
+# ---------------------------------------------------------------------------
+
+def add_caption(
+    data: bytes,
+    caption: str,
+    position: str = "bottom",
+    bg_color: str = "#000000",
+    text_color: str = "#ffffff",
+    font_size: int = 24,
+    padding: int = 12,
+) -> tuple[bytes, str]:
+    """Add a caption strip to the top or bottom of an image."""
+    from PIL import ImageDraw, ImageFont
+
+    img = Image.open(io.BytesIO(data)).convert("RGB")
+
+    # Determine strip height
+    strip_h = font_size + padding * 2
+
+    # Create canvas
+    canvas = Image.new("RGB", (img.width, img.height + strip_h), (255, 255, 255))
+
+    if position == "top":
+        canvas.paste(img, (0, strip_h))
+        strip_y = 0
+    else:
+        canvas.paste(img, (0, 0))
+        strip_y = img.height
+
+    # Fill strip
+    draw = ImageDraw.Draw(canvas)
+    bg = tuple(int(bg_color.lstrip("#")[i:i + 2], 16) for i in (0, 2, 4))
+    fg = tuple(int(text_color.lstrip("#")[i:i + 2], 16) for i in (0, 2, 4))
+    draw.rectangle([(0, strip_y), (canvas.width, strip_y + strip_h)], fill=bg)
+
+    # Load font
+    font: ImageFont.ImageFont | ImageFont.FreeTypeFont
+    try:
+        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", font_size)
+    except (IOError, OSError):
+        try:
+            font = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", font_size)
+        except (IOError, OSError):
+            font = ImageFont.load_default()
+
+    # Centre text in strip
+    bbox = draw.textbbox((0, 0), caption, font=font)
+    tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+    tx = max(padding, (canvas.width - tw) // 2)
+    ty = strip_y + (strip_h - th) // 2
+
+    draw.text((tx, ty), caption, font=font, fill=fg)
+
+    buf = io.BytesIO()
+    canvas.save(buf, format="JPEG", quality=95)
+    return buf.getvalue(), "image/jpeg"

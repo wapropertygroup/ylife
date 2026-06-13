@@ -1595,3 +1595,146 @@ def api_stitch_images():
     except Exception as exc:
         log.exception("Stitch images failed")
         return jsonify(error=str(exc)), 500
+
+# ---------------------------------------------------------------------------
+# Round 8 Page Routes
+# ---------------------------------------------------------------------------
+
+@bp.route("/round-corners")
+def page_round_corners():
+    return render_template("round_corners.html")
+
+@bp.route("/remove-bg-color")
+def page_remove_bg_color():
+    return render_template("remove_bg_color.html")
+
+@bp.route("/duotone")
+def page_duotone():
+    return render_template("duotone.html")
+
+@bp.route("/pdf-extract-pages")
+def page_pdf_extract_pages():
+    return render_template("pdf_extract_pages.html")
+
+@bp.route("/photo-caption")
+def page_photo_caption():
+    return render_template("photo_caption.html")
+
+
+# ---------------------------------------------------------------------------
+# Round 8 API Routes
+# ---------------------------------------------------------------------------
+
+@bp.route("/api/round-corners", methods=["POST"])
+def api_round_corners():
+    """Apply rounded corners to an image."""
+    data, filename, err = _get_upload(allowed_types=["jpg","jpeg","png","webp","bmp"])
+    if err: return err
+    bg_color = request.form.get("bg_color") or None
+    try:
+        radius = int(float(request.form.get("radius", "30")))
+    except (ValueError, TypeError):
+        radius = 30
+    radius = max(1, min(500, radius))
+    log.info("Round corners: %s (r=%d)", filename, radius)
+    try:
+        from yimage.processing import round_corners
+        result, mime = round_corners(data, radius, bg_color)
+        _ext = {"image/jpeg": "jpg", "image/png": "png"}
+        out_ext = _ext.get(mime, "png")
+        base = filename.rsplit(".", 1)[0] if "." in filename else filename
+        return send_file(BytesIO(result), mimetype=mime, as_attachment=True,
+                         download_name=f"rounded_{base}.{out_ext}")
+    except Exception as exc:
+        log.exception("Round corners failed"); return jsonify(error=str(exc)), 500
+
+
+@bp.route("/api/remove-bg-color", methods=["POST"])
+def api_remove_bg_color():
+    """Replace solid background color with transparency."""
+    data, filename, err = _get_upload(allowed_types=["jpg","jpeg","png","webp","bmp"])
+    if err: return err
+    bg_color = request.form.get("bg_color", "#ffffff")
+    try:
+        tolerance = int(float(request.form.get("tolerance", "30")))
+    except (ValueError, TypeError):
+        tolerance = 30
+    tolerance = max(0, min(128, tolerance))
+    log.info("Remove BG color: %s (color=%s, tol=%d)", filename, bg_color, tolerance)
+    try:
+        from yimage.processing import remove_bg_color
+        result = remove_bg_color(data, bg_color, tolerance)
+        base = filename.rsplit(".", 1)[0] if "." in filename else filename
+        return send_file(BytesIO(result), mimetype="image/png", as_attachment=True,
+                         download_name=f"nobg_{base}.png")
+    except Exception as exc:
+        log.exception("Remove BG color failed"); return jsonify(error=str(exc)), 500
+
+
+@bp.route("/api/duotone", methods=["POST"])
+def api_duotone():
+    """Apply duotone (two-color gradient map) effect."""
+    data, filename, err = _get_upload(allowed_types=["jpg","jpeg","png","webp","bmp"])
+    if err: return err
+    shadow_color    = request.form.get("shadow_color",    "#0d1b6e")
+    highlight_color = request.form.get("highlight_color", "#f7941d")
+    log.info("Duotone: %s (shadow=%s, highlight=%s)", filename, shadow_color, highlight_color)
+    try:
+        from yimage.processing import apply_duotone
+        result, mime = apply_duotone(data, shadow_color, highlight_color)
+        _ext = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}
+        out_ext = _ext.get(mime, "jpg")
+        base = filename.rsplit(".", 1)[0] if "." in filename else filename
+        return send_file(BytesIO(result), mimetype=mime, as_attachment=True,
+                         download_name=f"duotone_{base}.{out_ext}")
+    except Exception as exc:
+        log.exception("Duotone failed"); return jsonify(error=str(exc)), 500
+
+
+@bp.route("/api/pdf-extract-pages", methods=["POST"])
+def api_pdf_extract_pages():
+    """Extract a page range from a PDF."""
+    data, filename, err = _get_upload(allowed_types=["pdf"])
+    if err: return err
+    try:
+        start = int(float(request.form.get("start_page", "1")))
+        end   = int(float(request.form.get("end_page",   "1")))
+    except (ValueError, TypeError):
+        return jsonify(error="Invalid page numbers"), 400
+    start = max(1, start); end = max(start, end)
+    log.info("PDF extract pages: %s (pp. %d–%d)", filename, start, end)
+    try:
+        from yimage.processing import extract_pdf_pages
+        result, total = extract_pdf_pages(data, start, end, filename)
+        base = filename.rsplit(".", 1)[0] if "." in filename else filename
+        return send_file(BytesIO(result), mimetype="application/pdf", as_attachment=True,
+                         download_name=f"{base}_pp{start}-{end}.pdf")
+    except Exception as exc:
+        log.exception("PDF extract pages failed"); return jsonify(error=str(exc)), 500
+
+
+@bp.route("/api/photo-caption", methods=["POST"])
+def api_photo_caption():
+    """Add a caption strip to an image."""
+    data, filename, err = _get_upload(allowed_types=["jpg","jpeg","png","webp","bmp"])
+    if err: return err
+    caption    = request.form.get("caption", "").strip()
+    if not caption: return jsonify(error="Caption cannot be empty"), 400
+    position   = request.form.get("position",   "bottom")
+    bg_color   = request.form.get("bg_color",   "#000000")
+    text_color = request.form.get("text_color", "#ffffff")
+    try:
+        font_size = int(float(request.form.get("font_size", "24")))
+        padding   = int(float(request.form.get("padding",   "12")))
+    except (ValueError, TypeError):
+        font_size, padding = 24, 12
+    font_size = max(10, min(120, font_size)); padding = max(4, min(60, padding))
+    log.info("Photo caption: %s (pos=%s, text=%r)", filename, position, caption)
+    try:
+        from yimage.processing import add_caption
+        result, mime = add_caption(data, caption, position, bg_color, text_color, font_size, padding)
+        base = filename.rsplit(".", 1)[0] if "." in filename else filename
+        return send_file(BytesIO(result), mimetype=mime, as_attachment=True,
+                         download_name=f"captioned_{base}.jpg")
+    except Exception as exc:
+        log.exception("Photo caption failed"); return jsonify(error=str(exc)), 500
