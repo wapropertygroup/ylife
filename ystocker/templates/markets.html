@@ -166,6 +166,16 @@
       <div class="grid grid-cols-4 gap-2 mb-4" id="fgCompare"></div>
       <!-- History chart -->
       <div style="height:110px"><canvas id="fgChart"></canvas></div>
+      <!-- F&G vs S&P 500 correlation chart -->
+      <div id="fgSpySection" class="mt-3 border-t border-slate-800 pt-3">
+        <button onclick="_toggleFgSpy()" id="fgSpyToggle"
+          class="text-[11px] text-slate-500 hover:text-slate-300 transition flex items-center gap-1">
+          <span id="fgSpyChevron">▶</span> <span data-i18n="markets.fg_spy_title">Fear &amp; Greed vs S&amp;P 500</span>
+        </button>
+        <div id="fgSpyChart" class="chart-container mt-3 hidden" style="height:160px">
+          <canvas id="fgSpyCanvas"></canvas>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -1438,6 +1448,65 @@ async function loadIdxForecast(key) {
 
 // ── Fear & Greed ──────────────────────────────────────────────────────
 let _fgChartInst = null;
+let _fgSpyLoaded = false, _fgSpyChart = null;
+async function _toggleFgSpy() {
+  const wrap = document.getElementById('fgSpyChart');
+  const chevron = document.getElementById('fgSpyChevron');
+  if (!wrap.classList.contains('hidden')) {
+    wrap.classList.add('hidden');
+    chevron.textContent = '▶';
+    return;
+  }
+  wrap.classList.remove('hidden');
+  chevron.textContent = '▼';
+  if (_fgSpyLoaded) return;
+  _fgSpyLoaded = true;
+
+  try {
+    const [fgResp, spyResp] = await Promise.all([
+      fetch('/api/fear-greed'),
+      fetch('/api/history/SPY?period=1y')
+    ]);
+    const fg = await fgResp.json();
+    const spy = await spyResp.json();
+
+    const fgHistory = (fg.history || []).slice(-252);
+    const fgDates  = fgHistory.map(p => p.t || p.date || '');
+    const fgVals   = fgHistory.map(p => p.y ?? p.value ?? null);
+
+    const spyDates  = spy.dates  || [];
+    const spyPrices = spy.prices || [];
+    // Normalize SPY to 0-100 range for overlay
+    const spyMin = Math.min(...spyPrices.filter(v=>v!=null));
+    const spyMax = Math.max(...spyPrices.filter(v=>v!=null));
+    const spyNorm = spyPrices.map(v => v != null ? ((v-spyMin)/(spyMax-spyMin))*100 : null);
+
+    const gridCol = '#1e293b', tickCol = '#64748b';
+    if (_fgSpyChart) _fgSpyChart.destroy();
+    _fgSpyChart = new Chart(document.getElementById('fgSpyCanvas'), {
+      type: 'line',
+      data: {
+        labels: fgDates,
+        datasets: [
+          { label:'Fear & Greed', data:fgVals, borderColor:'#a78bfa', backgroundColor:'rgba(167,139,250,0.08)',
+            borderWidth:1.5, pointRadius:0, fill:true, tension:0.3, spanGaps:true, yAxisID:'y' },
+          { label:'S&P 500 (norm)', data:spyNorm.slice(-fgDates.length), borderColor:'#38bdf8', backgroundColor:'transparent',
+            borderWidth:1.5, pointRadius:0, fill:false, tension:0.3, spanGaps:true, yAxisID:'y' },
+        ]
+      },
+      options: {
+        responsive:true, maintainAspectRatio:false,
+        plugins:{ legend:{display:false}, tooltip:{mode:'index',intersect:false,
+          callbacks:{ label: c => ` ${c.dataset.label}: ${c.raw?.toFixed(1)}` }}},
+        scales:{
+          x:{grid:{color:gridCol},ticks:{color:tickCol,maxTicksLimit:6,maxRotation:0}},
+          y:{grid:{color:gridCol},ticks:{color:tickCol},min:0,max:100},
+        },
+        interaction:{mode:'index',intersect:false},
+      },
+    });
+  } catch(e) { console.error('F&G vs SPY:', e); }
+}
 
 function renderFearGreed(data, canvasId) {
   if (!data || data.error) {
@@ -2305,11 +2374,14 @@ function _renderEconTable(events) {
     byDate[ev.date].push(ev);
   });
 
-  const impactBadge = (imp) => {
-    const k = (imp || '').toLowerCase();
-    if (k.includes('high')) return `<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-rose-950/60 text-rose-400 border border-rose-900/50">● High</span>`;
-    if (k.includes('med')) return `<span class="inline-block w-1.5 h-1.5 rounded-full" style="background:#fb923c"></span>`;
-    return `<span class="inline-block w-1.5 h-1.5 rounded-full" style="background:#94a3b8"></span>`;
+  const impactBadge = (impact) => {
+    if (!impact) return '';
+    const i = String(impact).toLowerCase();
+    if (i === 'high' || i === '3')
+      return '<span class="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded border bg-rose-950/60 text-rose-400 border-rose-900/50 font-semibold">● High</span>';
+    if (i === 'medium' || i === 'moderate' || i === '2')
+      return '<span class="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded border bg-amber-950/50 text-amber-400 border-amber-900/50 font-semibold">● Med</span>';
+    return '<span class="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-500 font-medium">· Low</span>';
   };
 
   let rows = '';
@@ -2333,7 +2405,7 @@ function _renderEconTable(events) {
       const nameCell = ev.url
         ? `<a href="${ev.url}" target="_blank" rel="noopener" class="hover:underline underline-offset-2">${nameText}</a>`
         : nameText;
-      const nextBadge = isNext ? `<span class="ml-1 text-[9px] px-1 py-0.5 rounded bg-brand/20 text-brand font-semibold">Next</span>` : '';
+      const nextBadge = isNext ? `<span class="ml-1 text-[9px] px-1 py-0.5 rounded bg-brand/20 text-brand font-semibold">Next</span><span id="econNextCountdown" class="text-[10px] text-brand ml-2"></span>` : '';
       const actualVsForecast = (() => {
         if (!ev.actual || !ev.forecast) return '';
         const a = parseFloat(ev.actual), f = parseFloat(ev.forecast);
@@ -2372,6 +2444,27 @@ function _renderEconTable(events) {
   }
 
   document.getElementById('econTableBody').innerHTML = rows;
+
+  // Live countdown to next event
+  if (nextIdx >= 0 && filtered[nextIdx]) {
+    const nextEv = filtered[nextIdx];
+    const nextDt = _econEventDate(nextEv);
+    if (nextDt) {
+      const updateCountdown = () => {
+        const now = new Date();
+        const diff = nextDt - now;
+        if (diff <= 0) return;
+        const h = Math.floor(diff / 3600000);
+        const m = Math.floor((diff % 3600000) / 60000);
+        const label = h > 24 ? `in ${Math.floor(h/24)}d ${h%24}h` : h > 0 ? `in ${h}h ${m}m` : `in ${m}m`;
+        const el = document.getElementById('econNextCountdown');
+        if (el) el.textContent = label;
+      };
+      updateCountdown();
+      clearInterval(window._econCountdownTimer);
+      window._econCountdownTimer = setInterval(updateCountdown, 30000);
+    }
+  }
 }
 
 function renderEconEvents(events) {

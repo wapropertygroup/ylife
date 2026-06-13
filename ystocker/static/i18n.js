@@ -280,6 +280,7 @@ const I18n = (() => {
     'history.analyst_count':    { en: 'Analysts',     zh: '分析师数量' },
     'history.target_high':      { en: 'Target High',  zh: '目标价上限' },
     'history.target_low':       { en: 'Target Low',   zh: '目标价下限' },
+    'history.target_median':    { en: 'Target Median', zh: '目标价中位数' },
     // Extra profitability stats
     'history.operating_margin': { en: 'Op. Margin',   zh: '营业利润率' },
     'history.current_ratio':    { en: 'Current Ratio',zh: '流动比率' },
@@ -1152,6 +1153,48 @@ const I18n = (() => {
     'commodities.note_agri':        { en: 'Agricultural commodities depend on weather, plantings, and trade flows. Wheat especially sensitive to geopolitics.',
                                        zh: '农产品价格取决于天气、播种与贸易流向，小麦尤其对地缘政治敏感。' },
     'commodities.seasonality_title': { en: 'Seasonality',   zh: '季节性规律' },
+    'commodities.seasonality_label':{ en: 'Avg Return %', zh: '平均收益率 %' },
+
+    // Per-commodity popup educational notes (full detail, shown on click)
+    'commodities.popup.gold.title':     { en: '💡 Gold',               zh: '💡 黄金' },
+    'commodities.popup.gold.body':      { en: 'Gold is the ultimate safe-haven asset. It rises during inflation fears, currency debasement, geopolitical crises, and Fed rate-cut cycles. The 50d/200d MA crossover (golden cross / death cross) is widely watched. Gold has an inverse relationship with the US dollar (DXY) and real yields (TIPS). The gold/silver ratio >80 signals silver is relatively cheap.',
+                                          zh: '黄金是终极避险资产，在通胀恐慌、货币贬值、地缘危机及美联储降息周期中走强。50日/200日均线交叉（黄金交叉/死亡交叉）被广泛关注。黄金通常与美元（DXY）及实际收益率（TIPS）负相关。金银比>80意味着白银相对便宜。' },
+    'commodities.popup.silver.title':   { en: '💡 Silver',             zh: '💡 白银' },
+    'commodities.popup.silver.body':    { en: 'Silver has a split personality: ~55% industrial demand (solar panels, electronics) and ~45% monetary demand (like gold). It has higher beta than gold — bigger moves in both directions. The gold/silver ratio is a key spread trade. Silver underperforms gold during risk-off periods but outperforms in bull markets.',
+                                          zh: '白银具有双重属性：约55%为工业需求（太阳能板、电子元件），约45%为货币属性（类似黄金）。贝塔值高于黄金，涨跌幅度更大。金银比是重要的价差交易指标。避险期间白银跑输黄金，牛市行情中则跑赢。' },
+    'commodities.popup.platinum.title': { en: '💡 Platinum',           zh: '💡 铂金' },
+    'commodities.popup.platinum.body':  { en: 'Platinum is primarily an industrial metal (auto catalysts, jewelry, hydrogen fuel cells). It is rarer than gold but typically cheaper — when platinum trades below gold, it is historically cheap. South Africa produces ~70% of global supply.',
+                                          zh: '铂金主要是工业金属（汽车催化剂、珠宝、氢燃料电池）。比黄金稀有但通常更便宜——铂金价格低于黄金时历史上属于低估状态。南非供应全球约70%的铂金，地缘政治是关键风险。' },
+    'commodities.popup.palladium.title':{ en: '💡 Palladium',          zh: '💡 钯金' },
+    'commodities.popup.palladium.body': { en: 'Palladium is critical for gasoline engine catalytic converters. Russia produces ~40% of global supply. It saw a historic bull run from 2016-2022 on EV transition fears. It is now declining as EVs reduce petrol engine demand. Highly volatile and thinly traded.',
+                                          zh: '钯金是汽油发动机催化转化器的关键材料。俄罗斯供应全球约40%。2016-2022年因电动车转型引发供应紧缺，出现历史性牛市。目前随电动车普及而下行。波动剧烈且流动性较低。' },
+    'commodities.popup.copper.title':   { en: '💡 Copper (Dr. Copper)', zh: '💡 铜（铜博士）' },
+    'commodities.popup.copper.body':    { en: '"Dr. Copper" is a leading indicator of global manufacturing and GDP growth. Falling copper while gold rises = classic recession signal. China consumes ~55% of global copper. Key uses: wiring, EVs (4x more copper than ICE vehicles), construction.',
+                                          zh: '"铜博士"是全球制造业和GDP增长的领先指标。铜跌金涨是经典衰退信号。中国消耗全球约55%的铜，主要用于电线、电动汽车（用铜量是燃油车4倍）和建筑。铜金比可用于判断风险偏好。' },
+    'commodities.popup.oil_wti.title':  { en: '💡 WTI Crude Oil',      zh: '💡 WTI原油' },
+    'commodities.popup.oil_wti.body':   { en: 'WTI is the US benchmark crude, traded on NYMEX. Key drivers: OPEC+ production decisions, US shale output, refinery utilization, and geopolitical risk. WTI typically trades $2-4 below Brent. Contango (futures > spot) signals oversupply; backwardation signals tight supply.',
+                                          zh: 'WTI是美国基准原油，在NYMEX交易。关键驱动因素：OPEC+产量决策、美国页岩油产量、炼油厂利用率和地缘风险。WTI通常比布伦特低2-4美元。期货升水意味着供过于求；期货贴水意味着供应紧张。' },
+    'commodities.popup.oil_brent.title':{ en: '💡 Brent Crude',        zh: '💡 布伦特原油' },
+    'commodities.popup.oil_brent.body': { en: 'Brent is the global oil benchmark (~70% of world contracts). More sensitive than WTI to Middle East geopolitics and European demand. The Brent-WTI spread widens during Middle East tensions or US shale supply surges. Watch EIA weekly inventory reports every Wednesday.',
+                                          zh: '布伦特原油是全球石油基准（约70%的全球合约以此定价）。比WTI对中东地缘政治和欧洲需求更为敏感。中东紧张或美国页岩油激增时，布伦特-WTI价差扩大。关注EIA每周三发布的库存报告。' },
+    'commodities.popup.natgas.title':   { en: '💡 Natural Gas',        zh: '💡 天然气' },
+    'commodities.popup.natgas.body':    { en: 'Natural gas is highly seasonal — peaks in winter (heating) and summer (power/AC). EIA storage reports (weekly Thursday) drive short-term price action. The 2022 spike to $9+ was driven by European energy crisis post-Ukraine. LNG exports increasingly tie US prices to global markets.',
+                                          zh: '天然气季节性极强，冬季（供暖）和夏季（发电/空调）为需求高峰。EIA库存报告（每周四）主导短期价格走势。2022年受欧洲能源危机影响价格飙升至9美元以上。液化天然气出口日益将美国气价与全球市场挂钩。' },
+    'commodities.popup.wheat.title':    { en: '💡 Wheat',              zh: '💡 小麦' },
+    'commodities.popup.wheat.body':     { en: 'Wheat is the most geopolitically sensitive agricultural commodity — Russia and Ukraine supply ~30% of global exports. Price spikes on drought (US Plains, Australia), conflict (Black Sea region), and La Niña weather. USDA WASDE report (monthly) is the key data release.',
+                                          zh: '小麦是地缘政治敏感度最高的农产品，俄罗斯和乌克兰提供全球约30%的出口。干旱（美国平原、澳大利亚）、冲突（黑海地区）和拉尼娜天气均会引发价格飙升。美国农业部WASDE报告（每月）是关键数据发布。' },
+    'commodities.popup.corn.title':     { en: '💡 Corn',               zh: '💡 玉米' },
+    'commodities.popup.corn.body':      { en: 'Corn price follows the US growing season: spring planting concerns (April-May) and summer weather stress (July-August) drive the typical seasonal spike. The US produces ~35% of global corn. Ethanol demand (40% of US corn) links corn prices to oil prices.',
+                                          zh: '玉米价格跟随美国种植季节波动：春季种植担忧（4-5月）和夏季天气压力（7-8月）驱动典型季节性上涨。美国生产全球约35%的玉米。乙醇需求（占美国玉米40%）将玉米价格与油价挂钩。' },
+    'commodities.popup.soybeans.title': { en: '💡 Soybeans',           zh: '💡 大豆' },
+    'commodities.popup.soybeans.body':  { en: 'Soybeans are dominated by China demand (imports ~60% of globally traded soybeans) — US-China trade tensions directly move soy prices. Brazil and US alternate as top producers. Crush spread (soybean vs soybean oil + meal) measures processing margins.',
+                                          zh: '大豆市场由中国需求主导（进口全球约60%的贸易大豆），中美贸易紧张直接影响大豆价格。巴西和美国轮流担任最大生产国。压榨利差（大豆vs豆油+豆粕）衡量加工利润，利差走强意味着加工需求旺盛。' },
+    'commodities.popup.coffee.title':   { en: '💡 Coffee',             zh: '💡 咖啡' },
+    'commodities.popup.coffee.body':    { en: 'Coffee prices are driven by Brazilian weather (frost in June-July = price spike) and Vietnamese Robusta output. The biennial cycle of arabica trees causes 2-year supply cycles. Currency moves (BRL, VND) affect farmer planting decisions.',
+                                          zh: '咖啡价格受巴西天气（6-7月霜冻=价格飙升）和越南罗布斯塔产量驱动。阿拉比卡咖啡树的两年丰歉周期造成供应波动。汇率走势（巴西雷亚尔、越南盾）影响农民种植决策。' },
+    'commodities.popup.sugar.title':    { en: '💡 Sugar',              zh: '💡 糖' },
+    'commodities.popup.sugar.body':     { en: 'Sugar price is influenced by Brazilian sugarcane (ethanol vs sugar diversion based on oil price), Indian production (monsoon-dependent), and global subsidies. When oil prices rise, Brazil diverts more cane to ethanol, reducing sugar supply. El Niño typically reduces Indian and Thai output.',
+                                          zh: '糖价受巴西甘蔗（根据油价决定乙醇与糖的分配）、印度产量（依赖季风）和全球补贴政策影响。油价上涨时，巴西将更多甘蔗转为乙醇，减少糖的供应。厄尔尼诺通常降低印度和泰国产量。' },
     'commodities.seasonality_desc':  { en: 'Average monthly return (%) over 10 years by calendar month', zh: '过去10年各月平均收益率（%）' },
     'commodities.up':                { en: 'Up',            zh: '上涨' },
     'commodities.down':              { en: 'Down',          zh: '下跌' },
@@ -1191,6 +1234,7 @@ const I18n = (() => {
     'markets.econ_filter_jp':  { en: 'JP',  zh: '日本' },
     'markets.macd_period_desc':{ en: '12 / 26 / 9 EMA', zh: '12/26/9 EMA' },
     'markets.52w_range_label': { en: '52w Range', zh: '52周区间' },
+    'markets.fg_spy_title':    { en: 'Fear & Greed vs S&P 500', zh: '恐惧贪婪指数 vs 标普500' },
     'heatmap.title':       { en: 'Sector Heatmap',    zh: '板块热力图' },
     'heatmap.subtitle':    { en: 'S&P 500 top stocks — color-coded by day change. Click any tile to open the stock.',
                              zh: '标普500主要个股 — 按日涨跌幅着色。点击色块查看详情。' },
@@ -1325,6 +1369,7 @@ const I18n = (() => {
     current = lang;
     localStorage.setItem('ystocker_lang', lang);
     apply();
+    document.dispatchEvent(new Event('i18n:langchange'));
     // Update URL so the link is shareable
     const url = new URL(window.location.href);
     url.searchParams.set('lang', lang);

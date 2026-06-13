@@ -4917,6 +4917,21 @@ _MOVER_TICKERS = [
     "SBUX", "GS", "MS", "WFC", "C",
 ]
 
+_MOVER_SECTOR: dict[str, str] = {
+    "AAPL":"Tech","MSFT":"Tech","GOOGL":"Tech","META":"Tech","NVDA":"Tech",
+    "AMZN":"Retail","TSLA":"EV","NFLX":"Media","ORCL":"Tech","CRM":"Tech",
+    "JPM":"Finance","BAC":"Finance","GS":"Finance","V":"Finance","MA":"Finance",
+    "UNH":"Health","JNJ":"Health","LLY":"Health","PFE":"Health","ABBV":"Health",
+    "XOM":"Energy","CVX":"Energy","COP":"Energy","SLB":"Energy",
+    "WMT":"Retail","COST":"Retail","HD":"Retail","TGT":"Retail",
+    "BA":"Defense","RTX":"Defense","LMT":"Defense","CAT":"Industrial",
+    "NEE":"Utility","DUK":"Utility","SO":"Utility",
+    "AMT":"REIT","PLD":"REIT","EQIX":"REIT",
+    "GLD":"Metals","SLV":"Metals","GC=F":"Metals","CL=F":"Energy",
+    "SPY":"ETF","QQQ":"ETF","IWM":"ETF","DIA":"ETF",
+    "BTC-USD":"Crypto","ETH-USD":"Crypto",
+}
+
 
 @bp.route("/api/movers")
 def api_movers():
@@ -4966,7 +4981,7 @@ def api_movers():
                     continue
                 chg = round((curr - prev) / prev * 100, 2)
                 movers.append({"ticker": sym, "price": round(curr, 2), "day_chg": chg,
-                                "rel_vol": rel_vol_map.get(sym)})
+                                "rel_vol": rel_vol_map.get(sym), "sector": _MOVER_SECTOR.get(sym, "")})
             except Exception:
                 pass
 

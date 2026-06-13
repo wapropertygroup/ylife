@@ -145,7 +145,7 @@
   <!-- Analyst Consensus -->
   <div id="analystSection" style="display:none">
     <p class="text-[10px] font-semibold uppercase tracking-widest text-slate-600 mb-2 px-1" data-i18n="history.group_analyst">Analyst Consensus</p>
-    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
+    <div class="grid grid-cols-2 sm:grid-cols-5 gap-2 sm:gap-3">
       <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 py-3">
         <div class="text-xs text-slate-500 mb-1" data-i18n="history.analyst_rating">Rating</div>
         <div id="statRating" class="text-base font-bold text-slate-100">—</div>
@@ -159,10 +159,32 @@
         <div id="statTargetHigh" class="text-base font-bold text-emerald-400">—</div>
       </div>
       <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 py-3">
+        <div class="text-xs text-slate-500 mb-1" data-i18n="history.target_median">Target Median</div>
+        <div id="statTargetMedian" class="text-base font-bold text-sky-400">—</div>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 py-3">
         <div class="text-xs text-slate-500 mb-1" data-i18n="history.target_low">Target Low</div>
         <div id="statTargetLow" class="text-base font-bold text-rose-400">—</div>
       </div>
     </div>
+      <div id="targetRangeBar" class="mt-3 hidden">
+        <div class="flex items-center justify-between text-[10px] text-slate-500 mb-1">
+          <span id="trLow">—</span>
+          <span class="text-slate-400 text-xs font-medium" id="trCurrent">Current</span>
+          <span id="trHigh">—</span>
+        </div>
+        <div class="relative h-2 bg-slate-800 rounded-full">
+          <div class="absolute inset-y-0 left-0 bg-gradient-to-r from-rose-500 via-amber-400 to-emerald-500 rounded-full opacity-40" style="width:100%"></div>
+          <div id="trMarker" class="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-white shadow ring-2 ring-slate-900" style="left:50%"></div>
+          <div id="trMedianMarker" class="absolute top-1/2 -translate-y-1/2 w-1.5 h-4 rounded-sm bg-sky-400 opacity-70" style="left:50%"></div>
+          <div id="trMeanMarker" class="absolute top-1/2 -translate-y-1/2 w-1.5 h-4 rounded-sm bg-violet-400 opacity-70" style="left:50%"></div>
+        </div>
+        <div class="flex items-center gap-3 mt-1.5 text-[10px] text-slate-500">
+          <span><span class="inline-block w-1.5 h-2.5 rounded-sm bg-sky-400 opacity-70 mr-1 align-middle"></span>Median</span>
+          <span><span class="inline-block w-1.5 h-2.5 rounded-sm bg-violet-400 opacity-70 mr-1 align-middle"></span>Mean</span>
+          <span><span class="inline-block w-3 h-3 rounded-full bg-white ring-1 ring-slate-700 mr-1 align-middle"></span><span data-i18n="history.walls_current">Current</span></span>
+        </div>
+      </div>
   </div>
 
   <!-- Key Dates (shown when available) -->
@@ -1135,7 +1157,10 @@ let   _forecastResult = null;   // last forecast API response
     const lastPrice = data.prices.filter(p => p != null).at(-1);
     if (lastPrice) {
       const upside = (data.target_price - lastPrice) / lastPrice * 100;
-      upsideEl.textContent = (upside >= 0 ? '+' : '') + upside.toFixed(1) + '%';
+      const dollarDiff = data.target_price != null && lastPrice != null
+        ? data.target_price - lastPrice : null;
+      upsideEl.textContent = (upside >= 0 ? '+' : '') + upside.toFixed(1) + '%' +
+        (dollarDiff != null ? ' (' + (dollarDiff >= 0 ? '+$' : '-$') + Math.abs(dollarDiff).toFixed(2) + ')' : '');
       upsideEl.className   = 'text-xl font-bold ' + (upside >= 0 ? 'text-emerald-400' : 'text-rose-400');
     }
   }
@@ -1257,6 +1282,24 @@ let   _forecastResult = null;   // last forecast API response
     if (data.analyst_count != null) document.getElementById('statAnalystCount').textContent = data.analyst_count + ' analysts';
     if (data.target_high   != null) document.getElementById('statTargetHigh').textContent  = '$' + data.target_high.toFixed(2);
     if (data.target_low    != null) document.getElementById('statTargetLow').textContent   = '$' + data.target_low.toFixed(2);
+    if (data.target_median != null) document.getElementById('statTargetMedian').textContent = '$' + data.target_median.toFixed(2);
+    // Price target range bar
+    if (data.target_low != null && data.target_high != null) {
+      const rng = data.target_high - data.target_low;
+      if (rng > 0) {
+        const curr = (data.prices && data.prices.length) ? data.prices.filter(p => p != null).at(-1) : null;
+        const pctCurr   = curr    != null ? Math.max(0, Math.min(100, (curr - data.target_low) / rng * 100)) : 50;
+        const pctMedian = data.target_median != null ? Math.max(0, Math.min(100, (data.target_median - data.target_low) / rng * 100)) : 50;
+        const pctMean   = data.target_price  != null ? Math.max(0, Math.min(100, (data.target_price  - data.target_low) / rng * 100)) : 50;
+        document.getElementById('targetRangeBar').classList.remove('hidden');
+        document.getElementById('trLow').textContent     = '$' + data.target_low.toFixed(2);
+        document.getElementById('trHigh').textContent    = '$' + data.target_high.toFixed(2);
+        document.getElementById('trCurrent').textContent = curr ? '$' + curr.toFixed(2) : 'Current';
+        document.getElementById('trMarker').style.left      = pctCurr   + '%';
+        document.getElementById('trMedianMarker').style.left = pctMedian + '%';
+        document.getElementById('trMeanMarker').style.left   = pctMean   + '%';
+      }
+    }
   }
   // Extra profitability
   setPct('statOpMargin', data.operating_margin);

@@ -626,7 +626,9 @@
     if (!_seasonData || !_seasonData.seasonality) return;
     const avgs = _seasonData.seasonality[key];
     if (!avgs) { document.getElementById('seasonalitySection').style.display='none'; return; }
-    const months = _seasonData.months || ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const months = (typeof I18n !== 'undefined' && I18n.getLang() === 'zh')
+      ? ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月']
+      : (_seasonData.months || ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']);
     document.getElementById('seasonalitySection').style.display = 'block';
     const c = C[key];
     document.getElementById('seasonalityTitle').textContent =
@@ -700,6 +702,11 @@
 
   // Show note for initial commodity
   _showCommodityNote(CURRENT_KEY);
+
+  // Re-render seasonality chart on language switch
+  document.addEventListener('i18n:langchange', () => {
+    if (_seasonData) _renderSeasonality(CURRENT_KEY);
+  });
 })();
 </script>
 {% endblock %}
