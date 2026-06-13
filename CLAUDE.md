@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Flask monorepo hosting 5 web apps for the Li family at **li-family.us**:
+Flask monorepo hosting 8 web apps for the Li family at **li-family.us**:
 
 | App | Dir | Dev Port | Prod Port | URL | Storage |
 |-----|-----|----------|-----------|-----|---------|
@@ -13,6 +13,9 @@ Flask monorepo hosting 5 web apps for the Li family at **li-family.us**:
 | **yPlanter** | `yplanter/` | 5002 | 8002 | planter.li-family.us | DynamoDB |
 | **yHome** | `yhome/` | 5003 | 8003 | li-family.us | None |
 | **yTracker** | `ytracker/` | 5004 | 8004 | tracker.li-family.us | DynamoDB |
+| **yPay** | `ypay/` | 5005 | 8005 | pay.li-family.us | None (Stripe API) |
+| **yImage** | `yimage/` | 5006 | 8006 | image.li-family.us | None |
+| **yBG** | `ybg/` | 5007 | 8007 | ybackground.li-family.us | None (Checkr API) |
 
 ## Commands
 
@@ -32,7 +35,7 @@ bash deploy/deploy.sh -i ~/Downloads/my-key-pair.pem
 ```bash
 aws ssm send-command --instance-ids i-02c9614bcde54dd59 --region us-west-2 \
   --document-name AWS-RunShellScript \
-  --parameters '{"commands":["cd /opt/ystocker && sudo git fetch origin && sudo git reset --hard origin/main && sudo systemctl restart ystocker yplanner yplanter yhome ytracker"]}'
+  --parameters '{"commands":["cd /opt/ystocker && sudo git fetch origin && sudo git reset --hard origin/main && sudo systemctl restart ystocker yplanner yplanter yhome ytracker ypay yimage ybg"]}'
 ```
 
 ### Deploy a single app via SSM
@@ -109,9 +112,9 @@ Started in `create_app()`, all daemon threads:
 
 ### Infrastructure
 - **Region**: us-west-2
-- **EC2 Instance**: `i-02c9614bcde54dd59` (Amazon Linux 2023, `t3.small`)
+- **EC2 Instance**: `i-02c9614bcde54dd59` (Amazon Linux 2023, `t3.medium`)
 - **App directory**: `/opt/ystocker`
-- **Process model**: nginx → 5 Gunicorn systemd services (ports 8000-8004, 2 workers each)
+- **Process model**: nginx → 8 Gunicorn systemd services (ports 8000-8007, 2 workers each)
 - **SSL**: Let's Encrypt via certbot
 
 ### Deployment flow
