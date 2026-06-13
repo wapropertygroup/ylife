@@ -1434,7 +1434,7 @@ let   _forecastResult = null;   // last forecast API response
     const grid = document.getElementById('optionsWallsGrid');
     card.style.display = 'block';
 
-    function wallItem(label, strike, price, colorClass, distColor) {
+    function wallItem(label, strike, price, colorClass) {
       const distPct = (price != null && strike != null)
         ? ((strike - price) / price * 100).toFixed(1) : null;
       const distLabel = distPct != null
@@ -1447,22 +1447,22 @@ let   _forecastResult = null;   // last forecast API response
           <div class="text-xs text-slate-500 mb-1">${label}</div>
           <div class="text-base font-bold ${colorClass}">${strike != null ? '$' + Number(strike).toFixed(2) : '—'}</div>
           <div class="text-[11px] mt-1 ${distCls}">
-            ${distLabel} <span class="text-slate-600 font-normal">from spot</span>
+            ${distLabel} <span class="text-slate-600 font-normal">${I18n.t('history.walls_from_spot')}</span>
           </div>
         </div>`;
     }
 
     let html = '';
-    html += wallItem('Call Wall', cw, lastPrice, 'text-amber-400');
-    html += wallItem('Put Wall',  pw, lastPrice, 'text-rose-400');
+    html += wallItem(I18n.t('history.walls_call_wall'), cw, lastPrice, 'text-amber-400');
+    html += wallItem(I18n.t('history.walls_put_wall'),  pw, lastPrice, 'text-rose-400');
 
     // Add current price card for reference
     if (lastPrice != null) {
       html += `
         <div class="bg-slate-800/50 border border-slate-700/50 rounded-xl px-3 py-3">
-          <div class="text-xs text-slate-500 mb-1">Spot Price</div>
+          <div class="text-xs text-slate-500 mb-1">${I18n.t('history.walls_spot_price')}</div>
           <div class="text-base font-bold text-sky-400">$${lastPrice.toFixed(2)}</div>
-          <div class="text-[11px] mt-1 text-slate-600">Current</div>
+          <div class="text-[11px] mt-1 text-slate-600">${I18n.t('history.walls_current')}</div>
         </div>`;
       // Spread between walls
       if (cw != null && pw != null) {
@@ -1470,9 +1470,9 @@ let   _forecastResult = null;   // last forecast API response
         const spreadPct = ((cw - pw) / lastPrice * 100).toFixed(1);
         html += `
           <div class="bg-slate-800/50 border border-slate-700/50 rounded-xl px-3 py-3">
-            <div class="text-xs text-slate-500 mb-1">Wall Spread</div>
+            <div class="text-xs text-slate-500 mb-1">${I18n.t('history.walls_wall_spread')}</div>
             <div class="text-base font-bold text-violet-400">$${spread}</div>
-            <div class="text-[11px] mt-1 text-slate-500">${spreadPct}% of spot</div>
+            <div class="text-[11px] mt-1 text-slate-500">${spreadPct}${I18n.t('history.walls_pct_of_spot')}</div>
           </div>`;
       }
     }
