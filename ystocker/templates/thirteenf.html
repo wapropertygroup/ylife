@@ -254,9 +254,19 @@
               {% elif h.change == 'increased' %}
               <span class="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-sky-900/50 text-sky-300 border border-sky-800" data-i18n="inst.change_added">▲ Added</span>
               {% if h.change_pct %}<span class="text-sky-400 text-xs font-mono ml-1">+{{ h.change_pct }}%</span>{% endif %}
+              {% if h.change_shares %}
+              <div class="text-[10px] font-mono text-sky-500 mt-0.5">
+                +{% if h.change_shares >= 1000000 %}{{ "{:.1f}".format(h.change_shares / 1000000) }}M{% elif h.change_shares >= 1000 %}{{ "{:.0f}".format(h.change_shares / 1000) }}K{% else %}{{ "{:,}".format(h.change_shares) }}{% endif %} shares
+              </div>
+              {% endif %}
               {% elif h.change == 'reduced' %}
               <span class="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-amber-900/50 text-amber-300 border border-amber-800" data-i18n="inst.change_reduced">▼ Reduced</span>
               {% if h.change_pct %}<span class="text-amber-400 text-xs font-mono ml-1">{{ h.change_pct }}%</span>{% endif %}
+              {% if h.change_shares %}
+              <div class="text-[10px] font-mono text-amber-600 mt-0.5">
+                {% set abs_shares = -h.change_shares %}{% if abs_shares >= 1000000 %}-{{ "{:.1f}".format(abs_shares / 1000000) }}M{% elif abs_shares >= 1000 %}-{{ "{:.0f}".format(abs_shares / 1000) }}K{% else %}-{{ "{:,}".format(abs_shares) }}{% endif %} shares
+              </div>
+              {% endif %}
               {% elif h.change == 'closed' %}
               <span class="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-rose-900/50 text-rose-300 border border-rose-800" data-i18n="inst.change_closed">Closed</span>
               {% elif h.change == 'unchanged' %}

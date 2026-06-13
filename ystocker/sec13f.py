@@ -1163,6 +1163,7 @@ def _annotate_changes(curr: List[dict], prev: List[dict]) -> List[dict]:
         else:
             h["change"] = "new"
             h["change_pct"] = None
+            h["change_shares"] = None
             continue
 
         delta = curr_shares - prev_shares
@@ -1176,8 +1177,10 @@ def _annotate_changes(curr: List[dict], prev: List[dict]) -> List[dict]:
             if abs(pct) > 500:
                 h["change"] = "unknown"
                 h["change_pct"] = None
+                h["change_shares"] = None
             else:
                 h["change_pct"] = round(pct, 1)
+                h["change_shares"] = delta
                 if delta > 0:
                     h["change"] = "increased"
                 elif delta < 0:
@@ -1186,6 +1189,7 @@ def _annotate_changes(curr: List[dict], prev: List[dict]) -> List[dict]:
                     h["change"] = "unchanged"
         else:
             h["change_pct"] = None
+            h["change_shares"] = delta
             if delta > 0:
                 h["change"] = "increased"
             elif delta < 0:
@@ -1381,6 +1385,7 @@ def fetch_fund_holdings(name: str, cik: str) -> dict:
         for h in fetched_quarters[-1]["holdings"]:
             h.setdefault("change", "unknown")
             h.setdefault("change_pct", None)
+            h.setdefault("change_shares", None)
 
         # Post-process each full quarter: merge tickers, sort, rank, compute pct
         processed_quarters = []

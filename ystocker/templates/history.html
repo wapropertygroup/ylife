@@ -237,7 +237,7 @@
   <!-- Price / Sentiment -->
   <div>
     <p class="text-[10px] font-semibold uppercase tracking-widest text-slate-600 mb-2 px-1" data-i18n="history.group_sentiment">Price &amp; Sentiment</p>
-    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3">
       <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 py-3">
         <div class="text-xs text-slate-500 mb-1" data-i18n="history.target_price">Target Price</div>
         <div id="statTarget" class="text-base font-bold text-slate-100">—</div>
@@ -255,6 +255,14 @@
         <div class="text-xs text-slate-500 mb-1" data-i18n="history.zscore">Z-Score</div>
         <div id="statZscore" class="text-base font-bold text-slate-100">—</div>
         <div id="statZscoreLabel" class="text-[10px] mt-0.5 text-slate-600"></div>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 py-3">
+        <div class="text-xs text-slate-500 mb-1" data-i18n="history.week52_high">52W High</div>
+        <div id="stat52High" class="text-base font-bold text-emerald-400">—</div>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 py-3">
+        <div class="text-xs text-slate-500 mb-1" data-i18n="history.week52_low">52W Low</div>
+        <div id="stat52Low" class="text-base font-bold text-rose-400">—</div>
       </div>
     </div>
   </div>
@@ -382,6 +390,10 @@
       <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 py-3">
         <div class="text-xs text-slate-500 mb-1" data-i18n="history.float_shares">Float (B)</div>
         <div id="statFloat" class="text-base font-bold text-slate-100">—</div>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 py-3">
+        <div class="text-xs text-slate-500 mb-1" data-i18n="history.avg_volume_label">Avg Vol (30d)</div>
+        <div id="statAvgVolCard" class="text-base font-bold text-slate-100">—</div>
       </div>
     </div>
   </div>
@@ -1206,6 +1218,15 @@ let   _forecastResult = null;   // last forecast API response
   if (data.short_ratio != null) { const el = document.getElementById('statShortRatio'); el.textContent = data.short_ratio.toFixed(1) + 'd'; }
   if (data.shares_outstanding != null) { document.getElementById('statSharesOut').textContent = data.shares_outstanding.toFixed(2) + 'B'; }
   if (data.float_shares       != null) { document.getElementById('statFloat').textContent      = data.float_shares.toFixed(2) + 'B'; }
+  // 52-week high/low from api_history
+  if (data.week52_high != null) document.getElementById('stat52High').textContent = '$' + data.week52_high.toFixed(2);
+  if (data.week52_low  != null) document.getElementById('stat52Low').textContent  = '$' + data.week52_low.toFixed(2);
+  // Avg volume
+  if (data.avg_volume != null) {
+    const av = data.avg_volume;
+    const avEl = document.getElementById('statAvgVolCard');
+    if (avEl) avEl.textContent = av >= 1e9 ? (av/1e9).toFixed(1)+'B' : av >= 1e6 ? (av/1e6).toFixed(1)+'M' : av >= 1e3 ? (av/1e3).toFixed(0)+'K' : String(av);
+  }
 
   // ETF Info
   if (data.quote_type === 'ETF') {

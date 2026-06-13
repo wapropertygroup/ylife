@@ -762,6 +762,7 @@ def _get_institutional_holders(ticker: str) -> list:
                             "pct_portfolio":    h["pct_portfolio"],
                             "change":           h.get("change", "unknown"),
                             "change_pct":       h.get("change_pct"),
+                            "change_shares":    h.get("change_shares"),
                             "rank":             h.get("rank"),
                         })
                         break
@@ -776,6 +777,7 @@ def _get_institutional_holders(ticker: str) -> list:
                 "pct_portfolio":    latest_q["pct_portfolio"],
                 "change":           latest_q["change"],
                 "change_pct":       latest_q.get("change_pct"),
+                "change_shares":    latest_q.get("change_shares"),
                 "quarters":         fund_quarters,   # newest first
             })
         result.sort(key=lambda x: x["value_millions"], reverse=True)

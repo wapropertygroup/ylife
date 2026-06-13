@@ -72,8 +72,27 @@
 </div>
 
 <!-- ── Sector cards ──────────────────────────────────────────────────── -->
+<style>
+  .sector-sort-btn {
+    font-size: 10px; padding: 2px 8px; border-radius: 4px;
+    border: 1px solid #334155; background: transparent; color: #64748b; cursor: pointer;
+    transition: color 0.15s, background 0.15s, border-color 0.15s;
+  }
+  .sector-sort-btn:hover { color: #cbd5e1; border-color: #475569; }
+  .sector-sort-btn.active { color: #a5b4fc; border-color: #6366f1; background: rgba(99,102,241,0.15); }
+</style>
 <h2 id="sectors" class="text-lg sm:text-xl font-semibold text-slate-200 mb-4 fade-up" data-i18n="index.sector_overview">Sector Overview</h2>
-<div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5 mb-10">
+<div class="flex items-center gap-2 mb-3 flex-wrap">
+  <span class="text-[10px] text-slate-600 uppercase tracking-widest" data-i18n="index.sort_by">Sort by</span>
+  <div id="sectorSortBtns" class="flex gap-1 flex-wrap">
+    <button class="sector-sort-btn active" data-sort="day_chg" data-i18n="index.sort_day_chg">Day Chg</button>
+    <button class="sector-sort-btn" data-sort="upside" data-i18n="index.sort_upside">Upside</button>
+    <button class="sector-sort-btn" data-sort="pe" data-i18n="index.sort_pe">Avg PE</button>
+    <button class="sector-sort-btn" data-sort="ps" data-i18n="index.sort_ps">P/S</button>
+    <button class="sector-sort-btn" data-sort="short" data-i18n="index.sort_short">Short %</button>
+  </div>
+</div>
+<div id="sectorCardsGrid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5 mb-10">
   {% for group, info in sector_cards.items() %}
   <a href="{{ url_for('main.sector', sector_name=group) }}"
      data-group="{{ group }}"
@@ -686,18 +705,32 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // ── Avg P/S and Median Short Float badges
   const statsEl = ctx.closest('a').querySelector('.spark-stats');
+  const cardEl  = ctx.closest('a');
   if (statsEl) {
     const psVals = all.map(d => d.ps_ratio).filter(v => v != null);
     const sfVals = all.map(d => d.short_float).filter(v => v != null).sort((a, b) => a - b);
+    const peVals = all.map(d => d.pe_fwd ?? d.pe_ttm).filter(v => v != null);
+    const upVals = all.map(d => d.upside).filter(v => v != null);
     const parts = [];
     if (psVals.length) {
       const avgPs = psVals.reduce((a, b) => a + b, 0) / psVals.length;
+      if (cardEl) cardEl.dataset.sortPs = avgPs.toFixed(4);
       parts.push(`<span class="text-slate-500 text-[10px]">P/S <span class="text-slate-400 font-medium">${avgPs.toFixed(1)}x</span></span>`);
     }
     if (sfVals.length) {
       const mid = Math.floor(sfVals.length / 2);
       const medSf = sfVals.length % 2 === 0 ? (sfVals[mid - 1] + sfVals[mid]) / 2 : sfVals[mid];
-      parts.push(`<span class="text-slate-500 text-[10px]">Short <span class="text-slate-400 font-medium">${medSf.toFixed(1)}%</span></span>`);
+      if (cardEl) cardEl.dataset.sortShort = medSf.toFixed(4);
+      const sfColor = medSf > 10 ? 'text-rose-400' : medSf > 5 ? 'text-amber-400' : medSf < 3 ? 'text-emerald-400' : 'text-slate-400';
+      parts.push(`<span class="text-slate-500 text-[10px]">Short <span class="${sfColor} font-medium">${medSf.toFixed(1)}%</span></span>`);
+    }
+    if (peVals.length) {
+      const avgPe = peVals.reduce((a, b) => a + b, 0) / peVals.length;
+      if (cardEl) cardEl.dataset.sortPe = avgPe.toFixed(4);
+    }
+    if (upVals.length) {
+      const avgUp = upVals.reduce((a, b) => a + b, 0) / upVals.length;
+      if (cardEl) cardEl.dataset.sortUpside = avgUp.toFixed(4);
     }
     statsEl.innerHTML = parts.join('');
   }
@@ -738,7 +771,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Collect cards and sort by avg desc (best performers first)
-  const grid = document.querySelector('.grid.grid-cols-1.sm\\:grid-cols-2');
+  const grid = document.getElementById('sectorCardsGrid');
   if (!grid) return;
   const cards = [...grid.querySelectorAll('.sector-card')];
 
@@ -755,6 +788,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const avg = sectorAvg[card.dataset.group];
     const badge = card.querySelector('.sector-day-chg');
     if (avg == null) return;
+    card.dataset.sortDayChg = avg.toFixed(4);
     const col = cardColor(avg);
     card.style.background = col.bg;
     card.style.borderColor = col.border;
@@ -763,6 +797,26 @@ document.addEventListener('DOMContentLoaded', () => {
       badge.style.color = col.text;
       badge.style.background = col.bg;
     }
+  });
+
+  // ── Sector card sort buttons
+  function _applySectorSort(key) {
+    document.querySelectorAll('.sector-sort-btn').forEach(b => b.classList.toggle('active', b.dataset.sort === key));
+    const sortGrid = document.getElementById('sectorCardsGrid');
+    if (!sortGrid) return;
+    const sortCards = Array.from(sortGrid.querySelectorAll('.sector-card'));
+    if (!sortCards.length) return;
+    const attrMap = { day_chg: 'sortDayChg', upside: 'sortUpside', pe: 'sortPe', ps: 'sortPs', short: 'sortShort' };
+    const attr = attrMap[key];
+    sortCards.sort((a, b) => {
+      const av = parseFloat(a.dataset[attr]) || 0;
+      const bv = parseFloat(b.dataset[attr]) || 0;
+      return key === 'pe' ? av - bv : bv - av; // PE ascending (cheaper first), others descending
+    });
+    sortCards.forEach(c => sortGrid.appendChild(c));
+  }
+  document.querySelectorAll('.sector-sort-btn').forEach(btn => {
+    btn.addEventListener('click', () => _applySectorSort(btn.dataset.sort));
   });
 })();
 

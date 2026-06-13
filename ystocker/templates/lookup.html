@@ -165,7 +165,7 @@
       </div>
 
       <!-- Add to group -->
-      <div class="px-5 pb-5 flex items-center gap-3 flex-wrap">
+      <div class="px-5 pb-4 flex items-center gap-3 flex-wrap">
         <span class="text-xs text-slate-500" data-i18n="lookup.add_to_group">Add to group:</span>
         <form method="post" action="{{ url_for('main.add_ticker') }}" class="flex gap-2">
           <input type="hidden" name="ticker" id="addTickerInput">
@@ -178,6 +178,13 @@
             + Add
           </button>
         </form>
+      </div>
+
+      <!-- View full analysis CTA -->
+      <div class="px-5 pb-5 mt-1 pt-3 border-t border-slate-800 flex justify-end">
+        <a id="cardViewFull" href="#" class="text-xs text-brand hover:text-violet-300 transition font-medium">
+          View full analysis → <span class="opacity-60" id="cardViewTicker"></span>
+        </a>
       </div>
     </div>
   </div>
@@ -275,6 +282,12 @@ function renderCard(d) {
   const evEl = document.getElementById('cardEvEbitda');
   evEl.textContent = d['EV/EBITDA'] != null ? d['EV/EBITDA'].toFixed(1)+'x' : '—';
   evEl.className = 'font-semibold text-slate-100';
+
+  // View full analysis link
+  const viewBtn = document.getElementById('cardViewFull');
+  if (viewBtn) viewBtn.href = '/history/' + d.Ticker;
+  const viewTkrEl = document.getElementById('cardViewTicker');
+  if (viewTkrEl) viewTkrEl.textContent = d.Ticker;
 
   // Mini bar chart
   if (miniChartInstance) { miniChartInstance.destroy(); miniChartInstance = null; }

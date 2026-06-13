@@ -116,6 +116,16 @@
     </div>
     <div id="vixSkeleton" class="animate-pulse bg-slate-800 rounded-lg" style="height:200px"></div>
     <div id="vixChartWrap" style="height:200px; display:none"><canvas id="vixChart"></canvas></div>
+    <div class="mt-3 flex items-center justify-between text-[11px]">
+      <div class="flex gap-2 text-slate-600">
+        <span class="text-emerald-400">■</span> &lt;15 Calm
+        <span class="text-amber-400 ml-2">■</span> 15–25 Normal
+        <span class="text-orange-400 ml-2">■</span> 25–35 Elevated
+        <span class="text-rose-400 ml-2">■</span> &gt;35 Panic
+      </div>
+      <span id="vixZoneBadge" class="text-xs px-2 py-0.5 rounded font-semibold hidden"></span>
+    </div>
+    <p class="text-[11px] text-slate-600 mt-2" data-i18n="markets.vix_note">VIX below 15 = complacency; above 30 = fear, often marks near-term bottoms. VIX spikes during market drawdowns and mean-reverts quickly.</p>
   </div>
 
   <!-- CNN Fear & Greed card -->
@@ -722,6 +732,17 @@ function renderVix(vix, canvasId) {
       <div class="text-2xl font-bold tabular-nums" style="color:${col}">${level?.toFixed(2) ?? '—'}</div>
       <div class="text-xs font-semibold mt-0.5" style="color:${col}">${label}</div>
       <div class="text-xs text-slate-500">${_chgSign(vix.day_chg)}${_fmt(vix.day_chg, '', '%', 2)} today</div>`;
+
+    // VIX zone badge
+    const vixLast = level;
+    const vixBadge = document.getElementById('vixZoneBadge');
+    if (vixBadge && vixLast != null) {
+      vixBadge.classList.remove('hidden');
+      if (vixLast < 15)      { vixBadge.textContent = 'Calm'; vixBadge.className = 'text-xs px-2 py-0.5 rounded font-semibold bg-emerald-900/50 text-emerald-300'; }
+      else if (vixLast < 25) { vixBadge.textContent = 'Normal'; vixBadge.className = 'text-xs px-2 py-0.5 rounded font-semibold bg-amber-900/50 text-amber-300'; }
+      else if (vixLast < 35) { vixBadge.textContent = 'Elevated Fear'; vixBadge.className = 'text-xs px-2 py-0.5 rounded font-semibold bg-orange-900/50 text-orange-300'; }
+      else                   { vixBadge.textContent = 'Panic'; vixBadge.className = 'text-xs px-2 py-0.5 rounded font-semibold bg-rose-900/50 text-rose-300'; }
+    }
 
     if (_vixChartInst) { _vixChartInst.destroy(); _vixChartInst = null; }
   }

@@ -64,6 +64,12 @@ const I18n = (() => {
     'index.refreshing':   { en: 'refreshing now…', zh: '正在刷新…' },
     'index.next_refresh': { en: 'next refresh', zh: '下次刷新' },
     'index.sector_overview': { en: 'Sector Overview', zh: '板块概览' },
+    'index.sort_by':         { en: 'Sort by',    zh: '排序方式' },
+    'index.sort_day_chg':    { en: 'Day Chg',    zh: '日涨跌' },
+    'index.sort_upside':     { en: 'Upside',     zh: '上涨空间' },
+    'index.sort_pe':         { en: 'Avg PE',     zh: '平均市盈率' },
+    'index.sort_ps':         { en: 'P/S',        zh: '市销率' },
+    'index.sort_short':      { en: 'Short %',    zh: '做空比例' },
     'index.jump_stock_pe':  { en: '↓ Stock PE',  zh: '↓ 个股市盈率' },
     'index.jump_etf_pe':    { en: '↓ ETF PE',    zh: '↓ ETF市盈率' },
     'index.jump_sectors':   { en: '↓ Sectors',   zh: '↓ 板块概览' },
@@ -1079,6 +1085,7 @@ const I18n = (() => {
     'markets.unavailable':      { en: 'Unavailable',      zh: '不可用' },
     'markets.forecast_arrow':   { en: 'Forecast →',       zh: '预测 →' },
     'markets.aaii_avg':         { en: 'Avg 37.5%',        zh: '均值 37.5%' },
+    'markets.vix_note':         { en: 'VIX below 15 = complacency; above 30 = fear, often marks near-term market bottoms. Spikes during drawdowns and mean-reverts quickly.', zh: 'VIX低于15=市场自满；高于30=恐慌，通常标志短期底部。急涨后往往快速回归均值。' },
 
     // ── heatmap.html ───────────────────────────────────────────────────
     'heatmap.nav':         { en: 'Heatmap',           zh: '热力图' },
