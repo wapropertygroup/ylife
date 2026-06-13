@@ -637,7 +637,7 @@
     _seasonChart = new Chart(document.getElementById('seasonalityChart'), {
       type: 'bar',
       data: { labels: months, datasets: [{
-        label: 'Avg Return %',
+        label: I18n.t('commodities.seasonality_label')||'Avg Return %',
         data: avgs,
         backgroundColor: colors,
         borderColor: borders,
@@ -683,8 +683,10 @@
     if (!section) return;
     if (!note) { section.classList.add('hidden'); return; }
     section.classList.remove('hidden');
-    document.getElementById('commodityNoteTitle').textContent = note.title;
-    document.getElementById('commodityNoteBody').textContent  = note.body;
+    document.getElementById('commodityNoteTitle').textContent =
+      I18n.t('commodities.popup.' + key + '.title') || note.title;
+    document.getElementById('commodityNoteBody').textContent =
+      I18n.t('commodities.popup.' + key + '.body')  || note.body;
   }
 
   // Update seasonality when user selects a new commodity
