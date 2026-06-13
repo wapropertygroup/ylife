@@ -1021,7 +1021,62 @@ def api_history(ticker: str):
     }
     with _HISTORY_CACHE_LOCK:
         _HISTORY_CACHE[cache_key] = {"ts": time.time(), "data": result}
+    result["cached_at"] = time.time()
     return jsonify(result)
+
+
+# ---------------------------------------------------------------------------
+# Upcoming earnings endpoint  (/api/upcoming-earnings)
+# Returns tickers with earnings in the next 7 days from the history cache.
+# ---------------------------------------------------------------------------
+
+
+@bp.route("/api/upcoming-earnings")
+def api_upcoming_earnings():
+    """Return tickers with earnings in the next 7 days from the cache."""
+    import datetime
+
+    results = []
+    seen = set()
+
+    # Check all cached tickers for upcoming earnings dates
+    with _HISTORY_CACHE_LOCK:
+        cached_tickers = list(_HISTORY_CACHE.keys())
+
+    now = datetime.datetime.utcnow()
+    cutoff = now + datetime.timedelta(days=7)
+
+    for cache_key in cached_tickers:
+        try:
+            ticker = cache_key[0] if isinstance(cache_key, tuple) else cache_key
+            if ticker in seen:
+                continue
+            with _HISTORY_CACHE_LOCK:
+                entry = _HISTORY_CACHE.get(cache_key)
+            if not entry:
+                continue
+            data = entry.get("data", {})
+            ed = data.get("earnings_date")
+            if not ed:
+                continue
+            # Parse "Mon DD, YYYY" format
+            try:
+                dt = datetime.datetime.strptime(ed, "%b %d, %Y")
+            except ValueError:
+                continue
+            if now <= dt <= cutoff:
+                seen.add(ticker)
+                results.append({
+                    "ticker": ticker,
+                    "name": data.get("name", ticker),
+                    "earnings_date": ed,
+                    "days_away": (dt - now).days,
+                })
+        except Exception:
+            continue
+
+    results.sort(key=lambda x: x["days_away"])
+    return jsonify({"upcoming": results[:20]})
 
 
 # ---------------------------------------------------------------------------
@@ -6465,3 +6520,195 @@ def _daily_broadcast_loop() -> None:
 def _start_daily_broadcast_scheduler() -> None:
     t = threading.Thread(target=_daily_broadcast_loop, daemon=True, name="daily-broadcast")
     t.start()
+
+
+# ---------------------------------------------------------------------------
+# Daily summary pre-generator
+# Fires at server startup (2-min delay) and at midnight ET each day so the
+# /daily page always returns cached summaries instead of calling Gemini live.
+# ---------------------------------------------------------------------------
+
+def _do_pregen_daily_summaries() -> None:
+    """
+    Generate all 4 daily summaries (en_us / zh_us / en_cn / zh_cn) from
+    the in-memory market caches and store in DynamoDB + _DAILY_SUMMARY_CACHE.
+
+    If today's summary is already in DynamoDB or memory it is skipped.
+    Runs in 1-2 minutes (4 Gemini calls × ~15-30 s each, sequentially).
+    """
+    import datetime as _dt_mod
+    import time as _time_mod
+
+    GEMINI_KEY = os.environ.get("GEMINI_API_KEY")
+    if not GEMINI_KEY:
+        log.debug("Daily pre-gen: no GEMINI_API_KEY, skipping")
+        return
+
+    today_iso = _dt_mod.date.today().isoformat()
+    tbl       = _get_summaries_table()
+    log.info("Daily pre-gen: generating summaries for %s", today_iso)
+
+    # ── Collect market data from caches (same as _do_auto_broadcast) ─────────
+    with _MARKETS_CACHE_LOCK:
+        markets_d = ((_MARKETS_CACHE.get("data") or {}).get("data") or {})
+    with _FG_CACHE_LOCK:
+        fg_d = ((_FG_CACHE.get("data") or {}).get("data") or {})
+    with _PCR_CACHE_LOCK:
+        pcr_d = ((_PCR_CACHE.get("data") or {}).get("data") or {})
+    with _AAII_CACHE_LOCK:
+        aaii_d = (((_AAII_CACHE.get("data") or {}).get("data") or {}).get("latest") or {})
+    with _MOVERS_CACHE_LOCK:
+        movers_d = ((_MOVERS_CACHE.get("data") or {}).get("data") or {})
+
+    idx     = markets_d.get("indices", {})
+    vix     = markets_d.get("vix", {})
+    sectors = markets_d.get("sectors", [])
+    gainers = movers_d.get("gainers", [])
+    losers  = movers_d.get("losers",  [])
+
+    def _make_prompt(lang: str, market: str) -> str:
+        lines = [f"Date: {today_iso}"]
+        if market == "us":
+            for key, label in [("spx","S&P 500"),("ixic","Nasdaq"),("dji","Dow Jones")]:
+                d = idx.get(key, {})
+                if d.get("current"):
+                    chg = f"{d['day_chg']:+.2f}%" if d.get("day_chg") is not None else "—"
+                    lines.append(f"{label}: {d['current']:,.2f} ({chg}) YTD {d.get('ytd','—')}%")
+            if vix.get("current"):
+                lines.append(f"VIX: {vix['current']:.2f}")
+            if fg_d.get("score"):
+                lines.append(f"Fear & Greed: {fg_d['score']:.0f} ({fg_d.get('rating','')})")
+            if pcr_d.get("current"):
+                lines.append(f"Put/Call Ratio: {pcr_d['current']:.2f}")
+            if aaii_d.get("bullish"):
+                lines.append(f"AAII: Bull {aaii_d['bullish']:.1f}% Bear {aaii_d.get('bearish',0):.1f}%")
+            if sectors:
+                top = sorted(sectors, key=lambda s: s.get("day_chg", 0) or 0)
+                lines.append(f"Sectors — best: {top[-1]['label']} {top[-1].get('day_chg',0):+.2f}%, "
+                             f"worst: {top[0]['label']} {top[0].get('day_chg',0):+.2f}%")
+            if gainers:
+                lines.append("Top gainers: " + ", ".join(f"{g['ticker']} {g['day_chg']:+.2f}%" for g in gainers[:3]))
+            if losers:
+                lines.append("Top losers: "  + ", ".join(f"{l['ticker']} {l['day_chg']:+.2f}%" for l in losers[:3]))
+            snap = "\n".join(lines)
+            if lang == "zh":
+                return ("你是一位简洁的金融分析师。请根据以下数据，用中文撰写一份简短（3-4段）的美国市场每日评论。"
+                        "重点分析标普500、纳斯达克、道琼斯、VIX、PCR、AAII情绪及板块表现。"
+                        "语言要直接、有洞察力、保持中立。不要使用Markdown标题。\n\n"
+                        f"市场快照：\n{snap}")
+            return ("You are a concise financial analyst. Write a brief (3-4 paragraph) daily US markets commentary "
+                    "focusing on S&P 500, Nasdaq, Dow, VIX, Put/Call Ratio, AAII sentiment, and US sectors. "
+                    "Be direct, insightful, and neutral. Use plain English, no markdown headers.\n\n"
+                    f"Market snapshot:\n{snap}")
+        else:  # cn
+            for key, label in [("sse","Shanghai SSE"),("csi500","CSI 500"),("twii","Taiwan TWII"),("kospi","KOSPI")]:
+                d = idx.get(key, {})
+                if d.get("current"):
+                    chg = f"{d['day_chg']:+.2f}%" if d.get("day_chg") is not None else "—"
+                    lines.append(f"{label}: {d['current']:,.2f} ({chg})")
+            snap = "\n".join(lines)
+            if lang == "zh":
+                return ("你是一位简洁的金融分析师。请根据以下数据，用中文撰写一份简短（2-3段）的中国及亚太市场每日评论。"
+                        "重点分析上证指数、中证500、台湾及韩国市场表现。"
+                        "语言要直接、有洞察力、保持中立。不要使用Markdown标题。\n\n"
+                        f"市场快照：\n{snap}")
+            return ("You are a concise financial analyst. Write a brief (2-3 paragraph) daily CN & Asia-Pacific "
+                    "markets commentary focusing on Shanghai SSE, CSI 500, Taiwan, and South Korea. "
+                    "Be direct, insightful, and neutral. Use plain English, no markdown headers.\n\n"
+                    f"Market snapshot:\n{snap}")
+
+    # ── Generate each combination ─────────────────────────────────────────────
+    for lang in ("en", "zh"):
+        for market in ("us", "cn"):
+            cache_key = f"{lang}_{market}"
+
+            # Skip if already in memory cache (fresh)
+            with _DAILY_SUMMARY_CACHE_LOCK:
+                entry = _DAILY_SUMMARY_CACHE.get(cache_key, {})
+            if entry and _time_mod.time() - entry.get("ts", 0) < _DAILY_SUMMARY_CACHE_TTL:
+                log.debug("Daily pre-gen: %s already in memory cache, skipping", cache_key)
+                continue
+
+            # Skip if already in DynamoDB for today
+            if tbl:
+                try:
+                    item = tbl.get_item(Key={"date": today_iso, "lang_market": cache_key}).get("Item")
+                    if item and item.get("summary"):
+                        result = {"summary": item["summary"],
+                                  "generated_at": item.get("generated_at", ""),
+                                  "from_cache": True}
+                        with _DAILY_SUMMARY_CACHE_LOCK:
+                            _DAILY_SUMMARY_CACHE[cache_key] = {"ts": _time_mod.time(), "data": result}
+                        log.info("Daily pre-gen: %s loaded from DynamoDB", cache_key)
+                        continue
+                except Exception as exc:
+                    log.warning("Daily pre-gen: DynamoDB read failed (%s): %s", cache_key, exc)
+
+            # Generate via Gemini
+            try:
+                from google import genai as _genai
+                _client = _genai.Client(api_key=GEMINI_KEY)
+                resp    = _client.models.generate_content(
+                    model="gemini-2.5-flash", contents=_make_prompt(lang, market))
+                summary_text = resp.text.strip()
+                generated_at = __import__("datetime").datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+                result = {"summary": summary_text, "generated_at": generated_at}
+                with _DAILY_SUMMARY_CACHE_LOCK:
+                    _DAILY_SUMMARY_CACHE[cache_key] = {"ts": _time_mod.time(), "data": result}
+                if tbl:
+                    tbl.put_item(Item={
+                        "date": today_iso, "lang_market": cache_key,
+                        "summary": summary_text, "generated_at": generated_at,
+                        "ttl": int(_time_mod.time()) + 90 * 24 * 3600,
+                    })
+                log.info("Daily pre-gen: generated %s (%d chars)", cache_key, len(summary_text))
+            except Exception as exc:
+                log.warning("Daily pre-gen: Gemini failed for %s: %s", cache_key, exc)
+
+
+def _pregen_daily_loop() -> None:
+    """
+    Background thread:
+      1. On startup — wait 2 minutes (let caches warm), then pre-generate.
+      2. Daily at 00:05 ET — pre-generate for the new day so morning visitors
+         see instant summaries (no Gemini latency on first visit).
+    """
+    import datetime as _dt_mod
+
+    PRE_GEN_HOUR_ET   = 0
+    PRE_GEN_MINUTE_ET = 5
+    ET_OFFSET_HOURS   = -5   # conservative EST, works for EDT too
+
+    def _secs_until_midnight_pregen() -> float:
+        now_et  = _dt_mod.datetime.utcnow() + _dt_mod.timedelta(hours=ET_OFFSET_HOURS)
+        target  = now_et.replace(hour=PRE_GEN_HOUR_ET, minute=PRE_GEN_MINUTE_ET,
+                                 second=0, microsecond=0)
+        if now_et >= target:
+            target += _dt_mod.timedelta(days=1)
+        return (target - now_et).total_seconds()
+
+    log.info("Daily pre-gen scheduler started")
+
+    # Startup warm-up: wait 2 minutes, then generate if today's not cached
+    time.sleep(120)
+    try:
+        _do_pregen_daily_summaries()
+    except Exception:
+        log.exception("Daily pre-gen: startup warm-up failed")
+
+    # Nightly loop
+    while True:
+        secs = _secs_until_midnight_pregen()
+        log.info("Daily pre-gen: next midnight fire in %.1f h", secs / 3600)
+        time.sleep(secs)
+        try:
+            _do_pregen_daily_summaries()
+        except Exception:
+            log.exception("Daily pre-gen: nightly fire failed")
+        time.sleep(70)
+
+
+def _start_daily_pregen_scheduler() -> None:
+    t = threading.Thread(target=_pregen_daily_loop, daemon=True, name="daily-pregen")
+    t.start()
+    log.info("Daily summary pre-gen scheduler started")

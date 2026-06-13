@@ -159,6 +159,9 @@
       <div class="p-5">
         <p class="text-xs text-slate-500 mb-3" data-i18n="lookup.pe_comparison">PE comparison</p>
         <div style="height:120px"><canvas id="miniChart"></canvas></div>
+        <div class="mt-3">
+          <canvas id="lookupSparkline" height="50" style="width:100%"></canvas>
+        </div>
       </div>
 
       <!-- Add to group -->
@@ -297,6 +300,33 @@ function renderCard(d) {
       }
     }
   });
+
+  // Draw sparkline for looked-up ticker
+  (async function(tkr) {
+    try {
+      const r = await fetch(`/api/history/${encodeURIComponent(tkr)}?period=3mo`);
+      const d = await r.json();
+      if (!d.prices || !d.prices.length) return;
+      const prices = d.prices.filter(p => p != null);
+      if (!prices.length) return;
+      const ctx = document.getElementById('lookupSparkline');
+      if (!ctx) return;
+      if (window._lookupSparkChart) window._lookupSparkChart.destroy();
+      const first = prices[0], last = prices[prices.length-1];
+      const up = last >= first;
+      window._lookupSparkChart = new Chart(ctx, {
+        type: 'line',
+        data: { labels: d.dates, datasets: [{ data: d.prices,
+          borderColor: up ? '#34d399' : '#f87171',
+          backgroundColor: up ? 'rgba(52,211,153,0.1)' : 'rgba(248,113,113,0.1)',
+          borderWidth: 1.5, pointRadius: 0, fill: true, tension: 0.3, spanGaps: true }] },
+        options: { responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { display: false }, tooltip: { enabled: false } },
+          scales: { x: { display: false }, y: { display: false } },
+          animation: { duration: 400 } }
+      });
+    } catch(e) {}
+  })(d.Ticker);
 }
 
 // ── Discover

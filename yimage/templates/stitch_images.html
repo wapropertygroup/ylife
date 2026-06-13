@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+{% block title %}Stitch Images — yImage{% endblock %}
+{% block content %}
+<div x-data="stitchTool()">
+  <div class="max-w-2xl mx-auto">
+    <a href="/" class="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-brand transition mb-4">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+      <span data-i18n="common.all_tools">All Tools</span>
+    </a>
+    <h1 class="text-2xl font-extrabold mb-2" data-i18n="stitch.title">⛓️ Stitch Images</h1>
+    <p class="text-sm text-slate-500 dark:text-slate-400 mb-6" data-i18n="stitch.desc">Join multiple images side-by-side or top-to-bottom to create a panorama or comparison strip.</p>
+
+    <!-- Drop Zone -->
+    <div class="drop-zone rounded-2xl border-2 border-dashed border-slate-300 dark:border-slate-700 p-8 text-center cursor-pointer transition hover:border-brand"
+         @click="$refs.fi.click()"
+         @dragover.prevent="dragOver=true" @dragleave="dragOver=false"
+         @drop.prevent="dragOver=false; handleDrop($event)"
+         :class="dragOver ? 'border-brand bg-violet-50 dark:bg-violet-900/10' : ''">
+      <input type="file" accept="image/*" multiple x-ref="fi" @change="addFiles($event.target.files)" class="hidden">
+      <svg class="w-10 h-10 mx-auto mb-2 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v12a2 2 0 01-2 2h-2a2 2 0 01-2-2V6z"/>
+      </svg>
+      <p class="text-sm text-slate-500"><span data-i18n="common.upload">Drop images here or</span> <span class="text-brand font-medium" data-i18n="common.browse">browse</span></p>
+      <p class="text-xs text-slate-400 mt-1" data-i18n="stitch.hint">2–20 images · Order determines stitch sequence</p>
+    </div>
+
+    <!-- Thumbnails -->
+    <div x-show="images.length > 0" class="mt-4">
+      <div class="flex items-center gap-2 mb-2 overflow-x-auto py-1">
+        <template x-for="(img, idx) in images" :key="img.id">
+          <div class="relative shrink-0 group">
+            <img :src="img.preview" class="h-16 w-auto rounded-lg border border-slate-200 dark:border-slate-700 object-cover">
+            <button @click="images.splice(idx,1)"
+                    class="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-xs rounded-full hidden group-hover:flex items-center justify-center">✕</button>
+          </div>
+        </template>
+        <button @click="$refs.fi.click()"
+                class="h-16 w-12 shrink-0 rounded-lg border-2 border-dashed border-slate-300 dark:border-slate-700 flex items-center justify-center text-slate-400 hover:border-brand hover:text-brand transition text-2xl">+</button>
+      </div>
+    </div>
+
+    <!-- Options -->
+    <div x-show="images.length > 0" class="mt-3 p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 space-y-4">
+
+      <!-- Direction -->
+      <div>
+        <label class="text-sm font-medium mb-2 block" data-i18n="stitch.direction">Direction</label>
+        <div class="flex gap-2">
+          <button @click="direction='horizontal'"
+                  :class="direction==='horizontal' ? 'bg-brand text-white' : 'bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700'"
+                  class="flex-1 py-2.5 rounded-xl text-sm font-medium transition flex items-center justify-center gap-2">
+            <span>⟷</span> <span data-i18n="stitch.horizontal">Horizontal</span>
+          </button>
+          <button @click="direction='vertical'"
+                  :class="direction==='vertical' ? 'bg-brand text-white' : 'bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700'"
+                  class="flex-1 py-2.5 rounded-xl text-sm font-medium transition flex items-center justify-center gap-2">
+            <span>⟵<br>⟶</span> <span data-i18n="stitch.vertical">Vertical</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-4">
+        <!-- Gap -->
+        <div>
+          <label class="text-sm font-medium mb-1 block">
+            <span data-i18n="collage.gap">Gap</span>: <span x-text="gap + 'px'"></span>
+          </label>
+          <input type="range" x-model.number="gap" min="0" max="100" step="4"
+                 class="w-full accent-violet-500">
+        </div>
+        <!-- Alignment -->
+        <div>
+          <label class="text-sm font-medium mb-2 block" data-i18n="stitch.align">Align</label>
+          <div class="flex gap-1.5">
+            <button @click="align='start'"
+                    :class="align==='start' ? 'bg-brand text-white' : 'bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700'"
+                    class="flex-1 py-1.5 rounded-lg text-xs font-medium transition"
+                    data-i18n="stitch.start">Start</button>
+            <button @click="align='center'"
+                    :class="align==='center' ? 'bg-brand text-white' : 'bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700'"
+                    class="flex-1 py-1.5 rounded-lg text-xs font-medium transition"
+                    data-i18n="stitch.center">Center</button>
+            <button @click="align='end'"
+                    :class="align==='end' ? 'bg-brand text-white' : 'bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700'"
+                    class="flex-1 py-1.5 rounded-lg text-xs font-medium transition"
+                    data-i18n="stitch.end">End</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Gap color -->
+      <div x-show="gap > 0" class="flex items-center gap-3">
+        <label class="text-sm font-medium" data-i18n="collage.bg_color">Gap Color</label>
+        <input type="color" x-model="gapColor"
+               class="w-9 h-9 rounded cursor-pointer border border-slate-300 dark:border-slate-700 p-0.5 bg-white">
+        <input type="text" x-model="gapColor" maxlength="7"
+               class="w-24 px-2 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-mono focus:border-brand focus:outline-none">
+      </div>
+    </div>
+
+    <button x-show="images.length >= 2" @click="process()" :disabled="processing"
+            class="mt-4 w-full py-3 rounded-xl bg-brand text-white font-semibold hover:bg-brand-dark transition disabled:opacity-50">
+      <span x-show="!processing" data-i18n="stitch.button">Stitch & Download</span>
+      <span x-show="processing" class="flex items-center justify-center gap-2">
+        <svg class="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+        <span data-i18n="common.processing">Processing...</span>
+      </span>
+    </button>
+    <p x-show="images.length === 1" class="mt-2 text-xs text-amber-500 text-center" data-i18n="stitch.need_two">Add at least 2 images to stitch.</p>
+    <p x-show="error" class="mt-4 text-sm text-red-500" x-text="error"></p>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+function stitchTool() {
+  let _id = 0;
+  return {
+    images: [], dragOver: false,
+    direction: 'horizontal', gap: 0, align: 'center', gapColor: '#ffffff',
+    processing: false, error: '',
+
+    handleDrop(e) { this.addFiles(e.dataTransfer.files); },
+    addFiles(files) {
+      for (const f of files) {
+        if (this.images.length >= 20) break;
+        const id = ++_id;
+        const reader = new FileReader();
+        reader.onload = e => this.images.push({ id, _file: f, preview: e.target.result });
+        reader.readAsDataURL(f);
+      }
+      this.error = '';
+    },
+
+    async process() {
+      if (this.images.length < 2 || this.processing) return;
+      this.processing = true; this.error = '';
+      const form = new FormData();
+      this.images.forEach(img => form.append('files', img._file));
+      form.append('direction', this.direction);
+      form.append('gap',       this.gap);
+      form.append('align',     this.align);
+      form.append('gap_color', this.gapColor);
+      try {
+        const resp = await fetch('/api/stitch-images', { method: 'POST', body: form });
+        if (!resp.ok) { const d = await resp.json(); this.error = d.error || 'Failed'; this.processing = false; return; }
+        const blob = await resp.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href = url; a.download = 'stitched.jpg'; a.click();
+        URL.revokeObjectURL(url);
+      } catch(e) { this.error = 'Network error: ' + e.message; }
+      this.processing = false;
+    },
+  };
+}
+</script>
+{% endblock %}

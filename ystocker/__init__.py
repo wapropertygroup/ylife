@@ -139,7 +139,7 @@ def create_app() -> Flask:
     app.config["SESSION_COOKIE_HTTPONLY"] = True
 
     # Register the main blueprint (routes live in routes.py)
-    from ystocker.routes import bp, _start_background_thread, _start_heatmap_scheduler, _start_daily_broadcast_scheduler, _start_rolling_refresh_thread
+    from ystocker.routes import bp, _start_background_thread, _start_heatmap_scheduler, _start_daily_broadcast_scheduler, _start_rolling_refresh_thread, _start_daily_pregen_scheduler
     app.register_blueprint(bp)
 
     # Jinja2 filter: unix timestamp → "Feb 21, 2026 15:30"
@@ -204,5 +204,9 @@ def create_app() -> Flask:
     # small jittered batches spread over a 5-minute window so data stays fresh
     # without hammering Yahoo Finance.
     _start_rolling_refresh_thread()
+
+    # Pre-generate all 4 daily summaries at midnight ET and at startup so
+    # /daily always serves from cache — no Gemini latency on first visit.
+    _start_daily_pregen_scheduler()
 
     return app

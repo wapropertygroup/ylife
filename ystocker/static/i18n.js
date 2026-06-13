@@ -252,6 +252,9 @@ const I18n = (() => {
     'history.institutions': { en: 'Institutions %',  zh: '机构持股%' },
     'history.short_float':  { en: 'Short Float %',   zh: '做空浮动%' },
     'history.short_ratio':  { en: 'Short Ratio',     zh: '做空比率' },
+    'history.rev_growth':   { en: 'Revenue Growth',  zh: '营收增速' },
+    'history.shares_out':   { en: 'Shares Out (B)',   zh: '总股本（十亿）' },
+    'history.float_shares': { en: 'Float (B)',        zh: '流通股（十亿）' },
     // Volume / RSI / MACD chart sections
     'history.volume_title': { en: 'Volume',          zh: '成交量' },
     'history.volume_desc':  { en: 'Shares traded per period — green when price rose, red when fell', zh: '每期成交量 — 涨绿跌红' },

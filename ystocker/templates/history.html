@@ -94,6 +94,7 @@
   <h1 class="text-2xl sm:text-3xl font-bold">
     <span class="font-mono grad-text">{{ ticker }}</span>
     <span id="stockName" class="text-slate-400 text-lg sm:text-xl font-normal ml-2 sm:ml-3"></span>
+    <span id="dataCacheBadge" class="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-500 ml-2 align-middle"></span>
   </h1>
   <p class="text-slate-500 text-sm mt-1" data-i18n="history.subtitle">Historical PE ratio &amp; price</p>
 </div>
@@ -225,6 +226,10 @@
       <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 py-3">
         <div class="text-xs text-slate-500 mb-1" data-i18n="history.eps_growth_q">EPS Growth Q</div>
         <div id="statEpsGrowthQ" class="text-base font-bold text-slate-100">—</div>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 py-3">
+        <div class="text-xs text-slate-500 mb-1" data-i18n="history.rev_growth">Revenue Growth</div>
+        <div id="statRevGrowth" class="text-base font-bold text-slate-100">—</div>
       </div>
     </div>
   </div>
@@ -369,6 +374,14 @@
       <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 py-3">
         <div class="text-xs text-slate-500 mb-1" data-i18n="history.short_ratio">Short Ratio</div>
         <div id="statShortRatio" class="text-base font-bold text-slate-100">—</div>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 py-3">
+        <div class="text-xs text-slate-500 mb-1" data-i18n="history.shares_out">Shares Out (B)</div>
+        <div id="statSharesOut" class="text-base font-bold text-slate-100">—</div>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 py-3">
+        <div class="text-xs text-slate-500 mb-1" data-i18n="history.float_shares">Float (B)</div>
+        <div id="statFloat" class="text-base font-bold text-slate-100">—</div>
       </div>
     </div>
   </div>
@@ -561,6 +574,7 @@
         <span class="flex items-center gap-1.5 text-xs text-emerald-400"><span class="inline-block w-2 h-2 rounded-sm bg-emerald-500/70"></span> <span data-i18n="history.volume_up">Up</span></span>
         <span class="flex items-center gap-1.5 text-xs text-rose-400"><span class="inline-block w-2 h-2 rounded-sm bg-rose-500/70"></span> <span data-i18n="history.volume_down">Down</span></span>
         <span class="flex items-center gap-1.5 text-xs text-amber-400"><span class="inline-block w-3 h-0.5 border-dashed border border-amber-400"></span> <span data-i18n="history.volume_ma20">MA20</span></span>
+        <span id="statRelVol" class="hidden text-xs font-semibold px-1.5 py-0.5 rounded-md bg-slate-800"></span>
         <div class="flex gap-1">
           <button class="range-btn" data-chart="price" data-period="1mo">1M</button>
           <button class="range-btn" data-chart="price" data-period="3mo">3M</button>
@@ -573,6 +587,7 @@
         <button onclick="expandChart('volume')" title="Expand" class="expand-btn">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
         </button>
+        <button id="explainBtnVolume" class="explain-btn" onclick="explainChart('volume')" data-i18n="history.explain">✦ Explain</button>
       </div>
     </div>
     <div class="chart-container" style="height:140px" id="volumeChartWrap">
@@ -581,6 +596,7 @@
     <div class="mt-3 text-[11px] text-slate-500 leading-relaxed border-t border-slate-800 pt-3">
       <p data-i18n="history.volume_explain_body"><strong class="text-slate-300">Volume</strong> confirms price moves. <strong class="text-emerald-400">Green bars</strong> = price closed up that period; <strong class="text-rose-400">red bars</strong> = price closed down. High volume on a price move = conviction; low volume = weak move, possible reversal. Volume declining during a rally = weakening uptrend. The <strong class="text-amber-400">MA20 line</strong> shows the average volume — spikes above it signal unusual activity (earnings, news, institutional buying/selling).</p>
     </div>
+    <div id="explainPanelVolume" class="explain-panel"></div>
   </div>
 
   <!-- RSI-14 chart -->
@@ -605,6 +621,7 @@
         <button onclick="expandChart('rsi')" title="Expand" class="expand-btn">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
         </button>
+        <button id="explainBtnRsi" class="explain-btn" onclick="explainChart('rsi')" data-i18n="history.explain">✦ Explain</button>
       </div>
     </div>
     <div class="chart-container" style="height:160px" id="rsiChartWrap">
@@ -613,6 +630,7 @@
     <div class="mt-3 text-[11px] text-slate-500 leading-relaxed border-t border-slate-800 pt-3">
       <p data-i18n="history.rsi_explain_body"><strong class="text-slate-300">RSI (Relative Strength Index)</strong> measures momentum on a 0–100 scale. It compares the average gain vs average loss over the past 14 periods. Above <strong class="text-rose-400">70</strong> = overbought (momentum may be exhausted, watch for reversal). Below <strong class="text-emerald-400">30</strong> = oversold (selling may be overdone, watch for bounce). RSI can stay extreme in strong trends — use alongside price action and volume for confirmation.</p>
     </div>
+    <div id="explainPanelRsi" class="explain-panel"></div>
   </div>
 
   <!-- MACD chart -->
@@ -637,6 +655,7 @@
         <button onclick="expandChart('macd')" title="Expand" class="expand-btn">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
         </button>
+        <button id="explainBtnMacd" class="explain-btn" onclick="explainChart('macd')" data-i18n="history.explain">✦ Explain</button>
       </div>
     </div>
     <div class="chart-container" style="height:160px" id="macdChartWrap">
@@ -645,6 +664,7 @@
     <div class="mt-3 text-[11px] text-slate-500 leading-relaxed border-t border-slate-800 pt-3">
       <p data-i18n="history.macd_explain_body"><strong class="text-slate-300">MACD</strong> shows momentum by subtracting the 26-period EMA from the 12-period EMA. <strong class="text-sky-400">MACD line</strong> crossing above the <strong class="text-orange-400">signal line</strong> (9-period EMA of MACD) is bullish; crossing below is bearish. The <strong class="text-slate-300">histogram</strong> (green/red bars) shows the gap between them — widening = strengthening momentum, shrinking = momentum fading. A zero-line cross confirms trend direction change.</p>
     </div>
+    <div id="explainPanelMacd" class="explain-panel"></div>
   </div>
 
   <!-- Relative Strength vs SPY chart -->
@@ -669,11 +689,13 @@
         <button onclick="expandChart('rsstrength')" title="Expand" class="expand-btn">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
         </button>
+        <button id="explainBtnRsstrength" class="explain-btn" onclick="explainChart('rsstrength')" data-i18n="history.explain">✦ Explain</button>
       </div>
     </div>
     <div class="chart-container" style="height:200px" id="rsStrengthChartWrap">
       <canvas id="rsStrengthChart"></canvas>
     </div>
+    <div id="explainPanelRsstrength" class="explain-panel"></div>
   </div>
 
   <!-- Stochastic Oscillator chart -->
@@ -698,6 +720,7 @@
         <button onclick="expandChart('stoch')" title="Expand" class="expand-btn">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
         </button>
+        <button id="explainBtnStoch" class="explain-btn" onclick="explainChart('stoch')" data-i18n="history.explain">✦ Explain</button>
       </div>
     </div>
     <div class="chart-container" style="height:160px" id="stochChartWrap">
@@ -707,6 +730,7 @@
       <p class="font-semibold text-slate-400 mb-1" data-i18n="history.stoch_explain_title">📖 How to read this chart</p>
       <p data-i18n="history.stoch_explain_body">The <strong class="text-slate-300">Stochastic Oscillator</strong> compares a stock's closing price to its price range over the past 14 periods. <strong class="text-sky-400">%K</strong> (green line) is the raw momentum reading; <strong class="text-amber-400">%D</strong> (amber dashed) is a 3-period moving average of %K acting as a signal line — like MACD's signal line but for this indicator. Values range 0–100. Above <strong class="text-rose-400">80</strong> = overbought (price is near the top of its recent range, possible pullback ahead). Below <strong class="text-emerald-400">20</strong> = oversold (price near the bottom of recent range, possible bounce). A <strong class="text-slate-300">%K crossing above %D</strong> is a bullish momentum signal; crossing below is bearish. Best used alongside RSI and price context.</p>
     </div>
+    <div id="explainPanelStoch" class="explain-panel"></div>
   </div>
 
   <!-- Historical Volatility chart -->
@@ -731,6 +755,7 @@
         <button onclick="expandChart('hv')" title="Expand" class="expand-btn">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
         </button>
+        <button id="explainBtnHv" class="explain-btn" onclick="explainChart('hv')" data-i18n="history.explain">✦ Explain</button>
       </div>
     </div>
     <div class="chart-container" style="height:160px" id="hvChartWrap">
@@ -739,6 +764,7 @@
     <div class="mt-3 text-[11px] text-slate-500 leading-relaxed border-t border-slate-800 pt-3">
       <p data-i18n="history.hv_explain_body"><strong class="text-slate-300">Historical Volatility (HV)</strong> measures how much the stock's price has moved, expressed as an annualized percentage. <strong class="text-amber-400">HV20</strong> = 20-period rolling volatility (short-term); <strong class="text-violet-400">HV60</strong> = 60-period (longer-term). Rising HV = increasing uncertainty/risk. Low HV followed by a spike often precedes a big move. Options traders use HV to assess whether options implied volatility (IV) is cheap or expensive relative to realized moves.</p>
     </div>
+    <div id="explainPanelHv" class="explain-panel"></div>
   </div>
 
   <!-- Price Z-Score -->
@@ -1069,6 +1095,15 @@ let   _forecastResult = null;   // last forecast API response
 
   // Stat cards
   document.getElementById('stockName').textContent     = data.name || '';
+  // Data freshness badge
+  if (data.cached_at) {
+    const ageMin = Math.round((Date.now()/1000 - data.cached_at) / 60);
+    const ageEl = document.getElementById('dataCacheBadge');
+    if (ageEl) {
+      ageEl.textContent = ageMin < 2 ? 'Live' : ageMin + 'm ago';
+      ageEl.className = 'text-[10px] px-1.5 py-0.5 rounded ' + (ageMin < 5 ? 'bg-emerald-900/40 text-emerald-400' : ageMin < 30 ? 'bg-slate-800 text-slate-500' : 'bg-amber-900/40 text-amber-400');
+    }
+  }
   document.getElementById('statCurrentPe').textContent = data.current_pe  != null ? data.current_pe.toFixed(1)+'x'  : '—';
   document.getElementById('statFwdPe').textContent      = data.forward_pe  != null ? data.forward_pe.toFixed(1)+'x'  : '—';
   document.getElementById('statTarget').textContent     = data.target_price != null ? '$'+data.target_price.toFixed(2) : '—';
@@ -1099,6 +1134,7 @@ let   _forecastResult = null;   // last forecast API response
   }
   setGrowthStat('statEpsGrowthTtm', data.eps_growth_ttm);
   setGrowthStat('statEpsGrowthQ',   data.eps_growth_q);
+  setGrowthStat('statRevGrowth',    data.revenue_growth);
 
   const evEl = document.getElementById('statEvEbitda');
   if (data.ev_ebitda != null) {
@@ -1165,6 +1201,8 @@ let   _forecastResult = null;   // last forecast API response
     sfEl.className   = 'text-base font-bold ' + (data.short_float > 15 ? 'text-rose-400' : data.short_float > 7 ? 'text-amber-400' : 'text-slate-100');
   }
   if (data.short_ratio != null) { const el = document.getElementById('statShortRatio'); el.textContent = data.short_ratio.toFixed(1) + 'd'; }
+  if (data.shares_outstanding != null) { document.getElementById('statSharesOut').textContent = data.shares_outstanding.toFixed(2) + 'B'; }
+  if (data.float_shares       != null) { document.getElementById('statFloat').textContent      = data.float_shares.toFixed(2) + 'B'; }
 
   // ETF Info
   if (data.quote_type === 'ETF') {
@@ -2686,6 +2724,15 @@ async function _handleRange(chartKey, period, staticData) {
     // Volume — only when volume data exists
     if (d.volumes && d.volumes.some(v => v > 0)) {
       document.getElementById('volumeSection').style.display = 'block';
+    // Relative volume badge: latest / 30d avg
+    if (d.avg_volume && d.avg_volume > 0) {
+      const lastVol = [...d.volumes].reverse().find(v => v > 0) || 0;
+      const relVol = lastVol / d.avg_volume;
+      const rvEl = document.getElementById('statRelVol');
+      rvEl.textContent = relVol.toFixed(1) + 'x Vol';
+      rvEl.className = 'text-xs font-semibold px-1.5 py-0.5 rounded-md ' +
+        (relVol > 3 ? 'bg-rose-900/50 text-rose-300' : relVol > 1.5 ? 'bg-amber-900/50 text-amber-300' : 'bg-slate-800 text-slate-400');
+    }
       if (_chartInstances['volume']) { _chartInstances['volume'].destroy(); delete _chartInstances['volume']; }
       const vCfg = _buildConfig('volume', d, staticData);
       _chartConfigs['volume'] = vCfg;
@@ -3149,10 +3196,16 @@ function _renderVideo(v) {
 // ── Gemini explain hook ───────────────────────────────────────────────────────
 // Maps chart key → {btnId, panelId, dataKey}
 const _explainMeta = {
-  pe:     { btn: 'explainBtnPe',      panel: 'explainPanelPe',      key: 'pe_history'      },
-  fwdpe:  { btn: 'explainBtnFwdpe',   panel: 'explainPanelFwdpe',   key: 'fwd_pe_history'  },
-  price:  { btn: 'explainBtnPrice',   panel: 'explainPanelPrice',   key: 'prices'          },
-  peg:    { btn: 'explainBtnPeg',     panel: 'explainPanelPeg',     key: 'peg_history'     },
+  pe:         { btn: 'explainBtnPe',         panel: 'explainPanelPe',         key: 'pe_history'        },
+  fwdpe:      { btn: 'explainBtnFwdpe',      panel: 'explainPanelFwdpe',      key: 'fwd_pe_history'    },
+  price:      { btn: 'explainBtnPrice',      panel: 'explainPanelPrice',      key: 'prices'            },
+  peg:        { btn: 'explainBtnPeg',        panel: 'explainPanelPeg',        key: 'peg_history'       },
+  volume:     { btn: 'explainBtnVolume',     panel: 'explainPanelVolume',     key: 'volumes'           },
+  rsi:        { btn: 'explainBtnRsi',        panel: 'explainPanelRsi',        key: 'prices'            },
+  macd:       { btn: 'explainBtnMacd',       panel: 'explainPanelMacd',       key: 'prices'            },
+  stoch:      { btn: 'explainBtnStoch',      panel: 'explainPanelStoch',      key: 'prices'            },
+  hv:         { btn: 'explainBtnHv',         panel: 'explainPanelHv',         key: 'prices'            },
+  rsstrength: { btn: 'explainBtnRsstrength', panel: 'explainPanelRsstrength', key: 'relative_strength' },
 };
 
 // Track currently displayed period per chart key (default: 1y)

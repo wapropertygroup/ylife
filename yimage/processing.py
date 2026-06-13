@@ -1780,32 +1780,32 @@ def stamp_pdf_watermark(
 ) -> bytes:
     """Stamp a diagonal text watermark on every page of a PDF."""
     import fitz
-    import math
 
     doc = fitz.open(stream=data, filetype="pdf")
-    r = int(color_hex.lstrip("#")[0:2], 16) / 255
-    g = int(color_hex.lstrip("#")[2:4], 16) / 255
-    b = int(color_hex.lstrip("#")[4:6], 16) / 255
+    r_raw = int(color_hex.lstrip("#")[0:2], 16) / 255
+    g_raw = int(color_hex.lstrip("#")[2:4], 16) / 255
+    b_raw = int(color_hex.lstrip("#")[4:6], 16) / 255
     alpha = max(0.01, min(1.0, opacity / 100))
+
+    # Blend color with white to approximate opacity (TextWriter opacity support varies)
+    r = r_raw * alpha + (1 - alpha)
+    g = g_raw * alpha + (1 - alpha)
+    b = b_raw * alpha + (1 - alpha)
+
+    font = fitz.Font("helv")
 
     for page in doc:
         pw, ph = page.rect.width, page.rect.height
         cx, cy = pw / 2, ph / 2
-        rad = math.radians(-angle)
-        cos_a, sin_a = math.cos(rad), math.sin(rad)
-        tw = len(text) * font_size * 0.5
-        sx = cx - tw / 2
-        sy = cy + font_size / 4
-        rx = cos_a * (sx - cx) - sin_a * (sy - cy) + cx
-        ry = sin_a * (sx - cx) + cos_a * (sy - cy) + cy
-        page.insert_text(
-            point=fitz.Point(rx, ry),
-            text=text,
-            fontsize=font_size,
-            color=(r, g, b),
-            rotate=angle,
-            fill_opacity=alpha,
-        )
+
+        # Use TextWriter with morph matrix for arbitrary rotation
+        writer = fitz.TextWriter(page.rect)
+        # Place text anchor at centre then rotate around it
+        writer.append(fitz.Point(cx, cy), text, font=font, fontsize=font_size)
+
+        rotate_mat = fitz.Matrix(angle)   # rotation matrix for given angle
+        writer.write_text(page, color=(r, g, b), morph=(fitz.Point(cx, cy), rotate_mat))
+
 
     buf2 = io.BytesIO()
     doc.save(buf2)

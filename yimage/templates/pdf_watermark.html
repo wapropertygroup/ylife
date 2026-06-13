@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+{% block title %}PDF Watermark — yImage{% endblock %}
+{% block content %}
+<div x-data="pdfWatermarkTool()">
+  <div class="max-w-2xl mx-auto">
+    <a href="/" class="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-brand transition mb-4">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+      <span data-i18n="common.all_tools">All Tools</span>
+    </a>
+    <h1 class="text-2xl font-extrabold mb-2" data-i18n="pdfwm.title">💧 PDF Watermark</h1>
+    <p class="text-sm text-slate-500 dark:text-slate-400 mb-6" data-i18n="pdfwm.desc">Stamp a diagonal semi-transparent text watermark on every page of a PDF.</p>
+
+    <!-- Upload Zone -->
+    <div class="drop-zone rounded-2xl border-2 border-dashed border-slate-300 dark:border-slate-700 p-10 text-center cursor-pointer transition hover:border-brand"
+         @click="$refs.fi.click()"
+         @dragover.prevent="dragOver=true" @dragleave="dragOver=false"
+         @drop.prevent="dragOver=false; handleDrop($event)"
+         :class="dragOver ? 'border-brand bg-violet-50 dark:bg-violet-900/10' : ''">
+      <input type="file" accept=".pdf" x-ref="fi" @change="handleFile($event.target.files[0])" class="hidden">
+      <div x-show="!file">
+        <svg class="w-12 h-12 mx-auto mb-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+        </svg>
+        <p class="text-sm text-slate-500"><span data-i18n="common.upload">Drop a PDF here or</span> <span class="text-brand font-medium" data-i18n="common.browse">browse</span></p>
+        <p class="text-xs text-slate-400 mt-1" data-i18n="common.max_size">Max 50 MB</p>
+      </div>
+      <div x-show="file" class="flex items-center justify-center gap-3">
+        <span class="text-3xl">📄</span>
+        <div class="text-left">
+          <p class="text-sm font-medium" x-text="file?.name"></p>
+          <p class="text-xs text-slate-400" x-text="fileSize"></p>
+        </div>
+        <button @click.stop="reset()" class="ml-2 text-slate-400 hover:text-red-500 text-lg">✕</button>
+      </div>
+    </div>
+
+    <!-- Options -->
+    <div x-show="file" class="mt-4 space-y-5 p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50">
+      <!-- Text -->
+      <div>
+        <label class="text-sm font-medium mb-1 block" data-i18n="pdfwm.text">Watermark Text</label>
+        <div class="flex gap-2 flex-wrap mb-1.5">
+          <template x-for="p in presets" :key="p">
+            <button @click="text=p"
+                    :class="text===p ? 'bg-brand text-white' : 'bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-500'"
+                    class="px-2.5 py-1 rounded-lg text-xs font-medium transition"
+                    x-text="p"></button>
+          </template>
+        </div>
+        <input type="text" x-model="text" maxlength="100"
+               class="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-sm focus:border-brand focus:outline-none font-medium tracking-wide">
+      </div>
+
+      <div class="grid grid-cols-2 gap-4">
+        <!-- Opacity -->
+        <div>
+          <label class="text-sm font-medium mb-1 block">
+            <span data-i18n="wm.opacity">Opacity</span>: <span x-text="opacity + '%'"></span>
+          </label>
+          <input type="range" x-model.number="opacity" min="5" max="80" step="5"
+                 class="w-full accent-violet-500">
+        </div>
+        <!-- Angle -->
+        <div>
+          <label class="text-sm font-medium mb-1 block">
+            <span data-i18n="pdfwm.angle">Angle</span>: <span x-text="angle + '°'"></span>
+          </label>
+          <input type="range" x-model.number="angle" min="0" max="90" step="5"
+                 class="w-full accent-violet-500">
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-4">
+        <!-- Font Size -->
+        <div>
+          <label class="text-sm font-medium mb-1 block">
+            <span data-i18n="stamp.font_size">Font Size</span>: <span x-text="fontSize + 'pt'"></span>
+          </label>
+          <input type="range" x-model.number="fontSize" min="12" max="120" step="4"
+                 class="w-full accent-violet-500">
+        </div>
+        <!-- Color -->
+        <div>
+          <label class="text-sm font-medium mb-1 block" data-i18n="stamp.color">Color</label>
+          <div class="flex items-center gap-2">
+            <input type="color" x-model="color"
+                   class="w-9 h-9 rounded cursor-pointer border border-slate-300 dark:border-slate-700 p-0.5 bg-white">
+            <input type="text" x-model="color" maxlength="7"
+                   class="flex-1 px-2 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-mono focus:border-brand focus:outline-none">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <button x-show="file" @click="process()" :disabled="processing"
+            class="mt-4 w-full py-3 rounded-xl bg-brand text-white font-semibold hover:bg-brand-dark transition disabled:opacity-50">
+      <span x-show="!processing" data-i18n="pdfwm.button">Add Watermark & Download</span>
+      <span x-show="processing" class="flex items-center justify-center gap-2">
+        <svg class="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+        <span data-i18n="common.processing">Processing...</span>
+      </span>
+    </button>
+    <div x-show="done" class="mt-4 p-4 rounded-xl bg-green-50 dark:bg-green-900/15 border border-green-300 dark:border-green-700/50">
+      <p class="text-sm font-semibold text-green-600 dark:text-green-400" data-i18n="pdfwm.done">✓ Watermarked PDF downloaded!</p>
+    </div>
+    <p x-show="error" class="mt-4 text-sm text-red-500" x-text="error"></p>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+function pdfWatermarkTool() {
+  return {
+    file: null, dragOver: false,
+    text: 'CONFIDENTIAL', opacity: 20, angle: 45, fontSize: 60, color: '#888888',
+    presets: ['CONFIDENTIAL', 'DRAFT', 'SAMPLE', 'COPY', 'TOP SECRET'],
+    processing: false, error: '', done: false,
+
+    get fileSize() {
+      if (!this.file) return '';
+      const b = this.file.size;
+      return b < 1048576 ? (b/1024).toFixed(1)+'KB' : (b/1048576).toFixed(1)+'MB';
+    },
+
+    handleDrop(e) { this.handleFile(e.dataTransfer.files[0]); },
+    handleFile(f) { if (!f) return; this.file = f; this.done = false; this.error = ''; },
+    reset() { this.file = null; this.done = false; this.error = ''; },
+
+    async process() {
+      if (!this.file || this.processing) return;
+      this.processing = true; this.error = ''; this.done = false;
+      const form = new FormData();
+      form.append('file',      this.file);
+      form.append('text',      this.text);
+      form.append('opacity',   this.opacity);
+      form.append('angle',     this.angle);
+      form.append('font_size', this.fontSize);
+      form.append('color',     this.color);
+      try {
+        const resp = await fetch('/api/pdf-watermark', { method: 'POST', body: form });
+        if (!resp.ok) { const d = await resp.json(); this.error = d.error || 'Failed'; this.processing = false; return; }
+        const blob = await resp.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href = url; a.download = 'watermarked_' + this.file.name; a.click();
+        URL.revokeObjectURL(url); this.done = true;
+      } catch(e) { this.error = 'Network error: ' + e.message; }
+      this.processing = false;
+    },
+  };
+}
+</script>
+{% endblock %}

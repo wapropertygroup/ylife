@@ -1464,3 +1464,134 @@ def api_pdf_rotate():
     except Exception as exc:
         log.exception("PDF rotate failed")
         return jsonify(error=str(exc)), 500
+
+# ---------------------------------------------------------------------------
+# API: Invert Colors
+# ---------------------------------------------------------------------------
+
+@bp.route("/api/invert-colors", methods=["POST"])
+def api_invert_colors():
+    """Invert image colors (negative effect)."""
+    data, filename, err = _get_upload(
+        allowed_types=["jpg", "jpeg", "png", "webp", "bmp"]
+    )
+    if err:
+        return err
+    log.info("Invert colors: %s", filename)
+    try:
+        from yimage.processing import invert_colors
+        result, mime = invert_colors(data)
+        _ext = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}
+        out_ext = _ext.get(mime, filename.rsplit(".", 1)[-1] if "." in filename else "png")
+        base = filename.rsplit(".", 1)[0] if "." in filename else filename
+        return send_file(
+            BytesIO(result), mimetype=mime,
+            as_attachment=True, download_name=f"inverted_{base}.{out_ext}",
+        )
+    except Exception as exc:
+        log.exception("Invert colors failed")
+        return jsonify(error=str(exc)), 500
+
+
+# ---------------------------------------------------------------------------
+# API: PDF Watermark
+# ---------------------------------------------------------------------------
+
+@bp.route("/api/pdf-watermark", methods=["POST"])
+def api_pdf_watermark():
+    """Add a diagonal text watermark to every PDF page."""
+    data, filename, err = _get_upload(allowed_types=["pdf"])
+    if err:
+        return err
+    text = request.form.get("text", "CONFIDENTIAL").strip() or "CONFIDENTIAL"
+    if len(text) > 100:
+        return jsonify(error="Watermark text too long (max 100 chars)"), 400
+    color_hex = request.form.get("color", "#888888")
+    try:
+        opacity   = int(float(request.form.get("opacity",   "20")))
+        angle     = int(float(request.form.get("angle",     "45")))
+        font_size = int(float(request.form.get("font_size", "60")))
+    except (ValueError, TypeError):
+        opacity, angle, font_size = 20, 45, 60
+    opacity   = max(5,  min(100, opacity))
+    angle     = max(0,  min(90,  angle))
+    font_size = max(12, min(200, font_size))
+    log.info("PDF watermark: %s (text=%r, opacity=%d)", filename, text, opacity)
+    try:
+        from yimage.processing import stamp_pdf_watermark
+        result = stamp_pdf_watermark(data, text, opacity, angle, font_size, color_hex)
+        base = filename.rsplit(".", 1)[0] if "." in filename else filename
+        return send_file(
+            BytesIO(result), mimetype="application/pdf",
+            as_attachment=True, download_name=f"watermarked_{base}.pdf",
+        )
+    except Exception as exc:
+        log.exception("PDF watermark failed")
+        return jsonify(error=str(exc)), 500
+
+
+# ---------------------------------------------------------------------------
+# API: Extract Images from PDF
+# ---------------------------------------------------------------------------
+
+@bp.route("/api/extract-pdf-images", methods=["POST"])
+def api_extract_pdf_images():
+    """Extract all embedded images from a PDF as a ZIP."""
+    data, filename, err = _get_upload(allowed_types=["pdf"])
+    if err:
+        return err
+    log.info("Extract PDF images: %s (%d bytes)", filename, len(data))
+    try:
+        from yimage.processing import extract_pdf_images
+        result = extract_pdf_images(data, filename)
+        base = filename.rsplit(".", 1)[0] if "." in filename else filename
+        return send_file(
+            BytesIO(result), mimetype="application/zip",
+            as_attachment=True, download_name=f"{base}_images.zip",
+        )
+    except ValueError as exc:
+        return jsonify(error=str(exc)), 422
+    except Exception as exc:
+        log.exception("Extract PDF images failed")
+        return jsonify(error=str(exc)), 500
+
+
+# ---------------------------------------------------------------------------
+# API: Stitch Images
+# ---------------------------------------------------------------------------
+
+@bp.route("/api/stitch-images", methods=["POST"])
+def api_stitch_images():
+    """Join multiple images side-by-side or top-to-bottom."""
+    files = request.files.getlist("files")
+    if not files:
+        return jsonify(error="No files uploaded"), 400
+    images_data = []
+    for f in files:
+        if f and f.filename:
+            chunk = f.read()
+            if chunk:
+                images_data.append(chunk)
+    if len(images_data) < 2:
+        return jsonify(error="Please upload at least 2 images"), 400
+    if len(images_data) > 20:
+        return jsonify(error="Too many images (max 20)"), 400
+    direction = request.form.get("direction", "horizontal")
+    align     = request.form.get("align",     "center")
+    gap_color = request.form.get("gap_color", "#ffffff")
+    try:
+        gap = int(float(request.form.get("gap", "0")))
+    except (ValueError, TypeError):
+        gap = 0
+    gap = max(0, min(200, gap))
+    log.info("Stitch images: %d files, dir=%s, gap=%d", len(images_data), direction, gap)
+    try:
+        from yimage.processing import stitch_images
+        result, mime = stitch_images(images_data, direction, gap, gap_color, align)
+        return send_file(
+            BytesIO(result), mimetype=mime,
+            as_attachment=True, download_name="stitched.jpg",
+        )
+    except Exception as exc:
+        log.exception("Stitch images failed")
+        return jsonify(error=str(exc)), 500

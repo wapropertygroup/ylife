@@ -138,6 +138,49 @@ const I18n = (() => {
       "pdfrotate.button":      "Rotate & Download",
       "pdfrotate.done":        "✓ Rotated PDF downloaded!",
 
+      // Round 7 tool names
+      "tool.invert_colors":      "Invert Colors",
+      "tool.pdf_watermark":      "PDF Watermark",
+      "tool.extract_pdf_images": "Extract PDF Images",
+      "tool.stitch_images":      "Stitch Images",
+
+      // Invert Colors
+      "invert.title":    "🔲 Invert Colors",
+      "invert.desc":     "Create a photographic negative by inverting every pixel color channel.",
+      "invert.original": "Original",
+      "invert.preview":  "Inverted (preview)",
+      "invert.button":   "Invert & Download",
+      "invert.done":     "✓ Inverted image downloaded!",
+
+      // PDF Watermark
+      "pdfwm.title":  "💧 PDF Watermark",
+      "pdfwm.desc":   "Stamp a diagonal semi-transparent text watermark on every page of a PDF.",
+      "pdfwm.text":   "Watermark Text",
+      "pdfwm.angle":  "Angle",
+      "pdfwm.button": "Add Watermark & Download",
+      "pdfwm.done":   "✓ Watermarked PDF downloaded!",
+
+      // Extract PDF Images
+      "extractimg.title":  "🗃️ Extract Images from PDF",
+      "extractimg.desc":   "Pull out all embedded images from a PDF and download them as a ZIP archive.",
+      "extractimg.info":   "Images are extracted at their original resolution and saved as JPEG or PNG.",
+      "extractimg.button": "Extract Images (ZIP)",
+      "extractimg.done":   "✓ Images ZIP downloaded!",
+
+      // Stitch Images
+      "stitch.title":      "⛓️ Stitch Images",
+      "stitch.desc":       "Join multiple images side-by-side or top-to-bottom to create a panorama or comparison strip.",
+      "stitch.hint":       "2–20 images · Order determines stitch sequence",
+      "stitch.direction":  "Direction",
+      "stitch.horizontal": "Horizontal",
+      "stitch.vertical":   "Vertical",
+      "stitch.align":      "Align",
+      "stitch.start":      "Start",
+      "stitch.center":     "Center",
+      "stitch.end":        "End",
+      "stitch.button":     "Stitch & Download",
+      "stitch.need_two":   "Add at least 2 images to stitch.",
+
       // PDF Stamp
       "stamp.title":    "🔢 PDF Page Numbers",
       "stamp.desc":     "Stamp page numbers or custom text on every page. Use {n} for current page and {total} for total.",
@@ -645,6 +688,49 @@ const I18n = (() => {
       "pdfrotate.even_pages":  "偶数页",
       "pdfrotate.button":      "旋转并下载",
       "pdfrotate.done":        "✓ 已下载旋转后的 PDF！",
+
+      // Round 7 工具名称
+      "tool.invert_colors":      "颜色反转",
+      "tool.pdf_watermark":      "PDF 水印",
+      "tool.extract_pdf_images": "提取 PDF 图片",
+      "tool.stitch_images":      "拼接图片",
+
+      // 颜色反转
+      "invert.title":    "🔲 颜色反转",
+      "invert.desc":     "通过反转每个像素的颜色通道，创建照片底片效果。",
+      "invert.original": "原图",
+      "invert.preview":  "反转后（预览）",
+      "invert.button":   "反转并下载",
+      "invert.done":     "✓ 已下载颜色反转后的图片！",
+
+      // PDF 水印
+      "pdfwm.title":  "💧 PDF 水印",
+      "pdfwm.desc":   "在 PDF 每一页上斜向叠加半透明文字水印。",
+      "pdfwm.text":   "水印文字",
+      "pdfwm.angle":  "角度",
+      "pdfwm.button": "添加水印并下载",
+      "pdfwm.done":   "✓ 已下载带水印的 PDF！",
+
+      // 提取 PDF 图片
+      "extractimg.title":  "🗃️ 提取 PDF 图片",
+      "extractimg.desc":   "从 PDF 中提取所有嵌入图片，以 ZIP 压缩包形式下载。",
+      "extractimg.info":   "图片以原始分辨率提取，根据 PDF 内部存储方式保存为 JPEG 或 PNG。",
+      "extractimg.button": "提取图片 (ZIP)",
+      "extractimg.done":   "✓ 图片 ZIP 已下载！",
+
+      // 拼接图片
+      "stitch.title":      "⛓️ 拼接图片",
+      "stitch.desc":       "将多张图片横向或纵向拼接，制作全景图或前后对比图。",
+      "stitch.hint":       "2–20 张图片 · 顺序决定拼接顺序",
+      "stitch.direction":  "方向",
+      "stitch.horizontal": "横向",
+      "stitch.vertical":   "纵向",
+      "stitch.align":      "对齐方式",
+      "stitch.start":      "起始对齐",
+      "stitch.center":     "居中对齐",
+      "stitch.end":        "末端对齐",
+      "stitch.button":     "拼接并下载",
+      "stitch.need_two":   "请至少添加 2 张图片进行拼接。",
 
       // PDF 页码标注
       "stamp.title":    "🔢 PDF 页码标注",
