@@ -320,6 +320,99 @@ def _start_background_thread() -> None:
     log.info("Cache warmer started (TTL %dh, file: %s)", _CACHE_TTL // 3600, _CACHE_FILE)
 
 
+# -- Rolling cache refresher --------------------------------------------------
+# Keeps data fresh by continuously re-fetching tickers in small batches spread
+# evenly across a 5-minute window.  Each batch gets a random jitter so Yahoo
+# Finance never sees a sudden spike.  Tickers are patched in-place so the
+# cache is never fully cold after the first load.
+
+_ROLLING_PERIOD = 5 * 60   # total refresh window (seconds)
+_BATCH_SIZE     = 8         # tickers per mini-fetch
+_JITTER_MAX     = 15        # max per-batch jitter (seconds)
+
+
+def _rolling_refresh_loop() -> None:
+    """Continuously refresh all tickers in small batches spread over 5 minutes."""
+    import random
+
+    # Wait until the initial full fetch has populated the cache.
+    log.info("Rolling refresher: waiting for initial cache ...")
+    while True:
+        with _cache_lock:
+            ready = _cache is not None and not _cache_warming
+        if ready:
+            break
+        time.sleep(5)
+
+    log.info(
+        "Rolling refresher active (period=%ds, batch=%d, jitter=±%ds)",
+        _ROLLING_PERIOD, _BATCH_SIZE, _JITTER_MAX,
+    )
+
+    while True:
+        all_tickers = sorted({t for tickers in PEER_GROUPS.values() for t in tickers})
+        n = len(all_tickers)
+        if n == 0:
+            time.sleep(_ROLLING_PERIOD)
+            continue
+
+        batches = [all_tickers[i : i + _BATCH_SIZE] for i in range(0, n, _BATCH_SIZE)]
+        num_batches = len(batches)
+        base_interval = _ROLLING_PERIOD / num_batches  # ideal seconds per batch slot
+        cycle_start = time.time()
+
+        for idx, batch in enumerate(batches):
+            # Pause if a full refresh is already in progress.
+            with _cache_lock:
+                if _cache_warming:
+                    log.debug("Rolling refresher: pausing — full refresh in progress")
+                    break
+
+            try:
+                raw, errs = fetch_group(batch)
+                if raw:
+                    with _cache_lock:
+                        if _cache is not None:
+                            for group_data in _cache.values():
+                                for ticker, data in raw.items():
+                                    if ticker in group_data:
+                                        group_data[ticker] = data
+                            _cache_last_updated = time.time()
+                if errs:
+                    log.debug("Rolling refresher: %d error(s) in batch %s", len(errs), batch)
+            except Exception:
+                log.warning("Rolling refresher: exception fetching batch %s", batch, exc_info=True)
+
+            # Sleep until the next evenly-spaced slot, plus a random jitter.
+            next_slot = cycle_start + (idx + 1) * base_interval
+            jitter = random.uniform(-_JITTER_MAX, _JITTER_MAX)
+            wait = (next_slot + jitter) - time.time()
+            if wait > 0:
+                time.sleep(wait)
+
+        # Persist the freshened cache to disk once per cycle.
+        with _cache_lock:
+            snap = {g: dict(gd) for g, gd in _cache.items()} if _cache else None
+            errs_snap = list(_fetch_errors)
+            ts_snap = _cache_last_updated or time.time()
+        if snap:
+            _save_to_disk(snap, errs_snap, ts_snap)
+
+        # Sleep out any remaining time in the window so the period stays ~5 min.
+        remaining = _ROLLING_PERIOD - (time.time() - cycle_start)
+        if remaining > 0:
+            time.sleep(remaining)
+
+
+def _start_rolling_refresh_thread() -> None:
+    t = threading.Thread(target=_rolling_refresh_loop, daemon=True, name="cache-roller")
+    t.start()
+    log.info(
+        "Rolling cache refresher started (period=%ds, batch=%d, jitter=±%ds)",
+        _ROLLING_PERIOD, _BATCH_SIZE, _JITTER_MAX,
+    )
+
+
 # -- Public accessors ---------------------------------------------------------
 
 def _get_data() -> Optional[Dict[str, Dict[str, dict]]]:
@@ -378,6 +471,8 @@ def _df_to_chartdata(df: pd.DataFrame) -> str:
             "ev_ebitda":        _safe(row.get("EV/EBITDA")),
             "ev":               _safe(row.get("EV ($B)")),
             "ebitda":           _safe(row.get("EBITDA ($B)")),
+            "ps_ratio":         _safe(row.get("P/S Ratio")),
+            "short_float":      _safe(row.get("Short Float (%)")),
         })
     return json.dumps(rows).replace("&", r"\u0026").replace("<", r"\u003c").replace(">", r"\u003e")
 

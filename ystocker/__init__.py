@@ -140,7 +140,7 @@ def create_app() -> Flask:
     app.config["SESSION_COOKIE_HTTPONLY"] = True
 
     # Register the main blueprint (routes live in routes.py)
-    from ystocker.routes import bp, _start_background_thread, _start_heatmap_scheduler, _start_daily_broadcast_scheduler
+    from ystocker.routes import bp, _start_background_thread, _start_heatmap_scheduler, _start_daily_broadcast_scheduler, _start_rolling_refresh_thread
     app.register_blueprint(bp)
 
     # Jinja2 filter: unix timestamp → "Feb 21, 2026 15:30"
@@ -200,5 +200,10 @@ def create_app() -> Flask:
 
     # Start daily email broadcast scheduler (UTC 00:00 every day)
     _start_daily_broadcast_scheduler()
+
+    # Start rolling cache refresher: re-fetches all tickers continuously in
+    # small jittered batches spread over a 5-minute window so data stays fresh
+    # without hammering Yahoo Finance.
+    _start_rolling_refresh_thread()
 
     return app
