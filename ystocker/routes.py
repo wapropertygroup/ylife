@@ -1447,10 +1447,125 @@ def api_financials(ticker: str):
     except Exception as exc:
         log.warning("Price Z-Score failed for %s: %s", ticker, exc)
 
-    result = {"ticker": ticker, "financials_table": financials_table, "price_zscore": price_zscore}
+    # Quarterly revenue + EPS vs estimates (last 8 quarters)
+    quarterly_table = []
+    try:
+        q_stmt = tk.quarterly_income_stmt
+        if q_stmt is not None and not q_stmt.empty:
+            q_dates = sorted(q_stmt.columns, reverse=True)[:8]
+            for col in q_dates:
+                def _q_safe(key):
+                    try:
+                        v = q_stmt.loc[key, col]
+                        return round(float(v) / 1e9, 2) if not math.isnan(float(v)) else None
+                    except Exception:
+                        return None
+                quarterly_table.append({
+                    "quarter":      str(col.date()) if hasattr(col, "date") else str(col)[:10],
+                    "revenue":      _q_safe("Total Revenue"),
+                    "gross_profit": _q_safe("Gross Profit"),
+                    "net_income":   _q_safe("Net Income"),
+                    "eps_basic":    _q_safe("Basic EPS"),
+                })
+    except Exception as exc:
+        log.warning("Quarterly financials: %s", exc)
+
+    result = {
+        "ticker":          ticker,
+        "financials_table": financials_table,
+        "quarterly_table": quarterly_table,
+        "price_zscore":    price_zscore,
+    }
     with _FINANCIALS_CACHE_LOCK:
         _FINANCIALS_CACHE[ticker] = {"ts": time.time(), "data": result}
     return jsonify(result)
+
+
+@bp.route("/api/peers/<ticker>")
+def api_peers(ticker: str):
+    """Return peer group metrics for the given ticker from the in-memory cache."""
+    ticker = ticker.strip().upper()
+    # Find which group(s) this ticker belongs to
+    peer_group = None
+    for group_name, tickers in PEER_GROUPS.items():
+        if ticker in tickers:
+            peer_group = group_name
+            break
+    if not peer_group:
+        return jsonify({"peers": [], "group": None})
+
+    peers_data = []
+    with _cache_lock:
+        group_cache = (_cache or {}).get(peer_group, {})
+        for t in PEER_GROUPS[peer_group]:
+            if t == ticker:
+                continue
+            cached = group_cache.get(t)
+            if not cached:
+                continue
+            peers_data.append({
+                "ticker":     t,
+                "name":       cached.get("Name", t),
+                "pe":         cached.get("PE (TTM)"),
+                "peg":        cached.get("PEG"),
+                "fwd_pe":     cached.get("PE (Forward)"),
+                "ps":         cached.get("P/S Ratio"),
+                "upside":     cached.get("Upside (%)"),
+                "rev_growth": cached.get("Revenue Growth (%)"),
+                "day_chg":    cached.get("Day Change (%)"),
+            })
+    peers_data.sort(key=lambda x: abs(x.get("pe") or 0), reverse=False)
+    return jsonify({"peers": peers_data[:10], "group": peer_group})
+
+
+@bp.route("/api/search")
+def api_search():
+    """Autocomplete: return matching tickers from the cached peer groups."""
+    q = request.args.get("q", "").strip().upper()
+    if len(q) < 1:
+        return jsonify([])
+
+    results = []
+    seen: set[str] = set()
+
+    # Build a flat ticker→group lookup once
+    ticker_group: dict[str, str] = {}
+    for g, ts in PEER_GROUPS.items():
+        for t in ts:
+            if t not in ticker_group:
+                ticker_group[t] = g
+
+    def _get_cached_name(t: str) -> str:
+        g = ticker_group.get(t, "")
+        with _cache_lock:
+            return ((_cache or {}).get(g, {}).get(t) or {}).get("Name", "")
+
+    # First pass: exact ticker prefix matches
+    for t, g in ticker_group.items():
+        if t not in seen and t.startswith(q):
+            seen.add(t)
+            results.append({
+                "ticker": t,
+                "name":   _get_cached_name(t),
+                "group":  g,
+            })
+
+    # Second pass: name contains (case-insensitive)
+    if len(results) < 8:
+        q_lower = q.lower()
+        for t, g in ticker_group.items():
+            if t not in seen:
+                name = _get_cached_name(t)
+                if q_lower in name.lower():
+                    seen.add(t)
+                    results.append({
+                        "ticker": t,
+                        "name":   name,
+                        "group":  g,
+                    })
+
+    return jsonify(results[:10])
+
 
 @bp.route("/lookup")
 def lookup():

@@ -23,6 +23,7 @@
                class="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5
                       text-slate-100 font-mono uppercase placeholder:normal-case placeholder:text-slate-500
                       focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent transition">
+        <datalist id="tickerSuggestions"></datalist>
         <button onclick="lookupTicker()"
                 class="px-5 py-2.5 bg-brand hover:bg-brand-dark text-white rounded-xl font-medium text-sm transition" data-i18n="lookup.look_up">
           Look up
@@ -249,6 +250,26 @@ async function lookupTicker(symbolOverride) {
 document.getElementById('tickerInput').addEventListener('keydown', e => {
   if (e.key === 'Enter') lookupTicker();
 });
+
+// Ticker autocomplete via /api/search
+const tickerInput = document.getElementById('tickerInput');
+if (tickerInput) {
+  let _searchTimeout;
+  tickerInput.setAttribute('list', 'tickerSuggestions');
+  tickerInput.addEventListener('input', () => {
+    clearTimeout(_searchTimeout);
+    const q = tickerInput.value.trim().toUpperCase();
+    if (q.length < 1) return;
+    _searchTimeout = setTimeout(async () => {
+      try {
+        const r = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
+        const items = await r.json();
+        const dl = document.getElementById('tickerSuggestions');
+        dl.innerHTML = items.map(i => `<option value="${i.ticker}" label="${i.name}">`).join('');
+      } catch(e) {}
+    }, 200);
+  });
+}
 
 // ── Render the result card
 function renderCard(d) {

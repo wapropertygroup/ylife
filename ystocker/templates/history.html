@@ -968,6 +968,20 @@
         <tbody id="financialsBody"></tbody>
       </table>
     </div>
+
+    <!-- Quarterly Revenue + EPS trend -->
+    <div id="quarterlyChartWrap" class="mt-4 hidden">
+      <div class="flex items-center justify-between mb-2">
+        <p class="text-xs text-slate-500" data-i18n="history.quarterly_title">Quarterly Revenue &amp; EPS</p>
+        <div class="flex items-center gap-2">
+          <span class="flex items-center gap-1 text-xs text-sky-400"><span class="w-2 h-2 bg-sky-500/60 rounded-sm inline-block"></span> Revenue</span>
+          <span class="flex items-center gap-1 text-xs text-amber-400"><span class="w-3 h-0.5 bg-amber-400 inline-block"></span> EPS</span>
+        </div>
+      </div>
+      <div class="chart-container" style="height:180px">
+        <canvas id="quarterlyChart"></canvas>
+      </div>
+    </div>
   </div>
 
   <!-- EV/EBITDA panel -->
@@ -995,6 +1009,30 @@
       <span class="text-amber-400">■</span> 13–20x 成长型 &nbsp;
       <span class="text-rose-400">■</span> 20x+ 高增长或泡沫
     </p>
+  </div>
+
+  <!-- Peer Comparison -->
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up" id="peerSection" style="display:none">
+    <div class="flex items-baseline gap-3 mb-3">
+      <h2 class="text-base font-semibold text-slate-200" data-i18n="history.peer_title">Peer Comparison</h2>
+      <span id="peerGroupLabel" class="text-xs text-slate-500"></span>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="w-full text-xs" id="peerTable">
+        <thead>
+          <tr class="border-b border-slate-800 text-slate-500">
+            <th class="text-left py-2 px-2 font-medium">Ticker</th>
+            <th class="text-right py-2 px-2 font-medium">PE</th>
+            <th class="text-right py-2 px-2 font-medium">Fwd PE</th>
+            <th class="text-right py-2 px-2 font-medium">P/S</th>
+            <th class="text-right py-2 px-2 font-medium">PEG</th>
+            <th class="text-right py-2 px-2 font-medium">Upside</th>
+            <th class="text-right py-2 px-2 font-medium">Day</th>
+          </tr>
+        </thead>
+        <tbody id="peerTableBody"></tbody>
+      </table>
+    </div>
   </div>
 
 </div>
@@ -1397,6 +1435,31 @@ let   _forecastResult = null;   // last forecast API response
           _title:'Annual Financials', _desc:'Revenue, Net Income ($B) and EPS — actuals + forward estimates',
         };
         _registerChart('financials', finCfg, new Chart(document.getElementById('financialsBarChart'), finCfg));
+
+        // Quarterly chart
+        if (fdata.quarterly_table && fdata.quarterly_table.length > 0) {
+          const qt = fdata.quarterly_table.reverse(); // oldest first
+          const qtWrap = document.getElementById('quarterlyChartWrap');
+          qtWrap.classList.remove('hidden');
+          const qtRevColors = qt.map(() => 'rgba(56,189,248,0.6)');
+          new Chart(document.getElementById('quarterlyChart'), {
+            type: 'bar',
+            data: { labels: qt.map(r => r.quarter?.slice(0,7) || ''), datasets: [
+              { label:'Revenue ($B)', data:qt.map(r=>r.revenue), backgroundColor:qtRevColors, borderColor:qtRevColors.map(c=>c.replace('0.6','1')), borderWidth:1, yAxisID:'y', order:2 },
+              { type:'line', label:'EPS', data:qt.map(r=>r.eps_basic), borderColor:'#fbbf24', backgroundColor:'transparent', borderWidth:2, pointRadius:4, pointHoverRadius:6, fill:false, tension:0.3, spanGaps:true, yAxisID:'yEps', order:1 },
+            ]},
+            options: {
+              responsive:true, maintainAspectRatio:false,
+              plugins:{ legend:{display:false}, tooltip:{mode:'index',intersect:false,callbacks:{label:c=>c.raw==null?'': c.dataset.yAxisID==='yEps'?` EPS: $${c.raw.toFixed(2)}`:`  Rev: $${c.raw.toFixed(2)}B`}}},
+              scales:{
+                x:{grid:{color:'#1e293b'},ticks:{color:'#64748b'}},
+                y:{grid:{color:'#1e293b'},ticks:{color:'#64748b',callback:v=>'$'+v+'B'}},
+                yEps:{position:'right',grid:{drawOnChartArea:false},ticks:{color:'rgba(251,191,36,0.7)',callback:v=>'$'+v.toFixed(2)}},
+              },
+              interaction:{mode:'index',intersect:false},
+            },
+          });
+        }
       }
 
       // ── Price Z-Score stat card + detail panel ──
@@ -1738,6 +1801,28 @@ let   _forecastResult = null;   // last forecast API response
   })();
 
   // ── Insider Transactions
+  // Peer comparison (async, non-blocking)
+  (async () => {
+    try {
+      const pr = await fetch(`/api/peers/${encodeURIComponent(TICKER)}`);
+      const pd = await pr.json();
+      if (!pd.peers || !pd.peers.length) return;
+      document.getElementById('peerSection').style.display = 'block';
+      document.getElementById('peerGroupLabel').textContent = pd.group || '';
+      const fmt = (v, sfx='') => v != null ? v.toFixed(1) + sfx : '—';
+      document.getElementById('peerTableBody').innerHTML = pd.peers.map(p => `
+        <tr class="border-b border-slate-800/40 hover:bg-slate-800/30 cursor-pointer" onclick="window.location='/history/${p.ticker}'">
+          <td class="py-1.5 px-2 font-semibold text-brand">${p.ticker}</td>
+          <td class="py-1.5 px-2 text-right font-mono">${fmt(p.pe,'x')}</td>
+          <td class="py-1.5 px-2 text-right font-mono">${fmt(p.fwd_pe,'x')}</td>
+          <td class="py-1.5 px-2 text-right font-mono">${fmt(p.ps,'x')}</td>
+          <td class="py-1.5 px-2 text-right font-mono">${fmt(p.peg,'x')}</td>
+          <td class="py-1.5 px-2 text-right ${(p.upside??0)>=0?'text-emerald-400':'text-rose-400'}">${p.upside!=null?(p.upside>=0?'+':'')+p.upside.toFixed(1)+'%':'—'}</td>
+          <td class="py-1.5 px-2 text-right ${(p.day_chg??0)>=0?'text-emerald-400':'text-rose-400'}">${p.day_chg!=null?(p.day_chg>=0?'+':'')+p.day_chg.toFixed(2)+'%':'—'}</td>
+        </tr>`).join('');
+    } catch(e) {}
+  })();
+
   if (data.insider_trades && data.insider_trades.length > 0) {
     document.getElementById('insiderSection').style.display = 'block';
     const tbody = document.getElementById('insiderTableBody');

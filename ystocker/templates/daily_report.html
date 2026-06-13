@@ -562,6 +562,23 @@ function _countryLabel(code) {
   return I18n.t(key) || code;
 }
 
+function _startEconCountdowns() {
+  document.querySelectorAll('[data-event-datetime]').forEach(el => {
+    const dt = new Date(el.dataset.eventDatetime);
+    const now = new Date();
+    if (dt <= now) { el.textContent = ''; return; }
+    const update = () => {
+      const diff = new Date(el.dataset.eventDatetime) - new Date();
+      if (diff <= 0) { el.textContent = 'Now'; return; }
+      const h = Math.floor(diff / 3600000);
+      const m = Math.floor((diff % 3600000) / 60000);
+      el.textContent = h > 0 ? `in ${h}h ${m}m` : `in ${m}m`;
+    };
+    update();
+    setInterval(update, 60000);
+  });
+}
+
 function renderEventsTable(allEvents, today) {
   const evEl = document.getElementById('drEvents');
   if (!allEvents.length) {
@@ -610,8 +627,23 @@ function renderEventsTable(allEvents, today) {
         : ev.forecast != null
         ? `<span class="text-slate-500 font-mono">est ${ev.forecast}</span>`
         : '—';
+
+      // Build countdown span for today's events with parseable time
+      let countdownHtml = '';
+      if (d === today && ev.time && ev.time !== '—') {
+        try {
+          // Parse "8:30 AM ET" style times; strip timezone label for JS parsing
+          const timeStr = ev.time.replace(/\s*(ET|EST|EDT|CT|PT)\s*$/i, '').trim();
+          const dtStr = `${today}T${_parseTimeTo24h(timeStr)}`;
+          const dt = new Date(dtStr);
+          if (!isNaN(dt.getTime())) {
+            countdownHtml = ` <span data-event-datetime="${dtStr}" class="text-[10px] text-indigo-400 ml-1 tabular-nums"></span>`;
+          }
+        } catch(e) { /* ignore unparseable times */ }
+      }
+
       rows += `<tr>
-        <td class="text-slate-500 whitespace-nowrap">${ev.time || '—'}</td>
+        <td class="text-slate-500 whitespace-nowrap">${ev.time || '—'}${countdownHtml}</td>
         <td class="ev-country">${_countryLabel(ev.country || '')}</td>
         <td class="ev-name">${evName}</td>
         <td>${actFct}</td>
@@ -621,6 +653,19 @@ function renderEventsTable(allEvents, today) {
 
   rows += '</tbody></table>';
   evEl.innerHTML = rows;
+  _startEconCountdowns();
+}
+
+// Parse "8:30 AM" / "2:00 PM" to 24h "HH:MM:00" for Date constructor
+function _parseTimeTo24h(timeStr) {
+  const m = timeStr.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
+  if (!m) return null;
+  let h = parseInt(m[1], 10);
+  const min = m[2];
+  const ampm = (m[3] || '').toUpperCase();
+  if (ampm === 'PM' && h < 12) h += 12;
+  if (ampm === 'AM' && h === 12) h = 0;
+  return `${String(h).padStart(2,'0')}:${min}:00`;
 }
 
 // ── Top Movers ────────────────────────────────────────────────────

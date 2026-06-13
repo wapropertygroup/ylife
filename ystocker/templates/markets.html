@@ -45,6 +45,13 @@
   .yield-explain-thinking .dot:nth-child(2) { animation-delay: 0.2s; }
   .yield-explain-thinking .dot:nth-child(3) { animation-delay: 0.4s; }
   @keyframes yldBounce { 0%,80%,100% { transform: scale(0.6); opacity:.5 } 40% { transform: scale(1); opacity:1 } }
+  .sector-period-btn {
+    font-size: 10px; padding: 2px 8px; border-radius: 4px;
+    border: 1px solid #334155; background: transparent; color: #64748b; cursor: pointer;
+    transition: all 0.15s;
+  }
+  .sector-period-btn:hover { color: #cbd5e1; border-color: #475569; }
+  .sector-period-btn.active { color: #a5b4fc; border-color: #6366f1; background: rgba(99,102,241,0.15); }
 </style>
 
 <!-- ── Fullscreen chart modal ────────────────────────────────────────── -->
@@ -264,6 +271,10 @@
                 d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"/>
         </svg>
       </button>
+    </div>
+    <div id="sectorPeriodToggle" class="flex gap-1 mb-2">
+      <button class="sector-period-btn active" data-period="day" data-i18n="markets.sector_day">Day</button>
+      <button class="sector-period-btn" data-period="week" data-i18n="markets.sector_week">Week</button>
     </div>
     <div id="sectorBars" class="space-y-2.5"></div>
   </div>
@@ -807,14 +818,24 @@ function renderVix(vix, canvasId) {
 }
 
 // ── Sector bars ───────────────────────────────────────────────────────
+let _sectorPeriod = 'day';
+
 function renderSectors(sectors) {
   _mkSectorData = sectors;  // save for modal expand
   const el = document.getElementById('sectorBars');
   if (!sectors || !sectors.length) { el.innerHTML = '<p class="text-xs text-slate-600">' + (I18n.t('markets.no_data') || 'No data') + '.</p>'; return; }
-  const sorted = [...sectors].sort((a, b) => (b.day_chg ?? -999) - (a.day_chg ?? -999));
-  const maxAbs = Math.max(...sorted.map(s => Math.abs(s.day_chg ?? 0)), 1);
+  const sorted = [...sectors].sort((a, b) => {
+    const va = (_sectorPeriod === 'week' ? (a.week_chg_pct ?? a.day_chg) : a.day_chg) ?? -999;
+    const vb = (_sectorPeriod === 'week' ? (b.week_chg_pct ?? b.day_chg) : b.day_chg) ?? -999;
+    return vb - va;
+  });
+  const maxAbs = Math.max(...sorted.map(s => {
+    const v = _sectorPeriod === 'week' ? (s.week_chg_pct ?? s.day_chg) : s.day_chg;
+    return Math.abs(v ?? 0);
+  }), 1);
   el.innerHTML = sorted.map(s => {
-    const pct = s.day_chg;
+    const chg = _sectorPeriod === 'week' ? (s.week_chg_pct ?? s.day_chg) : s.day_chg;
+    const pct = chg;
     const col = pct == null ? '#475569' : pct >= 0 ? '#34d399' : '#f87171';
     const w   = pct == null ? 0 : Math.round(Math.abs(pct) / maxAbs * 100);
     const sign = _chgSign(pct);
@@ -832,6 +853,14 @@ function renderSectors(sectors) {
     </div>`;
   }).join('');
 }
+
+document.querySelectorAll('.sector-period-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    _sectorPeriod = btn.dataset.period;
+    document.querySelectorAll('.sector-period-btn').forEach(b => b.classList.toggle('active', b === btn));
+    if (_mkData) renderSectors(_mkData.sectors);
+  });
+});
 
 // ── Per-index stats & chart ───────────────────────────────────────────
 function renderIdxStats(key, data) {

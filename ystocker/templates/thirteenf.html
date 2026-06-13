@@ -199,6 +199,20 @@
 
     <!-- Holdings table -->
     <div class="overflow-x-auto">
+{% set new_buys = fd.holdings | selectattr("change", "equalto", "new") | list | sort(attribute="value_millions", reverse=True) %}
+{% if new_buys %}
+<div class="mb-3 p-3 bg-slate-800/40 rounded-xl">
+  <p class="text-[10px] text-slate-500 uppercase tracking-widest mb-2" data-i18n="thirteenf.new_buys">New Positions This Quarter</p>
+  <div class="flex flex-wrap gap-2">
+    {% for h in new_buys[:5] %}
+    <a href="/history/{{ h.ticker }}" class="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-emerald-900/20 border border-emerald-800/40 hover:border-emerald-600/60 transition">
+      <span class="text-xs font-bold text-emerald-400">{{ h.ticker }}</span>
+      <span class="text-[10px] text-slate-400">${{ '%.1f'|format(h.value_millions/1000) }}B</span>
+    </a>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
       <table class="w-full text-sm" data-sortable>
         <thead>
           <tr class="text-xs text-slate-500 border-b border-slate-800 select-none">
