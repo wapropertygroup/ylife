@@ -470,7 +470,8 @@ def sector(sector_name: str):
     chartdata = _df_to_chartdata(df)
     table_cols = ["Name", "Market Cap ($B)", "Current Price",
                   "Target Price", "Upside (%)", "PE (TTM)", "PE (Forward)", "PEG",
-                  "EPS Growth TTM (%)", "EPS Growth Q (%)", "Day Change (%)", "EV/EBITDA", "EV ($B)", "EBITDA ($B)"]
+                  "EPS Growth TTM (%)", "EPS Growth Q (%)", "Day Change (%)", "EV/EBITDA", "EV ($B)", "EBITDA ($B)",
+                  "P/S Ratio", "P/B Ratio", "FCF ($B)", "Short Float (%)", "Dividend Yield (%)"]
     existing_cols = [c for c in table_cols if c in df.columns]
     table_df = df[existing_cols].copy()
 
@@ -761,6 +762,29 @@ def api_history(ticker: str):
     earnings_growth_ttm = info.get("earningsGrowth")
     earnings_growth_q   = info.get("earningsQuarterlyGrowth")
 
+    def _fmt_ts(val):
+        """Format a list or single timestamp to 'Mon DD, YYYY' string."""
+        if not val:
+            return None
+        try:
+            import datetime as _dt
+            t = val[0] if isinstance(val, (list, tuple)) else val
+            if isinstance(t, (int, float)):
+                return _dt.datetime.utcfromtimestamp(t).strftime("%b %d, %Y")
+            return str(t)[:10]
+        except Exception:
+            return None
+
+    def _fmt_ts_single(val):
+        """Format a single unix timestamp to 'Mon DD, YYYY' string."""
+        if not val:
+            return None
+        try:
+            import datetime as _dt
+            return _dt.datetime.utcfromtimestamp(int(val)).strftime("%b %d, %Y")
+        except Exception:
+            return None
+
     # Options walls: strike with highest aggregate open interest across all expirations
     # Also compute put/call ratio = total put OI / total call OI
     # And per-expiration P/C ratios for the history chart
@@ -834,6 +858,17 @@ def api_history(ticker: str):
         "ps_ratio":          _safe(round(info.get("priceToSalesTrailingTwelveMonths"), 2)) if info.get("priceToSalesTrailingTwelveMonths") else None,
         "pb_ratio":          _safe(round(info.get("priceToBook"), 2)) if info.get("priceToBook") else None,
         "fcf":               _safe(round(info.get("freeCashflow") / 1e9, 1)) if info.get("freeCashflow") else None,
+        # ETF-specific
+        "quote_type":        info.get("quoteType"),
+        "expense_ratio":     _safe(round(info.get("annualReportExpenseRatio") * 100, 2)) if info.get("annualReportExpenseRatio") else None,
+        "total_assets":      _safe(round(info.get("totalAssets") / 1e9, 1)) if info.get("totalAssets") else None,
+        "etf_yield":         _safe(round(info.get("yield") * 100, 2)) if info.get("yield") else None,
+        "nav_price":         _safe(info.get("navPrice")),
+        "fund_family":       info.get("fundFamily"),
+        "category":          info.get("category"),
+        # Key dates
+        "earnings_date":     _fmt_ts(info.get("earningsTimestamps") or info.get("earningsDate")),
+        "ex_dividend_date":  _fmt_ts_single(info.get("exDividendDate")),
     }
     with _HISTORY_CACHE_LOCK:
         _HISTORY_CACHE[cache_key] = {"ts": time.time(), "data": result}

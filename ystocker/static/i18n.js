@@ -250,6 +250,18 @@ const I18n = (() => {
     'history.macd_title':   { en: 'MACD',            zh: 'MACD' },
     'history.macd_desc':    { en: 'Moving Average Convergence/Divergence (12/26 EMA, 9 signal)', zh: '指数平滑异同移动平均线（12/26 EMA，9信号线）' },
     'history.macd_signal':  { en: 'Signal',          zh: '信号线' },
+    // ETF info + key dates stat cards
+    'history.group_etf':        { en: 'ETF Info',         zh: 'ETF 信息' },
+    'history.expense_ratio':    { en: 'Expense Ratio',    zh: '费用率' },
+    'history.total_assets':     { en: 'AUM ($B)',         zh: '资产规模（十亿）' },
+    'history.etf_yield':        { en: 'Distribution Yield', zh: '分配收益率' },
+    'history.nav_price':        { en: 'NAV',              zh: '净资产值' },
+    'history.group_dates':      { en: 'Key Dates',        zh: '重要日期' },
+    'history.earnings_date':    { en: 'Next Earnings',    zh: '下次财报' },
+    'history.ex_div_date':      { en: 'Ex-Dividend',      zh: '除息日' },
+    // Historical Volatility chart
+    'history.hv_title':         { en: 'Historical Volatility', zh: '历史波动率' },
+    'history.hv_desc':          { en: 'Annualized rolling volatility from log returns (%)', zh: '对数收益率的年化滚动波动率（%）' },
     'history.target_legend':   { en: 'Target',    zh: '目标价' },
     'history.call_wall_legend':{ en: 'Call Wall', zh: '认购墙' },
     'history.put_wall_legend': { en: 'Put Wall',  zh: '认沽墙' },

@@ -117,6 +117,45 @@
 <!-- ── Stat cards ───────────────────────────────────────────────────── -->
 <div class="space-y-3 mb-6 sm:mb-8 fade-up">
 
+  <!-- ETF Info (shown only for ETFs) -->
+  <div id="etfSection" style="display:none">
+    <p class="text-[10px] font-semibold uppercase tracking-widest text-slate-600 mb-2 px-1" data-i18n="history.group_etf">ETF Info</p>
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
+      <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 py-3">
+        <div class="text-xs text-slate-500 mb-1" data-i18n="history.expense_ratio">Expense Ratio</div>
+        <div id="statExpenseRatio" class="text-base font-bold text-amber-400">—</div>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 py-3">
+        <div class="text-xs text-slate-500 mb-1" data-i18n="history.total_assets">AUM ($B)</div>
+        <div id="statAum" class="text-base font-bold text-slate-100">—</div>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 py-3">
+        <div class="text-xs text-slate-500 mb-1" data-i18n="history.etf_yield">Distribution Yield</div>
+        <div id="statEtfYield" class="text-base font-bold text-emerald-400">—</div>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 py-3">
+        <div class="text-xs text-slate-500 mb-1" data-i18n="history.nav_price">NAV</div>
+        <div id="statNav" class="text-base font-bold text-sky-400">—</div>
+      </div>
+    </div>
+    <div class="mt-2 text-xs text-slate-600 px-1" id="etfMeta"></div>
+  </div>
+
+  <!-- Key Dates (shown when available) -->
+  <div id="keyDatesSection" style="display:none">
+    <p class="text-[10px] font-semibold uppercase tracking-widest text-slate-600 mb-2 px-1" data-i18n="history.group_dates">Key Dates</p>
+    <div class="grid grid-cols-2 gap-2 sm:gap-3">
+      <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 py-3">
+        <div class="text-xs text-slate-500 mb-1" data-i18n="history.earnings_date">Next Earnings</div>
+        <div id="statEarningsDate" class="text-base font-bold text-sky-400">—</div>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 py-3">
+        <div class="text-xs text-slate-500 mb-1" data-i18n="history.ex_div_date">Ex-Dividend</div>
+        <div id="statExDivDate" class="text-base font-bold text-emerald-400">—</div>
+      </div>
+    </div>
+  </div>
+
   <!-- Valuation -->
   <div>
     <p class="text-[10px] font-semibold uppercase tracking-widest text-slate-600 mb-2 px-1" data-i18n="history.group_valuation">Valuation</p>
@@ -468,6 +507,26 @@
     </div>
     <div class="chart-container" style="height:160px" id="macdChartWrap">
       <canvas id="macdHistChart"></canvas>
+    </div>
+  </div>
+
+  <!-- Historical Volatility chart -->
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up" id="hvSection" style="display:none">
+    <div class="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-0 sm:justify-between mb-3">
+      <div>
+        <h2 class="text-base font-semibold text-slate-200" data-i18n="history.hv_title">Historical Volatility</h2>
+        <p class="text-xs text-slate-500" data-i18n="history.hv_desc">Annualized rolling volatility from log returns (%)</p>
+      </div>
+      <div class="flex items-center gap-2 flex-wrap justify-end">
+        <span class="flex items-center gap-1.5 text-xs text-amber-400"><span class="inline-block w-3 h-0.5 bg-amber-400"></span> HV20</span>
+        <span class="flex items-center gap-1.5 text-xs text-violet-400"><span class="inline-block w-3 h-0.5 border-dashed border border-violet-400"></span> HV60</span>
+        <button onclick="expandChart('hv')" title="Expand" class="expand-btn">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="chart-container" style="height:160px" id="hvChartWrap">
+      <canvas id="hvHistChart"></canvas>
     </div>
   </div>
 
@@ -849,6 +908,24 @@ let   _forecastResult = null;   // last forecast API response
     sfEl.className   = 'text-base font-bold ' + (data.short_float > 15 ? 'text-rose-400' : data.short_float > 7 ? 'text-amber-400' : 'text-slate-100');
   }
   if (data.short_ratio != null) { const el = document.getElementById('statShortRatio'); el.textContent = data.short_ratio.toFixed(1) + 'd'; }
+
+  // ETF Info
+  if (data.quote_type === 'ETF') {
+    document.getElementById('etfSection').style.display = 'block';
+    if (data.expense_ratio != null) document.getElementById('statExpenseRatio').textContent = data.expense_ratio.toFixed(2) + '%';
+    if (data.total_assets  != null) document.getElementById('statAum').textContent          = '$' + data.total_assets.toFixed(1) + 'B';
+    if (data.etf_yield     != null) document.getElementById('statEtfYield').textContent     = data.etf_yield.toFixed(2) + '%';
+    if (data.nav_price     != null) document.getElementById('statNav').textContent          = '$' + data.nav_price.toFixed(2);
+    const meta = [data.fund_family, data.category].filter(Boolean).join(' · ');
+    if (meta) document.getElementById('etfMeta').textContent = meta;
+  }
+
+  // Key dates
+  if (data.earnings_date || data.ex_dividend_date) {
+    document.getElementById('keyDatesSection').style.display = 'block';
+    if (data.earnings_date)    document.getElementById('statEarningsDate').textContent = data.earnings_date;
+    if (data.ex_dividend_date) document.getElementById('statExDivDate').textContent    = data.ex_dividend_date;
+  }
 
   const pcEl    = document.getElementById('statPutCallRatio');
   const pcLabel = document.getElementById('statPutCallLabel');
@@ -1232,6 +1309,11 @@ let   _forecastResult = null;   // last forecast API response
   document.getElementById('macdSection').style.display = 'block';
   const macdCfg = _buildConfig('macd', data, staticData);
   _registerChart('macd', macdCfg, new Chart(document.getElementById('macdHistChart'), macdCfg));
+
+  // ── Historical Volatility chart (synced to price range)
+  document.getElementById('hvSection').style.display = 'block';
+  const hvCfg = _buildConfig('hv', data, staticData);
+  _registerChart('hv', hvCfg, new Chart(document.getElementById('hvHistChart'), hvCfg));
 
   // ── PEG history chart (only when data available)
   if (data.peg_history && data.peg_history.some(v => v != null)) {
@@ -1822,6 +1904,53 @@ function _buildConfig(key, d, staticData) {
       _title:'MACD (12/26/9)', _desc:'Moving Average Convergence Divergence',
     };
   }
+  if (key === 'hv') {
+    function rollingHv(prices, n) {
+      const out = new Array(prices.length).fill(null);
+      const diff = (d.dates && d.dates.length > 1) ?
+        (new Date(d.dates[1]) - new Date(d.dates[0])) / 86400000 : 1;
+      const annFactor = diff <= 2 ? 252 : diff <= 10 ? 52 : 12;
+      for (let i = n; i < prices.length; i++) {
+        const slice = prices.slice(i - n, i + 1);
+        const logRets = [];
+        for (let j = 1; j < slice.length; j++) {
+          if (slice[j] != null && slice[j-1] != null && slice[j-1] > 0)
+            logRets.push(Math.log(slice[j] / slice[j-1]));
+        }
+        if (logRets.length < n * 0.5) continue;
+        const mean = logRets.reduce((s, v) => s + v, 0) / logRets.length;
+        const variance = logRets.reduce((s, v) => s + (v - mean) ** 2, 0) / logRets.length;
+        out[i] = parseFloat((Math.sqrt(variance * annFactor) * 100).toFixed(1));
+      }
+      return out;
+    }
+    const hv20 = rollingHv(d.prices, 20);
+    const hv60 = rollingHv(d.prices, 60);
+    return {
+      type: 'line',
+      data: { labels: d.dates, datasets: [
+        { label:'HV20', data:hv20,
+          borderColor:'#fbbf24', backgroundColor:'rgba(251,191,36,0.07)',
+          borderWidth:1.5, pointRadius:0, pointHoverRadius:4, fill:true, tension:0.3, spanGaps:true },
+        { label:'HV60', data:hv60,
+          borderColor:'#a78bfa', backgroundColor:'transparent',
+          borderWidth:1.5, pointRadius:0, pointHoverRadius:4, fill:false, tension:0.3, spanGaps:true,
+          borderDash:[4,3] },
+      ]},
+      options: {
+        responsive:true, maintainAspectRatio:false,
+        plugins:{ legend:{display:false}, tooltip:{mode:'index',intersect:false, callbacks:{
+          label: c => c.raw==null?'': ` ${c.dataset.label}: ${c.raw.toFixed(1)}%`
+        }}},
+        scales:{
+          x:{grid:{color:gridCol},ticks:{color:tickCol,maxTicksLimit:8,maxRotation:0}},
+          y:{grid:{color:gridCol},ticks:{color:tickCol,callback:v=>v.toFixed(0)+'%'},min:0},
+        },
+        interaction:{mode:'index',intersect:false},
+      },
+      _title:'Historical Volatility', _desc:'Annualized rolling HV20 / HV60 (%)',
+    };
+  }
   if (key === 'peg') {
     return {
       type: 'line',
@@ -2127,6 +2256,11 @@ async function _handleRange(chartKey, period, staticData) {
     const mCfg = _buildConfig('macd', d, staticData);
     _chartConfigs['macd'] = mCfg;
     _chartInstances['macd'] = new Chart(document.getElementById('macdHistChart'), mCfg);
+
+    if (_chartInstances['hv']) { _chartInstances['hv'].destroy(); delete _chartInstances['hv']; }
+    const hvCfg2 = _buildConfig('hv', d, staticData);
+    _chartConfigs['hv'] = hvCfg2;
+    _chartInstances['hv'] = new Chart(document.getElementById('hvHistChart'), hvCfg2);
   }
 
   // If modal is open for this chart, refresh it too
