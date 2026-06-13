@@ -702,6 +702,18 @@
       <canvas id="balanceChart"></canvas>
     </div>
     <div id="balanceExplainPanel" class="explain-panel"></div>
+
+    <!-- Fed Assets vs S&P 500 toggle -->
+    <div id="fedSpySection" class="mt-3 border-t border-slate-800 pt-3">
+      <button onclick="_toggleFedSpy()" id="fedSpyToggle"
+        class="text-[11px] text-slate-500 hover:text-slate-300 transition flex items-center gap-1">
+        <span id="fedSpyChevron">▶</span>
+        <span data-i18n="fed.fed_spy_title">Fed Total Assets vs S&amp;P 500</span>
+      </button>
+      <div id="fedSpyChartWrap" class="chart-container mt-3 hidden" style="height:200px">
+        <canvas id="fedSpyChart"></canvas>
+      </div>
+    </div>
   </div>
 
   <!-- Treasury as % of Total Assets -->
@@ -791,6 +803,9 @@
 {% endif %}
 
 <script>
+// Fed series data — populated by the main IIFE and read by _toggleFedSpy
+let _fedSeriesData = {};
+
 (async function() {
   const gridCol = '#1e293b';
   const tickCol = '#64748b';
@@ -812,6 +827,7 @@
   }
 
   const s = data.series || {};
+  _fedSeriesData = s;  // expose for _toggleFedSpy
 
   function lastVal(sid) {
     const d = s[sid];
@@ -1878,6 +1894,57 @@ function explainChart(chart) {
   }
 
   _runExplain(chart, I18n.getLang());
+}
+
+// ── Fed Assets vs S&P 500 toggle ─────────────────────────────────────────
+let _fedSpyLoaded = false, _fedSpyChart = null;
+async function _toggleFedSpy() {
+  const wrap = document.getElementById('fedSpyChartWrap');
+  const chevron = document.getElementById('fedSpyChevron');
+  if (!wrap.classList.contains('hidden')) {
+    wrap.classList.add('hidden'); chevron.textContent = '▶'; return;
+  }
+  wrap.classList.remove('hidden'); chevron.textContent = '▼';
+  if (_fedSpyLoaded) return;
+  _fedSpyLoaded = true;
+  try {
+    const spyResp = await fetch('/api/history/SPY?period=5y');
+    const spy = await spyResp.json();
+    // Use WALCL from the already-loaded _fedSeriesData object (Fed balance sheet data)
+    const walclSeries = _fedSeriesData['WALCL'] || {};
+    const walclDates  = walclSeries.dates  || [];
+    const walclValues = walclSeries.values || [];
+    const spyDates    = spy.dates  || [];
+    const spyPrices   = spy.prices || [];
+    // Normalize both to 100 at their earliest point
+    const walclBase = walclValues.find(v => v != null) || 1;
+    const spyBase   = spyPrices.find(v => v != null) || 1;
+    const walclNorm = walclValues.map(v => v != null ? Math.round(v / walclBase * 100 * 10) / 10 : null);
+    const spyNorm   = spyPrices.map(v => v != null ? Math.round(v / spyBase * 100 * 10) / 10 : null);
+    const gridCol = '#1e293b', tickCol = '#64748b';
+    if (_fedSpyChart) _fedSpyChart.destroy();
+    _fedSpyChart = new Chart(document.getElementById('fedSpyChart'), {
+      type: 'line',
+      data: { labels: spyDates, datasets: [
+        { label:'Fed Assets', data:walclNorm.slice(-spyDates.length),
+          borderColor:'#f59e0b', backgroundColor:'rgba(245,158,11,0.08)',
+          borderWidth:1.5, pointRadius:0, fill:true, tension:0.3, spanGaps:true },
+        { label:'S&P 500', data:spyNorm,
+          borderColor:'#38bdf8', backgroundColor:'transparent',
+          borderWidth:1.5, pointRadius:0, fill:false, tension:0.3, spanGaps:true },
+      ]},
+      options: {
+        responsive:true, maintainAspectRatio:false,
+        plugins:{ legend:{display:false}, tooltip:{mode:'index',intersect:false,
+          callbacks:{label:c=>c.raw==null?'':`  ${c.dataset.label}: ${c.raw.toFixed(1)} (norm)`}}},
+        scales:{
+          x:{grid:{color:gridCol},ticks:{color:tickCol,maxTicksLimit:6,maxRotation:0}},
+          y:{grid:{color:gridCol},ticks:{color:tickCol,callback:v=>v.toFixed(0)},title:{display:true,text:'Normalised (100=start)',color:tickCol,font:{size:9}}},
+        },
+        interaction:{mode:'index',intersect:false},
+      },
+    });
+  } catch(e) { console.error('Fed vs SPY:', e); }
 }
 
 // ── Stat card tooltips ────────────────────────────────────────────────────

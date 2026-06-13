@@ -63,6 +63,13 @@
 /* Date input */
 input[type="date"] { color-scheme: dark; }
 input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(.6); }
+.hm-toggle-btn {
+  font-size: 10px; padding: 2px 8px; border-radius: 4px;
+  border: 1px solid #334155; background: transparent; color: #64748b; cursor: pointer;
+  transition: all 0.15s;
+}
+.hm-toggle-btn:hover { color: #cbd5e1; border-color: #475569; }
+.hm-toggle-btn.active { color: #a5b4fc; border-color: #6366f1; background: rgba(99,102,241,0.15); }
 </style>
 
 <!-- ── Tooltip ──────────────────────────────────────────────────────────── -->
@@ -106,6 +113,11 @@ input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(.6); }
             class="px-3 py-1.5 text-sm rounded-lg bg-brand/20 border border-brand/40 text-brand
                    hover:bg-brand hover:text-white transition whitespace-nowrap"
             data-i18n="heatmap.snapshot">Save Snapshot</button>
+    <div id="hmColorToggle" class="flex gap-1">
+      <button class="hm-toggle-btn active" data-mode="day" data-i18n="heatmap.mode_day">Day</button>
+      <button class="hm-toggle-btn" data-mode="week" data-i18n="heatmap.mode_week">1W</button>
+      <button class="hm-toggle-btn" data-mode="month" data-i18n="heatmap.mode_month">1M</button>
+    </div>
   </div>
 </div>
 
@@ -205,6 +217,14 @@ function _cc(v) {
   return 'cc-p5';
 }
 
+let _hmColorMode = 'day'; // 'day' | 'week' | 'month'
+
+function _getChgForMode(s) {
+  if (_hmColorMode === 'week')  return s.week_chg  ?? s.w5   ?? s.day_chg;
+  if (_hmColorMode === 'month') return s.month_chg ?? s.m1   ?? s.day_chg;
+  return s.day_chg;
+}
+
 function _span(mkt_cap) {
   if (!mkt_cap || mkt_cap <= 0) return 2;
   // log10 range ~1.58 (38B) to 3.52 (3300B) → span 2–7
@@ -294,8 +314,9 @@ function renderHeatmap(stocks) {
       <div class="grid gap-0.5" style="grid-template-columns: repeat(auto-fill, minmax(50px, 1fr));">`;
 
     for (const s of sStocks) {
-      const cc  = _cc(s.day_chg);
-      const chg = s.day_chg != null ? (s.day_chg >= 0 ? '+' : '') + s.day_chg.toFixed(2) + '%' : '—';
+      const cc  = _cc(_getChgForMode(s));
+      const chg = _getChgForMode(s);
+      const chgTxt = chg != null ? (chg >= 0 ? '+' : '') + chg.toFixed(2) + '%' : '—';
       const sp  = _span(s.mkt_cap);
       const minH = 44 + (sp - 2) * 6;
       const spanCSS = sp > 1 ? `grid-column:span ${sp};` : '';
@@ -306,7 +327,7 @@ function renderHeatmap(stocks) {
          style="${spanCSS}min-height:${minH}px"
          data-s='${JSON.stringify({ticker:s.ticker,name:s.name,sector:s.sector,price:s.price,day_chg:s.day_chg,week_chg:s.week_chg??s.w5??null,mkt_cap:s.mkt_cap})}'>
         <span class="ht">${s.ticker}</span>
-        <span class="hc">${chg}</span>
+        <span class="hc">${chgTxt}</span>
         ${showName ? `<span class="hn">${s.name}</span>` : ''}
       </a>`;
     }
@@ -408,6 +429,31 @@ async function takeSnapshot() {
   const today = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
   document.getElementById('hmDatePicker').value = today;
   loadHeatmap(today);
+
+  document.querySelectorAll('.hm-toggle-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      _hmColorMode = btn.dataset.mode;
+      document.querySelectorAll('.hm-toggle-btn').forEach(b => b.classList.toggle('active', b === btn));
+      _recolorTiles();
+    });
+  });
 })();
+
+function _recolorTiles() {
+  document.querySelectorAll('[data-s]').forEach(tile => {
+    try {
+      const s = JSON.parse(tile.dataset.s);
+      const chg = _getChgForMode(s);
+      const chgTxt = chg != null ? (chg >= 0 ? '+' : '') + chg.toFixed(2) + '%' : '—';
+      // Update color class
+      const colorClasses = ['cc-n5','cc-n4','cc-n3','cc-n2','cc-n1','cc-n05','cc-0','cc-p05','cc-p1','cc-p2','cc-p3','cc-p4','cc-p5'];
+      tile.classList.remove(...colorClasses);
+      tile.classList.add(_cc(chg));
+      // Update displayed change text
+      const hcEl = tile.querySelector('.hc');
+      if (hcEl) hcEl.textContent = chgTxt;
+    } catch(e) {}
+  });
+}
 </script>
 {% endblock %}

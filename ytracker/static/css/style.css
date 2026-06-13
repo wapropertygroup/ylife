@@ -1,3 +1,10 @@
+/* Brand color tokens — amber palette (matches yTracker theme) */
+:root {
+  --brand:       245 158  11;  /* #f59e0b */
+  --brand-dark:  217 119   6;  /* #d97706 */
+  --brand-light: 251 191  36;  /* #fbbf24 */
+}
+
 body {
   font-family: 'Inter', sans-serif;
 }

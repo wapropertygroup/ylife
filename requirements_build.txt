@@ -1,0 +1,4 @@
+# Build dependencies — not needed to RUN the apps, only to rebuild Tailwind CSS.
+# Usage: pip install -r requirements_build.txt
+# Then:  bash build_css.sh  (or use Node.js/npx, which is preferred)
+pytailwindcss

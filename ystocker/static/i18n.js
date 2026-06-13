@@ -732,6 +732,7 @@ const I18n = (() => {
     // ── fed.html: M2 Money Supply cards ───────────────────────────────
     'fed.m2_supply':            { en: 'M2 Money Supply',    zh: 'M2货币供应量' },
     'fed.m2_yoy':               { en: 'M2 YoY Growth',      zh: 'M2同比增速' },
+    'fed.fed_spy_title':        { en: 'Fed Total Assets vs S&P 500', zh: '美联储总资产 vs 标普500' },
 
     // ── contact.html ───────────────────────────────────────────────────
     'contact.title':        { en: 'Contact Us',  zh: '联系我们' },
@@ -1090,6 +1091,10 @@ const I18n = (() => {
 
     // ── heatmap.html ───────────────────────────────────────────────────
     'heatmap.nav':         { en: 'Heatmap',           zh: '热力图' },
+    'heatmap.mode_day':    { en: 'Day',               zh: '日' },
+    'heatmap.mode_week':   { en: '1W',                zh: '1周' },
+    'heatmap.mode_month':  { en: '1M',                zh: '1月' },
+    'history.earnings_markers': { en: 'Earnings',     zh: '财报' },
 
     // ── commodities.html ───────────────────────────────────────────────
     'nav.commodities_overview': { en: '📊 Overview & Detail', zh: '📊 概览与详情' },

@@ -1,3 +1,10 @@
+/* Brand color tokens — indigo palette (matches yPlanner theme) */
+:root {
+  --brand:       99 102 241;   /* #6366f1 */
+  --brand-dark:  79  70 229;   /* #4f46e5 */
+  --brand-light: 165 180 252;  /* #a5b4fc */
+}
+
 /* yPlanner custom styles */
 
 body {

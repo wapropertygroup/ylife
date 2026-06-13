@@ -1,3 +1,10 @@
+/* Brand color tokens — sky/cyan palette (matches yBG theme) */
+:root {
+  --brand:        14 165 233;  /* #0ea5e9 */
+  --brand-dark:    2 132 199;  /* #0284c7 */
+  --brand-light:  56 189 248;  /* #38bdf8 */
+}
+
 @keyframes fade-up {
   from { opacity: 0; transform: translateY(16px); }
   to   { opacity: 1; transform: translateY(0); }

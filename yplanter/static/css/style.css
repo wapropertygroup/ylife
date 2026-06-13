@@ -1,3 +1,10 @@
+/* Brand color tokens — green palette (matches yPlanter theme) */
+:root {
+  --brand:       22 163  74;   /* #16a34a */
+  --brand-dark:  21 128  61;   /* #15803d */
+  --brand-light: 134 239 172;  /* #86efac */
+}
+
 body {
   font-family: 'Inter', sans-serif;
 }

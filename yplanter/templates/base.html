@@ -6,23 +6,8 @@
   <title>{% block title %}yPlanter — Seattle Garden Guide{% endblock %}</title>
   <link rel="icon" type="image/svg+xml" href="{{ url_for('planter.static', filename='favicon.svg') }}">
 
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      darkMode: 'class',
-      theme: {
-        extend: {
-          colors: {
-            brand: { DEFAULT: '#16a34a', dark: '#15803d', light: '#86efac' },
-            surface: '#0f172a',
-            panel: '#1e293b',
-            border: '#334155',
-          },
-          fontFamily: { mono: ['JetBrains Mono', 'Fira Code', 'monospace'] }
-        }
-      }
-    }
-  </script>
+  <!-- Tailwind CSS (compiled — regenerate with: bash build_css.sh) -->
+  <link rel="stylesheet" href="{{ url_for('planter.static', filename='css/tailwind.css') }}">
 
   <script>
     (function() {

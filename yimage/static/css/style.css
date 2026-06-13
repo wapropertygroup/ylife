@@ -1,3 +1,10 @@
+/* Brand color tokens — purple/violet palette (matches yImage theme) */
+:root {
+  --brand:       124  58 237;  /* #7c3aed */
+  --brand-dark:  109  40 217;  /* #6d28d9 */
+  --brand-light: 167 139 250;  /* #a78bfa */
+}
+
 @keyframes fade-up {
   from { opacity: 0; transform: translateY(12px); }
   to   { opacity: 1; transform: translateY(0); }

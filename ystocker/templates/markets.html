@@ -434,6 +434,20 @@
   <!-- Stat row (shared, updated per tab) -->
   <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 mb-5" id="idxStats"></div>
 
+  <!-- 52-week range bar -->
+  <div id="idxRangeBar" class="mt-3 hidden">
+    <div class="flex items-center justify-between text-[10px] text-slate-500 mb-1">
+      <span id="idxRangeLow">—</span>
+      <span class="text-slate-400 font-medium" id="idxRangeCurrent">—</span>
+      <span id="idxRangeHigh">—</span>
+    </div>
+    <div class="relative h-2 bg-slate-800 rounded-full">
+      <div class="absolute inset-y-0 left-0 bg-gradient-to-r from-rose-500 via-amber-400 to-emerald-500 rounded-full opacity-40" style="width:100%"></div>
+      <div id="idxRangeMarker" class="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-white shadow ring-2 ring-slate-900" style="left:50%"></div>
+    </div>
+    <div class="text-center text-[10px] text-slate-500 mt-1" id="idxRangePct"></div>
+  </div>
+
   <!-- Technical indicators -->
   <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
     <!-- MA status -->
@@ -863,8 +877,7 @@ function renderIdxStats(key, data) {
   document.getElementById('maStatus').innerHTML = maRows.length ? maRows.join('') : `<span class="text-slate-600 text-xs">${I18n.t('markets.no_data') || 'No data'}</span>`;
 
   // RSI gauge
-  const rsi = d.rsi14;
-  const rsiEl = document.getElementById('rsiGauge');
+  const rsi = d.rsi14;  const rsiEl = document.getElementById('rsiGauge');
   if (rsi == null) { rsiEl.innerHTML = `<span class="text-slate-600 text-xs">${I18n.t('markets.no_data') || 'No data'}</span>`; }
   else {
     let zone = '', zoneCol = '';
@@ -883,6 +896,24 @@ function renderIdxStats(key, data) {
         <div class="bar-fill" style="width:${pct}%; background:${zoneCol}"></div>
       </div>
       <div class="flex justify-between text-[10px] text-slate-600 mt-1"><span>0</span><span>30</span><span>50</span><span>70</span><span>100</span></div>`;
+  }
+
+  // 52-week range bar
+  const h52 = d.high52w ?? d.hi52 ?? null;
+  const l52 = d.low52w  ?? d.lo52  ?? null;
+  const cur = d.price   ?? d.current ?? null;
+  const rng = (h52 != null && l52 != null) ? h52 - l52 : null;
+  const bar = document.getElementById('idxRangeBar');
+  if (bar && rng > 0 && cur != null) {
+    bar.classList.remove('hidden');
+    const pct = Math.max(2, Math.min(98, (cur - l52) / rng * 100));
+    document.getElementById('idxRangeLow').textContent     = l52.toFixed(2);
+    document.getElementById('idxRangeHigh').textContent    = h52.toFixed(2);
+    document.getElementById('idxRangeCurrent').textContent = cur.toFixed(2);
+    document.getElementById('idxRangeMarker').style.left   = pct + '%';
+    document.getElementById('idxRangePct').textContent     = pct.toFixed(0) + '% from 52-week low';
+  } else if (bar) {
+    bar.classList.add('hidden');
   }
 }
 

@@ -163,6 +163,23 @@ for req in "\${REQS[@]}"; do
   fi
 done
 
+# ── Tailwind CSS — rebuild if pytailwindcss is available ─────────────────────
+if sudo "\$APP_DIR/venv/bin/pip" show pytailwindcss >/dev/null 2>&1; then
+  echo "[\$(TS)] Rebuilding Tailwind CSS..."
+  cd "\$APP_DIR"
+  sudo "\$APP_DIR/venv/bin/python3" -m pytailwindcss \
+    --config tailwind.config.js \
+    -i shared/input.css \
+    -o shared/tailwind.css \
+    --minify 2>&1
+  for _app in ystocker yplanner yplanter ytracker ypay yimage ybg; do
+    sudo cp "\$APP_DIR/shared/tailwind.css" "\$APP_DIR/\$_app/static/css/tailwind.css" 2>/dev/null || true
+  done
+  echo "[\$(TS)]    ✓ Tailwind CSS rebuilt"
+else
+  echo "[\$(TS)]    pytailwindcss not installed — serving committed tailwind.css"
+fi
+
 # Playwright Chromium browser install — DISABLED.
 # Reason: the Azure CDN (playwright.azureedge.net) frequently returns 400
 # errors for Mac/Linux ARM builds, breaking the deploy. The Walmart and

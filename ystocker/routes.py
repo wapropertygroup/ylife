@@ -839,6 +839,27 @@ def api_history(ticker: str):
     except Exception as exc:
         return jsonify({"error": str(exc)}), 502
 
+    # Quarterly earnings history for chart markers
+    earnings_markers = []
+    try:
+        ed = tk.earnings_dates
+        if ed is not None and not ed.empty:
+            for dt, row in ed.head(12).iterrows():
+                try:
+                    surprise_pct = float(row.get("Surprise(%)", 0) or 0)
+                    reported_eps = row.get("Reported EPS")
+                    estimated_eps = row.get("EPS Estimate")
+                    earnings_markers.append({
+                        "date":          str(dt.date()),
+                        "surprise_pct":  round(surprise_pct, 1) if not math.isnan(surprise_pct) else None,
+                        "reported_eps":  round(float(reported_eps), 2) if reported_eps is not None and not math.isnan(float(reported_eps)) else None,
+                        "estimated_eps": round(float(estimated_eps), 2) if estimated_eps is not None and not math.isnan(float(estimated_eps)) else None,
+                    })
+                except Exception:
+                    continue
+    except Exception:
+        pass
+
     eps     = info.get("trailingEps")
     fwd_eps = info.get("forwardEps")
     name = info.get("shortName", ticker)
@@ -1024,6 +1045,7 @@ def api_history(ticker: str):
         # Relative strength vs SPY (normalised to 100 at start)
         "relative_strength": relative_strength,
         "spy_prices":        spy_prices_list,
+        "earnings_markers":  earnings_markers,
     }
     with _HISTORY_CACHE_LOCK:
         _HISTORY_CACHE[cache_key] = {"ts": time.time(), "data": result}
@@ -1222,7 +1244,10 @@ def api_sector_performance(sector_name: str):
     dates: list = []
     series: dict[str, list] = {}
 
-    for tk_sym in tickers:
+    # Always include SPY as market benchmark
+    all_tickers = list(tickers) + ["SPY"] if "SPY" not in tickers else list(tickers)
+
+    for tk_sym in all_tickers:
         try:
             hist = yf.Ticker(tk_sym).history(period=period, interval=interval)
             if hist.empty:
