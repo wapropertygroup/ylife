@@ -3962,7 +3962,11 @@ def api_yield_curve():
         if tr.status_code == 200:
             d_ns = "http://schemas.microsoft.com/ado/2007/08/dataservices"
             root = _ET.fromstring(tr.content)
-            latest: dict = {}
+            # Merge ALL entries oldest→newest so the most recent available value
+            # for each maturity wins.  This handles partial same-day publications
+            # (e.g. treasury publishes 3M/10Y/30Y first, then the rest an hour later)
+            # without discarding data from the previous complete day.
+            all_entries_merged: dict = {}
             for props in root.iter(f"{{{d_ns}}}properties"):
                 entry_vals = {}
                 for tag, label in US_MAT_MAP.items():
@@ -3973,8 +3977,8 @@ def api_yield_curve():
                         except ValueError:
                             pass
                 if entry_vals:
-                    latest = entry_vals   # last entry = most recent trading day
-            us_current = latest
+                    all_entries_merged.update(entry_vals)  # newer entry wins per maturity
+            us_current = all_entries_merged
             log.info("Yield curve: US Treasury data fetched (%d maturities: %s)",
                      len(us_current), ", ".join(sorted(us_current.keys())))
     except Exception as exc:
@@ -4053,10 +4057,10 @@ def api_yield_curve():
         # Try FRED JSON API as second fallback
         try:
             end = _dt_mod.date.today()
-            start = end - _dt_mod.timedelta(days=10)
+            start = end - _dt_mod.timedelta(days=20)  # 20 days covers long weekends + holidays
             fj = _req.get(
                 f"https://api.stlouisfed.org/fred/series/observations"
-                f"?series_id={fred_id}&file_type=json&sort_order=desc&limit=5"
+                f"?series_id={fred_id}&file_type=json&sort_order=desc&limit=10"
                 f"&observation_start={start.strftime('%Y-%m-%d')}"
                 f"&observation_end={end.strftime('%Y-%m-%d')}"
                 f"&api_key=DEMO_KEY",
@@ -4073,6 +4077,28 @@ def api_yield_curve():
                         break
         except Exception as exc:
             log.warning("Yield curve: FRED JSON %s failed: %s", mat, exc)
+
+    # ── Stale-cache safety net: fill remaining gaps from previous successful fetch ─
+    # This is a last resort — if Treasury XML, yfinance, AND FRED all failed for a
+    # maturity (network outage, holiday data lag, etc.) use the last cached value so
+    # the yield curve never renders with holes.
+    _expected_maturities = set(US_MAT_MAP.values())
+    _still_missing = _expected_maturities - set(us_current.keys())
+    if _still_missing:
+        log.info("Yield curve: %d maturities still missing (%s) — trying stale disk cache",
+                 len(_still_missing), ", ".join(sorted(_still_missing)))
+        try:
+            if _YIELD_CURVE_FILE.exists():
+                _stale_payload = json.loads(_YIELD_CURVE_FILE.read_text())
+                if _stale_payload.get("ver") == _YIELD_CURVE_CACHE_VER:
+                    _stale_us = _stale_payload.get("data", {}).get("us", {}).get("current", {})
+                    for _mat in list(_still_missing):
+                        if _mat in _stale_us:
+                            us_current[_mat] = _stale_us[_mat]
+                            log.info("Yield curve: filled %s = %.3f%% from stale cache",
+                                     _mat, _stale_us[_mat])
+        except Exception as _exc:
+            log.debug("Yield curve stale-cache fill failed: %s", _exc)
 
     spread_10y_3m = None
     if "10Y" in us_current and "3M" in us_current:
