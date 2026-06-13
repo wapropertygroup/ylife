@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}Icon Set Generator — yImage{% endblock %}
+{% block content %}
+<div x-data="iconSetTool()">
+  <div class="max-w-2xl mx-auto">
+    <a href="/" class="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-brand transition mb-4">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+      <span data-i18n="common.all_tools">All Tools</span>
+    </a>
+    <h1 class="text-2xl font-extrabold mb-2" data-i18n="iconset.title">📱 Icon Set Generator</h1>
+    <p class="text-sm text-slate-500 dark:text-slate-400 mb-6" data-i18n="iconset.desc">Generate a complete icon set for macOS, iOS, or Windows from a single source image.</p>
+
+    <div class="drop-zone rounded-2xl border-2 border-dashed border-slate-300 dark:border-slate-700 p-10 text-center cursor-pointer transition hover:border-brand"
+         @click="$refs.fi.click()"
+         @dragover.prevent="dragOver=true" @dragleave="dragOver=false"
+         @drop.prevent="dragOver=false; handleDrop($event)"
+         :class="dragOver ? 'border-brand bg-violet-50 dark:bg-violet-900/10' : ''">
+      <input type="file" accept="image/*" x-ref="fi" @change="loadFile($event.target.files[0])" class="hidden">
+      <div x-show="!previewSrc">
+        <svg class="w-12 h-12 mx-auto mb-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <rect x="3" y="3" width="7" height="7" rx="1.5" stroke-width="1.5"/>
+          <rect x="14" y="3" width="7" height="7" rx="1.5" stroke-width="1.5"/>
+          <rect x="3" y="14" width="7" height="7" rx="1.5" stroke-width="1.5"/>
+          <rect x="14" y="14" width="7" height="7" rx="1.5" stroke-width="1.5"/>
+        </svg>
+        <p class="text-sm text-slate-500"><span data-i18n="common.upload">Drop an image here or</span> <span class="text-brand font-medium" data-i18n="common.browse">browse</span></p>
+        <p class="text-xs text-slate-400 mt-1" data-i18n="iconset.hint">Use a 1024×1024 PNG for best results. Non-square images are auto-cropped.</p>
+      </div>
+      <div x-show="previewSrc" class="flex flex-col items-center gap-2">
+        <!-- Show preview at multiple sizes -->
+        <div class="flex items-end gap-2 justify-center">
+          <img :src="previewSrc" class="w-16 h-16 object-cover rounded-xl border border-slate-200 dark:border-slate-700">
+          <img :src="previewSrc" class="w-8 h-8 object-cover rounded-md border border-slate-200 dark:border-slate-700">
+          <img :src="previewSrc" class="w-5 h-5 object-cover rounded border border-slate-200 dark:border-slate-700">
+        </div>
+        <button @click.stop="reset()" class="text-xs text-slate-400 hover:text-red-500" data-i18n="common.change">Change</button>
+      </div>
+    </div>
+
+    <div x-show="file" class="mt-4 p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50">
+      <label class="text-sm font-medium mb-2 block" data-i18n="iconset.platform">Platform</label>
+      <div class="flex gap-2">
+        <button @click="platform='macos'"
+                :class="platform==='macos' ? 'bg-brand text-white' : 'bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700'"
+                class="flex-1 py-2.5 rounded-xl text-sm font-medium transition">
+          🍎 macOS
+        </button>
+        <button @click="platform='ios'"
+                :class="platform==='ios' ? 'bg-brand text-white' : 'bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700'"
+                class="flex-1 py-2.5 rounded-xl text-sm font-medium transition">
+          📱 iOS
+        </button>
+        <button @click="platform='windows'"
+                :class="platform==='windows' ? 'bg-brand text-white' : 'bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700'"
+                class="flex-1 py-2.5 rounded-xl text-sm font-medium transition">
+          🪟 Windows
+        </button>
+      </div>
+      <p class="text-xs text-slate-400 mt-2" x-text="sizesInfo"></p>
+    </div>
+
+    <button x-show="file" @click="process()" :disabled="processing"
+            class="mt-4 w-full py-3 rounded-xl bg-brand text-white font-semibold hover:bg-brand-dark transition disabled:opacity-50">
+      <span x-show="!processing" data-i18n="iconset.button">Generate Icon Set (ZIP)</span>
+      <span x-show="processing" class="flex items-center justify-center gap-2">
+        <svg class="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+        <span data-i18n="common.processing">Processing...</span>
+      </span>
+    </button>
+    <div x-show="done" class="mt-4 p-4 rounded-xl bg-green-50 dark:bg-green-900/15 border border-green-300 dark:border-green-700/50">
+      <p class="text-sm font-semibold text-green-600 dark:text-green-400" data-i18n="iconset.done">✓ Icon set ZIP downloaded!</p>
+    </div>
+    <p x-show="error" class="mt-4 text-sm text-red-500" x-text="error"></p>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+function iconSetTool() {
+  return {
+    file: null, previewSrc: '', dragOver: false, platform: 'macos',
+    processing: false, error: '', done: false,
+    get sizesInfo() {
+      const info = {
+        macos:   'Sizes: 16, 32, 64, 128, 256, 512, 1024 px',
+        ios:     'Sizes: 20–1024 px (all App Store required sizes)',
+        windows: 'Sizes: 16, 24, 32, 48, 64, 128, 256 px',
+      };
+      return info[this.platform] || '';
+    },
+    handleDrop(e) { this.loadFile(e.dataTransfer.files[0]); },
+    loadFile(f) { if(!f) return; this.file=f; this.done=false; this.error=''; this.previewSrc=URL.createObjectURL(f); },
+    reset() { this.file=null; this.previewSrc=''; this.done=false; this.error=''; },
+    async process() {
+      if (!this.file || this.processing) return;
+      this.processing=true; this.error=''; this.done=false;
+      const form=new FormData(); form.append('file',this.file); form.append('platform',this.platform);
+      try {
+        const resp=await fetch('/api/icon-set',{method:'POST',body:form});
+        if(!resp.ok){const d=await resp.json();this.error=d.error||'Failed';this.processing=false;return;}
+        const blob=await resp.blob();const url=URL.createObjectURL(blob);
+        const base=this.file.name.replace(/\.[^.]+$/,'');
+        const a=document.createElement('a');a.href=url;a.download=`${base}_${this.platform}_icons.zip`;a.click();
+        URL.revokeObjectURL(url);this.done=true;
+      } catch(e){this.error='Network error: '+e.message;}
+      this.processing=false;
+    },
+  };
+}
+</script>
+{% endblock %}

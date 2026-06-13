@@ -336,6 +336,47 @@ const I18n = (() => {
       "tile.button":      "Create Tiled Image & Download",
       "tile.done":        "✓ Tiled image downloaded!",
 
+      // Round 11 (EN)
+      "tool.image_watermark": "Image Watermark",
+      "tool.flip_image":      "Flip / Mirror",
+      "tool.icon_set":        "Icon Set Generator",
+      "tool.posterize":       "Posterize",
+
+      // Image Watermark (logo overlay)
+      "imgwm.title":     "🖼️ Image Watermark",
+      "imgwm.desc":      "Overlay a logo or signature image on your photo. Control size, position, and opacity.",
+      "imgwm.base":      "Base Image",
+      "imgwm.wm":        "Watermark / Logo",
+      "imgwm.drop_base": "Drop photo here",
+      "imgwm.drop_wm":   "Drop logo / watermark here (PNG with transparency works best)",
+      "imgwm.scale":     "Scale",
+      "imgwm.button":    "Apply Watermark & Download",
+      "imgwm.done":      "✓ Watermarked image downloaded!",
+
+      // Flip / Mirror
+      "flip.title":      "🪞 Flip / Mirror Image",
+      "flip.desc":       "Mirror your image horizontally (left↔right) or vertically (top↕bottom).",
+      "flip.direction":  "Direction",
+      "flip.horizontal": "Horizontal (Mirror)",
+      "flip.vertical":   "Vertical (Upside Down)",
+      "flip.button":     "Flip & Download",
+      "flip.done":       "✓ Flipped image downloaded!",
+
+      // Icon Set
+      "iconset.title":    "📱 Icon Set Generator",
+      "iconset.desc":     "Generate a complete icon set for macOS, iOS, or Windows from a single image.",
+      "iconset.hint":     "Use a 1024×1024 PNG for best results. Non-square images are auto-cropped.",
+      "iconset.platform": "Platform",
+      "iconset.button":   "Generate Icon Set (ZIP)",
+      "iconset.done":     "✓ Icon set ZIP downloaded!",
+
+      // Posterize
+      "posterize.title":  "🎨 Posterize",
+      "posterize.desc":   "Reduce color depth to create a bold, graphic poster-style effect.",
+      "posterize.levels": "Color Levels per Channel",
+      "posterize.button": "Apply Posterize & Download",
+      "posterize.done":   "✓ Posterized image downloaded!",
+
       // PDF Stamp
       "stamp.title":    "🔢 PDF Page Numbers",
       "stamp.desc":     "Stamp page numbers or custom text on every page. Use {n} for current page and {total} for total.",
@@ -1041,6 +1082,47 @@ const I18n = (() => {
       "tile.custom_size": "自定义单格大小",
       "tile.button":      "创建平铺图片并下载",
       "tile.done":        "✓ 已下载平铺图片！",
+
+      // Round 11 (ZH)
+      "tool.image_watermark": "图片水印",
+      "tool.flip_image":      "翻转 / 镜像",
+      "tool.icon_set":        "图标集生成",
+      "tool.posterize":       "色调分离",
+
+      // 图片水印（Logo 叠加）
+      "imgwm.title":     "🖼️ 图片水印",
+      "imgwm.desc":      "将 Logo 或签名图片叠加到照片上，可控制大小、位置和透明度。",
+      "imgwm.base":      "底图",
+      "imgwm.wm":        "水印 / Logo",
+      "imgwm.drop_base": "拖入底图",
+      "imgwm.drop_wm":   "拖入 Logo / 水印（带透明通道的 PNG 效果最佳）",
+      "imgwm.scale":     "缩放比例",
+      "imgwm.button":    "应用水印并下载",
+      "imgwm.done":      "✓ 已下载添加水印的图片！",
+
+      // 翻转 / 镜像
+      "flip.title":      "🪞 翻转 / 镜像图片",
+      "flip.desc":       "横向（左↔右）或纵向（上↕下）翻转图片，实时预览。",
+      "flip.direction":  "方向",
+      "flip.horizontal": "水平翻转（镜像）",
+      "flip.vertical":   "垂直翻转（上下颠倒）",
+      "flip.button":     "翻转并下载",
+      "flip.done":       "✓ 已下载翻转后的图片！",
+
+      // 图标集
+      "iconset.title":    "📱 图标集生成器",
+      "iconset.desc":     "从单张图片生成 macOS、iOS 或 Windows 所需的完整图标集。",
+      "iconset.hint":     "建议使用 1024×1024 PNG，非方形图片将自动居中裁剪。",
+      "iconset.platform": "平台",
+      "iconset.button":   "生成图标集 (ZIP)",
+      "iconset.done":     "✓ 图标集 ZIP 已下载！",
+
+      // 色调分离
+      "posterize.title":  "🎨 色调分离",
+      "posterize.desc":   "将色彩深度降低至每通道 2–8 级，创造出大胆的海报风格效果。",
+      "posterize.levels": "每通道颜色级数",
+      "posterize.button": "应用色调分离并下载",
+      "posterize.done":   "✓ 已下载色调分离后的图片！",
 
       // PDF 页码标注
       "stamp.title":    "🔢 PDF 页码标注",
