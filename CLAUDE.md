@@ -33,21 +33,21 @@ bash deploy/deploy.sh -i ~/Downloads/my-key-pair.pem
 
 ### Deploy via AWS SSM (no SSH key needed)
 ```bash
-aws ssm send-command --instance-ids i-02c9614bcde54dd59 --region us-west-2 \
+aws ssm send-command --instance-ids i-01794a9910a4d5ee1 --region us-west-2 \
   --document-name AWS-RunShellScript \
   --parameters '{"commands":["cd /opt/ystocker && sudo git fetch origin && sudo git reset --hard origin/main && sudo systemctl restart ystocker yplanner yplanter yhome ytracker ypay yimage ybg"]}'
 ```
 
 ### Deploy a single app via SSM
 ```bash
-aws ssm send-command --instance-ids i-02c9614bcde54dd59 --region us-west-2 \
+aws ssm send-command --instance-ids i-01794a9910a4d5ee1 --region us-west-2 \
   --document-name AWS-RunShellScript \
   --parameters '{"commands":["cd /opt/ystocker && sudo git fetch origin && sudo git reset --hard origin/main && sudo systemctl restart yplanner"]}'
 ```
 
 ### Check deploy result
 ```bash
-aws ssm get-command-invocation --command-id <CMD_ID> --instance-id i-02c9614bcde54dd59 \
+aws ssm get-command-invocation --command-id <CMD_ID> --instance-id i-01794a9910a4d5ee1 \
   --region us-west-2 --query "[Status, StandardOutputContent]" --output text
 ```
 
@@ -112,7 +112,7 @@ Started in `create_app()`, all daemon threads:
 
 ### Infrastructure
 - **Region**: us-west-2
-- **EC2 Instance**: `i-02c9614bcde54dd59` (Amazon Linux 2023, `t3.medium`)
+- **EC2 Instance**: `i-01794a9910a4d5ee1` (Amazon Linux 2023, `t3.medium`)
 - **App directory**: `/opt/ystocker`
 - **Process model**: nginx → 8 Gunicorn systemd services (ports 8000-8007, 2 workers each)
 - **SSL**: Let's Encrypt via certbot
