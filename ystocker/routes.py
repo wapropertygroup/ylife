@@ -3114,6 +3114,77 @@ def api_markets():
 
 
 # ---------------------------------------------------------------------------
+# HYG / TLT Credit Spread  (/api/credit-spread)
+# ---------------------------------------------------------------------------
+
+_CREDIT_SPREAD_CACHE: dict = {}
+_CREDIT_SPREAD_CACHE_LOCK = threading.Lock()
+_CREDIT_SPREAD_CACHE_TTL  = 3600 * 4  # 4 hours
+
+
+@bp.route("/api/credit-spread")
+def api_credit_spread():
+    """
+    Return 1-year weekly price history for HYG and TLT plus the HYG/TLT ratio
+    (a proxy for credit-spread risk appetite: higher ratio = tighter spreads).
+    """
+    import yfinance as yf
+
+    with _CREDIT_SPREAD_CACHE_LOCK:
+        entry = _CREDIT_SPREAD_CACHE.get("data")
+        if entry and time.time() - entry["ts"] < _CREDIT_SPREAD_CACHE_TTL:
+            return jsonify(entry["data"])
+
+    def _fetch_etf(symbol: str) -> dict:
+        try:
+            tk = yf.Ticker(symbol)
+            hist = tk.history(period="1y", interval="1wk")
+            prices = [round(float(p), 4) if not math.isnan(float(p)) else None for p in hist["Close"]]
+            dates  = [str(d.date()) for d in hist.index]
+            valid  = [p for p in prices if p is not None]
+            current = valid[-1] if valid else None
+            prev    = valid[-2] if len(valid) >= 2 else None
+            day_chg = None
+            if current and prev and prev > 0:
+                raw_chg = (current - prev) / prev * 100
+                day_chg = round(raw_chg, 2) if abs(raw_chg) <= 25 else None
+            return {
+                "price":       current,
+                "day_chg_pct": day_chg,
+                "dates":       dates,
+                "prices":      prices,
+            }
+        except Exception as exc:
+            log.warning("credit-spread: could not fetch %s: %s", symbol, exc)
+            return {"price": None, "day_chg_pct": None, "dates": [], "prices": []}
+
+    hyg = _fetch_etf("HYG")
+    tlt = _fetch_etf("TLT")
+
+    # Align dates (inner join on date strings) and compute ratio
+    hyg_map = dict(zip(hyg["dates"], hyg["prices"]))
+    tlt_map = dict(zip(tlt["dates"], tlt["prices"]))
+    common_dates = sorted(set(hyg_map) & set(tlt_map))
+    spread = []
+    for d in common_dates:
+        h, t = hyg_map[d], tlt_map[d]
+        spread.append(round(h / t, 6) if h is not None and t is not None and t > 0 else None)
+
+    result = {
+        "hyg":          hyg,
+        "tlt":          tlt,
+        "spread_dates": common_dates,
+        "spread":       spread,
+    }
+
+    ts = time.time()
+    with _CREDIT_SPREAD_CACHE_LOCK:
+        _CREDIT_SPREAD_CACHE["data"] = {"ts": ts, "data": result}
+
+    return jsonify(result)
+
+
+# ---------------------------------------------------------------------------
 # CNN Fear & Greed Index  (/api/fear-greed)
 # ---------------------------------------------------------------------------
 

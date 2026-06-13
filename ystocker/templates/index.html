@@ -91,6 +91,7 @@
       <canvas id="spark_{{ loop.index }}"></canvas>
     </div>
     <p class="spark-label text-xs text-slate-400 mt-2 text-right" data-i18n="index.analyst_upside">analyst upside %</p>
+    <div class="spark-stats flex items-center justify-end gap-3 mt-1"></div>
   </a>
   {% endfor %}
 </div>
@@ -676,6 +677,24 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }]
   });
+
+  // ── Avg P/S and Median Short Float badges
+  const statsEl = ctx.closest('a').querySelector('.spark-stats');
+  if (statsEl) {
+    const psVals = all.map(d => d.ps_ratio).filter(v => v != null);
+    const sfVals = all.map(d => d.short_float).filter(v => v != null).sort((a, b) => a - b);
+    const parts = [];
+    if (psVals.length) {
+      const avgPs = psVals.reduce((a, b) => a + b, 0) / psVals.length;
+      parts.push(`<span class="text-slate-500 text-[10px]">P/S <span class="text-slate-400 font-medium">${avgPs.toFixed(1)}x</span></span>`);
+    }
+    if (sfVals.length) {
+      const mid = Math.floor(sfVals.length / 2);
+      const medSf = sfVals.length % 2 === 0 ? (sfVals[mid - 1] + sfVals[mid]) / 2 : sfVals[mid];
+      parts.push(`<span class="text-slate-500 text-[10px]">Short <span class="text-slate-400 font-medium">${medSf.toFixed(1)}%</span></span>`);
+    }
+    statsEl.innerHTML = parts.join('');
+  }
 })();
 {% endfor %}
 
