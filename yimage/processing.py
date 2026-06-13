@@ -1159,3 +1159,174 @@ def ocr_image(data: bytes) -> dict:
         "char_count": len(text),
         "method":     "tesseract",
     }
+
+
+# ---------------------------------------------------------------------------
+# 22. PDF Page Numbers / Stamp
+# ---------------------------------------------------------------------------
+
+def stamp_pdf_pages(
+    data: bytes,
+    text_template: str = "Page {n} of {total}",
+    position: str = "bottom_center",
+    font_size: int = 11,
+    margin: int = 20,
+    color_hex: str = "#444444",
+) -> bytes:
+    """Stamp page numbers (or any text template) on every page of a PDF.
+
+    Template variables:
+        {n}     – current page number (1-based)
+        {total} – total page count
+
+    position: bottom_center, bottom_right, bottom_left,
+              top_center, top_right, top_left
+    """
+    import fitz
+
+    doc = fitz.open(stream=data, filetype="pdf")
+    total = len(doc)
+
+    # Parse color
+    r = int(color_hex.lstrip("#")[0:2], 16) / 255
+    g = int(color_hex.lstrip("#")[2:4], 16) / 255
+    b = int(color_hex.lstrip("#")[4:6], 16) / 255
+
+    for i, page in enumerate(doc):
+        label = text_template.replace("{n}", str(i + 1)).replace("{total}", str(total))
+        pw, ph = page.rect.width, page.rect.height
+
+        # Measure approximate text width (0.5 * font_size * chars is a rough heuristic)
+        approx_tw = len(label) * font_size * 0.5
+
+        # Determine (x, y) of text anchor
+        if "bottom" in position:
+            y = ph - margin
+        else:
+            y = margin + font_size
+
+        if "center" in position:
+            x = (pw - approx_tw) / 2
+        elif "right" in position:
+            x = pw - approx_tw - margin
+        else:
+            x = margin
+
+        page.insert_text(
+            point=fitz.Point(x, y),
+            text=label,
+            fontsize=font_size,
+            color=(r, g, b),
+        )
+
+    buf = io.BytesIO()
+    doc.save(buf)
+    doc.close()
+    return buf.getvalue()
+
+
+# ---------------------------------------------------------------------------
+# 23. Image Collage / Grid
+# ---------------------------------------------------------------------------
+
+def make_collage(
+    images_data: list[bytes],
+    cols: int = 2,
+    gap: int = 10,
+    bg_color: str = "#ffffff",
+    cell_height: int = 300,
+) -> tuple[bytes, str]:
+    """Arrange multiple images in a uniform grid.
+
+    All cells are resized to *cell_height* pixels tall (width scales proportionally).
+    """
+    if not images_data:
+        raise ValueError("No images provided")
+
+    # Parse background colour
+    bg_rgb = tuple(int(bg_color.lstrip("#")[i:i + 2], 16) for i in (0, 2, 4))
+
+    # Open & resize each image
+    cells: list[Image.Image] = []
+    for raw in images_data:
+        img = Image.open(io.BytesIO(raw)).convert("RGB")
+        ratio = cell_height / img.height
+        new_w = max(1, int(img.width * ratio))
+        cells.append(img.resize((new_w, cell_height), Image.Resampling.LANCZOS))
+
+    cols = max(1, cols)
+    rows = (len(cells) + cols - 1) // cols
+
+    # Find max cell width in each column
+    col_widths = [0] * cols
+    for idx, cell in enumerate(cells):
+        col = idx % cols
+        col_widths[col] = max(col_widths[col], cell.width)
+
+    total_w = sum(col_widths) + gap * (cols + 1)
+    total_h = rows * cell_height + gap * (rows + 1)
+
+    canvas = Image.new("RGB", (total_w, total_h), bg_rgb)
+
+    for idx, cell in enumerate(cells):
+        row = idx // cols
+        col = idx % cols
+        x = gap + sum(col_widths[:col]) + col * gap
+        y = gap + row * (cell_height + gap)
+        # Centre the cell within its column width
+        x_offset = (col_widths[col] - cell.width) // 2
+        canvas.paste(cell, (x + x_offset, y))
+
+    buf = io.BytesIO()
+    canvas.save(buf, format="JPEG", quality=92)
+    return buf.getvalue(), "image/jpeg"
+
+
+# ---------------------------------------------------------------------------
+# 24. Image Border / Frame
+# ---------------------------------------------------------------------------
+
+def add_border(
+    data: bytes,
+    border_width: int = 20,
+    border_color: str = "#000000",
+    radius: int = 0,
+) -> tuple[bytes, str]:
+    """Add a solid-colour border around an image.
+
+    Args:
+        border_width: Width in pixels.
+        border_color: Hex colour string.
+        radius:       Corner radius in pixels (0 = square corners).
+    """
+    from PIL import ImageDraw
+
+    img = Image.open(io.BytesIO(data)).convert("RGBA")
+    orig_fmt = (img.format or "PNG").upper()
+
+    bw = max(0, border_width)
+    bg_rgb = tuple(int(border_color.lstrip("#")[i:i + 2], 16) for i in (0, 2, 4))
+
+    new_w = img.width + 2 * bw
+    new_h = img.height + 2 * bw
+
+    # Create canvas filled with border colour
+    canvas = Image.new("RGBA", (new_w, new_h), (*bg_rgb, 255))
+
+    if radius > 0:
+        # Apply rounded corners to the original image first
+        mask = Image.new("L", img.size, 0)
+        draw = ImageDraw.Draw(mask)
+        draw.rounded_rectangle([(0, 0), (img.width - 1, img.height - 1)], radius=radius, fill=255)
+        img.putalpha(mask)
+    canvas.paste(img, (bw, bw), img if img.mode == "RGBA" else None)
+
+    save_fmt = orig_fmt if orig_fmt in ("JPEG", "PNG", "WEBP") else "PNG"
+    if save_fmt == "JPEG":
+        canvas = canvas.convert("RGB")
+    mime_map = {"JPEG": "image/jpeg", "PNG": "image/png", "WEBP": "image/webp"}
+    mime = mime_map.get(save_fmt, "image/png")
+
+    buf = io.BytesIO()
+    canvas.save(buf, format=save_fmt, quality=95 if save_fmt == "JPEG" else None)
+    return buf.getvalue(), mime

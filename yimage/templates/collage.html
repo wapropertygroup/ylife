@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+{% block title %}Image Collage — yImage{% endblock %}
+{% block content %}
+<div x-data="collageTool()">
+  <div class="max-w-2xl mx-auto">
+    <a href="/" class="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-brand transition mb-4">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+      <span data-i18n="common.all_tools">All Tools</span>
+    </a>
+    <h1 class="text-2xl font-extrabold mb-2" data-i18n="collage.title">🖼️ Image Collage</h1>
+    <p class="text-sm text-slate-500 dark:text-slate-400 mb-6" data-i18n="collage.desc">Arrange multiple photos into a grid. Perfect for creating photo montages or mood boards.</p>
+
+    <!-- Drop Zone -->
+    <div class="drop-zone rounded-2xl border-2 border-dashed border-slate-300 dark:border-slate-700 p-8 text-center cursor-pointer transition hover:border-brand"
+         @click="$refs.fi.click()"
+         @dragover.prevent="dragOver=true" @dragleave="dragOver=false"
+         @drop.prevent="dragOver=false; handleDrop($event)"
+         :class="dragOver ? 'border-brand bg-violet-50 dark:bg-violet-900/10' : ''">
+      <input type="file" accept="image/*" multiple x-ref="fi" @change="addFiles($event.target.files)" class="hidden">
+      <svg class="w-10 h-10 mx-auto mb-2 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/>
+      </svg>
+      <p class="text-sm text-slate-500"><span data-i18n="common.upload">Drop images here or</span> <span class="text-brand font-medium" data-i18n="common.browse">browse</span></p>
+      <p class="text-xs text-slate-400 mt-1" data-i18n="collage.multi_hint">Multiple files · Max 20 images</p>
+    </div>
+
+    <!-- Thumbnail previews -->
+    <div x-show="images.length > 0" class="mt-4">
+      <div class="flex items-center justify-between mb-2">
+        <p class="text-sm font-medium" x-text="images.length + ' images'"></p>
+        <button @click="images=[]" class="text-xs text-slate-400 hover:text-red-500" data-i18n="merge.clear_all">Clear all</button>
+      </div>
+      <div class="flex flex-wrap gap-2 mb-3">
+        <template x-for="(img, idx) in images" :key="img.id">
+          <div class="relative">
+            <img :src="img.preview" class="w-16 h-16 object-cover rounded-lg border border-slate-200 dark:border-slate-700">
+            <button @click="images.splice(idx,1)"
+                    class="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-xs rounded-full flex items-center justify-center shadow">✕</button>
+          </div>
+        </template>
+        <!-- Add more -->
+        <button @click="$refs.fi.click()"
+                class="w-16 h-16 rounded-lg border-2 border-dashed border-slate-300 dark:border-slate-700 flex items-center justify-center text-slate-400 hover:border-brand hover:text-brand transition text-2xl">+</button>
+      </div>
+    </div>
+
+    <!-- Options -->
+    <div x-show="images.length > 0" class="mt-2 p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 space-y-4">
+
+      <!-- Columns -->
+      <div>
+        <label class="text-sm font-medium mb-2 block" data-i18n="collage.columns">Columns</label>
+        <div class="flex gap-2">
+          <template x-for="c in [1,2,3,4,5,6]" :key="c">
+            <button @click="cols=c"
+                    :class="cols===c ? 'bg-brand text-white' : 'bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300'"
+                    class="w-9 h-9 rounded-lg text-sm font-medium transition"
+                    x-text="c"></button>
+          </template>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-4">
+        <!-- Gap -->
+        <div>
+          <label class="text-sm font-medium mb-1 block">
+            <span data-i18n="collage.gap">Gap</span>: <span x-text="gap + 'px'"></span>
+          </label>
+          <input type="range" x-model.number="gap" min="0" max="50" step="2"
+                 class="w-full accent-violet-500">
+        </div>
+        <!-- Cell Height -->
+        <div>
+          <label class="text-sm font-medium mb-1 block">
+            <span data-i18n="collage.cell_height">Cell Height</span>: <span x-text="cellHeight + 'px'"></span>
+          </label>
+          <input type="range" x-model.number="cellHeight" min="100" max="600" step="20"
+                 class="w-full accent-violet-500">
+        </div>
+      </div>
+
+      <!-- Background Color -->
+      <div class="flex items-center gap-3">
+        <label class="text-sm font-medium" data-i18n="collage.bg_color">Background</label>
+        <input type="color" x-model="bgColor"
+               class="w-9 h-9 rounded cursor-pointer border border-slate-300 dark:border-slate-700 p-0.5 bg-white">
+        <input type="text" x-model="bgColor" maxlength="7"
+               class="w-24 px-2 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-mono focus:border-brand focus:outline-none">
+        <div class="flex gap-1.5">
+          <template x-for="c in ['#ffffff','#000000','#f0f0f0','#1e293b']" :key="c">
+            <button @click="bgColor=c" :style="`background:${c}`"
+                    :class="bgColor===c?'ring-2 ring-brand':'ring-1 ring-slate-300 dark:ring-slate-600'"
+                    class="w-6 h-6 rounded-full transition"></button>
+          </template>
+        </div>
+      </div>
+    </div>
+
+    <!-- Create Button -->
+    <button x-show="images.length >= 2" @click="process()" :disabled="processing"
+            class="mt-4 w-full py-3 rounded-xl bg-brand text-white font-semibold hover:bg-brand-dark transition disabled:opacity-50">
+      <span x-show="!processing" data-i18n="collage.button">Create Collage & Download</span>
+      <span x-show="processing" class="flex items-center justify-center gap-2">
+        <svg class="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+        <span data-i18n="common.processing">Processing...</span>
+      </span>
+    </button>
+    <p x-show="images.length === 1" class="mt-2 text-xs text-amber-500 text-center" data-i18n="collage.need_two">Add at least 2 images to create a collage.</p>
+
+    <p x-show="error" class="mt-4 text-sm text-red-500" x-text="error"></p>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function collageTool() {
+  let _id = 0;
+  return {
+    images: [], dragOver: false,
+    cols: 2, gap: 10, cellHeight: 300, bgColor: '#ffffff',
+    processing: false, error: '',
+
+    handleDrop(e) { this.addFiles(e.dataTransfer.files); },
+    addFiles(files) {
+      for (const f of files) {
+        if (this.images.length >= 20) break;
+        const id = ++_id;
+        const reader = new FileReader();
+        reader.onload = e => this.images.push({ id, name: f.name, _file: f, preview: e.target.result });
+        reader.readAsDataURL(f);
+      }
+      this.error = '';
+    },
+
+    async process() {
+      if (this.images.length < 2 || this.processing) return;
+      this.processing = true; this.error = '';
+      const form = new FormData();
+      this.images.forEach(img => form.append('files', img._file));
+      form.append('cols',        this.cols);
+      form.append('gap',         this.gap);
+      form.append('cell_height', this.cellHeight);
+      form.append('bg_color',    this.bgColor);
+      try {
+        const resp = await fetch('/api/collage', { method: 'POST', body: form });
+        if (!resp.ok) { const d = await resp.json(); this.error = d.error || 'Failed'; this.processing = false; return; }
+        const blob = await resp.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href = url; a.download = 'collage.jpg'; a.click();
+        URL.revokeObjectURL(url);
+      } catch(e) { this.error = 'Network error: ' + e.message; }
+      this.processing = false;
+    },
+  };
+}
+</script>
+{% endblock %}

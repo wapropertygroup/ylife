@@ -128,6 +128,21 @@ def page_image_ocr():
     return render_template("image_ocr.html")
 
 
+@bp.route("/pdf-stamp")
+def page_pdf_stamp():
+    return render_template("pdf_stamp.html")
+
+
+@bp.route("/collage")
+def page_collage():
+    return render_template("collage.html")
+
+
+@bp.route("/image-border")
+def page_image_border():
+    return render_template("image_border.html")
+
+
 # ---------------------------------------------------------------------------
 # Helper: validate upload
 # ---------------------------------------------------------------------------
@@ -918,4 +933,137 @@ def api_image_ocr():
         return jsonify(error=str(exc)), 503
     except Exception as exc:
         log.exception("Image OCR failed")
+        return jsonify(error=str(exc)), 500
+
+
+# ---------------------------------------------------------------------------
+# API: PDF Page Numbers / Stamp
+# ---------------------------------------------------------------------------
+
+@bp.route("/api/pdf-stamp", methods=["POST"])
+def api_pdf_stamp():
+    """Stamp page numbers (or any text) on every PDF page."""
+    data, filename, err = _get_upload(allowed_types=["pdf"])
+    if err:
+        return err
+
+    template  = request.form.get("template",  "Page {n} of {total}").strip() or "Page {n} of {total}"
+    position  = request.form.get("position",  "bottom_center")
+    color_hex = request.form.get("color",     "#444444")
+
+    try:
+        font_size = int(float(request.form.get("font_size", "11")))
+        margin    = int(float(request.form.get("margin",    "20")))
+    except (ValueError, TypeError):
+        font_size, margin = 11, 20
+
+    font_size = max(6, min(72, font_size))
+    margin    = max(5, min(100, margin))
+
+    log.info("PDF stamp: %s (template=%r, pos=%s, size=%d)",
+             filename, template, position, font_size)
+
+    try:
+        from yimage.processing import stamp_pdf_pages
+        result = stamp_pdf_pages(data, template, position, font_size, margin, color_hex)
+        base = filename.rsplit(".", 1)[0] if "." in filename else filename
+        return send_file(
+            BytesIO(result), mimetype="application/pdf",
+            as_attachment=True, download_name=f"stamped_{base}.pdf",
+        )
+    except Exception as exc:
+        log.exception("PDF stamp failed")
+        return jsonify(error=str(exc)), 500
+
+
+# ---------------------------------------------------------------------------
+# API: Image Collage
+# ---------------------------------------------------------------------------
+
+@bp.route("/api/collage", methods=["POST"])
+def api_collage():
+    """Arrange multiple images into a grid collage."""
+    files = request.files.getlist("files")
+    if not files:
+        return jsonify(error="No files uploaded"), 400
+
+    images_data = []
+    for f in files:
+        if f and f.filename:
+            ext = f.filename.rsplit(".", 1)[-1].lower() if "." in f.filename else ""
+            if ext not in ("jpg", "jpeg", "png", "webp", "bmp", "gif"):
+                return jsonify(error=f"Unsupported image type: {f.filename}"), 400
+            chunk = f.read()
+            if chunk:
+                images_data.append(chunk)
+
+    if not images_data:
+        return jsonify(error="No valid images"), 400
+    if len(images_data) > 20:
+        return jsonify(error="Too many images (max 20)"), 400
+
+    try:
+        cols       = int(request.form.get("cols",        "2"))
+        gap        = int(request.form.get("gap",         "10"))
+        cell_h     = int(request.form.get("cell_height", "300"))
+    except (ValueError, TypeError):
+        cols, gap, cell_h = 2, 10, 300
+
+    bg_color = request.form.get("bg_color", "#ffffff")
+    cols     = max(1, min(6,    cols))
+    gap      = max(0, min(100,  gap))
+    cell_h   = max(50, min(1000, cell_h))
+
+    log.info("Collage: %d images, cols=%d, gap=%d, cell_h=%d", len(images_data), cols, gap, cell_h)
+
+    try:
+        from yimage.processing import make_collage
+        result, mime = make_collage(images_data, cols, gap, bg_color, cell_h)
+        return send_file(
+            BytesIO(result), mimetype=mime,
+            as_attachment=True, download_name="collage.jpg",
+        )
+    except Exception as exc:
+        log.exception("Collage failed")
+        return jsonify(error=str(exc)), 500
+
+
+# ---------------------------------------------------------------------------
+# API: Image Border / Frame
+# ---------------------------------------------------------------------------
+
+@bp.route("/api/image-border", methods=["POST"])
+def api_image_border():
+    """Add a solid-colour border around an image."""
+    data, filename, err = _get_upload(
+        allowed_types=["jpg", "jpeg", "png", "webp", "bmp"]
+    )
+    if err:
+        return err
+
+    border_color = request.form.get("border_color", "#000000")
+
+    try:
+        border_width = int(float(request.form.get("border_width", "20")))
+        radius       = int(float(request.form.get("radius",       "0")))
+    except (ValueError, TypeError):
+        border_width, radius = 20, 0
+
+    border_width = max(1, min(200, border_width))
+    radius       = max(0, min(500, radius))
+
+    log.info("Image border: %s (w=%d, r=%d, color=%s)", filename, border_width, radius, border_color)
+
+    try:
+        from yimage.processing import add_border
+        result, mime = add_border(data, border_width, border_color, radius)
+        _ext = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}
+        out_ext = _ext.get(mime, filename.rsplit(".", 1)[-1] if "." in filename else "png")
+        base = filename.rsplit(".", 1)[0] if "." in filename else filename
+        return send_file(
+            BytesIO(result), mimetype=mime,
+            as_attachment=True, download_name=f"bordered_{base}.{out_ext}",
+        )
+    except Exception as exc:
+        log.exception("Image border failed")
         return jsonify(error=str(exc)), 500
