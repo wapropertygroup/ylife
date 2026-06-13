@@ -494,9 +494,15 @@ function buildScatterChart(ctx) {
 let _pegMapLabelsVisible = false;
 
 function buildPegChart(ctx) {
+  // Only the 20 most widely-followed large-caps with meaningful PEG ratios.
+  // Sorted by PEG ascending so undervalued stocks appear first.
+  const PEG_TICKERS = new Set([
+    'NVDA','MSFT','AAPL','GOOGL','AMZN','META','TSLA','AVGO','LLY','V',
+    'JPM','NFLX','MA','CRM','ORCL','ADBE','NOW','PLTR','AMD','COST'
+  ]);
   const seen = new Set();
   const rows = ALL.filter(d => {
-    if (d.peg == null || seen.has(d.ticker)) return false;
+    if (d.peg == null || !PEG_TICKERS.has(d.ticker) || seen.has(d.ticker)) return false;
     seen.add(d.ticker); return true;
   }).sort((a,b) => a.peg - b.peg);
   return new Chart(ctx, {
