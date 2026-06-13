@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block title %}Image OCR — yImage{% endblock %}
+{% block content %}
+<div x-data="ocrTool()">
+  <div class="max-w-2xl mx-auto">
+    <a href="/" class="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-brand transition mb-4">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+      <span data-i18n="common.all_tools">All Tools</span>
+    </a>
+    <h1 class="text-2xl font-extrabold mb-2" data-i18n="ocr.title">🔡 Image OCR</h1>
+    <p class="text-sm text-slate-500 dark:text-slate-400 mb-6" data-i18n="ocr.desc">Extract text from images — photos of documents, screenshots, scanned pages. Powered by Tesseract.</p>
+
+    <!-- Upload Zone -->
+    <div x-show="!text"
+         class="drop-zone rounded-2xl border-2 border-dashed border-slate-300 dark:border-slate-700 p-10 text-center cursor-pointer transition hover:border-brand"
+         @click="$refs.fi.click()"
+         @dragover.prevent @drop.prevent="handleDrop($event)">
+      <input type="file" accept="image/*,.tiff,.tif" x-ref="fi" @change="process($event.target.files[0])" class="hidden">
+      <div x-show="!loading">
+        <svg class="w-12 h-12 mx-auto mb-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+        </svg>
+        <p class="text-sm text-slate-500"><span data-i18n="common.upload">Drop an image here or</span> <span class="text-brand font-medium" data-i18n="common.browse">browse</span></p>
+        <p class="text-xs text-slate-400 mt-1">JPEG · PNG · WebP · TIFF · <span data-i18n="common.max_size">Max 50 MB</span></p>
+      </div>
+      <div x-show="loading" class="flex items-center justify-center gap-2 py-4">
+        <svg class="animate-spin w-6 h-6 text-brand" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+        <span class="text-sm text-slate-400" data-i18n="ocr.running">Running OCR...</span>
+      </div>
+    </div>
+
+    <!-- Result -->
+    <div x-show="text">
+      <div class="flex items-center justify-between mb-3">
+        <p class="text-xs text-slate-400">
+          <span x-text="charCount.toLocaleString()"></span>
+          <span data-i18n="ocr.chars"> characters extracted</span>
+        </p>
+        <div class="flex gap-2">
+          <button @click="copyText()"
+                  class="px-3 py-1.5 rounded-lg text-xs font-medium border border-slate-300 dark:border-slate-700 hover:border-brand hover:text-brand transition"
+                  x-text="copied ? I18n.t('p2t.copied') : I18n.t('p2t.copy')"></button>
+          <button @click="downloadText()"
+                  class="px-3 py-1.5 rounded-lg text-xs font-medium bg-brand text-white hover:bg-brand-dark transition"
+                  data-i18n="p2t.download_txt">Download .txt</button>
+          <button @click="text=''; error=''"
+                  class="px-3 py-1.5 rounded-lg text-xs text-slate-400 hover:text-red-500 transition"
+                  data-i18n="p2t.clear">Clear</button>
+        </div>
+      </div>
+      <div class="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 p-4 max-h-[500px] overflow-y-auto">
+        <pre class="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap font-mono leading-relaxed" x-text="text || '(No text found)'"></pre>
+      </div>
+    </div>
+
+    <!-- No text found state -->
+    <div x-show="ranOcr && !text && !loading && !error"
+         class="mt-4 p-4 rounded-xl bg-amber-50 dark:bg-amber-900/15 border border-amber-300 dark:border-amber-700/40 text-sm text-amber-700 dark:text-amber-400"
+         data-i18n="ocr.no_text">No text was detected in this image. Try a clearer photo or ensure the image contains readable text.</div>
+
+    <p x-show="error" class="mt-4 text-sm text-red-500" x-text="error"></p>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function ocrTool() {
+  return {
+    text: '', charCount: 0,
+    loading: false, error: '', copied: false, ranOcr: false,
+
+    handleDrop(e) { this.process(e.dataTransfer.files[0]); },
+    async process(f) {
+      if (!f || this.loading) return;
+      this.loading = true; this.error = ''; this.text = ''; this.ranOcr = false;
+      const form = new FormData();
+      form.append('file', f);
+      try {
+        const resp = await fetch('/api/image-ocr', { method: 'POST', body: form });
+        const data = await resp.json();
+        if (!resp.ok) { this.error = data.error || 'OCR failed'; this.loading = false; this.ranOcr = true; return; }
+        this.text = data.text;
+        this.charCount = data.char_count;
+        this.ranOcr = true;
+      } catch(e) { this.error = 'Network error: ' + e.message; }
+      this.loading = false;
+    },
+
+    copyText() {
+      navigator.clipboard.writeText(this.text);
+      this.copied = true;
+      setTimeout(() => this.copied = false, 2000);
+    },
+
+    downloadText() {
+      const blob = new Blob([this.text], {type:'text/plain'});
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'ocr_text.txt';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    },
+  };
+}
+</script>
+{% endblock %}

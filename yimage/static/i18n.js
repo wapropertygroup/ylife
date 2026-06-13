@@ -33,6 +33,10 @@ const I18n = (() => {
       "tool.qr_code":           "QR Code",
       "tool.watermark":         "Add Watermark",
       "tool.filters":           "Image Filters",
+      "tool.pdf_protect":       "PDF Protect & Unlock",
+      "tool.pdf_pages":         "PDF Page Editor",
+      "tool.color_palette":     "Color Palette",
+      "tool.image_ocr":         "Image OCR",
 
       // Common
       "common.upload":    "Drop a file here or",
@@ -126,6 +130,44 @@ const I18n = (() => {
       "filter.preset":     "Preset",
       "filter.button":     "Apply & Download",
       "filter.done":       "✓ Filtered image downloaded!",
+
+      // PDF Protect & Unlock
+      "protect.title":        "🔒 PDF Protect & Unlock",
+      "protect.desc":         "Add a password to lock a PDF, or enter the password to remove protection.",
+      "protect.protect_tab":  "Lock PDF",
+      "protect.unlock_tab":   "Unlock PDF",
+      "protect.password":     "Password",
+      "protect.unlock_hint":  "Leave blank if the PDF uses an empty password.",
+      "protect.protect_btn":  "Lock PDF & Download",
+      "protect.unlock_btn":   "Unlock PDF & Download",
+      "protect.done_protect": "✓ Password-protected PDF downloaded!",
+      "protect.done_unlock":  "✓ Unlocked PDF downloaded!",
+
+      // PDF Page Editor
+      "pages.title":     "📋 PDF Page Editor",
+      "pages.desc":      "Drag to reorder pages or click ✕ to delete them. Then download the edited PDF.",
+      "pages.loading":   "Loading pages...",
+      "pages.pages_of":  " pages remaining",
+      "pages.change":    "Change PDF",
+      "pages.apply":     "Download Edited PDF",
+
+      // Color Palette
+      "palette.title":       "🎨 Color Palette Extractor",
+      "palette.desc":        "Extract the dominant colours from any image. Click a swatch to copy its hex code.",
+      "palette.n_colors":    "Number of colors",
+      "palette.extract_btn": "Extract Palette",
+      "palette.copied":      "Copied!",
+      "palette.copy_all":    "Copy All Hex",
+      "palette.all_copied":  "Copied!",
+      "palette.download_css":"Download CSS",
+      "palette.new_image":   "New image",
+
+      // Image OCR
+      "ocr.title":   "🔡 Image OCR",
+      "ocr.desc":    "Extract text from photos, screenshots, and scanned documents. Powered by Tesseract.",
+      "ocr.running": "Running OCR...",
+      "ocr.chars":   " characters extracted",
+      "ocr.no_text": "No text was detected. Try a clearer photo or ensure the image contains readable text.",
 
       // Resize & Convert
       "resize.title":       "↔️ Resize & Convert Image",
@@ -306,9 +348,72 @@ const I18n = (() => {
       "filter.button":     "应用并下载",
       "filter.done":       "✓ 已下载滤镜图片！",
 
+      // PDF 加密 & 解密
+      "protect.title":        "🔒 PDF 加密 & 解密",
+      "protect.desc":         "为 PDF 添加密码保护，或输入密码去除保护。",
+      "protect.protect_tab":  "加密 PDF",
+      "protect.unlock_tab":   "解密 PDF",
+      "protect.password":     "密码",
+      "protect.unlock_hint":  "如果 PDF 使用空密码，请留空。",
+      "protect.protect_btn":  "加密并下载",
+      "protect.unlock_btn":   "解密并下载",
+      "protect.done_protect": "✓ 加密后的 PDF 已下载！",
+      "protect.done_unlock":  "✓ 已解密的 PDF 已下载！",
+
+      // PDF 页面编辑
+      "pages.title":    "📋 PDF 页面编辑",
+      "pages.desc":     "拖动缩略图调整页面顺序，点击 ✕ 删除页面，然后下载编辑后的 PDF。",
+      "pages.loading":  "正在加载页面...",
+      "pages.pages_of": " 页剩余",
+      "pages.change":   "更换 PDF",
+      "pages.apply":    "下载编辑后的 PDF",
+
+      // 色板提取
+      "palette.title":       "🎨 提取色板",
+      "palette.desc":        "从任意图片中提取主色调，点击色块复制 Hex 色值。",
+      "palette.n_colors":    "颜色数量",
+      "palette.extract_btn": "提取色板",
+      "palette.copied":      "已复制！",
+      "palette.copy_all":    "复制全部 Hex",
+      "palette.all_copied":  "已复制！",
+      "palette.download_css":"下载 CSS",
+      "palette.new_image":   "换图片",
+
+      // 图片 OCR
+      "ocr.title":   "🔡 图片文字识别",
+      "ocr.desc":    "从照片、截图和扫描文件中提取文字，由 Tesseract OCR 驱动。",
+      "ocr.running": "正在识别文字...",
+      "ocr.chars":   " 个字符已提取",
+      "ocr.no_text": "未检测到文字。请尝试更清晰的图片，或确保图片包含可读文字。",
+
+      // 水印
+      "wm.title":    "💧 添加水印",
+      "wm.desc":     "为图片添加文字水印，可控制位置、透明度、字体大小和颜色。",
+      "wm.text":     "水印文字",
+      "wm.position": "位置",
+      "wm.opacity":  "透明度",
+      "wm.size":     "字体大小",
+      "wm.color":    "颜色",
+      "wm.button":   "添加水印并下载",
+      "wm.done":     "✓ 已下载添加水印的图片！",
+
+      // 图片滤镜
+      "filter.title":      "🎚️ 图片滤镜",
+      "filter.desc":       "调整亮度、对比度和饱和度，或应用灰度/复古棕褐色效果。",
+      "filter.brightness": "亮度",
+      "filter.contrast":   "对比度",
+      "filter.saturation": "饱和度",
+      "filter.sharpness":  "锐度",
+      "filter.preset":     "预设",
+      "filter.button":     "应用并下载",
+
       // 工具名称新增
-      "tool.watermark": "添加水印",
-      "tool.filters":   "图片滤镜",
+      "tool.watermark":     "添加水印",
+      "tool.filters":       "图片滤镜",
+      "tool.pdf_protect":   "PDF 加密 & 解密",
+      "tool.pdf_pages":     "PDF 页面编辑",
+      "tool.color_palette": "提取色板",
+      "tool.image_ocr":     "图片文字识别",
 
       // 调整尺寸 & 转换
       "resize.title":       "↔️ 调整图片尺寸 & 格式转换",

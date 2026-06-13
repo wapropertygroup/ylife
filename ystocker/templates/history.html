@@ -429,13 +429,13 @@
           <span class="inline-block w-3 h-0.5 bg-sky-400"></span> <span data-i18n="history.price_legend">Price</span>
         </span>
         <span class="flex items-center gap-1.5 text-xs text-amber-400">
-          <span class="inline-block w-3 h-0.5 border-dashed border border-amber-400"></span> <span>MA20</span>
+          <span class="inline-block w-3 h-0.5 border-dashed border border-amber-400"></span> <span data-i18n="history.price_ma20">MA20</span>
         </span>
         <span class="flex items-center gap-1.5 text-xs text-rose-400">
-          <span class="inline-block w-3 h-0.5 border-dashed border border-rose-400"></span> <span>MA50</span>
+          <span class="inline-block w-3 h-0.5 border-dashed border border-rose-400"></span> <span data-i18n="history.price_ma50">MA50</span>
         </span>
         <span class="flex items-center gap-1.5 text-xs text-violet-400">
-          <span class="inline-block w-3 h-0.5 border-dashed border border-violet-400"></span> <span>BB</span>
+          <span class="inline-block w-3 h-0.5 border-dashed border border-violet-400"></span> <span data-i18n="history.price_bb">BB</span>
         </span>
         <span id="legendTarget" style="display:none" class="items-center gap-1.5 text-xs text-slate-400 cursor-help wall-tip"
               data-tip-i18n="history.tip_target">
@@ -514,7 +514,7 @@
       <div class="flex items-center gap-2 flex-wrap justify-end">
         <span class="flex items-center gap-1.5 text-xs text-emerald-400"><span class="inline-block w-2 h-2 rounded-sm bg-emerald-500/70"></span> <span data-i18n="history.volume_up">Up</span></span>
         <span class="flex items-center gap-1.5 text-xs text-rose-400"><span class="inline-block w-2 h-2 rounded-sm bg-rose-500/70"></span> <span data-i18n="history.volume_down">Down</span></span>
-        <span class="flex items-center gap-1.5 text-xs text-amber-400"><span class="inline-block w-3 h-0.5 border-dashed border border-amber-400"></span> MA20</span>
+        <span class="flex items-center gap-1.5 text-xs text-amber-400"><span class="inline-block w-3 h-0.5 border-dashed border border-amber-400"></span> <span data-i18n="history.volume_ma20">MA20</span></span>
         <button onclick="expandChart('volume')" title="Expand" class="expand-btn">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
         </button>
@@ -603,6 +603,10 @@
     <div class="chart-container" style="height:160px" id="stochChartWrap">
       <canvas id="stochHistChart"></canvas>
     </div>
+    <div class="mt-3 text-[11px] text-slate-500 leading-relaxed border-t border-slate-800 pt-3">
+      <p class="font-semibold text-slate-400 mb-1" data-i18n="history.stoch_explain_title">📖 How to read this chart</p>
+      <p data-i18n="history.stoch_explain_body">The <strong class="text-slate-300">Stochastic Oscillator</strong> compares a stock's closing price to its price range over the past 14 periods. <strong class="text-sky-400">%K</strong> (green line) is the raw momentum reading; <strong class="text-amber-400">%D</strong> (amber dashed) is a 3-period moving average of %K acting as a signal line — like MACD's signal line but for this indicator. Values range 0–100. Above <strong class="text-rose-400">80</strong> = overbought (price is near the top of its recent range, possible pullback ahead). Below <strong class="text-emerald-400">20</strong> = oversold (price near the bottom of recent range, possible bounce). A <strong class="text-slate-300">%K crossing above %D</strong> is a bullish momentum signal; crossing below is bearish. Best used alongside RSI and price context.</p>
+    </div>
   </div>
 
   <!-- Historical Volatility chart -->
@@ -613,8 +617,8 @@
         <p class="text-xs text-slate-500" data-i18n="history.hv_desc">Annualized rolling volatility from log returns (%)</p>
       </div>
       <div class="flex items-center gap-2 flex-wrap justify-end">
-        <span class="flex items-center gap-1.5 text-xs text-amber-400"><span class="inline-block w-3 h-0.5 bg-amber-400"></span> HV20</span>
-        <span class="flex items-center gap-1.5 text-xs text-violet-400"><span class="inline-block w-3 h-0.5 border-dashed border border-violet-400"></span> HV60</span>
+        <span class="flex items-center gap-1.5 text-xs text-amber-400"><span class="inline-block w-3 h-0.5 bg-amber-400"></span> <span data-i18n="history.hv20">HV20</span></span>
+        <span class="flex items-center gap-1.5 text-xs text-violet-400"><span class="inline-block w-3 h-0.5 border-dashed border border-violet-400"></span> <span data-i18n="history.hv60">HV60</span></span>
         <button onclick="expandChart('hv')" title="Expand" class="expand-btn">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
         </button>
@@ -748,9 +752,9 @@
         <p class="text-xs text-slate-500" data-i18n="history.pc_chart_desc">Total put OI ÷ call OI per expiry — &gt;1.2 bearish · &lt;0.7 bullish</p>
       </div>
       <div class="flex items-center gap-3 flex-wrap justify-end">
-        <span class="flex items-center gap-1.5 text-xs text-rose-400"><span class="inline-block w-2 h-2 rounded-sm bg-rose-500/70"></span> &gt;1.2 Bearish</span>
-        <span class="flex items-center gap-1.5 text-xs text-amber-400"><span class="inline-block w-2 h-2 rounded-sm bg-amber-500/70"></span> Neutral</span>
-        <span class="flex items-center gap-1.5 text-xs text-emerald-400"><span class="inline-block w-2 h-2 rounded-sm bg-emerald-500/70"></span> &lt;0.7 Bullish</span>
+        <span class="flex items-center gap-1.5 text-xs text-rose-400"><span class="inline-block w-2 h-2 rounded-sm bg-rose-500/70"></span> <span data-i18n="history.pc_bearish_label">&gt;1.2 Bearish</span></span>
+        <span class="flex items-center gap-1.5 text-xs text-amber-400"><span class="inline-block w-2 h-2 rounded-sm bg-amber-500/70"></span> <span data-i18n="history.pc_neutral_label">Neutral</span></span>
+        <span class="flex items-center gap-1.5 text-xs text-emerald-400"><span class="inline-block w-2 h-2 rounded-sm bg-emerald-500/70"></span> <span data-i18n="history.pc_bullish_label">&lt;0.7 Bullish</span></span>
       </div>
     </div>
     <div class="chart-container" style="height:280px"><canvas id="pcByExpiryChart"></canvas></div>

@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+{% block title %}PDF Page Editor — yImage{% endblock %}
+{% block content %}
+<div x-data="pdfPagesTool()">
+  <div class="max-w-4xl mx-auto">
+    <a href="/" class="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-brand transition mb-4">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+      <span data-i18n="common.all_tools">All Tools</span>
+    </a>
+    <h1 class="text-2xl font-extrabold mb-2" data-i18n="pages.title">📋 PDF Page Editor</h1>
+    <p class="text-sm text-slate-500 dark:text-slate-400 mb-6" data-i18n="pages.desc">Drag to reorder pages or click ✕ to delete them. Then download the edited PDF.</p>
+
+    <!-- Upload Zone -->
+    <div x-show="!pages.length"
+         class="drop-zone rounded-2xl border-2 border-dashed border-slate-300 dark:border-slate-700 p-10 text-center cursor-pointer transition hover:border-brand"
+         @click="$refs.fi.click()"
+         @dragover.prevent="dragOver=true" @dragleave="dragOver=false"
+         @drop.prevent="dragOver=false; handleDrop($event)"
+         :class="dragOver ? 'border-brand bg-violet-50 dark:bg-violet-900/10' : ''">
+      <input type="file" accept=".pdf" x-ref="fi" @change="loadPDF($event.target.files[0])" class="hidden">
+      <div x-show="!loading">
+        <svg class="w-12 h-12 mx-auto mb-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+        </svg>
+        <p class="text-sm text-slate-500"><span data-i18n="common.upload">Drop a PDF here or</span> <span class="text-brand font-medium" data-i18n="common.browse">browse</span></p>
+        <p class="text-xs text-slate-400 mt-1" data-i18n="common.max_size">Max 50 MB</p>
+      </div>
+      <div x-show="loading" class="flex items-center justify-center gap-2 py-4">
+        <svg class="animate-spin w-6 h-6 text-brand" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+        <span class="text-sm text-slate-400" data-i18n="pages.loading">Loading pages...</span>
+      </div>
+    </div>
+
+    <!-- Page Grid -->
+    <div x-show="pages.length > 0">
+      <div class="flex items-center justify-between mb-3">
+        <p class="text-sm text-slate-500">
+          <span x-text="pages.length"></span> / <span x-text="originalCount"></span>
+          <span data-i18n="pages.pages_of"> pages remaining</span>
+        </p>
+        <button @click="reset()" class="text-xs text-slate-400 hover:text-red-500" data-i18n="pages.change">Change PDF</button>
+      </div>
+
+      <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3 mb-4">
+        <template x-for="(page, i) in pages" :key="page.id">
+          <div class="relative group cursor-grab active:cursor-grabbing"
+               draggable="true"
+               @dragstart="dragStart(i)"
+               @dragover.prevent="dragOver2=i"
+               @drop.prevent="drop(i)"
+               @dragend="dragOver2=-1"
+               :class="dragOver2===i ? 'ring-2 ring-brand rounded-xl' : ''">
+            <!-- Thumbnail -->
+            <div class="rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">
+              <img :src="page.thumb" class="w-full h-auto block" :alt="'Page ' + page.originalPage">
+              <div class="px-1 py-0.5 text-center text-xs text-slate-400 bg-slate-50 dark:bg-slate-800">
+                <span x-text="page.originalPage"></span>
+              </div>
+            </div>
+            <!-- Delete button -->
+            <button @click="deletePage(i)"
+                    class="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 hover:bg-red-600 text-white text-xs rounded-full hidden group-hover:flex items-center justify-center transition shadow">
+              ✕
+            </button>
+            <!-- Position indicator -->
+            <div class="absolute -bottom-1.5 left-1/2 -translate-x-1/2 bg-brand text-white text-xs px-1.5 py-0.5 rounded-full leading-none opacity-0 group-hover:opacity-100 transition">
+              <span x-text="i+1"></span>
+            </div>
+          </div>
+        </template>
+      </div>
+
+      <!-- Apply button -->
+      <button @click="apply()" :disabled="applying || pages.length === 0"
+              class="w-full py-3 rounded-xl bg-brand text-white font-semibold hover:bg-brand-dark transition disabled:opacity-50">
+        <span x-show="!applying">
+          <span data-i18n="pages.apply">Download Edited PDF</span>
+          <span x-text="' (' + pages.length + ' pages)'"></span>
+        </span>
+        <span x-show="applying" class="flex items-center justify-center gap-2">
+          <svg class="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+          <span data-i18n="common.processing">Processing...</span>
+        </span>
+      </button>
+    </div>
+
+    <p x-show="error" class="mt-4 text-sm text-red-500" x-text="error"></p>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function pdfPagesTool() {
+  let _idSeq = 0;
+  return {
+    file: null, dragOver: false, dragOver2: -1,
+    pages: [], originalCount: 0,
+    loading: false, applying: false, error: '',
+    _dragIdx: -1,
+
+    handleDrop(e) { this.loadPDF(e.dataTransfer.files[0]); },
+    async loadPDF(f) {
+      if (!f) return;
+      this.file = f; this.error = ''; this.loading = true; this.pages = [];
+      const form = new FormData();
+      form.append('file', f);
+      try {
+        const resp = await fetch('/api/pdf-pages/thumbnails', { method: 'POST', body: form });
+        const data = await resp.json();
+        if (!resp.ok) { this.error = data.error || 'Failed'; this.loading = false; return; }
+        this.pages = data.pages.map(p => ({ id: ++_idSeq, ...p, originalPage: p.page }));
+        this.originalCount = data.count;
+      } catch(e) { this.error = 'Network error: ' + e.message; }
+      this.loading = false;
+    },
+
+    reset() { this.file = null; this.pages = []; this.error = ''; this.$refs.fi.value = ''; },
+    deletePage(i) { this.pages.splice(i, 1); },
+
+    dragStart(i) { this._dragIdx = i; },
+    drop(toIdx) {
+      if (this._dragIdx < 0 || this._dragIdx === toIdx) { this._dragIdx = -1; return; }
+      const item = this.pages.splice(this._dragIdx, 1)[0];
+      this.pages.splice(toIdx, 0, item);
+      this.pages = [...this.pages];
+      this._dragIdx = -1; this.dragOver2 = -1;
+    },
+
+    async apply() {
+      if (!this.file || this.pages.length === 0 || this.applying) return;
+      this.applying = true; this.error = '';
+      const form = new FormData();
+      form.append('file', this.file);
+      form.append('order', JSON.stringify(this.pages.map(p => p.index)));
+      try {
+        const resp = await fetch('/api/pdf-pages/apply', { method: 'POST', body: form });
+        if (!resp.ok) { const d = await resp.json(); this.error = d.error || 'Failed'; this.applying = false; return; }
+        const blob = await resp.blob();
+        const url = URL.createObjectURL(blob);
+        const base = this.file.name.replace(/\.pdf$/i, '');
+        const a = document.createElement('a'); a.href = url; a.download = `edited_${base}.pdf`; a.click();
+        URL.revokeObjectURL(url);
+      } catch(e) { this.error = 'Network error: ' + e.message; }
+      this.applying = false;
+    },
+  };
+}
+</script>
+{% endblock %}

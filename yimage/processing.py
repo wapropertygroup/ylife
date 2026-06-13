@@ -1004,3 +1004,158 @@ def apply_filters(
     buf = io.BytesIO()
     img.save(buf, format=save_fmt, quality=93 if save_fmt == "JPEG" else None)
     return buf.getvalue(), mime
+
+
+# ---------------------------------------------------------------------------
+# 18. PDF Protect & Unlock
+# ---------------------------------------------------------------------------
+
+def protect_pdf(data: bytes, password: str) -> bytes:
+    """Add password protection to a PDF."""
+    import pikepdf
+
+    src = pikepdf.open(io.BytesIO(data))
+    buf = io.BytesIO()
+    src.save(
+        buf,
+        encryption=pikepdf.Encryption(owner=password, user=password, R=4),
+    )
+    src.close()
+    return buf.getvalue()
+
+
+def unlock_pdf(data: bytes, password: str) -> bytes:
+    """Remove password protection from a PDF. Raises ValueError on wrong password."""
+    import pikepdf
+
+    try:
+        src = pikepdf.open(io.BytesIO(data), password=password)
+    except pikepdf.PasswordError as exc:
+        raise ValueError("Incorrect password — could not open PDF") from exc
+
+    buf = io.BytesIO()
+    src.save(buf)  # save without encryption
+    src.close()
+    return buf.getvalue()
+
+
+# ---------------------------------------------------------------------------
+# 19. PDF Page Editor (thumbnails + reorder/delete)
+# ---------------------------------------------------------------------------
+
+def get_pdf_page_thumbnails(data: bytes) -> list[dict]:
+    """Render each PDF page as a small JPEG thumbnail.  Returns list of dicts."""
+    import fitz
+    import base64
+
+    doc = fitz.open(stream=data, filetype="pdf")
+    pages: list[dict] = []
+    for i, page in enumerate(doc):
+        # ~120 px wide thumbnail
+        scale = 120 / max(page.rect.width, 1)
+        mat = fitz.Matrix(scale, scale)
+        pix = page.get_pixmap(matrix=mat, alpha=False)
+        img = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=55)
+        b64 = base64.b64encode(buf.getvalue()).decode()
+        pages.append({
+            "index": i,
+            "page":  i + 1,
+            "w": pix.width,
+            "h": pix.height,
+            "thumb": f"data:image/jpeg;base64,{b64}",
+        })
+
+    doc.close()
+    return pages
+
+
+def apply_pdf_page_order(data: bytes, order: list[int]) -> bytes:
+    """Build a new PDF from the given 0-based page indices in the given order."""
+    import fitz
+
+    src = fitz.open(stream=data, filetype="pdf")
+    out = fitz.open()
+    for idx in order:
+        if 0 <= idx < len(src):
+            out.insert_pdf(src, from_page=idx, to_page=idx)
+    buf = io.BytesIO()
+    out.save(buf)
+    out.close()
+    src.close()
+    return buf.getvalue()
+
+
+# ---------------------------------------------------------------------------
+# 20. Color Palette Extractor
+# ---------------------------------------------------------------------------
+
+def extract_color_palette(data: bytes, n_colors: int = 8) -> list[dict]:
+    """Extract the dominant colours from an image using K-means.
+
+    Returns a list of colour dicts sorted by dominance (most frequent first).
+    """
+    import numpy as np
+
+    img = Image.open(io.BytesIO(data)).convert("RGB")
+    # Down-sample for speed (max 300 px on longest side)
+    img.thumbnail((300, 300), Image.Resampling.LANCZOS)
+    arr = np.array(img)
+    pixels = arr.reshape(-1, 3).astype(np.float32)
+
+    try:
+        from sklearn.cluster import MiniBatchKMeans
+        km = MiniBatchKMeans(n_clusters=n_colors, random_state=42, n_init=3)
+        labels = km.fit_predict(pixels)
+        centers = km.cluster_centers_.astype(np.uint8)
+    except ImportError:
+        centers, labels = _simple_kmeans(pixels, n_colors)
+
+    total = len(labels)
+    colors: list[dict] = []
+    for i in range(n_colors):
+        count = int((labels == i).sum())
+        r, g, b = int(centers[i][0]), int(centers[i][1]), int(centers[i][2])
+        hex_c = f"#{r:02x}{g:02x}{b:02x}"
+        # Choose readable text colour (W3C luminance formula)
+        luma = 0.299 * r + 0.587 * g + 0.114 * b
+        colors.append({
+            "hex":        hex_c,
+            "r": r, "g": g, "b": b,
+            "percentage": round(count / total * 100, 1),
+            "text_color": "#000000" if luma > 128 else "#ffffff",
+        })
+
+    colors.sort(key=lambda c: c["percentage"], reverse=True)
+    return colors
+
+
+# ---------------------------------------------------------------------------
+# 21. Image OCR
+# ---------------------------------------------------------------------------
+
+def ocr_image(data: bytes) -> dict:
+    """Extract text from an image using Tesseract OCR (pytesseract).
+
+    Returns {text, char_count, method}.
+    Raises ImportError if pytesseract is not available.
+    """
+    try:
+        import pytesseract
+    except ImportError as exc:
+        raise ImportError(
+            "pytesseract is not installed — OCR is unavailable on this server"
+        ) from exc
+
+    img = Image.open(io.BytesIO(data))
+    # Convert to RGB for best Tesseract compatibility
+    if img.mode not in ("RGB", "L"):
+        img = img.convert("RGB")
+
+    text: str = pytesseract.image_to_string(img, lang="eng").strip()
+    return {
+        "text":       text,
+        "char_count": len(text),
+        "method":     "tesseract",
+    }

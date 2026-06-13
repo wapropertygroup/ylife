@@ -108,6 +108,26 @@ def page_image_filters():
     return render_template("image_filters.html")
 
 
+@bp.route("/pdf-protect")
+def page_pdf_protect():
+    return render_template("pdf_protect.html")
+
+
+@bp.route("/pdf-pages")
+def page_pdf_pages():
+    return render_template("pdf_pages.html")
+
+
+@bp.route("/color-palette")
+def page_color_palette():
+    return render_template("color_palette.html")
+
+
+@bp.route("/image-ocr")
+def page_image_ocr():
+    return render_template("image_ocr.html")
+
+
 # ---------------------------------------------------------------------------
 # Helper: validate upload
 # ---------------------------------------------------------------------------
@@ -730,4 +750,172 @@ def api_image_filters():
         )
     except Exception as exc:
         log.exception("Image filters failed")
+        return jsonify(error=str(exc)), 500
+
+
+# ---------------------------------------------------------------------------
+# API: PDF Protect & Unlock
+# ---------------------------------------------------------------------------
+
+@bp.route("/api/pdf-protect", methods=["POST"])
+def api_pdf_protect():
+    """Add password protection to a PDF."""
+    data, filename, err = _get_upload(allowed_types=["pdf"])
+    if err:
+        return err
+
+    password = request.form.get("password", "").strip()
+    if not password:
+        return jsonify(error="Please provide a password"), 400
+    if len(password) > 128:
+        return jsonify(error="Password too long (max 128 characters)"), 400
+
+    log.info("PDF protect: %s (%d bytes)", filename, len(data))
+
+    try:
+        from yimage.processing import protect_pdf
+        result = protect_pdf(data, password)
+        base = filename.rsplit(".", 1)[0] if "." in filename else filename
+        return send_file(
+            BytesIO(result), mimetype="application/pdf",
+            as_attachment=True, download_name=f"protected_{base}.pdf",
+        )
+    except Exception as exc:
+        log.exception("PDF protect failed")
+        return jsonify(error=str(exc)), 500
+
+
+@bp.route("/api/pdf-unlock", methods=["POST"])
+def api_pdf_unlock():
+    """Remove password protection from a PDF."""
+    data, filename, err = _get_upload(allowed_types=["pdf"])
+    if err:
+        return err
+
+    password = request.form.get("password", "").strip()
+
+    log.info("PDF unlock: %s (%d bytes)", filename, len(data))
+
+    try:
+        from yimage.processing import unlock_pdf
+        result = unlock_pdf(data, password)
+        base = filename.rsplit(".", 1)[0] if "." in filename else filename
+        return send_file(
+            BytesIO(result), mimetype="application/pdf",
+            as_attachment=True, download_name=f"unlocked_{base}.pdf",
+        )
+    except ValueError as exc:
+        return jsonify(error=str(exc)), 422
+    except Exception as exc:
+        log.exception("PDF unlock failed")
+        return jsonify(error=str(exc)), 500
+
+
+# ---------------------------------------------------------------------------
+# API: PDF Page Editor
+# ---------------------------------------------------------------------------
+
+@bp.route("/api/pdf-pages/thumbnails", methods=["POST"])
+def api_pdf_page_thumbnails():
+    """Return thumbnail data for each page of a PDF."""
+    data, filename, err = _get_upload(allowed_types=["pdf"])
+    if err:
+        return err
+
+    log.info("PDF page thumbnails: %s (%d bytes)", filename, len(data))
+
+    try:
+        from yimage.processing import get_pdf_page_thumbnails
+        pages = get_pdf_page_thumbnails(data)
+        return jsonify({"pages": pages, "count": len(pages), "filename": filename})
+    except Exception as exc:
+        log.exception("PDF page thumbnails failed")
+        return jsonify(error=str(exc)), 500
+
+
+@bp.route("/api/pdf-pages/apply", methods=["POST"])
+def api_pdf_pages_apply():
+    """Apply a new page order (and deletions) to a PDF."""
+    data, filename, err = _get_upload(allowed_types=["pdf"])
+    if err:
+        return err
+
+    import json as _json
+    try:
+        order_raw = request.form.get("order", "[]")
+        order = _json.loads(order_raw)
+        if not isinstance(order, list) or not order:
+            return jsonify(error="Invalid page order"), 400
+        order = [int(i) for i in order]
+    except (ValueError, TypeError):
+        return jsonify(error="Invalid page order format"), 400
+
+    log.info("PDF page reorder: %s → %s", filename, order)
+
+    try:
+        from yimage.processing import apply_pdf_page_order
+        result = apply_pdf_page_order(data, order)
+        base = filename.rsplit(".", 1)[0] if "." in filename else filename
+        return send_file(
+            BytesIO(result), mimetype="application/pdf",
+            as_attachment=True, download_name=f"edited_{base}.pdf",
+        )
+    except Exception as exc:
+        log.exception("PDF page reorder failed")
+        return jsonify(error=str(exc)), 500
+
+
+# ---------------------------------------------------------------------------
+# API: Color Palette Extractor
+# ---------------------------------------------------------------------------
+
+@bp.route("/api/color-palette", methods=["POST"])
+def api_color_palette():
+    """Extract the dominant colour palette from an image."""
+    data, filename, err = _get_upload(
+        allowed_types=["jpg", "jpeg", "png", "webp", "bmp"]
+    )
+    if err:
+        return err
+
+    try:
+        n = int(request.form.get("n_colors", "8"))
+        n = max(2, min(16, n))
+    except (ValueError, TypeError):
+        n = 8
+
+    log.info("Color palette: %s (%d bytes, n=%d)", filename, len(data), n)
+
+    try:
+        from yimage.processing import extract_color_palette
+        colors = extract_color_palette(data, n)
+        return jsonify({"colors": colors, "count": len(colors)})
+    except Exception as exc:
+        log.exception("Color palette extraction failed")
+        return jsonify(error=str(exc)), 500
+
+
+# ---------------------------------------------------------------------------
+# API: Image OCR
+# ---------------------------------------------------------------------------
+
+@bp.route("/api/image-ocr", methods=["POST"])
+def api_image_ocr():
+    """Extract text from an image using Tesseract OCR."""
+    data, filename, err = _get_upload(
+        allowed_types=["jpg", "jpeg", "png", "webp", "bmp", "tiff", "tif"]
+    )
+    if err:
+        return err
+
+    log.info("Image OCR: %s (%d bytes)", filename, len(data))
+
+    try:
+        from yimage.processing import ocr_image
+        result = ocr_image(data)
+        return jsonify(result)
+    except ImportError as exc:
+        return jsonify(error=str(exc)), 503
+    except Exception as exc:
+        log.exception("Image OCR failed")
         return jsonify(error=str(exc)), 500

@@ -348,7 +348,7 @@
       <div id="usYieldStats" class="flex gap-3 flex-wrap mb-3"></div>
       <div class="relative h-44"><canvas id="usYieldChart"></canvas></div>
       <div class="mt-2">
-        <button class="yield-explain-btn" id="usYieldExplainBtn" onclick="explainYield('usYield')">✦ Explain</button>
+        <button class="yield-explain-btn" id="usYieldExplainBtn" onclick="explainYield('usYield')" data-i18n="history.explain">✦ Explain</button>
       </div>
       <div class="yield-explain-panel" id="usYieldExplainPanel"></div>
     </div>
@@ -377,7 +377,7 @@
       <div id="cnYieldStats" class="flex gap-3 flex-wrap mb-3"></div>
       <div class="relative h-44"><canvas id="cnYieldChart"></canvas></div>
       <div class="mt-2">
-        <button class="yield-explain-btn" id="cnYieldExplainBtn" onclick="explainYield('cnYield')">✦ Explain</button>
+        <button class="yield-explain-btn" id="cnYieldExplainBtn" onclick="explainYield('cnYield')" data-i18n="history.explain">✦ Explain</button>
       </div>
       <div class="yield-explain-panel" id="cnYieldExplainPanel"></div>
     </div>
@@ -551,13 +551,17 @@
                 class="econ-filter-btn px-2.5 py-1 rounded-lg text-[11px] font-medium border border-slate-700 text-slate-400 hover:border-indigo-500 hover:text-indigo-300 transition-all"
                 data-i18n="markets.econ_filter_all">All</button>
         <button onclick="filterEcon('us')" id="econFilter-us"
-                class="econ-filter-btn px-2.5 py-1 rounded-lg text-[11px] font-medium border border-slate-700 text-slate-400 hover:border-indigo-500 hover:text-indigo-300 transition-all">US</button>
+                class="econ-filter-btn px-2.5 py-1 rounded-lg text-[11px] font-medium border border-slate-700 text-slate-400 hover:border-indigo-500 hover:text-indigo-300 transition-all"
+                data-i18n="markets.econ_filter_us">US</button>
         <button onclick="filterEcon('eu')" id="econFilter-eu"
-                class="econ-filter-btn px-2.5 py-1 rounded-lg text-[11px] font-medium border border-slate-700 text-slate-400 hover:border-indigo-500 hover:text-indigo-300 transition-all">EU</button>
+                class="econ-filter-btn px-2.5 py-1 rounded-lg text-[11px] font-medium border border-slate-700 text-slate-400 hover:border-indigo-500 hover:text-indigo-300 transition-all"
+                data-i18n="markets.econ_filter_eu">EU</button>
         <button onclick="filterEcon('cn')" id="econFilter-cn"
-                class="econ-filter-btn px-2.5 py-1 rounded-lg text-[11px] font-medium border border-slate-700 text-slate-400 hover:border-indigo-500 hover:text-indigo-300 transition-all">CN</button>
+                class="econ-filter-btn px-2.5 py-1 rounded-lg text-[11px] font-medium border border-slate-700 text-slate-400 hover:border-indigo-500 hover:text-indigo-300 transition-all"
+                data-i18n="markets.econ_filter_cn">CN</button>
         <button onclick="filterEcon('jp')" id="econFilter-jp"
-                class="econ-filter-btn px-2.5 py-1 rounded-lg text-[11px] font-medium border border-slate-700 text-slate-400 hover:border-indigo-500 hover:text-indigo-300 transition-all">JP</button>
+                class="econ-filter-btn px-2.5 py-1 rounded-lg text-[11px] font-medium border border-slate-700 text-slate-400 hover:border-indigo-500 hover:text-indigo-300 transition-all"
+                data-i18n="markets.econ_filter_jp">JP</button>
         <button onclick="filterEcon('high')" id="econFilter-high"
                 class="econ-filter-btn active px-2.5 py-1 rounded-lg text-[11px] font-medium border border-rose-500 text-rose-300 hover:border-rose-500 hover:text-rose-300 transition-all"
                 data-i18n="markets.econ_filter_high">High Impact</button>
@@ -1618,7 +1622,7 @@ function renderPcr(data, canvasId) {
     const chgSign = chg == null ? '' : chg >= 0 ? '+' : '';
     document.getElementById('pcrStats').innerHTML = `
       <div class="stat-card">
-        <div class="stat-label">${I18n.t('markets.day_change') || 'Day Change'}</div>
+        <div class="stat-label">${I18n.t('markets.day_chg') || 'Day Change'}</div>
         <div class="stat-val text-sm ${chgCls}">${chgSign}${chg != null ? chg.toFixed(3) : '—'}</div>
       </div>
       <div class="stat-card">

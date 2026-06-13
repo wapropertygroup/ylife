@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% block title %}PDF Protect & Unlock — yImage{% endblock %}
+{% block content %}
+<div x-data="pdfProtectTool()">
+  <div class="max-w-2xl mx-auto">
+    <a href="/" class="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-brand transition mb-4">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+      <span data-i18n="common.all_tools">All Tools</span>
+    </a>
+    <h1 class="text-2xl font-extrabold mb-2" data-i18n="protect.title">🔒 PDF Protect & Unlock</h1>
+    <p class="text-sm text-slate-500 dark:text-slate-400 mb-6" data-i18n="protect.desc">Add a password to lock a PDF, or enter the password to remove protection.</p>
+
+    <!-- Mode toggle -->
+    <div class="flex gap-2 mb-5">
+      <button @click="mode='protect'"
+              :class="mode==='protect' ? 'bg-brand text-white' : 'bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300'"
+              class="flex-1 py-2.5 rounded-xl text-sm font-semibold transition">
+        🔒 <span data-i18n="protect.protect_tab">Lock PDF</span>
+      </button>
+      <button @click="mode='unlock'"
+              :class="mode==='unlock' ? 'bg-brand text-white' : 'bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300'"
+              class="flex-1 py-2.5 rounded-xl text-sm font-semibold transition">
+        🔓 <span data-i18n="protect.unlock_tab">Unlock PDF</span>
+      </button>
+    </div>
+
+    <!-- Upload Zone -->
+    <div class="drop-zone rounded-2xl border-2 border-dashed border-slate-300 dark:border-slate-700 p-10 text-center cursor-pointer transition hover:border-brand"
+         @click="$refs.fi.click()"
+         @dragover.prevent="dragOver=true" @dragleave="dragOver=false"
+         @drop.prevent="dragOver=false; handleDrop($event)"
+         :class="dragOver ? 'border-brand bg-violet-50 dark:bg-violet-900/10' : ''">
+      <input type="file" accept=".pdf" x-ref="fi" @change="handleFile($event.target.files[0])" class="hidden">
+      <div x-show="!file">
+        <svg class="w-12 h-12 mx-auto mb-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+        </svg>
+        <p class="text-sm text-slate-500"><span data-i18n="common.upload">Drop a PDF here or</span> <span class="text-brand font-medium" data-i18n="common.browse">browse</span></p>
+        <p class="text-xs text-slate-400 mt-1" data-i18n="common.max_size">Max 50 MB</p>
+      </div>
+      <div x-show="file" class="flex items-center justify-center gap-3">
+        <span class="text-3xl">📄</span>
+        <div class="text-left">
+          <p class="text-sm font-medium" x-text="file?.name"></p>
+          <p class="text-xs text-slate-400" x-text="fileSize"></p>
+        </div>
+        <button @click.stop="reset()" class="ml-2 text-slate-400 hover:text-red-500 text-lg">✕</button>
+      </div>
+    </div>
+
+    <!-- Password Field -->
+    <div x-show="file" class="mt-4 p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50">
+      <label class="text-sm font-medium mb-2 block" data-i18n="protect.password">Password</label>
+      <div class="relative">
+        <input :type="showPw ? 'text' : 'password'"
+               x-model="password"
+               maxlength="128"
+               :placeholder="mode==='protect' ? 'Set a new password' : 'Enter the PDF password'"
+               class="w-full px-3 py-2 pr-10 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-sm focus:border-brand focus:outline-none">
+        <button @click="showPw=!showPw" type="button"
+                class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path x-show="!showPw" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0zM2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+            <path x-show="showPw" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"/>
+          </svg>
+        </button>
+      </div>
+      <p x-show="mode==='unlock'" class="text-xs text-amber-500 mt-1.5" data-i18n="protect.unlock_hint">Leave blank if the PDF uses an empty password.</p>
+    </div>
+
+    <!-- Action Button -->
+    <button x-show="file" @click="process()" :disabled="processing"
+            class="mt-4 w-full py-3 rounded-xl bg-brand text-white font-semibold hover:bg-brand-dark transition disabled:opacity-50">
+      <span x-show="!processing" x-text="mode==='protect' ? I18n.t('protect.protect_btn') : I18n.t('protect.unlock_btn')"></span>
+      <span x-show="processing" class="flex items-center justify-center gap-2">
+        <svg class="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+        <span data-i18n="common.processing">Processing...</span>
+      </span>
+    </button>
+
+    <div x-show="done" class="mt-4 p-4 rounded-xl bg-green-50 dark:bg-green-900/15 border border-green-300 dark:border-green-700/50">
+      <p class="text-sm font-semibold text-green-600 dark:text-green-400" x-text="mode==='protect' ? I18n.t('protect.done_protect') : I18n.t('protect.done_unlock')"></p>
+    </div>
+    <p x-show="error" class="mt-4 text-sm text-red-500" x-text="error"></p>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function pdfProtectTool() {
+  return {
+    file: null, dragOver: false,
+    mode: 'protect',
+    password: '', showPw: false,
+    processing: false, error: '', done: false,
+
+    get fileSize() {
+      if (!this.file) return '';
+      const b = this.file.size;
+      return b < 1048576 ? (b/1024).toFixed(1)+'KB' : (b/1048576).toFixed(1)+'MB';
+    },
+
+    handleDrop(e) { this.handleFile(e.dataTransfer.files[0]); },
+    handleFile(f) {
+      if (!f) return;
+      this.file = f; this.done = false; this.error = '';
+    },
+    reset() { this.file = null; this.done = false; this.error = ''; this.password = ''; },
+
+    async process() {
+      if (!this.file || this.processing) return;
+      if (this.mode === 'protect' && !this.password.trim()) {
+        this.error = 'Please enter a password'; return;
+      }
+      this.processing = true; this.error = ''; this.done = false;
+      const form = new FormData();
+      form.append('file',     this.file);
+      form.append('password', this.password);
+      const endpoint = this.mode === 'protect' ? '/api/pdf-protect' : '/api/pdf-unlock';
+      try {
+        const resp = await fetch(endpoint, { method: 'POST', body: form });
+        if (!resp.ok) { const d = await resp.json(); this.error = d.error || 'Failed'; this.processing = false; return; }
+        const blob = await resp.blob();
+        const prefix = this.mode === 'protect' ? 'protected_' : 'unlocked_';
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href = url; a.download = prefix + this.file.name; a.click();
+        URL.revokeObjectURL(url);
+        this.done = true;
+      } catch(e) { this.error = 'Network error: ' + e.message; }
+      this.processing = false;
+    },
+  };
+}
+</script>
+{% endblock %}
