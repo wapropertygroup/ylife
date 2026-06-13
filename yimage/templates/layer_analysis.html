@@ -4,9 +4,10 @@
 <div x-data="layerTool()">
   <div class="max-w-2xl mx-auto">
     <a href="/" class="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-brand transition mb-4">
-      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg> All Tools
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+      <span data-i18n="common.all_tools">All Tools</span>
     </a>
-    <h1 class="text-2xl font-extrabold mb-2">🎨 Layer Analysis</h1>
+    <h1 class="text-2xl font-extrabold mb-2">🎨 <span data-i18n="tool.layer_analysis">Layer Analysis</span></h1>
     <p class="text-sm text-slate-500 dark:text-slate-400 mb-6">Separate an image into RGB color channels and AI-detected color clusters. Download as a ZIP of transparent PNGs.</p>
 
     <div class="drop-zone rounded-2xl border-2 border-dashed border-slate-300 dark:border-slate-700 p-10 text-center cursor-pointer transition hover:border-brand"
@@ -14,8 +15,8 @@
       <input type="file" accept="image/*" x-ref="fi" @change="file=$event.target.files[0];result=false;error=''" class="hidden">
       <div x-show="!file">
         <svg class="w-12 h-12 mx-auto mb-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
-        <p class="text-sm text-slate-500">Drop an image here or <span class="text-brand font-medium">browse</span></p>
-        <p class="text-xs text-slate-400 mt-1">JPEG, PNG, or WebP</p>
+        <p class="text-sm text-slate-500"><span data-i18n="common.upload">Drop a file here or</span> <span class="text-brand font-medium" data-i18n="common.browse">browse</span></p>
+        <p class="text-xs text-slate-400 mt-1" data-i18n="layer.hint">JPEG, PNG, or WebP</p>
       </div>
       <div x-show="file" class="flex items-center justify-center gap-3">
         <span class="text-3xl">🖼️</span>
@@ -25,28 +26,29 @@
     </div>
 
     <div x-show="file" class="mt-4 p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50">
-      <label class="text-sm font-medium mb-2 block">Analysis Mode</label>
+      <label class="text-sm font-medium mb-2 block" data-i18n="layer.mode">Analysis Mode</label>
       <div class="flex gap-2">
-        <template x-for="m in [{v:'channels',l:'RGB Channels'},{v:'colors',l:'Color Clusters'},{v:'both',l:'Both'}]" :key="m.v">
+        <template x-for="m in modes" :key="m.v">
           <button @click="mode=m.v"
                   :class="mode===m.v ? 'bg-brand text-white' : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-300 dark:border-slate-700'"
-                  class="px-4 py-2 rounded-lg text-sm font-medium transition" x-text="m.l"></button>
+                  class="px-4 py-2 rounded-lg text-sm font-medium transition"
+                  x-text="m.l"></button>
         </template>
       </div>
-      <p class="text-xs text-slate-400 mt-2" x-text="mode==='channels'?'Separate into Red, Green, Blue channels':mode==='colors'?'Detect 5 dominant color regions with AI clustering':'RGB channels + color cluster separation'"></p>
+      <p class="text-xs text-slate-400 mt-2" x-text="modeHint"></p>
     </div>
 
     <button x-show="file" @click="process()" :disabled="processing"
             class="mt-4 w-full py-3 rounded-xl bg-brand text-white font-semibold hover:bg-brand-dark transition disabled:opacity-50">
-      <span x-show="!processing">Analyze Layers</span>
+      <span x-show="!processing" data-i18n="layer.button">Analyze Layers</span>
       <span x-show="processing" class="flex items-center justify-center gap-2">
         <svg class="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-        Analyzing...
+        <span data-i18n="common.processing">Processing...</span>
       </span>
     </button>
 
     <div x-show="result" class="mt-4 p-4 rounded-xl bg-green-50 dark:bg-green-900/15 border border-green-300 dark:border-green-700/50">
-      <p class="text-sm font-semibold text-green-600 dark:text-green-400">Layer ZIP downloaded!</p>
+      <p class="text-sm font-semibold text-green-600 dark:text-green-400" data-i18n="layer.done">Layer ZIP downloaded!</p>
     </div>
     <p x-show="error" class="mt-4 text-sm text-red-500" x-text="error"></p>
   </div>
@@ -57,6 +59,18 @@
 function layerTool() {
   return {
     file: null, mode: 'both', processing: false, error: '', result: false,
+    get modes() {
+      return [
+        {v:'channels', l: I18n.t('layer.channels')},
+        {v:'colors',   l: I18n.t('layer.colors')},
+        {v:'both',     l: I18n.t('layer.both')},
+      ];
+    },
+    get modeHint() {
+      if (this.mode === 'channels') return I18n.t('layer.channels_desc');
+      if (this.mode === 'colors')   return I18n.t('layer.colors_desc');
+      return I18n.t('layer.both_desc');
+    },
     async process() {
       if (!this.file || this.processing) return;
       this.processing = true; this.error = ''; this.result = false;

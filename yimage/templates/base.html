@@ -57,10 +57,11 @@
       </a>
 
       <nav class="hidden md:flex items-center gap-1 ml-4 flex-1">
-        <a href="/" class="px-3 py-1.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:text-brand transition">Tools</a>
-        <a href="/compress-pdf" class="px-3 py-1.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:text-brand transition">PDF</a>
-        <a href="/crop-image" class="px-3 py-1.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:text-brand transition">Image</a>
-        <a href="/passport-photo" class="px-3 py-1.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:text-brand transition">Passport</a>
+        <a href="/" class="px-3 py-1.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:text-brand transition" data-i18n="nav.tools">Tools</a>
+        <a href="/compress-pdf" class="px-3 py-1.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:text-brand transition" data-i18n="nav.pdf">PDF</a>
+        <a href="/crop-image" class="px-3 py-1.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:text-brand transition" data-i18n="nav.image">Image</a>
+        <a href="/passport-photo" class="px-3 py-1.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:text-brand transition" data-i18n="nav.passport">Passport</a>
+        <a href="/qr-code" class="px-3 py-1.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:text-brand transition" data-i18n="nav.qr">QR Code</a>
       </nav>
 
       <div class="ml-auto flex items-center gap-2">
@@ -90,15 +91,23 @@
 
     <div x-show="navOpen" x-transition class="md:hidden border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 pb-4">
       <div class="flex flex-col gap-1 pt-2">
-        <a href="/" class="px-3 py-2.5 rounded-md text-sm hover:bg-slate-100 dark:hover:bg-slate-800">All Tools</a>
-        <a href="/compress-pdf" class="px-3 py-2.5 rounded-md text-sm hover:bg-slate-100 dark:hover:bg-slate-800">Compress PDF</a>
-        <a href="/pdf-to-image" class="px-3 py-2.5 rounded-md text-sm hover:bg-slate-100 dark:hover:bg-slate-800">PDF to Image</a>
-        <a href="/image-to-pdf" class="px-3 py-2.5 rounded-md text-sm hover:bg-slate-100 dark:hover:bg-slate-800">Image to PDF</a>
-        <a href="/crop-image" class="px-3 py-2.5 rounded-md text-sm hover:bg-slate-100 dark:hover:bg-slate-800">Crop Image</a>
-        <a href="/passport-photo" class="px-3 py-2.5 rounded-md text-sm hover:bg-slate-100 dark:hover:bg-slate-800">Passport Photo</a>
-        <a href="/pdf-to-text" class="px-3 py-2.5 rounded-md text-sm hover:bg-slate-100 dark:hover:bg-slate-800">PDF to Text</a>
-        <a href="/trim-transparency" class="px-3 py-2.5 rounded-md text-sm hover:bg-slate-100 dark:hover:bg-slate-800">Trim Transparency</a>
-        <a href="/layer-analysis" class="px-3 py-2.5 rounded-md text-sm hover:bg-slate-100 dark:hover:bg-slate-800">Layer Analysis</a>
+        <a href="/" class="px-3 py-2.5 rounded-md text-sm hover:bg-slate-100 dark:hover:bg-slate-800" data-i18n="nav.all_tools">All Tools</a>
+        <a href="/compress-pdf" class="px-3 py-2.5 rounded-md text-sm hover:bg-slate-100 dark:hover:bg-slate-800" data-i18n="tool.compress_pdf">Compress PDF</a>
+        <a href="/pdf-to-image" class="px-3 py-2.5 rounded-md text-sm hover:bg-slate-100 dark:hover:bg-slate-800" data-i18n="tool.pdf_to_image">PDF to Image</a>
+        <a href="/image-to-pdf" class="px-3 py-2.5 rounded-md text-sm hover:bg-slate-100 dark:hover:bg-slate-800" data-i18n="tool.image_to_pdf">Image to PDF</a>
+        <a href="/merge-pdf" class="px-3 py-2.5 rounded-md text-sm hover:bg-slate-100 dark:hover:bg-slate-800" data-i18n="tool.merge_pdf">Merge PDFs</a>
+        <a href="/split-pdf" class="px-3 py-2.5 rounded-md text-sm hover:bg-slate-100 dark:hover:bg-slate-800" data-i18n="tool.split_pdf">Split PDF</a>
+        <a href="/crop-image" class="px-3 py-2.5 rounded-md text-sm hover:bg-slate-100 dark:hover:bg-slate-800" data-i18n="tool.crop_image">Crop Image</a>
+        <a href="/resize-image" class="px-3 py-2.5 rounded-md text-sm hover:bg-slate-100 dark:hover:bg-slate-800" data-i18n="tool.resize_image">Resize & Convert</a>
+        <a href="/rotate-flip" class="px-3 py-2.5 rounded-md text-sm hover:bg-slate-100 dark:hover:bg-slate-800" data-i18n="tool.rotate_flip">Rotate & Flip</a>
+        <a href="/exif-data" class="px-3 py-2.5 rounded-md text-sm hover:bg-slate-100 dark:hover:bg-slate-800" data-i18n="tool.exif_data">EXIF Data</a>
+        <a href="/passport-photo" class="px-3 py-2.5 rounded-md text-sm hover:bg-slate-100 dark:hover:bg-slate-800" data-i18n="tool.passport_photo">Passport Photo</a>
+        <a href="/pdf-to-text" class="px-3 py-2.5 rounded-md text-sm hover:bg-slate-100 dark:hover:bg-slate-800" data-i18n="tool.pdf_to_text">PDF to Text</a>
+        <a href="/trim-transparency" class="px-3 py-2.5 rounded-md text-sm hover:bg-slate-100 dark:hover:bg-slate-800" data-i18n="tool.trim_transparency">Trim Transparency</a>
+        <a href="/layer-analysis" class="px-3 py-2.5 rounded-md text-sm hover:bg-slate-100 dark:hover:bg-slate-800" data-i18n="tool.layer_analysis">Layer Analysis</a>
+        <a href="/qr-code" class="px-3 py-2.5 rounded-md text-sm hover:bg-slate-100 dark:hover:bg-slate-800" data-i18n="tool.qr_code">QR Code</a>
+        <a href="/watermark" class="px-3 py-2.5 rounded-md text-sm hover:bg-slate-100 dark:hover:bg-slate-800" data-i18n="tool.watermark">Add Watermark</a>
+        <a href="/image-filters" class="px-3 py-2.5 rounded-md text-sm hover:bg-slate-100 dark:hover:bg-slate-800" data-i18n="tool.filters">Image Filters</a>
       </div>
     </div>
   </header>

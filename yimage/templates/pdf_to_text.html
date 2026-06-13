@@ -4,9 +4,10 @@
 <div x-data="pdfText()">
   <div class="max-w-2xl mx-auto">
     <a href="/" class="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-brand transition mb-4">
-      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg> All Tools
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+      <span data-i18n="common.all_tools">All Tools</span>
     </a>
-    <h1 class="text-2xl font-extrabold mb-2">📝 PDF to Text</h1>
+    <h1 class="text-2xl font-extrabold mb-2">📝 <span data-i18n="tool.pdf_to_text">PDF to Text</span></h1>
     <p class="text-sm text-slate-500 dark:text-slate-400 mb-6">Extract all text from a PDF document. Falls back to OCR for scanned pages.</p>
 
     <div x-show="!text" class="drop-zone rounded-2xl border-2 border-dashed border-slate-300 dark:border-slate-700 p-10 text-center cursor-pointer transition hover:border-brand"
@@ -14,11 +15,11 @@
       <input type="file" accept=".pdf" x-ref="fi" @change="process($event.target.files[0])" class="hidden">
       <div x-show="!processing">
         <svg class="w-12 h-12 mx-auto mb-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
-        <p class="text-sm text-slate-500">Drop a PDF here or <span class="text-brand font-medium">browse</span></p>
+        <p class="text-sm text-slate-500"><span data-i18n="common.upload">Drop a file here or</span> <span class="text-brand font-medium" data-i18n="common.browse">browse</span></p>
       </div>
       <div x-show="processing" class="flex items-center justify-center gap-2 py-4">
         <svg class="animate-spin w-6 h-6 text-brand" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-        <span class="text-sm text-slate-400">Extracting text...</span>
+        <span class="text-sm text-slate-400" data-i18n="p2t.extract">Extracting text...</span>
       </div>
     </div>
 
@@ -32,10 +33,10 @@
         </div>
         <div class="flex gap-2">
           <button @click="copyText()" class="px-3 py-1.5 rounded-lg text-xs font-medium border border-slate-300 dark:border-slate-700 hover:border-brand hover:text-brand transition">
-            <span x-text="copied ? 'Copied!' : 'Copy All'"></span>
+            <span x-text="copied ? I18n.t('p2t.copied') : I18n.t('p2t.copy')"></span>
           </button>
-          <button @click="downloadText()" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-brand text-white hover:bg-brand-dark transition">Download .txt</button>
-          <button @click="text=''; error=''" class="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-red-500 transition">Clear</button>
+          <button @click="downloadText()" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-brand text-white hover:bg-brand-dark transition" data-i18n="p2t.download_txt">Download .txt</button>
+          <button @click="text=''; error=''" class="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-red-500 transition" data-i18n="p2t.clear">Clear</button>
         </div>
       </div>
       <div class="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 p-4 max-h-[500px] overflow-y-auto">

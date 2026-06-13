@@ -5,9 +5,9 @@
   <div class="max-w-2xl mx-auto">
     <a href="/" class="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-brand transition mb-4">
       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
-      All Tools
+      <span data-i18n="common.all_tools">All Tools</span>
     </a>
-    <h1 class="text-2xl font-extrabold mb-2">📦 Compress PDF</h1>
+    <h1 class="text-2xl font-extrabold mb-2">📦 <span data-i18n="tool.compress_pdf">Compress PDF</span></h1>
     <p class="text-sm text-slate-500 dark:text-slate-400 mb-6">Reduce PDF file size by recompressing embedded images. Choose your quality level.</p>
 
     <!-- Upload Zone -->
@@ -19,8 +19,8 @@
       <input type="file" accept=".pdf" x-ref="fileInput" @change="handleFile($event)" class="hidden">
       <div x-show="!file">
         <svg class="w-12 h-12 mx-auto mb-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
-        <p class="text-sm text-slate-500">Drop a PDF here or <span class="text-brand font-medium">browse</span></p>
-        <p class="text-xs text-slate-400 mt-1">Max 50 MB</p>
+        <p class="text-sm text-slate-500"><span data-i18n="common.upload">Drop a file here or</span> <span class="text-brand font-medium" data-i18n="common.browse">browse</span></p>
+        <p class="text-xs text-slate-400 mt-1" data-i18n="common.max_size">Max 50 MB</p>
       </div>
       <div x-show="file" class="flex items-center justify-center gap-3">
         <span class="text-3xl">📄</span>
@@ -34,30 +34,31 @@
 
     <!-- Options -->
     <div x-show="file" class="mt-4 p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50">
-      <label class="text-sm font-medium mb-2 block">Compression Quality</label>
+      <label class="text-sm font-medium mb-2 block" data-i18n="compress.quality">Compression Quality</label>
       <div class="flex gap-2">
-        <template x-for="q in ['low','medium','high']" :key="q">
-          <button @click="quality=q"
-                  :class="quality===q ? 'bg-brand text-white' : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-300 dark:border-slate-700'"
-                  class="px-4 py-2 rounded-lg text-sm font-medium transition capitalize" x-text="q"></button>
+        <template x-for="q in qualities" :key="q.v">
+          <button @click="quality=q.v"
+                  :class="quality===q.v ? 'bg-brand text-white' : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-300 dark:border-slate-700'"
+                  class="px-4 py-2 rounded-lg text-sm font-medium transition capitalize"
+                  x-text="q.l"></button>
         </template>
       </div>
-      <p class="text-xs text-slate-400 mt-2" x-text="quality==='low'?'Maximum compression, some quality loss':quality==='medium'?'Balanced compression and quality':'Minimal compression, best quality'"></p>
+      <p class="text-xs text-slate-400 mt-2" x-text="qualityHint"></p>
     </div>
 
     <!-- Process Button -->
     <button x-show="file" @click="process()" :disabled="processing"
             class="mt-4 w-full py-3 rounded-xl bg-brand text-white font-semibold hover:bg-brand-dark transition disabled:opacity-50">
-      <span x-show="!processing">Compress PDF</span>
+      <span x-show="!processing" data-i18n="compress.button">Compress PDF</span>
       <span x-show="processing" class="flex items-center justify-center gap-2">
         <svg class="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-        Compressing...
+        <span data-i18n="common.processing">Processing...</span>
       </span>
     </button>
 
     <!-- Result -->
     <div x-show="result" class="mt-4 p-4 rounded-xl bg-green-50 dark:bg-green-900/15 border border-green-300 dark:border-green-700/50">
-      <p class="text-sm font-semibold text-green-600 dark:text-green-400 mb-1">Compression complete!</p>
+      <p class="text-sm font-semibold text-green-600 dark:text-green-400 mb-1" data-i18n="compress.done">Compression complete!</p>
       <p class="text-xs text-slate-500" x-text="resultInfo"></p>
     </div>
 
@@ -71,6 +72,18 @@
 function compressTool() {
   return {
     file: null, quality: 'medium', processing: false, error: '', result: false, resultInfo: '', dragOver: false,
+    get qualities() {
+      return [
+        {v:'low',    l: I18n.t('compress.low')},
+        {v:'medium', l: I18n.t('compress.medium')},
+        {v:'high',   l: I18n.t('compress.high')},
+      ];
+    },
+    get qualityHint() {
+      if (this.quality === 'low')    return I18n.t('compress.hint_low');
+      if (this.quality === 'medium') return I18n.t('compress.hint_medium');
+      return I18n.t('compress.hint_high');
+    },
     handleFile(e) { this.file = e.target.files[0]; this.result = false; this.error = ''; },
     handleDrop(e) { this.file = e.dataTransfer.files[0]; this.result = false; this.error = ''; },
     formatSize(b) { if(!b) return ''; if(b<1024) return b+'B'; if(b<1048576) return (b/1024).toFixed(1)+'KB'; return (b/1048576).toFixed(1)+'MB'; },

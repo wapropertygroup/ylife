@@ -836,3 +836,171 @@ def generate_qr(
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     return buf.getvalue()
+
+
+# ---------------------------------------------------------------------------
+# 16. Watermark
+# ---------------------------------------------------------------------------
+
+_WM_POSITIONS = {
+    "center":       (0.5, 0.5),
+    "top_left":     (0.05, 0.05),
+    "top_right":    (0.95, 0.05),
+    "bottom_left":  (0.05, 0.95),
+    "bottom_right": (0.95, 0.95),
+}
+
+
+def add_watermark(
+    data: bytes,
+    text: str,
+    position: str = "bottom_right",
+    opacity: int = 50,
+    font_size: int = 36,
+    color: str = "#ffffff",
+) -> tuple[bytes, str]:
+    """Overlay a semi-transparent text watermark on an image.
+
+    Args:
+        text:      Watermark string.
+        position:  One of: center, top_left, top_right, bottom_left, bottom_right.
+        opacity:   0–100 (percentage).
+        font_size: Font size in points.
+        color:     Watermark text colour as hex string (e.g. '#ffffff').
+    """
+    from PIL import ImageDraw, ImageFont
+
+    img = Image.open(io.BytesIO(data)).convert("RGBA")
+    orig_fmt = (img.format or "PNG").upper()
+
+    # Build a transparent overlay
+    overlay = Image.new("RGBA", img.size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(overlay)
+
+    # Parse colour + apply opacity
+    r = int(color.lstrip("#")[0:2], 16)
+    g = int(color.lstrip("#")[2:4], 16)
+    b = int(color.lstrip("#")[4:6], 16)
+    a = int(opacity / 100 * 255)
+
+    # Try a system font, fall back to PIL default
+    font: ImageFont.ImageFont | ImageFont.FreeTypeFont
+    try:
+        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", font_size)
+    except (IOError, OSError):
+        try:
+            font = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", font_size)
+        except (IOError, OSError):
+            font = ImageFont.load_default()
+
+    # Measure text
+    bbox = draw.textbbox((0, 0), text, font=font)
+    tw = bbox[2] - bbox[0]
+    th = bbox[3] - bbox[1]
+
+    # Place watermark
+    px, py = _WM_POSITIONS.get(position, (0.95, 0.95))
+    x = int(img.width * px - tw / 2)
+    y = int(img.height * py - th / 2)
+    x = max(4, min(img.width - tw - 4, x))
+    y = max(4, min(img.height - th - 4, y))
+
+    # Add a subtle shadow for readability
+    shadow_offset = max(1, font_size // 20)
+    draw.text((x + shadow_offset, y + shadow_offset), text, font=font, fill=(0, 0, 0, a // 2))
+    draw.text((x, y), text, font=font, fill=(r, g, b, a))
+
+    # Composite
+    out = Image.alpha_composite(img, overlay)
+
+    save_fmt = orig_fmt if orig_fmt in ("JPEG", "PNG", "WEBP") else "PNG"
+    if save_fmt == "JPEG":
+        out = out.convert("RGB")
+    mime_map = {"JPEG": "image/jpeg", "PNG": "image/png", "WEBP": "image/webp"}
+    mime = mime_map.get(save_fmt, "image/png")
+
+    buf = io.BytesIO()
+    out.save(buf, format=save_fmt, quality=95 if save_fmt == "JPEG" else None)
+    return buf.getvalue(), mime
+
+
+# ---------------------------------------------------------------------------
+# 17. Image Filters & Adjustments
+# ---------------------------------------------------------------------------
+
+def apply_filters(
+    data: bytes,
+    brightness: float = 1.0,
+    contrast: float = 1.0,
+    saturation: float = 1.0,
+    sharpness: float = 1.0,
+    preset: str = "none",
+) -> tuple[bytes, str]:
+    """Apply brightness/contrast/saturation/sharpness adjustments and optional presets.
+
+    Args:
+        brightness:  1.0 = original; <1.0 = darker; >1.0 = brighter.
+        contrast:    1.0 = original; <1.0 = flat; >1.0 = punchy.
+        saturation:  1.0 = original; 0.0 = grayscale; >1.0 = vivid.
+        sharpness:   1.0 = original; 0.0 = blurred; >1.0 = sharper.
+        preset:      'none', 'grayscale', 'sepia', 'vivid', 'cool', 'warm'.
+    """
+    from PIL import ImageEnhance
+
+    img = Image.open(io.BytesIO(data))
+    orig_fmt = (img.format or "PNG").upper()
+
+    # Apply preset first (overrides individual sliders)
+    if preset == "grayscale":
+        img = img.convert("L").convert("RGB")
+    elif preset == "sepia":
+        img = img.convert("RGB")
+        import numpy as np
+        arr = np.array(img, dtype=np.float32)
+        r = arr[:, :, 0] * 0.393 + arr[:, :, 1] * 0.769 + arr[:, :, 2] * 0.189
+        g = arr[:, :, 0] * 0.349 + arr[:, :, 1] * 0.686 + arr[:, :, 2] * 0.168
+        b = arr[:, :, 0] * 0.272 + arr[:, :, 1] * 0.534 + arr[:, :, 2] * 0.131
+        sepia = np.stack([r, g, b], axis=2).clip(0, 255).astype(np.uint8)
+        img = Image.fromarray(sepia, "RGB")
+    elif preset == "vivid":
+        brightness, contrast, saturation, sharpness = 1.05, 1.2, 1.4, 1.2
+    elif preset == "cool":
+        # Slightly desaturate + blue tint
+        img = img.convert("RGB")
+        import numpy as np
+        arr = np.array(img, dtype=np.int16)
+        arr[:, :, 2] = np.clip(arr[:, :, 2] + 15, 0, 255)
+        arr[:, :, 0] = np.clip(arr[:, :, 0] - 10, 0, 255)
+        img = Image.fromarray(arr.astype(np.uint8), "RGB")
+        saturation = 0.85
+    elif preset == "warm":
+        # Orange/yellow tint
+        img = img.convert("RGB")
+        import numpy as np
+        arr = np.array(img, dtype=np.int16)
+        arr[:, :, 0] = np.clip(arr[:, :, 0] + 20, 0, 255)
+        arr[:, :, 1] = np.clip(arr[:, :, 1] + 10, 0, 255)
+        arr[:, :, 2] = np.clip(arr[:, :, 2] - 10, 0, 255)
+        img = Image.fromarray(arr.astype(np.uint8), "RGB")
+        saturation = 1.15
+
+    # Apply individual adjustments (if not preset that sets them)
+    if preset not in ("grayscale", "sepia"):
+        img = img.convert("RGB")
+
+    if brightness != 1.0:
+        img = ImageEnhance.Brightness(img).enhance(brightness)
+    if contrast != 1.0:
+        img = ImageEnhance.Contrast(img).enhance(contrast)
+    if saturation != 1.0:
+        img = ImageEnhance.Color(img).enhance(saturation)
+    if sharpness != 1.0:
+        img = ImageEnhance.Sharpness(img).enhance(sharpness)
+
+    save_fmt = orig_fmt if orig_fmt in ("JPEG", "PNG", "WEBP") else "JPEG"
+    mime_map = {"JPEG": "image/jpeg", "PNG": "image/png", "WEBP": "image/webp"}
+    mime = mime_map.get(save_fmt, "image/jpeg")
+
+    buf = io.BytesIO()
+    img.save(buf, format=save_fmt, quality=93 if save_fmt == "JPEG" else None)
+    return buf.getvalue(), mime

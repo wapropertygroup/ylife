@@ -98,6 +98,16 @@ def page_qr_code():
     return render_template("qr_code.html")
 
 
+@bp.route("/watermark")
+def page_watermark():
+    return render_template("watermark.html")
+
+
+@bp.route("/image-filters")
+def page_image_filters():
+    return render_template("image_filters.html")
+
+
 # ---------------------------------------------------------------------------
 # Helper: validate upload
 # ---------------------------------------------------------------------------
@@ -624,4 +634,100 @@ def api_qr_code():
         )
     except Exception as exc:
         log.exception("QR code generation failed")
+        return jsonify(error=str(exc)), 500
+
+
+# ---------------------------------------------------------------------------
+# API: Watermark
+# ---------------------------------------------------------------------------
+
+@bp.route("/api/watermark", methods=["POST"])
+def api_watermark():
+    """Add a text watermark to an image."""
+    data, filename, err = _get_upload(
+        allowed_types=["jpg", "jpeg", "png", "webp"]
+    )
+    if err:
+        return err
+
+    text     = request.form.get("text", "").strip()
+    position = request.form.get("position", "bottom_right")
+    color    = request.form.get("color", "#ffffff")
+
+    try:
+        opacity   = int(float(request.form.get("opacity",   "50")))
+        font_size = int(float(request.form.get("font_size", "36")))
+    except (ValueError, TypeError):
+        opacity, font_size = 50, 36
+
+    if not text:
+        return jsonify(error="Watermark text cannot be empty"), 400
+    if len(text) > 200:
+        return jsonify(error="Watermark text too long (max 200 characters)"), 400
+
+    opacity   = max(5, min(100, opacity))
+    font_size = max(10, min(200, font_size))
+
+    log.info("Watermark: %s (text=%r, pos=%s, size=%d, opacity=%d)",
+             filename, text, position, font_size, opacity)
+
+    try:
+        from yimage.processing import add_watermark
+        result, mime = add_watermark(data, text, position, opacity, font_size, color)
+        _ext = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}
+        out_ext = _ext.get(mime, filename.rsplit(".", 1)[-1] if "." in filename else "jpg")
+        base = filename.rsplit(".", 1)[0] if "." in filename else filename
+        return send_file(
+            BytesIO(result), mimetype=mime,
+            as_attachment=True, download_name=f"watermarked_{base}.{out_ext}",
+        )
+    except Exception as exc:
+        log.exception("Watermark failed")
+        return jsonify(error=str(exc)), 500
+
+
+# ---------------------------------------------------------------------------
+# API: Image Filters
+# ---------------------------------------------------------------------------
+
+@bp.route("/api/image-filters", methods=["POST"])
+def api_image_filters():
+    """Apply brightness/contrast/saturation/sharpness and preset filters."""
+    data, filename, err = _get_upload(
+        allowed_types=["jpg", "jpeg", "png", "webp", "bmp"]
+    )
+    if err:
+        return err
+
+    preset = request.form.get("preset", "none")
+
+    try:
+        brightness = float(request.form.get("brightness", "1.0"))
+        contrast   = float(request.form.get("contrast",   "1.0"))
+        saturation = float(request.form.get("saturation", "1.0"))
+        sharpness  = float(request.form.get("sharpness",  "1.0"))
+    except (ValueError, TypeError):
+        brightness = contrast = saturation = sharpness = 1.0
+
+    # Clamp to sane range
+    brightness = max(0.1, min(3.0, brightness))
+    contrast   = max(0.1, min(3.0, contrast))
+    saturation = max(0.0, min(3.0, saturation))
+    sharpness  = max(0.0, min(3.0, sharpness))
+
+    log.info("Image filters: %s (preset=%s, b=%.2f, c=%.2f, s=%.2f, sh=%.2f)",
+             filename, preset, brightness, contrast, saturation, sharpness)
+
+    try:
+        from yimage.processing import apply_filters
+        result, mime = apply_filters(data, brightness, contrast, saturation, sharpness, preset)
+        _ext = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}
+        out_ext = _ext.get(mime, filename.rsplit(".", 1)[-1] if "." in filename else "jpg")
+        base = filename.rsplit(".", 1)[0] if "." in filename else filename
+        return send_file(
+            BytesIO(result), mimetype=mime,
+            as_attachment=True, download_name=f"filtered_{base}.{out_ext}",
+        )
+    except Exception as exc:
+        log.exception("Image filters failed")
         return jsonify(error=str(exc)), 500

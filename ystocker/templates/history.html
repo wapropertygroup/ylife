@@ -590,7 +590,7 @@
     <div class="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-0 sm:justify-between mb-3">
       <div>
         <h2 class="text-base font-semibold text-slate-200" data-i18n="history.stoch_title">Stochastic Oscillator</h2>
-        <p class="text-xs text-slate-500" data-i18n="history.stoch_desc">%K (14) and %D (3) — overbought &gt;80 / oversold &lt;20</p>
+        <p class="text-xs text-slate-500" data-i18n="history.stoch_desc">%K (fast line) vs %D (slow signal) — compares closing price to its price range over 14 periods. Above 80 = overbought (may reverse down); below 20 = oversold (may reverse up); crossovers signal momentum shifts.</p>
       </div>
       <div class="flex items-center gap-2 flex-wrap justify-end">
         <span class="flex items-center gap-1.5 text-xs text-emerald-400"><span class="inline-block w-3 h-0.5 bg-emerald-400"></span> %K</span>
@@ -1487,25 +1487,37 @@ let   _forecastResult = null;   // last forecast API response
     _registerChart('volume', volCfg, new Chart(document.getElementById('volumeHistChart'), volCfg));
   }
 
-  // ── RSI chart (synced to price range)
-  document.getElementById('rsiSection').style.display = 'block';
-  const rsiCfg = _buildConfig('rsi', data, staticData);
-  _registerChart('rsi', rsiCfg, new Chart(document.getElementById('rsiHistChart'), rsiCfg));
+  // ── RSI chart — only when ≥15 prices available
+  if (_canRender('rsi', data)) {
+    document.getElementById('rsiSection').style.display = 'block';
+    const rsiCfg = _buildConfig('rsi', data, staticData);
+    _registerChart('rsi', rsiCfg, new Chart(document.getElementById('rsiHistChart'), rsiCfg));
+    _stampDataAge('rsiSection', data.dates);
+  }
 
-  // ── MACD chart (synced to price range)
-  document.getElementById('macdSection').style.display = 'block';
-  const macdCfg = _buildConfig('macd', data, staticData);
-  _registerChart('macd', macdCfg, new Chart(document.getElementById('macdHistChart'), macdCfg));
+  // ── MACD chart — only when ≥26 prices available
+  if (_canRender('macd', data)) {
+    document.getElementById('macdSection').style.display = 'block';
+    const macdCfg = _buildConfig('macd', data, staticData);
+    _registerChart('macd', macdCfg, new Chart(document.getElementById('macdHistChart'), macdCfg));
+    _stampDataAge('macdSection', data.dates);
+  }
 
-  // ── Stochastic chart (synced to price range)
-  document.getElementById('stochSection').style.display = 'block';
-  const stochCfg = _buildConfig('stoch', data, staticData);
-  _registerChart('stoch', stochCfg, new Chart(document.getElementById('stochHistChart'), stochCfg));
+  // ── Stochastic chart — only when ≥14 prices + high/low available
+  if (_canRender('stoch', data)) {
+    document.getElementById('stochSection').style.display = 'block';
+    const stochCfg = _buildConfig('stoch', data, staticData);
+    _registerChart('stoch', stochCfg, new Chart(document.getElementById('stochHistChart'), stochCfg));
+    _stampDataAge('stochSection', data.dates);
+  }
 
-  // ── Historical Volatility chart (synced to price range)
-  document.getElementById('hvSection').style.display = 'block';
-  const hvCfg = _buildConfig('hv', data, staticData);
-  _registerChart('hv', hvCfg, new Chart(document.getElementById('hvHistChart'), hvCfg));
+  // ── Historical Volatility chart — only when ≥21 prices available
+  if (_canRender('hv', data)) {
+    document.getElementById('hvSection').style.display = 'block';
+    const hvCfg = _buildConfig('hv', data, staticData);
+    _registerChart('hv', hvCfg, new Chart(document.getElementById('hvHistChart'), hvCfg));
+    _stampDataAge('hvSection', data.dates);
+  }
 
   // ── Relative Strength vs SPY chart (synced to price range)
   if (data.relative_strength && data.relative_strength.some(v => v != null)) {
@@ -1766,6 +1778,60 @@ let   _forecastResult = null;   // last forecast API response
 })();
 
 // ── Chart config builder, range handler, modal ───────────────────────────────
+
+// Returns true when indicator key has enough data to render a meaningful chart.
+function _canRender(key, d) {
+  const n = (d.prices || []).filter(v => v != null).length;
+  if (key === 'rsi')   return n >= 15;   // RSI-14 needs period + 1 prices
+  if (key === 'macd')  return n >= 26;   // EMA-26 first value requires 26 prices
+  if (key === 'stoch') return n >= 14 && (d.highs||[]).some(v=>v!=null) && (d.lows||[]).some(v=>v!=null);
+  if (key === 'hv')    return n >= 21;   // HV-20 first value requires n + 1 prices
+  return true;
+}
+
+// Stamp a small "as of [date]" note into a chart section's subtitle paragraph.
+function _stampDataAge(sectionId, dates) {
+  if (!dates || !dates.length) return;
+  const sec = document.getElementById(sectionId);
+  if (!sec) return;
+  let stamp = sec.querySelector('.data-age-stamp');
+  if (!stamp) {
+    stamp = document.createElement('span');
+    stamp.className = 'data-age-stamp';
+    stamp.style.cssText = 'margin-left:6px;font-size:10px;color:#475569;font-weight:normal;';
+    const subtitle = sec.querySelector('p.text-xs');
+    if (subtitle) subtitle.appendChild(stamp);
+  }
+  stamp.textContent = '· as of ' + dates[dates.length - 1];
+}
+
+// Show/hide loading spinners on all currently-visible synced chart sections.
+const _SYNCED_SECTIONS = {
+  delta:'priceDeltaSection', volume:'volumeSection',
+  rsi:'rsiSection', macd:'macdSection', stoch:'stochSection', hv:'hvSection',
+};
+function _showSyncOverlays() {
+  const SPINNER = '<svg class="animate-spin" style="width:20px;height:20px;color:#6366f1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle style="opacity:.25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path style="opacity:.75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path></svg>';
+  Object.values(_SYNCED_SECTIONS).forEach(sid => {
+    const sec = document.getElementById(sid);
+    if (!sec || sec.style.display === 'none') return;
+    let ov = sec.querySelector('.chart-loading-overlay');
+    if (!ov) {
+      ov = document.createElement('div');
+      ov.className = 'chart-loading-overlay';
+      ov.style.cssText = 'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(15,23,42,0.55);border-radius:16px;z-index:10;';
+      ov.innerHTML = SPINNER;
+      sec.style.position = 'relative';
+      sec.appendChild(ov);
+    } else { ov.style.display = 'flex'; }
+  });
+}
+function _hideSyncOverlays() {
+  Object.values(_SYNCED_SECTIONS).forEach(sid => {
+    const ov = document.getElementById(sid)?.querySelector('.chart-loading-overlay');
+    if (ov) ov.style.display = 'none';
+  });
+}
 
 function _registerChart(key, cfg, instance) {
   _chartConfigs[key]   = cfg;
@@ -2492,14 +2558,17 @@ async function _handleRange(chartKey, period, staticData) {
   } else {
     overlay.style.display = 'flex';
   }
+  if (chartKey === 'price') _showSyncOverlays();
 
   let d;
   try { d = await _fetchPeriod(period); } catch(e) {
     overlay.style.display = 'none';
+    if (chartKey === 'price') _hideSyncOverlays();
     return;
   }
 
   overlay.style.display = 'none';
+  if (chartKey === 'price') _hideSyncOverlays();
   if (_chartInstances[chartKey]) { _chartInstances[chartKey].destroy(); }
   const cfg = _buildConfig(chartKey, d, staticData);
   _chartConfigs[chartKey] = cfg;
@@ -2507,36 +2576,43 @@ async function _handleRange(chartKey, period, staticData) {
 
   // Keep price-derived charts in sync whenever the price range changes
   if (chartKey === 'price') {
+    // Delta — always shown when prices exist
     if (_chartInstances['delta']) { _chartInstances['delta'].destroy(); delete _chartInstances['delta']; }
     const dlCfg = _buildConfig('delta', d, staticData);
     _chartConfigs['delta'] = dlCfg;
     _chartInstances['delta'] = new Chart(document.getElementById('priceDeltaHistChart'), dlCfg);
+    _stampDataAge('priceDeltaSection', d.dates);
 
-    if (document.getElementById('volumeSection').style.display !== 'none') {
+    // Volume — only when volume data exists
+    if (d.volumes && d.volumes.some(v => v > 0)) {
+      document.getElementById('volumeSection').style.display = 'block';
       if (_chartInstances['volume']) { _chartInstances['volume'].destroy(); delete _chartInstances['volume']; }
       const vCfg = _buildConfig('volume', d, staticData);
       _chartConfigs['volume'] = vCfg;
       _chartInstances['volume'] = new Chart(document.getElementById('volumeHistChart'), vCfg);
+      _stampDataAge('volumeSection', d.dates);
+    } else {
+      document.getElementById('volumeSection').style.display = 'none';
     }
-    if (_chartInstances['rsi']) { _chartInstances['rsi'].destroy(); delete _chartInstances['rsi']; }
-    const rCfg = _buildConfig('rsi', d, staticData);
-    _chartConfigs['rsi'] = rCfg;
-    _chartInstances['rsi'] = new Chart(document.getElementById('rsiHistChart'), rCfg);
 
-    if (_chartInstances['macd']) { _chartInstances['macd'].destroy(); delete _chartInstances['macd']; }
-    const mCfg = _buildConfig('macd', d, staticData);
-    _chartConfigs['macd'] = mCfg;
-    _chartInstances['macd'] = new Chart(document.getElementById('macdHistChart'), mCfg);
-
-    if (_chartInstances['stoch']) { _chartInstances['stoch'].destroy(); delete _chartInstances['stoch']; }
-    const stochCfg2 = _buildConfig('stoch', d, staticData);
-    _chartConfigs['stoch'] = stochCfg2;
-    _chartInstances['stoch'] = new Chart(document.getElementById('stochHistChart'), stochCfg2);
-
-    if (_chartInstances['hv']) { _chartInstances['hv'].destroy(); delete _chartInstances['hv']; }
-    const hvCfg2 = _buildConfig('hv', d, staticData);
-    _chartConfigs['hv'] = hvCfg2;
-    _chartInstances['hv'] = new Chart(document.getElementById('hvHistChart'), hvCfg2);
+    // Indicator charts — show/hide based on data sufficiency
+    [
+      { key:'rsi',   section:'rsiSection',   canvas:'rsiHistChart' },
+      { key:'macd',  section:'macdSection',  canvas:'macdHistChart' },
+      { key:'stoch', section:'stochSection', canvas:'stochHistChart' },
+      { key:'hv',    section:'hvSection',    canvas:'hvHistChart' },
+    ].forEach(({ key, section, canvas }) => {
+      if (_chartInstances[key]) { _chartInstances[key].destroy(); delete _chartInstances[key]; }
+      if (_canRender(key, d)) {
+        document.getElementById(section).style.display = 'block';
+        const cfg = _buildConfig(key, d, staticData);
+        _chartConfigs[key] = cfg;
+        _chartInstances[key] = new Chart(document.getElementById(canvas), cfg);
+        _stampDataAge(section, d.dates);
+      } else {
+        document.getElementById(section).style.display = 'none';
+      }
+    });
 
     if (d.relative_strength && d.relative_strength.some(v => v != null)) {
       if (_chartInstances['rsstrength']) { _chartInstances['rsstrength'].destroy(); delete _chartInstances['rsstrength']; }

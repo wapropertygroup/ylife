@@ -4,9 +4,10 @@
 <div x-data="trimTool()">
   <div class="max-w-2xl mx-auto">
     <a href="/" class="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-brand transition mb-4">
-      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg> All Tools
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+      <span data-i18n="common.all_tools">All Tools</span>
     </a>
-    <h1 class="text-2xl font-extrabold mb-2">🔲 Trim Transparency</h1>
+    <h1 class="text-2xl font-extrabold mb-2">🔲 <span data-i18n="tool.trim_transparency">Trim Transparency</span></h1>
     <p class="text-sm text-slate-500 dark:text-slate-400 mb-6">Remove transparent borders from PNG images. Optionally replace transparency with a solid color.</p>
 
     <div class="drop-zone rounded-2xl border-2 border-dashed border-slate-300 dark:border-slate-700 p-10 text-center cursor-pointer transition hover:border-brand"
@@ -14,8 +15,8 @@
       <input type="file" accept=".png" x-ref="fi" @change="file=$event.target.files[0];result=false;error=''" class="hidden">
       <div x-show="!file">
         <svg class="w-12 h-12 mx-auto mb-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6z"/></svg>
-        <p class="text-sm text-slate-500">Drop a PNG here or <span class="text-brand font-medium">browse</span></p>
-        <p class="text-xs text-slate-400 mt-1">PNG with transparency (alpha channel)</p>
+        <p class="text-sm text-slate-500"><span data-i18n="common.upload">Drop a file here or</span> <span class="text-brand font-medium" data-i18n="common.browse">browse</span></p>
+        <p class="text-xs text-slate-400 mt-1" data-i18n="trim.hint">PNG with transparency (alpha channel)</p>
       </div>
       <div x-show="file" class="flex items-center justify-center gap-3">
         <span class="text-3xl">🖼️</span>
@@ -26,8 +27,8 @@
 
     <div x-show="file" class="mt-4 p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50">
       <label class="flex items-center gap-2 cursor-pointer">
-        <input type="checkbox" x-model="replaceBg" class="w-4 h-4 rounded border-slate-300 text-brand focus:ring-brand">
-        <span class="text-sm">Replace transparency with solid color</span>
+        <input type="checkbox" x-model="replaceBg" class="w-4 h-4 rounded border-slate-300 text-brand focus:ring-brand accent-violet-500">
+        <span class="text-sm" data-i18n="trim.replace_bg">Replace transparency with solid color</span>
       </label>
       <div x-show="replaceBg" class="mt-2 flex items-center gap-2">
         <input type="color" x-model="bgColor" class="w-8 h-8 rounded cursor-pointer border-0">
@@ -37,15 +38,15 @@
 
     <button x-show="file" @click="process()" :disabled="processing"
             class="mt-4 w-full py-3 rounded-xl bg-brand text-white font-semibold hover:bg-brand-dark transition disabled:opacity-50">
-      <span x-show="!processing">Trim Transparency</span>
+      <span x-show="!processing" data-i18n="trim.button">Trim Transparency</span>
       <span x-show="processing" class="flex items-center justify-center gap-2">
         <svg class="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-        Trimming...
+        <span data-i18n="common.processing">Processing...</span>
       </span>
     </button>
 
     <div x-show="result" class="mt-4 p-4 rounded-xl bg-green-50 dark:bg-green-900/15 border border-green-300 dark:border-green-700/50">
-      <p class="text-sm font-semibold text-green-600 dark:text-green-400">Trimmed and downloaded!</p>
+      <p class="text-sm font-semibold text-green-600 dark:text-green-400" data-i18n="trim.done">Trimmed and downloaded!</p>
     </div>
     <p x-show="error" class="mt-4 text-sm text-red-500" x-text="error"></p>
   </div>
