@@ -372,6 +372,10 @@
         <p class="text-xs text-slate-500" data-i18n="sector.perf_desc">All tickers normalised to 100 at period start — higher = outperformed</p>
       </div>
       <div class="flex items-center gap-2 flex-wrap justify-end">
+        <button id="spyRelativeToggle" onclick="_toggleSpyRelative()"
+          class="text-[11px] px-2 py-0.5 rounded border border-slate-700 text-slate-500 hover:text-emerald-400 hover:border-emerald-700 transition">
+          vs SPY
+        </button>
         <div class="flex gap-1" id="perfRangeBtns">
           <button class="range-btn" data-period="3mo">3M</button>
           <button class="range-btn active" data-period="1y">1Y</button>
@@ -1365,6 +1369,9 @@ async function loadSectorPerformance(forceReload) {
       }
     }],
   });
+  // Store original data for SPY-relative toggle
+  window._perfChart = _perfChart;
+  window._perfChart.data.datasets.forEach(d => { d._origData = [...d.data]; });
   _perfLoaded = true;
 }
 
@@ -1374,8 +1381,37 @@ document.querySelectorAll('#perfRangeBtns .range-btn').forEach(btn => {
     document.querySelectorAll('#perfRangeBtns .range-btn').forEach(b => b.classList.toggle('active', b === btn));
     _perfPeriod = btn.dataset.period;
     _perfLoaded = false;
+    _spyRelative = false;
+    const spyBtn = document.getElementById('spyRelativeToggle');
+    if (spyBtn) spyBtn.className = 'text-[11px] px-2 py-0.5 rounded border border-slate-700 text-slate-500 hover:text-emerald-400 hover:border-emerald-700 transition';
     loadSectorPerformance(true);
   });
 });
+
+let _spyRelative = false;
+function _toggleSpyRelative() {
+  _spyRelative = !_spyRelative;
+  const btn = document.getElementById('spyRelativeToggle');
+  if (btn) btn.className = _spyRelative
+    ? 'text-[11px] px-2 py-0.5 rounded border border-emerald-600 text-emerald-400 bg-emerald-900/20 transition'
+    : 'text-[11px] px-2 py-0.5 rounded border border-slate-700 text-slate-500 hover:text-emerald-400 hover:border-emerald-700 transition';
+  if (!window._perfChart) return;
+  const ds = window._perfChart.data.datasets;
+  const spyDs = ds.find(d => d.label === 'SPY');
+  if (!spyDs) return;
+  if (_spyRelative) {
+    ds.forEach(d => {
+      if (d.label === 'SPY') return;
+      d.data = d._origData.map((v, i) =>
+        v != null && spyDs._origData[i] != null ? parseFloat((v - spyDs._origData[i]).toFixed(2)) : null
+      );
+    });
+    window._perfChart.options.scales.y.title = { display: true, text: 'Alpha vs SPY', color: '#64748b', font: { size: 9 } };
+  } else {
+    ds.forEach(d => { if (d._origData) d.data = [...d._origData]; });
+    window._perfChart.options.scales.y.title = { display: true, text: 'Normalised (start=100)', color: '#64748b', font: { size: 10 } };
+  }
+  window._perfChart.update();
+}
 </script>
 {% endblock %}

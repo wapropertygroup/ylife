@@ -950,6 +950,11 @@ const I18n = (() => {
     'forecast.disclaimer': { en: '⚠ Statistical projections only — not financial advice. Past patterns do not guarantee future results.',
                               zh: '⚠ 仅为统计预测，不构成投资建议。历史规律不代表未来结果。' },
     'forecast.model_error':{ en: 'model unavailable', zh: '模型不可用' },
+    'history.forecast_all':    { en: 'All',     zh: '全部' },
+    'history.forecast_prophet':{ en: 'Prophet', zh: 'Prophet' },
+    'history.forecast_arima':  { en: 'ARIMA',   zh: 'ARIMA' },
+    'history.forecast_linear': { en: 'Linear',  zh: '线性' },
+    'history.mkt_context':     { en: 'Market',  zh: '市场' },
 
     // ── market index page ──────────────────────────────────────────────
     'markets.title':       { en: 'Market Overview', zh: '市场概览' },
@@ -1224,6 +1229,8 @@ const I18n = (() => {
     'commodities.name.soybeans':    { en: 'Soybeans',     zh: '大豆' },
     'commodities.name.coffee':      { en: 'Coffee',       zh: '咖啡' },
     'commodities.name.sugar':       { en: 'Sugar',        zh: '糖' },
+    'commodities.gold_dxy_title':   { en: 'Gold vs US Dollar Index (DXY)', zh: '黄金 vs 美元指数（DXY）' },
+    'commodities.gold_dxy_desc':    { en: 'Gold typically moves inverse to the dollar', zh: '黄金与美元通常呈反向关系' },
 
     // Sector performance bar labels (from SPDR ETFs)
     'markets.sector.Tech':          { en: 'Tech',             zh: '科技' },

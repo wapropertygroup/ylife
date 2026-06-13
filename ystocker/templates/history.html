@@ -72,6 +72,13 @@
     white-space: pre-wrap;
     display: none;
   }
+  .forecast-model-btn {
+    font-size: 10px; padding: 2px 8px; border-radius: 4px;
+    border: 1px solid #334155; background: transparent; color: #64748b; cursor: pointer;
+    transition: all 0.15s;
+  }
+  .forecast-model-btn:hover { color: #cbd5e1; border-color: #475569; }
+  .forecast-model-btn.active { color: #a5b4fc; border-color: #6366f1; background: rgba(99,102,241,0.15); }
 </style>
 
 <div class="mb-6 sm:mb-8 fade-up">
@@ -236,7 +243,7 @@
   <!-- Earnings -->
   <div>
     <p class="text-[10px] font-semibold uppercase tracking-widest text-slate-600 mb-2 px-1" data-i18n="history.group_earnings">Earnings</p>
-    <div class="grid grid-cols-3 sm:grid-cols-3 gap-2 sm:gap-3">
+    <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
       <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 py-3">
         <div class="text-xs text-slate-500 mb-1" data-i18n="history.ttm_eps">TTM EPS</div>
         <div id="statEps" class="text-base font-bold text-slate-100">—</div>
@@ -331,7 +338,7 @@
           <div id="statBeta" class="text-base font-bold text-slate-100">—</div>
         </div>
       </div>
-      <div class="grid grid-cols-3 sm:grid-cols-3 gap-2 sm:gap-3 mt-2">
+      <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3 mt-2">
         <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 py-3">
           <div class="text-xs text-slate-500 mb-1" data-i18n="history.operating_margin">Op. Margin</div>
           <div id="statOpMargin" class="text-base font-bold text-slate-100">—</div>
@@ -350,7 +357,7 @@
   <!-- Fundamentals -->
   <div>
     <p class="text-[10px] font-semibold uppercase tracking-widest text-slate-600 mb-2 px-1" data-i18n="history.group_fundamentals">Fundamentals</p>
-    <div class="grid grid-cols-3 sm:grid-cols-3 gap-2 sm:gap-3">
+    <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
       <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 py-3">
         <div class="text-xs text-slate-500 mb-1" data-i18n="history.ps_ratio">P/S Ratio</div>
         <div id="statPs" class="text-base font-bold text-slate-100">—</div>
@@ -369,7 +376,7 @@
   <!-- Dividend (shown only when dividend data available) -->
   <div id="dividendGroup" style="display:none">
     <p class="text-[10px] font-semibold uppercase tracking-widest text-slate-600 mb-2 px-1" data-i18n="history.group_dividend">Dividend</p>
-    <div class="grid grid-cols-3 sm:grid-cols-3 gap-2 sm:gap-3">
+    <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
       <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 py-3">
         <div class="text-xs text-slate-500 mb-1" data-i18n="history.div_yield">Yield</div>
         <div id="statDivYield" class="text-base font-bold text-emerald-400">—</div>
@@ -424,6 +431,27 @@
 
 <!-- ── Charts ────────────────────────────────────────────────────────── -->
 <div class="space-y-6">
+
+  <!-- Market Context strip -->
+  <div id="mktContextStrip" class="flex flex-wrap gap-2 mb-4 fade-up hidden">
+    <span class="text-[10px] text-slate-600 uppercase tracking-widest self-center">Market</span>
+    <a href="/markets" id="mktCtxSpy" class="flex items-center gap-1 text-xs px-2 py-1 rounded-lg bg-slate-900 border border-slate-800 hover:border-slate-700 transition">
+      <span class="text-slate-400">SPY</span>
+      <span id="mktCtxSpyChg" class="font-mono font-semibold">—</span>
+    </a>
+    <a href="/markets" id="mktCtxVix" class="flex items-center gap-1 text-xs px-2 py-1 rounded-lg bg-slate-900 border border-slate-800 hover:border-slate-700 transition">
+      <span class="text-slate-400">VIX</span>
+      <span id="mktCtxVixVal" class="font-mono font-semibold">—</span>
+    </a>
+    <a href="/markets" id="mktCtxFg" class="flex items-center gap-1 text-xs px-2 py-1 rounded-lg bg-slate-900 border border-slate-800 hover:border-slate-700 transition">
+      <span class="text-slate-400">F&amp;G</span>
+      <span id="mktCtxFgVal" class="font-mono font-semibold">—</span>
+    </a>
+    <a href="/markets" class="flex items-center gap-1 text-xs px-2 py-1 rounded-lg bg-slate-900 border border-slate-800 hover:border-slate-700 transition">
+      <span class="text-slate-400">10Y</span>
+      <span id="mktCtxTen" class="font-mono text-slate-300">—</span>
+    </a>
+  </div>
 
   <!-- PE history line chart -->
   <div id="peHistSection" class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up">
@@ -870,6 +898,12 @@
         <button onclick="expandChart('forecast')" title="Expand" class="expand-btn ml-1">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
         </button>
+        <div id="forecastModelToggle" class="flex gap-1">
+          <button class="forecast-model-btn active" data-models="0,1,2" data-i18n="history.forecast_all">All</button>
+          <button class="forecast-model-btn" data-models="0" data-i18n="history.forecast_prophet">Prophet</button>
+          <button class="forecast-model-btn" data-models="1" data-i18n="history.forecast_arima">ARIMA</button>
+          <button class="forecast-model-btn" data-models="2" data-i18n="history.forecast_linear">Linear</button>
+        </div>
       </div>
     </div>
     <!-- loading state -->
@@ -885,6 +919,24 @@
     </div>
     <!-- per-model status row -->
     <div id="forecastModelStatus" class="hidden flex flex-wrap gap-3 mt-3 text-[11px]"></div>
+    <!-- forecast target summary row -->
+    <div id="forecastSummaryRow" class="grid grid-cols-3 gap-2 mt-3 hidden">
+      <div class="bg-slate-950/50 border border-slate-800 rounded-lg p-2 text-center">
+        <div class="text-[9px] text-slate-500 mb-0.5 uppercase tracking-wider" data-i18n="history.forecast_prophet">Prophet</div>
+        <div id="fcastProphetTarget" class="text-sm font-bold font-mono text-slate-200">—</div>
+        <div id="fcastProphetRange" class="text-[10px] text-slate-500">—</div>
+      </div>
+      <div class="bg-slate-950/50 border border-slate-800 rounded-lg p-2 text-center">
+        <div class="text-[9px] text-slate-500 mb-0.5 uppercase tracking-wider" data-i18n="history.forecast_arima">ARIMA</div>
+        <div id="fcastArimaTarget" class="text-sm font-bold font-mono text-slate-200">—</div>
+        <div id="fcastArimaRange" class="text-[10px] text-slate-500">—</div>
+      </div>
+      <div class="bg-slate-950/50 border border-slate-800 rounded-lg p-2 text-center">
+        <div class="text-[9px] text-slate-500 mb-0.5 uppercase tracking-wider" data-i18n="history.forecast_linear">Linear</div>
+        <div id="fcastLinearTarget" class="text-sm font-bold font-mono text-slate-200">—</div>
+        <div id="fcastLinearRange" class="text-[10px] text-slate-500">—</div>
+      </div>
+    </div>
     <!-- disclaimer -->
     <p class="text-[11px] text-slate-600 mt-3 leading-snug" data-i18n="forecast.disclaimer">
       ⚠ Statistical projections only — not financial advice. Past patterns do not guarantee future results.
@@ -988,7 +1040,7 @@
   <div id="evEbitdaSection" class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up" style="display:none">
     <h2 class="text-base font-semibold text-slate-200 mb-1" data-i18n="history.ev_ebitda_title">EV / EBITDA</h2>
     <p class="text-xs text-slate-500 mb-4" data-i18n="history.ev_ebitda_desc">Enterprise Value ÷ EBITDA — capital-structure-neutral valuation multiple.</p>
-    <div class="grid grid-cols-3 gap-3">
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3">
       <div class="bg-slate-800/60 rounded-xl px-3 py-3">
         <div class="text-xs text-slate-500 mb-1" data-i18n="history.ev_ebitda">EV/EBITDA</div>
         <div id="evEbitdaVal" class="text-base font-bold text-slate-100">—</div>
@@ -1773,6 +1825,51 @@ let   _forecastResult = null;   // last forecast API response
         _chartConfigs['forecast'] = cfg;
         wrap.style.display = '';
         _chartInstances['forecast'] = new Chart(document.getElementById('forecastChart'), cfg);
+
+        // Forecast model toggle buttons
+        document.querySelectorAll('.forecast-model-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            document.querySelectorAll('.forecast-model-btn').forEach(b => b.classList.toggle('active', b === btn));
+            const show = btn.dataset.models.split(',').map(Number);
+            const inst = _chartInstances['forecast'];
+            if (!inst) return;
+            // Dataset layout: [0]=history, [1..]=prophet+CI, [4..]=ARIMA+CI, [7..]=Linear+CI
+            // Each model block: line, upper CI, lower CI (3 datasets each)
+            // Datasets 1-3 = Prophet, 4-6 = ARIMA, 7-9 = Linear
+            inst.data.datasets.forEach((ds, i) => {
+              if (i === 0) { ds.hidden = false; return; } // always show history
+              const modelIdx = Math.floor((i - 1) / 3); // 0=prophet, 1=arima, 2=linear
+              ds.hidden = !show.includes(modelIdx);
+            });
+            inst.update();
+          });
+        });
+
+        // Populate forecast summary row
+        try {
+          const fr = _forecastResult;
+          if (fr) {
+            document.getElementById('forecastSummaryRow').classList.remove('hidden');
+            function fcastSummary(fId, tId, rId, modelKey) {
+              const series = fr[modelKey]?.forecast || [];
+              if (!series.length) return;
+              const last = series[series.length - 1];
+              const tEl = document.getElementById(tId);
+              const rEl = document.getElementById(rId);
+              if (tEl && last?.value != null) {
+                tEl.textContent = '$' + last.value.toFixed(2);
+                const pct = fr.current_price ? ((last.value - fr.current_price) / fr.current_price * 100) : null;
+                tEl.className = 'text-sm font-bold font-mono ' + (pct == null || pct >= 0 ? 'text-emerald-400' : 'text-rose-400');
+                if (rEl && last.lo != null && last.hi != null) {
+                  rEl.textContent = '$' + last.lo.toFixed(0) + '–$' + last.hi.toFixed(0);
+                }
+              }
+            }
+            fcastSummary('fcastProphet', 'fcastProphetTarget', 'fcastProphetRange', 'prophet');
+            fcastSummary('fcastArima',   'fcastArimaTarget',   'fcastArimaRange',   'arima');
+            fcastSummary('fcastLinear',  'fcastLinearTarget',  'fcastLinearRange',  'linear');
+          }
+        } catch(e) {}
 
         // Per-model status chips
         const models = { prophet: '#a78bfa', arima: '#fb923c', linear: '#34d399' };
@@ -3471,5 +3568,47 @@ async function explainChart(chartKey) {
     btn.textContent = panel.textContent ? I18n.t('history.explain_hide') : I18n.t('history.explain');
   }
 }
+
+// ── Market context strip (non-blocking) ──────────────────────────────────────
+(async () => {
+  try {
+    const [mkResp, fgResp, ycResp] = await Promise.all([
+      fetch('/api/markets'),
+      fetch('/api/fear-greed'),
+      fetch('/api/yield-curve'),
+    ]);
+    const mk = await mkResp.json();
+    const fg = await fgResp.json();
+    const yc = await ycResp.json();
+    const strip = document.getElementById('mktContextStrip');
+    if (!strip) return;
+    strip.classList.remove('hidden');
+    // SPY
+    const spxDay = mk?.indices?.spx?.day_chg_pct ?? null;
+    const spyEl = document.getElementById('mktCtxSpyChg');
+    if (spyEl && spxDay != null) {
+      spyEl.textContent = (spxDay >= 0 ? '+' : '') + spxDay.toFixed(2) + '%';
+      spyEl.className = 'font-mono font-semibold ' + (spxDay >= 0 ? 'text-emerald-400' : 'text-rose-400');
+    }
+    // VIX
+    const vixVal = mk?.vix?.current ?? null;
+    const vixEl = document.getElementById('mktCtxVixVal');
+    if (vixEl && vixVal != null) {
+      vixEl.textContent = vixVal.toFixed(1);
+      vixEl.className = 'font-mono font-semibold ' + (vixVal > 30 ? 'text-rose-400' : vixVal > 20 ? 'text-amber-400' : 'text-emerald-400');
+    }
+    // Fear & Greed
+    const fgVal = fg?.score ?? fg?.current?.score ?? null;
+    const fgEl = document.getElementById('mktCtxFgVal');
+    if (fgEl && fgVal != null) {
+      fgEl.textContent = fgVal.toFixed(0);
+      fgEl.className = 'font-mono font-semibold ' + (fgVal < 25 ? 'text-rose-400' : fgVal < 45 ? 'text-amber-400' : fgVal > 75 ? 'text-emerald-400' : 'text-slate-300');
+    }
+    // 10Y yield
+    const ten = yc?.us?.['10y'] ?? null;
+    const tenEl = document.getElementById('mktCtxTen');
+    if (tenEl && ten != null) tenEl.textContent = ten.toFixed(2) + '%';
+  } catch(e) {}
+})();
 </script>
 {% endblock %}

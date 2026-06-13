@@ -187,6 +187,17 @@
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4" id="ratiosGrid"></div>
   </div>
 
+  <!-- Gold vs US Dollar (DXY) overlay -->
+  <div id="goldDxySection" class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up mb-6">
+    <div class="mb-3">
+      <h2 class="text-base font-semibold text-slate-200" data-i18n="commodities.gold_dxy_title">Gold vs US Dollar Index (DXY)</h2>
+      <p class="text-xs text-slate-500 mt-0.5" data-i18n="commodities.gold_dxy_desc">Gold typically moves inverse to the dollar — rising DXY = headwind for gold</p>
+    </div>
+    <div class="chart-container" style="height:200px">
+      <canvas id="goldDxyChart"></canvas>
+    </div>
+  </div>
+
   <!-- ── Sortable detail table ──────────────────────────────────────── -->
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up mb-6">
     <div class="flex flex-wrap items-start justify-between gap-3 mb-3">
@@ -530,6 +541,43 @@
       },
     });
   });
+
+  // Gold vs DXY overlay chart
+  (function() {
+    const gold = C['gold'];
+    const dxy  = C['dxy'];
+    if (!gold || !dxy || !gold.dates_1y || !dxy.dates_1y) return;
+    // Normalize both to 100
+    const gPrices = gold.prices_1y || [];
+    const dPrices = dxy.prices_1y  || [];
+    const gBase = gPrices.find(v => v != null) || 1;
+    const dBase = dPrices.find(v => v != null) || 1;
+    const gNorm = gPrices.map(v => v != null ? Math.round(v / gBase * 1000) / 10 : null);
+    const dNorm = dPrices.map(v => v != null ? Math.round(v / dBase * 1000) / 10 : null);
+    new Chart(document.getElementById('goldDxyChart'), {
+      type: 'line',
+      data: { labels: gold.dates_1y, datasets: [
+        { label: I18n.t('commodities.name.gold') || 'Gold', data: gNorm,
+          borderColor:'#facc15', backgroundColor:'rgba(250,204,21,0.08)',
+          borderWidth:1.5, pointRadius:0, fill:true, tension:0.3, spanGaps:true },
+        { label: 'DXY', data: dNorm,
+          borderColor:'#94a3b8', backgroundColor:'transparent',
+          borderWidth:1.5, pointRadius:0, fill:false, tension:0.3, spanGaps:true,
+          borderDash:[4,3] },
+      ]},
+      options: {
+        responsive:true, maintainAspectRatio:false,
+        plugins:{ legend:{display:false}, tooltip:{mode:'index',intersect:false,
+          callbacks:{label:c=>c.raw==null?'': ` ${c.dataset.label}: ${c.raw.toFixed(1)} (norm)`}}},
+        scales:{
+          x:{grid:{color:gridCol},ticks:{color:tickCol,maxTicksLimit:8,maxRotation:0}},
+          y:{grid:{color:gridCol},ticks:{color:tickCol,callback:v=>v.toFixed(0)},
+             title:{display:true,text:'Normalised (100=start)',color:tickCol,font:{size:9}}},
+        },
+        interaction:{mode:'index',intersect:false},
+      },
+    });
+  })();
 
   // ─── Sortable table
   let sortCol = 'ret_1y', sortDir = -1;

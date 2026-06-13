@@ -3473,10 +3473,34 @@ def api_markets():
             weekly  = daily["Close"].resample("W").last().dropna()
             prices  = [round(float(p), 2) for p in weekly]
             dates   = [str(d.date()) for d in weekly.index]
+
+            # Fetch VIX3M and VVIX for term structure
+            vix3m_current = None
+            vvix_current  = None
+            try:
+                vix_extra = yf.download(["^VIX3M", "^VVIX"], period="2d", interval="1d",
+                                        auto_adjust=True, progress=False)
+                if not vix_extra.empty:
+                    def _last_val(ticker):
+                        try:
+                            s = vix_extra["Close"][ticker].dropna()
+                            return round(float(s.iloc[-1]), 2) if len(s) > 0 else None
+                        except Exception:
+                            return None
+                    vix3m_current = _last_val("^VIX3M")
+                    vvix_current  = _last_val("^VVIX")
+            except Exception:
+                pass
+
+            term_ratio = round(vix3m_current / current, 2) if vix3m_current and current else None
+
             return {
-                "current": current,
-                "day_chg": day_chg,
-                "weekly":  {"dates": dates, "prices": prices},
+                "current":    current,
+                "day_chg":    day_chg,
+                "vix3m":      vix3m_current,
+                "vvix":       vvix_current,
+                "term_ratio": term_ratio,
+                "weekly":     {"dates": dates, "prices": prices},
             }
         except Exception as exc:
             log.warning("Could not fetch VIX: %s", exc)

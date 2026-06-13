@@ -132,6 +132,13 @@
       </div>
       <span id="vixZoneBadge" class="text-xs px-2 py-0.5 rounded font-semibold hidden"></span>
     </div>
+    <div id="vixTermRow" class="hidden flex items-center gap-3 text-[11px] mt-2">
+      <span class="text-slate-500">VIX3M <span id="vix3mVal" class="text-slate-300 font-mono">—</span></span>
+      <span class="text-slate-600">·</span>
+      <span class="text-slate-500">VVIX <span id="vvixVal" class="text-slate-300 font-mono">—</span></span>
+      <span class="text-slate-600">·</span>
+      <span id="vixTermLabel" class="text-[10px] px-1.5 py-0.5 rounded font-semibold hidden"></span>
+    </div>
     <p class="text-[11px] text-slate-600 mt-2" data-i18n="markets.vix_note">VIX below 15 = complacency; above 30 = fear, often marks near-term bottoms. VIX spikes during market drawdowns and mean-reverts quickly.</p>
   </div>
 
@@ -777,6 +784,25 @@ function renderVix(vix, canvasId) {
       else if (vixLast < 25) { vixBadge.textContent = 'Normal'; vixBadge.className = 'text-xs px-2 py-0.5 rounded font-semibold bg-amber-900/50 text-amber-300'; }
       else if (vixLast < 35) { vixBadge.textContent = 'Elevated Fear'; vixBadge.className = 'text-xs px-2 py-0.5 rounded font-semibold bg-orange-900/50 text-orange-300'; }
       else                   { vixBadge.textContent = 'Panic'; vixBadge.className = 'text-xs px-2 py-0.5 rounded font-semibold bg-rose-900/50 text-rose-300'; }
+    }
+
+    // VIX term structure row (VIX3M / VVIX)
+    const vixData = vix;
+    if (vixData.vix3m != null) {
+      document.getElementById('vixTermRow').classList.remove('hidden');
+      document.getElementById('vix3mVal').textContent = vixData.vix3m.toFixed(1);
+      document.getElementById('vvixVal').textContent  = vixData.vvix?.toFixed(1) ?? '—';
+      const termLabel = document.getElementById('vixTermLabel');
+      if (vixData.term_ratio != null) {
+        termLabel.classList.remove('hidden');
+        if (vixData.term_ratio < 1) {
+          termLabel.textContent = 'Backwardation ⚠';
+          termLabel.className = 'text-[10px] px-1.5 py-0.5 rounded font-semibold bg-rose-900/50 text-rose-300';
+        } else {
+          termLabel.textContent = 'Contango ✓';
+          termLabel.className = 'text-[10px] px-1.5 py-0.5 rounded font-semibold bg-emerald-900/50 text-emerald-300';
+        }
+      }
     }
 
     if (_vixChartInst) { _vixChartInst.destroy(); _vixChartInst = null; }
