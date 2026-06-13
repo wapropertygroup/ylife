@@ -472,6 +472,17 @@
     <div id="explainPanelPrice" class="explain-panel"></div>
   </div>
 
+  <!-- Options Walls Summary card (shown when call_wall or put_wall data available) -->
+  <div id="optionsWallsCard" class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up" style="display:none">
+    <div class="flex items-center justify-between mb-3">
+      <div>
+        <h2 class="text-base font-semibold text-slate-200" data-i18n="history.walls_title">Options Walls</h2>
+        <p class="text-xs text-slate-500" data-i18n="history.walls_desc">Strike with highest aggregate open interest across all expirations</p>
+      </div>
+    </div>
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3" id="optionsWallsGrid"></div>
+  </div>
+
   <!-- Price Delta chart -->
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up" id="priceDeltaSection" style="display:none">
     <div class="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-0 sm:justify-between mb-3">
@@ -551,6 +562,26 @@
     </div>
     <div class="chart-container" style="height:160px" id="macdChartWrap">
       <canvas id="macdHistChart"></canvas>
+    </div>
+  </div>
+
+  <!-- Relative Strength vs SPY chart -->
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up" id="rsStrengthSection" style="display:none">
+    <div class="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-0 sm:justify-between mb-3">
+      <div>
+        <h2 class="text-base font-semibold text-slate-200" data-i18n="history.rs_title">Relative Strength vs SPY</h2>
+        <p class="text-xs text-slate-500" data-i18n="history.rs_desc">Stock ÷ SPY normalised to 100 at period start — above 100 = outperforming</p>
+      </div>
+      <div class="flex items-center gap-2 flex-wrap justify-end">
+        <span class="flex items-center gap-1.5 text-xs text-violet-400"><span class="inline-block w-3 h-0.5 bg-violet-400"></span> <span data-i18n="history.rs_legend">Rel. Strength</span></span>
+        <span class="flex items-center gap-1.5 text-xs text-slate-500"><span class="inline-block w-3 h-0.5 border-dashed border border-slate-500"></span> 100</span>
+        <button onclick="expandChart('rsstrength')" title="Expand" class="expand-btn">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="chart-container" style="height:200px" id="rsStrengthChartWrap">
+      <canvas id="rsStrengthChart"></canvas>
     </div>
   </div>
 
@@ -1390,6 +1421,60 @@ let   _forecastResult = null;   // last forecast API response
   const prCfg = _buildConfig('price', data, staticData);
   _registerChart('price', prCfg, new Chart(document.getElementById('priceHistChart'), prCfg));
 
+  // ── Options Walls Summary card ──
+  (function() {
+    const cw = data.call_wall, pw = data.put_wall;
+    if (cw == null && pw == null) return;
+    const lastPrice = data.prices ? data.prices.filter(p => p != null).at(-1) : null;
+    const card = document.getElementById('optionsWallsCard');
+    const grid = document.getElementById('optionsWallsGrid');
+    card.style.display = 'block';
+
+    function wallItem(label, strike, price, colorClass, distColor) {
+      const distPct = (price != null && strike != null)
+        ? ((strike - price) / price * 100).toFixed(1) : null;
+      const distLabel = distPct != null
+        ? (distPct >= 0 ? '+' + distPct : distPct) + '%'
+        : '—';
+      const distCls = distPct == null ? 'text-slate-500'
+        : parseFloat(distPct) >= 0 ? 'text-emerald-400' : 'text-rose-400';
+      return `
+        <div class="bg-slate-800/50 border border-slate-700/50 rounded-xl px-3 py-3">
+          <div class="text-xs text-slate-500 mb-1">${label}</div>
+          <div class="text-base font-bold ${colorClass}">${strike != null ? '$' + Number(strike).toFixed(2) : '—'}</div>
+          <div class="text-[11px] mt-1 ${distCls}">
+            ${distLabel} <span class="text-slate-600 font-normal">from spot</span>
+          </div>
+        </div>`;
+    }
+
+    let html = '';
+    html += wallItem('Call Wall', cw, lastPrice, 'text-amber-400');
+    html += wallItem('Put Wall',  pw, lastPrice, 'text-rose-400');
+
+    // Add current price card for reference
+    if (lastPrice != null) {
+      html += `
+        <div class="bg-slate-800/50 border border-slate-700/50 rounded-xl px-3 py-3">
+          <div class="text-xs text-slate-500 mb-1">Spot Price</div>
+          <div class="text-base font-bold text-sky-400">$${lastPrice.toFixed(2)}</div>
+          <div class="text-[11px] mt-1 text-slate-600">Current</div>
+        </div>`;
+      // Spread between walls
+      if (cw != null && pw != null) {
+        const spread = (cw - pw).toFixed(2);
+        const spreadPct = ((cw - pw) / lastPrice * 100).toFixed(1);
+        html += `
+          <div class="bg-slate-800/50 border border-slate-700/50 rounded-xl px-3 py-3">
+            <div class="text-xs text-slate-500 mb-1">Wall Spread</div>
+            <div class="text-base font-bold text-violet-400">$${spread}</div>
+            <div class="text-[11px] mt-1 text-slate-500">${spreadPct}% of spot</div>
+          </div>`;
+      }
+    }
+    grid.innerHTML = html;
+  })();
+
   // ── Price delta chart (synced to price range)
   document.getElementById('priceDeltaSection').style.display = 'block';
   const dlCfg = _buildConfig('delta', data, staticData);
@@ -1421,6 +1506,13 @@ let   _forecastResult = null;   // last forecast API response
   document.getElementById('hvSection').style.display = 'block';
   const hvCfg = _buildConfig('hv', data, staticData);
   _registerChart('hv', hvCfg, new Chart(document.getElementById('hvHistChart'), hvCfg));
+
+  // ── Relative Strength vs SPY chart (synced to price range)
+  if (data.relative_strength && data.relative_strength.some(v => v != null)) {
+    document.getElementById('rsStrengthSection').style.display = 'block';
+    const rsCfg = _buildConfig('rsstrength', data, staticData);
+    _registerChart('rsstrength', rsCfg, new Chart(document.getElementById('rsStrengthChart'), rsCfg));
+  }
 
   // ── PEG history chart (only when data available)
   if (data.peg_history && data.peg_history.some(v => v != null)) {
@@ -2209,6 +2301,35 @@ function _buildConfig(key, d, staticData) {
       _title: 'Put/Call Ratio by Expiration', _desc: 'Put OI ÷ Call OI per expiration date — above 1.0 = bearish hedging, below 0.7 = bullish',
     };
   }
+  if (key === 'rsstrength') {
+    const rs  = d.relative_strength || [];
+    const ref = rs.map(() => 100);
+    const above = rs.map(v => v != null && v > 100);
+    return {
+      type: 'line',
+      data: { labels: d.dates.slice(0, rs.length), datasets: [
+        { label: 'Rel. Strength', data: rs,
+          borderColor: '#a78bfa', backgroundColor: 'rgba(167,139,250,0.08)',
+          borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 4, fill: 'origin', tension: 0.3, spanGaps: true },
+        { label: 'Baseline 100', data: ref,
+          borderColor: 'rgba(148,163,184,0.35)', backgroundColor: 'transparent',
+          borderWidth: 1, pointRadius: 0, borderDash: [4,3], fill: false },
+      ]},
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false, callbacks: {
+          label: c => { if (c.dataset.label === 'Baseline 100') return ''; return ` RS: ${c.raw?.toFixed(2)}`; }
+        }}},
+        scales: {
+          x: { grid: { color: gridCol }, ticks: { color: tickCol, maxTicksLimit: 8, maxRotation: 0 } },
+          y: { grid: { color: gridCol }, ticks: { color: tickCol, callback: v => v.toFixed(0) },
+               title: { display: true, text: 'RS (100 = even)', color: tickCol, font: { size: 10 } } },
+        },
+        interaction: { mode: 'index', intersect: false },
+      },
+      _title: 'Relative Strength vs SPY', _desc: 'Stock price / SPY price normalised to 100 at period start',
+    };
+  }
   // ── Forecast chart config ──────────────────────────────────────────────
   if (key === 'forecast') {
     // d is the full forecast result from /api/forecast
@@ -2416,6 +2537,13 @@ async function _handleRange(chartKey, period, staticData) {
     const hvCfg2 = _buildConfig('hv', d, staticData);
     _chartConfigs['hv'] = hvCfg2;
     _chartInstances['hv'] = new Chart(document.getElementById('hvHistChart'), hvCfg2);
+
+    if (d.relative_strength && d.relative_strength.some(v => v != null)) {
+      if (_chartInstances['rsstrength']) { _chartInstances['rsstrength'].destroy(); delete _chartInstances['rsstrength']; }
+      const rsCfg2 = _buildConfig('rsstrength', d, staticData);
+      _chartConfigs['rsstrength'] = rsCfg2;
+      _chartInstances['rsstrength'] = new Chart(document.getElementById('rsStrengthChart'), rsCfg2);
+    }
   }
 
   // If modal is open for this chart, refresh it too

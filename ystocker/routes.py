@@ -824,6 +824,35 @@ def api_history(ticker: str):
     volumes = [int(v) if not math.isnan(float(v)) else 0
                for v in hist["Volume"]]
 
+    # Relative strength vs SPY: (stock / SPY) normalised to 100 at period start
+    spy_prices_list: list = []
+    relative_strength: list = []
+    if ticker != "SPY":
+        try:
+            spy_hist = yf.Ticker("SPY").history(period=period, interval=interval)
+            if not spy_hist.empty:
+                spy_raw = [round(float(p), 2) if not math.isnan(float(p)) else None
+                           for p in spy_hist["Close"]]
+                # Align to same length as ticker (they usually match, but can differ by 1)
+                n = min(len(prices), len(spy_raw))
+                aligned_prices = prices[:n]
+                aligned_spy    = spy_raw[:n]
+                spy_prices_list = aligned_spy
+                # Find first index where both series have non-null values
+                base_idx = next((i for i in range(n)
+                                 if aligned_prices[i] is not None and aligned_spy[i] is not None), None)
+                if base_idx is not None:
+                    base_stock = aligned_prices[base_idx]
+                    base_spy   = aligned_spy[base_idx]
+                    relative_strength = [
+                        round(aligned_prices[i] / aligned_spy[i] * (base_spy / base_stock) * 100, 2)
+                        if aligned_prices[i] is not None and aligned_spy[i] is not None and aligned_spy[i] > 0
+                        else None
+                        for i in range(n)
+                    ]
+        except Exception:
+            log.debug("SPY fetch skipped for relative strength on %s", ticker)
+
     pe_history = []
     for p in prices:
         if p is not None and eps and eps > 0:
@@ -973,9 +1002,81 @@ def api_history(ticker: str):
         # High/Low series for Stochastic Oscillator
         "highs":             [round(float(v), 2) if not math.isnan(float(v)) else None for v in hist["High"]],
         "lows":              [round(float(v), 2) if not math.isnan(float(v)) else None for v in hist["Low"]],
+        # Relative strength vs SPY (normalised to 100 at start)
+        "relative_strength": relative_strength,
+        "spy_prices":        spy_prices_list,
     }
     with _HISTORY_CACHE_LOCK:
         _HISTORY_CACHE[cache_key] = {"ts": time.time(), "data": result}
+    return jsonify(result)
+
+
+# ---------------------------------------------------------------------------
+# Sector performance comparison endpoint
+# ---------------------------------------------------------------------------
+_SECTOR_PERF_CACHE: Dict[str, dict] = {}
+_SECTOR_PERF_CACHE_LOCK = threading.Lock()
+_SECTOR_PERF_CACHE_TTL  = 4 * 60 * 60   # 4 hours
+
+
+@bp.route("/api/sector-performance/<path:sector_name>")
+def api_sector_performance(sector_name: str):
+    """
+    Return normalised price series (start=100) for every ticker in a peer group.
+    Used by the Performance Comparison tab on the sector detail page.
+    Query params:
+      period: 1y | 6mo | 3mo | 2y  (default: 1y)
+    """
+    import yfinance as yf
+    from flask import request as flask_request
+    period = flask_request.args.get("period", "1y")
+    VALID = {"3mo", "6mo", "1y", "2y"}
+    if period not in VALID:
+        period = "1y"
+
+    if sector_name not in PEER_GROUPS:
+        return jsonify({"error": f"Unknown sector: {sector_name}"}), 404
+
+    cache_key = f"{sector_name}:{period}"
+    with _SECTOR_PERF_CACHE_LOCK:
+        entry = _SECTOR_PERF_CACHE.get(cache_key)
+        if entry and time.time() - entry["ts"] < _SECTOR_PERF_CACHE_TTL:
+            return jsonify(entry["data"])
+
+    tickers = PEER_GROUPS[sector_name]
+    if not tickers:
+        return jsonify({"error": "No tickers in this sector"}), 404
+
+    interval = "1wk" if period in ("1y", "2y") else "1d"
+    dates: list = []
+    series: dict[str, list] = {}
+
+    for tk_sym in tickers:
+        try:
+            hist = yf.Ticker(tk_sym).history(period=period, interval=interval)
+            if hist.empty:
+                continue
+            tk_dates = [str(d.date()) for d in hist.index]
+            tk_prices = [round(float(p), 2) if not math.isnan(float(p)) else None
+                         for p in hist["Close"]]
+            # Use the first non-null price as the base
+            base = next((p for p in tk_prices if p is not None), None)
+            if base is None:
+                continue
+            normalised = [round(p / base * 100, 2) if p is not None else None
+                          for p in tk_prices]
+            if not dates or len(tk_dates) > len(dates):
+                dates = tk_dates
+            series[tk_sym] = normalised
+        except Exception:
+            log.debug("Sector perf fetch failed for %s", tk_sym)
+
+    if not series:
+        return jsonify({"error": "No price data available"}), 502
+
+    result = {"sector": sector_name, "period": period, "dates": dates, "series": series}
+    with _SECTOR_PERF_CACHE_LOCK:
+        _SECTOR_PERF_CACHE[cache_key] = {"ts": time.time(), "data": result}
     return jsonify(result)
 
 

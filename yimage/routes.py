@@ -2,8 +2,9 @@
 yimage.routes
 ~~~~~~~~~~~~~
 URL routes for the yImage image/PDF tools app.
-8 tools: compress PDF, PDF↔image, crop, passport photo, PDF→text,
-trim transparency, layer analysis.
+14 tools: compress PDF, PDF↔image, crop, passport photo, PDF→text,
+trim transparency, layer analysis, resize/convert, rotate/flip,
+EXIF viewer/stripper, merge PDFs, split PDF, QR code.
 """
 from __future__ import annotations
 
@@ -65,6 +66,36 @@ def page_trim_transparency():
 @bp.route("/layer-analysis")
 def page_layer_analysis():
     return render_template("layer_analysis.html")
+
+
+@bp.route("/resize-image")
+def page_resize_image():
+    return render_template("resize_image.html")
+
+
+@bp.route("/rotate-flip")
+def page_rotate_flip():
+    return render_template("rotate_flip.html")
+
+
+@bp.route("/exif-data")
+def page_exif_data():
+    return render_template("exif_data.html")
+
+
+@bp.route("/merge-pdf")
+def page_merge_pdf():
+    return render_template("merge_pdf.html")
+
+
+@bp.route("/split-pdf")
+def page_split_pdf():
+    return render_template("split_pdf.html")
+
+
+@bp.route("/qr-code")
+def page_qr_code():
+    return render_template("qr_code.html")
 
 
 # ---------------------------------------------------------------------------
@@ -361,4 +392,236 @@ def api_layer_analysis():
         )
     except Exception as exc:
         log.exception("Layer analysis failed")
+        return jsonify(error=str(exc)), 500
+
+
+# ---------------------------------------------------------------------------
+# API: Resize & Convert Image
+# ---------------------------------------------------------------------------
+
+@bp.route("/api/resize-image", methods=["POST"])
+def api_resize_image():
+    """Resize an image and/or convert its format."""
+    data, filename, err = _get_upload(
+        allowed_types=["jpg", "jpeg", "png", "webp", "bmp", "gif"]
+    )
+    if err:
+        return err
+
+    fmt = request.form.get("format", "original").lower()
+    keep_aspect = request.form.get("keep_aspect", "true").lower() != "false"
+
+    try:
+        width_str = request.form.get("width", "").strip()
+        height_str = request.form.get("height", "").strip()
+        width = int(width_str) if width_str else None
+        height = int(height_str) if height_str else None
+    except ValueError:
+        return jsonify(error="Invalid width or height"), 400
+
+    if not width and not height and fmt == "original":
+        return jsonify(error="Please specify a new size or a different output format"), 400
+
+    log.info("Resize image: %s (w=%s, h=%s, fmt=%s, aspect=%s)",
+             filename, width, height, fmt, keep_aspect)
+
+    try:
+        from yimage.processing import resize_convert_image
+        result, mime = resize_convert_image(data, width, height, fmt, keep_aspect)
+        _ext = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp",
+                "image/bmp": "bmp", "image/gif": "gif"}
+        out_ext = _ext.get(mime, filename.rsplit(".", 1)[-1] if "." in filename else "jpg")
+        base = filename.rsplit(".", 1)[0] if "." in filename else filename
+        return send_file(
+            BytesIO(result), mimetype=mime,
+            as_attachment=True, download_name=f"resized_{base}.{out_ext}",
+        )
+    except Exception as exc:
+        log.exception("Resize image failed")
+        return jsonify(error=str(exc)), 500
+
+
+# ---------------------------------------------------------------------------
+# API: Rotate & Flip Image
+# ---------------------------------------------------------------------------
+
+@bp.route("/api/rotate-flip", methods=["POST"])
+def api_rotate_flip():
+    """Rotate and/or flip an image."""
+    data, filename, err = _get_upload(
+        allowed_types=["jpg", "jpeg", "png", "webp", "bmp", "gif"]
+    )
+    if err:
+        return err
+
+    try:
+        angle = int(request.form.get("angle", "0")) % 360
+    except ValueError:
+        angle = 0
+
+    flip_h = request.form.get("flip_h", "false").lower() == "true"
+    flip_v = request.form.get("flip_v", "false").lower() == "true"
+
+    log.info("Rotate/flip: %s (angle=%d, flip_h=%s, flip_v=%s)",
+             filename, angle, flip_h, flip_v)
+
+    try:
+        from yimage.processing import rotate_flip_image
+        result, mime = rotate_flip_image(data, angle, flip_h, flip_v)
+        _ext = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp",
+                "image/bmp": "bmp", "image/gif": "gif"}
+        out_ext = _ext.get(mime, filename.rsplit(".", 1)[-1] if "." in filename else "png")
+        base = filename.rsplit(".", 1)[0] if "." in filename else filename
+        return send_file(
+            BytesIO(result), mimetype=mime,
+            as_attachment=True, download_name=f"rotated_{base}.{out_ext}",
+        )
+    except Exception as exc:
+        log.exception("Rotate/flip failed")
+        return jsonify(error=str(exc)), 500
+
+
+# ---------------------------------------------------------------------------
+# API: EXIF Data — Extract & Strip
+# ---------------------------------------------------------------------------
+
+@bp.route("/api/exif-data", methods=["POST"])
+def api_exif_data():
+    """Extract EXIF metadata from an image, return JSON."""
+    data, filename, err = _get_upload(
+        allowed_types=["jpg", "jpeg", "png", "webp", "tiff", "tif"]
+    )
+    if err:
+        return err
+
+    log.info("EXIF extract: %s (%d bytes)", filename, len(data))
+
+    try:
+        from yimage.processing import extract_exif
+        return jsonify(extract_exif(data))
+    except Exception as exc:
+        log.exception("EXIF extraction failed")
+        return jsonify(error=str(exc)), 500
+
+
+@bp.route("/api/strip-exif", methods=["POST"])
+def api_strip_exif():
+    """Remove all EXIF/metadata from an image, return clean file."""
+    data, filename, err = _get_upload(
+        allowed_types=["jpg", "jpeg", "png", "webp"]
+    )
+    if err:
+        return err
+
+    log.info("EXIF strip: %s (%d bytes)", filename, len(data))
+
+    try:
+        from yimage.processing import strip_exif
+        result, mime = strip_exif(data)
+        _ext = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}
+        out_ext = _ext.get(mime, filename.rsplit(".", 1)[-1] if "." in filename else "jpg")
+        base = filename.rsplit(".", 1)[0] if "." in filename else filename
+        return send_file(
+            BytesIO(result), mimetype=mime,
+            as_attachment=True, download_name=f"clean_{base}.{out_ext}",
+        )
+    except Exception as exc:
+        log.exception("EXIF strip failed")
+        return jsonify(error=str(exc)), 500
+
+
+# ---------------------------------------------------------------------------
+# API: Merge PDFs
+# ---------------------------------------------------------------------------
+
+@bp.route("/api/merge-pdf", methods=["POST"])
+def api_merge_pdf():
+    """Merge multiple PDFs into one."""
+    files = request.files.getlist("files")
+    if not files:
+        return jsonify(error="No files uploaded"), 400
+
+    pdfs_data = []
+    for f in files:
+        if not f or not f.filename:
+            continue
+        ext = f.filename.rsplit(".", 1)[-1].lower() if "." in f.filename else ""
+        if ext != "pdf":
+            return jsonify(error=f"Only PDF files are allowed (got: {f.filename})"), 400
+        chunk = f.read()
+        if chunk:
+            pdfs_data.append(chunk)
+
+    if len(pdfs_data) < 2:
+        return jsonify(error="Please upload at least 2 PDF files"), 400
+
+    log.info("Merge PDFs: %d files", len(pdfs_data))
+
+    try:
+        from yimage.processing import merge_pdfs
+        result = merge_pdfs(pdfs_data)
+        return send_file(
+            BytesIO(result), mimetype="application/pdf",
+            as_attachment=True, download_name="merged.pdf",
+        )
+    except Exception as exc:
+        log.exception("PDF merge failed")
+        return jsonify(error=str(exc)), 500
+
+
+# ---------------------------------------------------------------------------
+# API: Split PDF
+# ---------------------------------------------------------------------------
+
+@bp.route("/api/split-pdf", methods=["POST"])
+def api_split_pdf():
+    """Split a PDF into one PDF per page, returned as a ZIP."""
+    data, filename, err = _get_upload(allowed_types=["pdf"])
+    if err:
+        return err
+
+    log.info("Split PDF: %s (%d bytes)", filename, len(data))
+
+    try:
+        from yimage.processing import split_pdf
+        result = split_pdf(data, filename)
+        base = filename.rsplit(".", 1)[0] if "." in filename else filename
+        return send_file(
+            BytesIO(result), mimetype="application/zip",
+            as_attachment=True, download_name=f"{base}_pages.zip",
+        )
+    except Exception as exc:
+        log.exception("PDF split failed")
+        return jsonify(error=str(exc)), 500
+
+
+# ---------------------------------------------------------------------------
+# API: QR Code
+# ---------------------------------------------------------------------------
+
+@bp.route("/api/qr-code", methods=["POST"])
+def api_qr_code():
+    """Generate a QR code PNG."""
+    text = request.form.get("text", "").strip()
+    if not text:
+        return jsonify(error="Please enter text or a URL"), 400
+    if len(text) > 4000:
+        return jsonify(error="Text is too long (max 4 000 characters)"), 400
+
+    size             = request.form.get("size", "medium")
+    error_correction = request.form.get("error_correction", "M").upper()
+    fg_color         = request.form.get("fg_color", "#000000")
+    bg_color         = request.form.get("bg_color", "#ffffff")
+
+    log.info("QR code: %d chars, size=%s, ec=%s", len(text), size, error_correction)
+
+    try:
+        from yimage.processing import generate_qr
+        result = generate_qr(text, size, error_correction, fg_color, bg_color)
+        return send_file(
+            BytesIO(result), mimetype="image/png",
+            as_attachment=False, download_name="qrcode.png",
+        )
+    except Exception as exc:
+        log.exception("QR code generation failed")
         return jsonify(error=str(exc)), 500

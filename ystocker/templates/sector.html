@@ -2,6 +2,15 @@
 {% block title %}yStocker — {{ sector_name }}{% endblock %}
 
 {% block content %}
+<style>
+  .range-btn {
+    font-size: 11px; font-weight: 500; line-height: 1; padding: 3px 7px;
+    border-radius: 5px; border: 1px solid #334155; background: transparent;
+    color: #64748b; cursor: pointer; transition: color 0.15s, background 0.15s, border-color 0.15s;
+  }
+  .range-btn:hover { color: #cbd5e1; border-color: #475569; background: #1e293b; }
+  .range-btn.active { color: #a5b4fc; border-color: #6366f1; background: rgba(99,102,241,0.15); }
+</style>
 
 <!-- ── Header ────────────────────────────────────────────────────────── -->
 <div class="mb-6 sm:mb-8 fade-up">
@@ -91,6 +100,11 @@
             :class="tab==='table' ? 'bg-brand text-white shadow' : 'text-slate-400 hover:text-slate-200'"
             class="px-4 py-1.5 rounded-lg text-sm font-medium transition-all" data-i18n="sector.tab_table">
       Data Table
+    </button>
+    <button @click="tab='performance'; loadSectorPerformance()"
+            :class="tab==='performance' ? 'bg-brand text-white shadow' : 'text-slate-400 hover:text-slate-200'"
+            class="px-4 py-1.5 rounded-lg text-sm font-medium transition-all" data-i18n="sector.tab_performance">
+      Performance
     </button>
   </div>
 
@@ -350,6 +364,28 @@
     </div>
   </div>
 
+  <!-- Performance Comparison -->
+  <div x-show="tab==='performance'" x-transition class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 mb-6">
+    <div class="flex flex-col sm:flex-row sm:items-start gap-3 sm:gap-0 sm:justify-between mb-4">
+      <div>
+        <h2 class="text-base font-semibold text-slate-200" data-i18n="sector.perf_title">Performance Comparison</h2>
+        <p class="text-xs text-slate-500" data-i18n="sector.perf_desc">All tickers normalised to 100 at period start — higher = outperformed</p>
+      </div>
+      <div class="flex items-center gap-2 flex-wrap justify-end">
+        <div class="flex gap-1" id="perfRangeBtns">
+          <button class="range-btn" data-period="3mo">3M</button>
+          <button class="range-btn active" data-period="1y">1Y</button>
+          <button class="range-btn" data-period="2y">2Y</button>
+        </div>
+      </div>
+    </div>
+    <div id="perfLoading" class="flex items-center gap-2 text-sm text-slate-500 py-8 justify-center animate-pulse" data-i18n="sector.perf_loading">Loading performance data…</div>
+    <div class="chart-container" style="height:340px; display:none" id="perfChartWrap">
+      <canvas id="perfChart"></canvas>
+    </div>
+    <p id="perfError" class="text-rose-400 text-sm hidden"></p>
+  </div>
+
   <!-- Data Table -->
   <div x-show="tab==='table'" x-transition class="bg-slate-900 border border-slate-800 rounded-2xl p-6 mb-6">
     <h2 class="text-base font-semibold text-slate-200 mb-4" data-i18n="sector.table_title">Data Table</h2>
@@ -421,6 +457,7 @@
 
 <script>
 const DATA = {{ chartdata | safe }};
+const SECTOR_NAME = {{ sector_name | tojson }};
 
 const labels  = DATA.map(d => d.ticker);
 const gridCol = '#1e293b';
@@ -1239,5 +1276,104 @@ function expandSectorChart(kind) {
     },
   });
 }
+// ── Performance Comparison chart ─────────────────────────────────────────────
+let _perfChart = null;
+let _perfLoaded = false;
+let _perfPeriod = '1y';
+
+const _PERF_COLORS = [
+  '#818cf8','#34d399','#f472b6','#fb923c','#38bdf8',
+  '#a3e635','#c084fc','#fbbf24','#2dd4bf','#f87171',
+  '#6ee7b7','#a5b4fc','#fca5a5','#fde68a','#bae6fd',
+];
+
+async function loadSectorPerformance(forceReload) {
+  if (_perfLoaded && !forceReload) return;
+  const loading = document.getElementById('perfLoading');
+  const wrap    = document.getElementById('perfChartWrap');
+  const errEl   = document.getElementById('perfError');
+  loading.style.display = 'flex';
+  wrap.style.display    = 'none';
+  errEl.classList.add('hidden');
+
+  let data;
+  try {
+    const resp = await fetch(`/api/sector-performance/${encodeURIComponent(SECTOR_NAME)}?period=${_perfPeriod}`);
+    data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || 'Failed');
+  } catch(e) {
+    loading.style.display = 'none';
+    errEl.textContent = '⚠ ' + e.message;
+    errEl.classList.remove('hidden');
+    return;
+  }
+
+  loading.style.display = 'none';
+  wrap.style.display = 'block';
+
+  if (_perfChart) { _perfChart.destroy(); _perfChart = null; }
+
+  const tickers  = Object.keys(data.series || {});
+  const gridCol  = '#1e293b', tickCol = '#64748b';
+
+  const datasets = tickers.map((tk, i) => ({
+    label: tk,
+    data: data.series[tk],
+    borderColor: _PERF_COLORS[i % _PERF_COLORS.length],
+    backgroundColor: 'transparent',
+    borderWidth: 1.8,
+    pointRadius: 0,
+    pointHoverRadius: 4,
+    fill: false,
+    tension: 0.3,
+    spanGaps: true,
+  }));
+
+  _perfChart = new Chart(document.getElementById('perfChart'), {
+    type: 'line',
+    data: { labels: data.dates, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { labels: { color: '#94a3b8', font: { size: 11 }, boxWidth: 12 } },
+        tooltip: {
+          mode: 'index', intersect: false,
+          callbacks: {
+            label: c => c.raw == null ? '' : ` ${c.dataset.label}: ${c.raw.toFixed(1)}`,
+          },
+        },
+      },
+      scales: {
+        x: { grid: { color: gridCol }, ticks: { color: tickCol, maxTicksLimit: 8, maxRotation: 0 } },
+        y: { grid: { color: gridCol }, ticks: { color: tickCol, callback: v => v.toFixed(0) },
+             title: { display: true, text: 'Normalised (start=100)', color: tickCol, font: { size: 10 } } },
+      },
+      interaction: { mode: 'index', intersect: false },
+    },
+    plugins: [{
+      afterDraw(chart) {
+        const {ctx:c, chartArea:a, scales:{y}} = chart;
+        const y100 = y.getPixelForValue(100);
+        if (y100 >= a.top && y100 <= a.bottom) {
+          c.save(); c.strokeStyle = 'rgba(148,163,184,0.4)'; c.lineWidth = 1; c.setLineDash([4,4]);
+          c.beginPath(); c.moveTo(a.left, y100); c.lineTo(a.right, y100); c.stroke();
+          c.fillStyle = '#64748b'; c.font = '10px Inter,sans-serif';
+          c.fillText('100 (start)', a.left + 4, y100 - 4); c.restore();
+        }
+      }
+    }],
+  });
+  _perfLoaded = true;
+}
+
+// Range buttons for performance chart
+document.querySelectorAll('#perfRangeBtns .range-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#perfRangeBtns .range-btn').forEach(b => b.classList.toggle('active', b === btn));
+    _perfPeriod = btn.dataset.period;
+    _perfLoaded = false;
+    loadSectorPerformance(true);
+  });
+});
 </script>
 {% endblock %}

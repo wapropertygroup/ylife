@@ -5,15 +5,22 @@ Server-side image and PDF processing pipelines.
 All functions take bytes in, return bytes out — no Flask dependency.
 
 Tools:
-  1. compress_pdf       — shrink PDF by recompressing images
-  2. pdf_to_images      — render PDF pages to JPEG/PNG
-  3. images_to_pdf      — merge images into a single PDF
-  4. crop_image         — crop image using canvas coordinates
-  5. detect_face        — face detection for passport photos
-  6. make_passport_photo — crop + resize + background for passport
-  7. pdf_to_text        — extract text from PDF (+ OCR fallback)
-  8. trim_transparency  — remove transparent borders from PNG
-  9. analyze_layers     — separate RGB channels + K-means color clusters
+  1.  compress_pdf        — shrink PDF by recompressing images
+  2.  pdf_to_images       — render PDF pages to JPEG/PNG
+  3.  images_to_pdf       — merge images into a single PDF
+  4.  crop_image          — crop image using canvas coordinates
+  5.  detect_face         — face detection for passport photos
+  6.  make_passport_photo — crop + resize + background for passport
+  7.  pdf_to_text         — extract text from PDF (+ OCR fallback)
+  8.  trim_transparency   — remove transparent borders from PNG
+  9.  analyze_layers      — separate RGB channels + K-means color clusters
+  10. resize_convert_image — resize and/or convert image format
+  11. rotate_flip_image   — rotate by angle and/or flip horizontally/vertically
+  12. extract_exif        — read EXIF/metadata tags from image
+  13. strip_exif          — remove all metadata from image
+  14. merge_pdfs          — combine multiple PDFs into one
+  15. split_pdf           — split a PDF into one PDF per page (ZIP)
+  16. generate_qr         — generate a QR code PNG
 """
 from __future__ import annotations
 
@@ -554,3 +561,278 @@ def _simple_kmeans(pixels, k: int, max_iter: int = 20):
         centers = new_centers
 
     return centers.astype(np.uint8), labels
+
+
+# ---------------------------------------------------------------------------
+# 10. Resize & Convert Image
+# ---------------------------------------------------------------------------
+
+def resize_convert_image(
+    data: bytes,
+    width: int | None,
+    height: int | None,
+    fmt: str = "jpeg",
+    keep_aspect: bool = True,
+) -> tuple[bytes, str]:
+    """Resize an image and/or convert its format.
+
+    Args:
+        width: Target width in pixels (None = derive from height or keep original).
+        height: Target height in pixels (None = derive from width or keep original).
+        fmt: Output format key: 'jpeg', 'png', 'webp', or 'original'.
+        keep_aspect: When both dimensions are given, scale to fit inside the box.
+    """
+    img = Image.open(io.BytesIO(data))
+    orig_fmt = (img.format or "PNG").upper()
+
+    # Resolve output format
+    target_fmt = fmt.upper()
+    if target_fmt in ("JPG",):
+        target_fmt = "JPEG"
+    if target_fmt in ("ORIGINAL", ""):
+        target_fmt = orig_fmt if orig_fmt in ("JPEG", "PNG", "WEBP", "BMP", "GIF") else "JPEG"
+
+    # Resize if requested
+    if width or height:
+        ow, oh = img.size
+        if keep_aspect:
+            if width and not height:
+                height = max(1, round(oh * width / ow))
+            elif height and not width:
+                width = max(1, round(ow * height / oh))
+            else:
+                ratio = min(width / ow, height / oh)
+                width = max(1, round(ow * ratio))
+                height = max(1, round(oh * ratio))
+        width = max(1, width or ow)
+        height = max(1, height or oh)
+        img = img.resize((width, height), Image.Resampling.LANCZOS)
+
+    # Mode conversion for JPEG
+    if target_fmt == "JPEG":
+        if img.mode in ("RGBA", "P", "LA"):
+            bg = Image.new("RGB", img.size, (255, 255, 255))
+            src = img.convert("RGBA") if img.mode == "P" else img
+            if src.mode == "RGBA":
+                bg.paste(src, mask=src.split()[3])
+            else:
+                bg.paste(src)
+            img = bg
+        elif img.mode != "RGB":
+            img = img.convert("RGB")
+
+    _mime_map = {
+        "JPEG": "image/jpeg", "PNG": "image/png", "WEBP": "image/webp",
+        "BMP": "image/bmp", "GIF": "image/gif",
+    }
+    mime = _mime_map.get(target_fmt, "image/png")
+
+    buf = io.BytesIO()
+    img.save(buf, format=target_fmt, quality=92 if target_fmt == "JPEG" else None)
+    return buf.getvalue(), mime
+
+
+# ---------------------------------------------------------------------------
+# 11. Rotate & Flip Image
+# ---------------------------------------------------------------------------
+
+def rotate_flip_image(
+    data: bytes,
+    angle: int = 0,
+    flip_h: bool = False,
+    flip_v: bool = False,
+) -> tuple[bytes, str]:
+    """Rotate and/or flip an image, preserving its original format."""
+    img = Image.open(io.BytesIO(data))
+    orig_fmt = (img.format or "PNG").upper()
+
+    if flip_h:
+        img = img.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
+    if flip_v:
+        img = img.transpose(Image.Transpose.FLIP_TOP_BOTTOM)
+    if angle % 360:
+        img = img.rotate(-angle, expand=True, resample=Image.Resampling.BICUBIC)
+
+    save_fmt = orig_fmt if orig_fmt in ("JPEG", "PNG", "WEBP", "BMP", "GIF") else "PNG"
+    mime = _FORMAT_MIME.get(save_fmt, "image/png")
+
+    if save_fmt == "JPEG" and img.mode not in ("RGB", "L"):
+        img = img.convert("RGB")
+
+    buf = io.BytesIO()
+    img.save(buf, format=save_fmt, quality=95 if save_fmt == "JPEG" else None)
+    return buf.getvalue(), mime
+
+
+# ---------------------------------------------------------------------------
+# 12. EXIF Data — Extract & Strip
+# ---------------------------------------------------------------------------
+
+def extract_exif(data: bytes) -> dict:
+    """Extract EXIF/metadata tags from an image. Returns a structured dict."""
+    img = Image.open(io.BytesIO(data))
+    result: dict = {
+        "format": img.format or "Unknown",
+        "mode": img.mode,
+        "width": img.width,
+        "height": img.height,
+        "exif": [],
+        "has_exif": False,
+    }
+
+    # Try JPEG/TIFF EXIF
+    try:
+        from PIL.ExifTags import TAGS, GPSTAGS
+        raw = img._getexif()  # type: ignore[attr-defined]
+        if raw:
+            result["has_exif"] = True
+            for tag_id, value in sorted(
+                raw.items(), key=lambda kv: TAGS.get(kv[0], str(kv[0]))
+            ):
+                tag = TAGS.get(tag_id, f"Tag_{tag_id}")
+                if tag == "GPSInfo" and isinstance(value, dict):
+                    parts = [
+                        f"{GPSTAGS.get(k, k)}: {v}" for k, v in value.items()
+                    ]
+                    result["exif"].append(
+                        {"key": "GPS Info", "value": " | ".join(parts), "type": "gps"}
+                    )
+                    continue
+                if isinstance(value, bytes):
+                    vstr = f"[Binary: {len(value)} bytes]" if len(value) > 32 else value.hex()
+                elif isinstance(value, tuple):
+                    vstr = " / ".join(str(v) for v in value)
+                else:
+                    vstr = str(value)
+                result["exif"].append({"key": tag, "value": vstr[:500], "type": "text"})
+    except (AttributeError, Exception):
+        pass
+
+    # Fallback: image info dict (PNG text chunks, WEBP metadata, etc.)
+    if not result["has_exif"]:
+        for k, v in (img.info or {}).items():
+            if isinstance(v, bytes):
+                vstr = f"[Binary: {len(v)} bytes]"
+            elif not isinstance(v, str):
+                vstr = str(v)
+            else:
+                vstr = v
+            result["exif"].append({"key": str(k), "value": vstr[:500], "type": "info"})
+        if result["exif"]:
+            result["has_exif"] = True
+
+    return result
+
+
+def strip_exif(data: bytes) -> tuple[bytes, str]:
+    """Remove all metadata from an image. Returns clean bytes."""
+    img = Image.open(io.BytesIO(data))
+    orig_fmt = (img.format or "JPEG").upper()
+
+    # Rebuild from raw pixel data — strips all attached metadata
+    clean = Image.new(img.mode, img.size)
+    clean.putdata(list(img.getdata()))
+
+    save_fmt = orig_fmt if orig_fmt in ("JPEG", "PNG", "WEBP") else "JPEG"
+    mime_map = {"JPEG": "image/jpeg", "PNG": "image/png", "WEBP": "image/webp"}
+    mime = mime_map.get(save_fmt, "image/jpeg")
+
+    if save_fmt == "JPEG" and clean.mode not in ("RGB", "L"):
+        clean = clean.convert("RGB")
+
+    buf = io.BytesIO()
+    clean.save(buf, format=save_fmt, quality=95 if save_fmt == "JPEG" else None)
+    return buf.getvalue(), mime
+
+
+# ---------------------------------------------------------------------------
+# 13. Merge PDFs
+# ---------------------------------------------------------------------------
+
+def merge_pdfs(pdfs_data: list[bytes]) -> bytes:
+    """Merge multiple PDFs into a single PDF in order."""
+    import fitz
+
+    merged = fitz.open()
+    for pdf_bytes in pdfs_data:
+        src = fitz.open(stream=pdf_bytes, filetype="pdf")
+        merged.insert_pdf(src)
+        src.close()
+
+    buf = io.BytesIO()
+    merged.save(buf)
+    merged.close()
+    return buf.getvalue()
+
+
+# ---------------------------------------------------------------------------
+# 14. Split PDF
+# ---------------------------------------------------------------------------
+
+def split_pdf(data: bytes, filename: str = "document.pdf") -> bytes:
+    """Split a PDF into one PDF per page. Returns a ZIP archive."""
+    import fitz
+
+    doc = fitz.open(stream=data, filetype="pdf")
+    base = filename.rsplit(".", 1)[0] if "." in filename else filename
+    page_count = len(doc)
+
+    zip_buf = io.BytesIO()
+    with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for i in range(page_count):
+            single = fitz.open()
+            single.insert_pdf(doc, from_page=i, to_page=i)
+            pg_buf = io.BytesIO()
+            single.save(pg_buf)
+            single.close()
+            zf.writestr(f"{base}_page{i + 1:03d}.pdf", pg_buf.getvalue())
+
+    doc.close()
+    return zip_buf.getvalue()
+
+
+# ---------------------------------------------------------------------------
+# 15. QR Code
+# ---------------------------------------------------------------------------
+
+def generate_qr(
+    text: str,
+    size: str = "medium",
+    error_correction: str = "M",
+    fg_color: str = "#000000",
+    bg_color: str = "#ffffff",
+) -> bytes:
+    """Generate a QR code and return PNG bytes.
+
+    Args:
+        text: Content to encode (text, URL, vCard, etc.)
+        size: 'small', 'medium', or 'large' — controls pixel dimensions.
+        error_correction: 'L' (7%), 'M' (15%), 'Q' (25%), or 'H' (30%).
+        fg_color: Foreground (module) colour as hex string.
+        bg_color: Background colour as hex string.
+    """
+    import qrcode
+    from qrcode.constants import (
+        ERROR_CORRECT_L, ERROR_CORRECT_M, ERROR_CORRECT_Q, ERROR_CORRECT_H,
+    )
+
+    ec_map = {
+        "L": ERROR_CORRECT_L, "M": ERROR_CORRECT_M,
+        "Q": ERROR_CORRECT_Q, "H": ERROR_CORRECT_H,
+    }
+    box_size_map = {"small": 6, "medium": 10, "large": 16}
+    border_map   = {"small": 2, "medium": 4,  "large": 6}
+
+    qr = qrcode.QRCode(
+        version=None,
+        error_correction=ec_map.get(error_correction.upper(), ERROR_CORRECT_M),
+        box_size=box_size_map.get(size, 10),
+        border=border_map.get(size, 4),
+    )
+    qr.add_data(text)
+    qr.make(fit=True)
+
+    img = qr.make_image(fill_color=fg_color, back_color=bg_color)
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue()

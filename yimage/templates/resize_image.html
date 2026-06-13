@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+{% block title %}Resize & Convert Image — yImage{% endblock %}
+{% block content %}
+<div x-data="resizeTool()">
+  <div class="max-w-2xl mx-auto">
+    <a href="/" class="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-brand transition mb-4">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+      <span data-i18n="common.all_tools">All Tools</span>
+    </a>
+    <h1 class="text-2xl font-extrabold mb-2" data-i18n="resize.title">↔️ Resize & Convert Image</h1>
+    <p class="text-sm text-slate-500 dark:text-slate-400 mb-6" data-i18n="resize.desc">Resize images to exact dimensions or scale by percentage. Convert between JPEG, PNG, and WebP.</p>
+
+    <!-- Upload Zone -->
+    <div class="drop-zone rounded-2xl border-2 border-dashed border-slate-300 dark:border-slate-700 p-10 text-center cursor-pointer transition hover:border-brand"
+         @click="$refs.fi.click()"
+         @dragover.prevent="dragOver=true" @dragleave="dragOver=false"
+         @drop.prevent="dragOver=false; handleDrop($event)"
+         :class="dragOver ? 'border-brand bg-violet-50 dark:bg-violet-900/10' : ''">
+      <input type="file" accept="image/*" x-ref="fi" @change="loadFile($event.target.files[0])" class="hidden">
+      <div x-show="!file">
+        <svg class="w-12 h-12 mx-auto mb-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+        </svg>
+        <p class="text-sm text-slate-500"><span data-i18n="common.upload">Drop a file here or</span> <span class="text-brand font-medium" data-i18n="common.browse">browse</span></p>
+        <p class="text-xs text-slate-400 mt-1">JPEG · PNG · WebP · BMP · <span data-i18n="common.max_size">Max 50 MB</span></p>
+      </div>
+      <div x-show="file" class="flex items-center justify-center gap-3">
+        <span class="text-3xl">🖼️</span>
+        <div class="text-left">
+          <p class="text-sm font-medium" x-text="file?.name"></p>
+          <p class="text-xs text-slate-400" x-text="imgInfo"></p>
+        </div>
+        <button @click.stop="reset()" class="ml-2 text-slate-400 hover:text-red-500 text-lg leading-none">✕</button>
+      </div>
+    </div>
+
+    <!-- Options -->
+    <div x-show="file" class="mt-4 space-y-5 p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50">
+
+      <!-- Dimensions -->
+      <div>
+        <div class="flex items-center justify-between mb-2">
+          <label class="text-sm font-medium" data-i18n="resize.dimensions">New Dimensions</label>
+          <label class="flex items-center gap-1.5 text-xs text-slate-500 cursor-pointer select-none">
+            <input type="checkbox" x-model="keepAspect" class="accent-violet-500 rounded">
+            <span data-i18n="resize.lock_aspect">Lock aspect ratio</span>
+          </label>
+        </div>
+        <div class="flex items-center gap-3">
+          <div class="flex-1">
+            <label class="text-xs text-slate-400 mb-1 block" data-i18n="resize.width">Width (px)</label>
+            <input type="number" x-model.number="newWidth" min="1" max="10000"
+                   @input="onWidthChange()"
+                   placeholder="e.g. 1920"
+                   class="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-sm focus:border-brand focus:outline-none">
+          </div>
+          <span class="text-slate-400 mt-5 text-lg">×</span>
+          <div class="flex-1">
+            <label class="text-xs text-slate-400 mb-1 block" data-i18n="resize.height">Height (px)</label>
+            <input type="number" x-model.number="newHeight" min="1" max="10000"
+                   @input="onHeightChange()"
+                   placeholder="e.g. 1080"
+                   class="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-sm focus:border-brand focus:outline-none">
+          </div>
+        </div>
+        <p class="text-xs text-slate-400 mt-1.5" x-text="dimensionHint"></p>
+      </div>
+
+      <!-- Output Format -->
+      <div>
+        <label class="text-sm font-medium mb-2 block" data-i18n="resize.format">Output Format</label>
+        <div class="flex gap-2 flex-wrap">
+          <template x-for="f in formats" :key="f.val">
+            <button @click="outputFormat=f.val"
+                    :class="outputFormat===f.val ? 'bg-brand text-white' : 'bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300'"
+                    class="px-4 py-2 rounded-lg text-sm font-medium transition"
+                    x-text="f.label"></button>
+          </template>
+        </div>
+      </div>
+    </div>
+
+    <!-- Process Button -->
+    <button x-show="file" @click="process()" :disabled="processing || !canProcess"
+            class="mt-4 w-full py-3 rounded-xl bg-brand text-white font-semibold hover:bg-brand-dark transition disabled:opacity-50">
+      <span x-show="!processing" data-i18n="resize.button">Resize & Download</span>
+      <span x-show="processing" class="flex items-center justify-center gap-2">
+        <svg class="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+        <span data-i18n="common.processing">Processing...</span>
+      </span>
+    </button>
+
+    <p x-show="error" class="mt-4 text-sm text-red-500" x-text="error"></p>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function resizeTool() {
+  return {
+    file: null, dragOver: false,
+    origW: 0, origH: 0,
+    newWidth: '', newHeight: '',
+    keepAspect: true,
+    outputFormat: 'original',
+    processing: false, error: '',
+    formats: [
+      {val:'original', label:'Original'},
+      {val:'jpeg',     label:'JPEG'},
+      {val:'png',      label:'PNG'},
+      {val:'webp',     label:'WebP'},
+    ],
+
+    get imgInfo() {
+      if (!this.file) return '';
+      const b = this.file.size;
+      const sz = b < 1048576 ? (b/1024).toFixed(1)+'KB' : (b/1048576).toFixed(1)+'MB';
+      return this.origW ? `${this.origW}×${this.origH}px · ${sz}` : sz;
+    },
+
+    get dimensionHint() {
+      if (!this.newWidth && !this.newHeight) return 'Leave blank to keep original dimensions';
+      if (this.keepAspect && this.origW && this.origH) {
+        if (this.newWidth && !this.newHeight)
+          return `→ Height: ${Math.round(this.origH * this.newWidth / this.origW)}px`;
+        if (this.newHeight && !this.newWidth)
+          return `→ Width: ${Math.round(this.origW * this.newHeight / this.origH)}px`;
+      }
+      return '';
+    },
+
+    get canProcess() {
+      return this.newWidth || this.newHeight || this.outputFormat !== 'original';
+    },
+
+    handleDrop(e) { this.loadFile(e.dataTransfer.files[0]); },
+    loadFile(f) {
+      if (!f) return;
+      this.file = f; this.error = '';
+      const img = new window.Image();
+      img.onload = () => { this.origW = img.naturalWidth; this.origH = img.naturalHeight; };
+      img.src = URL.createObjectURL(f);
+    },
+    reset() {
+      this.file = null; this.origW = 0; this.origH = 0;
+      this.newWidth = ''; this.newHeight = ''; this.error = '';
+    },
+
+    onWidthChange() {
+      if (this.keepAspect && this.origW && this.origH && this.newWidth)
+        this.newHeight = Math.round(this.origH * this.newWidth / this.origW);
+    },
+    onHeightChange() {
+      if (this.keepAspect && this.origW && this.origH && this.newHeight)
+        this.newWidth = Math.round(this.origW * this.newHeight / this.origH);
+    },
+
+    async process() {
+      if (!this.file || this.processing) return;
+      this.processing = true; this.error = '';
+      const form = new FormData();
+      form.append('file', this.file);
+      if (this.newWidth)  form.append('width',  this.newWidth);
+      if (this.newHeight) form.append('height', this.newHeight);
+      form.append('format',      this.outputFormat);
+      form.append('keep_aspect', this.keepAspect ? 'true' : 'false');
+      try {
+        const resp = await fetch('/api/resize-image', { method: 'POST', body: form });
+        if (!resp.ok) { const d = await resp.json(); this.error = d.error || 'Failed'; this.processing = false; return; }
+        const blob = await resp.blob();
+        const url  = URL.createObjectURL(blob);
+        const base = this.file.name.replace(/\.[^.]+$/, '');
+        const ext  = this.outputFormat === 'original'
+          ? (this.file.name.split('.').pop() || 'jpg')
+          : this.outputFormat;
+        const a = document.createElement('a');
+        a.href = url; a.download = `resized_${base}.${ext}`; a.click();
+        URL.revokeObjectURL(url);
+      } catch(e) { this.error = 'Network error: ' + e.message; }
+      this.processing = false;
+    },
+  };
+}
+</script>
+{% endblock %}
