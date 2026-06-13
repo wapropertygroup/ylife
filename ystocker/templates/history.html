@@ -1047,26 +1047,6 @@ let   _forecastResult = null;   // last forecast API response
     if (data.ex_dividend_date) document.getElementById('statExDivDate').textContent    = data.ex_dividend_date;
   }
 
-  const pcEl    = document.getElementById('statPutCallRatio');
-  const pcLabel = document.getElementById('statPutCallLabel');
-  if (data.put_call_ratio != null) {
-    const pcr = data.put_call_ratio;
-    pcEl.textContent = pcr.toFixed(2);
-    if (pcr > 1.2) {
-      pcEl.className = 'text-base font-bold text-rose-400';
-      pcLabel.textContent = 'Bearish';
-      pcLabel.className = 'text-[10px] mt-0.5 text-rose-500';
-    } else if (pcr < 0.7) {
-      pcEl.className = 'text-base font-bold text-emerald-400';
-      pcLabel.textContent = 'Bullish';
-      pcLabel.className = 'text-[10px] mt-0.5 text-emerald-600';
-    } else {
-      pcEl.className = 'text-base font-bold text-amber-400';
-      pcLabel.textContent = 'Neutral';
-      pcLabel.className = 'text-[10px] mt-0.5 text-amber-600';
-    }
-  }
-
   // Z-Score stat card — populated later from financials fetch
   // (placeholder — filled by the Price Z-Score async block below)
 
@@ -1401,8 +1381,8 @@ let   _forecastResult = null;   // last forecast API response
     current_pe:   data.current_pe,
     forward_pe:   data.forward_pe,
     target_price: data.target_price,
-    call_wall:    data.call_wall,
-    put_wall:     data.put_wall,
+    call_wall:    null,   // populated async by _loadOptionsData()
+    put_wall:     null,   // populated async by _loadOptionsData()
   };
   _staticData = staticData;
 
@@ -1419,204 +1399,12 @@ let   _forecastResult = null;   // last forecast API response
   // ── Price chart
   document.getElementById('priceChartWrap').style.display = 'block';
   if (data.target_price != null) document.getElementById('legendTarget').style.display   = 'flex';
-  if (data.call_wall    != null) document.getElementById('legendCallWall').style.display = 'flex';
-  if (data.put_wall     != null) document.getElementById('legendPutWall').style.display  = 'flex';
 
   const prCfg = _buildConfig('price', data, staticData);
   _registerChart('price', prCfg, new Chart(document.getElementById('priceHistChart'), prCfg));
 
-  // ── Options Walls Summary card ──
-  (function() {
-    const cw = data.call_wall, pw = data.put_wall;
-    if (cw == null && pw == null) return;
-    const lastPrice = data.prices ? data.prices.filter(p => p != null).at(-1) : null;
-    const card = document.getElementById('optionsWallsCard');
-    const grid = document.getElementById('optionsWallsGrid');
-    card.style.display = 'block';
-
-    function wallItem(label, strike, price, colorClass) {
-      const distPct = (price != null && strike != null)
-        ? ((strike - price) / price * 100).toFixed(1) : null;
-      const distLabel = distPct != null
-        ? (distPct >= 0 ? '+' + distPct : distPct) + '%'
-        : '—';
-      const distCls = distPct == null ? 'text-slate-500'
-        : parseFloat(distPct) >= 0 ? 'text-emerald-400' : 'text-rose-400';
-      return `
-        <div class="bg-slate-800/50 border border-slate-700/50 rounded-xl px-3 py-3">
-          <div class="text-xs text-slate-500 mb-1">${label}</div>
-          <div class="text-base font-bold ${colorClass}">${strike != null ? '$' + Number(strike).toFixed(2) : '—'}</div>
-          <div class="text-[11px] mt-1 ${distCls}">
-            ${distLabel} <span class="text-slate-600 font-normal">${I18n.t('history.walls_from_spot')}</span>
-          </div>
-        </div>`;
-    }
-
-    let html = '';
-    html += wallItem(I18n.t('history.walls_call_wall'), cw, lastPrice, 'text-amber-400');
-    html += wallItem(I18n.t('history.walls_put_wall'),  pw, lastPrice, 'text-rose-400');
-
-    // Add current price card for reference
-    if (lastPrice != null) {
-      html += `
-        <div class="bg-slate-800/50 border border-slate-700/50 rounded-xl px-3 py-3">
-          <div class="text-xs text-slate-500 mb-1">${I18n.t('history.walls_spot_price')}</div>
-          <div class="text-base font-bold text-sky-400">$${lastPrice.toFixed(2)}</div>
-          <div class="text-[11px] mt-1 text-slate-600">${I18n.t('history.walls_current')}</div>
-        </div>`;
-      // Spread between walls
-      if (cw != null && pw != null) {
-        const spread = (cw - pw).toFixed(2);
-        const spreadPct = ((cw - pw) / lastPrice * 100).toFixed(1);
-        html += `
-          <div class="bg-slate-800/50 border border-slate-700/50 rounded-xl px-3 py-3">
-            <div class="text-xs text-slate-500 mb-1">${I18n.t('history.walls_wall_spread')}</div>
-            <div class="text-base font-bold text-violet-400">$${spread}</div>
-            <div class="text-[11px] mt-1 text-slate-500">${spreadPct}${I18n.t('history.walls_pct_of_spot')}</div>
-          </div>`;
-      }
-    }
-    grid.innerHTML = html;
-  })();
-
-  // ── Price delta chart (synced to price range)
-  document.getElementById('priceDeltaSection').style.display = 'block';
-  const dlCfg = _buildConfig('delta', data, staticData);
-  _registerChart('delta', dlCfg, new Chart(document.getElementById('priceDeltaHistChart'), dlCfg));
-
-  // ── Volume chart (synced to price range)
-  if (data.volumes && data.volumes.some(v => v > 0)) {
-    document.getElementById('volumeSection').style.display = 'block';
-    const volCfg = _buildConfig('volume', data, staticData);
-    _registerChart('volume', volCfg, new Chart(document.getElementById('volumeHistChart'), volCfg));
-  }
-
-  // ── RSI chart — only when ≥15 prices available
-  if (_canRender('rsi', data)) {
-    document.getElementById('rsiSection').style.display = 'block';
-    const rsiCfg = _buildConfig('rsi', data, staticData);
-    _registerChart('rsi', rsiCfg, new Chart(document.getElementById('rsiHistChart'), rsiCfg));
-    _stampDataAge('rsiSection', data.dates);
-  }
-
-  // ── MACD chart — only when ≥26 prices available
-  if (_canRender('macd', data)) {
-    document.getElementById('macdSection').style.display = 'block';
-    const macdCfg = _buildConfig('macd', data, staticData);
-    _registerChart('macd', macdCfg, new Chart(document.getElementById('macdHistChart'), macdCfg));
-    _stampDataAge('macdSection', data.dates);
-  }
-
-  // ── Stochastic chart — only when ≥14 prices + high/low available
-  if (_canRender('stoch', data)) {
-    document.getElementById('stochSection').style.display = 'block';
-    const stochCfg = _buildConfig('stoch', data, staticData);
-    _registerChart('stoch', stochCfg, new Chart(document.getElementById('stochHistChart'), stochCfg));
-    _stampDataAge('stochSection', data.dates);
-  }
-
-  // ── Historical Volatility chart — only when ≥21 prices available
-  if (_canRender('hv', data)) {
-    document.getElementById('hvSection').style.display = 'block';
-    const hvCfg = _buildConfig('hv', data, staticData);
-    _registerChart('hv', hvCfg, new Chart(document.getElementById('hvHistChart'), hvCfg));
-    _stampDataAge('hvSection', data.dates);
-  }
-
-  // ── Relative Strength vs SPY chart (synced to price range)
-  if (data.relative_strength && data.relative_strength.some(v => v != null)) {
-    document.getElementById('rsStrengthSection').style.display = 'block';
-    const rsCfg = _buildConfig('rsstrength', data, staticData);
-    _registerChart('rsstrength', rsCfg, new Chart(document.getElementById('rsStrengthChart'), rsCfg));
-  }
-
-  // ── PEG history chart (only when data available)
-  if (data.peg_history && data.peg_history.some(v => v != null)) {
-    document.getElementById('pegHistSection').style.display = 'block';
-    const pgCfg = _buildConfig('peg', data, staticData);
-    _registerChart('peg', pgCfg, new Chart(document.getElementById('pegHistChart'), pgCfg));
-  }
-
-  // ── Forward PE chart (only when fwd_pe_history data is available)
-  if (data.fwd_pe_history && data.fwd_pe_history.some(v => v != null)) {
-    document.getElementById('fwdPeHistSection').style.display = 'block';
-    const fwdCfg = _buildConfig('fwdpe', data, staticData);
-    _registerChart('fwdpe', fwdCfg, new Chart(document.getElementById('fwdPeChart'), fwdCfg));
-  }
-
-  // ── P/C ratio by expiry bar chart
-  if (data.pc_by_expiry && data.pc_by_expiry.length > 0) {
-    document.getElementById('pcChartSection').style.display = 'block';
-    const pcLabels = data.pc_by_expiry.map(d => d.exp);
-    const pcRatios = data.pc_by_expiry.map(d => d.ratio);
-    const pcColors = pcRatios.map(r =>
-      r == null       ? 'rgba(100,116,139,0.5)'
-      : r > 1.2       ? 'rgba(239,68,68,0.65)'
-      : r < 0.7       ? 'rgba(52,211,153,0.65)'
-      :                  'rgba(251,191,36,0.65)'
-    );
-    const pcBorders = pcRatios.map(r =>
-      r == null       ? '#64748b'
-      : r > 1.2       ? '#ef4444'
-      : r < 0.7       ? '#34d399'
-      :                  '#fbbf24'
-    );
-    new Chart(document.getElementById('pcByExpiryChart'), {
-      type: 'bar',
-      data: {
-        labels: pcLabels,
-        datasets: [
-          {
-            label: 'P/C Ratio',
-            data: pcRatios,
-            backgroundColor: pcColors,
-            borderColor: pcBorders,
-            borderWidth: 1,
-            borderRadius: 3,
-            order: 1,
-          },
-          {
-            label: '1.2 (Bearish)',
-            data: pcLabels.map(() => 1.2),
-            type: 'line',
-            borderColor: 'rgba(239,68,68,0.45)',
-            borderWidth: 1,
-            borderDash: [4,3],
-            pointRadius: 0,
-            fill: false,
-            order: 0,
-          },
-          {
-            label: '0.7 (Bullish)',
-            data: pcLabels.map(() => 0.7),
-            type: 'line',
-            borderColor: 'rgba(52,211,153,0.45)',
-            borderWidth: 1,
-            borderDash: [4,3],
-            pointRadius: 0,
-            fill: false,
-            order: 0,
-          },
-        ],
-      },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        plugins: {
-          legend: { labels: { color: '#94a3b8', font: { size: 11 }, boxWidth: 12 } },
-          tooltip: { callbacks: {
-            label: c => c.dataset.label === 'P/C Ratio'
-              ? (c.raw == null ? 'N/A' : ` P/C: ${c.raw.toFixed(2)}`)
-              : ` ${c.dataset.label}`,
-          }},
-        },
-        scales: {
-          x: { grid: { color: '#1e293b' }, ticks: { color: '#94a3b8', maxRotation: 45, font: { size: 10 } } },
-          y: { grid: { color: '#1e293b' }, ticks: { color: '#94a3b8', font: { size: 11 } },
-               title: { display: true, text: 'P/C Ratio', color: '#64748b', font: { size: 11 } } },
-        },
-      },
-    });
-  }
+  // ── Options data (walls, P/C ratio, P/C chart) — loaded async for fast initial render
+  _loadOptionsData();
 
   // ── Wire up range buttons (exclude zscore — handled separately with client-side filtering)
   document.querySelectorAll('.range-btn[data-chart]').forEach(btn => {
@@ -1780,6 +1568,128 @@ let   _forecastResult = null;   // last forecast API response
       .catch(err => console.warn('13F fetch failed:', err));
   })();
 })();
+
+// ── Options data — async loader ───────────────────────────────────────────────
+// Fetches /api/options/<ticker> after the main page has rendered so the price
+// chart, stat cards, and PE charts appear instantly without waiting for the
+// options chain loop (which is 30+ serial HTTP calls for large-cap stocks).
+async function _loadOptionsData() {
+  const SPINNER = '<svg class="animate-spin w-4 h-4 text-brand flex-shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle style="opacity:.25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path style="opacity:.75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path></svg>';
+
+  // Show loading state on P/C stat card
+  const pcEl    = document.getElementById('statPutCallRatio');
+  const pcLabel = document.getElementById('statPutCallLabel');
+  if (pcEl) { pcEl.textContent = '…'; pcEl.className = 'text-base font-bold text-slate-600 animate-pulse'; }
+
+  // Show options walls card with a loading skeleton
+  const optionsCard = document.getElementById('optionsWallsCard');
+  const optionsGrid = document.getElementById('optionsWallsGrid');
+  if (optionsCard) {
+    optionsCard.style.display = 'block';
+    optionsGrid.innerHTML = `<div class="col-span-4 flex items-center gap-2 py-2">
+      ${SPINNER}
+      <span class="text-sm text-slate-500 animate-pulse">${I18n.t('history.options_loading') || 'Loading options data…'}</span>
+    </div>`;
+  }
+
+  let opts;
+  try {
+    const resp = await fetch(`/api/options/${encodeURIComponent(TICKER)}`);
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    opts = await resp.json();
+  } catch(e) {
+    if (pcEl)        { pcEl.textContent = '—'; pcEl.className = 'text-base font-bold text-slate-100'; }
+    if (optionsCard) optionsCard.style.display = 'none';
+    return;
+  }
+
+  // ── P/C ratio stat card ──────────────────────────────────────────────────
+  if (opts.put_call_ratio != null && pcEl) {
+    const pcr = opts.put_call_ratio;
+    pcEl.textContent = pcr.toFixed(2);
+    if      (pcr > 1.2) { pcEl.className = 'text-base font-bold text-rose-400';    pcLabel.textContent = I18n.t('history.pcr_bearish')||'Bearish'; pcLabel.className = 'text-[10px] mt-0.5 text-rose-500'; }
+    else if (pcr < 0.7) { pcEl.className = 'text-base font-bold text-emerald-400'; pcLabel.textContent = I18n.t('history.pcr_bullish')||'Bullish'; pcLabel.className = 'text-[10px] mt-0.5 text-emerald-600'; }
+    else                { pcEl.className = 'text-base font-bold text-amber-400';   pcLabel.textContent = I18n.t('history.pcr_neutral')||'Neutral';  pcLabel.className = 'text-[10px] mt-0.5 text-amber-600'; }
+  } else if (pcEl) {
+    pcEl.textContent = '—'; pcEl.className = 'text-base font-bold text-slate-100';
+  }
+
+  // ── Update price chart reference lines ──────────────────────────────────
+  const cw = opts.call_wall, pw = opts.put_wall;
+  if (_staticData) { _staticData.call_wall = cw; _staticData.put_wall = pw; }
+  if (cw != null) document.getElementById('legendCallWall').style.display = 'flex';
+  if (pw != null) document.getElementById('legendPutWall').style.display  = 'flex';
+  if (_chartInstances['price']) _chartInstances['price'].update();
+
+  // ── Options Walls Summary card ───────────────────────────────────────────
+  if (optionsCard && optionsGrid) {
+    if (cw == null && pw == null) { optionsCard.style.display = 'none'; }
+    else {
+      const priceData = _periodCache['1y'];
+      const lastPrice = priceData?.prices ? priceData.prices.filter(p => p != null).at(-1) : null;
+
+      function _wallItem(label, strike, price, colorClass) {
+        const distPct   = (price != null && strike != null) ? ((strike - price) / price * 100).toFixed(1) : null;
+        const distLabel = distPct != null ? (distPct >= 0 ? '+' + distPct : distPct) + '%' : '—';
+        const distCls   = distPct == null ? 'text-slate-500' : parseFloat(distPct) >= 0 ? 'text-emerald-400' : 'text-rose-400';
+        return `<div class="bg-slate-800/50 border border-slate-700/50 rounded-xl px-3 py-3">
+          <div class="text-xs text-slate-500 mb-1">${label}</div>
+          <div class="text-base font-bold ${colorClass}">${strike != null ? '$' + Number(strike).toFixed(2) : '—'}</div>
+          <div class="text-[11px] mt-1 ${distCls}">${distLabel} <span class="text-slate-600 font-normal">${I18n.t('history.walls_from_spot')}</span></div>
+        </div>`;
+      }
+
+      let html = '';
+      html += _wallItem(I18n.t('history.walls_call_wall'), cw, lastPrice, 'text-amber-400');
+      html += _wallItem(I18n.t('history.walls_put_wall'),  pw, lastPrice, 'text-rose-400');
+      if (lastPrice != null) {
+        html += `<div class="bg-slate-800/50 border border-slate-700/50 rounded-xl px-3 py-3">
+          <div class="text-xs text-slate-500 mb-1">${I18n.t('history.walls_spot_price')}</div>
+          <div class="text-base font-bold text-sky-400">$${lastPrice.toFixed(2)}</div>
+          <div class="text-[11px] mt-1 text-slate-600">${I18n.t('history.walls_current')}</div>
+        </div>`;
+        if (cw != null && pw != null) {
+          const spread = (cw - pw).toFixed(2);
+          const spreadPct = ((cw - pw) / lastPrice * 100).toFixed(1);
+          html += `<div class="bg-slate-800/50 border border-slate-700/50 rounded-xl px-3 py-3">
+            <div class="text-xs text-slate-500 mb-1">${I18n.t('history.walls_wall_spread')}</div>
+            <div class="text-base font-bold text-violet-400">$${spread}</div>
+            <div class="text-[11px] mt-1 text-slate-500">${spreadPct}${I18n.t('history.walls_pct_of_spot')}</div>
+          </div>`;
+        }
+      }
+      optionsGrid.innerHTML = html;
+    }
+  }
+
+  // ── P/C by expiry chart ──────────────────────────────────────────────────
+  if (opts.pc_by_expiry && opts.pc_by_expiry.length > 0) {
+    document.getElementById('pcChartSection').style.display = 'block';
+    const pcLabels  = opts.pc_by_expiry.map(d => d.exp);
+    const pcRatios  = opts.pc_by_expiry.map(d => d.ratio);
+    const pcColors  = pcRatios.map(r => r==null?'rgba(100,116,139,0.5)':r>1.2?'rgba(239,68,68,0.65)':r<0.7?'rgba(52,211,153,0.65)':'rgba(251,191,36,0.65)');
+    const pcBorders = pcRatios.map(r => r==null?'#64748b':r>1.2?'#ef4444':r<0.7?'#34d399':'#fbbf24');
+    new Chart(document.getElementById('pcByExpiryChart'), {
+      type: 'bar',
+      data: { labels: pcLabels, datasets: [
+        { label:'P/C Ratio', data:pcRatios, backgroundColor:pcColors, borderColor:pcBorders, borderWidth:1, borderRadius:3, order:1 },
+        { label:'1.2 (Bearish)', data:pcLabels.map(()=>1.2), type:'line', borderColor:'rgba(239,68,68,0.45)', borderWidth:1, borderDash:[4,3], pointRadius:0, fill:false, order:0 },
+        { label:'0.7 (Bullish)', data:pcLabels.map(()=>0.7), type:'line', borderColor:'rgba(52,211,153,0.45)', borderWidth:1, borderDash:[4,3], pointRadius:0, fill:false, order:0 },
+      ]},
+      options: {
+        responsive:true, maintainAspectRatio:false,
+        plugins: {
+          legend: { labels: { color:'#94a3b8', font:{size:11}, boxWidth:12 } },
+          tooltip: { callbacks: { label: c => c.dataset.label==='P/C Ratio' ? (c.raw==null?'N/A':` P/C: ${c.raw.toFixed(2)}`) : ` ${c.dataset.label}` }},
+        },
+        scales: {
+          x: { grid:{color:'#1e293b'}, ticks:{color:'#94a3b8', maxRotation:45, font:{size:10}} },
+          y: { grid:{color:'#1e293b'}, ticks:{color:'#94a3b8', font:{size:11}}, title:{display:true, text:'P/C Ratio', color:'#64748b', font:{size:11}} },
+        },
+      },
+    });
+  }
+}
 
 // ── Chart config builder, range handler, modal ───────────────────────────────
 

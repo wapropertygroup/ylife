@@ -143,6 +143,21 @@ def page_image_border():
     return render_template("image_border.html")
 
 
+@bp.route("/optimize-image")
+def page_optimize_image():
+    return render_template("optimize_image.html")
+
+
+@bp.route("/favicon")
+def page_favicon():
+    return render_template("favicon.html")
+
+
+@bp.route("/pdf-metadata")
+def page_pdf_metadata():
+    return render_template("pdf_metadata.html")
+
+
 # ---------------------------------------------------------------------------
 # Helper: validate upload
 # ---------------------------------------------------------------------------
@@ -1066,4 +1081,122 @@ def api_image_border():
         )
     except Exception as exc:
         log.exception("Image border failed")
+        return jsonify(error=str(exc)), 500
+
+
+# ---------------------------------------------------------------------------
+# API: Image Optimizer
+# ---------------------------------------------------------------------------
+
+@bp.route("/api/optimize-image", methods=["POST"])
+def api_optimize_image():
+    """Compress an image without resizing it."""
+    data, filename, err = _get_upload(
+        allowed_types=["jpg", "jpeg", "png", "webp", "bmp"]
+    )
+    if err:
+        return err
+
+    output_format  = request.form.get("format",         "original")
+    strip_metadata = request.form.get("strip_metadata", "true").lower() != "false"
+
+    try:
+        quality = int(float(request.form.get("quality", "75")))
+    except (ValueError, TypeError):
+        quality = 75
+    quality = max(1, min(95, quality))
+
+    log.info("Optimize image: %s (%d bytes, q=%d, fmt=%s, strip=%s)",
+             filename, len(data), quality, output_format, strip_metadata)
+
+    try:
+        from yimage.processing import optimize_image
+        result, mime = optimize_image(data, quality, output_format, strip_metadata)
+        _ext = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}
+        out_ext = _ext.get(mime, filename.rsplit(".", 1)[-1] if "." in filename else "jpg")
+        base = filename.rsplit(".", 1)[0] if "." in filename else filename
+        return send_file(
+            BytesIO(result), mimetype=mime,
+            as_attachment=True, download_name=f"optimized_{base}.{out_ext}",
+        )
+    except Exception as exc:
+        log.exception("Image optimize failed")
+        return jsonify(error=str(exc)), 500
+
+
+# ---------------------------------------------------------------------------
+# API: Favicon Generator
+# ---------------------------------------------------------------------------
+
+@bp.route("/api/favicon", methods=["POST"])
+def api_favicon():
+    """Generate favicon.ico and PNG sizes from an image."""
+    data, filename, err = _get_upload(
+        allowed_types=["jpg", "jpeg", "png", "webp", "bmp", "svg"]
+    )
+    if err:
+        return err
+
+    log.info("Favicon: %s (%d bytes)", filename, len(data))
+
+    try:
+        from yimage.processing import generate_favicons
+        result = generate_favicons(data)
+        base = filename.rsplit(".", 1)[0] if "." in filename else filename
+        return send_file(
+            BytesIO(result), mimetype="application/zip",
+            as_attachment=True, download_name=f"{base}_favicons.zip",
+        )
+    except Exception as exc:
+        log.exception("Favicon generation failed")
+        return jsonify(error=str(exc)), 500
+
+
+# ---------------------------------------------------------------------------
+# API: PDF Metadata
+# ---------------------------------------------------------------------------
+
+@bp.route("/api/pdf-metadata", methods=["POST"])
+def api_pdf_metadata_get():
+    """Return PDF document metadata as JSON."""
+    data, filename, err = _get_upload(allowed_types=["pdf"])
+    if err:
+        return err
+
+    log.info("PDF metadata read: %s", filename)
+
+    try:
+        from yimage.processing import get_pdf_metadata
+        return jsonify(get_pdf_metadata(data))
+    except Exception as exc:
+        log.exception("PDF metadata read failed")
+        return jsonify(error=str(exc)), 500
+
+
+@bp.route("/api/pdf-metadata/save", methods=["POST"])
+def api_pdf_metadata_save():
+    """Write updated metadata to a PDF."""
+    data, filename, err = _get_upload(allowed_types=["pdf"])
+    if err:
+        return err
+
+    strip_all = request.form.get("strip_all", "false").lower() == "true"
+    title    = request.form.get("title",    "").strip()
+    author   = request.form.get("author",   "").strip()
+    subject  = request.form.get("subject",  "").strip()
+    keywords = request.form.get("keywords", "").strip()
+
+    log.info("PDF metadata save: %s (strip=%s)", filename, strip_all)
+
+    try:
+        from yimage.processing import set_pdf_metadata
+        result = set_pdf_metadata(data, title, author, subject, keywords, strip_all)
+        base = filename.rsplit(".", 1)[0] if "." in filename else filename
+        dl_name = f"stripped_{base}.pdf" if strip_all else f"edited_{base}.pdf"
+        return send_file(
+            BytesIO(result), mimetype="application/pdf",
+            as_attachment=True, download_name=dl_name,
+        )
+    except Exception as exc:
+        log.exception("PDF metadata save failed")
         return jsonify(error=str(exc)), 500

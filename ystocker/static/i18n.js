@@ -301,6 +301,10 @@ const I18n = (() => {
     'history.walls_from_spot':     { en: 'from spot', zh: '距现价' },
     'history.walls_current':       { en: 'Current', zh: '当前' },
     'history.walls_pct_of_spot':   { en: '% of spot', zh: '占现价' },
+    'history.options_loading':     { en: 'Loading options data…', zh: '加载期权数据中…' },
+    'history.pcr_bullish':         { en: 'Bullish', zh: '看多' },
+    'history.pcr_neutral':         { en: 'Neutral', zh: '中性' },
+    'history.pcr_bearish':         { en: 'Bearish', zh: '看空' },
     // Relative Strength vs SPY
     'history.rs_title':            { en: 'Relative Strength vs S&P 500', zh: '相对标普500的强弱' },
     'history.rs_desc':             { en: 'Stock ÷ SPY normalised to 100 at period start — above 100 = outperforming the market', zh: '股价÷SPY，期初归一为100 — 高于100表示跑赢市场' },

@@ -909,44 +909,13 @@ def api_history(ticker: str):
         except Exception:
             return None
 
-    # Options walls: strike with highest aggregate open interest across all expirations
-    # Also compute put/call ratio = total put OI / total call OI
-    # And per-expiration P/C ratios for the history chart
+    # Options data is fetched separately via /api/options/<ticker> to keep
+    # this endpoint fast.  Options chains require one HTTP call per expiration
+    # (30+ for large-cap stocks like JPM) which adds 30+ seconds of serial latency.
     call_wall = None
     put_wall  = None
     put_call_ratio = None
-    pc_by_expiry: list = []   # [{exp, call_oi, put_oi, ratio}]
-    try:
-        expirations = tk.options  # tuple of expiration date strings
-        call_oi: dict[float, int] = {}
-        put_oi:  dict[float, int] = {}
-        for exp in expirations:
-            chain = tk.option_chain(exp)
-            exp_call_oi = int(chain.calls["openInterest"].dropna().sum())
-            exp_put_oi  = int(chain.puts["openInterest"].dropna().sum())
-            if exp_call_oi > 0 or exp_put_oi > 0:
-                pc_by_expiry.append({
-                    "exp":      exp,
-                    "call_oi":  exp_call_oi,
-                    "put_oi":   exp_put_oi,
-                    "ratio":    round(exp_put_oi / exp_call_oi, 2) if exp_call_oi > 0 else None,
-                })
-            for _, row in chain.calls[["strike", "openInterest"]].dropna().iterrows():
-                s, oi = float(row["strike"]), int(row["openInterest"])
-                call_oi[s] = call_oi.get(s, 0) + oi
-            for _, row in chain.puts[["strike", "openInterest"]].dropna().iterrows():
-                s, oi = float(row["strike"]), int(row["openInterest"])
-                put_oi[s] = put_oi.get(s, 0) + oi
-        if call_oi:
-            call_wall = max(call_oi, key=call_oi.__getitem__)
-        if put_oi:
-            put_wall  = max(put_oi,  key=put_oi.__getitem__)
-        total_call_oi = sum(call_oi.values())
-        total_put_oi  = sum(put_oi.values())
-        if total_call_oi > 0:
-            put_call_ratio = round(total_put_oi / total_call_oi, 2)
-    except Exception:
-        log.warning("Could not fetch options walls for %s", ticker)
+    pc_by_expiry: list = []
 
     result = {
         "ticker":           ticker,
@@ -1008,6 +977,103 @@ def api_history(ticker: str):
     }
     with _HISTORY_CACHE_LOCK:
         _HISTORY_CACHE[cache_key] = {"ts": time.time(), "data": result}
+    return jsonify(result)
+
+
+# ---------------------------------------------------------------------------
+# Options walls endpoint  (/api/options/<ticker>)
+# Separated from /api/history so the price/stats page loads instantly.
+# Uses a ThreadPoolExecutor to fetch all expirations in parallel.
+# ---------------------------------------------------------------------------
+
+_OPTIONS_CACHE: Dict[str, dict] = {}
+_OPTIONS_CACHE_LOCK = threading.Lock()
+_OPTIONS_CACHE_TTL  = 20 * 60          # 20 minutes
+_OPTIONS_MAX_EXPIRATIONS = 12          # cap: covers ~3 months of weeklies + monthlies
+
+
+@bp.route("/api/options/<ticker>")
+def api_options(ticker: str):
+    """
+    Return call/put walls, overall P/C ratio, and per-expiry P/C data.
+    Fetches all option chains in parallel (up to _OPTIONS_MAX_EXPIRATIONS)
+    to keep wall-clock time under ~5 s even for large-cap stocks.
+    """
+    import concurrent.futures as _cf
+    import yfinance as _yf
+
+    ticker = ticker.strip().upper()
+    log.info("API options: %s", ticker)
+
+    with _OPTIONS_CACHE_LOCK:
+        entry = _OPTIONS_CACHE.get(ticker)
+        if entry and time.time() - entry["ts"] < _OPTIONS_CACHE_TTL:
+            log.debug("Options cache hit: %s", ticker)
+            return jsonify(entry["data"])
+
+    call_wall      = None
+    put_wall       = None
+    put_call_ratio = None
+    pc_by_expiry: list[dict] = []
+
+    try:
+        tk           = _yf.Ticker(ticker)
+        expirations  = (tk.options or [])[:_OPTIONS_MAX_EXPIRATIONS]
+        call_oi: dict[float, int] = {}
+        put_oi:  dict[float, int] = {}
+
+        def _fetch_chain(exp: str):
+            return exp, tk.option_chain(exp)
+
+        with _cf.ThreadPoolExecutor(max_workers=8) as pool:
+            futures = {pool.submit(_fetch_chain, exp): exp for exp in expirations}
+            for fut in _cf.as_completed(futures, timeout=30):
+                try:
+                    exp, chain = fut.result()
+                    exp_c = int(chain.calls["openInterest"].dropna().sum())
+                    exp_p = int(chain.puts["openInterest"].dropna().sum())
+                    if exp_c > 0 or exp_p > 0:
+                        pc_by_expiry.append({
+                            "exp":     exp,
+                            "call_oi": exp_c,
+                            "put_oi":  exp_p,
+                            "ratio":   round(exp_p / exp_c, 2) if exp_c > 0 else None,
+                        })
+                    for _, row in chain.calls[["strike", "openInterest"]].dropna().iterrows():
+                        s, oi = float(row["strike"]), int(row["openInterest"])
+                        call_oi[s] = call_oi.get(s, 0) + oi
+                    for _, row in chain.puts[["strike", "openInterest"]].dropna().iterrows():
+                        s, oi = float(row["strike"]), int(row["openInterest"])
+                        put_oi[s] = put_oi.get(s, 0) + oi
+                except Exception as exc:
+                    log.debug("Options chain fetch failed %s %s: %s",
+                              ticker, futures[fut], exc)
+
+        if call_oi:
+            call_wall = max(call_oi, key=call_oi.__getitem__)
+        if put_oi:
+            put_wall  = max(put_oi,  key=put_oi.__getitem__)
+        total_c = sum(call_oi.values())
+        total_p = sum(put_oi.values())
+        if total_c > 0:
+            put_call_ratio = round(total_p / total_c, 2)
+        pc_by_expiry.sort(key=lambda x: x["exp"])
+        log.info("Options: %s — call_wall=%.2f put_wall=%.2f pcr=%.2f exps=%d",
+                 ticker,
+                 call_wall or 0, put_wall or 0,
+                 put_call_ratio or 0, len(pc_by_expiry))
+
+    except Exception as exc:
+        log.warning("Options fetch failed for %s: %s", ticker, exc)
+
+    result = {
+        "call_wall":      _safe(call_wall),
+        "put_wall":       _safe(put_wall),
+        "put_call_ratio": _safe(put_call_ratio),
+        "pc_by_expiry":   pc_by_expiry,
+    }
+    with _OPTIONS_CACHE_LOCK:
+        _OPTIONS_CACHE[ticker] = {"ts": time.time(), "data": result}
     return jsonify(result)
 
 

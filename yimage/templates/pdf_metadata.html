@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+{% block title %}PDF Metadata — yImage{% endblock %}
+{% block content %}
+<div x-data="pdfMetaTool()">
+  <div class="max-w-2xl mx-auto">
+    <a href="/" class="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-brand transition mb-4">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+      <span data-i18n="common.all_tools">All Tools</span>
+    </a>
+    <h1 class="text-2xl font-extrabold mb-2" data-i18n="pdfmeta.title">📋 PDF Metadata Editor</h1>
+    <p class="text-sm text-slate-500 dark:text-slate-400 mb-6" data-i18n="pdfmeta.desc">View and edit the title, author, subject and keywords stored inside a PDF. Or strip all metadata for privacy.</p>
+
+    <!-- Upload Zone -->
+    <div class="drop-zone rounded-2xl border-2 border-dashed border-slate-300 dark:border-slate-700 p-10 text-center cursor-pointer transition hover:border-brand"
+         @click="$refs.fi.click()"
+         @dragover.prevent="dragOver=true" @dragleave="dragOver=false"
+         @drop.prevent="dragOver=false; handleDrop($event)"
+         :class="dragOver ? 'border-brand bg-violet-50 dark:bg-violet-900/10' : ''">
+      <input type="file" accept=".pdf" x-ref="fi" @change="loadFile($event.target.files[0])" class="hidden">
+      <div x-show="!file">
+        <svg class="w-12 h-12 mx-auto mb-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+        </svg>
+        <p class="text-sm text-slate-500"><span data-i18n="common.upload">Drop a PDF here or</span> <span class="text-brand font-medium" data-i18n="common.browse">browse</span></p>
+        <p class="text-xs text-slate-400 mt-1" data-i18n="common.max_size">Max 50 MB</p>
+      </div>
+      <div x-show="file" class="flex items-center justify-center gap-3">
+        <span class="text-3xl">📄</span>
+        <div class="text-left">
+          <p class="text-sm font-medium" x-text="file?.name"></p>
+          <p class="text-xs text-slate-400" x-text="fileSize"></p>
+        </div>
+        <button @click.stop="reset()" class="ml-2 text-slate-400 hover:text-red-500 text-lg">✕</button>
+      </div>
+    </div>
+
+    <!-- Load button -->
+    <button x-show="file && !meta && !loading" @click="loadMeta()"
+            class="mt-4 w-full py-3 rounded-xl bg-brand text-white font-semibold hover:bg-brand-dark transition">
+      <span data-i18n="pdfmeta.read_btn">Read Metadata</span>
+    </button>
+
+    <div x-show="loading" class="mt-4 flex items-center justify-center gap-2 py-3 text-sm text-slate-500">
+      <svg class="animate-spin w-5 h-5 text-brand" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+      <span data-i18n="common.processing">Processing...</span>
+    </div>
+
+    <!-- Metadata Editor -->
+    <div x-show="meta" class="mt-4 space-y-4">
+
+      <!-- Read-only info -->
+      <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 text-sm">
+        <div class="grid grid-cols-2 gap-x-4 gap-y-1">
+          <span class="text-slate-400" data-i18n="pdfmeta.pages">Pages</span><span x-text="meta?.page_count"></span>
+          <span class="text-slate-400" data-i18n="pdfmeta.creator">Creator App</span><span x-text="meta?.creator || '—'"></span>
+          <span class="text-slate-400" data-i18n="pdfmeta.producer">Producer</span><span x-text="meta?.producer || '—'"></span>
+          <span class="text-slate-400" data-i18n="pdfmeta.created">Created</span><span class="text-xs" x-text="meta?.creationDate || '—'"></span>
+        </div>
+      </div>
+
+      <!-- Editable fields -->
+      <div class="space-y-3">
+        <template x-for="f in editFields" :key="f.key">
+          <div>
+            <label class="text-sm font-medium mb-1 block" x-text="f.label"></label>
+            <input type="text" :placeholder="f.placeholder"
+                   x-model="editValues[f.key]"
+                   class="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-sm focus:border-brand focus:outline-none">
+          </div>
+        </template>
+      </div>
+
+      <!-- Action buttons -->
+      <div class="flex gap-3">
+        <button @click="save(false)" :disabled="saving"
+                class="flex-1 py-3 rounded-xl bg-brand text-white font-semibold hover:bg-brand-dark transition disabled:opacity-50">
+          <span x-show="!saving" data-i18n="pdfmeta.save_btn">Save & Download</span>
+          <span x-show="saving" class="flex items-center justify-center gap-2">
+            <svg class="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+            <span data-i18n="common.processing">Processing...</span>
+          </span>
+        </button>
+        <button @click="save(true)" :disabled="saving"
+                class="py-3 px-4 rounded-xl border border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 font-semibold hover:bg-red-50 dark:hover:bg-red-900/20 transition disabled:opacity-50 text-sm"
+                data-i18n="pdfmeta.strip_btn">Strip All</button>
+      </div>
+    </div>
+
+    <p x-show="error" class="mt-4 text-sm text-red-500" x-text="error"></p>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function pdfMetaTool() {
+  return {
+    file: null, dragOver: false,
+    loading: false, saving: false,
+    meta: null,
+    editValues: { title: '', author: '', subject: '', keywords: '' },
+    error: '',
+
+    get editFields() {
+      return [
+        {key:'title',    label: I18n.t('pdfmeta.title_field'),    placeholder:'Document title'},
+        {key:'author',   label: I18n.t('pdfmeta.author_field'),   placeholder:'Author name'},
+        {key:'subject',  label: I18n.t('pdfmeta.subject_field'),  placeholder:'Subject / description'},
+        {key:'keywords', label: I18n.t('pdfmeta.keywords_field'), placeholder:'comma, separated, keywords'},
+      ];
+    },
+
+    get fileSize() {
+      if (!this.file) return '';
+      const b = this.file.size;
+      return b < 1048576 ? (b/1024).toFixed(1)+'KB' : (b/1048576).toFixed(1)+'MB';
+    },
+
+    handleDrop(e) { this.loadFile(e.dataTransfer.files[0]); },
+    loadFile(f) { if (!f) return; this.file = f; this.meta = null; this.error = ''; },
+    reset() { this.file = null; this.meta = null; this.error = ''; },
+
+    async loadMeta() {
+      if (!this.file || this.loading) return;
+      this.loading = true; this.error = '';
+      const form = new FormData();
+      form.append('file', this.file);
+      try {
+        const resp = await fetch('/api/pdf-metadata', { method: 'POST', body: form });
+        const data = await resp.json();
+        if (!resp.ok) { this.error = data.error || 'Failed'; this.loading = false; return; }
+        this.meta = data;
+        this.editValues = {
+          title:    data.title    || '',
+          author:   data.author   || '',
+          subject:  data.subject  || '',
+          keywords: data.keywords || '',
+        };
+      } catch(e) { this.error = 'Network error: ' + e.message; }
+      this.loading = false;
+    },
+
+    async save(stripAll) {
+      if (!this.file || this.saving) return;
+      this.saving = true; this.error = '';
+      const form = new FormData();
+      form.append('file',      this.file);
+      form.append('strip_all', stripAll ? 'true' : 'false');
+      if (!stripAll) {
+        Object.entries(this.editValues).forEach(([k, v]) => form.append(k, v));
+      }
+      const endpoint = '/api/pdf-metadata/save';
+      try {
+        const resp = await fetch(endpoint, { method: 'POST', body: form });
+        if (!resp.ok) { const d = await resp.json(); this.error = d.error || 'Failed'; this.saving = false; return; }
+        const blob = await resp.blob();
+        const prefix = stripAll ? 'stripped_' : 'edited_';
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href = url; a.download = prefix + this.file.name; a.click();
+        URL.revokeObjectURL(url);
+      } catch(e) { this.error = 'Network error: ' + e.message; }
+      this.saving = false;
+    },
+  };
+}
+</script>
+{% endblock %}

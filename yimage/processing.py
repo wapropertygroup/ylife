@@ -1330,3 +1330,176 @@ def add_border(
     buf = io.BytesIO()
     canvas.save(buf, format=save_fmt, quality=95 if save_fmt == "JPEG" else None)
     return buf.getvalue(), mime
+
+
+# ---------------------------------------------------------------------------
+# 25. Image Optimizer (compress without resizing)
+# ---------------------------------------------------------------------------
+
+def optimize_image(
+    data: bytes,
+    quality: int = 75,
+    output_format: str = "original",
+    strip_metadata: bool = True,
+) -> tuple[bytes, str]:
+    """Reduce image file size without changing dimensions.
+
+    Args:
+        quality:        JPEG/WebP quality (1–95).
+        output_format:  'original', 'jpeg', 'png', or 'webp'.
+        strip_metadata: Remove EXIF/ICC profile for smaller files.
+    """
+    img = Image.open(io.BytesIO(data))
+    orig_fmt = (img.format or "JPEG").upper()
+
+    target = output_format.upper()
+    if target in ("", "ORIGINAL"):
+        target = orig_fmt if orig_fmt in ("JPEG", "PNG", "WEBP") else "JPEG"
+    elif target == "JPG":
+        target = "JPEG"
+
+    if strip_metadata:
+        clean = Image.new(img.mode if img.mode not in ("P", "LA") else "RGBA", img.size)
+        clean.putdata(list(img.getdata()))
+        img = clean
+
+    if target == "JPEG" and img.mode not in ("RGB", "L"):
+        if img.mode == "RGBA":
+            bg = Image.new("RGB", img.size, (255, 255, 255))
+            bg.paste(img, mask=img.split()[3])
+            img = bg
+        else:
+            img = img.convert("RGB")
+
+    quality = max(1, min(95, quality))
+    mime_map = {"JPEG": "image/jpeg", "PNG": "image/png", "WEBP": "image/webp"}
+    mime = mime_map.get(target, "image/jpeg")
+
+    buf = io.BytesIO()
+    if target == "PNG":
+        img.save(buf, format="PNG", optimize=True)
+    elif target == "WEBP":
+        img.save(buf, format="WEBP", quality=quality, method=4)
+    else:
+        img.save(buf, format="JPEG", quality=quality, optimize=True, progressive=True)
+    return buf.getvalue(), mime
+
+
+# ---------------------------------------------------------------------------
+# 26. Favicon Generator
+# ---------------------------------------------------------------------------
+
+def generate_favicons(data: bytes) -> bytes:
+    """Generate favicon.ico and PNG sizes. Returns ZIP."""
+    img = Image.open(io.BytesIO(data)).convert("RGBA")
+
+    # Square-crop from centre
+    if img.width != img.height:
+        side = min(img.width, img.height)
+        x = (img.width  - side) // 2
+        y = (img.height - side) // 2
+        img = img.crop((x, y, x + side, y + side))
+
+    sizes = [16, 32, 48, 64, 128, 256]
+    png_images: dict[int, bytes] = {}
+
+    zip_buf = io.BytesIO()
+    with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for size in sizes:
+            resized = img.resize((size, size), Image.Resampling.LANCZOS)
+            buf = io.BytesIO()
+            resized.save(buf, format="PNG")
+            png_data = buf.getvalue()
+            png_images[size] = png_data
+            zf.writestr(f"favicon_{size}x{size}.png", png_data)
+
+        # Build multi-size ICO (16, 32, 48)
+        ico_data = _build_ico([png_images[s] for s in [16, 32, 48]])
+        zf.writestr("favicon.ico", ico_data)
+
+        # Apple touch icon (180x180 RGB)
+        touch = img.resize((180, 180), Image.Resampling.LANCZOS).convert("RGB")
+        tbuf = io.BytesIO()
+        touch.save(tbuf, format="PNG")
+        zf.writestr("apple-touch-icon.png", tbuf.getvalue())
+
+    return zip_buf.getvalue()
+
+
+def _build_ico(png_list: list[bytes]) -> bytes:
+    """Build a minimal multi-size .ico file from PNG images."""
+    import struct
+
+    n = len(png_list)
+    header = struct.pack("<HHH", 0, 1, n)
+    data_offset = 6 + n * 16
+    dir_entries = b""
+    image_data  = b""
+
+    for png_bytes in png_list:
+        img_tmp = Image.open(io.BytesIO(png_bytes))
+        w = img_tmp.width  if img_tmp.width  < 256 else 0
+        h = img_tmp.height if img_tmp.height < 256 else 0
+        size = len(png_bytes)
+        dir_entries += struct.pack("<BBBBHHII", w, h, 0, 0, 1, 32, size, data_offset)
+        data_offset += size
+        image_data  += png_bytes
+
+    return header + dir_entries + image_data
+
+
+# ---------------------------------------------------------------------------
+# 27. PDF Metadata Viewer / Editor
+# ---------------------------------------------------------------------------
+
+def get_pdf_metadata(data: bytes) -> dict:
+    """Return PDF document metadata fields."""
+    import fitz
+
+    doc = fitz.open(stream=data, filetype="pdf")
+    meta = doc.metadata or {}
+    page_count = len(doc)
+    doc.close()
+
+    return {
+        "title":        meta.get("title",        ""),
+        "author":       meta.get("author",       ""),
+        "subject":      meta.get("subject",      ""),
+        "keywords":     meta.get("keywords",     ""),
+        "creator":      meta.get("creator",      ""),
+        "producer":     meta.get("producer",     ""),
+        "creationDate": meta.get("creationDate", ""),
+        "modDate":      meta.get("modDate",      ""),
+        "page_count":   page_count,
+    }
+
+
+def set_pdf_metadata(
+    data: bytes,
+    title: str    = "",
+    author: str   = "",
+    subject: str  = "",
+    keywords: str = "",
+    strip_all: bool = False,
+) -> bytes:
+    """Write updated metadata to a PDF, or strip all metadata."""
+    import pikepdf
+
+    src = pikepdf.open(io.BytesIO(data))
+
+    if strip_all:
+        try:
+            del src.docinfo
+        except Exception:
+            pass
+    else:
+        with src.open_metadata() as meta_rw:
+            if title:    meta_rw["dc:title"]       = title
+            if author:   meta_rw["dc:creator"]     = [author]
+            if subject:  meta_rw["dc:description"] = subject
+            if keywords: meta_rw["pdf:Keywords"]   = keywords
+
+    buf = io.BytesIO()
+    src.save(buf)
+    src.close()
+    return buf.getvalue()

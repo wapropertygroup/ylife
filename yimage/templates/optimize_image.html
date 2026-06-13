@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+{% block title %}Image Optimizer — yImage{% endblock %}
+{% block content %}
+<div x-data="optimizeTool()">
+  <div class="max-w-2xl mx-auto">
+    <a href="/" class="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-brand transition mb-4">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+      <span data-i18n="common.all_tools">All Tools</span>
+    </a>
+    <h1 class="text-2xl font-extrabold mb-2" data-i18n="optimize.title">⚡ Image Optimizer</h1>
+    <p class="text-sm text-slate-500 dark:text-slate-400 mb-6" data-i18n="optimize.desc">Reduce image file size without changing dimensions. Great for web images — keeps resolution, reduces bytes.</p>
+
+    <!-- Upload Zone -->
+    <div class="drop-zone rounded-2xl border-2 border-dashed border-slate-300 dark:border-slate-700 p-10 text-center cursor-pointer transition hover:border-brand"
+         @click="$refs.fi.click()"
+         @dragover.prevent="dragOver=true" @dragleave="dragOver=false"
+         @drop.prevent="dragOver=false; handleDrop($event)"
+         :class="dragOver ? 'border-brand bg-violet-50 dark:bg-violet-900/10' : ''">
+      <input type="file" accept="image/*" x-ref="fi" @change="loadFile($event.target.files[0])" class="hidden">
+      <div x-show="!file">
+        <svg class="w-12 h-12 mx-auto mb-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+        </svg>
+        <p class="text-sm text-slate-500"><span data-i18n="common.upload">Drop an image here or</span> <span class="text-brand font-medium" data-i18n="common.browse">browse</span></p>
+        <p class="text-xs text-slate-400 mt-1">JPEG · PNG · WebP · <span data-i18n="common.max_size">Max 50 MB</span></p>
+      </div>
+      <div x-show="file" class="flex items-center justify-center gap-3">
+        <span class="text-3xl">🖼️</span>
+        <div class="text-left">
+          <p class="text-sm font-medium" x-text="file?.name"></p>
+          <p class="text-xs text-slate-400" x-text="fileSize"></p>
+        </div>
+        <button @click.stop="reset()" class="ml-2 text-slate-400 hover:text-red-500 text-lg">✕</button>
+      </div>
+    </div>
+
+    <!-- Options -->
+    <div x-show="file" class="mt-4 space-y-5 p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50">
+
+      <!-- Quality -->
+      <div>
+        <div class="flex items-center justify-between mb-1">
+          <label class="text-sm font-medium" data-i18n="optimize.quality">Quality</label>
+          <span class="text-xs font-mono text-slate-400" x-text="quality + '%'"></span>
+        </div>
+        <input type="range" x-model.number="quality" min="10" max="95" step="5"
+               class="w-full accent-violet-500">
+        <div class="flex justify-between text-xs text-slate-400 mt-0.5">
+          <span data-i18n="optimize.smaller">Smaller file</span>
+          <span data-i18n="optimize.better">Better quality</span>
+        </div>
+      </div>
+
+      <!-- Output Format -->
+      <div>
+        <label class="text-sm font-medium mb-2 block" data-i18n="optimize.format">Output Format</label>
+        <div class="flex gap-2">
+          <template x-for="f in formats" :key="f.v">
+            <button @click="outputFormat=f.v"
+                    :class="outputFormat===f.v ? 'bg-brand text-white' : 'bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300'"
+                    class="px-4 py-2 rounded-lg text-sm font-medium transition"
+                    x-text="f.l"></button>
+          </template>
+        </div>
+      </div>
+
+      <!-- Strip Metadata -->
+      <label class="flex items-center gap-2 cursor-pointer">
+        <input type="checkbox" x-model="stripMeta" class="accent-violet-500 rounded w-4 h-4">
+        <span class="text-sm" data-i18n="optimize.strip_meta">Strip metadata (smaller file)</span>
+      </label>
+    </div>
+
+    <!-- Process Button -->
+    <button x-show="file" @click="process()" :disabled="processing"
+            class="mt-4 w-full py-3 rounded-xl bg-brand text-white font-semibold hover:bg-brand-dark transition disabled:opacity-50">
+      <span x-show="!processing" data-i18n="optimize.button">Optimize & Download</span>
+      <span x-show="processing" class="flex items-center justify-center gap-2">
+        <svg class="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+        <span data-i18n="common.processing">Processing...</span>
+      </span>
+    </button>
+
+    <div x-show="result" class="mt-4 p-4 rounded-xl bg-green-50 dark:bg-green-900/15 border border-green-300 dark:border-green-700/50">
+      <p class="text-sm font-semibold text-green-600 dark:text-green-400 mb-1" data-i18n="optimize.done">✓ Optimized image downloaded!</p>
+      <p class="text-xs text-slate-500" x-text="resultInfo"></p>
+    </div>
+    <p x-show="error" class="mt-4 text-sm text-red-500" x-text="error"></p>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function optimizeTool() {
+  return {
+    file: null, dragOver: false,
+    quality: 75, outputFormat: 'original', stripMeta: true,
+    processing: false, error: '', result: false, resultInfo: '',
+    formats: [
+      {v:'original', l:'Original'},
+      {v:'jpeg',     l:'JPEG'},
+      {v:'webp',     l:'WebP'},
+      {v:'png',      l:'PNG'},
+    ],
+
+    get fileSize() {
+      if (!this.file) return '';
+      const b = this.file.size;
+      return b < 1048576 ? (b/1024).toFixed(1)+'KB' : (b/1048576).toFixed(1)+'MB';
+    },
+    fmt(b) { return b < 1048576 ? (b/1024).toFixed(1)+'KB' : (b/1048576).toFixed(1)+'MB'; },
+
+    handleDrop(e) { this.loadFile(e.dataTransfer.files[0]); },
+    loadFile(f) { if (!f) return; this.file = f; this.result = false; this.error = ''; },
+    reset() { this.file = null; this.result = false; this.error = ''; },
+
+    async process() {
+      if (!this.file || this.processing) return;
+      this.processing = true; this.error = ''; this.result = false;
+      const form = new FormData();
+      form.append('file',           this.file);
+      form.append('quality',        this.quality);
+      form.append('format',         this.outputFormat);
+      form.append('strip_metadata', this.stripMeta ? 'true' : 'false');
+      try {
+        const resp = await fetch('/api/optimize-image', { method: 'POST', body: form });
+        if (!resp.ok) { const d = await resp.json(); this.error = d.error || 'Failed'; this.processing = false; return; }
+        const blob = await resp.blob();
+        this.resultInfo = `${this.fmt(this.file.size)} → ${this.fmt(blob.size)} (${((1 - blob.size/this.file.size)*100).toFixed(0)}% smaller)`;
+        const url = URL.createObjectURL(blob);
+        const base = this.file.name.replace(/\.[^.]+$/, '');
+        const ext  = this.outputFormat === 'original' ? (this.file.name.split('.').pop() || 'jpg') : this.outputFormat;
+        const a = document.createElement('a'); a.href = url; a.download = `optimized_${base}.${ext}`; a.click();
+        URL.revokeObjectURL(url);
+        this.result = true;
+      } catch(e) { this.error = 'Network error: ' + e.message; }
+      this.processing = false;
+    },
+  };
+}
+</script>
+{% endblock %}
