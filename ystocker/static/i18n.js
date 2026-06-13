@@ -1075,6 +1075,8 @@ const I18n = (() => {
     'markets.sector.Utilities':     { en: 'Utilities',        zh: '公用事业' },
     'markets.sector.Materials':     { en: 'Materials',        zh: '材料' },
     'markets.sector.Real Estate':   { en: 'Real Estate',      zh: '房地产' },
+    'markets.credit_title': { en: 'Credit Spread (HYG / TLT)', zh: '信用利差（HYG/TLT）' },
+    'markets.credit_desc':  { en: 'HYG ÷ TLT ratio — rising = risk-on, falling = credit stress', zh: 'HYG÷TLT比率 — 上升=风险偏好，下降=信用收紧' },
     'heatmap.title':       { en: 'Sector Heatmap',    zh: '板块热力图' },
     'heatmap.subtitle':    { en: 'S&P 500 top stocks — color-coded by day change. Click any tile to open the stock.',
                              zh: '标普500主要个股 — 按日涨跌幅着色。点击色块查看详情。' },

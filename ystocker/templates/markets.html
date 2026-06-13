@@ -305,6 +305,23 @@
 
 </div>
 
+<!-- ── Credit Spread (HYG / TLT) ──────────────────────────────────────── -->
+<div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up mb-6" id="creditSpreadSection">
+  <div class="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-0 sm:justify-between mb-3">
+    <div>
+      <h2 class="text-base font-semibold text-slate-200" data-i18n="markets.credit_title">Credit Spread (HYG / TLT)</h2>
+      <p class="text-xs text-slate-500" data-i18n="markets.credit_desc">HYG ÷ TLT ratio — rising = risk-on (credit outperforms treasuries), falling = risk-off / credit stress</p>
+    </div>
+    <div class="flex items-center gap-2 flex-wrap justify-end">
+      <span id="hygCard" class="flex items-center gap-1.5 text-xs text-slate-400"></span>
+      <span id="tltCard" class="flex items-center gap-1.5 text-xs text-slate-400"></span>
+    </div>
+  </div>
+  <div class="chart-container" style="height:200px" id="creditChartWrap">
+    <canvas id="creditSpreadChart"></canvas>
+  </div>
+</div>
+
 <!-- ── Treasury Yield Curve row ──────────────────────────────────────────── -->
 <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6 fade-up">
 
@@ -2656,6 +2673,61 @@ function _mktsModalConfig(kind) {
       switchIdx(h, true);
     }
   });
+})();
+
+// ── Credit Spread chart (HYG / TLT ratio)
+(async function() {
+  try {
+    const resp = await fetch('/api/credit-spread');
+    if (!resp.ok) return;
+    const cs = await resp.json();
+    if (!cs.spread || !cs.spread_dates) return;
+
+    // Mini stat chips
+    function fmtChip(id, ticker, data) {
+      const el = document.getElementById(id);
+      if (!el || !data) return;
+      const pct = data.day_chg_pct;
+      const cls = pct == null ? 'text-slate-400' : pct >= 0 ? 'text-emerald-400' : 'text-rose-400';
+      const sign = pct == null ? '' : pct >= 0 ? '+' : '';
+      el.innerHTML = `<span class="font-mono font-semibold text-slate-200">${ticker}</span><span class="${cls} text-[11px]">${pct!=null ? sign+pct.toFixed(2)+'%' : ''}</span>`;
+    }
+    fmtChip('hygCard', 'HYG', cs.hyg);
+    fmtChip('tltCard', 'TLT', cs.tlt);
+
+    const gridCol = '#1e293b', tickCol = '#64748b';
+    new Chart(document.getElementById('creditSpreadChart'), {
+      type: 'line',
+      data: {
+        labels: cs.spread_dates,
+        datasets: [{
+          label: 'HYG/TLT',
+          data: cs.spread,
+          borderColor: '#22d3ee',
+          backgroundColor: 'rgba(34,211,238,0.07)',
+          borderWidth: 1.8, pointRadius: 0, pointHoverRadius: 5,
+          fill: true, tension: 0.3, spanGaps: true,
+        }],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            mode: 'index', intersect: false,
+            callbacks: { label: c => c.raw == null ? '' : ` HYG/TLT: ${c.raw.toFixed(4)}` },
+          },
+        },
+        scales: {
+          x: { grid: { color: gridCol }, ticks: { color: tickCol, maxTicksLimit: 8, maxRotation: 0 } },
+          y: { grid: { color: gridCol }, ticks: { color: tickCol, callback: v => v.toFixed(3) } },
+        },
+        interaction: { mode: 'index', intersect: false },
+      },
+    });
+  } catch(e) {
+    document.getElementById('creditSpreadSection').style.display = 'none';
+  }
 })();
 </script>
 
