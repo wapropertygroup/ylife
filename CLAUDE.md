@@ -11,7 +11,7 @@ Flask monorepo hosting 8 web apps for the Li family at **li-family.us**:
 | **yStocker** | `ystocker/` | 5000 | 8000 | stock.li-family.us | JSON cache files |
 | **yPlanner** | `yplanner/` | 5001 | 8001 | planner.li-family.us | DynamoDB |
 | **yPlanter** | `yplanter/` | 5002 | 8002 | planter.li-family.us | DynamoDB |
-| **yHome** | `yhome/` | 5003 | 8003 | li-family.us | None |
+| **yHome** | `yhome/` | 5003 | 8003 | home.li-family.us | None |
 | **yTracker** | `ytracker/` | 5004 | 8004 | tracker.li-family.us | DynamoDB |
 | **yPay** | `ypay/` | 5005 | 8005 | pay.li-family.us | None (Stripe API) |
 | **yImage** | `yimage/` | 5006 | 8006 | image.li-family.us | None |
