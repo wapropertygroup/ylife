@@ -94,6 +94,11 @@ def fetch_ticker_data(ticker: str) -> dict:
         "EV/EBITDA":           round(info.get("enterpriseToEbitda"), 1) if info.get("enterpriseToEbitda") is not None else None,
         "EV ($B)":             round(info.get("enterpriseValue") / 1e9, 1) if info.get("enterpriseValue") else None,
         "EBITDA ($B)":         round(info.get("ebitda") / 1e9, 1) if info.get("ebitda") else None,
+        "P/S Ratio":          round(info.get("priceToSalesTrailingTwelveMonths"), 2) if info.get("priceToSalesTrailingTwelveMonths") else None,
+        "P/B Ratio":          round(info.get("priceToBook"), 2) if info.get("priceToBook") else None,
+        "FCF ($B)":           round(info.get("freeCashflow") / 1e9, 1) if info.get("freeCashflow") else None,
+        "Short Float (%)":    round(info.get("shortPercentOfFloat") * 100, 1) if info.get("shortPercentOfFloat") else None,
+        "Dividend Yield (%)": round(info.get("dividendYield") * 100, 2) if info.get("dividendYield") else None,
     }
 
 

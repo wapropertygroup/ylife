@@ -21,14 +21,22 @@ APPS=(
   "yimage|8006|image.li-family.us|requirements_image.txt|yimage/static"
 )
 
+# CloudFormation
+CF_STACK_NAME="${CF_STACK_NAME:-li-family}"  # match your actual stack name (or override via env var)
+CF_REGION="us-west-2"
+INSTANCE_TYPE="t3.medium"                    # desired EC2 instance type
+INSTANCE_ID="i-02c9614bcde54dd59"            # EC2 instance managed by this stack
+
 LOG_PREFIX="[deploy $(date '+%Y-%m-%d %H:%M:%S')]"
 log() { echo "$LOG_PREFIX $*"; }
 
-# ── Resolve SSH key ──────────────────────────────────────────────────────────
+# ── Resolve SSH key / flags ───────────────────────────────────────────────────
 SSH_KEY=""
-while getopts "i:" opt; do
+SKIP_CF=false
+while getopts "i:s" opt; do
   case $opt in
     i) SSH_KEY="$OPTARG" ;;
+    s) SKIP_CF=true ;;      # -s skips the CloudFormation update step
   esac
 done
 
@@ -51,6 +59,47 @@ fi
 
 # ── Build APPS_CONFIG: semicolon-delimited, for embedding in heredoc ────────
 APPS_CONFIG="$(IFS=';'; echo "${APPS[*]}")"
+
+# ── CloudFormation update (idempotent — skips if stack is already up to date) ─
+if [[ "$SKIP_CF" == "true" ]]; then
+  log "CloudFormation: skipped (-s flag)"
+elif [[ -z "$CF_STACK_NAME" ]]; then
+  log "CloudFormation: CF_STACK_NAME is empty — skipping"
+elif ! command -v aws &>/dev/null; then
+  log "CloudFormation: aws CLI not found — skipping"
+else
+  _CF_STATUS=$(aws cloudformation describe-stacks \
+    --stack-name "$CF_STACK_NAME" --region "$CF_REGION" \
+    --query "Stacks[0].StackStatus" --output text 2>/dev/null || echo "NOT_FOUND")
+
+  if [[ "$_CF_STATUS" == "NOT_FOUND" ]]; then
+    log "CloudFormation: stack '$CF_STACK_NAME' not found — skipping"
+  else
+    _CF_TMPL="$(cd "$(dirname "$0")" && pwd)/cloudformation.yaml"
+    log "CloudFormation: checking stack '$CF_STACK_NAME' for changes..."
+
+    if _CF_OUT=$(aws cloudformation deploy \
+          --stack-name          "$CF_STACK_NAME" \
+          --template-file       "$_CF_TMPL" \
+          --region              "$CF_REGION" \
+          --capabilities        CAPABILITY_NAMED_IAM \
+          --parameter-overrides InstanceType="$INSTANCE_TYPE" \
+          --no-fail-on-empty-changeset 2>&1); then
+      if echo "$_CF_OUT" | grep -qi "no changes to deploy\|up to date"; then
+        log "CloudFormation: no changes — InstanceType already $INSTANCE_TYPE"
+      else
+        log "CloudFormation: stack updated (InstanceType → $INSTANCE_TYPE) — waiting for EC2..."
+        aws ec2 wait instance-status-ok \
+          --instance-ids "$INSTANCE_ID" --region "$CF_REGION"
+        log "✓ EC2 instance healthy — continuing with code deploy"
+      fi
+    else
+      log "ERROR: CloudFormation update failed:"
+      echo "$_CF_OUT" >&2
+      exit 1
+    fi
+  fi
+fi
 
 # ── Deploy ───────────────────────────────────────────────────────────────────
 log "Connecting to $EC2_USER@$HOST ($APP_DIR)"

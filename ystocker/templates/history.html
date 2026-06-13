@@ -192,6 +192,67 @@
     </div>
   </div>
 
+  <!-- Fundamentals -->
+  <div>
+    <p class="text-[10px] font-semibold uppercase tracking-widest text-slate-600 mb-2 px-1" data-i18n="history.group_fundamentals">Fundamentals</p>
+    <div class="grid grid-cols-3 sm:grid-cols-3 gap-2 sm:gap-3">
+      <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 py-3">
+        <div class="text-xs text-slate-500 mb-1" data-i18n="history.ps_ratio">P/S Ratio</div>
+        <div id="statPs" class="text-base font-bold text-slate-100">—</div>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 py-3">
+        <div class="text-xs text-slate-500 mb-1" data-i18n="history.pb_ratio">P/B Ratio</div>
+        <div id="statPb" class="text-base font-bold text-slate-100">—</div>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 py-3">
+        <div class="text-xs text-slate-500 mb-1" data-i18n="history.fcf">FCF ($B)</div>
+        <div id="statFcf" class="text-base font-bold text-slate-100">—</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Dividend (shown only when dividend data available) -->
+  <div id="dividendGroup" style="display:none">
+    <p class="text-[10px] font-semibold uppercase tracking-widest text-slate-600 mb-2 px-1" data-i18n="history.group_dividend">Dividend</p>
+    <div class="grid grid-cols-3 sm:grid-cols-3 gap-2 sm:gap-3">
+      <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 py-3">
+        <div class="text-xs text-slate-500 mb-1" data-i18n="history.div_yield">Yield</div>
+        <div id="statDivYield" class="text-base font-bold text-emerald-400">—</div>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 py-3">
+        <div class="text-xs text-slate-500 mb-1" data-i18n="history.div_rate">Annual Rate</div>
+        <div id="statDivRate" class="text-base font-bold text-slate-100">—</div>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 py-3">
+        <div class="text-xs text-slate-500 mb-1" data-i18n="history.payout_ratio">Payout Ratio</div>
+        <div id="statPayoutRatio" class="text-base font-bold text-slate-100">—</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Ownership & Short Interest -->
+  <div>
+    <p class="text-[10px] font-semibold uppercase tracking-widest text-slate-600 mb-2 px-1" data-i18n="history.group_ownership">Ownership &amp; Short</p>
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
+      <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 py-3">
+        <div class="text-xs text-slate-500 mb-1" data-i18n="history.insiders">Insider %</div>
+        <div id="statInsiders" class="text-base font-bold text-slate-100">—</div>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 py-3">
+        <div class="text-xs text-slate-500 mb-1" data-i18n="history.institutions">Institutions %</div>
+        <div id="statInstitutions" class="text-base font-bold text-slate-100">—</div>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 py-3">
+        <div class="text-xs text-slate-500 mb-1" data-i18n="history.short_float">Short Float %</div>
+        <div id="statShortFloat" class="text-base font-bold text-slate-100">—</div>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 py-3">
+        <div class="text-xs text-slate-500 mb-1" data-i18n="history.short_ratio">Short Ratio</div>
+        <div id="statShortRatio" class="text-base font-bold text-slate-100">—</div>
+      </div>
+    </div>
+  </div>
+
 </div>
 
 <!-- ── Charts ────────────────────────────────────────────────────────── -->
@@ -290,6 +351,9 @@
         <span class="flex items-center gap-1.5 text-xs text-rose-400">
           <span class="inline-block w-3 h-0.5 border-dashed border border-rose-400"></span> <span>MA50</span>
         </span>
+        <span class="flex items-center gap-1.5 text-xs text-violet-400">
+          <span class="inline-block w-3 h-0.5 border-dashed border border-violet-400"></span> <span>BB</span>
+        </span>
         <span id="legendTarget" style="display:none" class="items-center gap-1.5 text-xs text-slate-400 cursor-help wall-tip"
               data-tip-i18n="history.tip_target">
           <span class="inline-block w-3 h-0.5 border-dashed border border-emerald-400"></span> <span data-i18n="history.target_legend">Target</span>
@@ -343,6 +407,67 @@
     </div>
     <div class="chart-container" style="height:140px" id="priceDeltaChartWrap">
       <canvas id="priceDeltaHistChart"></canvas>
+    </div>
+  </div>
+
+  <!-- Volume chart -->
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up" id="volumeSection" style="display:none">
+    <div class="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-0 sm:justify-between mb-3">
+      <div>
+        <h2 class="text-base font-semibold text-slate-200" data-i18n="history.volume_title">Volume</h2>
+        <p class="text-xs text-slate-500" data-i18n="history.volume_desc">Shares traded per period — green when price rose, red when fell</p>
+      </div>
+      <div class="flex items-center gap-2 flex-wrap justify-end">
+        <span class="flex items-center gap-1.5 text-xs text-emerald-400"><span class="inline-block w-2 h-2 rounded-sm bg-emerald-500/70"></span> <span data-i18n="history.volume_up">Up</span></span>
+        <span class="flex items-center gap-1.5 text-xs text-rose-400"><span class="inline-block w-2 h-2 rounded-sm bg-rose-500/70"></span> <span data-i18n="history.volume_down">Down</span></span>
+        <span class="flex items-center gap-1.5 text-xs text-amber-400"><span class="inline-block w-3 h-0.5 border-dashed border border-amber-400"></span> MA20</span>
+        <button onclick="expandChart('volume')" title="Expand" class="expand-btn">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="chart-container" style="height:140px" id="volumeChartWrap">
+      <canvas id="volumeHistChart"></canvas>
+    </div>
+  </div>
+
+  <!-- RSI-14 chart -->
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up" id="rsiSection" style="display:none">
+    <div class="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-0 sm:justify-between mb-3">
+      <div>
+        <h2 class="text-base font-semibold text-slate-200" data-i18n="history.rsi_title">RSI (14)</h2>
+        <p class="text-xs text-slate-500" data-i18n="history.rsi_desc">Relative Strength Index — overbought (&gt;70) / oversold (&lt;30)</p>
+      </div>
+      <div class="flex items-center gap-2 flex-wrap justify-end">
+        <span class="flex items-center gap-1.5 text-xs text-rose-400"><span class="inline-block w-2 h-0.5 bg-rose-400"></span> <span data-i18n="history.rsi_ob">70 Overbought</span></span>
+        <span class="flex items-center gap-1.5 text-xs text-emerald-400"><span class="inline-block w-2 h-0.5 bg-emerald-400"></span> <span data-i18n="history.rsi_os">30 Oversold</span></span>
+        <button onclick="expandChart('rsi')" title="Expand" class="expand-btn">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="chart-container" style="height:160px" id="rsiChartWrap">
+      <canvas id="rsiHistChart"></canvas>
+    </div>
+  </div>
+
+  <!-- MACD chart -->
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up" id="macdSection" style="display:none">
+    <div class="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-0 sm:justify-between mb-3">
+      <div>
+        <h2 class="text-base font-semibold text-slate-200" data-i18n="history.macd_title">MACD</h2>
+        <p class="text-xs text-slate-500" data-i18n="history.macd_desc">Moving Average Convergence/Divergence (12/26 EMA, 9 signal)</p>
+      </div>
+      <div class="flex items-center gap-2 flex-wrap justify-end">
+        <span class="flex items-center gap-1.5 text-xs text-sky-400"><span class="inline-block w-3 h-0.5 bg-sky-400"></span> MACD</span>
+        <span class="flex items-center gap-1.5 text-xs text-orange-400"><span class="inline-block w-3 h-0.5 border-dashed border border-orange-400"></span> <span data-i18n="history.macd_signal">Signal</span></span>
+        <button onclick="expandChart('macd')" title="Expand" class="expand-btn">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="chart-container" style="height:160px" id="macdChartWrap">
+      <canvas id="macdHistChart"></canvas>
     </div>
   </div>
 
@@ -684,6 +809,33 @@ let   _forecastResult = null;   // last forecast API response
     ebitdaEl.className   = 'text-sm sm:text-base font-bold text-slate-100';
   }
 
+  // Fundamentals
+  if (data.ps_ratio != null) { const el = document.getElementById('statPs'); el.textContent = data.ps_ratio.toFixed(2)+'x'; }
+  if (data.pb_ratio != null) { const el = document.getElementById('statPb'); el.textContent = data.pb_ratio.toFixed(2)+'x'; }
+  const fcfEl = document.getElementById('statFcf');
+  if (data.fcf != null) {
+    fcfEl.textContent = (data.fcf >= 0 ? '$' : '-$') + Math.abs(data.fcf).toFixed(1) + 'B';
+    fcfEl.className   = 'text-base font-bold ' + (data.fcf >= 0 ? 'text-emerald-400' : 'text-rose-400');
+  }
+
+  // Dividend
+  if (data.dividend_yield != null || data.dividend_rate != null) {
+    document.getElementById('dividendGroup').style.display = 'block';
+    if (data.dividend_yield != null) { const el = document.getElementById('statDivYield'); el.textContent = data.dividend_yield.toFixed(2) + '%'; }
+    if (data.dividend_rate  != null) { const el = document.getElementById('statDivRate');  el.textContent = '$' + data.dividend_rate.toFixed(2); }
+    if (data.payout_ratio   != null) { const el = document.getElementById('statPayoutRatio'); el.textContent = data.payout_ratio.toFixed(1) + '%'; }
+  }
+
+  // Ownership & Short
+  if (data.held_insiders    != null) { const el = document.getElementById('statInsiders');    el.textContent = data.held_insiders.toFixed(1) + '%'; }
+  if (data.held_institutions!= null) { const el = document.getElementById('statInstitutions');el.textContent = data.held_institutions.toFixed(1) + '%'; }
+  const sfEl = document.getElementById('statShortFloat');
+  if (data.short_float != null) {
+    sfEl.textContent = data.short_float.toFixed(1) + '%';
+    sfEl.className   = 'text-base font-bold ' + (data.short_float > 15 ? 'text-rose-400' : data.short_float > 7 ? 'text-amber-400' : 'text-slate-100');
+  }
+  if (data.short_ratio != null) { const el = document.getElementById('statShortRatio'); el.textContent = data.short_ratio.toFixed(1) + 'd'; }
+
   const pcEl    = document.getElementById('statPutCallRatio');
   const pcLabel = document.getElementById('statPutCallLabel');
   if (data.put_call_ratio != null) {
@@ -1019,6 +1171,23 @@ let   _forecastResult = null;   // last forecast API response
   const dlCfg = _buildConfig('delta', data, staticData);
   _registerChart('delta', dlCfg, new Chart(document.getElementById('priceDeltaHistChart'), dlCfg));
 
+  // ── Volume chart (synced to price range)
+  if (data.volumes && data.volumes.some(v => v > 0)) {
+    document.getElementById('volumeSection').style.display = 'block';
+    const volCfg = _buildConfig('volume', data, staticData);
+    _registerChart('volume', volCfg, new Chart(document.getElementById('volumeHistChart'), volCfg));
+  }
+
+  // ── RSI chart (synced to price range)
+  document.getElementById('rsiSection').style.display = 'block';
+  const rsiCfg = _buildConfig('rsi', data, staticData);
+  _registerChart('rsi', rsiCfg, new Chart(document.getElementById('rsiHistChart'), rsiCfg));
+
+  // ── MACD chart (synced to price range)
+  document.getElementById('macdSection').style.display = 'block';
+  const macdCfg = _buildConfig('macd', data, staticData);
+  _registerChart('macd', macdCfg, new Chart(document.getElementById('macdHistChart'), macdCfg));
+
   // ── PEG history chart (only when data available)
   if (data.peg_history && data.peg_history.some(v => v != null)) {
     document.getElementById('pegHistSection').style.display = 'block';
@@ -1297,6 +1466,79 @@ function _setActiveBtn(chartKey, period) {
 // Build a fresh Chart.js config from fetched data for a given chart key
 function _buildConfig(key, d, staticData) {
   const gridCol = '#1e293b', tickCol = '#64748b';
+
+  // ── Shared technical helpers ──────────────────────────────────────
+  function rollingMa(data, n) {
+    const out = new Array(data.length).fill(null);
+    let sum = 0, cnt = 0;
+    for (let i = 0; i < data.length; i++) {
+      const p = data[i];
+      if (p != null) { sum += p; cnt++; }
+      if (i >= n) { const old = data[i - n]; if (old != null) { sum -= old; cnt--; } }
+      if (i >= n - 1 && cnt >= n * 0.6) out[i] = sum / Math.min(n, cnt);
+    }
+    return out;
+  }
+  function maLabel(n, dates) {
+    if (!dates || dates.length < 2) return `MA${n}`;
+    const diff = (new Date(dates[1]) - new Date(dates[0])) / 86400000;
+    if (diff <= 2) return `${n}d MA`;
+    if (diff <= 10) return `${n}w MA`;
+    return `${n}m MA`;
+  }
+  function _ema(vals, span) {
+    const k = 2 / (span + 1);
+    const result = new Array(vals.length).fill(null);
+    let started = false;
+    for (let i = 0; i < vals.length; i++) {
+      if (vals[i] == null) continue;
+      if (!started) { result[i] = vals[i]; started = true; continue; }
+      const prev = result.slice(0, i).reverse().find(v => v != null);
+      result[i] = prev != null ? vals[i] * k + prev * (1 - k) : vals[i];
+    }
+    return result;
+  }
+  function _computeRsi(prices, period = 14) {
+    const result = new Array(prices.length).fill(null);
+    if (prices.length < period + 1) return result;
+    let gains = 0, losses = 0;
+    for (let i = 1; i <= period; i++) {
+      const diff = prices[i] - prices[i - 1];
+      if (diff > 0) gains += diff; else losses -= diff;
+    }
+    let avgGain = gains / period, avgLoss = losses / period;
+    result[period] = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
+    for (let i = period + 1; i < prices.length; i++) {
+      if (prices[i] == null || prices[i-1] == null) { result[i] = result[i-1]; continue; }
+      const diff = prices[i] - prices[i - 1];
+      avgGain = (avgGain * (period - 1) + (diff > 0 ? diff : 0)) / period;
+      avgLoss = (avgLoss * (period - 1) + (diff < 0 ? -diff : 0)) / period;
+      result[i] = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
+    }
+    return result;
+  }
+  function _computeMacd(prices) {
+    const ema12 = _ema(prices, 12), ema26 = _ema(prices, 26);
+    const macdLine = prices.map((_, i) => ema12[i] != null && ema26[i] != null ? ema12[i] - ema26[i] : null);
+    const signal = _ema(macdLine, 9);
+    const histogram = macdLine.map((v, i) => v != null && signal[i] != null ? v - signal[i] : null);
+    return { macdLine, signal, histogram };
+  }
+  function bollingerBands(data, n = 20) {
+    const upper = new Array(data.length).fill(null);
+    const lower = new Array(data.length).fill(null);
+    for (let i = n - 1; i < data.length; i++) {
+      const slice = data.slice(i - n + 1, i + 1).filter(v => v != null);
+      if (slice.length < n * 0.6) continue;
+      const mean = slice.reduce((s, v) => s + v, 0) / slice.length;
+      const std  = Math.sqrt(slice.reduce((s, v) => s + (v - mean) ** 2, 0) / slice.length);
+      upper[i] = mean + 2 * std;
+      lower[i] = mean - 2 * std;
+    }
+    return { upper, lower };
+  }
+  // ─────────────────────────────────────────────────────────────────
+
   if (key === 'pe') {
     return {
       type: 'line',
@@ -1339,24 +1581,6 @@ function _buildConfig(key, d, staticData) {
     };
   }
   if (key === 'price') {
-    function rollingMa(data, n) {
-      const out = new Array(data.length).fill(null);
-      let sum = 0, cnt = 0;
-      for (let i = 0; i < data.length; i++) {
-        const p = data[i];
-        if (p != null) { sum += p; cnt++; }
-        if (i >= n) { const old = data[i - n]; if (old != null) { sum -= old; cnt--; } }
-        if (i >= n - 1 && cnt >= n * 0.6) out[i] = sum / Math.min(n, cnt);
-      }
-      return out;
-    }
-    function maLabel(n, dates) {
-      if (!dates || dates.length < 2) return `MA${n}`;
-      const diff = (new Date(dates[1]) - new Date(dates[0])) / 86400000;
-      if (diff <= 2) return `${n}d MA`;
-      if (diff <= 10) return `${n}w MA`;
-      return `${n}m MA`;
-    }
     const ma20 = rollingMa(d.prices, 20);
     const ma50 = rollingMa(d.prices, 50);
     const lbl20 = maLabel(20, d.dates);
@@ -1375,11 +1599,20 @@ function _buildConfig(key, d, staticData) {
           borderColor:'#f87171', backgroundColor:'transparent',
           borderWidth:1.5, pointRadius:0, pointHoverRadius:0, fill:false, tension:0.3, spanGaps:true,
           borderDash:[4,3] },
+        { label:'BB Upper', data:bollingerBands(d.prices).upper,
+          borderColor:'rgba(167,139,250,0.5)', backgroundColor:'rgba(167,139,250,0.04)',
+          borderWidth:1, pointRadius:0, pointHoverRadius:0, fill:'+1', tension:0.3, spanGaps:true,
+          borderDash:[2,2] },
+        { label:'BB Lower', data:bollingerBands(d.prices).lower,
+          borderColor:'rgba(167,139,250,0.5)', backgroundColor:'rgba(167,139,250,0.04)',
+          borderWidth:1, pointRadius:0, pointHoverRadius:0, fill:false, tension:0.3, spanGaps:true,
+          borderDash:[2,2] },
       ]},
       options: {
         responsive:true, maintainAspectRatio:false,
         plugins:{ legend:{display:false}, tooltip:{mode:'index',intersect:false, callbacks:{label:c=>{
           if (c.raw==null) return '';
+          if (c.dataset.label?.startsWith('BB')) return '';
           return ` ${c.dataset.label}: $${c.raw.toFixed(2)}`;
         }}}},
         scales:{ x:{grid:{color:gridCol},ticks:{color:tickCol,maxTicksLimit:8,maxRotation:0}}, y:{grid:{color:gridCol},ticks:{color:tickCol,callback:v=>'$'+v}} },
@@ -1460,6 +1693,88 @@ function _buildConfig(key, d, staticData) {
         interaction:{mode:'index',intersect:false},
       },
       _title: 'Price Change', _desc: 'Period-over-period price delta',
+    };
+  }
+  if (key === 'volume') {
+    const vols = (d.volumes || []).map(v => v || 0);
+    const vma  = rollingMa(vols, 20);
+    const fmtVol = v => v >= 1e9 ? (v/1e9).toFixed(1)+'B' : v >= 1e6 ? (v/1e6).toFixed(0)+'M' : v >= 1e3 ? (v/1e3).toFixed(0)+'K' : String(v);
+    return {
+      type: 'bar',
+      data: { labels: d.dates, datasets: [
+        { label:'Volume', data: vols,
+          backgroundColor: vols.map((v,i) => i===0||d.prices[i]==null||d.prices[i-1]==null ? 'rgba(56,189,248,0.5)' : d.prices[i] >= d.prices[i-1] ? 'rgba(52,211,153,0.55)' : 'rgba(248,113,113,0.55)'),
+          borderWidth:0, order:2 },
+        { type:'line', label:'MA20', data:vma,
+          borderColor:'#fbbf24', backgroundColor:'transparent',
+          borderWidth:1.5, pointRadius:0, fill:false, tension:0.4, spanGaps:true, borderDash:[4,3], order:1 },
+      ]},
+      options: {
+        responsive:true, maintainAspectRatio:false,
+        plugins:{ legend:{display:false}, tooltip:{mode:'index',intersect:false, callbacks:{
+          label: c => c.raw==null?'': ` ${c.dataset.label}: ${fmtVol(c.raw)}`
+        }}},
+        scales:{
+          x:{grid:{color:gridCol},ticks:{color:tickCol,maxTicksLimit:8,maxRotation:0}},
+          y:{grid:{color:gridCol},ticks:{color:tickCol,callback:v=>fmtVol(v)}},
+        },
+        interaction:{mode:'index',intersect:false},
+      },
+      _title:'Volume', _desc:'Shares traded per period',
+    };
+  }
+  if (key === 'rsi') {
+    const rsi = _computeRsi(d.prices);
+    const ob = new Array(rsi.length).fill(70);
+    const os = new Array(rsi.length).fill(30);
+    return {
+      type: 'line',
+      data: { labels: d.dates, datasets: [
+        { label:'RSI', data:rsi,
+          borderColor:'#a78bfa', backgroundColor:'rgba(167,139,250,0.08)',
+          borderWidth:1.5, pointRadius:0, pointHoverRadius:4, fill:true, tension:0.3, spanGaps:true },
+        { label:'OB 70', data:ob, borderColor:'rgba(248,113,113,0.4)', backgroundColor:'transparent',
+          borderWidth:1, pointRadius:0, borderDash:[4,3], fill:false },
+        { label:'OS 30', data:os, borderColor:'rgba(52,211,153,0.4)', backgroundColor:'transparent',
+          borderWidth:1, pointRadius:0, borderDash:[4,3], fill:false },
+      ]},
+      options: {
+        responsive:true, maintainAspectRatio:false,
+        plugins:{ legend:{display:false}, tooltip:{mode:'index',intersect:false, callbacks:{
+          label: c => { if (c.dataset.label!=='RSI'||c.raw==null) return ''; return ` RSI: ${c.raw.toFixed(1)}`; }
+        }}},
+        scales:{
+          x:{grid:{color:gridCol},ticks:{color:tickCol,maxTicksLimit:8,maxRotation:0}},
+          y:{grid:{color:gridCol},ticks:{color:tickCol},min:0,max:100},
+        },
+        interaction:{mode:'index',intersect:false},
+      },
+      _title:'RSI (14)', _desc:'Relative Strength Index',
+    };
+  }
+  if (key === 'macd') {
+    const { macdLine, signal, histogram } = _computeMacd(d.prices);
+    const histColors  = histogram.map(v => v==null?'transparent': v>=0?'rgba(52,211,153,0.55)':'rgba(248,113,113,0.55)');
+    const histBorders = histogram.map(v => v==null?'transparent': v>=0?'#34d399':'#f87171');
+    return {
+      type: 'bar',
+      data: { labels: d.dates, datasets: [
+        { type:'bar',  label:'Histogram', data:histogram, backgroundColor:histColors, borderColor:histBorders, borderWidth:1, order:3 },
+        { type:'line', label:'MACD',      data:macdLine,  borderColor:'#38bdf8', backgroundColor:'transparent', borderWidth:1.5, pointRadius:0, spanGaps:true, tension:0.2, order:1 },
+        { type:'line', label:'Signal',    data:signal,    borderColor:'#fb923c', backgroundColor:'transparent', borderWidth:1.5, pointRadius:0, spanGaps:true, tension:0.2, borderDash:[4,3], order:2 },
+      ]},
+      options: {
+        responsive:true, maintainAspectRatio:false,
+        plugins:{ legend:{display:false}, tooltip:{mode:'index',intersect:false, callbacks:{
+          label: c => c.raw==null?'': ` ${c.dataset.label}: ${c.raw.toFixed(2)}`
+        }}},
+        scales:{
+          x:{grid:{color:gridCol},ticks:{color:tickCol,maxTicksLimit:8,maxRotation:0}},
+          y:{grid:{color:gridCol},ticks:{color:tickCol,callback:v=>v.toFixed(1)}},
+        },
+        interaction:{mode:'index',intersect:false},
+      },
+      _title:'MACD (12/26/9)', _desc:'Moving Average Convergence Divergence',
     };
   }
   if (key === 'peg') {
@@ -1745,12 +2060,28 @@ async function _handleRange(chartKey, period, staticData) {
   _chartConfigs[chartKey] = cfg;
   _chartInstances[chartKey] = new Chart(document.getElementById(canvasId), cfg);
 
-  // Keep price delta chart in sync whenever the price range changes
+  // Keep price-derived charts in sync whenever the price range changes
   if (chartKey === 'price') {
     if (_chartInstances['delta']) { _chartInstances['delta'].destroy(); delete _chartInstances['delta']; }
     const dlCfg = _buildConfig('delta', d, staticData);
     _chartConfigs['delta'] = dlCfg;
     _chartInstances['delta'] = new Chart(document.getElementById('priceDeltaHistChart'), dlCfg);
+
+    if (document.getElementById('volumeSection').style.display !== 'none') {
+      if (_chartInstances['volume']) { _chartInstances['volume'].destroy(); delete _chartInstances['volume']; }
+      const vCfg = _buildConfig('volume', d, staticData);
+      _chartConfigs['volume'] = vCfg;
+      _chartInstances['volume'] = new Chart(document.getElementById('volumeHistChart'), vCfg);
+    }
+    if (_chartInstances['rsi']) { _chartInstances['rsi'].destroy(); delete _chartInstances['rsi']; }
+    const rCfg = _buildConfig('rsi', d, staticData);
+    _chartConfigs['rsi'] = rCfg;
+    _chartInstances['rsi'] = new Chart(document.getElementById('rsiHistChart'), rCfg);
+
+    if (_chartInstances['macd']) { _chartInstances['macd'].destroy(); delete _chartInstances['macd']; }
+    const mCfg = _buildConfig('macd', d, staticData);
+    _chartConfigs['macd'] = mCfg;
+    _chartInstances['macd'] = new Chart(document.getElementById('macdHistChart'), mCfg);
   }
 
   // If modal is open for this chart, refresh it too

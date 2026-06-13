@@ -725,6 +725,8 @@ def api_history(ticker: str):
     dates  = [str(d.date()) for d in hist.index]
     prices = [round(float(p), 2) if not math.isnan(float(p)) else None
               for p in hist["Close"]]
+    volumes = [int(v) if not math.isnan(float(v)) else 0
+               for v in hist["Volume"]]
 
     pe_history = []
     for p in prices:
@@ -803,6 +805,7 @@ def api_history(ticker: str):
         "name":             name,
         "dates":            dates,
         "prices":           prices,
+        "volumes":           volumes,
         "pe_history":       pe_history,
         "fwd_pe_history":   fwd_pe_history,
         "peg_history":      peg_history,
@@ -821,6 +824,16 @@ def api_history(ticker: str):
         "put_wall":         _safe(put_wall),
         "put_call_ratio":   _safe(put_call_ratio),
         "pc_by_expiry":     pc_by_expiry,
+        "short_ratio":       _safe(info.get("shortRatio")),
+        "short_float":       _safe(round(info.get("shortPercentOfFloat") * 100, 1)) if info.get("shortPercentOfFloat") else None,
+        "held_insiders":     _safe(round(info.get("heldPercentInsiders") * 100, 1)) if info.get("heldPercentInsiders") else None,
+        "held_institutions": _safe(round(info.get("heldPercentInstitutions") * 100, 1)) if info.get("heldPercentInstitutions") else None,
+        "dividend_yield":    _safe(round(info.get("dividendYield") * 100, 2)) if info.get("dividendYield") else None,
+        "dividend_rate":     _safe(info.get("dividendRate")),
+        "payout_ratio":      _safe(round(info.get("payoutRatio") * 100, 1)) if info.get("payoutRatio") else None,
+        "ps_ratio":          _safe(round(info.get("priceToSalesTrailingTwelveMonths"), 2)) if info.get("priceToSalesTrailingTwelveMonths") else None,
+        "pb_ratio":          _safe(round(info.get("priceToBook"), 2)) if info.get("priceToBook") else None,
+        "fcf":               _safe(round(info.get("freeCashflow") / 1e9, 1)) if info.get("freeCashflow") else None,
     }
     with _HISTORY_CACHE_LOCK:
         _HISTORY_CACHE[cache_key] = {"ts": time.time(), "data": result}

@@ -595,9 +595,11 @@ let _pcrData          = null;
 // Yahoo Finance symbols per index key (for forecast API)
 const IDX_SYMBOLS = {
   spx: '%5EGSPC', ixic: '%5EIXIC', dji: '%5EDJI',
-  ftse: '%5EFTSE', n225: '%5EN225', sse: '000001.SS', twii: '%5ETWII', kospi: '%5EKS11',
+  ftse: '%5EFTSE', n225: '%5EN225', sse: '000001.SS', csi500: '000905.SS', twii: '%5ETWII', kospi: '%5EKS11',
   // Commodity futures (=F → URL-encoded as %3DF)
-  gold: 'GC%3DF', silver: 'SI%3DF', oil: 'CL%3DF', natgas: 'NG%3DF', copper: 'HG%3DF',
+  gold: 'GC%3DF', silver: 'SI%3DF', oil: 'CL%3DF', brent: 'BZ%3DF', natgas: 'NG%3DF', copper: 'HG%3DF',
+  // Dollar Index
+  dxy: 'DX-Y.NYB',
 };
 const IDX_COLORS = {
   spx: '#6366f1', ixic: '#38bdf8', dji: '#fb923c',
