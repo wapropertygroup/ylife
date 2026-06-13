@@ -159,12 +159,12 @@
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up mb-6" id="seasonalitySection" style="display:none">
     <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-2 mb-3">
       <div>
-        <h2 id="seasonalityTitle" class="text-base font-semibold text-slate-200">Seasonality</h2>
-        <p class="text-xs text-slate-500">Average monthly return (%) over 10 years by calendar month</p>
+        <h2 id="seasonalityTitle" class="text-base font-semibold text-slate-200" data-i18n="commodities.seasonality_title">Seasonality</h2>
+        <p class="text-xs text-slate-500" data-i18n="commodities.seasonality_desc">Average monthly return (%) over 10 years by calendar month</p>
       </div>
       <div class="flex items-center gap-2">
-        <span class="flex items-center gap-1.5 text-xs text-emerald-400"><span class="inline-block w-2 h-2 rounded-sm bg-emerald-500/70"></span> Up</span>
-        <span class="flex items-center gap-1.5 text-xs text-rose-400"><span class="inline-block w-2 h-2 rounded-sm bg-rose-500/70"></span> Down</span>
+        <span class="flex items-center gap-1.5 text-xs text-emerald-400"><span class="inline-block w-2 h-2 rounded-sm bg-emerald-500/70"></span> <span data-i18n="commodities.up">Up</span></span>
+        <span class="flex items-center gap-1.5 text-xs text-rose-400"><span class="inline-block w-2 h-2 rounded-sm bg-rose-500/70"></span> <span data-i18n="commodities.down">Down</span></span>
       </div>
     </div>
     <div class="chart-container" style="height:180px">
@@ -630,7 +630,7 @@
     document.getElementById('seasonalitySection').style.display = 'block';
     const c = C[key];
     document.getElementById('seasonalityTitle').textContent =
-      `${c ? (c.emoji||'') + ' ' + localName(key, c.name) : key} — Seasonality`;
+      `${c ? (c.emoji||'') + ' ' + localName(key, c.name) : key} — ${I18n.t('commodities.seasonality_title')||'Seasonality'}`;
     const colors  = avgs.map(v => v==null?'transparent': v>=0?'rgba(52,211,153,0.7)':'rgba(248,113,113,0.7)');
     const borders = avgs.map(v => v==null?'transparent': v>=0?'#34d399':'#f87171');
     if (_seasonChart) { _seasonChart.destroy(); _seasonChart = null; }
