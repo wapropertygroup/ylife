@@ -23,7 +23,7 @@ APPS=(
 )
 
 # CloudFormation
-CF_STACK_NAME="${CF_STACK_NAME:-li-family}"  # match your actual stack name (or override via env var)
+CF_STACK_NAME="${CF_STACK_NAME:-ystocker}"   # match your actual stack name (or override via env var)
 CF_REGION="us-west-2"
 INSTANCE_TYPE="t3.medium"                    # desired EC2 instance type
 INSTANCE_ID="i-02c9614bcde54dd59"            # EC2 instance managed by this stack
