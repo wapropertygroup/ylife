@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block title %}Image Watermark — yImage{% endblock %}
+{% block content %}
+<div x-data="imgWmTool()">
+  <div class="max-w-2xl mx-auto">
+    <a href="/" class="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-brand transition mb-4">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+      <span data-i18n="common.all_tools">All Tools</span>
+    </a>
+    <h1 class="text-2xl font-extrabold mb-2" data-i18n="imgwm.title">🖼️ Image Watermark</h1>
+    <p class="text-sm text-slate-500 dark:text-slate-400 mb-6" data-i18n="imgwm.desc">Overlay a logo or signature image on your photo. Control size, position, and opacity.</p>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <!-- Base image -->
+      <div>
+        <label class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block" data-i18n="imgwm.base">Base Image</label>
+        <div class="drop-zone rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-700 p-6 text-center cursor-pointer transition hover:border-brand h-32 flex flex-col items-center justify-center"
+             @click="$refs.basefi.click()" @dragover.prevent @drop.prevent="loadBase(e.dataTransfer.files[0])">
+          <input type="file" accept="image/*" x-ref="basefi" @change="loadBase($event.target.files[0])" class="hidden">
+          <div x-show="!baseSrc">
+            <p class="text-xs text-slate-500" data-i18n="imgwm.drop_base">Drop photo here</p>
+          </div>
+          <div x-show="baseSrc" class="flex flex-col items-center gap-1">
+            <img :src="baseSrc" class="max-h-20 max-w-full object-contain rounded">
+            <button @click.stop="baseFile=null; baseSrc=''" class="text-xs text-slate-400 hover:text-red-500">✕</button>
+          </div>
+        </div>
+      </div>
+      <!-- Watermark image -->
+      <div>
+        <label class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block" data-i18n="imgwm.wm">Watermark / Logo</label>
+        <div class="drop-zone rounded-xl border-2 border-dashed border-violet-300 dark:border-violet-700/50 p-6 text-center cursor-pointer transition hover:border-brand h-32 flex flex-col items-center justify-center"
+             @click="$refs.wmfi.click()" @dragover.prevent @drop.prevent="loadWm($event.target.files[0])">
+          <input type="file" accept="image/*" x-ref="wmfi" @change="loadWm($event.target.files[0])" class="hidden">
+          <div x-show="!wmSrc">
+            <p class="text-xs text-slate-500" data-i18n="imgwm.drop_wm">Drop logo / watermark here (PNG with transparency works best)</p>
+          </div>
+          <div x-show="wmSrc" class="flex flex-col items-center gap-1">
+            <img :src="wmSrc" class="max-h-20 max-w-full object-contain rounded">
+            <button @click.stop="wmFile=null; wmSrc=''" class="text-xs text-slate-400 hover:text-red-500">✕</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div x-show="baseFile && wmFile" class="mt-4 space-y-4 p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50">
+
+      <!-- Position -->
+      <div>
+        <label class="text-sm font-medium mb-2 block" data-i18n="wm.position">Position</label>
+        <div class="grid grid-cols-3 gap-1.5 w-36">
+          <template x-for="p in positions" :key="p.v">
+            <button @click="position=p.v"
+                    :class="position===p.v ? 'bg-brand text-white' : 'bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-500'"
+                    class="p-2 rounded-lg text-xs transition"
+                    :title="p.label" x-text="p.icon"></button>
+          </template>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="text-sm font-medium mb-1 block">
+            <span data-i18n="wm.opacity">Opacity</span>: <span x-text="opacity+'%'"></span>
+          </label>
+          <input type="range" x-model.number="opacity" min="10" max="100" step="5"
+                 class="w-full accent-violet-500">
+        </div>
+        <div>
+          <label class="text-sm font-medium mb-1 block">
+            <span data-i18n="imgwm.scale">Scale</span>: <span x-text="scale+'%'"></span>
+          </label>
+          <input type="range" x-model.number="scale" min="5" max="80" step="5"
+                 class="w-full accent-violet-500">
+        </div>
+      </div>
+    </div>
+
+    <button x-show="baseFile && wmFile" @click="process()" :disabled="processing"
+            class="mt-4 w-full py-3 rounded-xl bg-brand text-white font-semibold hover:bg-brand-dark transition disabled:opacity-50">
+      <span x-show="!processing" data-i18n="imgwm.button">Apply Watermark & Download</span>
+      <span x-show="processing" class="flex items-center justify-center gap-2">
+        <svg class="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+        <span data-i18n="common.processing">Processing...</span>
+      </span>
+    </button>
+    <div x-show="done" class="mt-4 p-4 rounded-xl bg-green-50 dark:bg-green-900/15 border border-green-300 dark:border-green-700/50">
+      <p class="text-sm font-semibold text-green-600 dark:text-green-400" data-i18n="imgwm.done">✓ Watermarked image downloaded!</p>
+    </div>
+    <p x-show="error" class="mt-4 text-sm text-red-500" x-text="error"></p>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+function imgWmTool() {
+  return {
+    baseFile: null, baseSrc: '', wmFile: null, wmSrc: '',
+    position: 'bottom_right', opacity: 70, scale: 20,
+    processing: false, error: '', done: false,
+    positions: [
+      {v:'top_left',    icon:'↖',label:'Top Left'},    {v:'top_right',    icon:'↗',label:'Top Right'},
+      {v:'center',      icon:'⊕',label:'Center'},      {v:'bottom_left',  icon:'↙',label:'Bottom Left'},
+      {v:'bottom_right',icon:'↘',label:'Bottom Right'},
+    ],
+    loadBase(f) { if(!f) return; this.baseFile=f; this.baseSrc=URL.createObjectURL(f); this.done=false; this.error=''; },
+    loadWm(f)   { if(!f) return; this.wmFile=f;   this.wmSrc=URL.createObjectURL(f);   this.done=false; this.error=''; },
+    async process() {
+      if (!this.baseFile || !this.wmFile || this.processing) return;
+      this.processing=true; this.error=''; this.done=false;
+      const form=new FormData();
+      form.append('file',this.baseFile); form.append('watermark',this.wmFile);
+      form.append('position',this.position); form.append('opacity',this.opacity);
+      form.append('scale',this.scale);
+      try {
+        const resp=await fetch('/api/image-watermark',{method:'POST',body:form});
+        if(!resp.ok){const d=await resp.json();this.error=d.error||'Failed';this.processing=false;return;}
+        const blob=await resp.blob();const url=URL.createObjectURL(blob);
+        const a=document.createElement('a');a.href=url;a.download='watermarked_'+this.baseFile.name;a.click();
+        URL.revokeObjectURL(url);this.done=true;
+      } catch(e){this.error='Network error: '+e.message;}
+      this.processing=false;
+    },
+  };
+}
+</script>
+{% endblock %}

@@ -239,6 +239,103 @@ const I18n = (() => {
       "caption.button":     "Add Caption & Download",
       "caption.done":       "✓ Captioned image downloaded!",
 
+      // Round 9 tool names (EN)
+      "tool.vignette":        "Vignette",
+      "tool.grayscale":       "Grayscale",
+      "tool.sharpen_denoise": "Sharpen / Denoise",
+      "tool.placeholder":     "Placeholder Image",
+
+      // Vignette
+      "vignette.title":    "🌑 Vignette Effect",
+      "vignette.desc":     "Darken (or lighten) the edges of a photo to draw the eye toward the centre.",
+      "vignette.strength": "Strength",
+      "vignette.color":    "Edge Color",
+      "vignette.button":   "Apply Vignette & Download",
+      "vignette.done":     "✓ Vignette image downloaded!",
+
+      // Grayscale
+      "gray.title":        "⬜ Grayscale",
+      "gray.desc":         "Convert a photo to grayscale. Optionally add a sepia, cool, or custom color tint.",
+      "gray.add_tint":     "Add color tint",
+      "gray.tint_presets": "Tint Presets",
+      "gray.custom_tint":  "Custom:",
+      "gray.button":       "Convert & Download",
+      "gray.done":         "✓ Grayscale image downloaded!",
+
+      // Sharpen / Denoise
+      "sharpen.title":        "🔪 Sharpen / Denoise",
+      "sharpen.desc":         "Sharpen soft images, enhance edges, or reduce noise. Up to 5 passes.",
+      "sharpen.mode":         "Mode",
+      "sharpen.sharpen":      "Sharpen",
+      "sharpen.edge":         "Edge Enhance",
+      "sharpen.denoise":      "Denoise",
+      "sharpen.passes":       "Passes",
+      "sharpen.mild":         "Mild",
+      "sharpen.strong":       "Strong",
+      "sharpen.button":       "Apply & Download",
+      "sharpen.done":         "✓ Image processed and downloaded!",
+
+      // Placeholder
+      "placeholder.title":      "🟪 Placeholder Image",
+      "placeholder.desc":       "Generate a solid-colour placeholder image at any size. Great for UI mockups.",
+      "placeholder.size":       "Dimensions",
+      "placeholder.bg_color":   "Background",
+      "placeholder.text_color": "Text Color",
+      "placeholder.label":      "Custom Label",
+      "placeholder.preview":    "Preview",
+      "placeholder.button":     "Generate Placeholder",
+
+      // Round 10 tool names (EN)
+      "tool.crop_aspect":      "Crop to Aspect",
+      "tool.drop_shadow":      "Drop Shadow",
+      "tool.color_swap":       "Color Swap",
+      "tool.pdf_compress_pro": "PDF Compress Pro",
+      "tool.tile_image":       "Tile Image",
+
+      // Crop to Aspect Ratio
+      "aspect.title":    "📐 Crop to Aspect Ratio",
+      "aspect.desc":     "Crop an image to a target aspect ratio without resizing.",
+      "aspect.ratio":    "Aspect Ratio",
+      "aspect.anchor":   "Crop Anchor",
+      "aspect.original": "Original",
+      "aspect.result":   "Result",
+      "aspect.button":   "Crop & Download",
+      "aspect.done":     "✓ Cropped image downloaded!",
+
+      // Drop Shadow
+      "shadow.title":    "🌤 Drop Shadow",
+      "shadow.desc":     "Add a soft drop shadow behind an image. Works best with PNG with transparency.",
+      "shadow.offset_x": "Offset X",
+      "shadow.offset_y": "Offset Y",
+      "shadow.blur":     "Blur",
+      "shadow.opacity":  "Opacity",
+      "shadow.color":    "Color",
+      "shadow.button":   "Add Shadow & Download PNG",
+      "shadow.done":     "✓ Shadow PNG downloaded!",
+
+      // Color Swap
+      "colorswap.title":  "🔵 Color Swap",
+      "colorswap.desc":   "Replace one color in your image with another.",
+      "colorswap.source": "Replace this color",
+      "colorswap.target": "With this color",
+      "colorswap.button": "Swap Color & Download",
+      "colorswap.done":   "✓ Color-swapped PNG downloaded!",
+
+      // PDF Compress Pro
+      "compresspro.title":  "⚡ PDF Compress Pro",
+      "compresspro.desc":   "Aggressive structural PDF compression — removes unused objects and linearizes for web.",
+      "compresspro.info":   "Structural compression: removes redundant objects, linearizes for faster web loading. No image quality reduction.",
+      "compresspro.button": "Compress Pro & Download",
+      "compresspro.done":   "✓ Compressed PDF downloaded!",
+
+      // Tile Image
+      "tile.title":       "🔲 Tile Image",
+      "tile.desc":        "Tile a small image to fill a large canvas — create seamless backgrounds and patterns.",
+      "tile.canvas_size": "Canvas Size",
+      "tile.custom_size": "Custom tile size",
+      "tile.button":      "Create Tiled Image & Download",
+      "tile.done":        "✓ Tiled image downloaded!",
+
       // PDF Stamp
       "stamp.title":    "🔢 PDF Page Numbers",
       "stamp.desc":     "Stamp page numbers or custom text on every page. Use {n} for current page and {total} for total.",
@@ -847,6 +944,103 @@ const I18n = (() => {
       "caption.text_color": "文字颜色",
       "caption.button":     "添加配文并下载",
       "caption.done":       "✓ 已下载添加配文的图片！",
+
+      // Round 9 工具名称 (ZH)
+      "tool.vignette":        "暗角效果",
+      "tool.grayscale":       "灰度转换",
+      "tool.sharpen_denoise": "锐化 / 降噪",
+      "tool.placeholder":     "占位图生成",
+
+      // 暗角效果
+      "vignette.title":    "🌑 暗角效果",
+      "vignette.desc":     "将照片四周边缘变暗（或变亮），引导视线聚焦中心，营造电影感。",
+      "vignette.strength": "强度",
+      "vignette.color":    "边缘颜色",
+      "vignette.button":   "应用暗角并下载",
+      "vignette.done":     "✓ 已下载暗角图片！",
+
+      // 灰度转换
+      "gray.title":        "⬜ 灰度转换",
+      "gray.desc":         "将照片转换为灰度，可选添加棕褐色、冷调或自定义色彩染色。",
+      "gray.add_tint":     "添加色彩染色",
+      "gray.tint_presets": "染色预设",
+      "gray.custom_tint":  "自定义：",
+      "gray.button":       "转换并下载",
+      "gray.done":         "✓ 已下载灰度图片！",
+
+      // 锐化 / 降噪
+      "sharpen.title":        "🔪 锐化 / 降噪",
+      "sharpen.desc":         "锐化模糊图片、增强边缘轮廓，或对低光噪点图片降噪。最多 5 次。",
+      "sharpen.mode":         "模式",
+      "sharpen.sharpen":      "锐化",
+      "sharpen.edge":         "边缘增强",
+      "sharpen.denoise":      "降噪",
+      "sharpen.passes":       "处理次数",
+      "sharpen.mild":         "轻微",
+      "sharpen.strong":       "强烈",
+      "sharpen.button":       "应用并下载",
+      "sharpen.done":         "✓ 已处理并下载！",
+
+      // 占位图生成
+      "placeholder.title":      "🟪 占位图生成器",
+      "placeholder.desc":       "生成任意尺寸的纯色占位图，适用于 UI 原型设计和布局测试。",
+      "placeholder.size":       "尺寸",
+      "placeholder.bg_color":   "背景色",
+      "placeholder.text_color": "文字颜色",
+      "placeholder.label":      "自定义标签",
+      "placeholder.preview":    "预览",
+      "placeholder.button":     "生成占位图",
+
+      // Round 10 工具名称 (ZH)
+      "tool.crop_aspect":      "裁剪比例",
+      "tool.drop_shadow":      "投影效果",
+      "tool.color_swap":       "颜色替换",
+      "tool.pdf_compress_pro": "PDF 深度压缩",
+      "tool.tile_image":       "图片平铺",
+
+      // 裁剪比例
+      "aspect.title":    "📐 裁剪为指定比例",
+      "aspect.desc":     "将图片裁剪为目标宽高比，不改变分辨率。",
+      "aspect.ratio":    "宽高比",
+      "aspect.anchor":   "裁剪锚点",
+      "aspect.original": "原图",
+      "aspect.result":   "效果",
+      "aspect.button":   "裁剪并下载",
+      "aspect.done":     "✓ 已下载裁剪后的图片！",
+
+      // 投影效果
+      "shadow.title":    "🌤 投影效果",
+      "shadow.desc":     "在图片后面添加柔和投影，PNG 透明图片效果最佳。",
+      "shadow.offset_x": "X 偏移",
+      "shadow.offset_y": "Y 偏移",
+      "shadow.blur":     "模糊半径",
+      "shadow.opacity":  "透明度",
+      "shadow.color":    "颜色",
+      "shadow.button":   "添加投影并下载 PNG",
+      "shadow.done":     "✓ 已下载带投影的 PNG！",
+
+      // 颜色替换
+      "colorswap.title":  "🔵 颜色替换",
+      "colorswap.desc":   "将图片中的一种颜色替换为另一种颜色，适合重新着色 Logo 和图标。",
+      "colorswap.source": "替换此颜色",
+      "colorswap.target": "替换为此颜色",
+      "colorswap.button": "替换颜色并下载",
+      "colorswap.done":   "✓ 已下载颜色替换后的 PNG！",
+
+      // PDF 深度压缩
+      "compresspro.title":  "⚡ PDF 深度压缩",
+      "compresspro.desc":   "激进结构压缩——移除无用对象、重建交叉引用并线性化，适合网页快速加载。",
+      "compresspro.info":   "结构压缩：移除冗余对象，线性化以加快网页加载。不降低图片质量。",
+      "compresspro.button": "深度压缩并下载",
+      "compresspro.done":   "✓ 已下载深度压缩的 PDF！",
+
+      // 图片平铺
+      "tile.title":       "🔲 图片平铺",
+      "tile.desc":        "将小图片重复平铺填满大画布，用于创建无缝背景和重复图案。",
+      "tile.canvas_size": "画布大小",
+      "tile.custom_size": "自定义单格大小",
+      "tile.button":      "创建平铺图片并下载",
+      "tile.done":        "✓ 已下载平铺图片！",
 
       // PDF 页码标注
       "stamp.title":    "🔢 PDF 页码标注",

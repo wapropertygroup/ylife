@@ -120,6 +120,7 @@ const I18n = (() => {
     'th.fcf':         { en: 'FCF ($B)',    zh: '自由现金流' },
     'th.short_float': { en: 'Short %',    zh: '做空%' },
     'th.div_yield':   { en: 'Div Yield',  zh: '股息率' },
+    'th.rev_growth':  { en: 'Rev Growth', zh: '营收增速' },
 
     // ── sector.html ────────────────────────────────────────────────────
     'sector.dashboard':     { en: '← Dashboard',  zh: '← 仪表盘' },
@@ -290,6 +291,7 @@ const I18n = (() => {
     'history.rsi_explain_body':    { en: 'RSI measures momentum on a 0–100 scale. Above 70 = overbought (possible pullback); below 30 = oversold (possible bounce). RSI can stay extreme in strong trends — use with price action and volume for confirmation.', zh: 'RSI在0–100区间衡量动量。高于70为超买（可能回调），低于30为超卖（可能反弹）。强趋势中RSI可持续处于极端区域，需结合价格和成交量综合判断。' },
     'history.macd_explain_body':   { en: 'MACD subtracts the 26-period EMA from the 12-period EMA. MACD crossing above the signal line (9-period EMA) is bullish; below is bearish. The histogram shows the gap — widening = strengthening momentum, shrinking = fading.', zh: 'MACD = 12期EMA − 26期EMA。MACD上穿信号线（9期EMA）为看多，下穿为看空。柱状图显示差距：扩大表示动量增强，收窄表示动量减弱。' },
     'history.hv_explain_body':     { en: 'Historical Volatility measures how much the stock has moved, annualized as a percentage. HV20 = short-term; HV60 = longer-term. Rising HV = increasing uncertainty. Low HV followed by a spike often precedes a big price move.', zh: '历史波动率衡量股票的价格波动幅度，以年化百分比表示。HV20为短期，HV60为中长期。波动率上升代表不确定性增加；低波动率后骤然上升往往预示大行情。' },
+    'history.bb_explain_body':     { en: 'Bollinger Bands (violet) surround price with upper/lower bands at ±2σ from the 20-period MA. Squeeze = low vol / upcoming breakout. Price at upper band = extended; at lower band = short-term oversold. MA20 (amber) and MA50 (rose) show trend direction.', zh: '布林带（紫色区域）在20期均线上下各±2σ形成轨道。带宽收窄（挤压）预示低波动后的突破行情。价格触及上轨=阶段性超买；触及下轨=短期超卖。黄色MA20和红色MA50显示中期趋势方向。' },
     // ETF info + key dates stat cards
     'history.group_etf':        { en: 'ETF Info',         zh: 'ETF 信息' },
     'history.expense_ratio':    { en: 'Expense Ratio',    zh: '费用率' },

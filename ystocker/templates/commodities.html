@@ -172,6 +172,12 @@
     </div>
   </div>
 
+  <!-- Per-commodity educational note -->
+  <div id="commodityNote" class="hidden bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up mb-6 text-[12px] text-slate-400 leading-relaxed">
+    <p class="font-semibold text-slate-300 mb-1" id="commodityNoteTitle">💡 About this commodity</p>
+    <p id="commodityNoteBody"></p>
+  </div>
+
   <!-- ── Cross-commodity ratios ─────────────────────────────────────── -->
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up mb-6">
     <div class="mb-4">
@@ -654,13 +660,44 @@
   // Trigger seasonality load after initial render
   _loadSeasonality();
 
+  // ─── Per-commodity educational notes
+  const COMMODITY_NOTES = {
+    gold:      { title: '💡 Gold', body: 'Gold is the ultimate safe-haven asset. It rises during inflation fears, currency debasement, geopolitical crises, and Fed rate-cut cycles. The 50d/200d MA crossover (golden cross / death cross) is widely watched. Gold typically has an inverse relationship with the US dollar (DXY) and real yields (TIPS). The gold/silver ratio >80 signals silver is relatively cheap.' },
+    silver:    { title: '💡 Silver', body: 'Silver has a split personality: ~55% industrial demand (solar panels, electronics) and ~45% monetary demand (like gold). It has higher beta than gold — bigger moves in both directions. The gold/silver ratio is a key spread trade. Silver underperforms gold during risk-off periods but outperforms in bull markets.' },
+    platinum:  { title: '💡 Platinum', body: 'Platinum is primarily an industrial metal (auto catalysts, jewelry, hydrogen fuel cells). It is rarer than gold but typically cheaper — when platinum trades below gold, it is historically "cheap." South Africa produces ~70% of global supply, making geopolitical risk a key driver.' },
+    palladium: { title: '💡 Palladium', body: 'Palladium is critical for gasoline engine catalytic converters. Russia produces ~40% of global supply. It saw a historic bull run from 2016-2022 on EV transition fears creating a supply crunch. It is now declining as EVs reduce petrol engine demand. Highly volatile and thinly traded.' },
+    copper:    { title: '💡 Copper (Dr. Copper)', body: '"Dr. Copper" has a PhD in economics — its price is a leading indicator of global manufacturing and GDP growth. Falling copper while gold rises = classic recession signal. China consumes ~55% of global copper. Key uses: wiring, EVs (4x more copper than ICE vehicles), construction. Watch the copper/gold ratio for risk appetite.' },
+    oil_wti:   { title: '💡 WTI Crude Oil', body: 'WTI (West Texas Intermediate) is the US benchmark crude, traded on NYMEX. It reflects US supply/demand dynamics. Key drivers: OPEC+ production decisions, US shale output, refinery utilization, and geopolitical risk. WTI typically trades $2-4 below Brent. Contango (futures > spot) signals oversupply; backwardation signals tight supply.' },
+    oil_brent: { title: '💡 Brent Crude', body: 'Brent is the global oil benchmark (~70% of world contracts priced off Brent). Produced in the North Sea. More sensitive than WTI to Middle East geopolitics and European demand. The Brent-WTI spread widens during Middle East tensions or US shale supply surges. Watch EIA weekly inventory reports every Wednesday.' },
+    natgas:    { title: '💡 Natural Gas', body: 'Natural gas is highly seasonal — peaks in winter (heating) and summer (power generation/AC). It is one of the most volatile commodities. Storage reports (EIA, weekly Thursday) drive short-term price action. The 2022 spike to $9+ was driven by European energy crisis post-Ukraine. LNG exports increasingly tie US prices to global markets.' },
+    wheat:     { title: '💡 Wheat', body: 'Wheat is the most geopolitically sensitive agricultural commodity — Russia and Ukraine supply ~30% of global exports. Price spikes on drought (US Plains, Australia), conflict (Black Sea region), and La Niña weather patterns. The USDA WASDE report (monthly) is the key data release. Watch global ending stocks-to-use ratio: below 15% = tight supply, above 25% = ample.' },
+    corn:      { title: '💡 Corn', body: 'Corn price follows the US growing season: spring planting concerns (April-May) and summer weather stress (July-August pollination) drive the typical seasonal spike. The US produces ~35% of global corn. Ethanol demand (40% of US corn) links corn prices to oil prices. La Niña = South American drought → higher prices. USDA WASDE reports are the key catalyst.' },
+    soybeans:  { title: '💡 Soybeans', body: 'Soybeans are dominated by China demand (imports ~60% of globally traded soybeans) — US-China trade tensions directly move soy prices. Brazil and US alternate as top producers (seasonal flip: US harvest Sep-Nov, Brazil Jan-Mar). Crush spread (soybean vs soybean oil + meal) measures processing margins. Strong crush spread = processor demand is robust.' },
+    coffee:    { title: '💡 Coffee', body: 'Coffee prices are driven by Brazilian weather (frost in June-July = price spike; drought in flowering season = next-year supply worries) and Vietnamese output (Robusta). The biennial cycle of arabica trees causes 2-year supply cycles. Currency moves (BRL, VND) affect farmer income and planting decisions. Inventories at exchange-certified warehouses (ICE, NYSE Liffe) are weekly monitored.' },
+    sugar:     { title: '💡 Sugar', body: 'Sugar price is influenced by Brazilian sugarcane (ethanol vs sugar diversion based on oil price), Indian production (monsoon-dependent), and global subsidy policies. When oil prices rise, Brazil diverts more cane to ethanol, reducing sugar supply. El Niño typically reduces Indian and Thai output. The raw sugar (No. 11) vs white sugar spread reflects refining margins.' },
+  };
+
+  function _showCommodityNote(key) {
+    const note = COMMODITY_NOTES[key];
+    const section = document.getElementById('commodityNote');
+    if (!section) return;
+    if (!note) { section.classList.add('hidden'); return; }
+    section.classList.remove('hidden');
+    document.getElementById('commodityNoteTitle').textContent = note.title;
+    document.getElementById('commodityNoteBody').textContent  = note.body;
+  }
+
   // Update seasonality when user selects a new commodity
   const _origCmdSelect = window._cmdSelect;
   window._cmdSelect = function(key) {
     _origCmdSelect(key);
     if (_seasonData) _renderSeasonality(key);
     else _loadSeasonality();
+    _showCommodityNote(key);
   };
+
+  // Show note for initial commodity
+  _showCommodityNote(CURRENT_KEY);
 })();
 </script>
 {% endblock %}

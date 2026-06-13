@@ -426,6 +426,7 @@
             <th class="text-right py-2 px-2 font-medium sortable cursor-pointer hover:text-slate-300 transition whitespace-nowrap" data-col="fcf"><span data-i18n="th.fcf">FCF ($B)</span> <span class="sort-icon">↕</span></th>
             <th class="text-right py-2 px-2 font-medium sortable cursor-pointer hover:text-slate-300 transition whitespace-nowrap" data-col="short_float"><span data-i18n="th.short_float">Short %</span> <span class="sort-icon">↕</span></th>
             <th class="text-right py-2 px-2 font-medium sortable cursor-pointer hover:text-slate-300 transition whitespace-nowrap" data-col="div_yield"><span data-i18n="th.div_yield">Div Yield</span> <span class="sort-icon">↕</span></th>
+            <th class="text-right py-2 px-2 font-medium sortable cursor-pointer hover:text-slate-300 transition whitespace-nowrap" data-col="rev_growth"><span data-i18n="th.rev_growth">Rev Growth</span> <span class="sort-icon">↕</span></th>
           </tr>
         </thead>
         <tbody id="sectorTableBody"></tbody>
@@ -1217,6 +1218,7 @@ function avgLinePlugin(getAvg, fmt, color) {
       <td class="py-2 px-2 text-right font-mono text-xs ${d.fcf != null ? (d.fcf >= 0 ? 'text-emerald-400' : 'text-rose-400') : 'text-slate-700'}">${d.fcf != null ? (d.fcf >= 0 ? '+' : '') + d.fcf.toFixed(1) : '—'}</td>
       <td class="py-2 px-2 text-right font-mono text-xs ${d.short_float != null ? (d.short_float > 15 ? 'text-rose-400' : d.short_float > 7 ? 'text-amber-400' : '') : 'text-slate-700'}">${d.short_float != null ? d.short_float.toFixed(1)+'%' : '—'}</td>
       <td class="py-2 px-2 text-right font-mono text-xs ${d.div_yield != null ? 'text-emerald-400' : 'text-slate-700'}">${d.div_yield != null ? d.div_yield.toFixed(2)+'%' : '—'}</td>
+      <td class="py-2 px-2 text-right font-mono text-xs ${d.rev_growth != null ? (d.rev_growth > 15 ? 'text-emerald-400' : d.rev_growth > 5 ? 'text-amber-400' : d.rev_growth > 0 ? 'text-slate-300' : 'text-rose-400') : 'text-slate-700'}">${d.rev_growth != null ? (d.rev_growth >= 0 ? '+' : '') + d.rev_growth.toFixed(1) + '%' : '—'}</td>
       </tr>`).join('');
   }
 

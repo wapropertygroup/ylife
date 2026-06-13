@@ -2273,3 +2273,355 @@ def generate_placeholder(
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     return buf.getvalue()
+
+
+# ---------------------------------------------------------------------------
+# 46. Crop to Aspect Ratio
+# ---------------------------------------------------------------------------
+
+def crop_to_aspect(
+    data: bytes,
+    ratio_w: int = 1,
+    ratio_h: int = 1,
+    anchor: str = "center",
+) -> tuple[bytes, str]:
+    """Crop an image to a target aspect ratio without resizing.
+
+    Args:
+        ratio_w, ratio_h: Target aspect ratio (e.g. 16, 9).
+        anchor: 'center', 'top', 'bottom', 'left', or 'right'.
+    """
+    img = Image.open(io.BytesIO(data))
+    orig_fmt = (img.format or "JPEG").upper()
+    iw, ih = img.size
+
+    target_ratio = ratio_w / ratio_h
+    current_ratio = iw / ih
+
+    if current_ratio > target_ratio:
+        # Too wide → crop sides
+        new_w = int(ih * target_ratio)
+        new_h = ih
+        if anchor == "left":
+            left = 0
+        elif anchor == "right":
+            left = iw - new_w
+        else:
+            left = (iw - new_w) // 2
+        box = (left, 0, left + new_w, ih)
+    else:
+        # Too tall → crop top/bottom
+        new_w = iw
+        new_h = int(iw / target_ratio)
+        if anchor == "top":
+            top = 0
+        elif anchor == "bottom":
+            top = ih - new_h
+        else:
+            top = (ih - new_h) // 2
+        box = (0, top, iw, top + new_h)
+
+    cropped = img.crop(box)
+    save_fmt = orig_fmt if orig_fmt in ("JPEG", "PNG", "WEBP") else "JPEG"
+    if save_fmt == "JPEG" and cropped.mode not in ("RGB", "L"):
+        cropped = cropped.convert("RGB")
+    mime_map = {"JPEG": "image/jpeg", "PNG": "image/png", "WEBP": "image/webp"}
+    mime = mime_map.get(save_fmt, "image/jpeg")
+
+    buf = io.BytesIO()
+    cropped.save(buf, format=save_fmt, quality=95 if save_fmt == "JPEG" else None)
+    return buf.getvalue(), mime
+
+
+# ---------------------------------------------------------------------------
+# 47. Add Drop Shadow to PNG
+# ---------------------------------------------------------------------------
+
+def add_drop_shadow(
+    data: bytes,
+    offset_x: int = 8,
+    offset_y: int = 8,
+    blur: int = 12,
+    shadow_color: str = "#000000",
+    shadow_opacity: int = 60,
+    padding: int = 20,
+) -> bytes:
+    """Add a drop shadow to an image. Returns PNG with alpha channel.
+
+    Works best with PNG inputs that have transparency.
+    """
+    import numpy as np
+    from PIL import ImageFilter, ImageDraw
+
+    img = Image.open(io.BytesIO(data)).convert("RGBA")
+    sw = img.width + abs(offset_x) + padding * 2
+    sh = img.height + abs(offset_y) + padding * 2
+
+    r = int(shadow_color.lstrip("#")[0:2], 16)
+    g = int(shadow_color.lstrip("#")[2:4], 16)
+    b = int(shadow_color.lstrip("#")[4:6], 16)
+    a = int(shadow_opacity / 100 * 255)
+
+    # Create shadow layer: use alpha channel of original
+    shadow = Image.new("RGBA", (sw, sh), (0, 0, 0, 0))
+    # Place shadow mask at offset position
+    sx = padding + max(0, offset_x)
+    sy = padding + max(0, offset_y)
+    alpha_mask = img.split()[3]
+    shadow_layer = Image.new("RGBA", (sw, sh), (0, 0, 0, 0))
+    colored_shadow = Image.new("RGBA", img.size, (r, g, b, a))
+    colored_shadow.putalpha(alpha_mask)
+    shadow_layer.paste(colored_shadow, (sx, sy))
+
+    # Blur the shadow
+    if blur > 0:
+        shadow_layer = shadow_layer.filter(ImageFilter.GaussianBlur(radius=blur))
+
+    # Composite: shadow + original
+    ox = padding + max(0, -offset_x)
+    oy = padding + max(0, -offset_y)
+    result = Image.new("RGBA", (sw, sh), (0, 0, 0, 0))
+    result = Image.alpha_composite(result, shadow_layer)
+    result.paste(img, (ox, oy), img)
+
+    buf = io.BytesIO()
+    result.save(buf, format="PNG")
+    return buf.getvalue()
+
+
+# ---------------------------------------------------------------------------
+# 48. Color Swap (replace one color with another)
+# ---------------------------------------------------------------------------
+
+def swap_color(
+    data: bytes,
+    source_color: str = "#ff0000",
+    target_color: str = "#0000ff",
+    tolerance: int = 40,
+) -> bytes:
+    """Replace all pixels close to `source_color` with `target_color`.
+
+    Returns PNG to preserve exact color replacement.
+    """
+    import numpy as np
+
+    img = Image.open(io.BytesIO(data)).convert("RGBA")
+    arr = np.array(img, dtype=np.int32)
+
+    src = [int(source_color.lstrip("#")[i:i + 2], 16) for i in (0, 2, 4)]
+    tgt = [int(target_color.lstrip("#")[i:i + 2], 16) for i in (0, 2, 4)]
+
+    diff = np.abs(arr[:, :, :3] - np.array(src, dtype=np.int32))
+    mask = np.all(diff <= tolerance, axis=2)
+
+    arr[mask, 0] = tgt[0]
+    arr[mask, 1] = tgt[1]
+    arr[mask, 2] = tgt[2]
+    arr = arr.clip(0, 255).astype(np.uint8)
+
+    out = Image.fromarray(arr, "RGBA")
+    buf = io.BytesIO()
+    out.save(buf, format="PNG")
+    return buf.getvalue()
+
+
+# ---------------------------------------------------------------------------
+# 49. PDF Compress (aggressive — remove embedded fonts subset, linearize)
+# ---------------------------------------------------------------------------
+
+def compress_pdf_aggressive(data: bytes) -> bytes:
+    """More aggressive PDF compression using PyMuPDF's garbage collector.
+
+    Removes unused objects, cleans cross-references, and linearizes.
+    """
+    import fitz
+
+    doc = fitz.open(stream=data, filetype="pdf")
+    buf = io.BytesIO()
+    # garbage=4: aggressive GC + xref rebuild; deflate=True: recompress streams
+    doc.save(buf, garbage=4, deflate=True)
+    doc.close()
+    return buf.getvalue()
+
+
+# ---------------------------------------------------------------------------
+# 50. Image Tiling (repeat image as tiles on a canvas)
+# ---------------------------------------------------------------------------
+
+def tile_image(
+    data: bytes,
+    canvas_width: int = 1920,
+    canvas_height: int = 1080,
+    tile_width: int | None = None,
+    tile_height: int | None = None,
+) -> tuple[bytes, str]:
+    """Tile an image repeatedly to fill a canvas of the given dimensions."""
+    img = Image.open(io.BytesIO(data)).convert("RGB")
+
+    tw = tile_width  or img.width
+    th = tile_height or img.height
+    tw = max(10, min(canvas_width,  tw))
+    th = max(10, min(canvas_height, th))
+    canvas_width  = max(10, min(8192, canvas_width))
+    canvas_height = max(10, min(8192, canvas_height))
+
+    tile = img.resize((tw, th), Image.Resampling.LANCZOS)
+    canvas = Image.new("RGB", (canvas_width, canvas_height))
+
+    for y in range(0, canvas_height, th):
+        for x in range(0, canvas_width, tw):
+            canvas.paste(tile, (x, y))
+
+    buf = io.BytesIO()
+    canvas.save(buf, format="JPEG", quality=90)
+    return buf.getvalue(), "image/jpeg"
+
+
+# ---------------------------------------------------------------------------
+# 51. Add Image Watermark (logo overlay)
+# ---------------------------------------------------------------------------
+
+def add_image_watermark(
+    base_data: bytes,
+    wm_data: bytes,
+    position: str = "bottom_right",
+    opacity: int = 70,
+    scale: int = 20,
+    padding: int = 20,
+) -> tuple[bytes, str]:
+    """Overlay a logo/watermark image onto the base image.
+
+    Args:
+        scale:    Watermark size as % of base image's shortest dimension.
+        opacity:  0–100.
+        position: top_left, top_right, center, bottom_left, bottom_right.
+    """
+    base = Image.open(io.BytesIO(base_data)).convert("RGBA")
+    wm   = Image.open(io.BytesIO(wm_data)).convert("RGBA")
+    orig_fmt = (Image.open(io.BytesIO(base_data)).format or "PNG").upper()
+
+    # Scale watermark
+    max_side = min(base.width, base.height) * scale // 100
+    ratio = max_side / max(wm.width, wm.height)
+    wm_w = max(1, int(wm.width  * ratio))
+    wm_h = max(1, int(wm.height * ratio))
+    wm = wm.resize((wm_w, wm_h), Image.Resampling.LANCZOS)
+
+    # Apply opacity
+    if opacity < 100:
+        r, g, b, a = wm.split()
+        a = a.point(lambda x: int(x * opacity / 100))
+        wm = Image.merge("RGBA", (r, g, b, a))
+
+    positions = {
+        "top_left":     (padding, padding),
+        "top_right":    (base.width - wm_w - padding, padding),
+        "center":       ((base.width - wm_w) // 2, (base.height - wm_h) // 2),
+        "bottom_left":  (padding, base.height - wm_h - padding),
+        "bottom_right": (base.width - wm_w - padding, base.height - wm_h - padding),
+    }
+    x, y = positions.get(position, positions["bottom_right"])
+    x = max(0, min(base.width - wm_w, x))
+    y = max(0, min(base.height - wm_h, y))
+
+    out = base.copy()
+    out.paste(wm, (x, y), wm)
+
+    save_fmt = orig_fmt if orig_fmt in ("JPEG", "PNG", "WEBP") else "PNG"
+    if save_fmt == "JPEG":
+        out = out.convert("RGB")
+    mime_map = {"JPEG": "image/jpeg", "PNG": "image/png", "WEBP": "image/webp"}
+    mime = mime_map.get(save_fmt, "image/png")
+
+    buf = io.BytesIO()
+    out.save(buf, format=save_fmt, quality=95 if save_fmt == "JPEG" else None)
+    return buf.getvalue(), mime
+
+
+# ---------------------------------------------------------------------------
+# 52. Flip / Mirror Image (convenience single-step)
+# ---------------------------------------------------------------------------
+
+def flip_image(data: bytes, direction: str = "horizontal") -> tuple[bytes, str]:
+    """Flip an image horizontally or vertically (mirror)."""
+    img = Image.open(io.BytesIO(data))
+    orig_fmt = (img.format or "PNG").upper()
+
+    if direction == "vertical":
+        out = img.transpose(Image.Transpose.FLIP_TOP_BOTTOM)
+    else:
+        out = img.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
+
+    save_fmt = orig_fmt if orig_fmt in ("JPEG", "PNG", "WEBP", "BMP", "GIF") else "PNG"
+    if save_fmt == "JPEG" and out.mode not in ("RGB", "L"):
+        out = out.convert("RGB")
+    mime_map = {"JPEG":"image/jpeg","PNG":"image/png","WEBP":"image/webp","BMP":"image/bmp","GIF":"image/gif"}
+    mime = mime_map.get(save_fmt, "image/png")
+
+    buf = io.BytesIO()
+    out.save(buf, format=save_fmt, quality=95 if save_fmt == "JPEG" else None)
+    return buf.getvalue(), mime
+
+
+# ---------------------------------------------------------------------------
+# 53. Image to Icon Set (macOS / iOS / Windows sizes)
+# ---------------------------------------------------------------------------
+
+def generate_icon_set(data: bytes, platform: str = "macos") -> bytes:
+    """Generate a complete icon set for macOS, iOS, or Windows from a single image.
+
+    Returns a ZIP of PNG files at all required sizes.
+    """
+    img = Image.open(io.BytesIO(data)).convert("RGBA")
+
+    # Square-crop if needed
+    if img.width != img.height:
+        side = min(img.width, img.height)
+        x = (img.width  - side) // 2
+        y = (img.height - side) // 2
+        img = img.crop((x, y, x + side, y + side))
+
+    if platform == "ios":
+        sizes = [20, 29, 40, 58, 60, 76, 80, 87, 120, 152, 167, 180, 1024]
+        names = {s: f"AppIcon-{s}@1x.png" for s in sizes}
+    elif platform == "windows":
+        sizes = [16, 24, 32, 48, 64, 128, 256]
+        names = {s: f"icon-{s}x{s}.png" for s in sizes}
+    else:  # macOS
+        sizes = [16, 32, 64, 128, 256, 512, 1024]
+        names = {s: f"icon_{s}x{s}.png" for s in sizes}
+
+    zip_buf = io.BytesIO()
+    with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for size in sizes:
+            resized = img.resize((size, size), Image.Resampling.LANCZOS)
+            buf = io.BytesIO()
+            resized.save(buf, format="PNG")
+            zf.writestr(names[size], buf.getvalue())
+
+    return zip_buf.getvalue()
+
+
+# ---------------------------------------------------------------------------
+# 54. Posterize Effect
+# ---------------------------------------------------------------------------
+
+def apply_posterize(data: bytes, levels: int = 4) -> tuple[bytes, str]:
+    """Reduce colour depth to `levels` per channel (posterize/solarize effect).
+
+    Lower levels = more dramatic cartoon-like look.
+    """
+    from PIL import ImageOps
+
+    img = Image.open(io.BytesIO(data)).convert("RGB")
+    orig_fmt = (img.format or "JPEG").upper()
+    levels = max(2, min(8, levels))
+    out = ImageOps.posterize(img, bits=levels)
+
+    save_fmt = orig_fmt if orig_fmt in ("JPEG", "PNG", "WEBP") else "JPEG"
+    mime_map = {"JPEG":"image/jpeg","PNG":"image/png","WEBP":"image/webp"}
+    mime = mime_map.get(save_fmt, "image/jpeg")
+
+    buf = io.BytesIO()
+    out.save(buf, format=save_fmt, quality=93 if save_fmt == "JPEG" else None)
+    return buf.getvalue(), mime

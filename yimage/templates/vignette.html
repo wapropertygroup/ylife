@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}Vignette Effect — yImage{% endblock %}
+{% block content %}
+<div x-data="vignetteTool()">
+  <div class="max-w-2xl mx-auto">
+    <a href="/" class="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-brand transition mb-4">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+      <span data-i18n="common.all_tools">All Tools</span>
+    </a>
+    <h1 class="text-2xl font-extrabold mb-2" data-i18n="vignette.title">🌑 Vignette Effect</h1>
+    <p class="text-sm text-slate-500 dark:text-slate-400 mb-6" data-i18n="vignette.desc">Darken (or lighten) the edges of a photo to draw attention to the centre. A classic film photography effect.</p>
+
+    <div class="drop-zone rounded-2xl border-2 border-dashed border-slate-300 dark:border-slate-700 p-10 text-center cursor-pointer transition hover:border-brand"
+         @click="$refs.fi.click()"
+         @dragover.prevent="dragOver=true" @dragleave="dragOver=false"
+         @drop.prevent="dragOver=false; handleDrop($event)"
+         :class="dragOver ? 'border-brand bg-violet-50 dark:bg-violet-900/10' : ''">
+      <input type="file" accept="image/*" x-ref="fi" @change="loadFile($event.target.files[0])" class="hidden">
+      <div x-show="!previewSrc">
+        <svg class="w-12 h-12 mx-auto mb-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/>
+        </svg>
+        <p class="text-sm text-slate-500"><span data-i18n="common.upload">Drop an image here or</span> <span class="text-brand font-medium" data-i18n="common.browse">browse</span></p>
+        <p class="text-xs text-slate-400 mt-1">JPEG · PNG · WebP · <span data-i18n="common.max_size">Max 50 MB</span></p>
+      </div>
+      <div x-show="previewSrc" class="flex flex-col items-center gap-2">
+        <div class="relative inline-block rounded-xl overflow-hidden">
+          <img :src="previewSrc" class="block max-h-40 max-w-full object-contain">
+          <!-- CSS vignette overlay -->
+          <div class="absolute inset-0 pointer-events-none"
+               :style="`background: radial-gradient(ellipse at center, transparent ${100-(strength*80)}%, ${color} 140%); opacity: ${strength}`"></div>
+        </div>
+        <button @click.stop="reset()" class="text-xs text-slate-400 hover:text-red-500" data-i18n="common.change">Change</button>
+      </div>
+    </div>
+
+    <div x-show="file" class="mt-4 space-y-4 p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50">
+      <div>
+        <label class="text-sm font-medium mb-1 block">
+          <span data-i18n="vignette.strength">Strength</span>: <span x-text="(strength*100).toFixed(0)+'%'"></span>
+        </label>
+        <input type="range" x-model.number="strength" min="0.1" max="1.0" step="0.05"
+               class="w-full accent-violet-500">
+      </div>
+      <div>
+        <label class="text-sm font-medium mb-2 block" data-i18n="vignette.color">Edge Color</label>
+        <div class="flex gap-3">
+          <div class="flex items-center gap-2">
+            <input type="color" x-model="color" class="w-9 h-9 rounded cursor-pointer border border-slate-300 p-0.5 bg-white">
+            <input type="text" x-model="color" maxlength="7"
+                   class="w-24 px-2 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-mono focus:border-brand focus:outline-none">
+          </div>
+          <button @click="color='#000000'" class="px-2.5 py-1 rounded-lg text-xs bg-slate-900 text-white border border-slate-700 transition hover:ring-2 ring-brand">Dark</button>
+          <button @click="color='#ffffff'" class="px-2.5 py-1 rounded-lg text-xs bg-white text-slate-700 border border-slate-300 transition hover:ring-2 ring-brand">Glow</button>
+        </div>
+      </div>
+    </div>
+
+    <button x-show="file" @click="process()" :disabled="processing"
+            class="mt-4 w-full py-3 rounded-xl bg-brand text-white font-semibold hover:bg-brand-dark transition disabled:opacity-50">
+      <span x-show="!processing" data-i18n="vignette.button">Apply Vignette & Download</span>
+      <span x-show="processing" class="flex items-center justify-center gap-2">
+        <svg class="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+        <span data-i18n="common.processing">Processing...</span>
+      </span>
+    </button>
+    <div x-show="done" class="mt-4 p-4 rounded-xl bg-green-50 dark:bg-green-900/15 border border-green-300 dark:border-green-700/50">
+      <p class="text-sm font-semibold text-green-600 dark:text-green-400" data-i18n="vignette.done">✓ Vignette image downloaded!</p>
+    </div>
+    <p x-show="error" class="mt-4 text-sm text-red-500" x-text="error"></p>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+function vignetteTool() {
+  return {
+    file: null, previewSrc: '', dragOver: false,
+    strength: 0.6, color: '#000000',
+    processing: false, error: '', done: false,
+    handleDrop(e) { this.loadFile(e.dataTransfer.files[0]); },
+    loadFile(f) { if(!f) return; this.file=f; this.done=false; this.error=''; this.previewSrc=URL.createObjectURL(f); },
+    reset() { this.file=null; this.previewSrc=''; this.done=false; this.error=''; },
+    async process() {
+      if (!this.file || this.processing) return;
+      this.processing=true; this.error=''; this.done=false;
+      const form=new FormData();
+      form.append('file', this.file); form.append('strength', this.strength); form.append('color', this.color);
+      try {
+        const resp=await fetch('/api/vignette', {method:'POST', body:form});
+        if (!resp.ok) { const d=await resp.json(); this.error=d.error||'Failed'; this.processing=false; return; }
+        const blob=await resp.blob(); const url=URL.createObjectURL(blob);
+        const a=document.createElement('a'); a.href=url; a.download='vignette_'+this.file.name; a.click();
+        URL.revokeObjectURL(url); this.done=true;
+      } catch(e) { this.error='Network error: '+e.message; }
+      this.processing=false;
+    },
+  };
+}
+</script>
+{% endblock %}

@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+{% block title %}Crop to Aspect Ratio — yImage{% endblock %}
+{% block content %}
+<div x-data="aspectTool()">
+  <div class="max-w-2xl mx-auto">
+    <a href="/" class="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-brand transition mb-4">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+      <span data-i18n="common.all_tools">All Tools</span>
+    </a>
+    <h1 class="text-2xl font-extrabold mb-2" data-i18n="aspect.title">📐 Crop to Aspect Ratio</h1>
+    <p class="text-sm text-slate-500 dark:text-slate-400 mb-6" data-i18n="aspect.desc">Crop an image to a target aspect ratio without resizing — perfect for social media, presentations, and print layouts.</p>
+
+    <div class="drop-zone rounded-2xl border-2 border-dashed border-slate-300 dark:border-slate-700 p-10 text-center cursor-pointer transition hover:border-brand"
+         @click="$refs.fi.click()"
+         @dragover.prevent="dragOver=true" @dragleave="dragOver=false"
+         @drop.prevent="dragOver=false; handleDrop($event)"
+         :class="dragOver ? 'border-brand bg-violet-50 dark:bg-violet-900/10' : ''">
+      <input type="file" accept="image/*" x-ref="fi" @change="loadFile($event.target.files[0])" class="hidden">
+      <div x-show="!previewSrc">
+        <svg class="w-12 h-12 mx-auto mb-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/>
+        </svg>
+        <p class="text-sm text-slate-500"><span data-i18n="common.upload">Drop an image here or</span> <span class="text-brand font-medium" data-i18n="common.browse">browse</span></p>
+        <p class="text-xs text-slate-400 mt-1">JPEG · PNG · WebP · <span data-i18n="common.max_size">Max 50 MB</span></p>
+      </div>
+      <div x-show="previewSrc" class="flex flex-col items-center gap-2">
+        <!-- Show current vs target ratio preview box -->
+        <div class="flex gap-4 items-center justify-center">
+          <div class="text-center">
+            <p class="text-xs text-slate-400 mb-1" data-i18n="aspect.original">Original</p>
+            <img :src="previewSrc" class="max-h-28 max-w-36 object-cover rounded border border-slate-200">
+          </div>
+          <span class="text-slate-400 text-xl">→</span>
+          <div class="text-center">
+            <p class="text-xs text-slate-400 mb-1" data-i18n="aspect.result">Result</p>
+            <img :src="previewSrc" class="object-cover rounded border border-brand"
+                 :style="`max-height:112px; aspect-ratio:${ratioW}/${ratioH}; max-width:144px`">
+          </div>
+        </div>
+        <button @click.stop="reset()" class="text-xs text-slate-400 hover:text-red-500" data-i18n="common.change">Change</button>
+      </div>
+    </div>
+
+    <div x-show="file" class="mt-4 space-y-4 p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50">
+
+      <!-- Ratio presets -->
+      <div>
+        <label class="text-sm font-medium mb-2 block" data-i18n="aspect.ratio">Aspect Ratio</label>
+        <div class="flex flex-wrap gap-2 mb-3">
+          <template x-for="p in presets" :key="p.label">
+            <button @click="ratioW=p.w; ratioH=p.h"
+                    :class="ratioW===p.w && ratioH===p.h ? 'bg-brand text-white' : 'bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-600'"
+                    class="px-3 py-1.5 rounded-lg text-xs font-medium transition"
+                    x-text="p.label"></button>
+          </template>
+        </div>
+        <div class="flex items-center gap-2">
+          <input type="number" x-model.number="ratioW" min="1" max="100"
+                 class="w-16 px-2 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-sm text-center focus:border-brand focus:outline-none">
+          <span class="text-slate-400 font-bold">:</span>
+          <input type="number" x-model.number="ratioH" min="1" max="100"
+                 class="w-16 px-2 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-sm text-center focus:border-brand focus:outline-none">
+        </div>
+      </div>
+
+      <!-- Anchor -->
+      <div>
+        <label class="text-sm font-medium mb-2 block" data-i18n="aspect.anchor">Crop Anchor</label>
+        <div class="flex gap-2 flex-wrap">
+          <template x-for="a in anchors" :key="a.v">
+            <button @click="anchor=a.v"
+                    :class="anchor===a.v ? 'bg-brand text-white' : 'bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700'"
+                    class="px-3 py-1.5 rounded-lg text-xs font-medium transition"
+                    x-text="a.l"></button>
+          </template>
+        </div>
+      </div>
+    </div>
+
+    <button x-show="file" @click="process()" :disabled="processing"
+            class="mt-4 w-full py-3 rounded-xl bg-brand text-white font-semibold hover:bg-brand-dark transition disabled:opacity-50">
+      <span x-show="!processing" data-i18n="aspect.button">Crop & Download</span>
+      <span x-show="processing" class="flex items-center justify-center gap-2">
+        <svg class="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+        <span data-i18n="common.processing">Processing...</span>
+      </span>
+    </button>
+    <div x-show="done" class="mt-4 p-4 rounded-xl bg-green-50 dark:bg-green-900/15 border border-green-300 dark:border-green-700/50">
+      <p class="text-sm font-semibold text-green-600 dark:text-green-400" data-i18n="aspect.done">✓ Cropped image downloaded!</p>
+    </div>
+    <p x-show="error" class="mt-4 text-sm text-red-500" x-text="error"></p>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+function aspectTool() {
+  return {
+    file: null, previewSrc: '', dragOver: false,
+    ratioW: 16, ratioH: 9, anchor: 'center',
+    processing: false, error: '', done: false,
+    presets: [
+      {label:'1:1 Square',  w:1,  h:1},
+      {label:'4:3',         w:4,  h:3},
+      {label:'3:4',         w:3,  h:4},
+      {label:'16:9',        w:16, h:9},
+      {label:'9:16',        w:9,  h:16},
+      {label:'3:2',         w:3,  h:2},
+      {label:'2:3',         w:2,  h:3},
+      {label:'5:4',         w:5,  h:4},
+      {label:'21:9',        w:21, h:9},
+    ],
+    anchors: [
+      {v:'top',    l:'↑ Top'},
+      {v:'center', l:'⊕ Center'},
+      {v:'bottom', l:'↓ Bottom'},
+      {v:'left',   l:'← Left'},
+      {v:'right',  l:'→ Right'},
+    ],
+    handleDrop(e) { this.loadFile(e.dataTransfer.files[0]); },
+    loadFile(f) { if(!f) return; this.file=f; this.done=false; this.error=''; this.previewSrc=URL.createObjectURL(f); },
+    reset() { this.file=null; this.previewSrc=''; this.done=false; this.error=''; },
+    async process() {
+      if (!this.file || this.processing) return;
+      this.processing=true; this.error=''; this.done=false;
+      const form=new FormData();
+      form.append('file',this.file); form.append('ratio_w',this.ratioW);
+      form.append('ratio_h',this.ratioH); form.append('anchor',this.anchor);
+      try {
+        const resp=await fetch('/api/crop-aspect',{method:'POST',body:form});
+        if(!resp.ok){const d=await resp.json();this.error=d.error||'Failed';this.processing=false;return;}
+        const blob=await resp.blob();const url=URL.createObjectURL(blob);
+        const a=document.createElement('a');a.href=url;a.download=`${this.ratioW}x${this.ratioH}_`+this.file.name;a.click();
+        URL.revokeObjectURL(url);this.done=true;
+      } catch(e){this.error='Network error: '+e.message;}
+      this.processing=false;
+    },
+  };
+}
+</script>
+{% endblock %}

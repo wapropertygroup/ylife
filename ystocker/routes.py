@@ -472,6 +472,10 @@ def _df_to_chartdata(df: pd.DataFrame) -> str:
             "ev":               _safe(row.get("EV ($B)")),
             "ebitda":           _safe(row.get("EBITDA ($B)")),
             "ps_ratio":         _safe(row.get("P/S Ratio")),
+            "pb_ratio":         _safe(row.get("P/B Ratio")),
+            "fcf":              _safe(row.get("FCF ($B)")),
+            "div_yield":        _safe(row.get("Dividend Yield (%)")),
+            "rev_growth":       _safe(row.get("Revenue Growth (%)")),
             "short_float":      _safe(row.get("Short Float (%)")),
         })
     return json.dumps(rows).replace("&", r"\u0026").replace("<", r"\u003c").replace(">", r"\u003e")
@@ -566,7 +570,7 @@ def sector(sector_name: str):
     table_cols = ["Name", "Market Cap ($B)", "Current Price",
                   "Target Price", "Upside (%)", "PE (TTM)", "PE (Forward)", "PEG",
                   "EPS Growth TTM (%)", "EPS Growth Q (%)", "Day Change (%)", "EV/EBITDA", "EV ($B)", "EBITDA ($B)",
-                  "P/S Ratio", "P/B Ratio", "FCF ($B)", "Short Float (%)", "Dividend Yield (%)"]
+                  "P/S Ratio", "P/B Ratio", "FCF ($B)", "Short Float (%)", "Dividend Yield (%)", "Revenue Growth (%)"]
     existing_cols = [c for c in table_cols if c in df.columns]
     table_df = df[existing_cols].copy()
 

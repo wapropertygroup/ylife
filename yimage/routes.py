@@ -1848,3 +1848,253 @@ def api_placeholder():
                          download_name=f"placeholder_{width}x{height}.png")
     except Exception as exc:
         log.exception("Placeholder failed"); return jsonify(error=str(exc)), 500
+
+# ---------------------------------------------------------------------------
+# Round 10 Page Routes
+# ---------------------------------------------------------------------------
+
+@bp.route("/crop-aspect")
+def page_crop_aspect():
+    return render_template("crop_aspect.html")
+
+@bp.route("/drop-shadow")
+def page_drop_shadow():
+    return render_template("drop_shadow.html")
+
+@bp.route("/color-swap")
+def page_color_swap():
+    return render_template("color_swap.html")
+
+@bp.route("/pdf-compress-pro")
+def page_pdf_compress_pro():
+    return render_template("pdf_compress_pro.html")
+
+@bp.route("/tile-image")
+def page_tile_image():
+    return render_template("tile_image.html")
+
+
+# ---------------------------------------------------------------------------
+# Round 10 API Routes
+# ---------------------------------------------------------------------------
+
+@bp.route("/api/crop-aspect", methods=["POST"])
+def api_crop_aspect():
+    data, filename, err = _get_upload(allowed_types=["jpg","jpeg","png","webp","bmp"])
+    if err: return err
+    try:
+        rw = int(float(request.form.get("ratio_w","16")))
+        rh = int(float(request.form.get("ratio_h","9")))
+    except (ValueError, TypeError):
+        rw, rh = 16, 9
+    rw = max(1, min(100, rw)); rh = max(1, min(100, rh))
+    anchor = request.form.get("anchor","center")
+    log.info("Crop aspect: %s (%d:%d, anchor=%s)", filename, rw, rh, anchor)
+    try:
+        from yimage.processing import crop_to_aspect
+        result, mime = crop_to_aspect(data, rw, rh, anchor)
+        _ext = {"image/jpeg":"jpg","image/png":"png","image/webp":"webp"}
+        out_ext = _ext.get(mime, "jpg")
+        base = filename.rsplit(".",1)[0] if "." in filename else filename
+        return send_file(BytesIO(result), mimetype=mime, as_attachment=True,
+                         download_name=f"{rw}x{rh}_{base}.{out_ext}")
+    except Exception as exc:
+        log.exception("Crop aspect failed"); return jsonify(error=str(exc)), 500
+
+
+@bp.route("/api/drop-shadow", methods=["POST"])
+def api_drop_shadow():
+    data, filename, err = _get_upload(allowed_types=["jpg","jpeg","png","webp","bmp"])
+    if err: return err
+    shadow_color = request.form.get("shadow_color","#000000")
+    try:
+        offset_x       = int(float(request.form.get("offset_x","8")))
+        offset_y       = int(float(request.form.get("offset_y","8")))
+        blur           = int(float(request.form.get("blur","12")))
+        shadow_opacity = int(float(request.form.get("shadow_opacity","60")))
+        padding        = int(float(request.form.get("padding","20")))
+    except (ValueError, TypeError):
+        offset_x,offset_y,blur,shadow_opacity,padding = 8,8,12,60,20
+    offset_x = max(-200, min(200, offset_x)); offset_y = max(-200, min(200, offset_y))
+    blur = max(0, min(50, blur)); shadow_opacity = max(5, min(100, shadow_opacity))
+    padding = max(0, min(100, padding))
+    log.info("Drop shadow: %s", filename)
+    try:
+        from yimage.processing import add_drop_shadow
+        result = add_drop_shadow(data, offset_x, offset_y, blur, shadow_color, shadow_opacity, padding)
+        base = filename.rsplit(".",1)[0] if "." in filename else filename
+        return send_file(BytesIO(result), mimetype="image/png", as_attachment=True,
+                         download_name=f"shadow_{base}.png")
+    except Exception as exc:
+        log.exception("Drop shadow failed"); return jsonify(error=str(exc)), 500
+
+
+@bp.route("/api/color-swap", methods=["POST"])
+def api_color_swap():
+    data, filename, err = _get_upload(allowed_types=["jpg","jpeg","png","webp","bmp"])
+    if err: return err
+    source = request.form.get("source_color","#ff0000")
+    target = request.form.get("target_color","#0000ff")
+    try:
+        tolerance = int(float(request.form.get("tolerance","40")))
+    except (ValueError, TypeError):
+        tolerance = 40
+    tolerance = max(0, min(128, tolerance))
+    log.info("Color swap: %s (%s→%s, tol=%d)", filename, source, target, tolerance)
+    try:
+        from yimage.processing import swap_color
+        result = swap_color(data, source, target, tolerance)
+        base = filename.rsplit(".",1)[0] if "." in filename else filename
+        return send_file(BytesIO(result), mimetype="image/png", as_attachment=True,
+                         download_name=f"swapped_{base}.png")
+    except Exception as exc:
+        log.exception("Color swap failed"); return jsonify(error=str(exc)), 500
+
+
+@bp.route("/api/pdf-compress-pro", methods=["POST"])
+def api_pdf_compress_pro():
+    data, filename, err = _get_upload(allowed_types=["pdf"])
+    if err: return err
+    log.info("PDF compress pro: %s (%d bytes)", filename, len(data))
+    try:
+        from yimage.processing import compress_pdf_aggressive
+        result = compress_pdf_aggressive(data)
+        log.info("Compressed: %d → %d bytes", len(data), len(result))
+        base = filename.rsplit(".",1)[0] if "." in filename else filename
+        return send_file(BytesIO(result), mimetype="application/pdf", as_attachment=True,
+                         download_name=f"compressed_pro_{base}.pdf")
+    except Exception as exc:
+        log.exception("PDF compress pro failed"); return jsonify(error=str(exc)), 500
+
+
+@bp.route("/api/tile-image", methods=["POST"])
+def api_tile_image():
+    data, filename, err = _get_upload(allowed_types=["jpg","jpeg","png","webp","bmp"])
+    if err: return err
+    try:
+        cw = int(float(request.form.get("canvas_width","1920")))
+        ch = int(float(request.form.get("canvas_height","1080")))
+        tw = int(float(request.form.get("tile_width","0"))) or None
+        th = int(float(request.form.get("tile_height","0"))) or None
+    except (ValueError, TypeError):
+        cw,ch,tw,th = 1920,1080,None,None
+    log.info("Tile image: %s (canvas %dx%d)", filename, cw, ch)
+    try:
+        from yimage.processing import tile_image
+        result, mime = tile_image(data, cw, ch, tw, th)
+        return send_file(BytesIO(result), mimetype=mime, as_attachment=True,
+                         download_name="tiled.jpg")
+    except Exception as exc:
+        log.exception("Tile image failed"); return jsonify(error=str(exc)), 500
+
+# ---------------------------------------------------------------------------
+# Round 11 Page Routes
+# ---------------------------------------------------------------------------
+
+@bp.route("/image-watermark")
+def page_image_watermark():
+    return render_template("image_watermark.html")
+
+@bp.route("/flip-image")
+def page_flip_image():
+    return render_template("flip_image.html")
+
+@bp.route("/icon-set")
+def page_icon_set():
+    return render_template("icon_set.html")
+
+@bp.route("/posterize")
+def page_posterize():
+    return render_template("posterize.html")
+
+
+# ---------------------------------------------------------------------------
+# Round 11 API Routes
+# ---------------------------------------------------------------------------
+
+@bp.route("/api/image-watermark", methods=["POST"])
+def api_image_watermark():
+    """Overlay a logo/watermark image on the base image."""
+    base_data, base_filename, err = _get_upload("file", allowed_types=["jpg","jpeg","png","webp","bmp"])
+    if err: return err
+    wm_file = request.files.get("watermark")
+    if not wm_file or not wm_file.filename:
+        return jsonify(error="No watermark image uploaded"), 400
+    wm_data = wm_file.read()
+    if not wm_data:
+        return jsonify(error="Watermark image is empty"), 400
+    position = request.form.get("position","bottom_right")
+    try:
+        opacity = int(float(request.form.get("opacity","70")))
+        scale   = int(float(request.form.get("scale","20")))
+        padding = int(float(request.form.get("padding","20")))
+    except (ValueError, TypeError):
+        opacity,scale,padding = 70,20,20
+    opacity = max(10,min(100,opacity)); scale = max(5,min(80,scale)); padding = max(0,min(200,padding))
+    log.info("Image watermark: %s (pos=%s, scale=%d)", base_filename, position, scale)
+    try:
+        from yimage.processing import add_image_watermark
+        result, mime = add_image_watermark(base_data, wm_data, position, opacity, scale, padding)
+        _ext = {"image/jpeg":"jpg","image/png":"png","image/webp":"webp"}
+        out_ext = _ext.get(mime, base_filename.rsplit(".",1)[-1] if "." in base_filename else "jpg")
+        base = base_filename.rsplit(".",1)[0] if "." in base_filename else base_filename
+        return send_file(BytesIO(result), mimetype=mime, as_attachment=True,
+                         download_name=f"watermarked_{base}.{out_ext}")
+    except Exception as exc:
+        log.exception("Image watermark failed"); return jsonify(error=str(exc)), 500
+
+
+@bp.route("/api/flip-image", methods=["POST"])
+def api_flip_image():
+    data, filename, err = _get_upload(allowed_types=["jpg","jpeg","png","webp","bmp","gif"])
+    if err: return err
+    direction = request.form.get("direction","horizontal")
+    log.info("Flip image: %s (%s)", filename, direction)
+    try:
+        from yimage.processing import flip_image
+        result, mime = flip_image(data, direction)
+        _ext = {"image/jpeg":"jpg","image/png":"png","image/webp":"webp","image/bmp":"bmp","image/gif":"gif"}
+        out_ext = _ext.get(mime, filename.rsplit(".",1)[-1] if "." in filename else "jpg")
+        base = filename.rsplit(".",1)[0] if "." in filename else filename
+        return send_file(BytesIO(result), mimetype=mime, as_attachment=True,
+                         download_name=f"flipped_{base}.{out_ext}")
+    except Exception as exc:
+        log.exception("Flip image failed"); return jsonify(error=str(exc)), 500
+
+
+@bp.route("/api/icon-set", methods=["POST"])
+def api_icon_set():
+    data, filename, err = _get_upload(allowed_types=["jpg","jpeg","png","webp","bmp","svg"])
+    if err: return err
+    platform = request.form.get("platform","macos")
+    log.info("Icon set: %s (%s)", filename, platform)
+    try:
+        from yimage.processing import generate_icon_set
+        result = generate_icon_set(data, platform)
+        base = filename.rsplit(".",1)[0] if "." in filename else filename
+        return send_file(BytesIO(result), mimetype="application/zip", as_attachment=True,
+                         download_name=f"{base}_{platform}_icons.zip")
+    except Exception as exc:
+        log.exception("Icon set failed"); return jsonify(error=str(exc)), 500
+
+
+@bp.route("/api/posterize", methods=["POST"])
+def api_posterize():
+    data, filename, err = _get_upload(allowed_types=["jpg","jpeg","png","webp","bmp"])
+    if err: return err
+    try:
+        levels = int(float(request.form.get("levels","4")))
+    except (ValueError, TypeError):
+        levels = 4
+    levels = max(2, min(8, levels))
+    log.info("Posterize: %s (levels=%d)", filename, levels)
+    try:
+        from yimage.processing import apply_posterize
+        result, mime = apply_posterize(data, levels)
+        _ext = {"image/jpeg":"jpg","image/png":"png","image/webp":"webp"}
+        out_ext = _ext.get(mime, "jpg")
+        base = filename.rsplit(".",1)[0] if "." in filename else filename
+        return send_file(BytesIO(result), mimetype=mime, as_attachment=True,
+                         download_name=f"posterized_{base}.{out_ext}")
+    except Exception as exc:
+        log.exception("Posterize failed"); return jsonify(error=str(exc)), 500

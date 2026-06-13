@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}PDF Compress Pro — yImage{% endblock %}
+{% block content %}
+<div x-data="compressProTool()">
+  <div class="max-w-2xl mx-auto">
+    <a href="/" class="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-brand transition mb-4">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+      <span data-i18n="common.all_tools">All Tools</span>
+    </a>
+    <h1 class="text-2xl font-extrabold mb-2" data-i18n="compresspro.title">⚡ PDF Compress Pro</h1>
+    <p class="text-sm text-slate-500 dark:text-slate-400 mb-6" data-i18n="compresspro.desc">Aggressive PDF size reduction using PyMuPDF's garbage collector — removes unused objects, rebuilds cross-references, and linearizes for web. Complements the image-quality compressor.</p>
+
+    <div class="drop-zone rounded-2xl border-2 border-dashed border-slate-300 dark:border-slate-700 p-10 text-center cursor-pointer transition hover:border-brand"
+         @click="$refs.fi.click()"
+         @dragover.prevent="dragOver=true" @dragleave="dragOver=false"
+         @drop.prevent="dragOver=false; handleDrop($event)"
+         :class="dragOver ? 'border-brand bg-violet-50 dark:bg-violet-900/10' : ''">
+      <input type="file" accept=".pdf" x-ref="fi" @change="handleFile($event.target.files[0])" class="hidden">
+      <div x-show="!file">
+        <svg class="w-12 h-12 mx-auto mb-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+        </svg>
+        <p class="text-sm text-slate-500"><span data-i18n="common.upload">Drop a PDF here or</span> <span class="text-brand font-medium" data-i18n="common.browse">browse</span></p>
+        <p class="text-xs text-slate-400 mt-1" data-i18n="common.max_size">Max 50 MB</p>
+      </div>
+      <div x-show="file" class="flex items-center justify-center gap-3">
+        <span class="text-3xl">📄</span>
+        <div class="text-left">
+          <p class="text-sm font-medium" x-text="file?.name"></p>
+          <p class="text-xs text-slate-400" x-text="fileSize"></p>
+        </div>
+        <button @click.stop="file=null; $refs.fi.value=''" class="ml-2 text-slate-400 hover:text-red-500 text-lg">✕</button>
+      </div>
+    </div>
+
+    <div x-show="file" class="mt-4 p-4 rounded-xl bg-blue-50 dark:bg-blue-900/15 border border-blue-200 dark:border-blue-800/40 text-sm text-blue-700 dark:text-blue-400">
+      <p data-i18n="compresspro.info">This uses structural compression — removes redundant objects, dead-code, and linearizes for faster web loading. No image quality reduction. For image compression use <a href="/compress-pdf" class="underline font-medium">Compress PDF</a>.</p>
+    </div>
+
+    <button x-show="file" @click="process()" :disabled="processing"
+            class="mt-4 w-full py-3 rounded-xl bg-brand text-white font-semibold hover:bg-brand-dark transition disabled:opacity-50">
+      <span x-show="!processing" data-i18n="compresspro.button">Compress Pro & Download</span>
+      <span x-show="processing" class="flex items-center justify-center gap-2">
+        <svg class="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+        <span data-i18n="common.processing">Processing...</span>
+      </span>
+    </button>
+
+    <div x-show="result" class="mt-4 p-4 rounded-xl bg-green-50 dark:bg-green-900/15 border border-green-300 dark:border-green-700/50">
+      <p class="text-sm font-semibold text-green-600 dark:text-green-400 mb-1" data-i18n="compresspro.done">✓ Compressed PDF downloaded!</p>
+      <p class="text-xs text-slate-500" x-text="resultInfo"></p>
+    </div>
+    <p x-show="error" class="mt-4 text-sm text-red-500" x-text="error"></p>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+function compressProTool() {
+  return {
+    file: null, dragOver: false,
+    processing: false, error: '', result: false, resultInfo: '',
+    get fileSize() {
+      if (!this.file) return '';
+      const b=this.file.size; return b<1048576?(b/1024).toFixed(1)+'KB':(b/1048576).toFixed(1)+'MB';
+    },
+    fmt(b) { return b<1048576?(b/1024).toFixed(1)+'KB':(b/1048576).toFixed(1)+'MB'; },
+    handleDrop(e) { this.handleFile(e.dataTransfer.files[0]); },
+    handleFile(f) { if(!f) return; this.file=f; this.result=false; this.error=''; },
+    async process() {
+      if (!this.file || this.processing) return;
+      this.processing=true; this.error=''; this.result=false;
+      const form=new FormData(); form.append('file',this.file);
+      try {
+        const resp=await fetch('/api/pdf-compress-pro',{method:'POST',body:form});
+        if(!resp.ok){const d=await resp.json();this.error=d.error||'Failed';this.processing=false;return;}
+        const blob=await resp.blob();
+        this.resultInfo=`${this.fmt(this.file.size)} → ${this.fmt(blob.size)} (${((1-blob.size/this.file.size)*100).toFixed(0)}% smaller)`;
+        const url=URL.createObjectURL(blob);
+        const a=document.createElement('a');a.href=url;a.download='compressed_pro_'+this.file.name;a.click();
+        URL.revokeObjectURL(url);this.result=true;
+      } catch(e){this.error='Network error: '+e.message;}
+      this.processing=false;
+    },
+  };
+}
+</script>
+{% endblock %}

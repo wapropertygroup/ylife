@@ -99,6 +99,7 @@ def fetch_ticker_data(ticker: str) -> dict:
         "FCF ($B)":           round(info.get("freeCashflow") / 1e9, 1) if info.get("freeCashflow") else None,
         "Short Float (%)":    round(info.get("shortPercentOfFloat") * 100, 1) if info.get("shortPercentOfFloat") else None,
         "Dividend Yield (%)": round(info.get("dividendYield") * 100, 2) if info.get("dividendYield") else None,
+        "Revenue Growth (%)": round(info.get("revenueGrowth") * 100, 1) if info.get("revenueGrowth") else None,
     }
 
 

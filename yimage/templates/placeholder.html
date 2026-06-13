@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% block title %}Placeholder Image — yImage{% endblock %}
+{% block content %}
+<div x-data="placeholderTool()">
+  <div class="max-w-2xl mx-auto">
+    <a href="/" class="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-brand transition mb-4">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+      <span data-i18n="common.all_tools">All Tools</span>
+    </a>
+    <h1 class="text-2xl font-extrabold mb-2" data-i18n="placeholder.title">🟪 Placeholder Image</h1>
+    <p class="text-sm text-slate-500 dark:text-slate-400 mb-6" data-i18n="placeholder.desc">Generate a solid-colour placeholder image at any size. Useful for UI mockups, testing, and design layouts.</p>
+
+    <div class="space-y-5 p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50">
+
+      <!-- Dimensions -->
+      <div>
+        <label class="text-sm font-medium mb-2 block" data-i18n="placeholder.size">Dimensions</label>
+        <!-- Preset sizes -->
+        <div class="flex gap-2 flex-wrap mb-3">
+          <template x-for="p in presets" :key="p.label">
+            <button @click="width=p.w; height=p.h"
+                    :class="width===p.w && height===p.h ? 'bg-brand text-white' : 'bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300'"
+                    class="px-3 py-1.5 rounded-lg text-xs font-medium transition"
+                    x-text="p.label"></button>
+          </template>
+        </div>
+        <div class="flex items-center gap-3">
+          <div class="flex-1">
+            <label class="text-xs text-slate-400 mb-1 block" data-i18n="resize.width">Width (px)</label>
+            <input type="number" x-model.number="width" min="1" max="4096"
+                   class="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-sm focus:border-brand focus:outline-none">
+          </div>
+          <span class="text-slate-400 mt-5 text-lg">×</span>
+          <div class="flex-1">
+            <label class="text-xs text-slate-400 mb-1 block" data-i18n="resize.height">Height (px)</label>
+            <input type="number" x-model.number="height" min="1" max="4096"
+                   class="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-sm focus:border-brand focus:outline-none">
+          </div>
+        </div>
+      </div>
+
+      <!-- Colors -->
+      <div class="flex gap-4">
+        <div class="flex-1">
+          <label class="text-sm font-medium mb-1 block" data-i18n="placeholder.bg_color">Background</label>
+          <div class="flex items-center gap-2">
+            <input type="color" x-model="bgColor" class="w-9 h-9 rounded cursor-pointer border border-slate-300 p-0.5 bg-white">
+            <input type="text" x-model="bgColor" maxlength="7"
+                   class="flex-1 px-2 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-mono focus:border-brand focus:outline-none">
+          </div>
+        </div>
+        <div class="flex-1">
+          <label class="text-sm font-medium mb-1 block" data-i18n="placeholder.text_color">Text Color</label>
+          <div class="flex items-center gap-2">
+            <input type="color" x-model="textColor" class="w-9 h-9 rounded cursor-pointer border border-slate-300 p-0.5 bg-white">
+            <input type="text" x-model="textColor" maxlength="7"
+                   class="flex-1 px-2 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-mono focus:border-brand focus:outline-none">
+          </div>
+        </div>
+      </div>
+
+      <!-- Custom label -->
+      <div>
+        <label class="text-sm font-medium mb-1 block" data-i18n="placeholder.label">Custom Label <span class="text-slate-400 font-normal">(optional)</span></label>
+        <input type="text" x-model="label" maxlength="100"
+               :placeholder="'e.g. Hero Image, ' + width + '×' + height"
+               class="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-sm focus:border-brand focus:outline-none">
+      </div>
+
+      <!-- Live preview swatch -->
+      <div>
+        <label class="text-xs text-slate-400 mb-1 block" data-i18n="placeholder.preview">Preview</label>
+        <div class="rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden h-20 flex items-center justify-center"
+             :style="`background:${bgColor}`">
+          <span :style="`color:${textColor}; font-size:clamp(10px,2vw,18px); font-weight:600`"
+                x-text="label || width + '×' + height"></span>
+        </div>
+      </div>
+    </div>
+
+    <button @click="process()" :disabled="processing || width<1 || height<1"
+            class="mt-4 w-full py-3 rounded-xl bg-brand text-white font-semibold hover:bg-brand-dark transition disabled:opacity-50">
+      <span x-show="!processing" data-i18n="placeholder.button">Generate Placeholder</span>
+      <span x-show="processing" class="flex items-center justify-center gap-2">
+        <svg class="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+        <span data-i18n="common.processing">Processing...</span>
+      </span>
+    </button>
+    <p x-show="error" class="mt-4 text-sm text-red-500" x-text="error"></p>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+function placeholderTool() {
+  return {
+    width: 800, height: 600,
+    bgColor: '#cccccc', textColor: '#666666',
+    label: '',
+    processing: false, error: '',
+    presets: [
+      {label:'800×600',   w:800,  h:600},
+      {label:'1920×1080', w:1920, h:1080},
+      {label:'1200×630',  w:1200, h:630},
+      {label:'1080×1080', w:1080, h:1080},
+      {label:'400×300',   w:400,  h:300},
+      {label:'256×256',   w:256,  h:256},
+    ],
+    async process() {
+      if (this.processing || this.width<1 || this.height<1) return;
+      this.processing=true; this.error='';
+      const form=new FormData();
+      form.append('width',      this.width);
+      form.append('height',     this.height);
+      form.append('bg_color',   this.bgColor);
+      form.append('text_color', this.textColor);
+      form.append('label',      this.label);
+      try {
+        const resp=await fetch('/api/placeholder', {method:'POST', body:form});
+        if (!resp.ok) { const d=await resp.json(); this.error=d.error||'Failed'; this.processing=false; return; }
+        const blob=await resp.blob(); const url=URL.createObjectURL(blob);
+        const a=document.createElement('a'); a.href=url; a.download=`placeholder_${this.width}x${this.height}.png`; a.click();
+        URL.revokeObjectURL(url);
+      } catch(e) { this.error='Network error: '+e.message; }
+      this.processing=false;
+    },
+  };
+}
+</script>
+{% endblock %}

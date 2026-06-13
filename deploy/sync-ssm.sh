@@ -20,13 +20,18 @@ fi
 # Add new mappings here when you add new env vars or apps.
 get_ssm_path() {
   case "$1" in
-    GEMINI_API_KEY)       echo "/ystocker/GEMINI_API_KEY" ;;
-    YOUTUBE_API_KEY)      echo "/ystocker/YOUTUBE_API_KEY" ;;
-    SES_FROM_EMAIL)       echo "/ystocker/SES_FROM_EMAIL" ;;
-    GOOGLE_MAPS_API_KEY)  echo "/yplanner/GOOGLE_MAPS_API_KEY" ;;
-    GOOGLE_CLIENT_ID)     echo "/yplanner/GOOGLE_CLIENT_ID" ;;
-    APPLE_SERVICE_ID)     echo "/yplanner/APPLE_SERVICE_ID" ;;
-    *)                    echo "" ;;
+    GEMINI_API_KEY)           echo "/ystocker/GEMINI_API_KEY" ;;
+    YOUTUBE_API_KEY)          echo "/ystocker/YOUTUBE_API_KEY" ;;
+    SES_FROM_EMAIL)           echo "/ystocker/SES_FROM_EMAIL" ;;
+    GOOGLE_MAPS_API_KEY)      echo "/yplanner/GOOGLE_MAPS_API_KEY" ;;
+    GOOGLE_CLIENT_ID)         echo "/yplanner/GOOGLE_CLIENT_ID" ;;
+    APPLE_SERVICE_ID)         echo "/yplanner/APPLE_SERVICE_ID" ;;
+    STRIPE_SECRET_KEY)        echo "/ypay/STRIPE_SECRET_KEY" ;;
+    STRIPE_PUBLISHABLE_KEY)   echo "/ypay/STRIPE_PUBLISHABLE_KEY" ;;
+    STRIPE_WEBHOOK_SECRET)    echo "/ypay/STRIPE_WEBHOOK_SECRET" ;;
+    CHECKR_API_KEY)           echo "/ybg/CHECKR_API_KEY" ;;
+    YBG_ADMIN_EMAIL)          echo "/ybg/YBG_ADMIN_EMAIL" ;;
+    *)                        echo "" ;;
   esac
 }
 

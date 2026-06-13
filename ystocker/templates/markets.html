@@ -439,6 +439,10 @@
       <button class="range-btn" data-period="weekly"  onclick="switchIdxRange('weekly')">3Y</button>
       <button class="range-btn" data-period="monthly" onclick="switchIdxRange('monthly')">5Y</button>
       </div>
+      <button id="idxBBToggle" onclick="_toggleIdxBB()"
+        class="text-[11px] px-2 py-0.5 rounded border border-slate-700 text-slate-500 hover:text-violet-400 hover:border-violet-700 transition">
+        BB
+      </button>
       <button onclick="expandMktsChart('idx')" title="Expand"
               class="text-slate-600 hover:text-slate-300 transition p-1 rounded-lg hover:bg-slate-800">
         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -619,6 +623,7 @@ let _vixData          = null;
 let _fgData           = null;
 let _aaiiData         = null;
 let _pcrData          = null;
+let _idxShowBB        = false;
 
 // Yahoo Finance symbols per index key (for forecast API)
 const IDX_SYMBOLS = {
@@ -850,6 +855,32 @@ function renderIdxStats(key, data) {
   }
 }
 
+// ── Bollinger Bands helper ────────────────────────────────────────────
+function _bbBands(prices, n) {
+  const upper = new Array(prices.length).fill(null);
+  const lower = new Array(prices.length).fill(null);
+  for (let i = n - 1; i < prices.length; i++) {
+    const slice = prices.slice(i - n + 1, i + 1).filter(v => v != null);
+    if (slice.length < n * 0.6) continue;
+    const mean = slice.reduce((s, v) => s + v, 0) / slice.length;
+    const std  = Math.sqrt(slice.reduce((s, v) => s + (v - mean) ** 2, 0) / slice.length);
+    upper[i] = mean + 2 * std;
+    lower[i] = mean - 2 * std;
+  }
+  return { upper, lower };
+}
+
+function _toggleIdxBB() {
+  _idxShowBB = !_idxShowBB;
+  const btn = document.getElementById('idxBBToggle');
+  if (btn) {
+    btn.className = _idxShowBB
+      ? 'text-[11px] px-2 py-0.5 rounded border border-violet-600 text-violet-400 bg-violet-900/20 transition'
+      : 'text-[11px] px-2 py-0.5 rounded border border-slate-700 text-slate-500 hover:text-violet-400 hover:border-violet-700 transition';
+  }
+  if (_mkData) renderIdxChart(_curIdx, _curRange, _mkData);
+}
+
 function renderIdxChart(key, range, data, canvasId) {
   canvasId = canvasId || 'idxChart';
   const d = data.indices[key] || {};
@@ -872,15 +903,31 @@ function renderIdxChart(key, range, data, canvasId) {
   if (canvasId === 'idxChart') {
     if (_idxChartInst) { _idxChartInst.destroy(); _idxChartInst = null; }
   }
+  const datasets = [{
+    label: idxLabel(key),
+    data: prices,
+    borderColor: col, backgroundColor: col + '0d',
+    borderWidth: 2, pointRadius: 0, pointHoverRadius: 5,
+    fill: true, tension: 0.3, spanGaps: true,
+  }];
+
+  if (_idxShowBB && canvasId === 'idxChart') {
+    const bb = _bbBands(prices, 20);
+    datasets.push({
+      label: 'BB Upper', data: bb.upper,
+      borderColor: 'rgba(167,139,250,0.5)', backgroundColor: 'rgba(167,139,250,0.06)',
+      borderWidth: 1, pointRadius: 0, fill: '+1', tension: 0.3, spanGaps: true, borderDash: [2,2],
+    });
+    datasets.push({
+      label: 'BB Lower', data: bb.lower,
+      borderColor: 'rgba(167,139,250,0.5)', backgroundColor: 'rgba(167,139,250,0.06)',
+      borderWidth: 1, pointRadius: 0, fill: false, tension: 0.3, spanGaps: true, borderDash: [2,2],
+    });
+  }
+
   const _inst = new Chart(document.getElementById(canvasId), {
     type: 'line',
-    data: { labels: dates, datasets: [{
-      label: idxLabel(key),
-      data: prices,
-      borderColor: col, backgroundColor: col + '0d',
-      borderWidth: 2, pointRadius: 0, pointHoverRadius: 5,
-      fill: true, tension: 0.3, spanGaps: true,
-    }]},
+    data: { labels: dates, datasets },
     options: {
       responsive: true, maintainAspectRatio: false,
       plugins: {
