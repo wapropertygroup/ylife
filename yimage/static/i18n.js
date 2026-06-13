@@ -181,6 +181,64 @@ const I18n = (() => {
       "stitch.button":     "Stitch & Download",
       "stitch.need_two":   "Add at least 2 images to stitch.",
 
+      // Round 8 tool names (EN)
+      "tool.round_corners":     "Round Corners",
+      "tool.remove_bg_color":   "Remove BG Color",
+      "tool.duotone":           "Duotone Effect",
+      "tool.pdf_extract_pages": "PDF Extract Pages",
+      "tool.photo_caption":     "Photo Caption",
+
+      // Round Corners
+      "roundcorners.title":   "⬛ Round Corners",
+      "roundcorners.desc":    "Add rounded corners to any image. PNG (transparent) or JPEG (solid background).",
+      "roundcorners.radius":  "Corner Radius",
+      "roundcorners.less":    "Less",
+      "roundcorners.more":    "More rounded",
+      "roundcorners.use_bg":  "Output as JPEG with background color",
+      "roundcorners.preview": "Live preview (CSS approximation)",
+      "roundcorners.button":  "Round Corners & Download",
+      "roundcorners.done":    "✓ Image downloaded with rounded corners!",
+
+      // Remove BG Color
+      "removebg.title":     "🪄 Remove Background Color",
+      "removebg.desc":      "Replace a solid background color with transparency. Great for logos and icons.",
+      "removebg.bg_color":  "Background Color to Remove",
+      "removebg.tolerance": "Tolerance",
+      "removebg.exact":     "Exact match",
+      "removebg.fuzzy":     "Broader match",
+      "removebg.button":    "Remove Background & Download PNG",
+      "removebg.done":      "✓ Transparent PNG downloaded!",
+
+      // Duotone
+      "duotone.title":     "🎭 Duotone Effect",
+      "duotone.desc":      "Apply a two-color gradient map — shadows get one color, highlights get another.",
+      "duotone.shadow":    "Shadow Color",
+      "duotone.highlight": "Highlight Color",
+      "duotone.presets":   "Presets",
+      "duotone.button":    "Apply Duotone & Download",
+      "duotone.done":      "✓ Duotone image downloaded!",
+
+      // PDF Extract Pages
+      "extractpages.title":  "📄 PDF Extract Pages",
+      "extractpages.desc":   "Extract a specific range of pages from a PDF and save as a new document.",
+      "extractpages.from":   "From page",
+      "extractpages.to":     "To page",
+      "extractpages.hint":   "1-based page numbers. Same start and end = single page.",
+      "extractpages.button": "Extract Pages & Download",
+      "extractpages.done":   "✓ Extracted PDF downloaded!",
+
+      // Photo Caption
+      "caption.title":      "💬 Photo Caption",
+      "caption.desc":       "Add a caption bar to the top or bottom of your photo with custom colors and font size.",
+      "caption.text":       "Caption Text",
+      "caption.position":   "Position",
+      "caption.top":        "↑ Top",
+      "caption.bottom":     "↓ Bottom",
+      "caption.bg":         "Background",
+      "caption.text_color": "Text Color",
+      "caption.button":     "Add Caption & Download",
+      "caption.done":       "✓ Captioned image downloaded!",
+
       // PDF Stamp
       "stamp.title":    "🔢 PDF Page Numbers",
       "stamp.desc":     "Stamp page numbers or custom text on every page. Use {n} for current page and {total} for total.",
@@ -731,6 +789,64 @@ const I18n = (() => {
       "stitch.end":        "末端对齐",
       "stitch.button":     "拼接并下载",
       "stitch.need_two":   "请至少添加 2 张图片进行拼接。",
+
+      // Round 8 工具名称 (ZH)
+      "tool.round_corners":     "圆角处理",
+      "tool.remove_bg_color":   "去除背景色",
+      "tool.duotone":           "双色调效果",
+      "tool.pdf_extract_pages": "PDF 提取页面",
+      "tool.photo_caption":     "照片配文",
+
+      // 圆角处理
+      "roundcorners.title":   "⬛ 圆角处理",
+      "roundcorners.desc":    "为图片添加圆角效果。PNG（透明）或 JPEG（纯色背景）输出。",
+      "roundcorners.radius":  "圆角半径",
+      "roundcorners.less":    "较小",
+      "roundcorners.more":    "更圆",
+      "roundcorners.use_bg":  "输出为带背景色的 JPEG",
+      "roundcorners.preview": "实时预览（CSS 近似）",
+      "roundcorners.button":  "添加圆角并下载",
+      "roundcorners.done":    "✓ 已下载圆角图片！",
+
+      // 去除背景色
+      "removebg.title":     "🪄 去除背景色",
+      "removebg.desc":      "将纯色背景（如白色）替换为透明，非常适合处理 Logo 和图标。",
+      "removebg.bg_color":  "要去除的背景颜色",
+      "removebg.tolerance": "容差",
+      "removebg.exact":     "精确匹配",
+      "removebg.fuzzy":     "宽泛匹配",
+      "removebg.button":    "去除背景并下载 PNG",
+      "removebg.done":      "✓ 已下载透明 PNG！",
+
+      // 双色调
+      "duotone.title":     "🎭 双色调效果",
+      "duotone.desc":      "将图片转换为双色调——暗部用一种颜色，亮部用另一种颜色，打造艺术感。",
+      "duotone.shadow":    "暗部颜色",
+      "duotone.highlight": "亮部颜色",
+      "duotone.presets":   "预设",
+      "duotone.button":    "应用双色调并下载",
+      "duotone.done":      "✓ 已下载双色调图片！",
+
+      // PDF 提取页面
+      "extractpages.title":  "📄 PDF 提取页面",
+      "extractpages.desc":   "从 PDF 中提取指定页码范围，保存为新文档。",
+      "extractpages.from":   "起始页",
+      "extractpages.to":     "结束页",
+      "extractpages.hint":   "页码从 1 开始。起止页相同可提取单页。",
+      "extractpages.button": "提取页面并下载",
+      "extractpages.done":   "✓ 已下载提取的 PDF！",
+
+      // 照片配文
+      "caption.title":      "💬 照片配文",
+      "caption.desc":       "在照片顶部或底部添加配文栏，可自定义颜色和字体大小。",
+      "caption.text":       "配文内容",
+      "caption.position":   "位置",
+      "caption.top":        "↑ 顶部",
+      "caption.bottom":     "↓ 底部",
+      "caption.bg":         "背景色",
+      "caption.text_color": "文字颜色",
+      "caption.button":     "添加配文并下载",
+      "caption.done":       "✓ 已下载添加配文的图片！",
 
       // PDF 页码标注
       "stamp.title":    "🔢 PDF 页码标注",

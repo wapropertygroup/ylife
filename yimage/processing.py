@@ -2093,3 +2093,183 @@ def add_caption(
     buf = io.BytesIO()
     canvas.save(buf, format="JPEG", quality=95)
     return buf.getvalue(), "image/jpeg"
+
+
+# ---------------------------------------------------------------------------
+# 42. Vignette Effect
+# ---------------------------------------------------------------------------
+
+def apply_vignette(
+    data: bytes,
+    strength: float = 0.7,
+    color: str = "#000000",
+) -> tuple[bytes, str]:
+    """Apply a radial vignette (darkened edges) to an image.
+
+    Args:
+        strength: 0.0 = no effect, 1.0 = very strong darkening.
+        color:    Vignette colour (usually black or white for glow).
+    """
+    import numpy as np
+
+    img = Image.open(io.BytesIO(data)).convert("RGB")
+    orig_fmt = (img.format or "JPEG").upper()
+    arr = np.array(img, dtype=np.float32)
+    h, w = arr.shape[:2]
+
+    # Create radial gradient (1 at centre, 0 at edges)
+    y_idx = np.linspace(-1, 1, h)
+    x_idx = np.linspace(-1, 1, w)
+    xx, yy = np.meshgrid(x_idx, y_idx)
+    dist = np.sqrt(xx ** 2 + yy ** 2)
+    dist = np.clip(dist, 0, 1)
+    vignette = 1 - dist * strength
+
+    r_v = int(color.lstrip("#")[0:2], 16) / 255
+    g_v = int(color.lstrip("#")[2:4], 16) / 255
+    b_v = int(color.lstrip("#")[4:6], 16) / 255
+
+    vig = np.dstack([vignette] * 3)
+    # Blend: pixel = pixel * vignette + vignette_color * (1 - vignette)
+    inv_vig = 1 - vig
+    result = arr * vig + np.array([r_v * 255, g_v * 255, b_v * 255]) * inv_vig
+    result = result.clip(0, 255).astype(np.uint8)
+
+    out = Image.fromarray(result, "RGB")
+    save_fmt = orig_fmt if orig_fmt in ("JPEG", "PNG", "WEBP") else "JPEG"
+    mime_map = {"JPEG": "image/jpeg", "PNG": "image/png", "WEBP": "image/webp"}
+    mime = mime_map.get(save_fmt, "image/jpeg")
+
+    buf = io.BytesIO()
+    out.save(buf, format=save_fmt, quality=93 if save_fmt == "JPEG" else None)
+    return buf.getvalue(), mime
+
+
+# ---------------------------------------------------------------------------
+# 43. Convert to Grayscale (with toning option)
+# ---------------------------------------------------------------------------
+
+def to_grayscale(
+    data: bytes,
+    tint_color: str | None = None,
+) -> tuple[bytes, str]:
+    """Convert image to grayscale, with optional warm/cool toning.
+
+    Args:
+        tint_color: If set, tint the grayscale result with this hex color.
+                    Produces a duotone-like sepia or cool effect.
+    """
+    img = Image.open(io.BytesIO(data)).convert("RGB")
+    orig_fmt = (img.format or "JPEG").upper()
+
+    gray = img.convert("L")
+
+    if tint_color:
+        import numpy as np
+        r = int(tint_color.lstrip("#")[0:2], 16) / 255
+        g = int(tint_color.lstrip("#")[2:4], 16) / 255
+        b = int(tint_color.lstrip("#")[4:6], 16) / 255
+        arr = np.array(gray, dtype=np.float32) / 255.0
+        out_arr = np.dstack([arr * r, arr * g, arr * b])
+        out = Image.fromarray((out_arr * 255).clip(0, 255).astype(np.uint8), "RGB")
+    else:
+        out = gray.convert("RGB")
+
+    save_fmt = orig_fmt if orig_fmt in ("JPEG", "PNG", "WEBP") else "JPEG"
+    mime_map = {"JPEG": "image/jpeg", "PNG": "image/png", "WEBP": "image/webp"}
+    mime = mime_map.get(save_fmt, "image/jpeg")
+
+    buf = io.BytesIO()
+    out.save(buf, format=save_fmt, quality=93 if save_fmt == "JPEG" else None)
+    return buf.getvalue(), mime
+
+
+# ---------------------------------------------------------------------------
+# 44. Image Sharpen / Denoise
+# ---------------------------------------------------------------------------
+
+def sharpen_denoise_image(
+    data: bytes,
+    mode: str = "sharpen",
+    strength: int = 2,
+) -> tuple[bytes, str]:
+    """Apply sharpening or noise reduction to an image.
+
+    Args:
+        mode:     'sharpen', 'denoise', or 'edge_enhance'.
+        strength: 1-5 passes of the filter.
+    """
+    from PIL import ImageFilter
+
+    img = Image.open(io.BytesIO(data)).convert("RGB")
+    orig_fmt = (img.format or "JPEG").upper()
+    strength = max(1, min(5, strength))
+
+    for _ in range(strength):
+        if mode == "sharpen":
+            img = img.filter(ImageFilter.SHARPEN)
+        elif mode == "edge_enhance":
+            img = img.filter(ImageFilter.EDGE_ENHANCE)
+        else:  # denoise
+            img = img.filter(ImageFilter.MedianFilter(size=3))
+
+    save_fmt = orig_fmt if orig_fmt in ("JPEG", "PNG", "WEBP") else "JPEG"
+    mime_map = {"JPEG": "image/jpeg", "PNG": "image/png", "WEBP": "image/webp"}
+    mime = mime_map.get(save_fmt, "image/jpeg")
+
+    buf = io.BytesIO()
+    img.save(buf, format=save_fmt, quality=93 if save_fmt == "JPEG" else None)
+    return buf.getvalue(), mime
+
+
+# ---------------------------------------------------------------------------
+# 45. Generate Placeholder Image
+# ---------------------------------------------------------------------------
+
+def generate_placeholder(
+    width: int,
+    height: int,
+    bg_color: str = "#cccccc",
+    text_color: str = "#666666",
+    label: str = "",
+) -> bytes:
+    """Generate a solid-colour placeholder image with optional text label.
+
+    Returns PNG bytes.
+    """
+    from PIL import ImageDraw, ImageFont
+
+    width  = max(1, min(4096, width))
+    height = max(1, min(4096, height))
+
+    bg  = tuple(int(bg_color.lstrip("#")[i:i + 2], 16) for i in (0, 2, 4))
+    fg  = tuple(int(text_color.lstrip("#")[i:i + 2], 16) for i in (0, 2, 4))
+
+    img  = Image.new("RGB", (width, height), bg)
+    draw = ImageDraw.Draw(img)
+
+    # Default label: "WIDTHxHEIGHT"
+    text = label or f"{width}×{height}"
+
+    # Choose font size proportional to image
+    font_size = max(12, min(width, height) // 8)
+    font: ImageFont.ImageFont | ImageFont.FreeTypeFont
+    try:
+        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", font_size)
+    except (IOError, OSError):
+        try:
+            font = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", font_size)
+        except (IOError, OSError):
+            font = ImageFont.load_default()
+
+    bbox = draw.textbbox((0, 0), text, font=font)
+    tw = bbox[2] - bbox[0]
+    th = bbox[3] - bbox[1]
+    draw.text(((width - tw) // 2, (height - th) // 2), text, font=font, fill=fg)
+
+    # Subtle border
+    draw.rectangle([(0, 0), (width - 1, height - 1)], outline=fg, width=max(1, font_size // 10))
+
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue()

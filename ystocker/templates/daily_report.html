@@ -162,6 +162,15 @@
   <div class="card"><div class="card-title" data-i18n="daily.card_fg">Fear &amp; Greed</div><div id="drFg"></div></div>
 </div>
 
+<!-- Treasury Yields card -->
+<div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 fade-up mb-4" id="drYieldSection" style="display:none">
+  <div class="flex items-center justify-between mb-3">
+    <h3 class="text-sm font-semibold text-slate-300" data-i18n="daily.yields_title">Treasury Yields</h3>
+    <span id="drYieldSpread" class="text-xs px-2 py-0.5 rounded font-semibold"></span>
+  </div>
+  <div class="grid grid-cols-4 gap-2" id="drYieldGrid"></div>
+</div>
+
 <!-- ── Economic Events ─────────────────────────────────────────────── -->
 <div class="card mb-6 fade-up">
   <div class="card-title" data-i18n="daily.card_events">Economic Events</div>
@@ -256,6 +265,7 @@ async function loadMarkets() {
     return `<div class="bg-slate-800/50 rounded-xl p-2.5 text-center">
       <div class="text-xs text-slate-400 mb-1 truncate">${label}</div>
       <div class="text-sm font-bold" style="color:${col}">${s.day_chg != null ? (s.day_chg >= 0 ? '+' : '') + s.day_chg.toFixed(2) + '%' : '—'}</div>
+      ${s.week_chg_pct != null ? `<div class="text-[10px] ${s.week_chg_pct >= 0 ? 'text-emerald-600' : 'text-rose-600'} mt-0.5">${I18n.t('daily.wtd') || 'WTD'} ${s.week_chg_pct >= 0 ? '+' : ''}${s.week_chg_pct.toFixed(1)}%</div>` : ''}
     </div>`;
   }).join('');
 
@@ -624,7 +634,10 @@ async function loadMovers() {
         <a href="/history/${m.ticker}" class="text-sm font-semibold text-slate-200 hover:text-brand transition">${m.ticker}</a>
         <div class="text-right">
           <div class="text-xs text-slate-500">$${m.price?.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
-          <div class="text-sm font-bold ${isGain ? 'text-emerald-400' : 'text-rose-400'}">${m.day_chg >= 0 ? '+' : ''}${m.day_chg?.toFixed(2)}%</div>
+          <div class="flex items-center justify-end gap-1">
+            <div class="text-sm font-bold ${isGain ? 'text-emerald-400' : 'text-rose-400'}">${m.day_chg >= 0 ? '+' : ''}${m.day_chg?.toFixed(2)}%</div>
+            ${m.rel_vol != null ? `<span class="text-[10px] px-1 py-0.5 rounded ${m.rel_vol > 2 ? 'bg-amber-900/40 text-amber-400' : 'bg-slate-800 text-slate-500'}">${m.rel_vol.toFixed(1)}x vol</span>` : ''}
+          </div>
         </div>
       </div>`;
     const noData = `<span class="text-slate-600 text-xs">${I18n.t('daily.no_data') || 'No data'}</span>`;
@@ -812,6 +825,37 @@ async function subscribeEmail() {
   btn.disabled = false;
   btn.textContent = I18n.t('daily.subscribe') || 'Subscribe';
 }
+
+// Treasury yields card
+(async function() {
+  try {
+    const r = await fetch('/api/yield-curve');
+    const d = await r.json();
+    const us = d.us || {};
+    const maturities = [
+      { key: '3m', label: '3M' }, { key: '2y', label: '2Y' },
+      { key: '10y', label: '10Y' }, { key: '30y', label: '30Y' }
+    ];
+    const grid = document.getElementById('drYieldGrid');
+    if (!grid) return;
+    grid.innerHTML = maturities.map(m => {
+      const val = us[m.key];
+      return `<div class="bg-slate-800/50 rounded-lg px-2 py-2 text-center">
+        <div class="text-[10px] text-slate-500 mb-0.5">${m.label}</div>
+        <div class="text-sm font-bold font-mono text-slate-200">${val != null ? val.toFixed(2)+'%' : '—'}</div>
+      </div>`;
+    }).join('');
+    // 10Y-2Y spread
+    const spread = (us['10y'] != null && us['2y'] != null) ? (us['10y'] - us['2y']) : null;
+    const spreadEl = document.getElementById('drYieldSpread');
+    if (spreadEl && spread != null) {
+      const inverted = spread < 0;
+      spreadEl.textContent = '10Y−2Y: ' + (spread >= 0 ? '+' : '') + spread.toFixed(2) + '%';
+      spreadEl.className = 'text-xs px-2 py-0.5 rounded font-semibold ' + (inverted ? 'bg-rose-900/50 text-rose-300' : 'bg-emerald-900/50 text-emerald-300');
+    }
+    document.getElementById('drYieldSection').style.display = 'block';
+  } catch(e) {}
+})();
 
 // Boot
 Promise.all([loadMarkets(), loadSentiment(), loadGoldRatios(), loadEconEvents(), loadMovers()]);

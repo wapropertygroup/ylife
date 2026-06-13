@@ -1738,3 +1738,113 @@ def api_photo_caption():
                          download_name=f"captioned_{base}.jpg")
     except Exception as exc:
         log.exception("Photo caption failed"); return jsonify(error=str(exc)), 500
+
+# ---------------------------------------------------------------------------
+# Round 9 Page Routes
+# ---------------------------------------------------------------------------
+
+@bp.route("/vignette")
+def page_vignette():
+    return render_template("vignette.html")
+
+@bp.route("/grayscale")
+def page_grayscale():
+    return render_template("grayscale.html")
+
+@bp.route("/sharpen-denoise")
+def page_sharpen_denoise():
+    return render_template("sharpen_denoise.html")
+
+@bp.route("/placeholder")
+def page_placeholder():
+    return render_template("placeholder.html")
+
+
+# ---------------------------------------------------------------------------
+# Round 9 API Routes
+# ---------------------------------------------------------------------------
+
+@bp.route("/api/vignette", methods=["POST"])
+def api_vignette():
+    data, filename, err = _get_upload(allowed_types=["jpg","jpeg","png","webp","bmp"])
+    if err: return err
+    color = request.form.get("color", "#000000")
+    try:
+        strength = float(request.form.get("strength", "0.7"))
+    except (ValueError, TypeError):
+        strength = 0.7
+    strength = max(0.0, min(1.0, strength))
+    log.info("Vignette: %s (strength=%.2f)", filename, strength)
+    try:
+        from yimage.processing import apply_vignette
+        result, mime = apply_vignette(data, strength, color)
+        _ext = {"image/jpeg":"jpg","image/png":"png","image/webp":"webp"}
+        out_ext = _ext.get(mime, "jpg")
+        base = filename.rsplit(".",1)[0] if "." in filename else filename
+        return send_file(BytesIO(result), mimetype=mime, as_attachment=True,
+                         download_name=f"vignette_{base}.{out_ext}")
+    except Exception as exc:
+        log.exception("Vignette failed"); return jsonify(error=str(exc)), 500
+
+
+@bp.route("/api/grayscale", methods=["POST"])
+def api_grayscale():
+    data, filename, err = _get_upload(allowed_types=["jpg","jpeg","png","webp","bmp"])
+    if err: return err
+    tint = request.form.get("tint_color", "").strip() or None
+    log.info("Grayscale: %s (tint=%s)", filename, tint)
+    try:
+        from yimage.processing import to_grayscale
+        result, mime = to_grayscale(data, tint)
+        _ext = {"image/jpeg":"jpg","image/png":"png","image/webp":"webp"}
+        out_ext = _ext.get(mime, "jpg")
+        base = filename.rsplit(".",1)[0] if "." in filename else filename
+        return send_file(BytesIO(result), mimetype=mime, as_attachment=True,
+                         download_name=f"gray_{base}.{out_ext}")
+    except Exception as exc:
+        log.exception("Grayscale failed"); return jsonify(error=str(exc)), 500
+
+
+@bp.route("/api/sharpen-denoise", methods=["POST"])
+def api_sharpen_denoise():
+    data, filename, err = _get_upload(allowed_types=["jpg","jpeg","png","webp","bmp"])
+    if err: return err
+    mode = request.form.get("mode", "sharpen")
+    try:
+        strength = int(float(request.form.get("strength", "2")))
+    except (ValueError, TypeError):
+        strength = 2
+    strength = max(1, min(5, strength))
+    log.info("Sharpen/denoise: %s (mode=%s, strength=%d)", filename, mode, strength)
+    try:
+        from yimage.processing import sharpen_denoise_image
+        result, mime = sharpen_denoise_image(data, mode, strength)
+        _ext = {"image/jpeg":"jpg","image/png":"png","image/webp":"webp"}
+        out_ext = _ext.get(mime, "jpg")
+        base = filename.rsplit(".",1)[0] if "." in filename else filename
+        return send_file(BytesIO(result), mimetype=mime, as_attachment=True,
+                         download_name=f"{mode}_{base}.{out_ext}")
+    except Exception as exc:
+        log.exception("Sharpen/denoise failed"); return jsonify(error=str(exc)), 500
+
+
+@bp.route("/api/placeholder", methods=["POST"])
+def api_placeholder():
+    try:
+        width  = int(float(request.form.get("width",  "800")))
+        height = int(float(request.form.get("height", "600")))
+    except (ValueError, TypeError):
+        width, height = 800, 600
+    bg_color    = request.form.get("bg_color",    "#cccccc")
+    text_color  = request.form.get("text_color",  "#666666")
+    label       = request.form.get("label",       "").strip()
+    width  = max(1, min(4096, width))
+    height = max(1, min(4096, height))
+    log.info("Placeholder: %dx%d", width, height)
+    try:
+        from yimage.processing import generate_placeholder
+        result = generate_placeholder(width, height, bg_color, text_color, label)
+        return send_file(BytesIO(result), mimetype="image/png", as_attachment=True,
+                         download_name=f"placeholder_{width}x{height}.png")
+    except Exception as exc:
+        log.exception("Placeholder failed"); return jsonify(error=str(exc)), 500

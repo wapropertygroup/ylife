@@ -50,11 +50,12 @@
 #hmTooltip {
   position: fixed; z-index: 999; pointer-events: none;
   background: #0f172a; border: 1px solid #334155;
-  border-radius: 10px; padding: 8px 12px; min-width: 140px;
+  border-radius: 10px; padding: 8px 12px; min-width: 160px;
   box-shadow: 0 8px 32px rgba(0,0,0,.6);
   font-size: 12px; color: #e2e8f0;
   opacity: 0; transition: opacity .1s;
 }
+#hmTooltip #ttDetailsLink { pointer-events: auto; }
 
 /* Legend */
 .lg-cell { height: 10px; border-radius: 2px; flex: 1; }
@@ -70,9 +71,20 @@ input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(.6); }
   <div id="ttTicker"class="text-xs text-slate-400 mb-2"></div>
   <div class="flex justify-between gap-6">
     <div><div class="text-[10px] text-slate-500 mb-0.5">Price</div><div id="ttPrice" class="font-mono"></div></div>
-    <div><div class="text-[10px] text-slate-500 mb-0.5">Day</div><div id="ttChg" class="font-semibold"></div></div>
+    <div>
+      <div class="text-[10px] text-slate-500 mb-0.5">Day</div><div id="ttChg" class="font-semibold"></div>
+      <div id="ttWeekRow" style="display:none">
+        <div class="text-[10px] text-slate-500 mt-1 mb-0.5">5d</div><div id="ttWeekChg" class="font-semibold text-xs"></div>
+      </div>
+    </div>
     <div><div class="text-[10px] text-slate-500 mb-0.5">Mkt Cap</div><div id="ttMktCap" class="font-mono"></div></div>
   </div>
+  <a id="ttDetailsLink" href="#"
+     class="mt-2 flex items-center justify-center gap-1 text-[11px] text-slate-400
+            hover:text-brand border border-slate-700 hover:border-brand/50
+            rounded-md py-1 px-2 transition-colors pointer-events-auto">
+    → View Details
+  </a>
 </div>
 
 <!-- ── Header ──────────────────────────────────────────────────────────── -->
@@ -211,12 +223,31 @@ function _ttShow(e, s) {
   document.getElementById('ttChg').textContent    = chgTxt;
   document.getElementById('ttChg').style.color    = chg == null ? '#94a3b8' : chg >= 0 ? '#34d399' : '#f87171';
   document.getElementById('ttMktCap').textContent = s.mkt_cap != null ? '$' + s.mkt_cap.toFixed(0) + 'B' : '—';
+
+  // 5-day change row
+  const wChg = s.week_chg != null ? s.week_chg : s.w5;
+  const weekRow = document.getElementById('ttWeekRow');
+  const weekEl  = document.getElementById('ttWeekChg');
+  if (wChg != null) {
+    const wTxt = (wChg >= 0 ? '+' : '') + wChg.toFixed(2) + '%';
+    weekEl.textContent = wTxt;
+    weekEl.style.color = wChg >= 0 ? '#34d399' : '#f87171';
+    weekRow.style.display = '';
+  } else {
+    weekRow.style.display = 'none';
+  }
+
+  // Details link
+  const langQ = new URLSearchParams(window.location.search).get('lang');
+  const langSuffix = langQ ? '?lang=' + encodeURIComponent(langQ) : '';
+  document.getElementById('ttDetailsLink').href = '/history/' + encodeURIComponent(s.ticker) + langSuffix;
+
   _tt.style.opacity = '1';
   _ttMove(e);
 }
 function _ttMove(e) {
   const x = e.clientX, y = e.clientY;
-  const tw = 160, th = 90;
+  const tw = 180, th = 120;
   _tt.style.left = (x + 14 + tw > window.innerWidth  ? x - tw - 14 : x + 14) + 'px';
   _tt.style.top  = (y + 14 + th > window.innerHeight ? y - th - 14 : y + 14) + 'px';
 }
@@ -273,7 +304,7 @@ function renderHeatmap(stocks) {
       html += `<a href="/history/${encodeURIComponent(s.ticker)}${langSuffix}"
          class="hm-tile ${cc}"
          style="${spanCSS}min-height:${minH}px"
-         data-s='${JSON.stringify({ticker:s.ticker,name:s.name,sector:s.sector,price:s.price,day_chg:s.day_chg,mkt_cap:s.mkt_cap})}'>
+         data-s='${JSON.stringify({ticker:s.ticker,name:s.name,sector:s.sector,price:s.price,day_chg:s.day_chg,week_chg:s.week_chg??s.w5??null,mkt_cap:s.mkt_cap})}'>
         <span class="ht">${s.ticker}</span>
         <span class="hc">${chg}</span>
         ${showName ? `<span class="hn">${s.name}</span>` : ''}

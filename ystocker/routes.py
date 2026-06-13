@@ -3340,7 +3340,7 @@ def api_markets():
         results = []
         try:
             tickers = yf.download(
-                list(_SECTOR_ETFS.keys()), period="2d", interval="1d",
+                list(_SECTOR_ETFS.keys()), period="10d", interval="1d",
                 auto_adjust=True, progress=False
             )["Close"]
             for sym, label in _SECTOR_ETFS.items():
@@ -3355,7 +3355,14 @@ def api_markets():
                         chg = 0.0
                     else:
                         chg = None
-                    results.append({"ticker": sym, "label": label, "day_chg": chg})
+                    last = vals[-1] if vals else None
+                    # Week change: last price vs 6 trading days ago
+                    try:
+                        week_close = float(col.dropna().iloc[-6]) if len(col.dropna()) >= 6 else None
+                        week_chg_pct = round((last - week_close) / week_close * 100, 2) if week_close else None
+                    except Exception:
+                        week_chg_pct = None
+                    results.append({"ticker": sym, "label": label, "day_chg": chg, "week_chg_pct": week_chg_pct})
                 except Exception:
                     pass
         except Exception as exc:
@@ -4921,6 +4928,24 @@ def api_movers():
         raw = yf.download(tickers_str, period="2d", interval="1d",
                           auto_adjust=True, progress=False)["Close"]
 
+        # Fetch 22 days for relative volume calculation
+        rel_vol_map: dict = {}
+        try:
+            raw_22d = yf.download(tickers_str, period="22d", interval="1d",
+                                  auto_adjust=True, progress=False)
+            vol_data = raw_22d["Volume"] if "Volume" in raw_22d else None
+            if vol_data is not None:
+                for sym in _MOVER_TICKERS:
+                    try:
+                        vs = vol_data[sym].dropna() if sym in vol_data.columns else vol_data.dropna()
+                        avg_vol = float(vs.iloc[:-1].mean()) if len(vs) > 1 else None
+                        last_vol = float(vs.iloc[-1]) if len(vs) > 0 else None
+                        rel_vol_map[sym] = round(last_vol / avg_vol, 1) if (avg_vol and avg_vol > 0 and last_vol) else None
+                    except Exception:
+                        rel_vol_map[sym] = None
+        except Exception:
+            pass
+
         movers = []
         for sym in _MOVER_TICKERS:
             try:
@@ -4934,7 +4959,8 @@ def api_movers():
                 if prev <= 0:
                     continue
                 chg = round((curr - prev) / prev * 100, 2)
-                movers.append({"ticker": sym, "price": round(curr, 2), "day_chg": chg})
+                movers.append({"ticker": sym, "price": round(curr, 2), "day_chg": chg,
+                                "rel_vol": rel_vol_map.get(sym)})
             except Exception:
                 pass
 

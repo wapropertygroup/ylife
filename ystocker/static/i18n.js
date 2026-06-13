@@ -860,6 +860,8 @@ const I18n = (() => {
     'daily.aaii_bull':        { en: 'AAII Bull',                 zh: 'AAII 看多' },
     'daily.aaii_bear':        { en: 'AAII Bear',                 zh: 'AAII 看空' },
     'daily.aaii_spread':      { en: 'Bull-Bear Spread',          zh: '牛熊差' },
+    'daily.yields_title':     { en: 'Treasury Yields',           zh: '美债收益率' },
+    'daily.wtd':              { en: 'WTD',                       zh: '本周' },
     'daily.gold':             { en: 'Gold',                      zh: '黄金' },
     'daily.silver':           { en: 'Silver',                    zh: '白银' },
     'daily.gold_silver':      { en: 'Gold / Silver',             zh: '金银比' },
