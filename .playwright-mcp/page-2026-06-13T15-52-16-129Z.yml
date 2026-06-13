@@ -1,0 +1,718 @@
+- generic [active] [ref=e1]:
+  - banner [ref=e2]:
+    - generic [ref=e3]:
+      - link "yPlanter" [ref=e4] [cursor=pointer]:
+        - /url: /
+        - img [ref=e5]
+        - generic [ref=e7]: yPlanter
+      - navigation [ref=e8]:
+        - link "Browse Plants" [ref=e9] [cursor=pointer]:
+          - /url: /
+        - link "Planting Calendar" [ref=e10] [cursor=pointer]:
+          - /url: /calendar
+        - link "Yard Ideas" [ref=e11] [cursor=pointer]:
+          - /url: /yard
+        - link "Resources" [ref=e12] [cursor=pointer]:
+          - /url: /resources
+        - link "Chat History" [ref=e13] [cursor=pointer]:
+          - /url: /history
+      - generic [ref=e14]:
+        - button "Toggle theme" [ref=e15] [cursor=pointer]:
+          - img [ref=e16]
+        - button "中文" [ref=e18] [cursor=pointer]
+  - main [ref=e19]:
+    - generic [ref=e20]:
+      - heading "Seattle Garden Guide 🌱" [level=1] [ref=e21]
+      - paragraph [ref=e22]: What to plant, when to plant it, and how to grow it in the Pacific Northwest. Vegetables, herbs, fruit, houseplants & yard ideas for USDA Zone 8b.
+    - generic [ref=e24]:
+      - generic [ref=e25]:
+        - img [ref=e26]
+        - textbox "Search plants, vegetables, herbs..." [ref=e28]
+      - combobox [ref=e29]:
+        - option "All Types" [selected]
+        - option "Vegetables"
+        - option "Fruit"
+        - option "Herbs"
+        - option "Houseplants"
+        - option "Perennials"
+        - option "Annuals"
+        - option "Shrubs"
+        - option "Trees"
+      - combobox [ref=e30]:
+        - option "All Levels" [selected]
+        - option "Easy"
+        - option "Moderate"
+        - option "Hard"
+    - generic [ref=e31]:
+      - link "🥬 Vegetables" [ref=e32] [cursor=pointer]:
+        - /url: "#vegetables"
+      - link "🍓 Fruit" [ref=e33] [cursor=pointer]:
+        - /url: "#fruit"
+      - link "🌿 Herbs" [ref=e34] [cursor=pointer]:
+        - /url: "#herbs"
+      - link "🪴 Houseplants" [ref=e35] [cursor=pointer]:
+        - /url: "#houseplants"
+      - link "🌸 Perennials" [ref=e36] [cursor=pointer]:
+        - /url: "#perennials"
+      - link "🌻 Annuals" [ref=e37] [cursor=pointer]:
+        - /url: "#annuals"
+      - link "🌿 Shrubs" [ref=e38] [cursor=pointer]:
+        - /url: "#shrubs"
+      - link "🌳 Trees" [ref=e39] [cursor=pointer]:
+        - /url: "#trees"
+      - link "📅 Calendar" [ref=e40] [cursor=pointer]:
+        - /url: "#calendar-preview"
+      - link "🏡 Yard Ideas" [ref=e41] [cursor=pointer]:
+        - /url: "#yard-ideas"
+    - generic [ref=e42]:
+      - heading "🥬 Vegetables & Edibles for Seattle" [level=2] [ref=e43]:
+        - generic [ref=e44]: 🥬
+        - generic [ref=e45]: Vegetables & Edibles for Seattle
+      - generic [ref=e46]:
+        - 'link "🍅 Tomatoes Moderate Short-season varieties do best in Seattle. Start indoors Feb–Mar, transplant after last frost (mid-Apr). Use black plastic mulch to warm soil. Harvest: Jul–Oct" [ref=e47] [cursor=pointer]':
+          - /url: /plant/tomato
+          - generic [ref=e48]:
+            - generic [ref=e49]: 🍅
+            - generic [ref=e50]:
+              - heading "Tomatoes" [level=3] [ref=e51]
+              - generic [ref=e53]: Moderate
+              - paragraph [ref=e54]: Short-season varieties do best in Seattle. Start indoors Feb–Mar, transplant after last frost (mid-Apr). Use black plastic mulch to warm soil.
+              - paragraph [ref=e55]: "Harvest: Jul–Oct"
+        - 'link "🥬 Kale Easy ❄️ Frost Hardy A PNW superstar. Can grow nearly year-round in Seattle. Sweeter after frost. Start in spring or late summer for fall/winter harvest. Harvest: Year-round (with protection)" [ref=e56] [cursor=pointer]':
+          - /url: /plant/kale
+          - generic [ref=e57]:
+            - generic [ref=e58]: 🥬
+            - generic [ref=e59]:
+              - heading "Kale" [level=3] [ref=e60]
+              - generic [ref=e61]:
+                - generic [ref=e62]: Easy
+                - generic [ref=e63]: ❄️ Frost Hardy
+              - paragraph [ref=e64]: A PNW superstar. Can grow nearly year-round in Seattle. Sweeter after frost. Start in spring or late summer for fall/winter harvest.
+              - paragraph [ref=e65]: "Harvest: Year-round (with protection)"
+        - 'link "🥬 Lettuce & Salad Greens Easy ❄️ Frost Hardy Thrives in Seattle''s cool, mild climate. Direct sow early spring through fall. Bolts in summer heat—plant in shade then. Harvest: Apr–Nov" [ref=e66] [cursor=pointer]':
+          - /url: /plant/lettuce
+          - generic [ref=e67]:
+            - generic [ref=e68]: 🥬
+            - generic [ref=e69]:
+              - heading "Lettuce & Salad Greens" [level=3] [ref=e70]
+              - generic [ref=e71]:
+                - generic [ref=e72]: Easy
+                - generic [ref=e73]: ❄️ Frost Hardy
+              - paragraph [ref=e74]: Thrives in Seattle's cool, mild climate. Direct sow early spring through fall. Bolts in summer heat—plant in shade then.
+              - paragraph [ref=e75]: "Harvest: Apr–Nov"
+        - 'link "🥜 Sugar Snap Peas Easy ❄️ Frost Hardy A PNW spring classic. One of the earliest crops you can direct sow. Peas fix nitrogen in the soil for future crops. Harvest: May–Jul" [ref=e76] [cursor=pointer]':
+          - /url: /plant/sugar-snap-peas
+          - generic [ref=e77]:
+            - generic [ref=e78]: 🥜
+            - generic [ref=e79]:
+              - heading "Sugar Snap Peas" [level=3] [ref=e80]
+              - generic [ref=e81]:
+                - generic [ref=e82]: Easy
+                - generic [ref=e83]: ❄️ Frost Hardy
+              - paragraph [ref=e84]: A PNW spring classic. One of the earliest crops you can direct sow. Peas fix nitrogen in the soil for future crops.
+              - paragraph [ref=e85]: "Harvest: May–Jul"
+        - 'link "🥒 Zucchini & Summer Squash Easy Very productive in Seattle summers. One or two plants can feed a family. Start indoors or direct sow after frost danger. Harvest: Jul–Oct" [ref=e86] [cursor=pointer]':
+          - /url: /plant/zucchini
+          - generic [ref=e87]:
+            - generic [ref=e88]: 🥒
+            - generic [ref=e89]:
+              - heading "Zucchini & Summer Squash" [level=3] [ref=e90]
+              - generic [ref=e92]: Easy
+              - paragraph [ref=e93]: Very productive in Seattle summers. One or two plants can feed a family. Start indoors or direct sow after frost danger.
+              - paragraph [ref=e94]: "Harvest: Jul–Oct"
+        - 'link "🧄 Garlic Easy ❄️ Frost Hardy Plant in October for harvest next July. PNW is one of the best garlic-growing regions in the US. Hardneck types produce delicious scapes in spring. Harvest: Jul (following year)" [ref=e95] [cursor=pointer]':
+          - /url: /plant/garlic
+          - generic [ref=e96]:
+            - generic [ref=e97]: 🧄
+            - generic [ref=e98]:
+              - heading "Garlic" [level=3] [ref=e99]
+              - generic [ref=e100]:
+                - generic [ref=e101]: Easy
+                - generic [ref=e102]: ❄️ Frost Hardy
+              - paragraph [ref=e103]: Plant in October for harvest next July. PNW is one of the best garlic-growing regions in the US. Hardneck types produce delicious scapes in spring.
+              - paragraph [ref=e104]: "Harvest: Jul (following year)"
+        - 'link "🌿 Green Beans Easy Direct sow after soil warms to 60°F. Bush types are quicker to harvest; pole types produce longer. Harvest: Jul–Oct" [ref=e105] [cursor=pointer]':
+          - /url: /plant/beans-green
+          - generic [ref=e106]:
+            - generic [ref=e107]: 🌿
+            - generic [ref=e108]:
+              - heading "Green Beans" [level=3] [ref=e109]
+              - generic [ref=e111]: Easy
+              - paragraph [ref=e112]: Direct sow after soil warms to 60°F. Bush types are quicker to harvest; pole types produce longer.
+              - paragraph [ref=e113]: "Harvest: Jul–Oct"
+        - 'link "🥕 Carrots Moderate ❄️ Frost Hardy Thrive in PNW''s cool weather. Direct sow spring through mid-summer. Can overwinter in the ground with mulch for winter harvest. Harvest: Jun–Dec (can overwinter)" [ref=e114] [cursor=pointer]':
+          - /url: /plant/carrots
+          - generic [ref=e115]:
+            - generic [ref=e116]: 🥕
+            - generic [ref=e117]:
+              - heading "Carrots" [level=3] [ref=e118]
+              - generic [ref=e119]:
+                - generic [ref=e120]: Moderate
+                - generic [ref=e121]: ❄️ Frost Hardy
+              - paragraph [ref=e122]: Thrive in PNW's cool weather. Direct sow spring through mid-summer. Can overwinter in the ground with mulch for winter harvest.
+              - paragraph [ref=e123]: "Harvest: Jun–Dec (can overwinter)"
+        - 'link "🥔 Potatoes Easy Plant seed potatoes in March–April. Hill soil around stems as they grow. Easy and rewarding—great for kids! Harvest: Jul–Sep" [ref=e124] [cursor=pointer]':
+          - /url: /plant/potatoes
+          - generic [ref=e125]:
+            - generic [ref=e126]: 🥔
+            - generic [ref=e127]:
+              - heading "Potatoes" [level=3] [ref=e128]
+              - generic [ref=e130]: Easy
+              - paragraph [ref=e131]: Plant seed potatoes in March–April. Hill soil around stems as they grow. Easy and rewarding—great for kids!
+              - paragraph [ref=e132]: "Harvest: Jul–Sep"
+        - 'link "🔴 Beets Easy ❄️ Frost Hardy Cool-weather crop perfect for PNW. Direct sow spring and late summer for fall harvest. Greens are edible and nutritious too! Harvest: May–Nov" [ref=e133] [cursor=pointer]':
+          - /url: /plant/beets
+          - generic [ref=e134]:
+            - generic [ref=e135]: 🔴
+            - generic [ref=e136]:
+              - heading "Beets" [level=3] [ref=e137]
+              - generic [ref=e138]:
+                - generic [ref=e139]: Easy
+                - generic [ref=e140]: ❄️ Frost Hardy
+              - paragraph [ref=e141]: Cool-weather crop perfect for PNW. Direct sow spring and late summer for fall harvest. Greens are edible and nutritious too!
+              - paragraph [ref=e142]: "Harvest: May–Nov"
+        - 'link "🥒 Cucumbers Moderate Need warm soil—start indoors or wait until late May to direct sow. Use a trellis for straighter fruit and better air circulation. Harvest: Jul–Sep" [ref=e143] [cursor=pointer]':
+          - /url: /plant/cucumber
+          - generic [ref=e144]:
+            - generic [ref=e145]: 🥒
+            - generic [ref=e146]:
+              - heading "Cucumbers" [level=3] [ref=e147]
+              - generic [ref=e149]: Moderate
+              - paragraph [ref=e150]: Need warm soil—start indoors or wait until late May to direct sow. Use a trellis for straighter fruit and better air circulation.
+              - paragraph [ref=e151]: "Harvest: Jul–Sep"
+        - 'link "🌈 Swiss Chard Easy ❄️ Frost Hardy Almost as hardy as kale in Seattle. Beautiful ornamental AND edible. Tolerates light frost and partial shade. Harvest: Jun–Nov" [ref=e152] [cursor=pointer]':
+          - /url: /plant/chard
+          - generic [ref=e153]:
+            - generic [ref=e154]: 🌈
+            - generic [ref=e155]:
+              - heading "Swiss Chard" [level=3] [ref=e156]
+              - generic [ref=e157]:
+                - generic [ref=e158]: Easy
+                - generic [ref=e159]: ❄️ Frost Hardy
+              - paragraph [ref=e160]: Almost as hardy as kale in Seattle. Beautiful ornamental AND edible. Tolerates light frost and partial shade.
+              - paragraph [ref=e161]: "Harvest: Jun–Nov"
+        - 'link "🥦 Broccoli Moderate ❄️ Frost Hardy Cool-weather champion in Seattle. Plant in early spring or late summer for fall harvest. Purple sprouting types overwinter beautifully. Harvest: May–Jun (spring) or Oct–Dec (fall)" [ref=e162] [cursor=pointer]':
+          - /url: /plant/broccoli
+          - generic [ref=e163]:
+            - generic [ref=e164]: 🥦
+            - generic [ref=e165]:
+              - heading "Broccoli" [level=3] [ref=e166]
+              - generic [ref=e167]:
+                - generic [ref=e168]: Moderate
+                - generic [ref=e169]: ❄️ Frost Hardy
+              - paragraph [ref=e170]: Cool-weather champion in Seattle. Plant in early spring or late summer for fall harvest. Purple sprouting types overwinter beautifully.
+              - paragraph [ref=e171]: "Harvest: May–Jun (spring) or Oct–Dec (fall)"
+        - 'link "🥬 Spinach Easy ❄️ Frost Hardy Thrives in Seattle’s cool, overcast springs and falls. Bolts quickly in summer heat—grow as a cool-season crop. Can overwinter with protection. Harvest: Apr–Jun, Sep–Nov" [ref=e172] [cursor=pointer]':
+          - /url: /plant/spinach
+          - generic [ref=e173]:
+            - generic [ref=e174]: 🥬
+            - generic [ref=e175]:
+              - heading "Spinach" [level=3] [ref=e176]
+              - generic [ref=e177]:
+                - generic [ref=e178]: Easy
+                - generic [ref=e179]: ❄️ Frost Hardy
+              - paragraph [ref=e180]: Thrives in Seattle’s cool, overcast springs and falls. Bolts quickly in summer heat—grow as a cool-season crop. Can overwinter with protection.
+              - paragraph [ref=e181]: "Harvest: Apr–Jun, Sep–Nov"
+        - 'link "🌶️ Peppers Hard Challenging in Seattle—need warmth. Start early indoors, transplant to warmest spot after last frost. Black plastic mulch and wall-o-water help enormously. Harvest: Aug–Oct" [ref=e182] [cursor=pointer]':
+          - /url: /plant/peppers
+          - generic [ref=e183]:
+            - generic [ref=e184]: 🌶️
+            - generic [ref=e185]:
+              - heading "Peppers" [level=3] [ref=e186]
+              - generic [ref=e188]: Hard
+              - paragraph [ref=e189]: Challenging in Seattle—need warmth. Start early indoors, transplant to warmest spot after last frost. Black plastic mulch and wall-o-water help enormously.
+              - paragraph [ref=e190]: "Harvest: Aug–Oct"
+        - 'link "🔴 Radishes Easy ❄️ Frost Hardy One of the fastest crops—ready in 25–30 days. Perfect for filling gaps between longer crops. Succession sow spring through fall. Harvest: Apr–Oct (25–60 days depending on variety)" [ref=e191] [cursor=pointer]':
+          - /url: /plant/radishes
+          - generic [ref=e192]:
+            - generic [ref=e193]: 🔴
+            - generic [ref=e194]:
+              - heading "Radishes" [level=3] [ref=e195]
+              - generic [ref=e196]:
+                - generic [ref=e197]: Easy
+                - generic [ref=e198]: ❄️ Frost Hardy
+              - paragraph [ref=e199]: One of the fastest crops—ready in 25–30 days. Perfect for filling gaps between longer crops. Succession sow spring through fall.
+              - paragraph [ref=e200]: "Harvest: Apr–Oct (25–60 days depending on variety)"
+        - 'link "🟢 Brussels Sprouts Moderate ❄️ Frost Hardy A PNW fall/winter star. Flavor improves dramatically after frost. Start in spring for fall/winter harvest. Can harvest into January. Harvest: Oct–Jan" [ref=e201] [cursor=pointer]':
+          - /url: /plant/brussels-sprouts
+          - generic [ref=e202]:
+            - generic [ref=e203]: 🟢
+            - generic [ref=e204]:
+              - heading "Brussels Sprouts" [level=3] [ref=e205]
+              - generic [ref=e206]:
+                - generic [ref=e207]: Moderate
+                - generic [ref=e208]: ❄️ Frost Hardy
+              - paragraph [ref=e209]: A PNW fall/winter star. Flavor improves dramatically after frost. Start in spring for fall/winter harvest. Can harvest into January.
+              - paragraph [ref=e210]: "Harvest: Oct–Jan"
+        - 'link "🎃 Winter Squash Moderate Needs warm summer months but stores for months after harvest. Delicata is the most reliable in Seattle’s shorter season. Cure before storing. Harvest: Sep–Oct" [ref=e211] [cursor=pointer]':
+          - /url: /plant/winter-squash
+          - generic [ref=e212]:
+            - generic [ref=e213]: 🎃
+            - generic [ref=e214]:
+              - heading "Winter Squash" [level=3] [ref=e215]
+              - generic [ref=e217]: Moderate
+              - paragraph [ref=e218]: Needs warm summer months but stores for months after harvest. Delicata is the most reliable in Seattle’s shorter season. Cure before storing.
+              - paragraph [ref=e219]: "Harvest: Sep–Oct"
+    - generic [ref=e220]:
+      - heading "🍓 Fruit for PNW Gardens" [level=2] [ref=e221]:
+        - generic [ref=e222]: 🍓
+        - generic [ref=e223]: Fruit for PNW Gardens
+      - generic [ref=e224]:
+        - 'link "🫐 Blueberries Easy The PNW is blueberry country—Washington is the #1 US producer. Acidic native soil is naturally perfect. Plant 2+ varieties for cross-pollination. Harvest: Jun–Sep" [ref=e225] [cursor=pointer]':
+          - /url: /plant/blueberries
+          - generic [ref=e226]:
+            - generic [ref=e227]: 🫐
+            - generic [ref=e228]:
+              - heading "Blueberries" [level=3] [ref=e229]
+              - generic [ref=e231]: Easy
+              - paragraph [ref=e232]: "The PNW is blueberry country—Washington is the #1 US producer. Acidic native soil is naturally perfect. Plant 2+ varieties for cross-pollination."
+              - paragraph [ref=e233]: "Harvest: Jun–Sep"
+        - 'link "🍓 Strawberries Easy Hood strawberries are legendary in the PNW for their intense flavor. Plant in spring. Everbearing types fruit spring through fall. Harvest: Jun (June-bearing) or Jun–Oct (everbearing)" [ref=e234] [cursor=pointer]':
+          - /url: /plant/strawberries
+          - generic [ref=e235]:
+            - generic [ref=e236]: 🍓
+            - generic [ref=e237]:
+              - heading "Strawberries" [level=3] [ref=e238]
+              - generic [ref=e240]: Easy
+              - paragraph [ref=e241]: Hood strawberries are legendary in the PNW for their intense flavor. Plant in spring. Everbearing types fruit spring through fall.
+              - paragraph [ref=e242]: "Harvest: Jun (June-bearing) or Jun–Oct (everbearing)"
+        - 'link "🍇 Raspberries Easy The PNW produces 90% of US raspberries—our climate is perfect. Plant bare-root canes in early spring. Extremely productive once established. Harvest: Jun–Jul (summer) or Aug–Oct (everbearing)" [ref=e243] [cursor=pointer]':
+          - /url: /plant/raspberries
+          - generic [ref=e244]:
+            - generic [ref=e245]: 🍇
+            - generic [ref=e246]:
+              - heading "Raspberries" [level=3] [ref=e247]
+              - generic [ref=e249]: Easy
+              - paragraph [ref=e250]: The PNW produces 90% of US raspberries—our climate is perfect. Plant bare-root canes in early spring. Extremely productive once established.
+              - paragraph [ref=e251]: "Harvest: Jun–Jul (summer) or Aug–Oct (everbearing)"
+        - 'link "🍎 Apple Trees Moderate Washington is the #1 apple-producing state. Most varieties thrive here. Plant two compatible varieties for cross-pollination. Dwarf rootstocks work great in small yards. Harvest: Aug–Oct (depending on variety)" [ref=e252] [cursor=pointer]':
+          - /url: /plant/apples
+          - generic [ref=e253]:
+            - generic [ref=e254]: 🍎
+            - generic [ref=e255]:
+              - heading "Apple Trees" [level=3] [ref=e256]
+              - generic [ref=e258]: Moderate
+              - paragraph [ref=e259]: "Washington is the #1 apple-producing state. Most varieties thrive here. Plant two compatible varieties for cross-pollination. Dwarf rootstocks work great in small yards."
+              - paragraph [ref=e260]: "Harvest: Aug–Oct (depending on variety)"
+        - 'link "🍑 Fig Trees Moderate Yes, figs grow in Seattle! Desert King is the classic PNW variety—needs no pollination and ripens reliably. Plant against a south-facing wall for extra warmth. Harvest: Aug–Sep" [ref=e261] [cursor=pointer]':
+          - /url: /plant/figs
+          - generic [ref=e262]:
+            - generic [ref=e263]: 🍑
+            - generic [ref=e264]:
+              - heading "Fig Trees" [level=3] [ref=e265]
+              - generic [ref=e267]: Moderate
+              - paragraph [ref=e268]: Yes, figs grow in Seattle! Desert King is the classic PNW variety—needs no pollination and ripens reliably. Plant against a south-facing wall for extra warmth.
+              - paragraph [ref=e269]: "Harvest: Aug–Sep"
+    - generic [ref=e270]:
+      - heading "🌿 Herbs" [level=2] [ref=e271]:
+        - generic [ref=e272]: 🌿
+        - generic [ref=e273]: Herbs
+      - generic [ref=e274]:
+        - link "🌿 Basil Moderate Needs warmth—start indoors and transplant after last frost. Grow against south-facing wall or use black mulch for extra warmth." [ref=e275] [cursor=pointer]:
+          - /url: /plant/herbs-basil
+          - generic [ref=e276]:
+            - generic [ref=e277]: 🌿
+            - generic [ref=e278]:
+              - heading "Basil" [level=3] [ref=e279]
+              - generic [ref=e281]: Moderate
+              - paragraph [ref=e282]: Needs warmth—start indoors and transplant after last frost. Grow against south-facing wall or use black mulch for extra warmth.
+        - link "🌿 Rosemary Easy ❄️ Perennial in PNW Perennial in Seattle—once established, it thrives with minimal care. Arp variety is the hardiest for PNW winters." [ref=e283] [cursor=pointer]:
+          - /url: /plant/herbs-rosemary
+          - generic [ref=e284]:
+            - generic [ref=e285]: 🌿
+            - generic [ref=e286]:
+              - heading "Rosemary" [level=3] [ref=e287]
+              - generic [ref=e288]:
+                - generic [ref=e289]: Easy
+                - generic [ref=e290]: ❄️ Perennial in PNW
+              - paragraph [ref=e291]: Perennial in Seattle—once established, it thrives with minimal care. Arp variety is the hardiest for PNW winters.
+        - link "🌿 Cilantro / Coriander Easy ❄️ Perennial in PNW Bolts quickly in heat. Best grown in spring and fall in Seattle. Let some plants go to seed for coriander spice and self-sowing next year." [ref=e292] [cursor=pointer]:
+          - /url: /plant/herbs-cilantro
+          - generic [ref=e293]:
+            - generic [ref=e294]: 🌿
+            - generic [ref=e295]:
+              - heading "Cilantro / Coriander" [level=3] [ref=e296]
+              - generic [ref=e297]:
+                - generic [ref=e298]: Easy
+                - generic [ref=e299]: ❄️ Perennial in PNW
+              - paragraph [ref=e300]: Bolts quickly in heat. Best grown in spring and fall in Seattle. Let some plants go to seed for coriander spice and self-sowing next year.
+        - link "🌿 Thyme Easy ❄️ Perennial in PNW Perennial in Seattle—thrives in poor, well-drained soil. Creeping thyme makes a beautiful drought-tolerant groundcover or lawn alternative." [ref=e301] [cursor=pointer]:
+          - /url: /plant/herbs-thyme
+          - generic [ref=e302]:
+            - generic [ref=e303]: 🌿
+            - generic [ref=e304]:
+              - heading "Thyme" [level=3] [ref=e305]
+              - generic [ref=e306]:
+                - generic [ref=e307]: Easy
+                - generic [ref=e308]: ❄️ Perennial in PNW
+              - paragraph [ref=e309]: Perennial in Seattle—thrives in poor, well-drained soil. Creeping thyme makes a beautiful drought-tolerant groundcover or lawn alternative.
+        - link "🌿 Mint Easy ❄️ Perennial in PNW Grows aggressively in PNW climate—always plant in containers or it will take over your garden. Thrives in Seattle’s moist conditions." [ref=e310] [cursor=pointer]:
+          - /url: /plant/herbs-mint
+          - generic [ref=e311]:
+            - generic [ref=e312]: 🌿
+            - generic [ref=e313]:
+              - heading "Mint" [level=3] [ref=e314]
+              - generic [ref=e315]:
+                - generic [ref=e316]: Easy
+                - generic [ref=e317]: ❄️ Perennial in PNW
+              - paragraph [ref=e318]: Grows aggressively in PNW climate—always plant in containers or it will take over your garden. Thrives in Seattle’s moist conditions.
+    - generic [ref=e319]:
+      - heading "🌸 Perennial Flowers for PNW" [level=2] [ref=e320]:
+        - generic [ref=e321]: 🌸
+        - generic [ref=e322]: Perennial Flowers for PNW
+      - generic [ref=e323]:
+        - 'link "💜 Lavender Easy ❄️ Frost Hardy Thrives in Seattle’s dry summers. English varieties are hardiest for PNW winters. Excellent for borders, walkways, and pollinator gardens. Lavender farms dot the San Juan Islands and Sequim. Blooms: Jun–Aug" [ref=e324] [cursor=pointer]':
+          - /url: /plant/lavender
+          - generic [ref=e325]:
+            - generic [ref=e326]: 💜
+            - generic [ref=e327]:
+              - heading "Lavender" [level=3] [ref=e328]
+              - generic [ref=e329]:
+                - generic [ref=e330]: Easy
+                - generic [ref=e331]: ❄️ Frost Hardy
+              - paragraph [ref=e332]: Thrives in Seattle’s dry summers. English varieties are hardiest for PNW winters. Excellent for borders, walkways, and pollinator gardens. Lavender farms dot the San Juan Islands and Sequim.
+              - paragraph [ref=e333]: "Blooms: Jun–Aug"
+        - 'link "🌼 Dahlia Moderate Seattle’s unofficial flower! The American Dahlia Society was founded in WA. Plant tubers after last frost. Dig up tubers before hard frost for winter storage, or mulch heavily. Blooms: Jul–Oct (until first frost)" [ref=e334] [cursor=pointer]':
+          - /url: /plant/dahlia
+          - generic [ref=e335]:
+            - generic [ref=e336]: 🌼
+            - generic [ref=e337]:
+              - heading "Dahlia" [level=3] [ref=e338]
+              - generic [ref=e340]: Moderate
+              - paragraph [ref=e341]: Seattle’s unofficial flower! The American Dahlia Society was founded in WA. Plant tubers after last frost. Dig up tubers before hard frost for winter storage, or mulch heavily.
+              - paragraph [ref=e342]: "Blooms: Jul–Oct (until first frost)"
+        - 'link "🌺 Peony Easy ❄️ Frost Hardy Long-lived perennial that blooms spectacularly each spring. Seattle provides perfect winter chill for bud development. Once established, peonies can live 50+ years with minimal care. Blooms: May–Jun" [ref=e343] [cursor=pointer]':
+          - /url: /plant/peony
+          - generic [ref=e344]:
+            - generic [ref=e345]: 🌺
+            - generic [ref=e346]:
+              - heading "Peony" [level=3] [ref=e347]
+              - generic [ref=e348]:
+                - generic [ref=e349]: Easy
+                - generic [ref=e350]: ❄️ Frost Hardy
+              - paragraph [ref=e351]: Long-lived perennial that blooms spectacularly each spring. Seattle provides perfect winter chill for bud development. Once established, peonies can live 50+ years with minimal care.
+              - paragraph [ref=e352]: "Blooms: May–Jun"
+        - 'link "🌿 Hostas Easy ❄️ Frost Hardy Seattle’s shade gardens love hostas. Our mild, moist climate creates lush specimens. Main challenge is slugs—organic iron phosphate bait is pet-safe and effective. Blooms: Jul–Aug (lavender flower spikes)" [ref=e353] [cursor=pointer]':
+          - /url: /plant/hostas
+          - generic [ref=e354]:
+            - generic [ref=e355]: 🌿
+            - generic [ref=e356]:
+              - heading "Hostas" [level=3] [ref=e357]
+              - generic [ref=e358]:
+                - generic [ref=e359]: Easy
+                - generic [ref=e360]: ❄️ Frost Hardy
+              - paragraph [ref=e361]: Seattle’s shade gardens love hostas. Our mild, moist climate creates lush specimens. Main challenge is slugs—organic iron phosphate bait is pet-safe and effective.
+              - paragraph [ref=e362]: "Blooms: Jul–Aug (lavender flower spikes)"
+        - 'link "🌻 Echinacea / Coneflower Easy ❄️ Frost Hardy Native prairie plant that thrives in Seattle’s sunny spots. Drought-tolerant once established. Attracts butterflies, bees, and seed-eating birds. Medicinal properties. Blooms: Jun–Sep" [ref=e363] [cursor=pointer]':
+          - /url: /plant/echinacea
+          - generic [ref=e364]:
+            - generic [ref=e365]: 🌻
+            - generic [ref=e366]:
+              - heading "Echinacea / Coneflower" [level=3] [ref=e367]
+              - generic [ref=e368]:
+                - generic [ref=e369]: Easy
+                - generic [ref=e370]: ❄️ Frost Hardy
+              - paragraph [ref=e371]: Native prairie plant that thrives in Seattle’s sunny spots. Drought-tolerant once established. Attracts butterflies, bees, and seed-eating birds. Medicinal properties.
+              - paragraph [ref=e372]: "Blooms: Jun–Sep"
+        - 'link "🏵️ Heather / Heath Easy ❄️ Frost Hardy Evergreen groundcover that blooms when little else does—winter-blooming varieties are especially valuable in Seattle. Thrives in our acidic soil and mild winters. Blooms: Nov–Apr (winter types) or Jul–Sep (summer types)" [ref=e373] [cursor=pointer]':
+          - /url: /plant/heather
+          - generic [ref=e374]:
+            - generic [ref=e375]: 🏵️
+            - generic [ref=e376]:
+              - heading "Heather / Heath" [level=3] [ref=e377]
+              - generic [ref=e378]:
+                - generic [ref=e379]: Easy
+                - generic [ref=e380]: ❄️ Frost Hardy
+              - paragraph [ref=e381]: Evergreen groundcover that blooms when little else does—winter-blooming varieties are especially valuable in Seattle. Thrives in our acidic soil and mild winters.
+              - paragraph [ref=e382]: "Blooms: Nov–Apr (winter types) or Jul–Sep (summer types)"
+    - generic [ref=e383]:
+      - heading "🌻 Annual Flowers for Seattle" [level=2] [ref=e384]:
+        - generic [ref=e385]: 🌻
+        - generic [ref=e386]: Annual Flowers for Seattle
+      - generic [ref=e387]:
+        - 'link "🌻 Sunflowers Easy Easy, rewarding summer annual. Direct sow after last frost. Giant varieties can reach 10+ feet in Seattle’s long summer days. Great for kids’ gardens! Blooms: Jul–Sep" [ref=e388] [cursor=pointer]':
+          - /url: /plant/sunflowers
+          - generic [ref=e389]:
+            - generic [ref=e390]: 🌻
+            - generic [ref=e391]:
+              - heading "Sunflowers" [level=3] [ref=e392]
+              - generic [ref=e394]: Easy
+              - paragraph [ref=e395]: Easy, rewarding summer annual. Direct sow after last frost. Giant varieties can reach 10+ feet in Seattle’s long summer days. Great for kids’ gardens!
+              - paragraph [ref=e396]: "Blooms: Jul–Sep"
+        - 'link "🎀 Sweet Peas Easy Classic PNW cottage garden flower. Seattle’s cool springs are ideal—sweet peas fade in summer heat. Sow early for longest bloom season. Intoxicating fragrance. Blooms: May–Jul" [ref=e397] [cursor=pointer]':
+          - /url: /plant/sweet-peas
+          - generic [ref=e398]:
+            - generic [ref=e399]: 🎀
+            - generic [ref=e400]:
+              - heading "Sweet Peas" [level=3] [ref=e401]
+              - generic [ref=e403]: Easy
+              - paragraph [ref=e404]: Classic PNW cottage garden flower. Seattle’s cool springs are ideal—sweet peas fade in summer heat. Sow early for longest bloom season. Intoxicating fragrance.
+              - paragraph [ref=e405]: "Blooms: May–Jul"
+        - 'link "🧡 Nasturtiums Easy Edible flowers AND leaves with a peppery kick. Practically indestructible. Thrives in poor soil—too-rich soil produces leaves but few flowers. Great companion plant. Blooms: Jun–Oct" [ref=e406] [cursor=pointer]':
+          - /url: /plant/nasturtiums
+          - generic [ref=e407]:
+            - generic [ref=e408]: 🧡
+            - generic [ref=e409]:
+              - heading "Nasturtiums" [level=3] [ref=e410]
+              - generic [ref=e412]: Easy
+              - paragraph [ref=e413]: Edible flowers AND leaves with a peppery kick. Practically indestructible. Thrives in poor soil—too-rich soil produces leaves but few flowers. Great companion plant.
+              - paragraph [ref=e414]: "Blooms: Jun–Oct"
+    - generic [ref=e415]:
+      - heading "🌿 Shrubs & Bushes for PNW" [level=2] [ref=e416]:
+        - generic [ref=e417]: 🌿
+        - generic [ref=e418]: Shrubs & Bushes for PNW
+      - generic [ref=e419]:
+        - 'link "🌸 Rhododendron Easy ❄️ Frost Hardy Washington’s state flower—grows naturally in PNW forests. Prefers acidic soil (common in Seattle). Provides year-round evergreen structure with spectacular spring blooms. Blooms: Apr–Jun" [ref=e420] [cursor=pointer]':
+          - /url: /plant/rhododendron
+          - generic [ref=e421]:
+            - generic [ref=e422]: 🌸
+            - generic [ref=e423]:
+              - heading "Rhododendron" [level=3] [ref=e424]
+              - generic [ref=e425]:
+                - generic [ref=e426]: Easy
+                - generic [ref=e427]: ❄️ Frost Hardy
+              - paragraph [ref=e428]: Washington’s state flower—grows naturally in PNW forests. Prefers acidic soil (common in Seattle). Provides year-round evergreen structure with spectacular spring blooms.
+              - paragraph [ref=e429]: "Blooms: Apr–Jun"
+        - 'link "💐 Hydrangea Easy ❄️ Frost Hardy Thrives in Seattle’s climate. Flower color (pink vs blue) depends on soil pH—Seattle’s acidic soil naturally produces blue blooms. Panicle types are most reliable. Blooms: Jun–Oct" [ref=e430] [cursor=pointer]':
+          - /url: /plant/hydrangea
+          - generic [ref=e431]:
+            - generic [ref=e432]: 💐
+            - generic [ref=e433]:
+              - heading "Hydrangea" [level=3] [ref=e434]
+              - generic [ref=e435]:
+                - generic [ref=e436]: Easy
+                - generic [ref=e437]: ❄️ Frost Hardy
+              - paragraph [ref=e438]: Thrives in Seattle’s climate. Flower color (pink vs blue) depends on soil pH—Seattle’s acidic soil naturally produces blue blooms. Panicle types are most reliable.
+              - paragraph [ref=e439]: "Blooms: Jun–Oct"
+        - 'link "💮 Lilac Easy ❄️ Frost Hardy Classic spring fragrance. Needs some winter chill to bloom well—Seattle provides just enough. Plant in full sun for best flowering. Bloomerang varieties rebloom in fall. Blooms: Apr–May (spring); Sep–Oct (reblooming types)" [ref=e440] [cursor=pointer]':
+          - /url: /plant/lilac
+          - generic [ref=e441]:
+            - generic [ref=e442]: 💮
+            - generic [ref=e443]:
+              - heading "Lilac" [level=3] [ref=e444]
+              - generic [ref=e445]:
+                - generic [ref=e446]: Easy
+                - generic [ref=e447]: ❄️ Frost Hardy
+              - paragraph [ref=e448]: Classic spring fragrance. Needs some winter chill to bloom well—Seattle provides just enough. Plant in full sun for best flowering. Bloomerang varieties rebloom in fall.
+              - paragraph [ref=e449]: "Blooms: Apr–May (spring); Sep–Oct (reblooming types)"
+        - 'link "🌺 Camellia Moderate ❄️ Frost Hardy One of few shrubs that blooms in Seattle’s dark winter months. Evergreen, elegant, and well-suited to PNW’s acidic soil and mild winters. Blooms: Oct–Apr (varies by variety)" [ref=e450] [cursor=pointer]':
+          - /url: /plant/camellia
+          - generic [ref=e451]:
+            - generic [ref=e452]: 🌺
+            - generic [ref=e453]:
+              - heading "Camellia" [level=3] [ref=e454]
+              - generic [ref=e455]:
+                - generic [ref=e456]: Moderate
+                - generic [ref=e457]: ❄️ Frost Hardy
+              - paragraph [ref=e458]: One of few shrubs that blooms in Seattle’s dark winter months. Evergreen, elegant, and well-suited to PNW’s acidic soil and mild winters.
+              - paragraph [ref=e459]: "Blooms: Oct–Apr (varies by variety)"
+    - generic [ref=e460]:
+      - heading "🌳 Ornamental Trees for Seattle" [level=2] [ref=e461]:
+        - generic [ref=e462]: 🌳
+        - generic [ref=e463]: Ornamental Trees for Seattle
+      - generic [ref=e464]:
+        - 'link "🍁 Japanese Maple Moderate Seattle’s most popular ornamental tree. Hundreds of varieties thrive in our mild, humid climate. Stunning fall color. Protect from hot afternoon sun and drying east winds. Blooms: Apr–May (flowers); Oct–Nov (peak fall color)" [ref=e465] [cursor=pointer]':
+          - /url: /plant/japanese-maple
+          - generic [ref=e466]:
+            - generic [ref=e467]: 🍁
+            - generic [ref=e468]:
+              - heading "Japanese Maple" [level=3] [ref=e469]
+              - generic [ref=e471]: Moderate
+              - paragraph [ref=e472]: Seattle’s most popular ornamental tree. Hundreds of varieties thrive in our mild, humid climate. Stunning fall color. Protect from hot afternoon sun and drying east winds.
+              - paragraph [ref=e473]: "Blooms: Apr–May (flowers); Oct–Nov (peak fall color)"
+        - 'link "🌳 Pacific Dogwood Moderate Washington’s state tree. Elegant white bracts in spring, red berries in fall, and beautiful winter bark. Native to PNW forests—naturally suited to our climate. Blooms: Apr–May (white bracts); Sep–Oct (fall color)" [ref=e474] [cursor=pointer]':
+          - /url: /plant/dogwood
+          - generic [ref=e475]:
+            - generic [ref=e476]: 🌳
+            - generic [ref=e477]:
+              - heading "Pacific Dogwood" [level=3] [ref=e478]
+              - generic [ref=e480]: Moderate
+              - paragraph [ref=e481]: Washington’s state tree. Elegant white bracts in spring, red berries in fall, and beautiful winter bark. Native to PNW forests—naturally suited to our climate.
+              - paragraph [ref=e482]: "Blooms: Apr–May (white bracts); Sep–Oct (fall color)"
+        - 'link "🌸 Ornamental Cherry Easy Seattle is famous for cherry blossoms—the UW Quad’s Yoshino cherries draw thousands each spring. Fast-growing, stunning display. Short-lived (30–50 years) but worth every year. Blooms: Mar–Apr (2–3 week peak bloom)" [ref=e483] [cursor=pointer]':
+          - /url: /plant/cherry-ornamental
+          - generic [ref=e484]:
+            - generic [ref=e485]: 🌸
+            - generic [ref=e486]:
+              - heading "Ornamental Cherry" [level=3] [ref=e487]
+              - generic [ref=e489]: Easy
+              - paragraph [ref=e490]: Seattle is famous for cherry blossoms—the UW Quad’s Yoshino cherries draw thousands each spring. Fast-growing, stunning display. Short-lived (30–50 years) but worth every year.
+              - paragraph [ref=e491]: "Blooms: Mar–Apr (2–3 week peak bloom)"
+    - generic [ref=e492]:
+      - heading "🪴 Indoor Plants for PNW Homes" [level=2] [ref=e493]:
+        - generic [ref=e494]: 🪴
+        - generic [ref=e495]: Indoor Plants for PNW Homes
+      - generic [ref=e496]:
+        - link "🌱 Monstera Deliciosa Easy Loves PNW's humid winters. Place near a bright window but out of direct sun. Growth slows Nov–Feb with shorter days." [ref=e497] [cursor=pointer]:
+          - /url: /plant/monstera-deliciosa
+          - generic [ref=e498]:
+            - generic [ref=e499]: 🌱
+            - generic [ref=e500]:
+              - heading "Monstera Deliciosa" [level=3] [ref=e501]
+              - generic [ref=e503]: Easy
+              - paragraph [ref=e504]: Loves PNW's humid winters. Place near a bright window but out of direct sun. Growth slows Nov–Feb with shorter days.
+        - link "🌿 Golden Pothos Easy Perfect for Seattle's dark winter months—one of few plants that thrives in low light. Great for north-facing apartments." [ref=e505] [cursor=pointer]:
+          - /url: /plant/pothos-golden
+          - generic [ref=e506]:
+            - generic [ref=e507]: 🌿
+            - generic [ref=e508]:
+              - heading "Golden Pothos" [level=3] [ref=e509]
+              - generic [ref=e511]: Easy
+              - paragraph [ref=e512]: Perfect for Seattle's dark winter months—one of few plants that thrives in low light. Great for north-facing apartments.
+        - link "🪴 Snake Plant Easy Nearly indestructible. Releases oxygen at night—great for PNW bedrooms. Water less in winter." [ref=e513] [cursor=pointer]:
+          - /url: /plant/snake-plant
+          - generic [ref=e514]:
+            - generic [ref=e515]: 🪴
+            - generic [ref=e516]:
+              - heading "Snake Plant" [level=3] [ref=e517]
+              - generic [ref=e519]: Easy
+              - paragraph [ref=e520]: Nearly indestructible. Releases oxygen at night—great for PNW bedrooms. Water less in winter.
+        - link "🌲 Fiddle Leaf Fig Hard Challenging in Seattle—needs a bright south-facing window and consistent routine. Consider a grow light Nov–Feb." [ref=e521] [cursor=pointer]:
+          - /url: /plant/fiddle-leaf-fig
+          - generic [ref=e522]:
+            - generic [ref=e523]: 🌲
+            - generic [ref=e524]:
+              - heading "Fiddle Leaf Fig" [level=3] [ref=e525]
+              - generic [ref=e527]: Hard
+              - paragraph [ref=e528]: Challenging in Seattle—needs a bright south-facing window and consistent routine. Consider a grow light Nov–Feb.
+        - link "🌿 Ferns (Boston, Maidenhair) Moderate 🐾 Pet Safe PNW's naturally humid air helps! Bathrooms are ideal. Seattle's cool temps suit ferns perfectly." [ref=e529] [cursor=pointer]:
+          - /url: /plant/ferns
+          - generic [ref=e530]:
+            - generic [ref=e531]: 🌿
+            - generic [ref=e532]:
+              - heading "Ferns (Boston, Maidenhair)" [level=3] [ref=e533]
+              - generic [ref=e534]:
+                - generic [ref=e535]: Moderate
+                - generic [ref=e536]: 🐾 Pet Safe
+              - paragraph [ref=e537]: PNW's naturally humid air helps! Bathrooms are ideal. Seattle's cool temps suit ferns perfectly.
+        - link "🌼 Peace Lily Easy Excellent for Seattle's overcast days. Filters indoor air. Blooms white flowers even in low light." [ref=e538] [cursor=pointer]:
+          - /url: /plant/peace-lily
+          - generic [ref=e539]:
+            - generic [ref=e540]: 🌼
+            - generic [ref=e541]:
+              - heading "Peace Lily" [level=3] [ref=e542]
+              - generic [ref=e544]: Easy
+              - paragraph [ref=e545]: Excellent for Seattle's overcast days. Filters indoor air. Blooms white flowers even in low light.
+        - link "💲 Chinese Money Plant Easy 🐾 Pet Safe Produces lots of pups for sharing—a favorite at Seattle plant swaps. Rotate for even growth." [ref=e546] [cursor=pointer]:
+          - /url: /plant/pilea
+          - generic [ref=e547]:
+            - generic [ref=e548]: 💲
+            - generic [ref=e549]:
+              - heading "Chinese Money Plant" [level=3] [ref=e550]
+              - generic [ref=e551]:
+                - generic [ref=e552]: Easy
+                - generic [ref=e553]: 🐾 Pet Safe
+              - paragraph [ref=e554]: Produces lots of pups for sharing—a favorite at Seattle plant swaps. Rotate for even growth.
+        - link "🎨 Calathea / Prayer Plant Hard 🐾 Pet Safe PNW humidity helps but winter heating dries air—use a humidifier. Stunning leaf patterns worth the effort." [ref=e555] [cursor=pointer]:
+          - /url: /plant/calathea
+          - generic [ref=e556]:
+            - generic [ref=e557]: 🎨
+            - generic [ref=e558]:
+              - heading "Calathea / Prayer Plant" [level=3] [ref=e559]
+              - generic [ref=e560]:
+                - generic [ref=e561]: Hard
+                - generic [ref=e562]: 🐾 Pet Safe
+              - paragraph [ref=e563]: PNW humidity helps but winter heating dries air—use a humidifier. Stunning leaf patterns worth the effort.
+    - generic [ref=e564]:
+      - generic [ref=e565]:
+        - heading "📅 Seattle Planting Calendar" [level=2] [ref=e566]:
+          - generic [ref=e567]: 📅
+          - generic [ref=e568]: Seattle Planting Calendar
+        - link "View all →" [ref=e569] [cursor=pointer]:
+          - /url: /calendar
+      - generic [ref=e570]:
+        - generic [ref=e571]:
+          - heading "❄️ January" [level=3] [ref=e572]:
+            - generic [ref=e573]: ❄️
+            - generic [ref=e574]: January
+          - list [ref=e575]:
+            - listitem [ref=e576]:
+              - generic [ref=e577]: •
+              - generic [ref=e578]: Plan your garden—order seeds from Territorial Seed Co (Cottage Grove, OR) or Uprising Seeds (Bellingham, WA)
+            - listitem [ref=e579]:
+              - generic [ref=e580]: •
+              - generic [ref=e581]: Prune dormant fruit trees and roses on dry days
+            - listitem [ref=e582]:
+              - generic [ref=e583]: •
+              - generic [ref=e584]: Start onion seeds indoors under grow lights
+            - listitem [ref=e585]:
+              - generic [ref=e586]: •
+              - generic [ref=e587]: Clean and sharpen tools—oil wooden handles
+            - listitem [ref=e588]: + 5 more...
+        - generic [ref=e589]:
+          - heading "🌱 February" [level=3] [ref=e590]:
+            - generic [ref=e591]: 🌱
+            - generic [ref=e592]: February
+          - list [ref=e593]:
+            - listitem [ref=e594]:
+              - generic [ref=e595]: •
+              - generic [ref=e596]: "Direct sow: peas, fava beans, spinach, radishes (if soil is workable)"
+            - listitem [ref=e597]:
+              - generic [ref=e598]: •
+              - generic [ref=e599]: "Start indoors: tomatoes, peppers, eggplant under grow lights"
+            - listitem [ref=e600]:
+              - generic [ref=e601]: •
+              - generic [ref=e602]: Prune blueberries, grapes, and ornamental grasses before new growth
+            - listitem [ref=e603]:
+              - generic [ref=e604]: •
+              - generic [ref=e605]: Apply dormant spray to fruit trees for pest and disease prevention
+            - listitem [ref=e606]: + 5 more...
+        - generic [ref=e607]:
+          - heading "🌷 March" [level=3] [ref=e608]:
+            - generic [ref=e609]: 🌷
+            - generic [ref=e610]: March
+          - list [ref=e611]:
+            - listitem [ref=e612]:
+              - generic [ref=e613]: •
+              - generic [ref=e614]: "Direct sow: lettuce, carrots, beets, chard, kale, potatoes, radishes"
+            - listitem [ref=e615]:
+              - generic [ref=e616]: •
+              - generic [ref=e617]: "Transplant: broccoli, cabbage, cauliflower starts outdoors"
+            - listitem [ref=e618]:
+              - generic [ref=e619]: •
+              - generic [ref=e620]: Start basil, cucumbers, and squash seeds indoors
+            - listitem [ref=e621]:
+              - generic [ref=e622]: •
+              - generic [ref=e623]: "Divide overgrown perennials: hostas, daylilies, echinacea, ornamental grasses"
+            - listitem [ref=e624]: + 5 more...
+    - generic [ref=e625]:
+      - generic [ref=e626]:
+        - heading "🏡 Yard Ideas for Seattle" [level=2] [ref=e627]:
+          - generic [ref=e628]: 🏡
+          - generic [ref=e629]: Yard Ideas for Seattle
+        - link "View all →" [ref=e630] [cursor=pointer]:
+          - /url: /yard
+      - generic [ref=e631]:
+        - link "🌻 PNW Native Plant Garden Create a low-maintenance garden with native Pacific Northwest plants that support local pollinators and wildlife. Low water once established Supports native bees & butterflies" [ref=e632] [cursor=pointer]:
+          - /url: /yard#native-garden
+          - text: 🌻
+          - heading "PNW Native Plant Garden" [level=3] [ref=e633]
+          - paragraph [ref=e634]: Create a low-maintenance garden with native Pacific Northwest plants that support local pollinators and wildlife.
+          - generic [ref=e635]:
+            - generic [ref=e636]: Low water once established
+            - generic [ref=e637]: Supports native bees & butterflies
+        - link "🌧️ Rain Garden Manage Seattle's abundant rainfall naturally. A rain garden captures runoff from roofs/driveways, filtering pollutants before they reach Puget Sound. Reduces stormwater runoff 30–99% Filters pollutants naturally" [ref=e638] [cursor=pointer]:
+          - /url: /yard#rain-garden
+          - text: 🌧️
+          - heading "Rain Garden" [level=3] [ref=e639]
+          - paragraph [ref=e640]: Manage Seattle's abundant rainfall naturally. A rain garden captures runoff from roofs/driveways, filtering pollutants before they reach Puget Sound.
+          - generic [ref=e641]:
+            - generic [ref=e642]: Reduces stormwater runoff 30–99%
+            - generic [ref=e643]: Filters pollutants naturally
+        - link "🍎 Edible Landscaping Replace ornamental plants with beautiful edibles. Seattle's mild climate supports an incredible range of edible perennials. Free food from your yard! More interesting than lawn" [ref=e644] [cursor=pointer]:
+          - /url: /yard#edible-landscape
+          - text: 🍎
+          - heading "Edible Landscaping" [level=3] [ref=e645]
+          - paragraph [ref=e646]: Replace ornamental plants with beautiful edibles. Seattle's mild climate supports an incredible range of edible perennials.
+          - generic [ref=e647]:
+            - generic [ref=e648]: Free food from your yard!
+            - generic [ref=e649]: More interesting than lawn
+    - generic [ref=e650]:
+      - heading "📋 My Collection (saved locally in your browser)" [level=2] [ref=e651]:
+        - generic [ref=e652]: 📋
+        - generic [ref=e653]: My Collection
+        - generic [ref=e654]: (saved locally in your browser)
+      - paragraph [ref=e656]: Browse plants above and click "Add to Collection" on any plant detail page to track your garden.
+  - contentinfo [ref=e657]: yPlanter — Seattle / PNW Garden Guide (USDA Zone 8b) · © 2025 yPlanter
+  - button "🤖" [ref=e659] [cursor=pointer]:
+    - generic [ref=e660]: 🤖

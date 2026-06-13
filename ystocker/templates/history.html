@@ -604,9 +604,23 @@
 
   <!-- Annual Financials: 3 years actuals + 2 years forward estimates -->
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up" id="financialsSection" style="display:none">
-    <div class="flex items-baseline gap-3 mb-4">
-      <h2 class="text-base font-semibold text-slate-200" data-i18n="history.financials_title">Annual Financials</h2>
-      <span class="text-xs text-slate-500" data-i18n="history.financials_desc">3-year actuals · 2-year forward estimates · values in $B except EPS</span>
+    <div class="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-0 sm:justify-between mb-4">
+      <div>
+        <h2 class="text-base font-semibold text-slate-200" data-i18n="history.financials_title">Annual Financials</h2>
+        <p class="text-xs text-slate-500" data-i18n="history.financials_desc">3-year actuals · 2-year forward estimates · values in $B except EPS</p>
+      </div>
+      <div class="flex items-center gap-2 flex-wrap justify-end">
+        <span class="flex items-center gap-1.5 text-xs text-sky-400"><span class="inline-block w-2 h-2 rounded-sm bg-sky-500/70"></span> Revenue</span>
+        <span class="flex items-center gap-1.5 text-xs text-violet-400"><span class="inline-block w-2 h-2 rounded-sm bg-violet-500/70"></span> Net Income</span>
+        <span class="flex items-center gap-1.5 text-xs text-amber-400"><span class="inline-block w-3 h-0.5 bg-amber-400"></span> EPS</span>
+        <span class="text-xs text-slate-600 ml-1">* = estimate</span>
+        <button onclick="expandChart('financials')" title="Expand" class="expand-btn">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="chart-container mb-4" style="height:220px" id="financialsChartWrap">
+      <canvas id="financialsBarChart"></canvas>
     </div>
     <div class="overflow-x-auto">
       <table class="w-full text-sm" id="financialsTable">
@@ -895,6 +909,37 @@ let   _forecastResult = null;   // last forecast API response
         <td class="py-2.5 px-3 text-xs text-slate-400 font-medium whitespace-nowrap">${m.label}</td>${cells}
       </tr>`;
     }).join('');
+
+        // Revenue/EPS bar chart
+        const finYears   = rows.map(r => r.year + (r.is_estimate ? '*' : ''));
+        const finRevenue = rows.map(r => r.is_estimate ? (r.revenue_est ?? null) : (r.revenue ?? null));
+        const finNI      = rows.map(r => r.is_estimate ? null : (r.net_income ?? null));
+        const finEps     = rows.map(r => r.is_estimate ? (r.eps_est ?? null) : (r.eps_diluted ?? null));
+        const revColors  = rows.map(r => r.is_estimate ? 'rgba(56,189,248,0.35)' : 'rgba(56,189,248,0.7)');
+        const niColors   = rows.map(r => r.is_estimate ? 'rgba(167,139,250,0.25)' : 'rgba(167,139,250,0.65)');
+        const gridCol = '#1e293b', tickCol = '#64748b';
+        const finCfg = {
+          type: 'bar',
+          data: { labels: finYears, datasets: [
+            { label:'Revenue ($B)',    data:finRevenue, backgroundColor:revColors, borderColor:revColors.map(c=>c.replace('0.7','1').replace('0.35','0.6')), borderWidth:1, yAxisID:'y', order:2 },
+            { label:'Net Income ($B)', data:finNI,      backgroundColor:niColors,  borderColor:niColors.map(c=>c.replace('0.65','1').replace('0.25','0.5')),  borderWidth:1, yAxisID:'y', order:2 },
+            { type:'line', label:'EPS', data:finEps, borderColor:'#fbbf24', backgroundColor:'transparent', borderWidth:2, pointRadius:4, pointHoverRadius:6, fill:false, tension:0.3, spanGaps:true, yAxisID:'yEps', order:1 },
+          ]},
+          options: {
+            responsive:true, maintainAspectRatio:false,
+            plugins:{ legend:{display:false}, tooltip:{mode:'index',intersect:false, callbacks:{
+              label: c => { if (c.raw==null) return ''; return c.dataset.yAxisID==='yEps' ? ` EPS: $${c.raw.toFixed(2)}` : ` ${c.dataset.label}: $${c.raw.toFixed(2)}B`; }
+            }}},
+            scales:{
+              x:{grid:{color:gridCol},ticks:{color:tickCol}},
+              y:{grid:{color:gridCol},ticks:{color:tickCol,callback:v=>'$'+v+'B'},title:{display:false}},
+              yEps:{position:'right',grid:{drawOnChartArea:false},ticks:{color:'rgba(251,191,36,0.7)',callback:v=>'$'+v.toFixed(2)},title:{display:false}},
+            },
+            interaction:{mode:'index',intersect:false},
+          },
+          _title:'Annual Financials', _desc:'Revenue, Net Income ($B) and EPS — actuals + forward estimates',
+        };
+        _registerChart('financials', finCfg, new Chart(document.getElementById('financialsBarChart'), finCfg));
       }
 
       // ── Price Z-Score stat card + detail panel ──

@@ -50,6 +50,21 @@ Parameters:
     Default: "tracker.li-family.us"
     Description: Domain for yTracker (price tracker)
 
+  DomainYPay:
+    Type: String
+    Default: "pay.li-family.us"
+    Description: Domain for yPay (Stripe payments)
+
+  DomainYImage:
+    Type: String
+    Default: "image.li-family.us"
+    Description: Domain for yImage (image/PDF tools)
+
+  DomainYBg:
+    Type: String
+    Default: "ybackground.li-family.us"
+    Description: Domain for yBG (tenant background checks)
+
   CertEmail:
     Type: String
     Default: "admin@li-family.us"
@@ -161,6 +176,8 @@ Resources:
                   - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/yplanner/*"
                   - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/yplanter/*"
                   - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ytracker/*"
+                  - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ypay/*"
+                  - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ybg/*"
         - PolicyName: DynamoDBAccess
           PolicyDocument:
             Version: "2012-10-17"
@@ -217,11 +234,14 @@ Resources:
             yplanner|8001|${DomainYPlanner}|yplanner/static
             yplanter|8002|${DomainYPlanter}|yplanter/static
             yhome|8003|${DomainYHome}|yhome/static
-            ytracker|8004|${DomainYTracker}|ytracker/static"
+            ytracker|8004|${DomainYTracker}|ytracker/static
+            ypay|8005|${DomainYPay}|ypay/static
+            yimage|8006|${DomainYImage}|yimage/static
+            ybg|8007|${DomainYBg}|ybg/static"
 
             APP_DIR=/opt/ystocker
             APP_USER=ystocker
-            REQ_FILES="requirements_stocker.txt requirements_planner.txt requirements_planter.txt requirements_home.txt requirements_tracker.txt"
+            REQ_FILES="requirements_stocker.txt requirements_planner.txt requirements_planter.txt requirements_home.txt requirements_tracker.txt requirements_pay.txt requirements_image.txt requirements_bg.txt"
 
             # ── System packages ──────────────────────────────────────────
             dnf update -y
@@ -264,7 +284,7 @@ Resources:
             ExecStart=/bin/bash -c '\
               git config --global --add safe.directory /opt/ystocker; \
               git -C /opt/ystocker fetch origin && git -C /opt/ystocker reset --hard origin/main; \
-              for r in requirements_stocker.txt requirements_planner.txt requirements_planter.txt requirements_home.txt requirements_tracker.txt; do \
+              for r in requirements_stocker.txt requirements_planner.txt requirements_planter.txt requirements_home.txt requirements_tracker.txt requirements_pay.txt requirements_image.txt requirements_bg.txt; do \
                 [ -f /opt/ystocker/$r ] && /opt/ystocker/venv/bin/pip install -q -r /opt/ystocker/$r; \
               done; \
               chown -R ystocker:ystocker /opt/ystocker'
@@ -414,6 +434,15 @@ Outputs:
   YTrackerURL:
     Value: !Sub "https://${DomainYTracker}/"
 
+  YPayURL:
+    Value: !Sub "https://${DomainYPay}/"
+
+  YImageURL:
+    Value: !Sub "https://${DomainYImage}/"
+
+  YBgURL:
+    Value: !Sub "https://${DomainYBg}/"
+
   DirectIPURL:
     Description: Direct IP URL (before DNS)
     Value: !Sub "http://${ElasticIP}/"
@@ -422,4 +451,4 @@ Outputs:
     Value: !Sub "ssh -i ~/.ssh/${KeyName}.pem ec2-user@${ElasticIP}"
 
   LogsCommand:
-    Value: !Sub "ssh ec2-user@${ElasticIP} 'sudo journalctl -u ystocker -u yplanner -u yplanter -u yhome -u ytracker -f'"
+    Value: !Sub "ssh ec2-user@${ElasticIP} 'sudo journalctl -u ystocker -u yplanner -u yplanter -u yhome -u ytracker -u ypay -u yimage -u ybg -f'"

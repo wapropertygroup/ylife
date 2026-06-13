@@ -155,6 +155,23 @@
     </p>
   </div>
 
+  <!-- ── Seasonality chart ─────────────────────────────────────────── -->
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up mb-6" id="seasonalitySection" style="display:none">
+    <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-2 mb-3">
+      <div>
+        <h2 id="seasonalityTitle" class="text-base font-semibold text-slate-200">Seasonality</h2>
+        <p class="text-xs text-slate-500">Average monthly return (%) over 10 years by calendar month</p>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="flex items-center gap-1.5 text-xs text-emerald-400"><span class="inline-block w-2 h-2 rounded-sm bg-emerald-500/70"></span> Up</span>
+        <span class="flex items-center gap-1.5 text-xs text-rose-400"><span class="inline-block w-2 h-2 rounded-sm bg-rose-500/70"></span> Down</span>
+      </div>
+    </div>
+    <div class="chart-container" style="height:180px">
+      <canvas id="seasonalityChart"></canvas>
+    </div>
+  </div>
+
   <!-- ── Cross-commodity ratios ─────────────────────────────────────── -->
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up mb-6">
     <div class="mb-4">
@@ -584,6 +601,66 @@
   }
   applyHash();
   window.addEventListener('hashchange', applyHash);
+
+  // ─── Seasonality chart
+  let _seasonData = null;
+  let _seasonChart = null;
+
+  async function _loadSeasonality() {
+    if (!_seasonData) {
+      try {
+        const r = await fetch('/api/commodities/seasonality');
+        _seasonData = await r.json();
+      } catch(e) { return; }
+    }
+    _renderSeasonality(CURRENT_KEY);
+  }
+
+  function _renderSeasonality(key) {
+    if (!_seasonData || !_seasonData.seasonality) return;
+    const avgs = _seasonData.seasonality[key];
+    if (!avgs) { document.getElementById('seasonalitySection').style.display='none'; return; }
+    const months = _seasonData.months || ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    document.getElementById('seasonalitySection').style.display = 'block';
+    const c = C[key];
+    document.getElementById('seasonalityTitle').textContent =
+      `${c ? (c.emoji||'') + ' ' + localName(key, c.name) : key} — Seasonality`;
+    const colors  = avgs.map(v => v==null?'transparent': v>=0?'rgba(52,211,153,0.7)':'rgba(248,113,113,0.7)');
+    const borders = avgs.map(v => v==null?'transparent': v>=0?'#34d399':'#f87171');
+    if (_seasonChart) { _seasonChart.destroy(); _seasonChart = null; }
+    _seasonChart = new Chart(document.getElementById('seasonalityChart'), {
+      type: 'bar',
+      data: { labels: months, datasets: [{
+        label: 'Avg Return %',
+        data: avgs,
+        backgroundColor: colors,
+        borderColor: borders,
+        borderWidth: 1,
+        borderRadius: 3,
+      }]},
+      options: {
+        responsive:true, maintainAspectRatio:false,
+        plugins:{ legend:{display:false}, tooltip:{callbacks:{
+          label: c => c.raw==null?'': ` ${c.raw>=0?'+':''}${c.raw.toFixed(2)}%`
+        }}},
+        scales:{
+          x:{grid:{color:'#1e293b'},ticks:{color:'#64748b'}},
+          y:{grid:{color:'#1e293b'},ticks:{color:'#64748b',callback:v=>(v>=0?'+':'')+v.toFixed(1)+'%'}},
+        },
+      },
+    });
+  }
+
+  // Trigger seasonality load after initial render
+  _loadSeasonality();
+
+  // Update seasonality when user selects a new commodity
+  const _origCmdSelect = window._cmdSelect;
+  window._cmdSelect = function(key) {
+    _origCmdSelect(key);
+    if (_seasonData) _renderSeasonality(key);
+    else _loadSeasonality();
+  };
 })();
 </script>
 {% endblock %}

@@ -2697,6 +2697,68 @@ def api_commodities():
     return jsonify(payload)
 
 
+# 24-hour cache for seasonality data (expensive 10y monthly fetch)
+_SEASONALITY_CACHE: dict = {}
+_SEASONALITY_CACHE_LOCK = threading.Lock()
+
+
+@bp.route("/api/commodities/seasonality")
+def api_commodities_seasonality():
+    """
+    Monthly seasonality for commodities.
+
+    Returns for each commodity the average monthly return (%) over the past
+    10 years, grouped by calendar month (Jan–Dec).  Cached for 24 hours.
+    """
+    import yfinance as yf
+    import pandas as pd
+
+    with _SEASONALITY_CACHE_LOCK:
+        entry = _SEASONALITY_CACHE.get("data")
+        if entry and time.time() - entry["ts"] < 24 * 3600:
+            log.info("API seasonality: served from cache")
+            return jsonify(entry["data"])
+
+    log.info("API seasonality: fetching 10y monthly data from Yahoo Finance")
+    symbols = {k: v[0] for k, v in _COMMODITY_SYMBOLS.items()}
+    all_syms = list(symbols.values())
+
+    try:
+        raw = yf.download(all_syms, period="10y", interval="1mo",
+                          auto_adjust=True, progress=False, group_by="ticker")
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 502
+
+    seasonality: dict[str, list[Optional[float]]] = {}
+    month_names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+    for key, sym in symbols.items():
+        try:
+            if isinstance(raw.columns, pd.MultiIndex):
+                col = raw[sym]["Close"] if sym in raw.columns.get_level_values(0) else None
+            else:
+                col = raw["Close"]
+
+            if col is None or col.dropna().empty:
+                continue
+
+            rets = col.dropna().pct_change().dropna() * 100
+            monthly_avgs: list[Optional[float]] = []
+            for m in range(1, 13):
+                vals = rets[rets.index.month == m]
+                monthly_avgs.append(round(float(vals.mean()), 2) if len(vals) > 0 else None)
+            seasonality[key] = monthly_avgs
+        except Exception as exc:
+            log.warning("Seasonality: could not compute %s: %s", key, exc)
+            continue
+
+    data = {"months": month_names, "seasonality": seasonality}
+    with _SEASONALITY_CACHE_LOCK:
+        _SEASONALITY_CACHE["data"] = {"ts": time.time(), "data": data}
+    return jsonify(data)
+
+
 @bp.route("/daily")
 def daily_report():
     """Daily markets summary report page."""

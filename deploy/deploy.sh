@@ -19,6 +19,7 @@ APPS=(
   "ytracker|8004|tracker.li-family.us|requirements_tracker.txt|ytracker/static"
   "ypay|8005|pay.li-family.us|requirements_pay.txt|ypay/static"
   "yimage|8006|image.li-family.us|requirements_image.txt|yimage/static"
+  "ybg|8007|ybackground.li-family.us|requirements_bg.txt|ybg/static"
 )
 
 # CloudFormation
