@@ -288,6 +288,23 @@
 
 </div>
 
+<!-- ── Crypto ──────────────────────────────────────────────────────────── -->
+<div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 fade-up mb-4" id="cryptoCard">
+  <h3 class="text-sm font-semibold text-slate-300 mb-3" data-i18n="markets.crypto_title">Crypto</h3>
+  <div class="grid grid-cols-2 gap-3" id="cryptoGrid">
+    <div class="bg-slate-800/40 rounded-xl p-3">
+      <div class="text-xs text-slate-500 mb-0.5">Bitcoin</div>
+      <div id="btcPrice" class="text-base font-bold font-mono text-amber-400">—</div>
+      <div id="btcChg" class="text-xs font-medium mt-0.5">—</div>
+    </div>
+    <div class="bg-slate-800/40 rounded-xl p-3">
+      <div class="text-xs text-slate-500 mb-0.5">Ethereum</div>
+      <div id="ethPrice" class="text-base font-bold font-mono text-sky-400">—</div>
+      <div id="ethChg" class="text-xs font-medium mt-0.5">—</div>
+    </div>
+  </div>
+</div>
+
 <!-- ── Gold Ratios row ───────────────────────────────────────────────── -->
 <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6 fade-up">
 
@@ -3027,6 +3044,36 @@ async function loadCreditSpread(period) {
 
 // Initial load
 loadCreditSpread('1y');
+
+// Crypto prices (from history endpoint)
+(async function() {
+  try {
+    const [btcResp, ethResp] = await Promise.all([
+      fetch('/api/history/BTC-USD?period=2d'),
+      fetch('/api/history/ETH-USD?period=2d'),
+    ]);
+    const btc = await btcResp.json();
+    const eth = await ethResp.json();
+
+    function fillCrypto(prices, priceId, chgId) {
+      if (!prices || prices.length < 2) return;
+      const last = prices[prices.length - 1];
+      const prev = prices[prices.length - 2];
+      const chgPct = prev ? (last - prev) / prev * 100 : null;
+      const prEl = document.getElementById(priceId);
+      const chEl = document.getElementById(chgId);
+      if (prEl && last) {
+        prEl.textContent = '$' + Math.round(last).toLocaleString();
+      }
+      if (chEl && chgPct != null) {
+        chEl.textContent = (chgPct >= 0 ? '+' : '') + chgPct.toFixed(2) + '%';
+        chEl.className = 'text-xs font-medium mt-0.5 ' + (chgPct >= 0 ? 'text-emerald-400' : 'text-rose-400');
+      }
+    }
+    fillCrypto(btc.prices, 'btcPrice', 'btcChg');
+    fillCrypto(eth.prices, 'ethPrice', 'ethChg');
+  } catch(e) {}
+})();
 </script>
 
 {% endblock %}

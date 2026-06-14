@@ -369,6 +369,12 @@ const I18n = (() => {
     'history.ev_band_fair':        { en: '8–13x Fair',       zh: '8–13x 正常' },
     'history.ev_band_growth':      { en: '13–20x Growth',    zh: '13–20x 成长型' },
     'history.ev_band_bubble':      { en: '>20x Expensive',   zh: '>20x 高增长/泡沫' },
+    'history.week52_chg':          { en: '52W Return',       zh: '52周涨跌幅' },
+    'history.ytd_return':          { en: 'YTD Return',       zh: '年初至今涨跌幅' },
+    'ev.band_cheap':               { en: '<8x Cheap',        zh: '<8x 便宜' },
+    'ev.band_fair':                { en: '8–13x Fair',       zh: '8–13x 正常' },
+    'ev.band_growth':              { en: '13–20x Growth',    zh: '13–20x 成长型' },
+    'ev.band_bubble':              { en: '>20x Expensive',   zh: '>20x 高增长/泡沫' },
     'history.stamp_as_of':         { en: 'as of', zh: '截至' },
     // P/C chart legend
     'history.pc_bearish_label':    { en: '>1.2 Bearish', zh: '>1.2 看空' },

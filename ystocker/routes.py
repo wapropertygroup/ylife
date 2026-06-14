@@ -1041,6 +1041,8 @@ def api_history(ticker: str):
         "float_shares":      _safe(round(info.get("floatShares") / 1e9, 2)) if info.get("floatShares") else None,
         "week52_high":       _safe(info.get("fiftyTwoWeekHigh")),
         "week52_low":        _safe(info.get("fiftyTwoWeekLow")),
+        "week52_change":     _safe(round(info.get("52WeekChange") * 100, 1)) if info.get("52WeekChange") else None,
+        "ytd_return":        _safe(round(info.get("ytdReturn") * 100, 1)) if info.get("ytdReturn") else None,
         "avg_volume":        _safe(info.get("averageVolume")),
         # Relative strength vs SPY (normalised to 100 at start)
         "relative_strength": relative_strength,
@@ -1247,25 +1249,40 @@ def api_sector_performance(sector_name: str):
     # Always include SPY as market benchmark
     all_tickers = list(tickers) + ["SPY"] if "SPY" not in tickers else list(tickers)
 
-    for tk_sym in all_tickers:
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    def _fetch_one(tk_sym):
         try:
-            hist = yf.Ticker(tk_sym).history(period=period, interval=interval)
-            if hist.empty:
-                continue
-            tk_dates = [str(d.date()) for d in hist.index]
-            tk_prices = [round(float(p), 2) if not math.isnan(float(p)) else None
-                         for p in hist["Close"]]
-            # Use the first non-null price as the base
-            base = next((p for p in tk_prices if p is not None), None)
-            if base is None:
-                continue
-            normalised = [round(p / base * 100, 2) if p is not None else None
-                          for p in tk_prices]
-            if not dates or len(tk_dates) > len(dates):
-                dates = tk_dates
-            series[tk_sym] = normalised
+            tk_hist = yf.Ticker(tk_sym).history(period=period, interval=interval)
+            if tk_hist.empty:
+                return tk_sym, None
+            closes = tk_hist["Close"].dropna()
+            if len(closes) < 2:
+                return tk_sym, None
+            base = float(closes.iloc[0])
+            if base == 0:
+                return tk_sym, None
+            norm = [round(float(v) / base * 100, 2) for v in closes]
+            return tk_sym, {"prices": norm, "dates": [str(d.date()) for d in closes.index]}
         except Exception:
-            log.debug("Sector perf fetch failed for %s", tk_sym)
+            return tk_sym, None
+
+    raw_series: dict[str, dict] = {}
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        futs = {pool.submit(_fetch_one, t): t for t in all_tickers}
+        for fut in as_completed(futs, timeout=20):
+            try:
+                tk_sym, data = fut.result(timeout=8)
+                if data:
+                    raw_series[tk_sym] = data
+            except Exception:
+                continue
+
+    # Reconstruct dates/series: use the ticker with the most dates as shared x-axis
+    if raw_series:
+        best = max(raw_series, key=lambda k: len(raw_series[k]["dates"]))
+        dates = raw_series[best]["dates"]
+        series = {k: v["prices"] for k, v in raw_series.items()}
 
     if not series:
         return jsonify({"error": "No price data available"}), 502
@@ -1516,6 +1533,35 @@ def api_peers(ticker: str):
             })
     peers_data.sort(key=lambda x: abs(x.get("pe") or 0), reverse=False)
     return jsonify({"peers": peers_data[:10], "group": peer_group})
+
+
+@bp.route("/api/dividend-history/<ticker>")
+def api_dividend_history(ticker: str):
+    """Return annual dividend payment history for the past 10 years."""
+    import yfinance as yf
+    ticker = ticker.strip().upper()
+
+    try:
+        tk = yf.Ticker(ticker)
+        divs = tk.dividends
+        if divs is None or divs.empty:
+            return jsonify({"dividends": [], "ticker": ticker})
+
+        # Aggregate by year
+        annual = {}
+        for dt, amt in divs.items():
+            year = dt.year
+            if year not in annual:
+                annual[year] = 0.0
+            annual[year] += float(amt)
+
+        # Return last 10 years sorted ascending
+        sorted_years = sorted(annual.keys())[-10:]
+        result = [{"year": str(y), "amount": round(annual[y], 4)} for y in sorted_years]
+        return jsonify({"dividends": result, "ticker": ticker})
+    except Exception as exc:
+        log.warning("Dividend history: %s %s", ticker, exc)
+        return jsonify({"dividends": [], "ticker": ticker})
 
 
 @bp.route("/api/search")

@@ -100,6 +100,8 @@ def fetch_ticker_data(ticker: str) -> dict:
         "Short Float (%)":    round(info.get("shortPercentOfFloat") * 100, 1) if info.get("shortPercentOfFloat") else None,
         "Dividend Yield (%)": round(info.get("dividendYield") * 100, 2) if info.get("dividendYield") else None,
         "Revenue Growth (%)": round(info.get("revenueGrowth") * 100, 1) if info.get("revenueGrowth") else None,
+        "52W Return (%)":  round(info.get("52WeekChange") * 100, 1) if info.get("52WeekChange") else None,
+        "YTD Return (%)":  round(info.get("ytdReturn") * 100, 1) if info.get("ytdReturn") else None,
     }
 
 

@@ -266,7 +266,7 @@
   <!-- Price / Sentiment -->
   <div>
     <p class="text-[10px] font-semibold uppercase tracking-widest text-slate-600 mb-2 px-1" data-i18n="history.group_sentiment">Price &amp; Sentiment</p>
-    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3">
+    <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2 sm:gap-3">
       <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 py-3">
         <div class="text-xs text-slate-500 mb-1" data-i18n="history.target_price">Target Price</div>
         <div id="statTarget" class="text-base font-bold text-slate-100">—</div>
@@ -292,6 +292,14 @@
       <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 py-3">
         <div class="text-xs text-slate-500 mb-1" data-i18n="history.week52_low">52W Low</div>
         <div id="stat52Low" class="text-base font-bold text-rose-400">—</div>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 py-3">
+        <div class="text-xs text-slate-500 mb-1" data-i18n="history.week52_chg">52W Return</div>
+        <div id="stat52Chg" class="text-base font-bold text-slate-100">—</div>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 py-3">
+        <div class="text-xs text-slate-500 mb-1" data-i18n="history.ytd_return">YTD Return</div>
+        <div id="statYtdReturn" class="text-base font-bold text-slate-100">—</div>
       </div>
     </div>
   </div>
@@ -388,6 +396,19 @@
       <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 py-3">
         <div class="text-xs text-slate-500 mb-1" data-i18n="history.payout_ratio">Payout Ratio</div>
         <div id="statPayoutRatio" class="text-base font-bold text-slate-100">—</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Dividend History Chart -->
+  <div id="dividendChartGroup" style="display:none">
+    <div class="bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 mt-2">
+      <div class="flex items-center justify-between mb-2">
+        <p class="text-xs text-slate-500" data-i18n="history.div_history_title">Annual Dividend History</p>
+        <span class="flex items-center gap-1 text-xs text-emerald-400"><span class="w-2 h-2 bg-emerald-500/70 rounded-sm inline-block"></span> <span data-i18n="history.div_per_share">Per Share ($)</span></span>
+      </div>
+      <div class="chart-container" style="height:120px">
+        <canvas id="dividendHistChart"></canvas>
       </div>
     </div>
   </div>
@@ -1056,10 +1077,10 @@
       </div>
     </div>
     <p class="text-xs text-slate-600 mt-3">
-      <span class="text-emerald-400">■</span> &lt;8x 便宜 &nbsp;
-      <span class="text-sky-400">■</span> 8–13x 正常 &nbsp;
-      <span class="text-amber-400">■</span> 13–20x 成长型 &nbsp;
-      <span class="text-rose-400">■</span> 20x+ 高增长或泡沫
+      <span class="text-emerald-400">■</span> <span data-i18n="ev.band_cheap">&lt;8x Cheap</span> &nbsp;
+      <span class="text-sky-400">■</span> <span data-i18n="ev.band_fair">8–13x Fair</span> &nbsp;
+      <span class="text-amber-400">■</span> <span data-i18n="ev.band_growth">13–20x Growth</span> &nbsp;
+      <span class="text-rose-400">■</span> <span data-i18n="ev.band_bubble">&gt;20x Expensive</span>
     </p>
   </div>
 
@@ -1073,13 +1094,13 @@
       <table class="w-full text-xs" id="peerTable">
         <thead>
           <tr class="border-b border-slate-800 text-slate-500">
-            <th class="text-left py-2 px-2 font-medium">Ticker</th>
-            <th class="text-right py-2 px-2 font-medium">PE</th>
-            <th class="text-right py-2 px-2 font-medium">Fwd PE</th>
-            <th class="text-right py-2 px-2 font-medium">P/S</th>
-            <th class="text-right py-2 px-2 font-medium">PEG</th>
-            <th class="text-right py-2 px-2 font-medium">Upside</th>
-            <th class="text-right py-2 px-2 font-medium">Day</th>
+            <th class="text-left py-2 px-2 font-medium" data-i18n="th.ticker">Ticker</th>
+            <th class="text-right py-2 px-2 font-medium" data-i18n="th.pe_ttm">PE</th>
+            <th class="text-right py-2 px-2 font-medium" data-i18n="th.pe_fwd">Fwd PE</th>
+            <th class="text-right py-2 px-2 font-medium" data-i18n="th.ps_ratio">P/S</th>
+            <th class="text-right py-2 px-2 font-medium" data-i18n="th.peg">PEG</th>
+            <th class="text-right py-2 px-2 font-medium" data-i18n="th.upside">Upside</th>
+            <th class="text-right py-2 px-2 font-medium" data-i18n="th.day_chg">Day</th>
           </tr>
         </thead>
         <tbody id="peerTableBody"></tbody>
@@ -1325,6 +1346,36 @@ let   _forecastResult = null;   // last forecast API response
     if (data.dividend_yield != null) { const el = document.getElementById('statDivYield'); el.textContent = data.dividend_yield.toFixed(2) + '%'; }
     if (data.dividend_rate  != null) { const el = document.getElementById('statDivRate');  el.textContent = '$' + data.dividend_rate.toFixed(2); }
     if (data.payout_ratio   != null) { const el = document.getElementById('statPayoutRatio'); el.textContent = data.payout_ratio.toFixed(1) + '%'; }
+
+    // Dividend history chart (async, non-blocking)
+    (async () => {
+      try {
+        const r = await fetch(`/api/dividend-history/${encodeURIComponent(TICKER)}`);
+        const d2 = await r.json();
+        if (!d2.dividends || d2.dividends.length < 2) return;
+        document.getElementById('dividendChartGroup').style.display = 'block';
+        const years = d2.dividends.map(d => d.year);
+        const amts  = d2.dividends.map(d => d.amount);
+        new Chart(document.getElementById('dividendHistChart'), {
+          type: 'bar',
+          data: { labels: years, datasets: [{
+            label: 'Annual Dividend ($)',
+            data: amts,
+            backgroundColor: 'rgba(52,211,153,0.65)',
+            borderColor: '#34d399',
+            borderWidth: 1, borderRadius: 3,
+          }]},
+          options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => ` $${c.raw.toFixed(4)}` }}},
+            scales: {
+              x: { grid: { color: '#1e293b' }, ticks: { color: '#64748b' }},
+              y: { grid: { color: '#1e293b' }, ticks: { color: '#64748b', callback: v => '$' + v.toFixed(2) }, min: 0 },
+            },
+          },
+        });
+      } catch(e) {}
+    })();
   }
 
   // Ownership & Short
@@ -1341,6 +1392,15 @@ let   _forecastResult = null;   // last forecast API response
   // 52-week high/low from api_history
   if (data.week52_high != null) document.getElementById('stat52High').textContent = '$' + data.week52_high.toFixed(2);
   if (data.week52_low  != null) document.getElementById('stat52Low').textContent  = '$' + data.week52_low.toFixed(2);
+  // 52W Return and YTD Return
+  function pctStat(id, val) {
+    const el = document.getElementById(id);
+    if (!el || val == null) return;
+    el.textContent = (val >= 0 ? '+' : '') + val.toFixed(1) + '%';
+    el.className = 'text-base font-bold ' + (val >= 0 ? 'text-emerald-400' : 'text-rose-400');
+  }
+  pctStat('stat52Chg',    data.week52_change);
+  pctStat('statYtdReturn',data.ytd_return);
   // Avg volume
   if (data.avg_volume != null) {
     const av = data.avg_volume;
