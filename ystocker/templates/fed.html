@@ -2098,7 +2098,7 @@ let _fedSeriesData = {};
   // ── Auto-load Fed Assets vs S&P 500 (always visible)
   _loadFedSpy();
 
-})();
+})().catch(e => console.error('Fed IIFE failed:', e));
 
 // ── AI Explain ────────────────────────────────────────────────────────────
 const _explainData = {};  // populated by main IIFE via registerExplainData()
