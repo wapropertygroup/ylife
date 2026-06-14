@@ -4783,6 +4783,71 @@ def api_yield_curve():
 
 
 # ---------------------------------------------------------------------------
+# Yield Spread  (/api/yield-spread)
+# ---------------------------------------------------------------------------
+
+# 4-hour cache for yield spread data
+_YIELD_SPREAD_CACHE: dict = {}
+_YIELD_SPREAD_LOCK = threading.Lock()
+_YIELD_SPREAD_TTL = 4 * 3600
+
+
+@bp.route("/api/yield-spread")
+def api_yield_spread():
+    """10Y-2Y Treasury spread + NBER recession bands.
+
+    Returns:
+      dates: list of YYYY-MM-DD
+      spread: list of floats (10Y - 2Y, percentage points)
+      recession: list of 0/1 (NBER recession indicator)
+    """
+    import datetime as _dt
+
+    with _YIELD_SPREAD_LOCK:
+        entry = _YIELD_SPREAD_CACHE.get("data")
+        if entry and time.time() - entry["ts"] < _YIELD_SPREAD_TTL:
+            return jsonify(entry["data"])
+
+    try:
+        import requests as _req
+        headers = {"User-Agent": "Mozilla/5.0 (research)"}
+
+        def _fred(sid):
+            url = f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={sid}"
+            r = _req.get(url, headers=headers, timeout=15)
+            r.raise_for_status()
+            rows = [line.split(",") for line in r.text.strip().splitlines()[1:]
+                    if "," in line and line.split(",")[1].strip() not in ("", ".")]
+            return {row[0]: float(row[1]) for row in rows}
+
+        dgs10 = _fred("DGS10")
+        dgs2  = _fred("DGS2")
+        usrec = _fred("USREC")
+
+        # Align on dates present in both DGS10 and DGS2
+        dates = sorted(set(dgs10) & set(dgs2))
+        spread = [round(dgs10[d] - dgs2[d], 3) for d in dates]
+        recession = [int(usrec.get(d, usrec.get(d[:7] + "-01", 0))) for d in dates]
+
+        # Keep last 10 years
+        cutoff = (
+            _dt.date.today() - _dt.timedelta(days=365 * 10)
+        ).isoformat()
+        dates, spread, recession = zip(
+            *[(d, s, r) for d, s, r in zip(dates, spread, recession) if d >= cutoff]
+        )
+
+        result = {"dates": list(dates), "spread": list(spread), "recession": list(recession)}
+        with _YIELD_SPREAD_LOCK:
+            _YIELD_SPREAD_CACHE["data"] = {"ts": time.time(), "data": result}
+        return jsonify(result)
+
+    except Exception as exc:
+        log.warning("yield-spread: fetch failed: %s", exc)
+        return jsonify({"error": str(exc)}), 502
+
+
+# ---------------------------------------------------------------------------
 # Markets AI Explain  (/api/markets/explain)
 # ---------------------------------------------------------------------------
 

@@ -216,6 +216,19 @@
 
 </div>
 
+<!-- ── Equity Risk Premium card ─────────────────────────────────────── -->
+<div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 fade-up mb-6" id="erpCard">
+  <div class="flex items-center justify-between mb-1">
+    <h3 class="text-sm font-semibold text-slate-300">Equity Risk Premium</h3>
+    <span class="text-[10px] text-slate-600">ERP = S&amp;P Earnings Yield – 10Y</span>
+  </div>
+  <div class="flex items-end gap-3">
+    <div id="erpValue" class="text-2xl font-bold font-mono text-slate-100">—</div>
+    <div id="erpLabel" class="text-xs text-slate-500 pb-1"></div>
+  </div>
+  <p class="text-[11px] text-slate-600 mt-2">Above 3% = stocks attractive vs bonds. Below 1% = bonds competitive. Negative = bonds preferred.</p>
+</div>
+
 <!-- ── AAII Sentiment + Put/Call Ratio + Sector Performance row ─────── -->
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6 fade-up">
 
@@ -326,6 +339,20 @@
   </div>
   <div class="chart-container" style="height:200px">
     <canvas id="vixPcrChart"></canvas>
+  </div>
+</div>
+
+<!-- ── Growth vs Broad Market Rotation ──────────────────────── -->
+<div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up mb-6" id="rotationSection">
+  <div class="flex items-start justify-between mb-3">
+    <div>
+      <h2 class="text-base font-semibold text-slate-200">Growth vs Broad Market Rotation</h2>
+      <p class="text-xs text-slate-500 mt-0.5">Nasdaq/S&amp;P ratio — rising = growth outperforming, falling = rotation to value/defensives</p>
+    </div>
+    <span id="rotationBadge" class="text-xs px-2 py-0.5 rounded font-semibold hidden"></span>
+  </div>
+  <div class="chart-container" style="height:180px">
+    <canvas id="rotationChart"></canvas>
   </div>
 </div>
 
@@ -515,6 +542,21 @@
       <div class="yield-explain-panel" id="jpYieldExplainPanel"></div>
     </div>
   </div>
+</div>
+
+<!-- ── 10Y–2Y Spread (Recession Predictor) ──────────────────────── -->
+<div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up mb-6" id="yieldSpreadSection">
+  <div class="flex items-start justify-between mb-3">
+    <div>
+      <h2 class="text-base font-semibold text-slate-200">10Y – 2Y Treasury Spread</h2>
+      <p class="text-xs text-slate-500 mt-0.5">Inversion (below 0) has preceded every US recession since 1978. Red shading = NBER-defined recessions.</p>
+    </div>
+    <span id="spreadBadge" class="text-xs px-2 py-0.5 rounded font-semibold hidden"></span>
+  </div>
+  <div class="chart-container" style="height:200px">
+    <canvas id="yieldSpreadChart"></canvas>
+  </div>
+  <p class="text-[11px] text-slate-600 mt-2">Current spread: <span id="spreadCurrent" class="font-mono font-semibold"></span> · Source: FRED (DGS10 – DGS2)</p>
 </div>
 
 <!-- ── Per-index detail tabs ──────────────────────────────────────────── -->
@@ -3204,6 +3246,79 @@ function _mktsModalConfig(kind) {
     renderRsiChart(_curIdx, _mkData, _curRange);
     _syncHover();
     loadIdxForecast(_curIdx);   // async — non-blocking
+
+    // Equity Risk Premium
+    try {
+      const spxPE = _mkData?.indices?.spx?.pe ?? null;
+      fetch('/api/yield-curve').then(r=>r.json()).then(yc => {
+        const ten = yc?.us?.current?.['10Y'] ?? null;
+        if (spxPE && ten) {
+          const earningsYield = 100 / spxPE;
+          const erp = earningsYield - ten;
+          const erpEl = document.getElementById('erpValue');
+          const lblEl = document.getElementById('erpLabel');
+          if (erpEl) {
+            erpEl.textContent = (erp >= 0 ? '+' : '') + erp.toFixed(2) + '%';
+            erpEl.className = 'text-2xl font-bold font-mono ' +
+              (erp >= 3 ? 'text-emerald-400' : erp >= 1 ? 'text-amber-400' : erp >= 0 ? 'text-orange-400' : 'text-rose-400');
+          }
+          if (lblEl) {
+            lblEl.textContent = erp >= 3 ? 'Stocks attractive' : erp >= 1 ? 'Fairly valued' : erp >= 0 ? 'Expensive' : 'Bonds preferred';
+          }
+        }
+      }).catch(()=>{});
+    } catch(e) {}
+
+    // Nasdaq / SPX Rotation Ratio
+    (function buildRotation() {
+      if (!_mkData) return;
+      const ixic = _mkData.indices?.ixic?.daily;
+      const spx  = _mkData.indices?.spx?.daily;
+      if (!ixic?.prices?.length || !spx?.prices?.length) return;
+
+      // Align by date
+      const spxMap = {};
+      (spx.dates || []).forEach((d, i) => { if (spx.prices[i] != null) spxMap[d] = spx.prices[i]; });
+
+      const dates  = (ixic.dates || []).slice(-252);
+      const ratio  = dates.map((d, i) => {
+        const ixicP = ixic.prices[ixic.prices.length - dates.length + i];
+        const spxP  = spxMap[d];
+        return (ixicP && spxP) ? +(ixicP / spxP).toFixed(4) : null;
+      });
+
+      const last = ratio.filter(v=>v).slice(-1)[0];
+      const first = ratio.find(v=>v);
+      const pct = (last && first) ? ((last / first - 1) * 100).toFixed(1) : null;
+
+      const badge = document.getElementById('rotationBadge');
+      if (badge && pct) {
+        badge.classList.remove('hidden');
+        badge.textContent = (pct >= 0 ? '▲ +' : '▼ ') + pct + '% YTD';
+        badge.className = 'text-xs px-2 py-0.5 rounded font-semibold ' +
+          (pct >= 0 ? 'bg-emerald-900/50 text-emerald-300' : 'bg-rose-900/50 text-rose-300');
+      }
+
+      const gridCol = '#1e293b', tickCol = '#64748b';
+      new Chart(document.getElementById('rotationChart'), {
+        type: 'line',
+        data: { labels: dates, datasets: [{
+          label: 'Nasdaq/S&P Ratio',
+          data: ratio,
+          borderColor: '#38bdf8', backgroundColor: 'rgba(56,189,248,0.08)',
+          borderWidth: 2, pointRadius: 0, fill: true, tension: 0.3, spanGaps: true,
+        }]},
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend:{display:false}, tooltip:{callbacks:{label:c=>` Ratio: ${c.raw?.toFixed(3)}`}} },
+          scales: {
+            x:{grid:{color:gridCol},ticks:{color:tickCol,maxTicksLimit:6,maxRotation:0}},
+            y:{grid:{color:gridCol},ticks:{color:tickCol,callback:v=>v.toFixed(2)}},
+          },
+          interaction:{mode:'index',intersect:false},
+        },
+      });
+    })();
   } catch(err) {
     document.getElementById('marketsLoading').textContent = '⚠ Failed to load market data: ' + err.message;
   }
@@ -3350,6 +3465,76 @@ async function loadCreditSpread(period) {
 
 // Initial load
 loadCreditSpread('1y');
+
+// 10Y-2Y Spread with recession bands
+(async function() {
+  try {
+    const resp = await fetch('/api/yield-spread');
+    if (!resp.ok) return;
+    const ys = await resp.json();
+    if (!ys.dates || !ys.dates.length) return;
+    const gridCol = '#1e293b', tickCol = '#64748b';
+
+    // Current spread badge
+    const last = ys.spread[ys.spread.length - 1];
+    const badge = document.getElementById('spreadBadge');
+    const cur   = document.getElementById('spreadCurrent');
+    if (badge && last != null) {
+      badge.classList.remove('hidden');
+      badge.textContent = (last >= 0 ? '+' : '') + last.toFixed(2) + '%';
+      badge.className = 'text-xs px-2 py-0.5 rounded font-semibold ' +
+        (last >= 0 ? 'bg-emerald-900/50 text-emerald-300' : 'bg-rose-900/50 text-rose-300');
+    }
+    if (cur) cur.textContent = (last >= 0 ? '+' : '') + last.toFixed(2) + 'pp';
+
+    // Recession shading plugin
+    const recessionPlugin = {
+      id: 'recessionBands',
+      beforeDraw(chart) {
+        const { ctx, chartArea: a, scales: { x, y } } = chart;
+        if (!a) return;
+        const zeroY = y.getPixelForValue(0);
+        const dates = ys.dates;
+        const rec   = ys.recession;
+        let inRec = false, recStart = null;
+        ctx.save();
+        ctx.fillStyle = 'rgba(248,113,113,0.1)';
+        for (let i = 0; i < dates.length; i++) {
+          if (rec[i] && !inRec) { inRec = true; recStart = x.getPixelForValue(i); }
+          if (!rec[i] && inRec) {
+            inRec = false;
+            ctx.fillRect(recStart, a.top, x.getPixelForValue(i) - recStart, a.bottom - a.top);
+          }
+        }
+        if (inRec) ctx.fillRect(recStart, a.top, a.right - recStart, a.bottom - a.top);
+        // Zero line
+        ctx.strokeStyle = 'rgba(248,113,113,0.4)'; ctx.lineWidth = 1; ctx.setLineDash([4,4]);
+        ctx.beginPath(); ctx.moveTo(a.left, zeroY); ctx.lineTo(a.right, zeroY); ctx.stroke();
+        ctx.restore();
+      }
+    };
+
+    new Chart(document.getElementById('yieldSpreadChart'), {
+      type: 'line',
+      data: { labels: ys.dates, datasets: [{
+        label: '10Y-2Y Spread',
+        data: ys.spread,
+        borderColor: '#38bdf8', backgroundColor: 'rgba(56,189,248,0.07)',
+        borderWidth: 1.5, pointRadius: 0, fill: true, tension: 0.2, spanGaps: true,
+      }]},
+      plugins: [recessionPlugin],
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend:{display:false}, tooltip:{callbacks:{label:c=>` Spread: ${c.raw?.toFixed(2)}pp`}} },
+        scales: {
+          x:{grid:{color:gridCol},ticks:{color:tickCol,maxTicksLimit:6,maxRotation:0}},
+          y:{grid:{color:gridCol},ticks:{color:tickCol,callback:v=>(v>=0?'+':'')+v.toFixed(1)+'%'}},
+        },
+        interaction:{mode:'index',intersect:false},
+      },
+    });
+  } catch(e) { console.warn('Yield spread chart failed:', e); }
+})();
 
 // Crypto prices (from history endpoint)
 (async function() {

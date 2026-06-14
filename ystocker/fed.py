@@ -63,6 +63,19 @@ SERIES: dict[str, dict[str, str]] = {
     # Monthly series
     "M2SL":      {"label": "M2 Money Supply",            "color": "#22d3ee"},
     "M2V":       {"label": "Velocity of M2",             "color": "#a3e635"},
+    # ── Inflation & real rates ──────────────────────────────────────────────
+    "DFII10":          {"label": "10Y Real Yield (TIPS)",      "unit": "pct",    "scale": 1.0},
+    "T10YIE":          {"label": "10Y Breakeven Inflation",    "unit": "pct",    "scale": 1.0},
+    # ── Credit spreads (OAS, basis points) ─────────────────────────────────
+    "BAMLH0A0HYM2":    {"label": "HY OAS (bps)",               "unit": "bps",    "scale": 1.0},
+    "BAMLC0A0CM":      {"label": "IG OAS (bps)",               "unit": "bps",    "scale": 1.0},
+    # ── Valuation / business cycle ──────────────────────────────────────────
+    "WILL5000INDFC":   {"label": "Wilshire 5000 Index",        "unit": "index",  "scale": 1.0},
+    "GDP":             {"label": "US GDP ($B)",                 "unit": "bln",   "scale": 1.0},
+    "NAPM":            {"label": "ISM Manufacturing PMI",       "unit": "index",  "scale": 1.0},
+    "HOUST":           {"label": "Housing Starts (k units)",   "unit": "k",      "scale": 1.0},
+    # ── Recession indicator ─────────────────────────────────────────────────
+    "USREC":           {"label": "NBER Recession",              "unit": "binary", "scale": 1.0},
 }
 
 # ---------------------------------------------------------------------------
@@ -124,10 +137,15 @@ _HEADERS = {
 
 
 # Series already in billions USD (no /1000 conversion needed)
-_SERIES_ALREADY_BILLIONS = {"RRPONTSYD", "M2SL"}
+_SERIES_ALREADY_BILLIONS = {
+    "RRPONTSYD", "M2SL",
+    # New series — already in natural units, no millions→billions conversion
+    "DFII10", "T10YIE", "BAMLH0A0HYM2", "BAMLC0A0CM",
+    "WILL5000INDFC", "GDP", "NAPM", "HOUST", "USREC",
+}
 
 # Series that are dimensionless ratios (stored as-is, no unit conversion)
-_SERIES_RAW_RATIO = {"M2V"}
+_SERIES_RAW_RATIO = {"M2V", "DFII10", "T10YIE"}
 
 
 def _fetch_series(series_id: str) -> Optional[dict[str, Any]]:
