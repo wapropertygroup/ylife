@@ -220,6 +220,68 @@
   </div>
 </div>
 
+<!-- Buffett Indicator -->
+<div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up" id="buffettSection" style="display:none">
+  <div class="flex items-start justify-between mb-3">
+    <div>
+      <h3 class="text-sm font-semibold text-slate-300">📊 Buffett Indicator — US Market Cap / GDP</h3>
+      <p class="text-xs text-slate-500 mt-0.5">"Probably the best single measure of where valuations stand." — Warren Buffett. Above 140% = overvalued; below 80% = undervalued.</p>
+    </div>
+    <span id="buffettBadge" class="text-sm font-bold font-mono text-slate-100">—%</span>
+  </div>
+  <div class="chart-container" style="height:180px">
+    <canvas id="buffettChart"></canvas>
+  </div>
+  <div class="flex gap-4 mt-2 text-[10px] text-slate-600">
+    <span class="text-emerald-400">■</span> &lt;80% Undervalued &nbsp;
+    <span class="text-amber-400">■</span> 80–120% Fair &nbsp;
+    <span class="text-rose-400">■</span> &gt;140% Overvalued
+  </div>
+</div>
+
+<!-- Breakeven Inflation -->
+<div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up" id="breakEvenSection" style="display:none">
+  <div class="flex items-start justify-between mb-3">
+    <div>
+      <h3 class="text-sm font-semibold text-slate-300">📈 10Y Breakeven Inflation Rate</h3>
+      <p class="text-xs text-slate-500 mt-0.5">Bond market's implied average inflation forecast over 10 years (10Y nominal – 10Y TIPS). Fed targets 2%.</p>
+    </div>
+    <span id="breakEvenVal" class="text-sm font-bold font-mono text-amber-400">—%</span>
+  </div>
+  <div class="chart-container" style="height:160px">
+    <canvas id="breakEvenChart"></canvas>
+  </div>
+</div>
+
+<!-- HY/IG OAS Credit Spreads -->
+<div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up" id="oasSection" style="display:none">
+  <div class="mb-3">
+    <h3 class="text-sm font-semibold text-slate-300">💳 Credit Spreads — HY &amp; IG OAS</h3>
+    <p class="text-xs text-slate-500 mt-0.5">Option-Adjusted Spread over Treasuries. Widening = credit stress / risk-off. HY OAS &gt;600bps = distress level.</p>
+  </div>
+  <div class="flex items-center gap-3 mb-2 text-xs">
+    <span class="flex items-center gap-1 text-rose-400"><span class="w-3 h-0.5 bg-rose-400 inline-block"></span> HY OAS (bps)</span>
+    <span class="flex items-center gap-1 text-sky-400"><span class="w-3 h-0.5 border-dashed border border-sky-400 inline-block"></span> IG OAS (bps)</span>
+  </div>
+  <div class="chart-container" style="height:200px">
+    <canvas id="oasChart"></canvas>
+  </div>
+</div>
+
+<!-- ISM PMI -->
+<div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up" id="ismSection" style="display:none">
+  <div class="flex items-start justify-between mb-3">
+    <div>
+      <h3 class="text-sm font-semibold text-slate-300">🏭 ISM Manufacturing PMI</h3>
+      <p class="text-xs text-slate-500 mt-0.5">Above 50 = expansion, below 50 = contraction. Leads earnings and S&amp;P 500 by 3–6 months. Classic business cycle indicator.</p>
+    </div>
+    <span id="ismVal" class="text-sm font-bold font-mono text-slate-100">—</span>
+  </div>
+  <div class="chart-container" style="height:180px">
+    <canvas id="ismChart"></canvas>
+  </div>
+</div>
+
 <!-- ── Balance Sheet Identity (Assets = Liabilities + Capital) ───────── -->
 <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 mb-6 fade-up">
   <div class="flex items-start justify-between gap-3 mb-3 flex-wrap">
@@ -976,6 +1038,140 @@ let _fedSeriesData = {};
           x: { grid:{color:'#1e293b'}, ticks:{color:'#64748b',maxTicksLimit:6,maxRotation:0} },
           y: { grid:{color:'#1e293b'}, ticks:{color:'#64748b',callback:v=>v.toFixed(2)+'x'} },
         },
+      },
+    });
+  }
+
+  // Buffett Indicator
+  const will5k = s['WILL5000INDFC'];
+  const gdp    = s['GDP'];
+  if (will5k?.dates?.length && gdp?.dates?.length) {
+    // GDP is quarterly — interpolate to monthly using forward-fill
+    const gdpMap = {};
+    gdp.dates.forEach((d, i) => { if (gdp.values[i] != null) gdpMap[d.slice(0,7)] = gdp.values[i]; });
+    // Forward-fill GDP to all Wilshire dates
+    let lastGdp = null;
+    const ratioVals = will5k.dates.map(d => {
+      const ym = d.slice(0,7);
+      if (gdpMap[ym] != null) lastGdp = gdpMap[ym];
+      return (lastGdp && will5k.values[will5k.dates.indexOf(d)] != null)
+        ? +(will5k.values[will5k.dates.indexOf(d)] / lastGdp * 100).toFixed(1) : null;
+    });
+    const latestRatio = ratioVals.filter(v=>v).slice(-1)[0];
+    document.getElementById('buffettSection').style.display = 'block';
+    if (latestRatio) {
+      const b = document.getElementById('buffettBadge');
+      b.textContent = latestRatio.toFixed(0) + '%';
+      b.className = 'text-sm font-bold font-mono ' +
+        (latestRatio > 140 ? 'text-rose-400' : latestRatio > 120 ? 'text-amber-400' : latestRatio < 80 ? 'text-emerald-400' : 'text-slate-100');
+    }
+    new Chart(document.getElementById('buffettChart'), {
+      type: 'line',
+      data: { labels: will5k.dates.slice(-480), datasets: [{
+        label: 'Market Cap / GDP (%)',
+        data: ratioVals.slice(-480),
+        borderColor: '#a78bfa', backgroundColor: 'rgba(167,139,250,0.08)',
+        borderWidth: 1.5, pointRadius: 0, fill: true, tension: 0.3, spanGaps: true,
+      }]},
+      plugins: [{
+        afterDraw(chart) {
+          const {ctx:c, chartArea:a, scales:{y}} = chart;
+          [[80,'#34d399','80%'],[120,'#fbbf24','120%'],[140,'#f87171','140%']].forEach(([v,col,lbl]) => {
+            const py = y.getPixelForValue(v);
+            if (py < a.top || py > a.bottom) return;
+            c.save(); c.strokeStyle=col+'60'; c.lineWidth=1; c.setLineDash([4,3]);
+            c.beginPath(); c.moveTo(a.left,py); c.lineTo(a.right,py); c.stroke();
+            c.fillStyle=col; c.font='10px Inter,sans-serif';
+            c.fillText(lbl, a.left+4, py-3); c.restore();
+          });
+        }
+      }],
+      options: {
+        responsive:true, maintainAspectRatio:false,
+        plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>` ${c.raw?.toFixed(1)}%`}}},
+        scales:{
+          x:{grid:{color:'#1e293b'},ticks:{color:'#64748b',maxTicksLimit:6,maxRotation:0}},
+          y:{grid:{color:'#1e293b'},ticks:{color:'#64748b',callback:v=>v+'%'}},
+        },
+        interaction:{mode:'index',intersect:false},
+      },
+    });
+  }
+
+  // 10Y Breakeven Inflation
+  const t10yie = s['T10YIE'];
+  if (t10yie?.dates?.length && t10yie.values.some(v=>v!=null)) {
+    document.getElementById('breakEvenSection').style.display = 'block';
+    const latest = t10yie.values.filter(v=>v!=null).slice(-1)[0];
+    if (latest != null) document.getElementById('breakEvenVal').textContent = latest.toFixed(2) + '%';
+    new Chart(document.getElementById('breakEvenChart'), {
+      type: 'line',
+      data: { labels: t10yie.dates.slice(-500), datasets: [
+        { label:'Breakeven', data:t10yie.values.slice(-500), borderColor:'#fbbf24', backgroundColor:'rgba(251,191,36,0.07)', borderWidth:1.5, pointRadius:0, fill:true, tension:0.3, spanGaps:true },
+        { label:'2% Target', data:new Array(Math.min(t10yie.dates.length,500)).fill(2), borderColor:'rgba(52,211,153,0.4)', backgroundColor:'transparent', borderWidth:1, pointRadius:0, borderDash:[4,3] },
+      ]},
+      options:{
+        responsive:true,maintainAspectRatio:false,
+        plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>c.dataset.label==='2% Target'?'':` Breakeven: ${c.raw?.toFixed(2)}%`}}},
+        scales:{x:{grid:{color:'#1e293b'},ticks:{color:'#64748b',maxTicksLimit:6,maxRotation:0}},y:{grid:{color:'#1e293b'},ticks:{color:'#64748b',callback:v=>v.toFixed(1)+'%'}}},
+        interaction:{mode:'index',intersect:false},
+      },
+    });
+  }
+
+  // HY/IG OAS Credit Spreads
+  const hyOas = s['BAMLH0A0HYM2'];
+  const igOas = s['BAMLC0A0CM'];
+  if ((hyOas?.dates?.length || igOas?.dates?.length)) {
+    document.getElementById('oasSection').style.display = 'block';
+    const labels = hyOas?.dates?.slice(-500) || igOas?.dates?.slice(-500);
+    new Chart(document.getElementById('oasChart'), {
+      type:'line',
+      data:{ labels, datasets:[
+        { label:'HY OAS', data:(hyOas?.values||[]).slice(-500), borderColor:'#f87171', backgroundColor:'rgba(248,113,113,0.07)', borderWidth:1.5, pointRadius:0, fill:true, tension:0.2, spanGaps:true, yAxisID:'y' },
+        { label:'IG OAS', data:(igOas?.values||[]).slice(-500), borderColor:'#38bdf8', backgroundColor:'transparent', borderWidth:1.5, pointRadius:0, fill:false, tension:0.2, spanGaps:true, yAxisID:'yIg', borderDash:[4,3] },
+      ]},
+      options:{
+        responsive:true,maintainAspectRatio:false,
+        plugins:{legend:{display:false},tooltip:{mode:'index',intersect:false,callbacks:{label:c=>` ${c.dataset.label}: ${c.raw?.toFixed(0)}bps`}}},
+        scales:{
+          x:{grid:{color:'#1e293b'},ticks:{color:'#64748b',maxTicksLimit:6,maxRotation:0}},
+          y:{grid:{color:'#1e293b'},ticks:{color:'rgba(248,113,113,0.6)',callback:v=>v+'bps'}},
+          yIg:{position:'right',grid:{drawOnChartArea:false},ticks:{color:'rgba(56,189,248,0.6)',callback:v=>v+'bps'}},
+        },
+        interaction:{mode:'index',intersect:false},
+      },
+    });
+  }
+
+  // ISM PMI
+  const napm = s['NAPM'];
+  if (napm?.dates?.length && napm.values.some(v=>v!=null)) {
+    document.getElementById('ismSection').style.display = 'block';
+    const latestPMI = napm.values.filter(v=>v!=null).slice(-1)[0];
+    const ismEl = document.getElementById('ismVal');
+    if (ismEl && latestPMI != null) {
+      ismEl.textContent = latestPMI.toFixed(1);
+      ismEl.className = 'text-sm font-bold font-mono ' + (latestPMI >= 50 ? 'text-emerald-400' : 'text-rose-400');
+    }
+    const pmiColors = napm.values.map(v => v == null ? 'transparent' : v >= 50 ? 'rgba(52,211,153,0.7)' : 'rgba(248,113,113,0.7)');
+    new Chart(document.getElementById('ismChart'), {
+      type:'bar',
+      data:{ labels:napm.dates.slice(-120), datasets:[
+        { label:'ISM PMI', data:napm.values.slice(-120), backgroundColor:pmiColors.slice(-120), borderWidth:0, borderRadius:2 },
+      ]},
+      plugins:[{ afterDraw(chart){
+        const {ctx:c,chartArea:a,scales:{y}}=chart; const py=y.getPixelForValue(50);
+        if(py<a.top||py>a.bottom)return;
+        c.save();c.strokeStyle='rgba(251,191,36,0.6)';c.lineWidth=1.5;c.setLineDash([4,3]);
+        c.beginPath();c.moveTo(a.left,py);c.lineTo(a.right,py);c.stroke();
+        c.fillStyle='#fbbf24';c.font='10px Inter,sans-serif';c.fillText('50',a.left+4,py-3);c.restore();
+      }}],
+      options:{
+        responsive:true,maintainAspectRatio:false,
+        plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>` PMI: ${c.raw?.toFixed(1)}`}}},
+        scales:{x:{grid:{color:'#1e293b'},ticks:{color:'#64748b',maxTicksLimit:6,maxRotation:0}},y:{grid:{color:'#1e293b'},ticks:{color:'#64748b'},min:30,max:70}},
+        interaction:{mode:'index',intersect:false},
       },
     });
   }
