@@ -209,16 +209,23 @@ def _build_cache() -> dict[str, Any]:
 
     with _cf.ThreadPoolExecutor(max_workers=8) as pool:
         futures = {pool.submit(_fetch_one, sid): sid for sid in SERIES}
-        for fut in _cf.as_completed(futures, timeout=60):
-            try:
-                sid, data = fut.result()
-            except Exception as exc:
-                sid = futures[fut]
-                log.warning("Fed: parallel fetch failed for %s: %s", sid, exc)
-                data = None
-            result["series"][sid] = (
-                data if data else {"dates": [], "values": [], "error": True}
-            )
+        try:
+            for fut in _cf.as_completed(futures, timeout=60):
+                try:
+                    sid, data = fut.result()
+                except Exception as exc:
+                    sid = futures[fut]
+                    log.warning("Fed: parallel fetch failed for %s: %s", sid, exc)
+                    data = None
+                result["series"][sid] = (
+                    data if data else {"dates": [], "values": [], "error": True}
+                )
+        except _cf.TimeoutError:
+            log.warning("Fed: _build_cache() timed out after 60s — returning partial results (%d/%d series fetched)",
+                        len(result["series"]), len(SERIES))
+            for sid in SERIES:
+                if sid not in result["series"]:
+                    result["series"][sid] = {"dates": [], "values": [], "error": True}
 
     return result
 
@@ -255,19 +262,14 @@ def get_fed_data(force: bool = False) -> dict[str, Any]:
                 _cache_ts   = disk.get("_ts", time.time())
             return disk
 
-    # ── If another fetch is already in progress, return whatever we have ──
-    # This prevents the page's AJAX call from blocking behind a background
-    # refresh that was already started by /fed/refresh.
+    # ── If another fetch is already in progress, return stale data or warming indicator ──
     if not force and _fetch_in_progress.is_set():
-        log.info("Fed: fetch in progress — returning stale cache to avoid blocking")
+        log.info("Fed: fetch in progress — returning stale/empty cache to avoid blocking worker")
         with _cache_lock:
             if _cache_data:
                 return _cache_data
-        # No stale data at all — have to wait for the in-flight fetch
-        _fetch_in_progress.wait(timeout=30)
-        with _cache_lock:
-            if _cache_data:
-                return _cache_data
+        # No stale data at all — return warming indicator so client can poll
+        return {"_warming": True, "_ts": None, "series": {}}
 
     # ── Fetch from network (without holding _cache_lock) ─────────────────
     _fetch_in_progress.set()
@@ -311,3 +313,44 @@ def refresh_cache() -> None:
     finally:
         with _warming_lock:
             _warming = False
+
+
+def start_background_thread() -> None:
+    """Warm the Fed cache on startup and refresh it daily in the background.
+
+    - On startup: loads disk cache into memory immediately (fast path) or
+      triggers a background fetch if the disk cache is absent/stale.
+    - Daily: re-fetches FRED data every 24 hours so the first visitor after
+      TTL expiry never waits for a cold fetch.
+    """
+
+    def _loop() -> None:
+        # ── Startup: warm memory cache from disk if available ──────────────
+        try:
+            disk = _load_disk_cache()
+            if disk:
+                global _cache_data, _cache_ts
+                with _cache_lock:
+                    _cache_data = disk
+                    _cache_ts   = disk.get("_ts", time.time())
+                log.info("Fed background: memory cache warmed from disk (%d series)",
+                         len(disk.get("series", {})))
+            else:
+                log.info("Fed background: no disk cache — fetching FRED data now")
+                refresh_cache()
+        except Exception as exc:
+            log.warning("Fed background: startup warm failed: %s", exc)
+
+        # ── Daily refresh loop ─────────────────────────────────────────────
+        while True:
+            time.sleep(_CACHE_TTL)
+            try:
+                log.info("Fed background: 24h TTL elapsed — refreshing FRED data")
+                refresh_cache()
+                log.info("Fed background: daily refresh complete")
+            except Exception as exc:
+                log.warning("Fed background: daily refresh failed: %s", exc)
+
+    t = threading.Thread(target=_loop, name="fed-background-refresh", daemon=True)
+    t.start()
+    log.info("Fed: background refresh thread started")

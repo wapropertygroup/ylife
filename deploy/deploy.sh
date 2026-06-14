@@ -217,7 +217,7 @@ Group=\${RUN_USER}
 WorkingDirectory=\${APP_DIR}
 Environment="PATH=\${APP_DIR}/venv/bin"
 ExecStart=\${APP_DIR}/venv/bin/gunicorn \\\\
-          --workers 2 \\\\
+          --workers 4 \\\\
           --preload \\\\
           --bind 127.0.0.1:\${port} \\\\
           --timeout 120 \\\\
@@ -289,7 +289,15 @@ server {
         proxy_set_header   Host              \\\$host;
         proxy_set_header   X-Real-IP         \\\$remote_addr;
         proxy_set_header   X-Forwarded-For   \\\$proxy_add_x_forwarded_for;
-        proxy_read_timeout 120s;
+        proxy_read_timeout 130s;
+        proxy_connect_timeout 10s;
+        proxy_send_timeout 130s;
+        # Avoid buffering large responses to disk
+        proxy_buffer_size       16k;
+        proxy_buffers           8 64k;
+        proxy_busy_buffers_size 128k;
+        # Retry on upstream failure so a crashing worker doesn't cause 502
+        proxy_next_upstream     error timeout http_502 http_503;
     }
 
     location /static/ {

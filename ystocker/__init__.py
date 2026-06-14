@@ -194,6 +194,10 @@ def create_app() -> Flask:
     from ystocker.sec13f import start_background_thread as _start_sec13f_thread
     _start_sec13f_thread()
 
+    # Start Fed balance-sheet cache warm-up + daily refresh (H.4.1 is weekly; TTL = 24h)
+    from ystocker.fed import start_background_thread as _start_fed_thread
+    _start_fed_thread()
+
     # Start heatmap daily auto-snapshot scheduler (weekdays at 16:30 ET)
     _start_heatmap_scheduler()
 
