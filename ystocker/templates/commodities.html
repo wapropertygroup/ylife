@@ -228,6 +228,18 @@
     <div class="chart-container" style="height:220px"><canvas id="dxyBasketChart"></canvas></div>
   </div>
 
+  <!-- Brent–WTI Spread -->
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up mb-6" id="brentWtiSection" style="display:none">
+    <div class="flex items-start justify-between mb-3">
+      <div>
+        <h2 class="text-base font-semibold text-slate-200">Brent–WTI Spread ($)</h2>
+        <p class="text-xs text-slate-500 mt-0.5">Brent premium over WTI ($/bbl). Widens during Middle East geopolitical stress or when US domestic supply surges. Normal range: $2–6.</p>
+      </div>
+      <span id="brentWtiSpreadVal" class="text-base font-bold font-mono text-cyan-400">—</span>
+    </div>
+    <div class="chart-container" style="height:180px"><canvas id="brentWtiChart"></canvas></div>
+  </div>
+
   <!-- ── Copper vs S&P 500 (Dr. Copper as leading indicator) ─────── -->
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up mb-6" id="copperSpySection">
     <div class="mb-3">
@@ -576,10 +588,24 @@
     return wrap;
   }
   const ratiosGrid = document.getElementById('ratiosGrid');
+  // Nat gas energy-equivalent reference line plugin (1 barrel oil ≈ 6 MMBtu gas → ratio ≈ 0.167)
+  const natGasPlugin = [{
+    afterDraw(chart) {
+      const {ctx:c, chartArea:a, scales:{y}} = chart;
+      const fairVal = 0.167; // 1 barrel oil ≈ 6 MMBtu gas
+      const py = y.getPixelForValue(fairVal);
+      if (py < a.top || py > a.bottom) return;
+      c.save(); c.strokeStyle='rgba(251,191,36,0.5)'; c.lineWidth=1; c.setLineDash([4,3]);
+      c.beginPath(); c.moveTo(a.left,py); c.lineTo(a.right,py); c.stroke();
+      c.fillStyle='#fbbf24'; c.font='9px Inter';
+      c.fillText('Energy equiv. (1/6)', a.left+4, py-3);
+      c.restore();
+    }
+  }];
   Object.entries(R).forEach(([k, r]) => {
     if (!r.values || !r.values.length) return;
     ratiosGrid.appendChild(buildRatioCard(k, r));
-    new Chart(document.getElementById('ratio_' + k), {
+    const chartConfig = {
       type: 'line',
       data: {
         labels: r.dates,
@@ -600,7 +626,8 @@
         },
         interaction: { mode: 'index', intersect: false },
       },
-    });
+    };
+    new Chart(document.getElementById('ratio_' + k), chartConfig, k === 'oil_natgas' ? natGasPlugin : undefined);
   });
 
   // Gold vs DXY overlay chart
@@ -910,6 +937,56 @@
   document.addEventListener('i18n:langchange', () => {
     if (_seasonData) _renderSeasonality(CURRENT_KEY);
   });
+
+  // ── Brent–WTI Spread chart ──────────────────────────────────────────
+  (function() {
+    const brent = C['oil_brent'];
+    const wti   = C['oil_wti'];
+    if (!brent?.prices_1y?.length || !wti?.prices_1y?.length) return;
+
+    // Align by dates (both daily, same length expected)
+    const len = Math.min(brent.prices_1y.length, wti.prices_1y.length, brent.dates_1y?.length||0, wti.dates_1y?.length||0);
+    const dates  = (brent.dates_1y || wti.dates_1y || []).slice(-len);
+    const spread = brent.prices_1y.slice(-len).map((b, i) => {
+      const w = wti.prices_1y.slice(-len)[i];
+      return (b != null && w != null) ? +(b - w).toFixed(2) : null;
+    });
+
+    document.getElementById('brentWtiSection').style.display = 'block';
+    const latest = spread.filter(v=>v!=null).slice(-1)[0];
+    if (latest != null) {
+      document.getElementById('brentWtiSpreadVal').textContent = '$' + latest.toFixed(2);
+    }
+
+    const gCol='#1e293b', tCol='#64748b';
+    new Chart(document.getElementById('brentWtiChart'), {
+      type: 'line',
+      data: { labels: dates, datasets: [{
+        label: 'Brent–WTI Spread',
+        data: spread,
+        borderColor: '#22d3ee', backgroundColor: 'rgba(34,211,238,0.08)',
+        borderWidth: 1.5, pointRadius: 0, fill: true, tension: 0.3, spanGaps: true,
+      }]},
+      options: {
+        responsive:true, maintainAspectRatio:false,
+        plugins:{ legend:{display:false}, tooltip:{callbacks:{label:c=>` Spread: $${c.raw?.toFixed(2)}/bbl`}} },
+        scales:{
+          x:{grid:{color:gCol},ticks:{color:tCol,maxTicksLimit:8,maxRotation:0}},
+          y:{grid:{color:gCol},ticks:{color:tCol,callback:v=>'$'+v.toFixed(1)},
+             afterDraw(ax){
+               const ct=ax.chart.ctx,a=ax.chart.chartArea;
+               [[2,'rgba(52,211,153,0.3)','$2 low'],[6,'rgba(251,191,36,0.3)','$6 high']].forEach(([v,c,lbl])=>{
+                 const py=ax.getPixelForValue(v);
+                 if(py<a.top||py>a.bottom)return;
+                 ct.save();ct.strokeStyle=c.replace('0.3','0.5');ct.setLineDash([4,3]);ct.lineWidth=1;ct.beginPath();ct.moveTo(a.left,py);ct.lineTo(a.right,py);ct.stroke();
+                 ct.fillStyle='#64748b';ct.font='9px Inter';ct.fillText(lbl,a.left+4,py-3);ct.restore();
+               });
+             }},
+        },
+        interaction:{mode:'index',intersect:false},
+      },
+    });
+  })();
 })();
 </script>
 {% endblock %}

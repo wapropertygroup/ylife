@@ -2191,6 +2191,34 @@ def thirteenf():
     holdings   = get_all_holdings()
     cache_ts   = get_cache_ts()
     warming    = sec_warming()
+
+    # Build consensus positions (tickers held by most funds)
+    from collections import defaultdict
+    ticker_funds: dict[str, list] = defaultdict(list)
+    ticker_value: dict[str, float] = defaultdict(float)
+    for fund_name, fd in holdings.items():
+        if "error" in fd:
+            continue
+        for h in fd.get("holdings", []):
+            t = h.get("ticker")
+            if not t:
+                continue
+            ticker_funds[t].append(fund_name)
+            ticker_value[t] += h.get("value_millions", 0) or 0
+    consensus_positions = sorted(
+        [
+            {
+                "ticker": t,
+                "fund_count": len(fnames),
+                "total_value_m": round(ticker_value[t]),
+                "fund_names": fnames,
+            }
+            for t, fnames in ticker_funds.items()
+            if len(fnames) >= 2
+        ],
+        key=lambda x: -x["fund_count"],
+    )[:25]
+
     return render_template(
         "thirteenf.html",
         peer_groups=list(PEER_GROUPS.keys()),
@@ -2199,6 +2227,7 @@ def thirteenf():
         cache_last_updated=cache_ts,
         cache_fresh=is_cache_fresh(),
         warming=warming,
+        consensus_positions=consensus_positions,
     )
 
 

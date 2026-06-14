@@ -1128,6 +1128,15 @@
         <canvas id="quarterlyChart"></canvas>
       </div>
     </div>
+
+    <!-- Revenue Acceleration -->
+    <div id="revAccelWrap" class="mt-3 hidden">
+      <div class="flex items-center justify-between mb-1">
+        <p class="text-xs text-slate-500">Revenue Growth Rate (QoQ %)</p>
+        <span id="revAccelBadge" class="text-[10px] px-1.5 py-0.5 rounded font-semibold hidden"></span>
+      </div>
+      <div class="chart-container" style="height:120px"><canvas id="revAccelChart"></canvas></div>
+    </div>
   </div>
 
   <!-- EV/EBITDA panel -->
@@ -1747,6 +1756,42 @@ let   _forecastResult = null;   // last forecast API response
             },
           });
         }
+
+        // Revenue Acceleration chart
+        try {
+          const _qtData = (fdata.quarterly_table || []).slice().reverse().filter(r => r.revenue != null && !r.is_estimate);
+          const qtWithRev = _qtData;
+          if (qtWithRev.length >= 3) {
+            const growths = qtWithRev.map((r, i) => {
+              if (i === 0) return null;
+              const prev = qtWithRev[i-1].revenue;
+              return prev > 0 ? +((r.revenue - prev) / prev * 100).toFixed(1) : null;
+            }).filter((v,i)=>i>0);
+            const labels = qtWithRev.slice(1).map(r=>r.quarter?.slice(0,7)||'');
+            const colors = growths.map(v=>v==null?'transparent':v>=0?'rgba(52,211,153,0.7)':'rgba(248,113,113,0.7)');
+            const lastG  = growths.filter(v=>v!=null).slice(-1)[0];
+            const prevG  = growths.filter(v=>v!=null).slice(-2,-1)[0];
+            if (growths.some(v=>v!=null)) {
+              document.getElementById('revAccelWrap').classList.remove('hidden');
+              if (lastG!=null && prevG!=null) {
+                const badge=document.getElementById('revAccelBadge');
+                badge.classList.remove('hidden');
+                const accel=lastG-prevG;
+                badge.textContent=(accel>=0?'▲ Accelerating':'▼ Decelerating')+' ('+Math.abs(accel.toFixed(1))+'pp)';
+                badge.className='text-[10px] px-1.5 py-0.5 rounded font-semibold '+(accel>=0?'bg-emerald-900/50 text-emerald-300':'bg-rose-900/50 text-rose-300');
+              }
+              new Chart(document.getElementById('revAccelChart'),{
+                type:'bar',
+                data:{labels,datasets:[{label:'Rev Growth QoQ%',data:growths,backgroundColor:colors,borderColor:colors.map(c=>c.replace('0.7','0.9')),borderWidth:1,borderRadius:3}]},
+                options:{responsive:true,maintainAspectRatio:false,
+                  plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>c.raw==null?'':` Rev Growth: ${c.raw?.toFixed(1)}%`}}},
+                  scales:{x:{grid:{color:'#1e293b'},ticks:{color:'#64748b'}},y:{grid:{color:'#1e293b'},ticks:{color:'#64748b',callback:v=>(v>=0?'+':'')+v.toFixed(0)+'%'},
+                    afterDraw(ax){const ct=ax.chart.ctx,a=ax.chart.chartArea,z=ax.getPixelForValue(0);if(z>=a.top&&z<=a.bottom){ct.save();ct.strokeStyle='rgba(148,163,184,0.4)';ct.lineWidth=1;ct.beginPath();ct.moveTo(a.left,z);ct.lineTo(a.right,z);ct.stroke();ct.restore();}}}},
+                  interaction:{mode:'index',intersect:false}},
+              });
+            }
+          }
+        } catch(e) {}
       }
 
       // ── Price Z-Score stat card + detail panel ──
@@ -2274,6 +2319,23 @@ let   _forecastResult = null;   // last forecast API response
           <td class="py-1.5 px-2 text-right ${(p.ytd_return??0)>=0?'text-emerald-400':'text-rose-400'}">${p.ytd_return!=null?(p.ytd_return>=0?'+':'')+p.ytd_return.toFixed(1)+'%':'—'}</td>
           <td class="py-1.5 px-2 text-right ${(p.week52_change??0)>=0?'text-emerald-400':'text-rose-400'}">${p.week52_change!=null?(p.week52_change>=0?'+':'')+p.week52_change.toFixed(1)+'%':'—'}</td>
         </tr>`).join('');
+
+      // P/S vs sector average annotation on statPs card
+      try {
+        const peerPsVals = pd.peers.filter(p=>p.ps!=null&&p.ps>0&&p.ps<100).map(p=>p.ps);
+        if (peerPsVals.length >= 2) {
+          const avgPs = peerPsVals.reduce((s,v)=>s+v,0)/peerPsVals.length;
+          const myPs  = data.ps_ratio;
+          const psEl  = document.getElementById('statPs');
+          if (psEl && myPs != null) {
+            const pctVsAvg = ((myPs - avgPs) / avgPs * 100).toFixed(0);
+            const vsSpan = document.createElement('div');
+            vsSpan.className = 'text-[10px] mt-0.5 ' + (myPs > avgPs ? 'text-rose-400' : 'text-emerald-400');
+            vsSpan.textContent = (myPs > avgPs ? '▲ ' : '▼ ') + Math.abs(pctVsAvg) + '% vs sector avg ' + avgPs.toFixed(1) + 'x';
+            psEl.parentElement.appendChild(vsSpan);
+          }
+        }
+      } catch(e) {}
     } catch(e) {}
   })();
 

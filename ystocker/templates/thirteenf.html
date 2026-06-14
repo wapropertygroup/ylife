@@ -24,6 +24,43 @@
 
 <!-- ── Fund selector + panels ────────────────────────────────────────── -->
 <!-- buildSectorDonut must be defined BEFORE the fund panels which call it inline -->
+
+<!-- Top Consensus Positions (most widely held) -->
+{% if consensus_positions %}
+<div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up mb-6">
+  <div class="flex items-baseline gap-3 mb-3">
+    <h2 class="text-base font-semibold text-slate-200" data-i18n="thirteenf.consensus_title">Top Consensus Positions</h2>
+    <span class="text-xs text-slate-500" data-i18n="thirteenf.consensus_desc">Stocks held by the most funds — reflects institutional conviction</span>
+  </div>
+  <div class="overflow-x-auto">
+    <table class="w-full text-xs">
+      <thead><tr class="border-b border-slate-800 text-slate-500">
+        <th class="text-left py-2 px-2 font-medium">#</th>
+        <th class="text-left py-2 px-2 font-medium">Ticker</th>
+        <th class="text-right py-2 px-2 font-medium">Funds</th>
+        <th class="text-right py-2 px-2 font-medium">Total Value ($M)</th>
+        <th class="text-left py-2 px-2 font-medium">Held By</th>
+      </tr></thead>
+      <tbody>
+        {% for pos in consensus_positions[:20] %}
+        <tr class="border-b border-slate-800/40 hover:bg-slate-800/30 cursor-pointer" onclick="window.location='/history/{{ pos.ticker }}'">
+          <td class="py-1.5 px-2 text-slate-600">{{ loop.index }}</td>
+          <td class="py-1.5 px-2 font-bold text-brand">{{ pos.ticker }}</td>
+          <td class="py-1.5 px-2 text-right">
+            <span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-brand/15 text-brand">{{ pos.fund_count }} funds</span>
+          </td>
+          <td class="py-1.5 px-2 text-right font-mono text-slate-300">
+            ${{ '{:,.0f}'.format(pos.total_value_m) }}M
+          </td>
+          <td class="py-1.5 px-2 text-slate-500 text-[10px]">{{ pos.fund_names[:3] | join(', ') }}{% if pos.fund_names|length > 3 %} +{{ pos.fund_names|length - 3 }}{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
 <script>
 const TICKER_SECTOR = {
   AAPL:'Tech',MSFT:'Tech',GOOGL:'Tech',GOOG:'Tech',META:'Tech',NVDA:'Tech',AMZN:'Tech',

@@ -376,6 +376,7 @@
       <button class="sector-period-btn" data-period="week" data-i18n="markets.sector_week">Week</button>
     </div>
     <div id="sectorBars" class="space-y-2.5"></div>
+    <div id="sectorMomentumGrid" class="flex flex-wrap gap-1 mt-2"></div>
   </div>
 
 </div>
@@ -649,6 +650,22 @@
     <canvas id="yieldSpreadChart"></canvas>
   </div>
   <p class="text-[11px] text-slate-600 mt-2">Current spread: <span id="spreadCurrent" class="font-mono font-semibold"></span> · Source: FRED (DGS10 – DGS2)</p>
+</div>
+
+<!-- Global Markets 1Y Normalized -->
+<div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up mb-6" id="globalNormSection">
+  <div class="flex items-start justify-between mb-3">
+    <div>
+      <h2 class="text-base font-semibold text-slate-200">Global Markets — Normalized</h2>
+      <p class="text-xs text-slate-500 mt-0.5">All major indices rebased to 100 at period start — compare relative performance at a glance.</p>
+    </div>
+    <div class="flex gap-1" id="globalNormBtns">
+      <button class="range-btn" data-norm-range="1m">1M</button>
+      <button class="range-btn active" data-norm-range="6m">6M</button>
+      <button class="range-btn" data-norm-range="1y">1Y</button>
+    </div>
+  </div>
+  <div class="chart-container" style="height:260px"><canvas id="globalNormChart"></canvas></div>
 </div>
 
 <!-- ── Per-index detail tabs ──────────────────────────────────────────── -->
@@ -1108,6 +1125,75 @@ document.querySelectorAll('.sector-period-btn').forEach(btn => {
     if (_mkData) renderSectors(_mkData.sectors);
   });
 });
+
+// ── Global Markets Normalized Comparison Chart ────────────────────────
+let _globalNormChart = null;
+function _buildGlobalNorm(range) {
+  if (!_mkData) return;
+  const KEYS = ['spx','ixic','dji','ftse','n225','sse','twii'];
+  const COLORS = ['#a78bfa','#38bdf8','#fb923c','#34d399','#f472b6','#fbbf24','#60a5fa'];
+  const LABELS = { spx:'S&P 500', ixic:'Nasdaq', dji:'Dow', ftse:'FTSE', n225:'Nikkei', sse:'Shanghai', twii:'Taiwan' };
+  const cutDays = range === '1m' ? 21 : range === '6m' ? 126 : 252;
+  const gridCol = '#1e293b', tickCol = '#64748b';
+
+  // Build datasets from existing daily data
+  const datasets = [];
+  let commonDates = null;
+  KEYS.forEach((key, i) => {
+    const daily = _mkData.indices?.[key]?.daily;
+    if (!daily?.prices?.length) return;
+    const prices = daily.prices.slice(-cutDays);
+    const dates  = daily.dates.slice(-cutDays);
+    const base   = prices.find(v=>v!=null);
+    if (!base) return;
+    const norm = prices.map(v => v!=null ? +(v/base*100).toFixed(1) : null);
+    if (!commonDates) commonDates = dates;
+    datasets.push({ label: LABELS[key]||key.toUpperCase(), data: norm, borderColor: COLORS[i], backgroundColor: 'transparent', borderWidth: 1.5, pointRadius: 0, fill: false, tension: 0.3, spanGaps: true });
+  });
+
+  if (_globalNormChart) _globalNormChart.destroy();
+  _globalNormChart = new Chart(document.getElementById('globalNormChart'), {
+    type: 'line',
+    data: { labels: commonDates||[], datasets },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{labels:{color:tickCol,boxWidth:12,font:{size:10}}}, tooltip:{mode:'index',intersect:false,callbacks:{label:c=>` ${c.dataset.label}: ${c.raw?.toFixed(0)}`}} },
+      scales:{
+        x:{grid:{color:gridCol},ticks:{color:tickCol,maxTicksLimit:6,maxRotation:0}},
+        y:{grid:{color:gridCol},ticks:{color:tickCol,callback:v=>v.toFixed(0)},title:{display:true,text:'Normalised (start=100)',color:'#475569',font:{size:10}}},
+      },
+      interaction:{mode:'index',intersect:false},
+    },
+  });
+}
+
+document.querySelectorAll('[data-norm-range]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('[data-norm-range]').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    _buildGlobalNorm(btn.dataset.normRange);
+  });
+});
+
+// ── Sector Momentum from movers ───────────────────────────────────────
+function _buildSectorMomentum(movers) {
+  const sectorMap = {};
+  (movers||[]).forEach(m => {
+    if (!m.sector || m.day_pct == null) return;
+    if (!sectorMap[m.sector]) sectorMap[m.sector] = { sum: 0, count: 0 };
+    sectorMap[m.sector].sum += m.day_pct || m.day_chg || 0;
+    sectorMap[m.sector].count++;
+  });
+  const entries = Object.entries(sectorMap)
+    .map(([s, d]) => ({ sector: s, avg: d.count ? d.sum/d.count : 0 }))
+    .sort((a,b) => b.avg - a.avg);
+  const el = document.getElementById('sectorMomentumGrid');
+  if (!el || !entries.length) return;
+  el.innerHTML = entries.slice(0, 8).map(e => `
+    <span class="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded ${e.avg>=0?'bg-emerald-900/30 text-emerald-400':'bg-rose-900/30 text-rose-400'}">
+      ${e.sector} ${e.avg>=0?'+':''}${e.avg.toFixed(1)}%
+    </span>`).join('');
+}
 
 // ── Per-index stats & chart ───────────────────────────────────────────
 function renderIdxStats(key, data) {
@@ -3378,6 +3464,10 @@ function _mktsModalConfig(kind) {
     document.getElementById('vixChartWrap').style.display = '';
     renderVix(_mkData.vix);
     renderSectors(_mkData.sectors);
+    // Build global normalized chart after market data loads
+    _buildGlobalNorm('6m');
+    // Build sector momentum from sector data
+    if (_mkData.sectors) _buildSectorMomentum(_mkData.sectors);
 
     // Weekly Recap
     try {
