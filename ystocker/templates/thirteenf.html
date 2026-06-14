@@ -23,6 +23,67 @@
 </div>
 
 <!-- ── Fund selector + panels ────────────────────────────────────────── -->
+<!-- buildSectorDonut must be defined BEFORE the fund panels which call it inline -->
+<script>
+const TICKER_SECTOR = {
+  AAPL:'Tech',MSFT:'Tech',GOOGL:'Tech',GOOG:'Tech',META:'Tech',NVDA:'Tech',AMZN:'Tech',
+  TSLA:'Consumer',NFLX:'Media',ORCL:'Tech',CRM:'Tech',ADBE:'Tech',AVGO:'Tech',
+  INTC:'Tech',AMD:'Tech',QCOM:'Tech',TXN:'Tech',AMAT:'Tech',LRCX:'Tech',
+  CSCO:'Tech',IBM:'Tech',HPQ:'Tech',DELL:'Tech',NOW:'Tech',SNOW:'Tech',
+  JPM:'Financials',BAC:'Financials',GS:'Financials',V:'Financials',MA:'Financials',
+  WFC:'Financials',AXP:'Financials',BLK:'Financials',MS:'Financials',C:'Financials',
+  SCHW:'Financials',COF:'Financials',USB:'Financials',PNC:'Financials',TFC:'Financials',
+  'BRK-B':'Financials','BRK-A':'Financials',
+  UNH:'Healthcare',JNJ:'Healthcare',LLY:'Healthcare',PFE:'Healthcare',ABBV:'Healthcare',
+  TMO:'Healthcare',ABT:'Healthcare',MRK:'Healthcare',BMY:'Healthcare',AMGN:'Healthcare',
+  VRTX:'Healthcare',REGN:'Healthcare',GILD:'Healthcare',CI:'Healthcare',CVS:'Healthcare',
+  XOM:'Energy',CVX:'Energy',COP:'Energy',SLB:'Energy',EOG:'Energy',PSX:'Energy',
+  HD:'Retail',WMT:'Retail',COST:'Retail',TGT:'Retail',LOW:'Retail',
+  NEE:'Utilities',DUK:'Utilities',SO:'Utilities',D:'Utilities',AEP:'Utilities',
+  AMT:'Real Estate',PLD:'Real Estate',CCI:'Real Estate',EQIX:'Real Estate',
+  UNP:'Industrials',UPS:'Industrials',BA:'Industrials',CAT:'Industrials',
+  HON:'Industrials',GE:'Industrials',MMM:'Industrials',RTX:'Industrials',LMT:'Industrials',
+  BABA:'China Tech',JD:'China Tech',PDD:'China Tech',BIDU:'China Tech',NIO:'China Tech',
+  DIS:'Media',CMCSA:'Media',PARA:'Media',WBD:'Media',
+  SBUX:'Consumer',MCD:'Consumer',NKE:'Consumer',F:'Consumer',GM:'Consumer',
+};
+const DONUT_SECTOR_COLORS = {
+  Tech:'#818cf8',Financials:'#34d399',Healthcare:'#f472b6',
+  Energy:'#fb923c',Consumer:'#38bdf8',Media:'#a78bfa',
+  Retail:'#fbbf24',Industrials:'#94a3b8','Real Estate':'#22d3ee',
+  Utilities:'#6ee7b7','China Tech':'#f87171',Other:'#475569',
+};
+const _donutCharts = {};
+function buildSectorDonut(fundSlug, holdingsArray) {
+  const canvas = document.getElementById('donut_' + fundSlug);
+  const legend = document.getElementById('donutLegend_' + fundSlug);
+  if (!canvas) return;
+  const sectorPct = {};
+  for (const h of holdingsArray) {
+    if (!h.ticker || h.pct == null) continue;
+    const sector = TICKER_SECTOR[h.ticker] || 'Other';
+    sectorPct[sector] = (sectorPct[sector] || 0) + h.pct;
+  }
+  const entries = Object.entries(sectorPct).sort((a,b) => b[1]-a[1]);
+  if (!entries.length) { canvas.parentElement.parentElement.style.display='none'; return; }
+  const labels = entries.map(e=>e[0]);
+  const data   = entries.map(e=>+e[1].toFixed(2));
+  const colors = labels.map(l=>DONUT_SECTOR_COLORS[l]||DONUT_SECTOR_COLORS.Other);
+  if (_donutCharts[fundSlug]) _donutCharts[fundSlug].destroy();
+  _donutCharts[fundSlug] = new Chart(canvas, {
+    type:'doughnut',
+    data:{ labels, datasets:[{ data, backgroundColor:colors, borderColor:'#0f172a', borderWidth:2, hoverOffset:6 }] },
+    options:{ responsive:true, maintainAspectRatio:false, cutout:'62%',
+      plugins:{ legend:{display:false}, tooltip:{callbacks:{label:c=>` ${c.label}: ${c.raw.toFixed(1)}%`}} } },
+  });
+  if (legend) {
+    legend.innerHTML = entries.slice(0,6).map(([l,v])=>
+      `<span style="display:inline-flex;align-items:center;gap:3px;margin-right:8px;font-size:10px;color:#94a3b8">
+        <span style="width:8px;height:8px;border-radius:2px;background:${DONUT_SECTOR_COLORS[l]||DONUT_SECTOR_COLORS.Other};flex-shrink:0"></span>${l} ${v.toFixed(0)}%</span>`
+    ).join('');
+  }
+}
+</script>
 {% set fund_names = funds.keys() | list %}
 {% set first_ok = namespace(slug='') %}
 {% for name in fund_names %}
@@ -325,98 +386,6 @@
 </div>
 
 <script>
-// ── Sector donut chart helpers ─────────────────────────────────────────────
-const TICKER_SECTOR = {
-  AAPL:'Tech', MSFT:'Tech', GOOGL:'Tech', GOOG:'Tech', META:'Tech', NVDA:'Tech', AMZN:'Tech',
-  TSLA:'Consumer', NFLX:'Media', ORCL:'Tech', CRM:'Tech', ADBE:'Tech', AVGO:'Tech',
-  INTC:'Tech', AMD:'Tech', QCOM:'Tech', TXN:'Tech', AMAT:'Tech', LRCX:'Tech',
-  CSCO:'Tech', IBM:'Tech', HPQ:'Tech', DELL:'Tech', NOW:'Tech', SNOW:'Tech',
-  JPM:'Financials', BAC:'Financials', GS:'Financials', V:'Financials', MA:'Financials',
-  WFC:'Financials', AXP:'Financials', BLK:'Financials', MS:'Financials', C:'Financials',
-  SCHW:'Financials', COF:'Financials', USB:'Financials', PNC:'Financials', TFC:'Financials',
-  'BRK-B':'Financials', 'BRK-A':'Financials',
-  UNH:'Healthcare', JNJ:'Healthcare', LLY:'Healthcare', PFE:'Healthcare', ABBV:'Healthcare',
-  TMO:'Healthcare', ABT:'Healthcare', MRK:'Healthcare', BMY:'Healthcare', AMGN:'Healthcare',
-  VRTX:'Healthcare', REGN:'Healthcare', GILD:'Healthcare', CI:'Healthcare', CVS:'Healthcare',
-  XOM:'Energy', CVX:'Energy', COP:'Energy', SLB:'Energy', EOG:'Energy', PSX:'Energy',
-  HD:'Retail', WMT:'Retail', COST:'Retail', TGT:'Retail', LOW:'Retail',
-  NEE:'Utilities', DUK:'Utilities', SO:'Utilities', D:'Utilities', AEP:'Utilities',
-  AMT:'Real Estate', PLD:'Real Estate', CCI:'Real Estate', EQIX:'Real Estate',
-  UNP:'Industrials', UPS:'Industrials', BA:'Industrials', CAT:'Industrials',
-  HON:'Industrials', GE:'Industrials', MMM:'Industrials', RTX:'Industrials', LMT:'Industrials',
-  BABA:'China Tech', JD:'China Tech', PDD:'China Tech', BIDU:'China Tech', NIO:'China Tech',
-  DIS:'Media', CMCSA:'Media', PARA:'Media', WBD:'Media',
-  SBUX:'Consumer', MCD:'Consumer', NKE:'Consumer', F:'Consumer', GM:'Consumer',
-};
-
-const DONUT_SECTOR_COLORS = {
-  Tech:'#818cf8', Financials:'#34d399', Healthcare:'#f472b6',
-  Energy:'#fb923c', Consumer:'#38bdf8', Media:'#a78bfa',
-  Retail:'#fbbf24', Industrials:'#94a3b8', 'Real Estate':'#22d3ee',
-  Utilities:'#6ee7b7', 'China Tech':'#f87171', Other:'#475569',
-};
-
-const _donutCharts = {};
-
-function buildSectorDonut(fundSlug, holdingsArray) {
-  const canvas = document.getElementById('donut_' + fundSlug);
-  const legend = document.getElementById('donutLegend_' + fundSlug);
-  if (!canvas) return;
-
-  // Aggregate pct by sector
-  const sectorPct = {};
-  for (const h of holdingsArray) {
-    if (!h.ticker || h.pct == null) continue;
-    const sector = TICKER_SECTOR[h.ticker] || 'Other';
-    sectorPct[sector] = (sectorPct[sector] || 0) + h.pct;
-  }
-
-  // Sort descending
-  const entries = Object.entries(sectorPct).sort((a, b) => b[1] - a[1]);
-  if (!entries.length) {
-    canvas.parentElement.parentElement.style.display = 'none';
-    return;
-  }
-
-  const labels = entries.map(e => e[0]);
-  const data   = entries.map(e => +e[1].toFixed(2));
-  const colors = labels.map(l => DONUT_SECTOR_COLORS[l] || DONUT_SECTOR_COLORS.Other);
-
-  // Destroy previous chart if re-rendered
-  if (_donutCharts[fundSlug]) { _donutCharts[fundSlug].destroy(); }
-
-  _donutCharts[fundSlug] = new Chart(canvas, {
-    type: 'doughnut',
-    data: {
-      labels,
-      datasets: [{ data, backgroundColor: colors, borderColor: '#0f172a', borderWidth: 2, hoverOffset: 6 }],
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      cutout: '62%',
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          callbacks: {
-            label: c => ` ${c.label}: ${c.raw.toFixed(1)}%`,
-          },
-        },
-      },
-    },
-  });
-
-  // Build custom legend
-  if (legend) {
-    legend.innerHTML = entries.map(([sec, pct]) =>
-      `<div class="flex items-center gap-1.5 leading-tight">
-        <span style="width:8px;height:8px;border-radius:2px;background:${DONUT_SECTOR_COLORS[sec]||DONUT_SECTOR_COLORS.Other};flex-shrink:0;display:inline-block"></span>
-        <span class="text-slate-300 font-medium truncate">${sec}</span>
-        <span class="text-slate-500 tabular-nums ml-auto pl-2">${pct.toFixed(1)}%</span>
-      </div>`
-    ).join('');
-  }
-}
-
 // Sortable tables — click any ↕ header to sort ascending, click again for descending
 document.querySelectorAll('table[data-sortable]').forEach(table => {
   const KEYS = ['rank','ticker','name','shares','value','pct'];

@@ -1,0 +1,455 @@
+- generic [active] [ref=e1]:
+  - banner [ref=e2]:
+    - generic [ref=e3]:
+      - link "yStocker" [ref=e4] [cursor=pointer]:
+        - /url: /markets
+        - generic [ref=e5]: yStocker
+      - navigation [ref=e6]:
+        - link "Markets" [ref=e7] [cursor=pointer]:
+          - /url: /markets
+        - link "Valuation" [ref=e8] [cursor=pointer]:
+          - /url: /evaluation
+        - button "Sectors" [ref=e10] [cursor=pointer]:
+          - generic [ref=e11]: Sectors
+          - img [ref=e12]
+        - button "Commodities" [ref=e15] [cursor=pointer]:
+          - generic [ref=e16]: Commodities
+          - img [ref=e17]
+        - link "13F" [ref=e19] [cursor=pointer]:
+          - /url: /13f
+        - link "Fed" [ref=e20] [cursor=pointer]:
+          - /url: /fed
+        - link "Daily" [ref=e21] [cursor=pointer]:
+          - /url: /daily
+        - link "Videos" [ref=e22] [cursor=pointer]:
+          - /url: /videos
+        - link "Guide" [ref=e23] [cursor=pointer]:
+          - /url: /guide
+      - generic [ref=e24]:
+        - link "Search Ticker" [ref=e25] [cursor=pointer]:
+          - /url: /lookup
+          - img [ref=e26]
+        - link "Sign In" [ref=e29] [cursor=pointer]:
+          - /url: /login
+          - img [ref=e30]
+          - generic [ref=e32]: Sign In
+        - button "中文" [ref=e33] [cursor=pointer]
+        - generic [ref=e34]:
+          - generic: ↻ Refresh
+          - generic:
+            - generic:
+              - paragraph: Refresh data
+              - paragraph: Refreshed 3m ago. Please wait 7 more minutes.
+  - main [ref=e35]:
+    - generic [ref=e36]:
+      - heading "13F Institutional Holdings" [level=1] [ref=e37]
+      - paragraph [ref=e38]: Latest quarterly 13F-HR filings from SEC EDGAR · Top 50 equity positions per fund
+      - paragraph [ref=e39]: Data as of Jun 13, 2026 20:44 · next refresh Jun 14, 2026 20:44
+    - generic [ref=e40]:
+      - generic [ref=e41]:
+        - button "Berkshire Hathaway" [ref=e42] [cursor=pointer]
+        - button "Vanguard Group" [ref=e43] [cursor=pointer]
+        - button "BlackRock" [ref=e44] [cursor=pointer]
+        - button "State Street" [ref=e45] [cursor=pointer]
+        - button "Fidelity (FMR)" [ref=e46] [cursor=pointer]
+        - button "T. Rowe Price" [disabled]
+        - button "Capital Group" [ref=e47] [cursor=pointer]
+        - button "Wellington Management" [ref=e48] [cursor=pointer]
+        - button "Northern Trust" [ref=e49] [cursor=pointer]
+        - button "Geode Capital" [ref=e50] [cursor=pointer]
+        - button "Bridgewater Associates" [ref=e51] [cursor=pointer]
+        - button "Citadel Advisors" [ref=e52] [cursor=pointer]
+        - button "Millennium Management" [ref=e53] [cursor=pointer]
+        - button "Point72 Asset Management" [ref=e54] [cursor=pointer]
+        - button "DE Shaw" [ref=e55] [cursor=pointer]
+        - button "Balyasny Asset Mgmt" [disabled]
+        - button "Brevan Howard" [disabled]
+        - button "Marshall Wace" [disabled]
+        - button "Tiger Global" [ref=e56] [cursor=pointer]
+        - button "Coatue Management" [ref=e57] [cursor=pointer]
+        - button "Viking Global" [ref=e58] [cursor=pointer]
+        - button "Lone Pine Capital" [ref=e59] [cursor=pointer]
+        - button "Maverick Capital" [ref=e60] [cursor=pointer]
+        - button "D1 Capital" [disabled]
+        - button "Light Street Capital" [disabled]
+        - button "Tiger Cub Hill House" [disabled]
+        - button "Third Point" [ref=e61] [cursor=pointer]
+        - button "Pershing Square" [ref=e62] [cursor=pointer]
+        - button "Baupost Group" [ref=e63] [cursor=pointer]
+        - button "Elliott Management" [ref=e64] [cursor=pointer]
+        - button "Starboard Value" [ref=e65] [cursor=pointer]
+        - button "Icahn Capital" [ref=e66] [cursor=pointer]
+        - button "Trian Partners" [ref=e67] [cursor=pointer]
+        - button "Carl Icahn" [ref=e68] [cursor=pointer]
+        - button "Soros Fund Management" [ref=e69] [cursor=pointer]
+        - button "Duquesne Family Office" [ref=e70] [cursor=pointer]
+        - button "Appaloosa (Tepper)" [ref=e71] [cursor=pointer]
+        - button "Greenlight Capital (Einhorn)" [ref=e72] [cursor=pointer]
+        - button "Pabrai Investment Funds" [disabled]
+        - button "Buffett Family Office" [ref=e73] [cursor=pointer]
+        - button "ARK Investment" [ref=e74] [cursor=pointer]
+        - button "Whale Rock Capital" [ref=e75] [cursor=pointer]
+        - button "Altimeter Capital" [disabled]
+        - button "Tudor Investment" [disabled]
+        - button "Druckenmiller Family Office" [ref=e76] [cursor=pointer]
+        - button "Renaissance Technologies" [ref=e77] [cursor=pointer]
+        - button "Two Sigma Investments" [ref=e78] [cursor=pointer]
+        - button "AQR Capital" [ref=e79] [cursor=pointer]
+        - button "Susquehanna" [disabled]
+        - button "Jane Street" [ref=e80] [cursor=pointer]
+        - button "Hudson Bay Capital" [disabled]
+      - generic [ref=e81]:
+        - generic [ref=e82]:
+          - generic [ref=e83]: "CIK: 0001067983"
+          - generic [ref=e84]: "Filing date: 2026-05-15"
+          - generic [ref=e85]: "Period: 2026-03-31"
+          - generic [ref=e86]: "Reported AUM: $263,095,704M"
+          - generic [ref=e87]: "Holdings shown: 26 / 26"
+          - generic [ref=e88]: ·
+          - generic [ref=e89]: "Shown value: $263,095,703M (100.0% of AUM)"
+        - generic [ref=e91]:
+          - paragraph [ref=e92]: AUM by Quarter
+          - button "✦ AI Explain" [ref=e93] [cursor=pointer]:
+            - generic [ref=e94]: ✦
+            - generic [ref=e95]: AI Explain
+        - paragraph [ref=e99]: Sector Concentration
+        - generic [ref=e103]:
+          - generic [ref=e104]:
+            - paragraph [ref=e105]: New Positions This Quarter
+            - generic [ref=e106]:
+              - link "DAL $2646.5B" [ref=e107] [cursor=pointer]:
+                - /url: /history/DAL
+                - generic [ref=e108]: DAL
+                - generic [ref=e109]: $2646.5B
+              - link "M $55.0B" [ref=e110] [cursor=pointer]:
+                - /url: /history/M
+                - generic [ref=e111]: M
+                - generic [ref=e112]: $55.0B
+          - table [ref=e113]:
+            - rowgroup [ref=e114]:
+              - row "# ↕ Ticker ↕ Company ↕ 52-week Shares ↕ Value ($M) ↕ % Portfolio ↕ Change" [ref=e115]:
+                - columnheader "# ↕" [ref=e116] [cursor=pointer]
+                - columnheader "Ticker ↕" [ref=e117] [cursor=pointer]
+                - columnheader "Company ↕" [ref=e118] [cursor=pointer]
+                - columnheader "52-week" [ref=e119]
+                - columnheader "Shares ↕" [ref=e120] [cursor=pointer]
+                - columnheader "Value ($M) ↕" [ref=e121] [cursor=pointer]
+                - columnheader "% Portfolio ↕" [ref=e122] [cursor=pointer]
+                - columnheader "Change" [ref=e123]
+            - rowgroup [ref=e124]:
+              - row "1 AAPL APPLE INC 227,917,808 $57,843,260.5 21.99% —" [ref=e125]:
+                - cell "1" [ref=e126]
+                - cell "AAPL" [ref=e127]:
+                  - link "AAPL" [ref=e128] [cursor=pointer]:
+                    - /url: /history/AAPL
+                - cell "APPLE INC" [ref=e129]
+                - cell [ref=e130]
+                - cell "227,917,808" [ref=e133]
+                - cell "$57,843,260.5" [ref=e134]
+                - cell "21.99%" [ref=e135]
+                - cell "—" [ref=e136]
+              - row "2 AXP AMERICAN EXPRESS CO 151,610,700 $45,859,204.5 17.43% —" [ref=e137]:
+                - cell "2" [ref=e138]
+                - cell "AXP" [ref=e139]:
+                  - link "AXP" [ref=e140] [cursor=pointer]:
+                    - /url: /history/AXP
+                - cell "AMERICAN EXPRESS CO" [ref=e141]
+                - cell [ref=e142]
+                - cell "151,610,700" [ref=e145]
+                - cell "$45,859,204.5" [ref=e146]
+                - cell "17.43%" [ref=e147]
+                - cell "—" [ref=e148]
+              - row "3 KO COCA COLA CO 400,000,000 $30,420,000.0 11.56% —" [ref=e149]:
+                - cell "3" [ref=e150]
+                - cell "KO" [ref=e151]:
+                  - link "KO" [ref=e152] [cursor=pointer]:
+                    - /url: /history/KO
+                - cell "COCA COLA CO" [ref=e153]
+                - cell [ref=e154]
+                - cell "400,000,000" [ref=e157]
+                - cell "$30,420,000.0" [ref=e158]
+                - cell "11.56%" [ref=e159]
+                - cell "—" [ref=e160]
+              - row "4 BAC BANK AMERICA CORP 513,624,165 $25,039,178.0 9.52% ▼ Reduced -0.7%" [ref=e161]:
+                - cell "4" [ref=e162]
+                - cell "BAC" [ref=e163]:
+                  - link "BAC" [ref=e164] [cursor=pointer]:
+                    - /url: /history/BAC
+                - cell "BANK AMERICA CORP" [ref=e165]
+                - cell [ref=e166]
+                - cell "513,624,165" [ref=e169]
+                - cell "$25,039,178.0" [ref=e170]
+                - cell "9.52%" [ref=e171]
+                - cell "▼ Reduced -0.7%" [ref=e172]
+              - row "5 CVX CHEVRON CORPORATION 84,375,856 $17,457,364.6 6.64% ▼ Reduced -35.2%" [ref=e173]:
+                - cell "5" [ref=e174]
+                - cell "CVX" [ref=e175]:
+                  - link "CVX" [ref=e176] [cursor=pointer]:
+                    - /url: /history/CVX
+                - cell "CHEVRON CORPORATION" [ref=e177]
+                - cell [ref=e178]
+                - cell "84,375,856" [ref=e181]
+                - cell "$17,457,364.6" [ref=e182]
+                - cell "6.64%" [ref=e183]
+                - cell "▼ Reduced -35.2%" [ref=e184]
+              - row "6 OXY OCCIDENTAL PETE CORP 264,941,431 $17,221,193.0 6.55% —" [ref=e185]:
+                - cell "6" [ref=e186]
+                - cell "OXY" [ref=e187]:
+                  - link "OXY" [ref=e188] [cursor=pointer]:
+                    - /url: /history/OXY
+                - cell "OCCIDENTAL PETE CORP" [ref=e189]
+                - cell [ref=e190]
+                - cell "264,941,431" [ref=e193]
+                - cell "$17,221,193.0" [ref=e194]
+                - cell "6.55%" [ref=e195]
+                - cell "—" [ref=e196]
+              - row "7 GOOGL ALPHABET INC 57,835,013 $16,628,526.7 6.32% ▲ Added +204.0%" [ref=e197]:
+                - cell "7" [ref=e198]
+                - cell "GOOGL" [ref=e199]:
+                  - link "GOOGL" [ref=e200] [cursor=pointer]:
+                    - /url: /history/GOOGL
+                - cell "ALPHABET INC" [ref=e201]
+                - cell [ref=e202]
+                - cell "57,835,013" [ref=e205]
+                - cell "$16,628,526.7" [ref=e206]
+                - cell "6.32%" [ref=e207]
+                - cell "▲ Added +204.0%" [ref=e208]
+              - row "8 CB CHUBB LTD SWITZ 34,249,183 $11,162,836.2 4.24% —" [ref=e209]:
+                - cell "8" [ref=e210]
+                - cell "CB" [ref=e211]:
+                  - link "CB" [ref=e212] [cursor=pointer]:
+                    - /url: /history/CB
+                - cell "CHUBB LTD SWITZ" [ref=e213]
+                - cell [ref=e214]
+                - cell "34,249,183" [ref=e217]
+                - cell "$11,162,836.2" [ref=e218]
+                - cell "4.24%" [ref=e219]
+                - cell "—" [ref=e220]
+              - row "9 KR KRAFT HEINZ CO 375,634,818 $10,941,527.1 4.16% —" [ref=e221]:
+                - cell "9" [ref=e222]
+                - cell "KR" [ref=e223]:
+                  - link "KR" [ref=e224] [cursor=pointer]:
+                    - /url: /history/KR
+                - cell "KRAFT HEINZ CO" [ref=e225]
+                - cell [ref=e226]
+                - cell "375,634,818" [ref=e229]
+                - cell "$10,941,527.1" [ref=e230]
+                - cell "4.16%" [ref=e231]
+                - cell "—" [ref=e232]
+              - row "10 MCO MOODYS CORP 24,669,778 $10,762,190.7 4.09% —" [ref=e233]:
+                - cell "10" [ref=e234]
+                - cell "MCO" [ref=e235]:
+                  - link "MCO" [ref=e236] [cursor=pointer]:
+                    - /url: /history/MCO
+                - cell "MOODYS CORP" [ref=e237]
+                - cell [ref=e238]
+                - cell "24,669,778" [ref=e241]
+                - cell "$10,762,190.7" [ref=e242]
+                - cell "4.09%" [ref=e243]
+                - cell "—" [ref=e244]
+              - row "11 DVA DAVITA INC 30,100,585 $4,626,158.9 1.76% ▼ Reduced -5.2%" [ref=e245]:
+                - cell "11" [ref=e246]
+                - cell "DVA" [ref=e247]:
+                  - link "DVA" [ref=e248] [cursor=pointer]:
+                    - /url: /history/DVA
+                - cell "DAVITA INC" [ref=e249]
+                - cell [ref=e250]
+                - cell "30,100,585" [ref=e253]
+                - cell "$4,626,158.9" [ref=e254]
+                - cell "1.76%" [ref=e255]
+                - cell "▼ Reduced -5.2%" [ref=e256]
+              - row "12 SIRI SIRIUSXM HOLDINGS INC 124,807,117 $2,880,548.3 1.09% —" [ref=e257]:
+                - cell "12" [ref=e258]
+                - cell "SIRI" [ref=e259]:
+                  - link "SIRI" [ref=e260] [cursor=pointer]:
+                    - /url: /history/SIRI
+                - cell "SIRIUSXM HOLDINGS INC" [ref=e261]
+                - cell [ref=e262]
+                - cell "124,807,117" [ref=e265]
+                - cell "$2,880,548.3" [ref=e266]
+                - cell "1.09%" [ref=e267]
+                - cell "—" [ref=e268]
+              - row "13 DAL DELTA AIR LINES INC 39,809,456 $2,646,532.6 1.01% New" [ref=e269]:
+                - cell "13" [ref=e270]
+                - cell "DAL" [ref=e271]:
+                  - link "DAL" [ref=e272] [cursor=pointer]:
+                    - /url: /history/DAL
+                - cell "DELTA AIR LINES INC" [ref=e273]
+                - cell [ref=e274]
+                - cell "39,809,456" [ref=e277]
+                - cell "$2,646,532.6" [ref=e278]
+                - cell "1.01%" [ref=e279]
+                - cell "New" [ref=e280]
+              - row "14 VRSN VERISIGN INC 8,989,880 $2,232,726.6 0.85% —" [ref=e281]:
+                - cell "14" [ref=e282]
+                - cell "VRSN" [ref=e283]:
+                  - link "VRSN" [ref=e284] [cursor=pointer]:
+                    - /url: /history/VRSN
+                - cell "VERISIGN INC" [ref=e285]
+                - cell [ref=e286]
+                - cell "8,989,880" [ref=e289]
+                - cell "$2,232,726.6" [ref=e290]
+                - cell "0.85%" [ref=e291]
+                - cell "—" [ref=e292]
+              - row "15 COF CAPITAL ONE FINL CORP 7,150,000 $1,304,374.5 0.50% —" [ref=e293]:
+                - cell "15" [ref=e294]
+                - cell "COF" [ref=e295]:
+                  - link "COF" [ref=e296] [cursor=pointer]:
+                    - /url: /history/COF
+                - cell "CAPITAL ONE FINL CORP" [ref=e297]
+                - cell [ref=e298]
+                - cell "7,150,000" [ref=e301]
+                - cell "$1,304,374.5" [ref=e302]
+                - cell "0.50%" [ref=e303]
+                - cell "—" [ref=e304]
+              - row "16 NYT NEW YORK TIMES CO MTN BE 15,146,535 $1,268,219.4 0.48% ▲ Added +199.0%" [ref=e305]:
+                - cell "16" [ref=e306]
+                - cell "NYT" [ref=e307]:
+                  - link "NYT" [ref=e308] [cursor=pointer]:
+                    - /url: /history/NYT
+                - cell "NEW YORK TIMES CO MTN BE" [ref=e309]
+                - cell [ref=e310]
+                - cell "15,146,535" [ref=e313]
+                - cell "$1,268,219.4" [ref=e314]
+                - cell "0.48%" [ref=e315]
+                - cell "▲ Added +199.0%" [ref=e316]
+              - row "17 ALLY ALLY FINL INC 29,000,000 $1,137,670.0 0.43% —" [ref=e317]:
+                - cell "17" [ref=e318]
+                - cell "ALLY" [ref=e319]:
+                  - link "ALLY" [ref=e320] [cursor=pointer]:
+                    - /url: /history/ALLY
+                - cell "ALLY FINL INC" [ref=e321]
+                - cell [ref=e322]
+                - cell "29,000,000" [ref=e325]
+                - cell "$1,137,670.0" [ref=e326]
+                - cell "0.43%" [ref=e327]
+                - cell "—" [ref=e328]
+              - row "18 LLYVK LIBERTY LIVE HOLDINGS INC 10,587,143 $996,356.0 0.38% ▼ Reduced -3.0%" [ref=e329]:
+                - cell "18" [ref=e330]
+                - cell "LLYVK" [ref=e331]:
+                  - link "LLYVK" [ref=e332] [cursor=pointer]:
+                    - /url: /history/LLYVK
+                - cell "LIBERTY LIVE HOLDINGS INC" [ref=e333]
+                - cell [ref=e334]
+                - cell "10,587,143" [ref=e337]
+                - cell "$996,356.0" [ref=e338]
+                - cell "0.38%" [ref=e339]
+                - cell "▼ Reduced -3.0%" [ref=e340]
+              - row "19 LEN LENNAR CORP 10,337,345 $897,048.5 0.34% ▲ Added +43.2%" [ref=e341]:
+                - cell "19" [ref=e342]
+                - cell "LEN" [ref=e343]:
+                  - link "LEN" [ref=e344] [cursor=pointer]:
+                    - /url: /history/LEN
+                - cell "LENNAR CORP" [ref=e345]
+                - cell [ref=e346]
+                - cell "10,337,345" [ref=e349]
+                - cell "$897,048.5" [ref=e350]
+                - cell "0.34%" [ref=e351]
+                - cell "▲ Added +43.2%" [ref=e352]
+              - row "20 NUE NUCOR CORP 3,907,075 $660,686.4 0.25% ▼ Reduced -39.0%" [ref=e353]:
+                - cell "20" [ref=e354]
+                - cell "NUE" [ref=e355]:
+                  - link "NUE" [ref=e356] [cursor=pointer]:
+                    - /url: /history/NUE
+                - cell "NUCOR CORP" [ref=e357]
+                - cell [ref=e358]
+                - cell "3,907,075" [ref=e361]
+                - cell "$660,686.4" [ref=e362]
+                - cell "0.25%" [ref=e363]
+                - cell "▼ Reduced -39.0%" [ref=e364]
+              - row "21 LLYVA LIBERTY LIVE HOLDINGS INC 4,986,588 $456,970.9 0.17% —" [ref=e365]:
+                - cell "21" [ref=e366]
+                - cell "LLYVA" [ref=e367]:
+                  - link "LLYVA" [ref=e368] [cursor=pointer]:
+                    - /url: /history/LLYVA
+                - cell "LIBERTY LIVE HOLDINGS INC" [ref=e369]
+                - cell [ref=e370]
+                - cell "4,986,588" [ref=e373]
+                - cell "$456,970.9" [ref=e374]
+                - cell "0.17%" [ref=e375]
+                - cell "—" [ref=e376]
+              - row "22 LPX LOUISIANA PAC CORP 5,664,793 $412,113.7 0.16% —" [ref=e377]:
+                - cell "22" [ref=e378]
+                - cell "LPX" [ref=e379]:
+                  - link "LPX" [ref=e380] [cursor=pointer]:
+                    - /url: /history/LPX
+                - cell "LOUISIANA PAC CORP" [ref=e381]
+                - cell [ref=e382]
+                - cell "5,664,793" [ref=e385]
+                - cell "$412,113.7" [ref=e386]
+                - cell "0.16%" [ref=e387]
+                - cell "—" [ref=e388]
+              - row "23 STZ CONSTELLATION BRANDS INC 632,890 $94,933.5 0.04% ▼ Reduced -95.1%" [ref=e389]:
+                - cell "23" [ref=e390]
+                - cell "STZ" [ref=e391]:
+                  - link "STZ" [ref=e392] [cursor=pointer]:
+                    - /url: /history/STZ
+                - cell "CONSTELLATION BRANDS INC" [ref=e393]
+                - cell [ref=e394]
+                - cell "632,890" [ref=e397]
+                - cell "$94,933.5" [ref=e398]
+                - cell "0.04%" [ref=e399]
+                - cell "▼ Reduced -95.1%" [ref=e400]
+              - row "24 NVR NVR INC 11,112 $73,226.2 0.03% —" [ref=e401]:
+                - cell "24" [ref=e402]
+                - cell "NVR" [ref=e403]:
+                  - link "NVR" [ref=e404] [cursor=pointer]:
+                    - /url: /history/NVR
+                - cell "NVR INC" [ref=e405]
+                - cell [ref=e406]
+                - cell "11,112" [ref=e409]
+                - cell "$73,226.2" [ref=e410]
+                - cell "0.03%" [ref=e411]
+                - cell "—" [ref=e412]
+              - row "25 M MACYS INC 3,038,355 $54,963.8 0.02% New" [ref=e413]:
+                - cell "25" [ref=e414]
+                - cell "M" [ref=e415]:
+                  - link "M" [ref=e416] [cursor=pointer]:
+                    - /url: /history/M
+                - cell "MACYS INC" [ref=e417]
+                - cell [ref=e418]
+                - cell "3,038,355" [ref=e421]
+                - cell "$54,963.8" [ref=e422]
+                - cell "0.02%" [ref=e423]
+                - cell "New" [ref=e424]
+              - row "26 JEF JEFFERIES FINANCIAL GROUP IN 433,558 $17,892.9 0.01% —" [ref=e425]:
+                - cell "26" [ref=e426]
+                - cell "JEF" [ref=e427]:
+                  - link "JEF" [ref=e428] [cursor=pointer]:
+                    - /url: /history/JEF
+                - cell "JEFFERIES FINANCIAL GROUP IN" [ref=e429]
+                - cell [ref=e430]
+                - cell "433,558" [ref=e433]
+                - cell "$17,892.9" [ref=e434]
+                - cell "0.01%" [ref=e435]
+                - cell "—" [ref=e436]
+            - rowgroup [ref=e437]:
+              - row "Total (shown) — $263,095,703.5 100.02%" [ref=e438]:
+                - cell [ref=e439]
+                - cell "Total (shown)" [ref=e440]
+                - cell "—" [ref=e441]
+                - cell "$263,095,703.5" [ref=e442]
+                - cell "100.02%" [ref=e443]
+                - cell [ref=e444]
+    - generic [ref=e445]:
+      - generic [ref=e446]:
+        - generic [ref=e447]: New
+        - generic [ref=e448]: New position this quarter
+      - generic [ref=e449]:
+        - generic [ref=e450]: ▲ Added
+        - generic [ref=e451]: Shares increased vs prior quarter
+      - generic [ref=e452]:
+        - generic [ref=e453]: ▼ Reduced
+        - generic [ref=e454]: Shares decreased vs prior quarter
+      - generic [ref=e455]:
+        - generic [ref=e456]: Closed
+        - generic [ref=e457]: Position exited (prior quarter only)
+      - generic [ref=e458]:
+        - text: "· Data source:"
+        - link "SEC EDGAR" [ref=e459] [cursor=pointer]:
+          - /url: https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&type=13F
+  - contentinfo [ref=e460]:
+    - text: yStocker — data via Yahoo Finance ·
+    - link "Contact Us" [ref=e461] [cursor=pointer]:
+      - /url: /contact
+    - text: · © 2025 yStocker. All rights reserved.
