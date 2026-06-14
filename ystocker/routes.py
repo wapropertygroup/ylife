@@ -6141,13 +6141,9 @@ def _ses_send_to_recipients(
 @bp.route("/api/send-daily-email", methods=["POST"])
 def api_send_daily_email():
     """
-    Broadcast the full daily report to all active subscribers (in their preferred lang)
-    plus the one-time email from the request payload.
-
-    Request body: {
-      email, lang, summary,
-      indices, sectors, vix, gold_ratios, sentiment, events, gainers, losers
-    }
+    Broadcast the daily report to the requested email address.
+    Returns 202 immediately and does the actual SES send in a background
+    thread so the Gunicorn worker is never blocked by email I/O.
     """
     SES_FROM = os.environ.get("SES_FROM_EMAIL")
     if not SES_FROM:
@@ -6177,7 +6173,7 @@ def api_send_daily_email():
     today_iso = _date_cls.today().isoformat()
     base_url  = os.environ.get("APP_BASE_URL", request.host_url).rstrip("/")
 
-    # Try to get AI summaries for both languages from cache
+    # Snapshot in-memory summaries now (before leaving request context)
     summaries_us: dict = {lang: summary_us_raw} if summary_us_raw else {}
     summaries_cn: dict = {lang: summary_cn_raw} if summary_cn_raw else {}
     for _l in ("en", "zh"):
@@ -6192,18 +6188,23 @@ def api_send_daily_email():
             if _s:
                 summaries_cn[_l] = _s
 
-    cached = _build_daily_email_cache(
-        indices, sectors, vix_data, gold, sentiment, events,
-        gainers, losers, summaries_us, summaries_cn, today_str, today_iso, lang,
-    )
+    # ── Fire-and-forget: all SES I/O runs in a background thread ─────────────
+    def _send_bg():
+        try:
+            cached = _build_daily_email_cache(
+                indices, sectors, vix_data, gold, sentiment, events,
+                gainers, losers, summaries_us, summaries_cn, today_str, today_iso, lang,
+            )
+            recipients = [{"email": email, "lang": lang, "token": ""}]
+            import boto3
+            ses = boto3.client("ses", region_name="us-east-1")
+            sent, errors = _ses_send_to_recipients(ses, recipients, cached, base_url, SES_FROM)
+            log.info("send-daily-email bg: sent=%d errors=%d to=%s", sent, errors, email)
+        except Exception:
+            log.exception("send-daily-email bg: unhandled error for %s", email)
 
-    # ── Send only to the requested email address ─────────────────────────────
-    recipients = [{"email": email, "lang": lang, "token": ""}]
-
-    import boto3
-    ses = boto3.client("ses", region_name="us-east-1")
-    sent_count, errors = _ses_send_to_recipients(ses, recipients, cached, base_url, SES_FROM)
-    return jsonify({"ok": True, "sent": sent_count, "failed": errors})
+    threading.Thread(target=_send_bg, daemon=True, name=f"email-{email[:12]}").start()
+    return jsonify({"ok": True, "queued": True, "email": email}), 202
 
 
 # ---------------------------------------------------------------------------
