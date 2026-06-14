@@ -156,80 +156,10 @@
           </div>
         </div>
 
-        <!-- Commodities dropdown -->
-        <div class="relative" x-data="{ open: false }" @mouseenter="open=true" @mouseleave="open=false">
-          <button class="flex items-center gap-1 px-3 py-1.5 rounded-md text-sm text-slate-300
-                         hover:text-white hover:bg-slate-800 transition"
-                  :class="open && 'text-white bg-slate-800'">
-            <span data-i18n="nav.commodities">Commodities</span>
-            <svg class="w-3.5 h-3.5 mt-0.5 transition-transform duration-200" :class="open && 'rotate-180'"
-                 fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-            </svg>
-          </button>
-          <div x-show="open"
-               x-transition:enter="transition ease-out duration-150"
-               x-transition:enter-start="opacity-0 -translate-y-1"
-               x-transition:enter-end="opacity-100 translate-y-0"
-               x-transition:leave="transition ease-in duration-100"
-               x-transition:leave-start="opacity-100 translate-y-0"
-               x-transition:leave-end="opacity-0 -translate-y-1"
-               class="absolute left-0 top-full mt-1.5 bg-slate-900 border border-slate-700/80
-                      rounded-2xl shadow-2xl shadow-black/60 z-50 overflow-hidden"
-               style="min-width:210px">
-            <div class="px-3 pt-2.5 pb-2">
-              <a href="{{ url_for('main.commodities') }}"
-                 class="flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs text-brand
-                        hover:text-white hover:bg-brand/20 border border-transparent hover:border-brand/30
-                        transition-all duration-100 font-semibold mb-1">
-                <span class="flex-1" data-i18n="nav.commodities_overview">📊 Overview &amp; Detail</span>
-                <span class="text-[10px] text-slate-500">→</span>
-              </a>
-              <p class="text-[10px] font-semibold tracking-widest uppercase text-slate-500 px-1 mb-1.5 mt-1.5"
-                 data-i18n="nav.commodities_futures">Futures</p>
-              <a href="{{ url_for('main.commodities') }}#gold"
-                 class="flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs text-slate-300
-                        hover:text-white hover:bg-brand/20 border border-transparent hover:border-brand/30
-                        transition-all duration-100">
-                <span class="w-1.5 h-1.5 rounded-full shrink-0" style="background:#facc15"></span>
-                <span class="flex-1" data-i18n="markets.tab_gold">Gold</span>
-                <span class="text-[10px] text-slate-600 font-mono">GC=F</span>
-              </a>
-              <a href="{{ url_for('main.commodities') }}#silver"
-                 class="flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs text-slate-300
-                        hover:text-white hover:bg-brand/20 border border-transparent hover:border-brand/30
-                        transition-all duration-100">
-                <span class="w-1.5 h-1.5 rounded-full shrink-0" style="background:#cbd5e1"></span>
-                <span class="flex-1" data-i18n="markets.tab_silver">Silver</span>
-                <span class="text-[10px] text-slate-600 font-mono">SI=F</span>
-              </a>
-              <a href="{{ url_for('main.commodities') }}#oil"
-                 class="flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs text-slate-300
-                        hover:text-white hover:bg-brand/20 border border-transparent hover:border-brand/30
-                        transition-all duration-100">
-                <span class="w-1.5 h-1.5 rounded-full shrink-0" style="background:#14b8a6"></span>
-                <span class="flex-1" data-i18n="markets.tab_oil">Crude Oil</span>
-                <span class="text-[10px] text-slate-600 font-mono">CL=F</span>
-              </a>
-              <a href="{{ url_for('main.commodities') }}#natgas"
-                 class="flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs text-slate-300
-                        hover:text-white hover:bg-brand/20 border border-transparent hover:border-brand/30
-                        transition-all duration-100">
-                <span class="w-1.5 h-1.5 rounded-full shrink-0" style="background:#60a5fa"></span>
-                <span class="flex-1" data-i18n="markets.tab_natgas">Nat Gas</span>
-                <span class="text-[10px] text-slate-600 font-mono">NG=F</span>
-              </a>
-              <a href="{{ url_for('main.commodities') }}#copper"
-                 class="flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs text-slate-300
-                        hover:text-white hover:bg-brand/20 border border-transparent hover:border-brand/30
-                        transition-all duration-100">
-                <span class="w-1.5 h-1.5 rounded-full shrink-0" style="background:#d97706"></span>
-                <span class="flex-1" data-i18n="markets.tab_copper">Copper</span>
-                <span class="text-[10px] text-slate-600 font-mono">HG=F</span>
-              </a>
-            </div>
-          </div>
-        </div>
+        <!-- Commodities — direct link (no dropdown needed, everything is on one page) -->
+        <a href="{{ url_for('main.commodities') }}"
+           class="px-3 py-1.5 rounded-md text-sm text-slate-300 hover:text-white hover:bg-slate-800 transition"
+           data-i18n="nav.commodities">Commodities</a>
 
         <a href="{{ url_for('main.thirteenf') }}"
            class="px-3 py-1.5 rounded-md text-sm text-slate-300 hover:text-white hover:bg-slate-800 transition"
