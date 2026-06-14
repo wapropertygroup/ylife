@@ -49,6 +49,13 @@
   .rsi-ob { background: rgba(248,113,113,0.18); color: #f87171; }
   .rsi-os { background: rgba(52,211,153,0.18);  color: #34d399; }
   .rsi-nu { background: rgba(148,163,184,0.15); color: #94a3b8; }
+  .rsi-filter-btn {
+    font-size: 10px; padding: 2px 8px; border-radius: 4px;
+    border: 1px solid #334155; background: transparent; color: #64748b; cursor: pointer;
+    transition: all 0.15s;
+  }
+  .rsi-filter-btn:hover { color: #cbd5e1; border-color: #475569; }
+  .rsi-filter-btn.active { color: #a5b4fc; border-color: #6366f1; background: rgba(99,102,241,0.15); }
 </style>
 
 <!-- ── Header ──────────────────────────────────────────────────────────── -->
@@ -79,6 +86,15 @@
 <div id="cmdMain" class="hidden">
 
   <!-- Group sections -->
+  <!-- RSI Filter -->
+  <div id="rsiFilterRow" class="flex items-center gap-2 mb-4 flex-wrap">
+    <span class="text-[10px] text-slate-600 uppercase tracking-widest" data-i18n="commodities.rsi_filter_label">RSI Filter</span>
+    <button class="rsi-filter-btn active" data-filter="all" data-i18n="commodities.rsi_all">All</button>
+    <button class="rsi-filter-btn" data-filter="oversold" data-i18n="commodities.rsi_os">Oversold (&lt;30)</button>
+    <button class="rsi-filter-btn" data-filter="overbought" data-i18n="commodities.rsi_ob">Overbought (&gt;70)</button>
+    <button class="rsi-filter-btn" data-filter="neutral" data-i18n="commodities.rsi_neutral">Neutral (30–70)</button>
+  </div>
+
   <div id="metalsSection" class="mb-6 fade-up">
     <h2 class="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3" data-i18n="commodities.group_metals">Precious Metals</h2>
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3" id="metalsGrid"></div>
@@ -360,6 +376,34 @@
   renderGrid('industrial', 'industrialGrid');
   renderGrid('energy',     'energyGrid');
   renderGrid('agri',       'agriGrid');
+
+  // RSI filter
+  let _rsiFilter = 'all';
+  function _applyRsiFilter(filter) {
+    _rsiFilter = filter;
+    document.querySelectorAll('.rsi-filter-btn').forEach(b => b.classList.toggle('active', b.dataset.filter === filter));
+    document.querySelectorAll('.commodity-card').forEach(card => {
+      const key = card.dataset.key;
+      const c = C[key];
+      if (!c) { card.style.display = ''; return; }
+      const rsi = c.rsi_14;
+      let show = true;
+      if (filter === 'oversold')   show = rsi != null && rsi < 30;
+      if (filter === 'overbought') show = rsi != null && rsi > 70;
+      if (filter === 'neutral')    show = rsi != null && rsi >= 30 && rsi <= 70;
+      card.style.display = show ? '' : 'none';
+    });
+    // Show/hide empty sections
+    ['metalsSection','industrialSection','energySection','agriSection'].forEach(id => {
+      const sec = document.getElementById(id);
+      if (!sec) return;
+      const visible = sec.querySelectorAll('.commodity-card:not([style*="display: none"])').length;
+      sec.style.display = visible > 0 ? '' : 'none';
+    });
+  }
+  document.querySelectorAll('.rsi-filter-btn').forEach(btn => {
+    btn.addEventListener('click', () => _applyRsiFilter(btn.dataset.filter));
+  });
 
   // ─── Detail chart
   function buildOrUpdateDetail() {

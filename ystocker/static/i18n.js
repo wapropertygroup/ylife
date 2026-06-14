@@ -545,6 +545,10 @@ const I18n = (() => {
     'lookup.cheap':         { en: '✓ cheap', zh: '✓ 低估' },
     'lookup.fair':          { en: ' fair',   zh: ' 合理' },
     'lookup.rich':          { en: ' rich',   zh: ' 高估' },
+    'lookup.smart_search_label': { en: '✦ Smart Search (AI)', zh: '✦ 智能搜索（AI）' },
+    'lookup.smart_search_ph':    { en: 'e.g. semiconductor stocks with low PEG', zh: '例如：低PEG半导体股票' },
+    'lookup.smart_search_btn':   { en: 'Search', zh: '搜索' },
+    'lookup.smart_search_loading':{ en: 'Searching with AI…', zh: 'AI搜索中…' },
 
     // ── groups.html ────────────────────────────────────────────────────
     'groups.title':         { en: 'Manage Peer Groups', zh: '管理同类组' },
@@ -1199,6 +1203,11 @@ const I18n = (() => {
                                        zh: '农产品价格取决于天气、播种与贸易流向，小麦尤其对地缘政治敏感。' },
     'commodities.seasonality_title': { en: 'Seasonality',   zh: '季节性规律' },
     'commodities.seasonality_label':{ en: 'Avg Return %', zh: '平均收益率 %' },
+    'commodities.rsi_filter_label':{ en: 'RSI Filter',      zh: 'RSI 筛选' },
+    'commodities.rsi_all':         { en: 'All',              zh: '全部' },
+    'commodities.rsi_os':          { en: 'Oversold (<30)',   zh: '超卖（<30）' },
+    'commodities.rsi_ob':          { en: 'Overbought (>70)', zh: '超买（>70）' },
+    'commodities.rsi_neutral':     { en: 'Neutral (30–70)',  zh: '中性（30–70）' },
 
     // Per-commodity popup educational notes (full detail, shown on click)
     'commodities.popup.gold.title':     { en: '💡 Gold',               zh: '💡 黄金' },

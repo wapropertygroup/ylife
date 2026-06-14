@@ -297,6 +297,10 @@
             Q <span class="growth-sort-arrow"></span>
           </button>
         </div>
+        <button id="revGrowthToggle" onclick="_toggleRevGrowth()"
+          class="text-[11px] px-2 py-0.5 rounded border border-slate-700 text-slate-500 hover:text-emerald-400 hover:border-emerald-700 transition">
+          Rev Growth
+        </button>
         <button onclick="toggleValues('growth')" data-chart="growth"
                 class="chart-toggle flex items-center gap-1 text-xs text-brand border border-brand/40 bg-brand/10
                        hover:bg-brand hover:text-white transition px-2 py-1 rounded-lg">
@@ -909,6 +913,7 @@ const chartDefaults = {
   if (!ctx) return;
   const sorted = [...DATA].filter(d => d.eps_growth_ttm != null || d.eps_growth_q != null)
                           .sort((a, b) => (a.eps_growth_ttm ?? -Infinity) - (b.eps_growth_ttm ?? -Infinity));
+  window._sortedGrowthData = sorted;
   chartInstances.growth = new Chart(ctx, {
     type: 'bar',
     data: {
@@ -952,6 +957,7 @@ const chartDefaults = {
       }
     }]
   });
+  window._growthChartInst = chartInstances.growth;
 })();
 
 // -- EV/EBITDA horizontal bar
@@ -1389,6 +1395,32 @@ document.querySelectorAll('#perfRangeBtns .range-btn').forEach(btn => {
 });
 
 let _spyRelative = false;
+
+let _showRevGrowth = false;
+function _toggleRevGrowth() {
+  _showRevGrowth = !_showRevGrowth;
+  const btn = document.getElementById('revGrowthToggle');
+  if (btn) btn.className = _showRevGrowth
+    ? 'text-[11px] px-2 py-0.5 rounded border border-emerald-600 text-emerald-400 bg-emerald-900/20 transition'
+    : 'text-[11px] px-2 py-0.5 rounded border border-slate-700 text-slate-500 hover:text-emerald-400 hover:border-emerald-700 transition';
+  const chart = window._growthChartInst;
+  if (!chart) return;
+  const sorted = window._sortedGrowthData || [];
+  if (_showRevGrowth) {
+    const revData = sorted.map(d => d.rev_growth);
+    chart.data.datasets[0].data = revData;
+    chart.data.datasets[0].label = 'Revenue Growth (%)';
+    chart.data.datasets[0].backgroundColor = revData.map(v => (v ?? 0) >= 0 ? 'rgba(52,211,153,0.7)' : 'rgba(248,113,113,0.7)');
+    chart.data.datasets[1].data = [];
+  } else {
+    chart.data.datasets[0].data = sorted.map(d => d.eps_growth_ttm);
+    chart.data.datasets[0].label = 'EPS Growth TTM';
+    chart.data.datasets[0].backgroundColor = sorted.map(d => (d.eps_growth_ttm ?? 0) >= 0 ? '#34d399cc' : '#f43f5ecc');
+    chart.data.datasets[1].data = sorted.map(d => d.eps_growth_q);
+  }
+  chart.update();
+}
+
 function _toggleSpyRelative() {
   _spyRelative = !_spyRelative;
   const btn = document.getElementById('spyRelativeToggle');

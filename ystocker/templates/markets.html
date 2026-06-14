@@ -2716,10 +2716,16 @@ function expandMktsChart(kind) {
   }
   if (kind === 'sectors' && _mkSectorData) {
     titleEl.textContent = I18n.t('markets.sector_perf') || 'Sector Performance';
-    subEl.textContent   = I18n.t('markets.sector_perf_sub') || 'Day change by sector ETF';
-    const sorted = [..._mkSectorData].sort((a, b) => (a.day_chg ?? -999) - (b.day_chg ?? -999));
+    subEl.textContent   = (_sectorPeriod === 'week'
+      ? (I18n.t('markets.sector_week') || 'Week') + ' change by sector ETF'
+      : (I18n.t('markets.sector_day') || 'Day') + ' change by sector ETF');
+    const sorted = [..._mkSectorData].sort((a, b) => {
+      const va = (_sectorPeriod === 'week' ? (a.week_chg_pct ?? a.day_chg) : a.day_chg) ?? -999;
+      const vb = (_sectorPeriod === 'week' ? (b.week_chg_pct ?? b.day_chg) : b.day_chg) ?? -999;
+      return va - vb;
+    });
     const labels = sorted.map(s => (I18n.t('markets.sector.' + s.label)) || s.label);
-    const vals   = sorted.map(s => s.day_chg ?? 0);
+    const vals   = sorted.map(s => (_sectorPeriod === 'week' ? (s.week_chg_pct ?? s.day_chg) : s.day_chg) ?? 0);
     const colors = vals.map(v => v >= 0 ? 'rgba(52,211,153,0.7)' : 'rgba(248,113,113,0.7)');
     modal.style.display = 'flex';
     _mktsModalChart = new Chart(document.getElementById('mktsModalCanvas'), {
@@ -3020,7 +3026,10 @@ async function _loadAiBrief(force) {
       textEl.textContent = summary;
       textEl.classList.remove('hidden');
       loadEl?.classList.add('hidden');
-      if (timeEl && d.generated_at) timeEl.textContent = '· ' + new Date(d.generated_at * 1000).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+      if (timeEl && d.generated_at) {
+        const ts = typeof d.generated_at === 'number' ? d.generated_at * 1000 : Date.parse(d.generated_at);
+        if (!isNaN(ts)) timeEl.textContent = '· ' + new Date(ts).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+      }
     }
   } catch(e) {
     if (loadEl) loadEl.textContent = '—';

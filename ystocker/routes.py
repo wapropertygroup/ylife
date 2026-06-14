@@ -329,6 +329,8 @@ def _start_background_thread() -> None:
 _ROLLING_PERIOD = 5 * 60   # total refresh window (seconds)
 _BATCH_SIZE     = 8         # tickers per mini-fetch
 _JITTER_MAX     = 15        # max per-batch jitter (seconds)
+_ticker_backoff: dict[str, float] = {}   # ticker → earliest retry timestamp (UTC epoch)
+_ticker_backoff_attempts: dict[str, int] = {}  # ticker → consecutive failure count
 
 
 def _rolling_refresh_loop() -> None:
@@ -356,8 +358,12 @@ def _rolling_refresh_loop() -> None:
             time.sleep(_ROLLING_PERIOD)
             continue
 
-        batches = [all_tickers[i : i + _BATCH_SIZE] for i in range(0, n, _BATCH_SIZE)]
-        num_batches = len(batches)
+        # Skip tickers currently in exponential backoff window
+        now_ts = time.time()
+        eligible = [t for t in all_tickers if now_ts >= _ticker_backoff.get(t, 0)]
+
+        batches = [eligible[i : i + _BATCH_SIZE] for i in range(0, len(eligible), _BATCH_SIZE)]
+        num_batches = len(batches) or 1
         base_interval = _ROLLING_PERIOD / num_batches  # ideal seconds per batch slot
         cycle_start = time.time()
 
@@ -378,8 +384,20 @@ def _rolling_refresh_loop() -> None:
                                     if ticker in group_data:
                                         group_data[ticker] = data
                             _cache_last_updated = time.time()
+                    # Clear backoff for successfully fetched tickers
+                    for ticker in raw:
+                        _ticker_backoff.pop(ticker, None)
+                        _ticker_backoff_attempts.pop(ticker, None)
                 if errs:
                     log.debug("Rolling refresher: %d error(s) in batch %s", len(errs), batch)
+                # Mark tickers that failed with exponential backoff
+                failed_tickers = [t for t in batch if t not in raw]
+                for ticker in failed_tickers:
+                    attempt = _ticker_backoff_attempts.get(ticker, 0)
+                    delay = min(120 * (2 ** attempt), 3600)  # 2min → 4min → 8min → … max 1hr
+                    _ticker_backoff[ticker] = time.time() + delay
+                    _ticker_backoff_attempts[ticker] = attempt + 1
+                    log.debug("Rolling refresher: backoff %s attempt=%d delay=%ds", ticker, attempt + 1, delay)
             except Exception:
                 log.warning("Rolling refresher: exception fetching batch %s", batch, exc_info=True)
 
@@ -1526,15 +1544,17 @@ def api_peers(ticker: str):
             if not cached:
                 continue
             peers_data.append({
-                "ticker":     t,
-                "name":       cached.get("Name", t),
-                "pe":         cached.get("PE (TTM)"),
-                "peg":        cached.get("PEG"),
-                "fwd_pe":     cached.get("PE (Forward)"),
-                "ps":         cached.get("P/S Ratio"),
-                "upside":     cached.get("Upside (%)"),
-                "rev_growth": cached.get("Revenue Growth (%)"),
-                "day_chg":    cached.get("Day Change (%)"),
+                "ticker":       t,
+                "name":         cached.get("Name", t),
+                "pe":           cached.get("PE (TTM)"),
+                "peg":          cached.get("PEG"),
+                "fwd_pe":       cached.get("PE (Forward)"),
+                "ps":           cached.get("P/S Ratio"),
+                "upside":       cached.get("Upside (%)"),
+                "rev_growth":   cached.get("Revenue Growth (%)"),
+                "day_chg":      cached.get("Day Change (%)"),
+                "ytd_return":   cached.get("YTD Return (%)"),
+                "week52_change":cached.get("52W Return (%)"),
             })
     peers_data.sort(key=lambda x: abs(x.get("pe") or 0), reverse=False)
     return jsonify({"peers": peers_data[:10], "group": peer_group})
@@ -1633,8 +1653,12 @@ def api_search_semantic():
     # Build context from cached peer data (compact representation)
     from ystocker import PEER_GROUPS
     rows = []
-    with _CACHE_LOCK:
-        for t, d in _cache.items():
+    with _cache_lock:
+        cache_snapshot = dict(_cache or {})
+    for group_data in cache_snapshot.values():
+        if not isinstance(group_data, dict):
+            continue
+        for t, d in group_data.items():
             if not isinstance(d, dict):
                 continue
             rows.append(
@@ -5412,6 +5436,24 @@ def api_daily_summary():
                 ev_str = "; ".join(f"{e.get('event','')}" for e in us_evts)
                 lines.append(f"Key US economic events: {ev_str}")
 
+        # Treasury yields
+        try:
+            with _YIELD_CURVE_CACHE_LOCK:
+                yc_entry = _YIELD_CURVE_CACHE.get(_YIELD_CURVE_CACHE_VER)
+            if yc_entry:
+                yield_data = yc_entry["data"]
+                us_yc = yield_data.get("us", {}).get("current", {})
+                y10 = us_yc.get("10Y")
+                y2  = us_yc.get("2Y")
+                if y10 is not None:
+                    lines.append(f"10Y Treasury: {y10:.2f}%")
+                if y2 is not None:
+                    lines.append(f"2Y Treasury: {y2:.2f}%")
+                if y10 is not None and y2 is not None:
+                    lines.append(f"10Y-2Y Spread: {(y10 - y2):.2f}% ({'INVERTED - recession signal' if y10 < y2 else 'normal'})")
+        except Exception:
+            pass
+
     else:  # market == "cn"
         for key, label in [("sse","Shanghai Composite"), ("csi500","CSI 500 (中证500)"),
                            ("twii","Taiwan TWII"), ("kospi","KOSPI"),
@@ -5434,16 +5476,26 @@ def api_daily_summary():
     if market == "us":
         if lang == "zh":
             prompt = (
-                "你是一位简洁的金融分析师。请根据以下数据，用中文撰写一份简短（3-4段）的美国市场每日评论。"
-                "重点分析标普500、纳斯达克、道琼斯、VIX、PCR、AAII情绪及美国板块表现。"
-                "语言要直接、有洞察力、保持中立。不要使用Markdown标题。\n\n"
+                "你是一位简洁的金融分析师。请根据以下数据，用中文撰写一份美国市场每日评论。"
+                "请严格按以下结构分为4段：\n"
+                "第1段：指数与宏观概述（主要涨跌、趋势）\n"
+                "第2段：情绪分析（VIX、恐慌贪婪指数、PCR、AAII、国债收益率曲线形态）\n"
+                "第3段：板块轮动与涨跌幅前列个股\n"
+                "第4段：前瞻展望——下一交易日的主要风险与催化剂\n"
+                "每段2-3句话。语言要直接、有洞察力、保持中立。不要使用Markdown标题或项目符号。\n\n"
                 f"市场快照：\n{snapshot}"
             )
         else:
             prompt = (
-                "You are a concise financial analyst. Write a brief (3-4 paragraph) daily US markets commentary "
-                "focusing on S&P 500, Nasdaq, Dow, VIX, Put/Call Ratio, AAII sentiment, US sector performance, "
-                "and top movers. Be direct, insightful, and neutral. Use plain English, no markdown headers.\n\n"
+                "You are a concise financial analyst. Write a daily US markets commentary "
+                "based on the snapshot below. "
+                "Structure your response as exactly 4 paragraphs:\n"
+                "P1: Index & macro overview (key moves, trend)\n"
+                "P2: Sentiment context (VIX, Fear&Greed, PCR, AAII, yield curve shape)\n"
+                "P3: Sector rotation & top movers\n"
+                "P4: Forward look — key risks/catalysts for the next session\n"
+                "Keep each paragraph 2-3 sentences. No bullet points. "
+                "Be direct, insightful, and neutral. Use plain English, no markdown headers.\n\n"
                 f"Market snapshot:\n{snapshot}"
             )
     else:
@@ -6193,36 +6245,55 @@ def _heatmap_save_to_dynamo(date_str: str, stocks: list) -> None:
 
 
 def _heatmap_fetch_live() -> list:
-    """Fetch live price + day_chg for all heatmap tickers via yfinance batch download."""
+    """Fetch live price + day_chg/week_chg/month_chg for all heatmap tickers via yfinance batch download."""
     import yfinance as yf
     from ystocker.heatmap_meta import HEATMAP_META
 
     tickers_list = list(HEATMAP_META.keys())
     stocks = []
     try:
+        # Fetch 35 trading days to support 1M color mode (21 trading days)
         data   = yf.download(
-            tickers_list, period="2d", interval="1d",
+            tickers_list, period="35d", interval="1d",
             auto_adjust=True, progress=False, threads=True,
         )
         closes = data["Close"]
         for ticker in tickers_list:
             meta = HEATMAP_META[ticker]
             try:
-                col = closes[ticker] if ticker in closes.columns else None
-                if col is None:
+                closes_col = closes[ticker] if ticker in closes.columns else None
+                if closes_col is None:
                     continue
-                vals    = col.dropna().tolist()
-                price   = round(float(vals[-1]), 2) if vals else None
+                closes_series = closes_col.dropna()
+                vals  = closes_series.tolist()
+                last  = float(vals[-1]) if vals else None
+                price = round(last, 2) if last is not None else None
                 day_chg = round((vals[-1] - vals[-2]) / vals[-2] * 100, 2) if len(vals) >= 2 else None
+
+                # Week change (5 trading days ago)
+                week_close  = None
+                month_close = None
+                try:
+                    if len(closes_series) >= 6:
+                        week_close  = float(closes_series.iloc[-6])
+                    if len(closes_series) >= 22:
+                        month_close = float(closes_series.iloc[-22])
+                except Exception:
+                    pass
+
+                week_chg  = round((last - week_close)  / week_close  * 100, 2) if week_close  and week_close  > 0 and last is not None else None
+                month_chg = round((last - month_close) / month_close * 100, 2) if month_close and month_close > 0 and last is not None else None
             except Exception:
-                price, day_chg = None, None
+                price, day_chg, week_chg, month_chg = None, None, None, None
             stocks.append({
-                "ticker":  ticker,
-                "name":    meta["name"],
-                "sector":  meta["sector"],
-                "price":   price,
-                "day_chg": day_chg,
-                "mkt_cap": meta.get("mkt_cap_b"),  # use static approximate value
+                "ticker":    ticker,
+                "name":      meta["name"],
+                "sector":    meta["sector"],
+                "price":     price,
+                "day_chg":   day_chg,
+                "week_chg":  week_chg,
+                "month_chg": month_chg,
+                "mkt_cap":   meta.get("mkt_cap_b"),  # use static approximate value
             })
     except Exception as exc:
         log.warning("Heatmap yf.download failed: %s", exc)

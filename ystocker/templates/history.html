@@ -109,6 +109,9 @@
   <h1 class="text-2xl sm:text-3xl font-bold">
     <span class="font-mono grad-text">{{ ticker }}</span>
     <span id="stockName" class="text-slate-400 text-lg sm:text-xl font-normal ml-2 sm:ml-3"></span>
+    <button id="copyLinkBtn" onclick="_copyPermalink()"
+      class="text-slate-600 hover:text-slate-400 transition text-xs px-1.5 py-0.5 rounded border border-slate-800 hover:border-slate-600"
+      title="Copy link">🔗</button>
     <span id="dataCacheBadge" class="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-500 ml-2 align-middle"></span>
   </h1>
   <p class="text-slate-500 text-sm mt-1" data-i18n="history.subtitle">Historical PE ratio &amp; price</p>
@@ -967,6 +970,7 @@
         <button onclick="expandChart('forecast')" title="Expand" class="expand-btn ml-1">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
         </button>
+        <button id="explainBtnForecast" class="explain-btn" onclick="explainChart('forecast')" data-i18n="history.explain">✦ Explain</button>
         <div id="forecastModelToggle" class="flex gap-1">
           <button class="forecast-model-btn active" data-models="0,1,2" data-i18n="history.forecast_all">All</button>
           <button class="forecast-model-btn" data-models="0" data-i18n="history.forecast_prophet">Prophet</button>
@@ -986,6 +990,7 @@
     <div class="chart-container" style="height:380px; display:none" id="forecastChartWrap">
       <canvas id="forecastChart"></canvas>
     </div>
+    <div id="explainPanelForecast" class="explain-panel"></div>
     <!-- per-model status row -->
     <div id="forecastModelStatus" class="hidden flex flex-wrap gap-3 mt-3 text-[11px]"></div>
     <!-- forecast target summary row -->
@@ -1151,6 +1156,8 @@
             <th class="text-right py-2 px-2 font-medium" data-i18n="th.peg">PEG</th>
             <th class="text-right py-2 px-2 font-medium" data-i18n="th.upside">Upside</th>
             <th class="text-right py-2 px-2 font-medium" data-i18n="th.day_chg">Day</th>
+            <th class="text-right py-2 px-2 font-medium" data-i18n="history.ytd_return">YTD</th>
+            <th class="text-right py-2 px-2 font-medium" data-i18n="history.week52_chg">52W</th>
           </tr>
         </thead>
         <tbody id="peerTableBody"></tbody>
@@ -1625,8 +1632,8 @@ let   _forecastResult = null;   // last forecast API response
           const qtRevColors = qt.map(() => 'rgba(56,189,248,0.6)');
           const qtEpsActual = qt.map(r => r.eps_basic ?? null);
           const qtEpsEst    = qt.map(r => {
-            // match by quarter date from earnings_markers
-            const markers = (staticData && staticData.earnings_markers) || [];
+            // match by quarter date from earnings_markers — use _staticData (module-level) to avoid closure race
+            const markers = (_staticData && _staticData.earnings_markers) || [];
             const qDate = r.quarter?.slice(0,7);
             const m = markers.find(m => m.date?.slice(0,7) === qDate);
             return m?.estimated_eps ?? null;
@@ -2066,6 +2073,8 @@ let   _forecastResult = null;   // last forecast API response
         <td class="py-1.5 px-2 text-right font-mono">${fmt2(data.current_peg,'x')}</td>
         <td class="py-1.5 px-2 text-right ${currentUpside == null ? 'text-slate-300' : currentUpside >= 0 ? 'text-emerald-400' : 'text-rose-400'}">${currentUpside != null ? (currentUpside >= 0 ? '+' : '') + currentUpside.toFixed(1) + '%' : '—'}</td>
         <td class="py-1.5 px-2 text-right text-slate-300">—</td>
+        <td class="py-1.5 px-2 text-right ${(data.ytd_return??0)>=0?'text-emerald-400':'text-rose-400'}">${data.ytd_return!=null?(data.ytd_return>=0?'+':'')+data.ytd_return.toFixed(1)+'%':'—'}</td>
+        <td class="py-1.5 px-2 text-right ${(data.week52_change??0)>=0?'text-emerald-400':'text-rose-400'}">${data.week52_change!=null?(data.week52_change>=0?'+':'')+data.week52_change.toFixed(1)+'%':'—'}</td>
       </tr>`;
       document.getElementById('peerTableBody').innerHTML = currentRow + pd.peers.map(p => `
         <tr class="border-b border-slate-800/40 hover:bg-slate-800/30 cursor-pointer" onclick="window.location='/history/${p.ticker}'">
@@ -2076,6 +2085,8 @@ let   _forecastResult = null;   // last forecast API response
           <td class="py-1.5 px-2 text-right font-mono">${fmt(p.peg,'x')}</td>
           <td class="py-1.5 px-2 text-right ${(p.upside??0)>=0?'text-emerald-400':'text-rose-400'}">${p.upside!=null?(p.upside>=0?'+':'')+p.upside.toFixed(1)+'%':'—'}</td>
           <td class="py-1.5 px-2 text-right ${(p.day_chg??0)>=0?'text-emerald-400':'text-rose-400'}">${p.day_chg!=null?(p.day_chg>=0?'+':'')+p.day_chg.toFixed(2)+'%':'—'}</td>
+          <td class="py-1.5 px-2 text-right ${(p.ytd_return??0)>=0?'text-emerald-400':'text-rose-400'}">${p.ytd_return!=null?(p.ytd_return>=0?'+':'')+p.ytd_return.toFixed(1)+'%':'—'}</td>
+          <td class="py-1.5 px-2 text-right ${(p.week52_change??0)>=0?'text-emerald-400':'text-rose-400'}">${p.week52_change!=null?(p.week52_change>=0?'+':'')+p.week52_change.toFixed(1)+'%':'—'}</td>
         </tr>`).join('');
     } catch(e) {}
   })();
@@ -3258,6 +3269,15 @@ document.getElementById('chartModal').addEventListener('click', function(e) {
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
 
 // ── Copy Price Alert ─────────────────────────────────────────────────────────
+function _copyPermalink() {
+  const period = document.querySelector('#priceRangeBtns .range-btn.active')?.dataset?.period || '1y';
+  const url = window.location.origin + window.location.pathname + '?range=' + period;
+  navigator.clipboard.writeText(url).then(() => {
+    const btn = document.getElementById('copyLinkBtn');
+    if (btn) { btn.textContent = '✓'; setTimeout(() => { btn.textContent = '🔗'; }, 2000); }
+  }).catch(() => {});
+}
+
 function _copyPriceAlert() {
   try {
     const price  = (_forecastResult?.current_price || (staticData && staticData.current_price)) ?? null;
@@ -3286,6 +3306,7 @@ if (backBtn) {
   }, { passive: true });
 }
 // Hide section nav when not on Charts tab
+window._activeTab = 'charts'; // default tab
 function _updateSectionNav() {
   const nav = document.getElementById('sectionNav');
   if (nav) nav.style.display = window._activeTab === 'charts' ? 'flex' : 'none';
@@ -3679,6 +3700,7 @@ const _explainMeta = {
   stoch:      { btn: 'explainBtnStoch',      panel: 'explainPanelStoch',      key: 'prices'            },
   hv:         { btn: 'explainBtnHv',         panel: 'explainPanelHv',         key: 'prices'            },
   rsstrength: { btn: 'explainBtnRsstrength', panel: 'explainPanelRsstrength', key: 'relative_strength' },
+  forecast: { btn: 'explainBtnForecast', panel: 'explainPanelForecast', key: 'prices' },
 };
 
 // Track currently displayed period per chart key (default: 1y)
