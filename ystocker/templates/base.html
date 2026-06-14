@@ -33,16 +33,15 @@
   })();
 
   // ── Fetch with automatic retry ────────────────────────────────────────────
-  // Wraps same-origin API calls with up to 3 retries + exponential back-off
-  // (1 s → 2 s → 3 s).  External URLs (Stripe, Google Maps, CDNs) pass through
-  // unchanged.  Re-throws on final failure so existing error handlers still fire.
+  // Wraps same-origin API calls with up to 4 retries + exponential back-off
+  // (1 s → 2 s → 4 s → 8 s = 15 s total).  External URLs pass through unchanged.
   (function patchFetchRetry() {
     const _raw = window.fetch;
-    const MAX   = 3;
+    const MAX   = 4;
     const DELAY = 1000; // ms base delay
 
     window.fetch = async function(url, opts) {
-      // Only retry relative / same-origin paths
+      // Only retry relative / same-origin paths (not CDNs, Stripe, Google, etc.)
       const isLocal = typeof url === 'string' && !url.startsWith('http') && !url.startsWith('//');
       if (!isLocal) return _raw(url, opts);
 
@@ -51,8 +50,9 @@
           return await _raw(url, opts);
         } catch (err) {
           if (attempt === MAX) throw err;
-          await new Promise(r => setTimeout(r, DELAY * attempt));
-          console.warn(`[fetch] retry ${attempt}/${MAX - 1}: ${url}`);
+          const wait = DELAY * Math.pow(2, attempt - 1); // 1s, 2s, 4s
+          await new Promise(r => setTimeout(r, wait));
+          console.warn(`[fetch] retry ${attempt}/${MAX - 1} (+${wait}ms): ${url}`);
         }
       }
     };

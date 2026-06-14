@@ -1947,6 +1947,58 @@ let   _forecastResult = null;   // last forecast API response
   const prCfg = _buildConfig('price', data, staticData);
   _registerChart('price', prCfg, new Chart(document.getElementById('priceHistChart'), prCfg));
 
+  // ── Price-synced technical charts — initial render on page load
+  // (These are also rebuilt in _handleRange when the period changes)
+  document.getElementById('priceDeltaSection').style.display = 'block';
+  const _initDlCfg = _buildConfig('delta', data, staticData);
+  _registerChart('delta', _initDlCfg, new Chart(document.getElementById('priceDeltaHistChart'), _initDlCfg));
+  _stampDataAge('priceDeltaSection', data.dates);
+
+  if (data.volumes && data.volumes.some(v => v > 0)) {
+    document.getElementById('volumeSection').style.display = 'block';
+    if (data.avg_volume && data.avg_volume > 0) {
+      const _lastVol = [...data.volumes].reverse().find(v => v > 0) || 0;
+      const _relVol  = _lastVol / data.avg_volume;
+      const _rvEl    = document.getElementById('statRelVol');
+      if (_rvEl) {
+        _rvEl.textContent = _relVol.toFixed(1) + 'x Vol';
+        _rvEl.style.display = 'inline-block';
+        _rvEl.className = 'text-xs font-semibold px-1.5 py-0.5 rounded-md ' +
+          (_relVol > 3 ? 'bg-rose-900/50 text-rose-300' : _relVol > 1.5 ? 'bg-amber-900/50 text-amber-300' : 'bg-slate-800 text-slate-400');
+      }
+    }
+    const _initVCfg = _buildConfig('volume', data, staticData);
+    _registerChart('volume', _initVCfg, new Chart(document.getElementById('volumeHistChart'), _initVCfg));
+    _stampDataAge('volumeSection', data.dates);
+  }
+
+  document.getElementById('rsiSection').style.display = 'block';
+  const _initRsiCfg = _buildConfig('rsi', data, staticData);
+  _registerChart('rsi', _initRsiCfg, new Chart(document.getElementById('rsiHistChart'), _initRsiCfg));
+  _stampDataAge('rsiSection', data.dates);
+
+  document.getElementById('macdSection').style.display = 'block';
+  const _initMacdCfg = _buildConfig('macd', data, staticData);
+  _registerChart('macd', _initMacdCfg, new Chart(document.getElementById('macdHistChart'), _initMacdCfg));
+  _stampDataAge('macdSection', data.dates);
+
+  if (data.relative_strength && data.relative_strength.some(v => v != null)) {
+    document.getElementById('rsStrengthSection').style.display = 'block';
+    const _initRsCfg = _buildConfig('rsstrength', data, staticData);
+    _registerChart('rsstrength', _initRsCfg, new Chart(document.getElementById('rsStrengthChart'), _initRsCfg));
+    _stampDataAge('rsStrengthSection', data.dates);
+  }
+
+  document.getElementById('stochSection').style.display = 'block';
+  const _initStochCfg = _buildConfig('stoch', data, staticData);
+  _registerChart('stoch', _initStochCfg, new Chart(document.getElementById('stochHistChart'), _initStochCfg));
+  _stampDataAge('stochSection', data.dates);
+
+  document.getElementById('hvSection').style.display = 'block';
+  const _initHvCfg = _buildConfig('hv', data, staticData);
+  _registerChart('hv', _initHvCfg, new Chart(document.getElementById('hvHistChart'), _initHvCfg));
+  _stampDataAge('hvSection', data.dates);
+
   // ── Options data (walls, P/C ratio, P/C chart) — loaded async for fast initial render
   _loadOptionsData();
 

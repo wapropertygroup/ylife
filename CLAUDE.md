@@ -35,14 +35,14 @@ bash deploy/deploy.sh -i ~/Downloads/my-key-pair.pem
 ```bash
 aws ssm send-command --instance-ids i-01794a9910a4d5ee1 --region us-west-2 \
   --document-name AWS-RunShellScript \
-  --parameters '{"commands":["cd /opt/ystocker && sudo git fetch origin && sudo git reset --hard origin/main && sudo systemctl restart ystocker yplanner yplanter yhome ytracker ypay yimage ybg"]}'
+  --parameters '{"commands":["cd /opt/ystocker && sudo git fetch origin && sudo git reset --hard origin/main && for svc in ystocker yplanner yplanter yhome ytracker ypay yimage ybg; do sudo kill -HUP $(systemctl show --property MainPID $svc | cut -d= -f2) 2>/dev/null || sudo systemctl restart $svc; done"]}'
 ```
 
 ### Deploy a single app via SSM
 ```bash
 aws ssm send-command --instance-ids i-01794a9910a4d5ee1 --region us-west-2 \
   --document-name AWS-RunShellScript \
-  --parameters '{"commands":["cd /opt/ystocker && sudo git fetch origin && sudo git reset --hard origin/main && sudo systemctl restart yplanner"]}'
+  --parameters '{"commands":["cd /opt/ystocker && sudo git fetch origin && sudo git reset --hard origin/main && sudo kill -HUP $(systemctl show --property MainPID yplanner | cut -d= -f2) 2>/dev/null || sudo systemctl restart yplanner"]}'
 ```
 
 ### Check deploy result
