@@ -1350,6 +1350,72 @@ def api_sector_performance(sector_name: str):
     return jsonify(result)
 
 
+_SECTOR_RANKING_CACHE: dict = {}
+_SECTOR_RANKING_LOCK = threading.Lock()
+
+
+@bp.route("/api/sector-ranking")
+def api_sector_ranking():
+    """Composite sector ranking by valuation + momentum.
+
+    For each of the 11 SPDR sector ETFs, fetches PE, P/B, YTD + 6M momentum.
+    Returns a ranked list with composite value_score and momentum_score.
+    """
+    import yfinance as yf
+
+    with _SECTOR_RANKING_LOCK:
+        entry = _SECTOR_RANKING_CACHE.get("data")
+        if entry and time.time() - entry["ts"] < 3600:
+            return jsonify(entry["data"])
+
+    ETF_MAP = {
+        "XLK": "Technology", "XLV": "Healthcare", "XLF": "Financials",
+        "XLY": "Cons. Disc.", "XLP": "Cons. Staples", "XLE": "Energy",
+        "XLI": "Industrials", "XLU": "Utilities", "XLB": "Materials",
+        "XLRE": "Real Estate", "XLC": "Comm. Svcs",
+    }
+    results = []
+    try:
+        tickers = list(ETF_MAP.keys())
+        batch = yf.download(tickers, period="1y", interval="1wk",
+                            auto_adjust=True, progress=False, group_by="ticker")
+        for etf, sector in ETF_MAP.items():
+            try:
+                if isinstance(batch.columns, __import__("pandas").MultiIndex):
+                    closes = batch[etf]["Close"].dropna()
+                else:
+                    closes = batch["Close"].dropna()
+                if len(closes) < 4:
+                    continue
+                info = yf.Ticker(etf).info
+                ytd_ret = closes.iloc[-1] / closes.iloc[0] * 100 - 100
+                m6_ret  = closes.iloc[-1] / closes.iloc[max(0, len(closes)-26)] * 100 - 100
+                m1_ret  = closes.iloc[-1] / closes.iloc[max(0, len(closes)-4)]  * 100 - 100
+                results.append({
+                    "ticker":      etf,
+                    "sector":      sector,
+                    "pe":          _safe(round(info.get("trailingPE"), 1)) if info.get("trailingPE") else None,
+                    "pb":          _safe(round(info.get("priceToBook"), 2)) if info.get("priceToBook") else None,
+                    "div_yield":   _safe(round(info.get("dividendYield", 0) * 100, 2)) if info.get("dividendYield") else None,
+                    "ytd":         round(float(ytd_ret), 1),
+                    "m6":          round(float(m6_ret), 1),
+                    "m1":          round(float(m1_ret), 1),
+                    "price":       round(float(closes.iloc[-1]), 2),
+                })
+            except Exception:
+                continue
+        # Compute composite momentum score (higher = stronger momentum)
+        for r in results:
+            r["momentum_score"] = round((r["m1"] or 0) * 0.3 + (r["m6"] or 0) * 0.7, 1)
+    except Exception as exc:
+        log.warning("Sector ranking: %s", exc)
+
+    data = sorted(results, key=lambda x: -(x["momentum_score"] or 0))
+    with _SECTOR_RANKING_LOCK:
+        _SECTOR_RANKING_CACHE["data"] = {"ts": time.time(), "data": data}
+    return jsonify(data)
+
+
 # ---------------------------------------------------------------------------
 # Annual financials endpoint (separate from history to avoid slowing PE chart)
 # ---------------------------------------------------------------------------
@@ -1621,6 +1687,68 @@ def api_dividend_history(ticker: str):
     except Exception as exc:
         log.warning("Dividend history: %s %s", ticker, exc)
         return jsonify({"dividends": [], "ticker": ticker})
+
+
+@bp.route("/api/etf-holdings/<ticker>")
+def api_etf_holdings(ticker: str):
+    """Top holdings and sector weights for an ETF via yfinance."""
+    import yfinance as yf
+    ticker = ticker.strip().upper()
+
+    # 4-hour cache
+    cache_key = f"etf_holdings_{ticker}"
+    with _HISTORY_CACHE_LOCK:
+        entry = _HISTORY_CACHE.get(cache_key)
+        if entry and time.time() - entry["ts"] < 4 * 3600:
+            return jsonify(entry["data"])
+
+    try:
+        tk = yf.Ticker(ticker)
+        holdings = []
+        sector_weights = {}
+
+        # Top holdings
+        try:
+            fd = tk.funds_data
+            if fd is not None:
+                th = fd.top_holdings
+                if th is not None and not th.empty:
+                    for _, row in th.head(15).iterrows():
+                        holdings.append({
+                            "ticker": str(row.get("Symbol") or row.get("symbol") or row.get("Ticker") or ""),
+                            "name":   str(row.get("Name") or row.get("name") or ""),
+                            "weight": round(float(row.get("% Assets") or row.get("holdingPercent") or row.get("weight") or 0) * 100, 2)
+                                      if (row.get("% Assets") or row.get("holdingPercent") or row.get("weight")) else None,
+                        })
+                # Sector weights
+                sw = fd.sector_weightings
+                if sw is not None and not sw.empty:
+                    for _, row in sw.iterrows():
+                        sec = str(row.get("Sector") or row.get("sector") or "")
+                        wt  = row.get("Weight (%)") or row.get("sectorWeight") or row.get("weight") or 0
+                        if sec:
+                            sector_weights[sec] = round(float(wt) * 100, 2) if wt else None
+        except Exception as e:
+            log.warning("ETF holdings: funds_data failed for %s: %s", ticker, e)
+
+        # Fallback: try direct info
+        if not holdings:
+            info = tk.info
+            top = info.get("holdings", [])
+            for h in top[:15]:
+                holdings.append({
+                    "ticker": h.get("symbol") or h.get("ticker", ""),
+                    "name":   h.get("holdingName") or h.get("name", ""),
+                    "weight": round(float(h.get("holdingPercent") or 0) * 100, 2),
+                })
+
+        result = {"ticker": ticker, "holdings": holdings, "sector_weights": sector_weights}
+        with _HISTORY_CACHE_LOCK:
+            _HISTORY_CACHE[cache_key] = {"ts": time.time(), "data": result}
+        return jsonify(result)
+    except Exception as exc:
+        log.warning("ETF holdings: %s %s", ticker, exc)
+        return jsonify({"ticker": ticker, "holdings": [], "sector_weights": {}}), 200
 
 
 @bp.route("/api/search")
@@ -4984,6 +5112,7 @@ def api_yield_spread():
 
     try:
         import requests as _req
+        import concurrent.futures as _cf_ys
         headers = {"User-Agent": "Mozilla/5.0 (research)"}
 
         def _fred(sid):
@@ -4992,11 +5121,22 @@ def api_yield_spread():
             r.raise_for_status()
             rows = [line.split(",") for line in r.text.strip().splitlines()[1:]
                     if "," in line and line.split(",")[1].strip() not in ("", ".")]
-            return {row[0]: float(row[1]) for row in rows}
+            return sid, {row[0]: float(row[1]) for row in rows}
 
-        dgs10 = _fred("DGS10")
-        dgs2  = _fred("DGS2")
-        usrec = _fred("USREC")
+        # Fetch DGS10, DGS2, USREC in parallel — was serial (up to 45 s)
+        with _cf_ys.ThreadPoolExecutor(max_workers=3) as _pool:
+            futs = {sid: _pool.submit(_fred, sid) for sid in ("DGS10", "DGS2", "USREC")}
+            results = {}
+            for sid, fut in futs.items():
+                try:
+                    _, data = fut.result(timeout=20)
+                    results[sid] = data
+                except Exception as exc:
+                    raise RuntimeError(f"FRED {sid} failed: {exc}") from exc
+
+        dgs10 = results["DGS10"]
+        dgs2  = results["DGS2"]
+        usrec = results["USREC"]
 
         # Align on dates present in both DGS10 and DGS2
         dates = sorted(set(dgs10) & set(dgs2))
@@ -5500,7 +5640,7 @@ def api_economic_events_translate():
         from google import genai
         from google.genai import types as _genai_types
         client = genai.Client(api_key=GEMINI_API_KEY,
-                              http_options=_genai_types.HttpOptions(timeout=20))
+                              http_options=_genai_types.HttpOptions(timeout=30))
         resp = client.models.generate_content(
             model="gemini-2.5-flash",
             contents=prompt,
@@ -5813,6 +5953,19 @@ def api_daily_summary():
                     lines.append(f"2Y Treasury: {y2:.2f}%")
                 if y10 is not None and y2 is not None:
                     lines.append(f"10Y-2Y Spread: {(y10 - y2):.2f}% ({'INVERTED - recession signal' if y10 < y2 else 'normal'})")
+        except Exception:
+            pass
+
+        # HY credit spread proxy
+        try:
+            cs_cache_entry = _CREDIT_SPREAD_CACHE.get("data")
+            if cs_cache_entry:
+                cs_data = cs_cache_entry.get("data", {})
+                cs_spread = cs_data.get("spread", [])
+                if cs_spread:
+                    latest_cs = cs_spread[-1]
+                    lines.append(f"HY/IG Credit Spread (HYG/TLT ratio): {latest_cs:.4f} "
+                                f"({'tight, risk-on' if latest_cs > 0.5 else 'wide, risk-off'})")
         except Exception:
             pass
 

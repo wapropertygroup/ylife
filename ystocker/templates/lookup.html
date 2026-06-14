@@ -16,6 +16,11 @@
     <!-- Search box -->
     <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 fade-up">
       <h2 class="text-base font-semibold text-slate-200 mb-4" data-i18n="lookup.search_title">Search a Ticker</h2>
+      <div id="watchlistPanel" class="mb-3 hidden">
+        <p class="text-[10px] text-slate-600 uppercase tracking-widest mb-2">⭐ Watchlist</p>
+        <div id="watchlistChips" class="flex flex-wrap gap-1.5 mb-1"></div>
+        <button id="clearWatchlistBtn" onclick="_clearWatchlist()" class="text-[10px] text-slate-700 hover:text-slate-500">clear all</button>
+      </div>
       <div id="recentlySearched" class="mb-3 hidden">
         <p class="text-[10px] text-slate-600 uppercase tracking-widest mb-2">Recent</p>
         <div id="recentChips" class="flex flex-wrap gap-1.5"></div>
@@ -269,6 +274,37 @@ function _renderRecent() {
 }
 _renderRecent();
 
+const WL_KEY = 'ystocker_watchlist';
+function _getWatchlist() { try { return JSON.parse(localStorage.getItem(WL_KEY)||'[]'); } catch(e) { return []; } }
+function _saveWatchlist(arr) { try { localStorage.setItem(WL_KEY, JSON.stringify(arr)); } catch(e) {} }
+function _addToWatchlist(ticker, name) {
+  let wl = _getWatchlist().filter(w => w.ticker !== ticker);
+  wl.unshift({ ticker, name: name || ticker });
+  wl = wl.slice(0, 12);
+  _saveWatchlist(wl);
+  _renderWatchlist();
+}
+function _removeFromWatchlist(ticker) {
+  _saveWatchlist(_getWatchlist().filter(w => w.ticker !== ticker));
+  _renderWatchlist();
+}
+function _clearWatchlist() { _saveWatchlist([]); _renderWatchlist(); }
+function _renderWatchlist() {
+  const wl = _getWatchlist();
+  const panel = document.getElementById('watchlistPanel');
+  const chips = document.getElementById('watchlistChips');
+  if (!panel || !chips) return;
+  if (!wl.length) { panel.classList.add('hidden'); return; }
+  panel.classList.remove('hidden');
+  chips.innerHTML = wl.map(w => `
+    <span class="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-lg bg-slate-900 border border-slate-800 hover:border-slate-600 transition">
+      <button onclick="quickLookup('${w.ticker}')" class="text-brand font-medium">${w.ticker}</button>
+      <span class="text-slate-500 text-[10px]">${w.name}</span>
+      <button onclick="_removeFromWatchlist('${w.ticker}')" class="text-slate-700 hover:text-slate-400 ml-0.5">×</button>
+    </span>`).join('');
+}
+_renderWatchlist();
+
 // ── Single ticker lookup
 async function lookupTicker(symbolOverride) {
   const input  = document.getElementById('tickerInput');
@@ -330,6 +366,25 @@ function renderCard(d) {
 
   // Save to recently searched
   _addRecent(d.Ticker, d.Name || d['Company Name'] || '');
+
+  // Add watchlist star button to the card
+  const wlBtn = document.createElement('button');
+  wlBtn.className = 'text-lg hover:scale-110 transition ml-2';
+  const isInWl = _getWatchlist().some(w => w.ticker === d.Ticker);
+  wlBtn.textContent = isInWl ? '⭐' : '☆';
+  wlBtn.title = isInWl ? 'Remove from watchlist' : 'Add to watchlist';
+  wlBtn.onclick = () => {
+    if (_getWatchlist().some(w => w.ticker === d.Ticker)) {
+      _removeFromWatchlist(d.Ticker);
+      wlBtn.textContent = '☆';
+    } else {
+      _addToWatchlist(d.Ticker, d.Name || '');
+      wlBtn.textContent = '⭐';
+    }
+  };
+  // Find the ticker heading element and append star
+  const tickerEl = document.getElementById('cardSymbol');
+  if (tickerEl && tickerEl.parentElement) tickerEl.parentElement.appendChild(wlBtn);
 
   const upsideEl = document.getElementById('cardUpside');
   const u = d['Upside (%)'];

@@ -96,7 +96,7 @@
 <!-- ── This Week's Recap ──────────────────────────────────────────────── -->
 <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 fade-up mb-6" id="weeklyRecapCard" style="display:none">
   <div class="flex items-center justify-between mb-2">
-    <h3 class="text-sm font-semibold text-slate-300">📅 This Week</h3>
+    <h3 class="text-sm font-semibold text-slate-300" data-i18n="markets.this_week">📅 This Week</h3>
     <span id="weeklyRecapDates" class="text-[10px] text-slate-600"></span>
   </div>
   <div id="weeklyRecapGrid" class="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -246,8 +246,8 @@
 <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up mb-6" id="skewSection">
   <div class="flex items-start justify-between mb-3">
     <div>
-      <h2 class="text-base font-semibold text-slate-200">CBOE SKEW vs VIX — Tail Risk Divergence</h2>
-      <p class="text-xs text-slate-500 mt-0.5">High SKEW + low VIX = institutions quietly buying tail protection while the index looks calm. Classic "smart money" positioning signal.</p>
+      <h2 class="text-base font-semibold text-slate-200" data-i18n="markets.skew_title">CBOE SKEW vs VIX — Tail Risk Divergence</h2>
+      <p class="text-xs text-slate-500 mt-0.5" data-i18n="markets.skew_desc">High SKEW + low VIX = institutions quietly buying tail protection while the index looks calm. Classic "smart money" positioning signal.</p>
     </div>
     <span id="skewBadge" class="text-xs px-2 py-0.5 rounded font-semibold hidden"></span>
   </div>
@@ -262,7 +262,7 @@
 <!-- ── Equity Risk Premium card ─────────────────────────────────────── -->
 <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 fade-up mb-6" id="erpCard">
   <div class="flex items-center justify-between mb-1">
-    <h3 class="text-sm font-semibold text-slate-300">Equity Risk Premium</h3>
+    <h3 class="text-sm font-semibold text-slate-300" data-i18n="markets.erp_title">Equity Risk Premium</h3>
     <span class="text-[10px] text-slate-600">ERP = S&amp;P Earnings Yield – 10Y</span>
   </div>
   <div class="flex items-end gap-3">
@@ -303,12 +303,12 @@
       <div class="chart-container mt-3" style="height:80px">
         <canvas id="aaiiBullBearSpread"></canvas>
       </div>
-      <p class="text-[10px] text-slate-600 mt-1">Spread = Bull% − Bear%. Positive = bullish majority; <span class="text-rose-400">&lt;0 = bearish majority</span> (historically a contrarian buy signal)</p>
+      <p class="text-[10px] text-slate-600 mt-1" data-i18n="markets.aaii_spread_desc">Spread = Bull% − Bear%. Positive = bullish majority; <span class="text-rose-400">&lt;0 = bearish majority</span> (historically a contrarian buy signal)</p>
       <!-- AAII Spread vs S&P 500 (collapsible) -->
       <div id="aaiiSpySection" class="mt-3 border-t border-slate-800 pt-3">
         <button onclick="_toggleAaiiSpy()" id="aaiiSpyToggle"
           class="text-[11px] text-slate-500 hover:text-slate-300 transition flex items-center gap-1">
-          <span id="aaiiSpyChevron">▶</span> <span>AAII Sentiment vs S&P 500</span>
+          <span id="aaiiSpyChevron">▶</span> <span data-i18n="markets.aaii_spy_toggle">AAII Sentiment vs S&P 500</span>
         </button>
         <div id="aaiiSpyChart" class="chart-container mt-3 hidden" style="height:160px">
           <canvas id="aaiiSpyCanvas"></canvas>
@@ -384,17 +384,28 @@
 <!-- Sector Rotation Heatmap -->
 <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up mb-6" id="sectorGridSection">
   <div class="mb-3">
-    <h2 class="text-base font-semibold text-slate-200">Sector Rotation — vs S&amp;P 500 Performance</h2>
-    <p class="text-xs text-slate-500 mt-0.5">Green = outperforming S&amp;P 500, Red = underperforming. Shows rotation signals across multiple time horizons.</p>
+    <h2 class="text-base font-semibold text-slate-200" data-i18n="markets.sector_rot_title">Sector Rotation — vs S&amp;P 500 Performance</h2>
+    <p class="text-xs text-slate-500 mt-0.5" data-i18n="markets.sector_rot_desc">Green = outperforming S&amp;P 500, Red = underperforming. Shows rotation signals across multiple time horizons.</p>
   </div>
   <div id="sectorGridTable" class="overflow-x-auto"></div>
+</div>
+
+<!-- Sector Ranking Leaderboard -->
+<div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up mb-6" id="sectorRankingSection">
+  <div class="flex items-baseline gap-3 mb-3">
+    <h2 class="text-base font-semibold text-slate-200" data-i18n="markets.sector_rank_title">Sector Rotation Ranking</h2>
+    <span class="text-xs text-slate-500" data-i18n="markets.sector_rank_desc">Composite momentum score (1M × 30% + 6M × 70%)</span>
+  </div>
+  <div id="sectorRankingTable" class="overflow-x-auto">
+    <div class="text-xs text-slate-600 animate-pulse">Loading sector ranking…</div>
+  </div>
 </div>
 
 <!-- ── VIX vs PCR Correlation ──────────────────────────────────────────── -->
 <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up mb-6" id="vixPcrCorrelSection">
   <div class="mb-3">
     <h3 class="text-sm font-semibold text-slate-300" data-i18n="markets.vix_pcr_title">VIX vs Put/Call Ratio — Correlation</h3>
-    <p class="text-xs text-slate-500 mt-0.5">When VIX spikes but PCR stays low, hedging demand lags — often a signal that complacency persists. Divergence (one high, one low) = contrarian warning.</p>
+    <p class="text-xs text-slate-500 mt-0.5" data-i18n="markets.vix_pcr_desc">When VIX spikes but PCR stays low, hedging demand lags — often a signal that complacency persists. Divergence (one high, one low) = contrarian warning.</p>
   </div>
   <div class="flex items-center gap-3 mb-2 text-xs">
     <span class="flex items-center gap-1 text-rose-400"><span class="w-3 h-0.5 bg-rose-400 inline-block"></span> VIX</span>
@@ -409,8 +420,8 @@
 <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up mb-6" id="rotationSection">
   <div class="flex items-start justify-between mb-3">
     <div>
-      <h2 class="text-base font-semibold text-slate-200">Growth vs Broad Market Rotation</h2>
-      <p class="text-xs text-slate-500 mt-0.5">Nasdaq/S&amp;P ratio — rising = growth outperforming, falling = rotation to value/defensives</p>
+      <h2 class="text-base font-semibold text-slate-200" data-i18n="markets.growth_rot_title">Growth vs Broad Market Rotation</h2>
+      <p class="text-xs text-slate-500 mt-0.5" data-i18n="markets.growth_rot_desc">Nasdaq/S&amp;P ratio — rising = growth outperforming, falling = rotation to value/defensives</p>
     </div>
     <span id="rotationBadge" class="text-xs px-2 py-0.5 rounded font-semibold hidden"></span>
   </div>
@@ -424,12 +435,12 @@
   <h3 class="text-sm font-semibold text-slate-300 mb-3" data-i18n="markets.crypto_title">Crypto</h3>
   <div class="grid grid-cols-2 gap-3" id="cryptoGrid">
     <div class="bg-slate-800/40 rounded-xl p-3">
-      <div class="text-xs text-slate-500 mb-0.5">Bitcoin</div>
+      <div class="text-xs text-slate-500 mb-0.5" data-i18n="markets.btc_label">Bitcoin</div>
       <div id="btcPrice" class="text-base font-bold font-mono text-amber-400">—</div>
       <div id="btcChg" class="text-xs font-medium mt-0.5">—</div>
     </div>
     <div class="bg-slate-800/40 rounded-xl p-3">
-      <div class="text-xs text-slate-500 mb-0.5">Ethereum</div>
+      <div class="text-xs text-slate-500 mb-0.5" data-i18n="markets.eth_label">Ethereum</div>
       <div id="ethPrice" class="text-base font-bold font-mono text-sky-400">—</div>
       <div id="ethChg" class="text-xs font-medium mt-0.5">—</div>
     </div>
@@ -525,12 +536,12 @@
 <!-- Market Breadth -->
 <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up mb-6" id="breadthSection">
   <div class="mb-3">
-    <h2 class="text-base font-semibold text-slate-200">Market Breadth &amp; Concentration</h2>
-    <p class="text-xs text-slate-500 mt-0.5">Is the rally broad or narrow? High concentration risk = fragile bull market.</p>
+    <h2 class="text-base font-semibold text-slate-200" data-i18n="markets.breadth_title">Market Breadth &amp; Concentration</h2>
+    <p class="text-xs text-slate-500 mt-0.5" data-i18n="markets.breadth_desc">Is the rally broad or narrow? High concentration risk = fragile bull market.</p>
   </div>
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
     <div>
-      <p class="text-xs text-slate-500 mb-1">% S&amp;P 500 Above Moving Averages</p>
+      <p class="text-xs text-slate-500 mb-1" data-i18n="markets.breadth_ma_label">% S&amp;P 500 Above Moving Averages</p>
       <div class="flex items-center gap-3 mb-1 text-[11px]">
         <span class="text-sky-400">— 50-day MA %</span>
         <span class="text-violet-400">-- 200-day MA %</span>
@@ -538,7 +549,7 @@
       <div class="chart-container" style="height:160px"><canvas id="breadth50Chart"></canvas></div>
     </div>
     <div>
-      <p class="text-xs text-slate-500 mb-1">Equal-Weight / Cap-Weight (RSP/SPY) Ratio</p>
+      <p class="text-xs text-slate-500 mb-1" data-i18n="markets.breadth_rsp_label">Equal-Weight / Cap-Weight (RSP/SPY) Ratio</p>
       <p class="text-[10px] text-slate-600 mb-1">Rising = breadth expanding. Falling = mega-cap concentration increasing.</p>
       <div class="chart-container" style="height:160px"><canvas id="rspSpyChart"></canvas></div>
     </div>
@@ -641,8 +652,8 @@
 <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up mb-6" id="yieldSpreadSection">
   <div class="flex items-start justify-between mb-3">
     <div>
-      <h2 class="text-base font-semibold text-slate-200">10Y – 2Y Treasury Spread</h2>
-      <p class="text-xs text-slate-500 mt-0.5">Inversion (below 0) has preceded every US recession since 1978. Red shading = NBER-defined recessions.</p>
+      <h2 class="text-base font-semibold text-slate-200" data-i18n="markets.yield_spread_title">10Y – 2Y Treasury Spread</h2>
+      <p class="text-xs text-slate-500 mt-0.5" data-i18n="markets.yield_spread_desc">Inversion (below 0) has preceded every US recession since 1978. Red shading = NBER-defined recessions.</p>
     </div>
     <span id="spreadBadge" class="text-xs px-2 py-0.5 rounded font-semibold hidden"></span>
   </div>
@@ -656,8 +667,8 @@
 <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up mb-6" id="globalNormSection">
   <div class="flex items-start justify-between mb-3">
     <div>
-      <h2 class="text-base font-semibold text-slate-200">Global Markets — Normalized</h2>
-      <p class="text-xs text-slate-500 mt-0.5">All major indices rebased to 100 at period start — compare relative performance at a glance.</p>
+      <h2 class="text-base font-semibold text-slate-200" data-i18n="markets.global_title">Global Markets — Normalized</h2>
+      <p class="text-xs text-slate-500 mt-0.5" data-i18n="markets.global_desc">All major indices rebased to 100 at period start — compare relative performance at a glance.</p>
     </div>
     <div class="flex gap-1" id="globalNormBtns">
       <button class="range-btn" data-norm-range="1m">1M</button>
@@ -749,7 +760,7 @@
     <div class="flex items-center justify-between mb-2">
       <div>
         <span class="text-sm font-semibold text-slate-300">MACD</span>
-        <span class="text-xs text-slate-500 ml-2">12 / 26 / 9 — daily</span>
+        <span class="text-xs text-slate-500 ml-2" data-i18n="markets.macd_desc_full">12 / 26 / 9 — daily</span>
       </div>
       <div class="flex items-center gap-3 text-[11px]">
         <span class="flex items-center gap-1 text-slate-400"><span class="w-3 h-0.5 inline-block" style="background:#38bdf8"></span>MACD</span>
@@ -1160,7 +1171,7 @@ function _buildGlobalNorm(range) {
       plugins:{ legend:{labels:{color:tickCol,boxWidth:12,font:{size:10}}}, tooltip:{mode:'index',intersect:false,callbacks:{label:c=>` ${c.dataset.label}: ${c.raw?.toFixed(0)}`}} },
       scales:{
         x:{grid:{color:gridCol},ticks:{color:tickCol,maxTicksLimit:6,maxRotation:0}},
-        y:{grid:{color:gridCol},ticks:{color:tickCol,callback:v=>v.toFixed(0)},title:{display:true,text:'Normalised (start=100)',color:'#475569',font:{size:10}}},
+        y:{grid:{color:gridCol},ticks:{color:tickCol,callback:v=>v.toFixed(0)},title:{display:true,text: I18n.t('markets.norm_axis_label') || 'Normalised (start=100)',color:'#475569',font:{size:10}}},
       },
       interaction:{mode:'index',intersect:false},
     },
@@ -3021,12 +3032,12 @@ async function translateEconEvents() {
   const btn = document.getElementById('econTranslateBtn');
   if (btn) btn.disabled = true;
 
-  // Find events without Chinese translation — limit to 50 nearest dates
-  // to keep the Gemini prompt small (sending 400+ events causes timeouts)
+  // Find events without Chinese translation — limit to 20 nearest dates
+  // (50 events still times out Gemini; 20 fits within 30 s)
   const toTranslate = _econData
     .filter(ev => !ev.zh && ev.event && ev.event_id)
     .sort((a, b) => new Date(a.date) - new Date(b.date))
-    .slice(0, 50)
+    .slice(0, 20)
     .map(ev => ({ event_id: ev.event_id, event: ev.event, date: ev.date }));
 
   if (!toTranslate.length) {
@@ -3079,14 +3090,14 @@ function expandMktsChart(kind) {
     return;
   }
   if (kind === 'macd' && _mkData) {
-    titleEl.textContent = idxLabel(_curIdx) + ' — MACD';
-    subEl.textContent   = '12 / 26 / 9 — daily';
+    titleEl.textContent = idxLabel(_curIdx) + (I18n.t('markets.macd_label') || ' — MACD');
+    subEl.textContent   = I18n.t('markets.macd_desc_full') || '12 / 26 / 9 — daily';
     modal.style.display = 'flex';
     _mktsModalChart = renderMacdChart(_curIdx, _mkData, _curRange, 'mktsModalCanvas');
     return;
   }
   if (kind === 'rsi' && _mkData) {
-    titleEl.textContent = idxLabel(_curIdx) + ' — RSI-14';
+    titleEl.textContent = idxLabel(_curIdx) + (I18n.t('markets.rsi_label') || ' — RSI-14');
     subEl.textContent   = '';
     modal.style.display = 'flex';
     _mktsModalChart = renderRsiChart(_curIdx, _mkData, _curRange, 'mktsModalCanvas');
@@ -3159,22 +3170,22 @@ function expandMktsChart(kind) {
   }
 
   if (kind === 'gs' && _goldRatioData) {
-    titleEl.textContent = 'Gold / Silver Ratio';
-    subEl.textContent   = '2-year daily — oz of silver per oz of gold';
+    titleEl.textContent = I18n.t('markets.gold_silver_title') || 'Gold / Silver Ratio';
+    subEl.textContent   = I18n.t('markets.gold_silver_desc') || '2-year daily — oz of silver per oz of gold';
     modal.style.display = 'flex';
     _mktsModalChart = _renderRatioChart(_goldRatioData, 'mktsModalCanvas', 'gs_ratio', '#fbbf24');
     return;
   }
   if (kind === 'gc' && _goldRatioData) {
-    titleEl.textContent = 'Gold / Copper Ratio';
-    subEl.textContent   = '2-year daily — gold ($/oz) ÷ copper ($/lb)';
+    titleEl.textContent = I18n.t('markets.gold_copper_title') || 'Gold / Copper Ratio';
+    subEl.textContent   = I18n.t('markets.gold_copper_desc') || '2-year daily — gold ($/oz) ÷ copper ($/lb)';
     modal.style.display = 'flex';
     _mktsModalChart = _renderRatioChart(_goldRatioData, 'mktsModalCanvas', 'gc_ratio', '#fb923c');
     return;
   }
   if (kind === 'usYield' && _yieldData) {
-    titleEl.textContent = 'US Treasury Yield Curve';
-    subEl.textContent   = 'Current yields by maturity';
+    titleEl.textContent = I18n.t('markets.us_yield_title') || 'US Treasury Yield Curve';
+    subEl.textContent   = I18n.t('markets.us_yield_desc') || 'Current yields by maturity';
     modal.style.display = 'flex';
     const cur = (_yieldData.us || {}).current || {};
     const allM = ['3M', '6M', '1Y', '2Y', '3Y', '5Y', '10Y', '20Y', '30Y'];
@@ -3204,8 +3215,8 @@ function expandMktsChart(kind) {
     return;
   }
   if (kind === 'cnYield' && _yieldData) {
-    titleEl.textContent = 'CN Treasury Yield Curve';
-    subEl.textContent   = 'Current CN government bond yields by maturity';
+    titleEl.textContent = I18n.t('markets.cn_yield_title') || 'CN Treasury Yield Curve';
+    subEl.textContent   = I18n.t('markets.cn_yield_desc') || 'Current CN government bond yields by maturity';
     modal.style.display = 'flex';
     const cnCur  = (_yieldData.cn || {}).current || {};
     const cnMats = ['3M', '6M', '1Y', '2Y', '3Y', '5Y', '7Y', '10Y', '30Y'];
@@ -3309,14 +3320,14 @@ function _mktsModalConfig(kind) {
   }
   if (kind === 'macd' && _macdChartInst) {
     return {
-      title: idxLabel(_curIdx) + ' — MACD',
+      title: idxLabel(_curIdx) + (I18n.t('markets.macd_label') || ' — MACD'),
       sub:   '12 / 26 / 9 — daily',
       chartConfig: JSON.parse(JSON.stringify(_macdChartInst.config)),
     };
   }
   if (kind === 'rsi' && _rsiChartInst) {
     return {
-      title: idxLabel(_curIdx) + ' — RSI-14',
+      title: idxLabel(_curIdx) + (I18n.t('markets.rsi_label') || ' — RSI-14'),
       sub:   '',
       chartConfig: JSON.parse(JSON.stringify(_rsiChartInst.config)),
     };
@@ -3996,6 +4007,53 @@ loadCreditSpread('1y');
     html += '</tbody></table>';
     document.getElementById('sectorGridTable').innerHTML = html;
   } catch(e) {}
+})();
+
+// Sector Ranking Leaderboard
+(async function() {
+  try {
+    const data = await fetch('/api/sector-ranking').then(r=>r.json());
+    if (!data || !data.length) return;
+    const maxScore = Math.max(...data.map(d=>Math.abs(d.momentum_score||0)));
+    document.getElementById('sectorRankingTable').innerHTML = `
+      <table class="w-full text-xs">
+        <thead><tr class="border-b border-slate-800 text-slate-500 text-[10px]">
+          <th class="text-left py-1.5 px-2">Sector ETF</th>
+          <th class="text-right py-1.5 px-2">1M</th>
+          <th class="text-right py-1.5 px-2">6M</th>
+          <th class="text-right py-1.5 px-2">YTD</th>
+          <th class="text-right py-1.5 px-2">PE</th>
+          <th class="text-right py-1.5 px-2">Div%</th>
+          <th class="py-1.5 px-2 w-24">Momentum</th>
+        </tr></thead>
+        <tbody>
+          ${data.map((d, i) => {
+            const barW = maxScore > 0 ? Math.abs(d.momentum_score||0)/maxScore*100 : 0;
+            const barCol = (d.momentum_score||0)>=0 ? '#34d399' : '#f87171';
+            const fmtPct = v => v==null ? '—' : `<span class="${v>=0?'text-emerald-400':'text-rose-400'}">${v>=0?'+':''}${v.toFixed(1)}%</span>`;
+            return `<tr class="border-b border-slate-800/40 hover:bg-slate-800/30">
+              <td class="py-1.5 px-2">
+                <a href="/history/${d.ticker}" class="font-bold text-brand">${d.ticker}</a>
+                <span class="text-slate-500 ml-1">${d.sector}</span>
+              </td>
+              <td class="py-1.5 px-2 text-right">${fmtPct(d.m1)}</td>
+              <td class="py-1.5 px-2 text-right">${fmtPct(d.m6)}</td>
+              <td class="py-1.5 px-2 text-right">${fmtPct(d.ytd)}</td>
+              <td class="py-1.5 px-2 text-right font-mono text-slate-300">${d.pe ? d.pe+'x' : '—'}</td>
+              <td class="py-1.5 px-2 text-right font-mono text-emerald-400">${d.div_yield ? d.div_yield+'%' : '—'}</td>
+              <td class="py-1.5 px-2">
+                <div class="flex items-center gap-1">
+                  <div class="flex-1 h-1.5 bg-slate-800 rounded overflow-hidden">
+                    <div style="width:${barW}%;background:${barCol};height:100%"></div>
+                  </div>
+                  <span class="text-[10px] font-mono" style="color:${barCol}">${(d.momentum_score||0)>=0?'+':''}${(d.momentum_score||0).toFixed(1)}</span>
+                </div>
+              </td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>`;
+  } catch(e) { document.getElementById('sectorRankingTable').innerHTML = ''; }
 })();
 </script>
 

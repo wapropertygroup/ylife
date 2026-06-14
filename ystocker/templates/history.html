@@ -158,6 +158,22 @@
       </div>
     </div>
     <div class="mt-2 text-xs text-slate-600 px-1" id="etfMeta"></div>
+
+    <!-- ETF Holdings (shown only when quote_type = ETF) -->
+    <div id="etfHoldingsSection" style="display:none">
+      <div class="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <!-- Top Holdings table -->
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-3">
+          <p class="text-[10px] text-slate-500 uppercase tracking-widest mb-2">Top Holdings</p>
+          <div id="etfHoldingsTable" class="space-y-1"></div>
+        </div>
+        <!-- Sector weights chart -->
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-3">
+          <p class="text-[10px] text-slate-500 uppercase tracking-widest mb-2">Sector Weights</p>
+          <div style="height:140px"><canvas id="etfSectorChart"></canvas></div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- Analyst Consensus -->
@@ -1584,6 +1600,41 @@ let   _forecastResult = null;   // last forecast API response
     if (data.nav_price     != null) document.getElementById('statNav').textContent          = '$' + data.nav_price.toFixed(2);
     const meta = [data.fund_family, data.category].filter(Boolean).join(' · ');
     if (meta) document.getElementById('etfMeta').textContent = meta;
+
+    // ETF Holdings & Sector Weights
+    (async () => {
+      try {
+        const resp = await fetch(`/api/etf-holdings/${encodeURIComponent(TICKER)}`);
+        const hd = await resp.json();
+        if (hd.holdings && hd.holdings.length) {
+          document.getElementById('etfHoldingsSection').style.display = 'block';
+          // Holdings table
+          const tbl = document.getElementById('etfHoldingsTable');
+          tbl.innerHTML = hd.holdings.slice(0, 10).map((h, i) => `
+            <div class="flex items-center justify-between text-[11px]">
+              <div class="flex items-center gap-1.5">
+                <span class="text-slate-600 w-4">${i+1}</span>
+                <a href="/history/${encodeURIComponent(h.ticker)}" class="font-semibold text-brand hover:underline">${h.ticker}</a>
+                <span class="text-slate-500 truncate max-w-[100px]">${h.name}</span>
+              </div>
+              <span class="font-mono text-slate-300 shrink-0">${h.weight != null ? h.weight.toFixed(1)+'%' : '—'}</span>
+            </div>`).join('');
+
+          // Sector weights donut
+          const sw = hd.sector_weights;
+          if (sw && Object.keys(sw).length) {
+            const entries = Object.entries(sw).sort((a,b) => (b[1]||0)-(a[1]||0)).slice(0, 8);
+            const colors = ['#818cf8','#34d399','#f472b6','#fb923c','#38bdf8','#fbbf24','#94a3b8','#22d3ee'];
+            new Chart(document.getElementById('etfSectorChart'), {
+              type: 'doughnut',
+              data: { labels: entries.map(e=>e[0]), datasets: [{ data: entries.map(e=>e[1]||0), backgroundColor: colors, borderColor: '#0f172a', borderWidth: 2 }] },
+              options: { responsive:true, maintainAspectRatio:false, cutout:'55%',
+                plugins:{ legend:{labels:{color:'#94a3b8',boxWidth:10,font:{size:9}}}, tooltip:{callbacks:{label:c=>` ${c.label}: ${c.raw?.toFixed(1)}%`}} } },
+            });
+          }
+        }
+      } catch(e) {}
+    })();
   }
 
   // Analyst Consensus
