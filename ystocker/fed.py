@@ -76,6 +76,10 @@ SERIES: dict[str, dict[str, str]] = {
     "HOUST":           {"label": "Housing Starts (k units)",   "unit": "k",      "scale": 1.0},
     # ── Recession indicator ─────────────────────────────────────────────────
     "USREC":           {"label": "NBER Recession",              "unit": "binary", "scale": 1.0},
+    # ── Consumer & housing leading indicators ───────────────────────────────
+    "UMCSENT":         {"label": "Consumer Sentiment (UMich)", "unit": "index",  "scale": 1.0},
+    "MORTGAGE30US":    {"label": "30Y Fixed Mortgage Rate",    "unit": "pct",    "scale": 1.0},
+    "GDPC1":           {"label": "Real GDP ($B chained)",      "unit": "bln",    "scale": 1.0},
 }
 
 # ---------------------------------------------------------------------------
@@ -142,6 +146,7 @@ _SERIES_ALREADY_BILLIONS = {
     # New series — already in natural units, no millions→billions conversion
     "DFII10", "T10YIE", "BAMLH0A0HYM2", "BAMLC0A0CM",
     "WILL5000INDFC", "GDP", "NAPM", "HOUST", "USREC",
+    "UMCSENT", "MORTGAGE30US", "GDPC1",
 }
 
 # Series that are dimensionless ratios (stored as-is, no unit conversion)

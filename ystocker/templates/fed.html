@@ -1018,163 +1018,173 @@ let _fedSeriesData = {};
   })();
 
   // M2 Velocity chart
-  const m2v = s['M2V'];
-  if (m2v && m2v.dates && m2v.dates.length > 4) {
-    document.getElementById('m2VelSection').style.display = 'block';
-    const latestV = m2v.values.filter(v=>v!=null).slice(-1)[0];
-    if (latestV != null) document.getElementById('m2VelLatest').textContent = latestV.toFixed(2) + 'x';
-    new Chart(document.getElementById('m2VelChart'), {
-      type: 'line',
-      data: { labels: m2v.dates, datasets: [{
-        label: 'M2 Velocity',
-        data: m2v.values,
-        borderColor: '#fbbf24', backgroundColor: 'rgba(251,191,36,0.08)',
-        borderWidth: 1.5, pointRadius: 0, fill: true, tension: 0.3, spanGaps: true,
-      }]},
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        plugins: { legend:{display:false}, tooltip:{callbacks:{label:c=>` Velocity: ${c.raw?.toFixed(3)}x`}} },
-        scales: {
-          x: { grid:{color:'#1e293b'}, ticks:{color:'#64748b',maxTicksLimit:6,maxRotation:0} },
-          y: { grid:{color:'#1e293b'}, ticks:{color:'#64748b',callback:v=>v.toFixed(2)+'x'} },
+  try {
+    const m2v = s['M2V'];
+    if (m2v && m2v.dates && m2v.dates.length > 4) {
+      document.getElementById('m2VelSection').style.display = 'block';
+      const latestV = m2v.values.filter(v=>v!=null).slice(-1)[0];
+      if (latestV != null) document.getElementById('m2VelLatest').textContent = latestV.toFixed(2) + 'x';
+      new Chart(document.getElementById('m2VelChart'), {
+        type: 'line',
+        data: { labels: m2v.dates, datasets: [{
+          label: 'M2 Velocity',
+          data: m2v.values,
+          borderColor: '#fbbf24', backgroundColor: 'rgba(251,191,36,0.08)',
+          borderWidth: 1.5, pointRadius: 0, fill: true, tension: 0.3, spanGaps: true,
+        }]},
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend:{display:false}, tooltip:{callbacks:{label:c=>` Velocity: ${c.raw?.toFixed(3)}x`}} },
+          scales: {
+            x: { grid:{color:'#1e293b'}, ticks:{color:'#64748b',maxTicksLimit:6,maxRotation:0} },
+            y: { grid:{color:'#1e293b'}, ticks:{color:'#64748b',callback:v=>v.toFixed(2)+'x'} },
+          },
         },
-      },
-    });
-  }
+      });
+    }
+  } catch(e) { console.warn('Fed chart m2VelChart failed:', e); }
 
   // Buffett Indicator
-  const will5k = s['WILL5000INDFC'];
-  const gdp    = s['GDP'];
-  if (will5k?.dates?.length && gdp?.dates?.length) {
-    // GDP is quarterly — interpolate to monthly using forward-fill
-    const gdpMap = {};
-    gdp.dates.forEach((d, i) => { if (gdp.values[i] != null) gdpMap[d.slice(0,7)] = gdp.values[i]; });
-    // Forward-fill GDP to all Wilshire dates
-    let lastGdp = null;
-    const ratioVals = will5k.dates.map(d => {
-      const ym = d.slice(0,7);
-      if (gdpMap[ym] != null) lastGdp = gdpMap[ym];
-      return (lastGdp && will5k.values[will5k.dates.indexOf(d)] != null)
-        ? +(will5k.values[will5k.dates.indexOf(d)] / lastGdp * 100).toFixed(1) : null;
-    });
-    const latestRatio = ratioVals.filter(v=>v).slice(-1)[0];
-    document.getElementById('buffettSection').style.display = 'block';
-    if (latestRatio) {
-      const b = document.getElementById('buffettBadge');
-      b.textContent = latestRatio.toFixed(0) + '%';
-      b.className = 'text-sm font-bold font-mono ' +
-        (latestRatio > 140 ? 'text-rose-400' : latestRatio > 120 ? 'text-amber-400' : latestRatio < 80 ? 'text-emerald-400' : 'text-slate-100');
-    }
-    new Chart(document.getElementById('buffettChart'), {
-      type: 'line',
-      data: { labels: will5k.dates.slice(-480), datasets: [{
-        label: 'Market Cap / GDP (%)',
-        data: ratioVals.slice(-480),
-        borderColor: '#a78bfa', backgroundColor: 'rgba(167,139,250,0.08)',
-        borderWidth: 1.5, pointRadius: 0, fill: true, tension: 0.3, spanGaps: true,
-      }]},
-      plugins: [{
-        afterDraw(chart) {
-          const {ctx:c, chartArea:a, scales:{y}} = chart;
-          [[80,'#34d399','80%'],[120,'#fbbf24','120%'],[140,'#f87171','140%']].forEach(([v,col,lbl]) => {
-            const py = y.getPixelForValue(v);
-            if (py < a.top || py > a.bottom) return;
-            c.save(); c.strokeStyle=col+'60'; c.lineWidth=1; c.setLineDash([4,3]);
-            c.beginPath(); c.moveTo(a.left,py); c.lineTo(a.right,py); c.stroke();
-            c.fillStyle=col; c.font='10px Inter,sans-serif';
-            c.fillText(lbl, a.left+4, py-3); c.restore();
-          });
-        }
-      }],
-      options: {
-        responsive:true, maintainAspectRatio:false,
-        plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>` ${c.raw?.toFixed(1)}%`}}},
-        scales:{
-          x:{grid:{color:'#1e293b'},ticks:{color:'#64748b',maxTicksLimit:6,maxRotation:0}},
-          y:{grid:{color:'#1e293b'},ticks:{color:'#64748b',callback:v=>v+'%'}},
+  try {
+    const will5k = s['WILL5000INDFC'];
+    const gdp    = s['GDP'];
+    if (will5k?.dates?.length && gdp?.dates?.length) {
+      // GDP is quarterly — interpolate to monthly using forward-fill
+      const gdpMap = {};
+      gdp.dates.forEach((d, i) => { if (gdp.values[i] != null) gdpMap[d.slice(0,7)] = gdp.values[i]; });
+      // Forward-fill GDP to all Wilshire dates
+      let lastGdp = null;
+      const ratioVals = will5k.dates.map(d => {
+        const ym = d.slice(0,7);
+        if (gdpMap[ym] != null) lastGdp = gdpMap[ym];
+        return (lastGdp && will5k.values[will5k.dates.indexOf(d)] != null)
+          ? +(will5k.values[will5k.dates.indexOf(d)] / lastGdp * 100).toFixed(1) : null;
+      });
+      const latestRatio = ratioVals.filter(v=>v).slice(-1)[0];
+      document.getElementById('buffettSection').style.display = 'block';
+      if (latestRatio) {
+        const b = document.getElementById('buffettBadge');
+        b.textContent = latestRatio.toFixed(0) + '%';
+        b.className = 'text-sm font-bold font-mono ' +
+          (latestRatio > 140 ? 'text-rose-400' : latestRatio > 120 ? 'text-amber-400' : latestRatio < 80 ? 'text-emerald-400' : 'text-slate-100');
+      }
+      new Chart(document.getElementById('buffettChart'), {
+        type: 'line',
+        data: { labels: will5k.dates.slice(-480), datasets: [{
+          label: 'Market Cap / GDP (%)',
+          data: ratioVals.slice(-480),
+          borderColor: '#a78bfa', backgroundColor: 'rgba(167,139,250,0.08)',
+          borderWidth: 1.5, pointRadius: 0, fill: true, tension: 0.3, spanGaps: true,
+        }]},
+        plugins: [{
+          afterDraw(chart) {
+            const {ctx:c, chartArea:a, scales:{y}} = chart;
+            [[80,'#34d399','80%'],[120,'#fbbf24','120%'],[140,'#f87171','140%']].forEach(([v,col,lbl]) => {
+              const py = y.getPixelForValue(v);
+              if (py < a.top || py > a.bottom) return;
+              c.save(); c.strokeStyle=col+'60'; c.lineWidth=1; c.setLineDash([4,3]);
+              c.beginPath(); c.moveTo(a.left,py); c.lineTo(a.right,py); c.stroke();
+              c.fillStyle=col; c.font='10px Inter,sans-serif';
+              c.fillText(lbl, a.left+4, py-3); c.restore();
+            });
+          }
+        }],
+        options: {
+          responsive:true, maintainAspectRatio:false,
+          plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>` ${c.raw?.toFixed(1)}%`}}},
+          scales:{
+            x:{grid:{color:'#1e293b'},ticks:{color:'#64748b',maxTicksLimit:6,maxRotation:0}},
+            y:{grid:{color:'#1e293b'},ticks:{color:'#64748b',callback:v=>v+'%'}},
+          },
+          interaction:{mode:'index',intersect:false},
         },
-        interaction:{mode:'index',intersect:false},
-      },
-    });
-  }
+      });
+    }
+  } catch(e) { console.warn('Fed chart buffettChart failed:', e); }
 
   // 10Y Breakeven Inflation
-  const t10yie = s['T10YIE'];
-  if (t10yie?.dates?.length && t10yie.values.some(v=>v!=null)) {
-    document.getElementById('breakEvenSection').style.display = 'block';
-    const latest = t10yie.values.filter(v=>v!=null).slice(-1)[0];
-    if (latest != null) document.getElementById('breakEvenVal').textContent = latest.toFixed(2) + '%';
-    new Chart(document.getElementById('breakEvenChart'), {
-      type: 'line',
-      data: { labels: t10yie.dates.slice(-500), datasets: [
-        { label:'Breakeven', data:t10yie.values.slice(-500), borderColor:'#fbbf24', backgroundColor:'rgba(251,191,36,0.07)', borderWidth:1.5, pointRadius:0, fill:true, tension:0.3, spanGaps:true },
-        { label:'2% Target', data:new Array(Math.min(t10yie.dates.length,500)).fill(2), borderColor:'rgba(52,211,153,0.4)', backgroundColor:'transparent', borderWidth:1, pointRadius:0, borderDash:[4,3] },
-      ]},
-      options:{
-        responsive:true,maintainAspectRatio:false,
-        plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>c.dataset.label==='2% Target'?'':` Breakeven: ${c.raw?.toFixed(2)}%`}}},
-        scales:{x:{grid:{color:'#1e293b'},ticks:{color:'#64748b',maxTicksLimit:6,maxRotation:0}},y:{grid:{color:'#1e293b'},ticks:{color:'#64748b',callback:v=>v.toFixed(1)+'%'}}},
-        interaction:{mode:'index',intersect:false},
-      },
-    });
-  }
+  try {
+    const t10yie = s['T10YIE'];
+    if (t10yie?.dates?.length && t10yie.values.some(v=>v!=null)) {
+      document.getElementById('breakEvenSection').style.display = 'block';
+      const latest = t10yie.values.filter(v=>v!=null).slice(-1)[0];
+      if (latest != null) document.getElementById('breakEvenVal').textContent = latest.toFixed(2) + '%';
+      new Chart(document.getElementById('breakEvenChart'), {
+        type: 'line',
+        data: { labels: t10yie.dates.slice(-500), datasets: [
+          { label:'Breakeven', data:t10yie.values.slice(-500), borderColor:'#fbbf24', backgroundColor:'rgba(251,191,36,0.07)', borderWidth:1.5, pointRadius:0, fill:true, tension:0.3, spanGaps:true },
+          { label:'2% Target', data:new Array(Math.min(t10yie.dates.length,500)).fill(2), borderColor:'rgba(52,211,153,0.4)', backgroundColor:'transparent', borderWidth:1, pointRadius:0, borderDash:[4,3] },
+        ]},
+        options:{
+          responsive:true,maintainAspectRatio:false,
+          plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>c.dataset.label==='2% Target'?'':` Breakeven: ${c.raw?.toFixed(2)}%`}}},
+          scales:{x:{grid:{color:'#1e293b'},ticks:{color:'#64748b',maxTicksLimit:6,maxRotation:0}},y:{grid:{color:'#1e293b'},ticks:{color:'#64748b',callback:v=>v.toFixed(1)+'%'}}},
+          interaction:{mode:'index',intersect:false},
+        },
+      });
+    }
+  } catch(e) { console.warn('Fed chart breakEvenChart failed:', e); }
 
   // HY/IG OAS Credit Spreads
-  const hyOas = s['BAMLH0A0HYM2'];
-  const igOas = s['BAMLC0A0CM'];
-  if ((hyOas?.dates?.length || igOas?.dates?.length)) {
-    document.getElementById('oasSection').style.display = 'block';
-    const labels = hyOas?.dates?.slice(-500) || igOas?.dates?.slice(-500);
-    new Chart(document.getElementById('oasChart'), {
-      type:'line',
-      data:{ labels, datasets:[
-        { label:'HY OAS', data:(hyOas?.values||[]).slice(-500), borderColor:'#f87171', backgroundColor:'rgba(248,113,113,0.07)', borderWidth:1.5, pointRadius:0, fill:true, tension:0.2, spanGaps:true, yAxisID:'y' },
-        { label:'IG OAS', data:(igOas?.values||[]).slice(-500), borderColor:'#38bdf8', backgroundColor:'transparent', borderWidth:1.5, pointRadius:0, fill:false, tension:0.2, spanGaps:true, yAxisID:'yIg', borderDash:[4,3] },
-      ]},
-      options:{
-        responsive:true,maintainAspectRatio:false,
-        plugins:{legend:{display:false},tooltip:{mode:'index',intersect:false,callbacks:{label:c=>` ${c.dataset.label}: ${c.raw?.toFixed(0)}bps`}}},
-        scales:{
-          x:{grid:{color:'#1e293b'},ticks:{color:'#64748b',maxTicksLimit:6,maxRotation:0}},
-          y:{grid:{color:'#1e293b'},ticks:{color:'rgba(248,113,113,0.6)',callback:v=>v+'bps'}},
-          yIg:{position:'right',grid:{drawOnChartArea:false},ticks:{color:'rgba(56,189,248,0.6)',callback:v=>v+'bps'}},
+  try {
+    const hyOas = s['BAMLH0A0HYM2'];
+    const igOas = s['BAMLC0A0CM'];
+    if ((hyOas?.dates?.length || igOas?.dates?.length)) {
+      document.getElementById('oasSection').style.display = 'block';
+      const labels = hyOas?.dates?.slice(-500) || igOas?.dates?.slice(-500);
+      new Chart(document.getElementById('oasChart'), {
+        type:'line',
+        data:{ labels, datasets:[
+          { label:'HY OAS', data:(hyOas?.values||[]).slice(-500), borderColor:'#f87171', backgroundColor:'rgba(248,113,113,0.07)', borderWidth:1.5, pointRadius:0, fill:true, tension:0.2, spanGaps:true, yAxisID:'y' },
+          { label:'IG OAS', data:(igOas?.values||[]).slice(-500), borderColor:'#38bdf8', backgroundColor:'transparent', borderWidth:1.5, pointRadius:0, fill:false, tension:0.2, spanGaps:true, yAxisID:'yIg', borderDash:[4,3] },
+        ]},
+        options:{
+          responsive:true,maintainAspectRatio:false,
+          plugins:{legend:{display:false},tooltip:{mode:'index',intersect:false,callbacks:{label:c=>` ${c.dataset.label}: ${c.raw?.toFixed(0)}bps`}}},
+          scales:{
+            x:{grid:{color:'#1e293b'},ticks:{color:'#64748b',maxTicksLimit:6,maxRotation:0}},
+            y:{grid:{color:'#1e293b'},ticks:{color:'rgba(248,113,113,0.6)',callback:v=>v+'bps'}},
+            yIg:{position:'right',grid:{drawOnChartArea:false},ticks:{color:'rgba(56,189,248,0.6)',callback:v=>v+'bps'}},
+          },
+          interaction:{mode:'index',intersect:false},
         },
-        interaction:{mode:'index',intersect:false},
-      },
-    });
-  }
+      });
+    }
+  } catch(e) { console.warn('Fed chart oasChart failed:', e); }
 
   // ISM PMI
-  const napm = s['NAPM'];
-  if (napm?.dates?.length && napm.values.some(v=>v!=null)) {
-    document.getElementById('ismSection').style.display = 'block';
-    const latestPMI = napm.values.filter(v=>v!=null).slice(-1)[0];
-    const ismEl = document.getElementById('ismVal');
-    if (ismEl && latestPMI != null) {
-      ismEl.textContent = latestPMI.toFixed(1);
-      ismEl.className = 'text-sm font-bold font-mono ' + (latestPMI >= 50 ? 'text-emerald-400' : 'text-rose-400');
+  try {
+    const napm = s['NAPM'];
+    if (napm?.dates?.length && napm.values.some(v=>v!=null)) {
+      document.getElementById('ismSection').style.display = 'block';
+      const latestPMI = napm.values.filter(v=>v!=null).slice(-1)[0];
+      const ismEl = document.getElementById('ismVal');
+      if (ismEl && latestPMI != null) {
+        ismEl.textContent = latestPMI.toFixed(1);
+        ismEl.className = 'text-sm font-bold font-mono ' + (latestPMI >= 50 ? 'text-emerald-400' : 'text-rose-400');
+      }
+      const pmiColors = napm.values.map(v => v == null ? 'transparent' : v >= 50 ? 'rgba(52,211,153,0.7)' : 'rgba(248,113,113,0.7)');
+      new Chart(document.getElementById('ismChart'), {
+        type:'bar',
+        data:{ labels:napm.dates.slice(-120), datasets:[
+          { label:'ISM PMI', data:napm.values.slice(-120), backgroundColor:pmiColors.slice(-120), borderWidth:0, borderRadius:2 },
+        ]},
+        plugins:[{ afterDraw(chart){
+          const {ctx:c,chartArea:a,scales:{y}}=chart; const py=y.getPixelForValue(50);
+          if(py<a.top||py>a.bottom)return;
+          c.save();c.strokeStyle='rgba(251,191,36,0.6)';c.lineWidth=1.5;c.setLineDash([4,3]);
+          c.beginPath();c.moveTo(a.left,py);c.lineTo(a.right,py);c.stroke();
+          c.fillStyle='#fbbf24';c.font='10px Inter,sans-serif';c.fillText('50',a.left+4,py-3);c.restore();
+        }}],
+        options:{
+          responsive:true,maintainAspectRatio:false,
+          plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>` PMI: ${c.raw?.toFixed(1)}`}}},
+          scales:{x:{grid:{color:'#1e293b'},ticks:{color:'#64748b',maxTicksLimit:6,maxRotation:0}},y:{grid:{color:'#1e293b'},ticks:{color:'#64748b'},min:30,max:70}},
+          interaction:{mode:'index',intersect:false},
+        },
+      });
     }
-    const pmiColors = napm.values.map(v => v == null ? 'transparent' : v >= 50 ? 'rgba(52,211,153,0.7)' : 'rgba(248,113,113,0.7)');
-    new Chart(document.getElementById('ismChart'), {
-      type:'bar',
-      data:{ labels:napm.dates.slice(-120), datasets:[
-        { label:'ISM PMI', data:napm.values.slice(-120), backgroundColor:pmiColors.slice(-120), borderWidth:0, borderRadius:2 },
-      ]},
-      plugins:[{ afterDraw(chart){
-        const {ctx:c,chartArea:a,scales:{y}}=chart; const py=y.getPixelForValue(50);
-        if(py<a.top||py>a.bottom)return;
-        c.save();c.strokeStyle='rgba(251,191,36,0.6)';c.lineWidth=1.5;c.setLineDash([4,3]);
-        c.beginPath();c.moveTo(a.left,py);c.lineTo(a.right,py);c.stroke();
-        c.fillStyle='#fbbf24';c.font='10px Inter,sans-serif';c.fillText('50',a.left+4,py-3);c.restore();
-      }}],
-      options:{
-        responsive:true,maintainAspectRatio:false,
-        plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>` PMI: ${c.raw?.toFixed(1)}`}}},
-        scales:{x:{grid:{color:'#1e293b'},ticks:{color:'#64748b',maxTicksLimit:6,maxRotation:0}},y:{grid:{color:'#1e293b'},ticks:{color:'#64748b'},min:30,max:70}},
-        interaction:{mode:'index',intersect:false},
-      },
-    });
-  }
+  } catch(e) { console.warn('Fed chart ismChart failed:', e); }
 
   // ── Populate Balance Sheet Identity panel
   const totA = _v('WALCL');
@@ -1475,307 +1485,182 @@ let _fedSeriesData = {};
   // ──────────────────────────────────────────────────────────────────────────
   // Treasury chart (with range selector + WoW bar)
   // ──────────────────────────────────────────────────────────────────────────
-  document.getElementById('treasuryLoading').style.display = 'none';
-  document.getElementById('treasuryChartWrap').style.display = 'block';
-  document.getElementById('treasuryWowWrap').classList.remove('hidden');
-  registerExplainData('treasury', sliceSeries('TREAST', 52).dates, sliceSeries('TREAST', 52).values, 'U.S. Treasury Securities Held Outright');
+  try {
+    document.getElementById('treasuryLoading').style.display = 'none';
+    document.getElementById('treasuryChartWrap').style.display = 'block';
+    document.getElementById('treasuryWowWrap').classList.remove('hidden');
+    registerExplainData('treasury', sliceSeries('TREAST', 52).dates, sliceSeries('TREAST', 52).values, 'U.S. Treasury Securities Held Outright');
 
-  const TREASURY_COLORS = {
-    border: '#38bdf8',
-    fill:   'rgba(56,189,248,0.07)',
-  };
+    const TREASURY_COLORS = {
+      border: '#38bdf8',
+      fill:   'rgba(56,189,248,0.07)',
+    };
 
-  let currentRange = 52; // default 1Y
+    let currentRange = 52; // default 1Y
 
-  // WoW chart data (last 52 weeks always)
-  function wowData(n) {
-    const {values} = sliceSeries('TREAST', n || 0);
-    const wowVals = values.map((v, i) => {
-      if (i === 0 || v == null || values[i-1] == null) return null;
-      return +(v - values[i-1]).toFixed(2);
-    });
-    return wowVals;
-  }
-
-  const tCtx = document.getElementById('treasuryChart');
-  const treasuryChart = new Chart(tCtx, {
-    type: 'line',
-    data: {
-      labels: sliceSeries('TREAST', currentRange).dates,
-      datasets: [{
-        label: I18n.t('fed.chart_treasuries') || 'Treasuries ($B)',
-        data:  sliceSeries('TREAST', currentRange).values,
-        borderColor: TREASURY_COLORS.border,
-        backgroundColor: TREASURY_COLORS.fill,
-        borderWidth: 2,
-        pointRadius: 0,
-        pointHoverRadius: 5,
-        fill: true,
-        tension: 0.3,
-        spanGaps: true,
-      }]
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          mode: 'index', intersect: false,
-          callbacks: {
-            label: c => {
-              const v = c.raw;
-              if (v == null) return '';
-              return ` $${(v >= 1000 ? (v/1000).toFixed(2)+'T' : v.toFixed(1)+'B')}`;
-            }
-          }
-        }
-      },
-      scales: {
-        x: { grid:{color:gridCol}, ticks:{color:tickCol, maxTicksLimit:8, maxRotation:0} },
-        y: {
-          grid:{color:gridCol},
-          ticks:{
-            color:tickCol,
-            callback: v => v >= 1000 ? '$'+(v/1000).toFixed(1)+'T' : '$'+v+'B'
-          }
-        }
-      },
-      interaction: { mode:'index', intersect:false },
-    }
-  });
-
-  // WoW bar chart
-  const wCtx = document.getElementById('treasuryWowChart');
-  const {dates: wowDates, values: wowValsInit} = sliceSeries('TREAST', currentRange);
-  const wowBars = wowValsInit.map((v, i) => {
-    if (i === 0 || v == null || wowValsInit[i-1] == null) return null;
-    return +(v - wowValsInit[i-1]).toFixed(2);
-  });
-  const wowChart = new Chart(wCtx, {
-    type: 'bar',
-    data: {
-      labels: wowDates,
-      datasets: [{
-        label: I18n.t('fed.chart_wow') || 'WoW Change ($B)',
-        data: wowBars,
-        backgroundColor: wowBars.map(v => v == null ? 'transparent' : v >= 0 ? 'rgba(52,211,153,0.6)' : 'rgba(244,63,94,0.6)'),
-        borderWidth: 0,
-      }]
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: { legend: {display: false}, tooltip: {
-        mode:'index', intersect:false,
-        callbacks: { label: c => ` ${c.raw >= 0 ? '+' : ''}${c.raw?.toFixed(1)}B` }
-      }},
-      scales: {
-        x: { display: false },
-        y: { grid:{color:gridCol}, ticks:{color:tickCol, callback: v => v+'B'} }
-      },
-      interaction: { mode:'index', intersect:false },
-    }
-  });
-
-  // Range selector buttons
-  function wireRangeSelector(selectorId, onRange) {
-    document.querySelectorAll(`#${selectorId} .range-btn`).forEach(btn => {
-      btn.addEventListener('click', () => {
-        document.querySelectorAll(`#${selectorId} .range-btn`).forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        onRange(+btn.dataset.range);
+    // WoW chart data (last 52 weeks always)
+    function wowData(n) {
+      const {values} = sliceSeries('TREAST', n || 0);
+      const wowVals = values.map((v, i) => {
+        if (i === 0 || v == null || values[i-1] == null) return null;
+        return +(v - values[i-1]).toFixed(2);
       });
-    });
-  }
-
-  wireRangeSelector('treasuryRangeSelector', n => {
-    currentRange = n;
-    const {dates, values} = sliceSeries('TREAST', n);
-    treasuryChart.data.labels = dates;
-    treasuryChart.data.datasets[0].data = values;
-    treasuryChart.update();
-
-    const newWow = values.map((v, i) => {
-      if (i === 0 || v == null || values[i-1] == null) return null;
-      return +(v - values[i-1]).toFixed(2);
-    });
-    wowChart.data.labels = dates;
-    wowChart.data.datasets[0].data = newWow;
-    wowChart.data.datasets[0].backgroundColor = newWow.map(v =>
-      v == null ? 'transparent' : v >= 0 ? 'rgba(52,211,153,0.6)' : 'rgba(244,63,94,0.6)'
-    );
-    wowChart.update();
-  });
-
-  // ──────────────────────────────────────────────────────────────────────────
-  // Balance-sheet overview chart (total assets + MBS + reserves)
-  // ──────────────────────────────────────────────────────────────────────────
-  document.getElementById('balanceLoading').style.display = 'none';
-  document.getElementById('balanceChartWrap').style.display = 'block';
-
-  const bCtx = document.getElementById('balanceChart');
-  let BALANCE_N = 52; // 1Y default
-
-  function buildBalanceData(n) {
-    return {
-      walcl: sliceSeries('WALCL',   n),
-      mbs:   sliceSeries('MBST',    n),
-      res:   sliceSeries('WRESBAL', n),
-    };
-  }
-
-  let bd = buildBalanceData(BALANCE_N);
-  // Register explain data: use Total Assets as the primary series for the overview
-  registerExplainData('balance', bd.walcl.dates, bd.walcl.values, 'Fed Balance Sheet Overview (Total Assets, MBS, Reserve Balances)');
-  const balanceChart = new Chart(bCtx, {
-    type: 'line',
-    data: {
-      labels: bd.walcl.dates,
-      datasets: [
-        {
-          label: I18n.t('fed.stat_total') || 'Total Assets',
-          data: bd.walcl.values,
-          borderColor: '#6366f1', backgroundColor: 'rgba(99,102,241,0.05)',
-          borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, fill: true, tension: 0.3, spanGaps: true,
-        },
-        {
-          label: I18n.t('fed.stat_mbs') || 'MBS',
-          data: bd.mbs.values,
-          borderColor: '#34d399', backgroundColor: 'transparent',
-          borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 4, fill: false, tension: 0.3, spanGaps: true,
-          borderDash: [4, 3],
-        },
-        {
-          label: I18n.t('fed.stat_reserves') || 'Reserve Balances',
-          data: bd.res.values,
-          borderColor: '#f59e0b', backgroundColor: 'transparent',
-          borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 4, fill: false, tension: 0.3, spanGaps: true,
-          borderDash: [4, 3],
-        },
-      ]
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: {
-        legend: { display: true, labels: { color: '#94a3b8', boxWidth: 12, font: {size: 11} } },
-        tooltip: {
-          mode: 'index', intersect: false,
-          callbacks: {
-            label: c => {
-              const v = c.raw;
-              if (v == null) return '';
-              const fmt = v >= 1000 ? '$'+(v/1000).toFixed(2)+'T' : '$'+v.toFixed(1)+'B';
-              return ` ${c.dataset.label}: ${fmt}`;
-            }
-          }
-        }
-      },
-      scales: {
-        x: { grid:{color:gridCol}, ticks:{color:tickCol, maxTicksLimit:8, maxRotation:0} },
-        y: { grid:{color:gridCol}, ticks:{color:tickCol, callback: v => v >= 1000 ? '$'+(v/1000).toFixed(1)+'T' : '$'+v+'B'} }
-      },
-      interaction: { mode:'index', intersect:false },
+      return wowVals;
     }
-  });
 
-  wireRangeSelector('balanceRangeSelector', n => {
-    const d = buildBalanceData(n);
-    balanceChart.data.labels = d.walcl.dates;
-    balanceChart.data.datasets[0].data = d.walcl.values;
-    balanceChart.data.datasets[1].data = d.mbs.values;
-    balanceChart.data.datasets[2].data = d.res.values;
-    balanceChart.update();
-  });
-
-  // ──────────────────────────────────────────────────────────────────────────
-  // Treasury as % of total assets
-  // ──────────────────────────────────────────────────────────────────────────
-  function buildPctData(n) {
-    const w = sliceSeries('WALCL',  n);
-    const t = sliceSeries('TREAST', n);
-    return {
-      dates: w.dates,
-      values: w.values.map((total, i) => {
-        const treas = t.values[i];
-        if (total == null || treas == null || total === 0) return null;
-        return +(treas / total * 100).toFixed(2);
-      }),
-    };
-  }
-
-  const pctInitial = buildPctData(52);
-  if (pctInitial.values.some(v => v != null)) {
-    registerExplainData('pct', pctInitial.dates, pctInitial.values, 'U.S. Treasuries as % of Total Fed Assets');
-    document.getElementById('pctChartWrap').style.display = 'block';
-    const pCtx = document.getElementById('pctChart');
-    const pctChart = new Chart(pCtx, {
+    const tCtx = document.getElementById('treasuryChart');
+    const treasuryChart = new Chart(tCtx, {
       type: 'line',
       data: {
-        labels: pctInitial.dates,
+        labels: sliceSeries('TREAST', currentRange).dates,
         datasets: [{
-          label: I18n.t('fed.pct_title') || 'Treasury % of Total Assets',
-          data: pctInitial.values,
-          borderColor: '#a78bfa', backgroundColor: 'rgba(167,139,250,0.07)',
-          borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, fill: true, tension: 0.3, spanGaps: true,
+          label: I18n.t('fed.chart_treasuries') || 'Treasuries ($B)',
+          data:  sliceSeries('TREAST', currentRange).values,
+          borderColor: TREASURY_COLORS.border,
+          backgroundColor: TREASURY_COLORS.fill,
+          borderWidth: 2,
+          pointRadius: 0,
+          pointHoverRadius: 5,
+          fill: true,
+          tension: 0.3,
+          spanGaps: true,
         }]
       },
       options: {
         responsive: true, maintainAspectRatio: false,
         plugins: {
           legend: { display: false },
-          tooltip: { mode: 'index', intersect: false, callbacks: { label: c => ` ${c.raw?.toFixed(1)}%` } }
+          tooltip: {
+            mode: 'index', intersect: false,
+            callbacks: {
+              label: c => {
+                const v = c.raw;
+                if (v == null) return '';
+                return ` $${(v >= 1000 ? (v/1000).toFixed(2)+'T' : v.toFixed(1)+'B')}`;
+              }
+            }
+          }
         },
         scales: {
           x: { grid:{color:gridCol}, ticks:{color:tickCol, maxTicksLimit:8, maxRotation:0} },
-          y: { grid:{color:gridCol}, ticks:{ color:tickCol, callback: v => v.toFixed(0)+'%' } }
+          y: {
+            grid:{color:gridCol},
+            ticks:{
+              color:tickCol,
+              callback: v => v >= 1000 ? '$'+(v/1000).toFixed(1)+'T' : '$'+v+'B'
+            }
+          }
         },
         interaction: { mode:'index', intersect:false },
       }
     });
 
-    wireRangeSelector('pctRangeSelector', n => {
-      const d = buildPctData(n);
-      pctChart.data.labels = d.dates;
-      pctChart.data.datasets[0].data = d.values;
-      pctChart.update();
+    // WoW bar chart
+    const wCtx = document.getElementById('treasuryWowChart');
+    const {dates: wowDates, values: wowValsInit} = sliceSeries('TREAST', currentRange);
+    const wowBars = wowValsInit.map((v, i) => {
+      if (i === 0 || v == null || wowValsInit[i-1] == null) return null;
+      return +(v - wowValsInit[i-1]).toFixed(2);
     });
-  }
+    const wowChart = new Chart(wCtx, {
+      type: 'bar',
+      data: {
+        labels: wowDates,
+        datasets: [{
+          label: I18n.t('fed.chart_wow') || 'WoW Change ($B)',
+          data: wowBars,
+          backgroundColor: wowBars.map(v => v == null ? 'transparent' : v >= 0 ? 'rgba(52,211,153,0.6)' : 'rgba(244,63,94,0.6)'),
+          borderWidth: 0,
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: {display: false}, tooltip: {
+          mode:'index', intersect:false,
+          callbacks: { label: c => ` ${c.raw >= 0 ? '+' : ''}${c.raw?.toFixed(1)}B` }
+        }},
+        scales: {
+          x: { display: false },
+          y: { grid:{color:gridCol}, ticks:{color:tickCol, callback: v => v+'B'} }
+        },
+        interaction: { mode:'index', intersect:false },
+      }
+    });
+
+    // Range selector buttons
+    function wireRangeSelector(selectorId, onRange) {
+      document.querySelectorAll(`#${selectorId} .range-btn`).forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll(`#${selectorId} .range-btn`).forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          onRange(+btn.dataset.range);
+        });
+      });
+    }
+
+    wireRangeSelector('treasuryRangeSelector', n => {
+      currentRange = n;
+      const {dates, values} = sliceSeries('TREAST', n);
+      treasuryChart.data.labels = dates;
+      treasuryChart.data.datasets[0].data = values;
+      treasuryChart.update();
+
+      const newWow = values.map((v, i) => {
+        if (i === 0 || v == null || values[i-1] == null) return null;
+        return +(v - values[i-1]).toFixed(2);
+      });
+      wowChart.data.labels = dates;
+      wowChart.data.datasets[0].data = newWow;
+      wowChart.data.datasets[0].backgroundColor = newWow.map(v =>
+        v == null ? 'transparent' : v >= 0 ? 'rgba(52,211,153,0.6)' : 'rgba(244,63,94,0.6)'
+      );
+      wowChart.update();
+    });
+  } catch(e) { console.warn('Fed chart treasuryChart failed:', e); }
 
   // ──────────────────────────────────────────────────────────────────────────
-  // Liabilities chart: ON RRP + Treasury General Account (TGA)
+  // Balance-sheet overview chart (total assets + MBS + reserves)
   // ──────────────────────────────────────────────────────────────────────────
-  document.getElementById('liabLoading').style.display = 'none';
-  if ((s['RRPONTSYD'] && s['RRPONTSYD'].dates.length) || (s['WTREGEN'] && s['WTREGEN'].dates.length)) {
-    document.getElementById('liabChartWrap').style.display = 'block';
+  try {
+    document.getElementById('balanceLoading').style.display = 'none';
+    document.getElementById('balanceChartWrap').style.display = 'block';
 
-    function buildLiabData(n) {
+    const bCtx = document.getElementById('balanceChart');
+    let BALANCE_N = 52; // 1Y default
+
+    function buildBalanceData(n) {
       return {
-        rrp: sliceSeries('RRPONTSYD', n),
-        tga: sliceSeries('WTREGEN',   n),
+        walcl: sliceSeries('WALCL',   n),
+        mbs:   sliceSeries('MBST',    n),
+        res:   sliceSeries('WRESBAL', n),
       };
     }
 
-    let LIAB_N = 52;
-    let ld = buildLiabData(LIAB_N);
-
-    // Use longer series for labels (TGA goes further back)
-    const liabLabels = ld.tga.dates.length >= ld.rrp.dates.length ? ld.tga.dates : ld.rrp.dates;
-    registerExplainData('liab', liabLabels, ld.tga.values, 'Fed Liabilities: ON RRP & Treasury General Account (TGA)');
-
-    const liabChart = new Chart(document.getElementById('liabChart'), {
+    let bd = buildBalanceData(BALANCE_N);
+    // Register explain data: use Total Assets as the primary series for the overview
+    registerExplainData('balance', bd.walcl.dates, bd.walcl.values, 'Fed Balance Sheet Overview (Total Assets, MBS, Reserve Balances)');
+    const balanceChart = new Chart(bCtx, {
       type: 'line',
       data: {
-        labels: liabLabels,
+        labels: bd.walcl.dates,
         datasets: [
           {
-            label: I18n.t('fed.chart_onrrp') || 'ON RRP ($B)',
-            data: ld.rrp.values,
-            borderColor: '#fb7185', backgroundColor: 'rgba(251,113,133,0.07)',
+            label: I18n.t('fed.stat_total') || 'Total Assets',
+            data: bd.walcl.values,
+            borderColor: '#6366f1', backgroundColor: 'rgba(99,102,241,0.05)',
             borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, fill: true, tension: 0.3, spanGaps: true,
           },
           {
-            label: I18n.t('fed.chart_tga') || 'TGA ($B)',
-            data: ld.tga.values,
-            borderColor: '#facc15', backgroundColor: 'transparent',
+            label: I18n.t('fed.stat_mbs') || 'MBS',
+            data: bd.mbs.values,
+            borderColor: '#34d399', backgroundColor: 'transparent',
+            borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 4, fill: false, tension: 0.3, spanGaps: true,
+            borderDash: [4, 3],
+          },
+          {
+            label: I18n.t('fed.stat_reserves') || 'Reserve Balances',
+            data: bd.res.values,
+            borderColor: '#f59e0b', backgroundColor: 'transparent',
             borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 4, fill: false, tension: 0.3, spanGaps: true,
             borderDash: [4, 3],
           },
@@ -1792,7 +1677,7 @@ let _fedSeriesData = {};
                 const v = c.raw;
                 if (v == null) return '';
                 const fmt = v >= 1000 ? '$'+(v/1000).toFixed(2)+'T' : '$'+v.toFixed(1)+'B';
-                return ` ${c.dataset.label.replace(' ($B)', '')}: ${fmt}`;
+                return ` ${c.dataset.label}: ${fmt}`;
               }
             }
           }
@@ -1805,94 +1690,229 @@ let _fedSeriesData = {};
       }
     });
 
-    wireRangeSelector('liabRangeSelector', n => {
-      const d = buildLiabData(n);
-      const labels = d.tga.dates.length >= d.rrp.dates.length ? d.tga.dates : d.rrp.dates;
-      liabChart.data.labels = labels;
-      liabChart.data.datasets[0].data = d.rrp.values;
-      liabChart.data.datasets[1].data = d.tga.values;
-      liabChart.update();
+    wireRangeSelector('balanceRangeSelector', n => {
+      const d = buildBalanceData(n);
+      balanceChart.data.labels = d.walcl.dates;
+      balanceChart.data.datasets[0].data = d.walcl.values;
+      balanceChart.data.datasets[1].data = d.mbs.values;
+      balanceChart.data.datasets[2].data = d.res.values;
+      balanceChart.update();
     });
-  }
+  } catch(e) { console.warn('Fed chart balanceChart failed:', e); }
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // Treasury as % of total assets
+  // ──────────────────────────────────────────────────────────────────────────
+  try {
+    function buildPctData(n) {
+      const w = sliceSeries('WALCL',  n);
+      const t = sliceSeries('TREAST', n);
+      return {
+        dates: w.dates,
+        values: w.values.map((total, i) => {
+          const treas = t.values[i];
+          if (total == null || treas == null || total === 0) return null;
+          return +(treas / total * 100).toFixed(2);
+        }),
+      };
+    }
+
+    const pctInitial = buildPctData(52);
+    if (pctInitial.values.some(v => v != null)) {
+      registerExplainData('pct', pctInitial.dates, pctInitial.values, 'U.S. Treasuries as % of Total Fed Assets');
+      document.getElementById('pctChartWrap').style.display = 'block';
+      const pCtx = document.getElementById('pctChart');
+      const pctChart = new Chart(pCtx, {
+        type: 'line',
+        data: {
+          labels: pctInitial.dates,
+          datasets: [{
+            label: I18n.t('fed.pct_title') || 'Treasury % of Total Assets',
+            data: pctInitial.values,
+            borderColor: '#a78bfa', backgroundColor: 'rgba(167,139,250,0.07)',
+            borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, fill: true, tension: 0.3, spanGaps: true,
+          }]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: { mode: 'index', intersect: false, callbacks: { label: c => ` ${c.raw?.toFixed(1)}%` } }
+          },
+          scales: {
+            x: { grid:{color:gridCol}, ticks:{color:tickCol, maxTicksLimit:8, maxRotation:0} },
+            y: { grid:{color:gridCol}, ticks:{ color:tickCol, callback: v => v.toFixed(0)+'%' } }
+          },
+          interaction: { mode:'index', intersect:false },
+        }
+      });
+
+      wireRangeSelector('pctRangeSelector', n => {
+        const d = buildPctData(n);
+        pctChart.data.labels = d.dates;
+        pctChart.data.datasets[0].data = d.values;
+        pctChart.update();
+      });
+    }
+  } catch(e) { console.warn('Fed chart pctChart failed:', e); }
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // Liabilities chart: ON RRP + Treasury General Account (TGA)
+  // ──────────────────────────────────────────────────────────────────────────
+  try {
+    document.getElementById('liabLoading').style.display = 'none';
+    if ((s['RRPONTSYD'] && s['RRPONTSYD'].dates.length) || (s['WTREGEN'] && s['WTREGEN'].dates.length)) {
+      document.getElementById('liabChartWrap').style.display = 'block';
+
+      function buildLiabData(n) {
+        return {
+          rrp: sliceSeries('RRPONTSYD', n),
+          tga: sliceSeries('WTREGEN',   n),
+        };
+      }
+
+      let LIAB_N = 52;
+      let ld = buildLiabData(LIAB_N);
+
+      // Use longer series for labels (TGA goes further back)
+      const liabLabels = ld.tga.dates.length >= ld.rrp.dates.length ? ld.tga.dates : ld.rrp.dates;
+      registerExplainData('liab', liabLabels, ld.tga.values, 'Fed Liabilities: ON RRP & Treasury General Account (TGA)');
+
+      const liabChart = new Chart(document.getElementById('liabChart'), {
+        type: 'line',
+        data: {
+          labels: liabLabels,
+          datasets: [
+            {
+              label: I18n.t('fed.chart_onrrp') || 'ON RRP ($B)',
+              data: ld.rrp.values,
+              borderColor: '#fb7185', backgroundColor: 'rgba(251,113,133,0.07)',
+              borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, fill: true, tension: 0.3, spanGaps: true,
+            },
+            {
+              label: I18n.t('fed.chart_tga') || 'TGA ($B)',
+              data: ld.tga.values,
+              borderColor: '#facc15', backgroundColor: 'transparent',
+              borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 4, fill: false, tension: 0.3, spanGaps: true,
+              borderDash: [4, 3],
+            },
+          ]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: {
+            legend: { display: true, labels: { color: '#94a3b8', boxWidth: 12, font: {size: 11} } },
+            tooltip: {
+              mode: 'index', intersect: false,
+              callbacks: {
+                label: c => {
+                  const v = c.raw;
+                  if (v == null) return '';
+                  const fmt = v >= 1000 ? '$'+(v/1000).toFixed(2)+'T' : '$'+v.toFixed(1)+'B';
+                  return ` ${c.dataset.label.replace(' ($B)', '')}: ${fmt}`;
+                }
+              }
+            }
+          },
+          scales: {
+            x: { grid:{color:gridCol}, ticks:{color:tickCol, maxTicksLimit:8, maxRotation:0} },
+            y: { grid:{color:gridCol}, ticks:{color:tickCol, callback: v => v >= 1000 ? '$'+(v/1000).toFixed(1)+'T' : '$'+v+'B'} }
+          },
+          interaction: { mode:'index', intersect:false },
+        }
+      });
+
+      wireRangeSelector('liabRangeSelector', n => {
+        const d = buildLiabData(n);
+        const labels = d.tga.dates.length >= d.rrp.dates.length ? d.tga.dates : d.rrp.dates;
+        liabChart.data.labels = labels;
+        liabChart.data.datasets[0].data = d.rrp.values;
+        liabChart.data.datasets[1].data = d.tga.values;
+        liabChart.update();
+      });
+    }
+  } catch(e) { console.warn('Fed chart liabChart failed:', e); }
 
   // ──────────────────────────────────────────────────────────────────────────
   // Currency in Circulation + Fed Loans (BTFP)
   // ──────────────────────────────────────────────────────────────────────────
-  document.getElementById('currLoanLoading').style.display = 'none';
-  if ((s['WCURCIR'] && s['WCURCIR'].dates.length) || (s['WLCFLPCL'] && s['WLCFLPCL'].dates.length)) {
-    document.getElementById('currLoanChartWrap').style.display = 'block';
+  try {
+    document.getElementById('currLoanLoading').style.display = 'none';
+    if ((s['WCURCIR'] && s['WCURCIR'].dates.length) || (s['WLCFLPCL'] && s['WLCFLPCL'].dates.length)) {
+      document.getElementById('currLoanChartWrap').style.display = 'block';
 
-    function buildCurrLoanData(n) {
-      return {
-        cur:  sliceSeries('WCURCIR',  n),
-        loan: sliceSeries('WLCFLPCL', n),
-      };
-    }
+      function buildCurrLoanData(n) {
+        return {
+          cur:  sliceSeries('WCURCIR',  n),
+          loan: sliceSeries('WLCFLPCL', n),
+        };
+      }
 
-    let CL_N = 52;
-    let cld = buildCurrLoanData(CL_N);
-    registerExplainData('currLoan', cld.cur.dates, cld.cur.values, 'Currency in Circulation & Fed Emergency Loans (incl. BTFP)');
+      let CL_N = 52;
+      let cld = buildCurrLoanData(CL_N);
+      registerExplainData('currLoan', cld.cur.dates, cld.cur.values, 'Currency in Circulation & Fed Emergency Loans (incl. BTFP)');
 
-    const currLoanChart = new Chart(document.getElementById('currLoanChart'), {
-      type: 'line',
-      data: {
-        labels: cld.cur.dates,
-        datasets: [
-          {
-            label: I18n.t('fed.chart_currency') || 'Currency in Circulation ($B)',
-            data: cld.cur.values,
-            borderColor: '#94a3b8', backgroundColor: 'rgba(148,163,184,0.06)',
-            borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, fill: true, tension: 0.3, spanGaps: true,
-            yAxisID: 'yCur',
-          },
-          {
-            label: I18n.t('fed.chart_fedloans') || 'Fed Loans incl. BTFP ($B)',
-            data: cld.loan.values,
-            borderColor: '#f97316', backgroundColor: 'transparent',
-            borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 4, fill: false, tension: 0.3, spanGaps: true,
-            yAxisID: 'yLoan',
-          },
-        ]
-      },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        plugins: {
-          legend: { display: true, labels: { color: '#94a3b8', boxWidth: 12, font: {size: 11} } },
-          tooltip: {
-            mode: 'index', intersect: false,
-            callbacks: {
-              label: c => {
-                const v = c.raw;
-                if (v == null) return '';
-                const fmt = v >= 1000 ? '$'+(v/1000).toFixed(2)+'T' : '$'+v.toFixed(1)+'B';
-                return ` ${c.dataset.label.replace(' ($B)', '')}: ${fmt}`;
+      const currLoanChart = new Chart(document.getElementById('currLoanChart'), {
+        type: 'line',
+        data: {
+          labels: cld.cur.dates,
+          datasets: [
+            {
+              label: I18n.t('fed.chart_currency') || 'Currency in Circulation ($B)',
+              data: cld.cur.values,
+              borderColor: '#94a3b8', backgroundColor: 'rgba(148,163,184,0.06)',
+              borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, fill: true, tension: 0.3, spanGaps: true,
+              yAxisID: 'yCur',
+            },
+            {
+              label: I18n.t('fed.chart_fedloans') || 'Fed Loans incl. BTFP ($B)',
+              data: cld.loan.values,
+              borderColor: '#f97316', backgroundColor: 'transparent',
+              borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 4, fill: false, tension: 0.3, spanGaps: true,
+              yAxisID: 'yLoan',
+            },
+          ]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: {
+            legend: { display: true, labels: { color: '#94a3b8', boxWidth: 12, font: {size: 11} } },
+            tooltip: {
+              mode: 'index', intersect: false,
+              callbacks: {
+                label: c => {
+                  const v = c.raw;
+                  if (v == null) return '';
+                  const fmt = v >= 1000 ? '$'+(v/1000).toFixed(2)+'T' : '$'+v.toFixed(1)+'B';
+                  return ` ${c.dataset.label.replace(' ($B)', '')}: ${fmt}`;
+                }
               }
             }
-          }
-        },
-        scales: {
-          x: { grid:{color:gridCol}, ticks:{color:tickCol, maxTicksLimit:8, maxRotation:0} },
-          yCur: {
-            type: 'linear', position: 'left',
-            grid:{color:gridCol}, ticks:{color:'#94a3b8', callback: v => v >= 1000 ? '$'+(v/1000).toFixed(1)+'T' : '$'+v+'B'}
           },
-          yLoan: {
-            type: 'linear', position: 'right',
-            grid:{drawOnChartArea:false}, ticks:{color:'#f97316', callback: v => '$'+v+'B'}
+          scales: {
+            x: { grid:{color:gridCol}, ticks:{color:tickCol, maxTicksLimit:8, maxRotation:0} },
+            yCur: {
+              type: 'linear', position: 'left',
+              grid:{color:gridCol}, ticks:{color:'#94a3b8', callback: v => v >= 1000 ? '$'+(v/1000).toFixed(1)+'T' : '$'+v+'B'}
+            },
+            yLoan: {
+              type: 'linear', position: 'right',
+              grid:{drawOnChartArea:false}, ticks:{color:'#f97316', callback: v => '$'+v+'B'}
+            },
           },
-        },
-        interaction: { mode:'index', intersect:false },
-      }
-    });
+          interaction: { mode:'index', intersect:false },
+        }
+      });
 
-    wireRangeSelector('currLoanRangeSelector', n => {
-      const d = buildCurrLoanData(n);
-      currLoanChart.data.labels = d.cur.dates;
-      currLoanChart.data.datasets[0].data = d.cur.values;
-      currLoanChart.data.datasets[1].data = d.loan.values;
-      currLoanChart.update();
-    });
-  }
+      wireRangeSelector('currLoanRangeSelector', n => {
+        const d = buildCurrLoanData(n);
+        currLoanChart.data.labels = d.cur.dates;
+        currLoanChart.data.datasets[0].data = d.cur.values;
+        currLoanChart.data.datasets[1].data = d.loan.values;
+        currLoanChart.update();
+      });
+    }
+  } catch(e) { console.warn('Fed chart currLoanChart failed:', e); }
 
   // ──────────────────────────────────────────────────────────────────────────
   // Currency in Circulation — Growth-Speed TREND (history of annualized %)
@@ -1906,120 +1926,122 @@ let _fedSeriesData = {};
   //   • 52-week % (YoY, the cleanest line)
   // All three are on the same axis since they're all annualized percentages.
   document.getElementById('currSpeedTrendLoading').style.display = 'none';
-  if (s['WCURCIR'] && s['WCURCIR'].values && s['WCURCIR'].values.length > 53) {
-    document.getElementById('currSpeedTrendWrap').style.display = 'block';
+  try {
+    if (s['WCURCIR'] && s['WCURCIR'].values && s['WCURCIR'].values.length > 53) {
+      document.getElementById('currSpeedTrendWrap').style.display = 'block';
 
-    // Build full-history rate series once, then slice on range change.
-    const _curAll  = s['WCURCIR'];
-    const _allDates = _curAll.dates;
-    const _allVals  = _curAll.values;
+      // Build full-history rate series once, then slice on range change.
+      const _curAll  = s['WCURCIR'];
+      const _allDates = _curAll.dates;
+      const _allVals  = _curAll.values;
 
-    // Annualized % growth between t-n and t.  `null` until enough history.
-    function _annRate(n) {
-      const out = new Array(_allVals.length).fill(null);
-      const exp = 52 / n;
-      for (let i = n; i < _allVals.length; i++) {
-        const a = _allVals[i], b = _allVals[i - n];
-        if (a == null || b == null || b <= 0) continue;
-        out[i] = +((Math.pow(a / b, exp) - 1) * 100).toFixed(2);
+      // Annualized % growth between t-n and t.  `null` until enough history.
+      function _annRate(n) {
+        const out = new Array(_allVals.length).fill(null);
+        const exp = 52 / n;
+        for (let i = n; i < _allVals.length; i++) {
+          const a = _allVals[i], b = _allVals[i - n];
+          if (a == null || b == null || b <= 0) continue;
+          out[i] = +((Math.pow(a / b, exp) - 1) * 100).toFixed(2);
+        }
+        return out;
       }
-      return out;
-    }
 
-    const _rate4  = _annRate(4);
-    const _rate13 = _annRate(13);
-    const _rate52 = _annRate(52);
+      const _rate4  = _annRate(4);
+      const _rate13 = _annRate(13);
+      const _rate52 = _annRate(52);
 
-    function buildCurrSpeedData(n) {
-      const len = _allDates.length;
-      const start = (n <= 0 || n >= len) ? 0 : len - n;
-      return {
-        dates: _allDates.slice(start),
-        r4:    _rate4.slice(start),
-        r13:   _rate13.slice(start),
-        r52:   _rate52.slice(start),
-      };
-    }
-
-    let CS_N = 156; // default 3Y to give the trend room to breathe
-    let csd = buildCurrSpeedData(CS_N);
-
-    // Provide the YoY% series as the canonical line for AI Explain.
-    registerExplainData(
-      'currSpeed',
-      csd.dates,
-      csd.r52,
-      'Currency in Circulation — YoY % growth rate (annualized)',
-    );
-
-    const _csTooltip = c => {
-      const v = c.raw;
-      if (v == null) return '';
-      const sign = v >= 0 ? '+' : '';
-      return ` ${c.dataset.label}: ${sign}${v.toFixed(2)}%`;
-    };
-
-    const currSpeedTrendChart = new Chart(document.getElementById('currSpeedTrendChart'), {
-      type: 'line',
-      data: {
-        labels: csd.dates,
-        datasets: [
-          {
-            label: I18n.t('fed.curr_speed_trend_4w')  || '4W ann. %',
-            data: csd.r4,
-            borderColor: '#fb7185', backgroundColor: 'transparent',
-            borderWidth: 1, pointRadius: 0, pointHoverRadius: 4,
-            fill: false, tension: 0.3, spanGaps: true, borderDash: [3, 3],
-          },
-          {
-            label: I18n.t('fed.curr_speed_trend_13w') || '13W ann. %',
-            data: csd.r13,
-            borderColor: '#38bdf8', backgroundColor: 'transparent',
-            borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 4,
-            fill: false, tension: 0.3, spanGaps: true,
-          },
-          {
-            label: I18n.t('fed.curr_speed_trend_yoy') || 'YoY %',
-            data: csd.r52,
-            borderColor: '#34d399', backgroundColor: 'rgba(52,211,153,0.06)',
-            borderWidth: 2, pointRadius: 0, pointHoverRadius: 4,
-            fill: true, tension: 0.3, spanGaps: true,
-          },
-        ]
-      },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        plugins: {
-          legend: { display: true, labels: { color: '#94a3b8', boxWidth: 12, font: {size: 11} } },
-          tooltip: { mode: 'index', intersect: false, callbacks: { label: _csTooltip } },
-        },
-        scales: {
-          x: { grid:{color:gridCol}, ticks:{color:tickCol, maxTicksLimit:8, maxRotation:0} },
-          y: {
-            grid:{color:gridCol},
-            ticks:{ color:tickCol, callback: v => (v >= 0 ? '+' : '') + v.toFixed(1) + '%' },
-          },
-        },
-        interaction: { mode:'index', intersect:false },
+      function buildCurrSpeedData(n) {
+        const len = _allDates.length;
+        const start = (n <= 0 || n >= len) ? 0 : len - n;
+        return {
+          dates: _allDates.slice(start),
+          r4:    _rate4.slice(start),
+          r13:   _rate13.slice(start),
+          r52:   _rate52.slice(start),
+        };
       }
-    });
 
-    wireRangeSelector('currSpeedRangeSelector', n => {
-      const d = buildCurrSpeedData(n);
-      currSpeedTrendChart.data.labels = d.dates;
-      currSpeedTrendChart.data.datasets[0].data = d.r4;
-      currSpeedTrendChart.data.datasets[1].data = d.r13;
-      currSpeedTrendChart.data.datasets[2].data = d.r52;
-      currSpeedTrendChart.update();
-      // Keep AI-Explain payload aligned with the visible window
+      let CS_N = 156; // default 3Y to give the trend room to breathe
+      let csd = buildCurrSpeedData(CS_N);
+
+      // Provide the YoY% series as the canonical line for AI Explain.
       registerExplainData(
         'currSpeed',
-        d.dates,
-        d.r52,
+        csd.dates,
+        csd.r52,
         'Currency in Circulation — YoY % growth rate (annualized)',
       );
-    });
-  }
+
+      const _csTooltip = c => {
+        const v = c.raw;
+        if (v == null) return '';
+        const sign = v >= 0 ? '+' : '';
+        return ` ${c.dataset.label}: ${sign}${v.toFixed(2)}%`;
+      };
+
+      const currSpeedTrendChart = new Chart(document.getElementById('currSpeedTrendChart'), {
+        type: 'line',
+        data: {
+          labels: csd.dates,
+          datasets: [
+            {
+              label: I18n.t('fed.curr_speed_trend_4w')  || '4W ann. %',
+              data: csd.r4,
+              borderColor: '#fb7185', backgroundColor: 'transparent',
+              borderWidth: 1, pointRadius: 0, pointHoverRadius: 4,
+              fill: false, tension: 0.3, spanGaps: true, borderDash: [3, 3],
+            },
+            {
+              label: I18n.t('fed.curr_speed_trend_13w') || '13W ann. %',
+              data: csd.r13,
+              borderColor: '#38bdf8', backgroundColor: 'transparent',
+              borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 4,
+              fill: false, tension: 0.3, spanGaps: true,
+            },
+            {
+              label: I18n.t('fed.curr_speed_trend_yoy') || 'YoY %',
+              data: csd.r52,
+              borderColor: '#34d399', backgroundColor: 'rgba(52,211,153,0.06)',
+              borderWidth: 2, pointRadius: 0, pointHoverRadius: 4,
+              fill: true, tension: 0.3, spanGaps: true,
+            },
+          ]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: {
+            legend: { display: true, labels: { color: '#94a3b8', boxWidth: 12, font: {size: 11} } },
+            tooltip: { mode: 'index', intersect: false, callbacks: { label: _csTooltip } },
+          },
+          scales: {
+            x: { grid:{color:gridCol}, ticks:{color:tickCol, maxTicksLimit:8, maxRotation:0} },
+            y: {
+              grid:{color:gridCol},
+              ticks:{ color:tickCol, callback: v => (v >= 0 ? '+' : '') + v.toFixed(1) + '%' },
+            },
+          },
+          interaction: { mode:'index', intersect:false },
+        }
+      });
+
+      wireRangeSelector('currSpeedRangeSelector', n => {
+        const d = buildCurrSpeedData(n);
+        currSpeedTrendChart.data.labels = d.dates;
+        currSpeedTrendChart.data.datasets[0].data = d.r4;
+        currSpeedTrendChart.data.datasets[1].data = d.r13;
+        currSpeedTrendChart.data.datasets[2].data = d.r52;
+        currSpeedTrendChart.update();
+        // Keep AI-Explain payload aligned with the visible window
+        registerExplainData(
+          'currSpeed',
+          d.dates,
+          d.r52,
+          'Currency in Circulation — YoY % growth rate (annualized)',
+        );
+      });
+    }
+  } catch(e) { console.warn('Fed chart currSpeedTrendChart failed:', e); }
 
   // ── Fed Balance Sheet vs 10Y Yield dual-axis chart
   (async () => {
@@ -2199,43 +2221,68 @@ async function _loadFedSpy() {
   if (_fedSpyLoaded) return;
   _fedSpyLoaded = true;
   try {
+    const walcl = _fedSeriesData['WALCL'];
+    if (!walcl || !walcl.dates || !walcl.dates.length) return;
+
     const spyResp = await fetch('/api/history/SPY?period=5y');
     const spy = await spyResp.json();
-    // Use WALCL from the already-loaded _fedSeriesData object (Fed balance sheet data)
-    const walclSeries = _fedSeriesData['WALCL'] || {};
-    const walclDates  = walclSeries.dates  || [];
-    const walclValues = walclSeries.values || [];
-    const spyDates    = spy.dates  || [];
-    const spyPrices   = spy.prices || [];
-    // Normalize both to 100 at their earliest point
-    const walclBase = walclValues.find(v => v != null) || 1;
-    const spyBase   = spyPrices.find(v => v != null) || 1;
-    const walclNorm = walclValues.map(v => v != null ? Math.round(v / walclBase * 100 * 10) / 10 : null);
-    const spyNorm   = spyPrices.map(v => v != null ? Math.round(v / spyBase * 100 * 10) / 10 : null);
+    if (!spy.prices || !spy.prices.length) return;
+
+    document.getElementById('fedSpyChartWrap').style.display = 'block';
+
     const gridCol = '#1e293b', tickCol = '#64748b';
+
+    // Build SPY monthly map (take last value per YYYY-MM)
+    const spyMonthMap = {};
+    (spy.dates || []).forEach((d, i) => {
+      const ym = d.slice(0, 7);
+      if (spy.prices[i] != null) spyMonthMap[ym] = spy.prices[i];
+    });
+
+    // Align WALCL weekly dates to SPY using YYYY-MM key
+    const walclDates = walcl.dates;
+    const walclVals  = walcl.values;
+    const spyAligned = walclDates.map(d => spyMonthMap[d.slice(0, 7)] ?? null);
+
+    // Normalise both to 100 at first common non-null point
+    let walclBase = null, spyBase = null;
+    for (let i = 0; i < walclVals.length; i++) {
+      if (walclVals[i] != null && spyAligned[i] != null && walclBase === null) {
+        walclBase = walclVals[i];
+        spyBase   = spyAligned[i];
+      }
+    }
+    if (!walclBase || !spyBase) return;
+
+    const walclNorm = walclVals.map(v => v != null ? +(v / walclBase * 100).toFixed(2) : null);
+    const spyNorm   = spyAligned.map(v => v != null ? +(v / spyBase * 100).toFixed(2) : null);
+
     if (_fedSpyChart) _fedSpyChart.destroy();
     _fedSpyChart = new Chart(document.getElementById('fedSpyChart'), {
       type: 'line',
-      data: { labels: spyDates, datasets: [
-        { label:'Fed Assets', data:walclNorm.slice(-spyDates.length),
-          borderColor:'#f59e0b', backgroundColor:'rgba(245,158,11,0.08)',
-          borderWidth:1.5, pointRadius:0, fill:true, tension:0.3, spanGaps:true },
-        { label:'S&P 500', data:spyNorm,
-          borderColor:'#38bdf8', backgroundColor:'transparent',
-          borderWidth:1.5, pointRadius:0, fill:false, tension:0.3, spanGaps:true },
+      data: { labels: walclDates, datasets: [
+        { label: 'Fed Total Assets', data: walclNorm,
+          borderColor: '#a78bfa', backgroundColor: 'rgba(167,139,250,0.08)',
+          borderWidth: 2, pointRadius: 0, fill: true, tension: 0.3, spanGaps: true },
+        { label: 'S&P 500 (SPY)', data: spyNorm,
+          borderColor: '#38bdf8', backgroundColor: 'transparent',
+          borderWidth: 1.5, pointRadius: 0, fill: false, tension: 0.3, spanGaps: true, borderDash: [4, 3] },
       ]},
       options: {
-        responsive:true, maintainAspectRatio:false,
-        plugins:{ legend:{display:false}, tooltip:{mode:'index',intersect:false,
-          callbacks:{label:c=>c.raw==null?'':`  ${c.dataset.label}: ${c.raw.toFixed(1)} (norm)`}}},
-        scales:{
-          x:{grid:{color:gridCol},ticks:{color:tickCol,maxTicksLimit:6,maxRotation:0}},
-          y:{grid:{color:gridCol},ticks:{color:tickCol,callback:v=>v.toFixed(0)},title:{display:true,text:'Normalised (100=start)',color:tickCol,font:{size:9}}},
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false },
+          tooltip: { mode: 'index', intersect: false, callbacks: {
+            label: c => ` ${c.dataset.label}: ${c.raw?.toFixed(1)} (norm)`,
+          }}},
+        scales: {
+          x: { grid: { color: gridCol }, ticks: { color: tickCol, maxTicksLimit: 6, maxRotation: 0 }},
+          y: { grid: { color: gridCol }, ticks: { color: tickCol, callback: v => v.toFixed(0) },
+               title: { display: true, text: 'Normalised (start = 100)', color: '#475569', font: { size: 10 }}},
         },
-        interaction:{mode:'index',intersect:false},
+        interaction: { mode: 'index', intersect: false },
       },
     });
-  } catch(e) { console.error('Fed vs SPY:', e); }
+  } catch(e) { console.error('Fed vs SPY chart:', e); }
 }
 
 // ── Stat card tooltips ────────────────────────────────────────────────────
