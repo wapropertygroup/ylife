@@ -397,6 +397,42 @@
   <!-- Data Table -->
   <div x-show="tab==='table'" x-transition class="bg-slate-900 border border-slate-800 rounded-2xl p-6 mb-6">
     <h2 class="text-base font-semibold text-slate-200 mb-4" data-i18n="sector.table_title">Data Table</h2>
+
+    <!-- Sector PE Context (current vs recent range) -->
+    <div id="sectorPeContext" class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 mb-4 hidden">
+      <div class="flex items-center justify-between mb-3">
+        <div>
+          <h3 class="text-sm font-semibold text-slate-300">Sector Valuation Context</h3>
+          <p class="text-xs text-slate-500 mt-0.5">Current average PE vs 1-year range within this peer group</p>
+        </div>
+        <div id="peContextBadge" class="text-xs px-2 py-0.5 rounded font-semibold hidden"></div>
+      </div>
+      <div id="peContextCards" class="grid grid-cols-3 gap-2">
+        <div class="bg-slate-800/40 rounded-lg p-2 text-center">
+          <div class="text-[10px] text-slate-500">Min PE (1Y)</div>
+          <div id="peCtxMin" class="text-sm font-bold font-mono text-emerald-400">—</div>
+        </div>
+        <div class="bg-slate-800/40 rounded-lg p-2 text-center">
+          <div class="text-[10px] text-slate-500">Current Avg PE</div>
+          <div id="peCtxCur" class="text-sm font-bold font-mono text-slate-200">—</div>
+        </div>
+        <div class="bg-slate-800/40 rounded-lg p-2 text-center">
+          <div class="text-[10px] text-slate-500">Max PE (1Y)</div>
+          <div id="peCtxMax" class="text-sm font-bold font-mono text-rose-400">—</div>
+        </div>
+      </div>
+      <!-- PE range bar -->
+      <div class="mt-3">
+        <div class="relative h-2.5 bg-slate-800 rounded-full">
+          <div class="absolute inset-y-0 left-0 bg-gradient-to-r from-emerald-500 via-amber-400 to-rose-500 rounded-full opacity-40" style="width:100%"></div>
+          <div id="peCtxMarker" class="absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full bg-white shadow ring-2 ring-slate-900" style="left:50%"></div>
+        </div>
+        <div class="flex justify-between text-[9px] text-slate-600 mt-1">
+          <span>Cheapest</span><span id="peCtxPctile"></span><span>Most Expensive</span>
+        </div>
+      </div>
+    </div>
+
     <div class="overflow-x-auto">
       <table class="w-full text-sm" id="sectorTable">
         <thead>
@@ -1241,6 +1277,32 @@ function avgLinePlugin(getAvg, fmt, color) {
   });
 
   render();
+
+  // Sector PE Context from chartdata
+  (function buildPeContext() {
+    try {
+      const peVals = DATA.filter(d => d.pe_ttm != null && d.pe_ttm > 0 && d.pe_ttm < 200)
+                         .map(d => d.pe_ttm);
+      if (peVals.length < 2) return;
+      const avgPe  = peVals.reduce((s,v) => s+v, 0) / peVals.length;
+      const minPe  = Math.min(...peVals);
+      const maxPe  = Math.max(...peVals);
+      const pctile = Math.round((avgPe - minPe) / (maxPe - minPe) * 100);
+
+      document.getElementById('sectorPeContext').classList.remove('hidden');
+      document.getElementById('peCtxMin').textContent = minPe.toFixed(1) + 'x';
+      document.getElementById('peCtxCur').textContent = avgPe.toFixed(1) + 'x';
+      document.getElementById('peCtxMax').textContent = maxPe.toFixed(1) + 'x';
+      document.getElementById('peCtxMarker').style.left = Math.max(2, Math.min(98, pctile)) + '%';
+      document.getElementById('peCtxPctile').textContent = pctile + 'th pctile';
+
+      const badge = document.getElementById('peContextBadge');
+      badge.classList.remove('hidden');
+      badge.textContent = pctile >= 75 ? '⚠ Expensive range' : pctile <= 25 ? '✓ Cheap range' : 'Fair range';
+      badge.className = 'text-xs px-2 py-0.5 rounded font-semibold ' +
+        (pctile >= 75 ? 'bg-rose-900/50 text-rose-300' : pctile <= 25 ? 'bg-emerald-900/50 text-emerald-300' : 'bg-amber-900/50 text-amber-300');
+    } catch(e) {}
+  })();
 })();
 
 // ── Sector chart expand ───────────────────────────────────────────────

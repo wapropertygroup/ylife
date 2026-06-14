@@ -93,6 +93,32 @@
 </div>
 <div id="marketsContent">
 
+<!-- ── This Week's Recap ──────────────────────────────────────────────── -->
+<div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 fade-up mb-6" id="weeklyRecapCard" style="display:none">
+  <div class="flex items-center justify-between mb-2">
+    <h3 class="text-sm font-semibold text-slate-300">📅 This Week</h3>
+    <span id="weeklyRecapDates" class="text-[10px] text-slate-600"></span>
+  </div>
+  <div id="weeklyRecapGrid" class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+    <div class="bg-slate-800/50 rounded-lg p-2">
+      <div class="text-[10px] text-slate-500 mb-0.5">SPX Week</div>
+      <div id="wkSpx" class="text-sm font-bold font-mono">—</div>
+    </div>
+    <div class="bg-slate-800/50 rounded-lg p-2">
+      <div class="text-[10px] text-slate-500 mb-0.5">VIX Change</div>
+      <div id="wkVix" class="text-sm font-bold font-mono">—</div>
+    </div>
+    <div class="bg-slate-800/50 rounded-lg p-2">
+      <div class="text-[10px] text-slate-500 mb-0.5">Best Sector</div>
+      <div id="wkBestSec" class="text-sm font-bold text-emerald-400">—</div>
+    </div>
+    <div class="bg-slate-800/50 rounded-lg p-2">
+      <div class="text-[10px] text-slate-500 mb-0.5">Worst Sector</div>
+      <div id="wkWorstSec" class="text-sm font-bold text-rose-400">—</div>
+    </div>
+  </div>
+</div>
+
 <!-- ── AI Markets Brief ──────────────────────────────────────────────── -->
 <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 fade-up mb-6" id="aiMarketsBriefCard">
   <div class="flex items-center justify-between">
@@ -216,6 +242,23 @@
 
 </div>
 
+<!-- SKEW vs VIX -->
+<div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up mb-6" id="skewSection">
+  <div class="flex items-start justify-between mb-3">
+    <div>
+      <h2 class="text-base font-semibold text-slate-200">CBOE SKEW vs VIX — Tail Risk Divergence</h2>
+      <p class="text-xs text-slate-500 mt-0.5">High SKEW + low VIX = institutions quietly buying tail protection while the index looks calm. Classic "smart money" positioning signal.</p>
+    </div>
+    <span id="skewBadge" class="text-xs px-2 py-0.5 rounded font-semibold hidden"></span>
+  </div>
+  <div class="flex items-center gap-3 mb-2 text-xs">
+    <span class="flex items-center gap-1 text-rose-400"><span class="w-3 h-0.5 bg-rose-400 inline-block"></span> SKEW (left)</span>
+    <span class="flex items-center gap-1 text-amber-400"><span class="w-3 h-0.5 border-dashed border border-amber-400 inline-block"></span> VIX (right)</span>
+  </div>
+  <div class="chart-container" style="height:200px"><canvas id="skewChart"></canvas></div>
+  <p class="text-[11px] text-slate-600 mt-2">SKEW &gt;140 = elevated tail risk demand. Historical avg ~130.</p>
+</div>
+
 <!-- ── Equity Risk Premium card ─────────────────────────────────────── -->
 <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 fade-up mb-6" id="erpCard">
   <div class="flex items-center justify-between mb-1">
@@ -261,6 +304,16 @@
         <canvas id="aaiiBullBearSpread"></canvas>
       </div>
       <p class="text-[10px] text-slate-600 mt-1">Spread = Bull% − Bear%. Positive = bullish majority; <span class="text-rose-400">&lt;0 = bearish majority</span> (historically a contrarian buy signal)</p>
+      <!-- AAII Spread vs S&P 500 (collapsible) -->
+      <div id="aaiiSpySection" class="mt-3 border-t border-slate-800 pt-3">
+        <button onclick="_toggleAaiiSpy()" id="aaiiSpyToggle"
+          class="text-[11px] text-slate-500 hover:text-slate-300 transition flex items-center gap-1">
+          <span id="aaiiSpyChevron">▶</span> <span>AAII Sentiment vs S&P 500</span>
+        </button>
+        <div id="aaiiSpyChart" class="chart-container mt-3 hidden" style="height:160px">
+          <canvas id="aaiiSpyCanvas"></canvas>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -327,6 +380,15 @@
 
 </div>
 
+<!-- Sector Rotation Heatmap -->
+<div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up mb-6" id="sectorGridSection">
+  <div class="mb-3">
+    <h2 class="text-base font-semibold text-slate-200">Sector Rotation — vs S&amp;P 500 Performance</h2>
+    <p class="text-xs text-slate-500 mt-0.5">Green = outperforming S&amp;P 500, Red = underperforming. Shows rotation signals across multiple time horizons.</p>
+  </div>
+  <div id="sectorGridTable" class="overflow-x-auto"></div>
+</div>
+
 <!-- ── VIX vs PCR Correlation ──────────────────────────────────────────── -->
 <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up mb-6" id="vixPcrCorrelSection">
   <div class="mb-3">
@@ -371,6 +433,13 @@
       <div id="ethChg" class="text-xs font-medium mt-0.5">—</div>
     </div>
   </div>
+    <!-- BTC/ETH 1Y chart -->
+    <div class="mt-3 chart-container" style="height:180px" id="cryptoChartWrap">
+      <canvas id="cryptoChart"></canvas>
+    </div>
+    <p class="text-[10px] text-slate-600 mt-2">
+      ▼ Bitcoin halving dates marked. Next halving: ~April 2028.
+    </p>
 </div>
 
 <!-- ── Gold Ratios row ───────────────────────────────────────────────── -->
@@ -449,6 +518,29 @@
   </div>
   <div class="relative chart-container" style="height:200px" id="creditChartWrap">
     <canvas id="creditSpreadChart"></canvas>
+  </div>
+</div>
+
+<!-- Market Breadth -->
+<div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up mb-6" id="breadthSection">
+  <div class="mb-3">
+    <h2 class="text-base font-semibold text-slate-200">Market Breadth &amp; Concentration</h2>
+    <p class="text-xs text-slate-500 mt-0.5">Is the rally broad or narrow? High concentration risk = fragile bull market.</p>
+  </div>
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+    <div>
+      <p class="text-xs text-slate-500 mb-1">% S&amp;P 500 Above Moving Averages</p>
+      <div class="flex items-center gap-3 mb-1 text-[11px]">
+        <span class="text-sky-400">— 50-day MA %</span>
+        <span class="text-violet-400">-- 200-day MA %</span>
+      </div>
+      <div class="chart-container" style="height:160px"><canvas id="breadth50Chart"></canvas></div>
+    </div>
+    <div>
+      <p class="text-xs text-slate-500 mb-1">Equal-Weight / Cap-Weight (RSP/SPY) Ratio</p>
+      <p class="text-[10px] text-slate-600 mb-1">Rising = breadth expanding. Falling = mega-cap concentration increasing.</p>
+      <div class="chart-container" style="height:160px"><canvas id="rspSpyChart"></canvas></div>
+    </div>
   </div>
 </div>
 
@@ -1721,6 +1813,59 @@ async function _toggleFgSpy() {
       },
     });
   } catch(e) { console.error('F&G vs SPY:', e); }
+}
+
+let _aaiiSpyLoaded = false, _aaiiSpyChart = null;
+async function _toggleAaiiSpy() {
+  const wrap = document.getElementById('aaiiSpyChart');
+  const chevron = document.getElementById('aaiiSpyChevron');
+  if (!wrap.classList.contains('hidden')) {
+    wrap.classList.add('hidden'); chevron.textContent = '▶'; return;
+  }
+  wrap.classList.remove('hidden'); chevron.textContent = '▼';
+  if (_aaiiSpyLoaded) return;
+  _aaiiSpyLoaded = true;
+  try {
+    const [aaiiResp, spyResp] = await Promise.all([
+      fetch('/api/aaii-sentiment'),
+      fetch('/api/history/SPY?period=5y'),
+    ]);
+    const aaii = await aaiiResp.json();
+    const spy  = await spyResp.json();
+    const history = (aaii.history || aaii.data || []).slice(-260);
+    if (!history.length || !spy.prices) return;
+
+    const spreadDates = history.map(h => h.date || h.t || '');
+    const spreadVals  = history.map(h => (h.bull_bear_spread ?? h.bullish - h.bearish) ?? null);
+
+    const spyMonthMap = {};
+    (spy.dates||[]).forEach((d,i)=>{ if(spy.prices[i]!=null) spyMonthMap[d.slice(0,7)]=spy.prices[i]; });
+    const spyNormVals = spreadDates.map((d,i) => spyMonthMap[d.slice(0,7)] ?? null);
+    const spyBase = spyNormVals.find(v=>v!=null);
+    const spyNorm = spyNormVals.map(v=>v!=null&&spyBase?+(v/spyBase*100).toFixed(1):null);
+
+    const gridCol = '#1e293b', tickCol = '#64748b';
+    if (_aaiiSpyChart) _aaiiSpyChart.destroy();
+    _aaiiSpyChart = new Chart(document.getElementById('aaiiSpyCanvas'), {
+      type: 'line',
+      data: { labels: spreadDates, datasets: [
+        { label:'Bull-Bear Spread', data:spreadVals, borderColor:'#a78bfa', backgroundColor:'rgba(167,139,250,0.08)', borderWidth:1.5, pointRadius:0, fill:true, tension:0.3, spanGaps:true, yAxisID:'y' },
+        { label:'S&P 500 (norm)', data:spyNorm, borderColor:'#38bdf8', backgroundColor:'transparent', borderWidth:1.5, pointRadius:0, fill:false, tension:0.3, spanGaps:true, yAxisID:'ySpy', borderDash:[4,3] },
+      ]},
+      options: {
+        responsive:true, maintainAspectRatio:false,
+        plugins:{ legend:{display:false}, tooltip:{mode:'index',intersect:false,callbacks:{
+          label:c=>c.dataset.yAxisID==='ySpy'?` S&P: ${c.raw?.toFixed(0)}`:` AAII Spread: ${c.raw?.toFixed(1)}%`
+        }}},
+        scales:{
+          x:{grid:{color:gridCol},ticks:{color:tickCol,maxTicksLimit:6,maxRotation:0}},
+          y:{grid:{color:gridCol},ticks:{color:'rgba(167,139,250,0.6)',callback:v=>(v>=0?'+':'')+v.toFixed(0)+'%'}},
+          ySpy:{position:'right',grid:{drawOnChartArea:false},ticks:{color:'rgba(56,189,248,0.6)',callback:v=>v.toFixed(0)}},
+        },
+        interaction:{mode:'index',intersect:false},
+      },
+    });
+  } catch(e) { console.warn('AAII vs SPY:', e); }
 }
 
 function renderFearGreed(data, canvasId) {
@@ -3234,6 +3379,44 @@ function _mktsModalConfig(kind) {
     renderVix(_mkData.vix);
     renderSectors(_mkData.sectors);
 
+    // Weekly Recap
+    try {
+      const spxW = _mkData?.indices?.spx?.week_chg_pct ?? _mkData?.indices?.spx?.ytd_chg_pct ?? null;
+      const vixCur = _mkData?.vix?.current ?? null;
+      const vixPrev = _mkData?.vix?.prev_week ?? null;
+      const sectors = _mkData?.sectors || [];
+
+      if (spxW != null || sectors.length) {
+        document.getElementById('weeklyRecapCard').style.display = 'block';
+
+        const today = new Date();
+        const monday = new Date(today); monday.setDate(today.getDate() - today.getDay() + 1);
+        document.getElementById('weeklyRecapDates').textContent =
+          monday.toLocaleDateString('en-US', {month:'short',day:'numeric'}) + ' – ' +
+          today.toLocaleDateString('en-US', {month:'short',day:'numeric'});
+
+        if (spxW != null) {
+          const el = document.getElementById('wkSpx');
+          el.textContent = (spxW>=0?'+':'')+spxW.toFixed(2)+'%';
+          el.className = 'text-sm font-bold font-mono ' + (spxW>=0?'text-emerald-400':'text-rose-400');
+        }
+        if (vixCur != null && vixPrev != null) {
+          const vixDelta = vixCur - vixPrev;
+          const el = document.getElementById('wkVix');
+          el.textContent = vixCur.toFixed(1) + ' (' + (vixDelta>=0?'+':'') + vixDelta.toFixed(1) + ')';
+          el.className = 'text-sm font-bold font-mono ' + (vixDelta<=0?'text-emerald-400':'text-rose-400');
+        }
+        if (sectors.length) {
+          const sorted = [...sectors].filter(s=>s.week_chg_pct!=null||s.day_chg!=null)
+            .sort((a,b)=>(b.week_chg_pct??b.day_chg)-(a.week_chg_pct??a.day_chg));
+          if (sorted.length) {
+            document.getElementById('wkBestSec').textContent  = sorted[0].name || sorted[0].ticker;
+            document.getElementById('wkWorstSec').textContent = sorted[sorted.length-1].name || sorted[sorted.length-1].ticker;
+          }
+        }
+      }
+    } catch(e) {}
+
     // Activate the correct tab
     IDX_ALL_KEYS.forEach(k => {
       const id = 'tab' + k.charAt(0).toUpperCase() + k.slice(1);
@@ -3563,6 +3746,165 @@ loadCreditSpread('1y');
     }
     fillCrypto(btc.prices, 'btcPrice', 'btcChg');
     fillCrypto(eth.prices, 'ethPrice', 'ethChg');
+
+    // 1Y price chart
+    try {
+      const [btcHistResp, ethHistResp] = await Promise.all([
+        fetch('/api/history/BTC-USD?period=1y'),
+        fetch('/api/history/ETH-USD?period=1y'),
+      ]);
+      const btcHist = await btcHistResp.json();
+      const ethHist = await ethHistResp.json();
+      if (btcHist.prices && btcHist.prices.length) {
+        const gridCol = '#1e293b', tickCol = '#64748b';
+        // Normalise ETH to BTC scale
+        const ethMap = {};
+        (ethHist.dates||[]).forEach((d,i) => { if(ethHist.prices[i]!=null) ethMap[d] = ethHist.prices[i]; });
+        const ethAligned = (btcHist.dates||[]).map(d => ethMap[d] ?? null);
+        const btcBase = btcHist.prices.find(v=>v!=null);
+        const ethBase = ethAligned.find(v=>v!=null);
+        const btcNorm = btcHist.prices.map(v => v!=null&&btcBase ? +(v/btcBase*100).toFixed(1) : null);
+        const ethNorm = ethAligned.map(v => v!=null&&ethBase ? +(v/ethBase*100).toFixed(1) : null);
+
+        // Bitcoin halving dates
+        const halvings = ['2024-04-19'];
+        const halvingPlugin = {
+          id: 'halvings',
+          afterDraw(chart) {
+            const {ctx:c, chartArea:a, scales:{x}} = chart;
+            halvings.forEach(hd => {
+              const idx = chart.data.labels.findIndex(l => l >= hd);
+              if (idx < 0) return;
+              const px = x.getPixelForValue(idx);
+              c.save(); c.strokeStyle = 'rgba(251,191,36,0.5)'; c.lineWidth = 1; c.setLineDash([3,3]);
+              c.beginPath(); c.moveTo(px, a.top); c.lineTo(px, a.bottom); c.stroke();
+              c.fillStyle = '#fbbf24'; c.font = '9px Inter'; c.fillText('Halving', px+3, a.top+12);
+              c.restore();
+            });
+          }
+        };
+
+        const cryptoChart = new Chart(document.getElementById('cryptoChart'), {
+          type: 'line',
+          data: { labels: btcHist.dates, datasets: [
+            { label:'BTC', data:btcNorm, borderColor:'#f59e0b', backgroundColor:'rgba(245,158,11,0.07)', borderWidth:1.5, pointRadius:0, fill:true, tension:0.3, spanGaps:true },
+            { label:'ETH', data:ethNorm, borderColor:'#6366f1', backgroundColor:'transparent', borderWidth:1.5, pointRadius:0, fill:false, tension:0.3, spanGaps:true, borderDash:[4,3] },
+          ]},
+          plugins: [halvingPlugin],
+          options: {
+            responsive:true, maintainAspectRatio:false,
+            plugins:{ legend:{display:false}, tooltip:{mode:'index',intersect:false,callbacks:{label:c=>` ${c.dataset.label}: ${c.raw?.toFixed(0)} (norm)`}} },
+            scales:{
+              x:{grid:{color:gridCol},ticks:{color:tickCol,maxTicksLimit:6,maxRotation:0}},
+              y:{grid:{color:gridCol},ticks:{color:tickCol,callback:v=>v.toFixed(0)}},
+            },
+            interaction:{mode:'index',intersect:false},
+          },
+        });
+      }
+    } catch(e) {}
+  } catch(e) {}
+})();
+
+// CBOE SKEW vs VIX
+(async function() {
+  try {
+    const resp = await fetch('/api/skew');
+    if (!resp.ok) return;
+    const sk = await resp.json();
+    if (!sk.dates?.length) return;
+    const last = sk.skew[sk.skew.length - 1];
+    const badge = document.getElementById('skewBadge');
+    if (badge && last) {
+      badge.classList.remove('hidden');
+      badge.textContent = 'SKEW ' + last.toFixed(0);
+      badge.className = 'text-xs px-2 py-0.5 rounded font-semibold ' +
+        (last > 140 ? 'bg-rose-900/50 text-rose-300' : last > 130 ? 'bg-amber-900/50 text-amber-300' : 'bg-slate-800 text-slate-400');
+    }
+    const g='#1e293b', t='#64748b';
+    new Chart(document.getElementById('skewChart'), {
+      type:'line',
+      data:{ labels:sk.dates, datasets:[
+        { label:'SKEW',  data:sk.skew, borderColor:'#f87171', backgroundColor:'rgba(248,113,113,0.06)', borderWidth:1.5, pointRadius:0, fill:true,  tension:0.2, spanGaps:true, yAxisID:'y' },
+        { label:'VIX',   data:sk.vix,  borderColor:'#fbbf24', backgroundColor:'transparent',           borderWidth:1.5, pointRadius:0, fill:false, tension:0.2, spanGaps:true, yAxisID:'yVix', borderDash:[4,3] },
+      ]},
+      options:{
+        responsive:true, maintainAspectRatio:false,
+        plugins:{legend:{display:false},tooltip:{mode:'index',intersect:false,callbacks:{label:c=>c.dataset.yAxisID==='yVix'?` VIX: ${c.raw?.toFixed(1)}`:(` SKEW: ${c.raw?.toFixed(0)}`)}}},
+        scales:{
+          x:{grid:{color:g},ticks:{color:t,maxTicksLimit:6,maxRotation:0}},
+          y:{grid:{color:g},ticks:{color:'rgba(248,113,113,0.6)',callback:v=>v.toFixed(0)}},
+          yVix:{position:'right',grid:{drawOnChartArea:false},ticks:{color:'rgba(251,191,36,0.6)',callback:v=>v.toFixed(1)}},
+        },
+        interaction:{mode:'index',intersect:false},
+      },
+    });
+  } catch(e) {}
+})();
+
+// Market Breadth
+(async function() {
+  try {
+    const resp = await fetch('/api/breadth');
+    if (!resp.ok) return;
+    const br = await resp.json();
+    const g='#1e293b', t='#64748b';
+    // % Above MAs
+    if (br.pct_above_50ma?.dates?.length) {
+      new Chart(document.getElementById('breadth50Chart'), {
+        type:'line',
+        data:{ labels: br.pct_above_200ma?.dates || br.pct_above_50ma.dates, datasets:[
+          { label:'50-day',  data:br.pct_above_50ma.values,  borderColor:'#38bdf8', backgroundColor:'rgba(56,189,248,0.07)',    borderWidth:1.5, pointRadius:0, fill:true,  tension:0.3, spanGaps:true },
+          { label:'200-day', data:br.pct_above_200ma?.values||[], borderColor:'#a78bfa', backgroundColor:'transparent', borderWidth:1.5, pointRadius:0, fill:false, tension:0.3, spanGaps:true, borderDash:[4,3] },
+        ]},
+        plugins:[{ afterDraw(c){
+          const {ctx,chartArea:a,scales:{y}}=c;
+          [50].forEach(v=>{
+            const py=y.getPixelForValue(v);
+            if(py>=a.top&&py<=a.bottom){
+              ctx.save();ctx.strokeStyle='rgba(251,191,36,0.4)';ctx.lineWidth=1;ctx.setLineDash([3,3]);
+              ctx.beginPath();ctx.moveTo(a.left,py);ctx.lineTo(a.right,py);ctx.stroke();
+              ctx.fillStyle='#fbbf2488';ctx.font='9px Inter';ctx.fillText('50%',a.left+3,py-2);ctx.restore();
+            }
+          });
+        }}],
+        options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{mode:'index',intersect:false,callbacks:{label:c=>` ${c.dataset.label}: ${c.raw?.toFixed(1)}%`}}},scales:{x:{grid:{color:g},ticks:{color:t,maxTicksLimit:5,maxRotation:0}},y:{grid:{color:g},ticks:{color:t,callback:v=>v+'%'},min:0,max:100}},interaction:{mode:'index',intersect:false}},
+      });
+    }
+    // RSP/SPY
+    if (br.rsp_spy?.dates?.length) {
+      new Chart(document.getElementById('rspSpyChart'), {
+        type:'line',
+        data:{ labels:br.rsp_spy.dates, datasets:[{
+          label:'RSP/SPY', data:br.rsp_spy.values,
+          borderColor:'#34d399', backgroundColor:'rgba(52,211,153,0.07)',
+          borderWidth:1.5, pointRadius:0, fill:true, tension:0.3, spanGaps:true,
+        }]},
+        options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>` RSP/SPY: ${c.raw?.toFixed(4)}`}}},scales:{x:{grid:{color:g},ticks:{color:t,maxTicksLimit:5,maxRotation:0}},y:{grid:{color:g},ticks:{color:'rgba(52,211,153,0.6)',callback:v=>v.toFixed(3)}}},interaction:{mode:'index',intersect:false}},
+      });
+    }
+  } catch(e) {}
+})();
+
+// Sector Rotation Grid
+(async function() {
+  try {
+    const resp = await fetch('/api/sector-rotation-grid');
+    if (!resp.ok) return;
+    const gr = await resp.json();
+    const { rows, periods } = gr;
+    let html = `<table class="w-full text-xs border-collapse"><thead><tr class="text-slate-500 border-b border-slate-800"><th class="text-left py-1.5 px-2 font-medium">Sector</th>${periods.map(p=>`<th class="text-right py-1.5 px-2 font-medium">${p}</th>`).join('')}</tr></thead><tbody>`;
+    rows.forEach(row => {
+      html += `<tr class="border-b border-slate-800/50 hover:bg-slate-800/30"><td class="py-1.5 px-2 font-medium text-slate-300">${row.etf} <span class="text-slate-600 text-[10px]">${row.name}</span></td>`;
+      periods.forEach(p => {
+        const v = row.returns[p];
+        const cls = v == null ? 'text-slate-600' : v >= 2 ? 'bg-emerald-900/60 text-emerald-300' : v >= 0.5 ? 'bg-emerald-900/30 text-emerald-400' : v >= -0.5 ? 'text-slate-400' : v >= -2 ? 'bg-rose-900/30 text-rose-400' : 'bg-rose-900/60 text-rose-300';
+        html += `<td class="py-1.5 px-2 text-right font-mono rounded ${cls}">${v == null ? '—' : (v >= 0 ? '+' : '') + v.toFixed(1) + '%'}</td>`;
+      });
+      html += '</tr>';
+    });
+    html += '</tbody></table>';
+    document.getElementById('sectorGridTable').innerHTML = html;
   } catch(e) {}
 })();
 </script>

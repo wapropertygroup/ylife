@@ -4230,6 +4230,151 @@ def api_put_call_ratio():
 
 
 # ---------------------------------------------------------------------------
+# CBOE SKEW + VIX history  (/api/skew)
+# ---------------------------------------------------------------------------
+
+_SKEW_CACHE: dict = {}
+_SKEW_LOCK = threading.Lock()
+_SKEW_TTL = 4 * 3600  # 4 hours
+
+@bp.route("/api/skew")
+def api_skew():
+    """CBOE SKEW Index vs VIX — 2 years of daily history."""
+    import yfinance as yf
+    with _SKEW_LOCK:
+        entry = _SKEW_CACHE.get("data")
+        if entry and time.time() - entry["ts"] < _SKEW_TTL:
+            return jsonify(entry["data"])
+    try:
+        df = yf.download(["^SKEW", "^VIX"], period="2y", interval="1d",
+                         auto_adjust=True, progress=False)
+        closes = df["Close"] if hasattr(df.columns, "levels") else df[["Close"]]
+        skew_s = closes["^SKEW"].dropna()
+        vix_s  = closes["^VIX"].dropna()
+        # Align dates
+        common = sorted(set(skew_s.index) & set(vix_s.index))
+        dates = [str(d.date()) for d in common]
+        skew  = [round(float(skew_s[d]), 2) for d in common]
+        vix   = [round(float(vix_s[d]),  2) for d in common]
+        result = {"dates": dates, "skew": skew, "vix": vix}
+        with _SKEW_LOCK:
+            _SKEW_CACHE["data"] = {"ts": time.time(), "data": result}
+        return jsonify(result)
+    except Exception as exc:
+        log.warning("api_skew failed: %s", exc)
+        return jsonify({"error": str(exc)}), 502
+
+
+# ---------------------------------------------------------------------------
+# Market Breadth  (/api/breadth)
+# ---------------------------------------------------------------------------
+
+_BREADTH_CACHE: dict = {}
+_BREADTH_LOCK = threading.Lock()
+_BREADTH_TTL = 4 * 3600  # 4 hours
+
+@bp.route("/api/breadth")
+def api_breadth():
+    """Market breadth: % S&P500 above 50/200 MA, plus RSP/SPY concentration ratio."""
+    import yfinance as yf
+    with _BREADTH_LOCK:
+        entry = _BREADTH_CACHE.get("data")
+        if entry and time.time() - entry["ts"] < _BREADTH_TTL:
+            return jsonify(entry["data"])
+    try:
+        df = yf.download(["^SP500-50", "^SP500-200", "RSP", "SPY"],
+                         period="3y", interval="1wk",
+                         auto_adjust=True, progress=False)
+        closes = df["Close"]
+        def _series(sym):
+            s = closes[sym].dropna()
+            return {"dates": [str(d.date()) for d in s.index],
+                    "values": [round(float(v), 2) for v in s]}
+        sp50  = _series("^SP500-50")
+        sp200 = _series("^SP500-200")
+        rsp   = _series("RSP")
+        spy   = _series("SPY")
+        # RSP/SPY ratio
+        spyMap = {}
+        for d, v in zip(spy["dates"], spy["values"]):
+            spyMap[d] = v
+        rspSpyDates  = [d for d in rsp["dates"] if d in spyMap]
+        rspSpyRatio  = [round(rsp["values"][rsp["dates"].index(d)] / spyMap[d], 4) for d in rspSpyDates]
+        result = {
+            "pct_above_50ma":  sp50,
+            "pct_above_200ma": sp200,
+            "rsp_spy": {"dates": rspSpyDates, "values": rspSpyRatio},
+        }
+        with _BREADTH_LOCK:
+            _BREADTH_CACHE["data"] = {"ts": time.time(), "data": result}
+        return jsonify(result)
+    except Exception as exc:
+        log.warning("api_breadth failed: %s", exc)
+        return jsonify({"error": str(exc)}), 502
+
+
+# ---------------------------------------------------------------------------
+# Sector Rotation Grid  (/api/sector-rotation-grid)
+# ---------------------------------------------------------------------------
+
+_SECTOR_GRID_CACHE: dict = {}
+_SECTOR_GRID_LOCK = threading.Lock()
+_SECTOR_GRID_TTL = 4 * 3600  # 4 hours
+
+_SECTOR_GRID_ETFS = {
+    "XLK": "Tech", "XLF": "Financials", "XLE": "Energy",
+    "XLV": "Healthcare", "XLI": "Industrials", "XLY": "Cons. Disc.",
+    "XLP": "Cons. Stap.", "XLU": "Utilities", "XLB": "Materials",
+    "XLRE": "Real Estate", "XLC": "Comm.",
+}
+_SECTOR_PERIODS = ["1W", "1M", "3M", "6M", "YTD", "1Y"]
+
+@bp.route("/api/sector-rotation-grid")
+def api_sector_rotation_grid():
+    """Multi-period sector performance vs SPY for the rotation heatmap."""
+    import yfinance as yf
+    import datetime as _dt
+    with _SECTOR_GRID_LOCK:
+        entry = _SECTOR_GRID_CACHE.get("data")
+        if entry and time.time() - entry["ts"] < _SECTOR_GRID_TTL:
+            return jsonify(entry["data"])
+    try:
+        tickers = list(_SECTOR_GRID_ETFS.keys()) + ["SPY"]
+        df = yf.download(tickers, period="1y", interval="1d",
+                         auto_adjust=True, progress=False)
+        closes = df["Close"]
+        today = _dt.date.today()
+        ytd_start = _dt.date(today.year, 1, 1)
+        def _back(days):
+            return (today - _dt.timedelta(days=days)).isoformat()
+        cutoffs = {
+            "1W": _back(7), "1M": _back(31), "3M": _back(92),
+            "6M": _back(183), "YTD": ytd_start.isoformat(), "1Y": _back(365),
+        }
+        def _ret(sym, cutoff):
+            s = closes[sym].dropna()
+            s = s[s.index.date >= _dt.date.fromisoformat(cutoff)]
+            if len(s) < 2: return None
+            return round((float(s.iloc[-1]) / float(s.iloc[0]) - 1) * 100, 2)
+        spy_rets = {p: _ret("SPY", c) for p, c in cutoffs.items()}
+        rows = []
+        for etf, name in _SECTOR_GRID_ETFS.items():
+            rets = {}
+            for period, cutoff in cutoffs.items():
+                abs_ret = _ret(etf, cutoff)
+                spy_ret = spy_rets[period]
+                rets[period] = round(abs_ret - spy_ret, 2) if (abs_ret is not None and spy_ret is not None) else None
+            rows.append({"etf": etf, "name": name, "returns": rets})
+        result = {"rows": rows, "periods": _SECTOR_PERIODS}
+        with _SECTOR_GRID_LOCK:
+            _SECTOR_GRID_CACHE["data"] = {"ts": time.time(), "data": result}
+        return jsonify(result)
+    except Exception as exc:
+        log.warning("api_sector_rotation_grid failed: %s", exc)
+        return jsonify({"error": str(exc)}), 502
+
+
+# ---------------------------------------------------------------------------
 # AAII Sentiment Survey  (/api/aaii-sentiment)
 # ---------------------------------------------------------------------------
 

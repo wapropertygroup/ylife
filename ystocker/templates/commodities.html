@@ -215,16 +215,15 @@
   </div>
 
   <!-- DXY vs Commodities Basket -->
-  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up mb-6" id="dxyBasketSection">
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up mb-6" id="dxyBasketSection" style="display:none">
     <div class="mb-3">
-      <h2 class="text-base font-semibold text-slate-200">💵 US Dollar (DXY) vs Commodities Basket</h2>
-      <p class="text-xs text-slate-500 mt-0.5">Dollar strengthens → commodity prices fall (inverse relationship). All normalised to 100 at period start.</p>
+      <h2 class="text-base font-semibold text-slate-200">US Dollar (DXY) vs Commodities</h2>
+      <p class="text-xs text-slate-500 mt-0.5">Dollar strength historically inversely correlates with commodity prices (priced in USD). Watch for divergences — they signal regime changes.</p>
     </div>
-    <div class="flex flex-wrap items-center gap-3 mb-2 text-xs">
-      <span class="flex items-center gap-1 text-slate-400"><span class="w-3 h-0.5 bg-slate-400 inline-block"></span> DXY</span>
-      <span class="flex items-center gap-1 text-amber-400"><span class="w-3 h-0.5 bg-amber-400 inline-block"></span> Gold</span>
-      <span class="flex items-center gap-1 text-teal-400"><span class="w-3 h-0.5 border-dashed border border-teal-400 inline-block"></span> WTI Oil</span>
-      <span class="flex items-center gap-1 text-orange-400"><span class="w-3 h-0.5 border-dashed border border-orange-400 inline-block"></span> Copper</span>
+    <div class="flex items-center gap-3 mb-2 text-xs">
+      <span class="text-sky-400">— DXY (normalised, inverted)</span>
+      <span class="text-amber-400">--- Gold</span>
+      <span class="text-orange-400">--- Oil</span>
     </div>
     <div class="chart-container" style="height:220px"><canvas id="dxyBasketChart"></canvas></div>
   </div>
@@ -641,42 +640,36 @@
     });
   })();
 
-  // DXY vs Commodities Basket
-  (function() {
-    const dxy    = C['dxy'];
-    const gold   = C['gold'];
-    const oilWti = C['oil_wti'];
-    const copper = C['copper'];
-    if (!dxy?.prices_1y) return;
-    function norm(prices) {
-      const base = prices.find(v=>v!=null);
-      if (!base) return prices;
-      return prices.map(v => v!=null ? +(v/base*100).toFixed(2) : null);
-    }
-    const labels  = dxy.dates_1y || [];
-    const dxyN    = norm(dxy.prices_1y    || []);
-    const goldN   = norm(gold?.prices_1y  || []);
-    const oilN    = norm(oilWti?.prices_1y || []);
-    const copperN = norm(copper?.prices_1y || []);
-    const g='#1e293b', t='#64748b';
-    new Chart(document.getElementById('dxyBasketChart'), {
-      type:'line',
-      data:{ labels, datasets:[
-        { label:'DXY',    data:dxyN,    borderColor:'#94a3b8', backgroundColor:'rgba(148,163,184,0.06)', borderWidth:2,   pointRadius:0, fill:true,  tension:0.3, spanGaps:true },
-        { label:'Gold',   data:goldN,   borderColor:'#fbbf24', backgroundColor:'transparent', borderWidth:1.5, pointRadius:0, fill:false, tension:0.3, spanGaps:true },
-        { label:'Oil',    data:oilN,    borderColor:'#2dd4bf', backgroundColor:'transparent', borderWidth:1.5, pointRadius:0, fill:false, tension:0.3, spanGaps:true, borderDash:[4,3] },
-        { label:'Copper', data:copperN, borderColor:'#fb923c', backgroundColor:'transparent', borderWidth:1.5, pointRadius:0, fill:false, tension:0.3, spanGaps:true, borderDash:[4,3] },
-      ]},
-      options:{
-        responsive:true,maintainAspectRatio:false,
-        plugins:{legend:{display:false},tooltip:{mode:'index',intersect:false,callbacks:{label:c=>` ${c.dataset.label}: ${c.raw?.toFixed(1)}`}}},
-        scales:{
-          x:{grid:{color:g},ticks:{color:t,maxTicksLimit:8,maxRotation:0}},
-          y:{grid:{color:g},ticks:{color:t,callback:v=>v.toFixed(0)},title:{display:true,text:'Normalised (start=100)',color:'#475569',font:{size:10}}},
-        },
-        interaction:{mode:'index',intersect:false},
-      },
-    });
+  // DXY vs Commodities basket
+  (async function() {
+    try {
+      const dxy = await fetch('/api/history/DX-Y.NYB?period=1y').then(r=>r.json());
+      const gold = C['gold'];
+      const oil  = C['oil_wti'];
+      if (!dxy.prices || !dxy.prices.length) return;
+      if (!gold?.prices_1y?.length && !oil?.prices_1y?.length) return;
+      document.getElementById('dxyBasketSection').style.display = 'block';
+      const gCol = '#1e293b', tCol = '#64748b';
+      const dxyBase = dxy.prices.find(v=>v!=null);
+      // Invert DXY so it shows inverse relationship visually
+      const dxyNorm = dxy.prices.map(v=>v!=null&&dxyBase?+(200-v/dxyBase*100).toFixed(1):null);
+      const goldBase = gold?.prices_1y?.find(v=>v!=null);
+      const goldNorm = (gold?.prices_1y||[]).map(v=>v!=null&&goldBase?+(v/goldBase*100).toFixed(1):null);
+      const oilBase  = oil?.prices_1y?.find(v=>v!=null);
+      const oilNorm  = (oil?.prices_1y||[]).map(v=>v!=null&&oilBase?+(v/oilBase*100).toFixed(1):null);
+      new Chart(document.getElementById('dxyBasketChart'), {
+        type:'line',
+        data:{ labels: dxy.dates, datasets:[
+          {label:'DXY (inv)',data:dxyNorm,borderColor:'#38bdf8',backgroundColor:'rgba(56,189,248,0.07)',borderWidth:1.5,pointRadius:0,fill:true,tension:0.3,spanGaps:true},
+          {label:'Gold',data:goldNorm.slice(-dxy.dates.length),borderColor:'#fbbf24',backgroundColor:'transparent',borderWidth:1.5,pointRadius:0,fill:false,tension:0.3,spanGaps:true,borderDash:[4,3]},
+          {label:'Oil',data:oilNorm.slice(-dxy.dates.length),borderColor:'#fb923c',backgroundColor:'transparent',borderWidth:1.5,pointRadius:0,fill:false,tension:0.3,spanGaps:true,borderDash:[4,3]},
+        ]},
+        options:{responsive:true,maintainAspectRatio:false,
+          plugins:{legend:{display:false},tooltip:{mode:'index',intersect:false,callbacks:{label:c=>` ${c.dataset.label}: ${c.raw?.toFixed(1)}`}}},
+          scales:{x:{grid:{color:gCol},ticks:{color:tCol,maxTicksLimit:8,maxRotation:0}},y:{grid:{color:gCol},ticks:{color:tCol,callback:v=>v.toFixed(0)},title:{display:true,text:'Normalised (start=100, DXY inverted)',color:'#475569',font:{size:10}}}},
+          interaction:{mode:'index',intersect:false}},
+      });
+    } catch(e) {}
   })();
 
   // Copper vs S&P 500 overlay chart

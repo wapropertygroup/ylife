@@ -837,6 +837,7 @@
       <span class="text-rose-400">-- 30Y Mortgage Rate (%)</span>
     </div>
     <div class="chart-container" style="height:200px"><canvas id="housingChart"></canvas></div>
+    <div id="mortAffordCard" class="bg-slate-800/40 rounded-xl p-3 mt-2"></div>
   </div>
 
   <!-- Consumer Sentiment (UMich) vs S&P 500 -->
@@ -861,6 +862,55 @@
       </div>
     </div>
     <div class="chart-container" style="height:180px"><canvas id="cycleChart"></canvas></div>
+  </div>
+
+  <!-- Real GDP vs S&P 500 -->
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up" id="gdpSpySection" style="display:none">
+    <div class="mb-2">
+      <h3 class="text-sm font-semibold text-slate-300">Real GDP vs S&P 500</h3>
+      <p class="text-xs text-slate-500 mt-0.5">GDP measures actual economic output; S&P 500 reflects expectations. Long divergences signal either market overextension or the start of a new growth cycle.</p>
+    </div>
+    <div class="chart-container" style="height:200px"><canvas id="gdpSpyChart"></canvas></div>
+  </div>
+
+  <!-- M2 Money Growth vs Breakeven Inflation -->
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up" id="m2InflSection" style="display:none">
+    <div class="mb-2">
+      <h3 class="text-sm font-semibold text-slate-300">M2 Growth Rate vs Breakeven Inflation</h3>
+      <p class="text-xs text-slate-500 mt-0.5">M2 money supply growth (YoY %) historically leads inflation expectations by 12–18 months. The 2020–2022 episode is the clearest modern example.</p>
+    </div>
+    <div class="chart-container" style="height:180px"><canvas id="m2InflChart"></canvas></div>
+  </div>
+
+  <!-- Real GDP Growth vs ISM PMI -->
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up" id="gdpIsmSection" style="display:none">
+    <div class="mb-2">
+      <h3 class="text-sm font-semibold text-slate-300">Real GDP Growth vs ISM PMI</h3>
+      <p class="text-xs text-slate-500 mt-0.5">ISM PMI leads real GDP by 1–2 quarters. When PMI crosses below 50, GDP contraction typically follows within 6 months.</p>
+    </div>
+    <div class="chart-container" style="height:180px"><canvas id="gdpIsmChart"></canvas></div>
+  </div>
+
+  <!-- Consumer Sentiment vs Yield Spread -->
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up" id="sentSpreadSection" style="display:none">
+    <div class="mb-2">
+      <h3 class="text-sm font-semibold text-slate-300">Consumer Sentiment vs Yield Curve</h3>
+      <p class="text-xs text-slate-500 mt-0.5">Consumer confidence tracks the yield curve with a lag. Sentiment typically recovers once the curve uninverts — signaling the post-recession all-clear.</p>
+    </div>
+    <div class="chart-container" style="height:180px"><canvas id="sentSpreadChart"></canvas></div>
+  </div>
+
+  <!-- HY OAS vs VIX -->
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up" id="oasVixSection" style="display:none">
+    <div class="mb-2">
+      <h3 class="text-sm font-semibold text-slate-300">HY Credit Spreads vs VIX</h3>
+      <p class="text-xs text-slate-500 mt-0.5">When HY OAS rises but VIX stays low, credit markets are leading equity complacency — a reliable early warning of stress. Divergences precede corrections.</p>
+    </div>
+    <div class="flex items-center gap-3 mb-1 text-[10px]">
+      <span class="text-rose-400">— HY OAS (bps, left)</span>
+      <span class="text-amber-400">--- VIX (right)</span>
+    </div>
+    <div class="chart-container" style="height:180px"><canvas id="oasVixChart"></canvas></div>
   </div>
 
   <!-- Treasury as % of Total Assets -->
@@ -2201,6 +2251,153 @@ let _fedSeriesData = {};
     }
   } catch(e) { console.warn('Fed cycle chart failed:', e); }
 
+  // ── Real GDP vs S&P 500
+  try {
+    const gdp = s['GDPC1'];
+    if (gdp && gdp.dates && gdp.dates.length > 4) {
+      document.getElementById('gdpSpySection').style.display = 'block';
+      const spyResp = await fetch('/api/history/SPY?period=10y');
+      const spy = await spyResp.json();
+      if (spy.prices && spy.prices.length) {
+        const spyMonthMap = {};
+        (spy.dates||[]).forEach((d,i)=>{ if(spy.prices[i]!=null) spyMonthMap[d.slice(0,7)]=spy.prices[i]; });
+        const gdpBase = gdp.values.find(v=>v!=null);
+        const spyAligned = gdp.dates.map(d=>spyMonthMap[d.slice(0,7)]??null);
+        const spyBase = spyAligned.find(v=>v!=null);
+        const gdpNorm = gdp.values.map(v=>v!=null&&gdpBase?+(v/gdpBase*100).toFixed(1):null);
+        const spyNorm = spyAligned.map(v=>v!=null&&spyBase?+(v/spyBase*100).toFixed(1):null);
+        new Chart(document.getElementById('gdpSpyChart'),{
+          type:'line',
+          data:{labels:gdp.dates,datasets:[
+            {label:'Real GDP',data:gdpNorm,borderColor:'#34d399',backgroundColor:'rgba(52,211,153,0.07)',borderWidth:2,pointRadius:0,fill:true,tension:0.3,spanGaps:true},
+            {label:'S&P 500',data:spyNorm,borderColor:'#38bdf8',backgroundColor:'transparent',borderWidth:1.5,pointRadius:0,fill:false,tension:0.3,spanGaps:true,borderDash:[4,3]},
+          ]},
+          options:{responsive:true,maintainAspectRatio:false,
+            plugins:{legend:{display:false},tooltip:{mode:'index',intersect:false,callbacks:{label:c=>` ${c.dataset.label}: ${c.raw?.toFixed(0)} (norm=100)`}}},
+            scales:{x:{grid:{color:gridCol},ticks:{color:tickCol,maxTicksLimit:6,maxRotation:0}},y:{grid:{color:gridCol},ticks:{color:tickCol,callback:v=>v.toFixed(0)},title:{display:true,text:'Normalised (start=100)',color:'#475569',font:{size:10}}}},
+            interaction:{mode:'index',intersect:false}},
+        });
+      }
+    }
+  } catch(e){console.warn('Fed GDP/SPY:',e);}
+
+  // ── M2 Growth Rate vs Breakeven Inflation
+  try {
+    const m2 = s['M2SL'];
+    const bie = s['T10YIE'];
+    if (m2&&m2.dates.length>14&&bie&&bie.dates.length>4) {
+      document.getElementById('m2InflSection').style.display='block';
+      // M2 YoY %: compare value to same month 12 months ago
+      const m2YoY=m2.values.map((v,i)=>{
+        if(v==null)return null;
+        const target=new Date(m2.dates[i]);target.setFullYear(target.getFullYear()-1);
+        const ym=target.toISOString().slice(0,7);
+        const idx=m2.dates.findIndex(d=>d.slice(0,7)===ym);
+        if(idx<0||m2.values[idx]==null)return null;
+        return +((v-m2.values[idx])/m2.values[idx]*100).toFixed(2);
+      });
+      // Align breakeven to M2 monthly dates
+      const bieMap={};bie.dates.forEach((d,i)=>{if(bie.values[i]!=null)bieMap[d.slice(0,7)]=bie.values[i];});
+      const bieAligned=m2.dates.map(d=>bieMap[d.slice(0,7)]??null);
+      new Chart(document.getElementById('m2InflChart'),{
+        type:'line',
+        data:{labels:m2.dates,datasets:[
+          {label:'M2 Growth YoY%',data:m2YoY,borderColor:'#22d3ee',backgroundColor:'rgba(34,211,238,0.07)',borderWidth:1.5,pointRadius:0,fill:true,tension:0.3,spanGaps:true,yAxisID:'y'},
+          {label:'10Y Breakeven',data:bieAligned,borderColor:'#fbbf24',backgroundColor:'transparent',borderWidth:1.5,pointRadius:0,fill:false,tension:0.3,spanGaps:true,yAxisID:'y',borderDash:[4,3]},
+        ]},
+        options:{responsive:true,maintainAspectRatio:false,
+          plugins:{legend:{display:false},tooltip:{mode:'index',intersect:false,callbacks:{label:c=>` ${c.dataset.label}: ${c.raw?.toFixed(2)}%`}}},
+          scales:{x:{grid:{color:gridCol},ticks:{color:tickCol,maxTicksLimit:6,maxRotation:0}},y:{grid:{color:gridCol},ticks:{color:tickCol,callback:v=>(v>=0?'+':'')+v.toFixed(1)+'%'}}},
+          interaction:{mode:'index',intersect:false}},
+      });
+    }
+  } catch(e){console.warn('Fed M2/Inflation:',e);}
+
+  // ── Real GDP Growth vs ISM PMI
+  try {
+    const gdp2=s['GDPC1'];
+    const ism=s['NAPM'];
+    if(gdp2&&gdp2.dates.length>8&&ism&&ism.dates.length>4){
+      document.getElementById('gdpIsmSection').style.display='block';
+      // GDP YoY growth %
+      const gdpGrowth=gdp2.values.map((v,i)=>{
+        if(v==null)return null;
+        const idx=i-4;// quarterly: 4 quarters ago = 1 year
+        if(idx<0||gdp2.values[idx]==null)return null;
+        return +((v-gdp2.values[idx])/gdp2.values[idx]*100).toFixed(2);
+      });
+      // Align ISM to GDP quarterly dates
+      const ismMap={};ism.dates.forEach((d,i)=>{if(ism.values[i]!=null)ismMap[d.slice(0,7)]=ism.values[i];});
+      const ismAligned=gdp2.dates.map(d=>ismMap[d.slice(0,7)]??null);
+      new Chart(document.getElementById('gdpIsmChart'),{
+        type:'line',
+        data:{labels:gdp2.dates,datasets:[
+          {label:'Real GDP Growth YoY%',data:gdpGrowth,borderColor:'#34d399',backgroundColor:'rgba(52,211,153,0.07)',borderWidth:2,pointRadius:3,fill:true,tension:0.3,spanGaps:true,yAxisID:'y'},
+          {label:'ISM PMI',data:ismAligned,borderColor:'#a78bfa',backgroundColor:'transparent',borderWidth:1.5,pointRadius:0,fill:false,tension:0.3,spanGaps:true,yAxisID:'yPmi',borderDash:[4,3]},
+        ]},
+        options:{responsive:true,maintainAspectRatio:false,
+          plugins:{legend:{display:false},tooltip:{mode:'index',intersect:false,callbacks:{label:c=>c.dataset.yAxisID==='yPmi'?` ISM: ${c.raw?.toFixed(1)}`:` GDP: ${c.raw?.toFixed(2)}%`}}},
+          scales:{x:{grid:{color:gridCol},ticks:{color:tickCol,maxTicksLimit:6,maxRotation:0}},y:{grid:{color:gridCol},ticks:{color:'rgba(52,211,153,0.6)',callback:v=>v.toFixed(1)+'%'}},yPmi:{position:'right',grid:{drawOnChartArea:false},ticks:{color:'rgba(167,139,250,0.6)',callback:v=>v.toFixed(0)},min:30,max:70}},
+          interaction:{mode:'index',intersect:false}},
+        plugins:[{afterDraw(ch){const{ctx:ct,chartArea:a,scales:{yPmi}}=ch;const p50=yPmi.getPixelForValue(50);if(p50>=a.top&&p50<=a.bottom){ct.save();ct.strokeStyle='rgba(148,163,184,0.4)';ct.lineWidth=1;ct.setLineDash([4,3]);ct.beginPath();ct.moveTo(a.left,p50);ct.lineTo(a.right,p50);ct.stroke();ct.restore();}}}],
+      });
+    }
+  } catch(e){console.warn('Fed GDP/ISM:',e);}
+
+  // ── Consumer Sentiment vs Yield Spread
+  try {
+    const sent=s['UMCSENT'];
+    if(sent&&sent.dates.length>4){
+      // Fetch yield spread
+      const spreadResp=await fetch('/api/yield-spread');
+      const spreadData=await spreadResp.json();
+      if(spreadData.dates&&spreadData.dates.length){
+        document.getElementById('sentSpreadSection').style.display='block';
+        const spreadMap={};
+        spreadData.dates.forEach((d,i)=>{if(spreadData.spread[i]!=null)spreadMap[d.slice(0,7)]=spreadData.spread[i];});
+        const spreadAligned=sent.dates.map(d=>spreadMap[d.slice(0,7)]??null);
+        new Chart(document.getElementById('sentSpreadChart'),{
+          type:'line',
+          data:{labels:sent.dates,datasets:[
+            {label:'Consumer Sentiment',data:sent.values,borderColor:'#38bdf8',backgroundColor:'rgba(56,189,248,0.07)',borderWidth:1.5,pointRadius:0,fill:true,tension:0.3,spanGaps:true,yAxisID:'y'},
+            {label:'10Y-2Y Spread',data:spreadAligned,borderColor:'#f87171',backgroundColor:'transparent',borderWidth:1.5,pointRadius:0,fill:false,tension:0.3,spanGaps:true,yAxisID:'ySpread',borderDash:[4,3]},
+          ]},
+          options:{responsive:true,maintainAspectRatio:false,
+            plugins:{legend:{display:false},tooltip:{mode:'index',intersect:false,callbacks:{label:c=>c.dataset.yAxisID==='ySpread'?` Spread: ${c.raw?.toFixed(2)}pp`:` Sentiment: ${c.raw?.toFixed(0)}`}}},
+            scales:{x:{grid:{color:gridCol},ticks:{color:tickCol,maxTicksLimit:6,maxRotation:0}},y:{grid:{color:gridCol},ticks:{color:'rgba(56,189,248,0.6)',callback:v=>v.toFixed(0)}},ySpread:{position:'right',grid:{drawOnChartArea:false},ticks:{color:'rgba(248,113,113,0.6)',callback:v=>(v>=0?'+':'')+v.toFixed(1)}}},
+            interaction:{mode:'index',intersect:false}},
+        });
+      }
+    }
+  } catch(e){console.warn('Fed sentiment/spread:',e);}
+
+  // ── HY OAS vs VIX
+  try {
+    const hy=s['BAMLH0A0HYM2'];
+    if(hy&&hy.dates.length>4){
+      const vixResp=await fetch('/api/markets');
+      const mkData=await vixResp.json();
+      const vixH=mkData?.vix?.history||[];
+      if(vixH.length){
+        document.getElementById('oasVixSection').style.display='block';
+        const vixMap={};
+        vixH.forEach(v=>{if(v.t&&v.y!=null)vixMap[v.t.slice(0,7)]=v.y;});
+        const vixAligned=hy.dates.map(d=>vixMap[d.slice(0,7)]??null);
+        new Chart(document.getElementById('oasVixChart'),{
+          type:'line',
+          data:{labels:hy.dates,datasets:[
+            {label:'HY OAS',data:hy.values,borderColor:'#f87171',backgroundColor:'rgba(248,113,113,0.07)',borderWidth:1.5,pointRadius:0,fill:true,tension:0.3,spanGaps:true,yAxisID:'y'},
+            {label:'VIX',data:vixAligned,borderColor:'#fbbf24',backgroundColor:'transparent',borderWidth:1.5,pointRadius:0,fill:false,tension:0.3,spanGaps:true,yAxisID:'yVix',borderDash:[4,3]},
+          ]},
+          options:{responsive:true,maintainAspectRatio:false,
+            plugins:{legend:{display:false},tooltip:{mode:'index',intersect:false,callbacks:{label:c=>c.dataset.yAxisID==='yVix'?` VIX: ${c.raw?.toFixed(1)}`:` HY OAS: ${c.raw?.toFixed(0)}bps`}}},
+            scales:{x:{grid:{color:gridCol},ticks:{color:tickCol,maxTicksLimit:6,maxRotation:0}},y:{grid:{color:gridCol},ticks:{color:'rgba(248,113,113,0.6)',callback:v=>v+'bps'}},yVix:{position:'right',grid:{drawOnChartArea:false},ticks:{color:'rgba(251,191,36,0.6)',callback:v=>v.toFixed(0)}}},
+            interaction:{mode:'index',intersect:false}},
+        });
+      }
+    }
+  } catch(e){console.warn('Fed OAS/VIX:',e);}
+
   // Real 10Y Yield vs S&P 500
   const dfii10 = s['DFII10'];
   if (dfii10?.dates?.length && dfii10.values.some(v=>v!=null)) {
@@ -2306,6 +2503,41 @@ let _fedSeriesData = {};
       },
     });
   }
+
+  // Mortgage Affordability
+  try {
+    const mort = s['MORTGAGE30US'];
+    if (mort && mort.dates && mort.dates.length) {
+      const latestRate = mort.values.filter(v=>v!=null).slice(-1)[0];
+      if (latestRate != null) {
+        // Monthly payment on $420k at current rate
+        const homePrice = 420000;
+        const downPct = 0.20;
+        const principal = homePrice * (1 - downPct);
+        const monthlyRate = latestRate / 100 / 12;
+        const n = 360; // 30 years
+        const payment = monthlyRate > 0
+          ? principal * monthlyRate * Math.pow(1+monthlyRate,n) / (Math.pow(1+monthlyRate,n)-1)
+          : principal / n;
+        // Find the payment in 2020 (when rates were ~3%)
+        const idx2020 = mort.dates.findIndex(d=>d.startsWith('2020-01'));
+        const rate2020 = idx2020>=0 ? mort.values.slice(idx2020, idx2020+4).find(v=>v!=null) : 3.0;
+        const mRate2020 = rate2020/100/12;
+        const pay2020 = mRate2020>0 ? principal*mRate2020*Math.pow(1+mRate2020,n)/(Math.pow(1+mRate2020,n)-1) : principal/n;
+
+        // Display affordability in the mortgage stat section
+        const mortEl = document.getElementById('mortAffordCard');
+        if (mortEl) {
+          mortEl.innerHTML = `
+            <div class="text-xs text-slate-500 mb-1">Monthly Payment ($420k, 20% down)</div>
+            <div class="text-base font-bold font-mono text-amber-400">$${Math.round(payment).toLocaleString()}</div>
+            <div class="text-[10px] text-slate-600 mt-0.5">vs $${Math.round(pay2020).toLocaleString()} in Jan 2020 at ${rate2020?.toFixed(1)}%</div>
+          `;
+          mortEl.parentElement.style.display = 'block';
+        }
+      }
+    }
+  } catch(e) {}
 
   // Consumer Sentiment vs SPY
   const umcsent = s['UMCSENT'];
