@@ -799,6 +799,70 @@
     </div>
   </div>
 
+  <!-- Real 10Y Yield (TIPS) vs S&P 500 -->
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up" id="realYieldSpySection" style="display:none">
+    <div class="mb-3">
+      <h3 class="text-sm font-semibold text-slate-300">📉 Real 10Y Yield (TIPS) vs S&P 500</h3>
+      <p class="text-xs text-slate-500 mt-0.5">When real yields rise above 2%, equity multiples typically compress. When negative, stocks and risk assets inflate. The post-2008 driver of asset prices.</p>
+    </div>
+    <div class="flex items-center gap-3 mb-2 text-[11px]">
+      <span class="text-amber-400">■ Real 10Y (&gt;2% = headwind)</span>
+      <span class="text-sky-400">■ S&P 500 (right axis)</span>
+    </div>
+    <div class="chart-container" style="height:220px"><canvas id="realYieldSpyChart"></canvas></div>
+  </div>
+
+  <!-- Fisher Decomposition: Nominal = Real + Breakeven -->
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up" id="fisherSection" style="display:none">
+    <div class="mb-3">
+      <h3 class="text-sm font-semibold text-slate-300">⚖️ Yield Decomposition: Nominal = Real + Inflation Expectations</h3>
+      <p class="text-xs text-slate-500 mt-0.5">Fisher equation: 10Y nominal yield = real yield (TIPS) + breakeven inflation. Shows what's driving yields — growth expectations or inflation fears.</p>
+    </div>
+    <div class="flex items-center gap-3 mb-2 text-[11px]">
+      <span class="text-amber-400">— Real (DFII10)</span>
+      <span class="text-rose-400">— Breakeven (T10YIE)</span>
+      <span class="text-sky-400">— Nominal (implied)</span>
+    </div>
+    <div class="chart-container" style="height:200px"><canvas id="fisherChart"></canvas></div>
+  </div>
+
+  <!-- Housing Starts vs 30Y Mortgage Rate -->
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up" id="housingSection" style="display:none">
+    <div class="mb-3">
+      <h3 class="text-sm font-semibold text-slate-300">🏠 Housing Starts vs 30Y Mortgage Rate</h3>
+      <p class="text-xs text-slate-500 mt-0.5">Rate hikes → mortgage rates spike → housing starts collapse (3-6 month lag). Classic credit cycle barometer.</p>
+    </div>
+    <div class="flex items-center gap-3 mb-2 text-[11px]">
+      <span class="text-emerald-400">■ Housing Starts (k)</span>
+      <span class="text-rose-400">-- 30Y Mortgage Rate (%)</span>
+    </div>
+    <div class="chart-container" style="height:200px"><canvas id="housingChart"></canvas></div>
+  </div>
+
+  <!-- Consumer Sentiment (UMich) vs S&P 500 -->
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up" id="sentSpySection" style="display:none">
+    <div class="mb-3">
+      <h3 class="text-sm font-semibold text-slate-300">🧑‍💼 Consumer Sentiment (UMich) vs S&P 500</h3>
+      <p class="text-xs text-slate-500 mt-0.5">Consumer sentiment leads retail spending and corporate earnings by 2-3 quarters. Sentiment troughs often mark market bottoms.</p>
+    </div>
+    <div class="chart-container" style="height:200px"><canvas id="sentSpyChart"></canvas></div>
+  </div>
+
+  <!-- ── ISM PMI + Housing Starts ──────────────────────────────── -->
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up" id="cycleSection" style="display:none">
+    <div class="flex items-start justify-between mb-2">
+      <div>
+        <h3 class="text-sm font-semibold text-slate-300">Business Cycle Indicators</h3>
+        <p class="text-xs text-slate-500 mt-0.5">ISM Manufacturing PMI (50 = expansion/contraction line) and Housing Starts (k units) — both lead the economy by 3–9 months.</p>
+      </div>
+      <div class="text-right text-[10px] text-slate-500">
+        <div>ISM: <span id="ismCycleVal" class="font-semibold text-slate-300">—</span></div>
+        <div>Starts: <span id="housingVal" class="font-semibold text-slate-300">—</span>k</div>
+      </div>
+    </div>
+    <div class="chart-container" style="height:180px"><canvas id="cycleChart"></canvas></div>
+  </div>
+
   <!-- Treasury as % of Total Assets -->
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up">
     <div class="flex flex-wrap items-start justify-between gap-2 mb-4">
@@ -1483,6 +1547,19 @@ let _fedSeriesData = {};
   }
 
   // ──────────────────────────────────────────────────────────────────────────
+  // Range selector helper — shared by all charts with range buttons
+  // ──────────────────────────────────────────────────────────────────────────
+  function wireRangeSelector(selectorId, onRange) {
+    document.querySelectorAll(`#${selectorId} .range-btn`).forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll(`#${selectorId} .range-btn`).forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        onRange(+btn.dataset.range);
+      });
+    });
+  }
+
+  // ──────────────────────────────────────────────────────────────────────────
   // Treasury chart (with range selector + WoW bar)
   // ──────────────────────────────────────────────────────────────────────────
   try {
@@ -1586,17 +1663,6 @@ let _fedSeriesData = {};
         interaction: { mode:'index', intersect:false },
       }
     });
-
-    // Range selector buttons
-    function wireRangeSelector(selectorId, onRange) {
-      document.querySelectorAll(`#${selectorId} .range-btn`).forEach(btn => {
-        btn.addEventListener('click', () => {
-          document.querySelectorAll(`#${selectorId} .range-btn`).forEach(b => b.classList.remove('active'));
-          btn.classList.add('active');
-          onRange(+btn.dataset.range);
-        });
-      });
-    }
 
     wireRangeSelector('treasuryRangeSelector', n => {
       currentRange = n;
@@ -2094,6 +2160,187 @@ let _fedSeriesData = {};
       });
     } catch(e) { console.warn('Fed vs 10Y chart failed:', e); }
   })();
+
+  // ── ISM PMI + Housing Starts (Business Cycle)
+  try {
+    const ism  = s['NAPM'];
+    const hous = s['HOUST'];
+    if ((ism&&ism.dates.length)||(hous&&hous.dates.length)) {
+      document.getElementById('cycleSection').style.display = 'block';
+      const lastIsm  = ism?.values.filter(v=>v!=null).slice(-1)[0];
+      const lastHous = hous?.values.filter(v=>v!=null).slice(-1)[0];
+      if(lastIsm!=null){
+        const el=document.getElementById('ismCycleVal');
+        if(el){el.textContent=lastIsm.toFixed(1);el.className='font-semibold '+(lastIsm>=50?'text-emerald-400':'text-rose-400');}
+      }
+      if(lastHous!=null){const el=document.getElementById('housingVal');if(el)el.textContent=(lastHous/1000).toFixed(0);}
+      // Align ISM and Housing to same dates (use ISM as base)
+      const housMap={};
+      (hous?.dates||[]).forEach((d,i)=>{ if(hous.values[i]!=null) housMap[d.slice(0,7)]=hous.values[i]; });
+      const ismDates=(ism?.dates||[]).slice(-240);
+      const ismVals=(ism?.values||[]).slice(-240);
+      const housAligned=ismDates.map(d=>housMap[d.slice(0,7)]??null);
+      new Chart(document.getElementById('cycleChart'),{
+        type:'line',
+        data:{labels:ismDates,datasets:[
+          {label:'ISM PMI',data:ismVals,borderColor:'#34d399',backgroundColor:'rgba(52,211,153,0.07)',borderWidth:1.5,pointRadius:0,fill:true,tension:0.3,spanGaps:true,yAxisID:'y'},
+          {label:'Housing Starts',data:housAligned,borderColor:'#f59e0b',backgroundColor:'transparent',borderWidth:1.5,pointRadius:0,fill:false,tension:0.3,spanGaps:true,yAxisID:'yH',borderDash:[4,3]},
+        ]},
+        options:{
+          responsive:true,maintainAspectRatio:false,
+          plugins:{legend:{display:false},tooltip:{mode:'index',intersect:false,callbacks:{label:c=>c.dataset.yAxisID==='yH'?` Housing: ${c.raw?.toFixed(0)}k`:` ISM PMI: ${c.raw?.toFixed(1)}`}}},
+          scales:{
+            x:{grid:{color:gridCol},ticks:{color:tickCol,maxTicksLimit:6,maxRotation:0}},
+            y:{grid:{color:gridCol},ticks:{color:'rgba(52,211,153,0.6)',callback:v=>v.toFixed(0)},min:35,max:70},
+            yH:{position:'right',grid:{drawOnChartArea:false},ticks:{color:'rgba(245,158,11,0.6)',callback:v=>v+'k'}},
+          },
+          interaction:{mode:'index',intersect:false},
+        },
+        plugins:[{afterDraw(ch){const{ctx:ct,chartArea:a,scales:{y}}=ch;const p50=y.getPixelForValue(50);if(p50>=a.top&&p50<=a.bottom){ct.save();ct.strokeStyle='rgba(148,163,184,0.5)';ct.lineWidth=1;ct.setLineDash([4,3]);ct.beginPath();ct.moveTo(a.left,p50);ct.lineTo(a.right,p50);ct.stroke();ct.fillStyle='#94a3b8';ct.font='9px Inter';ct.fillText('50',a.left+3,p50-3);ct.restore();}}}],
+      });
+    }
+  } catch(e) { console.warn('Fed cycle chart failed:', e); }
+
+  // Real 10Y Yield vs S&P 500
+  const dfii10 = s['DFII10'];
+  if (dfii10?.dates?.length && dfii10.values.some(v=>v!=null)) {
+    (async () => {
+      try {
+        const spy = await fetch('/api/history/SPY?period=10y').then(r=>r.json());
+        if (!spy.prices?.length) return;
+        document.getElementById('realYieldSpySection').style.display = 'block';
+        // Build SPY monthly map
+        const spyMap = {};
+        (spy.dates||[]).forEach((d,i)=>{ if(spy.prices[i]!=null) spyMap[d.slice(0,7)]=spy.prices[i]; });
+        const labels  = dfii10.dates.slice(-500);
+        const real    = dfii10.values.slice(-500);
+        const spyAlgn = labels.map(d => spyMap[d.slice(0,7)] ?? null);
+        const g='#1e293b', t='#64748b';
+        new Chart(document.getElementById('realYieldSpyChart'), {
+          type:'line',
+          data:{ labels, datasets:[
+            { label:'Real 10Y',    data:real,    borderColor:'#fbbf24', backgroundColor:'rgba(251,191,36,0.07)', borderWidth:1.5, pointRadius:0, fill:true,  tension:0.3, spanGaps:true, yAxisID:'y' },
+            { label:'S&P 500',    data:spyAlgn, borderColor:'#38bdf8', backgroundColor:'transparent',           borderWidth:1.5, pointRadius:0, fill:false, tension:0.3, spanGaps:true, yAxisID:'ySpy', borderDash:[4,3] },
+          ]},
+          plugins:[{ afterDraw(chart){
+            const {ctx:c,chartArea:a,scales:{y}}=chart;
+            const py2=y.getPixelForValue(2);
+            if(py2>=a.top&&py2<=a.bottom){
+              c.save();c.strokeStyle='rgba(248,113,113,0.5)';c.lineWidth=1;c.setLineDash([4,3]);
+              c.beginPath();c.moveTo(a.left,py2);c.lineTo(a.right,py2);c.stroke();
+              c.fillStyle='#f87171';c.font='10px Inter';c.fillText('2% headwind',a.left+4,py2-3);c.restore();
+            }
+          }}],
+          options:{
+            responsive:true,maintainAspectRatio:false,
+            plugins:{legend:{display:false},tooltip:{mode:'index',intersect:false,callbacks:{label:c=>c.dataset.yAxisID==='ySpy'?` SPY: $${c.raw?.toFixed(0)}`:(` Real 10Y: ${c.raw?.toFixed(2)}%`)}}},
+            scales:{
+              x:{grid:{color:g},ticks:{color:t,maxTicksLimit:6,maxRotation:0}},
+              y:{grid:{color:g},ticks:{color:'rgba(251,191,36,0.6)',callback:v=>v.toFixed(1)+'%'}},
+              ySpy:{position:'right',grid:{drawOnChartArea:false},ticks:{color:'rgba(56,189,248,0.6)',callback:v=>'$'+v.toFixed(0)}},
+            },
+            interaction:{mode:'index',intersect:false},
+          },
+        });
+      } catch(e) {}
+    })();
+  }
+
+  // Fisher Decomposition
+  const t10yie = s['T10YIE'];
+  if (dfii10?.dates?.length && t10yie?.dates?.length) {
+    // Align by month
+    const realMap = {}, beMap = {};
+    dfii10.dates.forEach((d,i)=>{ if(dfii10.values[i]!=null) realMap[d.slice(0,7)]=dfii10.values[i]; });
+    t10yie.dates.forEach((d,i)=>{ if(t10yie.values[i]!=null) beMap[d.slice(0,7)]=t10yie.values[i]; });
+    const months = [...new Set([...Object.keys(realMap),...Object.keys(beMap)])].sort().slice(-240);
+    const realV  = months.map(m => realMap[m] ?? null);
+    const beV    = months.map(m => beMap[m]  ?? null);
+    const nomV   = months.map((m,i) => (realV[i]!=null&&beV[i]!=null) ? +(realV[i]+beV[i]).toFixed(3) : null);
+    if (nomV.some(v=>v!=null)) {
+      document.getElementById('fisherSection').style.display = 'block';
+      const g='#1e293b', t='#64748b';
+      new Chart(document.getElementById('fisherChart'), {
+        type:'line',
+        data:{ labels:months, datasets:[
+          { label:'Nominal', data:nomV, borderColor:'#38bdf8', backgroundColor:'transparent', borderWidth:2, pointRadius:0, fill:false, tension:0.3, spanGaps:true },
+          { label:'Breakeven', data:beV, borderColor:'#f87171', backgroundColor:'rgba(248,113,113,0.07)', borderWidth:1.5, pointRadius:0, fill:true,  tension:0.3, spanGaps:true },
+          { label:'Real',     data:realV, borderColor:'#fbbf24', backgroundColor:'transparent', borderWidth:1.5, pointRadius:0, fill:false, tension:0.3, spanGaps:true, borderDash:[4,3] },
+        ]},
+        options:{
+          responsive:true,maintainAspectRatio:false,
+          plugins:{legend:{display:false},tooltip:{mode:'index',intersect:false,callbacks:{label:c=>` ${c.dataset.label}: ${c.raw?.toFixed(2)}%`}}},
+          scales:{x:{grid:{color:g},ticks:{color:t,maxTicksLimit:6,maxRotation:0}},y:{grid:{color:g},ticks:{color:t,callback:v=>v.toFixed(1)+'%'}}},
+          interaction:{mode:'index',intersect:false},
+        },
+      });
+    }
+  }
+
+  // Housing Starts vs Mortgage Rate
+  const houst = s['HOUST'];
+  const mort  = s['MORTGAGE30US'];
+  if (houst?.dates?.length && mort?.dates?.length) {
+    document.getElementById('housingSection').style.display = 'block';
+    const mortMap = {};
+    mort.dates.forEach((d,i)=>{ if(mort.values[i]!=null) mortMap[d.slice(0,7)]=mort.values[i]; });
+    const labels  = houst.dates.slice(-360);
+    const starts  = houst.values.slice(-360);
+    const mortAlgn = labels.map(d => mortMap[d.slice(0,7)] ?? null);
+    const g='#1e293b', t='#64748b';
+    new Chart(document.getElementById('housingChart'), {
+      type:'line',
+      data:{ labels, datasets:[
+        { label:'Housing Starts', data:starts,   borderColor:'#34d399', backgroundColor:'rgba(52,211,153,0.07)', borderWidth:1.5, pointRadius:0, fill:true,  tension:0.3, spanGaps:true, yAxisID:'y' },
+        { label:'Mortgage 30Y',  data:mortAlgn, borderColor:'#f87171', backgroundColor:'transparent',           borderWidth:1.5, pointRadius:0, fill:false, tension:0.3, spanGaps:true, yAxisID:'yMort', borderDash:[4,3] },
+      ]},
+      options:{
+        responsive:true,maintainAspectRatio:false,
+        plugins:{legend:{display:false},tooltip:{mode:'index',intersect:false,callbacks:{label:c=>c.dataset.yAxisID==='yMort'?` Mortgage: ${c.raw?.toFixed(2)}%`:` Starts: ${c.raw?.toFixed(0)}k`}}},
+        scales:{
+          x:{grid:{color:g},ticks:{color:t,maxTicksLimit:6,maxRotation:0}},
+          y:{grid:{color:g},ticks:{color:'rgba(52,211,153,0.6)',callback:v=>v+'k'}},
+          yMort:{position:'right',grid:{drawOnChartArea:false},ticks:{color:'rgba(248,113,113,0.6)',callback:v=>v.toFixed(1)+'%'}},
+        },
+        interaction:{mode:'index',intersect:false},
+      },
+    });
+  }
+
+  // Consumer Sentiment vs SPY
+  const umcsent = s['UMCSENT'];
+  if (umcsent?.dates?.length && umcsent.values.some(v=>v!=null)) {
+    (async () => {
+      try {
+        const spy = await fetch('/api/history/SPY?period=10y').then(r=>r.json());
+        if (!spy.prices?.length) return;
+        document.getElementById('sentSpySection').style.display = 'block';
+        const spyMap = {};
+        (spy.dates||[]).forEach((d,i)=>{ if(spy.prices[i]!=null) spyMap[d.slice(0,7)]=spy.prices[i]; });
+        const labels  = umcsent.dates.slice(-360);
+        const sent    = umcsent.values.slice(-360);
+        const spyAlgn = labels.map(d => spyMap[d.slice(0,7)] ?? null);
+        const g='#1e293b', t='#64748b';
+        new Chart(document.getElementById('sentSpyChart'), {
+          type:'line',
+          data:{ labels, datasets:[
+            { label:'Sentiment', data:sent,    borderColor:'#a78bfa', backgroundColor:'rgba(167,139,250,0.07)', borderWidth:1.5, pointRadius:0, fill:true,  tension:0.3, spanGaps:true, yAxisID:'y' },
+            { label:'S&P 500',  data:spyAlgn, borderColor:'#38bdf8', backgroundColor:'transparent',           borderWidth:1.5, pointRadius:0, fill:false, tension:0.3, spanGaps:true, yAxisID:'ySpy', borderDash:[4,3] },
+          ]},
+          options:{
+            responsive:true,maintainAspectRatio:false,
+            plugins:{legend:{display:false},tooltip:{mode:'index',intersect:false,callbacks:{label:c=>c.dataset.yAxisID==='ySpy'?` SPY: $${c.raw?.toFixed(0)}`:(` Sentiment: ${c.raw?.toFixed(1)}`)}}},
+            scales:{
+              x:{grid:{color:g},ticks:{color:t,maxTicksLimit:6,maxRotation:0}},
+              y:{grid:{color:g},ticks:{color:'rgba(167,139,250,0.6)'}},
+              ySpy:{position:'right',grid:{drawOnChartArea:false},ticks:{color:'rgba(56,189,248,0.6)',callback:v=>'$'+v.toFixed(0)}},
+            },
+            interaction:{mode:'index',intersect:false},
+          },
+        });
+      } catch(e) {}
+    })();
+  }
 
   // ── Auto-load Fed Assets vs S&P 500 (always visible)
   _loadFedSpy();
