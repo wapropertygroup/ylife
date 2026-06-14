@@ -4443,10 +4443,20 @@ def api_breadth():
                          period="3y", interval="1wk",
                          auto_adjust=True, progress=False)
         closes = df["Close"]
+
         def _series(sym):
-            s = closes[sym].dropna()
-            return {"dates": [str(d.date()) for d in s.index],
-                    "values": [round(float(v), 2) for v in s]}
+            """Return series dict; silently returns empty if ticker is missing/delisted."""
+            try:
+                col = closes[sym] if sym in closes.columns else closes.get(sym)
+                if col is None:
+                    return {"dates": [], "values": []}
+                s = col.dropna()
+                if s.empty:
+                    return {"dates": [], "values": []}
+                return {"dates": [str(d.date()) for d in s.index],
+                        "values": [round(float(v), 2) for v in s]}
+            except Exception:
+                return {"dates": [], "values": []}
         sp50  = _series("^SP500-50")
         sp200 = _series("^SP500-200")
         rsp   = _series("RSP")
@@ -5076,6 +5086,19 @@ def api_yield_curve():
             "history_10y": jp_hist_10y,
         },
     }
+
+    # ── S&P 500 P/E for ERP (Equity Risk Premium) calculation ────────────────
+    # Yahoo Finance doesn't reliably return trailingPE for the ^GSPC index
+    # ticker, but consistently returns it for SPY (the tracking ETF).
+    spx_pe = None
+    try:
+        _spy_info = yf.Ticker("SPY").info
+        spx_pe = _spy_info.get("trailingPE") or _spy_info.get("forwardPE")
+        if spx_pe:
+            spx_pe = round(float(spx_pe), 1)
+    except Exception as exc:
+        log.debug("Yield curve: SPY PE fetch failed: %s", exc)
+    result["spx_pe"] = spx_pe
 
     with _YIELD_CURVE_CACHE_LOCK:
         _YIELD_CURVE_CACHE[_YIELD_CURVE_CACHE_VER] = {"ts": time.time(), "data": result}

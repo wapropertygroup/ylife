@@ -2393,11 +2393,11 @@ function renderGoldRatios(data) {
   const gsCls = gsChg == null ? 'text-slate-200' : gsChg >= 0 ? 'text-rose-400' : 'text-emerald-400';
   document.getElementById('gsBadge').innerHTML = `
     <div class="text-2xl font-bold tabular-nums text-yellow-300">${gs != null ? gs.toFixed(1) : '—'}</div>
-    <div class="text-xs text-slate-500 mt-0.5">${_ratioChg(gsChg)} today</div>`;
+    <div class="text-xs text-slate-500 mt-0.5">${_ratioChg(gsChg)} ${I18n.t('markets.ratio_today')||'today'}</div>`;
   document.getElementById('gsStats').innerHTML = `
-    <div class="stat-card text-center"><div class="stat-label">Gold</div><div class="stat-val text-sm text-yellow-300">$${data.gold_price?.toFixed(0) ?? '—'}</div></div>
-    <div class="stat-card text-center"><div class="stat-label">Silver</div><div class="stat-val text-sm text-slate-300">$${data.silver_price?.toFixed(2) ?? '—'}</div></div>
-    <div class="stat-card text-center"><div class="stat-label">52w Range</div><div class="stat-val text-xs text-slate-400">${data.gs_52wk_lo?.toFixed(0) ?? '—'}–${data.gs_52wk_hi?.toFixed(0) ?? '—'}</div></div>`;
+    <div class="stat-card text-center"><div class="stat-label">${I18n.t('markets.ratio_gold')||'Gold'}</div><div class="stat-val text-sm text-yellow-300">$${data.gold_price?.toFixed(0) ?? '—'}</div></div>
+    <div class="stat-card text-center"><div class="stat-label">${I18n.t('markets.ratio_silver')||'Silver'}</div><div class="stat-val text-sm text-slate-300">$${data.silver_price?.toFixed(2) ?? '—'}</div></div>
+    <div class="stat-card text-center"><div class="stat-label">${I18n.t('markets.ratio_52w')||'52w Range'}</div><div class="stat-val text-xs text-slate-400">${data.gs_52wk_lo?.toFixed(0) ?? '—'}–${data.gs_52wk_hi?.toFixed(0) ?? '—'}</div></div>`;
   if (_gsChartInst) { _gsChartInst.destroy(); _gsChartInst = null; }
   _gsChartInst = _renderRatioChart(data, 'gsChart', 'gs_ratio', '#fbbf24');
   document.getElementById('gsLoading').style.display = 'none';
@@ -2408,11 +2408,11 @@ function renderGoldRatios(data) {
   const gcChg = data.gc_day_chg;
   document.getElementById('gcBadge').innerHTML = `
     <div class="text-2xl font-bold tabular-nums text-orange-300">${gc != null ? gc.toFixed(1) : '—'}</div>
-    <div class="text-xs text-slate-500 mt-0.5">${_ratioChg(gcChg)} today</div>`;
+    <div class="text-xs text-slate-500 mt-0.5">${_ratioChg(gcChg)} ${I18n.t('markets.ratio_today')||'today'}</div>`;
   document.getElementById('gcStats').innerHTML = `
-    <div class="stat-card text-center"><div class="stat-label">Gold</div><div class="stat-val text-sm text-yellow-300">$${data.gold_price?.toFixed(0) ?? '—'}</div></div>
-    <div class="stat-card text-center"><div class="stat-label">Copper</div><div class="stat-val text-sm text-orange-300">$${data.copper_price?.toFixed(3) ?? '—'}</div></div>
-    <div class="stat-card text-center"><div class="stat-label">52w Range</div><div class="stat-val text-xs text-slate-400">${data.gc_52wk_lo?.toFixed(0) ?? '—'}–${data.gc_52wk_hi?.toFixed(0) ?? '—'}</div></div>`;
+    <div class="stat-card text-center"><div class="stat-label">${I18n.t('markets.ratio_gold')||'Gold'}</div><div class="stat-val text-sm text-yellow-300">$${data.gold_price?.toFixed(0) ?? '—'}</div></div>
+    <div class="stat-card text-center"><div class="stat-label">${I18n.t('markets.ratio_copper')||'Copper'}</div><div class="stat-val text-sm text-orange-300">$${data.copper_price?.toFixed(3) ?? '—'}</div></div>
+    <div class="stat-card text-center"><div class="stat-label">${I18n.t('markets.ratio_52w')||'52w Range'}</div><div class="stat-val text-xs text-slate-400">${data.gc_52wk_lo?.toFixed(0) ?? '—'}–${data.gc_52wk_hi?.toFixed(0) ?? '—'}</div></div>`;
   if (_gcChartInst) { _gcChartInst.destroy(); _gcChartInst = null; }
   _gcChartInst = _renderRatioChart(data, 'gcChart', 'gc_ratio', '#fb923c');
   document.getElementById('gcLoading').style.display = 'none';
@@ -3533,11 +3533,13 @@ function _mktsModalConfig(kind) {
 
     // Equity Risk Premium
     try {
+      // SPY PE is a reliable S&P 500 PE proxy (Yahoo Finance returns it consistently for ETFs)
       const spxPE = _mkData?.indices?.spx?.pe ?? null;
       fetch('/api/yield-curve').then(r=>r.json()).then(yc => {
         const ten = yc?.us?.current?.['10Y'] ?? null;
-        if (spxPE && ten) {
-          const earningsYield = 100 / spxPE;
+        const pe  = spxPE ?? yc?.spx_pe ?? null;  // fallback to SPY PE from yield-curve API
+        if (pe && ten) {
+          const earningsYield = 100 / pe;
           const erp = earningsYield - ten;
           const erpEl = document.getElementById('erpValue');
           const lblEl = document.getElementById('erpLabel');
