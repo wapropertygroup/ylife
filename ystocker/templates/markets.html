@@ -3252,7 +3252,7 @@ function expandMktsChart(kind) {
           fill: false, tension: 0.4, spanGaps: true },
       ]},
       options: { responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => \` \${ctx.parsed.y?.toFixed(3)}%\` } } },
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ` ${ctx.parsed.y?.toFixed(3)}%` } } },
         scales: { x: { grid: { color: '#1e293b' }, ticks: { color: '#64748b' } },
           y: { grid: { color: '#1e293b' }, ticks: { color: '#64748b', callback: v => v.toFixed(2)+'%' },
             suggestedMin: Math.max(0, Math.min(...jpYlds)-0.2),
