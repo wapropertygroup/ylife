@@ -31,6 +31,32 @@
     Chart.defaults.elements.point.radius     = 0;
     Chart.defaults.elements.point.hoverRadius = 4;
   })();
+
+  // ── Fetch with automatic retry ────────────────────────────────────────────
+  // Wraps same-origin API calls with up to 3 retries + exponential back-off
+  // (1 s → 2 s → 3 s).  External URLs (Stripe, Google Maps, CDNs) pass through
+  // unchanged.  Re-throws on final failure so existing error handlers still fire.
+  (function patchFetchRetry() {
+    const _raw = window.fetch;
+    const MAX   = 3;
+    const DELAY = 1000; // ms base delay
+
+    window.fetch = async function(url, opts) {
+      // Only retry relative / same-origin paths
+      const isLocal = typeof url === 'string' && !url.startsWith('http') && !url.startsWith('//');
+      if (!isLocal) return _raw(url, opts);
+
+      for (let attempt = 1; attempt <= MAX; attempt++) {
+        try {
+          return await _raw(url, opts);
+        } catch (err) {
+          if (attempt === MAX) throw err;
+          await new Promise(r => setTimeout(r, DELAY * attempt));
+          console.warn(`[fetch] retry ${attempt}/${MAX - 1}: ${url}`);
+        }
+      }
+    };
+  })();
   </script>
 
   <!-- Google Font -->

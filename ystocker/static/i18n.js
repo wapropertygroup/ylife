@@ -452,6 +452,22 @@ const I18n = (() => {
     'history.zscore_stdev':        { en: '52w Std Dev',          zh: '52周标准差' },
     'history.zscore_range':        { en: '52w Range',            zh: '52周范围' },
 
+    // ── history.html navigation & new cards ──────────────────────────
+    'history.nav_valuation':   { en: 'Valuation',   zh: '估值' },
+    'history.nav_price_sec':   { en: 'Price',        zh: '价格' },
+    'history.nav_technical':   { en: 'Technical',    zh: '技术' },
+    'history.nav_forecast':    { en: 'Forecast',     zh: '预测' },
+    'history.nav_financials':  { en: 'Financials',   zh: '财务' },
+    'history.nav_peers':       { en: 'Peers',        zh: '同业' },
+    'history.nav_ownership':   { en: 'Ownership',    zh: '持股' },
+    'history.copy_alert_tip':  { en: 'Copy price alert to clipboard', zh: '复制价格提醒到剪贴板' },
+    'history.group_balance':   { en: 'Balance Sheet', zh: '资产负债' },
+    'history.net_cash':        { en: 'Net Cash ($B)', zh: '净现金（十亿）' },
+    'history.total_debt':      { en: 'Total Debt ($B)', zh: '总债务（十亿）' },
+    'history.interest_coverage':{ en: 'Int. Coverage', zh: '利息覆盖率' },
+    'history.median_label':    { en: 'Median',       zh: '中位数' },
+    'history.mean_label':      { en: 'Mean',         zh: '均值' },
+
     // ── 13F page ───────────────────────────────────────────────────────
     'thirteenf.title':       { en: '13F Institutional Holdings', zh: '13F 机构持仓' },
     'thirteenf.subtitle':    { en: 'Latest quarterly 13F-HR filings from SEC EDGAR · Top 50 equity positions per fund',
@@ -1109,6 +1125,9 @@ const I18n = (() => {
     'markets.forecast_arrow':   { en: 'Forecast →',       zh: '预测 →' },
     'markets.aaii_avg':         { en: 'Avg 37.5%',        zh: '均值 37.5%' },
     'markets.vix_note':         { en: 'VIX below 15 = complacency; above 30 = fear, often marks near-term market bottoms. Spikes during drawdowns and mean-reverts quickly.', zh: 'VIX低于15=市场自满；高于30=恐慌，通常标志短期底部。急涨后往往快速回归均值。' },
+    'markets.ai_brief_label':   { en: 'AI Markets Brief',           zh: 'AI 市场简报' },
+    'markets.ai_brief_loading': { en: 'Generating market brief…',   zh: '正在生成市场简报…' },
+    'markets.ai_brief_full':    { en: 'View full daily report →',   zh: '查看完整每日报告 →' },
 
     // ── heatmap.html ───────────────────────────────────────────────────
     'heatmap.nav':         { en: 'Heatmap',           zh: '热力图' },

@@ -16,6 +16,10 @@
     <!-- Search box -->
     <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 fade-up">
       <h2 class="text-base font-semibold text-slate-200 mb-4" data-i18n="lookup.search_title">Search a Ticker</h2>
+      <div id="recentlySearched" class="mb-3 hidden">
+        <p class="text-[10px] text-slate-600 uppercase tracking-widest mb-2">Recent</p>
+        <div id="recentChips" class="flex flex-wrap gap-1.5"></div>
+      </div>
       <div class="flex gap-3">
         <input id="tickerInput" type="text" placeholder="e.g. AAPL, WMT, TSM …"
                data-i18n-placeholder="lookup.search_ph"
@@ -223,6 +227,32 @@ function fmtPeg(v){
   return v.toFixed(2) + (v<1?' '+(I18n.t('lookup.cheap')||'✓ cheap'):v<2?' '+(I18n.t('lookup.fair')||'fair'):' '+(I18n.t('lookup.rich')||'rich'));
 }
 
+// ── Recently searched (localStorage)
+const RECENT_KEY = 'ystocker_recent_tickers';
+function _getRecent() {
+  try { return JSON.parse(localStorage.getItem(RECENT_KEY) || '[]'); } catch(e) { return []; }
+}
+function _addRecent(ticker, name) {
+  let arr = _getRecent().filter(t => t.ticker !== ticker);
+  arr.unshift({ticker, name: name || ticker});
+  arr = arr.slice(0, 6);
+  try { localStorage.setItem(RECENT_KEY, JSON.stringify(arr)); } catch(e) {}
+  _renderRecent();
+}
+function _renderRecent() {
+  const arr = _getRecent();
+  const container = document.getElementById('recentlySearched');
+  const chips = document.getElementById('recentChips');
+  if (!container || !chips || !arr.length) { container?.classList.add('hidden'); return; }
+  container.classList.remove('hidden');
+  chips.innerHTML = arr.map(t => `
+    <button onclick="quickLookup('${t.ticker}')"
+      class="text-xs px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 hover:border-slate-600 text-brand font-medium transition">
+      ${t.ticker} <span class="text-slate-500 font-normal text-[10px]">${t.name}</span>
+    </button>`).join('');
+}
+_renderRecent();
+
 // ── Single ticker lookup
 async function lookupTicker(symbolOverride) {
   const input  = document.getElementById('tickerInput');
@@ -281,6 +311,9 @@ function renderCard(d) {
   document.getElementById('cardName').textContent   = d.Name || '';
   document.getElementById('cardPrice').textContent  = fmtPrice(d['Current Price']);
   document.getElementById('addTickerInput').value   = d.Ticker;
+
+  // Save to recently searched
+  _addRecent(d.Ticker, d.Name || d['Company Name'] || '');
 
   const upsideEl = document.getElementById('cardUpside');
   const u = d['Upside (%)'];

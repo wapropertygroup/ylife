@@ -1042,6 +1042,11 @@ def api_history(ticker: str):
         "week52_high":       _safe(info.get("fiftyTwoWeekHigh")),
         "week52_low":        _safe(info.get("fiftyTwoWeekLow")),
         "week52_change":     _safe(round(info.get("52WeekChange") * 100, 1)) if info.get("52WeekChange") else None,
+        # Balance sheet
+        "total_cash":        _safe(round(info.get("totalCash") / 1e9, 1)) if info.get("totalCash") else None,
+        "total_debt":        _safe(round(info.get("totalDebt") / 1e9, 1)) if info.get("totalDebt") else None,
+        "interest_coverage": _safe(round(info.get("operatingCashflow") / info.get("interestExpense"), 1))
+                             if (info.get("operatingCashflow") and info.get("interestExpense") and info.get("interestExpense") != 0) else None,
         "ytd_return":        _safe(round(info.get("ytdReturn") * 100, 1)) if info.get("ytdReturn") else None,
         "avg_volume":        _safe(info.get("averageVolume")),
         # Relative strength vs SPY (normalised to 100 at start)
@@ -1611,6 +1616,60 @@ def api_search():
                     })
 
     return jsonify(results[:10])
+
+
+@bp.route("/api/search/semantic", methods=["POST"])
+def api_search_semantic():
+    """Gemini-powered semantic stock search — finds tickers matching a natural-language query."""
+    import os
+    from flask import request as flask_req
+
+    body = flask_req.get_json(force=True, silent=True) or {}
+    query = str(body.get("query", "")).strip()[:200]
+    lang  = str(body.get("lang", "en"))
+    if not query:
+        return jsonify([])
+
+    # Build context from cached peer data (compact representation)
+    from ystocker import PEER_GROUPS
+    rows = []
+    with _CACHE_LOCK:
+        for t, d in _cache.items():
+            if not isinstance(d, dict):
+                continue
+            rows.append(
+                f"{t}|{d.get('Name','')[:25]}|{d.get('PE (TTM)','')}|"
+                f"{d.get('Dividend Yield (%)','')}{d.get('Revenue Growth (%)','')}"
+                f"|{d.get('Short Float (%)','')}"
+            )
+    context = "\n".join(rows[:200])  # limit context size
+
+    try:
+        from google import genai
+        client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY", ""))
+        zh = lang == "zh"
+        prompt = (
+            f"Stock screener. Given this stock data (Ticker|Name|PE|DivYield%|RevGrowth%|ShortFloat%):\n"
+            f"{context}\n\n"
+            f"User query: '{query}'\n\n"
+            f"Return the top 5 matching tickers as JSON array: "
+            f'[{{"ticker":"XXX","name":"...","reason":"{("原因" if zh else "reason")}..."}}]. '
+            f"{'用中文回答原因。' if zh else 'Keep reasons to 10 words max.'} "
+            f"Return ONLY valid JSON, no markdown."
+        )
+        resp = client.models.generate_content(
+            model="gemini-2.0-flash-lite",
+            contents=prompt,
+        )
+        import json as _json
+        text = resp.text.strip().lstrip("```json").rstrip("```").strip()
+        results = _json.loads(text)
+        if isinstance(results, list):
+            return jsonify(results[:5])
+        return jsonify([])
+    except Exception as exc:
+        log.warning("Semantic search failed: %s", exc)
+        return jsonify([])
 
 
 @bp.route("/lookup")

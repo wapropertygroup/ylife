@@ -298,8 +298,8 @@ function renderHeatmap(stocks) {
     const sStocks = bySector[sector] || [];
     if (!sStocks.length) continue;
 
-    const valid   = sStocks.filter(s => s.day_chg != null);
-    const sAvg    = valid.length ? valid.reduce((a, x) => a + x.day_chg, 0) / valid.length : null;
+    const valid   = sStocks.filter(s => _getChgForMode(s) != null);
+    const sAvg    = valid.length ? valid.reduce((a, x) => a + _getChgForMode(x), 0) / valid.length : null;
     const sAvgTxt = sAvg != null ? (sAvg >= 0 ? '+' : '') + sAvg.toFixed(2) + '%' : '';
     const sCol    = SECTOR_COLORS[sector] || '#64748b';
     const sAvgCol = sAvg == null ? '#64748b' : sAvg >= 0 ? '#34d399' : '#f87171';
