@@ -851,16 +851,49 @@ def api_history(ticker: str):
             return jsonify(entry["data"])
 
     try:
-        tk   = yf.Ticker(ticker)
-        info = tk.info
-        hist = tk.history(period=period, interval=interval)
+        import concurrent.futures as _cf_h
+
+        # Fetch ticker info, price history, and SPY history in parallel.
+        # Sequential calls took 3-5 s; parallel cuts it to ~max(individual calls).
+        # A 15 s timeout prevents hung yfinance workers from blocking Gunicorn.
+        def _get_info():
+            return yf.Ticker(ticker).info
+
+        def _get_hist():
+            return yf.Ticker(ticker).history(period=period, interval=interval)
+
+        def _get_spy():
+            if ticker == "SPY":
+                return None
+            return yf.Ticker("SPY").history(period=period, interval=interval)
+
+        with _cf_h.ThreadPoolExecutor(max_workers=3) as _pool:
+            _info_fut = _pool.submit(_get_info)
+            _hist_fut = _pool.submit(_get_hist)
+            _spy_fut  = _pool.submit(_get_spy)
+
+            try:
+                info = _info_fut.result(timeout=15)
+            except _cf_h.TimeoutError:
+                return jsonify({"error": f"Data fetch timed out for {ticker}"}), 504
+
+            try:
+                hist = _hist_fut.result(timeout=15)
+            except _cf_h.TimeoutError:
+                return jsonify({"error": f"Price history timed out for {ticker}"}), 504
+
+            try:
+                _spy_result = _spy_fut.result(timeout=15)
+            except Exception:
+                _spy_result = None
+
     except Exception as exc:
         return jsonify({"error": str(exc)}), 502
 
-    # Quarterly earnings history for chart markers
+    # Quarterly earnings markers (best-effort; many tickers lack this data)
     earnings_markers = []
     try:
-        ed = tk.earnings_dates
+        ed = yf.Ticker(ticker).earnings_dates
         if ed is not None and not ed.empty:
             for dt, row in ed.head(12).iterrows():
                 try:
@@ -899,8 +932,8 @@ def api_history(ticker: str):
     relative_strength: list = []
     if ticker != "SPY":
         try:
-            spy_hist = yf.Ticker("SPY").history(period=period, interval=interval)
-            if not spy_hist.empty:
+            spy_hist = _spy_result  # already fetched in parallel above
+            if spy_hist is not None and not spy_hist.empty:
                 spy_raw = [round(float(p), 2) if not math.isnan(float(p)) else None
                            for p in spy_hist["Close"]]
                 # Align to same length as ticker (they usually match, but can differ by 1)
@@ -3114,6 +3147,8 @@ _COMMODITY_SYMBOLS: dict[str, tuple[str, str, str, str, str]] = {
     "soybeans":   ("ZS=F", "Soybeans",     "¢/bu",    "🫘", "agri"),
     "coffee":     ("KC=F", "Coffee",       "¢/lb",    "☕", "agri"),
     "sugar":      ("SB=F", "Sugar",        "¢/lb",    "🍬", "agri"),
+    # Macro (fetched for charts, not shown in commodity grid)
+    "dxy":        ("DX-Y.NYB", "US Dollar Index", "index", "💵", "macro"),
 }
 
 # 15-minute in-memory cache for the commodities snapshot (yfinance is slow)

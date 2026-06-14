@@ -2646,9 +2646,12 @@ async function translateEconEvents() {
   const btn = document.getElementById('econTranslateBtn');
   if (btn) btn.disabled = true;
 
-  // Find events without Chinese translation
+  // Find events without Chinese translation — limit to 50 nearest dates
+  // to keep the Gemini prompt small (sending 400+ events causes timeouts)
   const toTranslate = _econData
     .filter(ev => !ev.zh && ev.event && ev.event_id)
+    .sort((a, b) => new Date(a.date) - new Date(b.date))
+    .slice(0, 50)
     .map(ev => ({ event_id: ev.event_id, event: ev.event, date: ev.date }));
 
   if (!toTranslate.length) {
