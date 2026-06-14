@@ -139,7 +139,7 @@ def create_app() -> Flask:
     app.config["SESSION_COOKIE_HTTPONLY"] = True
 
     # Register the main blueprint (routes live in routes.py)
-    from ystocker.routes import bp, _start_background_thread, _start_heatmap_scheduler, _start_daily_broadcast_scheduler, _start_rolling_refresh_thread, _start_daily_pregen_scheduler
+    from ystocker.routes import bp, _start_background_thread, _start_heatmap_scheduler, _start_daily_broadcast_scheduler, _start_rolling_refresh_thread, _start_daily_pregen_scheduler, _start_markets_warmup_thread
     app.register_blueprint(bp)
 
     # Jinja2 filter: unix timestamp → "Feb 21, 2026 15:30"
@@ -197,6 +197,9 @@ def create_app() -> Flask:
     # Start Fed balance-sheet cache warm-up + daily refresh (H.4.1 is weekly; TTL = 24h)
     from ystocker.fed import start_background_thread as _start_fed_thread
     _start_fed_thread()
+
+    # Start markets cache warm-up (pre-fetches index/VIX/sector data every 5 min)
+    _start_markets_warmup_thread(app)
 
     # Start heatmap daily auto-snapshot scheduler (weekdays at 16:30 ET)
     _start_heatmap_scheduler()

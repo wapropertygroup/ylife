@@ -1056,7 +1056,8 @@ def api_history(ticker: str):
         "fcf":               _safe(round(info.get("freeCashflow") / 1e9, 1)) if info.get("freeCashflow") else None,
         # ETF-specific
         "quote_type":        info.get("quoteType"),
-        "expense_ratio":     _safe(round(info.get("annualReportExpenseRatio") * 100, 2)) if info.get("annualReportExpenseRatio") else None,
+        "expense_ratio":     _safe(round((info.get("annualReportExpenseRatio") or info.get("expenseRatio") or 0) * 100, 3))
+                             if (info.get("annualReportExpenseRatio") or info.get("expenseRatio")) else None,
         "total_assets":      _safe(round(info.get("totalAssets") / 1e9, 1)) if info.get("totalAssets") else None,
         "etf_yield":         _safe(round(info.get("yield") * 100, 2)) if info.get("yield") else None,
         "nav_price":         _safe(info.get("navPrice")),
@@ -3019,6 +3020,35 @@ _MARKETS_TABLE_NAME    = "ystocker-markets-cache"
 _markets_ddb_table     = None
 _markets_ddb_unavail_until = 0.0
 _MARKETS_DDB_LOCK      = threading.Lock()
+
+
+def _start_markets_warmup_thread(app) -> None:
+    """Pre-warm the markets cache on startup and refresh every 5 minutes.
+
+    Without this thread, the first visitor after a server restart (or after the
+    5-minute TTL expires) waits 20-30 seconds for Yahoo Finance to return data
+    for 15+ indices.  This background thread keeps the cache fresh so every
+    request is a cache hit.
+    """
+    def _loop():
+        time.sleep(8)  # Let Gunicorn fully initialize before the first fetch
+        while True:
+            try:
+                with _MARKETS_CACHE_LOCK:
+                    entry = _MARKETS_CACHE.get("data")
+                    ts    = entry.get("ts", 0) if entry else 0
+                if time.time() - ts >= _MARKETS_CACHE_TTL - 30:
+                    log.info("Markets warm-up: cache stale (%.0fs) — refreshing", time.time() - ts)
+                    with app.test_request_context():
+                        api_markets()  # populates _MARKETS_CACHE as a side effect
+                    log.info("Markets warm-up: cache refreshed")
+            except Exception as exc:
+                log.warning("Markets warm-up: refresh failed: %s", exc)
+            time.sleep(60)  # re-check every minute
+
+    t = threading.Thread(target=_loop, daemon=True, name="markets-warmup")
+    t.start()
+    log.info("Markets warm-up thread started (TTL=%ds)", _MARKETS_CACHE_TTL)
 
 
 def _get_markets_ddb_table():
