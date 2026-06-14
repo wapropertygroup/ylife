@@ -973,15 +973,15 @@ function renderIdxStats(key, data) {
   // 52-week range bar
   const h52 = d.high52w ?? d.hi52 ?? null;
   const l52 = d.low52w  ?? d.lo52  ?? null;
-  const cur = d.price   ?? d.current ?? null;
+  const curPrice = d.price   ?? d.current ?? null;
   const rng = (h52 != null && l52 != null) ? h52 - l52 : null;
   const bar = document.getElementById('idxRangeBar');
-  if (bar && rng > 0 && cur != null) {
+  if (bar && rng > 0 && curPrice != null) {
     bar.classList.remove('hidden');
-    const pct = Math.max(2, Math.min(98, (cur - l52) / rng * 100));
+    const pct = Math.max(2, Math.min(98, (curPrice - l52) / rng * 100));
     document.getElementById('idxRangeLow').textContent     = l52.toFixed(2);
     document.getElementById('idxRangeHigh').textContent    = h52.toFixed(2);
-    document.getElementById('idxRangeCurrent').textContent = cur.toFixed(2);
+    document.getElementById('idxRangeCurrent').textContent = curPrice.toFixed(2);
     document.getElementById('idxRangeMarker').style.left   = pct + '%';
     document.getElementById('idxRangePct').textContent     = pct.toFixed(0) + '% from 52-week low';
   } else if (bar) {

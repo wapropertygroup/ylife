@@ -256,6 +256,8 @@ const I18n = (() => {
     'history.div_yield':    { en: 'Yield',           zh: '股息率' },
     'history.div_rate':     { en: 'Annual Rate',     zh: '年度股息' },
     'history.payout_ratio': { en: 'Payout Ratio',    zh: '派息率' },
+    'history.div_history_title': { en: 'Annual Dividend History', zh: '年度股息历史' },
+    'history.div_per_share':     { en: 'Per Share ($)',           zh: '每股（美元）' },
     'history.group_ownership':    { en: 'Ownership & Short', zh: '持股与做空' },
     'history.insiders':     { en: 'Insider %',       zh: '内部人持股%' },
     'history.institutions': { en: 'Institutions %',  zh: '机构持股%' },
@@ -1057,6 +1059,9 @@ const I18n = (() => {
     'markets.gs_desc':       { en: 'oz of silver per oz of gold — higher = gold relatively expensive', zh: '每盎司黄金兑银盎司数 — 越高代表黄金相对昂贵' },
     'markets.gc_title':      { en: 'Gold / Copper Ratio',   zh: '金铜比' },
     'markets.gc_desc':       { en: 'gold ($/oz) ÷ copper ($/lb) — economic risk indicator', zh: '黄金（美元/盎司）÷ 铜（美元/磅）— 经济风险指标' },
+
+    // Crypto
+    'markets.crypto_title':  { en: 'Crypto',                zh: '加密货币' },
 
     // Treasury Yield Curve
     'markets.us_yield_title': { en: 'US Treasury Yield Curve',  zh: '美国国债收益率曲线' },
