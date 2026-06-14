@@ -4439,7 +4439,7 @@ def api_gold_ratios():
 _YIELD_CURVE_CACHE: dict = {}
 _YIELD_CURVE_CACHE_LOCK = threading.Lock()
 _YIELD_CURVE_CACHE_TTL  = 3600  # 1 hour
-_YIELD_CURVE_CACHE_VER  = "v2"  # bump when maturity keys change
+_YIELD_CURVE_CACHE_VER  = "v3"  # bump when maturity keys change
 _YIELD_CURVE_FILE       = Path(__file__).parent.parent / "cache" / "yield_curve_cache.json"
 
 
@@ -4496,9 +4496,9 @@ def api_yield_curve():
 
     # ── US snapshot: US Treasury XML (all maturities) ────────────────────────
     US_MAT_MAP = {
-        "BC_3MONTH":  "3M",  "BC_6MONTH": "6M",  "BC_1YEAR":  "12M",
-        "BC_3YEAR":   "3Y",  "BC_5YEAR":  "5Y",  "BC_10YEAR": "10Y",
-        "BC_30YEAR":  "30Y",
+        "BC_3MONTH":  "3M",  "BC_6MONTH": "6M",  "BC_1YEAR":  "1Y",
+        "BC_2YEAR":   "2Y",  "BC_3YEAR":  "3Y",  "BC_5YEAR":  "5Y",
+        "BC_10YEAR":  "10Y", "BC_20YEAR": "20Y", "BC_30YEAR": "30Y",
     }
     us_current: dict = {}
     try:
@@ -4579,8 +4579,9 @@ def api_yield_curve():
 
     # FRED fallback for any maturity still missing (covers all 7)
     FRED_IDS = {
-        "3M":  "DGS3MO", "6M": "DGS6MO", "12M": "DGS1",
-        "3Y":  "DGS3",   "5Y": "DGS5",   "10Y": "DGS10",  "30Y": "DGS30",
+        "3M":  "DGS3MO", "6M": "DGS6MO", "1Y":  "DGS1",
+        "2Y":  "DGS2",   "3Y": "DGS3",   "5Y":  "DGS5",
+        "10Y": "DGS10",  "20Y": "DGS20", "30Y": "DGS30",
     }
     missing = [m for m in FRED_IDS if m not in us_current]
     if missing:
@@ -4705,6 +4706,59 @@ def api_yield_curve():
     except Exception as exc:
         log.warning("Yield curve: CN FRED fetch failed: %s", exc)
 
+    # ── JP snapshot: Ministry of Finance Japan JGB yield curve ──────────────
+    JP_COL_MAP = {"1Y": "1Y", "2Y": "2Y", "3Y": "3Y", "5Y": "5Y",
+                  "10Y": "10Y", "20Y": "20Y", "30Y": "30Y"}
+    jp_current: dict = {}
+    try:
+        mof_url = ("https://www.mof.go.jp/english/jgbs/reference/"
+                   "interest_rate/jgbcme_all.csv")
+        mof_r = _req.get(mof_url, timeout=10, headers={"User-Agent": "Mozilla/5.0"})
+        if mof_r.status_code == 200:
+            mof_lines = mof_r.text.strip().splitlines()
+            if len(mof_lines) >= 2:
+                header = [h.strip() for h in mof_lines[0].split(",")]
+                for line in reversed(mof_lines[1:]):
+                    parts = [p.strip() for p in line.split(",")]
+                    if len(parts) >= len(header) and parts[0]:
+                        for label, col in JP_COL_MAP.items():
+                            try:
+                                idx = header.index(col)
+                                val = parts[idx]
+                                if val and val not in ("", "-", "N/A"):
+                                    jp_current[label] = round(float(val), 3)
+                            except (ValueError, IndexError):
+                                pass
+                        if jp_current:
+                            break
+        log.info("Yield curve: JP MoF fetched (%d maturities: %s)",
+                 len(jp_current), ", ".join(sorted(jp_current.keys())))
+    except Exception as exc:
+        log.warning("Yield curve: JP MoF fetch failed: %s", exc)
+
+    jp_hist_10y: dict = {"dates": [], "values": []}
+    try:
+        jp_fred = _req.get(
+            "https://fred.stlouisfed.org/graph/fredgraph.csv?id=IRLTLT01JPM156N",
+            timeout=10, headers={"User-Agent": "Mozilla/5.0"},
+        )
+        if jp_fred.status_code == 200:
+            dates, vals = [], []
+            for line in jp_fred.text.strip().splitlines()[1:]:
+                parts = line.split(",")
+                if len(parts) == 2 and parts[1].strip() not in (".", ""):
+                    try:
+                        dates.append(parts[0].strip())
+                        vals.append(round(float(parts[1].strip()), 3))
+                    except ValueError:
+                        pass
+            if dates:
+                jp_hist_10y = {"dates": dates, "values": vals}
+                if "10Y" not in jp_current:
+                    jp_current["10Y"] = vals[-1]
+    except Exception as exc:
+        log.warning("Yield curve: JP FRED fetch failed: %s", exc)
+
     result = {
         "us": {
             "current":       us_current,
@@ -4714,6 +4768,10 @@ def api_yield_curve():
         "cn": {
             "current":     cn_current,
             "history_10y": cn_hist_10y,
+        },
+        "jp": {
+            "current":     jp_current,
+            "history_10y": jp_hist_10y,
         },
     }
 

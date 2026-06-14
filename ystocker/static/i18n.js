@@ -1073,6 +1073,7 @@ const I18n = (() => {
     'markets.pcr_bearish':  { en: 'Bearish (high put buying)', zh: '看跌（大量买入看跌期权）' },
     'markets.pcr_neutral':  { en: 'Neutral',                zh: '中性' },
     'markets.pcr_bullish':  { en: 'Bullish (low put buying)', zh: '看涨（看跌期权买入减少）' },
+    'markets.vix_pcr_title': { en: 'VIX vs Put/Call Ratio', zh: 'VIX与认沽/认购比率' },
 
     // Gold Ratios
     'markets.gs_title':      { en: 'Gold / Silver Ratio',   zh: '金银比' },
@@ -1088,6 +1089,8 @@ const I18n = (() => {
     'markets.us_yield_desc':  { en: 'Current yields by maturity — inverted curve signals recession risk', zh: '美债各期限实时收益率，曲线倒挂预示经济衰退风险' },
     'markets.cn_yield_title': { en: 'CN Treasury Yield Curve',   zh: '中国国债收益率曲线' },
     'markets.cn_yield_desc':  { en: 'Current CN government bond yields by maturity', zh: '中国国债各期限实时收益率' },
+    'markets.jp_yield_title': { en: 'JP Treasury Yield Curve',   zh: '日本国债收益率曲线' },
+    'markets.jp_yield_desc':  { en: 'Japan Government Bond (JGB) yields — BoJ YCC policy shapes the short end', zh: '日本国债各期限实时收益率，日本央行YCC政策主导短端利率' },
     'markets.yield_inverted': { en: '⚠ Inverted',               zh: '⚠ 倒挂' },
     'markets.yield_normal':   { en: 'Normal',                   zh: '正常' },
     'markets.yield_spread':   { en: 'Spread',                   zh: '利差' },
@@ -1270,6 +1273,11 @@ const I18n = (() => {
     'commodities.name.sugar':       { en: 'Sugar',        zh: '糖' },
     'commodities.gold_dxy_title':   { en: 'Gold vs US Dollar Index (DXY)', zh: '黄金 vs 美元指数（DXY）' },
     'commodities.gold_dxy_desc':    { en: 'Gold typically moves inverse to the dollar', zh: '黄金与美元通常呈反向关系' },
+    'commodities.copper_spy_title': { en: 'Dr. Copper vs S&P 500', zh: '"铜博士"vs 标普500' },
+    'commodities.copper_spy_desc':  { en: 'Copper tracks global manufacturing demand and often leads equity markets by 3–6 months. Divergence is a classic warning signal.', zh: '铜价追踪全球制造业需求，通常领先股市3–6个月。背离是经典的预警信号。' },
+    'commodities.copper_spy_legend_copper': { en: 'Copper (normalised)', zh: '铜（标准化）' },
+    'commodities.copper_spy_legend_spy':    { en: 'S&P 500 (normalised)', zh: '标普500（标准化）' },
+    'commodities.copper_spy_axis':          { en: 'Normalised (start=100)', zh: '标准化（起点=100）' },
 
     // Sector performance bar labels (from SPDR ETFs)
     'markets.sector.Tech':          { en: 'Tech',             zh: '科技' },

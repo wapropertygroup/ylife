@@ -206,6 +206,20 @@
   </div>
 </div>
 
+<!-- M2 Velocity Chart -->
+<div id="m2VelSection" class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 mb-6 fade-up" style="display:none">
+  <div class="flex items-start justify-between mb-3">
+    <div>
+      <h3 class="text-sm font-semibold text-slate-300">M2 Velocity (M2V)</h3>
+      <p class="text-xs text-slate-500 mt-0.5">How many times M2 turns over per year (GDP / M2). Low velocity = money hoarding; high = faster economic activity.</p>
+    </div>
+    <span id="m2VelLatest" class="text-base font-bold font-mono text-amber-400">—</span>
+  </div>
+  <div class="chart-container" style="height:160px">
+    <canvas id="m2VelChart"></canvas>
+  </div>
+</div>
+
 <!-- ── Balance Sheet Identity (Assets = Liabilities + Capital) ───────── -->
 <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 mb-6 fade-up">
   <div class="flex items-start justify-between gap-3 mb-3 flex-wrap">
@@ -703,16 +717,23 @@
     </div>
     <div id="balanceExplainPanel" class="explain-panel"></div>
 
-    <!-- Fed Assets vs S&P 500 toggle -->
+    <!-- Fed Assets vs S&P 500 (always visible) -->
     <div id="fedSpySection" class="mt-3 border-t border-slate-800 pt-3">
-      <button onclick="_toggleFedSpy()" id="fedSpyToggle"
-        class="text-[11px] text-slate-500 hover:text-slate-300 transition flex items-center gap-1">
-        <span id="fedSpyChevron">▶</span>
-        <span data-i18n="fed.fed_spy_title">Fed Total Assets vs S&amp;P 500</span>
-      </button>
-      <div id="fedSpyChartWrap" class="chart-container mt-3 hidden" style="height:200px">
+      <p class="text-xs font-semibold text-slate-400 mb-2" data-i18n="fed.fed_spy_title">Fed Total Assets vs S&amp;P 500</p>
+      <div id="fedSpyChartWrap" class="chart-container mt-1" style="height:200px">
         <canvas id="fedSpyChart"></canvas>
       </div>
+    </div>
+  </div>
+
+  <!-- Fed Balance Sheet vs 10Y Yield -->
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up" id="fedYieldSection" style="display:none">
+    <div class="mb-3">
+      <h3 class="text-sm font-semibold text-slate-300">Fed Total Assets vs 10-Year Treasury Yield</h3>
+      <p class="text-xs text-slate-500 mt-0.5">QE expands the balance sheet → yields fall. QT shrinks it → yields rise. This is the defining macro relationship of the post-2008 era.</p>
+    </div>
+    <div class="chart-container" style="height:220px">
+      <canvas id="fedYieldChart"></canvas>
     </div>
   </div>
 
@@ -803,7 +824,7 @@
 {% endif %}
 
 <script>
-// Fed series data — populated by the main IIFE and read by _toggleFedSpy
+// Fed series data — populated by the main IIFE and read by _loadFedSpy
 let _fedSeriesData = {};
 
 (async function() {
@@ -827,7 +848,7 @@ let _fedSeriesData = {};
   }
 
   const s = data.series || {};
-  _fedSeriesData = s;  // expose for _toggleFedSpy
+  _fedSeriesData = s;  // expose for _loadFedSpy
 
   function lastVal(sid) {
     const d = s[sid];
@@ -933,6 +954,31 @@ let _fedSeriesData = {};
       }
     }
   })();
+
+  // M2 Velocity chart
+  const m2v = s['M2V'];
+  if (m2v && m2v.dates && m2v.dates.length > 4) {
+    document.getElementById('m2VelSection').style.display = 'block';
+    const latestV = m2v.values.filter(v=>v!=null).slice(-1)[0];
+    if (latestV != null) document.getElementById('m2VelLatest').textContent = latestV.toFixed(2) + 'x';
+    new Chart(document.getElementById('m2VelChart'), {
+      type: 'line',
+      data: { labels: m2v.dates, datasets: [{
+        label: 'M2 Velocity',
+        data: m2v.values,
+        borderColor: '#fbbf24', backgroundColor: 'rgba(251,191,36,0.08)',
+        borderWidth: 1.5, pointRadius: 0, fill: true, tension: 0.3, spanGaps: true,
+      }]},
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend:{display:false}, tooltip:{callbacks:{label:c=>` Velocity: ${c.raw?.toFixed(3)}x`}} },
+        scales: {
+          x: { grid:{color:'#1e293b'}, ticks:{color:'#64748b',maxTicksLimit:6,maxRotation:0} },
+          y: { grid:{color:'#1e293b'}, ticks:{color:'#64748b',callback:v=>v.toFixed(2)+'x'} },
+        },
+      },
+    });
+  }
 
   // ── Populate Balance Sheet Identity panel
   const totA = _v('WALCL');
@@ -1779,6 +1825,61 @@ let _fedSeriesData = {};
     });
   }
 
+  // ── Fed Balance Sheet vs 10Y Yield dual-axis chart
+  (async () => {
+    try {
+      const yc = await fetch('/api/yield-curve').then(r=>r.json());
+      const walcl = s['WALCL'];
+      if (!walcl || !walcl.dates || !walcl.dates.length) return;
+      const ten = yc?.us?.history_10y || null;
+      if (!ten || !ten.dates || !ten.dates.length) return;
+      document.getElementById('fedYieldSection').style.display = 'block';
+      // Build a daily-date → value map for the 10Y yield (daily data)
+      const tenMap = {};
+      ten.dates.forEach((d, i) => { if (ten.values[i] != null) tenMap[d] = ten.values[i]; });
+      // For weekly WALCL dates, find the nearest trading day within ±3 days
+      function nearestYield(dateStr) {
+        if (tenMap[dateStr] != null) return tenMap[dateStr];
+        const base = new Date(dateStr);
+        for (let delta = 1; delta <= 3; delta++) {
+          for (const sign of [1, -1]) {
+            const d = new Date(base);
+            d.setDate(d.getDate() + sign * delta);
+            const key = d.toISOString().slice(0, 10);
+            if (tenMap[key] != null) return tenMap[key];
+          }
+        }
+        return null;
+      }
+      const tenAligned = walcl.dates.map(d => nearestYield(d));
+      const walcl_b = walcl.values.map(v => v != null ? +(v/1000).toFixed(1) : null);
+      new Chart(document.getElementById('fedYieldChart'), {
+        type: 'line',
+        data: { labels: walcl.dates.slice(-260), datasets: [
+          { label: 'Fed Assets ($T)', data: walcl_b.slice(-260),
+            borderColor: '#a78bfa', backgroundColor: 'rgba(167,139,250,0.08)',
+            borderWidth: 2, pointRadius: 0, fill: true, tension: 0.3, spanGaps: true, yAxisID: 'y' },
+          { label: '10Y Yield (%)', data: tenAligned.slice(-260),
+            borderColor: '#f87171', backgroundColor: 'transparent',
+            borderWidth: 1.5, pointRadius: 0, fill: false, tension: 0.3, spanGaps: true, yAxisID: 'yYield', borderDash:[4,3] },
+        ]},
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend:{display:false}, tooltip:{mode:'index',intersect:false,callbacks:{label:c=>c.dataset.yAxisID==='yYield'?` 10Y: ${c.raw?.toFixed(2)}%`:` Fed: $${c.raw?.toFixed(1)}T`}} },
+          scales: {
+            x: { grid:{color:'#1e293b'}, ticks:{color:'#64748b',maxTicksLimit:6,maxRotation:0} },
+            y: { grid:{color:'#1e293b'}, ticks:{color:'rgba(167,139,250,0.7)',callback:v=>'$'+v+'T'} },
+            yYield: { position:'right', grid:{drawOnChartArea:false}, ticks:{color:'rgba(248,113,113,0.7)',callback:v=>v.toFixed(1)+'%'} },
+          },
+          interaction: { mode:'index', intersect:false },
+        },
+      });
+    } catch(e) { console.warn('Fed vs 10Y chart failed:', e); }
+  })();
+
+  // ── Auto-load Fed Assets vs S&P 500 (always visible)
+  _loadFedSpy();
+
 })();
 
 // ── AI Explain ────────────────────────────────────────────────────────────
@@ -1896,15 +1997,9 @@ function explainChart(chart) {
   _runExplain(chart, I18n.getLang());
 }
 
-// ── Fed Assets vs S&P 500 toggle ─────────────────────────────────────────
+// ── Fed Assets vs S&P 500 (auto-loaded, always visible) ───────────────────
 let _fedSpyLoaded = false, _fedSpyChart = null;
-async function _toggleFedSpy() {
-  const wrap = document.getElementById('fedSpyChartWrap');
-  const chevron = document.getElementById('fedSpyChevron');
-  if (!wrap.classList.contains('hidden')) {
-    wrap.classList.add('hidden'); chevron.textContent = '▶'; return;
-  }
-  wrap.classList.remove('hidden'); chevron.textContent = '▼';
+async function _loadFedSpy() {
   if (_fedSpyLoaded) return;
   _fedSpyLoaded = true;
   try {
