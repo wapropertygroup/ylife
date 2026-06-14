@@ -210,8 +210,8 @@
 <div id="m2VelSection" class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 mb-6 fade-up" style="display:none">
   <div class="flex items-start justify-between mb-3">
     <div>
-      <h3 class="text-sm font-semibold text-slate-300">M2 Velocity (M2V)</h3>
-      <p class="text-xs text-slate-500 mt-0.5">How many times M2 turns over per year (GDP / M2). Low velocity = money hoarding; high = faster economic activity.</p>
+      <h3 class="text-sm font-semibold text-slate-300" data-i18n="fed.m2v_title">M2 Velocity (M2V)</h3>
+      <p class="text-xs text-slate-500 mt-0.5" data-i18n="fed.m2v_desc">How many times M2 turns over per year (GDP / M2). Low velocity = money hoarding; high = faster economic activity.</p>
     </div>
     <span id="m2VelLatest" class="text-base font-bold font-mono text-amber-400">—</span>
   </div>
@@ -224,8 +224,8 @@
 <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up" id="buffettSection" style="display:none">
   <div class="flex items-start justify-between mb-3">
     <div>
-      <h3 class="text-sm font-semibold text-slate-300">📊 Buffett Indicator — US Market Cap / GDP</h3>
-      <p class="text-xs text-slate-500 mt-0.5">"Probably the best single measure of where valuations stand." — Warren Buffett. Above 140% = overvalued; below 80% = undervalued.</p>
+      <h3 class="text-sm font-semibold text-slate-300" data-i18n="fed.buffett_title">📊 Buffett Indicator — US Market Cap / GDP</h3>
+      <p class="text-xs text-slate-500 mt-0.5" data-i18n="fed.buffett_desc">"Probably the best single measure of where valuations stand." — Warren Buffett. Above 140% = overvalued; below 80% = undervalued.</p>
     </div>
     <span id="buffettBadge" class="text-sm font-bold font-mono text-slate-100">—%</span>
   </div>
@@ -243,8 +243,8 @@
 <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up" id="breakEvenSection" style="display:none">
   <div class="flex items-start justify-between mb-3">
     <div>
-      <h3 class="text-sm font-semibold text-slate-300">📈 10Y Breakeven Inflation Rate</h3>
-      <p class="text-xs text-slate-500 mt-0.5">Bond market's implied average inflation forecast over 10 years (10Y nominal – 10Y TIPS). Fed targets 2%.</p>
+      <h3 class="text-sm font-semibold text-slate-300" data-i18n="fed.breakeven_title">📈 10Y Breakeven Inflation Rate</h3>
+      <p class="text-xs text-slate-500 mt-0.5" data-i18n="fed.breakeven_desc">Bond market's implied average inflation forecast over 10 years (10Y nominal – 10Y TIPS). Fed targets 2%.</p>
     </div>
     <span id="breakEvenVal" class="text-sm font-bold font-mono text-amber-400">—%</span>
   </div>
@@ -256,8 +256,8 @@
 <!-- Oil vs CPI Inflation -->
 <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up" id="oilCpiSection" style="display:none">
   <div class="mb-2">
-    <h3 class="text-sm font-semibold text-slate-300">WTI Oil Price vs CPI Inflation</h3>
-    <p class="text-xs text-slate-500 mt-0.5">Oil shocks typically feed through to headline CPI within 1–3 months. A leading indicator for Fed policy pivots.</p>
+    <h3 class="text-sm font-semibold text-slate-300" data-i18n="fed.oil_cpi_title">WTI Oil Price vs CPI Inflation</h3>
+    <p class="text-xs text-slate-500 mt-0.5" data-i18n="fed.oil_cpi_desc">Oil shocks typically feed through to headline CPI within 1–3 months. A leading indicator for Fed policy pivots.</p>
   </div>
   <div class="flex items-center gap-3 mb-1 text-[10px]">
     <span class="text-orange-400">— WTI Crude ($/bbl, left)</span>
@@ -269,8 +269,8 @@
 <!-- HY/IG OAS Credit Spreads -->
 <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up" id="oasSection" style="display:none">
   <div class="mb-3">
-    <h3 class="text-sm font-semibold text-slate-300">💳 Credit Spreads — HY &amp; IG OAS</h3>
-    <p class="text-xs text-slate-500 mt-0.5">Option-Adjusted Spread over Treasuries. Widening = credit stress / risk-off. HY OAS &gt;600bps = distress level.</p>
+    <h3 class="text-sm font-semibold text-slate-300" data-i18n="fed.credit_spreads_title">💳 Credit Spreads — HY &amp; IG OAS</h3>
+    <p class="text-xs text-slate-500 mt-0.5" data-i18n="fed.credit_spreads_desc">Option-Adjusted Spread over Treasuries. Widening = credit stress / risk-off. HY OAS &gt;600bps = distress level.</p>
   </div>
   <div class="flex items-center gap-3 mb-2 text-xs">
     <span class="flex items-center gap-1 text-rose-400"><span class="w-3 h-0.5 bg-rose-400 inline-block"></span> HY OAS (bps)</span>
@@ -285,8 +285,8 @@
 <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up" id="ismSection" style="display:none">
   <div class="flex items-start justify-between mb-3">
     <div>
-      <h3 class="text-sm font-semibold text-slate-300">🏭 ISM Manufacturing PMI</h3>
-      <p class="text-xs text-slate-500 mt-0.5">Above 50 = expansion, below 50 = contraction. Leads earnings and S&amp;P 500 by 3–6 months. Classic business cycle indicator.</p>
+      <h3 class="text-sm font-semibold text-slate-300" data-i18n="fed.ism_title">🏭 ISM Manufacturing PMI</h3>
+      <p class="text-xs text-slate-500 mt-0.5" data-i18n="fed.ism_desc">Above 50 = expansion, below 50 = contraction. Leads earnings and S&amp;P 500 by 3–6 months. Classic business cycle indicator.</p>
     </div>
     <span id="ismVal" class="text-sm font-bold font-mono text-slate-100">—</span>
   </div>
@@ -804,8 +804,8 @@
   <!-- Fed Balance Sheet vs 10Y Yield -->
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up" id="fedYieldSection" style="display:none">
     <div class="mb-3">
-      <h3 class="text-sm font-semibold text-slate-300">Fed Total Assets vs 10-Year Treasury Yield</h3>
-      <p class="text-xs text-slate-500 mt-0.5">QE expands the balance sheet → yields fall. QT shrinks it → yields rise. This is the defining macro relationship of the post-2008 era.</p>
+      <h3 class="text-sm font-semibold text-slate-300" data-i18n="fed.fed_assets_title">Fed Total Assets vs 10-Year Treasury Yield</h3>
+      <p class="text-xs text-slate-500 mt-0.5" data-i18n="fed.fed_assets_desc">QE expands the balance sheet → yields fall. QT shrinks it → yields rise. This is the defining macro relationship of the post-2008 era.</p>
     </div>
     <div class="chart-container" style="height:220px">
       <canvas id="fedYieldChart"></canvas>
@@ -815,8 +815,8 @@
   <!-- Real 10Y Yield (TIPS) vs S&P 500 -->
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up" id="realYieldSpySection" style="display:none">
     <div class="mb-3">
-      <h3 class="text-sm font-semibold text-slate-300">📉 Real 10Y Yield (TIPS) vs S&P 500</h3>
-      <p class="text-xs text-slate-500 mt-0.5">When real yields rise above 2%, equity multiples typically compress. When negative, stocks and risk assets inflate. The post-2008 driver of asset prices.</p>
+      <h3 class="text-sm font-semibold text-slate-300" data-i18n="fed.real_yield_title">📉 Real 10Y Yield (TIPS) vs S&P 500</h3>
+      <p class="text-xs text-slate-500 mt-0.5" data-i18n="fed.real_yield_desc">When real yields rise above 2%, equity multiples typically compress. When negative, stocks and risk assets inflate. The post-2008 driver of asset prices.</p>
     </div>
     <div class="flex items-center gap-3 mb-2 text-[11px]">
       <span class="text-amber-400">■ Real 10Y (&gt;2% = headwind)</span>
@@ -828,8 +828,8 @@
   <!-- Fisher Decomposition: Nominal = Real + Breakeven -->
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up" id="fisherSection" style="display:none">
     <div class="mb-3">
-      <h3 class="text-sm font-semibold text-slate-300">⚖️ Yield Decomposition: Nominal = Real + Inflation Expectations</h3>
-      <p class="text-xs text-slate-500 mt-0.5">Fisher equation: 10Y nominal yield = real yield (TIPS) + breakeven inflation. Shows what's driving yields — growth expectations or inflation fears.</p>
+      <h3 class="text-sm font-semibold text-slate-300" data-i18n="fed.yield_decomp_title">⚖️ Yield Decomposition: Nominal = Real + Inflation Expectations</h3>
+      <p class="text-xs text-slate-500 mt-0.5" data-i18n="fed.yield_decomp_desc">Fisher equation: 10Y nominal yield = real yield (TIPS) + breakeven inflation. Shows what's driving yields — growth expectations or inflation fears.</p>
     </div>
     <div class="flex items-center gap-3 mb-2 text-[11px]">
       <span class="text-amber-400">— Real (DFII10)</span>
@@ -842,8 +842,8 @@
   <!-- Housing Starts vs 30Y Mortgage Rate -->
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up" id="housingSection" style="display:none">
     <div class="mb-3">
-      <h3 class="text-sm font-semibold text-slate-300">🏠 Housing Starts vs 30Y Mortgage Rate</h3>
-      <p class="text-xs text-slate-500 mt-0.5">Rate hikes → mortgage rates spike → housing starts collapse (3-6 month lag). Classic credit cycle barometer.</p>
+      <h3 class="text-sm font-semibold text-slate-300" data-i18n="fed.housing_title">🏠 Housing Starts vs 30Y Mortgage Rate</h3>
+      <p class="text-xs text-slate-500 mt-0.5" data-i18n="fed.housing_desc">Rate hikes → mortgage rates spike → housing starts collapse (3-6 month lag). Classic credit cycle barometer.</p>
     </div>
     <div class="flex items-center gap-3 mb-2 text-[11px]">
       <span class="text-emerald-400">■ Housing Starts (k)</span>
@@ -856,8 +856,8 @@
   <!-- Consumer Sentiment (UMich) vs S&P 500 -->
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up" id="sentSpySection" style="display:none">
     <div class="mb-3">
-      <h3 class="text-sm font-semibold text-slate-300">🧑‍💼 Consumer Sentiment (UMich) vs S&P 500</h3>
-      <p class="text-xs text-slate-500 mt-0.5">Consumer sentiment leads retail spending and corporate earnings by 2-3 quarters. Sentiment troughs often mark market bottoms.</p>
+      <h3 class="text-sm font-semibold text-slate-300" data-i18n="fed.sentiment_title">🧑‍💼 Consumer Sentiment (UMich) vs S&P 500</h3>
+      <p class="text-xs text-slate-500 mt-0.5" data-i18n="fed.sentiment_desc">Consumer sentiment leads retail spending and corporate earnings by 2-3 quarters. Sentiment troughs often mark market bottoms.</p>
     </div>
     <div class="chart-container" style="height:200px"><canvas id="sentSpyChart"></canvas></div>
   </div>
@@ -866,8 +866,8 @@
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up" id="cycleSection" style="display:none">
     <div class="flex items-start justify-between mb-2">
       <div>
-        <h3 class="text-sm font-semibold text-slate-300">Business Cycle Indicators</h3>
-        <p class="text-xs text-slate-500 mt-0.5">ISM Manufacturing PMI (50 = expansion/contraction line) and Housing Starts (k units) — both lead the economy by 3–9 months.</p>
+        <h3 class="text-sm font-semibold text-slate-300" data-i18n="fed.business_cycle_title">Business Cycle Indicators</h3>
+        <p class="text-xs text-slate-500 mt-0.5" data-i18n="fed.business_cycle_desc">ISM Manufacturing PMI (50 = expansion/contraction line) and Housing Starts (k units) — both lead the economy by 3–9 months.</p>
       </div>
       <div class="text-right text-[10px] text-slate-500">
         <div>ISM: <span id="ismCycleVal" class="font-semibold text-slate-300">—</span></div>
@@ -880,8 +880,8 @@
   <!-- Real GDP vs S&P 500 -->
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up" id="gdpSpySection" style="display:none">
     <div class="mb-2">
-      <h3 class="text-sm font-semibold text-slate-300">Real GDP vs S&P 500</h3>
-      <p class="text-xs text-slate-500 mt-0.5">GDP measures actual economic output; S&P 500 reflects expectations. Long divergences signal either market overextension or the start of a new growth cycle.</p>
+      <h3 class="text-sm font-semibold text-slate-300" data-i18n="fed.gdp_sp_title">Real GDP vs S&P 500</h3>
+      <p class="text-xs text-slate-500 mt-0.5" data-i18n="fed.gdp_sp_desc">GDP measures actual economic output; S&P 500 reflects expectations. Long divergences signal either market overextension or the start of a new growth cycle.</p>
     </div>
     <div class="chart-container" style="height:200px"><canvas id="gdpSpyChart"></canvas></div>
   </div>
@@ -889,8 +889,8 @@
   <!-- M2 Money Growth vs Breakeven Inflation -->
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up" id="m2InflSection" style="display:none">
     <div class="mb-2">
-      <h3 class="text-sm font-semibold text-slate-300">M2 Growth Rate vs Breakeven Inflation</h3>
-      <p class="text-xs text-slate-500 mt-0.5">M2 money supply growth (YoY %) historically leads inflation expectations by 12–18 months. The 2020–2022 episode is the clearest modern example.</p>
+      <h3 class="text-sm font-semibold text-slate-300" data-i18n="fed.m2_breakeven_title">M2 Growth Rate vs Breakeven Inflation</h3>
+      <p class="text-xs text-slate-500 mt-0.5" data-i18n="fed.m2_breakeven_desc">M2 money supply growth (YoY %) historically leads inflation expectations by 12–18 months. The 2020–2022 episode is the clearest modern example.</p>
     </div>
     <div class="chart-container" style="height:180px"><canvas id="m2InflChart"></canvas></div>
   </div>
@@ -898,8 +898,8 @@
   <!-- Real GDP Growth vs ISM PMI -->
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up" id="gdpIsmSection" style="display:none">
     <div class="mb-2">
-      <h3 class="text-sm font-semibold text-slate-300">Real GDP Growth vs ISM PMI</h3>
-      <p class="text-xs text-slate-500 mt-0.5">ISM PMI leads real GDP by 1–2 quarters. When PMI crosses below 50, GDP contraction typically follows within 6 months.</p>
+      <h3 class="text-sm font-semibold text-slate-300" data-i18n="fed.gdp_ism_title">Real GDP Growth vs ISM PMI</h3>
+      <p class="text-xs text-slate-500 mt-0.5" data-i18n="fed.gdp_ism_desc">ISM PMI leads real GDP by 1–2 quarters. When PMI crosses below 50, GDP contraction typically follows within 6 months.</p>
     </div>
     <div class="chart-container" style="height:180px"><canvas id="gdpIsmChart"></canvas></div>
   </div>
@@ -907,8 +907,8 @@
   <!-- Consumer Sentiment vs Yield Spread -->
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up" id="sentSpreadSection" style="display:none">
     <div class="mb-2">
-      <h3 class="text-sm font-semibold text-slate-300">Consumer Sentiment vs Yield Curve</h3>
-      <p class="text-xs text-slate-500 mt-0.5">Consumer confidence tracks the yield curve with a lag. Sentiment typically recovers once the curve uninverts — signaling the post-recession all-clear.</p>
+      <h3 class="text-sm font-semibold text-slate-300" data-i18n="fed.sentiment_yield_title">Consumer Sentiment vs Yield Curve</h3>
+      <p class="text-xs text-slate-500 mt-0.5" data-i18n="fed.sentiment_yield_desc">Consumer confidence tracks the yield curve with a lag. Sentiment typically recovers once the curve uninverts — signaling the post-recession all-clear.</p>
     </div>
     <div class="chart-container" style="height:180px"><canvas id="sentSpreadChart"></canvas></div>
   </div>
@@ -916,8 +916,8 @@
   <!-- HY OAS vs VIX -->
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up" id="oasVixSection" style="display:none">
     <div class="mb-2">
-      <h3 class="text-sm font-semibold text-slate-300">HY Credit Spreads vs VIX</h3>
-      <p class="text-xs text-slate-500 mt-0.5">When HY OAS rises but VIX stays low, credit markets are leading equity complacency — a reliable early warning of stress. Divergences precede corrections.</p>
+      <h3 class="text-sm font-semibold text-slate-300" data-i18n="fed.hy_vix_title">HY Credit Spreads vs VIX</h3>
+      <p class="text-xs text-slate-500 mt-0.5" data-i18n="fed.hy_vix_desc">When HY OAS rises but VIX stays low, credit markets are leading equity complacency — a reliable early warning of stress. Divergences precede corrections.</p>
     </div>
     <div class="flex items-center gap-3 mb-1 text-[10px]">
       <span class="text-rose-400">— HY OAS (bps, left)</span>

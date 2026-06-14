@@ -157,21 +157,28 @@ _SERIES_RAW_RATIO = {"M2V", "DFII10", "T10YIE"}
 
 def _fetch_series(series_id: str) -> Optional[dict[str, Any]]:
     """
-    Fetch a single FRED series CSV and return
-    {"dates": [...], "values": [...]} with values in billions USD.
-    Returns None on error.
+    Fetch a single FRED series CSV with up to 3 retries + exponential back-off.
+    Returns {"dates": [...], "values": [...]} or None on persistent failure.
     """
     url = _FRED_CSV.format(series=series_id)
     already_billions = series_id in _SERIES_ALREADY_BILLIONS
     raw_ratio        = series_id in _SERIES_RAW_RATIO
     log.info("Fed: fetching %s from FRED", series_id)
-    try:
-        resp = requests.get(url, headers=_HEADERS, timeout=10)
-        resp.raise_for_status()
-        text = resp.text
-    except Exception as exc:
-        log.error("Fed: HTTP error for %s: %s", series_id, exc)
-        return None
+
+    text = None
+    for attempt in range(1, 4):   # up to 3 attempts
+        try:
+            resp = requests.get(url, headers=_HEADERS, timeout=12)
+            resp.raise_for_status()
+            text = resp.text
+            break
+        except Exception as exc:
+            if attempt == 3:
+                log.error("Fed: HTTP error for %s after %d attempts: %s", series_id, attempt, exc)
+                return None
+            wait = attempt * 2   # 2 s, then 4 s
+            log.warning("Fed: %s attempt %d failed (%s) — retry in %ds", series_id, attempt, exc, wait)
+            time.sleep(wait)
 
     # FRED CSV format:
     #   observation_date,<SERIES_ID>
@@ -232,7 +239,7 @@ def _build_cache() -> dict[str, Any]:
     def _fetch_one(sid: str) -> tuple[str, Optional[dict[str, Any]]]:
         return sid, _fetch_series(sid)
 
-    with _cf.ThreadPoolExecutor(max_workers=8) as pool:
+    with _cf.ThreadPoolExecutor(max_workers=4) as pool:  # 4 keeps FRED happy (was 8 → rate limiting)
         futures = {pool.submit(_fetch_one, sid): sid for sid in SERIES}
         try:
             for fut in _cf.as_completed(futures, timeout=60):
