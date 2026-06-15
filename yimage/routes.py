@@ -2098,3 +2098,40 @@ def api_posterize():
                          download_name=f"posterized_{base}.{out_ext}")
     except Exception as exc:
         log.exception("Posterize failed"); return jsonify(error=str(exc)), 500
+
+# ---------------------------------------------------------------------------
+# Remove Watermark
+# ---------------------------------------------------------------------------
+
+@bp.route("/remove-watermark")
+def page_remove_watermark():
+    return render_template("remove_watermark.html")
+
+@bp.route("/api/remove-watermark", methods=["POST"])
+def api_remove_watermark():
+    """Remove a watermark by restoring a selected rectangular region."""
+    data, filename, err = _get_upload(allowed_types=["jpg","jpeg","png","webp","bmp"])
+    if err: return err
+    try:
+        x        = float(request.form.get("x",        0))
+        y        = float(request.form.get("y",        0))
+        w        = float(request.form.get("w",        0))
+        h        = float(request.form.get("h",        0))
+        canvas_w = float(request.form.get("canvas_w", 0))
+        canvas_h = float(request.form.get("canvas_h", 0))
+    except (ValueError, TypeError):
+        return jsonify(error="Invalid coordinates"), 400
+    if w <= 0 or h <= 0 or canvas_w <= 0 or canvas_h <= 0:
+        return jsonify(error="Please select a region first"), 400
+    method = request.form.get("method", "blend")
+    log.info("Remove watermark: %s (method=%s, box=%.0f,%.0f,%.0f,%.0f)", filename, method, x, y, w, h)
+    try:
+        from yimage.processing import remove_watermark_region
+        result, mime = remove_watermark_region(data, x, y, w, h, canvas_w, canvas_h, method)
+        _ext = {"image/jpeg":"jpg","image/png":"png","image/webp":"webp"}
+        out_ext = _ext.get(mime, filename.rsplit(".",1)[-1] if "." in filename else "jpg")
+        base = filename.rsplit(".",1)[0] if "." in filename else filename
+        return send_file(BytesIO(result), mimetype=mime, as_attachment=True,
+                         download_name=f"clean_{base}.{out_ext}")
+    except Exception as exc:
+        log.exception("Remove watermark failed"); return jsonify(error=str(exc)), 500

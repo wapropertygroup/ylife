@@ -2625,3 +2625,109 @@ def apply_posterize(data: bytes, levels: int = 4) -> tuple[bytes, str]:
     buf = io.BytesIO()
     out.save(buf, format=save_fmt, quality=93 if save_fmt == "JPEG" else None)
     return buf.getvalue(), mime
+
+
+# ---------------------------------------------------------------------------
+# 55. Remove Watermark / Region Restore
+# ---------------------------------------------------------------------------
+
+def remove_watermark_region(
+    data: bytes,
+    x: float,
+    y: float,
+    w: float,
+    h: float,
+    canvas_w: float,
+    canvas_h: float,
+    method: str = "blend",
+) -> tuple[bytes, str]:
+    """Reconstruct a rectangular region to remove a watermark.
+
+    The selected rectangle is repainted using pixels from just outside it.
+
+    Methods:
+        blend: Bilinear gradient interpolated from the 4 surrounding edges.
+               Best for watermarks on plain / gradient backgrounds.
+        blur:  Heavy Gaussian blur — obscures without reconstruction.
+               Use when the background is textured.
+        tile:  Tile (repeat) pixels from just to the left of the selection.
+               Best for patterned or tiled backgrounds.
+    """
+    import numpy as np
+
+    img = Image.open(io.BytesIO(data)).convert("RGB")
+    orig_fmt = (img.format or "JPEG").upper()
+
+    sx = img.width  / canvas_w
+    sy = img.height / canvas_h
+    x1 = max(0, int(x * sx))
+    y1 = max(0, int(y * sy))
+    x2 = min(img.width,  int((x + w) * sx))
+    y2 = min(img.height, int((y + h) * sy))
+
+    if x2 <= x1 or y2 <= y1:
+        raise ValueError("Selection is too small — please draw a larger rectangle")
+
+    rh = y2 - y1
+    rw = x2 - x1
+
+    if method == "blur":
+        from PIL import ImageFilter
+        radius = max(5, min(rw, rh) // 3, 15)
+        region = img.crop((x1, y1, x2, y2))
+        blurred = region.filter(ImageFilter.GaussianBlur(radius=radius))
+        # Repeat several times for a stronger effect
+        for _ in range(3):
+            blurred = blurred.filter(ImageFilter.GaussianBlur(radius=radius))
+        img.paste(blurred, (x1, y1))
+
+    elif method == "tile":
+        arr = np.array(img)
+        pad = max(5, min(rw // 2, 30))
+        if x1 >= pad:
+            src = arr[y1:y2, x1 - pad : x1]          # left strip (rh × pad × 3)
+        elif x2 + pad <= img.width:
+            src = arr[y1:y2, x2 : x2 + pad]           # right strip
+        else:
+            src = arr[max(0, y1 - pad) : y1, x1:x2]  # top strip
+            src = src.transpose(1, 0, 2) if src.size else arr[y1:y2, x1:x2]
+        if src.shape[1] == 0:
+            src = arr[y1:y2, x1:x2]
+        tiles_needed = int(np.ceil(rw / src.shape[1]))
+        tiled = np.tile(src, (1, tiles_needed, 1))[:rh, :rw, :]
+        arr[y1:y2, x1:x2] = tiled
+        img = Image.fromarray(arr)
+
+    else:  # blend — bilinear interpolation from the 4 edges
+        arr = np.array(img, dtype=np.float32)
+
+        # Sample one-pixel-wide strips just outside the region
+        top   = arr[max(0, y1 - 1), x1:x2].copy()              # (rw, 3)
+        bot   = arr[min(img.height - 1, y2), x1:x2].copy()     # (rw, 3)
+        left  = arr[y1:y2, max(0, x1 - 1)].copy()              # (rh, 3)
+        right = arr[y1:y2, min(img.width - 1, x2)].copy()      # (rh, 3)
+
+        # Gradient weights: 0.0 at one edge → 1.0 at the opposite
+        gy = np.linspace(0, 1, rh).reshape(-1, 1, 1)   # vertical weight
+        gx = np.linspace(0, 1, rw).reshape(1, -1, 1)   # horizontal weight
+
+        top_e   = np.broadcast_to(top[np.newaxis],   (rh, rw, 3)).copy()
+        bot_e   = np.broadcast_to(bot[np.newaxis],   (rh, rw, 3)).copy()
+        left_e  = np.broadcast_to(left[:, np.newaxis], (rh, rw, 3)).copy()
+        right_e = np.broadcast_to(right[:, np.newaxis], (rh, rw, 3)).copy()
+
+        tb = top_e * (1 - gy) + bot_e * gy         # top-bottom blend
+        lr = left_e * (1 - gx) + right_e * gx      # left-right blend
+        arr[y1:y2, x1:x2] = (tb + lr) / 2          # average
+
+        img = Image.fromarray(arr.clip(0, 255).astype(np.uint8))
+
+    save_fmt = orig_fmt if orig_fmt in ("JPEG", "PNG", "WEBP") else "JPEG"
+    if save_fmt == "JPEG" and img.mode != "RGB":
+        img = img.convert("RGB")
+    mime_map = {"JPEG": "image/jpeg", "PNG": "image/png", "WEBP": "image/webp"}
+    mime = mime_map.get(save_fmt, "image/jpeg")
+
+    buf = io.BytesIO()
+    img.save(buf, format=save_fmt, quality=95 if save_fmt == "JPEG" else None)
+    return buf.getvalue(), mime

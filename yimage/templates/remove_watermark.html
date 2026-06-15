@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+{% block title %}Remove Watermark — yImage{% endblock %}
+{% block content %}
+<div x-data="removeWmTool()">
+  <div class="max-w-3xl mx-auto">
+    <a href="/" class="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-brand transition mb-4">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+      <span data-i18n="common.all_tools">All Tools</span>
+    </a>
+    <h1 class="text-2xl font-extrabold mb-1" data-i18n="rmwm.title">🧹 Remove Watermark</h1>
+    <p class="text-sm text-slate-500 dark:text-slate-400 mb-6" data-i18n="rmwm.desc">Draw a rectangle over the watermark area and let the server reconstruct the background behind it.</p>
+
+    <!-- Upload Zone -->
+    <div x-show="!imageSrc"
+         class="drop-zone rounded-2xl border-2 border-dashed border-slate-300 dark:border-slate-700 p-10 text-center cursor-pointer transition hover:border-brand"
+         @click="$refs.fi.click()"
+         @dragover.prevent @drop.prevent="handleDrop($event)">
+      <input type="file" accept="image/*" x-ref="fi" @change="loadImage($event.target.files[0])" class="hidden">
+      <svg class="w-12 h-12 mx-auto mb-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+      </svg>
+      <p class="text-sm text-slate-500"><span data-i18n="common.upload">Drop an image here or</span> <span class="text-brand font-medium" data-i18n="common.browse">browse</span></p>
+      <p class="text-xs text-slate-400 mt-1">JPEG · PNG · WebP · <span data-i18n="common.max_size">Max 50 MB</span></p>
+    </div>
+
+    <!-- Canvas + Controls -->
+    <div x-show="imageSrc">
+      <div class="flex items-center justify-between mb-2">
+        <p class="text-xs text-slate-400" x-text="selInfo"></p>
+        <button @click="reset()" class="text-xs text-slate-400 hover:text-red-500" data-i18n="common.change">Change image</button>
+      </div>
+
+      <!-- Canvas -->
+      <div class="relative inline-block border border-slate-700 rounded-xl overflow-hidden" style="max-width:100%">
+        <canvas x-ref="canvas"
+                @mousedown="startSel($event)" @mousemove="moveSel($event)" @mouseup="endSel()"
+                @touchstart.prevent="startSel($event.touches[0])" @touchmove.prevent="moveSel($event.touches[0])" @touchend="endSel()"
+                class="block max-w-full cursor-crosshair select-none"></canvas>
+      </div>
+
+      <!-- Instructions -->
+      <p class="text-xs text-slate-400 mt-2 text-center" data-i18n="rmwm.draw_hint">
+        Draw a rectangle over the watermark. Then choose a method and click Remove.
+      </p>
+
+      <!-- Method + Action Row -->
+      <div class="mt-4 flex flex-col sm:flex-row gap-3">
+        <!-- Method selector -->
+        <div class="flex gap-2 flex-1 flex-wrap">
+          <template x-for="m in methods" :key="m.v">
+            <button @click="method=m.v"
+                    :class="method===m.v ? 'bg-brand text-white' : 'bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300'"
+                    class="flex-1 min-w-0 py-2 px-3 rounded-xl text-xs font-medium transition flex flex-col items-center gap-0.5">
+              <span x-text="m.icon"></span>
+              <span x-text="m.l"></span>
+            </button>
+          </template>
+        </div>
+
+        <!-- Remove button -->
+        <button @click="process()" :disabled="processing || !hasSel"
+                class="sm:w-48 py-3 px-6 rounded-xl bg-brand text-white font-semibold hover:bg-brand-dark transition disabled:opacity-50 shrink-0">
+          <span x-show="!processing" data-i18n="rmwm.button">Remove Watermark</span>
+          <span x-show="processing" class="flex items-center justify-center gap-2">
+            <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+            <span data-i18n="common.processing">Processing...</span>
+          </span>
+        </button>
+      </div>
+
+      <!-- Method description -->
+      <p class="text-xs text-slate-400 mt-1.5 text-center" x-text="methods.find(m=>m.v===method)?.desc||''"></p>
+    </div>
+
+    <!-- Tips -->
+    <div x-show="imageSrc" class="mt-5 p-4 rounded-xl bg-amber-50 dark:bg-amber-900/15 border border-amber-200 dark:border-amber-800/40">
+      <p class="text-xs font-semibold text-amber-700 dark:text-amber-400 mb-1" data-i18n="rmwm.tips_title">💡 Tips for best results</p>
+      <ul class="text-xs text-amber-600 dark:text-amber-400 space-y-0.5 list-disc list-inside" data-i18n="rmwm.tips">
+        <li>Use <strong>Blend</strong> for solid/gradient backgrounds (most common)</li>
+        <li>Use <strong>Blur</strong> when the background is complex or textured</li>
+        <li>Use <strong>Tile</strong> for repetitive patterns or textures</li>
+        <li>Select tightly around the watermark — avoid extra padding</li>
+      </ul>
+    </div>
+
+    <p x-show="error" class="mt-4 text-sm text-red-500" x-text="error"></p>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function removeWmTool() {
+  return {
+    file: null, imageSrc: null, imgEl: null,
+    sel: {x:0,y:0,w:0,h:0}, dragging: false, startX:0, startY:0,
+    method: 'blend',
+    processing: false, error: '',
+
+    get hasSel() { return this.sel.w > 5 && this.sel.h > 5; },
+    get selInfo() {
+      if (!this.hasSel) return I18n.t('rmwm.no_sel');
+      return `${I18n.t('rmwm.sel_info')}: ${Math.round(this.sel.w)}×${Math.round(this.sel.h)}px`;
+    },
+    get methods() {
+      return [
+        {v:'blend', icon:'🌊', l: I18n.t('rmwm.blend'), desc: I18n.t('rmwm.blend_desc')},
+        {v:'blur',  icon:'🌫',  l: I18n.t('rmwm.blur_m'), desc: I18n.t('rmwm.blur_desc')},
+        {v:'tile',  icon:'🔲', l: I18n.t('rmwm.tile'), desc: I18n.t('rmwm.tile_desc')},
+      ];
+    },
+
+    handleDrop(e) { this.loadImage(e.dataTransfer.files[0]); },
+    loadImage(f) {
+      if (!f) return;
+      this.file = f; this.error = '';
+      const reader = new FileReader();
+      reader.onload = e => {
+        this.imageSrc = e.target.result;
+        const img = new window.Image();
+        img.onload = () => { this.imgEl = img; this.$nextTick(() => this.drawCanvas()); };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(f);
+    },
+
+    drawCanvas() {
+      const c = this.$refs.canvas;
+      if (!c || !this.imgEl) return;
+      const maxW = Math.min(this.imgEl.width, window.innerWidth - 80, 900);
+      const scale = maxW / this.imgEl.width;
+      c.width  = this.imgEl.width  * scale;
+      c.height = this.imgEl.height * scale;
+      const ctx = c.getContext('2d');
+      ctx.drawImage(this.imgEl, 0, 0, c.width, c.height);
+      if (this.hasSel) {
+        // Dim outside selection
+        ctx.fillStyle = 'rgba(0,0,0,0.4)';
+        ctx.fillRect(0, 0, c.width, c.height);
+        ctx.clearRect(this.sel.x, this.sel.y, this.sel.w, this.sel.h);
+        ctx.drawImage(this.imgEl,
+          (this.sel.x/scale), (this.sel.y/scale), (this.sel.w/scale), (this.sel.h/scale),
+          this.sel.x, this.sel.y, this.sel.w, this.sel.h);
+        // Selection border
+        ctx.strokeStyle = '#f59e0b'; ctx.lineWidth = 2;
+        ctx.setLineDash([5,3]);
+        ctx.strokeRect(this.sel.x, this.sel.y, this.sel.w, this.sel.h);
+        ctx.setLineDash([]);
+        // Corner handles
+        const hs = 6;
+        ctx.fillStyle = '#f59e0b';
+        [[0,0],[this.sel.w,0],[0,this.sel.h],[this.sel.w,this.sel.h]].forEach(([dx,dy]) => {
+          ctx.fillRect(this.sel.x+dx-hs/2, this.sel.y+dy-hs/2, hs, hs);
+        });
+      }
+    },
+
+    _pos(e) {
+      const r = this.$refs.canvas.getBoundingClientRect();
+      return { x: e.clientX - r.left, y: e.clientY - r.top };
+    },
+    startSel(e) {
+      const p = this._pos(e);
+      this.startX = p.x; this.startY = p.y;
+      this.dragging = true;
+      this.sel = {x:p.x, y:p.y, w:0, h:0};
+    },
+    moveSel(e) {
+      if (!this.dragging) return;
+      const p = this._pos(e);
+      let nx = p.x - this.startX, ny = p.y - this.startY;
+      this.sel = {
+        x: nx < 0 ? p.x : this.startX,
+        y: ny < 0 ? p.y : this.startY,
+        w: Math.abs(nx), h: Math.abs(ny),
+      };
+      this.drawCanvas();
+    },
+    endSel() { this.dragging = false; },
+    reset() { this.file=null; this.imageSrc=null; this.imgEl=null; this.sel={x:0,y:0,w:0,h:0}; this.error=''; },
+
+    async process() {
+      if (!this.file || !this.hasSel || this.processing) return;
+      this.processing = true; this.error = '';
+      const c = this.$refs.canvas;
+      const form = new FormData();
+      form.append('file',     this.file);
+      form.append('x',        this.sel.x);
+      form.append('y',        this.sel.y);
+      form.append('w',        this.sel.w);
+      form.append('h',        this.sel.h);
+      form.append('canvas_w', c.width);
+      form.append('canvas_h', c.height);
+      form.append('method',   this.method);
+      try {
+        const resp = await fetch('/api/remove-watermark', {method:'POST', body:form});
+        if (!resp.ok) { const d = await resp.json(); this.error = d.error || 'Failed'; this.processing=false; return; }
+        const blob = await resp.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = 'clean_' + this.file.name; a.click();
+        URL.revokeObjectURL(url);
+        // Reload processed image so user can repeat
+        const reader = new FileReader();
+        reader.onload = ev => {
+          this.imageSrc = ev.target.result;
+          const img = new window.Image();
+          img.onload = () => { this.imgEl = img; this.sel={x:0,y:0,w:0,h:0}; this.$nextTick(()=>this.drawCanvas()); };
+          img.src = ev.target.result;
+        };
+        reader.readAsDataURL(blob);
+      } catch(e) { this.error = 'Network error: ' + e.message; }
+      this.processing = false;
+    },
+  };
+}
+</script>
+{% endblock %}

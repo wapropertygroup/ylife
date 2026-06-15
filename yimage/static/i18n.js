@@ -78,6 +78,44 @@ const I18n = (() => {
       "pdfmeta.save_btn":       "Save & Download",
       "pdfmeta.strip_btn":      "Strip All Metadata",
 
+      // ── New Banner ──
+      "hero.badge":        "54 Free Tools · No signup · Free forever",
+      "hero.title":        "Image & PDF Tools",
+      "hero.subtitle":     "Free browser-based tools for images and PDFs. No uploads to third parties — all processing happens on our server.",
+      "hero.stat_private": "100% Private",
+      "hero.stat_fast":    "Instant Results",
+      "hero.stat_free":    "Always Free",
+      "hero.stat_family":  "Made for Li Family",
+      "hero.no_results":   "No tools match your search.",
+
+      // ── Category Filters ──
+      "cat.all":     "All",
+      "cat.pdf":     "PDF",
+      "cat.image":   "Images",
+      "cat.effect":  "Effects",
+      "cat.create":  "Create",
+      "cat.utility": "Utilities",
+
+      // ── Search ──
+      "common.search": "Search tools…",
+
+      // ── Remove Watermark ──
+      "tool.remove_watermark": "Remove Watermark",
+      "rmwm.title":      "🧹 Remove Watermark",
+      "rmwm.desc":       "Draw a rectangle over the watermark area and the server reconstructs the background behind it.",
+      "rmwm.draw_hint":  "Draw a rectangle over the watermark, choose a method, and click Remove.",
+      "rmwm.no_sel":     "Click and drag to select the watermark area",
+      "rmwm.sel_info":   "Selection",
+      "rmwm.blend":      "Blend",
+      "rmwm.blend_desc": "Bilinear interpolation from the 4 surrounding edges — best for solid/gradient backgrounds",
+      "rmwm.blur_m":     "Blur",
+      "rmwm.blur_desc":  "Heavy Gaussian blur — use when the background is complex or textured",
+      "rmwm.tile":       "Tile",
+      "rmwm.tile_desc":  "Repeat nearby pixels — best for patterned/tiled backgrounds",
+      "rmwm.button":     "Remove Watermark",
+      "rmwm.tips_title": "💡 Tips for best results",
+      "rmwm.tips":       "Use Blend for solid/gradient backgrounds (most common). Use Blur when background is complex. Use Tile for repeating patterns. Select tightly around the watermark.",
+
       // Round 6 tool names
       "tool.blur_image":   "Blur / Pixelate",
       "tool.gif_creator":  "GIF Creator",
@@ -1221,6 +1259,44 @@ const I18n = (() => {
       "qr.download":         "下载 PNG",
 
       "footer.text": "yImage — 免费图片 & PDF 工具",
+
+      // ── 新 Banner ──
+      "hero.badge":        "54 个免费工具 · 无需注册 · 永久免费",
+      "hero.title":        "图片 & PDF 工具",
+      "hero.subtitle":     "免费的在线图片和PDF处理工具。所有处理在我们的服务器上完成，不会上传至第三方。",
+      "hero.stat_private": "100% 私密",
+      "hero.stat_fast":    "即时处理",
+      "hero.stat_free":    "永久免费",
+      "hero.stat_family":  "李家专属",
+      "hero.no_results":   "没有符合搜索条件的工具。",
+
+      // ── 分类筛选 ──
+      "cat.all":     "全部",
+      "cat.pdf":     "PDF",
+      "cat.image":   "图片",
+      "cat.effect":  "特效",
+      "cat.create":  "生成",
+      "cat.utility": "工具",
+
+      // ── 搜索 ──
+      "common.search": "搜索工具…",
+
+      // ── 去除水印 ──
+      "tool.remove_watermark": "去除水印",
+      "rmwm.title":      "🧹 去除水印",
+      "rmwm.desc":       "在水印区域画一个矩形，服务器将重建该区域的背景。",
+      "rmwm.draw_hint":  "在水印上画矩形，选择修复方式，点击去除。",
+      "rmwm.no_sel":     "点击并拖动选择水印区域",
+      "rmwm.sel_info":   "已选择",
+      "rmwm.blend":      "渐变融合",
+      "rmwm.blend_desc": "从四边像素渐变插值——适合纯色/渐变背景（最常用）",
+      "rmwm.blur_m":     "模糊遮盖",
+      "rmwm.blur_desc":  "高斯模糊——背景复杂时使用",
+      "rmwm.tile":       "纹理平铺",
+      "rmwm.tile_desc":  "重复邻近像素——适合重复图案背景",
+      "rmwm.button":     "去除水印",
+      "rmwm.tips_title": "💡 最佳使用技巧",
+      "rmwm.tips":       "对纯色/渐变背景用「渐变融合」；复杂背景用「模糊遮盖」；重复纹理用「纹理平铺」；选框请紧贴水印，避免过多留白。",
     },
   };
 

@@ -3,149 +3,247 @@
 {% block title %}yImage — Free Image & PDF Tools{% endblock %}
 
 {% block content %}
-<div class="text-center mb-10 fade-up">
-  <h1 class="text-3xl sm:text-4xl font-extrabold mb-3 tracking-tight">
-    <span class="bg-gradient-to-r from-violet-500 to-purple-500 bg-clip-text text-transparent" data-i18n="hero.title">Image & PDF Tools</span>
-  </h1>
-  <p class="text-base sm:text-lg text-slate-500 dark:text-slate-400 max-w-2xl mx-auto leading-relaxed" data-i18n="hero.subtitle">
-    Free browser-based tools for images and PDFs. No uploads to third parties — all processing happens on our server.
-  </p>
-</div>
+<div x-data="toolGrid()" x-init="init()">
 
-<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 max-w-5xl mx-auto">
+  <!-- ═══════════════════ HERO BANNER ═══════════════════ -->
+  <div class="relative rounded-3xl overflow-hidden mb-8 fade-up"
+       style="background: linear-gradient(135deg, #5b21b6 0%, #7c3aed 40%, #4f46e5 100%)">
 
-  {% set tools = [
-    {"href": "/compress-pdf",      "emoji": "📦", "title_key": "tool.compress_pdf",      "title": "Compress PDF",
-     "desc": "Reduce PDF file size by recompressing images. Choose low, medium, or high quality."},
-    {"href": "/pdf-to-image",      "emoji": "🖼️", "title_key": "tool.pdf_to_image",      "title": "PDF to Image",
-     "desc": "Convert PDF pages to JPEG or PNG images. Adjustable DPI for print or web quality."},
-    {"href": "/image-to-pdf",      "emoji": "📄", "title_key": "tool.image_to_pdf",      "title": "Image to PDF",
-     "desc": "Merge multiple images into a single PDF. Drag and drop to arrange page order."},
-    {"href": "/crop-image",        "emoji": "✂️", "title_key": "tool.crop_image",        "title": "Crop Image",
-     "desc": "Interactive crop tool with live preview. Draw a rectangle and download the cropped result."},
-    {"href": "/passport-photo",    "emoji": "🪪", "title_key": "tool.passport_photo",    "title": "Passport Photo",
-     "desc": "Auto-detect face and crop to standard passport sizes. US, EU, CN and UK formats with custom backgrounds."},
-    {"href": "/pdf-to-text",       "emoji": "📝", "title_key": "tool.pdf_to_text",       "title": "PDF to Text",
-     "desc": "Extract text from PDF documents. Falls back to OCR for scanned pages."},
-    {"href": "/trim-transparency", "emoji": "🔲", "title_key": "tool.trim_transparency", "title": "Trim Transparency",
-     "desc": "Remove transparent borders from PNG images. Optionally replace with a solid background color."},
-    {"href": "/layer-analysis",    "emoji": "🎨", "title_key": "tool.layer_analysis",    "title": "Layer Analysis",
-     "desc": "Separate image into RGB channels and color-based layers using K-means clustering."},
-    {"href": "/resize-image",      "emoji": "↔️", "title_key": "tool.resize_image",      "title": "Resize & Convert",
-     "desc": "Resize images to exact pixel dimensions with aspect-ratio lock. Convert between JPEG, PNG, and WebP."},
-    {"href": "/rotate-flip",       "emoji": "🔄", "title_key": "tool.rotate_flip",       "title": "Rotate & Flip",
-     "desc": "Rotate images by any angle and flip horizontally or vertically. Live preview before downloading."},
-    {"href": "/exif-data",         "emoji": "🔍", "title_key": "tool.exif_data",         "title": "EXIF Data",
-     "desc": "View camera metadata, GPS location, and exposure settings. One-click to strip all metadata for privacy."},
-    {"href": "/merge-pdf",         "emoji": "🔗", "title_key": "tool.merge_pdf",         "title": "Merge PDFs",
-     "desc": "Combine multiple PDFs into one. Reorder with arrow buttons before merging."},
-    {"href": "/split-pdf",         "emoji": "📑", "title_key": "tool.split_pdf",         "title": "Split PDF",
-     "desc": "Split a multi-page PDF into individual single-page PDF files, bundled as a ZIP."},
-    {"href": "/qr-code",           "emoji": "📱", "title_key": "tool.qr_code",           "title": "QR Code",
-     "desc": "Generate QR codes from any text or URL. Customize size, error correction level, and colors."},
-    {"href": "/watermark",         "emoji": "💧", "title_key": "tool.watermark",         "title": "Add Watermark",
-     "desc": "Stamp a semi-transparent text watermark on your photos. Choose position, opacity, size, and color."},
-    {"href": "/image-filters",     "emoji": "🎚️", "title_key": "tool.filters",           "title": "Image Filters",
-     "desc": "One-click presets (Vivid, Warm, Cool, Sepia, Grayscale) plus individual brightness, contrast, and saturation sliders."},
-    {"href": "/pdf-protect",       "emoji": "🔒", "title_key": "tool.pdf_protect",       "title": "PDF Protect & Unlock",
-     "desc": "Add a password to lock a PDF, or enter the password to strip protection and make it freely openable."},
-    {"href": "/pdf-pages",         "emoji": "📋", "title_key": "tool.pdf_pages",         "title": "PDF Page Editor",
-     "desc": "Drag thumbnails to reorder pages or click ✕ to delete them, then download the edited PDF."},
-    {"href": "/color-palette",     "emoji": "🎨", "title_key": "tool.color_palette",     "title": "Color Palette",
-     "desc": "Extract the dominant colors from any image as swatches with hex codes. Download as CSS variables."},
-    {"href": "/image-ocr",         "emoji": "🔡", "title_key": "tool.image_ocr",         "title": "Image OCR",
-     "desc": "Extract text from photos, screenshots, and scanned documents using Tesseract OCR."},
-    {"href": "/pdf-stamp",         "emoji": "🔢", "title_key": "tool.pdf_stamp",         "title": "PDF Page Numbers",
-     "desc": "Stamp page numbers or custom header/footer text on every page. Supports {n} and {total} placeholders."},
-    {"href": "/collage",           "emoji": "🖼️", "title_key": "tool.collage",           "title": "Image Collage",
-     "desc": "Arrange multiple photos in a grid. Choose number of columns, gap size, cell height, and background color."},
-    {"href": "/image-border",      "emoji": "🖼",  "title_key": "tool.image_border",      "title": "Image Border",
-     "desc": "Add a solid-colour border around any image. Optional rounded corners for a modern polished look."},
-    {"href": "/optimize-image",    "emoji": "⚡",  "title_key": "tool.optimize_image",    "title": "Image Optimizer",
-     "desc": "Reduce image file size without changing dimensions. Tune quality and optionally strip EXIF metadata."},
-    {"href": "/favicon",           "emoji": "⭐",  "title_key": "tool.favicon",           "title": "Favicon Generator",
-     "desc": "Generate favicon.ico and PNG icons at 16, 32, 48, 64, 128, 256 px plus Apple touch icon from any image."},
-    {"href": "/pdf-metadata",      "emoji": "📋",  "title_key": "tool.pdf_metadata",      "title": "PDF Metadata",
-     "desc": "View and edit the title, author, subject, and keywords inside a PDF. Strip all metadata for privacy."},
-    {"href": "/blur-image",        "emoji": "🫥",  "title_key": "tool.blur_image",        "title": "Blur / Pixelate",
-     "desc": "Apply Gaussian blur or block-pixel effect. Perfect for hiding faces, license plates, or sensitive info."},
-    {"href": "/gif-creator",       "emoji": "🎞️",  "title_key": "tool.gif_creator",       "title": "GIF Creator",
-     "desc": "Turn multiple images into an animated GIF. Control frame delay, max size, and loop count."},
-    {"href": "/add-text",          "emoji": "✏️",   "title_key": "tool.add_text",          "title": "Add Text",
-     "desc": "Overlay text anywhere on your image. Control position (click to place), font size, color, and stroke."},
-    {"href": "/image-base64",      "emoji": "🔢",  "title_key": "tool.image_base64",      "title": "Image → Base64",
-     "desc": "Convert any image to a Base64 data URL for embedding in HTML, CSS, or JavaScript — no file hosting needed."},
-    {"href": "/pdf-rotate",        "emoji": "🔃",  "title_key": "tool.pdf_rotate",        "title": "PDF Rotate",
-     "desc": "Rotate all pages, odd pages, or even pages in a PDF by 90°, 180°, or 270°."},
-    {"href": "/invert-colors",     "emoji": "🔲",  "title_key": "tool.invert_colors",     "title": "Invert Colors",
-     "desc": "Create a photographic negative by inverting every pixel channel. Works on JPEG, PNG, and WebP."},
-    {"href": "/pdf-watermark",     "emoji": "💧",  "title_key": "tool.pdf_watermark",     "title": "PDF Watermark",
-     "desc": "Stamp a diagonal semi-transparent text watermark (CONFIDENTIAL, DRAFT…) on every page of a PDF."},
-    {"href": "/extract-pdf-images","emoji": "🗃️",  "title_key": "tool.extract_pdf_images","title": "Extract PDF Images",
-     "desc": "Pull out all embedded images from a PDF and download them as a ZIP of JPEG and PNG files."},
-    {"href": "/stitch-images",     "emoji": "⛓️",  "title_key": "tool.stitch_images",     "title": "Stitch Images",
-     "desc": "Join multiple images side-by-side or top-to-bottom to create a panorama or before/after comparison."},
-    {"href": "/round-corners",     "emoji": "⬛",  "title_key": "tool.round_corners",     "title": "Round Corners",
-     "desc": "Add smooth rounded corners to any image. Output as PNG with transparency or JPEG with solid background."},
-    {"href": "/remove-bg-color",   "emoji": "🪄",  "title_key": "tool.remove_bg_color",   "title": "Remove BG Color",
-     "desc": "Replace a solid background color (white, black, etc.) with transparency. Great for logos and icons."},
-    {"href": "/duotone",           "emoji": "🎭",  "title_key": "tool.duotone",           "title": "Duotone Effect",
-     "desc": "Apply a two-color gradient map — shadows get one color, highlights another. 8 built-in presets."},
-    {"href": "/pdf-extract-pages", "emoji": "📄",  "title_key": "tool.pdf_extract_pages", "title": "PDF Extract Pages",
-     "desc": "Extract a specific page range (e.g. pages 3–7) from a PDF and save as a new document."},
-    {"href": "/photo-caption",     "emoji": "💬",  "title_key": "tool.photo_caption",     "title": "Photo Caption",
-     "desc": "Add a styled caption bar to the top or bottom of your photo with custom colors and font size."},
-    {"href": "/vignette",          "emoji": "🌑",  "title_key": "tool.vignette",          "title": "Vignette",
-     "desc": "Darken (or lighten) the edges of a photo to draw attention to the centre. Live CSS preview."},
-    {"href": "/grayscale",         "emoji": "⬜",  "title_key": "tool.grayscale",         "title": "Grayscale",
-     "desc": "Convert to grayscale with optional sepia, cool, or custom color tint overlays."},
-    {"href": "/sharpen-denoise",   "emoji": "🔪",  "title_key": "tool.sharpen_denoise",   "title": "Sharpen / Denoise",
-     "desc": "Sharpen soft images, enhance edges, or reduce noise from low-light photos. Up to 5 passes."},
-    {"href": "/placeholder",       "emoji": "🟪",  "title_key": "tool.placeholder",       "title": "Placeholder",
-     "desc": "Generate solid-color placeholder images at any size. Handy for UI mockups and design layouts."},
-    {"href": "/crop-aspect",       "emoji": "📐",  "title_key": "tool.crop_aspect",       "title": "Crop to Aspect",
-     "desc": "Crop an image to 1:1, 4:3, 16:9, 9:16, or any custom ratio — no resizing, just cropping."},
-    {"href": "/drop-shadow",       "emoji": "🌤",  "title_key": "tool.drop_shadow",       "title": "Drop Shadow",
-     "desc": "Add a soft blurred drop shadow behind an image. Control offset, blur, color, and opacity."},
-    {"href": "/color-swap",        "emoji": "🔵",  "title_key": "tool.color_swap",        "title": "Color Swap",
-     "desc": "Replace one color in an image with another. Great for recoloring logos and simple graphics."},
-    {"href": "/pdf-compress-pro",  "emoji": "⚡",  "title_key": "tool.pdf_compress_pro",  "title": "PDF Compress Pro",
-     "desc": "Structural PDF compression — removes unused objects and linearizes for web. No image quality loss."},
-    {"href": "/tile-image",        "emoji": "🔲",  "title_key": "tool.tile_image",        "title": "Tile Image",
-     "desc": "Tile a small image to fill a large canvas. Create seamless backgrounds and repeat patterns."},
-    {"href": "/image-watermark",   "emoji": "🖼️",  "title_key": "tool.image_watermark",   "title": "Image Watermark",
-     "desc": "Overlay a logo or signature PNG on your photo. Control size (5-80%), position, and opacity."},
-    {"href": "/flip-image",        "emoji": "🪞",  "title_key": "tool.flip_image",        "title": "Flip / Mirror",
-     "desc": "Mirror your image horizontally (left↔right) or vertically (top↕bottom) with a live preview."},
-    {"href": "/icon-set",          "emoji": "📱",  "title_key": "tool.icon_set",          "title": "Icon Set Generator",
-     "desc": "Generate a complete icon set for macOS (16–1024 px), iOS, or Windows from a single source image."},
-    {"href": "/posterize",         "emoji": "🎨",  "title_key": "tool.posterize",         "title": "Posterize",
-     "desc": "Reduce color depth to 2–8 levels per channel for a bold graphic poster-style effect."},
-  ] %}
+    <!-- Decorative blobs -->
+    <div class="absolute -top-24 -right-24 w-96 h-96 rounded-full bg-white/5 blur-3xl pointer-events-none"></div>
+    <div class="absolute -bottom-20 -left-16 w-80 h-80 rounded-full bg-indigo-400/10 blur-2xl pointer-events-none"></div>
+    <div class="absolute top-1/2 left-1/2 w-[600px] h-[200px] -translate-x-1/2 -translate-y-1/2 bg-purple-300/5 rounded-full blur-3xl pointer-events-none"></div>
 
-  {% for tool in tools %}
-  <a href="{{ tool.href }}"
-     class="tool-card group block rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50
-            hover:border-violet-400/50 dark:hover:border-violet-500/30
-            hover:shadow-xl hover:shadow-violet-500/10 transition-all duration-300 overflow-hidden">
+    <div class="relative z-10 px-7 py-9 sm:px-12 sm:py-12 text-white">
 
-    <div class="h-1 bg-gradient-to-r from-violet-400 to-purple-400 opacity-60 group-hover:opacity-100 transition-opacity"></div>
-
-    <div class="p-5">
-      <div class="flex items-center gap-3 mb-3">
-        <span class="text-2xl">{{ tool.emoji }}</span>
-        <h2 class="text-sm font-bold group-hover:text-brand transition" data-i18n="{{ tool.title_key }}">{{ tool.title }}</h2>
+      <!-- Badge -->
+      <div class="inline-flex items-center gap-1.5 bg-white/15 backdrop-blur-sm rounded-full
+                  px-4 py-1.5 text-xs font-semibold mb-5 border border-white/10 text-violet-100">
+        ✨&nbsp;<span data-i18n="hero.badge">54 Free Tools · No signup · Free forever</span>
       </div>
-      <p class="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">{{ tool.desc }}</p>
-      <div class="flex items-center gap-1 mt-3 text-xs font-medium text-brand opacity-0 group-hover:opacity-100 transition-opacity">
-        <span data-i18n="common.open_tool">Open tool</span>
-        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/>
-        </svg>
+
+      <!-- Title + subtitle -->
+      <h1 class="text-3xl sm:text-5xl font-extrabold tracking-tight leading-tight mb-4">
+        <span data-i18n="hero.title">Image & PDF Tools</span>
+      </h1>
+      <p class="text-violet-200 max-w-xl text-base sm:text-lg leading-relaxed mb-7"
+         data-i18n="hero.subtitle">
+        Free browser-based tools for images and PDFs. No uploads to third parties — all processing happens on our server.
+      </p>
+
+      <!-- Stats row -->
+      <div class="flex flex-wrap gap-5 text-sm font-medium text-violet-100">
+        <div class="flex items-center gap-1.5">
+          <svg class="w-4 h-4 text-emerald-300 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+          </svg>
+          <span data-i18n="hero.stat_private">100% Private</span>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <svg class="w-4 h-4 text-amber-300 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+          </svg>
+          <span data-i18n="hero.stat_fast">Instant Results</span>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <svg class="w-4 h-4 text-sky-300 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+          <span data-i18n="hero.stat_free">Always Free</span>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <svg class="w-4 h-4 text-pink-300 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>
+          </svg>
+          <span data-i18n="hero.stat_family">Made for Li Family</span>
+        </div>
       </div>
     </div>
-  </a>
-  {% endfor %}
+  </div>
+
+  <!-- ═══════════════════ FILTER BAR ═══════════════════ -->
+  <div class="flex flex-col sm:flex-row items-start sm:items-center gap-3 mb-6 max-w-5xl mx-auto">
+
+    <!-- Category tabs -->
+    <div class="flex gap-1.5 flex-wrap">
+      <template x-for="cat in categories" :key="cat.v">
+        <button @click="activeCat=cat.v"
+                :class="activeCat===cat.v
+                  ? 'bg-brand text-white shadow-sm shadow-violet-500/30'
+                  : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-brand hover:text-brand'"
+                class="px-3.5 py-1.5 rounded-full text-xs font-semibold transition whitespace-nowrap flex items-center gap-1">
+          <span x-text="cat.icon"></span>
+          <span x-text="cat.label"></span>
+          <span x-show="activeCat===cat.v"
+                class="ml-0.5 bg-white/20 rounded-full px-1.5 py-0.5 text-xs leading-none"
+                x-text="count(cat.v)"></span>
+        </button>
+      </template>
+    </div>
+
+    <!-- Search box -->
+    <div class="relative ml-auto w-full sm:w-56">
+      <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none"
+           fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+      </svg>
+      <input type="text" x-model="search"
+             :placeholder="I18n.t('common.search')"
+             class="w-full pl-8 pr-3 py-1.5 rounded-full text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:border-brand focus:outline-none text-slate-700 dark:text-slate-300">
+      <button x-show="search" @click="search=''"
+              class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-red-500 text-xs leading-none">✕</button>
+    </div>
+  </div>
+
+  <!-- ═══════════════════ TOOL GRID ═══════════════════ -->
+  <!-- No results -->
+  <p x-show="count(activeCat) === 0"
+     class="text-center text-sm text-slate-400 py-12 max-w-5xl mx-auto"
+     data-i18n="hero.no_results">No tools match your search.</p>
+
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 max-w-5xl mx-auto">
+    <template x-for="tool in tools" :key="tool.href">
+      <a :href="tool.href"
+         x-show="visible(tool)"
+         x-transition:enter="transition ease-out duration-150"
+         x-transition:enter-start="opacity-0 scale-95"
+         x-transition:enter-end="opacity-100 scale-100"
+         class="group block rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50
+                hover:border-violet-400/50 dark:hover:border-violet-500/30
+                hover:shadow-xl hover:shadow-violet-500/10 transition-all duration-300 overflow-hidden">
+
+        <div class="h-1 bg-gradient-to-r from-violet-400 to-purple-400 opacity-60 group-hover:opacity-100 transition-opacity"></div>
+
+        <div class="p-5">
+          <div class="flex items-center gap-3 mb-2.5">
+            <span class="text-2xl leading-none" x-text="tool.emoji"></span>
+            <h2 class="text-sm font-bold group-hover:text-brand transition leading-tight" x-text="I18n.t(tool.tk) || tool.title"></h2>
+          </div>
+          <p class="text-xs text-slate-500 dark:text-slate-400 leading-relaxed line-clamp-2" x-text="tool.desc"></p>
+          <div class="flex items-center gap-1 mt-3 text-xs font-medium text-brand opacity-0 group-hover:opacity-100 transition-opacity">
+            <span data-i18n="common.open_tool">Open tool</span>
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/>
+            </svg>
+          </div>
+        </div>
+      </a>
+    </template>
+  </div>
 
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function toolGrid() {
+  const TOOLS = [
+    // PDF tools
+    {href:"/compress-pdf",      emoji:"📦", tk:"tool.compress_pdf",      title:"Compress PDF",      cat:"pdf",     desc:"Reduce PDF file size by recompressing embedded images. Low, medium, or high quality."},
+    {href:"/pdf-to-image",      emoji:"🖼️", tk:"tool.pdf_to_image",      title:"PDF to Image",      cat:"pdf",     desc:"Convert each PDF page to JPEG or PNG. Adjustable DPI from 72–600."},
+    {href:"/image-to-pdf",      emoji:"📄", tk:"tool.image_to_pdf",      title:"Image to PDF",      cat:"pdf",     desc:"Merge multiple images into a single PDF. Drag to reorder pages."},
+    {href:"/pdf-to-text",       emoji:"📝", tk:"tool.pdf_to_text",       title:"PDF to Text",       cat:"pdf",     desc:"Extract text from PDFs. Falls back to Tesseract OCR for scanned pages."},
+    {href:"/merge-pdf",         emoji:"🔗", tk:"tool.merge_pdf",         title:"Merge PDFs",        cat:"pdf",     desc:"Combine multiple PDFs into one. Reorder with arrow buttons."},
+    {href:"/split-pdf",         emoji:"📑", tk:"tool.split_pdf",         title:"Split PDF",         cat:"pdf",     desc:"Split a multi-page PDF into individual page PDFs, bundled as ZIP."},
+    {href:"/pdf-protect",       emoji:"🔒", tk:"tool.pdf_protect",       title:"PDF Protect",       cat:"pdf",     desc:"Add a password to lock a PDF, or remove an existing password."},
+    {href:"/pdf-pages",         emoji:"📋", tk:"tool.pdf_pages",         title:"PDF Page Editor",   cat:"pdf",     desc:"Drag page thumbnails to reorder or ✕ to delete, then download."},
+    {href:"/pdf-stamp",         emoji:"🔢", tk:"tool.pdf_stamp",         title:"PDF Page Numbers",  cat:"pdf",     desc:"Stamp page numbers or custom text on every page. {n} / {total} variables."},
+    {href:"/pdf-metadata",      emoji:"🗂️", tk:"tool.pdf_metadata",      title:"PDF Metadata",      cat:"pdf",     desc:"View/edit title, author, subject and keywords. Strip all metadata."},
+    {href:"/pdf-extract-pages", emoji:"📄", tk:"tool.pdf_extract_pages", title:"PDF Extract Pages", cat:"pdf",     desc:"Extract a page range (e.g. pages 3–7) as a new PDF document."},
+    {href:"/pdf-compress-pro",  emoji:"⚡", tk:"tool.pdf_compress_pro",  title:"PDF Compress Pro",  cat:"pdf",     desc:"Structural compression — removes unused objects, no image quality loss."},
+    {href:"/pdf-rotate",        emoji:"🔃", tk:"tool.pdf_rotate",        title:"PDF Rotate",        cat:"pdf",     desc:"Rotate all, odd, or even pages by 90°, 180°, or 270°."},
+    {href:"/pdf-watermark",     emoji:"💧", tk:"tool.pdf_watermark",     title:"PDF Watermark",     cat:"pdf",     desc:"Diagonal CONFIDENTIAL / DRAFT text watermark on every PDF page."},
+    {href:"/extract-pdf-images",emoji:"🗃️", tk:"tool.extract_pdf_images",title:"Extract PDF Images",cat:"pdf",     desc:"Extract all embedded images from a PDF as a ZIP of JPEG/PNG files."},
+    // Image editing
+    {href:"/resize-image",      emoji:"↔️", tk:"tool.resize_image",      title:"Resize & Convert",  cat:"image",   desc:"Resize to exact pixels with aspect-ratio lock. Convert JPEG/PNG/WebP."},
+    {href:"/rotate-flip",       emoji:"🔄", tk:"tool.rotate_flip",       title:"Rotate & Flip",     cat:"image",   desc:"Rotate any angle + H/V flip with live CSS preview."},
+    {href:"/crop-image",        emoji:"✂️", tk:"tool.crop_image",        title:"Crop Image",        cat:"image",   desc:"Interactive canvas crop — draw a rectangle and download."},
+    {href:"/crop-aspect",       emoji:"📐", tk:"tool.crop_aspect",       title:"Crop to Aspect",    cat:"image",   desc:"Crop to 1:1, 4:3, 16:9, 9:16 or any custom ratio."},
+    {href:"/flip-image",        emoji:"🪞", tk:"tool.flip_image",        title:"Flip / Mirror",     cat:"image",   desc:"Mirror horizontally or vertically with one click."},
+    {href:"/stitch-images",     emoji:"⛓️", tk:"tool.stitch_images",     title:"Stitch Images",     cat:"image",   desc:"Join images side-by-side or top-to-bottom — panoramas, comparisons."},
+    {href:"/collage",           emoji:"🖼️", tk:"tool.collage",           title:"Image Collage",     cat:"image",   desc:"Photo grid with custom columns, gap, cell height, and background."},
+    {href:"/image-border",      emoji:"🖼",  tk:"tool.image_border",      title:"Image Border",      cat:"image",   desc:"Solid-colour border with optional rounded corners."},
+    {href:"/round-corners",     emoji:"⬛", tk:"tool.round_corners",     title:"Round Corners",     cat:"image",   desc:"Rounded corners — PNG transparent or JPEG with solid background."},
+    {href:"/trim-transparency", emoji:"🔲", tk:"tool.trim_transparency", title:"Trim Transparency", cat:"image",   desc:"Remove transparent borders from PNGs. Optionally fill with a colour."},
+    {href:"/passport-photo",    emoji:"🪪", tk:"tool.passport_photo",    title:"Passport Photo",    cat:"image",   desc:"Auto face-detect and crop to US / EU / CN / UK passport sizes."},
+    {href:"/optimize-image",    emoji:"⚡", tk:"tool.optimize_image",    title:"Image Optimizer",   cat:"image",   desc:"Reduce file size without changing dimensions. JPEG/PNG/WebP output."},
+    // Effects
+    {href:"/image-filters",     emoji:"🎚️", tk:"tool.filters",           title:"Image Filters",     cat:"effect",  desc:"Vivid, Warm, Cool, Sepia, Grayscale presets + individual sliders."},
+    {href:"/blur-image",        emoji:"🫥", tk:"tool.blur_image",        title:"Blur / Pixelate",   cat:"effect",  desc:"Gaussian blur or block-pixel effect for hiding faces/plates."},
+    {href:"/vignette",          emoji:"🌑", tk:"tool.vignette",          title:"Vignette",          cat:"effect",  desc:"Darken or lighten image edges to draw focus to the centre."},
+    {href:"/grayscale",         emoji:"⬜", tk:"tool.grayscale",         title:"Grayscale",         cat:"effect",  desc:"Grayscale with optional sepia, cool, or custom color tint."},
+    {href:"/sharpen-denoise",   emoji:"🔪", tk:"tool.sharpen_denoise",   title:"Sharpen / Denoise", cat:"effect",  desc:"Sharpen, edge-enhance, or reduce noise. Up to 5 passes."},
+    {href:"/duotone",           emoji:"🎭", tk:"tool.duotone",           title:"Duotone Effect",    cat:"effect",  desc:"Two-color gradient map — 8 built-in presets + custom colors."},
+    {href:"/invert-colors",     emoji:"🔲", tk:"tool.invert_colors",     title:"Invert Colors",     cat:"effect",  desc:"Photographic negative — invert every pixel channel."},
+    {href:"/posterize",         emoji:"🎨", tk:"tool.posterize",         title:"Posterize",         cat:"effect",  desc:"Reduce color depth (2–8 levels) for a bold poster-style look."},
+    {href:"/color-swap",        emoji:"🔵", tk:"tool.color_swap",        title:"Color Swap",        cat:"effect",  desc:"Replace one color with another — great for recoloring logos."},
+    {href:"/remove-bg-color",   emoji:"🪄", tk:"tool.remove_bg_color",   title:"Remove BG Color",   cat:"effect",  desc:"Replace solid background (white, black…) with transparency."},
+    {href:"/remove-watermark",  emoji:"🧹", tk:"tool.remove_watermark",  title:"Remove Watermark",  cat:"effect",  desc:"Draw a rectangle over any watermark — three fill methods to choose from."},
+    {href:"/drop-shadow",       emoji:"🌤", tk:"tool.drop_shadow",       title:"Drop Shadow",       cat:"effect",  desc:"Soft blurred drop shadow behind an image. Offset, blur, opacity."},
+    // Create / Generate
+    {href:"/qr-code",           emoji:"📱", tk:"tool.qr_code",           title:"QR Code",           cat:"create",  desc:"Text/URL → QR code. Size, error correction, colors, inline preview."},
+    {href:"/placeholder",       emoji:"🟪", tk:"tool.placeholder",       title:"Placeholder Image", cat:"create",  desc:"Solid-color placeholder at any size. Common presets included."},
+    {href:"/favicon",           emoji:"⭐", tk:"tool.favicon",           title:"Favicon Generator", cat:"create",  desc:"favicon.ico + PNG sizes 16–256 + Apple touch icon as ZIP."},
+    {href:"/icon-set",          emoji:"📱", tk:"tool.icon_set",          title:"Icon Set Generator",cat:"create",  desc:"macOS, iOS, or Windows icon set from one source image."},
+    {href:"/gif-creator",       emoji:"🎞️", tk:"tool.gif_creator",       title:"GIF Creator",       cat:"create",  desc:"Animate multiple images into a GIF. Control delay, size, loop."},
+    {href:"/photo-caption",     emoji:"💬", tk:"tool.photo_caption",     title:"Photo Caption",     cat:"create",  desc:"Add a caption bar to the top or bottom of your photo."},
+    {href:"/add-text",          emoji:"✏️",  tk:"tool.add_text",          title:"Add Text",          cat:"create",  desc:"Overlay text anywhere — click to place, set font/color/stroke."},
+    {href:"/watermark",         emoji:"💧", tk:"tool.watermark",         title:"Add Text Watermark",cat:"create",  desc:"Semi-transparent text stamp — 5 positions, opacity, color."},
+    {href:"/image-watermark",   emoji:"🖼️", tk:"tool.image_watermark",   title:"Image Watermark",   cat:"create",  desc:"Overlay a logo/PNG on your photo. Scale, position, opacity."},
+    {href:"/tile-image",        emoji:"🔲", tk:"tool.tile_image",        title:"Tile Image",        cat:"create",  desc:"Repeat a tile to fill a large canvas — seamless backgrounds."},
+    {href:"/collage",           emoji:"🖼️", tk:"tool.collage",           title:"Image Collage",     cat:"create",  desc:"Arrange photos in a grid with custom columns and spacing."},
+    // Utilities / Analyze
+    {href:"/image-ocr",         emoji:"🔡", tk:"tool.image_ocr",         title:"Image OCR",         cat:"utility", desc:"Extract text from photos and screenshots with Tesseract."},
+    {href:"/image-base64",      emoji:"🔢", tk:"tool.image_base64",      title:"Image → Base64",    cat:"utility", desc:"Convert image to Base64 data URL for HTML/CSS embedding."},
+    {href:"/exif-data",         emoji:"🔍", tk:"tool.exif_data",         title:"EXIF Data",         cat:"utility", desc:"Read camera/GPS/exposure metadata. Strip all for privacy."},
+    {href:"/color-palette",     emoji:"🎨", tk:"tool.color_palette",     title:"Color Palette",     cat:"utility", desc:"Extract dominant colors as swatches. Copy hex, download CSS."},
+    {href:"/layer-analysis",    emoji:"🎨", tk:"tool.layer_analysis",    title:"Layer Analysis",    cat:"utility", desc:"Separate image into RGB channels + K-means color clusters (ZIP)."},
+  ];
+
+  return {
+    tools: TOOLS,
+    activeCat: 'all',
+    search: '',
+
+    categories: [
+      {v:'all',     icon:'🏠', label:''},
+      {v:'pdf',     icon:'📄', label:''},
+      {v:'image',   icon:'🖼️', label:''},
+      {v:'effect',  icon:'✨', label:''},
+      {v:'create',  icon:'🪄', label:''},
+      {v:'utility', icon:'🔧', label:''},
+    ],
+
+    init() {
+      // Set category labels from i18n after DOM is ready
+      const labels = ['cat.all','cat.pdf','cat.image','cat.effect','cat.create','cat.utility'];
+      this.categories.forEach((c, i) => { c.label = I18n.t(labels[i]); });
+      // Watch for language change
+      const observer = new MutationObserver(() => {
+        this.categories.forEach((c, i) => { c.label = I18n.t(labels[i]); });
+      });
+      observer.observe(document.body, {subtree:true, childList:true, characterData:true});
+    },
+
+    visible(tool) {
+      if (this.activeCat !== 'all' && tool.cat !== this.activeCat) return false;
+      if (this.search) {
+        const q = this.search.toLowerCase();
+        return (I18n.t(tool.tk) || tool.title).toLowerCase().includes(q) ||
+               tool.desc.toLowerCase().includes(q);
+      }
+      return true;
+    },
+
+    count(cat) {
+      return this.tools.filter(t => {
+        const catOk = cat === 'all' || t.cat === cat;
+        const qOk   = !this.search || (I18n.t(t.tk) || t.title).toLowerCase().includes(this.search.toLowerCase());
+        return catOk && qOk;
+      }).length;
+    },
+  };
+}
+</script>
 {% endblock %}
