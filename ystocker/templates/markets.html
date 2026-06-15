@@ -1965,7 +1965,7 @@ function _toggleSkewGuide() {
   btn.textContent = open ? '▶' : '▼';
 }
 
-function _toggleAaiiSpy() {
+async function _toggleAaiiSpy() {
   const wrap = document.getElementById('aaiiSpyChart');
   const chevron = document.getElementById('aaiiSpyChevron');
   if (!wrap.classList.contains('hidden')) {
