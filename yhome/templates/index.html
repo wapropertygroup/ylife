@@ -1,162 +1,377 @@
 <!doctype html>
-<html lang="en" class="h-full dark">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Li Family — Home</title>
+  <title>Li Family — home.li-family.us</title>
+  <meta name="description" content="Apps we built for investing, travel, gardening, and everyday life.">
   <link rel="icon" type="image/svg+xml" href="{{ url_for('home.static', filename='favicon.svg') }}">
 
   <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      darkMode: 'class',
-      theme: {
-        extend: {
-          colors: {
-            surface: '#0f172a',
-            panel: '#1e293b',
-            border: '#334155',
-          },
-          fontFamily: { mono: ['JetBrains Mono', 'Fira Code', 'monospace'] }
-        }
-      }
-    }
-  </script>
-
-  <script>
-    (function() {
-      const theme = localStorage.getItem('yhome_theme') || 'dark';
-      if (theme === 'light') document.documentElement.classList.remove('dark');
-    })();
-  </script>
-
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="{{ url_for('home.static', filename='css/style.css') }}">
+  <style>
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      background: #06060f;
+      color: #f1f5f9;
+      font-family: 'Inter', sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── Starfield ─────────────────────────────────── */
+    .stars {
+      position: fixed; inset: 0; pointer-events: none; z-index: 0;
+      background-image:
+        radial-gradient(1px 1px at 10% 20%, rgba(255,255,255,0.18) 0%, transparent 100%),
+        radial-gradient(1px 1px at 30% 60%, rgba(255,255,255,0.14) 0%, transparent 100%),
+        radial-gradient(1px 1px at 50% 10%, rgba(255,255,255,0.12) 0%, transparent 100%),
+        radial-gradient(1px 1px at 70% 80%, rgba(255,255,255,0.10) 0%, transparent 100%),
+        radial-gradient(1px 1px at 85% 35%, rgba(255,255,255,0.16) 0%, transparent 100%),
+        radial-gradient(1.5px 1.5px at 15% 75%, rgba(255,255,255,0.10) 0%, transparent 100%),
+        radial-gradient(1px 1px at 45% 45%, rgba(255,255,255,0.12) 0%, transparent 100%),
+        radial-gradient(1px 1px at 90% 15%, rgba(255,255,255,0.14) 0%, transparent 100%),
+        radial-gradient(1px 1px at 60% 90%, rgba(255,255,255,0.08) 0%, transparent 100%),
+        radial-gradient(1px 1px at 25% 35%, rgba(255,255,255,0.10) 0%, transparent 100%),
+        radial-gradient(1px 1px at 75% 55%, rgba(255,255,255,0.12) 0%, transparent 100%),
+        radial-gradient(1px 1px at 5% 90%, rgba(255,255,255,0.08) 0%, transparent 100%);
+    }
+
+    /* ── Gradient text ──────────────────────────────── */
+    .grad-hero {
+      background: linear-gradient(135deg, #fbbf24 0%, #f97316 40%, #a78bfa 80%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .grad-blue {
+      background: linear-gradient(135deg, #38bdf8, #818cf8);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    /* ── Glow button ────────────────────────────────── */
+    .btn-primary {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 12px 24px; border-radius: 10px; font-size: 14px; font-weight: 600;
+      background: linear-gradient(135deg, #f97316, #a78bfa);
+      color: #fff; border: none; cursor: pointer;
+      box-shadow: 0 0 24px rgba(249,115,22,0.35);
+      transition: all 0.2s;
+      text-decoration: none;
+    }
+    .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 0 36px rgba(249,115,22,0.5); }
+
+    .btn-ghost {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 12px 24px; border-radius: 10px; font-size: 14px; font-weight: 600;
+      background: rgba(255,255,255,0.04);
+      color: #94a3b8;
+      border: 1px solid rgba(255,255,255,0.10);
+      cursor: pointer; transition: all 0.2s;
+      text-decoration: none;
+    }
+    .btn-ghost:hover { background: rgba(255,255,255,0.08); color: #f1f5f9; border-color: rgba(255,255,255,0.18); }
+
+    /* ── Marquee ────────────────────────────────────── */
+    .marquee-outer { overflow: hidden; mask: linear-gradient(to right, transparent 0%, black 10%, black 90%, transparent 100%); }
+    .marquee-track { display: flex; gap: 40px; animation: marquee 28s linear infinite; white-space: nowrap; }
+    .marquee-track:hover { animation-play-state: paused; }
+    @keyframes marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+    .marquee-item {
+      display: inline-flex; align-items: center; gap: 8px;
+      font-size: 13px; font-weight: 500; color: #475569;
+      padding: 6px 16px; border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.07);
+      background: rgba(255,255,255,0.02);
+      white-space: nowrap;
+      transition: color 0.2s;
+    }
+
+    /* ── App cards ──────────────────────────────────── */
+    .app-card {
+      position: relative; overflow: hidden;
+      background: rgba(255,255,255,0.025);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 20px;
+      padding: 28px;
+      transition: all 0.3s;
+      text-decoration: none; color: inherit;
+      display: block;
+    }
+    .app-card:hover {
+      background: rgba(255,255,255,0.045);
+      border-color: rgba(255,255,255,0.16);
+      transform: translateY(-3px);
+      box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    }
+    .app-card .accent-line {
+      position: absolute; top: 0; left: 0; right: 0; height: 2px;
+      opacity: 0.7; transition: opacity 0.3s;
+    }
+    .app-card:hover .accent-line { opacity: 1; }
+
+    /* ── Fade-up ────────────────────────────────────── */
+    .fade-up { opacity: 0; transform: translateY(24px); transition: opacity 0.6s ease, transform 0.6s ease; }
+    .fade-up.visible { opacity: 1; transform: translateY(0); }
+
+    /* ── Section divider glow ───────────────────────── */
+    .glow-line {
+      height: 1px;
+      background: linear-gradient(to right, transparent, rgba(167,139,250,0.3), rgba(249,115,22,0.3), transparent);
+    }
+  </style>
 </head>
 
-<body class="bg-white dark:bg-slate-950 text-slate-800 dark:text-slate-100 min-h-screen flex flex-col font-[Inter]">
+<body>
+<div class="stars"></div>
 
-  <!-- Header -->
-  <header class="sticky top-0 z-50 bg-white/80 dark:bg-slate-900/80 backdrop-blur border-b border-slate-200 dark:border-slate-800">
-    <div class="max-w-screen-xl mx-auto px-4 sm:px-6 flex items-center h-14 gap-4">
-      <a href="/" class="flex items-center gap-2 font-bold text-lg">
-        <span class="text-2xl">&#x1f3e0;</span>
-        <span class="bg-gradient-to-r from-blue-500 via-violet-500 to-green-500 bg-clip-text text-transparent">Li Family</span>
+<!-- ── NAV ──────────────────────────────────────────── -->
+<header class="fixed top-0 left-0 right-0 z-50" style="background: rgba(6,6,15,0.75); backdrop-filter: blur(20px); border-bottom: 1px solid rgba(255,255,255,0.06);">
+  <div class="max-w-screen-xl mx-auto px-6 flex items-center h-14 gap-8">
+    <a href="/" class="flex items-center gap-2 font-bold text-base">
+      <span class="text-xl">🏠</span>
+      <span class="grad-hero font-extrabold text-sm tracking-tight">Li Family</span>
+    </a>
+    <nav class="hidden sm:flex items-center gap-1 ml-4">
+      <a href="#apps" class="px-3 py-1.5 rounded-md text-sm text-slate-400 hover:text-white transition">Apps</a>
+      <a href="#about" class="px-3 py-1.5 rounded-md text-sm text-slate-400 hover:text-white transition">About</a>
+    </nav>
+    <div class="ml-auto flex items-center gap-3">
+      <a href="https://stock.li-family.us" target="_blank" rel="noopener"
+         class="btn-primary" style="padding: 8px 18px; font-size:13px;">
+        yStocker →
       </a>
-      <div class="ml-auto flex items-center gap-2">
-        <button onclick="toggleTheme()"
-                class="p-2 rounded-md text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
-                title="Toggle theme">
-          <svg class="w-5 h-5 hidden dark:block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/>
-          </svg>
-          <svg class="w-5 h-5 block dark:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
-          </svg>
-        </button>
-      </div>
     </div>
-  </header>
+  </div>
+</header>
 
-  <main class="flex-1 max-w-screen-xl mx-auto w-full px-4 sm:px-6 py-10 sm:py-16">
 
-    <!-- Hero -->
-    <div class="text-center mb-14 fade-up">
-      <h1 class="text-4xl sm:text-5xl font-extrabold mb-4 tracking-tight">
-        <span class="bg-gradient-to-r from-blue-500 via-violet-500 to-green-500 bg-clip-text text-transparent">li-family.us</span>
-      </h1>
-      <p class="text-lg sm:text-xl text-slate-500 dark:text-slate-400 max-w-2xl mx-auto leading-relaxed">
-        Our family toolkit — apps we built for investing, traveling, and gardening in the Pacific Northwest.
-      </p>
+<!-- ── HERO ─────────────────────────────────────────── -->
+<section class="relative min-h-screen flex flex-col items-center justify-center text-center px-6 pt-20 pb-16" style="z-index:1;">
+
+  <!-- Background glow blobs -->
+  <div style="position:absolute; top:20%; left:30%; width:600px; height:600px;
+       background: radial-gradient(circle, rgba(249,115,22,0.07) 0%, transparent 70%);
+       pointer-events:none; transform: translate(-50%,-50%);"></div>
+  <div style="position:absolute; top:60%; left:70%; width:400px; height:400px;
+       background: radial-gradient(circle, rgba(167,139,250,0.06) 0%, transparent 70%);
+       pointer-events:none; transform: translate(-50%,-50%);"></div>
+
+  <div class="max-w-4xl mx-auto fade-up">
+    <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium text-slate-400 mb-8"
+         style="border: 1px solid rgba(255,255,255,0.10); background: rgba(255,255,255,0.03);">
+      <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+      8 apps · All live
     </div>
 
-    <!-- App Cards -->
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-16">
+    <h1 class="text-5xl sm:text-7xl font-black tracking-tight leading-none mb-6">
+      Tools We<br>
+      <span class="grad-hero">Built for Living.</span>
+    </h1>
+
+    <p class="text-lg sm:text-xl text-slate-400 max-w-2xl mx-auto leading-relaxed mb-10">
+      Apps we made for ourselves — for investing smarter, planning trips,
+      growing food, and handling life in the Pacific Northwest.
+    </p>
+
+    <div class="flex flex-wrap items-center justify-center gap-4">
+      <a href="#apps" class="btn-primary">
+        Explore Apps
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+        </svg>
+      </a>
+      <a href="https://stock.li-family.us" target="_blank" rel="noopener" class="btn-ghost">
+        Visit yStocker
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/>
+        </svg>
+      </a>
+    </div>
+  </div>
+
+  <!-- Scroll indicator -->
+  <div class="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 text-slate-600 text-xs">
+    <span>scroll</span>
+    <div style="width:1px; height:32px; background: linear-gradient(to bottom, rgba(148,163,184,0.4), transparent);"></div>
+  </div>
+</section>
+
+
+<!-- ── MARQUEE ───────────────────────────────────────── -->
+<div class="py-8" style="border-top: 1px solid rgba(255,255,255,0.05); border-bottom: 1px solid rgba(255,255,255,0.05); z-index:1; position:relative;">
+  <div class="marquee-outer">
+    <div class="marquee-track">
+      {% set all_apps = apps + apps %}
+      {% for app in all_apps %}
+      <span class="marquee-item">{{ app.emoji }} {{ app.name }}</span>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+
+<!-- ── MANIFESTO ─────────────────────────────────────── -->
+<section id="about" class="relative py-24 px-6" style="z-index:1;">
+  <div class="max-w-4xl mx-auto text-center fade-up">
+    <p class="text-xs font-semibold uppercase tracking-widest text-slate-500 mb-6">Why we build</p>
+    <h2 class="text-3xl sm:text-5xl font-black tracking-tight leading-tight text-white">
+      We got tired of paying for tools<br>
+      that <span class="grad-blue">almost</span> did what we needed.<br>
+      <span class="text-slate-400 font-light">So we built our own.</span>
+    </h2>
+    <p class="text-slate-400 text-lg mt-8 max-w-2xl mx-auto leading-relaxed">
+      Every app here started as a personal problem. yStocker because financial dashboards were cluttered.
+      yPlanner because trip planning was scattered across 10 tabs.
+      yPlanter because nobody told us what actually grows in Seattle.
+    </p>
+  </div>
+
+  <!-- Stats row -->
+  <div class="max-w-3xl mx-auto mt-16 grid grid-cols-2 sm:grid-cols-4 gap-6 fade-up">
+    {% set stats = [
+      ['8', 'Live apps'],
+      ['4', 'AI features'],
+      ['1', 'Family'],
+      ['∞', 'Side projects'],
+    ] %}
+    {% for stat in stats %}
+    {% set num = stat[0] %}{% set label = stat[1] %}
+    <div class="text-center p-6 rounded-2xl" style="background: rgba(255,255,255,0.025); border: 1px solid rgba(255,255,255,0.07);">
+      <div class="text-4xl font-black grad-hero mb-2">{{ num }}</div>
+      <div class="text-sm text-slate-500">{{ label }}</div>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+
+<div class="glow-line mx-6"></div>
+
+
+<!-- ── APPS GRID ─────────────────────────────────────── -->
+<section id="apps" class="relative py-20 px-6" style="z-index:1;">
+  <div class="max-w-screen-xl mx-auto">
+
+    <div class="mb-12 fade-up">
+      <p class="text-xs font-semibold uppercase tracking-widest text-slate-500 mb-3">The Apps</p>
+      <h2 class="text-3xl sm:text-4xl font-black tracking-tight">
+        Everything we've shipped.
+      </h2>
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+      {% set color_map = {
+        'blue':   ('from-sky-400 to-blue-500',   'rgba(56,189,248,0.15)',  '#38bdf8'),
+        'violet': ('from-violet-400 to-fuchsia-500', 'rgba(167,139,250,0.15)', '#a78bfa'),
+        'green':  ('from-emerald-400 to-teal-500', 'rgba(52,211,153,0.15)', '#34d399'),
+        'amber':  ('from-amber-400 to-orange-500', 'rgba(251,191,36,0.15)', '#fbbf24'),
+      } %}
       {% for app in apps %}
-      <a href="{{ app.url }}" target="_blank" rel="noopener"
-         class="app-card group block rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50
-                hover:border-{{ app.color }}-400/50 dark:hover:border-{{ app.color }}-500/30
-                hover:shadow-xl hover:shadow-{{ app.color }}-500/10 transition-all duration-300 overflow-hidden">
+      {% set color_info = color_map.get(app.color, color_map['blue']) %}
+      {% set grad = color_info[0] %}
+      {% set glow = color_info[1] %}
+      {% set accent = color_info[2] %}
+      <a href="{{ app.url }}" target="_blank" rel="noopener" class="app-card fade-up group">
+        <!-- accent bar -->
+        <div class="accent-line bg-gradient-to-r {{ grad }}"></div>
 
-        <!-- Color accent bar -->
-        <div class="h-1 bg-gradient-to-r
-          {% if app.color == 'blue' %}from-blue-400 to-cyan-400
-          {% elif app.color == 'violet' %}from-violet-400 to-fuchsia-400
-          {% elif app.color == 'green' %}from-green-400 to-emerald-400
-          {% elif app.color == 'amber' %}from-amber-400 to-orange-400
-          {% endif %}
-          opacity-60 group-hover:opacity-100 transition-opacity"></div>
+        <!-- Hover glow -->
+        <div class="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"
+             style="background: radial-gradient(circle at 50% 0%, {{ glow }}, transparent 60%);"></div>
 
-        <div class="p-6">
-          <!-- Icon + Name -->
-          <div class="flex items-center gap-3 mb-3">
-            <span class="text-3xl">{{ app.emoji }}</span>
-            <div>
-              <h2 class="text-lg font-bold group-hover:text-{{ app.color }}-500 transition">{{ app.name }}</h2>
-              <p class="text-xs text-slate-500 dark:text-slate-400 font-medium tracking-wide uppercase">{{ app.tagline }}</p>
-            </div>
-          </div>
-
-          <!-- Description -->
-          <p class="text-sm text-slate-600 dark:text-slate-400 leading-relaxed mb-4">{{ app.description }}</p>
-
-          <!-- Features -->
-          <div class="flex flex-wrap gap-1.5 mb-4">
-            {% for feature in app.features %}
-            <span class="text-[10px] px-2 py-0.5 rounded-full font-medium
-              bg-{{ app.color }}-50 dark:bg-{{ app.color }}-900/20
-              text-{{ app.color }}-600 dark:text-{{ app.color }}-400">{{ feature }}</span>
-            {% endfor %}
-          </div>
-
-          <!-- CTA -->
-          <div class="flex items-center gap-1 text-sm font-medium text-{{ app.color }}-500 group-hover:gap-2 transition-all">
-            <span>Open {{ app.name }}</span>
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div class="relative">
+          <!-- Emoji + name -->
+          <div class="flex items-start justify-between mb-4">
+            <div class="text-4xl">{{ app.emoji }}</div>
+            <svg class="w-4 h-4 text-slate-600 group-hover:text-slate-400 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/>
             </svg>
+          </div>
+
+          <h3 class="text-lg font-bold mb-1" style="color: {{ accent }};">{{ app.name }}</h3>
+          <p class="text-xs font-semibold uppercase tracking-widest text-slate-500 mb-3">{{ app.tagline }}</p>
+          <p class="text-sm text-slate-400 leading-relaxed mb-4">{{ app.description }}</p>
+
+          <!-- Feature pills -->
+          <div class="flex flex-wrap gap-1.5">
+            {% for feature in app.features[:3] %}
+            <span class="text-[10px] px-2 py-0.5 rounded-full font-medium text-slate-400"
+                  style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08);">
+              {{ feature }}
+            </span>
+            {% endfor %}
           </div>
         </div>
       </a>
       {% endfor %}
     </div>
+  </div>
+</section>
 
-    <!-- Quick Links -->
-    <div class="text-center fade-up">
-      <p class="text-xs text-slate-400 dark:text-slate-600 mb-3 uppercase tracking-widest font-medium">Quick Links</p>
-      <div class="flex flex-wrap justify-center gap-3">
-        {% for app in apps %}
-        <a href="{{ app.url }}" target="_blank" rel="noopener"
-           class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium
-                  border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400
-                  hover:border-{{ app.color }}-300 dark:hover:border-{{ app.color }}-700
-                  hover:text-{{ app.color }}-500 transition">
-          <span>{{ app.emoji }}</span> {{ app.name }}
-        </a>
-        {% endfor %}
-      </div>
+
+<!-- ── CTA SECTION ───────────────────────────────────── -->
+<div class="glow-line mx-6"></div>
+<section class="relative py-24 px-6 text-center" style="z-index:1;">
+  <div class="max-w-2xl mx-auto fade-up">
+    <h2 class="text-3xl sm:text-5xl font-black tracking-tight mb-6">
+      Start with <span class="grad-hero">yStocker.</span>
+    </h2>
+    <p class="text-slate-400 text-lg mb-10 leading-relaxed">
+      Our most complete app. Real-time markets, AI daily summaries,
+      13F institutional holdings, Fed balance sheet, and more.
+    </p>
+    <a href="https://stock.li-family.us" target="_blank" rel="noopener" class="btn-primary" style="font-size:15px; padding:14px 28px;">
+      Open yStocker
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/>
+      </svg>
+    </a>
+  </div>
+</section>
+
+
+<!-- ── FOOTER ────────────────────────────────────────── -->
+<footer class="relative border-t py-10 px-6" style="border-color: rgba(255,255,255,0.07); z-index:1;">
+  <div class="max-w-screen-xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-6">
+    <div class="flex items-center gap-2">
+      <span class="text-xl">🏠</span>
+      <span class="grad-hero font-extrabold text-sm">Li Family</span>
+      <span class="text-slate-600 text-sm">· Seattle, WA</span>
     </div>
 
-  </main>
+    <div class="flex flex-wrap justify-center gap-4">
+      {% for app in apps %}
+      <a href="{{ app.url }}" target="_blank" rel="noopener"
+         class="text-xs text-slate-600 hover:text-slate-300 transition flex items-center gap-1">
+        {{ app.emoji }} {{ app.name }}
+      </a>
+      {% endfor %}
+    </div>
 
-  <footer class="border-t border-slate-200 dark:border-slate-800 py-4 text-center text-xs text-slate-400 dark:text-slate-600">
-    <p>&copy; 2025–2026 Li Family &middot; Seattle, WA</p>
-  </footer>
+    <p class="text-xs text-slate-700">&copy; 2025–2026</p>
+  </div>
+</footer>
 
-  <script>
-  function toggleTheme() {
-    const html = document.documentElement;
-    const isDark = html.classList.contains('dark');
-    if (isDark) {
-      html.classList.remove('dark');
-      localStorage.setItem('yhome_theme', 'light');
-    } else {
-      html.classList.add('dark');
-      localStorage.setItem('yhome_theme', 'dark');
+
+<script>
+// Fade-up on scroll
+const observer = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      e.target.classList.add('visible');
+      // Stagger children
+      const children = e.target.closest('.grid')?.querySelectorAll('.fade-up') || [];
+      children.forEach((el, i) => {
+        setTimeout(() => el.classList.add('visible'), i * 60);
+      });
     }
-  }
-  </script>
+  });
+}, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
+
+document.querySelectorAll('.fade-up').forEach(el => observer.observe(el));
+</script>
+
 </body>
 </html>
