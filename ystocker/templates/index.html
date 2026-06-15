@@ -227,17 +227,8 @@
         <span class="w-3 h-3 rounded-sm inline-block" style="background:rgba(248,113,113,0.35)"></span><span data-i18n="index.heat_high">High PE</span>
       </div>
       <!-- Sector filter -->
-      <div class="relative" id="sectorFilterWrap">
-        <select id="sectorFilter"
-                class="appearance-none bg-slate-800 border border-slate-700 rounded-lg pl-3 pr-7 py-1.5
-                       text-xs text-slate-300 focus:outline-none focus:ring-1 focus:ring-brand cursor-pointer">
-          <option value="" data-i18n="index.all_sectors">All sectors</option>
-        </select>
-        <svg class="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-500"
-             fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-        </svg>
-      </div>
+      <!-- Sector pills — click to toggle filter; "All" resets -->
+      <div id="sectorPills" class="flex flex-wrap gap-1 max-w-full"></div>
 
       <!-- Search -->
       <div class="relative">
@@ -835,10 +826,37 @@ document.addEventListener('DOMContentLoaded', () => {
   let sortCol = 'market_cap', sortDir = -1;
   let filterSector = '', filterText = '';
 
-  // Populate sector dropdown (stocks only)
+  // Build sector pills (stocks only)
   const sectors = [...new Set(stockRows.map(d => d.sector))].sort();
-  const sel = document.getElementById('sectorFilter');
-  sectors.forEach(s => { const o = document.createElement('option'); o.value = s; o.textContent = I18n.tSector(s); sel.appendChild(o); });
+  const pillsWrap = document.getElementById('sectorPills');
+  function _makePill(label, value, isAll) {
+    const btn = document.createElement('button');
+    btn.dataset.sector = value;
+    btn.textContent = label;
+    btn.className = 'sector-filter-pill text-[10px] px-2 py-0.5 rounded-full border transition ' +
+      (isAll ? 'border-brand text-brand bg-brand/10 active' : 'border-slate-700 text-slate-400 bg-transparent hover:border-slate-500 hover:text-slate-200');
+    btn.addEventListener('click', () => {
+      filterSector = value;
+      document.querySelectorAll('.sector-filter-pill').forEach(p => {
+        const active = p.dataset.sector === value;
+        p.classList.toggle('active', active);
+        p.classList.toggle('border-brand', active);
+        p.classList.toggle('text-brand', active);
+        p.classList.toggle('bg-brand\/10', active);
+        p.classList.toggle('border-slate-700', !active);
+        p.classList.toggle('text-slate-400', !active);
+      });
+      render();
+    });
+    return btn;
+  }
+  pillsWrap.appendChild(_makePill(I18n.t('index.all_sectors') || 'All', '', true));
+  sectors.forEach(s => pillsWrap.appendChild(_makePill(I18n.tSector(s), s, false)));
+  // Keep hidden select for any legacy code
+  if (!document.getElementById('sectorFilter')) {
+    const _sel = document.createElement('select'); _sel.id = 'sectorFilter'; _sel.style.display='none';
+    document.body.appendChild(_sel);
+  }
 
   // ── ETF heatmap state
   let etfSortCol = 'pe_ttm', etfSortDir = 1;
@@ -984,7 +1002,7 @@ document.addEventListener('DOMContentLoaded', () => {
       render();
     });
   });
-  document.getElementById('sectorFilter').addEventListener('change', e => { filterSector = e.target.value; render(); });
+  // Sector filter now handled by pills above
   document.getElementById('heatmapSearch').addEventListener('input', e => { filterText = e.target.value; render(); });
 
   // ── Bind ETF controls

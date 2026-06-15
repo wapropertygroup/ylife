@@ -257,6 +257,51 @@
   </div>
   <div class="chart-container" style="height:200px"><canvas id="skewChart"></canvas></div>
   <p class="text-[11px] text-slate-600 mt-2" data-i18n="markets.skew_note">SKEW &gt;140 = elevated tail risk demand. Historical avg ~130.</p>
+
+  <!-- ── Interpretation guide ──────────────────────────────────────── -->
+  <div class="mt-3 border-t border-slate-800 pt-3">
+    <button onclick="_toggleSkewGuide()" id="skewGuideBtn"
+            class="flex items-center gap-1.5 text-[11px] text-slate-500 hover:text-slate-300 transition mb-2">
+      <span id="skewGuideChevron" class="text-[9px]">▶</span>
+      <span data-i18n="markets.skew_guide_toggle">How to read this signal</span>
+    </button>
+    <div id="skewGuide" class="hidden space-y-2 text-[11px] text-slate-400 leading-relaxed">
+
+      <!-- What they measure -->
+      <div class="bg-slate-800/50 rounded-lg px-3 py-2">
+        <p class="font-semibold text-slate-300 mb-1" data-i18n="markets.skew_guide_what_title">① What each measures</p>
+        <p data-i18n="markets.skew_guide_what_body">VIX = implied volatility for the next 30 days (everyday risk). SKEW = premium for deep OTM puts (tail insurance). Low VIX + High SKEW means: everyday calm, but catastrophe insurance is expensive.</p>
+      </div>
+
+      <!-- 4-layer framework -->
+      <div class="bg-slate-800/50 rounded-lg px-3 py-2">
+        <p class="font-semibold text-slate-300 mb-1" data-i18n="markets.skew_guide_read_title">② How to read it (4 layers)</p>
+        <ul class="space-y-1 list-none">
+          <li><span class="text-sky-400 font-semibold" data-i18n="markets.skew_guide_layer1_label">Percentile, not absolute —</span> <span data-i18n="markets.skew_guide_layer1">SKEW &gt;140–145 is notable; compare to its 1–3 year percentile range, not a fixed number.</span></li>
+          <li><span class="text-sky-400 font-semibold" data-i18n="markets.skew_guide_layer2_label">VIX must truly be low —</span> <span data-i18n="markets.skew_guide_layer2">Divergence only matters when VIX is 12–18. If VIX is already 25+, this is broad risk-off, not a divergence.</span></li>
+          <li><span class="text-sky-400 font-semibold" data-i18n="markets.skew_guide_layer3_label">Duration matters —</span> <span data-i18n="markets.skew_guide_layer3">A single-day SKEW spike is often noise (structured product flows). Sustained elevation over days/weeks carries more weight.</span></li>
+          <li><span class="text-sky-400 font-semibold" data-i18n="markets.skew_guide_layer4_label">Confirm with breadth —</span> <span data-i18n="markets.skew_guide_layer4">High SKEW + low VIX + widening credit spreads + narrowing market breadth = fragile calm. If credit is stable and breadth is healthy, tail insurance may just be expensive, not predictive.</span></li>
+        </ul>
+      </div>
+
+      <!-- Yellow flag not red flag -->
+      <div class="bg-amber-900/20 border border-amber-800/40 rounded-lg px-3 py-2">
+        <p class="font-semibold text-amber-300 mb-1" data-i18n="markets.skew_guide_flag_title">⚠ Yellow flag, not red flag</p>
+        <p data-i18n="markets.skew_guide_flag_body">High SKEW can persist for weeks while the index keeps rising. It's a risk thermometer, not a timing signal. Use it to adjust risk budget and check concentrated positions — not to call a top.</p>
+      </div>
+
+      <!-- Common mistakes -->
+      <div class="bg-slate-800/50 rounded-lg px-3 py-2">
+        <p class="font-semibold text-slate-300 mb-1" data-i18n="markets.skew_guide_mistakes_title">✗ Common mistakes</p>
+        <ul class="space-y-0.5 list-none">
+          <li data-i18n="markets.skew_guide_mistake1">High SKEW ≠ crash imminent — it may just reflect structured product hedging or options supply/demand.</li>
+          <li data-i18n="markets.skew_guide_mistake2">Deep OTM puts are already expensive when SKEW is high — buying them at this moment is usually poor timing.</li>
+          <li data-i18n="markets.skew_guide_mistake3">Low VIX ≠ no risk — VIX only sees ordinary volatility; it can be low while tail risk is being repriced.</li>
+        </ul>
+      </div>
+
+    </div>
+  </div>
 </div>
 
 <!-- ── Equity Risk Premium card ─────────────────────────────────────── -->
@@ -1913,7 +1958,14 @@ async function _toggleFgSpy() {
 }
 
 let _aaiiSpyLoaded = false, _aaiiSpyChart = null;
-async function _toggleAaiiSpy() {
+function _toggleSkewGuide() {
+  const el  = document.getElementById('skewGuide');
+  const btn = document.getElementById('skewGuideChevron');
+  const open = el.classList.toggle('hidden');
+  btn.textContent = open ? '▶' : '▼';
+}
+
+function _toggleAaiiSpy() {
   const wrap = document.getElementById('aaiiSpyChart');
   const chevron = document.getElementById('aaiiSpyChevron');
   if (!wrap.classList.contains('hidden')) {
