@@ -234,7 +234,14 @@
       <h3 class="text-sm font-semibold text-slate-300" data-i18n="fed.buffett_title">📊 Buffett Indicator — US Market Cap / GDP</h3>
       <p class="text-xs text-slate-500 mt-0.5" data-i18n="fed.buffett_desc">"Probably the best single measure of where valuations stand." — Warren Buffett. Above 140% = overvalued; below 80% = undervalued.</p>
     </div>
-    <span id="buffettBadge" class="text-sm font-bold font-mono text-slate-100">—%</span>
+    <div class="flex items-center gap-2">
+      <span id="buffettBadge" class="text-sm font-bold font-mono text-slate-100">—%</span>
+      <div class="flex gap-1 ml-2" id="buffettRangeBtns">
+        <button class="range-btn" data-buffett-years="10">10Y</button>
+        <button class="range-btn" data-buffett-years="20">20Y</button>
+        <button class="range-btn active" data-buffett-years="0">All</button>
+      </div>
+    </div>
   </div>
   <div class="chart-container" style="height:180px">
     <canvas id="buffettChart"></canvas>
@@ -869,16 +876,23 @@
     <div class="chart-container" style="height:200px"><canvas id="sentSpyChart"></canvas></div>
   </div>
 
-  <!-- ── ISM PMI + Housing Starts ──────────────────────────────── -->
+  <!-- ── Industrial Production + Housing Starts ────────────────── -->
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up" id="cycleSection" style="display:none">
     <div class="flex items-start justify-between mb-2">
       <div>
         <h3 class="text-sm font-semibold text-slate-300" data-i18n="fed.business_cycle_title">Business Cycle Indicators</h3>
-        <p class="text-xs text-slate-500 mt-0.5" data-i18n="fed.business_cycle_desc">ISM Manufacturing PMI (50 = expansion/contraction line) and Housing Starts (k units) — both lead the economy by 3–9 months.</p>
+        <p class="text-xs text-slate-500 mt-0.5" data-i18n="fed.business_cycle_desc">Industrial Production Index and Housing Starts (k units) — both track the business cycle and lead recessions by 3–9 months.</p>
       </div>
-      <div class="text-right text-[10px] text-slate-500">
-        <div>ISM: <span id="ismCycleVal" class="font-semibold text-slate-300">—</span></div>
-        <div>Starts: <span id="housingVal" class="font-semibold text-slate-300">—</span>k</div>
+      <div class="flex items-start gap-3">
+        <div class="text-right text-[10px] text-slate-500" id="cycleStats">
+          <div>Ind. Prod.: <span id="ismCycleVal" class="font-semibold text-slate-300">—</span></div>
+          <div>Starts: <span id="housingVal" class="font-semibold text-slate-300">—</span>k</div>
+        </div>
+        <div class="flex gap-1" id="cycleRangeBtns">
+          <button class="range-btn" data-cycle-years="10">10Y</button>
+          <button class="range-btn" data-cycle-years="20">20Y</button>
+          <button class="range-btn active" data-cycle-years="0">All</button>
+        </div>
       </div>
     </div>
     <div class="chart-container" style="height:180px"><canvas id="cycleChart"></canvas></div>
@@ -886,27 +900,48 @@
 
   <!-- Real GDP vs S&P 500 -->
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up" id="gdpSpySection" style="display:none">
-    <div class="mb-2">
-      <h3 class="text-sm font-semibold text-slate-300" data-i18n="fed.gdp_sp_title">Real GDP vs S&P 500</h3>
-      <p class="text-xs text-slate-500 mt-0.5" data-i18n="fed.gdp_sp_desc">GDP measures actual economic output; S&P 500 reflects expectations. Long divergences signal either market overextension or the start of a new growth cycle.</p>
+    <div class="flex items-start justify-between mb-2">
+      <div>
+        <h3 class="text-sm font-semibold text-slate-300" data-i18n="fed.gdp_sp_title">Real GDP vs S&P 500</h3>
+        <p class="text-xs text-slate-500 mt-0.5" data-i18n="fed.gdp_sp_desc">GDP measures actual economic output; S&P 500 reflects expectations. Long divergences signal either market overextension or the start of a new growth cycle.</p>
+      </div>
+      <div class="flex gap-1" id="gdpSpyRangeBtns">
+        <button class="range-btn" data-gdpspy-years="10">10Y</button>
+        <button class="range-btn" data-gdpspy-years="20">20Y</button>
+        <button class="range-btn active" data-gdpspy-years="0">All</button>
+      </div>
     </div>
     <div class="chart-container" style="height:200px"><canvas id="gdpSpyChart"></canvas></div>
   </div>
 
   <!-- M2 Money Growth vs Breakeven Inflation -->
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up" id="m2InflSection" style="display:none">
-    <div class="mb-2">
-      <h3 class="text-sm font-semibold text-slate-300" data-i18n="fed.m2_breakeven_title">M2 Growth Rate vs Breakeven Inflation</h3>
-      <p class="text-xs text-slate-500 mt-0.5" data-i18n="fed.m2_breakeven_desc">M2 money supply growth (YoY %) historically leads inflation expectations by 12–18 months. The 2020–2022 episode is the clearest modern example.</p>
+    <div class="flex items-start justify-between mb-2">
+      <div>
+        <h3 class="text-sm font-semibold text-slate-300" data-i18n="fed.m2_breakeven_title">M2 Growth Rate vs Breakeven Inflation</h3>
+        <p class="text-xs text-slate-500 mt-0.5" data-i18n="fed.m2_breakeven_desc">M2 money supply growth (YoY %) historically leads inflation expectations by 12–18 months. The 2020–2022 episode is the clearest modern example.</p>
+      </div>
+      <div class="flex gap-1" id="m2InflRangeBtns">
+        <button class="range-btn" data-m2infl-years="10">10Y</button>
+        <button class="range-btn" data-m2infl-years="20">20Y</button>
+        <button class="range-btn active" data-m2infl-years="0">All</button>
+      </div>
     </div>
     <div class="chart-container" style="height:180px"><canvas id="m2InflChart"></canvas></div>
   </div>
 
   <!-- Real GDP Growth vs ISM PMI -->
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up" id="gdpIsmSection" style="display:none">
-    <div class="mb-2">
-      <h3 class="text-sm font-semibold text-slate-300" data-i18n="fed.gdp_ism_title">Real GDP Growth vs ISM PMI</h3>
-      <p class="text-xs text-slate-500 mt-0.5" data-i18n="fed.gdp_ism_desc">ISM PMI leads real GDP by 1–2 quarters. When PMI crosses below 50, GDP contraction typically follows within 6 months.</p>
+    <div class="flex items-start justify-between mb-2">
+      <div>
+        <h3 class="text-sm font-semibold text-slate-300" data-i18n="fed.gdp_ism_title">Real GDP Growth vs Industrial Production</h3>
+        <p class="text-xs text-slate-500 mt-0.5" data-i18n="fed.gdp_ism_desc">Industrial Production leads real GDP by 1–2 quarters. When INDPRO turns negative, GDP contraction typically follows within 6 months.</p>
+      </div>
+      <div class="flex gap-1" id="gdpIsmRangeBtns">
+        <button class="range-btn" data-gdpism-years="10">10Y</button>
+        <button class="range-btn" data-gdpism-years="20">20Y</button>
+        <button class="range-btn active" data-gdpism-years="0">All</button>
+      </div>
     </div>
     <div class="chart-container" style="height:180px"><canvas id="gdpIsmChart"></canvas></div>
   </div>
@@ -1198,8 +1233,9 @@ let _fedSeriesData = {};
   } catch(e) { console.warn('Fed chart m2VelChart failed:', e); }
 
   // Buffett Indicator
+  let _buffettIndfc = null, _buffettGdp = null, _buffettRatioAll = null, _buffettDatesAll = null, _buffettChart = null;
   try {
-    const will5k = s['WILL5000INDFC'];
+    const will5k = s['WILL5000'];
     const gdp    = s['GDP'];
     if (will5k?.dates?.length && gdp?.dates?.length) {
       // GDP is quarterly — interpolate to monthly using forward-fill
@@ -1213,6 +1249,8 @@ let _fedSeriesData = {};
         return (lastGdp && will5k.values[will5k.dates.indexOf(d)] != null)
           ? +(will5k.values[will5k.dates.indexOf(d)] / lastGdp * 100).toFixed(1) : null;
       });
+      _buffettDatesAll = will5k.dates;
+      _buffettRatioAll = ratioVals;
       const latestRatio = ratioVals.filter(v=>v).slice(-1)[0];
       document.getElementById('buffettSection').style.display = 'block';
       if (latestRatio) {
@@ -1221,36 +1259,55 @@ let _fedSeriesData = {};
         b.className = 'text-sm font-bold font-mono ' +
           (latestRatio > 140 ? 'text-rose-400' : latestRatio > 120 ? 'text-amber-400' : latestRatio < 80 ? 'text-emerald-400' : 'text-slate-100');
       }
-      new Chart(document.getElementById('buffettChart'), {
-        type: 'line',
-        data: { labels: will5k.dates.slice(-480), datasets: [{
-          label: 'Market Cap / GDP (%)',
-          data: ratioVals.slice(-480),
-          borderColor: '#a78bfa', backgroundColor: 'rgba(167,139,250,0.08)',
-          borderWidth: 1.5, pointRadius: 0, fill: true, tension: 0.3, spanGaps: true,
-        }]},
-        plugins: [{
-          afterDraw(chart) {
-            const {ctx:c, chartArea:a, scales:{y}} = chart;
-            [[80,'#34d399','80%'],[120,'#fbbf24','120%'],[140,'#f87171','140%']].forEach(([v,col,lbl]) => {
-              const py = y.getPixelForValue(v);
-              if (py < a.top || py > a.bottom) return;
-              c.save(); c.strokeStyle=col+'60'; c.lineWidth=1; c.setLineDash([4,3]);
-              c.beginPath(); c.moveTo(a.left,py); c.lineTo(a.right,py); c.stroke();
-              c.fillStyle=col; c.font='10px Inter,sans-serif';
-              c.fillText(lbl, a.left+4, py-3); c.restore();
-            });
-          }
-        }],
-        options: {
-          responsive:true, maintainAspectRatio:false,
-          plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>` ${c.raw?.toFixed(1)}%`}}},
-          scales:{
-            x:{grid:{color:'#1e293b'},ticks:{color:'#64748b',maxTicksLimit:6,maxRotation:0}},
-            y:{grid:{color:'#1e293b'},ticks:{color:'#64748b',callback:v=>v+'%'}},
+
+      function _renderBuffett(years) {
+        const cutDate = years > 0
+          ? new Date(new Date() - years * 365 * 86400000).toISOString().slice(0,10)
+          : '1900-01-01';
+        const startIdx = _buffettDatesAll.findIndex(d => d >= cutDate);
+        const idx = startIdx < 0 ? 0 : startIdx;
+        const dates = _buffettDatesAll.slice(idx);
+        const vals  = _buffettRatioAll.slice(idx);
+        if (_buffettChart) { _buffettChart.destroy(); _buffettChart = null; }
+        _buffettChart = new Chart(document.getElementById('buffettChart'), {
+          type: 'line',
+          data: { labels: dates, datasets: [{
+            label: 'Market Cap / GDP (%)',
+            data: vals,
+            borderColor: '#a78bfa', backgroundColor: 'rgba(167,139,250,0.08)',
+            borderWidth: 1.5, pointRadius: 0, fill: true, tension: 0.3, spanGaps: true,
+          }]},
+          plugins: [{
+            afterDraw(chart) {
+              const {ctx:c, chartArea:a, scales:{y}} = chart;
+              [[80,'#34d399','80%'],[120,'#fbbf24','120%'],[140,'#f87171','140%']].forEach(([v,col,lbl]) => {
+                const py = y.getPixelForValue(v);
+                if (py < a.top || py > a.bottom) return;
+                c.save(); c.strokeStyle=col+'60'; c.lineWidth=1; c.setLineDash([4,3]);
+                c.beginPath(); c.moveTo(a.left,py); c.lineTo(a.right,py); c.stroke();
+                c.fillStyle=col; c.font='10px Inter,sans-serif';
+                c.fillText(lbl, a.left+4, py-3); c.restore();
+              });
+            }
+          }],
+          options: {
+            responsive:true, maintainAspectRatio:false,
+            plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>` ${c.raw?.toFixed(1)}%`}}},
+            scales:{
+              x:{grid:{color:'#1e293b'},ticks:{color:'#64748b',maxTicksLimit:6,maxRotation:0}},
+              y:{grid:{color:'#1e293b'},ticks:{color:'#64748b',callback:v=>v+'%'}},
+            },
+            interaction:{mode:'index',intersect:false},
           },
-          interaction:{mode:'index',intersect:false},
-        },
+        });
+      }
+      _renderBuffett(0);
+      document.querySelectorAll('[data-buffett-years]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('[data-buffett-years]').forEach(b=>b.classList.remove('active'));
+          btn.classList.add('active');
+          _renderBuffett(+btn.dataset.buffettYears);
+        });
       });
     }
   } catch(e) { console.warn('Fed chart buffettChart failed:', e); }
@@ -2289,47 +2346,68 @@ let _fedSeriesData = {};
     } catch(e) { console.warn('Fed vs 10Y chart failed:', e); }
   })();
 
-  // ── ISM PMI + Housing Starts (Business Cycle)
+  // ── Industrial Production + Housing Starts (Business Cycle)
+  let _cycleIndpro = null, _cycleHoust = null, _cycleChart = null;
   try {
-    const ism  = s['NAPM'];
-    const hous = s['HOUST'];
-    if ((ism&&ism.dates.length)||(hous&&hous.dates.length)) {
+    const indpro = s['INDPRO'];
+    const hous   = s['HOUST'];
+    if ((indpro&&indpro.dates.length)||(hous&&hous.dates.length)) {
       document.getElementById('cycleSection').style.display = 'block';
-      const lastIsm  = ism?.values.filter(v=>v!=null).slice(-1)[0];
-      const lastHous = hous?.values.filter(v=>v!=null).slice(-1)[0];
-      if(lastIsm!=null){
-        const el=document.getElementById('ismCycleVal');
-        if(el){el.textContent=lastIsm.toFixed(1);el.className='font-semibold '+(lastIsm>=50?'text-emerald-400':'text-rose-400');}
+      const lastIndpro = indpro?.values.filter(v=>v!=null).slice(-1)[0];
+      const lastHous   = hous?.values.filter(v=>v!=null).slice(-1)[0];
+      if (lastIndpro != null) {
+        const el = document.getElementById('ismCycleVal');
+        if (el) { el.textContent = lastIndpro.toFixed(1); el.className = 'font-semibold text-slate-300'; }
       }
-      if(lastHous!=null){const el=document.getElementById('housingVal');if(el)el.textContent=(lastHous/1000).toFixed(0);}
-      // Align ISM and Housing to same dates (use ISM as base)
-      const housMap={};
-      (hous?.dates||[]).forEach((d,i)=>{ if(hous.values[i]!=null) housMap[d.slice(0,7)]=hous.values[i]; });
-      const ismDates=(ism?.dates||[]).slice(-240);
-      const ismVals=(ism?.values||[]).slice(-240);
-      const housAligned=ismDates.map(d=>housMap[d.slice(0,7)]??null);
-      new Chart(document.getElementById('cycleChart'),{
-        type:'line',
-        data:{labels:ismDates,datasets:[
-          {label:'ISM PMI',data:ismVals,borderColor:'#34d399',backgroundColor:'rgba(52,211,153,0.07)',borderWidth:1.5,pointRadius:0,fill:true,tension:0.3,spanGaps:true,yAxisID:'y'},
-          {label:'Housing Starts',data:housAligned,borderColor:'#f59e0b',backgroundColor:'transparent',borderWidth:1.5,pointRadius:0,fill:false,tension:0.3,spanGaps:true,yAxisID:'yH',borderDash:[4,3]},
-        ]},
-        options:{
-          responsive:true,maintainAspectRatio:false,
-          plugins:{legend:{display:false},tooltip:{mode:'index',intersect:false,callbacks:{label:c=>c.dataset.yAxisID==='yH'?` Housing: ${c.raw?.toFixed(0)}k`:` ISM PMI: ${c.raw?.toFixed(1)}`}}},
-          scales:{
-            x:{grid:{color:gridCol},ticks:{color:tickCol,maxTicksLimit:6,maxRotation:0}},
-            y:{grid:{color:gridCol},ticks:{color:'rgba(52,211,153,0.6)',callback:v=>v.toFixed(0)},min:35,max:70},
-            yH:{position:'right',grid:{drawOnChartArea:false},ticks:{color:'rgba(245,158,11,0.6)',callback:v=>v+'k'}},
+      if (lastHous != null) { const el = document.getElementById('housingVal'); if (el) el.textContent = (lastHous/1000).toFixed(0); }
+
+      // Store full aligned series for slicing
+      const housMap = {};
+      (hous?.dates||[]).forEach((d,i) => { if (hous.values[i] != null) housMap[d.slice(0,7)] = hous.values[i]; });
+      _cycleIndpro = { dates: indpro?.dates||[], values: indpro?.values||[] };
+      _cycleHoust  = (indpro?.dates||[]).map(d => housMap[d.slice(0,7)] ?? null);
+
+      function _renderCycle(years) {
+        const cutDate = years > 0
+          ? new Date(new Date() - years * 365 * 86400000).toISOString().slice(0,10)
+          : '1900-01-01';
+        const startIdx = _cycleIndpro.dates.findIndex(d => d >= cutDate);
+        const idx = startIdx < 0 ? 0 : startIdx;
+        const dates     = _cycleIndpro.dates.slice(idx);
+        const indproVals= _cycleIndpro.values.slice(idx);
+        const housVals  = _cycleHoust.slice(idx);
+        if (_cycleChart) { _cycleChart.destroy(); _cycleChart = null; }
+        _cycleChart = new Chart(document.getElementById('cycleChart'), {
+          type: 'line',
+          data: { labels: dates, datasets: [
+            { label:'Industrial Production', data:indproVals, borderColor:'#34d399', backgroundColor:'rgba(52,211,153,0.07)', borderWidth:1.5, pointRadius:0, fill:true, tension:0.3, spanGaps:true, yAxisID:'y' },
+            { label:'Housing Starts',        data:housVals,   borderColor:'#f59e0b', backgroundColor:'transparent',           borderWidth:1.5, pointRadius:0, fill:false,tension:0.3, spanGaps:true, yAxisID:'yH', borderDash:[4,3] },
+          ]},
+          options: {
+            responsive:true, maintainAspectRatio:false,
+            plugins:{ legend:{display:false}, tooltip:{mode:'index',intersect:false,callbacks:{label:c=>c.dataset.yAxisID==='yH'?` Housing: ${c.raw?.toFixed(0)}k`:` Ind. Production: ${c.raw?.toFixed(1)}`}} },
+            scales:{
+              x:{grid:{color:gridCol},ticks:{color:tickCol,maxTicksLimit:6,maxRotation:0}},
+              y:{grid:{color:gridCol},ticks:{color:'rgba(52,211,153,0.6)',callback:v=>v.toFixed(1)}},
+              yH:{position:'right',grid:{drawOnChartArea:false},ticks:{color:'rgba(245,158,11,0.6)',callback:v=>v+'k'}},
+            },
+            interaction:{mode:'index',intersect:false},
           },
-          interaction:{mode:'index',intersect:false},
-        },
-        plugins:[{afterDraw(ch){const{ctx:ct,chartArea:a,scales:{y}}=ch;const p50=y.getPixelForValue(50);if(p50>=a.top&&p50<=a.bottom){ct.save();ct.strokeStyle='rgba(148,163,184,0.5)';ct.lineWidth=1;ct.setLineDash([4,3]);ct.beginPath();ct.moveTo(a.left,p50);ct.lineTo(a.right,p50);ct.stroke();ct.fillStyle='#94a3b8';ct.font='9px Inter';ct.fillText('50',a.left+3,p50-3);ct.restore();}}}],
+        });
+      }
+      _renderCycle(0);
+      document.querySelectorAll('[data-cycle-years]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('[data-cycle-years]').forEach(b=>b.classList.remove('active'));
+          btn.classList.add('active');
+          _renderCycle(+btn.dataset.cycleYears);
+        });
       });
     }
   } catch(e) { console.warn('Fed cycle chart failed:', e); }
 
   // ── Real GDP vs S&P 500
+  let _gdpSpyGdp = null, _gdpSpySpy = null, _gdpSpyChart = null;
   try {
     const gdp = s['GDPC1'];
     if (gdp && gdp.dates && gdp.dates.length > 4) {
@@ -2344,22 +2422,44 @@ let _fedSeriesData = {};
         const spyBase = spyAligned.find(v=>v!=null);
         const gdpNorm = gdp.values.map(v=>v!=null&&gdpBase?+(v/gdpBase*100).toFixed(1):null);
         const spyNorm = spyAligned.map(v=>v!=null&&spyBase?+(v/spyBase*100).toFixed(1):null);
-        new Chart(document.getElementById('gdpSpyChart'),{
-          type:'line',
-          data:{labels:gdp.dates,datasets:[
-            {label:'Real GDP',data:gdpNorm,borderColor:'#34d399',backgroundColor:'rgba(52,211,153,0.07)',borderWidth:2,pointRadius:0,fill:true,tension:0.3,spanGaps:true},
-            {label:'S&P 500',data:spyNorm,borderColor:'#38bdf8',backgroundColor:'transparent',borderWidth:1.5,pointRadius:0,fill:false,tension:0.3,spanGaps:true,borderDash:[4,3]},
-          ]},
-          options:{responsive:true,maintainAspectRatio:false,
-            plugins:{legend:{display:false},tooltip:{mode:'index',intersect:false,callbacks:{label:c=>` ${c.dataset.label}: ${c.raw?.toFixed(0)} (norm=100)`}}},
-            scales:{x:{grid:{color:gridCol},ticks:{color:tickCol,maxTicksLimit:6,maxRotation:0}},y:{grid:{color:gridCol},ticks:{color:tickCol,callback:v=>v.toFixed(0)},title:{display:true,text:'Normalised (start=100)',color:'#475569',font:{size:10}}}},
-            interaction:{mode:'index',intersect:false}},
+        _gdpSpyGdp = { dates: gdp.dates, gdpNorm, spyNorm };
+
+        function _renderGdpSpy(years) {
+          const cutDate = years > 0
+            ? new Date(new Date() - years * 365 * 86400000).toISOString().slice(0,10)
+            : '1900-01-01';
+          const startIdx = _gdpSpyGdp.dates.findIndex(d => d >= cutDate);
+          const idx = startIdx < 0 ? 0 : startIdx;
+          const dates   = _gdpSpyGdp.dates.slice(idx);
+          const gdpVals = _gdpSpyGdp.gdpNorm.slice(idx);
+          const spyVals = _gdpSpyGdp.spyNorm.slice(idx);
+          if (_gdpSpyChart) { _gdpSpyChart.destroy(); _gdpSpyChart = null; }
+          _gdpSpyChart = new Chart(document.getElementById('gdpSpyChart'), {
+            type:'line',
+            data:{labels:dates, datasets:[
+              {label:'Real GDP',data:gdpVals,borderColor:'#34d399',backgroundColor:'rgba(52,211,153,0.07)',borderWidth:2,pointRadius:0,fill:true,tension:0.3,spanGaps:true},
+              {label:'S&P 500',data:spyVals,borderColor:'#38bdf8',backgroundColor:'transparent',borderWidth:1.5,pointRadius:0,fill:false,tension:0.3,spanGaps:true,borderDash:[4,3]},
+            ]},
+            options:{responsive:true,maintainAspectRatio:false,
+              plugins:{legend:{display:false},tooltip:{mode:'index',intersect:false,callbacks:{label:c=>` ${c.dataset.label}: ${c.raw?.toFixed(0)} (norm=100)`}}},
+              scales:{x:{grid:{color:gridCol},ticks:{color:tickCol,maxTicksLimit:6,maxRotation:0}},y:{grid:{color:gridCol},ticks:{color:tickCol,callback:v=>v.toFixed(0)},title:{display:true,text:'Normalised (start=100)',color:'#475569',font:{size:10}}}},
+              interaction:{mode:'index',intersect:false}},
+          });
+        }
+        _renderGdpSpy(0);
+        document.querySelectorAll('[data-gdpspy-years]').forEach(btn => {
+          btn.addEventListener('click', () => {
+            document.querySelectorAll('[data-gdpspy-years]').forEach(b=>b.classList.remove('active'));
+            btn.classList.add('active');
+            _renderGdpSpy(+btn.dataset.gdpspyYears);
+          });
         });
       }
     }
   } catch(e){console.warn('Fed GDP/SPY:',e);}
 
   // ── M2 Growth Rate vs Breakeven Inflation
+  let _m2InflM2 = null, _m2InflBie = null, _m2InflChart = null;
   try {
     const m2 = s['M2SL'];
     const bie = s['T10YIE'];
@@ -2377,25 +2477,48 @@ let _fedSeriesData = {};
       // Align breakeven to M2 monthly dates
       const bieMap={};bie.dates.forEach((d,i)=>{if(bie.values[i]!=null)bieMap[d.slice(0,7)]=bie.values[i];});
       const bieAligned=m2.dates.map(d=>bieMap[d.slice(0,7)]??null);
-      new Chart(document.getElementById('m2InflChart'),{
-        type:'line',
-        data:{labels:m2.dates,datasets:[
-          {label:'M2 Growth YoY%',data:m2YoY,borderColor:'#22d3ee',backgroundColor:'rgba(34,211,238,0.07)',borderWidth:1.5,pointRadius:0,fill:true,tension:0.3,spanGaps:true,yAxisID:'y'},
-          {label:'10Y Breakeven',data:bieAligned,borderColor:'#fbbf24',backgroundColor:'transparent',borderWidth:1.5,pointRadius:0,fill:false,tension:0.3,spanGaps:true,yAxisID:'y',borderDash:[4,3]},
-        ]},
-        options:{responsive:true,maintainAspectRatio:false,
-          plugins:{legend:{display:false},tooltip:{mode:'index',intersect:false,callbacks:{label:c=>` ${c.dataset.label}: ${c.raw?.toFixed(2)}%`}}},
-          scales:{x:{grid:{color:gridCol},ticks:{color:tickCol,maxTicksLimit:6,maxRotation:0}},y:{grid:{color:gridCol},ticks:{color:tickCol,callback:v=>(v>=0?'+':'')+v.toFixed(1)+'%'}}},
-          interaction:{mode:'index',intersect:false}},
+      _m2InflM2  = { dates: m2.dates, yoy: m2YoY };
+      _m2InflBie = bieAligned;
+
+      function _renderM2Infl(years) {
+        const cutDate = years > 0
+          ? new Date(new Date() - years * 365 * 86400000).toISOString().slice(0,10)
+          : '1900-01-01';
+        const startIdx = _m2InflM2.dates.findIndex(d => d >= cutDate);
+        const idx = startIdx < 0 ? 0 : startIdx;
+        const dates   = _m2InflM2.dates.slice(idx);
+        const m2Vals  = _m2InflM2.yoy.slice(idx);
+        const bieVals = _m2InflBie.slice(idx);
+        if (_m2InflChart) { _m2InflChart.destroy(); _m2InflChart = null; }
+        _m2InflChart = new Chart(document.getElementById('m2InflChart'), {
+          type:'line',
+          data:{labels:dates, datasets:[
+            {label:'M2 Growth YoY%',data:m2Vals,borderColor:'#22d3ee',backgroundColor:'rgba(34,211,238,0.07)',borderWidth:1.5,pointRadius:0,fill:true,tension:0.3,spanGaps:true,yAxisID:'y'},
+            {label:'10Y Breakeven',data:bieVals,borderColor:'#fbbf24',backgroundColor:'transparent',borderWidth:1.5,pointRadius:0,fill:false,tension:0.3,spanGaps:true,yAxisID:'y',borderDash:[4,3]},
+          ]},
+          options:{responsive:true,maintainAspectRatio:false,
+            plugins:{legend:{display:false},tooltip:{mode:'index',intersect:false,callbacks:{label:c=>` ${c.dataset.label}: ${c.raw?.toFixed(2)}%`}}},
+            scales:{x:{grid:{color:gridCol},ticks:{color:tickCol,maxTicksLimit:6,maxRotation:0}},y:{grid:{color:gridCol},ticks:{color:tickCol,callback:v=>(v>=0?'+':'')+v.toFixed(1)+'%'}}},
+            interaction:{mode:'index',intersect:false}},
+        });
+      }
+      _renderM2Infl(0);
+      document.querySelectorAll('[data-m2infl-years]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('[data-m2infl-years]').forEach(b=>b.classList.remove('active'));
+          btn.classList.add('active');
+          _renderM2Infl(+btn.dataset.m2inflYears);
+        });
       });
     }
   } catch(e){console.warn('Fed M2/Inflation:',e);}
 
-  // ── Real GDP Growth vs ISM PMI
+  // ── Real GDP Growth vs Industrial Production
+  let _gdpIsmGdp = null, _gdpIsmIndpro = null, _gdpIsmChart = null;
   try {
-    const gdp2=s['GDPC1'];
-    const ism=s['NAPM'];
-    if(gdp2&&gdp2.dates.length>8&&ism&&ism.dates.length>4){
+    const gdp2   = s['GDPC1'];
+    const indpro = s['INDPRO'];
+    if (gdp2&&gdp2.dates.length>8&&indpro&&indpro.dates.length>4) {
       document.getElementById('gdpIsmSection').style.display='block';
       // GDP YoY growth %
       const gdpGrowth=gdp2.values.map((v,i)=>{
@@ -2404,20 +2527,41 @@ let _fedSeriesData = {};
         if(idx<0||gdp2.values[idx]==null)return null;
         return +((v-gdp2.values[idx])/gdp2.values[idx]*100).toFixed(2);
       });
-      // Align ISM to GDP quarterly dates
-      const ismMap={};ism.dates.forEach((d,i)=>{if(ism.values[i]!=null)ismMap[d.slice(0,7)]=ism.values[i];});
-      const ismAligned=gdp2.dates.map(d=>ismMap[d.slice(0,7)]??null);
-      new Chart(document.getElementById('gdpIsmChart'),{
-        type:'line',
-        data:{labels:gdp2.dates,datasets:[
-          {label:'Real GDP Growth YoY%',data:gdpGrowth,borderColor:'#34d399',backgroundColor:'rgba(52,211,153,0.07)',borderWidth:2,pointRadius:3,fill:true,tension:0.3,spanGaps:true,yAxisID:'y'},
-          {label:'ISM PMI',data:ismAligned,borderColor:'#a78bfa',backgroundColor:'transparent',borderWidth:1.5,pointRadius:0,fill:false,tension:0.3,spanGaps:true,yAxisID:'yPmi',borderDash:[4,3]},
-        ]},
-        options:{responsive:true,maintainAspectRatio:false,
-          plugins:{legend:{display:false},tooltip:{mode:'index',intersect:false,callbacks:{label:c=>c.dataset.yAxisID==='yPmi'?` ISM: ${c.raw?.toFixed(1)}`:` GDP: ${c.raw?.toFixed(2)}%`}}},
-          scales:{x:{grid:{color:gridCol},ticks:{color:tickCol,maxTicksLimit:6,maxRotation:0}},y:{grid:{color:gridCol},ticks:{color:'rgba(52,211,153,0.6)',callback:v=>v.toFixed(1)+'%'}},yPmi:{position:'right',grid:{drawOnChartArea:false},ticks:{color:'rgba(167,139,250,0.6)',callback:v=>v.toFixed(0)},min:30,max:70}},
-          interaction:{mode:'index',intersect:false}},
-        plugins:[{afterDraw(ch){const{ctx:ct,chartArea:a,scales:{yPmi}}=ch;const p50=yPmi.getPixelForValue(50);if(p50>=a.top&&p50<=a.bottom){ct.save();ct.strokeStyle='rgba(148,163,184,0.4)';ct.lineWidth=1;ct.setLineDash([4,3]);ct.beginPath();ct.moveTo(a.left,p50);ct.lineTo(a.right,p50);ct.stroke();ct.restore();}}}],
+      // Align INDPRO to GDP quarterly dates
+      const indproMap={};indpro.dates.forEach((d,i)=>{if(indpro.values[i]!=null)indproMap[d.slice(0,7)]=indpro.values[i];});
+      const indproAligned=gdp2.dates.map(d=>indproMap[d.slice(0,7)]??null);
+      _gdpIsmGdp   = { dates: gdp2.dates, growth: gdpGrowth };
+      _gdpIsmIndpro = indproAligned;
+
+      function _renderGdpIsm(years) {
+        const cutDate = years > 0
+          ? new Date(new Date() - years * 365 * 86400000).toISOString().slice(0,10)
+          : '1900-01-01';
+        const startIdx = _gdpIsmGdp.dates.findIndex(d => d >= cutDate);
+        const idx = startIdx < 0 ? 0 : startIdx;
+        const dates      = _gdpIsmGdp.dates.slice(idx);
+        const gdpVals    = _gdpIsmGdp.growth.slice(idx);
+        const indproVals = _gdpIsmIndpro.slice(idx);
+        if (_gdpIsmChart) { _gdpIsmChart.destroy(); _gdpIsmChart = null; }
+        _gdpIsmChart = new Chart(document.getElementById('gdpIsmChart'), {
+          type:'line',
+          data:{labels:dates, datasets:[
+            {label:'Real GDP Growth YoY%',data:gdpVals,borderColor:'#34d399',backgroundColor:'rgba(52,211,153,0.07)',borderWidth:2,pointRadius:3,fill:true,tension:0.3,spanGaps:true,yAxisID:'y'},
+            {label:'Industrial Production',data:indproVals,borderColor:'#a78bfa',backgroundColor:'transparent',borderWidth:1.5,pointRadius:0,fill:false,tension:0.3,spanGaps:true,yAxisID:'yPmi',borderDash:[4,3]},
+          ]},
+          options:{responsive:true,maintainAspectRatio:false,
+            plugins:{legend:{display:false},tooltip:{mode:'index',intersect:false,callbacks:{label:c=>c.dataset.yAxisID==='yPmi'?` Ind. Production: ${c.raw?.toFixed(1)}`:` GDP: ${c.raw?.toFixed(2)}%`}}},
+            scales:{x:{grid:{color:gridCol},ticks:{color:tickCol,maxTicksLimit:6,maxRotation:0}},y:{grid:{color:gridCol},ticks:{color:'rgba(52,211,153,0.6)',callback:v=>v.toFixed(1)+'%'}},yPmi:{position:'right',grid:{drawOnChartArea:false},ticks:{color:'rgba(167,139,250,0.6)',callback:v=>v.toFixed(1)}}},
+            interaction:{mode:'index',intersect:false}},
+        });
+      }
+      _renderGdpIsm(0);
+      document.querySelectorAll('[data-gdpism-years]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('[data-gdpism-years]').forEach(b=>b.classList.remove('active'));
+          btn.classList.add('active');
+          _renderGdpIsm(+btn.dataset.gdpismYears);
+        });
       });
     }
   } catch(e){console.warn('Fed GDP/ISM:',e);}

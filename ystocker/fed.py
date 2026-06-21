@@ -70,9 +70,9 @@ SERIES: dict[str, dict[str, str]] = {
     "BAMLH0A0HYM2":    {"label": "HY OAS (bps)",               "unit": "bps",    "scale": 1.0},
     "BAMLC0A0CM":      {"label": "IG OAS (bps)",               "unit": "bps",    "scale": 1.0},
     # ── Valuation / business cycle ──────────────────────────────────────────
-    "WILL5000INDFC":   {"label": "Wilshire 5000 Index",        "unit": "index",  "scale": 1.0},
+    "WILL5000":        {"label": "Wilshire 5000 Index",        "unit": "index",  "scale": 1.0},  # was WILL5000INDFC (returns no data)
     "GDP":             {"label": "US GDP ($B)",                 "unit": "bln",   "scale": 1.0},
-    "NAPM":            {"label": "ISM Manufacturing PMI",       "unit": "index",  "scale": 1.0},
+    "INDPRO":          {"label": "Industrial Production Index", "unit": "index",  "scale": 1.0},  # replaces NAPM (which returns empty)
     "HOUST":           {"label": "Housing Starts (k units)",   "unit": "k",      "scale": 1.0},
     # ── Recession indicator ─────────────────────────────────────────────────
     "USREC":           {"label": "NBER Recession",              "unit": "binary", "scale": 1.0},
@@ -147,7 +147,7 @@ _SERIES_ALREADY_BILLIONS = {
     "RRPONTSYD", "M2SL",
     # New series — already in natural units, no millions→billions conversion
     "DFII10", "T10YIE", "BAMLH0A0HYM2", "BAMLC0A0CM",
-    "WILL5000INDFC", "GDP", "NAPM", "HOUST", "USREC",
+    "WILL5000", "GDP", "INDPRO", "HOUST", "USREC",
     "UMCSENT", "MORTGAGE30US", "GDPC1", "CPIAUCSL", "DCOILWTICO",
 }
 
