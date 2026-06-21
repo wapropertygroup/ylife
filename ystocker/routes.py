@@ -4439,7 +4439,9 @@ def api_breadth():
         if entry and time.time() - entry["ts"] < _BREADTH_TTL:
             return jsonify(entry["data"])
     try:
-        df = yf.download(["^SP500-50", "^SP500-200", "RSP", "SPY"],
+        # ^SPXA50R / ^SPXA200R are the correct Yahoo Finance tickers for
+        # "% of S&P 500 stocks above 50/200-day moving average" (values 0–100)
+        df = yf.download(["^SPXA50R", "^SPXA200R", "RSP", "SPY"],
                          period="3y", interval="1wk",
                          auto_adjust=True, progress=False)
         closes = df["Close"]
@@ -4457,10 +4459,53 @@ def api_breadth():
                         "values": [round(float(v), 2) for v in s]}
             except Exception:
                 return {"dates": [], "values": []}
-        sp50  = _series("^SP500-50")
-        sp200 = _series("^SP500-200")
-        rsp   = _series("RSP")
-        spy   = _series("SPY")
+
+        sp50  = _series("^SPXA50R")
+        sp200 = _series("^SPXA200R")
+
+        # Fallback: compute breadth from heatmap stocks if Yahoo tickers empty
+        if not sp50["dates"]:
+            try:
+                from ystocker.heatmap_meta import HEATMAP_META
+                hm_tickers = list(HEATMAP_META.keys())[:100]
+                hm_df = yf.download(hm_tickers, period="1y", interval="1d",
+                                    auto_adjust=True, progress=False, group_by="ticker")
+                above50, above200 = {}, {}
+                for t in hm_tickers:
+                    try:
+                        prices = hm_df[t]["Close"].dropna() if isinstance(hm_df.columns, __import__("pandas").MultiIndex) else hm_df["Close"].dropna()
+                        if len(prices) < 50:
+                            continue
+                        ma50  = prices.rolling(50).mean()
+                        ma200 = prices.rolling(200).mean()
+                        for d, p, m50, m200 in zip(prices.index, prices, ma50, ma200):
+                            ds = str(d.date())
+                            if not __import__("math").isnan(float(m50)):
+                                above50[ds]  = above50.get(ds, []) + [float(p) > float(m50)]
+                            if not __import__("math").isnan(float(m200)):
+                                above200[ds] = above200.get(ds, []) + [float(p) > float(m200)]
+                    except Exception:
+                        continue
+                # Weekly sampling
+                from datetime import date as _date
+                def _to_weekly(daily_dict):
+                    dates, vals = [], []
+                    prev_week = None
+                    for d in sorted(daily_dict):
+                        dt = _date.fromisoformat(d)
+                        week = (dt.year, dt.isocalendar()[1])
+                        if week != prev_week:
+                            pct = round(sum(daily_dict[d]) / len(daily_dict[d]) * 100, 1)
+                            dates.append(d); vals.append(pct)
+                            prev_week = week
+                    return {"dates": dates, "values": vals}
+                sp50  = _to_weekly(above50)
+                sp200 = _to_weekly(above200)
+            except Exception as exc2:
+                log.warning("Breadth fallback failed: %s", exc2)
+
+        rsp = _series("RSP")
+        spy = _series("SPY")
         # RSP/SPY ratio
         spyMap = {}
         for d, v in zip(spy["dates"], spy["values"]):
@@ -5133,6 +5178,20 @@ def api_yield_spread():
         if entry and time.time() - entry["ts"] < _YIELD_SPREAD_TTL:
             return jsonify(entry["data"])
 
+    # Hardcoded NBER recession periods (start, end) — more reliable than FRED USREC fetch
+    # Updated through 2024; add new recessions here as NBER declares them.
+    _NBER_RECESSIONS = [
+        ("1980-01-01", "1980-07-31"), ("1981-07-01", "1982-11-30"),
+        ("1990-07-01", "1991-03-31"), ("2001-03-01", "2001-11-30"),
+        ("2007-12-01", "2009-06-30"), ("2020-02-01", "2020-04-30"),
+    ]
+
+    def _in_recession(date_str: str) -> int:
+        for start, end in _NBER_RECESSIONS:
+            if start <= date_str <= end:
+                return 1
+        return 0
+
     try:
         import requests as _req
         import concurrent.futures as _cf_ys
@@ -5140,40 +5199,40 @@ def api_yield_spread():
 
         def _fred(sid):
             url = f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={sid}"
-            r = _req.get(url, headers=headers, timeout=15)
+            r = _req.get(url, headers=headers, timeout=20)
             r.raise_for_status()
             rows = [line.split(",") for line in r.text.strip().splitlines()[1:]
                     if "," in line and line.split(",")[1].strip() not in ("", ".")]
             return sid, {row[0]: float(row[1]) for row in rows}
 
-        # Fetch DGS10, DGS2, USREC in parallel — was serial (up to 45 s)
-        with _cf_ys.ThreadPoolExecutor(max_workers=3) as _pool:
-            futs = {sid: _pool.submit(_fred, sid) for sid in ("DGS10", "DGS2", "USREC")}
+        # Fetch DGS10 and DGS2 in parallel (skip USREC — using hardcoded fallback)
+        with _cf_ys.ThreadPoolExecutor(max_workers=2) as _pool:
+            futs = {sid: _pool.submit(_fred, sid) for sid in ("DGS10", "DGS2")}
             results = {}
             for sid, fut in futs.items():
                 try:
-                    _, data = fut.result(timeout=20)
+                    _, data = fut.result(timeout=25)
                     results[sid] = data
                 except Exception as exc:
                     raise RuntimeError(f"FRED {sid} failed: {exc}") from exc
 
         dgs10 = results["DGS10"]
         dgs2  = results["DGS2"]
-        usrec = results["USREC"]
 
         # Align on dates present in both DGS10 and DGS2
-        dates = sorted(set(dgs10) & set(dgs2))
-        spread = [round(dgs10[d] - dgs2[d], 3) for d in dates]
-        recession = [int(usrec.get(d, usrec.get(d[:7] + "-01", 0))) for d in dates]
+        all_dates = sorted(set(dgs10) & set(dgs2))
+        if not all_dates:
+            raise RuntimeError("No overlapping dates between DGS10 and DGS2")
 
         # Keep last 10 years
-        cutoff = (
-            _dt.date.today() - _dt.timedelta(days=365 * 10)
-        ).isoformat()
-        dates, spread, recession = zip(
-            *[(d, s, r) for d, s, r in zip(dates, spread, recession) if d >= cutoff]
-        )
+        cutoff = (_dt.date.today() - _dt.timedelta(days=365 * 10)).isoformat()
+        filtered = [(d, round(dgs10[d] - dgs2[d], 3), _in_recession(d))
+                    for d in all_dates if d >= cutoff]
 
+        if not filtered:
+            raise RuntimeError("No data in 10-year window")
+
+        dates, spread, recession = zip(*filtered)
         result = {"dates": list(dates), "spread": list(spread), "recession": list(recession)}
         with _YIELD_SPREAD_LOCK:
             _YIELD_SPREAD_CACHE["data"] = {"ts": time.time(), "data": result}
