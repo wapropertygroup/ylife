@@ -4442,7 +4442,7 @@ def api_breadth():
         # ^SPXA50R / ^SPXA200R are the correct Yahoo Finance tickers for
         # "% of S&P 500 stocks above 50/200-day moving average" (values 0–100)
         df = yf.download(["^SPXA50R", "^SPXA200R", "RSP", "SPY"],
-                         period="3y", interval="1wk",
+                         period="10y", interval="1wk",
                          auto_adjust=True, progress=False)
         closes = df["Close"]
 
@@ -5218,6 +5218,35 @@ def api_yield_spread():
 
         dgs10 = results["DGS10"]
         dgs2  = results["DGS2"]
+
+    except Exception as fred_exc:
+        log.warning("yield-spread: FRED failed (%s), trying yfinance fallback", fred_exc)
+        # Fallback: use yfinance for TNX (10Y) and ^TWO or FRED-equivalent
+        try:
+            import yfinance as yf
+            import pandas as _pd
+            tnx = yf.Ticker("^TNX").history(period="10y", interval="1d")
+            # Best fallback: use the yield curve endpoint's existing data for 2Y
+            dgs2 = {}
+            try:
+                with _YIELD_CURVE_CACHE_LOCK:
+                    yc_entry = _YIELD_CURVE_CACHE.get(_YIELD_CURVE_CACHE_VER)
+                if yc_entry and yc_entry.get("data"):
+                    h2y = yc_entry["data"].get("history_2y")
+                    if h2y and h2y.get("dates"):
+                        dgs2 = {d: v for d, v in zip(h2y["dates"], h2y["values"]) if v is not None}
+            except Exception:
+                pass
+            dgs10 = {}
+            for dt, row in tnx.iterrows():
+                if not _pd.isna(row["Close"]):
+                    dgs10[str(dt.date())] = round(float(row["Close"]), 3)
+        except Exception as yf_exc:
+            log.warning("yield-spread: yfinance fallback also failed: %s", yf_exc)
+            return jsonify({"error": str(yf_exc)}), 502
+
+        if not dgs10 or not dgs2:
+            return jsonify({"error": "No data from either FRED or yfinance"}), 502
 
         # Align on dates present in both DGS10 and DGS2
         all_dates = sorted(set(dgs10) & set(dgs2))

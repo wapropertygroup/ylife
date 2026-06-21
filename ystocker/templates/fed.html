@@ -213,7 +213,14 @@
       <h3 class="text-sm font-semibold text-slate-300" data-i18n="fed.m2v_title">M2 Velocity (M2V)</h3>
       <p class="text-xs text-slate-500 mt-0.5" data-i18n="fed.m2v_desc">How many times M2 turns over per year (GDP / M2). Low velocity = money hoarding; high = faster economic activity.</p>
     </div>
-    <span id="m2VelLatest" class="text-base font-bold font-mono text-amber-400">—</span>
+    <div class="flex items-center gap-2">
+      <span id="m2VelLatest" class="text-base font-bold font-mono text-amber-400">—</span>
+      <div class="flex gap-1" id="m2VelRangeBtns">
+        <button class="range-btn" data-m2vel-years="10">10Y</button>
+        <button class="range-btn" data-m2vel-years="20">20Y</button>
+        <button class="range-btn active" data-m2vel-years="0">All</button>
+      </div>
+    </div>
   </div>
   <div class="chart-container" style="height:160px">
     <canvas id="m2VelChart"></canvas>
@@ -1144,29 +1151,48 @@ let _fedSeriesData = {};
     }
   })();
 
-  // M2 Velocity chart
+  // M2 Velocity chart — with year range buttons (10Y / 20Y / All)
   try {
     const m2v = s['M2V'];
     if (m2v && m2v.dates && m2v.dates.length > 4) {
       document.getElementById('m2VelSection').style.display = 'block';
       const latestV = m2v.values.filter(v=>v!=null).slice(-1)[0];
       if (latestV != null) document.getElementById('m2VelLatest').textContent = latestV.toFixed(2) + 'x';
-      new Chart(document.getElementById('m2VelChart'), {
-        type: 'line',
-        data: { labels: m2v.dates, datasets: [{
-          label: 'M2 Velocity',
-          data: m2v.values,
-          borderColor: '#fbbf24', backgroundColor: 'rgba(251,191,36,0.08)',
-          borderWidth: 1.5, pointRadius: 0, fill: true, tension: 0.3, spanGaps: true,
-        }]},
-        options: {
-          responsive: true, maintainAspectRatio: false,
-          plugins: { legend:{display:false}, tooltip:{callbacks:{label:c=>` Velocity: ${c.raw?.toFixed(3)}x`}} },
-          scales: {
-            x: { grid:{color:'#1e293b'}, ticks:{color:'#64748b',maxTicksLimit:6,maxRotation:0} },
-            y: { grid:{color:'#1e293b'}, ticks:{color:'#64748b',callback:v=>v.toFixed(2)+'x'} },
+
+      let _m2vChart = null;
+      function _renderM2V(years) {
+        const cutDate = years > 0
+          ? new Date(new Date().setFullYear(new Date().getFullYear() - years)).toISOString().slice(0,10)
+          : '1900-01-01';
+        const startIdx = m2v.dates.findIndex(d => d >= cutDate);
+        const slicedDates  = m2v.dates.slice(startIdx < 0 ? 0 : startIdx);
+        const slicedValues = m2v.values.slice(startIdx < 0 ? 0 : startIdx);
+        if (_m2vChart) { _m2vChart.destroy(); _m2vChart = null; }
+        _m2vChart = new Chart(document.getElementById('m2VelChart'), {
+          type: 'line',
+          data: { labels: slicedDates, datasets: [{
+            label: 'M2 Velocity',
+            data: slicedValues,
+            borderColor: '#fbbf24', backgroundColor: 'rgba(251,191,36,0.08)',
+            borderWidth: 1.5, pointRadius: 0, fill: true, tension: 0.3, spanGaps: true,
+          }]},
+          options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend:{display:false}, tooltip:{callbacks:{label:c=>` Velocity: ${c.raw?.toFixed(3)}x`}} },
+            scales: {
+              x: { grid:{color:'#1e293b'}, ticks:{color:'#64748b',maxTicksLimit:6,maxRotation:0} },
+              y: { grid:{color:'#1e293b'}, ticks:{color:'#64748b',callback:v=>v.toFixed(2)+'x'} },
+            },
           },
-        },
+        });
+      }
+      _renderM2V(0);  // default: all data
+      document.querySelectorAll('[data-m2vel-years]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('[data-m2vel-years]').forEach(b=>b.classList.remove('active'));
+          btn.classList.add('active');
+          _renderM2V(+btn.dataset.m2velYears);
+        });
       });
     }
   } catch(e) { console.warn('Fed chart m2VelChart failed:', e); }

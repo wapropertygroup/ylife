@@ -580,9 +580,17 @@
 
 <!-- Market Breadth -->
 <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up mb-6" id="breadthSection">
-  <div class="mb-3">
-    <h2 class="text-base font-semibold text-slate-200" data-i18n="markets.breadth_title">Market Breadth &amp; Concentration</h2>
-    <p class="text-xs text-slate-500 mt-0.5" data-i18n="markets.breadth_desc">Is the rally broad or narrow? High concentration risk = fragile bull market.</p>
+  <div class="flex items-start justify-between mb-3">
+    <div>
+      <h2 class="text-base font-semibold text-slate-200" data-i18n="markets.breadth_title">Market Breadth &amp; Concentration</h2>
+      <p class="text-xs text-slate-500 mt-0.5" data-i18n="markets.breadth_desc">Is the rally broad or narrow? High concentration risk = fragile bull market.</p>
+    </div>
+    <div class="flex gap-1" id="breadthRangeBtns">
+      <button class="range-btn" data-breadth-range="1y">1Y</button>
+      <button class="range-btn active" data-breadth-range="3y">3Y</button>
+      <button class="range-btn" data-breadth-range="5y">5Y</button>
+      <button class="range-btn" data-breadth-range="10y">10Y</button>
+    </div>
   </div>
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
     <div>
@@ -700,9 +708,17 @@
       <h2 class="text-base font-semibold text-slate-200" data-i18n="markets.yield_spread_title">10Y – 2Y Treasury Spread</h2>
       <p class="text-xs text-slate-500 mt-0.5" data-i18n="markets.yield_spread_desc">Inversion (below 0) has preceded every US recession since 1978. Red shading = NBER-defined recessions.</p>
     </div>
-    <span id="spreadBadge" class="text-xs px-2 py-0.5 rounded font-semibold hidden"></span>
+    <div class="flex items-center gap-2">
+      <span id="spreadBadge" class="text-xs px-2 py-0.5 rounded font-semibold hidden"></span>
+      <div class="flex gap-1" id="spreadRangeBtns">
+        <button class="range-btn" data-spread-range="2y">2Y</button>
+        <button class="range-btn" data-spread-range="5y">5Y</button>
+        <button class="range-btn active" data-spread-range="10y">10Y</button>
+      </div>
+    </div>
   </div>
-  <div class="chart-container" style="height:200px">
+  <div id="yieldSpreadLoading" class="text-xs text-slate-600 animate-pulse py-4 text-center">Loading spread data from FRED…</div>
+  <div class="chart-container hidden" style="height:200px" id="yieldSpreadChartWrap">
     <canvas id="yieldSpreadChart"></canvas>
   </div>
   <p class="text-[11px] text-slate-600 mt-2">Current spread: <span id="spreadCurrent" class="font-mono font-semibold"></span> · Source: FRED (DGS10 – DGS2)</p>
@@ -3804,17 +3820,79 @@ async function loadCreditSpread(period) {
 // Initial load
 loadCreditSpread('1y');
 
-// 10Y-2Y Spread with recession bands
+// 10Y-2Y Spread with recession bands + year range buttons
+let _ysData = null, _ysChart = null;
+const _YS_YEARS = { '2y': 730, '5y': 1825, '10y': 3650 };
+
+function _renderYieldSpread(range) {
+  if (!_ysData) return;
+  const days = _YS_YEARS[range] || 3650;
+  const cutDate = new Date(Date.now() - days * 86400000).toISOString().slice(0,10);
+  const startIdx = _ysData.dates.findIndex(d => d >= cutDate);
+  const si = startIdx < 0 ? 0 : startIdx;
+  const dates    = _ysData.dates.slice(si);
+  const spread   = _ysData.spread.slice(si);
+  const recession = _ysData.recession.slice(si);
+  const gridCol = '#1e293b', tickCol = '#64748b';
+
+  const recessionPlugin = {
+    id: 'recessionBands',
+    beforeDraw(chart) {
+      const { ctx, chartArea: a, scales: { x, y } } = chart;
+      if (!a) return;
+      const zeroY = y.getPixelForValue(0);
+      let inRec = false, recStart = null;
+      ctx.save();
+      ctx.fillStyle = 'rgba(248,113,113,0.1)';
+      for (let i = 0; i < dates.length; i++) {
+        if (recession[i] && !inRec) { inRec = true; recStart = x.getPixelForValue(i); }
+        if (!recession[i] && inRec) {
+          inRec = false;
+          ctx.fillRect(recStart, a.top, x.getPixelForValue(i) - recStart, a.bottom - a.top);
+        }
+      }
+      if (inRec) ctx.fillRect(recStart, a.top, a.right - recStart, a.bottom - a.top);
+      ctx.strokeStyle = 'rgba(248,113,113,0.4)'; ctx.lineWidth = 1; ctx.setLineDash([4,4]);
+      ctx.beginPath(); ctx.moveTo(a.left, zeroY); ctx.lineTo(a.right, zeroY); ctx.stroke();
+      ctx.restore();
+    }
+  };
+
+  if (_ysChart) { _ysChart.destroy(); _ysChart = null; }
+  _ysChart = new Chart(document.getElementById('yieldSpreadChart'), {
+    type: 'line',
+    data: { labels: dates, datasets: [{
+      label: '10Y-2Y Spread', data: spread,
+      borderColor: '#38bdf8', backgroundColor: 'rgba(56,189,248,0.07)',
+      borderWidth: 1.5, pointRadius: 0, fill: true, tension: 0.2, spanGaps: true,
+    }]},
+    plugins: [recessionPlugin],
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend:{display:false}, tooltip:{callbacks:{label:c=>` Spread: ${c.raw?.toFixed(2)}pp`}} },
+      scales: {
+        x:{grid:{color:gridCol},ticks:{color:tickCol,maxTicksLimit:6,maxRotation:0}},
+        y:{grid:{color:gridCol},ticks:{color:tickCol,callback:v=>(v>=0?'+':'')+v.toFixed(1)+'%'}},
+      },
+      interaction:{mode:'index',intersect:false},
+    },
+  });
+}
+
 (async function() {
+  const loadingEl = document.getElementById('yieldSpreadLoading');
+  const wrapEl    = document.getElementById('yieldSpreadChartWrap');
   try {
     const resp = await fetch('/api/yield-spread');
-    if (!resp.ok) return;
-    const ys = await resp.json();
-    if (!ys.dates || !ys.dates.length) return;
-    const gridCol = '#1e293b', tickCol = '#64748b';
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    _ysData = await resp.json();
+    if (!_ysData.dates || !_ysData.dates.length) throw new Error('No data');
 
-    // Current spread badge
-    const last = ys.spread[ys.spread.length - 1];
+    if (loadingEl) loadingEl.style.display = 'none';
+    if (wrapEl)    wrapEl.classList.remove('hidden');
+
+    // Badge + current value
+    const last = _ysData.spread[_ysData.spread.length - 1];
     const badge = document.getElementById('spreadBadge');
     const cur   = document.getElementById('spreadCurrent');
     if (badge && last != null) {
@@ -3825,53 +3903,19 @@ loadCreditSpread('1y');
     }
     if (cur) cur.textContent = (last >= 0 ? '+' : '') + last.toFixed(2) + 'pp';
 
-    // Recession shading plugin
-    const recessionPlugin = {
-      id: 'recessionBands',
-      beforeDraw(chart) {
-        const { ctx, chartArea: a, scales: { x, y } } = chart;
-        if (!a) return;
-        const zeroY = y.getPixelForValue(0);
-        const dates = ys.dates;
-        const rec   = ys.recession;
-        let inRec = false, recStart = null;
-        ctx.save();
-        ctx.fillStyle = 'rgba(248,113,113,0.1)';
-        for (let i = 0; i < dates.length; i++) {
-          if (rec[i] && !inRec) { inRec = true; recStart = x.getPixelForValue(i); }
-          if (!rec[i] && inRec) {
-            inRec = false;
-            ctx.fillRect(recStart, a.top, x.getPixelForValue(i) - recStart, a.bottom - a.top);
-          }
-        }
-        if (inRec) ctx.fillRect(recStart, a.top, a.right - recStart, a.bottom - a.top);
-        // Zero line
-        ctx.strokeStyle = 'rgba(248,113,113,0.4)'; ctx.lineWidth = 1; ctx.setLineDash([4,4]);
-        ctx.beginPath(); ctx.moveTo(a.left, zeroY); ctx.lineTo(a.right, zeroY); ctx.stroke();
-        ctx.restore();
-      }
-    };
+    _renderYieldSpread('10y');  // default 10Y
 
-    new Chart(document.getElementById('yieldSpreadChart'), {
-      type: 'line',
-      data: { labels: ys.dates, datasets: [{
-        label: '10Y-2Y Spread',
-        data: ys.spread,
-        borderColor: '#38bdf8', backgroundColor: 'rgba(56,189,248,0.07)',
-        borderWidth: 1.5, pointRadius: 0, fill: true, tension: 0.2, spanGaps: true,
-      }]},
-      plugins: [recessionPlugin],
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        plugins: { legend:{display:false}, tooltip:{callbacks:{label:c=>` Spread: ${c.raw?.toFixed(2)}pp`}} },
-        scales: {
-          x:{grid:{color:gridCol},ticks:{color:tickCol,maxTicksLimit:6,maxRotation:0}},
-          y:{grid:{color:gridCol},ticks:{color:tickCol,callback:v=>(v>=0?'+':'')+v.toFixed(1)+'%'}},
-        },
-        interaction:{mode:'index',intersect:false},
-      },
+    document.querySelectorAll('[data-spread-range]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('[data-spread-range]').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        _renderYieldSpread(btn.dataset.spreadRange);
+      });
     });
-  } catch(e) { console.warn('Yield spread chart failed:', e); }
+  } catch(e) {
+    console.warn('Yield spread chart failed:', e);
+    if (loadingEl) loadingEl.textContent = '⚠ Unable to load spread data (FRED timeout). Retry later.';
+  }
 })();
 
 // Crypto prices (from history endpoint)
@@ -3997,48 +4041,93 @@ loadCreditSpread('1y');
   } catch(e) {}
 })();
 
-// Market Breadth
+// Market Breadth — with range selector (1Y / 3Y / 5Y / 10Y)
+let _brData = null, _brChart50 = null, _brChartRsp = null;
+const _BR_WEEKS = { '1y': 52, '3y': 156, '5y': 260, '10y': 520 };
+
+function _renderBreadth(range) {
+  if (!_brData) return;
+  const weeks = _BR_WEEKS[range] || 156;
+  const g = '#1e293b', t = '#64748b';
+  const br50  = _brData.pct_above_50ma;
+  const br200 = _brData.pct_above_200ma;
+  const rsp   = _brData.rsp_spy;
+
+  // Slice data to requested range
+  const s50   = { dates: br50.dates.slice(-weeks),  values: br50.values.slice(-weeks)  };
+  const s200  = { dates: br200.dates.slice(-weeks), values: br200.values.slice(-weeks) };
+  const sRsp  = { dates: rsp.dates.slice(-weeks),   values: rsp.values.slice(-weeks)   };
+
+  // 50/200 MA breadth chart
+  if (_brChart50) { _brChart50.destroy(); _brChart50 = null; }
+  if (s50.dates.length) {
+    _brChart50 = new Chart(document.getElementById('breadth50Chart'), {
+      type: 'line',
+      data: { labels: s50.dates, datasets: [
+        { label:'50-day',  data: s50.values,  borderColor:'#38bdf8', backgroundColor:'rgba(56,189,248,0.07)', borderWidth:1.5, pointRadius:0, fill:true,  tension:0.3, spanGaps:true },
+        { label:'200-day', data: s200.values, borderColor:'#a78bfa', backgroundColor:'transparent',          borderWidth:1.5, pointRadius:0, fill:false, tension:0.3, spanGaps:true, borderDash:[4,3] },
+      ]},
+      plugins: [{ afterDraw(c) {
+        const {ctx, chartArea:a, scales:{y}} = c;
+        const py = y.getPixelForValue(50);
+        if (py >= a.top && py <= a.bottom) {
+          ctx.save(); ctx.strokeStyle='rgba(251,191,36,0.4)'; ctx.lineWidth=1; ctx.setLineDash([3,3]);
+          ctx.beginPath(); ctx.moveTo(a.left,py); ctx.lineTo(a.right,py); ctx.stroke();
+          ctx.fillStyle='#fbbf2488'; ctx.font='9px Inter'; ctx.fillText('50%',a.left+3,py-2); ctx.restore();
+        }
+      }}],
+      options: {
+        responsive:true, maintainAspectRatio:false,
+        plugins:{ legend:{display:false}, tooltip:{mode:'index',intersect:false,callbacks:{label:c=>` ${c.dataset.label}: ${c.raw?.toFixed(1)}%`}} },
+        scales:{
+          x:{grid:{color:g},ticks:{color:t,maxTicksLimit:6,maxRotation:0}},
+          y:{grid:{color:g},ticks:{color:t,callback:v=>v+'%'},min:0,max:100},
+        },
+        interaction:{mode:'index',intersect:false},
+      },
+    });
+  }
+
+  // RSP/SPY chart
+  if (_brChartRsp) { _brChartRsp.destroy(); _brChartRsp = null; }
+  if (sRsp.dates.length) {
+    _brChartRsp = new Chart(document.getElementById('rspSpyChart'), {
+      type: 'line',
+      data: { labels: sRsp.dates, datasets: [{
+        label:'RSP/SPY', data: sRsp.values,
+        borderColor:'#34d399', backgroundColor:'rgba(52,211,153,0.07)',
+        borderWidth:1.5, pointRadius:0, fill:true, tension:0.3, spanGaps:true,
+      }]},
+      options: {
+        responsive:true, maintainAspectRatio:false,
+        plugins:{ legend:{display:false}, tooltip:{callbacks:{label:c=>` RSP/SPY: ${c.raw?.toFixed(4)}`}} },
+        scales:{
+          x:{grid:{color:g},ticks:{color:t,maxTicksLimit:6,maxRotation:0}},
+          y:{grid:{color:g},ticks:{color:'rgba(52,211,153,0.6)',callback:v=>v.toFixed(3)}},
+        },
+        interaction:{mode:'index',intersect:false},
+      },
+    });
+  }
+}
+
 (async function() {
   try {
     const resp = await fetch('/api/breadth');
     if (!resp.ok) return;
-    const br = await resp.json();
-    const g='#1e293b', t='#64748b';
-    // % Above MAs
-    if (br.pct_above_50ma?.dates?.length) {
-      new Chart(document.getElementById('breadth50Chart'), {
-        type:'line',
-        data:{ labels: br.pct_above_200ma?.dates || br.pct_above_50ma.dates, datasets:[
-          { label:'50-day',  data:br.pct_above_50ma.values,  borderColor:'#38bdf8', backgroundColor:'rgba(56,189,248,0.07)',    borderWidth:1.5, pointRadius:0, fill:true,  tension:0.3, spanGaps:true },
-          { label:'200-day', data:br.pct_above_200ma?.values||[], borderColor:'#a78bfa', backgroundColor:'transparent', borderWidth:1.5, pointRadius:0, fill:false, tension:0.3, spanGaps:true, borderDash:[4,3] },
-        ]},
-        plugins:[{ afterDraw(c){
-          const {ctx,chartArea:a,scales:{y}}=c;
-          [50].forEach(v=>{
-            const py=y.getPixelForValue(v);
-            if(py>=a.top&&py<=a.bottom){
-              ctx.save();ctx.strokeStyle='rgba(251,191,36,0.4)';ctx.lineWidth=1;ctx.setLineDash([3,3]);
-              ctx.beginPath();ctx.moveTo(a.left,py);ctx.lineTo(a.right,py);ctx.stroke();
-              ctx.fillStyle='#fbbf2488';ctx.font='9px Inter';ctx.fillText('50%',a.left+3,py-2);ctx.restore();
-            }
-          });
-        }}],
-        options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{mode:'index',intersect:false,callbacks:{label:c=>` ${c.dataset.label}: ${c.raw?.toFixed(1)}%`}}},scales:{x:{grid:{color:g},ticks:{color:t,maxTicksLimit:5,maxRotation:0}},y:{grid:{color:g},ticks:{color:t,callback:v=>v+'%'},min:0,max:100}},interaction:{mode:'index',intersect:false}},
+    _brData = await resp.json();
+    if (_brData.error) return;
+    _renderBreadth('3y');  // default 3Y
+
+    // Wire range buttons
+    document.querySelectorAll('[data-breadth-range]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('[data-breadth-range]').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        _renderBreadth(btn.dataset.breadthRange);
       });
-    }
-    // RSP/SPY
-    if (br.rsp_spy?.dates?.length) {
-      new Chart(document.getElementById('rspSpyChart'), {
-        type:'line',
-        data:{ labels:br.rsp_spy.dates, datasets:[{
-          label:'RSP/SPY', data:br.rsp_spy.values,
-          borderColor:'#34d399', backgroundColor:'rgba(52,211,153,0.07)',
-          borderWidth:1.5, pointRadius:0, fill:true, tension:0.3, spanGaps:true,
-        }]},
-        options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>` RSP/SPY: ${c.raw?.toFixed(4)}`}}},scales:{x:{grid:{color:g},ticks:{color:t,maxTicksLimit:5,maxRotation:0}},y:{grid:{color:g},ticks:{color:'rgba(52,211,153,0.6)',callback:v=>v.toFixed(3)}}},interaction:{mode:'index',intersect:false}},
-      });
-    }
-  } catch(e) {}
+    });
+  } catch(e) { console.warn('Breadth chart failed:', e); }
 })();
 
 // Sector Rotation Grid
