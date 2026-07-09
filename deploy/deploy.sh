@@ -336,19 +336,19 @@ fi
 SSL_STEP=\$((5 + NUM_APPS))
 echo "[\$(TS)][\$SSL_STEP/\$TOTAL_STEPS] Ensuring SSL certificates..."
 
-if [[ ${#CERTBOT_DOMAINS[@]} -gt 0 ]]; then
+if [[ \${#CERTBOT_DOMAINS[@]} -gt 0 ]]; then
   sudo dnf install -y certbot python3-certbot-nginx -q 2>&1 | tail -1
-  for domains in "${CERTBOT_DOMAINS[@]}"; do
-    echo "[$(TS)]    Certbot: $domains"
+  for domains in "\${CERTBOT_DOMAINS[@]}"; do
+    echo "[\$(TS)]    Certbot: \$domains"
     CERT_D_FLAGS=""
-    for d in $domains; do
-      CERT_D_FLAGS="$CERT_D_FLAGS -d $d"
+    for d in \$domains; do
+      CERT_D_FLAGS="\$CERT_D_FLAGS -d \$d"
     done
-    FIRST_D=$(echo $domains | awk '{print $1}')
-    sudo certbot --nginx --cert-name "$FIRST_D" $CERT_D_FLAGS \
+    FIRST_D=\$(echo \$domains | awk '{print \$1}')
+    sudo certbot --nginx --cert-name "\$FIRST_D" \$CERT_D_FLAGS \
       --non-interactive --agree-tos -m "$CERT_EMAIL" --redirect 2>&1 | tail -3
   done
-  echo "[$(TS)]    ✓ SSL certificates installed"
+  echo "[\$(TS)]    ✓ SSL certificates installed"
 else
   echo "[\$(TS)]    All nginx configs unchanged — SSL intact"
 fi
