@@ -14,8 +14,8 @@ CERT_EMAIL="admin@li-family.us"
 APPS=(
   "ystocker|8000|stock.li-family.us|requirements_stocker.txt|ystocker/static"
   "yplanner|8001|planner.li-family.us|requirements_planner.txt|yplanner/static"
-  "yplanter|8002|planter.li-family.us|requirements_planter.txt|yplanter/static"
-  "yhome|8003|home.li-family.us|requirements_home.txt|yhome/static"
+  "yplanter|8002|plant.li-family.us|requirements_planter.txt|yplanter/static"
+  "yhome|8003|li-family.us www.li-family.us home.li-family.us|requirements_home.txt|yhome/static"
   "ytracker|8004|tracker.li-family.us|requirements_tracker.txt|ytracker/static"
   "ypay|8005|pay.li-family.us|requirements_pay.txt|ypay/static"
   "yimage|8006|image.li-family.us|requirements_image.txt|yimage/static"
@@ -270,9 +270,10 @@ ensure_nginx() {
   local name="\$1" port="\$2" domain="\$3" static="\$4"
   local CONF="/etc/nginx/conf.d/\${name}.conf"
 
-  # Skip if config exists, has the right domain, AND passes syntax check
+  # Skip if config exists, has the right domains AND the right proxy port
   if sudo test -f "\$CONF" \
      && sudo grep -q "server_name \${domain};" "\$CONF" \
+     && sudo grep -q "proxy_pass http://127.0.0.1:\${port};" "\$CONF" \
      && sudo nginx -t 2>/dev/null; then
     echo "[\$(TS)]    \$name nginx config up to date"
     return
@@ -289,6 +290,8 @@ server {
         proxy_set_header   Host              \\\$host;
         proxy_set_header   X-Real-IP         \\\$remote_addr;
         proxy_set_header   X-Forwarded-For   \\\$proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto \\\$scheme;
+        proxy_set_header   X-Forwarded-Host  \\\$host;
         proxy_read_timeout 130s;
         proxy_connect_timeout 10s;
         proxy_send_timeout 130s;
@@ -333,14 +336,19 @@ fi
 SSL_STEP=\$((5 + NUM_APPS))
 echo "[\$(TS)][\$SSL_STEP/\$TOTAL_STEPS] Ensuring SSL certificates..."
 
-if [[ \${#CERTBOT_DOMAINS[@]} -gt 0 ]]; then
+if [[ ${#CERTBOT_DOMAINS[@]} -gt 0 ]]; then
   sudo dnf install -y certbot python3-certbot-nginx -q 2>&1 | tail -1
-  for domain in "\${CERTBOT_DOMAINS[@]}"; do
-    echo "[\$(TS)]    Certbot: \$domain"
-    sudo certbot --nginx --cert-name "\$domain" -d "\$domain" \
-      --non-interactive --agree-tos -m "\$CERT_EMAIL" --redirect 2>&1 | tail -3
+  for domains in "${CERTBOT_DOMAINS[@]}"; do
+    echo "[$(TS)]    Certbot: $domains"
+    CERT_D_FLAGS=""
+    for d in $domains; do
+      CERT_D_FLAGS="$CERT_D_FLAGS -d $d"
+    done
+    FIRST_D=$(echo $domains | awk '{print $1}')
+    sudo certbot --nginx --cert-name "$FIRST_D" $CERT_D_FLAGS \
+      --non-interactive --agree-tos -m "$CERT_EMAIL" --redirect 2>&1 | tail -3
   done
-  echo "[\$(TS)]    ✓ SSL certificates installed"
+  echo "[$(TS)]    ✓ SSL certificates installed"
 else
   echo "[\$(TS)]    All nginx configs unchanged — SSL intact"
 fi
