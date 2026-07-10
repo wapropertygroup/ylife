@@ -826,6 +826,17 @@
     </div>
   </div>
 
+  <!-- SPY / 10Y Yield Ratio (Relative Rate Graph) -->
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up" id="spyTnxSection" style="display:none">
+    <div class="mb-3">
+      <h3 class="text-sm font-semibold text-slate-300" data-i18n="fed.spy_tnx_title">📊 Relative Rate Graph — SPY / 10Y Yield Ratio</h3>
+      <p class="text-xs text-slate-500 mt-0.5" data-i18n="fed.spy_tnx_desc">S&P 500 price divided by the 10Y Treasury yield. Rising ratio = stocks outperforming bonds (risk-on); falling = bonds outperforming stocks (risk-off).</p>
+    </div>
+    <div class="chart-container" style="height:200px">
+      <canvas id="spyTnxChart"></canvas>
+    </div>
+  </div>
+
   <!-- Real 10Y Yield (TIPS) vs S&P 500 -->
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up" id="realYieldSpySection" style="display:none">
     <div class="mb-3">
@@ -2343,6 +2354,49 @@ let _fedSeriesData = {};
           interaction: { mode:'index', intersect:false },
         },
       });
+
+      // ── SPY / 10Y Ratio Chart (Relative Rate Graph)
+      (async () => {
+        try {
+          const spyResp = await fetch('/api/history/SPY?period=10y');
+          const spy = await spyResp.json();
+          if (!spy.prices || !spy.prices.length) return;
+          document.getElementById('spyTnxSection').style.display = 'block';
+
+          // Align SPY to daily 10Y yield dates
+          const spyMap = {};
+          (spy.dates || []).forEach((d, i) => { if (spy.prices[i] != null) spyMap[d] = spy.prices[i]; });
+
+          const ratioDates = [];
+          const ratioValues = [];
+          ten.dates.forEach((d, i) => {
+            const sVal = spyMap[d];
+            const tVal = ten.values[i];
+            if (sVal != null && tVal != null && tVal > 0) {
+              ratioDates.push(d);
+              ratioValues.push(+(sVal / tVal).toFixed(2));
+            }
+          });
+
+          new Chart(document.getElementById('spyTnxChart'), {
+            type: 'line',
+            data: { labels: ratioDates.slice(-500), datasets: [
+              { label: 'SPY / 10Y Ratio', data: ratioValues.slice(-500),
+                borderColor: '#60a5fa', backgroundColor: 'rgba(96,165,250,0.08)',
+                borderWidth: 2, pointRadius: 0, fill: true, tension: 0.3, spanGaps: true }
+            ]},
+            options: {
+              responsive: true, maintainAspectRatio: false,
+              plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false } },
+              scales: {
+                x: { grid: { color: '#1e293b' }, ticks: { color: '#64748b', maxTicksLimit: 6, maxRotation: 0 } },
+                y: { grid: { color: '#1e293b' }, ticks: { color: '#64748b' } },
+              },
+              interaction: { mode: 'index', intersect: false },
+            },
+          });
+        } catch(e) { console.warn('Relative Rate Graph failed:', e); }
+      })();
     } catch(e) { console.warn('Fed vs 10Y chart failed:', e); }
   })();
 
