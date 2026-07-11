@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # Entry point - run this file to start the yImage development server.
 # Usage:  python run/run_image.py
 import sys

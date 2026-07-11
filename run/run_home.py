@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # Entry point - run this file to start the yHome development server.
 # Usage:  python run/run_home.py
 import sys

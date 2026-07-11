@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # Entry point - run this file to start the yBG development server.
 # Usage:  python run/run_bg.py
 import sys

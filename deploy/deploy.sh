@@ -53,7 +53,7 @@ fi
 
 [[ -z "$SSH_KEY" ]] && log "WARNING: no SSH key found — relying on ssh-agent or default config"
 
-SSH_OPTS="-o StrictHostKeyChecking=no -o ConnectTimeout=10 -o User=$EC2_USER"
+SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10 -o User=$EC2_USER"
 if [[ -n "$SSH_KEY" ]]; then
   SSH_OPTS="$SSH_OPTS -i $SSH_KEY"
 fi
@@ -89,10 +89,32 @@ else
       if echo "$_CF_OUT" | grep -qi "no changes to deploy\|up to date"; then
         log "CloudFormation: no changes — InstanceType already $INSTANCE_TYPE"
       else
-        log "CloudFormation: stack updated (InstanceType → $INSTANCE_TYPE) — waiting for EC2..."
-        aws ec2 wait instance-status-ok \
-          --instance-ids "$INSTANCE_ID" --region "$CF_REGION"
-        log "✓ EC2 instance healthy — continuing with code deploy"
+        log "CloudFormation: stack updated (InstanceType → $INSTANCE_TYPE) — resolving Instance ID..."
+        
+        # Resolve current instance ID (in case it was replaced)
+        INSTANCE_ID=$(aws cloudformation describe-stack-resource \
+          --stack-name "$CF_STACK_NAME" --logical-resource-id Instance --region "$CF_REGION" \
+          --query "StackResourceDetail.PhysicalResourceId" --output text 2>/dev/null)
+        
+        if [[ -z "$INSTANCE_ID" || "$INSTANCE_ID" == "None" ]]; then
+          log "WARNING: could not resolve Instance ID from stack. Using hardcoded: $INSTANCE_ID"
+        fi
+
+        log "CloudFormation: waiting for EC2 ($INSTANCE_ID) to reach 'running' state..."
+        aws ec2 wait instance-running --instance-ids "$INSTANCE_ID" --region "$CF_REGION"
+        
+        log "CloudFormation: waiting for EC2 ($INSTANCE_ID) health checks (may take 2-5 mins)..."
+        # We use a loop instead of 'wait instance-status-ok' so the user sees progress
+        for i in $(seq 1 30); do
+          _ST=$(aws ec2 describe-instance-status --instance-ids "$INSTANCE_ID" --region "$CF_REGION" \
+            --query "InstanceStatuses[0].InstanceStatus.Status" --output text 2>/dev/null || echo "initializing")
+          if [[ "$_ST" == "ok" ]]; then
+            log "✓ EC2 instance healthy ($INSTANCE_ID)"
+            break
+          fi
+          echo "  status: $_ST (attempt $i/30, waiting 15s...)"
+          sleep 15
+        done
       fi
     else
       log "ERROR: CloudFormation update failed:"
@@ -105,6 +127,21 @@ fi
 # ── Deploy ───────────────────────────────────────────────────────────────────
 log "Connecting to $EC2_USER@$HOST ($APP_DIR)"
 log "Apps: $(for a in "${APPS[@]}"; do echo -n "${a%%|*} "; done)"
+
+log "Waiting for remote bootstrap to finish..."
+# Poll for "Bootstrap complete" in /var/log/app-init.log
+for i in $(seq 1 60); do
+  if ssh $SSH_OPTS "$EC2_USER@$HOST" "grep -q 'Bootstrap complete' /var/log/app-init.log 2>/dev/null" &>/dev/null; then
+    log "✓ Remote bootstrap complete"
+    break
+  fi
+  if [[ $i -eq 60 ]]; then
+    log "WARNING: Remote bootstrap did not finish in time. Continuing anyway..."
+  else
+    echo "  waiting for bootstrap... (attempt $i/60, 10s sleep)"
+    sleep 10
+  fi
+done
 
 # NOTE: unquoted heredoc (<<REMOTE not <<'REMOTE') so local shell substitutes
 # $APP_DIR, $RUN_USER, $CERT_EMAIL, $APPS_CONFIG before sending to remote.

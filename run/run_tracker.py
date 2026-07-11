@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # Entry point - run this file to start the yTracker development server.
 # Usage:  python run/run_tracker.py
 import sys

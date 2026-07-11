@@ -113,9 +113,12 @@ def fetch_group(tickers: list[str]) -> tuple[dict[str, dict], list[str]]:
       results - {ticker: data_dict} for every ticker that succeeded
       errors  - list of error message strings for tickers that failed
     """
+    import time
     results: dict[str, dict] = {}
     errors: list[str] = []
-    for t in tickers:
+    for i, t in enumerate(tickers):
+        if i > 0:
+            time.sleep(0.5)  # Add delay to avoid rate limiting
         try:
             results[t] = fetch_ticker_data(t)
         except FetchError as exc:

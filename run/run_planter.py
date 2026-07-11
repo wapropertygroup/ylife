@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # Entry point - run this file to start the yPlanter development server.
 # Usage:  python run/run_planter.py
 import sys

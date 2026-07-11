@@ -154,6 +154,19 @@ _SESSION.trust_env = False  # Ignore system proxies which can cause silent timeo
 _SESSION.headers.update(_HEADERS)
 
 
+# Series already in billions USD (no /1000 conversion needed)
+_SERIES_ALREADY_BILLIONS = {
+    "RRPONTSYD", "M2SL",
+    # New series — already in natural units, no millions→billions conversion
+    "DFII10", "T10YIE", "BAMLH0A0HYM2", "BAMLC0A0CM",
+    "WILL5000", "GDP", "INDPRO", "HOUST", "USREC",
+    "UMCSENT", "MORTGAGE30US", "GDPC1", "CPIAUCSL", "DCOILWTICO",
+}
+
+# Series that are dimensionless ratios (stored as-is, no unit conversion)
+_SERIES_RAW_RATIO = {"M2V", "DFII10", "T10YIE"}
+
+
 def _fetch_series(series_id: str) -> Optional[dict[str, Any]]:
     """
     Fetch a single FRED series CSV with up to 3 retries + exponential back-off.
@@ -244,6 +257,9 @@ def _build_cache() -> dict[str, Any]:
     result: dict[str, Any] = {"_ts": time.time(), "series": {}}
 
     def _fetch_one(sid: str) -> tuple[str, Optional[dict[str, Any]]]:
+        # Small random delay to jitter the requests
+        import random
+        time.sleep(random.uniform(0.1, 0.5))
         return sid, _fetch_series(sid)
 
     with _cf.ThreadPoolExecutor(max_workers=2) as pool:  # 2 is safer for FRED
