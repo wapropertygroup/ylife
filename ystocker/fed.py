@@ -136,24 +136,14 @@ def _save_disk_cache(data: dict[str, Any]) -> None:
 # ── Fetch helpers ───────────────────────────────────────────────────────────
 _HEADERS = {
     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
-    "Accept": "text/csv,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+    "Accept": "text/csv,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "Accept-Language": "en-US,en;q=0.9",
-    "Cache-Control": "no-cache",
-    "Pragma": "no-cache",
 }
 
-
-# Series already in billions USD (no /1000 conversion needed)
-_SERIES_ALREADY_BILLIONS = {
-    "RRPONTSYD", "M2SL",
-    # New series — already in natural units, no millions→billions conversion
-    "DFII10", "T10YIE", "BAMLH0A0HYM2", "BAMLC0A0CM",
-    "WILL5000", "GDP", "INDPRO", "HOUST", "USREC",
-    "UMCSENT", "MORTGAGE30US", "GDPC1", "CPIAUCSL", "DCOILWTICO",
-}
-
-# Series that are dimensionless ratios (stored as-is, no unit conversion)
-_SERIES_RAW_RATIO = {"M2V", "DFII10", "T10YIE"}
+# Shared session for connection pooling
+_SESSION = requests.Session()
+_SESSION.trust_env = False  # Ignore system proxies which can cause silent timeouts
+_SESSION.headers.update(_HEADERS)
 
 
 def _fetch_series(series_id: str) -> Optional[dict[str, Any]]:
@@ -164,12 +154,12 @@ def _fetch_series(series_id: str) -> Optional[dict[str, Any]]:
     url = _FRED_CSV.format(series=series_id)
     already_billions = series_id in _SERIES_ALREADY_BILLIONS
     raw_ratio        = series_id in _SERIES_RAW_RATIO
-    log.info("Fed: fetching %s from FRED", series_id)
 
     text = None
-    for attempt in range(1, 4):   # up to 3 attempts
+    for attempt in range(1, 4):
         try:
-            resp = requests.get(url, headers=_HEADERS, timeout=12)
+            log.info("Fed: fetching %s (attempt %d/3)...", series_id, attempt)
+            resp = _SESSION.get(url, timeout=30)
             resp.raise_for_status()
             text = resp.text
             break
@@ -177,8 +167,8 @@ def _fetch_series(series_id: str) -> Optional[dict[str, Any]]:
             if attempt == 3:
                 log.error("Fed: HTTP error for %s after %d attempts: %s", series_id, attempt, exc)
                 return None
-            wait = attempt * 2   # 2 s, then 4 s
-            log.warning("Fed: %s attempt %d failed (%s) — retry in %ds", series_id, attempt, exc, wait)
+            wait = attempt * 3
+            log.warning("Fed: %s failed (%s) — retry in %ds", series_id, exc, wait)
             time.sleep(wait)
 
     # FRED CSV format:
@@ -244,7 +234,7 @@ def _build_cache() -> dict[str, Any]:
     def _fetch_one(sid: str) -> tuple[str, Optional[dict[str, Any]]]:
         return sid, _fetch_series(sid)
 
-    with _cf.ThreadPoolExecutor(max_workers=4) as pool:  # 4 keeps FRED happy (was 8 → rate limiting)
+    with _cf.ThreadPoolExecutor(max_workers=2) as pool:  # 2 is safer for FRED
         futures = {pool.submit(_fetch_one, sid): sid for sid in SERIES}
         try:
             for fut in _cf.as_completed(futures, timeout=60):
