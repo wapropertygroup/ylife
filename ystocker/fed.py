@@ -135,9 +135,17 @@ def _save_disk_cache(data: dict[str, Any]) -> None:
 
 # ── Fetch helpers ───────────────────────────────────────────────────────────
 _HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
-    "Accept": "text/csv,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+    "Accept": "text/csv,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
     "Accept-Language": "en-US,en;q=0.9",
+    "Sec-Ch-Ua": '"Not/A)Brand";v="8", "Chromium";v="126", "Google Chrome";v="126"',
+    "Sec-Ch-Ua-Mobile": "?0",
+    "Sec-Ch-Ua-Platform": '"macOS"',
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "none",
+    "Sec-Fetch-User": "?1",
+    "Upgrade-Insecure-Requests": "1",
 }
 
 # Shared session for connection pooling
@@ -160,16 +168,20 @@ def _fetch_series(series_id: str) -> Optional[dict[str, Any]]:
         try:
             log.info("Fed: fetching %s (attempt %d/3)...", series_id, attempt)
             resp = _SESSION.get(url, timeout=30)
+            if resp.status_code != 200:
+                log.warning("Fed: %s got HTTP %d for %s. Body: %s", 
+                            series_id, resp.status_code, url, resp.text[:200])
             resp.raise_for_status()
             text = resp.text
             break
         except Exception as exc:
             if attempt == 3:
-                log.error("Fed: HTTP error for %s after %d attempts: %s", series_id, attempt, exc)
+                log.error("Fed: final attempt failed for %s (%s). URL: %s", series_id, exc, url)
                 return None
             wait = attempt * 3
-            log.warning("Fed: %s failed (%s) — retry in %ds", series_id, exc, wait)
+            log.warning("Fed: %s attempt %d failed (%s) — retry in %ds", series_id, attempt, exc, wait)
             time.sleep(wait)
+
 
     # FRED CSV format:
     #   observation_date,<SERIES_ID>
