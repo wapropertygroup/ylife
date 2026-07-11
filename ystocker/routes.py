@@ -2102,26 +2102,28 @@ def api_fed():
         # Fresh cache available — return immediately.
         if is_cache_fresh():
             data = get_fed_data()
-            if not data:
-                log.warning("API fed: cache fresh but data is empty")
-                return jsonify({"error": "Cache is empty", "warming": True}), 202
+            if not data or not data.get("series"):
+                log.warning("API fed: cache fresh check passed but data is empty or missing 'series'")
+                # Don't return None/empty, return a proper status
+                return jsonify({"status": "stale", "error": "Cache data inconsistent", "warming": True}), 202
 
             resp = {k: v for k, v in data.items() if not k.startswith("_")}
+            resp["status"] = "ok"
             log.info("API fed: served from cache (%d series)", len(resp.get("series", {})))
             return jsonify(resp)
 
         # A background fetch is already running — tell the client to retry.
         if fed_warming_fn():
             log.info("API fed: warming in progress, returning 202")
-            return jsonify({"warming": True}), 202
+            return jsonify({"status": "warming", "warming": True}), 202
 
         # No cache and no fetch in progress — start one in the background.
         log.info("API fed: no cache, starting background fetch")
         threading.Thread(target=refresh_cache, daemon=True, name="fed-auto-warm").start()
-        return jsonify({"warming": True}), 202
+        return jsonify({"status": "initializing", "warming": True}), 202
     except Exception as exc:
         log.error("API fed: error: %s", exc, exc_info=True)
-        return jsonify({"error": str(exc), "warming": True}), 500
+        return jsonify({"status": "error", "error": str(exc), "warming": True}), 500
 
 
 @bp.route("/api/fed/explain", methods=["POST"])

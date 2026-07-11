@@ -326,8 +326,33 @@ def get_cache_ts() -> Optional[float]:
 
 
 def is_cache_fresh() -> bool:
-    ts = get_cache_ts()
-    return bool(ts and (time.time() - ts) < _CACHE_TTL)
+    """Check if we have a valid, recent cache.
+
+    Deep validation: returns False if the cache is missing, stale, or contains
+    empty/error data for critical series (like WALCL).
+    """
+    with _cache_lock:
+        if _cache_data:
+            data = _cache_data
+        else:
+            data = _load_disk_cache()
+
+    if not data:
+        return False
+
+    # Check TTL
+    ts = data.get("_ts")
+    if not ts or (time.time() - ts) >= _CACHE_TTL:
+        return False
+
+    # Deep check: ensure critical series have data
+    series = data.get("series", {})
+    for sid in ["WALCL", "M2SL"]:  # absolute must-haves
+        if not series.get(sid, {}).get("dates"):
+            log.warning("Fed: cache for %s is empty/error — forcing refetch", sid)
+            return False
+
+    return True
 
 
 def is_warming() -> bool:
