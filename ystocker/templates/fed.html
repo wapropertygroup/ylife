@@ -120,12 +120,22 @@
 <script>
   // Poll until data is ready, then reload the page
   (function poll() {
-    fetch('/api/fed').then(r => r.json()).then(d => {
-      const series = d.series || {};
-      const hasData = Object.values(series).some(s => s.values && s.values.some(v => v != null));
-      if (hasData) { location.reload(); }
-      else { setTimeout(poll, 3000); }
-    }).catch(() => setTimeout(poll, 5000));
+    fetch('/api/fed')
+      .then(r => r.text())
+      .then(text => {
+        if (!text) { console.warn('Poll: empty response'); return setTimeout(poll, 3000); }
+        try {
+          const d = JSON.parse(text);
+          const series = d.series || {};
+          const hasData = Object.values(series).some(s => s.values && s.values.some(v => v != null));
+          if (hasData) { location.reload(); }
+          else { setTimeout(poll, 3000); }
+        } catch(e) {
+          console.error('Poll parse error:', e);
+          setTimeout(poll, 5000);
+        }
+      })
+      .catch(() => setTimeout(poll, 5000));
   })();
 </script>
 {% else %}
@@ -1066,7 +1076,20 @@ let _fedSeriesData = {};
   let data;
   try {
     const resp = await fetch('/api/fed');
-    data = await resp.json();
+    const text = await resp.text();
+    if (!text) {
+      document.getElementById('fedError').textContent = '⚠ API returned empty response.';
+      document.getElementById('fedError').classList.remove('hidden');
+      return;
+    }
+    try {
+      data = JSON.parse(text);
+    } catch(e) {
+      console.error('API parse error:', e, 'Raw:', text);
+      document.getElementById('fedError').textContent = '⚠ API parse error: ' + e;
+      document.getElementById('fedError').classList.remove('hidden');
+      return;
+    }
     if (!resp.ok) {
       document.getElementById('fedError').textContent = '⚠ ' + (data.error || 'Failed to load data.');
       document.getElementById('fedError').classList.remove('hidden');

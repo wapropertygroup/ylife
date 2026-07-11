@@ -2096,24 +2096,32 @@ def api_fed():
     If no cache exists yet, kick off a background fetch and return 202 so the
     page shows a loading state rather than blocking the request thread.
     """
-    from ystocker.fed import get_fed_data, is_cache_fresh, is_warming as fed_warming_fn, refresh_cache
+    try:
+        from ystocker.fed import get_fed_data, is_cache_fresh, is_warming as fed_warming_fn, refresh_cache
 
-    # Fresh cache available — return immediately.
-    if is_cache_fresh():
-        data = get_fed_data()
-        resp = {k: v for k, v in data.items() if not k.startswith("_")}
-        log.info("API fed: served from cache (%d series)", len(resp.get("series", {})))
-        return jsonify(resp)
+        # Fresh cache available — return immediately.
+        if is_cache_fresh():
+            data = get_fed_data()
+            if not data:
+                log.warning("API fed: cache fresh but data is empty")
+                return jsonify({"error": "Cache is empty", "warming": True}), 202
 
-    # A background fetch is already running — tell the client to retry.
-    if fed_warming_fn():
-        log.info("API fed: warming in progress, returning 202")
+            resp = {k: v for k, v in data.items() if not k.startswith("_")}
+            log.info("API fed: served from cache (%d series)", len(resp.get("series", {})))
+            return jsonify(resp)
+
+        # A background fetch is already running — tell the client to retry.
+        if fed_warming_fn():
+            log.info("API fed: warming in progress, returning 202")
+            return jsonify({"warming": True}), 202
+
+        # No cache and no fetch in progress — start one in the background.
+        log.info("API fed: no cache, starting background fetch")
+        threading.Thread(target=refresh_cache, daemon=True, name="fed-auto-warm").start()
         return jsonify({"warming": True}), 202
-
-    # No cache and no fetch in progress — start one in the background.
-    log.info("API fed: no cache, starting background fetch")
-    threading.Thread(target=refresh_cache, daemon=True, name="fed-auto-warm").start()
-    return jsonify({"warming": True}), 202
+    except Exception as exc:
+        log.error("API fed: error: %s", exc, exc_info=True)
+        return jsonify({"error": str(exc), "warming": True}), 500
 
 
 @bp.route("/api/fed/explain", methods=["POST"])
