@@ -121,19 +121,26 @@
   // Poll until data is ready, then reload the page
   (function poll() {
     fetch('/api/fed')
-      .then(r => r.text())
-      .then(text => {
-        if (!text) { console.warn('Poll: empty response'); return setTimeout(poll, 3000); }
-        try {
-          const d = JSON.parse(text);
-          const series = d.series || {};
-          const hasData = Object.values(series).some(s => s.values && s.values.some(v => v != null));
-          if (hasData) { location.reload(); }
-          else { setTimeout(poll, 3000); }
-        } catch(e) {
-          console.error('Poll parse error:', e);
-          setTimeout(poll, 5000);
+      .then(r => {
+        if (!r.ok) {
+          return r.json().then(d => {
+            document.getElementById('fedError').textContent = '⚠ Server error: ' + (d.error || r.statusText);
+            document.getElementById('fedError').classList.remove('hidden');
+          });
         }
+        return r.text().then(text => {
+          if (!text) { console.warn('Poll: empty response'); return setTimeout(poll, 3000); }
+          try {
+            const d = JSON.parse(text);
+            const series = d.series || {};
+            const hasData = Object.values(series).some(s => s.values && s.values.some(v => v != null));
+            if (hasData) { location.reload(); }
+            else { setTimeout(poll, 3000); }
+          } catch(e) {
+            console.error('Poll parse error:', e);
+            setTimeout(poll, 5000);
+          }
+        });
       })
       .catch(() => setTimeout(poll, 5000));
   })();

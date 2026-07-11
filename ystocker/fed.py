@@ -133,12 +133,13 @@ def _save_disk_cache(data: dict[str, Any]) -> None:
         log.warning("Fed: failed to write disk cache: %s", exc)
 
 
-# ---------------------------------------------------------------------------
-# Fetch helpers
-# ---------------------------------------------------------------------------
+# ── Fetch helpers ───────────────────────────────────────────────────────────
 _HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.4 Safari/605.1.15",
-    "Accept": "text/csv,text/plain,*/*",
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+    "Accept": "text/csv,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Cache-Control": "no-cache",
+    "Pragma": "no-cache",
 }
 
 
@@ -220,9 +221,13 @@ def _fetch_series(series_id: str) -> Optional[dict[str, Any]]:
         log.warning("Fed: no data rows parsed for %s", series_id)
         return None
 
+    def _fmt_latest():
+        v = values[-1]
+        if v is None: return "N/A"
+        return f"{v:.4f}" if raw_ratio else f"${v:.1f}B"
+
     log.info("Fed: %s — %d obs (%s … %s), latest %s",
-             series_id, len(dates), dates[0], dates[-1],
-             f"{values[-1]:.4f}" if raw_ratio else f"${values[-1] or 0:.1f}B")
+             series_id, len(dates), dates[0], dates[-1], _fmt_latest())
     return {"dates": dates, "values": values}
 
 
