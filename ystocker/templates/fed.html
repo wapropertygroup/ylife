@@ -836,6 +836,17 @@
     </div>
   </div>
 
+  <!-- SPY / 10Y Yield Ratio (Relative Rate Graph) -->
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up" id="spyTnxSection" style="display:none">
+    <div class="mb-3">
+      <h3 class="text-sm font-semibold text-slate-300" data-i18n="fed.spy_tnx_title">📊 Relative Rate Graph — SPY / 10Y Yield Ratio</h3>
+      <p class="text-xs text-slate-500 mt-0.5" data-i18n="fed.spy_tnx_desc">S&P 500 price divided by the 10Y Treasury yield. Rising ratio = stocks outperforming bonds (risk-on); falling = bonds outperforming stocks (risk-off).</p>
+    </div>
+    <div class="chart-container" style="height:200px">
+      <canvas id="spyTnxChart"></canvas>
+    </div>
+  </div>
+
   <!-- Real 10Y Yield (TIPS) vs S&P 500 -->
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up" id="realYieldSpySection" style="display:none">
     <div class="mb-3">
@@ -2320,15 +2331,22 @@ let _fedSeriesData = {};
   // ── Fed Balance Sheet vs 10Y Yield dual-axis chart
   (async () => {
     try {
-      const yc = await fetch('/api/yield-curve').then(r=>r.json());
+      const [yc, spy] = await Promise.all([
+        fetch('/api/yield-curve').then(r => r.json()),
+        fetch('/api/history/SPY?period=10y').then(r => r.json())
+      ]);
+
       const walcl = s['WALCL'];
       if (!walcl || !walcl.dates || !walcl.dates.length) return;
       const ten = yc?.us?.history_10y || null;
       if (!ten || !ten.dates || !ten.dates.length) return;
+      
       document.getElementById('fedYieldSection').style.display = 'block';
+
       // Build a daily-date → value map for the 10Y yield (daily data)
       const tenMap = {};
       ten.dates.forEach((d, i) => { if (ten.values[i] != null) tenMap[d] = ten.values[i]; });
+
       // For weekly WALCL dates, find the nearest trading day within ±3 days
       function nearestYield(dateStr) {
         if (tenMap[dateStr] != null) return tenMap[dateStr];
@@ -2343,8 +2361,10 @@ let _fedSeriesData = {};
         }
         return null;
       }
+
       const tenAligned = walcl.dates.map(d => nearestYield(d));
       const walcl_b = walcl.values.map(v => v != null ? +(v/1000).toFixed(1) : null);
+
       new Chart(document.getElementById('fedYieldChart'), {
         type: 'line',
         data: { labels: walcl.dates.slice(-260), datasets: [
@@ -2366,7 +2386,44 @@ let _fedSeriesData = {};
           interaction: { mode:'index', intersect:false },
         },
       });
-    } catch(e) { console.warn('Fed vs 10Y chart failed:', e); }
+
+      // ── SPY / 10Y Ratio Chart (Relative Rate Graph)
+      if (spy && spy.prices && spy.prices.length) {
+        document.getElementById('spyTnxSection').style.display = 'block';
+
+        const spyMap = {};
+        (spy.dates || []).forEach((d, i) => { if (spy.prices[i] != null) spyMap[d] = spy.prices[i]; });
+
+        const ratioDates = [];
+        const ratioValues = [];
+        ten.dates.forEach((d, i) => {
+          const sVal = spyMap[d];
+          const tVal = ten.values[i];
+          if (sVal != null && tVal != null && tVal > 0) {
+            ratioDates.push(d);
+            ratioValues.push(+(sVal / tVal).toFixed(2));
+          }
+        });
+
+        new Chart(document.getElementById('spyTnxChart'), {
+          type: 'line',
+          data: { labels: ratioDates.slice(-500), datasets: [
+            { label: 'SPY / 10Y Ratio', data: ratioValues.slice(-500),
+              borderColor: '#60a5fa', backgroundColor: 'rgba(96,165,250,0.08)',
+              borderWidth: 2, pointRadius: 0, fill: true, tension: 0.3, spanGaps: true }
+          ]},
+          options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false } },
+            scales: {
+              x: { grid: { color: '#1e293b' }, ticks: { color: '#64748b', maxTicksLimit: 6, maxRotation: 0 } },
+              y: { grid: { color: '#1e293b' }, ticks: { color: '#64748b' } },
+            },
+            interaction: { mode: 'index', intersect: false },
+          },
+        });
+      }
+    } catch(e) { console.warn('Fed charts failed:', e); }
   })();
 
   // ── Industrial Production + Housing Starts (Business Cycle)
