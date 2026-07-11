@@ -335,6 +335,7 @@ _ticker_backoff_attempts: dict[str, int] = {}  # ticker → consecutive failure 
 
 def _rolling_refresh_loop() -> None:
     """Continuously refresh all tickers in small batches spread over 5 minutes."""
+    global _cache_last_updated
     import random
 
     # Wait until the initial full fetch has populated the cache.
