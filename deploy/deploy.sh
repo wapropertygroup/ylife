@@ -346,7 +346,8 @@ if [[ \${#CERTBOT_DOMAINS[@]} -gt 0 ]]; then
     done
     FIRST_D=\$(echo \$domains | awk '{print \$1}')
     sudo certbot --nginx --cert-name "\$FIRST_D" \$CERT_D_FLAGS \
-      --non-interactive --agree-tos -m "$CERT_EMAIL" --redirect 2>&1 | tail -3
+      --non-interactive --agree-tos -m "$CERT_EMAIL" --redirect \
+      --allow-subset-of-names 2>&1 | tail -3
   done
   echo "[\$(TS)]    ✓ SSL certificates installed"
 else

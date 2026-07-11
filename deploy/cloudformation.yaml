@@ -372,31 +372,47 @@ Resources:
 
             MY_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)
 
-            # Wait for all domains to resolve
-            echo "$APPS" | while IFS='|' read -r NAME PORT DOMAIN STATIC; do
-              [ -z "$DOMAIN" ] && continue
-              echo "Waiting for DNS: $DOMAIN -> $MY_IP"
-              for i in $(seq 1 20); do
-                RESOLVED=$(dig +short "$DOMAIN" | tail -1)
-                [ "$RESOLVED" = "$MY_IP" ] && echo "  OK after $i checks" && break
-                echo "  attempt $i: got '$RESOLVED' — waiting 30s..."
-                sleep 30
-              done
+            # Wait for domains to resolve (parallel-ish check)
+            echo "Waiting for DNS propagation..."
+            MAX_WAIT=20
+            for i in $(seq 1 $MAX_WAIT); do
+              PENDING=0
+              while IFS='|' read -r NAME PORT DOMAIN STATIC; do
+                [ -z "$DOMAIN" ] && continue
+                for d in $DOMAIN; do
+                  RESOLVED=$(dig +short "$d" | tail -1)
+                  if [ "$RESOLVED" != "$MY_IP" ]; then
+                    echo "  $d: still '$RESOLVED' (waiting for $MY_IP)"
+                    PENDING=$((PENDING + 1))
+                  fi
+                done
+              done <<< "$APPS"
+
+              if [ "$PENDING" -eq 0 ]; then
+                echo "All domains resolved after $i checks."
+                break
+              fi
+              echo "  $PENDING checks still failing — attempt $i/$MAX_WAIT, waiting 30s..."
+              sleep 30
             done
 
             # Build certbot -d flags
             CERT_FLAGS=""
             while IFS='|' read -r NAME PORT DOMAIN STATIC; do
               [ -z "$DOMAIN" ] && continue
-              CERT_FLAGS="$CERT_FLAGS -d $DOMAIN"
+              for d in $DOMAIN; do
+                CERT_FLAGS="$CERT_FLAGS -d $d"
+              done
             done <<< "$APPS"
 
             if [ -n "$CERT_FLAGS" ]; then
+              # --allow-subset-of-names allows Certbot to succeed even if some domains haven't propagated yet
               certbot --nginx \
                       --non-interactive \
                       --agree-tos \
                       --email ${CertEmail} \
                       $CERT_FLAGS \
+                      --allow-subset-of-names \
                       --redirect || echo "Certbot failed — check /var/log/letsencrypt/letsencrypt.log"
             fi
 

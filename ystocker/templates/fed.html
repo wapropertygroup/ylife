@@ -1083,37 +1083,36 @@ let _fedSeriesData = {};
   const gridCol = '#1e293b';
   const tickCol = '#64748b';
 
-  // ── fetch data
-  let data;
-  try {
-    const resp = await fetch('/api/fed');
-    const text = await resp.text();
-    if (!text) {
-      document.getElementById('fedError').textContent = '⚠ API returned empty response.';
-      document.getElementById('fedError').classList.remove('hidden');
-      return;
-    }
+  // Robust fetch helper to prevent "Unhandled Promise Rejection" and crash on bad JSON
+  async function safeJsonFetch(url, options = {}) {
     try {
-      data = JSON.parse(text);
+      const resp = await fetch(url, options);
+      const text = await resp.text();
+      if (!text) return { error: 'Empty response' };
+      try {
+        const data = JSON.parse(text);
+        if (!resp.ok) data.error = data.error || `HTTP ${resp.status}`;
+        return data;
+      } catch(e) {
+        console.warn(`JSON parse failed for ${url}:`, e, 'Raw:', text.slice(0, 100));
+        return { error: `Invalid JSON: ${e.message}` };
+      }
     } catch(e) {
-      console.error('API parse error:', e, 'Raw:', text);
-      document.getElementById('fedError').textContent = '⚠ API parse error: ' + e;
-      document.getElementById('fedError').classList.remove('hidden');
-      return;
+      console.warn(`Network/fetch failed for ${url}:`, e);
+      return { error: `Fetch error: ${e.message || e}` };
     }
-    if (!resp.ok) {
-      document.getElementById('fedError').textContent = '⚠ ' + (data.error || 'Failed to load data.');
-      document.getElementById('fedError').classList.remove('hidden');
-      return;
-    }
-  } catch(e) {
-    document.getElementById('fedError').textContent = '⚠ Network error: ' + e;
+  }
+
+  // ── fetch data
+  const data = await safeJsonFetch('/api/fed');
+  if (data.error) {
+    document.getElementById('fedError').textContent = '⚠ ' + data.error;
     document.getElementById('fedError').classList.remove('hidden');
-    return;
+    if (!data.warming) return;
   }
 
   const s = data.series || {};
-  _fedSeriesData = s;  // expose for _loadFedSpy
+  _fedSeriesData = s;
 
   function lastVal(sid) {
     const d = s[sid];
@@ -2328,103 +2327,56 @@ let _fedSeriesData = {};
     }
   } catch(e) { console.warn('Fed chart currSpeedTrendChart failed:', e); }
 
-  // ── Fed Balance Sheet vs 10Y Yield dual-axis chart
-  (async () => {
-    try {
-      const [yc, spy] = await Promise.all([
-        fetch('/api/yield-curve').then(r => r.json()),
-        fetch('/api/history/SPY?period=10y').then(r => r.json())
-      ]);
+  // ── Pre-fetch macro data (consolidated to reduce network requests)
+  const [yc, spreadData, mkData, spy10y] = await Promise.all([
+    safeJsonFetch('/api/yield-curve'),
+    safeJsonFetch('/api/yield-spread'),
+    safeJsonFetch('/api/markets'),
+    safeJsonFetch('/api/history/SPY?period=10y')
+  ]);
 
-      const walcl = s['WALCL'];
-      if (!walcl || !walcl.dates || !walcl.dates.length) return;
-      const ten = yc?.us?.history_10y || null;
-      if (!ten || !ten.dates || !ten.dates.length) return;
-      
+  // ── Fed Balance Sheet vs 10Y Yield dual-axis chart & Relative Rate Graph
+  try {
+    const walcl = s['WALCL'], ten = yc?.us?.history_10y || null;
+    if (walcl?.dates?.length && ten?.dates?.length) {
       document.getElementById('fedYieldSection').style.display = 'block';
-
-      // Build a daily-date → value map for the 10Y yield (daily data)
-      const tenMap = {};
-      ten.dates.forEach((d, i) => { if (ten.values[i] != null) tenMap[d] = ten.values[i]; });
-
-      // For weekly WALCL dates, find the nearest trading day within ±3 days
+      const tenMap = {}; ten.dates.forEach((d, i) => { if (ten.values[i] != null) tenMap[d] = ten.values[i]; });
       function nearestYield(dateStr) {
         if (tenMap[dateStr] != null) return tenMap[dateStr];
         const base = new Date(dateStr);
-        for (let delta = 1; delta <= 3; delta++) {
-          for (const sign of [1, -1]) {
-            const d = new Date(base);
-            d.setDate(d.getDate() + sign * delta);
-            const key = d.toISOString().slice(0, 10);
-            if (tenMap[key] != null) return tenMap[key];
-          }
-        }
+        for (let delta = 1; delta <= 3; delta++) { for (const sign of [1, -1]) {
+          const d = new Date(base); d.setDate(d.getDate() + sign * delta);
+          const key = d.toISOString().slice(0, 10); if (tenMap[key] != null) return tenMap[key];
+        }}
         return null;
       }
-
       const tenAligned = walcl.dates.map(d => nearestYield(d));
       const walcl_b = walcl.values.map(v => v != null ? +(v/1000).toFixed(1) : null);
-
       new Chart(document.getElementById('fedYieldChart'), {
         type: 'line',
         data: { labels: walcl.dates.slice(-260), datasets: [
-          { label: 'Fed Assets ($T)', data: walcl_b.slice(-260),
-            borderColor: '#a78bfa', backgroundColor: 'rgba(167,139,250,0.08)',
-            borderWidth: 2, pointRadius: 0, fill: true, tension: 0.3, spanGaps: true, yAxisID: 'y' },
-          { label: '10Y Yield (%)', data: tenAligned.slice(-260),
-            borderColor: '#f87171', backgroundColor: 'transparent',
-            borderWidth: 1.5, pointRadius: 0, fill: false, tension: 0.3, spanGaps: true, yAxisID: 'yYield', borderDash:[4,3] },
+          { label: 'Fed Assets ($T)', data: walcl_b.slice(-260), borderColor: '#a78bfa', backgroundColor: 'rgba(167,139,250,0.08)', borderWidth: 2, pointRadius: 0, fill: true, tension: 0.3, spanGaps: true, yAxisID: 'y' },
+          { label: '10Y Yield (%)', data: tenAligned.slice(-260), borderColor: '#f87171', backgroundColor: 'transparent', borderWidth: 1.5, pointRadius: 0, fill: false, tension: 0.3, spanGaps: true, yAxisID: 'yYield', borderDash:[4,3] },
         ]},
-        options: {
-          responsive: true, maintainAspectRatio: false,
-          plugins: { legend:{display:false}, tooltip:{mode:'index',intersect:false,callbacks:{label:c=>c.dataset.yAxisID==='yYield'?` 10Y: ${c.raw?.toFixed(2)}%`:` Fed: $${c.raw?.toFixed(1)}T`}} },
-          scales: {
-            x: { grid:{color:'#1e293b'}, ticks:{color:'#64748b',maxTicksLimit:6,maxRotation:0} },
-            y: { grid:{color:'#1e293b'}, ticks:{color:'rgba(167,139,250,0.7)',callback:v=>'$'+v+'T'} },
-            yYield: { position:'right', grid:{drawOnChartArea:false}, ticks:{color:'rgba(248,113,113,0.7)',callback:v=>v.toFixed(1)+'%'} },
-          },
-          interaction: { mode:'index', intersect:false },
-        },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend:{display:false}, tooltip:{mode:'index',intersect:false,callbacks:{label:c=>c.dataset.yAxisID==='yYield'?` 10Y: ${c.raw?.toFixed(2)}%`:` Fed: $${c.raw?.toFixed(1)}T`}} }, scales: { x: { grid:{color:'#1e293b'}, ticks:{color:'#64748b',maxTicksLimit:6,maxRotation:0} }, y: { grid:{color:'#1e293b'}, ticks:{color:'rgba(167,139,250,0.7)',callback:v=>'$'+v+'T'} }, yYield: { position:'right', grid:{drawOnChartArea:false}, ticks:{color:'rgba(248,113,113,0.7)',callback:v=>v.toFixed(1)+'%'} } }, interaction: { mode:'index', intersect:false } },
       });
 
-      // ── SPY / 10Y Ratio Chart (Relative Rate Graph)
-      if (spy && spy.prices && spy.prices.length) {
+      if (spy10y && spy10y.prices && spy10y.prices.length) {
         document.getElementById('spyTnxSection').style.display = 'block';
-
-        const spyMap = {};
-        (spy.dates || []).forEach((d, i) => { if (spy.prices[i] != null) spyMap[d] = spy.prices[i]; });
-
-        const ratioDates = [];
-        const ratioValues = [];
+        const spyMap = {}; (spy10y.dates || []).forEach((d, i) => { if (spy10y.prices[i] != null) spyMap[d] = spy10y.prices[i]; });
+        const ratioDates = [], ratioValues = [];
         ten.dates.forEach((d, i) => {
-          const sVal = spyMap[d];
-          const tVal = ten.values[i];
-          if (sVal != null && tVal != null && tVal > 0) {
-            ratioDates.push(d);
-            ratioValues.push(+(sVal / tVal).toFixed(2));
-          }
+          const sVal = spyMap[d], tVal = ten.values[i];
+          if (sVal != null && tVal != null && tVal > 0) { ratioDates.push(d); ratioValues.push(+(sVal / tVal).toFixed(2)); }
         });
-
         new Chart(document.getElementById('spyTnxChart'), {
           type: 'line',
-          data: { labels: ratioDates.slice(-500), datasets: [
-            { label: 'SPY / 10Y Ratio', data: ratioValues.slice(-500),
-              borderColor: '#60a5fa', backgroundColor: 'rgba(96,165,250,0.08)',
-              borderWidth: 2, pointRadius: 0, fill: true, tension: 0.3, spanGaps: true }
-          ]},
-          options: {
-            responsive: true, maintainAspectRatio: false,
-            plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false } },
-            scales: {
-              x: { grid: { color: '#1e293b' }, ticks: { color: '#64748b', maxTicksLimit: 6, maxRotation: 0 } },
-              y: { grid: { color: '#1e293b' }, ticks: { color: '#64748b' } },
-            },
-            interaction: { mode: 'index', intersect: false },
-          },
+          data: { labels: ratioDates.slice(-500), datasets: [{ label: 'SPY / 10Y Ratio', data: ratioValues.slice(-500), borderColor: '#60a5fa', backgroundColor: 'rgba(96,165,250,0.08)', borderWidth: 2, pointRadius: 0, fill: true, tension: 0.3, spanGaps: true }]},
+          options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false } }, scales: { x: { grid: { color: '#1e293b' }, ticks: { color: '#64748b', maxTicksLimit: 6, maxRotation: 0 } }, y: { grid: { color: '#1e293b' }, ticks: { color: '#64748b' } } }, interaction: { mode: 'index', intersect: false } },
         });
       }
-    } catch(e) { console.warn('Fed charts failed:', e); }
-  })();
+    }
+  } catch(e) { console.warn('Fed yield charts failed:', e); }
 
   // ── Industrial Production + Housing Starts (Business Cycle)
   let _cycleIndpro = null, _cycleHoust = null, _cycleChart = null;
@@ -2490,108 +2442,67 @@ let _fedSeriesData = {};
   let _gdpSpyGdp = null, _gdpSpySpy = null, _gdpSpyChart = null;
   try {
     const gdp = s['GDPC1'];
-    if (gdp && gdp.dates && gdp.dates.length > 4) {
+    if (gdp?.dates?.length > 4 && spy10y?.prices?.length) {
       document.getElementById('gdpSpySection').style.display = 'block';
-      const spyResp = await fetch('/api/history/SPY?period=10y');
-      const spy = await spyResp.json();
-      if (spy.prices && spy.prices.length) {
-        const spyMonthMap = {};
-        (spy.dates||[]).forEach((d,i)=>{ if(spy.prices[i]!=null) spyMonthMap[d.slice(0,7)]=spy.prices[i]; });
-        const gdpBase = gdp.values.find(v=>v!=null);
-        const spyAligned = gdp.dates.map(d=>spyMonthMap[d.slice(0,7)]??null);
-        const spyBase = spyAligned.find(v=>v!=null);
-        const gdpNorm = gdp.values.map(v=>v!=null&&gdpBase?+(v/gdpBase*100).toFixed(1):null);
-        const spyNorm = spyAligned.map(v=>v!=null&&spyBase?+(v/spyBase*100).toFixed(1):null);
-        _gdpSpyGdp = { dates: gdp.dates, gdpNorm, spyNorm };
-
-        function _renderGdpSpy(years) {
-          const cutDate = years > 0
-            ? new Date(new Date() - years * 365 * 86400000).toISOString().slice(0,10)
-            : '1900-01-01';
-          const startIdx = _gdpSpyGdp.dates.findIndex(d => d >= cutDate);
-          const idx = startIdx < 0 ? 0 : startIdx;
-          const dates   = _gdpSpyGdp.dates.slice(idx);
-          const gdpVals = _gdpSpyGdp.gdpNorm.slice(idx);
-          const spyVals = _gdpSpyGdp.spyNorm.slice(idx);
-          if (_gdpSpyChart) { _gdpSpyChart.destroy(); _gdpSpyChart = null; }
-          _gdpSpyChart = new Chart(document.getElementById('gdpSpyChart'), {
-            type:'line',
-            data:{labels:dates, datasets:[
-              {label:'Real GDP',data:gdpVals,borderColor:'#34d399',backgroundColor:'rgba(52,211,153,0.07)',borderWidth:2,pointRadius:0,fill:true,tension:0.3,spanGaps:true},
-              {label:'S&P 500',data:spyVals,borderColor:'#38bdf8',backgroundColor:'transparent',borderWidth:1.5,pointRadius:0,fill:false,tension:0.3,spanGaps:true,borderDash:[4,3]},
-            ]},
-            options:{responsive:true,maintainAspectRatio:false,
-              plugins:{legend:{display:false},tooltip:{mode:'index',intersect:false,callbacks:{label:c=>` ${c.dataset.label}: ${c.raw?.toFixed(0)} (norm=100)`}}},
-              scales:{x:{grid:{color:gridCol},ticks:{color:tickCol,maxTicksLimit:6,maxRotation:0}},y:{grid:{color:gridCol},ticks:{color:tickCol,callback:v=>v.toFixed(0)},title:{display:true,text:'Normalised (start=100)',color:'#475569',font:{size:10}}}},
-              interaction:{mode:'index',intersect:false}},
-          });
-        }
-        _renderGdpSpy(0);
-        document.querySelectorAll('[data-gdpspy-years]').forEach(btn => {
-          btn.addEventListener('click', () => {
-            document.querySelectorAll('[data-gdpspy-years]').forEach(b=>b.classList.remove('active'));
-            btn.classList.add('active');
-            _renderGdpSpy(+btn.dataset.gdpspyYears);
-          });
+      const spyMonthMap = {}; (spy10y.dates||[]).forEach((d,i)=>{ if(spy10y.prices[i]!=null) spyMonthMap[d.slice(0,7)]=spy10y.prices[i]; });
+      const gdpBase = gdp.values.find(v=>v!=null), spyAligned = gdp.dates.map(d=>spyMonthMap[d.slice(0,7)]??null), spyBase = spyAligned.find(v=>v!=null);
+      const gdpNorm = gdp.values.map(v=>v!=null&&gdpBase?+(v/gdpBase*100).toFixed(1):null), spyNorm = spyAligned.map(v=>v!=null&&spyBase?+(v/spyBase*100).toFixed(1):null);
+      _gdpSpyGdp = { dates: gdp.dates, gdpNorm, spyNorm };
+      function _renderGdpSpy(years) {
+        const cutDate = years > 0 ? new Date(new Date() - years * 365 * 86400000).toISOString().slice(0,10) : '1900-01-01';
+        const idx = Math.max(0, gdp.dates.findIndex(d => d >= cutDate));
+        if (_gdpSpyChart) _gdpSpyChart.destroy();
+        _gdpSpyChart = new Chart(document.getElementById('gdpSpyChart'), {
+          type:'line',
+          data:{labels:gdp.dates.slice(idx), datasets:[
+            {label:'Real GDP',data:gdpNorm.slice(idx),borderColor:'#34d399',backgroundColor:'rgba(52,211,153,0.07)',borderWidth:2,pointRadius:0,fill:true,tension:0.3,spanGaps:true},
+            {label:'S&P 500',data:spyNorm.slice(idx),borderColor:'#38bdf8',backgroundColor:'transparent',borderWidth:1.5,pointRadius:0,fill:false,tension:0.3,spanGaps:true,borderDash:[4,3]},
+          ]},
+          options:{responsive:true,maintainAspectRatio:false, plugins:{legend:{display:false},tooltip:{mode:'index',intersect:false,callbacks:{label:c=>` ${c.dataset.label}: ${c.raw?.toFixed(0)} (norm=100)`}}}, scales:{x:{grid:{color:gridCol},ticks:{color:tickCol,maxTicksLimit:6,maxRotation:0}},y:{grid:{color:gridCol},ticks:{color:tickCol,callback:v=>v.toFixed(0)},title:{display:true,text:'Normalised (start=100)',color:'#475569',font:{size:10}}}}, interaction:{mode:'index',intersect:false}},
         });
       }
+      _renderGdpSpy(0);
+      document.querySelectorAll('[data-gdpspy-years]').forEach(btn => btn.addEventListener('click', () => {
+        document.querySelectorAll('[data-gdpspy-years]').forEach(b=>b.classList.remove('active')); btn.classList.add('active');
+        _renderGdpSpy(+btn.dataset.gdpspyYears);
+      }));
     }
-  } catch(e){console.warn('Fed GDP/SPY:',e);}
+  } catch(e) { console.warn('Fed GDP/SPY failed:', e); }
 
   // ── M2 Growth Rate vs Breakeven Inflation
   let _m2InflM2 = null, _m2InflBie = null, _m2InflChart = null;
   try {
-    const m2 = s['M2SL'];
-    const bie = s['T10YIE'];
-    if (m2&&m2.dates.length>14&&bie&&bie.dates.length>4) {
+    const m2 = s['M2SL'], bie = s['T10YIE'];
+    if (m2?.dates?.length > 14 && bie?.dates?.length > 4) {
       document.getElementById('m2InflSection').style.display='block';
-      // M2 YoY %: compare value to same month 12 months ago
-      const m2YoY=m2.values.map((v,i)=>{
-        if(v==null)return null;
-        const target=new Date(m2.dates[i]);target.setFullYear(target.getFullYear()-1);
-        const ym=target.toISOString().slice(0,7);
-        const idx=m2.dates.findIndex(d=>d.slice(0,7)===ym);
-        if(idx<0||m2.values[idx]==null)return null;
-        return +((v-m2.values[idx])/m2.values[idx]*100).toFixed(2);
+      const m2YoY = m2.values.map((v,i)=>{
+        if(v==null) return null; const target = new Date(m2.dates[i]); target.setFullYear(target.getFullYear()-1);
+        const ym = target.toISOString().slice(0,7), idx = m2.dates.findIndex(d=>d.slice(0,7)===ym);
+        return (idx>=0 && m2.values[idx]!=null) ? +((v-m2.values[idx])/m2.values[idx]*100).toFixed(2) : null;
       });
-      // Align breakeven to M2 monthly dates
-      const bieMap={};bie.dates.forEach((d,i)=>{if(bie.values[i]!=null)bieMap[d.slice(0,7)]=bie.values[i];});
-      const bieAligned=m2.dates.map(d=>bieMap[d.slice(0,7)]??null);
-      _m2InflM2  = { dates: m2.dates, yoy: m2YoY };
-      _m2InflBie = bieAligned;
-
+      const bieMap = {}; bie.dates.forEach((d,i)=>{if(bie.values[i]!=null)bieMap[d.slice(0,7)]=bie.values[i];});
+      const bieAligned = m2.dates.map(d=>bieMap[d.slice(0,7)]??null);
+      _m2InflM2 = { dates: m2.dates, yoy: m2YoY }; _m2InflBie = bieAligned;
       function _renderM2Infl(years) {
-        const cutDate = years > 0
-          ? new Date(new Date() - years * 365 * 86400000).toISOString().slice(0,10)
-          : '1900-01-01';
-        const startIdx = _m2InflM2.dates.findIndex(d => d >= cutDate);
-        const idx = startIdx < 0 ? 0 : startIdx;
-        const dates   = _m2InflM2.dates.slice(idx);
-        const m2Vals  = _m2InflM2.yoy.slice(idx);
-        const bieVals = _m2InflBie.slice(idx);
-        if (_m2InflChart) { _m2InflChart.destroy(); _m2InflChart = null; }
+        const cutDate = years > 0 ? new Date(new Date() - years * 365 * 86400000).toISOString().slice(0,10) : '1900-01-01';
+        const idx = Math.max(0, m2.dates.findIndex(d => d >= cutDate));
+        if (_m2InflChart) _m2InflChart.destroy();
         _m2InflChart = new Chart(document.getElementById('m2InflChart'), {
           type:'line',
-          data:{labels:dates, datasets:[
-            {label:'M2 Growth YoY%',data:m2Vals,borderColor:'#22d3ee',backgroundColor:'rgba(34,211,238,0.07)',borderWidth:1.5,pointRadius:0,fill:true,tension:0.3,spanGaps:true,yAxisID:'y'},
-            {label:'10Y Breakeven',data:bieVals,borderColor:'#fbbf24',backgroundColor:'transparent',borderWidth:1.5,pointRadius:0,fill:false,tension:0.3,spanGaps:true,yAxisID:'y',borderDash:[4,3]},
+          data:{labels:m2.dates.slice(idx), datasets:[
+            {label:'M2 Growth YoY%',data:m2YoY.slice(idx),borderColor:'#22d3ee',backgroundColor:'rgba(34,211,238,0.07)',borderWidth:1.5,pointRadius:0,fill:true,tension:0.3,spanGaps:true,yAxisID:'y'},
+            {label:'10Y Breakeven',data:bieAligned.slice(idx),borderColor:'#fbbf24',backgroundColor:'transparent',borderWidth:1.5,pointRadius:0,fill:false,tension:0.3,spanGaps:true,yAxisID:'y',borderDash:[4,3]},
           ]},
-          options:{responsive:true,maintainAspectRatio:false,
-            plugins:{legend:{display:false},tooltip:{mode:'index',intersect:false,callbacks:{label:c=>` ${c.dataset.label}: ${c.raw?.toFixed(2)}%`}}},
-            scales:{x:{grid:{color:gridCol},ticks:{color:tickCol,maxTicksLimit:6,maxRotation:0}},y:{grid:{color:gridCol},ticks:{color:tickCol,callback:v=>(v>=0?'+':'')+v.toFixed(1)+'%'}}},
-            interaction:{mode:'index',intersect:false}},
+          options:{responsive:true,maintainAspectRatio:false, plugins:{legend:{display:false},tooltip:{mode:'index',intersect:false,callbacks:{label:c=>` ${c.dataset.label}: ${c.raw?.toFixed(2)}%`}}}, scales:{x:{grid:{color:gridCol},ticks:{color:tickCol,maxTicksLimit:6,maxRotation:0}},y:{grid:{color:gridCol},ticks:{color:tickCol,callback:v=>(v>=0?'+':'')+v.toFixed(1)+'%'}}}, interaction:{mode:'index',intersect:false}},
         });
       }
       _renderM2Infl(0);
-      document.querySelectorAll('[data-m2infl-years]').forEach(btn => {
-        btn.addEventListener('click', () => {
-          document.querySelectorAll('[data-m2infl-years]').forEach(b=>b.classList.remove('active'));
-          btn.classList.add('active');
-          _renderM2Infl(+btn.dataset.m2inflYears);
-        });
-      });
+      document.querySelectorAll('[data-m2infl-years]').forEach(btn => btn.addEventListener('click', () => {
+        document.querySelectorAll('[data-m2infl-years]').forEach(b=>b.classList.remove('active')); btn.classList.add('active');
+        _renderM2Infl(+btn.dataset.m2inflYears);
+      }));
     }
-  } catch(e){console.warn('Fed M2/Inflation:',e);}
+  } catch(e) { console.warn('Fed M2/Inflation failed:', e); }
 
   // ── Real GDP Growth vs Industrial Production
   let _gdpIsmGdp = null, _gdpIsmIndpro = null, _gdpIsmChart = null;
