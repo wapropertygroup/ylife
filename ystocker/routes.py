@@ -5170,6 +5170,8 @@ def api_yield_curve():
 _YIELD_SPREAD_CACHE: dict = {}
 _YIELD_SPREAD_LOCK = threading.Lock()
 _YIELD_SPREAD_TTL = 4 * 3600
+_YIELD_SPREAD_FETCH_EVENT = threading.Event()
+_YIELD_SPREAD_FETCH_EVENT.set()  # Initially set (meaning "not fetching")
 
 
 @bp.route("/api/yield-spread")
@@ -5183,77 +5185,108 @@ def api_yield_spread():
     """
     import datetime as _dt
 
+    # 1. Check cache first
     with _YIELD_SPREAD_LOCK:
         entry = _YIELD_SPREAD_CACHE.get("data")
         if entry and time.time() - entry["ts"] < _YIELD_SPREAD_TTL:
             return jsonify(entry["data"])
 
-    # Hardcoded NBER recession periods (start, end) — more reliable than FRED USREC fetch
-    # Updated through 2024; add new recessions here as NBER declares them.
-    _NBER_RECESSIONS = [
-        ("1980-01-01", "1980-07-31"), ("1981-07-01", "1982-11-30"),
-        ("1990-07-01", "1991-03-31"), ("2001-03-01", "2001-11-30"),
-        ("2007-12-01", "2009-06-30"), ("2020-02-01", "2020-04-30"),
-    ]
+    # 2. Cache is empty or stale. Deduplicate concurrent fetches.
+    # If an event is NOT set, another thread is already fetching.
+    is_first_fetcher = _YIELD_SPREAD_FETCH_EVENT.is_set()
+    if not is_first_fetcher:
+        # Wait for the other thread to finish fetching (up to 30s)
+        log.info("yield-spread: waiting for concurrent fetch to complete...")
+        _YIELD_SPREAD_FETCH_EVENT.wait(timeout=30)
+        # Check cache again
+        with _YIELD_SPREAD_LOCK:
+            entry = _YIELD_SPREAD_CACHE.get("data")
+            if entry and time.time() - entry["ts"] < _YIELD_SPREAD_TTL:
+                return jsonify(entry["data"])
+        # If we get here, the other thread failed. Fall through to try fetching.
 
-    def _in_recession(date_str: str) -> int:
-        for start, end in _NBER_RECESSIONS:
-            if start <= date_str <= end:
-                return 1
-        return 0
-
+    # 3. We are the designated fetcher
+    _YIELD_SPREAD_FETCH_EVENT.clear()
     try:
-        import requests as _req
-        import concurrent.futures as _cf_ys
-        headers = {"User-Agent": "Mozilla/5.0 (research)"}
+        # Hardcoded NBER recession periods (start, end) — more reliable than FRED USREC fetch
+        # Updated through 2024; add new recessions here as NBER declares them.
+        _NBER_RECESSIONS = [
+            ("1980-01-01", "1980-07-31"), ("1981-07-01", "1982-11-30"),
+            ("1990-07-01", "1991-03-31"), ("2001-03-01", "2001-11-30"),
+            ("2007-12-01", "2009-06-30"), ("2020-02-01", "2020-04-30"),
+        ]
 
-        def _fred(sid):
-            url = f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={sid}"
-            r = _req.get(url, headers=headers, timeout=20)
-            r.raise_for_status()
-            rows = [line.split(",") for line in r.text.strip().splitlines()[1:]
-                    if "," in line and line.split(",")[1].strip() not in ("", ".")]
-            return sid, {row[0]: float(row[1]) for row in rows}
+        def _in_recession(date_str: str) -> int:
+            for start, end in _NBER_RECESSIONS:
+                if start <= date_str <= end:
+                    return 1
+            return 0
 
-        # Fetch DGS10 and DGS2 in parallel (skip USREC — using hardcoded fallback)
-        with _cf_ys.ThreadPoolExecutor(max_workers=2) as _pool:
-            futs = {sid: _pool.submit(_fred, sid) for sid in ("DGS10", "DGS2")}
-            results = {}
-            for sid, fut in futs.items():
-                try:
-                    _, data = fut.result(timeout=25)
-                    results[sid] = data
-                except Exception as exc:
-                    raise RuntimeError(f"FRED {sid} failed: {exc}") from exc
-
-        dgs10 = results["DGS10"]
-        dgs2  = results["DGS2"]
-
-    except Exception as fred_exc:
-        log.warning("yield-spread: FRED failed (%s), trying yfinance fallback", fred_exc)
-        # Fallback: use yfinance for TNX (10Y) and ^TWO or FRED-equivalent
         try:
-            import yfinance as yf
-            import pandas as _pd
-            tnx = yf.Ticker("^TNX").history(period="10y", interval="1d")
-            # Best fallback: use the yield curve endpoint's existing data for 2Y
-            dgs2 = {}
+            import requests as _req
+            import concurrent.futures as _cf_ys
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+                "Accept": "text/csv,*/*",
+            }
+            # Use a session to avoid proxy/timeout issues
+            session = _req.Session()
+            session.trust_env = False
+            session.headers.update(headers)
+
+            def _fred(sid):
+                url = f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={sid}"
+                r = session.get(url, timeout=20)
+                r.raise_for_status()
+                rows = [line.split(",") for line in r.text.strip().splitlines()[1:]
+                        if "," in line and line.split(",")[1].strip() not in ("", ".")]
+                return sid, {row[0]: float(row[1]) for row in rows}
+
+            # Fetch DGS10 and DGS2 in parallel
+            with _cf_ys.ThreadPoolExecutor(max_workers=2) as _pool:
+                futs = {sid: _pool.submit(_fred, sid) for sid in ("DGS10", "DGS2")}
+                results = {}
+                for sid, fut in futs.items():
+                    try:
+                        _, data = fut.result(timeout=25)
+                        results[sid] = data
+                    except Exception as exc:
+                        raise RuntimeError(f"FRED {sid} failed: {exc}") from exc
+
+            dgs10 = results["DGS10"]
+            dgs2  = results["DGS2"]
+
+        except Exception as fred_exc:
+            log.warning("yield-spread: FRED failed (%s), trying yfinance fallback", fred_exc)
+            # Fallback: use yfinance for TNX (10Y) and ^TWO or FRED-equivalent
             try:
-                with _YIELD_CURVE_CACHE_LOCK:
-                    yc_entry = _YIELD_CURVE_CACHE.get(_YIELD_CURVE_CACHE_VER)
-                if yc_entry and yc_entry.get("data"):
-                    h2y = yc_entry["data"].get("history_2y")
-                    if h2y and h2y.get("dates"):
-                        dgs2 = {d: v for d, v in zip(h2y["dates"], h2y["values"]) if v is not None}
-            except Exception:
-                pass
-            dgs10 = {}
-            for dt, row in tnx.iterrows():
-                if not _pd.isna(row["Close"]):
-                    dgs10[str(dt.date())] = round(float(row["Close"]), 3)
-        except Exception as yf_exc:
-            log.warning("yield-spread: yfinance fallback also failed: %s", yf_exc)
-            return jsonify({"error": str(yf_exc)}), 502
+                import yfinance as yf
+                import pandas as _pd
+                time.sleep(1) # Be polite to yfinance
+                tnx = yf.Ticker("^TNX").history(period="10y", interval="1d")
+                
+                # Best fallback: use the yield curve endpoint's existing data for 2Y
+                dgs2 = {}
+                try:
+                    with _YIELD_CURVE_CACHE_LOCK:
+                        yc_entry = _YIELD_CURVE_CACHE.get(_YIELD_CURVE_CACHE_VER)
+                    if yc_entry and yc_entry.get("data"):
+                        h2y = yc_entry["data"].get("history_2y")
+                        if h2y and h2y.get("dates"):
+                            dgs2 = {d: v for d, v in zip(h2y["dates"], h2y["values"]) if v is not None}
+                except Exception:
+                    pass
+                    
+                if not dgs2:
+                    raise RuntimeError("No 2Y data available in yield curve cache")
+                    
+                dgs10 = {}
+                for dt, row in tnx.iterrows():
+                    if not _pd.isna(row["Close"]):
+                        dgs10[str(dt.date())] = round(float(row["Close"]), 3)
+            except Exception as yf_exc:
+                log.warning("yield-spread: yfinance fallback also failed: %s", yf_exc)
+                return jsonify({"error": str(yf_exc)}), 502
 
         if not dgs10 or not dgs2:
             return jsonify({"error": "No data from either FRED or yfinance"}), 502
@@ -5273,13 +5306,18 @@ def api_yield_spread():
 
         dates, spread, recession = zip(*filtered)
         result = {"dates": list(dates), "spread": list(spread), "recession": list(recession)}
+        
         with _YIELD_SPREAD_LOCK:
             _YIELD_SPREAD_CACHE["data"] = {"ts": time.time(), "data": result}
+            
         return jsonify(result)
 
     except Exception as exc:
         log.warning("yield-spread: fetch failed: %s", exc)
         return jsonify({"error": str(exc)}), 502
+    finally:
+        # 4. Always signal that the fetch attempt is complete
+        _YIELD_SPREAD_FETCH_EVENT.set()
 
 
 # ---------------------------------------------------------------------------
