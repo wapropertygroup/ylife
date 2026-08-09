@@ -4059,6 +4059,9 @@ function _renderYieldSpread(range) {
 })();
 
 // Market Breadth — every MA period, with range selector (1Y / 3Y / 5Y / 10Y)
+// i18n.js exposes `I18n` as a top-level const, not as window.I18n — reach it by
+// bare name (guarded), the same way the rest of this page does.
+const _brI18n = () => (typeof I18n !== 'undefined' ? I18n : null);
 let _brData = null, _brChart50 = null, _brChartRsp = null;
 const _BR_WEEKS = { '1y': 52, '3y': 156, '5y': 260, '10y': 520 };
 let _brRange = '3y';
@@ -4075,6 +4078,10 @@ const _BR_MA_COLORS = {
   200: '#bae6fd',
 };
 const _BR_MA_FALLBACK = '#38bdf8';
+// Line weight also steps with the period — a second, colour-independent cue for
+// the same ordering, and it keeps the noisy fast MAs from shouting over the
+// slow ones they are meant to be read against.
+const _BR_MA_WIDTH = { 20: 1.25, 50: 1.5, 100: 1.75, 150: 2, 200: 2.25 };
 // Series the user has switched off via a legend chip.
 const _brHidden = new Set();
 
@@ -4086,6 +4093,15 @@ function _brPeriods() {
   return (declared && declared.length ? declared : keys).filter(
     p => (_brData.pct_above_ma || {})[String(p)]?.dates?.length
   ).sort((a, b) => a - b);
+}
+
+/** Reflect _brHidden onto the chips, in place — no DOM rebuild, so a chip keeps
+ *  keyboard focus across a toggle. The CSS dims aria-pressed="false". */
+function _syncBreadthChips() {
+  document.querySelectorAll('#breadthMaLegend .ma-chip').forEach(chip => {
+    const p = Number(chip.dataset.maToggle);
+    chip.setAttribute('aria-pressed', _brHidden.has(p) ? 'false' : 'true');
+  });
 }
 
 /** Build the clickable legend / current-reading row. */
@@ -4102,7 +4118,7 @@ function _renderBreadthLegend() {
     chip.className = 'ma-chip';
     chip.dataset.maToggle = String(p);
     chip.setAttribute('aria-pressed', on ? 'true' : 'false');
-    chip.title = (window.I18n?.t?.('markets.breadth_ma_toggle_hint')) || 'Click to show/hide this series';
+    chip.title = _brI18n()?.t('markets.breadth_ma_toggle_hint') || 'Click to show/hide this series';
 
     const sw = document.createElement('span');
     sw.className = 'ma-swatch';
@@ -4122,18 +4138,19 @@ function _renderBreadthLegend() {
       // Never let the reader switch off every series.
       if (!_brHidden.has(p) && _brHidden.size >= periods.length - 1) return;
       if (_brHidden.has(p)) _brHidden.delete(p); else _brHidden.add(p);
+      _syncBreadthChips();   // keep the chip's pressed/dimmed state truthful
       _renderBreadth(_brRange);
     });
     box.appendChild(chip);
   });
-  try { window.I18n?.apply?.(box); } catch (_) {}
+  try { _brI18n()?.apply(box); } catch (_) {}
 }
 
 function _renderBreadthFootnote() {
   const el = document.getElementById('breadthFootnote');
   if (!el || !_brData) return;
   const n = _brData.universe;
-  const tpl = (window.I18n?.t?.('markets.breadth_source_note'))
+  const tpl = _brI18n()?.t('markets.breadth_source_note')
     || 'Diffusion index computed from {n} S&P 500 constituents · as of {d}';
   el.textContent = tpl.replace('{n}', n ?? '—').replace('{d}', _brData.asof || '—');
 }
@@ -4163,11 +4180,11 @@ function _renderBreadth(range) {
     const byDate = new Map();
     s.dates.forEach((d, i) => byDate.set(d, s.values[i]));
     return {
-      ...(window.I18n?.label?.('chart.ma_breadth_' + p, p + '-day') || { label: p + '-day' }),
+      ...(_brI18n()?.label('chart.ma_breadth_' + p, p + '-day') || { label: p + '-day' }),
       data: labels.map(d => (byDate.has(d) ? byDate.get(d) : null)),
       borderColor: _BR_MA_COLORS[p] || _BR_MA_FALLBACK,
       backgroundColor: 'transparent',
-      borderWidth: 2, pointRadius: 0, pointHitRadius: 12,
+      borderWidth: _BR_MA_WIDTH[p] || 2, pointRadius: 0, pointHitRadius: 12,
       fill: false, tension: 0.3, spanGaps: false,
     };
   });
@@ -4182,12 +4199,15 @@ function _renderBreadth(range) {
       type: 'line',
       data: { labels, datasets },
       plugins: [{ afterDraw(c) {
+        // 50% = the neutral line: above it more constituents are in uptrends
+        // than not. Labelled on the right so it clears the y-axis ticks.
         const {ctx, chartArea:a, scales:{y}} = c;
         const py = y.getPixelForValue(50);
         if (py >= a.top && py <= a.bottom) {
           ctx.save(); ctx.strokeStyle='rgba(251,191,36,0.4)'; ctx.lineWidth=1; ctx.setLineDash([3,3]);
           ctx.beginPath(); ctx.moveTo(a.left,py); ctx.lineTo(a.right,py); ctx.stroke();
-          ctx.fillStyle='#fbbf2488'; ctx.font='9px Inter'; ctx.fillText('50%',a.left+3,py-2); ctx.restore();
+          ctx.setLineDash([]); ctx.fillStyle='#fbbf24aa'; ctx.font='9px Inter';
+          ctx.textAlign='right'; ctx.fillText('50%', a.right-2, py-3); ctx.restore();
         }
       }}],
       options: {
@@ -4241,6 +4261,14 @@ function _renderBreadth(range) {
     _renderBreadthLegend();
     _renderBreadthFootnote();
     _renderBreadth('3y');  // default 3Y
+
+    // The footnote interpolates {n}/{d} into a translated template and the chip
+    // tooltips are attributes, so neither is reachable by apply()'s [data-i18n]
+    // walk — rebuild both when the language changes.
+    document.addEventListener('i18n:langchange', () => {
+      _renderBreadthLegend();
+      _renderBreadthFootnote();
+    });
 
     // Wire range buttons
     document.querySelectorAll('[data-breadth-range]').forEach(btn => {

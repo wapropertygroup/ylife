@@ -165,6 +165,14 @@ _cache_data: Optional[dict[str, Any]] = None
 _cache_ts: Optional[float] = None
 _cache_lock = threading.Lock()
 
+# Serialises rebuilds so concurrent requests can never stack 500-ticker
+# downloads on top of each other, and throttles retries after a failure: a
+# broken upstream must not turn every page view into a 20s blocking fetch
+# (that is exactly how this endpoint used to time out behind nginx).
+_build_lock = threading.Lock()
+_last_build_attempt: float = 0.0
+_BUILD_RETRY_COOLDOWN = 10 * 60   # 10 minutes
+
 _warming = False
 _warming_lock = threading.Lock()
 
@@ -294,14 +302,30 @@ def _build_cache() -> dict[str, Any]:
 # Public API
 # ---------------------------------------------------------------------------
 
-def get_breadth(force: bool = False) -> dict[str, Any]:
-    """Return the breadth payload, using memory -> disk -> recompute in order.
+def _serve_stale() -> Optional[dict[str, Any]]:
+    """Return an expired disk cache, flagged, or None if there is nothing."""
+    global _cache_data
+    stale = _load_disk_cache(ignore_ttl=True)
+    if not stale:
+        return None
+    stale = {**stale, "stale": True}
+    with _cache_lock:
+        # Publish to memory but leave _cache_ts alone so a later call still
+        # knows the data is expired and will retry once the cooldown lapses.
+        _cache_data = stale
+    return stale
 
-    Never raises for a caller that already has data available: if a recompute
-    fails, an expired disk cache is served rather than an error, because a
-    day-old diffusion index is far more useful than an empty chart.
+
+def get_breadth(force: bool = False) -> dict[str, Any]:
+    """Return the breadth payload, using memory -> disk -> rebuild in order.
+
+    A caller that has *any* data available never gets an exception: if the
+    rebuild fails, an expired disk cache is served instead, because a day-old
+    diffusion index is far more useful than an empty chart. Rebuilds are
+    serialised and rate-limited so a cold or broken cache cannot pile 20-second
+    downloads onto every in-flight request.
     """
-    global _cache_data, _cache_ts
+    global _cache_data, _cache_ts, _last_build_attempt
     now = time.time()
 
     with _cache_lock:
@@ -315,23 +339,37 @@ def get_breadth(force: bool = False) -> dict[str, Any]:
                 _cache_data, _cache_ts = disk, disk.get("_ts", now)
             return disk
 
-    try:
-        data = _build_cache()
-    except Exception as exc:
-        log.warning("Breadth: rebuild failed (%s) — falling back to stale cache", exc)
-        stale = _load_disk_cache(ignore_ttl=True)
-        if stale:
-            stale["stale"] = True
-            with _cache_lock:
-                # Keep the stale timestamp so the next request retries the rebuild.
-                _cache_data, _cache_ts = stale, None
-            return stale
-        raise
+    with _build_lock:
+        # Another thread may have finished a rebuild while we waited here.
+        with _cache_lock:
+            if not force and _cache_data and _cache_ts and (time.time() - _cache_ts) < _CACHE_TTL:
+                return _cache_data
 
-    _save_disk_cache(data)
-    with _cache_lock:
-        _cache_data, _cache_ts = data, data["_ts"]
-    return data
+        since = time.time() - _last_build_attempt
+        if not force and _last_build_attempt and since < _BUILD_RETRY_COOLDOWN:
+            stale = _serve_stale()
+            if stale:
+                log.info("Breadth: rebuild on cooldown (%.0fs left) — serving stale cache",
+                         _BUILD_RETRY_COOLDOWN - since)
+                return stale
+
+        _last_build_attempt = time.time()
+        try:
+            data = _build_cache()
+        except Exception as exc:
+            log.warning("Breadth: rebuild failed (%s) — falling back to stale cache", exc)
+            stale = _serve_stale()
+            if stale:
+                return stale
+            raise
+
+        # Publish while still holding _build_lock: a waiter re-checks the memory
+        # cache the moment it acquires the lock, so releasing before this point
+        # would let it start a second, redundant download.
+        _save_disk_cache(data)
+        with _cache_lock:
+            _cache_data, _cache_ts = data, data["_ts"]
+        return data
 
 
 def get_cache_ts() -> Optional[float]:
