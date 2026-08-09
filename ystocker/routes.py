@@ -5558,28 +5558,58 @@ def api_markets_explain():
     if not api_key:
         return jsonify({"error": "GEMINI_API_KEY not configured"}), 503
 
-    if chart in ("usYield", "cnYield"):
-        current  = data.get("current", {})
-        spread   = data.get("spread")
-        inverted = spread is not None and spread < 0
-        country  = "US Treasury" if chart == "usYield" else "China Government Bond (CGBs)"
-        mats     = (["3M", "6M", "12M", "3Y", "5Y", "10Y", "30Y"]
-                    if chart == "usYield"
-                    else ["3M", "6M", "1Y", "2Y", "3Y", "5Y", "7Y", "10Y", "30Y"])
-        yield_lines = "\n".join(
-            f"  {m}: {current[m]:.3f}%"
-            for m in mats if m in current
-        )
-        spread_line = (f"\n10Y–3M Spread: {spread:+.3f}% ({'INVERTED' if inverted else 'Normal'})"
-                       if spread is not None else "")
-        prompt = f"""You are a macroeconomic analyst. Analyze the current {country} yield curve snapshot for a financial market participant in 3–4 concise paragraphs.{"  Respond in Simplified Chinese (中文)." if zh else ""}
+    # Per-chart config. `mats` mirrors the maturity ladder each card renders and
+    # `spread` is whatever spread that card displays — JP uses 10Y–1Y because MoF
+    # publishes no bill tenors, so there is no 3M point to subtract.
+    _YIELD_CHARTS = {
+        "usYield": {
+            "country": "US Treasury",
+            "mats": ["3M", "6M", "12M", "3Y", "5Y", "10Y", "30Y"],
+            "spread_label": "10Y–3M",
+            "extra": "",
+        },
+        "cnYield": {
+            "country": "China Government Bond (CGBs)",
+            "mats": ["3M", "6M", "1Y", "2Y", "3Y", "5Y", "7Y", "10Y", "30Y"],
+            "spread_label": "10Y–3M",
+            "extra": "",
+        },
+        "jpYield": {
+            "country": "Japanese Government Bond (JGBs)",
+            "mats": ["1Y", "2Y", "3Y", "5Y", "7Y", "10Y", "15Y", "20Y", "30Y", "40Y"],
+            "spread_label": "10Y–1Y",
+            "extra": (" Because this is the JGB curve, also address (a) how the Bank of "
+                      "Japan's yield-curve-control legacy and policy-normalisation path "
+                      "anchor the short end, (b) what the super-long end (20Y/30Y/40Y) "
+                      "implies about inflation expectations and fiscal risk premia, and "
+                      "(c) the read-across for the yen and JPY-funded carry trades."),
+        },
+    }
+
+    cfg = _YIELD_CHARTS.get(chart)
+    if cfg is None:
+        return jsonify({"error": f"Unknown chart: {chart}"}), 400
+
+    current  = data.get("current", {})
+    spread   = data.get("spread")
+    inverted = isinstance(spread, (int, float)) and spread < 0
+    # Guard on type, not just presence: a missing tenor can arrive as null and
+    # f"{None:.3f}" would raise, turning a partial curve into a 500.
+    yield_lines = "\n".join(
+        f"  {m}: {current[m]:.3f}%"
+        for m in cfg["mats"] if isinstance(current.get(m), (int, float))
+    )
+    if not yield_lines:
+        return jsonify({"error": "No yield data provided"}), 400
+    spread_line = (f"\n{cfg['spread_label']} Spread: {spread:+.3f}% "
+                   f"({'INVERTED' if inverted else 'Normal'})"
+                   if isinstance(spread, (int, float)) else "")
+    prompt = f"""You are a macroeconomic analyst. Analyze the current {cfg['country']} yield curve snapshot for a financial market participant in 3–4 concise paragraphs.{"  Respond in Simplified Chinese (中文)." if zh else ""}
 
 Current yields by maturity:
 {yield_lines}{spread_line}
 
-Cover: (1) the curve shape — normal, flat, or inverted — and what it signals, (2) notable features such as where the curve peaks or humps, (3) monetary policy and growth expectations implied by this shape. Be specific about the numbers. Do not use headers or bullet points."""
-    else:
-        return jsonify({"error": f"Unknown chart: {chart}"}), 400
+Cover: (1) the curve shape — normal, flat, or inverted — and what it signals, (2) notable features such as where the curve peaks or humps, (3) monetary policy and growth expectations implied by this shape.{cfg['extra']} Be specific about the numbers. Do not use headers or bullet points."""
 
     client = genai.Client(api_key=api_key)
 
