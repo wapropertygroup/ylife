@@ -9,7 +9,7 @@ No API key required.
 Series (weekly, not seasonally adjusted):
   WALCL     — Total assets (all Federal Reserve Banks), millions USD
   TREAST    — U.S. Treasury securities held outright, millions USD
-  MBST      — Mortgage-backed securities held outright, millions USD
+  WSHOMCB   — Mortgage-backed securities held outright (Wednesday level), millions USD
   WSHOSHO   — U.S. Treasury bills outstanding (market-wide, NOT Fed-held), millions USD
   WRESBAL   — Reserve balances with Federal Reserve Banks, millions USD
   RRPONTSYD — Overnight reverse repurchase agreements (ON RRP), billions USD
@@ -23,6 +23,13 @@ Note: WSDRAL (SDR Certificate Account) is intentionally absent. FRED 404s that
 id; the real id is WASDRAL, but that series stopped publishing in June 2018, so
 charting it would present 8-year-old data as current. The fed.html SDR card
 already renders an "unavailable" note when the series is missing.
+
+Note: MBS holdings use WSHOMCB, not MBST. MBST is the same trap as WASDRAL — it
+still returns HTTP 200 with 809 well-formed rows, but stopped publishing on
+2018-06-13, so it silently served 8-year-old MBS holdings as current and (worse)
+inflated the derived "Other Assets" figure in fed.html by the accumulated drift.
+Prefer the Wednesday-level H.4.1 ids (WSHO*) — they share WALCL's release
+cadence, so a stale one shows up as a row-count mismatch against WALCL.
 
 Series (monthly):
   M2SL      — M2 Money Supply, billions USD (seasonally adjusted)
@@ -54,7 +61,7 @@ _FRED_CSV = "https://fred.stlouisfed.org/graph/fredgraph.csv?id={series}"
 SERIES: dict[str, dict[str, str]] = {
     "WALCL":     {"label": "Total Assets",              "color": "#6366f1"},
     "TREAST":    {"label": "Treasury Securities",       "color": "#38bdf8"},
-    "MBST":      {"label": "MBS (Mortgage-Backed Sec)", "color": "#34d399"},
+    "WSHOMCB":   {"label": "MBS (Mortgage-Backed Sec)", "color": "#34d399"},
     "WSHOSHO":   {"label": "T-Bills Outstanding",       "color": "#818cf8"},
     "WRESBAL":   {"label": "Reserve Balances",          "color": "#f59e0b"},
     "RRPONTSYD": {"label": "Overnight Reverse Repos",   "color": "#fb7185"},
@@ -71,8 +78,12 @@ SERIES: dict[str, dict[str, str]] = {
     "DFII10":          {"label": "10Y Real Yield (TIPS)",      "unit": "pct",    "scale": 1.0},
     "T10YIE":          {"label": "10Y Breakeven Inflation",    "unit": "pct",    "scale": 1.0},
     # ── Credit spreads (OAS, basis points) ─────────────────────────────────
-    "BAMLH0A0HYM2":    {"label": "HY OAS (bps)",               "unit": "bps",    "scale": 1.0},
-    "BAMLC0A0CM":      {"label": "IG OAS (bps)",               "unit": "bps",    "scale": 1.0},
+    # FRED publishes both ICE BofA OAS series in PERCENT (e.g. 2.71), but every
+    # consumer in fed.html labels the axis and tooltip "bps". scale=100 converts
+    # at the source so those labels are literally true; without it the HY chart
+    # renders "3bps" next to copy that reads ">600bps = distress level".
+    "BAMLH0A0HYM2":    {"label": "HY OAS (bps)",               "unit": "bps",    "scale": 100.0},
+    "BAMLC0A0CM":      {"label": "IG OAS (bps)",               "unit": "bps",    "scale": 100.0},
     # ── Valuation / business cycle ──────────────────────────────────────────
     # Buffett Indicator numerator. Wilshire pulled every WILL5000* series from
     # FRED, so the old ids (WILL5000, WILL5000IND, WILL5000INDFC, WILL5000PR)
@@ -193,6 +204,11 @@ def _fetch_series(series_id: str) -> Optional[dict[str, Any]]:
     url = _FRED_CSV.format(series=series_id)
     already_billions = series_id in _SERIES_ALREADY_BILLIONS
     raw_ratio        = series_id in _SERIES_RAW_RATIO
+    meta             = SERIES.get(series_id, {})
+    unit             = str(meta.get("unit", "bln"))
+    # Applied last, after the millions→billions / ratio branch below, so it
+    # expresses "FRED's native unit → the unit fed.html labels the axis with".
+    scale            = float(meta.get("scale", 1.0) or 1.0)
 
     text = None
     for attempt in range(1, 4):
@@ -244,9 +260,9 @@ def _fetch_series(series_id: str) -> Optional[dict[str, Any]]:
             try:
                 raw = float(val_str)
                 if raw_ratio:
-                    values.append(round(raw, 4))          # dimensionless ratio, store as-is
+                    values.append(round(raw * scale, 4))  # dimensionless ratio, store as-is
                 else:
-                    values.append(round(raw if already_billions else raw / 1000, 2))  # millions → billions
+                    values.append(round((raw if already_billions else raw / 1000) * scale, 2))  # millions → billions
             except ValueError:
                 values.append(None)
 
@@ -256,8 +272,11 @@ def _fetch_series(series_id: str) -> Optional[dict[str, Any]]:
 
     def _fmt_latest():
         v = values[-1]
-        if v is None: return "N/A"
-        return f"{v:.4f}" if raw_ratio else f"${v:.1f}B"
+        if v is None:
+            return "N/A"
+        if raw_ratio:
+            return f"{v:.4f}"
+        return f"${v:.1f}B" if unit == "bln" else f"{v:.1f} {unit}"
 
     log.info("Fed: %s — %d obs (%s … %s), latest %s",
              series_id, len(dates), dates[0], dates[-1], _fmt_latest())

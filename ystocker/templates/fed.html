@@ -1153,7 +1153,7 @@ let _fedSeriesData = {};
   [
     ['WALCL',     'statTotal',    'statTotalChg'],
     ['TREAST',    'statTreasury', 'statTreasuryChg'],
-    ['MBST',      'statMbs',      'statMbsChg'],
+    ['WSHOMCB',   'statMbs',      'statMbsChg'],
     ['WRESBAL',   'statReserves', 'statReservesChg'],
     ['RRPONTSYD', 'statRrp',      'statRrpChg'],
     ['WTREGEN',   'statTga',      'statTgaChg'],
@@ -1177,8 +1177,8 @@ let _fedSeriesData = {};
   function _v(sid) { const x = lastVal(sid); return x == null ? 0 : x; }
   function _p(sid) { const x = prevVal(sid); return x == null ? 0 : x; }
 
-  const otherAssetsNow  = _v('WALCL') - _v('TREAST') - _v('MBST') - _v('WLCFLPCL');
-  const otherAssetsPrev = _p('WALCL') - _p('TREAST') - _p('MBST') - _p('WLCFLPCL');
+  const otherAssetsNow  = _v('WALCL') - _v('TREAST') - _v('WSHOMCB') - _v('WLCFLPCL');
+  const otherAssetsPrev = _p('WALCL') - _p('TREAST') - _p('WSHOMCB') - _p('WLCFLPCL');
   const otherAEl  = document.getElementById('statOtherAssets');
   const otherAChg = document.getElementById('statOtherAssetsChg');
   if (otherAEl)  otherAEl.textContent  = fmtB(otherAssetsNow);
@@ -1491,7 +1491,7 @@ let _fedSeriesData = {};
   const bsMap = {
     balanceTotalAssets: [totA,            totAprev],
     balanceTreas:       [_v('TREAST'),    _p('TREAST')],
-    balanceMbs:         [_v('MBST'),      _p('MBST')],
+    balanceMbs:         [_v('WSHOMCB'),   _p('WSHOMCB')],
     balanceLoans:       [_v('WLCFLPCL'),  _p('WLCFLPCL')],
     balanceOtherA:      [otherAssetsNow,  otherAssetsPrev],
     balanceTotalLiab:   [totA,            totAprev],          // by definition equals Total Assets
@@ -1535,7 +1535,7 @@ let _fedSeriesData = {};
       assets: {
         total:      _v('WALCL'),
         treasuries: _v('TREAST'),
-        mbs:        _v('MBST'),
+        mbs:        _v('WSHOMCB'),
         loans:      _v('WLCFLPCL'),
         other:      otherAssetsNow,
         // Optional sub-components inside "other"
@@ -1555,7 +1555,7 @@ let _fedSeriesData = {};
       weekly_changes: {
         total:        _v('WALCL')    - _p('WALCL'),
         treasuries:   _v('TREAST')   - _p('TREAST'),
-        mbs:          _v('MBST')     - _p('MBST'),
+        mbs:          _v('WSHOMCB')  - _p('WSHOMCB'),
         loans:        _v('WLCFLPCL') - _p('WLCFLPCL'),
         other_assets: otherAssetsNow - otherAssetsPrev,
         reserves:     _v('WRESBAL')  - _p('WRESBAL'),
@@ -1928,7 +1928,7 @@ let _fedSeriesData = {};
     function buildBalanceData(n) {
       return {
         walcl: sliceSeries('WALCL',   n),
-        mbs:   sliceSeries('MBST',    n),
+        mbs:   sliceSeries('WSHOMCB', n),
         res:   sliceSeries('WRESBAL', n),
       };
     }
