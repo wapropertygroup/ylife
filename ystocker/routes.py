@@ -4970,6 +4970,53 @@ def _yield_curve_save_disk(result: dict) -> None:
     threading.Thread(target=_write, daemon=True).start()
 
 
+_CN10Y_HISTORY_FILE = Path(__file__).parent.parent / "cache" / "cn_10y_history.json"
+
+
+def _cn10y_history(value: Optional[float]) -> dict:
+    """
+    Maintain a forward-accumulating daily series of the CN 10Y government yield.
+
+    There is no queryable free source for Chinese 10Y history:
+      * FRED's ``IRLTLT01CNM156N`` (and every OECD/IMF CN long-rate sibling) was
+        discontinued and now returns HTTP 404.
+      * ChinaBond serves only the *live* curve — its ``workTime`` parameter is
+        silently ignored, so every historical date returns today's numbers.
+
+    So we persist one observation per calendar day from the working ChinaBond
+    snapshot and let the series build up over time.  Returns the stored series
+    oldest→newest, in the same shape as the other ``history_10y`` payloads.
+    """
+    import datetime as _dt
+
+    store: dict[str, float] = {}
+    try:
+        if _CN10Y_HISTORY_FILE.exists():
+            raw = json.loads(_CN10Y_HISTORY_FILE.read_text())
+            for _d, _v in (raw.get("series") or {}).items():
+                try:
+                    store[str(_d)] = float(_v)
+                except (TypeError, ValueError):
+                    pass
+    except Exception as exc:
+        log.debug("CN 10Y history load failed: %s", exc)
+
+    if value is not None:
+        today = _dt.date.today().isoformat()
+        if store.get(today) != value:
+            store[today] = float(value)
+            try:
+                _CN10Y_HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
+                _tmp = _CN10Y_HISTORY_FILE.with_suffix(".tmp")
+                _tmp.write_text(json.dumps({"series": store}))
+                _tmp.replace(_CN10Y_HISTORY_FILE)   # atomic
+            except Exception as exc:
+                log.debug("CN 10Y history save failed: %s", exc)
+
+    ordered = sorted(store.items())
+    return {"dates": [d for d, _ in ordered], "values": [v for _, v in ordered]}
+
+
 @bp.route("/api/yield-curve")
 def api_yield_curve():
     """Return US & CN Treasury yield curve snapshots + historical 10Y comparison."""
@@ -5128,29 +5175,12 @@ def api_yield_curve():
             except Exception as exc:
                 log.warning("Yield curve: FRED CSV %s failed (%s). URL: %s", mat, exc, url)
 
-            # Try FRED JSON API as second fallback
-            try:
-                end = _dt_mod.date.today()
-                start = end - _dt_mod.timedelta(days=20)  # 20 days covers long weekends + holidays
-                fj = session.get(
-                    f"https://api.stlouisfed.org/fred/series/observations"
-                    f"?series_id={fred_id}&file_type=json&sort_order=desc&limit=10"
-                    f"&observation_start={start.strftime('%Y-%m-%d')}"
-                    f"&observation_end={end.strftime('%Y-%m-%d')}"
-                    f"&api_key=DEMO_KEY",
-                    timeout=20,
-                )
-                if fj.status_code == 200:
-                    import json as _json_mod
-                    obs = _json_mod.loads(fj.text).get("observations", [])
-                    for ob in obs:
-                        val = ob.get("value", ".")
-                        if val not in (".", ""):
-                            us_current[mat] = round(float(val), 3)
-                            log.info("Yield curve: FRED JSON filled %s = %s", mat, us_current[mat])
-                            break
-            except Exception as exc:
-                log.warning("Yield curve: FRED JSON %s failed: %s", mat, exc)
+            # NOTE: a FRED JSON API fallback used to live here, keyed with
+            # `api_key=DEMO_KEY`.  FRED requires a real 32-char lower-case
+            # alphanumeric key and rejects that placeholder with HTTP 400, so the
+            # block could never contribute data — it only ever burned the request
+            # timeout.  Removed; add it back only alongside a real FRED_API_KEY.
+
 
     # ── Stale-cache safety net: fill remaining gaps from previous successful fetch ─
     # This is a last resort — if Treasury XML, yfinance, AND FRED all failed for a
@@ -5204,57 +5234,60 @@ def api_yield_curve():
     except Exception as exc:
         log.warning("Yield curve: ChinaBond fetch failed: %s", exc)
 
-    # ── CN historical 10Y: FRED public CSV ───────────────────────────────────
-    cn_hist_10y: dict = {"dates": [], "values": []}
+    # ── CN historical 10Y: locally accumulated daily series ─────────────────
+    # The old FRED series (IRLTLT01CNM156N) was discontinued and returns 404, and
+    # ChinaBond cannot be queried for past dates — see _cn10y_history() for detail.
     cn_current_10y = cn_current.get("10Y")
-    try:
-        fred_resp = _req.get(
-            "https://fred.stlouisfed.org/graph/fredgraph.csv?id=IRLTLT01CNM156N",
-            timeout=10, headers={"User-Agent": _FRED_UA},
-        )
-        if fred_resp.status_code == 200:
-            dates, vals = [], []
-            for line in fred_resp.text.strip().splitlines()[1:]:
-                parts = line.split(",")
-                if len(parts) == 2 and parts[1].strip() not in (".", ""):
-                    try:
-                        dates.append(parts[0].strip())
-                        vals.append(round(float(parts[1].strip()), 3))
-                    except ValueError:
-                        pass
-            if dates:
-                cn_hist_10y = {"dates": dates, "values": vals}
-                if cn_current_10y is None:
-                    cn_current_10y = vals[-1]
-                    cn_current["10Y"] = cn_current_10y
-    except Exception as exc:
-        log.warning("Yield curve: CN FRED fetch failed: %s", exc)
+    cn_hist_10y = _cn10y_history(cn_current_10y)
 
     # ── JP snapshot: Ministry of Finance Japan JGB yield curve ──────────────
+    # The old `/english/jgbs/...` path 404s — it moved under `/english/policy/`.
+    # `jgbcme.csv` carries the *current month*; the full daily series since 1974
+    # lives at `historical/jgbcme_all.csv`, used here only as a fallback for the
+    # first days of a month before the new file is published.
     JP_COL_MAP = {"1Y": "1Y", "2Y": "2Y", "3Y": "3Y", "5Y": "5Y",
                   "10Y": "10Y", "20Y": "20Y", "30Y": "30Y"}
+    _MOF_BASE = "https://www.mof.go.jp/english/policy/jgbs/reference/interest_rate"
     jp_current: dict = {}
+
+    def _parse_mof_csv(text: str) -> dict:
+        """Return the newest complete row of a MoF JGB CSV as {label: yield}."""
+        lines = text.strip().splitlines()
+        # Row 0 is a title ("Interest Rate (August 2026)"); the header is row 1.
+        hdr_idx = next((i for i, ln in enumerate(lines[:6])
+                        if ln.split(",")[0].strip().strip('"').lower() == "date"), None)
+        if hdr_idx is None:
+            return {}
+        header = [h.strip() for h in lines[hdr_idx].split(",")]
+        # Walk newest→oldest; trailing lines are a blank row and a footer note.
+        for ln in reversed(lines[hdr_idx + 1:]):
+            parts = [p.strip() for p in ln.split(",")]
+            if not parts or "/" not in parts[0]:
+                continue
+            vals: dict = {}
+            for label, col in JP_COL_MAP.items():
+                try:
+                    raw = parts[header.index(col)]
+                except (ValueError, IndexError):
+                    continue
+                if raw and raw not in ("-", "N/A"):
+                    try:
+                        vals[label] = round(float(raw), 3)
+                    except ValueError:
+                        pass
+            if vals:
+                return vals
+        return {}
+
     try:
-        mof_url = ("https://www.mof.go.jp/english/jgbs/reference/"
-                   "interest_rate/jgbcme_all.csv")
-        mof_r = _req.get(mof_url, timeout=10, headers={"User-Agent": "Mozilla/5.0"})
-        if mof_r.status_code == 200:
-            mof_lines = mof_r.text.strip().splitlines()
-            if len(mof_lines) >= 2:
-                header = [h.strip() for h in mof_lines[0].split(",")]
-                for line in reversed(mof_lines[1:]):
-                    parts = [p.strip() for p in line.split(",")]
-                    if len(parts) >= len(header) and parts[0]:
-                        for label, col in JP_COL_MAP.items():
-                            try:
-                                idx = header.index(col)
-                                val = parts[idx]
-                                if val and val not in ("", "-", "N/A"):
-                                    jp_current[label] = round(float(val), 3)
-                            except (ValueError, IndexError):
-                                pass
-                        if jp_current:
-                            break
+        for _mof_path in ("jgbcme.csv", "historical/jgbcme_all.csv"):
+            mof_r = _req.get(f"{_MOF_BASE}/{_mof_path}", timeout=15,
+                             headers={"User-Agent": "Mozilla/5.0"})
+            if mof_r.status_code != 200:
+                continue
+            jp_current = _parse_mof_csv(mof_r.text)
+            if jp_current:
+                break
         log.info("Yield curve: JP MoF fetched (%d maturities: %s)",
                  len(jp_current), ", ".join(sorted(jp_current.keys())))
     except Exception as exc:
