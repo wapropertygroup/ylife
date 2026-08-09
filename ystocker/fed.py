@@ -134,18 +134,25 @@ def _save_disk_cache(data: dict[str, Any]) -> None:
 
 
 # ── Fetch helpers ───────────────────────────────────────────────────────────
+# IMPORTANT: Do NOT send a spoofed browser User-Agent to FRED.
+#
+# fred.stlouisfed.org is fronted by Akamai Kona (kona-prod.stlouisfed.org), whose
+# bot detection compares the claimed client against the actual TLS/header
+# fingerprint. A request that claims to be Chrome while presenting a Python/
+# requests TLS stack is treated as a bot and silently blackholed: the TCP + TLS
+# handshake succeeds, then the connection is dropped with no HTTP response at
+# all. In `requests` this surfaces as a ReadTimeout after the full timeout
+# elapses (not a 403), which makes it look like a network/FRED outage.
+#
+# A plain, honest client User-Agent is allowed through and returns 200. Verified
+# against FRED from the production host: this UA -> 200, "Mozilla/5.0 ..." ->
+# ReadTimeout, empty UA -> ReadTimeout.
+FRED_USER_AGENT = "ystocker/1.0 (+https://stock.li-family.us)"
+
 _HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
-    "Accept": "text/csv,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+    "User-Agent": FRED_USER_AGENT,
+    "Accept": "text/csv,*/*",
     "Accept-Language": "en-US,en;q=0.9",
-    "Sec-Ch-Ua": '"Not/A)Brand";v="8", "Chromium";v="126", "Google Chrome";v="126"',
-    "Sec-Ch-Ua-Mobile": "?0",
-    "Sec-Ch-Ua-Platform": '"macOS"',
-    "Sec-Fetch-Dest": "document",
-    "Sec-Fetch-Mode": "navigate",
-    "Sec-Fetch-Site": "none",
-    "Sec-Fetch-User": "?1",
-    "Upgrade-Insecure-Requests": "1",
 }
 
 # Shared session for connection pooling

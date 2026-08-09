@@ -14,7 +14,7 @@ CERT_EMAIL="admin@li-family.us"
 APPS=(
   "ystocker|8000|stock.li-family.us|requirements_stocker.txt|ystocker/static"
   "yplanner|8001|planner.li-family.us|requirements_planner.txt|yplanner/static"
-  "yplanter|8002|plant.li-family.us|requirements_planter.txt|yplanter/static"
+  "yplanter|8002|planter.li-family.us|requirements_planter.txt|yplanter/static"
   "yhome|8003|li-family.us www.li-family.us home.li-family.us|requirements_home.txt|yhome/static"
   "ytracker|8004|tracker.li-family.us|requirements_tracker.txt|ytracker/static"
   "ypay|8005|pay.li-family.us|requirements_pay.txt|ypay/static"
@@ -375,6 +375,7 @@ echo "[\$(TS)][\$SSL_STEP/\$TOTAL_STEPS] Ensuring SSL certificates..."
 
 if [[ \${#CERTBOT_DOMAINS[@]} -gt 0 ]]; then
   sudo dnf install -y certbot python3-certbot-nginx -q 2>&1 | tail -1
+  SSL_FAILED=()
   for domains in "\${CERTBOT_DOMAINS[@]}"; do
     echo "[\$(TS)]    Certbot: \$domains"
     CERT_D_FLAGS=""
@@ -382,11 +383,25 @@ if [[ \${#CERTBOT_DOMAINS[@]} -gt 0 ]]; then
       CERT_D_FLAGS="\$CERT_D_FLAGS -d \$d"
     done
     FIRST_D=\$(echo \$domains | awk '{print \$1}')
+    # Isolate each domain: this script runs under 'set -euo pipefail', so without
+    # the explicit '|| true' one unresolvable domain aborts the entire deploy and
+    # every app after it in the list silently loses its certificate.
+    CERT_RC=0
     sudo certbot --nginx --cert-name "\$FIRST_D" \$CERT_D_FLAGS \
       --non-interactive --agree-tos -m "$CERT_EMAIL" --redirect \
-      --allow-subset-of-names 2>&1 | tail -3
+      --allow-subset-of-names > /tmp/certbot-\$FIRST_D.log 2>&1 || CERT_RC=\$?
+    tail -3 /tmp/certbot-\$FIRST_D.log
+    if [[ \$CERT_RC -ne 0 ]]; then
+      echo "[\$(TS)]    ✗ Certbot FAILED for \$domains (rc=\$CERT_RC) — continuing"
+      SSL_FAILED+=("\$domains")
+    fi
   done
-  echo "[\$(TS)]    ✓ SSL certificates installed"
+  if [[ \${#SSL_FAILED[@]} -gt 0 ]]; then
+    echo "[\$(TS)]    ⚠ SSL incomplete — no certificate for: \${SSL_FAILED[*]}"
+    echo "[\$(TS)]      These hosts will serve a MISMATCHED cert until fixed."
+  else
+    echo "[\$(TS)]    ✓ SSL certificates installed"
+  fi
 else
   echo "[\$(TS)]    All nginx configs unchanged — SSL intact"
 fi

@@ -37,7 +37,7 @@ Parameters:
 
   DomainYPlanter:
     Type: String
-    Default: "plant.li-family.us"
+    Default: "planter.li-family.us"
     Description: Domain for yPlanter
 
   DomainYHome:
@@ -370,31 +370,47 @@ Resources:
             # ── SSL (Let's Encrypt) ──────────────────────────────────────
             dnf install -y python3-certbot-nginx || dnf install -y certbot python3-certbot-nginx || true
 
-            MY_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)
+            # IMDSv2 is enforced on this instance (MetadataOptions HttpTokens: required),
+            # so an unauthenticated IMDSv1 GET returns 401 and MY_IP ends up empty —
+            # which made the DNS-propagation check below compare against "" and never pass.
+            # NOTE: bare $TOKEN (not curly braces) — this block is inside an Fn::Sub.
+            IMDS_TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" \
+              -H "X-aws-ec2-metadata-token-ttl-seconds: 300" --max-time 5)
+            MY_IP=$(curl -s -H "X-aws-ec2-metadata-token: $IMDS_TOKEN" --max-time 5 \
+              http://169.254.169.254/latest/meta-data/public-ipv4)
+            if [ -z "$MY_IP" ]; then
+              echo "WARNING: could not determine public IP from IMDS — skipping DNS wait."
+            fi
 
-            # Wait for domains to resolve (parallel-ish check)
-            echo "Waiting for DNS propagation..."
-            MAX_WAIT=20
-            for i in $(seq 1 $MAX_WAIT); do
-              PENDING=0
-              while IFS='|' read -r NAME PORT DOMAIN STATIC; do
-                [ -z "$DOMAIN" ] && continue
-                for d in $DOMAIN; do
-                  RESOLVED=$(dig +short "$d" | tail -1)
-                  if [ "$RESOLVED" != "$MY_IP" ]; then
-                    echo "  $d: still '$RESOLVED' (waiting for $MY_IP)"
-                    PENDING=$((PENDING + 1))
-                  fi
-                done
-              done <<< "$APPS"
+            # Wait for domains to resolve (parallel-ish check).
+            # Skipped when MY_IP is unknown — comparing against "" can never pass and
+            # would burn MAX_WAIT*30s for nothing.
+            if [ -z "$MY_IP" ]; then
+              echo "Skipping DNS propagation wait (public IP unknown)."
+            else
+              echo "Waiting for DNS propagation..."
+              MAX_WAIT=20
+              for i in $(seq 1 $MAX_WAIT); do
+                PENDING=0
+                while IFS='|' read -r NAME PORT DOMAIN STATIC; do
+                  [ -z "$DOMAIN" ] && continue
+                  for d in $DOMAIN; do
+                    RESOLVED=$(dig +short "$d" | tail -1)
+                    if [ "$RESOLVED" != "$MY_IP" ]; then
+                      echo "  $d: still '$RESOLVED' (waiting for $MY_IP)"
+                      PENDING=$((PENDING + 1))
+                    fi
+                  done
+                done <<< "$APPS"
 
-              if [ "$PENDING" -eq 0 ]; then
-                echo "All domains resolved after $i checks."
-                break
-              fi
-              echo "  $PENDING checks still failing — attempt $i/$MAX_WAIT, waiting 30s..."
-              sleep 30
-            done
+                if [ "$PENDING" -eq 0 ]; then
+                  echo "All domains resolved after $i checks."
+                  break
+                fi
+                echo "  $PENDING checks still failing — attempt $i/$MAX_WAIT, waiting 30s..."
+                sleep 30
+              done
+            fi
 
             # Build certbot -d flags
             CERT_FLAGS=""
@@ -405,12 +421,23 @@ Resources:
               done
             done <<< "$APPS"
 
+            # Quote the email: an empty CertEmail left unquoted makes --email swallow
+            # the following -d flag, and certbot aborts with
+            # "argument -m/--email: expected one argument" — no cert, no :443 listener.
+            CERT_EMAIL="${CertEmail}"
+            if [ -z "$CERT_EMAIL" ]; then
+              echo "WARNING: CertEmail is empty — registering without an email (no expiry notices)."
+              CERT_EMAIL_FLAG="--register-unsafely-without-email"
+            else
+              CERT_EMAIL_FLAG="--email $CERT_EMAIL"
+            fi
+
             if [ -n "$CERT_FLAGS" ]; then
               # --allow-subset-of-names allows Certbot to succeed even if some domains haven't propagated yet
               certbot --nginx \
                       --non-interactive \
                       --agree-tos \
-                      --email ${CertEmail} \
+                      $CERT_EMAIL_FLAG \
                       $CERT_FLAGS \
                       --allow-subset-of-names \
                       --redirect || echo "Certbot failed — check /var/log/letsencrypt/letsencrypt.log"

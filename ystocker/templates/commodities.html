@@ -118,7 +118,7 @@
           <button class="range-btn" data-range="63" data-i18n="commodities.range_3m">3M</button>
           <button class="range-btn" data-range="126" data-i18n="commodities.range_6m">6M</button>
           <button class="range-btn active" data-range="252" data-i18n="commodities.range_1y">1Y</button>
-          <button class="range-btn" data-range="504" data-source="5y" data-i18n="commodities.range_2y">2Y</button>
+          <button class="range-btn" data-range="104" data-source="5y" data-i18n="commodities.range_2y">2Y</button>
           <button class="range-btn" data-range="0" data-source="5y" data-i18n="commodities.range_5y">5Y</button>
         </div>
       </div>
@@ -503,7 +503,7 @@
       prices = prices.slice(-CURRENT_RANGE);
     }
 
-    // Compute MA50/MA200 over the 1y daily series and align to displayed range
+    // Compute MA50/MA200 over the source series and align to displayed range
     const datasets = [{
       label: c.name,
       data: prices,
@@ -513,40 +513,40 @@
       fill: true, tension: 0.25, spanGaps: true,
     }];
 
-    // Only show MA on daily 1y view (5y weekly doesn't make sense for 50/200 day MAs)
-    if (CURRENT_SOURCE === '1y' && CURRENT_RANGE >= 50 && c.prices_1y) {
-      const fullPrices = c.prices_1y;
-      const fullDates  = c.dates_1y;
-      function rollingMa(n) {
-        const out = new Array(fullPrices.length).fill(null);
-        let sum = 0, cnt = 0;
-        for (let i = 0; i < fullPrices.length; i++) {
-          const p = fullPrices[i];
-          if (p != null) { sum += p; cnt++; }
-          if (i >= n) {
-            const old = fullPrices[i - n];
-            if (old != null) { sum -= old; cnt--; }
-          }
-          if (i >= n - 1 && cnt >= n * 0.8) out[i] = sum / Math.min(n, cnt);
+    // Moving averages. `pre_1y`/`pre_5y` are the closes immediately *before* the
+    // source window, so the dashed lines are already defined at the first
+    // plotted point and span every timeframe. The 5Y series is weekly, so use
+    // the 10w/40w equivalents of the 50d/200d averages.
+    const [maShort, maLong] = CURRENT_SOURCE === '5y' ? [10, 40] : [50, 200];
+    const maInput  = ((CURRENT_SOURCE === '5y' ? c.pre_5y : c.pre_1y) || []).concat(sourcePrices);
+    const maOffset = maInput.length - prices.length;   // where the plotted window starts
+
+    function rollingMa(n) {
+      const out = new Array(maInput.length).fill(null);
+      let sum = 0, cnt = 0;
+      for (let i = 0; i < maInput.length; i++) {
+        const p = maInput[i];
+        if (p != null) { sum += p; cnt++; }
+        if (i >= n) {
+          const old = maInput[i - n];
+          if (old != null) { sum -= old; cnt--; }
         }
-        return out;
+        if (i >= n - 1 && cnt >= n * 0.8) out[i] = sum / cnt;
       }
-      const ma50  = rollingMa(50);
-      const ma200 = rollingMa(200);
-      const startIdx = fullDates.length - dates.length;
-      datasets.push({
-        label: I18n.t('commodities.detail_ma50') || '50d MA',
-        data: ma50.slice(startIdx),
-        borderColor: '#fbbf24', borderDash: [4, 3], borderWidth: 1.2,
-        pointRadius: 0, pointHoverRadius: 0, fill: false,
-      });
-      datasets.push({
-        label: I18n.t('commodities.detail_ma200') || '200d MA',
-        data: ma200.slice(startIdx),
-        borderColor: '#f87171', borderDash: [4, 3], borderWidth: 1.2,
-        pointRadius: 0, pointHoverRadius: 0, fill: false,
-      });
+      return out;
     }
+
+    [[maShort, '#fbbf24', 'commodities.detail_ma50',  '50d MA'],
+     [maLong,  '#f87171', 'commodities.detail_ma200', '200d MA']].forEach(([n, color, key, fallback]) => {
+      const ma = rollingMa(n).slice(maOffset);
+      if (!ma.some(v => v != null)) return;   // not enough history for this average
+      datasets.push({
+        label: I18n.t(key) || fallback,
+        data: ma,
+        borderColor: color, borderDash: [4, 3], borderWidth: 1.2,
+        pointRadius: 0, pointHoverRadius: 0, fill: false, spanGaps: true,
+      });
+    });
 
     if (detailChart) detailChart.destroy();
     detailChart = new Chart(document.getElementById('detailChart'), {

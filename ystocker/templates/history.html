@@ -87,6 +87,61 @@
   .section-nav-btn:hover { color: #cbd5e1; border-color: #475569; background: #1e293b; }
   .scrollbar-hide::-webkit-scrollbar { display: none; }
   .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+
+  /* ── Research panel ─────────────────────────────────────────────── */
+  .research-input {
+    width: 100%;
+    font-size: 12px;
+    padding: 6px 8px;
+    border-radius: 6px;
+    border: 1px solid #334155;
+    background: #0f172a;
+    color: #e2e8f0;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .research-input:focus { border-color: #6366f1; }
+  .research-input::placeholder { color: #475569; }
+  /* Rendered markdown report */
+  .md-body {
+    font-size: 13.5px;
+    line-height: 1.75;
+    color: #cbd5e1;
+    padding: 18px 20px;
+    border-radius: 12px;
+    border: 1px solid #1e293b;
+    background: rgba(99,102,241,0.04);
+    overflow-wrap: break-word;
+  }
+  .md-body h1, .md-body h2 {
+    font-size: 15px; font-weight: 700; color: #e2e8f0;
+    margin: 22px 0 8px; padding-bottom: 6px; border-bottom: 1px solid #1e293b;
+  }
+  .md-body h1:first-child, .md-body h2:first-child { margin-top: 0; }
+  .md-body h3 { font-size: 13.5px; font-weight: 600; color: #a5b4fc; margin: 16px 0 6px; }
+  .md-body h4 { font-size: 13px; font-weight: 600; color: #94a3b8; margin: 12px 0 4px; }
+  .md-body p  { margin: 8px 0; }
+  .md-body ul, .md-body ol { margin: 8px 0 8px 20px; }
+  .md-body li { margin: 3px 0; }
+  .md-body strong { color: #e2e8f0; font-weight: 600; }
+  .md-body code {
+    font-family: ui-monospace, SFMono-Regular, monospace; font-size: 12px;
+    background: #1e293b; padding: 1px 5px; border-radius: 4px; color: #a5b4fc;
+  }
+  .md-body hr { border: 0; border-top: 1px solid #1e293b; margin: 18px 0; }
+  .md-body blockquote {
+    margin: 10px 0; padding: 8px 14px;
+    border-left: 3px solid #6366f1; background: rgba(99,102,241,0.06);
+    border-radius: 0 6px 6px 0; color: #cbd5e1;
+  }
+  .md-body table {
+    width: 100%; border-collapse: collapse; margin: 12px 0;
+    font-size: 12px; display: block; overflow-x: auto;
+  }
+  .md-body th, .md-body td {
+    border: 1px solid #1e293b; padding: 5px 9px; text-align: left; white-space: nowrap;
+  }
+  .md-body th { background: #131c2e; color: #94a3b8; font-weight: 600; }
 </style>
 
 <div class="mb-6 sm:mb-8 fade-up">
@@ -128,6 +183,9 @@
   <button id="tabVideosBtn" onclick="switchTab('videos')"
           class="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-slate-200 -mb-px transition"
           data-i18n="history.tab_videos">Videos</button>
+  <button id="tabResearchBtn" onclick="switchTab('research')"
+          class="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-slate-200 -mb-px transition"
+          data-i18n="history.tab_research">✦ Research</button>
 </div>
 
 <!-- ── Charts panel ──────────────────────────────────────────────────── -->
@@ -1312,6 +1370,101 @@
        data-i18n="history.videos_open_yt">Open on YouTube ↗</a>
   </div>
   <div id="videosFeed" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+</div>
+
+<!-- ── Research panel (full stock-research template) ──────────────── -->
+<div id="panelResearch" style="display:none">
+
+  <!-- Position inputs — feed template §1 / §12 / §13 / §14 -->
+  <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 mb-4">
+    <div class="flex items-start justify-between gap-3 mb-3">
+      <div>
+        <p class="text-sm font-semibold text-slate-200" data-i18n="research.pos_title">Your position &amp; account</p>
+        <p class="text-xs text-slate-500 mt-0.5" data-i18n="research.pos_hint">
+          Saved in this browser only (localStorage). Used for §1 position, §12 portfolio fit,
+          §13 position tier and §14 buy plan. Leave blank to get a recommendation-only report.
+        </p>
+      </div>
+      <button id="researchFormToggle" onclick="_toggleResearchForm()" class="explain-btn shrink-0"
+              data-i18n="research.collapse">▾ Collapse</button>
+    </div>
+
+    <div id="researchForm">
+      <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3">
+        <label class="block">
+          <span class="text-[11px] text-slate-500 block mb-1" data-i18n="research.account_value">Account value ($)</span>
+          <input id="rfAccount" type="number" min="0" step="any" class="research-input" placeholder="500000">
+        </label>
+        <label class="block">
+          <span class="text-[11px] text-slate-500 block mb-1" data-i18n="research.shares">Shares held</span>
+          <input id="rfShares" type="number" min="0" step="any" class="research-input" placeholder="0">
+        </label>
+        <label class="block">
+          <span class="text-[11px] text-slate-500 block mb-1" data-i18n="research.avg_cost">Average cost ($)</span>
+          <input id="rfCost" type="number" min="0" step="any" class="research-input" placeholder="0">
+        </label>
+        <label class="block">
+          <span class="text-[11px] text-slate-500 block mb-1" data-i18n="research.max_pct">Planned max position (%)</span>
+          <input id="rfMaxPct" type="number" min="0" max="100" step="any" class="research-input" placeholder="8">
+        </label>
+        <label class="block">
+          <span class="text-[11px] text-slate-500 block mb-1" data-i18n="research.role">Role in portfolio</span>
+          <select id="rfRole" class="research-input">
+            <option value="">—</option>
+            <option value="core" data-i18n="research.role_core">Long-term core</option>
+            <option value="growth" data-i18n="research.role_growth">Growth</option>
+            <option value="cyclical" data-i18n="research.role_cyclical">Cyclical</option>
+            <option value="turnaround" data-i18n="research.role_turnaround">Turnaround</option>
+            <option value="tactical" data-i18n="research.role_tactical">Tactical trade</option>
+          </select>
+        </label>
+      </div>
+
+      <!-- Other holdings → drives §12 ETF look-through -->
+      <div class="mt-4">
+        <div class="flex items-center justify-between mb-2">
+          <p class="text-[11px] font-semibold uppercase tracking-widest text-slate-600"
+             data-i18n="research.holdings_title">Other holdings — for ETF look-through overlap</p>
+          <button onclick="_addHoldingRow()" class="explain-btn" data-i18n="research.add_holding">+ Add</button>
+        </div>
+        <p class="text-[11px] text-slate-600 mb-2" data-i18n="research.holdings_hint">
+          Add your ETFs and same-sector stocks with their market value. ETF holdings are looked up
+          so the report can compute your true exposure to {{ ticker }}, not just the direct position.
+        </p>
+        <div id="rfHoldings" class="space-y-2"></div>
+      </div>
+
+      <div class="mt-3 flex flex-wrap items-center gap-2">
+        <button onclick="_computeExposure()" class="explain-btn" data-i18n="research.compute_exposure">↻ Compute exposure</button>
+        <button onclick="_clearResearchForm()" class="explain-btn" data-i18n="research.clear">Clear</button>
+        <span id="rfSaved" class="text-[11px] text-slate-600"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Computed look-through exposure -->
+  <div id="researchExposure" class="mb-4" style="display:none"></div>
+
+  <!-- Run -->
+  <div class="flex flex-wrap items-center gap-2 mb-4">
+    <button id="researchRunBtn" onclick="runResearch(false)"
+            class="flex items-center gap-1.5 text-sm font-medium text-indigo-300 border border-indigo-600
+                   bg-indigo-500/10 hover:bg-indigo-500/20 transition px-4 py-2 rounded-lg"
+            data-i18n="research.generate">✦ Generate research report</button>
+    <button id="researchRefreshBtn" onclick="runResearch(true)" class="explain-btn"
+            data-i18n="research.regenerate">↻ Regenerate</button>
+    <button id="researchCopyBtn" onclick="_copyResearch()" class="explain-btn" style="display:none"
+            data-i18n="research.copy">⧉ Copy Markdown</button>
+    <span id="researchStatus" class="text-xs text-slate-500"></span>
+  </div>
+
+  <div id="researchSources" class="mb-3 text-[11px] text-slate-600" style="display:none"></div>
+  <div id="researchReport" class="md-body" style="display:none"></div>
+
+  <p class="mt-6 text-[11px] text-slate-600 leading-relaxed" data-i18n="research.disclaimer">
+    Research analysis generated by AI from in-app market data plus web search. It can be wrong or
+    out of date, and it is not investment advice. Verify every number before acting.
+  </p>
 </div>
 
 <!-- Error -->
@@ -3659,21 +3812,25 @@ let _videosLoaded = false;
 
 function switchTab(tab) {
   window._activeTab = tab;
-  const isCharts = tab === 'charts';
-  const isNews   = tab === 'news';
-  const isVideos = tab === 'videos';
-  document.getElementById('panelCharts').style.display = isCharts ? '' : 'none';
-  document.getElementById('panelNews').style.display   = isNews   ? '' : 'none';
-  document.getElementById('panelVideos').style.display = isVideos ? '' : 'none';
+  const isCharts   = tab === 'charts';
+  const isNews     = tab === 'news';
+  const isVideos   = tab === 'videos';
+  const isResearch = tab === 'research';
+  document.getElementById('panelCharts').style.display   = isCharts   ? '' : 'none';
+  document.getElementById('panelNews').style.display     = isNews     ? '' : 'none';
+  document.getElementById('panelVideos').style.display   = isVideos   ? '' : 'none';
+  document.getElementById('panelResearch').style.display = isResearch ? '' : 'none';
 
-  const chartsBtn = document.getElementById('tabChartsBtn');
-  const newsBtn   = document.getElementById('tabNewsBtn');
-  const videosBtn = document.getElementById('tabVideosBtn');
+  const chartsBtn   = document.getElementById('tabChartsBtn');
+  const newsBtn     = document.getElementById('tabNewsBtn');
+  const videosBtn   = document.getElementById('tabVideosBtn');
+  const researchBtn = document.getElementById('tabResearchBtn');
   const activeClass   = 'px-4 py-2 text-sm font-medium border-b-2 -mb-px transition border-brand text-brand';
   const inactiveClass = 'px-4 py-2 text-sm font-medium border-b-2 -mb-px transition border-transparent text-slate-400 hover:text-slate-200';
-  chartsBtn.className = isCharts ? activeClass : inactiveClass;
-  newsBtn.className   = isNews   ? activeClass : inactiveClass;
-  videosBtn.className = isVideos ? activeClass : inactiveClass;
+  chartsBtn.className   = isCharts   ? activeClass : inactiveClass;
+  newsBtn.className     = isNews     ? activeClass : inactiveClass;
+  videosBtn.className   = isVideos   ? activeClass : inactiveClass;
+  researchBtn.className = isResearch ? activeClass : inactiveClass;
 
   if (typeof _updateSectionNav === 'function') _updateSectionNav();
 
@@ -3687,6 +3844,7 @@ function switchTab(tab) {
     }
   }
   if (isVideos && !_videosLoaded) loadVideos();
+  if (isResearch && typeof _initResearchPanel === 'function') _initResearchPanel();
 }
 
 // ── News feed ─────────────────────────────────────────────────────────────────
@@ -4041,13 +4199,30 @@ async function explainChart(chartKey) {
 
   const lang = (typeof I18n !== 'undefined') ? I18n.getLang() : 'en';
 
+  // Headline metrics so the AI can tie the chart to price/valuation reality
+  // instead of reading the line in isolation.
+  const context = {
+    price:          d.prices ? d.prices.filter(v => v != null).slice(-1)[0] : null,
+    pe_ttm:         d.current_pe,
+    forward_pe:     d.forward_pe,
+    peg:            d.current_peg,
+    revenue_growth: d.revenue_growth,
+    eps_growth_ttm: d.eps_growth_ttm,
+    gross_margin:   d.gross_margin,
+    week52_high:    d.week52_high,
+    week52_low:     d.week52_low,
+    target_price:   d.target_price,
+    earnings_date:  d.earnings_date,
+    sector:         d.sector,
+  };
+
   try {
     const resp = await fetch(
       `/api/history/${encodeURIComponent(TICKER)}/explain`,
       {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ chart: chartKey, dates, values, period, lang }),
+        body:    JSON.stringify({ chart: chartKey, dates, values, period, lang, context }),
       }
     );
 
@@ -4127,6 +4302,773 @@ async function explainChart(chartKey) {
     const tenEl = document.getElementById('mktCtxTen');
     if (tenEl && ten != null) tenEl.textContent = ten.toFixed(2) + '%';
   } catch(e) {}
+})();
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Deep research report — assembles the data bundle for the 17-section template
+// ═══════════════════════════════════════════════════════════════════════════════
+(function() {
+  const LS_KEY = 'ystocker.research.portfolio.v1';
+  let _initialised = false;
+  let _reportMarkdown = '';
+  let _exposure = null;      // last computed look-through result
+  let _etfCache = {};        // ticker → /api/etf-holdings response
+
+  // ── Indicator helpers (self-contained; chart code keeps its own copies) ────
+  function _ma(arr, n) {
+    const v = arr.filter(x => x != null);
+    if (v.length < n) return null;
+    const s = v.slice(-n);
+    return s.reduce((a, b) => a + b, 0) / s.length;
+  }
+  function _emaSeries(vals, span) {
+    const k = 2 / (span + 1);
+    let prev = null;
+    return vals.map(v => {
+      if (v == null) return null;
+      prev = (prev == null) ? v : v * k + prev * (1 - k);
+      return prev;
+    });
+  }
+  function _rsi(prices, period = 14) {
+    const p = prices.filter(v => v != null);
+    if (p.length < period + 1) return null;
+    let gain = 0, loss = 0;
+    for (let i = 1; i <= period; i++) {
+      const d = p[i] - p[i - 1];
+      if (d > 0) gain += d; else loss -= d;
+    }
+    let ag = gain / period, al = loss / period;
+    for (let i = period + 1; i < p.length; i++) {
+      const d = p[i] - p[i - 1];
+      ag = (ag * (period - 1) + (d > 0 ? d : 0)) / period;
+      al = (al * (period - 1) + (d < 0 ? -d : 0)) / period;
+    }
+    return al === 0 ? 100 : 100 - 100 / (1 + ag / al);
+  }
+  function _macd(prices) {
+    const p = prices.filter(v => v != null);
+    if (p.length < 26) return {};
+    const e12 = _emaSeries(p, 12), e26 = _emaSeries(p, 26);
+    const line = p.map((_, i) => e12[i] - e26[i]);
+    const sig = _emaSeries(line, 9);
+    const i = p.length - 1;
+    return { macd: line[i], signal: sig[i], hist: line[i] - sig[i] };
+  }
+  function _stoch(highs, lows, closes, period = 14) {
+    const n = closes.length;
+    if (n < period + 3) return {};
+    const kSeries = [];
+    for (let i = period - 1; i < n; i++) {
+      const hh = Math.max(...highs.slice(i - period + 1, i + 1).filter(v => v != null));
+      const ll = Math.min(...lows.slice(i - period + 1, i + 1).filter(v => v != null));
+      kSeries.push(hh === ll ? 50 : (closes[i] - ll) / (hh - ll) * 100);
+    }
+    if (!kSeries.length) return {};
+    const last3 = kSeries.slice(-3);
+    return {
+      k: kSeries[kSeries.length - 1],
+      d: last3.reduce((a, b) => a + b, 0) / last3.length,
+    };
+  }
+  // Annualised historical volatility from log returns; barsPerYear scales the
+  // daily-vs-weekly interval difference.
+  function _hv(prices, window, barsPerYear) {
+    const p = prices.filter(v => v != null);
+    if (p.length < window + 1) return null;
+    const rets = [];
+    for (let i = p.length - window; i < p.length; i++) {
+      if (p[i - 1] > 0) rets.push(Math.log(p[i] / p[i - 1]));
+    }
+    if (rets.length < 2) return null;
+    const m = rets.reduce((a, b) => a + b, 0) / rets.length;
+    const v = rets.reduce((a, b) => a + (b - m) ** 2, 0) / (rets.length - 1);
+    return Math.sqrt(v) * Math.sqrt(barsPerYear) * 100;
+  }
+  function _bollinger(prices, n = 20) {
+    const p = prices.filter(v => v != null);
+    if (p.length < n) return {};
+    const s = p.slice(-n);
+    const mean = s.reduce((a, b) => a + b, 0) / n;
+    const sd = Math.sqrt(s.reduce((a, b) => a + (b - mean) ** 2, 0) / n);
+    return { upper: mean + 2 * sd, mid: mean, lower: mean - 2 * sd };
+  }
+
+  // Cluster swing highs/lows into support / resistance ZONES (never a single
+  // number — the template requires "98–101", not "support is 100").
+  function _levelZones(highs, lows, closes, last) {
+    const pivots = [];
+    const look = 3;
+    for (let i = look; i < closes.length - look; i++) {
+      const wHi = highs.slice(i - look, i + look + 1).filter(v => v != null);
+      const wLo = lows.slice(i - look, i + look + 1).filter(v => v != null);
+      if (highs[i] != null && highs[i] === Math.max(...wHi)) pivots.push(highs[i]);
+      if (lows[i]  != null && lows[i]  === Math.min(...wLo)) pivots.push(lows[i]);
+    }
+    // Always consider the extremes of the window too
+    const allHi = highs.filter(v => v != null), allLo = lows.filter(v => v != null);
+    if (allHi.length) pivots.push(Math.max(...allHi));
+    if (allLo.length) pivots.push(Math.min(...allLo));
+
+    // Cluster pivots within 1.5% of each other
+    const sorted = pivots.filter(v => v > 0).sort((a, b) => a - b);
+    const clusters = [];
+    for (const p of sorted) {
+      const c = clusters[clusters.length - 1];
+      if (c && p <= c.hi * 1.015) { c.hi = Math.max(c.hi, p); c.touches++; }
+      else clusters.push({ lo: p, hi: p, touches: 1 });
+    }
+    // Give every zone real width (min 1%) so it reads as a zone
+    for (const c of clusters) {
+      const mid = (c.lo + c.hi) / 2;
+      const minW = mid * 0.005;
+      if (c.hi - c.lo < minW * 2) { c.lo = mid - minW; c.hi = mid + minW; }
+      c.lo = +c.lo.toFixed(2); c.hi = +c.hi.toFixed(2);
+    }
+    const support = clusters.filter(c => c.hi < last).sort((a, b) => b.hi - a.hi).slice(0, 3);
+    const resist  = clusters.filter(c => c.lo > last).sort((a, b) => a.lo - b.lo).slice(0, 3);
+    return { support, resist };
+  }
+
+  function _pctChange(a, b) {
+    return (a != null && b != null && b !== 0) ? (a / b - 1) * 100 : null;
+  }
+  // Return the value N calendar days back from the end of a dated series.
+  function _valueDaysAgo(dates, values, days) {
+    if (!dates || !dates.length) return null;
+    const target = new Date(dates[dates.length - 1]).getTime() - days * 86400000;
+    let best = null, bestDiff = Infinity;
+    for (let i = 0; i < dates.length; i++) {
+      if (values[i] == null) continue;
+      const diff = Math.abs(new Date(dates[i]).getTime() - target);
+      if (diff < bestDiff) { bestDiff = diff; best = values[i]; }
+    }
+    return best;
+  }
+  function _relPerf(dates, prices, benchPrices, days) {
+    const p0 = _valueDaysAgo(dates, prices, days);
+    const b0 = _valueDaysAgo(dates, benchPrices, days);
+    const p1 = prices.filter(v => v != null).slice(-1)[0];
+    const b1 = (benchPrices || []).filter(v => v != null).slice(-1)[0];
+    const sp = _pctChange(p1, p0), sb = _pctChange(b1, b0);
+    return { self: sp, bench: sb, rel: (sp != null && sb != null) ? sp - sb : null };
+  }
+
+  // Sector → sector-ETF proxy, mirroring the app's _SECTOR_ETFS map.
+  const SECTOR_ETF = {
+    'Technology': 'XLK', 'Financial Services': 'XLF', 'Financial': 'XLF',
+    'Energy': 'XLE', 'Healthcare': 'XLV', 'Industrials': 'XLI',
+    'Consumer Cyclical': 'XLY', 'Consumer Defensive': 'XLP', 'Utilities': 'XLU',
+    'Communication Services': 'XLC', 'Real Estate': 'XLRE', 'Basic Materials': 'XLB',
+  };
+
+  // ── Portfolio form ────────────────────────────────────────────────────────
+  function _loadSaved() {
+    try { return JSON.parse(localStorage.getItem(LS_KEY)) || {}; } catch(e) { return {}; }
+  }
+  function _saveForm() {
+    const state = {
+      account: document.getElementById('rfAccount').value,
+      shares:  document.getElementById('rfShares').value,
+      cost:    document.getElementById('rfCost').value,
+      maxPct:  document.getElementById('rfMaxPct').value,
+      role:    document.getElementById('rfRole').value,
+      holdings: _readHoldingRows(),
+    };
+    try {
+      localStorage.setItem(LS_KEY, JSON.stringify(state));
+      const el = document.getElementById('rfSaved');
+      el.textContent = I18n.t('research.saved') || 'Saved';
+      setTimeout(() => { el.textContent = ''; }, 1500);
+    } catch(e) {}
+  }
+  function _readHoldingRows() {
+    return Array.from(document.querySelectorAll('#rfHoldings .rf-row')).map(row => ({
+      ticker: (row.querySelector('.rf-h-ticker').value || '').trim().toUpperCase(),
+      value:  parseFloat(row.querySelector('.rf-h-value').value) || 0,
+    })).filter(h => h.ticker && h.value > 0);
+  }
+  window._addHoldingRow = function(ticker, value) {
+    const wrap = document.getElementById('rfHoldings');
+    const row = document.createElement('div');
+    row.className = 'rf-row flex items-center gap-2';
+    row.innerHTML =
+      `<input class="rf-h-ticker research-input" style="max-width:110px" placeholder="QQQM"
+              value="${ticker ? String(ticker).replace(/"/g, '') : ''}">
+       <input class="rf-h-value research-input" type="number" min="0" step="any" placeholder="${I18n.t('research.value_ph') || 'Market value $'}"
+              value="${value != null ? value : ''}">
+       <button class="explain-btn shrink-0" title="Remove">✕</button>`;
+    row.querySelector('button').onclick = () => { row.remove(); _saveForm(); };
+    row.querySelectorAll('input').forEach(i => i.addEventListener('change', _saveForm));
+    wrap.appendChild(row);
+  };
+  window._toggleResearchForm = function() {
+    const form = document.getElementById('researchForm');
+    const btn  = document.getElementById('researchFormToggle');
+    const hidden = form.style.display === 'none';
+    form.style.display = hidden ? '' : 'none';
+    btn.textContent = hidden
+      ? (I18n.t('research.collapse') || '▾ Collapse')
+      : (I18n.t('research.expand')   || '▸ Expand');
+  };
+  window._clearResearchForm = function() {
+    ['rfAccount','rfShares','rfCost','rfMaxPct'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('rfRole').value = '';
+    document.getElementById('rfHoldings').innerHTML = '';
+    document.getElementById('researchExposure').style.display = 'none';
+    _exposure = null;
+    try { localStorage.removeItem(LS_KEY); } catch(e) {}
+  };
+
+  window._initResearchPanel = function() {
+    if (_initialised) return;
+    _initialised = true;
+    const s = _loadSaved();
+    if (s.account) document.getElementById('rfAccount').value = s.account;
+    if (s.shares)  document.getElementById('rfShares').value  = s.shares;
+    if (s.cost)    document.getElementById('rfCost').value    = s.cost;
+    if (s.maxPct)  document.getElementById('rfMaxPct').value  = s.maxPct;
+    if (s.role)    document.getElementById('rfRole').value    = s.role;
+    (s.holdings || []).forEach(h => window._addHoldingRow(h.ticker, h.value));
+    if (!(s.holdings || []).length) window._addHoldingRow('', '');
+    ['rfAccount','rfShares','rfCost','rfMaxPct','rfRole'].forEach(id =>
+      document.getElementById(id).addEventListener('change', _saveForm));
+    if (s.account && (s.holdings || []).length) window._computeExposure();
+  };
+
+  // ── §12 look-through exposure ─────────────────────────────────────────────
+  async function _etfHoldings(t) {
+    if (_etfCache[t] !== undefined) return _etfCache[t];
+    try {
+      const r = await fetch(`/api/etf-holdings/${encodeURIComponent(t)}`);
+      _etfCache[t] = r.ok ? await r.json() : null;
+    } catch(e) { _etfCache[t] = null; }
+    return _etfCache[t];
+  }
+
+  window._computeExposure = async function() {
+    _saveForm();
+    const account = parseFloat(document.getElementById('rfAccount').value) || 0;
+    const shares  = parseFloat(document.getElementById('rfShares').value)  || 0;
+    const cost    = parseFloat(document.getElementById('rfCost').value)    || 0;
+    const maxPct  = parseFloat(document.getElementById('rfMaxPct').value)  || null;
+    const rows    = _readHoldingRows();
+    const box     = document.getElementById('researchExposure');
+
+    if (!account) { box.style.display = 'none'; _exposure = null; return null; }
+
+    const d = _periodCache['1y'] || (await _fetchPeriod('1y'));
+    const price = (d.prices || []).filter(v => v != null).slice(-1)[0] || null;
+    const sector = d.sector || null;
+    const directValue = (shares && price) ? shares * price : 0;
+
+    // Resolve each holding: ETF (has constituents) vs single stock
+    const resolved = await Promise.all(rows.map(async h => {
+      if (h.ticker === TICKER) {
+        return { ...h, kind: 'self', weight: 100, sectorWeight: null };
+      }
+      const etf = await _etfHoldings(h.ticker);
+      const list = (etf && etf.holdings) || [];
+      if (!list.length) return { ...h, kind: 'stock', weight: null, sectorWeight: null };
+      const hit = list.find(x => (x.ticker || '').toUpperCase() === TICKER);
+      let sectorWeight = null;
+      if (sector && etf.sector_weights) {
+        for (const [k, v] of Object.entries(etf.sector_weights)) {
+          if (k && sector && k.toLowerCase().includes(sector.toLowerCase().split(' ')[0])) {
+            sectorWeight = v; break;
+          }
+        }
+      }
+      return { ...h, kind: 'etf', weight: hit ? hit.weight : 0, sectorWeight,
+               truncated: !hit && list.length >= 15 };
+    }));
+
+    const detail = resolved.filter(r => r.kind !== 'self').map(r => ({
+      holding: r.ticker + (r.kind === 'etf' ? ' (ETF)' : ''),
+      value: Math.round(r.value),
+      pct_account: +(r.value / account * 100).toFixed(2),
+      weight_in_holding: r.weight != null ? +Number(r.weight).toFixed(2) : null,
+      exposure_pct: r.weight ? +(r.value * r.weight / 100 / account * 100).toFixed(3) : 0,
+      sector_weight: r.sectorWeight != null ? +Number(r.sectorWeight).toFixed(1) : null,
+      note: r.truncated ? 'not in top-15 holdings — weight may be understated' : null,
+    }));
+
+    const directPct = +(directValue / account * 100).toFixed(2);
+    const ltPct = +detail.reduce((s, r) => s + (r.exposure_pct || 0), 0).toFixed(3);
+    // Same-sector single stocks held directly (excluding the subject itself)
+    const sectorPct = +resolved
+      .filter(r => r.kind === 'stock')
+      .reduce((s, r) => s + r.value / account * 100, 0).toFixed(2);
+    const truePct = +(directPct + ltPct).toFixed(2);
+
+    _exposure = {
+      total_account_value: account,
+      direct_value: Math.round(directValue),
+      direct_pct: directPct,
+      shares: shares || null,
+      avg_cost: cost || null,
+      unrealized_pct: (cost && price) ? +((price / cost - 1) * 100).toFixed(2) : null,
+      max_pct: maxPct,
+      role: document.getElementById('rfRole').value || null,
+      lookthrough: detail,
+      lookthrough_pct: ltPct,
+      same_sector_pct: sectorPct,
+      true_total_pct: truePct,
+      headroom_pct: maxPct != null ? +(maxPct - truePct).toFixed(2) : null,
+      holdings: resolved.map(r => ({
+        ticker: r.ticker, value: Math.round(r.value),
+        pct_account: +(r.value / account * 100).toFixed(2), kind: r.kind,
+      })),
+    };
+
+    _renderExposure(_exposure, maxPct);
+    return _exposure;
+  };
+
+  function _renderExposure(e, maxPct) {
+    const box = document.getElementById('researchExposure');
+    const over = maxPct != null && e.true_total_pct > maxPct;
+    const rows = e.lookthrough.filter(r => r.exposure_pct > 0).map(r => `
+      <tr>
+        <td class="py-1 pr-3 text-slate-300 font-mono">${r.holding}</td>
+        <td class="py-1 pr-3 text-right text-slate-400">${r.pct_account.toFixed(2)}%</td>
+        <td class="py-1 pr-3 text-right text-slate-400">${r.weight_in_holding != null ? r.weight_in_holding.toFixed(2) + '%' : '—'}</td>
+        <td class="py-1 text-right text-amber-400 font-mono">${r.exposure_pct.toFixed(3)}%</td>
+      </tr>`).join('');
+    box.innerHTML = `
+      <div class="bg-slate-900 border ${over ? 'border-rose-800' : 'border-slate-800'} rounded-xl p-4">
+        <p class="text-[10px] font-semibold uppercase tracking-widest text-slate-600 mb-3">
+          ${I18n.t('research.exposure_title') || 'True look-through exposure'} — ${TICKER}</p>
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
+          <div><div class="text-[11px] text-slate-500">${I18n.t('research.direct') || 'Direct'}</div>
+               <div class="text-lg font-bold text-slate-100">${e.direct_pct.toFixed(2)}%</div></div>
+          <div><div class="text-[11px] text-slate-500">${I18n.t('research.via_etf') || 'Via ETFs'}</div>
+               <div class="text-lg font-bold text-amber-400">${e.lookthrough_pct.toFixed(2)}%</div></div>
+          <div><div class="text-[11px] text-slate-500">${I18n.t('research.true_total') || 'True total'}</div>
+               <div class="text-lg font-bold ${over ? 'text-rose-400' : 'text-emerald-400'}">${e.true_total_pct.toFixed(2)}%</div></div>
+          <div><div class="text-[11px] text-slate-500">${I18n.t('research.headroom') || 'Headroom to max'}</div>
+               <div class="text-lg font-bold ${e.headroom_pct != null && e.headroom_pct < 0 ? 'text-rose-400' : 'text-slate-100'}">
+                 ${e.headroom_pct != null ? e.headroom_pct.toFixed(2) + '%' : '—'}</div></div>
+        </div>
+        ${rows ? `<table class="w-full text-xs"><thead><tr class="text-slate-600 text-[10px] uppercase tracking-wider">
+            <th class="text-left pb-1">${I18n.t('research.holding') || 'Holding'}</th>
+            <th class="text-right pb-1">${I18n.t('research.of_account') || '% acct'}</th>
+            <th class="text-right pb-1">${I18n.t('research.weight_inside') || 'Weight inside'}</th>
+            <th class="text-right pb-1">${I18n.t('research.lookthrough') || 'Look-through'}</th>
+          </tr></thead><tbody>${rows}</tbody></table>`
+        : `<p class="text-xs text-slate-600">${I18n.t('research.no_overlap') || 'No ETF overlap found in your holdings.'}</p>`}
+        ${over ? `<p class="mt-3 text-xs text-rose-400">⚠ ${I18n.t('research.over_max') || 'True exposure already exceeds your planned max position.'}</p>` : ''}
+      </div>`;
+    box.style.display = '';
+  }
+
+  // ── Bundle assembly ───────────────────────────────────────────────────────
+  async function _json(url) {
+    try {
+      const r = await fetch(url);
+      return r.ok ? await r.json() : null;
+    } catch(e) { return null; }
+  }
+
+  async function _buildBundle() {
+    // Daily bars (3mo) for short-term technicals; weekly bars (2y) for the
+    // long moving averages and multi-horizon relative strength.
+    const [daily, weekly, fin, peers, news, opts, thirteenF] = await Promise.all([
+      _fetchPeriod('3mo').catch(() => null),
+      _fetchPeriod('2y').catch(() => null),
+      _json(`/api/financials/${encodeURIComponent(TICKER)}`),
+      _json(`/api/peers/${encodeURIComponent(TICKER)}`),
+      _json(`/api/news/${encodeURIComponent(TICKER)}`),
+      _json(`/api/options/${encodeURIComponent(TICKER)}`),
+      _json(`/api/13f/ticker/${encodeURIComponent(TICKER)}`),
+    ]);
+    const base = daily || weekly || _periodCache['1y'];
+    if (!base) throw new Error('No price data available');
+
+    const meta = await _json(`/api/ticker/${encodeURIComponent(TICKER)}`);
+
+    // ── Technicals ─────────────────────────────────────────────────────────
+    const dP = (daily && daily.prices) || [];
+    const dH = (daily && daily.highs)  || [];
+    const dL = (daily && daily.lows)   || [];
+    const wP = (weekly && weekly.prices) || [];
+    const last = dP.filter(v => v != null).slice(-1)[0]
+              ?? wP.filter(v => v != null).slice(-1)[0] ?? null;
+    const st = _stoch(dH, dL, dP);
+    const mac = _macd(dP);
+    const bb = _bollinger(dP);
+    const zones = (dP.length && last)
+      ? _levelZones(dH.length ? dH : dP, dL.length ? dL : dP, dP, last)
+      : { support: [], resist: [] };
+    const vols = (daily && daily.volumes) || [];
+    const volLast = vols.filter(v => v != null).slice(-1)[0] ?? null;
+    const volAvg20 = _ma(vols, 20);
+
+    const technicals = {
+      last,
+      ma5:   _ma(dP, 5),
+      ma20:  _ma(dP, 20),
+      ma60:  _ma(dP, 60),
+      ma120: _ma(wP, 24),   // ≈ MA120 daily, derived from weekly bars
+      ma240: _ma(wP, 48),   // ≈ MA240 daily
+      rsi14: _rsi(dP, 14),
+      macd: mac.macd, macd_signal: mac.signal, macd_hist: mac.hist,
+      stoch_k: st.k, stoch_d: st.d,
+      bb_upper: bb.upper, bb_mid: bb.mid, bb_lower: bb.lower,
+      hv20: _hv(dP, 20, 252),
+      hv60: _hv(wP, 12, 52),
+      volume_last: volLast,
+      volume_avg20: volAvg20,
+      volume_rel: (volLast && volAvg20) ? volLast / volAvg20 : null,
+      week52_high: base.week52_high, week52_low: base.week52_low,
+      ytd_return: base.ytd_return,
+      support_zones: zones.support,
+      resistance_zones: zones.resist,
+    };
+    technicals.vs_ma20 = _pctChange(last, technicals.ma20);
+    technicals.vs_ma60 = _pctChange(last, technicals.ma60);
+    technicals.from_52w_high = _pctChange(last, base.week52_high);
+    technicals.from_52w_low  = _pctChange(last, base.week52_low);
+    technicals.ret_20d = _pctChange(last, _valueDaysAgo(daily?.dates, dP, 20));
+    technicals.ret_60d = _pctChange(last, _valueDaysAgo(daily?.dates, dP, 60));
+
+    // ── §4 relative strength vs SPY and the sector ETF ─────────────────────
+    const relative = { sector_etf: null };
+    if (weekly && weekly.dates) {
+      const r1 = _relPerf(weekly.dates, wP, weekly.spy_prices || [], 30);
+      const r3 = _relPerf(weekly.dates, wP, weekly.spy_prices || [], 91);
+      const r12 = _relPerf(weekly.dates, wP, weekly.spy_prices || [], 365);
+      Object.assign(relative, {
+        self_1m: r1.self, self_3m: r3.self, self_1y: r12.self,
+        vs_spy_1m: r1.rel, vs_spy_3m: r3.rel, vs_spy_1y: r12.rel,
+      });
+      const etf = SECTOR_ETF[base.sector];
+      if (etf && etf !== TICKER) {
+        const se = await _json(`/api/history/${encodeURIComponent(etf)}?period=2y`);
+        if (se && se.prices) {
+          relative.sector_etf = etf;
+          const align = d => _valueDaysAgo(se.dates, se.prices, d);
+          const seLast = se.prices.filter(v => v != null).slice(-1)[0];
+          [[30, '1m'], [91, '3m'], [365, '1y']].forEach(([days, key]) => {
+            const selfR = _pctChange(last, _valueDaysAgo(weekly.dates, wP, days));
+            const etfR  = _pctChange(seLast, align(days));
+            relative['vs_sector_' + key] =
+              (selfR != null && etfR != null) ? selfR - etfR : null;
+          });
+        }
+      }
+    }
+
+    // ── §5 growth trend from the quarterly table ───────────────────────────
+    const q = (fin && fin.quarterly_table) || [];
+    const a = (fin && fin.financials_table) || [];
+    const growth = {
+      revenue_growth: base.revenue_growth,
+      eps_growth_ttm: base.eps_growth_ttm,
+      eps_growth_q:   base.eps_growth_q,
+    };
+    if (q.length >= 5) {
+      growth.revenue_qoq   = _pctChange(q[0].revenue, q[1].revenue);
+      growth.revenue_yoy_q = _pctChange(q[0].revenue, q[4].revenue);
+      const prevYoy = (q.length >= 6) ? _pctChange(q[1].revenue, q[5].revenue) : null;
+      if (growth.revenue_yoy_q != null && prevYoy != null) {
+        growth.trend = growth.revenue_yoy_q > prevYoy
+          ? `accelerating (YoY ${growth.revenue_yoy_q.toFixed(1)}% vs ${prevYoy.toFixed(1)}% prior quarter)`
+          : `decelerating (YoY ${growth.revenue_yoy_q.toFixed(1)}% vs ${prevYoy.toFixed(1)}% prior quarter)`;
+      }
+    }
+    const actual = a.filter(r => !r.is_estimate);
+    if (actual.length >= 3) {
+      const newest = actual[0].revenue, oldest = actual[actual.length - 1].revenue;
+      const yrs = actual.length - 1;
+      if (newest > 0 && oldest > 0) {
+        growth.revenue_cagr_3y = (Math.pow(newest / oldest, 1 / yrs) - 1) * 100;
+      }
+    }
+
+    // ── Valuation history from the PE series we already chart ───────────────
+    const peSeries = ((weekly && weekly.pe_history) || []).filter(v => v != null);
+    const valuation_history = {};
+    if (peSeries.length > 4) {
+      const lo = Math.min(...peSeries), hi = Math.max(...peSeries);
+      const now = peSeries[peSeries.length - 1];
+      valuation_history.pe_now = now;
+      valuation_history.pe_avg = peSeries.reduce((s, v) => s + v, 0) / peSeries.length;
+      valuation_history.pe_low = lo;
+      valuation_history.pe_high = hi;
+      valuation_history.pe_percentile = hi > lo ? (now - lo) / (hi - lo) * 100 : null;
+      valuation_history.window = '2 years (weekly, PE derived from constant TTM EPS)';
+    }
+
+    const revTtm = q.slice(0, 4).reduce((s, r) => s + (r.revenue || 0), 0) || null;
+    const netTtm = q.slice(0, 4).reduce((s, r) => s + (r.net_income || 0), 0) || null;
+    const mcap = meta ? meta['Market Cap ($B)'] : null;
+
+    const exposure = _exposure || (document.getElementById('rfAccount').value
+      ? await window._computeExposure() : null);
+
+    return {
+      identity: {
+        ticker: TICKER, name: base.name, quote_type: base.quote_type,
+        sector: base.sector, industry: base.industry,
+        price: last, market_cap: mcap,
+        day_change: meta ? meta['Day Change (%)'] : null,
+        fund_family: base.fund_family, category: base.category,
+        expense_ratio: base.expense_ratio, total_assets: base.total_assets,
+      },
+      valuation: {
+        pe_ttm: base.current_pe, forward_pe: base.forward_pe, peg: base.current_peg,
+        ev_ebitda: base.ev_ebitda, ps_ratio: base.ps_ratio, pb_ratio: base.pb_ratio,
+        eps: base.eps, fcf: base.fcf, ev: base.ev, ebitda: base.ebitda,
+        fcf_yield: (base.fcf && mcap) ? base.fcf / mcap * 100 : null,
+        dividend_yield: base.dividend_yield, payout_ratio: base.payout_ratio,
+      },
+      valuation_history,
+      zscore: (fin && fin.price_zscore) || null,
+      growth,
+      margins: {
+        gross_margin: base.gross_margin, operating_margin: base.operating_margin,
+        net_margin: base.net_margin, roe: base.roe, roa: base.roa,
+        fcf_margin: (base.fcf && revTtm) ? base.fcf / revTtm * 100 : null,
+      },
+      balance: {
+        total_cash: base.total_cash, total_debt: base.total_debt,
+        net_cash: (base.total_cash != null && base.total_debt != null)
+                  ? base.total_cash - base.total_debt : null,
+        debt_equity: base.debt_equity, current_ratio: base.current_ratio,
+        interest_coverage: base.interest_coverage,
+        shares_outstanding: base.shares_outstanding, beta: base.beta,
+        share_trend: shareTrend,
+      },
+      analyst: {
+        recommendation: base.recommendation, recommendation_mean: base.recommendation_mean,
+        analyst_count: base.analyst_count, target_price: base.target_price,
+        target_high: base.target_high, target_low: base.target_low,
+        target_median: base.target_median,
+        upside: _pctChange(base.target_price, last),
+      },
+      annual: a.slice(0, 5),
+      quarterly: q.slice(0, 8),
+      ttm: { revenue: revTtm, net_income: netTtm },
+      earnings_markers: (base.earnings_markers || []).slice(-8).reverse(),
+      earnings_date: base.earnings_date,
+      ex_dividend_date: base.ex_dividend_date,
+      technicals,
+      relative,
+      peers: { group: peers && peers.group, rows: (peers && peers.peers) || [] },
+      news: ((news && news.articles) || []).slice(0, 15).map(n => ({
+        title: n.title, publisher: n.publisher, important: n.important,
+        date: n.published ? new Date(n.published * 1000).toISOString().slice(0, 10) : null,
+      })),
+      options: opts || {},
+      institutional: ((thirteenF && thirteenF.holders) || []).slice(0, 10).map(h => ({
+        fund: h.fund, value_millions: h.value_millions,
+        pct_portfolio: h.pct_portfolio, change_pct: h.change_pct,
+      })),
+      insider: (base.insider_trades || []).slice(0, 8),
+      held_institutions: base.held_institutions, held_insiders: base.held_insiders,
+      short_float: base.short_float, short_ratio: base.short_ratio,
+      forecast: _forecastSummary(),
+      portfolio: exposure || {},
+    };
+  }
+
+  function _forecastSummary() {
+    const f = (typeof _forecastResult !== 'undefined') ? _forecastResult : null;
+    if (!f) return null;
+    const endOf = m => {
+      const arr = f[m] && f[m].forecast;
+      return (arr && arr.length) ? arr[arr.length - 1].value : null;
+    };
+    const p = endOf('prophet'), ar = endOf('arima'), li = endOf('linear');
+    if (p == null && ar == null && li == null) return null;
+    const arr = f.prophet?.forecast || f.arima?.forecast || f.linear?.forecast || [];
+    return {
+      prophet: p, arima: ar, linear: li,
+      horizon: arr.length ? `through ${arr[arr.length - 1].date}` : null,
+    };
+  }
+
+  // ── Minimal Markdown renderer (headers, tables, lists, quotes, bold) ─────
+  function _esc(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+  function _inline(s) {
+    return _esc(s)
+      .replace(/`([^`]+)`/g, '<code>$1</code>')
+      .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+      .replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>');
+  }
+  function _renderMd(md) {
+    const lines = md.replace(/\r/g, '').split('\n');
+    const out = [];
+    let i = 0, listType = null;
+    const closeList = () => { if (listType) { out.push(`</${listType}>`); listType = null; } };
+
+    while (i < lines.length) {
+      const line = lines[i];
+      const t = line.trim();
+
+      // Table: header row followed by a |---|---| separator
+      if (t.startsWith('|') && i + 1 < lines.length && /^\|[\s:|-]+\|$/.test(lines[i + 1].trim())) {
+        closeList();
+        const cells = r => r.trim().replace(/^\||\|$/g, '').split('|').map(c => c.trim());
+        const head = cells(t);
+        i += 2;
+        const body = [];
+        while (i < lines.length && lines[i].trim().startsWith('|')) { body.push(cells(lines[i])); i++; }
+        out.push('<table><thead><tr>' + head.map(h => `<th>${_inline(h)}</th>`).join('') +
+                 '</tr></thead><tbody>' +
+                 body.map(r => '<tr>' + r.map(c => `<td>${_inline(c)}</td>`).join('') + '</tr>').join('') +
+                 '</tbody></table>');
+        continue;
+      }
+      const h = t.match(/^(#{1,6})\s+(.*)$/);
+      if (h) {
+        closeList();
+        const lvl = Math.min(h[1].length, 4);
+        out.push(`<h${lvl}>${_inline(h[2])}</h${lvl}>`);
+        i++; continue;
+      }
+      if (/^(---+|\*\*\*+|___+)$/.test(t)) { closeList(); out.push('<hr>'); i++; continue; }
+      if (t.startsWith('>')) {
+        closeList();
+        const quote = [];
+        while (i < lines.length && lines[i].trim().startsWith('>')) {
+          quote.push(lines[i].trim().replace(/^>\s?/, '')); i++;
+        }
+        out.push(`<blockquote>${quote.map(_inline).join('<br>')}</blockquote>`);
+        continue;
+      }
+      const ul = t.match(/^[-*+]\s+(.*)$/);
+      const ol = t.match(/^\d+[.)]\s+(.*)$/);
+      if (ul || ol) {
+        const want = ul ? 'ul' : 'ol';
+        if (listType !== want) { closeList(); out.push(`<${want}>`); listType = want; }
+        // Render "[ ]" / "[x]" checkboxes as plain glyphs
+        const body = (ul ? ul[1] : ol[1]).replace(/^\[( |x|X)\]\s*/, (m, c) =>
+          (c.toLowerCase() === 'x' ? '☑ ' : '☐ '));
+        out.push(`<li>${_inline(body)}</li>`);
+        i++; continue;
+      }
+      if (!t) { closeList(); i++; continue; }
+      closeList();
+      const para = [];
+      while (i < lines.length && lines[i].trim() &&
+             !/^(#{1,6}\s|>|\||[-*+]\s|\d+[.)]\s|---+$)/.test(lines[i].trim())) {
+        para.push(lines[i].trim()); i++;
+      }
+      out.push(`<p>${para.map(_inline).join('<br>')}</p>`);
+    }
+    closeList();
+    return out.join('\n');
+  }
+
+  // ── Run ───────────────────────────────────────────────────────────────────
+  window.runResearch = async function(refresh) {
+    const btn    = document.getElementById('researchRunBtn');
+    const status = document.getElementById('researchStatus');
+    const report = document.getElementById('researchReport');
+    const srcBox = document.getElementById('researchSources');
+    const copyBtn = document.getElementById('researchCopyBtn');
+    if (btn.disabled) return;
+
+    btn.disabled = true;
+    btn.style.opacity = '0.6';
+    srcBox.style.display = 'none';
+    copyBtn.style.display = 'none';
+    status.textContent = I18n.t('research.gathering') || 'Gathering data…';
+    report.style.display = 'block';
+    report.innerHTML = `<p class="text-slate-500">${I18n.t('research.gathering') || 'Gathering data…'}</p>`;
+
+    let bundle;
+    try {
+      bundle = await _buildBundle();
+    } catch(e) {
+      report.innerHTML = `<p class="text-rose-400">⚠ ${_esc(e.message)}</p>`;
+      btn.disabled = false; btn.style.opacity = ''; status.textContent = '';
+      return;
+    }
+
+    const lang = (typeof I18n !== 'undefined') ? I18n.getLang() : 'en';
+    status.textContent = I18n.t('research.searching') || 'Searching the web & writing…';
+    report.innerHTML = `<p class="text-slate-500">${I18n.t('research.searching') || 'Searching the web & writing…'}</p>`;
+    _reportMarkdown = '';
+
+    try {
+      const resp = await fetch(`/api/history/${encodeURIComponent(TICKER)}/research`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bundle, lang, refresh: !!refresh }),
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        report.innerHTML = `<p class="text-rose-400">⚠ ${_esc(err.error || 'Failed to generate report.')}</p>`;
+        return;
+      }
+
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = '', sources = [], cached = false, painting = false;
+      const paint = () => {
+        if (painting) return;
+        painting = true;
+        requestAnimationFrame(() => {
+          report.innerHTML = _renderMd(_reportMarkdown);
+          painting = false;
+        });
+      };
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const parts = buf.split('\n');
+        buf = parts.pop();
+        for (const line of parts) {
+          if (!line.startsWith('data:')) continue;
+          const raw = line.slice(5).trim();
+          if (raw === '[DONE]') continue;
+          let msg;
+          try { msg = JSON.parse(raw); } catch(e) { continue; }
+          if (msg.error) {
+            report.innerHTML = _renderMd(_reportMarkdown) +
+              `<p class="text-rose-400 mt-3">⚠ ${_esc(msg.error)}</p>`;
+            continue;
+          }
+          if (msg.cached) cached = true;
+          if (msg.sources) sources = msg.sources;
+          if (msg.text) { _reportMarkdown += msg.text; paint(); }
+        }
+      }
+
+      report.innerHTML = _renderMd(_reportMarkdown);
+      if (sources.length) {
+        srcBox.textContent = (I18n.t('research.sources') || 'Web sources consulted: ') +
+                             sources.join(' · ');
+        srcBox.style.display = '';
+      }
+      status.textContent = cached
+        ? (I18n.t('research.from_cache') || 'From cache — hit Regenerate for a fresh run')
+        : (I18n.t('research.done') || 'Done');
+      if (_reportMarkdown) copyBtn.style.display = '';
+    } catch(e) {
+      report.innerHTML = `<p class="text-rose-400">⚠ ${_esc(e.message)}</p>`;
+    } finally {
+      btn.disabled = false;
+      btn.style.opacity = '';
+    }
+  };
+
+  window._copyResearch = function() {
+    if (!_reportMarkdown) return;
+    navigator.clipboard.writeText(_reportMarkdown).then(() => {
+      const b = document.getElementById('researchCopyBtn');
+      const orig = b.textContent;
+      b.textContent = I18n.t('research.copied') || '✓ Copied';
+      setTimeout(() => { b.textContent = orig; }, 1500);
+    }).catch(() => {});
+  };
 })();
 </script>
 {% endblock %}

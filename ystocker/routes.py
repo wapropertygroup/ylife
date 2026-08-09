@@ -26,6 +26,9 @@ from flask import Blueprint, render_template, redirect, url_for, request, flash,
 from ystocker import PEER_GROUPS, YT_CHANNELS
 from ystocker.data import fetch_group
 from ystocker import charts
+# Plain client UA for every fred.stlouisfed.org request. A spoofed browser UA is
+# silently blackholed by FRED's Akamai bot detection — see fed.py for details.
+from ystocker.fed import FRED_USER_AGENT as _FRED_UA
 
 bp = Blueprint("main", __name__)
 log = logging.getLogger(__name__)
@@ -1106,6 +1109,9 @@ def api_history(ticker: str):
         "relative_strength": relative_strength,
         "spy_prices":        spy_prices_list,
         "earnings_markers":  earnings_markers,
+        # Classification — used by the research agent for sector-relative strength
+        "sector":            info.get("sector"),
+        "industry":          info.get("industry"),
     }
     with _HISTORY_CACHE_LOCK:
         _HISTORY_CACHE[cache_key] = {"ts": time.time(), "data": result}
@@ -2461,11 +2467,15 @@ def api_history_explain(ticker: str):
         return jsonify({"error": "No valid data points"}), 400
 
     # ── Disk cache ────────────────────────────────────────────────────────────
+    from . import research
+
     _EXPLAIN_CACHE_DIR = Path(__file__).parent.parent / "cache" / "explain"
     _EXPLAIN_CACHE_TTL = 8 * 60 * 60   # 8 hours, matches main data cache
 
     safe_ticker = ticker.replace("/", "-")
-    cache_file  = _EXPLAIN_CACHE_DIR / f"{safe_ticker}_{chart}_{period}_{lang}.json"
+    # Template version is part of the key so prompt changes invalidate old text.
+    cache_file  = (_EXPLAIN_CACHE_DIR /
+                   f"{safe_ticker}_{chart}_{period}_{lang}_{research.TEMPLATE_VERSION}.json")
 
     try:
         if cache_file.exists():
@@ -2489,45 +2499,15 @@ def api_history_explain(ticker: str):
         log.debug("Explain cache read failed for %s/%s — will re-generate", ticker, chart)
 
     # ── Build prompt ──────────────────────────────────────────────────────────
-    first_date, first_val = pairs[0]
-    last_date,  last_val  = pairs[-1]
-    recent = pairs[-12:]
-
-    chart_meta = {
-        "pe":    ("PE Ratio (TTM)",        "x",  lambda v: f"{v:.1f}x"),
-        "fwdpe": ("Forward PE Ratio",      "x",  lambda v: f"{v:.1f}x"),
-        "peg":   ("PEG Ratio",             "",   lambda v: f"{v:.2f}"),
-        "price": ("Stock Price (USD)",     "$",  lambda v: f"${v:.2f}"),
-    }
-    label, _unit, fmt = chart_meta.get(chart, (chart, "", lambda v: f"{v:.2f}"))
-
-    recent_lines  = "\n".join(f"  {d}: {fmt(v)}" for d, v in recent)
-    period_change = last_val - first_val
-    pct_change    = period_change / first_val * 100 if first_val else 0
-    period_summary = (
-        f"{first_date} ({fmt(first_val)}) → {last_date} ({fmt(last_val)})\n"
-        f"Total change: {'+' if period_change >= 0 else ''}{fmt(period_change)} "
-        f"({pct_change:+.1f}%)"
-    )
-
-    chart_hints = {
-        "pe":    "Focus on whether the stock looks cheap or expensive relative to its historical PE range, and what drives the multiple expansion or compression.",
-        "fwdpe": "Focus on how the market's forward earnings expectations have repriced over time and what that implies for valuation.",
-        "peg":   "Focus on whether the PEG suggests the growth-adjusted valuation is attractive (below 1) or stretched (above 2).",
-        "price": "Focus on price trend, key support/resistance levels implied by the data, and momentum.",
-    }
-    hint = chart_hints.get(chart, "")
-
-    prompt = (
-        f"You are a sell-side equity analyst. Explain the following {label} chart for {ticker} "
-        f"over the {period} period in 2-3 concise paragraphs."
-        f"{'  Respond in Simplified Chinese (中文).' if lang == 'zh' else ''}\n\n"
-        f"Chart: {label} for {ticker}\n"
-        f"Period: {period}\n"
-        f"Full period: {period_summary}\n\n"
-        f"Most recent 12 data points:\n{recent_lines}\n\n"
-        f"{hint}\n"
-        f"Be specific about the numbers. Do not use headers or bullet points."
+    # Anchored to the shared stock-research template so each per-chart note
+    # lands in the same framework as the full deep-research report.
+    prompt = research.build_chart_prompt(
+        ticker=ticker,
+        chart=chart,
+        period=period,
+        lang=lang,
+        pairs=pairs,
+        context=body.get("context") or {},
     )
 
     client = genai.Client(api_key=api_key)
@@ -2558,6 +2538,137 @@ def api_history_explain(ticker: str):
                     log.debug("Explain cached: %s/%s period=%s lang=%s", ticker, chart, period, lang)
                 except Exception:
                     log.debug("Failed to write explain cache for %s/%s", ticker, chart)
+        finally:
+            yield "data: [DONE]\n\n"
+
+    return Response(generate(), mimetype="text/event-stream", headers={
+        "Cache-Control": "no-cache",
+        "X-Accel-Buffering": "no",
+    })
+
+
+@bp.route("/api/history/<ticker>/research", methods=["POST"])
+def api_history_research(ticker: str):
+    """Stream a full deep-research report for a ticker via SSE.
+
+    The frontend assembles a data bundle (fundamentals, technicals, peers, news,
+    ownership, and the user's portfolio inputs with computed ETF look-through
+    exposure) and POSTs it here; this endpoint renders the shared 17-section
+    research template around it and streams Gemini's answer back.
+
+    Google Search grounding is enabled so the model can pull the latest earnings
+    result, guidance, announcements and analyst estimates — the in-app figures
+    still take precedence, per the system instruction in ``research.py``.
+
+    Request body:
+        {"bundle": {...}, "lang": "en"|"zh", "refresh": bool}
+    Response:
+        SSE stream of ``data: {"text": "..."}`` then ``data: [DONE]``.
+    """
+    import os
+    from google import genai
+    from google.genai import types as genai_types
+
+    from . import research
+
+    ticker = ticker.strip().upper()
+    body   = request.get_json(force=True, silent=True) or {}
+    bundle = body.get("bundle") or {}
+    lang   = "zh" if body.get("lang") == "zh" else "en"
+    refresh = bool(body.get("refresh"))
+
+    if not isinstance(bundle, dict) or not bundle.get("identity"):
+        return jsonify({"error": "No research bundle provided"}), 400
+
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        log.warning("API history/research: GEMINI_API_KEY not configured")
+        return jsonify({"error": "GEMINI_API_KEY not configured"}), 503
+
+    fingerprint = research.bundle_fingerprint(bundle)
+    log.info("API history/research: ticker=%s lang=%s fp=%s refresh=%s",
+             ticker, lang, fingerprint, refresh)
+
+    # ── Disk cache ────────────────────────────────────────────────────────────
+    # Keyed on the portfolio inputs + reporting period, not on live price, so a
+    # tick-by-tick price change does not force a 40 s regeneration.
+    _RESEARCH_CACHE_DIR = Path(__file__).parent.parent / "cache" / "research"
+    _RESEARCH_CACHE_TTL = 8 * 60 * 60   # 8 hours, matches the main data cache
+
+    safe_ticker = ticker.replace("/", "-")
+    cache_file  = _RESEARCH_CACHE_DIR / f"{safe_ticker}_{lang}_{fingerprint}.json"
+
+    if not refresh:
+        try:
+            if cache_file.exists():
+                payload = json.loads(cache_file.read_text())
+                if time.time() - payload.get("ts", 0) < _RESEARCH_CACHE_TTL:
+                    cached_text = payload.get("text", "")
+                    if cached_text:
+                        log.debug("Research cache hit: %s lang=%s", ticker, lang)
+
+                        def stream_cached():
+                            yield f"data: {json.dumps({'cached': True})}\n\n"
+                            yield f"data: {json.dumps({'text': cached_text})}\n\n"
+                            yield "data: [DONE]\n\n"
+
+                        return Response(stream_cached(), mimetype="text/event-stream", headers={
+                            "Cache-Control": "no-cache",
+                            "X-Accel-Buffering": "no",
+                        })
+        except (OSError, ValueError):
+            log.debug("Research cache read failed for %s — will re-generate", ticker)
+
+    from datetime import datetime, timezone
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    system_instruction, prompt = research.build_research_prompt(
+        ticker=ticker, bundle=bundle, lang=lang, today=today)
+
+    client = genai.Client(api_key=api_key,
+                          http_options=genai_types.HttpOptions(timeout=300_000))
+    config = genai_types.GenerateContentConfig(
+        system_instruction=system_instruction,
+        temperature=0.3,                       # research, not creative writing
+        tools=[genai_types.Tool(google_search=genai_types.GoogleSearch())],
+    )
+
+    def generate():
+        accumulated: list[str] = []
+        sources: list[str] = []
+        try:
+            stream = client.models.generate_content_stream(
+                model="gemini-2.5-flash", contents=prompt, config=config)
+            for chunk in stream:
+                text = chunk.text
+                if text:
+                    accumulated.append(text)
+                    yield f"data: {json.dumps({'text': text})}\n\n"
+                # Collect grounding sources so the UI can show what was searched
+                for cand in (chunk.candidates or []):
+                    meta = getattr(cand, "grounding_metadata", None)
+                    for gc in (getattr(meta, "grounding_chunks", None) or []):
+                        web = getattr(gc, "web", None)
+                        title = getattr(web, "title", None) if web else None
+                        if title and title not in sources:
+                            sources.append(title)
+        except Exception as exc:
+            log.error("History research error for %s: %s", ticker, exc)
+            yield f"data: {json.dumps({'error': str(exc)})}\n\n"
+        else:
+            full_text = "".join(accumulated)
+            if sources:
+                yield f"data: {json.dumps({'sources': sources[:12]})}\n\n"
+            if full_text:
+                try:
+                    _RESEARCH_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+                    tmp = cache_file.with_suffix(".tmp")
+                    tmp.write_text(json.dumps({
+                        "ts": time.time(), "text": full_text, "sources": sources[:12],
+                    }))
+                    tmp.replace(cache_file)
+                    log.debug("Research cached: %s lang=%s fp=%s", ticker, lang, fingerprint)
+                except OSError:
+                    log.debug("Failed to write research cache for %s", ticker)
         finally:
             yield "data: [DONE]\n\n"
 
@@ -3354,6 +3465,15 @@ _COMMODITIES_CACHE: dict[str, dict] = {}
 _COMMODITIES_CACHE_LOCK = threading.Lock()
 _COMMODITIES_CACHE_TTL  = 15 * 60  # 15 minutes
 
+# Chart windows served to the client, plus the extra history fetched *before*
+# each window (`pre_1y` / `pre_5y` in the payload). The lookback is what lets
+# the 50/200-day moving averages be defined at the very first plotted point
+# instead of only in the final fifth of the chart.
+_DAILY_WINDOW  = 252  # ~1 year of trading days (daily chart)
+_DAILY_MA_PRE  = 200  # longest daily MA
+_WEEKLY_WINDOW = 261  # ~5 years of weeks (weekly chart)
+_WEEKLY_MA_PRE = 40   # 40 weeks ≈ 200 trading days
+
 
 @bp.route("/commodities")
 def commodities():
@@ -3423,18 +3543,19 @@ def api_commodities():
     keys    = list(_COMMODITY_SYMBOLS.keys())
     sym_to_key = {v[0]: k for k, v in _COMMODITY_SYMBOLS.items()}
 
-    # Bulk download — daily 1y for short-term metrics
+    # Bulk download — 2y daily: the trailing year is charted, the year before
+    # it is MA lookback (and gives _ret(252) a real 1-year comparison point).
     try:
-        raw_1y = yf.download(symbols, period="1y", interval="1d",
+        raw_1y = yf.download(symbols, period="2y", interval="1d",
                              group_by="ticker", auto_adjust=False,
                              progress=False, threads=True)
     except Exception as exc:
-        log.error("Commodities: yfinance 1y download failed: %s", exc)
+        log.error("Commodities: yfinance daily download failed: %s", exc)
         return jsonify({"error": "Failed to fetch commodity data"}), 502
 
-    # 5y weekly for the long-term chart
+    # 10y weekly for the long-term chart — 5y charted + MA lookback before it
     try:
-        raw_5y = yf.download(symbols, period="5y", interval="1wk",
+        raw_5y = yf.download(symbols, period="10y", interval="1wk",
                              group_by="ticker", auto_adjust=False,
                              progress=False, threads=True)
     except Exception:
@@ -3521,8 +3642,16 @@ def api_commodities():
         ma_200 = _ma(p1, 200)
         rsi_14 = _rsi(p1, 14)
 
-        # 5y weekly history for long-term chart
+        # 5y weekly history for long-term chart, split into the charted window
+        # and the 40 weeks of MA lookback that precede it
         d5, p5 = _close_series(raw_5y, sym) if raw_5y is not None else ([], [])
+        d5_win, p5_win = d5[-_WEEKLY_WINDOW:], p5[-_WEEKLY_WINDOW:]
+        pre_5y = p5[:-_WEEKLY_WINDOW][-_WEEKLY_MA_PRE:]
+
+        # Same split for the daily series: chart the trailing year, keep the
+        # 200 sessions before it so the client's 200-day MA starts at day one
+        d1_win, p1_win = d1[-_DAILY_WINDOW:], p1[-_DAILY_WINDOW:]
+        pre_1y = p1[:-_DAILY_WINDOW][-_DAILY_MA_PRE:]
 
         out[key] = {
             "symbol":      sym,
@@ -3548,10 +3677,12 @@ def api_commodities():
             "rsi_14":      rsi_14,
             "above_ma_50":  (last is not None and ma_50  is not None and last > ma_50),
             "above_ma_200": (last is not None and ma_200 is not None and last > ma_200),
-            "dates_1y":    d1,
-            "prices_1y":   p1,
-            "dates_5y":    d5,
-            "prices_5y":   p5,
+            "dates_1y":    d1_win,
+            "prices_1y":   p1_win,
+            "pre_1y":      pre_1y,
+            "dates_5y":    d5_win,
+            "prices_5y":   p5_win,
+            "pre_5y":      pre_5y,
         }
 
     # ── Cross-commodity ratios (computed from full daily history when present)
@@ -4870,13 +5001,26 @@ def api_yield_curve():
     }
     us_current: dict = {}
     try:
-        ym = _dt_mod.date.today().strftime("%Y%m")
-        treas_url = (
-            "https://home.treasury.gov/resource-center/data-chart-center/"
-            f"interest-rates/pages/xml?data=daily_treasury_yield_curve&field_tdr_date_value={ym}"
-        )
-        tr = _req.get(treas_url, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
-        if tr.status_code == 200:
+        # The month filter param is `field_tdr_date_value_month=YYYYMM`.  Using
+        # `field_tdr_date_value=YYYYMM` matches no *year* and returns an empty feed.
+        # Try the current month first, then fall back to the previous month so the
+        # first days of a month (before the first publication) still resolve.
+        _today = _dt_mod.date.today()
+        _prev  = (_today.replace(day=1) - _dt_mod.timedelta(days=1))
+        for _ym in (_today.strftime("%Y%m"), _prev.strftime("%Y%m")):
+            treas_url = (
+                "https://home.treasury.gov/resource-center/data-chart-center/"
+                "interest-rates/pages/xml?data=daily_treasury_yield_curve"
+                f"&field_tdr_date_value_month={_ym}"
+            )
+            # NOTE: treasury.gov responds in ~0.1s to a browser UA but takes ~8s
+            # with the default requests UA — keep the browser UA here.
+            tr = _req.get(treas_url, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
+            if tr.status_code != 200:
+                continue
+            # `<m:properties>` lives in the *metadata* namespace; only the
+            # `BC_*` value elements live in the plain dataservices namespace.
+            m_ns = "http://schemas.microsoft.com/ado/2007/08/dataservices/metadata"
             d_ns = "http://schemas.microsoft.com/ado/2007/08/dataservices"
             root = _ET.fromstring(tr.content)
             # Merge ALL entries oldest→newest so the most recent available value
@@ -4884,7 +5028,7 @@ def api_yield_curve():
             # (e.g. treasury publishes 3M/10Y/30Y first, then the rest an hour later)
             # without discarding data from the previous complete day.
             all_entries_merged: dict = {}
-            for props in root.iter(f"{{{d_ns}}}properties"):
+            for props in root.iter(f"{{{m_ns}}}properties"):
                 entry_vals = {}
                 for tag, label in US_MAT_MAP.items():
                     el = props.find(f"{{{d_ns}}}{tag}")
@@ -4895,9 +5039,12 @@ def api_yield_curve():
                             pass
                 if entry_vals:
                     all_entries_merged.update(entry_vals)  # newer entry wins per maturity
-            us_current = all_entries_merged
-            log.info("Yield curve: US Treasury data fetched (%d maturities: %s)",
-                     len(us_current), ", ".join(sorted(us_current.keys())))
+            if all_entries_merged:
+                us_current = all_entries_merged
+                log.info("Yield curve: US Treasury data fetched (%d maturities: %s)",
+                         len(us_current), ", ".join(sorted(us_current.keys())))
+                break
+            log.info("Yield curve: US Treasury feed for %s was empty — trying previous month", _ym)
     except Exception as exc:
         log.warning("Yield curve: US Treasury XML failed: %s", exc)
 
@@ -4959,7 +5106,9 @@ def api_yield_curve():
         import requests as _req_mod
         session = _req_mod.Session()
         session.trust_env = False
-        session.headers.update({"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"})
+        # Plain client UA — a spoofed browser UA gets blackholed by FRED's Akamai
+        # bot detection (see FRED_USER_AGENT in fed.py).
+        session.headers.update({"User-Agent": _FRED_UA, "Accept": "text/csv,*/*"})
         
         for mat in missing:
             fred_id = FRED_IDS[mat]
@@ -5061,7 +5210,7 @@ def api_yield_curve():
     try:
         fred_resp = _req.get(
             "https://fred.stlouisfed.org/graph/fredgraph.csv?id=IRLTLT01CNM156N",
-            timeout=10, headers={"User-Agent": "Mozilla/5.0"},
+            timeout=10, headers={"User-Agent": _FRED_UA},
         )
         if fred_resp.status_code == 200:
             dates, vals = [], []
@@ -5115,7 +5264,7 @@ def api_yield_curve():
     try:
         jp_fred = _req.get(
             "https://fred.stlouisfed.org/graph/fredgraph.csv?id=IRLTLT01JPM156N",
-            timeout=10, headers={"User-Agent": "Mozilla/5.0"},
+            timeout=10, headers={"User-Agent": _FRED_UA},
         )
         if jp_fred.status_code == 200:
             dates, vals = [], []
@@ -5234,7 +5383,9 @@ def api_yield_spread():
             import requests as _req
             import concurrent.futures as _cf_ys
             headers = {
-                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+                # Plain client UA — a spoofed browser UA gets blackholed by FRED's
+                # Akamai bot detection (see FRED_USER_AGENT in fed.py).
+                "User-Agent": _FRED_UA,
                 "Accept": "text/csv,*/*",
             }
             # Use a session to avoid proxy/timeout issues
@@ -5265,39 +5416,23 @@ def api_yield_spread():
             dgs2  = results["DGS2"]
 
         except Exception as fred_exc:
-            log.warning("yield-spread: FRED failed (%s), trying yfinance fallback", fred_exc)
-            # Fallback: use yfinance for TNX (10Y) and ^TWO or FRED-equivalent
-            try:
-                import yfinance as yf
-                import pandas as _pd
-                time.sleep(1) # Be polite to yfinance
-                tnx = yf.Ticker("^TNX").history(period="10y", interval="1d")
-                
-                # Best fallback: use the yield curve endpoint's existing data for 2Y
-                dgs2 = {}
-                try:
-                    with _YIELD_CURVE_CACHE_LOCK:
-                        yc_entry = _YIELD_CURVE_CACHE.get(_YIELD_CURVE_CACHE_VER)
-                    if yc_entry and yc_entry.get("data"):
-                        h2y = yc_entry["data"].get("history_2y")
-                        if h2y and h2y.get("dates"):
-                            dgs2 = {d: v for d, v in zip(h2y["dates"], h2y["values"]) if v is not None}
-                except Exception:
-                    pass
-                    
-                if not dgs2:
-                    raise RuntimeError("No 2Y data available in yield curve cache")
-                    
-                dgs10 = {}
-                for dt, row in tnx.iterrows():
-                    if not _pd.isna(row["Close"]):
-                        dgs10[str(dt.date())] = round(float(row["Close"]), 3)
-            except Exception as yf_exc:
-                log.warning("yield-spread: yfinance fallback also failed: %s", yf_exc)
-                return jsonify({"error": str(yf_exc)}), 502
+            # No usable fallback exists for the 2Y series: yfinance has no reliable
+            # free 2Y Treasury ticker, and the yield-curve cache only stores a
+            # single latest 2Y point (not the 10-year history this chart needs).
+            # Rather than 502 on a transient FRED blip, serve the last good payload
+            # even if it is past its TTL, flagged so the UI can label it.
+            log.warning("yield-spread: FRED failed (%s) — falling back to stale cache", fred_exc)
+            with _YIELD_SPREAD_LOCK:
+                stale = _YIELD_SPREAD_CACHE.get("data")
+            if stale and stale.get("data"):
+                age_h = (time.time() - stale["ts"]) / 3600
+                log.info("yield-spread: serving stale cache (%.1fh old)", age_h)
+                return jsonify({**stale["data"], "stale": True,
+                                "stale_age_hours": round(age_h, 1)})
+            return jsonify({"error": f"FRED unavailable and no cached data: {fred_exc}"}), 502
 
         if not dgs10 or not dgs2:
-            return jsonify({"error": "No data from either FRED or yfinance"}), 502
+            return jsonify({"error": "No data returned from FRED"}), 502
 
         # Align on dates present in both DGS10 and DGS2
         all_dates = sorted(set(dgs10) & set(dgs2))
