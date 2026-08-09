@@ -16,6 +16,67 @@ class FetchError(Exception):
     """Raised when Yahoo Finance data cannot be retrieved."""
 
 
+# ── Field helpers ───────────────────────────────────────────────────────────
+# Yahoo silently changes the units and availability of `info` fields. Each
+# helper below normalises one such field and is shared by every call site, so a
+# future change is fixed in one place instead of three.
+
+def latest_price(info: dict) -> float | None:
+    """
+    Latest market price, falling back through Yahoo's variants.
+
+    ETFs report no `currentPrice`, so `navPrice` / `previousClose` are needed.
+    """
+    return (info.get("currentPrice")
+            or info.get("regularMarketPrice")
+            or info.get("navPrice")
+            or info.get("previousClose"))
+
+
+def dividend_yield_pct(info: dict, price: float | None = None) -> float | None:
+    """
+    Annual dividend yield as a percentage — 2.44 means 2.44%.
+
+    Yahoo's `dividendYield` used to be a decimal (0.0244) and is now already a
+    percentage (2.44), so multiplying by 100 inflated every yield 100x (MSFT
+    reported 73% instead of 0.73%). A magnitude heuristic cannot separate the
+    two scales, because a low-yield value like 0.73 is plausible under either
+    reading. So derive the yield from `dividendRate` (dollars per share), which
+    is unit-unambiguous and immune to another scale flip, and fall back to
+    `dividendYield` as-is only when the rate is missing — ETFs report no
+    `dividendRate`, but their `dividendYield` is a percentage too.
+
+    Note this is NOT interchangeable with the ETF-only `yield` field, which is
+    still a decimal and does need the * 100.
+    """
+    if price is None:
+        price = latest_price(info)
+    rate = info.get("dividendRate")
+    if rate and price:
+        return round(rate / price * 100, 2)
+    dy = info.get("dividendYield")
+    return round(dy, 2) if dy else None
+
+
+def ps_ratio(info: dict) -> float | None:
+    """
+    Price-to-sales ratio (trailing twelve months).
+
+    Yahoo stopped populating `priceToSalesTrailingTwelveMonths` — it is null for
+    every ticker as of 2026-08 — which silently blanked P/S everywhere it was
+    displayed. Fall back to marketCap / totalRevenue, which is the same ratio.
+    Both are null for ETFs, so ETFs correctly stay None.
+    """
+    ps = info.get("priceToSalesTrailingTwelveMonths")
+    if ps:
+        return round(ps, 2)
+    market_cap = info.get("marketCap")
+    revenue    = info.get("totalRevenue")
+    if market_cap and revenue and revenue > 0:
+        return round(market_cap / revenue, 2)
+    return None
+
+
 def fetch_ticker_data(ticker: str) -> dict:
     """
     Return a flat dict of key valuation metrics for *ticker*.
@@ -40,10 +101,7 @@ def fetch_ticker_data(ticker: str) -> dict:
     except Exception as exc:
         raise FetchError(f"Could not fetch data for {ticker}: {exc}") from exc
 
-    current_price = (info.get("currentPrice")
-                     or info.get("regularMarketPrice")
-                     or info.get("navPrice")
-                     or info.get("previousClose"))
+    current_price = latest_price(info)
 
     # Day change %: use Yahoo's pre-computed value first, fall back to manual calc
     day_change_pct = info.get("regularMarketChangePercent")
@@ -94,11 +152,11 @@ def fetch_ticker_data(ticker: str) -> dict:
         "EV/EBITDA":           round(info.get("enterpriseToEbitda"), 1) if info.get("enterpriseToEbitda") is not None else None,
         "EV ($B)":             round(info.get("enterpriseValue") / 1e9, 1) if info.get("enterpriseValue") else None,
         "EBITDA ($B)":         round(info.get("ebitda") / 1e9, 1) if info.get("ebitda") else None,
-        "P/S Ratio":          round(info.get("priceToSalesTrailingTwelveMonths"), 2) if info.get("priceToSalesTrailingTwelveMonths") else None,
+        "P/S Ratio":          ps_ratio(info),
         "P/B Ratio":          round(info.get("priceToBook"), 2) if info.get("priceToBook") else None,
         "FCF ($B)":           round(info.get("freeCashflow") / 1e9, 1) if info.get("freeCashflow") else None,
         "Short Float (%)":    round(info.get("shortPercentOfFloat") * 100, 1) if info.get("shortPercentOfFloat") else None,
-        "Dividend Yield (%)": round(info.get("dividendYield") * 100, 2) if info.get("dividendYield") else None,
+        "Dividend Yield (%)": dividend_yield_pct(info, current_price),
         "Revenue Growth (%)": round(info.get("revenueGrowth") * 100, 1) if info.get("revenueGrowth") else None,
         "52W Return (%)":  round(info.get("52WeekChange") * 100, 1) if info.get("52WeekChange") else None,
         "YTD Return (%)":  round(info.get("ytdReturn") * 100, 1) if info.get("ytdReturn") else None,
