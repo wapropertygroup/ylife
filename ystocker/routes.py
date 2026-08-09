@@ -24,7 +24,7 @@ import pandas as pd
 from flask import Blueprint, render_template, redirect, url_for, request, flash, jsonify, Response, has_request_context, session
 
 from ystocker import PEER_GROUPS, YT_CHANNELS
-from ystocker.data import fetch_group
+from ystocker.data import fetch_group, dividend_yield_pct, ps_ratio
 from ystocker import charts
 # Plain client UA for every fred.stlouisfed.org request. A spoofed browser UA is
 # silently blackholed by FRED's Akamai bot detection — see fed.py for details.
@@ -1052,10 +1052,10 @@ def api_history(ticker: str):
         "short_float":       _safe(round(info.get("shortPercentOfFloat") * 100, 1)) if info.get("shortPercentOfFloat") else None,
         "held_insiders":     _safe(round(info.get("heldPercentInsiders") * 100, 1)) if info.get("heldPercentInsiders") else None,
         "held_institutions": _safe(round(info.get("heldPercentInstitutions") * 100, 1)) if info.get("heldPercentInstitutions") else None,
-        "dividend_yield":    _safe(round(info.get("dividendYield") * 100, 2)) if info.get("dividendYield") else None,
+        "dividend_yield":    _safe(dividend_yield_pct(info)),
         "dividend_rate":     _safe(info.get("dividendRate")),
         "payout_ratio":      _safe(round(info.get("payoutRatio") * 100, 1)) if info.get("payoutRatio") else None,
-        "ps_ratio":          _safe(round(info.get("priceToSalesTrailingTwelveMonths"), 2)) if info.get("priceToSalesTrailingTwelveMonths") else None,
+        "ps_ratio":          _safe(ps_ratio(info)),
         "pb_ratio":          _safe(round(info.get("priceToBook"), 2)) if info.get("priceToBook") else None,
         "fcf":               _safe(round(info.get("freeCashflow") / 1e9, 1)) if info.get("freeCashflow") else None,
         # ETF-specific
@@ -1403,7 +1403,7 @@ def api_sector_ranking():
                     "sector":      sector,
                     "pe":          _safe(round(info.get("trailingPE"), 1)) if info.get("trailingPE") else None,
                     "pb":          _safe(round(info.get("priceToBook"), 2)) if info.get("priceToBook") else None,
-                    "div_yield":   _safe(round(info.get("dividendYield", 0) * 100, 2)) if info.get("dividendYield") else None,
+                    "div_yield":   _safe(dividend_yield_pct(info)),
                     "ytd":         round(float(ytd_ret), 1),
                     "m6":          round(float(m6_ret), 1),
                     "m1":          round(float(m1_ret), 1),
@@ -1720,16 +1720,30 @@ def api_etf_holdings(ticker: str):
             if fd is not None:
                 th = fd.top_holdings
                 if th is not None and not th.empty:
-                    for _, row in th.head(15).iterrows():
+                    # yfinance returns Symbol as the DataFrame *index* and the
+                    # weight in a "Holding Percent" column (0-1 scale).
+                    for idx, row in th.head(15).iterrows():
+                        sym = row.get("Symbol") or row.get("symbol") or row.get("Ticker") or idx
+                        wt = None
+                        for col in ("Holding Percent", "% Assets", "holdingPercent", "weight"):
+                            if col in row and row.get(col) is not None:
+                                wt = row.get(col)
+                                break
                         holdings.append({
-                            "ticker": str(row.get("Symbol") or row.get("symbol") or row.get("Ticker") or ""),
+                            "ticker": str(sym or "").strip().upper(),
                             "name":   str(row.get("Name") or row.get("name") or ""),
-                            "weight": round(float(row.get("% Assets") or row.get("holdingPercent") or row.get("weight") or 0) * 100, 2)
-                                      if (row.get("% Assets") or row.get("holdingPercent") or row.get("weight")) else None,
+                            "weight": round(float(wt) * 100, 2) if wt is not None else None,
                         })
-                # Sector weights
+                # Sector weights — a plain dict in current yfinance, e.g.
+                # {"technology": 0.9926, ...}; older versions returned a frame.
                 sw = fd.sector_weightings
-                if sw is not None and not sw.empty:
+                if isinstance(sw, dict):
+                    for sec, wt in sw.items():
+                        if not sec:
+                            continue
+                        label = str(sec).replace("_", " ").title()
+                        sector_weights[label] = round(float(wt) * 100, 2) if wt else 0.0
+                elif sw is not None and not sw.empty:
                     for _, row in sw.iterrows():
                         sec = str(row.get("Sector") or row.get("sector") or "")
                         wt  = row.get("Weight (%)") or row.get("sectorWeight") or row.get("weight") or 0
@@ -2624,53 +2638,105 @@ def api_history_research(ticker: str):
     system_instruction, prompt = research.build_research_prompt(
         ticker=ticker, bundle=bundle, lang=lang, today=today)
 
+    # The analyst persona/rules go in the user turn rather than the
+    # system_instruction field: with Google Search grounding enabled, a Chinese
+    # system_instruction makes the upstream stream complete with zero chunks
+    # (reproduced 0/3 with the field vs 3/3 when merged). English is unaffected,
+    # but one code path is better than two.
+    contents = f"{system_instruction}\n\n---\n\n{prompt}"
+
+    # A full report runs ~10k output + ~5k thinking tokens; 24k leaves headroom
+    # without letting a runaway generation exceed the Gunicorn request window.
+    _MAX_OUTPUT_TOKENS = 24_576
+    # Stay under the production Gunicorn --timeout of 120 s.
     client = genai.Client(api_key=api_key,
-                          http_options=genai_types.HttpOptions(timeout=300_000))
-    config = genai_types.GenerateContentConfig(
-        system_instruction=system_instruction,
-        temperature=0.3,                       # research, not creative writing
-        tools=[genai_types.Tool(google_search=genai_types.GoogleSearch())],
-    )
+                          http_options=genai_types.HttpOptions(timeout=100_000))
+
+    def _open_stream(use_search: bool):
+        """Start one generation attempt, optionally with Google Search grounding."""
+        kwargs: dict = {
+            "temperature": 0.3,                    # research, not creative writing
+            "max_output_tokens": _MAX_OUTPUT_TOKENS,
+        }
+        if use_search:
+            kwargs["tools"] = [genai_types.Tool(google_search=genai_types.GoogleSearch())]
+        return client.models.generate_content_stream(
+            model="gemini-2.5-flash", contents=contents,
+            config=genai_types.GenerateContentConfig(**kwargs))
 
     def generate():
         accumulated: list[str] = []
         sources: list[str] = []
-        try:
-            stream = client.models.generate_content_stream(
-                model="gemini-2.5-flash", contents=prompt, config=config)
-            for chunk in stream:
-                text = chunk.text
-                if text:
-                    accumulated.append(text)
-                    yield f"data: {json.dumps({'text': text})}\n\n"
-                # Collect grounding sources so the UI can show what was searched
-                for cand in (chunk.candidates or []):
-                    meta = getattr(cand, "grounding_metadata", None)
-                    for gc in (getattr(meta, "grounding_chunks", None) or []):
-                        web = getattr(gc, "web", None)
-                        title = getattr(web, "title", None) if web else None
-                        if title and title not in sources:
-                            sources.append(title)
-        except Exception as exc:
-            log.error("History research error for %s: %s", ticker, exc)
-            yield f"data: {json.dumps({'error': str(exc)})}\n\n"
-        else:
-            full_text = "".join(accumulated)
-            if sources:
-                yield f"data: {json.dumps({'sources': sources[:12]})}\n\n"
-            if full_text:
-                try:
-                    _RESEARCH_CACHE_DIR.mkdir(parents=True, exist_ok=True)
-                    tmp = cache_file.with_suffix(".tmp")
-                    tmp.write_text(json.dumps({
-                        "ts": time.time(), "text": full_text, "sources": sources[:12],
-                    }))
-                    tmp.replace(cache_file)
-                    log.debug("Research cached: %s lang=%s fp=%s", ticker, lang, fingerprint)
-                except OSError:
-                    log.debug("Failed to write research cache for %s", ticker)
-        finally:
+        truncated = False
+        error: str | None = None
+        degraded = False
+
+        # The grounded stream intermittently completes with zero chunks upstream.
+        # Retry once, then fall back to a search-free run (markedly more reliable
+        # and still complete from the in-app data). Retrying is only safe while
+        # nothing has been emitted yet, which is exactly the case we retry on.
+        for attempt, use_search in enumerate((True, True, False), start=1):
+            error = None
+            truncated = False
+            try:
+                for chunk in _open_stream(use_search):
+                    text = chunk.text
+                    if text:
+                        accumulated.append(text)
+                        yield f"data: {json.dumps({'text': text})}\n\n"
+                    for cand in (chunk.candidates or []):
+                        # Collect grounding sources so the UI can show what was read
+                        meta = getattr(cand, "grounding_metadata", None)
+                        for gc in (getattr(meta, "grounding_chunks", None) or []):
+                            web = getattr(gc, "web", None)
+                            title = getattr(web, "title", None) if web else None
+                            if title and title not in sources:
+                                sources.append(title)
+                        if str(getattr(cand, "finish_reason", "") or "").endswith("MAX_TOKENS"):
+                            truncated = True
+            except Exception as exc:
+                error = str(exc)
+                log.error("History research error for %s (attempt %d, search=%s): %s",
+                          ticker, attempt, use_search, exc)
+
+            if accumulated:
+                degraded = not use_search
+                break
+            log.warning("History research: empty stream for %s (attempt %d, search=%s)",
+                        ticker, attempt, use_search)
+
+        full_text = "".join(accumulated)
+
+        if not full_text:
+            msg = error or (
+                "AI 返回为空，请点「重新生成」重试。" if lang == "zh"
+                else "The AI returned an empty response. Press Regenerate to retry.")
+            yield f"data: {json.dumps({'error': msg})}\n\n"
             yield "data: [DONE]\n\n"
+            return
+
+        if degraded:
+            yield f"data: {json.dumps({'degraded': True})}\n\n"
+        if truncated:
+            yield f"data: {json.dumps({'truncated': True})}\n\n"
+        if sources:
+            yield f"data: {json.dumps({'sources': sources[:12]})}\n\n"
+        if error:
+            yield f"data: {json.dumps({'error': error})}\n\n"
+
+        # Cache only a clean, complete report
+        if not error and not truncated:
+            try:
+                _RESEARCH_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+                tmp = cache_file.with_suffix(".tmp")
+                tmp.write_text(json.dumps({
+                    "ts": time.time(), "text": full_text, "sources": sources[:12],
+                }))
+                tmp.replace(cache_file)
+                log.debug("Research cached: %s lang=%s fp=%s", ticker, lang, fingerprint)
+            except OSError:
+                log.debug("Failed to write research cache for %s", ticker)
+        yield "data: [DONE]\n\n"
 
     return Response(generate(), mimetype="text/event-stream", headers={
         "Cache-Control": "no-cache",
@@ -2846,7 +2912,9 @@ def _ddb_batch_put(items: list) -> None:
         return
     ts = Decimal(str(time.time()))
     try:
-        with table.batch_writer() as batch:
+        # overwrite_by_pkeys: BatchWriteItem rejects the entire batch if one
+        # request repeats a key, so collapse duplicates (last wins) first.
+        with table.batch_writer(overwrite_by_pkeys=["link"]) as batch:
             for item in items:
                 if not item.get("link"):
                     continue
@@ -4195,23 +4263,38 @@ def _fg_load_from_dynamo() -> list:
         return []
 
 
-def _fg_save_to_dynamo(history: list) -> None:
-    """Batch-write history items [{date, score, rating}] to DynamoDB."""
+def _fg_save_to_dynamo(history: list) -> int:
+    """Batch-write history items [{date, score, rating}] to DynamoDB.
+
+    Returns the number of records actually written.
+
+    `date` is the table's partition key and the upstream CNN feed can repeat a
+    date, so items are collapsed by date first (last value wins). BatchWriteItem
+    rejects the *whole* batch with a ValidationException if one request contains
+    duplicate keys, so without this every write would fail.
+    """
     table = _get_fg_table()
     if not table or not history:
-        return
+        return 0
+    deduped: dict[str, dict] = {}
+    for item in history:
+        if not item.get("date") or item.get("score") is None:
+            continue
+        deduped[item["date"]] = {
+            "date":   item["date"],
+            "score":  Decimal(str(round(float(item["score"]), 2))),
+            "rating": item.get("rating") or "",
+        }
+    if not deduped:
+        return 0
     try:
-        with table.batch_writer() as batch:
-            for item in history:
-                if not item.get("date") or item.get("score") is None:
-                    continue
-                batch.put_item(Item={
-                    "date":   item["date"],
-                    "score":  Decimal(str(round(float(item["score"]), 2))),
-                    "rating": item.get("rating") or "",
-                })
+        with table.batch_writer(overwrite_by_pkeys=["date"]) as batch:
+            for record in deduped.values():
+                batch.put_item(Item=record)
+        return len(deduped)
     except Exception as exc:
         log.warning("DynamoDB fear-greed write failed: %s", exc)
+        return 0
 
 
 _CNN_FG_URL = "https://production.dataviz.cnn.io/index/fearandgreed/graphdata"
@@ -4319,8 +4402,14 @@ def api_fear_greed():
     # Persist only dates not already in DynamoDB
     new_records = [r for r in cnn_dated if r["date"] not in ddb_dates]
     if new_records:
-        _fg_save_to_dynamo(new_records)
-        log.info("Saved %d new Fear & Greed records to DynamoDB", len(new_records))
+        # Log what was actually stored, not what we attempted — the previous
+        # version reported success even when the batch write raised.
+        written = _fg_save_to_dynamo(new_records)
+        if written:
+            log.info("Saved %d new Fear & Greed records to DynamoDB", written)
+        else:
+            log.warning("Fear & Greed: %d new records could not be saved",
+                        len(new_records))
 
     # Build merged history: DynamoDB + new CNN records, deduped by ms timestamp
     cnn_history = [
@@ -4970,6 +5059,53 @@ def _yield_curve_save_disk(result: dict) -> None:
     threading.Thread(target=_write, daemon=True).start()
 
 
+_CN10Y_HISTORY_FILE = Path(__file__).parent.parent / "cache" / "cn_10y_history.json"
+
+
+def _cn10y_history(value: Optional[float]) -> dict:
+    """
+    Maintain a forward-accumulating daily series of the CN 10Y government yield.
+
+    There is no queryable free source for Chinese 10Y history:
+      * FRED's ``IRLTLT01CNM156N`` (and every OECD/IMF CN long-rate sibling) was
+        discontinued and now returns HTTP 404.
+      * ChinaBond serves only the *live* curve — its ``workTime`` parameter is
+        silently ignored, so every historical date returns today's numbers.
+
+    So we persist one observation per calendar day from the working ChinaBond
+    snapshot and let the series build up over time.  Returns the stored series
+    oldest→newest, in the same shape as the other ``history_10y`` payloads.
+    """
+    import datetime as _dt
+
+    store: dict[str, float] = {}
+    try:
+        if _CN10Y_HISTORY_FILE.exists():
+            raw = json.loads(_CN10Y_HISTORY_FILE.read_text())
+            for _d, _v in (raw.get("series") or {}).items():
+                try:
+                    store[str(_d)] = float(_v)
+                except (TypeError, ValueError):
+                    pass
+    except Exception as exc:
+        log.debug("CN 10Y history load failed: %s", exc)
+
+    if value is not None:
+        today = _dt.date.today().isoformat()
+        if store.get(today) != value:
+            store[today] = float(value)
+            try:
+                _CN10Y_HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
+                _tmp = _CN10Y_HISTORY_FILE.with_suffix(".tmp")
+                _tmp.write_text(json.dumps({"series": store}))
+                _tmp.replace(_CN10Y_HISTORY_FILE)   # atomic
+            except Exception as exc:
+                log.debug("CN 10Y history save failed: %s", exc)
+
+    ordered = sorted(store.items())
+    return {"dates": [d for d, _ in ordered], "values": [v for _, v in ordered]}
+
+
 @bp.route("/api/yield-curve")
 def api_yield_curve():
     """Return US & CN Treasury yield curve snapshots + historical 10Y comparison."""
@@ -5128,29 +5264,12 @@ def api_yield_curve():
             except Exception as exc:
                 log.warning("Yield curve: FRED CSV %s failed (%s). URL: %s", mat, exc, url)
 
-            # Try FRED JSON API as second fallback
-            try:
-                end = _dt_mod.date.today()
-                start = end - _dt_mod.timedelta(days=20)  # 20 days covers long weekends + holidays
-                fj = session.get(
-                    f"https://api.stlouisfed.org/fred/series/observations"
-                    f"?series_id={fred_id}&file_type=json&sort_order=desc&limit=10"
-                    f"&observation_start={start.strftime('%Y-%m-%d')}"
-                    f"&observation_end={end.strftime('%Y-%m-%d')}"
-                    f"&api_key=DEMO_KEY",
-                    timeout=20,
-                )
-                if fj.status_code == 200:
-                    import json as _json_mod
-                    obs = _json_mod.loads(fj.text).get("observations", [])
-                    for ob in obs:
-                        val = ob.get("value", ".")
-                        if val not in (".", ""):
-                            us_current[mat] = round(float(val), 3)
-                            log.info("Yield curve: FRED JSON filled %s = %s", mat, us_current[mat])
-                            break
-            except Exception as exc:
-                log.warning("Yield curve: FRED JSON %s failed: %s", mat, exc)
+            # NOTE: a FRED JSON API fallback used to live here, keyed with
+            # `api_key=DEMO_KEY`.  FRED requires a real 32-char lower-case
+            # alphanumeric key and rejects that placeholder with HTTP 400, so the
+            # block could never contribute data — it only ever burned the request
+            # timeout.  Removed; add it back only alongside a real FRED_API_KEY.
+
 
     # ── Stale-cache safety net: fill remaining gaps from previous successful fetch ─
     # This is a last resort — if Treasury XML, yfinance, AND FRED all failed for a
@@ -5204,57 +5323,60 @@ def api_yield_curve():
     except Exception as exc:
         log.warning("Yield curve: ChinaBond fetch failed: %s", exc)
 
-    # ── CN historical 10Y: FRED public CSV ───────────────────────────────────
-    cn_hist_10y: dict = {"dates": [], "values": []}
+    # ── CN historical 10Y: locally accumulated daily series ─────────────────
+    # The old FRED series (IRLTLT01CNM156N) was discontinued and returns 404, and
+    # ChinaBond cannot be queried for past dates — see _cn10y_history() for detail.
     cn_current_10y = cn_current.get("10Y")
-    try:
-        fred_resp = _req.get(
-            "https://fred.stlouisfed.org/graph/fredgraph.csv?id=IRLTLT01CNM156N",
-            timeout=10, headers={"User-Agent": _FRED_UA},
-        )
-        if fred_resp.status_code == 200:
-            dates, vals = [], []
-            for line in fred_resp.text.strip().splitlines()[1:]:
-                parts = line.split(",")
-                if len(parts) == 2 and parts[1].strip() not in (".", ""):
-                    try:
-                        dates.append(parts[0].strip())
-                        vals.append(round(float(parts[1].strip()), 3))
-                    except ValueError:
-                        pass
-            if dates:
-                cn_hist_10y = {"dates": dates, "values": vals}
-                if cn_current_10y is None:
-                    cn_current_10y = vals[-1]
-                    cn_current["10Y"] = cn_current_10y
-    except Exception as exc:
-        log.warning("Yield curve: CN FRED fetch failed: %s", exc)
+    cn_hist_10y = _cn10y_history(cn_current_10y)
 
     # ── JP snapshot: Ministry of Finance Japan JGB yield curve ──────────────
+    # The old `/english/jgbs/...` path 404s — it moved under `/english/policy/`.
+    # `jgbcme.csv` carries the *current month*; the full daily series since 1974
+    # lives at `historical/jgbcme_all.csv`, used here only as a fallback for the
+    # first days of a month before the new file is published.
     JP_COL_MAP = {"1Y": "1Y", "2Y": "2Y", "3Y": "3Y", "5Y": "5Y",
                   "10Y": "10Y", "20Y": "20Y", "30Y": "30Y"}
+    _MOF_BASE = "https://www.mof.go.jp/english/policy/jgbs/reference/interest_rate"
     jp_current: dict = {}
+
+    def _parse_mof_csv(text: str) -> dict:
+        """Return the newest complete row of a MoF JGB CSV as {label: yield}."""
+        lines = text.strip().splitlines()
+        # Row 0 is a title ("Interest Rate (August 2026)"); the header is row 1.
+        hdr_idx = next((i for i, ln in enumerate(lines[:6])
+                        if ln.split(",")[0].strip().strip('"').lower() == "date"), None)
+        if hdr_idx is None:
+            return {}
+        header = [h.strip() for h in lines[hdr_idx].split(",")]
+        # Walk newest→oldest; trailing lines are a blank row and a footer note.
+        for ln in reversed(lines[hdr_idx + 1:]):
+            parts = [p.strip() for p in ln.split(",")]
+            if not parts or "/" not in parts[0]:
+                continue
+            vals: dict = {}
+            for label, col in JP_COL_MAP.items():
+                try:
+                    raw = parts[header.index(col)]
+                except (ValueError, IndexError):
+                    continue
+                if raw and raw not in ("-", "N/A"):
+                    try:
+                        vals[label] = round(float(raw), 3)
+                    except ValueError:
+                        pass
+            if vals:
+                return vals
+        return {}
+
     try:
-        mof_url = ("https://www.mof.go.jp/english/jgbs/reference/"
-                   "interest_rate/jgbcme_all.csv")
-        mof_r = _req.get(mof_url, timeout=10, headers={"User-Agent": "Mozilla/5.0"})
-        if mof_r.status_code == 200:
-            mof_lines = mof_r.text.strip().splitlines()
-            if len(mof_lines) >= 2:
-                header = [h.strip() for h in mof_lines[0].split(",")]
-                for line in reversed(mof_lines[1:]):
-                    parts = [p.strip() for p in line.split(",")]
-                    if len(parts) >= len(header) and parts[0]:
-                        for label, col in JP_COL_MAP.items():
-                            try:
-                                idx = header.index(col)
-                                val = parts[idx]
-                                if val and val not in ("", "-", "N/A"):
-                                    jp_current[label] = round(float(val), 3)
-                            except (ValueError, IndexError):
-                                pass
-                        if jp_current:
-                            break
+        for _mof_path in ("jgbcme.csv", "historical/jgbcme_all.csv"):
+            mof_r = _req.get(f"{_MOF_BASE}/{_mof_path}", timeout=15,
+                             headers={"User-Agent": "Mozilla/5.0"})
+            if mof_r.status_code != 200:
+                continue
+            jp_current = _parse_mof_csv(mof_r.text)
+            if jp_current:
+                break
         log.info("Yield curve: JP MoF fetched (%d maturities: %s)",
                  len(jp_current), ", ".join(sorted(jp_current.keys())))
     except Exception as exc:
@@ -5750,7 +5872,9 @@ def _econ_save_to_dynamo(events: list) -> None:
         return
     _STABLE_FIELDS = {"date", "event_id", "time", "event", "country", "impact", "url", "zh"}
     try:
-        with table.batch_writer() as batch:
+        # Composite key (date, event_id) — collapse repeats so one duplicated
+        # pair cannot fail the whole batch.
+        with table.batch_writer(overwrite_by_pkeys=["date", "event_id"]) as batch:
             for ev in events:
                 if not ev.get("date") or not ev.get("event_id"):
                     continue
@@ -7040,7 +7164,9 @@ def _heatmap_save_to_dynamo(date_str: str, stocks: list) -> None:
         return
     ttl_epoch = int(time.time()) + 90 * 24 * 3600
     try:
-        with table.batch_writer() as batch:
+        # Composite key (date, ticker) — a repeated ticker in the source list
+        # would otherwise reject the entire snapshot batch.
+        with table.batch_writer(overwrite_by_pkeys=["date", "ticker"]) as batch:
             for s in stocks:
                 item = {
                     "date":    date_str,
