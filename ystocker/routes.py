@@ -5402,22 +5402,67 @@ _YIELD_SPREAD_FETCH_EVENT = threading.Event()
 _YIELD_SPREAD_FETCH_EVENT.set()  # Initially set (meaning "not fetching")
 
 
+def _yield_spread_window(payload: dict, full: bool) -> dict:
+    """Window a full-history spread payload for the requesting page.
+
+    full=False (default) — the trailing 10 years at daily resolution. /markets
+    only offers 2Y/5Y/10Y buttons and slices client-side, so it keeps exactly the
+    payload it always got.
+
+    full=True — the entire history (DGS2 starts 1976-06) downsampled to one
+    observation per month. This is for the /fed page's "Consumer Sentiment vs
+    Yield Curve" overlay, which aligns the spread onto monthly UMCSENT dates by
+    YYYY-MM key: sending all ~12.5k daily points would be a 440 KB response that
+    the client immediately collapses to ~600 monthly values.
+    """
+    dates     = payload.get("dates", [])
+    spread    = payload.get("spread", [])
+    recession = payload.get("recession", [])
+
+    if full:
+        # Keep the last observation of each month (dates are ascending).
+        keep = [i for i, d in enumerate(dates)
+                if i + 1 == len(dates) or dates[i + 1][:7] != d[:7]]
+        return {
+            **payload,
+            "dates":     [dates[i] for i in keep],
+            "spread":    [spread[i] for i in keep],
+            "recession": [recession[i] for i in keep],
+        }
+
+    import datetime as _dt
+
+    cutoff = (_dt.date.today() - _dt.timedelta(days=365 * 10)).isoformat()
+    start  = next((i for i, d in enumerate(dates) if d >= cutoff), len(dates))
+    return {
+        **payload,
+        "dates":     dates[start:],
+        "spread":    spread[start:],
+        "recession": recession[start:],
+    }
+
+
 @bp.route("/api/yield-spread")
 def api_yield_spread():
     """10Y-2Y Treasury spread + NBER recession bands.
+
+    Query params:
+      full: "1" to return the entire history (from 1976-06, where DGS2 begins)
+            downsampled to monthly, instead of the default trailing 10-year
+            window at daily resolution. See _yield_spread_window().
 
     Returns:
       dates: list of YYYY-MM-DD
       spread: list of floats (10Y - 2Y, percentage points)
       recession: list of 0/1 (NBER recession indicator)
     """
-    import datetime as _dt
+    full = request.args.get("full") == "1"
 
     # 1. Check cache first
     with _YIELD_SPREAD_LOCK:
         entry = _YIELD_SPREAD_CACHE.get("data")
         if entry and time.time() - entry["ts"] < _YIELD_SPREAD_TTL:
-            return jsonify(entry["data"])
+            return jsonify(_yield_spread_window(entry["data"], full))
 
     # 2. Cache is empty or stale. Deduplicate concurrent fetches.
     # If an event is NOT set, another thread is already fetching.
@@ -5430,7 +5475,7 @@ def api_yield_spread():
         with _YIELD_SPREAD_LOCK:
             entry = _YIELD_SPREAD_CACHE.get("data")
             if entry and time.time() - entry["ts"] < _YIELD_SPREAD_TTL:
-                return jsonify(entry["data"])
+                return jsonify(_yield_spread_window(entry["data"], full))
         # If we get here, the other thread failed. Fall through to try fetching.
 
     # 3. We are the designated fetcher
@@ -5498,7 +5543,8 @@ def api_yield_spread():
             if stale and stale.get("data"):
                 age_h = (time.time() - stale["ts"]) / 3600
                 log.info("yield-spread: serving stale cache (%.1fh old)", age_h)
-                return jsonify({**stale["data"], "stale": True,
+                return jsonify({**_yield_spread_window(stale["data"], full),
+                                "stale": True,
                                 "stale_age_hours": round(age_h, 1)})
             return jsonify({"error": f"FRED unavailable and no cached data: {fred_exc}"}), 502
 
@@ -5510,21 +5556,22 @@ def api_yield_spread():
         if not all_dates:
             raise RuntimeError("No overlapping dates between DGS10 and DGS2")
 
-        # Keep last 10 years
-        cutoff = (_dt.date.today() - _dt.timedelta(days=365 * 10)).isoformat()
-        filtered = [(d, round(dgs10[d] - dgs2[d], 3), _in_recession(d))
-                    for d in all_dates if d >= cutoff]
+        # Cache the FULL series (1976-06 onward, where DGS2 begins); each response
+        # is windowed by _yield_spread_window() so one fetch serves both the
+        # default 10-year payload and the /fed page's full-history overlay.
+        rows = [(d, round(dgs10[d] - dgs2[d], 3), _in_recession(d)) for d in all_dates]
 
-        if not filtered:
-            raise RuntimeError("No data in 10-year window")
+        if not rows:
+            raise RuntimeError("No overlapping DGS10/DGS2 observations")
 
-        dates, spread, recession = zip(*filtered)
+        dates, spread, recession = zip(*rows)
         result = {"dates": list(dates), "spread": list(spread), "recession": list(recession)}
-        
+
         with _YIELD_SPREAD_LOCK:
             _YIELD_SPREAD_CACHE["data"] = {"ts": time.time(), "data": result}
-            
-        return jsonify(result)
+
+        log.info("yield-spread: %d obs (%s … %s)", len(dates), dates[0], dates[-1])
+        return jsonify(_yield_spread_window(result, full))
 
     except Exception as exc:
         log.warning("yield-spread: fetch failed: %s", exc)
@@ -5532,6 +5579,77 @@ def api_yield_spread():
     finally:
         # 4. Always signal that the fetch attempt is complete
         _YIELD_SPREAD_FETCH_EVENT.set()
+
+
+# ---------------------------------------------------------------------------
+# Long-horizon S&P 500 history  (/api/spx-history)
+# ---------------------------------------------------------------------------
+
+# 24-hour cache: monthly closes only move once a month, and the /fed page
+# overlays that consume this already refresh on the 24 h Fed cache TTL.
+_SPX_HISTORY_CACHE: dict = {}
+_SPX_HISTORY_LOCK = threading.Lock()
+_SPX_HISTORY_TTL = 24 * 3600
+
+
+@bp.route("/api/spx-history")
+def api_spx_history():
+    """Monthly S&P 500 (^GSPC) closes back to 1927, for long-horizon macro overlays.
+
+    The /fed page charts FRED series that begin decades before any tradeable S&P
+    product existed (GDPC1 → 1947, UMCSENT → 1952). Two traps make the obvious
+    sources unusable there:
+
+      * /api/history/SPY tracks the SPY *ETF*, which only launched in 1993.
+      * Yahoo silently caps interval="1mo" responses at 500 rows regardless of the
+        requested start date, so a monthly ^GSPC request truncates to ~1985 with
+        no error — passing an explicit start= does not lift the cap.
+
+    Fetching daily (period="max" returns ~24.7k rows from 1927-12-30) and
+    resampling to month-end server-side is the only way to get the full series.
+    Dates land on month ends; every consumer aligns on the YYYY-MM prefix, so
+    they interoperate with FRED's first-of-month monthly convention.
+
+    Returns: {"dates": ["YYYY-MM-DD", ...], "prices": [float, ...]}
+    """
+    import yfinance as yf
+
+    with _SPX_HISTORY_LOCK:
+        entry = _SPX_HISTORY_CACHE.get("data")
+        if entry and time.time() - entry["ts"] < _SPX_HISTORY_TTL:
+            return jsonify(entry["data"])
+
+    try:
+        hist = yf.Ticker("^GSPC").history(period="max", interval="1d")
+        if hist.empty or "Close" not in hist:
+            raise RuntimeError("yfinance returned no ^GSPC rows")
+
+        monthly = hist["Close"].resample("ME").last().dropna()
+        if monthly.empty:
+            raise RuntimeError("no monthly closes after resampling ^GSPC")
+
+        result = {
+            "dates":  [d.strftime("%Y-%m-%d") for d in monthly.index],
+            "prices": [round(float(v), 2) for v in monthly.values],
+        }
+    except Exception as exc:
+        log.warning("spx-history: fetch failed: %s", exc)
+        # Serve the last good payload rather than blanking the charts on a blip.
+        with _SPX_HISTORY_LOCK:
+            stale = _SPX_HISTORY_CACHE.get("data")
+        if stale and stale.get("data"):
+            age_h = (time.time() - stale["ts"]) / 3600
+            log.info("spx-history: serving stale cache (%.1fh old)", age_h)
+            return jsonify({**stale["data"], "stale": True,
+                            "stale_age_hours": round(age_h, 1)})
+        return jsonify({"error": str(exc)}), 502
+
+    with _SPX_HISTORY_LOCK:
+        _SPX_HISTORY_CACHE["data"] = {"ts": time.time(), "data": result}
+
+    log.info("spx-history: %d monthly closes (%s … %s)",
+             len(result["dates"]), result["dates"][0], result["dates"][-1])
+    return jsonify(result)
 
 
 # ---------------------------------------------------------------------------

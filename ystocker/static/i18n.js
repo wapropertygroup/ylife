@@ -1614,7 +1614,7 @@ const I18n = (() => {
     'chart.fed_assets_t':    { en: 'Fed Assets ($T)', zh: '美联储总资产（万亿美元）' },
     'chart.fed_total_assets':{ en: 'Fed Total Assets', zh: '美联储总资产' },
     'chart.spy_10y_ratio':   { en: 'SPY / 10Y Ratio', zh: 'SPY / 10年期美债比率' },
-    'chart.spy':             { en: 'S&P 500 (SPY)',   zh: '标普500 (SPY)' },
+    'chart.spy':             { en: 'S&P 500',        zh: '标普500' },
     'chart.annual_dividend': { en: 'Annual Dividend ($)', zh: '年度股息（美元）' },
     'chart.div_yield':       { en: 'Div Yield',       zh: '股息率' },
     'chart.revenue_b':       { en: 'Revenue ($B)',    zh: '营业收入（十亿美元）' },

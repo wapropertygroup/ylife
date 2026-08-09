@@ -2341,12 +2341,29 @@ let _fedSeriesData = {};
   } catch(e) { console.warn('Fed chart currSpeedTrendChart failed:', e); }
 
   // ── Pre-fetch macro data (consolidated to reduce network requests)
-  const [yc, spreadData, mkData, spy10y] = await Promise.all([
+  // spxLong is monthly ^GSPC back to 1927 — the decades-long FRED series below
+  // (GDPC1 → 1947, UMCSENT → 1952) need it because SPY only starts in 1993.
+  const [yc, spreadData, mkData, spy10y, spxLong] = await Promise.all([
     safeJsonFetch('/api/yield-curve'),
-    safeJsonFetch('/api/yield-spread'),
+    safeJsonFetch('/api/yield-spread?full=1'),
     safeJsonFetch('/api/markets'),
-    safeJsonFetch('/api/history/SPY?period=10y')
+    safeJsonFetch('/api/history/SPY?period=10y'),
+    safeJsonFetch('/api/spx-history')
   ]);
+
+  // Month-key (YYYY-MM) → close, shared by the normalised S&P overlays.
+  const _spxMonthMap = {};
+  (spxLong?.dates || []).forEach((d, i) => {
+    if (spxLong.prices?.[i] != null) _spxMonthMap[d.slice(0, 7)] = spxLong.prices[i];
+  });
+
+  // Clip a date array to the first index where both series have data, so a
+  // shorter comparison line spans the whole plot instead of leaving an empty
+  // gutter across the earlier decades.
+  function _firstBothIdx(dates, aVals, bVals) {
+    const i = dates.findIndex((_, k) => aVals[k] != null && bVals[k] != null);
+    return i < 0 ? 0 : i;
+  }
 
   // ── Fed Balance Sheet vs 10Y Yield dual-axis chart & Relative Rate Graph
   try {
@@ -2452,26 +2469,40 @@ let _fedSeriesData = {};
   } catch(e) { console.warn('Fed cycle chart failed:', e); }
 
   // ── Real GDP vs S&P 500
-  let _gdpSpyGdp = null, _gdpSpySpy = null, _gdpSpyChart = null;
+  let _gdpSpyChart = null;
   try {
     const gdp = s['GDPC1'];
-    if (gdp?.dates?.length > 4 && spy10y?.prices?.length) {
+    if (gdp?.dates?.length > 4 && spxLong?.prices?.length) {
       document.getElementById('gdpSpySection').style.display = 'block';
-      const spyMonthMap = {}; (spy10y.dates||[]).forEach((d,i)=>{ if(spy10y.prices[i]!=null) spyMonthMap[d.slice(0,7)]=spy10y.prices[i]; });
-      const gdpBase = gdp.values.find(v=>v!=null), spyAligned = gdp.dates.map(d=>spyMonthMap[d.slice(0,7)]??null), spyBase = spyAligned.find(v=>v!=null);
-      const gdpNorm = gdp.values.map(v=>v!=null&&gdpBase?+(v/gdpBase*100).toFixed(1):null), spyNorm = spyAligned.map(v=>v!=null&&spyBase?+(v/spyBase*100).toFixed(1):null);
-      _gdpSpyGdp = { dates: gdp.dates, gdpNorm, spyNorm };
+      const spyAligned = gdp.dates.map(d => _spxMonthMap[d.slice(0,7)] ?? null);
+      // GDPC1 starts 1947 and ^GSPC 1927, so the overlap is all of GDP's history;
+      // clipping keeps the chart honest if either source is ever shortened.
+      const from     = _firstBothIdx(gdp.dates, gdp.values, spyAligned);
+      const gdpDates = gdp.dates.slice(from);
+      const gdpVals  = gdp.values.slice(from);
+      const spyVals  = spyAligned.slice(from);
       function _renderGdpSpy(years) {
         const cutDate = years > 0 ? new Date(new Date() - years * 365 * 86400000).toISOString().slice(0,10) : '1900-01-01';
-        const idx = Math.max(0, gdp.dates.findIndex(d => d >= cutDate));
+        const startIdx = gdpDates.findIndex(d => d >= cutDate);
+        const idx = startIdx < 0 ? 0 : startIdx;
+        const dates = gdpDates.slice(idx), gv = gdpVals.slice(idx), sv = spyVals.slice(idx);
+        // Re-base both lines at the first visible point where BOTH exist, so the
+        // "start = 100" axis is true for every range button. (Normalising each
+        // series to its own first value put GDP on a 1947 base and the S&P on a
+        // 2015 base, which made the two lines orders of magnitude apart.)
+        const b = _firstBothIdx(dates, gv, sv);
+        const gdpBase = gv[b], spyBase = sv[b];
+        if (!gdpBase || !spyBase) return;
+        const gdpNorm = gv.map(v => v != null ? +(v / gdpBase * 100).toFixed(1) : null);
+        const spyNorm = sv.map(v => v != null ? +(v / spyBase * 100).toFixed(1) : null);
         if (_gdpSpyChart) _gdpSpyChart.destroy();
         _gdpSpyChart = new Chart(document.getElementById('gdpSpyChart'), {
           type:'line',
-          data:{labels:gdp.dates.slice(idx), datasets:[
-            {label:'Real GDP',data:gdpNorm.slice(idx),borderColor:'#34d399',backgroundColor:'rgba(52,211,153,0.07)',borderWidth:2,pointRadius:0,fill:true,tension:0.3,spanGaps:true},
-            {label:'S&P 500',data:spyNorm.slice(idx),borderColor:'#38bdf8',backgroundColor:'transparent',borderWidth:1.5,pointRadius:0,fill:false,tension:0.3,spanGaps:true,borderDash:[4,3]},
+          data:{labels:dates, datasets:[
+            {label:'Real GDP',data:gdpNorm,borderColor:'#34d399',backgroundColor:'rgba(52,211,153,0.07)',borderWidth:2,pointRadius:0,fill:true,tension:0.3,spanGaps:true},
+            {label:'S&P 500',data:spyNorm,borderColor:'#38bdf8',backgroundColor:'transparent',borderWidth:1.5,pointRadius:0,fill:false,tension:0.3,spanGaps:true,borderDash:[4,3]},
           ]},
-          options:{responsive:true,maintainAspectRatio:false, plugins:{legend:{display:false},tooltip:{mode:'index',intersect:false,callbacks:{label:c=>` ${c.dataset.label}: ${c.raw?.toFixed(0)} (norm=100)`}}}, scales:{x:{grid:{color:gridCol},ticks:{color:tickCol,maxTicksLimit:6,maxRotation:0}},y:{grid:{color:gridCol},ticks:{color:tickCol,callback:v=>v.toFixed(0)},title:{display:true,text:'Normalised (start=100)',color:'#475569',font:{size:10}}}}, interaction:{mode:'index',intersect:false}},
+          options:{responsive:true,maintainAspectRatio:false, plugins:{legend:{display:false},tooltip:{mode:'index',intersect:false,callbacks:{label:c=>` ${c.dataset.label}: ${c.raw?.toFixed(0)} (norm=100)`}}}, scales:{x:{grid:{color:gridCol},ticks:{color:tickCol,maxTicksLimit:6,maxRotation:0}},y:{type:'logarithmic',grid:{color:gridCol},ticks:{color:tickCol,callback:v=>v.toFixed(0)},title:{display:true,text:'Normalised (start=100, log)',color:'#475569',font:{size:10}}}}, interaction:{mode:'index',intersect:false}},
         });
       }
       _renderGdpSpy(0);
@@ -2483,26 +2514,33 @@ let _fedSeriesData = {};
   } catch(e) { console.warn('Fed GDP/SPY failed:', e); }
 
   // ── M2 Growth Rate vs Breakeven Inflation
-  let _m2InflM2 = null, _m2InflBie = null, _m2InflChart = null;
+  let _m2InflChart = null;
   try {
     const m2 = s['M2SL'], bie = s['T10YIE'];
     if (m2?.dates?.length > 14 && bie?.dates?.length > 4) {
       document.getElementById('m2InflSection').style.display='block';
-      const m2YoY = m2.values.map((v,i)=>{
+      const m2YoYFull = m2.values.map((v,i)=>{
         if(v==null) return null; const target = new Date(m2.dates[i]); target.setFullYear(target.getFullYear()-1);
         const ym = target.toISOString().slice(0,7), idx = m2.dates.findIndex(d=>d.slice(0,7)===ym);
         return (idx>=0 && m2.values[idx]!=null) ? +((v-m2.values[idx])/m2.values[idx]*100).toFixed(2) : null;
       });
       const bieMap = {}; bie.dates.forEach((d,i)=>{if(bie.values[i]!=null)bieMap[d.slice(0,7)]=bie.values[i];});
-      const bieAligned = m2.dates.map(d=>bieMap[d.slice(0,7)]??null);
-      _m2InflM2 = { dates: m2.dates, yoy: m2YoY }; _m2InflBie = bieAligned;
+      const bieFull = m2.dates.map(d=>bieMap[d.slice(0,7)]??null);
+      // T10YIE is TIPS-implied and starts 2003 — no breakeven exists before that,
+      // so clip to the overlap rather than drawing 44 years of M2 (M2SL begins
+      // 1959) against an empty comparison line.
+      const from       = _firstBothIdx(m2.dates, m2YoYFull, bieFull);
+      const m2Dates    = m2.dates.slice(from);
+      const m2YoY      = m2YoYFull.slice(from);
+      const bieAligned = bieFull.slice(from);
       function _renderM2Infl(years) {
         const cutDate = years > 0 ? new Date(new Date() - years * 365 * 86400000).toISOString().slice(0,10) : '1900-01-01';
-        const idx = Math.max(0, m2.dates.findIndex(d => d >= cutDate));
+        const startIdx = m2Dates.findIndex(d => d >= cutDate);
+        const idx = startIdx < 0 ? 0 : startIdx;
         if (_m2InflChart) _m2InflChart.destroy();
         _m2InflChart = new Chart(document.getElementById('m2InflChart'), {
           type:'line',
-          data:{labels:m2.dates.slice(idx), datasets:[
+          data:{labels:m2Dates.slice(idx), datasets:[
             {label:'M2 Growth YoY%',data:m2YoY.slice(idx),borderColor:'#22d3ee',backgroundColor:'rgba(34,211,238,0.07)',borderWidth:1.5,pointRadius:0,fill:true,tension:0.3,spanGaps:true,yAxisID:'y'},
             {label:'10Y Breakeven',data:bieAligned.slice(idx),borderColor:'#fbbf24',backgroundColor:'transparent',borderWidth:1.5,pointRadius:0,fill:false,tension:0.3,spanGaps:true,yAxisID:'y',borderDash:[4,3]},
           ]},
@@ -2573,27 +2611,29 @@ let _fedSeriesData = {};
   // ── Consumer Sentiment vs Yield Spread
   try {
     const sent=s['UMCSENT'];
-    if(sent&&sent.dates.length>4){
-      // Fetch yield spread
-      const spreadResp=await fetch('/api/yield-spread');
-      const spreadData=await spreadResp.json();
-      if(spreadData.dates&&spreadData.dates.length){
-        document.getElementById('sentSpreadSection').style.display='block';
-        const spreadMap={};
-        spreadData.dates.forEach((d,i)=>{if(spreadData.spread[i]!=null)spreadMap[d.slice(0,7)]=spreadData.spread[i];});
-        const spreadAligned=sent.dates.map(d=>spreadMap[d.slice(0,7)]??null);
-        new Chart(document.getElementById('sentSpreadChart'),{
-          type:'line',
-          data:{labels:sent.dates,datasets:[
-            {label:'Consumer Sentiment',data:sent.values,borderColor:'#38bdf8',backgroundColor:'rgba(56,189,248,0.07)',borderWidth:1.5,pointRadius:0,fill:true,tension:0.3,spanGaps:true,yAxisID:'y'},
-            {label:'10Y-2Y Spread',data:spreadAligned,borderColor:'#f87171',backgroundColor:'transparent',borderWidth:1.5,pointRadius:0,fill:false,tension:0.3,spanGaps:true,yAxisID:'ySpread',borderDash:[4,3]},
-          ]},
-          options:{responsive:true,maintainAspectRatio:false,
-            plugins:{legend:{display:false},tooltip:{mode:'index',intersect:false,callbacks:{label:c=>c.dataset.yAxisID==='ySpread'?` Spread: ${c.raw?.toFixed(2)}pp`:` Sentiment: ${c.raw?.toFixed(0)}`}}},
-            scales:{x:{grid:{color:gridCol},ticks:{color:tickCol,maxTicksLimit:6,maxRotation:0}},y:{grid:{color:gridCol},ticks:{color:'rgba(56,189,248,0.6)',callback:v=>v.toFixed(0)}},ySpread:{position:'right',grid:{drawOnChartArea:false},ticks:{color:'rgba(248,113,113,0.6)',callback:v=>(v>=0?'+':'')+v.toFixed(1)}}},
-            interaction:{mode:'index',intersect:false}},
-        });
-      }
+    // spreadData is the full-history payload (?full=1) fetched above — DGS2 starts
+    // 1976-06, so the spread now spans nearly all of UMCSENT instead of the
+    // trailing 10 years the default endpoint window returns.
+    if(sent&&sent.dates.length>4&&spreadData?.dates?.length){
+      document.getElementById('sentSpreadSection').style.display='block';
+      const spreadMap={};
+      spreadData.dates.forEach((d,i)=>{if(spreadData.spread[i]!=null)spreadMap[d.slice(0,7)]=spreadData.spread[i];});
+      const spreadFull=sent.dates.map(d=>spreadMap[d.slice(0,7)]??null);
+      const from   = _firstBothIdx(sent.dates, sent.values, spreadFull);
+      const labels = sent.dates.slice(from);
+      const sentV  = sent.values.slice(from);
+      const spreadAligned = spreadFull.slice(from);
+      new Chart(document.getElementById('sentSpreadChart'),{
+        type:'line',
+        data:{labels,datasets:[
+          {label:'Consumer Sentiment',data:sentV,borderColor:'#38bdf8',backgroundColor:'rgba(56,189,248,0.07)',borderWidth:1.5,pointRadius:0,fill:true,tension:0.3,spanGaps:true,yAxisID:'y'},
+          {label:'10Y-2Y Spread',data:spreadAligned,borderColor:'#f87171',backgroundColor:'transparent',borderWidth:1.5,pointRadius:0,fill:false,tension:0.3,spanGaps:true,yAxisID:'ySpread',borderDash:[4,3]},
+        ]},
+        options:{responsive:true,maintainAspectRatio:false,
+          plugins:{legend:{display:false},tooltip:{mode:'index',intersect:false,callbacks:{label:c=>c.dataset.yAxisID==='ySpread'?` Spread: ${c.raw?.toFixed(2)}pp`:` Sentiment: ${c.raw?.toFixed(0)}`}}},
+          scales:{x:{grid:{color:gridCol},ticks:{color:tickCol,maxTicksLimit:6,maxRotation:0}},y:{grid:{color:gridCol},ticks:{color:'rgba(56,189,248,0.6)',callback:v=>v.toFixed(0)}},ySpread:{position:'right',grid:{drawOnChartArea:false},ticks:{color:'rgba(248,113,113,0.6)',callback:v=>(v>=0?'+':'')+v.toFixed(1)}}},
+          interaction:{mode:'index',intersect:false}},
+      });
     }
   } catch(e){console.warn('Fed sentiment/spread:',e);}
 
@@ -2765,19 +2805,21 @@ let _fedSeriesData = {};
     }
   } catch(e) {}
 
-  // Consumer Sentiment vs SPY
+  // Consumer Sentiment vs S&P 500
   const umcsent = s['UMCSENT'];
   if (umcsent?.dates?.length && umcsent.values.some(v=>v!=null)) {
-    (async () => {
-      try {
-        const spy = await fetch('/api/history/SPY?period=10y').then(r=>r.json());
-        if (!spy.prices?.length) return;
+    try {
+      if (Object.keys(_spxMonthMap).length) {
         document.getElementById('sentSpySection').style.display = 'block';
-        const spyMap = {};
-        (spy.dates||[]).forEach((d,i)=>{ if(spy.prices[i]!=null) spyMap[d.slice(0,7)]=spy.prices[i]; });
-        const labels  = umcsent.dates.slice(-360);
-        const sent    = umcsent.values.slice(-360);
-        const spyAlgn = labels.map(d => spyMap[d.slice(0,7)] ?? null);
+        // Start at the first month both series cover (UMCSENT begins 1952-11)
+        // rather than an arbitrary 360-month tail: the old window ran 30 years
+        // back while the S&P came from a 10-year SPY fetch, so two thirds of the
+        // plot had no S&P line at all.
+        const spyFull = umcsent.dates.map(d => _spxMonthMap[d.slice(0,7)] ?? null);
+        const from    = _firstBothIdx(umcsent.dates, umcsent.values, spyFull);
+        const labels  = umcsent.dates.slice(from);
+        const sent    = umcsent.values.slice(from);
+        const spyAlgn = spyFull.slice(from);
         const g='#1e293b', t='#64748b';
         new Chart(document.getElementById('sentSpyChart'), {
           type:'line',
@@ -2787,17 +2829,19 @@ let _fedSeriesData = {};
           ]},
           options:{
             responsive:true,maintainAspectRatio:false,
-            plugins:{legend:{display:false},tooltip:{mode:'index',intersect:false,callbacks:{label:c=>c.dataset.yAxisID==='ySpy'?` SPY: $${c.raw?.toFixed(0)}`:(` Sentiment: ${c.raw?.toFixed(1)}`)}}},
+            plugins:{legend:{display:false},tooltip:{mode:'index',intersect:false,callbacks:{label:c=>c.dataset.yAxisID==='ySpy'?` S&P 500: ${c.raw?.toFixed(0)}`:(` Sentiment: ${c.raw?.toFixed(1)}`)}}},
             scales:{
               x:{grid:{color:g},ticks:{color:t,maxTicksLimit:6,maxRotation:0}},
               y:{grid:{color:g},ticks:{color:'rgba(167,139,250,0.6)'}},
-              ySpy:{position:'right',grid:{drawOnChartArea:false},ticks:{color:'rgba(56,189,248,0.6)',callback:v=>'$'+v.toFixed(0)}},
+              // Log scale: across 70+ years the index runs ~25 → 6,400, which on a
+              // linear axis flattens everything before 1995 onto the baseline.
+              ySpy:{type:'logarithmic',position:'right',grid:{drawOnChartArea:false},ticks:{color:'rgba(56,189,248,0.6)',callback:v=>v>=1000?(v/1000).toFixed(1)+'k':v.toFixed(0)}},
             },
             interaction:{mode:'index',intersect:false},
           },
         });
-      } catch(e) {}
-    })();
+      }
+    } catch(e) { console.warn('Fed sentiment/SPY failed:', e); }
   }
 
   // ── Auto-load Fed Assets vs S&P 500 (always visible)
@@ -2929,7 +2973,9 @@ async function _loadFedSpy() {
     const walcl = _fedSeriesData['WALCL'];
     if (!walcl || !walcl.dates || !walcl.dates.length) return;
 
-    const spyResp = await fetch('/api/history/SPY?period=5y');
+    // Monthly ^GSPC back to 1927. The old /api/history/SPY?period=5y fetch left
+    // roughly 80% of this chart's x-axis (WALCL starts 2002-12) with no S&P line.
+    const spyResp = await fetch('/api/spx-history');
     const spy = await spyResp.json();
     if (!spy.prices || !spy.prices.length) return;
 
@@ -2944,19 +2990,18 @@ async function _loadFedSpy() {
       if (spy.prices[i] != null) spyMonthMap[ym] = spy.prices[i];
     });
 
-    // Align WALCL weekly dates to SPY using YYYY-MM key
-    const walclDates = walcl.dates;
-    const walclVals  = walcl.values;
-    const spyAligned = walclDates.map(d => spyMonthMap[d.slice(0, 7)] ?? null);
+    // Align WALCL weekly dates to SPY using YYYY-MM key, then clip to the first
+    // month both series cover so the S&P line spans the whole plot.
+    const spyAlignedFull = walcl.dates.map(d => spyMonthMap[d.slice(0, 7)] ?? null);
+    let start = walcl.dates.findIndex((_, i) =>
+      walcl.values[i] != null && spyAlignedFull[i] != null);
+    if (start < 0) return;
+    const walclDates = walcl.dates.slice(start);
+    const walclVals  = walcl.values.slice(start);
+    const spyAligned = spyAlignedFull.slice(start);
 
-    // Normalise both to 100 at first common non-null point
-    let walclBase = null, spyBase = null;
-    for (let i = 0; i < walclVals.length; i++) {
-      if (walclVals[i] != null && spyAligned[i] != null && walclBase === null) {
-        walclBase = walclVals[i];
-        spyBase   = spyAligned[i];
-      }
-    }
+    // Normalise both to 100 at that first common point
+    const walclBase = walclVals[0], spyBase = spyAligned[0];
     if (!walclBase || !spyBase) return;
 
     const walclNorm = walclVals.map(v => v != null ? +(v / walclBase * 100).toFixed(2) : null);
@@ -2969,7 +3014,7 @@ async function _loadFedSpy() {
         { ...I18n.label('chart.fed_total_assets', 'Fed Total Assets'), data: walclNorm,
           borderColor: '#a78bfa', backgroundColor: 'rgba(167,139,250,0.08)',
           borderWidth: 2, pointRadius: 0, fill: true, tension: 0.3, spanGaps: true },
-        { ...I18n.label('chart.spy', 'S&P 500 (SPY)'), data: spyNorm,
+        { ...I18n.label('chart.spy', 'S&P 500'), data: spyNorm,
           borderColor: '#38bdf8', backgroundColor: 'transparent',
           borderWidth: 1.5, pointRadius: 0, fill: false, tension: 0.3, spanGaps: true, borderDash: [4, 3] },
       ]},
