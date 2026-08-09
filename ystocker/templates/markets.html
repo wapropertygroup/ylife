@@ -11,6 +11,23 @@
   }
   .range-btn:hover  { color: #cbd5e1; border-color: #475569; background: #1e293b; }
   .range-btn.active { color: #a5b4fc; border-color: #6366f1; background: rgba(99,102,241,0.15); }
+  /* Breadth MA legend chips — click to toggle a series. The swatch carries the
+     series colour; the label and value stay in text ink so the reading never
+     depends on colour alone. Hit area is >=24px tall for touch. */
+  .ma-chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    min-height: 24px; padding: 3px 7px; border-radius: 5px;
+    font-size: 11px; line-height: 1; white-space: nowrap;
+    border: 1px solid transparent; background: transparent;
+    cursor: pointer; transition: background 0.15s, border-color 0.15s, opacity 0.15s;
+  }
+  .ma-chip:hover { background: #1e293b; border-color: #334155; }
+  .ma-chip:focus-visible { outline: 2px solid #6366f1; outline-offset: 1px; }
+  .ma-chip[aria-pressed="false"] { opacity: 0.4; }
+  .ma-chip[aria-pressed="false"] .ma-swatch { background: #475569 !important; }
+  .ma-swatch { width: 14px; height: 2px; border-radius: 1px; flex: none; }
+  .ma-chip-label { color: #94a3b8; }
+  .ma-chip-value { color: #e2e8f0; font-weight: 600; }
   .idx-tab-btn {
     padding: 8px 16px; font-size: 14px; font-weight: 500;
     border-bottom: 2px solid transparent; color: #94a3b8;
@@ -595,16 +612,16 @@
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
     <div>
       <p class="text-xs text-slate-500 mb-1" data-i18n="markets.breadth_ma_label">% S&amp;P 500 Above Moving Averages</p>
-      <div class="flex items-center gap-3 mb-1 text-[11px]">
-        <span class="text-sky-400" data-i18n="markets.ma50_pct">— 50-day MA %</span>
-        <span class="text-violet-400" data-i18n="markets.ma200_pct">-- 200-day MA %</span>
-      </div>
-      <div class="chart-container" style="height:160px"><canvas id="breadth50Chart"></canvas></div>
+      <!-- Legend doubles as the current-reading table: every series is named and
+           valued in text, so identity is never carried by colour alone. -->
+      <div id="breadthMaLegend" class="flex flex-wrap items-center gap-x-2.5 gap-y-1 mb-1.5"></div>
+      <div class="chart-container" style="height:196px"><canvas id="breadth50Chart"></canvas></div>
+      <p class="text-[10px] text-slate-600 mt-1.5" id="breadthFootnote"></p>
     </div>
     <div>
       <p class="text-xs text-slate-500 mb-1" data-i18n="markets.breadth_rsp_label">Equal-Weight / Cap-Weight (RSP/SPY) Ratio</p>
       <p class="text-[10px] text-slate-600 mb-1" data-i18n="markets.breadth_rsp_note">Rising = breadth expanding. Falling = mega-cap concentration increasing.</p>
-      <div class="chart-container" style="height:160px"><canvas id="rspSpyChart"></canvas></div>
+      <div class="chart-container" style="height:196px"><canvas id="rspSpyChart"></canvas></div>
     </div>
   </div>
 </div>
@@ -4041,32 +4058,129 @@ function _renderYieldSpread(range) {
   } catch(e) {}
 })();
 
-// Market Breadth — with range selector (1Y / 3Y / 5Y / 10Y)
+// Market Breadth — every MA period, with range selector (1Y / 3Y / 5Y / 10Y)
 let _brData = null, _brChart50 = null, _brChartRsp = null;
 const _BR_WEEKS = { '1y': 52, '3y': 156, '5y': 260, '10y': 520 };
+let _brRange = '3y';
+
+// Ordinal ramp: MA period is an ordered dimension, so the series take monotone
+// lightness steps of ONE hue (short = deepest, long = lightest) instead of
+// unrelated categorical hues. Validated on the #0f172a panel surface: monotone
+// L, adjacent dL >= 0.06, single hue (12deg spread), darkest step 4.36:1.
+const _BR_MA_COLORS = {
+  20:  '#0284c7',
+  50:  '#0ea5e9',
+  100: '#38bdf8',
+  150: '#7dd3fc',
+  200: '#bae6fd',
+};
+const _BR_MA_FALLBACK = '#38bdf8';
+// Series the user has switched off via a legend chip.
+const _brHidden = new Set();
+
+/** MA periods present in the payload, shortest first. */
+function _brPeriods() {
+  if (!_brData) return [];
+  const declared = Array.isArray(_brData.ma_periods) ? _brData.ma_periods : null;
+  const keys = Object.keys(_brData.pct_above_ma || {}).map(Number);
+  return (declared && declared.length ? declared : keys).filter(
+    p => (_brData.pct_above_ma || {})[String(p)]?.dates?.length
+  ).sort((a, b) => a - b);
+}
+
+/** Build the clickable legend / current-reading row. */
+function _renderBreadthLegend() {
+  const box = document.getElementById('breadthMaLegend');
+  if (!box || !_brData) return;
+  const periods = _brPeriods();
+  box.innerHTML = '';
+  periods.forEach(p => {
+    const on  = !_brHidden.has(p);
+    const val = _brData.latest?.[String(p)];
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'ma-chip';
+    chip.dataset.maToggle = String(p);
+    chip.setAttribute('aria-pressed', on ? 'true' : 'false');
+    chip.title = (window.I18n?.t?.('markets.breadth_ma_toggle_hint')) || 'Click to show/hide this series';
+
+    const sw = document.createElement('span');
+    sw.className = 'ma-swatch';
+    sw.style.background = _BR_MA_COLORS[p] || _BR_MA_FALLBACK;
+
+    const lbl = document.createElement('span');
+    lbl.className = 'ma-chip-label';
+    lbl.setAttribute('data-i18n', 'markets.breadth_ma_' + p);
+    lbl.textContent = p + 'D';
+
+    const num = document.createElement('span');
+    num.className = 'ma-chip-value';
+    num.textContent = (val == null) ? '—' : val.toFixed(1) + '%';
+
+    chip.append(sw, lbl, num);
+    chip.addEventListener('click', () => {
+      // Never let the reader switch off every series.
+      if (!_brHidden.has(p) && _brHidden.size >= periods.length - 1) return;
+      if (_brHidden.has(p)) _brHidden.delete(p); else _brHidden.add(p);
+      _renderBreadth(_brRange);
+    });
+    box.appendChild(chip);
+  });
+  try { window.I18n?.apply?.(box); } catch (_) {}
+}
+
+function _renderBreadthFootnote() {
+  const el = document.getElementById('breadthFootnote');
+  if (!el || !_brData) return;
+  const n = _brData.universe;
+  const tpl = (window.I18n?.t?.('markets.breadth_source_note'))
+    || 'Diffusion index computed from {n} S&P 500 constituents · as of {d}';
+  el.textContent = tpl.replace('{n}', n ?? '—').replace('{d}', _brData.asof || '—');
+}
 
 function _renderBreadth(range) {
   if (!_brData) return;
-  const weeks = _BR_WEEKS[range] || 156;
+  _brRange = range || _brRange;
+  const weeks = _BR_WEEKS[_brRange] || 156;
   const g = '#1e293b', t = '#64748b';
-  const br50  = _brData.pct_above_50ma;
-  const br200 = _brData.pct_above_200ma;
-  const rsp   = _brData.rsp_spy;
+  const periods = _brPeriods();
 
-  // Slice data to requested range
-  const s50   = { dates: br50.dates.slice(-weeks),  values: br50.values.slice(-weeks)  };
-  const s200  = { dates: br200.dates.slice(-weeks), values: br200.values.slice(-weeks) };
-  const sRsp  = { dates: rsp.dates.slice(-weeks),   values: rsp.values.slice(-weeks)   };
+  // Align every MA on one date axis by lookup, not by array index: the series
+  // have different start dates (a 200-day MA needs 200 days of warm-up), so
+  // positional slicing would silently shift the shorter ones sideways.
+  const axis = [];
+  const seen = new Set();
+  periods.forEach(p => {
+    (_brData.pct_above_ma[String(p)].dates || []).forEach(d => {
+      if (!seen.has(d)) { seen.add(d); axis.push(d); }
+    });
+  });
+  axis.sort();
+  const labels = axis.slice(-weeks);
 
-  // 50/200 MA breadth chart
+  const datasets = periods.filter(p => !_brHidden.has(p)).map(p => {
+    const s = _brData.pct_above_ma[String(p)];
+    const byDate = new Map();
+    s.dates.forEach((d, i) => byDate.set(d, s.values[i]));
+    return {
+      ...(window.I18n?.label?.('chart.ma_breadth_' + p, p + '-day') || { label: p + '-day' }),
+      data: labels.map(d => (byDate.has(d) ? byDate.get(d) : null)),
+      borderColor: _BR_MA_COLORS[p] || _BR_MA_FALLBACK,
+      backgroundColor: 'transparent',
+      borderWidth: 2, pointRadius: 0, pointHitRadius: 12,
+      fill: false, tension: 0.3, spanGaps: false,
+    };
+  });
+
+  const rsp  = _brData.rsp_spy || { dates: [], values: [] };
+  const sRsp = { dates: rsp.dates.slice(-weeks), values: rsp.values.slice(-weeks) };
+
+  // % above MA chart
   if (_brChart50) { _brChart50.destroy(); _brChart50 = null; }
-  if (s50.dates.length) {
+  if (labels.length && datasets.length) {
     _brChart50 = new Chart(document.getElementById('breadth50Chart'), {
       type: 'line',
-      data: { labels: s50.dates, datasets: [
-        { label:'50-day',  data: s50.values,  borderColor:'#38bdf8', backgroundColor:'rgba(56,189,248,0.07)', borderWidth:1.5, pointRadius:0, fill:true,  tension:0.3, spanGaps:true },
-        { label:'200-day', data: s200.values, borderColor:'#a78bfa', backgroundColor:'transparent',          borderWidth:1.5, pointRadius:0, fill:false, tension:0.3, spanGaps:true, borderDash:[4,3] },
-      ]},
+      data: { labels, datasets },
       plugins: [{ afterDraw(c) {
         const {ctx, chartArea:a, scales:{y}} = c;
         const py = y.getPixelForValue(50);
@@ -4078,7 +4192,14 @@ function _renderBreadth(range) {
       }}],
       options: {
         responsive:true, maintainAspectRatio:false,
-        plugins:{ legend:{display:false}, tooltip:{mode:'index',intersect:false,callbacks:{label:c=>` ${c.dataset.label}: ${c.raw?.toFixed(1)}%`}} },
+        plugins:{
+          legend:{display:false},   // the chip row above is the legend
+          tooltip:{
+            mode:'index', intersect:false,
+            itemSort:(a,b)=>b.parsed.y-a.parsed.y,
+            callbacks:{label:c=>` ${c.dataset.label}: ${c.raw==null?'—':c.raw.toFixed(1)+'%'}`},
+          },
+        },
         scales:{
           x:{grid:{color:g},ticks:{color:t,maxTicksLimit:6,maxRotation:0}},
           y:{grid:{color:g},ticks:{color:t,callback:v=>v+'%'},min:0,max:100},
@@ -4096,7 +4217,7 @@ function _renderBreadth(range) {
       data: { labels: sRsp.dates, datasets: [{
         label:'RSP/SPY', data: sRsp.values,
         borderColor:'#34d399', backgroundColor:'rgba(52,211,153,0.07)',
-        borderWidth:1.5, pointRadius:0, fill:true, tension:0.3, spanGaps:true,
+        borderWidth:2, pointRadius:0, pointHitRadius:12, fill:true, tension:0.3, spanGaps:true,
       }]},
       options: {
         responsive:true, maintainAspectRatio:false,
@@ -4117,6 +4238,8 @@ function _renderBreadth(range) {
     if (!resp.ok) return;
     _brData = await resp.json();
     if (_brData.error) return;
+    _renderBreadthLegend();
+    _renderBreadthFootnote();
     _renderBreadth('3y');  // default 3Y
 
     // Wire range buttons

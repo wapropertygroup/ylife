@@ -1235,8 +1235,17 @@ const I18n = (() => {
     'markets.erp_bonds_preferred':   { en: 'Bonds preferred',                      zh: '债券更具优势' },
     'markets.btc_halving_note':      { en: '▼ Bitcoin halving dates marked. Next halving: ~April 2028.',
                                        zh: '▼ 标注比特币减半日期。下次减半：约2028年4月。' },
-    'markets.ma50_pct':              { en: '— 50-day MA %',                        zh: '— 50日均线占比 %' },
-    'markets.ma200_pct':             { en: '-- 200-day MA %',                      zh: '-- 200日均线占比 %' },
+    // Breadth MA legend chips (one per period in breadth.MA_PERIODS) — these
+    // are the clickable legend that doubles as the current-reading row.
+    'markets.breadth_ma_20':         { en: '20D',  zh: '20日' },
+    'markets.breadth_ma_50':         { en: '50D',  zh: '50日' },
+    'markets.breadth_ma_100':        { en: '100D', zh: '100日' },
+    'markets.breadth_ma_150':        { en: '150D', zh: '150日' },
+    'markets.breadth_ma_200':        { en: '200D', zh: '200日' },
+    'markets.breadth_ma_toggle_hint':{ en: 'Click to show/hide this moving average',
+                                       zh: '点击显示/隐藏该均线' },
+    'markets.breadth_source_note':   { en: 'Diffusion index computed from {n} S&P 500 constituents · as of {d}',
+                                       zh: '基于 {n} 只标普500成分股计算 · 数据截至 {d}' },
     'markets.breadth_rsp_note':      { en: 'Rising = breadth expanding. Falling = mega-cap concentration increasing.',
                                        zh: '上升 = 市场宽度扩大。下降 = 大市值股集中度上升。' },
     // Commodities page missing keys
@@ -1576,6 +1585,12 @@ const I18n = (() => {
     'chart.peg':             { en: 'PEG',             zh: 'PEG' },
     'chart.upside_pct':      { en: 'Upside %',        zh: '上涨空间 %' },
     'chart.day_change_pct':  { en: 'Day Change %',    zh: '日涨跌 %' },
+    // Breadth dataset labels — shown in the % above MA tooltip.
+    'chart.ma_breadth_20':   { en: '20-day',  zh: '20日均线' },
+    'chart.ma_breadth_50':   { en: '50-day',  zh: '50日均线' },
+    'chart.ma_breadth_100':  { en: '100-day', zh: '100日均线' },
+    'chart.ma_breadth_150':  { en: '150-day', zh: '150日均线' },
+    'chart.ma_breadth_200':  { en: '200-day', zh: '200日均线' },
     'chart.eps_growth_ttm':  { en: 'EPS Growth TTM',  zh: 'EPS增长TTM' },
     'chart.eps_growth_q':    { en: 'EPS Growth Q',    zh: 'EPS增长Q' },
     'chart.ev_ebitda':       { en: 'EV/EBITDA',       zh: '企业价值倍数' },

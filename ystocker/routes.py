@@ -25,6 +25,7 @@ from flask import Blueprint, render_template, redirect, url_for, request, flash,
 
 from ystocker import PEER_GROUPS, YT_CHANNELS
 from ystocker.data import fetch_group, dividend_yield_pct, ps_ratio
+from ystocker import breadth
 from ystocker import charts
 # Plain client UA for every fred.stlouisfed.org request. A spoofed browser UA is
 # silently blackholed by FRED's Akamai bot detection — see fed.py for details.
@@ -4657,100 +4658,17 @@ def api_skew():
 # Market Breadth  (/api/breadth)
 # ---------------------------------------------------------------------------
 
-_BREADTH_CACHE: dict = {}
-_BREADTH_LOCK = threading.Lock()
-_BREADTH_TTL = 4 * 3600  # 4 hours
-
 @bp.route("/api/breadth")
 def api_breadth():
-    """Market breadth: % S&P500 above 50/200 MA, plus RSP/SPY concentration ratio."""
-    import yfinance as yf
-    with _BREADTH_LOCK:
-        entry = _BREADTH_CACHE.get("data")
-        if entry and time.time() - entry["ts"] < _BREADTH_TTL:
-            return jsonify(entry["data"])
+    """Market breadth: % of S&P 500 above each key MA + RSP/SPY concentration.
+
+    All caching, the 500-ticker download and the diffusion-index maths live in
+    ystocker.breadth, which is warmed by a background thread — a request should
+    always land on a cache hit. See that module for why the breadth series are
+    computed locally instead of pulled from Yahoo's (nonexistent) ^SPXA*R feeds.
+    """
     try:
-        # ^SPXA50R / ^SPXA200R are the correct Yahoo Finance tickers for
-        # "% of S&P 500 stocks above 50/200-day moving average" (values 0–100)
-        df = yf.download(["^SPXA50R", "^SPXA200R", "RSP", "SPY"],
-                         period="10y", interval="1wk",
-                         auto_adjust=True, progress=False)
-        closes = df["Close"]
-
-        def _series(sym):
-            """Return series dict; silently returns empty if ticker is missing/delisted."""
-            try:
-                col = closes[sym] if sym in closes.columns else closes.get(sym)
-                if col is None:
-                    return {"dates": [], "values": []}
-                s = col.dropna()
-                if s.empty:
-                    return {"dates": [], "values": []}
-                return {"dates": [str(d.date()) for d in s.index],
-                        "values": [round(float(v), 2) for v in s]}
-            except Exception:
-                return {"dates": [], "values": []}
-
-        sp50  = _series("^SPXA50R")
-        sp200 = _series("^SPXA200R")
-
-        # Fallback: compute breadth from heatmap stocks if Yahoo tickers empty
-        if not sp50["dates"]:
-            try:
-                from ystocker.heatmap_meta import HEATMAP_META
-                hm_tickers = list(HEATMAP_META.keys())[:100]
-                hm_df = yf.download(hm_tickers, period="1y", interval="1d",
-                                    auto_adjust=True, progress=False, group_by="ticker")
-                above50, above200 = {}, {}
-                for t in hm_tickers:
-                    try:
-                        prices = hm_df[t]["Close"].dropna() if isinstance(hm_df.columns, __import__("pandas").MultiIndex) else hm_df["Close"].dropna()
-                        if len(prices) < 50:
-                            continue
-                        ma50  = prices.rolling(50).mean()
-                        ma200 = prices.rolling(200).mean()
-                        for d, p, m50, m200 in zip(prices.index, prices, ma50, ma200):
-                            ds = str(d.date())
-                            if not __import__("math").isnan(float(m50)):
-                                above50[ds]  = above50.get(ds, []) + [float(p) > float(m50)]
-                            if not __import__("math").isnan(float(m200)):
-                                above200[ds] = above200.get(ds, []) + [float(p) > float(m200)]
-                    except Exception:
-                        continue
-                # Weekly sampling
-                from datetime import date as _date
-                def _to_weekly(daily_dict):
-                    dates, vals = [], []
-                    prev_week = None
-                    for d in sorted(daily_dict):
-                        dt = _date.fromisoformat(d)
-                        week = (dt.year, dt.isocalendar()[1])
-                        if week != prev_week:
-                            pct = round(sum(daily_dict[d]) / len(daily_dict[d]) * 100, 1)
-                            dates.append(d); vals.append(pct)
-                            prev_week = week
-                    return {"dates": dates, "values": vals}
-                sp50  = _to_weekly(above50)
-                sp200 = _to_weekly(above200)
-            except Exception as exc2:
-                log.warning("Breadth fallback failed: %s", exc2)
-
-        rsp = _series("RSP")
-        spy = _series("SPY")
-        # RSP/SPY ratio
-        spyMap = {}
-        for d, v in zip(spy["dates"], spy["values"]):
-            spyMap[d] = v
-        rspSpyDates  = [d for d in rsp["dates"] if d in spyMap]
-        rspSpyRatio  = [round(rsp["values"][rsp["dates"].index(d)] / spyMap[d], 4) for d in rspSpyDates]
-        result = {
-            "pct_above_50ma":  sp50,
-            "pct_above_200ma": sp200,
-            "rsp_spy": {"dates": rspSpyDates, "values": rspSpyRatio},
-        }
-        with _BREADTH_LOCK:
-            _BREADTH_CACHE["data"] = {"ts": time.time(), "data": result}
-        return jsonify(result)
+        return jsonify(breadth.get_breadth())
     except Exception as exc:
         log.warning("api_breadth failed: %s", exc)
         return jsonify({"error": str(exc)}), 502

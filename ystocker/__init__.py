@@ -198,6 +198,11 @@ def create_app() -> Flask:
     from ystocker.fed import start_background_thread as _start_fed_thread
     _start_fed_thread()
 
+    # Start market-breadth warm-up + daily refresh. The rebuild downloads 500+
+    # tickers (~20s), so it must never run inside a request — see breadth.py.
+    from ystocker.breadth import start_background_thread as _start_breadth_thread
+    _start_breadth_thread()
+
     # Start markets cache warm-up (pre-fetches index/VIX/sector data every 5 min)
     _start_markets_warmup_thread(app)
 
