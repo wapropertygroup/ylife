@@ -753,9 +753,9 @@ const chartDefaults = {
     data: {
       labels,
       datasets: [
-        { label: 'PE (TTM)',    data: DATA.map(d=>d.pe_ttm),  backgroundColor: '#6366f1cc', borderRadius: 4, yAxisID: 'yPE' },
-        { label: 'PE (Fwd)',   data: DATA.map(d=>d.pe_fwd),   backgroundColor: '#38bdf8cc', borderRadius: 4, yAxisID: 'yPE' },
-        { label: 'PEG',        data: DATA.map(d=>d.peg),      backgroundColor: '#34d399cc', borderRadius: 4, yAxisID: 'yPEG' },
+        { ...I18n.label('chart.pe_ttm', 'PE (TTM)'), data: DATA.map(d=>d.pe_ttm),  backgroundColor: '#6366f1cc', borderRadius: 4, yAxisID: 'yPE' },
+        { ...I18n.label('chart.pe_fwd', 'PE (Fwd)'), data: DATA.map(d=>d.pe_fwd),   backgroundColor: '#38bdf8cc', borderRadius: 4, yAxisID: 'yPE' },
+        { ...I18n.label('chart.peg', 'PEG'), data: DATA.map(d=>d.peg),      backgroundColor: '#34d399cc', borderRadius: 4, yAxisID: 'yPEG' },
       ]
     },
     options: {
@@ -821,7 +821,7 @@ const chartDefaults = {
     data: {
       labels: sorted.map(d=>d.ticker),
       datasets: [{
-        label: 'Upside %',
+        ...I18n.label('chart.upside_pct', 'Upside %'),
         data: sorted.map(d=>d.upside),
         backgroundColor: sorted.map(d => d.upside >= 0 ? '#34d399cc' : '#f43f5ecc'),
         borderRadius: 4,
@@ -911,7 +911,7 @@ const chartDefaults = {
     data: {
       labels: sorted.map(d => d.ticker),
       datasets: [{
-        label: 'Day Change %',
+        ...I18n.label('chart.day_change_pct', 'Day Change %'),
         data: sorted.map(d => d.day_change_pct),
         backgroundColor: sorted.map(d => heatColor(d.day_change_pct)),
         borderRadius: 4,
@@ -956,13 +956,13 @@ const chartDefaults = {
       labels: sorted.map(d => d.ticker),
       datasets: [
         {
-          label: 'EPS Growth TTM',
+          ...I18n.label('chart.eps_growth_ttm', 'EPS Growth TTM'),
           data: sorted.map(d => d.eps_growth_ttm),
           backgroundColor: sorted.map(d => (d.eps_growth_ttm ?? 0) >= 0 ? '#34d399cc' : '#f43f5ecc'),
           borderRadius: 4,
         },
         {
-          label: 'EPS Growth Q',
+          ...I18n.label('chart.eps_growth_q', 'EPS Growth Q'),
           data: sorted.map(d => d.eps_growth_q),
           backgroundColor: sorted.map(d => (d.eps_growth_q ?? 0) >= 0 ? '#38bdf8cc' : '#fb923ccc'),
           borderRadius: 4,
@@ -1008,7 +1008,7 @@ const chartDefaults = {
     data: {
       labels: sorted.map(d => d.ticker),
       datasets: [{
-        label: 'EV/EBITDA',
+        ...I18n.label('chart.ev_ebitda', 'EV/EBITDA'),
         data: sorted.map(d => d.ev_ebitda),
         backgroundColor: sorted.map(d => {
           const v = d.ev_ebitda;
@@ -1079,7 +1079,7 @@ function avgLinePlugin(getAvg, fmt, color) {
     data: {
       labels: sorted.map(d => d.ticker),
       datasets: [{
-        label: 'EV ($B)',
+        ...I18n.label('chart.ev_b', 'EV ($B)'),
         data: sorted.map(d => d.ev),
         backgroundColor: '#38bdf8cc',
         borderRadius: 4,
@@ -1113,7 +1113,7 @@ function avgLinePlugin(getAvg, fmt, color) {
     data: {
       labels: sorted.map(d => d.ticker),
       datasets: [{
-        label: 'EBITDA ($B)',
+        ...I18n.label('chart.ebitda_b', 'EBITDA ($B)'),
         data: sorted.map(d => d.ebitda),
         backgroundColor: '#a78bfacc',
         borderRadius: 4,
@@ -1500,7 +1500,7 @@ function _toggleSpyRelative() {
         v != null && spyDs._origData[i] != null ? parseFloat((v - spyDs._origData[i]).toFixed(2)) : null
       );
     });
-    window._perfChart.options.scales.y.title = { display: true, text: 'Alpha vs SPY', color: '#64748b', font: { size: 9 } };
+    window._perfChart.options.scales.y.title = I18n.axis('chart.axis_alpha_spy', 'Alpha vs SPY', { font: { size: 9 } });
   } else {
     ds.forEach(d => { if (d._origData) d.data = [...d._origData]; });
     window._perfChart.options.scales.y.title = { display: true, text: 'Normalised (start=100)', color: '#64748b', font: { size: 10 } };

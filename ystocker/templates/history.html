@@ -1631,7 +1631,7 @@ let   _forecastResult = null;   // last forecast API response
         new Chart(document.getElementById('dividendHistChart'), {
           type: 'bar',
           data: { labels: years, datasets: [{
-            label: 'Annual Dividend ($)',
+            ...I18n.label('chart.annual_dividend', 'Annual Dividend ($)'),
             data: amts,
             backgroundColor: 'rgba(52,211,153,0.65)',
             borderColor: '#34d399',
@@ -1696,7 +1696,7 @@ let   _forecastResult = null;   // last forecast API response
           new Chart(document.getElementById('divVsBondChart'), {
             type: 'line',
             data: { labels: priceData.dates, datasets: [
-              { label: 'Div Yield', data: divYieldHist, borderColor: '#34d399', backgroundColor: 'rgba(52,211,153,0.08)', borderWidth: 1.5, pointRadius: 0, fill: true, tension: 0.3, spanGaps: true },
+              { ...I18n.label('chart.div_yield', 'Div Yield'), data: divYieldHist, borderColor: '#34d399', backgroundColor: 'rgba(52,211,153,0.08)', borderWidth: 1.5, pointRadius: 0, fill: true, tension: 0.3, spanGaps: true },
               { label: '10Y Yield', data: tenAligned, borderColor: '#f87171', backgroundColor: 'transparent', borderWidth: 1.5, pointRadius: 0, fill: false, tension: 0.3, spanGaps: true, borderDash: [4, 3] },
             ]},
             options: {
@@ -1793,17 +1793,25 @@ let   _forecastResult = null;   // last forecast API response
   // Analyst Consensus
   if (data.recommendation || data.analyst_count) {
     document.getElementById('analystSection').style.display = 'block';
+    // Keys are normalised (lowercase, separators stripped) because Yahoo sends
+    // 'strong_buy' while the old camelCase keys were never matched by
+    // `.replace('_','')` -> 'strongbuy', so Strong Buy always fell through to
+    // the raw API string.
     const RATING_MAP = {
-      strongBuy:    { label: 'Strong Buy',  cls: 'text-emerald-400' },
-      buy:          { label: 'Buy',         cls: 'text-emerald-400' },
-      hold:         { label: 'Hold',        cls: 'text-amber-400' },
-      underperform: { label: 'Underperform',cls: 'text-rose-400' },
-      sell:         { label: 'Sell',        cls: 'text-rose-400' },
+      strongbuy:    { label: 'Strong Buy',  i18n: 'chart.rec_strong_buy',   cls: 'text-emerald-400' },
+      buy:          { label: 'Buy',         i18n: 'chart.rec_buy',          cls: 'text-emerald-400' },
+      hold:         { label: 'Hold',        i18n: 'chart.rec_hold',         cls: 'text-amber-400' },
+      underperform: { label: 'Underperform',i18n: 'chart.rec_underperform', cls: 'text-rose-400' },
+      sell:         { label: 'Sell',        i18n: 'chart.rec_sell',         cls: 'text-rose-400' },
     };
-    const rec = data.recommendation?.toLowerCase().replace('_', '');
-    const ratingInfo = RATING_MAP[rec] || RATING_MAP[data.recommendation] || { label: data.recommendation || '—', cls: 'text-slate-100' };
+    const rec = (data.recommendation || '').toLowerCase().replace(/[_\s-]/g, '');
+    const ratingInfo = RATING_MAP[rec] || { label: data.recommendation || '—', cls: 'text-slate-100' };
     const rEl = document.getElementById('statRating');
-    rEl.textContent = ratingInfo.label;
+    rEl.textContent = (ratingInfo.i18n && I18n.t(ratingInfo.i18n)) || ratingInfo.label;
+    // Tag the element so a language switch re-translates it via I18n.apply().
+    // Unknown ratings fall through with no key, so drop any stale one.
+    if (ratingInfo.i18n) rEl.dataset.i18n = ratingInfo.i18n;
+    else delete rEl.dataset.i18n;
     rEl.className = 'text-base font-bold ' + ratingInfo.cls;
     if (data.analyst_count != null) document.getElementById('statAnalystCount').textContent = data.analyst_count + ' analysts';
     if (data.target_high   != null) document.getElementById('statTargetHigh').textContent  = '$' + data.target_high.toFixed(2);
@@ -1855,11 +1863,11 @@ let   _forecastResult = null;   // last forecast API response
         document.getElementById('financialsSection').style.display = 'block';
         const rows = fdata.financials_table;
     const METRICS = [
-      { key: 'revenue',     label: 'Revenue ($B)',     est_key: 'revenue_est' },
-      { key: 'gross_profit',label: 'Gross Profit ($B)',est_key: null },
-      { key: 'ebitda_is',   label: 'EBITDA ($B)',      est_key: null },
-      { key: 'net_income',  label: 'Net Income ($B)',  est_key: null },
-      { key: 'eps_diluted', label: 'EPS (Diluted)',    est_key: 'eps_est' },
+      { key: 'revenue',     label: 'Revenue ($B)',     i18n: 'chart.revenue_b',      est_key: 'revenue_est' },
+      { key: 'gross_profit',label: 'Gross Profit ($B)',i18n: 'chart.gross_profit_b', est_key: null },
+      { key: 'ebitda_is',   label: 'EBITDA ($B)',      i18n: 'chart.ebitda_b',       est_key: null },
+      { key: 'net_income',  label: 'Net Income ($B)',  i18n: 'chart.net_income_b',   est_key: null },
+      { key: 'eps_diluted', label: 'EPS (Diluted)',    i18n: 'chart.eps_diluted',    est_key: 'eps_est' },
     ];
     // Header
     const thead = document.getElementById('financialsHead');
@@ -1879,7 +1887,7 @@ let   _forecastResult = null;   // last forecast API response
       }).join('');
       const rowBg = mi % 2 === 0 ? '' : 'bg-slate-800/20';
       return `<tr class="border-b border-slate-800/40 ${rowBg}">
-        <td class="py-2.5 px-3 text-xs text-slate-400 font-medium whitespace-nowrap">${m.label}</td>${cells}
+        <td class="py-2.5 px-3 text-xs text-slate-400 font-medium whitespace-nowrap"><span data-i18n="${m.i18n}">${m.label}</span></td>${cells}
       </tr>`;
     }).join('');
 
@@ -2101,7 +2109,7 @@ let   _forecastResult = null;   // last forecast API response
                     order: 2,
                   },
                   {
-                    label: 'Z-Score (14d)',
+                    ...I18n.label('chart.zscore14', 'Z-Score (14d)'),
                     data: zVals,
                     borderColor: '#818cf8',
                     backgroundColor: 'rgba(129,140,248,0.08)',
@@ -2127,7 +2135,7 @@ let   _forecastResult = null;   // last forecast API response
                     order: 1,
                   },
                   {
-                    label: 'Price',
+                    ...I18n.label('chart.price', 'Price'),
                     data: prices,
                     borderColor: 'rgba(56,189,248,0.6)',
                     backgroundColor: 'rgba(56,189,248,0.06)',
@@ -3373,7 +3381,7 @@ function _buildConfig(key, d, staticData) {
     const gridCol = '#1e293b', tickCol = '#64748b';
     return {
       type: 'bar',
-      data: { labels, datasets: [{ label: 'P/C Ratio', data: ratios,
+      data: { labels, datasets: [{ ...I18n.label('chart.pc_ratio', 'P/C Ratio'), data: ratios,
         backgroundColor: colors, borderColor: borderColors, borderWidth: 1, borderRadius: 3 }] },
       options: {
         responsive: true, maintainAspectRatio: false,
@@ -3383,7 +3391,7 @@ function _buildConfig(key, d, staticData) {
         scales: {
           x: { grid: { color: gridCol }, ticks: { color: tickCol, maxRotation: 45, font: { size: 10 } } },
           y: { grid: { color: gridCol }, ticks: { color: tickCol }, min: 0,
-               title: { display: true, text: 'Put/Call OI Ratio', color: tickCol, font: { size: 11 } } },
+               title: I18n.axis('chart.axis_pc_oi_ratio', 'Put/Call OI Ratio', { color: tickCol, font: { size: 11 } }) },
         },
         interaction: { mode: 'index', intersect: false },
       },
@@ -3410,10 +3418,10 @@ function _buildConfig(key, d, staticData) {
     return {
       type: 'line',
       data: { labels: d.dates.slice(0, rs.length), datasets: [
-        { label: 'Rel. Strength', data: rs,
+        { ...I18n.label('chart.rel_strength', 'Rel. Strength'), data: rs,
           borderColor: '#a78bfa', backgroundColor: 'rgba(167,139,250,0.08)',
           borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 4, fill: 'origin', tension: 0.3, spanGaps: true },
-        { label: 'Baseline 100', data: ref,
+        { ...I18n.label('chart.baseline_100', 'Baseline 100'), data: ref,
           borderColor: 'rgba(148,163,184,0.35)', backgroundColor: 'transparent',
           borderWidth: 1, pointRadius: 0, borderDash: [4,3], fill: false },
       ]},
@@ -4433,6 +4441,11 @@ async function explainChart(chartKey) {
   function _pctChange(a, b) {
     return (a != null && b != null && b !== 0) ? (a / b - 1) * 100 : null;
   }
+  // Value N bars back in a series (trading days when the series is daily).
+  function _valueBarsAgo(values, n) {
+    const v = (values || []).filter(x => x != null);
+    return v.length > n ? v[v.length - 1 - n] : null;
+  }
   // Return the value N calendar days back from the end of a dated series.
   function _valueDaysAgo(dates, values, days) {
     if (!dates || !dates.length) return null;
@@ -4483,10 +4496,16 @@ async function explainChart(chartKey) {
     } catch(e) {}
   }
   function _readHoldingRows() {
-    return Array.from(document.querySelectorAll('#rfHoldings .rf-row')).map(row => ({
-      ticker: (row.querySelector('.rf-h-ticker').value || '').trim().toUpperCase(),
-      value:  parseFloat(row.querySelector('.rf-h-value').value) || 0,
-    })).filter(h => h.ticker && h.value > 0);
+    // Merge duplicate tickers — double-counting here would silently inflate the
+    // look-through exposure that drives the position decision.
+    const byTicker = new Map();
+    Array.from(document.querySelectorAll('#rfHoldings .rf-row')).forEach(row => {
+      const ticker = (row.querySelector('.rf-h-ticker').value || '').trim().toUpperCase();
+      const value  = parseFloat(row.querySelector('.rf-h-value').value) || 0;
+      if (!ticker || value <= 0) return;
+      byTicker.set(ticker, (byTicker.get(ticker) || 0) + value);
+    });
+    return Array.from(byTicker, ([ticker, value]) => ({ ticker, value }));
   }
   window._addHoldingRow = function(ticker, value) {
     const wrap = document.getElementById('rfHoldings');
@@ -4561,6 +4580,9 @@ async function explainChart(chartKey) {
     const price = (d.prices || []).filter(v => v != null).slice(-1)[0] || null;
     const sector = d.sector || null;
     const directValue = (shares && price) ? shares * price : 0;
+    // Upstream holdings data sometimes lacks symbols, so also match on name.
+    const subjectName = (d.name || '').replace(/\b(inc|corp|corporation|co|company|plc|ltd|holdings|class [a-c])\b\.?/gi, '')
+                          .replace(/[^a-z0-9 ]/gi, '').trim().toLowerCase();
 
     // Resolve each holding: ETF (has constituents) vs single stock
     const resolved = await Promise.all(rows.map(async h => {
@@ -4570,27 +4592,39 @@ async function explainChart(chartKey) {
       const etf = await _etfHoldings(h.ticker);
       const list = (etf && etf.holdings) || [];
       if (!list.length) return { ...h, kind: 'stock', weight: null, sectorWeight: null };
-      const hit = list.find(x => (x.ticker || '').toUpperCase() === TICKER);
+      const hit = list.find(x => (x.ticker || '').toUpperCase() === TICKER)
+               || (subjectName && list.find(x => {
+                    const n = (x.name || '').toLowerCase();
+                    return n && (n.includes(subjectName) || subjectName.includes(n.split(' ')[0]));
+                  }));
       let sectorWeight = null;
       if (sector && etf.sector_weights) {
+        const key = sector.toLowerCase().replace(/[^a-z]/g, '');
         for (const [k, v] of Object.entries(etf.sector_weights)) {
-          if (k && sector && k.toLowerCase().includes(sector.toLowerCase().split(' ')[0])) {
-            sectorWeight = v; break;
-          }
+          if (k && k.toLowerCase().replace(/[^a-z]/g, '') === key) { sectorWeight = v; break; }
         }
       }
-      return { ...h, kind: 'etf', weight: hit ? hit.weight : 0, sectorWeight,
-               truncated: !hit && list.length >= 15 };
+      return {
+        ...h, kind: 'etf',
+        weight: hit ? hit.weight : 0,
+        // Present but with no published weight — must not be reported as 0%.
+        weightUnknown: !!(hit && hit.weight == null),
+        sectorWeight,
+        truncated: !hit && list.length >= 10,
+      };
     }));
 
     const detail = resolved.filter(r => r.kind !== 'self').map(r => ({
       holding: r.ticker + (r.kind === 'etf' ? ' (ETF)' : ''),
       value: Math.round(r.value),
       pct_account: +(r.value / account * 100).toFixed(2),
-      weight_in_holding: r.weight != null ? +Number(r.weight).toFixed(2) : null,
-      exposure_pct: r.weight ? +(r.value * r.weight / 100 / account * 100).toFixed(3) : 0,
+      weight_in_holding: (r.weight != null && !r.weightUnknown) ? +Number(r.weight).toFixed(2) : null,
+      exposure_pct: (r.weight && !r.weightUnknown)
+        ? +(r.value * r.weight / 100 / account * 100).toFixed(3) : 0,
       sector_weight: r.sectorWeight != null ? +Number(r.sectorWeight).toFixed(1) : null,
-      note: r.truncated ? 'not in top-15 holdings — weight may be understated' : null,
+      note: r.weightUnknown
+        ? `holds ${TICKER} but the weight is not published — look-through understated`
+        : (r.truncated ? `${TICKER} not in the top holdings returned — weight may be understated` : null),
     }));
 
     const directPct = +(directValue / account * 100).toFixed(2);
@@ -4628,12 +4662,13 @@ async function explainChart(chartKey) {
   function _renderExposure(e, maxPct) {
     const box = document.getElementById('researchExposure');
     const over = maxPct != null && e.true_total_pct > maxPct;
-    const rows = e.lookthrough.filter(r => r.exposure_pct > 0).map(r => `
+    const caveats = e.lookthrough.filter(r => r.note).map(r => `${r.holding}: ${r.note}`);
+    const rows = e.lookthrough.filter(r => r.exposure_pct > 0 || r.note).map(r => `
       <tr>
         <td class="py-1 pr-3 text-slate-300 font-mono">${r.holding}</td>
         <td class="py-1 pr-3 text-right text-slate-400">${r.pct_account.toFixed(2)}%</td>
         <td class="py-1 pr-3 text-right text-slate-400">${r.weight_in_holding != null ? r.weight_in_holding.toFixed(2) + '%' : '—'}</td>
-        <td class="py-1 text-right text-amber-400 font-mono">${r.exposure_pct.toFixed(3)}%</td>
+        <td class="py-1 text-right ${r.exposure_pct > 0 ? 'text-amber-400' : 'text-slate-600'} font-mono">${r.exposure_pct > 0 ? r.exposure_pct.toFixed(3) + '%' : '?'}</td>
       </tr>`).join('');
     box.innerHTML = `
       <div class="bg-slate-900 border ${over ? 'border-rose-800' : 'border-slate-800'} rounded-xl p-4">
@@ -4657,6 +4692,7 @@ async function explainChart(chartKey) {
             <th class="text-right pb-1">${I18n.t('research.lookthrough') || 'Look-through'}</th>
           </tr></thead><tbody>${rows}</tbody></table>`
         : `<p class="text-xs text-slate-600">${I18n.t('research.no_overlap') || 'No ETF overlap found in your holdings.'}</p>`}
+        ${caveats.length ? `<p class="mt-3 text-xs text-amber-500">⚠ ${I18n.t('research.partial') || 'Partial data — the true total is a floor:'} ${caveats.map(c => _esc(c)).join('; ')}</p>` : ''}
         ${over ? `<p class="mt-3 text-xs text-rose-400">⚠ ${I18n.t('research.over_max') || 'True exposure already exceeds your planned max position.'}</p>` : ''}
       </div>`;
     box.style.display = '';
@@ -4729,8 +4765,8 @@ async function explainChart(chartKey) {
     technicals.vs_ma60 = _pctChange(last, technicals.ma60);
     technicals.from_52w_high = _pctChange(last, base.week52_high);
     technicals.from_52w_low  = _pctChange(last, base.week52_low);
-    technicals.ret_20d = _pctChange(last, _valueDaysAgo(daily?.dates, dP, 20));
-    technicals.ret_60d = _pctChange(last, _valueDaysAgo(daily?.dates, dP, 60));
+    technicals.ret_20d = _pctChange(last, _valueBarsAgo(dP, 20));
+    technicals.ret_60d = _pctChange(last, _valueBarsAgo(dP, 60));
 
     // ── §4 relative strength vs SPY and the sector ETF ─────────────────────
     const relative = { sector_etf: null };
@@ -4838,7 +4874,6 @@ async function explainChart(chartKey) {
         debt_equity: base.debt_equity, current_ratio: base.current_ratio,
         interest_coverage: base.interest_coverage,
         shares_outstanding: base.shares_outstanding, beta: base.beta,
-        share_trend: shareTrend,
       },
       analyst: {
         recommendation: base.recommendation, recommendation_mean: base.recommendation_mean,
@@ -4953,7 +4988,11 @@ async function explainChart(chartKey) {
       }
       if (!t) { closeList(); i++; continue; }
       closeList();
-      const para = [];
+      // Always consume the current line first: while streaming, a table header
+      // row can arrive before its |---| separator, and that line matches the
+      // block-start guard below — without this the loop would never advance.
+      const para = [t];
+      i++;
       while (i < lines.length && lines[i].trim() &&
              !/^(#{1,6}\s|>|\||[-*+]\s|\d+[.)]\s|---+$)/.test(lines[i].trim())) {
         para.push(lines[i].trim()); i++;
@@ -5010,6 +5049,7 @@ async function explainChart(chartKey) {
       const reader = resp.body.getReader();
       const decoder = new TextDecoder();
       let buf = '', sources = [], cached = false, painting = false;
+      let degraded = false, truncated = false, streamError = null;
       const paint = () => {
         if (painting) return;
         painting = true;
@@ -5031,27 +5071,38 @@ async function explainChart(chartKey) {
           if (raw === '[DONE]') continue;
           let msg;
           try { msg = JSON.parse(raw); } catch(e) { continue; }
-          if (msg.error) {
-            report.innerHTML = _renderMd(_reportMarkdown) +
-              `<p class="text-rose-400 mt-3">⚠ ${_esc(msg.error)}</p>`;
-            continue;
-          }
-          if (msg.cached) cached = true;
-          if (msg.sources) sources = msg.sources;
+          if (msg.error)     streamError = msg.error;
+          if (msg.cached)    cached = true;
+          if (msg.degraded)  degraded = true;
+          if (msg.truncated) truncated = true;
+          if (msg.sources)   sources = msg.sources;
           if (msg.text) { _reportMarkdown += msg.text; paint(); }
         }
       }
 
-      report.innerHTML = _renderMd(_reportMarkdown);
+      const notes = [];
+      if (degraded) notes.push(I18n.t('research.degraded') ||
+        'Web search was unavailable — this report uses in-app data only.');
+      if (truncated) notes.push(I18n.t('research.truncated') ||
+        'Output hit the length limit and may be cut short.');
+      report.innerHTML =
+        (notes.length ? `<p class="text-amber-500">⚠ ${notes.map(_esc).join(' ')}</p>` : '') +
+        _renderMd(_reportMarkdown) +
+        (streamError ? `<p class="text-rose-400 mt-3">⚠ ${_esc(streamError)}</p>` : '');
+
       if (sources.length) {
         srcBox.textContent = (I18n.t('research.sources') || 'Web sources consulted: ') +
                              sources.join(' · ');
         srcBox.style.display = '';
       }
-      status.textContent = cached
-        ? (I18n.t('research.from_cache') || 'From cache — hit Regenerate for a fresh run')
-        : (I18n.t('research.done') || 'Done');
-      if (_reportMarkdown) copyBtn.style.display = '';
+      if (!_reportMarkdown) {
+        status.textContent = I18n.t('research.failed') || 'No report generated';
+      } else {
+        status.textContent = cached
+          ? (I18n.t('research.from_cache') || 'From cache — hit Regenerate for a fresh run')
+          : (I18n.t('research.done') || 'Done');
+        copyBtn.style.display = '';
+      }
     } catch(e) {
       report.innerHTML = `<p class="text-rose-400">⚠ ${_esc(e.message)}</p>`;
     } finally {

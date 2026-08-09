@@ -839,6 +839,11 @@ def _template_instructions(lang: str, has_portfolio: bool) -> str:
 请严格按下面的 17 段模板输出完整研究报告，用 Markdown（标题、表格、清单都可以用）。
 每一段都要写，不能跳过；某项确实没有数据就写「数据缺失」，绝对不要编造数字。
 
+**输出格式硬性要求：**
+* 不要复述模板里的提问、说明或要求文字——每一节只输出你填好的分析结论。
+* 小节标题保持简洁，例如 `## 6. 盈利质量`；不要把括号里的要求抄进标题。
+* 直接给答案，不要写「根据模板要求…」这类过场话。
+
 {missing_note}
 
 ## 1. 基本信息
@@ -975,6 +980,13 @@ FCF恶化、Thesis失效、行业景气反转、仓位已超上限……）。
 Produce the full research report following the 17-section template below, in Markdown (headers,
 tables and lists are fine). Every section must appear — do not skip any. Where a figure genuinely
 is not available, write "no data" rather than inventing it.
+
+**Output format requirements:**
+* Do not echo the template's questions, instructions or requirement text — under each heading,
+  output only your filled-in analysis.
+* Keep headings clean, e.g. `## 6. Earnings Quality`; do not copy the parenthetical requirements
+  into the heading.
+* Answer directly — no "as requested by the template" preamble.
 
 {missing_note_en}
 

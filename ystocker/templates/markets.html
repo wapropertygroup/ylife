@@ -1123,7 +1123,7 @@ function renderVix(vix, canvasId) {
   const _inst = new Chart(document.getElementById(canvasId), {
     type: 'line',
     data: { labels: dates, datasets: [{
-      label: 'VIX', data: prices,
+      ...I18n.label('chart.vix', 'VIX'), data: prices,
       borderColor: '#a78bfa', backgroundColor: 'rgba(167,139,250,0.07)',
       borderWidth: 2, pointRadius: 0, fill: true, tension: 0.3, spanGaps: true,
     }]},
@@ -1275,7 +1275,7 @@ function renderIdxStats(key, data) {
   const stats = [
     { label: I18n.t('markets.price') || 'Price',     val: fmtPt(d.current),   cls: '' },
     { label: I18n.t('markets.day_chg') || 'Day Chg', val: fmtPct(d.day_chg), cls: _chgClass(d.day_chg) },
-    { label: 'YTD', val: fmtPct(_computeYtd(d)), cls: _chgClass(_computeYtd(d)) },
+    { label: I18n.t('markets.ytd') || 'YTD', val: fmtPct(_computeYtd(d)), cls: _chgClass(_computeYtd(d)) },
     { label: I18n.t('markets.52w_high') || '52W Hi', val: fmtPt(d.hi52),      cls: '' },
     { label: I18n.t('markets.52w_low')  || '52W Lo', val: fmtPt(d.lo52),      cls: '' },
     { label: I18n.t('markets.pe')       || 'P/E',    val: d.pe != null ? d.pe.toFixed(1) + 'x' : '—', cls: '' },
@@ -1410,12 +1410,12 @@ function renderIdxChart(key, range, data, canvasId) {
   if (_idxShowBB && canvasId === 'idxChart') {
     const bb = _bbBands(prices, 20);
     datasets.push({
-      label: 'BB Upper', data: bb.upper,
+      ...I18n.label('chart.bb_upper', 'BB Upper'), data: bb.upper,
       borderColor: 'rgba(167,139,250,0.5)', backgroundColor: 'rgba(167,139,250,0.06)',
       borderWidth: 1, pointRadius: 0, fill: '+1', tension: 0.3, spanGaps: true, borderDash: [2,2],
     });
     datasets.push({
-      label: 'BB Lower', data: bb.lower,
+      ...I18n.label('chart.bb_lower', 'BB Lower'), data: bb.lower,
       borderColor: 'rgba(167,139,250,0.5)', backgroundColor: 'rgba(167,139,250,0.06)',
       borderWidth: 1, pointRadius: 0, fill: false, tension: 0.3, spanGaps: true, borderDash: [2,2],
     });
@@ -1537,7 +1537,7 @@ function renderMacdChart(key, data, range, canvasId) {
       datasets: [
         {
           type: 'bar',
-          label: 'Histogram',
+          ...I18n.label('markets.macd_histogram', 'Histogram'),
           data: histSlice,
           backgroundColor: histColors,
           borderColor: histBorders,
@@ -1546,7 +1546,7 @@ function renderMacdChart(key, data, range, canvasId) {
         },
         {
           type: 'line',
-          label: 'MACD',
+          ...I18n.label('chart.macd', 'MACD'),
           data: macdSlice,
           borderColor: '#38bdf8',
           backgroundColor: 'transparent',
@@ -1555,7 +1555,7 @@ function renderMacdChart(key, data, range, canvasId) {
         },
         {
           type: 'line',
-          label: 'Signal',
+          ...I18n.label('markets.macd_signal', 'Signal'),
           data: signalSlice,
           borderColor: '#fb923c',
           backgroundColor: 'transparent',
@@ -1624,7 +1624,7 @@ function renderRsiChart(key, data, range, canvasId) {
     data: {
       labels: dates,
       datasets: [{
-        label: 'RSI-14',
+        ...I18n.label('chart.rsi14', 'RSI-14'),
         data: rsiVals,
         borderColor: '#a78bfa',
         backgroundColor: 'rgba(167,139,250,0.06)',
@@ -2104,7 +2104,7 @@ function renderFearGreed(data, canvasId) {
       data: {
         labels,
         datasets: [{
-          label: 'Fear & Greed',
+          ...I18n.label('chart.fear_greed', 'Fear & Greed'),
           data: values,
           borderColor: '#a78bfa',
           backgroundColor: 'rgba(167,139,250,0.07)',
@@ -2257,7 +2257,7 @@ function renderAaii(data, canvasId) {
     window._aaiiSpreadChart = new Chart(document.getElementById('aaiiBullBearSpread'), {
       type: 'bar',
       data: { labels: spreadDates, datasets: [{
-        label: 'Bull-Bear Spread',
+        ...I18n.label('chart.bull_bear_spread', 'Bull-Bear Spread'),
         data: spreadVals,
         backgroundColor: spreadColors,
         borderColor: spreadColors.map(c => c.replace('0.6','0.8')),
@@ -2333,7 +2333,7 @@ function renderPcr(data, canvasId) {
     type: 'line',
     data: { labels: dates, datasets: [
       {
-        label: 'Put/Call',
+        ...I18n.label('chart.put_call', 'Put/Call'),
         data: closes,
         borderColor: '#a5b4fc', backgroundColor: 'rgba(165,180,252,0.08)',
         borderWidth: 1.5, pointRadius: 0, fill: true, tension: 0.3, spanGaps: true,
@@ -3657,7 +3657,7 @@ function _mktsModalConfig(kind) {
       new Chart(document.getElementById('rotationChart'), {
         type: 'line',
         data: { labels: dates, datasets: [{
-          label: 'Nasdaq/S&P Ratio',
+          ...I18n.label('chart.nasdaq_sp_ratio', 'Nasdaq/S&P Ratio'),
           data: ratio,
           borderColor: '#38bdf8', backgroundColor: 'rgba(56,189,248,0.08)',
           borderWidth: 2, pointRadius: 0, fill: true, tension: 0.3, spanGaps: true,
@@ -3779,7 +3779,7 @@ async function loadCreditSpread(period) {
       data: {
         labels: cs.spread_dates,
         datasets: [{
-          label: 'HYG/TLT',
+          ...I18n.label('chart.hyg_tlt', 'HYG/TLT'),
           data: cs.spread,
           borderColor: '#22d3ee',
           backgroundColor: 'rgba(34,211,238,0.07)',

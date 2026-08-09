@@ -414,6 +414,7 @@ const I18n = (() => {
     'history.tab_charts':   { en: 'Charts & Holdings', zh: '图表与持仓' },
     'history.tab_news':     { en: 'News',               zh: '新闻' },
     'history.tab_videos':   { en: 'Videos',             zh: '视频' },
+    'history.tab_research': { en: '✦ Research',         zh: '✦ 深度研究' },
     'history.news_translating': { en: 'Translating headlines…', zh: '正在翻译标题…' },
     'history.news_translated':  { en: 'Translated by AI', zh: 'AI 翻译' },
     'history.news_trans_fail':  { en: 'Translation unavailable', zh: '翻译不可用' },
@@ -436,6 +437,66 @@ const I18n = (() => {
     'history.explain':        { en: '✦ Explain',        zh: '✦ AI 解读' },
     'history.explain_hide':   { en: '✦ Hide',           zh: '✦ 收起' },
     'history.explain_thinking':{ en: '✦ Generating…',  zh: '✦ 生成中…' },
+
+    // ── Deep research report (history.html → Research tab) ──────────────
+    'research.pos_title':     { en: 'Your position & account',
+                                zh: '你的持仓与账户' },
+    'research.pos_hint':      { en: 'Saved in this browser only (localStorage). Used for §1 position, §12 portfolio fit, §13 position tier and §14 buy plan. Leave blank to get a recommendation-only report.',
+                                zh: '仅保存在本浏览器（localStorage）。用于模板 §1 持仓、§12 组合适配度、§13 仓位等级、§14 买入计划。留空则只给建议仓位。' },
+    'research.collapse':      { en: '▾ Collapse',       zh: '▾ 收起' },
+    'research.expand':        { en: '▸ Expand',         zh: '▸ 展开' },
+    'research.account_value': { en: 'Account value ($)', zh: '账户总值（$）' },
+    'research.shares':        { en: 'Shares held',       zh: '持仓股数' },
+    'research.avg_cost':      { en: 'Average cost ($)',  zh: '平均成本（$）' },
+    'research.max_pct':       { en: 'Planned max position (%)', zh: '计划最大仓位（%）' },
+    'research.role':          { en: 'Role in portfolio', zh: '投资定位' },
+    'research.role_core':     { en: 'Long-term core',    zh: '长期核心仓' },
+    'research.role_growth':   { en: 'Growth',            zh: '成长仓' },
+    'research.role_cyclical': { en: 'Cyclical',          zh: '周期仓' },
+    'research.role_turnaround':{ en: 'Turnaround',       zh: '反转仓' },
+    'research.role_tactical': { en: 'Tactical trade',    zh: '战术交易仓' },
+    'research.holdings_title':{ en: 'Other holdings — for ETF look-through overlap',
+                                zh: '其他持仓 — 用于 ETF 穿透重叠计算' },
+    'research.holdings_hint': { en: 'Add your ETFs and same-sector stocks with their market value. ETF holdings are looked up so the report can compute your true exposure, not just the direct position.',
+                                zh: '填入你的 ETF 和同板块个股及其市值。系统会查询 ETF 成分股，算出穿透后的真实暴露，而不只是直接仓位。' },
+    'research.add_holding':   { en: '+ Add',             zh: '+ 添加' },
+    'research.value_ph':      { en: 'Market value $',    zh: '市值 $' },
+    'research.compute_exposure':{ en: '↻ Compute exposure', zh: '↻ 计算穿透暴露' },
+    'research.clear':         { en: 'Clear',             zh: '清空' },
+    'research.saved':         { en: 'Saved',             zh: '已保存' },
+    'research.exposure_title':{ en: 'True look-through exposure', zh: '穿透后真实暴露' },
+    'research.direct':        { en: 'Direct',            zh: '直接仓位' },
+    'research.via_etf':       { en: 'Via ETFs',          zh: 'ETF 穿透' },
+    'research.true_total':    { en: 'True total',        zh: '真实合计' },
+    'research.headroom':      { en: 'Headroom to max',   zh: '距上限还剩' },
+    'research.holding':       { en: 'Holding',           zh: '持仓' },
+    'research.of_account':    { en: '% acct',            zh: '占账户%' },
+    'research.weight_inside': { en: 'Weight inside',     zh: '其中权重' },
+    'research.lookthrough':   { en: 'Look-through',      zh: '穿透后' },
+    'research.no_overlap':    { en: 'No ETF overlap found in your holdings.',
+                                zh: '你的持仓中未发现 ETF 重叠。' },
+    'research.over_max':      { en: 'True exposure already exceeds your planned max position.',
+                                zh: '穿透后的真实暴露已超过你的计划最大仓位。' },
+    'research.partial':       { en: 'Partial data — the true total is a floor:',
+                                zh: '数据不完整 — 真实合计只是下限：' },
+    'research.generate':      { en: '✦ Generate research report', zh: '✦ 生成深度研究报告' },
+    'research.regenerate':    { en: '↻ Regenerate',      zh: '↻ 重新生成' },
+    'research.copy':          { en: '⧉ Copy Markdown',   zh: '⧉ 复制 Markdown' },
+    'research.copied':        { en: '✓ Copied',          zh: '✓ 已复制' },
+    'research.gathering':     { en: 'Gathering data…',   zh: '正在汇总数据…' },
+    'research.searching':     { en: 'Searching the web & writing… this takes 30–60 s',
+                                zh: '正在联网检索并撰写…约需 30–60 秒' },
+    'research.done':          { en: 'Done',              zh: '已完成' },
+    'research.from_cache':    { en: 'From cache — hit Regenerate for a fresh run',
+                                zh: '来自缓存 — 点「重新生成」可刷新' },
+    'research.failed':        { en: 'No report generated', zh: '未生成报告' },
+    'research.degraded':      { en: 'Web search was unavailable — this report uses in-app data only.',
+                                zh: '联网检索不可用 — 本报告仅基于站内数据。' },
+    'research.truncated':     { en: 'Output hit the length limit and may be cut short.',
+                                zh: '输出达到长度上限，可能被截断。' },
+    'research.sources':       { en: 'Web sources consulted: ', zh: '参考的网络来源：' },
+    'research.disclaimer':    { en: 'Research analysis generated by AI from in-app market data plus web search. It can be wrong or out of date, and it is not investment advice. Verify every number before acting.',
+                                zh: '本报告由 AI 基于站内行情数据与联网检索生成，可能出错或过时，不构成投资建议。操作前请自行核实每一个数字。' },
 
     // Price Z-Score (history.html)
     'history.zscore':              { en: 'Z-Score',              zh: 'Z分数' },
@@ -1504,6 +1565,64 @@ const I18n = (() => {
     'videos.loading':       { en: 'Fetching videos…',  zh: '正在加载视频…' },
     'videos.error':         { en: 'Failed to load videos.', zh: '视频加载失败。' },
     'videos.all_channels':  { en: 'All channels',      zh: '全部频道' },
+
+    // ── Chart.js labels ────────────────────────────────────────────────
+    // Legend/dataset labels and axis titles. These live inside JS chart configs
+    // rather than the DOM, so they are resolved via I18n.label()/I18n.axis()
+    // and refreshed by retranslateCharts() on a language switch — apply() can
+    // only reach elements carrying data-i18n.
+    'chart.pe_ttm':          { en: 'PE (TTM)',        zh: '市盈率(TTM)' },
+    'chart.pe_fwd':          { en: 'PE (Fwd)',        zh: '市盈率(预测)' },
+    'chart.peg':             { en: 'PEG',             zh: 'PEG' },
+    'chart.upside_pct':      { en: 'Upside %',        zh: '上涨空间 %' },
+    'chart.day_change_pct':  { en: 'Day Change %',    zh: '日涨跌 %' },
+    'chart.eps_growth_ttm':  { en: 'EPS Growth TTM',  zh: 'EPS增长TTM' },
+    'chart.eps_growth_q':    { en: 'EPS Growth Q',    zh: 'EPS增长Q' },
+    'chart.ev_ebitda':       { en: 'EV/EBITDA',       zh: '企业价值倍数' },
+    'chart.ev_b':            { en: 'EV ($B)',         zh: '企业价值（十亿美元）' },
+    'chart.ebitda_b':        { en: 'EBITDA ($B)',     zh: 'EBITDA（十亿美元）' },
+    'chart.price':           { en: 'Price',           zh: '股价' },
+    'chart.vix':             { en: 'VIX',             zh: 'VIX' },
+    'chart.macd':            { en: 'MACD',            zh: 'MACD' },
+    'chart.rsi14':           { en: 'RSI-14',          zh: 'RSI-14' },
+    'chart.bb_upper':        { en: 'BB Upper',        zh: '布林带上轨' },
+    'chart.bb_lower':        { en: 'BB Lower',        zh: '布林带下轨' },
+    'chart.fear_greed':      { en: 'Fear & Greed',    zh: '恐惧贪婪指数' },
+    'chart.bull_bear_spread':{ en: 'Bull-Bear Spread', zh: '多空差值' },
+    'chart.put_call':        { en: 'Put/Call',        zh: '认沽/认购' },
+    'chart.pc_ratio':        { en: 'P/C Ratio',       zh: '认沽/认购比率' },
+    'chart.nasdaq_sp_ratio': { en: 'Nasdaq/S&P Ratio', zh: '纳指/标普比率' },
+    'chart.hyg_tlt':         { en: 'HYG/TLT',         zh: 'HYG/TLT' },
+    'chart.brent_wti_spread':{ en: 'Brent–WTI Spread', zh: '布伦特–WTI 价差' },
+    'chart.m2_velocity':     { en: 'M2 Velocity',     zh: 'M2 货币流通速度' },
+    'chart.mktcap_gdp':      { en: 'Market Cap / GDP (%)', zh: '总市值 / GDP (%)' },
+    'chart.fed_assets_t':    { en: 'Fed Assets ($T)', zh: '美联储总资产（万亿美元）' },
+    'chart.fed_total_assets':{ en: 'Fed Total Assets', zh: '美联储总资产' },
+    'chart.spy_10y_ratio':   { en: 'SPY / 10Y Ratio', zh: 'SPY / 10年期美债比率' },
+    'chart.spy':             { en: 'S&P 500 (SPY)',   zh: '标普500 (SPY)' },
+    'chart.annual_dividend': { en: 'Annual Dividend ($)', zh: '年度股息（美元）' },
+    'chart.div_yield':       { en: 'Div Yield',       zh: '股息率' },
+    'chart.revenue_b':       { en: 'Revenue ($B)',    zh: '营业收入（十亿美元）' },
+    'chart.gross_profit_b':  { en: 'Gross Profit ($B)', zh: '毛利润（十亿美元）' },
+    'chart.net_income_b':    { en: 'Net Income ($B)', zh: '净利润（十亿美元）' },
+    'chart.eps_diluted':     { en: 'EPS (Diluted)',   zh: 'EPS（摊薄）' },
+    'chart.zscore14':        { en: 'Z-Score (14d)',   zh: 'Z分数（14日）' },
+    'chart.rel_strength':    { en: 'Rel. Strength',   zh: '相对强度' },
+    'chart.baseline_100':    { en: 'Baseline 100',    zh: '基准线 100' },
+    // Axis titles
+    'chart.axis_fwd_pe':      { en: 'Forward PE',       zh: '预测市盈率' },
+    'chart.axis_upside_pct':  { en: 'Upside (%)',       zh: '上涨空间 (%)' },
+    'chart.axis_alpha_spy':   { en: 'Alpha vs SPY',     zh: '相对标普500超额收益' },
+    'chart.axis_pc_oi_ratio': { en: 'Put/Call OI Ratio', zh: '认沽/认购未平仓比率' },
+    // Analyst recommendation tiers
+    'chart.rec_strong_buy':   { en: 'Strong Buy',    zh: '强烈买入' },
+    'chart.rec_buy':          { en: 'Buy',           zh: '买入' },
+    'chart.rec_hold':         { en: 'Hold',          zh: '持有' },
+    'chart.rec_underperform': { en: 'Underperform',  zh: '跑输大盘' },
+    'chart.rec_sell':         { en: 'Sell',          zh: '卖出' },
+    // Sector-card stat badges (built in JS, so no data-i18n possible)
+    'card.badge_ps':          { en: 'P/S',           zh: '市销率' },
+    'card.badge_short':       { en: 'Short',         zh: '做空' },
   };
 
   let current = (() => {
@@ -1585,6 +1704,57 @@ const I18n = (() => {
     return v != null ? v : key.toUpperCase();
   }
 
+  // ── Chart.js label binding ─────────────────────────────────────────────
+  // Chart.js copies label strings into its own config at construction time, so
+  // apply() (which only walks [data-i18n] elements) cannot reach a legend entry
+  // or an axis title. Labels created through label()/axis() carry the key
+  // alongside the resolved text, which lets retranslateCharts() re-resolve them
+  // in place on a language switch — otherwise every page would need its own
+  // destroy-and-rebuild hook just to translate a legend.
+
+  /** Dataset label bound to a key. Spread into a Chart.js dataset:
+   *    { ...I18n.label('chart.peg', 'PEG'), data: [...] }
+   */
+  function label(key, fallback) {
+    return { label: t(key) ?? fallback, i18nKey: key };
+  }
+
+  /** Axis title object bound to a key. Use as:
+   *    x: { title: I18n.axis('chart.axis_fwd_pe', 'Forward PE') }
+   *  `extra` merges in per-chart styling, e.g. { font: { size: 9 } }.
+   */
+  function axis(key, fallback, extra) {
+    return Object.assign(
+      { display: true, text: t(key) ?? fallback, i18nKey: key, color: '#64748b' },
+      extra || {},
+    );
+  }
+
+  /** Re-resolve every i18n-bound chart label / axis title on the page. */
+  function retranslateCharts() {
+    if (typeof Chart === 'undefined' || typeof Chart.getChart !== 'function') return;
+    document.querySelectorAll('canvas').forEach(cv => {
+      let chart;
+      try { chart = Chart.getChart(cv); } catch (_) { return; }
+      if (!chart) return;
+      let dirty = false;
+      ((chart.data && chart.data.datasets) || []).forEach(ds => {
+        if (!ds || !ds.i18nKey) return;
+        const v = t(ds.i18nKey);
+        if (v != null && v !== ds.label) { ds.label = v; dirty = true; }
+      });
+      const scales = (chart.options && chart.options.scales) || {};
+      Object.keys(scales).forEach(id => {
+        const title = scales[id] && scales[id].title;
+        if (!title || !title.i18nKey) return;
+        const v = t(title.i18nKey);
+        if (v != null && v !== title.text) { title.text = v; dirty = true; }
+      });
+      // 'none' repaints without replaying entry animations.
+      if (dirty) { try { chart.update('none'); } catch (_) {} }
+    });
+  }
+
   function apply(root) {
     root = root || document;
     // textContent
@@ -1613,6 +1783,10 @@ const I18n = (() => {
     current = lang;
     localStorage.setItem('ystocker_lang', lang);
     apply();
+    // Charts before the event: pages listening on i18n:langchange may fully
+    // rebuild a chart, and rebuilding after an in-place update is harmless,
+    // whereas the reverse order would leave the rebuilt chart untranslated.
+    retranslateCharts();
     document.dispatchEvent(new Event('i18n:langchange'));
     // Update URL so the link is shareable
     const url = new URL(window.location.href);
@@ -1657,5 +1831,6 @@ const I18n = (() => {
     _injectLangLinks(current);
   });
 
-  return { t, tSector, tIdx, stockName, apply, toggle, setLang, getLang };
+  return { t, tSector, tIdx, stockName, apply, toggle, setLang, getLang,
+           label, axis, retranslateCharts };
 })();

@@ -414,6 +414,9 @@ function buildScatterChart(ctx) {
   const sectors = [...new Set(ALL.map(d => d.sector))];
   const datasets = sectors.map((sec, i) => ({
     label: I18n.tSector(sec),
+    // Bind to the sector key too, so the legend re-translates on a language
+    // switch rather than staying in the language the chart was built in.
+    i18nKey: 'sector.name.' + sec,
     _key: sec,
     data: ALL.filter(d => d.sector === sec && d.pe_fwd != null && d.upside != null)
               .map(d => ({ x: d.pe_fwd, y: d.upside, ticker: d.ticker })),
@@ -461,8 +464,8 @@ function buildScatterChart(ctx) {
         tooltip: { callbacks: { label: c => ` ${c.raw.ticker}  PE ${c.raw.x?.toFixed(1)}x  Upside ${c.raw.y?.toFixed(1)}%` } }
       },
       scales: {
-        x: { title: { display: true, text: 'Forward PE', color: '#64748b' }, grid: { color: '#1e293b' }, ticks: { color: '#64748b' } },
-        y: { title: { display: true, text: 'Upside (%)', color: '#64748b' }, grid: { color: '#1e293b' }, ticks: { color: '#64748b' } }
+        x: { title: I18n.axis('chart.axis_fwd_pe', 'Forward PE'), grid: { color: '#1e293b' }, ticks: { color: '#64748b' } },
+        y: { title: I18n.axis('chart.axis_upside_pct', 'Upside (%)'), grid: { color: '#1e293b' }, ticks: { color: '#64748b' } }
       }
     },
     plugins: [{
@@ -520,7 +523,7 @@ function buildPegChart(ctx) {
     data: {
       labels: rows.map(d => d.ticker),
       datasets: [{
-        label: 'PEG',
+        ...I18n.label('chart.peg', 'PEG'),
         data: rows.map(d => d.peg),
         backgroundColor: rows.map(d => d.peg < 1 ? '#34d399cc' : d.peg < 2 ? '#f59e0bcc' : '#f43f5ecc'),
         borderRadius: 4,
@@ -723,14 +726,14 @@ document.addEventListener('DOMContentLoaded', () => {
     if (psVals.length) {
       const avgPs = mean(psVals);
       if (cardEl) cardEl.dataset.sortPs = avgPs.toFixed(4);
-      parts.push(`<span class="text-slate-500 text-[10px]">P/S <span class="text-slate-400 font-medium">${avgPs.toFixed(1)}x</span></span>`);
+      parts.push(`<span class="text-slate-500 text-[10px]"><span data-i18n="card.badge_ps">P/S</span> <span class="text-slate-400 font-medium">${avgPs.toFixed(1)}x</span></span>`);
     }
     if (sfVals.length) {
       const mid = Math.floor(sfVals.length / 2);
       const medSf = sfVals.length % 2 === 0 ? (sfVals[mid - 1] + sfVals[mid]) / 2 : sfVals[mid];
       if (cardEl) cardEl.dataset.sortShort = medSf.toFixed(4);
       const sfColor = medSf > 10 ? 'text-rose-400' : medSf > 5 ? 'text-amber-400' : medSf < 3 ? 'text-emerald-400' : 'text-slate-400';
-      parts.push(`<span class="text-slate-500 text-[10px]">Short <span class="${sfColor} font-medium">${medSf.toFixed(1)}%</span></span>`);
+      parts.push(`<span class="text-slate-500 text-[10px]"><span data-i18n="card.badge_short">Short</span> <span class="${sfColor} font-medium">${medSf.toFixed(1)}%</span></span>`);
     }
     statsEl.innerHTML = parts.join('');
   }
