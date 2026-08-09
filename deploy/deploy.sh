@@ -26,7 +26,7 @@ APPS=(
 CF_STACK_NAME="${CF_STACK_NAME:-ystocker}"   # match your actual stack name (or override via env var)
 CF_REGION="us-west-2"
 INSTANCE_TYPE="t3.medium"                    # desired EC2 instance type
-INSTANCE_ID="i-01794a9910a4d5ee1"            # EC2 instance managed by this stack
+INSTANCE_ID="i-0b0504ed1c16b9b85"            # EC2 instance managed by this stack
 
 LOG_PREFIX="[deploy $(date '+%Y-%m-%d %H:%M:%S')]"
 log() { echo "$LOG_PREFIX $*"; }
