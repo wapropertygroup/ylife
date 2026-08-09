@@ -1272,24 +1272,29 @@ let _fedSeriesData = {};
     }
   } catch(e) { console.warn('Fed chart m2VelChart failed:', e); }
 
-  // Buffett Indicator
+  // Buffett Indicator — total US corporate equities / GDP.
+  // Source series is NCBEILQ027S (Z.1 corporate equities, $B), not the retired
+  // Wilshire 5000 index. It is quarterly, so this chart steps quarterly.
+  // NOTE: the equities/GDP ratio sits structurally higher than the old
+  // Wilshire-index/GDP ratio (~215% vs ~180% today), so the badge thresholds
+  // below read "expensive" sooner than they did before.
   let _buffettIndfc = null, _buffettGdp = null, _buffettRatioAll = null, _buffettDatesAll = null, _buffettChart = null;
   try {
-    const will5k = s['WILL5000'];
+    const mktCap = s['NCBEILQ027S'];
     const gdp    = s['GDP'];
-    if (will5k?.dates?.length && gdp?.dates?.length) {
+    if (mktCap?.dates?.length && gdp?.dates?.length) {
       // GDP is quarterly — interpolate to monthly using forward-fill
       const gdpMap = {};
       gdp.dates.forEach((d, i) => { if (gdp.values[i] != null) gdpMap[d.slice(0,7)] = gdp.values[i]; });
-      // Forward-fill GDP to all Wilshire dates
+      // Forward-fill GDP across the market-cap dates
       let lastGdp = null;
-      const ratioVals = will5k.dates.map(d => {
+      const ratioVals = mktCap.dates.map(d => {
         const ym = d.slice(0,7);
         if (gdpMap[ym] != null) lastGdp = gdpMap[ym];
-        return (lastGdp && will5k.values[will5k.dates.indexOf(d)] != null)
-          ? +(will5k.values[will5k.dates.indexOf(d)] / lastGdp * 100).toFixed(1) : null;
+        return (lastGdp && mktCap.values[mktCap.dates.indexOf(d)] != null)
+          ? +(mktCap.values[mktCap.dates.indexOf(d)] / lastGdp * 100).toFixed(1) : null;
       });
-      _buffettDatesAll = will5k.dates;
+      _buffettDatesAll = mktCap.dates;
       _buffettRatioAll = ratioVals;
       const latestRatio = ratioVals.filter(v=>v).slice(-1)[0];
       document.getElementById('buffettSection').style.display = 'block';
@@ -1536,7 +1541,9 @@ let _fedSeriesData = {};
         // Optional sub-components inside "other"
         swaps:      _v('SWPT'),
         gold:       _v('WGCAL'),
-        sdr:        _v('WSDRAL'),
+        // No `sdr`: FRED no longer publishes the SDR certificate account, and
+        // _v() coerces a missing series to 0 — which would tell the AI the
+        // account is empty rather than unreported.
       },
       liabilities: {
         reserves: _v('WRESBAL'),
@@ -1557,7 +1564,6 @@ let _fedSeriesData = {};
         rrp:          _v('RRPONTSYD') - _p('RRPONTSYD'),
         swaps:        _v('SWPT')     - _p('SWPT'),
         gold:         _v('WGCAL')    - _p('WGCAL'),
-        sdr:          _v('WSDRAL')   - _p('WSDRAL'),
       }
     },
     label: 'Fed Balance Sheet Snapshot (Assets vs Liabilities + Capital)'

@@ -18,7 +18,11 @@ Series (weekly, not seasonally adjusted):
   WLCFLPCL  — Loans from Federal Reserve Banks (incl. BTFP), millions USD
   SWPT      — Central Bank Liquidity Swaps, millions USD
   WGCAL     — Gold Certificate Account, millions USD
-  WSDRAL    — Special Drawing Rights Certificate Account, millions USD
+
+Note: WSDRAL (SDR Certificate Account) is intentionally absent. FRED 404s that
+id; the real id is WASDRAL, but that series stopped publishing in June 2018, so
+charting it would present 8-year-old data as current. The fed.html SDR card
+already renders an "unavailable" note when the series is missing.
 
 Series (monthly):
   M2SL      — M2 Money Supply, billions USD (seasonally adjusted)
@@ -59,7 +63,7 @@ SERIES: dict[str, dict[str, str]] = {
     "WLCFLPCL":  {"label": "Fed Loans (incl. BTFP)",    "color": "#f97316"},
     "SWPT":      {"label": "Central Bank Liquidity Swaps", "color": "#a78bfa"},
     "WGCAL":     {"label": "Gold Certificate Account",  "color": "#fbbf24"},
-    "WSDRAL":    {"label": "SDR Certificate Account",   "color": "#facc15"},
+    # NOTE: no WSDRAL — see the module docstring (FRED 404s it; WASDRAL ended 2018).
     # Monthly series
     "M2SL":      {"label": "M2 Money Supply",            "color": "#22d3ee"},
     "M2V":       {"label": "Velocity of M2",             "color": "#a3e635"},
@@ -70,7 +74,14 @@ SERIES: dict[str, dict[str, str]] = {
     "BAMLH0A0HYM2":    {"label": "HY OAS (bps)",               "unit": "bps",    "scale": 1.0},
     "BAMLC0A0CM":      {"label": "IG OAS (bps)",               "unit": "bps",    "scale": 1.0},
     # ── Valuation / business cycle ──────────────────────────────────────────
-    "WILL5000":        {"label": "Wilshire 5000 Index",        "unit": "index",  "scale": 1.0},  # was WILL5000INDFC (returns no data)
+    # Buffett Indicator numerator. Wilshire pulled every WILL5000* series from
+    # FRED, so the old ids (WILL5000, WILL5000IND, WILL5000INDFC, WILL5000PR)
+    # all 404. NCBEILQ027S — Nonfinancial Corporate Business; Corporate Equities;
+    # Liability Level — is the standard FRED substitute. It is quarterly (not
+    # daily) and reported in millions, so it is deliberately NOT listed in
+    # _SERIES_ALREADY_BILLIONS: the millions→billions conversion is what keeps it
+    # on the same scale as GDP for the ratio in fed.html.
+    "NCBEILQ027S":     {"label": "US Corporate Equities ($B)", "unit": "bln",   "scale": 1.0},
     "GDP":             {"label": "US GDP ($B)",                 "unit": "bln",   "scale": 1.0},
     "INDPRO":          {"label": "Industrial Production Index", "unit": "index",  "scale": 1.0},  # replaces NAPM (which returns empty)
     "HOUST":           {"label": "Housing Starts (k units)",   "unit": "k",      "scale": 1.0},
@@ -166,7 +177,7 @@ _SERIES_ALREADY_BILLIONS = {
     "RRPONTSYD", "M2SL",
     # New series — already in natural units, no millions→billions conversion
     "DFII10", "T10YIE", "BAMLH0A0HYM2", "BAMLC0A0CM",
-    "WILL5000", "GDP", "INDPRO", "HOUST", "USREC",
+    "GDP", "INDPRO", "HOUST", "USREC",
     "UMCSENT", "MORTGAGE30US", "GDPC1", "CPIAUCSL", "DCOILWTICO",
 }
 
