@@ -5027,7 +5027,7 @@ def api_gold_ratios():
 _YIELD_CURVE_CACHE: dict = {}
 _YIELD_CURVE_CACHE_LOCK = threading.Lock()
 _YIELD_CURVE_CACHE_TTL  = 3600  # 1 hour
-_YIELD_CURVE_CACHE_VER  = "v3"  # bump when maturity keys change
+_YIELD_CURVE_CACHE_VER  = "v4"  # bump when maturity keys change
 _YIELD_CURVE_FILE       = Path(__file__).parent.parent / "cache" / "yield_curve_cache.json"
 
 
@@ -5334,8 +5334,11 @@ def api_yield_curve():
     # `jgbcme.csv` carries the *current month*; the full daily series since 1974
     # lives at `historical/jgbcme_all.csv`, used here only as a fallback for the
     # first days of a month before the new file is published.
-    JP_COL_MAP = {"1Y": "1Y", "2Y": "2Y", "3Y": "3Y", "5Y": "5Y",
-                  "10Y": "10Y", "20Y": "20Y", "30Y": "30Y"}
+    # MoF publishes 15 tenors: 1Y–10Y in yearly steps, then 15/20/25/30/40Y.  We keep
+    # the conventional JGB benchmark ladder — enough resolution to show both the
+    # BoJ-anchored short end and the steep super-long end without crowding the card.
+    # Column headers in the CSV are exactly these labels, so no label→column map.
+    JP_MATURITIES = ["1Y", "2Y", "3Y", "5Y", "7Y", "10Y", "15Y", "20Y", "30Y", "40Y"]
     _MOF_BASE = "https://www.mof.go.jp/english/policy/jgbs/reference/interest_rate"
     jp_current: dict = {}
 
@@ -5354,9 +5357,9 @@ def api_yield_curve():
             if not parts or "/" not in parts[0]:
                 continue
             vals: dict = {}
-            for label, col in JP_COL_MAP.items():
+            for label in JP_MATURITIES:
                 try:
-                    raw = parts[header.index(col)]
+                    raw = parts[header.index(label)]
                 except (ValueError, IndexError):
                     continue
                 if raw and raw not in ("-", "N/A"):
@@ -5373,14 +5376,42 @@ def api_yield_curve():
             mof_r = _req.get(f"{_MOF_BASE}/{_mof_path}", timeout=15,
                              headers={"User-Agent": "Mozilla/5.0"})
             if mof_r.status_code != 200:
+                # Log it — a silent `continue` here is what previously made the
+                # curve collapse to a lone FRED 10Y with no trace of the cause.
+                log.warning("Yield curve: JP MoF %s returned HTTP %s",
+                            _mof_path, mof_r.status_code)
                 continue
             jp_current = _parse_mof_csv(mof_r.text)
             if jp_current:
                 break
+            log.warning("Yield curve: JP MoF %s parsed 0 maturities (%d bytes, "
+                        "first line: %.60s)", _mof_path, len(mof_r.content),
+                        mof_r.text.strip().splitlines()[0] if mof_r.text.strip() else "")
         log.info("Yield curve: JP MoF fetched (%d maturities: %s)",
                  len(jp_current), ", ".join(sorted(jp_current.keys())))
     except Exception as exc:
         log.warning("Yield curve: JP MoF fetch failed: %s", exc)
+
+    # ── JP stale-cache safety net (mirrors the US path above) ────────────────
+    # MoF is the only source for the full JGB term structure, so a single flaky
+    # fetch used to drop the card to one point (the FRED monthly 10Y below).
+    # Re-use the last good snapshot for whatever is missing instead.
+    _jp_missing = [m for m in JP_MATURITIES if m not in jp_current]
+    if _jp_missing:
+        log.info("Yield curve: JP missing %d maturities (%s) — trying stale disk cache",
+                 len(_jp_missing), ", ".join(_jp_missing))
+        try:
+            if _YIELD_CURVE_FILE.exists():
+                _stale_payload = json.loads(_YIELD_CURVE_FILE.read_text())
+                if _stale_payload.get("ver") == _YIELD_CURVE_CACHE_VER:
+                    _stale_jp = _stale_payload.get("data", {}).get("jp", {}).get("current", {})
+                    for _mat in _jp_missing:
+                        if _mat in _stale_jp:
+                            jp_current[_mat] = _stale_jp[_mat]
+                            log.info("Yield curve: JP filled %s = %.3f%% from stale cache",
+                                     _mat, _stale_jp[_mat])
+        except Exception as _exc:
+            log.debug("Yield curve JP stale-cache fill failed: %s", _exc)
 
     jp_hist_10y: dict = {"dates": [], "values": []}
     try:

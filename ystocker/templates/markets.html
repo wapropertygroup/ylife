@@ -2646,7 +2646,7 @@ function renderYieldCurve(data) {
   document.getElementById('jpYieldBody').style.display    = '';
 
   const jpCurrent = jp.current || {};
-  const allJpMats   = ['1Y', '2Y', '3Y', '5Y', '10Y', '20Y', '30Y'];
+  const allJpMats   = ['1Y', '2Y', '3Y', '5Y', '7Y', '10Y', '15Y', '20Y', '30Y', '40Y'];
   const allJpYields = allJpMats.map(m => jpCurrent[m] ?? null);
   const jpMats   = allJpMats.filter((_, i) => allJpYields[i] != null);
   const jpYields = allJpYields.filter(v => v != null);
@@ -3316,7 +3316,7 @@ function expandMktsChart(kind) {
     subEl.textContent   = I18n.t('markets.jp_yield_desc') || 'Japan Government Bond (JGB) yields';
     modal.style.display = 'flex';
     const jpCur  = (_yieldData.jp || {}).current || {};
-    const allJM  = ['1Y', '2Y', '3Y', '5Y', '10Y', '20Y', '30Y'];
+    const allJM  = ['1Y', '2Y', '3Y', '5Y', '7Y', '10Y', '15Y', '20Y', '30Y', '40Y'];
     const allJY  = allJM.map(m => jpCur[m] ?? null);
     const jpMats = allJM.filter((_,i) => allJY[i] != null);
     const jpYlds = allJY.filter(v => v != null);
