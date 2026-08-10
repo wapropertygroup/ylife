@@ -3344,9 +3344,9 @@ def api_forecast(ticker: str):
             log.debug("Forecast cache hit: %s", ticker)
             return jsonify(entry["data"])
 
-    from ystocker.forecast import run_forecast
-    log.info("Running forecast for %s", ticker)
-    result = run_forecast(ticker)
+    from ystocker.forecast import run_forecast_isolated
+    log.info("Running forecast for %s (isolated process)", ticker)
+    result = run_forecast_isolated(ticker)
 
     if "error" not in result:
         with _FORECAST_CACHE_LOCK:

@@ -10,6 +10,10 @@ All models train on ~2 years of weekly closing prices and produce
 a 90-day (≈13-week) forward forecast with 80% confidence intervals.
 
 Returns a plain dict ready for jsonify().
+
+Request handlers must call :func:`run_forecast_isolated`, not
+:func:`run_forecast` — see that function's docstring for why fitting in the
+worker process cost us nine OOM kills.
 """
 from __future__ import annotations
 
@@ -27,6 +31,11 @@ log = logging.getLogger(__name__)
 FORECAST_WEEKS = 26     # ~6 months forward
 TRAIN_PERIOD   = "3y"   # how much history to train on
 INTERVAL       = "1wk"  # weekly bars
+
+# Wall-clock budget for one isolated forecast. Must stay below gunicorn's
+# --timeout (120 s) so a slow fit returns a clean JSON error instead of letting
+# the master kill the whole worker mid-request.
+FORECAST_TIMEOUT = 100.0
 
 
 # ---------------------------------------------------------------------------
@@ -204,3 +213,93 @@ def run_forecast(ticker: str) -> dict:
         result["linear"] = {"forecast": [], "error": str(exc)}
 
     return result
+
+
+# ---------------------------------------------------------------------------
+# Process-isolated entry point — use this from request handlers
+# ---------------------------------------------------------------------------
+
+def run_forecast_isolated(ticker: str, timeout: float = FORECAST_TIMEOUT) -> dict:
+    """Run :func:`run_forecast` in a throwaway interpreter, then reap it.
+
+    Prophet (via cmdstanpy) and ``pmdarima.auto_arima`` allocate hundreds of MB
+    per call, and glibc does not hand those large arenas back to the OS. A
+    gunicorn worker that served a single /api/forecast request therefore stayed
+    ~880 MB larger for the rest of its life: on a 4 GB box, ten such requests
+    produced nine OOM kills in 48 h, and because the kernel picks its victim
+    globally they took unrelated apps down with them. A separate process gives
+    every byte back on exit, unconditionally.
+
+    Deliberately ``subprocess``, not ``multiprocessing``:
+
+    * ``fork`` is unsafe here — this app runs background daemon threads holding
+      module-level cache locks (ticker, Fed, 13F, breadth), and a child forked
+      while one is held inherits a lock nothing will ever release.
+    * ``spawn`` re-imports the parent's ``__main__`` in the child. Under
+      gunicorn that is the console script in venv/bin/gunicorn, so every
+      forecast would re-execute the launcher module (it survives only because
+      of its ``if __name__ == '__main__'`` guard) and drag the whole gunicorn
+      package into the child. Too subtle to rely on.
+
+    The child writes its JSON to *out_path* rather than stdout because
+    cmdstanpy and plotly print to stdout on import, which would corrupt a
+    stdout-framed payload.
+    """
+    import json
+    import os
+    import subprocess
+    import sys
+    import tempfile
+    from pathlib import Path
+
+    # -m needs the package parent on sys.path; pass it as cwd so this works no
+    # matter where gunicorn was started from.
+    pkg_root = Path(__file__).resolve().parent.parent
+    fd, out_path = tempfile.mkstemp(prefix="ystocker-forecast-", suffix=".json")
+    os.close(fd)
+
+    try:
+        proc = subprocess.run(
+            [sys.executable, "-m", "ystocker.forecast", ticker, out_path],
+            cwd=str(pkg_root), capture_output=True, text=True, timeout=timeout,
+        )
+        if proc.returncode != 0:
+            log.warning("Forecast child for %s exited %d: %s",
+                        ticker, proc.returncode, (proc.stderr or "")[-500:])
+            return {"error": f"Forecast failed (exit {proc.returncode})."}
+        try:
+            return json.loads(Path(out_path).read_text())
+        except (OSError, ValueError) as exc:
+            log.warning("Forecast child for %s wrote no usable JSON: %s", ticker, exc)
+            return {"error": "Forecast produced no usable output."}
+    except subprocess.TimeoutExpired:
+        log.warning("Forecast for %s exceeded %.0fs — child killed", ticker, timeout)
+        return {"error": f"Forecast timed out after {timeout:.0f}s."}
+    finally:
+        Path(out_path).unlink(missing_ok=True)
+
+
+if __name__ == "__main__":
+    # Child entry point for run_forecast_isolated(). Invoked as
+    #   python -m ystocker.forecast <TICKER> <OUT_JSON_PATH>
+    # Logs go to stderr so they land in the gunicorn error log; stdout is left
+    # to whatever cmdstanpy/plotly want to print.
+    import json as _json
+    import logging as _logging
+    import sys as _sys
+
+    _logging.basicConfig(
+        level=_logging.INFO, stream=_sys.stderr,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        datefmt="%H:%M:%S",
+    )
+    if len(_sys.argv) != 3:
+        _sys.exit("usage: python -m ystocker.forecast <TICKER> <OUT_JSON_PATH>")
+
+    _ticker, _out = _sys.argv[1], _sys.argv[2]
+    try:
+        _payload = run_forecast(_ticker)
+    except BaseException as _exc:  # noqa: BLE001 — always hand the parent JSON
+        _payload = {"error": f"Forecast crashed: {_exc}"}
+    with open(_out, "w") as _fh:
+        _json.dump(_payload, _fh)

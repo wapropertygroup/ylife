@@ -236,9 +236,27 @@ if [[ "\${INSTALL_PLAYWRIGHT:-0}" == "1" ]] \
       echo "[\$(TS)]    ⚠ Playwright install failed — Walmart scraping uses API fallbacks"
 fi
 
+# ── Swap file — OOM cushion ──────────────────────────────────────────────────
+# The box has 4 GB and shipped with no swap at all, so any memory spike went
+# straight to the OOM killer instead of degrading. 2 GB of swap turns a hard
+# kill into a slow request, which is the difference between a 502 and a wait.
+if ! sudo swapon --show 2>/dev/null | grep -q /swapfile; then
+  echo "[\$(TS)] No swap present — creating 2G swapfile..."
+  sudo fallocate -l 2G /swapfile 2>/dev/null \\
+    || sudo dd if=/dev/zero of=/swapfile bs=1M count=2048 status=none
+  sudo chmod 600 /swapfile
+  sudo mkswap /swapfile >/dev/null
+  sudo swapon /swapfile
+  grep -q '^/swapfile' /etc/fstab \\
+    || echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab >/dev/null
+  echo "[\$(TS)]    ✓ swap enabled: \$(free -m | awk '/^Swap:/ {print \$2" MB"}')"
+else
+  echo "[\$(TS)]    swap already configured — skipping"
+fi
+
 # ── Service setup (function) ─────────────────────────────────────────────────
 ensure_service() {
-  local name="\$1" port="\$2" step="\$3"
+  local name="\$1" port="\$2" step="\$3" mem_max="\${4:-400M}"
 
   echo "[\$(TS)][\$step/\$TOTAL_STEPS] Ensuring \$name service..."
 
@@ -253,11 +271,21 @@ User=\${RUN_USER}
 Group=\${RUN_USER}
 WorkingDirectory=\${APP_DIR}
 Environment="PATH=\${APP_DIR}/venv/bin"
+# glibc opens a malloc arena per thread and never shrinks one, so a long-lived
+# worker fragments into hundreds of MB of retained heap. Cap the arena count.
+Environment="MALLOC_ARENA_MAX=2"
+# Keep a runaway app inside its own cgroup. Without this the kernel picks its
+# OOM victim globally, so one bloated ystocker worker took unrelated apps down
+# with it. These are ceilings, not reservations.
+MemoryAccounting=yes
+MemoryMax=\${mem_max}
 ExecStart=\${APP_DIR}/venv/bin/gunicorn \\\\
-          --workers 4 \\\\
+          --workers 2 \\\\
           --preload \\\\
           --bind 127.0.0.1:\${port} \\\\
           --timeout 120 \\\\
+          --max-requests 200 \\\\
+          --max-requests-jitter 50 \\\\
           --access-logfile /var/log/\${name}-access.log \\\\
           --error-logfile  /var/log/\${name}-error.log \\\\
           "\${name}:create_app()"
@@ -294,7 +322,10 @@ SERVICEFILE
 
 # ── Deploy each app service ──────────────────────────────────────────────────
 for i in \$(seq 0 \$((NUM_APPS - 1))); do
-  ensure_service "\${NAMES[\$i]}" "\${PORTS[\$i]}" "\$((4 + i))"
+  # ystocker carries pandas/matplotlib/prophet plus the 500-ticker caches and
+  # legitimately needs ~1 GB; the other seven sit around 100 MB each.
+  if [[ "\${NAMES[\$i]}" == "ystocker" ]]; then _mem="1800M"; else _mem="400M"; fi
+  ensure_service "\${NAMES[\$i]}" "\${PORTS[\$i]}" "\$((4 + i))" "\$_mem"
 done
 
 # ── Nginx (function) ─────────────────────────────────────────────────────────
