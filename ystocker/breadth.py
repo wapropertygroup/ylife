@@ -372,6 +372,26 @@ def get_breadth(force: bool = False) -> dict[str, Any]:
         return data
 
 
+def peek() -> Optional[dict[str, Any]]:
+    """Return an already-available breadth payload, or None. Never rebuilds.
+
+    ``get_breadth()`` falls through to a ~25s, 500-ticker download when the
+    cache is cold, which is the right trade for /api/breadth but not for
+    incidental consumers that only want the series if it is already paid for.
+    Checks memory first, then the disk cache regardless of TTL — a week-old
+    diffusion index still answers "is breadth narrowing?", and the caller can
+    date it via the payload's own ``asof``.
+    """
+    with _cache_lock:
+        if _cache_data:
+            return _cache_data
+    try:
+        return _load_disk_cache(ignore_ttl=True)
+    except Exception as exc:  # pragma: no cover - defensive
+        log.debug("Breadth: peek failed to read disk cache: %s", exc)
+        return None
+
+
 def get_cache_ts() -> Optional[float]:
     with _cache_lock:
         return _cache_ts

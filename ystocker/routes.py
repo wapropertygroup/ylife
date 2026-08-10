@@ -4626,26 +4626,207 @@ _SKEW_CACHE: dict = {}
 _SKEW_LOCK = threading.Lock()
 _SKEW_TTL = 4 * 3600  # 4 hours
 
+# Interpretation bands for the SKEW index. Upper bound is exclusive, so a
+# reading sits in the first band whose `hi` it falls under; `None` = open top.
+_SKEW_BANDS: tuple[tuple[float | None, str], ...] = (
+    (120.0, "weak"),      # < 120        tail-protection demand is soft
+    (135.0, "neutral"),   # 120 - 135    normal / neutral
+    (145.0, "notable"),   # 135 - 145    demand worth noting
+    (155.0, "elevated"),  # 145 - 155    clearly elevated
+    (None,  "extreme"),   # > 155        extreme tail-insurance premium
+)
+
+
+def _skew_band(value: float | None) -> str | None:
+    """Classify a SKEW reading into one of the five interpretation bands."""
+    if value is None:
+        return None
+    for hi, name in _SKEW_BANDS:
+        if hi is None or value < hi:
+            return name
+    return "extreme"
+
+
+def _breadth_pct50_cached() -> dict | None:
+    """% of S&P 500 above its 50-day MA, but only if it is already cached.
+
+    ``breadth.peek()`` never rebuilds, so /api/skew cannot inherit the ~25s
+    500-ticker download that a cold ``get_breadth()`` would trigger. If nothing
+    is cached yet the breadth leg reports "unknown" rather than blocking.
+    """
+    try:
+        payload = breadth.peek()
+        if not payload:
+            return None
+        series = payload.get("pct_above_ma", {}).get("50")
+        return series if series and series.get("values") else None
+    except Exception as exc:
+        log.debug("skew: breadth unavailable for divergence check: %s", exc)
+        return None
+
+
+def _build_divergence(skew_s, vix_s, vvix_s, spx_s, ratio_s) -> dict:
+    """Score the cross-market tail-risk divergence.
+
+    The signal that matters is not a high SKEW on its own — it is spot equity
+    calm *and* ordinary-vol calm *and* the tail-option market refusing to agree.
+    Each leg is reported with its live value so a near-miss stays visible
+    instead of collapsing into a silent False.
+    """
+    def _last(s):
+        return float(s.iloc[-1]) if s is not None and len(s) else None
+
+    def _mean(s, n):
+        return float(s.tail(n).mean()) if s is not None and len(s) >= max(2, n // 2) else None
+
+    conds: list[dict] = []
+
+    def _add(key, met, fmt, now=None, ref=None, near=False):
+        # Numbers stay numbers: the client owns formatting so the units and
+        # comparison words ("20d avg", "8w ago") can be translated. Baking a
+        # display string here would hard-code English into a bilingual page.
+        conds.append({"key": key, "met": met, "near": bool(near) and met is not True,
+                      "fmt": fmt, "now": now, "ref": ref})
+
+    # 1. S&P 500 at / near a new high -------------------------------------
+    spx_last, spx_hi = _last(spx_s), (float(spx_s.max()) if spx_s is not None and len(spx_s) else None)
+    if spx_last and spx_hi:
+        off = (spx_hi - spx_last) / spx_hi * 100
+        _add("spx_high", off <= 1.0, "pct_off_high", round(off, 1), near=off <= 3.0)
+    else:
+        _add("spx_high", None, "na")
+
+    # 2. VIX genuinely low (13-15 is the sweet spot for a real divergence) --
+    vix_last = _last(vix_s)
+    if vix_last:
+        _add("vix_low", 13.0 <= vix_last <= 15.0, "level1", round(vix_last, 1),
+             near=12.0 <= vix_last <= 16.5)
+    else:
+        _add("vix_low", None, "na")
+
+    # 3. SKEW 150+ ---------------------------------------------------------
+    skew_last = _last(skew_s)
+    if skew_last:
+        _add("skew_high", skew_last >= 150.0, "level0", round(skew_last),
+             near=skew_last >= 145.0)
+    else:
+        _add("skew_high", None, "na")
+
+    # 4. VVIX rising (vol-of-vol bid = hedging the hedges) -----------------
+    vvix_last, vvix_20 = _last(vvix_s), _mean(vvix_s, 20)
+    if vvix_last and vvix_20:
+        _add("vvix_rising", vvix_last > vvix_20, "vs_20d",
+             round(vvix_last), round(vvix_20))
+    else:
+        _add("vvix_rising", None, "na")
+
+    # 5. Put skew still steepening. SKEW *is* the SPX put-skew measure, so
+    #    "steepening" is its own short-term trend, not a separate series.
+    skew_5, skew_20 = _mean(skew_s, 5), _mean(skew_s, 20)
+    if skew_5 and skew_20:
+        _add("put_skew_steep", skew_5 > skew_20, "ma5_vs_ma20",
+             round(skew_5), round(skew_20))
+    else:
+        _add("put_skew_steep", None, "na")
+
+    # 6. Breadth narrowing -------------------------------------------------
+    b50 = _breadth_pct50_cached()
+    vals = [v for v in b50["values"] if v is not None] if b50 else []
+    if len(vals) >= 9:
+        now_v, then_v = vals[-1], vals[-9]  # weekly series -> ~8 weeks back
+        _add("breadth_falling", now_v < then_v, "pct_vs_8w",
+             round(now_v), round(then_v))
+    else:
+        _add("breadth_falling", None, "na")
+
+    # 7. Credit spreads widening. HYG/TLT falling = high yield losing to
+    #    duration = compensation for credit risk being repriced upward.
+    r_last, r_20, r_60 = _last(ratio_s), _mean(ratio_s, 20), _mean(ratio_s, 60)
+    if r_last and r_20:
+        _add("credit_widening", r_last < r_20, "ratio_vs_20d",
+             round(r_last, 3), round(r_20, 3),
+             near=bool(r_60 and r_last < r_60))
+    else:
+        _add("credit_widening", None, "na")
+
+    met     = sum(1 for c in conds if c["met"] is True)
+    known   = sum(1 for c in conds if c["met"] is not None)
+    # "Fragile calm" needs both halves: the calm (equity high + low VIX) and the
+    # disagreement (tail bid). A high score built only from breadth/credit is
+    # ordinary risk-off, not the divergence described here.
+    calm    = any(c["key"] == "spx_high" and c["met"] for c in conds) and \
+              any(c["key"] == "vix_low" and c["met"] for c in conds)
+    tail_bid = any(c["key"] == "skew_high" and c["met"] for c in conds)
+
+    if met >= 6 and calm and tail_bid:
+        level = "strong"
+    elif met >= 4 and tail_bid:
+        level = "building"
+    elif met >= 3:
+        level = "partial"
+    else:
+        level = "quiet"
+
+    return {"conditions": conds, "met": met, "known": known,
+            "total": len(conds), "level": level}
+
+
 @bp.route("/api/skew")
 def api_skew():
-    """CBOE SKEW Index vs VIX — 2 years of daily history."""
+    """CBOE SKEW vs VIX — 2y of daily history plus the cross-market divergence.
+
+    One download covers all six legs of the divergence check. HYG/TLT is pulled
+    here at daily resolution rather than reused from /api/credit-spread, which
+    only keeps weekly bars for its 1y window — too coarse to tell whether
+    spreads started widening this week.
+    """
     import yfinance as yf
     with _SKEW_LOCK:
         entry = _SKEW_CACHE.get("data")
         if entry and time.time() - entry["ts"] < _SKEW_TTL:
             return jsonify(entry["data"])
     try:
-        df = yf.download(["^SKEW", "^VIX"], period="2y", interval="1d",
+        df = yf.download(["^SKEW", "^VIX", "^VVIX", "^GSPC", "HYG", "TLT"],
+                         period="2y", interval="1d",
                          auto_adjust=True, progress=False)
         closes = df["Close"] if hasattr(df.columns, "levels") else df[["Close"]]
-        skew_s = closes["^SKEW"].dropna()
-        vix_s  = closes["^VIX"].dropna()
-        # Align dates
+
+        def _series(sym):
+            return closes[sym].dropna() if sym in closes.columns else None
+
+        skew_s = _series("^SKEW")
+        vix_s  = _series("^VIX")
+        if skew_s is None or vix_s is None or skew_s.empty or vix_s.empty:
+            raise RuntimeError("yfinance returned no ^SKEW/^VIX closes")
+        vvix_s, spx_s = _series("^VVIX"), _series("^GSPC")
+        hyg_s, tlt_s  = _series("HYG"), _series("TLT")
+        ratio_s = None
+        if hyg_s is not None and tlt_s is not None:
+            ratio_s = (hyg_s / tlt_s).dropna()
+
+        # Chart series stay on the SKEW-VIX intersection. The divergence scorecard
+        # deliberately does not: CBOE publishes SKEW a day behind VIX, so joining
+        # first would judge today's tape on yesterday's VIX.
         common = sorted(set(skew_s.index) & set(vix_s.index))
         dates = [str(d.date()) for d in common]
         skew  = [round(float(skew_s[d]), 2) for d in common]
         vix   = [round(float(vix_s[d]),  2) for d in common]
-        result = {"dates": dates, "skew": skew, "vix": vix}
+
+        last_skew = round(float(skew_s.iloc[-1]), 2)
+        pctile = round(float((skew_s < skew_s.iloc[-1]).sum()) / len(skew_s) * 100, 1)
+
+        result = {
+            "dates": dates, "skew": skew, "vix": vix,
+            "latest": {
+                "skew":       last_skew,
+                "skew_date":  str(skew_s.index[-1].date()),
+                "band":       _skew_band(last_skew),
+                "percentile": pctile,
+                "vix":        round(float(vix_s.iloc[-1]), 2),
+                "vvix":       round(float(vvix_s.iloc[-1]), 2) if vvix_s is not None and len(vvix_s) else None,
+            },
+            "divergence": _build_divergence(skew_s, vix_s, vvix_s, spx_s, ratio_s),
+        }
         with _SKEW_LOCK:
             _SKEW_CACHE["data"] = {"ts": time.time(), "data": result}
         return jsonify(result)

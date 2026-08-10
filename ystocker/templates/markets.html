@@ -272,8 +272,65 @@
     <span class="flex items-center gap-1 text-rose-400"><span class="w-3 h-0.5 bg-rose-400 inline-block"></span> <span data-i18n="markets.skew_left">SKEW (left)</span></span>
     <span class="flex items-center gap-1 text-amber-400"><span class="w-3 h-0.5 border-dashed border border-amber-400 inline-block"></span> <span data-i18n="markets.vix_right">VIX (right)</span></span>
   </div>
-  <div class="chart-container" style="height:200px"><canvas id="skewChart"></canvas></div>
-  <p class="text-[11px] text-slate-600 mt-2" data-i18n="markets.skew_note">SKEW &gt;140 = elevated tail risk demand. Historical avg ~130.</p>
+  <div class="chart-container" style="height:240px"><canvas id="skewChart"></canvas></div>
+
+  <!-- ── SKEW band reference. Mirrors the shaded zones on the chart; the live
+       reading's row is ringed by _renderSkewBands(). ───────────────────── -->
+  <div class="mt-3">
+    <p class="text-[10px] uppercase tracking-wide text-slate-400 mb-1.5"
+       data-i18n="markets.skew_bands_title">How I read the level</p>
+    <div id="skewBands" class="space-y-0.5">
+      <div class="skew-band-row flex items-center gap-2 px-2 py-1 rounded text-[11px]" data-band="weak">
+        <span class="w-2.5 h-2.5 rounded-sm bg-sky-400/70 shrink-0"></span>
+        <span class="font-mono text-slate-400 w-16 shrink-0">&lt;120</span>
+        <span class="text-slate-400" data-i18n="markets.skew_band_weak">Tail-protection demand is soft</span>
+      </div>
+      <div class="skew-band-row flex items-center gap-2 px-2 py-1 rounded text-[11px]" data-band="neutral">
+        <span class="w-2.5 h-2.5 rounded-sm bg-slate-500/70 shrink-0"></span>
+        <span class="font-mono text-slate-400 w-16 shrink-0">120–135</span>
+        <span class="text-slate-400" data-i18n="markets.skew_band_neutral">Normal / neutral zone</span>
+      </div>
+      <div class="skew-band-row flex items-center gap-2 px-2 py-1 rounded text-[11px]" data-band="notable">
+        <span class="w-2.5 h-2.5 rounded-sm bg-amber-400/80 shrink-0"></span>
+        <span class="font-mono text-slate-400 w-16 shrink-0">135–145</span>
+        <span class="text-slate-400" data-i18n="markets.skew_band_notable">Tail-protection demand worth noting</span>
+      </div>
+      <div class="skew-band-row flex items-center gap-2 px-2 py-1 rounded text-[11px]" data-band="elevated">
+        <span class="w-2.5 h-2.5 rounded-sm bg-orange-500/90 shrink-0"></span>
+        <span class="font-mono text-slate-400 w-16 shrink-0">145–155</span>
+        <span class="text-slate-400" data-i18n="markets.skew_band_elevated">Clearly elevated</span>
+      </div>
+      <div class="skew-band-row flex items-center gap-2 px-2 py-1 rounded text-[11px]" data-band="extreme">
+        <span class="w-2.5 h-2.5 rounded-sm bg-rose-500/95 shrink-0"></span>
+        <span class="font-mono text-slate-400 w-16 shrink-0">&gt;155</span>
+        <span class="text-slate-400" data-i18n="markets.skew_band_extreme">Extreme tail-insurance premium</span>
+      </div>
+    </div>
+    <p id="skewPctile" class="text-[10px] text-slate-400 mt-1.5"></p>
+  </div>
+
+  <!-- ── Cross-market divergence scorecard ───────────────────────────────
+       A lone SKEW=150 is weak evidence. What matters is spot calm + ordinary-vol
+       calm + the tail-option market disagreeing, confirmed by breadth and credit. -->
+  <div class="mt-4 border-t border-slate-800 pt-3">
+    <div class="flex items-start justify-between gap-2 mb-2">
+      <div>
+        <h3 class="text-xs font-semibold text-slate-300" data-i18n="markets.skew_div_title">Cross-market divergence check</h3>
+        <p class="text-[10px] text-slate-400 mt-0.5" data-i18n="markets.skew_div_desc">Spot market calm + ordinary vol calm + tail market disagreeing. Far stronger evidence than SKEW=150 alone.</p>
+      </div>
+      <span id="skewDivScore" class="text-[11px] px-2 py-0.5 rounded font-semibold bg-slate-800 text-slate-400 shrink-0">—</span>
+    </div>
+    <div id="skewDivRows" class="space-y-0.5"></div>
+    <p id="skewDivVerdict" class="text-[11px] mt-2 px-2.5 py-1.5 rounded-lg hidden"></p>
+
+    <!-- Playbook: what the combination licenses, and what it does not. -->
+    <div class="mt-2 bg-slate-800/40 rounded-lg px-3 py-2 text-[11px] text-slate-400 leading-relaxed">
+      <p class="font-semibold text-slate-300 mb-1" data-i18n="markets.skew_div_play_title">If this fires: cut risk budget one notch — don't go short</p>
+      <p class="mb-1"><span class="font-mono text-sky-300">100% risk-on → 90–95%</span></p>
+      <p class="mb-1" data-i18n="markets.skew_div_play_trim">Trim: leverage · high beta · crowded tech/semiconductor exposure · short-volatility positions.</p>
+      <p class="text-slate-400" data-i18n="markets.skew_div_play_not">Not: "liquidate everything and wait for the crash."</p>
+    </div>
+  </div>
 
   <!-- ── Interpretation guide ──────────────────────────────────────── -->
   <div class="mt-3 border-t border-slate-800 pt-3">
@@ -4022,6 +4079,198 @@ function _renderYieldSpread(range) {
   } catch(e) {}
 })();
 
+// ── CBOE SKEW: interpretation bands + cross-market divergence ─────────────
+// The bands are an ordered severity scale, so they take a monotone escalation
+// (neutral → amber → orange → rose) at monotone alpha rather than categorical
+// hues, and all sit far below the 2px SKEW line's weight so the line stays the
+// figure and the zones stay ground. <120 gets a cool tint because "unusually
+// low" is a different statement from "normal", not a hotter one.
+// Alpha runs *inversely* to band area: >155 is unbounded and can fill the top
+// third of the plot, so it is the faintest per-pixel or it would read as a
+// permanent alarm on a 2y window that spent months up there.
+const _SK_BAND_STOPS = [
+  { key:'weak',     lo:-Infinity, hi:120,      fill:'rgba(56,189,248,0.05)' },
+  { key:'neutral',  lo:120,       hi:135,      fill:null },  // baseline surface
+  { key:'notable',  lo:135,       hi:145,      fill:'rgba(251,191,36,0.05)' },
+  { key:'elevated', lo:145,       hi:155,      fill:'rgba(249,115,22,0.07)' },
+  { key:'extreme',  lo:155,       hi:Infinity, fill:'rgba(244,63,94,0.08)' },
+];
+const _SK_BOUNDS = [120, 135, 145, 155];
+
+const _skT = (k, fb) => (typeof I18n !== 'undefined' && I18n.t(k)) || fb;
+const _skBandOf = v => v == null ? null
+  : v < 120 ? 'weak' : v < 135 ? 'neutral' : v < 145 ? 'notable' : v < 155 ? 'elevated' : 'extreme';
+
+const _SK_BANDS = {
+  weak:     { badge:'bg-sky-900/50 text-sky-300',       k:'markets.skew_band_weak',     fb:'Tail-protection demand is soft',        label(){ return _skT(this.k,this.fb); } },
+  neutral:  { badge:'bg-slate-800 text-slate-400',      k:'markets.skew_band_neutral',  fb:'Normal / neutral zone',                 label(){ return _skT(this.k,this.fb); } },
+  notable:  { badge:'bg-amber-900/50 text-amber-300',   k:'markets.skew_band_notable',  fb:'Tail-protection demand worth noting',   label(){ return _skT(this.k,this.fb); } },
+  elevated: { badge:'bg-orange-900/50 text-orange-300', k:'markets.skew_band_elevated', fb:'Clearly elevated',                      label(){ return _skT(this.k,this.fb); } },
+  extreme:  { badge:'bg-rose-900/60 text-rose-200',     k:'markets.skew_band_extreme',  fb:'Extreme tail-insurance premium',        label(){ return _skT(this.k,this.fb); } },
+};
+
+let _skData = null;
+
+// Bands are painted under the datasets and clipped to the plot area. They are
+// keyed to the LEFT axis only. The boundaries carry no in-plot numeric labels:
+// at 135/145/155 they landed on top of the left axis ticks, and the band table
+// below already states every range, so the dashed rules are enough.
+const _skBandPlugin = {
+  id: 'skewBands',
+  beforeDatasetsDraw(chart) {
+    const y = chart.scales.y, area = chart.chartArea;
+    if (!y || !area) return;
+    const ctx = chart.ctx;
+    const { left, right, top, bottom } = area;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(left, top, right - left, bottom - top);
+    ctx.clip();
+
+    for (const b of _SK_BAND_STOPS) {
+      if (!b.fill) continue;
+      const lo = Math.max(b.lo, y.min), hi = Math.min(b.hi, y.max);
+      if (hi <= lo) continue;
+      const yTop = y.getPixelForValue(hi), yBot = y.getPixelForValue(lo);
+      ctx.fillStyle = b.fill;
+      ctx.fillRect(left, yTop, right - left, yBot - yTop);
+    }
+
+    ctx.setLineDash([3, 3]);
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = 'rgba(148,163,184,0.20)';
+    for (const v of _SK_BOUNDS) {
+      if (v < y.min || v > y.max) continue;
+      const py = y.getPixelForValue(v);
+      ctx.beginPath(); ctx.moveTo(left, py); ctx.lineTo(right, py); ctx.stroke();
+    }
+    ctx.restore();
+  },
+};
+
+// Ring the band the live reading sits in, so the table and the chart agree.
+function _renderSkewBands(sk) {
+  const band = sk?.latest?.band || _skBandOf(sk?.latest?.skew);
+  document.querySelectorAll('#skewBands .skew-band-row').forEach(row => {
+    const on = row.dataset.band === band;
+    row.classList.toggle('bg-slate-800/60', on);
+    row.classList.toggle('ring-1', on);
+    row.classList.toggle('ring-slate-700', on);
+    row.querySelector('[data-i18n]')?.classList.toggle('text-slate-200', on);
+    let pill = row.querySelector('.sk-now');
+    if (on && !pill) {
+      pill = document.createElement('span');
+      pill.className = 'sk-now ml-auto text-[9px] px-1.5 py-0.5 rounded bg-slate-700 text-slate-200 shrink-0';
+      row.appendChild(pill);
+    } else if (!on && pill) {
+      pill.remove(); pill = null;
+    }
+    if (pill) pill.textContent = _skT('markets.skew_band_now', 'now');
+  });
+
+  const p = document.getElementById('skewPctile');
+  if (p && sk?.latest) {
+    const parts = [];
+    if (sk.latest.percentile != null) {
+      parts.push(_skT('markets.skew_pctile', 'SKEW {v} — {p}th percentile of the last 2 years')
+        .replace('{v}', sk.latest.skew.toFixed(0))
+        .replace('{p}', sk.latest.percentile.toFixed(0)));
+    }
+    if (sk.latest.skew_date) parts.push(_skT('markets.skew_asof', 'as of') + ' ' + sk.latest.skew_date);
+    p.textContent = parts.join(' · ');
+  }
+}
+
+const _SK_DIV_LABELS = {
+  spx_high:        ['markets.skew_div_spx',     'S&P 500 at / near a new high'],
+  vix_low:         ['markets.skew_div_vix',     'VIX 13–15 (ordinary vol genuinely calm)'],
+  skew_high:       ['markets.skew_div_skew',    'SKEW 150+'],
+  vvix_rising:     ['markets.skew_div_vvix',    'VVIX rising (hedging the hedges)'],
+  put_skew_steep:  ['markets.skew_div_steep',   'SPX put skew still steepening'],
+  breadth_falling: ['markets.skew_div_breadth', 'Market breadth narrowing'],
+  credit_widening: ['markets.skew_div_credit',  'Credit spreads starting to widen'],
+};
+
+// Status is glyph + text + colour, never colour alone.
+const _SK_DIV_STATE = {
+  met:     { glyph:'✓', cls:'text-rose-300'   },
+  near:    { glyph:'~', cls:'text-amber-400'  },
+  unmet:   { glyph:'·', cls:'text-slate-500'  },
+  unknown: { glyph:'?', cls:'text-slate-500'  },
+};
+
+// The API sends numbers, not sentences, so the units and comparison words can
+// follow the active language.
+const _skN = (v, d) => v == null ? '—' : v.toFixed(d);
+const _SK_FMT = {
+  na:           ()  => '—',
+  level0:       c   => _skN(c.now, 0),
+  level1:       c   => _skN(c.now, 1),
+  pct_off_high: c   => `${_skN(c.now, 1)}% ` + _skT('markets.skew_f_off_high', 'off 2y high'),
+  vs_20d:       c   => `${_skN(c.now, 0)} vs ${_skN(c.ref, 0)} ` + _skT('markets.skew_f_20d', '20d avg'),
+  ma5_vs_ma20:  c   => `${_skT('markets.skew_f_5d','5d')} ${_skN(c.now,0)} vs ${_skT('markets.skew_f_20d','20d avg')} ${_skN(c.ref,0)}`,
+  pct_vs_8w:    c   => `${_skN(c.now, 0)}% vs ${_skN(c.ref, 0)}% ` + _skT('markets.skew_f_8w', '8w ago'),
+  ratio_vs_20d: c   => `HYG/TLT ${_skN(c.now, 3)} vs ${_skN(c.ref, 3)}`,
+};
+
+const _SK_DIV_VERDICT = {
+  strong:   { cls:'bg-rose-900/30 border border-rose-800/50 text-rose-200',       k:'markets.skew_div_v_strong',   fb:'Cross-market divergence present: spot calm, ordinary vol calm, tail market disagreeing. This is the combination worth acting on — cut risk budget one notch.' },
+  building: { cls:'bg-amber-900/25 border border-amber-800/50 text-amber-200',    k:'markets.skew_div_v_building', fb:'Forming: the tail bid is there but the cross-market confirmation is incomplete. Watch breadth and credit.' },
+  partial:  { cls:'bg-slate-800/60 border border-slate-700 text-slate-300',       k:'markets.skew_div_v_partial',  fb:'Some legs present but no coherent divergence — this is ordinary noise, not fragile calm.' },
+  quiet:    { cls:'bg-slate-800/50 border border-slate-800 text-slate-400',       k:'markets.skew_div_v_quiet',    fb:'No divergence: the tail-option market broadly agrees with spot. Nothing to act on here.' },
+};
+
+function _renderSkewDivergence(sk) {
+  const dv = sk?.divergence;
+  const box = document.getElementById('skewDivRows');
+  const chip = document.getElementById('skewDivScore');
+  const verdict = document.getElementById('skewDivVerdict');
+  if (!dv || !box) return;
+
+  box.innerHTML = '';
+  for (const c of dv.conditions) {
+    const [key, fb] = _SK_DIV_LABELS[c.key] || [null, c.key];
+    const st = _SK_DIV_STATE[c.met === true ? 'met' : c.met === null ? 'unknown' : c.near ? 'near' : 'unmet'];
+    const row = document.createElement('div');
+    row.className = 'flex items-baseline gap-2 text-[11px] px-1';
+    row.innerHTML =
+      `<span class="${st.cls} font-mono w-3 shrink-0 text-center">${st.glyph}</span>` +
+      `<span class="${c.met === true ? 'text-slate-200' : 'text-slate-400'} flex-1 leading-snug"></span>` +
+      `<span class="text-slate-400 font-mono text-[10px] shrink-0 text-right"></span>`;
+    row.children[1].textContent = key ? _skT(key, fb) : fb;
+    row.children[2].textContent = (_SK_FMT[c.fmt] || _SK_FMT.na)(c);
+    box.appendChild(row);
+  }
+
+  if (chip) {
+    chip.textContent = `${dv.met} / ${dv.total}`;
+    const tone = dv.level === 'strong' ? 'bg-rose-900/60 text-rose-200'
+               : dv.level === 'building' ? 'bg-amber-900/50 text-amber-300'
+               : 'bg-slate-800 text-slate-400';
+    chip.className = 'text-[11px] px-2 py-0.5 rounded font-semibold shrink-0 ' + tone;
+  }
+  if (verdict) {
+    const v = _SK_DIV_VERDICT[dv.level] || _SK_DIV_VERDICT.quiet;
+    verdict.classList.remove('hidden');
+    verdict.className = 'text-[11px] mt-2 px-2.5 py-1.5 rounded-lg leading-relaxed ' + v.cls;
+    verdict.textContent = _skT(v.k, v.fb);
+  }
+  if (dv.known < dv.total) {
+    const note = document.createElement('p');
+    note.className = 'text-[10px] text-slate-400 mt-1 px-1';
+    note.textContent = _skT('markets.skew_div_partial_data', '? = data unavailable right now; that leg is not counted.');
+    box.appendChild(note);
+  }
+}
+
+// Rebuild the JS-rendered rows on a language switch — apply() only reaches
+// elements that carry data-i18n, and these are built from live values.
+document.addEventListener('i18n:langchange', () => {
+  if (!_skData) return;
+  _renderSkewBands(_skData);
+  _renderSkewDivergence(_skData);
+});
+
 // CBOE SKEW vs VIX
 (async function() {
   try {
@@ -4029,31 +4278,48 @@ function _renderYieldSpread(range) {
     if (!resp.ok) return;
     const sk = await resp.json();
     if (!sk.dates?.length) return;
-    const last = sk.skew[sk.skew.length - 1];
+    _skData = sk;
+
+    const last = sk.latest?.skew ?? sk.skew[sk.skew.length - 1];
+    const band = sk.latest?.band || _skBandOf(last);
     const badge = document.getElementById('skewBadge');
-    if (badge && last) {
+    if (badge && last != null) {
       badge.classList.remove('hidden');
       badge.textContent = 'SKEW ' + last.toFixed(0);
-      badge.className = 'text-xs px-2 py-0.5 rounded font-semibold ' +
-        (last > 140 ? 'bg-rose-900/50 text-rose-300' : last > 130 ? 'bg-amber-900/50 text-amber-300' : 'bg-slate-800 text-slate-400');
+      badge.className = 'text-xs px-2 py-0.5 rounded font-semibold ' + (_SK_BANDS[band]?.badge || 'bg-slate-800 text-slate-400');
     }
+    _renderSkewBands(sk);
+    _renderSkewDivergence(sk);
+
     const g='#1e293b', t='#64748b';
     new Chart(document.getElementById('skewChart'), {
       type:'line',
       data:{ labels:sk.dates, datasets:[
-        { label:'SKEW',  data:sk.skew, borderColor:'#f87171', backgroundColor:'rgba(248,113,113,0.06)', borderWidth:1.5, pointRadius:0, fill:true,  tension:0.2, spanGaps:true, yAxisID:'y' },
-        { label:'VIX',   data:sk.vix,  borderColor:'#fbbf24', backgroundColor:'transparent',           borderWidth:1.5, pointRadius:0, fill:false, tension:0.2, spanGaps:true, yAxisID:'yVix', borderDash:[4,3] },
+        { label:'SKEW',  data:sk.skew, borderColor:'#f87171', backgroundColor:'transparent', borderWidth:2,   pointRadius:0, fill:false, tension:0.2, spanGaps:true, yAxisID:'y' },
+        { label:'VIX',   data:sk.vix,  borderColor:'#fbbf24', backgroundColor:'transparent', borderWidth:1.5, pointRadius:0, fill:false, tension:0.2, spanGaps:true, yAxisID:'yVix', borderDash:[4,3] },
       ]},
       options:{
         responsive:true, maintainAspectRatio:false,
-        plugins:{legend:{display:false},tooltip:{mode:'index',intersect:false,callbacks:{label:c=>c.dataset.yAxisID==='yVix'?` VIX: ${c.raw?.toFixed(1)}`:(` SKEW: ${c.raw?.toFixed(0)}`)}}},
+        plugins:{legend:{display:false},tooltip:{mode:'index',intersect:false,callbacks:{
+          label:c=>c.dataset.yAxisID==='yVix'?` VIX: ${c.raw?.toFixed(1)}`:(` SKEW: ${c.raw?.toFixed(0)}`),
+          // Name the band in the tooltip so the shaded zone is never read off colour alone.
+          afterBody:(items)=>{
+            const s = items.find(i=>i.dataset.yAxisID!=='yVix');
+            if (!s || s.raw == null) return '';
+            const b = _SK_BANDS[_skBandOf(s.raw)];
+            return b ? ' → ' + b.label() : '';
+          },
+        }}},
         scales:{
           x:{grid:{color:g},ticks:{color:t,maxTicksLimit:6,maxRotation:0}},
-          y:{grid:{color:g},ticks:{color:'rgba(248,113,113,0.6)',callback:v=>v.toFixed(0)}},
+          // suggestedMin/Max keep the band structure legible without clipping a
+          // genuine spike — SKEW has printed >170 before.
+          y:{grid:{color:g},suggestedMin:115,suggestedMax:160,ticks:{color:'rgba(248,113,113,0.6)',callback:v=>v.toFixed(0)}},
           yVix:{position:'right',grid:{drawOnChartArea:false},ticks:{color:'rgba(251,191,36,0.6)',callback:v=>v.toFixed(1)}},
         },
         interaction:{mode:'index',intersect:false},
       },
+      plugins:[_skBandPlugin],
     });
   } catch(e) {}
 })();
