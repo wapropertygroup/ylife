@@ -2044,6 +2044,120 @@ def fed_refresh():
     return redirect(url_for("main.fed"))
 
 
+# ---------------------------------------------------------------------------
+# FedWatch — FOMC rate-move probabilities from Fed Funds futures
+# ---------------------------------------------------------------------------
+
+@bp.route("/fedwatch")
+def fedwatch():
+    """Page showing implied FOMC rate-move probabilities (CME FedWatch style)."""
+    log.info("GET /fedwatch")
+    from ystocker.fedwatch import get_cache_ts, is_cache_fresh, is_warming as fw_warming_fn
+    return render_template(
+        "fedwatch.html",
+        peer_groups=list(PEER_GROUPS.keys()),
+        cache_last_updated=get_cache_ts(),
+        cache_fresh=is_cache_fresh(),
+        warming=fw_warming_fn(),
+    )
+
+
+@bp.route("/fedwatch/refresh")
+def fedwatch_refresh():
+    """Kick off a background re-fetch of the Fed Funds futures curve."""
+    from ystocker.fedwatch import refresh_cache
+    threading.Thread(target=refresh_cache, daemon=True, name="fedwatch-manual-refresh").start()
+    return redirect(url_for("main.fedwatch"))
+
+
+@bp.route("/api/fedwatch")
+def api_fedwatch():
+    """JSON API — implied probability of each target range at each FOMC meeting.
+
+    Mirrors /api/fed: serve a fresh cache immediately, otherwise return 202 so
+    the page can poll instead of holding a gunicorn worker through a
+    yfinance + FRED round trip.
+    """
+    try:
+        from ystocker.fedwatch import (
+            get_fedwatch_data,
+            is_cache_fresh,
+            is_warming as fw_warming_fn,
+            refresh_cache,
+        )
+
+        if is_cache_fresh():
+            data = get_fedwatch_data()
+            if not data or not data.get("meetings"):
+                log.warning("API fedwatch: fresh check passed but payload has no meetings")
+                return jsonify({"status": "stale", "error": "Cache data inconsistent",
+                                "warming": True}), 202
+            resp = {k: v for k, v in data.items() if not k.startswith("_")}
+            resp["status"] = "ok"
+            log.info("API fedwatch: served from cache (%d meetings)", len(resp["meetings"]))
+            return jsonify(resp)
+
+        if fw_warming_fn():
+            log.info("API fedwatch: warming in progress, returning 202")
+            return jsonify({"status": "warming", "warming": True}), 202
+
+        log.info("API fedwatch: no cache, starting background fetch")
+        threading.Thread(target=refresh_cache, daemon=True, name="fedwatch-auto-warm").start()
+        return jsonify({"status": "initializing", "warming": True}), 202
+    except Exception as exc:
+        log.error("API fedwatch: error: %s", exc, exc_info=True)
+        return jsonify({"status": "error", "error": str(exc), "warming": True}), 500
+
+
+def _build_fedwatch_prompt(snapshot: dict, lang: str) -> str:
+    """Build a Gemini prompt that explains the market-implied rate path.
+
+    The snapshot is the ``/api/fedwatch`` payload trimmed by the client: the
+    current target range plus, per meeting, the implied rate and the
+    probability of each outcome.
+    """
+    current  = snapshot.get("current") or {}
+    meetings = snapshot.get("meetings") or []
+
+    lines = []
+    for m in meetings:
+        outcomes = " · ".join(
+            f"{o.get('lower')}–{o.get('upper')}%: {o.get('prob')}%"
+            for o in (m.get("outcomes") or [])
+        )
+        # The snapshot is client-supplied, so never format a field directly
+        # into a numeric spec — a missing change_bp would raise TypeError and
+        # turn a bad request into a 500.
+        try:
+            delta = f"{float(m.get('change_bp')):+.1f}bp"
+        except (TypeError, ValueError):
+            delta = "n/a"
+        lines.append(
+            f"  {m.get('label')} (decision {m.get('date')}): "
+            f"implied rate {m.get('implied_rate')}% "
+            f"({delta} vs the prior meeting) — {outcomes}"
+        )
+    meeting_block = "\n".join(lines) if lines else "  (no meetings available)"
+
+    lang_instr = "Respond in Simplified Chinese (中文)." if lang == "zh" else ""
+
+    return f"""You are a rates strategist. Explain what the Fed Funds futures market is currently pricing for U.S. monetary policy.
+
+Current target range: {current.get('label')}% (effective fed funds rate {current.get('effr')}%)
+Data as of: {snapshot.get('as_of')}
+
+Market-implied probabilities by FOMC meeting (derived from CME 30-Day Fed Funds futures):
+{meeting_block}
+
+In 3-4 concise paragraphs, cover:
+(1) What the market expects at the very next meeting — is a cut, hold, or hike the base case, and how confident is that pricing?
+(2) The shape of the full expected path over the coming year — total basis points of easing or tightening priced in, and how quickly.
+(3) How much conviction is really there: note that the distribution widens at longer horizons, so a spread-out set of outcomes means genuine uncertainty rather than a firm forecast.
+(4) What this pricing implies for markets — bonds, the dollar, and risk assets — and what data could shift it.
+
+Be specific about the numbers and use the exact figures provided. Note that these are market-implied probabilities, not a forecast. Do not use bullet points or markdown headers — just flowing prose paragraphs. {lang_instr}"""
+
+
 def _build_balance_snapshot_prompt(snapshot: dict, lang: str) -> str:
     """Build a Gemini prompt that explains the Fed's full balance-sheet identity.
 
@@ -2178,7 +2292,13 @@ def api_fed_explain():
         return jsonify({"error": "GEMINI_API_KEY not configured"}), 503
 
     if snapshot:
-        prompt = _build_balance_snapshot_prompt(snapshot, lang)
+        # Snapshot mode is shared by two very different cards, so the chart id
+        # picks the prompt builder. Without this branch the FedWatch payload
+        # would be fed to the balance-sheet prompt and explained as assets.
+        if chart == "fedwatch":
+            prompt = _build_fedwatch_prompt(snapshot, lang)
+        else:
+            prompt = _build_balance_snapshot_prompt(snapshot, lang)
     else:
         if not dates or not values:
             return jsonify({"error": "No data provided"}), 400

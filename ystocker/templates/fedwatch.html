@@ -1,0 +1,646 @@
+{% extends "base.html" %}
+{% block title %}yStocker — Interest Rate Probabilities (FedWatch){% endblock %}
+
+{% block content %}
+<style>
+.explain-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 6px;
+  border: 1px solid #334155;
+  background: transparent;
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+.explain-btn:hover {
+  color: #a78bfa;
+  border-color: #7c3aed;
+}
+.explain-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.explain-panel {
+  margin-top: 12px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: rgba(167,139,250,0.06);
+  border: 1px solid rgba(167,139,250,0.2);
+  color: #cbd5e1;
+  font-size: 13px;
+  line-height: 1.65;
+  display: none;
+}
+.explain-panel.visible { display: block; }
+.explain-thinking {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #a78bfa;
+  font-size: 12px;
+  font-style: italic;
+}
+.explain-thinking .dot {
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: #a78bfa;
+  animation: explainBounce 1.2s infinite ease-in-out;
+}
+.explain-thinking .dot:nth-child(2) { animation-delay: 0.2s; }
+.explain-thinking .dot:nth-child(3) { animation-delay: 0.4s; }
+@keyframes explainBounce {
+  0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+  40%           { transform: scale(1.0); opacity: 1.0; }
+}
+/* Probability grid — the table view that backs the stacked chart. */
+.fw-grid { border-collapse: separate; border-spacing: 2px; }
+.fw-grid th, .fw-grid td {
+  padding: 6px 8px;
+  font-size: 11px;
+  text-align: center;
+  border-radius: 4px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.fw-grid th { color: #94a3b8; font-weight: 600; }
+.fw-grid td.fw-range { color: #cbd5e1; text-align: right; font-weight: 600; }
+</style>
+
+<!-- ── Header ─────────────────────────────────────────────────────────── -->
+<div class="mb-6 sm:mb-8 fade-up">
+  <h1 class="text-2xl sm:text-3xl font-bold grad-text mb-1" data-i18n="fedwatch.title">Interest Rate Probabilities</h1>
+  <p class="text-slate-400 text-sm" data-i18n="fedwatch.subtitle">
+    Market-implied odds of each Fed target range at every upcoming FOMC meeting · derived from CME 30-Day Fed Funds futures
+  </p>
+  {% if cache_last_updated %}
+  <p class="text-xs text-slate-600 mt-1">
+    <span data-i18n="fedwatch.data_as_of">Data as of</span> {{ cache_last_updated | int | datetimeformat }}
+    &nbsp;·&nbsp;
+    {% if warming %}
+    <span class="text-brand animate-pulse" data-i18n="fedwatch.refreshing">refreshing now…</span>
+    {% else %}
+    <span data-i18n="fedwatch.next_refresh">next refresh</span> {{ (cache_last_updated | int + 14400) | datetimeformat }}
+    {% endif %}
+    &nbsp;·&nbsp;
+    <a href="{{ url_for('main.fedwatch_refresh') }}" class="text-brand hover:underline" data-i18n="fedwatch.refresh">↻ Refresh</a>
+  </p>
+  {% else %}
+  <p class="text-xs text-slate-600 mt-1">
+    <a href="{{ url_for('main.fedwatch_refresh') }}" class="text-brand hover:underline" data-i18n="fedwatch.load">↻ Load data</a>
+  </p>
+  {% endif %}
+</div>
+
+{% if not cache_last_updated and warming %}
+<div id="fwLoadingPanel" class="flex flex-col items-center justify-center py-24 gap-4 fade-up">
+  <svg class="w-8 h-8 text-brand animate-spin" fill="none" viewBox="0 0 24 24">
+    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/>
+  </svg>
+  <p class="text-slate-400 text-sm animate-pulse" data-i18n="fedwatch.loading">Reading the Fed Funds futures curve — this may take a moment…</p>
+  <p class="text-xs text-slate-600" data-i18n="fedwatch.loading_hint">This page will refresh automatically when data is ready.</p>
+</div>
+<div id="fwError" class="hidden mt-4 px-4 py-3 rounded-lg bg-red-900/40 border border-red-700 text-red-300 text-sm"></div>
+<script>
+  // Poll until the futures curve has been priced, then reload.
+  (function poll() {
+    fetch('/api/fedwatch')
+      .then(r => r.text().then(text => {
+        if (!text) { return setTimeout(poll, 3000); }
+        try {
+          const d = JSON.parse(text);
+          if (d.meetings && d.meetings.length) { location.reload(); }
+          else if (d.error && !d.warming) {
+            const el = document.getElementById('fwError');
+            if (el) { el.textContent = '⚠ ' + d.error; el.classList.remove('hidden'); }
+          }
+          else { setTimeout(poll, 3000); }
+        } catch(e) { console.error('FedWatch poll parse error:', e); setTimeout(poll, 5000); }
+      }))
+      .catch(() => setTimeout(poll, 5000));
+  })();
+</script>
+{% else %}
+
+<!-- ── Headline: what the next meeting looks like ──────────────────────── -->
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
+    <p class="text-xs text-slate-500 mb-1" data-i18n="fedwatch.current_range">Current target range</p>
+    <p class="text-2xl font-semibold text-slate-100"><span id="fwCurrentRange">—</span></p>
+    <p class="text-xs text-slate-500 mt-1">
+      <span data-i18n="fedwatch.effr">Effective rate</span> <span id="fwEffr" class="text-slate-400">—</span>
+    </p>
+  </div>
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
+    <p class="text-xs text-slate-500 mb-1" data-i18n="fedwatch.next_meeting">Next FOMC decision</p>
+    <p class="text-2xl font-semibold text-slate-100"><span id="fwNextDate">—</span></p>
+    <p class="text-xs text-slate-500 mt-1"><span id="fwDaysAway" class="text-slate-400">—</span></p>
+  </div>
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
+    <p class="text-xs text-slate-500 mb-1" data-i18n="fedwatch.base_case">Base case at that meeting</p>
+    <!-- The hero figure: the one number this page leads with. -->
+    <p class="text-5xl font-semibold text-slate-100 leading-none mt-1"><span id="fwBaseProb">—</span></p>
+    <p class="text-xs text-slate-500 mt-1.5"><span id="fwBaseLabel">—</span></p>
+  </div>
+</div>
+
+<div class="space-y-6" id="fwChartsArea">
+
+  <!-- ── Primary: probability of each target range, per meeting ─────────── -->
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up">
+    <div class="flex flex-wrap items-start justify-between gap-2 mb-1">
+      <div>
+        <h2 class="text-base font-semibold text-slate-200" data-i18n="fedwatch.chart_title">Probability of Each Target Range by Meeting</h2>
+        <p class="text-xs text-slate-500" data-i18n="fedwatch.chart_desc">Each column totals 100%. The spread widens further out because uncertainty compounds across meetings.</p>
+      </div>
+      <button class="explain-btn" onclick="explainChart('fedwatch')" data-i18n="fedwatch.explain">✦ Explain</button>
+    </div>
+    <!-- Legend is always present: identity never rests on colour alone. -->
+    <div id="fwLegend" class="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-3 mb-3 text-[11px] text-slate-400"></div>
+    <div class="chart-container" style="height:340px">
+      <canvas id="fwProbChart"></canvas>
+    </div>
+    <div id="fedwatchExplainPanel" class="explain-panel"></div>
+  </div>
+
+  <!-- ── Secondary: the implied policy path (single series, no legend) ──── -->
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
+    <div class="mb-3">
+      <h3 class="text-sm font-semibold text-slate-300" data-i18n="fedwatch.path_title">Market-Implied Policy Rate Path</h3>
+      <p class="text-xs text-slate-500 mt-0.5" data-i18n="fedwatch.path_desc">The expected effective fed funds rate after each meeting, backed out of the futures curve. The dashed line is today's rate.</p>
+    </div>
+    <div class="chart-container" style="height:220px">
+      <canvas id="fwPathChart"></canvas>
+    </div>
+  </div>
+
+  <!-- ── The table view: every value, no colour needed to read it ───────── -->
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
+    <div class="mb-3">
+      <h3 class="text-sm font-semibold text-slate-300" data-i18n="fedwatch.grid_title">Probability Grid</h3>
+      <p class="text-xs text-slate-500 mt-0.5" data-i18n="fedwatch.grid_desc">The same numbers as the chart above, in full. Rows are target ranges; columns are meeting dates.</p>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="fw-grid w-full" id="fwGrid"></table>
+    </div>
+  </div>
+
+  <!-- ── How this is computed ───────────────────────────────────────────── -->
+  <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
+    <h3 class="text-sm font-semibold text-slate-300 mb-2" data-i18n="fedwatch.method_title">How this is calculated</h3>
+    <p class="text-xs text-slate-500 leading-relaxed" data-i18n="fedwatch.method_body">
+      A CME 30-Day Fed Funds future (ZQ) settles to 100 minus the average daily effective fed funds rate over its delivery month, so 100 − price is the rate the market expects for that month. Because a new target range takes effect the day after an FOMC decision, a month containing a meeting blends the old and new rate in proportion to the days on each side — that lets the expected post-meeting rate be backed out contract by contract. Each meeting then moves in 25bp increments, so an expected change of, say, +10bp reads as a 40% chance of a 25bp move and 60% chance of no change. Chaining those odds across meetings produces the widening distribution above.
+    </p>
+    <p class="text-xs text-slate-600 mt-2" data-i18n="fedwatch.method_caveat">
+      These are market-implied probabilities, not a forecast, and they move whenever the futures curve does. This page reproduces the CME FedWatch methodology from public data; it is not affiliated with CME Group.
+    </p>
+  </div>
+
+  <div id="fwError" class="hidden mt-4 px-4 py-3 rounded-lg bg-red-900/40 border border-red-700 text-red-300 text-sm"></div>
+
+  <p class="text-xs text-slate-600 mt-4">
+    <span data-i18n="fedwatch.source">Sources</span>:
+    <a href="https://www.cmegroup.com/markets/interest-rates/cme-fedwatch-tool.html" target="_blank" rel="noopener" class="text-brand hover:underline">CME FedWatch</a> ·
+    <a href="https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm" target="_blank" rel="noopener" class="text-brand hover:underline">FOMC calendar</a> ·
+    <span data-i18n="fedwatch.source_tail">ZQ futures via Yahoo Finance, target range via FRED</span>
+  </p>
+</div>
+{% endif %}
+
+<script>
+const _explainData = {};
+
+(async function() {
+  const gridCol = '#1e293b';
+  const tickCol = '#64748b';
+
+  // Diverging scale, anchored on today's target range.
+  //   cuts  → blue arm, hikes → red arm, current → neutral gray.
+  // Each arm is a validated 5-step ordinal ramp (monotone lightness, adjacent
+  // ΔL ≥ 0.06, light end ≥ 2:1 on the slate-900 card). Index 0 is the step
+  // nearest today's range; the last entry is reused if the tail ever runs
+  // past 5 steps so a colour is never undefined.
+  const NEUTRAL  = '#94a3b8';
+  const HIKE_RAMP = ['#b91c1c', '#ef4444', '#f87171', '#fca5a5', '#fecaca'];
+  const CUT_RAMP  = ['#1d4ed8', '#3b82f6', '#60a5fa', '#93c5fd', '#bfdbfe'];
+
+  function rangeColor(steps) {
+    if (steps === 0) return NEUTRAL;
+    const ramp = steps > 0 ? HIKE_RAMP : CUT_RAMP;
+    return ramp[Math.min(Math.abs(steps) - 1, ramp.length - 1)];
+  }
+
+  // A label sits inside a coloured fill, so pick ink by the fill's luminance.
+  function inkOn(hex) {
+    const r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
+    const lum = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+    return lum > 0.55 ? '#0f172a' : '#f8fafc';
+  }
+
+  async function safeJsonFetch(url, options = {}) {
+    try {
+      const resp = await fetch(url, options);
+      const text = await resp.text();
+      if (!text) return { error: 'Empty response' };
+      try {
+        const data = JSON.parse(text);
+        if (!resp.ok) data.error = data.error || `HTTP ${resp.status}`;
+        return data;
+      } catch(e) {
+        console.warn(`JSON parse failed for ${url}:`, e, 'Raw:', text.slice(0, 100));
+        return { error: `Invalid JSON: ${e.message}` };
+      }
+    } catch(e) {
+      console.warn(`Network/fetch failed for ${url}:`, e);
+      return { error: `Fetch error: ${e.message || e}` };
+    }
+  }
+
+  const showErr = msg => {
+    const el = document.getElementById('fwError');
+    if (el) { el.textContent = '⚠ ' + msg; el.classList.remove('hidden'); }
+  };
+
+  const data = await safeJsonFetch('/api/fedwatch');
+  if (data.error) {
+    showErr(data.error);
+    if (!data.warming) return;
+  }
+
+  const meetings = data.meetings || [];
+  const ranges   = data.ranges   || [];
+  const current  = data.current  || {};
+  if (!meetings.length) return;
+
+  const pct = v => (v == null ? '—' : (v >= 10 ? v.toFixed(0) : v.toFixed(1)) + '%');
+
+  // ── Headline stat tiles ──────────────────────────────────────────────
+  try {
+    const next = meetings[0];
+    const best = (next.outcomes || []).reduce((a, b) => (b.prob > a.prob ? b : a), next.outcomes[0]);
+
+    document.getElementById('fwCurrentRange').textContent = (current.label || '—') + '%';
+    document.getElementById('fwEffr').textContent = current.effr != null ? current.effr.toFixed(2) + '%' : '—';
+
+    const d = new Date(next.date + 'T00:00:00');
+    document.getElementById('fwNextDate').textContent =
+      d.toLocaleDateString(I18n.getLang() === 'zh' ? 'zh-CN' : 'en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+    const days = Math.max(0, Math.round((d - new Date()) / 86400000));
+    document.getElementById('fwDaysAway').textContent =
+      I18n.getLang() === 'zh' ? `${days} 天后` : `in ${days} day${days === 1 ? '' : 's'}`;
+
+    // The base case is stated as a move, not just a range — that is what the
+    // reader is actually asking ("will they cut?").
+    document.getElementById('fwBaseProb').textContent = pct(best.prob);
+    const moveKey = best.steps === 0 ? 'fedwatch.hold'
+                  : best.steps  <  0 ? 'fedwatch.cut'
+                  : 'fedwatch.hike';
+    const moveTxt = I18n.t(moveKey) || (best.steps === 0 ? 'no change' : best.steps < 0 ? 'cut' : 'hike');
+    const bps = Math.abs(best.steps) * 25;
+    document.getElementById('fwBaseLabel').textContent =
+      (best.steps === 0 ? moveTxt : `${bps}bp ${moveTxt}`) + ` → ${best.lower.toFixed(2)}–${best.upper.toFixed(2)}%`;
+  } catch(e) { console.warn('FedWatch stat tiles failed:', e); }
+
+  // ── Legend ───────────────────────────────────────────────────────────
+  try {
+    const legend = document.getElementById('fwLegend');
+    legend.innerHTML = '';
+    ranges.forEach(r => {
+      const item = document.createElement('span');
+      item.className = 'inline-flex items-center gap-1.5';
+      const sw = document.createElement('span');
+      sw.style.cssText = `width:10px;height:10px;border-radius:2px;background:${rangeColor(r.steps)};flex-shrink:0`;
+      const txt = document.createElement('span');
+      const tag = r.steps === 0 ? (I18n.t('fedwatch.legend_now') || 'now') : (r.steps > 0 ? `+${r.steps * 25}bp` : `${r.steps * 25}bp`);
+      txt.textContent = `${r.label}% (${tag})`;
+      item.appendChild(sw); item.appendChild(txt);
+      legend.appendChild(item);
+    });
+  } catch(e) { console.warn('FedWatch legend failed:', e); }
+
+  // ── Primary chart: 100% stacked columns ──────────────────────────────
+  try {
+    const labels = meetings.map(m => m.label);
+    const datasets = ranges.map(r => ({
+      label: r.label + '%',
+      data: meetings.map(m => {
+        const o = (m.outcomes || []).find(x => x.steps === r.steps);
+        return o ? o.prob : 0;
+      }),
+      backgroundColor: rangeColor(r.steps),
+      // A 2px gap in the card colour is what separates touching segments —
+      // never a contrasting stroke, which would add ink that isn't data.
+      // Top-only, so there is exactly one consistent gap between neighbours.
+      borderColor: '#0f172a',
+      borderWidth: { top: 2, right: 0, bottom: 0, left: 0 },
+      borderSkipped: false,
+      // The 24px mark cap is relaxed to 48px here: the inline "39%" labels sit
+      // inside the segments, and below ~40px they no longer fit and would have
+      // to be dropped — but the sub-3:1 fills owe the reader visible labels.
+      // Still a real cap, so the band keeps plenty of air.
+      maxBarThickness: 48,
+      barPercentage: 0.62,
+      categoryPercentage: 0.82,
+      _steps: r.steps,
+    }));
+
+    // Direct labels, but only where the segment genuinely fits the text in
+    // both directions. A clipped "61%" reads as "51%", which is worse than no
+    // label at all — on a narrow viewport the bars are ~17px and every label
+    // is correctly dropped, because the probability grid below carries all of
+    // the values anyway.
+    const segmentLabels = {
+      id: 'fwSegmentLabels',
+      afterDatasetsDraw(chart) {
+        const { ctx } = chart;
+        ctx.save();
+        ctx.font = '600 10px system-ui, -apple-system, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        chart.data.datasets.forEach((ds, di) => {
+          const meta = chart.getDatasetMeta(di);
+          if (meta.hidden) return;
+          meta.data.forEach((bar, i) => {
+            const v = ds.data[i];
+            if (!v) return;
+            const txt = Math.round(v) + '%';
+            const h = Math.abs(bar.base - bar.y);
+            // 4px of breathing room on each side, both axes.
+            if (h < 16) return;
+            if (ctx.measureText(txt).width + 8 > bar.width) return;
+            ctx.fillStyle = inkOn(ds.backgroundColor);
+            ctx.fillText(txt, bar.x, (bar.base + bar.y) / 2);
+          });
+        });
+        ctx.restore();
+      }
+    };
+
+    new Chart(document.getElementById('fwProbChart'), {
+      type: 'bar',
+      data: { labels, datasets },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        scales: {
+          x: { stacked: true, grid: { display: false }, ticks: { color: tickCol, maxRotation: 0, font: { size: 11 } } },
+          y: {
+            stacked: true, min: 0, max: 100,
+            grid: { color: gridCol },
+            ticks: { color: tickCol, stepSize: 25, callback: v => v + '%' },
+          },
+        },
+        plugins: {
+          // Identity comes from the custom legend row above, which stays
+          // readable when a series is 0% in every column.
+          legend: { display: false },
+          tooltip: {
+            mode: 'index', intersect: false,
+            itemSort: (a, b) => b.raw - a.raw,
+            callbacks: {
+              title: items => {
+                const m = meetings[items[0].dataIndex];
+                return `${m.label} — ${m.date}`;
+              },
+              label: c => (c.raw > 0 ? ` ${c.dataset.label}: ${c.raw.toFixed(1)}%` : null),
+              afterBody: items => {
+                const m = meetings[items[0].dataIndex];
+                const sign = m.change_bp >= 0 ? '+' : '';
+                return [`implied rate ${m.implied_rate.toFixed(3)}% (${sign}${m.change_bp.toFixed(1)}bp)`];
+              },
+            },
+            filter: item => item.raw > 0,
+          },
+        },
+        interaction: { mode: 'index', intersect: false },
+      },
+      plugins: [segmentLabels],
+    });
+  } catch(e) { console.warn('FedWatch chart fwProbChart failed:', e); }
+
+  // ── Secondary chart: implied rate path ───────────────────────────────
+  try {
+    const pathLabels = [I18n.t('fedwatch.today') || 'Today', ...meetings.map(m => m.label)];
+    const pathVals   = [current.effr, ...meetings.map(m => m.implied_rate)];
+
+    new Chart(document.getElementById('fwPathChart'), {
+      type: 'line',
+      data: {
+        labels: pathLabels,
+        datasets: [
+          {
+            label: I18n.t('fedwatch.implied_rate') || 'Implied fed funds rate',
+            data: pathVals,
+            borderColor: '#6366f1',
+            backgroundColor: 'rgba(99,102,241,0.10)',
+            borderWidth: 2,
+            pointRadius: 4,
+            pointHoverRadius: 6,
+            pointBackgroundColor: '#6366f1',
+            // A surface-coloured ring keeps the markers legible where they
+            // sit on the line.
+            pointBorderColor: '#0f172a',
+            pointBorderWidth: 2,
+            fill: true,
+            tension: 0.25,
+            stepped: false,
+          },
+          {
+            label: I18n.t('fedwatch.today_rate') || "Today's rate",
+            data: pathVals.map(() => current.effr),
+            borderColor: 'rgba(148,163,184,0.55)',
+            borderWidth: 1.5,
+            borderDash: [4, 3],
+            pointRadius: 0,
+            fill: false,
+          },
+        ],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { display: true, labels: { color: '#94a3b8', boxWidth: 12, font: { size: 11 } } },
+          tooltip: {
+            mode: 'index', intersect: false,
+            callbacks: { label: c => (c.raw == null ? '' : ` ${c.dataset.label}: ${c.raw.toFixed(3)}%`) },
+          },
+        },
+        scales: {
+          x: { grid: { color: gridCol }, ticks: { color: tickCol, maxRotation: 0, font: { size: 10 } } },
+          y: { grid: { color: gridCol }, ticks: { color: tickCol, callback: v => v.toFixed(2) + '%' } },
+        },
+        interaction: { mode: 'index', intersect: false },
+      },
+    });
+  } catch(e) { console.warn('FedWatch chart fwPathChart failed:', e); }
+
+  // ── Probability grid ─────────────────────────────────────────────────
+  try {
+    const table = document.getElementById('fwGrid');
+    table.innerHTML = '';
+
+    const thead = document.createElement('thead');
+    const hrow  = document.createElement('tr');
+    const corner = document.createElement('th');
+    corner.textContent = I18n.t('fedwatch.grid_range_col') || 'Target range';
+    corner.className = 'text-right';
+    hrow.appendChild(corner);
+    meetings.forEach(m => {
+      const th = document.createElement('th');
+      th.textContent = m.label;
+      hrow.appendChild(th);
+    });
+    thead.appendChild(hrow);
+    table.appendChild(thead);
+
+    const tbody = document.createElement('tbody');
+    // Highest rate on top, so the grid reads the same way as the stack.
+    [...ranges].reverse().forEach(r => {
+      const tr = document.createElement('tr');
+      const th = document.createElement('td');
+      th.className = 'fw-range';
+      th.textContent = r.label + '%';
+      tr.appendChild(th);
+      meetings.forEach(m => {
+        const o = (m.outcomes || []).find(x => x.steps === r.steps);
+        const td = document.createElement('td');
+        const p = o ? o.prob : 0;
+        td.textContent = p > 0 ? p.toFixed(1) + '%' : '—';
+        if (p > 0) {
+          // Shade by probability within the row's own hue so the grid reads
+          // as magnitude, and keep the text in ink rather than the fill hue.
+          const c = rangeColor(r.steps);
+          td.style.background = c + Math.round(18 + (p / 100) * 120).toString(16).padStart(2, '0');
+          td.style.color = '#f1f5f9';
+        } else {
+          td.style.color = '#475569';
+        }
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    if (typeof I18n !== 'undefined' && I18n.apply) I18n.apply(table);
+  } catch(e) { console.warn('FedWatch grid failed:', e); }
+
+  // ── Register the snapshot for AI Explain ─────────────────────────────
+  _explainData['fedwatch'] = {
+    label: 'FOMC rate-move probabilities',
+    snapshot: {
+      as_of: data.as_of,
+      current: current,
+      meetings: meetings.map(m => ({
+        label: m.label, date: m.date,
+        implied_rate: m.implied_rate, change_bp: m.change_bp,
+        outcomes: (m.outcomes || []).map(o => ({ lower: o.lower, upper: o.upper, prob: o.prob })),
+      })),
+    },
+  };
+})().catch(e => console.error('FedWatch IIFE failed:', e));
+
+// ── AI Explain — same streaming contract as the Fed page ──────────────────
+function _explainDone(btn) {
+  if (!btn) return;
+  btn.disabled = false;
+  btn.textContent = btn.dataset.origText || (I18n.t('fedwatch.explain') || '✦ Explain');
+}
+
+function _runExplain(chart, lang) {
+  const panel = document.getElementById(chart + 'ExplainPanel');
+  const btn   = document.querySelector(`button.explain-btn[onclick="explainChart('${chart}')"]`);
+  const d = _explainData[chart];
+  if (!panel || !d) return;
+
+  panel.classList.add('visible');
+  panel.innerHTML = '';
+
+  const thinking = document.createElement('span');
+  thinking.className = 'explain-thinking';
+  thinking.innerHTML = `<span>${lang === 'zh' ? 'AI 分析中' : 'Thinking'}</span>`
+    + `<span class="dot"></span><span class="dot"></span><span class="dot"></span>`;
+  panel.appendChild(thinking);
+
+  if (btn) {
+    btn.disabled = true;
+    btn.dataset.origText = btn.dataset.origText || btn.textContent;
+    btn.textContent = lang === 'zh' ? '⏳ 分析中…' : '⏳ Thinking…';
+  }
+
+  fetch('/api/fed/explain', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ chart, snapshot: d.snapshot, label: d.label, lang }),
+  }).then(resp => {
+    if (!resp.ok) return resp.json().then(e => { throw new Error(e.error || resp.statusText); });
+    let firstChunk = true;
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+    const textNode = document.createTextNode('');
+    function pump() {
+      reader.read().then(({ done, value }) => {
+        if (done) { _explainFinish(panel, chart, lang, btn); return; }
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split('\n');
+        buf = lines.pop();
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const payload = line.slice(6).trim();
+          if (payload === '[DONE]') { _explainFinish(panel, chart, lang, btn); return; }
+          try {
+            const obj = JSON.parse(payload);
+            if (obj.error) { panel.textContent = '⚠ ' + obj.error; _explainDone(btn); return; }
+            if (obj.text) {
+              if (firstChunk) { panel.innerHTML = ''; panel.appendChild(textNode); firstChunk = false; }
+              textNode.textContent += obj.text;
+            }
+          } catch {}
+        }
+        pump();
+      });
+    }
+    pump();
+  }).catch(err => {
+    panel.textContent = '⚠ ' + err.message;
+    _explainDone(btn);
+  });
+}
+
+function _explainFinish(panel, chart, lang, btn) {
+  _explainDone(btn);
+  const otherLang = lang === 'zh' ? 'en' : 'zh';
+  const label = lang === 'zh' ? '🌐 View in English' : '🌐 翻译成中文';
+  const translateBtn = document.createElement('button');
+  translateBtn.textContent = label;
+  translateBtn.className = 'mt-3 block text-xs text-violet-400 hover:text-violet-300 underline underline-offset-2 cursor-pointer bg-transparent border-0 p-0';
+  translateBtn.onclick = () => _runExplain(chart, otherLang);
+  panel.appendChild(document.createElement('br'));
+  panel.appendChild(translateBtn);
+}
+
+function explainChart(chart) {
+  const panel = document.getElementById(chart + 'ExplainPanel');
+  const btn   = document.querySelector(`button.explain-btn[onclick="explainChart('${chart}')"]`);
+  if (!panel) return;
+
+  if (panel.classList.contains('visible') && !btn?.disabled) {
+    panel.classList.remove('visible');
+    return;
+  }
+  const d = _explainData[chart];
+  if (!d || !d.snapshot) {
+    panel.textContent = 'No data available to explain.';
+    panel.classList.add('visible');
+    return;
+  }
+  _runExplain(chart, I18n.getLang());
+}
+</script>
+{% endblock %}

@@ -198,6 +198,10 @@ def create_app() -> Flask:
     from ystocker.fed import start_background_thread as _start_fed_thread
     _start_fed_thread()
 
+    # Start FedWatch warm-up + refresh (ZQ futures reprice all session; TTL = 4h)
+    from ystocker.fedwatch import start_background_thread as _start_fedwatch_thread
+    _start_fedwatch_thread()
+
     # Start market-breadth warm-up + daily refresh. The rebuild downloads 500+
     # tickers (~20s), so it must never run inside a request — see breadth.py.
     from ystocker.breadth import start_background_thread as _start_breadth_thread
