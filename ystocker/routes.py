@@ -2109,6 +2109,148 @@ def api_fedwatch():
         return jsonify({"status": "error", "error": str(exc), "warming": True}), 500
 
 
+# ---------------------------------------------------------------------------
+# Housing — Zillow Research + Redfin Data Center
+# ---------------------------------------------------------------------------
+
+@bp.route("/housing")
+def housing():
+    """Page showing US housing-market data from Zillow and Redfin."""
+    log.info("GET /housing")
+    from ystocker.housing import get_cache_ts, is_cache_fresh, is_warming as hz_warming_fn
+    return render_template(
+        "housing.html",
+        peer_groups=list(PEER_GROUPS.keys()),
+        cache_last_updated=get_cache_ts(),
+        cache_fresh=is_cache_fresh(),
+        warming=hz_warming_fn(),
+    )
+
+
+@bp.route("/housing/refresh")
+def housing_refresh():
+    """Kick off a background re-download of the Zillow + Redfin datasets."""
+    from ystocker.housing import refresh_cache
+    threading.Thread(target=refresh_cache, daemon=True, name="housing-manual-refresh").start()
+    return redirect(url_for("main.housing"))
+
+
+@bp.route("/api/housing")
+def api_housing():
+    """JSON API — national + metro housing series from Zillow and Redfin.
+
+    Mirrors /api/fed: serve a fresh cache immediately, otherwise 202 so the
+    page polls. The underlying download is ~10 MB across 8 files, so it must
+    never run inline in a request.
+    """
+    try:
+        from ystocker.housing import (
+            get_housing_data,
+            is_cache_fresh,
+            is_warming as hz_warming_fn,
+            refresh_cache,
+        )
+
+        if is_cache_fresh():
+            data = get_housing_data()
+            if not data or not (data.get("zillow") or data.get("redfin")):
+                log.warning("API housing: fresh check passed but payload is empty")
+                return jsonify({"status": "stale", "error": "Cache data inconsistent",
+                                "warming": True}), 202
+            resp = {k: v for k, v in data.items() if not k.startswith("_")}
+            resp["status"] = "ok"
+            log.info("API housing: served from cache (%d Zillow, %d Redfin series)",
+                     len(resp.get("zillow", {})), len(resp.get("redfin", {})))
+            return jsonify(resp)
+
+        if hz_warming_fn():
+            log.info("API housing: warming in progress, returning 202")
+            return jsonify({"status": "warming", "warming": True}), 202
+
+        log.info("API housing: no cache, starting background fetch")
+        threading.Thread(target=refresh_cache, daemon=True, name="housing-auto-warm").start()
+        return jsonify({"status": "initializing", "warming": True}), 202
+    except Exception as exc:
+        log.error("API housing: error: %s", exc, exc_info=True)
+        return jsonify({"status": "error", "error": str(exc), "warming": True}), 500
+
+
+def _build_housing_prompt(snapshot: dict, lang: str) -> str:
+    """Build a Gemini prompt that explains the US housing market.
+
+    The snapshot is the ``/api/housing`` payload trimmed by the client:
+    headline metrics with their source, the affordability figures, and the
+    largest metros.
+    """
+    head    = snapshot.get("headline") or {}
+    afford  = snapshot.get("affordability") or {}
+    metros  = snapshot.get("metros") or []
+
+    def _fmt(entry: dict) -> str:
+        val, unit = entry.get("value"), entry.get("unit")
+        try:
+            if unit == "usd":
+                shown = f"${float(val):,.0f}"
+            elif unit == "pct_dec":
+                shown = f"{float(val) * 100:.1f}%"
+            elif unit == "pct":
+                shown = f"{float(val):.2f}%"
+            elif unit == "count":
+                shown = f"{float(val):,.0f}"
+            else:
+                shown = f"{float(val):,.1f}"
+        except (TypeError, ValueError):
+            shown = "n/a"
+        yoy = entry.get("yoy")
+        if yoy is None:
+            return f"{shown} ({entry.get('source', '?')})"
+        suffix = "pp" if entry.get("yoy_unit") == "pp" else "%"
+        return f"{shown}, {yoy:+g}{suffix} YoY ({entry.get('source', '?')})"
+
+    head_lines = "\n".join(f"  {k}: {_fmt(v)}" for k, v in head.items()) or "  (unavailable)"
+
+    metro_lines = "\n".join(
+        f"  {m.get('metro')}: ${m.get('zhvi'):,.0f} "
+        f"({m.get('zhvi_yoy'):+g}% YoY)" if isinstance(m.get("zhvi"), (int, float))
+        and isinstance(m.get("zhvi_yoy"), (int, float))
+        else f"  {m.get('metro')}: n/a"
+        for m in metros
+    ) or "  (unavailable)"
+
+    afford_line = "unavailable"
+    if afford:
+        try:
+            afford_line = (
+                f"${float(afford['latest_payment']):,.0f}/mo principal+interest on the typical "
+                f"${float(afford['home_value']):,.0f} home at {float(afford['latest_rate']):.2f}% "
+                f"(20% down, 30-year fixed); peak was ${float(afford['peak_payment']):,.0f}/mo"
+            )
+        except (KeyError, TypeError, ValueError):
+            pass
+
+    lang_instr = "Respond in Simplified Chinese (中文)." if lang == "zh" else ""
+
+    return f"""You are a housing-market analyst. Explain the current state of the US housing market to an investor.
+
+Data as of: {snapshot.get('as_of')}
+
+National headline metrics (source noted per line):
+{head_lines}
+
+Cost to buy: {afford_line}
+
+Largest metros — typical home value and year-over-year change:
+{metro_lines}
+
+In 3-4 concise paragraphs, cover:
+(1) Where prices and rents stand nationally, and whether the market is heating or cooling.
+(2) Affordability: how the monthly payment compares to its peak, and what is driving it — prices, rates, or both.
+(3) Supply and leverage: what inventory, months of supply, days on market and the price-cut share say about whether buyers or sellers hold the advantage.
+(4) The metro divergence — name specific metros that are rising and falling, and what distinguishes them.
+
+Important: Zillow and Redfin measure different transaction universes, so their price levels are not directly comparable; do not present one as contradicting the other. Be specific about the numbers and use the exact figures provided. Do not use bullet points or markdown headers — just flowing prose paragraphs. {lang_instr}"""
+
+
 def _build_fedwatch_prompt(snapshot: dict, lang: str) -> str:
     """Build a Gemini prompt that explains the market-implied rate path.
 
@@ -2297,6 +2439,8 @@ def api_fed_explain():
         # would be fed to the balance-sheet prompt and explained as assets.
         if chart == "fedwatch":
             prompt = _build_fedwatch_prompt(snapshot, lang)
+        elif chart == "housing":
+            prompt = _build_housing_prompt(snapshot, lang)
         else:
             prompt = _build_balance_snapshot_prompt(snapshot, lang)
     else:

@@ -1,0 +1,862 @@
+{% extends "base.html" %}
+{% block title %}yStocker — US Housing Market (Zillow + Redfin){% endblock %}
+
+{% block content %}
+<style>
+.explain-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 10px; border-radius: 6px;
+  border: 1px solid #334155; background: transparent;
+  color: #94a3b8; font-size: 11px; font-weight: 500;
+  cursor: pointer; transition: color .15s, border-color .15s, background .15s;
+  letter-spacing: .02em; white-space: nowrap;
+}
+.explain-btn:hover { color: #a78bfa; border-color: #7c3aed; }
+.explain-btn:disabled { opacity: .5; cursor: not-allowed; }
+.explain-panel {
+  margin-top: 12px; padding: 14px 16px; border-radius: 10px;
+  background: rgba(167,139,250,.06); border: 1px solid rgba(167,139,250,.2);
+  color: #cbd5e1; font-size: 13px; line-height: 1.65; display: none;
+}
+.explain-panel.visible { display: block; }
+.explain-thinking {
+  display: inline-flex; align-items: center; gap: 6px;
+  color: #a78bfa; font-size: 12px; font-style: italic;
+}
+.explain-thinking .dot {
+  width: 5px; height: 5px; border-radius: 50%; background: #a78bfa;
+  animation: explainBounce 1.2s infinite ease-in-out;
+}
+.explain-thinking .dot:nth-child(2) { animation-delay: .2s; }
+.explain-thinking .dot:nth-child(3) { animation-delay: .4s; }
+@keyframes explainBounce {
+  0%, 80%, 100% { transform: scale(.6); opacity: .4; }
+  40%           { transform: scale(1);  opacity: 1;  }
+}
+/* Source chip — every card names its publisher, because Zillow and Redfin
+   measure different universes and must never be read as one number. */
+.src-chip {
+  display: inline-block; padding: 1px 6px; border-radius: 4px;
+  font-size: 9px; font-weight: 600; letter-spacing: .04em;
+  text-transform: uppercase; vertical-align: middle;
+}
+.src-zillow { background: rgba(57,135,229,.15);  color: #7cb2f0; }
+.src-redfin { background: rgba(217,89,38,.15);   color: #e89a76; }
+.src-fred   { background: rgba(148,163,184,.15); color: #b6c2d1; }
+.hz-table { border-collapse: separate; border-spacing: 0 2px; }
+.hz-table th {
+  font-size: 10px; font-weight: 600; color: #94a3b8;
+  text-transform: uppercase; letter-spacing: .04em;
+  padding: 4px 10px; text-align: right; white-space: nowrap;
+}
+.hz-table th:first-child, .hz-table td:first-child { text-align: left; }
+.hz-table td {
+  font-size: 12px; color: #cbd5e1; padding: 6px 10px;
+  text-align: right; white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  background: rgba(30,41,59,.4);
+}
+.hz-table tr td:first-child  { border-radius: 6px 0 0 6px; color: #e2e8f0; }
+.hz-table tr td:last-child   { border-radius: 0 6px 6px 0; }
+.hz-up   { color: #199e70; }
+.hz-down { color: #e66767; }
+</style>
+
+<!-- ── Header ─────────────────────────────────────────────────────────── -->
+<div class="mb-6 sm:mb-8 fade-up">
+  <h1 class="text-2xl sm:text-3xl font-bold grad-text mb-1" data-i18n="housing.title">US Housing Market</h1>
+  <p class="text-slate-400 text-sm" data-i18n="housing.subtitle">
+    Home values, rents, inventory and affordability · Zillow Research and Redfin Data Center
+  </p>
+  {% if cache_last_updated %}
+  <p class="text-xs text-slate-600 mt-1">
+    <span data-i18n="housing.data_as_of">Data as of</span> {{ cache_last_updated | int | datetimeformat }}
+    &nbsp;·&nbsp;
+    {% if warming %}
+    <span class="text-brand animate-pulse" data-i18n="housing.refreshing">refreshing now…</span>
+    {% else %}
+    <span data-i18n="housing.next_refresh">next refresh</span> {{ (cache_last_updated | int + 86400) | datetimeformat }}
+    {% endif %}
+    &nbsp;·&nbsp;
+    <a href="{{ url_for('main.housing_refresh') }}" class="text-brand hover:underline" data-i18n="housing.refresh">↻ Refresh</a>
+  </p>
+  {% else %}
+  <p class="text-xs text-slate-600 mt-1">
+    <a href="{{ url_for('main.housing_refresh') }}" class="text-brand hover:underline" data-i18n="housing.load">↻ Load data</a>
+  </p>
+  {% endif %}
+</div>
+
+{% if not cache_last_updated and warming %}
+<div class="flex flex-col items-center justify-center py-24 gap-4 fade-up">
+  <svg class="w-8 h-8 text-brand animate-spin" fill="none" viewBox="0 0 24 24">
+    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/>
+  </svg>
+  <p class="text-slate-400 text-sm animate-pulse" data-i18n="housing.loading">Downloading Zillow and Redfin datasets — this may take a moment…</p>
+  <p class="text-xs text-slate-600" data-i18n="housing.loading_hint">This page will refresh automatically when data is ready.</p>
+</div>
+<div id="hzError" class="hidden mt-4 px-4 py-3 rounded-lg bg-red-900/40 border border-red-700 text-red-300 text-sm"></div>
+<script>
+  (function poll() {
+    fetch('/api/housing')
+      .then(r => r.text().then(text => {
+        if (!text) return setTimeout(poll, 4000);
+        try {
+          const d = JSON.parse(text);
+          if ((d.zillow && Object.keys(d.zillow).length) || (d.redfin && Object.keys(d.redfin).length)) {
+            location.reload();
+          } else if (d.error && !d.warming) {
+            const el = document.getElementById('hzError');
+            if (el) { el.textContent = '⚠ ' + d.error; el.classList.remove('hidden'); }
+          } else setTimeout(poll, 4000);
+        } catch(e) { console.error('Housing poll parse error:', e); setTimeout(poll, 6000); }
+      }))
+      .catch(() => setTimeout(poll, 6000));
+  })();
+</script>
+{% else %}
+
+<!-- ── KPI row ─────────────────────────────────────────────────────────── -->
+<div id="hzKpis" class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 mb-6"></div>
+
+<div class="space-y-6">
+
+  <!-- ── Affordability — the page's headline insight ───────────────────── -->
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up">
+    <div class="flex flex-wrap items-start justify-between gap-2 mb-3">
+      <div>
+        <h2 class="text-base font-semibold text-slate-200" data-i18n="housing.afford_title">Cost of Buying the Typical US Home</h2>
+        <p class="text-xs text-slate-500">
+          <span data-i18n="housing.afford_desc">Monthly principal &amp; interest, 20% down on a 30-year fixed. Excludes taxes, insurance and HOA, so it is a floor on the true cost.</span>
+          <span class="src-chip src-zillow">Zillow</span> <span class="src-chip src-fred">FRED</span>
+        </p>
+      </div>
+      <button class="explain-btn" onclick="explainChart('housing')" data-i18n="housing.explain">✦ Explain</button>
+    </div>
+    <div class="flex flex-wrap items-end gap-x-8 gap-y-2 mb-4">
+      <div>
+        <p class="text-xs text-slate-500 mb-0.5" data-i18n="housing.afford_now">Payment today</p>
+        <!-- Hero figure: the one number this page leads with. -->
+        <p class="text-5xl font-semibold text-slate-100 leading-none"><span id="hzPayNow">—</span></p>
+      </div>
+      <div class="text-xs text-slate-500 space-y-1 pb-1">
+        <p><span data-i18n="housing.afford_peak">Peak</span>: <span id="hzPayPeak" class="text-slate-300">—</span></p>
+        <p><span data-i18n="housing.afford_2019">vs Dec 2019</span>: <span id="hzPay2019" class="text-slate-300">—</span></p>
+      </div>
+    </div>
+    <div class="chart-container" style="height:260px"><canvas id="hzAffordChart"></canvas></div>
+    <div id="housingExplainPanel" class="explain-panel"></div>
+  </div>
+
+  <!-- ── Home values vs rents, indexed ─────────────────────────────────── -->
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
+    <div class="mb-3">
+      <h3 class="text-sm font-semibold text-slate-300">
+        <span data-i18n="housing.idx_title">Home Values vs Rents</span>
+        <span class="src-chip src-zillow">Zillow</span>
+      </h3>
+      <p class="text-xs text-slate-500 mt-0.5" data-i18n="housing.idx_desc">Both indexed to 100 at their first common month, so the two sit on one scale and the gap is directly readable.</p>
+    </div>
+    <div class="chart-container" style="height:240px"><canvas id="hzIndexChart"></canvas></div>
+  </div>
+
+  <!-- ── Supply: inventory & new listings ──────────────────────────────── -->
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
+    <div class="mb-3">
+      <h3 class="text-sm font-semibold text-slate-300">
+        <span data-i18n="housing.supply_title">Inventory &amp; New Listings</span>
+        <span class="src-chip src-redfin">Redfin</span>
+      </h3>
+      <p class="text-xs text-slate-500 mt-0.5" data-i18n="housing.supply_desc">Homes for sale versus homes newly listed each month. Inventory rising while new listings flatten means buyers are absorbing less.</p>
+    </div>
+    <div class="chart-container" style="height:240px"><canvas id="hzSupplyChart"></canvas></div>
+  </div>
+
+  <!-- ── Negotiating power: price drops vs sold above list ─────────────── -->
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
+    <div class="mb-3">
+      <h3 class="text-sm font-semibold text-slate-300">
+        <span data-i18n="housing.power_title">Who Has the Leverage</span>
+        <span class="src-chip src-redfin">Redfin</span>
+      </h3>
+      <p class="text-xs text-slate-500 mt-0.5" data-i18n="housing.power_desc">Share of listings cutting price against share selling above asking. When the lines cross, negotiating power changes hands.</p>
+    </div>
+    <div class="chart-container" style="height:240px"><canvas id="hzPowerChart"></canvas></div>
+  </div>
+
+  <!-- ── Metro YoY comparison ──────────────────────────────────────────── -->
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
+    <div class="mb-3">
+      <h3 class="text-sm font-semibold text-slate-300">
+        <span data-i18n="housing.metro_yoy_title">Home Value Change by Metro, Year over Year</span>
+        <span class="src-chip src-zillow">Zillow</span>
+      </h3>
+      <p class="text-xs text-slate-500 mt-0.5" data-i18n="housing.metro_yoy_desc">The 25 largest metros, sorted. Bars sit left or right of zero and carry their own value, so the direction never rests on colour alone.</p>
+    </div>
+    <div class="chart-container" id="hzMetroBarWrap" style="height:560px"><canvas id="hzMetroBarChart"></canvas></div>
+  </div>
+
+  <!-- ── Metro time series with selector ───────────────────────────────── -->
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
+    <div class="flex flex-wrap items-start justify-between gap-2 mb-3">
+      <div>
+        <h3 class="text-sm font-semibold text-slate-300">
+          <span data-i18n="housing.metro_trend_title">Typical Home Value by Metro</span>
+          <span class="src-chip src-zillow">Zillow</span>
+        </h3>
+        <p class="text-xs text-slate-500 mt-0.5" data-i18n="housing.metro_trend_desc">Pick a metro to compare its path against the national index.</p>
+      </div>
+      <select id="hzMetroSelect"
+              class="bg-slate-800 border border-slate-700 rounded-md text-xs text-slate-200 px-2 py-1.5
+                     focus:outline-none focus:border-brand"></select>
+    </div>
+    <div class="chart-container" style="height:240px"><canvas id="hzMetroTrendChart"></canvas></div>
+  </div>
+
+  <!-- ── Metro detail table ────────────────────────────────────────────── -->
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
+    <div class="mb-3">
+      <h3 class="text-sm font-semibold text-slate-300">
+        <span data-i18n="housing.metro_table_title">Metro Detail</span>
+        <span class="src-chip src-zillow">Zillow</span>
+      </h3>
+      <p class="text-xs text-slate-500 mt-0.5" data-i18n="housing.metro_table_desc">Every value from the charts above, in full, for the 25 largest metros.</p>
+    </div>
+    <div class="overflow-x-auto"><table class="hz-table w-full" id="hzMetroTable"></table></div>
+  </div>
+
+  <!-- ── Methodology ───────────────────────────────────────────────────── -->
+  <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
+    <h3 class="text-sm font-semibold text-slate-300 mb-2" data-i18n="housing.method_title">Reading these two sources together</h3>
+    <p class="text-xs text-slate-500 leading-relaxed" data-i18n="housing.method_body">
+      Zillow and Redfin do not measure the same market, so their price levels are not interchangeable. For the same month Redfin reported a median sale price of about $440k against Zillow's $370k — roughly a 19% gap — because Redfin's universe is MLS-centric and metro-weighted while Zillow's is broader. Their price-cut measures differ in definition too, not just in coverage. Each card above therefore names its publisher, and no chart mixes the two on one axis as though they agreed. Use Zillow for home-value and rent levels across metros, and Redfin for market mechanics: inventory, months of supply, days on market and the share selling above asking.
+    </p>
+    <p class="text-xs text-slate-600 mt-2" data-i18n="housing.method_caveat">
+      Both series are revised as late transactions arrive, and Zillow's home-value and sale-price indices are seasonally adjusted while several supply measures are not. Monthly data, updated once a month.
+    </p>
+  </div>
+
+  <div id="hzError" class="hidden mt-4 px-4 py-3 rounded-lg bg-red-900/40 border border-red-700 text-red-300 text-sm"></div>
+
+  <p class="text-xs text-slate-600 mt-4">
+    <span data-i18n="housing.source">Sources</span>:
+    <a href="https://www.zillow.com/research/data/" target="_blank" rel="noopener" class="text-brand hover:underline">Zillow Research</a> ·
+    <a href="https://public.tableau.com/app/profile/zillow.economic.research/vizzes" target="_blank" rel="noopener" class="text-brand hover:underline">Zillow dashboards</a> ·
+    <a href="https://www.redfin.com/news/data-center/" target="_blank" rel="noopener" class="text-brand hover:underline">Redfin Data Center</a> ·
+    <a href="https://public.tableau.com/app/profile/redfin/vizzes" target="_blank" rel="noopener" class="text-brand hover:underline">Redfin dashboards</a> ·
+    <span data-i18n="housing.source_tail">mortgage rate via FRED</span>
+  </p>
+</div>
+{% endif %}
+
+<script>
+const _explainData = {};
+
+(async function() {
+  const gridCol = '#1e293b';
+  const tickCol = '#64748b';
+  // Categorical slots 1 & 2, validated for the dark card surface.
+  const C_BLUE = '#3987e5', C_ORANGE = '#d95926', C_INDIGO = '#6366f1';
+  const C_UP = '#199e70', C_DOWN = '#e66767';
+
+  async function safeJsonFetch(url) {
+    try {
+      const resp = await fetch(url);
+      const text = await resp.text();
+      if (!text) return { error: 'Empty response' };
+      try {
+        const data = JSON.parse(text);
+        if (!resp.ok) data.error = data.error || `HTTP ${resp.status}`;
+        return data;
+      } catch(e) { return { error: `Invalid JSON: ${e.message}` }; }
+    } catch(e) { return { error: `Fetch error: ${e.message || e}` }; }
+  }
+
+  const showErr = m => {
+    const el = document.getElementById('hzError');
+    if (el) { el.textContent = '⚠ ' + m; el.classList.remove('hidden'); }
+  };
+
+  const data = await safeJsonFetch('/api/housing');
+  if (data.error) { showErr(data.error); if (!data.warming) return; }
+
+  const Z = data.zillow || {}, R = data.redfin || {};
+  const head = data.headline || {}, metros = data.metros || [];
+  if (!Object.keys(Z).length && !Object.keys(R).length) return;
+
+  // ── formatters ───────────────────────────────────────────────────────
+  const usd = v => v == null ? '—'
+    : v >= 1e6 ? '$' + (v / 1e6).toFixed(2) + 'M'
+    : '$' + Math.round(v).toLocaleString('en-US');
+  const cnt = v => v == null ? '—'
+    : v >= 1e6 ? (v / 1e6).toFixed(2) + 'M'
+    : v >= 1e3 ? Math.round(v / 1e3) + 'K' : String(Math.round(v));
+  const pctDec = v => v == null ? '—' : (v * 100).toFixed(1) + '%';
+  const fmt = (v, unit) => {
+    if (v == null) return '—';
+    switch (unit) {
+      case 'usd':     return usd(v);
+      case 'count':   return cnt(v);
+      case 'pct_dec': return pctDec(v);
+      case 'pct':     return v.toFixed(2) + '%';
+      case 'days':    return Math.round(v) + 'd';
+      case 'months':  return v.toFixed(1) + ' mo';
+      default:        return String(v);
+    }
+  };
+  // Month-end stamps ("2026-06-30") read better as "Jun '26" on an axis.
+  const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const axisMonth = d => !d ? '' : MON[+d.slice(5, 7) - 1] + " '" + d.slice(2, 4);
+
+  const KPI_ORDER = [
+    ['zhvi',                    'housing.kpi_zhvi',      'Typical home value'],
+    ['zori',                    'housing.kpi_zori',      'Typical asking rent'],
+    ['mortgage_rate',           'housing.kpi_rate',      '30-yr mortgage'],
+    ['redfin_months_of_supply', 'housing.kpi_supply',    'Months of supply'],
+    ['redfin_median_dom',       'housing.kpi_dom',       'Days on market'],
+    ['price_cuts',              'housing.kpi_cuts',      'Listings cutting price'],
+  ];
+  const SRC_CLASS = { Zillow: 'src-zillow', Redfin: 'src-redfin', FRED: 'src-fred' };
+
+  // ── KPI tiles ────────────────────────────────────────────────────────
+  try {
+    const wrap = document.getElementById('hzKpis');
+    wrap.innerHTML = '';
+    KPI_ORDER.forEach(([key, i18nKey, fallback]) => {
+      const h = head[key];
+      if (!h) return;
+      const card = document.createElement('div');
+      card.className = 'bg-slate-900 border border-slate-800 rounded-2xl p-3 sm:p-4 fade-up';
+
+      const label = document.createElement('p');
+      label.className = 'text-xs text-slate-500 mb-1 flex items-center gap-1.5 flex-wrap';
+      const lt = document.createElement('span');
+      lt.setAttribute('data-i18n', i18nKey);
+      lt.textContent = I18n.t(i18nKey) || fallback;
+      const chip = document.createElement('span');
+      chip.className = 'src-chip ' + (SRC_CLASS[h.source] || 'src-fred');
+      chip.textContent = h.source;
+      label.appendChild(lt); label.appendChild(chip);
+
+      const val = document.createElement('p');
+      val.className = 'text-xl sm:text-2xl font-semibold text-slate-100';
+      val.textContent = fmt(h.value, h.unit);
+
+      const delta = document.createElement('p');
+      delta.className = 'text-xs mt-0.5';
+      if (h.yoy == null) {
+        delta.className += ' text-slate-600';
+        delta.textContent = '—';
+      } else {
+        // A share or a rate moves in percentage POINTS; a level moves in
+        // percent. Rendering both as "%" is how unit bugs get shipped.
+        const suffix = h.yoy_unit === 'pp' ? 'pp' : '%';
+        const sign = h.yoy > 0 ? '+' : '';
+        delta.className += h.yoy > 0 ? ' hz-up' : h.yoy < 0 ? ' hz-down' : ' text-slate-500';
+        delta.textContent = `${sign}${h.yoy}${suffix} ${I18n.t('housing.yoy') || 'YoY'}`;
+      }
+      card.appendChild(label); card.appendChild(val); card.appendChild(delta);
+      wrap.appendChild(card);
+    });
+    if (typeof I18n !== 'undefined' && I18n.apply) I18n.apply(wrap);
+  } catch(e) { console.warn('Housing KPIs failed:', e); }
+
+  // ── Affordability ────────────────────────────────────────────────────
+  try {
+    const a = data.affordability;
+    if (a && a.dates.length) {
+      const last = a.payment.length - 1;
+      document.getElementById('hzPayNow').textContent = usd(a.payment[last]) + '/mo';
+
+      let pk = 0;
+      a.payment.forEach((v, i) => { if (v > a.payment[pk]) pk = i; });
+      document.getElementById('hzPayPeak').textContent =
+        `${usd(a.payment[pk])}/mo · ${axisMonth(a.dates[pk])}`;
+
+      const i2019 = a.dates.findIndex(d => d.startsWith('2019-12'));
+      if (i2019 >= 0 && a.payment[i2019]) {
+        const chg = (a.payment[last] / a.payment[i2019] - 1) * 100;
+        const el = document.getElementById('hzPay2019');
+        el.textContent = `${chg > 0 ? '+' : ''}${chg.toFixed(0)}% (${usd(a.payment[i2019])}/mo)`;
+        el.className = chg > 0 ? 'hz-down' : 'hz-up';   // costlier = worse for a buyer
+      }
+
+      new Chart(document.getElementById('hzAffordChart'), {
+        type: 'line',
+        data: {
+          labels: a.dates,
+          datasets: [{
+            label: I18n.t('housing.afford_series') || 'Monthly payment',
+            data: a.payment,
+            borderColor: C_INDIGO, backgroundColor: 'rgba(99,102,241,.10)',
+            borderWidth: 2, pointRadius: 0, pointHoverRadius: 4,
+            fill: true, tension: .25, spanGaps: true,
+          }],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          // Single series — the title already names it, so no legend box.
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              mode: 'index', intersect: false,
+              callbacks: {
+                title: it => it[0].label,
+                label: c => ` ${usd(c.raw)}/mo`,
+                afterBody: it => {
+                  const i = it[0].dataIndex;
+                  return [`home value ${usd(a.home_value[i])} · rate ${a.rate[i]}%`];
+                },
+              },
+            },
+          },
+          scales: {
+            x: { grid: { color: gridCol },
+                 ticks: { color: tickCol, maxTicksLimit: 9, maxRotation: 0,
+                          callback(v) { return axisMonth(this.getLabelForValue(v)); } } },
+            y: { grid: { color: gridCol },
+                 ticks: { color: tickCol, callback: v => '$' + (v / 1000).toFixed(1) + 'k' } },
+          },
+          interaction: { mode: 'index', intersect: false },
+        },
+      });
+    }
+  } catch(e) { console.warn('Housing chart hzAffordChart failed:', e); }
+
+  // ── Home values vs rents, indexed to 100 ─────────────────────────────
+  try {
+    const zh = Z.zhvi, zo = Z.zori;
+    if (zh && zo) {
+      // Index to the first month both series cover — this is what lets two
+      // very different dollar levels share one axis instead of needing a
+      // second y-scale.
+      const start = zo.dates.find(d => zh.dates.includes(d));
+      const iH = zh.dates.indexOf(start), iO = zo.dates.indexOf(start);
+      const baseH = zh.values[iH], baseO = zo.values[iO];
+      const labels = zo.dates.slice(iO);
+      const idxH = zh.dates.slice(iH).map(( _, k) => {
+        const v = zh.values[iH + k];
+        return v == null ? null : +(v / baseH * 100).toFixed(1);
+      });
+      const idxO = zo.values.slice(iO).map(v => v == null ? null : +(v / baseO * 100).toFixed(1));
+
+      new Chart(document.getElementById('hzIndexChart'), {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [
+            { label: (I18n.t('housing.series_values') || 'Home values') + ' (ZHVI)',
+              data: idxH.slice(0, labels.length), borderColor: C_BLUE,
+              backgroundColor: 'rgba(57,135,229,.10)', borderWidth: 2,
+              pointRadius: 0, pointHoverRadius: 4, fill: true, tension: .25, spanGaps: true },
+            { label: (I18n.t('housing.series_rents') || 'Rents') + ' (ZORI)',
+              data: idxO, borderColor: C_ORANGE, backgroundColor: 'transparent',
+              borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, fill: false, tension: .25, spanGaps: true },
+          ],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: {
+            legend: { display: true, labels: { color: '#94a3b8', boxWidth: 12, font: { size: 11 } } },
+            tooltip: { mode: 'index', intersect: false,
+              callbacks: { label: c => c.raw == null ? '' : ` ${c.dataset.label}: ${c.raw}` } },
+          },
+          scales: {
+            x: { grid: { color: gridCol },
+                 ticks: { color: tickCol, maxTicksLimit: 8, maxRotation: 0,
+                          callback(v) { return axisMonth(this.getLabelForValue(v)); } } },
+            y: { grid: { color: gridCol }, ticks: { color: tickCol } },
+          },
+          interaction: { mode: 'index', intersect: false },
+        },
+      });
+    }
+  } catch(e) { console.warn('Housing chart hzIndexChart failed:', e); }
+
+  // ── Inventory & new listings (both counts → one axis) ────────────────
+  try {
+    const inv = R.inventory, nl = R.new_listings;
+    if (inv && nl) {
+      new Chart(document.getElementById('hzSupplyChart'), {
+        type: 'line',
+        data: {
+          labels: inv.dates,
+          datasets: [
+            { label: I18n.t('housing.series_inventory') || 'Inventory',
+              data: inv.values, borderColor: C_BLUE, backgroundColor: 'rgba(57,135,229,.10)',
+              borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, fill: true, tension: .25, spanGaps: true },
+            { label: I18n.t('housing.series_new_listings') || 'New listings',
+              data: nl.values, borderColor: C_ORANGE, backgroundColor: 'transparent',
+              borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, fill: false, tension: .25, spanGaps: true },
+          ],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: {
+            legend: { display: true, labels: { color: '#94a3b8', boxWidth: 12, font: { size: 11 } } },
+            tooltip: { mode: 'index', intersect: false,
+              callbacks: { label: c => c.raw == null ? '' : ` ${c.dataset.label}: ${cnt(c.raw)}` } },
+          },
+          scales: {
+            x: { grid: { color: gridCol },
+                 ticks: { color: tickCol, maxTicksLimit: 8, maxRotation: 0,
+                          callback(v) { return axisMonth(this.getLabelForValue(v)); } } },
+            y: { grid: { color: gridCol }, ticks: { color: tickCol, callback: v => cnt(v) } },
+          },
+          interaction: { mode: 'index', intersect: false },
+        },
+      });
+    }
+  } catch(e) { console.warn('Housing chart hzSupplyChart failed:', e); }
+
+  // ── Price drops vs sold above list (both shares → one axis) ──────────
+  try {
+    const pd = R.price_drops, sal = R.sold_above_list;
+    if (pd && sal) {
+      new Chart(document.getElementById('hzPowerChart'), {
+        type: 'line',
+        data: {
+          labels: pd.dates,
+          datasets: [
+            { label: I18n.t('housing.series_drops') || 'Cut their price',
+              data: pd.values.map(v => v == null ? null : +(v * 100).toFixed(1)),
+              borderColor: C_ORANGE, backgroundColor: 'transparent',
+              borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, fill: false, tension: .25, spanGaps: true },
+            { label: I18n.t('housing.series_above') || 'Sold above asking',
+              data: sal.values.map(v => v == null ? null : +(v * 100).toFixed(1)),
+              borderColor: C_BLUE, backgroundColor: 'rgba(57,135,229,.10)',
+              borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, fill: true, tension: .25, spanGaps: true },
+          ],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: {
+            legend: { display: true, labels: { color: '#94a3b8', boxWidth: 12, font: { size: 11 } } },
+            tooltip: { mode: 'index', intersect: false,
+              callbacks: { label: c => c.raw == null ? '' : ` ${c.dataset.label}: ${c.raw}%` } },
+          },
+          scales: {
+            x: { grid: { color: gridCol },
+                 ticks: { color: tickCol, maxTicksLimit: 8, maxRotation: 0,
+                          callback(v) { return axisMonth(this.getLabelForValue(v)); } } },
+            y: { grid: { color: gridCol }, ticks: { color: tickCol, callback: v => v + '%' } },
+          },
+          interaction: { mode: 'index', intersect: false },
+        },
+      });
+    }
+  } catch(e) { console.warn('Housing chart hzPowerChart failed:', e); }
+
+  // ── Metro YoY horizontal bars ────────────────────────────────────────
+  try {
+    const rows = metros.filter(m => m.zhvi_yoy != null)
+                       .sort((a, b) => b.zhvi_yoy - a.zhvi_yoy);
+    if (rows.length) {
+      // Direct signed labels: the CVD separation of the up/down pair sits in
+      // the floor band, so colour alone must not carry the sign. Bar side of
+      // zero plus this label are the redundant channels.
+      const barLabels = {
+        id: 'hzBarLabels',
+        afterDatasetsDraw(chart) {
+          const { ctx, chartArea } = chart;
+          ctx.save();
+          ctx.font = '600 10px system-ui, -apple-system, sans-serif';
+          ctx.textBaseline = 'middle';
+          chart.getDatasetMeta(0).data.forEach((bar, i) => {
+            const v = rows[i].zhvi_yoy;
+            if (v == null) return;
+            const txt = (v > 0 ? '+' : '') + v.toFixed(1) + '%';
+            const w = ctx.measureText(txt).width;
+            const pad = 6;
+            const neg = v < 0;
+
+            // Preferred spot is just beyond the bar's end. The longest bars
+            // run out of room there and the label would print on top of the
+            // metro names on the category axis, so fall back to just inside
+            // the bar end. Overlapping another label is worse than tucking in.
+            let x, align, inside = false;
+            if (neg) {
+              if (bar.x - pad - w >= chartArea.left) { x = bar.x - pad; align = 'right'; }
+              else { x = bar.x + pad; align = 'left'; inside = true; }
+            } else {
+              if (bar.x + pad + w <= chartArea.right) { x = bar.x + pad; align = 'left'; }
+              else { x = bar.x - pad; align = 'right'; inside = true; }
+            }
+            // Inside a saturated fill, ink has to be light to stay legible.
+            ctx.fillStyle = inside ? '#0f172a' : '#94a3b8';
+            ctx.textAlign = align;
+            ctx.fillText(txt, x, bar.y);
+          });
+          ctx.restore();
+        },
+      };
+
+      new Chart(document.getElementById('hzMetroBarChart'), {
+        type: 'bar',
+        data: {
+          labels: rows.map(r => r.metro),
+          datasets: [{
+            data: rows.map(r => r.zhvi_yoy),
+            backgroundColor: rows.map(r => r.zhvi_yoy >= 0 ? C_UP : C_DOWN),
+            borderWidth: 0,
+            borderRadius: 3,
+            maxBarThickness: 14,
+          }],
+        },
+        options: {
+          indexAxis: 'y',
+          responsive: true, maintainAspectRatio: false,
+          layout: { padding: { right: 42, left: 8 } },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: c => {
+                  const r = rows[c.dataIndex];
+                  return [` ${c.raw > 0 ? '+' : ''}${c.raw}% YoY`,
+                          ` value ${usd(r.zhvi)}`];
+                },
+              },
+            },
+          },
+          scales: {
+            // `grace` keeps the longest bars off the plot edge so the signed
+            // labels have room to sit outside the bar in the common case.
+            x: { grace: '12%', grid: { color: gridCol },
+                 ticks: { color: tickCol, callback: v => v + '%' } },
+            y: { grid: { display: false }, ticks: { color: tickCol, font: { size: 10 }, autoSkip: false } },
+          },
+        },
+        plugins: [barLabels],
+      });
+    }
+  } catch(e) { console.warn('Housing chart hzMetroBarChart failed:', e); }
+
+  // ── Metro trend with selector ────────────────────────────────────────
+  try {
+    const mdates = data.metro_dates || [];
+    const mz = data.metro_zhvi || {};
+    const names = Object.keys(mz);
+    const sel = document.getElementById('hzMetroSelect');
+    if (names.length && mdates.length && sel) {
+      // Flask's jsonify sorts object keys, so `names` arrives alphabetical.
+      // That is the right order for the dropdown, but the wrong default view —
+      // open on the largest metro instead of whichever one starts with an "A".
+      const initial = (metros.find(m => mz[m.metro]) || {}).metro || names[0];
+      names.forEach(n => {
+        const o = document.createElement('option');
+        o.value = n; o.textContent = n;
+        if (n === initial) o.selected = true;
+        sel.appendChild(o);
+      });
+
+      // National line, trimmed to the same window, as constant context.
+      const zh = Z.zhvi;
+      const natl = zh ? mdates.map(d => {
+        const i = zh.dates.indexOf(d);
+        return i >= 0 ? zh.values[i] : null;
+      }) : [];
+
+      const chart = new Chart(document.getElementById('hzMetroTrendChart'), {
+        type: 'line',
+        data: {
+          labels: mdates,
+          datasets: [
+            { label: initial, data: mz[initial], borderColor: C_BLUE,
+              backgroundColor: 'rgba(57,135,229,.10)', borderWidth: 2,
+              pointRadius: 0, pointHoverRadius: 4, fill: true, tension: .25, spanGaps: true },
+            { label: I18n.t('housing.series_national') || 'United States',
+              data: natl, borderColor: 'rgba(148,163,184,.6)', backgroundColor: 'transparent',
+              borderWidth: 1.5, borderDash: [4, 3], pointRadius: 0, fill: false, tension: .25, spanGaps: true },
+          ],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: {
+            legend: { display: true, labels: { color: '#94a3b8', boxWidth: 12, font: { size: 11 } } },
+            tooltip: { mode: 'index', intersect: false,
+              callbacks: { label: c => c.raw == null ? '' : ` ${c.dataset.label}: ${usd(c.raw)}` } },
+          },
+          scales: {
+            x: { grid: { color: gridCol },
+                 ticks: { color: tickCol, maxTicksLimit: 8, maxRotation: 0,
+                          callback(v) { return axisMonth(this.getLabelForValue(v)); } } },
+            y: { grid: { color: gridCol }, ticks: { color: tickCol, callback: v => usd(v) } },
+          },
+          interaction: { mode: 'index', intersect: false },
+        },
+      });
+
+      sel.addEventListener('change', () => {
+        chart.data.datasets[0].label = sel.value;
+        chart.data.datasets[0].data = mz[sel.value];
+        chart.update();
+      });
+    }
+  } catch(e) { console.warn('Housing chart hzMetroTrendChart failed:', e); }
+
+  // ── Metro table ──────────────────────────────────────────────────────
+  try {
+    const table = document.getElementById('hzMetroTable');
+    if (table && metros.length) {
+      table.innerHTML = '';
+      const cols = [
+        ['housing.col_metro', 'Metro',        r => r.metro],
+        ['housing.col_value', 'Home value',   r => usd(r.zhvi)],
+        ['housing.col_yoy',   'YoY',          null],
+        ['housing.col_rent',  'Rent',         r => usd(r.zori)],
+        ['housing.col_rent_yoy', 'Rent YoY',  null],
+        ['housing.col_dop',   'Days to pending', r => r.days_to_pending == null ? '—' : Math.round(r.days_to_pending) + 'd'],
+        ['housing.col_cuts',  'Price cuts',   r => pctDec(r.price_cuts)],
+      ];
+      const thead = document.createElement('thead');
+      const hr = document.createElement('tr');
+      cols.forEach(([key, fallback]) => {
+        const th = document.createElement('th');
+        th.setAttribute('data-i18n', key);
+        th.textContent = I18n.t(key) || fallback;
+        hr.appendChild(th);
+      });
+      thead.appendChild(hr); table.appendChild(thead);
+
+      const tbody = document.createElement('tbody');
+      metros.forEach(r => {
+        const tr = document.createElement('tr');
+        const signed = (v, unit) => {
+          const td = document.createElement('td');
+          if (v == null) { td.textContent = '—'; td.style.color = '#475569'; return td; }
+          td.textContent = (v > 0 ? '+' : '') + v.toFixed(1) + unit;
+          td.className = v > 0 ? 'hz-up' : v < 0 ? 'hz-down' : '';
+          return td;
+        };
+        cols.forEach(([key, , get]) => {
+          if (get) {
+            const td = document.createElement('td');
+            td.textContent = get(r);
+            tr.appendChild(td);
+          } else {
+            tr.appendChild(signed(key === 'housing.col_yoy' ? r.zhvi_yoy : r.zori_yoy, '%'));
+          }
+        });
+        tbody.appendChild(tr);
+      });
+      table.appendChild(tbody);
+      if (typeof I18n !== 'undefined' && I18n.apply) I18n.apply(table);
+    }
+  } catch(e) { console.warn('Housing metro table failed:', e); }
+
+  // ── Snapshot for AI Explain ──────────────────────────────────────────
+  _explainData['housing'] = {
+    label: 'US housing market',
+    snapshot: {
+      as_of: data.as_of,
+      headline: head,
+      affordability: data.affordability ? {
+        latest_payment: data.affordability.payment[data.affordability.payment.length - 1],
+        latest_rate:    data.affordability.rate[data.affordability.rate.length - 1],
+        home_value:     data.affordability.home_value[data.affordability.home_value.length - 1],
+        peak_payment:   Math.max(...data.affordability.payment),
+      } : null,
+      metros: metros.slice(0, 15).map(m => ({
+        metro: m.metro, zhvi: m.zhvi, zhvi_yoy: m.zhvi_yoy,
+        rent: m.zori, days_to_pending: m.days_to_pending,
+      })),
+    },
+  };
+})().catch(e => console.error('Housing IIFE failed:', e));
+
+// ── AI Explain — same streaming contract as the Fed pages ────────────────
+function _explainDone(btn) {
+  if (!btn) return;
+  btn.disabled = false;
+  btn.textContent = btn.dataset.origText || (I18n.t('housing.explain') || '✦ Explain');
+}
+
+function _runExplain(chart, lang) {
+  const panel = document.getElementById(chart + 'ExplainPanel');
+  const btn   = document.querySelector(`button.explain-btn[onclick="explainChart('${chart}')"]`);
+  const d = _explainData[chart];
+  if (!panel || !d) return;
+
+  panel.classList.add('visible');
+  panel.innerHTML = '';
+  const thinking = document.createElement('span');
+  thinking.className = 'explain-thinking';
+  thinking.innerHTML = `<span>${lang === 'zh' ? 'AI 分析中' : 'Thinking'}</span>`
+    + `<span class="dot"></span><span class="dot"></span><span class="dot"></span>`;
+  panel.appendChild(thinking);
+
+  if (btn) {
+    btn.disabled = true;
+    btn.dataset.origText = btn.dataset.origText || btn.textContent;
+    btn.textContent = lang === 'zh' ? '⏳ 分析中…' : '⏳ Thinking…';
+  }
+
+  fetch('/api/fed/explain', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ chart, snapshot: d.snapshot, label: d.label, lang }),
+  }).then(resp => {
+    if (!resp.ok) return resp.json().then(e => { throw new Error(e.error || resp.statusText); });
+    let firstChunk = true;
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+    const textNode = document.createTextNode('');
+    function pump() {
+      reader.read().then(({ done, value }) => {
+        if (done) { _explainFinish(panel, chart, lang, btn); return; }
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split('\n');
+        buf = lines.pop();
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const payload = line.slice(6).trim();
+          if (payload === '[DONE]') { _explainFinish(panel, chart, lang, btn); return; }
+          try {
+            const obj = JSON.parse(payload);
+            if (obj.error) { panel.textContent = '⚠ ' + obj.error; _explainDone(btn); return; }
+            if (obj.text) {
+              if (firstChunk) { panel.innerHTML = ''; panel.appendChild(textNode); firstChunk = false; }
+              textNode.textContent += obj.text;
+            }
+          } catch {}
+        }
+        pump();
+      });
+    }
+    pump();
+  }).catch(err => { panel.textContent = '⚠ ' + err.message; _explainDone(btn); });
+}
+
+function _explainFinish(panel, chart, lang, btn) {
+  _explainDone(btn);
+  const otherLang = lang === 'zh' ? 'en' : 'zh';
+  const label = lang === 'zh' ? '🌐 View in English' : '🌐 翻译成中文';
+  const b = document.createElement('button');
+  b.textContent = label;
+  b.className = 'mt-3 block text-xs text-violet-400 hover:text-violet-300 underline underline-offset-2 cursor-pointer bg-transparent border-0 p-0';
+  b.onclick = () => _runExplain(chart, otherLang);
+  panel.appendChild(document.createElement('br'));
+  panel.appendChild(b);
+}
+
+function explainChart(chart) {
+  const panel = document.getElementById(chart + 'ExplainPanel');
+  const btn   = document.querySelector(`button.explain-btn[onclick="explainChart('${chart}')"]`);
+  if (!panel) return;
+  if (panel.classList.contains('visible') && !btn?.disabled) {
+    panel.classList.remove('visible');
+    return;
+  }
+  const d = _explainData[chart];
+  if (!d || !d.snapshot) {
+    panel.textContent = 'No data available to explain.';
+    panel.classList.add('visible');
+    return;
+  }
+  _runExplain(chart, I18n.getLang());
+}
+</script>
+{% endblock %}

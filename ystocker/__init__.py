@@ -202,6 +202,11 @@ def create_app() -> Flask:
     from ystocker.fedwatch import start_background_thread as _start_fedwatch_thread
     _start_fedwatch_thread()
 
+    # Start housing warm-up + daily refresh. The Zillow/Redfin download is
+    # ~10 MB across 8 files, so it must never run inside a request.
+    from ystocker.housing import start_background_thread as _start_housing_thread
+    _start_housing_thread()
+
     # Start market-breadth warm-up + daily refresh. The rebuild downloads 500+
     # tickers (~20s), so it must never run inside a request — see breadth.py.
     from ystocker.breadth import start_background_thread as _start_breadth_thread
