@@ -2228,6 +2228,36 @@ def _build_housing_prompt(snapshot: dict, lang: str) -> str:
         except (KeyError, TypeError, ValueError):
             pass
 
+    extra: list[str] = []
+    spread = snapshot.get("mortgage_spread") or {}
+    if spread.get("current") is not None:
+        try:
+            extra.append(
+                f"Mortgage spread over the 10-year Treasury: {float(spread['current']):.2f}pp "
+                f"(historical range {float(spread['min']):.2f}-{float(spread['max']):.2f}pp)"
+            )
+        except (TypeError, ValueError):
+            pass
+    ptr = snapshot.get("price_to_rent") or {}
+    if ptr.get("current") is not None:
+        try:
+            extra.append(
+                f"Price-to-rent ratio: {float(ptr['current']):.0f} vs a peak of "
+                f"{float(ptr['peak']):.0f} in {ptr.get('peak_date')} (index, 100 = start of history)"
+            )
+        except (TypeError, ValueError):
+            pass
+    rg = snapshot.get("rent_growth") or {}
+    if rg.get("market") is not None:
+        try:
+            extra.append(
+                f"Rent growth: market asking rents {float(rg['market']):+.1f}% YoY vs "
+                f"CPI rent {float(rg['cpi']):+.1f}% YoY"
+            )
+        except (TypeError, ValueError):
+            pass
+    extra_block = "\n".join(f"  {line}" for line in extra) or "  (unavailable)"
+
     lang_instr = "Respond in Simplified Chinese (中文)." if lang == "zh" else ""
 
     return f"""You are a housing-market analyst. Explain the current state of the US housing market to an investor.
@@ -2239,16 +2269,144 @@ National headline metrics (source noted per line):
 
 Cost to buy: {afford_line}
 
+Valuation and financing context:
+{extra_block}
+
 Largest metros — typical home value and year-over-year change:
 {metro_lines}
 
-In 3-4 concise paragraphs, cover:
+In 4-5 concise paragraphs, cover:
 (1) Where prices and rents stand nationally, and whether the market is heating or cooling.
-(2) Affordability: how the monthly payment compares to its peak, and what is driving it — prices, rates, or both.
-(3) Supply and leverage: what inventory, months of supply, days on market and the price-cut share say about whether buyers or sellers hold the advantage.
-(4) The metro divergence — name specific metros that are rising and falling, and what distinguishes them.
+(2) Affordability: how the monthly payment compares to its peak, and what is driving it — prices, rates, or both. If the mortgage spread over the 10-year Treasury is wide by historical standards, explain that mortgages can stay expensive even as the Fed eases, because they are priced off the 10-year plus that spread.
+(3) Supply and leverage: what inventory, months of supply, days on market, construction and the price-cut share say about whether buyers or sellers hold the advantage.
+(4) The rental market: how market asking rents compare with official CPI rent inflation, noting that CPI covers all tenants including mid-lease and therefore turns roughly a year after the market does.
+(5) The metro divergence — name specific metros that are rising and falling, and what distinguishes them.
 
 Important: Zillow and Redfin measure different transaction universes, so their price levels are not directly comparable; do not present one as contradicting the other. Be specific about the numbers and use the exact figures provided. Do not use bullet points or markdown headers — just flowing prose paragraphs. {lang_instr}"""
+
+
+def _stream_gemini(prompt: str, log_label: str) -> Response:
+    """Stream a Gemini completion as SSE.
+
+    The Fed and FedWatch explain routes each carry their own copy of this
+    plumbing; new endpoints use this helper instead of adding a third.
+    """
+    import os
+    from google import genai
+
+    client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY", ""))
+
+    def generate():
+        try:
+            stream = client.models.generate_content_stream(
+                model="gemini-2.5-flash", contents=prompt
+            )
+            for chunk in stream:
+                text = chunk.text
+                if text:
+                    yield f"data: {json.dumps({'text': text})}\n\n"
+        except Exception as exc:
+            log.error("%s explain error: %s", log_label, exc)
+            yield f"data: {json.dumps({'error': str(exc)})}\n\n"
+        finally:
+            yield "data: [DONE]\n\n"
+
+    return Response(generate(), mimetype="text/event-stream", headers={
+        "Cache-Control": "no-cache",
+        "X-Accel-Buffering": "no",
+    })
+
+
+def _build_housing_series_prompt(
+    chart: str, label: str, unit: str, dates: list, values: list, lang: str
+) -> str:
+    """Prompt for a single housing chart, given its visible time series.
+
+    Sends the endpoints, the extremes, and a thinned sample rather than every
+    observation: some of these series run to 800 monthly points, and pasting
+    them all in wastes context without telling the model anything the shape
+    does not already say.
+    """
+    pairs = [(d, v) for d, v in zip(dates, values) if v is not None]
+    if not pairs:
+        return ""
+
+    def show(v: float) -> str:
+        if unit == "usd":
+            return f"${v:,.0f}"
+        if unit in ("pct", "pp"):
+            return f"{v:.2f}{'pp' if unit == 'pp' else '%'}"
+        if unit == "thousands":
+            return f"{v:,.0f}k units (annual rate)"
+        if unit == "months":
+            return f"{v:.1f} months"
+        return f"{v:,.2f}"
+
+    first_d, first_v = pairs[0]
+    last_d, last_v = pairs[-1]
+    hi = max(pairs, key=lambda p: p[1])
+    lo = min(pairs, key=lambda p: p[1])
+
+    step = max(1, len(pairs) // 24)
+    sample = "\n".join(f"  {d}: {show(v)}" for d, v in pairs[::step][-24:])
+
+    change = ""
+    if unit in ("pct", "pp"):
+        change = f"net change {last_v - first_v:+.2f}pp"
+    elif first_v:
+        change = f"net change {(last_v / first_v - 1) * 100:+.1f}%"
+
+    lang_instr = "Respond in Simplified Chinese (中文)." if lang == "zh" else ""
+
+    return f"""You are a housing-market analyst. Explain this US housing indicator to an investor.
+
+Indicator: {label}
+Period: {first_d} ({show(first_v)}) to {last_d} ({show(last_v)}); {change}
+All-time high in this window: {show(hi[1])} in {hi[0]}
+All-time low in this window: {show(lo[1])} in {lo[0]}
+
+Sampled observations:
+{sample}
+
+In 2-3 concise paragraphs, cover: what this indicator measures and why it matters for housing; what the trend and the current level say relative to the historical range shown; and what it implies for buyers, sellers, or investors from here. Be specific about the numbers given. Do not use bullet points or markdown headers — just flowing prose paragraphs. {lang_instr}"""
+
+
+@bp.route("/api/housing/explain", methods=["POST"])
+def api_housing_explain():
+    """Stream an AI explanation of the housing page or one of its charts.
+
+    Two payload modes, mirroring /api/fed/explain:
+      • ``snapshot``            — the whole page (headline + valuation + metros)
+      • ``dates`` + ``values``  — a single chart's visible range
+    """
+    import os
+
+    body   = request.get_json(force=True, silent=True) or {}
+    chart  = body.get("chart", "")
+    label  = body.get("label", chart)
+    unit   = body.get("unit", "")
+    lang   = body.get("lang", "en")
+    dates  = body.get("dates") or []
+    values = body.get("values") or []
+    snapshot = body.get("snapshot")
+
+    log.info("API housing/explain: chart=%s lang=%s points=%d snapshot=%s",
+             chart, lang, len(dates), bool(snapshot))
+
+    if not os.environ.get("GEMINI_API_KEY"):
+        log.warning("API housing/explain: GEMINI_API_KEY not configured")
+        return jsonify({"error": "GEMINI_API_KEY not configured"}), 503
+
+    if snapshot:
+        prompt = _build_housing_prompt(snapshot, lang)
+    else:
+        if not dates or not values:
+            return jsonify({"error": "No data provided"}), 400
+        prompt = _build_housing_series_prompt(chart, label, unit, dates, values, lang)
+        if not prompt:
+            return jsonify({"error": "No valid data points"}), 400
+
+    return _stream_gemini(prompt, "Housing")
 
 
 def _build_fedwatch_prompt(snapshot: dict, lang: str) -> str:

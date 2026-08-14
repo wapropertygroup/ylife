@@ -13,6 +13,18 @@
 }
 .explain-btn:hover { color: #a78bfa; border-color: #7c3aed; }
 .explain-btn:disabled { opacity: .5; cursor: not-allowed; }
+.range-btn {
+  padding: 3px 9px; border-radius: 6px;
+  border: 1px solid #334155; background: transparent;
+  color: #64748b; font-size: 11px; font-weight: 500;
+  cursor: pointer; transition: color .15s, border-color .15s, background .15s;
+  letter-spacing: .02em;
+}
+.range-btn:hover { color: #cbd5e1; border-color: #64748b; }
+.range-btn.active { color: #a5b4fc; border-color: #6366f1; background: rgba(99,102,241,.12); }
+.card-tools {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px;
+}
 .explain-panel {
   margin-top: 12px; padding: 14px 16px; border-radius: 10px;
   background: rgba(167,139,250,.06); border: 1px solid rgba(167,139,250,.2);
@@ -60,6 +72,33 @@
 .hz-table tr td:last-child   { border-radius: 0 6px 6px 0; }
 .hz-up   { color: #199e70; }
 .hz-down { color: #e66767; }
+/* Section divider — the page now spans prices, rents, supply and credit, so
+   the eye needs anchors between groups of cards. */
+.hz-section {
+  display: flex; align-items: center; gap: 10px;
+  margin: 30px 0 -2px; padding-top: 4px;
+}
+.hz-section h2 {
+  font-size: 11px; font-weight: 700; letter-spacing: .09em;
+  text-transform: uppercase; color: #94a3b8; white-space: nowrap;
+}
+.hz-section .rule { flex: 1; height: 1px; background: #1e293b; }
+/* Layout utilities defined locally on purpose.
+   static/css/tailwind.css is a committed build artifact and there is no
+   package.json to regenerate it, so any utility class not already compiled in
+   silently does nothing — `xl:grid-cols-2`, `gap-x-8` and `gap-y-2` are all
+   absent, which left these grids stuck at one column. Local rules cannot
+   no-op and cannot affect the other seven apps sharing that stylesheet. */
+.hz-2col { display: grid; grid-template-columns: 1fr; gap: 24px; }
+@media (min-width: 1280px) { .hz-2col { grid-template-columns: 1fr 1fr; } }
+.hz-herorow {
+  display: flex; flex-wrap: wrap; align-items: flex-end;
+  column-gap: 32px; row-gap: 8px;
+}
+.hz-headrow {
+  display: flex; flex-wrap: wrap; align-items: flex-start;
+  justify-content: space-between; column-gap: 24px; row-gap: 12px;
+}
 </style>
 
 <!-- ── Header ─────────────────────────────────────────────────────────── -->
@@ -122,6 +161,8 @@
 
 <div class="space-y-6">
 
+  <div class="hz-section"><h2 data-i18n="housing.sec_prices">Prices &amp; Affordability</h2><div class="rule"></div></div>
+
   <!-- ── Affordability — the page's headline insight ───────────────────── -->
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up">
     <div class="flex flex-wrap items-start justify-between gap-2 mb-3">
@@ -134,7 +175,7 @@
       </div>
       <button class="explain-btn" onclick="explainChart('housing')" data-i18n="housing.explain">✦ Explain</button>
     </div>
-    <div class="flex flex-wrap items-end gap-x-8 gap-y-2 mb-4">
+    <div class="hz-herorow mb-4">
       <div>
         <p class="text-xs text-slate-500 mb-0.5" data-i18n="housing.afford_now">Payment today</p>
         <!-- Hero figure: the one number this page leads with. -->
@@ -149,6 +190,35 @@
     <div id="housingExplainPanel" class="explain-panel"></div>
   </div>
 
+  <!-- ── Case-Shiller: the long view, incl. the 2006 bubble ───────────── -->
+  <div class="hz-2col">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
+      <div class="mb-3">
+        <h3 class="text-sm font-semibold text-slate-300">
+          <span data-i18n="housing.cs_title">Case-Shiller National Home Price Index</span>
+          <span class="src-chip src-fred">FRED</span>
+        </h3>
+        <p class="text-xs text-slate-500 mt-0.5" data-i18n="housing.cs_desc">Back to 1987 — long enough to contain the 2006 bubble and the crash that followed, which Zillow's index only partly covers.</p>
+      </div>
+      <div class="chart-container" style="height:220px"><canvas id="hzCaseShillerChart"></canvas></div>
+    </div>
+
+    <!-- ── Price-to-rent: the valuation question ───────────────────────── -->
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
+      <div class="mb-3">
+        <h3 class="text-sm font-semibold text-slate-300">
+          <span data-i18n="housing.ptr_title">Price-to-Rent Ratio</span>
+          <span class="src-chip src-fred">FRED</span>
+        </h3>
+        <p class="text-xs text-slate-500 mt-0.5">
+          <span data-i18n="housing.ptr_desc">Home prices divided by CPI rent, indexed to 100 at the start. Above its own history means buying is expensive relative to renting.</span>
+          <span id="hzPtrPeak" class="text-slate-400"></span>
+        </p>
+      </div>
+      <div class="chart-container" style="height:220px"><canvas id="hzPriceToRentChart"></canvas></div>
+    </div>
+  </div>
+
   <!-- ── Home values vs rents, indexed ─────────────────────────────────── -->
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
     <div class="mb-3">
@@ -159,6 +229,69 @@
       <p class="text-xs text-slate-500 mt-0.5" data-i18n="housing.idx_desc">Both indexed to 100 at their first common month, so the two sit on one scale and the gap is directly readable.</p>
     </div>
     <div class="chart-container" style="height:240px"><canvas id="hzIndexChart"></canvas></div>
+  </div>
+
+  <div class="hz-section"><h2 data-i18n="housing.sec_rents">Rental Market</h2><div class="rule"></div></div>
+
+  <!-- ── Market rents lead official rent inflation ─────────────────────── -->
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
+    <div class="mb-3">
+      <h3 class="text-sm font-semibold text-slate-300">
+        <span data-i18n="housing.rentgrowth_title">Market Rents vs Official Rent Inflation</span>
+        <span class="src-chip src-zillow">Zillow</span> <span class="src-chip src-fred">FRED</span>
+      </h3>
+      <p class="text-xs text-slate-500 mt-0.5" data-i18n="housing.rentgrowth_desc">Year-over-year growth in asking rents for new tenants (Zillow) against CPI rent, which covers everyone including mid-lease tenants. CPI turns roughly a year after the market does, so the gap is a lead indicator rather than a contradiction.</p>
+    </div>
+    <div class="chart-container" style="height:240px"><canvas id="hzRentGrowthChart"></canvas></div>
+  </div>
+
+  <!-- ── Vacancy: is there slack? ──────────────────────────────────────── -->
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
+    <div class="mb-3">
+      <h3 class="text-sm font-semibold text-slate-300">
+        <span data-i18n="housing.vacancy_title">Rental &amp; Homeowner Vacancy Rates</span>
+        <span class="src-chip src-fred">FRED</span>
+      </h3>
+      <p class="text-xs text-slate-500 mt-0.5" data-i18n="housing.vacancy_desc">Share of units sitting empty and available, quarterly since 1956. Rising rental vacancy caps rent growth; homeowner vacancy near record lows is why prices have held up despite weak sales.</p>
+    </div>
+    <div class="chart-container" style="height:240px"><canvas id="hzVacancyChart"></canvas></div>
+  </div>
+
+  <div class="hz-section"><h2 data-i18n="housing.sec_supply">Supply &amp; Construction</h2><div class="rule"></div></div>
+
+  <!-- ── Pipeline: permits lead starts lead completions ────────────────── -->
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
+    <div class="mb-3">
+      <h3 class="text-sm font-semibold text-slate-300">
+        <span data-i18n="housing.pipeline_title">Construction Pipeline</span>
+        <span class="src-chip src-fred">FRED</span>
+      </h3>
+      <p class="text-xs text-slate-500 mt-0.5" data-i18n="housing.pipeline_desc">Permits, starts and completions in thousands of units at an annual rate. They run in that order, so permits turning down is the earliest warning of a construction slowdown.</p>
+    </div>
+    <div class="chart-container" style="height:240px"><canvas id="hzPipelineChart"></canvas></div>
+  </div>
+
+  <div class="hz-2col">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
+      <div class="mb-3">
+        <h3 class="text-sm font-semibold text-slate-300">
+          <span data-i18n="housing.msn_title">Months' Supply of New Homes</span>
+          <span class="src-chip src-fred">FRED</span>
+        </h3>
+        <p class="text-xs text-slate-500 mt-0.5" data-i18n="housing.msn_desc">How long the unsold new-home inventory would last at the current sales pace. Six months is the conventional balance point; above that, builders discount.</p>
+      </div>
+      <div class="chart-container" style="height:200px"><canvas id="hzMonthsSupplyChart"></canvas></div>
+    </div>
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
+      <div class="mb-3">
+        <h3 class="text-sm font-semibold text-slate-300">
+          <span data-i18n="housing.nhs_title">New Single-Family Home Sales</span>
+          <span class="src-chip src-fred">FRED</span>
+        </h3>
+        <p class="text-xs text-slate-500 mt-0.5" data-i18n="housing.nhs_desc">Thousands of units at an annual rate, back to 1963. New homes are a small share of sales but the part that responds fastest to rates.</p>
+      </div>
+      <div class="chart-container" style="height:200px"><canvas id="hzNewSalesChart"></canvas></div>
+    </div>
   </div>
 
   <!-- ── Supply: inventory & new listings ──────────────────────────────── -->
@@ -184,6 +317,53 @@
     </div>
     <div class="chart-container" style="height:240px"><canvas id="hzPowerChart"></canvas></div>
   </div>
+
+  <div class="hz-section"><h2 data-i18n="housing.sec_rates">Mortgage Rates &amp; Credit</h2><div class="rule"></div></div>
+
+  <!-- ── 30y vs 15y ────────────────────────────────────────────────────── -->
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
+    <div class="mb-3">
+      <h3 class="text-sm font-semibold text-slate-300">
+        <span data-i18n="housing.mortrates_title">Mortgage Rates: 30-Year vs 15-Year</span>
+        <span class="src-chip src-fred">FRED</span>
+      </h3>
+      <p class="text-xs text-slate-500 mt-0.5" data-i18n="housing.mortrates_desc">Weekly Freddie Mac survey averages. The gap between the two is what a borrower pays for the option to stretch repayment over another fifteen years.</p>
+    </div>
+    <div class="chart-container" style="height:240px"><canvas id="hzMortRatesChart"></canvas></div>
+  </div>
+
+  <!-- ── The spread: why Fed cuts don't reach mortgages 1:1 ────────────── -->
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
+    <div class="hz-headrow mb-3">
+      <div class="max-w-3xl">
+        <h3 class="text-sm font-semibold text-slate-300">
+          <span data-i18n="housing.spread_title">Mortgage Spread over the 10-Year Treasury</span>
+          <span class="src-chip src-fred">FRED</span>
+        </h3>
+        <p class="text-xs text-slate-500 mt-0.5" data-i18n="housing.spread_desc">Mortgages are priced off the 10-year, not the funds rate. This spread separates "rates are high because the Fed is tight" from "mortgage credit itself is expensive" — which is why the easing priced on the Rates page does not pass through one-for-one.</p>
+      </div>
+      <div class="shrink-0 sm:text-right">
+        <p class="text-xs text-slate-500 mb-0.5" data-i18n="housing.spread_now">Current spread</p>
+        <p class="text-2xl font-semibold text-slate-100"><span id="hzSpreadNow">—</span></p>
+        <p class="text-[11px] text-slate-500"><span data-i18n="housing.spread_range">range</span> <span id="hzSpreadRange" class="text-slate-400">—</span></p>
+      </div>
+    </div>
+    <div class="chart-container" style="height:240px"><canvas id="hzSpreadChart"></canvas></div>
+  </div>
+
+  <!-- ── Credit stress ─────────────────────────────────────────────────── -->
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
+    <div class="mb-3">
+      <h3 class="text-sm font-semibold text-slate-300">
+        <span data-i18n="housing.delinq_title">Single-Family Mortgage Delinquency Rate</span>
+        <span class="src-chip src-fred">FRED</span>
+      </h3>
+      <p class="text-xs text-slate-500 mt-0.5" data-i18n="housing.delinq_desc">Share of residential mortgages at commercial banks that are past due, quarterly since 1991. The 2010 peak above 11% is the reference point for judging any current uptick.</p>
+    </div>
+    <div class="chart-container" style="height:240px"><canvas id="hzDelinqChart"></canvas></div>
+  </div>
+
+  <div class="hz-section"><h2 data-i18n="housing.sec_metros">Metro Detail</h2><div class="rule"></div></div>
 
   <!-- ── Metro YoY comparison ──────────────────────────────────────────── -->
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
@@ -296,27 +476,216 @@ const _explainData = {};
   const fmt = (v, unit) => {
     if (v == null) return '—';
     switch (unit) {
-      case 'usd':     return usd(v);
-      case 'count':   return cnt(v);
-      case 'pct_dec': return pctDec(v);
-      case 'pct':     return v.toFixed(2) + '%';
-      case 'days':    return Math.round(v) + 'd';
-      case 'months':  return v.toFixed(1) + ' mo';
-      default:        return String(v);
+      case 'usd':       return usd(v);
+      case 'count':     return cnt(v);
+      case 'units':     return cnt(v);
+      case 'pct_dec':   return pctDec(v);
+      case 'pct':       return v.toFixed(2) + '%';
+      case 'pp':        return v.toFixed(2) + 'pp';
+      case 'days':      return Math.round(v) + 'd';
+      case 'months':    return v.toFixed(1) + ' mo';
+      // Thousands of units at an annual rate — the FRED convention for
+      // starts/permits/sales. 1427 means 1.43M homes/yr, so show it as such.
+      case 'thousands': return (v / 1000).toFixed(2) + 'M';
+      case 'index':     return Math.round(v).toLocaleString('en-US');
+      default:          return String(v);
     }
   };
   // Month-end stamps ("2026-06-30") read better as "Jun '26" on an axis.
   const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const axisMonth = d => !d ? '' : MON[+d.slice(5, 7) - 1] + " '" + d.slice(2, 4);
+  // Axis/tooltip formatters. Declared here with the rest rather than beside
+  // their first use: `const` is hoisted into a temporal dead zone, so a chart
+  // defined earlier in source order that referenced one of these would throw.
+  const pp  = v => (v == null ? '—' : v.toFixed(2) + 'pp');
+  const pc  = v => (v == null ? '—' : v.toFixed(1) + '%');
+  const num = v => (v == null ? '—' : Math.round(v).toLocaleString('en-US'));
 
   const KPI_ORDER = [
     ['zhvi',                    'housing.kpi_zhvi',      'Typical home value'],
     ['zori',                    'housing.kpi_zori',      'Typical asking rent'],
     ['mortgage_rate',           'housing.kpi_rate',      '30-yr mortgage'],
+    ['mortgage_spread',         'housing.kpi_spread',    'Spread over 10-yr'],
+    ['fred_case_shiller',       'housing.kpi_cs',        'Case-Shiller index'],
     ['redfin_months_of_supply', 'housing.kpi_supply',    'Months of supply'],
     ['redfin_median_dom',       'housing.kpi_dom',       'Days on market'],
     ['price_cuts',              'housing.kpi_cuts',      'Listings cutting price'],
+    ['fred_rental_vacancy',     'housing.kpi_vacancy',   'Rental vacancy'],
+    ['fred_homeownership',      'housing.kpi_ownership', 'Homeownership rate'],
+    ['fred_starts',             'housing.kpi_starts',    'Housing starts'],
+    ['fred_delinquency',        'housing.kpi_delinq',    'Mortgage delinquency'],
   ];
+
+  // ── shared line-chart builder ────────────────────────────────────────
+  // Fourteen charts on one page; hand-rolling each one is how fed.html got to
+  // 3,000 lines. Series are {key|dates|values, label, color, fill, dash}.
+  const SERIES_COLORS = [C_BLUE, C_ORANGE, '#199e70'];
+
+  // Range presets, in months of lookback (0 = everything).
+  const RANGE_LABEL = m => (m === 0 ? (I18n.t('housing.range_all') || 'All')
+                          : m % 12 === 0 ? (m / 12) + 'Y' : m + 'M');
+
+  function autoRanges(span) {
+    if (span > 300) return [60, 120, 240, 0];
+    if (span > 120) return [12, 60, 120, 0];
+    if (span > 48)  return [12, 36, 60, 0];
+    return [12, 24, 0];
+  }
+
+  // Slice by calendar month rather than by index: these series mix weekly,
+  // monthly and quarterly frequencies, so "last 60 observations" would mean
+  // five years on one chart and fifteen on another.
+  function rangeStart(labels, months) {
+    if (!months) return 0;
+    const last = labels[labels.length - 1];
+    const total = (+last.slice(0, 4)) * 12 + (+last.slice(5, 7)) - months;
+    const cutoff = `${Math.floor((total - 1) / 12)}-${String(((total - 1) % 12) + 1).padStart(2, '0')}`;
+    const i = labels.findIndex(d => d.slice(0, 7) >= cutoff);
+    return i < 0 ? 0 : i;
+  }
+
+  function lineChart(canvasId, series, opts) {
+    opts = opts || {};
+    const el = document.getElementById(canvasId);
+    if (!el) return null;
+    const live = series.filter(s => s && s.values && s.values.some(v => v != null));
+    if (!live.length) { console.warn(`Housing: ${canvasId} has no data — skipped`); return null; }
+
+    // All series on a chart must share one x axis, so take the longest date
+    // list and index the others onto it by date.
+    const base = live.reduce((a, b) => (b.dates.length > a.dates.length ? b : a), live[0]);
+    const labels = base.dates;
+    const align = s => {
+      if (s.dates === labels) return s.values;
+      const m = new Map(s.dates.map((d, i) => [d, s.values[i]]));
+      return labels.map(d => (m.has(d) ? m.get(d) : null));
+    };
+
+    const fmtV = opts.fmt || (v => v);
+    const full = { labels, data: live.map(align) };
+
+    const chart = new Chart(el, {
+      type: 'line',
+      data: {
+        labels: labels.slice(),
+        datasets: live.map((s, i) => {
+          const color = s.color || SERIES_COLORS[i % SERIES_COLORS.length];
+          return {
+            label: s.label,
+            data: full.data[i].slice(),
+            borderColor: color,
+            backgroundColor: s.fill ? (opts.fillRgba || 'rgba(57,135,229,.10)') : 'transparent',
+            borderWidth: 2,
+            borderDash: s.dash || undefined,
+            pointRadius: 0,
+            pointHoverRadius: 4,
+            fill: !!s.fill,
+            tension: .25,
+            spanGaps: true,
+          };
+        }),
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          // A single series needs no legend box — the card title names it.
+          legend: live.length > 1
+            ? { display: true, labels: { color: '#94a3b8', boxWidth: 12, font: { size: 11 } } }
+            : { display: false },
+          tooltip: {
+            mode: 'index', intersect: false,
+            callbacks: {
+              label: c => c.raw == null ? ''
+                : ` ${live.length > 1 ? c.dataset.label + ': ' : ''}${fmtV(c.raw)}`,
+            },
+          },
+          ...(opts.plugins || {}),
+        },
+        scales: {
+          x: { grid: { color: gridCol },
+               ticks: { color: tickCol, maxTicksLimit: opts.xTicks || 8, maxRotation: 0,
+                        callback(v) { return axisMonth(this.getLabelForValue(v)); } } },
+          y: { grid: { color: gridCol },
+               ticks: { color: tickCol, callback: v => fmtV(v) },
+               ...(opts.yMin != null ? { min: opts.yMin } : {}),
+               ...(opts.beginAtZero ? { beginAtZero: true } : {}) },
+        },
+        interaction: { mode: 'index', intersect: false },
+      },
+    });
+
+    // Explain always describes what is currently on screen, so it is
+    // re-registered whenever the range changes.
+    const explainLabel = opts.explainLabel || live[0].label;
+    const register = from => {
+      if (opts.explain === false) return;
+      _explainData[canvasId] = {
+        label: explainLabel,
+        unit: opts.unit || '',
+        dates: full.labels.slice(from),
+        values: full.data[0].slice(from),
+      };
+    };
+
+    const applyRange = months => {
+      const from = rangeStart(full.labels, months);
+      chart.data.labels = full.labels.slice(from);
+      chart.data.datasets.forEach((ds, i) => { ds.data = full.data[i].slice(from); });
+      chart.update();
+      register(from);
+    };
+
+    _buildCardTools(el, {
+      chartId: canvasId,
+      ranges: opts.ranges === false ? null : (opts.ranges || autoRanges(labels.length)),
+      defaultRange: opts.defaultRange || 0,
+      explain: opts.explain !== false,
+      onRange: applyRange,
+    });
+
+    if (opts.defaultRange) applyRange(opts.defaultRange);
+    else register(0);
+    return chart;
+  }
+
+  // Injects the range buttons and the explain panel around a chart's
+  // container. Anchoring to `.chart-container` keeps this independent of each
+  // card's header markup, so adding a chart needs no extra HTML.
+  function _buildCardTools(canvas, cfg) {
+    const wrap = canvas.closest('.chart-container');
+    if (!wrap) return;
+
+    const bar = document.createElement('div');
+    bar.className = 'card-tools justify-end mb-2';
+
+    (cfg.ranges || []).forEach(months => {
+      const b = document.createElement('button');
+      b.className = 'range-btn' + (months === cfg.defaultRange ? ' active' : '');
+      b.textContent = RANGE_LABEL(months);
+      b.addEventListener('click', () => {
+        bar.querySelectorAll('.range-btn').forEach(x => x.classList.remove('active'));
+        b.classList.add('active');
+        cfg.onRange(months);
+      });
+      bar.appendChild(b);
+    });
+
+    if (cfg.explain) {
+      const e = document.createElement('button');
+      e.className = 'explain-btn';
+      e.setAttribute('data-i18n', 'housing.explain');
+      e.textContent = I18n.t('housing.explain') || '✦ Explain';
+      e.setAttribute('onclick', `explainChart('${cfg.chartId}')`);
+      bar.appendChild(e);
+
+      const panel = document.createElement('div');
+      panel.id = cfg.chartId + 'ExplainPanel';
+      panel.className = 'explain-panel';
+      wrap.parentNode.insertBefore(panel, wrap.nextSibling);
+    }
+
+    if (bar.childElementCount) wrap.parentNode.insertBefore(bar, wrap);
+  }
   const SRC_CLASS = { Zillow: 'src-zillow', Redfin: 'src-redfin', FRED: 'src-fred' };
 
   // ── KPI tiles ────────────────────────────────────────────────────────
@@ -421,6 +790,24 @@ const _explainData = {};
           interaction: { mode: 'index', intersect: false },
         },
       });
+
+      // Range buttons only. This card's header already carries an Explain
+      // button that covers the whole page in snapshot mode, so injecting a
+      // second per-chart one here would just be confusing.
+      _buildCardTools(document.getElementById('hzAffordChart'), {
+        chartId: 'hzAffordChart',
+        ranges: autoRanges(a.dates.length),
+        defaultRange: 0,
+        explain: false,
+        onRange: months => {
+          const ch = Chart.getChart(document.getElementById('hzAffordChart'));
+          if (!ch) return;
+          const from = rangeStart(a.dates, months);
+          ch.data.labels = a.dates.slice(from);
+          ch.data.datasets[0].data = a.payment.slice(from);
+          ch.update();
+        },
+      });
     }
   } catch(e) { console.warn('Housing chart hzAffordChart failed:', e); }
 
@@ -435,118 +822,155 @@ const _explainData = {};
       const iH = zh.dates.indexOf(start), iO = zo.dates.indexOf(start);
       const baseH = zh.values[iH], baseO = zo.values[iO];
       const labels = zo.dates.slice(iO);
-      const idxH = zh.dates.slice(iH).map(( _, k) => {
+      const idxH = labels.map((d, k) => {
         const v = zh.values[iH + k];
         return v == null ? null : +(v / baseH * 100).toFixed(1);
       });
       const idxO = zo.values.slice(iO).map(v => v == null ? null : +(v / baseO * 100).toFixed(1));
 
-      new Chart(document.getElementById('hzIndexChart'), {
-        type: 'line',
-        data: {
-          labels,
-          datasets: [
-            { label: (I18n.t('housing.series_values') || 'Home values') + ' (ZHVI)',
-              data: idxH.slice(0, labels.length), borderColor: C_BLUE,
-              backgroundColor: 'rgba(57,135,229,.10)', borderWidth: 2,
-              pointRadius: 0, pointHoverRadius: 4, fill: true, tension: .25, spanGaps: true },
-            { label: (I18n.t('housing.series_rents') || 'Rents') + ' (ZORI)',
-              data: idxO, borderColor: C_ORANGE, backgroundColor: 'transparent',
-              borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, fill: false, tension: .25, spanGaps: true },
-          ],
-        },
-        options: {
-          responsive: true, maintainAspectRatio: false,
-          plugins: {
-            legend: { display: true, labels: { color: '#94a3b8', boxWidth: 12, font: { size: 11 } } },
-            tooltip: { mode: 'index', intersect: false,
-              callbacks: { label: c => c.raw == null ? '' : ` ${c.dataset.label}: ${c.raw}` } },
-          },
-          scales: {
-            x: { grid: { color: gridCol },
-                 ticks: { color: tickCol, maxTicksLimit: 8, maxRotation: 0,
-                          callback(v) { return axisMonth(this.getLabelForValue(v)); } } },
-            y: { grid: { color: gridCol }, ticks: { color: tickCol } },
-          },
-          interaction: { mode: 'index', intersect: false },
-        },
-      });
+      lineChart('hzIndexChart', [
+        { dates: labels, values: idxH, color: C_BLUE, fill: true,
+          label: (I18n.t('housing.series_values') || 'Home values') + ' (ZHVI)' },
+        { dates: labels, values: idxO, color: C_ORANGE,
+          label: (I18n.t('housing.series_rents') || 'Rents') + ' (ZORI)' },
+      ], { fmt: v => (v == null ? '—' : Math.round(v)), unit: 'index',
+           explainLabel: 'US home values (Zillow ZHVI) vs rents (ZORI), both indexed to 100' });
     }
   } catch(e) { console.warn('Housing chart hzIndexChart failed:', e); }
 
   // ── Inventory & new listings (both counts → one axis) ────────────────
   try {
-    const inv = R.inventory, nl = R.new_listings;
-    if (inv && nl) {
-      new Chart(document.getElementById('hzSupplyChart'), {
-        type: 'line',
-        data: {
-          labels: inv.dates,
-          datasets: [
-            { label: I18n.t('housing.series_inventory') || 'Inventory',
-              data: inv.values, borderColor: C_BLUE, backgroundColor: 'rgba(57,135,229,.10)',
-              borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, fill: true, tension: .25, spanGaps: true },
-            { label: I18n.t('housing.series_new_listings') || 'New listings',
-              data: nl.values, borderColor: C_ORANGE, backgroundColor: 'transparent',
-              borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, fill: false, tension: .25, spanGaps: true },
-          ],
-        },
-        options: {
-          responsive: true, maintainAspectRatio: false,
-          plugins: {
-            legend: { display: true, labels: { color: '#94a3b8', boxWidth: 12, font: { size: 11 } } },
-            tooltip: { mode: 'index', intersect: false,
-              callbacks: { label: c => c.raw == null ? '' : ` ${c.dataset.label}: ${cnt(c.raw)}` } },
-          },
-          scales: {
-            x: { grid: { color: gridCol },
-                 ticks: { color: tickCol, maxTicksLimit: 8, maxRotation: 0,
-                          callback(v) { return axisMonth(this.getLabelForValue(v)); } } },
-            y: { grid: { color: gridCol }, ticks: { color: tickCol, callback: v => cnt(v) } },
-          },
-          interaction: { mode: 'index', intersect: false },
-        },
-      });
-    }
+    lineChart('hzSupplyChart', [
+      { dates: R.inventory?.dates, values: R.inventory?.values, color: C_BLUE, fill: true,
+        label: I18n.t('housing.series_inventory') || 'Inventory' },
+      { dates: R.new_listings?.dates, values: R.new_listings?.values, color: C_ORANGE,
+        label: I18n.t('housing.series_new_listings') || 'New listings' },
+    ], { fmt: cnt, unit: 'count',
+         explainLabel: 'US homes for sale (inventory) vs new listings each month' });
   } catch(e) { console.warn('Housing chart hzSupplyChart failed:', e); }
 
   // ── Price drops vs sold above list (both shares → one axis) ──────────
   try {
     const pd = R.price_drops, sal = R.sold_above_list;
     if (pd && sal) {
-      new Chart(document.getElementById('hzPowerChart'), {
-        type: 'line',
-        data: {
-          labels: pd.dates,
-          datasets: [
-            { label: I18n.t('housing.series_drops') || 'Cut their price',
-              data: pd.values.map(v => v == null ? null : +(v * 100).toFixed(1)),
-              borderColor: C_ORANGE, backgroundColor: 'transparent',
-              borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, fill: false, tension: .25, spanGaps: true },
-            { label: I18n.t('housing.series_above') || 'Sold above asking',
-              data: sal.values.map(v => v == null ? null : +(v * 100).toFixed(1)),
-              borderColor: C_BLUE, backgroundColor: 'rgba(57,135,229,.10)',
-              borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, fill: true, tension: .25, spanGaps: true },
-          ],
-        },
-        options: {
-          responsive: true, maintainAspectRatio: false,
-          plugins: {
-            legend: { display: true, labels: { color: '#94a3b8', boxWidth: 12, font: { size: 11 } } },
-            tooltip: { mode: 'index', intersect: false,
-              callbacks: { label: c => c.raw == null ? '' : ` ${c.dataset.label}: ${c.raw}%` } },
-          },
-          scales: {
-            x: { grid: { color: gridCol },
-                 ticks: { color: tickCol, maxTicksLimit: 8, maxRotation: 0,
-                          callback(v) { return axisMonth(this.getLabelForValue(v)); } } },
-            y: { grid: { color: gridCol }, ticks: { color: tickCol, callback: v => v + '%' } },
-          },
-          interaction: { mode: 'index', intersect: false },
-        },
-      });
+      lineChart('hzPowerChart', [
+        { dates: pd.dates, values: pd.values.map(v => v == null ? null : +(v * 100).toFixed(1)),
+          color: C_ORANGE, label: I18n.t('housing.series_drops') || 'Cut their price' },
+        { dates: sal.dates, values: sal.values.map(v => v == null ? null : +(v * 100).toFixed(1)),
+          color: C_BLUE, fill: true, label: I18n.t('housing.series_above') || 'Sold above asking' },
+      ], { fmt: pc, unit: 'pct',
+           explainLabel: 'Share of US listings cutting price vs share selling above asking' });
     }
   } catch(e) { console.warn('Housing chart hzPowerChart failed:', e); }
+
+  // ── FRED-backed charts ───────────────────────────────────────────────
+  const F = data.fred || {};
+  // Adapter: FRED blocks carry their own label/unit, and `chartable` is false
+  // for series whose history was truncated upstream (see _CHARTABLE_MIN).
+  const fs = (key, label, opts) => {
+    const b = F[key];
+    if (!b || !b.chartable) return null;
+    return { dates: b.dates, values: b.values, label: label || b.label, ...(opts || {}) };
+  };
+
+  try {
+    lineChart('hzCaseShillerChart',
+      [fs('case_shiller', I18n.t('housing.series_cs') || 'Case-Shiller index', { fill: true })],
+      { fmt: v => (v == null ? '—' : Math.round(v)), xTicks: 7, unit: 'index',
+        explainLabel: 'Case-Shiller US National Home Price Index' });
+  } catch(e) { console.warn('Housing chart hzCaseShillerChart failed:', e); }
+
+  try {
+    const ptr = data.price_to_rent;
+    if (ptr) {
+      const el = document.getElementById('hzPtrPeak');
+      if (el) el.textContent = `${I18n.t('housing.ptr_peak') || 'Peak'} ${ptr.peak.toFixed(0)} · ${axisMonth(ptr.peak_date + '-01')}; ${I18n.t('housing.ptr_now') || 'now'} ${ptr.values[ptr.values.length - 1].toFixed(0)}.`;
+      lineChart('hzPriceToRentChart',
+        [{ dates: ptr.dates, values: ptr.values,
+           label: I18n.t('housing.series_ptr') || 'Price-to-rent (index)', color: C_INDIGO, fill: true }],
+        { fmt: v => (v == null ? '—' : Math.round(v)), xTicks: 7, fillRgba: 'rgba(99,102,241,.10)',
+          unit: 'index', explainLabel: 'Price-to-rent ratio (home prices / CPI rent, indexed to 100)' });
+    }
+  } catch(e) { console.warn('Housing chart hzPriceToRentChart failed:', e); }
+
+  try {
+    const rg = data.rent_growth;
+    if (rg) {
+      lineChart('hzRentGrowthChart', [
+        { dates: rg.dates, values: rg.market, color: C_BLUE, fill: true,
+          label: I18n.t('housing.series_market_rent') || 'Market asking rents (Zillow ZORI)' },
+        { dates: rg.dates, values: rg.cpi, color: C_ORANGE,
+          label: I18n.t('housing.series_cpi_rent') || 'CPI rent of primary residence' },
+      ], { fmt: pc, unit: 'pct',
+           explainLabel: 'Market asking-rent growth (Zillow ZORI) vs CPI rent inflation, YoY' });
+    }
+  } catch(e) { console.warn('Housing chart hzRentGrowthChart failed:', e); }
+
+  try {
+    lineChart('hzVacancyChart', [
+      fs('rental_vacancy', I18n.t('housing.series_rental_vac') || 'Rental vacancy rate', { fill: true }),
+      fs('owner_vacancy',  I18n.t('housing.series_owner_vac')  || 'Homeowner vacancy rate', { color: C_ORANGE }),
+    ], { fmt: pc, beginAtZero: true, unit: 'pct',
+         explainLabel: 'US rental and homeowner vacancy rates' });
+  } catch(e) { console.warn('Housing chart hzVacancyChart failed:', e); }
+
+  try {
+    lineChart('hzPipelineChart', [
+      fs('permits',     I18n.t('housing.series_permits')     || 'Permits'),
+      fs('starts',      I18n.t('housing.series_starts')      || 'Starts'),
+      fs('completions', I18n.t('housing.series_completions') || 'Completions'),
+    ], { fmt: num, xTicks: 7, unit: 'thousands',
+         // 67 years of monthly SAAR at once is three tangled lines; open on
+         // 20 years and let the reader zoom out.
+         defaultRange: 240,
+         explainLabel: 'US housing permits, starts and completions' });
+  } catch(e) { console.warn('Housing chart hzPipelineChart failed:', e); }
+
+  try {
+    lineChart('hzMonthsSupplyChart',
+      [fs('months_supply_new', I18n.t('housing.series_months_supply') || "Months' supply", { fill: true })],
+      { fmt: v => (v == null ? '—' : v.toFixed(1)), xTicks: 6, unit: 'months', defaultRange: 240,
+        explainLabel: "Months' supply of new homes in the US" });
+  } catch(e) { console.warn('Housing chart hzMonthsSupplyChart failed:', e); }
+
+  try {
+    lineChart('hzNewSalesChart',
+      [fs('new_home_sales', I18n.t('housing.series_new_sales') || 'New home sales', { fill: true })],
+      { fmt: num, xTicks: 6, unit: 'thousands', defaultRange: 240,
+        explainLabel: 'New single-family home sales in the US' });
+  } catch(e) { console.warn('Housing chart hzNewSalesChart failed:', e); }
+
+  try {
+    lineChart('hzMortRatesChart', [
+      fs('mortgage_30', I18n.t('housing.series_m30') || '30-year fixed', { fill: true }),
+      fs('mortgage_15', I18n.t('housing.series_m15') || '15-year fixed', { color: C_ORANGE }),
+    ], { fmt: v => (v == null ? '—' : v.toFixed(2) + '%'), xTicks: 7, unit: 'pct',
+         explainLabel: '30-year and 15-year fixed mortgage rates' });
+  } catch(e) { console.warn('Housing chart hzMortRatesChart failed:', e); }
+
+  try {
+    const sp = data.mortgage_spread;
+    if (sp) {
+      const now = sp.spread[sp.spread.length - 1];
+      const lo = Math.min(...sp.spread), hi = Math.max(...sp.spread);
+      const nowEl = document.getElementById('hzSpreadNow');
+      const rngEl = document.getElementById('hzSpreadRange');
+      if (nowEl) nowEl.textContent = pp(now);
+      if (rngEl) rngEl.textContent = `${lo.toFixed(2)}–${hi.toFixed(2)}pp`;
+      lineChart('hzSpreadChart',
+        [{ dates: sp.dates, values: sp.spread, color: C_INDIGO, fill: true,
+           label: I18n.t('housing.series_spread') || 'Spread (30-yr mortgage − 10-yr Treasury)' }],
+        { fmt: pp, xTicks: 7, fillRgba: 'rgba(99,102,241,.10)', unit: 'pp',
+          explainLabel: '30-year mortgage rate minus the 10-year Treasury yield' });
+    }
+  } catch(e) { console.warn('Housing chart hzSpreadChart failed:', e); }
+
+  try {
+    lineChart('hzDelinqChart',
+      [fs('delinquency', I18n.t('housing.series_delinq') || 'Delinquency rate', { fill: true })],
+      { fmt: pc, xTicks: 7, beginAtZero: true, unit: 'pct',
+        explainLabel: 'US single-family mortgage delinquency rate' });
+  } catch(e) { console.warn('Housing chart hzDelinqChart failed:', e); }
 
   // ── Metro YoY horizontal bars ────────────────────────────────────────
   try {
@@ -758,6 +1182,19 @@ const _explainData = {};
         home_value:     data.affordability.home_value[data.affordability.home_value.length - 1],
         peak_payment:   Math.max(...data.affordability.payment),
       } : null,
+      mortgage_spread: data.mortgage_spread ? {
+        current: data.mortgage_spread.spread[data.mortgage_spread.spread.length - 1],
+        min: Math.min(...data.mortgage_spread.spread),
+        max: Math.max(...data.mortgage_spread.spread),
+      } : null,
+      price_to_rent: data.price_to_rent ? {
+        current: data.price_to_rent.values[data.price_to_rent.values.length - 1],
+        peak: data.price_to_rent.peak, peak_date: data.price_to_rent.peak_date,
+      } : null,
+      rent_growth: data.rent_growth ? {
+        market: data.rent_growth.market[data.rent_growth.market.length - 1],
+        cpi: data.rent_growth.cpi[data.rent_growth.cpi.length - 1],
+      } : null,
       metros: metros.slice(0, 15).map(m => ({
         metro: m.metro, zhvi: m.zhvi, zhvi_yoy: m.zhvi_yoy,
         rent: m.zori, days_to_pending: m.days_to_pending,
@@ -793,10 +1230,14 @@ function _runExplain(chart, lang) {
     btn.textContent = lang === 'zh' ? '⏳ 分析中…' : '⏳ Thinking…';
   }
 
-  fetch('/api/fed/explain', {
+  fetch('/api/housing/explain', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chart, snapshot: d.snapshot, label: d.label, lang }),
+    // Snapshot mode explains the whole page; series mode explains one chart's
+    // currently visible range.
+    body: JSON.stringify(d.snapshot
+      ? { chart, snapshot: d.snapshot, label: d.label, lang }
+      : { chart, dates: d.dates, values: d.values, label: d.label, unit: d.unit, lang }),
   }).then(resp => {
     if (!resp.ok) return resp.json().then(e => { throw new Error(e.error || resp.statusText); });
     let firstChunk = true;
@@ -851,7 +1292,7 @@ function explainChart(chart) {
     return;
   }
   const d = _explainData[chart];
-  if (!d || !d.snapshot) {
+  if (!d || (!d.snapshot && !(d.dates && d.dates.length))) {
     panel.textContent = 'No data available to explain.';
     panel.classList.add('visible');
     return;

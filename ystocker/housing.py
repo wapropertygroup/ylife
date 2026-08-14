@@ -151,6 +151,71 @@ _REDFIN_COLS = {
     "off_market_2wk":    "OFF_MARKET_IN_TWO_WEEKS",
 }
 
+# ---------------------------------------------------------------------------
+# FRED series — the rental, construction, mortgage and credit context that
+# neither Zillow nor Redfin publishes.
+#
+# `keep` caps how many trailing observations reach the payload. Series whose
+# whole point is the long view (Case-Shiller back to 1987, delinquencies across
+# 2008) keep everything; the weekly mortgage series would otherwise ship ~2,900
+# points to draw a line a few hundred pixels wide.
+#
+# Every id here was checked for a *current* last observation, not just a 200.
+# Dead FRED series keep serving well-formed CSV for years — see the MBST /
+# WASDRAL note in CLAUDE.md — so `_fetch_fred_series` re-checks staleness at
+# runtime and drops anything that has gone quiet.
+# ---------------------------------------------------------------------------
+FRED_SERIES: dict[str, dict[str, Any]] = {
+    # ── prices ──
+    "case_shiller":  {"id": "CSUSHPINSA",    "label": "Case-Shiller US National Home Price Index",
+                      "unit": "index", "freq": "M", "keep": None, "max_age_days": 200},
+    # ── rents (official inflation measures) ──
+    # Charted only as the derived YoY comparison against Zillow, so the raw
+    # index never reaches the client — see `ship`.
+    "rent_cpi":      {"id": "CUSR0000SEHA",  "label": "CPI: Rent of Primary Residence",
+                      "unit": "index", "freq": "M", "keep": None, "max_age_days": 120,
+                      "ship": False},
+    # ── rental / ownership balance ──
+    "rental_vacancy":  {"id": "RRVRUSQ156N", "label": "Rental Vacancy Rate",
+                        "unit": "pct", "freq": "Q", "keep": None, "max_age_days": 300},
+    "owner_vacancy":   {"id": "RHVRUSQ156N", "label": "Homeowner Vacancy Rate",
+                        "unit": "pct", "freq": "Q", "keep": None, "max_age_days": 300},
+    "homeownership":   {"id": "RHORUSQ156N", "label": "Homeownership Rate",
+                        "unit": "pct", "freq": "Q", "keep": None, "max_age_days": 300},
+    # ── construction pipeline (thousands of units, SAAR) ──
+    "permits":       {"id": "PERMIT",        "label": "Building Permits",
+                      "unit": "thousands", "freq": "M", "keep": None, "max_age_days": 150},
+    "starts":        {"id": "HOUST",         "label": "Housing Starts",
+                      "unit": "thousands", "freq": "M", "keep": None, "max_age_days": 150},
+    "completions":   {"id": "COMPUTSA",      "label": "Housing Completions",
+                      "unit": "thousands", "freq": "M", "keep": None, "max_age_days": 150},
+    "new_home_sales":  {"id": "HSN1F",       "label": "New Single-Family Homes Sold",
+                        "unit": "thousands", "freq": "M", "keep": None, "max_age_days": 150},
+    "months_supply_new": {"id": "MSACSR",    "label": "Months' Supply of New Homes",
+                          "unit": "months", "freq": "M", "keep": None, "max_age_days": 150},
+    # ── mortgage rates ──
+    "mortgage_30":   {"id": "MORTGAGE30US",  "label": "30-Year Fixed Mortgage",
+                      "unit": "pct", "freq": "W", "keep": 1200, "max_age_days": 30},
+    "mortgage_15":   {"id": "MORTGAGE15US",  "label": "15-Year Fixed Mortgage",
+                      "unit": "pct", "freq": "W", "keep": 1200, "max_age_days": 30},
+    "treasury_10":   {"id": "DGS10",         "label": "10-Year Treasury Yield",
+                      "unit": "pct", "freq": "D", "keep": 6000, "max_age_days": 30,
+                      "ship": False},
+    # ── credit stress ──
+    "delinquency":   {"id": "DRSFRMACBS",    "label": "Single-Family Mortgage Delinquency Rate",
+                      "unit": "pct", "freq": "Q", "keep": None, "max_age_days": 400},
+    # ── existing-home sales: KPI only, see _CHARTABLE_MIN ──
+    "existing_sales": {"id": "EXHOSLUSM495S", "label": "Existing Home Sales",
+                       "unit": "units", "freq": "M", "keep": None, "max_age_days": 150},
+}
+
+# NAR licenses its existing-home-sales data and its history was pulled from
+# FRED: EXHOSLUSM495S and its siblings now serve ~13 observations starting
+# 2025-07 instead of decades. The values are current and fine as a headline
+# number, but a 13-point line next to an 800-point one reads as a broken
+# chart, so anything this short is marked KPI-only rather than plotted.
+_CHARTABLE_MIN = 36
+
 # Plain client UA. A spoofed browser UA is silently blackholed by FRED's Akamai
 # bot detection — see the FRED_USER_AGENT comment block in fed.py.
 from ystocker.fed import FRED_USER_AGENT
@@ -371,6 +436,215 @@ def _fetch_mortgage_rate() -> Optional[dict[str, Any]]:
     }
 
 
+def _fetch_fred_series(key: str, meta: dict[str, Any]) -> Optional[dict[str, Any]]:
+    """Fetch one FRED series as {"dates": [...], "values": [...]}.
+
+    Drops the series if its newest observation is older than ``max_age_days``.
+    That check is the point: a retired FRED id keeps returning HTTP 200 with
+    well-formed CSV long after it stops publishing (MBST and WASDRAL still do
+    years later, per CLAUDE.md), so a status code proves nothing. Better to
+    show one fewer chart than a chart of silently frozen data.
+    """
+    series_id = meta["id"]
+    try:
+        resp = _SESSION.get(_FRED_CSV.format(series=series_id), timeout=45)
+        resp.raise_for_status()
+        text = resp.text
+    except Exception as exc:
+        log.warning("Housing: FRED %s (%s) fetch failed: %s", key, series_id, exc)
+        return None
+
+    dates: list[str] = []
+    values: list[float] = []
+    for line in text.strip().splitlines()[1:]:
+        parts = line.split(",")
+        if len(parts) < 2:
+            continue
+        d = parts[0].strip()
+        v = _num(parts[1])
+        if len(d) != 10 or v is None:
+            continue
+        dates.append(d)
+        values.append(v)
+
+    if not dates:
+        log.warning("Housing: FRED %s (%s) returned no usable observations", key, series_id)
+        return None
+
+    try:
+        age = (date.today() - date.fromisoformat(dates[-1])).days
+    except ValueError:
+        age = 0
+    max_age = meta.get("max_age_days")
+    if max_age and age > max_age:
+        log.warning(
+            "Housing: FRED %s (%s) looks retired — newest observation %s is %d days "
+            "old (limit %d). Dropping rather than charting frozen data.",
+            key, series_id, dates[-1], age, max_age,
+        )
+        return None
+
+    keep = meta.get("keep")
+    if keep and len(dates) > keep:
+        dates, values = dates[-keep:], values[-keep:]
+
+    return {
+        "dates": dates,
+        "values": values,
+        "label": meta["label"],
+        "unit": meta["unit"],
+        "freq": meta["freq"],
+        "source": "FRED",
+        "series_id": series_id,
+        "chartable": len(dates) >= _CHARTABLE_MIN,
+    }
+
+
+def _fetch_all_fred() -> dict[str, Any]:
+    """Fetch every FRED series concurrently, skipping any that fail."""
+    import concurrent.futures as cf
+
+    out: dict[str, Any] = {}
+    with cf.ThreadPoolExecutor(max_workers=4) as pool:
+        futs = {pool.submit(_fetch_fred_series, k, m): k for k, m in FRED_SERIES.items()}
+        for fut in cf.as_completed(list(futs)):
+            key = futs[fut]
+            try:
+                data = fut.result()
+            except Exception as exc:
+                log.warning("Housing: FRED %s raised: %s", key, exc)
+                continue
+            if data:
+                out[key] = data
+
+    dropped = [k for k in FRED_SERIES if k not in out]
+    kpi_only = [k for k, v in out.items() if not v["chartable"]]
+    log.info("Housing: FRED — %d/%d series (%s)", len(out), len(FRED_SERIES),
+             ", ".join(f"{k} KPI-only" for k in kpi_only) or "all chartable")
+    if dropped:
+        log.warning("Housing: FRED series unavailable: %s", ", ".join(dropped))
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Derived series
+# ---------------------------------------------------------------------------
+
+def _monthly_last(series: dict[str, Any]) -> dict[str, float]:
+    """Collapse any frequency to one value per YYYY-MM (the month's last obs)."""
+    out: dict[str, float] = {}
+    for d, v in zip(series["dates"], series["values"]):
+        out[d[:7]] = v
+    return out
+
+
+def _build_mortgage_spread(fred: dict[str, Any]) -> Optional[dict[str, Any]]:
+    """30-year mortgage rate minus the 10-year Treasury yield.
+
+    Mortgages are priced off the 10-year, not off the funds rate, so this
+    spread separates "rates are high because the Fed is tight" from "rates are
+    high because mortgage credit itself is expensive". It normally sits near
+    170bp and blew past 300bp in 2023, which is why /fedwatch easing does not
+    mechanically translate into cheaper mortgages.
+    """
+    m30, t10 = fred.get("mortgage_30"), fred.get("treasury_10")
+    if not m30 or not t10:
+        return None
+
+    # The mortgage series is weekly (Thursdays) and the Treasury series daily,
+    # so align on the month rather than trying to match exact dates — a
+    # calendar-day join would silently drop most weeks to null.
+    t10_by_month = _monthly_last(t10)
+    m30_by_month = _monthly_last(m30)
+
+    dates, spread, mort, tsy = [], [], [], []
+    for month in sorted(m30_by_month):
+        t = t10_by_month.get(month)
+        if t is None:
+            continue
+        m = m30_by_month[month]
+        dates.append(month)
+        mort.append(m)
+        tsy.append(t)
+        spread.append(round(m - t, 3))
+
+    if not dates:
+        return None
+    log.info("Housing: mortgage spread — %d months, latest %.2fpp (%.2f%% vs %.2f%%)",
+             len(dates), spread[-1], mort[-1], tsy[-1])
+    return {"dates": dates, "spread": spread, "mortgage": mort, "treasury": tsy}
+
+
+def _build_price_to_rent(fred: dict[str, Any]) -> Optional[dict[str, Any]]:
+    """Case-Shiller home prices divided by CPI rent, indexed to 100 at the start.
+
+    Both inputs are already indices on arbitrary bases, so the ratio is only
+    meaningful as its own index. Rebasing to 100 makes the level readable: the
+    2006 peak and the trough after it are what give the current reading scale.
+    """
+    cs, rent = fred.get("case_shiller"), fred.get("rent_cpi")
+    if not cs or not rent:
+        return None
+
+    cs_m, rent_m = _monthly_last(cs), _monthly_last(rent)
+    months = sorted(set(cs_m) & set(rent_m))
+    if len(months) < _CHARTABLE_MIN:
+        return None
+
+    raw = [cs_m[m] / rent_m[m] for m in months]
+    base = raw[0]
+    if not base:
+        return None
+    ratio = [round(v / base * 100, 2) for v in raw]
+
+    peak_i = max(range(len(ratio)), key=lambda i: ratio[i])
+    log.info("Housing: price-to-rent — %d months, latest %.1f, peak %.1f (%s)",
+             len(months), ratio[-1], ratio[peak_i], months[peak_i])
+    return {
+        "dates": months, "values": ratio,
+        "peak": ratio[peak_i], "peak_date": months[peak_i],
+    }
+
+
+def _build_rent_growth(
+    zillow: dict[str, Any], fred: dict[str, Any]
+) -> Optional[dict[str, Any]]:
+    """Market asking-rent growth (Zillow ZORI) vs official CPI rent inflation.
+
+    These measure different things and that is the point. ZORI tracks what new
+    tenants are asked to pay, while CPI rent tracks what all tenants actually
+    pay including those mid-lease, so CPI turns roughly a year after the market
+    does. The gap between the two lines is a lead indicator for shelter
+    inflation rather than a discrepancy to reconcile.
+    """
+    zori = zillow.get("zori")
+    rent_cpi = fred.get("rent_cpi")
+    if not zori or not zori.get("national") or not rent_cpi:
+        return None
+
+    def yoy_by_month(dates: list[str], values: list[Optional[float]]) -> dict[str, float]:
+        by_month = {d[:7]: v for d, v in zip(dates, values) if v is not None}
+        out: dict[str, float] = {}
+        for month, v in by_month.items():
+            y, m = int(month[:4]), int(month[5:7])
+            prior = by_month.get(f"{y - 1:04d}-{m:02d}")
+            if prior:
+                out[month] = round((v / prior - 1) * 100, 2)
+        return out
+
+    z = yoy_by_month(zori["dates"], zori["national"])
+    c = yoy_by_month(rent_cpi["dates"], rent_cpi["values"])
+    months = sorted(set(z) & set(c))
+    if len(months) < 12:
+        return None
+
+    return {
+        "dates": months,
+        "market": [z[m] for m in months],
+        "cpi": [c[m] for m in months],
+    }
+
+
 # ---------------------------------------------------------------------------
 # Derived: affordability
 # ---------------------------------------------------------------------------
@@ -492,6 +766,7 @@ def _build_payload() -> dict[str, Any]:
     zillow: dict[str, Any] = {}
     redfin: Optional[dict[str, Any]] = None
     mortgage: Optional[dict[str, Any]] = None
+    fred: dict[str, Any] = {}
 
     # ~10 MB across 8 requests. Two workers, not more: each in-flight parse
     # holds a decompressing stream, so concurrency multiplies peak memory on a
@@ -503,6 +778,7 @@ def _build_payload() -> dict[str, Any]:
         }
         r_fut = pool.submit(_fetch_redfin_national)
         m_fut = pool.submit(_fetch_mortgage_rate)
+        f_fut = pool.submit(_fetch_all_fred)
 
         for fut in cf.as_completed(list(z_futs)):
             key = z_futs[fut]
@@ -521,12 +797,19 @@ def _build_payload() -> dict[str, Any]:
             mortgage = m_fut.result()
         except Exception as exc:
             log.warning("Housing: mortgage rate raised: %s", exc)
+        try:
+            fred = f_fut.result() or {}
+        except Exception as exc:
+            log.warning("Housing: FRED batch raised: %s", exc)
 
     if not zillow and not redfin:
         log.error("Housing: every source failed")
         return {"_ts": time.time(), "error": "housing data unavailable"}
 
     affordability = _build_affordability(zillow.get("zhvi"), mortgage)
+    mortgage_spread = _build_mortgage_spread(fred)
+    price_to_rent = _build_price_to_rent(fred)
+    rent_growth = _build_rent_growth(zillow, fred)
 
     # ── National headline numbers ────────────────────────────────────────
     headline: dict[str, Any] = {}
@@ -568,6 +851,41 @@ def _build_payload() -> dict[str, Any]:
             "yoy_unit": m_yoy_unit,
             "unit": "pct",
             "as_of": mortgage["months"][-1],
+            "source": "FRED",
+        }
+
+    # FRED headline tiles. Quarterly series get a 4-observation lookback so the
+    # comparison is still year-over-year rather than quarter-over-quarter.
+    for key in ("rental_vacancy", "homeownership", "months_supply_new",
+                "starts", "permits", "new_home_sales", "existing_sales",
+                "delinquency", "case_shiller"):
+        block = fred.get(key)
+        if not block:
+            continue
+        periods = 4 if block["freq"] == "Q" else 12
+        unit = block["unit"]
+        if unit == "pct":
+            yoy, yoy_unit = _point_change(block["values"], periods), "pp"
+        else:
+            yoy, yoy_unit = _pct_change(block["values"], periods), "pct"
+        headline[f"fred_{key}"] = {
+            "value": block["values"][-1],
+            "yoy": yoy,
+            "yoy_unit": yoy_unit,
+            "unit": unit,
+            "as_of": block["dates"][-1],
+            "source": "FRED",
+            "label": block["label"],
+        }
+
+    if mortgage_spread:
+        headline["mortgage_spread"] = {
+            "value": mortgage_spread["spread"][-1],
+            "yoy": round(mortgage_spread["spread"][-1] - mortgage_spread["spread"][-13], 2)
+                   if len(mortgage_spread["spread"]) > 13 else None,
+            "yoy_unit": "pp",
+            "unit": "pp",
+            "as_of": mortgage_spread["dates"][-1],
             "source": "FRED",
         }
 
@@ -630,15 +948,26 @@ def _build_payload() -> dict[str, Any]:
         "headline": headline,
         "zillow": national_series,
         "redfin": redfin_series,
+        # Series marked ship=False exist only to derive something else
+        # (treasury_10 feeds the spread, rent_cpi feeds rent growth). Sending
+        # 6,000 daily Treasury points the page never plots would triple the
+        # response for nothing.
+        "fred": {
+            k: v for k, v in fred.items()
+            if FRED_SERIES.get(k, {}).get("ship", True)
+        },
         "affordability": affordability,
+        "mortgage_spread": mortgage_spread,
+        "price_to_rent": price_to_rent,
+        "rent_growth": rent_growth,
         "metros": metro_rows,
         "metro_dates": zhvi["metro_dates"] if zhvi else [],
         "metro_zhvi": {
             name: blk["values"] for name, blk in zhvi["metros"].items()
         } if zhvi else {},
     }
-    log.info("Housing: payload built — %d Zillow series, %d Redfin series, %d metros",
-             len(national_series), len(redfin_series), len(metro_rows))
+    log.info("Housing: payload built — %d Zillow, %d Redfin, %d FRED series, %d metros",
+             len(national_series), len(redfin_series), len(fred), len(metro_rows))
     return payload
 
 
