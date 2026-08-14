@@ -1065,6 +1065,14 @@ def get_housing_data(force: bool = False) -> dict[str, Any]:
 
 
 def get_cache_ts() -> Optional[float]:
+    """Timestamp of the payload we hold, fresh or not.
+
+    Deliberately not freshness-filtered: callers use this to display "data as
+    of", and the true age is the honest thing to show. Never branch page
+    layout on this alone — pair it with :func:`is_cache_fresh`, or a worker
+    holding an expired in-memory payload will render a confident "data as of"
+    header above empty charts.
+    """
     with _cache_lock:
         if _cache_ts:
             return _cache_ts
@@ -1124,9 +1132,20 @@ def start_background_thread() -> None:
             log.warning("Housing background: startup warm failed: %s", exc)
 
         while True:
-            time.sleep(_CACHE_TTL)
+            # Sleep until the payload we hold expires, not a full TTL from
+            # startup. With a 24h TTL, warming from an already-old disk cache
+            # and then sleeping a further 24h could leave the page stale for
+            # most of a day. Re-derived each pass so a failed refresh retries
+            # soon instead of waiting another whole TTL.
+            with _cache_lock:
+                ts = _cache_ts
+            age = (time.time() - ts) if ts else _CACHE_TTL
+            sleep_for = max(300.0, _CACHE_TTL - age)
+            log.info("Housing background: next refresh in %.0f min (cache age %.0f min)",
+                     sleep_for / 60, age / 60)
+            time.sleep(sleep_for)
             try:
-                log.info("Housing background: TTL elapsed — refreshing")
+                log.info("Housing background: refreshing")
                 refresh_cache()
             except Exception as exc:
                 log.warning("Housing background: refresh failed: %s", exc)

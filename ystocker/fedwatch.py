@@ -688,6 +688,14 @@ def get_fedwatch_data(force: bool = False) -> dict[str, Any]:
 
 
 def get_cache_ts() -> Optional[float]:
+    """Timestamp of the payload we hold, fresh or not.
+
+    Deliberately not freshness-filtered: callers use this to display "data as
+    of", and the true age is the honest thing to show. Never branch page
+    layout on this alone — pair it with :func:`is_cache_fresh`, or a worker
+    holding an expired in-memory payload will render a confident "data as of"
+    header above empty charts.
+    """
     with _cache_lock:
         if _cache_ts:
             return _cache_ts
@@ -748,9 +756,21 @@ def start_background_thread() -> None:
             log.warning("FedWatch background: startup warm failed: %s", exc)
 
         while True:
-            time.sleep(_CACHE_TTL)
+            # Sleep until the payload we actually hold expires, not a full TTL
+            # from startup. Warming from a disk cache that was already 3h old
+            # and then sleeping 4h left a ~3h window where every request saw a
+            # stale cache, and the page rendered blank charts under a "data as
+            # of" header. Re-derived each pass so a failed refresh retries soon
+            # rather than waiting another whole TTL.
+            with _cache_lock:
+                ts = _cache_ts
+            age = (time.time() - ts) if ts else _CACHE_TTL
+            sleep_for = max(60.0, _CACHE_TTL - age)
+            log.info("FedWatch background: next refresh in %.0f min (cache age %.0f min)",
+                     sleep_for / 60, age / 60)
+            time.sleep(sleep_for)
             try:
-                log.info("FedWatch background: TTL elapsed — refreshing")
+                log.info("FedWatch background: refreshing")
                 refresh_cache()
             except Exception as exc:
                 log.warning("FedWatch background: refresh failed: %s", exc)
