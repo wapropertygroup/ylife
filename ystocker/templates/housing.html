@@ -83,12 +83,13 @@
   text-transform: uppercase; color: #94a3b8; white-space: nowrap;
 }
 .hz-section .rule { flex: 1; height: 1px; background: #1e293b; }
-/* Layout utilities defined locally on purpose.
-   static/css/tailwind.css is a committed build artifact and there is no
-   package.json to regenerate it, so any utility class not already compiled in
-   silently does nothing — `xl:grid-cols-2`, `gap-x-8` and `gap-y-2` are all
-   absent, which left these grids stuck at one column. Local rules cannot
-   no-op and cannot affect the other seven apps sharing that stylesheet. */
+/* Layout utilities kept local deliberately.
+   static/css/tailwind.css is a compiled artifact: a utility only exists if it
+   was present in a template when `bash build_css.sh` last ran, so a newly
+   introduced class silently does nothing until someone rebuilds. That is what
+   left these grids at one column. The stylesheet has since been regenerated,
+   but these few rules stay local so this page's layout cannot regress if the
+   shared build drifts again. */
 .hz-2col { display: grid; grid-template-columns: 1fr; gap: 24px; }
 @media (min-width: 1280px) { .hz-2col { grid-template-columns: 1fr 1fr; } }
 .hz-herorow {

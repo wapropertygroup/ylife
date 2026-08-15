@@ -1,0 +1,574 @@
+{% extends "base.html" %}
+{% block title %}yStocker — Index P/E Multiples (SPY, QQQ, S&P 500){% endblock %}
+
+{% block content %}
+<style>
+.explain-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 10px; border-radius: 6px;
+  border: 1px solid #334155; background: transparent;
+  color: #94a3b8; font-size: 11px; font-weight: 500;
+  cursor: pointer; transition: color .15s, border-color .15s, background .15s;
+  letter-spacing: .02em; white-space: nowrap;
+}
+.explain-btn:hover { color: #a78bfa; border-color: #7c3aed; }
+.explain-btn:disabled { opacity: .5; cursor: not-allowed; }
+.range-btn {
+  padding: 3px 9px; border-radius: 6px; border: 1px solid #334155;
+  background: transparent; color: #64748b; font-size: 11px; font-weight: 500;
+  cursor: pointer; transition: color .15s, border-color .15s, background .15s;
+  letter-spacing: .02em;
+}
+.range-btn:hover { color: #cbd5e1; border-color: #64748b; }
+.range-btn.active { color: #a5b4fc; border-color: #6366f1; background: rgba(99,102,241,.12); }
+.card-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.explain-panel {
+  margin-top: 12px; padding: 14px 16px; border-radius: 10px;
+  background: rgba(167,139,250,.06); border: 1px solid rgba(167,139,250,.2);
+  color: #cbd5e1; font-size: 13px; line-height: 1.65; display: none;
+}
+.explain-panel.visible { display: block; }
+.explain-thinking {
+  display: inline-flex; align-items: center; gap: 6px;
+  color: #a78bfa; font-size: 12px; font-style: italic;
+}
+.explain-thinking .dot {
+  width: 5px; height: 5px; border-radius: 50%; background: #a78bfa;
+  animation: explainBounce 1.2s infinite ease-in-out;
+}
+.explain-thinking .dot:nth-child(2) { animation-delay: .2s; }
+.explain-thinking .dot:nth-child(3) { animation-delay: .4s; }
+@keyframes explainBounce {
+  0%, 80%, 100% { transform: scale(.6); opacity: .4; }
+  40%           { transform: scale(1);  opacity: 1;  }
+}
+.src-chip {
+  display: inline-block; padding: 1px 6px; border-radius: 4px;
+  font-size: 9px; font-weight: 600; letter-spacing: .04em;
+  text-transform: uppercase; vertical-align: middle;
+}
+.src-trailing { background: rgba(57,135,229,.15);  color: #7cb2f0; }
+.src-forward  { background: rgba(99,102,241,.18);  color: #a5b4fc; }
+/* Local layout utilities. static/css/tailwind.css is compiled by
+   `bash build_css.sh`, so a class introduced without a rebuild silently does
+   nothing; keeping this page's grid local makes it independent of that. */
+.vp-2col { display: grid; grid-template-columns: 1fr; gap: 24px; }
+@media (min-width: 1280px) { .vp-2col { grid-template-columns: 1fr 1fr; } }
+.vp-section { display: flex; align-items: center; gap: 10px; margin: 30px 0 -2px; padding-top: 4px; }
+.vp-section h2 {
+  font-size: 11px; font-weight: 700; letter-spacing: .09em;
+  text-transform: uppercase; color: #94a3b8; white-space: nowrap;
+}
+.vp-section .rule { flex: 1; height: 1px; background: #1e293b; }
+.vp-up { color: #199e70; }
+.vp-down { color: #e66767; }
+</style>
+
+<!-- ── Header ─────────────────────────────────────────────────────────── -->
+<div class="mb-6 sm:mb-8 fade-up">
+  <h1 class="text-2xl sm:text-3xl font-bold grad-text mb-1" data-i18n="mult.title">Index P/E Multiples</h1>
+  <p class="text-slate-400 text-sm" data-i18n="mult.subtitle">
+    S&amp;P 500 trailing P/E back to 1871, and a cap-weighted forward P/E for SPY and QQQ
+  </p>
+  {% if cache_last_updated %}
+  <p class="text-xs text-slate-600 mt-1">
+    <span data-i18n="mult.data_as_of">Data as of</span> {{ cache_last_updated | int | datetimeformat }}
+    &nbsp;·&nbsp;
+    {% if warming or not cache_fresh %}
+    <span class="text-brand animate-pulse" data-i18n="mult.refreshing">refreshing now…</span>
+    {% else %}
+    <span data-i18n="mult.next_refresh">next refresh</span> {{ (cache_last_updated | int + 86400) | datetimeformat }}
+    {% endif %}
+    &nbsp;·&nbsp;
+    <a href="{{ url_for('main.multiples_refresh') }}" class="text-brand hover:underline" data-i18n="mult.refresh">↻ Refresh</a>
+  </p>
+  {% else %}
+  <p class="text-xs text-slate-600 mt-1">
+    <a href="{{ url_for('main.multiples_refresh') }}" class="text-brand hover:underline" data-i18n="mult.load">↻ Load data</a>
+  </p>
+  {% endif %}
+</div>
+
+<div id="vpNotice" class="hidden mb-6 px-4 py-3 rounded-lg bg-slate-800/60 border border-slate-700 text-slate-300 text-sm items-center gap-3">
+  <svg class="w-4 h-4 text-brand animate-spin inline-block align-middle" fill="none" viewBox="0 0 24 24">
+    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/>
+  </svg>
+  <span data-i18n="mult.rebuilding">Rebuilding the multiples — charts will appear in a moment…</span>
+</div>
+
+<div id="vpKpis" class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3 mb-6"></div>
+
+<div class="space-y-6">
+
+  <div class="vp-section"><h2 data-i18n="mult.sec_forward">Forward P/E — SPY &amp; QQQ</h2><div class="rule"></div></div>
+
+  <!-- ── The accumulating forward series ──────────────────────────────── -->
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up">
+    <div class="mb-1">
+      <h2 class="text-base font-semibold text-slate-200">
+        <span data-i18n="mult.fwd_title">Forward P/E: SPY vs QQQ</span>
+        <span class="src-chip src-forward" data-i18n="mult.chip_forward">Forward</span>
+      </h2>
+      <p class="text-xs text-slate-500" data-i18n="mult.fwd_desc">Cap-weighted forward P/E computed from index constituents — total market value divided by total forward earnings, which is the correct aggregation. Snapshotted once a day, so this series begins at the first snapshot and lengthens by one point per day.</p>
+    </div>
+    <div id="vpFwdEmpty" class="hidden text-xs text-slate-500 bg-slate-800/40 border border-slate-700 rounded-lg px-3 py-2 mt-3">
+      <span data-i18n="mult.fwd_seeding">Only one day recorded so far — the line appears once there are at least two snapshots. Today's values are in the tiles above.</span>
+    </div>
+    <div class="chart-container" style="height:280px"><canvas id="vpForwardChart"></canvas></div>
+    <p class="text-[11px] text-slate-600 mt-2"><span id="vpCoverage"></span></p>
+  </div>
+
+  <div class="vp-section"><h2 data-i18n="mult.sec_trailing">S&amp;P 500 Trailing P/E — 155 Years</h2><div class="rule"></div></div>
+
+  <!-- ── The real long history ────────────────────────────────────────── -->
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up">
+    <div class="mb-1">
+      <h2 class="text-base font-semibold text-slate-200">
+        <span data-i18n="mult.spxpe_title">S&amp;P 500 Trailing P/E</span>
+        <span class="src-chip src-trailing" data-i18n="mult.chip_trailing">Trailing</span>
+      </h2>
+      <p class="text-xs text-slate-500">
+        <span data-i18n="mult.spxpe_desc">Monthly since 1871, built on actual reported earnings rather than a constant-EPS approximation — so the shape is real valuation history, not a rescaled price chart.</span>
+        <span id="vpPctile" class="text-slate-400"></span>
+      </p>
+    </div>
+    <div class="chart-container" style="height:280px"><canvas id="vpSpxPeChart"></canvas></div>
+  </div>
+
+  <!-- ── Earnings, the denominator ────────────────────────────────────── -->
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
+    <div class="mb-1">
+      <h3 class="text-sm font-semibold text-slate-300">
+        <span data-i18n="mult.spxeps_title">S&amp;P 500 Trailing Earnings per Share</span>
+        <span class="src-chip src-trailing" data-i18n="mult.chip_trailing">Trailing</span>
+      </h3>
+      <p class="text-xs text-slate-500 mt-0.5" data-i18n="mult.spxeps_desc">The denominator behind the P/E above. A multiple can fall because prices dropped or because earnings grew, and only this series distinguishes the two.</p>
+    </div>
+    <div class="chart-container" style="height:240px"><canvas id="vpSpxEpsChart"></canvas></div>
+  </div>
+
+  <!-- ── Methodology ──────────────────────────────────────────────────── -->
+  <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
+    <h3 class="text-sm font-semibold text-slate-300 mb-2" data-i18n="mult.method_title">Why there is no long forward-P/E history</h3>
+    <p class="text-xs text-slate-500 leading-relaxed" data-i18n="mult.method_body">
+      A historical forward P/E for SPY or QQQ is not available from free data. Yahoo returns no forward P/E, forward EPS or trailing EPS for either ETF — only a current trailing P/E — and no free source publishes past forward estimates. The tempting shortcut, dividing historical prices by today's consensus EPS, produces a line mathematically identical to the price chart: it implies earnings expectations never changed, so 2020 prices over 2026 earnings yield a badly wrong multiple. Rather than ship that, this page keeps two honest series apart: a genuine trailing P/E with 155 years of real earnings behind it, and a true forward P/E that starts the day snapshots began and grows daily.
+    </p>
+    <p class="text-xs text-slate-600 mt-2" data-i18n="mult.method_caveat">
+      Trailing and forward multiples are not comparable to each other — forward earnings are normally higher, so a forward P/E sits below the trailing one for the same market. The forward figure is an estimate over the index members whose fundamentals the app already tracks, cap-weighted; the constituent count is shown beneath the chart. It is computed from cached fundamentals rather than by querying every constituent, because bulk per-name requests get the whole app throttled by Yahoo.
+    </p>
+  </div>
+
+  <div id="vpError" class="hidden mt-4 px-4 py-3 rounded-lg bg-red-900/40 border border-red-700 text-red-300 text-sm"></div>
+
+  <p class="text-xs text-slate-600 mt-4">
+    <span data-i18n="mult.source">Sources</span>:
+    <a href="https://www.multpl.com/s-p-500-pe-ratio" target="_blank" rel="noopener" class="text-brand hover:underline">multpl.com</a>
+    <span data-i18n="mult.source_tail">for S&amp;P 500 trailing P/E and earnings; forward P/E computed from constituent fundamentals via Yahoo Finance</span>
+  </p>
+</div>
+
+<script>
+const _explainData = {};
+
+(async function() {
+  const gridCol = '#1e293b';
+  const tickCol = '#64748b';
+  const C_BLUE = '#3987e5', C_ORANGE = '#d95926', C_INDIGO = '#6366f1';
+
+  async function safeJsonFetch(url) {
+    try {
+      const resp = await fetch(url);
+      const text = await resp.text();
+      if (!text) return { error: 'Empty response' };
+      try {
+        const d = JSON.parse(text);
+        if (!resp.ok) d.error = d.error || `HTTP ${resp.status}`;
+        return d;
+      } catch(e) { return { error: `Invalid JSON: ${e.message}` }; }
+    } catch(e) { return { error: `Fetch error: ${e.message || e}` }; }
+  }
+
+  const showErr = m => {
+    const el = document.getElementById('vpError');
+    if (el) { el.textContent = '⚠ ' + m; el.classList.remove('hidden'); }
+  };
+  const notice = document.getElementById('vpNotice');
+  const showNotice = on => {
+    if (!notice) return;
+    notice.classList.toggle('hidden', !on);
+    notice.classList.toggle('flex', on);
+  };
+
+  const hasData = d => d && ((Object.keys(d.multpl || {}).length) ||
+                             (Object.keys(d.forward || {}).length));
+
+  // A worker holding an expired in-memory payload still reports a "data as of"
+  // timestamp, so this branch renders instead of the warming panel — the 202
+  // has to be handled here or the page sits blank. Same fix as 77d41db.
+  async function loadWithRetry() {
+    const MAX_WAIT_MS = 120000, EVERY_MS = 3000;
+    const started = Date.now();
+    let first = true;
+    while (true) {
+      const d = await safeJsonFetch('/api/multiples');
+      if (hasData(d)) { showNotice(false); return d; }
+      if (d && d.error && !d.warming) { showNotice(false); showErr(d.error); return null; }
+      if (Date.now() - started > MAX_WAIT_MS) {
+        showNotice(false);
+        showErr(I18n.t('mult.timeout') || 'Timed out building the multiples. Try ↻ Refresh.');
+        return null;
+      }
+      if (first) { showNotice(true); first = false; }
+      await new Promise(r => setTimeout(r, EVERY_MS));
+    }
+  }
+
+  const data = await loadWithRetry();
+  if (!data) return;
+
+  const M = data.multpl || {}, F = data.forward || {}, head = data.headline || {};
+
+  const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  // Two-digit years are ambiguous the moment a series crosses a century: the
+  // 1871 start of the S&P P/E history rendered as "Jan '71", which reads as
+  // 1971. Long spans therefore get the full year.
+  const axisMonth = d => !d ? '' : MON[+d.slice(5, 7) - 1] + " '" + d.slice(2, 4);
+  const axisYear  = d => !d ? '' : d.slice(0, 4);
+  const spanYears = labels => {
+    if (!labels || !labels.length) return 0;
+    return (+labels[labels.length - 1].slice(0, 4)) - (+labels[0].slice(0, 4));
+  };
+  const xmult = v => (v == null ? '—' : v.toFixed(1) + 'x');
+  const usd   = v => (v == null ? '—' : '$' + v.toFixed(2));
+
+  const RANGE_LABEL = m => (m === 0 ? (I18n.t('mult.range_all') || 'All')
+                          : m % 12 === 0 ? (m / 12) + 'Y' : m + 'M');
+  const autoRanges = span => (span > 300 ? [120, 240, 600, 0]
+                            : span > 120 ? [12, 60, 120, 0] : [12, 60, 0]);
+  function rangeStart(labels, months) {
+    if (!months) return 0;
+    const last = labels[labels.length - 1];
+    const total = (+last.slice(0, 4)) * 12 + (+last.slice(5, 7)) - months;
+    const cutoff = `${Math.floor((total - 1) / 12)}-${String(((total - 1) % 12) + 1).padStart(2, '0')}`;
+    const i = labels.findIndex(d => d.slice(0, 7) >= cutoff);
+    return i < 0 ? 0 : i;
+  }
+
+  function buildTools(canvas, cfg) {
+    const wrap = canvas.closest('.chart-container');
+    if (!wrap) return;
+    const bar = document.createElement('div');
+    bar.className = 'card-tools justify-end mb-2';
+    (cfg.ranges || []).forEach(m => {
+      const b = document.createElement('button');
+      b.className = 'range-btn' + (m === cfg.defaultRange ? ' active' : '');
+      b.textContent = RANGE_LABEL(m);
+      b.addEventListener('click', () => {
+        bar.querySelectorAll('.range-btn').forEach(x => x.classList.remove('active'));
+        b.classList.add('active');
+        cfg.onRange(m);
+      });
+      bar.appendChild(b);
+    });
+    if (cfg.explain) {
+      const e = document.createElement('button');
+      e.className = 'explain-btn';
+      e.setAttribute('data-i18n', 'mult.explain');
+      e.textContent = I18n.t('mult.explain') || '✦ Explain';
+      e.setAttribute('onclick', `explainChart('${cfg.chartId}')`);
+      bar.appendChild(e);
+      const panel = document.createElement('div');
+      panel.id = cfg.chartId + 'ExplainPanel';
+      panel.className = 'explain-panel';
+      wrap.parentNode.insertBefore(panel, wrap.nextSibling);
+    }
+    if (bar.childElementCount) wrap.parentNode.insertBefore(bar, wrap);
+  }
+
+  function lineChart(canvasId, series, opts) {
+    opts = opts || {};
+    const el = document.getElementById(canvasId);
+    if (!el) return null;
+    const live = series.filter(s => s && s.values && s.values.some(v => v != null));
+    if (!live.length) { console.warn(`Multiples: ${canvasId} has no data — skipped`); return null; }
+
+    const base = live.reduce((a, b) => (b.dates.length > a.dates.length ? b : a), live[0]);
+    const labels = base.dates;
+    const align = s => {
+      if (s.dates === labels) return s.values;
+      const m = new Map(s.dates.map((d, i) => [d, s.values[i]]));
+      return labels.map(d => (m.has(d) ? m.get(d) : null));
+    };
+    const fmtV = opts.fmt || (v => v);
+    const full = { labels, data: live.map(align) };
+
+    const chart = new Chart(el, {
+      type: 'line',
+      data: {
+        labels: labels.slice(),
+        datasets: live.map((s, i) => ({
+          label: s.label,
+          data: full.data[i].slice(),
+          borderColor: s.color || [C_BLUE, C_ORANGE][i % 2],
+          backgroundColor: s.fill ? (opts.fillRgba || 'rgba(57,135,229,.10)') : 'transparent',
+          borderWidth: 2,
+          // The forward series starts with a single point; without a visible
+          // marker a 1-point line renders as literally nothing.
+          pointRadius: opts.showPoints ? 3 : 0,
+          pointHoverRadius: 5,
+          fill: !!s.fill, tension: .25, spanGaps: true,
+        })),
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: live.length > 1
+            ? { display: true, labels: { color: '#94a3b8', boxWidth: 12, font: { size: 11 } } }
+            : { display: false },
+          tooltip: {
+            mode: 'index', intersect: false,
+            callbacks: { label: c => c.raw == null ? ''
+              : ` ${live.length > 1 ? c.dataset.label + ': ' : ''}${fmtV(c.raw)}` },
+          },
+        },
+        scales: {
+          x: { grid: { color: gridCol },
+               ticks: { color: tickCol, maxTicksLimit: opts.xTicks || 8, maxRotation: 0,
+                        callback(v) {
+                          const d = this.getLabelForValue(v);
+                          // >25 years on screen: the month adds nothing and the
+                          // two-digit year is ambiguous, so show YYYY.
+                          return spanYears(this.chart.data.labels) > 25
+                            ? axisYear(d) : axisMonth(d);
+                        } } },
+          y: { grid: { color: gridCol }, ticks: { color: tickCol, callback: v => fmtV(v) },
+               ...(opts.beginAtZero ? { beginAtZero: true } : {}) },
+        },
+        interaction: { mode: 'index', intersect: false },
+      },
+    });
+
+    const register = from => {
+      if (opts.explain === false) return;
+      _explainData[canvasId] = {
+        label: opts.explainLabel || live[0].label,
+        unit: opts.unit || '',
+        dates: full.labels.slice(from),
+        values: full.data[0].slice(from),
+      };
+    };
+    const applyRange = months => {
+      const from = rangeStart(full.labels, months);
+      chart.data.labels = full.labels.slice(from);
+      chart.data.datasets.forEach((ds, i) => { ds.data = full.data[i].slice(from); });
+      chart.update();
+      register(from);
+    };
+    buildTools(el, {
+      chartId: canvasId,
+      ranges: opts.ranges === false ? null : (opts.ranges || autoRanges(labels.length)),
+      defaultRange: opts.defaultRange || 0,
+      explain: opts.explain !== false,
+      onRange: applyRange,
+    });
+    if (opts.defaultRange) applyRange(opts.defaultRange); else register(0);
+    return chart;
+  }
+
+  // ── KPI tiles ────────────────────────────────────────────────────────
+  const KPIS = [
+    ['spy_forward_pe',    'mult.kpi_spy',  'SPY forward P/E'],
+    ['qqq_forward_pe',    'mult.kpi_qqq',  'QQQ forward P/E'],
+    ['spx_trailing_pe',   'mult.kpi_spxpe','S&P 500 trailing P/E'],
+    ['spx_pe_percentile', 'mult.kpi_pctl', 'Percentile since 1871'],
+    ['spx_trailing_eps',  'mult.kpi_eps',  'S&P 500 trailing EPS'],
+  ];
+  const fmtKpi = (v, unit) => {
+    if (v == null) return '—';
+    if (unit === 'x') return v.toFixed(1) + 'x';
+    if (unit === 'usd') return '$' + v.toFixed(2);
+    if (unit === 'pct_rank') return v.toFixed(0) + 'th';
+    return String(v);
+  };
+  try {
+    const wrap = document.getElementById('vpKpis');
+    wrap.innerHTML = '';
+    KPIS.forEach(([key, i18nKey, fallback]) => {
+      const h = head[key];
+      if (!h) return;
+      const card = document.createElement('div');
+      card.className = 'bg-slate-900 border border-slate-800 rounded-2xl p-3 sm:p-4 fade-up';
+      const label = document.createElement('p');
+      label.className = 'text-xs text-slate-500 mb-1';
+      label.setAttribute('data-i18n', i18nKey);
+      label.textContent = I18n.t(i18nKey) || fallback;
+      const val = document.createElement('p');
+      val.className = 'text-xl sm:text-2xl font-semibold text-slate-100';
+      val.textContent = fmtKpi(h.value, h.unit);
+      const sub = document.createElement('p');
+      sub.className = 'text-xs text-slate-600 mt-0.5';
+      sub.textContent = h.constituents
+        ? `${h.constituents} ${I18n.t('mult.names') || 'names'}`
+        : (h.since ? `${I18n.t('mult.since') || 'since'} ${h.since.slice(0, 4)}` : (h.as_of || ''));
+      card.append(label, val, sub);
+      wrap.appendChild(card);
+    });
+    if (typeof I18n !== 'undefined' && I18n.apply) I18n.apply(wrap);
+  } catch(e) { console.warn('Multiples KPIs failed:', e); }
+
+  // ── Forward P/E: the accumulating snapshot series ────────────────────
+  try {
+    const hist = data.forward_history || [];
+    const dates = hist.map(r => r.date);
+    const mk = etf => ({
+      dates, values: hist.map(r => (typeof r[etf] === 'number' ? r[etf] : null)),
+      label: (F[etf] && F[etf].label) || etf,
+      color: etf === 'SPY' ? C_BLUE : C_ORANGE,
+      fill: etf === 'SPY',
+    });
+    // With a single recorded day a line is invisible, so say so rather than
+    // showing an apparently broken chart.
+    const empty = document.getElementById('vpFwdEmpty');
+    if (hist.length < 2 && empty) { empty.classList.remove('hidden'); }
+
+    lineChart('vpForwardChart', [mk('SPY'), mk('QQQ')], {
+      fmt: xmult, showPoints: true, ranges: false, unit: 'x',
+      explainLabel: 'Cap-weighted forward P/E for SPY and QQQ',
+    });
+
+    const cov = document.getElementById('vpCoverage');
+    if (cov) {
+      const parts = Object.values(F).map(b =>
+        `${b.etf}: ${b.constituents_used}/${b.constituents_total} ${I18n.t('mult.names') || 'names'}`);
+      if (parts.length) {
+        cov.textContent = (I18n.t('mult.computed_over') || 'Computed over') + ' ' + parts.join(' · ');
+      }
+    }
+  } catch(e) { console.warn('Multiples chart vpForwardChart failed:', e); }
+
+  // ── S&P 500 trailing P/E, 1871 → now ────────────────────────────────
+  try {
+    const pe = M.spx_pe;
+    if (pe) {
+      const pctl = head.spx_pe_percentile;
+      const el = document.getElementById('vpPctile');
+      if (el && pctl) {
+        el.textContent = ` ${I18n.t('mult.today') || 'Today'} ${pe.values[pe.values.length - 1].toFixed(1)}x`
+          + ` — ${I18n.t('mult.higher_than') || 'higher than'} ${pctl.value.toFixed(0)}%`
+          + ` ${I18n.t('mult.of_history') || 'of all months since 1871'}.`;
+      }
+      lineChart('vpSpxPeChart', [{
+        dates: pe.dates, values: pe.values, color: C_INDIGO, fill: true,
+        label: I18n.t('mult.series_spxpe') || 'S&P 500 trailing P/E',
+      }], { fmt: xmult, xTicks: 8, unit: 'x', fillRgba: 'rgba(99,102,241,.10)',
+            explainLabel: 'S&P 500 trailing P/E, monthly since 1871' });
+    }
+  } catch(e) { console.warn('Multiples chart vpSpxPeChart failed:', e); }
+
+  // ── S&P 500 trailing EPS ────────────────────────────────────────────
+  try {
+    const eps = M.spx_eps;
+    if (eps) {
+      lineChart('vpSpxEpsChart', [{
+        dates: eps.dates, values: eps.values, color: C_BLUE, fill: true,
+        label: I18n.t('mult.series_spxeps') || 'S&P 500 trailing EPS',
+      }], { fmt: usd, xTicks: 8, unit: 'usd',
+            explainLabel: 'S&P 500 trailing earnings per share, monthly since 1871' });
+    }
+  } catch(e) { console.warn('Multiples chart vpSpxEpsChart failed:', e); }
+})().catch(e => console.error('Multiples IIFE failed:', e));
+
+// ── AI Explain ───────────────────────────────────────────────────────────
+function _explainDone(btn) {
+  if (!btn) return;
+  btn.disabled = false;
+  btn.textContent = btn.dataset.origText || (I18n.t('mult.explain') || '✦ Explain');
+}
+
+function _runExplain(chart, lang) {
+  const panel = document.getElementById(chart + 'ExplainPanel');
+  const btn   = document.querySelector(`button.explain-btn[onclick="explainChart('${chart}')"]`);
+  const d = _explainData[chart];
+  if (!panel || !d) return;
+
+  panel.classList.add('visible');
+  panel.innerHTML = '';
+  const thinking = document.createElement('span');
+  thinking.className = 'explain-thinking';
+  thinking.innerHTML = `<span>${lang === 'zh' ? 'AI 分析中' : 'Thinking'}</span>`
+    + `<span class="dot"></span><span class="dot"></span><span class="dot"></span>`;
+  panel.appendChild(thinking);
+  if (btn) {
+    btn.disabled = true;
+    btn.dataset.origText = btn.dataset.origText || btn.textContent;
+    btn.textContent = lang === 'zh' ? '⏳ 分析中…' : '⏳ Thinking…';
+  }
+
+  fetch('/api/multiples/explain', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ chart, dates: d.dates, values: d.values,
+                           label: d.label, unit: d.unit, lang }),
+  }).then(resp => {
+    if (!resp.ok) return resp.json().then(e => { throw new Error(e.error || resp.statusText); });
+    let firstChunk = true;
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+    const textNode = document.createTextNode('');
+    function pump() {
+      reader.read().then(({ done, value }) => {
+        if (done) { _explainFinish(panel, chart, lang, btn); return; }
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split('\n');
+        buf = lines.pop();
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const payload = line.slice(6).trim();
+          if (payload === '[DONE]') { _explainFinish(panel, chart, lang, btn); return; }
+          try {
+            const obj = JSON.parse(payload);
+            if (obj.error) { panel.textContent = '⚠ ' + obj.error; _explainDone(btn); return; }
+            if (obj.text) {
+              if (firstChunk) { panel.innerHTML = ''; panel.appendChild(textNode); firstChunk = false; }
+              textNode.textContent += obj.text;
+            }
+          } catch {}
+        }
+        pump();
+      });
+    }
+    pump();
+  }).catch(err => { panel.textContent = '⚠ ' + err.message; _explainDone(btn); });
+}
+
+function _explainFinish(panel, chart, lang, btn) {
+  _explainDone(btn);
+  const otherLang = lang === 'zh' ? 'en' : 'zh';
+  const b = document.createElement('button');
+  b.textContent = lang === 'zh' ? '🌐 View in English' : '🌐 翻译成中文';
+  b.className = 'mt-3 block text-xs text-violet-400 hover:text-violet-300 underline underline-offset-2 cursor-pointer bg-transparent border-0 p-0';
+  b.onclick = () => _runExplain(chart, otherLang);
+  panel.appendChild(document.createElement('br'));
+  panel.appendChild(b);
+}
+
+function explainChart(chart) {
+  const panel = document.getElementById(chart + 'ExplainPanel');
+  const btn   = document.querySelector(`button.explain-btn[onclick="explainChart('${chart}')"]`);
+  if (!panel) return;
+  if (panel.classList.contains('visible') && !btn?.disabled) {
+    panel.classList.remove('visible');
+    return;
+  }
+  const d = _explainData[chart];
+  if (!d || !(d.dates && d.dates.length)) {
+    panel.textContent = 'No data available to explain.';
+    panel.classList.add('visible');
+    return;
+  }
+  _runExplain(chart, I18n.getLang());
+}
+</script>
+{% endblock %}

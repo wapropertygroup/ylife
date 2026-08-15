@@ -207,6 +207,11 @@ def create_app() -> Flask:
     from ystocker.housing import start_background_thread as _start_housing_thread
     _start_housing_thread()
 
+    # Start P/E multiples warm-up + daily refresh (multpl history + forward P/E
+    # computed from the ticker cache, so no extra Yahoo load).
+    from ystocker.valuation import start_background_thread as _start_valuation_thread
+    _start_valuation_thread()
+
     # Start market-breadth warm-up + daily refresh. The rebuild downloads 500+
     # tickers (~20s), so it must never run inside a request — see breadth.py.
     from ystocker.breadth import start_background_thread as _start_breadth_thread

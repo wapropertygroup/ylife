@@ -1,0 +1,622 @@
+"""
+ystocker.valuation
+~~~~~~~~~~~~~~~~~~
+Index P/E multiples: a real long-history trailing P/E for the S&P 500, plus a
+genuine cap-weighted *forward* P/E for SPY and QQQ that accumulates daily.
+
+Why it is built this way
+------------------------
+A historical forward P/E series for SPY or QQQ is not obtainable from free
+sources, and pretending otherwise is the trap here:
+
+* Yahoo returns ``forwardPE``, ``forwardEps`` and ``trailingEps`` as ``None``
+  for both ETFs. Only ``trailingPE`` comes back. So the ``price / forwardEps``
+  construction used per-ticker in routes.py cannot even run for SPY/QQQ.
+* That construction is misleading anyway. Holding consensus EPS constant makes
+  the resulting "P/E history" mathematically identical to the price chart, so
+  it implies earnings expectations never moved — 2020 prices divided by 2026
+  earnings produce a badly wrong historical multiple.
+
+So this module does two honest things instead, and never mixes them:
+
+1. **Trailing P/E and EPS for the S&P 500** from multpl.com — monthly back to
+   1871, built on actual reported earnings, so the shape is real history rather
+   than a rescaled price line. Clearly labelled *trailing*.
+
+2. **Forward P/E for SPY and QQQ**, computed bottom-up from constituents each
+   day and appended to a persisted series. Truly forward-looking and truly
+   per-ETF, but it necessarily starts on the first snapshot and fills in at one
+   point per day.
+
+Aggregation
+-----------
+A cap-weighted index P/E is total market value over total earnings, which for
+per-name P/Es is the cap-weighted *harmonic* mean:
+
+    index P/E = Σ(mktCap_i) / Σ(mktCap_i / PE_i)
+
+Averaging P/Es arithmetically would overweight expensive names and is simply
+the wrong statistic. Market caps supply the weights, so no index weight file is
+needed — which is why this does not scrape holdings. Names with a missing or
+non-positive forward P/E are excluded and the excluded share of market cap is
+reported as ``coverage_pct``: an index multiple computed over 60% of the cap is
+a different claim from one computed over 98%, and the page says which.
+
+Cost: no per-constituent network calls at all. Fetching ``Ticker.info`` for
+500+ names got this machine hard-blocked by Yahoo during development (a first
+run returned 500/503; later runs returned 0/503 with HTTP 401 "Invalid Crumb"),
+and doing that daily would throttle every other Yahoo-dependent feature in the
+app. The multiple is therefore computed from ``cache/ticker_cache.json``, which
+the rolling refresher already maintains.
+"""
+from __future__ import annotations
+
+import json
+import logging
+import re
+import tempfile
+import threading
+import time
+from datetime import date
+from pathlib import Path
+from typing import Any, Optional
+
+import requests
+
+log = logging.getLogger(__name__)
+
+_CACHE_FILE = Path(__file__).parent.parent / "cache" / "valuation_cache.json"
+_CACHE_TTL = 24 * 60 * 60  # multpl updates daily; constituents once a day is plenty
+
+# Browser UA: multpl.com serves a plain client fine, but its CDN is happier
+# with a normal UA and this host is not FRED (see fed.py for why FRED differs).
+_MULTPL_UA = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/126.0 Safari/537.36"
+)
+
+MULTPL_SERIES: dict[str, dict[str, str]] = {
+    "spx_pe":  {"url": "https://www.multpl.com/s-p-500-pe-ratio/table/by-month",
+                "label": "S&P 500 Trailing P/E", "unit": "x"},
+    "spx_eps": {"url": "https://www.multpl.com/s-p-500-earnings/table/by-month",
+                "label": "S&P 500 Trailing EPS", "unit": "usd"},
+}
+
+# Nasdaq-100 constituents. NDX reconstitutes annually (announced mid-December,
+# effective the third Friday), so this list needs a yearly look. A stale name
+# only drops that holding from the aggregate and is reported in `missing`
+# rather than producing a silently wrong multiple — ANSS and WBA were removed
+# after Yahoo started 404ing them (acquired / taken private).
+#
+# Names with negative forward estimates (an unprofitable MRNA, say) are also
+# excluded by the aggregation: they have no meaningful P/E, and including a
+# negative one would drag the index multiple toward nonsense. That is the
+# standard treatment for an index P/E, not a data gap.
+NDX100: tuple[str, ...] = (
+    "AAPL", "MSFT", "NVDA", "AMZN", "AVGO", "META", "GOOGL", "GOOG", "TSLA", "COST",
+    "NFLX", "AMD", "PEP", "ADBE", "LIN", "TMUS", "CSCO", "QCOM", "INTU", "TXN",
+    "AMGN", "ISRG", "AMAT", "BKNG", "CMCSA", "HON", "VRTX", "PANW", "ADP", "GILD",
+    "MU", "ADI", "LRCX", "REGN", "MELI", "SBUX", "KLAC", "SNPS", "CDNS", "CRWD",
+    "MAR", "CTAS", "ORLY", "CSX", "ASML", "ABNB", "PYPL", "MNST", "WDAY", "FTNT",
+    "ADSK", "NXPI", "PCAR", "ROP", "CPRT", "MRVL", "AEP", "DASH", "CHTR", "PAYX",
+    "ODFL", "MCHP", "KDP", "AZN", "FAST", "EXC", "IDXX", "CTSH", "VRSK", "EA",
+    "GEHC", "CCEP", "XEL", "DDOG", "TTD", "LULU", "KHC", "CSGP", "ZS",
+    "TEAM", "ON", "DXCM", "FANG", "BIIB", "GFS", "CDW", "WBD", "ILMN", "MDB",
+    "MRNA", "SIRI", "SMCI", "ARM", "PDD", "BKR", "TTWO", "ALGN",
+)
+
+# Which ETF maps to which constituent universe.
+INDEX_UNIVERSE: dict[str, dict[str, Any]] = {
+    "SPY": {"label": "SPY (S&P 500)",    "source": "sp500"},
+    "QQQ": {"label": "QQQ (Nasdaq-100)", "source": "ndx100"},
+}
+
+# Sanity band for an index-level forward P/E. Anything outside this is a data
+# problem, not a market event, and must not be charted or snapshotted.
+_PE_MIN, _PE_MAX = 5.0, 80.0
+# Minimum number of constituents before an aggregate is trustworthy enough to
+# record. Guarding on share-of-matched-market-cap instead was the original bug:
+# names that fail leave the denominator as well as the numerator, so coverage
+# read a perfect 100% while only 195 of 503 names had actually been priced.
+_MIN_CONSTITUENTS = 40
+
+_SESSION = requests.Session()
+_SESSION.trust_env = False  # system proxies cause silent timeouts
+_SESSION.headers.update({"User-Agent": _MULTPL_UA, "Accept": "text/html,*/*"})
+
+
+# ---------------------------------------------------------------------------
+# multpl.com — real trailing history
+# ---------------------------------------------------------------------------
+
+_MONTHS = {m: i for i, m in enumerate(
+    ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+     "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"], start=1)}
+
+_TABLE_RE = re.compile(r'<table[^>]*id="datatable".*?</table>', re.S)
+_ROW_RE = re.compile(r"<tr[^>]*>\s*<td[^>]*>(.*?)</td>\s*<td[^>]*>(.*?)</td>", re.S)
+
+
+def _clean_cell(raw: str) -> str:
+    """Strip tags, HTML entities and multpl's estimate dagger from a cell.
+
+    Commas are deliberately preserved: a comma separates "Aug 14, 2026" as well
+    as acting as a thousands separator in values, and stripping it here silently
+    broke every date match and yielded zero rows. Numeric parsing drops commas
+    at the point of use instead.
+    """
+    txt = re.sub(r"<[^>]+>", "", raw)
+    # Rows carry &#x2002; (en-space) or a † marking an estimate.
+    txt = txt.replace("&#x2002;", " ").replace(" ", " ").replace("†", " ")
+    return txt.strip()
+
+
+def _fetch_multpl(key: str, meta: dict[str, str]) -> Optional[dict[str, Any]]:
+    """Scrape one multpl.com monthly table into {dates, values}.
+
+    Returns dates as ``YYYY-MM-DD`` ascending. The newest row is often an
+    as-of-today estimate rather than a month end; that is kept, because it is
+    the current reading the page headlines.
+    """
+    try:
+        resp = _SESSION.get(meta["url"], timeout=40)
+        resp.raise_for_status()
+    except Exception as exc:
+        log.warning("Valuation: multpl %s fetch failed: %s", key, exc)
+        return None
+
+    table = _TABLE_RE.search(resp.text)
+    if not table:
+        log.warning("Valuation: multpl %s — datatable not found (markup changed?)", key)
+        return None
+
+    points: list[tuple[str, float]] = []
+    for raw_date, raw_val in _ROW_RE.findall(table.group(0)):
+        d = _clean_cell(raw_date)
+        v = _clean_cell(raw_val)
+        m = re.match(r"([A-Z][a-z]{2})\s+(\d{1,2}),\s+(\d{4})", d)
+        if not m or not v:
+            continue
+        try:
+            iso = f"{int(m.group(3)):04d}-{_MONTHS[m.group(1)]:02d}-{int(m.group(2)):02d}"
+            points.append((iso, float(v.replace(",", ""))))
+        except (ValueError, KeyError):
+            continue
+
+    if len(points) < 100:
+        log.warning("Valuation: multpl %s only yielded %d rows — treating as failure",
+                    key, len(points))
+        return None
+
+    points.sort(key=lambda p: p[0])
+    log.info("Valuation: multpl %s — %d rows (%s … %s), latest %.2f",
+             key, len(points), points[0][0], points[-1][0], points[-1][1])
+    return {
+        "dates":  [p[0] for p in points],
+        "values": [p[1] for p in points],
+        "label":  meta["label"],
+        "unit":   meta["unit"],
+        "source": "multpl.com",
+    }
+
+
+# ---------------------------------------------------------------------------
+# Bottom-up forward P/E
+# ---------------------------------------------------------------------------
+
+def _constituents(source: str) -> tuple[str, ...]:
+    if source == "ndx100":
+        # dict.fromkeys dedupes while preserving order (the static list can
+        # briefly contain a duplicate across a reconstitution edit).
+        return tuple(dict.fromkeys(NDX100))
+    from ystocker.breadth import SP500_UNIVERSE
+    return tuple(dict.fromkeys(SP500_UNIVERSE))
+
+
+def _cached_fundamentals() -> dict[str, dict[str, Any]]:
+    """Ticker -> record from the app's own ticker_cache.json.
+
+    The cache is populated by the rolling refresher in routes.py on a schedule
+    Yahoo tolerates, and already carries "PE (Forward)" and "Market Cap ($B)".
+    Reading it costs zero extra requests.
+    """
+    path = Path(__file__).parent.parent / "cache" / "ticker_cache.json"
+    try:
+        blob = json.loads(path.read_text())
+    except Exception as exc:
+        log.warning("Valuation: could not read ticker cache: %s", exc)
+        return {}
+
+    out: dict[str, dict[str, Any]] = {}
+
+    def walk(node: Any) -> None:
+        if isinstance(node, dict):
+            for key, val in node.items():
+                if isinstance(val, dict) and "PE (Forward)" in val:
+                    out[key] = val
+                elif isinstance(val, (dict, list)):
+                    walk(val)
+        elif isinstance(node, list):
+            for val in node:
+                walk(val)
+
+    walk(blob.get("data", {}))
+    return out
+
+
+def _fetch_forward_pe(etf: str, meta: dict[str, Any]) -> Optional[dict[str, Any]]:
+    """Cap-weighted forward P/E for one ETF, from cached constituent fundamentals.
+
+    Deliberately does NOT call Yahoo per constituent. Fetching ``.info`` for
+    500+ names got this machine hard-blocked mid-development: a first run
+    returned 500/503, later runs returned 0/503 with HTTP 401 "Invalid Crumb".
+    Doing that daily in production would throttle the box for *every* other
+    Yahoo-dependent feature — quotes, breadth, the heatmap — so the multiple is
+    computed from fundamentals the app has already fetched instead.
+
+    The trade-off is coverage: only index members the app happens to track are
+    included, so this is an estimate over the largest holdings rather than the
+    full index. Measured against a clean full-universe run it came out ~3% off
+    (SPY 20.05 vs 19.49 over 120/503 names; QQQ 20.81 vs 21.44 over 45/97), so
+    the level is representative but not exact — which is why every consumer
+    reports ``constituents_used`` and the page labels it an estimate.
+    """
+    universe = _constituents(meta["source"])
+    if not universe:
+        return None
+    recs = _cached_fundamentals()
+    if not recs:
+        return None
+
+    cap_used = 0.0
+    earnings_used = 0.0
+    used = 0
+    missing: list[str] = []
+
+    for sym in universe:
+        rec = recs.get(sym)
+        if not rec:
+            missing.append(sym)
+            continue
+        pe = rec.get("PE (Forward)")
+        cap = rec.get("Market Cap ($B)")
+        if not isinstance(pe, (int, float)) or pe <= 0:
+            continue
+        if not isinstance(cap, (int, float)) or cap <= 0:
+            continue
+        cap_used += cap
+        earnings_used += cap / pe
+        used += 1
+
+    if earnings_used <= 0:
+        log.warning("Valuation: %s — no usable cached constituent earnings", etf)
+        return None
+
+    # Cap-weighted harmonic mean: total market value / total forward earnings.
+    fwd_pe = cap_used / earnings_used
+    coverage = used / len(universe) * 100.0
+
+    if not (_PE_MIN <= fwd_pe <= _PE_MAX):
+        log.warning("Valuation: %s forward P/E %.2f outside sanity band %.0f-%.0f — "
+                    "discarding rather than charting it", etf, fwd_pe, _PE_MIN, _PE_MAX)
+        return None
+    if used < _MIN_CONSTITUENTS:
+        log.warning("Valuation: %s only %d cached constituents (min %d) — discarding",
+                    etf, used, _MIN_CONSTITUENTS)
+        return None
+
+    log.info("Valuation: %s forward P/E %.2f from %d/%d constituents (%.0f%% by count, "
+             "$%.0fB cap)", etf, fwd_pe, used, len(universe), coverage, cap_used)
+    return {
+        "etf": etf,
+        "label": meta["label"],
+        "forward_pe": round(fwd_pe, 2),
+        "coverage_pct": round(coverage, 1),
+        "constituents_used": used,
+        "constituents_total": len(universe),
+        "market_cap_b": round(cap_used, 0),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Snapshot history — the accumulating forward series
+# ---------------------------------------------------------------------------
+
+def _merge_snapshots(previous: list[dict[str, Any]],
+                     today: dict[str, float]) -> list[dict[str, Any]]:
+    """Append today's forward P/Es to the persisted series.
+
+    This is accumulated state, not derived data: it is the only record of what
+    forward multiples were on past days, so a rebuild must merge into it rather
+    than replace it. One row per calendar day; a same-day refresh overwrites
+    that row instead of adding a duplicate.
+    """
+    stamp = date.today().isoformat()
+    merged = {row["date"]: dict(row) for row in previous if row.get("date")}
+    row = merged.get(stamp, {"date": stamp})
+    row.update(today)
+    merged[stamp] = row
+    return [merged[d] for d in sorted(merged)]
+
+
+def _previous_snapshots() -> list[dict[str, Any]]:
+    """Read the snapshot series off disk, ignoring cache freshness.
+
+    Deliberately bypasses the TTL: an expired payload still holds real history
+    that must survive, and dropping it would silently reset the series to a
+    single point on every stale rebuild.
+    """
+    try:
+        if _CACHE_FILE.exists():
+            payload = json.loads(_CACHE_FILE.read_text())
+            hist = payload.get("forward_history")
+            if isinstance(hist, list):
+                return hist
+    except Exception as exc:
+        log.warning("Valuation: could not read prior snapshots: %s", exc)
+    return []
+
+
+# ---------------------------------------------------------------------------
+# Assemble
+# ---------------------------------------------------------------------------
+
+def _build_payload() -> dict[str, Any]:
+    import concurrent.futures as cf
+
+    multpl: dict[str, Any] = {}
+    forward: dict[str, Any] = {}
+
+    with cf.ThreadPoolExecutor(max_workers=2) as pool:
+        m_futs = {pool.submit(_fetch_multpl, k, v): k for k, v in MULTPL_SERIES.items()}
+        for fut in cf.as_completed(list(m_futs)):
+            key = m_futs[fut]
+            try:
+                data = fut.result()
+            except Exception as exc:
+                log.warning("Valuation: multpl %s raised: %s", key, exc)
+                continue
+            if data:
+                multpl[key] = data
+
+    # Sequential: each ETF already fans out to 8 workers internally.
+    for etf, meta in INDEX_UNIVERSE.items():
+        try:
+            got = _fetch_forward_pe(etf, meta)
+        except Exception as exc:
+            log.warning("Valuation: %s raised: %s", etf, exc)
+            got = None
+        if got:
+            forward[etf] = got
+
+    if not multpl and not forward:
+        log.error("Valuation: every source failed")
+        return {"_ts": time.time(), "error": "valuation data unavailable"}
+
+    today = {etf: blk["forward_pe"] for etf, blk in forward.items()}
+    history = _merge_snapshots(_previous_snapshots(), today) if today \
+        else _previous_snapshots()
+
+    spx_pe = multpl.get("spx_pe")
+    headline: dict[str, Any] = {}
+    if spx_pe:
+        vals = spx_pe["values"]
+        headline["spx_trailing_pe"] = {
+            "value": vals[-1],
+            "yoy": round(vals[-1] - vals[-13], 2) if len(vals) > 13 else None,
+            "unit": "x", "source": "multpl.com",
+            "as_of": spx_pe["dates"][-1],
+        }
+        # Where today's multiple sits in its own recorded history is the only
+        # thing that makes a P/E level interpretable.
+        ranked = sorted(vals)
+        pos = sum(1 for v in ranked if v <= vals[-1]) / len(ranked) * 100
+        headline["spx_pe_percentile"] = {
+            "value": round(pos, 1), "unit": "pct_rank",
+            "source": "multpl.com", "as_of": spx_pe["dates"][-1],
+            "since": spx_pe["dates"][0],
+        }
+    spx_eps = multpl.get("spx_eps")
+    if spx_eps:
+        vals = spx_eps["values"]
+        headline["spx_trailing_eps"] = {
+            "value": vals[-1],
+            "yoy": round((vals[-1] / vals[-13] - 1) * 100, 1) if len(vals) > 13 and vals[-13] else None,
+            "unit": "usd", "source": "multpl.com",
+            "as_of": spx_eps["dates"][-1],
+        }
+    for etf, blk in forward.items():
+        headline[f"{etf.lower()}_forward_pe"] = {
+            "value": blk["forward_pe"], "yoy": None, "unit": "x",
+            "source": "computed", "as_of": date.today().isoformat(),
+            "coverage_pct": blk["coverage_pct"],
+            "constituents": f"{blk['constituents_used']}/{blk['constituents_total']}",
+            "market_cap_b": blk.get("market_cap_b"),
+        }
+
+    log.info("Valuation: payload built — %d multpl series, %d forward P/Es, "
+             "%d snapshot days", len(multpl), len(forward), len(history))
+    return {
+        "_ts": time.time(),
+        "as_of": date.today().isoformat(),
+        "headline": headline,
+        "multpl": multpl,
+        "forward": forward,
+        "forward_history": history,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Cache — mirrors fed.py: memory -> disk -> network, lock never held over IO
+# ---------------------------------------------------------------------------
+
+_cache_lock = threading.Lock()
+_cache_data: Optional[dict[str, Any]] = None
+_cache_ts: Optional[float] = None
+
+_warming = False
+_warming_lock = threading.Lock()
+_fetch_in_progress = threading.Event()
+
+
+def _has_content(payload: Optional[dict[str, Any]]) -> bool:
+    return bool(payload and (payload.get("multpl") or payload.get("forward")))
+
+
+def _load_disk_cache() -> Optional[dict[str, Any]]:
+    try:
+        if not _CACHE_FILE.exists():
+            return None
+        payload = json.loads(_CACHE_FILE.read_text())
+        if time.time() - payload.get("_ts", 0) >= _CACHE_TTL:
+            return None
+        if not _has_content(payload):
+            return None
+        return payload
+    except Exception as exc:
+        log.warning("Valuation: failed to read disk cache: %s", exc)
+    return None
+
+
+def _save_disk_cache(data: dict[str, Any]) -> None:
+    """Atomically write cache to disk using temp file + rename."""
+    try:
+        _CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(dir=_CACHE_FILE.parent, suffix=".tmp")
+        try:
+            with open(fd, "w") as f:
+                json.dump(data, f)
+            Path(tmp).replace(_CACHE_FILE)
+        except BaseException:
+            Path(tmp).unlink(missing_ok=True)
+            raise
+    except Exception as exc:
+        log.warning("Valuation: failed to write disk cache: %s", exc)
+
+
+def get_valuation_data(force: bool = False) -> dict[str, Any]:
+    """Return cached valuation data. memory -> disk -> network."""
+    global _cache_data, _cache_ts
+
+    with _cache_lock:
+        if not force and _cache_data and _cache_ts and (time.time() - _cache_ts) < _CACHE_TTL:
+            return _cache_data
+
+    if not force:
+        disk = _load_disk_cache()
+        if disk:
+            with _cache_lock:
+                _cache_data = disk
+                _cache_ts = disk.get("_ts", time.time())
+            return disk
+
+    if not force and _fetch_in_progress.is_set():
+        log.info("Valuation: fetch in progress — returning stale/warming payload")
+        with _cache_lock:
+            if _cache_data:
+                return _cache_data
+        return {"_warming": True, "_ts": None, "multpl": {}, "forward": {}}
+
+    _fetch_in_progress.set()
+    try:
+        log.info("Valuation: rebuilding (multpl history + constituent forward P/Es)")
+        fresh = _build_payload()
+        if _has_content(fresh):
+            with _cache_lock:
+                _cache_data = fresh
+                _cache_ts = fresh["_ts"]
+            _save_disk_cache(fresh)
+        else:
+            with _cache_lock:
+                if _cache_data:
+                    log.warning("Valuation: build failed — keeping previous cache")
+                    return _cache_data
+        return fresh
+    finally:
+        _fetch_in_progress.clear()
+
+
+def get_cache_ts() -> Optional[float]:
+    """Timestamp of the payload we hold, fresh or not.
+
+    Not freshness-filtered on purpose — it is the honest "data as of" value.
+    Never branch page layout on it alone; pair it with :func:`is_cache_fresh`,
+    or a worker holding an expired payload renders a confident header above
+    empty charts (the bug fixed in 77d41db).
+    """
+    with _cache_lock:
+        if _cache_ts:
+            return _cache_ts
+    disk = _load_disk_cache()
+    return disk.get("_ts") if disk else None
+
+
+def is_cache_fresh() -> bool:
+    with _cache_lock:
+        data = _cache_data if _cache_data else _load_disk_cache()
+    if not data:
+        return False
+    ts = data.get("_ts")
+    if not ts or (time.time() - ts) >= _CACHE_TTL:
+        return False
+    return _has_content(data)
+
+
+def is_warming() -> bool:
+    with _warming_lock:
+        return _warming
+
+
+def refresh_cache() -> None:
+    global _warming
+    with _warming_lock:
+        _warming = True
+    try:
+        get_valuation_data(force=True)
+    finally:
+        with _warming_lock:
+            _warming = False
+
+
+def start_background_thread() -> None:
+    """Warm on startup, then refresh near expiry.
+
+    Under gunicorn --preload this runs only in the master (see CLAUDE.md), so
+    the ~600 constituent lookups happen once per deploy rather than per worker.
+    """
+
+    def _loop() -> None:
+        try:
+            disk = _load_disk_cache()
+            if disk:
+                global _cache_data, _cache_ts
+                with _cache_lock:
+                    _cache_data = disk
+                    _cache_ts = disk.get("_ts", time.time())
+                log.info("Valuation background: memory cache warmed from disk "
+                         "(%d snapshot days)", len(disk.get("forward_history", [])))
+            else:
+                log.info("Valuation background: no disk cache — building now")
+                refresh_cache()
+        except Exception as exc:
+            log.warning("Valuation background: startup warm failed: %s", exc)
+
+        while True:
+            # Sleep until the payload we hold expires, not a full TTL from
+            # startup: a deploy restarts this thread, so a fixed sleep meant
+            # frequent deploys could stop the refresh ever firing (77d41db).
+            with _cache_lock:
+                ts = _cache_ts
+            age = (time.time() - ts) if ts else _CACHE_TTL
+            sleep_for = max(300.0, _CACHE_TTL - age)
+            log.info("Valuation background: next refresh in %.0f min (cache age %.0f min)",
+                     sleep_for / 60, age / 60)
+            time.sleep(sleep_for)
+            try:
+                log.info("Valuation background: refreshing")
+                refresh_cache()
+            except Exception as exc:
+                log.warning("Valuation background: refresh failed: %s", exc)
+
+    threading.Thread(target=_loop, name="valuation-background-refresh", daemon=True).start()
+    log.info("Valuation: background refresh thread started")

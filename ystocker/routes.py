@@ -2175,6 +2175,131 @@ def api_housing():
         return jsonify({"status": "error", "error": str(exc), "warming": True}), 500
 
 
+# ---------------------------------------------------------------------------
+# Index P/E multiples — SPY / QQQ forward P/E + S&P 500 trailing history
+# ---------------------------------------------------------------------------
+
+@bp.route("/multiples")
+def multiples():
+    """Page showing index P/E multiples for SPY, QQQ and the S&P 500."""
+    log.info("GET /multiples")
+    from ystocker.valuation import get_cache_ts, is_cache_fresh, is_warming as vp_warming_fn
+    return render_template(
+        "multiples.html",
+        peer_groups=list(PEER_GROUPS.keys()),
+        cache_last_updated=get_cache_ts(),
+        cache_fresh=is_cache_fresh(),
+        warming=vp_warming_fn(),
+    )
+
+
+@bp.route("/multiples/refresh")
+def multiples_refresh():
+    """Kick off a background rebuild of the P/E multiples."""
+    from ystocker.valuation import refresh_cache
+    threading.Thread(target=refresh_cache, daemon=True, name="valuation-manual-refresh").start()
+    return redirect(url_for("main.multiples"))
+
+
+@bp.route("/api/multiples")
+def api_multiples():
+    """JSON API — index P/E multiples. 202 while the cache is being rebuilt."""
+    try:
+        from ystocker.valuation import (
+            get_valuation_data, is_cache_fresh,
+            is_warming as vp_warming_fn, refresh_cache,
+        )
+        if is_cache_fresh():
+            data = get_valuation_data()
+            if not data or not (data.get("multpl") or data.get("forward")):
+                log.warning("API multiples: fresh check passed but payload is empty")
+                return jsonify({"status": "stale", "error": "Cache data inconsistent",
+                                "warming": True}), 202
+            resp = {k: v for k, v in data.items() if not k.startswith("_")}
+            resp["status"] = "ok"
+            log.info("API multiples: served from cache (%d trailing series, %d forward)",
+                     len(resp.get("multpl", {})), len(resp.get("forward", {})))
+            return jsonify(resp)
+
+        if vp_warming_fn():
+            log.info("API multiples: warming in progress, returning 202")
+            return jsonify({"status": "warming", "warming": True}), 202
+
+        log.info("API multiples: no cache, starting background rebuild")
+        threading.Thread(target=refresh_cache, daemon=True, name="valuation-auto-warm").start()
+        return jsonify({"status": "initializing", "warming": True}), 202
+    except Exception as exc:
+        log.error("API multiples: error: %s", exc, exc_info=True)
+        return jsonify({"status": "error", "error": str(exc), "warming": True}), 500
+
+
+def _build_multiples_prompt(label: str, unit: str, dates: list, values: list, lang: str) -> str:
+    """Prompt for one P/E chart, given its visible range."""
+    pairs = [(d, v) for d, v in zip(dates, values) if v is not None]
+    if not pairs:
+        return ""
+
+    def show(v: float) -> str:
+        if unit == "x":
+            return f"{v:.1f}x"
+        if unit == "usd":
+            return f"${v:.2f}"
+        return f"{v:,.2f}"
+
+    first_d, first_v = pairs[0]
+    last_d, last_v = pairs[-1]
+    hi = max(pairs, key=lambda p: p[1])
+    lo = min(pairs, key=lambda p: p[1])
+    ranked = sorted(v for _, v in pairs)
+    pctl = sum(1 for v in ranked if v <= last_v) / len(ranked) * 100
+    step = max(1, len(pairs) // 20)
+    sample = "\n".join(f"  {d}: {show(v)}" for d, v in pairs[::step][-20:])
+    lang_instr = "Respond in Simplified Chinese (中文)." if lang == "zh" else ""
+
+    return f"""You are an equity strategist. Explain this valuation series to an investor.
+
+Series: {label}
+Window: {first_d} ({show(first_v)}) to {last_d} ({show(last_v)})
+High in window: {show(hi[1])} in {hi[0]}
+Low in window:  {show(lo[1])} in {lo[0]}
+Current reading sits at the {pctl:.0f}th percentile of this window.
+
+Sampled observations:
+{sample}
+
+In 2-3 concise paragraphs, cover: what this multiple measures and what drives it;
+where the current level sits against its own history and whether that is stretched
+or cheap; and what would have to happen to earnings or prices for it to normalise.
+If the series is a trailing multiple, note that forward multiples are normally
+lower because forward earnings are higher, and that the two are not directly
+comparable. Be specific about the numbers given. Do not use bullet points or
+markdown headers — just flowing prose paragraphs. {lang_instr}"""
+
+
+@bp.route("/api/multiples/explain", methods=["POST"])
+def api_multiples_explain():
+    """Stream an AI explanation of one P/E chart's visible range."""
+    import os
+
+    body   = request.get_json(force=True, silent=True) or {}
+    label  = body.get("label", body.get("chart", ""))
+    unit   = body.get("unit", "")
+    lang   = body.get("lang", "en")
+    dates  = body.get("dates") or []
+    values = body.get("values") or []
+    log.info("API multiples/explain: label=%s lang=%s points=%d", label, lang, len(dates))
+
+    if not os.environ.get("GEMINI_API_KEY"):
+        return jsonify({"error": "GEMINI_API_KEY not configured"}), 503
+    if not dates or not values:
+        return jsonify({"error": "No data provided"}), 400
+
+    prompt = _build_multiples_prompt(label, unit, dates, values, lang)
+    if not prompt:
+        return jsonify({"error": "No valid data points"}), 400
+    return _stream_gemini(prompt, "Multiples")
+
+
 def _build_housing_prompt(snapshot: dict, lang: str) -> str:
     """Build a Gemini prompt that explains the US housing market.
 
