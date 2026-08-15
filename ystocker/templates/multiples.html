@@ -97,7 +97,7 @@
   <span data-i18n="mult.rebuilding">Rebuilding the multiples — charts will appear in a moment…</span>
 </div>
 
-<div id="vpKpis" class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3 mb-6"></div>
+<div id="vpKpis" class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 mb-6"></div>
 
 <div class="space-y-6">
 
@@ -113,9 +113,15 @@
       <p class="text-xs text-slate-500" data-i18n="mult.fwd_desc">Cap-weighted forward P/E computed from index constituents — total market value divided by total forward earnings, which is the correct aggregation. Snapshotted once a day, so this series begins at the first snapshot and lengthens by one point per day.</p>
     </div>
     <div id="vpFwdEmpty" class="hidden text-xs text-slate-500 bg-slate-800/40 border border-slate-700 rounded-lg px-3 py-2 mt-3">
-      <span data-i18n="mult.fwd_seeding">Only one day recorded so far — the line appears once there are at least two snapshots. Today's values are in the tiles above.</span>
+      <span data-i18n="mult.fwd_seeding">Only today's reading has been recorded so far, so this shows the two side by side. It becomes a time series once a second daily snapshot lands.</span>
     </div>
-    <div class="chart-container" style="height:280px"><canvas id="vpForwardChart"></canvas></div>
+    <!-- Two presentations of the same data. A line needs at least two points to
+         mean anything, so until the snapshot series has them the comparison is
+         shown as bars instead of an all-but-empty chart. -->
+    <div class="chart-container" id="vpForwardBarWrap" style="height:200px; display:none">
+      <canvas id="vpForwardBar"></canvas>
+    </div>
+    <div class="chart-container" id="vpForwardLineWrap" style="height:280px"><canvas id="vpForwardChart"></canvas></div>
     <p class="text-[11px] text-slate-600 mt-2"><span id="vpCoverage"></span></p>
   </div>
 
@@ -381,14 +387,24 @@ const _explainData = {};
     ['spy_forward_pe',    'mult.kpi_spy',  'SPY forward P/E'],
     ['qqq_forward_pe',    'mult.kpi_qqq',  'QQQ forward P/E'],
     ['spx_trailing_pe',   'mult.kpi_spxpe','S&P 500 trailing P/E'],
-    ['spx_pe_percentile', 'mult.kpi_pctl', 'Percentile since 1871'],
+    ['spx_pe_percentile', 'mult.kpi_pctl', 'P/E percentile since 1871'],
+    ['spx_cape',          'mult.kpi_cape', 'Shiller CAPE'],
+    ['spx_cape_percentile','mult.kpi_capepctl','CAPE percentile since 1871'],
     ['spx_trailing_eps',  'mult.kpi_eps',  'S&P 500 trailing EPS'],
   ];
+  // Percentiles floor rather than round: a CAPE at the 99.5th percentile
+  // rounded to "100th" would claim an all-time record it has not set. And the
+  // ordinal suffix is computed, so a reading of 21 is not rendered "21th".
+  const ordinal = n => {
+    const s = ['th', 'st', 'nd', 'rd'];
+    const v = n % 100;
+    return n + (s[(v - 20) % 10] || s[v] || s[0]);
+  };
   const fmtKpi = (v, unit) => {
     if (v == null) return '—';
     if (unit === 'x') return v.toFixed(1) + 'x';
     if (unit === 'usd') return '$' + v.toFixed(2);
-    if (unit === 'pct_rank') return v.toFixed(0) + 'th';
+    if (unit === 'pct_rank') return ordinal(Math.floor(v));
     return String(v);
   };
   try {
@@ -430,12 +446,72 @@ const _explainData = {};
     // With a single recorded day a line is invisible, so say so rather than
     // showing an apparently broken chart.
     const empty = document.getElementById('vpFwdEmpty');
-    if (hist.length < 2 && empty) { empty.classList.remove('hidden'); }
+    const barWrap = document.getElementById('vpForwardBarWrap');
+    const lineWrap = document.getElementById('vpForwardLineWrap');
 
-    lineChart('vpForwardChart', [mk('SPY'), mk('QQQ')], {
-      fmt: xmult, showPoints: true, ranges: false, unit: 'x',
-      explainLabel: 'Cap-weighted forward P/E for SPY and QQQ',
-    });
+    if (hist.length < 2) {
+      // Not enough history for a line: compare the two current readings.
+      if (empty) empty.classList.remove('hidden');
+      if (barWrap) barWrap.style.display = 'block';
+      if (lineWrap) lineWrap.style.display = 'none';
+
+      const etfs = Object.keys(F);
+      const labels = etfs.map(e => (F[e].label || e));
+      const vals = etfs.map(e => F[e].forward_pe);
+      const barLabels = {
+        id: 'vpBarLabels',
+        afterDatasetsDraw(chart) {
+          const { ctx } = chart;
+          ctx.save();
+          ctx.font = '600 12px system-ui, -apple-system, sans-serif';
+          ctx.textBaseline = 'middle';
+          ctx.textAlign = 'left';
+          ctx.fillStyle = '#cbd5e1';
+          chart.getDatasetMeta(0).data.forEach((bar, i) => {
+            if (vals[i] == null) return;
+            ctx.fillText(vals[i].toFixed(1) + 'x', bar.x + 8, bar.y);
+          });
+          ctx.restore();
+        },
+      };
+      new Chart(document.getElementById('vpForwardBar'), {
+        type: 'bar',
+        data: { labels, datasets: [{
+          data: vals,
+          backgroundColor: etfs.map(e => (e === 'SPY' ? C_BLUE : C_ORANGE)),
+          borderWidth: 0, borderRadius: 3, maxBarThickness: 26,
+        }] },
+        options: {
+          indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+          layout: { padding: { right: 52 } },
+          plugins: {
+            legend: { display: false },
+            tooltip: { callbacks: { label: c => {
+              const b = F[etfs[c.dataIndex]];
+              return [` ${c.raw.toFixed(2)}x forward`,
+                      ` ${b.constituents_used}/${b.constituents_total} constituents`];
+            } } },
+          },
+          scales: {
+            x: { beginAtZero: true, grid: { color: gridCol },
+                 ticks: { color: tickCol, callback: v => v + 'x' } },
+            y: { grid: { display: false }, ticks: { color: tickCol, font: { size: 12 } } },
+          },
+        },
+        plugins: [barLabels],
+      });
+      // Explain still works — it just describes today's readings.
+      _explainData['vpForwardChart'] = {
+        label: 'Cap-weighted forward P/E for SPY and QQQ (current reading)',
+        unit: 'x', dates: [data.as_of], values: [vals[0]],
+      };
+    } else {
+      if (barWrap) barWrap.style.display = 'none';
+      lineChart('vpForwardChart', [mk('SPY'), mk('QQQ')], {
+        fmt: xmult, showPoints: true, ranges: false, unit: 'x',
+        explainLabel: 'Cap-weighted forward P/E for SPY and QQQ',
+      });
+    }
 
     const cov = document.getElementById('vpCoverage');
     if (cov) {
@@ -458,11 +534,17 @@ const _explainData = {};
           + ` — ${I18n.t('mult.higher_than') || 'higher than'} ${pctl.value.toFixed(0)}%`
           + ` ${I18n.t('mult.of_history') || 'of all months since 1871'}.`;
       }
-      lineChart('vpSpxPeChart', [{
-        dates: pe.dates, values: pe.values, color: C_INDIGO, fill: true,
-        label: I18n.t('mult.series_spxpe') || 'S&P 500 trailing P/E',
-      }], { fmt: xmult, xTicks: 8, unit: 'x', fillRgba: 'rgba(99,102,241,.10)',
-            explainLabel: 'S&P 500 trailing P/E, monthly since 1871' });
+      const cape = M.spx_cape;
+      lineChart('vpSpxPeChart', [
+        { dates: pe.dates, values: pe.values, color: C_INDIGO, fill: true,
+          label: I18n.t('mult.series_spxpe') || 'S&P 500 trailing P/E' },
+        // Legitimately on the same axis: both are P/E multiples of the same
+        // index in the same unit. The divergence is the point — trailing P/E
+        // spiked past 120x in 2009 on collapsing earnings while CAPE did not.
+        cape ? { dates: cape.dates, values: cape.values, color: C_ORANGE,
+                 label: I18n.t('mult.series_cape') || 'Shiller CAPE' } : null,
+      ], { fmt: xmult, xTicks: 8, unit: 'x', fillRgba: 'rgba(99,102,241,.10)',
+           explainLabel: 'S&P 500 trailing P/E and Shiller CAPE, monthly since 1871' });
     }
   } catch(e) { console.warn('Multiples chart vpSpxPeChart failed:', e); }
 

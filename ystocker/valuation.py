@@ -80,6 +80,13 @@ MULTPL_SERIES: dict[str, dict[str, str]] = {
                 "label": "S&P 500 Trailing P/E", "unit": "x"},
     "spx_eps": {"url": "https://www.multpl.com/s-p-500-earnings/table/by-month",
                 "label": "S&P 500 Trailing EPS", "unit": "usd"},
+    # Shiller CAPE: price over the 10-year inflation-adjusted earnings average.
+    # Worth carrying alongside the plain trailing P/E because trailing P/E goes
+    # useless exactly when it matters most — in 2009 collapsing earnings sent it
+    # above 120x, implying record expensiveness at the century's best entry
+    # point. CAPE's smoothed denominator does not invert like that.
+    "spx_cape": {"url": "https://www.multpl.com/shiller-pe/table/by-month",
+                 "label": "S&P 500 Shiller CAPE", "unit": "x"},
 }
 
 # Nasdaq-100 constituents. NDX reconstitutes annually (announced mid-December,
@@ -416,6 +423,21 @@ def _build_payload() -> dict[str, Any]:
             "source": "multpl.com", "as_of": spx_pe["dates"][-1],
             "since": spx_pe["dates"][0],
         }
+    cape = multpl.get("spx_cape")
+    if cape:
+        vals = cape["values"]
+        ranked = sorted(vals)
+        headline["spx_cape"] = {
+            "value": vals[-1],
+            "yoy": round(vals[-1] - vals[-13], 2) if len(vals) > 13 else None,
+            "unit": "x", "source": "multpl.com", "as_of": cape["dates"][-1],
+        }
+        headline["spx_cape_percentile"] = {
+            "value": round(sum(1 for v in ranked if v <= vals[-1]) / len(ranked) * 100, 1),
+            "unit": "pct_rank", "source": "multpl.com",
+            "as_of": cape["dates"][-1], "since": cape["dates"][0],
+        }
+
     spx_eps = multpl.get("spx_eps")
     if spx_eps:
         vals = spx_eps["values"]
