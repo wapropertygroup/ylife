@@ -78,8 +78,10 @@ _MULTPL_UA = (
 MULTPL_SERIES: dict[str, dict[str, str]] = {
     "spx_pe":  {"url": "https://www.multpl.com/s-p-500-pe-ratio/table/by-month",
                 "label": "S&P 500 Trailing P/E", "unit": "x"},
-    "spx_eps": {"url": "https://www.multpl.com/s-p-500-earnings/table/by-month",
-                "label": "S&P 500 Trailing EPS", "unit": "usd"},
+    # Nominal index level. Needed to derive nominal EPS, and never shipped —
+    # the page plots multiples, not the index.
+    "spx_price": {"url": "https://www.multpl.com/s-p-500-historical-prices/table/by-month",
+                  "label": "S&P 500 Price", "unit": "usd", "ship": False},
     # Shiller CAPE: price over the 10-year inflation-adjusted earnings average.
     # Worth carrying alongside the plain trailing P/E because trailing P/E goes
     # useless exactly when it matters most — in 2009 collapsing earnings sent it
@@ -204,6 +206,83 @@ def _fetch_multpl(key: str, meta: dict[str, str]) -> Optional[dict[str, Any]]:
         "label":  meta["label"],
         "unit":   meta["unit"],
         "source": "multpl.com",
+    }
+
+
+# ---------------------------------------------------------------------------
+# Derived from multpl's nominal series
+# ---------------------------------------------------------------------------
+
+def _by_month(block: Optional[dict[str, Any]]) -> dict[str, float]:
+    if not block:
+        return {}
+    return {d[:7]: v for d, v in zip(block["dates"], block["values"])}
+
+
+def _plus_12m(month: str) -> str:
+    return f"{int(month[:4]) + 1:04d}-{month[5:7]}"
+
+
+def _nominal_eps(multpl: dict[str, Any]) -> Optional[dict[str, Any]]:
+    """Nominal trailing EPS, derived as index level / P/E.
+
+    multpl publishes earnings **inflation-adjusted to current dollars** while its
+    price and P/E tables are nominal. Charting that earnings table as "trailing
+    EPS" overstates history badly — 1871 reads $10.72 instead of $0.40 — and
+    dividing a nominal price by a real EPS produces a meaningless ratio. Since
+    P/E and price are both nominal, their quotient recovers nominal EPS exactly:
+    verified at 0.40 (1871-01), 1.53 (1929-08), 2.34 (1950-01), 50.94 (2000-03)
+    and 261.68 (2026-03), all matching the published record.
+    """
+    price, pe = _by_month(multpl.get("spx_price")), _by_month(multpl.get("spx_pe"))
+    months = sorted(m for m in price if m in pe and pe[m])
+    if len(months) < 100:
+        return None
+    return {
+        "dates": [f"{m}-01" for m in months],
+        "values": [round(price[m] / pe[m], 2) for m in months],
+        "label": "S&P 500 Trailing EPS (nominal)",
+        "unit": "usd", "source": "multpl.com (derived)",
+    }
+
+
+def _realized_forward_pe(multpl: dict[str, Any],
+                         eps_nominal: Optional[dict[str, Any]]) -> Optional[dict[str, Any]]:
+    """Forward P/E on the earnings that actually arrived.
+
+    This is the one forward-P/E *time series* that free data supports. For each
+    month it divides the index level by the trailing EPS twelve months later —
+    which is precisely the earnings of the following twelve months:
+
+        forward P/E(t) = price(t) / EPS(t + 12m)
+
+    It is real history, not a rescaled price line, because the denominator moves
+    independently. What it is *not* is the consensus forward P/E of the day: it
+    uses hindsight, so it answers "what multiple did buyers actually pay for the
+    earnings they got" rather than "what did analysts expect". June 2008 reads
+    178x for exactly that reason — nobody forecast the collapse that followed.
+    The series necessarily stops twelve months short of today, since the next
+    year of earnings is not yet known; today's expectations live in the
+    consensus SPY/QQQ figures instead.
+    """
+    price = _by_month(multpl.get("spx_price"))
+    eps = _by_month(eps_nominal)
+    months = [m for m in sorted(price)
+              if _plus_12m(m) in eps and eps[_plus_12m(m)] > 0]
+    if len(months) < 100:
+        return None
+    values = [round(price[m] / eps[_plus_12m(m)], 2) for m in months]
+    ranked = sorted(values)
+    log.info("Valuation: realized forward P/E — %d months (%s … %s), latest %.1fx, "
+             "median %.1fx", len(months), months[0], months[-1], values[-1],
+             ranked[len(ranked) // 2])
+    return {
+        "dates": [f"{m}-01" for m in months],
+        "values": values,
+        "label": "S&P 500 Forward P/E (realized earnings)",
+        "unit": "x", "source": "multpl.com (derived)",
+        "median": round(ranked[len(ranked) // 2], 2),
+        "percentile": round(sum(1 for v in ranked if v <= values[-1]) / len(ranked) * 100, 1),
     }
 
 
@@ -400,6 +479,9 @@ def _build_payload() -> dict[str, Any]:
         log.error("Valuation: every source failed")
         return {"_ts": time.time(), "error": "valuation data unavailable"}
 
+    eps_nominal = _nominal_eps(multpl)
+    fwd_realized = _realized_forward_pe(multpl, eps_nominal)
+
     today = {etf: blk["forward_pe"] for etf, blk in forward.items()}
     history = _merge_snapshots(_previous_snapshots(), today) if today \
         else _previous_snapshots()
@@ -438,7 +520,7 @@ def _build_payload() -> dict[str, Any]:
             "as_of": cape["dates"][-1], "since": cape["dates"][0],
         }
 
-    spx_eps = multpl.get("spx_eps")
+    spx_eps = eps_nominal
     if spx_eps:
         vals = spx_eps["values"]
         headline["spx_trailing_eps"] = {
@@ -447,6 +529,13 @@ def _build_payload() -> dict[str, Any]:
             "unit": "usd", "source": "multpl.com",
             "as_of": spx_eps["dates"][-1],
         }
+    if fwd_realized:
+        headline["spx_fwd_realized"] = {
+            "value": fwd_realized["values"][-1], "yoy": None, "unit": "x",
+            "source": "multpl.com (derived)", "as_of": fwd_realized["dates"][-1],
+            "median": fwd_realized["median"],
+        }
+
     for etf, blk in forward.items():
         headline[f"{etf.lower()}_forward_pe"] = {
             "value": blk["forward_pe"], "yoy": None, "unit": "x",
@@ -462,9 +551,14 @@ def _build_payload() -> dict[str, Any]:
         "_ts": time.time(),
         "as_of": date.today().isoformat(),
         "headline": headline,
-        "multpl": multpl,
+        # spx_price is a derivation input only (nominal EPS and the realized
+        # forward P/E); the page plots multiples, so it never goes over the wire.
+        "multpl": {k: v for k, v in multpl.items()
+                   if MULTPL_SERIES.get(k, {}).get("ship", True)},
         "forward": forward,
         "forward_history": history,
+        "eps_nominal": eps_nominal,
+        "fwd_realized": fwd_realized,
     }
 
 

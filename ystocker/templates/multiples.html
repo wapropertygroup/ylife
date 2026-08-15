@@ -125,6 +125,21 @@
     <p class="text-[11px] text-slate-600 mt-2"><span id="vpCoverage"></span></p>
   </div>
 
+  <!-- ── The forward P/E time series that free data DOES support ──────── -->
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up">
+    <div class="mb-1">
+      <h2 class="text-base font-semibold text-slate-200">
+        <span data-i18n="mult.fwdhist_title">Forward P/E History (on realized earnings)</span>
+        <span class="src-chip src-forward" data-i18n="mult.chip_forward">Forward</span>
+      </h2>
+      <p class="text-xs text-slate-500">
+        <span data-i18n="mult.fwdhist_desc">Index level divided by the earnings of the following twelve months — the multiple buyers actually paid for the earnings that arrived. Real history since 1871, because the denominator moves independently of price. It uses hindsight rather than the consensus of the day, so it stops twelve months short of today.</span>
+        <span id="vpFwdHistStat" class="text-slate-400"></span>
+      </p>
+    </div>
+    <div class="chart-container" style="height:280px"><canvas id="vpFwdHistChart"></canvas></div>
+  </div>
+
   <div class="vp-section"><h2 data-i18n="mult.sec_trailing">S&amp;P 500 Trailing P/E — 155 Years</h2><div class="rule"></div></div>
 
   <!-- ── The real long history ────────────────────────────────────────── -->
@@ -319,6 +334,7 @@ const _explainData = {};
           borderColor: s.color || [C_BLUE, C_ORANGE][i % 2],
           backgroundColor: s.fill ? (opts.fillRgba || 'rgba(57,135,229,.10)') : 'transparent',
           borderWidth: 2,
+          borderDash: s.dash || undefined,
           // The forward series starts with a single point; without a visible
           // marker a 1-point line renders as literally nothing.
           pointRadius: opts.showPoints ? 3 : 0,
@@ -390,7 +406,8 @@ const _explainData = {};
     ['spx_pe_percentile', 'mult.kpi_pctl', 'P/E percentile since 1871'],
     ['spx_cape',          'mult.kpi_cape', 'Shiller CAPE'],
     ['spx_cape_percentile','mult.kpi_capepctl','CAPE percentile since 1871'],
-    ['spx_trailing_eps',  'mult.kpi_eps',  'S&P 500 trailing EPS'],
+    ['spx_fwd_realized',  'mult.kpi_fwdreal','Forward P/E (realized)'],
+    ['spx_trailing_eps',  'mult.kpi_eps',  'S&P 500 trailing EPS (nominal)'],
   ];
   // Percentiles floor rather than round: a CAPE at the 99.5th percentile
   // rounded to "100th" would claim an all-time record it has not set. And the
@@ -523,6 +540,27 @@ const _explainData = {};
     }
   } catch(e) { console.warn('Multiples chart vpForwardChart failed:', e); }
 
+  // ── Realized forward P/E, 1871 → 12 months ago ──────────────────────
+  try {
+    const fr = data.fwd_realized;
+    if (fr) {
+      const el = document.getElementById('vpFwdHistStat');
+      if (el) {
+        el.textContent = ` ${I18n.t('mult.latest') || 'Latest'} ${fr.values[fr.values.length - 1].toFixed(1)}x`
+          + ` ${I18n.t('mult.vs_median') || 'vs a long-run median of'} ${fr.median.toFixed(1)}x`
+          + ` (${Math.floor(fr.percentile)}${I18n.getLang() === 'zh' ? '' : 'th'} ${I18n.t('mult.pctile_word') || 'percentile'}).`;
+      }
+      lineChart('vpFwdHistChart', [
+        { dates: fr.dates, values: fr.values, color: C_ORANGE, fill: true,
+          label: I18n.t('mult.series_fwdhist') || 'Forward P/E (realized earnings)' },
+        // A flat median makes an absolute multiple readable at a glance.
+        { dates: fr.dates, values: fr.dates.map(() => fr.median), color: 'rgba(148,163,184,.55)',
+          dash: [4, 3], label: I18n.t('mult.series_median') || 'Long-run median' },
+      ], { fmt: xmult, xTicks: 8, unit: 'x', fillRgba: 'rgba(217,89,38,.10)',
+           explainLabel: 'S&P 500 forward P/E computed on realized next-12-month earnings, since 1871' });
+    }
+  } catch(e) { console.warn('Multiples chart vpFwdHistChart failed:', e); }
+
   // ── S&P 500 trailing P/E, 1871 → now ────────────────────────────────
   try {
     const pe = M.spx_pe;
@@ -550,7 +588,7 @@ const _explainData = {};
 
   // ── S&P 500 trailing EPS ────────────────────────────────────────────
   try {
-    const eps = M.spx_eps;
+    const eps = data.eps_nominal;
     if (eps) {
       lineChart('vpSpxEpsChart', [{
         dates: eps.dates, values: eps.values, color: C_BLUE, fill: true,
