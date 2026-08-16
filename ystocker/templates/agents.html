@@ -1,0 +1,273 @@
+{% extends "base.html" %}
+{% block title %}yStocker — Trading Agents{% endblock %}
+
+{% block content %}
+<style>
+.ag-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600;
+  border: 1px solid #6366f1; background: rgba(99,102,241,.15); color: #a5b4fc;
+  cursor: pointer; transition: background .15s, border-color .15s, color .15s;
+  white-space: nowrap;
+}
+.ag-btn:hover:not(:disabled) { background: rgba(99,102,241,.28); color: #c7d2fe; }
+.ag-btn:disabled { opacity: .45; cursor: not-allowed; }
+.ag-btn-ghost {
+  border-color: #334155; background: transparent; color: #94a3b8;
+  font-weight: 500; padding: 6px 12px; font-size: 12px;
+}
+.ag-btn-ghost:hover:not(:disabled) { background: rgba(148,163,184,.12); color: #cbd5e1; }
+.ag-input {
+  background: #0f172a; border: 1px solid #334155; border-radius: 8px;
+  color: #e2e8f0; font-size: 13px; padding: 8px 12px;
+}
+.ag-input:focus { outline: none; border-color: #6366f1; }
+.ag-pill {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 600;
+}
+.ag-queued  { background: rgba(148,163,184,.15); color: #b6c2d1; }
+.ag-running { background: rgba(99,102,241,.18);  color: #a5b4fc; }
+.ag-done    { background: rgba(25,158,112,.18);  color: #4ade80; }
+.ag-error   { background: rgba(230,103,103,.18); color: #fca5a5; }
+.ag-log {
+  background: #0b1120; border: 1px solid #1e293b; border-radius: 8px;
+  padding: 12px; font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 11px; line-height: 1.6; color: #94a3b8;
+  white-space: pre-wrap; word-break: break-word;
+  max-height: 320px; overflow-y: auto;
+}
+.ag-report {
+  color: #cbd5e1; font-size: 13px; line-height: 1.7; white-space: pre-wrap;
+}
+.ag-row {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+}
+</style>
+
+<!-- ── Header ─────────────────────────────────────────────────────────── -->
+<div class="mb-6 fade-up">
+  <h1 class="text-2xl sm:text-3xl font-bold grad-text mb-1" data-i18n="agents.title">Trading Agents</h1>
+  <p class="text-slate-400 text-sm" data-i18n="agents.subtitle">
+    Runs the TradingAgents multi-agent analysis — analyst, researcher and risk debate rounds — for one ticker and date.
+  </p>
+</div>
+
+{% if not signed_in %}
+<div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 fade-up text-center">
+  <p class="text-slate-300 text-sm mb-1" data-i18n="agents.need_signin">Sign in to run an analysis.</p>
+  <p class="text-xs text-slate-500 mb-4" data-i18n="agents.need_signin_why">Each run makes live LLM calls that cost real money, so this page is restricted.</p>
+  <a href="{{ url_for('main.login') }}" class="ag-btn" data-i18n="nav.sign_in">Sign In</a>
+</div>
+{% elif not allowed %}
+<div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 fade-up">
+  <p class="text-slate-300 text-sm mb-1">
+    <span data-i18n="agents.not_allowed">This account is not on the agent allowlist.</span>
+  </p>
+  <p class="text-xs text-slate-500">
+    <span data-i18n="agents.not_allowed_fix">Add the address to AGENTS_ALLOWED_EMAILS (comma-separated) and restart, or via SSM in production.</span>
+    <span class="text-slate-600">— {{ user_email }}</span>
+  </p>
+</div>
+{% else %}
+
+{# The page says up front when a run cannot possibly work, rather than letting
+   the user discover it as a failed job. #}
+{% if not agent_env.ready %}
+<div class="mb-6 px-4 py-3 rounded-lg bg-amber-900/25 border border-amber-700/60 text-amber-200 text-sm fade-up">
+  <p class="font-semibold mb-1" data-i18n="agents.env_bad">The agent runner is not fully configured</p>
+  <ul class="text-xs space-y-0.5 text-amber-200/80">
+    {% if not agent_env.ta_dir_exists %}
+    <li>· <span data-i18n="agents.env_dir">TradingAgents directory not found</span>: <code>{{ agent_env.ta_dir }}</code> — <span data-i18n="agents.env_dir_fix">set TRADINGAGENTS_DIR</span></li>
+    {% endif %}
+    {% if not agent_env.interpreter_exists %}
+    <li>· <span data-i18n="agents.env_py">Interpreter not found</span>: <code>{{ agent_env.interpreter }}</code> — <span data-i18n="agents.env_py_fix">set TRADINGAGENTS_PYTHON to a python that can import tradingagents</span></li>
+    {% endif %}
+  </ul>
+</div>
+{% endif %}
+
+<!-- ── Run form ───────────────────────────────────────────────────────── -->
+<div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 mb-6 fade-up">
+  <div class="ag-row">
+    <div>
+      <label class="block text-xs text-slate-500 mb-1" for="agTicker" data-i18n="agents.ticker">Ticker</label>
+      <input id="agTicker" class="ag-input w-28" value="NVDA" maxlength="10" autocomplete="off">
+    </div>
+    <div>
+      <label class="block text-xs text-slate-500 mb-1" for="agDate" data-i18n="agents.date">Analysis date</label>
+      <input id="agDate" class="ag-input" type="date" value="{{ agent_env.today if agent_env.today else '' }}">
+    </div>
+    <div class="pt-5 ag-row">
+      <button id="agRun" class="ag-btn" data-i18n="agents.run">▶ Run analysis</button>
+      {# A free path to prove the plumbing works end to end without an LLM bill. #}
+      <button id="agSelftest" class="ag-btn ag-btn-ghost" data-i18n="agents.selftest">Self-test (no LLM)</button>
+    </div>
+  </div>
+  <p class="text-xs text-slate-600 mt-3">
+    <span data-i18n="agents.cost_warning">A real run takes several minutes and spends API credits. One run executes at a time; others queue.</span>
+    <span data-i18n="agents.timeout_is">Timeout</span>: {{ (agent_env.timeout_sec | int) // 60 }}&nbsp;min.
+  </p>
+  <div id="agError" class="hidden mt-3 px-3 py-2 rounded-lg bg-red-900/40 border border-red-700 text-red-300 text-xs"></div>
+</div>
+
+<!-- ── Current run ────────────────────────────────────────────────────── -->
+<div id="agCurrent" class="hidden bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 mb-6 fade-up">
+  <div class="ag-row justify-between mb-3">
+    <div class="ag-row">
+      <span class="text-base font-semibold text-slate-200" id="agJobTitle">—</span>
+      <span id="agStatus" class="ag-pill ag-queued">queued</span>
+      <span id="agElapsed" class="text-xs text-slate-500"></span>
+    </div>
+    <button id="agHide" class="ag-btn ag-btn-ghost" data-i18n="agents.dismiss">Dismiss</button>
+  </div>
+  <div id="agDecisionWrap" class="hidden mb-4">
+    <p class="text-xs text-slate-500 mb-1" data-i18n="agents.decision">Decision</p>
+    <p class="text-2xl font-semibold text-slate-100" id="agDecision">—</p>
+  </div>
+  <div id="agReportWrap" class="hidden mb-4">
+    <p class="text-xs text-slate-500 mb-1" data-i18n="agents.report">Report</p>
+    <div class="ag-report" id="agReport"></div>
+  </div>
+  <div id="agLogWrap" class="hidden">
+    <p class="text-xs text-slate-500 mb-1" data-i18n="agents.log">Runner output (tail)</p>
+    <div class="ag-log" id="agLog"></div>
+  </div>
+</div>
+
+<!-- ── History ────────────────────────────────────────────────────────── -->
+<div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
+  <h3 class="text-sm font-semibold text-slate-300 mb-3" data-i18n="agents.history">Recent runs</h3>
+  <div id="agHistory" class="text-xs text-slate-500" data-i18n="agents.history_empty">No runs yet.</div>
+</div>
+{% endif %}
+
+<script>
+(function() {
+  const runBtn = document.getElementById('agRun');
+  if (!runBtn) return;   // not signed in / not allowed — nothing to wire
+
+  const selfBtn = document.getElementById('agSelftest');
+  const tickerEl = document.getElementById('agTicker');
+  const dateEl = document.getElementById('agDate');
+  const errEl = document.getElementById('agError');
+  const card = document.getElementById('agCurrent');
+  const statusEl = document.getElementById('agStatus');
+  const titleEl = document.getElementById('agJobTitle');
+  const elapsedEl = document.getElementById('agElapsed');
+  let poll = null;
+
+  if (dateEl && !dateEl.value) dateEl.value = new Date().toISOString().slice(0, 10);
+
+  const showErr = m => { errEl.textContent = '⚠ ' + m; errEl.classList.remove('hidden'); };
+  const clearErr = () => errEl.classList.add('hidden');
+
+  const setStatus = s => {
+    statusEl.textContent = s;
+    statusEl.className = 'ag-pill ' + ({ queued: 'ag-queued', running: 'ag-running',
+                                         done: 'ag-done', error: 'ag-error' }[s] || 'ag-queued');
+  };
+  const show = (id, on) => document.getElementById(id).classList.toggle('hidden', !on);
+
+  function render(job) {
+    card.classList.remove('hidden');
+    titleEl.textContent = `${job.ticker} · ${job.date}` + (job.selftest ? '  (self-test)' : '');
+    setStatus(job.status);
+    elapsedEl.textContent = job.elapsed_sec ? `${job.elapsed_sec}s` : '';
+
+    show('agDecisionWrap', !!job.decision);
+    if (job.decision) document.getElementById('agDecision').textContent = job.decision;
+
+    show('agReportWrap', !!job.report);
+    if (job.report) document.getElementById('agReport').textContent = job.report;
+
+    const logText = job.error ? ('ERROR: ' + job.error + (job.log ? '\n\n' + job.log : '')) : (job.log || '');
+    show('agLogWrap', !!logText);
+    if (logText) document.getElementById('agLog').textContent = logText;
+
+    // Running jobs disable the buttons: the server allows one at a time anyway,
+    // so letting a second be queued from here would just confuse.
+    const busy = job.status === 'queued' || job.status === 'running';
+    runBtn.disabled = busy; selfBtn.disabled = busy;
+    return busy;
+  }
+
+  async function pollJob(id) {
+    try {
+      const r = await fetch(`/api/agents/job/${id}`);
+      if (!r.ok) { clearInterval(poll); poll = null; showErr(`Polling failed (HTTP ${r.status})`); return; }
+      const job = await r.json();
+      const busy = render(job);
+      if (!busy) { clearInterval(poll); poll = null; loadHistory(); }
+    } catch (e) {
+      clearInterval(poll); poll = null; showErr('Polling failed: ' + e.message);
+    }
+  }
+
+  async function start(selftest) {
+    clearErr();
+    runBtn.disabled = true; selfBtn.disabled = true;
+    try {
+      const r = await fetch('/api/agents/run', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ticker: tickerEl.value, date: dateEl.value, selftest: !!selftest }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        showErr(d.error || `HTTP ${r.status}`);
+        runBtn.disabled = false; selfBtn.disabled = false;
+        return;
+      }
+      // A real debate runs for minutes, so poll on a slow cadence.
+      if (poll) clearInterval(poll);
+      await pollJob(d.job_id);
+      poll = setInterval(() => pollJob(d.job_id), 4000);
+    } catch (e) {
+      showErr(e.message); runBtn.disabled = false; selfBtn.disabled = false;
+    }
+  }
+
+  async function loadHistory() {
+    try {
+      const r = await fetch('/api/agents/jobs');
+      if (!r.ok) return;
+      const { jobs } = await r.json();
+      const box = document.getElementById('agHistory');
+      if (!jobs || !jobs.length) { box.textContent = I18n.t('agents.history_empty') || 'No runs yet.'; return; }
+      box.removeAttribute('data-i18n');
+      box.innerHTML = '';
+      // Hoisted out of the template literal below. A dollar-sign followed by
+      // two braces inside a JS template literal is read by Jinja as an
+      // expression opener, which breaks compilation of this file.
+      const CLS = { queued: 'ag-queued', running: 'ag-running', done: 'ag-done', error: 'ag-error' };
+      jobs.forEach(j => {
+        const row = document.createElement('div');
+        row.className = 'ag-row justify-between border-t border-slate-800 py-2';
+        const left = document.createElement('div');
+        left.className = 'ag-row';
+        left.innerHTML = `<span class="text-slate-300 font-medium">${j.ticker}</span>`
+          + `<span class="text-slate-600">${j.date}</span>`
+          + `<span class="ag-pill ${CLS[j.status] || 'ag-queued'}">${j.status}</span>`
+          + (j.selftest ? '<span class="text-slate-600">self-test</span>' : '')
+          + (j.elapsed_sec ? `<span class="text-slate-600">${j.elapsed_sec}s</span>` : '');
+        const btn = document.createElement('button');
+        btn.className = 'ag-btn ag-btn-ghost';
+        btn.textContent = I18n.t('agents.view') || 'View';
+        btn.onclick = () => pollJob(j.id);
+        row.append(left, btn);
+        box.appendChild(row);
+      });
+    } catch (e) { /* history is decoration; never block the page on it */ }
+  }
+
+  runBtn.addEventListener('click', () => start(false));
+  selfBtn.addEventListener('click', () => start(true));
+  document.getElementById('agHide').addEventListener('click', () => {
+    card.classList.add('hidden');
+    if (poll) { clearInterval(poll); poll = null; }
+    runBtn.disabled = false; selfBtn.disabled = false;
+  });
+  loadHistory();
+})();
+</script>
+{% endblock %}

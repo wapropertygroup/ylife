@@ -2110,6 +2110,96 @@ def api_fedwatch():
 
 
 # ---------------------------------------------------------------------------
+# Trading agents — gated, subprocess-per-run
+# ---------------------------------------------------------------------------
+
+def _agent_user() -> Optional[str]:
+    """Signed-in email, or None."""
+    return session.get("user_email")
+
+
+def _agent_gate():
+    """Return an error Response if the caller may not run agents, else None.
+
+    Two separate reasons are distinguished because they need different fixes:
+    401 means sign in, 403 means ask to be added to the allowlist. Each run
+    spends real API credits and this site is otherwise public, so an empty
+    allowlist denies everyone.
+    """
+    from ystocker.agents import is_allowed
+
+    email = _agent_user()
+    if not email:
+        return jsonify({"error": "Sign in required", "reason": "auth"}), 401
+    if not is_allowed(email):
+        return jsonify({"error": "This account is not on the agent allowlist",
+                        "reason": "forbidden"}), 403
+    return None
+
+
+@bp.route("/agents")
+def agents_page():
+    """Page for running the TradingAgents analysis."""
+    from ystocker.agents import environment_report, is_allowed
+
+    email = _agent_user()
+    log.info("GET /agents (user=%s)", email or "anon")
+    return render_template(
+        "agents.html",
+        peer_groups=list(PEER_GROUPS.keys()),
+        agent_env=environment_report(),
+        signed_in=bool(email),
+        allowed=is_allowed(email),
+        user_email=email or "",
+    )
+
+
+@bp.route("/api/agents/run", methods=["POST"])
+def api_agents_run():
+    """Queue a run. Returns a job id to poll."""
+    gate = _agent_gate()
+    if gate:
+        return gate
+    from ystocker.agents import submit
+
+    body = request.get_json(force=True, silent=True) or {}
+    job_id, err = submit(
+        ticker=body.get("ticker", ""),
+        day=body.get("date", ""),
+        user=_agent_user() or "",
+        selftest=bool(body.get("selftest")),
+    )
+    if err:
+        return jsonify({"error": err}), 400
+    return jsonify({"job_id": job_id, "status": "queued"}), 202
+
+
+@bp.route("/api/agents/job/<job_id>")
+def api_agents_job(job_id):
+    """Poll one job. Gated too — a transcript may contain position views."""
+    gate = _agent_gate()
+    if gate:
+        return gate
+    from ystocker.agents import get_job
+
+    job = get_job(job_id)
+    if not job:
+        return jsonify({"error": "No such job"}), 404
+    return jsonify(job)
+
+
+@bp.route("/api/agents/jobs")
+def api_agents_jobs():
+    """Recent runs, newest first."""
+    gate = _agent_gate()
+    if gate:
+        return gate
+    from ystocker.agents import list_jobs
+
+    return jsonify({"jobs": list_jobs(20)})
+
+
+# ---------------------------------------------------------------------------
 # Syndication — iCalendar + RSS
 # ---------------------------------------------------------------------------
 
