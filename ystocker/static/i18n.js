@@ -1050,6 +1050,8 @@ const I18n = (() => {
                             zh: '指数点位除以其后十二个月的实际盈利——即买方为最终实现的盈利所支付的真实倍数。自1871年起的真实历史，因为分母独立于价格变动。该序列使用事后数据而非当时的一致预期，因此截止于距今十二个月之前。' },
     'mult.series_fwdhist':{ en: 'Forward P/E (realized earnings)', zh: '预期市盈率（实际盈利）' },
     'mult.series_median': { en: 'Long-run median', zh: '长期中位数' },
+    'mult.log_note':      { en: 'Log scale — the 2009 reading near 193x would otherwise flatten the rest.',
+                            zh: '对数刻度——否则2009年接近193倍的读数会压平其余全部历史。' },
     'mult.kpi_fwdreal':   { en: 'Forward P/E (realized)', zh: '预期市盈率（实际）' },
     'mult.latest':        { en: 'Latest',          zh: '最新' },
     'mult.vs_median':     { en: 'vs a long-run median of', zh: '对比长期中位数' },

@@ -135,6 +135,7 @@
       <p class="text-xs text-slate-500">
         <span data-i18n="mult.fwdhist_desc">Index level divided by the earnings of the following twelve months — the multiple buyers actually paid for the earnings that arrived. Real history since 1871, because the denominator moves independently of price. It uses hindsight rather than the consensus of the day, so it stops twelve months short of today.</span>
         <span id="vpFwdHistStat" class="text-slate-400"></span>
+        <span class="text-slate-600" data-i18n="mult.log_note">Log scale — the 2009 reading near 193x would otherwise flatten the rest.</span>
       </p>
     </div>
     <div class="chart-container" style="height:280px"><canvas id="vpFwdHistChart"></canvas></div>
@@ -380,8 +381,17 @@ const _explainData = {};
                           return spanYears(this.chart.data.labels) > 25
                             ? axisYear(d) : axisMonth(d);
                         } } },
-          y: { grid: { color: gridCol }, ticks: { color: tickCol, callback: v => fmtV(v) },
-               ...(opts.beginAtZero ? { beginAtZero: true } : {}) },
+          // A log y-axis where one outlier would otherwise flatten everything
+          // else: the realized forward P/E touches ~193x in 2009, which on a
+          // linear scale compresses 150 years into a band a few pixels tall.
+          // Log keeps every point and shows proportional moves, which is what
+          // matters for a ratio.
+          y: opts.logY
+            ? { type: 'logarithmic', grid: { color: gridCol },
+                ticks: { color: tickCol,
+                         callback: v => ([5, 10, 20, 50, 100, 200].includes(v) ? fmtV(v) : '') } }
+            : { grid: { color: gridCol }, ticks: { color: tickCol, callback: v => fmtV(v) },
+                ...(opts.beginAtZero ? { beginAtZero: true } : {}) },
         },
         interaction: { mode: 'index', intersect: false },
       },
@@ -572,7 +582,7 @@ const _explainData = {};
         // A flat median makes an absolute multiple readable at a glance.
         { dates: fr.dates, values: fr.dates.map(() => fr.median), color: 'rgba(148,163,184,.55)',
           dash: [4, 3], label: I18n.t('mult.series_median') || 'Long-run median' },
-      ], { fmt: xmult, xTicks: 8, unit: 'x', fillRgba: 'rgba(217,89,38,.10)',
+      ], { fmt: xmult, xTicks: 8, unit: 'x', fillRgba: 'rgba(217,89,38,.10)', logY: true,
            explainLabel: 'S&P 500 forward P/E computed on realized next-12-month earnings, since 1871' });
     }
   } catch(e) { console.warn('Multiples chart vpFwdHistChart failed:', e); }
