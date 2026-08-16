@@ -9,6 +9,13 @@
   <!-- Tailwind CSS (compiled — regenerate with: bash build_css.sh) -->
   <link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind.css') }}">
 
+  <!-- Feed autodiscovery: lets an RSS reader or calendar client find these
+       from any page rather than needing the URL typed in. -->
+  <link rel="alternate" type="application/rss+xml" title="yStocker Daily Commentary"
+        href="{{ url_for('main.rss_feed') }}">
+  <link rel="alternate" type="text/calendar" title="FOMC Meetings"
+        href="{{ url_for('main.fomc_calendar') }}">
+
   <!-- Alpine.js -->
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 

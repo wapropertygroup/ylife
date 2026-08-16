@@ -2110,6 +2110,53 @@ def api_fedwatch():
 
 
 # ---------------------------------------------------------------------------
+# Syndication — iCalendar + RSS
+# ---------------------------------------------------------------------------
+
+@bp.route("/calendar.ics")
+@bp.route("/fomc.ics")
+def fomc_calendar():
+    """iCalendar feed of FOMC decision dates, for calendar subscriptions.
+
+    Cached for an hour: the FOMC schedule changes a few times a year, and
+    calendar clients poll far more often than that. text/calendar is what makes
+    Apple Calendar and Google offer to subscribe rather than download.
+    """
+    from ystocker.feeds import build_fomc_ics
+
+    try:
+        body = build_fomc_ics(include_past=request.args.get("past", "1") != "0")
+    except Exception as exc:
+        log.error("calendar.ics: build failed: %s", exc, exc_info=True)
+        return Response("calendar unavailable", status=503, mimetype="text/plain")
+
+    log.info("GET calendar.ics (%d bytes)", len(body))
+    return Response(body, content_type="text/calendar; charset=utf-8", headers={
+        "Content-Disposition": 'inline; filename="ystocker-fomc.ics"',
+        "Cache-Control": "public, max-age=3600",
+    })
+
+
+@bp.route("/rss.xml")
+@bp.route("/feed.xml")
+def rss_feed():
+    """RSS 2.0 feed of the daily market commentary."""
+    from ystocker.feeds import build_rss
+
+    lang = request.args.get("lang", "en")
+    try:
+        body = build_rss(lang=lang)
+    except Exception as exc:
+        log.error("rss.xml: build failed: %s", exc, exc_info=True)
+        return Response("feed unavailable", status=503, mimetype="text/plain")
+
+    log.info("GET rss.xml lang=%s (%d bytes)", lang, len(body))
+    return Response(body, content_type="application/rss+xml; charset=utf-8", headers={
+        "Cache-Control": "public, max-age=1800",
+    })
+
+
+# ---------------------------------------------------------------------------
 # Housing — Zillow Research + Redfin Data Center
 # ---------------------------------------------------------------------------
 
