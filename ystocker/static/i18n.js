@@ -1054,6 +1054,8 @@ const I18n = (() => {
     'mult.latest':        { en: 'Latest',          zh: '最新' },
     'mult.vs_median':     { en: 'vs a long-run median of', zh: '对比长期中位数' },
     'mult.pctile_word':   { en: 'percentile',      zh: '百分位' },
+    'mult.series_missing':{ en: 'This series is unavailable right now. Try ↻ Refresh.',
+                            zh: '该序列暂时不可用，请点击「↻ 刷新」重试。' },
     'mult.fwd_title':     { en: 'Forward P/E: SPY vs QQQ', zh: '预期市盈率：SPY vs QQQ' },
     'mult.fwd_desc':      { en: 'Cap-weighted forward P/E computed from index constituents — total market value divided by total forward earnings, which is the correct aggregation. Snapshotted once a day, so this series begins at the first snapshot and lengthens by one point per day.',
                             zh: '由指数成分股计算的市值加权预期市盈率——总市值除以总预期盈利，这是正确的汇总方式。每日快照一次，因此该序列自首次快照开始，每天新增一个数据点。' },

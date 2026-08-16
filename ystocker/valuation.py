@@ -67,6 +67,12 @@ log = logging.getLogger(__name__)
 
 _CACHE_FILE = Path(__file__).parent.parent / "cache" / "valuation_cache.json"
 _CACHE_TTL = 24 * 60 * 60  # multpl updates daily; constituents once a day is plenty
+# Payload schema version. Bump whenever a key is added, removed or renamed.
+# A TTL alone does not protect against a shape change: after a deploy that adds
+# a field, an existing cache still looks fresh, so the API happily serves a
+# payload the new page cannot read and charts render empty with no explanation.
+# Same idea as _YIELD_CURVE_CACHE_VER in routes.py.
+_CACHE_VER = "v2"
 
 # Browser UA: multpl.com serves a plain client fine, but its CDN is happier
 # with a normal UA and this host is not FRED (see fed.py for why FRED differs).
@@ -549,6 +555,7 @@ def _build_payload() -> dict[str, Any]:
              "%d snapshot days", len(multpl), len(forward), len(history))
     return {
         "_ts": time.time(),
+        "_ver": _CACHE_VER,
         "as_of": date.today().isoformat(),
         "headline": headline,
         # spx_price is a derivation input only (nominal EPS and the realized
@@ -584,6 +591,10 @@ def _load_disk_cache() -> Optional[dict[str, Any]]:
         if not _CACHE_FILE.exists():
             return None
         payload = json.loads(_CACHE_FILE.read_text())
+        if payload.get("_ver") != _CACHE_VER:
+            log.info("%s: cache schema %s != %s — rebuilding",
+                     __name__, payload.get("_ver"), _CACHE_VER)
+            return None
         if time.time() - payload.get("_ts", 0) >= _CACHE_TTL:
             return None
         if not _has_content(payload):
@@ -671,6 +682,8 @@ def is_cache_fresh() -> bool:
     with _cache_lock:
         data = _cache_data if _cache_data else _load_disk_cache()
     if not data:
+        return False
+    if data.get("_ver") != _CACHE_VER:
         return False
     ts = data.get("_ts")
     if not ts or (time.time() - ts) >= _CACHE_TTL:

@@ -84,6 +84,12 @@ log = logging.getLogger(__name__)
 
 _CACHE_FILE = Path(__file__).parent.parent / "cache" / "fedwatch_cache.json"
 _CACHE_TTL = 4 * 60 * 60  # 4 hours
+# Payload schema version. Bump whenever a key is added, removed or renamed.
+# A TTL alone does not protect against a shape change: after a deploy that adds
+# a field, an existing cache still looks fresh, so the API happily serves a
+# payload the new page cannot read and charts render empty with no explanation.
+# Same idea as _YIELD_CURVE_CACHE_VER in routes.py.
+_CACHE_VER = "v1"
 
 # Futures month codes: Jan..Dec
 _MONTH_CODES = "FGHJKMNQUVXZ"
@@ -576,6 +582,7 @@ def _build_payload() -> dict[str, Any]:
 
     return {
         "_ts": time.time(),
+        "_ver": _CACHE_VER,
         "as_of": as_of,
         "current": {
             "lower": lower,
@@ -612,6 +619,10 @@ def _load_disk_cache() -> Optional[dict[str, Any]]:
         if not _CACHE_FILE.exists():
             return None
         payload = json.loads(_CACHE_FILE.read_text())
+        if payload.get("_ver") != _CACHE_VER:
+            log.info("%s: cache schema %s != %s — rebuilding",
+                     __name__, payload.get("_ver"), _CACHE_VER)
+            return None
         if time.time() - payload.get("_ts", 0) >= _CACHE_TTL:
             return None
         if not payload.get("meetings"):
@@ -708,6 +719,8 @@ def is_cache_fresh() -> bool:
     with _cache_lock:
         data = _cache_data if _cache_data else _load_disk_cache()
     if not data:
+        return False
+    if data.get("_ver") != _CACHE_VER:
         return False
     ts = data.get("_ts")
     if not ts or (time.time() - ts) >= _CACHE_TTL:

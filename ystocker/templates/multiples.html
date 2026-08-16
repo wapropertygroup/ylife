@@ -312,7 +312,23 @@ const _explainData = {};
     const el = document.getElementById(canvasId);
     if (!el) return null;
     const live = series.filter(s => s && s.values && s.values.some(v => v != null));
-    if (!live.length) { console.warn(`Multiples: ${canvasId} has no data — skipped`); return null; }
+    if (!live.length) {
+      // Say why rather than leaving a blank rectangle. This fires when a source
+      // failed or when a cached payload predates a series being added, and an
+      // unexplained empty chart is indistinguishable from a broken page.
+      console.warn(`Multiples: ${canvasId} has no data — skipped`);
+      const wrap = el.closest('.chart-container');
+      if (wrap) {
+        wrap.innerHTML = '';
+        const note = document.createElement('p');
+        note.className = 'text-xs text-slate-500 bg-slate-800/40 border border-slate-700 '
+                       + 'rounded-lg px-3 py-2';
+        note.textContent = I18n.t('mult.series_missing')
+          || 'This series is unavailable right now. Try ↻ Refresh.';
+        wrap.appendChild(note);
+      }
+      return null;
+    }
 
     const base = live.reduce((a, b) => (b.dates.length > a.dates.length ? b : a), live[0]);
     const labels = base.dates;
