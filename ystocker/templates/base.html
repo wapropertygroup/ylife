@@ -164,18 +164,43 @@
         <a href="{{ url_for('main.thirteenf') }}"
            class="px-3 py-1.5 rounded-md text-sm text-slate-300 hover:text-white hover:bg-slate-800 transition"
            data-i18n="nav.thirteenf">13F</a>
-        <a href="{{ url_for('main.fed') }}"
-           class="px-3 py-1.5 rounded-md text-sm text-slate-300 hover:text-white hover:bg-slate-800 transition"
-           data-i18n="nav.fed">Fed</a>
-        <a href="{{ url_for('main.fedwatch') }}"
-           class="px-3 py-1.5 rounded-md text-sm text-slate-300 hover:text-white hover:bg-slate-800 transition"
-           data-i18n="nav.fedwatch">Rates</a>
-        <a href="{{ url_for('main.housing') }}"
-           class="px-3 py-1.5 rounded-md text-sm text-slate-300 hover:text-white hover:bg-slate-800 transition"
-           data-i18n="nav.housing">Housing</a>
-        <a href="{{ url_for('main.multiples') }}"
-           class="px-3 py-1.5 rounded-md text-sm text-slate-300 hover:text-white hover:bg-slate-800 transition"
-           data-i18n="nav.multiples">P/E</a>
+        <!-- Macro dropdown: Fed, Rates, Housing and P/E as one item. Four
+             separate links pushed the bar past its width and made the
+             right-hand buttons wrap. -->
+        <div class="relative" x-data="{ open: false }" @mouseenter="open=true" @mouseleave="open=false">
+          <button class="flex items-center gap-1 px-3 py-1.5 rounded-md text-sm text-slate-300
+                         hover:text-white hover:bg-slate-800 transition whitespace-nowrap"
+                  :class="open && 'text-white bg-slate-800'">
+            <span data-i18n="nav.macro">Macro</span>
+            <svg class="w-3.5 h-3.5 mt-0.5 transition-transform duration-200" :class="open && 'rotate-180'"
+                 fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+          </button>
+          <div x-show="open"
+               x-transition:enter="transition ease-out duration-150"
+               x-transition:enter-start="opacity-0 -translate-y-1"
+               x-transition:enter-end="opacity-100 translate-y-0"
+               x-transition:leave="transition ease-in duration-100"
+               x-transition:leave-start="opacity-100 translate-y-0"
+               x-transition:leave-end="opacity-0 -translate-y-1"
+               class="absolute left-0 top-full mt-1.5 bg-slate-900 border border-slate-700/80
+                      rounded-2xl shadow-2xl shadow-black/60 z-50 overflow-hidden py-2"
+               style="min-width:190px">
+            <a href="{{ url_for('main.fed') }}"
+               class="block px-4 py-2 text-xs text-slate-300 hover:text-white hover:bg-brand/20 transition"
+               data-i18n="nav.fed_long">Fed Balance Sheet</a>
+            <a href="{{ url_for('main.fedwatch') }}"
+               class="block px-4 py-2 text-xs text-slate-300 hover:text-white hover:bg-brand/20 transition"
+               data-i18n="nav.fedwatch_long">Interest Rates</a>
+            <a href="{{ url_for('main.housing') }}"
+               class="block px-4 py-2 text-xs text-slate-300 hover:text-white hover:bg-brand/20 transition"
+               data-i18n="nav.housing_long">Housing Market</a>
+            <a href="{{ url_for('main.multiples') }}"
+               class="block px-4 py-2 text-xs text-slate-300 hover:text-white hover:bg-brand/20 transition"
+               data-i18n="nav.multiples_long">P/E Multiples</a>
+          </div>
+        </div>
         <a href="{{ url_for('main.daily_report') }}"
            class="px-3 py-1.5 rounded-md text-sm text-slate-300 hover:text-white hover:bg-slate-800 transition"
            data-i18n="nav.daily">Daily</a>
@@ -193,7 +218,7 @@
         <a href="{{ url_for('main.lookup') }}"
            title="Search Ticker"
            data-i18n-title="nav.search_ticker"
-           class="p-1.5 rounded-md text-slate-500 hover:text-slate-200 hover:bg-slate-800 transition">
+           class="whitespace-nowrap shrink-0 p-1.5 rounded-md text-slate-500 hover:text-slate-200 hover:bg-slate-800 transition">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                   d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
@@ -208,9 +233,9 @@
                   class="text-xs text-slate-500 hover:text-red-400 transition"
                   data-i18n="nav.logout">Logout</button>
         </div>
-        <div x-show="!user || !user.email" x-cloak>
+        <div x-show="!user || !user.email" x-cloak class="shrink-0">
           <a href="{{ url_for('main.login') }}"
-             class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium border border-brand text-brand hover:bg-brand hover:text-white transition">
+             class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium border border-brand text-brand hover:bg-brand hover:text-white transition whitespace-nowrap">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"/>
             </svg>
@@ -221,7 +246,7 @@
         <!-- Language toggle -->
         <button onclick="I18n.toggle()"
                 class="lang-toggle-btn px-2.5 py-1.5 rounded-md text-sm border border-slate-700 text-slate-300
-                       hover:border-brand hover:text-brand transition font-medium">
+                       hover:border-brand hover:text-brand transition font-medium whitespace-nowrap shrink-0">
           中文
         </button>
         {#
@@ -243,7 +268,7 @@
         <div class="relative group" id="refreshWrap">
           <a id="refreshBtn"
              href="{{ refresh_url }}"
-             class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm border border-brand text-brand hover:bg-brand hover:text-white transition"
+             class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm border border-brand text-brand hover:bg-brand hover:text-white transition whitespace-nowrap shrink-0"
              data-i18n="nav.refresh">↻ Refresh</a>
           <!-- Tooltip -->
           <div id="refreshTooltip" class="absolute right-0 top-full mt-2 w-64 z-50 pointer-events-none
