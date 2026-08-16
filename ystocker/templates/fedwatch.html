@@ -90,6 +90,11 @@
     {% endif %}
     &nbsp;·&nbsp;
     <a href="{{ url_for('main.fedwatch_refresh') }}" class="text-brand hover:underline" data-i18n="fedwatch.refresh">↻ Refresh</a>
+    &nbsp;·&nbsp;
+    {# webcal:// triggers the OS subscribe flow; https:// would only download a
+       static snapshot that never picks up schedule changes. #}
+    <a href="webcal://{{ request.host }}{{ url_for('main.fomc_calendar') }}"
+       class="text-brand hover:underline" data-i18n="fedwatch.subscribe">🗓 Subscribe to meeting dates</a>
   </p>
   {% else %}
   <p class="text-xs text-slate-600 mt-1">

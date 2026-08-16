@@ -2113,8 +2113,11 @@ def api_fedwatch():
 # Syndication — iCalendar + RSS
 # ---------------------------------------------------------------------------
 
-@bp.route("/calendar.ics")
+# Alias first, canonical second: url_for() builds from the last rule registered
+# for an endpoint, so this order is what makes the UI link to /calendar.ics
+# rather than the alias.
 @bp.route("/fomc.ics")
+@bp.route("/calendar.ics")
 def fomc_calendar():
     """iCalendar feed of FOMC decision dates, for calendar subscriptions.
 
@@ -2137,8 +2140,8 @@ def fomc_calendar():
     })
 
 
-@bp.route("/rss.xml")
 @bp.route("/feed.xml")
+@bp.route("/rss.xml")
 def rss_feed():
     """RSS 2.0 feed of the daily market commentary."""
     from ystocker.feeds import build_rss

@@ -372,6 +372,22 @@
   <footer class="border-t border-slate-800 py-4 text-center text-xs text-slate-600">
     <span data-i18n="footer.text">yStocker — data via Yahoo Finance</span> &nbsp;·&nbsp;
     <a href="{{ url_for('main.contact') }}" class="hover:text-brand transition" data-i18n="footer.contact">Contact Us</a>
+    &nbsp;·&nbsp;
+    <a href="{{ url_for('main.rss_feed') }}" class="hover:text-brand transition"
+       data-i18n-title="footer.rss_title" title="Subscribe in an RSS reader">
+      <span aria-hidden="true">◉</span> <span data-i18n="footer.rss">RSS</span>
+    </a>
+    &nbsp;·&nbsp;
+    {#
+      webcal:// is what makes a calendar client offer to *subscribe* — an
+      https:// link just downloads a one-off .ics snapshot that never updates.
+      Built from request.host so it works in dev and prod alike.
+    #}
+    <a href="webcal://{{ request.host }}{{ url_for('main.fomc_calendar') }}"
+       class="hover:text-brand transition"
+       data-i18n-title="footer.ical_title" title="Subscribe to FOMC dates in your calendar">
+      <span aria-hidden="true">🗓</span> <span data-i18n="footer.ical">FOMC Calendar</span>
+    </a>
     &nbsp;·&nbsp; <span data-i18n="footer.copyright">© 2025 yStocker. All rights reserved.</span>
   </footer>
 
