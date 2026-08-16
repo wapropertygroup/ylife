@@ -26,6 +26,7 @@ const I18n = (() => {
     'nav.housing':        { en: 'Housing',  zh: '房市' },
     'nav.multiples':      { en: 'P/E',      zh: '估值倍数' },
     'nav.macro':          { en: 'Macro',    zh: '宏观' },
+    'nav.commodities_all':{ en: 'All',      zh: '全部' },
     'footer.rss':         { en: 'RSS',      zh: 'RSS 订阅' },
     'footer.rss_title':   { en: 'Subscribe to the daily commentary in an RSS reader',
                             zh: '在 RSS 阅读器中订阅每日市场评论' },
