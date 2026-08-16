@@ -101,7 +101,7 @@
 
 <div class="space-y-6">
 
-  <div class="vp-section"><h2 data-i18n="mult.sec_forward">Forward P/E — SPY &amp; QQQ</h2><div class="rule"></div></div>
+  <div class="vp-section"><h2 data-i18n="mult.sec_forward">Forward P/E — Today's Reading</h2><div class="rule"></div></div>
 
   <!-- ── The accumulating forward series ──────────────────────────────── -->
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up">
@@ -110,6 +110,7 @@
         <span data-i18n="mult.fwd_title">Forward P/E: SPY vs QQQ</span>
         <span class="src-chip src-forward" data-i18n="mult.chip_forward">Forward</span>
       </h2>
+      <p class="text-xs text-slate-500"><span data-i18n="mult.fwd_scope">Consensus forward estimates for both ETFs, as of today. SPY's long history is the S&amp;P 500 chart below; the Nasdaq-100 has no free earnings history, so QQQ builds up from the first snapshot only.</span></p>
       <p class="text-xs text-slate-500" data-i18n="mult.fwd_desc">Cap-weighted forward P/E computed from index constituents — total market value divided by total forward earnings, which is the correct aggregation. Snapshotted once a day, so this series begins at the first snapshot and lengthens by one point per day.</p>
     </div>
     <div id="vpFwdEmpty" class="hidden text-xs text-slate-500 bg-slate-800/40 border border-slate-700 rounded-lg px-3 py-2 mt-3">
@@ -125,17 +126,22 @@
     <p class="text-[11px] text-slate-600 mt-2"><span id="vpCoverage"></span></p>
   </div>
 
+  <div class="vp-section"><h2 data-i18n="mult.sec_fwdhist">Forward P/E History — S&amp;P 500 / SPY</h2><div class="rule"></div></div>
+
   <!-- ── The forward P/E time series that free data DOES support ──────── -->
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up">
     <div class="mb-1">
       <h2 class="text-base font-semibold text-slate-200">
-        <span data-i18n="mult.fwdhist_title">Forward P/E History (on realized earnings)</span>
+        <span data-i18n="mult.fwdhist_title">S&amp;P 500 (SPY) Forward P/E History — on realized earnings</span>
         <span class="src-chip src-forward" data-i18n="mult.chip_forward">Forward</span>
       </h2>
       <p class="text-xs text-slate-500">
         <span data-i18n="mult.fwdhist_desc">Index level divided by the earnings of the following twelve months — the multiple buyers actually paid for the earnings that arrived. Real history since 1871, because the denominator moves independently of price. It uses hindsight rather than the consensus of the day, so it stops twelve months short of today.</span>
         <span id="vpFwdHistStat" class="text-slate-400"></span>
         <span class="text-slate-600" data-i18n="mult.log_note">Log scale — the 2009 reading near 193x would otherwise flatten the rest.</span>
+      </p>
+      <p class="text-xs text-slate-500 mt-1">
+        <span data-i18n="mult.fwdhist_scope">This is the S&amp;P 500 — the index SPY tracks. There is no equivalent for QQQ: nobody publishes Nasdaq-100 earnings history for free, so the Nasdaq-100 appears only in today's reading above.</span>
       </p>
     </div>
     <div class="chart-container" style="height:280px"><canvas id="vpFwdHistChart"></canvas></div>
