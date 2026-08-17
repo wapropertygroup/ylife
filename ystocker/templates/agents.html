@@ -110,7 +110,9 @@
   <p class="text-xs text-slate-600 mt-3">
     <span data-i18n="agents.cost_warning">A real run takes several minutes and spends API credits. One run executes at a time; others queue.</span>
     <span data-i18n="agents.timeout_is">Timeout</span>: {{ (agent_env.timeout_sec | int) // 60 }}&nbsp;min.
-    &nbsp;·&nbsp; <span data-i18n="agents.model_is">Model</span>: {{ agent_env.provider }} / {{ agent_env.deep_model }}.
+    &nbsp;·&nbsp; <span data-i18n="agents.model_is">Model</span>: {{ agent_env.provider }} / {{ agent_env.deep_model }}
+    &nbsp;·&nbsp; <span data-i18n="agents.depth_is">Depth</span>: {{ agent_env.debate_rounds }}+{{ agent_env.risk_rounds }} <span data-i18n="agents.rounds">rounds</span>, thinking={{ agent_env.thinking }}
+    &nbsp;·&nbsp; <span data-i18n="agents.lang_is">Report language</span>: {{ agent_env.language }}.
   </p>
   <div id="agError" class="hidden mt-3 px-3 py-2 rounded-lg bg-red-900/40 border border-red-700 text-red-300 text-xs"></div>
 </div>

@@ -56,7 +56,10 @@ TA_PYTHON = os.environ.get("TRADINGAGENTS_PYTHON", "")
 
 # A debate with default settings runs for minutes. Past this we kill it rather
 # than let a wedged run hold the single slot forever.
-RUN_TIMEOUT = float(os.environ.get("TRADINGAGENTS_TIMEOUT", "1500"))
+# Pro on both roles with 3 debate and 3 risk rounds runs far longer than the
+# package's 1-round Flash default — tens of minutes rather than a few. The old
+# 25-minute ceiling would have killed good runs mid-debate.
+RUN_TIMEOUT = float(os.environ.get("TRADINGAGENTS_TIMEOUT", "5400"))
 
 # Keep at most this many job records on disk.
 MAX_JOBS = 60
@@ -73,8 +76,27 @@ MAX_JOBS = 60
 DEFAULT_PROVIDER = os.environ.get("TRADINGAGENTS_LLM_PROVIDER", "google")
 # Ids taken from tradingagents/llm_clients/model_catalog.py, not invented: an
 # unknown model id fails deep inside the provider SDK.
+#
+# Pro on both roles, not just the deep one. quick_think handles tool calls and
+# summarisation, so Flash there is the usual cost/latency trade — running Pro
+# everywhere is deliberately the expensive, highest-quality setting.
 DEFAULT_DEEP_MODEL = os.environ.get("TRADINGAGENTS_DEEP_THINK_LLM", "gemini-3.1-pro-preview")
-DEFAULT_QUICK_MODEL = os.environ.get("TRADINGAGENTS_QUICK_THINK_LLM", "gemini-3.5-flash")
+DEFAULT_QUICK_MODEL = os.environ.get("TRADINGAGENTS_QUICK_THINK_LLM", "gemini-3.1-pro-preview")
+
+# Gemini 3.x takes a string thinking_level; google_client.py shows Pro accepts
+# low/high (Flash also takes minimal/medium).
+DEFAULT_THINKING = os.environ.get("TRADINGAGENTS_GOOGLE_THINKING_LEVEL", "high")
+
+# Depth. The package ships 1 round each; more rounds mean the bull/bear and risk
+# debates actually go back and forth instead of each side speaking once.
+DEFAULT_DEBATE_ROUNDS = os.environ.get("TRADINGAGENTS_MAX_DEBATE_ROUNDS", "3")
+DEFAULT_RISK_ROUNDS = os.environ.get("TRADINGAGENTS_MAX_RISK_ROUNDS", "3")
+
+# Report language. agent_utils appends "Write your entire response in {lang}."
+# to the report prompts; the internal debate stays English by the package's own
+# design, for reasoning quality, so this changes the deliverable and not the
+# reasoning.
+DEFAULT_LANGUAGE = os.environ.get("TRADINGAGENTS_OUTPUT_LANGUAGE", "Simplified Chinese (简体中文)")
 
 
 def _child_env() -> dict[str, str]:
@@ -88,6 +110,10 @@ def _child_env() -> dict[str, str]:
     env.setdefault("TRADINGAGENTS_LLM_PROVIDER", DEFAULT_PROVIDER)
     env.setdefault("TRADINGAGENTS_DEEP_THINK_LLM", DEFAULT_DEEP_MODEL)
     env.setdefault("TRADINGAGENTS_QUICK_THINK_LLM", DEFAULT_QUICK_MODEL)
+    env.setdefault("TRADINGAGENTS_GOOGLE_THINKING_LEVEL", DEFAULT_THINKING)
+    env.setdefault("TRADINGAGENTS_MAX_DEBATE_ROUNDS", DEFAULT_DEBATE_ROUNDS)
+    env.setdefault("TRADINGAGENTS_MAX_RISK_ROUNDS", DEFAULT_RISK_ROUNDS)
+    env.setdefault("TRADINGAGENTS_OUTPUT_LANGUAGE", DEFAULT_LANGUAGE)
     env["PYTHONUNBUFFERED"] = "1"
     return env
 
@@ -184,7 +210,14 @@ if os.environ.get("YSTOCKER_AGENT_SELFTEST") == "1":
                     "### Markdown coverage\n\n- **bold** and *italic* text\n"
                     "- a ratio written as P/E < 20 & a stray > character\n"
                     "- curly quotes \u201clike this\u201d and an em dash \u2014 here\n"
-                    "\n| col | value |\n| --- | --- |\n| a | 1 |\n"})
+                    "\n| col | value |\n| --- | --- |\n| a | 1 |\n"
+                    # Real runs default to Chinese, so the free plumbing
+                    # check exercises the CJK font path in the PDF too --
+                    # otherwise the only thing catching a font regression
+                    # is a run that costs money.
+                    "\n### 中文渲染检查\n\n"
+                    "验证 PDF 中文字体（STSong-Light）与换行是否正常；"
+                    "中英文混排：NVDA 同比增长 94%。\n"})
     raise SystemExit(0)
 
 try:
@@ -270,11 +303,52 @@ def _write(job: dict[str, Any]) -> None:
             raise
 
 
+def _reap(job: Optional[dict[str, Any]]) -> Optional[dict[str, Any]]:
+    """Mark a job whose runner died without ever writing a terminal status.
+
+    The runner is a daemon thread inside a gunicorn worker, and the worker is
+    recycled every ~200 requests. If a recycle lands mid-run the thread is
+    killed and the on-disk record is frozen at ``running`` forever, so the page
+    polls a job that will never finish. Deciding this on read keeps it correct
+    across workers without a extra background thread -- any worker that reads
+    the file reaches the same verdict from the timestamps alone.
+
+    The grace period is generous: exceeding it means the process is gone, not
+    that the run is slow, because a live run is killed by its own subprocess
+    timeout well before this.
+    """
+    if not job or job.get("status") not in ("queued", "running"):
+        return job
+    stamp = job.get("started_at") or job.get("created_at")
+    if not stamp:
+        return job
+    try:
+        began = datetime.fromisoformat(stamp)
+    except ValueError:
+        return job
+    if began.tzinfo is None:
+        began = began.replace(tzinfo=timezone.utc)
+    # Queued jobs wait on the single run slot, so they can legitimately sit for
+    # one full run before starting.
+    limit = RUN_TIMEOUT + 300 if job.get("started_at") else 2 * RUN_TIMEOUT + 300
+    if (datetime.now(timezone.utc) - began).total_seconds() < limit:
+        return job
+    job.update(status="error",
+               error="Runner did not report a result (the server process was "
+                     "most likely restarted mid-run). Please run it again.",
+               finished_at=datetime.now(timezone.utc).isoformat(timespec="seconds"))
+    try:
+        _write(job)
+    except Exception:
+        pass   # a stale record is not worth failing the read over
+    return job
+
+
 def get_job(job_id: str) -> Optional[dict[str, Any]]:
     if not re.fullmatch(r"[0-9a-f]{8,36}", job_id or ""):
         return None
     try:
-        return json.loads(_job_path(job_id).read_text())
+        return _reap(json.loads(_job_path(job_id).read_text()))
     except Exception:
         return None
 
@@ -285,7 +359,7 @@ def list_jobs(limit: int = 20) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for p in sorted(JOB_DIR.glob("*.json"), key=lambda x: x.stat().st_mtime, reverse=True)[:limit]:
         try:
-            j = json.loads(p.read_text())
+            j = _reap(json.loads(p.read_text()))
             # The transcript can be long; a listing does not need it.
             j.pop("log", None)
             j.pop("report", None)
@@ -451,6 +525,10 @@ def environment_report() -> dict[str, Any]:
         "provider": DEFAULT_PROVIDER,
         "deep_model": DEFAULT_DEEP_MODEL,
         "quick_model": DEFAULT_QUICK_MODEL,
+        "thinking": DEFAULT_THINKING,
+        "debate_rounds": DEFAULT_DEBATE_ROUNDS,
+        "risk_rounds": DEFAULT_RISK_ROUNDS,
+        "language": DEFAULT_LANGUAGE,
         "has_key": key_ok,
         "ready": ta_dir_ok and interp_ok and key_ok and bool(allowed_emails()),
     }
