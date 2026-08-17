@@ -286,6 +286,11 @@
   const titleEl = document.getElementById('agJobTitle');
   const elapsedEl = document.getElementById('agElapsed');
   let poll = null;
+  // Live progress: cursor into the run's event stream, plus the newest body
+  // seen for each role. Keyed by role so a re-published section replaces the
+  // previous one instead of appending a duplicate.
+  let evCursor = 0;
+  let liveByRole = new Map();
 
   // Poll interval grows 5s -> 30s. Short at first so a self-test (which
   // finishes in under a second) still feels immediate.
@@ -347,7 +352,14 @@
     pdf.classList.toggle('hidden', !hasPdf);
     if (hasPdf) pdf.href = `/api/agents/job/${job.id}/pdf`;
 
-    const secs = job.sections || [];
+    for (const ev of job.events || []) liveByRole.set(ev.role, ev.body);
+    if (typeof job.event_cursor === 'number') evCursor = job.event_cursor;
+
+    // The finished report is authoritative: it carries the team dividers and
+    // the report's own structure. Until it exists, show the live turns.
+    const secs = (job.sections && job.sections.length)
+      ? job.sections
+      : liveSections();
     show('agReportWrap', secs.length > 0);
     if (secs.length) renderConversation(document.getElementById('agReport'), secs);
 
@@ -360,6 +372,21 @@
     const busy = job.status === 'queued' || job.status === 'running';
     runBtn.disabled = busy; selfBtn.disabled = busy;
     return busy;
+  }
+
+  // Roles in the order they appear in the report, so live turns do not jump
+  // around as events arrive. Injected from agent_roles.py, the same source the
+  // server splits the finished report with.
+  const ROLES = {{ agent_roles | tojson }};
+
+  // Live turns, shaped like the server's sections so one renderer draws both.
+  function liveSections() {
+    const out = [];
+    for (const role of ROLES) {
+      const body = liveByRole.get(role.key);
+      if (body) out.push({ role: role, team: null, team_zh: null, body: body });
+    }
+    return out;
   }
 
   // Each report section is one agent's turn. The server does the splitting
@@ -420,7 +447,7 @@
   // Returns whether the job is still in flight, which drives the backoff chain.
   async function pollJob(id) {
     try {
-      const r = await fetch(`/api/agents/job/${id}`);
+      const r = await fetch(`/api/agents/job/${id}?since=${evCursor}`);
       if (!r.ok) { clearTimeout(poll); poll = null; showErr(`Polling failed (HTTP ${r.status})`); return false; }
       const job = await r.json();
       const busy = render(job);
@@ -453,6 +480,7 @@
       // -- several times gunicorn's 200-request worker-recycle budget, so the
       // run's own status polling would recycle the worker supervising it.
       if (poll) clearTimeout(poll);
+      evCursor = 0; liveByRole = new Map();
       await pollJob(d.job_id);
       schedulePoll(d.job_id, POLL_MIN);
     } catch (e) {
@@ -516,6 +544,7 @@
           // snapshot that never updates.
           btn.onclick = async () => {
             if (poll) { clearTimeout(poll); poll = null; }
+            evCursor = 0; liveByRole = new Map();
             if (await pollJob(j.id)) schedulePoll(j.id, POLL_MIN);
           };
           actions.appendChild(btn);

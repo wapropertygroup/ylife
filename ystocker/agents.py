@@ -260,9 +260,71 @@ except Exception as exc:
 
 try:
     cfg = DEFAULT_CONFIG.copy()
+
+    # Live progress. The graph streams full state snapshots (stream_mode
+    # "values"), so each agent's output can be published the moment it exists
+    # instead of the page showing nothing for ten minutes. Written as one JSON
+    # object per line to a sidecar file, for the same reason the result is: this
+    # process outlives the web worker that started it, so a file is the only
+    # channel that survives.
+    EVENTS_PATH = RESULT_PATH.replace(".result.json", ".events.jsonl") if RESULT_PATH else ""
+
+    # state key -> (role key, whether it lives inside a debate sub-dict)
+    PLAIN = [
+        ("market_report", "market"),
+        ("sentiment_report", "sentiment"),
+        ("news_report", "news"),
+        ("fundamentals_report", "fundamentals"),
+        ("trader_investment_plan", "trader"),
+    ]
+    DEBATES = [
+        ("investment_debate_state", [("bull_history", "bull"),
+                                     ("bear_history", "bear"),
+                                     ("judge_decision", "research_mgr")]),
+        ("risk_debate_state", [("aggressive_history", "aggressive"),
+                               ("conservative_history", "conservative"),
+                               ("neutral_history", "neutral"),
+                               ("judge_decision", "portfolio")]),
+    ]
+
+    _seen = {}
+    _seq = [0]
+
+    def publish(role, text):
+        """Append one event, if this role's text actually changed."""
+        text = (text or "").strip()
+        if not text or _seen.get(role) == text:
+            return
+        _seen[role] = text
+        _seq[0] += 1
+        if not EVENTS_PATH:
+            return
+        try:
+            # Append-only and line-oriented: a reader can tail it safely while
+            # this keeps writing, and a torn final line is simply skipped.
+            with open(EVENTS_PATH, "a", encoding="utf-8") as fh:
+                fh.write(json.dumps({"seq": _seq[0], "role": role,
+                                     "chars": len(text), "body": text},
+                                    ensure_ascii=False) + "\n")
+                fh.flush()
+        except Exception:
+            pass          # progress reporting must never break a run
+
+    def on_progress(chunk):
+        if not isinstance(chunk, dict):
+            return
+        for key, role in PLAIN:
+            publish(role, chunk.get(key))
+        for key, fields in DEBATES:
+            sub = chunk.get(key)
+            if isinstance(sub, dict):
+                for field, role in fields:
+                    publish(role, sub.get(field))
+
     # TradingAgents reads TRADINGAGENTS_* itself, so anything exported by the
     # parent already applies; only override what we pass explicitly.
-    graph = TradingAgentsGraph(debug=False, config=cfg)
+    graph = TradingAgentsGraph(debug=False, config=cfg,
+                               progress_callback=on_progress)
     state, decision = graph.propagate(ticker, day)
 
     # Prefer the package's own report builder: reporting.write_report_tree
@@ -353,6 +415,40 @@ def _interpreter() -> str:
 # ---------------------------------------------------------------------------
 # Job store — plain files, so a worker recycle cannot lose a run
 # ---------------------------------------------------------------------------
+
+def _events_path(job_id: str) -> Path:
+    """Where the child appends its progress events."""
+    JOB_DIR.mkdir(parents=True, exist_ok=True)
+    return JOB_DIR / f"{job_id}.events.jsonl"
+
+
+def read_events(job_id: str, since: int = 0) -> list[dict[str, Any]]:
+    """Progress events with ``seq`` greater than ``since``.
+
+    Tolerant of a torn last line: the child appends while this reads, so the
+    final line can be half-written. A malformed line is skipped rather than
+    failing the poll -- it will be complete on the next one.
+    """
+    path = _events_path(job_id)
+    out: list[dict[str, Any]] = []
+    try:
+        with open(path, encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    ev = json.loads(line)
+                except ValueError:
+                    continue
+                if int(ev.get("seq", 0)) > since:
+                    out.append(ev)
+    except FileNotFoundError:
+        return []
+    except Exception as exc:  # noqa: BLE001 - progress is decoration
+        log.debug("agents: unreadable events for %s: %s", job_id, exc)
+    return out
+
 
 def _result_path(job_id: str) -> Path:
     """Where the detached child writes its result, independent of stdout."""
@@ -498,7 +594,7 @@ def list_jobs(limit: int = 20, user: Optional[str] = None) -> list[dict[str, Any
         return []
     out: list[dict[str, Any]] = []
     # Exclude the children's sidecar result files, which are not job records.
-    records = (p for p in JOB_DIR.glob("*.json") if not p.name.endswith(".result.json"))
+    records = (p for p in JOB_DIR.glob("*.json") if not (p.name.endswith(".result.json") or p.name.endswith(".events.jsonl")))
     for p in sorted(records, key=lambda x: x.stat().st_mtime, reverse=True):
         if len(out) >= limit:
             break
@@ -518,12 +614,14 @@ def list_jobs(limit: int = 20, user: Optional[str] = None) -> list[dict[str, Any
 def _prune() -> None:
     try:
         files = sorted((p for p in JOB_DIR.glob("*.json")
-                        if not p.name.endswith(".result.json")),
+                        if not (p.name.endswith(".result.json") or p.name.endswith(".events.jsonl"))),
                        key=lambda x: x.stat().st_mtime, reverse=True)
         for p in files[MAX_JOBS:]:
             p.unlink(missing_ok=True)
-            # Drop the child's sidecar with its job, else it leaks forever.
-            p.with_suffix("").with_suffix(".result.json").unlink(missing_ok=True)
+            # Drop the child's sidecars with its job, else they leak forever.
+            stem = p.with_suffix("")
+            stem.with_suffix(".result.json").unlink(missing_ok=True)
+            stem.with_suffix(".events.jsonl").unlink(missing_ok=True)
     except Exception as exc:
         log.debug("agents: prune failed: %s", exc)
 

@@ -2230,6 +2230,25 @@ def api_agents_job(job_id):
     payload = dict(job)
     report = payload.pop("report", None) or ""
     payload["sections"] = split_sections(report) if report.strip() else []
+
+    # Live progress. A deep run takes ten minutes or more, and the finished
+    # report only exists at the very end, so the page would otherwise show a
+    # spinner for the whole time. The child publishes each agent's output as it
+    # lands; ``since`` is the client's cursor so a poll carries only what is new
+    # rather than resending the whole transcript every few seconds.
+    #
+    # Served over the existing poll on purpose, not Server-Sent Events: this box
+    # runs 2 gunicorn workers, and an SSE connection held open for a
+    # thirteen-minute run would occupy half the server's capacity per viewer.
+    from ystocker.agents import read_events
+
+    try:
+        since = int(request.args.get("since", 0))
+    except (TypeError, ValueError):
+        since = 0
+    events = read_events(job_id, since) if job.get("status") != "done" or since == 0 else []
+    payload["events"] = events
+    payload["event_cursor"] = max([since] + [int(e.get("seq", 0)) for e in events])
     # The raw markdown is dropped from the response because nothing on the page
     # needs it once it is split, and it would double a 40 KB payload on every
     # poll. The PDF route reads the job from disk, so it is unaffected.
