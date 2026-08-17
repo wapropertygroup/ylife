@@ -31,33 +31,33 @@ from typing import Any, Optional
 #       coloured badge instead of trying to draw these.
 ROLES: list[dict[str, str]] = [
     {"key": "market",       "name": "Market Analyst",       "zh": "市场分析师",
-     "icon": "📈", "color": "#3b82f6", "group": "analysts"},
+     "short": "Market", "icon": "📈", "color": "#3b82f6", "group": "analysts"},
     {"key": "sentiment",    "name": "Sentiment Analyst",    "zh": "情绪分析师",
-     "icon": "💬", "color": "#a855f7", "group": "analysts"},
+     "short": "Sentiment", "icon": "💬", "color": "#a855f7", "group": "analysts"},
     {"key": "news",         "name": "News Analyst",         "zh": "新闻分析师",
-     "icon": "📰", "color": "#06b6d4", "group": "analysts"},
+     "short": "News", "icon": "📰", "color": "#06b6d4", "group": "analysts"},
     {"key": "fundamentals", "name": "Fundamentals Analyst", "zh": "基本面分析师",
-     "icon": "🏦", "color": "#14b8a6", "group": "analysts"},
+     "short": "Fundamentals", "icon": "🏦", "color": "#14b8a6", "group": "analysts"},
 
     {"key": "bull",         "name": "Bull Researcher",      "zh": "看涨研究员",
-     "icon": "🐂", "color": "#22c55e", "group": "research"},
+     "short": "Bull", "icon": "🐂", "color": "#22c55e", "group": "research"},
     {"key": "bear",         "name": "Bear Researcher",      "zh": "看跌研究员",
-     "icon": "🐻", "color": "#ef4444", "group": "research"},
+     "short": "Bear", "icon": "🐻", "color": "#ef4444", "group": "research"},
     {"key": "research_mgr", "name": "Research Manager",     "zh": "研究主管",
-     "icon": "⚖️", "color": "#f59e0b", "group": "research"},
+     "short": "Research Mgr", "icon": "⚖️", "color": "#f59e0b", "group": "research"},
 
     {"key": "trader",       "name": "Trader",               "zh": "交易员",
-     "icon": "🎯", "color": "#6366f1", "group": "trading"},
+     "short": "Trader", "icon": "🎯", "color": "#6366f1", "group": "trading"},
 
     {"key": "aggressive",   "name": "Aggressive Analyst",   "zh": "激进派",
-     "icon": "🔥", "color": "#f97316", "group": "risk"},
+     "short": "Aggressive", "icon": "🔥", "color": "#f97316", "group": "risk"},
     {"key": "conservative", "name": "Conservative Analyst", "zh": "保守派",
-     "icon": "🛡️", "color": "#0ea5e9", "group": "risk"},
+     "short": "Conservative", "icon": "🛡️", "color": "#0ea5e9", "group": "risk"},
     {"key": "neutral",      "name": "Neutral Analyst",      "zh": "中立派",
-     "icon": "☯️", "color": "#94a3b8", "group": "risk"},
+     "short": "Neutral", "icon": "☯️", "color": "#94a3b8", "group": "risk"},
 
     {"key": "portfolio",    "name": "Portfolio Manager",    "zh": "投资组合经理",
-     "icon": "🏛️", "color": "#8b5cf6", "group": "decision"},
+     "short": "Portfolio", "icon": "🏛️", "color": "#8b5cf6", "group": "decision"},
 ]
 
 # Team headings (``## II. Research Team Decision``). Kept so the phase can be

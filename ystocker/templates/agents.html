@@ -93,6 +93,33 @@
 .ag-quota-out { border-color: #7f1d1d; }
 .ag-quota-out b { color: #fca5a5; }
 
+/* ── Jump bar ───────────────────────────────────────────────────────────── */
+.ag-jump {
+  /* Stacks under the site header, which is sticky at top:0 with h-14 (56px).
+     z-index stays below the header's z-50 so its dropdowns still cover this. */
+  position: sticky; top: 56px; z-index: 30;
+  display: flex; gap: 6px; overflow-x: auto; scrollbar-width: thin;
+  padding: 8px 2px; margin: -4px 0 10px;
+  background: rgba(11,17,32,.92); backdrop-filter: blur(6px);
+  border-bottom: 1px solid #1e293b;
+}
+.ag-jump::-webkit-scrollbar { height: 4px; }
+.ag-jump::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 2px; }
+.ag-chip {
+  flex: 0 0 auto; display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 10px; border-radius: 999px; cursor: pointer;
+  font-size: 11.5px; font-weight: 600; white-space: nowrap;
+  color: #94a3b8; background: transparent;
+  border: 1px solid #24314a; transition: color .12s, border-color .12s, background .12s;
+}
+.ag-chip:hover { color: #e2e8f0; border-color: var(--role); }
+/* Current speaker, set by the scroll spy. */
+.ag-chip.is-active {
+  color: var(--role); border-color: var(--role);
+  background: color-mix(in srgb, var(--role) 14%, transparent);
+}
+.ag-chip i { font-style: normal; font-size: 13px; line-height: 1; }
+
 /* ── Agent conversation ─────────────────────────────────────────────────── */
 .ag-team {
   display: flex; align-items: center; gap: 10px;
@@ -100,7 +127,12 @@
   font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase;
 }
 .ag-team::after { content: ""; flex: 1; height: 1px; background: #1e293b; }
-.ag-turn { display: flex; gap: 12px; margin-bottom: 16px; }
+.ag-turn {
+  display: flex; gap: 12px; margin-bottom: 16px;
+  /* Without this, scrollIntoView parks the target underneath the two sticky
+     bars and the bubble you asked for is the one thing you cannot see. */
+  scroll-margin-top: 112px;
+}
 .ag-avatar {
   flex: 0 0 auto; width: 34px; height: 34px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
@@ -138,11 +170,39 @@
 }
 .ag-hist-runs { display: flex; flex-direction: column; gap: 8px; }
 .ag-hist-run { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; justify-content: space-between; }
+/* Search bar above the history. Wraps rather than shrinks so the ticker box
+   keeps a usable width on a phone instead of collapsing to a few characters. */
+.ag-hist-head {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+  justify-content: space-between; margin-bottom: 12px;
+}
+.ag-hist-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.ag-hist-tools .ag-input { padding: 6px 10px; font-size: 12px; }
+/* The clear button sits inside the field's trailing padding. */
+.ag-search-wrap { position: relative; display: inline-flex; }
+.ag-search-wrap .ag-input { padding-right: 26px; }
+.ag-search-clear {
+  position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+  border: 0; background: none; color: #475569; cursor: pointer;
+  font-size: 14px; line-height: 1; padding: 2px 3px;
+}
+.ag-search-clear:hover { color: #cbd5e1; }
+.ag-search-meta {
+  color: #64748b; font-size: 11px; margin-bottom: 10px;
+  font-variant-numeric: tabular-nums;
+}
+.ag-search-meta b { color: #94a3b8; font-weight: 600; }
+/* Highlight of the matched part of a ticker, so a substring hit shows why it
+   matched -- "T" inside MSFT is otherwise indistinguishable from noise. */
+.ag-hl { background: rgba(99,102,241,.32); color: #e0e7ff; border-radius: 3px; }
 @media (max-width: 520px) {
   /* Too narrow for two columns: the date becomes a heading above its runs. */
   .ag-hist { grid-template-columns: minmax(0, 1fr); column-gap: 0; }
   .ag-hist > .ag-hist-runs { border-top: 0; padding-top: 0; }
   .ag-hist > .ag-hist-date { padding-bottom: 5px; }
+  .ag-hist-tools { width: 100%; }
+  .ag-hist-tools .ag-search-wrap { flex: 1; }
+  .ag-hist-tools .ag-search-wrap .ag-input { width: 100%; }
 }
 </style>
 
@@ -257,6 +317,7 @@
   </div>
   <div id="agReportWrap" class="hidden mb-4">
     <p class="text-xs text-slate-500 mb-1" data-i18n="agents.report">Report</p>
+    <nav id="agJump" class="ag-jump hidden" aria-label="Jump to an agent"></nav>
     <div class="ag-report" id="agReport"></div>
   </div>
   <div id="agLogWrap" class="hidden">
@@ -413,6 +474,7 @@
       }
       const turn = document.createElement('div');
       turn.className = 'ag-turn';
+      turn.id = 'turn-' + sec.role.key;
       // Set the accent once, as a custom property, so the avatar ring, the
       // bubble border and the name all stay in sync.
       turn.style.setProperty('--role', sec.role.color);
@@ -442,6 +504,141 @@
       turn.append(av, bubble);
       box.appendChild(turn);
     }
+    buildJump(sections);
+  }
+
+  // ── Jump bar ────────────────────────────────────────────────────────────
+  let jumpSig = '';        // which roles the current bar was built for
+  let spy = null;
+  let spyTick = null;      // latest geometry recompute, called by the scroll handler
+  // Set while an explicit jump owns the highlight. Near the end of the document
+  // several turns share the final viewport and no geometry rule can tell which
+  // one was asked for -- clicking the Neutral Analyst scrolled to the bottom and
+  // the "at bottom means the last turn" rule then stole the highlight for the
+  // Portfolio Manager. Released on the reader's next scroll gesture, so tracking
+  // resumes the moment they take over.
+  let lockedTarget = null;
+
+  function setActive(chip) {
+    const bar = document.getElementById('agJump');
+    if (!bar || !chip || chip.classList.contains('is-active')) return;
+    bar.querySelectorAll('.ag-chip.is-active').forEach(c => c.classList.remove('is-active'));
+    chip.classList.add('is-active');
+    // Nearest, not centre: centring yanks the bar sideways on every scroll.
+    chip.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }
+
+  function buildJump(sections) {
+    const bar = document.getElementById('agJump');
+    if (!bar) return;
+    const present = sections.filter(s => s.role);
+    // One chip is not navigation. Hide the bar until there is somewhere to go.
+    bar.classList.toggle('hidden', present.length < 2);
+    if (present.length < 2) { jumpSig = ''; return; }
+
+    // Rebuilt only when the cast changes. While a run streams, the conversation
+    // re-renders on every poll, and rebuilding each time would reset this bar's
+    // horizontal scroll and drop the active highlight mid-read.
+    const sig = present.map(s => s.role.key).join(',');
+    if (sig === jumpSig) return;
+    jumpSig = sig;
+    bar.innerHTML = '';
+
+    const zh = I18n.getLang() === 'zh';
+    for (const sec of present) {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'ag-chip';
+      chip.style.setProperty('--role', sec.role.color);
+      chip.dataset.target = 'turn-' + sec.role.key;
+      const icon = document.createElement('i');
+      icon.setAttribute('aria-hidden', 'true');
+      icon.textContent = sec.role.icon;
+      chip.append(icon, document.createTextNode(
+        zh ? (sec.role.zh || sec.role.name) : (sec.role.short || sec.role.name)));
+      chip.addEventListener('click', () => {
+        const el = document.getElementById(chip.dataset.target);
+        if (!el) return;
+        // Mark it now rather than waiting for the spy. The last sections can
+        // never reach the top of the viewport -- the page simply runs out of
+        // scroll -- so geometry alone would leave the highlight on whatever
+        // section did reach it, contradicting what the reader just clicked.
+        lockedTarget = chip.dataset.target;
+        setActive(chip);
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+      bar.appendChild(chip);
+    }
+    attachSpy();
+  }
+
+  // Highlight whoever is on screen, and keep that chip visible in the bar, so
+  // the bar doubles as a position indicator in a long report.
+  function attachSpy() {
+    if (spy) spy.disconnect();
+    const bar = document.getElementById('agJump');
+    const turns = [...document.querySelectorAll('.ag-turn')];
+    if (!turns.length || !('IntersectionObserver' in window)) return;
+    // The observer is only a change trigger; which chip is current is then
+    // recomputed from geometry. Reacting per-entry looked right but was wrong:
+    // a short section (the Trader is two lines) leaves the following section
+    // intersecting too, and whichever entry came last in the callback won -- so
+    // jumping to the Trader highlighted the Aggressive Analyst.
+    const markCurrent = () => {
+      if (lockedTarget) {
+        // Re-assert, do not merely skip. Returning early left the highlight
+        // wherever the previous recompute had put it, which is how clicking the
+        // last chip while already at the page bottom kept the wrong one lit.
+        const held = bar.querySelector(`[data-target="${lockedTarget}"]`);
+        if (held) setActive(held);
+        return;
+      }
+      let current = turns[0];
+      // At the bottom of the page the trailing sections can never reach the
+      // band, so the last one is what the reader is actually looking at.
+      // Tolerance, not equality: fractional device pixels and browser zoom mean
+      // the arithmetic rarely lands exactly on the document height.
+      const atBottom = window.innerHeight + window.scrollY
+                       >= document.documentElement.scrollHeight - 12;
+      if (atBottom) {
+        current = turns[turns.length - 1];
+      } else {
+        for (const t of turns) {
+          if (t.getBoundingClientRect().top <= 120) current = t;
+          else break;                    // turns are in document order
+        }
+      }
+      const chip = current && bar.querySelector(`[data-target="${current.id}"]`);
+      if (chip) setActive(chip);
+    };
+    spy = new IntersectionObserver(markCurrent, {
+      rootMargin: '-112px 0px -55% 0px',
+      threshold: 0,
+    });
+    turns.forEach(t => spy.observe(t));
+
+    // The observer alone fires only *during* a smooth scroll, so the highlight
+    // could settle on a mid-animation position and never be corrected. A
+    // rAF-throttled scroll listener catches where it actually stops.
+    if (!window.__agSpyScroll) {
+      window.__agSpyScroll = true;
+      let queued = false;
+      window.addEventListener('scroll', () => {
+        if (queued) return;
+        queued = true;
+        requestAnimationFrame(() => { queued = false; spyTick && spyTick(); });
+      }, { passive: true });
+      // Hand control back on a real scroll gesture rather than on a timer: a
+      // timeout either fires before a slow smooth-scroll finishes or leaves the
+      // highlight stale after a fast one.
+      for (const ev of ['wheel', 'touchstart', 'keydown']) {
+        window.addEventListener(ev, () => {
+          if (lockedTarget) { lockedTarget = null; spyTick && spyTick(); }
+        }, { passive: true });
+      }
+    }
+    spyTick = markCurrent;
+    markCurrent();
   }
 
   // Returns whether the job is still in flight, which drives the backoff chain.

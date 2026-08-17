@@ -2295,6 +2295,38 @@ def api_agents_jobs():
     return jsonify({"jobs": list_jobs(20, user=_agent_user())})
 
 
+@bp.route("/api/agents/search")
+def api_agents_search():
+    """Search the caller's own analysis reports by ticker or analysis date.
+
+    Query params:
+      q      = ticker ("NVDA", "NV") or analysis date prefix ("2026-08")
+      status = optional exact filter: queued | running | done | error
+      limit  = max hits to return (1-60, default 50)
+
+    Scoped to the caller's own runs by ``search_jobs``, same as every other
+    agent read: the reports state entry levels and position sizes.
+    """
+    gate = _agent_gate()
+    if gate:
+        return gate
+    from ystocker.agents import search_jobs
+
+    q = request.args.get("q", "")[:32]
+    status = request.args.get("status", "")
+    if status and status not in ("queued", "running", "done", "error"):
+        return jsonify({"error": f"Unknown status filter '{status}'"}), 400
+    try:
+        limit = int(request.args.get("limit", 50))
+    except (TypeError, ValueError):
+        limit = 50
+    # Clamped rather than rejected: a bad limit is not worth failing a search
+    # over, and an unbounded one would let a query read every record on disk.
+    limit = max(1, min(limit, 60))
+
+    return jsonify(search_jobs(q, user=_agent_user(), status=status, limit=limit))
+
+
 # ---------------------------------------------------------------------------
 # Syndication — iCalendar + RSS
 # ---------------------------------------------------------------------------

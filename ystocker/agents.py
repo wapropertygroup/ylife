@@ -583,6 +583,37 @@ def owns(job: Optional[dict[str, Any]], email: Optional[str]) -> bool:
     return bool(owner) and owner == email.strip().lower()
 
 
+def _record_paths() -> list[Path]:
+    """Job record files, newest first.
+
+    The children's sidecars (``.result.json``, ``.events.jsonl``) live in the
+    same directory but are not job records, and reading one as a job yields a
+    bogus entry. Excluded in one place here rather than in each caller, which is
+    what let the listing and the pruner drift apart previously.
+    """
+    if not JOB_DIR.exists():
+        return []
+    records = (p for p in JOB_DIR.glob("*.json")
+               if not (p.name.endswith(".result.json") or p.name.endswith(".events.jsonl")))
+    return sorted(records, key=lambda x: x.stat().st_mtime, reverse=True)
+
+
+def _listing_entry(job: dict[str, Any]) -> dict[str, Any]:
+    """Trim a job record down to what a listing or search hit needs.
+
+    ``has_report`` is recorded before the body is dropped: a run can finish with
+    an empty report, and the UI offers a PDF link only where there is something
+    to render. Deciding that from ``status == 'done'`` alone produced links that
+    404'd.
+    """
+    entry = dict(job)
+    entry["has_report"] = bool((entry.get("report") or "").strip())
+    # The transcript can be long; a listing does not need it.
+    entry.pop("log", None)
+    entry.pop("report", None)
+    return entry
+
+
 def list_jobs(limit: int = 20, user: Optional[str] = None) -> list[dict[str, Any]]:
     """Recent runs, newest first, restricted to ``user`` when given.
 
@@ -590,33 +621,105 @@ def list_jobs(limit: int = 20, user: Optional[str] = None) -> list[dict[str, Any
     and then discarding other people's would show a user an empty history
     whenever N busier runs happened to come first.
     """
-    if not JOB_DIR.exists():
-        return []
     out: list[dict[str, Any]] = []
-    # Exclude the children's sidecar result files, which are not job records.
-    records = (p for p in JOB_DIR.glob("*.json") if not (p.name.endswith(".result.json") or p.name.endswith(".events.jsonl")))
-    for p in sorted(records, key=lambda x: x.stat().st_mtime, reverse=True):
+    for p in _record_paths():
         if len(out) >= limit:
             break
         try:
             j = _reap(json.loads(p.read_text()))
             if user is not None and not owns(j, user):
                 continue
-            # The transcript can be long; a listing does not need it.
-            j.pop("log", None)
-            j.pop("report", None)
-            out.append(j)
+            out.append(_listing_entry(j))
         except Exception:
             continue
     return out
 
 
+# Search ranking tiers, best first. Kept as named constants because the tier
+# number is also what orders the results.
+_RANK_TICKER_EXACT = 0
+_RANK_TICKER_PREFIX = 1
+_RANK_DATE = 2
+_RANK_TICKER_SUBSTR = 3
+
+
+def _match_rank(job: dict[str, Any], q: str) -> Optional[int]:
+    """How well ``job`` matches query ``q``, or None if it does not.
+
+    A ticker is the common case, so an exact symbol ranks above a prefix and a
+    prefix above a mid-string hit -- searching "T" should not bury T under
+    TSM, TSLA and MSFT. A query that looks like a date matches the analysis
+    date instead, so the same box finds "everything I ran for 2026-08-14"
+    without a second control.
+    """
+    ticker = (job.get("ticker") or "").upper()
+    if ticker:
+        if ticker == q:
+            return _RANK_TICKER_EXACT
+        if ticker.startswith(q):
+            return _RANK_TICKER_PREFIX
+    # Digits or a dash mean the user is typing a date, not a symbol: no listed
+    # ticker starts with a digit, so this cannot shadow a symbol match.
+    if q[0].isdigit() and (job.get("date") or "").startswith(q):
+        return _RANK_DATE
+    if ticker and q in ticker:
+        return _RANK_TICKER_SUBSTR
+    return None
+
+
+def search_jobs(query: str = "", user: Optional[str] = None,
+                status: Optional[str] = None,
+                limit: int = 50) -> dict[str, Any]:
+    """Search this user's own analysis reports by ticker or analysis date.
+
+    Returns ``{"jobs": [...], "found": int, "scanned": int, "truncated": bool}``
+    where ``found`` counts every match and ``jobs`` holds at most ``limit`` of
+    them, so the UI can say "showing 50 of 63" instead of silently dropping the
+    tail.
+
+    Ownership is enforced per record via ``owns()`` and never relaxed for
+    search: these transcripts carry position sizes, so a query must not become
+    a way to probe what other people ran. A caller with no email gets nothing.
+    """
+    q = (query or "").strip().upper()
+    status = (status or "").strip().lower() or None
+
+    hits: list[tuple[int, int, dict[str, Any]]] = []
+    scanned = 0
+    for idx, p in enumerate(_record_paths()):
+        try:
+            j = _reap(json.loads(p.read_text()))
+            if not owns(j, user):
+                continue
+            scanned += 1
+            if status and (j.get("status") or "").lower() != status:
+                continue
+            # An empty query lists everything the filters allow, which is what
+            # makes the search box degrade into the plain history view.
+            rank = _match_rank(j, q) if q else _RANK_TICKER_EXACT
+            if rank is None:
+                continue
+            # idx is the newest-first position, so it breaks ties within a tier
+            # by recency without a second sort key.
+            hits.append((rank, idx, _listing_entry(j)))
+        except Exception:
+            continue
+
+    hits.sort(key=lambda h: (h[0], h[1]))
+    found = len(hits)
+    log.info("agents: search q=%r status=%s -> %d/%d owned records",
+             q, status or "any", found, scanned)
+    return {
+        "jobs": [h[2] for h in hits[:limit]],
+        "found": found,
+        "scanned": scanned,
+        "truncated": found > limit,
+    }
+
+
 def _prune() -> None:
     try:
-        files = sorted((p for p in JOB_DIR.glob("*.json")
-                        if not (p.name.endswith(".result.json") or p.name.endswith(".events.jsonl"))),
-                       key=lambda x: x.stat().st_mtime, reverse=True)
-        for p in files[MAX_JOBS:]:
+        for p in _record_paths()[MAX_JOBS:]:
             p.unlink(missing_ok=True)
             # Drop the child's sidecars with its job, else they leak forever.
             stem = p.with_suffix("")
