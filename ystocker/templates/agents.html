@@ -78,6 +78,23 @@
 .ag-row {
   display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
 }
+/* History: one shared grid rather than a grid per group, so every group's date
+   cell lines up on the same column edge no matter how wide the widest date is. */
+.ag-hist { display: grid; grid-template-columns: max-content minmax(0, 1fr); column-gap: 18px; }
+.ag-hist > * { border-top: 1px solid #1e293b; padding: 9px 0; }
+.ag-hist > :nth-child(-n+2) { border-top: 0; padding-top: 0; }   /* first group */
+.ag-hist-date {
+  color: #94a3b8; font-weight: 600; white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.ag-hist-runs { display: flex; flex-direction: column; gap: 8px; }
+.ag-hist-run { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; justify-content: space-between; }
+@media (max-width: 520px) {
+  /* Too narrow for two columns: the date becomes a heading above its runs. */
+  .ag-hist { grid-template-columns: minmax(0, 1fr); column-gap: 0; }
+  .ag-hist > .ag-hist-runs { border-top: 0; padding-top: 0; }
+  .ag-hist > .ag-hist-date { padding-bottom: 5px; }
+}
 </style>
 
 <!-- ── Header ─────────────────────────────────────────────────────────── -->
@@ -306,45 +323,72 @@
       if (!r.ok) return;
       const { jobs } = await r.json();
       const box = document.getElementById('agHistory');
-      if (!jobs || !jobs.length) { box.textContent = I18n.t('agents.history_empty') || 'No runs yet.'; return; }
+      if (!jobs || !jobs.length) {
+        // Reset the grid class too: a reload after the last job was pruned must
+        // not leave the empty message sitting in a two-column layout.
+        box.className = 'text-xs text-slate-500';
+        box.textContent = I18n.t('agents.history_empty') || 'No runs yet.';
+        return;
+      }
       box.removeAttribute('data-i18n');
       box.innerHTML = '';
+      box.className = 'ag-hist text-xs text-slate-500';
       // Hoisted out of the template literal below. A dollar-sign followed by
       // two braces inside a JS template literal is read by Jinja as an
       // expression opener, which breaks compilation of this file.
       const CLS = { queued: 'ag-queued', running: 'ag-running', done: 'ag-done', error: 'ag-error' };
+
+      // The API orders by submission time, so runs sharing an analysis date are
+      // not contiguous. Bucket first, then emit newest date first, keeping the
+      // server's within-date order.
+      const byDate = new Map();
       jobs.forEach(j => {
-        const row = document.createElement('div');
-        row.className = 'ag-row justify-between border-t border-slate-800 py-2';
-        const left = document.createElement('div');
-        left.className = 'ag-row';
-        left.innerHTML = `<span class="text-slate-300 font-medium">${j.ticker}</span>`
-          + `<span class="text-slate-600">${j.date}</span>`
-          + `<span class="ag-pill ${CLS[j.status] || 'ag-queued'}">${j.status}</span>`
-          + (j.selftest ? '<span class="text-slate-600">self-test</span>' : '')
-          + (j.elapsed_sec ? `<span class="text-slate-600">${j.elapsed_sec}s</span>` : '');
-        const actions = document.createElement('div');
-        actions.className = 'ag-row';
-        const btn = document.createElement('button');
-        btn.className = 'ag-btn ag-btn-ghost';
-        btn.textContent = I18n.t('agents.view') || 'View';
-        // Resume tracking if the job is still in flight, rather than showing a
-        // snapshot that never updates.
-        btn.onclick = async () => {
-          if (poll) { clearTimeout(poll); poll = null; }
-          if (await pollJob(j.id)) schedulePoll(j.id, POLL_MIN);
-        };
-        actions.appendChild(btn);
-        if (j.status === 'done') {
-          const dl = document.createElement('a');
-          dl.className = 'ag-btn ag-btn-ghost';
-          dl.href = `/api/agents/job/${j.id}/pdf`;
-          dl.setAttribute('download', '');
-          dl.textContent = I18n.t('agents.pdf_short') || 'PDF';
-          actions.appendChild(dl);
-        }
-        row.append(left, actions);
-        box.appendChild(row);
+        const d = j.date || '—';
+        if (!byDate.has(d)) byDate.set(d, []);
+        byDate.get(d).push(j);
+      });
+
+      [...byDate.keys()].sort().reverse().forEach(date => {
+        const dateCell = document.createElement('div');
+        dateCell.className = 'ag-hist-date';
+        dateCell.textContent = date;
+        const runs = document.createElement('div');
+        runs.className = 'ag-hist-runs';
+
+        byDate.get(date).forEach(j => {
+          const row = document.createElement('div');
+          row.className = 'ag-hist-run';
+          const left = document.createElement('div');
+          left.className = 'ag-row';
+          left.innerHTML = `<span class="text-slate-300 font-medium">${j.ticker}</span>`
+            + `<span class="ag-pill ${CLS[j.status] || 'ag-queued'}">${j.status}</span>`
+            + (j.selftest ? '<span class="text-slate-600">self-test</span>' : '')
+            + (j.elapsed_sec ? `<span class="text-slate-600">${j.elapsed_sec}s</span>` : '');
+          const actions = document.createElement('div');
+          actions.className = 'ag-row';
+          const btn = document.createElement('button');
+          btn.className = 'ag-btn ag-btn-ghost';
+          btn.textContent = I18n.t('agents.view') || 'View';
+          // Resume tracking if the job is still in flight, rather than showing a
+          // snapshot that never updates.
+          btn.onclick = async () => {
+            if (poll) { clearTimeout(poll); poll = null; }
+            if (await pollJob(j.id)) schedulePoll(j.id, POLL_MIN);
+          };
+          actions.appendChild(btn);
+          if (j.status === 'done') {
+            const dl = document.createElement('a');
+            dl.className = 'ag-btn ag-btn-ghost';
+            dl.href = `/api/agents/job/${j.id}/pdf`;
+            dl.setAttribute('download', '');
+            dl.textContent = I18n.t('agents.pdf_short') || 'PDF';
+            actions.appendChild(dl);
+          }
+          row.append(left, actions);
+          runs.appendChild(row);
+        });
+
+        box.append(dateCell, runs);
       });
     } catch (e) { /* history is decoration; never block the page on it */ }
   }
