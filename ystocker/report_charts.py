@@ -309,6 +309,10 @@ def position_bar(ticker: str, df, target: Optional[float]) -> Optional[bytes]:
 def build_all(ticker: str, report_text: str) -> list[dict[str, Any]]:
     """Charts for a report, in display order. Empty when data is unavailable.
 
+    Each spec carries its caption in both languages, because the PDF picks its
+    language from the report's own content -- a Chinese report with an English
+    figure caption reads like a screenshot pasted in from somewhere else.
+
     Never raises: a report with no picture is worth far more than no report.
     """
     try:
@@ -327,10 +331,15 @@ def build_all(ticker: str, report_text: str) -> list[dict[str, Any]]:
                     "caption": "Price with 50- and 200-day moving averages, "
                                "daily volume with its 20-day average, and "
                                "RSI(14) with the 30/70 bands. Drawn from the "
-                               "same daily bars the agents analysed."})
+                               "same daily bars the agents analysed.",
+                    "caption_zh": "收盘价与 50 日、200 日均线，成交量及其 20 日均量，"
+                                  "以及 RSI(14) 与 30/70 阈值带。数据取自智能体本次"
+                                  "分析所用的同一份日线行情。"})
     bar = position_bar(ticker, df, parse_price_target(report_text))
     if bar:
         out.append({"png": bar, "w": 7.0, "h": 1.15,
                     "caption": "Last close within its 52-week range, against "
-                               "the price target stated in the report."})
+                               "the price target stated in the report.",
+                    "caption_zh": "最新收盘价在 52 周区间中的位置，并与报告给出的"
+                                  "目标价对比。"})
     return out

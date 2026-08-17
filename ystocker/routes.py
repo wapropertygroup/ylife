@@ -2141,7 +2141,7 @@ def _agent_gate():
 @bp.route("/agents")
 def agents_page():
     """Page for running the TradingAgents analysis."""
-    from ystocker.agents import environment_report, is_allowed
+    from ystocker.agents import environment_report, is_allowed, showcase_enabled
 
     email = _agent_user()
     log.info("GET /agents (user=%s)", email or "anon")
@@ -2157,6 +2157,9 @@ def agents_page():
         user_email=email or "",
         quota=quota.usage(email) if email else None,
         agent_roles=roles_json(),
+        # Only consulted by the not-signed-in branch, which shows a sample of
+        # finished reports instead of a dead end.
+        showcase=showcase_enabled(),
     )
 
 
@@ -2325,6 +2328,112 @@ def api_agents_search():
     limit = max(1, min(limit, 60))
 
     return jsonify(search_jobs(q, user=_agent_user(), status=status, limit=limit))
+
+
+# ---------------------------------------------------------------------------
+# Public showcase — a sample of finished reports for visitors who are not
+# signed in. These two routes deliberately skip ``_agent_gate()``: every other
+# agent read is owner-only, and this is the documented exception. They are safe
+# because ``agents._publishable`` strips the record down to an allowlist of
+# fields, so no owner address, runner stderr or pid leaves the server.
+# ---------------------------------------------------------------------------
+
+@bp.route("/api/agents/showcase")
+def api_agents_showcase():
+    """A random sample of finished reports. No sign-in required."""
+    from ystocker.agents import SHOWCASE_SIZE, showcase_enabled, showcase_jobs
+
+    if not showcase_enabled():
+        return jsonify({"jobs": [], "enabled": False})
+
+    try:
+        limit = int(request.args.get("limit", SHOWCASE_SIZE))
+    except (TypeError, ValueError):
+        limit = SHOWCASE_SIZE
+    # Clamped rather than rejected, and capped at the default: this endpoint is
+    # unauthenticated, so an unbounded limit would let a caller pull every
+    # finished report on disk in a single request.
+    limit = max(1, min(limit, SHOWCASE_SIZE))
+    return jsonify({"jobs": showcase_jobs(limit), "enabled": True})
+
+
+@bp.route("/api/agents/showcase/<job_id>")
+def api_agents_showcase_job(job_id):
+    """One sampled report, split into agent turns. No sign-in required."""
+    from ystocker.agent_roles import split_sections
+    from ystocker.agents import showcase_job
+
+    job = showcase_job(job_id)
+    # 404 for anything not in the sample, including a perfectly real run that is
+    # simply private. A distinguishable 403 would turn this route into a way to
+    # test whether a given job id exists, and the ids are the only thing
+    # protecting one user's transcript from another's guesses.
+    if not job:
+        return jsonify({"error": "No such report"}), 404
+
+    # Split server-side for the same reason the owner's poll does it: one
+    # implementation of the awkward cases, in ystocker/agent_roles.py.
+    report = job.pop("report", None) or ""
+    job["sections"] = split_sections(report) if report.strip() else []
+    job["has_report"] = bool(report.strip())
+    log.info("agents: showcase served report %s (%d sections)",
+             job_id, len(job["sections"]))
+    return jsonify(job)
+
+
+# Rendered showcase PDFs, keyed by job id. Building one runs report_charts and
+# embeds a CJK font, which is real CPU on a box with two vCPUs shared by eight
+# apps -- and unlike the owner's PDF route this one is unauthenticated, so the
+# same handful of reports would otherwise be re-rendered for every passer-by.
+#
+# Bounded twice over: only ids in the current sample are reachable (``_is_showcase``
+# re-checks eligibility, and a job id is 16 hex chars so it cannot be guessed),
+# and the dict is capped below. Cleared wholesale rather than by LRU because at
+# this size tracking recency costs more than the occasional rebuild.
+_SHOWCASE_PDF_MAX = 12
+_showcase_pdfs: dict[str, bytes] = {}
+_showcase_pdf_lock = threading.Lock()
+
+
+@bp.route("/api/agents/showcase/<job_id>/pdf")
+def api_agents_showcase_job_pdf(job_id):
+    """A sampled report as a PDF. No sign-in required.
+
+    The anonymised record is what gets rendered, not the record on disk, so the
+    owner's address cannot reach the document even if the template later grows a
+    byline. ``pdf_filename`` builds from the ticker and date alone.
+    """
+    from ystocker.agents import showcase_job
+    from ystocker.report_pdf import build_report_pdf, pdf_filename
+
+    job = showcase_job(job_id)
+    # 404, matching the JSON route: a distinguishable error would confirm that a
+    # given job id exists.
+    if not job:
+        return jsonify({"error": "No such report"}), 404
+
+    with _showcase_pdf_lock:
+        pdf = _showcase_pdfs.get(job_id)
+    if pdf is None:
+        pdf = build_report_pdf(job)
+        if not pdf:
+            return jsonify({"error": "Could not render a PDF for this report"}), 500
+        with _showcase_pdf_lock:
+            # Dropped whole when full: the sample re-rolls hourly, so the old
+            # entries are the ones no longer listed anyway.
+            if len(_showcase_pdfs) >= _SHOWCASE_PDF_MAX:
+                _showcase_pdfs.clear()
+            _showcase_pdfs[job_id] = pdf
+        log.info("agents: showcase rendered PDF for %s (%d bytes)", job_id, len(pdf))
+
+    return Response(pdf, content_type="application/pdf", headers={
+        "Content-Disposition": f'attachment; filename="{pdf_filename(job)}"',
+        "Content-Length": str(len(pdf)),
+        # public, unlike the owner's "private" copy: this report is deliberately
+        # published, so a CDN or browser cache holding it is fine and spares the
+        # box a re-render.
+        "Cache-Control": "public, max-age=3600",
+    })
 
 
 # ---------------------------------------------------------------------------

@@ -1129,6 +1129,8 @@ const I18n = (() => {
     'agents.vip':          { en: 'VIP',           zh: 'VIP' },
     'agents.degraded':     { en: 'ran on fallback model', zh: '已降级模型' },
     'agents.recovered':    { en: 'recovered from stream', zh: '由实时流恢复' },
+    'agents.collapse_all': { en: 'Collapse all',  zh: '全部折叠' },
+    'agents.expand_all':   { en: 'Expand all',    zh: '全部展开' },
     'agents.degraded_why': { en: 'The configured model hit its daily quota, so part of this report was written by a weaker model.',
                              zh: '配置的模型已用完当日额度，本报告部分内容由能力较弱的模型生成。' },
     'agents.depth_is':     { en: 'Depth',         zh: '深度' },
@@ -1155,6 +1157,15 @@ const I18n = (() => {
     'agents.status_running':{ en: 'Running',      zh: '运行中' },
     'agents.status_queued': { en: 'Queued',       zh: '排队中' },
     'agents.status_error':  { en: 'Error',        zh: '出错' },
+    // Shown only to visitors who are not signed in: a sample of finished
+    // reports, so the page shows what it produces instead of a dead end.
+    'agents.sample':        { en: 'Sample reports', zh: '报告样例' },
+    'agents.sample_why':    { en: 'A random selection of finished analyses. Sign in to run your own.',
+                              zh: '随机展示已完成的分析报告。登录后可运行你自己的分析。' },
+    'agents.sample_loading':{ en: 'Loading…',     zh: '加载中…' },
+    'agents.sample_none':   { en: 'No finished reports to show yet.', zh: '暂无可展示的已完成报告。' },
+    'agents.sample_cta':    { en: 'Want this for your own ticker and date?',
+                              zh: '想分析你自己的股票和日期?' },
 
     // ── contact.html ───────────────────────────────────────────────────
     'contact.title':        { en: 'Contact Us',  zh: '联系我们' },

@@ -34,6 +34,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import random
 import re
 import signal
 import subprocess
@@ -64,6 +65,12 @@ RUN_TIMEOUT = float(os.environ.get("TRADINGAGENTS_TIMEOUT", "5400"))
 
 # Keep at most this many job records on disk.
 MAX_JOBS = 60
+
+# How many finished reports the /agents page shows a visitor who is not signed
+# in. Also the hard ceiling on that endpoint's ``limit``: the showcase is a
+# sample, and letting a caller ask for 60 would turn it into a way to walk every
+# report on disk.
+SHOWCASE_SIZE = 10
 
 # Default to Gemini because this app already holds a Gemini key: SSM parameter
 # /ystocker/GEMINI_API_KEY is loaded into os.environ by _load_secrets_from_ssm()
@@ -780,6 +787,176 @@ def search_jobs(query: str = "", user: Optional[str] = None,
         "scanned": scanned,
         "truncated": found > limit,
     }
+
+
+# ---------------------------------------------------------------------------
+# Public showcase — finished reports shown to visitors who are not signed in
+# ---------------------------------------------------------------------------
+#
+# Every other agent read is owner-only (see ``owns``), because a report states
+# entry levels and position sizes and the person who ran it paid for it. This is
+# the one deliberate exception: /agents is otherwise a dead end for a visitor who
+# has not signed in, and a sample of real output is what tells them what the page
+# produces. The exception is made safe by *anonymising* rather than authorising —
+# nothing here reveals who ran a report, and the sample never carries a body
+# except through ``showcase_job``.
+#
+# How many are shown is ``SHOWCASE_SIZE``, declared beside ``MAX_JOBS`` because
+# the two together decide what fraction of recent work a visitor sees.
+
+# What a visitor who is not signed in may see of a run. An allowlist and not a
+# denylist on purpose: a job record also carries the owner's address, the
+# runner's stderr, its pid and its quota day. Naming the publishable fields means
+# a field added to the record later is private until someone decides otherwise,
+# instead of public until someone notices. ``report`` is absent by design —
+# ``showcase_job`` adds it for the caller to split, and the listing never has it.
+_PUBLIC_FIELDS = (
+    "id", "ticker", "date", "status", "decision",
+    "created_at", "started_at", "finished_at", "elapsed_sec",
+    # Kept so a sampled report cannot pass itself off as better than it is.
+    "degraded", "fallback_models", "recovered",
+)
+
+
+def showcase_enabled() -> bool:
+    """Whether finished runs may be sampled for visitors who are not signed in.
+
+    On by default: the sample is the only thing that tells a first-time visitor
+    what this page does. ``AGENTS_SHOWCASE=0`` turns it off without a deploy.
+    """
+    return os.environ.get("AGENTS_SHOWCASE", "1").strip().lower() \
+        not in ("0", "false", "no", "off")
+
+
+def showcase_emails() -> set[str]:
+    """Owners whose finished runs may be sampled; empty means any owner.
+
+    Set ``AGENTS_SHOWCASE_EMAILS`` to publish only a demo account's runs and keep
+    every other user's reports out of the sample entirely. Empty (the default)
+    samples anyone's finished work, which is acceptable only because the sample is
+    anonymous: see ``_PUBLIC_FIELDS``.
+    """
+    raw = os.environ.get("AGENTS_SHOWCASE_EMAILS", "")
+    return {e.strip().lower() for e in _SPLIT_RE.split(raw) if e.strip()}
+
+
+def _is_showcase(job: Optional[dict[str, Any]]) -> bool:
+    """Whether this run may appear in the public sample.
+
+    Finished, non-empty and not a self-test: a queued or errored run says nothing
+    about what the agents produce, and a self-test makes no LLM call, so its
+    "report" is a fixture rather than analysis. Ownership is deliberately *not*
+    checked — that is the point of the sample — so every caller must go through
+    ``_publishable`` rather than hand a raw record out.
+    """
+    if not job or not showcase_enabled():
+        return False
+    if job.get("status") != "done" or job.get("selftest"):
+        return False
+    if not (job.get("report") or "").strip():
+        return False
+    only = showcase_emails()
+    if only and (job.get("user") or "").strip().lower() not in only:
+        return False
+    return True
+
+
+def _publishable(job: dict[str, Any]) -> dict[str, Any]:
+    """A run reduced to the fields a visitor who is not signed in may see."""
+    out = {k: job[k] for k in _PUBLIC_FIELDS if k in job}
+    out["has_report"] = bool((job.get("report") or "").strip())
+    return out
+
+
+# Pool cache. Building the pool parses every job record on disk — up to
+# ``MAX_JOBS`` files whose report bodies run to tens of KB each — and unlike
+# ``search_jobs`` this feeds an *unauthenticated* endpoint, so rebuilding it per
+# request would let anyone outside turn a page load into megabytes of JSON
+# parsing on a box with two vCPUs shared by eight apps. The cached pool holds no
+# report bodies (``_PUBLIC_FIELDS`` excludes them), so it stays small.
+_SHOWCASE_TTL = 60.0
+_showcase_cache: tuple[float, list[dict[str, Any]]] = (0.0, [])
+_showcase_lock = threading.Lock()
+
+
+def _showcase_pool() -> list[dict[str, Any]]:
+    """Every publishable run, newest first, cached for ``_SHOWCASE_TTL`` seconds.
+
+    A run that has just finished takes up to a minute to join the pool, which is
+    a fair trade for not re-reading the whole directory on every anonymous hit.
+    """
+    global _showcase_cache
+    ts, pool = _showcase_cache
+    now = time.monotonic()
+    # Keyed on the timestamp rather than on ``pool`` being non-empty, so a site
+    # with no finished reports yet caches the empty answer too instead of
+    # rescanning the directory on every request.
+    if ts and now - ts < _SHOWCASE_TTL:
+        return pool
+
+    fresh: list[dict[str, Any]] = []
+    for p in _record_paths():          # newest first
+        try:
+            j = _reap(json.loads(p.read_text()))
+        except Exception:
+            continue                   # a stale record is not worth failing on
+        if _is_showcase(j):
+            fresh.append(_publishable(j))
+
+    with _showcase_lock:
+        _showcase_cache = (now, fresh)
+    return fresh
+
+
+def showcase_jobs(limit: int = SHOWCASE_SIZE) -> list[dict[str, Any]]:
+    """A random sample of finished reports, anonymised, newest first.
+
+    Sampled rather than truncated because that is the honest impression to give:
+    always showing the newest ten would hide everything older, and a visitor who
+    reloads learns there is more here than one screenful. ``_prune`` keeps only
+    ``MAX_JOBS`` records, so the pool is a rolling window over recent work.
+
+    The draw is stable for an hour rather than fresh per request -- see the seed
+    below for why.
+    """
+    pool = _showcase_pool()
+    if len(pool) <= limit:
+        sample = list(pool)
+    else:
+        # Seeded with the current UTC hour rather than drawn from the global RNG,
+        # so the ten hold still for an hour. Re-rolling per request meant a
+        # visitor who opened one report and came back to the list found it
+        # replaced by a fresh draw, and it defeats any cache in front of this
+        # endpoint. An hour still re-rolls often enough that the page is not a
+        # fixed advertisement for the same ten tickers.
+        #
+        # Stable given a stable pool, which is the honest guarantee: a run
+        # finishing shifts the indices this seed picks, so the sample can change
+        # within the hour when new work lands. That is preferable to seeding on
+        # the pool's contents, which would re-roll on every finished run.
+        rng = random.Random(datetime.now(timezone.utc).strftime("%Y-%m-%dT%H"))
+        # Sampled by index and re-sorted so the newest-first order of
+        # ``_record_paths`` survives into the result; ``random.sample`` on the
+        # records themselves would also shuffle them, and the page groups by date.
+        sample = [pool[i] for i in sorted(rng.sample(range(len(pool)), limit))]
+    log.info("agents: showcase served %d of %d eligible reports", len(sample), len(pool))
+    return sample
+
+
+def showcase_job(job_id: str) -> Optional[dict[str, Any]]:
+    """One sampled report with its body, anonymised, or None if it may not be shown.
+
+    Eligibility is re-checked against the record on disk rather than trusted from
+    a listing: the id is the only thing the caller supplies, and a run whose owner
+    has since been dropped from ``AGENTS_SHOWCASE_EMAILS`` must stop being
+    readable at the same moment it stops being listed.
+    """
+    job = get_job(job_id)
+    if not _is_showcase(job):
+        return None
+    out = _publishable(job)
+    out["report"] = job.get("report") or ""
+    return out
 
 
 def _prune() -> None:

@@ -120,6 +120,39 @@
 }
 .ag-chip i { font-style: normal; font-size: 13px; line-height: 1; }
 
+/* ── Collapse + back to top ─────────────────────────────────────────────── */
+.ag-ctl {
+  flex: 0 0 auto; display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 10px; border-radius: 999px; cursor: pointer;
+  font-size: 11.5px; font-weight: 600; white-space: nowrap;
+  color: #cbd5e1; background: rgba(99,102,241,.14);
+  border: 1px solid #4338ca;
+}
+.ag-ctl:hover { background: rgba(99,102,241,.26); color: #e2e8f0; }
+/* Separates the control from the speaker chips it sits in front of. */
+.ag-ctl-sep { flex: 0 0 auto; width: 1px; align-self: stretch; background: #1e293b; margin: 0 3px; }
+
+.ag-who { cursor: pointer; user-select: none; }
+.ag-caret {
+  color: #475569; font-size: 10px; line-height: 1;
+  transition: transform .15s;
+}
+.ag-bubble.is-collapsed .ag-caret { transform: rotate(-90deg); }
+.ag-bubble.is-collapsed .ag-report { display: none; }
+.ag-hidden-note { color: #475569; font-size: 11px; }
+.ag-bubble:not(.is-collapsed) .ag-hidden-note { display: none; }
+
+#agTop {
+  position: fixed; right: 18px; bottom: 20px; z-index: 40;
+  width: 40px; height: 40px; border-radius: 50%;
+  display: none; align-items: center; justify-content: center;
+  cursor: pointer; font-size: 15px; line-height: 1;
+  color: #c7d2fe; background: rgba(15,23,42,.92); backdrop-filter: blur(6px);
+  border: 1px solid #4338ca; box-shadow: 0 6px 20px rgba(0,0,0,.5);
+}
+#agTop.is-on { display: flex; }
+#agTop:hover { background: rgba(99,102,241,.3); color: #e2e8f0; }
+
 /* ── Agent conversation ─────────────────────────────────────────────────── */
 .ag-team {
   display: flex; align-items: center; gap: 10px;
@@ -224,6 +257,239 @@
   <p class="text-xs text-slate-500 mb-4" data-i18n="agents.need_signin_why">Each run makes live LLM calls that cost real money, so this page is restricted.</p>
   <a href="{{ url_for('main.login') }}" class="ag-btn" data-i18n="nav.sign_in">Sign In</a>
 </div>
+
+{% if showcase %}
+{# A visitor who cannot run anything still deserves to see what a run produces,
+   so the page samples finished reports instead of stopping at the card above.
+   The sample is anonymous: the API hands over an allowlist of fields and never
+   says who ran a report (ystocker/agents.py:_PUBLIC_FIELDS). #}
+<!-- ── Sample reports (not signed in) ─────────────────────────────────── -->
+<div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 mt-6 fade-up">
+  <div class="ag-hist-head">
+    <h3 class="text-sm font-semibold text-slate-300" data-i18n="agents.sample">Sample reports</h3>
+    <p class="text-xs text-slate-600" data-i18n="agents.sample_why">A random selection of finished analyses. Sign in to run your own.</p>
+  </div>
+  <div id="agSample" class="text-xs text-slate-500" data-i18n="agents.sample_loading">Loading…</div>
+</div>
+
+<div id="agSampleCard" class="hidden bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 mt-6 fade-up">
+  <div class="ag-row justify-between mb-3">
+    <div class="ag-row">
+      <span class="text-base font-semibold text-slate-200" id="agSampleTitle">—</span>
+      <span id="agSampleDecision" class="ag-pill ag-done hidden"></span>
+      <span id="agSampleRecovered" class="ag-pill ag-degraded hidden"
+            data-i18n="agents.recovered">recovered from stream</span>
+      <span id="agSampleDegraded" class="ag-pill ag-degraded hidden"></span>
+    </div>
+    <div class="ag-row">
+      <a id="agSamplePdf" class="ag-btn ag-btn-ghost hidden" href="#" download
+         data-i18n="agents.download_pdf">⬇ Download PDF</a>
+      <button id="agSampleHide" class="ag-btn ag-btn-ghost" data-i18n="agents.dismiss">Dismiss</button>
+    </div>
+  </div>
+  <div class="ag-report" id="agSampleReport"></div>
+  <p class="text-xs text-slate-500 mt-5 pt-4 border-t border-slate-800">
+    <span data-i18n="agents.sample_cta">Want this for your own ticker and date?</span>
+    <a href="{{ url_for('main.login') }}" class="text-indigo-400 hover:underline" data-i18n="nav.sign_in">Sign In</a>
+  </p>
+</div>
+
+<script>
+(function() {
+  const listBox = document.getElementById('agSample');
+  if (!listBox) return;   // signed in, or the showcase is switched off
+
+  // Same cast the server split the report with, so a turn is drawn with the
+  // role's own colour and icon rather than a guess.
+  const ROLES = {{ agent_roles | tojson }};
+  const card = document.getElementById('agSampleCard');
+
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g,
+    c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+
+  // When the report was generated, which is not the analysis date it covers.
+  function fmtWhen(iso) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (isNaN(d)) return '';
+    const pad = n => String(n).padStart(2, '0');
+    return pad(d.getMonth() + 1) + '/' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+  }
+
+  // Draws the same conversation the signed-in view does, minus the jump bar and
+  // scroll spy: this is a read-only teaser, and a live run's machinery has
+  // nothing to track here.
+  function drawConversation(box, sections) {
+    box.innerHTML = '';
+    let team = null;
+    for (const sec of sections) {
+      if (sec.team && sec.team !== team) {
+        team = sec.team;
+        const h = document.createElement('div');
+        h.className = 'ag-team';
+        h.textContent = (I18n.getLang() === 'zh' && sec.team_zh) ? sec.team_zh : team;
+        box.appendChild(h);
+      }
+      const md = window.Markdown ? Markdown.render(sec.body) : null;
+      if (!sec.role) {
+        // Preamble: the report title and generation stamp, nobody's turn.
+        const p = document.createElement('div');
+        p.className = 'ag-preamble ag-report';
+        if (md) p.innerHTML = md; else p.textContent = sec.body;
+        box.appendChild(p);
+        continue;
+      }
+      const turn = document.createElement('div');
+      turn.className = 'ag-turn';
+      turn.style.setProperty('--role', sec.role.color);
+
+      const av = document.createElement('div');
+      av.className = 'ag-avatar';
+      av.textContent = sec.role.icon;
+      av.setAttribute('aria-hidden', 'true');
+
+      const bubble = document.createElement('div');
+      bubble.className = 'ag-bubble';
+      const who = document.createElement('div');
+      who.className = 'ag-who';
+      const nm = document.createElement('b');
+      nm.textContent = (I18n.getLang() === 'zh' && sec.role.zh) ? sec.role.zh : sec.role.name;
+      const sub = document.createElement('span');
+      if (I18n.getLang() === 'zh' && sec.role.zh) sub.textContent = sec.role.name;
+      who.append(nm, sub);
+
+      const body = document.createElement('div');
+      body.className = 'ag-report';
+      if (md) body.innerHTML = md; else body.textContent = sec.body;
+
+      bubble.append(who, body);
+      turn.append(av, bubble);
+      box.appendChild(turn);
+    }
+  }
+
+  async function openReport(j) {
+    try {
+      const r = await fetch('/api/agents/showcase/' + encodeURIComponent(j.id));
+      if (!r.ok) return;
+      const job = await r.json();
+
+      document.getElementById('agSampleTitle').textContent =
+        (job.ticker || '') + (job.date ? ' · ' + job.date : '');
+      const dec = document.getElementById('agSampleDecision');
+      dec.textContent = job.decision || '';
+      dec.classList.toggle('hidden', !job.decision);
+      document.getElementById('agSampleRecovered').classList.toggle('hidden', !job.recovered);
+      // Disclosed here for the same reason the owner's view discloses it: a
+      // Flash-written report should not be mistaken for a Pro one.
+      const deg = document.getElementById('agSampleDegraded');
+      const fell = job.fallback_models || [];
+      if (job.degraded || fell.length) {
+        deg.textContent = (I18n.t('agents.degraded') || 'ran on fallback model')
+          + (fell.length ? ' · ' + fell.join(', ') : '');
+        deg.classList.remove('hidden');
+      } else {
+        deg.classList.add('hidden');
+      }
+
+      drawConversation(document.getElementById('agSampleReport'), job.sections || []);
+      // has_report rather than the status: a run can finish with an empty body,
+      // and the PDF route answers 500 for one.
+      const pdf = document.getElementById('agSamplePdf');
+      pdf.classList.toggle('hidden', !job.has_report);
+      if (job.has_report) {
+        pdf.href = '/api/agents/showcase/' + encodeURIComponent(j.id) + '/pdf';
+      }
+      card.classList.remove('hidden');
+      card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } catch (e) { /* the sample is a teaser; never block the page on it */ }
+  }
+
+  function drawList(jobs) {
+    if (!jobs.length) {
+      listBox.className = 'text-xs text-slate-500';
+      listBox.removeAttribute('data-i18n');
+      listBox.textContent = I18n.t('agents.sample_none') || 'No finished reports to show yet.';
+      return;
+    }
+    listBox.removeAttribute('data-i18n');
+    listBox.innerHTML = '';
+    listBox.className = 'ag-hist text-xs text-slate-500';
+
+    // Grouped by analysis date in a column of its own, matching the signed-in
+    // history so the two views read the same way.
+    const byDate = new Map();
+    jobs.forEach(j => {
+      const d = j.date || '—';
+      if (!byDate.has(d)) byDate.set(d, []);
+      byDate.get(d).push(j);
+    });
+
+    [...byDate.keys()].sort().reverse().forEach(date => {
+      const dateCell = document.createElement('div');
+      dateCell.className = 'ag-hist-date';
+      dateCell.textContent = date;
+      const runs = document.createElement('div');
+      runs.className = 'ag-hist-runs';
+
+      byDate.get(date).forEach(j => {
+        const row = document.createElement('div');
+        row.className = 'ag-hist-run';
+        const left = document.createElement('div');
+        left.className = 'ag-row';
+        const when = fmtWhen(j.finished_at || j.created_at);
+        left.innerHTML = '<span class="text-slate-300 font-medium">' + esc(j.ticker) + '</span>'
+          + (j.decision ? `<span class="text-slate-400">${esc(j.decision)}</span>` : '')
+          + (when ? `<span class="text-slate-600" title="When this report was generated">${when}</span>` : '')
+          + (j.elapsed_sec ? `<span class="text-slate-600">${esc(j.elapsed_sec)}s</span>` : '');
+
+        const actions = document.createElement('div');
+        actions.className = 'ag-row';
+        const btn = document.createElement('button');
+        btn.className = 'ag-btn ag-btn-ghost';
+        btn.textContent = I18n.t('agents.view') || 'View';
+        btn.onclick = () => openReport(j);
+        actions.appendChild(btn);
+
+        // Offered straight from the row as well as from the opened report, the
+        // same as the signed-in history: a visitor scanning the list should not
+        // have to open a report to find out it can be downloaded.
+        if (j.has_report) {
+          const dl = document.createElement('a');
+          dl.className = 'ag-btn ag-btn-ghost';
+          dl.href = '/api/agents/showcase/' + encodeURIComponent(j.id) + '/pdf';
+          dl.setAttribute('download', '');
+          dl.textContent = I18n.t('agents.pdf_short') || 'PDF';
+          actions.appendChild(dl);
+        }
+
+        row.append(left, actions);
+        runs.appendChild(row);
+      });
+
+      listBox.append(dateCell, runs);
+    });
+  }
+
+  document.getElementById('agSampleHide').addEventListener('click', () => {
+    card.classList.add('hidden');
+  });
+
+  (async () => {
+    try {
+      const r = await fetch('/api/agents/showcase');
+      if (!r.ok) { listBox.textContent = ''; return; }
+      const res = await r.json();
+      drawList(res.jobs || []);
+    } catch (e) {
+      // Leave no stale "Loading…" behind if the fetch never lands.
+      listBox.textContent = '';
+    }
+  })();
+})();
+</script>
+{% endif %}
+
 {% elif not allowed %}
 <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 fade-up">
   <p class="text-slate-300 text-sm mb-1">
@@ -333,6 +599,8 @@
     <div class="ag-log" id="agLog"></div>
   </div>
 </div>
+
+<button id="agTop" type="button" title="Back to top" aria-label="Back to top">&#9650;</button>
 
 <!-- ── History ────────────────────────────────────────────────────────── -->
 <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
@@ -483,7 +751,19 @@
 
   // Each report section is one agent's turn. The server does the splitting
   // (ystocker/agent_roles.py), so this only has to draw it.
+  const fmtLen = (n) => (n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(n));
+
   function renderConversation(box, sections) {
+    // Apply the remembered collapse-all preference the first time each speaker
+    // appears, but never re-fold something the reader has just opened.
+    if (collapseAll) {
+      for (const sec of sections) {
+        if (sec.role && !seededFolds.has(sec.role.key)) {
+          seededFolds.add(sec.role.key);
+          collapsed.add(sec.role.key);
+        }
+      }
+    }
     box.innerHTML = '';
     let team = null;
     for (const sec of sections) {
@@ -519,19 +799,41 @@
       bubble.className = 'ag-bubble';
       const who = document.createElement('div');
       who.className = 'ag-who';
+      who.setAttribute('role', 'button');
+      who.tabIndex = 0;
+      const caret = document.createElement('span');
+      caret.className = 'ag-caret';
+      caret.setAttribute('aria-hidden', 'true');
+      caret.textContent = '\u25BC';
       const nm = document.createElement('b');
       // Show the translated role name when the page is in Chinese; the report
       // text itself is Chinese, so an English speaker label reads oddly.
       nm.textContent = (I18n.getLang() === 'zh' && sec.role.zh) ? sec.role.zh : sec.role.name;
       const sub = document.createElement('span');
       if (I18n.getLang() === 'zh' && sec.role.zh) sub.textContent = sec.role.name;
-      who.append(nm, sub);
+      // How much is folded away, so a collapsed speaker still says how much it holds.
+      const note = document.createElement('span');
+      note.className = 'ag-hidden-note';
+      note.textContent = '\u00b7 ' + fmtLen((sec.body || '').length);
+      who.append(caret, nm, sub, note);
 
       const body = document.createElement('div');
       body.className = 'ag-report';
       if (md) body.innerHTML = md; else body.textContent = sec.body;
 
       bubble.append(who, body);
+      if (collapsed.has(sec.role.key)) bubble.classList.add('is-collapsed');
+      who.setAttribute('aria-expanded', String(!collapsed.has(sec.role.key)));
+      const toggle = () => {
+        const folded = bubble.classList.toggle('is-collapsed');
+        if (folded) collapsed.add(sec.role.key); else collapsed.delete(sec.role.key);
+        who.setAttribute('aria-expanded', String(!folded));
+        syncCollapseBtn();
+      };
+      who.addEventListener('click', toggle);
+      who.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
+      });
       turn.append(av, bubble);
       box.appendChild(turn);
     }
@@ -539,6 +841,16 @@
   }
 
   // ── Jump bar ────────────────────────────────────────────────────────────
+  // Which speakers are folded. Kept outside the renderer because the
+  // conversation is rebuilt on every poll while a run streams, and a fold that
+  // sprang back open on each poll would be useless.
+  const collapsed = new Set();
+  const seededFolds = new Set();
+  // "collapse as always": the preference is remembered, so a reader who prefers
+  // to skim headings gets that on the next report too.
+  const COLLAPSE_PREF = 'ystocker_agents_collapse_all';
+  let collapseAll = localStorage.getItem(COLLAPSE_PREF) === '1';
+
   let jumpSig = '';        // which roles the current bar was built for
   let spy = null;
   let spyTick = null;      // latest geometry recompute, called by the scroll handler
@@ -575,6 +887,32 @@
     jumpSig = sig;
     bar.innerHTML = '';
 
+    const ctl = document.createElement('button');
+    ctl.type = 'button';
+    ctl.className = 'ag-ctl';
+    ctl.id = 'agCollapseAll';
+    ctl.addEventListener('click', () => {
+      const keys = present.map(x => x.role.key);
+      // Fold everything unless everything is already folded, in which case this
+      // is the way back out.
+      const foldAll = !keys.every(k => collapsed.has(k));
+      keys.forEach(k => foldAll ? collapsed.add(k) : collapsed.delete(k));
+      collapseAll = foldAll;
+      try { localStorage.setItem(COLLAPSE_PREF, foldAll ? '1' : '0'); } catch (e) {}
+      document.querySelectorAll('#agReport .ag-turn').forEach(t => {
+        const b = t.querySelector('.ag-bubble');
+        if (!b) return;
+        b.classList.toggle('is-collapsed', foldAll);
+        const w = b.querySelector('.ag-who');
+        if (w) w.setAttribute('aria-expanded', String(!foldAll));
+      });
+      syncCollapseBtn();
+    });
+    bar.appendChild(ctl);
+    const sep = document.createElement('span');
+    sep.className = 'ag-ctl-sep';
+    bar.appendChild(sep);
+
     const zh = I18n.getLang() === 'zh';
     for (const sec of present) {
       const chip = document.createElement('button');
@@ -601,6 +939,19 @@
       bar.appendChild(chip);
     }
     attachSpy();
+    syncCollapseBtn();
+  }
+
+  // The control's label always states what it will do next, so it never claims
+  // to "collapse all" when everything is already collapsed.
+  function syncCollapseBtn() {
+    const ctl = document.getElementById('agCollapseAll');
+    if (!ctl) return;
+    const bubbles = [...document.querySelectorAll('#agReport .ag-bubble')];
+    const allFolded = bubbles.length > 0 && bubbles.every(b => b.classList.contains('is-collapsed'));
+    ctl.textContent = allFolded
+      ? (I18n.t('agents.expand_all') || 'Expand all')
+      : (I18n.t('agents.collapse_all') || 'Collapse all');
   }
 
   // Highlight whoever is on screen, and keep that chip visible in the bar, so
@@ -887,6 +1238,25 @@
     searchEl.focus();
     loadHistory();
   });
+
+  // ── Back to top ─────────────────────────────────────────────────────────
+  // A finished report runs to tens of thousands of characters, so scrolling back
+  // by hand is a real cost. Appears only once there is something to go back to.
+  (function backToTop() {
+    const btn = document.getElementById('agTop');
+    if (!btn) return;
+    const sync = () => btn.classList.toggle('is-on', window.scrollY > 500);
+    let queued = false;
+    window.addEventListener('scroll', () => {
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(() => { queued = false; sync(); });
+    }, { passive: true });
+    btn.addEventListener('click', () => {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+    sync();
+  })();
 
   runBtn.addEventListener('click', () => start(false));
   selfBtn.addEventListener('click', () => start(true));
