@@ -2207,14 +2207,17 @@ def api_agents_run():
 
 @bp.route("/api/agents/job/<job_id>")
 def api_agents_job(job_id):
-    """Poll one job. Gated too — a transcript may contain position views."""
+    """Poll one job. Readable only by the user who ran it."""
     gate = _agent_gate()
     if gate:
         return gate
-    from ystocker.agents import get_job
+    from ystocker.agents import get_job, owns
 
     job = get_job(job_id)
-    if not job:
+    # 404 rather than 403 for someone else's run: a distinguishable "forbidden"
+    # would confirm that a given job id exists, and the ids are the only thing
+    # protecting one user's transcript from another's guesses.
+    if not job or not owns(job, _agent_user()):
         return jsonify({"error": "No such job"}), 404
 
     # Split into role turns here rather than in the browser. The page renders
@@ -2240,11 +2243,11 @@ def api_agents_job_pdf(job_id):
     gate = _agent_gate()
     if gate:
         return gate
-    from ystocker.agents import get_job
+    from ystocker.agents import get_job, owns
     from ystocker.report_pdf import build_report_pdf, pdf_filename
 
     job = get_job(job_id)
-    if not job:
+    if not job or not owns(job, _agent_user()):
         return jsonify({"error": "No such job"}), 404
     if job.get("status") != "done":
         return jsonify({"error": f"Run is {job.get('status')}, not done"}), 409
@@ -2264,13 +2267,13 @@ def api_agents_job_pdf(job_id):
 
 @bp.route("/api/agents/jobs")
 def api_agents_jobs():
-    """Recent runs, newest first."""
+    """The caller's own recent runs, newest first."""
     gate = _agent_gate()
     if gate:
         return gate
     from ystocker.agents import list_jobs
 
-    return jsonify({"jobs": list_jobs(20)})
+    return jsonify({"jobs": list_jobs(20, user=_agent_user())})
 
 
 # ---------------------------------------------------------------------------

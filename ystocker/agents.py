@@ -473,15 +473,39 @@ def get_job(job_id: str) -> Optional[dict[str, Any]]:
         return None
 
 
-def list_jobs(limit: int = 20) -> list[dict[str, Any]]:
+def owns(job: Optional[dict[str, Any]], email: Optional[str]) -> bool:
+    """Whether this address owns this run.
+
+    A report is private to whoever paid for it: these transcripts state position
+    sizes and entry levels, and /agents is open to any signed-in user. A job with
+    no recorded owner belongs to nobody and is readable by nobody, which is the
+    safe direction for records written before ownership was enforced.
+    """
+    if not job or not email:
+        return False
+    owner = (job.get("user") or "").strip().lower()
+    return bool(owner) and owner == email.strip().lower()
+
+
+def list_jobs(limit: int = 20, user: Optional[str] = None) -> list[dict[str, Any]]:
+    """Recent runs, newest first, restricted to ``user`` when given.
+
+    Filtering happens before the limit, not after: slicing the newest N records
+    and then discarding other people's would show a user an empty history
+    whenever N busier runs happened to come first.
+    """
     if not JOB_DIR.exists():
         return []
     out: list[dict[str, Any]] = []
     # Exclude the children's sidecar result files, which are not job records.
     records = (p for p in JOB_DIR.glob("*.json") if not p.name.endswith(".result.json"))
-    for p in sorted(records, key=lambda x: x.stat().st_mtime, reverse=True)[:limit]:
+    for p in sorted(records, key=lambda x: x.stat().st_mtime, reverse=True):
+        if len(out) >= limit:
+            break
         try:
             j = _reap(json.loads(p.read_text()))
+            if user is not None and not owns(j, user):
+                continue
             # The transcript can be long; a listing does not need it.
             j.pop("log", None)
             j.pop("report", None)
