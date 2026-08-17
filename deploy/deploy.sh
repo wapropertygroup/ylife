@@ -236,6 +236,20 @@ if [[ "\${INSTALL_PLAYWRIGHT:-0}" == "1" ]] \
       echo "[\$(TS)]    ⚠ Playwright install failed — Walmart scraping uses API fallbacks"
 fi
 
+# ── CJK font for PDF reports ─────────────────────────────────────────────────
+# The agent reports are generated in Chinese and downloaded as PDFs. reportlab
+# has to *embed* a font or the file only renders on readers that ship Adobe's
+# CJK pack (macOS Preview, Acrobat) and is blank on Windows/Android. It also
+# cannot read PostScript/CFF outlines, which rules out google-noto-*-cjk-*
+# (sfnt tag OTTO) despite those being the obvious choice -- AR PL UMing is the
+# TrueType-outline CJK face in the Amazon Linux repos. ~21 MB.
+# See ystocker/report_pdf.py:_register_cjk_font.
+if ! rpm -q cjkuni-uming-fonts >/dev/null 2>&1; then
+  echo "[\$(TS)]    Installing CJK font for PDF reports..."
+  sudo dnf install -y -q cjkuni-uming-fonts 2>&1 | tail -2 || \\
+      echo "[\$(TS)]    ⚠ CJK font install failed — Chinese PDFs will not embed a font"
+fi
+
 # ── Swap file — OOM cushion ──────────────────────────────────────────────────
 # The box has 4 GB and shipped with no swap at all, so any memory spike went
 # straight to the OOM killer instead of degrading. 2 GB of swap turns a hard
