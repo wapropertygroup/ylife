@@ -106,6 +106,11 @@ def _child_env() -> dict[str, str]:
     gemini = env.get("GEMINI_API_KEY", "").strip()
     if gemini and not env.get("GOOGLE_API_KEY", "").strip():
         env["GOOGLE_API_KEY"] = gemini
+        # Drop the original rather than leaving both set. google-genai warns
+        # "Both GOOGLE_API_KEY and GEMINI_API_KEY are set" on every client it
+        # builds, which is once per agent -- pure noise in the run log, and
+        # the two hold the same value here anyway.
+        env.pop("GEMINI_API_KEY", None)
     # TradingAgents reads these itself, so setting them here is enough to steer
     # the run without patching its config.
     env.setdefault("TRADINGAGENTS_LLM_PROVIDER", DEFAULT_PROVIDER)
@@ -562,8 +567,14 @@ def _run(job_id: str) -> None:
         job["elapsed_sec"] = elapsed
         job["returncode"] = rc
 
-        # Keep the tail: a debate transcript can be very large.
-        tail = (out[-6000:] if out else "") + (("\n[stderr]\n" + err[-3000:]) if err else "")
+        # Keep the tail: a debate transcript can be very large. stdout also
+        # carries the result block, which the page renders separately, so only
+        # the part before it is useful as a log.
+        visible_out = out.split(_BEGIN)[0] if _BEGIN in out else out
+        tail = (visible_out[-6000:] if visible_out.strip() else "")
+        clean_err = _denoise(err)
+        if clean_err:
+            tail += "\n[stderr]\n" + clean_err[-3000:]
         job["log"] = tail.strip()
 
         if job.get("status") != "error":
@@ -583,6 +594,49 @@ def _run(job_id: str) -> None:
                  job_id, job.get("status"), rc, elapsed)
     finally:
         _slot.release()
+
+
+# Third-party chatter that appears on every run and means nothing to whoever is
+# reading the report. Each is a *known* benign condition, not a class of error:
+# leaving real warnings visible is the point of showing a log at all.
+_NOISE = (
+    # google-genai, once per client. See _child_env: both key names held the
+    # same value; the alias is now removed, so this is belt and braces.
+    "Both GOOGLE_API_KEY and GEMINI_API_KEY are set",
+    # google-genai style advice about its own API, not a problem with the run.
+    "Direct use of automatic function calling (AFC)",
+    # FRED is an optional data source and no key is configured; TradingAgents
+    # already falls through to the next vendor by design.
+    "Vendor 'fred' not configured",
+    "Optional macro_data unavailable",
+    "FRED_API_KEY environment variable is not set",
+    # Reddit rate-limits anonymous RSS constantly; the fetcher retries and the
+    # analysis proceeds without it.
+    "Reddit RSS 429",
+    "Reddit RSS fetch failed",
+)
+
+
+def _denoise(text: str) -> str:
+    """Strip recurring third-party warnings from captured stderr.
+
+    Whitelist-based on purpose: an unrecognised line is always kept, so a new
+    failure mode shows up in the log instead of being silently swallowed.
+    """
+    if not text:
+        return ""
+    kept = [ln for ln in text.splitlines()
+            if not any(n in ln for n in _NOISE)]
+    # Collapse runs of blank lines left behind by the removals.
+    out, blank = [], False
+    for ln in kept:
+        if ln.strip():
+            out.append(ln)
+            blank = False
+        elif not blank:
+            out.append("")
+            blank = True
+    return "\n".join(out).strip()
 
 
 def _extract(stdout: str) -> Optional[dict[str, Any]]:
