@@ -96,10 +96,19 @@ def _load_secrets_from_ssm() -> None:
         "/ystocker/SES_FROM_EMAIL":     "SES_FROM_EMAIL",
         "/ystocker/GOOGLE_CLIENT_ID":   "GOOGLE_CLIENT_ID",
         "/ystocker/YSTOCKER_SECRET_KEY": "YSTOCKER_SECRET_KEY",
-        # Who may run the trading agents. Not a secret, but it is an access
-        # control, so it lives with the other SSM-managed config rather than
-        # being baked into the image — adding a person should not need a deploy.
+        # Agent access + spending controls. Not secrets, but they govern who can
+        # spend the Gemini budget, so they live with the other SSM-managed
+        # config rather than being baked into the image — changing a limit or
+        # promoting a VIP should not need a deploy.
+        #
+        # AGENTS_ALLOWED_EMAILS is an *optional* restriction now: empty means
+        # /agents is open to any signed-in user, bounded by the daily quotas
+        # below. Set it to fall back to allowlist-only access.
         "/ystocker/AGENTS_ALLOWED_EMAILS": "AGENTS_ALLOWED_EMAILS",
+        "/ystocker/AGENTS_VIP_EMAILS": "AGENTS_VIP_EMAILS",
+        "/ystocker/AGENTS_DAILY_LIMIT": "AGENTS_DAILY_LIMIT",
+        "/ystocker/AGENTS_VIP_DAILY_LIMIT": "AGENTS_VIP_DAILY_LIMIT",
+        "/ystocker/AGENTS_GLOBAL_DAILY_LIMIT": "AGENTS_GLOBAL_DAILY_LIMIT",
         # Where the TradingAgents checkout and its interpreter live. Paths
         # differ between a laptop and the box, so they are configuration rather
         # than constants; agents.py falls back to a home-directory guess only

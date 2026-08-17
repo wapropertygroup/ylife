@@ -2119,12 +2119,12 @@ def _agent_user() -> Optional[str]:
 
 
 def _agent_gate():
-    """Return an error Response if the caller may not run agents, else None.
+    """Return an error Response if the caller may not view agent runs, else None.
 
-    Two separate reasons are distinguished because they need different fixes:
-    401 means sign in, 403 means ask to be added to the allowlist. Each run
-    spends real API credits and this site is otherwise public, so an empty
-    allowlist denies everyone.
+    Signing in is the requirement; how much a signed-in user may *spend* is the
+    quota's job, checked at submit time rather than here, so reading a finished
+    report never consumes anything. 403 remains reachable only through the
+    optional ``AGENTS_ALLOWED_EMAILS`` override.
     """
     from ystocker.agents import is_allowed
 
@@ -2132,7 +2132,8 @@ def _agent_gate():
     if not email:
         return jsonify({"error": "Sign in required", "reason": "auth"}), 401
     if not is_allowed(email):
-        return jsonify({"error": "This account is not on the agent allowlist",
+        return jsonify({"error": "Agent runs are currently restricted to "
+                                 "specific accounts",
                         "reason": "forbidden"}), 403
     return None
 
@@ -2144,6 +2145,9 @@ def agents_page():
 
     email = _agent_user()
     log.info("GET /agents (user=%s)", email or "anon")
+    from ystocker import quota
+    from ystocker.agent_roles import roles_json
+
     return render_template(
         "agents.html",
         peer_groups=list(PEER_GROUPS.keys()),
@@ -2151,6 +2155,8 @@ def agents_page():
         signed_in=bool(email),
         allowed=is_allowed(email),
         user_email=email or "",
+        quota=quota.usage(email) if email else None,
+        agent_roles=roles_json(),
     )
 
 
@@ -2160,18 +2166,43 @@ def api_agents_run():
     gate = _agent_gate()
     if gate:
         return gate
+    from ystocker import quota
     from ystocker.agents import submit
 
     body = request.get_json(force=True, silent=True) or {}
+    email = _agent_user() or ""
+    selftest = bool(body.get("selftest"))
+
+    # Validate before charging quota, so a typo'd ticker does not cost a run.
+    # Self-tests make no LLM call, so they are free and deliberately unmetered.
+    charged = False
+    if not selftest:
+        ok, reason, info = quota.try_consume(email)
+        if not ok:
+            if reason == "global":
+                msg = ("The site-wide daily limit for agent runs has been "
+                       "reached. This protects the shared API budget — please "
+                       "try again tomorrow.")
+            else:
+                msg = (f"You have used your {info['limit']} runs for today. "
+                       f"The limit resets at midnight ({info['tz']}).")
+            log.info("agents: quota denied (%s) for %s: %s", reason, email, info)
+            return jsonify({"error": msg, "reason": "quota", "quota": info}), 429
+        charged = True
+
     job_id, err = submit(
         ticker=body.get("ticker", ""),
         day=body.get("date", ""),
-        user=_agent_user() or "",
-        selftest=bool(body.get("selftest")),
+        user=email,
+        selftest=selftest,
     )
     if err:
-        return jsonify({"error": err}), 400
-    return jsonify({"job_id": job_id, "status": "queued"}), 202
+        # Rejected before anything was spent, so hand the run back.
+        if charged:
+            quota.refund(email)
+        return jsonify({"error": err, "quota": quota.usage(email)}), 400
+    return jsonify({"job_id": job_id, "status": "queued",
+                    "quota": quota.usage(email)}), 202
 
 
 @bp.route("/api/agents/job/<job_id>")
@@ -2185,7 +2216,22 @@ def api_agents_job(job_id):
     job = get_job(job_id)
     if not job:
         return jsonify({"error": "No such job"}), 404
-    return jsonify(job)
+
+    # Split into role turns here rather than in the browser. The page renders
+    # the report as a conversation between the agents, and doing the split
+    # server-side keeps one implementation of it (agent_roles.split_sections)
+    # instead of a JavaScript copy that can drift on the awkward cases -- the
+    # section bodies contain their own markdown headings.
+    from ystocker.agent_roles import split_sections
+
+    payload = dict(job)
+    report = payload.pop("report", None) or ""
+    payload["sections"] = split_sections(report) if report.strip() else []
+    # The raw markdown is dropped from the response because nothing on the page
+    # needs it once it is split, and it would double a 40 KB payload on every
+    # poll. The PDF route reads the job from disk, so it is unaffected.
+    payload["has_report"] = bool(report.strip())
+    return jsonify(payload)
 
 
 @bp.route("/api/agents/job/<job_id>/pdf")

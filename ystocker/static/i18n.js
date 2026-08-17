@@ -1123,6 +1123,8 @@ const I18n = (() => {
                              zh: '真实运行需要数分钟并消耗 API 费用。同一时间仅运行一个任务,其余排队。' },
     'agents.timeout_is':   { en: 'Timeout',       zh: '超时时间' },
     'agents.model_is':     { en: 'Model',         zh: '模型' },
+    'agents.runs_left':    { en: 'runs left today', zh: '今日剩余次数' },
+    'agents.vip':          { en: 'VIP',           zh: 'VIP' },
     'agents.depth_is':     { en: 'Depth',         zh: '深度' },
     'agents.rounds':       { en: 'rounds',        zh: '轮辩论' },
     'agents.lang_is':      { en: 'Report language', zh: '报告语言' },

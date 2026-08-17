@@ -262,15 +262,137 @@ _ITALIC_RE = re.compile(r"(?<!\*)\*([^*\n]+?)\*(?!\*)")
 _CODE_RE = re.compile(r"`([^`\n]+?)`")
 
 
-def _inline(text: str, mono: str = "Courier") -> str:
-    """Escape, then re-apply the inline markdown reportlab understands."""
+# ---------------------------------------------------------------------------
+# Emphasis
+#
+# Highlighting is deliberately scarce. These reports say "buy" and "看涨"
+# constantly -- the bull and bear researchers argue for pages -- so shading
+# every occurrence would leave a document that is uniformly yellow and
+# therefore says nothing. Only the *actionable conclusions* are shaded: the
+# decision itself and the handful of verdict lines a reader skims for. Ordinary
+# ``**bold**`` stays bold, which is the second tier of emphasis, and the rest is
+# plain.
+# ---------------------------------------------------------------------------
+
+# Tone -> (text colour, background). Green/red/amber read as buy/sell/hold to
+# essentially everyone who reads a broker note.
+_TONES = {
+    "buy":  ("#166534", "#dcfce7"),
+    "sell": ("#991b1b", "#fee2e2"),
+    "hold": ("#92400e", "#fef3c7"),
+    "flat": ("#334155", "#e8eefc"),
+}
+
+_TONE_WORDS = (
+    ("buy",  ("buy", "overweight", "accumulate",
+              "买入", "增持", "加仓", "超配")),
+    ("sell", ("sell", "underweight", "reduce", "short",
+              "卖出", "减持", "减仓", "低配", "做空")),
+    ("hold", ("hold", "neutral", "market perform",
+              "持有", "观望", "中性", "标配")),
+)
+
+
+def verdict_tone(text: str) -> str:
+    """Classify a decision string as buy / sell / hold, else 'flat'.
+
+    Checked in buy, sell, hold order and returns on the first hit, so a decision
+    reading "Buy" wins over an incidental later "hold". A string with no verdict
+    word gets the neutral tone rather than being left unstyled, since the
+    decision box is drawn either way.
+    """
+    low = (text or "").casefold()
+    for tone, words in _TONE_WORDS:
+        if any(w in low for w in words):
+            return tone
+    return "flat"
+
+
+# Lines a reader skims for: the explicit proposal, rating, target and horizon.
+# Anchored at the start so a mid-sentence mention of a target does not promote a
+# whole paragraph, and length-capped for the same reason.
+_KEY_LINE_RE = re.compile(
+    r"^\s*(?:\*\*)?\s*(?:"
+    r"final\s+transaction\s+proposal|recommendation|rating|price\s+target|"
+    r"time\s+horizon|action|verdict|"
+    r"最终交易建议|投资建议|投资决策|评级|目标价|目標價|时间跨度|持有期限|操作建议"
+    r")\s*(?:\*\*)?\s*[:：]",
+    re.IGNORECASE)
+_KEY_LINE_MAX = 200
+
+
+def is_key_line(text: str) -> bool:
+    """Whether this line is one of the report's actionable conclusions."""
+    t = (text or "").strip()
+    return bool(t) and len(t) <= _KEY_LINE_MAX and bool(_KEY_LINE_RE.match(t))
+
+
+# Sentinels, so emphasis can be marked on the *plain* text and turned into tags
+# only after escaping. Marking after escaping would risk matching inside a tag
+# we just emitted; marking before escaping would see our own tags escaped.
+_H0, _H1 = "\x00", "\x01"
+
+
+def _inline(text: str, mono: str = "Courier", tone: Optional[str] = None) -> str:
+    """Escape, then re-apply the inline markdown reportlab understands.
+
+    ``tone`` shades the verdict words in this line, and is passed only for the
+    key lines identified by :func:`is_key_line`.
+    """
+    if tone:
+        words = dict(_TONE_WORDS).get(tone, ())
+        for w in sorted(words, key=len, reverse=True):
+            text = re.sub(f"({re.escape(w)})", _H0 + r"\1" + _H1, text,
+                          flags=re.IGNORECASE)
     text = _escape(text)
     text = _BOLD_RE.sub(r"<b>\1</b>", text)
     text = _ITALIC_RE.sub(r"<i>\1</i>", text)
     # face= must be a font that can draw the span's characters, so it follows
     # the document's monospace choice rather than always being Courier.
     text = _CODE_RE.sub(lambda m: f'<font face="{mono}">{m.group(1)}</font>', text)
+    if tone:
+        fg, bg = _TONES.get(tone, _TONES["flat"])
+        text = text.replace(_H0, f'<span backColor="{bg}" color="{fg}"><b>')
+        text = text.replace(_H1, "</b></span>")
     return text
+
+
+_PREAMBLE_DROP = re.compile(
+    r"^\s*(?:#{1,3}\s*)?(?:trading\s+analysis\s+report\b.*|generated\s*[:：].*)$",
+    re.IGNORECASE)
+
+
+def _strip_redundant_preamble(text: str) -> str:
+    """Drop the report's own title/stamp, which the PDF header already shows."""
+    kept = [ln for ln in (text or "").splitlines() if not _PREAMBLE_DROP.match(ln)]
+    return "\n".join(kept).strip()
+
+
+def _charts_for(job: dict[str, Any], report_text: str) -> list[dict[str, Any]]:
+    """Chart flowables for this job, or [] when none can be built.
+
+    Wrapped so that a missing cache file, an unreadable CSV or a matplotlib
+    problem costs the report its pictures and nothing else -- a text-only PDF is
+    still the analysis the user paid for.
+    """
+    try:
+        from reportlab.lib.units import inch
+        from reportlab.platypus import Image
+
+        from ystocker import report_charts
+
+        out = []
+        for spec in report_charts.build_all(job.get("ticker", ""), report_text):
+            out.append({
+                "flowable": Image(io.BytesIO(spec["png"]),
+                                  width=spec["w"] * inch, height=spec["h"] * inch),
+                "caption": spec["caption"],
+            })
+        return out
+    except Exception as exc:  # noqa: BLE001
+        log.warning("report_pdf: charts unavailable for %s: %s",
+                    job.get("ticker"), exc)
+        return []
 
 
 def build_report_pdf(job: dict[str, Any]) -> Optional[bytes]:
@@ -344,7 +466,35 @@ def build_report_pdf(job: dict[str, Any]) -> Optional[bytes]:
                                textColor=colors.HexColor("#64748b")),
         "decision": ParagraphStyle("decision", parent=base["BodyText"], fontName=sb, fontSize=13, leading=17,
                                    spaceAfter=4, **heading("#1e293b")),
+        "caption": ParagraphStyle("caption", parent=base["BodyText"], fontName=sn, fontSize=7.5,
+                                  leading=10, spaceBefore=2, spaceAfter=10,
+                                  textColor=colors.HexColor("#64748b")),
     }
+
+    def callout(tone: str, size: float = 13) -> ParagraphStyle:
+        """A shaded box: used for the decision and the key verdict lines."""
+        fg, bg = _TONES.get(tone, _TONES["flat"])
+        return ParagraphStyle(
+            f"callout-{tone}-{size}", parent=base["BodyText"], fontName=sb,
+            fontSize=size, leading=size * 1.35,
+            textColor=colors.HexColor(fg),
+            backColor=colors.HexColor(bg),
+            borderColor=colors.HexColor(fg), borderWidth=0,
+            borderPadding=(6, 8, 6, 8), leftIndent=0,
+            spaceBefore=2, spaceAfter=8,
+            wordWrap="CJK" if cjk else None,
+        )
+
+    def badge(role: dict[str, str]) -> ParagraphStyle:
+        """The role's name reversed out of its accent colour."""
+        return ParagraphStyle(
+            f"badge-{role['key']}", parent=base["BodyText"], fontName=sb,
+            fontSize=9.5, leading=13, textColor=colors.white,
+            backColor=colors.HexColor(role["color"]),
+            borderPadding=(3, 7, 3, 7),
+            spaceBefore=14, spaceAfter=6,
+            wordWrap="CJK" if cjk else None,
+        )
 
     flow: list[Any] = []
     title = f"{ticker} 交易智能体分析报告" if cjk else f"{ticker} — Trading Agents Report"
@@ -364,60 +514,96 @@ def build_report_pdf(job: dict[str, Any]) -> Optional[bytes]:
     flow.append(HRFlowable(width="100%", thickness=0.7, color=colors.HexColor("#cbd5e1")))
     flow.append(Spacer(1, 10))
 
+    tone = verdict_tone(decision or body_md[:400])
     if decision:
         flow.append(Paragraph(clean("投资决策" if cjk else "Decision"), styles["h2"]))
-        flow.append(Paragraph(_inline(clean(decision), mono=mono), styles["decision"]))
-        flow.append(Spacer(1, 6))
+        flow.append(Paragraph(_inline(clean(decision), mono=mono, tone=tone),
+                              callout(tone)))
 
-    in_code = False
-    code_buf: list[str] = []
+    # Charts, from the OHLCV the run itself cached. Placed after the decision so
+    # the reader sees the conclusion, then the price context behind it.
+    for chart in _charts_for(job, body_md):
+        flow.append(chart["flowable"])
+        flow.append(Paragraph(clean(chart["caption"]), styles["caption"]))
 
-    for raw_line in clean(body_md).splitlines():
-        line = raw_line.rstrip()
+    def emit_markdown(md: str) -> None:
+        """Append one block of report markdown to the flow."""
+        in_code = False
+        code_buf: list[str] = []
 
-        # Fenced code: accumulate verbatim, since Preformatted must not be
-        # escaped as mini-HTML the way Paragraph is.
-        if line.strip().startswith("```"):
+        for raw_line in clean(md).splitlines():
+            line = raw_line.rstrip()
+
+            # Fenced code: accumulate verbatim, since Preformatted must not be
+            # escaped as mini-HTML the way Paragraph is.
+            if line.strip().startswith("```"):
+                if in_code:
+                    if code_buf:
+                        flow.append(Preformatted("\n".join(code_buf), base["Code"]))
+                        flow.append(Spacer(1, 6))
+                    code_buf = []
+                in_code = not in_code
+                continue
             if in_code:
-                if code_buf:
-                    flow.append(Preformatted("\n".join(code_buf), base["Code"]))
-                    flow.append(Spacer(1, 6))
-                code_buf = []
-            in_code = not in_code
-            continue
-        if in_code:
-            code_buf.append(raw_line)
-            continue
+                code_buf.append(raw_line)
+                continue
 
-        if not line.strip():
+            if not line.strip():
+                continue
+
+            if line.startswith("#### "):
+                flow.append(Paragraph(_inline(line[5:].strip(), mono=mono), styles["h3"]))
+            elif line.startswith("### "):
+                flow.append(Paragraph(_inline(line[4:].strip(), mono=mono), styles["h3"]))
+            elif line.startswith("## "):
+                flow.append(Paragraph(_inline(line[3:].strip(), mono=mono), styles["h2"]))
+            elif line.startswith("# "):
+                flow.append(Paragraph(_inline(line[2:].strip(), mono=mono), styles["h2"]))
+            elif is_key_line(line):
+                # An actionable conclusion: shade the whole line and tint the
+                # verdict word inside it. Checked before the list and paragraph
+                # branches so a bulleted "- **Rating**: Buy" is still promoted.
+                body = re.sub(r"^\s*[-*+]\s+", "", line).strip()
+                lt = verdict_tone(body)
+                flow.append(Paragraph(_inline(body, mono=mono, tone=lt),
+                                      callout(lt, size=10)))
+            elif re.match(r"^\s*[-*+]\s+", line):
+                flow.append(Paragraph(_inline(re.sub(r"^\s*[-*+]\s+", "", line), mono=mono),
+                                      styles["bullet"], bulletText="•"))
+            elif re.match(r"^\s*\d+[.)]\s+", line):
+                flow.append(Paragraph(_inline(line.strip(), mono=mono), styles["bullet"]))
+            elif re.match(r"^\s*\|.*\|\s*$", line):
+                # Markdown tables are common in these reports. Rendering them as a
+                # real table needs column parsing that breaks on ragged rows, so
+                # they go through monospaced and stay legible either way.
+                flow.append(Preformatted(line.strip(), base["Code"]))
+            elif re.match(r"^\s*[-=]{3,}\s*$", line):
+                flow.append(HRFlowable(width="100%", thickness=0.5,
+                                       color=colors.HexColor("#e2e8f0")))
+            else:
+                flow.append(Paragraph(_inline(line.strip(), mono=mono), styles["body"]))
+
+        if in_code and code_buf:
+            flow.append(Preformatted("\n".join(code_buf), base["Code"]))
+
+    # Walk the report as role turns, badging each speaker, so the PDF shows the
+    # same conversation structure as the page. A report that does not match the
+    # expected shape yields one unbadged section, i.e. exactly the old output.
+    from ystocker.agent_roles import split_sections
+
+    for sec in split_sections(body_md):
+        role = sec.get("role")
+        if role:
+            label = f"{role['zh']} · {role['name']}" if cjk else role["name"]
+            flow.append(Paragraph(clean(label), badge(role)))
+            emit_markdown(sec["body"])
             continue
-
-        if line.startswith("#### "):
-            flow.append(Paragraph(_inline(line[5:].strip(), mono=mono), styles["h3"]))
-        elif line.startswith("### "):
-            flow.append(Paragraph(_inline(line[4:].strip(), mono=mono), styles["h3"]))
-        elif line.startswith("## "):
-            flow.append(Paragraph(_inline(line[3:].strip(), mono=mono), styles["h2"]))
-        elif line.startswith("# "):
-            flow.append(Paragraph(_inline(line[2:].strip(), mono=mono), styles["h2"]))
-        elif re.match(r"^\s*[-*+]\s+", line):
-            flow.append(Paragraph(_inline(re.sub(r"^\s*[-*+]\s+", "", line), mono=mono),
-                                  styles["bullet"], bulletText="•"))
-        elif re.match(r"^\s*\d+[.)]\s+", line):
-            flow.append(Paragraph(_inline(line.strip(), mono=mono), styles["bullet"]))
-        elif re.match(r"^\s*\|.*\|\s*$", line):
-            # Markdown tables are common in these reports. Rendering them as a
-            # real table needs column parsing that breaks on ragged rows, so
-            # they go through monospaced and stay legible either way.
-            flow.append(Preformatted(line.strip(), base["Code"]))
-        elif re.match(r"^\s*[-=]{3,}\s*$", line):
-            flow.append(HRFlowable(width="100%", thickness=0.5,
-                                   color=colors.HexColor("#e2e8f0")))
-        else:
-            flow.append(Paragraph(_inline(line.strip(), mono=mono), styles["body"]))
-
-    if in_code and code_buf:
-        flow.append(Preformatted("\n".join(code_buf), base["Code"]))
+        # The preamble is the report's own title and generation stamp, both of
+        # which this document already prints in its header. Emitting them again
+        # would put two titles two inches apart.
+        body = _strip_redundant_preamble(sec["body"])
+        if body.strip():
+            emit_markdown(body)
 
     flow.append(Spacer(1, 14))
     flow.append(HRFlowable(width="100%", thickness=0.5, color=colors.HexColor("#e2e8f0")))

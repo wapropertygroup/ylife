@@ -154,10 +154,11 @@ _SPLIT_RE = re.compile(r"[,;\s]+")
 
 
 def allowed_emails() -> set[str]:
-    """Emails permitted to start a run.
+    """The optional allowlist override, empty when unset.
 
-    Each run spends real API credits and yStocker is otherwise public, so an
-    empty allowlist denies everyone rather than defaulting open.
+    Empty means open: access is governed by the daily quotas in ``quota.py``,
+    not by membership. See :func:`is_allowed`. A non-empty value restricts runs
+    to those addresses, as an emergency brake.
     """
     global _allow_cache
     raw = os.environ.get("AGENTS_ALLOWED_EMAILS", "")
@@ -184,7 +185,18 @@ def allowed_emails() -> set[str]:
 
 
 def is_allowed(email: Optional[str]) -> bool:
-    return bool(email) and email.strip().lower() in allowed_emails()
+    """Whether this signed-in address may run at all.
+
+    /agents is open to any signed-in user, bounded by the daily quotas in
+    ``quota.py`` rather than by membership. ``AGENTS_ALLOWED_EMAILS`` is kept as
+    an *optional* override: when it is non-empty only those addresses may run,
+    which is a usable kill switch if the quotas ever prove insufficient. Empty
+    (the default) means open.
+    """
+    if not email:
+        return False
+    allow = allowed_emails()
+    return (not allow) or email.strip().lower() in allow
 
 
 # ---------------------------------------------------------------------------
@@ -528,6 +540,10 @@ def submit(ticker: str, day: str, user: str, selftest: bool = False) -> tuple[Op
         "error": None,
         "log": "",
         "queue_depth": max(0, 1 - _slot._value),  # informational only
+        # The day the run was charged against, recorded here rather than derived
+        # later: a run that starts at 23:59 and fails after midnight must be
+        # refunded to the day it was taken from.
+        "quota_day": _quota_day(),
     }
     _write(job)
     _prune()
@@ -537,6 +553,35 @@ def submit(ticker: str, day: str, user: str, selftest: bool = False) -> tuple[Op
     log.info("agents: queued %s %s@%s (selftest=%s) for %s",
              job_id, ticker, day, selftest, user)
     return job_id, None
+
+
+def _quota_day() -> Optional[str]:
+    try:
+        from ystocker import quota
+
+        return quota.today()
+    except Exception:  # noqa: BLE001 - quota is not essential to running
+        return None
+
+
+def _refund_preflight(job: dict[str, Any], why: str) -> None:
+    """Return the quota for a run that never reached an LLM.
+
+    Only called on failures that provably happened before the child could make
+    a request: no slot, no interpreter, or an import error inside the child. A
+    failure after that point may already have spent an unknown number of calls,
+    so it is not refunded -- silently handing quota back for those would let a
+    run that burns credits and then dies be repeated for free.
+    """
+    if job.get("selftest"):
+        return          # never charged
+    try:
+        from ystocker import quota
+
+        quota.refund(job.get("user"), job.get("quota_day"))
+        log.info("agents: refunded %s (%s)", job.get("id"), why)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("agents: refund failed for %s: %s", job.get("id"), exc)
 
 
 def _run(job_id: str) -> None:
@@ -550,6 +595,7 @@ def _run(job_id: str) -> None:
         job.update(status="error", error="Timed out waiting for a free run slot",
                    finished_at=datetime.now(timezone.utc).isoformat(timespec="seconds"))
         _write(job)
+        _refund_preflight(job, "never got a run slot")
         return
 
     try:
@@ -597,6 +643,7 @@ def _run(job_id: str) -> None:
                               "TRADINGAGENTS_PYTHON to a python that can import "
                               "tradingagents."))
             out, err, rc = "", "", -1
+            _refund_preflight(job, "interpreter missing")
         except Exception as exc:
             job.update(status="error", error=f"{type(exc).__name__}: {exc}")
             out, err, rc = "", "", -1
@@ -628,6 +675,10 @@ def _run(job_id: str) -> None:
                            report=payload.get("report") or "")
         job["finished_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
         _write(job)
+        # Exit code 2 is the runner's "could not import tradingagents", raised
+        # before any client is constructed, so nothing was spent.
+        if rc == 2:
+            _refund_preflight(job, "child could not import tradingagents")
         log.info("agents: %s finished status=%s rc=%s in %.1fs",
                  job_id, job.get("status"), rc, elapsed)
     finally:

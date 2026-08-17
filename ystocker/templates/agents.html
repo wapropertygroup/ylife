@@ -78,6 +78,54 @@
 .ag-row {
   display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
 }
+.ag-quota {
+  display: inline-flex; align-items: baseline; gap: 5px;
+  padding: 7px 12px; border-radius: 8px; font-size: 12px;
+  border: 1px solid #1e293b; background: #0b1120; color: #94a3b8;
+  white-space: nowrap;
+}
+.ag-quota b { color: #4ade80; font-size: 14px; font-weight: 700; }
+.ag-quota em {
+  font-style: normal; font-weight: 700; font-size: 10px; letter-spacing: .06em;
+  color: #fbbf24; border: 1px solid #a16207; border-radius: 999px; padding: 1px 6px;
+}
+.ag-quota-out { border-color: #7f1d1d; }
+.ag-quota-out b { color: #fca5a5; }
+
+/* ── Agent conversation ─────────────────────────────────────────────────── */
+.ag-team {
+  display: flex; align-items: center; gap: 10px;
+  margin: 22px 0 12px; color: #64748b;
+  font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase;
+}
+.ag-team::after { content: ""; flex: 1; height: 1px; background: #1e293b; }
+.ag-turn { display: flex; gap: 12px; margin-bottom: 16px; }
+.ag-avatar {
+  flex: 0 0 auto; width: 34px; height: 34px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 17px; line-height: 1; user-select: none;
+  border: 1px solid var(--role);
+  background: #0b1120;   /* fallback where color-mix is unsupported */
+  background: color-mix(in srgb, var(--role) 16%, #0b1120);
+}
+.ag-bubble {
+  flex: 1 1 auto; min-width: 0;
+  background: #0f172a; border: 1px solid #1e293b;
+  border-left: 3px solid var(--role);
+  border-radius: 10px; padding: 11px 14px;
+}
+.ag-who {
+  display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+.ag-who b { color: var(--role); font-size: 13px; font-weight: 600; }
+.ag-who span { color: #475569; font-size: 11px; }
+/* The turn body reuses the report typography, so markdown inside a bubble is
+   styled exactly like the standalone report. */
+.ag-bubble .ag-report { font-size: 12.5px; }
+.ag-bubble .ag-report > :first-child { margin-top: 0; }
+.ag-bubble .ag-report > :last-child { margin-bottom: 0; }
+.ag-preamble { color: #64748b; font-size: 12px; margin-bottom: 4px; }
 /* History: one shared grid rather than a grid per group, so every group's date
    cell lines up on the same column edge no matter how wide the widest date is. */
 .ag-hist { display: grid; grid-template-columns: max-content minmax(0, 1fr); column-gap: 18px; }
@@ -158,6 +206,16 @@
       {# A free path to prove the plumbing works end to end without an LLM bill. #}
       <button id="agSelftest" class="ag-btn ag-btn-ghost" data-i18n="agents.selftest">Self-test (no LLM)</button>
     </div>
+    {% if quota %}
+    <div class="pt-5">
+      <span id="agQuota" class="ag-quota{{ ' ag-quota-out' if quota.remaining == 0 else '' }}"
+            data-remaining="{{ quota.remaining }}" data-limit="{{ quota.limit }}">
+        <b>{{ quota.remaining }}</b>/{{ quota.limit }}
+        <span data-i18n="agents.runs_left">runs left today</span>
+        {% if quota.vip %}<em data-i18n="agents.vip">VIP</em>{% endif %}
+      </span>
+    </div>
+    {% endif %}
   </div>
   <p class="text-xs text-slate-600 mt-3">
     <span data-i18n="agents.cost_warning">A real run takes several minutes and spends API credits. One run executes at a time; others queue.</span>
@@ -231,6 +289,19 @@
 
   if (dateEl && !dateEl.value) dateEl.value = new Date().toISOString().slice(0, 10);
 
+  // The chip always shows the server's number rather than decrementing locally:
+  // another tab, or another device, spends from the same allowance.
+  function paintQuota(q) {
+    const el = document.getElementById('agQuota');
+    if (!el || !q) return;
+    el.dataset.remaining = q.remaining;
+    el.dataset.limit = q.limit;
+    el.classList.toggle('ag-quota-out', q.remaining === 0);
+    const label = I18n.t('agents.runs_left') || 'runs left today';
+    const vip = q.vip ? '<em>' + (I18n.t('agents.vip') || 'VIP') + '</em>' : '';
+    el.innerHTML = `<b>${q.remaining}</b>/${q.limit} <span>${label}</span> ${vip}`;
+  }
+
   const showErr = m => { errEl.textContent = '⚠ ' + m; errEl.classList.remove('hidden'); };
   const clearErr = () => errEl.classList.add('hidden');
 
@@ -252,18 +323,13 @@
 
     // Only offer the PDF once there is a finished report to render.
     const pdf = document.getElementById('agPdf');
-    const hasPdf = job.status === 'done' && (job.report || job.decision);
+    const hasPdf = job.status === 'done' && (job.has_report || job.decision);
     pdf.classList.toggle('hidden', !hasPdf);
     if (hasPdf) pdf.href = `/api/agents/job/${job.id}/pdf`;
 
-    show('agReportWrap', !!job.report);
-    if (job.report) {
-      const box = document.getElementById('agReport');
-      // Markdown.render escapes every leaf before adding tags, so model output
-      // containing HTML is shown as text rather than executed.
-      if (window.Markdown) box.innerHTML = Markdown.render(job.report);
-      else box.textContent = job.report;
-    }
+    const secs = job.sections || [];
+    show('agReportWrap', secs.length > 0);
+    if (secs.length) renderConversation(document.getElementById('agReport'), secs);
 
     const logText = job.error ? ('ERROR: ' + job.error + (job.log ? '\n\n' + job.log : '')) : (job.log || '');
     show('agLogWrap', !!logText);
@@ -274,6 +340,61 @@
     const busy = job.status === 'queued' || job.status === 'running';
     runBtn.disabled = busy; selfBtn.disabled = busy;
     return busy;
+  }
+
+  // Each report section is one agent's turn. The server does the splitting
+  // (ystocker/agent_roles.py), so this only has to draw it.
+  function renderConversation(box, sections) {
+    box.innerHTML = '';
+    let team = null;
+    for (const sec of sections) {
+      if (sec.team && sec.team !== team) {
+        team = sec.team;
+        const h = document.createElement('div');
+        h.className = 'ag-team';
+        h.textContent = (I18n.getLang() === 'zh' && sec.team_zh) ? sec.team_zh : team;
+        box.appendChild(h);
+      }
+      const md = window.Markdown ? Markdown.render(sec.body) : null;
+      if (!sec.role) {
+        // Preamble: the report title and generation stamp, nobody's turn.
+        const p = document.createElement('div');
+        p.className = 'ag-preamble ag-report';
+        if (md) p.innerHTML = md; else p.textContent = sec.body;
+        box.appendChild(p);
+        continue;
+      }
+      const turn = document.createElement('div');
+      turn.className = 'ag-turn';
+      // Set the accent once, as a custom property, so the avatar ring, the
+      // bubble border and the name all stay in sync.
+      turn.style.setProperty('--role', sec.role.color);
+
+      const av = document.createElement('div');
+      av.className = 'ag-avatar';
+      av.textContent = sec.role.icon;
+      av.setAttribute('aria-hidden', 'true');
+
+      const bubble = document.createElement('div');
+      bubble.className = 'ag-bubble';
+      const who = document.createElement('div');
+      who.className = 'ag-who';
+      const nm = document.createElement('b');
+      // Show the translated role name when the page is in Chinese; the report
+      // text itself is Chinese, so an English speaker label reads oddly.
+      nm.textContent = (I18n.getLang() === 'zh' && sec.role.zh) ? sec.role.zh : sec.role.name;
+      const sub = document.createElement('span');
+      if (I18n.getLang() === 'zh' && sec.role.zh) sub.textContent = sec.role.name;
+      who.append(nm, sub);
+
+      const body = document.createElement('div');
+      body.className = 'ag-report';
+      if (md) body.innerHTML = md; else body.textContent = sec.body;
+
+      bubble.append(who, body);
+      turn.append(av, bubble);
+      box.appendChild(turn);
+    }
   }
 
   // Returns whether the job is still in flight, which drives the backoff chain.
@@ -302,9 +423,11 @@
       const d = await r.json().catch(() => ({}));
       if (!r.ok) {
         showErr(d.error || `HTTP ${r.status}`);
+        if (d.quota) paintQuota(d.quota);
         runBtn.disabled = false; selfBtn.disabled = false;
         return;
       }
+      if (d.quota) paintQuota(d.quota);
       // Back off rather than poll at a fixed cadence. A deep run takes tens of
       // minutes, and a fixed 4s poll would fire ~1350 requests over 90 minutes
       // -- several times gunicorn's 200-request worker-recycle budget, so the
