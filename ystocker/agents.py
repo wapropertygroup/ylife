@@ -35,6 +35,7 @@ import json
 import logging
 import os
 import re
+import signal
 import subprocess
 import sys
 import tempfile
@@ -192,11 +193,24 @@ _BEGIN = "<<<YSTOCKER_RESULT_BEGIN>>>"
 _END = "<<<YSTOCKER_RESULT_END>>>"
 
 _RUNNER = r'''
-import json, sys, os
+import json, sys, os, tempfile
 BEGIN, END = sys.argv[3], sys.argv[4]
 ticker, day = sys.argv[1], sys.argv[2]
+RESULT_PATH = sys.argv[5] if len(sys.argv) > 5 else ""
 
 def emit(payload):
+    # Written to a file as well as stdout. stdout only reaches the parent while
+    # the parent is alive, and this process deliberately outlives it (gunicorn
+    # recycles the worker that launched us), so the file is the durable channel.
+    if RESULT_PATH:
+        try:
+            d = os.path.dirname(RESULT_PATH)
+            fd, tmp = tempfile.mkstemp(dir=d, suffix=".tmp")
+            with open(fd, "w", encoding="utf-8") as f:
+                json.dump(payload, f)
+            os.replace(tmp, RESULT_PATH)
+        except Exception:
+            pass          # stdout may still get through; never fail the run here
     sys.stdout.write("\n" + BEGIN + "\n" + json.dumps(payload) + "\n" + END + "\n")
     sys.stdout.flush()
 
@@ -285,6 +299,12 @@ def _interpreter() -> str:
 # Job store — plain files, so a worker recycle cannot lose a run
 # ---------------------------------------------------------------------------
 
+def _result_path(job_id: str) -> Path:
+    """Where the detached child writes its result, independent of stdout."""
+    JOB_DIR.mkdir(parents=True, exist_ok=True)
+    return JOB_DIR / f"{job_id}.result.json"
+
+
 def _job_path(job_id: str) -> Path:
     return JOB_DIR / f"{job_id}.json"
 
@@ -304,21 +324,58 @@ def _write(job: dict[str, Any]) -> None:
 
 
 def _reap(job: Optional[dict[str, Any]]) -> Optional[dict[str, Any]]:
-    """Mark a job whose runner died without ever writing a terminal status.
+    """Settle a job whose supervising thread died, from durable evidence.
 
-    The runner is a daemon thread inside a gunicorn worker, and the worker is
-    recycled every ~200 requests. If a recycle lands mid-run the thread is
-    killed and the on-disk record is frozen at ``running`` forever, so the page
-    polls a job that will never finish. Deciding this on read keeps it correct
-    across workers without a extra background thread -- any worker that reads
-    the file reaches the same verdict from the timestamps alone.
+    The thread that supervises a run is a daemon inside a gunicorn worker, and
+    the worker is recycled every ~200 requests -- a threshold a long run's own
+    status polling blows straight through. The child is detached so it keeps
+    going, but nothing is left to record what it produced.
 
-    The grace period is generous: exceeding it means the process is gone, not
-    that the run is slow, because a live run is killed by its own subprocess
-    timeout well before this.
+    So this checks, in order of authority: the result file the child writes
+    itself, then whether its pid is still alive, and only then the clock. Doing
+    it on read keeps it correct across workers with no extra thread, since every
+    worker reads the same three facts and reaches the same verdict.
     """
     if not job or job.get("status") not in ("queued", "running"):
         return job
+
+    # 1. The child may have finished after its supervisor died. Its result file
+    #    is authoritative, so adopt it rather than declaring the run lost.
+    try:
+        rp = _result_path(job["id"])
+        if rp.exists():
+            payload = json.loads(rp.read_text(encoding="utf-8"))
+            if payload.get("ok"):
+                job.update(status="done", decision=payload.get("decision"),
+                           report=payload.get("report") or "")
+            else:
+                job.update(status="error",
+                           error=str(payload.get("error", "unknown error")))
+            job["finished_at"] = datetime.fromtimestamp(
+                rp.stat().st_mtime, timezone.utc).isoformat(timespec="seconds")
+            job.setdefault("orphaned", True)
+            try:
+                _write(job)
+            except Exception:
+                pass
+            return job
+    except Exception:
+        pass   # fall through to the liveness and clock checks
+
+    # 2. Is the detached child still alive? Checked before the clock, but not
+    #    trusted past the timeout: pids are recycled by the OS, so "alive" for
+    #    longer than a run can possibly take means we are looking at some other
+    #    process that inherited the number.
+    pid, alive = job.get("pid"), False
+    if pid:
+        try:
+            os.kill(int(pid), 0)
+            alive = True
+        except (ProcessLookupError, ValueError):
+            alive = False     # gone, and it left no result
+        except PermissionError:
+            alive = True      # exists, owned by another uid
+
     stamp = job.get("started_at") or job.get("created_at")
     if not stamp:
         return job
@@ -328,9 +385,17 @@ def _reap(job: Optional[dict[str, Any]]) -> Optional[dict[str, Any]]:
         return job
     if began.tzinfo is None:
         began = began.replace(tzinfo=timezone.utc)
-    # Queued jobs wait on the single run slot, so they can legitimately sit for
-    # one full run before starting.
-    limit = RUN_TIMEOUT + 300 if job.get("started_at") else 2 * RUN_TIMEOUT + 300
+    # A launched-but-dead pid that left no result is finished now, whatever the
+    # clock says. A live one gets the full timeout plus grace, after which it is
+    # wedged or the pid has been reused -- either way it is not coming back.
+    # With no pid at all (killed before launch) fall back to the timeout, and
+    # allow a queued job one full run's wait for the single slot.
+    if pid and not alive:
+        limit = 0.0
+    elif job.get("started_at"):
+        limit = RUN_TIMEOUT + 300
+    else:
+        limit = 2 * RUN_TIMEOUT + 300
     if (datetime.now(timezone.utc) - began).total_seconds() < limit:
         return job
     job.update(status="error",
@@ -357,7 +422,9 @@ def list_jobs(limit: int = 20) -> list[dict[str, Any]]:
     if not JOB_DIR.exists():
         return []
     out: list[dict[str, Any]] = []
-    for p in sorted(JOB_DIR.glob("*.json"), key=lambda x: x.stat().st_mtime, reverse=True)[:limit]:
+    # Exclude the children's sidecar result files, which are not job records.
+    records = (p for p in JOB_DIR.glob("*.json") if not p.name.endswith(".result.json"))
+    for p in sorted(records, key=lambda x: x.stat().st_mtime, reverse=True)[:limit]:
         try:
             j = _reap(json.loads(p.read_text()))
             # The transcript can be long; a listing does not need it.
@@ -371,9 +438,13 @@ def list_jobs(limit: int = 20) -> list[dict[str, Any]]:
 
 def _prune() -> None:
     try:
-        files = sorted(JOB_DIR.glob("*.json"), key=lambda x: x.stat().st_mtime, reverse=True)
+        files = sorted((p for p in JOB_DIR.glob("*.json")
+                        if not p.name.endswith(".result.json")),
+                       key=lambda x: x.stat().st_mtime, reverse=True)
         for p in files[MAX_JOBS:]:
             p.unlink(missing_ok=True)
+            # Drop the child's sidecar with its job, else it leaks forever.
+            p.with_suffix("").with_suffix(".result.json").unlink(missing_ok=True)
     except Exception as exc:
         log.debug("agents: prune failed: %s", exc)
 
@@ -447,15 +518,33 @@ def _run(job_id: str) -> None:
         if job.get("selftest"):
             env["YSTOCKER_AGENT_SELFTEST"] = "1"
 
-        cmd = [_interpreter(), "-c", _RUNNER, job["ticker"], job["date"], _BEGIN, _END]
+        result_path = str(_result_path(job_id))
+        cmd = [_interpreter(), "-c", _RUNNER, job["ticker"], job["date"],
+               _BEGIN, _END, result_path]
         started = time.time()
         try:
-            proc = subprocess.run(
-                cmd, cwd=TA_DIR, env=env, capture_output=True, text=True,
-                timeout=RUN_TIMEOUT,
+            # start_new_session detaches the child into its own process group so
+            # it survives this worker. The run thread is a daemon inside a
+            # gunicorn worker that is recycled every ~200 requests, and a long
+            # run's own 4s status polling generates far more than that on its
+            # own -- roughly 1350 requests over 90 minutes, against a 200-request
+            # budget shared by 2 workers. Without this the run reliably kills the
+            # worker that owns it, losing the analysis and the API spend with it.
+            proc = subprocess.Popen(
+                cmd, cwd=TA_DIR, env=env, stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE, text=True, start_new_session=True,
             )
-            out, err, rc = proc.stdout or "", proc.stderr or "", proc.returncode
+            job["pid"] = proc.pid
+            _write(job)
+            out, err = proc.communicate(timeout=RUN_TIMEOUT)
+            out, err, rc = out or "", err or "", proc.returncode
         except subprocess.TimeoutExpired:
+            # Kill the whole group: the child spawns its own workers.
+            try:
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+            except (ProcessLookupError, PermissionError):
+                proc.kill()
+            proc.wait(timeout=30)
             job.update(status="error",
                        error=f"Run exceeded {RUN_TIMEOUT:.0f}s and was killed")
             out, err, rc = "", "", -9

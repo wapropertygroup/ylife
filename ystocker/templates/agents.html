@@ -167,6 +167,16 @@
   const elapsedEl = document.getElementById('agElapsed');
   let poll = null;
 
+  // Poll interval grows 5s -> 30s. Short at first so a self-test (which
+  // finishes in under a second) still feels immediate.
+  const POLL_MIN = 5000, POLL_MAX = 30000;
+  const schedulePoll = (id, delay) => {
+    poll = setTimeout(async () => {
+      const again = await pollJob(id);
+      if (again) schedulePoll(id, Math.min(delay * 1.5, POLL_MAX));
+    }, delay);
+  };
+
   if (dateEl && !dateEl.value) dateEl.value = new Date().toISOString().slice(0, 10);
 
   const showErr = m => { errEl.textContent = '⚠ ' + m; errEl.classList.remove('hidden'); };
@@ -208,15 +218,18 @@
     return busy;
   }
 
+  // Returns whether the job is still in flight, which drives the backoff chain.
   async function pollJob(id) {
     try {
       const r = await fetch(`/api/agents/job/${id}`);
-      if (!r.ok) { clearInterval(poll); poll = null; showErr(`Polling failed (HTTP ${r.status})`); return; }
+      if (!r.ok) { clearTimeout(poll); poll = null; showErr(`Polling failed (HTTP ${r.status})`); return false; }
       const job = await r.json();
       const busy = render(job);
-      if (!busy) { clearInterval(poll); poll = null; loadHistory(); }
+      if (!busy) { clearTimeout(poll); poll = null; loadHistory(); }
+      return busy;
     } catch (e) {
-      clearInterval(poll); poll = null; showErr('Polling failed: ' + e.message);
+      clearTimeout(poll); poll = null; showErr('Polling failed: ' + e.message);
+      return false;
     }
   }
 
@@ -234,10 +247,13 @@
         runBtn.disabled = false; selfBtn.disabled = false;
         return;
       }
-      // A real debate runs for minutes, so poll on a slow cadence.
-      if (poll) clearInterval(poll);
+      // Back off rather than poll at a fixed cadence. A deep run takes tens of
+      // minutes, and a fixed 4s poll would fire ~1350 requests over 90 minutes
+      // -- several times gunicorn's 200-request worker-recycle budget, so the
+      // run's own status polling would recycle the worker supervising it.
+      if (poll) clearTimeout(poll);
       await pollJob(d.job_id);
-      poll = setInterval(() => pollJob(d.job_id), 4000);
+      schedulePoll(d.job_id, POLL_MIN);
     } catch (e) {
       showErr(e.message); runBtn.disabled = false; selfBtn.disabled = false;
     }
@@ -271,7 +287,12 @@
         const btn = document.createElement('button');
         btn.className = 'ag-btn ag-btn-ghost';
         btn.textContent = I18n.t('agents.view') || 'View';
-        btn.onclick = () => pollJob(j.id);
+        // Resume tracking if the job is still in flight, rather than showing a
+        // snapshot that never updates.
+        btn.onclick = async () => {
+          if (poll) { clearTimeout(poll); poll = null; }
+          if (await pollJob(j.id)) schedulePoll(j.id, POLL_MIN);
+        };
         actions.appendChild(btn);
         if (j.status === 'done') {
           const dl = document.createElement('a');
@@ -291,7 +312,7 @@
   selfBtn.addEventListener('click', () => start(true));
   document.getElementById('agHide').addEventListener('click', () => {
     card.classList.add('hidden');
-    if (poll) { clearInterval(poll); poll = null; }
+    if (poll) { clearTimeout(poll); poll = null; }
     runBtn.disabled = false; selfBtn.disabled = false;
   });
   loadHistory();
