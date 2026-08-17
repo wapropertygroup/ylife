@@ -100,6 +100,12 @@ def _load_secrets_from_ssm() -> None:
         # control, so it lives with the other SSM-managed config rather than
         # being baked into the image — adding a person should not need a deploy.
         "/ystocker/AGENTS_ALLOWED_EMAILS": "AGENTS_ALLOWED_EMAILS",
+        # Where the TradingAgents checkout and its interpreter live. Paths
+        # differ between a laptop and the box, so they are configuration rather
+        # than constants; agents.py falls back to a home-directory guess only
+        # for local dev.
+        "/ystocker/TRADINGAGENTS_DIR":    "TRADINGAGENTS_DIR",
+        "/ystocker/TRADINGAGENTS_PYTHON": "TRADINGAGENTS_PYTHON",
     }
 
     try:
