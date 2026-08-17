@@ -590,12 +590,25 @@ def _record_paths() -> list[Path]:
     same directory but are not job records, and reading one as a job yields a
     bogus entry. Excluded in one place here rather than in each caller, which is
     what let the listing and the pruner drift apart previously.
+
+    Each mtime is read once, up front, rather than inside the sort's key: a run
+    finishing calls ``_prune()`` and deletes records while a search is walking
+    them, and a ``stat()`` on a file that vanished mid-sort raises
+    FileNotFoundError out of ``sorted()``. That race widened once the history
+    box began searching on every keystroke instead of once per page load.
     """
     if not JOB_DIR.exists():
         return []
-    records = (p for p in JOB_DIR.glob("*.json")
-               if not (p.name.endswith(".result.json") or p.name.endswith(".events.jsonl")))
-    return sorted(records, key=lambda x: x.stat().st_mtime, reverse=True)
+    stamped: list[tuple[float, Path]] = []
+    for p in JOB_DIR.glob("*.json"):
+        if p.name.endswith(".result.json") or p.name.endswith(".events.jsonl"):
+            continue
+        try:
+            stamped.append((p.stat().st_mtime, p))
+        except OSError:
+            continue   # pruned between the glob and here
+    stamped.sort(key=lambda sp: sp[0], reverse=True)
+    return [p for _, p in stamped]
 
 
 def _listing_entry(job: dict[str, Any]) -> dict[str, Any]:

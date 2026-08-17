@@ -181,6 +181,10 @@
 /* The clear button sits inside the field's trailing padding. */
 .ag-search-wrap { position: relative; display: inline-flex; }
 .ag-search-wrap .ag-input { padding-right: 26px; }
+/* WebKit draws its own clear affordance for type=search, which would sit next
+   to ours. Ours is kept rather than the native one because Firefox draws none,
+   so relying on the native button would leave that browser without one. */
+.ag-search-wrap .ag-input::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; }
 .ag-search-clear {
   position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
   border: 0; background: none; color: #475569; cursor: pointer;
@@ -328,7 +332,28 @@
 
 <!-- ── History ────────────────────────────────────────────────────────── -->
 <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
-  <h3 class="text-sm font-semibold text-slate-300 mb-3" data-i18n="agents.history">Recent runs</h3>
+  <div class="ag-hist-head">
+    <h3 class="text-sm font-semibold text-slate-300" data-i18n="agents.history">Recent runs</h3>
+    <div class="ag-hist-tools">
+      <div class="ag-search-wrap">
+        <input id="agSearch" type="search" class="ag-input w-44" maxlength="32"
+               autocomplete="off" spellcheck="false"
+               placeholder="Ticker or date…"
+               data-i18n-placeholder="agents.search_ph"
+               aria-label="Search reports by ticker or analysis date">
+        <button id="agSearchClear" class="ag-search-clear hidden" type="button"
+                title="Clear search" aria-label="Clear search">×</button>
+      </div>
+      <select id="agStatusFilter" class="ag-input" aria-label="Filter by status">
+        <option value=""        data-i18n="agents.status_any">Any status</option>
+        <option value="done"    data-i18n="agents.status_done">Done</option>
+        <option value="running" data-i18n="agents.status_running">Running</option>
+        <option value="queued"  data-i18n="agents.status_queued">Queued</option>
+        <option value="error"   data-i18n="agents.status_error">Error</option>
+      </select>
+    </div>
+  </div>
+  <p id="agSearchMeta" class="ag-search-meta hidden"></p>
   <div id="agHistory" class="text-xs text-slate-500" data-i18n="agents.history_empty">No runs yet.</div>
 </div>
 {% endif %}
@@ -685,17 +710,86 @@
     }
   }
 
+  // -- Report search -------------------------------------------------------
+  // The history panel is driven entirely by the search endpoint: an empty query
+  // matches everything the user owns, so the plain "recent runs" view and a
+  // filtered search share one fetch path and one renderer instead of two that
+  // can drift apart.
+  const searchEl = document.getElementById('agSearch');
+  const statusFilterEl = document.getElementById('agStatusFilter');
+  const searchClearEl = document.getElementById('agSearchClear');
+  const searchMetaEl = document.getElementById('agSearchMeta');
+  let histTimer = null;
+  // Guards against an older, slower response overwriting a newer one when the
+  // user types faster than the requests return.
+  let histSeq = 0;
+
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g,
+    c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+
+  // Bold the matched run of characters so a mid-string hit shows why it matched.
+  function highlight(text, q) {
+    const t = String(text || '');
+    if (!q) return esc(t);
+    const i = t.toUpperCase().indexOf(q.toUpperCase());
+    if (i < 0) return esc(t);
+    return esc(t.slice(0, i))
+      + '<span class="ag-hl">' + esc(t.slice(i, i + q.length)) + '</span>'
+      + esc(t.slice(i + q.length));
+  }
+
+  // When the run actually happened, which is not the analysis date it covers --
+  // a report for 2026-08-14 may have been generated days later.
+  function fmtWhen(iso) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (isNaN(d)) return '';
+    const pad = n => String(n).padStart(2, '0');
+    return pad(d.getMonth() + 1) + '/' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+  }
+
   async function loadHistory() {
+    const q = (searchEl?.value || '').trim();
+    const status = statusFilterEl?.value || '';
+    const seq = ++histSeq;
+    if (searchClearEl) searchClearEl.classList.toggle('hidden', !q);
+
     try {
-      const r = await fetch('/api/agents/jobs');
-      if (!r.ok) return;
-      const { jobs } = await r.json();
+      const params = new URLSearchParams();
+      if (q) params.set('q', q);
+      if (status) params.set('status', status);
+      const r = await fetch('/api/agents/search?' + params.toString());
+      if (!r.ok || seq !== histSeq) return;
+      const res = await r.json();
+      if (seq !== histSeq) return;   // a newer query already landed
+      const jobs = res.jobs || [];
       const box = document.getElementById('agHistory');
-      if (!jobs || !jobs.length) {
+      const filtering = !!(q || status);
+
+      // Found-count line: the point of a search is knowing whether the thing
+      // exists, so say so explicitly rather than leaving an empty list to mean
+      // both "nothing matched" and "nothing loaded".
+      if (searchMetaEl) {
+        if (!filtering) {
+          searchMetaEl.classList.add('hidden');
+        } else {
+          const label = I18n.t('agents.search_found') || 'reports found';
+          let txt = '<b>' + res.found + '</b> ' + label;
+          if (res.truncated) txt += ' · ' + (I18n.t('agents.search_showing') || 'showing') + ' ' + jobs.length;
+          if (status) txt += ' · ' + esc(status);
+          searchMetaEl.innerHTML = txt;
+          searchMetaEl.classList.remove('hidden');
+        }
+      }
+
+      if (!jobs.length) {
         // Reset the grid class too: a reload after the last job was pruned must
         // not leave the empty message sitting in a two-column layout.
         box.className = 'text-xs text-slate-500';
-        box.textContent = I18n.t('agents.history_empty') || 'No runs yet.';
+        box.removeAttribute('data-i18n');
+        box.textContent = filtering
+          ? (I18n.t('agents.search_none') || 'No reports match that search.')
+          : (I18n.t('agents.history_empty') || 'No runs yet.');
         return;
       }
       box.removeAttribute('data-i18n');
@@ -706,9 +800,9 @@
       // expression opener, which breaks compilation of this file.
       const CLS = { queued: 'ag-queued', running: 'ag-running', done: 'ag-done', error: 'ag-error' };
 
-      // The API orders by submission time, so runs sharing an analysis date are
-      // not contiguous. Bucket first, then emit newest date first, keeping the
-      // server's within-date order.
+      // The API orders by match quality then recency, so runs sharing an
+      // analysis date are not contiguous. Bucket first, then emit newest date
+      // first, keeping the server's within-date order.
       const byDate = new Map();
       jobs.forEach(j => {
         const d = j.date || '—';
@@ -719,7 +813,7 @@
       [...byDate.keys()].sort().reverse().forEach(date => {
         const dateCell = document.createElement('div');
         dateCell.className = 'ag-hist-date';
-        dateCell.textContent = date;
+        dateCell.innerHTML = highlight(date, /^\d/.test(q) ? q : '');
         const runs = document.createElement('div');
         runs.className = 'ag-hist-runs';
 
@@ -728,8 +822,12 @@
           row.className = 'ag-hist-run';
           const left = document.createElement('div');
           left.className = 'ag-row';
-          left.innerHTML = `<span class="text-slate-300 font-medium">${j.ticker}</span>`
-            + `<span class="ag-pill ${CLS[j.status] || 'ag-queued'}">${j.status}</span>`
+          const when = fmtWhen(j.finished_at || j.started_at || j.created_at);
+          left.innerHTML = '<span class="text-slate-300 font-medium">'
+              + highlight(j.ticker, /^\d/.test(q) ? '' : q) + '</span>'
+            + `<span class="ag-pill ${CLS[j.status] || 'ag-queued'}">${esc(j.status)}</span>`
+            + (j.decision ? `<span class="text-slate-400">${esc(j.decision)}</span>` : '')
+            + (when ? `<span class="text-slate-600" title="When this report was generated">${when}</span>` : '')
             + (j.selftest ? '<span class="text-slate-600">self-test</span>' : '')
             + (j.elapsed_sec ? `<span class="text-slate-600">${j.elapsed_sec}s</span>` : '');
           const actions = document.createElement('div');
@@ -745,7 +843,9 @@
             if (await pollJob(j.id)) schedulePoll(j.id, POLL_MIN);
           };
           actions.appendChild(btn);
-          if (j.status === 'done') {
+          // has_report, not status alone: a run can finish with an empty report,
+          // and a PDF link for one 404s.
+          if (j.status === 'done' && j.has_report) {
             const dl = document.createElement('a');
             dl.className = 'ag-btn ag-btn-ghost';
             dl.href = `/api/agents/job/${j.id}/pdf`;
@@ -761,6 +861,26 @@
       });
     } catch (e) { /* history is decoration; never block the page on it */ }
   }
+
+  if (searchEl) {
+    searchEl.addEventListener('input', () => {
+      clearTimeout(histTimer);
+      histTimer = setTimeout(loadHistory, 220);
+    });
+    // A search field's native clear (the × Safari draws) fires "search", not
+    // "input", so without this the list keeps showing stale filtered results.
+    searchEl.addEventListener('search', loadHistory);
+    searchEl.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { clearTimeout(histTimer); loadHistory(); }
+      if (e.key === 'Escape' && searchEl.value) { searchEl.value = ''; loadHistory(); }
+    });
+  }
+  if (statusFilterEl) statusFilterEl.addEventListener('change', loadHistory);
+  if (searchClearEl) searchClearEl.addEventListener('click', () => {
+    searchEl.value = '';
+    searchEl.focus();
+    loadHistory();
+  });
 
   runBtn.addEventListener('click', () => start(false));
   selfBtn.addEventListener('click', () => start(true));

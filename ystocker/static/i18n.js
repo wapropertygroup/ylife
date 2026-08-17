@@ -1145,6 +1145,15 @@ const I18n = (() => {
     'agents.view':         { en: 'View',          zh: '查看' },
     'agents.download_pdf': { en: '⬇ Download PDF', zh: '⬇ 下载 PDF' },
     'agents.pdf_short':    { en: 'PDF',           zh: 'PDF' },
+    'agents.search_ph':     { en: 'Ticker or date…',  zh: '代码或日期…' },
+    'agents.search_found':  { en: 'reports found',    zh: '份报告' },
+    'agents.search_showing':{ en: 'showing',          zh: '显示' },
+    'agents.search_none':   { en: 'No reports match that search.', zh: '没有匹配的报告。' },
+    'agents.status_any':    { en: 'Any status',   zh: '所有状态' },
+    'agents.status_done':   { en: 'Done',         zh: '已完成' },
+    'agents.status_running':{ en: 'Running',      zh: '运行中' },
+    'agents.status_queued': { en: 'Queued',       zh: '排队中' },
+    'agents.status_error':  { en: 'Error',        zh: '出错' },
 
     // ── contact.html ───────────────────────────────────────────────────
     'contact.title':        { en: 'Contact Us',  zh: '联系我们' },
