@@ -579,6 +579,20 @@ def submit(ticker: str, day: str, user: str, selftest: bool = False) -> tuple[Op
     return job_id, None
 
 
+# Emitted by tradingagents.llm_clients.google_client when it switches models.
+_FALLBACK_RE = re.compile(r"Retrying on ([A-Za-z0-9.\-]+) after ([A-Za-z0-9.\-]+) ran out")
+
+
+def _fallback_models_used(stderr: str) -> list[str]:
+    """Models the child fell back to, in first-seen order."""
+    seen: list[str] = []
+    for m in _FALLBACK_RE.finditer(stderr or ""):
+        name = m.group(1)
+        if name not in seen:
+            seen.append(name)
+    return seen
+
+
 def _quota_day() -> Optional[str]:
     try:
         from ystocker import quota
@@ -676,6 +690,18 @@ def _run(job_id: str) -> None:
         job["elapsed_sec"] = elapsed
         job["returncode"] = rc
 
+        # Which models actually answered. When the configured model runs out of
+        # its daily quota the child continues on a weaker one, and a report that
+        # was mostly written by Flash must not be presented as though it came
+        # from Pro. Scanned from the untruncated stderr, because the log tail
+        # keeps only the last few KB and the notice can fall outside it.
+        used = _fallback_models_used(err)
+        if used:
+            job["fallback_models"] = used
+            job["degraded"] = True
+            log.warning("agents: %s degraded to %s (daily quota)",
+                        job_id, ", ".join(used))
+
         # Keep the tail: a debate transcript can be very large. stdout also
         # carries the result block, which the page renders separately, so only
         # the part before it is useful as a log.
@@ -703,6 +729,13 @@ def _run(job_id: str) -> None:
         # before any client is constructed, so nothing was spent.
         if rc == 2:
             _refund_preflight(job, "child could not import tradingagents")
+        # A run killed by the provider's daily cap returns no report at all, and
+        # no amount of retrying today will change that. Charging the user for a
+        # capacity failure they cannot influence, and got nothing from, is not
+        # defensible -- so this one is refunded even though calls were spent.
+        elif (job.get("status") == "error"
+              and "RESOURCE_EXHAUSTED" in (job.get("error") or "")):
+            _refund_preflight(job, "provider daily quota exhausted")
         log.info("agents: %s finished status=%s rc=%s in %.1fs",
                  job_id, job.get("status"), rc, elapsed)
     finally:

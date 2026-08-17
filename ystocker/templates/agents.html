@@ -32,6 +32,7 @@
 .ag-running { background: rgba(99,102,241,.18);  color: #a5b4fc; }
 .ag-done    { background: rgba(25,158,112,.18);  color: #4ade80; }
 .ag-error   { background: rgba(230,103,103,.18); color: #fca5a5; }
+.ag-degraded{ background: rgba(251,191,36,.16);  color: #fcd34d; }
 .ag-log {
   background: #0b1120; border: 1px solid #1e293b; border-radius: 8px;
   padding: 12px; font-family: 'JetBrains Mono', ui-monospace, monospace;
@@ -240,6 +241,9 @@
       <span class="text-base font-semibold text-slate-200" id="agJobTitle">—</span>
       <span id="agStatus" class="ag-pill ag-queued">queued</span>
       <span id="agElapsed" class="text-xs text-slate-500"></span>
+      {# Shown only when the configured model ran out of daily quota mid-run, so
+         a Flash-written report is never mistaken for a Pro one. #}
+      <span id="agDegraded" class="ag-pill ag-degraded hidden"></span>
     </div>
     <div class="ag-row">
       <a id="agPdf" class="ag-btn hidden" href="#" download
@@ -323,6 +327,16 @@
     titleEl.textContent = `${job.ticker} · ${job.date}` + (job.selftest ? '  (self-test)' : '');
     setStatus(job.status);
     elapsedEl.textContent = job.elapsed_sec ? `${job.elapsed_sec}s` : '';
+
+    const deg = document.getElementById('agDegraded');
+    const fell = job.fallback_models || [];
+    deg.classList.toggle('hidden', fell.length === 0);
+    if (fell.length) {
+      deg.textContent = (I18n.t('agents.degraded') || 'ran on fallback model')
+                        + ': ' + fell.join(', ');
+      deg.title = I18n.t('agents.degraded_why')
+        || 'The configured model hit its daily quota, so part of this report was written by a weaker model.';
+    }
 
     show('agDecisionWrap', !!job.decision);
     if (job.decision) document.getElementById('agDecision').textContent = job.decision;

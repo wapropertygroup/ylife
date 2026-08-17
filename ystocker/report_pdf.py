@@ -509,6 +509,15 @@ def build_report_pdf(job: dict[str, Any]) -> Optional[bytes]:
     if job.get("selftest"):
         meta_bits.append("自检运行 — 未调用大模型" if cjk
                          else "SELF-TEST — no LLM call was made")
+    # A downgraded run is disclosed on the document itself, not only in the web
+    # UI: the PDF is the artefact that gets saved and shared, so it has to carry
+    # the caveat with it.
+    fell = job.get("fallback_models") or []
+    if fell:
+        joined = ", ".join(fell)
+        meta_bits.append(f"降级模型：{joined}（主模型当日额度已用尽）" if cjk
+                         else f"Fallback model used: {joined} "
+                              f"(the configured model hit its daily quota)")
     flow.append(Paragraph(clean(" · ".join(meta_bits)), styles["meta"]))
     flow.append(Spacer(1, 8))
     flow.append(HRFlowable(width="100%", thickness=0.7, color=colors.HexColor("#cbd5e1")))
