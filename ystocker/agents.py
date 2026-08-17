@@ -61,6 +61,42 @@ RUN_TIMEOUT = float(os.environ.get("TRADINGAGENTS_TIMEOUT", "1500"))
 # Keep at most this many job records on disk.
 MAX_JOBS = 60
 
+# Default to Gemini because this app already holds a Gemini key: SSM parameter
+# /ystocker/GEMINI_API_KEY is loaded into os.environ by _load_secrets_from_ssm()
+# at startup, so a run needs no extra secret in production.
+#
+# The name has to be bridged, though. TradingAgents resolves a provider's key
+# through llm_clients/api_key_env.py, which maps "google" -> GOOGLE_API_KEY and
+# has no knowledge of GEMINI_API_KEY. Without the alias below the child would
+# import cleanly and then fail at the first LLM call with a missing-credentials
+# error, which is a confusing way to discover a naming mismatch.
+DEFAULT_PROVIDER = os.environ.get("TRADINGAGENTS_LLM_PROVIDER", "google")
+# Ids taken from tradingagents/llm_clients/model_catalog.py, not invented: an
+# unknown model id fails deep inside the provider SDK.
+DEFAULT_DEEP_MODEL = os.environ.get("TRADINGAGENTS_DEEP_THINK_LLM", "gemini-3.1-pro-preview")
+DEFAULT_QUICK_MODEL = os.environ.get("TRADINGAGENTS_QUICK_THINK_LLM", "gemini-3.5-flash")
+
+
+def _child_env() -> dict[str, str]:
+    """Environment for the run, with the Gemini key aliased for TradingAgents."""
+    env = os.environ.copy()
+    gemini = env.get("GEMINI_API_KEY", "").strip()
+    if gemini and not env.get("GOOGLE_API_KEY", "").strip():
+        env["GOOGLE_API_KEY"] = gemini
+    # TradingAgents reads these itself, so setting them here is enough to steer
+    # the run without patching its config.
+    env.setdefault("TRADINGAGENTS_LLM_PROVIDER", DEFAULT_PROVIDER)
+    env.setdefault("TRADINGAGENTS_DEEP_THINK_LLM", DEFAULT_DEEP_MODEL)
+    env.setdefault("TRADINGAGENTS_QUICK_THINK_LLM", DEFAULT_QUICK_MODEL)
+    env["PYTHONUNBUFFERED"] = "1"
+    return env
+
+
+def has_llm_key() -> bool:
+    """Whether some usable provider credential is present."""
+    return any(os.environ.get(k, "").strip() for k in
+               ("GEMINI_API_KEY", "GOOGLE_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY"))
+
 _TICKER_RE = re.compile(r"^[A-Za-z][A-Za-z0-9.\-]{0,9}$")
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
@@ -282,11 +318,9 @@ def _run(job_id: str) -> None:
                    started_at=datetime.now(timezone.utc).isoformat(timespec="seconds"))
         _write(job)
 
-        env = os.environ.copy()
+        env = _child_env()
         if job.get("selftest"):
             env["YSTOCKER_AGENT_SELFTEST"] = "1"
-        # Unbuffered so the transcript reaches us as it is produced.
-        env["PYTHONUNBUFFERED"] = "1"
 
         cmd = [_interpreter(), "-c", _RUNNER, job["ticker"], job["date"], _BEGIN, _END]
         started = time.time()
@@ -354,6 +388,7 @@ def environment_report() -> dict[str, Any]:
     interp = _interpreter()
     ta_dir_ok = Path(TA_DIR).is_dir()
     interp_ok = Path(interp).exists() or interp == "python3"
+    key_ok = has_llm_key()
     return {
         "today": _date.today().isoformat(),
         "ta_dir": TA_DIR,
@@ -362,5 +397,9 @@ def environment_report() -> dict[str, Any]:
         "interpreter_exists": interp_ok,
         "timeout_sec": RUN_TIMEOUT,
         "allowlist_size": len(allowed_emails()),
-        "ready": ta_dir_ok and interp_ok and bool(allowed_emails()),
+        "provider": DEFAULT_PROVIDER,
+        "deep_model": DEFAULT_DEEP_MODEL,
+        "quick_model": DEFAULT_QUICK_MODEL,
+        "has_key": key_ok,
+        "ready": ta_dir_ok and interp_ok and key_ok and bool(allowed_emails()),
     }

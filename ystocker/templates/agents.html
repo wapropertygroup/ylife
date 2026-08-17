@@ -80,6 +80,9 @@
     {% if not agent_env.ta_dir_exists %}
     <li>· <span data-i18n="agents.env_dir">TradingAgents directory not found</span>: <code>{{ agent_env.ta_dir }}</code> — <span data-i18n="agents.env_dir_fix">set TRADINGAGENTS_DIR</span></li>
     {% endif %}
+    {% if not agent_env.has_key %}
+    <li>· <span data-i18n="agents.env_key">No LLM credential found</span> — <span data-i18n="agents.env_key_fix">set GEMINI_API_KEY (production loads it from SSM automatically)</span></li>
+    {% endif %}
     {% if not agent_env.interpreter_exists %}
     <li>· <span data-i18n="agents.env_py">Interpreter not found</span>: <code>{{ agent_env.interpreter }}</code> — <span data-i18n="agents.env_py_fix">set TRADINGAGENTS_PYTHON to a python that can import tradingagents</span></li>
     {% endif %}
@@ -107,6 +110,7 @@
   <p class="text-xs text-slate-600 mt-3">
     <span data-i18n="agents.cost_warning">A real run takes several minutes and spends API credits. One run executes at a time; others queue.</span>
     <span data-i18n="agents.timeout_is">Timeout</span>: {{ (agent_env.timeout_sec | int) // 60 }}&nbsp;min.
+    &nbsp;·&nbsp; <span data-i18n="agents.model_is">Model</span>: {{ agent_env.provider }} / {{ agent_env.deep_model }}.
   </p>
   <div id="agError" class="hidden mt-3 px-3 py-2 rounded-lg bg-red-900/40 border border-red-700 text-red-300 text-xs"></div>
 </div>
