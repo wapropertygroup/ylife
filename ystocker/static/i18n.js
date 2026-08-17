@@ -1133,6 +1133,8 @@ const I18n = (() => {
     'agents.history':      { en: 'Recent runs',   zh: '最近运行' },
     'agents.history_empty':{ en: 'No runs yet.',  zh: '暂无运行记录。' },
     'agents.view':         { en: 'View',          zh: '查看' },
+    'agents.download_pdf': { en: '⬇ Download PDF', zh: '⬇ 下载 PDF' },
+    'agents.pdf_short':    { en: 'PDF',           zh: 'PDF' },
 
     // ── contact.html ───────────────────────────────────────────────────
     'contact.title':        { en: 'Contact Us',  zh: '联系我们' },

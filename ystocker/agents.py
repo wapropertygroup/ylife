@@ -179,8 +179,12 @@ def emit(payload):
 if os.environ.get("YSTOCKER_AGENT_SELFTEST") == "1":
     emit({"ok": True, "selftest": True, "ticker": ticker, "date": day,
           "decision": "HOLD (selftest — no LLM call was made)",
-          "report": "Self-test run: subprocess, argument passing, result "
-                    "delimiting and JSON parsing all exercised."})
+          "report": "## Self-test\n\nSubprocess, argument passing, result "
+                    "delimiting and JSON parsing all exercised.\n\n"
+                    "### Markdown coverage\n\n- **bold** and *italic* text\n"
+                    "- a ratio written as P/E < 20 & a stray > character\n"
+                    "- curly quotes \u201clike this\u201d and an em dash \u2014 here\n"
+                    "\n| col | value |\n| --- | --- |\n| a | 1 |\n"})
     raise SystemExit(0)
 
 try:
@@ -197,8 +201,23 @@ try:
     graph = TradingAgentsGraph(debug=False, config=cfg)
     state, decision = graph.propagate(ticker, day)
 
+    # Prefer the package's own report builder: reporting.write_report_tree
+    # assembles every section (all four analysts, the bull/bear/manager debate,
+    # the trader plan, risk and portfolio) into complete_report.md, and its
+    # docstring says it exists for exactly this headless case. Hand-picking a
+    # few state keys, as this did first, silently dropped most of the analysis.
     report = ""
-    if isinstance(state, dict):
+    try:
+        import tempfile as _tf
+        from tradingagents.reporting import write_report_tree
+        with _tf.TemporaryDirectory() as td:
+            complete = write_report_tree(state, ticker, td)
+            if complete and os.path.exists(complete):
+                report = open(complete, encoding="utf-8").read()
+    except Exception as _exc:
+        sys.stderr.write("report_tree unavailable (%s); falling back to state keys\n" % _exc)
+
+    if not report.strip() and isinstance(state, dict):
         for key in ("final_trade_decision", "trader_investment_plan",
                     "investment_plan", "market_report"):
             val = state.get(key)

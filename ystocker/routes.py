@@ -2188,6 +2188,34 @@ def api_agents_job(job_id):
     return jsonify(job)
 
 
+@bp.route("/api/agents/job/<job_id>/pdf")
+def api_agents_job_pdf(job_id):
+    """Download a finished run's full report as a PDF."""
+    gate = _agent_gate()
+    if gate:
+        return gate
+    from ystocker.agents import get_job
+    from ystocker.report_pdf import build_report_pdf, pdf_filename
+
+    job = get_job(job_id)
+    if not job:
+        return jsonify({"error": "No such job"}), 404
+    if job.get("status") != "done":
+        return jsonify({"error": f"Run is {job.get('status')}, not done"}), 409
+
+    pdf = build_report_pdf(job)
+    if not pdf:
+        return jsonify({"error": "Could not render a PDF for this run"}), 500
+
+    log.info("agents: served PDF for %s (%d bytes)", job_id, len(pdf))
+    return Response(pdf, content_type="application/pdf", headers={
+        # attachment so the browser downloads rather than previews inline.
+        "Content-Disposition": f'attachment; filename="{pdf_filename(job)}"',
+        "Content-Length": str(len(pdf)),
+        "Cache-Control": "private, max-age=300",
+    })
+
+
 @bp.route("/api/agents/jobs")
 def api_agents_jobs():
     """Recent runs, newest first."""

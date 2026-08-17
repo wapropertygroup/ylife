@@ -123,7 +123,11 @@
       <span id="agStatus" class="ag-pill ag-queued">queued</span>
       <span id="agElapsed" class="text-xs text-slate-500"></span>
     </div>
-    <button id="agHide" class="ag-btn ag-btn-ghost" data-i18n="agents.dismiss">Dismiss</button>
+    <div class="ag-row">
+      <a id="agPdf" class="ag-btn hidden" href="#" download
+         data-i18n="agents.download_pdf">⬇ Download PDF</a>
+      <button id="agHide" class="ag-btn ag-btn-ghost" data-i18n="agents.dismiss">Dismiss</button>
+    </div>
   </div>
   <div id="agDecisionWrap" class="hidden mb-4">
     <p class="text-xs text-slate-500 mb-1" data-i18n="agents.decision">Decision</p>
@@ -181,6 +185,12 @@
 
     show('agDecisionWrap', !!job.decision);
     if (job.decision) document.getElementById('agDecision').textContent = job.decision;
+
+    // Only offer the PDF once there is a finished report to render.
+    const pdf = document.getElementById('agPdf');
+    const hasPdf = job.status === 'done' && (job.report || job.decision);
+    pdf.classList.toggle('hidden', !hasPdf);
+    if (hasPdf) pdf.href = `/api/agents/job/${job.id}/pdf`;
 
     show('agReportWrap', !!job.report);
     if (job.report) document.getElementById('agReport').textContent = job.report;
@@ -254,11 +264,22 @@
           + `<span class="ag-pill ${CLS[j.status] || 'ag-queued'}">${j.status}</span>`
           + (j.selftest ? '<span class="text-slate-600">self-test</span>' : '')
           + (j.elapsed_sec ? `<span class="text-slate-600">${j.elapsed_sec}s</span>` : '');
+        const actions = document.createElement('div');
+        actions.className = 'ag-row';
         const btn = document.createElement('button');
         btn.className = 'ag-btn ag-btn-ghost';
         btn.textContent = I18n.t('agents.view') || 'View';
         btn.onclick = () => pollJob(j.id);
-        row.append(left, btn);
+        actions.appendChild(btn);
+        if (j.status === 'done') {
+          const dl = document.createElement('a');
+          dl.className = 'ag-btn ag-btn-ghost';
+          dl.href = `/api/agents/job/${j.id}/pdf`;
+          dl.setAttribute('download', '');
+          dl.textContent = I18n.t('agents.pdf_short') || 'PDF';
+          actions.appendChild(dl);
+        }
+        row.append(left, actions);
         box.appendChild(row);
       });
     } catch (e) { /* history is decoration; never block the page on it */ }
