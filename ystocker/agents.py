@@ -109,14 +109,46 @@ _io_lock = threading.Lock()
 # Access control
 # ---------------------------------------------------------------------------
 
+# Parsed allowlist, cached against the raw string so the warning below is
+# emitted when the value changes rather than on every request.
+_allow_cache: tuple[str, frozenset[str]] = ("", frozenset())
+_allow_lock = threading.Lock()
+
+# Comma is the documented separator, but semicolons, spaces and newlines are all
+# plausible ways to write a list. Accepting them matters because the failure mode
+# is silent: "a@x.com b@y.com" parsed on commas alone yields one entry that
+# matches nobody, so everyone is denied with no hint as to why.
+_SPLIT_RE = re.compile(r"[,;\s]+")
+
+
 def allowed_emails() -> set[str]:
     """Emails permitted to start a run.
 
     Each run spends real API credits and yStocker is otherwise public, so an
     empty allowlist denies everyone rather than defaulting open.
     """
+    global _allow_cache
     raw = os.environ.get("AGENTS_ALLOWED_EMAILS", "")
-    return {e.strip().lower() for e in raw.split(",") if e.strip()}
+    cached_raw, cached_set = _allow_cache
+    if raw == cached_raw:
+        return set(cached_set)
+
+    entries = [e.strip().lower() for e in _SPLIT_RE.split(raw) if e.strip()]
+    # An entry without an "@" is a typo, not an address. Dropping it silently is
+    # how an allowlist ends up denying the person it was meant to admit, so say
+    # so once.
+    good = {e for e in entries if "@" in e and "." in e.split("@")[-1]}
+    bad = [e for e in entries if e not in good]
+
+    with _allow_lock:
+        if bad:
+            log.warning("agents: ignoring %d malformed allowlist entr%s: %s",
+                        len(bad), "y" if len(bad) == 1 else "ies", ", ".join(bad[:5]))
+        if not good and raw.strip():
+            log.warning("agents: AGENTS_ALLOWED_EMAILS is set but no valid address "
+                        "parsed — everyone will be denied")
+        _allow_cache = (raw, frozenset(good))
+    return set(good)
 
 
 def is_allowed(email: Optional[str]) -> bool:
