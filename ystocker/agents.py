@@ -474,6 +474,37 @@ def _write(job: dict[str, Any]) -> None:
             raise
 
 
+def salvage_from_events(job_id: str) -> tuple[str, Optional[str]]:
+    """Rebuild a report from the streamed events, for a run that never wrote one.
+
+    A run publishes each agent's output as it lands, so when the child dies after
+    the debate but before writing its result, the whole analysis is still sitting
+    in the events file. Discarding it and telling the user to run again would
+    throw away roughly twenty Gemini Pro calls they have already paid for.
+
+    Emits the same ``### <Role Name>`` headings the package's own report builder
+    uses, so the result parses through ``agent_roles.split_sections`` exactly like
+    a real report and renders identically on the page and in the PDF.
+    """
+    from ystocker.agent_roles import ROLES
+
+    latest: dict[str, str] = {}
+    for ev in read_events(job_id):
+        role, body = ev.get("role"), (ev.get("body") or "").strip()
+        if role and body:
+            latest[role] = body        # last write per role wins
+
+    parts, decision = [], None
+    for role in ROLES:                 # the cast's own order, not arrival order
+        body = latest.get(role["key"])
+        if not body:
+            continue
+        parts.append(f"### {role['name']}\n\n{body}\n")
+        if role["key"] == "portfolio":
+            decision = body.splitlines()[0].strip() if body.strip() else None
+    return "\n".join(parts), decision
+
+
 def _reap(job: Optional[dict[str, Any]]) -> Optional[dict[str, Any]]:
     """Settle a job whose supervising thread died, from durable evidence.
 
@@ -549,6 +580,27 @@ def _reap(job: Optional[dict[str, Any]]) -> Optional[dict[str, Any]]:
         limit = 2 * RUN_TIMEOUT + 300
     if (datetime.now(timezone.utc) - began).total_seconds() < limit:
         return job
+    # Last chance before writing this run off: the streamed events may already
+    # contain the entire analysis.
+    try:
+        recovered, decision = salvage_from_events(job["id"])
+    except Exception as exc:  # noqa: BLE001
+        log.warning("agents: salvage failed for %s: %s", job.get("id"), exc)
+        recovered, decision = "", None
+
+    if recovered.strip():
+        job.update(status="done", report=recovered, recovered=True,
+                   finished_at=datetime.now(timezone.utc).isoformat(timespec="seconds"))
+        if decision and not job.get("decision"):
+            job["decision"] = decision
+        log.warning("agents: %s recovered %d chars from its stream after the "
+                    "runner died", job.get("id"), len(recovered))
+        try:
+            _write(job)
+        except Exception:
+            pass
+        return job
+
     job.update(status="error",
                error="Runner did not report a result (the server process was "
                      "most likely restarted mid-run). Please run it again.",

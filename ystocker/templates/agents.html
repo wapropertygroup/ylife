@@ -308,6 +308,10 @@
       {# Shown only when the configured model ran out of daily quota mid-run, so
          a Flash-written report is never mistaken for a Pro one. #}
       <span id="agDegraded" class="ag-pill ag-degraded hidden"></span>
+      {# A report rebuilt from the live stream because the runner died before
+         writing its own. Says so, because the final synthesis may be missing. #}
+      <span id="agRecovered" class="ag-pill ag-degraded hidden"
+            data-i18n="agents.recovered">recovered from stream</span>
     </div>
     <div class="ag-row">
       <a id="agPdf" class="ag-btn hidden" href="#" download
@@ -418,6 +422,8 @@
     titleEl.textContent = `${job.ticker} · ${job.date}` + (job.selftest ? '  (self-test)' : '');
     setStatus(job.status);
     elapsedEl.textContent = job.elapsed_sec ? `${job.elapsed_sec}s` : '';
+
+    document.getElementById('agRecovered').classList.toggle('hidden', !job.recovered);
 
     const deg = document.getElementById('agDegraded');
     const fell = job.fallback_models || [];

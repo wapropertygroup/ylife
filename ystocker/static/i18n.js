@@ -1128,6 +1128,7 @@ const I18n = (() => {
                              zh: '各项检查均已通过 — 请查看服务器日志' },
     'agents.vip':          { en: 'VIP',           zh: 'VIP' },
     'agents.degraded':     { en: 'ran on fallback model', zh: '已降级模型' },
+    'agents.recovered':    { en: 'recovered from stream', zh: '由实时流恢复' },
     'agents.degraded_why': { en: 'The configured model hit its daily quota, so part of this report was written by a weaker model.',
                              zh: '配置的模型已用完当日额度，本报告部分内容由能力较弱的模型生成。' },
     'agents.depth_is':     { en: 'Depth',         zh: '深度' },

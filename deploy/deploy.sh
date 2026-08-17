@@ -293,6 +293,15 @@ Environment="MALLOC_ARENA_MAX=2"
 # with it. These are ceilings, not reservations.
 MemoryAccounting=yes
 MemoryMax=\${mem_max}
+# Kill only gunicorn's master on stop, not everything in the cgroup.
+#
+# ystocker launches the TradingAgents analysis as a detached subprocess that can
+# run for tens of minutes; start_new_session gives it its own session, but a
+# session is not a cgroup, so the default KillMode=control-group made every
+# \`systemctl restart\` kill in-flight runs -- a deploy silently destroyed a
+# ten-minute analysis and the ~22 Gemini Pro calls it had already paid for.
+# gunicorn's master reaps its own workers on SIGTERM, so nothing is orphaned.
+KillMode=process
 ExecStart=\${APP_DIR}/venv/bin/gunicorn \\\\
           --workers 2 \\\\
           --preload \\\\

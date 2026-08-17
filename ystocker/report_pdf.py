@@ -512,6 +512,10 @@ def build_report_pdf(job: dict[str, Any]) -> Optional[bytes]:
     # A downgraded run is disclosed on the document itself, not only in the web
     # UI: the PDF is the artefact that gets saved and shared, so it has to carry
     # the caveat with it.
+    if job.get("recovered"):
+        meta_bits.append("由实时流恢复 — 运行中断，最终汇总可能缺失" if cjk
+                         else "Recovered from the live stream — the run was "
+                              "interrupted, so the final synthesis may be missing")
     fell = job.get("fallback_models") or []
     if fell:
         joined = ", ".join(fell)
