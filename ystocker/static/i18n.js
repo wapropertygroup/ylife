@@ -1124,6 +1124,8 @@ const I18n = (() => {
     'agents.timeout_is':   { en: 'Timeout',       zh: '超时时间' },
     'agents.model_is':     { en: 'Model',         zh: '模型' },
     'agents.runs_left':    { en: 'runs left today', zh: '今日剩余次数' },
+    'agents.env_unknown':  { en: 'No specific check failed — see the server log',
+                             zh: '各项检查均已通过 — 请查看服务器日志' },
     'agents.vip':          { en: 'VIP',           zh: 'VIP' },
     'agents.depth_is':     { en: 'Depth',         zh: '深度' },
     'agents.rounds':       { en: 'rounds',        zh: '轮辩论' },

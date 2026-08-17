@@ -777,7 +777,10 @@ def environment_report() -> dict[str, Any]:
         "interpreter": interp,
         "interpreter_exists": interp_ok,
         "timeout_sec": RUN_TIMEOUT,
+        # Reported for transparency, not as a health signal: an empty allowlist
+        # is the normal, open configuration.
         "allowlist_size": len(allowed_emails()),
+        "allowlist_active": bool(allowed_emails()),
         "provider": DEFAULT_PROVIDER,
         "deep_model": DEFAULT_DEEP_MODEL,
         "quick_model": DEFAULT_QUICK_MODEL,
@@ -786,5 +789,11 @@ def environment_report() -> dict[str, Any]:
         "risk_rounds": DEFAULT_RISK_ROUNDS,
         "language": DEFAULT_LANGUAGE,
         "has_key": key_ok,
-        "ready": ta_dir_ok and interp_ok and key_ok and bool(allowed_emails()),
+        # Whether a run *can execute*, which is a question about the checkout,
+        # the interpreter and the credential -- not about who is permitted to
+        # start one. It used to include a non-empty allowlist, which became
+        # wrong the moment an empty allowlist started meaning "open to any
+        # signed-in user": the page then reported the runner as misconfigured
+        # while listing no actual fault.
+        "ready": ta_dir_ok and interp_ok and key_ok,
     }

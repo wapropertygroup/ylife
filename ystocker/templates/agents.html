@@ -186,6 +186,12 @@
     {% if not agent_env.interpreter_exists %}
     <li>· <span data-i18n="agents.env_py">Interpreter not found</span>: <code>{{ agent_env.interpreter }}</code> — <span data-i18n="agents.env_py_fix">set TRADINGAGENTS_PYTHON to a python that can import tradingagents</span></li>
     {% endif %}
+    {# A warning that lists nothing is worse than no warning: it tells the user
+       something is broken and gives them no way to act. If none of the specific
+       checks failed, say so rather than showing an empty list. #}
+    {% if agent_env.ta_dir_exists and agent_env.has_key and agent_env.interpreter_exists %}
+    <li>· <span data-i18n="agents.env_unknown">No specific check failed — see the server log</span></li>
+    {% endif %}
   </ul>
 </div>
 {% endif %}
