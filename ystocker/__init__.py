@@ -77,6 +77,7 @@ def _load_secrets_from_ssm() -> None:
 
     Parameters fetched:
       /ystocker/GEMINI_API_KEY  → os.environ["GEMINI_API_KEY"]
+      /ystocker/AGENTS_ALLOWED_EMAILS → os.environ["AGENTS_ALLOWED_EMAILS"]
     """
     import logging
     import os
@@ -95,6 +96,10 @@ def _load_secrets_from_ssm() -> None:
         "/ystocker/SES_FROM_EMAIL":     "SES_FROM_EMAIL",
         "/ystocker/GOOGLE_CLIENT_ID":   "GOOGLE_CLIENT_ID",
         "/ystocker/YSTOCKER_SECRET_KEY": "YSTOCKER_SECRET_KEY",
+        # Who may run the trading agents. Not a secret, but it is an access
+        # control, so it lives with the other SSM-managed config rather than
+        # being baked into the image — adding a person should not need a deploy.
+        "/ystocker/AGENTS_ALLOWED_EMAILS": "AGENTS_ALLOWED_EMAILS",
     }
 
     try:
