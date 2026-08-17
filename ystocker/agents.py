@@ -279,7 +279,45 @@ try:
           "decision": decision if isinstance(decision, str) else json.dumps(decision, default=str),
           "report": report.strip()})
 except Exception as exc:
-    emit({"ok": False, "error": "%s: %s" % (type(exc).__name__, exc)})
+    # A traceback here is the only diagnosis available: the message alone can be
+    # useless. pandas raises EmptyDataError("No columns to parse from file")
+    # without naming the file, and the whole point of the log is to say which.
+    import traceback as _tb
+    _trace = _tb.format_exc()
+    sys.stderr.write(_trace)
+
+    detail = "%s: %s" % (type(exc).__name__, exc)
+
+    # A zero-byte cache file poisons every later run: stockstats_utils reads it
+    # with pd.read_csv before its own `cached.empty` guard can see it, so the
+    # crash repeats until someone deletes the file by hand. The upstream write
+    # is a plain to_csv, so any kill mid-write leaves exactly this. Clear the
+    # unusable files and say so, rather than making the user debug a cache they
+    # do not know exists.
+    if isinstance(exc, Exception) and "No columns to parse" in str(exc):
+        removed = []
+        try:
+            from tradingagents.default_config import DEFAULT_CONFIG as _C
+            _dir = _C.get("data_cache_dir", "")
+            if _dir and os.path.isdir(_dir):
+                for _n in os.listdir(_dir):
+                    _p = os.path.join(_dir, _n)
+                    try:
+                        if os.path.isfile(_p) and os.path.getsize(_p) == 0:
+                            os.unlink(_p)
+                            removed.append(_n)
+                    except OSError:
+                        pass
+        except Exception:
+            pass
+        if removed:
+            detail += (" -- cleared %d empty cache file(s): %s. "
+                       "Re-run to refetch." % (len(removed), ", ".join(removed[:5])))
+        else:
+            detail += (" -- a data file could not be parsed. If it recurs, "
+                       "clear the TradingAgents data cache and re-run.")
+
+    emit({"ok": False, "error": detail})
     raise SystemExit(3)
 '''
 
