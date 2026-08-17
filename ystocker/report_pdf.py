@@ -19,17 +19,17 @@ Two details that otherwise produce broken output rather than an error:
   reportlab renders an unmappable glyph as a black box. Since reports are
   generated in Chinese by default, a Helvetica-only pipeline silently dropped
   every Han character and produced a near-empty PDF. When the report contains
-  CJK the document switches to ``STSong-Light``, one of the Adobe CID fonts
-  whose metrics ship inside reportlab -- so this needs no font file on disk,
-  which matters because the production box has no CJK font installed at all.
-  Typographic characters (curly quotes, em dashes, arrows) are still folded to
-  ASCII in both modes, and anything the chosen font cannot draw is dropped
-  rather than left to print as a black box.
+  CJK the document switches to an embedded TrueType CJK face -- see
+  ``_register_cjk_font`` for why it must be *embedded* and why the Noto CJK
+  .otf files cannot be used. Typographic characters (curly quotes, em dashes,
+  arrows) are folded to ASCII on the Latin path only; on the CJK path they are
+  kept, because folding "……" to "..." is a typographic error in Chinese.
 """
 from __future__ import annotations
 
 import io
 import logging
+import os
 import re
 import unicodedata
 from datetime import datetime, timezone
@@ -58,10 +58,73 @@ _CJK_RE = re.compile(
     "\uf900-\ufaff\ufe30-\ufe4f\uff00-\uffef]"
 )
 
-# An Adobe CID font: reportlab ships its metrics, so no font file is required
-# on the host. Registered lazily because registration is global state.
-_CJK_FONT = "STSong-Light"
+# TrueType-outline CJK font files, in preference order. These get *embedded* in
+# the PDF, so it renders on any device. Paths differ between a laptop and the
+# box, so several are tried.
+#
+# The face *inside* a .ttc is chosen by weight, never by a hardcoded index:
+# index 0 of macOS Songti.ttc is the Black (900) cut, so assuming 0 meant the
+# whole report rendered in the heaviest weight available.
+_EMBEDDABLE_CJK: list[str] = [
+    "/usr/share/fonts/cjkuni-uming/uming.ttc",          # Amazon Linux
+    "/System/Library/Fonts/Supplemental/Songti.ttc",    # macOS
+    "/System/Library/Fonts/STHeiti Light.ttc",
+    "/usr/share/fonts/truetype/arphic/uming.ttc",       # Debian/Ubuntu
+    "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
+    "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+]
+_env_font = os.environ.get("YSTOCKER_CJK_FONT", "").strip()
+if _env_font:
+    _EMBEDDABLE_CJK.insert(0, _env_font)
+
+
+def _pick_faces(path: str) -> tuple[int, int]:
+    """Return (regular_index, bold_index) for a font file.
+
+    A .ttc packs several cuts, and which index is which varies by vendor, so
+    the weights are read rather than assumed. Returns (0, 0) for a plain .ttf
+    or when the collection cannot be inspected.
+    """
+    if not path.lower().endswith(".ttc"):
+        return 0, 0
+    try:
+        from fontTools.ttLib import TTCollection
+
+        with TTCollection(path, lazy=True) as coll:
+            weights = []
+            for i, f in enumerate(coll.fonts):
+                try:
+                    w = f["OS/2"].usWeightClass
+                except Exception:  # noqa: BLE001 - malformed face, skip it
+                    continue
+                # Simplified Chinese where the collection says so: a TC cut has
+                # different glyph shapes for the same codepoints.
+                name = (f["name"].getDebugName(1) or "")
+                weights.append((i, int(w), "TC" not in name and "HK" not in name))
+        if not weights:
+            return 0, 0
+        sc = [x for x in weights if x[2]] or weights
+        # Regular = closest to 400 from below; bold = closest to 700.
+        reg = min(sc, key=lambda x: (abs(x[1] - 400), x[1]))
+        bold = min(sc, key=lambda x: abs(x[1] - 700))
+        return reg[0], (bold[0] if bold[1] >= 600 else reg[0])
+    except Exception as exc:  # noqa: BLE001 - fall back to the first face
+        log.warning("report_pdf: cannot inspect %s (%s); using face 0", path, exc)
+        return 0, 0
+
+# Last resort only. An Adobe CID font whose metrics ship inside reportlab, so
+# it needs no file -- but it is *not embedded*, so the glyphs come from the
+# reader. Fine on macOS/Acrobat, blank or boxed elsewhere.
+_CID_FALLBACK = "STSong-Light"
+
+# Resolved lazily at first use; registration is global state.
 _cjk_ready = False
+_cjk_embedded = False
+# True when the file had no bold cut and weight must be faked by stroking.
+_cjk_synth_bold = False
+_cjk_font = _CID_FALLBACK
+_cjk_bold = _CID_FALLBACK
+_cjk_mono = _CID_FALLBACK
 
 
 def has_cjk(text: str) -> bool:
@@ -69,28 +132,80 @@ def has_cjk(text: str) -> bool:
 
 
 def _register_cjk_font() -> bool:
-    """Register the CID font once. Returns False if unavailable."""
-    global _cjk_ready
+    """Register a CJK face once, preferring one that can be embedded.
+
+    Order matters. A ``UnicodeCIDFont`` is only a *reference* to one of Adobe's
+    standard CJK fonts -- the PDF carries no glyph data, so the text renders
+    only on a viewer that ships those fonts (macOS Preview, Acrobat) and comes
+    out blank or boxed on Windows, Android and most Linux readers. A TrueType
+    face is embedded as /FontFile2 and therefore renders anywhere, which for a
+    report meant to be downloaded and shared is the whole point.
+
+    reportlab's TTFont cannot read PostScript/CFF outlines, so the ubiquitous
+    Noto Sans CJK ``.otf`` files (sfnt tag ``OTTO``) are not usable here despite
+    being installed; AR PL UMing is the TrueType-outline CJK face available on
+    Amazon Linux (package ``cjkuni-uming-fonts``).
+    """
+    global _cjk_ready, _cjk_font, _cjk_bold, _cjk_mono, _cjk_embedded, _cjk_synth_bold
     if _cjk_ready:
         return True
+    from reportlab.pdfbase import pdfmetrics
+
+    for path in _EMBEDDABLE_CJK:
+        if not os.path.exists(path):
+            continue
+        try:
+            from reportlab.pdfbase.ttfonts import TTFont
+
+            reg_i, bold_i = _pick_faces(path)
+            name, bold_name = "ystocker-cjk", "ystocker-cjk-b"
+            pdfmetrics.registerFont(TTFont(name, path, subfontIndex=reg_i))
+            if bold_i != reg_i:
+                pdfmetrics.registerFont(TTFont(bold_name, path, subfontIndex=bold_i))
+                _cjk_synth_bold = False
+            else:
+                # Only one weight in the file (uming is Light-only). Point bold
+                # at the same face so <b> does not fall back to Helvetica-Bold,
+                # which cannot draw CJK at all, and fake the weight by stroking.
+                bold_name = name
+                _cjk_synth_bold = True
+            pdfmetrics.registerFontFamily(name, normal=name, bold=bold_name,
+                                          italic=name, boldItalic=bold_name)
+            _cjk_font, _cjk_bold, _cjk_mono = name, bold_name, name
+            _cjk_embedded = True
+            _cjk_ready = True
+            log.info("report_pdf: embedding CJK font %s (regular=%d, bold=%d%s)",
+                     path, reg_i, bold_i, ", synthesised" if _cjk_synth_bold else "")
+            return True
+        except Exception as exc:  # noqa: BLE001 - try the next candidate
+            log.warning("report_pdf: cannot embed %s: %s", path, exc)
+
+    # Nothing embeddable: fall back to the non-embedded CID font, which is
+    # still far better than dropping every Han character.
     try:
-        from reportlab.pdfbase import pdfmetrics
         from reportlab.pdfbase.cidfonts import UnicodeCIDFont
 
-        pdfmetrics.registerFont(UnicodeCIDFont(_CJK_FONT))
-        # Without a family mapping, reportlab resolves the <b> tags that
-        # markdown headings produce to Helvetica-Bold and the CJK inside them
-        # vanishes again. There is no bold cut of this CID font, so every slot
-        # maps to the one face.
+        pdfmetrics.registerFont(UnicodeCIDFont(_CID_FALLBACK))
         pdfmetrics.registerFontFamily(
-            _CJK_FONT, normal=_CJK_FONT, bold=_CJK_FONT,
-            italic=_CJK_FONT, boldItalic=_CJK_FONT,
+            _CID_FALLBACK, normal=_CID_FALLBACK, bold=_CID_FALLBACK,
+            italic=_CID_FALLBACK, boldItalic=_CID_FALLBACK,
         )
+        _cjk_font = _cjk_bold = _cjk_mono = _CID_FALLBACK
+        _cjk_embedded = False
+        _cjk_synth_bold = True
         _cjk_ready = True
+        log.warning("report_pdf: no embeddable CJK font found; using "
+                    "non-embedded %s (may not render off-macOS)", _CID_FALLBACK)
     except Exception as exc:  # noqa: BLE001 - fall back to Latin-only output
         log.warning("report_pdf: CJK font unavailable (%s); falling back", exc)
         _cjk_ready = False
     return _cjk_ready
+
+
+# Characters _FOLD would damage in Chinese text but an embedded CJK face draws
+# correctly. The ellipsis is the clearest case: Chinese uses a six-dot "……",
+# and rewriting it to "..." is a typographic error, not a fallback.
+_KEEP_IN_CJK = {"…", "·", "—", "–", "“", "”", "‘", "’"}
 
 
 def _sanitize(text: str, cjk: bool = False) -> str:
@@ -100,15 +215,19 @@ def _sanitize(text: str, cjk: bool = False) -> str:
     Helvetica path has to drop.
     """
     for src, dst in _FOLD.items():
+        if cjk and src in _KEEP_IN_CJK:
+            continue
         text = text.replace(src, dst)
     if cjk:
-        # NFKC, not NFKD: decomposing would split Hangul syllables and, worse,
-        # rewrite full-width forms in ways that change the text. Only drop what
-        # is neither CJK nor WinAnsi-encodable.
-        text = unicodedata.normalize("NFKC", text)
+        # NFC, not NFKC. The compatibility forms are exactly the characters
+        # Chinese typography depends on: NFKC rewrites the full-width comma,
+        # colon and parentheses (：（）、) to their ASCII equivalents and expands
+        # the ellipsis …… to six periods, which is simply wrong in Chinese text.
+        # NFC composes without altering any of them.
+        text = unicodedata.normalize("NFC", text)
         out = []
         for ch in text:
-            if ch in "\n\t" or _CJK_RE.match(ch):
+            if ch in "\n\t" or _CJK_RE.match(ch) or ch in _KEEP_IN_CJK:
                 out.append(ch)
                 continue
             try:
@@ -183,9 +302,9 @@ def build_report_pdf(job: dict[str, Any]) -> Optional[bytes]:
     cjk = has_cjk(body_md) or has_cjk(decision)
     if cjk and not _register_cjk_font():
         cjk = False   # registration failed; degrade to Latin rather than crash
-    sn = _CJK_FONT if cjk else "Helvetica"
-    sb = _CJK_FONT if cjk else "Helvetica-Bold"
-    mono = _CJK_FONT if cjk else "Courier"
+    sn = _cjk_font if cjk else "Helvetica"
+    sb = _cjk_bold if cjk else "Helvetica-Bold"
+    mono = _cjk_mono if cjk else "Courier"
 
     def clean(t: str) -> str:
         return _sanitize(t, cjk=cjk)
@@ -198,13 +317,24 @@ def build_report_pdf(job: dict[str, Any]) -> Optional[bytes]:
         base["Code"].fontSize = 8
         base["Code"].leading = 11
 
+    # uming has a single Light weight, so headings would otherwise be
+    # indistinguishable from body text. Stroking the glyph outline in its own
+    # colour thickens it; this is how reportlab fakes a bold cut.
+    fake_bold = cjk and _cjk_synth_bold
+
+    def heading(hex_colour: str) -> dict[str, Any]:
+        c = colors.HexColor(hex_colour)
+        if not fake_bold:
+            return {"textColor": c}
+        return {"textColor": c, "strokeColor": c, "strokeWidth": 0.3}
+
     styles = {
         "h1": ParagraphStyle("h1", parent=base["Heading1"], fontName=sb, fontSize=18, leading=22,
-                             spaceBefore=2, spaceAfter=8, textColor=colors.HexColor("#1e293b")),
+                             spaceBefore=2, spaceAfter=8, **heading("#1e293b")),
         "h2": ParagraphStyle("h2", parent=base["Heading2"], fontName=sb, fontSize=13, leading=17,
-                             spaceBefore=14, spaceAfter=5, textColor=colors.HexColor("#334155")),
+                             spaceBefore=14, spaceAfter=5, **heading("#334155")),
         "h3": ParagraphStyle("h3", parent=base["Heading3"], fontName=sb, fontSize=11, leading=15,
-                             spaceBefore=10, spaceAfter=4, textColor=colors.HexColor("#475569")),
+                             spaceBefore=10, spaceAfter=4, **heading("#475569")),
         "body": ParagraphStyle("body", parent=base["BodyText"], fontName=sn, fontSize=9.5, leading=13.5,
                                alignment=TA_LEFT, spaceAfter=6, wordWrap="CJK" if cjk else None),
         "bullet": ParagraphStyle("bullet", parent=base["BodyText"], fontName=sn, fontSize=9.5, leading=13.5,
@@ -213,7 +343,7 @@ def build_report_pdf(job: dict[str, Any]) -> Optional[bytes]:
         "meta": ParagraphStyle("meta", parent=base["BodyText"], fontName=sn, fontSize=8.5, leading=12,
                                textColor=colors.HexColor("#64748b")),
         "decision": ParagraphStyle("decision", parent=base["BodyText"], fontName=sb, fontSize=13, leading=17,
-                                   spaceAfter=4, textColor=colors.HexColor("#1e293b")),
+                                   spaceAfter=4, **heading("#1e293b")),
     }
 
     flow: list[Any] = []
