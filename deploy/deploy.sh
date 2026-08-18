@@ -139,8 +139,10 @@ for i in $(seq 1 60); do
     log "✓ Remote bootstrap complete"
     break
   fi
-  if ssh $SSH_OPTS "$EC2_USER@$HOST" "sudo cloud-init status --long 2>/dev/null | grep -q '^status: error'" &>/dev/null; then
-    log "WARNING: Remote bootstrap failed. Continuing with deploy repair..."
+  _BOOTSTRAP_STATUS=$(ssh $SSH_OPTS "$EC2_USER@$HOST" \
+    "sudo cloud-init status --long 2>/dev/null | sed -n 's/^status: //p' | head -1" 2>/dev/null || true)
+  if [[ "$_BOOTSTRAP_STATUS" == "error" || "$_BOOTSTRAP_STATUS" == "done" ]]; then
+    log "WARNING: Remote bootstrap ended without its completion marker (cloud-init: $_BOOTSTRAP_STATUS). Continuing with deploy repair..."
     ssh $SSH_OPTS "$EC2_USER@$HOST" "sudo tail -20 /var/log/app-init.log 2>/dev/null" || true
     break
   fi
