@@ -79,6 +79,7 @@ def _load_secrets_from_ssm() -> None:
       /ystocker/GEMINI_API_KEY  → os.environ["GEMINI_API_KEY"]
       /ystocker/FRED_API_KEY    → os.environ["FRED_API_KEY"]
       /ystocker/AGENTS_ALLOWED_EMAILS → os.environ["AGENTS_ALLOWED_EMAILS"]
+      /ystocker/GOLDMAN_CTA_DATA_JSON → os.environ["GOLDMAN_CTA_DATA_JSON"]
     """
     import logging
     import os
@@ -117,6 +118,11 @@ def _load_secrets_from_ssm() -> None:
         # for local dev.
         "/ystocker/TRADINGAGENTS_DIR":    "TRADINGAGENTS_DIR",
         "/ystocker/TRADINGAGENTS_PYTHON": "TRADINGAGENTS_PYTHON",
+        # Optional JSON override for dated Goldman CTA snapshots. The public
+        # Goldman model has no live API, so new report values can be published
+        # without a code deploy while the built-in public snapshots remain the
+        # fallback.
+        "/ystocker/GOLDMAN_CTA_DATA_JSON": "GOLDMAN_CTA_DATA_JSON",
     }
 
     try:

@@ -652,6 +652,75 @@
   </div>
 </div>
 
+<!-- ── Goldman CTA Positioning Tracker ────────────────────────────────── -->
+<div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up mb-6" id="ctaPositioningSection">
+  <div class="flex items-start justify-between gap-3 mb-3">
+    <div>
+      <div class="flex items-center gap-2 flex-wrap">
+        <h2 class="text-base font-semibold text-slate-200" data-i18n="markets.cta_title">Goldman Sachs CTA Positioning Tracker</h2>
+        <span id="ctaAsOf" class="text-[10px] px-2 py-0.5 rounded-full border border-slate-700 text-slate-500"></span>
+      </div>
+      <p class="text-xs text-slate-500 mt-0.5" data-i18n="markets.cta_desc">Dated Goldman estimates from public reporting, monitored against the live S&amp;P 500.</p>
+    </div>
+    <button onclick="expandMktsChart('cta')" title="Expand" data-i18n-title="markets.expand"
+            class="text-slate-500 hover:text-slate-200 transition p-1 rounded-lg hover:bg-slate-800 shrink-0">
+      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"/>
+      </svg>
+    </button>
+  </div>
+
+  <div id="ctaLoading" class="text-xs text-slate-600 py-3" data-i18n="markets.cta_loading">Loading CTA snapshots…</div>
+  <div id="ctaBody" style="display:none">
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-2 mb-3">
+      <div class="stat-card">
+        <div class="stat-label" data-i18n="markets.cta_reported_position">Reported global equity position</div>
+        <div id="ctaPositionValue" class="stat-val font-mono">—</div>
+        <div id="ctaPositionMeta" class="text-[10px] text-slate-600 mt-1"></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label" data-i18n="markets.cta_spx_spot">Live S&amp;P 500</div>
+        <div id="ctaSpxValue" class="stat-val font-mono">—</div>
+        <div id="ctaSpxMeta" class="text-[10px] text-slate-600 mt-1"></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label" data-i18n="markets.cta_nearest_pivot">Nearest downside pivot</div>
+        <div id="ctaNearestPivot" class="stat-val font-mono">—</div>
+        <div id="ctaNearestMeta" class="text-[10px] text-slate-600 mt-1"></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label" data-i18n="markets.cta_month_down">1-month downside flow</div>
+        <div id="ctaMonthDown" class="stat-val font-mono text-rose-400">—</div>
+        <div class="text-[10px] text-slate-600 mt-1" data-i18n="markets.cta_global_equities">global equities</div>
+      </div>
+    </div>
+
+    <div id="ctaStatus" class="text-xs px-3 py-2 rounded-lg border mb-4"></div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div class="lg:col-span-2 min-w-0">
+        <div class="flex items-center justify-between mb-1">
+          <p class="text-xs text-slate-500" data-i18n="markets.cta_trigger_chart">S&amp;P 500 vs latest reported CTA pivots</p>
+          <span class="text-[10px] text-slate-600" data-i18n="markets.cta_trigger_note">Lines begin on the report date</span>
+        </div>
+        <div class="chart-container" style="height:230px"><canvas id="ctaTriggerChart"></canvas></div>
+      </div>
+      <div class="min-w-0">
+        <p class="text-xs text-slate-500 mb-1" data-i18n="markets.cta_position_chart">Reported global equity net length ($bn)</p>
+        <div class="chart-container" style="height:150px"><canvas id="ctaPositionChart"></canvas></div>
+        <div id="ctaFlowGrid" class="grid grid-cols-3 gap-1.5 mt-3"></div>
+      </div>
+    </div>
+
+    <div class="mt-4 pt-3 border-t border-slate-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5">
+      <p class="text-[10px] leading-relaxed text-slate-600" data-i18n="markets.cta_disclaimer">Goldman's model is proprietary. This is a dated public-report tracker, not a live Goldman feed or an independent estimate.</p>
+      <a id="ctaSource" href="#" target="_blank" rel="noopener noreferrer"
+         class="text-[10px] text-indigo-400 hover:text-indigo-300 whitespace-nowrap" data-i18n="markets.cta_source">View latest public source ↗</a>
+    </div>
+  </div>
+</div>
+
 <!-- Market Breadth -->
 <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up mb-6" id="breadthSection">
   <div class="flex items-start justify-between mb-3">
@@ -1059,6 +1128,9 @@ let _vixData          = null;
 let _fgData           = null;
 let _aaiiData         = null;
 let _pcrData          = null;
+let _ctaData          = null;
+let _ctaTriggerChartInst = null;
+let _ctaPositionChartInst = null;
 let _idxShowBB        = false;
 
 // Yahoo Finance symbols per index key (for forecast API)
@@ -1097,6 +1169,249 @@ function _fmt(v, prefix='', suffix='', dec=2) {
 }
 function _chgClass(v) { return v == null ? 'neutral' : v >= 0 ? 'up' : 'down'; }
 function _chgSign(v)  { return v == null ? '' : v >= 0 ? '+' : ''; }
+
+// ── Goldman CTA positioning tracker ──────────────────────────────────
+function _ctaT(key, fallback) {
+  return (typeof I18n !== 'undefined' && I18n.t(key)) || fallback;
+}
+
+function _ctaTemplate(key, fallback, values) {
+  let text = _ctaT(key, fallback);
+  Object.entries(values || {}).forEach(([name, value]) => {
+    text = text.replaceAll(`{${name}}`, String(value));
+  });
+  return text;
+}
+
+function _ctaDate(value) {
+  if (!value) return '—';
+  const parsed = new Date(value + 'T12:00:00Z');
+  if (isNaN(parsed)) return value;
+  return parsed.toLocaleDateString(I18n.getLang() === 'zh' ? 'zh-CN' : 'en-US', {
+    year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC',
+  });
+}
+
+function _ctaMoney(value) {
+  if (value == null || isNaN(Number(value))) return '—';
+  const number = Number(value);
+  const abs = Math.abs(number);
+  const decimals = abs >= 100 ? 0 : abs >= 10 ? 1 : 2;
+  return `${number > 0 ? '+' : number < 0 ? '-' : ''}$${abs.toFixed(decimals)}B`;
+}
+
+function _ctaSpData() {
+  const spx = _mkData?.indices?.spx || {};
+  const daily = spx.daily || {};
+  const dates = daily.dates || [];
+  const prices = daily.prices || [];
+  let current = spx.current;
+  let currentDate = dates[dates.length - 1] || '';
+  if (current == null) {
+    for (let index = prices.length - 1; index >= 0; index--) {
+      if (prices[index] != null) {
+        current = prices[index];
+        currentDate = dates[index] || currentDate;
+        break;
+      }
+    }
+  }
+  return { dates, prices, current, currentDate };
+}
+
+function _buildCtaTriggerChart(canvasId) {
+  if (!_ctaData || !_mkData) return null;
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return null;
+  const spx = _ctaSpData();
+  if (!spx.dates.length) return null;
+  const start = Math.max(0, spx.dates.length - 132);
+  const labels = spx.dates.slice(start);
+  const prices = spx.prices.slice(start);
+  const latest = _ctaData.latest || {};
+  const reportDate = latest.report_date || labels[0];
+  const triggerData = level => labels.map(date => date >= reportDate ? level : null);
+  const triggers = latest.spx_triggers || {};
+
+  return new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          ...I18n.label('markets.idx_spx', 'S&P 500'), data: prices,
+          borderColor: '#c4b5fd', backgroundColor: 'rgba(139,92,246,.08)',
+          borderWidth: 2, pointRadius: 0, fill: true, tension: .22, spanGaps: true,
+        },
+        {
+          ...I18n.label('markets.cta_pivot_short', 'Short-term pivot'),
+          data: triggerData(triggers.short), borderColor: '#fbbf24',
+          borderWidth: 1.5, borderDash: [7, 4], pointRadius: 0, spanGaps: false,
+        },
+        {
+          ...I18n.label('markets.cta_pivot_medium', 'Medium-term pivot'),
+          data: triggerData(triggers.medium), borderColor: '#fb923c',
+          borderWidth: 1.5, borderDash: [5, 4], pointRadius: 0, spanGaps: false,
+        },
+        {
+          ...I18n.label('markets.cta_pivot_long', 'Long-term pivot'),
+          data: triggerData(triggers.long), borderColor: '#f87171',
+          borderWidth: 1.5, borderDash: [3, 4], pointRadius: 0, spanGaps: false,
+        },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { position: 'bottom', labels: { color: '#94a3b8', boxWidth: 18, boxHeight: 2, font: { size: 10 } } },
+        tooltip: { callbacks: { label: context => ` ${context.dataset.label}: ${context.raw == null ? '—' : Number(context.raw).toLocaleString()}` } },
+      },
+      scales: {
+        x: { grid: { color: GRID_COL }, ticks: { color: TICK_COL, maxTicksLimit: 7, maxRotation: 0, font: { size: 9 } } },
+        y: { grid: { color: GRID_COL }, ticks: { color: TICK_COL, callback: value => Number(value).toLocaleString(), font: { size: 9 } } },
+      },
+    },
+  });
+}
+
+function _buildCtaPositionChart() {
+  const canvas = document.getElementById('ctaPositionChart');
+  const points = _ctaData?.positioning || [];
+  if (!canvas || !points.length) return null;
+  return new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels: points.map(point => point.date),
+      datasets: [{
+        ...I18n.label('markets.cta_reported_position', 'Reported global equity position'),
+        data: points.map(point => point.global_equity_bn),
+        borderColor: '#38bdf8', backgroundColor: 'rgba(56,189,248,.12)',
+        borderWidth: 2, pointRadius: 4, pointHoverRadius: 6,
+        pointBackgroundColor: '#0ea5e9', pointBorderColor: '#bae6fd',
+        fill: true, tension: .2,
+      }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: context => ` ${_ctaMoney(context.raw)}` } },
+      },
+      scales: {
+        x: { grid: { color: GRID_COL }, ticks: { color: TICK_COL, maxTicksLimit: 4, maxRotation: 0, font: { size: 9 } } },
+        y: { grid: { color: GRID_COL }, ticks: { color: TICK_COL, callback: value => `$${value}B`, font: { size: 9 } }, suggestedMin: 0 },
+      },
+    },
+  });
+}
+
+function _renderCtaFlowGrid(latest) {
+  const grid = document.getElementById('ctaFlowGrid');
+  if (!grid) return;
+  grid.innerHTML = '';
+  const flows = latest?.flows_1w_global_bn || {};
+  [
+    ['up', 'markets.cta_flow_up', '1W up tape'],
+    ['flat', 'markets.cta_flow_flat', '1W flat tape'],
+    ['down', 'markets.cta_flow_down', '1W down tape'],
+  ].forEach(([scenario, key, fallback]) => {
+    const value = flows[scenario];
+    const card = document.createElement('div');
+    card.className = 'rounded-lg border border-slate-800 bg-slate-950/60 px-2 py-2 min-w-0';
+    const label = document.createElement('div');
+    label.className = 'text-[9px] text-slate-600 truncate';
+    label.textContent = _ctaT(key, fallback);
+    const amount = document.createElement('div');
+    amount.className = 'text-xs font-semibold font-mono mt-1 ' + (value >= 0 ? 'text-emerald-400' : 'text-rose-400');
+    amount.textContent = _ctaMoney(value);
+    card.append(label, amount);
+    grid.appendChild(card);
+  });
+}
+
+function _renderCtaTracker() {
+  if (!_ctaData) return;
+  const latest = _ctaData.latest || {};
+  const position = _ctaData.latest_positioning || {};
+  const spx = _ctaSpData();
+  const triggers = latest.spx_triggers || {};
+  const current = Number(spx.current);
+
+  document.getElementById('ctaLoading').style.display = 'none';
+  document.getElementById('ctaBody').style.display = '';
+  document.getElementById('ctaAsOf').textContent = _ctaTemplate(
+    'markets.cta_asof', 'GS snapshot · {date}', { date: _ctaDate(latest.report_date) });
+
+  const positionValue = document.getElementById('ctaPositionValue');
+  positionValue.textContent = _ctaMoney(position.global_equity_bn);
+  positionValue.className = 'stat-val font-mono ' + (position.global_equity_bn >= 0 ? 'text-sky-400' : 'text-rose-400');
+  const positionMeta = [_ctaDate(position.date)];
+  if (position.percentile != null) {
+    positionMeta.push(_ctaTemplate('markets.cta_percentile', '{value}th percentile', { value: position.percentile }));
+  } else {
+    positionMeta.push(_ctaT('markets.cta_public_snapshot', 'dated public snapshot'));
+  }
+  document.getElementById('ctaPositionMeta').textContent = positionMeta.join(' · ');
+
+  document.getElementById('ctaSpxValue').textContent = Number.isFinite(current) ? current.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—';
+  document.getElementById('ctaSpxMeta').textContent = _ctaDate(spx.currentDate);
+  document.getElementById('ctaMonthDown').textContent = _ctaMoney(latest.flows_1m_global_bn?.down);
+
+  const triggerRows = [
+    ['short', _ctaT('markets.cta_pivot_short', 'Short-term pivot')],
+    ['medium', _ctaT('markets.cta_pivot_medium', 'Medium-term pivot')],
+    ['long', _ctaT('markets.cta_pivot_long', 'Long-term pivot')],
+  ].filter(([key]) => Number.isFinite(Number(triggers[key])));
+  const nearest = Number.isFinite(current)
+    ? [...triggerRows].sort((a, b) => Math.abs(triggers[a[0]] - current) - Math.abs(triggers[b[0]] - current))[0]
+    : null;
+  if (nearest) {
+    const level = Number(triggers[nearest[0]]);
+    const distance = (level / current - 1) * 100;
+    document.getElementById('ctaNearestPivot').textContent = level.toLocaleString();
+    document.getElementById('ctaNearestMeta').textContent = nearest[1] + ' · ' + _ctaTemplate(
+      'markets.cta_from_spot', '{value}% from spot', { value: `${distance >= 0 ? '+' : ''}${distance.toFixed(1)}` });
+  }
+
+  const status = document.getElementById('ctaStatus');
+  let statusKey = 'markets.cta_status_all_broken';
+  let fallback = 'Below all reported pivots.';
+  let statusClass = 'bg-rose-900/25 border-rose-800/60 text-rose-200';
+  if (!Number.isFinite(current)) {
+    statusKey = 'markets.cta_status_waiting';
+    fallback = 'Waiting for the live S&P 500 snapshot.';
+    statusClass = 'bg-slate-800/60 border-slate-700 text-slate-300';
+  } else if (current >= Number(triggers.short)) {
+    statusKey = 'markets.cta_status_above_all';
+    fallback = 'Above all reported pivots.';
+    statusClass = 'bg-emerald-900/20 border-emerald-800/60 text-emerald-200';
+  } else if (Number.isFinite(current) && current >= Number(triggers.medium)) {
+    statusKey = 'markets.cta_status_short_broken';
+    fallback = 'Short-term pivot breached.';
+    statusClass = 'bg-amber-900/20 border-amber-800/60 text-amber-200';
+  } else if (Number.isFinite(current) && current >= Number(triggers.long)) {
+    statusKey = 'markets.cta_status_medium_broken';
+    fallback = 'Medium-term pivot breached.';
+    statusClass = 'bg-orange-900/20 border-orange-800/60 text-orange-200';
+  }
+  status.className = 'text-xs px-3 py-2 rounded-lg border mb-4 ' + statusClass;
+  status.textContent = _ctaT(statusKey, fallback);
+
+  const source = document.getElementById('ctaSource');
+  source.href = latest.source_url || '#';
+  source.title = latest.source_title || '';
+  _renderCtaFlowGrid(latest);
+
+  if (_ctaPositionChartInst) _ctaPositionChartInst.destroy();
+  _ctaPositionChartInst = _buildCtaPositionChart();
+  if (_ctaTriggerChartInst) _ctaTriggerChartInst.destroy();
+  _ctaTriggerChartInst = _buildCtaTriggerChart('ctaTriggerChart');
+}
+
+document.addEventListener('i18n:langchange', () => {
+  if (_ctaData) _renderCtaTracker();
+});
 
 // ── Compute YTD from daily data when server value is null ────────────
 function _computeYtd(d) {
@@ -3223,6 +3538,14 @@ function expandMktsChart(kind) {
   const subEl    = document.getElementById('mktsModalSub');
   if (_mktsModalChart) { _mktsModalChart.destroy(); _mktsModalChart = null; }
 
+  if (kind === 'cta' && _ctaData && _mkData) {
+    titleEl.textContent = I18n.t('markets.cta_title') || 'Goldman Sachs CTA Positioning Tracker';
+    subEl.textContent = I18n.t('markets.cta_trigger_chart') || 'S&P 500 vs latest reported CTA pivots';
+    modal.style.display = 'flex';
+    _mktsModalChart = _buildCtaTriggerChart('mktsModalCanvas');
+    return;
+  }
+
   // For charts with inline plugins (functions), render fresh into modal canvas
   if (kind === 'idx' && _mkData) {
     titleEl.textContent = idxLabel(_curIdx) + ' — ' + (I18n.t('markets.hist_title') || 'Price History');
@@ -3492,6 +3815,11 @@ function _mktsModalConfig(kind) {
   const pcrP          = fetch('/api/put-call-ratio').then(r => r.json());
   const goldRatiosP   = fetch('/api/gold-ratios').then(r => r.json());
   const yieldCurveP   = fetch('/api/yield-curve').then(r => r.json());
+  const ctaP          = fetch('/api/cta-positioning').then(async r => {
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'CTA data failed');
+    return data;
+  });
 
   // Resolve each as soon as it arrives — don't wait for the slowest
   fearGreedP
@@ -3505,6 +3833,9 @@ function _mktsModalConfig(kind) {
   pcrP
     .then(d => renderPcr(d))
     .catch(e => { document.getElementById('pcrLoading').textContent = '⚠ ' + e.message; });
+  ctaP
+    .then(d => { _ctaData = d; _renderCtaTracker(); })
+    .catch(e => { document.getElementById('ctaLoading').textContent = '⚠ ' + e.message; });
 
   // VIX vs PCR correlation chart — build after both VIX (from /api/markets) and PCR arrive
   let _vixPcrBuilt = false;
@@ -3608,6 +3939,8 @@ function _mktsModalConfig(kind) {
     const resp = await fetch('/api/markets');
     _mkData = await resp.json();
     if (!resp.ok) throw new Error(_mkData.error || 'Failed');
+
+    _renderCtaTracker();
 
     document.getElementById('marketsLoading').style.display = 'none';
 

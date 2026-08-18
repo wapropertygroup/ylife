@@ -4426,6 +4426,14 @@ def markets():
                            peer_groups=list(PEER_GROUPS.keys()))
 
 
+@bp.route("/api/cta-positioning")
+def api_cta_positioning():
+    """Dated Goldman CTA snapshots and the latest reported SPX trigger levels."""
+    from ystocker.cta import get_cta_positioning
+
+    return jsonify(get_cta_positioning())
+
+
 # ---------------------------------------------------------------------------
 # Commodities  (/commodities)
 # ---------------------------------------------------------------------------
