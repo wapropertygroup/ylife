@@ -133,10 +133,12 @@ log "Connecting to $EC2_USER@$HOST ($APP_DIR)"
 log "Apps: $(for a in "${APPS[@]}"; do echo -n "${a%%|*} "; done)"
 
 log "Waiting for remote bootstrap to finish..."
-# Poll for "Bootstrap complete" in /var/log/app-init.log
+# A successful repair deploy leaves its own marker because cloud-init's status
+# and log remain permanently failed after an early bootstrap dependency error.
 for i in $(seq 1 60); do
-  if ssh $SSH_OPTS "$EC2_USER@$HOST" "grep -q 'Bootstrap complete' /var/log/app-init.log 2>/dev/null" &>/dev/null; then
-    log "✓ Remote bootstrap complete"
+  if ssh $SSH_OPTS "$EC2_USER@$HOST" \
+    "sudo test -f /var/lib/ystocker/deploy-ready || grep -q 'Bootstrap complete' /var/log/app-init.log 2>/dev/null" &>/dev/null; then
+    log "✓ Remote bootstrap/deploy repair complete"
     break
   fi
   _BOOTSTRAP_STATUS=$(ssh $SSH_OPTS "$EC2_USER@$HOST" \
@@ -201,7 +203,10 @@ fi
 
 echo "[\$(TS)] Ensuring writable runtime directories..."
 sudo install -d -o "\$RUN_USER" -g "\$RUN_USER" -m 755 \
-  "\$APP_DIR/cache" "\$APP_DIR/cache/agents" "\$APP_DIR/.gunicorn"
+  "\$APP_DIR/cache" "\$APP_DIR/cache/agents" \
+  "\$APP_DIR/cache/tradingagents/cache" \
+  "\$APP_DIR/cache/tradingagents/logs" \
+  "\$APP_DIR/cache/tradingagents/memory" "\$APP_DIR/.gunicorn"
 
 echo "[\$(TS)] Ensuring TradingAgents environment..."
 sudo bash "\$APP_DIR/deploy/install-tradingagents.sh" \
@@ -244,7 +249,8 @@ fi
 # To re-enable, set INSTALL_PLAYWRIGHT=1 in this shell before running deploy.
 if [[ "\${INSTALL_PLAYWRIGHT:-0}" == "1" ]]; then
   echo "[\$(TS)]    Installing optional Playwright package..."
-  sudo "\$APP_DIR/venv/bin/pip" install -q --retries 12 --timeout 60 'playwright>=1.40.0'
+  sudo "\$APP_DIR/venv/bin/pip" install -q --retries 12 --timeout 60 'playwright>=1.40.0' || \
+      echo "[\$(TS)]    ⚠ Playwright package install failed — continuing without browser scraping"
   echo "[\$(TS)]    Installing Chromium system dependencies via dnf..."
   sudo dnf install -y -q \\
       alsa-lib atk at-spi2-atk at-spi2-core cairo cups-libs dbus-libs \\
@@ -307,6 +313,9 @@ WorkingDirectory=\${APP_DIR}
 Environment="PATH=\${APP_DIR}/venv/bin"
 Environment="TRADINGAGENTS_DIR=/opt/tradingagents"
 Environment="TRADINGAGENTS_PYTHON=/opt/tradingagents/venv/bin/python"
+Environment="TRADINGAGENTS_CACHE_DIR=\${APP_DIR}/cache/tradingagents/cache"
+Environment="TRADINGAGENTS_RESULTS_DIR=\${APP_DIR}/cache/tradingagents/logs"
+Environment="TRADINGAGENTS_MEMORY_LOG_PATH=\${APP_DIR}/cache/tradingagents/memory/trading_memory.md"
 # glibc opens a malloc arena per thread and never shrinks one, so a long-lived
 # worker fragments into hundreds of MB of retained heap. Cap the arena count.
 Environment="MALLOC_ARENA_MAX=2"
@@ -481,6 +490,9 @@ if [[ \${#CERTBOT_DOMAINS[@]} -gt 0 ]]; then
 else
   echo "[\$(TS)]    All nginx configs unchanged — SSL intact"
 fi
+
+sudo install -d -m 755 /var/lib/ystocker
+sudo touch /var/lib/ystocker/deploy-ready
 REMOTE
 
 log "✓ Deploy complete"

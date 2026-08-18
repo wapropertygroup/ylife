@@ -51,6 +51,7 @@ from typing import Any, Optional
 log = logging.getLogger(__name__)
 
 JOB_DIR = Path(__file__).parent.parent / "cache" / "agents"
+TA_RUNTIME_DIR = JOB_DIR.parent / "tradingagents"
 JOBS_TABLE_NAME = "ystocker-agent-jobs"
 JOBS_USER_INDEX = "user-created-at-index"
 JOBS_STATUS_INDEX = "status-created-at-index"
@@ -133,6 +134,12 @@ def _child_env() -> dict[str, str]:
     env.setdefault("TRADINGAGENTS_MAX_DEBATE_ROUNDS", DEFAULT_DEBATE_ROUNDS)
     env.setdefault("TRADINGAGENTS_MAX_RISK_ROUNDS", DEFAULT_RISK_ROUNDS)
     env.setdefault("TRADINGAGENTS_OUTPUT_LANGUAGE", DEFAULT_LANGUAGE)
+    env.setdefault("TRADINGAGENTS_CACHE_DIR", str(TA_RUNTIME_DIR / "cache"))
+    env.setdefault("TRADINGAGENTS_RESULTS_DIR", str(TA_RUNTIME_DIR / "logs"))
+    env.setdefault(
+        "TRADINGAGENTS_MEMORY_LOG_PATH",
+        str(TA_RUNTIME_DIR / "memory" / "trading_memory.md"),
+    )
     env["PYTHONUNBUFFERED"] = "1"
     return env
 
