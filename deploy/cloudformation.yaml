@@ -150,6 +150,40 @@ Resources:
         - { IpProtocol: "-1", CidrIp: "0.0.0.0/0" }
       Tags: [{ Key: Name, Value: !Sub "${AWS::StackName}-sg" }]
 
+  # -- Durable agent history ---------------------------------------------------
+
+  AgentJobsTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: ystocker-agent-jobs
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - { AttributeName: id, AttributeType: S }
+        - { AttributeName: user, AttributeType: S }
+        - { AttributeName: status, AttributeType: S }
+        - { AttributeName: created_at, AttributeType: S }
+      KeySchema:
+        - { AttributeName: id, KeyType: HASH }
+      GlobalSecondaryIndexes:
+        - IndexName: user-created-at-index
+          KeySchema:
+            - { AttributeName: user, KeyType: HASH }
+            - { AttributeName: created_at, KeyType: RANGE }
+          Projection: { ProjectionType: ALL }
+        - IndexName: status-created-at-index
+          KeySchema:
+            - { AttributeName: status, KeyType: HASH }
+            - { AttributeName: created_at, KeyType: RANGE }
+          Projection: { ProjectionType: ALL }
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+      Tags:
+        - { Key: Name, Value: ystocker-agent-jobs }
+
   # -- IAM role ----------------------------------------------------------------
 
   InstanceRole:
@@ -270,6 +304,11 @@ Resources:
               [ -f "$APP_DIR/$req" ] && "$APP_DIR/venv/bin/pip" install --retries 12 --timeout 60 -r "$APP_DIR/$req"
             done
 
+            if ! bash "$APP_DIR/deploy/install-tradingagents.sh" \
+              "$APP_DIR" "/opt/tradingagents" "$APP_USER"; then
+              echo "WARNING: TradingAgents installation failed — normal apps will continue."
+            fi
+
             mkdir -p "$APP_DIR/cache"
             chown -R "$APP_USER:$APP_USER" "$APP_DIR"
             export HOME=/root
@@ -321,6 +360,8 @@ Resources:
             WorkingDirectory=$APP_DIR
             Environment="PATH=$APP_DIR/venv/bin"
             Environment="AWS_REGION=${AWS::Region}"
+            Environment="TRADINGAGENTS_DIR=/opt/tradingagents"
+            Environment="TRADINGAGENTS_PYTHON=/opt/tradingagents/venv/bin/python"
             ExecStart=$APP_DIR/venv/bin/gunicorn \
                       --workers 1 \
                       --bind 127.0.0.1:$PORT \

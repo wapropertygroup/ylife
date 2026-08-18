@@ -31,6 +31,7 @@ is IO-bound on LLM calls but its process is not free; queued jobs wait.
 """
 from __future__ import annotations
 
+import gzip
 import json
 import logging
 import os
@@ -50,6 +51,10 @@ from typing import Any, Optional
 log = logging.getLogger(__name__)
 
 JOB_DIR = Path(__file__).parent.parent / "cache" / "agents"
+JOBS_TABLE_NAME = "ystocker-agent-jobs"
+JOBS_USER_INDEX = "user-created-at-index"
+JOBS_STATUS_INDEX = "status-created-at-index"
+_DDB_MAX_PAYLOAD_BYTES = 380_000
 
 # Where the other repo lives and which interpreter can import it. ystocker's own
 # venv has none of langchain, so this must point at TradingAgents' environment.
@@ -63,7 +68,8 @@ TA_PYTHON = os.environ.get("TRADINGAGENTS_PYTHON", "")
 # 25-minute ceiling would have killed good runs mid-debate.
 RUN_TIMEOUT = float(os.environ.get("TRADINGAGENTS_TIMEOUT", "5400"))
 
-# Keep at most this many job records on disk.
+# Keep this many recent jobs in listings and in the local runtime cache.
+# DynamoDB retains the durable history beyond this window.
 MAX_JOBS = 60
 
 # How many finished reports the /agents page shows a visitor who is not signed
@@ -420,8 +426,173 @@ def _interpreter() -> str:
 
 
 # ---------------------------------------------------------------------------
-# Job store — plain files, so a worker recycle cannot lose a run
+# Job store — DynamoDB for durable history, local files for live sidecars
 # ---------------------------------------------------------------------------
+
+_jobs_table = None
+_jobs_ddb_unavailable_until = 0.0
+_jobs_ddb_lock = threading.Lock()
+_ddb_backfilled_ids: set[str] = set()
+
+
+def _mark_jobs_ddb_unavailable() -> None:
+    global _jobs_table, _jobs_ddb_unavailable_until
+    _jobs_table = None
+    _jobs_ddb_unavailable_until = time.time() + 60
+
+
+def _get_jobs_table():
+    """Return the agent-history table, with a short retry backoff."""
+    global _jobs_table, _jobs_ddb_unavailable_until
+    if _jobs_table is not None:
+        return _jobs_table
+    if time.time() < _jobs_ddb_unavailable_until:
+        return None
+    with _jobs_ddb_lock:
+        if _jobs_table is not None:
+            return _jobs_table
+        if time.time() < _jobs_ddb_unavailable_until:
+            return None
+        try:
+            import boto3
+
+            ddb = boto3.resource(
+                "dynamodb",
+                region_name=os.environ.get("AWS_REGION", "us-west-2"),
+            )
+            table = ddb.Table(JOBS_TABLE_NAME)
+            table.load()
+            _jobs_table = table
+            log.info("agents: DynamoDB history connected: %s", JOBS_TABLE_NAME)
+        except Exception as exc:
+            log.warning("agents: DynamoDB history unavailable: %s", exc)
+            _mark_jobs_ddb_unavailable()
+        return _jobs_table
+
+
+def _encode_job(job: dict[str, Any]) -> bytes:
+    raw = json.dumps(
+        job,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        default=str,
+    ).encode("utf-8")
+    payload = gzip.compress(raw, compresslevel=6)
+    if len(payload) > _DDB_MAX_PAYLOAD_BYTES:
+        raise ValueError(
+            f"compressed job is {len(payload)} bytes; DynamoDB limit is 400 KB"
+        )
+    return payload
+
+
+def _decode_job(item: dict[str, Any]) -> Optional[dict[str, Any]]:
+    payload = item.get("payload")
+    if payload is None:
+        return None
+    try:
+        if isinstance(payload, str):
+            raw = payload.encode("utf-8")
+        else:
+            raw = gzip.decompress(bytes(payload))
+        job = json.loads(raw)
+        return job if isinstance(job, dict) else None
+    except (EOFError, OSError, TypeError, ValueError) as exc:
+        log.warning("agents: unreadable DynamoDB job %s: %s", item.get("id"), exc)
+        return None
+
+
+def _ddb_write(job: dict[str, Any]) -> bool:
+    table = _get_jobs_table()
+    if table is None:
+        return False
+    try:
+        item = {
+            "id": job["id"],
+            "payload": _encode_job(job),
+        }
+        owner = (job.get("user") or "").strip().lower()
+        created_at = str(job.get("created_at") or "").strip()
+        status = str(job.get("status") or "").strip().lower()
+        if owner:
+            item["user"] = owner
+        if created_at:
+            item["created_at"] = created_at
+        if status:
+            item["status"] = status
+        table.put_item(Item=item)
+        return True
+    except ValueError as exc:
+        log.error("agents: job %s is too large for DynamoDB: %s", job.get("id"), exc)
+    except Exception as exc:
+        log.warning("agents: DynamoDB write failed for %s: %s", job.get("id"), exc)
+        _mark_jobs_ddb_unavailable()
+    return False
+
+
+def _ddb_get(job_id: str) -> Optional[dict[str, Any]]:
+    table = _get_jobs_table()
+    if table is None:
+        return None
+    try:
+        item = table.get_item(Key={"id": job_id}).get("Item")
+        return _decode_job(item) if item else None
+    except Exception as exc:
+        log.warning("agents: DynamoDB read failed for %s: %s", job_id, exc)
+        _mark_jobs_ddb_unavailable()
+        return None
+
+
+def _ddb_jobs(
+    *,
+    user: Optional[str] = None,
+    status: Optional[str] = None,
+    limit: int = MAX_JOBS,
+) -> tuple[list[dict[str, Any]], bool]:
+    table = _get_jobs_table()
+    if table is None or limit <= 0:
+        return [], False
+    try:
+        items: list[dict[str, Any]] = []
+        if user or status:
+            from boto3.dynamodb.conditions import Key
+
+            if user:
+                index_name = JOBS_USER_INDEX
+                condition = Key("user").eq(user.strip().lower())
+            else:
+                index_name = JOBS_STATUS_INDEX
+                condition = Key("status").eq((status or "").strip().lower())
+            request: dict[str, Any] = {
+                "IndexName": index_name,
+                "KeyConditionExpression": condition,
+                "ScanIndexForward": False,
+                "Limit": limit,
+            }
+            while len(items) < limit:
+                response = table.query(**request)
+                items.extend(response.get("Items", []))
+                last_key = response.get("LastEvaluatedKey")
+                if not last_key:
+                    break
+                request["ExclusiveStartKey"] = last_key
+                request["Limit"] = limit - len(items)
+        else:
+            request = {}
+            while True:
+                response = table.scan(**request)
+                items.extend(response.get("Items", []))
+                last_key = response.get("LastEvaluatedKey")
+                if not last_key:
+                    break
+                request["ExclusiveStartKey"] = last_key
+
+        jobs = [job for item in items if (job := _decode_job(item)) is not None]
+        jobs.sort(key=lambda job: job.get("created_at") or "", reverse=True)
+        return jobs[:limit], True
+    except Exception as exc:
+        log.warning("agents: DynamoDB history query failed: %s", exc)
+        _mark_jobs_ddb_unavailable()
+        return [], False
 
 def _events_path(job_id: str) -> Path:
     """Where the child appends its progress events."""
@@ -479,6 +650,7 @@ def _write(job: dict[str, Any]) -> None:
         except BaseException:
             Path(tmp).unlink(missing_ok=True)
             raise
+    _ddb_write(job)
 
 
 def salvage_from_events(job_id: str) -> tuple[str, Optional[str]]:
@@ -623,9 +795,10 @@ def get_job(job_id: str) -> Optional[dict[str, Any]]:
     if not re.fullmatch(r"[0-9a-f]{8,36}", job_id or ""):
         return None
     try:
-        return _reap(json.loads(_job_path(job_id).read_text()))
+        job = json.loads(_job_path(job_id).read_text())
     except Exception:
-        return None
+        job = _ddb_get(job_id)
+    return _reap(job)
 
 
 def owns(job: Optional[dict[str, Any]], email: Optional[str]) -> bool:
@@ -670,6 +843,57 @@ def _record_paths() -> list[Path]:
     return [p for _, p in stamped]
 
 
+def _local_jobs() -> list[dict[str, Any]]:
+    jobs: list[dict[str, Any]] = []
+    for path in _record_paths():
+        try:
+            job = json.loads(path.read_text())
+            if isinstance(job, dict) and job.get("id"):
+                jobs.append(job)
+        except (OSError, TypeError, ValueError):
+            continue
+    return jobs
+
+
+def _records(
+    *,
+    user: Optional[str] = None,
+    status: Optional[str] = None,
+    limit: int = MAX_JOBS,
+) -> list[dict[str, Any]]:
+    durable, ddb_available = _ddb_jobs(user=user, status=status, limit=limit)
+    durable = [
+        job for job in durable
+        if (user is None or owns(job, user))
+        and (not status or (job.get("status") or "").lower() == status.lower())
+    ]
+    durable_ids = {job.get("id") for job in durable}
+    merged = {job["id"]: job for job in durable if job.get("id")}
+
+    for job in _local_jobs():
+        if user is not None and not owns(job, user):
+            continue
+        if status and (job.get("status") or "").lower() != status.lower():
+            continue
+        job_id = job["id"]
+        if (
+            ddb_available
+            and job_id not in durable_ids
+            and job_id not in _ddb_backfilled_ids
+            and _ddb_write(job)
+        ):
+            _ddb_backfilled_ids.add(job_id)
+        merged[job_id] = job
+
+    records: list[dict[str, Any]] = []
+    for job in merged.values():
+        reaped = _reap(job)
+        if reaped is not None:
+            records.append(reaped)
+    records.sort(key=lambda job: job.get("created_at") or "", reverse=True)
+    return records[:limit]
+
+
 def _listing_entry(job: dict[str, Any]) -> dict[str, Any]:
     """Trim a job record down to what a listing or search hit needs.
 
@@ -694,16 +918,12 @@ def list_jobs(limit: int = 20, user: Optional[str] = None) -> list[dict[str, Any
     whenever N busier runs happened to come first.
     """
     out: list[dict[str, Any]] = []
-    for p in _record_paths():
+    for job in _records(user=user):
         if len(out) >= limit:
             break
-        try:
-            j = _reap(json.loads(p.read_text()))
-            if user is not None and not owns(j, user):
-                continue
-            out.append(_listing_entry(j))
-        except Exception:
+        if user is not None and not owns(job, user):
             continue
+        out.append(_listing_entry(job))
     return out
 
 
@@ -758,24 +978,20 @@ def search_jobs(query: str = "", user: Optional[str] = None,
 
     hits: list[tuple[int, int, dict[str, Any]]] = []
     scanned = 0
-    for idx, p in enumerate(_record_paths()):
-        try:
-            j = _reap(json.loads(p.read_text()))
-            if not owns(j, user):
-                continue
-            scanned += 1
-            if status and (j.get("status") or "").lower() != status:
-                continue
-            # An empty query lists everything the filters allow, which is what
-            # makes the search box degrade into the plain history view.
-            rank = _match_rank(j, q) if q else _RANK_TICKER_EXACT
-            if rank is None:
-                continue
-            # idx is the newest-first position, so it breaks ties within a tier
-            # by recency without a second sort key.
-            hits.append((rank, idx, _listing_entry(j)))
-        except Exception:
+    for idx, job in enumerate(_records(user=user)):
+        if not owns(job, user):
             continue
+        scanned += 1
+        if status and (job.get("status") or "").lower() != status:
+            continue
+        # An empty query lists everything the filters allow, which is what
+        # makes the search box degrade into the plain history view.
+        rank = _match_rank(job, q) if q else _RANK_TICKER_EXACT
+        if rank is None:
+            continue
+        # idx is the newest-first position, so it breaks ties within a tier
+        # by recency without a second sort key.
+        hits.append((rank, idx, _listing_entry(job)))
 
     hits.sort(key=lambda h: (h[0], h[1]))
     found = len(hits)
@@ -868,8 +1084,8 @@ def _publishable(job: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
-# Pool cache. Building the pool parses every job record on disk — up to
-# ``MAX_JOBS`` files whose report bodies run to tens of KB each — and unlike
+# Pool cache. Building the pool loads up to ``MAX_JOBS`` durable job records
+# whose report bodies run to tens of KB each, and unlike
 # ``search_jobs`` this feeds an *unauthenticated* endpoint, so rebuilding it per
 # request would let anyone outside turn a page load into megabytes of JSON
 # parsing on a box with two vCPUs shared by eight apps. The cached pool holds no
@@ -895,13 +1111,9 @@ def _showcase_pool() -> list[dict[str, Any]]:
         return pool
 
     fresh: list[dict[str, Any]] = []
-    for p in _record_paths():          # newest first
-        try:
-            j = _reap(json.loads(p.read_text()))
-        except Exception:
-            continue                   # a stale record is not worth failing on
-        if _is_showcase(j):
-            fresh.append(_publishable(j))
+    for job in _records(status="done"):
+        if _is_showcase(job):
+            fresh.append(_publishable(job))
 
     with _showcase_lock:
         _showcase_cache = (now, fresh)
@@ -913,8 +1125,9 @@ def showcase_jobs(limit: int = SHOWCASE_SIZE) -> list[dict[str, Any]]:
 
     Sampled rather than truncated because that is the honest impression to give:
     always showing the newest ten would hide everything older, and a visitor who
-    reloads learns there is more here than one screenful. ``_prune`` keeps only
-    ``MAX_JOBS`` records, so the pool is a rolling window over recent work.
+    reloads learns there is more here than one screenful. The durable query
+    returns the latest ``MAX_JOBS`` completed records, so the pool is a rolling
+    window over recent work.
 
     The draw is stable for an hour rather than fresh per request -- see the seed
     below for why.
@@ -936,7 +1149,7 @@ def showcase_jobs(limit: int = SHOWCASE_SIZE) -> list[dict[str, Any]]:
         # the pool's contents, which would re-roll on every finished run.
         rng = random.Random(datetime.now(timezone.utc).strftime("%Y-%m-%dT%H"))
         # Sampled by index and re-sorted so the newest-first order of
-        # ``_record_paths`` survives into the result; ``random.sample`` on the
+        # the durable query survives into the result; ``random.sample`` on the
         # records themselves would also shuffle them, and the page groups by date.
         sample = [pool[i] for i in sorted(rng.sample(range(len(pool)), limit))]
     log.info("agents: showcase served %d of %d eligible reports", len(sample), len(pool))
@@ -946,10 +1159,10 @@ def showcase_jobs(limit: int = SHOWCASE_SIZE) -> list[dict[str, Any]]:
 def showcase_job(job_id: str) -> Optional[dict[str, Any]]:
     """One sampled report with its body, anonymised, or None if it may not be shown.
 
-    Eligibility is re-checked against the record on disk rather than trusted from
-    a listing: the id is the only thing the caller supplies, and a run whose owner
-    has since been dropped from ``AGENTS_SHOWCASE_EMAILS`` must stop being
-    readable at the same moment it stops being listed.
+    Eligibility is re-checked against the durable record rather than trusted
+    from a listing: the id is the only thing the caller supplies, and a run
+    whose owner has since been dropped from ``AGENTS_SHOWCASE_EMAILS`` must stop
+    being readable at the same moment it stops being listed.
     """
     job = get_job(job_id)
     if not _is_showcase(job):
@@ -1227,8 +1440,8 @@ _NOISE = (
     "Both GOOGLE_API_KEY and GEMINI_API_KEY are set",
     # google-genai style advice about its own API, not a problem with the run.
     "Direct use of automatic function calling (AFC)",
-    # FRED is an optional data source and no key is configured; TradingAgents
-    # already falls through to the next vendor by design.
+    # FRED is an optional data source; TradingAgents falls through to the next
+    # vendor if its key is unavailable.
     "Vendor 'fred' not configured",
     "Optional macro_data unavailable",
     "FRED_API_KEY environment variable is not set",

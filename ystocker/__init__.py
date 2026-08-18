@@ -77,6 +77,7 @@ def _load_secrets_from_ssm() -> None:
 
     Parameters fetched:
       /ystocker/GEMINI_API_KEY  → os.environ["GEMINI_API_KEY"]
+      /ystocker/FRED_API_KEY    → os.environ["FRED_API_KEY"]
       /ystocker/AGENTS_ALLOWED_EMAILS → os.environ["AGENTS_ALLOWED_EMAILS"]
     """
     import logging
@@ -92,6 +93,7 @@ def _load_secrets_from_ssm() -> None:
 
     SSM_PARAMS = {
         "/ystocker/GEMINI_API_KEY":     "GEMINI_API_KEY",
+        "/ystocker/FRED_API_KEY":       "FRED_API_KEY",
         "/ystocker/YOUTUBE_API_KEY":    "YOUTUBE_API_KEY",
         "/ystocker/SES_FROM_EMAIL":     "SES_FROM_EMAIL",
         "/ystocker/GOOGLE_CLIENT_ID":   "GOOGLE_CLIENT_ID",

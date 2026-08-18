@@ -203,6 +203,10 @@ echo "[\$(TS)] Ensuring writable runtime directories..."
 sudo install -d -o "\$RUN_USER" -g "\$RUN_USER" -m 755 \
   "\$APP_DIR/cache" "\$APP_DIR/cache/agents" "\$APP_DIR/.gunicorn"
 
+echo "[\$(TS)] Ensuring TradingAgents environment..."
+sudo bash "\$APP_DIR/deploy/install-tradingagents.sh" \
+  "\$APP_DIR" "/opt/tradingagents" "\$RUN_USER"
+
 # ── Dependencies ─────────────────────────────────────────────────────────────
 STEP=3
 echo "[\$(TS)][\$STEP/\$TOTAL_STEPS] Installing/updating dependencies..."
@@ -301,6 +305,8 @@ User=\${RUN_USER}
 Group=\${RUN_USER}
 WorkingDirectory=\${APP_DIR}
 Environment="PATH=\${APP_DIR}/venv/bin"
+Environment="TRADINGAGENTS_DIR=/opt/tradingagents"
+Environment="TRADINGAGENTS_PYTHON=/opt/tradingagents/venv/bin/python"
 # glibc opens a malloc arena per thread and never shrinks one, so a long-lived
 # worker fragments into hundreds of MB of retained heap. Cap the arena count.
 Environment="MALLOC_ARENA_MAX=2"
@@ -314,7 +320,7 @@ MemoryMax=\${mem_max}
 # ystocker launches the TradingAgents analysis as a detached subprocess that can
 # run for tens of minutes; start_new_session gives it its own session, but a
 # session is not a cgroup, so the default KillMode=control-group made every
-# \`systemctl restart\` kill in-flight runs -- a deploy silently destroyed a
+# systemctl restart used to kill in-flight runs -- a deploy silently destroyed a
 # ten-minute analysis and the ~22 Gemini Pro calls it had already paid for.
 # gunicorn's master reaps its own workers on SIGTERM, so nothing is orphaned.
 KillMode=process
