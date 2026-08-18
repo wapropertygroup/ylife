@@ -1299,12 +1299,15 @@ def _refund_preflight(job: dict[str, Any], why: str) -> None:
     so it is not refunded -- silently handing quota back for those would let a
     run that burns credits and then dies be repeated for free.
     """
-    if job.get("selftest"):
+    if job.get("selftest") or job.get("quota_refunded"):
         return          # never charged
     try:
         from ystocker import quota
 
         quota.refund(job.get("user"), job.get("quota_day"))
+        job["quota_refunded"] = True
+        job["quota_refund_reason"] = why
+        _write(job)
         log.info("agents: refunded %s (%s)", job.get("id"), why)
     except Exception as exc:  # noqa: BLE001
         log.warning("agents: refund failed for %s: %s", job.get("id"), exc)
@@ -1425,6 +1428,11 @@ def _run(job_id: str) -> None:
         # before any client is constructed, so nothing was spent.
         if rc == 2:
             _refund_preflight(job, "child could not import tradingagents")
+        elif (rc == 3
+              and job.get("status") == "error"
+              and "PermissionError" in (job.get("error") or "")
+              and ".tradingagents" in (job.get("error") or "")):
+            _refund_preflight(job, "TradingAgents runtime path was not writable")
         # A run killed by the provider's daily cap returns no report at all, and
         # no amount of retrying today will change that. Charging the user for a
         # capacity failure they cannot influence, and got nothing from, is not
