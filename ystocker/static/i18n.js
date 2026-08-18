@@ -31,6 +31,8 @@ const I18n = (() => {
     'agents.float_open':  { en: 'Trading Agents', zh: '交易智能体' },
     'agents.float_status':{ en: 'AI research desk', zh: 'AI 投研台' },
     'agents.float_minimize': { en: 'Minimize', zh: '最小化' },
+    'agents.float_maximize': { en: 'Full screen', zh: '全屏' },
+    'agents.float_restore': { en: 'Restore window', zh: '还原窗口' },
     'agents.float_close': { en: 'Close', zh: '关闭' },
     'agents.float_loading': { en: 'Opening research desk…', zh: '正在打开投研台…' },
     'footer.rss':         { en: 'RSS',      zh: 'RSS 订阅' },

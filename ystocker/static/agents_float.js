@@ -7,6 +7,7 @@
   const launcher = document.getElementById('agentsFloatingLauncher');
   const panel = document.getElementById('agentsFloatingPanel');
   const handle = document.getElementById('agentsFloatingHandle');
+  const maximizeButton = document.getElementById('agentsFloatingMaximize');
   const minimizeButton = document.getElementById('agentsFloatingMinimize');
   const closeButton = document.getElementById('agentsFloatingClose');
   const resizer = document.getElementById('agentsFloatingResizer');
@@ -15,6 +16,7 @@
   const compact = window.matchMedia('(max-width: 700px)');
   const openKey = 'ystocker_agents_float_open';
   const geometryKey = 'ystocker_agents_float_geometry';
+  const maximizedKey = 'ystocker_agents_float_maximized';
   let frameLoaded = false;
   let geometryRestored = false;
   let interaction = null;
@@ -33,6 +35,13 @@
 
   function syncAccessibleLabels() {
     if (typeof I18n === 'undefined') return;
+    const maximized = panel.classList.contains('is-maximized');
+    const labelKey = maximized ? 'agents.float_restore' : 'agents.float_maximize';
+    const maximizeLabel = I18n.t(labelKey)
+      || (maximized ? 'Restore window' : 'Full screen');
+    maximizeButton.dataset.i18nTitle = labelKey;
+    maximizeButton.setAttribute('aria-label', maximizeLabel);
+    maximizeButton.title = maximizeLabel;
     minimizeButton.setAttribute('aria-label', I18n.t('agents.float_minimize') || 'Minimize');
     closeButton.setAttribute('aria-label', I18n.t('agents.float_close') || 'Close');
   }
@@ -60,7 +69,7 @@
   }
 
   function clampPanel() {
-    if (compact.matches || panel.hidden) return;
+    if (compact.matches || panel.hidden || panel.classList.contains('is-maximized')) return;
     const rect = panel.getBoundingClientRect();
     const width = Math.min(rect.width, window.innerWidth - 16);
     const height = Math.min(rect.height, window.innerHeight - 16);
@@ -91,7 +100,7 @@
   }
 
   function saveGeometry() {
-    if (compact.matches || panel.hidden) return;
+    if (compact.matches || panel.hidden || panel.classList.contains('is-maximized')) return;
     const rect = panel.getBoundingClientRect();
     writeStorage(geometryKey, JSON.stringify({
       left: Math.round(rect.left),
@@ -126,8 +135,18 @@
     loading.hidden = false;
   }
 
+  function toggleMaximize() {
+    const maximize = !panel.classList.contains('is-maximized');
+    if (maximize) saveGeometry();
+    panel.classList.toggle('is-maximized', maximize);
+    maximizeButton.setAttribute('aria-pressed', String(maximize));
+    writeStorage(maximizedKey, maximize ? '1' : '0');
+    syncAccessibleLabels();
+    if (!maximize) requestAnimationFrame(clampPanel);
+  }
+
   function startInteraction(event, type) {
-    if (compact.matches || event.button !== 0) return;
+    if (compact.matches || panel.classList.contains('is-maximized') || event.button !== 0) return;
     if (type === 'drag' && event.target.closest('button')) return;
     event.preventDefault();
     const rect = panel.getBoundingClientRect();
@@ -171,6 +190,7 @@
   }
 
   launcher.addEventListener('click', () => openPanel());
+  maximizeButton.addEventListener('click', toggleMaximize);
   minimizeButton.addEventListener('click', minimizePanel);
   closeButton.addEventListener('click', closePanel);
   handle.addEventListener('pointerdown', event => startInteraction(event, 'drag'));
@@ -191,6 +211,9 @@
     if (event.key === 'Escape' && !panel.hidden) minimizePanel();
   });
 
+  const startsMaximized = readStorage(maximizedKey) === '1';
+  panel.classList.toggle('is-maximized', startsMaximized);
+  maximizeButton.setAttribute('aria-pressed', String(startsMaximized));
   syncAccessibleLabels();
   if (readStorage(openKey) === '1') openPanel(false);
 })();
