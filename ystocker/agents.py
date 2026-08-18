@@ -1045,6 +1045,31 @@ def _quota_day() -> Optional[str]:
         return None
 
 
+def _try_salvage(job: dict[str, Any], why: str) -> bool:
+    """Turn a failed run into a recovered one when its stream holds the analysis.
+
+    The child's own error is preserved in ``failed_with`` rather than discarded:
+    the report is usable, but whatever broke still needs diagnosing, and a job
+    that silently reports success would hide it.
+    """
+    if job.get("selftest"):
+        return False
+    try:
+        recovered, decision = salvage_from_events(job["id"])
+    except Exception as exc:  # noqa: BLE001
+        log.warning("agents: salvage failed for %s: %s", job.get("id"), exc)
+        return False
+    if not recovered.strip():
+        return False
+    job["failed_with"] = job.get("error") or why
+    job.update(status="done", report=recovered, recovered=True, error=None)
+    if decision and not job.get("decision"):
+        job["decision"] = decision
+    log.warning("agents: %s failed (%s) but %d chars were recovered from its "
+                "stream", job.get("id"), why, len(recovered))
+    return True
+
+
 def _refund_preflight(job: dict[str, Any], why: str) -> None:
     """Return the quota for a run that never reached an LLM.
 
@@ -1161,8 +1186,16 @@ def _run(job_id: str) -> None:
                 job.update(status="error",
                            error=("The run produced no result block. Exit code "
                                   f"{rc}. See the log below."))
+                _try_salvage(job, f"no result block (exit {rc})")
             elif not payload.get("ok"):
                 job.update(status="error", error=str(payload.get("error", "unknown error")))
+                # A failure at the very end still leaves a finished analysis in
+                # the stream. This is not hypothetical: a bug of mine let three
+                # runs debate to completion and then die in the package's own
+                # bookkeeping, and all three were fully recoverable from their
+                # events. Twenty-odd Pro calls each is too much to discard over
+                # failed bookkeeping.
+                _try_salvage(job, str(payload.get("error", ""))[:120])
             else:
                 job.update(status="done", decision=payload.get("decision"),
                            report=payload.get("report") or "")
