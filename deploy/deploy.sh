@@ -3,7 +3,7 @@
 set -euo pipefail
 
 # ── Configuration ────────────────────────────────────────────────────────────
-# Each app: NAME|PORT|DOMAIN|REQUIREMENTS_FILE|STATIC_DIR
+# Each app: NAME|PORT|DOMAIN|REQUIREMENTS_FILE|STATIC_DIR|CERT_NAME
 # Add new apps by adding a line to APPS below.
 EC2_USER="ec2-user"
 HOST="stock.li-family.us"
@@ -12,14 +12,14 @@ RUN_USER="ystocker"
 CERT_EMAIL="admin@li-family.us"
 
 APPS=(
-  "ystocker|8000|stock.li-family.us|requirements_stocker.txt|ystocker/static"
-  "yplanner|8001|planner.li-family.us|requirements_planner.txt|yplanner/static"
-  "yplanter|8002|planter.li-family.us|requirements_planter.txt|yplanter/static"
-  "yhome|8003|li-family.us www.li-family.us home.li-family.us|requirements_home.txt|yhome/static"
-  "ytracker|8004|tracker.li-family.us|requirements_tracker.txt|ytracker/static"
-  "ypay|8005|pay.li-family.us|requirements_pay.txt|ypay/static"
-  "yimage|8006|image.li-family.us|requirements_image.txt|yimage/static"
-  "ybg|8007|ybackground.li-family.us|requirements_bg.txt|ybg/static"
+  "ystocker|8000|stock.li-family.us|requirements_stocker.txt|ystocker/static|stock.li-family.us"
+  "yplanner|8001|planner.li-family.us|requirements_planner.txt|yplanner/static|planner.li-family.us"
+  "yplanter|8002|planter.li-family.us|requirements_planter.txt|yplanter/static|planter.li-family.us"
+  "yhome|8003|home.li-family.us|requirements_home.txt|yhome/static|li-family.us"
+  "ytracker|8004|tracker.li-family.us|requirements_tracker.txt|ytracker/static|tracker.li-family.us"
+  "ypay|8005|pay.li-family.us|requirements_pay.txt|ypay/static|pay.li-family.us"
+  "yimage|8006|image.li-family.us|requirements_image.txt|yimage/static|image.li-family.us"
+  "ybg|8007|ybackground.li-family.us|requirements_bg.txt|ybg/static|ybackground.li-family.us"
 )
 
 # CloudFormation
@@ -168,12 +168,12 @@ APPS_RAW="$APPS_CONFIG"
 TS() { date '+%Y-%m-%d %H:%M:%S'; }
 
 # Parse apps into arrays
-NAMES=(); PORTS=(); DOMAINS=(); REQS=(); STATICS=()
+NAMES=(); PORTS=(); DOMAINS=(); REQS=(); STATICS=(); CERT_NAMES=()
 IFS=';' read -ra _APPS <<< "\$APPS_RAW"
 for _app in "\${_APPS[@]}"; do
-  IFS='|' read -r name port domain req static <<< "\$_app"
+  IFS='|' read -r name port domain req static cert_name <<< "\$_app"
   [[ -z "\$name" ]] && continue
-  NAMES+=("\$name"); PORTS+=("\$port"); DOMAINS+=("\$domain"); REQS+=("\$req"); STATICS+=("\$static")
+  NAMES+=("\$name"); PORTS+=("\$port"); DOMAINS+=("\$domain"); REQS+=("\$req"); STATICS+=("\$static"); CERT_NAMES+=("\$cert_name")
 done
 
 NUM_APPS=\${#NAMES[@]}
@@ -386,7 +386,6 @@ done
 NGINX_STEP=\$((4 + NUM_APPS))
 echo "[\$(TS)][\$NGINX_STEP/\$TOTAL_STEPS] Ensuring nginx is configured..."
 NGINX_CHANGED=false
-CERTBOT_DOMAINS=()
 
 ensure_nginx() {
   local name="\$1" port="\$2" domain="\$3" static="\$4"
@@ -432,7 +431,6 @@ server {
 }
 NGINXCONF
   NGINX_CHANGED=true
-  CERTBOT_DOMAINS+=("\$domain")
   echo "[\$(TS)]    \$name nginx config updated"
 }
 
@@ -458,37 +456,52 @@ fi
 SSL_STEP=\$((5 + NUM_APPS))
 echo "[\$(TS)][\$SSL_STEP/\$TOTAL_STEPS] Ensuring SSL certificates..."
 
-if [[ \${#CERTBOT_DOMAINS[@]} -gt 0 ]]; then
-  sudo dnf install -y certbot python3-certbot-nginx -q 2>&1 | tail -1
-  SSL_FAILED=()
-  for domains in "\${CERTBOT_DOMAINS[@]}"; do
+tls_covers_domain() {
+  local domain="\$1" certificate
+  certificate=\$(timeout 5 openssl s_client -connect 127.0.0.1:443 -servername "\$domain" </dev/null 2>/dev/null) || return 1
+  openssl x509 -noout -checkhost "\$domain" <<< "\$certificate" >/dev/null 2>&1
+}
+
+sudo dnf install -y certbot python3-certbot-nginx -q 2>&1 | tail -1
+SSL_FAILED=()
+for i in \$(seq 0 \$((NUM_APPS - 1))); do
+  domains="\${DOMAINS[\$i]}"
+  cert_name="\${CERT_NAMES[\$i]}"
+  NEEDS_CERT=false
+  for d in \$domains; do
+    if ! tls_covers_domain "\$d"; then
+      NEEDS_CERT=true
+      break
+    fi
+  done
+
+  if [[ "\$NEEDS_CERT" == "true" ]]; then
     echo "[\$(TS)]    Certbot: \$domains"
     CERT_D_FLAGS=""
     for d in \$domains; do
       CERT_D_FLAGS="\$CERT_D_FLAGS -d \$d"
     done
-    FIRST_D=\$(echo \$domains | awk '{print \$1}')
-    # Isolate each domain: this script runs under 'set -euo pipefail', so without
-    # the explicit '|| true' one unresolvable domain aborts the entire deploy and
-    # every app after it in the list silently loses its certificate.
     CERT_RC=0
-    sudo certbot --nginx --cert-name "\$FIRST_D" \$CERT_D_FLAGS \
+    sudo certbot --nginx --cert-name "\$cert_name" \$CERT_D_FLAGS \
       --non-interactive --agree-tos -m "$CERT_EMAIL" --redirect \
-      --allow-subset-of-names > /tmp/certbot-\$FIRST_D.log 2>&1 || CERT_RC=\$?
-    tail -3 /tmp/certbot-\$FIRST_D.log
+      --allow-subset-of-names --reinstall > "/tmp/certbot-\$cert_name.log" 2>&1 || CERT_RC=\$?
+    tail -3 "/tmp/certbot-\$cert_name.log"
     if [[ \$CERT_RC -ne 0 ]]; then
       echo "[\$(TS)]    ✗ Certbot FAILED for \$domains (rc=\$CERT_RC) — continuing"
-      SSL_FAILED+=("\$domains")
     fi
-  done
-  if [[ \${#SSL_FAILED[@]} -gt 0 ]]; then
-    echo "[\$(TS)]    ⚠ SSL incomplete — no certificate for: \${SSL_FAILED[*]}"
-    echo "[\$(TS)]      These hosts will serve a MISMATCHED cert until fixed."
   else
-    echo "[\$(TS)]    ✓ SSL certificates installed"
+    echo "[\$(TS)]    ✓ \$domains SSL already active"
   fi
+
+  for d in \$domains; do
+    tls_covers_domain "\$d" || SSL_FAILED+=("\$d")
+  done
+done
+
+if [[ \${#SSL_FAILED[@]} -gt 0 ]]; then
+  echo "[\$(TS)]    ⚠ SSL incomplete or mismatched for: \${SSL_FAILED[*]}"
 else
-  echo "[\$(TS)]    All nginx configs unchanged — SSL intact"
+  echo "[\$(TS)]    ✓ SSL certificates installed and verified"
 fi
 
 sudo install -d -m 755 /var/lib/ystocker
@@ -497,6 +510,6 @@ REMOTE
 
 log "✓ Deploy complete"
 for app in "${APPS[@]}"; do
-  IFS='|' read -r name port domain req static <<< "$app"
+  IFS='|' read -r name port domain req static cert_name <<< "$app"
   log "  $name → https://$domain"
 done
