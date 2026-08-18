@@ -258,13 +258,16 @@ Resources:
               rm -rf /tmp/app-repo
             fi
 
+            install -d -o "$APP_USER" -g "$APP_USER" -m 755 \
+              "$APP_DIR/cache" "$APP_DIR/cache/agents" "$APP_DIR/.gunicorn"
+
             # ── Python venv + deps ───────────────────────────────────────
             python3.11 -m venv "$APP_DIR/venv"
             "$APP_DIR/venv/bin/pip" install --upgrade pip
             "$APP_DIR/venv/bin/pip" install gunicorn
 
             for req in $REQ_FILES; do
-              [ -f "$APP_DIR/$req" ] && "$APP_DIR/venv/bin/pip" install -r "$APP_DIR/$req"
+              [ -f "$APP_DIR/$req" ] && "$APP_DIR/venv/bin/pip" install --retries 12 --timeout 60 -r "$APP_DIR/$req"
             done
 
             mkdir -p "$APP_DIR/cache"

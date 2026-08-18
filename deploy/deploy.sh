@@ -26,7 +26,7 @@ APPS=(
 CF_STACK_NAME="${CF_STACK_NAME:-ystocker}"   # match your actual stack name (or override via env var)
 CF_REGION="us-west-2"
 INSTANCE_TYPE="t3.medium"                    # desired EC2 instance type
-INSTANCE_ID="i-0b0504ed1c16b9b85"            # EC2 instance managed by this stack
+INSTANCE_ID=""
 
 LOG_PREFIX="[deploy $(date '+%Y-%m-%d %H:%M:%S')]"
 log() { echo "$LOG_PREFIX $*"; }
@@ -76,6 +76,9 @@ else
   if [[ "$_CF_STATUS" == "NOT_FOUND" ]]; then
     log "CloudFormation: stack '$CF_STACK_NAME' not found — skipping"
   else
+    INSTANCE_ID=$(aws cloudformation describe-stack-resource \
+      --stack-name "$CF_STACK_NAME" --logical-resource-id Instance --region "$CF_REGION" \
+      --query "StackResourceDetail.PhysicalResourceId" --output text 2>/dev/null || true)
     _CF_TMPL="$(cd "$(dirname "$0")" && pwd)/cloudformation.yaml"
     log "CloudFormation: checking stack '$CF_STACK_NAME' for changes..."
 
@@ -97,7 +100,8 @@ else
           --query "StackResourceDetail.PhysicalResourceId" --output text 2>/dev/null)
         
         if [[ -z "$INSTANCE_ID" || "$INSTANCE_ID" == "None" ]]; then
-          log "WARNING: could not resolve Instance ID from stack. Using hardcoded: $INSTANCE_ID"
+          log "ERROR: could not resolve Instance ID from stack"
+          exit 1
         fi
 
         log "CloudFormation: waiting for EC2 ($INSTANCE_ID) to reach 'running' state..."
@@ -133,6 +137,11 @@ log "Waiting for remote bootstrap to finish..."
 for i in $(seq 1 60); do
   if ssh $SSH_OPTS "$EC2_USER@$HOST" "grep -q 'Bootstrap complete' /var/log/app-init.log 2>/dev/null" &>/dev/null; then
     log "✓ Remote bootstrap complete"
+    break
+  fi
+  if ssh $SSH_OPTS "$EC2_USER@$HOST" "sudo cloud-init status --long 2>/dev/null | grep -q '^status: error'" &>/dev/null; then
+    log "WARNING: Remote bootstrap failed. Continuing with deploy repair..."
+    ssh $SSH_OPTS "$EC2_USER@$HOST" "sudo tail -20 /var/log/app-init.log 2>/dev/null" || true
     break
   fi
   if [[ $i -eq 60 ]]; then
@@ -188,12 +197,16 @@ else
   done
 fi
 
+echo "[\$(TS)] Ensuring writable runtime directories..."
+sudo install -d -o "\$RUN_USER" -g "\$RUN_USER" -m 755 \
+  "\$APP_DIR/cache" "\$APP_DIR/cache/agents" "\$APP_DIR/.gunicorn"
+
 # ── Dependencies ─────────────────────────────────────────────────────────────
 STEP=3
 echo "[\$(TS)][\$STEP/\$TOTAL_STEPS] Installing/updating dependencies..."
 for req in "\${REQS[@]}"; do
   if sudo test -f "\$APP_DIR/\$req"; then
-    sudo "\$APP_DIR/venv/bin/pip" install -q -r "\$APP_DIR/\$req" 2>&1
+    sudo "\$APP_DIR/venv/bin/pip" install -q --retries 12 --timeout 60 -r "\$APP_DIR/\$req" 2>&1
     echo "[\$(TS)]    \$req OK"
   else
     echo "[\$(TS)]    \$req not found — skipping"
@@ -223,8 +236,9 @@ fi
 # Target scrapers already have multiple API fallback strategies that work
 # without a browser, so Playwright is no longer required on EC2.
 # To re-enable, set INSTALL_PLAYWRIGHT=1 in this shell before running deploy.
-if [[ "\${INSTALL_PLAYWRIGHT:-0}" == "1" ]] \
-   && sudo "\$APP_DIR/venv/bin/pip" show playwright >/dev/null 2>&1; then
+if [[ "\${INSTALL_PLAYWRIGHT:-0}" == "1" ]]; then
+  echo "[\$(TS)]    Installing optional Playwright package..."
+  sudo "\$APP_DIR/venv/bin/pip" install -q --retries 12 --timeout 60 'playwright>=1.40.0'
   echo "[\$(TS)]    Installing Chromium system dependencies via dnf..."
   sudo dnf install -y -q \\
       alsa-lib atk at-spi2-atk at-spi2-core cairo cups-libs dbus-libs \\
