@@ -24,6 +24,24 @@
   color: #e2e8f0; font-size: 13px; padding: 8px 12px;
 }
 .ag-input:focus { outline: none; border-color: #6366f1; }
+.ag-form-grid {
+  display: grid;
+  grid-template-columns: minmax(110px, 140px) minmax(170px, 190px) max-content max-content;
+  align-items: end; gap: 12px;
+}
+.ag-form-field { min-width: 0; }
+.ag-form-field .ag-input {
+  box-sizing: border-box; width: 100%; height: 38px;
+}
+.ag-form-actions {
+  display: grid; grid-template-columns: repeat(2, max-content); gap: 8px;
+}
+.ag-form-actions .ag-btn {
+  min-height: 38px; justify-content: center;
+}
+.ag-form-quota {
+  display: flex; align-items: center; min-height: 38px;
+}
 .ag-pill {
   display: inline-flex; align-items: center; gap: 5px;
   padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 600;
@@ -234,7 +252,15 @@
 .ag-hl { background: rgba(99,102,241,.32); color: #e0e7ff; border-radius: 3px; }
 body.agents-embedded .ag-jump { top: 0; }
 body.agents-embedded #agTop { right: 12px; bottom: 12px; }
+@media (max-width: 900px) {
+  .ag-form-grid { grid-template-columns: minmax(100px, .7fr) minmax(170px, 1.3fr); }
+  .ag-form-actions, .ag-form-quota { grid-column: 1 / -1; }
+  .ag-form-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ag-form-quota .ag-quota { box-sizing: border-box; width: 100%; justify-content: center; }
+}
 @media (max-width: 520px) {
+  .ag-form-grid { grid-template-columns: minmax(0, 1fr); }
+  .ag-form-actions, .ag-form-quota { grid-column: 1; }
   /* Too narrow for two columns: the date becomes a heading above its runs. */
   .ag-hist { grid-template-columns: minmax(0, 1fr); column-gap: 0; }
   .ag-hist > .ag-hist-runs { border-top: 0; padding-top: 0; }
@@ -537,22 +563,22 @@ body.agents-embedded #agTop { right: 12px; bottom: 12px; }
 
 <!-- ── Run form ───────────────────────────────────────────────────────── -->
 <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 mb-6 fade-up">
-  <div class="ag-row">
-    <div>
+  <div class="ag-form-grid">
+    <div class="ag-form-field">
       <label class="block text-xs text-slate-500 mb-1" for="agTicker" data-i18n="agents.ticker">Ticker</label>
-      <input id="agTicker" class="ag-input w-28" value="NVDA" maxlength="10" autocomplete="off">
+      <input id="agTicker" class="ag-input" value="NVDA" maxlength="10" autocomplete="off">
     </div>
-    <div>
+    <div class="ag-form-field">
       <label class="block text-xs text-slate-500 mb-1" for="agDate" data-i18n="agents.date">Analysis date</label>
       <input id="agDate" class="ag-input" type="date" value="{{ agent_env.today if agent_env.today else '' }}">
     </div>
-    <div class="pt-5 ag-row">
+    <div class="ag-form-actions">
       <button id="agRun" class="ag-btn" data-i18n="agents.run">▶ Run analysis</button>
       {# A free path to prove the plumbing works end to end without an LLM bill. #}
       <button id="agSelftest" class="ag-btn ag-btn-ghost" data-i18n="agents.selftest">Self-test (no LLM)</button>
     </div>
     {% if quota %}
-    <div class="pt-5">
+    <div class="ag-form-quota">
       <span id="agQuota" class="ag-quota{{ ' ag-quota-out' if quota.remaining == 0 else '' }}"
             data-remaining="{{ quota.remaining }}" data-limit="{{ quota.limit }}">
         <b>{{ quota.remaining }}</b>/{{ quota.limit }}
