@@ -232,6 +232,8 @@
 /* Highlight of the matched part of a ticker, so a substring hit shows why it
    matched -- "T" inside MSFT is otherwise indistinguishable from noise. */
 .ag-hl { background: rgba(99,102,241,.32); color: #e0e7ff; border-radius: 3px; }
+body.agents-embedded .ag-jump { top: 0; }
+body.agents-embedded #agTop { right: 12px; bottom: 12px; }
 @media (max-width: 520px) {
   /* Too narrow for two columns: the date becomes a heading above its runs. */
   .ag-hist { grid-template-columns: minmax(0, 1fr); column-gap: 0; }
@@ -244,18 +246,22 @@
 </style>
 
 <!-- ── Header ─────────────────────────────────────────────────────────── -->
+{% if not agent_embedded %}
 <div class="mb-6 fade-up">
   <h1 class="text-2xl sm:text-3xl font-bold grad-text mb-1" data-i18n="agents.title">Trading Agents</h1>
   <p class="text-slate-400 text-sm" data-i18n="agents.subtitle">
     Runs the TradingAgents multi-agent analysis — analyst, researcher and risk debate rounds — for one ticker and date.
   </p>
 </div>
+{% endif %}
 
 {% if not signed_in %}
 <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 fade-up text-center">
   <p class="text-slate-300 text-sm mb-1" data-i18n="agents.need_signin">Sign in to run an analysis.</p>
   <p class="text-xs text-slate-500 mb-4" data-i18n="agents.need_signin_why">Each run makes live LLM calls that cost real money, so this page is restricted.</p>
-  <a href="{{ url_for('main.login') }}" class="ag-btn" data-i18n="nav.sign_in">Sign In</a>
+  <a href="{{ url_for('main.login', next=url_for('main.agents_page')) }}"
+     {% if agent_embedded %}target="_top"{% endif %}
+     class="ag-btn" data-i18n="nav.sign_in">Sign In</a>
 </div>
 
 {% if showcase %}
@@ -290,7 +296,9 @@
   <div class="ag-report" id="agSampleReport"></div>
   <p class="text-xs text-slate-500 mt-5 pt-4 border-t border-slate-800">
     <span data-i18n="agents.sample_cta">Want this for your own ticker and date?</span>
-    <a href="{{ url_for('main.login') }}" class="text-indigo-400 hover:underline" data-i18n="nav.sign_in">Sign In</a>
+    <a href="{{ url_for('main.login', next=url_for('main.agents_page')) }}"
+       {% if agent_embedded %}target="_top"{% endif %}
+       class="text-indigo-400 hover:underline" data-i18n="nav.sign_in">Sign In</a>
   </p>
 </div>
 
@@ -1268,4 +1276,14 @@
   loadHistory();
 })();
 </script>
+{% if agent_embedded %}
+<script>
+window.addEventListener('message', event => {
+  if (event.origin !== window.location.origin) return;
+  if (event.data && event.data.type === 'ystocker:agents-language') {
+    I18n.setLang(event.data.lang === 'zh' ? 'zh' : 'en');
+  }
+});
+</script>
+{% endif %}
 {% endblock %}

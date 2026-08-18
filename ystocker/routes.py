@@ -2144,7 +2144,8 @@ def agents_page():
     from ystocker.agents import environment_report, is_allowed, showcase_enabled
 
     email = _agent_user()
-    log.info("GET /agents (user=%s)", email or "anon")
+    embedded = request.args.get("embed") == "1"
+    log.info("GET /agents (user=%s, embedded=%s)", email or "anon", embedded)
     from ystocker import quota
     from ystocker.agent_roles import roles_json
 
@@ -2157,6 +2158,7 @@ def agents_page():
         user_email=email or "",
         quota=quota.usage(email) if email else None,
         agent_roles=roles_json(),
+        agent_embedded=embedded,
         # Only consulted by the not-signed-in branch, which shows a sample of
         # finished reports instead of a dead end.
         showcase=showcase_enabled(),

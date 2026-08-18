@@ -1,3 +1,5 @@
+{% set _agents_embedded = agent_embedded|default(false) %}
+{% set _agents_floating = not _agents_embedded and request.endpoint != 'main.agents_page' %}
 <!doctype html>
 <html lang="en" class="h-full">
 <head>
@@ -73,6 +75,10 @@
   <!-- i18n -->
   <script src="{{ url_for('static', filename='i18n.js') }}?v={{ cache_bust or 'dev' }}"></script>
 
+  {% if _agents_floating %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='agents_float.css') }}?v={{ cache_bust or 'dev' }}">
+  {% endif %}
+
   <!-- Google Identity Services (only when configured) -->
   {% if google_client_id %}
   <script src="https://accounts.google.com/gsi/client" async defer></script>
@@ -96,12 +102,14 @@
     tbody tr:hover td { background: rgba(99,102,241,.08); }
     /* Hide x-cloak elements until Alpine.js initializes */
     [x-cloak] { display: none !important; }
+    body.agents-embedded > main { max-width: none; padding: 12px; }
   </style>
 </head>
 
-<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col"
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col{% if _agents_embedded %} agents-embedded{% endif %}"
       x-data='{ navOpen: false, user: {{ current_user|tojson if current_user is defined else "{\"email\":\"\",\"name\":\"\",\"picture\":\"\"}"|safe }} }'>
 
+  {% if not _agents_embedded %}
   <!-- ── Top navigation bar ──────────────────────────────────────────── -->
   <header class="sticky top-0 z-50 bg-slate-900/80 backdrop-blur border-b border-slate-800">
     <div class="max-w-screen-xl mx-auto px-4 sm:px-6 flex items-center h-14 gap-4">
@@ -206,10 +214,6 @@
             <a href="{{ url_for('main.multiples') }}"
                class="block px-4 py-2 text-xs text-slate-300 hover:text-white hover:bg-brand/20 transition"
                data-i18n="nav.multiples_long">P/E Multiples</a>
-            <div class="border-t border-slate-800 my-1"></div>
-            <a href="{{ url_for('main.agents_page') }}"
-               class="block px-4 py-2 text-xs text-slate-300 hover:text-white hover:bg-brand/20 transition"
-               data-i18n="nav.agents">Trading Agents</a>
           </div>
         </div>
         <a href="{{ url_for('main.daily_report') }}"
@@ -359,7 +363,6 @@
           <a href="{{ url_for('main.fedwatch') }}"  class="px-3 py-2 rounded-md text-sm text-slate-300 hover:bg-slate-800 truncate" data-i18n="nav.fedwatch">Rates</a>
           <a href="{{ url_for('main.housing') }}"   class="px-3 py-2 rounded-md text-sm text-slate-300 hover:bg-slate-800 truncate" data-i18n="nav.housing">Housing</a>
           <a href="{{ url_for('main.multiples') }}" class="px-3 py-2 rounded-md text-sm text-slate-300 hover:bg-slate-800 truncate" data-i18n="nav.multiples">P/E</a>
-          <a href="{{ url_for('main.agents_page') }}" class="px-3 py-2 rounded-md text-sm text-slate-300 hover:bg-slate-800 truncate" data-i18n="nav.agents">Agents</a>
         </div>
 
         <div class="grid grid-cols-2 gap-1">
@@ -392,6 +395,7 @@
       </div>
     </div>
   </header>
+  {% endif %}
 
   <!-- ── Main content ─────────────────────────────────────────────────── -->
   <main class="flex-1 {% block main_class %}max-w-screen-xl mx-auto{% endblock %} w-full px-4 sm:px-6 py-6 sm:py-8">
@@ -412,6 +416,11 @@
     {% block content %}{% endblock %}
   </main>
 
+  {% if _agents_floating %}
+    {% include "_agents_float.html" %}
+  {% endif %}
+
+  {% if not _agents_embedded %}
   <footer class="border-t border-slate-800 py-4 text-center text-xs text-slate-600">
     <span data-i18n="footer.text">yStocker — data via Yahoo Finance</span> &nbsp;·&nbsp;
     <a href="{{ url_for('main.contact') }}" class="hover:text-brand transition" data-i18n="footer.contact">Contact Us</a>
@@ -433,6 +442,7 @@
     </a>
     &nbsp;·&nbsp; <span data-i18n="footer.copyright">© 2025 yStocker. All rights reserved.</span>
   </footer>
+  {% endif %}
 
 <script>
 (function() {
@@ -474,6 +484,10 @@
     .catch(() => {}); // silently ignore fetch errors
 })();
 </script>
+
+{% if _agents_floating %}
+<script src="{{ url_for('static', filename='agents_float.js') }}?v={{ cache_bust or 'dev' }}"></script>
+{% endif %}
 
 {% block scripts %}{% endblock %}
 
