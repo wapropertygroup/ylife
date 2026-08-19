@@ -171,6 +171,30 @@
 #agTop.is-on { display: flex; }
 #agTop:hover { background: rgba(99,102,241,.3); color: #e2e8f0; }
 
+/* ── Loading ────────────────────────────────────────────────────────────── */
+/* Defined here rather than using Tailwind's animate-spin: arbitrary Tailwind
+   classes have silently gone missing from the compiled stylesheet in this
+   project before, and a spinner that does not spin is worse than no spinner. */
+@keyframes ag-spin { to { transform: rotate(360deg); } }
+.ag-spinner {
+  display: inline-block; width: 13px; height: 13px; border-radius: 50%;
+  border: 2px solid #24314a; border-top-color: #8b5cf6;
+  animation: ag-spin .7s linear infinite;
+  vertical-align: -2px; flex: 0 0 auto;
+}
+/* Honour a reduced-motion preference: still shows progress, just calmly. */
+@media (prefers-reduced-motion: reduce) {
+  .ag-spinner { animation-duration: 2.2s; }
+}
+.ag-hist-load {
+  display: flex; align-items: center; gap: 9px;
+  padding: 14px 2px; color: #64748b; font-size: 12px;
+}
+/* Refreshing a list that already has rows dims it instead of replacing it, so
+   typing in the search box does not blank the results on every keystroke. */
+.ag-hist-busy { opacity: .45; transition: opacity .12s; }
+.ag-hist-err { color: #fca5a5; font-size: 12px; padding: 10px 2px; }
+
 /* ── Follow-up conversation ─────────────────────────────────────────────── */
 #agChatWrap { margin-top: 18px; border-top: 1px solid #1e293b; padding-top: 14px; }
 .ag-chat-head {
@@ -724,7 +748,10 @@ body.agents-embedded #agTop { right: 12px; bottom: 12px; }
     </div>
   </div>
   <p id="agSearchMeta" class="ag-search-meta hidden"></p>
-  <div id="agHistory" class="text-xs text-slate-500" data-i18n="agents.history_empty">No runs yet.</div>
+  <div id="agHistory" class="text-xs text-slate-500">
+    <div class="ag-hist-load"><span class="ag-spinner"></span><span
+      data-i18n="agents.history_loading">Loading your reports…</span></div>
+  </div>
 </div>
 {% endif %}
 
@@ -811,7 +838,12 @@ body.agents-embedded #agTop { right: 12px; bottom: 12px; }
     }
 
     show('agDecisionWrap', !!job.decision);
-    if (job.decision) document.getElementById('agDecision').textContent = job.decision;
+    if (job.decision) {
+      const el = document.getElementById('agDecision');
+      // Markdown.inline escapes before adding tags, so model text cannot inject.
+      if (window.Markdown) el.innerHTML = Markdown.inline(job.decision);
+      else el.textContent = decPlain(job.decision);
+    }
 
     // Only offer the PDF once there is a finished report to render.
     const pdf = document.getElementById('agPdf');
@@ -868,6 +900,15 @@ body.agents-embedded #agTop { right: 12px; bottom: 12px; }
   // Each report section is one agent's turn. The server does the splitting
   // (ystocker/agent_roles.py), so this only has to draw it.
   const fmtLen = (n) => (n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(n));
+
+  // Decisions arrive as markdown -- the Portfolio Manager writes "**Rating**:
+  // Buy" -- so displaying them raw shows literal asterisks. Compact rows strip
+  // the markers; the prominent decision line renders them.
+  const decPlain = (s) => String(s || '')
+    .replace(/\*\*(.+?)\*\*/g, '$1')
+    .replace(/(^|[^*])\*([^*\n]+?)\*/g, '$1$2')
+    .replace(/`([^`]+)`/g, '$1')
+    .trim();
 
   function renderConversation(box, sections) {
     // Apply the remembered collapse-all preference the first time each speaker
@@ -1225,18 +1266,78 @@ body.agents-embedded #agTop { right: 12px; bottom: 12px; }
     return pad(d.getMonth() + 1) + '/' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
   }
 
+  // Whether the panel currently shows real rows, as opposed to a spinner, an
+  // empty message or an error. Decides between replacing the panel and merely
+  // dimming it.
+  function historyHasRows() {
+    const box = document.getElementById('agHistory');
+    return !!box && !!box.querySelector('.ag-hist-run, .ag-row');
+  }
+
+  function setHistoryLoading(on) {
+    const box = document.getElementById('agHistory');
+    if (!box) return;
+    if (!on) {
+      box.classList.remove('ag-hist-busy');
+      document.getElementById('agHistSpin')?.remove();
+      return;
+    }
+    if (historyHasRows()) {
+      // Keep the rows visible and dim them, with the spinner next to the count
+      // line so the layout does not jump on every keystroke.
+      box.classList.add('ag-hist-busy');
+      if (searchMetaEl && !document.getElementById('agHistSpin')) {
+        const sp = document.createElement('span');
+        sp.id = 'agHistSpin';
+        sp.className = 'ag-spinner';
+        sp.style.marginLeft = '8px';
+        searchMetaEl.classList.remove('hidden');
+        searchMetaEl.appendChild(sp);
+      }
+      return;
+    }
+    // Nothing to preserve: show the spinner in place of the empty message, which
+    // would otherwise claim there are no reports before we have looked.
+    box.classList.remove('ag-hist-busy');
+    box.removeAttribute('data-i18n');
+    box.className = 'text-xs text-slate-500';
+    box.innerHTML = '';
+    const row = document.createElement('div');
+    row.className = 'ag-hist-load';
+    const sp = document.createElement('span');
+    sp.className = 'ag-spinner';
+    const label = document.createElement('span');
+    label.textContent = I18n.t('agents.history_loading') || 'Loading your reports…';
+    row.append(sp, label);
+    box.appendChild(row);
+  }
+
   async function loadHistory() {
     const q = (searchEl?.value || '').trim();
     const status = statusFilterEl?.value || '';
     const seq = ++histSeq;
     if (searchClearEl) searchClearEl.classList.toggle('hidden', !q);
+    setHistoryLoading(true);
 
     try {
       const params = new URLSearchParams();
       if (q) params.set('q', q);
       if (status) params.set('status', status);
       const r = await fetch('/api/agents/search?' + params.toString());
-      if (!r.ok || seq !== histSeq) return;
+      if (seq !== histSeq) return;      // a newer query is already in flight
+      if (!r.ok) {
+        // Previously this returned silently, leaving "No runs yet" on screen --
+        // a load failure reading as "you have no reports".
+        const box = document.getElementById('agHistory');
+        box.className = 'text-xs';
+        box.innerHTML = '';
+        const err = document.createElement('div');
+        err.className = 'ag-hist-err';
+        err.textContent = '⚠ ' + (I18n.t('agents.history_failed')
+          || 'Could not load your reports.') + ' (HTTP ' + r.status + ')';
+        box.appendChild(err);
+        return;
+      }
       const res = await r.json();
       if (seq !== histSeq) return;   // a newer query already landed
       const jobs = res.jobs || [];
@@ -1303,7 +1404,7 @@ body.agents-embedded #agTop { right: 12px; bottom: 12px; }
           left.innerHTML = '<span class="text-slate-300 font-medium">'
               + highlight(j.ticker, /^\d/.test(q) ? '' : q) + '</span>'
             + `<span class="ag-pill ${CLS[j.status] || 'ag-queued'}">${esc(j.status)}</span>`
-            + (j.decision ? `<span class="text-slate-400">${esc(j.decision)}</span>` : '')
+            + (j.decision ? `<span class="text-slate-400">${esc(decPlain(j.decision))}</span>` : '')
             + (when ? `<span class="text-slate-600" title="When this report was generated">${when}</span>` : '')
             + (j.selftest ? '<span class="text-slate-600">self-test</span>' : '')
             + (j.elapsed_sec ? `<span class="text-slate-600">${j.elapsed_sec}s</span>` : '');
@@ -1336,7 +1437,24 @@ body.agents-embedded #agTop { right: 12px; bottom: 12px; }
 
         box.append(dateCell, runs);
       });
-    } catch (e) { /* history is decoration; never block the page on it */ }
+    } catch (e) {
+      // History is decoration and must never block the page, but a silent
+      // failure would leave the spinner running for ever.
+      if (seq === histSeq && !historyHasRows()) {
+        const box = document.getElementById('agHistory');
+        box.className = 'text-xs';
+        box.innerHTML = '';
+        const err = document.createElement('div');
+        err.className = 'ag-hist-err';
+        err.textContent = '⚠ ' + (I18n.t('agents.history_failed')
+          || 'Could not load your reports.') + ' (' + e.message + ')';
+        box.appendChild(err);
+      }
+    } finally {
+      // Only the newest query owns the panel: an older one finishing later must
+      // not clear the spinner the newer one is still showing.
+      if (seq === histSeq) setHistoryLoading(false);
+    }
   }
 
   if (searchEl) {

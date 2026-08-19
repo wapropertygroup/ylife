@@ -1143,6 +1143,8 @@ const I18n = (() => {
     'agents.degraded':     { en: 'ran on fallback model', zh: '已降级模型' },
     'agents.recovered':    { en: 'recovered from stream', zh: '由实时流恢复' },
     'agents.chat_with':    { en: 'Ask the Portfolio Manager', zh: '追问投资组合经理' },
+    'agents.history_loading':{ en: 'Loading your reports…', zh: '正在加载你的报告…' },
+    'agents.history_failed': { en: 'Could not load your reports.', zh: '无法加载你的报告。' },
     'agents.chat_scope':   { en: '— answered from this report only', zh: '— 仅依据本报告作答' },
     'agents.chat_send':    { en: 'Ask',            zh: '提问' },
     'agents.chat_ph':      { en: 'Why 3-6 months rather than 12?', zh: '为什么是 3-6 个月而不是 12 个月？' },
