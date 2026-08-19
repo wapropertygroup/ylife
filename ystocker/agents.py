@@ -111,10 +111,49 @@ DEFAULT_RISK_ROUNDS = os.environ.get("TRADINGAGENTS_MAX_RISK_ROUNDS", "3")
 # to the report prompts; the internal debate stays English by the package's own
 # design, for reasoning quality, so this changes the deliverable and not the
 # reasoning.
-DEFAULT_LANGUAGE = os.environ.get("TRADINGAGENTS_OUTPUT_LANGUAGE", "Simplified Chinese (简体中文)")
+#
+# It follows the UI language of whoever asked for the run rather than being a
+# server-wide constant. The report is the *only* thing a run produces, and it
+# costs minutes and real credits, so handing an English-mode reader a Chinese
+# one wastes the entire run. ``submit`` resolves the caller's language once and
+# records it on the job, so ``_run`` reproduces the same choice even if the
+# request that queued it is long gone.
+LANGUAGES = {"en": "English", "zh": "Simplified Chinese (简体中文)"}
+
+# Deployment pin: set TRADINGAGENTS_OUTPUT_LANGUAGE to force every run to one
+# language whatever the UI says -- including a language this app has no UI for.
+# Unset, which is the normal case, means follow the caller. The pin keeps the
+# name TradingAgents itself reads so it can be set from the unit file alone.
+FORCED_LANGUAGE = os.environ.get("TRADINGAGENTS_OUTPUT_LANGUAGE", "").strip()
 
 
-def _child_env() -> dict[str, str]:
+def resolve_language(code: Optional[str]) -> str:
+    """The report language for a UI language code (``en`` / ``zh``).
+
+    Anything unrecognised -- including a caller that sent no code at all, such
+    as a bare API client -- resolves to English, matching the default in
+    ``static/i18n.js``.
+    """
+    if FORCED_LANGUAGE:
+        return FORCED_LANGUAGE
+    return LANGUAGES.get((code or "").strip().lower(), LANGUAGES["en"])
+
+
+def language_code(language: str) -> str:
+    """The UI language a resolved report language corresponds to, ``""`` if none.
+
+    Recorded alongside the language itself so the page can tell a reader when a
+    finished report is not in the language they are now reading in. Empty for a
+    pinned language outside :data:`LANGUAGES`, which is also a mismatch worth
+    surfacing rather than a value to guess at.
+    """
+    for code, name in LANGUAGES.items():
+        if name == language:
+            return code
+    return ""
+
+
+def _child_env(language: str = "") -> dict[str, str]:
     """Environment for the run, with the Gemini key aliased for TradingAgents."""
     env = os.environ.copy()
     gemini = env.get("GEMINI_API_KEY", "").strip()
@@ -133,7 +172,11 @@ def _child_env() -> dict[str, str]:
     env.setdefault("TRADINGAGENTS_GOOGLE_THINKING_LEVEL", DEFAULT_THINKING)
     env.setdefault("TRADINGAGENTS_MAX_DEBATE_ROUNDS", DEFAULT_DEBATE_ROUNDS)
     env.setdefault("TRADINGAGENTS_MAX_RISK_ROUNDS", DEFAULT_RISK_ROUNDS)
-    env.setdefault("TRADINGAGENTS_OUTPUT_LANGUAGE", DEFAULT_LANGUAGE)
+    # Assigned, not setdefault: this is the run's own choice and must win over
+    # whatever this process inherited -- and what it inherited is precisely
+    # FORCED_LANGUAGE, which would otherwise pin every run to one language and
+    # reintroduce the bug this parameter exists to fix.
+    env["TRADINGAGENTS_OUTPUT_LANGUAGE"] = language or resolve_language(None)
     env.setdefault("TRADINGAGENTS_CACHE_DIR", str(TA_RUNTIME_DIR / "cache"))
     env.setdefault("TRADINGAGENTS_RESULTS_DIR", str(TA_RUNTIME_DIR / "logs"))
     env.setdefault(
@@ -262,10 +305,12 @@ if os.environ.get("YSTOCKER_AGENT_SELFTEST") == "1":
                     "- a ratio written as P/E < 20 & a stray > character\n"
                     "- curly quotes \u201clike this\u201d and an em dash \u2014 here\n"
                     "\n| col | value |\n| --- | --- |\n| a | 1 |\n"
-                    # Real runs default to Chinese, so the free plumbing
-                    # check exercises the CJK font path in the PDF too --
-                    # otherwise the only thing catching a font regression
-                    # is a run that costs money.
+                    # A run only writes Chinese when its caller was reading the
+                    # page in Chinese, so the CJK font path in the PDF can go
+                    # untested for a long time. The free plumbing check
+                    # exercises it every time instead -- otherwise the only
+                    # thing catching a font regression is a run that costs
+                    # money.
                     "\n### 中文渲染检查\n\n"
                     "验证 PDF 中文字体（STSong-Light）与换行是否正常；"
                     "中英文混排：NVDA 同比增长 94%。\n"})
@@ -1195,8 +1240,13 @@ def _prune() -> None:
 # Running
 # ---------------------------------------------------------------------------
 
-def submit(ticker: str, day: str, user: str, selftest: bool = False) -> tuple[Optional[str], Optional[str]]:
-    """Validate and queue a run. Returns (job_id, error)."""
+def submit(ticker: str, day: str, user: str, selftest: bool = False,
+           lang: str = "") -> tuple[Optional[str], Optional[str]]:
+    """Validate and queue a run. Returns (job_id, error).
+
+    ``lang`` is the caller's UI language code, which selects the language the
+    report is written in -- see :data:`LANGUAGES`.
+    """
     ticker = (ticker or "").strip().upper()
     day = (day or "").strip() or _date.today().isoformat()
 
@@ -1212,12 +1262,18 @@ def submit(ticker: str, day: str, user: str, selftest: bool = False) -> tuple[Op
         return None, "Invalid date"
 
     job_id = uuid.uuid4().hex[:16]
+    language = resolve_language(lang)
     job = {
         "id": job_id,
         "ticker": ticker,
         "date": day,
         "user": user,
         "selftest": bool(selftest),
+        # Frozen at submit time, not read at run time: the reader may toggle the
+        # page to the other language while this sits in the queue, and a report
+        # half-written in each would be worse than either.
+        "language": language,
+        "lang": language_code(language),
         "status": "queued",
         "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "started_at": None,
@@ -1237,8 +1293,8 @@ def submit(ticker: str, day: str, user: str, selftest: bool = False) -> tuple[Op
 
     threading.Thread(target=_run, args=(job_id,), daemon=True,
                      name=f"agent-{job_id}").start()
-    log.info("agents: queued %s %s@%s (selftest=%s) for %s",
-             job_id, ticker, day, selftest, user)
+    log.info("agents: queued %s %s@%s (selftest=%s, language=%s) for %s",
+             job_id, ticker, day, selftest, language, user)
     return job_id, None
 
 
@@ -1332,7 +1388,7 @@ def _run(job_id: str) -> None:
                    started_at=datetime.now(timezone.utc).isoformat(timespec="seconds"))
         _write(job)
 
-        env = _child_env()
+        env = _child_env(job.get("language") or "")
         if job.get("selftest"):
             env["YSTOCKER_AGENT_SELFTEST"] = "1"
 
@@ -1524,7 +1580,12 @@ def environment_report() -> dict[str, Any]:
         "thinking": DEFAULT_THINKING,
         "debate_rounds": DEFAULT_DEBATE_ROUNDS,
         "risk_rounds": DEFAULT_RISK_ROUNDS,
-        "language": DEFAULT_LANGUAGE,
+        # Only set when a deployment pinned one language for everybody. Normally
+        # empty, because the language is per-run and the page fills it in from
+        # the reader's own toggle -- a server-rendered value would be wrong for
+        # anyone whose language came from localStorage rather than the URL.
+        "language": FORCED_LANGUAGE,
+        "language_pinned": bool(FORCED_LANGUAGE),
         "has_key": key_ok,
         # Whether a run *can execute*, which is a question about the checkout,
         # the interpreter and the credential -- not about who is permitted to

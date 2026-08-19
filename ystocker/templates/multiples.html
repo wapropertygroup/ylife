@@ -107,7 +107,7 @@
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up">
     <div class="mb-1">
       <h2 class="text-base font-semibold text-slate-200">
-        <span data-i18n="mult.fwd_title">Forward P/E: SPY vs QQQ</span>
+        <span data-i18n="mult.fwd_title">Forward P/E: SPY vs QQQ — consensus estimates, today</span>
         <span class="src-chip src-forward" data-i18n="mult.chip_forward">Forward</span>
       </h2>
       <p class="text-xs text-slate-500"><span data-i18n="mult.fwd_scope">Consensus forward estimates for both ETFs, as of today. SPY's long history is the S&amp;P 500 chart below; the Nasdaq-100 has no free earnings history, so QQQ builds up from the first snapshot only.</span></p>
@@ -126,7 +126,7 @@
     <p class="text-[11px] text-slate-600 mt-2"><span id="vpCoverage"></span></p>
   </div>
 
-  <div class="vp-section"><h2 data-i18n="mult.sec_fwdhist">Forward P/E History — S&amp;P 500 / SPY</h2><div class="rule"></div></div>
+  <div class="vp-section"><h2 data-i18n="mult.sec_fwdhist">Forward P/E History — S&amp;P 500 / SPY, realized earnings</h2><div class="rule"></div></div>
 
   <!-- ── The forward P/E time series that free data DOES support ──────── -->
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up">
@@ -142,6 +142,12 @@
       </p>
       <p class="text-xs text-slate-500 mt-1">
         <span data-i18n="mult.fwdhist_scope">This is the S&amp;P 500 — the index SPY tracks. There is no equivalent for QQQ: nobody publishes Nasdaq-100 earnings history for free, so the Nasdaq-100 appears only in today's reading above.</span>
+      </p>
+      <!-- The one question this page reliably provokes: two tiles both saying
+           "forward P/E", ~5x apart. Answer it here rather than leaving the
+           reader to assume one of them is broken. -->
+      <p class="text-xs text-amber-500/80 mt-1">
+        <span data-i18n="mult.fwdhist_vs_consensus">Not comparable with the consensus tiles above, and not meant to be: those divide today's price by analyst estimates of the next twelve months, this divides a year-old price by the earnings that actually arrived. Same index, different denominators and different dates — so the two readings differ by several turns of multiple.</span>
       </p>
     </div>
     <div class="chart-container" style="height:280px"><canvas id="vpFwdHistChart"></canvas></div>
@@ -431,20 +437,30 @@ const _explainData = {};
   }
 
   // ── KPI tiles ────────────────────────────────────────────────────────
+  // The two forward P/Es sit adjacent on purpose. They are different statistics
+  // on the same index — consensus estimates dated today vs realized earnings
+  // dated twelve months back — and in Aug 2026 they read 19.8x and 24.5x. Split
+  // across separate rows and labelled only "forward P/E", that gap gets read as
+  // a bug in one of them, so the basis is in the label and the date is in the
+  // sub-line for every tile.
   const KPIS = [
-    ['spy_forward_pe',    'mult.kpi_spy',  'SPY forward P/E'],
-    ['qqq_forward_pe',    'mult.kpi_qqq',  'QQQ forward P/E'],
+    ['spy_forward_pe',    'mult.kpi_spy',  'SPY forward P/E (consensus)'],
+    ['qqq_forward_pe',    'mult.kpi_qqq',  'QQQ forward P/E (consensus)'],
+    ['spx_fwd_realized',  'mult.kpi_fwdreal','S&P 500 forward P/E (realized)'],
     ['spx_trailing_pe',   'mult.kpi_spxpe','S&P 500 trailing P/E'],
     ['spx_pe_percentile', 'mult.kpi_pctl', 'P/E percentile since 1871'],
     ['spx_cape',          'mult.kpi_cape', 'Shiller CAPE'],
     ['spx_cape_percentile','mult.kpi_capepctl','CAPE percentile since 1871'],
-    ['spx_fwd_realized',  'mult.kpi_fwdreal','Forward P/E (realized)'],
     ['spx_trailing_eps',  'mult.kpi_eps',  'S&P 500 trailing EPS (nominal)'],
   ];
   // Percentiles floor rather than round: a CAPE at the 99.5th percentile
   // rounded to "100th" would claim an all-time record it has not set. And the
   // ordinal suffix is computed, so a reading of 21 is not rendered "21th".
   const ordinal = n => {
+    // Chinese has no ordinal suffix and the label already reads "…百分位", so an
+    // English "th" glued on renders as "97th 百分位". The realized-P/E sentence
+    // below already special-cases this; the tiles did not.
+    if (typeof I18n !== 'undefined' && I18n.getLang && I18n.getLang() === 'zh') return String(n);
     const s = ['th', 'st', 'nd', 'rd'];
     const v = n % 100;
     return n + (s[(v - 20) % 10] || s[v] || s[0]);
@@ -455,6 +471,28 @@ const _explainData = {};
     if (unit === 'usd') return '$' + v.toFixed(2);
     if (unit === 'pct_rank') return ordinal(Math.floor(v));
     return String(v);
+  };
+  // Cap in whichever unit reads shortest — a tile sub-line has no room for
+  // "$50256B" and the trillions figure is the one that conveys "this is most of
+  // the index" against a count that says only 24%.
+  const capShort = b => (typeof b !== 'number' || b <= 0 ? null
+    : b >= 1000 ? '$' + (b / 1000).toFixed(1) + 'T' : '$' + Math.round(b) + 'B');
+  // What the number covers, and as of when. The date is not decoration: the
+  // realized forward P/E is necessarily a year stale, and rendering that as a
+  // bare "2025-08-01" (as this did) made it look like a typo rather than the
+  // whole explanation for why it disagrees with the consensus tile.
+  const kpiSub = h => {
+    const bits = [];
+    if (h.constituents) {
+      bits.push(`${h.constituents} ${I18n.t('mult.names') || 'names'}`);
+      const cap = capShort(h.market_cap_b);
+      if (cap) bits.push(`${cap} ${I18n.t('mult.cap') || 'cap'}`);
+    }
+    // Percentile tiles carry both; "since 1871" is the more informative of the
+    // two for them, and stacking both would wrap the line.
+    if (h.since) bits.push(`${I18n.t('mult.since') || 'since'} ${h.since.slice(0, 4)}`);
+    else if (h.as_of) bits.push(`${I18n.t('mult.as_of') || 'as of'} ${h.as_of}`);
+    return bits.join(' · ');
   };
   try {
     const wrap = document.getElementById('vpKpis');
@@ -473,9 +511,7 @@ const _explainData = {};
       val.textContent = fmtKpi(h.value, h.unit);
       const sub = document.createElement('p');
       sub.className = 'text-xs text-slate-600 mt-0.5';
-      sub.textContent = h.constituents
-        ? `${h.constituents} ${I18n.t('mult.names') || 'names'}`
-        : (h.since ? `${I18n.t('mult.since') || 'since'} ${h.since.slice(0, 4)}` : (h.as_of || ''));
+      sub.textContent = kpiSub(h);
       card.append(label, val, sub);
       wrap.appendChild(card);
     });
@@ -537,8 +573,10 @@ const _explainData = {};
             legend: { display: false },
             tooltip: { callbacks: { label: c => {
               const b = F[etfs[c.dataIndex]];
-              return [` ${c.raw.toFixed(2)}x forward`,
-                      ` ${b.constituents_used}/${b.constituents_total} constituents`];
+              const cap = capShort(b.market_cap_b);
+              return [` ${c.raw.toFixed(2)}x forward (consensus)`,
+                      ` ${b.constituents_used}/${b.constituents_total} constituents`
+                        + (cap ? `, ${cap} cap` : '')];
             } } },
           },
           scales: {
@@ -564,8 +602,22 @@ const _explainData = {};
 
     const cov = document.getElementById('vpCoverage');
     if (cov) {
-      const parts = Object.values(F).map(b =>
-        `${b.etf}: ${b.constituents_used}/${b.constituents_total} ${I18n.t('mult.names') || 'names'}`);
+      // Count and cap together. 120/503 alone reads as thin coverage; the cap
+      // says those 120 are most of the index by weight, which is what actually
+      // determines whether the aggregate is representative.
+      // Ordered to match the tiles above — Flask sorts JSON keys, so plain
+      // Object.values puts QQQ first and disagrees with them.
+      const ETF_ORDER = ['SPY', 'QQQ'];
+      const rank = e => { const i = ETF_ORDER.indexOf(e); return i < 0 ? 99 : i; };
+      const parts = Object.values(F)
+        .slice()
+        .sort((a, b) => rank(a.etf) - rank(b.etf))
+        .map(b => {
+          const cap = capShort(b.market_cap_b);
+          return `${b.etf}: ${b.constituents_used}/${b.constituents_total} `
+            + `${I18n.t('mult.names') || 'names'}`
+            + (cap ? ` (${cap} ${I18n.t('mult.cap') || 'cap'})` : '');
+        });
       if (parts.length) {
         cov.textContent = (I18n.t('mult.computed_over') || 'Computed over') + ' ' + parts.join(' · ');
       }

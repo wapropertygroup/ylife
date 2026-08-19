@@ -593,7 +593,12 @@ body.agents-embedded #agTop { right: 12px; bottom: 12px; }
     <span data-i18n="agents.timeout_is">Timeout</span>: {{ (agent_env.timeout_sec | int) // 60 }}&nbsp;min.
     &nbsp;·&nbsp; <span data-i18n="agents.model_is">Model</span>: {{ agent_env.provider }} / {{ agent_env.deep_model }}
     &nbsp;·&nbsp; <span data-i18n="agents.depth_is">Depth</span>: {{ agent_env.debate_rounds }}+{{ agent_env.risk_rounds }} <span data-i18n="agents.rounds">rounds</span>, thinking={{ agent_env.thinking }}
-    &nbsp;·&nbsp; <span data-i18n="agents.lang_is">Report language</span>: {{ agent_env.language }}.
+    &nbsp;·&nbsp; <span data-i18n="agents.lang_is">Report language</span>:
+    {#- Follows the language toggle, because that is what the run will follow.
+        Rendered client-side rather than from the request: the language can come
+        from localStorage (and does inside the floating window, whose iframe URL
+        carries no ?lang=), so the server does not reliably know it. #}
+    {% if agent_env.language_pinned %}{{ agent_env.language }}{% else %}<span data-i18n="agents.lang_value">English</span>{% endif %}.
   </p>
   <div id="agError" class="hidden mt-3 px-3 py-2 rounded-lg bg-red-900/40 border border-red-700 text-red-300 text-xs"></div>
 </div>
@@ -605,6 +610,11 @@ body.agents-embedded #agTop { right: 12px; bottom: 12px; }
       <span class="text-base font-semibold text-slate-200" id="agJobTitle">—</span>
       <span id="agStatus" class="ag-pill ag-queued">queued</span>
       <span id="agElapsed" class="text-xs text-slate-500"></span>
+      {# The language this run's report is in, shown only when it is not the
+         language the page is currently being read in: the choice is frozen when
+         the run is queued, so a reader who toggles afterwards would otherwise
+         have no explanation for the text in front of them. #}
+      <span id="agLang" class="text-xs text-slate-500 hidden"></span>
       {# Shown only when the configured model ran out of daily quota mid-run, so
          a Flash-written report is never mistaken for a Pro one. #}
       <span id="agDegraded" class="ag-pill ag-degraded hidden"></span>
@@ -724,6 +734,15 @@ body.agents-embedded #agTop { right: 12px; bottom: 12px; }
     titleEl.textContent = `${job.ticker} · ${job.date}` + (job.selftest ? '  (self-test)' : '');
     setStatus(job.status);
     elapsedEl.textContent = job.elapsed_sec ? `${job.elapsed_sec}s` : '';
+
+    // job.lang is empty for a run whose language is not one this UI offers (a
+    // pinned deployment), which is a mismatch too -- and for runs queued before
+    // the language was recorded, which job.language being empty filters out.
+    const langEl = document.getElementById('agLang');
+    const runLang = job.language || '';
+    const langDiffers = !!runLang && (job.lang || '') !== I18n.getLang();
+    langEl.classList.toggle('hidden', !langDiffers);
+    if (langDiffers) langEl.textContent = runLang;
 
     document.getElementById('agRecovered').classList.toggle('hidden', !job.recovered);
 
@@ -1078,7 +1097,10 @@ body.agents-embedded #agTop { right: 12px; bottom: 12px; }
     try {
       const r = await fetch('/api/agents/run', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ticker: tickerEl.value, date: dateEl.value, selftest: !!selftest }),
+        body: JSON.stringify({ ticker: tickerEl.value, date: dateEl.value, selftest: !!selftest,
+                               // Write the report in the language the page is
+                               // being read in.
+                               lang: I18n.getLang() }),
       });
       const d = await r.json().catch(() => ({}));
       if (!r.ok) {

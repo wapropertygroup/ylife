@@ -33,21 +33,21 @@ bash deploy/deploy.sh -i ~/Downloads/my-key-pair.pem
 
 ### Deploy via AWS SSM (no SSH key needed)
 ```bash
-aws ssm send-command --instance-ids i-0b0504ed1c16b9b85 --region us-west-2 \
+aws ssm send-command --instance-ids i-059a024daff6bd015 --region us-west-2 \
   --document-name AWS-RunShellScript \
   --parameters '{"commands":["cd /opt/ystocker && sudo git fetch origin && sudo git reset --hard origin/main && for svc in ystocker yplanner yplanter yhome ytracker ypay yimage ybg; do sudo kill -HUP $(systemctl show --property MainPID $svc | cut -d= -f2) 2>/dev/null || sudo systemctl restart $svc; done"]}'
 ```
 
 ### Deploy a single app via SSM
 ```bash
-aws ssm send-command --instance-ids i-0b0504ed1c16b9b85 --region us-west-2 \
+aws ssm send-command --instance-ids i-059a024daff6bd015 --region us-west-2 \
   --document-name AWS-RunShellScript \
   --parameters '{"commands":["cd /opt/ystocker && sudo git fetch origin && sudo git reset --hard origin/main && sudo kill -HUP $(systemctl show --property MainPID yplanner | cut -d= -f2) 2>/dev/null || sudo systemctl restart yplanner"]}'
 ```
 
 ### Check deploy result
 ```bash
-aws ssm get-command-invocation --command-id <CMD_ID> --instance-id i-0b0504ed1c16b9b85 \
+aws ssm get-command-invocation --command-id <CMD_ID> --instance-id i-059a024daff6bd015 \
   --region us-west-2 --query "[Status, StandardOutputContent]" --output text
 ```
 
@@ -85,6 +85,13 @@ Two-tier: in-memory dict + on-disk JSON in `cache/`. All cache access guarded by
 | 13F holdings | 24 hours | `cache/sec13f_cache.json` |
 | Peer groups | persistent | `cache/peer_groups.json` |
 
+**Observed series are not cache.** The forward-P/E snapshots accumulate one row
+per day and cannot be recomputed from anything, so they live in DynamoDB
+(`ystocker-valuation-history`) as well as in `cache/valuation_cache.json` — the
+same pattern `ystocker-fear-greed` and `ystocker-pcr-history` already use. Keeping
+such a series only in a cache file loses it whenever the EC2 instance is replaced,
+which is exactly how the SPY/QQQ chart reset to a single point.
+
 ### Background threads (yStocker)
 Started in `create_app()`, all daemon threads:
 - Stock cache warming (every 8h)
@@ -112,7 +119,7 @@ Started in `create_app()`, all daemon threads:
 
 ### Infrastructure
 - **Region**: us-west-2
-- **EC2 Instance**: `i-0b0504ed1c16b9b85` (Amazon Linux 2023, `t3.medium`)
+- **EC2 Instance**: `i-059a024daff6bd015` (Amazon Linux 2023, `t3.medium`)
 - **App directory**: `/opt/ystocker`
 - **Process model**: nginx → 8 Gunicorn systemd services (ports 8000-8007, 2 workers each, `--preload`, recycled every ~200 requests)
 - **Memory budget**: 4 GB total + 2 GB swap. ystocker runs ~1 GB (`MemoryMax=1800M`); the other seven ~100 MB each (`MemoryMax=400M`). With `--preload`, `create_app()` runs once in the master, so the background refresh threads live **only in the master** — forked workers inherit a cache snapshot and refill on demand.

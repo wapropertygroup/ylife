@@ -2200,6 +2200,9 @@ def api_agents_run():
         day=body.get("date", ""),
         user=email,
         selftest=selftest,
+        # The report is written in the language the page is being read in. A
+        # caller that sends nothing gets English, as everywhere else here.
+        lang="zh" if body.get("lang") == "zh" else "en",
     )
     if err:
         # Rejected before anything was spent, so hand the run back.

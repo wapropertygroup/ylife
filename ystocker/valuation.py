@@ -17,16 +17,30 @@ sources, and pretending otherwise is the trap here:
   it implies earnings expectations never moved — 2020 prices divided by 2026
   earnings produce a badly wrong historical multiple.
 
-So this module does two honest things instead, and never mixes them:
+So this module does three honest things instead, and never mixes them:
 
 1. **Trailing P/E and EPS for the S&P 500** from multpl.com — monthly back to
    1871, built on actual reported earnings, so the shape is real history rather
    than a rescaled price line. Clearly labelled *trailing*.
 
-2. **Forward P/E for SPY and QQQ**, computed bottom-up from constituents each
-   day and appended to a persisted series. Truly forward-looking and truly
-   per-ETF, but it necessarily starts on the first snapshot and fills in at one
-   point per day.
+2. **Consensus forward P/E for SPY and QQQ**, computed bottom-up from
+   constituents each day and appended to a persisted series. Truly
+   forward-looking and truly per-ETF, but it necessarily starts on the first
+   snapshot and fills in at one point per day. Shipped as ``forward`` /
+   ``forward_history``, headlined as ``{etf}_forward_pe``.
+
+3. **Realized forward P/E for the S&P 500** — index level over the earnings
+   that actually arrived in the following twelve months (see
+   :func:`_realized_forward_pe`). Shipped as ``fwd_realized``, headlined as
+   ``spx_fwd_realized``.
+
+(2) and (3) are both "forward P/E" and they are *not* comparable, which is the
+single easiest thing to get wrong on the page that consumes this. (2) divides
+by analyst estimates and is dated today; (3) divides by realized earnings and
+necessarily stops twelve months short of today, so its latest point carries a
+year-old index level. In Aug 2026 they read 19.8x and 24.5x respectively — the
+same index, neither figure wrong. Every label that surfaces one of these must
+say which basis it is on and as of when, or the two get read as a contradiction.
 
 Aggregation
 -----------
@@ -38,9 +52,15 @@ per-name P/Es is the cap-weighted *harmonic* mean:
 Averaging P/Es arithmetically would overweight expensive names and is simply
 the wrong statistic. Market caps supply the weights, so no index weight file is
 needed — which is why this does not scrape holdings. Names with a missing or
-non-positive forward P/E are excluded and the excluded share of market cap is
-reported as ``coverage_pct``: an index multiple computed over 60% of the cap is
-a different claim from one computed over 98%, and the page says which.
+non-positive forward P/E are excluded, and what the aggregate actually covered
+is reported two ways: ``coverage_pct``, a share of the constituent *count*, and
+``market_cap_b``, the absolute market cap that went in. Coverage is deliberately
+*not* expressed as a percentage of index market cap, because the caps of the
+excluded names are precisely what is unavailable — a ratio over the names we do
+have reads a meaningless 100% (that was the original bug; see
+``_MIN_CONSTITUENTS``). The count and the dollar figure together are the honest
+statement, and they can differ a lot: 120 of 503 names is 24% by count but
+~$50T of cap, because the misses are overwhelmingly small caps.
 
 Cost: no per-constituent network calls at all. Fetching ``Ticker.info`` for
 500+ names got this machine hard-blocked by Yahoo during development (a first
@@ -53,6 +73,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 import tempfile
 import threading
@@ -431,22 +452,133 @@ def _merge_snapshots(previous: list[dict[str, Any]],
     return [merged[d] for d in sorted(merged)]
 
 
-def _previous_snapshots() -> list[dict[str, Any]]:
-    """Read the snapshot series off disk, ignoring cache freshness.
+# The series is observed data, not derived data: it is the only record of what
+# forward multiples were on past days and it cannot be recomputed from anything.
+# Keeping it solely in the cache file was the flaw -- when the EC2 instance was
+# replaced the file went with it and the chart reset to a single point, which is
+# exactly what a reader kept seeing. It now also goes to DynamoDB, following the
+# same pattern the fear-greed and put/call series already use here, so it
+# survives instance replacement, a cache-schema bump and a disk wipe alike.
+_HIST_TABLE_NAME = "ystocker-valuation-history"
+_hist_table = None
+_hist_unavail_until = 0.0
+_HIST_LOCK = threading.Lock()
 
-    Deliberately bypasses the TTL: an expired payload still holds real history
-    that must survive, and dropping it would silently reset the series to a
-    single point on every stale rebuild.
+
+def _get_hist_table():
+    """DynamoDB table for the snapshot series, or None when unavailable.
+
+    Absence is not an error: local dev has no AWS credentials, and the disk copy
+    still works. The 5-minute backoff stops every refresh paying a connection
+    timeout when the table genuinely is not there.
     """
+    global _hist_table, _hist_unavail_until
+    if _hist_table is not None:
+        return _hist_table
+    if time.time() < _hist_unavail_until:
+        return None
+    with _HIST_LOCK:
+        if _hist_table is not None:
+            return _hist_table
+        if time.time() < _hist_unavail_until:
+            return None
+        try:
+            import boto3
+
+            ddb = boto3.resource("dynamodb",
+                                 region_name=os.environ.get("AWS_REGION", "us-west-2"))
+            tbl = ddb.Table(_HIST_TABLE_NAME)
+            tbl.load()
+            _hist_table = tbl
+            log.info("Valuation: DynamoDB history table connected: %s", _HIST_TABLE_NAME)
+        except Exception as exc:  # noqa: BLE001 - degrade to disk-only
+            log.warning("Valuation: DynamoDB history unavailable: %s", exc)
+            _hist_table = None
+            _hist_unavail_until = time.time() + 300
+        return _hist_table
+
+
+def _hist_load_rows() -> list[dict[str, Any]]:
+    """Every stored snapshot row from DynamoDB, oldest first."""
+    table = _get_hist_table()
+    if table is None:
+        return []
+    try:
+        rows: list[dict[str, Any]] = []
+        kwargs: dict[str, Any] = {}
+        while True:
+            resp = table.scan(**kwargs)
+            for item in resp.get("Items", []):
+                stamp = item.get("date")
+                if not stamp:
+                    continue
+                row: dict[str, Any] = {"date": stamp}
+                for etf in INDEX_UNIVERSE:
+                    val = item.get(etf)
+                    if val is None:
+                        continue
+                    try:
+                        row[etf] = float(val)
+                    except (TypeError, ValueError):
+                        continue
+                rows.append(row)
+            # A scan is paginated; without this the series silently stops at the
+            # first page once there is more than 1 MB of history.
+            if "LastEvaluatedKey" not in resp:
+                break
+            kwargs["ExclusiveStartKey"] = resp["LastEvaluatedKey"]
+        rows.sort(key=lambda r: r["date"])
+        return rows
+    except Exception as exc:  # noqa: BLE001
+        log.warning("Valuation: DynamoDB history load failed: %s", exc)
+        return []
+
+
+def _hist_save_row(row: dict[str, Any]) -> None:
+    """Persist one day's row. Values go as strings, since DynamoDB rejects float."""
+    table = _get_hist_table()
+    if table is None or not row.get("date"):
+        return
+    try:
+        item = {"date": row["date"]}
+        for etf in INDEX_UNIVERSE:
+            val = row.get(etf)
+            if val is not None:
+                item[etf] = str(round(float(val), 2))
+        if len(item) > 1:
+            table.put_item(Item=item)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("Valuation: DynamoDB history save failed for %s: %s",
+                    row.get("date"), exc)
+
+
+def _previous_snapshots() -> list[dict[str, Any]]:
+    """The snapshot series so far, from DynamoDB and disk together.
+
+    Both are read and unioned by date rather than one being preferred: the disk
+    copy can hold a row written while DynamoDB was briefly unreachable, and
+    DynamoDB holds everything that predates the current instance. Reading the
+    file deliberately bypasses the TTL and the schema version -- an expired or
+    stale payload still holds real observations, and discarding them would reset
+    the series to a single point on every rebuild.
+    """
+    merged: dict[str, dict[str, Any]] = {}
+    for row in _hist_load_rows():
+        if row.get("date"):
+            merged[row["date"]] = dict(row)
     try:
         if _CACHE_FILE.exists():
             payload = json.loads(_CACHE_FILE.read_text())
             hist = payload.get("forward_history")
             if isinstance(hist, list):
-                return hist
-    except Exception as exc:
+                for row in hist:
+                    stamp = row.get("date")
+                    if not stamp:
+                        continue
+                    merged.setdefault(stamp, {}).update(row)
+    except Exception as exc:  # noqa: BLE001
         log.warning("Valuation: could not read prior snapshots: %s", exc)
-    return []
+    return [merged[d] for d in sorted(merged)]
 
 
 # ---------------------------------------------------------------------------
@@ -491,6 +623,10 @@ def _build_payload() -> dict[str, Any]:
     today = {etf: blk["forward_pe"] for etf, blk in forward.items()}
     history = _merge_snapshots(_previous_snapshots(), today) if today \
         else _previous_snapshots()
+    if today and history:
+        # Write the row through to durable storage now, not at shutdown: the
+        # process is a web worker that may be recycled at any point.
+        _hist_save_row(history[-1])
 
     spx_pe = multpl.get("spx_pe")
     headline: dict[str, Any] = {}
