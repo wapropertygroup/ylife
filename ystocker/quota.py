@@ -103,6 +103,40 @@ def limit_for(email: Optional[str]) -> int:
     return limit_vip() if is_vip(email) else limit_default()
 
 
+def limit_chat() -> int:
+    """Follow-up questions per user per day.
+
+    Far higher than the run limit because a question is one Flash call, not the
+    ~22 Pro calls a run costs -- but not unlimited, since the page is open to
+    any signed-in user and every call is still billed.
+    """
+    return _int_env("AGENTS_CHAT_DAILY_LIMIT", 60)
+
+
+def try_consume_chat(email: Optional[str]) -> tuple[bool, dict[str, Any]]:
+    """Reserve one follow-up question. Counted separately from runs.
+
+    Kept in the same daily file and under the same lock as the run counter, so
+    the two cannot interleave a lost update, but under its own key: spending a
+    question must never eat into the analysis allowance.
+    """
+    key = (email or "").strip().lower()
+    if not key:
+        return False, {"used": 0, "limit": limit_chat(), "remaining": 0}
+    day, lim = today(), limit_chat()
+    with _Guard():
+        data = _read(day)
+        chat = data.setdefault("chat", {})
+        used = int(chat.get(key, 0))
+        if used >= lim:
+            return False, {"used": used, "limit": lim, "remaining": 0, "tz": QUOTA_TZ}
+        chat[key] = used + 1
+        data["day"] = day
+        _write(day, data)
+    return True, {"used": used + 1, "limit": lim,
+                  "remaining": max(0, lim - used - 1), "tz": QUOTA_TZ}
+
+
 def today() -> str:
     """Current quota day as YYYY-MM-DD in the configured timezone."""
     try:

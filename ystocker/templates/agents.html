@@ -171,6 +171,38 @@
 #agTop.is-on { display: flex; }
 #agTop:hover { background: rgba(99,102,241,.3); color: #e2e8f0; }
 
+/* ── Follow-up conversation ─────────────────────────────────────────────── */
+#agChatWrap { margin-top: 18px; border-top: 1px solid #1e293b; padding-top: 14px; }
+.ag-chat-head {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
+  color: #94a3b8; font-size: 12px;
+}
+.ag-chat-head b { color: #8b5cf6; font-size: 13px; }
+.ag-chat-quota { margin-left: auto; color: #475569; font-size: 11px; }
+/* The user's own turns are right-aligned and neutral, so a glance separates the
+   question from the answer without reading either. */
+.ag-chat-you { display: flex; justify-content: flex-end; margin-bottom: 10px; }
+.ag-chat-you > div {
+  max-width: 78%; background: #1e293b; border: 1px solid #334155;
+  border-radius: 10px 10px 2px 10px; padding: 8px 12px;
+  color: #e2e8f0; font-size: 12.5px; line-height: 1.6; white-space: pre-wrap;
+}
+.ag-chat-mgr { display: flex; gap: 12px; margin-bottom: 12px; }
+.ag-chat-form { display: flex; gap: 8px; align-items: flex-end; margin-top: 12px; }
+#agChatInput {
+  flex: 1 1 auto; min-height: 40px; max-height: 160px; resize: vertical;
+  background: #0f172a; border: 1px solid #334155; border-radius: 8px;
+  color: #e2e8f0; font-size: 13px; padding: 9px 12px; font-family: inherit;
+}
+#agChatInput:focus { outline: none; border-color: #8b5cf6; }
+#agChatSend { border-color: #8b5cf6; background: rgba(139,92,246,.16); color: #c4b5fd; }
+#agChatSend:hover:not(:disabled) { background: rgba(139,92,246,.3); color: #ede9fe; }
+.ag-chat-note { color: #475569; font-size: 11px; margin-top: 6px; }
+.ag-chat-err {
+  margin-top: 8px; padding: 7px 10px; border-radius: 8px; font-size: 12px;
+  background: rgba(230,103,103,.14); border: 1px solid #7f1d1d; color: #fca5a5;
+}
+
 /* ── Agent conversation ─────────────────────────────────────────────────── */
 .ag-team {
   display: flex; align-items: center; gap: 10px;
@@ -638,6 +670,28 @@ body.agents-embedded #agTop { right: 12px; bottom: 12px; }
     <nav id="agJump" class="ag-jump hidden" aria-label="Jump to an agent"></nav>
     <div class="ag-report" id="agReport"></div>
   </div>
+  {# Follow-up questions to the Portfolio Manager about a finished report. #}
+  <div id="agChatWrap" class="hidden">
+    <div class="ag-chat-head">
+      <span>🏛️</span>
+      <b data-i18n="agents.chat_with">Ask the Portfolio Manager</b>
+      <span data-i18n="agents.chat_scope">— answered from this report only</span>
+      <span id="agChatQuota" class="ag-chat-quota"></span>
+    </div>
+    <div id="agChatTurns"></div>
+    <div class="ag-chat-form">
+      <textarea id="agChatInput" rows="1" maxlength="1200"
+                placeholder="Why 3-6 months rather than 12?"
+                data-i18n-placeholder="agents.chat_ph"
+                aria-label="Ask the Portfolio Manager a follow-up question"></textarea>
+      <button id="agChatSend" class="ag-btn" data-i18n="agents.chat_send">Ask</button>
+    </div>
+    <p class="ag-chat-note" data-i18n="agents.chat_note">
+      Grounded in this report — it will say so when the analysis does not cover your question. Not investment advice.
+    </p>
+    <div id="agChatErr" class="ag-chat-err hidden"></div>
+  </div>
+
   <div id="agLogWrap" class="hidden">
     <p class="text-xs text-slate-500 mb-1" data-i18n="agents.log">Runner output (tail)</p>
     <div class="ag-log" id="agLog"></div>
@@ -770,6 +824,15 @@ body.agents-embedded #agTop { right: 12px; bottom: 12px; }
 
     // The finished report is authoritative: it carries the team dividers and
     // the report's own structure. Until it exists, show the live turns.
+    // Follow-ups only make sense once there is a finished report to discuss.
+    const canChat = job.status === 'done' && (job.has_report || (job.sections || []).length);
+    show('agChatWrap', !!canChat);
+    if (canChat) {
+      chatJobId = job.id;
+      renderChat(job.chat || []);
+      paintChatQuota(job.chat_quota);
+    }
+
     const secs = (job.sections && job.sections.length)
       ? job.sections
       : liveSections();
@@ -1116,6 +1179,7 @@ body.agents-embedded #agTop { right: 12px; bottom: 12px; }
       // run's own status polling would recycle the worker supervising it.
       if (poll) clearTimeout(poll);
       evCursor = 0; liveByRole = new Map();
+      chatJobId = null; renderChat([]);
       await pollJob(d.job_id);
       schedulePoll(d.job_id, POLL_MIN);
     } catch (e) {
@@ -1293,6 +1357,114 @@ body.agents-embedded #agTop { right: 12px; bottom: 12px; }
     searchEl.value = '';
     searchEl.focus();
     loadHistory();
+  });
+
+  // ── Follow-up conversation ──────────────────────────────────────────────
+  let chatJobId = null;
+  let chatBusy = false;
+
+  function renderChat(turns) {
+    const box = document.getElementById('agChatTurns');
+    if (!box) return;
+    box.innerHTML = '';
+    const mgr = ROLES.find(r => r.key === 'portfolio');
+    for (const t of turns) {
+      if (t.role === 'user') {
+        const row = document.createElement('div');
+        row.className = 'ag-chat-you';
+        const b = document.createElement('div');
+        // textContent: a question is the one string here the user authored, so
+        // it is never treated as markup.
+        b.textContent = t.text || '';
+        row.appendChild(b);
+        box.appendChild(row);
+        continue;
+      }
+      // Manager turns reuse the report bubble, so an answer looks like the same
+      // person speaking as the section above it.
+      const row = document.createElement('div');
+      row.className = 'ag-chat-mgr';
+      row.style.setProperty('--role', mgr ? mgr.color : '#8b5cf6');
+      const av = document.createElement('div');
+      av.className = 'ag-avatar';
+      av.textContent = mgr ? mgr.icon : '🏛️';
+      av.setAttribute('aria-hidden', 'true');
+      const bubble = document.createElement('div');
+      bubble.className = 'ag-bubble';
+      const body = document.createElement('div');
+      body.className = 'ag-report';
+      if (window.Markdown) body.innerHTML = Markdown.render(t.text || '');
+      else body.textContent = t.text || '';
+      bubble.appendChild(body);
+      row.append(av, bubble);
+      box.appendChild(row);
+    }
+  }
+
+  function paintChatQuota(q) {
+    const el = document.getElementById('agChatQuota');
+    if (el && q && typeof q.remaining === 'number') {
+      el.textContent = `${q.remaining}/${q.limit}`;
+    }
+  }
+
+  async function askManager() {
+    const input = document.getElementById('agChatInput');
+    const sendBtn = document.getElementById('agChatSend');
+    const errBox = document.getElementById('agChatErr');
+    const question = (input.value || '').trim();
+    if (!question || chatBusy || !chatJobId) return;
+
+    chatBusy = true;
+    sendBtn.disabled = true;
+    errBox.classList.add('hidden');
+    // Echo the question immediately and clear the box: a several-second wait
+    // with the text still sitting there reads as "the button did nothing".
+    const box = document.getElementById('agChatTurns');
+    const pending = document.createElement('div');
+    pending.className = 'ag-chat-you';
+    const pb = document.createElement('div');
+    pb.textContent = question;
+    pending.appendChild(pb);
+    box.appendChild(pending);
+    const waiting = document.createElement('div');
+    waiting.className = 'ag-chat-note';
+    waiting.textContent = I18n.t('agents.chat_thinking') || 'Thinking…';
+    box.appendChild(waiting);
+    input.value = '';
+
+    try {
+      const r = await fetch(`/api/agents/job/${chatJobId}/chat`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (d.chat_quota) paintChatQuota(d.chat_quota);
+      if (!r.ok) {
+        // Put the question back so it is not lost to a failed call.
+        input.value = question;
+        waiting.remove(); pending.remove();
+        errBox.textContent = '⚠ ' + (d.error || `HTTP ${r.status}`);
+        errBox.classList.remove('hidden');
+        return;
+      }
+      renderChat(d.chat || []);
+    } catch (e) {
+      input.value = question;
+      waiting.remove(); pending.remove();
+      errBox.textContent = '⚠ ' + e.message;
+      errBox.classList.remove('hidden');
+    } finally {
+      chatBusy = false;
+      sendBtn.disabled = false;
+      input.focus();
+    }
+  }
+
+  document.getElementById('agChatSend')?.addEventListener('click', askManager);
+  document.getElementById('agChatInput')?.addEventListener('keydown', (e) => {
+    // Enter sends, Shift+Enter makes a newline — the convention for a chat box.
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); askManager(); }
   });
 
   // ── Back to top ─────────────────────────────────────────────────────────

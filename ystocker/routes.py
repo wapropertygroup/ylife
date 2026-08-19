@@ -2248,6 +2248,7 @@ def api_agents_job(job_id):
     # Served over the existing poll on purpose, not Server-Sent Events: this box
     # runs 2 gunicorn workers, and an SSE connection held open for a
     # thirteen-minute run would occupy half the server's capacity per viewer.
+    from ystocker import quota
     from ystocker.agents import read_events
 
     try:
@@ -2261,6 +2262,13 @@ def api_agents_job(job_id):
     # needs it once it is split, and it would double a 40 KB payload on every
     # poll. The PDF route reads the job from disk, so it is unaffected.
     payload["has_report"] = bool(report.strip())
+    payload["chat"] = job.get("chat") or []
+    # Remaining follow-ups, so the allowance is visible before the first question
+    # rather than appearing only after one has been spent.
+    payload["chat_quota"] = {
+        "remaining": max(0, quota.limit_chat() - _chat_used_today(_agent_user())),
+        "limit": quota.limit_chat(),
+    }
     return jsonify(payload)
 
 
@@ -2290,6 +2298,76 @@ def api_agents_job_pdf(job_id):
         "Content-Length": str(len(pdf)),
         "Cache-Control": "private, max-age=300",
     })
+
+
+def _chat_used_today(email: Optional[str]) -> int:
+    """Follow-up questions this address has already asked today."""
+    from ystocker import quota
+
+    try:
+        with quota._Guard():
+            data = quota._read(quota.today())
+        return int((data.get("chat") or {}).get((email or "").strip().lower(), 0))
+    except Exception:  # noqa: BLE001 - a counter read must not break the poll
+        return 0
+
+
+@bp.route("/api/agents/job/<job_id>/chat", methods=["POST"])
+def api_agents_chat(job_id):
+    """Ask the Portfolio Manager a follow-up about a finished run.
+
+    One grounded Flash call against the stored report, not another run: the
+    analysis already exists, and re-running the graph to answer a question would
+    cost ~22 Pro calls and ten minutes.
+    """
+    gate = _agent_gate()
+    if gate:
+        return gate
+    from datetime import datetime, timezone
+
+    from ystocker import quota
+    from ystocker.agents import (append_chat, ask_manager, chat_turns,
+                                 get_job, owns)
+
+    email = _agent_user()
+    job = get_job(job_id)
+    # 404 for someone else's run, as everywhere else here: a distinguishable
+    # 403 would confirm the id exists.
+    if not job or not owns(job, email):
+        return jsonify({"error": "No such job"}), 404
+    if job.get("status") != "done":
+        return jsonify({"error": f"Run is {job.get('status')}, not done"}), 409
+
+    body = request.get_json(force=True, silent=True) or {}
+    question = (body.get("question") or "").strip()
+    if not question:
+        return jsonify({"error": "Ask a question first"}), 400
+    from ystocker.agents import CHAT_QUESTION_MAX
+
+    if len(question) > CHAT_QUESTION_MAX:
+        return jsonify({"error": f"Question is too long (max {CHAT_QUESTION_MAX} characters)"}), 400
+
+    # Charged against its own daily allowance, never the run quota.
+    ok, info = quota.try_consume_chat(email)
+    if not ok:
+        return jsonify({"error": (f"You have used your {info['limit']} follow-up "
+                                  f"questions for today."),
+                        "reason": "quota", "chat_quota": info}), 429
+
+    answer, err = ask_manager(job, question)
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    if err:
+        # The question is still recorded, so the user can see what they asked and
+        # retry without retyping it.
+        append_chat(job_id, [{"role": "user", "text": question, "at": now}])
+        return jsonify({"error": err, "chat_quota": info}), 502
+
+    updated = append_chat(job_id, [
+        {"role": "user", "text": question, "at": now},
+        {"role": "manager", "text": answer, "at": now},
+    ])
+    log.info("agents: follow-up answered for %s (%d chars)", job_id, len(answer))
+    return jsonify({"chat": chat_turns(updated or job), "chat_quota": info})
 
 
 @bp.route("/api/agents/jobs")

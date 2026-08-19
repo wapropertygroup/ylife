@@ -1321,6 +1321,109 @@ def _quota_day() -> Optional[str]:
         return None
 
 
+# ---------------------------------------------------------------------------
+# Follow-up questions
+#
+# Once a run is finished, the analysis exists. A follow-up question does not need
+# another run: re-running the graph would cost ~22 Gemini Pro calls and ten
+# minutes to answer "why 3-6 months and not 12". So a question is one grounded
+# call against the finished report instead.
+#
+# Deliberately on Flash rather than the deep model. Pro's *daily* cap is the
+# binding constraint on how many analyses can be produced (250/day, about eleven
+# runs), so spending Pro calls on conversation would directly cost the user
+# analyses. Flash is a separate quota bucket, answers in seconds, and the hard
+# reasoning has already been done and is sitting in the context.
+# ---------------------------------------------------------------------------
+
+CHAT_MODEL = os.environ.get("AGENTS_CHAT_MODEL", "gemini-2.5-flash")
+CHAT_MAX_TURNS = 60            # per job, so one report cannot grow without bound
+CHAT_QUESTION_MAX = 1200       # characters
+# How much of the report to put in context. The whole thing is ~55 KB, which is
+# well within Flash's window, so it is sent entire rather than retrieved from --
+# a chunk-picking step here could silently drop the section a question is about.
+CHAT_REPORT_MAX = 120_000
+
+_CHAT_LOCK = threading.Lock()
+
+
+def chat_turns(job: dict[str, Any]) -> list[dict[str, Any]]:
+    turns = job.get("chat")
+    return turns if isinstance(turns, list) else []
+
+
+def append_chat(job_id: str, turns: list[dict[str, Any]]) -> Optional[dict[str, Any]]:
+    """Append turns to a job's conversation and persist.
+
+    Read-modify-write under a lock: two questions posted at once would otherwise
+    each read the same list and the first answer would vanish. _write is atomic,
+    so the file itself can never be torn.
+    """
+    with _CHAT_LOCK:
+        job = get_job(job_id)
+        if not job:
+            return None
+        existing = chat_turns(job)
+        job["chat"] = (existing + turns)[-CHAT_MAX_TURNS:]
+        _write(job)
+        return job
+
+
+def _chat_prompt(job: dict[str, Any], question: str) -> str:
+    """Build the grounded prompt for a follow-up question."""
+    report = (job.get("report") or "")[:CHAT_REPORT_MAX]
+    decision = job.get("decision") or "(none recorded)"
+    ticker, day = job.get("ticker", "?"), job.get("date", "?")
+
+    prior = ""
+    for turn in chat_turns(job)[-10:]:      # recent context only, to stay cheap
+        who = "User" if turn.get("role") == "user" else "You"
+        prior += f"\n{who}: {turn.get('text','')}"
+
+    return (
+        "You are the Portfolio Manager who signed off the following equity "
+        f"analysis of {ticker} for {day}. The user is asking a follow-up "
+        "question about your own decision.\n\n"
+        "Rules you must follow:\n"
+        "1. Answer from the analysis below. It is the only evidence you have.\n"
+        "2. If the analysis does not address the question, say so plainly and "
+        "briefly say what would be needed to answer it. Do not fill the gap "
+        "with a plausible guess, and never invent a number, date or source.\n"
+        "3. Do not silently change the recorded decision. If the question "
+        "raises something that would genuinely alter it, say what and why.\n"
+        "4. Reply in the same language as the analysis.\n"
+        "5. Be direct and short — a few sentences to a short paragraph unless "
+        "the question truly needs more. No preamble.\n"
+        "6. This is analysis, not investment advice.\n\n"
+        f"=== RECORDED DECISION ===\n{decision}\n\n"
+        f"=== FULL ANALYSIS ===\n{report}\n\n"
+        + (f"=== CONVERSATION SO FAR ==={prior}\n\n" if prior else "")
+        + f"=== USER'S QUESTION ===\n{question}\n"
+    )
+
+
+def ask_manager(job: dict[str, Any], question: str) -> tuple[Optional[str], Optional[str]]:
+    """Ask the Portfolio Manager a follow-up. Returns (answer, error)."""
+    if not (job.get("report") or "").strip():
+        return None, "This run has no report to discuss."
+    key = (os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY") or "").strip()
+    if not key:
+        return None, "No LLM credential is configured."
+    try:
+        from google import genai
+
+        client = genai.Client(api_key=key)
+        resp = client.models.generate_content(
+            model=CHAT_MODEL, contents=_chat_prompt(job, question))
+        text = (getattr(resp, "text", "") or "").strip()
+        if not text:
+            return None, "The model returned an empty answer."
+        return text, None
+    except Exception as exc:  # noqa: BLE001 - surfaced to the user verbatim
+        log.error("agents: follow-up failed for %s: %s", job.get("id"), exc)
+        return None, f"{type(exc).__name__}: {exc}"
+
+
 def _try_salvage(job: dict[str, Any], why: str) -> bool:
     """Turn a failed run into a recovered one when its stream holds the analysis.
 
