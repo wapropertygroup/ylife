@@ -1237,12 +1237,71 @@ body.agents-embedded #agTop { right: 12px; bottom: 12px; }
       if (poll) clearTimeout(poll);
       evCursor = 0; liveByRole = new Map();
       chatJobId = null; renderChat([]);
+      // A new run gets its own history entry, so back returns to whatever was
+      // being read before it started.
+      syncJobUrl(d.job_id, true);
+      announceJob(d.job_id);
       await pollJob(d.job_id);
       schedulePoll(d.job_id, POLL_MIN);
     } catch (e) {
       showErr(e.message); runBtn.disabled = false; selfBtn.disabled = false;
     }
   }
+
+  // -- Deep links ----------------------------------------------------------
+  // A report is addressable as /agents?job=<id>, so one can be bookmarked, sent
+  // to someone, or reopened after a reload. The id alone is not a capability:
+  // every read still goes through the owner/VIP check server-side, so a link
+  // shared with someone who may not read it 404s rather than leaking.
+  //
+  // History is only touched outside the floating panel. In embedded mode this
+  // document is an iframe, and pushState there writes into the *parent* window's
+  // session history -- the browser back button would then step through reports
+  // the reader never navigated to as a page.
+  const EMBEDDED = {% if agent_embedded %}true{% else %}false{% endif %};
+
+  function syncJobUrl(id, push) {
+    if (EMBEDDED || !window.history) return;
+    const url = new URL(window.location.href);
+    if (id) url.searchParams.set('job', id);
+    else url.searchParams.delete('job');
+    const next = url.pathname + url.search;
+    if (push && url.searchParams.get('job') !== new URL(window.location.href).searchParams.get('job')) {
+      history.pushState({ job: id || null }, '', next);
+    } else {
+      history.replaceState({ job: id || null }, '', next);
+    }
+  }
+
+  // Open one report: reset the per-run view state, poll it, keep polling while
+  // it is still working. Shared by the history View button, a deep link, and
+  // back/forward, so all three behave identically.
+  async function openJob(id, opts) {
+    const push = !(opts && opts.push === false);
+    if (!id) return;
+    if (poll) { clearTimeout(poll); poll = null; }
+    evCursor = 0; liveByRole = new Map();
+    chatJobId = null; renderChat([]);
+    syncJobUrl(id, push);
+    announceJob(id);
+    if (await pollJob(id)) schedulePoll(id, POLL_MIN);
+  }
+
+  // Tell the host page which report is on screen, so its "open full page"
+  // button can land on this same one instead of the bare index.
+  function announceJob(id) {
+    if (!EMBEDDED || !window.parent || window.parent === window) return;
+    try {
+      window.parent.postMessage({ type: 'ystocker:agents-job', id: id || null },
+                                window.location.origin);
+    } catch (_) {}
+  }
+
+  window.addEventListener('popstate', event => {
+    const id = (event.state && event.state.job)
+      || new URLSearchParams(window.location.search).get('job');
+    if (id) openJob(id, { push: false });
+  });
 
   // -- Report search -------------------------------------------------------
   // The history panel is driven entirely by the search endpoint: an empty query
@@ -1440,11 +1499,7 @@ body.agents-embedded #agTop { right: 12px; bottom: 12px; }
           btn.textContent = I18n.t('agents.view') || 'View';
           // Resume tracking if the job is still in flight, rather than showing a
           // snapshot that never updates.
-          btn.onclick = async () => {
-            if (poll) { clearTimeout(poll); poll = null; }
-            evCursor = 0; liveByRole = new Map();
-            if (await pollJob(j.id)) schedulePoll(j.id, POLL_MIN);
-          };
+          btn.onclick = () => openJob(j.id);
           actions.appendChild(btn);
           // has_report, not status alone: a run can finish with an empty report,
           // and a PDF link for one 404s.
@@ -1637,6 +1692,14 @@ body.agents-embedded #agTop { right: 12px; bottom: 12px; }
     runBtn.disabled = false; selfBtn.disabled = false;
   });
   loadHistory();
+
+  // Deep link: /agents?job=<id> opens that report straight away. replaceState
+  // rather than push, so the first back press leaves the page instead of
+  // stepping onto a duplicate of the entry the user arrived on.
+  {
+    const deep = new URLSearchParams(window.location.search).get('job');
+    if (deep) openJob(deep, { push: false });
+  }
 })();
 </script>
 {% if agent_embedded %}

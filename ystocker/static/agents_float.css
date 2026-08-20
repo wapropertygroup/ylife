@@ -91,13 +91,6 @@
   animation: agentsPanelIn .22s cubic-bezier(.2, .8, .2, 1) both;
 }
 
-.agents-floating-panel.is-maximized {
-  inset: 0 !important;
-  width: 100vw !important;
-  height: 100vh !important;
-  height: 100dvh !important;
-  border-radius: 0;
-}
 
 .agents-floating-bar {
   position: relative;
@@ -154,9 +147,6 @@
 }
 .agents-floating-actions button:hover { color: #e2e8f0; background: #172033; border-color: #28364e; }
 .agents-floating-actions svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-width: 1.7; }
-.agents-floating-icon-restore { display: none; }
-.agents-floating-panel.is-maximized .agents-floating-icon-maximize { display: none; }
-.agents-floating-panel.is-maximized .agents-floating-icon-restore { display: block; }
 
 .agents-floating-body { position: absolute; inset: 54px 0 0; background: #020617; }
 .agents-floating-body iframe { display: block; width: 100%; height: 100%; border: 0; background: #020617; }
@@ -203,7 +193,6 @@
   border-right: 1px solid #64748b;
   border-bottom: 1px solid #64748b;
 }
-.agents-floating-panel.is-maximized .agents-floating-resizer { display: none; }
 
 body.agents-float-interacting { user-select: none; }
 body.agents-float-interacting iframe { pointer-events: none; }
@@ -233,8 +222,12 @@ body.agents-float-interacting iframe { pointer-events: none; }
   .agents-floating-bar { height: 56px; padding-top: env(safe-area-inset-top); }
   .agents-floating-body { top: calc(56px + env(safe-area-inset-top)); }
   .agents-floating-grip,
-  #agentsFloatingMaximize,
   .agents-floating-resizer { display: none; }
+  /* The expand button stays. It used to grow the frame to a full-screen overlay,
+     which on a phone the panel already is, so it was hidden as a no-op. It now
+     navigates to /agents, which is the one thing a phone reader most wants from a
+     framed sheet: a real address bar, the browser's own back button, and no
+     nested scroll container. */
 }
 
 @media (prefers-reduced-motion: reduce) {

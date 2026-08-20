@@ -1,5 +1,11 @@
 {% set _agents_embedded = agent_embedded|default(false) %}
-{% set _agents_floating = not _agents_embedded and request.endpoint != 'main.agents_page' %}
+{# The research-desk launcher is suppressed on /agents itself (it is that page),
+   and on /login. On a phone the panel is a full-screen sheet, so a launcher there
+   competes with the one control the page exists for -- and Google blocks its
+   sign-in flow inside an iframe, so the framed copy could not sign anyone in
+   anyway. #}
+{% set _agents_floating = not _agents_embedded
+       and request.endpoint not in ('main.agents_page', 'main.login') %}
 <!doctype html>
 <html lang="en" class="h-full">
 <head>
