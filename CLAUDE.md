@@ -51,6 +51,33 @@ aws ssm get-command-invocation --command-id <CMD_ID> --instance-id i-059a024daff
   --region us-west-2 --query "[Status, StandardOutputContent]" --output text
 ```
 
+### Deploy the TradingAgents patches
+
+`/opt/tradingagents` is a checkout of **TauricResearch/TradingAgents**, which we
+cannot push to, so every fix we have made to it lives only as local commits. The
+series is therefore kept in this repo, in `deploy/tradingagents/`, and applied
+with `git am` so it lands as real commits — a later upstream `git pull` then
+conflicts loudly instead of silently reverting the work.
+
+```bash
+# on the box, after deploying ystocker
+sudo bash /opt/ystocker/deploy/tradingagents/apply.sh
+```
+
+Idempotent: an already-applied patch is detected by testing whether it *reverses*
+cleanly, so re-running reports `skipped` rather than failing. Regenerate the
+series after adding a commit in the TradingAgents checkout:
+
+```bash
+cd ~/workspace/TradingAgents
+rm -f ~/workspace/ystocker/deploy/tradingagents/0*.patch
+git format-patch --output-directory ~/workspace/ystocker/deploy/tradingagents <first>^..HEAD
+```
+
+Keep the series deployable rather than historical: squash a fix into the commit
+it fixes. The hook and its follow-up fix were separate commits at first, which
+meant a fresh box passed through a state where every run died in `_log_state`.
+
 ### Sync secrets
 ```bash
 bash deploy/sync-ssm.sh          # reads .env, writes to SSM Parameter Store
