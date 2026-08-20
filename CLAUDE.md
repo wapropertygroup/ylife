@@ -26,52 +26,56 @@ pip install -r requirements_stocker.txt   # or requirements_{planner,planter,tra
 python run/run_stocker.py                 # starts on http://127.0.0.1:5000
 ```
 
-### Deploy to production (via SSH)
-```bash
-bash deploy/deploy.sh -i ~/Downloads/my-key-pair.pem
-```
-
-### Deploy via AWS SSM (no SSH key needed)
-```bash
-aws ssm send-command --instance-ids i-059a024daff6bd015 --region us-west-2 \
-  --document-name AWS-RunShellScript \
-  --parameters '{"commands":["cd /opt/ystocker && sudo git fetch origin && sudo git reset --hard origin/main && for svc in ystocker yplanner yplanter yhome ytracker ypay yimage ybg; do sudo kill -HUP $(systemctl show --property MainPID $svc | cut -d= -f2) 2>/dev/null || sudo systemctl restart $svc; done"]}'
-```
-
-### Deploy a single app via SSM
-```bash
-aws ssm send-command --instance-ids i-059a024daff6bd015 --region us-west-2 \
-  --document-name AWS-RunShellScript \
-  --parameters '{"commands":["cd /opt/ystocker && sudo git fetch origin && sudo git reset --hard origin/main && sudo kill -HUP $(systemctl show --property MainPID yplanner | cut -d= -f2) 2>/dev/null || sudo systemctl restart yplanner"]}'
-```
-
-### Check deploy result
-```bash
-aws ssm get-command-invocation --command-id <CMD_ID> --instance-id i-059a024daff6bd015 \
-  --region us-west-2 --query "[Status, StandardOutputContent]" --output text
-```
-
 ### Deploy
-
 ```bash
-bash deploy/ship.sh              # ystocker + TradingAgents, then restart
-bash deploy/ship.sh --ystocker   # ystocker only
+bash deploy/ship.sh              # both repos, restart all 8 apps, health check
+bash deploy/ship.sh --ystocker   # skip TradingAgents
 bash deploy/ship.sh --check      # report what is deployed, change nothing
 ```
 
-Both checkouts are `fetch` + `reset --hard`, so the box simply matches GitHub.
+Both checkouts are `fetch` + `reset --hard`, so the box just matches GitHub.
 `/opt/tradingagents` tracks **15th-Ave-NE/TradingAgents** (our fork), not
-TauricResearch — the fork is where our commits live, and `ship.sh` repoints the
-box automatically if it finds the old remote. It also warns when a repo has
-uncommitted changes or unpushed commits, because `reset --hard` takes what GitHub
-has and would silently not ship them.
+TauricResearch; `ship.sh` repoints the box automatically if it still finds the old
+remote. Before deploying it warns about uncommitted or unpushed work, since
+`reset --hard` takes what GitHub has and would otherwise appear to ship a commit
+still sitting on the laptop. That check asks the remote for its `main` SHA rather
+than reading a local `<remote>/main` ref, because the TradingAgents clone calls the
+fork `upstream` and has never fetched it, so no such ref exists.
+
+All 8 apps get a full `systemctl restart`, **not** `kill -HUP`. HUP looks like a
+graceful reload but under `--preload` it ships stale code: gunicorn's HUP handler
+re-reads the *config file* only, and the WSGI app was imported once by the master
+at `ExecStart`, so HUP re-forks workers from that same module state. Verified on the
+box — a route added to `yhome/routes.py` returned 404 after HUP and 200 after
+restart. Templates *do* refresh (a forked worker starts with an empty Jinja cache),
+which is what made this easy to miss for so long. ystocker must not be HUPed for a
+second reason: its background threads live in the master, and HUP cannot stop the
+threads a previous import started.
+
+Restarting is safe mid-analysis: the unit sets `KillMode=process`, so systemd
+signals only gunicorn's master and the detached TradingAgents child survives.
+Before that, every deploy killed in-flight runs and threw away the API spend.
 
 There used to be a patch series in `deploy/tradingagents/` applied with `git am`,
 because our TradingAgents commits had nowhere to live. The fork replaced it and it
-was deleted: two copies of the same code drift.
+was deleted — two copies of the same code drift.
 
-Restarting is safe mid-analysis — the unit sets `KillMode=process`, so systemd
-signals only gunicorn's master and the detached TradingAgents child survives.
+<details><summary>Lower-level alternatives</summary>
+
+```bash
+# SSH (needs a .pem; the id_ed25519 key on this machine has no EC2 access)
+bash deploy/deploy.sh -i ~/Downloads/my-key-pair.pem
+
+# One app, by hand
+aws ssm send-command --instance-ids i-059a024daff6bd015 --region us-west-2 \
+  --document-name AWS-RunShellScript \
+  --parameters '{"commands":["cd /opt/ystocker && sudo git fetch origin && sudo git reset --hard origin/main && sudo systemctl restart yplanner"]}'
+
+# Read a command result
+aws ssm get-command-invocation --command-id <CMD_ID> --instance-id i-059a024daff6bd015 \
+  --region us-west-2 --query "[Status, StandardOutputContent]" --output text
+```
+</details>
 
 ### Sync secrets
 ```bash
@@ -161,6 +165,7 @@ Started in `create_app()`, all daemon threads:
 
 ## Known Pitfalls
 
+- **`kill -HUP` does not reload code under `--preload`.** Gunicorn's HUP handler re-reads the config file, not the WSGI app, which the master imported once at `ExecStart`. Workers re-fork from the old module state, so new Python never runs — while templates *do* refresh, because a fresh worker has an empty Jinja cache. The deploy one-liner in this file used HUP for a long time and was therefore shipping stale code. Use `systemctl restart`.
 - **Nested `<button>` elements** break DOM structure in templates — browsers auto-close the outer button, causing sibling sections to escape their parent container. Always use `<div>` or `<span>` for clickable elements inside buttons.
 - **`routes.py` is monolithic** (5200+ lines in yStocker) — all routes, API endpoints, cache logic, and background tasks in one file.
 - **Google Maps API** on yPlanner requires a valid billing-enabled API key; errors show "Oops! Something went wrong" with a purple stripe.
