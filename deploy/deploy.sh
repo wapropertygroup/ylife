@@ -154,55 +154,121 @@ fi
 
 if [[ "$MODE" == "ship" ]]; then
   _ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-  preflight "$_ROOT" ystocker "$(git -C "$_ROOT" remote get-url origin 2>/dev/null || true)"
+  _YS_REMOTE="$(git -C "$_ROOT" remote get-url origin 2>/dev/null || true)"
+  preflight "$_ROOT" ystocker "$_YS_REMOTE"
   if [[ $WITH_TA -eq 1 ]]; then
     preflight "$HOME/workspace/TradingAgents" TradingAgents "$TA_REMOTE"
+
+    # Refresh the local clone's view of the fork as well, so `git log <remote>/main`
+    # on the laptop shows what is about to ship. Fetch only -- never reset, never
+    # add a remote: this is someone's working tree. Best-effort, because a network
+    # problem here says nothing about whether the box can reach GitHub.
+    _TA_NAME="$(git -C "$HOME/workspace/TradingAgents" remote -v 2>/dev/null |
+                awk -v u="$TA_REMOTE" '$2==u {print $1; exit}' || true)"
+    if [[ -n "$_TA_NAME" ]]; then
+      GIT_TERMINAL_PROMPT=0 git -C "$HOME/workspace/TradingAgents" \
+        fetch "$_TA_NAME" --prune -q 2>/dev/null || true
+    fi
   fi
 
-  STEPS="
+  # The remote body is read verbatim into a variable, then prefixed with config
+  # assignments. Note the form: `read -d ''` with a plain heredoc, NOT
+  # STEPS="...$(cat <<'X' ...)". A heredoc nested inside command substitution
+  # cannot contain an unbalanced apostrophe -- bash tracks quotes while scanning
+  # for the closing paren, so "gunicorn's" below silently breaks the parse.
+  IFS= read -r -d '' _BODY <<'REMOTE_BODY' || true
 set -u
-echo '== ystocker'
-cd $APP_DIR && sudo git fetch origin --prune -q && sudo git reset --hard -q origin/main
-sudo git log --oneline -1
-"
-  if [[ $WITH_TA -eq 1 ]]; then
-    STEPS="$STEPS
-echo '== tradingagents'
-cd /opt/tradingagents
-# Repoint if the box still tracks the upstream project rather than our fork.
-if [[ \"\$(sudo git remote get-url origin)\" != '$TA_REMOTE' ]]; then
-  echo '   repointing origin -> $TA_REMOTE'
-  sudo git remote set-url origin '$TA_REMOTE'
-fi
-sudo git fetch origin --prune -q && sudo git reset --hard -q origin/main
-sudo git log --oneline -1
-"
+
+# Bring one checkout to whatever the remote calls main, and prove it got there.
+#
+# enforce=1 rewrites origin to $url. That exists for one specific migration --
+# /opt/tradingagents used to track TauricResearch and has to be moved to our fork
+# -- and is deliberately NOT the default: rewriting a remote that already works
+# can break it, e.g. turning an SSH deploy-key URL into HTTPS the box has no
+# credentials for. For everything else a mismatch is reported, not "fixed".
+sync_repo() {
+  dir="$1"; label="$2"; url="$3"; enforce="$4"
+  echo "== $label"
+
+  actual="$(sudo git -C "$dir" remote get-url origin)"
+  if [ "$actual" != "$url" ]; then
+    if [ "$enforce" = 1 ]; then
+      echo "   repointing origin -> $url"
+      sudo git -C "$dir" remote set-url origin "$url"
+    elif [ -n "$url" ]; then
+      echo "   ?? box origin is $actual, laptop origin is $url — deploying the box's"
+    fi
   fi
 
-  STEPS="$STEPS
-echo '== restart'
-# Every app gets a real restart. NOT \`kill -HUP\`, which is what the one-liner
-# in CLAUDE.md used to do and which silently shipped stale code: gunicorn's HUP
+  before="$(sudo git -C "$dir" rev-parse HEAD)"
+  if ! sudo git -C "$dir" fetch origin --prune -q; then
+    echo "   !! fetch failed — refusing to restart $label on unchanged code"
+    return 1
+  fi
+  sudo git -C "$dir" reset --hard -q origin/main
+  after="$(sudo git -C "$dir" rev-parse HEAD)"
+
+  # Ask the remote what main is, rather than trusting the ref we just fetched.
+  # `fetch && reset` chained on && silently skips the reset when the fetch fails,
+  # and the old script then printed the *old* commit and exited 0 -- a deploy that
+  # reported success while shipping nothing. Compare against the source of truth.
+  remote="$(sudo git -C "$dir" ls-remote origin refs/heads/main 2>/dev/null | awk '{print $1; exit}')"
+  if [ -z "$remote" ]; then
+    echo "   !! cannot read main from origin — deployed SHA unverified"
+    return 1
+  fi
+  if [ "$after" != "$remote" ]; then
+    echo "   !! at ${after:0:7} but remote main is ${remote:0:7} — fetch did not land"
+    return 1
+  fi
+
+  if [ "$before" = "$after" ]; then
+    echo "   already at latest: $(sudo git -C "$dir" log --oneline -1)"
+  else
+    echo "   updated to $(sudo git -C "$dir" log --oneline -1)"
+    sudo git -C "$dir" log --oneline "$before..$after" 2>/dev/null | sed 's/^/     + /' || true
+  fi
+}
+
+rc=0
+sync_repo "$APP_DIR" ystocker "$YS_REMOTE" 0 || rc=1
+if [ "$WITH_TA" = 1 ]; then
+  sync_repo /opt/tradingagents tradingagents "$TA_REMOTE" 1 || rc=1
+fi
+if [ "$rc" != 0 ]; then
+  echo "== aborted before restart: the running code is still the last good deploy"
+  exit 1
+fi
+
+echo "== restart"
+# Every app gets a real restart. NOT `kill -HUP`, which is what the one-liner in
+# CLAUDE.md used to do and which silently shipped stale code: gunicorn's HUP
 # handler calls Application.reload(), and that re-reads the *config file* only.
 # Under --preload the WSGI app was imported once by the master at ExecStart, so
-# HUP re-forks workers from that same already-imported module state and new
-# Python never loads. Measured on this box: a route added to yhome/routes.py
-# returned 404 after HUP and 200 after restart. Templates did refresh, because a
-# forked worker starts with an empty Jinja cache -- which is what made this so
-# easy to miss.
+# HUP re-forks workers from that same already-imported module state and new Python
+# never loads. Measured on this box: a route added to yhome/routes.py returned 404
+# after HUP and 200 after restart. Templates did refresh, because a forked worker
+# starts with an empty Jinja cache -- which is what made this so easy to miss.
 #
-# ystocker must not be HUPed for a second reason: it runs --preload, so
-# create_app() and its cache-warming, 13F, heatmap and email threads live in the
-# master, and HUP cannot stop threads a previous import started.
-for svc in $SERVICES; do sudo systemctl restart \"\$svc\"; done
+# ystocker must not be HUPed for a second reason: it runs --preload, so create_app()
+# and its cache-warming, 13F, heatmap and email threads live in the master, and HUP
+# cannot stop threads a previous import started.
+for svc in $SERVICES; do sudo systemctl restart "$svc"; done
 sleep 10
-for svc in $SERVICES; do printf '   %-10s %s\n' \"\$svc\" \"\$(systemctl is-active \$svc)\"; done
-printf '   http     agents=%s multiples=%s planner=%s home=%s\n' \\
-  \"\$(curl -s -o /dev/null -w '%{http_code}' https://stock.li-family.us/agents)\" \\
-  \"\$(curl -s -o /dev/null -w '%{http_code}' https://stock.li-family.us/multiples)\" \\
-  \"\$(curl -s -o /dev/null -w '%{http_code}' https://planner.li-family.us/)\" \\
-  \"\$(curl -s -o /dev/null -w '%{http_code}' https://home.li-family.us/)\"
-"
+for svc in $SERVICES; do printf '   %-10s %s\n' "$svc" "$(systemctl is-active $svc)"; done
+printf '   http     agents=%s multiples=%s planner=%s home=%s\n' \
+  "$(curl -s -o /dev/null -w '%{http_code}' https://stock.li-family.us/agents)" \
+  "$(curl -s -o /dev/null -w '%{http_code}' https://stock.li-family.us/multiples)" \
+  "$(curl -s -o /dev/null -w '%{http_code}' https://planner.li-family.us/)" \
+  "$(curl -s -o /dev/null -w '%{http_code}' https://home.li-family.us/)"
+REMOTE_BODY
+
+  STEPS="APP_DIR='$APP_DIR'
+YS_REMOTE='$_YS_REMOTE'
+TA_REMOTE='$TA_REMOTE'
+SERVICES='$SERVICES'
+WITH_TA='$WITH_TA'
+$_BODY"
   run_remote "$STEPS"
   exit $?
 fi

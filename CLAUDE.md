@@ -41,13 +41,24 @@ nginx, certbot, swap, CJK font) and needs a `.pem`; use it for a new box or afte
 editing a unit file, not to ship code.
 
 `/opt/tradingagents` tracks **15th-Ave-NE/TradingAgents** (our fork), not
-TauricResearch; both `deploy.sh` and `install-tradingagents.sh` repoint the box
-automatically if they still find the old remote. Before deploying, `deploy.sh`
-warns about uncommitted or unpushed work, since `reset --hard` takes what GitHub
-has and would otherwise appear to ship a commit still sitting on the laptop. That
-check asks the remote for its `main` SHA rather than reading a local
-`<remote>/main` ref, because the TradingAgents clone calls the fork `upstream` and
-has never fetched it, so no such ref exists.
+TauricResearch; `deploy.sh` and `install-tradingagents.sh` repoint that one checkout
+if they still find the old remote. They do **not** rewrite ystocker's remote — a
+mismatch there is reported, since silently rewriting a working remote can break it
+(an SSH deploy-key URL turned into HTTPS the box has no credentials for).
+
+After resetting, the deploy re-reads `main` straight from the remote with
+`ls-remote` and aborts before restarting if the checkout does not match it. The
+previous `git fetch origin && git reset --hard origin/main` chained the two on
+`&&`, so a failed fetch skipped the reset, printed the *old* commit and still
+exited 0 — a deploy that reported success while shipping nothing. It also prints
+`already at latest` or `updated to <sha>` plus the new commits, so "nothing
+happened" and "nothing needed to happen" are distinguishable.
+
+Before deploying, `deploy.sh` warns about uncommitted or unpushed work, since
+`reset --hard` takes what GitHub has and would otherwise appear to ship a commit
+still sitting on the laptop. That check asks the remote for its `main` SHA rather
+than reading a local `<remote>/main` ref, because the TradingAgents clone calls the
+fork `upstream` and has never fetched it, so no such ref exists.
 
 All 8 apps get a full `systemctl restart`, **not** `kill -HUP`. HUP looks like a
 graceful reload but under `--preload` it ships stale code: gunicorn's HUP handler
