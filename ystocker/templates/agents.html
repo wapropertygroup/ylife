@@ -369,6 +369,10 @@ body.agents-embedded #agTop { right: 12px; bottom: 12px; }
   <div id="agSample" class="text-xs text-slate-500" data-i18n="agents.sample_loading">Loading…</div>
 </div>
 
+{# Shown only when a shared /agents?job=<id> link cannot be opened, so a bad or
+   private link says so instead of looking like a page that failed to load. #}
+<div id="agDeepMissing" class="hidden bg-slate-900 border border-amber-900/60 rounded-2xl p-4 mt-6 text-sm text-amber-200/90"></div>
+
 <div id="agSampleCard" class="hidden bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 mt-6 fade-up">
   <div class="ag-row justify-between mb-3">
     <div class="ag-row">
@@ -397,6 +401,7 @@ body.agents-embedded #agTop { right: 12px; bottom: 12px; }
 (function() {
   const listBox = document.getElementById('agSample');
   if (!listBox) return;   // signed in, or the showcase is switched off
+  const EMBEDDED_SAMPLE = {% if agent_embedded %}true{% else %}false{% endif %};
 
   // Same cast the server split the report with, so a turn is drawn with the
   // role's own colour and icon rather than a guess.
@@ -467,11 +472,19 @@ body.agents-embedded #agTop { right: 12px; bottom: 12px; }
     }
   }
 
-  async function openReport(j) {
+  async function openReport(j, opts) {
+    const deep = !!(opts && opts.deep);
     try {
       const r = await fetch('/api/agents/showcase/' + encodeURIComponent(j.id));
-      if (!r.ok) return;
+      if (!r.ok) {
+        // A sample click that fails is a teaser not loading, and staying quiet is
+        // right. A shared link that fails is the whole reason the visitor came,
+        // so it has to say something.
+        if (deep) showDeepMissing(r.status);
+        return;
+      }
       const job = await r.json();
+      hideDeepMissing();
 
       document.getElementById('agSampleTitle').textContent =
         (job.ticker || '') + (job.date ? ' · ' + job.date : '');
@@ -500,8 +513,47 @@ body.agents-embedded #agTop { right: 12px; bottom: 12px; }
         pdf.href = '/api/agents/showcase/' + encodeURIComponent(j.id) + '/pdf';
       }
       card.classList.remove('hidden');
-      card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      card.scrollIntoView({ behavior: deep ? 'auto' : 'smooth', block: 'start' });
+      // Make the open report the address, so this view is itself shareable and
+      // survives a reload. replaceState, not push: a sample click is a change of
+      // view within the page, not somewhere back should have to step through.
+      shareUrl(j.id);
     } catch (e) { /* the sample is a teaser; never block the page on it */ }
+  }
+
+  // Keep ?job= in sync and tell a hosting page which report is open, so the
+  // floating panel's expand button lands on this one. Both are skipped while
+  // framed for history, matching the signed-in view: pushing state from an
+  // iframe writes into the host page's session history.
+  function shareUrl(id) {
+    if (!EMBEDDED_SAMPLE && window.history) {
+      const url = new URL(window.location.href);
+      url.searchParams.set('job', id);
+      history.replaceState({ job: id }, '', url.pathname + url.search);
+    }
+    if (EMBEDDED_SAMPLE && window.parent && window.parent !== window) {
+      try {
+        window.parent.postMessage({ type: 'ystocker:agents-job', id: id },
+                                  window.location.origin);
+      } catch (_) {}
+    }
+  }
+
+  function showDeepMissing(status) {
+    const box = document.getElementById('agDeepMissing');
+    if (!box) return;
+    // 404 is the only expected answer: the showcase route returns it for an id
+    // that does not exist, for a run that is not finished, and for a self-test
+    // alike, precisely so it cannot be used to probe which ids are real.
+    box.textContent = status === 404
+      ? (I18n.t('agents.deep_missing') || 'That report is not available. It may still be running, or the link may be wrong.')
+      : (I18n.t('agents.deep_failed') || 'Could not load that report.') + ' (HTTP ' + status + ')';
+    box.classList.remove('hidden');
+    box.scrollIntoView({ block: 'nearest' });
+  }
+
+  function hideDeepMissing() {
+    document.getElementById('agDeepMissing')?.classList.add('hidden');
   }
 
   function drawList(jobs) {
@@ -575,6 +627,10 @@ body.agents-embedded #agTop { right: 12px; bottom: 12px; }
   });
 
   (async () => {
+    // A shared link is opened first and independently of the sample list, so a
+    // slow or empty sample never delays or blocks the report someone was sent.
+    const deep = new URLSearchParams(window.location.search).get('job');
+    if (deep) openReport({ id: deep }, { deep: true });
     try {
       const r = await fetch('/api/agents/showcase');
       if (!r.ok) { listBox.textContent = ''; return; }

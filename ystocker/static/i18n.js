@@ -1187,6 +1187,10 @@ const I18n = (() => {
     'agents.sample_why':    { en: 'A random selection of finished analyses. Sign in to run your own.',
                               zh: '随机展示已完成的分析报告。登录后可运行你自己的分析。' },
     'agents.sample_loading':{ en: 'Loading…',     zh: '加载中…' },
+    // Shown when a shared /agents?job=<id> link cannot be opened.
+    'agents.deep_missing':  { en: 'That report is not available. It may still be running, or the link may be wrong.',
+                              zh: '该报告不可访问。可能仍在运行中，或链接有误。' },
+    'agents.deep_failed':   { en: 'Could not load that report.', zh: '无法加载该报告。' },
     'agents.sample_none':   { en: 'No finished reports to show yet.', zh: '暂无可展示的已完成报告。' },
     'agents.sample_cta':    { en: 'Want this for your own ticker and date?',
                               zh: '想分析你自己的股票和日期?' },
