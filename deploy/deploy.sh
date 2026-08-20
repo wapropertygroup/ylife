@@ -225,7 +225,7 @@ sync_repo() {
   if [ "$before" = "$after" ]; then
     echo "   already at latest: $(sudo git -C "$dir" log --oneline -1)"
   else
-    echo "   updated to $(sudo git -C "$dir" log --oneline -1)"
+    echo "   updated ${before:0:7} -> ${after:0:7}"
     sudo git -C "$dir" log --oneline "$before..$after" 2>/dev/null | sed 's/^/     + /' || true
   fi
 }
