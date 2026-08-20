@@ -193,7 +193,25 @@ def has_llm_key() -> bool:
                ("GEMINI_API_KEY", "GOOGLE_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY"))
 
 _TICKER_RE = re.compile(r"^[A-Za-z][A-Za-z0-9.\-]{0,9}$")
+# A-share codes are all digits, so the letter-initial pattern above rejects every
+# one of them -- 002185 came back "Invalid ticker" even though the TradingAgents
+# side handles 沪深京 codes. Accepts the decorated forms people actually type,
+# matching tradingagents.dataflows.a_stock.normalize_code: 600519, SH600519,
+# 600519.SS, 600519.SH.
+#
+# Deliberately not checking the exchange prefix (60/00/30/68/43/83...) even though
+# a_stock.is_a_share does. This regex exists for safety, not market correctness --
+# the value lands in a filename and a report header -- and an unlisted US ticker
+# like ZZZZ is likewise accepted here and fails later in the run. Prefix-checking
+# in two places would also drift as 北交所 ranges are added.
+_ASHARE_RE = re.compile(r"^(?:(?:SH|SZ|BJ)\.?)?\d{6}(?:\.(?:SS|SZ|SH|BJ))?$")
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def valid_ticker(ticker: str) -> bool:
+    """Whether a symbol is safe to interpolate into a path and a header."""
+    t = (ticker or "").strip().upper()
+    return bool(_TICKER_RE.match(t) or _ASHARE_RE.match(t))
 
 # One run at a time; further submissions queue behind it.
 _slot = threading.Semaphore(1)
@@ -1252,7 +1270,7 @@ def submit(ticker: str, day: str, user: str, selftest: bool = False,
 
     # Validated even though the child is invoked as an argv list rather than a
     # shell string: these land in a filename and in a report header.
-    if not _TICKER_RE.match(ticker):
+    if not valid_ticker(ticker):
         return None, "Invalid ticker"
     if not _DATE_RE.match(day):
         return None, "Invalid date (expected YYYY-MM-DD)"
