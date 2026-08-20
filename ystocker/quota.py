@@ -8,13 +8,13 @@ Gemini 3 Pro calls at ``thinking_level=high``. The quota is therefore not a
 fairness nicety, it is the thing standing between a public Google Sign-In button
 and an unbounded bill:
 
-* per user, per day  -- ``AGENTS_DAILY_LIMIT`` (default 10)
+* per user, per day  -- ``AGENTS_DAILY_LIMIT`` (default 5)
 * per VIP, per day   -- ``AGENTS_VIP_DAILY_LIMIT`` (default 50)
 * everyone, per day  -- ``AGENTS_GLOBAL_DAILY_LIMIT`` (default 60)
 
 The global ceiling exists because the per-user limit alone bounds nothing: the
 site is public, so the number of distinct Google accounts is unbounded and
-10-per-user multiplies by however many people show up.
+5-per-user multiplies by however many people show up.
 
 Correctness notes
 -----------------
@@ -75,7 +75,7 @@ def _int_env(name: str, default: int) -> int:
 
 
 def limit_default() -> int:
-    return _int_env("AGENTS_DAILY_LIMIT", 10)
+    return _int_env("AGENTS_DAILY_LIMIT", 5)
 
 
 def limit_vip() -> int:

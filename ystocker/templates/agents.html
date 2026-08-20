@@ -197,6 +197,15 @@
 
 /* ── Follow-up conversation ─────────────────────────────────────────────── */
 #agChatWrap { margin-top: 18px; border-top: 1px solid #1e293b; padding-top: 14px; }
+/* Owner label on a history row a VIP does not own. Defined here rather than as
+   Tailwind utilities: this stylesheet is a compiled artifact, so an arbitrary
+   class added in markup is silently absent at runtime. */
+.ag-owner {
+  font-size: 10px; color: #94a3b8; background: #1e293b;
+  border: 1px solid #334155; border-radius: 9999px;
+  padding: 1px 7px; white-space: nowrap; max-width: 15rem;
+  overflow: hidden; text-overflow: ellipsis;
+}
 .ag-chat-head {
   display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
   color: #94a3b8; font-size: 12px;
@@ -774,6 +783,9 @@ body.agents-embedded #agTop { right: 12px; bottom: 12px; }
   // previous one instead of appending a duplicate.
   let evCursor = 0;
   let liveByRole = new Map();
+  // Signed-in address, filled from the jobs/search response. Used only to decide
+  // which history rows belong to someone else.
+  let viewer = '';
 
   // Poll interval grows 5s -> 30s. Short at first so a self-test (which
   // finishes in under a second) still feels immediate.
@@ -857,7 +869,11 @@ body.agents-embedded #agTop { right: 12px; bottom: 12px; }
     // The finished report is authoritative: it carries the team dividers and
     // the report's own structure. Until it exists, show the live turns.
     // Follow-ups only make sense once there is a finished report to discuss.
-    const canChat = job.status === 'done' && (job.has_report || (job.sections || []).length);
+    // can_chat is separate from readability: a VIP may open anyone's report but
+    // may not write into it, and rendering the box for a run they cannot post to
+    // would turn every question into a 404.
+    const canChat = job.status === 'done' && job.can_chat !== false
+      && (job.has_report || (job.sections || []).length);
     show('agChatWrap', !!canChat);
     if (canChat) {
       chatJobId = job.id;
@@ -1341,6 +1357,10 @@ body.agents-embedded #agTop { right: 12px; bottom: 12px; }
       const res = await r.json();
       if (seq !== histSeq) return;   // a newer query already landed
       const jobs = res.jobs || [];
+      // Who is looking, so rows owned by someone else can be labelled. Tracked
+      // from the response rather than a template variable because the same
+      // renderer serves both the search and plain-history responses.
+      viewer = res.viewer || '';
       const box = document.getElementById('agHistory');
       const filtering = !!(q || status);
 
@@ -1401,9 +1421,14 @@ body.agents-embedded #agTop { right: 12px; bottom: 12px; }
           const left = document.createElement('div');
           left.className = 'ag-row';
           const when = fmtWhen(j.finished_at || j.started_at || j.created_at);
+          // Whose run this is, shown only to a VIP looking at someone else's.
+          // Without it a VIP's history is a merged list of everyone's tickers
+          // with no way to tell which rows are their own.
+          const mine = !j.user || (viewer && j.user.toLowerCase() === viewer.toLowerCase());
           left.innerHTML = '<span class="text-slate-300 font-medium">'
               + highlight(j.ticker, /^\d/.test(q) ? '' : q) + '</span>'
             + `<span class="ag-pill ${CLS[j.status] || 'ag-queued'}">${esc(j.status)}</span>`
+            + (mine ? '' : `<span class="ag-owner" title="Ran by another user">${esc(j.user)}</span>`)
             + (j.decision ? `<span class="text-slate-400">${esc(decPlain(j.decision))}</span>` : '')
             + (when ? `<span class="text-slate-600" title="When this report was generated">${when}</span>` : '')
             + (j.selftest ? '<span class="text-slate-600">self-test</span>' : '')

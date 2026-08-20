@@ -885,6 +885,32 @@ def owns(job: Optional[dict[str, Any]], email: Optional[str]) -> bool:
     return bool(owner) and owner == email.strip().lower()
 
 
+def can_read(job: Optional[dict[str, Any]], email: Optional[str]) -> bool:
+    """Whether this address may read this run.
+
+    Owners always may. VIPs may read anyone's, which is the one deliberate hole
+    in the privacy rule ``owns`` implements -- the VIP list is the site owner,
+    who pays for the API calls and needs to see what the box actually produced.
+
+    This also lets a VIP read the pre-ownership records ``owns`` hides from
+    everybody. That is the intended consequence rather than an oversight: those
+    were hidden because there was no way to tell whose they were and therefore no
+    safe person to show them to, and a reader allowed to see every owner's reports
+    is trivially allowed to see an unowned one.
+
+    Write paths deliberately do NOT use this. Adding a follow-up question mutates
+    the job record, so a VIP asking questions on someone else's run would put
+    turns the owner never wrote into the owner's own view of it.
+    """
+    if owns(job, email):
+        return True
+    if not job or not email:
+        return False
+    from ystocker.quota import is_vip
+
+    return is_vip(email)
+
+
 def _record_paths() -> list[Path]:
     """Job record files, newest first.
 
@@ -980,18 +1006,24 @@ def _listing_entry(job: dict[str, Any]) -> dict[str, Any]:
     return entry
 
 
-def list_jobs(limit: int = 20, user: Optional[str] = None) -> list[dict[str, Any]]:
+def list_jobs(limit: int = 20, user: Optional[str] = None,
+              all_users: bool = False) -> list[dict[str, Any]]:
     """Recent runs, newest first, restricted to ``user`` when given.
 
     Filtering happens before the limit, not after: slicing the newest N records
     and then discarding other people's would show a user an empty history
     whenever N busier runs happened to come first.
+
+    ``all_users`` lifts the restriction for a VIP viewer. It is a separate flag
+    rather than "pass user=None", so that forgetting to pass the viewer's email
+    fails closed to an empty list instead of publishing everyone's history.
     """
+    scope = None if all_users else user
     out: list[dict[str, Any]] = []
-    for job in _records(user=user):
+    for job in _records(user=scope):
         if len(out) >= limit:
             break
-        if user is not None and not owns(job, user):
+        if not all_users and (user is None or not owns(job, user)):
             continue
         out.append(_listing_entry(job))
     return out
@@ -1031,25 +1063,28 @@ def _match_rank(job: dict[str, Any], q: str) -> Optional[int]:
 
 def search_jobs(query: str = "", user: Optional[str] = None,
                 status: Optional[str] = None,
-                limit: int = 50) -> dict[str, Any]:
-    """Search this user's own analysis reports by ticker or analysis date.
+                limit: int = 50, all_users: bool = False) -> dict[str, Any]:
+    """Search analysis reports by ticker or analysis date.
 
     Returns ``{"jobs": [...], "found": int, "scanned": int, "truncated": bool}``
     where ``found`` counts every match and ``jobs`` holds at most ``limit`` of
     them, so the UI can say "showing 50 of 63" instead of silently dropping the
     tail.
 
-    Ownership is enforced per record via ``owns()`` and never relaxed for
-    search: these transcripts carry position sizes, so a query must not become
-    a way to probe what other people ran. A caller with no email gets nothing.
+    Ownership is enforced per record via ``owns()``: these transcripts carry
+    position sizes, so a query must not become a way to probe what other people
+    ran. ``all_users`` lifts that for a VIP viewer, matching ``can_read``, since a
+    reader allowed to open every report gains nothing from being unable to find
+    one. It is a separate flag rather than "pass user=None" so that omitting the
+    viewer's email fails closed to no results instead of searching everything.
     """
     q = (query or "").strip().upper()
     status = (status or "").strip().lower() or None
 
     hits: list[tuple[int, int, dict[str, Any]]] = []
     scanned = 0
-    for idx, job in enumerate(_records(user=user)):
-        if not owns(job, user):
+    for idx, job in enumerate(_records(user=None if all_users else user)):
+        if not all_users and not owns(job, user):
             continue
         scanned += 1
         if status and (job.get("status") or "").lower() != status:

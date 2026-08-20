@@ -2215,17 +2215,17 @@ def api_agents_run():
 
 @bp.route("/api/agents/job/<job_id>")
 def api_agents_job(job_id):
-    """Poll one job. Readable only by the user who ran it."""
+    """Poll one job. Readable by the user who ran it, or by a VIP."""
     gate = _agent_gate()
     if gate:
         return gate
-    from ystocker.agents import get_job, owns
+    from ystocker.agents import can_read, get_job, owns
 
     job = get_job(job_id)
-    # 404 rather than 403 for someone else's run: a distinguishable "forbidden"
-    # would confirm that a given job id exists, and the ids are the only thing
-    # protecting one user's transcript from another's guesses.
-    if not job or not owns(job, _agent_user()):
+    # 404 rather than 403 for a run the caller may not read: a distinguishable
+    # "forbidden" would confirm that a given job id exists, and the ids are the
+    # only thing protecting one user's transcript from another's guesses.
+    if not job or not can_read(job, _agent_user()):
         return jsonify({"error": "No such job"}), 404
 
     # Split into role turns here rather than in the browser. The page renders
@@ -2263,6 +2263,10 @@ def api_agents_job(job_id):
     # poll. The PDF route reads the job from disk, so it is unaffected.
     payload["has_report"] = bool(report.strip())
     payload["chat"] = job.get("chat") or []
+    # Whether this viewer may add a follow-up. A VIP can *read* anyone's run but
+    # not write to it, so the page must know the difference: without this the chat
+    # box would render on someone else's report and every question would 404.
+    payload["can_chat"] = owns(job, _agent_user())
     # Remaining follow-ups, so the allowance is visible before the first question
     # rather than appearing only after one has been spent.
     payload["chat_quota"] = {
@@ -2278,11 +2282,11 @@ def api_agents_job_pdf(job_id):
     gate = _agent_gate()
     if gate:
         return gate
-    from ystocker.agents import get_job, owns
+    from ystocker.agents import can_read, get_job
     from ystocker.report_pdf import build_report_pdf, pdf_filename
 
     job = get_job(job_id)
-    if not job or not owns(job, _agent_user()):
+    if not job or not can_read(job, _agent_user()):
         return jsonify({"error": "No such job"}), 404
     if job.get("status") != "done":
         return jsonify({"error": f"Run is {job.get('status')}, not done"}), 409
@@ -2372,30 +2376,38 @@ def api_agents_chat(job_id):
 
 @bp.route("/api/agents/jobs")
 def api_agents_jobs():
-    """The caller's own recent runs, newest first."""
+    """Recent runs: the caller's own, or everyone's for a VIP."""
     gate = _agent_gate()
     if gate:
         return gate
+    from ystocker import quota
     from ystocker.agents import list_jobs
 
-    return jsonify({"jobs": list_jobs(20, user=_agent_user())})
+    viewer = _agent_user()
+    vip = quota.is_vip(viewer)
+    return jsonify({"jobs": list_jobs(20, user=viewer, all_users=vip),
+                    # The page labels rows it does not own, which it can only do
+                    # if it knows who is looking.
+                    "viewer": viewer or "", "vip": vip})
 
 
 @bp.route("/api/agents/search")
 def api_agents_search():
-    """Search the caller's own analysis reports by ticker or analysis date.
+    """Search analysis reports by ticker or analysis date.
 
     Query params:
       q      = ticker ("NVDA", "NV") or analysis date prefix ("2026-08")
       status = optional exact filter: queued | running | done | error
       limit  = max hits to return (1-60, default 50)
 
-    Scoped to the caller's own runs by ``search_jobs``, same as every other
-    agent read: the reports state entry levels and position sizes.
+    Scoped to the caller's own runs by ``search_jobs``, same as every other agent
+    read: the reports state entry levels and position sizes. A VIP searches every
+    user's, matching what a VIP is allowed to open.
     """
     gate = _agent_gate()
     if gate:
         return gate
+    from ystocker import quota
     from ystocker.agents import search_jobs
 
     q = request.args.get("q", "")[:32]
@@ -2410,7 +2422,12 @@ def api_agents_search():
     # over, and an unbounded one would let a query read every record on disk.
     limit = max(1, min(limit, 60))
 
-    return jsonify(search_jobs(q, user=_agent_user(), status=status, limit=limit))
+    viewer = _agent_user()
+    vip = quota.is_vip(viewer)
+    out = search_jobs(q, user=viewer, status=status, limit=limit, all_users=vip)
+    out["viewer"] = viewer or ""
+    out["vip"] = vip
+    return jsonify(out)
 
 
 # ---------------------------------------------------------------------------
