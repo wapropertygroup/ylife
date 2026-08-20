@@ -51,32 +51,27 @@ aws ssm get-command-invocation --command-id <CMD_ID> --instance-id i-059a024daff
   --region us-west-2 --query "[Status, StandardOutputContent]" --output text
 ```
 
-### Deploy the TradingAgents patches
-
-`/opt/tradingagents` is a checkout of **TauricResearch/TradingAgents**, which we
-cannot push to, so every fix we have made to it lives only as local commits. The
-series is therefore kept in this repo, in `deploy/tradingagents/`, and applied
-with `git am` so it lands as real commits — a later upstream `git pull` then
-conflicts loudly instead of silently reverting the work.
+### Deploy
 
 ```bash
-# on the box, after deploying ystocker
-sudo bash /opt/ystocker/deploy/tradingagents/apply.sh
+bash deploy/ship.sh              # ystocker + TradingAgents, then restart
+bash deploy/ship.sh --ystocker   # ystocker only
+bash deploy/ship.sh --check      # report what is deployed, change nothing
 ```
 
-Idempotent: an already-applied patch is detected by testing whether it *reverses*
-cleanly, so re-running reports `skipped` rather than failing. Regenerate the
-series after adding a commit in the TradingAgents checkout:
+Both checkouts are `fetch` + `reset --hard`, so the box simply matches GitHub.
+`/opt/tradingagents` tracks **15th-Ave-NE/TradingAgents** (our fork), not
+TauricResearch — the fork is where our commits live, and `ship.sh` repoints the
+box automatically if it finds the old remote. It also warns when a repo has
+uncommitted changes or unpushed commits, because `reset --hard` takes what GitHub
+has and would silently not ship them.
 
-```bash
-cd ~/workspace/TradingAgents
-rm -f ~/workspace/ystocker/deploy/tradingagents/0*.patch
-git format-patch --output-directory ~/workspace/ystocker/deploy/tradingagents <first>^..HEAD
-```
+There used to be a patch series in `deploy/tradingagents/` applied with `git am`,
+because our TradingAgents commits had nowhere to live. The fork replaced it and it
+was deleted: two copies of the same code drift.
 
-Keep the series deployable rather than historical: squash a fix into the commit
-it fixes. The hook and its follow-up fix were separate commits at first, which
-meant a fresh box passed through a state where every run died in `_log_state`.
+Restarting is safe mid-analysis — the unit sets `KillMode=process`, so systemd
+signals only gunicorn's master and the detached TradingAgents child survives.
 
 ### Sync secrets
 ```bash
