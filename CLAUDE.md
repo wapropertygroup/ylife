@@ -28,19 +28,26 @@ python run/run_stocker.py                 # starts on http://127.0.0.1:5000
 
 ### Deploy
 ```bash
-bash deploy/ship.sh              # both repos, restart all 8 apps, health check
-bash deploy/ship.sh --ystocker   # skip TradingAgents
-bash deploy/ship.sh --check      # report what is deployed, change nothing
+bash deploy/deploy.sh              # ship code: both repos, restart all 8, health check
+bash deploy/deploy.sh --ystocker   # skip TradingAgents
+bash deploy/deploy.sh --check      # report what is deployed, change nothing
+bash deploy/deploy.sh --full       # also converge the box; needs -i key.pem
 ```
 
-Both checkouts are `fetch` + `reset --hard`, so the box just matches GitHub.
+The default path is code-only and runs over SSM, so it needs no SSH key — `fetch`
++ `reset --hard` both checkouts, restart, health-check, about a minute. `--full`
+additionally converges the machine over SSH (CloudFormation, pip, systemd units,
+nginx, certbot, swap, CJK font) and needs a `.pem`; use it for a new box or after
+editing a unit file, not to ship code.
+
 `/opt/tradingagents` tracks **15th-Ave-NE/TradingAgents** (our fork), not
-TauricResearch; `ship.sh` repoints the box automatically if it still finds the old
-remote. Before deploying it warns about uncommitted or unpushed work, since
-`reset --hard` takes what GitHub has and would otherwise appear to ship a commit
-still sitting on the laptop. That check asks the remote for its `main` SHA rather
-than reading a local `<remote>/main` ref, because the TradingAgents clone calls the
-fork `upstream` and has never fetched it, so no such ref exists.
+TauricResearch; both `deploy.sh` and `install-tradingagents.sh` repoint the box
+automatically if they still find the old remote. Before deploying, `deploy.sh`
+warns about uncommitted or unpushed work, since `reset --hard` takes what GitHub
+has and would otherwise appear to ship a commit still sitting on the laptop. That
+check asks the remote for its `main` SHA rather than reading a local
+`<remote>/main` ref, because the TradingAgents clone calls the fork `upstream` and
+has never fetched it, so no such ref exists.
 
 All 8 apps get a full `systemctl restart`, **not** `kill -HUP`. HUP looks like a
 graceful reload but under `--preload` it ships stale code: gunicorn's HUP handler
@@ -56,16 +63,16 @@ Restarting is safe mid-analysis: the unit sets `KillMode=process`, so systemd
 signals only gunicorn's master and the detached TradingAgents child survives.
 Before that, every deploy killed in-flight runs and threw away the API spend.
 
-There used to be a patch series in `deploy/tradingagents/` applied with `git am`,
-because our TradingAgents commits had nowhere to live. The fork replaced it and it
-was deleted — two copies of the same code drift.
+TradingAgents used to be installed as a pinned TauricResearch commit plus
+`deploy/tradingagents.patch`, and later as a `git am` series in
+`deploy/tradingagents/`. Both are deleted — the pin had drifted so far behind that
+a freshly provisioned box would have come up missing the A-share vendor, the Gemini
+fallback, the progress callback and the indicator race fix, while reporting a
+successful deploy.
 
-<details><summary>Lower-level alternatives</summary>
+<details><summary>Lower-level alternative</summary>
 
 ```bash
-# SSH (needs a .pem; the id_ed25519 key on this machine has no EC2 access)
-bash deploy/deploy.sh -i ~/Downloads/my-key-pair.pem
-
 # One app, by hand
 aws ssm send-command --instance-ids i-059a024daff6bd015 --region us-west-2 \
   --document-name AWS-RunShellScript \

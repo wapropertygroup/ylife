@@ -1,5 +1,19 @@
 #!/usr/bin/env bash
-# deploy.sh — force-pull latest code on the EC2 instance and restart all apps
+# deploy.sh — deploy li-family.us.
+#
+#   bash deploy/deploy.sh                 # ship code: both repos, restart all 8
+#   bash deploy/deploy.sh --ystocker      # skip TradingAgents
+#   bash deploy/deploy.sh --check         # report what is deployed, change nothing
+#   bash deploy/deploy.sh --full          # also converge the box (see below)
+#   bash deploy/deploy.sh -i key.pem      # implies --full
+#
+# The default path is code-only and runs over SSM, so it needs no SSH key: fetch
+# + `reset --hard` both checkouts, restart the services, health-check. That is
+# every ordinary deploy, and it takes about a minute.
+#
+# --full additionally converges the machine itself over SSH -- CloudFormation,
+# pip, systemd units, nginx, certbot, swap, CJK font -- and needs a .pem. Use it
+# for a new box or after changing a unit file, not for shipping code.
 set -euo pipefail
 
 # ── Configuration ────────────────────────────────────────────────────────────
@@ -10,6 +24,11 @@ HOST="stock.li-family.us"
 APP_DIR="/opt/ystocker"
 RUN_USER="ystocker"
 CERT_EMAIL="admin@li-family.us"
+
+INSTANCE="${YSTOCKER_INSTANCE:-i-059a024daff6bd015}"
+SSM_REGION="${AWS_REGION:-us-west-2}"
+# Our fork, not TauricResearch: this is where our commits live.
+TA_REMOTE="https://github.com/15th-Ave-NE/TradingAgents.git"
 
 APPS=(
   "ystocker|8000|stock.li-family.us|requirements_stocker.txt|ystocker/static|stock.li-family.us"
@@ -31,15 +50,164 @@ INSTANCE_ID=""
 LOG_PREFIX="[deploy $(date '+%Y-%m-%d %H:%M:%S')]"
 log() { echo "$LOG_PREFIX $*"; }
 
-# ── Resolve SSH key / flags ───────────────────────────────────────────────────
+# ── Resolve mode / SSH key / flags ────────────────────────────────────────────
 SSH_KEY=""
 SKIP_CF=false
-while getopts "i:s" opt; do
-  case $opt in
-    i) SSH_KEY="$OPTARG" ;;
-    s) SKIP_CF=true ;;      # -s skips the CloudFormation update step
+MODE=ship          # ship | check | full
+WITH_TA=1
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --check)    MODE=check ;;
+    --full)     MODE=full ;;
+    --ystocker) WITH_TA=0 ;;
+    -s)         SKIP_CF=true ;;
+    -i)         SSH_KEY="${2:-}"; MODE=full; shift ;;
+    -i*)        SSH_KEY="${1#-i}"; MODE=full ;;
+    -h|--help)  sed -n '2,16p' "$0"; exit 0 ;;
+    *) echo "unknown option: $1" >&2; exit 2 ;;
   esac
+  shift
 done
+
+# ══ Fast path: ship code over SSM ════════════════════════════════════════════
+# Deliberately no SSH here. The id_ed25519 key on the dev machine has no EC2
+# access, so the SSH path needs a .pem that is not always to hand -- and needing
+# a key file to ship a one-line fix is how deploys get skipped.
+
+# Send one script to the box and wait for it, rather than polling a command id
+# by hand. Base64 so quoting in the payload survives the JSON round trip.
+run_remote() {
+  local script="$1" b64 cmd status="" i
+  b64="$(printf '%s' "$script" | base64 | tr -d '\n')"
+  cmd="$(aws ssm send-command \
+        --instance-ids "$INSTANCE" --region "$SSM_REGION" \
+        --document-name AWS-RunShellScript \
+        --parameters "{\"commands\":[\"echo -n '$b64' | base64 -d > /tmp/deploy_step.sh\",\"bash /tmp/deploy_step.sh\"]}" \
+        --query 'Command.CommandId' --output text)"
+  for i in $(seq 1 90); do
+    sleep 5
+    status="$(aws ssm get-command-invocation --command-id "$cmd" \
+              --instance-id "$INSTANCE" --region "$SSM_REGION" \
+              --query 'Status' --output text 2>/dev/null || echo Pending)"
+    case "$status" in
+      InProgress|Pending|Delayed) : ;;
+      *) break ;;
+    esac
+  done
+  aws ssm get-command-invocation --command-id "$cmd" \
+    --instance-id "$INSTANCE" --region "$SSM_REGION" \
+    --query 'StandardOutputContent' --output text
+  local err
+  err="$(aws ssm get-command-invocation --command-id "$cmd" --instance-id "$INSTANCE" \
+        --region "$SSM_REGION" --query 'StandardErrorContent' --output text 2>/dev/null || true)"
+  if [[ -n "$err" && "$err" != "None" ]]; then printf '%s\n%s\n' "--- stderr ---" "$err"; fi
+  [[ "$status" == "Success" ]]
+}
+
+# Warn about work that will not ship. `reset --hard` on the box takes whatever
+# GitHub has, so an uncommitted edit or an unpushed commit looks deployed and is
+# not -- a nasty way to spend twenty minutes debugging prod.
+#
+# This asks the remote for its main SHA rather than comparing against a local
+# `<remote>/main` ref, because that ref need not exist: the TradingAgents clone
+# calls the fork `upstream` and has never fetched it, so `upstream/main` is an
+# unknown revision. A failed comparison defaulting to "0 commits ahead" would
+# report everything pushed when nothing is -- silence exactly where the warning
+# is needed.
+preflight() {
+  local repo="$1" name="$2" url="$3" head remote_head
+  if [[ ! -d "$repo/.git" ]]; then return 0; fi
+  if [[ -n "$(git -C "$repo" status --porcelain 2>/dev/null)" ]]; then
+    echo "!! $name has uncommitted changes — they will NOT be deployed"
+  fi
+  head="$(git -C "$repo" rev-parse HEAD 2>/dev/null || true)"
+  # GIT_TERMINAL_PROMPT=0: never block a deploy on a credential prompt.
+  remote_head="$(GIT_TERMINAL_PROMPT=0 git -C "$repo" \
+                 -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=10 \
+                 ls-remote "$url" refs/heads/main 2>/dev/null | awk '{print $1; exit}' || true)"
+  if [[ -z "$remote_head" ]]; then
+    echo "?? $name: could not reach $url — cannot tell whether HEAD is pushed"
+  elif [[ "$head" != "$remote_head" ]]; then
+    echo "!! $name HEAD ${head:0:7} != remote main ${remote_head:0:7} — push first"
+  fi
+  return 0
+}
+
+SERVICES="ystocker yplanner yplanter yhome ytracker ypay yimage ybg"
+
+if [[ "$MODE" == "check" ]]; then
+  run_remote "
+set -u
+echo \"ystocker      : \$(cd $APP_DIR && sudo git log --oneline -1)\"
+echo \"tradingagents : \$(cd /opt/tradingagents && sudo git log --oneline -1)\"
+echo \"ta remote     : \$(cd /opt/tradingagents && sudo git remote get-url origin)\"
+echo \"kill mode     : \$(systemctl show ystocker -p KillMode --value)\"
+for svc in $SERVICES; do printf '   %-10s %s\n' \"\$svc\" \"\$(systemctl is-active \$svc)\"; done
+printf 'http           : agents=%s multiples=%s planner=%s home=%s\n' \\
+  \"\$(curl -s -o /dev/null -w '%{http_code}' https://stock.li-family.us/agents)\" \\
+  \"\$(curl -s -o /dev/null -w '%{http_code}' https://stock.li-family.us/multiples)\" \\
+  \"\$(curl -s -o /dev/null -w '%{http_code}' https://planner.li-family.us/)\" \\
+  \"\$(curl -s -o /dev/null -w '%{http_code}' https://home.li-family.us/)\"
+"
+  exit $?
+fi
+
+if [[ "$MODE" == "ship" ]]; then
+  _ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+  preflight "$_ROOT" ystocker "$(git -C "$_ROOT" remote get-url origin 2>/dev/null || true)"
+  if [[ $WITH_TA -eq 1 ]]; then
+    preflight "$HOME/workspace/TradingAgents" TradingAgents "$TA_REMOTE"
+  fi
+
+  STEPS="
+set -u
+echo '== ystocker'
+cd $APP_DIR && sudo git fetch origin --prune -q && sudo git reset --hard -q origin/main
+sudo git log --oneline -1
+"
+  if [[ $WITH_TA -eq 1 ]]; then
+    STEPS="$STEPS
+echo '== tradingagents'
+cd /opt/tradingagents
+# Repoint if the box still tracks the upstream project rather than our fork.
+if [[ \"\$(sudo git remote get-url origin)\" != '$TA_REMOTE' ]]; then
+  echo '   repointing origin -> $TA_REMOTE'
+  sudo git remote set-url origin '$TA_REMOTE'
+fi
+sudo git fetch origin --prune -q && sudo git reset --hard -q origin/main
+sudo git log --oneline -1
+"
+  fi
+
+  STEPS="$STEPS
+echo '== restart'
+# Every app gets a real restart. NOT \`kill -HUP\`, which is what the one-liner
+# in CLAUDE.md used to do and which silently shipped stale code: gunicorn's HUP
+# handler calls Application.reload(), and that re-reads the *config file* only.
+# Under --preload the WSGI app was imported once by the master at ExecStart, so
+# HUP re-forks workers from that same already-imported module state and new
+# Python never loads. Measured on this box: a route added to yhome/routes.py
+# returned 404 after HUP and 200 after restart. Templates did refresh, because a
+# forked worker starts with an empty Jinja cache -- which is what made this so
+# easy to miss.
+#
+# ystocker must not be HUPed for a second reason: it runs --preload, so
+# create_app() and its cache-warming, 13F, heatmap and email threads live in the
+# master, and HUP cannot stop threads a previous import started.
+for svc in $SERVICES; do sudo systemctl restart \"\$svc\"; done
+sleep 10
+for svc in $SERVICES; do printf '   %-10s %s\n' \"\$svc\" \"\$(systemctl is-active \$svc)\"; done
+printf '   http     agents=%s multiples=%s planner=%s home=%s\n' \\
+  \"\$(curl -s -o /dev/null -w '%{http_code}' https://stock.li-family.us/agents)\" \\
+  \"\$(curl -s -o /dev/null -w '%{http_code}' https://stock.li-family.us/multiples)\" \\
+  \"\$(curl -s -o /dev/null -w '%{http_code}' https://planner.li-family.us/)\" \\
+  \"\$(curl -s -o /dev/null -w '%{http_code}' https://home.li-family.us/)\"
+"
+  run_remote "$STEPS"
+  exit $?
+fi
+
+# ══ Full path: converge the machine over SSH ══════════════════════════════════
 
 if [[ -z "$SSH_KEY" ]]; then
   for candidate in ~/.ssh/*.pem ~/.ssh/id_rsa ~/.ssh/id_ed25519; do
