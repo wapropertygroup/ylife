@@ -1294,7 +1294,7 @@ def _prune() -> None:
 # ---------------------------------------------------------------------------
 
 def submit(ticker: str, day: str, user: str, selftest: bool = False,
-           lang: str = "") -> tuple[Optional[str], Optional[str]]:
+           lang: str = "", paid: bool = False) -> tuple[Optional[str], Optional[str]]:
     """Validate and queue a run. Returns (job_id, error).
 
     ``lang`` is the caller's UI language code, which selects the language the
@@ -1340,6 +1340,9 @@ def submit(ticker: str, day: str, user: str, selftest: bool = False,
         # later: a run that starts at 23:59 and fails after midnight must be
         # refunded to the day it was taken from.
         "quota_day": _quota_day(),
+        # True when this run was funded by a purchased credit rather than the
+        # free daily allowance. Read by _refund_preflight.
+        "quota_paid": bool(paid),
     }
     _write(job)
     _prune()
@@ -1516,7 +1519,11 @@ def _refund_preflight(job: dict[str, Any], why: str) -> None:
     try:
         from ystocker import quota
 
-        quota.refund(job.get("user"), job.get("quota_day"))
+        # paid=True refunds a purchased credit; paid=False decrements the free
+        # daily counter. Refunding the wrong one either gives away a free run or
+        # keeps money for an analysis that never ran.
+        quota.refund(job.get("user"), job.get("quota_day"),
+                     paid=bool(job.get("quota_paid")))
         job["quota_refunded"] = True
         job["quota_refund_reason"] = why
         _write(job)

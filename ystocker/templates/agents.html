@@ -108,6 +108,16 @@
   font-style: normal; font-weight: 700; font-size: 10px; letter-spacing: .06em;
   color: #fbbf24; border: 1px solid #a16207; border-radius: 999px; padding: 1px 6px;
 }
+.ag-credits {
+  font-size: 10.5px; font-weight: 700; color: #6ee7b7;
+  border: 1px solid #065f46; border-radius: 999px; padding: 1px 6px;
+  background: rgba(6,95,70,.22);
+}
+.ag-pack {
+  display: inline-block; margin-right: 10px; padding: 2px 8px;
+  border: 1px solid #1e293b; border-radius: 999px; background: #0b1120;
+  color: #94a3b8; font-variant-numeric: tabular-nums;
+}
 .ag-quota-out { border-color: #7f1d1d; }
 .ag-quota-out b { color: #fca5a5; }
 
@@ -704,11 +714,28 @@ body.agents-embedded #agTop { right: 12px; bottom: 12px; }
             data-remaining="{{ quota.remaining }}" data-limit="{{ quota.limit }}">
         <b>{{ quota.remaining }}</b>/{{ quota.limit }}
         <span data-i18n="agents.runs_left">runs left today</span>
+        {% if quota.credits %}<span class="ag-credits">+{{ quota.credits }} <span data-i18n="agents.credits">bought</span></span>{% endif %}
         {% if quota.vip %}<em data-i18n="agents.vip">VIP</em>{% endif %}
       </span>
     </div>
     {% endif %}
   </div>
+  {# Shown once the free runs are gone and nothing is banked. Hidden by default
+     so it never flashes on a page that has runs available. #}
+  <div id="agBuy" class="hidden mt-4 rounded-xl border border-indigo-800/70 bg-indigo-950/30 p-4">
+    <div class="ag-row justify-between">
+      <div>
+        <p class="text-sm text-slate-200 font-semibold" data-i18n="agents.buy_title">Out of free runs for today</p>
+        <p class="text-xs text-slate-400 mt-1" data-i18n="agents.buy_why">Buy a pack to keep going. Purchased runs never expire and carry over between days.</p>
+      </div>
+      <a id="agBuyLink" class="ag-btn" href="{{ quota.pay_url if quota else '' }}" rel="noopener"
+         data-i18n="agents.buy_cta">Buy more runs</a>
+    </div>
+    <p class="text-xs text-slate-500 mt-3">
+      {% for p in agent_packs %}<span class="ag-pack">${{ '%g' % p.price }} → {{ p.credits }}</span>{% endfor %}
+    </p>
+  </div>
+
   <p class="text-xs text-slate-600 mt-3">
     <span data-i18n="agents.cost_warning">A real run takes several minutes and spends API credits. One run executes at a time; others queue.</span>
     <span data-i18n="agents.timeout_is">Timeout</span>: {{ (agent_env.timeout_sec | int) // 60 }}&nbsp;min.
@@ -842,6 +869,9 @@ body.agents-embedded #agTop { right: 12px; bottom: 12px; }
   // Signed-in address, filled from the jobs/search response. Used only to decide
   // which history rows belong to someone else.
   let viewer = '';
+  // The signed-in address, for the payment link. Rendered server-side rather than
+  // read from a response, because the buy prompt can appear before any API call.
+  const AG_USER = {{ (user_email or '') | tojson }};
 
   // Poll interval grows 5s -> 30s. Short at first so a self-test (which
   // finishes in under a second) still feels immediate.
@@ -865,7 +895,32 @@ body.agents-embedded #agTop { right: 12px; bottom: 12px; }
     el.classList.toggle('ag-quota-out', q.remaining === 0);
     const label = I18n.t('agents.runs_left') || 'runs left today';
     const vip = q.vip ? '<em>' + (I18n.t('agents.vip') || 'VIP') + '</em>' : '';
-    el.innerHTML = `<b>${q.remaining}</b>/${q.limit} <span>${label}</span> ${vip}`;
+    // Purchased credits are shown separately from the free allowance rather than
+    // added to it: they do not reset at midnight, and a single "8 left" would
+    // hide which part comes back tomorrow and which was paid for.
+    const bought = Number(q.credits || 0) > 0
+      ? ` <span class="ag-credits" title="${I18n.t('agents.credits_hint') || 'Purchased runs — these never expire'}">+${q.credits} ${I18n.t('agents.credits') || 'bought'}</span>`
+      : '';
+    el.innerHTML = `<b>${q.remaining}</b>/${q.limit} <span>${label}</span>${bought} ${vip}`;
+    // Offer the top-up as soon as the free runs are gone and nothing is banked,
+    // rather than waiting for a submit to be refused.
+    paintBuy(Number(q.remaining || 0) === 0 && Number(q.credits || 0) === 0
+             ? { url: q.pay_url } : null);
+  }
+
+  // Top-up prompt. Built from the server's pay_url so a staging box can point
+  // somewhere that is not the live payment page.
+  function paintBuy(buy) {
+    const box = document.getElementById('agBuy');
+    if (!box) return;
+    if (!buy || !buy.url) { box.classList.add('hidden'); return; }
+    const u = new URL(buy.url);
+    u.searchParams.set('email', AG_USER);
+    // Where to come back to. Sent so the payment page can return the buyer to
+    // the page they were blocked on instead of leaving them on a receipt.
+    u.searchParams.set('next', location.origin + '/agents');
+    document.getElementById('agBuyLink').href = u.toString();
+    box.classList.remove('hidden');
   }
 
   const showErr = m => { errEl.textContent = '⚠ ' + m; errEl.classList.remove('hidden'); };
@@ -1282,6 +1337,9 @@ body.agents-embedded #agTop { right: 12px; bottom: 12px; }
       if (!r.ok) {
         showErr(d.error || `HTTP ${r.status}`);
         if (d.quota) paintQuota(d.quota);
+        // The API says whether a top-up is on offer. It deliberately is not for
+        // the site-wide cap, which no amount of money can lift today.
+        if (d.buy) paintBuy(d.buy);
         runBtn.disabled = false; selfBtn.disabled = false;
         return;
       }

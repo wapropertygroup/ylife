@@ -37,6 +37,68 @@
     </div>
     {% endif %}
 
+    {# ── yStocker run packs ────────────────────────────────────────────────
+       Shown only when yStocker sent the visitor here with the account to credit.
+       Without an address the runs would have nowhere to land, and /api/checkout
+       refuses the purchase, so offering it would be a dead end. #}
+    {% if agent_packs and buyer_email %}
+    <div class="bg-white dark:bg-slate-900 rounded-3xl border border-indigo-300 dark:border-indigo-800 shadow-2xl shadow-indigo-200/40 dark:shadow-black/40 overflow-hidden fade-up mb-6">
+      <div class="h-[3px] bg-gradient-to-r from-emerald-400 via-teal-400 to-cyan-400"></div>
+      <div class="p-6 sm:p-7">
+        <p class="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-1">Trading Agents</p>
+        <h2 class="text-lg font-bold text-slate-800 dark:text-slate-100">Buy analysis runs</h2>
+        <p class="text-xs text-slate-500 dark:text-slate-400 mt-1 mb-4">
+          Credited to <b class="text-slate-700 dark:text-slate-200">{{ buyer_email }}</b>.
+          Runs never expire and carry over between days.
+        </p>
+
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
+          {% for p in agent_packs %}
+          <button type="button" data-pack="{{ p.id }}"
+                  class="pack-btn flex flex-col items-center justify-center py-4 rounded-2xl border-2 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-emerald-400 dark:hover:border-emerald-600 transition-all duration-150 focus:outline-none active:scale-[0.97]">
+            <span class="text-lg font-bold">${{ '%g' % p.price }}</span>
+            <span class="text-xs mt-0.5">{{ p.credits }} runs</span>
+            <span class="text-[10px] text-slate-400 mt-0.5">${{ '%.2f' % p.per_run }}/run</span>
+          </button>
+          {% endfor %}
+        </div>
+
+        <p id="packErr" class="hidden text-xs text-rose-500 mb-2"></p>
+        <p class="text-[11px] text-slate-400">Secure checkout by Stripe. Card details never reach this site.</p>
+      </div>
+    </div>
+
+    <script>
+    (function () {
+      const email = {{ buyer_email | tojson }};
+      const next = {{ return_to | tojson }};
+      const err = document.getElementById('packErr');
+      document.querySelectorAll('.pack-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          // Disable every button, not just this one: a second click during the
+          // redirect would open a second Checkout session and risk two charges.
+          document.querySelectorAll('.pack-btn').forEach(b => b.disabled = true);
+          err.classList.add('hidden');
+          try {
+            const r = await fetch('/api/checkout', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ item_id: btn.dataset.pack, email: email, next: next }),
+            });
+            const d = await r.json();
+            if (r.ok && d.checkout_url) { window.location.href = d.checkout_url; return; }
+            err.textContent = d.error || 'Could not start checkout. Please try again.';
+          } catch (e) {
+            err.textContent = 'Could not reach the payment service. Please try again.';
+          }
+          err.classList.remove('hidden');
+          document.querySelectorAll('.pack-btn').forEach(b => b.disabled = false);
+        });
+      });
+    })();
+    </script>
+    {% endif %}
+
     <!-- Payment Card -->
     <div class="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl shadow-slate-200/50 dark:shadow-black/40 overflow-hidden fade-up" style="animation-delay:.08s">
 

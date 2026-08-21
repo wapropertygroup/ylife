@@ -158,10 +158,22 @@ def _get_stripe():
 
 @bp.route("/")
 def index():
-    """Payment landing page with available items."""
+    """Payment landing page with available items.
+
+    ``?email=`` and ``?next=`` arrive when yStocker sends a signed-in user here
+    to buy analysis runs: the address says which balance to credit, and next is
+    where to return afterwards. The address is not proof of anything on its own,
+    and it does not need to be -- it only decides who benefits from a payment
+    somebody actually makes.
+    """
     stripe_pk = os.environ.get("STRIPE_PUBLISHABLE_KEY", "")
+    email = (request.args.get("email") or "").strip()[:200]
+    nxt = (request.args.get("next") or "").strip()[:300]
     return render_template("index.html",
                            items=DEFAULT_ITEMS,
+                           agent_packs=_agent_packs(),
+                           buyer_email=email if "@" in email else "",
+                           return_to=nxt if nxt.startswith("https://") else "",
                            stripe_pk=stripe_pk,
                            stripe_configured=bool(stripe_pk))
 
@@ -180,6 +192,49 @@ def cancel():
 
 
 # ---------------------------------------------------------------------------
+# yStocker agent run packs
+# ---------------------------------------------------------------------------
+# The pack table lives in ystocker.credits so that the app that *sells* runs and
+# the app that *spends* them cannot drift apart on how many a pack contains. Both
+# apps run from the same checkout on the same box, so this is a plain import.
+def _agent_packs():
+    """The run packs, or [] if yStocker is not importable from here."""
+    try:
+        from ystocker import credits
+
+        return credits.packs_public()
+    except Exception as exc:  # noqa: BLE001 - yPay still works without them
+        log.warning("ypay: agent packs unavailable: %s", exc)
+        return []
+
+
+def _agent_pack_item(pack_id: str):
+    """A pack as a checkout line item, or None when the id is unknown.
+
+    The price comes from the pack table, never from the request, so a caller
+    cannot buy the 130-run pack for $5.
+    """
+    try:
+        from ystocker import credits
+
+        p = credits.pack(pack_id)
+    except Exception:  # noqa: BLE001
+        return None
+    if not p:
+        return None
+    return {
+        "id": pack_id,
+        "name": f"yStocker — {p['label']}",
+        "description": (f"{p['credits']} Trading Agents analysis runs. "
+                        "Credits never expire and carry over between days."),
+        "price": float(p["price"]),
+        "emoji": "\U0001f4c8",
+        "category": "agent_runs",
+        "credits": int(p["credits"]),
+    }
+
+
+# ---------------------------------------------------------------------------
 # API: Create Stripe Checkout session
 # ---------------------------------------------------------------------------
 
@@ -193,9 +248,18 @@ def api_checkout():
     body = request.get_json(force=True, silent=True) or {}
     item_id = body.get("item_id", "")
     custom_amount = body.get("amount")
+    buyer_email = (body.get("email") or "").strip().lower()[:200]
+    return_to = (body.get("next") or "").strip()[:300]
 
-    # Find the item
-    item = next((i for i in DEFAULT_ITEMS if i["id"] == item_id), None)
+    # An agent run pack, or one of the donation items.
+    item = _agent_pack_item(item_id)
+    if item and not (buyer_email and "@" in buyer_email):
+        # Refused rather than sold: a run pack with nowhere to deliver the credits
+        # is a payment we would have to refund by hand.
+        return jsonify({"error": "Sign in on stock.li-family.us first so the "
+                                 "runs can be added to your account."}), 400
+    if not item:
+        item = next((i for i in DEFAULT_ITEMS if i["id"] == item_id), None)
     if not item:
         return jsonify({"error": "Item not found"}), 404
 
@@ -232,10 +296,21 @@ def api_checkout():
             mode="payment",
             success_url=f"{base_url}/success?session_id={{CHECKOUT_SESSION_ID}}",
             cancel_url=f"{base_url}/cancel",
+            # Metadata is the only thing the webhook gets to work with, and it is
+            # echoed back by Stripe rather than re-sent by the browser, so it is
+            # the right place for the address to credit. The credit *count* is
+            # deliberately absent: the webhook looks it up from the pack id, so a
+            # tampered session cannot ask for more runs than it paid for.
             metadata={
                 "item_id": item_id,
                 "item_name": item["name"],
+                "agent_credits": "1" if item.get("category") == "agent_runs" else "",
+                "buyer_email": buyer_email,
+                "return_to": return_to,
             },
+            # Prefill and pin the address so the receipt goes to the same account
+            # the runs land in.
+            customer_email=buyer_email or None,
         )
 
         log.info("Stripe checkout created: %s ($%.2f) → %s", item["name"], amount, checkout_session.id)
@@ -265,10 +340,20 @@ def api_webhook():
     sig_header = request.headers.get("Stripe-Signature", "")
     webhook_secret = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
 
+    # Whether this event's authenticity was actually established. Without the
+    # signing secret the body is just an unauthenticated POST, and anyone who can
+    # reach this URL could forge "payment completed". That was survivable while
+    # this only incremented a donation counter; it is not now that the same event
+    # grants paid analysis runs, so an unverified event may be recorded but never
+    # credited.
+    verified = False
     try:
         if webhook_secret:
             event = stripe.Webhook.construct_event(payload, sig_header, webhook_secret)
+            verified = True
         else:
+            log.error("ypay: STRIPE_WEBHOOK_SECRET is not set — event accepted "
+                      "UNVERIFIED. Run credits will NOT be granted.")
             event = json.loads(payload)
     except ValueError:
         return "Invalid payload", 400
@@ -293,7 +378,44 @@ def api_webhook():
             "name": metadata.get("item_name", ""),
         }, amount, "completed", email=email, customer_name=name)
 
+        if metadata.get("agent_credits"):
+            _grant_agent_runs(metadata, session_id, amount, email, verified)
+
     return "OK", 200
+
+
+def _grant_agent_runs(metadata: dict, session_id: str, amount: float,
+                      stripe_email: str, verified: bool) -> None:
+    """Add purchased runs to a yStocker balance.
+
+    Prefers the address the buyer was signed in as over the one Stripe collected:
+    someone may pay with a different card email than the account they run
+    analyses under, and the runs have to land where they will be spent.
+
+    Never raises. A webhook that returns non-2xx is retried by Stripe, and the
+    grant is idempotent on the session id, so a transient failure here is
+    recoverable -- but an exception escaping into the handler would turn every
+    delivery into a retry storm.
+    """
+    if not verified:
+        log.error("ypay: refusing to grant runs for %s — event was not "
+                  "signature-verified", session_id)
+        return
+    target = (metadata.get("buyer_email") or "").strip().lower() or stripe_email
+    try:
+        from ystocker import credits
+
+        result = credits.grant(target, metadata.get("item_id", ""),
+                               session_id, amount_usd=amount)
+        if result.ok:
+            log.info("ypay: granted %d runs to %s (session %s, %s)",
+                     result.credited, target, session_id, result.reason)
+        else:
+            log.error("ypay: FAILED to grant runs to %s for session %s: %s",
+                      target, session_id, result.reason)
+    except Exception as exc:  # noqa: BLE001
+        log.exception("ypay: granting runs for session %s raised: %s",
+                      session_id, exc)
 
 
 # ---------------------------------------------------------------------------

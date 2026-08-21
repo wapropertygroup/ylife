@@ -2118,6 +2118,20 @@ def _agent_user() -> Optional[str]:
     return session.get("user_email")
 
 
+def _agent_packs_for_page():
+    """Run packs for the page, or [] if the credits module is unavailable.
+
+    Never raises: the packs are an upsell, and /agents must render without them.
+    """
+    try:
+        from ystocker import credits
+
+        return credits.packs_public()
+    except Exception as exc:  # noqa: BLE001
+        log.warning("agents: packs unavailable: %s", exc)
+        return []
+
+
 def _agent_gate():
     """Return an error Response if the caller may not view agent runs, else None.
 
@@ -2157,6 +2171,9 @@ def agents_page():
         allowed=is_allowed(email),
         user_email=email or "",
         quota=quota.usage(email) if email else None,
+        # The ladder is rendered server-side so the prices are visible without a
+        # round trip, and come from one table shared with yPay.
+        agent_packs=_agent_packs_for_page(),
         agent_roles=roles_json(),
         agent_embedded=embedded,
         # Only consulted by the not-signed-in branch, which shows a sample of
@@ -2181,19 +2198,32 @@ def api_agents_run():
     # Validate before charging quota, so a typo'd ticker does not cost a run.
     # Self-tests make no LLM call, so they are free and deliberately unmetered.
     charged = False
+    paid_run = False
     if not selftest:
         ok, reason, info = quota.try_consume(email)
         if not ok:
+            from ystocker import credits
+
             if reason == "global":
+                # Not offered a top-up: this ceiling is about what the box and
+                # the upstream model quota can deliver today, so selling a credit
+                # would be selling capacity that does not exist.
                 msg = ("The site-wide daily limit for agent runs has been "
                        "reached. This protects the shared API budget — please "
                        "try again tomorrow.")
+                buy = None
             else:
-                msg = (f"You have used your {info['limit']} runs for today. "
-                       f"The limit resets at midnight ({info['tz']}).")
+                msg = (f"You have used your {info['limit']} free runs for today "
+                       f"(resets at midnight, {info['tz']}). "
+                       f"Buy more runs to keep going.")
+                buy = {"url": credits.PAY_URL, "packs": credits.packs_public()}
             log.info("agents: quota denied (%s) for %s: %s", reason, email, info)
-            return jsonify({"error": msg, "reason": "quota", "quota": info}), 429
+            payload = {"error": msg, "reason": "quota", "quota": info}
+            if buy:
+                payload["buy"] = buy
+            return jsonify(payload), 429
         charged = True
+        paid_run = bool(info.get("paid"))
 
     job_id, err = submit(
         ticker=body.get("ticker", ""),
@@ -2203,11 +2233,12 @@ def api_agents_run():
         # The report is written in the language the page is being read in. A
         # caller that sends nothing gets English, as everywhere else here.
         lang="zh" if body.get("lang") == "zh" else "en",
+        paid=paid_run,
     )
     if err:
         # Rejected before anything was spent, so hand the run back.
         if charged:
-            quota.refund(email)
+            quota.refund(email, paid=paid_run)
         return jsonify({"error": err, "quota": quota.usage(email)}), 400
     return jsonify({"job_id": job_id, "status": "queued",
                     "quota": quota.usage(email)}), 202
