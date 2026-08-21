@@ -91,6 +91,12 @@ def selling_enabled() -> tuple[bool, str]:
     """
     if os.environ.get("AGENTS_SELLING_DISABLED", "").strip().lower() in ("1", "true", "yes"):
         return False, "selling disabled by configuration"
+    # Two ways to know selling works, because this module is imported by both
+    # apps and only one of them holds the Stripe config. yPay has the real
+    # variables; yStocker is told the fact at startup (see _load_secrets_from_ssm)
+    # so it can show a price without holding a signing key.
+    if os.environ.get("AGENTS_SELLING_OK", "").strip() == "1":
+        return True, ""
     if not os.environ.get("STRIPE_SECRET_KEY", "").strip():
         return False, "Stripe is not configured"
     if not os.environ.get("STRIPE_WEBHOOK_SECRET", "").strip():

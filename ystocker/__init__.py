@@ -138,6 +138,31 @@ def _load_secrets_from_ssm() -> None:
                 code = e.response["Error"]["Code"]
                 if code != "ParameterNotFound":
                     log.warning("SSM: could not fetch %s: %s", param_name, e)
+        # Whether run packs can be sold. yStocker shows the price ladder and the
+        # "buy more runs" prompt, but the money is handled by yPay, whose Stripe
+        # config lives under /ypay/ and is therefore invisible to this process --
+        # so the guard in credits.selling_enabled() saw no Stripe key here and
+        # silently hid the ladder from /agents and /guide while yPay was happily
+        # selling.
+        #
+        # Only the *fact* is imported, never the secrets: a run pack must not be
+        # offered unless a payment for it could actually be credited, and this
+        # process has no reason to hold a webhook signing key to know that.
+        try:
+            probe = ssm.get_parameters(
+                Names=["/ypay/STRIPE_SECRET_KEY", "/ypay/STRIPE_WEBHOOK_SECRET"],
+                WithDecryption=False)
+            found = {p["Name"] for p in probe.get("Parameters", []) if p.get("Value")}
+            if len(found) == 2:
+                os.environ.setdefault("AGENTS_SELLING_OK", "1")
+                log.info("SSM: run packs sellable (yPay Stripe config present)")
+            else:
+                missing = {"/ypay/STRIPE_SECRET_KEY",
+                           "/ypay/STRIPE_WEBHOOK_SECRET"} - found
+                log.warning("SSM: run packs NOT sellable, missing %s",
+                            ", ".join(sorted(missing)))
+        except ClientError as e:
+            log.warning("SSM: could not check yPay Stripe config: %s", e)
     except NoCredentialsError:
         pass  # not on AWS — skip silently
     except Exception as exc:
