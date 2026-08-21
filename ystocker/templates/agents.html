@@ -646,7 +646,7 @@ body.agents-embedded #agTop { right: 12px; bottom: 12px; }
         const when = fmtWhen(j.finished_at || j.created_at);
         left.innerHTML = '<span class="text-slate-300 font-medium">' + esc(j.ticker) + '</span>'
           + (j.decision ? `<span class="text-slate-400">${esc(j.decision)}</span>` : '')
-          + (when ? `<span class="text-slate-600" title="When this report was generated">${when}</span>` : '')
+          + (when ? `<span class="text-slate-600" title="${esc(YSTime.full(j.finished_at || j.created_at))}">${when}</span>` : '')
           + (j.elapsed_sec ? `<span class="text-slate-600">${esc(j.elapsed_sec)}s</span>` : '');
 
         const actions = document.createElement('div');
