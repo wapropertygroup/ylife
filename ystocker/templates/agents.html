@@ -4,6 +4,55 @@
 {% block content %}
 <script src="{{ url_for('static', filename='markdown.js') }}?v={{ cache_bust or 'dev' }}"></script>
 
+<script>
+/* Timestamps, in the reader's own zone and saying so.
+ *
+ * Server timestamps are UTC ISO strings ("2026-08-20T14:19:59+00:00"), and the
+ * offset is what makes them unambiguous -- Date parses it, so the getters below
+ * are already local. What was missing is the label: "08/20 15:45" gives a reader
+ * no way to know whether that is their clock or the server's, and the same page
+ * is read from several zones.
+ *
+ * Defined once and shared, because this page previously carried two identical
+ * copies of the formatter in separate scopes -- the same duplication the shared
+ * Markdown renderer exists to avoid.
+ */
+window.YSTime = (function () {
+  'use strict';
+  const zone = () => {
+    try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ''; }
+    catch (_) { return ''; }
+  };
+  const fmt = (iso, opts) => {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (isNaN(d)) return '';
+    try {
+      return new Intl.DateTimeFormat(undefined, opts).format(d);
+    } catch (_) {
+      // No Intl: fall back to the old unlabelled form rather than nothing.
+      const pad = n => String(n).padStart(2, '0');
+      return pad(d.getMonth() + 1) + '/' + pad(d.getDate()) + ' ' +
+             pad(d.getHours()) + ':' + pad(d.getMinutes());
+    }
+  };
+  return {
+    zone: zone,
+    /* Compact, for a list row: "08/20 15:45 PDT". */
+    when: iso => fmt(iso, {
+      month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
+      hour12: false, timeZoneName: 'short',
+    }),
+    /* Full, for a tooltip or a report header: includes the year and seconds. */
+    full: iso => fmt(iso, {
+      year: 'numeric', month: 'short', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+      hour12: false, timeZoneName: 'short',
+    }),
+  };
+})();
+</script>
+
 <style>
 .ag-btn {
   display: inline-flex; align-items: center; gap: 6px;
@@ -422,13 +471,8 @@ body.agents-embedded #agTop { right: 12px; bottom: 12px; }
     c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
   // When the report was generated, which is not the analysis date it covers.
-  function fmtWhen(iso) {
-    if (!iso) return '';
-    const d = new Date(iso);
-    if (isNaN(d)) return '';
-    const pad = n => String(n).padStart(2, '0');
-    return pad(d.getMonth() + 1) + '/' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
-  }
+  // Delegates to the shared formatter so both views label the zone identically.
+  const fmtWhen = iso => YSTime.when(iso);
 
   // Draws the same conversation the signed-in view does, minus the jump bar and
   // scroll spy: this is a read-only teaser, and a live run's machinery has
@@ -520,7 +564,8 @@ body.agents-embedded #agTop { right: 12px; bottom: 12px; }
       const pdf = document.getElementById('agSamplePdf');
       pdf.classList.toggle('hidden', !job.has_report);
       if (job.has_report) {
-        pdf.href = '/api/agents/showcase/' + encodeURIComponent(j.id) + '/pdf';
+        pdf.href = '/api/agents/showcase/' + encodeURIComponent(j.id) + '/pdf'
+                 + '?tz=' + encodeURIComponent(YSTime.zone());
       }
       card.classList.remove('hidden');
       card.scrollIntoView({ behavior: deep ? 'auto' : 'smooth', block: 'start' });
@@ -618,7 +663,8 @@ body.agents-embedded #agTop { right: 12px; bottom: 12px; }
         if (j.has_report) {
           const dl = document.createElement('a');
           dl.className = 'ag-btn ag-btn-ghost';
-          dl.href = '/api/agents/showcase/' + encodeURIComponent(j.id) + '/pdf';
+          dl.href = '/api/agents/showcase/' + encodeURIComponent(j.id) + '/pdf'
+                   + '?tz=' + encodeURIComponent(YSTime.zone());
           dl.setAttribute('download', '');
           dl.textContent = I18n.t('agents.pdf_short') || 'PDF';
           actions.appendChild(dl);
@@ -758,6 +804,9 @@ body.agents-embedded #agTop { right: 12px; bottom: 12px; }
       <span class="text-base font-semibold text-slate-200" id="agJobTitle">—</span>
       <span id="agStatus" class="ag-pill ag-queued">queued</span>
       <span id="agElapsed" class="text-xs text-slate-500"></span>
+      {# When the report was produced. Absent until now, which left the report
+         itself undated once it scrolled away from the history row. #}
+      <span id="agWhen" class="text-xs text-slate-500"></span>
       {# The language this run's report is in, shown only when it is not the
          language the page is currently being read in: the choice is frozen when
          the run is queued, so a reader who toggles afterwards would otherwise
@@ -938,6 +987,13 @@ body.agents-embedded #agTop { right: 12px; bottom: 12px; }
     titleEl.textContent = `${job.ticker} · ${job.date}` + (job.selftest ? '  (self-test)' : '');
     setStatus(job.status);
     elapsedEl.textContent = job.elapsed_sec ? `${job.elapsed_sec}s` : '';
+    const whenEl = document.getElementById('agWhen');
+    if (whenEl) {
+      const stamp = job.finished_at || job.started_at || job.created_at;
+      whenEl.textContent = stamp ? YSTime.when(stamp) : '';
+      // The tooltip carries the year and seconds; the row stays compact.
+      whenEl.title = stamp ? YSTime.full(stamp) : '';
+    }
 
     // job.lang is empty for a run whose language is not one this UI offers (a
     // pinned deployment), which is a mismatch too -- and for runs queued before
@@ -972,7 +1028,7 @@ body.agents-embedded #agTop { right: 12px; bottom: 12px; }
     const pdf = document.getElementById('agPdf');
     const hasPdf = job.status === 'done' && (job.has_report || job.decision);
     pdf.classList.toggle('hidden', !hasPdf);
-    if (hasPdf) pdf.href = `/api/agents/job/${job.id}/pdf`;
+    if (hasPdf) pdf.href = `/api/agents/job/${job.id}/pdf?tz=${encodeURIComponent(YSTime.zone())}`;
 
     for (const ev of job.events || []) liveByRole.set(ev.role, ev.body);
     if (typeof job.event_cursor === 'number') evCursor = job.event_cursor;
@@ -1447,13 +1503,8 @@ body.agents-embedded #agTop { right: 12px; bottom: 12px; }
 
   // When the run actually happened, which is not the analysis date it covers --
   // a report for 2026-08-14 may have been generated days later.
-  function fmtWhen(iso) {
-    if (!iso) return '';
-    const d = new Date(iso);
-    if (isNaN(d)) return '';
-    const pad = n => String(n).padStart(2, '0');
-    return pad(d.getMonth() + 1) + '/' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
-  }
+  // Delegates to the shared formatter so both views label the zone identically.
+  const fmtWhen = iso => YSTime.when(iso);
 
   // Whether the panel currently shows real rows, as opposed to a spinner, an
   // empty message or an error. Decides between replacing the panel and merely
@@ -1603,7 +1654,7 @@ body.agents-embedded #agTop { right: 12px; bottom: 12px; }
             + `<span class="ag-pill ${CLS[j.status] || 'ag-queued'}">${esc(j.status)}</span>`
             + (mine ? '' : `<span class="ag-owner" title="Ran by another user">${esc(j.user)}</span>`)
             + (j.decision ? `<span class="text-slate-400">${esc(decPlain(j.decision))}</span>` : '')
-            + (when ? `<span class="text-slate-600" title="When this report was generated">${when}</span>` : '')
+            + (when ? `<span class="text-slate-600" title="${esc(YSTime.full(j.finished_at || j.started_at || j.created_at))}">${when}</span>` : '')
             + (j.selftest ? '<span class="text-slate-600">self-test</span>' : '')
             + (j.elapsed_sec ? `<span class="text-slate-600">${j.elapsed_sec}s</span>` : '');
           const actions = document.createElement('div');
@@ -1620,7 +1671,7 @@ body.agents-embedded #agTop { right: 12px; bottom: 12px; }
           if (j.status === 'done' && j.has_report) {
             const dl = document.createElement('a');
             dl.className = 'ag-btn ag-btn-ghost';
-            dl.href = `/api/agents/job/${j.id}/pdf`;
+            dl.href = `/api/agents/job/${j.id}/pdf?tz=${encodeURIComponent(YSTime.zone())}`;
             dl.setAttribute('download', '');
             dl.textContent = I18n.t('agents.pdf_short') || 'PDF';
             actions.appendChild(dl);

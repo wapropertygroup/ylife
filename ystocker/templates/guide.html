@@ -109,6 +109,7 @@
       <a href="#s5" class="toc-link" data-i18n="guide.s5_title">5. Fed Balance Sheet</a>
       <a href="#s6" class="toc-link" data-i18n="guide.s6_title">6. Groups</a>
       <a href="#s7" class="toc-link" data-i18n="guide.s7_title">7. Language & Refresh</a>
+      <a href="#s8" class="toc-link" data-i18n="guide.s8_title">8. Trading Agents</a>
     </nav>
     <a href="#" class="toc-link mt-4 text-slate-600 hover:text-slate-400" data-i18n="guide.back_to_top">↑ Back to top</a>
   </aside>
@@ -461,6 +462,67 @@
         <div class="tip-badge">
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-width="2"/><path stroke-linecap="round" stroke-width="2" d="M12 8v4m0 4h.01"/></svg>
           <span data-i18n="guide.s7_tip1">Refresh is rate-limited to once every 10 minutes to avoid API overuse.</span>
+        </div>
+      </div>
+    </section>
+
+    <section id="s8" class="guide-section">
+      <div class="flex items-center gap-3 mb-4">
+        <span class="section-num">8</span>
+        <h2 class="text-lg font-bold text-slate-100" data-i18n="guide.s8_title">Trading Agents</h2>
+      </div>
+
+      <p class="text-slate-300 text-sm leading-relaxed mb-4" data-i18n="guide.s8_desc">
+        A team of AI analysts, researchers and risk managers debates one ticker and produces a full research report. A deep run takes ten minutes or more, so the page streams each agent's section as it lands rather than making you wait for the end.
+      </p>
+
+      <!-- Free vs paid -->
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 mb-5">
+        <p class="text-[10px] font-semibold tracking-widest uppercase text-slate-500 mb-3" data-i18n="guide.s8_cost">What a run costs</p>
+        <p class="text-slate-300 text-sm leading-relaxed mb-3" data-i18n="guide.s8_free">
+          Signing in gives you 3 free runs per day, reset at midnight Pacific. Past that you can buy a pack; purchased runs never expire and carry over between days, and free runs are always spent first so you are never charged while one is left.
+        </p>
+        <div class="overflow-x-auto">
+          <table class="text-sm w-full">
+            <thead>
+              <tr class="text-slate-400 text-xs">
+                <th class="text-left font-semibold py-1.5 pr-4" data-i18n="guide.s8_price">Price</th>
+                <th class="text-left font-semibold py-1.5 pr-4" data-i18n="guide.s8_runs">Runs</th>
+                <th class="text-left font-semibold py-1.5" data-i18n="guide.s8_perrun">Per run</th>
+              </tr>
+            </thead>
+            <tbody class="text-slate-300">
+              {% for p in agent_packs %}
+              <tr class="border-t border-slate-800">
+                <td class="py-1.5 pr-4 font-semibold">${{ '%g' % p.price }}</td>
+                <td class="py-1.5 pr-4">{{ p.credits }}</td>
+                <td class="py-1.5 text-slate-400">${{ '%.2f' % p.per_run }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% if not agent_packs %}
+        <p class="text-xs text-slate-500 mt-3" data-i18n="guide.s8_packs_off">Run packs are not on sale at the moment.</p>
+        {% endif %}
+      </div>
+
+      <div class="flex flex-col gap-2">
+        <div class="tip-badge">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-width="2"/><path stroke-linecap="round" stroke-width="2" d="M12 8v4m0 4h.01"/></svg>
+          <span data-i18n="guide.s8_tip1">Chinese A-shares work too — enter a 6-digit code such as 600519 or 002185, with or without an SH/SZ prefix.</span>
+        </div>
+        <div class="tip-badge">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-width="2"/><path stroke-linecap="round" stroke-width="2" d="M12 8v4m0 4h.01"/></svg>
+          <span data-i18n="guide.s8_tip2">Every report has its own link you can bookmark or send to someone — it opens without signing in.</span>
+        </div>
+        <div class="tip-badge">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-width="2"/><path stroke-linecap="round" stroke-width="2" d="M12 8v4m0 4h.01"/></svg>
+          <span data-i18n="guide.s8_tip3">Download any finished report as a PDF, with charts. Times are shown in your own timezone.</span>
+        </div>
+        <div class="tip-badge">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-width="2"/><path stroke-linecap="round" stroke-width="2" d="M12 8v4m0 4h.01"/></svg>
+          <span data-i18n="guide.s8_tip4">After a run finishes you can ask the portfolio manager follow-up questions about it.</span>
         </div>
       </div>
     </section>

@@ -1391,12 +1391,47 @@ def _report_doc(buf, lay: _Layout, running: str, footer: str,
     return _ReportDoc()
 
 
-def _job_facts(job: dict[str, Any], day: str, cjk: bool) -> list[tuple[str, str]]:
+def _local_stamp(iso: str, tz: str = "") -> str:
+    """A UTC ISO timestamp rendered in ``tz``, with the zone named.
+
+    The previous version was ``str(iso).replace("T", " ")[:16]``, which cut the
+    "+00:00" off a UTC timestamp and printed it bare. A reader in Pacific time saw
+    a number seven hours ahead of the truth with nothing to indicate it was not
+    their own clock -- silently wrong, which is worse than obviously wrong.
+
+    Falls back through the caller's zone, the configured quota zone (the users and
+    the box are Pacific) and finally UTC, and always names whichever it used.
+    """
+    from datetime import datetime as _dt
+
+    try:
+        moment = _dt.fromisoformat(str(iso))
+    except (TypeError, ValueError):
+        return str(iso or "--")
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)
+
+    for name in (tz, os.environ.get("AGENTS_QUOTA_TZ", "America/Los_Angeles")):
+        if not name:
+            continue
+        try:
+            from zoneinfo import ZoneInfo
+
+            local = moment.astimezone(ZoneInfo(name))
+            # %Z gives the abbreviation the reader recognises (PDT), not the id.
+            return local.strftime("%Y-%m-%d %H:%M %Z")
+        except Exception:  # noqa: BLE001 - unknown zone, try the next
+            continue
+    return moment.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
+
+def _job_facts(job: dict[str, Any], day: str, cjk: bool,
+               tz: str = "") -> list[tuple[str, str]]:
     """Label/value pairs for the metadata strip on page one."""
     facts = [("分析日期" if cjk else "Analysis date", day or "--")]
     if job.get("finished_at"):
-        stamp = str(job["finished_at"]).replace("T", " ")[:16]
-        facts.append(("生成时间" if cjk else "Generated", stamp))
+        facts.append(("生成时间" if cjk else "Generated",
+                      _local_stamp(job["finished_at"], tz)))
     if job.get("elapsed_sec"):
         facts.append(("运行耗时" if cjk else "Runtime",
                       f"{job['elapsed_sec']} 秒" if cjk else f"{job['elapsed_sec']}s"))
@@ -1424,7 +1459,7 @@ def _job_advisories(job: dict[str, Any], cjk: bool) -> list[str]:
     return out
 
 
-def build_report_pdf(job: dict[str, Any]) -> Optional[bytes]:
+def build_report_pdf(job: dict[str, Any], tz: str = "") -> Optional[bytes]:
     """Render a finished job's report to PDF bytes, or None if unavailable."""
     try:
         from reportlab.platypus import (
@@ -1473,7 +1508,7 @@ def build_report_pdf(job: dict[str, Any]) -> Optional[bytes]:
     tone = verdict_tone(decision or body_md[:400])
     if decision:
         story.append(lay.decision_panel(decision, tone))
-    story.extend(lay.fact_strip(_job_facts(job, day, cjk)))
+    story.extend(lay.fact_strip(_job_facts(job, day, cjk, tz)))
     advisories = _job_advisories(job, cjk)
     if advisories:
         story.append(lay.advisory(advisories))

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import threading
 import time
 from pathlib import Path
@@ -2007,7 +2008,11 @@ def contact():
 
 @bp.route("/guide")
 def guide():
-    return render_template("guide.html", peer_groups=list(PEER_GROUPS.keys()))
+    # The pack ladder comes from the same table /agents and yPay use, so the
+    # guide cannot quote a price the checkout does not charge. Empty when selling
+    # is off, which the template says explicitly rather than showing a bare table.
+    return render_template("guide.html", peer_groups=list(PEER_GROUPS.keys()),
+                           agent_packs=_agent_packs_for_page())
 
 
 @bp.route("/videos")
@@ -2116,6 +2121,21 @@ def api_fedwatch():
 def _agent_user() -> Optional[str]:
     """Signed-in email, or None."""
     return session.get("user_email")
+
+
+def _reader_tz() -> str:
+    """The IANA zone the browser reported, or "" .
+
+    Sent as ?tz= on a PDF link because a PDF is rendered server-side and the box
+    has no idea where the reader is. Validated only for shape here; report_pdf
+    falls back through the configured zone to UTC if it cannot load it.
+    """
+    tz = (request.args.get("tz") or "").strip()
+    # An IANA id, not free text: it is interpolated into a zoneinfo lookup, and
+    # 64 characters is far more than "America/Argentina/ComodRivadavia" needs.
+    if len(tz) > 64 or not re.fullmatch(r"[A-Za-z0-9_+\-/]+", tz or "x"):
+        return ""
+    return tz
 
 
 def _agent_packs_for_page():
@@ -2326,7 +2346,7 @@ def api_agents_job_pdf(job_id):
     if job.get("status") != "done":
         return jsonify({"error": f"Run is {job.get('status')}, not done"}), 409
 
-    pdf = build_report_pdf(job)
+    pdf = build_report_pdf(job, tz=_reader_tz())
     if not pdf:
         return jsonify({"error": "Could not render a PDF for this run"}), 500
 
@@ -2547,10 +2567,12 @@ def api_agents_showcase_job_pdf(job_id):
     if not job:
         return jsonify({"error": "No such report"}), 404
 
+    tz = _reader_tz()
+    cache_key = f"{job_id}|{tz}"
     with _showcase_pdf_lock:
-        pdf = _showcase_pdfs.get(job_id)
+        pdf = _showcase_pdfs.get(cache_key)
     if pdf is None:
-        pdf = build_report_pdf(job)
+        pdf = build_report_pdf(job, tz=tz)
         if not pdf:
             return jsonify({"error": "Could not render a PDF for this report"}), 500
         with _showcase_pdf_lock:
@@ -2558,7 +2580,7 @@ def api_agents_showcase_job_pdf(job_id):
             # entries are the ones no longer listed anyway.
             if len(_showcase_pdfs) >= _SHOWCASE_PDF_MAX:
                 _showcase_pdfs.clear()
-            _showcase_pdfs[job_id] = pdf
+            _showcase_pdfs[cache_key] = pdf
         log.info("agents: showcase rendered PDF for %s (%d bytes)", job_id, len(pdf))
 
     return Response(pdf, content_type="application/pdf", headers={
