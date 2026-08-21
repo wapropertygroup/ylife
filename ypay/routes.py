@@ -202,6 +202,10 @@ def _agent_packs():
     try:
         from ystocker import credits
 
+        ok, why = credits.selling_enabled()
+        if not ok:
+            log.warning("ypay: not offering run packs — %s", why)
+            return []
         return credits.packs_public()
     except Exception as exc:  # noqa: BLE001 - yPay still works without them
         log.warning("ypay: agent packs unavailable: %s", exc)
@@ -253,6 +257,19 @@ def api_checkout():
 
     # An agent run pack, or one of the donation items.
     item = _agent_pack_item(item_id)
+    if item:
+        # Re-checked here and not only on the page: the page could have been
+        # loaded while selling was possible and submitted after it stopped being.
+        try:
+            from ystocker import credits
+
+            sellable, why = credits.selling_enabled()
+        except Exception:  # noqa: BLE001
+            sellable, why = False, "credits module unavailable"
+        if not sellable:
+            log.error("ypay: refusing to sell %s — %s", item_id, why)
+            return jsonify({"error": "Run packs are temporarily unavailable. "
+                                     "No charge has been made."}), 503
     if item and not (buyer_email and "@" in buyer_email):
         # Refused rather than sold: a run pack with nowhere to deliver the credits
         # is a payment we would have to refund by hand.

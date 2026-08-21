@@ -2126,6 +2126,10 @@ def _agent_packs_for_page():
     try:
         from ystocker import credits
 
+        ok, why = credits.selling_enabled()
+        if not ok:
+            log.warning("agents: not offering run packs — %s", why)
+            return []
         return credits.packs_public()
     except Exception as exc:  # noqa: BLE001
         log.warning("agents: packs unavailable: %s", exc)

@@ -80,6 +80,25 @@ def pack(pack_id: str) -> Optional[dict[str, Any]]:
     return PACKS.get((pack_id or "").strip())
 
 
+def selling_enabled() -> tuple[bool, str]:
+    """Whether it is safe to offer packs for sale, and why not if it is not.
+
+    Runs are granted by yPay's Stripe webhook, and that handler refuses to credit
+    an event it could not signature-verify. With no ``STRIPE_WEBHOOK_SECRET`` a
+    purchase would therefore charge the card and grant nothing -- so the packs are
+    withheld rather than sold. Refusing a sale is recoverable; taking money for
+    nothing is not.
+    """
+    if os.environ.get("AGENTS_SELLING_DISABLED", "").strip().lower() in ("1", "true", "yes"):
+        return False, "selling disabled by configuration"
+    if not os.environ.get("STRIPE_SECRET_KEY", "").strip():
+        return False, "Stripe is not configured"
+    if not os.environ.get("STRIPE_WEBHOOK_SECRET", "").strip():
+        return False, ("no STRIPE_WEBHOOK_SECRET: a payment could not be "
+                       "credited, so packs are not offered")
+    return True, ""
+
+
 def packs_public() -> list[dict[str, Any]]:
     """The packs as the page shows them, cheapest first."""
     out = []
