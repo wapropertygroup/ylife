@@ -10,7 +10,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>yStocker TV</title>
+<title>{{ 'yStocker 电视版' if lang == 'zh' else 'yStocker TV' }}</title>
 <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
 <style>
   :root {
@@ -157,9 +157,13 @@
   <section class="slide" id="s-sectors"></section>
   <section class="slide" id="s-vol"></section>
   <section class="slide" id="s-risk"></section>
+  <section class="slide" id="s-breadth"></section>
+  <section class="slide" id="s-rates"></section>
+  <section class="slide" id="s-housing"></section>
   <div id="err"></div>
 
   <div id="ctl">
+    <button id="bLang" type="button"></button>
     <button id="bCast" type="button" hidden></button>
     <button id="bAir"  type="button"></button>
     <button id="bFull" type="button" aria-pressed="false"></button>
@@ -179,7 +183,25 @@
 (() => {
   'use strict';
   const P = new URLSearchParams(location.search);
-  const ZH = (P.get('lang') || '{{ lang }}') === 'zh';
+  // Language: ?lang= wins, then whatever the rest of the site is set to, then the
+  // server's guess. Reading localStorage is the point -- this page is standalone
+  // and does not load i18n.js, so before this a reader who had switched the whole
+  // site to Chinese still got an English TV, with no control anywhere to fix it.
+  // The key is i18n.js's own ystocker_lang, so the two stay in step.
+  const LANG_KEY = 'ystocker_lang';
+  const LANG = (() => {
+    const q = P.get('lang');
+    if (q === 'zh' || q === 'en') {
+      try { localStorage.setItem(LANG_KEY, q); } catch (_) {}
+      return q;
+    }
+    try {
+      const s = localStorage.getItem(LANG_KEY);
+      if (s === 'zh' || s === 'en') return s;
+    } catch (_) {}          // private mode / storage disabled
+    return '{{ lang }}';
+  })();
+  const ZH = LANG === 'zh';
   // Seconds per slide and minutes between data refreshes, both overridable so a
   // display can be tuned without a deploy.
   const SECS = Math.max(5, Math.min(300, +(P.get('secs') || 15) || 15));
@@ -221,11 +243,60 @@
     castFail: ZH ? '投屏失败或已取消' : 'Cast failed or was cancelled',
     castNoDev: ZH ? '同一 Wi-Fi 下未找到设备' : 'No device found on this Wi-Fi',
     castMaybe: ZH ? '尚未探测到设备，仍可点击试试' : 'No device detected yet — still worth a try',
+    breadth: ZH ? '市场广度' : 'Breadth',
+    rates:   ZH ? '利率曲线' : 'Rates',
+    housing: ZH ? '房地产' : 'Housing',
+    aboveMa: ZH ? '成分股高于均线比例' : 'S&P 500 members above their moving average',
+    rspSpy:  ZH ? '等权/市值加权 (RSP/SPY)' : 'Equal weight vs cap weight (RSP/SPY)',
+    narrow:  ZH ? '涨势集中于大盘股' : 'led by the largest names',
+    broad:   ZH ? '涨势较为普遍' : 'broadly shared',
+    curve:   ZH ? '美债收益率曲线' : 'US Treasury curve',
+    s2s10:   ZH ? '2年-10年利差' : '2s10s spread',
+    s10y3m:  ZH ? '3月-10年利差' : '10y-3m spread',
+    inverted: ZH ? '倒挂' : 'inverted',
+    normalCv: ZH ? '正常' : 'normal',
+    mortgage: ZH ? '30年房贷利率' : '30-yr mortgage',
+    askPrice: ZH ? '挂牌价中位数' : 'Median asking price',
+    domH:     ZH ? '中位在市天数' : 'Median days on market',
+    cutShare: ZH ? '降价房源占比' : 'Share with a price cut',
+    activeH:  ZH ? '在售房源' : 'Active listings',
+    caseSh:   ZH ? 'Case-Shiller 同比' : 'Case-Shiller YoY',
+    lang:    ZH ? 'EN' : '中文',
+    wakeNo:  ZH ? '系统拒绝了常亮请求' : 'wake lock refused',
+    fetchFail: ZH ? '数据获取失败' : 'fetch failed',
+    r1: ZH ? '1年' : '1Y',
+    r3: ZH ? '3年' : '3Y',
+    r5: ZH ? '5年' : '5Y',
+  };
+
+  // Sector labels arrive from the server's _SECTOR_ETFS map, which is English
+  // only, so on ?lang=zh the sectors slide used to read "Tech / Financials /
+  // Consumer Disc." in an otherwise Chinese page. Keyed by ticker rather than by
+  // the English string so a relabel upstream cannot silently drop a translation.
+  const SECTOR_ZH = {
+    XLK: '科技', XLF: '金融', XLE: '能源', XLV: '医疗保健', XLI: '工业',
+    XLY: '可选消费', XLP: '必需消费', XLU: '公用事业', XLB: '原材料',
+    XLRE: '房地产', XLC: '通信服务', XTL: '电信',
+  };
+  const sectorName = s => (ZH && SECTOR_ZH[s.ticker]) || s.label || s.ticker;
+
+  // CNN publishes its Fear & Greed rating as English prose, so it was printed
+  // raw into the Chinese page. Matched loosely because the wording has drifted
+  // before ("Extreme Greed" vs "extreme greed").
+  const FG_ZH = [
+    [/extreme\s*fear/i, '极度恐慌'], [/extreme\s*greed/i, '极度贪婪'],
+    [/fear/i, '恐慌'], [/greed/i, '贪婪'], [/neutral/i, '中性'],
+  ];
+  const fgRating = r => {
+    if (!r) return '';
+    if (!ZH) return r;
+    const hit = FG_ZH.find(([re]) => re.test(r));
+    return hit ? hit[1] : r;
   };
   document.querySelectorAll('[data-t]').forEach(e => e.textContent = T[e.dataset.t] || e.textContent);
 
   // Which slides to show, so a display can be dedicated to one view.
-  const ALL = ['indices', 'sectors', 'vol', 'risk'];
+  const ALL = ['indices', 'sectors', 'vol', 'risk', 'breadth', 'rates', 'housing'];
   const want = (P.get('slides') || '').split(',').map(s => s.trim()).filter(Boolean);
   const SLIDES = want.filter(s => ALL.includes(s));
   const order = SLIDES.length ? SLIDES : ALL;
@@ -240,7 +311,8 @@
     : v >= 1000 ? (+v).toLocaleString('en-US', {maximumFractionDigits: 0})
     : num(v, 2);
 
-  let data = { markets: null, fg: null, etf: null };
+  let data = { markets: null, fg: null, etf: null,
+               breadth: null, yc: null, housing: null };
   let lastGood = 0;
 
   async function grab(url) {
@@ -252,16 +324,25 @@
   async function load() {
     // Settled, not all: one dead endpoint must not blank a wall display. Whatever
     // arrives is drawn and the rest keeps its previous value.
-    const [m, f, e] = await Promise.allSettled([
-      grab('/api/markets'), grab('/api/fear-greed'), grab('/api/etf-returns'),
-    ]);
-    if (m.status === 'fulfilled') data.markets = m.value;
-    if (f.status === 'fulfilled') data.fg = f.value;
-    if (e.status === 'fulfilled') data.etf = e.value;
+    // Only the endpoints the chosen slides actually need. A display pinned to
+    // ?slides=indices should not be waking the housing cache every five minutes.
+    const need = new Set(order);
+    const jobs = [
+      ['markets', '/api/markets',      true],
+      ['fg',      '/api/fear-greed',   need.has('risk')],
+      ['etf',     '/api/etf-returns',  need.has('risk')],
+      ['breadth', '/api/breadth',      need.has('breadth')],
+      ['yc',      '/api/yield-curve',  need.has('rates')],
+      ['housing', '/api/housing',      need.has('housing')],
+    ].filter(j => j[2]);
 
-    const failed = [m, f, e].filter(x => x.status === 'rejected');
+    const res = await Promise.allSettled(jobs.map(j => grab(j[1])));
+    res.forEach((r, i) => { if (r.status === 'fulfilled') data[jobs[i][0]] = r.value; });
+
+    const failed = res.filter(x => x.status === 'rejected');
     if (failed.length) {
-      $('err').textContent = '⚠ ' + failed.map(x => x.reason.message).join(' · ');
+      $('err').textContent = '⚠ ' + T.fetchFail + ': '
+        + failed.map(x => x.reason.message).join(' · ');
     } else {
       $('err').textContent = '';
     }
@@ -278,10 +359,22 @@
   }
 
   // ── slide painters ──────────────────────────────────────────────────
+  // Every label localised, not just three. Shanghai, Gold and Copper were the
+  // only translated ones, so a Chinese display still read "S&P 500 / Nasdaq /
+  // Dow / VIX / CSI 500 / Nikkei / FTSE / WTI / DXY" in Latin script.
   const IDX = [
-    ['spx', 'S&P 500'], ['ixic', 'Nasdaq'], ['dji', 'Dow'], ['vixq', 'VIX'],
-    ['sse', ZH ? '上证' : 'Shanghai'], ['csi500', 'CSI 500'], ['n225', 'Nikkei'], ['ftse', 'FTSE'],
-    ['gold', ZH ? '黄金' : 'Gold'], ['oil', 'WTI'], ['dxy', 'DXY'], ['copper', ZH ? '铜' : 'Copper'],
+    ['spx',    ZH ? '标普500'    : 'S&P 500'],
+    ['ixic',   ZH ? '纳斯达克'    : 'Nasdaq'],
+    ['dji',    ZH ? '道琼斯'      : 'Dow'],
+    ['vixq',   ZH ? '恐慌指数'    : 'VIX'],
+    ['sse',    ZH ? '上证综指'    : 'Shanghai'],
+    ['csi500', ZH ? '中证500'     : 'CSI 500'],
+    ['n225',   ZH ? '日经225'     : 'Nikkei'],
+    ['ftse',   ZH ? '富时100'     : 'FTSE'],
+    ['gold',   ZH ? '黄金'        : 'Gold'],
+    ['oil',    ZH ? '原油'        : 'WTI'],
+    ['dxy',    ZH ? '美元指数'    : 'DXY'],
+    ['copper', ZH ? '铜'          : 'Copper'],
   ];
 
   function drawIndices() {
@@ -312,7 +405,7 @@
       const w = Math.abs(s.week_chg_pct) / max * 50;
       const pos = s.week_chg_pct >= 0;
       return `<div class="row">
-        <div class="nm">${esc(s.label || s.ticker)}</div>
+        <div class="nm">${esc(sectorName(s))}</div>
         <div class="track"><span class="mid"></span>
           <i style="${pos ? 'left:50%' : `right:50%`};width:${w}%;background:${pos ? 'var(--up)' : 'var(--down)'}"></i>
         </div>
@@ -349,7 +442,7 @@
     const tbl = (rows, title) => `
       <div class="cell" style="justify-content:flex-start">
         <div class="k" style="margin-bottom:.6vh">${esc(title)}</div>
-        <table class="tv"><thead><tr><th></th><th>1Y</th><th>3Y</th><th>5Y</th></tr></thead><tbody>
+        <table class="tv"><thead><tr><th></th><th>${esc(T.r1)}</th><th>${esc(T.r3)}</th><th>${esc(T.r5)}</th></tr></thead><tbody>
         ${(rows || []).map(r => `<tr>
           <td><span class="tick">${esc(r.ticker)}</span></td>
           <td class="${cls(r.r1)}">${sign(r.r1)}${num(r.r1, 1)}%</td>
@@ -361,19 +454,129 @@
       <div class="cell"><div class="big">
         <div class="k">${esc(T.fg)}</div>
         <div class="huge ${col}">${score == null ? '—' : Math.round(score)}</div>
-        <div class="sub">${esc(fg.rating || '')}</div>
+        <div class="sub">${esc(fgRating(fg.rating))}</div>
       </div></div>
       ${tbl(etf.equity, T.stocks)}
       ${tbl(etf.bond, T.bonds)}
     </div>`;
   }
 
-  const PAINT = { indices: drawIndices, sectors: drawSectors, vol: drawVol, risk: drawRisk };
+  function drawBreadth() {
+    const b = data.breadth || {};
+    const L = b.latest || {};
+    // Longer averages first: the shape of 20 -> 200 is the story. If the short
+    // averages sit below the long ones, the recent trend is weaker than the base.
+    const mas = ['20', '50', '100', '150', '200'].filter(k => L[k] != null);
+    if (!mas.length) { $('s-breadth').innerHTML = `<div class="big"><div class="sub">${esc(T.noData)}</div></div>`; return; }
+    const bars = mas.map(k => {
+      const v = L[k];
+      // 50% is the neutral line for a breadth reading, not zero, so the bar is
+      // drawn against that rather than from the left edge.
+      const col = v >= 60 ? 'var(--up)' : v >= 40 ? '#fbbf24' : 'var(--down)';
+      return `<div class="row">
+        <div class="nm">${esc(k)}d</div>
+        <div class="track"><span class="mid"></span>
+          <i style="left:0;width:${Math.max(0, Math.min(100, v))}%;background:${col};opacity:.85"></i>
+        </div>
+        <div class="pc">${num(v, 1)}%</div>
+      </div>`;
+    }).join('');
+    const rsp = b.rsp_spy;
+    // RSP/SPY rising means the average stock is beating the index: gains are
+    // spread. Falling means a handful of large names are carrying it.
+    const rspNow = rsp && rsp.values ? rsp.values.filter(v => v != null).slice(-1)[0] : null;
+    const rspPrev = rsp && rsp.values ? rsp.values.filter(v => v != null).slice(-64)[0] : null;
+    const trend = (rspNow != null && rspPrev != null) ? (rspNow / rspPrev - 1) * 100 : null;
+    $('s-breadth').innerHTML = `<div class="grid g3" style="grid-template-columns:2fr 1fr">
+      <div class="cell" style="justify-content:center">
+        <div class="k" style="margin-bottom:1vh">${esc(T.aboveMa)}</div>
+        <div class="rank">${bars}</div>
+      </div>
+      <div class="cell"><div class="big">
+        <div class="k">${esc(T.rspSpy)}</div>
+        <div class="huge ${cls(trend)}" style="font-size:9vh">${trend == null ? '—' : sign(trend) + num(trend, 1) + '%'}</div>
+        <div class="sub">${trend == null ? '' : esc(trend >= 0 ? T.broad : T.narrow)}</div>
+      </div></div>
+    </div>`;
+  }
+
+  function drawRates() {
+    const us = (data.yc && data.yc.us) || {};
+    const c = us.current || {};
+    const order2 = ['3M', '6M', '1Y', '2Y', '3Y', '5Y', '10Y', '20Y', '30Y'].filter(k => c[k] != null);
+    if (!order2.length) { $('s-rates').innerHTML = `<div class="big"><div class="sub">${esc(T.noData)}</div></div>`; return; }
+    // 2s10s is not in the payload; it is the spread everyone quotes, so derive it
+    // rather than leave the reader to subtract two tiles.
+    const s2 = c['2Y'], s10 = c['10Y'];
+    const t2s10 = (s2 != null && s10 != null) ? s10 - s2 : null;
+    const t10y3m = us.spread_10y_3m && us.spread_10y_3m.values
+      ? us.spread_10y_3m.values.filter(v => v != null).slice(-1)[0]
+      : (c['3M'] != null && s10 != null ? s10 - c['3M'] : null);
+    const pill = v => v == null ? '' :
+      `<span class="${v < 0 ? 'down' : 'up'}">${v < 0 ? esc(T.inverted) : esc(T.normalCv)}</span>`;
+    const tiles = order2.map(k => `<div class="cell">
+        <div class="k">${esc(k)}</div><div class="v">${num(c[k], 2)}%</div></div>`).join('');
+    $('s-rates').innerHTML = `
+      <div class="grid g3" style="grid-template-rows:auto 1fr;gap:1.1vh 1.1vw">
+        <div class="cell"><div class="k">${esc(T.s2s10)}</div>
+          <div class="v ${cls(t2s10)}">${sign(t2s10)}${num(t2s10, 2)}%</div>
+          <div class="d">${pill(t2s10)}</div></div>
+        <div class="cell"><div class="k">${esc(T.s10y3m)}</div>
+          <div class="v ${cls(t10y3m)}">${sign(t10y3m)}${num(t10y3m, 2)}%</div>
+          <div class="d">${pill(t10y3m)}</div></div>
+        <div class="cell"><div class="k">${esc(T.curve)}</div>
+          <div class="v">${num(c['10Y'], 2)}%</div>
+          <div class="d" style="color:var(--dim)">10Y</div></div>
+      </div>
+      <div class="grid" style="grid-template-columns:repeat(${order2.length},1fr);margin-top:1.1vh;height:auto">
+        ${tiles}
+      </div>`;
+  }
+
+  function drawHousing() {
+    const h = data.housing || {};
+    const hd = h.headline || {};
+    const L = h.realtor || {};
+    const last = k => (L[k] && L[k].values) ? L[k].values.filter(v => v != null).slice(-1)[0] : null;
+    const hv = k => (hd[k] && hd[k].value != null) ? hd[k].value : null;
+    const cells = [
+      [T.mortgage, hv('mortgage_rate') == null ? '—' : num(hv('mortgage_rate'), 2) + '%', ''],
+      [T.askPrice, money(last('list_price')) === '—' ? '—' : '$' + money(last('list_price')), ''],
+      [T.domH,     last('days_on_market') == null ? '—' : Math.round(last('days_on_market')) + 'd', ''],
+      [T.cutShare, last('price_reduced_share') == null ? '—' : num(last('price_reduced_share') * 100, 1) + '%', ''],
+      [T.activeH,  last('active_listings') == null ? '—' : money(last('active_listings')), ''],
+      [T.caseSh,   (hd.fred_case_shiller && hd.fred_case_shiller.yoy != null)
+                     ? sign(hd.fred_case_shiller.yoy) + num(hd.fred_case_shiller.yoy, 1) + '%' : '—',
+                   hd.fred_case_shiller ? cls(hd.fred_case_shiller.yoy) : ''],
+    ];
+    $('s-housing').innerHTML = `<div class="grid g3">${cells.map(([k, v, c]) =>
+      `<div class="cell"><div class="k">${esc(k)}</div><div class="v ${c}">${esc(v)}</div></div>`
+    ).join('')}</div>`;
+  }
+
+  const PAINT = { indices: drawIndices, sectors: drawSectors, vol: drawVol, risk: drawRisk,
+                  breadth: drawBreadth, rates: drawRates, housing: drawHousing };
   function draw() { order.forEach(k => { try { PAINT[k](); } catch (e) { console.warn(k, e); } }); }
 
   // ── Casting, wake lock, fullscreen, overscan ────────────────────────
   const bCast = $('bCast'), bAir = $('bAir'), bFull = $('bFull'),
-        bWake = $('bWake'), bSafe = $('bSafe'), tip = $('tip');
+        bWake = $('bWake'), bSafe = $('bSafe'), bLang = $('bLang'), tip = $('tip');
+
+  // Language toggle. Reloads with ?lang= rather than re-rendering in place, and
+  // that is the right trade here: ZH is read once at startup by the T table, the
+  // IDX labels, the sector map and the clock's locale, so a live swap would mean
+  // making all of them reactive for a control nobody presses twice. A kiosk
+  // reload costs one 1.5 KB digest. Persisting to ystocker_lang first means the
+  // choice also follows the reader to the rest of the site.
+  bLang.textContent = '⇄ ' + T.lang;
+  bLang.title = ZH ? 'Switch to English' : '切换为中文';
+  bLang.onclick = () => {
+    const next = ZH ? 'en' : 'zh';
+    try { localStorage.setItem(LANG_KEY, next); } catch (_) {}
+    const u = new URL(location.href);
+    u.searchParams.set('lang', next);
+    location.assign(u.toString());
+  };
   bAir.textContent  = '􀋆 ' + T.air;
   bFull.textContent = '⛶ ' + T.full;
   bWake.textContent = '☀ ' + T.wake;
@@ -465,7 +668,7 @@
     wakeWanted = !wakeWanted;
     if (wakeWanted) {
       const ok = await takeWake();
-      if (!ok) { wakeWanted = false; $('err').textContent = '⚠ wake lock refused'; }
+      if (!ok) { wakeWanted = false; $('err').textContent = '⚠ ' + T.wakeNo; }
     } else if (wake) { try { await wake.release(); } catch (_) {} wake = null; }
     bWake.setAttribute('aria-pressed', String(wakeWanted));
   };
