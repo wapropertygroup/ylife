@@ -1075,6 +1075,14 @@ def _build_payload() -> dict[str, Any]:
 
     payload = {
         "_ts": time.time(),
+        # Stamped here because two places compare it against _CACHE_VER and
+        # nothing was ever setting it. None != "v2" is always true, so the disk
+        # cache was rejected unconditionally and is_cache_fresh() could never
+        # return True: every worker re-downloaded ~10 MB on startup and after
+        # each TTL, and /api/housing answered "warming" indefinitely. The version
+        # check has been inert since it was added; bumping it to v3 is what made
+        # that visible.
+        "_ver": _CACHE_VER,
         "as_of": as_of,
         "headline": headline,
         "zillow": national_series,
