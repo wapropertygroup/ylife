@@ -312,19 +312,11 @@
   </div>
 </div>
 
-<!-- ISM PMI -->
-<div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up" id="ismSection" style="display:none">
-  <div class="flex items-start justify-between mb-3">
-    <div>
-      <h3 class="text-sm font-semibold text-slate-300" data-i18n="fed.ism_title">🏭 ISM Manufacturing PMI</h3>
-      <p class="text-xs text-slate-500 mt-0.5" data-i18n="fed.ism_desc">Above 50 = expansion, below 50 = contraction. Leads earnings and S&amp;P 500 by 3–6 months. Classic business cycle indicator.</p>
-    </div>
-    <span id="ismVal" class="text-sm font-bold font-mono text-slate-100">—</span>
-  </div>
-  <div class="chart-container" style="height:180px">
-    <canvas id="ismChart"></canvas>
-  </div>
-</div>
+{# The standalone ISM Manufacturing PMI card was removed, not hidden. It was gated
+   on s['NAPM'] and FRED answers 404 for NAPM -- ISM ended its FRED licensing, so
+   the series cannot come back and the card could never have rendered. The
+   business-cycle and GDP charts below use INDPRO (Industrial Production), the
+   closest freely available substitute, and label it as itself. #}
 
 <!-- ── Balance Sheet Identity (Assets = Liabilities + Capital) ───────── -->
 <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 mb-6 fade-up">
@@ -900,6 +892,7 @@
     <div class="mb-3">
       <h3 class="text-sm font-semibold text-slate-300" data-i18n="fed.sentiment_title">🧑‍💼 Consumer Sentiment (UMich) vs S&P 500</h3>
       <p class="text-xs text-slate-500 mt-0.5" data-i18n="fed.sentiment_desc">Consumer sentiment leads retail spending and corporate earnings by 2-3 quarters. Sentiment troughs often mark market bottoms.</p>
+        <p class="text-[10px] mt-0.5" id="sentAsof"></p>
     </div>
     <div class="chart-container" style="height:200px"><canvas id="sentSpyChart"></canvas></div>
   </div>
@@ -910,6 +903,7 @@
       <div>
         <h3 class="text-sm font-semibold text-slate-300" data-i18n="fed.business_cycle_title">Business Cycle Indicators</h3>
         <p class="text-xs text-slate-500 mt-0.5" data-i18n="fed.business_cycle_desc">Industrial Production Index and Housing Starts (k units) — both track the business cycle and lead recessions by 3–9 months.</p>
+        <p class="text-[10px] mt-0.5" id="cycleAsof"></p>
       </div>
       <div class="flex items-start gap-3">
         <div class="text-right text-[10px] text-slate-500" id="cycleStats">
@@ -932,6 +926,7 @@
       <div>
         <h3 class="text-sm font-semibold text-slate-300" data-i18n="fed.gdp_sp_title">Real GDP vs S&P 500</h3>
         <p class="text-xs text-slate-500 mt-0.5" data-i18n="fed.gdp_sp_desc">GDP measures actual economic output; S&P 500 reflects expectations. Long divergences signal either market overextension or the start of a new growth cycle.</p>
+        <p class="text-[10px] mt-0.5" id="gdpSpAsof"></p>
       </div>
       <div class="flex gap-1" id="gdpSpyRangeBtns">
         <button class="range-btn" data-gdpspy-years="10">10Y</button>
@@ -964,6 +959,7 @@
       <div>
         <h3 class="text-sm font-semibold text-slate-300" data-i18n="fed.gdp_ism_title">Real GDP Growth vs Industrial Production</h3>
         <p class="text-xs text-slate-500 mt-0.5" data-i18n="fed.gdp_ism_desc">Industrial Production leads real GDP by 1–2 quarters. When INDPRO turns negative, GDP contraction typically follows within 6 months.</p>
+        <p class="text-[10px] mt-0.5" id="gdpIsmAsof"></p>
       </div>
       <div class="flex gap-1" id="gdpIsmRangeBtns">
         <button class="range-btn" data-gdpism-years="10">10Y</button>
@@ -1446,39 +1442,8 @@ let _fedSeriesData = {};
     }
   } catch(e) { console.warn('Fed chart oasChart failed:', e); }
 
-  // ISM PMI
-  try {
-    const napm = s['NAPM'];
-    if (napm?.dates?.length && napm.values.some(v=>v!=null)) {
-      document.getElementById('ismSection').style.display = 'block';
-      const latestPMI = napm.values.filter(v=>v!=null).slice(-1)[0];
-      const ismEl = document.getElementById('ismVal');
-      if (ismEl && latestPMI != null) {
-        ismEl.textContent = latestPMI.toFixed(1);
-        ismEl.className = 'text-sm font-bold font-mono ' + (latestPMI >= 50 ? 'text-emerald-400' : 'text-rose-400');
-      }
-      const pmiColors = napm.values.map(v => v == null ? 'transparent' : v >= 50 ? 'rgba(52,211,153,0.7)' : 'rgba(248,113,113,0.7)');
-      new Chart(document.getElementById('ismChart'), {
-        type:'bar',
-        data:{ labels:napm.dates.slice(-120), datasets:[
-          { label:'ISM PMI', data:napm.values.slice(-120), backgroundColor:pmiColors.slice(-120), borderWidth:0, borderRadius:2 },
-        ]},
-        plugins:[{ afterDraw(chart){
-          const {ctx:c,chartArea:a,scales:{y}}=chart; const py=y.getPixelForValue(50);
-          if(py<a.top||py>a.bottom)return;
-          c.save();c.strokeStyle='rgba(251,191,36,0.6)';c.lineWidth=1.5;c.setLineDash([4,3]);
-          c.beginPath();c.moveTo(a.left,py);c.lineTo(a.right,py);c.stroke();
-          c.fillStyle='#fbbf24';c.font='10px Inter,sans-serif';c.fillText('50',a.left+4,py-3);c.restore();
-        }}],
-        options:{
-          responsive:true,maintainAspectRatio:false,
-          plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>` PMI: ${c.raw?.toFixed(1)}`}}},
-          scales:{x:{grid:{color:'#1e293b'},ticks:{color:'#64748b',maxTicksLimit:6,maxRotation:0}},y:{grid:{color:'#1e293b'},ticks:{color:'#64748b'},min:30,max:70}},
-          interaction:{mode:'index',intersect:false},
-        },
-      });
-    }
-  } catch(e) { console.warn('Fed chart ismChart failed:', e); }
+  // The ISM PMI chart was removed with its card: FRED 404s NAPM, so its guard was
+  // always falsy and it never drew. See the note beside the markup above.
 
   // ── Populate Balance Sheet Identity panel
   const totA = _v('WALCL');
@@ -2607,6 +2572,53 @@ let _fedSeriesData = {};
       });
     }
   } catch(e){console.warn('Fed GDP/ISM:',e);}
+
+  // ── Source freshness ──────────────────────────────────────────────────────
+  // These charts plot FRED series, and FRED publishes on the statistical
+  // agencies' schedule, not ours. UMCSENT in particular can sit two months
+  // behind. Showing the last observation date is the difference between a chart
+  // that looks broken and one that is honestly reporting what the source has --
+  // "not auto updating" is usually the source, but the reader cannot tell that
+  // from an undated line.
+  function _lastObs(series) {
+    const vs = series?.values || [], ds = series?.dates || [];
+    for (let i = vs.length - 1; i >= 0; i--) if (vs[i] != null) return ds[i];
+    return null;
+  }
+
+  // monthsBehind: how many whole months back the last observation sits.
+  function _monthsBehind(iso) {
+    if (!iso) return null;
+    const d = new Date(iso + 'T00:00:00Z'), now = new Date();
+    return (now.getUTCFullYear() - d.getUTCFullYear()) * 12 +
+           (now.getUTCMonth() - d.getUTCMonth());
+  }
+
+  // staleAfter is in months and differs by release frequency: a quarterly series
+  // is not late at two months old, a monthly one is.
+  function showAsOf(spanId, series, staleAfter) {
+    const el = document.getElementById(spanId);
+    if (!el) return;
+    const last = _lastObs(series);
+    if (!last) { el.textContent = ''; return; }
+    const behind = _monthsBehind(last);
+    const label = (I18n.t('fed.asof') || 'Source data through') + ' ' + last.slice(0, 7);
+    if (behind != null && behind > staleAfter) {
+      el.innerHTML = label + ' · <span class="text-amber-500">' +
+        (I18n.t('fed.asof_lag') || 'FRED has published nothing newer') + '</span>';
+      el.className = 'text-[10px] mt-0.5 text-slate-500';
+    } else {
+      el.textContent = label;
+      el.className = 'text-[10px] mt-0.5 text-slate-600';
+    }
+  }
+
+  try {
+    showAsOf('sentAsof',   s['UMCSENT'], 2);   // monthly
+    showAsOf('gdpSpAsof',  s['GDPC1'],   5);   // quarterly, ~1 quarter lag is normal
+    showAsOf('gdpIsmAsof', s['INDPRO'],  2);   // monthly
+    showAsOf('cycleAsof',  s['INDPRO'],  2);   // monthly
+  } catch (e) { console.warn('Fed as-of labels failed:', e); }
 
   // ── Consumer Sentiment vs Yield Spread
   try {
