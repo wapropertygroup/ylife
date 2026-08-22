@@ -12,6 +12,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+import tempfile
 import threading
 import time
 from pathlib import Path
@@ -4451,6 +4452,46 @@ _markets_ddb_unavail_until = 0.0
 _MARKETS_DDB_LOCK      = threading.Lock()
 
 
+def _start_spx_history_warmup_thread(app) -> None:
+    """Keep the long ^GSPC monthly series warm, off the request path.
+
+    This is the fetch that made the /fed macro charts look broken. It pulls
+    period="max" daily bars (~24.7k rows) and resamples, which on a cold cache
+    took long enough to exceed gunicorn's 120s timeout and return 504. Every
+    long-horizon chart on /fed awaits it in one Promise.all, so a single timeout
+    left Consumer Sentiment, Real GDP vs S&P 500, Real GDP vs Industrial
+    Production and Business Cycle Indicators all hidden -- indistinguishable, from
+    the outside, from data that had stopped updating.
+
+    Runs in the master under --preload, like the other warmers here, so the
+    workers inherit a populated cache instead of racing to build it.
+    """
+    def _loop():
+        time.sleep(20)   # after the markets warmer, which visitors hit sooner
+        while True:
+            try:
+                with _SPX_HISTORY_LOCK:
+                    entry = _SPX_HISTORY_CACHE.get("data") or _spx_history_load_disk()
+                    if entry:
+                        _SPX_HISTORY_CACHE.setdefault("data", entry)
+                    ts = entry.get("ts", 0) if entry else 0
+                age = time.time() - ts
+                if age >= _SPX_HISTORY_TTL - 3600:
+                    log.info("spx-history warm-up: %.1fh old — refreshing", age / 3600)
+                    with app.test_request_context():
+                        api_spx_history()   # fills the cache and the disk copy
+                else:
+                    log.info("spx-history warm-up: fresh (%.1fh old)", age / 3600)
+            except Exception as exc:  # noqa: BLE001
+                log.warning("spx-history warm-up: failed: %s", exc)
+            # Re-check hourly. The series gains one point a month, so this is
+            # about surviving a restart, not about latency.
+            time.sleep(3600)
+
+    t = threading.Thread(target=_loop, daemon=True, name="spx-history-warmup")
+    t.start()
+
+
 def _start_markets_warmup_thread(app) -> None:
     """Pre-warm the markets cache on startup and refresh every 5 minutes.
 
@@ -6876,6 +6917,36 @@ def api_yield_spread():
 _SPX_HISTORY_CACHE: dict = {}
 _SPX_HISTORY_LOCK = threading.Lock()
 _SPX_HISTORY_TTL = 24 * 3600
+# Persisted, because the in-memory cache alone made every restart a cliff: the
+# first /fed visitor afterwards triggered a period="max" daily ^GSPC download
+# (~24.7k rows), which exceeds gunicorn's 120s timeout and returns 504. The /fed
+# macro charts all await this in one Promise.all, so they silently stayed hidden
+# and looked like they had stopped updating.
+_SPX_HISTORY_PATH = Path(__file__).parent.parent / "cache" / "spx_history.json"
+
+
+def _spx_history_load_disk() -> Optional[dict]:
+    """Last persisted payload, or None. Age is checked by the caller."""
+    try:
+        raw = json.loads(_SPX_HISTORY_PATH.read_text(encoding="utf-8"))
+        if isinstance(raw, dict) and raw.get("data", {}).get("dates"):
+            return raw
+    except FileNotFoundError:
+        return None
+    except Exception as exc:  # noqa: BLE001
+        log.warning("spx-history: unreadable disk cache: %s", exc)
+    return None
+
+
+def _spx_history_save_disk(entry: dict) -> None:
+    try:
+        _SPX_HISTORY_PATH.parent.mkdir(parents=True, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(dir=str(_SPX_HISTORY_PATH.parent), suffix=".tmp")
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            json.dump(entry, fh)
+        os.replace(tmp, _SPX_HISTORY_PATH)
+    except Exception as exc:  # noqa: BLE001 - a cache write failure is not fatal
+        log.warning("spx-history: could not persist: %s", exc)
 
 
 @bp.route("/api/spx-history")
@@ -6904,6 +6975,14 @@ def api_spx_history():
         entry = _SPX_HISTORY_CACHE.get("data")
         if entry and time.time() - entry["ts"] < _SPX_HISTORY_TTL:
             return jsonify(entry["data"])
+        if entry is None:
+            # Adopt the persisted copy before considering a fetch: a fresh worker
+            # must not pay for a full download that another process already made.
+            disk = _spx_history_load_disk()
+            if disk:
+                _SPX_HISTORY_CACHE["data"] = disk
+                if time.time() - disk["ts"] < _SPX_HISTORY_TTL:
+                    return jsonify(disk["data"])
 
     try:
         hist = yf.Ticker("^GSPC").history(period="max", interval="1d")
@@ -6930,8 +7009,10 @@ def api_spx_history():
                             "stale_age_hours": round(age_h, 1)})
         return jsonify({"error": str(exc)}), 502
 
+    entry = {"ts": time.time(), "data": result}
     with _SPX_HISTORY_LOCK:
-        _SPX_HISTORY_CACHE["data"] = {"ts": time.time(), "data": result}
+        _SPX_HISTORY_CACHE["data"] = entry
+    _spx_history_save_disk(entry)
 
     log.info("spx-history: %d monthly closes (%s … %s)",
              len(result["dates"]), result["dates"][0], result["dates"][-1])
