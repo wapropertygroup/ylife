@@ -82,7 +82,7 @@ _CACHE_TTL = 24 * 60 * 60  # 24 hours
 # a field, an existing cache still looks fresh, so the API happily serves a
 # payload the new page cannot read and charts render empty with no explanation.
 # Same idea as _YIELD_CURVE_CACHE_VER in routes.py.
-_CACHE_VER = "v3"   # v3 adds the realtor.com listing-side series
+_CACHE_VER = "v4"   # v4 adds realtor.com state + metro breakdowns
 
 # How many metros (by Zillow SizeRank) to carry in the comparison table.
 _TOP_METROS = 25
@@ -110,8 +110,19 @@ _FRED_CSV = "https://fred.stlouisfed.org/graph/fredgraph.csv?id={series}"
 # what sellers are asking and how fast it moves -- which is the dimension this
 # page was missing. Zillow ZHVI is an estimated value, Redfin is what actually
 # sold; the gap between ask and sold is the interesting part.
-_REALTOR_HISTORY = ("https://econdata.s3-us-west-2.amazonaws.com/Reports/Core/"
-                    "RDC_Inventory_Core_Metrics_Country_History.csv")
+_REALTOR_BASE = "https://econdata.s3-us-west-2.amazonaws.com/Reports/Core/"
+_REALTOR_HISTORY = _REALTOR_BASE + "RDC_Inventory_Core_Metrics_Country_History.csv"
+_REALTOR_STATE = _REALTOR_BASE + "RDC_Inventory_Core_Metrics_State_History.csv"
+_REALTOR_METRO = _REALTOR_BASE + "RDC_Inventory_Core_Metrics_Metro_History.csv"
+
+# Geography is a size cliff, measured with HEAD before writing any of this:
+# country 39 KB, state 1.8 MB, metro 31.4 MB, county 96.7 MB, ZIP 784 MB. State is
+# small enough to read whole. Metro is streamed and filtered to the largest markets
+# as it arrives, because holding 31 MB of text plus the parsed rows is exactly the
+# kind of allocation that has OOM-killed this box before (see CLAUDE.md). County and
+# ZIP are not offered at all: at 97 MB and 784 MB they are a different kind of
+# feature -- a queried endpoint, not a cached payload.
+_REALTOR_TOP_METROS = 50
 
 # CSV column -> (payload key, label, unit). Only the level columns are taken; the
 # file also carries _mm and _yy changes for each, which are trivially derivable
@@ -466,7 +477,6 @@ def _fetch_realtor_national() -> dict[str, Any]:
     Returns {} on any failure: the rest of the page must not depend on one
     optional source being reachable.
     """
-    import calendar
     import csv as _csv
     import io
 
@@ -486,20 +496,11 @@ def _fetch_realtor_national() -> dict[str, Any]:
         log.warning("Housing: realtor.com returned no rows")
         return {}
 
-    def month_end(ym: str) -> Optional[str]:
-        ym = (ym or "").strip()
-        if len(ym) != 6 or not ym.isdigit():
-            return None
-        y, m = int(ym[:4]), int(ym[4:])
-        if not 1 <= m <= 12:
-            return None
-        return f"{y:04d}-{m:02d}-{calendar.monthrange(y, m)[1]:02d}"
-
     # Newest-first in the file; sort ascending by the parsed date instead of
     # trusting the order, so a reordered upload cannot silently reverse a chart.
     dated = []
     for row in rows:
-        d = month_end(row.get("month_date_yyyymm", ""))
+        d = _realtor_month_end(row.get("month_date_yyyymm", ""))
         if d:
             dated.append((d, row))
     dated.sort(key=lambda pair: pair[0])
@@ -525,6 +526,154 @@ def _fetch_realtor_national() -> dict[str, Any]:
     log.info("Housing: realtor.com — %d series, %d months (%s … %s)",
              len(out), len(dates), dates[0], dates[-1])
     return out
+
+
+def _realtor_month_end(ym: str) -> Optional[str]:
+    """"202607" -> "2026-07-31".
+
+    realtor.com dates months as a bare YYYYMM. Converting to the month end lines
+    them up with the Zillow and Redfin series the page plots alongside, which are
+    all month-end stamped.
+    """
+    import calendar
+
+    ym = (ym or "").strip()
+    if len(ym) != 6 or not ym.isdigit():
+        return None
+    y, m = int(ym[:4]), int(ym[4:])
+    if not 1 <= m <= 12:
+        return None
+    return f"{y:04d}-{m:02d}-{calendar.monthrange(y, m)[1]:02d}"
+
+
+def _realtor_row_metrics(row: dict[str, str]) -> dict[str, Optional[float]]:
+    """The level metrics from one realtor.com row, keyed as the payload keys."""
+    return {meta["key"]: _num(row.get(column, ""))
+            for column, meta in REALTOR_SERIES.items()}
+
+
+def _fetch_realtor_state() -> dict[str, Any]:
+    """Latest-month listing metrics for all 51 states (50 + DC).
+
+    1.8 MB, so it is read whole. Only the newest month is kept: 51 states x 121
+    months x 7 metrics is ~43k numbers, which would roughly double the payload to
+    support a view nobody has asked for. The table is a cross-section -- "where is
+    it cheap, where is it slow" -- and the national charts carry the time axis.
+
+    Returns {"as_of": "YYYY-MM-DD", "rows": [{name, code, <metrics>}, ...]}.
+    """
+    import csv as _csv
+    import io
+
+    try:
+        resp = _SESSION.get(_REALTOR_STATE, timeout=90)
+        resp.raise_for_status()
+        rows = list(_csv.DictReader(io.StringIO(resp.text)))
+    except Exception as exc:  # noqa: BLE001
+        log.warning("Housing: realtor.com state fetch failed: %s", exc)
+        return {}
+    if not rows:
+        return {}
+
+    # The file is newest-first, but pick the max month explicitly rather than
+    # trusting row order -- one reordered upload would otherwise silently publish
+    # a year-old cross-section with no visible symptom.
+    months = {(r.get("month_date_yyyymm") or "").strip() for r in rows}
+    months.discard("")
+    if not months:
+        return {}
+    newest = max(months)
+
+    out = []
+    for row in rows:
+        if (row.get("month_date_yyyymm") or "").strip() != newest:
+            continue
+        name = (row.get("state") or "").strip()
+        if not name:
+            continue
+        entry = {"name": name.title(), "code": (row.get("state_id") or "").strip().upper()}
+        entry.update(_realtor_row_metrics(row))
+        out.append(entry)
+
+    out.sort(key=lambda r: (r.get("list_price") is None, -(r.get("list_price") or 0)))
+    log.info("Housing: realtor.com state — %d states as of %s", len(out), newest)
+    return {"as_of": _realtor_month_end(newest) or newest, "rows": out}
+
+
+def _fetch_realtor_metro() -> dict[str, Any]:
+    """Latest-month listing metrics for the largest metros.
+
+    Streamed line by line and filtered on HouseholdRank as it arrives. The file is
+    31.4 MB; ``resp.text`` followed by a DictReader would hold the whole body, the
+    decoded string and every parsed row at once, which is the allocation pattern
+    the Redfin fetcher above already documents avoiding.
+
+    csv.reader, not ``line.split(",")``: metro names are quoted and contain commas
+    ("New York-Newark-Jersey City, NY-NJ"), so splitting would shift every column
+    after the name and silently mis-assign prices to the wrong fields.
+    """
+    import csv as _csv
+
+    try:
+        resp = _SESSION.get(_REALTOR_METRO, timeout=180, stream=True)
+        resp.raise_for_status()
+    except Exception as exc:  # noqa: BLE001
+        log.warning("Housing: realtor.com metro fetch failed: %s", exc)
+        return {}
+
+    try:
+        lines = resp.iter_lines(decode_unicode=True)
+        reader = _csv.reader(lines)
+        header = next(reader, None)
+        if not header:
+            return {}
+        idx = {name: i for i, name in enumerate(header)}
+        need = ["month_date_yyyymm", "cbsa_title", "HouseholdRank"]
+        if any(k not in idx for k in need):
+            log.warning("Housing: realtor.com metro header unexpected: %s", header[:6])
+            return {}
+
+        def cell(parts: list[str], column: str) -> str:
+            i = idx.get(column)
+            return parts[i] if i is not None and i < len(parts) else ""
+
+        newest = ""
+        kept: dict[str, dict[str, Any]] = {}
+        for parts in reader:
+            if not parts:
+                continue
+            month = cell(parts, "month_date_yyyymm").strip()
+            if not month:
+                continue
+            # Single pass, so the newest month is discovered while filtering. Rows
+            # for an older month are dropped; if a newer month appears later in the
+            # file, what was kept is discarded and collection restarts.
+            if month > newest:
+                newest, kept = month, {}
+            elif month != newest:
+                continue
+            try:
+                rank = int(float(cell(parts, "HouseholdRank") or 0))
+            except ValueError:
+                continue
+            if not 1 <= rank <= _REALTOR_TOP_METROS:
+                continue
+            title = cell(parts, "cbsa_title").strip()
+            if not title:
+                continue
+            row = {column: cell(parts, column) for column in REALTOR_SERIES}
+            entry = {"name": title, "rank": rank}
+            entry.update(_realtor_row_metrics(row))
+            kept[title] = entry
+    except Exception as exc:  # noqa: BLE001
+        log.warning("Housing: realtor.com metro parse failed: %s", exc)
+        return {}
+    finally:
+        resp.close()
+
+    rows = sorted(kept.values(), key=lambda r: r["rank"])
+    log.info("Housing: realtor.com metro — %d metros as of %s", len(rows), newest)
+    return {"as_of": _realtor_month_end(newest) or newest, "rows": rows}
 
 
 def _fetch_mortgage_rate() -> Optional[dict[str, Any]]:
@@ -902,6 +1051,8 @@ def _build_payload() -> dict[str, Any]:
         }
         r_fut = pool.submit(_fetch_redfin_national)
         rl_fut = pool.submit(_fetch_realtor_national)
+        rs_fut = pool.submit(_fetch_realtor_state)
+        rm_fut = pool.submit(_fetch_realtor_metro)
         m_fut = pool.submit(_fetch_mortgage_rate)
         f_fut = pool.submit(_fetch_all_fred)
 
@@ -1073,6 +1224,19 @@ def _build_payload() -> dict[str, Any]:
         log.warning("Housing: realtor.com unavailable: %s", exc)
         realtor = {}
 
+    # Each geography is independent: a metro stream that fails must not cost the
+    # state table, and neither must cost the national charts.
+    try:
+        realtor_state = rs_fut.result() or {}
+    except Exception as exc:  # noqa: BLE001
+        log.warning("Housing: realtor.com state unavailable: %s", exc)
+        realtor_state = {}
+    try:
+        realtor_metro = rm_fut.result() or {}
+    except Exception as exc:  # noqa: BLE001
+        log.warning("Housing: realtor.com metro unavailable: %s", exc)
+        realtor_metro = {}
+
     payload = {
         "_ts": time.time(),
         # Stamped here because two places compare it against _CACHE_VER and
@@ -1105,13 +1269,20 @@ def _build_payload() -> dict[str, Any]:
         # "zillow" (estimated values) and "redfin" (what sold) so the page can
         # say which of the three a number came from -- they routinely disagree.
         "realtor": realtor,
+        # Cross-sections, newest month only. Named by geography rather than folded
+        # into one list so the page can label which level a number describes --
+        # a state median and a metro median are not comparable.
+        "realtor_state": realtor_state,
+        "realtor_metro": realtor_metro,
         "metro_zhvi": {
             name: blk["values"] for name, blk in zhvi["metros"].items()
         } if zhvi else {},
     }
-    log.info("Housing: payload built — %d Zillow, %d Redfin, %d realtor, "
-             "%d FRED series, %d metros", len(national_series), len(redfin_series),
-             len(realtor), len(fred), len(metro_rows))
+    log.info("Housing: payload built — %d Zillow, %d Redfin, %d realtor "
+             "(%d states, %d metros), %d FRED series, %d Zillow metros",
+             len(national_series), len(redfin_series), len(realtor),
+             len(realtor_state.get("rows") or []), len(realtor_metro.get("rows") or []),
+             len(fred), len(metro_rows))
     return payload
 
 
