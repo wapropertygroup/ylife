@@ -55,6 +55,7 @@
 .src-zillow { background: rgba(57,135,229,.15);  color: #7cb2f0; }
 .src-redfin { background: rgba(217,89,38,.15);   color: #e89a76; }
 .src-fred   { background: rgba(148,163,184,.15); color: #b6c2d1; }
+.src-realtor{ background: rgba(212,42,61,.15);   color: #f0919e; }
 .hz-table { border-collapse: separate; border-spacing: 0 2px; }
 .hz-table th {
   font-size: 10px; font-weight: 600; color: #94a3b8;
@@ -269,6 +270,54 @@
   <div class="hz-section"><h2 data-i18n="housing.sec_supply">Supply &amp; Construction</h2><div class="rule"></div></div>
 
   <!-- ── Pipeline: permits lead starts lead completions ────────────────── -->
+  {# The listing side. Zillow ZHVI is an estimated value and Redfin is what
+     actually sold; this is what sellers are *asking*, which is the dimension the
+     page was missing. The three routinely disagree, and the gap is the signal. #}
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
+    <div class="mb-3">
+      <h3 class="text-sm font-semibold text-slate-300">
+        <span data-i18n="housing.ask_title">Asking vs Sold Price</span>
+        <span class="src-chip src-realtor">realtor.com</span>
+        <span class="src-chip src-redfin">Redfin</span>
+      </h3>
+      <p class="text-xs text-slate-500 mt-0.5" data-i18n="housing.ask_desc">What sellers list at, against what buyers actually paid. Asking above sold means sellers have not yet met the market; the two converging is the market clearing.</p>
+    </div>
+    <div class="chart-container" style="height:240px"><canvas id="hzAskSoldChart"></canvas></div>
+  </div>
+
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
+    <div class="mb-3">
+      <h3 class="text-sm font-semibold text-slate-300">
+        <span data-i18n="housing.listing_flow_title">Listing Supply</span>
+        <span class="src-chip src-realtor">realtor.com</span>
+      </h3>
+      <p class="text-xs text-slate-500 mt-0.5" data-i18n="housing.listing_flow_desc">Homes on the market against how many were newly listed each month. Active rising while new listings fall means what is listed is not selling.</p>
+    </div>
+    <div class="chart-container" style="height:240px"><canvas id="hzListingFlowChart"></canvas></div>
+  </div>
+
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
+    <div class="mb-3">
+      <h3 class="text-sm font-semibold text-slate-300">
+        <span data-i18n="housing.dom_title">Days on Market</span>
+        <span class="src-chip src-realtor">realtor.com</span>
+      </h3>
+      <p class="text-xs text-slate-500 mt-0.5" data-i18n="housing.dom_desc">Median days a listing sits before going under contract. The 2021 trough and the climb since is the clearest single picture of the market cooling.</p>
+    </div>
+    <div class="chart-container" style="height:240px"><canvas id="hzDomChart"></canvas></div>
+  </div>
+
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
+    <div class="mb-3">
+      <h3 class="text-sm font-semibold text-slate-300">
+        <span data-i18n="housing.pending_title">Demand Pressure</span>
+        <span class="src-chip src-realtor">realtor.com</span>
+      </h3>
+      <p class="text-xs text-slate-500 mt-0.5" data-i18n="housing.pending_desc">Pending-to-active ratio and the share of listings that have taken a price cut. A falling ratio with a rising cut share is sellers losing pricing power.</p>
+    </div>
+    <div class="chart-container" style="height:240px"><canvas id="hzPendingChart"></canvas></div>
+  </div>
+
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
     <div class="mb-3">
       <h3 class="text-sm font-semibold text-slate-300">
@@ -506,6 +555,9 @@ const _explainData = {};
   if (!data) return;
 
   const Z = data.zillow || {}, R = data.redfin || {};
+  // realtor.com listing-side series. Optional: the page must render without it,
+  // since it is one more third-party fetch that can fail independently.
+  const L = data.realtor || {};
   const head = data.headline || {}, metros = data.metros || [];
 
   // ── formatters ───────────────────────────────────────────────────────
@@ -880,6 +932,55 @@ const _explainData = {};
            explainLabel: 'US home values (Zillow ZHVI) vs rents (ZORI), both indexed to 100' });
     }
   } catch(e) { console.warn('Housing chart hzIndexChart failed:', e); }
+
+  // ── Asking price (realtor.com) vs sold price (Redfin) ────────────────
+  // Two providers on one axis on purpose: both are dollars per home, and the
+  // point of the chart is the gap between what is asked and what is paid.
+  try {
+    lineChart('hzAskSoldChart', [
+      { dates: L.list_price?.dates, values: L.list_price?.values, color: C_ORANGE,
+        label: I18n.t('housing.series_ask') || 'Median asking price' },
+      { dates: R.median_sale_price?.dates, values: R.median_sale_price?.values, color: C_BLUE,
+        label: I18n.t('housing.series_sold') || 'Median sale price' },
+    ], { fmt: usd, unit: 'usd',
+         explainLabel: 'US median asking price (realtor.com) vs median sale price (Redfin)' });
+  } catch(e) { console.warn('Housing chart hzAskSoldChart failed:', e); }
+
+  // ── Active vs new listings, and days on market ───────────────────────
+  // Two charts, not one with two axes: lineChart has a single y axis, so pairing
+  // active listings (~1.1M) with days on market (~57) would draw the second as a
+  // flat line on the floor. Active and new listings share a unit and a magnitude,
+  // so they belong together; the duration gets its own plot.
+  try {
+    lineChart('hzListingFlowChart', [
+      { dates: L.active_listings?.dates, values: L.active_listings?.values, color: C_BLUE,
+        fill: true, label: I18n.t('housing.series_active') || 'Active listings' },
+      { dates: L.new_listings?.dates, values: L.new_listings?.values, color: C_ORANGE,
+        label: I18n.t('housing.series_new_listed') || 'New listings' },
+    ], { fmt: cnt, unit: 'count',
+         explainLabel: 'US active listings against new listings each month (realtor.com)' });
+  } catch(e) { console.warn('Housing chart hzListingFlowChart failed:', e); }
+
+  try {
+    lineChart('hzDomChart', [
+      { dates: L.days_on_market?.dates, values: L.days_on_market?.values, color: C_INDIGO,
+        fill: true, label: I18n.t('housing.series_dom') || 'Median days on market' },
+    ], { fmt: v => v == null ? '—' : Math.round(v) + 'd', unit: 'days',
+         explainLabel: 'US median days a listing spends on the market (realtor.com)' });
+  } catch(e) { console.warn('Housing chart hzDomChart failed:', e); }
+
+  // ── Pending ratio vs price-cut share (both ratios → percent) ─────────
+  try {
+    lineChart('hzPendingChart', [
+      { dates: L.pending_ratio?.dates,
+        values: (L.pending_ratio?.values || []).map(v => v == null ? null : +(v * 100).toFixed(1)),
+        color: C_UP, label: I18n.t('housing.series_pending') || 'Pending / active' },
+      { dates: L.price_reduced_share?.dates,
+        values: (L.price_reduced_share?.values || []).map(v => v == null ? null : +(v * 100).toFixed(1)),
+        color: C_ORANGE, label: I18n.t('housing.series_cut_share') || 'Share with a price cut' },
+    ], { fmt: v => v == null ? '—' : v.toFixed(1) + '%', unit: 'pct',
+         explainLabel: 'US pending-to-active listing ratio vs share of listings with a price cut' });
+  } catch(e) { console.warn('Housing chart hzPendingChart failed:', e); }
 
   // ── Inventory & new listings (both counts → one axis) ────────────────
   try {
