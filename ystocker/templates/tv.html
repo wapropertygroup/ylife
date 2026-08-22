@@ -215,8 +215,12 @@
                     'Come back here, then turn on Keep awake and Fullscreen'],
     airNote: ZH ? '网页无法自行发起 AirPlay 屏幕镜像 —— 只有 <video> 元素可以，文档不行，所以这一步必须手动。镜像后本页会保持刷新。'
                 : 'A web page cannot start AirPlay screen mirroring itself — only <video> elements can, not documents — so this step has to be manual. Once mirrored, this page keeps refreshing on its own.',
-    castNone: ZH ? '此浏览器不支持投屏' : 'This browser cannot cast',
-    castFail: ZH ? '未找到设备或已取消' : 'No device found, or cancelled',
+    castNone: ZH ? '此浏览器不支持 Cast（请用 Chrome 或 Edge），或改用 AirPlay'
+                 : 'This browser has no Cast support (use Chrome or Edge), or use AirPlay',
+    castChrome: ZH ? '需 Chrome' : 'Chrome only',
+    castFail: ZH ? '投屏失败或已取消' : 'Cast failed or was cancelled',
+    castNoDev: ZH ? '同一 Wi-Fi 下未找到设备' : 'No device found on this Wi-Fi',
+    castMaybe: ZH ? '尚未探测到设备，仍可点击试试' : 'No device detected yet — still worth a try',
   };
   document.querySelectorAll('[data-t]').forEach(e => e.textContent = T[e.dataset.t] || e.textContent);
 
@@ -380,24 +384,48 @@
   // *on* the Chromecast rather than mirroring the tab, so the phone can sleep
   // afterwards and the TV keeps updating on its own. Feature-detected rather than
   // sniffed, and the button stays hidden where it would not work.
+  // The button is ALWAYS shown. It used to be hidden where PresentationRequest is
+  // missing, which meant that in Safari -- and so on every iPhone and any Mac not
+  // using Chrome -- the control someone had just been told to press was simply not
+  // on screen, with nothing to say why. A disabled button that explains itself is
+  // strictly better than an absent one.
   let presReq = null;
+  bCast.hidden = false;
+  bCast.textContent = '⧉ ' + T.cast;
+
   if ('PresentationRequest' in window) {
     try {
       presReq = new PresentationRequest([location.pathname + location.search]);
-      // availabilitychange tells us whether any receiver is on the network, so the
-      // button can be disabled instead of opening an empty picker.
+      // Availability is treated as a hint, not a gate. getAvailability() reports
+      // false in cases where Chrome's own Cast menu still finds the device -- it
+      // depends on mDNS having completed, and on some networks it never resolves --
+      // so disabling the button on it made casting look impossible when it was not.
+      // The picker is allowed to open and report for itself.
       presReq.getAvailability().then(a => {
-        const sync = () => { bCast.disabled = !a.value; };
-        a.onchange = sync; sync();
+        const hint = () => {
+          bCast.title = a.value ? '' : T.castMaybe;
+          bCast.textContent = '⧉ ' + T.cast + (a.value ? '' : ' ?');
+        };
+        a.onchange = hint; hint();
       }).catch(() => {});
-      bCast.hidden = false;
-      bCast.textContent = '⧉ ' + T.cast;
       bCast.onclick = () => {
         presReq.start().catch(err => {
-          $('err').textContent = '⚠ ' + T.castFail + ' (' + (err && err.name || 'error') + ')';
+          // NotFoundError is the ordinary "no device on this network" answer and
+          // deserves a plain sentence, not a DOMException name.
+          const name = (err && err.name) || 'error';
+          $('err').textContent = '⚠ ' + (name === 'NotFoundError' ? T.castNoDev : T.castFail)
+                               + ' (' + name + ')';
         });
       };
     } catch (_) { presReq = null; }
+  }
+
+  if (!presReq) {
+    // No Presentation API here. Say which browsers have it and offer the route
+    // that does work on this one, rather than leaving a dead control.
+    bCast.disabled = true;
+    bCast.title = T.castNone;
+    bCast.textContent = '⧉ ' + T.cast + ' — ' + T.castChrome;
   }
 
   // AirPlay cannot be initiated from a document, so this is instructions, not a
@@ -465,7 +493,11 @@
       $('ctl').classList.remove('show'); hideAt = 0;
     }
   }, 500);
+  // Longer on the very first load: four seconds is enough for someone already
+  // reaching for the mouse, and not enough for someone who has just opened the
+  // page and is reading it.
   wake_ui();
+  hideAt = Date.now() + 12000;
 
   // ── rotation ────────────────────────────────────────────────────────
   let at = -1, elapsed = 0;
