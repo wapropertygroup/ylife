@@ -100,6 +100,44 @@
   .nmsub { font-size: 1.5vh; color: var(--dim); font-weight: 600; }
 
   #err { position: absolute; bottom: 1.4vh; left: 2.2vw; font-size: 1.6vh; color: #fbbf24; }
+
+  /* ── Casting controls ───────────────────────────────────────────────────
+     Hidden by default and revealed on pointer movement, because the normal state
+     of this page is "nobody is touching it". Auto-hides again so a cast or
+     mirrored screen is not showing a toolbar all evening. */
+  #ctl {
+    position: absolute; bottom: 2vh; right: 2.2vw; display: flex; gap: .8vw;
+    align-items: center; opacity: 0; transition: opacity .3s ease;
+    pointer-events: none; z-index: 5;
+  }
+  #ctl.show { opacity: 1; pointer-events: auto; }
+  #ctl button {
+    font: inherit; font-size: 1.8vh; font-weight: 700; color: var(--ink);
+    background: rgba(15,23,42,.92); border: 1px solid #334155; border-radius: 1vh;
+    padding: 1vh 1.4vw; cursor: pointer; backdrop-filter: blur(6px);
+    display: inline-flex; align-items: center; gap: .5vw; white-space: nowrap;
+  }
+  #ctl button:hover { border-color: #6366f1; color: #c7d2fe; }
+  #ctl button[aria-pressed="true"] { border-color: var(--up); color: var(--up); }
+  #ctl button:disabled { opacity: .4; cursor: default; }
+
+  /* Instructions for the transport a web page is not allowed to start. */
+  #tip {
+    position: absolute; inset: 0; display: none; z-index: 10;
+    background: rgba(3,7,18,.93); backdrop-filter: blur(4px);
+    align-items: center; justify-content: center; padding: 6vh 8vw;
+  }
+  #tip.show { display: flex; }
+  #tipBox { max-width: 60vw; }
+  #tipBox h2 { font-size: 3.4vh; font-weight: 800; margin-bottom: 2vh; }
+  #tipBox ol { font-size: 2.4vh; line-height: 1.7; color: #cbd5e1; padding-left: 3vw; }
+  #tipBox p  { font-size: 1.9vh; color: var(--dim); margin-top: 2.4vh; line-height: 1.6; }
+  #tipBox button { margin-top: 3vh; }
+
+  /* TVs overscan: the outer few percent of the frame can be cut off entirely, so
+     ?safe=1 (or the button) insets everything rather than losing a row of tiles. */
+  body.safe main, body.safe header { padding-left: 4vw; padding-right: 4vw; }
+  body.safe main { padding-bottom: 3vh; }
 </style>
 </head>
 <body>
@@ -120,6 +158,21 @@
   <section class="slide" id="s-vol"></section>
   <section class="slide" id="s-risk"></section>
   <div id="err"></div>
+
+  <div id="ctl">
+    <button id="bCast" type="button" hidden></button>
+    <button id="bAir"  type="button"></button>
+    <button id="bFull" type="button" aria-pressed="false"></button>
+    <button id="bWake" type="button" aria-pressed="false"></button>
+    <button id="bSafe" type="button" aria-pressed="false"></button>
+  </div>
+
+  <div id="tip"><div id="tipBox">
+    <h2 id="tipTitle"></h2>
+    <ol id="tipSteps"></ol>
+    <p id="tipNote"></p>
+    <button id="tipClose" type="button"></button>
+  </div></div>
 </main>
 
 <script>
@@ -148,6 +201,22 @@
     stocks:  ZH ? '股票 ETF' : 'Stock ETFs',
     bonds:   ZH ? '债券 ETF' : 'Bond ETFs',
     noData:  ZH ? '暂无数据' : 'no data',
+    cast:    ZH ? '投屏到电视' : 'Cast to TV',
+    air:     ZH ? 'AirPlay 说明' : 'AirPlay how-to',
+    full:    ZH ? '全屏' : 'Fullscreen',
+    wake:    ZH ? '常亮' : 'Keep awake',
+    safe:    ZH ? '防裁切边距' : 'TV safe area',
+    close:   ZH ? '关闭' : 'Close',
+    airTitle: ZH ? '用 AirPlay 投到电视' : 'AirPlay this to your TV',
+    airSteps: ZH ? ['打开 控制中心', '轻点 “屏幕镜像”', '选择你的 Apple TV 或 AirPlay 电视',
+                    '回到本页，并开启“常亮”与“全屏”']
+                 : ['Open Control Center', 'Tap Screen Mirroring',
+                    'Pick your Apple TV or AirPlay-capable TV',
+                    'Come back here, then turn on Keep awake and Fullscreen'],
+    airNote: ZH ? '网页无法自行发起 AirPlay 屏幕镜像 —— 只有 <video> 元素可以，文档不行，所以这一步必须手动。镜像后本页会保持刷新。'
+                : 'A web page cannot start AirPlay screen mirroring itself — only <video> elements can, not documents — so this step has to be manual. Once mirrored, this page keeps refreshing on its own.',
+    castNone: ZH ? '此浏览器不支持投屏' : 'This browser cannot cast',
+    castFail: ZH ? '未找到设备或已取消' : 'No device found, or cancelled',
   };
   document.querySelectorAll('[data-t]').forEach(e => e.textContent = T[e.dataset.t] || e.textContent);
 
@@ -298,6 +367,106 @@
   const PAINT = { indices: drawIndices, sectors: drawSectors, vol: drawVol, risk: drawRisk };
   function draw() { order.forEach(k => { try { PAINT[k](); } catch (e) { console.warn(k, e); } }); }
 
+  // ── Casting, wake lock, fullscreen, overscan ────────────────────────
+  const bCast = $('bCast'), bAir = $('bAir'), bFull = $('bFull'),
+        bWake = $('bWake'), bSafe = $('bSafe'), tip = $('tip');
+  bAir.textContent  = '􀋆 ' + T.air;
+  bFull.textContent = '⛶ ' + T.full;
+  bWake.textContent = '☀ ' + T.wake;
+  bSafe.textContent = '▣ ' + T.safe;
+  $('tipClose').textContent = T.close;
+
+  // Google Cast via the Presentation API. Chrome and Edge only: this loads the URL
+  // *on* the Chromecast rather than mirroring the tab, so the phone can sleep
+  // afterwards and the TV keeps updating on its own. Feature-detected rather than
+  // sniffed, and the button stays hidden where it would not work.
+  let presReq = null;
+  if ('PresentationRequest' in window) {
+    try {
+      presReq = new PresentationRequest([location.pathname + location.search]);
+      // availabilitychange tells us whether any receiver is on the network, so the
+      // button can be disabled instead of opening an empty picker.
+      presReq.getAvailability().then(a => {
+        const sync = () => { bCast.disabled = !a.value; };
+        a.onchange = sync; sync();
+      }).catch(() => {});
+      bCast.hidden = false;
+      bCast.textContent = '⧉ ' + T.cast;
+      bCast.onclick = () => {
+        presReq.start().catch(err => {
+          $('err').textContent = '⚠ ' + T.castFail + ' (' + (err && err.name || 'error') + ')';
+        });
+      };
+    } catch (_) { presReq = null; }
+  }
+
+  // AirPlay cannot be initiated from a document, so this is instructions, not a
+  // control. Saying so plainly beats a button that silently does nothing.
+  bAir.onclick = () => {
+    $('tipTitle').textContent = T.airTitle;
+    $('tipSteps').innerHTML = T.airSteps.map(x => `<li>${esc(x)}</li>`).join('');
+    // Contains a literal <video>, so it is set as text and not as markup.
+    $('tipNote').textContent = T.airNote;
+    tip.classList.add('show');
+  };
+  $('tipClose').onclick = () => tip.classList.remove('show');
+
+  bFull.onclick = async () => {
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else await document.documentElement.requestFullscreen();
+    } catch (_) {}
+  };
+  document.addEventListener('fullscreenchange', () =>
+    bFull.setAttribute('aria-pressed', String(!!document.fullscreenElement)));
+
+  // The thing that actually decides whether mirroring survives the evening: the
+  // phone sleeping is what blanks the TV, not the page. The lock is dropped by the
+  // browser whenever the tab is hidden, so it is re-taken on visibilitychange.
+  let wake = null, wakeWanted = false;
+  async function takeWake() {
+    if (!('wakeLock' in navigator)) return false;
+    try {
+      wake = await navigator.wakeLock.request('screen');
+      wake.addEventListener('release', () => { wake = null; });
+      return true;
+    } catch (_) { return false; }
+  }
+  if (!('wakeLock' in navigator)) bWake.disabled = true;
+  bWake.onclick = async () => {
+    wakeWanted = !wakeWanted;
+    if (wakeWanted) {
+      const ok = await takeWake();
+      if (!ok) { wakeWanted = false; $('err').textContent = '⚠ wake lock refused'; }
+    } else if (wake) { try { await wake.release(); } catch (_) {} wake = null; }
+    bWake.setAttribute('aria-pressed', String(wakeWanted));
+  };
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && wakeWanted && !wake) takeWake();
+  });
+
+  // Overscan inset. ?safe=1 so a permanently mounted screen keeps it across reloads.
+  const safeOn = on => { document.body.classList.toggle('safe', on);
+                         bSafe.setAttribute('aria-pressed', String(on)); };
+  safeOn(P.get('safe') === '1');
+  bSafe.onclick = () => safeOn(!document.body.classList.contains('safe'));
+
+  // Reveal the bar on any pointer activity, hide it again shortly after. A cast
+  // or mirrored screen should not display a toolbar all evening.
+  let hideAt = 0;
+  const wake_ui = () => {
+    $('ctl').classList.add('show');
+    hideAt = Date.now() + 4000;
+  };
+  ['pointermove', 'pointerdown', 'keydown'].forEach(ev =>
+    addEventListener(ev, wake_ui, { passive: true }));
+  setInterval(() => {
+    if (hideAt && Date.now() > hideAt && !tip.classList.contains('show')) {
+      $('ctl').classList.remove('show'); hideAt = 0;
+    }
+  }, 500);
+  wake_ui();
+
   // ── rotation ────────────────────────────────────────────────────────
   let at = -1, elapsed = 0;
   function show(i) {
@@ -325,7 +494,12 @@
     else if (ev.key === 'ArrowLeft') show(at - 1);
     else if (ev.key === ' ') { paused = !paused; ev.preventDefault(); }
   });
-  addEventListener('click', () => show(at + 1));
+  addEventListener('click', ev => {
+    // Ignore clicks on the controls and the overlay, or pressing Cast would also
+    // skip the slide underneath it.
+    if (ev.target.closest('#ctl') || ev.target.closest('#tip')) return;
+    show(at + 1);
+  });
 
   clock(); setInterval(clock, 10000);
   show(0);
