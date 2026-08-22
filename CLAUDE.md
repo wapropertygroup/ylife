@@ -17,6 +17,13 @@ Flask monorepo hosting 8 web apps for the Li family at **li-family.us**:
 | **yImage** | `yimage/` | 5006 | 8006 | image.li-family.us | None |
 | **yBG** | `ybg/` | 5007 | 8007 | ybackground.li-family.us | None (Checkr API) |
 
+`tv.li-family.us` is a ninth nginx vhost with no app behind it: a 302 to
+`stock.li-family.us/tv`, the TV dashboard. It exists because 15 characters is
+typeable on a television remote's on-screen keyboard and 21 is not. Note the apex
+`li-family.us` is **not** this box — it resolves to GitHub Pages
+(`papersboys.github.io`), so only subdomains can be pointed here. DNS is at
+Squarespace, not Route53.
+
 ## Commands
 
 ### Run locally

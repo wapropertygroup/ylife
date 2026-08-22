@@ -714,6 +714,42 @@ else
   echo "[\$(TS)]    gzip config up to date"
 fi
 
+# ── tv.li-family.us: short host for the TV dashboard ─────────────────────────
+# A redirect host, not an app, so it is deliberately not in APPS: nothing listens
+# behind it and a fake entry would have ensure_nginx proxy to a dead port. Written
+# here so a rebuilt box keeps the short URL instead of quietly 404ing it.
+#
+# Port 80 only in this file. certbot --nginx adds the 443 server and the
+# http->https redirect once it holds a certificate; writing a 443 block up front
+# would point nginx at a cert path that does not exist yet and stop it starting.
+TV_CONF="/etc/nginx/conf.d/ytv.conf"
+if ! sudo test -f "\$TV_CONF" || ! sudo grep -q "tv.li-family.us" "\$TV_CONF"; then
+  echo "[\$(TS)]    tv.li-family.us nginx config writing..."
+  sudo tee "\$TV_CONF" > /dev/null <<'TVCONF'
+# tv.li-family.us — short, typeable host for the TV dashboard (/tv on ystocker).
+#
+# A redirect rather than a proxy: the dashboard has one canonical home, and serving
+# it from two hosts would split cookies, caches and the Cast receiver URL across two
+# origins for the same page.
+#
+# 302, not 301: a permanent redirect is cached by browsers and by whatever resolver
+# or CDN sits in the path, making it impossible to repoint without chasing stale
+# caches on devices nobody can clear.
+#
+# The query string is forwarded. ?safe=1 for an overscanning panel, ?lang=zh and
+# ?slides= are the whole reason the page is configurable; dropping them would
+# silently downgrade a working bookmark.
+server {
+    listen 80;
+    server_name tv.li-family.us;
+    location / {
+        return 302 https://stock.li-family.us/tv$is_args$args;
+    }
+}
+TVCONF
+  NGINX_CHANGED=true
+fi
+
 if [[ "\$NGINX_CHANGED" == "true" ]]; then
   sudo rm -f /etc/nginx/conf.d/default.conf /etc/nginx/sites-enabled/default 2>/dev/null || true
   sudo systemctl enable nginx
@@ -773,6 +809,16 @@ for i in \$(seq 0 \$((NUM_APPS - 1))); do
     tls_covers_domain "\$d" || SSL_FAILED+=("\$d")
   done
 done
+
+# The redirect host needs its own certificate: it is not in APPS, so the loop
+# above never sees it.
+if ! tls_covers_domain "tv.li-family.us"; then
+  echo "[\$(TS)]    Certbot: tv.li-family.us"
+  sudo certbot --nginx --cert-name tv.li-family.us -d tv.li-family.us \
+    --non-interactive --agree-tos -m "$CERT_EMAIL" --redirect \
+    > /tmp/certbot-tv.log 2>&1 || echo "[\$(TS)]    ✗ Certbot FAILED for tv.li-family.us"
+  tail -2 /tmp/certbot-tv.log
+fi
 
 if [[ \${#SSL_FAILED[@]} -gt 0 ]]; then
   echo "[\$(TS)]    ⚠ SSL incomplete or mismatched for: \${SSL_FAILED[*]}"
