@@ -82,7 +82,7 @@ _CACHE_TTL = 24 * 60 * 60  # 24 hours
 # a field, an existing cache still looks fresh, so the API happily serves a
 # payload the new page cannot read and charts render empty with no explanation.
 # Same idea as _YIELD_CURVE_CACHE_VER in routes.py.
-_CACHE_VER = "v2"
+_CACHE_VER = "v3"   # v3 adds the realtor.com listing-side series
 
 # How many metros (by Zillow SizeRank) to carry in the comparison table.
 _TOP_METROS = 25
@@ -97,6 +97,48 @@ _REDFIN_NATIONAL = (
     "redfin_market_tracker/us_national_market_tracker.tsv000.gz"
 )
 _FRED_CSV = "https://fred.stlouisfed.org/graph/fredgraph.csv?id={series}"
+
+# realtor.com research data. Free, no API key, and small: the country history is
+# ~39 KB for 121 months. The *_Country.csv without "_History" is a single-month
+# snapshot -- charting it would give a one-point line, which is the mistake the
+# forward-P/E series already made once (see CLAUDE.md).
+#
+# Chosen over the per-property APIs because those are not free in any usable
+# sense: probed from the box, Estated answers 403 "token is invalid" and RentCast
+# 401 "no API key", and Zillow retired its public property API. What is freely
+# available is market aggregate data, and realtor.com's is the *listing* side --
+# what sellers are asking and how fast it moves -- which is the dimension this
+# page was missing. Zillow ZHVI is an estimated value, Redfin is what actually
+# sold; the gap between ask and sold is the interesting part.
+_REALTOR_HISTORY = ("https://econdata.s3-us-west-2.amazonaws.com/Reports/Core/"
+                    "RDC_Inventory_Core_Metrics_Country_History.csv")
+
+# CSV column -> (payload key, label, unit). Only the level columns are taken; the
+# file also carries _mm and _yy changes for each, which are trivially derivable
+# and would treble the payload.
+REALTOR_SERIES: dict[str, dict[str, str]] = {
+    "median_listing_price": {
+        "key": "list_price", "unit": "usd",
+        "label": "Median asking price", "label_zh": "挂牌价中位数"},
+    "median_listing_price_per_square_foot": {
+        "key": "list_ppsf", "unit": "usd",
+        "label": "Asking price per sq ft", "label_zh": "每平方英尺挂牌价"},
+    "active_listing_count": {
+        "key": "active_listings", "unit": "count",
+        "label": "Active listings", "label_zh": "在售房源数"},
+    "new_listing_count": {
+        "key": "new_listings", "unit": "count",
+        "label": "New listings", "label_zh": "新增房源数"},
+    "median_days_on_market": {
+        "key": "days_on_market", "unit": "days",
+        "label": "Median days on market", "label_zh": "中位在市天数"},
+    "price_reduced_share": {
+        "key": "price_reduced_share", "unit": "share",
+        "label": "Share with a price cut", "label_zh": "降价房源占比"},
+    "pending_ratio": {
+        "key": "pending_ratio", "unit": "ratio",
+        "label": "Pending / active ratio", "label_zh": "待成交/在售比"},
+}
 
 # Zillow metric key -> (path, label, unit). `unit` drives formatting in the
 # template; "pct_dec" means the file stores 0.24 for 24%.
@@ -407,6 +449,82 @@ def _fetch_redfin_national() -> Optional[dict[str, Any]]:
     log.info("Housing: Redfin national — %d months (%s … %s)",
              len(dates), dates[0], dates[-1])
     return {"dates": dates, "series": series}
+
+
+def _fetch_realtor_national() -> dict[str, Any]:
+    """realtor.com national listing metrics, newest month last.
+
+    The file is newest-first, so rows are reversed: every other series in this
+    module is chronological and the chart code assumes it.
+
+    ``month_date_yyyymm`` is a bare "202607", which is turned into a month-end
+    date so it lines up with the Zillow and Redfin series the page plots beside
+    it. Rows flagged ``quality_flag`` are kept -- the flag marks a month realtor
+    itself considers noisy, not wrong, and dropping it would leave a hole -- but
+    it is carried through so the UI can say so if it ever wants to.
+
+    Returns {} on any failure: the rest of the page must not depend on one
+    optional source being reachable.
+    """
+    import calendar
+    import csv as _csv
+    import io
+
+    try:
+        resp = _SESSION.get(_REALTOR_HISTORY, timeout=60)
+        resp.raise_for_status()
+    except Exception as exc:  # noqa: BLE001
+        log.warning("Housing: realtor.com fetch failed: %s", exc)
+        return {}
+
+    try:
+        rows = list(_csv.DictReader(io.StringIO(resp.text)))
+    except Exception as exc:  # noqa: BLE001
+        log.warning("Housing: realtor.com parse failed: %s", exc)
+        return {}
+    if not rows:
+        log.warning("Housing: realtor.com returned no rows")
+        return {}
+
+    def month_end(ym: str) -> Optional[str]:
+        ym = (ym or "").strip()
+        if len(ym) != 6 or not ym.isdigit():
+            return None
+        y, m = int(ym[:4]), int(ym[4:])
+        if not 1 <= m <= 12:
+            return None
+        return f"{y:04d}-{m:02d}-{calendar.monthrange(y, m)[1]:02d}"
+
+    # Newest-first in the file; sort ascending by the parsed date instead of
+    # trusting the order, so a reordered upload cannot silently reverse a chart.
+    dated = []
+    for row in rows:
+        d = month_end(row.get("month_date_yyyymm", ""))
+        if d:
+            dated.append((d, row))
+    dated.sort(key=lambda pair: pair[0])
+    if not dated:
+        return {}
+
+    dates = [d for d, _ in dated]
+    out: dict[str, Any] = {}
+    for column, meta in REALTOR_SERIES.items():
+        values = [_num(row.get(column, "")) for _, row in dated]
+        if not any(v is not None for v in values):
+            log.warning("Housing: realtor.com column %s is empty", column)
+            continue
+        out[meta["key"]] = {
+            "dates": dates,
+            "values": values,
+            "label": meta["label"],
+            "label_zh": meta["label_zh"],
+            "unit": meta["unit"],
+            "source": "realtor.com",
+        }
+
+    log.info("Housing: realtor.com — %d series, %d months (%s … %s)",
+             len(out), len(dates), dates[0], dates[-1])
+    return out
 
 
 def _fetch_mortgage_rate() -> Optional[dict[str, Any]]:
@@ -783,6 +901,7 @@ def _build_payload() -> dict[str, Any]:
             for k, m in ZILLOW_SERIES.items()
         }
         r_fut = pool.submit(_fetch_redfin_national)
+        rl_fut = pool.submit(_fetch_realtor_national)
         m_fut = pool.submit(_fetch_mortgage_rate)
         f_fut = pool.submit(_fetch_all_fred)
 
@@ -948,6 +1067,12 @@ def _build_payload() -> dict[str, Any]:
         or [date.today().isoformat()]
     )
 
+    try:
+        realtor = rl_fut.result() or {}
+    except Exception as exc:  # noqa: BLE001 - optional source
+        log.warning("Housing: realtor.com unavailable: %s", exc)
+        realtor = {}
+
     payload = {
         "_ts": time.time(),
         "as_of": as_of,
@@ -968,12 +1093,17 @@ def _build_payload() -> dict[str, Any]:
         "rent_growth": rent_growth,
         "metros": metro_rows,
         "metro_dates": zhvi["metro_dates"] if zhvi else [],
+        # The listing side: what sellers ask and how fast it moves. Separate from
+        # "zillow" (estimated values) and "redfin" (what sold) so the page can
+        # say which of the three a number came from -- they routinely disagree.
+        "realtor": realtor,
         "metro_zhvi": {
             name: blk["values"] for name, blk in zhvi["metros"].items()
         } if zhvi else {},
     }
-    log.info("Housing: payload built — %d Zillow, %d Redfin, %d FRED series, %d metros",
-             len(national_series), len(redfin_series), len(fred), len(metro_rows))
+    log.info("Housing: payload built — %d Zillow, %d Redfin, %d realtor, "
+             "%d FRED series, %d metros", len(national_series), len(redfin_series),
+             len(realtor), len(fred), len(metro_rows))
     return payload
 
 
