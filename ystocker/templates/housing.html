@@ -464,6 +464,31 @@
     <div class="overflow-x-auto"><table class="hz-table w-full" id="hzMetroTable"></table></div>
   </div>
 
+  <!-- ── realtor.com geography breakdowns ──────────────────────────────── -->
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
+    <div class="mb-3">
+      <h3 class="text-sm font-semibold text-slate-300">
+        <span data-i18n="housing.state_table_title">By State</span>
+        <span class="src-chip src-realtor">realtor.com</span>
+        <span id="hzStateAsof" class="text-[10px] text-slate-600 font-normal"></span>
+      </h3>
+      <p class="text-xs text-slate-500 mt-0.5" data-i18n="housing.state_table_desc">All 50 states and DC for the latest month. Click a column to sort. These are asking prices, not sale prices, so they are not comparable with the Zillow or Redfin levels above.</p>
+    </div>
+    <div class="overflow-x-auto"><table class="hz-table w-full" id="hzStateTable"></table></div>
+  </div>
+
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
+    <div class="mb-3">
+      <h3 class="text-sm font-semibold text-slate-300">
+        <span data-i18n="housing.rmetro_table_title">By Metro</span>
+        <span class="src-chip src-realtor">realtor.com</span>
+        <span id="hzRMetroAsof" class="text-[10px] text-slate-600 font-normal"></span>
+      </h3>
+      <p class="text-xs text-slate-500 mt-0.5" data-i18n="housing.rmetro_table_desc">The 50 largest metros by household count. Click a column to sort. County and ZIP level exist upstream but are 97 MB and 784 MB, so they are not carried here.</p>
+    </div>
+    <div class="overflow-x-auto"><table class="hz-table w-full" id="hzRMetroTable"></table></div>
+  </div>
+
   <!-- ── Methodology ───────────────────────────────────────────────────── -->
   <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
     <h3 class="text-sm font-semibold text-slate-300 mb-2" data-i18n="housing.method_title">Reading these two sources together</h3>
@@ -1263,6 +1288,91 @@ const _explainData = {};
       });
     }
   } catch(e) { console.warn('Housing chart hzMetroTrendChart failed:', e); }
+
+  // ── realtor.com cross-sections: state and metro ──────────────────────
+  // One renderer for both, because they carry identical columns and differ only
+  // in the label of the first one. Sortable client-side: the payload is already
+  // here, so a sort is free, and "where is it cheapest" / "where is it slowest"
+  // are the two questions a cross-section exists to answer.
+  function renderGeoTable(tableId, asofId, block, firstColKey, firstColFallback) {
+    const table = document.getElementById(tableId);
+    const rows = (block && block.rows) || [];
+    if (!table || !rows.length) return;
+
+    const asof = document.getElementById(asofId);
+    if (asof && block.as_of) asof.textContent = '· ' + String(block.as_of).slice(0, 7);
+
+    const cols = [
+      [firstColKey, firstColFallback, r => r.name, 'text'],
+      ['housing.col_ask',       'Asking price',  r => usd(r.list_price),        'list_price'],
+      ['housing.col_ppsf',      '$/sq ft',       r => usd(r.list_ppsf),         'list_ppsf'],
+      ['housing.col_active',    'Active',        r => cnt(r.active_listings),   'active_listings'],
+      ['housing.col_new',       'New',           r => cnt(r.new_listings),      'new_listings'],
+      ['housing.col_dom2',      'Days on market',
+       r => r.days_on_market == null ? '—' : Math.round(r.days_on_market) + 'd', 'days_on_market'],
+      ['housing.col_cut_share', 'Price cut',     r => pctDec(r.price_reduced_share), 'price_reduced_share'],
+      ['housing.col_pending',   'Pending/active',r => pctDec(r.pending_ratio),  'pending_ratio'],
+    ];
+
+    // Default order is the one the fetcher chose (price for states, size rank for
+    // metros); clicking a header sorts descending, clicking again ascending.
+    let sortKey = null, desc = true;
+
+    function draw() {
+      const view = rows.slice();
+      if (sortKey) {
+        view.sort((a, b) => {
+          const x = a[sortKey], y = b[sortKey];
+          // Nulls last in both directions: a missing value is not "smallest".
+          if (x == null && y == null) return 0;
+          if (x == null) return 1;
+          if (y == null) return -1;
+          return desc ? y - x : x - y;
+        });
+      }
+      table.innerHTML = '';
+      const thead = document.createElement('thead');
+      const hr = document.createElement('tr');
+      cols.forEach(([key, fallback, , field]) => {
+        const th = document.createElement('th');
+        th.setAttribute('data-i18n', key);
+        th.textContent = I18n.t(key) || fallback;
+        if (field !== 'text') {
+          th.style.cursor = 'pointer';
+          if (sortKey === field) th.textContent += desc ? ' ↓' : ' ↑';
+          th.onclick = () => {
+            if (sortKey === field) desc = !desc; else { sortKey = field; desc = true; }
+            draw();
+          };
+        }
+        hr.appendChild(th);
+      });
+      thead.appendChild(hr);
+      table.appendChild(thead);
+
+      const tbody = document.createElement('tbody');
+      view.forEach(r => {
+        const tr = document.createElement('tr');
+        cols.forEach(([, , render]) => {
+          const td = document.createElement('td');
+          td.textContent = render(r);
+          tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+      });
+      table.appendChild(tbody);
+    }
+    draw();
+  }
+
+  try {
+    renderGeoTable('hzStateTable', 'hzStateAsof', data.realtor_state,
+                   'housing.col_state', 'State');
+  } catch(e) { console.warn('Housing state table failed:', e); }
+  try {
+    renderGeoTable('hzRMetroTable', 'hzRMetroAsof', data.realtor_metro,
+                   'housing.col_metro', 'Metro');
+  } catch(e) { console.warn('Housing realtor metro table failed:', e); }
 
   // ── Metro table ──────────────────────────────────────────────────────
   try {
