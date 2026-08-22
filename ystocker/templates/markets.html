@@ -110,31 +110,16 @@
 </div>
 <div id="marketsContent">
 
-<!-- ── This Week's Recap ──────────────────────────────────────────────── -->
-<div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 fade-up mb-6" id="weeklyRecapCard" style="display:none">
-  <div class="flex items-center justify-between mb-2">
-    <h3 class="text-sm font-semibold text-slate-300" data-i18n="markets.this_week">📅 This Week</h3>
-    <span id="weeklyRecapDates" class="text-[10px] text-slate-600"></span>
-  </div>
-  <div id="weeklyRecapGrid" class="grid grid-cols-2 sm:grid-cols-4 gap-2">
-    <div class="bg-slate-800/50 rounded-lg p-2">
-      <div class="text-[10px] text-slate-500 mb-0.5">SPX Week</div>
-      <div id="wkSpx" class="text-sm font-bold font-mono">—</div>
-    </div>
-    <div class="bg-slate-800/50 rounded-lg p-2">
-      <div class="text-[10px] text-slate-500 mb-0.5">VIX Change</div>
-      <div id="wkVix" class="text-sm font-bold font-mono">—</div>
-    </div>
-    <div class="bg-slate-800/50 rounded-lg p-2">
-      <div class="text-[10px] text-slate-500 mb-0.5">Best Sector</div>
-      <div id="wkBestSec" class="text-sm font-bold text-emerald-400">—</div>
-    </div>
-    <div class="bg-slate-800/50 rounded-lg p-2">
-      <div class="text-[10px] text-slate-500 mb-0.5">Worst Sector</div>
-      <div id="wkWorstSec" class="text-sm font-bold text-rose-400">—</div>
-    </div>
-  </div>
-</div>
+{# The "This Week" recap card was removed rather than repaired.
+   Two of its four tiles could never have shown anything: SPX Week read
+   spx.week_chg_pct then fell back to spx.ytd_chg_pct, and /api/markets provides
+   neither (the key is "ytd"), so it was permanently "—" -- and had the fallback
+   ever resolved it would have printed a year-to-date number under a label saying
+   "Week". VIX Change read vix.prev_week, which belongs to the fear-and-greed
+   payload, not this one.
+   The two that did work ranked sectors on `week_chg_pct ?? day_chg` evaluated per
+   sector, so one sector's week was sorted against another's day -- a ranking with
+   no single timeframe, which is why the best/worst pair read as noise. #}
 
 <!-- ── AI Markets Brief ──────────────────────────────────────────────── -->
 <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 fade-up mb-6" id="aiMarketsBriefCard">
@@ -3976,44 +3961,6 @@ function _mktsModalConfig(kind) {
     _buildGlobalNorm('6m');
     // Build sector momentum from sector data
     if (_mkData.sectors) _buildSectorMomentum(_mkData.sectors);
-
-    // Weekly Recap
-    try {
-      const spxW = _mkData?.indices?.spx?.week_chg_pct ?? _mkData?.indices?.spx?.ytd_chg_pct ?? null;
-      const vixCur = _mkData?.vix?.current ?? null;
-      const vixPrev = _mkData?.vix?.prev_week ?? null;
-      const sectors = _mkData?.sectors || [];
-
-      if (spxW != null || sectors.length) {
-        document.getElementById('weeklyRecapCard').style.display = 'block';
-
-        const today = new Date();
-        const monday = new Date(today); monday.setDate(today.getDate() - today.getDay() + 1);
-        document.getElementById('weeklyRecapDates').textContent =
-          monday.toLocaleDateString('en-US', {month:'short',day:'numeric'}) + ' – ' +
-          today.toLocaleDateString('en-US', {month:'short',day:'numeric'});
-
-        if (spxW != null) {
-          const el = document.getElementById('wkSpx');
-          el.textContent = (spxW>=0?'+':'')+spxW.toFixed(2)+'%';
-          el.className = 'text-sm font-bold font-mono ' + (spxW>=0?'text-emerald-400':'text-rose-400');
-        }
-        if (vixCur != null && vixPrev != null) {
-          const vixDelta = vixCur - vixPrev;
-          const el = document.getElementById('wkVix');
-          el.textContent = vixCur.toFixed(1) + ' (' + (vixDelta>=0?'+':'') + vixDelta.toFixed(1) + ')';
-          el.className = 'text-sm font-bold font-mono ' + (vixDelta<=0?'text-emerald-400':'text-rose-400');
-        }
-        if (sectors.length) {
-          const sorted = [...sectors].filter(s=>s.week_chg_pct!=null||s.day_chg!=null)
-            .sort((a,b)=>(b.week_chg_pct??b.day_chg)-(a.week_chg_pct??a.day_chg));
-          if (sorted.length) {
-            document.getElementById('wkBestSec').textContent  = sorted[0].name || sorted[0].ticker;
-            document.getElementById('wkWorstSec').textContent = sorted[sorted.length-1].name || sorted[sorted.length-1].ticker;
-          }
-        }
-      }
-    } catch(e) {}
 
     // Activate the correct tab
     IDX_ALL_KEYS.forEach(k => {

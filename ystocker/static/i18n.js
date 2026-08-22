@@ -1585,7 +1585,6 @@ const I18n = (() => {
     'markets.jp_yield_title': { en: 'JP Treasury Yield Curve',   zh: '日本国债收益率曲线' },
     'markets.jp_yield_desc':  { en: 'Japan Government Bond (JGB) yields — BoJ YCC policy shapes the short end', zh: '日本国债各期限实时收益率，日本央行YCC政策主导短端利率' },
     // ── Section titles & descriptions missing data-i18n ────────────────────
-    'markets.this_week':             { en: '📅 This Week',                       zh: '📅 本周' },
     'markets.skew_title':            { en: 'CBOE SKEW vs VIX — Tail Risk Divergence', zh: 'CBOE偏斜指数 vs VIX — 尾部风险背离' },
     'markets.skew_desc':             { en: 'High SKEW + low VIX = institutions quietly buying tail protection while the index looks calm. Classic "smart money" positioning signal.',
                                        zh: '高偏斜+低VIX = 机构悄悄买入尾部保护，而指数表面平静。经典"聪明钱"仓位信号。' },
