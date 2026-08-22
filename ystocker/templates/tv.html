@@ -597,7 +597,14 @@
     u.searchParams.set('lang', next);
     location.assign(u.toString());
   };
-  // Label is set by paintAir(), which folds in AirPlay availability.
+  // Label is set by paintAir(), which folds in AirPlay availability. airState is
+  // declared here rather than beside the probe further down for a reason that is not
+  // stylistic: paintAir() reads it, `function paintAir` hoists but `let airState`
+  // does not, so declaring it next to the probe left this call reading a variable
+  // still in its temporal dead zone. That throws, and because everything on this
+  // page shares one IIFE the throw took out fullscreen, wake lock, the AirPlay probe
+  // itself and the slide rotation -- a blank dashboard in every browser.
+  let airState = 'unknown';   // unknown | available | none
   paintAir();
   bFull.textContent = '⛶ ' + T.full;
   bWake.textContent = '☀ ' + T.wake;
@@ -669,7 +676,6 @@
   // webkitShowPlaybackTargetPicker() is deliberately NOT called. It routes that
   // media element's playback, not the page, so picking a target would appear to do
   // nothing at all -- worse than a button that admits its limits.
-  let airState = 'unknown';   // unknown | available | none
   (function probeAirPlay() {
     const v = document.createElement('video');
     if (typeof v.webkitShowPlaybackTargetPicker !== 'function') return;
