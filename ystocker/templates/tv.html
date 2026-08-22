@@ -1,0 +1,338 @@
+{# TV / kiosk dashboard.
+   Deliberately standalone -- it does not extend base.html and uses no Tailwind.
+   A kiosk has no one to notice a broken layout, and this project's tailwind.css is
+   a compiled artifact that has silently dropped arbitrary classes before (see
+   CLAUDE.md), so every rule here is local and every size is explicit.
+   No nav, no launcher, no scrollbars: the only interaction a wall display gets is
+   being switched on. #}
+<!doctype html>
+<html lang="{{ 'zh' if lang == 'zh' else 'en' }}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>yStocker TV</title>
+<link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+<style>
+  :root {
+    /* Sized in vw/vh, not px: this has to be legible from across a room on a
+       1080p or 4K panel without knowing which. */
+    --up: #34d399; --down: #fb7185; --dim: #64748b; --ink: #e2e8f0;
+    --panel: #0f172a; --line: #1e293b; --bg: #060a14;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    height: 100%; overflow: hidden;
+    background: var(--bg); color: var(--ink);
+    font-family: 'Inter', system-ui, -apple-system, 'Helvetica Neue', sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  body { display: flex; flex-direction: column; }
+
+  header {
+    display: flex; align-items: baseline; gap: 1.2vw;
+    padding: 1.6vh 2.2vw 0.8vh;
+    border-bottom: 1px solid var(--line);
+  }
+  .brand { font-size: 2.1vh; font-weight: 800; letter-spacing: .02em; }
+  .brand em { font-style: normal; color: #818cf8; }
+  #slideName { font-size: 2.1vh; font-weight: 600; color: var(--dim); }
+  .spacer { flex: 1; }
+  #clock { font-size: 2.1vh; font-weight: 700; font-variant-numeric: tabular-nums; }
+  #asof  { font-size: 1.5vh; color: var(--dim); }
+  #stale { font-size: 1.5vh; color: #fbbf24; display: none; }
+
+  /* Rotation progress: the only moving thing on screen, so a viewer can tell the
+     display is live rather than frozen on a stale frame. */
+  #bar { height: 3px; background: #4338ca; width: 0; transition: width .25s linear; }
+
+  main { flex: 1; position: relative; }
+  .slide {
+    position: absolute; inset: 0;
+    padding: 2.2vh 2.2vw;
+    opacity: 0; transition: opacity .45s ease;
+    pointer-events: none;
+  }
+  .slide.on { opacity: 1; }
+
+  /* ── grids ─────────────────────────────────────────────────────────── */
+  .grid { display: grid; gap: 1.1vh 1.1vw; height: 100%; }
+  .g4 { grid-template-columns: repeat(4, 1fr); }
+  .g3 { grid-template-columns: repeat(3, 1fr); }
+  .g2 { grid-template-columns: repeat(2, 1fr); }
+
+  .cell {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 1.1vh;
+    padding: 1.4vh 1.4vw; display: flex; flex-direction: column; justify-content: center;
+    min-width: 0;
+  }
+  .cell .k { font-size: 1.7vh; color: var(--dim); font-weight: 600; letter-spacing: .04em;
+             text-transform: uppercase; white-space: nowrap; overflow: hidden;
+             text-overflow: ellipsis; }
+  .cell .v { font-size: 4.6vh; font-weight: 800; font-variant-numeric: tabular-nums;
+             line-height: 1.1; }
+  .cell .d { font-size: 2.2vh; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .up { color: var(--up); } .down { color: var(--down); } .flat { color: var(--dim); }
+
+  /* ── ranked bars (sectors) ─────────────────────────────────────────── */
+  .rank { display: flex; flex-direction: column; gap: .55vh; height: 100%; justify-content: center; }
+  .row { display: grid; grid-template-columns: 8vw 1fr 7vw; align-items: center; gap: 1vw; }
+  .row .nm { font-size: 2.3vh; font-weight: 700; white-space: nowrap; }
+  .row .pc { font-size: 2.3vh; font-weight: 800; text-align: right;
+             font-variant-numeric: tabular-nums; }
+  .track { position: relative; height: 2.4vh; background: #0b1120; border-radius: .5vh; }
+  /* Bars grow from a centre line so direction reads without relying on colour. */
+  .track i { position: absolute; top: 0; bottom: 0; border-radius: .4vh; }
+  .track .mid { position: absolute; top: -.3vh; bottom: -.3vh; left: 50%; width: 1px;
+                background: #334155; }
+
+  .big { display: flex; flex-direction: column; justify-content: center; height: 100%;
+         gap: 1.4vh; }
+  .big .huge { font-size: 13vh; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+  .big .sub  { font-size: 2.6vh; color: var(--dim); font-weight: 600; }
+
+  table.tv { width: 100%; border-collapse: collapse; }
+  table.tv th { font-size: 1.6vh; color: var(--dim); text-transform: uppercase;
+                letter-spacing: .05em; text-align: right; padding: .5vh .6vw; font-weight: 700; }
+  table.tv th:first-child, table.tv td:first-child { text-align: left; }
+  table.tv td { font-size: 2.4vh; font-weight: 700; text-align: right; padding: .55vh .6vw;
+                font-variant-numeric: tabular-nums; border-top: 1px solid var(--line); }
+  .tick { font-size: 2.4vh; font-weight: 800; }
+  .nmsub { font-size: 1.5vh; color: var(--dim); font-weight: 600; }
+
+  #err { position: absolute; bottom: 1.4vh; left: 2.2vw; font-size: 1.6vh; color: #fbbf24; }
+</style>
+</head>
+<body>
+
+<header>
+  <span class="brand">y<em>Stocker</em></span>
+  <span id="slideName">—</span>
+  <span class="spacer"></span>
+  <span id="stale">⚠ <span data-t="stale">data is stale</span></span>
+  <span id="asof"></span>
+  <span id="clock">--:--</span>
+</header>
+<div id="bar"></div>
+
+<main>
+  <section class="slide" id="s-indices"></section>
+  <section class="slide" id="s-sectors"></section>
+  <section class="slide" id="s-vol"></section>
+  <section class="slide" id="s-risk"></section>
+  <div id="err"></div>
+</main>
+
+<script>
+(() => {
+  'use strict';
+  const P = new URLSearchParams(location.search);
+  const ZH = (P.get('lang') || '{{ lang }}') === 'zh';
+  // Seconds per slide and minutes between data refreshes, both overridable so a
+  // display can be tuned without a deploy.
+  const SECS = Math.max(5, Math.min(300, +(P.get('secs') || 15) || 15));
+  const REFRESH_MIN = Math.max(1, Math.min(60, +(P.get('refresh') || 5) || 5));
+
+  const T = {
+    indices: ZH ? '指数' : 'Indices',
+    sectors: ZH ? '板块（本周）' : 'Sectors · this week',
+    vol:     ZH ? '波动率' : 'Volatility',
+    risk:    ZH ? '风险偏好' : 'Risk appetite',
+    stale:   ZH ? '数据已过期' : 'data is stale',
+    vix:     ZH ? '恐慌指数' : 'VIX',
+    term:    ZH ? '期限结构 (VIX3M/VIX)' : 'Term structure (VIX3M/VIX)',
+    vvix:    ZH ? 'VVIX（波动率的波动率）' : 'VVIX (vol of vol)',
+    fg:      ZH ? '恐慌与贪婪' : 'Fear & Greed',
+    day:     ZH ? '日' : 'day',
+    ytd:     ZH ? '年初至今' : 'YTD',
+    week:    ZH ? '周' : 'wk',
+    stocks:  ZH ? '股票 ETF' : 'Stock ETFs',
+    bonds:   ZH ? '债券 ETF' : 'Bond ETFs',
+    noData:  ZH ? '暂无数据' : 'no data',
+  };
+  document.querySelectorAll('[data-t]').forEach(e => e.textContent = T[e.dataset.t] || e.textContent);
+
+  // Which slides to show, so a display can be dedicated to one view.
+  const ALL = ['indices', 'sectors', 'vol', 'risk'];
+  const want = (P.get('slides') || '').split(',').map(s => s.trim()).filter(Boolean);
+  const SLIDES = want.filter(s => ALL.includes(s));
+  const order = SLIDES.length ? SLIDES : ALL;
+
+  const $ = id => document.getElementById(id);
+  const num = (v, dp = 2) => v == null ? '—' : (+v).toFixed(dp);
+  const sign = v => v == null ? '' : (v >= 0 ? '+' : '');
+  const cls = v => v == null ? 'flat' : v > 0 ? 'up' : v < 0 ? 'down' : 'flat';
+  const esc = s => String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const money = v => v == null ? '—'
+    : v >= 1000 ? (+v).toLocaleString('en-US', {maximumFractionDigits: 0})
+    : num(v, 2);
+
+  let data = { markets: null, fg: null, etf: null };
+  let lastGood = 0;
+
+  async function grab(url) {
+    const r = await fetch(url, { cache: 'no-store' });
+    if (!r.ok) throw new Error(url + ' → ' + r.status);
+    return r.json();
+  }
+
+  async function load() {
+    // Settled, not all: one dead endpoint must not blank a wall display. Whatever
+    // arrives is drawn and the rest keeps its previous value.
+    const [m, f, e] = await Promise.allSettled([
+      grab('/api/markets'), grab('/api/fear-greed'), grab('/api/etf-returns'),
+    ]);
+    if (m.status === 'fulfilled') data.markets = m.value;
+    if (f.status === 'fulfilled') data.fg = f.value;
+    if (e.status === 'fulfilled') data.etf = e.value;
+
+    const failed = [m, f, e].filter(x => x.status === 'rejected');
+    if (failed.length) {
+      $('err').textContent = '⚠ ' + failed.map(x => x.reason.message).join(' · ');
+    } else {
+      $('err').textContent = '';
+    }
+    if (data.markets) lastGood = Date.now();
+    // Stale is judged on the clock, not on the last fetch result: a display left
+    // running through an outage should say so rather than show yesterday silently.
+    const staleMs = REFRESH_MIN * 60 * 1000 * 3;
+    $('stale').style.display = (lastGood && Date.now() - lastGood > staleMs) ? '' : 'none';
+    $('asof').textContent = lastGood
+      ? new Date(lastGood).toLocaleTimeString(ZH ? 'zh-CN' : 'en-US',
+          { hour: '2-digit', minute: '2-digit' })
+      : '';
+    draw();
+  }
+
+  // ── slide painters ──────────────────────────────────────────────────
+  const IDX = [
+    ['spx', 'S&P 500'], ['ixic', 'Nasdaq'], ['dji', 'Dow'], ['vixq', 'VIX'],
+    ['sse', ZH ? '上证' : 'Shanghai'], ['csi500', 'CSI 500'], ['n225', 'Nikkei'], ['ftse', 'FTSE'],
+    ['gold', ZH ? '黄金' : 'Gold'], ['oil', 'WTI'], ['dxy', 'DXY'], ['copper', ZH ? '铜' : 'Copper'],
+  ];
+
+  function drawIndices() {
+    const idx = (data.markets && data.markets.indices) || {};
+    const vix = (data.markets && data.markets.vix) || {};
+    const cells = IDX.map(([key, label]) => {
+      const d = key === 'vixq' ? { current: vix.current, day_chg: vix.day_chg } : (idx[key] || {});
+      const chg = d.day_chg;
+      return `<div class="cell">
+        <div class="k">${esc(label)}</div>
+        <div class="v">${money(d.current)}</div>
+        <div class="d ${cls(chg)}">${sign(chg)}${num(chg)}% <span style="color:var(--dim);font-weight:600">${esc(T.day)}</span>${
+          d.ytd != null ? ` · <span class="${cls(d.ytd)}">${sign(d.ytd)}${num(d.ytd, 1)}%</span> <span style="color:var(--dim);font-weight:600">${esc(T.ytd)}</span>` : ''}</div>
+      </div>`;
+    }).join('');
+    $('s-indices').innerHTML = `<div class="grid g4">${cells}</div>`;
+  }
+
+  function drawSectors() {
+    const secs = ((data.markets && data.markets.sectors) || [])
+      .filter(s => s.week_chg_pct != null)
+      .sort((a, b) => b.week_chg_pct - a.week_chg_pct);
+    if (!secs.length) { $('s-sectors').innerHTML = `<div class="big"><div class="sub">${esc(T.noData)}</div></div>`; return; }
+    // One scale for every bar, so the lengths are comparable rather than each
+    // sector being scaled to itself.
+    const max = Math.max(...secs.map(s => Math.abs(s.week_chg_pct)), 1);
+    const rows = secs.map(s => {
+      const w = Math.abs(s.week_chg_pct) / max * 50;
+      const pos = s.week_chg_pct >= 0;
+      return `<div class="row">
+        <div class="nm">${esc(s.label || s.ticker)}</div>
+        <div class="track"><span class="mid"></span>
+          <i style="${pos ? 'left:50%' : `right:50%`};width:${w}%;background:${pos ? 'var(--up)' : 'var(--down)'}"></i>
+        </div>
+        <div class="pc ${cls(s.week_chg_pct)}">${sign(s.week_chg_pct)}${num(s.week_chg_pct, 1)}%</div>
+      </div>`;
+    }).join('');
+    $('s-sectors').innerHTML = `<div class="rank">${rows}</div>`;
+  }
+
+  function drawVol() {
+    const v = (data.markets && data.markets.vix) || {};
+    const term = v.term_ratio;
+    // Below 1 means 1-month vol above 3-month: the curve has inverted, which is
+    // the stress signal, so it is called out rather than left as a bare number.
+    const inverted = term != null && term < 1;
+    $('s-vol').innerHTML = `<div class="grid g3">
+      <div class="cell"><div class="k">${esc(T.vix)}</div>
+        <div class="v ${cls(v.day_chg == null ? null : -v.day_chg)}">${num(v.current, 2)}</div>
+        <div class="d ${cls(v.day_chg == null ? null : -v.day_chg)}">${sign(v.day_chg)}${num(v.day_chg, 1)}%</div></div>
+      <div class="cell"><div class="k">${esc(T.term)}</div>
+        <div class="v ${inverted ? 'down' : 'up'}">${num(term, 2)}</div>
+        <div class="d" style="color:var(--dim)">${inverted ? (ZH ? '倒挂 · 短期压力' : 'inverted · near-term stress') : (ZH ? '正常' : 'normal')}</div></div>
+      <div class="cell"><div class="k">${esc(T.vvix)}</div>
+        <div class="v">${num(v.vvix, 1)}</div>
+        <div class="d" style="color:var(--dim)">VIX3M ${num(v.vix3m, 1)}</div></div>
+    </div>`;
+  }
+
+  function drawRisk() {
+    const fg = data.fg || {};
+    const score = fg.score;
+    const col = score == null ? 'flat' : score >= 55 ? 'up' : score <= 45 ? 'down' : 'flat';
+    const etf = data.etf || {};
+    const tbl = (rows, title) => `
+      <div class="cell" style="justify-content:flex-start">
+        <div class="k" style="margin-bottom:.6vh">${esc(title)}</div>
+        <table class="tv"><thead><tr><th></th><th>1Y</th><th>3Y</th><th>5Y</th></tr></thead><tbody>
+        ${(rows || []).map(r => `<tr>
+          <td><span class="tick">${esc(r.ticker)}</span></td>
+          <td class="${cls(r.r1)}">${sign(r.r1)}${num(r.r1, 1)}%</td>
+          <td class="${cls(r.r3)}">${sign(r.r3)}${num(r.r3, 1)}%</td>
+          <td class="${cls(r.r5)}">${sign(r.r5)}${num(r.r5, 1)}%</td></tr>`).join('')}
+        </tbody></table>
+      </div>`;
+    $('s-risk').innerHTML = `<div class="grid g3">
+      <div class="cell"><div class="big">
+        <div class="k">${esc(T.fg)}</div>
+        <div class="huge ${col}">${score == null ? '—' : Math.round(score)}</div>
+        <div class="sub">${esc(fg.rating || '')}</div>
+      </div></div>
+      ${tbl(etf.equity, T.stocks)}
+      ${tbl(etf.bond, T.bonds)}
+    </div>`;
+  }
+
+  const PAINT = { indices: drawIndices, sectors: drawSectors, vol: drawVol, risk: drawRisk };
+  function draw() { order.forEach(k => { try { PAINT[k](); } catch (e) { console.warn(k, e); } }); }
+
+  // ── rotation ────────────────────────────────────────────────────────
+  let at = -1, elapsed = 0;
+  function show(i) {
+    at = ((i % order.length) + order.length) % order.length;
+    order.forEach((k, n) => $('s-' + k).classList.toggle('on', n === at));
+    $('slideName').textContent = T[order[at]] || order[at];
+    elapsed = 0; $('bar').style.width = '0%';
+  }
+  function tick() {
+    elapsed += 0.25;
+    $('bar').style.width = Math.min(100, elapsed / SECS * 100) + '%';
+    if (elapsed >= SECS) show(at + 1);
+  }
+
+  function clock() {
+    $('clock').textContent = new Date().toLocaleTimeString(ZH ? 'zh-CN' : 'en-US',
+      { hour: '2-digit', minute: '2-digit' });
+  }
+
+  // Arrow keys and a tap step slides, for someone standing at the screen with a
+  // remote. Space pauses. Everything else is untouched.
+  let paused = false;
+  addEventListener('keydown', ev => {
+    if (ev.key === 'ArrowRight') show(at + 1);
+    else if (ev.key === 'ArrowLeft') show(at - 1);
+    else if (ev.key === ' ') { paused = !paused; ev.preventDefault(); }
+  });
+  addEventListener('click', () => show(at + 1));
+
+  clock(); setInterval(clock, 10000);
+  show(0);
+  setInterval(() => { if (!paused) tick(); }, 250);
+  load();
+  setInterval(load, REFRESH_MIN * 60 * 1000);
+})();
+</script>
+</body>
+</html>

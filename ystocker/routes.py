@@ -2007,6 +2007,23 @@ def contact():
     return render_template("contact.html", peer_groups=list(PEER_GROUPS.keys()))
 
 
+@bp.route("/tv")
+def tv():
+    """Full-screen rotating dashboard for a wall display or TV.
+
+    Standalone template on purpose: no nav, no floating launcher, no Tailwind. A
+    kiosk has nobody to notice a broken layout, and tailwind.css here is a compiled
+    artifact that has silently dropped arbitrary classes before.
+
+    Reads the same public JSON the site already serves, so there is no new backend
+    and no new cache to go stale. Query params: ?secs= per slide, ?refresh= minutes
+    between fetches, ?slides=indices,sectors,vol,risk to pin one view, ?lang=zh.
+    """
+    lang = "zh" if request.args.get("lang") == "zh" else "en"
+    log.info("GET /tv (lang=%s, slides=%s)", lang, request.args.get("slides") or "all")
+    return render_template("tv.html", lang=lang)
+
+
 @bp.route("/guide")
 def guide():
     # The pack ladder comes from the same table /agents and yPay use, so the
