@@ -95,10 +95,18 @@ APPS = [
 ]
 
 
-# Short aliases for the TV dashboard. It lives on stock.li-family.us, but that is
-# 21 characters to spell out on a television remote's on-screen keyboard, one
-# D-pad press per letter. From the apex it is 15, and "li-family.us/tv" is
-# something a person can remember and type without a note.
+# Alias for the TV dashboard, reachable at home.li-family.us/tv.
+#
+# It is NOT reachable at li-family.us/tv, which is what I assumed when adding this.
+# The apex resolves to GitHub Pages (185.199.108-111.153, www CNAME'd to
+# papersboys.github.io), not to the EC2 box -- only the subdomains point here. So
+# this saves exactly one character over stock.li-family.us/tv and is kept as a
+# convenience alias rather than the short URL it was meant to be.
+#
+# A genuinely short host would be tv.li-family.us, which needs a DNS record at the
+# registrar (the zone is not in Route53), an nginx server_name and a certificate.
+# The cheaper alternative is a redirect on the GitHub Pages site that already owns
+# the apex, which needs no work on this box at all.
 #
 # 302 rather than 301: a permanent redirect gets cached by the browser and by
 # whatever CDN or ISP resolver is in the path, which would make this impossible to
@@ -109,7 +117,7 @@ _TV_TARGET = "https://stock.li-family.us/tv"
 @bp.route("/tv")
 @bp.route("/tv/")
 def tv_redirect():
-    """Send li-family.us/tv to the dashboard, query string intact.
+    """Send home.li-family.us/tv to the dashboard, query string intact.
 
     The query string is forwarded because that is where every useful option lives
     -- ?safe=1 for an overscanning panel, ?lang=zh, ?slides= to pin one view -- and
