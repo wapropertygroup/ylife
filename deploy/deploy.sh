@@ -672,6 +672,48 @@ for i in \$(seq 0 \$((NUM_APPS - 1))); do
   ensure_nginx "\${NAMES[\$i]}" "\${PORTS[\$i]}" "\${DOMAINS[\$i]}" "\${STATICS[\$i]}"
 done
 
+# Compression, once for all eight apps rather than per server block -- the
+# per-app writer above is skipped whenever the domain and port already match, so
+# anything added to that template would never reach an existing box.
+#
+# nginx does not compress anything by default, and it will not compress a
+# *proxied* response even with gzip on unless gzip_proxied is set -- which is
+# every response here. Measured on the live box before this: /api/multiples
+# 141 KB, i18n.js 231 KB, /multiples 88 KB, all raw on the wire, ~460 KB for one
+# page load that gzips to well under a tenth of that.
+GZIP_CONF="/etc/nginx/conf.d/gzip.conf"
+GZIP_WANT=\$(cat <<'GZIPCONF'
+gzip              on;
+gzip_vary         on;
+gzip_proxied      any;
+gzip_comp_level   5;
+gzip_min_length   1024;
+# An allowlist, and deliberately WITHOUT text/event-stream: ystocker and yplanter
+# serve Server-Sent Events on many routes, and compressing a stream makes nginx
+# buffer it, which would stall live analysis progress. Those routes also send
+# X-Accel-Buffering: no, so this is the second of two guards, not the only one.
+# text/html is always compressed when gzip is on and must not be listed here.
+gzip_types
+    application/json
+    application/javascript
+    application/x-javascript
+    text/javascript
+    text/css
+    text/plain
+    text/xml
+    application/xml
+    application/xml+rss
+    image/svg+xml;
+GZIPCONF
+)
+if ! sudo test -f "\$GZIP_CONF" || ! echo "\$GZIP_WANT" | sudo diff -q - "\$GZIP_CONF" >/dev/null 2>&1; then
+  echo "\$GZIP_WANT" | sudo tee "\$GZIP_CONF" > /dev/null
+  NGINX_CHANGED=true
+  echo "[\$(TS)]    gzip config written"
+else
+  echo "[\$(TS)]    gzip config up to date"
+fi
+
 if [[ "\$NGINX_CHANGED" == "true" ]]; then
   sudo rm -f /etc/nginx/conf.d/default.conf /etc/nginx/sites-enabled/default 2>/dev/null || true
   sudo systemctl enable nginx
