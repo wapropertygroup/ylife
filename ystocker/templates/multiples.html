@@ -110,7 +110,7 @@
         <span data-i18n="mult.fwd_title">Forward P/E: SPY vs QQQ — consensus estimates, today</span>
         <span class="src-chip src-forward" data-i18n="mult.chip_forward">Forward</span>
       </h2>
-      <p class="text-xs text-slate-500"><span data-i18n="mult.fwd_scope">Consensus forward estimates for both ETFs, as of today. SPY's long history is the S&amp;P 500 chart below; the Nasdaq-100 has no free earnings history, so QQQ builds up from the first snapshot only.</span></p>
+      <p class="text-xs text-slate-500"><span data-i18n="mult.fwd_scope">Our own reading, computed here from index constituents and recorded once a day, so this series starts at the first snapshot. For history on each index — years of it for the S&amp;P 500 — see the published consensus chart below.</span></p>
       <p class="text-xs text-slate-500" data-i18n="mult.fwd_desc">Cap-weighted forward P/E computed from index constituents — total market value divided by total forward earnings, which is the correct aggregation. Snapshotted once a day, so this series begins at the first snapshot and lengthens by one point per day.</p>
     </div>
     <div id="vpFwdEmpty" class="hidden text-xs text-slate-500 bg-slate-800/40 border border-slate-700 rounded-lg px-3 py-2 mt-3">
@@ -124,6 +124,31 @@
     </div>
     <div class="chart-container" id="vpForwardLineWrap" style="height:280px"><canvas id="vpForwardChart"></canvas></div>
     <p class="text-[11px] text-slate-600 mt-2"><span id="vpCoverage"></span></p>
+  </div>
+
+  <div class="vp-section"><h2 data-i18n="mult.sec_consensus">Consensus Forward P/E — Published History</h2><div class="rule"></div></div>
+
+  <!-- ── Published consensus history: the history our own snapshots cannot have ─
+       Kept as its own chart rather than added to the card above, on purpose.
+       These are other aggregators' numbers on other bases, and the x-axes are
+       incompatible: 2017→today against five daily points would either squash our
+       series to a single pixel or, because lineChart aligns extra series onto the
+       longest one's dates, drop it entirely when no dates coincide. -->
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up">
+    <div class="mb-1">
+      <h2 class="text-base font-semibold text-slate-200">
+        <span data-i18n="mult.consensus_title">Consensus Forward P/E — published history</span>
+        <span class="src-chip src-forward" data-i18n="mult.chip_forward">Forward</span>
+      </h2>
+      <p class="text-xs text-slate-500">
+        <span data-i18n="mult.consensus_desc">What analysts actually expected on each past date — the same question as the card above, answered by the firms that publish it, so it has real history. The S&amp;P 500 line is FactSet's stated forward 12-month P/E, back to 2017.</span>
+        <span id="vpConsensusStat" class="text-slate-400"></span>
+      </p>
+      <p class="text-xs text-slate-500 mt-1" data-i18n="mult.consensus_gap">FactSet publishes these during earnings season, so the line is dense in Jan/Feb, Apr/May, Jul/Aug and Oct/Nov and flat across the gaps between — the straight stretches are missing weeks, not still markets.</p>
+      <!-- The obvious question: why is the Nasdaq dotted and so much higher. -->
+      <p class="text-xs text-amber-500/80 mt-1" data-i18n="mult.consensus_ndx_note">The Nasdaq-100 points are month-end readings from Siblis, the only free forward figure for that index — eight points from Dec 2023. They sit several turns above the QQQ number in the card above (25.2x vs 20.3x on 30 Jun 2026) because the constituent coverage and the estimate source both differ, so they are drawn as separate markers and must not be read as QQQ's own history.</p>
+    </div>
+    <div class="chart-container" style="height:280px"><canvas id="vpConsensusChart"></canvas></div>
   </div>
 
   <div class="vp-section"><h2 data-i18n="mult.sec_fwdhist">Forward P/E History — S&amp;P 500 / SPY, realized earnings</h2><div class="rule"></div></div>
@@ -141,7 +166,7 @@
         <span class="text-slate-600" data-i18n="mult.log_note">Log scale — the 2009 reading near 193x would otherwise flatten the rest.</span>
       </p>
       <p class="text-xs text-slate-500 mt-1">
-        <span data-i18n="mult.fwdhist_scope">This is the S&amp;P 500 — the index SPY tracks. There is no equivalent for QQQ: nobody publishes Nasdaq-100 earnings history for free, so the Nasdaq-100 appears only in today's reading above.</span>
+        <span data-i18n="mult.fwdhist_scope">This is the S&amp;P 500 — the index SPY tracks. There is no equivalent for the Nasdaq-100: nobody publishes its earnings history for free, which is why the Nasdaq appears only as today's reading above and as eight month-end consensus points in the chart above that.</span>
       </p>
       <!-- The one question this page reliably provokes: two tiles both saying
            "forward P/E", ~5x apart. Answer it here rather than leaving the
@@ -623,6 +648,46 @@ const _explainData = {};
       }
     }
   } catch(e) { console.warn('Multiples chart vpForwardChart failed:', e); }
+
+  // ── Published consensus forward P/E, 2017 → now ─────────────────────
+  try {
+    const cs = data.spx_consensus_fwd;
+    const cn = data.ndx_consensus_fwd;
+    if (cs || cn) {
+      // Both series are sparse and land on different dates — FactSet posts on
+      // Fridays in earnings season, Siblis reports month-ends — so neither can
+      // serve as the other's axis. lineChart aligns by exact date match against
+      // the longest series, which would silently null out every Siblis point.
+      // Build the union up front and hand both series the same array, which also
+      // makes lineChart's align() a no-op.
+      const axis = Array.from(new Set([].concat(cs ? cs.dates : [], cn ? cn.dates : []))).sort();
+      const onAxis = s => {
+        if (!s) return null;
+        const m = new Map(s.dates.map((d, i) => [d, s.values[i]]));
+        return axis.map(d => (m.has(d) ? m.get(d) : null));
+      };
+      const series = [];
+      if (cs) series.push({ dates: axis, values: onAxis(cs), color: C_BLUE, fill: true,
+        label: I18n.t('mult.series_spx_consensus') || 'S&P 500 (FactSet consensus)' });
+      if (cn) series.push({ dates: axis, values: onAxis(cn), color: C_ORANGE, dash: [4, 3],
+        label: I18n.t('mult.series_ndx_consensus') || 'Nasdaq-100 (Siblis, month-end)' });
+
+      const stat = document.getElementById('vpConsensusStat');
+      if (stat && cs) {
+        const v = cs.values[cs.values.length - 1];
+        const d = cs.dates[cs.dates.length - 1];
+        const lo = Math.min.apply(null, cs.values);
+        const hi = Math.max.apply(null, cs.values);
+        stat.textContent = ` ${I18n.t('mult.latest') || 'Latest'} ${v.toFixed(1)}x (${d}),`
+          + ` ${I18n.t('mult.range_since') || 'range since'} ${cs.dates[0].slice(0, 4)}:`
+          + ` ${lo.toFixed(1)}x–${hi.toFixed(1)}x.`;
+      }
+      lineChart('vpConsensusChart', series, {
+        fmt: xmult, showPoints: true, unit: 'x', xTicks: 8,
+        explainLabel: 'S&P 500 consensus forward 12-month P/E as published by FactSet since 2017',
+      });
+    }
+  } catch(e) { console.warn('Multiples chart vpConsensusChart failed:', e); }
 
   // ── Realized forward P/E, 1871 → 12 months ago ──────────────────────
   try {

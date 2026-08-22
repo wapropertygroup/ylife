@@ -34,6 +34,14 @@ So this module does three honest things instead, and never mixes them:
    :func:`_realized_forward_pe`). Shipped as ``fwd_realized``, headlined as
    ``spx_fwd_realized``.
 
+4. **Published consensus forward P/E history** for the S&P 500 and the
+   Nasdaq-100, from :mod:`ystocker.consensus_pe` — FactSet's stated forward
+   12-month P/E back to 2017 and Siblis' month-end NDX figures. This is the
+   history (2) cannot have, on someone else's basis rather than ours. Shipped as
+   ``spx_consensus_fwd`` / ``ndx_consensus_fwd`` and deliberately *not* merged
+   into ``forward_history``: see that module for why splicing them would invent
+   moves that never happened.
+
 (2) and (3) are both "forward P/E" and they are *not* comparable, which is the
 single easiest thing to get wrong on the page that consumes this. (2) divides
 by analyst estimates and is dated today; (3) divides by realized earnings and
@@ -41,6 +49,7 @@ necessarily stops twelve months short of today, so its latest point carries a
 year-old index level. In Aug 2026 they read 19.8x and 24.5x respectively — the
 same index, neither figure wrong. Every label that surfaces one of these must
 say which basis it is on and as of when, or the two get read as a contradiction.
+(4) is a third basis again: same question as (2), different answerer.
 
 Aggregation
 -----------
@@ -93,7 +102,7 @@ _CACHE_TTL = 24 * 60 * 60  # multpl updates daily; constituents once a day is pl
 # a field, an existing cache still looks fresh, so the API happily serves a
 # payload the new page cannot read and charts render empty with no explanation.
 # Same idea as _YIELD_CURVE_CACHE_VER in routes.py.
-_CACHE_VER = "v2"
+_CACHE_VER = "v3"
 
 # Browser UA: multpl.com serves a plain client fine, but its CDN is happier
 # with a normal UA and this host is not FRED (see fed.py for why FRED differs).
@@ -588,10 +597,16 @@ def _previous_snapshots() -> list[dict[str, Any]]:
 def _build_payload() -> dict[str, Any]:
     import concurrent.futures as cf
 
+    from ystocker import consensus_pe
+
     multpl: dict[str, Any] = {}
     forward: dict[str, Any] = {}
+    consensus: dict[str, Any] = {}
 
-    with cf.ThreadPoolExecutor(max_workers=2) as pool:
+    with cf.ThreadPoolExecutor(max_workers=3) as pool:
+        # Published consensus history is independent of multpl, so it overlaps
+        # with those fetches instead of adding its own latency.
+        c_fut = pool.submit(consensus_pe.get_consensus_series)
         m_futs = {pool.submit(_fetch_multpl, k, v): k for k, v in MULTPL_SERIES.items()}
         for fut in cf.as_completed(list(m_futs)):
             key = m_futs[fut]
@@ -602,6 +617,10 @@ def _build_payload() -> dict[str, Any]:
                 continue
             if data:
                 multpl[key] = data
+        try:
+            consensus = {k: v for k, v in c_fut.result().items() if v}
+        except Exception as exc:  # noqa: BLE001 - the page survives without it
+            log.warning("Valuation: consensus history raised: %s", exc)
 
     # Sequential: each ETF already fans out to 8 workers internally.
     for etf, meta in INDEX_UNIVERSE.items():
@@ -613,7 +632,7 @@ def _build_payload() -> dict[str, Any]:
         if got:
             forward[etf] = got
 
-    if not multpl and not forward:
+    if not multpl and not forward and not consensus:
         log.error("Valuation: every source failed")
         return {"_ts": time.time(), "error": "valuation data unavailable"}
 
@@ -688,7 +707,8 @@ def _build_payload() -> dict[str, Any]:
         }
 
     log.info("Valuation: payload built — %d multpl series, %d forward P/Es, "
-             "%d snapshot days", len(multpl), len(forward), len(history))
+             "%d snapshot days, %d consensus series", len(multpl), len(forward),
+             len(history), len(consensus))
     return {
         "_ts": time.time(),
         "_ver": _CACHE_VER,
@@ -702,6 +722,9 @@ def _build_payload() -> dict[str, Any]:
         "forward_history": history,
         "eps_nominal": eps_nominal,
         "fwd_realized": fwd_realized,
+        # Published consensus history. Separate keys, never folded into
+        # forward_history — different aggregators on different bases.
+        **consensus,
     }
 
 
@@ -719,7 +742,8 @@ _fetch_in_progress = threading.Event()
 
 
 def _has_content(payload: Optional[dict[str, Any]]) -> bool:
-    return bool(payload and (payload.get("multpl") or payload.get("forward")))
+    return bool(payload and (payload.get("multpl") or payload.get("forward")
+                             or payload.get("spx_consensus_fwd")))
 
 
 def _load_disk_cache() -> Optional[dict[str, Any]]:
