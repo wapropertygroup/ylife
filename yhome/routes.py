@@ -3,7 +3,7 @@ yhome.routes
 ~~~~~~~~~~~~
 URL routes for the Li Family home page.
 """
-from flask import Blueprint, render_template
+from flask import Blueprint, redirect, render_template, request
 
 bp = Blueprint("home", __name__, template_folder="templates", static_folder="static")
 
@@ -93,6 +93,30 @@ APPS = [
                      "Criminal & eviction search", "Income-to-rent analysis"],
     },
 ]
+
+
+# Short aliases for the TV dashboard. It lives on stock.li-family.us, but that is
+# 21 characters to spell out on a television remote's on-screen keyboard, one
+# D-pad press per letter. From the apex it is 15, and "li-family.us/tv" is
+# something a person can remember and type without a note.
+#
+# 302 rather than 301: a permanent redirect gets cached by the browser and by
+# whatever CDN or ISP resolver is in the path, which would make this impossible to
+# repoint later without chasing stale caches on devices nobody can clear.
+_TV_TARGET = "https://stock.li-family.us/tv"
+
+
+@bp.route("/tv")
+@bp.route("/tv/")
+def tv_redirect():
+    """Send li-family.us/tv to the dashboard, query string intact.
+
+    The query string is forwarded because that is where every useful option lives
+    -- ?safe=1 for an overscanning panel, ?lang=zh, ?slides= to pin one view -- and
+    dropping it would silently downgrade a bookmark that used to work.
+    """
+    qs = request.query_string.decode("utf-8", "replace")
+    return redirect(_TV_TARGET + ("?" + qs if qs else ""), code=302)
 
 
 @bp.route("/")
