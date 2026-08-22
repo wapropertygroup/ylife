@@ -2179,11 +2179,16 @@ def _tv_build_digest() -> dict:
         fs = ((_fed.get_fed_data() or {}).get("series") or {}).get("WALCL") or {}
         vals = [v for v in (fs.get("values") or []) if isinstance(v, (int, float))]
         if vals:
-            # WALCL is millions; trillions read better on a wall.
+            # fed.py's module docstring calls WALCL "millions USD", which is
+            # FRED's native unit, but what lands in its cache is billions --
+            # 6759.95 is $6.76T, not $6.76B. Dividing by 1e6 as the docstring
+            # implies renders Fed total assets as 0.01T on the wall.
             out.setdefault("macro", {}).update({
-                "fed_assets_t": round(vals[-1] / 1e6, 2),
-                # Weekly series, so 13 rows back is about a quarter.
-                "fed_chg_13w_t": (round((vals[-1] - vals[-14]) / 1e6, 2)
+                "fed_assets_t": round(vals[-1] / 1e3, 2),
+                # Weekly series, so 13 rows back is about a quarter. Reported in
+                # billions because the quarterly move is tens of billions and
+                # would round to 0.0 in trillions.
+                "fed_chg_13w_b": (round(vals[-1] - vals[-14], 1)
                                   if len(vals) > 14 else None),
             })
     except Exception as exc:  # noqa: BLE001
