@@ -6294,6 +6294,22 @@ def _cn10y_history(value: Optional[float]) -> dict:
     return {"dates": [d for d, _ in ordered], "values": [v for _, v in ordered]}
 
 
+@bp.route("/api/etf-returns")
+def api_etf_returns():
+    """Trailing total returns for the stock/bond ETFs shown beside the ERP card.
+
+    Cached for a day in ``ystocker.etf_returns``: these are five-year windows, so
+    an intraday refresh moves the last decimal place and costs a Yahoo call on a
+    box that is already rate-limited elsewhere.
+    """
+    from ystocker import etf_returns
+
+    data = etf_returns.get()
+    log.info("API etf-returns (asof=%s, stale=%s)",
+             data.get("asof"), bool(data.get("stale")))
+    return jsonify(data)
+
+
 @bp.route("/api/yield-curve")
 def api_yield_curve():
     """Return US & CN Treasury yield curve snapshots + historical 10Y comparison."""

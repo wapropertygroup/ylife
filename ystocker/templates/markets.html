@@ -389,6 +389,28 @@
     <div id="erpLabel" class="text-xs text-slate-500 pb-1"></div>
   </div>
   <p class="text-[11px] text-slate-600 mt-2" data-i18n="markets.erp_note">Above 3% = stocks attractive vs bonds. Below 1% = bonds competitive. Negative = bonds preferred.</p>
+
+  {# Representative ETFs for each side of the ERP argument, with what they have
+     actually returned. The side the current reading favours is highlighted; both
+     are always shown, because the comparison is the point and hiding the losing
+     side would turn a valuation reading into a tip. #}
+  <div id="erpEtf" class="mt-4 pt-3 border-t border-slate-800" style="display:none">
+    <div class="flex items-baseline justify-between mb-2">
+      <p class="text-[10px] font-semibold tracking-widest uppercase text-slate-500"
+         data-i18n="markets.erp_etf_title">Representative ETFs</p>
+      <p class="text-[10px] text-slate-600">
+        <span data-i18n="markets.erp_etf_basis">Total return · 3Y/5Y annualised</span>
+        <span id="erpEtfAsof" class="ml-1"></span>
+      </p>
+    </div>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <div id="erpEtfStocks"></div>
+      <div id="erpEtfBonds"></div>
+    </div>
+    <p class="text-[10px] text-slate-600 mt-2" data-i18n="markets.erp_etf_disclaimer">
+      Past returns, not a forecast or a recommendation to buy.
+    </p>
+  </div>
 </div>
 
 <!-- ── AAII Sentiment + Put/Call Ratio + Sector Performance row ─────── -->
@@ -4026,9 +4048,76 @@ function _mktsModalConfig(kind) {
           if (lblEl) {
             lblEl.textContent = erp >= 3 ? (I18n.t('markets.erp_stocks_attractive')||'Stocks attractive') : erp >= 1 ? (I18n.t('markets.erp_fairly_valued')||'Fairly valued') : erp >= 0 ? (I18n.t('markets.erp_expensive')||'Expensive') : (I18n.t('markets.erp_bonds_preferred')||'Bonds preferred');
           }
+          // Which side the reading argues for, using the same thresholds as the
+          // label above so the highlight and the words cannot disagree.
+          renderErpEtfs(erp >= 3 ? 'stocks' : erp < 1 ? 'bonds' : null);
         }
       }).catch(()=>{});
     } catch(e) {}
+
+
+  // ── ERP: representative ETFs ──────────────────────────────────────────────
+  // Fetched once and cached by the server for a day. Failure is silent: the
+  // block stays hidden and the ERP reading above is unaffected, because this is
+  // supporting detail rather than the measurement.
+  let _erpEtfData = null, _erpEtfFavour = null;
+
+  async function renderErpEtfs(favour) {
+    _erpEtfFavour = favour;
+    if (!_erpEtfData) {
+      try {
+        const r = await fetch('/api/etf-returns');
+        if (!r.ok) return;
+        _erpEtfData = await r.json();
+      } catch (e) { return; }
+    }
+    const d = _erpEtfData;
+    if (!d || (!(d.equity || []).length && !(d.bond || []).length)) return;
+
+    const isZh = () => (I18n.getLang && I18n.getLang() === 'zh');
+    const pct = v => (typeof v === 'number')
+      ? `<span class="${v >= 0 ? 'text-emerald-400' : 'text-rose-400'}">${v >= 0 ? '+' : ''}${v.toFixed(1)}%</span>`
+      : '<span class="text-slate-600">—</span>';
+
+    const table = (rows, heading, favoured) => {
+      const head = `<div class="flex items-center gap-2 mb-1.5">
+          <span class="text-[11px] font-semibold ${favoured ? 'text-slate-100' : 'text-slate-400'}">${heading}</span>
+          ${favoured ? `<span class="text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-800">${I18n.t('markets.erp_etf_favoured') || 'favoured now'}</span>` : ''}
+        </div>`;
+      const body = rows.map(r => `<tr class="border-t border-slate-800/70">
+            <td class="py-1 pr-2 font-mono text-[11px] text-slate-200">${r.ticker}</td>
+            <td class="py-1 pr-2 text-[10px] text-slate-500 truncate">${isZh() ? (r.name_zh || r.name) : r.name}</td>
+            <td class="py-1 pr-2 text-right font-mono text-[11px]">${pct(r.r1)}</td>
+            <td class="py-1 pr-2 text-right font-mono text-[11px]">${pct(r.r3)}</td>
+            <td class="py-1 text-right font-mono text-[11px]">${pct(r.r5)}</td>
+          </tr>`).join('');
+      return head + `<div class="rounded-lg border ${favoured ? 'border-emerald-900/60 bg-emerald-950/10' : 'border-slate-800'} p-2">
+          <table class="w-full table-fixed">
+            <thead><tr class="text-[9px] uppercase tracking-wider text-slate-600">
+              <th class="text-left font-semibold w-12"></th><th></th>
+              <th class="text-right font-semibold w-12">1Y</th>
+              <th class="text-right font-semibold w-12">3Y</th>
+              <th class="text-right font-semibold w-12">5Y</th>
+            </tr></thead>
+            <tbody>${body}</tbody>
+          </table>
+        </div>`;
+    };
+
+    const st = document.getElementById('erpEtfStocks');
+    const bd = document.getElementById('erpEtfBonds');
+    if (st) st.innerHTML = table(d.equity || [], I18n.t('markets.erp_etf_stocks') || 'Stock ETFs', favour === 'stocks');
+    if (bd) bd.innerHTML = table(d.bond || [], I18n.t('markets.erp_etf_bonds') || 'Bond ETFs', favour === 'bonds');
+    const asof = document.getElementById('erpEtfAsof');
+    if (asof) asof.textContent = d.asof ? `· ${d.asof}${d.stale ? ' (cached)' : ''}` : '';
+    const box = document.getElementById('erpEtf');
+    if (box) box.style.display = '';
+  }
+
+  // Re-render on a language toggle so the fund descriptions follow the page.
+  document.addEventListener('i18n:langchange', () => {
+    if (_erpEtfData) renderErpEtfs(_erpEtfFavour);
+  });
 
     // Nasdaq / SPX Rotation Ratio
     (function buildRotation() {
