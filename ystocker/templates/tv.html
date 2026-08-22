@@ -202,6 +202,12 @@
     return '{{ lang }}';
   })();
   const ZH = LANG === 'zh';
+  // The server renders <title> and <html lang> from its own ?lang= reading, which
+  // is blank on a bare /tv even when localStorage says Chinese. Resync both to the
+  // language actually being displayed, so the tab title and the accessibility tree
+  // do not disagree with the screen.
+  document.documentElement.lang = ZH ? 'zh' : 'en';
+  document.title = ZH ? 'yStocker 电视版' : 'yStocker TV';
   // Seconds per slide and minutes between data refreshes, both overridable so a
   // display can be tuned without a deploy.
   const SECS = Math.max(5, Math.min(300, +(P.get('secs') || 15) || 15));
