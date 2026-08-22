@@ -1736,6 +1736,8 @@ const I18n = (() => {
     'fed.sentiment_desc':            { en: 'Consumer sentiment leads retail spending and corporate earnings by 2-3 quarters. Sentiment troughs often mark market bottoms.',
                                        zh: '消费者信心领先零售支出和企业盈利2–3个季度。情绪低谷往往是市场底部信号。' },
     'fed.business_cycle_title':      { en: 'Business Cycle Indicators',             zh: '商业周期指标' },
+    'fed.warming':                   { en: 'Loading Fed data — this takes a moment on the first request after a restart…',
+                                       zh: '正在加载美联储数据 — 服务重启后的首次请求需要稍等…' },
     'fed.asof':                      { en: 'Source data through', zh: '数据截至' },
     'fed.asof_lag':                  { en: 'FRED has published nothing newer',
                                        zh: 'FRED 尚未发布更新数据' },

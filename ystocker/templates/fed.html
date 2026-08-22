@@ -1107,11 +1107,45 @@ let _fedSeriesData = {};
   }
 
   // ── fetch data
-  const data = await safeJsonFetch('/api/fed');
+  // /api/fed deliberately never blocks: when its cache is cold it starts a
+  // background fetch and answers 202 {"status":"warming"} with no series. That is
+  // the right server behaviour, but the page used to take that answer as final --
+  // series was {}, every macro chart's guard was falsy, and Consumer Sentiment,
+  // Real GDP and Business Cycle Indicators silently never appeared. There was no
+  // retry, so they stayed missing until the reader happened to reload after the
+  // warm finished. That is what "not auto updated" looked like: after every
+  // restart or TTL expiry, the first visitors got a page with no macro charts.
+  //
+  // So poll until the series arrive. Bounded, because waiting forever on a fetch
+  // that is failing upstream is its own kind of broken.
+  async function fedSeriesWhenReady({ tries = 20, waitMs = 3000 } = {}) {
+    for (let i = 0; i < tries; i++) {
+      const d = await safeJsonFetch('/api/fed');
+      if (d && d.series && Object.keys(d.series).length) return d;
+      if (d && d.error && !d.warming) return d;      // a real failure, not a warm
+      if (i === 0) {
+        const el = document.getElementById('fedError');
+        if (el) {
+          el.textContent = (I18n.t('fed.warming') || 'Loading Fed data — this takes a moment on the first request after a restart…');
+          el.classList.remove('hidden');
+        }
+      }
+      await new Promise(r => setTimeout(r, waitMs));
+    }
+    return await safeJsonFetch('/api/fed');
+  }
+
+  const data = await fedSeriesWhenReady();
+  const _fedErrEl = document.getElementById('fedError');
   if (data.error) {
-    document.getElementById('fedError').textContent = '⚠ ' + data.error;
-    document.getElementById('fedError').classList.remove('hidden');
+    if (_fedErrEl) {
+      _fedErrEl.textContent = '⚠ ' + data.error;
+      _fedErrEl.classList.remove('hidden');
+    }
     if (!data.warming) return;
+  } else if (_fedErrEl && data.series && Object.keys(data.series).length) {
+    // Clear the "loading" note once the series actually land.
+    _fedErrEl.classList.add('hidden');
   }
 
   const s = data.series || {};
