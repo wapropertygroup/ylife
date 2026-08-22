@@ -2021,7 +2021,226 @@ def tv():
     """
     lang = "zh" if request.args.get("lang") == "zh" else "en"
     log.info("GET /tv (lang=%s, slides=%s)", lang, request.args.get("slides") or "all")
-    return render_template("tv.html", lang=lang)
+    return render_template("tv.html", lang=lang,
+                           market_holidays=_tv_holiday_list())
+
+
+# ── /tv supporting endpoints ─────────────────────────────────────────────────
+# The kiosk used to fetch /api/markets, /api/fear-greed and /api/etf-returns
+# whole and read a handful of fields out of each. That is 300 KB of JSON for
+# about forty numbers, and it cannot show a metric that does not already have a
+# page-sized endpoint. These two replace that: a compact digest of everything
+# the display actually paints, and a quotes-only route cheap enough to poll.
+
+_TV_DIGEST_CACHE: dict = {}
+_TV_DIGEST_LOCK = threading.Lock()
+_TV_DIGEST_TTL = 300  # matches _MARKETS_CACHE_TTL; nothing underneath moves faster
+
+
+def _tv_holiday_list() -> list:
+    """US market holidays for this year and next, as ISO strings.
+
+    Handed to the template because the kiosk decides its own refresh cadence and
+    there is no JS holiday calendar in this app. Two years so a display left
+    running over New Year does not lose holiday awareness at midnight.
+    """
+    try:
+        import datetime as _dt_mod
+
+        this_year = _dt_mod.date.today().year
+        out: list = []
+        for yr in (this_year, this_year + 1):
+            out.extend(sorted(d.isoformat() for d in _us_market_holidays(yr)))
+        return out
+    except Exception as exc:  # noqa: BLE001 - a kiosk without holidays still works
+        log.warning("TV: holiday list failed: %s", exc)
+        return []
+
+
+def _tv_json(view):
+    """Call one of this module's own API views and return its JSON body.
+
+    Composing the views rather than the fetchers under them is deliberate: each
+    already owns its cache, its TTL and its degradation behaviour, so the digest
+    inherits all of that and adds no upstream load. The markets warm-up thread
+    already calls api_markets() this way.
+    """
+    name = getattr(view, "__name__", str(view))
+    try:
+        rv = view()
+    except Exception as exc:  # noqa: BLE001 - one dead source must not kill the digest
+        log.warning("TV digest: %s raised: %s", name, exc)
+        return None
+    body, code = (rv[0], rv[1]) if isinstance(rv, tuple) else (rv, 200)
+    if code != 200:
+        log.info("TV digest: %s returned HTTP %s — skipped", name, code)
+        return None
+    try:
+        return body.get_json()
+    except Exception as exc:  # noqa: BLE001
+        log.warning("TV digest: %s body was not JSON: %s", name, exc)
+        return None
+
+
+def _tv_spark(values, keep: int = 40, nd: int = 2) -> list:
+    """Tail of a series, thinned and rounded — a sparkline, not a dataset.
+
+    A kiosk sparkline is ~120 px wide, so shipping ten years of weekly points
+    would be most of the payload for pixels nobody can resolve.
+    """
+    nums = [v for v in (values or []) if isinstance(v, (int, float))]
+    return [round(float(v), nd) for v in nums[-keep:]]
+
+
+def _tv_pctile(values, latest) -> Optional[float]:
+    """Percentile rank of ``latest`` within ``values``."""
+    nums = [v for v in (values or []) if isinstance(v, (int, float))]
+    if not nums or not isinstance(latest, (int, float)):
+        return None
+    return round(sum(1 for v in nums if v <= latest) / len(nums) * 100, 1)
+
+
+def _tv_build_digest() -> dict:
+    """Assemble the kiosk digest from data the app has already cached."""
+    import datetime as _dt_mod
+
+    out: dict = {"as_of": _dt_mod.date.today().isoformat()}
+
+    # ── Breadth: how much of the index is actually participating ──────────
+    br = _tv_json(api_breadth)
+    if br:
+        latest = br.get("latest") or {}
+        series = (br.get("pct_above_200ma") or {}).get("values")
+        out["breadth"] = {
+            "latest": {k: latest.get(k) for k in ("20", "50", "100", "150", "200")
+                       if isinstance(latest.get(k), (int, float))},
+            "asof": br.get("asof"),
+            "universe": br.get("universe"),
+            "spark200": _tv_spark(series, 40, 1),
+        }
+
+    # ── Valuation: the level and, more usefully, where it sits historically ──
+    try:
+        from ystocker import valuation as _val
+        vd = _val.get_valuation_data()
+        head = (vd or {}).get("headline") or {}
+        pe, cape = head.get("spx_trailing_pe") or {}, head.get("spx_cape") or {}
+        fwd = (vd or {}).get("spx_consensus_fwd") or {}
+        blk = {
+            "pe": pe.get("value"),
+            "pe_pct": (head.get("spx_pe_percentile") or {}).get("value"),
+            "cape": cape.get("value"),
+            "cape_pct": (head.get("spx_cape_percentile") or {}).get("value"),
+        }
+        fv = fwd.get("values") or []
+        if fv:
+            blk.update({
+                "fwd": fv[-1],
+                "fwd_date": (fwd.get("dates") or [None])[-1],
+                "fwd_lo": min(fv), "fwd_hi": max(fv),
+                "fwd_pct": _tv_pctile(fv, fv[-1]),
+                "fwd_spark": _tv_spark(fv, 40, 1),
+            })
+        # Our own bottom-up reading, which is a different basis from FactSet's
+        # and is labelled as such on the display.
+        for etf in ("SPY", "QQQ"):
+            got = ((vd or {}).get("forward") or {}).get(etf) or {}
+            if got.get("forward_pe"):
+                blk[f"{etf.lower()}_fwd"] = got["forward_pe"]
+        if any(v is not None for v in blk.values()):
+            out["valuation"] = blk
+    except Exception as exc:  # noqa: BLE001
+        log.warning("TV digest: valuation failed: %s", exc)
+
+    # ── Macro: the curve and what the market thinks the Fed does next ──────
+    ys = _tv_json(api_yield_spread)
+    if ys and ys.get("spread"):
+        sp = [v for v in ys["spread"] if isinstance(v, (int, float))]
+        if sp:
+            out.setdefault("macro", {}).update({
+                "spread": round(sp[-1], 2),
+                "inverted": sp[-1] < 0,
+                "spread_spark": _tv_spark(sp, 40, 2),
+            })
+    fw = _tv_json(api_fedwatch)
+    if fw and fw.get("status") == "ok":
+        cur = fw.get("current") or {}
+        nxt = (fw.get("meetings") or [{}])[0]
+        out.setdefault("macro", {}).update({
+            "effr": cur.get("effr"), "effr_label": cur.get("label"),
+            "next_meeting": {
+                "date": nxt.get("date"), "cut": nxt.get("cut_prob"),
+                "hold": nxt.get("hold_prob"), "hike": nxt.get("hike_prob"),
+                "change_bp": nxt.get("change_bp"),
+            },
+        })
+    try:
+        from ystocker import fed as _fed
+        fs = ((_fed.get_fed_data() or {}).get("series") or {}).get("WALCL") or {}
+        vals = [v for v in (fs.get("values") or []) if isinstance(v, (int, float))]
+        if vals:
+            # WALCL is millions; trillions read better on a wall.
+            out.setdefault("macro", {}).update({
+                "fed_assets_t": round(vals[-1] / 1e6, 2),
+                # Weekly series, so 13 rows back is about a quarter.
+                "fed_chg_13w_t": (round((vals[-1] - vals[-14]) / 1e6, 2)
+                                  if len(vals) > 14 else None),
+            })
+    except Exception as exc:  # noqa: BLE001
+        log.warning("TV digest: fed assets failed: %s", exc)
+
+    # ── Sectors and cross-asset, ranked. Both come out of the markets cache,
+    # which already carries a year of daily closes per series, so the sparklines
+    # cost nothing extra upstream.
+    mk = _tv_json(api_markets)
+    if mk:
+        secs = []
+        for s in (mk.get("sectors") or []):
+            if not isinstance(s, dict):
+                continue
+            secs.append({"t": s.get("ticker"), "label": s.get("label"),
+                         "wk": s.get("week_chg_pct"), "day": s.get("day_chg")})
+        secs = [s for s in secs if isinstance(s.get("wk"), (int, float))]
+        secs.sort(key=lambda s: s["wk"], reverse=True)
+        if secs:
+            out["sectors"] = secs
+        cross = []
+        for key in ("gold", "silver", "oil", "brent", "copper", "dxy", "natgas"):
+            blk = (mk.get("indices") or {}).get(key) or {}
+            if not isinstance(blk, dict):
+                continue
+            # Field names here are the ones /api/markets actually ships for an
+            # index block -- day_chg (already a percent) and ytd. The richer
+            # day_chg_pct / ret_ytd names exist elsewhere in this file for a
+            # different builder and are absent here, so reading those silently
+            # yields a row of Nones.
+            row = {"k": key, "cur": blk.get("current"),
+                   "day": blk.get("day_chg"), "ytd": blk.get("ytd")}
+            if row["cur"] is not None:
+                daily = (blk.get("daily") or {})
+                row["spark"] = _tv_spark(daily.get("prices") or daily.get("values"), 30, 2)
+                cross.append(row)
+        if cross:
+            out["cross"] = cross
+    return out
+
+
+@bp.route("/api/tv-digest")
+def api_tv_digest():
+    """Compact metrics digest for /tv — a few KB instead of ~300."""
+    with _TV_DIGEST_LOCK:
+        entry = _TV_DIGEST_CACHE.get("data")
+        if entry and time.time() - entry["ts"] < _TV_DIGEST_TTL:
+            return jsonify(entry["data"])
+
+    data = _tv_build_digest()
+    # Only cache something worth serving, so a transient all-sources-down does
+    # not get pinned for five minutes.
+    if len(data) > 1:
+        with _TV_DIGEST_LOCK:
+            _TV_DIGEST_CACHE["data"] = {"ts": time.time(), "data": data}
+    log.info("API tv-digest: built with %s", ", ".join(k for k in data if k != "as_of") or "nothing")
+    return jsonify(data)
 
 
 @bp.route("/guide")
