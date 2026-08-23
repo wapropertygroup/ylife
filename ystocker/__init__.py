@@ -213,6 +213,29 @@ def create_app() -> Flask:
     def _inject_cache_bust():
         return {"cache_bust": _cache_bust}
 
+    # Brand by hostname. The same app answers on stock.li-family.us and on
+    # trade-agents.com (see deploy.sh), and the second exists precisely so the
+    # agents product can carry its own name -- redirecting or hardcoding one
+    # brand would defeat owning the domain.
+    #
+    # Matched against a set rather than a substring: a substring test on
+    # "trade-agents" would also match a staging host nobody intended to rebrand,
+    # and request.host carries the port in development.
+    _TA_HOSTS = {"trade-agents.com", "www.trade-agents.com"}
+
+    @app.context_processor
+    def _inject_brand():
+        from flask import request as _rq
+
+        host = ""
+        try:
+            host = (_rq.host or "").split(":")[0].lower()
+        except Exception:  # noqa: BLE001 - no request context (CLI, thread)
+            pass
+        is_ta = host in _TA_HOSTS
+        return {"brand_name": "TradeAgents" if is_ta else "yStocker",
+                "brand_is_ta": is_ta}
+
     @app.context_processor
     def _inject_auth_context():
         """Make google_client_id + current_user available in every template."""

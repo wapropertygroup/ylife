@@ -2233,10 +2233,28 @@ const I18n = (() => {
     FLMX: '墨西哥ETF', FLAX: '澳大利亚ETF', FLSW: '瑞士ETF',
   };
 
+  // Brand substitution, applied to every translated string.
+  //
+  // This app answers on stock.li-family.us and on trade-agents.com, and the
+  // templates already pick their brand server-side from the Host header. That is
+  // not enough on its own: seven strings in this table spell "yStocker" (the
+  // footer, the copyright line, the RSS title), and apply() writes t() straight
+  // over whatever the server rendered -- so a server-side rebrand alone would be
+  // visibly reverted a moment after load.
+  //
+  // Hooked into t() rather than into apply() so it also covers strings read
+  // directly by page scripts, and matched on exact hostname for the same reason
+  // the Python side does: a substring test would rebrand staging hosts too.
+  const _TA_HOSTS = ['trade-agents.com', 'www.trade-agents.com'];
+  const BRAND = _TA_HOSTS.indexOf(location.hostname.toLowerCase()) >= 0
+    ? 'TradeAgents' : 'yStocker';
+  const _brandise = v => (BRAND === 'yStocker' || typeof v !== 'string')
+    ? v : v.split('yStocker').join(BRAND);
+
   function t(key) {
     const entry = LANGS[key];
     if (!entry) return null;
-    return entry[current] ?? entry['en'];
+    return _brandise(entry[current] ?? entry['en']);
   }
 
   /** Localized sector/peer-group name. Falls back to the raw English key. */

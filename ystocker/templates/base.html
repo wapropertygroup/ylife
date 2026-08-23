@@ -11,7 +11,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}yStocker{% endblock %}</title>
+  {# One filter rebrands every page title, including the two dozen templates
+     that spell "yStocker" into their own {% block title %}. #}
+  <title>{% filter replace("yStocker", brand_name) %}{% block title %}yStocker{% endblock %}{% endfilter %}</title>
   <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
 
   <!-- Tailwind CSS (compiled — regenerate with: bash build_css.sh) -->
@@ -19,7 +21,7 @@
 
   <!-- Feed autodiscovery: lets an RSS reader or calendar client find these
        from any page rather than needing the URL typed in. -->
-  <link rel="alternate" type="application/rss+xml" title="yStocker Daily Commentary"
+  <link rel="alternate" type="application/rss+xml" title="{{ brand_name }} Daily Commentary"
         href="{{ url_for('main.rss_feed') }}">
   <link rel="alternate" type="text/calendar" title="FOMC Meetings"
         href="{{ url_for('main.fomc_calendar') }}">
@@ -122,7 +124,7 @@
 
       <!-- Logo -->
       <a href="{{ url_for('main.markets') }}" class="flex items-center gap-2 font-bold text-lg shrink-0">
-        <span class="grad-text">yStocker</span>
+        <span class="grad-text">{{ brand_name }}</span>
       </a>
 
       <!-- Desktop nav -->

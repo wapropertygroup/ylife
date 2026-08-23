@@ -1,5 +1,7 @@
 {% extends "base.html" %}
-{% block title %}yStocker — Trading Agents{% endblock %}
+{# On its own domain the product name is the whole title; the filter in
+   base.html would otherwise render "TradeAgents — Trading Agents". #}
+{% block title %}{% if brand_is_ta %}TradeAgents{% else %}yStocker — Trading Agents{% endif %}{% endblock %}
 
 {% block content %}
 <script src="{{ url_for('static', filename='markdown.js') }}?v={{ cache_bust or 'dev' }}"></script>
