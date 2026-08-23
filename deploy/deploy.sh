@@ -887,23 +887,29 @@ for i in \$(seq 0 \$((NUM_APPS - 1))); do
   done
 done
 
-# The redirect host needs its own certificate: it is not in APPS, so the loop
-# above never sees it.
-# trade-agents.com is not in APPS either, so it needs its own certbot call.
-# --allow-subset-of-names matters here rather than being boilerplate: www is a
-# CNAME to Squarespace until it is repointed, so demanding both names would fail
-# the whole request and leave the apex on plain HTTP.
+# trade-agents.com is not in APPS, so it needs its own certbot call.
+#
+# Its -d flags are spelled out rather than reusing CERT_D_FLAGS: that variable is
+# built inside the APPS loop above and still holds the last app's domain when the
+# loop exits, so inheriting it here would quietly attach ybackground.li-family.us
+# to this certificate.
+#
+# --allow-subset-of-names is load-bearing, not boilerplate: www.trade-agents.com
+# has no A record of its own, so demanding both names would fail the whole request
+# and leave the apex on plain HTTP.
 if ! tls_covers_domain "trade-agents.com"; then
   echo "[\$(TS)]    Certbot: trade-agents.com"
   sudo certbot --nginx --cert-name trade-agents.com \\
     -d trade-agents.com -d www.trade-agents.com \\
-    --allow-subset-of-names \$CERT_D_FLAGS --non-interactive --agree-tos \\
-    -m "\$CERT_EMAIL" --redirect \\
+    --allow-subset-of-names --non-interactive --agree-tos \\
+    -m "$CERT_EMAIL" --redirect \\
     > /tmp/certbot-trade-agents.log 2>&1 \\
     || echo "[\$(TS)]    ✗ Certbot FAILED for trade-agents.com (DNS not pointed here yet?)"
   tail -2 /tmp/certbot-trade-agents.log
 fi
 
+# The redirect host needs its own certificate too: it is not in APPS, so the loop
+# above never sees it.
 if ! tls_covers_domain "tv.li-family.us"; then
   echo "[\$(TS)]    Certbot: tv.li-family.us"
   sudo certbot --nginx --cert-name tv.li-family.us -d tv.li-family.us \
