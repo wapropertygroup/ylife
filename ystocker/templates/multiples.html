@@ -110,7 +110,7 @@
         <span data-i18n="mult.fwd_title">Forward P/E: SPY vs QQQ — consensus estimates, today</span>
         <span class="src-chip src-forward" data-i18n="mult.chip_forward">Forward</span>
       </h2>
-      <p class="text-xs text-slate-500"><span data-i18n="mult.fwd_scope">Our own reading, computed here from index constituents and recorded once a day, so this series starts at the first snapshot. For history on each index — years of it for the S&amp;P 500 — see the published consensus chart below.</span></p>
+      <p class="text-xs text-slate-500"><span data-i18n="mult.fwd_scope">Our own reading, computed here from index constituents and recorded once a day, so this series starts at the first snapshot. The chart below plots this same SPY series against FactSet's published history, which is where to see whether today's reading is high or low; QQQ stays here, because no free source measures the Nasdaq-100 on a comparable basis.</span></p>
       <p class="text-xs text-slate-500" data-i18n="mult.fwd_desc">Cap-weighted forward P/E computed from index constituents — total market value divided by total forward earnings, which is the correct aggregation. Snapshotted once a day, so this series begins at the first snapshot and lengthens by one point per day.</p>
     </div>
     <div id="vpFwdEmpty" class="hidden text-xs text-slate-500 bg-slate-800/40 border border-slate-700 rounded-lg px-3 py-2 mt-3">
@@ -128,12 +128,18 @@
 
   <div class="vp-section"><h2 data-i18n="mult.sec_consensus">Consensus Forward P/E — Published History</h2><div class="rule"></div></div>
 
-  <!-- ── Published consensus history: the history our own snapshots cannot have ─
-       Kept as its own chart rather than added to the card above, on purpose.
-       These are other aggregators' numbers on other bases, and the x-axes are
-       incompatible: 2017→today against five daily points would either squash our
-       series to a single pixel or, because lineChart aligns extra series onto the
-       longest one's dates, drop it entirely when no dates coincide. -->
+  <!-- ── Published consensus history, with our own SPY series co-plotted ───────
+       The S&P 500 side is merged: FactSet's published history and this app's own
+       daily snapshots share one axis, as two separate lines. They are never
+       joined, because they are different constructions that happen to agree
+       today (0.4% apart on the nearest dates) and a single line would hide that
+       seam forever.
+       The Nasdaq side is NOT merged. Siblis reads 25.17x on 2026-06-30 where this
+       app reads 20.32x -- a 24% gap. That is not an earnings-season effect: over
+       147 FactSet observations no 40-70 day gap since 2017 moves more than 14.4%,
+       Siblis' own largest move is 8.3%, and the eight Q2 seasons on record move
+       the S&P forward P/E by only -4.7%..+10.8%. The gap is 45/97 constituent
+       coverage, so QQQ stays out of this chart and in the card above. -->
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up">
     <div class="mb-1">
       <h2 class="text-base font-semibold text-slate-200">
@@ -141,12 +147,14 @@
         <span class="src-chip src-forward" data-i18n="mult.chip_forward">Forward</span>
       </h2>
       <p class="text-xs text-slate-500">
-        <span data-i18n="mult.consensus_desc">What analysts actually expected on each past date — the same question as the card above, answered by the firms that publish it, so it has real history. The S&amp;P 500 line is FactSet's stated forward 12-month P/E, back to 2017.</span>
+        <span data-i18n="mult.consensus_desc">What analysts actually expected on each past date — the same question as the card above, answered by the firms that publish it, so it has real history. The S&amp;P 500 line is FactSet's stated forward 12-month P/E, back to 2017, and our own daily SPY reading is drawn alongside it as a separate line.</span>
         <span id="vpConsensusStat" class="text-slate-400"></span>
       </p>
       <p class="text-xs text-slate-500 mt-1" data-i18n="mult.consensus_gap">FactSet publishes these during earnings season, so the line is dense in Jan/Feb, Apr/May, Jul/Aug and Oct/Nov and flat across the gaps between — the straight stretches are missing weeks, not still markets.</p>
+      <!-- Why one index is merged and the other is not. -->
+      <p class="text-xs text-slate-500 mt-1" data-i18n="mult.consensus_spy_note">The two S&amp;P 500 lines are separate series and are never joined end to end. They are different constructions — FactSet aggregates its own analyst collection over the full index, this app cap-weights Yahoo's per-name estimates over the constituents it holds — and they read 20.0x and 19.9x on their nearest dates. Agreeing to within half a percent today is a fact about today, not a guarantee, so the seam stays visible.</p>
       <!-- The obvious question: why is the Nasdaq dotted and so much higher. -->
-      <p class="text-xs text-amber-500/80 mt-1" data-i18n="mult.consensus_ndx_note">The Nasdaq-100 points are month-end readings from Siblis, the only free forward figure for that index — eight points from Dec 2023. They sit several turns above the QQQ number in the card above (25.2x vs 20.3x on 30 Jun 2026) because the constituent coverage and the estimate source both differ, so they are drawn as separate markers and must not be read as QQQ's own history.</p>
+      <p class="text-xs text-amber-500/80 mt-1" data-i18n="mult.consensus_ndx_note">The Nasdaq-100 points are month-end readings from Siblis, the only free forward figure for that index — eight points from Dec 2023. They sit several turns above the QQQ number in the card above (25.2x vs 20.3x on 30 Jun 2026), and that gap is not an earnings-season effect: across 147 FactSet observations no 40–70 day gap since 2017 moves more than 14.4%, Siblis' own largest move between readings is 8.3%, and the eight Q2 seasons on record move the S&amp;P forward P/E by only −4.7% to +10.8%. It is constituent coverage — 45 of 97 names — so QQQ is left out of this chart rather than drawn into a cliff that never happened.</p>
     </div>
     <div class="chart-container" style="height:280px"><canvas id="vpConsensusChart"></canvas></div>
   </div>
@@ -660,7 +668,24 @@ const _explainData = {};
       // the longest series, which would silently null out every Siblis point.
       // Build the union up front and hand both series the same array, which also
       // makes lineChart's align() a no-op.
-      const axis = Array.from(new Set([].concat(cs ? cs.dates : [], cn ? cn.dates : []))).sort();
+      // Our own SPY snapshots are co-plotted here, as a SEPARATE series that is
+      // never joined to FactSet's. The two agree closely today -- FactSet 20.0 on
+      // 2026-08-07 against 19.92 computed here, 0.4% apart -- which is exactly why
+      // they are not spliced: the agreement is a fact about today, not a
+      // guarantee, and one continuous line would hide the seam permanently.
+      // Drawn as its own colour with no fill so the eye reads "second opinion,
+      // same question", the same treatment Siblis already gets.
+      //
+      // QQQ is deliberately NOT co-plotted against Siblis. Measured: Siblis moves
+      // at most 8.3% between its own readings, FactSet at most 14.4% over any
+      // 40-70 day gap in 147 observations since 2017, and the eight Q2 earnings
+      // seasons on record move the S&P forward P/E by -4.7%..+10.8%. The 24% gap
+      // between Siblis 25.17x and our 20.32x is therefore not a calendar effect;
+      // it is 45/97 constituent coverage against Siblis' full index. Putting the
+      // two on one axis would invite exactly the reading the numbers refute.
+      const fh = (data.forward_history || []).filter(r => r && r.SPY != null);
+      const axis = Array.from(new Set([].concat(
+        cs ? cs.dates : [], cn ? cn.dates : [], fh.map(r => r.date)))).sort();
       const onAxis = s => {
         if (!s) return null;
         const m = new Map(s.dates.map((d, i) => [d, s.values[i]]));
@@ -669,6 +694,11 @@ const _explainData = {};
       const series = [];
       if (cs) series.push({ dates: axis, values: onAxis(cs), color: C_BLUE, fill: true,
         label: I18n.t('mult.series_spx_consensus') || 'S&P 500 (FactSet consensus)' });
+      if (fh.length) series.push({
+        dates: axis,
+        values: onAxis({ dates: fh.map(r => r.date), values: fh.map(r => r.SPY) }),
+        color: C_INDIGO,
+        label: I18n.t('mult.series_spy_ours') || 'SPY (computed here, daily)' });
       if (cn) series.push({ dates: axis, values: onAxis(cn), color: C_ORANGE, dash: [4, 3],
         label: I18n.t('mult.series_ndx_consensus') || 'Nasdaq-100 (Siblis, month-end)' });
 
@@ -682,9 +712,18 @@ const _explainData = {};
           + ` ${I18n.t('mult.range_since') || 'range since'} ${cs.dates[0].slice(0, 4)}:`
           + ` ${lo.toFixed(1)}x–${hi.toFixed(1)}x.`;
       }
+      // Ranges, which this chart previously did without. Now that our own daily
+      // series shares the axis it needs them: the x-axis is a category scale
+      // (Chart.js 4 with no date adapter), so every observation gets an equal
+      // slot regardless of the gap before it, and our snapshots occupy the last
+      // few slots of ~150. That is legible, but a 1Y view is what makes today's
+      // reading and FactSet's last prints directly comparable, so default there
+      // and keep All one click away.
       lineChart('vpConsensusChart', series, {
         fmt: xmult, showPoints: true, unit: 'x', xTicks: 8,
-        explainLabel: 'S&P 500 consensus forward 12-month P/E as published by FactSet since 2017',
+        ranges: [12, 60, 0], defaultRange: 12,
+        explainLabel: 'S&P 500 consensus forward 12-month P/E as published by FactSet since 2017, '
+          + 'with this app’s own daily cap-weighted SPY reading as a separate series',
       });
     }
   } catch(e) { console.warn('Multiples chart vpConsensusChart failed:', e); }
