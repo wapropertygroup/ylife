@@ -102,7 +102,7 @@ _CACHE_TTL = 24 * 60 * 60  # multpl updates daily; constituents once a day is pl
 # a field, an existing cache still looks fresh, so the API happily serves a
 # payload the new page cannot read and charts render empty with no explanation.
 # Same idea as _YIELD_CURVE_CACHE_VER in routes.py.
-_CACHE_VER = "v3"
+_CACHE_VER = "v4"
 
 # Browser UA: multpl.com serves a plain client fine, but its CDN is happier
 # with a normal UA and this host is not FRED (see fed.py for why FRED differs).
@@ -394,6 +394,19 @@ def _fetch_forward_pe(etf: str, meta: dict[str, Any]) -> Optional[dict[str, Any]
     earnings_used = 0.0
     used = 0
     missing: list[str] = []
+    # A second, deliberately separate aggregation over the names that carry a
+    # trailing multiple *as well*. Growth is the whole reason it exists, and a
+    # growth rate is only meaningful when numerator and denominator cover the
+    # same companies: SPY has 120 names with a forward P/E but 116 with both, so
+    # dividing the 120-name forward total by the 116-name trailing total would
+    # book four companies' worth of earnings as growth.
+    cap_both = 0.0
+    fwd_earnings_both = 0.0
+    ttm_earnings_both = 0.0
+    used_both = 0
+
+    def _pos(v: Any) -> bool:
+        return isinstance(v, (int, float)) and v > 0
 
     for sym in universe:
         rec = recs.get(sym)
@@ -402,13 +415,17 @@ def _fetch_forward_pe(etf: str, meta: dict[str, Any]) -> Optional[dict[str, Any]
             continue
         pe = rec.get("PE (Forward)")
         cap = rec.get("Market Cap ($B)")
-        if not isinstance(pe, (int, float)) or pe <= 0:
-            continue
-        if not isinstance(cap, (int, float)) or cap <= 0:
+        ttm = rec.get("PE (TTM)")
+        if not _pos(pe) or not _pos(cap):
             continue
         cap_used += cap
         earnings_used += cap / pe
         used += 1
+        if _pos(ttm):
+            cap_both += cap
+            fwd_earnings_both += cap / pe
+            ttm_earnings_both += cap / ttm
+            used_both += 1
 
     if earnings_used <= 0:
         log.warning("Valuation: %s — no usable cached constituent earnings", etf)
@@ -429,7 +446,7 @@ def _fetch_forward_pe(etf: str, meta: dict[str, Any]) -> Optional[dict[str, Any]
 
     log.info("Valuation: %s forward P/E %.2f from %d/%d constituents (%.0f%% by count, "
              "$%.0fB cap)", etf, fwd_pe, used, len(universe), coverage, cap_used)
-    return {
+    out: dict[str, Any] = {
         "etf": etf,
         "label": meta["label"],
         "forward_pe": round(fwd_pe, 2),
@@ -437,7 +454,44 @@ def _fetch_forward_pe(etf: str, meta: dict[str, Any]) -> Optional[dict[str, Any]
         "constituents_used": used,
         "constituents_total": len(universe),
         "market_cap_b": round(cap_used, 0),
+        # The denominator of the multiple above, which used to be computed and
+        # thrown away. Total forward earnings of the covered names, in $B.
+        "forward_earnings_b": round(earnings_used, 0),
+        # 1/PE. Worth surfacing because it is the form that compares directly to
+        # a bond yield, which is the comparison the number is usually wanted for.
+        "earnings_yield_pct": round(100.0 / fwd_pe, 2),
     }
+
+    # Per-share EPS for the ETF itself, derived rather than fetched: Yahoo
+    # returns forwardEps and trailingEps as None for both SPY and QQQ (see the
+    # module docstring), so price / multiple is the only route. Exact by
+    # construction given the multiple, and on the same basis as it.
+    etf_rec = recs.get(etf) or {}
+    price = etf_rec.get("Current Price")
+    if _pos(price):
+        out["price"] = round(float(price), 2)
+        out["forward_eps_share"] = round(float(price) / fwd_pe, 2)
+        ttm_pe_etf = etf_rec.get("PE (TTM)")
+        if _pos(ttm_pe_etf):
+            out["trailing_pe_etf"] = round(float(ttm_pe_etf), 2)
+            out["trailing_eps_share"] = round(float(price) / float(ttm_pe_etf), 2)
+
+    # Implied 12-month earnings growth, over the names that have both multiples.
+    if used_both >= _MIN_CONSTITUENTS and ttm_earnings_both > 0:
+        growth = (fwd_earnings_both / ttm_earnings_both - 1.0) * 100.0
+        out.update({
+            "trailing_pe": round(cap_both / ttm_earnings_both, 2),
+            "trailing_earnings_b": round(ttm_earnings_both, 0),
+            "growth_pct": round(growth, 1),
+            "growth_names": used_both,
+        })
+        log.info("Valuation: %s implied earnings growth %+.1f%% over %d names "
+                 "(fwd $%.0fB vs ttm $%.0fB)", etf, growth, used_both,
+                 fwd_earnings_both, ttm_earnings_both)
+    else:
+        log.info("Valuation: %s growth skipped — only %d names carry both multiples",
+                 etf, used_both)
+    return out
 
 
 # ---------------------------------------------------------------------------

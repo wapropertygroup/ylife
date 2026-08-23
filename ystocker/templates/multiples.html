@@ -124,6 +124,19 @@
     </div>
     <div class="chart-container" id="vpForwardLineWrap" style="height:280px"><canvas id="vpForwardChart"></canvas></div>
     <p class="text-[11px] text-slate-600 mt-2"><span id="vpCoverage"></span></p>
+
+    <!-- ── Earnings behind the multiple ─────────────────────────────────────
+         The P/E above is a ratio, and a ratio moving tells you nothing about
+         which half moved. These are its two halves plus what they imply, on the
+         same basis and over the same constituents. -->
+    <div id="vpEps" class="mt-3 pt-3 border-t border-slate-800" style="display:none">
+      <p class="text-xs text-slate-500 mb-2">
+        <span data-i18n="mult.eps_label">Earnings behind the multiple</span>
+        <span class="text-slate-600" data-i18n="mult.eps_derived">— per-share figures are price divided by the multiple, because Yahoo publishes no EPS at all for either ETF.</span>
+      </p>
+      <div id="vpEpsRows" class="flex flex-col gap-1"></div>
+      <p class="text-[11px] text-slate-600 mt-2" data-i18n="mult.eps_growth_note">Implied growth compares forward with trailing earnings over only the names carrying both multiples, so the two sides cover the same companies. It is a by-product of Yahoo's per-name estimates, not a forecast of ours — worth noting it lands close to FactSet's stated 30.0% for CY 2026.</p>
+    </div>
     <!-- ── Advancers / decliners ───────────────────────────────────────────
          Same two indices, so it belongs on this card, but it is a different
          statistic on a different denominator: the P/E above is computed over
@@ -651,6 +664,45 @@ const _explainData = {};
         fmt: xmult, showPoints: true, ranges: false, unit: 'x',
         explainLabel: 'Cap-weighted forward P/E for SPY and QQQ',
       });
+    }
+
+    // ── Earnings behind the multiple ────────────────────────────────────
+    const epsWrap = document.getElementById('vpEps');
+    const epsRows = document.getElementById('vpEpsRows');
+    if (epsWrap && epsRows) {
+      const ORDER = ['SPY', 'QQQ'];
+      const rank = e => { const i = ORDER.indexOf(e); return i < 0 ? 99 : i; };
+      const bn = v => v == null ? '—'
+        : v >= 1000 ? '$' + (v / 1000).toFixed(2) + 'T' : '$' + Math.round(v) + 'B';
+      const rows = Object.values(F).slice().sort((a, b) => rank(a.etf) - rank(b.etf))
+        .filter(b => b.forward_earnings_b != null)
+        .map(b => {
+          const bits = [];
+          if (b.forward_eps_share != null) {
+            bits.push(`${I18n.t('mult.eps_fwd') || 'fwd EPS'} `
+              + `<b class="text-slate-300">$${b.forward_eps_share.toFixed(2)}</b>`
+              + (b.trailing_eps_share != null
+                 ? ` <span class="text-slate-600">${I18n.t('mult.eps_vs') || 'vs'} `
+                   + `$${b.trailing_eps_share.toFixed(2)} ${I18n.t('mult.eps_ttm') || 'ttm'}</span>` : ''));
+          }
+          bits.push(`${I18n.t('mult.eps_pool') || 'earnings'} `
+            + `<b class="text-slate-300">${bn(b.forward_earnings_b)}</b>`);
+          if (b.earnings_yield_pct != null) {
+            bits.push(`${I18n.t('mult.eps_yield') || 'earnings yield'} `
+              + `<b class="text-slate-300">${b.earnings_yield_pct.toFixed(2)}%</b>`);
+          }
+          if (b.growth_pct != null) {
+            const g = b.growth_pct;
+            bits.push(`${I18n.t('mult.eps_growth') || 'implied growth'} `
+              + `<b class="${g >= 0 ? 'vp-up' : 'vp-down'}">${g >= 0 ? '+' : ''}${g.toFixed(1)}%</b>`
+              + `<span class="text-slate-600"> (${b.growth_names}`
+              + `${I18n.t('mult.eps_names_suffix') || ' names'})</span>`);
+          }
+          return `<div class="text-[11px] text-slate-500">`
+               + `<span class="text-slate-400 font-semibold">${b.etf}</span> `
+               + bits.join(' <span class="text-slate-700">·</span> ') + `</div>`;
+        });
+      if (rows.length) { epsRows.innerHTML = rows.join(''); epsWrap.style.display = ''; }
     }
 
     const cov = document.getElementById('vpCoverage');
