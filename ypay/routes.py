@@ -197,6 +197,16 @@ def cancel():
 # The pack table lives in ystocker.credits so that the app that *sells* runs and
 # the app that *spends* them cannot drift apart on how many a pack contains. Both
 # apps run from the same checkout on the same box, so this is a plain import.
+def _is_ta_host() -> bool:
+    """True when this request arrived on the TradeAgents side of the house."""
+    try:
+        host = (request.host or "").split(":")[0].lower()
+    except Exception:  # noqa: BLE001
+        return False
+    return host in {"pay.trade-agents.com", "trade-agents.com",
+                    "www.trade-agents.com"}
+
+
 def _agent_packs():
     """The run packs, or [] if yStocker is not importable from here."""
     try:
@@ -273,7 +283,11 @@ def api_checkout():
     if item and not (buyer_email and "@" in buyer_email):
         # Refused rather than sold: a run pack with nowhere to deliver the credits
         # is a payment we would have to refund by hand.
-        return jsonify({"error": "Sign in on stock.li-family.us first so the "
+        # Names the site the buyer actually came from. Hardcoding
+        # stock.li-family.us sent a TradeAgents buyer to a domain they had never
+        # seen, at the one moment they are being asked to trust the page.
+        _origin = "trade-agents.com" if _is_ta_host() else "stock.li-family.us"
+        return jsonify({"error": f"Sign in on {_origin} first so the "
                                  "runs can be added to your account."}), 400
     if not item:
         item = next((i for i in DEFAULT_ITEMS if i["id"] == item_id), None)

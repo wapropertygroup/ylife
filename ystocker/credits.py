@@ -40,6 +40,7 @@ from __future__ import annotations
 import logging
 import os
 import threading
+from urllib.parse import urlencode
 from datetime import datetime, timezone
 from typing import Any, Optional
 
@@ -51,6 +52,33 @@ REGION = os.environ.get("AWS_REGION", "us-west-2")
 # Where a user is sent to buy more. Configurable so a staging box can point
 # somewhere that is not the live payment page.
 PAY_URL = os.environ.get("AGENTS_PAY_URL", "https://pay.li-family.us")
+
+# Checkout host per brand. The agents page answers on stock.li-family.us and on
+# trade-agents.com, and handing a TradeAgents user to pay.li-family.us at the
+# moment card details are asked for is the worst possible place to show them a
+# domain they do not recognise.
+#
+# A dict rather than a second env var because AGENTS_PAY_URL is read once at
+# import: it is process-global, so setting it to the TradeAgents host would send
+# li-family.us buyers there too. An explicit env override still wins outright,
+# since that is what a staging box needs.
+_PAY_BY_HOST = {
+    "trade-agents.com":     "https://pay.trade-agents.com",
+    "www.trade-agents.com": "https://pay.trade-agents.com",
+}
+
+
+def pay_url() -> str:
+    """The checkout host for the domain this request arrived on."""
+    if os.environ.get("AGENTS_PAY_URL"):
+        return PAY_URL
+    try:
+        from flask import request
+
+        host = (request.host or "").split(":")[0].lower()
+    except Exception:  # noqa: BLE001 - no request context (thread, CLI)
+        return PAY_URL
+    return _PAY_BY_HOST.get(host, PAY_URL)
 
 _table = None
 _table_lock = threading.Lock()
@@ -185,11 +213,33 @@ def balance(email: Optional[str]) -> int:
 
 def summary(email: Optional[str]) -> dict[str, Any]:
     """Balance plus what the page needs to offer a top-up."""
+    # The address is appended because ypay hides the run packs without it -- see
+    # its index.html -- so the bare link led to a page with nothing to buy, and
+    # /api/checkout refuses an emailless purchase anyway. `next` brings the buyer
+    # back to the brand they started from rather than always to li-family.us.
+    base = pay_url()
+    query = {}
+    if email:
+        query["email"] = email
+    back = _return_to()
+    if back:
+        query["next"] = back
     return {
         "balance": balance(email),
-        "pay_url": PAY_URL,
+        "pay_url": base + ("?" + urlencode(query) if query else ""),
         "packs": packs_public(),
     }
+
+
+def _return_to() -> str:
+    """Absolute https URL of the agents page on the host being used, or ""."""
+    try:
+        from flask import request, url_for
+
+        url = request.url_root.rstrip("/") + url_for("main.agents")
+    except Exception:  # noqa: BLE001
+        return ""
+    return url if url.startswith("https://") else ""
 
 
 # ---------------------------------------------------------------------------

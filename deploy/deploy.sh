@@ -827,6 +827,50 @@ TACONF
   NGINX_CHANGED=true
 fi
 
+# ── pay.trade-agents.com: checkout on the TradeAgents brand ──────────────────
+# Its own file rather than a second server block in ytradeagents.conf, because
+# certbot rewrites that file to add the 443 server -- appending here would either
+# be skipped by the idempotency check or clobber certbot's work.
+#
+# Fronts ypay on 8005, the same app behind pay.li-family.us. ypay builds its
+# Stripe success and cancel URLs from request.host_url, so it follows whichever
+# host it is served on with no Stripe-side configuration.
+TAP_CONF="/etc/nginx/conf.d/ypaytrade.conf"
+if ! sudo test -f "\$TAP_CONF" || ! sudo grep -qF "server_name pay.trade-agents.com;" "\$TAP_CONF"; then
+  echo "[\$(TS)]    pay.trade-agents.com nginx config writing..."
+  sudo tee "\$TAP_CONF" > /dev/null <<'TAPCONF'
+# pay.trade-agents.com — checkout for TradeAgents, proxying the same ypay app that
+# serves pay.li-family.us.
+#
+# The point is brand continuity at the one moment it matters most: a buyer who
+# started on trade-agents.com should not be shown an unfamiliar domain while being
+# asked for card details. Nothing about the payment itself differs.
+server {
+    listen 80;
+    server_name pay.trade-agents.com;
+
+    location / {
+        proxy_pass         http://127.0.0.1:8005;
+        proxy_set_header   Host              $host;
+        proxy_set_header   X-Real-IP         $remote_addr;
+        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto $scheme;
+        proxy_set_header   X-Forwarded-Host  $host;
+        proxy_read_timeout 130s;
+        proxy_connect_timeout 10s;
+        proxy_send_timeout 130s;
+        proxy_next_upstream error timeout http_502 http_503;
+    }
+
+    location /static/ {
+        alias /opt/ystocker/ypay/static/;
+        expires 7d;
+    }
+}
+TAPCONF
+  NGINX_CHANGED=true
+fi
+
 if [[ "\$NGINX_CHANGED" == "true" ]]; then
   sudo rm -f /etc/nginx/conf.d/default.conf /etc/nginx/sites-enabled/default 2>/dev/null || true
   sudo systemctl enable nginx
@@ -906,6 +950,18 @@ if ! tls_covers_domain "trade-agents.com"; then
     > /tmp/certbot-trade-agents.log 2>&1 \\
     || echo "[\$(TS)]    ✗ Certbot FAILED for trade-agents.com (DNS not pointed here yet?)"
   tail -2 /tmp/certbot-trade-agents.log
+fi
+
+# pay.trade-agents.com, same reasoning as the apex above: not in APPS, so its own
+# call, and non-fatal because the record may not exist yet.
+if ! tls_covers_domain "pay.trade-agents.com"; then
+  echo "[\$(TS)]    Certbot: pay.trade-agents.com"
+  sudo certbot --nginx --cert-name pay.trade-agents.com \\
+    -d pay.trade-agents.com \\
+    --non-interactive --agree-tos -m "$CERT_EMAIL" --redirect \\
+    > /tmp/certbot-pay-trade-agents.log 2>&1 \\
+    || echo "[\$(TS)]    ✗ Certbot FAILED for pay.trade-agents.com (DNS not pointed here yet?)"
+  tail -2 /tmp/certbot-pay-trade-agents.log
 fi
 
 # The redirect host needs its own certificate too: it is not in APPS, so the loop

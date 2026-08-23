@@ -59,6 +59,26 @@ def create_app() -> Flask:
 
     app = Flask(__name__)
     app.secret_key = os.environ.get("YPAY_SECRET_KEY", "ypay-dev-secret")
+    # Brand by hostname, mirroring ystocker/__init__.py. This app answers on
+    # pay.li-family.us and on pay.trade-agents.com, and a buyer who started on
+    # trade-agents.com must not be handed to a page called yPay at the exact
+    # moment they are asked for card details.
+    _TA_PAY_HOSTS = {"pay.trade-agents.com", "trade-agents.com",
+                     "www.trade-agents.com"}
+
+    @app.context_processor
+    def _inject_brand():
+        from flask import request as _rq
+
+        host = ""
+        try:
+            host = (_rq.host or "").split(":")[0].lower()
+        except Exception:  # noqa: BLE001 - no request context
+            pass
+        is_ta = host in _TA_PAY_HOSTS
+        return {"brand_name": "TradeAgents" if is_ta else "yPay",
+                "brand_is_ta": is_ta}
+
     app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
     app.config["SESSION_COOKIE_HTTPONLY"] = True
 

@@ -45,6 +45,24 @@ until they are done by hand:
   must be added to the authorized JavaScript origins of `GOOGLE_CLIENT_ID` or the
   sign-in button fails silently and the page is decorative.
 
+`pay.trade-agents.com` is an eleventh vhost fronting **ypay on 8005** — the same
+app as `pay.li-family.us`. It exists for brand continuity at the one moment it
+matters: a buyer who started on trade-agents.com should not be shown an
+unfamiliar domain while being asked for card details. It needs its own A record;
+until then the vhost is inert and its certbot call fails non-fatally.
+
+Nothing about the payment differs. ypay builds its Stripe success and cancel URLs
+from `request.host_url`, so it follows whichever host serves it with **no
+Stripe-side configuration**. The buyer handoff is by email in the query string,
+not a shared session — `SESSION_COOKIE_DOMAIN` is unset in both apps, so the
+session does not even cross `stock.` to `pay.`, which is why `credits.summary()`
+appends `?email=` and `?next=`. Without the address ypay hides the run packs
+entirely, so a bare link led to a page with nothing to buy.
+
+`AGENTS_PAY_URL` still overrides everything for staging, but it is read once at
+import and so is process-global — which is exactly why the per-brand mapping is a
+dict in `credits.py` rather than a second env var.
+
 The agents quotas in `quota.py` are per box, not per domain, so a second hostname
 adds no new billing exposure — but the 60/day global ceiling is shared with
 whatever traffic the new name attracts.

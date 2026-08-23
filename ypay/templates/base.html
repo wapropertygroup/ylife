@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}yPay — Payments{% endblock %}</title>
+  <title>{% filter replace("yPay", brand_name) %}{% block title %}yPay — Payments{% endblock %}{% endfilter %}</title>
   <link rel="icon" type="image/svg+xml" href="{{ url_for('pay.static', filename='favicon.svg') }}">
 
   <!-- Tailwind CSS (compiled — regenerate with: bash build_css.sh) -->
@@ -33,7 +33,7 @@
         <svg class="w-6 h-6 text-brand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/>
         </svg>
-        <span class="bg-gradient-to-r from-indigo-400 to-violet-400 bg-clip-text text-transparent">yPay</span>
+        <span class="bg-gradient-to-r from-indigo-400 to-violet-400 bg-clip-text text-transparent">{{ brand_name }}</span>
       </a>
 
       <div class="ml-auto flex items-center gap-2">
@@ -57,7 +57,7 @@
   </main>
 
   <footer class="border-t border-slate-200 dark:border-slate-800 py-3 text-center text-xs text-slate-500 dark:text-slate-600">
-    <span>yPay &middot; Secure payments via Stripe</span>
+    <span>{{ brand_name }} &middot; Secure payments via Stripe</span>
     &nbsp;&middot;&nbsp;
     <a href="https://li-family.us" class="hover:text-brand transition">li-family.us</a>
     &nbsp;&middot;&nbsp;
