@@ -222,11 +222,16 @@
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
     <div class="mb-1">
       <h3 class="text-sm font-semibold text-slate-300">
-        <span data-i18n="mult.spxeps_title">S&amp;P 500 Trailing Earnings per Share</span>
+        <span data-i18n="mult.spxeps_title">S&amp;P 500 Trailing Earnings per Share (as reported)</span>
         <span class="src-chip src-trailing" data-i18n="mult.chip_trailing">Trailing</span>
       </h3>
       <p class="text-xs text-slate-500 mt-0.5" data-i18n="mult.spxeps_desc">The denominator behind the P/E above. A multiple can fall because prices dropped or because earnings grew, and only this series distinguishes the two.</p>
     </div>
+      <!-- The single most-questioned number on this page. Three different EPS
+           figures for the same index circulate widely and differ by ~50%, so the
+           basis is stated here rather than leaving a reader to conclude the
+           series is simply wrong. -->
+      <p class="text-xs text-amber-500/80 mt-1" data-i18n="mult.spxeps_basis">Sources quoting $300 or $400+ are not contradicting this. Three different earnings figures circulate for the same index: this is <strong>as-reported</strong> (GAAP) trailing 12-month EPS, which is what multpl&rsquo;s P/E is built on; <strong>operating</strong> (adjusted) trailing EPS excludes write-downs and typically runs 10&ndash;20% higher; and <strong>forward</strong> 12-month operating EPS &mdash; the FactSet consensus above, at 20.0x &mdash; is higher again, roughly 48% above this series. All three are real; they differ by what is excluded and by which twelve months they cover.</p>
     <div class="chart-container" style="height:240px"><canvas id="vpSpxEpsChart"></canvas></div>
   </div>
 

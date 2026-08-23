@@ -277,7 +277,7 @@ def _nominal_eps(multpl: dict[str, Any]) -> Optional[dict[str, Any]]:
     return {
         "dates": [f"{m}-01" for m in months],
         "values": [round(price[m] / pe[m], 2) for m in months],
-        "label": "S&P 500 Trailing EPS (nominal)",
+        "label": "S&P 500 Trailing EPS (as reported, nominal)",
         "unit": "usd", "source": "multpl.com (derived)",
     }
 
