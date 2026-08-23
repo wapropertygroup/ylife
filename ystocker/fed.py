@@ -441,6 +441,8 @@ def start_background_thread() -> None:
       TTL expiry never waits for a cold fetch.
     """
 
+    from ystocker import warmup
+
     def _loop() -> None:
         # ── Startup: warm memory cache from disk if available ──────────────
         try:
@@ -454,7 +456,8 @@ def start_background_thread() -> None:
                          len(disk.get("series", {})))
             else:
                 log.info("Fed background: no disk cache — fetching FRED data now")
-                refresh_cache()
+                with warmup.cold_build('fed'):
+                    refresh_cache()
         except Exception as exc:
             log.warning("Fed background: startup warm failed: %s", exc)
 
@@ -463,7 +466,8 @@ def start_background_thread() -> None:
             time.sleep(_CACHE_TTL)
             try:
                 log.info("Fed background: 24h TTL elapsed — refreshing FRED data")
-                refresh_cache()
+                with warmup.cold_build('fed'):
+                    refresh_cache()
                 log.info("Fed background: daily refresh complete")
             except Exception as exc:
                 log.warning("Fed background: daily refresh failed: %s", exc)

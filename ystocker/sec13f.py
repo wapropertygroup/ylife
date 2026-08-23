@@ -1547,11 +1547,14 @@ def is_warming() -> bool:
 
 def start_background_thread() -> None:
     """Start background thread: load or refresh on startup, then every 24h."""
+    from ystocker import warmup
+
     def _loop():
         global _sec13f_warming
         if not _load_cache():
             log.info("13F: no fresh disk cache — fetching now")
-            refresh_cache()
+            with warmup.cold_build('sec13f'):
+                refresh_cache()
         while True:
             with _sec13f_lock:
                 last = _sec13f_ts
@@ -1559,7 +1562,8 @@ def start_background_thread() -> None:
             sleep_for = max(sleep_for, 0)
             log.info("Next 13F refresh in %.1fh", sleep_for / 3600)
             time.sleep(sleep_for)
-            refresh_cache()
+            with warmup.cold_build('sec13f'):
+                refresh_cache()
 
     t = threading.Thread(target=_loop, daemon=True, name="sec13f-warmer")
     t.start()

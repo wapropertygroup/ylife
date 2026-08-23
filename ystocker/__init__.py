@@ -265,8 +265,13 @@ def create_app() -> Flask:
     from ystocker.valuation import start_background_thread as _start_valuation_thread
     _start_valuation_thread()
 
-    # Start market-breadth warm-up + daily refresh. The rebuild downloads 500+
-    # tickers (~20s), so it must never run inside a request — see breadth.py.
+    # Start market-breadth warm-up + daily refresh. The rebuild downloads 518
+    # tickers (measured 81.9s on the box), so it must never run inside a request
+    # — /api/breadth answers 202 until it lands. Its build also runs under
+    # ystocker.warmup's gate, which serialises the cold builds of every module
+    # below against each other; they all start within the same millisecond and
+    # mostly share a 24h TTL, so left unserialised they collide both at boot and
+    # once a day forever after, on two vCPUs.
     from ystocker.breadth import start_background_thread as _start_breadth_thread
     _start_breadth_thread()
 

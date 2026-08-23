@@ -4962,10 +4962,31 @@ function _renderBreadth(range) {
 
 (async function() {
   try {
-    const resp = await fetch('/api/breadth');
-    if (!resp.ok) return;
-    _brData = await resp.json();
-    if (_brData.error) return;
+    // /api/breadth answers 202 + {warming:true} while the background thread does
+    // the 500-ticker build, rather than blocking the request for ~82s as it used
+    // to. 202 is a 2xx, so resp.ok alone would accept the warming stub as data
+    // and render an empty chart with no retry — the status has to be inspected.
+    const MAX_WAIT_MS = 180000, EVERY_MS = 5000;
+    const started = Date.now();
+    let announced = false;
+    while (true) {
+      const resp = await fetch('/api/breadth');
+      if (!resp.ok && resp.status !== 202) return;
+      const d = await resp.json();
+      if (d && d.error) return;
+      if (!(d && d.warming)) { _brData = d; break; }
+      if (Date.now() - started > MAX_WAIT_MS) {
+        console.warn('Breadth: still warming after 180s — giving up for this load');
+        return;
+      }
+      if (!announced) {
+        // The section is below the fold on most screens, so a spinner is not
+        // worth it; one console line is enough to tell a cold start from a break.
+        console.info('Breadth: cache warming, retrying every 5s…');
+        announced = true;
+      }
+      await new Promise(r => setTimeout(r, EVERY_MS));
+    }
     _renderBreadthLegend();
     _renderBreadthFootnote();
     _renderAdvDec();

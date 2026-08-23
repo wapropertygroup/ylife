@@ -874,6 +874,8 @@ def start_background_thread() -> None:
     the ~600 constituent lookups happen once per deploy rather than per worker.
     """
 
+    from ystocker import warmup
+
     def _loop() -> None:
         try:
             disk = _load_disk_cache()
@@ -886,7 +888,8 @@ def start_background_thread() -> None:
                          "(%d snapshot days)", len(disk.get("forward_history", [])))
             else:
                 log.info("Valuation background: no disk cache — building now")
-                refresh_cache()
+                with warmup.cold_build('valuation'):
+                    refresh_cache()
         except Exception as exc:
             log.warning("Valuation background: startup warm failed: %s", exc)
 
@@ -903,7 +906,8 @@ def start_background_thread() -> None:
             time.sleep(sleep_for)
             try:
                 log.info("Valuation background: refreshing")
-                refresh_cache()
+                with warmup.cold_build('valuation'):
+                    refresh_cache()
             except Exception as exc:
                 log.warning("Valuation background: refresh failed: %s", exc)
 

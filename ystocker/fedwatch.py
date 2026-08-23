@@ -752,6 +752,8 @@ def start_background_thread() -> None:
     forked workers inherit a warm snapshot and never pay for a cold fetch.
     """
 
+    from ystocker import warmup
+
     def _loop() -> None:
         try:
             disk = _load_disk_cache()
@@ -764,7 +766,8 @@ def start_background_thread() -> None:
                          len(disk.get("meetings", [])))
             else:
                 log.info("FedWatch background: no disk cache — computing now")
-                refresh_cache()
+                with warmup.cold_build('fedwatch'):
+                    refresh_cache()
         except Exception as exc:
             log.warning("FedWatch background: startup warm failed: %s", exc)
 
@@ -784,7 +787,8 @@ def start_background_thread() -> None:
             time.sleep(sleep_for)
             try:
                 log.info("FedWatch background: refreshing")
-                refresh_cache()
+                with warmup.cold_build('fedwatch'):
+                    refresh_cache()
             except Exception as exc:
                 log.warning("FedWatch background: refresh failed: %s", exc)
 

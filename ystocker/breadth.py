@@ -71,6 +71,9 @@ log = logging.getLogger(__name__)
 
 _CACHE_FILE = Path(__file__).parent.parent / "cache" / "breadth_cache.json"
 _CACHE_TTL  = 24 * 60 * 60   # 24 hours
+# Public alias: /api/breadth serves peek() output, which ignores the TTL, and has
+# to label the result stale or fresh. It should not have to reach for a private.
+CACHE_TTL = _CACHE_TTL
 
 # Moving-average periods (trading days) charted as breadth diffusion indices.
 # Ordered short -> long; the UI colours them as an ordinal ramp in this order.
@@ -534,13 +537,26 @@ def refresh_cache() -> None:
 def start_background_thread() -> None:
     """Warm breadth on startup, then rebuild daily.
 
-    The rebuild downloads 500+ tickers and takes ~25s, far longer than the
-    nginx/Gunicorn request budget — so it must never happen inside a request.
-    This thread guarantees the first visitor always hits a warm cache.
+    The rebuild downloads 518 tickers and was measured at 81.9s on the box, far
+    longer than the nginx/Gunicorn request budget — so it must never happen
+    inside a request. This thread guarantees the first visitor always hits a warm
+    cache, and /api/breadth answers 202 until it does rather than blocking.
+
+    Both build paths run under ystocker.warmup's gate, which serialises them
+    against the other eight warm-up threads. This is the heaviest of them, and it
+    used to collide with the markets warm-up and the rolling ticker refresher on
+    two vCPUs.
     """
+    from ystocker import warmup
 
     def _loop() -> None:
-        time.sleep(10)  # let Gunicorn finish booting before a 500-ticker fetch
+        # 45s, not 10. The markets warm-up fires at 8s and the rolling ticker
+        # refresher at 5s, both hitting Yahoo, and the old 10s put the heaviest
+        # download in the app right on top of them — that three-way collision on
+        # two vCPUs is what made /markets time out for ~2 minutes after a restart.
+        # Starting late costs nothing now that /api/breadth answers 202 and the
+        # client retries, and on a warm box this path is a single file read.
+        time.sleep(45)
         try:
             disk = _load_disk_cache()
             if disk:
@@ -552,7 +568,8 @@ def start_background_thread() -> None:
                          disk.get("asof"))
             else:
                 log.info("Breadth background: no fresh disk cache — computing now")
-                refresh_cache()
+                with warmup.cold_build("breadth"):
+                    refresh_cache()
         except Exception as exc:
             log.warning("Breadth background: startup warm failed: %s", exc)
 
@@ -560,7 +577,12 @@ def start_background_thread() -> None:
             time.sleep(_CACHE_TTL)
             try:
                 log.info("Breadth background: 24h TTL elapsed — recomputing")
-                refresh_cache()
+                # Gated on the daily path too: every warm-up thread started in the
+                # same millisecond and most carry a 24h TTL, so their refreshes
+                # come due simultaneously for the life of the process, not just at
+                # boot.
+                with warmup.cold_build("breadth"):
+                    refresh_cache()
                 log.info("Breadth background: daily refresh complete")
             except Exception as exc:
                 log.warning("Breadth background: daily refresh failed: %s", exc)

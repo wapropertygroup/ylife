@@ -1437,6 +1437,8 @@ def start_background_thread() -> None:
     the ~10 MB download happens once per deploy rather than once per worker.
     """
 
+    from ystocker import warmup
+
     def _loop() -> None:
         try:
             disk = _load_disk_cache()
@@ -1448,7 +1450,8 @@ def start_background_thread() -> None:
                 log.info("Housing background: memory cache warmed from disk")
             else:
                 log.info("Housing background: no disk cache — downloading now")
-                refresh_cache()
+                with warmup.cold_build('housing'):
+                    refresh_cache()
         except Exception as exc:
             log.warning("Housing background: startup warm failed: %s", exc)
 
@@ -1467,7 +1470,8 @@ def start_background_thread() -> None:
             time.sleep(sleep_for)
             try:
                 log.info("Housing background: refreshing")
-                refresh_cache()
+                with warmup.cold_build('housing'):
+                    refresh_cache()
             except Exception as exc:
                 log.warning("Housing background: refresh failed: %s", exc)
 

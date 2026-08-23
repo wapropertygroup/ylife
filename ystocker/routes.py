@@ -6241,13 +6241,36 @@ def api_skew():
 def api_breadth():
     """Market breadth: % of S&P 500 above each key MA + RSP/SPY concentration.
 
-    All caching, the 500-ticker download and the diffusion-index maths live in
-    ystocker.breadth, which is warmed by a background thread — a request should
-    always land on a cache hit. See that module for why the breadth series are
-    computed locally instead of pulled from Yahoo's (nonexistent) ^SPXA*R feeds.
+    Never builds in the request. This used to call ``get_breadth()``, which falls
+    through to the 500-ticker download when the cache is cold -- measured at
+    **81.9s** on the box, against an nginx/Gunicorn budget of a few seconds and
+    only two workers to lose. One cold request therefore took the whole app down:
+    /markets and /api/multiples timed out alongside it, because both workers were
+    parked on Yahoo. breadth.py's own docstring already said the rebuild "must
+    never happen inside a request"; this endpoint was the one place that did.
+
+    So: serve whatever is already paid for, stale included -- a day-old diffusion
+    index still answers "is breadth narrowing?" and ships its own ``asof`` -- and
+    otherwise report 202 and let the background thread do the work, the same
+    contract /api/multiples has used all along.
     """
     try:
-        return jsonify(breadth.get_breadth())
+        cached = breadth.peek()
+        if cached:
+            # peek() ignores TTL, so say when the payload is past it rather than
+            # passing week-old data off as current. The client shows the date.
+            ts = cached.get("_ts") or 0
+            stale = (time.time() - ts) >= breadth.CACHE_TTL if ts else True
+            return jsonify({**cached, "stale": stale or bool(cached.get("stale"))})
+
+        if breadth.is_warming():
+            log.info("API breadth: build in progress, returning 202")
+            return jsonify({"status": "warming", "warming": True}), 202
+
+        log.info("API breadth: no cache, starting background rebuild")
+        threading.Thread(target=breadth.refresh_cache, daemon=True,
+                         name="breadth-auto-warm").start()
+        return jsonify({"status": "initializing", "warming": True}), 202
     except Exception as exc:
         log.warning("api_breadth failed: %s", exc)
         return jsonify({"error": str(exc)}), 502
