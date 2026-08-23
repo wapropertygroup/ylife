@@ -2977,6 +2977,25 @@ def multiples_refresh():
     return redirect(url_for("main.multiples"))
 
 
+def _adv_dec_cached() -> dict | None:
+    """Per-index advancers/decliners, but only if breadth is already cached.
+
+    Same contract as :func:`_breadth_pct50_cached`: ``peek()`` never rebuilds, so
+    a caller cannot accidentally inherit breadth's ~25s 500-ticker download. An
+    absent return means "not warm yet", which callers render as a hidden row
+    rather than as zeros.
+    """
+    try:
+        payload = breadth.peek()
+        if not payload:
+            return None
+        adv = payload.get("adv_dec")
+        return adv if adv else None
+    except Exception as exc:
+        log.debug("adv_dec unavailable: %s", exc)
+        return None
+
+
 @bp.route("/api/multiples")
 def api_multiples():
     """JSON API — index P/E multiples. 202 while the cache is being rebuilt."""
@@ -2993,6 +3012,14 @@ def api_multiples():
                                 "warming": True}), 202
             resp = {k: v for k, v in data.items() if not k.startswith("_")}
             resp["status"] = "ok"
+            # Advance/decline rides along so the multiples page can show it on the
+            # SPY-vs-QQQ card without a second request for the 84 KB breadth
+            # payload. peek() never rebuilds, so this cannot inherit breadth's
+            # ~25s 500-ticker download; if breadth is not warm yet the key is
+            # simply absent and the card hides that row.
+            adv = _adv_dec_cached()
+            if adv:
+                resp["adv_dec"] = adv
             log.info("API multiples: served from cache (%d trailing series, %d forward)",
                      len(resp.get("multpl", {})), len(resp.get("forward", {})))
             return jsonify(resp)

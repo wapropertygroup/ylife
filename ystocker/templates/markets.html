@@ -757,6 +757,17 @@
       <div class="chart-container" style="height:196px"><canvas id="rspSpyChart"></canvas></div>
     </div>
   </div>
+  <!-- ── Advancers / decliners, per index ────────────────────────────────────
+       The diffusion indices above answer "how much of the index is in an
+       uptrend"; this answers "how many names rose in the last session", which is
+       a different and more immediate question. Populated from the same download,
+       so it costs nothing extra, and it is the only place on this page where the
+       Nasdaq-100 gets a breadth reading of its own. -->
+  <div id="advDecBlock" class="mt-4 pt-4 border-t border-slate-800" style="display:none">
+    <p class="text-xs text-slate-500 mb-2" data-i18n="markets.advdec_label">Advancers vs Decliners — last completed session</p>
+    <div id="advDecRows" class="grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
+    <p class="text-[10px] text-slate-600 mt-2" id="advDecNote"></p>
+  </div>
 </div>
 
 <!-- ── Treasury Yield Curve row ──────────────────────────────────────────── -->
@@ -4790,6 +4801,68 @@ function _renderBreadthFootnote() {
   el.textContent = tpl.replace('{n}', n ?? '—').replace('{d}', _brData.asof || '—');
 }
 
+function _renderAdvDec() {
+  const block = document.getElementById('advDecBlock');
+  const rows = document.getElementById('advDecRows');
+  if (!block || !rows || !_brData) return;
+  const ad = _brData.adv_dec;
+  // Absent on a cache built before this shipped, and {} when the build ran but
+  // no index had enough participating names. Either way there is nothing honest
+  // to draw, so the block stays hidden rather than showing zeros.
+  if (!ad || !Object.keys(ad).length) { block.style.display = 'none'; return; }
+
+  const T = k => _brI18n()?.t(k);
+  // SPY before QQQ regardless of key order, matching every other paired display.
+  const ORDER = ['SPY', 'QQQ'];
+  const keys = Object.keys(ad).sort((a, b) => {
+    const i = ORDER.indexOf(a), j = ORDER.indexOf(b);
+    return (i < 0 ? 99 : i) - (j < 0 ? 99 : j);
+  });
+
+  rows.innerHTML = keys.map(k => {
+    const d = ad[k];
+    const decided = d.up + d.down;
+    // Bar is up vs down only. Including flat names would make a 0.8%-wide
+    // sliver that reads as a rendering artefact, and the count is in the text.
+    const pct = decided > 0 ? (d.up / decided * 100) : 50;
+    const ratio = d.down > 0 ? (d.up / d.down) : null;
+    const flat = d.unchanged
+      ? ` · ${d.unchanged} ${T('markets.advdec_flat') || 'flat'}` : '';
+    return `<div>
+      <div class="flex items-baseline justify-between mb-1">
+        <span class="text-xs font-semibold text-slate-300">${d.label || k}</span>
+        <span class="text-xs font-mono">
+          <span class="text-emerald-400">${d.up} ▲</span>
+          <span class="text-slate-600 mx-1">/</span>
+          <span class="text-rose-400">${d.down} ▼</span>
+        </span>
+      </div>
+      <div class="flex h-1.5 rounded-full overflow-hidden bg-slate-800" role="img"
+           aria-label="${d.up} up, ${d.down} down">
+        <div class="bg-emerald-500" style="width:${pct.toFixed(1)}%"></div>
+        <div class="bg-rose-500" style="width:${(100 - pct).toFixed(1)}%"></div>
+      </div>
+      <p class="text-[10px] text-slate-600 mt-1">
+        ${pct.toFixed(0)}% ${T('markets.advdec_advancing') || 'advancing'}${ratio != null
+          ? ` · ${ratio.toFixed(2)}:1` : ''} · ${d.counted}/${d.universe} ${
+          T('markets.advdec_counted') || 'counted'}${flat}
+      </p>
+    </div>`;
+  }).join('');
+
+  // One date line for the whole block: both indices share the session, and
+  // saying it once is what keeps a 24h-old count from reading as live.
+  const any = ad[keys[0]];
+  const note = document.getElementById('advDecNote');
+  if (note) {
+    const tpl = T('markets.advdec_note')
+      || 'Close-to-close change from {p} to {d}. Refreshed daily, so during a '
+       + 'session this shows the previous close, not a live count.';
+    note.textContent = tpl.replace('{p}', any.prev || '—').replace('{d}', any.as_of || '—');
+  }
+  block.style.display = '';
+}
+
 function _renderBreadth(range) {
   if (!_brData) return;
   _brRange = range || _brRange;
@@ -4895,14 +4968,17 @@ function _renderBreadth(range) {
     if (_brData.error) return;
     _renderBreadthLegend();
     _renderBreadthFootnote();
+    _renderAdvDec();
     _renderBreadth('3y');  // default 3Y
 
     // The footnote interpolates {n}/{d} into a translated template and the chip
     // tooltips are attributes, so neither is reachable by apply()'s [data-i18n]
-    // walk — rebuild both when the language changes.
+    // walk — rebuild both when the language changes. Same for the A/D rows,
+    // which are built as innerHTML from translated fragments.
     document.addEventListener('i18n:langchange', () => {
       _renderBreadthLegend();
       _renderBreadthFootnote();
+      _renderAdvDec();
     });
 
     // Wire range buttons

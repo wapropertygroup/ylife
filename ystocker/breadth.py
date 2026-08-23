@@ -2,7 +2,8 @@
 ystocker.breadth
 ~~~~~~~~~~~~~~~~
 Market breadth: the share of S&P 500 constituents trading above each of their
-key moving averages, plus the equal-weight / cap-weight concentration ratio.
+key moving averages, the equal-weight / cap-weight concentration ratio, and the
+advance/decline count for the last completed session.
 
 Why this is computed locally
 ----------------------------
@@ -25,6 +26,22 @@ Method
 3. Resample to weekly (last observation per ISO week) to keep the payload small
    -- the UI plots 1Y-10Y windows, where weekly resolution is indistinguishable
    from daily.
+4. Advancers / decliners for the last two daily rows, per index. See
+   :func:`_advance_decline`.
+
+Advance/decline
+---------------
+This rides the download that steps 1-3 already pay for, so the S&P 500 count is
+free. The Nasdaq-100 costs 13 extra symbols -- the NDX names that are not S&P
+500 members (ASML, AZN, PDD and friends) -- which is why both universes are
+fetched in one call rather than adding a second endpoint that re-downloads 500
+tickers on demand. Bulk per-name requests are what get this whole app throttled
+by Yahoo, so the cheap path is the only responsible one.
+
+The number is therefore as fresh as the cache: 24 hours. It describes the last
+*completed* session in the data, and ships the date it refers to so the UI can
+say so rather than implying a live intraday count. If a build lands mid-session
+the final row is a partial bar, which the date label makes visible.
 
 Caveats
 -------
@@ -33,6 +50,9 @@ Caveats
   are therefore slightly optimistic; the shape and turning points are intact.
 * Percentages are of *participating* tickers, not a fixed 503, so a name that
   IPO'd mid-window dilutes nothing before it existed.
+* Advance/decline is likewise over participating names, and ships both the
+  counted and the full universe size so a thin day cannot masquerade as a
+  complete one.
 
 Cache TTL: 24 hours (this is a weekly-resolution chart; intraday refresh is
 pointless and the download costs ~25s).
@@ -65,6 +85,14 @@ _MIN_VALID = 50
 
 # Concentration proxy: equal-weight S&P 500 vs cap-weighted S&P 500.
 _RSP, _SPY = "RSP", "SPY"
+
+# Advance/decline: a count is only published when at least this share of the
+# universe has a close on both of the last two sessions. An absolute floor like
+# _MIN_VALID cannot serve here -- 50 names out of 503 would pass it while
+# reporting "up 30 / down 20" for the S&P 500, which reads as a complete count
+# and is not one. Proportional keeps the guard meaningful for a 97-name index
+# and a 503-name one at the same time.
+_ADV_MIN_SHARE = 0.5
 
 # ---------------------------------------------------------------------------
 # S&P 500 universe (Yahoo ticker format: dots -> dashes, e.g. BRK.B -> BRK-B)
@@ -195,6 +223,16 @@ def _load_disk_cache(ignore_ttl: bool = False) -> Optional[dict[str, Any]]:
         if missing:
             log.info("Breadth: disk cache missing MA periods %s — will recompute", missing)
             return None
+        # Same idea for adv_dec, but only on the fresh path. _serve_stale() calls
+        # this with ignore_ttl=True as the fallback while a rebuild runs, and
+        # rejecting there would blank the MA charts -- the main content of the
+        # section -- for the ~25s it takes, in order to add a row that the UI
+        # already hides gracefully when absent. Stale-but-complete beats empty.
+        # An absent key means an older schema; an empty dict means the build ran
+        # and had nothing publishable, which is not a reason to refetch.
+        if not ignore_ttl and "adv_dec" not in payload:
+            log.info("Breadth: disk cache predates adv_dec — will recompute")
+            return None
         return payload
     except Exception as exc:
         log.warning("Breadth: failed to read disk cache: %s", exc)
@@ -221,6 +259,63 @@ def _save_disk_cache(data: dict[str, Any]) -> None:
 # Computation
 # ---------------------------------------------------------------------------
 
+def _advance_decline(closes, universes: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    """Advancers / decliners for the last completed session, per index.
+
+    ``closes`` is the wide daily-close frame already downloaded for the MA work;
+    ``universes`` maps a display key (``"SPY"``) to ``{"label", "members"}``.
+
+    Compares the last two rows that the frame actually holds. Only names with a
+    close on *both* days are counted -- a ticker that started or stopped
+    reporting between the two sessions has no defined direction and must not be
+    silently binned as unchanged, which is what a fillna(0) would have done.
+
+    Unchanged is reported separately rather than folded into either side so that
+    up + down + unchanged == counted, and a reader can verify the arithmetic.
+    """
+    out: dict[str, Any] = {}
+    if closes is None or len(closes.index) < 2:
+        log.warning("Breadth: fewer than two sessions available — A/D skipped")
+        return out
+
+    prev_row, last_row = closes.index[-2], closes.index[-1]
+    as_of = str(last_row)[:10]
+    prev_of = str(prev_row)[:10]
+
+    for key, spec in universes.items():
+        members = [t for t in spec["members"] if t in closes.columns]
+        if not members:
+            log.warning("Breadth: no columns for %s universe — A/D skipped", key)
+            continue
+        today = closes.loc[last_row, members]
+        yday = closes.loc[prev_row, members]
+        both = today.notna() & yday.notna()
+        counted = int(both.sum())
+        total = len(spec["members"])
+        if counted < total * _ADV_MIN_SHARE:
+            log.warning("Breadth: %s A/D has only %d/%d names on %s — not published",
+                        key, counted, total, as_of)
+            continue
+        diff = (today[both] - yday[both])
+        up = int((diff > 0).sum())
+        down = int((diff < 0).sum())
+        out[key] = {
+            "label": spec["label"],
+            "up": up,
+            "down": down,
+            # Anything neither up nor down: an exact flat close. Rare on adjusted
+            # prices but real, and it has to be somewhere for the three to sum.
+            "unchanged": counted - up - down,
+            "counted": counted,
+            "universe": total,
+            "as_of": as_of,
+            "prev": prev_of,
+        }
+        log.info("Breadth: %s A/D %s up / %s down / %s flat of %d counted (%s vs %s)",
+                 key, up, down, counted - up - down, counted, as_of, prev_of)
+    return out
+
+
 def _weekly_last(series, digits: int = 2) -> dict[str, list]:
     """Down-sample a daily pandas Series to the last observation of each week.
 
@@ -242,15 +337,26 @@ def _build_cache() -> dict[str, Any]:
     import pandas as pd
     import yfinance as yf
 
-    tickers = list(SP500_UNIVERSE) + [_RSP, _SPY]
+    # Imported here rather than at module scope: valuation.py reads
+    # SP500_UNIVERSE back out of this module, so a top-level import would make
+    # the pair import-order dependent for no benefit. _build_cache already
+    # defers pandas and yfinance the same way.
+    from ystocker.valuation import NDX100
+
+    # 84 of the 97 NDX names are already S&P 500 members, so the Nasdaq-100
+    # advance/decline costs 13 extra symbols on a call that fetches 505.
+    ndx = tuple(dict.fromkeys(NDX100))
+    extra = [t for t in ndx if t not in SP500_UNIVERSE]
+    tickers = list(SP500_UNIVERSE) + [_RSP, _SPY] + extra
     t0 = time.time()
     df = yf.download(tickers, period=_HISTORY_PERIOD, interval="1d",
                      auto_adjust=True, progress=False, threads=True)
     if df is None or df.empty:
         raise RuntimeError("yfinance returned no data for the S&P 500 universe")
     closes = df["Close"]
-    log.info("Breadth: downloaded %d/%d tickers in %.1fs",
-             int(closes.notna().any().sum()), len(tickers), time.time() - t0)
+    log.info("Breadth: downloaded %d/%d tickers in %.1fs (%d extra for NDX)",
+             int(closes.notna().any().sum()), len(tickers), time.time() - t0,
+             len(extra))
 
     # Constituent closes only — RSP/SPY are index proxies, not members.
     members = [t for t in SP500_UNIVERSE if t in closes.columns]
@@ -269,6 +375,16 @@ def _build_cache() -> dict[str, Any]:
         series  = _weekly_last(pct)
         pct_above_ma[str(period)] = series
         latest[str(period)] = series["values"][-1] if series["values"] else None
+
+    # ── Advancers / decliners for the last session, per index ───────────────
+    # Rides the download above. SP500_UNIVERSE for SPY, NDX100 for QQQ; the two
+    # overlap by 84 names but are counted independently, because "how many
+    # Nasdaq-100 names rose" is a different question from "how many S&P 500
+    # names rose" even where the same ticker answers both.
+    adv_dec = _advance_decline(closes, {
+        "SPY": {"label": "SPY (S&P 500)", "members": SP500_UNIVERSE},
+        "QQQ": {"label": "QQQ (Nasdaq-100)", "members": ndx},
+    })
 
     # ── Concentration: equal-weight / cap-weight ratio ──────────────────────
     def _col(sym):
@@ -290,6 +406,7 @@ def _build_cache() -> dict[str, Any]:
         "pct_above_ma": pct_above_ma,
         "latest":       latest,
         "rsp_spy":      rsp_spy,
+        "adv_dec":      adv_dec,
         "universe":     universe_used,
         "asof":         asof[0],
         # Back-compat aliases for any older client still reading these keys.
