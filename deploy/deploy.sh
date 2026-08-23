@@ -553,6 +553,18 @@ Environment="TRADINGAGENTS_MEMORY_LOG_PATH=\${APP_DIR}/cache/tradingagents/memor
 # glibc opens a malloc arena per thread and never shrinks one, so a long-lived
 # worker fragments into hundreds of MB of retained heap. Cap the arena count.
 Environment="MALLOC_ARENA_MAX=2"
+# /opt/ystocker is root-owned, so the run user cannot create the dot-dirs that
+# matplotlib and yfinance default to under $HOME. Both then log a warning and
+# degrade every start:
+#   * matplotlib rebuilds its font cache instead of reusing it
+#   * yfinance disables its CookieCache and TzCache entirely, so every worker
+#     re-negotiates a cookie and crumb with Yahoo. That is a round trip added to
+#     Yahoo calls and a step closer to the 401 "Invalid Crumb" throttling that
+#     hard-blocked this box during development (see valuation.py).
+# Pointing both at the cache dir the run user already owns fixes both.
+Environment="MPLCONFIGDIR=/opt/ystocker/cache/.matplotlib"
+Environment="HOME=/opt/ystocker/cache"
+Environment="XDG_CACHE_HOME=/opt/ystocker/cache/.cache"
 # Keep a runaway app inside its own cgroup. Without this the kernel picks its
 # OOM victim globally, so one bloated ystocker worker took unrelated apps down
 # with it. These are ceilings, not reservations.

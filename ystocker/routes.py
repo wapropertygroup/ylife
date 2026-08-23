@@ -2035,6 +2035,15 @@ def tv():
 _TV_DIGEST_CACHE: dict = {}
 _TV_DIGEST_LOCK = threading.Lock()
 _TV_DIGEST_TTL = 300  # matches _MARKETS_CACHE_TTL; nothing underneath moves faster
+# Single-flight. Without it every concurrent poll starts its own build, and with
+# only two gunicorn workers two slow builds is the whole site.
+_TV_DIGEST_BUILDING = threading.Event()
+
+
+def _dt_now_iso() -> str:
+    import datetime as _dt_mod
+
+    return _dt_mod.date.today().isoformat()
 
 
 def _tv_holiday_list() -> list:
@@ -2079,6 +2088,35 @@ def _tv_json(view):
         return body.get_json()
     except Exception as exc:  # noqa: BLE001
         log.warning("TV digest: %s body was not JSON: %s", name, exc)
+        return None
+
+
+def _tv_markets_cached() -> Optional[dict]:
+    """The markets payload, but only if it is already in memory.
+
+    Deliberately not api_markets(): that function will fall through to a full
+    Yahoo rebuild of ~30 symbols with a year of history each, which took 120s in
+    a request and got the worker SIGKILLed by gunicorn's --timeout. On a box with
+    two workers that is half the site gone for two minutes, and the kiosk polls
+    this route.
+
+    Staleness is accepted rather than refreshed. A wall display showing
+    five-minute-old sector bars is fine; a display showing nothing because it
+    triggered a fetch it then died waiting for is not. The markets warm-up thread
+    is what keeps this current.
+    """
+    try:
+        with _MARKETS_CACHE_LOCK:
+            entry = _MARKETS_CACHE.get("data")
+        if not entry:
+            log.info("TV digest: markets not in memory yet — section skipped")
+            return None
+        age = time.time() - entry.get("ts", 0)
+        if age > _MARKETS_CACHE_TTL:
+            log.info("TV digest: serving markets %.0fs stale rather than refetching", age)
+        return entry.get("data")
+    except Exception as exc:  # noqa: BLE001
+        log.warning("TV digest: markets cache read failed: %s", exc)
         return None
 
 
@@ -2197,7 +2235,7 @@ def _tv_build_digest() -> dict:
     # ── Sectors and cross-asset, ranked. Both come out of the markets cache,
     # which already carries a year of daily closes per series, so the sparklines
     # cost nothing extra upstream.
-    mk = _tv_json(api_markets)
+    mk = _tv_markets_cached()
     if mk:
         secs = []
         for s in (mk.get("sectors") or []):
@@ -2232,18 +2270,39 @@ def _tv_build_digest() -> dict:
 
 @bp.route("/api/tv-digest")
 def api_tv_digest():
-    """Compact metrics digest for /tv — a few KB instead of ~300."""
+    """Compact metrics digest for /tv — a few KB instead of ~300.
+
+    Never blocks on an upstream and never lets two builds run at once. A kiosk
+    polls this on a timer and will keep polling through any outage, so the
+    failure mode to avoid is a queue of requests each holding a worker.
+    """
     with _TV_DIGEST_LOCK:
         entry = _TV_DIGEST_CACHE.get("data")
-        if entry and time.time() - entry["ts"] < _TV_DIGEST_TTL:
-            return jsonify(entry["data"])
+    if entry and time.time() - entry["ts"] < _TV_DIGEST_TTL:
+        return jsonify(entry["data"])
 
-    data = _tv_build_digest()
+    # A build is already running: hand back the previous answer rather than
+    # starting a second one. Stale beats slow on a display.
+    if _TV_DIGEST_BUILDING.is_set():
+        if entry:
+            return jsonify(entry["data"])
+        return jsonify({"as_of": _dt_now_iso(), "warming": True})
+
+    _TV_DIGEST_BUILDING.set()
+    try:
+        data = _tv_build_digest()
+    finally:
+        _TV_DIGEST_BUILDING.clear()
+
     # Only cache something worth serving, so a transient all-sources-down does
-    # not get pinned for five minutes.
+    # not get pinned for five minutes. If this build came back empty but a older
+    # one is held, the older one is still the better answer.
     if len(data) > 1:
         with _TV_DIGEST_LOCK:
             _TV_DIGEST_CACHE["data"] = {"ts": time.time(), "data": data}
+    elif entry:
+        log.warning("API tv-digest: build produced nothing — serving previous")
+        return jsonify(entry["data"])
     log.info("API tv-digest: built with %s", ", ".join(k for k in data if k != "as_of") or "nothing")
     return jsonify(data)
 
