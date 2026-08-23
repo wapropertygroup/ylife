@@ -70,6 +70,10 @@ from typing import Any, Optional
 log = logging.getLogger(__name__)
 
 _CACHE_FILE = Path(__file__).parent.parent / "cache" / "breadth_cache.json"
+# Committed snapshot of the eleven-year series, served by peek() when a box has
+# no disk cache at all. See _load_baseline() for why this is a file and not a
+# DynamoDB table. Regenerate with: python -m ystocker.breadth --write-baseline
+_BASELINE_FILE = Path(__file__).parent / "data" / "breadth_baseline.json"
 _CACHE_TTL  = 24 * 60 * 60   # 24 hours
 # Public alias: /api/breadth serves peek() output, which ignores the TTL, and has
 # to label the result stale or fresh. It should not have to reach for a private.
@@ -492,24 +496,64 @@ def get_breadth(force: bool = False) -> dict[str, Any]:
         return data
 
 
+def _load_baseline() -> Optional[dict[str, Any]]:
+    """The committed history, for a box that has no disk cache yet.
+
+    Same reasoning as ``consensus_pe``'s baseline: this data is re-derivable, so
+    it does not belong in DynamoDB, but re-deriving it costs an 82-second
+    518-ticker download and a fresh instance would otherwise serve an empty
+    breadth section until that finished. The eleven-year series is the expensive
+    part and it barely moves -- only the last few points change day to day -- so
+    committing a snapshot buys instant history for ~85 KB in the repo.
+
+    Always flagged stale, and ``adv_dec`` is deliberately dropped: the diffusion
+    series is a decade of history that stays useful when a fortnight old, but
+    advancers/decliners describes one specific session and a months-old count
+    dressed up as the latest reading would be a lie of a different kind. The UI
+    already hides that block when the key is absent, so a fresh box shows real
+    history with no A/D until the first true build lands.
+    """
+    try:
+        blob = json.loads(_BASELINE_FILE.read_text())
+    except FileNotFoundError:
+        log.info("Breadth: no committed baseline at %s", _BASELINE_FILE)
+        return None
+    except (OSError, ValueError) as exc:
+        log.warning("Breadth: baseline unreadable: %s", exc)
+        return None
+    cached = blob.get("pct_above_ma") or {}
+    missing = [p for p in MA_PERIODS if str(p) not in cached]
+    if missing:
+        log.warning("Breadth: baseline missing MA periods %s — ignoring it", missing)
+        return None
+    blob.pop("adv_dec", None)
+    blob["stale"] = True
+    blob["baseline"] = True
+    log.info("Breadth: serving committed baseline (asof %s) until the first build",
+             blob.get("asof"))
+    return blob
+
+
 def peek() -> Optional[dict[str, Any]]:
     """Return an already-available breadth payload, or None. Never rebuilds.
 
-    ``get_breadth()`` falls through to a ~25s, 500-ticker download when the
-    cache is cold, which is the right trade for /api/breadth but not for
-    incidental consumers that only want the series if it is already paid for.
-    Checks memory first, then the disk cache regardless of TTL — a week-old
-    diffusion index still answers "is breadth narrowing?", and the caller can
-    date it via the payload's own ``asof``.
+    ``get_breadth()`` falls through to an 82-second, 518-ticker download when the
+    cache is cold, which is why /api/breadth no longer calls it and why incidental
+    consumers use this instead. Checks memory, then the disk cache regardless of
+    TTL — a week-old diffusion index still answers "is breadth narrowing?", and
+    the caller can date it via the payload's own ``asof`` — then the committed
+    baseline, so a freshly provisioned box is never empty.
     """
     with _cache_lock:
         if _cache_data:
             return _cache_data
     try:
-        return _load_disk_cache(ignore_ttl=True)
+        disk = _load_disk_cache(ignore_ttl=True)
+        if disk:
+            return disk
     except Exception as exc:  # pragma: no cover - defensive
         log.debug("Breadth: peek failed to read disk cache: %s", exc)
-        return None
+    return _load_baseline()
 
 
 def get_cache_ts() -> Optional[float]:
@@ -591,3 +635,39 @@ def start_background_thread() -> None:
     t.start()
     log.info("Breadth: background refresh thread started (%d tickers, MA %s)",
              len(SP500_UNIVERSE), ", ".join(str(p) for p in MA_PERIODS))
+
+
+# ---------------------------------------------------------------------------
+# Baseline regeneration (developer entry point, never runs in the app)
+# ---------------------------------------------------------------------------
+
+def write_baseline() -> Path:
+    """Rebuild from Yahoo and write the committed baseline. ~82 seconds.
+
+    Kept as an explicit command rather than something the app does on its own: a
+    baseline that rewrote itself would churn the repo daily and could commit a
+    bad scrape. Run it when the series has drifted far enough that a fresh box
+    would look wrong -- a few times a year is plenty, since only the tail moves.
+
+        python -m ystocker.breadth --write-baseline
+    """
+    data = _build_cache()
+    # adv_dec is dropped on read as well, but there is no reason to carry a
+    # single session's count in a file that will sit in git for months.
+    data.pop("adv_dec", None)
+    _BASELINE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    _BASELINE_FILE.write_text(json.dumps(data, separators=(",", ":")))
+    log.info("Breadth: baseline written to %s (asof %s, %d bytes)",
+             _BASELINE_FILE, data.get("asof"), _BASELINE_FILE.stat().st_size)
+    return _BASELINE_FILE
+
+
+if __name__ == "__main__":
+    import sys
+
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+    if "--write-baseline" in sys.argv:
+        write_baseline()
+    else:
+        print(__doc__)
+        print("usage: python -m ystocker.breadth --write-baseline")
