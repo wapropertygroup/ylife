@@ -10,7 +10,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{{ 'yStocker 电视版' if lang == 'zh' else 'yStocker TV' }}</title>
+{# Standalone template: it does not extend base.html, so the brand filter
+   there never sees it and brand_name has to be used directly. #}
+<title>{{ brand_name }}{{ ' 电视版' if lang == 'zh' else ' TV' }}</title>
 <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
 <style>
   :root {
@@ -143,7 +145,7 @@
 <body>
 
 <header>
-  <span class="brand">y<em>Stocker</em></span>
+  <span class="brand">{% if brand_is_ta %}Trade<em>Agents</em>{% else %}y<em>Stocker</em>{% endif %}</span>
   <span id="slideName">—</span>
   <span class="spacer"></span>
   <span id="stale">⚠ <span data-t="stale">data is stale</span></span>
@@ -207,7 +209,7 @@
   // language actually being displayed, so the tab title and the accessibility tree
   // do not disagree with the screen.
   document.documentElement.lang = ZH ? 'zh' : 'en';
-  document.title = ZH ? 'yStocker 电视版' : 'yStocker TV';
+  document.title = {{ brand_name | tojson }} + (ZH ? ' 电视版' : ' TV');
   // Seconds per slide and minutes between data refreshes, both overridable so a
   // display can be tuned without a deploy.
   const SECS = Math.max(5, Math.min(300, +(P.get('secs') || 15) || 15));
