@@ -24,6 +24,31 @@ typeable on a television remote's on-screen keyboard and 21 is not. Note the ape
 (`papersboys.github.io`), so only subdomains can be pointed here. DNS is at
 Squarespace, not Route53.
 
+`trade-agents.com` is a tenth vhost, also with no app of its own, and unlike
+`tv.` it **proxies** rather than redirects: `/` maps to `/agents` on ystocker:8000
+and every other path passes through, so the domain stays in the address bar. That
+is the whole point of owning the name, and it does mean the rest of yStocker is
+reachable under it too — accepted deliberately, since filtering paths in nginx
+would be a second routing table to keep in step with `routes.py`.
+
+Being a separate registrable domain, its **apex can point here** (`35.155.14.61`),
+which `li-family.us` cannot. Two things live outside this repo and will not work
+until they are done by hand:
+
+- **DNS at Squarespace** — the apex A records must move off Squarespace's website
+  IPs (`198.185.159.144/145`, `198.49.23.144/145`) to the box. Doing so replaces
+  whatever Squarespace serves on that domain. Until then the vhost is inert and
+  `certbot` cannot pass its HTTP-01 challenge, so the cert call is written to fail
+  non-fatally and `--allow-subset-of-names` is set, because `www` is a CNAME to
+  Squarespace and demanding both names would fail the apex too.
+- **Google OAuth origin** — `/agents` is sign-in gated, so `https://trade-agents.com`
+  must be added to the authorized JavaScript origins of `GOOGLE_CLIENT_ID` or the
+  sign-in button fails silently and the page is decorative.
+
+The agents quotas in `quota.py` are per box, not per domain, so a second hostname
+adds no new billing exposure — but the 60/day global ceiling is shared with
+whatever traffic the new name attracts.
+
 ## Commands
 
 ### Run locally

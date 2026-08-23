@@ -750,6 +750,83 @@ TVCONF
   NGINX_CHANGED=true
 fi
 
+# ── trade-agents.com: the agents page on its own domain ──────────────────────
+# A proxy, not a redirect, and that is the difference from ytv.conf above: the
+# point of owning this name is that it stays in the address bar, so a 302 to
+# stock.li-family.us would defeat it.
+#
+# Also deliberately not in APPS. Nothing new listens -- it fronts ystocker on
+# 8000 -- and an APPS entry would have the generator write a second vhost with a
+# /static alias under a different server_name and its own cert loop, which is
+# exactly the duplication this single file avoids.
+#
+# Port 80 only here, as with ytv.conf: certbot --nginx adds the 443 server once a
+# certificate exists, and writing a 443 block up front points nginx at a cert path
+# that does not exist and stops it starting.
+TA_CONF="/etc/nginx/conf.d/ytradeagents.conf"
+TA_WANT_MARK="server_name trade-agents.com www.trade-agents.com;"
+if ! sudo test -f "\$TA_CONF" || ! sudo grep -qF "\$TA_WANT_MARK" "\$TA_CONF"; then
+  echo "[\$(TS)]    trade-agents.com nginx config writing..."
+  sudo tee "\$TA_CONF" > /dev/null <<'TACONF'
+# trade-agents.com — the trading-agents page (/agents on ystocker) on its own host.
+#
+# Root maps to /agents so the bare domain lands on the page rather than on the
+# yStocker home page. Everything else proxies through untouched, because /agents
+# is not self-contained: it posts to /api/agents/*, polls job ids, pulls PDFs and
+# loads /static, and rewriting or restricting those paths would break the page in
+# ways that only show up mid-analysis.
+#
+# Note this does make the rest of yStocker reachable under this name too. That is
+# accepted rather than blocked: filtering paths here would be a second, silent
+# routing table to keep in step with routes.py, and getting it wrong breaks a page
+# nobody is watching.
+server {
+    listen 80;
+    server_name trade-agents.com www.trade-agents.com;
+
+    # Exact match only, so /agents/... and every other path fall through to the
+    # generic location below.
+    location = / {
+        proxy_pass         http://127.0.0.1:8000/agents;
+        proxy_set_header   Host              $host;
+        proxy_set_header   X-Real-IP         $remote_addr;
+        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto $scheme;
+        proxy_set_header   X-Forwarded-Host  $host;
+        proxy_read_timeout 130s;
+        proxy_connect_timeout 10s;
+        proxy_send_timeout 130s;
+    }
+
+    location / {
+        proxy_pass         http://127.0.0.1:8000;
+        proxy_set_header   Host              $host;
+        proxy_set_header   X-Real-IP         $remote_addr;
+        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto $scheme;
+        proxy_set_header   X-Forwarded-Host  $host;
+        # An agents run streams progress over SSE for several minutes, so the
+        # read timeout has to outlast a deep analysis and buffering has to stay
+        # off for those responses. The routes already send X-Accel-Buffering: no;
+        # this keeps the timeout from cutting them short regardless.
+        proxy_read_timeout 130s;
+        proxy_connect_timeout 10s;
+        proxy_send_timeout 130s;
+        proxy_buffer_size       16k;
+        proxy_buffers           8 64k;
+        proxy_busy_buffers_size 128k;
+        proxy_next_upstream     error timeout http_502 http_503;
+    }
+
+    location /static/ {
+        alias /opt/ystocker/ystocker/static/;
+        expires 7d;
+    }
+}
+TACONF
+  NGINX_CHANGED=true
+fi
+
 if [[ "\$NGINX_CHANGED" == "true" ]]; then
   sudo rm -f /etc/nginx/conf.d/default.conf /etc/nginx/sites-enabled/default 2>/dev/null || true
   sudo systemctl enable nginx
@@ -812,6 +889,21 @@ done
 
 # The redirect host needs its own certificate: it is not in APPS, so the loop
 # above never sees it.
+# trade-agents.com is not in APPS either, so it needs its own certbot call.
+# --allow-subset-of-names matters here rather than being boilerplate: www is a
+# CNAME to Squarespace until it is repointed, so demanding both names would fail
+# the whole request and leave the apex on plain HTTP.
+if ! tls_covers_domain "trade-agents.com"; then
+  echo "[\$(TS)]    Certbot: trade-agents.com"
+  sudo certbot --nginx --cert-name trade-agents.com \\
+    -d trade-agents.com -d www.trade-agents.com \\
+    --allow-subset-of-names \$CERT_D_FLAGS --non-interactive --agree-tos \\
+    -m "\$CERT_EMAIL" --redirect \\
+    > /tmp/certbot-trade-agents.log 2>&1 \\
+    || echo "[\$(TS)]    ✗ Certbot FAILED for trade-agents.com (DNS not pointed here yet?)"
+  tail -2 /tmp/certbot-trade-agents.log
+fi
+
 if ! tls_covers_domain "tv.li-family.us"; then
   echo "[\$(TS)]    Certbot: tv.li-family.us"
   sudo certbot --nginx --cert-name tv.li-family.us -d tv.li-family.us \
