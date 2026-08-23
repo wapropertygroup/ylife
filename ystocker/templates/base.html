@@ -430,7 +430,7 @@
 
   {% if not _agents_embedded %}
   <footer class="border-t border-slate-800 py-4 text-center text-xs text-slate-600">
-    <span data-i18n="footer.text">yStocker — data via Yahoo Finance</span> &nbsp;·&nbsp;
+    <span data-i18n="footer.text">{{ brand_name }} — data via Yahoo Finance</span> &nbsp;·&nbsp;
     <a href="{{ url_for('main.contact') }}" class="hover:text-brand transition" data-i18n="footer.contact">Contact Us</a>
     &nbsp;·&nbsp;
     <a href="{{ url_for('main.rss_feed') }}" class="hover:text-brand transition"
@@ -448,7 +448,7 @@
        data-i18n-title="footer.ical_title" title="Subscribe to FOMC dates in your calendar">
       <span aria-hidden="true">🗓</span> <span data-i18n="footer.ical">FOMC Calendar</span>
     </a>
-    &nbsp;·&nbsp; <span data-i18n="footer.copyright">© 2025 yStocker. All rights reserved.</span>
+    &nbsp;·&nbsp; <span data-i18n="footer.copyright">© 2025 {{ brand_name }}. All rights reserved.</span>
   </footer>
   {% endif %}
 
