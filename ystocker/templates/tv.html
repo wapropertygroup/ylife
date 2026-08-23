@@ -232,18 +232,28 @@
     cast:    ZH ? '投屏到电视' : 'Cast to TV',
     air:     ZH ? 'AirPlay 说明' : 'AirPlay how-to',
     full:    ZH ? '全屏' : 'Fullscreen',
+    fullNo:  ZH ? '此浏览器不支持整页全屏（iPhone 版 Safari 只允许视频全屏）。用 AirPlay 镜像时，隐藏浏览器界面请改用「添加到主屏幕」后从主屏启动。'
+                : 'This browser cannot make the whole page fullscreen (Safari on iPhone allows it for video only). When mirroring over AirPlay, use Add to Home Screen and launch from there to lose the browser chrome.',
+    fullNoShort: ZH ? '不支持' : 'unsupported',
+    fullFail: ZH ? '全屏请求被拒绝' : 'Fullscreen request was refused',
     wake:    ZH ? '常亮' : 'Keep awake',
     safe:    ZH ? '防裁切边距' : 'TV safe area',
     close:   ZH ? '关闭' : 'Close',
     airTitle: ZH ? '用 AirPlay 投到电视' : 'AirPlay this to your TV',
     // iOS and macOS put screen mirroring in different places, and sending someone
     // to Control Center on a Mac is a dead end.
+    // The last iOS step used to say "turn on Keep awake and Fullscreen". Fullscreen
+    // does not exist for a document on iPhone Safari, so that instruction sent the
+    // reader to a button that cannot work; Add to Home Screen is the route that
+    // actually removes the browser chrome there.
     airStepsIOS: ZH ? ['从右上角下滑，打开 控制中心', '轻点 “屏幕镜像”',
-                       '选择你的 Apple TV 或 VIZIO 电视', '回到本页，开启“常亮”与“全屏”']
+                       '选择你的 Apple TV 或 VIZIO 电视', '回到本页，开启“常亮”',
+                       '想去掉浏览器界面：分享 → 添加到主屏幕，然后从主屏启动本页']
                     : ['Swipe down from the top-right to open Control Center',
                        'Tap Screen Mirroring',
                        'Pick your Apple TV or VIZIO',
-                       'Come back here, then turn on Keep awake and Fullscreen'],
+                       'Come back here, then turn on Keep awake',
+                       'To lose the browser chrome: Share → Add to Home Screen, then launch it from there'],
     airStepsMac: ZH ? ['点菜单栏右上角的 控制中心 图标', '点 “屏幕镜像”',
                        '选择你的 Apple TV 或 VIZIO 电视', '回到本页，开启“全屏”']
                     : ['Click Control Center in the menu bar, top right',
@@ -256,7 +266,31 @@
                  : 'This browser has no Cast support (use Chrome or Edge), or use AirPlay',
     castChrome: ZH ? '需 Chrome' : 'Chrome only',
     castFail: ZH ? '投屏失败或已取消' : 'Cast failed or was cancelled',
-    castNoDev: ZH ? '同一 Wi-Fi 下未找到设备' : 'No device found on this Wi-Fi',
+    // Short enough for the one-line #err banner, which has no width bound and
+    // would otherwise run off the panel edge. The detail goes in the overlay.
+    castNoDev: ZH ? '未找到 Cast 设备 —— 点“投屏到电视”查看排查步骤'
+                  : 'No Cast device found — press Cast to TV for what to check',
+    // NotFoundError is Chrome saying "no Cast receiver here", which has three very
+    // different causes, and the old one-liner named only the least likely. Since
+    // macOS 15 Chrome needs Local Network permission for the mDNS discovery Cast
+    // depends on; without it Chrome finds exactly zero devices while the Wi-Fi is
+    // demonstrably fine, and nothing anywhere says so. An Apple TV, meanwhile, is
+    // never a Cast target at all, so the answer is the AirPlay button next door
+    // rather than more network fiddling.
+    castTipTitle: ZH ? '未找到 Cast 设备' : 'No Cast device found',
+    castTipSteps: ZH ? [
+        '检查 macOS 是否给了 Chrome「本地网络」权限：系统设置 → 隐私与安全性 → 本地网络。授权后必须 ⌘Q 完全退出 Chrome 再打开（此权限只在启动时读取）。',
+        '如果电视是 Apple TV，它永远不是 Cast 设备 —— 请改用「AirPlay 说明」。VIZIO SmartCast 内置 Chromecast，但必须真正唤醒，待机不算。',
+        '确认电视与本机在同一 Wi-Fi，且路由器未开启 AP/客户端隔离（mesh 系统常见）。',
+        '对照检查：打开 Chrome ⋮ 菜单 → 投放。如果那里也是空的，问题在设备发现，与本页无关。',
+      ] : [
+        'Check macOS gave Chrome Local Network permission: System Settings → Privacy & Security → Local Network. Then ⌘Q to fully quit Chrome and reopen — the permission is only read at launch.',
+        'If the TV is an Apple TV it is never a Cast target — use AirPlay how-to instead. A VIZIO SmartCast has Chromecast built in, but it has to be genuinely awake, not in standby.',
+        'Confirm the TV is on the same Wi-Fi and the router does not have AP/client isolation on (common on mesh systems).',
+        'Cross-check: open Chrome ⋮ menu → Cast. If that list is empty too, the problem is device discovery and has nothing to do with this page.',
+      ],
+    castTipNote: ZH ? 'Cast 会把本页加载到电视上（手机随后可以息屏）；AirPlay 是屏幕镜像，需要保持本机常亮。两者都不可用时，用电视自带浏览器打开本页地址是最后的办法。'
+                    : 'Cast loads this page onto the TV, so the phone can sleep afterwards; AirPlay mirrors your screen and needs this device awake. If neither works, opening this page’s URL in the TV’s own browser is the fallback.',
     castMaybe: ZH ? '尚未探测到设备，仍可点击试试' : 'No device detected yet — still worth a try',
     airFound:  ZH ? '已在本网络检测到 AirPlay 设备' : 'AirPlay target detected on this network',
     airNotFound: ZH ? '未检测到 AirPlay 设备 —— 请确认电视已开机且在同一 Wi-Fi'
@@ -641,11 +675,17 @@
       }).catch(() => {});
       bCast.onclick = () => {
         presReq.start().catch(err => {
-          // NotFoundError is the ordinary "no device on this network" answer and
-          // deserves a plain sentence, not a DOMException name.
           const name = (err && err.name) || 'error';
-          $('err').textContent = '⚠ ' + (name === 'NotFoundError' ? T.castNoDev : T.castFail)
-                               + ' (' + name + ')';
+          // NotFoundError is the ordinary "nothing out there" answer, and its
+          // causes do not fit a one-line banner. Show the short line and open the
+          // same overlay the AirPlay button uses, so the fix is actually reachable
+          // instead of being a DOMException name the reader has to search for.
+          if (name === 'NotFoundError') {
+            $('err').textContent = '⚠ ' + T.castNoDev;
+            showTip(T.castTipTitle, T.castTipSteps, T.castTipNote);
+          } else {
+            $('err').textContent = '⚠ ' + T.castFail + ' (' + name + ')';
+          }
         });
       };
     } catch (_) { presReq = null; }
@@ -699,31 +739,67 @@
                : airState === 'none' ? T.airNotFound : T.airUnknown;
   }
 
+  // Both the AirPlay how-to and the Cast failure explain themselves through the
+  // same overlay, so the plumbing lives here once. Steps and note are set as text,
+  // never markup: airNote contains a literal <video> and would vanish otherwise.
+  function showTip(title, steps, note) {
+    $('tipTitle').textContent = title;
+    $('tipSteps').innerHTML = (steps || []).map(x => `<li>${esc(x)}</li>`).join('');
+    $('tipNote').textContent = note || '';
+    tip.classList.add('show');
+  }
+
   bAir.onclick = () => {
     // Steps for the platform in front of the reader, not a union of both.
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
       || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
     const steps = isIOS ? T.airStepsIOS : T.airStepsMac;
-    $('tipTitle').textContent = T.airTitle;
-    $('tipSteps').innerHTML = steps.map(x => `<li>${esc(x)}</li>`).join('');
-    // Says whether a target was actually seen, then the caveat. Set as text, not
-    // markup: airNote contains a literal <video>.
+    // Says whether a target was actually seen, then the caveat.
     const found = airState === 'available' ? T.airFound
                 : airState === 'none' ? T.airNotFound : T.airUnknown;
-    $('tipNote').textContent = found + ' — ' + T.airNote
-      + '  ' + T.thisUrl + ': ' + location.host + location.pathname;
-    tip.classList.add('show');
+    showTip(T.airTitle, steps, found + ' — ' + T.airNote
+      + '  ' + T.thisUrl + ': ' + location.host + location.pathname);
   };
   $('tipClose').onclick = () => tip.classList.remove('show');
 
-  bFull.onclick = async () => {
-    try {
-      if (document.fullscreenElement) await document.exitFullscreen();
-      else await document.documentElement.requestFullscreen();
-    } catch (_) {}
-  };
-  document.addEventListener('fullscreenchange', () =>
-    bFull.setAttribute('aria-pressed', String(!!document.fullscreenElement)));
+  // Fullscreen, feature-detected rather than assumed. Two problems with the old
+  // three lines, both silent:
+  //
+  // Safari only got unprefixed Element.requestFullscreen in 16.4; before that it
+  // is webkitRequestFullscreen, and the event is webkitfullscreenchange. On
+  // iPhone there is historically no element fullscreen at all -- only <video>
+  // goes fullscreen -- so the call throws TypeError, the try/catch swallowed it,
+  // and the button looked functional while doing nothing. That mattered here more
+  // than it looks: the AirPlay how-to ends by telling the reader to turn on
+  // Fullscreen, so the one instruction the page gives was the one that failed.
+  //
+  // A disabled button that says why beats a live one that lies, which is the same
+  // call already made for Cast.
+  const fsEl = () => document.fullscreenElement || document.webkitFullscreenElement || null;
+  const fsEnter = document.documentElement.requestFullscreen
+               || document.documentElement.webkitRequestFullscreen;
+  const fsExit = document.exitFullscreen || document.webkitExitFullscreen;
+  const fsPaint = () => bFull.setAttribute('aria-pressed', String(!!fsEl()));
+
+  if (!fsEnter || !fsExit) {
+    bFull.disabled = true;
+    bFull.title = T.fullNo;
+    bFull.textContent = '⛶ ' + T.full + ' — ' + T.fullNoShort;
+  } else {
+    bFull.onclick = async () => {
+      try {
+        if (fsEl()) await fsExit.call(document);
+        else await fsEnter.call(document.documentElement);
+      } catch (err) {
+        // Refusal is possible even where the API exists (not a user gesture, or
+        // an iframe without allowfullscreen). Say so rather than doing nothing.
+        $('err').textContent = '⚠ ' + T.fullFail;
+      }
+      fsPaint();
+    };
+    ['fullscreenchange', 'webkitfullscreenchange'].forEach(ev =>
+      document.addEventListener(ev, fsPaint));
+  }
 
   // The thing that actually decides whether mirroring survives the evening: the
   // phone sleeping is what blanks the TV, not the page. The lock is dropped by the
