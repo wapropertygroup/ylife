@@ -45,6 +45,21 @@ if ! "$TA_PYTHON" -c "import tradingagents" >/dev/null 2>&1 \
    || [[ "$TA_DIR/pyproject.toml" -nt "$TA_DIR/venv/pyvenv.cfg" ]]; then
   "$TA_DIR/venv/bin/pip" install -q --upgrade pip
   "$TA_DIR/venv/bin/pip" install -q --retries 12 --timeout 60 -e "$TA_DIR"
+  # mootdx is an optional accelerator for A-share OHLCV, so its install must not
+  # be able to fail the deploy. Nothing in tradingagents imports it (or its
+  # tdxpy/py-mini-racer/prettytable runtime deps) at module scope — a_stock.py
+  # imports it lazily inside a try and degrades to 东财 then 新浪. py-mini-racer
+  # is a native V8 binding with no wheel on some platforms, so making it
+  # mandatory would abort the whole TradingAgents install to lose a fast path.
+  #
+  # 0.11.7 declares httpx<0.26 while the Gemini SDK needs modern httpx, hence
+  # --no-deps: the extras above supply what it actually uses at runtime.
+  if "$TA_DIR/venv/bin/pip" install -q --retries 6 --timeout 60 -e "$TA_DIR[astock]" \
+     && "$TA_DIR/venv/bin/pip" install -q --no-deps mootdx==0.11.7; then
+    echo "  mootdx TDX fast path installed"
+  else
+    echo "  WARNING: mootdx unavailable; A-share quotes will use 东财 then 新浪" >&2
+  fi
   touch "$TA_DIR/venv/pyvenv.cfg"
 fi
 
@@ -55,3 +70,6 @@ chown -R "$RUN_USER:$RUN_USER" "$TA_DIR"
 # failed analysis twenty minutes later.
 "$TA_PYTHON" -c "from tradingagents.graph.trading_graph import TradingAgentsGraph"
 echo "  tradingagents import OK"
+"$TA_PYTHON" -c "from tradingagents.graph.analyst_execution import build_analyst_execution_plan as b; p=b(('market','social','news','fundamentals','policy','hot_money','lockup')); assert len(p.specs)==7"
+"$TA_PYTHON" -c "from tradingagents.agents.utils.agent_utils import get_dragon_tiger_board, get_lockup_expiry; assert get_dragon_tiger_board.name and get_lockup_expiry.name"
+echo "  seven-role A-share graph preflight OK"

@@ -206,12 +206,19 @@ _TICKER_RE = re.compile(r"^[A-Za-z][A-Za-z0-9.\-]{0,9}$")
 # in two places would also drift as 北交所 ranges are added.
 _ASHARE_RE = re.compile(r"^(?:(?:SH|SZ|BJ)\.?)?\d{6}(?:\.(?:SS|SZ|SH|BJ))?$")
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+BASE_ANALYSTS = ("market", "social", "news", "fundamentals")
+ASTOCK_ANALYSTS = BASE_ANALYSTS + ("policy", "hot_money", "lockup")
 
 
 def valid_ticker(ticker: str) -> bool:
     """Whether a symbol is safe to interpolate into a path and a header."""
     t = (ticker or "").strip().upper()
     return bool(_TICKER_RE.match(t) or _ASHARE_RE.match(t))
+
+
+def analysts_for_ticker(ticker: str) -> tuple[str, ...]:
+    """Seven analysts for A shares; the established four for other markets."""
+    return ASTOCK_ANALYSTS if _ASHARE_RE.match((ticker or "").strip().upper()) else BASE_ANALYSTS
 
 # One run at a time; further submissions queue behind it.
 _slot = threading.Semaphore(1)
@@ -331,7 +338,11 @@ if os.environ.get("YSTOCKER_AGENT_SELFTEST") == "1":
                     # money.
                     "\n### 中文渲染检查\n\n"
                     "验证 PDF 中文字体（STSong-Light）与换行是否正常；"
-                    "中英文混排：NVDA 同比增长 94%。\n"})
+                    "中英文混排：NVDA 同比增长 94%。\n"
+                    "\n### Policy Analyst\n\n政策角色自检。\n"
+                    "\n### Hot Money Tracker\n\n游资角色自检。\n"
+                    "\n### Lock-up Monitor\n\n解禁角色自检。\n",
+          "selected_analysts": os.environ.get("YSTOCKER_SELECTED_ANALYSTS", "")})
     raise SystemExit(0)
 
 try:
@@ -358,6 +369,9 @@ try:
         ("sentiment_report", "sentiment"),
         ("news_report", "news"),
         ("fundamentals_report", "fundamentals"),
+        ("policy_report", "policy"),
+        ("hot_money_report", "hot_money"),
+        ("lockup_report", "lockup"),
         ("trader_investment_plan", "trader"),
     ]
     DEBATES = [
@@ -406,7 +420,16 @@ try:
 
     # TradingAgents reads TRADINGAGENTS_* itself, so anything exported by the
     # parent already applies; only override what we pass explicitly.
-    graph = TradingAgentsGraph(debug=False, config=cfg,
+    # The parent picks the roster from the ticker's market and passes it down; an
+    # empty or absent variable means an older parent, so fall back to the four
+    # that every market supports rather than guessing at A-share specialists.
+    selected = tuple(
+        part.strip() for part in
+        os.environ.get("YSTOCKER_SELECTED_ANALYSTS", "").split(",")
+        if part.strip()
+    )
+    graph = TradingAgentsGraph(selected_analysts=selected or BASE_ANALYSTS,
+                               debug=False, config=cfg,
                                progress_callback=on_progress)
     state, decision = graph.propagate(ticker, day)
 
@@ -1552,6 +1575,9 @@ def _run(job_id: str) -> None:
         _write(job)
 
         env = _child_env(job.get("language") or "")
+        env["YSTOCKER_SELECTED_ANALYSTS"] = ",".join(
+            analysts_for_ticker(job.get("ticker") or "")
+        )
         if job.get("selftest"):
             env["YSTOCKER_AGENT_SELFTEST"] = "1"
 
@@ -1750,6 +1776,7 @@ def environment_report() -> dict[str, Any]:
         "language": FORCED_LANGUAGE,
         "language_pinned": bool(FORCED_LANGUAGE),
         "has_key": key_ok,
+        "a_share_analysts": list(ASTOCK_ANALYSTS),
         # Whether a run *can execute*, which is a question about the checkout,
         # the interpreter and the credential -- not about who is permitted to
         # start one. It used to include a non-empty allowlist, which became

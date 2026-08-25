@@ -368,6 +368,8 @@ Resources:
             Environment="TRADINGAGENTS_CACHE_DIR=$APP_DIR/cache/tradingagents/cache"
             Environment="TRADINGAGENTS_RESULTS_DIR=$APP_DIR/cache/tradingagents/logs"
             Environment="TRADINGAGENTS_MEMORY_LOG_PATH=$APP_DIR/cache/tradingagents/memory/trading_memory.md"
+            Environment="TRADINGAGENTS_MOOTDX_ENABLED=1"
+            Environment="EM_MIN_INTERVAL=1.0"
             ExecStart=$APP_DIR/venv/bin/gunicorn \
                       --workers 1 \
                       --bind 127.0.0.1:$PORT \

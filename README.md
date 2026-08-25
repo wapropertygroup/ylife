@@ -411,6 +411,26 @@ gunicorn "ystocker:create_app()" --bind 0.0.0.0:8000
 
 ## Dependencies
 
+### TradingAgents A-share runtime
+
+The `/agents` product launches the separate
+[`15th-Ave-NE/TradingAgents`](https://github.com/15th-Ave-NE/TradingAgents)
+checkout in a short-lived process. Non-A-share symbols use the established four
+analysts. Mainland A-share codes use seven: Market, Sentiment, News,
+Fundamentals, Policy, Hot Money, and Lock-up. All seven reports are explicit
+inputs to both the Bull/Bear research debate and the aggressive/conservative/
+neutral risk debate.
+
+A-share data is keyless and direct: mootdx/通达信 TCP when compatible, then
+Tencent/Eastmoney/Sina/Tonghuashun according to the tool. Eastmoney calls are
+serialized and rate-limited; an unavailable mootdx import or TCP server falls
+through to HTTP sources rather than failing the run. The runtime keeps modern
+`httpx` for Gemini and installs mootdx without dependency resolution because
+mootdx's published metadata pins an incompatible old `httpx` range.
+
+The paired runtime is installed by `deploy/install-tradingagents.sh`; changing
+yStocker role rendering alone does not add an analyst to the decision graph.
+
 | Package | Purpose |
 |---------|---------|
 | `flask` | Web framework |

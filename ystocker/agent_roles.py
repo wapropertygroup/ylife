@@ -38,6 +38,12 @@ ROLES: list[dict[str, str]] = [
      "short": "News", "icon": "📰", "color": "#06b6d4", "group": "analysts"},
     {"key": "fundamentals", "name": "Fundamentals Analyst", "zh": "基本面分析师",
      "short": "Fundamentals", "icon": "🏦", "color": "#14b8a6", "group": "analysts"},
+    {"key": "policy",       "name": "Policy Analyst",       "zh": "政策分析师",
+     "short": "Policy", "icon": "🏛️", "color": "#eab308", "group": "analysts"},
+    {"key": "hot_money",    "name": "Hot Money Tracker",    "zh": "游资追踪师",
+     "short": "Hot Money", "icon": "🔥", "color": "#f97316", "group": "analysts"},
+    {"key": "lockup",       "name": "Lock-up Monitor",      "zh": "解禁监控师",
+     "short": "Lock-up", "icon": "🔓", "color": "#ec4899", "group": "analysts"},
 
     {"key": "bull",         "name": "Bull Researcher",      "zh": "看涨研究员",
      "short": "Bull", "icon": "🐂", "color": "#22c55e", "group": "research"},
@@ -96,6 +102,10 @@ _ALIASES = {
     "risky analyst": "aggressive",
     "safe analyst": "conservative",
     "risk manager": "portfolio",
+    "hot money analyst": "hot_money",
+    "lockup monitor": "lockup",
+    "lockup watcher": "lockup",
+    "lock-up watcher": "lockup",
 }
 _BY_KEY = {r["key"]: r for r in ROLES}
 
