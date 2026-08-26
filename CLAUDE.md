@@ -106,9 +106,17 @@ happened" and "nothing needed to happen" are distinguishable.
 
 Before deploying, `deploy.sh` warns about uncommitted or unpushed work, since
 `reset --hard` takes what GitHub has and would otherwise appear to ship a commit
-still sitting on the laptop. That check asks the remote for its `main` SHA rather
-than reading a local `<remote>/main` ref, because the TradingAgents clone calls the
-fork `upstream` and has never fetched it, so no such ref exists.
+still sitting on the laptop. That check asks the remote for its `main` SHA with
+`ls-remote` on the URL rather than reading a local `<remote>/main` ref, so it does
+not care what the clone happens to name its remotes.
+
+That naming used to matter and was a trap: the local TradingAgents clone called
+TauricResearch `origin` and our fork `upstream`, so `main` tracked *upstream of
+record* and a bare `git push` from `main` aimed at TauricResearch. They are now
+swapped to the usual convention — `origin` is the fork, `upstream` is what it was
+forked from — so a bare push goes somewhere harmless. `deploy.sh` was already
+URL-matching rather than name-matching, which is why the swap needed no change
+there.
 
 All 8 apps get a full `systemctl restart`, **not** `kill -HUP`. HUP looks like a
 graceful reload but under `--preload` it ships stale code: gunicorn's HUP handler

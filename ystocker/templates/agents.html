@@ -330,6 +330,40 @@ window.YSTime = (function () {
 }
 .ag-who b { color: var(--role); font-size: 13px; font-weight: 600; }
 .ag-who span { color: #475569; font-size: 11px; }
+/* Deep link to one speaker. A span, not a <button>: .ag-who is itself a
+   role="button" that folds the turn, and nesting real buttons is the DOM trap
+   noted in CLAUDE.md. Kept faint until the turn is hovered so eleven of these
+   do not read as decoration, but always in the tab order and always announced,
+   because keyboard and screen-reader users cannot hover to discover it. */
+.ag-who .ag-anchor {
+  margin-left: auto; flex: none;
+  color: #334155; font-size: 12px; line-height: 1;
+  padding: 2px 5px; border-radius: 6px;
+  cursor: pointer; user-select: none;
+  opacity: 0; transition: opacity .12s, color .12s, background .12s;
+}
+.ag-turn:hover .ag-who .ag-anchor,
+.ag-who .ag-anchor:focus-visible { opacity: 1; }
+.ag-who .ag-anchor:hover { color: var(--role); background: #0b1120; }
+.ag-who .ag-anchor.is-done { opacity: 1; color: #22c55e; }
+/* The turn a deep link just landed on, so arriving at a long report does not
+   leave the reader guessing which of eleven speakers was linked. */
+.ag-turn.is-linked .ag-bubble {
+  box-shadow: 0 0 0 1px var(--role), 0 0 22px -6px var(--role);
+}
+/* Copy feedback. Fixed and aria-live so it reports without moving the report. */
+.ag-toast {
+  position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%);
+  z-index: 60; pointer-events: none;
+  background: #0b1120; border: 1px solid #1e293b; color: #e2e8f0;
+  font-size: 12px; padding: 8px 14px; border-radius: 8px;
+  box-shadow: 0 8px 24px -8px #000;
+  opacity: 0; transition: opacity .16s;
+}
+.ag-toast.is-on { opacity: 1; }
+@media (prefers-reduced-motion: reduce) {
+  .ag-who .ag-anchor, .ag-toast { transition: none; }
+}
 /* The turn body reuses the report typography, so markdown inside a bubble is
    styled exactly like the standalone report. */
 .ag-bubble .ag-report { font-size: 12.5px; }
@@ -1160,7 +1194,23 @@ body.agents-embedded #agTop { right: 12px; bottom: 12px; }
       const note = document.createElement('span');
       note.className = 'ag-hidden-note';
       note.textContent = '\u00b7 ' + fmtLen((sec.body || '').length);
-      who.append(caret, nm, sub, note);
+      const anchor = document.createElement('span');
+      anchor.className = 'ag-anchor';
+      anchor.setAttribute('role', 'button');
+      anchor.tabIndex = 0;
+      anchor.textContent = '\ud83d\udd17';
+      const anchorLabel = (I18n.t('agents.copy_link') || 'Copy link to this section')
+        + ' \u2014 ' + ((I18n.getLang() === 'zh' && sec.role.zh) ? sec.role.zh : sec.role.name);
+      anchor.title = anchorLabel;
+      anchor.setAttribute('aria-label', anchorLabel);
+      // stopPropagation, or copying the link would also fold the turn it points
+      // at -- so the first thing the recipient sees is a collapsed section.
+      const copyThis = (e) => { e.preventDefault(); e.stopPropagation(); copyRoleLink(sec.role.key, anchor); };
+      anchor.addEventListener('click', copyThis);
+      anchor.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') copyThis(e);
+      });
+      who.append(caret, nm, sub, note, anchor);
 
       const body = document.createElement('div');
       body.className = 'ag-report';
@@ -1183,6 +1233,9 @@ body.agents-embedded #agTop { right: 12px; bottom: 12px; }
       box.appendChild(turn);
     }
     buildJump(sections);
+    // After the turns exist, not before: a deep link that arrives with the page
+    // has nothing to scroll to until the report has been fetched and rendered.
+    applyDeepLink({ instant: true });
   }
 
   // ── Jump bar ────────────────────────────────────────────────────────────
@@ -1215,6 +1268,122 @@ body.agents-embedded #agTop { right: 12px; bottom: 12px; }
     // Nearest, not centre: centring yanks the bar sideways on every scroll.
     chip.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }
+
+  // ── Deep links to one speaker ───────────────────────────────────────────
+  // "Read what the Portfolio Manager concluded" is the common ask, and a report
+  // runs to eleven speakers and tens of thousands of characters, so a link to the
+  // report alone lands the reader at the top with scrolling to do. The anchor ids
+  // (turn-<key>) already existed for the jump bar; these make them addressable.
+  //
+  // The hash carries the role key, not the display name: the name is localised
+  // and would change a shared link's meaning between EN and ZH.
+  const TURN_PREFIX = 'turn-';
+
+  function roleKeyFromHash(hash) {
+    const raw = String(hash || '').replace(/^#/, '');
+    return raw.startsWith(TURN_PREFIX) ? raw.slice(TURN_PREFIX.length) : '';
+  }
+
+  function roleLinkFor(key) {
+    const url = new URL(window.location.href);
+    url.hash = TURN_PREFIX + key;
+    return url.toString();
+  }
+
+  let toastTimer = null;
+  function showToast(msg) {
+    let el = document.getElementById('agToast');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'agToast';
+      el.className = 'ag-toast';
+      // polite, not assertive: confirming a copy must not interrupt a screen
+      // reader mid-sentence in the report body.
+      el.setAttribute('role', 'status');
+      el.setAttribute('aria-live', 'polite');
+      document.body.appendChild(el);
+    }
+    el.textContent = msg;
+    el.classList.add('is-on');
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove('is-on'), 1900);
+  }
+
+  async function copyRoleLink(key, btn) {
+    const href = roleLinkFor(key);
+    // Put it in the address bar too, so the browser's own copy still works when
+    // the clipboard API is unavailable (it needs a secure context) and so the
+    // reader can see what was copied.
+    if (!EMBEDDED && window.history) {
+      try { history.replaceState(history.state, '', href); } catch (e) {}
+    }
+    let ok = false;
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(href);
+        ok = true;
+      }
+    } catch (e) { ok = false; }
+    if (ok) {
+      showToast(I18n.t('agents.link_copied') || 'Section link copied');
+      if (btn) {
+        btn.classList.add('is-done');
+        btn.textContent = '✓';
+        setTimeout(() => { btn.classList.remove('is-done'); btn.textContent = '🔗'; }, 1600);
+      }
+    } else {
+      // Not a failure worth an error: the URL is now the section link, so
+      // ⌘L ⌘C gets it. Say that instead of "copy failed".
+      showToast(I18n.t('agents.link_in_bar') || 'Section link is in the address bar');
+    }
+  }
+
+  // Reveal and highlight one speaker. Expanding matters more than scrolling: the
+  // collapse-all preference is remembered across reports, so a deep link would
+  // otherwise land on a folded bubble showing nothing but its own name.
+  function focusRole(key, opts) {
+    const el = document.getElementById(TURN_PREFIX + key);
+    if (!el) return false;
+    const bubble = el.querySelector('.ag-bubble');
+    if (bubble && bubble.classList.contains('is-collapsed')) {
+      bubble.classList.remove('is-collapsed');
+      collapsed.delete(key);
+      const w = bubble.querySelector('.ag-who');
+      if (w) w.setAttribute('aria-expanded', 'true');
+      syncCollapseBtn();
+    }
+    lockedTarget = TURN_PREFIX + key;
+    const chip = document.querySelector('#agJump .ag-chip[data-target="' + TURN_PREFIX + key + '"]');
+    if (chip) setActive(chip);
+    el.scrollIntoView({
+      behavior: (opts && opts.instant) ? 'auto' : 'smooth', block: 'start' });
+    // A ring rather than a scroll position alone, because the sticky jump bar
+    // means "top of the viewport" is not obviously "the thing you asked for".
+    document.querySelectorAll('#agReport .ag-turn.is-linked')
+      .forEach(t => t.classList.remove('is-linked'));
+    el.classList.add('is-linked');
+    setTimeout(() => el.classList.remove('is-linked'), 2600);
+    return true;
+  }
+
+  // Which hash has already been honoured. The conversation re-renders on every
+  // poll while a run streams, and re-applying the deep link each time would drag
+  // the reader back to the same speaker every two seconds.
+  let deepLinkDone = '';
+  function applyDeepLink(opts) {
+    const key = roleKeyFromHash(window.location.hash);
+    if (!key) return;
+    const force = !!(opts && opts.force);
+    if (!force && deepLinkDone === key) return;
+    // A role can be linked before it has spoken; leave it unmarked so it applies
+    // once the streaming report reaches that turn.
+    if (focusRole(key, opts)) deepLinkDone = key;
+  }
+
+  // Same-page hash edits (pasting a link into the bar, back/forward across
+  // sections) must re-run: the browser will not scroll to a bubble it cannot see
+  // inside a collapsed parent, and force re-runs an already-honoured key.
+  window.addEventListener('hashchange', () => applyDeepLink({ force: true }));
 
   function buildJump(sections) {
     const bar = document.getElementById('agJump');
@@ -1279,6 +1448,16 @@ body.agents-embedded #agTop { right: 12px; bottom: 12px; }
         // section did reach it, contradicting what the reader just clicked.
         lockedTarget = chip.dataset.target;
         setActive(chip);
+        // Record the jump in the URL so the address bar is always a link to what
+        // is on screen, and copying it shares that speaker rather than the top of
+        // the report. replaceState, not the hash property: assigning location.hash
+        // pushes a history entry per chip, which turns Back into a walk through
+        // every section the reader glanced at.
+        const key = sec.role.key;
+        deepLinkDone = key;
+        if (!EMBEDDED && window.history) {
+          try { history.replaceState(history.state, '', roleLinkFor(key)); } catch (e) {}
+        }
         el.scrollIntoView({ behavior: 'smooth', block: 'start' });
       });
       bar.appendChild(chip);
@@ -1440,7 +1619,11 @@ body.agents-embedded #agTop { right: 12px; bottom: 12px; }
     const url = new URL(window.location.href);
     if (id) url.searchParams.set('job', id);
     else url.searchParams.delete('job');
-    const next = url.pathname + url.search;
+    // Keep the hash. It names a speaker within this report, and openJob() runs
+    // this before the turns render -- dropping it here meant a link to
+    // #turn-portfolio was erased a moment before anything could scroll to it, so
+    // every shared section link silently opened at the top of the report.
+    const next = url.pathname + url.search + url.hash;
     if (push && url.searchParams.get('job') !== new URL(window.location.href).searchParams.get('job')) {
       history.pushState({ job: id || null }, '', next);
     } else {
@@ -1476,6 +1659,9 @@ body.agents-embedded #agTop { right: 12px; bottom: 12px; }
     const id = (event.state && event.state.job)
       || new URLSearchParams(window.location.search).get('job');
     if (id) openJob(id, { push: false });
+    // Stepping back to a section of the report already on screen fires popstate
+    // without re-rendering, so nothing would move without this.
+    applyDeepLink({ force: true });
   });
 
   // -- Report search -------------------------------------------------------
