@@ -513,9 +513,87 @@ body.agents-embedded #agTop { right: 12px; bottom: 12px; }
   // Delegates to the shared formatter so both views label the zone identically.
   const fmtWhen = iso => YSTime.when(iso);
 
+  // ── Per-speaker links, showcase side ────────────────────────────────────
+  // Deliberately a second, small implementation rather than shared code: this
+  // block and the owner's view are separate IIFEs (each returns early when its
+  // own root element is absent, so exactly one is ever live on a page). Only the
+  // hash format is a contract between them, and it is one line.
+  const TURN_PREFIX = 'turn-';
+
+  function roleKeyFromHash(hash) {
+    const raw = String(hash || '').replace(/^#/, '');
+    return raw.startsWith(TURN_PREFIX) ? raw.slice(TURN_PREFIX.length) : '';
+  }
+
+  function focusShowcaseRole(key, opts) {
+    if (!key) return false;
+    const el = document.getElementById(TURN_PREFIX + key);
+    if (!el) return false;
+    el.scrollIntoView({
+      behavior: (opts && opts.instant) ? 'auto' : 'smooth', block: 'start' });
+    document.querySelectorAll('.ag-turn.is-linked').forEach(t => t.classList.remove('is-linked'));
+    el.classList.add('is-linked');
+    setTimeout(() => el.classList.remove('is-linked'), 2600);
+    return true;
+  }
+
+  let sampleToastTimer = null;
+  function showSampleToast(msg) {
+    let el = document.getElementById('agToast');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'agToast';
+      el.className = 'ag-toast';
+      el.setAttribute('role', 'status');
+      el.setAttribute('aria-live', 'polite');
+      document.body.appendChild(el);
+    }
+    el.textContent = msg;
+    el.classList.add('is-on');
+    if (sampleToastTimer) clearTimeout(sampleToastTimer);
+    sampleToastTimer = setTimeout(() => el.classList.remove('is-on'), 1900);
+  }
+
+  async function copyShowcaseRoleLink(key, btn) {
+    const url = new URL(window.location.href);
+    url.hash = TURN_PREFIX + key;
+    const href = url.toString();
+    // Not in embedded mode: this document is an iframe there, and writing history
+    // reaches into the parent window's session history.
+    if (!EMBEDDED_SAMPLE && window.history) {
+      try { history.replaceState(history.state, '', href); } catch (e) {}
+    }
+    let ok = false;
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(href);
+        ok = true;
+      }
+    } catch (e) { ok = false; }
+    showSampleToast(ok
+      ? (I18n.t('agents.link_copied') || 'Section link copied')
+      : (I18n.t('agents.link_in_bar') || 'Section link is in the address bar'));
+    if (ok && btn) {
+      btn.classList.add('is-done');
+      btn.textContent = '✓';
+      setTimeout(() => { btn.classList.remove('is-done'); btn.textContent = '🔗'; }, 1600);
+    }
+  }
+
+  window.addEventListener('hashchange', () => {
+    focusShowcaseRole(roleKeyFromHash(window.location.hash), {});
+  });
+
   // Draws the same conversation the signed-in view does, minus the jump bar and
   // scroll spy: this is a read-only teaser, and a live run's machinery has
   // nothing to track here.
+  //
+  // It does carry the same turn ids and per-speaker links, because this is the
+  // renderer a *shared* link actually reaches. Both entry points read ?job=<id>
+  // (see the deep-link handling below and in the owner's view), so the visitor
+  // who is sent stock.li-family.us/agents?job=X#turn-portfolio arrives here, not
+  // in the owner's view — and without ids here the fragment silently did nothing
+  // in the one case the feature exists for.
   function drawConversation(box, sections) {
     box.innerHTML = '';
     let team = null;
@@ -538,6 +616,7 @@ body.agents-embedded #agTop { right: 12px; bottom: 12px; }
       }
       const turn = document.createElement('div');
       turn.className = 'ag-turn';
+      turn.id = 'turn-' + sec.role.key;
       turn.style.setProperty('--role', sec.role.color);
 
       const av = document.createElement('div');
@@ -553,7 +632,23 @@ body.agents-embedded #agTop { right: 12px; bottom: 12px; }
       nm.textContent = (I18n.getLang() === 'zh' && sec.role.zh) ? sec.role.zh : sec.role.name;
       const sub = document.createElement('span');
       if (I18n.getLang() === 'zh' && sec.role.zh) sub.textContent = sec.role.name;
-      who.append(nm, sub);
+      const anchor = document.createElement('span');
+      anchor.className = 'ag-anchor';
+      anchor.setAttribute('role', 'button');
+      anchor.tabIndex = 0;
+      anchor.textContent = '🔗';
+      const anchorLabel = (I18n.t('agents.copy_link') || 'Copy link to this section')
+        + ' — ' + ((I18n.getLang() === 'zh' && sec.role.zh) ? sec.role.zh : sec.role.name);
+      anchor.title = anchorLabel;
+      anchor.setAttribute('aria-label', anchorLabel);
+      // No stopPropagation needed here: unlike the owner's view, this .ag-who is
+      // not itself a control, so there is no fold to accidentally trigger.
+      const copyThis = (e) => { e.preventDefault(); copyShowcaseRoleLink(sec.role.key, anchor); };
+      anchor.addEventListener('click', copyThis);
+      anchor.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') copyThis(e);
+      });
+      who.append(nm, sub, anchor);
 
       const body = document.createElement('div');
       body.className = 'ag-report';
@@ -607,7 +702,13 @@ body.agents-embedded #agTop { right: 12px; bottom: 12px; }
                  + '?tz=' + encodeURIComponent(YSTime.zone());
       }
       card.classList.remove('hidden');
-      card.scrollIntoView({ behavior: deep ? 'auto' : 'smooth', block: 'start' });
+      // A fragment naming a speaker beats scrolling to the top of the card: the
+      // visitor asked for that turn, and this is the renderer a shared link lands
+      // in. Falls back to the card when the fragment names a speaker this report
+      // does not contain (a four-analyst US run linked to #turn-policy).
+      if (!focusShowcaseRole(roleKeyFromHash(window.location.hash), { instant: deep })) {
+        card.scrollIntoView({ behavior: deep ? 'auto' : 'smooth', block: 'start' });
+      }
       // Make the open report the address, so this view is itself shareable and
       // survives a reload. replaceState, not push: a sample click is a change of
       // view within the page, not somewhere back should have to step through.
@@ -623,7 +724,11 @@ body.agents-embedded #agTop { right: 12px; bottom: 12px; }
     if (!EMBEDDED_SAMPLE && window.history) {
       const url = new URL(window.location.href);
       url.searchParams.set('job', id);
-      history.replaceState({ job: id }, '', url.pathname + url.search);
+      // Keep the fragment: this runs just after a deep link has been honoured, so
+      // dropping it here rewrote the visitor's own #turn-<key> link out of the
+      // address bar the moment they arrived on it — and a reload then landed at
+      // the top of the report.
+      history.replaceState({ job: id }, '', url.pathname + url.search + url.hash);
     }
     if (EMBEDDED_SAMPLE && window.parent && window.parent !== window) {
       try {
