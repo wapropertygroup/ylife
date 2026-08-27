@@ -800,22 +800,42 @@ def _has_content(payload: Optional[dict[str, Any]]) -> bool:
                              or payload.get("spx_consensus_fwd")))
 
 
-def _load_disk_cache() -> Optional[dict[str, Any]]:
+def _load_disk_cache(ignore_ttl: bool = False) -> Optional[dict[str, Any]]:
     try:
         if not _CACHE_FILE.exists():
             return None
         payload = json.loads(_CACHE_FILE.read_text())
+        # The version check applies even to peek(): a schema mismatch means the
+        # keys are wrong, not merely old, and a consumer would misread it.
         if payload.get("_ver") != _CACHE_VER:
             log.info("%s: cache schema %s != %s — rebuilding",
                      __name__, payload.get("_ver"), _CACHE_VER)
             return None
-        if time.time() - payload.get("_ts", 0) >= _CACHE_TTL:
+        if not ignore_ttl and time.time() - payload.get("_ts", 0) >= _CACHE_TTL:
             return None
         if not _has_content(payload):
             return None
         return payload
     except Exception as exc:
         log.warning("Valuation: failed to read disk cache: %s", exc)
+    return None
+
+
+def peek() -> Optional[dict[str, Any]]:
+    """Return an already-available valuation payload, or None. Never fetches.
+
+    Mirrors ``breadth.peek()``. ``get_valuation_data()`` past its TTL re-derives
+    the bottom-up forward P/E from ~600 constituent lookups, which must not
+    happen inside a request; a trailing P/E from yesterday is still the right
+    order of magnitude for a brief. Callers can date it from ``as_of``.
+    """
+    with _cache_lock:
+        if _cache_data:
+            return _cache_data
+    try:
+        return _load_disk_cache(ignore_ttl=True)
+    except Exception as exc:  # pragma: no cover - defensive
+        log.debug("Valuation: peek failed to read disk cache: %s", exc)
     return None
 
 

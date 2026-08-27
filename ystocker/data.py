@@ -9,7 +9,58 @@ import logging
 
 import yfinance as yf
 
+from ystocker import fetchguard
+
 log = logging.getLogger(__name__)
+
+#: Breaker/back-off identity for every Yahoo call made through this module.
+PROVIDER = "yahoo"
+
+#: yfinance sets no request timeout of its own, and an absent timeout in a
+#: daemon thread means "block forever": a hung socket used to park the cache
+#: warmer permanently with nothing in the log to say so.
+YF_TIMEOUT_SECONDS = fetchguard.env_float("YF_TIMEOUT_SECONDS", 15.0, 1.0)
+
+#: Per-ticker exponential back-off, shared by every consumer of `fetch_group` --
+#: the 8-hour full warm and the 5-minute rolling refresher both consult it, so a
+#: symbol that keeps failing in one is skipped by the other. Persisted, so a
+#: delisted symbol stays skipped across a deploy instead of the whole dead set
+#: being retried at once on the next restart.
+TICKER_BACKOFF = fetchguard.FailureBackoff("tickers", base_seconds=120, max_seconds=3600)
+
+_yf_session_cached = None
+_yf_session_tried = False
+
+
+def _yf_session():
+    """A shared curl_cffi session carrying a default timeout, or None.
+
+    It must be curl_cffi, not `requests`: yfinance >=1.x asserts the session
+    type and needs Chrome TLS impersonation, so handing it a `requests.Session`
+    raises `YFDataException` and handing it nothing leaves the timeout unset.
+    One module-level session is reused because `YfData` is a singleton that
+    re-binds whatever session it is passed -- a fresh session per ticker would
+    thrash the shared cookie/crumb it just negotiated.
+
+    Returns None if curl_cffi is unavailable, in which case callers fall back to
+    yfinance's own session. That is the old, timeout-less behaviour: worse, but
+    no worse than before, and better than not fetching at all.
+    """
+    global _yf_session_cached, _yf_session_tried
+    if _yf_session_tried:
+        return _yf_session_cached
+    _yf_session_tried = True
+    try:
+        from curl_cffi import requests as curl_requests
+
+        _yf_session_cached = curl_requests.Session(
+            impersonate="chrome", timeout=YF_TIMEOUT_SECONDS
+        )
+        log.info("Yahoo session ready (timeout %.0fs)", YF_TIMEOUT_SECONDS)
+    except Exception as exc:
+        log.warning("Yahoo: curl_cffi session unavailable (%s) — no request timeout", exc)
+        _yf_session_cached = None
+    return _yf_session_cached
 
 
 class FetchError(Exception):
@@ -94,11 +145,26 @@ def fetch_ticker_data(ticker: str) -> dict:
     Market Cap ($B) float - market capitalisation in billions USD
 
     Any value that Yahoo Finance does not provide is returned as None.
-    Raises FetchError if the network request fails entirely.
+    Raises FetchError if the network request fails entirely, including when the
+    Yahoo circuit breaker is open -- callers already handle FetchError, and a
+    cool-down is just another reason the data is not available right now.
     """
     try:
-        info = yf.Ticker(ticker).info
+        fetchguard.guard(PROVIDER)
+    except fetchguard.CooldownActive as exc:
+        raise FetchError(str(exc)) from exc
+
+    try:
+        session = _yf_session()
+        info = yf.Ticker(ticker, session=session).info if session else yf.Ticker(ticker).info
     except Exception as exc:
+        # yfinance flattens HTTP status into generic exceptions, so the only
+        # signal that this was a rate-limit rather than a bad symbol is the
+        # message text. Worth checking: one 429 seen early saves the rest of the
+        # batch from walking into the same wall.
+        if _looks_rate_limited(exc):
+            fetchguard.trip(PROVIDER, fetchguard.FETCH_RATE_LIMIT_COOLDOWN_SECONDS,
+                            "yfinance rate limit")
         raise FetchError(f"Could not fetch data for {ticker}: {exc}") from exc
 
     current_price = latest_price(info)
@@ -163,6 +229,15 @@ def fetch_ticker_data(ticker: str) -> dict:
     }
 
 
+def _looks_rate_limited(exc: BaseException) -> bool:
+    """Best-effort detection of a Yahoo rate-limit hiding inside a generic error."""
+    text = f"{type(exc).__name__}: {exc}".lower()
+    return any(
+        needle in text
+        for needle in ("429", "too many requests", "rate limit", "rate-limited")
+    )
+
+
 def fetch_group(tickers: list[str]) -> tuple[dict[str, dict], list[str]]:
     """
     Fetch data for every ticker in *tickers*.
@@ -170,15 +245,52 @@ def fetch_group(tickers: list[str]) -> tuple[dict[str, dict], list[str]]:
     Returns (results, errors) where:
       results - {ticker: data_dict} for every ticker that succeeded
       errors  - list of error message strings for tickers that failed
+
+    Also maintains :data:`TICKER_BACKOFF`. That bookkeeping lives here rather
+    than in the callers because only this loop knows which tickers it actually
+    *attempted*: a ticker skipped because the breaker opened part-way through was
+    never asked about, and recording a failure against it would blame a symbol
+    for a provider outage and double its back-off for nothing.
+
+    Two provider-level behaviours also belong here, because both only make sense
+    across a batch:
+
+    * If the breaker is already open, return immediately instead of walking the
+      whole list. Each iteration would otherwise fail instantly *and still sleep
+      0.5s*, turning a cool-down into minutes of doing nothing slowly.
+    * If every ticker in a batch of three or more fails, treat that as the
+      provider being unwell rather than coincidence, and trip the breaker.
+      Individual symbols fail all the time -- delistings, renames, thin ETFs --
+      so a *unanimous* failure is the only reliable signal available here.
     """
     import time
     results: dict[str, dict] = {}
     errors: list[str] = []
+
+    remaining = fetchguard.cooldown_remaining(PROVIDER)
+    if remaining > 0:
+        log.info("Yahoo cool-down active (%.0fs) — skipping batch of %d", remaining, len(tickers))
+        return results, [f"Yahoo cool-down active for {remaining:.0f}s"]
+
+    attempted: list[str] = []
     for i, t in enumerate(tickers):
         if i > 0:
             time.sleep(0.5)  # Add delay to avoid rate limiting
+        attempted.append(t)
         try:
             results[t] = fetch_ticker_data(t)
         except FetchError as exc:
             errors.append(str(exc))
+            # A breaker tripped mid-batch (by this call or another thread) means
+            # the rest of the list is wasted effort.
+            if fetchguard.cooldown_remaining(PROVIDER) > 0:
+                log.warning("Yahoo cool-down opened mid-batch — abandoning %d remaining",
+                            len(tickers) - i - 1)
+                break
+
+    if len(attempted) >= 3 and not results:
+        fetchguard.trip(PROVIDER, fetchguard.FETCH_ERROR_COOLDOWN_SECONDS,
+                        f"all {len(attempted)} tickers in batch failed")
+
+    TICKER_BACKOFF.record_batch(attempted, results.keys())
     return results, errors

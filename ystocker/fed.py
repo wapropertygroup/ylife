@@ -49,6 +49,8 @@ from typing import Any, Optional
 
 import requests
 
+from ystocker import fetchguard
+
 log = logging.getLogger(__name__)
 
 _CACHE_FILE = Path(__file__).parent.parent / "cache" / "fed_cache.json"
@@ -120,18 +122,22 @@ _warming_lock = threading.Lock()
 # Disk cache
 # ---------------------------------------------------------------------------
 
-def _load_disk_cache() -> Optional[dict[str, Any]]:
+def _load_disk_cache(ignore_ttl: bool = False) -> Optional[dict[str, Any]]:
     try:
         if not _CACHE_FILE.exists():
             return None
         payload = json.loads(_CACHE_FILE.read_text())
-        if time.time() - payload.get("_ts", 0) >= _CACHE_TTL:
+        if not ignore_ttl and time.time() - payload.get("_ts", 0) >= _CACHE_TTL:
             return None
-        # Schema check: if SERIES expanded since cache was written, force a refetch
+        # Schema check: if SERIES expanded since cache was written, force a refetch.
+        # Skipped for peek(), where a payload missing two of twenty-eight series is
+        # worth far more to the caller than nothing at all.
         cached_series = payload.get("series", {})
-        if not all(sid in cached_series for sid in SERIES):
+        if not ignore_ttl and not all(sid in cached_series for sid in SERIES):
             missing = [s for s in SERIES if s not in cached_series]
             log.info("Fed: disk cache missing series %s — will refetch", missing)
+            return None
+        if ignore_ttl and not cached_series:
             return None
         return payload
     except Exception as exc:
@@ -182,6 +188,13 @@ _SESSION = requests.Session()
 _SESSION.trust_env = False  # Ignore system proxies which can cause silent timeouts
 _SESSION.headers.update(_HEADERS)
 
+#: Breaker identity for FRED. Shared by every series fetch, which is the point:
+#: 28 series behind one rate limit should discover it once, not 28 times.
+PROVIDER = "fred"
+#: FRED is legitimately slow on long daily series, so it keeps a longer timeout
+#: than the fetchguard default.
+_FRED_TIMEOUT_SECONDS = fetchguard.env_float("FRED_TIMEOUT_SECONDS", 30.0, 1.0)
+
 
 # Series already in billions USD (no /1000 conversion needed)
 _SERIES_ALREADY_BILLIONS = {
@@ -198,8 +211,14 @@ _SERIES_RAW_RATIO = {"M2V", "DFII10", "T10YIE"}
 
 def _fetch_series(series_id: str) -> Optional[dict[str, Any]]:
     """
-    Fetch a single FRED series CSV with up to 3 retries + exponential back-off.
-    Returns {"dates": [...], "values": [...]} or None on persistent failure.
+    Fetch a single FRED series CSV with retry, back-off and a shared circuit
+    breaker. Returns {"dates": [...], "values": [...]} or None on failure.
+
+    Retries now come from `fetchguard`, which means the back-off is genuinely
+    exponential with jitter -- this used to be `wait = attempt * 3`, i.e. linear
+    3s/6s, while the docstring claimed exponential. It also means a 429 from FRED
+    stops the other 27 series from queueing up behind the same rate limit,
+    because the breaker is per provider rather than per call.
     """
     url = _FRED_CSV.format(series=series_id)
     already_billions = series_id in _SERIES_ALREADY_BILLIONS
@@ -210,24 +229,18 @@ def _fetch_series(series_id: str) -> Optional[dict[str, Any]]:
     # expresses "FRED's native unit → the unit fed.html labels the axis with".
     scale            = float(meta.get("scale", 1.0) or 1.0)
 
-    text = None
-    for attempt in range(1, 4):
-        try:
-            log.info("Fed: fetching %s (attempt %d/3)...", series_id, attempt)
-            resp = _SESSION.get(url, timeout=30)
-            if resp.status_code != 200:
-                log.warning("Fed: %s got HTTP %d for %s. Body: %s", 
-                            series_id, resp.status_code, url, resp.text[:200])
-            resp.raise_for_status()
-            text = resp.text
-            break
-        except Exception as exc:
-            if attempt == 3:
-                log.error("Fed: final attempt failed for %s (%s). URL: %s", series_id, exc, url)
-                return None
-            wait = attempt * 3
-            log.warning("Fed: %s attempt %d failed (%s) — retry in %ds", series_id, attempt, exc, wait)
-            time.sleep(wait)
+    try:
+        log.info("Fed: fetching %s ...", series_id)
+        resp = fetchguard.request(
+            PROVIDER, url, session=_SESSION, timeout=_FRED_TIMEOUT_SECONDS
+        )
+        text = resp.text
+    except fetchguard.CooldownActive as exc:
+        log.info("Fed: skipping %s — %s", series_id, exc)
+        return None
+    except Exception as exc:
+        log.error("Fed: fetch failed for %s (%s). URL: %s", series_id, exc, url)
+        return None
 
 
     # FRED CSV format:
@@ -375,6 +388,26 @@ def get_fed_data(force: bool = False) -> dict[str, Any]:
         return fresh
     finally:
         _fetch_in_progress.clear()
+
+
+def peek() -> Optional[dict[str, Any]]:
+    """Return an already-available H.4.1 payload, or None. Never fetches.
+
+    Mirrors ``breadth.peek()``. ``get_fed_data()`` falls through to a network
+    build once the cache passes its 24-hour TTL, which must not happen inside a
+    request; but a balance sheet published weekly is still the current balance
+    sheet a day after the TTL lapsed. Consumers that would rather label data
+    stale than lose it — the market brief — use this. Callers can date it from
+    the payload's own ``_ts`` and the last date of any series.
+    """
+    with _cache_lock:
+        if _cache_data:
+            return _cache_data
+    try:
+        return _load_disk_cache(ignore_ttl=True)
+    except Exception as exc:  # pragma: no cover - defensive
+        log.debug("Fed: peek failed to read disk cache: %s", exc)
+    return None
 
 
 def get_cache_ts() -> Optional[float]:

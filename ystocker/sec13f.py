@@ -24,6 +24,8 @@ from typing import Dict, List, Optional
 
 import requests
 
+from ystocker import fetchguard
+
 log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -649,39 +651,59 @@ _SESSION.headers.update({
 })
 _LAST_REQ_TIME: float = 0.0
 _RATE_LIMIT_INTERVAL = 0.15   # seconds between requests
+_rate_lock = threading.Lock()
+
+#: Breaker identity for SEC EDGAR.
+PROVIDER = "sec-edgar"
+_SEC_TIMEOUT_SECONDS = fetchguard.env_float("SEC_TIMEOUT_SECONDS", 20.0, 1.0)
+
+#: `_get_maybe` treats 503 as "not here" rather than "try again", so it must not
+#: be retried or allowed to trip the breaker -- EDGAR serves it routinely for
+#: funds with no filing at the requested path, and stalling the whole 13F
+#: refresh on one of those would be wrong.
+_MAYBE_RETRY_STATUS = frozenset({429, 500, 502, 504})
+
+
+def _throttle() -> None:
+    """Serialise outbound SEC requests to at most one per _RATE_LIMIT_INTERVAL.
+
+    The lock is held across the sleep deliberately. Without it the
+    read-modify-write on `_LAST_REQ_TIME` races: under the ThreadPoolExecutor in
+    `refresh_cache()` several threads could read the same timestamp, each
+    conclude no wait was needed, and fire together -- precisely the burst SEC's
+    request-rate limit punishes.
+    """
+    global _LAST_REQ_TIME
+    with _rate_lock:
+        gap = time.time() - _LAST_REQ_TIME
+        if gap < _RATE_LIMIT_INTERVAL:
+            time.sleep(_RATE_LIMIT_INTERVAL - gap)
+        _LAST_REQ_TIME = time.time()
 
 
 def _get(url: str, **kwargs) -> requests.Response:
-    """Rate-limited GET. Raises on non-2xx (caller must handle)."""
-    global _LAST_REQ_TIME
-    gap = time.time() - _LAST_REQ_TIME
-    if gap < _RATE_LIMIT_INTERVAL:
-        time.sleep(_RATE_LIMIT_INTERVAL - gap)
-    _LAST_REQ_TIME = time.time()
-    resp = _SESSION.get(url, timeout=20, **kwargs)
-    if resp.status_code == 429:
-        log.warning("SEC rate limit hit, sleeping 2s")
-        time.sleep(2)
-        resp = _SESSION.get(url, timeout=20, **kwargs)
-    resp.raise_for_status()
-    return resp
+    """Rate-limited GET with retry + breaker. Raises on non-2xx (caller handles)."""
+    _throttle()
+    return fetchguard.request(
+        PROVIDER, url, session=_SESSION, timeout=_SEC_TIMEOUT_SECONDS, **kwargs
+    )
 
 
 def _get_maybe(url: str, **kwargs) -> Optional[requests.Response]:
     """
-    Rate-limited GET that returns None on 404/403 instead of raising.
+    Rate-limited GET that returns None on 404/403/503 instead of raising.
     All other errors still raise.
     """
-    global _LAST_REQ_TIME
-    gap = time.time() - _LAST_REQ_TIME
-    if gap < _RATE_LIMIT_INTERVAL:
-        time.sleep(_RATE_LIMIT_INTERVAL - gap)
-    _LAST_REQ_TIME = time.time()
-    resp = _SESSION.get(url, timeout=20, **kwargs)
-    if resp.status_code == 429:
-        log.warning("SEC rate limit hit, sleeping 2s")
-        time.sleep(2)
-        resp = _SESSION.get(url, timeout=20, **kwargs)
+    _throttle()
+    resp = fetchguard.request(
+        PROVIDER,
+        url,
+        session=_SESSION,
+        timeout=_SEC_TIMEOUT_SECONDS,
+        retry_statuses=_MAYBE_RETRY_STATUS,
+        raise_for_status=False,
+        **kwargs,
+    )
     if resp.status_code in (404, 403, 503):
         return None
     resp.raise_for_status()
@@ -691,6 +713,12 @@ def _get_maybe(url: str, **kwargs) -> Optional[requests.Response]:
 # ---------------------------------------------------------------------------
 # CUSIP auto-resolver via OpenFIGI (free, no API key required)
 # ---------------------------------------------------------------------------
+
+#: OpenFIGI gets its own breaker. It is a different vendor with a much tighter
+#: anonymous rate limit, and a CUSIP lookup being throttled must not stop the
+#: 13F filings themselves from downloading.
+FIGI_PROVIDER = "openfigi"
+_FIGI_TIMEOUT_SECONDS = fetchguard.env_float("OPENFIGI_TIMEOUT_SECONDS", 10.0, 1.0)
 
 _CUSIP_CACHE_FILE = Path(__file__).parent.parent / "cache" / "cusip_cache.json"
 _cusip_cache: Optional[dict] = None
@@ -746,11 +774,15 @@ def _resolve_cusip_to_ticker(cusip: str) -> Optional[str]:
 
     # Query OpenFIGI
     try:
-        resp = _SESSION.post(
+        resp = fetchguard.request(
+            FIGI_PROVIDER,
             "https://api.openfigi.com/v3/mapping",
+            session=_SESSION,
+            method="POST",
             json=[{"idType": "ID_CUSIP", "idValue": cusip}],
             headers={"Content-Type": "application/json"},
-            timeout=10,
+            timeout=_FIGI_TIMEOUT_SECONDS,
+            raise_for_status=False,
         )
         if resp.status_code == 429:
             log.warning("OpenFIGI rate-limited; will retry CUSIP %s later", cusip)

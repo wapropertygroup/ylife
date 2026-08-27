@@ -16,7 +16,7 @@ import tempfile
 import threading
 import time
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 import json
 import math
@@ -27,8 +27,13 @@ from flask import Blueprint, render_template, redirect, url_for, request, flash,
 
 from ystocker import PEER_GROUPS, YT_CHANNELS
 from ystocker.data import fetch_group, dividend_yield_pct, ps_ratio
+# Per-ticker back-off. Owned by data.py because fetch_group() is what knows which
+# tickers it actually attempted; routes only reads it to pre-filter work lists.
+from ystocker.data import TICKER_BACKOFF as _ticker_backoff
 from ystocker import breadth
 from ystocker import charts
+from ystocker import fetchguard
+from ystocker import freshness
 # Plain client UA for every fred.stlouisfed.org request. A spoofed browser UA is
 # silently blackholed by FRED's Akamai bot detection — see fed.py for details.
 from ystocker.fed import FRED_USER_AGENT as _FRED_UA
@@ -255,22 +260,53 @@ def _load_groups() -> None:
 
 # -- Fetch / background loop --------------------------------------------------
 
-def _do_fetch() -> None:
-    """Fetch all tickers, update in-memory cache, and persist to disk."""
+def _do_fetch(force: bool = False) -> None:
+    """Fetch all tickers, update in-memory cache, and persist to disk.
+
+    Honours the per-ticker back-off unless *force* is set. This loop used to
+    ignore it entirely -- only the 5-minute rolling refresher consulted it -- so
+    a permanently-dead symbol was still refetched on every 8-hour warm and on
+    every restart, costing a request and a log line each time forever.
+
+    Tickers that are skipped or that fail keep whatever value the cache already
+    held. The previous version rebuilt the cache purely from the fetch result, so
+    any ticker missing from `raw` silently vanished from the UI; with a back-off
+    in play that would have made a single failure hide a symbol for up to an
+    hour, which is strictly worse than showing its last known price.
+    """
     global _cache, _fetch_errors, _cache_warming, _cache_last_updated
     all_tickers = sorted({t for tickers in PEER_GROUPS.values() for t in tickers})
-    log.info("Cache fetch started - %d tickers", len(all_tickers))
+    if force:
+        eligible = all_tickers
+    else:
+        eligible = _ticker_backoff.filter_ready(all_tickers)
+    log.info("Cache fetch started - %d tickers (%d after back-off%s)",
+             len(all_tickers), len(eligible), ", forced" if force else "")
     t0 = time.perf_counter()
-    raw, errors = fetch_group(all_tickers)
+    raw, errors = fetch_group(eligible)
     elapsed = time.perf_counter() - t0
     log.info("Cache fetch done in %.1fs - %d ok, %d failed", elapsed, len(raw), len(errors))
     for err in errors:
         log.warning("Fetch error: %s", err)
 
-    new_cache = {
-        group: {t: raw[t] for t in tickers if t in raw}
-        for group, tickers in PEER_GROUPS.items()
-    }
+    with _cache_lock:
+        previous = {g: dict(gd) for g, gd in (_cache or {}).items()}
+
+    new_cache: Dict[str, Dict[str, dict]] = {}
+    carried = 0
+    for group, tickers in PEER_GROUPS.items():
+        prev_group = previous.get(group, {})
+        group_data: Dict[str, dict] = {}
+        for t in tickers:
+            if t in raw:
+                group_data[t] = raw[t]
+            elif t in prev_group:
+                group_data[t] = prev_group[t]
+                carried += 1
+        new_cache[group] = group_data
+    if carried:
+        log.info("Cache fetch: carried forward %d stale ticker entries", carried)
+
     ts = time.time()
     with _cache_lock:
         _cache = new_cache
@@ -335,8 +371,8 @@ def _start_background_thread() -> None:
 _ROLLING_PERIOD = 5 * 60   # total refresh window (seconds)
 _BATCH_SIZE     = 8         # tickers per mini-fetch
 _JITTER_MAX     = 15        # max per-batch jitter (seconds)
-_ticker_backoff: dict[str, float] = {}   # ticker → earliest retry timestamp (UTC epoch)
-_ticker_backoff_attempts: dict[str, int] = {}  # ticker → consecutive failure count
+# Back-off state lives in _ticker_backoff (declared with the cache globals above)
+# and is shared with the full warm in _do_fetch.
 
 
 def _rolling_refresh_loop() -> None:
@@ -366,8 +402,7 @@ def _rolling_refresh_loop() -> None:
             continue
 
         # Skip tickers currently in exponential backoff window
-        now_ts = time.time()
-        eligible = [t for t in all_tickers if now_ts >= _ticker_backoff.get(t, 0)]
+        eligible = _ticker_backoff.filter_ready(all_tickers, log_skipped=False)
 
         batches = [eligible[i : i + _BATCH_SIZE] for i in range(0, len(eligible), _BATCH_SIZE)]
         num_batches = len(batches) or 1
@@ -391,20 +426,8 @@ def _rolling_refresh_loop() -> None:
                                     if ticker in group_data:
                                         group_data[ticker] = data
                             _cache_last_updated = time.time()
-                    # Clear backoff for successfully fetched tickers
-                    for ticker in raw:
-                        _ticker_backoff.pop(ticker, None)
-                        _ticker_backoff_attempts.pop(ticker, None)
                 if errs:
                     log.debug("Rolling refresher: %d error(s) in batch %s", len(errs), batch)
-                # Mark tickers that failed with exponential backoff
-                failed_tickers = [t for t in batch if t not in raw]
-                for ticker in failed_tickers:
-                    attempt = _ticker_backoff_attempts.get(ticker, 0)
-                    delay = min(120 * (2 ** attempt), 3600)  # 2min → 4min → 8min → … max 1hr
-                    _ticker_backoff[ticker] = time.time() + delay
-                    _ticker_backoff_attempts[ticker] = attempt + 1
-                    log.debug("Rolling refresher: backoff %s attempt=%d delay=%ds", ticker, attempt + 1, delay)
             except Exception:
                 log.warning("Rolling refresher: exception fetching batch %s", batch, exc_info=True)
 
@@ -622,12 +645,70 @@ def refresh():
 
 @bp.route("/api/cache-age")
 def api_cache_age():
-    """Return seconds since the cache was last updated."""
+    """Return seconds since the cache was last updated, plus fetch-guard state.
+
+    `providers` and `tickers_backed_off` make the new back-off machinery
+    visible. Without them "why has NVDA not moved in an hour" is unanswerable
+    from outside the process -- a silently skipped ticker looks exactly like a
+    ticker whose price genuinely has not changed.
+    """
     with _cache_lock:
         last = _cache_last_updated
     age = int(time.time() - last) if last else None
     log.info("API cache-age: %s seconds", age)
-    return jsonify({"age_seconds": age, "last_updated": last})
+    return jsonify({
+        "age_seconds": age,
+        "last_updated": last,
+        "providers": fetchguard.snapshot(),
+        "tickers_backed_off": _ticker_backoff.snapshot(),
+    })
+
+
+def _with_freshness(
+    data: dict,
+    *,
+    series_keys: tuple[str, ...] = (),
+) -> dict:
+    """Strip internal keys from a cache payload and attach a `meta` block.
+
+    Every cache-backed API here filtered out underscore-prefixed keys on the way
+    out, which quietly removed `_ts` -- the one field the UI needed to render
+    "data as of". So `/api/fed` and friends returned no age information at all,
+    and the only staleness a user could see came from a handful of hand-wired
+    client-side checks.
+
+    `meta` carries two independent things, and the distinction is the point:
+
+    * how old *our fetch* is (`fetched_at`, `age_seconds`, `age_label`)
+    * whether each upstream *series* has stopped publishing (`series`,
+      `stale_series`) -- the `WASDRAL`/`MBST` failure mode, where FRED keeps
+      answering 200 with well-formed data years after the series died.
+
+    `meta["series"]` is a flat map. When more than one *series_keys* group is
+    inspected its ids are namespaced `group:id`, because the same id legitimately
+    appears in two groups (`MORTGAGE30US` is in housing's `fred` block and could
+    be in another), and silently overwriting one with the other would report
+    health for a series nobody asked about.
+    """
+    resp = {k: v for k, v in data.items() if not k.startswith("_")}
+    meta = freshness.describe_age(data.get("_ts"))
+
+    health: dict[str, dict] = {}
+    namespace = len(series_keys) > 1
+    for key in series_keys:
+        group = data.get(key)
+        if not isinstance(group, dict):
+            continue
+        for sid, h in freshness.annotate_series(group).items():
+            health[f"{key}:{sid}" if namespace else sid] = h
+
+    if health:
+        meta["series"] = health
+        stale_ids = freshness.stale_series_ids(health)
+        if stale_ids:
+            meta["stale_series"] = stale_ids
+    resp["meta"] = meta
+    return resp
 
 
 # ---------------------------------------------------------------------------
@@ -725,7 +806,11 @@ def _invalidate_cache():
             _cache_warming = True
     if not already:
         log.info("Cache invalidated - spawning background re-fetch")
-        t = threading.Thread(target=_do_fetch, daemon=True, name="cache-invalidate-refetch")
+        # force=True: an explicit invalidate is a human saying "try everything
+        # again", so it ignores the per-ticker back-off rather than quietly
+        # skipping whatever was failing.
+        t = threading.Thread(target=_do_fetch, kwargs={"force": True},
+                             daemon=True, name="cache-invalidate-refetch")
         t.start()
     else:
         log.info("Cache invalidated (fetch already in progress)")
@@ -2066,28 +2151,31 @@ def _tv_holiday_list() -> list:
         return []
 
 
-def _tv_json(view):
+def _tv_json(view, label: str = "TV digest"):
     """Call one of this module's own API views and return its JSON body.
 
     Composing the views rather than the fetchers under them is deliberate: each
     already owns its cache, its TTL and its degradation behaviour, so the digest
     inherits all of that and adds no upstream load. The markets warm-up thread
     already calls api_markets() this way.
+
+    ``label`` only names the caller in the log lines; the market brief reuses
+    this helper and would otherwise report its failures as TV digest failures.
     """
     name = getattr(view, "__name__", str(view))
     try:
         rv = view()
     except Exception as exc:  # noqa: BLE001 - one dead source must not kill the digest
-        log.warning("TV digest: %s raised: %s", name, exc)
+        log.warning("%s: %s raised: %s", label, name, exc)
         return None
     body, code = (rv[0], rv[1]) if isinstance(rv, tuple) else (rv, 200)
     if code != 200:
-        log.info("TV digest: %s returned HTTP %s — skipped", name, code)
+        log.info("%s: %s returned HTTP %s — skipped", label, name, code)
         return None
     try:
         return body.get_json()
     except Exception as exc:  # noqa: BLE001
-        log.warning("TV digest: %s body was not JSON: %s", name, exc)
+        log.warning("%s: %s body was not JSON: %s", label, name, exc)
         return None
 
 
@@ -2398,9 +2486,10 @@ def api_fedwatch():
                 log.warning("API fedwatch: fresh check passed but payload has no meetings")
                 return jsonify({"status": "stale", "error": "Cache data inconsistent",
                                 "warming": True}), 202
-            resp = {k: v for k, v in data.items() if not k.startswith("_")}
+            resp = _with_freshness(data)
             resp["status"] = "ok"
-            log.info("API fedwatch: served from cache (%d meetings)", len(resp["meetings"]))
+            log.info("API fedwatch: served from cache (%d meetings, age %s)",
+                     len(resp["meetings"]), resp["meta"]["age_label"])
             return jsonify(resp)
 
         if fw_warming_fn():
@@ -2756,6 +2845,17 @@ def api_agents_search():
       status = optional exact filter: queued | running | done | error
       limit  = max hits to return (1-60, default 50)
 
+    A call with ``q`` set is a search result, and each hit carries a ``portfolio``
+    object -- the Portfolio Manager's turn (投资组合经理), body and role metadata --
+    or null where the report has no such section, which a self-test fixture and a
+    run that died before the decision both produce. Without ``q`` this is the
+    recent-runs index and the key is absent entirely, which is a distinct case
+    from null.
+
+    A search by ``q`` also drops runs with no report at all, counting them in
+    ``skipped_empty``. The index and an explicit ``status`` still show them, so a
+    failed run stays findable.
+
     Scoped to the caller's own runs by ``search_jobs``, same as every other agent
     read: the reports state entry levels and position sizes. A VIP searches every
     user's, matching what a VIP is allowed to open.
@@ -2780,7 +2880,30 @@ def api_agents_search():
 
     viewer = _agent_user()
     vip = quota.is_vip(viewer)
-    out = search_jobs(q, user=viewer, status=status, limit=limit, all_users=vip)
+    # This endpoint serves two views, and both extras below belong to the second.
+    # With no ``q`` it is the "Recent runs" index — including when the status
+    # dropdown narrows it, since almost every record is "done" and that filter
+    # therefore narrows very little. Once ``q`` names something, it is a search
+    # result: a short list the reader means to read.
+    #
+    # So a searched hit carries the Portfolio Manager's turn in full and the call
+    # is readable without opening the report. Not on the index: that is 50 full
+    # sections on every page load, six times the payload, and fifty stacked
+    # decisions is a wall of text rather than a list one can scan. Note the JSON
+    # is ASCII-escaped, so a Chinese section costs ~6 bytes per character — the
+    # reason this is worth gating at all rather than always sending.
+    #
+    # A searched hit with no report body is skipped as well — no decision, no
+    # sections, and a PDF link that 404s. Two exemptions keep failures findable.
+    # The index shows everything, because it is the only place a user sees that
+    # their own run failed, and most records here are errored runs, so the panel
+    # would go nearly blank. And an explicit status filter wins outright: queued,
+    # running and error runs have no report *by definition*, so skipping there
+    # would make three of the four dropdown choices always return nothing.
+    searching = bool(q.strip())
+    out = search_jobs(q, user=viewer, status=status, limit=limit, all_users=vip,
+                      require_report=searching and not status,
+                      with_portfolio=searching)
     out["viewer"] = viewer or ""
     out["vip"] = vip
     return jsonify(out)
@@ -2992,10 +3115,11 @@ def api_housing():
                 log.warning("API housing: fresh check passed but payload is empty")
                 return jsonify({"status": "stale", "error": "Cache data inconsistent",
                                 "warming": True}), 202
-            resp = {k: v for k, v in data.items() if not k.startswith("_")}
+            resp = _with_freshness(data, series_keys=("zillow", "redfin", "fred", "realtor"))
             resp["status"] = "ok"
-            log.info("API housing: served from cache (%d Zillow, %d Redfin series)",
-                     len(resp.get("zillow", {})), len(resp.get("redfin", {})))
+            log.info("API housing: served from cache (%d Zillow, %d Redfin series, age %s)",
+                     len(resp.get("zillow", {})), len(resp.get("redfin", {})),
+                     resp["meta"]["age_label"])
             return jsonify(resp)
 
         if hz_warming_fn():
@@ -3069,7 +3193,7 @@ def api_multiples():
                 log.warning("API multiples: fresh check passed but payload is empty")
                 return jsonify({"status": "stale", "error": "Cache data inconsistent",
                                 "warming": True}), 202
-            resp = {k: v for k, v in data.items() if not k.startswith("_")}
+            resp = _with_freshness(data, series_keys=("multpl",))
             resp["status"] = "ok"
             # Advance/decline rides along so the multiples page can show it on the
             # SPY-vs-QQQ card without a second request for the 84 KB breadth
@@ -3530,9 +3654,12 @@ def api_fed():
                 # Don't return None/empty, return a proper status
                 return jsonify({"status": "stale", "error": "Cache data inconsistent", "warming": True}), 202
 
-            resp = {k: v for k, v in data.items() if not k.startswith("_")}
+            resp = _with_freshness(data, series_keys=("series",))
             resp["status"] = "ok"
-            log.info("API fed: served from cache (%d series)", len(resp.get("series", {})))
+            stale = resp["meta"].get("stale_series")
+            log.info("API fed: served from cache (%d series, age %s%s)",
+                     len(resp.get("series", {})), resp["meta"]["age_label"],
+                     f", {len(stale)} stale: {', '.join(stale[:5])}" if stale else "")
             return jsonify(resp)
 
         # A background fetch is already running — tell the client to retry.
@@ -5360,7 +5487,10 @@ def api_markets():
         entry = _MARKETS_CACHE.get("data")
         if entry and time.time() - entry["ts"] < _MARKETS_CACHE_TTL:
             log.info("API markets: served from memory cache")
-            return jsonify(entry["data"])
+            # The snapshot timestamp was tracked in _MARKETS_CACHE but never
+            # shipped, so the page could not tell a live quote from a Friday
+            # close it had been showing all weekend.
+            return jsonify({**entry["data"], "meta": freshness.classify_quote(entry["ts"])})
 
     # Memory miss — try DynamoDB before hitting Yahoo Finance
     ddb_entry = _markets_load_from_dynamo()
@@ -5368,7 +5498,7 @@ def api_markets():
         log.info("API markets: served from DynamoDB cache")
         with _MARKETS_CACHE_LOCK:
             _MARKETS_CACHE["data"] = ddb_entry
-        return jsonify(ddb_entry["data"])
+        return jsonify({**ddb_entry["data"], "meta": freshness.classify_quote(ddb_entry.get("ts"))})
 
     def _rsi(prices: list, period: int = 14) -> Optional[float]:
         if len(prices) < period + 1:
@@ -5572,7 +5702,7 @@ def api_markets():
         _MARKETS_CACHE["data"] = {"ts": ts, "data": result}
     # Persist to DynamoDB in background so the response isn't delayed
     threading.Thread(target=_markets_save_to_dynamo, args=(result, ts), daemon=True).start()
-    return jsonify(result)
+    return jsonify({**result, "meta": freshness.classify_quote(ts)})
 
 
 # ---------------------------------------------------------------------------
@@ -8036,6 +8166,467 @@ def api_movers():
 
 
 # ---------------------------------------------------------------------------
+# AI Markets Brief  (/api/market-brief)
+# ---------------------------------------------------------------------------
+# The long-form brief shown on /markets. It is deliberately a separate endpoint
+# from /api/daily-summary rather than a mode of it: that one still feeds the
+# /daily page and the subscriber email, and the email builder splits its text on
+# blank lines into <p> tags, so a brief containing Markdown tables would arrive
+# as literal pipes in somebody's inbox. Two consumers, two shapes, two routes.
+#
+# Formatting lives in ystocker/brief.py; this section only collects the data,
+# because the /markets and /commodities payloads live in this module's private
+# caches.
+
+_BRIEF_CACHE: dict = {}
+_BRIEF_CACHE_LOCK = threading.Lock()
+_BRIEF_CACHE_TTL  = 1800   # 30 minutes
+
+# Stored in the same DynamoDB table as the daily summaries, partitioned by a
+# suffix on lang_market. Versioned because the brief's shape is part of what is
+# cached: bump this and a stale short summary written by an older build stops
+# being served as though it were a brief.
+_BRIEF_KEY_VER = "brief_v1"
+
+# Ceiling on the Gemini call, in milliseconds. Chosen against gunicorn's
+# --timeout 120 (deploy/cloudformation.yaml): the generation is normally 20-40s,
+# so 90s leaves headroom for a slow response while still failing before the
+# worker is killed. Observed generations run ~14k chars of prompt to ~7k of
+# Markdown; if the brief grows much past that, re-measure before raising this.
+_BRIEF_GEMINI_TIMEOUT_MS = 90_000
+
+
+def _brief_evaluation_summary() -> Optional[dict]:
+    """Sector-valuation medians for the brief, from the peer-group cache.
+
+    /evaluation renders per-ticker scatter data; a brief cannot use 500 rows, so
+    this reduces each peer group to its medians and picks the few individual
+    names worth naming. Returns None when the ticker cache is still cold.
+    """
+    data = _get_data()
+    if not data:
+        return None
+
+    sectors: list[dict] = []
+    all_rows: list[dict] = []
+    seen: set[str] = set()
+    for group, raw in data.items():
+        try:
+            df = _raw_to_df(raw)
+        except Exception as exc:  # noqa: BLE001 - one bad group must not kill the brief
+            log.warning("Brief: peer group %r could not build a DataFrame: %s", group, exc)
+            continue
+        if df.empty:
+            continue
+
+        def _median(col: str) -> Optional[float]:
+            if col not in df.columns:
+                return None
+            ser = pd.to_numeric(df[col], errors="coerce").dropna()
+            return round(float(ser.median()), 3) if not ser.empty else None
+
+        sectors.append({
+            "sector":            group,
+            "count":             int(len(df)),
+            "median_pe_ttm":     _median("PE (TTM)"),
+            "median_pe_fwd":     _median("PE (Forward)"),
+            "median_peg":        _median("PEG"),
+            "median_ev_ebitda":  _median("EV/EBITDA"),
+            "median_upside":     _median("Upside (%)"),
+            # Median, not mean, and named so: a peer group of 18 semis with one
+            # 20% mover has a mean day change that describes no member of it.
+            "median_day_change": _median("Day Change (%)"),
+        })
+
+        for ticker, row in df.iterrows():
+            if ticker in seen:
+                continue
+            seen.add(str(ticker))
+            all_rows.append({
+                "ticker":     str(ticker),
+                "sector":     group,
+                "pe_fwd":     _safe(row.get("PE (Forward)")),
+                "upside":     _safe(row.get("Upside (%)")),
+                "market_cap": _safe(row.get("Market Cap ($B)")),
+            })
+
+    if not sectors:
+        return None
+
+    sectors.sort(key=lambda s: s.get("median_pe_fwd") or 0, reverse=True)
+
+    def _top(key: str, reverse: bool, limit: int = 5) -> list[dict]:
+        rows = [r for r in all_rows if isinstance(r.get(key), (int, float))]
+        # Forward P/E below zero is a loss-maker, not a cheap stock; ranking on
+        # it would put the most distressed names at the top of "cheapest".
+        if key == "pe_fwd":
+            rows = [r for r in rows if r[key] > 0]
+        rows.sort(key=lambda r: r[key], reverse=reverse)
+        return rows[:limit]
+
+    return {
+        "sectors":        sectors,
+        "most_expensive": _top("pe_fwd", True),
+        "cheapest":       _top("pe_fwd", False),
+        "most_upside":    _top("upside", True),
+    }
+
+
+def _brief_13f() -> tuple[Optional[dict], Optional[list]]:
+    """Latest 13F holdings plus the consensus positions across funds.
+
+    Mirrors the consensus computation in the /13f view rather than importing it,
+    since that one is entangled with rendering the page.
+
+    Returns ``(None, None)`` when no fund has usable holdings — the cache is a
+    dict of per-fund results, and a run where every SEC fetch failed still
+    produces a populated-looking dict of ``{"error": ...}`` entries. Returning
+    it would report the source as used while the section renders unavailable.
+    """
+    try:
+        from ystocker.sec13f import get_all_holdings
+        holdings = get_all_holdings()
+    except Exception as exc:  # noqa: BLE001
+        log.warning("Brief: 13F holdings unavailable: %s", exc)
+        return None, None
+    if not holdings:
+        return None, None
+
+    from collections import defaultdict
+
+    ticker_funds: dict[str, list] = defaultdict(list)
+    ticker_value: dict[str, float] = defaultdict(float)
+    live = 0
+    for fund_name, fd in holdings.items():
+        if not isinstance(fd, dict) or fd.get("error") or not fd.get("holdings"):
+            continue
+        live += 1
+        for h in fd.get("holdings", []):
+            t = h.get("ticker")
+            if not t:
+                continue
+            ticker_funds[t].append(fund_name)
+            ticker_value[t] += h.get("value_millions", 0) or 0
+    if not live:
+        errored = sum(1 for fd in holdings.values()
+                      if isinstance(fd, dict) and fd.get("error"))
+        log.info("Brief: 13F has %d funds but none usable (%d errored) — "
+                 "section marked unavailable", len(holdings), errored)
+        return None, None
+
+    consensus = sorted(
+        [
+            {"ticker": t, "fund_count": len(names),
+             "total_value_m": round(ticker_value[t]), "fund_names": names}
+            for t, names in ticker_funds.items() if len(names) >= 2
+        ],
+        key=lambda x: -x["fund_count"],
+    )[:25]
+    return holdings, consensus
+
+
+def _collect_brief_sources(warm: bool = False, app=None) -> dict:
+    """Gather every dashboard's data for the brief.
+
+    ``warm=False`` (the request path) peeks caches and never rebuilds. This is
+    not politeness: api_markets() on a cold cache refetches ~30 symbols with a
+    year of history each, which measured 120s and got the worker SIGKILLed by
+    gunicorn's --timeout — see the note on _tv_markets_cached. A section the
+    model is told is unavailable costs a sentence; a dead worker costs the site.
+
+    ``warm=True`` is for the overnight pre-generator, which runs in a background
+    thread where a slow fetch harms nobody. Eight of these caches have no
+    warm-up thread of their own and are only ever filled by a browser hitting
+    the page, so without this the first brief of a fresh process would be built
+    from half a snapshot. ``app`` is required for that path: these are Flask
+    views, and calling one outside an app context raises before it can return —
+    the same reason _start_markets_warmup_thread holds a test_request_context.
+    """
+    # breadth is imported at module level; the rest are local to keep import
+    # time down, matching how the other routes reach these modules.
+    from ystocker import fed as fed_mod, fedwatch, housing, valuation
+
+    src: dict[str, Any] = {}
+    # Sources served past their TTL. Named in the snapshot so the model dates
+    # them rather than presenting week-old figures as this morning's.
+    stale: list[str] = []
+
+    if warm:
+        # Populate the caches that nothing else warms, by calling the views the
+        # browser would have called. Each is independently guarded inside
+        # _tv_json, so one dead upstream costs one section.
+        from contextlib import nullcontext
+        if has_request_context():
+            ctx = nullcontext()
+        elif app is not None:
+            ctx = app.test_request_context()
+        else:
+            ctx = None
+            log.warning("Brief: warm-up needs an app or request context — "
+                        "skipping it and peeking only")
+        if ctx is not None:
+            with ctx:
+                for view in (api_commodities, api_fear_greed, api_put_call_ratio,
+                             api_aaii_sentiment, api_economic_events, api_yield_curve,
+                             api_credit_spread, api_movers, api_skew, api_yield_spread):
+                    _tv_json(view, label="Market brief warm-up")
+                # api_markets has its own warm-up thread on a 60s loop, so it is
+                # normally already in memory and is deliberately not refreshed
+                # here — it is the one view that can take 120s. But a brief
+                # missing the index table is barely a brief, so if that thread
+                # has not landed yet, pay the cost once rather than ship without.
+                with _MARKETS_CACHE_LOCK:
+                    have_markets = bool(_MARKETS_CACHE.get("data"))
+                if not have_markets:
+                    log.info("Brief warm-up: markets cache empty — fetching it "
+                             "directly (slow path, background thread only)")
+                    _tv_json(api_markets, label="Market brief warm-up")
+
+    def _peek(cache: dict, lock, key: str = "data"):
+        """Read a {key: {ts, data}} cache without rebuilding it."""
+        try:
+            with lock:
+                entry = cache.get(key)
+            return (entry or {}).get("data")
+        except Exception as exc:  # noqa: BLE001
+            log.warning("Brief: cache peek failed for %s: %s", key, exc)
+            return None
+
+    src["markets"]     = _peek(_MARKETS_CACHE, _MARKETS_CACHE_LOCK)
+    src["commodities"] = _peek(_COMMODITIES_CACHE, _COMMODITIES_CACHE_LOCK)
+    src["movers"]      = _peek(_MOVERS_CACHE, _MOVERS_CACHE_LOCK)
+    src["fg"]          = _peek(_FG_CACHE, _FG_CACHE_LOCK)
+    src["pcr"]         = _peek(_PCR_CACHE, _PCR_CACHE_LOCK)
+    src["skew"]        = _peek(_SKEW_CACHE, _SKEW_LOCK)
+    src["yield_curve"] = _peek(_YIELD_CURVE_CACHE, _YIELD_CURVE_CACHE_LOCK,
+                               _YIELD_CURVE_CACHE_VER)
+    src["yield_spread"] = _peek(_YIELD_SPREAD_CACHE, _YIELD_SPREAD_LOCK)
+
+    # _CREDIT_SPREAD_CACHE is keyed by period, never by "data" — the daily
+    # summary has been reading _CREDIT_SPREAD_CACHE.get("data") since it was
+    # written, which is always None, which is why its credit-spread line has
+    # never once appeared. "1y" is what /markets requests by default.
+    src["credit_spread"] = _peek(_CREDIT_SPREAD_CACHE, _CREDIT_SPREAD_CACHE_LOCK, "1y")
+
+    aaii = _peek(_AAII_CACHE, _AAII_CACHE_LOCK)
+    src["aaii"] = (aaii or {}).get("latest")
+    econ = _peek(_ECON_CACHE, _ECON_CACHE_LOCK)
+    src["events"] = (econ or {}).get("events")
+
+    # breadth.peek() reads memory, then disk, then the committed baseline, and
+    # never rebuilds — get_breadth() would block ~82s downloading 518 tickers.
+    try:
+        src["breadth"] = breadth.peek()
+    except Exception as exc:  # noqa: BLE001
+        log.warning("Brief: breadth peek failed: %s", exc)
+        src["breadth"] = None
+
+    # The four standalone modules are memory-cache-first and warmed at startup.
+    # peek() is deliberate: get_*_data() past its TTL falls through to a network
+    # rebuild (housing's is ~10 MB, valuation's is ~600 constituent lookups),
+    # which must never happen inside a request. Gating on is_cache_fresh()
+    # instead would drop the whole section every time a nightly refresh ran
+    # late — and these are weekly and monthly series, where a day of staleness
+    # changes nothing a brief would say. So take the stale copy and date it.
+    for name, mod in (("fed", fed_mod), ("fedwatch", fedwatch),
+                      ("housing", housing), ("valuation", valuation)):
+        try:
+            payload = mod.peek()
+            if not payload or payload.get("_warming"):
+                log.info("Brief: %s has no cached payload — section marked unavailable", name)
+                src[name] = None
+                continue
+            if not mod.is_cache_fresh():
+                log.info("Brief: %s cache is stale — using it anyway, labelled", name)
+                stale.append(name)
+            src[name] = payload
+        except Exception as exc:  # noqa: BLE001
+            log.warning("Brief: %s unavailable: %s", name, exc)
+            src[name] = None
+
+    src["fed_series_meta"] = getattr(fed_mod, "SERIES", {})
+    src["evaluation"] = _brief_evaluation_summary()
+    src["holdings13f"], src["consensus13f"] = _brief_13f()
+    src["_stale"] = stale
+    return src
+
+
+def _generate_market_brief(lang: str, warm: bool = False, app=None) -> dict:
+    """Build the snapshot, call Gemini, and return the result dict.
+
+    Raises on a Gemini failure so the caller decides whether that is a 500 (the
+    endpoint) or a logged skip (the pre-generator).
+    """
+    from datetime import date as _date_cls, datetime as _dt
+    from google import genai
+    from google.genai import types as genai_types
+    from ystocker import brief as brief_mod
+
+    today_iso = _date_cls.today().isoformat()
+    sources   = _collect_brief_sources(warm=warm, app=app)
+    snapshot  = brief_mod.build_snapshot(sources, today_iso)
+    prompt    = brief_mod.build_prompt(snapshot, lang)
+    log.info("Market brief: lang=%s snapshot=%d chars prompt=%d chars",
+             lang, len(snapshot), len(prompt))
+
+    # Bounded below gunicorn's --timeout 120. This call can happen inside a
+    # request (first visit of the day, or the ↻ button), and a worker killed at
+    # the 120s wall takes every other request it was serving down with it. A
+    # brief that errors at 90s is a retry; a SIGKILLed worker is an outage.
+    client = genai.Client(
+        api_key=os.environ.get("GEMINI_API_KEY", ""),
+        http_options=genai_types.HttpOptions(timeout=_BRIEF_GEMINI_TIMEOUT_MS),
+    )
+    resp = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
+    text = (resp.text or "").strip()
+    if not text:
+        raise RuntimeError("Gemini returned an empty brief")
+
+    return {
+        "brief":        text,
+        "generated_at": _dt.utcnow().strftime("%Y-%m-%d %H:%M UTC"),
+        "sources_used": sorted(k for k, v in sources.items()
+                               if v and k not in brief_mod._META_KEYS),
+        "sources_cold": sorted(k for k, v in sources.items()
+                               if not v and k not in brief_mod._META_KEYS),
+        "sources_stale": sorted(sources.get("_stale") or []),
+    }
+
+
+def _brief_ddb_key(lang: str) -> str:
+    return f"{lang}_{_BRIEF_KEY_VER}"
+
+
+@bp.route("/api/market-brief", methods=["POST"])
+def api_market_brief():
+    """The long-form AI Markets Brief for /markets.
+
+    Request body:  {"lang": "en"|"zh", "force_refresh": bool}
+    Response:      {"brief": "<markdown>", "generated_at": "...",
+                    "sources_used": [...], "sources_cold": [...]}
+
+    Markdown, not prose: the card renders it through static/markdown.js, which
+    does pipe tables. Cached for the day, since it describes a dated snapshot.
+    """
+    import time as _time
+    from datetime import date as _date_cls
+
+    if not os.environ.get("GEMINI_API_KEY"):
+        return jsonify({"error": "GEMINI_API_KEY not configured"}), 503
+
+    payload = request.get_json(silent=True) or {}
+    lang    = payload.get("lang", "en")
+    if lang not in ("en", "zh"):
+        lang = "en"
+    # force_refresh was accepted and silently ignored by the endpoint this
+    # replaces, so the card's refresh button has never refreshed anything.
+    force     = bool(payload.get("force_refresh"))
+    today_iso = _date_cls.today().isoformat()
+    ddb_key   = _brief_ddb_key(lang)
+    log.info("API market-brief: lang=%s force=%s", lang, force)
+
+    if not force:
+        with _BRIEF_CACHE_LOCK:
+            entry = _BRIEF_CACHE.get(lang)
+        if entry and _time.time() - entry["ts"] < _BRIEF_CACHE_TTL:
+            return jsonify(entry["data"])
+
+        tbl = _get_summaries_table()
+        if tbl:
+            try:
+                item = tbl.get_item(Key={"date": today_iso,
+                                         "lang_market": ddb_key}).get("Item")
+                if item and item.get("summary"):
+                    result = {"brief": item["summary"],
+                              "generated_at": item.get("generated_at", ""),
+                              "from_cache": True}
+                    with _BRIEF_CACHE_LOCK:
+                        _BRIEF_CACHE[lang] = {"ts": _time.time(), "data": result}
+                    return jsonify(result)
+            except Exception as exc:  # noqa: BLE001
+                log.warning("Brief: DynamoDB read failed: %s", exc)
+
+    try:
+        result = _generate_market_brief(lang)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("Brief: generation failed: %s", exc)
+        return jsonify({"error": str(exc)}), 500
+
+    _store_market_brief(lang, result, today_iso)
+    return jsonify(result)
+
+
+def _store_market_brief(lang: str, result: dict, today_iso: str) -> None:
+    """Write a generated brief to the memory cache and DynamoDB."""
+    import time as _time
+
+    with _BRIEF_CACHE_LOCK:
+        _BRIEF_CACHE[lang] = {"ts": _time.time(), "data": result}
+    tbl = _get_summaries_table()
+    if not tbl:
+        return
+    try:
+        tbl.put_item(Item={
+            "date":         today_iso,
+            "lang_market":  _brief_ddb_key(lang),
+            "summary":      result["brief"],
+            "generated_at": result.get("generated_at", ""),
+            "ttl":          int(_time.time()) + 90 * 24 * 3600,
+        })
+    except Exception as exc:  # noqa: BLE001
+        log.warning("Brief: DynamoDB write failed: %s", exc)
+
+
+def _do_pregen_market_briefs(app=None) -> None:
+    """Pre-generate both language briefs so the morning's first visit is instant.
+
+    Called from the same scheduler as the daily summaries. Uses warm=True: this
+    is a background thread, so filling the eight unwarmed caches here is free,
+    and it is the difference between a complete brief and one that opens by
+    apologising for four missing sections.
+    """
+    import time as _time
+    from datetime import date as _date_cls
+
+    if not os.environ.get("GEMINI_API_KEY"):
+        log.debug("Brief pre-gen: no GEMINI_API_KEY, skipping")
+        return
+
+    today_iso = _date_cls.today().isoformat()
+    tbl       = _get_summaries_table()
+
+    for i, lang in enumerate(("en", "zh")):
+        with _BRIEF_CACHE_LOCK:
+            entry = _BRIEF_CACHE.get(lang)
+        if entry and _time.time() - entry["ts"] < _BRIEF_CACHE_TTL:
+            log.debug("Brief pre-gen: %s already in memory, skipping", lang)
+            continue
+        if tbl:
+            try:
+                item = tbl.get_item(Key={"date": today_iso,
+                                         "lang_market": _brief_ddb_key(lang)}).get("Item")
+                if item and item.get("summary"):
+                    with _BRIEF_CACHE_LOCK:
+                        _BRIEF_CACHE[lang] = {"ts": _time.time(), "data": {
+                            "brief": item["summary"],
+                            "generated_at": item.get("generated_at", ""),
+                            "from_cache": True}}
+                    log.info("Brief pre-gen: %s loaded from DynamoDB", lang)
+                    continue
+            except Exception as exc:  # noqa: BLE001
+                log.warning("Brief pre-gen: DynamoDB read failed (%s): %s", lang, exc)
+        try:
+            # Only the first language needs the warm-up pass; the second reads
+            # the caches the first one filled.
+            result = _generate_market_brief(lang, warm=(i == 0), app=app)
+            _store_market_brief(lang, result, today_iso)
+            log.info("Brief pre-gen: generated %s (%d chars, %d sources cold)",
+                     lang, len(result["brief"]), len(result.get("sources_cold", [])))
+        except Exception as exc:  # noqa: BLE001
+            log.warning("Brief pre-gen: failed for %s: %s", lang, exc)
+
+
+# ---------------------------------------------------------------------------
 # Daily AI Summary  (/api/daily-summary)
 # ---------------------------------------------------------------------------
 
@@ -9811,7 +10402,7 @@ def _do_pregen_daily_summaries() -> None:
                 log.warning("Daily pre-gen: Gemini failed for %s: %s", cache_key, exc)
 
 
-def _pregen_daily_loop() -> None:
+def _pregen_daily_loop(app=None) -> None:
     """
     Background thread:
       1. On startup — wait 2 minutes (let caches warm), then pre-generate.
@@ -9840,6 +10431,10 @@ def _pregen_daily_loop() -> None:
         _do_pregen_daily_summaries()
     except Exception:
         log.exception("Daily pre-gen: startup warm-up failed")
+    try:
+        _do_pregen_market_briefs(app)
+    except Exception:
+        log.exception("Brief pre-gen: startup warm-up failed")
 
     # Nightly loop
     while True:
@@ -9850,10 +10445,15 @@ def _pregen_daily_loop() -> None:
             _do_pregen_daily_summaries()
         except Exception:
             log.exception("Daily pre-gen: nightly fire failed")
+        try:
+            _do_pregen_market_briefs(app)
+        except Exception:
+            log.exception("Brief pre-gen: nightly fire failed")
         time.sleep(70)
 
 
-def _start_daily_pregen_scheduler() -> None:
-    t = threading.Thread(target=_pregen_daily_loop, daemon=True, name="daily-pregen")
+def _start_daily_pregen_scheduler(app=None) -> None:
+    t = threading.Thread(target=_pregen_daily_loop, args=(app,),
+                         daemon=True, name="daily-pregen")
     t.start()
     log.info("Daily summary pre-gen scheduler started")

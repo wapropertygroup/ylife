@@ -317,6 +317,6 @@ def create_app() -> Flask:
 
     # Pre-generate all 4 daily summaries at midnight ET and at startup so
     # /daily always serves from cache — no Gemini latency on first visit.
-    _start_daily_pregen_scheduler()
+    _start_daily_pregen_scheduler(app)
 
     return app

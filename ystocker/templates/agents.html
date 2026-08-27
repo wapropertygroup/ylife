@@ -396,6 +396,38 @@ window.YSTime = (function () {
 }
 .ag-hist-runs { display: flex; flex-direction: column; gap: 8px; }
 .ag-hist-run { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; justify-content: space-between; }
+/* The Portfolio Manager's turn, carried inline on every search hit so the call
+   can be read without opening the report. A 100% flex basis rather than a block:
+   .ag-hist-run is a wrapping flex row, so this drops onto its own line beneath
+   the ticker and the buttons instead of competing with them for width.
+   min-width:0 because a flex child defaults to min-content, and one long
+   unbroken line in a table cell would otherwise push the row wider than the
+   panel and produce a horizontal scrollbar on the whole page. */
+.ag-hist-pm {
+  flex: 1 1 100%; min-width: 0; margin-top: 1px;
+  border-left: 2px solid var(--role, #8b5cf6);
+  border-radius: 0 8px 8px 0;
+  background: rgba(139, 92, 246, .06);
+  padding: 8px 12px; overflow-x: auto;
+}
+.ag-hist-pm-head {
+  display: flex; align-items: baseline; gap: 7px; margin-bottom: 4px;
+  font-size: 11px; font-weight: 600; color: var(--role, #8b5cf6);
+}
+/* The English name beside the Chinese one, de-emphasised: the cast is named in
+   English upstream, so a bilingual reader can still match a section to the PDF. */
+.ag-hist-pm-head .ag-hist-pm-alt { color: #64748b; font-weight: 400; }
+.ag-hist-pm .ag-report { font-size: 12px; line-height: 1.7; }
+/* The turn is LLM-authored markdown and opens with its own heading often as high
+   as h1, which at report scale would dwarf the row it sits in. */
+.ag-hist-pm .ag-report h1,
+.ag-hist-pm .ag-report h2,
+.ag-hist-pm .ag-report h3,
+.ag-hist-pm .ag-report h4 { font-size: 12.5px; margin: .6em 0 .3em; }
+.ag-hist-pm .ag-report > :first-child { margin-top: 0; }
+.ag-hist-pm .ag-report > :last-child { margin-bottom: 0; }
+.ag-hist-pm-note { color: #64748b; font-size: 11px; font-style: italic; }
+.ag-hist-pm-note:not(:first-child) { margin-top: 5px; }
 /* Search bar above the history. Wraps rather than shrinks so the ticker box
    keeps a usable width on a phone instead of collapsing to a few characters. */
 .ag-hist-head {
@@ -1982,6 +2014,13 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
           let txt = '<b>' + res.found + '</b> ' + label;
           if (res.truncated) txt += ' · ' + (I18n.t('agents.search_showing') || 'showing') + ' ' + jobs.length;
           if (status) txt += ' · ' + esc(status);
+          // Runs the server dropped for having no report. Stated, not hidden:
+          // otherwise a query whose only matches were failed runs reads as
+          // "you never ran that ticker".
+          if (res.skipped_empty) {
+            txt += ' · ' + esc(String(res.skipped_empty)) + ' '
+              + (I18n.t('agents.search_hidden') || 'with no report hidden');
+          }
           searchMetaEl.innerHTML = txt;
           searchMetaEl.classList.remove('hidden');
         }
@@ -2060,6 +2099,67 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
             actions.appendChild(dl);
           }
           row.append(left, actions);
+          // The Portfolio Manager's turn, in full, under the row. Rendered from
+          // the search response rather than fetched per row, so a 50-hit search
+          // is still one request.
+          //
+          // Two conditions, and both matter. The key is present only on a
+          // filtered response — the unfiltered index omits it, and treating
+          // "absent" as "no section" would caption every row in the default view
+          // with a note saying its report has no decision. And has_report,
+          // because a queued or running run has not produced one yet while an
+          // errored run never will; those reach this renderer only when the
+          // status filter asked for them, and a "missing section" note on a job
+          // that is still running would be describing the clock, not the report.
+          if (j.has_report && ('portfolio' in j)) {
+            const pm = j.portfolio;
+            const pmBox = document.createElement('div');
+            pmBox.className = 'ag-hist-pm';
+            const zh = I18n.getLang() === 'zh';
+            if (pm) {
+              pmBox.style.setProperty('--role', pm.color || '#8b5cf6');
+              const head = document.createElement('div');
+              head.className = 'ag-hist-pm-head';
+              const nm = document.createElement('span');
+              // Chinese first when the page is Chinese, matching the
+              // conversation view's own bilingual header.
+              nm.textContent = (pm.icon ? pm.icon + ' ' : '')
+                + ((zh && pm.zh) ? pm.zh : pm.name);
+              head.appendChild(nm);
+              if (zh && pm.zh) {
+                const alt = document.createElement('span');
+                alt.className = 'ag-hist-pm-alt';
+                alt.textContent = pm.name;
+                head.appendChild(alt);
+              }
+              const body = document.createElement('div');
+              body.className = 'ag-report';
+              const md = window.Markdown ? Markdown.render(pm.body) : null;
+              // textContent, not innerHTML, on the fallback path: the body is
+              // model-authored and reaches the page unescaped otherwise.
+              if (md) body.innerHTML = md; else body.textContent = pm.body;
+              pmBox.append(head, body);
+              // Say so rather than ending mid-argument: the server clips a very
+              // long section, and silence would read as the manager's own words.
+              if (pm.truncated) {
+                const more = document.createElement('div');
+                more.className = 'ag-hist-pm-note';
+                more.textContent = I18n.t('agents.pm_truncated')
+                  || 'Section truncated — open the report for the full text.';
+                pmBox.appendChild(more);
+              }
+            } else {
+              // A report with no decision section: a self-test fixture, or a run
+              // that stopped before the Portfolio Manager spoke. The row stays,
+              // because the analyst sections are still readable via View.
+              const note = document.createElement('div');
+              note.className = 'ag-hist-pm-note';
+              note.textContent = I18n.t('agents.pm_none')
+                || 'No Portfolio Manager section in this report.';
+              pmBox.appendChild(note);
+            }
+            row.appendChild(pmBox);
+          }
           runs.appendChild(row);
         });
 
@@ -2068,6 +2168,12 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
     } catch (e) {
       // History is decoration and must never block the page, but a silent
       // failure would leave the spinner running for ever.
+      //
+      // Logged unconditionally, because the visible branch below is taken only
+      // when the panel is empty: a throw while rows are already on screen was
+      // swallowed without a trace, leaving stale results that looked like a
+      // search returning the wrong thing rather than a bug.
+      console.error('agents: history/search render failed', e);
       if (seq === histSeq && !historyHasRows()) {
         const box = document.getElementById('agHistory');
         box.className = 'text-xs';

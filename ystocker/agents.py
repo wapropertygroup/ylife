@@ -1013,16 +1013,74 @@ def _records(
     return records[:limit]
 
 
-def _listing_entry(job: dict[str, Any]) -> dict[str, Any]:
+# The one section a search hit may carry in full. A search result is something
+# the reader wants to *read*, and the Portfolio Manager's turn is where the call
+# is actually stated, so it travels with the listing instead of costing a second
+# request per row.
+#
+# Capped because a search returns up to 60 hits. The section measured 610 bytes
+# on a real 39 KB report, but it is LLM-authored and nothing upstream bounds its
+# length, so one unlucky run must not turn a single search into a megabyte of
+# JSON. The clip is reported rather than hidden -- see ``truncated`` -- so the UI
+# can say so and point at the full report rather than quietly ending mid-argument.
+_PM_MAX_CHARS = 4000
+
+
+def portfolio_section(report: str) -> Optional[dict[str, Any]]:
+    """The Portfolio Manager's turn from ``report``, or None if it has none.
+
+    The role's own metadata (name, Chinese name, icon, colour) is returned beside
+    the body so a caller renders the speaker exactly as the conversation view
+    does, rather than keeping a second copy of the cast that can drift from
+    ``agent_roles.ROLES``.
+
+    None is not an error and every caller must handle it: a run that has not
+    produced a report yet, a self-test whose fixture carries no role headings at
+    all, and a real report that stopped before the decision all reach it.
+    """
+    body = (report or "").strip()
+    if not body:
+        return None
+    from ystocker.agent_roles import split_sections
+
+    for sec in split_sections(body):
+        role = sec.get("role")
+        if not role or role.get("key") != "portfolio":
+            continue
+        text = sec.get("body") or ""
+        clipped = len(text) > _PM_MAX_CHARS
+        return {
+            "key": role["key"],
+            "name": role["name"],
+            "zh": role["zh"],
+            "icon": role["icon"],
+            "color": role["color"],
+            "team": sec.get("team"),
+            "team_zh": sec.get("team_zh"),
+            "body": text[:_PM_MAX_CHARS] if clipped else text,
+            "truncated": clipped,
+        }
+    return None
+
+
+def _listing_entry(job: dict[str, Any],
+                   with_portfolio: bool = False) -> dict[str, Any]:
     """Trim a job record down to what a listing or search hit needs.
 
     ``has_report`` is recorded before the body is dropped: a run can finish with
     an empty report, and the UI offers a PDF link only where there is something
     to render. Deciding that from ``status == 'done'`` alone produced links that
     404'd.
+
+    ``with_portfolio`` attaches the Portfolio Manager's turn -- extracted here,
+    while the body is still in hand, which is the whole point: the caller renders
+    the decision without a second fetch. Off by default so the plain history and
+    every other listing keep their previous size.
     """
     entry = dict(job)
     entry["has_report"] = bool((entry.get("report") or "").strip())
+    if with_portfolio:
+        entry["portfolio"] = portfolio_section(entry.get("report") or "")
     # The transcript can be long; a listing does not need it.
     entry.pop("log", None)
     entry.pop("report", None)
@@ -1086,13 +1144,24 @@ def _match_rank(job: dict[str, Any], q: str) -> Optional[int]:
 
 def search_jobs(query: str = "", user: Optional[str] = None,
                 status: Optional[str] = None,
-                limit: int = 50, all_users: bool = False) -> dict[str, Any]:
+                limit: int = 50, all_users: bool = False,
+                require_report: bool = False,
+                with_portfolio: bool = False) -> dict[str, Any]:
     """Search analysis reports by ticker or analysis date.
 
-    Returns ``{"jobs": [...], "found": int, "scanned": int, "truncated": bool}``
-    where ``found`` counts every match and ``jobs`` holds at most ``limit`` of
-    them, so the UI can say "showing 50 of 63" instead of silently dropping the
-    tail.
+    Returns ``{"jobs": [...], "found": int, "scanned": int, "truncated": bool,
+    "skipped_empty": int}`` where ``found`` counts every match and ``jobs`` holds
+    at most ``limit`` of them, so the UI can say "showing 50 of 63" instead of
+    silently dropping the tail.
+
+    ``require_report`` drops hits with no report body, so every row returned is
+    something there is text to read. ``skipped_empty`` reports how many went that
+    way rather than leaving them to vanish unaccounted for -- a search that
+    quietly hides half its matches reads as a search that found nothing.
+
+    ``with_portfolio`` attaches each hit's Portfolio Manager turn (see
+    ``portfolio_section``). Both default off so ``list_jobs`` and any other
+    caller keep the previous payload and the previous row set.
 
     Ownership is enforced per record via ``owns()``: these transcripts carry
     position sizes, so a query must not become a way to probe what other people
@@ -1106,6 +1175,7 @@ def search_jobs(query: str = "", user: Optional[str] = None,
 
     hits: list[tuple[int, int, dict[str, Any]]] = []
     scanned = 0
+    skipped_empty = 0
     for idx, job in enumerate(_records(user=None if all_users else user)):
         if not all_users and not owns(job, user):
             continue
@@ -1117,19 +1187,25 @@ def search_jobs(query: str = "", user: Optional[str] = None,
         rank = _match_rank(job, q) if q else _RANK_TICKER_EXACT
         if rank is None:
             continue
+        # Counted after the match, not before: "hidden" should mean "matched your
+        # query but had nothing to read", not "exists somewhere on disk".
+        if require_report and not (job.get("report") or "").strip():
+            skipped_empty += 1
+            continue
         # idx is the newest-first position, so it breaks ties within a tier
         # by recency without a second sort key.
-        hits.append((rank, idx, _listing_entry(job)))
+        hits.append((rank, idx, _listing_entry(job, with_portfolio=with_portfolio)))
 
     hits.sort(key=lambda h: (h[0], h[1]))
     found = len(hits)
-    log.info("agents: search q=%r status=%s -> %d/%d owned records",
-             q, status or "any", found, scanned)
+    log.info("agents: search q=%r status=%s -> %d/%d owned records (%d empty skipped)",
+             q, status or "any", found, scanned, skipped_empty)
     return {
         "jobs": [h[2] for h in hits[:limit]],
         "found": found,
         "scanned": scanned,
         "truncated": found > limit,
+        "skipped_empty": skipped_empty,
     }
 
 

@@ -176,6 +176,53 @@ Each app follows the same pattern:
 - `forecast.py` — Prophet / ARIMA / Linear price forecasting
 - `charts.py` — Matplotlib/Seaborn → base64 PNG (server-side, no disk I/O)
 - `heatmap_meta.py` — Static S&P 500 metadata for market heatmap tile sizing
+- `brief.py` — The AI Markets Brief: formats all eight dashboards into one
+  prompt and asks for a sectioned, table-per-section daily brief
+
+### The AI Markets Brief (`/api/market-brief`)
+
+The card at the top of `/markets` is generated from **every** dashboard —
+`/markets`, `/evaluation`, `/commodities`, `/13f`, `/fedwatch`, `/housing`,
+`/multiples`, `/fed` — collected server-side by `routes._collect_brief_sources()`
+and formatted by `brief.py`. Output is Markdown, rendered through the shared
+`static/markdown.js`, because the point of the brief is a table per section.
+
+It is deliberately **not** a mode of `/api/daily-summary`. That endpoint still
+feeds `/daily` and the subscriber email, and `_build_email_sections` splits its
+text on blank lines into `<p>` tags — so a brief containing pipe tables would
+arrive as literal pipes in somebody's inbox. Two consumers, two shapes, two
+routes, two DynamoDB key namespaces (`{lang}_brief_v1` vs `{lang}_{market}`).
+
+Three rules hold the thing together, and breaking any of them degrades quietly:
+
+- **A cold source is stated, never dropped.** Each section emits an explicit
+  `DATA UNAVAILABLE` line, and the prompt turns that into one italic sentence.
+  Omitting the section instead reads to the model as "nothing to say about
+  housing" and invites it to answer from training data — in a dated, numeric
+  brief an invented number is much worse than an admitted hole.
+- **The request path peeks caches and never rebuilds.** `_collect_brief_sources()`
+  only fetches when passed `warm=True`, which only the overnight pre-generator
+  does (and which needs the `app`, since these are Flask views). `api_markets()`
+  on a cold cache measured 120s and got the worker SIGKILLed — see the note on
+  `_tv_markets_cached`. The Gemini call is likewise capped at 90s, under
+  gunicorn's `--timeout 120`, because a killed worker takes every other request
+  it was serving with it.
+- **Stale beats absent, but must be labelled.** The four cached modules expose
+  `peek()` (mirroring `breadth.peek()`) which ignores TTL but still honours
+  `_CACHE_VER`. Gating on `is_cache_fresh()` dropped whole sections whenever a
+  nightly refresh ran late, on monthly series where a day changes nothing.
+  `_stale` carries the names into the snapshot so the model dates them.
+
+The version suffix in the DynamoDB key is load-bearing: bump `_BRIEF_KEY_VER`
+whenever the brief's shape changes, or today's already-stored copy is served all
+day and the change looks like it did nothing.
+
+Tests: `tests/test_brief_formatters.py` (60 unit tests, no app/network — this is
+the one that catches the real risk, which is key names and units, since the eight
+payloads use `day_chg` vs `day_chg_pct`, `ytd` vs `ret_ytd`, `pct` vs `pct_dec`).
+The `tests/check_brief_*.py` scripts are diagnostics that need live caches, a
+Flask app, or a Gemini key, and are named `check_` so `unittest discover` skips
+them; `check_brief_live.py` does one real generation and prints it.
 
 ### Caching (yStocker)
 Two-tier: in-memory dict + on-disk JSON in `cache/`. All cache access guarded by `threading.Lock`. Disk writes use atomic temp file + `os.replace()`.
@@ -248,4 +295,5 @@ Started in `create_app()`, all daemon threads:
 - **SSH deploy** requires a `.pem` key file; the `id_ed25519` key on this machine doesn't have EC2 access. Use SSM `send-command` instead.
 - **Never fit ML models in a request process.** Prophet (cmdstanpy) and `pmdarima.auto_arima` each retain hundreds of MB that glibc never returns to the OS, so a worker that served one `/api/forecast` request stayed ~880 MB larger for life. Ten such requests caused nine OOM kills in 48 h, and since the kernel picks its OOM victim globally they took *other* apps down too. `forecast.py` now runs fits in a `subprocess` (`python -m ystocker.forecast <TICKER> <OUT>`) via `run_forecast_isolated()`. Not `multiprocessing`: `fork` would inherit held cache locks from the background threads, and `spawn` re-imports the parent's `__main__` — which under gunicorn is the venv launcher script.
 - **Dead FRED series return HTTP 200.** `MBST` and `WASDRAL` still serve well-formed CSV years after they stopped publishing, so stale data flows in silently and corrupts anything derived from it. Prefer the Wednesday-level `WSHO*` ids and sanity-check a new series' row count against `WALCL`.
+- **Not every cache in `routes.py` is keyed `"data"`.** Most are `CACHE["data"] = {"ts", "data"}`, but `_CREDIT_SPREAD_CACHE` is keyed by *period* (`"1y"`, `"2y"`, …) and `_YIELD_CURVE_CACHE` by its schema version (`_YIELD_CURVE_CACHE_VER`). Reading the wrong key returns `None` rather than raising, so the consumer just silently loses a section — `/api/daily-summary` read `_CREDIT_SPREAD_CACHE.get("data")` from the day it was written, which meant its credit-spread line never once appeared in a summary. Check the write site for the key before peeking a cache, and hold its lock.
 - **reportlab fails loudly on height and silently on width.** A flowable taller than the frame raises `LayoutError` and kills the whole PDF (a single-cell `Table` cannot split between rows — pass `splitInRow=1`); a flowable *wider* than the frame is simply drawn through the margin, or off the paper. So every fixed-width flowable in `report_pdf.py` is clamped to the measure, and preformatted text is hard-wrapped before it is handed over. Separately, the CJK line breaker deliberately overruns the measure by up to one em rather than start a line with `、` or `。`, which is why the Chinese path lays out to a slightly narrower measure and leaves a gutter for that overhang.

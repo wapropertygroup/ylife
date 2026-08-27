@@ -1300,22 +1300,43 @@ _warming_lock = threading.Lock()
 _fetch_in_progress = threading.Event()
 
 
-def _load_disk_cache() -> Optional[dict[str, Any]]:
+def _load_disk_cache(ignore_ttl: bool = False) -> Optional[dict[str, Any]]:
     try:
         if not _CACHE_FILE.exists():
             return None
         payload = json.loads(_CACHE_FILE.read_text())
+        # The version check applies even to peek(): a schema mismatch means the
+        # keys are wrong, not merely old, and a consumer would misread it.
         if payload.get("_ver") != _CACHE_VER:
             log.info("%s: cache schema %s != %s — rebuilding",
                      __name__, payload.get("_ver"), _CACHE_VER)
             return None
-        if time.time() - payload.get("_ts", 0) >= _CACHE_TTL:
+        if not ignore_ttl and time.time() - payload.get("_ts", 0) >= _CACHE_TTL:
             return None
         if not payload.get("zillow") and not payload.get("redfin"):
             return None
         return payload
     except Exception as exc:
         log.warning("Housing: failed to read disk cache: %s", exc)
+    return None
+
+
+def peek() -> Optional[dict[str, Any]]:
+    """Return an already-available housing payload, or None. Never fetches.
+
+    Mirrors ``breadth.peek()``. This is the most important of the four to have:
+    ``get_housing_data()`` past its TTL rebuilds from eight upstreams for about
+    10 MB, so a freshness-gated consumer must drop the section entirely — yet the
+    inputs are monthly series where a day of staleness changes nothing. Callers
+    can date it from the payload's ``as_of``.
+    """
+    with _cache_lock:
+        if _cache_data:
+            return _cache_data
+    try:
+        return _load_disk_cache(ignore_ttl=True)
+    except Exception as exc:  # pragma: no cover - defensive
+        log.debug("Housing: peek failed to read disk cache: %s", exc)
     return None
 
 

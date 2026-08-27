@@ -1251,6 +1251,14 @@ const I18n = (() => {
     'agents.search_found':  { en: 'reports found',    zh: '份报告' },
     'agents.search_showing':{ en: 'showing',          zh: '显示' },
     'agents.search_none':   { en: 'No reports match that search.', zh: '没有匹配的报告。' },
+    // Runs a search dropped for having no report body. Phrased as a suffix to a
+    // count ("3 with no report hidden"), so it carries no number of its own.
+    'agents.search_hidden': { en: 'with no report hidden', zh: '份无报告已隐藏' },
+    // The Portfolio Manager's turn, shown in full on every search hit.
+    'agents.pm_none':       { en: 'No Portfolio Manager section in this report.',
+                              zh: '本报告没有投资组合经理部分。' },
+    'agents.pm_truncated':  { en: 'Section truncated — open the report for the full text.',
+                              zh: '本节已截断，打开报告查看全文。' },
     'agents.status_any':    { en: 'Any status',   zh: '所有状态' },
     'agents.status_done':   { en: 'Done',         zh: '已完成' },
     'agents.status_running':{ en: 'Running',      zh: '运行中' },

@@ -2,6 +2,7 @@
 {% block title %}yStocker — Market Overview{% endblock %}
 
 {% block content %}
+<script src="{{ url_for('static', filename='markdown.js') }}?v={{ cache_bust or 'dev' }}"></script>
 <style>
   .range-btn {
     font-size: 11px; font-weight: 500; line-height: 1;
@@ -69,6 +70,41 @@
   }
   .sector-period-btn:hover { color: #cbd5e1; border-color: #475569; }
   .sector-period-btn.active { color: #a5b4fc; border-color: #6366f1; background: rgba(99,102,241,0.15); }
+  /* AI Markets Brief — rendered Markdown, including pipe tables. Mirrors the
+     .md-body rules on /history so LLM output reads the same everywhere. */
+  .brief-md { font-size: 13px; line-height: 1.75; color: #cbd5e1; overflow-wrap: break-word; }
+  .brief-md h2 {
+    font-size: 14px; font-weight: 700; color: #e2e8f0;
+    margin: 20px 0 8px; padding-bottom: 6px; border-bottom: 1px solid #1e293b;
+  }
+  .brief-md h2:first-child { margin-top: 0; }
+  .brief-md h3 { font-size: 13px; font-weight: 600; color: #a5b4fc; margin: 14px 0 6px; }
+  .brief-md p  { margin: 8px 0; }
+  .brief-md ul, .brief-md ol { margin: 8px 0 8px 20px; }
+  .brief-md li { margin: 3px 0; }
+  .brief-md strong { color: #e2e8f0; font-weight: 600; }
+  .brief-md code {
+    font-family: ui-monospace, SFMono-Regular, monospace; font-size: 11.5px;
+    background: #1e293b; padding: 1px 5px; border-radius: 4px; color: #a5b4fc;
+  }
+  .brief-md hr { border: 0; border-top: 1px solid #1e293b; margin: 16px 0; }
+  .brief-md blockquote {
+    margin: 10px 0; padding: 8px 14px;
+    border-left: 3px solid #6366f1; background: rgba(99,102,241,0.06);
+    border-radius: 0 6px 6px 0;
+  }
+  /* display:block + overflow-x lets a wide table scroll inside the card instead
+     of stretching it past the viewport on a phone. */
+  .brief-md table {
+    width: 100%; border-collapse: collapse; margin: 10px 0;
+    font-size: 11.5px; display: block; overflow-x: auto;
+  }
+  .brief-md th, .brief-md td {
+    border: 1px solid #1e293b; padding: 4px 8px; text-align: left; white-space: nowrap;
+  }
+  .brief-md th { background: #131c2e; color: #94a3b8; font-weight: 600; }
+  .brief-md td:not(:first-child) { font-variant-numeric: tabular-nums; }
+  .brief-md tbody tr:nth-child(even) { background: rgba(30,41,59,0.35); }
 </style>
 
 <!-- ── Fullscreen chart modal ────────────────────────────────────────── -->
@@ -122,11 +158,12 @@
    no single timeframe, which is why the best/worst pair read as noise. #}
 
 <!-- ── AI Markets Brief ──────────────────────────────────────────────── -->
-<div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 fade-up mb-6" id="aiMarketsBriefCard">
+<div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up mb-6" id="aiMarketsBriefCard">
   <div class="flex items-center justify-between">
     <div class="flex items-center gap-2">
       <span class="text-[10px] font-semibold uppercase tracking-widest text-slate-600" data-i18n="markets.ai_brief_label">AI Markets Brief</span>
       <span id="aiMarketsBriefTime" class="text-[10px] text-slate-700"></span>
+      <span id="aiMarketsBriefCold" class="text-[10px] text-amber-600/80 hidden"></span>
     </div>
     <div class="flex gap-2">
       <button id="aiMarketsBriefRefresh" onclick="_loadAiBrief(true)"
@@ -136,10 +173,10 @@
     </div>
   </div>
   <div id="aiMarketsBriefBody" class="mt-2 text-sm text-slate-400 leading-relaxed">
-    <div id="aiMarketsBriefText" class="hidden text-[13px] leading-relaxed"></div>
+    <div id="aiMarketsBriefText" class="hidden brief-md"></div>
     <div id="aiMarketsBriefLoading" class="text-slate-600 text-xs animate-pulse" data-i18n="markets.ai_brief_loading">Generating market brief…</div>
   </div>
-  <a href="/daily" class="mt-2 text-[11px] text-brand hover:text-violet-300 transition" data-i18n="markets.ai_brief_full">View full daily report →</a>
+  <a href="/daily" class="mt-2 inline-block text-[11px] text-brand hover:text-violet-300 transition" data-i18n="markets.ai_brief_full">View full daily report →</a>
 </div>
 
 <!-- ── Index snapshot cards ───────────────────────────────────────────── -->
@@ -4141,34 +4178,91 @@ function _mktsModalConfig(kind) {
 })();
 
 // ── AI Markets Brief ─────────────────────────────────────────────────────
+// The brief is Markdown with pipe tables, built server-side from every
+// dashboard on the site (see ystocker/brief.py). Rendered through the shared
+// markdown.js, which escapes text before adding tags — model output is not
+// trusted, so this must stay innerHTML-of-rendered-markup, never raw insertion.
 let _aiMarketsBriefCollapsed = false;
+let _aiBriefInFlight = false;
+
 async function _loadAiBrief(force) {
-  const textEl    = document.getElementById('aiMarketsBriefText');
-  const loadEl    = document.getElementById('aiMarketsBriefLoading');
-  const timeEl    = document.getElementById('aiMarketsBriefTime');
+  const textEl = document.getElementById('aiMarketsBriefText');
+  const loadEl = document.getElementById('aiMarketsBriefLoading');
+  const timeEl = document.getElementById('aiMarketsBriefTime');
+  const coldEl = document.getElementById('aiMarketsBriefCold');
+  const btnEl  = document.getElementById('aiMarketsBriefRefresh');
   if (!textEl) return;
+
+  // A forced regeneration is a Gemini call over a large prompt and takes tens of
+  // seconds. Without this guard, repeated clicks on ↻ queue up several of them.
+  if (_aiBriefInFlight) return;
+  _aiBriefInFlight = true;
+  if (btnEl) { btnEl.disabled = true; btnEl.style.opacity = '0.4'; }
+
   try {
-    loadEl?.classList.remove('hidden'); textEl.classList.add('hidden');
-    const resp = await fetch('/api/daily-summary', {
+    if (loadEl) {
+      loadEl.classList.remove('hidden');
+      loadEl.textContent = ((typeof I18n !== 'undefined' && I18n.t('markets.ai_brief_loading'))
+        || 'Generating market brief…');
+    }
+    if (force) textEl.classList.add('hidden');
+
+    const resp = await fetch('/api/market-brief', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ lang: (typeof I18n !== 'undefined') ? I18n.getLang() : 'en', force_refresh: !!force })
+      body: JSON.stringify({
+        lang: (typeof I18n !== 'undefined') ? I18n.getLang() : 'en',
+        force_refresh: !!force
+      })
     });
     const d = await resp.json();
-    const summary = d.summary || d.text || d.content || '';
-    if (summary) {
-      textEl.textContent = summary;
-      textEl.classList.remove('hidden');
-      loadEl?.classList.add('hidden');
-      if (timeEl && d.generated_at) {
-        const ts = typeof d.generated_at === 'number' ? d.generated_at * 1000 : Date.parse(d.generated_at);
-        if (!isNaN(ts)) timeEl.textContent = '· ' + new Date(ts).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+    const md = d.brief || '';
+    if (!md) throw new Error(d.error || 'empty brief');
+
+    textEl.innerHTML = (typeof Markdown !== 'undefined')
+      ? Markdown.render(md)
+      : Markdown_fallbackEscape(md);
+    textEl.classList.remove('hidden');
+    loadEl?.classList.add('hidden');
+
+    if (timeEl && d.generated_at) {
+      const ts = typeof d.generated_at === 'number'
+        ? d.generated_at * 1000 : Date.parse(d.generated_at);
+      if (!isNaN(ts)) {
+        timeEl.textContent = '· ' + new Date(ts).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
       }
     }
-  } catch(e) {
-    if (loadEl) loadEl.textContent = '—';
+    // Name the sections the model was told nothing about, so a brief that is
+    // quiet on housing reads as a cold cache rather than a considered omission.
+    if (coldEl) {
+      const cold = d.sources_cold || [];
+      if (cold.length) {
+        coldEl.textContent = '· ' +
+          ((typeof I18n !== 'undefined' && I18n.getLang() === 'zh')
+            ? `${cold.length} 项数据源暂不可用`
+            : `${cold.length} source${cold.length > 1 ? 's' : ''} unavailable`);
+        coldEl.title = cold.join(', ');
+        coldEl.classList.remove('hidden');
+      } else {
+        coldEl.classList.add('hidden');
+      }
+    }
+  } catch (e) {
+    if (loadEl) loadEl.textContent = '⚠ ' + (e.message || 'brief unavailable');
+  } finally {
+    _aiBriefInFlight = false;
+    if (btnEl) { btnEl.disabled = false; btnEl.style.opacity = ''; }
   }
 }
+
+// Only reached if markdown.js failed to load; shows the source rather than
+// nothing, and escapes it rather than trusting it.
+function Markdown_fallbackEscape(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return '<pre style="white-space:pre-wrap">' + d.innerHTML + '</pre>';
+}
+
 function _toggleAiBrief() {
   _aiMarketsBriefCollapsed = !_aiMarketsBriefCollapsed;
   const body    = document.getElementById('aiMarketsBriefBody');
@@ -4176,6 +4270,13 @@ function _toggleAiBrief() {
   if (body)    body.style.display = _aiMarketsBriefCollapsed ? 'none' : '';
   if (chevron) chevron.textContent = _aiMarketsBriefCollapsed ? '▶' : '▼';
 }
+
+// Re-fetch in the new language when the toggle is hit. setLang() does not
+// reload the page, so without this a reader who switches to 中文 keeps reading
+// the English brief — and the brief is the one thing on this page whose text
+// comes from the server rather than from i18n.js.
+document.addEventListener('i18n:langchange', () => _loadAiBrief(false));
+
 // Load on page start (after market data arrives)
 _loadAiBrief(false);
 
