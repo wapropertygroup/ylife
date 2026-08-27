@@ -734,6 +734,9 @@ fi
 # Port 80 only in this file. certbot --nginx adds the 443 server and the
 # http->https redirect once it holds a certificate; writing a 443 block up front
 # would point nginx at a cert path that does not exist yet and stop it starting.
+# These quoted config heredocs still live inside the unquoted REMOTE heredoc
+# above. Escape nginx's dollar variables once here so the local shell passes
+# them through; the remote quoted heredoc then writes them literally.
 TV_CONF="/etc/nginx/conf.d/ytv.conf"
 if ! sudo test -f "\$TV_CONF" || ! sudo grep -q "tv.li-family.us" "\$TV_CONF"; then
   echo "[\$(TS)]    tv.li-family.us nginx config writing..."
@@ -755,7 +758,7 @@ server {
     listen 80;
     server_name tv.li-family.us;
     location / {
-        return 302 https://stock.li-family.us/tv$is_args$args;
+        return 302 https://stock.li-family.us/tv\$is_args\$args;
     }
 }
 TVCONF
@@ -800,11 +803,11 @@ server {
     # generic location below.
     location = / {
         proxy_pass         http://127.0.0.1:8000/agents;
-        proxy_set_header   Host              $host;
-        proxy_set_header   X-Real-IP         $remote_addr;
-        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
-        proxy_set_header   X-Forwarded-Proto $scheme;
-        proxy_set_header   X-Forwarded-Host  $host;
+        proxy_set_header   Host              \$host;
+        proxy_set_header   X-Real-IP         \$remote_addr;
+        proxy_set_header   X-Forwarded-For   \$proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto \$scheme;
+        proxy_set_header   X-Forwarded-Host  \$host;
         proxy_read_timeout 130s;
         proxy_connect_timeout 10s;
         proxy_send_timeout 130s;
@@ -812,11 +815,11 @@ server {
 
     location / {
         proxy_pass         http://127.0.0.1:8000;
-        proxy_set_header   Host              $host;
-        proxy_set_header   X-Real-IP         $remote_addr;
-        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
-        proxy_set_header   X-Forwarded-Proto $scheme;
-        proxy_set_header   X-Forwarded-Host  $host;
+        proxy_set_header   Host              \$host;
+        proxy_set_header   X-Real-IP         \$remote_addr;
+        proxy_set_header   X-Forwarded-For   \$proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto \$scheme;
+        proxy_set_header   X-Forwarded-Host  \$host;
         # An agents run streams progress over SSE for several minutes, so the
         # read timeout has to outlast a deep analysis and buffering has to stay
         # off for those responses. The routes already send X-Accel-Buffering: no;
@@ -863,11 +866,11 @@ server {
 
     location / {
         proxy_pass         http://127.0.0.1:8005;
-        proxy_set_header   Host              $host;
-        proxy_set_header   X-Real-IP         $remote_addr;
-        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
-        proxy_set_header   X-Forwarded-Proto $scheme;
-        proxy_set_header   X-Forwarded-Host  $host;
+        proxy_set_header   Host              \$host;
+        proxy_set_header   X-Real-IP         \$remote_addr;
+        proxy_set_header   X-Forwarded-For   \$proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto \$scheme;
+        proxy_set_header   X-Forwarded-Host  \$host;
         proxy_read_timeout 130s;
         proxy_connect_timeout 10s;
         proxy_send_timeout 130s;
