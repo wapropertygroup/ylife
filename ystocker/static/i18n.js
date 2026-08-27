@@ -1222,6 +1222,7 @@ const I18n = (() => {
                              zh: '仅基于本报告作答；报告未涵盖的问题会直接说明。不构成投资建议。' },
     'agents.collapse_all': { en: 'Collapse all',  zh: '全部折叠' },
     'agents.expand_all':   { en: 'Expand all',    zh: '全部展开' },
+    'agents.back_to_top':  { en: 'Back to top',   zh: '返回顶部' },
     'agents.copy_link':    { en: 'Copy link to this section', zh: '复制该角色小节链接' },
     'agents.link_copied':  { en: 'Section link copied',       zh: '小节链接已复制' },
     'agents.link_in_bar':  { en: 'Section link is in the address bar',

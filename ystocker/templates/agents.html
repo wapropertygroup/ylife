@@ -221,16 +221,31 @@ window.YSTime = (function () {
 .ag-hidden-note { color: #475569; font-size: 11px; }
 .ag-bubble:not(.is-collapsed) .ag-hidden-note { display: none; }
 
-#agTop {
-  position: fixed; right: 18px; bottom: 20px; z-index: 40;
+/* Floating controls for a long report. Docked to the *reading column*, not to
+   the window: pinned at the viewport's right edge these sat some 600px away
+   from the text on a wide monitor, where they read as page furniture rather
+   than as controls for the report being read. The calc mirrors <main>'s box
+   (max-w-screen-xl = 1280px, mx-auto), so the dock rides the column's outer
+   edge — clear of the card's text on a wide screen, and tucked into the card's
+   own padding once the gutters run out. */
+#agDock {
+  position: fixed; z-index: 40;
+  bottom: 20px; right: max(14px, calc(50vw - 640px));
+  display: flex; flex-direction: column; gap: 8px;
+  /* The dock is only a positioner; clicks must reach the report underneath. */
+  pointer-events: none;
+}
+.ag-dock-btn {
+  pointer-events: auto;
   width: 40px; height: 40px; border-radius: 50%;
   display: none; align-items: center; justify-content: center;
   cursor: pointer; font-size: 15px; line-height: 1;
   color: #c7d2fe; background: rgba(15,23,42,.92); backdrop-filter: blur(6px);
   border: 1px solid #4338ca; box-shadow: 0 6px 20px rgba(0,0,0,.5);
 }
-#agTop.is-on { display: flex; }
-#agTop:hover { background: rgba(99,102,241,.3); color: #e2e8f0; }
+.ag-dock-btn.is-on { display: flex; }
+.ag-dock-btn:hover { background: rgba(99,102,241,.3); color: #e2e8f0; }
+#agFold { font-size: 17px; }
 
 /* ── Loading ────────────────────────────────────────────────────────────── */
 /* Defined here rather than using Tailwind's animate-spin: arbitrary Tailwind
@@ -411,7 +426,9 @@ window.YSTime = (function () {
    matched -- "T" inside MSFT is otherwise indistinguishable from noise. */
 .ag-hl { background: rgba(99,102,241,.32); color: #e0e7ff; border-radius: 3px; }
 body.agents-embedded .ag-jump { top: 0; }
-body.agents-embedded #agTop { right: 12px; bottom: 12px; }
+/* Embedded, <main> is full-width with 12px padding, so the column edge is the
+   frame edge and the calc above has no gutter to sit in. */
+body.agents-embedded #agDock { right: 12px; bottom: 12px; }
 @media (max-width: 900px) {
   .ag-form-grid { grid-template-columns: minmax(100px, .7fr) minmax(170px, 1.3fr); }
   .ag-form-actions, .ag-form-quota { grid-column: 1 / -1; }
@@ -1007,7 +1024,14 @@ body.agents-embedded #agTop { right: 12px; bottom: 12px; }
   </div>
 </div>
 
-<button id="agTop" type="button" title="Back to top" aria-label="Back to top">&#9650;</button>
+{# Floating report controls: fold the whole conversation, or return to the top.
+   Both labels are set from JS, since each states what the next press will do. #}
+<div id="agDock">
+  <button id="agFold" class="ag-dock-btn" type="button"
+          title="Collapse all" aria-label="Collapse all">&#8863;</button>
+  <button id="agTop" class="ag-dock-btn" type="button"
+          title="Back to top" aria-label="Back to top">&#9650;</button>
+</div>
 
 <!-- ── History ────────────────────────────────────────────────────────── -->
 <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
@@ -1338,6 +1362,9 @@ body.agents-embedded #agTop { right: 12px; bottom: 12px; }
       box.appendChild(turn);
     }
     buildJump(sections);
+    // Not only from buildJump: that returns early on a re-render with the same
+    // cast, and the dock still has to learn whether this report is foldable.
+    syncCollapseBtn();
     // After the turns exist, not before: a deep link that arrives with the page
     // has nothing to scroll to until the report has been fetched and rendered.
     applyDeepLink({ instant: true });
@@ -1353,6 +1380,69 @@ body.agents-embedded #agTop { right: 12px; bottom: 12px; }
   // to skim headings gets that on the next report too.
   const COLLAPSE_PREF = 'ystocker_agents_collapse_all';
   let collapseAll = localStorage.getItem(COLLAPSE_PREF) === '1';
+  // Assigned when the floating dock is wired at the end of this script; a no-op
+  // until then so anything rendering earlier can call it unconditionally.
+  let dockSync = () => {};
+
+  // Every fold-everything control drives the helpers below, so the jump bar's
+  // "Collapse all" and the dock button cannot end up disagreeing about the state
+  // or about what the remembered preference now is. Read from the DOM rather
+  // than from a section list: the turns are the truth, and a control may be
+  // pressed between renders.
+  function foldTurns() {
+    return [...document.querySelectorAll('#agReport .ag-turn')];
+  }
+
+  function allFolded() {
+    const turns = foldTurns();
+    return turns.length > 0 && turns.every(t => {
+      const b = t.querySelector('.ag-bubble');
+      return b && b.classList.contains('is-collapsed');
+    });
+  }
+
+  // Which turn the reader is in, by the same rule the jump bar's spy uses: the
+  // last one whose top has passed under the sticky bars. Null when none has --
+  // the reader is above the conversation, so there is nothing to hold.
+  function currentTurn() {
+    let cur = null;
+    for (const t of foldTurns()) {
+      if (t.getBoundingClientRect().top <= 130) cur = t;
+      else break;                        // turns are in document order
+    }
+    return cur;
+  }
+
+  function setAllFolds(foldAll) {
+    // Keep the reader with the speaker they were reading. Folding an
+    // eleven-speaker report takes tens of thousands of pixels out of the
+    // document while the scroll offset survives, so collapsing from the
+    // Portfolio Manager's turn dropped the reader into the history list below
+    // the report -- with the button they had just pressed now off screen and no
+    // obvious way back.
+    //
+    // The anchor is the turn itself, not a pixel offset: one turn can be taller
+    // than the viewport, so holding its top edge would move the reader anyway,
+    // and once it is folded their position *inside* its body no longer exists.
+    // Which speaker it was is the only thing left to preserve.
+    const anchor = currentTurn();
+    for (const t of foldTurns()) {
+      const b = t.querySelector('.ag-bubble');
+      if (!b) continue;
+      const key = t.id.startsWith(TURN_PREFIX) ? t.id.slice(TURN_PREFIX.length) : '';
+      if (key) { if (foldAll) collapsed.add(key); else collapsed.delete(key); }
+      b.classList.toggle('is-collapsed', foldAll);
+      const w = b.querySelector('.ag-who');
+      if (w) w.setAttribute('aria-expanded', String(!foldAll));
+    }
+    // Instant, not smooth: this corrects for a layout change that has already
+    // happened, and animating it reads as the page sliding away on its own.
+    // .ag-turn's scroll-margin-top keeps the landing clear of the sticky bars.
+    if (anchor) anchor.scrollIntoView({ block: 'start', behavior: 'instant' });
+    collapseAll = foldAll;
+    try { localStorage.setItem(COLLAPSE_PREF, foldAll ? '1' : '0'); } catch (e) {}
+    syncCollapseBtn();
+  }
 
   let jumpSig = '';        // which roles the current bar was built for
   let spy = null;
@@ -1511,21 +1601,9 @@ body.agents-embedded #agTop { right: 12px; bottom: 12px; }
     ctl.className = 'ag-ctl';
     ctl.id = 'agCollapseAll';
     ctl.addEventListener('click', () => {
-      const keys = present.map(x => x.role.key);
       // Fold everything unless everything is already folded, in which case this
       // is the way back out.
-      const foldAll = !keys.every(k => collapsed.has(k));
-      keys.forEach(k => foldAll ? collapsed.add(k) : collapsed.delete(k));
-      collapseAll = foldAll;
-      try { localStorage.setItem(COLLAPSE_PREF, foldAll ? '1' : '0'); } catch (e) {}
-      document.querySelectorAll('#agReport .ag-turn').forEach(t => {
-        const b = t.querySelector('.ag-bubble');
-        if (!b) return;
-        b.classList.toggle('is-collapsed', foldAll);
-        const w = b.querySelector('.ag-who');
-        if (w) w.setAttribute('aria-expanded', String(!foldAll));
-      });
-      syncCollapseBtn();
+      setAllFolds(!allFolded());
     });
     bar.appendChild(ctl);
     const sep = document.createElement('span');
@@ -1572,15 +1650,24 @@ body.agents-embedded #agTop { right: 12px; bottom: 12px; }
   }
 
   // The control's label always states what it will do next, so it never claims
-  // to "collapse all" when everything is already collapsed.
+  // to "collapse all" when everything is already collapsed. Both controls are
+  // labelled from here: the one in the jump bar and the one in the dock.
   function syncCollapseBtn() {
-    const ctl = document.getElementById('agCollapseAll');
-    if (!ctl) return;
-    const bubbles = [...document.querySelectorAll('#agReport .ag-bubble')];
-    const allFolded = bubbles.length > 0 && bubbles.every(b => b.classList.contains('is-collapsed'));
-    ctl.textContent = allFolded
+    const folded = allFolded();
+    const label = folded
       ? (I18n.t('agents.expand_all') || 'Expand all')
       : (I18n.t('agents.collapse_all') || 'Collapse all');
+    const ctl = document.getElementById('agCollapseAll');
+    if (ctl) ctl.textContent = label;
+    const fold = document.getElementById('agFold');
+    if (fold) {
+      // ⊞ / ⊟ — a tree control's own vocabulary, and the tooltip spells it out
+      // for anyone who does not read the glyph that way.
+      fold.textContent = folded ? '⊞' : '⊟';
+      fold.title = label;
+      fold.setAttribute('aria-label', label);
+    }
+    dockSync();
   }
 
   // Highlight whoever is on screen, and keep that chip visible in the bar, so
@@ -2126,23 +2213,53 @@ body.agents-embedded #agTop { right: 12px; bottom: 12px; }
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); askManager(); }
   });
 
-  // ── Back to top ─────────────────────────────────────────────────────────
+  // ── Floating dock: fold all, back to top ────────────────────────────────
   // A finished report runs to tens of thousands of characters, so scrolling back
-  // by hand is a real cost. Appears only once there is something to go back to.
-  (function backToTop() {
-    const btn = document.getElementById('agTop');
-    if (!btn) return;
-    const sync = () => btn.classList.toggle('is-on', window.scrollY > 500);
+  // by hand is a real cost, and the jump bar's "Collapse all" is a screen away
+  // once you are deep in the Portfolio Manager's turn. Each button appears only
+  // when it has something to do.
+  (function dock() {
+    const top = document.getElementById('agTop');
+    const fold = document.getElementById('agFold');
+    if (!top && !fold) return;
+
+    const setLabels = () => {
+      if (!top) return;
+      const label = I18n.t('agents.back_to_top') || 'Back to top';
+      top.title = label;
+      top.setAttribute('aria-label', label);
+    };
+
+    dockSync = () => {
+      if (top) top.classList.toggle('is-on', window.scrollY > 500);
+      if (!fold) return;
+      // Only while the conversation is on screen. Folding turns the reader
+      // cannot see does nothing observable, and the history list below the
+      // report has nothing to fold at all. A dismissed card measures 0×0 under
+      // display:none, so this hides the button then too.
+      const report = document.getElementById('agReport');
+      const many = report && report.querySelectorAll('.ag-turn').length > 1;
+      const r = many ? report.getBoundingClientRect() : null;
+      fold.classList.toggle('is-on', !!r && r.top < window.innerHeight && r.bottom > 0);
+    };
+
     let queued = false;
     window.addEventListener('scroll', () => {
       if (queued) return;
       queued = true;
-      requestAnimationFrame(() => { queued = false; sync(); });
+      requestAnimationFrame(() => { queued = false; dockSync(); });
     }, { passive: true });
-    btn.addEventListener('click', () => {
+    if (top) top.addEventListener('click', () => {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     });
-    sync();
+    // Fold everything unless everything is already folded, in which case this
+    // is the way back out -- the same contract as the jump bar's control.
+    if (fold) fold.addEventListener('click', () => setAllFolds(!allFolded()));
+    // These labels are built in JS, so without this they would keep the old
+    // language until the next report rendered.
+    document.addEventListener('i18n:langchange', () => { setLabels(); syncCollapseBtn(); });
+    setLabels();
+    syncCollapseBtn();
   })();
 
   runBtn.addEventListener('click', () => start(false));
