@@ -8180,7 +8180,23 @@ def api_movers():
 
 _BRIEF_CACHE: dict = {}
 _BRIEF_CACHE_LOCK = threading.Lock()
-_BRIEF_CACHE_TTL  = 1800   # 30 minutes
+# Short on purpose. DynamoDB is the authoritative store — `_store_market_brief`
+# only ever writes a brief that beat what was there, so the row is the best
+# version of the day — and this tier exists only to coalesce repeat loads, not to
+# own the answer. At the 30 minutes it started with, a worker that had generated
+# a thin brief served it for half an hour after the master had already replaced
+# the row with a complete one: observed in production, 11 sources served while 19
+# sat in DynamoDB. A get_item is a few milliseconds and the brief is fetched once
+# per page view, so preferring the shared store is close to free.
+_BRIEF_CACHE_TTL  = 120   # 2 minutes
+
+# How recently this process must have generated a brief for the pre-generator to
+# consider its work already done. Deliberately not _BRIEF_CACHE_TTL: that one is
+# a read-cache lifetime and is now short, whereas this answers "did I already
+# spend a Gemini call on today's brief?" — a question whose answer stays true for
+# hours. Sharing one constant would have the pre-generator regenerate every time
+# the read cache lapsed.
+_BRIEF_PREGEN_SKIP_SECONDS = 6 * 3600
 
 # Stored in the same DynamoDB table as the daily summaries, partitioned by a
 # suffix on lang_market. Versioned because the brief's shape is part of what is
@@ -8674,7 +8690,7 @@ def _do_pregen_market_briefs(app=None) -> None:
         # today's brief, so regenerating would compare it against itself.
         with _BRIEF_CACHE_LOCK:
             entry = _BRIEF_CACHE.get(lang)
-        if entry and _time.time() - entry["ts"] < _BRIEF_CACHE_TTL:
+        if entry and _time.time() - entry["ts"] < _BRIEF_PREGEN_SKIP_SECONDS:
             log.debug("Brief pre-gen: %s already generated in this process, skipping", lang)
             continue
         try:

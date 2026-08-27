@@ -11,10 +11,11 @@
  * A mount with no toggle is treated as permanently open, which is the only
  * difference between the two.
  *
- * Suggestions come from /api/search, which only knows PEER_GROUPS members —
- * so the typed symbol is *always* offered as its own row. Otherwise anything
- * off the curated list (most of the market) would look unsearchable even
- * though /history/<TICKER> and /api/ticker/<TICKER> handle arbitrary symbols.
+ * Suggestions come from /api/search, which only knows PEER_GROUPS members — so
+ * the typed symbol always leads the list, named from a matching suggestion when
+ * there is one and offered bare when there is not. Without that lead row
+ * anything off the curated list (most of the market) would look unsearchable,
+ * even though /history/<TICKER> and /api/ticker/<TICKER> take any symbol.
  */
 (function () {
   'use strict';
@@ -159,16 +160,31 @@
         return;
       }
 
-      // The typed symbol always leads: /api/search cannot vouch for symbols
-      // outside PEER_GROUPS, but /history/<TICKER> can still render them.
-      var list = [{ ticker: typed, name: t('nav.search_symbol', 'Search this symbol'), group: '', _typed: true }];
+      /*
+       * The typed symbol always leads the list: /api/search only knows
+       * PEER_GROUPS members, but /history/<TICKER> renders any symbol, so the
+       * lead row is what makes the rest of the market reachable.
+       *
+       * When a suggestion *is* the typed symbol it is folded into that lead row
+       * rather than listed under it — otherwise typing a full symbol showed
+       * "WMT — Search this symbol" and hid the one row that carried the company
+       * name, and picking it stored a nameless entry in Recent ("NVDA NVDA").
+       */
+      var exact = null, others = [];
       hits.forEach(function (h) {
-        if (h && h.ticker && h.ticker !== typed) list.push(h);
+        if (!h || !h.ticker) return;
+        if (h.ticker === typed) exact = h; else others.push(h);
       });
-      rows = list;
 
-      html += list.map(function (r, i) {
-        return row(r.ticker, r.name, r.group, i, r._typed);
+      var lead = (exact && exact.name)
+        ? { ticker: typed, name: exact.name, group: exact.group || '' }
+        : { ticker: typed, name: t('nav.search_symbol', 'Search this symbol'),
+            group: '', _hint: true };
+
+      rows = [lead].concat(others);
+
+      html += rows.map(function (r, i) {
+        return row(r.ticker, r.name, r.group, i, r._hint);
       }).join('');
       results.innerHTML = html;
       paint();
@@ -179,13 +195,13 @@
              esc(label) + '</p>';
     }
 
-    function row(ticker, name, group, i, typed) {
+    function row(ticker, name, group, i, hint) {
       return '' +
         '<button type="button" data-i="' + i + '" data-ticker="' + esc(ticker) + '"' +
         ' class="navsearch-row w-full flex items-center gap-2 px-3 py-2 text-left' +
         ' hover:bg-brand/20 transition">' +
         '<span class="font-mono text-xs font-semibold text-brand shrink-0">' + esc(ticker) + '</span>' +
-        '<span class="text-xs text-slate-400 truncate flex-1' + (typed ? ' italic' : '') + '">' +
+        '<span class="text-xs text-slate-400 truncate flex-1' + (hint ? ' italic' : '') + '">' +
         esc(name || '') + '</span>' +
         (group ? '<span class="text-[10px] text-slate-600 shrink-0">' + esc(group) + '</span>' : '') +
         '</button>';
@@ -236,9 +252,13 @@
         paint();
       } else if (e.key === 'Enter') {
         e.preventDefault();
-        var pick = active >= 0 ? rows[active] : null;
-        if (pick) go(pick.ticker, pick._typed ? '' : pick.name);
-        else go(input.value, '');
+        // With nothing highlighted, Enter takes the lead row — which on a
+        // non-empty box is always the typed symbol, so Enter is never a no-op
+        // there. On an *empty* box rows[0] is the newest Recent entry, which
+        // the visitor did not ask for, so Enter does nothing instead.
+        var pick = active >= 0 ? rows[active] : (clean(input.value) ? rows[0] : null);
+        if (!pick) return;
+        go(pick.ticker, pick._hint ? '' : pick.name);
       } else if (e.key === 'Escape') {
         if (panel) { close(); input.blur(); }
       }
@@ -247,9 +267,8 @@
     results.addEventListener('click', function (e) {
       var btn = e.target.closest ? e.target.closest('.navsearch-row') : null;
       if (!btn) return;
-      var i = parseInt(btn.getAttribute('data-i'), 10);
-      var pick = rows[i];
-      go(btn.getAttribute('data-ticker'), pick && !pick._typed ? pick.name : '');
+      var pick = rows[parseInt(btn.getAttribute('data-i'), 10)];
+      go(btn.getAttribute('data-ticker'), pick && !pick._hint ? pick.name : '');
     });
 
     if (toggle) {
