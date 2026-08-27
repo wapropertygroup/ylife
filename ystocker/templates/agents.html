@@ -225,13 +225,13 @@ window.YSTime = (function () {
    the window: pinned at the viewport's right edge these sat some 600px away
    from the text on a wide monitor, where they read as page furniture rather
    than as controls for the report being read. The calc mirrors <main>'s box
-   (max-w-screen-2xl = 1536px, mx-auto — so half is 768px), so the dock rides
+   (max-w-[1840px], mx-auto — so half is 920px), so the dock rides
    the column's outer edge — clear of the card's text on a wide screen, and
-   tucked into the card's own padding once the gutters run out. Keep the 768px
+   tucked into the card's own padding once the gutters run out. Keep the 920px
    in step with base.html's container class; they are one measurement. */
 #agDock {
   position: fixed; z-index: 40;
-  bottom: 20px; right: max(14px, calc(50vw - 768px));
+  bottom: 20px; right: max(14px, calc(50vw - 920px));
   display: flex; flex-direction: column; gap: 8px;
   /* The dock is only a positioner; clicks must reach the report underneath. */
   pointer-events: none;

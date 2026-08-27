@@ -333,6 +333,22 @@ document.getElementById('tickerInput').addEventListener('keydown', e => {
   if (e.key === 'Enter') lookupTicker();
 });
 
+// ── ?ticker=AAPL prefill
+// The banner search offers a "Full lookup page →" row that carries whatever
+// was typed. Without this the symbol was dropped on arrival and the visitor
+// had to type it a second time on a page whose whole purpose is that box.
+(function _prefillFromQuery() {
+  let sym = '';
+  try {
+    sym = (new URLSearchParams(location.search).get('ticker') || '')
+      .toUpperCase().replace(/[^A-Z0-9.\-^=]/g, '').slice(0, 12);
+  } catch (_) { return; }
+  if (!sym) return;
+  const input = document.getElementById('tickerInput');
+  if (input) input.value = sym;
+  lookupTicker(sym);
+})();
+
 // Ticker autocomplete via /api/search
 const tickerInput = document.getElementById('tickerInput');
 if (tickerInput) {

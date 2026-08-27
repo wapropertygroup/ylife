@@ -120,7 +120,7 @@
   {% if not _agents_embedded %}
   <!-- ── Top navigation bar ──────────────────────────────────────────── -->
   <header class="sticky top-0 z-50 bg-slate-900/80 backdrop-blur border-b border-slate-800">
-    <div class="max-w-screen-2xl mx-auto px-4 sm:px-6 flex items-center h-14 gap-4">
+    <div class="max-w-[1840px] mx-auto px-4 sm:px-6 flex items-center h-14 gap-4">
 
       <!-- Logo -->
       <a href="{{ url_for('main.markets') }}" class="flex items-center gap-2 font-bold text-lg shrink-0">
@@ -237,16 +237,44 @@
 
       <!-- Refresh button + Language toggle -->
       <div class="relative ml-auto hidden md:flex items-center gap-2">
-        <!-- Search Ticker icon -->
-        <a href="{{ url_for('main.lookup') }}"
-           title="Search Ticker"
-           data-i18n-title="nav.search_ticker"
-           class="whitespace-nowrap shrink-0 p-1.5 rounded-md text-slate-500 hover:text-slate-200 hover:bg-slate-800 transition">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
-          </svg>
-        </a>
+        {#
+          Ticker search. This was a bare link to /lookup, which meant a full
+          page load before you could type a single character. The box now opens
+          in place and Enter lands on /history/<TICKER>, so /lookup is a
+          destination you choose rather than a toll gate. The panel is
+          absolutely positioned so expanding it cannot reflow the nav bar,
+          which is already at its width limit (see the Macro dropdown note).
+        #}
+        <div class="relative shrink-0" data-navsearch>
+          <button type="button" data-navsearch-toggle
+                  title="Search Ticker"
+                  data-i18n-title="nav.search_ticker"
+                  aria-label="Search Ticker" aria-expanded="false"
+                  class="whitespace-nowrap shrink-0 p-1.5 rounded-md text-slate-500 hover:text-slate-200 hover:bg-slate-800 transition">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+            </svg>
+          </button>
+          <div data-navsearch-panel hidden
+               class="absolute right-0 top-full mt-1.5 w-80 bg-slate-900 border border-slate-700/80
+                      rounded-2xl shadow-2xl shadow-black/60 z-50 overflow-hidden">
+            <div class="p-2 border-b border-slate-800">
+              <input data-navsearch-input type="text"
+                     placeholder="Ticker, e.g. AAPL" data-i18n-placeholder="nav.search_ph"
+                     maxlength="12" autocomplete="off" spellcheck="false"
+                     class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm
+                            text-slate-100 font-mono uppercase placeholder:normal-case placeholder:text-slate-500
+                            focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent transition">
+            </div>
+            <div data-navsearch-results class="max-h-72 overflow-y-auto py-1"></div>
+            <div class="border-t border-slate-800 px-3 py-2">
+              <a data-navsearch-full href="{{ url_for('main.lookup') }}"
+                 class="block text-center text-[11px] text-slate-500 hover:text-brand transition"
+                 data-i18n="nav.search_full">Full lookup page →</a>
+            </div>
+          </div>
+        </div>
 
         <!-- Auth: signed-in chip / sign-in button -->
         <div x-show="user && user.email" class="flex items-center gap-2" x-cloak>
@@ -318,6 +346,21 @@
     <!-- Mobile menu -->
     <div x-show="navOpen" x-transition class="md:hidden border-t border-slate-800 bg-slate-900 px-4 pb-4">
       <div class="flex flex-col gap-1 pt-2">
+        {#
+          The hamburger had no search entry at all, so on a phone the only way
+          to reach a symbol was the /lookup page. No toggle button here: a mount
+          without [data-navsearch-toggle] is treated as permanently open, since
+          the menu itself is already the disclosure.
+        #}
+        <div class="pb-2 mb-1 border-b border-slate-800" data-navsearch>
+          <input data-navsearch-input type="text"
+                 placeholder="Ticker, e.g. AAPL" data-i18n-placeholder="nav.search_ph"
+                 maxlength="12" autocomplete="off" spellcheck="false"
+                 class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2.5 text-sm
+                        text-slate-100 font-mono uppercase placeholder:normal-case placeholder:text-slate-500
+                        focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent transition">
+          <div data-navsearch-results class="max-h-60 overflow-y-auto mt-1"></div>
+        </div>
         <a href="{{ url_for('main.markets') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-300 hover:bg-slate-800" data-i18n="markets.nav">Markets</a>
         <a href="{{ url_for('main.evaluation') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-300 hover:bg-slate-800" data-i18n="nav.home">Valuation</a>
         {#
@@ -406,12 +449,16 @@
   {% endif %}
 
   <!-- ── Main content ─────────────────────────────────────────────────── -->
-  {# The reading column is max-w-screen-2xl (1536px), widened from -xl (1280px)
-     because the AI brief on /markets carries tables up to eleven columns, which
-     were scrolling inside their own card at the old measure. The nav bar above
-     uses the same class so the logo stays flush with the content beneath it, and
-     agents.html's #agDock mirrors it in a calc() — change all three together. #}
-  <main class="flex-1 {% block main_class %}max-w-screen-2xl mx-auto{% endblock %} w-full px-4 sm:px-6 py-6 sm:py-8">
+  {# The reading column is 1840px, up from Tailwind's screen-xl (1280px) via
+     screen-2xl (1536px), because the AI brief on /markets carries tables up to
+     eleven columns that were scrolling inside their own card at the old measure.
+     An arbitrary value rather than a named screen because Tailwind has nothing
+     between 1536px and none — which means it only exists once build_css.sh has
+     regenerated the compiled stylesheet; this project does not load Tailwind
+     from a CDN. The nav bar above uses the same value so the logo stays flush
+     with the content beneath it, and agents.html's #agDock mirrors half of it
+     (920px) in a calc(). Those three are one measurement: change them together. #}
+  <main class="flex-1 {% block main_class %}max-w-[1840px] mx-auto{% endblock %} w-full px-4 sm:px-6 py-6 sm:py-8">
 
     <!-- Flash messages -->
     {% with messages = get_flashed_messages(with_categories=true) %}
@@ -497,6 +544,12 @@
     .catch(() => {}); // silently ignore fetch errors
 })();
 </script>
+
+{# The banner search lives in the header, which the embedded /agents view
+   omits entirely — so its script would have nothing to bind to. #}
+{% if not _agents_embedded %}
+<script src="{{ url_for('static', filename='navsearch.js') }}?v={{ cache_bust or 'dev' }}"></script>
+{% endif %}
 
 {% if _agents_floating %}
 <script src="{{ url_for('static', filename='agents_float.js') }}?v={{ cache_bust or 'dev' }}"></script>

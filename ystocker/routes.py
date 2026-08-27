@@ -8650,6 +8650,15 @@ def _do_pregen_market_briefs(app=None) -> None:
     is a background thread, so filling the eight unwarmed caches here is free,
     and it is the difference between a complete brief and one that opens by
     apologising for four missing sections.
+
+    It deliberately does *not* skip a date already present in DynamoDB. This runs
+    in the gunicorn master with every cache warm, so it is the richest generator
+    there is; a row written by a worker — which sees only its own fork-time cache
+    snapshot — is routinely half as complete. Skipping meant whichever request
+    happened to land first pinned a thin brief for the whole day, which is
+    exactly what happened on the deploy that shipped this. It costs two Gemini
+    calls per restart, and `_store_market_brief` throws the result away if it did
+    not actually improve on what is stored.
     """
     import time as _time
     from datetime import date as _date_cls
@@ -8659,33 +8668,29 @@ def _do_pregen_market_briefs(app=None) -> None:
         return
 
     today_iso = _date_cls.today().isoformat()
-    tbl       = _get_summaries_table()
 
     for i, lang in enumerate(("en", "zh")):
+        # The memory check still applies: it means *this* process already built
+        # today's brief, so regenerating would compare it against itself.
         with _BRIEF_CACHE_LOCK:
             entry = _BRIEF_CACHE.get(lang)
         if entry and _time.time() - entry["ts"] < _BRIEF_CACHE_TTL:
-            log.debug("Brief pre-gen: %s already in memory, skipping", lang)
+            log.debug("Brief pre-gen: %s already generated in this process, skipping", lang)
             continue
-        if tbl:
-            try:
-                item = tbl.get_item(Key={"date": today_iso,
-                                         "lang_market": _brief_ddb_key(lang)}).get("Item")
-                if item and item.get("summary"):
-                    with _BRIEF_CACHE_LOCK:
-                        _BRIEF_CACHE[lang] = {"ts": _time.time(),
-                                              "data": _brief_from_ddb_item(item)}
-                    log.info("Brief pre-gen: %s loaded from DynamoDB", lang)
-                    continue
-            except Exception as exc:  # noqa: BLE001
-                log.warning("Brief pre-gen: DynamoDB read failed (%s): %s", lang, exc)
         try:
             # Only the first language needs the warm-up pass; the second reads
             # the caches the first one filled.
             result = _generate_market_brief(lang, warm=(i == 0), app=app)
-            _store_market_brief(lang, result, today_iso)
-            log.info("Brief pre-gen: generated %s (%d chars, %d sources cold)",
-                     lang, len(result["brief"]), len(result.get("sources_cold", [])))
+            served = _store_market_brief(lang, result, today_iso)
+            if served.get("superseded_by_cache"):
+                log.info("Brief pre-gen: %s kept the stored brief (%d sources) over "
+                         "this run's %d", lang, len(served.get("sources_used") or []),
+                         len(result.get("sources_used") or []))
+            else:
+                log.info("Brief pre-gen: stored %s (%d chars, %d sources used, %d cold)",
+                         lang, len(result["brief"]),
+                         len(result.get("sources_used") or []),
+                         len(result.get("sources_cold") or []))
         except Exception as exc:  # noqa: BLE001
             log.warning("Brief pre-gen: failed for %s: %s", lang, exc)
 

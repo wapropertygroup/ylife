@@ -50,6 +50,12 @@ const I18n = (() => {
     'nav.guide':          { en: 'Guide',    zh: '使用指南' },
     'nav.videos':         { en: 'Videos',   zh: '视频' },
     'nav.search_ticker':  { en: 'Search Ticker', zh: '搜索股票' },
+    // ── Banner ticker search (navsearch.js) ────────────────────────────
+    'nav.search_ph':      { en: 'Ticker, e.g. AAPL', zh: '股票代码，如 AAPL' },
+    'nav.search_symbol':  { en: 'Search this symbol', zh: '搜索该代码' },
+    'nav.search_recent':  { en: 'Recent', zh: '最近搜索' },
+    'nav.search_empty':   { en: 'Type a symbol, then press Enter.', zh: '输入代码后按回车。' },
+    'nav.search_full':    { en: 'Full lookup page →', zh: '完整查询页 →' },
     'nav.sign_in':        { en: 'Sign In',  zh: '登录' },
     'nav.logout':         { en: 'Logout',   zh: '退出登录' },
     'nav.refresh':        { en: '↻ Refresh', zh: '↻ 刷新' },
