@@ -74,6 +74,18 @@ check("generated_at present", body.get("generated_at") == SEEDED["generated_at"]
 check("sources_cold present", body.get("sources_cold") == ["housing"])
 check("sources_stale present", body.get("sources_stale") == ["fed"])
 
+print()
+print("=== stored-row shaper carries the source lists ===")
+shaped = routes._brief_from_ddb_item({
+    "summary": "## x", "generated_at": "t",
+    "sources_used": ["markets"], "sources_cold": ["housing"], "sources_stale": []})
+check("brief mapped from 'summary'", shaped["brief"] == "## x")
+check("sources_used carried", shaped["sources_used"] == ["markets"])
+check("sources_cold carried", shaped["sources_cold"] == ["housing"])
+check("from_cache flagged", shaped["from_cache"] is True)
+missing = routes._brief_from_ddb_item({"summary": "## y"})
+check("absent lists degrade to []", missing["sources_used"] == [] and missing["sources_cold"] == [])
+
 resp_zh = client.post("/api/market-brief", json={"lang": "zh"})
 check("zh served from its own cache slot",
       resp_zh.get_json()["brief"].startswith("## 一、指数"))
@@ -103,7 +115,10 @@ def _fake_generate(lang, warm=False, app=None):
 
 real_generate, real_store = routes._generate_market_brief, routes._store_market_brief
 routes._generate_market_brief = _fake_generate
-routes._store_market_brief = lambda *a, **k: None
+# _store_market_brief returns the brief to serve — normally what it was given,
+# but the stored one when that was built from more sources. The endpoint jsonifies
+# its return value, so a stub returning None would 500.
+routes._store_market_brief = lambda lang, result, today: result
 try:
     resp = client.post("/api/market-brief", json={"lang": "en", "force_refresh": True})
     check("force_refresh regenerates", resp.get_json()["brief"] == "## regenerated")
@@ -113,6 +128,18 @@ try:
     calls.clear()
     client.post("/api/market-brief", json={"lang": "en"})
     check("without force_refresh the cache is used again", not calls, str(calls))
+
+    # A worker with cold caches must not replace a richer stored brief.
+    calls.clear()
+    routes._store_market_brief = lambda lang, result, today: {
+        "brief": "## the richer stored one", "generated_at": "earlier",
+        "sources_used": ["a", "b", "c"], "sources_cold": [], "sources_stale": [],
+        "from_cache": True, "superseded_by_cache": True}
+    body = client.post("/api/market-brief",
+                       json={"lang": "en", "force_refresh": True}).get_json()
+    check("a thinner regeneration serves the stored brief",
+          body["brief"] == "## the richer stored one")
+    check("and says so", body.get("superseded_by_cache") is True)
 finally:
     routes._generate_market_brief = real_generate
     routes._store_market_brief = real_store

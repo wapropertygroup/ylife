@@ -8393,6 +8393,18 @@ def _collect_brief_sources(warm: bool = False, app=None) -> dict:
             return None
 
     src["markets"]     = _peek(_MARKETS_CACHE, _MARKETS_CACHE_LOCK)
+    if not src["markets"]:
+        # Under --preload the markets warm-up thread runs in the gunicorn
+        # *master*, so a forked worker inherits whatever snapshot existed when it
+        # was forked and never sees a later refresh (CLAUDE.md, "Memory budget").
+        # A brief built in a request therefore had no index table at all, which
+        # is most of the brief. api_markets() would rebuild it in ~120s and get
+        # the worker killed, so go through the cross-process tier the markets
+        # cache already keeps in DynamoDB — it is at most 5 minutes old.
+        ddb_markets = _markets_load_from_dynamo()
+        if ddb_markets:
+            log.info("Brief: markets cache empty in this worker — served from DynamoDB")
+            src["markets"] = ddb_markets.get("data")
     src["commodities"] = _peek(_COMMODITIES_CACHE, _COMMODITIES_CACHE_LOCK)
     src["movers"]      = _peek(_MOVERS_CACHE, _MOVERS_CACHE_LOCK)
     src["fg"]          = _peek(_FG_CACHE, _FG_CACHE_LOCK)
@@ -8537,9 +8549,7 @@ def api_market_brief():
                 item = tbl.get_item(Key={"date": today_iso,
                                          "lang_market": ddb_key}).get("Item")
                 if item and item.get("summary"):
-                    result = {"brief": item["summary"],
-                              "generated_at": item.get("generated_at", ""),
-                              "from_cache": True}
+                    result = _brief_from_ddb_item(item)
                     with _BRIEF_CACHE_LOCK:
                         _BRIEF_CACHE[lang] = {"ts": _time.time(), "data": result}
                     return jsonify(result)
@@ -8552,29 +8562,85 @@ def api_market_brief():
         log.warning("Brief: generation failed: %s", exc)
         return jsonify({"error": str(exc)}), 500
 
-    _store_market_brief(lang, result, today_iso)
-    return jsonify(result)
+    # _store_market_brief may hand back the stored brief instead, when this
+    # worker's caches were too cold to improve on it.
+    return jsonify(_store_market_brief(lang, result, today_iso))
 
 
-def _store_market_brief(lang: str, result: dict, today_iso: str) -> None:
-    """Write a generated brief to the memory cache and DynamoDB."""
+def _brief_from_ddb_item(item: dict) -> dict:
+    """Shape a stored DynamoDB row back into the endpoint's response.
+
+    The source lists are stored and read back rather than recomputed so the
+    "N sources unavailable" note works on a cache hit too — which is the common
+    path, the brief being pre-generated daily. Without them the note only ever
+    appeared on the rare fresh generation.
+    """
+    return {
+        "brief":         item["summary"],
+        "generated_at":  item.get("generated_at", ""),
+        "sources_used":  list(item.get("sources_used") or []),
+        "sources_cold":  list(item.get("sources_cold") or []),
+        "sources_stale": list(item.get("sources_stale") or []),
+        "from_cache":    True,
+    }
+
+
+def _store_market_brief(lang: str, result: dict, today_iso: str) -> dict:
+    """Write a generated brief to the memory cache and DynamoDB.
+
+    Returns whichever brief should be served — normally ``result``, but the
+    stored one when that is built from strictly more sources.
+
+    A request-path generation sees only the caches of the worker that serves it,
+    and under --preload those are a fork-time snapshot that no refresh thread
+    updates. The overnight pre-generator runs in the master with everything warm,
+    so it produces a far richer brief. Left alone, one press of the refresh
+    button replaced a sixteen-table brief with a ten-table one and pinned that
+    for the rest of the day, since the pre-generator skips a date it already has.
+    A refresh may now leave the brief unchanged, but it can no longer make it
+    worse.
+    """
     import time as _time
+
+    tbl = _get_summaries_table()
+    fresh_n = len(result.get("sources_used") or [])
+
+    if tbl:
+        try:
+            item = tbl.get_item(Key={"date": today_iso,
+                                     "lang_market": _brief_ddb_key(lang)}).get("Item")
+            if item and item.get("summary"):
+                stored_n = len(item.get("sources_used") or [])
+                if stored_n > fresh_n:
+                    log.info("Brief: keeping stored %s brief (%d sources) over the "
+                             "fresh one (%d) — this worker's caches are colder",
+                             lang, stored_n, fresh_n)
+                    kept = _brief_from_ddb_item(item)
+                    kept["superseded_by_cache"] = True
+                    with _BRIEF_CACHE_LOCK:
+                        _BRIEF_CACHE[lang] = {"ts": _time.time(), "data": kept}
+                    return kept
+        except Exception as exc:  # noqa: BLE001
+            log.warning("Brief: DynamoDB compare-before-write failed: %s", exc)
 
     with _BRIEF_CACHE_LOCK:
         _BRIEF_CACHE[lang] = {"ts": _time.time(), "data": result}
-    tbl = _get_summaries_table()
     if not tbl:
-        return
+        return result
     try:
         tbl.put_item(Item={
-            "date":         today_iso,
-            "lang_market":  _brief_ddb_key(lang),
-            "summary":      result["brief"],
-            "generated_at": result.get("generated_at", ""),
-            "ttl":          int(_time.time()) + 90 * 24 * 3600,
+            "date":          today_iso,
+            "lang_market":   _brief_ddb_key(lang),
+            "summary":       result["brief"],
+            "generated_at":  result.get("generated_at", ""),
+            "sources_used":  list(result.get("sources_used") or []),
+            "sources_cold":  list(result.get("sources_cold") or []),
+            "sources_stale": list(result.get("sources_stale") or []),
+            "ttl":           int(_time.time()) + 90 * 24 * 3600,
         })
     except Exception as exc:  # noqa: BLE001
         log.warning("Brief: DynamoDB write failed: %s", exc)
+    return result
 
 
 def _do_pregen_market_briefs(app=None) -> None:
@@ -8607,10 +8673,8 @@ def _do_pregen_market_briefs(app=None) -> None:
                                          "lang_market": _brief_ddb_key(lang)}).get("Item")
                 if item and item.get("summary"):
                     with _BRIEF_CACHE_LOCK:
-                        _BRIEF_CACHE[lang] = {"ts": _time.time(), "data": {
-                            "brief": item["summary"],
-                            "generated_at": item.get("generated_at", ""),
-                            "from_cache": True}}
+                        _BRIEF_CACHE[lang] = {"ts": _time.time(),
+                                              "data": _brief_from_ddb_item(item)}
                     log.info("Brief pre-gen: %s loaded from DynamoDB", lang)
                     continue
             except Exception as exc:  # noqa: BLE001

@@ -73,6 +73,29 @@
   /* AI Markets Brief — rendered Markdown, including pipe tables. Mirrors the
      .md-body rules on /history so LLM output reads the same everywhere. */
   .brief-md { font-size: 13px; line-height: 1.75; color: #cbd5e1; overflow-wrap: break-word; }
+  /* Clamped to a preview by default. The brief runs ~1,500 words and a dozen
+     tables, which pushed the index cards two screens down — it is a summary at
+     the top of a dashboard, not the page's subject. The fade is what makes the
+     clamp legible as "there is more" rather than as an abrupt cut; without it a
+     table sliced mid-row just looks broken. */
+  .brief-md.is-clamped {
+    max-height: 190px;          /* ~8 lines at 13px/1.75 */
+    overflow: hidden;
+    position: relative;
+  }
+  .brief-md.is-clamped::after {
+    content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 64px;
+    background: linear-gradient(to bottom, rgba(15,23,42,0), #0f172a 85%);
+    pointer-events: none;
+  }
+  .brief-more-btn {
+    margin-top: 8px; font-size: 11px; font-weight: 600;
+    color: #a5b4fc; background: transparent;
+    border: 1px solid #312e81; border-radius: 6px; padding: 3px 10px;
+    cursor: pointer; transition: background 0.15s, border-color 0.15s, color 0.15s;
+  }
+  .brief-more-btn:hover { background: rgba(99,102,241,0.12); border-color: #4f46e5; color: #c7d2fe; }
+  .brief-more-btn:focus-visible { outline: 2px solid #6366f1; outline-offset: 1px; }
   .brief-md h2 {
     font-size: 14px; font-weight: 700; color: #e2e8f0;
     margin: 20px 0 8px; padding-bottom: 6px; border-bottom: 1px solid #1e293b;
@@ -168,13 +191,17 @@
     <div class="flex gap-2">
       <button id="aiMarketsBriefRefresh" onclick="_loadAiBrief(true)"
         class="text-[10px] text-slate-600 hover:text-slate-400 transition px-2 py-0.5 rounded border border-slate-800 hover:border-slate-700">↻</button>
-      <button onclick="_toggleAiBrief()" id="aiMarketsBriefChevron"
-        class="text-slate-600 hover:text-slate-400 transition text-xs">▼</button>
     </div>
   </div>
+  {# No collapse chevron any more: the body is clamped to a preview by default,
+     which is what that control existed to achieve. Two toggles on one small
+     card — one hiding it, one clamping it — read as a puzzle. #}
   <div id="aiMarketsBriefBody" class="mt-2 text-sm text-slate-400 leading-relaxed">
-    <div id="aiMarketsBriefText" class="hidden brief-md"></div>
+    <div id="aiMarketsBriefText" class="hidden brief-md is-clamped"></div>
     <div id="aiMarketsBriefLoading" class="text-slate-600 text-xs animate-pulse" data-i18n="markets.ai_brief_loading">Generating market brief…</div>
+    <button id="aiMarketsBriefMore" onclick="_toggleAiBriefMore()"
+            class="brief-more-btn hidden" aria-expanded="false"
+            data-i18n="markets.ai_brief_more">View more</button>
   </div>
   <a href="/daily" class="mt-2 inline-block text-[11px] text-brand hover:text-violet-300 transition" data-i18n="markets.ai_brief_full">View full daily report →</a>
 </div>
@@ -4182,8 +4209,39 @@ function _mktsModalConfig(kind) {
 // dashboard on the site (see ystocker/brief.py). Rendered through the shared
 // markdown.js, which escapes text before adding tags — model output is not
 // trusted, so this must stay innerHTML-of-rendered-markup, never raw insertion.
-let _aiMarketsBriefCollapsed = false;
 let _aiBriefInFlight = false;
+// Survives a re-render: the language toggle re-fetches the brief, and silently
+// re-collapsing what the reader had opened is worse than the wrong language.
+let _aiBriefExpanded = false;
+
+function _applyBriefClamp() {
+  const textEl = document.getElementById('aiMarketsBriefText');
+  const moreEl = document.getElementById('aiMarketsBriefMore');
+  if (!textEl || !moreEl) return;
+  textEl.classList.toggle('is-clamped', !_aiBriefExpanded);
+  // Only offer the control when there is actually something hidden. scrollHeight
+  // is measured against the clamp, so read it while clamped.
+  const overflows = textEl.scrollHeight > textEl.clientHeight + 8;
+  moreEl.classList.toggle('hidden', !(overflows || _aiBriefExpanded));
+  moreEl.setAttribute('aria-expanded', String(_aiBriefExpanded));
+  const key = _aiBriefExpanded ? 'markets.ai_brief_less' : 'markets.ai_brief_more';
+  moreEl.dataset.i18n = key;
+  moreEl.textContent = (typeof I18n !== 'undefined' && I18n.t(key))
+    || (_aiBriefExpanded ? 'Show less' : 'View more');
+}
+
+function _toggleAiBriefMore() {
+  _aiBriefExpanded = !_aiBriefExpanded;
+  _applyBriefClamp();
+  // Collapsing from deep inside the brief would otherwise leave the reader
+  // somewhere below the card, looking at whatever moved up to meet them.
+  if (!_aiBriefExpanded) {
+    const card = document.getElementById('aiMarketsBriefCard');
+    if (card && card.getBoundingClientRect().top < 0) {
+      card.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    }
+  }
+}
 
 async function _loadAiBrief(force) {
   const textEl = document.getElementById('aiMarketsBriefText');
@@ -4224,6 +4282,7 @@ async function _loadAiBrief(force) {
       : Markdown_fallbackEscape(md);
     textEl.classList.remove('hidden');
     loadEl?.classList.add('hidden');
+    _applyBriefClamp();
 
     if (timeEl && d.generated_at) {
       const ts = typeof d.generated_at === 'number'
@@ -4249,6 +4308,7 @@ async function _loadAiBrief(force) {
     }
   } catch (e) {
     if (loadEl) loadEl.textContent = '⚠ ' + (e.message || 'brief unavailable');
+    document.getElementById('aiMarketsBriefMore')?.classList.add('hidden');
   } finally {
     _aiBriefInFlight = false;
     if (btnEl) { btnEl.disabled = false; btnEl.style.opacity = ''; }
@@ -4264,11 +4324,9 @@ function Markdown_fallbackEscape(s) {
 }
 
 function _toggleAiBrief() {
-  _aiMarketsBriefCollapsed = !_aiMarketsBriefCollapsed;
-  const body    = document.getElementById('aiMarketsBriefBody');
-  const chevron = document.getElementById('aiMarketsBriefChevron');
-  if (body)    body.style.display = _aiMarketsBriefCollapsed ? 'none' : '';
-  if (chevron) chevron.textContent = _aiMarketsBriefCollapsed ? '▶' : '▼';
+  // Kept as a no-op shim: the chevron that called it is gone, but a stale
+  // cached copy of this page can still be holding an onclick that names it.
+  _toggleAiBriefMore();
 }
 
 // Re-fetch in the new language when the toggle is hit. setLang() does not

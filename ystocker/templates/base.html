@@ -120,7 +120,7 @@
   {% if not _agents_embedded %}
   <!-- ── Top navigation bar ──────────────────────────────────────────── -->
   <header class="sticky top-0 z-50 bg-slate-900/80 backdrop-blur border-b border-slate-800">
-    <div class="max-w-screen-xl mx-auto px-4 sm:px-6 flex items-center h-14 gap-4">
+    <div class="max-w-screen-2xl mx-auto px-4 sm:px-6 flex items-center h-14 gap-4">
 
       <!-- Logo -->
       <a href="{{ url_for('main.markets') }}" class="flex items-center gap-2 font-bold text-lg shrink-0">
@@ -406,7 +406,12 @@
   {% endif %}
 
   <!-- ── Main content ─────────────────────────────────────────────────── -->
-  <main class="flex-1 {% block main_class %}max-w-screen-xl mx-auto{% endblock %} w-full px-4 sm:px-6 py-6 sm:py-8">
+  {# The reading column is max-w-screen-2xl (1536px), widened from -xl (1280px)
+     because the AI brief on /markets carries tables up to eleven columns, which
+     were scrolling inside their own card at the old measure. The nav bar above
+     uses the same class so the logo stays flush with the content beneath it, and
+     agents.html's #agDock mirrors it in a calc() — change all three together. #}
+  <main class="flex-1 {% block main_class %}max-w-screen-2xl mx-auto{% endblock %} w-full px-4 sm:px-6 py-6 sm:py-8">
 
     <!-- Flash messages -->
     {% with messages = get_flashed_messages(with_categories=true) %}

@@ -1894,6 +1894,8 @@ const I18n = (() => {
     'markets.ai_brief_label':   { en: 'AI Markets Brief',           zh: 'AI 市场简报' },
     'markets.ai_brief_loading': { en: 'Generating market brief…',   zh: '正在生成市场简报…' },
     'markets.ai_brief_full':    { en: 'View full daily report →',   zh: '查看完整每日报告 →' },
+    'markets.ai_brief_more':    { en: 'View more',                 zh: '展开全文' },
+    'markets.ai_brief_less':    { en: 'Show less',                 zh: '收起' },
 
     // ── heatmap.html ───────────────────────────────────────────────────
     'heatmap.nav':         { en: 'Heatmap',           zh: '热力图' },
