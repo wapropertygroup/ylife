@@ -32,24 +32,32 @@ reachable under it too — accepted deliberately, since filtering paths in nginx
 would be a second routing table to keep in step with `routes.py`.
 
 Being a separate registrable domain, its **apex can point here** (`35.155.14.61`),
-which `li-family.us` cannot. Two things live outside this repo and will not work
-until they are done by hand:
+which `li-family.us` cannot. The DNS move has been done: `trade-agents.com`,
+`www.trade-agents.com` and `pay.trade-agents.com` all resolve to the box, the
+apex certificate issued (expires 2026-11-21), and `https://trade-agents.com/`
+serves `/agents` — verified from the box, since the vhost only answers to its own
+`server_name` and a local `curl` needs `--resolve`.
 
-- **DNS at Squarespace** — the apex A records must move off Squarespace's website
-  IPs (`198.185.159.144/145`, `198.49.23.144/145`) to the box. Doing so replaces
-  whatever Squarespace serves on that domain. Until then the vhost is inert and
-  `certbot` cannot pass its HTTP-01 challenge, so the cert call is written to fail
-  non-fatally and `--allow-subset-of-names` is set, because `www` is a CNAME to
-  Squarespace and demanding both names would fail the apex too.
+Two things remain:
+
+- **`www` has no certificate.** `certbot` runs with `--allow-subset-of-names`, so
+  when `www` was still a CNAME to Squarespace it dropped that name and issued for
+  the apex alone; the cert's only SAN is `DNS:trade-agents.com`. Now that `www`
+  points at the box, nginx accepts it (`server_name trade-agents.com
+  www.trade-agents.com`) but has no cert to present, so HTTPS to `www` fails at
+  the TLS handshake rather than serving anything. It can pass an HTTP-01
+  challenge now, so re-running the cert call would fix it — that flag is why the
+  gap is silent instead of a deploy failure.
 - **Google OAuth origin** — `/agents` is sign-in gated, so `https://trade-agents.com`
   must be added to the authorized JavaScript origins of `GOOGLE_CLIENT_ID` or the
-  sign-in button fails silently and the page is decorative.
+  sign-in button fails silently and the page is decorative. Not verifiable from
+  the box; it lives in the Google Cloud console.
 
 `pay.trade-agents.com` is an eleventh vhost fronting **ypay on 8005** — the same
 app as `pay.li-family.us`. It exists for brand continuity at the one moment it
 matters: a buyer who started on trade-agents.com should not be shown an
-unfamiliar domain while being asked for card details. It needs its own A record;
-until then the vhost is inert and its certbot call fails non-fatally.
+unfamiliar domain while being asked for card details. It has its own A record and
+its own certificate (expires 2026-11-21) and serves 200.
 
 Nothing about the payment differs. ypay builds its Stripe success and cancel URLs
 from `request.host_url`, so it follows whichever host serves it with **no
@@ -305,5 +313,6 @@ Started in `create_app()`, all daemon threads:
 - **Never fit ML models in a request process.** Prophet (cmdstanpy) and `pmdarima.auto_arima` each retain hundreds of MB that glibc never returns to the OS, so a worker that served one `/api/forecast` request stayed ~880 MB larger for life. Ten such requests caused nine OOM kills in 48 h, and since the kernel picks its OOM victim globally they took *other* apps down too. `forecast.py` now runs fits in a `subprocess` (`python -m ystocker.forecast <TICKER> <OUT>`) via `run_forecast_isolated()`. Not `multiprocessing`: `fork` would inherit held cache locks from the background threads, and `spawn` re-imports the parent's `__main__` — which under gunicorn is the venv launcher script.
 - **Dead FRED series return HTTP 200.** `MBST` and `WASDRAL` still serve well-formed CSV years after they stopped publishing, so stale data flows in silently and corrupts anything derived from it. Prefer the Wednesday-level `WSHO*` ids. The row-count-against-`WALCL` check this file used to prescribe was never implemented and would have needed a hand-maintained expectation per series; `freshness.series_health()` now does it generically instead, inferring each series' cadence from its own observation dates and flagging a trailing gap of more than `cadence * 3 + 7` days. `/api/fed`, `/api/housing` and `/api/multiples` ship the verdict as `meta.series` + `meta.stale_series`. It is deliberately biased toward flagging — a false positive costs one log line, and this failure went unnoticed for years. Tune with `FRESHNESS_CADENCE_TOLERANCE` / `FRESHNESS_CADENCE_GRACE_DAYS`; note a `stale` of `None` means "too few observations to tell", which is not the same as healthy.
 - **Never let an outbound call run without a timeout.** `yf.Ticker(t).info` had none, and in a daemon thread that means block forever with nothing in the log — the cache warmer could park indefinitely. Yahoo now gets a `curl_cffi` session carrying one, which **must** be curl_cffi rather than `requests`: yfinance ≥1.x asserts the session type and needs Chrome TLS impersonation, so a `requests.Session` raises `YFDataException` and passing nothing leaves the timeout unset. One module-level session is reused because `YfData` is a singleton that re-binds whatever it is given, so a session per ticker would thrash the cookie/crumb it just negotiated.
+- **A deploy takes ystocker down for as long as its slowest in-flight request.** The unit sets `KillMode=process`, so systemd signals only gunicorn's master and then waits while workers finish what they are serving; nginx returns 502 for that whole window, and `--preload` adds a few more seconds re-importing the app before anything binds :8000 again. Measured: 2 seconds for a normal deploy, but **32 seconds** for one that landed while a worker was generating an AI brief, which is a Gemini call capped at 90s. So the outage is bounded by `_BRIEF_GEMINI_TIMEOUT_MS`, not by anything about the deploy. Pre-generating the brief keeps request-path generation rare, but if this matters, drain first or move generation off the request path entirely — do not just retry the deploy and assume the 502 was transient.
 - **Not every cache in `routes.py` is keyed `"data"`.** Most are `CACHE["data"] = {"ts", "data"}`, but `_CREDIT_SPREAD_CACHE` is keyed by *period* (`"1y"`, `"2y"`, …) and `_YIELD_CURVE_CACHE` by its schema version (`_YIELD_CURVE_CACHE_VER`). Reading the wrong key returns `None` rather than raising, so the consumer just silently loses a section — `/api/daily-summary` read `_CREDIT_SPREAD_CACHE.get("data")` from the day it was written, which meant its credit-spread line never once appeared in a summary. Check the write site for the key before peeking a cache, and hold its lock.
 - **reportlab fails loudly on height and silently on width.** A flowable taller than the frame raises `LayoutError` and kills the whole PDF (a single-cell `Table` cannot split between rows — pass `splitInRow=1`); a flowable *wider* than the frame is simply drawn through the margin, or off the paper. So every fixed-width flowable in `report_pdf.py` is clamped to the measure, and preformatted text is hard-wrapped before it is handed over. Separately, the CJK line breaker deliberately overruns the measure by up to one em rather than start a line with `、` or `。`, which is why the Chinese path lays out to a slightly narrower measure and leaves a gutter for that overhang.
