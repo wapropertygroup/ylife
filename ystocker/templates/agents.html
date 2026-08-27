@@ -64,6 +64,9 @@ window.YSTime = (function () {
   white-space: nowrap;
 }
 .ag-btn:hover:not(:disabled) { background: rgba(99,102,241,.28); color: #c7d2fe; }
+.ag-btn:focus-visible {
+  outline: 2px solid #a5b4fc; outline-offset: 2px;
+}
 .ag-btn:disabled { opacity: .45; cursor: not-allowed; }
 .ag-btn-ghost {
   border-color: #334155; background: transparent; color: #94a3b8;
@@ -225,13 +228,13 @@ window.YSTime = (function () {
    the window: pinned at the viewport's right edge these sat some 600px away
    from the text on a wide monitor, where they read as page furniture rather
    than as controls for the report being read. The calc mirrors <main>'s box
-   (max-w-[1490px], mx-auto — so half is 745px), so the dock rides
+   (.app-container at 1341px, mx-auto — so half is 670.5px), so the dock rides
    the column's outer edge — clear of the card's text on a wide screen, and
-   tucked into the card's own padding once the gutters run out. Keep the 745px
+   tucked into the card's own padding once the gutters run out. Keep the 670.5px
    in step with base.html's container class; they are one measurement. */
 #agDock {
   position: fixed; z-index: 40;
-  bottom: 20px; right: max(14px, calc(50vw - 745px));
+  bottom: 20px; right: max(14px, calc(50vw - 670.5px));
   display: flex; flex-direction: column; gap: 8px;
   /* The dock is only a positioner; clicks must reach the report underneath. */
   pointer-events: none;
@@ -469,15 +472,53 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
   .ag-form-quota .ag-quota { box-sizing: border-box; width: 100%; justify-content: center; }
 }
 @media (max-width: 520px) {
+  /* Phone controls use a consistent thumb-sized hit area. Report actions form
+     a small action rail beneath each run instead of floating as tiny pills. */
+  .ag-btn {
+    box-sizing: border-box; min-height: 44px; padding: 10px 15px;
+    border-radius: 11px; font-size: 13px; justify-content: center;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .ag-btn-ghost {
+    padding: 10px 14px; font-size: 13px;
+    background: rgba(15, 23, 42, .72);
+  }
+  .ag-btn:active:not(:disabled) { transform: translateY(1px); }
+  .ag-signin-btn { width: 100%; max-width: 18rem; }
   .ag-form-grid { grid-template-columns: minmax(0, 1fr); }
   .ag-form-actions, .ag-form-quota { grid-column: 1; }
+  .ag-form-actions { grid-template-columns: minmax(0, 1fr); }
+  .ag-form-actions .ag-btn { width: 100%; }
   /* Too narrow for two columns: the date becomes a heading above its runs. */
   .ag-hist { grid-template-columns: minmax(0, 1fr); column-gap: 0; }
   .ag-hist > .ag-hist-runs { border-top: 0; padding-top: 0; }
   .ag-hist > .ag-hist-date { padding-bottom: 5px; }
+  .ag-hist-runs { gap: 10px; }
+  .ag-hist-run {
+    padding: 10px; gap: 9px;
+    background: rgba(15, 23, 42, .58);
+    border: 1px solid #1e293b; border-radius: 12px;
+  }
+  .ag-row-actions {
+    display: flex; width: 100%; gap: 8px;
+  }
+  .ag-row-actions .ag-btn { flex: 1 1 0; min-width: 0; }
+  .ag-row-actions .ag-btn:first-child {
+    color: #c7d2fe; border-color: #4f46e5;
+    background: rgba(79, 70, 229, .2);
+  }
+  .ag-report-actions { display: flex; width: 100%; }
+  .ag-report-actions .ag-btn { flex: 1 1 0; min-width: 0; }
+  #agBuyLink { width: 100%; margin-top: 4px; }
+  .ag-chat-form { align-items: stretch; }
+  #agChatSend { min-width: 64px; }
+  .ag-chip, .ag-ctl { min-height: 36px; padding: 7px 11px; }
+  .ag-dock-btn { width: 46px; height: 46px; }
   .ag-hist-tools { width: 100%; }
   .ag-hist-tools .ag-search-wrap { flex: 1; }
   .ag-hist-tools .ag-search-wrap .ag-input { width: 100%; }
+  .ag-hist-tools .ag-input { min-height: 44px; }
+  .ag-search-clear { right: 0; width: 40px; height: 40px; padding: 0; font-size: 18px; }
 }
 </style>
 
@@ -500,7 +541,7 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
   <p class="text-xs text-slate-500 mb-4" data-i18n="agents.need_signin_why">Each run makes live LLM calls that cost real money, so this page is restricted.</p>
   <a href="{{ url_for('main.login', next=url_for('main.agents_page')) }}"
      {% if agent_embedded %}target="_top"{% endif %}
-     class="ag-btn" data-i18n="nav.sign_in">Sign In</a>
+     class="ag-btn ag-signin-btn" data-i18n="nav.sign_in">Sign In</a>
 </div>
 
 {% if showcase %}
@@ -530,7 +571,7 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
             data-i18n="agents.recovered">recovered from stream</span>
       <span id="agSampleDegraded" class="ag-pill ag-degraded hidden"></span>
     </div>
-    <div class="ag-row">
+    <div class="ag-row ag-report-actions">
       <a id="agSamplePdf" class="ag-btn ag-btn-ghost hidden" href="#" download
          data-i18n="agents.download_pdf">⬇ Download PDF</a>
       <button id="agSampleHide" class="ag-btn ag-btn-ghost" data-i18n="agents.dismiss">Dismiss</button>
@@ -844,7 +885,7 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
           + (j.elapsed_sec ? `<span class="text-slate-600">${esc(j.elapsed_sec)}s</span>` : '');
 
         const actions = document.createElement('div');
-        actions.className = 'ag-row';
+        actions.className = 'ag-row ag-row-actions';
         const btn = document.createElement('button');
         btn.className = 'ag-btn ag-btn-ghost';
         btn.textContent = I18n.t('agents.view') || 'View';
@@ -1014,7 +1055,7 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
       <span id="agRecovered" class="ag-pill ag-degraded hidden"
             data-i18n="agents.recovered">recovered from stream</span>
     </div>
-    <div class="ag-row">
+    <div class="ag-row ag-report-actions">
       <a id="agPdf" class="ag-btn hidden" href="#" download
          data-i18n="agents.download_pdf">⬇ Download PDF</a>
       <button id="agHide" class="ag-btn ag-btn-ghost" data-i18n="agents.dismiss">Dismiss</button>
@@ -2081,7 +2122,7 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
             + (j.selftest ? '<span class="text-slate-600">self-test</span>' : '')
             + (j.elapsed_sec ? `<span class="text-slate-600">${j.elapsed_sec}s</span>` : '');
           const actions = document.createElement('div');
-          actions.className = 'ag-row';
+          actions.className = 'ag-row ag-row-actions';
           const btn = document.createElement('button');
           btn.className = 'ag-btn ag-btn-ghost';
           btn.textContent = I18n.t('agents.view') || 'View';

@@ -96,6 +96,7 @@
     /* Brand color tokens — indigo palette */
     :root { --brand: 99 102 241; --brand-dark: 79 70 229; --brand-light: 165 180 252; }
     body { font-family: 'Inter', sans-serif; }
+    .app-container { max-width: 1341px; }
     .chart-container { position: relative; }
     /* Custom scrollbar */
     ::-webkit-scrollbar { width: 6px; height: 6px; }
@@ -120,7 +121,7 @@
   {% if not _agents_embedded %}
   <!-- ── Top navigation bar ──────────────────────────────────────────── -->
   <header class="sticky top-0 z-50 bg-slate-900/80 backdrop-blur border-b border-slate-800">
-    <div class="max-w-[1490px] mx-auto px-4 sm:px-6 flex items-center h-14 gap-4">
+    <div class="app-container mx-auto px-4 sm:px-6 flex items-center h-14 gap-4">
 
       <!-- Logo -->
       <a href="{{ url_for('main.markets') }}" class="flex items-center gap-2 font-bold text-lg shrink-0">
@@ -449,17 +450,11 @@
   {% endif %}
 
   <!-- ── Main content ─────────────────────────────────────────────────── -->
-  {# The reading column is 1490px, tuned by eye: screen-xl (1280px) was too
-     narrow for the AI brief's eleven-column tables, 1840px and 1656px were both
-     too wide for comfortable prose. This sits just under Tailwind's screen-2xl
-     (1536px), which is why it is an arbitrary value and not a named screen.
-     An arbitrary value rather than a named screen because Tailwind has nothing
-     between 1536px and none — which means it only exists once build_css.sh has
-     regenerated the compiled stylesheet; this project does not load Tailwind
-     from a CDN. The nav bar above uses the same value so the logo stays flush
-     with the content beneath it, and agents.html's #agDock mirrors half of it
-     (745px) in a calc(). Those three are one measurement: change them together. #}
-  <main class="flex-1 {% block main_class %}max-w-[1490px] mx-auto{% endblock %} w-full px-4 sm:px-6 py-6 sm:py-8">
+  {# The reading column is capped at 1341px. The nav bar above uses the same
+     value so the logo stays flush with the content beneath it, and agents.html's
+     #agDock mirrors half of it (670.5px) in a calc(). Those three are one
+     measurement: change them together. #}
+  <main class="flex-1 {% block main_class %}app-container mx-auto{% endblock %} w-full px-4 sm:px-6 py-6 sm:py-8">
 
     <!-- Flash messages -->
     {% with messages = get_flashed_messages(with_categories=true) %}
