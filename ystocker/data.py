@@ -6,6 +6,8 @@ Fetches financial metrics from Yahoo Finance for a single ticker.
 from __future__ import annotations
 
 import logging
+import os
+import threading
 
 import yfinance as yf
 
@@ -28,39 +30,56 @@ YF_TIMEOUT_SECONDS = fetchguard.env_float("YF_TIMEOUT_SECONDS", 15.0, 1.0)
 #: being retried at once on the next restart.
 TICKER_BACKOFF = fetchguard.FailureBackoff("tickers", base_seconds=120, max_seconds=3600)
 
-_yf_session_cached = None
-_yf_session_tried = False
+_yf_session_state = threading.local()
 
 
 def _yf_session():
-    """A shared curl_cffi session carrying a default timeout, or None.
+    """A curl_cffi session carrying a default timeout, or None.
 
     It must be curl_cffi, not `requests`: yfinance >=1.x asserts the session
     type and needs Chrome TLS impersonation, so handing it a `requests.Session`
     raises `YFDataException` and handing it nothing leaves the timeout unset.
-    One module-level session is reused because `YfData` is a singleton that
-    re-binds whatever session it is passed -- a fresh session per ticker would
-    thrash the shared cookie/crumb it just negotiated.
+
+    One session **per thread, per process**, not one per module. A single shared
+    session looked right -- ``YfData`` is a singleton that re-binds whatever
+    session it is passed, so a session per ticker would thrash the cookie/crumb
+    it just negotiated -- but it took production down twice over:
+
+    * Under gunicorn ``--preload`` this module is imported by the *master*, so a
+      module-level session was created there and then inherited by both forked
+      workers. libcurl handles are not fork-safe; a worker that used the parent's
+      handle died with ``SIGSEGV``, gunicorn respawned it, and it died again on
+      the next Yahoo call. ``/markets`` stopped responding entirely.
+    * The master's several background fetch threads shared the one session too,
+      and a worker blocked in ``YfData._set_session`` on yfinance's
+      ``_cookie_lock`` until gunicorn's ``--timeout 120`` aborted it.
+
+    Keying on ``threading.local()`` fixes the threads, and re-checking the pid
+    fixes the fork: a child sees a pid that does not match what its inherited
+    thread-local recorded, and builds its own session instead of touching a
+    handle that belongs to a dead parent.
 
     Returns None if curl_cffi is unavailable, in which case callers fall back to
     yfinance's own session. That is the old, timeout-less behaviour: worse, but
     no worse than before, and better than not fetching at all.
     """
-    global _yf_session_cached, _yf_session_tried
-    if _yf_session_tried:
-        return _yf_session_cached
-    _yf_session_tried = True
+    pid = os.getpid()
+    if getattr(_yf_session_state, "pid", None) == pid:
+        return _yf_session_state.session
+
+    _yf_session_state.pid = pid
     try:
         from curl_cffi import requests as curl_requests
 
-        _yf_session_cached = curl_requests.Session(
+        _yf_session_state.session = curl_requests.Session(
             impersonate="chrome", timeout=YF_TIMEOUT_SECONDS
         )
-        log.info("Yahoo session ready (timeout %.0fs)", YF_TIMEOUT_SECONDS)
+        log.info("Yahoo session ready for pid %d thread %s (timeout %.0fs)",
+                 pid, threading.current_thread().name, YF_TIMEOUT_SECONDS)
     except Exception as exc:
         log.warning("Yahoo: curl_cffi session unavailable (%s) — no request timeout", exc)
-        _yf_session_cached = None
-    return _yf_session_cached
+        _yf_session_state.session = None
+    return _yf_session_state.session
 
 
 class FetchError(Exception):
