@@ -735,8 +735,12 @@
     });
   });
 
-  // DXY vs Commodities basket
-  (async function() {
+  // DXY vs Commodities basket.
+  // Anchored on the gold/DXY ratio canvas rather than on #dxyBasketSection: the
+  // section carries style="display:none" until this loader reveals it (L746), so
+  // it has no box at registration time and DeferLoad would load it eagerly.
+  // The ratio canvas is the last thing in the always-visible card above it.
+  DeferLoad.when('#goldDxyRatioChart', async function() {
     try {
       const dxy = await fetch('/api/history/DX-Y.NYB?period=1y').then(r=>r.json());
       const gold = C['gold'];
@@ -765,10 +769,12 @@
           interaction:{mode:'index',intersect:false}},
       });
     } catch(e) {}
-  })();
+  }, { label: 'dxy-basket' });
 
-  // Copper / SPY ratio chart — replaces dual normalised lines
-  (async function() {
+  // Copper / SPY ratio chart — replaces dual normalised lines.
+  // #copperSpySection is in normal flow from first paint (the loader only ever
+  // hides it on failure, L781), so it can anchor itself.
+  DeferLoad.when('#copperSpySection', async function() {
     const copper = C['copper'];
     if (!copper || !copper.prices_1y || !copper.prices_1y.length) return;
     const section = document.getElementById('copperSpySection');
@@ -817,7 +823,7 @@
     } catch(e) {
       if (section) section.style.display = 'none';
     }
-  })();
+  }, { label: 'copper-spy' });
 
   // ─── Sortable table
   let sortCol = 'ret_1y', sortDir = -1;
@@ -947,8 +953,18 @@
     });
   }
 
-  // Trigger seasonality load after initial render
-  _loadSeasonality();
+  // Trigger seasonality load on approach. /api/commodities/seasonality is the
+  // most expensive call on the page — on a cold cache it is a live download of
+  // all 14 symbols at 10y — and the panel is a screen down, so it is the one
+  // most worth not paying for on load.
+  //
+  // Anchored on #detailChart, the canvas in the always-visible card directly
+  // above: #seasonalitySection itself is display:none until _renderSeasonality
+  // reveals it, and #seasonalityChart is inside it, so neither has a box to
+  // observe. Clicking a commodity still calls _loadSeasonality directly through
+  // the _cmdSelect override below, which is why this stays a plain re-entrant
+  // call rather than a one-shot.
+  DeferLoad.when('#detailChart', _loadSeasonality, { label: 'seasonality' });
 
   // ─── Per-commodity educational notes
   const COMMODITY_NOTES = {

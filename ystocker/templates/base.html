@@ -83,6 +83,13 @@
   <!-- i18n -->
   <script src="{{ url_for('static', filename='i18n.js') }}?v={{ cache_bust or 'dev' }}"></script>
 
+  <!-- Deferred panel loading. Must be blocking and must be here rather than in a
+       page's own block: every dashboard calls DeferLoad.when() during the initial
+       parse of its inline script, so the global has to exist before the body is
+       parsed. Pages with nothing to defer pay one cached same-origin script for
+       it. -->
+  <script src="{{ url_for('static', filename='deferload.js') }}?v={{ cache_bust or 'dev' }}"></script>
+
   {% if _agents_floating %}
   <link rel="stylesheet" href="{{ url_for('static', filename='agents_float.css') }}?v={{ cache_bust or 'dev' }}">
   {% endif %}

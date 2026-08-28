@@ -271,6 +271,13 @@ Started in `create_app()`, all daemon threads:
 - **Chart.js 4** for yStocker charts
 - **Google Maps API** for yPlanner
 - **i18n**: Each app has `static/i18n.js` with EN + ZH translations, toggled via `I18n.toggle()`
+- **Deferred panel loading**: `static/deferload.js` exposes `DeferLoad.when(anchor, loader)`,
+  which runs a panel's fetch when that panel nears the viewport. Loaded blocking
+  from `base.html` for every yStocker page, because pages call it during their
+  initial parse. Only worth applying where a page fires *several* independent
+  requests on load — most dashboards are one request that renders everything, and
+  `/tv` must never use it (a kiosk nobody scrolls, whose `opacity:0` slides all
+  intersect anyway).
 
 ### Auth
 - yPlanner/yTracker: Google Sign-In + Apple Sign-In → Flask session → DynamoDB users table
@@ -306,6 +313,20 @@ Started in `create_app()`, all daemon threads:
 ## Known Pitfalls
 
 - **`kill -HUP` does not reload code under `--preload`.** Gunicorn's HUP handler re-reads the config file, not the WSGI app, which the master imported once at `ExecStart`. Workers re-fork from the old module state, so new Python never runs — while templates *do* refresh, because a fresh worker has an empty Jinja cache. The deploy one-liner in this file used HUP for a long time and was therefore shipping stale code. Use `systemctl restart`.
+- **A `DeferLoad` anchor that is hidden defers nothing, and says so only in the console.**
+  `IntersectionObserver` can never fire for an element with no box, so
+  `deferload.js` detects that case and runs the loader *immediately* — the panel
+  still fills, which is exactly why this is easy to ship. The page looks lazy
+  while fetching everything on load. Nearly every card in `history.html` and
+  `fed.html` is `style="display:none"` until its own loader reveals it, so the
+  obvious id is usually the wrong anchor: use the card's visible loading
+  placeholder (`#forecastLoading`, `#peLoading`), or the nearest element that is
+  in flow from first paint. Same trap one level up — a visible anchor inside a
+  hidden card is equally dead. `tests/test_deferload_anchors.py` checks every
+  call site in the templates for all three shapes and needs no browser.
+  Registration order matters too: `deferload.js` waits for layout before
+  observing, but a `when()` called after an `await` is measured against the
+  layout at that instant, so register once the page has reached its real height.
 - **Nested `<button>` elements** break DOM structure in templates — browsers auto-close the outer button, causing sibling sections to escape their parent container. Always use `<div>` or `<span>` for clickable elements inside buttons.
 - **`routes.py` is monolithic** (5200+ lines in yStocker) — all routes, API endpoints, cache logic, and background tasks in one file.
 - **Google Maps API** on yPlanner requires a valid billing-enabled API key; errors show "Oops! Something went wrong" with a purple stripe.

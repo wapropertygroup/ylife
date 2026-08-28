@@ -3,9 +3,6 @@
 
 {% block content %}
 <script src="{{ url_for('static', filename='markdown.js') }}?v={{ cache_bust or 'dev' }}"></script>
-{# Must be a blocking script, not defer: the panel loaders below call
-   DeferLoad.when() during initial parse. #}
-<script src="{{ url_for('static', filename='deferload.js') }}?v={{ cache_bust or 'dev' }}"></script>
 <style>
   .range-btn {
     font-size: 11px; font-weight: 500; line-height: 1;

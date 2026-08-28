@@ -2,7 +2,6 @@
 {% block title %}yStocker — Valuation Dashboard{% endblock %}
 
 {% block content %}
-<script src="{{ url_for('static', filename='deferload.js') }}?v={{ cache_bust or 'dev' }}"></script>
 
 <!-- ── Fullscreen chart modal ────────────────────────────────────────── -->
 <div x-data="chartModal()"

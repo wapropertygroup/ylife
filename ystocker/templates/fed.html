@@ -2342,6 +2342,24 @@ let _fedSeriesData = {};
   // ── Pre-fetch macro data (consolidated to reduce network requests)
   // spxLong is monthly ^GSPC back to 1927 — the decades-long FRED series below
   // (GDPC1 → 1947, UMCSENT → 1952) need it because SPY only starts in 1993.
+  //
+  // Suspended until the macro block is approached. Everything from here to the
+  // end of this IIFE is the display:none run of sections at 828–993, thousands
+  // of pixels down, and it costs five requests — the largest burst on the page.
+  // Awaiting a DeferLoad trigger *here* defers that whole tail without moving a
+  // line of it, which matters: the panels below share closure locals declared
+  // across the range (dfii10 at one panel is read by the next, _spxMonthMap by
+  // two panels 400 lines apart), so splitting them into separate loaders would
+  // break them. Suspending the one function keeps every dependency intact.
+  //
+  // #fedSpyChartWrap is the last element with a box before that block — the
+  // sections themselves have none until their own loader reveals them. If the
+  // anchor ever disappears, resolve anyway: a missing anchor must not strand the
+  // entire lower half of the page on a promise that never settles.
+  await new Promise(resolve => {
+    if (!DeferLoad.when('#fedSpyChartWrap', resolve, { label: 'fed-macro' })) resolve();
+  });
+
   const [yc, spreadData, mkData, spy10y, spxLong] = await Promise.all([
     safeJsonFetch('/api/yield-curve'),
     safeJsonFetch('/api/yield-spread?full=1'),
@@ -2687,8 +2705,9 @@ let _fedSeriesData = {};
   try {
     const hy=s['BAMLH0A0HYM2'];
     if(hy&&hy.dates.length>4){
-      const vixResp=await fetch('/api/markets');
-      const mkData=await vixResp.json();
+      // mkData is the batch's /api/markets payload. This block used to re-fetch
+      // it into a shadowing local of the same name, so the batch copy was never
+      // read at all and the page paid for /api/markets twice.
       const vixH=mkData?.vix?.history||[];
       if(vixH.length){
         document.getElementById('oasVixSection').style.display='block';
@@ -2715,8 +2734,10 @@ let _fedSeriesData = {};
   if (dfii10?.dates?.length && dfii10.values.some(v=>v!=null)) {
     (async () => {
       try {
-        const spy = await fetch('/api/history/SPY?period=10y').then(r=>r.json());
-        if (!spy.prices?.length) return;
+        // spy10y is the batch's /api/history/SPY?period=10y payload — the same
+        // request this block used to issue for itself.
+        const spy = spy10y;
+        if (!spy?.prices?.length) return;
         document.getElementById('realYieldSpySection').style.display = 'block';
         // Build SPY monthly map
         const spyMap = {};
@@ -2891,7 +2912,9 @@ let _fedSeriesData = {};
   }
 
   // ── Auto-load Fed Assets vs S&P 500 (always visible)
-  _loadFedSpy();
+  // Handed the batch's /api/spx-history payload; it used to fetch that same URL
+  // a third time for itself.
+  _loadFedSpy(spxLong);
 
 })().catch(e => console.error('Fed IIFE failed:', e));
 
@@ -3012,7 +3035,7 @@ function explainChart(chart) {
 
 // ── Fed Assets vs S&P 500 (auto-loaded, always visible) ───────────────────
 let _fedSpyLoaded = false, _fedSpyChart = null;
-async function _loadFedSpy() {
+async function _loadFedSpy(spxPrefetched) {
   if (_fedSpyLoaded) return;
   _fedSpyLoaded = true;
   try {
@@ -3021,9 +3044,14 @@ async function _loadFedSpy() {
 
     // Monthly ^GSPC back to 1927. The old /api/history/SPY?period=5y fetch left
     // roughly 80% of this chart's x-axis (WALCL starts 2002-12) with no S&P line.
-    const spyResp = await fetch('/api/spx-history');
-    const spy = await spyResp.json();
-    if (!spy.prices || !spy.prices.length) return;
+    // The caller passes the payload the macro batch already fetched. Tested for
+    // prices rather than truthiness: safeJsonFetch resolves to {error: …} on
+    // failure, which would otherwise satisfy `||` and skip the fallback, losing
+    // this chart entirely whenever the batch call failed.
+    const spy = spxPrefetched?.prices?.length
+      ? spxPrefetched
+      : await fetch('/api/spx-history').then(r => r.json());
+    if (!spy?.prices || !spy.prices.length) return;
 
     document.getElementById('fedSpyChartWrap').style.display = 'block';
 

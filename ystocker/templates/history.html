@@ -1483,6 +1483,28 @@ let   _modalKey       = null;
 let   _staticData     = null;   // reference values (target, walls, current_pe)
 let   _forecastResult = null;   // last forecast API response
 
+// Memoised /api/forecast loader, assigned by the master IIFE below (it needs
+// that scope's `staticData` to build the chart). Deferring the forecast card
+// means _forecastResult is still null for a reader who never scrolled to it, so
+// the research report calls this and waits rather than silently omitting its
+// forecast section.
+let   _forecastLoad   = null;   // () => Promise, memoised, safe to call twice
+
+// /api/yield-curve was fetched three times on load — by the dividend-vs-bond
+// chart, the P/E 10Y overlay and the market-context strip, none of which knew
+// about the others. One shared promise instead. The memo is cleared on failure
+// so a later caller still gets its own attempt rather than inheriting a
+// permanently rejected promise.
+let   _ycPromise      = null;
+function _yieldCurve() {
+  if (!_ycPromise) {
+    _ycPromise = fetch('/api/yield-curve')
+      .then(r => r.json())
+      .catch(err => { _ycPromise = null; throw err; });
+  }
+  return _ycPromise;
+}
+
 (async function() {
   let data;
   try {
@@ -1654,7 +1676,7 @@ let   _forecastResult = null;   // last forecast API response
     if (data.dividend_yield != null && data.dividend_yield > 0) {
       (async () => {
         try {
-          const yc = await fetch('/api/yield-curve').then(r=>r.json());
+          const yc = await _yieldCurve();
           const tenHistory = yc?.us?.history_10y;
           if (!tenHistory || !tenHistory.dates.length) return;
 
@@ -1664,8 +1686,11 @@ let   _forecastResult = null;   // last forecast API response
             if (tenHistory.values[i] != null) yieldMap[d.slice(0, 7)] = tenHistory.values[i];
           });
 
-          // Use last 1Y of price history as x-axis
-          const priceData = await fetch(`/api/history/${encodeURIComponent(TICKER)}?period=1y`).then(r=>r.json());
+          // Use last 1Y of price history as x-axis. This is `data` — the master
+          // /api/history payload defaults to 1y and is what _periodCache['1y']
+          // is set from below — so re-requesting it was a whole yfinance
+          // round-trip for a copy of what this closure already had.
+          const priceData = data;
           if (!priceData.dates) return;
 
           // Estimate historical div yield from current annual dividend / historical price
@@ -2280,7 +2305,7 @@ let   _forecastResult = null;   // last forecast API response
     // Overlay 10Y yield on PE chart (bond yield → PE compression)
     (async () => {
       try {
-        const yc = await fetch('/api/yield-curve').then(r=>r.json());
+        const yc = await _yieldCurve();
         const tenHistory = yc?.us?.history_10y;
         if (!tenHistory || !tenHistory.dates || !tenHistory.dates.length) return;
         const peChart = Chart.getChart(document.getElementById('peChart'));
@@ -2400,103 +2425,120 @@ let   _forecastResult = null;   // last forecast API response
     btn.addEventListener('click', () => _handleRange(btn.dataset.chart, btn.dataset.period, staticData));
   });
 
-  // ── Forecast chart (async, non-blocking)
-  (function() {
-    const loading  = document.getElementById('forecastLoading');
-    const wrap     = document.getElementById('forecastChartWrap');
-    const statusEl = document.getElementById('forecastModelStatus');
-    if (!loading || !wrap) return;
+  // ── Forecast chart — fetched on approach, not on load.
+  // The costliest endpoint on the page: forecast.py fits Prophet and ARIMA in a
+  // subprocess, and the card settles ~3000px down. Anchored on #forecastLoading,
+  // the visible spinner inside the card — #forecastChartWrap carries
+  // display:none until the data lands, so it has no box to observe.
+  // Memoised and hoisted to _forecastLoad so the research report can force it.
+  _forecastLoad = (function() {
+    let started = null;
+    return function() {
+      if (started) return started;
+      const loading  = document.getElementById('forecastLoading');
+      const wrap     = document.getElementById('forecastChartWrap');
+      const statusEl = document.getElementById('forecastModelStatus');
+      if (!loading || !wrap) return (started = Promise.resolve());
 
-    fetch(`/api/forecast/${encodeURIComponent(TICKER)}`)
-      .then(r => r.json())
-      .then(result => {
-        loading.style.display = 'none';
-        if (result.error) {
-          loading.textContent = (I18n.t('forecast.failed') || 'Forecast unavailable.') + ' ' + result.error;
-          loading.style.display = '';
-          return;
-        }
-        // Build & render chart
-        const cfg = _buildConfig('forecast', result, staticData);
-        _forecastResult = result;
-        _chartConfigs['forecast'] = cfg;
-        wrap.style.display = '';
-        _chartInstances['forecast'] = new Chart(document.getElementById('forecastChart'), cfg);
-
-        // Forecast model toggle buttons
-        document.querySelectorAll('.forecast-model-btn').forEach(btn => {
-          btn.addEventListener('click', () => {
-            document.querySelectorAll('.forecast-model-btn').forEach(b => b.classList.toggle('active', b === btn));
-            const show = btn.dataset.models.split(',').map(Number);
-            const inst = _chartInstances['forecast'];
-            if (!inst) return;
-            // Dataset layout: [0]=history, [1..]=prophet+CI, [4..]=ARIMA+CI, [7..]=Linear+CI
-            // Each model block: line, upper CI, lower CI (3 datasets each)
-            // Datasets 1-3 = Prophet, 4-6 = ARIMA, 7-9 = Linear
-            inst.data.datasets.forEach((ds, i) => {
-              if (i === 0) { ds.hidden = false; return; } // always show history
-              const modelIdx = Math.floor((i - 1) / 3); // 0=prophet, 1=arima, 2=linear
-              ds.hidden = !show.includes(modelIdx);
-            });
-            inst.update();
-          });
-        });
-
-        // Populate forecast summary row
-        try {
-          const fr = _forecastResult;
-          if (fr) {
-            document.getElementById('forecastSummaryRow').classList.remove('hidden');
-            function fcastSummary(fId, tId, rId, modelKey) {
-              const series = fr[modelKey]?.forecast || [];
-              if (!series.length) return;
-              const last = series[series.length - 1];
-              const tEl = document.getElementById(tId);
-              const rEl = document.getElementById(rId);
-              if (tEl && last?.value != null) {
-                tEl.textContent = '$' + last.value.toFixed(2);
-                const pct = fr.current_price ? ((last.value - fr.current_price) / fr.current_price * 100) : null;
-                tEl.className = 'text-sm font-bold font-mono ' + (pct == null || pct >= 0 ? 'text-emerald-400' : 'text-rose-400');
-                if (rEl && last.lo != null && last.hi != null) {
-                  rEl.textContent = '$' + last.lo.toFixed(0) + '–$' + last.hi.toFixed(0);
-                }
-              }
+      started = fetch(`/api/forecast/${encodeURIComponent(TICKER)}`)
+          .then(r => r.json())
+          .then(result => {
+            loading.style.display = 'none';
+            if (result.error) {
+              loading.textContent = (I18n.t('forecast.failed') || 'Forecast unavailable.') + ' ' + result.error;
+              loading.style.display = '';
+              return;
             }
-            fcastSummary('fcastProphet', 'fcastProphetTarget', 'fcastProphetRange', 'prophet');
-            fcastSummary('fcastArima',   'fcastArimaTarget',   'fcastArimaRange',   'arima');
-            fcastSummary('fcastLinear',  'fcastLinearTarget',  'fcastLinearRange',  'linear');
-          }
-        } catch(e) {}
+            // Build & render chart
+            const cfg = _buildConfig('forecast', result, staticData);
+            _forecastResult = result;
+            _chartConfigs['forecast'] = cfg;
+            wrap.style.display = '';
+            _chartInstances['forecast'] = new Chart(document.getElementById('forecastChart'), cfg);
 
-        // Per-model status chips
-        const models = { prophet: '#a78bfa', arima: '#fb923c', linear: '#34d399' };
-        const chips = Object.entries(models).map(([m, col]) => {
-          const err = result[m]?.error;
-          const pts = (result[m]?.forecast || []).length;
-          if (err) {
-            return `<span class="flex items-center gap-1" style="color:#64748b">
-                      <span class="w-2 h-2 rounded-full bg-slate-600"></span>
-                      ${I18n.t('forecast.' + m) || m}: <em>${I18n.t('forecast.model_error') || 'unavailable'}</em>
-                    </span>`;
-          }
-          return `<span class="flex items-center gap-1" style="color:${col}">
-                    <span class="w-2 h-2 rounded-full" style="background:${col}"></span>
-                    ${I18n.t('forecast.' + m) || m}: ${pts} pts
-                  </span>`;
-        });
-        statusEl.innerHTML = chips.join('');
-        statusEl.classList.remove('hidden');
-        statusEl.classList.add('flex');
-      })
-      .catch(err => {
-        loading.style.display = '';
-        loading.textContent = (I18n.t('forecast.failed') || 'Forecast unavailable.') + ' ' + err.message;
-      });
+            // Forecast model toggle buttons
+            document.querySelectorAll('.forecast-model-btn').forEach(btn => {
+              btn.addEventListener('click', () => {
+                document.querySelectorAll('.forecast-model-btn').forEach(b => b.classList.toggle('active', b === btn));
+                const show = btn.dataset.models.split(',').map(Number);
+                const inst = _chartInstances['forecast'];
+                if (!inst) return;
+                // Dataset layout: [0]=history, [1..]=prophet+CI, [4..]=ARIMA+CI, [7..]=Linear+CI
+                // Each model block: line, upper CI, lower CI (3 datasets each)
+                // Datasets 1-3 = Prophet, 4-6 = ARIMA, 7-9 = Linear
+                inst.data.datasets.forEach((ds, i) => {
+                  if (i === 0) { ds.hidden = false; return; } // always show history
+                  const modelIdx = Math.floor((i - 1) / 3); // 0=prophet, 1=arima, 2=linear
+                  ds.hidden = !show.includes(modelIdx);
+                });
+                inst.update();
+              });
+            });
+
+            // Populate forecast summary row
+            try {
+              const fr = _forecastResult;
+              if (fr) {
+                document.getElementById('forecastSummaryRow').classList.remove('hidden');
+                function fcastSummary(fId, tId, rId, modelKey) {
+                  const series = fr[modelKey]?.forecast || [];
+                  if (!series.length) return;
+                  const last = series[series.length - 1];
+                  const tEl = document.getElementById(tId);
+                  const rEl = document.getElementById(rId);
+                  if (tEl && last?.value != null) {
+                    tEl.textContent = '$' + last.value.toFixed(2);
+                    const pct = fr.current_price ? ((last.value - fr.current_price) / fr.current_price * 100) : null;
+                    tEl.className = 'text-sm font-bold font-mono ' + (pct == null || pct >= 0 ? 'text-emerald-400' : 'text-rose-400');
+                    if (rEl && last.lo != null && last.hi != null) {
+                      rEl.textContent = '$' + last.lo.toFixed(0) + '–$' + last.hi.toFixed(0);
+                    }
+                  }
+                }
+                fcastSummary('fcastProphet', 'fcastProphetTarget', 'fcastProphetRange', 'prophet');
+                fcastSummary('fcastArima',   'fcastArimaTarget',   'fcastArimaRange',   'arima');
+                fcastSummary('fcastLinear',  'fcastLinearTarget',  'fcastLinearRange',  'linear');
+              }
+            } catch(e) {}
+
+            // Per-model status chips
+            const models = { prophet: '#a78bfa', arima: '#fb923c', linear: '#34d399' };
+            const chips = Object.entries(models).map(([m, col]) => {
+              const err = result[m]?.error;
+              const pts = (result[m]?.forecast || []).length;
+              if (err) {
+                return `<span class="flex items-center gap-1" style="color:#64748b">
+                          <span class="w-2 h-2 rounded-full bg-slate-600"></span>
+                          ${I18n.t('forecast.' + m) || m}: <em>${I18n.t('forecast.model_error') || 'unavailable'}</em>
+                        </span>`;
+              }
+              return `<span class="flex items-center gap-1" style="color:${col}">
+                        <span class="w-2 h-2 rounded-full" style="background:${col}"></span>
+                        ${I18n.t('forecast.' + m) || m}: ${pts} pts
+                      </span>`;
+            });
+            statusEl.innerHTML = chips.join('');
+            statusEl.classList.remove('hidden');
+            statusEl.classList.add('flex');
+          })
+          .catch(err => {
+            loading.style.display = '';
+            loading.textContent = (I18n.t('forecast.failed') || 'Forecast unavailable.') + ' ' + err.message;
+          });
+      return started;
+    };
   })();
+  DeferLoad.when('#forecastLoading', _forecastLoad, { label: 'forecast' });
 
   // ── Insider Transactions
-  // Peer comparison (async, non-blocking)
-  (async () => {
+  // Peer comparison — fetched on approach.
+  // Anchored on #forecastSection rather than #peerSection: the peer card is
+  // display:none until this loader reveals it (below), and every card between
+  // here and the bottom of #panelCharts is the same, so the forecast card is the
+  // lowest element that actually has a box at registration time. It fires
+  // earlier than the peer card's own position would, which is still far better
+  // than firing on load.
+  DeferLoad.when('#forecastSection', async () => {
     try {
       const pr = await fetch(`/api/peers/${encodeURIComponent(TICKER)}`);
       const pd = await pr.json();
@@ -2550,7 +2592,7 @@ let   _forecastResult = null;   // last forecast API response
         }
       } catch(e) {}
     } catch(e) {}
-  })();
+  }, { label: 'peers' });
 
   if (data.insider_trades && data.insider_trades.length > 0) {
     document.getElementById('insiderSection').style.display = 'block';
@@ -2572,14 +2614,17 @@ let   _forecastResult = null;   // last forecast API response
     }).join('');
   }
 
-  // ── Institutional holdings (13F) — multi-quarter
-  (function() {
+  // ── Institutional holdings (13F) — fetched on approach.
+  // Bottom of #panelCharts, ~6000px down. Anchored on #forecastSection for the
+  // same reason as the peer card: #instHoldersSection is display:none until this
+  // loader reveals it.
+  DeferLoad.when('#forecastSection', function() {
     const section = document.getElementById('instHoldersSection');
     const thead   = document.getElementById('instHoldersHead');
     const tbody   = document.getElementById('instHoldersBody');
     if (!section) return;
 
-    fetch(`/api/13f/ticker/${encodeURIComponent(TICKER)}`)
+    return fetch(`/api/13f/ticker/${encodeURIComponent(TICKER)}`)
       .then(r => r.json())
       .then(json => {
         const holders = (json.holders || []).filter(h => h.quarters && h.quarters.length > 0);
@@ -2677,7 +2722,7 @@ let   _forecastResult = null;   // last forecast API response
         }).join('');
       })
       .catch(err => console.warn('13F fetch failed:', err));
-  })();
+  }, { label: '13f' });
 })();
 
 // ── Options data — async loader ───────────────────────────────────────────────
@@ -4274,14 +4319,13 @@ async function explainChart(chartKey) {
 // ── Market context strip (non-blocking) ──────────────────────────────────────
 (async () => {
   try {
-    const [mkResp, fgResp, ycResp] = await Promise.all([
+    const [mkResp, fgResp, yc] = await Promise.all([
       fetch('/api/markets'),
       fetch('/api/fear-greed'),
-      fetch('/api/yield-curve'),
+      _yieldCurve(),
     ]);
     const mk = await mkResp.json();
     const fg = await fgResp.json();
-    const yc = await ycResp.json();
     const strip = document.getElementById('mktContextStrip');
     if (!strip) return;
     strip.classList.remove('hidden');
@@ -4708,6 +4752,12 @@ async function explainChart(chartKey) {
   }
 
   async function _buildBundle() {
+    // The forecast card is deferred, so on a report requested without scrolling
+    // that far _forecastResult is still null. Force the load and wait for it —
+    // it is memoised, so this is free once the reader has reached the card.
+    if (!_forecastResult && _forecastLoad) {
+      try { await _forecastLoad(); } catch(e) {}
+    }
     // Daily bars (3mo) for short-term technicals; weekly bars (2y) for the
     // long moving averages and multi-horizon relative strength.
     const [daily, weekly, fin, peers, news, opts, thirteenF] = await Promise.all([
