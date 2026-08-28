@@ -317,11 +317,36 @@ _TRIGGER_RE = re.compile(
     re.I)
 
 
-def _http_get(url: str) -> str:
+def _http_get(url: str, attempts: int = 3) -> str:
+    """Fetch a URL, retrying a transient failure.
+
+    Measured need: the article URL returned 503 from the box, then 200 six times
+    in a row minutes later with two different User-Agents. So the source throws
+    occasional 5xx that has nothing to do with us — and without a retry a weekly
+    report could be missed entirely on a 503, since the feed window is only a few
+    hours wide and the next poll may find the item already gone.
+    """
+    import time
+    import urllib.error
     import urllib.request
-    req = urllib.request.Request(url, headers={"User-Agent": _UA})
-    with urllib.request.urlopen(req, timeout=_HTTP_TIMEOUT) as resp:
-        return resp.read().decode("utf-8", "replace")
+
+    last: Exception | None = None
+    for attempt in range(1, attempts + 1):
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": _UA})
+            with urllib.request.urlopen(req, timeout=_HTTP_TIMEOUT) as resp:
+                return resp.read().decode("utf-8", "replace")
+        except urllib.error.HTTPError as exc:
+            last = exc
+            # 4xx is a decision, not a hiccup — retrying it just adds load.
+            if exc.code < 500:
+                raise
+        except Exception as exc:  # noqa: BLE001
+            last = exc
+        if attempt < attempts:
+            time.sleep(2 * attempt)
+            log.debug("cta: retrying %s after %s", url[:60], last)
+    raise last if last else RuntimeError("fetch failed")
 
 
 def _pubdate_to_iso(raw: str | None, today: date | None = None) -> str | None:
@@ -371,6 +396,94 @@ def _num_from_text(raw: str) -> float | None:
     return _number(raw.replace(",", "").replace("$", ""))
 
 
+#: Money in the article prose, with its unit. The unit is **not** optional and
+#: not assumed, because the same paragraph mixes them: the 1-week up scenario is
+#: "$275 mn" while everything around it is "bn". Reading 275 as billions is a
+#: 1000x error that sails straight through MAX_FLOW_BN, so there is no
+#: independent gate to catch it — the unit has to be read.
+_MONEY_RE = re.compile(r"\$\s?([0-9][0-9.,]*)\s*(bn|billion|mn|million)\b", re.I)
+_UNIT_BN = {"bn": 1.0, "billion": 1.0, "mn": 1e-3, "million": 1e-3}
+
+#: The 1-week scenario labels, and the 1-month ones. Goldman's write-ups label
+#: these consistently even when the surrounding prose changes.
+_SCEN_1W_RE = re.compile(r"\b(Flat|Up|Down)\s+scenario", re.I)
+_SCEN_1M_RE = re.compile(r"one[- ]month\s+(downside|upside)\s+scenario", re.I)
+_1M_NAME = {"downside": "down", "upside": "up"}
+
+
+def _money_bn(segment: str) -> list[float]:
+    """Every dollar figure in a span, normalised to billions."""
+    out: list[float] = []
+    for m in _MONEY_RE.finditer(segment):
+        value = _num_from_text(m.group(1))
+        if value is None:
+            continue
+        out.append(round(value * _UNIT_BN[m.group(2).lower()], 4))
+    return out
+
+
+def _direction(segment: str) -> int:
+    """-1 selling, +1 buying, 0 when the prose does not say.
+
+    Zero is a refusal, not a default. The 1-week down scenario reads "Down
+    scenario: ~$31.46 bn global ( ~$15.1 bn US)" with no verb at all — the fact
+    that it is selling lives in an earlier sentence. Inferring it from the
+    neighbouring scenario would be reading adjacency as meaning, and the cost of
+    being wrong is a flow whose sign is inverted: net buying displayed as net
+    selling, which inverts what the card is for. Dropping the number is the
+    cheaper mistake.
+    """
+    sell = re.search(r"net\s+sell(?:ing|er)|sell(?:ing|-off)", segment, re.I)
+    buy = re.search(r"net\s+buy(?:ing|er)|buying", segment, re.I)
+    if sell and buy:
+        return -1 if sell.start() < buy.start() else 1
+    if sell:
+        return -1
+    if buy:
+        return 1
+    return 0
+
+
+def _scenario_flows(text: str, label_re: re.Pattern[str],
+                    rename: dict[str, str] | None = None,
+                    window: int = 240) -> tuple[dict[str, float], dict[str, float]]:
+    """Signed global and US flows per scenario, in billions.
+
+    Each label's span runs to the next label so one scenario cannot borrow a
+    figure from its neighbour. Within a span the first dollar figure is global and
+    a later one is US only when the span actually says so.
+    """
+    marks = [(m.group(1).lower(), m.start(), m.end())
+             for m in label_re.finditer(text)]
+    glob: dict[str, float] = {}
+    us: dict[str, float] = {}
+    for i, (name, _start, end) in enumerate(marks):
+        stop = marks[i + 1][1] if i + 1 < len(marks) else min(len(text), end + window)
+        # Also stop at the next bullet. Without this the span bleeds into the
+        # commentary that follows, and the 1-week down scenario — "~$31.46 bn
+        # global ( ~$15.1 bn US). • This means → even a rally won't trigger fresh
+        # buying." — picked up "buying" from the *next sentence* and recorded a
+        # net purchase of 31bn where the report means a sale. An inverted sign is
+        # the worst possible outcome here, worse than no number, and it is exactly
+        # the adjacency-as-meaning error _direction is written to avoid.
+        bullet = text.find("•", end)
+        if 0 <= bullet < stop:
+            stop = bullet
+        segment = text[end:stop]
+        key = (rename or {}).get(name, name)
+        sign = _direction(segment)
+        if not sign:
+            log.debug("cta: %r scenario states no direction — skipped", name)
+            continue
+        amounts = _money_bn(segment)
+        if not amounts:
+            continue
+        glob[key] = round(sign * abs(amounts[0]), 4)
+        if len(amounts) > 1 and re.search(r"\bU\.?S\.?\b", segment):
+            us[key] = round(sign * abs(amounts[1]), 4)
+    return glob, us
+
+
 def parse_article(html: str) -> dict[str, Any] | None:
     """Pull the trigger levels out of an article. No validation here."""
     text = _visible_text(html)
@@ -384,16 +497,33 @@ def parse_article(html: str) -> dict[str, Any] | None:
             return None
         triggers[key] = value
 
-    flows: dict[str, float] = {}
-    # "$184.3 billion worst-case selling wave" and similar. Only the magnitude is
-    # taken, and only into the down scenario, because that is the one the article
-    # headlines and the only one whose attribution is unambiguous in prose.
-    worst = re.search(r"\$([0-9][0-9.,]*)\s*billion[^.]{0,60}(?:selling|sell|downside)", text, re.I)
-    if worst:
-        value = _num_from_text(worst.group(1))
-        if value is not None:
-            flows["down"] = -abs(value)
-    return {"spx_triggers": triggers, "flows_1m_global_bn": flows}
+    out: dict[str, Any] = {"spx_triggers": triggers}
+
+    # The 1-week and 1-month scenario tables. Every one of these is optional and
+    # extracted independently, so a phrasing change costs that one number rather
+    # than the whole report — the triggers are the part with an external
+    # cross-check and must not be held hostage to the flows.
+    w_glob, w_us = _scenario_flows(text, _SCEN_1W_RE)
+    m_glob, m_us = _scenario_flows(text, _SCEN_1M_RE, _1M_NAME)
+    if w_glob:
+        out["flows_1w_global_bn"] = w_glob
+    if w_us:
+        out["flows_1w_us_bn"] = w_us
+    if m_us:
+        out["flows_1m_us_bn"] = m_us
+
+    flows = dict(m_glob)
+    if "down" not in flows:
+        # Fallback for the headline figure, which is often stated outside any
+        # labelled scenario ("$184.3 billion worst-case selling wave").
+        worst = re.search(r"\$([0-9][0-9.,]*)\s*billion[^.]{0,60}(?:selling|sell|downside)",
+                          text, re.I)
+        if worst:
+            value = _num_from_text(worst.group(1))
+            if value is not None:
+                flows["down"] = -abs(value)
+    out["flows_1m_global_bn"] = flows
+    return out
 
 
 def _validate(parsed: dict[str, Any], spx_ref: float | None) -> tuple[bool, str]:
@@ -418,10 +548,73 @@ def _validate(parsed: dict[str, Any], spx_ref: float | None) -> tuple[bool, str]
         # share price.
         if not all(1000 <= v <= 20000 for v in (short, medium, long_)):
             return False, "triggers outside a plausible index range: %s" % triggers
-    for scenario, value in ((parsed.get("flows_1m_global_bn") or {}).items()):
-        if abs(value) > MAX_FLOW_BN:
-            return False, "flow %s=%.1fbn exceeds %.0fbn" % (scenario, value, MAX_FLOW_BN)
+    # Every flow bucket, not just the 1-month global one. The unit trap ("$275
+    # mn" read as billions) lands inside this band rather than outside it, so
+    # this bound is a backstop against absurdity, not a substitute for reading
+    # the unit — see _MONEY_RE.
+    for bucket in ("flows_1w_global_bn", "flows_1w_us_bn",
+                   "flows_1m_global_bn", "flows_1m_us_bn"):
+        for scenario, value in ((parsed.get(bucket) or {}).items()):
+            if not isinstance(value, float):
+                return False, "%s.%s is not a number" % (bucket, scenario)
+            if abs(value) > MAX_FLOW_BN:
+                return False, "flow %s.%s=%.1fbn exceeds %.0fbn" % (
+                    bucket, scenario, value, MAX_FLOW_BN)
+    # There is deliberately no "US cannot exceed global" check here. I wrote one,
+    # called it arithmetic rather than a heuristic, and the live article disproved
+    # it on the first run: the 1-week up scenario is "$275 mn global net selling
+    # ( ~$2.03 bn in US stocks)". Global net is a *sum of regional nets that
+    # offset*, so US selling of 2bn against 1.75bn of buying elsewhere nets to
+    # 0.275bn globally. |US| > |global| is normal, and the check rejected a
+    # correct parse of the only real article I had.
     return True, "ok"
+
+
+def distance_to_triggers(spx: float | None,
+                         triggers: dict[str, float] | None = None) -> dict[str, Any]:
+    """How far the index sits above each CTA trigger, in percent.
+
+    This is the more actionable of the two views: a net-length reading says how
+    much there is to sell, whereas the distance to the next threshold says how
+    close the mechanical selling is to actually starting. A -3% gap to the
+    short-term trigger with modest positioning matters more than a large position
+    that is 12% clear of anything.
+
+    ``distance_pct`` is signed: positive means the index is above the level, so
+    negative means already through it. ``next_trigger`` is the highest level still
+    below the index — the one that fires next — and is None once every level has
+    been breached, which is a different state from "no data" and worth
+    distinguishing in the UI.
+    """
+    if triggers is None:
+        triggers = ((get_cta_positioning().get("latest") or {}).get("spx_triggers") or {})
+    price = _number(spx)
+    out: dict[str, Any] = {"spx": price, "levels": []}
+    if not price or price <= 0:
+        return out
+
+    breached, pending = [], []
+    for key in ("short", "medium", "long"):
+        level = _number((triggers or {}).get(key))
+        if not level or level <= 0:
+            continue
+        row = {
+            "key": key,
+            "trigger": level,
+            "distance_pct": round((price - level) / level * 100, 2),
+            "breached": price < level,
+        }
+        out["levels"].append(row)
+        (breached if row["breached"] else pending).append(row)
+
+    out["breached"] = [r["key"] for r in breached]
+    # Highest level still below the price: the next one a decline would cross.
+    nxt = max(pending, key=lambda r: r["trigger"], default=None)
+    if nxt:
+        out["next_trigger"] = nxt["key"]
+        out["next_trigger_level"] = nxt["trigger"]
+        out["next_trigger_distance_pct"] = nxt["distance_pct"]
+    return out
 
 
 def _read_fetched() -> dict[str, Any] | None:
@@ -458,7 +651,11 @@ def fetch_latest_report(spx_ref: float | None = None) -> dict[str, Any] | None:
     try:
         rss = _http_get(REPORT_RSS_URL)
     except Exception as exc:  # noqa: BLE001
-        log.info("cta: RSS unavailable (%s)", exc)
+        # Warning, not info. A source that is unreachable looks exactly like a
+        # source with nothing new, and the second is normal — so the first has to
+        # be loud or the fetcher can be broken for weeks while the card just sits
+        # there quietly going stale.
+        log.warning("cta: feed unreachable after retries (%s) — no update this pass", exc)
         return None
 
     items = re.findall(r"<item>(.*?)</item>", rss, re.S)

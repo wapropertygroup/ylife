@@ -376,5 +376,153 @@ class PubDateParsing(unittest.TestCase):
                          "2026-08-28")
 
 
+#: Verbatim from the live article (2026-07-28), as ``_visible_text`` leaves it.
+#: Every number here has been checked against the hand-entered built-in payload,
+#: which is the only ground truth available for this source.
+ARTICLE_FLOWS = (
+    "01 Why are CTAs selling no matter what happens? • CTAs — trend-following "
+    "quant funds — are net sellers globally next week whether the market rises, "
+    "falls, or stays flat . • Flat scenario: ~$7.48 bn global net selling "
+    "( ~$5.96 bn in US equities). Up scenario: still ~$275 mn global net selling "
+    "( ~$2.03 bn in US stocks). Down scenario: ~$31.46 bn global ( ~$15.1 bn US). "
+    "• This means → even a rally won't trigger fresh buying. "
+    "02 How large is the $184.3 billion worst-case selling wave? • Goldman's "
+    "one-month downside scenario: global CTA net selling surges to ~$184.3 billion , "
+    "with US equities accounting for ~$71.1 billion . • For contrast, the "
+    "one-month upside scenario flips to global net buying of ~$34.39 billion "
+    "(US ~$8.31 bn ). 03 Where are the key support levels for the S&P 500? • "
+    "Goldman flags three support thresholds: short-term 7,455 , medium-term 7,204 , "
+    "long-term 6,765 .")
+
+
+class FlowParsing(unittest.TestCase):
+    """The scenario tables. Every assertion is a value from the real article."""
+
+    def setUp(self):
+        self.out = cta.parse_article("<p>%s</p>" % ARTICLE_FLOWS)
+
+    def test_the_1000x_unit_trap(self):
+        """"$275 mn" among "bn" neighbours. Reading it as billions is 1000x off
+        and lands *inside* MAX_FLOW_BN, so no other gate would catch it."""
+        self.assertEqual(self.out["flows_1w_global_bn"]["up"], -0.275)
+
+    def test_sign_comes_from_the_verb_not_the_position(self):
+        """"net buying" is positive, "net selling" negative, in the same table."""
+        self.assertEqual(self.out["flows_1m_global_bn"]["up"], 34.39)
+        self.assertEqual(self.out["flows_1m_global_bn"]["down"], -184.3)
+
+    def test_a_scenario_with_no_verb_is_refused_not_guessed(self):
+        """The 1-week down scenario states no direction of its own.
+
+        The sentence after it ends "...won't trigger fresh buying", and an
+        unbounded window read that as a purchase — recording +31.46bn where the
+        report means a sale of 31.46bn. An inverted flow is worse than a missing
+        one, so the span stops at the bullet and the value is dropped.
+        """
+        self.assertNotIn("down", self.out["flows_1w_global_bn"])
+        self.assertNotIn("down", self.out["flows_1w_us_bn"])
+
+    def test_us_figures_are_split_out(self):
+        self.assertEqual(self.out["flows_1w_us_bn"]["flat"], -5.96)
+        self.assertEqual(self.out["flows_1m_us_bn"]["down"], -71.1)
+
+    def test_matches_the_hand_entered_values(self):
+        built_in = cta._PUBLIC_DATA["latest"]
+        for key, value in self.out["flows_1w_global_bn"].items():
+            self.assertEqual(value, built_in["flows_1w_global_bn"][key], key)
+        self.assertEqual(self.out["flows_1m_global_bn"]["down"],
+                         built_in["flows_1m_global_bn"]["down"])
+
+    def test_the_real_parse_validates(self):
+        """Regression: a gate must not reject the only real article there is.
+
+        A "US cannot exceed global" check looked like arithmetic and rejected
+        this: 1-week up is $275mn global against $2.03bn US, because global net
+        is a sum of regional nets that offset. The check is gone.
+        """
+        ok, why = cta._validate(self.out, 7739.0)
+        self.assertTrue(ok, why)
+
+    def test_absurd_flow_in_any_bucket_is_rejected(self):
+        for bucket in ("flows_1w_global_bn", "flows_1w_us_bn",
+                       "flows_1m_global_bn", "flows_1m_us_bn"):
+            with self.subTest(bucket=bucket):
+                bad = dict(self.out, **{bucket: {"down": -9999.0}})
+                ok, why = cta._validate(bad, 7739.0)
+                self.assertFalse(ok)
+                self.assertIn("exceeds", why)
+
+    def test_flows_are_optional_and_never_block_the_triggers(self):
+        """A phrasing change must cost that number, not the whole report."""
+        out = cta.parse_article(
+            "<p>Goldman flags short-term 7,455 , medium-term 7,204 , "
+            "long-term 6,765 and says nothing about flows.</p>")
+        self.assertEqual(out["spx_triggers"]["short"], 7455.0)
+        self.assertEqual(out["flows_1m_global_bn"], {})
+        self.assertTrue(cta._validate(out, 7739.0)[0])
+
+    def test_money_units(self):
+        self.assertEqual(cta._money_bn("$7.48 bn"), [7.48])
+        self.assertEqual(cta._money_bn("$275 mn"), [0.275])
+        self.assertEqual(cta._money_bn("$184.3 billion"), [184.3])
+        self.assertEqual(cta._money_bn("$1,200 million"), [1.2])
+        # A bare number with no unit is not money and must not be read as one.
+        self.assertEqual(cta._money_bn("7455 and $3 bn"), [3.0])
+
+    def test_direction_refuses_when_silent(self):
+        self.assertEqual(cta._direction("~$31.46 bn global ( ~$15.1 bn US)."), 0)
+        self.assertEqual(cta._direction("global net selling of $5bn"), -1)
+        self.assertEqual(cta._direction("flips to global net buying of $5bn"), 1)
+        # Both present: the earlier verb governs.
+        self.assertEqual(cta._direction("net selling now, net buying later"), -1)
+        self.assertEqual(cta._direction("net buying now, net selling later"), 1)
+
+
+class DistanceToTrigger(unittest.TestCase):
+    """The more actionable of the two views: how close the selling is, not how
+    much of it there could be."""
+
+    T = {"short": 7455.0, "medium": 7204.0, "long": 6765.0}
+
+    def test_signed_distance_and_next_level(self):
+        out = cta.distance_to_triggers(7739.0, self.T)
+        self.assertEqual(out["breached"], [])
+        self.assertEqual(out["next_trigger"], "short")
+        self.assertAlmostEqual(out["next_trigger_distance_pct"], 3.81, places=2)
+        self.assertAlmostEqual(
+            [r for r in out["levels"] if r["key"] == "long"][0]["distance_pct"],
+            14.40, places=2)
+
+    def test_next_trigger_is_the_highest_still_below(self):
+        out = cta.distance_to_triggers(7300.0, self.T)
+        self.assertEqual(out["breached"], ["short"])
+        self.assertEqual(out["next_trigger"], "medium")
+
+    def test_all_breached_is_not_the_same_as_no_data(self):
+        out = cta.distance_to_triggers(6000.0, self.T)
+        self.assertEqual(out["breached"], ["short", "medium", "long"])
+        self.assertNotIn("next_trigger", out)
+        self.assertEqual(len(out["levels"]), 3)
+
+    def test_no_price_yields_no_levels_rather_than_zeroes(self):
+        for bad in (None, 0, -5, float("nan"), "abc", {}, []):
+            with self.subTest(value=bad):
+                out = cta.distance_to_triggers(bad, self.T)
+                self.assertEqual(out["levels"], [])
+
+    def test_a_numeric_string_price_is_accepted(self):
+        """``_number`` coerces throughout this module — SSM JSON may carry a
+        number as a string — so this must not be special-cased here."""
+        self.assertEqual(len(cta.distance_to_triggers("7739", self.T)["levels"]), 3)
+
+    def test_missing_triggers_are_skipped_not_zeroed(self):
+        out = cta.distance_to_triggers(7739.0, {"short": 7455.0, "medium": None})
+        self.assertEqual([r["key"] for r in out["levels"]], ["short"])
+
+    def test_defaults_to_the_current_snapshot(self):
+        out = cta.distance_to_triggers(7739.0)
+        self.assertEqual(len(out["levels"]), 3)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
