@@ -24,6 +24,18 @@
   border-color: #6366f1;
   background: rgba(99,102,241,0.12);
 }
+/* A range whose window holds too few observations to plot. Shown rather than
+   removed so the ladder reads the same on every chart, and so the reason is
+   discoverable on hover instead of the option silently not existing. */
+.range-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  text-decoration: line-through;
+}
+.range-btn:disabled:hover {
+  color: #64748b;
+  border-color: #334155;
+}
 .explain-btn {
   display: inline-flex;
   align-items: center;
@@ -254,6 +266,8 @@
     <div class="flex items-center gap-2">
       <span id="buffettBadge" class="text-sm font-bold font-mono text-slate-100">—%</span>
       <div class="flex gap-1 ml-2" id="buffettRangeBtns">
+        <button class="range-btn" data-buffett-years="1">1Y</button>
+        <button class="range-btn" data-buffett-years="2">2Y</button>
         <button class="range-btn" data-buffett-years="10">10Y</button>
         <button class="range-btn" data-buffett-years="20">20Y</button>
         <button class="range-btn active" data-buffett-years="0">All</button>
@@ -911,6 +925,8 @@
           <div>Starts: <span id="housingVal" class="font-semibold text-slate-300">—</span>k</div>
         </div>
         <div class="flex gap-1" id="cycleRangeBtns">
+          <button class="range-btn" data-cycle-years="1">1Y</button>
+          <button class="range-btn" data-cycle-years="2">2Y</button>
           <button class="range-btn" data-cycle-years="10">10Y</button>
           <button class="range-btn" data-cycle-years="20">20Y</button>
           <button class="range-btn active" data-cycle-years="0">All</button>
@@ -929,6 +945,8 @@
         <p class="text-[10px] mt-0.5" id="gdpSpAsof"></p>
       </div>
       <div class="flex gap-1" id="gdpSpyRangeBtns">
+        <button class="range-btn" data-gdpspy-years="1">1Y</button>
+        <button class="range-btn" data-gdpspy-years="2">2Y</button>
         <button class="range-btn" data-gdpspy-years="10">10Y</button>
         <button class="range-btn" data-gdpspy-years="20">20Y</button>
         <button class="range-btn active" data-gdpspy-years="0">All</button>
@@ -962,6 +980,8 @@
         <p class="text-[10px] mt-0.5" id="gdpIsmAsof"></p>
       </div>
       <div class="flex gap-1" id="gdpIsmRangeBtns">
+        <button class="range-btn" data-gdpism-years="1">1Y</button>
+        <button class="range-btn" data-gdpism-years="2">2Y</button>
         <button class="range-btn" data-gdpism-years="10">10Y</button>
         <button class="range-btn" data-gdpism-years="20">20Y</button>
         <button class="range-btn active" data-gdpism-years="0">All</button>
@@ -1104,6 +1124,43 @@ let _fedSeriesData = {};
       console.warn(`Network/fetch failed for ${url}:`, e);
       return { error: `Fetch error: ${e.message || e}` };
     }
+  }
+
+  // ── Year-range buttons: gate a window that holds too little data ───────────
+  // The 1Y button on a quarterly FRED series selects a handful of observations,
+  // which draws as a few dots on an empty grid rather than a trend. Rather than
+  // offer a different ladder per chart, each selector is gated against its own
+  // series: a window holding fewer than MIN_RANGE_POINTS observations is disabled
+  // and says why on hover.
+  //
+  // The threshold is 6, set from the live series rather than from the nominal
+  // publication rate, which is what makes it work. GDPC1 is quarterly *and* lags
+  // — measured against /api/fed, the last observation was a full quarter old — so
+  // a 2Y window holds 6 or 7 points, not 8. At a threshold of 8 every quarterly
+  // chart had *both* new buttons struck through, which reads as broken rather
+  // than as a considered limit. At 6 the outcome is the useful one: 2Y works
+  // everywhere, and 1Y works only where the series is monthly (INDPRO: 11 points)
+  // and is visibly unavailable where it is quarterly (GDPC1: 3, market cap: 2).
+  const MIN_RANGE_POINTS = 6;
+  function _gateYearButtons(attr, dates) {
+    const ds = (dates || []).filter(Boolean);
+    if (!ds.length) return;
+    document.querySelectorAll(`[data-${attr}-years]`).forEach(btn => {
+      const years = +btn.getAttribute(`data-${attr}-years`);
+      if (!years) return;                    // 0 == "All", never gated
+      const cut = new Date(Date.now() - years * 365 * 86400000)
+        .toISOString().slice(0, 10);
+      const n = ds.filter(d => d >= cut).length;
+      if (n >= MIN_RANGE_POINTS) return;
+      btn.disabled = true;
+      btn.title = `${n} observation${n === 1 ? '' : 's'} in ${years}Y — too few to plot`;
+      // A disabled button cannot be the active one; if it somehow is, hand the
+      // highlight back to All so the ladder still shows what is on screen.
+      if (btn.classList.contains('active')) {
+        btn.classList.remove('active');
+        document.querySelector(`[data-${attr}-years="0"]`)?.classList.add('active');
+      }
+    });
   }
 
   // ── fetch data
@@ -1377,6 +1434,7 @@ let _fedSeriesData = {};
         });
       }
       _renderBuffett(0);
+      _gateYearButtons('buffett', _buffettDatesAll);
       document.querySelectorAll('[data-buffett-years]').forEach(btn => {
         btn.addEventListener('click', () => {
           document.querySelectorAll('[data-buffett-years]').forEach(b=>b.classList.remove('active'));
@@ -2399,11 +2457,22 @@ let _fedSeriesData = {};
       }
       const tenAligned = walcl.dates.map(d => nearestYield(d));
       const walcl_b = walcl.values.map(v => v != null ? +(v/1000).toFixed(1) : null);
+      // Take the intended five-year window first, then clip the leading stretch
+      // where only one series has data. /api/yield-curve's history_10y is shorter
+      // than WALCL's five years, so plotting both at -260 left the yield line
+      // missing across the first ~40% of the plot (measured: first non-null at
+      // index 103 of 260). An empty gutter reads as "yields did nothing until
+      // 2023", which is worse than a shorter chart. The five other two-series
+      // charts on this page already clip with _firstBothIdx; this one was missed.
+      const fyDatesW  = walcl.dates.slice(-260);
+      const fyAssetsW = walcl_b.slice(-260);
+      const fyYieldW  = tenAligned.slice(-260);
+      const fyFrom    = _firstBothIdx(fyDatesW, fyAssetsW, fyYieldW);
       new Chart(document.getElementById('fedYieldChart'), {
         type: 'line',
-        data: { labels: walcl.dates.slice(-260), datasets: [
-          { ...I18n.label('chart.fed_assets_t', 'Fed Assets ($T)'), data: walcl_b.slice(-260), borderColor: '#a78bfa', backgroundColor: 'rgba(167,139,250,0.08)', borderWidth: 2, pointRadius: 0, fill: true, tension: 0.3, spanGaps: true, yAxisID: 'y' },
-          { label: '10Y Yield (%)', data: tenAligned.slice(-260), borderColor: '#f87171', backgroundColor: 'transparent', borderWidth: 1.5, pointRadius: 0, fill: false, tension: 0.3, spanGaps: true, yAxisID: 'yYield', borderDash:[4,3] },
+        data: { labels: fyDatesW.slice(fyFrom), datasets: [
+          { ...I18n.label('chart.fed_assets_t', 'Fed Assets ($T)'), data: fyAssetsW.slice(fyFrom), borderColor: '#a78bfa', backgroundColor: 'rgba(167,139,250,0.08)', borderWidth: 2, pointRadius: 0, fill: true, tension: 0.3, spanGaps: true, yAxisID: 'y' },
+          { ...I18n.label('chart.ten_year_yield', '10Y Yield (%)'), data: fyYieldW.slice(fyFrom), borderColor: '#f87171', backgroundColor: 'transparent', borderWidth: 1.5, pointRadius: 0, fill: false, tension: 0.3, spanGaps: true, yAxisID: 'yYield', borderDash:[4,3] },
         ]},
         options: { responsive: true, maintainAspectRatio: false, plugins: { legend:{display:false}, tooltip:{mode:'index',intersect:false,callbacks:{label:c=>c.dataset.yAxisID==='yYield'?` 10Y: ${c.raw?.toFixed(2)}%`:` Fed: $${c.raw?.toFixed(1)}T`}} }, scales: { x: { grid:{color:'#1e293b'}, ticks:{color:'#64748b',maxTicksLimit:6,maxRotation:0} }, y: { grid:{color:'#1e293b'}, ticks:{color:'rgba(167,139,250,0.7)',callback:v=>'$'+v+'T'} }, yYield: { position:'right', grid:{drawOnChartArea:false}, ticks:{color:'rgba(248,113,113,0.7)',callback:v=>v.toFixed(1)+'%'} } }, interaction: { mode:'index', intersect:false } },
       });
@@ -2455,12 +2524,20 @@ let _fedSeriesData = {};
         const dates     = _cycleIndpro.dates.slice(idx);
         const indproVals= _cycleIndpro.values.slice(idx);
         const housVals  = _cycleHoust.slice(idx);
+        // Clip the leading stretch where only INDPRO has data. INDPRO starts in
+        // 1919 and HOUST in 1959, so on the "all" range 37% of the plot (measured:
+        // first non-null at index 480 of 1291) had no housing line at all, which
+        // looks like missing rendering rather than a shorter series.
+        const cFrom      = _firstBothIdx(dates, indproVals, housVals);
+        const cDates     = dates.slice(cFrom);
+        const cIndproVals= indproVals.slice(cFrom);
+        const cHousVals  = housVals.slice(cFrom);
         if (_cycleChart) { _cycleChart.destroy(); _cycleChart = null; }
         _cycleChart = new Chart(document.getElementById('cycleChart'), {
           type: 'line',
-          data: { labels: dates, datasets: [
-            { label:'Industrial Production', data:indproVals, borderColor:'#34d399', backgroundColor:'rgba(52,211,153,0.07)', borderWidth:1.5, pointRadius:0, fill:true, tension:0.3, spanGaps:true, yAxisID:'y' },
-            { label:'Housing Starts',        data:housVals,   borderColor:'#f59e0b', backgroundColor:'transparent',           borderWidth:1.5, pointRadius:0, fill:false,tension:0.3, spanGaps:true, yAxisID:'yH', borderDash:[4,3] },
+          data: { labels: cDates, datasets: [
+            { ...I18n.label('chart.indpro', 'Industrial Production'), data:cIndproVals, borderColor:'#34d399', backgroundColor:'rgba(52,211,153,0.07)', borderWidth:1.5, pointRadius:0, fill:true, tension:0.3, spanGaps:true, yAxisID:'y' },
+            { ...I18n.label('chart.housing_starts', 'Housing Starts'), data:cHousVals,   borderColor:'#f59e0b', backgroundColor:'transparent',           borderWidth:1.5, pointRadius:0, fill:false,tension:0.3, spanGaps:true, yAxisID:'yH', borderDash:[4,3] },
           ]},
           options: {
             responsive:true, maintainAspectRatio:false,
@@ -2475,6 +2552,7 @@ let _fedSeriesData = {};
         });
       }
       _renderCycle(0);
+      _gateYearButtons('cycle', _cycleIndpro.dates);
       document.querySelectorAll('[data-cycle-years]').forEach(btn => {
         btn.addEventListener('click', () => {
           document.querySelectorAll('[data-cycle-years]').forEach(b=>b.classList.remove('active'));
@@ -2523,6 +2601,7 @@ let _fedSeriesData = {};
         });
       }
       _renderGdpSpy(0);
+      _gateYearButtons('gdpspy', gdpDates);
       document.querySelectorAll('[data-gdpspy-years]').forEach(btn => btn.addEventListener('click', () => {
         document.querySelectorAll('[data-gdpspy-years]').forEach(b=>b.classList.remove('active')); btn.classList.add('active');
         _renderGdpSpy(+btn.dataset.gdpspyYears);
@@ -2615,6 +2694,7 @@ let _fedSeriesData = {};
         });
       }
       _renderGdpIsm(0);
+      _gateYearButtons('gdpism', _gdpIsmGdp.dates);
       document.querySelectorAll('[data-gdpism-years]').forEach(btn => {
         btn.addEventListener('click', () => {
           document.querySelectorAll('[data-gdpism-years]').forEach(b=>b.classList.remove('active'));
