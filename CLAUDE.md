@@ -278,6 +278,21 @@ Started in `create_app()`, all daemon threads:
   requests on load — most dashboards are one request that renders everything, and
   `/tv` must never use it (a kiosk nobody scrolls, whose `opacity:0` slides all
   intersect anyway).
+- **Pull-to-refresh**: `static/pulltorefresh.js`, loaded at the end of `base.html`
+  for every yStocker page except `/agents`, `/login` and `/contact` (a reload
+  there destroys typed input) and the embedded `/agents` iframe. `/tv` does not
+  extend `base.html`, so the kiosk is excluded for free — it reloads on its own
+  timer. It matters most in the installed PWA: `manifest.json` sets `"display":
+  "standalone"`, so there is no address bar or reload button and the gesture is
+  the *only* way to refresh. Tests: `node tests/check_pulltorefresh.mjs`.
+
+  The gesture is `location.reload()` and deliberately **not** what the header's
+  `↻ Refresh` button does. That button navigates to a per-endpoint refresh route
+  that purges the server cache and re-fetches from Yahoo, FRED and SEC EDGAR, and
+  is cooldown-gated to 10 minutes precisely because it costs real upstream calls
+  — so it is the wrong thing to wire to a gesture an overscroll can trigger by
+  accident. The strings differ for the same reason (`ptr.*` promises less than
+  `nav.refresh_body`).
 
 ### Auth
 - yPlanner/yTracker: Google Sign-In + Apple Sign-In → Flask session → DynamoDB users table
@@ -327,6 +342,18 @@ Started in `create_app()`, all daemon threads:
   Registration order matters too: `deferload.js` waits for layout before
   observing, but a `when()` called after an `await` is measured against the
   layout at that instant, so register once the page has reached its real height.
+- **A custom pull-to-refresh stacks with the browser's own unless you suppress it.**
+  Chrome on Android (and iOS standalone) already has the gesture, so a hand-rolled
+  one fires *twice* — the page reloads out from under its own animation.
+  `pulltorefresh.js` injects `html { overscroll-behavior-y: contain }` to take the
+  native gesture off the table, and injects it *from JavaScript* so that a script
+  that fails to load leaves the native gesture intact rather than removing it with
+  nothing in its place. Its CSS is likewise self-contained: Tailwind here is
+  **compiled** (`css/tailwind.css`, rebuild with `build_css.sh`), so a class a
+  script invents is simply absent from the bundle. Note the non-passive
+  `touchmove` this needs costs the browser its fast scroll path, which is why it
+  is bound per-gesture on a touch that starts at `scrollTop === 0` rather than for
+  the page's lifetime.
 - **Nested `<button>` elements** break DOM structure in templates — browsers auto-close the outer button, causing sibling sections to escape their parent container. Always use `<div>` or `<span>` for clickable elements inside buttons.
 - **`routes.py` is monolithic** (5200+ lines in yStocker) — all routes, API endpoints, cache logic, and background tasks in one file.
 - **Google Maps API** on yPlanner requires a valid billing-enabled API key; errors show "Oops! Something went wrong" with a purple stripe.

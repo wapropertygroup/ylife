@@ -16,6 +16,30 @@
   <title>{% filter replace("yStocker", brand_name) %}{% block title %}yStocker{% endblock %}{% endfilter %}</title>
   <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
 
+  <!-- ── Installable web app ───────────────────────────────────────────────
+       Makes the site add to a phone's home screen as "trade-agents" with its own
+       icon and no browser chrome.
+
+       The name is fixed here rather than following brand_name, which is otherwise
+       per-host (TradeAgents on trade-agents.com, yStocker elsewhere). An installed
+       icon's label is chosen once, at install time, and cannot re-brand later — so
+       a host-dependent name would only mean two installs that disagree, with no
+       way to reconcile them. start_url is "/" for the same reason in reverse:
+       it defers to whatever each host already serves there, which is /agents on
+       trade-agents.com and the valuation page elsewhere.
+
+       apple-touch-icon must be a PNG; iOS ignores the SVG favicon. Status bar is
+       "black" rather than "black-translucent" because translucent draws content
+       under the clock, which would need safe-area insets applied across every
+       template. -->
+  <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}?v={{ cache_bust or 'dev' }}">
+  <meta name="theme-color" content="#0f172a">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='img/pwa-icon-180.png') }}">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="trade-agents">
+
   <!-- Tailwind CSS (compiled — regenerate with: bash build_css.sh) -->
   <link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind.css') }}">
 
@@ -558,7 +582,45 @@
 <script src="{{ url_for('static', filename='agents_float.js') }}?v={{ cache_bust or 'dev' }}"></script>
 {% endif %}
 
+{#
+  Pull down at the top of a page to reload it. Loaded at the end of the body
+  rather than in <head> like deferload.js, because nothing calls into it during a
+  page's parse — it binds itself on DOMContentLoaded.
+
+  Suppressed where a reload would destroy work rather than refresh a view: the
+  three pages built around text entry, and the embedded /agents view, which is an
+  iframe inside a sheet that owns its own vertical gestures. Everything else
+  under base.html is a read-only dashboard where reloading costs nothing. /tv is
+  a standalone template that does not extend this one, so the kiosk is excluded
+  for free — it already reloads itself on a timer.
+#}
+{% if not _agents_embedded
+      and request.endpoint not in ('main.agents_page', 'main.login', 'main.contact') %}
+<script src="{{ url_for('static', filename='pulltorefresh.js') }}?v={{ cache_bust or 'dev' }}"></script>
+{% endif %}
+
 {% block scripts %}{% endblock %}
+
+{# Service worker: installability plus an offline shell. Registered on `load` so
+   it never competes with the page's own first paint or its API calls, and from
+   /sw.js rather than /static/sw.js because a worker's scope defaults to the
+   directory it is served from — at /static/ it could only control /static/, which
+   would make it useless for navigations. See the route in routes.py.
+
+   Localhost is excluded: a cached shell during development is a debugging trap,
+   and the dev server is http anyway, where registration is only permitted as a
+   special case. #}
+<script>
+(function registerServiceWorker() {
+  if (!('serviceWorker' in navigator)) return;
+  if (['localhost', '127.0.0.1'].includes(location.hostname)) return;
+  window.addEventListener('load', function () {
+    navigator.serviceWorker.register('/sw.js').catch(function (err) {
+      console.warn('[sw] registration failed:', err);
+    });
+  });
+})();
+</script>
 
 </body>
 </html>

@@ -1,0 +1,48 @@
+<!doctype html>
+<!--
+  Offline fallback, served by the service worker when a navigation fails and no
+  cached copy of that page exists.
+
+  Deliberately standalone: no Tailwind, no fonts, no Chart.js, no i18n.js. Every
+  one of those is a network request, and this page exists precisely for the case
+  where the network is gone. Both languages are printed rather than switched,
+  since I18n is not loaded to tell us which one to pick.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>trade-agents — offline</title>
+  <style>
+    :root { color-scheme: dark; }
+    body {
+      margin: 0; min-height: 100vh;
+      display: flex; align-items: center; justify-content: center;
+      background: #020617; color: #e2e8f0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      text-align: center; padding: 24px;
+    }
+    .card { max-width: 22rem; }
+    img { width: 64px; height: 64px; border-radius: 14px; margin-bottom: 20px; }
+    h1 { font-size: 1.05rem; font-weight: 600; margin: 0 0 10px; color: #f1f5f9; }
+    p { font-size: 0.85rem; line-height: 1.6; color: #94a3b8; margin: 0 0 6px; }
+    .zh { color: #64748b; }
+    button {
+      margin-top: 22px; padding: 9px 20px; font-size: 0.85rem; font-weight: 500;
+      color: #a5b4fc; background: rgba(99,102,241,0.12);
+      border: 1px solid #6366f1; border-radius: 8px; cursor: pointer;
+    }
+    button:hover { background: rgba(99,102,241,0.2); }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <img src="/static/img/pwa-icon-192.png" alt="trade-agents">
+    <h1>No connection</h1>
+    <p>Market data is never stored offline, so there is nothing to show rather
+       than something out of date.</p>
+    <p class="zh">行情数据不会离线缓存，因此此处不显示过时的数据。</p>
+    <button onclick="location.reload()">Retry · 重试</button>
+  </div>
+</body>
+</html>

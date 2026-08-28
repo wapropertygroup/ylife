@@ -62,6 +62,12 @@ const I18n = (() => {
     'nav.refresh_title':  { en: 'Refresh data', zh: '刷新数据' },
     'nav.refresh_body':   { en: 'Clears the in-memory cache and re-fetches live prices, PE ratios, and analyst targets for all tickers from Yahoo Finance.',
                             zh: '清除内存缓存，从 Yahoo Finance 重新获取所有股票的最新价格、市盈率及分析师目标价。' },
+    // Pull-to-refresh (static/pulltorefresh.js). This reloads the page; it does
+    // not purge the server cache the way nav.refresh above does, so the wording
+    // deliberately promises less.
+    'ptr.pull':           { en: 'Pull to refresh',    zh: '下拉刷新' },
+    'ptr.release':        { en: 'Release to refresh', zh: '松开即刷新' },
+    'ptr.busy':           { en: 'Refreshing…',        zh: '正在刷新…' },
     'footer.text':        { en: 'yStocker — data via Yahoo Finance', zh: 'yStocker — 数据来源：Yahoo Finance' },
     'footer.contact':     { en: 'Contact Us', zh: '联系我们' },
     'footer.copyright':   { en: '© 2025 yStocker. All rights reserved.', zh: '© 2025 yStocker. 保留所有权利。' },

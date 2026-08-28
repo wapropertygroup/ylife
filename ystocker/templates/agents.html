@@ -423,6 +423,27 @@ window.YSTime = (function () {
 }
 .ag-hist-runs { display: flex; flex-direction: column; gap: 8px; }
 .ag-hist-run { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; justify-content: space-between; }
+/* The ticker doubles as the search control: pressing one filters the panel to
+   that symbol, which is most of what this panel is read for ("every GDX run")
+   and previously meant retyping a code already on screen -- 002384.SZ by hand,
+   on a phone. A real <button> so it is reachable by keyboard and announced as
+   pressable, then styled back down to the text it replaced: fifty buttons
+   styled as buttons would read as an action rail rather than a list of symbols.
+   The dashed rule is the only affordance, since nothing else here hints that a
+   label is live. */
+.ag-tick {
+  appearance: none; -webkit-appearance: none;
+  border: 0; padding: 0; background: none; font: inherit;
+  color: #cbd5e1; font-weight: 500; cursor: pointer;
+  border-bottom: 1px dashed #334155;
+  -webkit-tap-highlight-color: transparent;
+}
+.ag-tick:hover { color: #e0e7ff; border-bottom-color: #6366f1; }
+.ag-tick:focus-visible { outline: 2px solid #6366f1; outline-offset: 2px; border-radius: 3px; }
+/* The symbol the panel is currently filtered to. Says the press landed even
+   when the list was already showing only that ticker, and marks the row that
+   clears the filter again. */
+.ag-tick.is-on { color: #c7d2fe; border-bottom-style: solid; border-bottom-color: #6366f1; }
 /* The Portfolio Manager's turn, carried inline on every search hit so the call
    can be read without opening the report. A 100% flex basis rather than a block:
    .ag-hist-run is a wrapping flex row, so this drops onto its own line beneath
@@ -519,6 +540,9 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
   .ag-hist > .ag-hist-runs { border-top: 0; padding-top: 0; }
   .ag-hist > .ag-hist-date { padding-bottom: 5px; }
   .ag-hist-runs { gap: 10px; }
+  /* Inline text, so it has no height of its own to tap at: pad it vertically
+     rather than leave a 15px target inside a 44px row. */
+  .ag-tick { padding: 4px 0; }
   .ag-hist-run {
     padding: 10px; gap: 9px;
     background: rgba(15, 23, 42, .58);
@@ -2130,7 +2154,12 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
       [...byDate.keys()].sort().reverse().forEach(date => {
         const dateCell = document.createElement('div');
         dateCell.className = 'ag-hist-date';
-        dateCell.innerHTML = highlight(date, /^\d/.test(q) ? q : '');
+        // highlight() already no-ops where the query does not occur, so both
+        // fields can simply be offered it. The previous /^\d/ test guessed which
+        // field the query meant from its first character, and every A-share code
+        // starts with a digit -- so clicking 002384.SZ filtered correctly but
+        // highlighted nothing, while NFLX bolded.
+        dateCell.innerHTML = highlight(date, q);
         const runs = document.createElement('div');
         runs.className = 'ag-hist-runs';
 
@@ -2144,8 +2173,21 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
           // Without it a VIP's history is a merged list of everyone's tickers
           // with no way to tell which rows are their own.
           const mine = !j.user || (viewer && j.user.toLowerCase() === viewer.toLowerCase());
-          left.innerHTML = '<span class="text-slate-300 font-medium">'
-              + highlight(j.ticker, /^\d/.test(q) ? '' : q) + '</span>'
+          // Pressed state and tooltip both depend on whether this row's symbol
+          // is the one being filtered on, since the press then clears it. A
+          // record with no ticker stays inert text, the same em dash the date
+          // bucket uses, rather than becoming a zero-width button that would
+          // filter by nothing.
+          const isFilter = !!j.ticker && j.ticker.toUpperCase() === q.toUpperCase();
+          const tickHint = isFilter
+            ? (I18n.t('agents.filter_clear') || 'Clear this filter')
+            : (I18n.t('agents.filter_ticker') || 'Show only this ticker');
+          const tickCell = j.ticker
+            ? `<button type="button" class="ag-tick${isFilter ? ' is-on' : ''}"`
+                + ` data-ticker="${esc(j.ticker)}" title="${esc(tickHint)}"`
+                + ` aria-pressed="${isFilter}">${highlight(j.ticker, q)}</button>`
+            : '<span class="text-slate-300 font-medium">—</span>';
+          left.innerHTML = tickCell
             + `<span class="ag-pill ${CLS[j.status] || 'ag-queued'}">${esc(j.status)}</span>`
             + (mine ? '' : `<span class="ag-owner" title="Ran by another user">${esc(j.user)}</span>`)
             + (j.decision ? `<span class="text-slate-400">${esc(decPlain(j.decision))}</span>` : '')
