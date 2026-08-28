@@ -8116,9 +8116,80 @@ _MOVER_SECTOR: dict[str, str] = {
 }
 
 
+#: Smallest market cap a screener hit may have to be shown, in dollars.
+#:
+#: Yahoo's day_gainers screen covers the whole US market, so unfiltered it
+#: surfaces micro-caps up 300% on no volume. The old implementation could not
+#: have this problem because it scanned a fixed list of fifty large caps; a floor
+#: is what buys the wider universe without the noise. $2B keeps mid-caps, which
+#: is where the interesting moves are, and drops the lottery tickets.
+_MOVERS_MIN_MARKET_CAP = 2_000_000_000
+
+
+def _movers_from_screener() -> Optional[dict]:
+    """Top gainers and losers from Yahoo's own screens.
+
+    One request per side against the whole US market, instead of downloading two
+    price histories for a hand-maintained list of fifty tickers. Returns None if
+    the screens are unavailable, so the caller can fall back.
+
+    The quote payload gives relative volume for free — regularMarketVolume over
+    averageDailyVolume3Month — which the old path needed a second 22-day
+    download to compute. It does *not* give sector: that field comes back None,
+    so the hand-maintained map still supplies it where it knows the ticker, and
+    the column is simply blank otherwise rather than wrong.
+    """
+    import yfinance as yf
+
+    def side(screen: str, want_gainers: bool) -> list:
+        try:
+            res = yf.screen(screen, count=40)
+        except Exception as exc:  # noqa: BLE001 - fall back, do not fail the route
+            log.warning("Movers: screen(%s) failed: %s", screen, exc)
+            return []
+        rows = []
+        for q in (res or {}).get("quotes") or []:
+            sym = q.get("symbol")
+            price = q.get("regularMarketPrice")
+            chg = q.get("regularMarketChangePercent")
+            cap = q.get("marketCap")
+            if not sym or not isinstance(price, (int, float)) or not isinstance(chg, (int, float)):
+                continue
+            if not isinstance(cap, (int, float)) or cap < _MOVERS_MIN_MARKET_CAP:
+                continue
+            vol, avg = q.get("regularMarketVolume"), q.get("averageDailyVolume3Month")
+            rel_vol = (round(vol / avg, 1)
+                       if isinstance(vol, (int, float)) and isinstance(avg, (int, float)) and avg > 0
+                       else None)
+            rows.append({
+                "ticker":     sym,
+                "price":      round(float(price), 2),
+                "day_chg":    round(float(chg), 2),
+                "rel_vol":    rel_vol,
+                "sector":     _MOVER_SECTOR.get(sym, ""),
+                "name":       q.get("shortName") or q.get("displayName") or "",
+                "market_cap": round(cap / 1e9, 1),
+            })
+        rows.sort(key=lambda r: r["day_chg"], reverse=want_gainers)
+        return rows[:5]
+
+    gainers = side("day_gainers", True)
+    losers = side("day_losers", False)
+    if not gainers and not losers:
+        return None
+    log.info("Movers: from screener (%d gainers, %d losers, cap floor $%.1fB)",
+             len(gainers), len(losers), _MOVERS_MIN_MARKET_CAP / 1e9)
+    return {"gainers": gainers, "losers": losers, "source": "screener"}
+
+
 @bp.route("/api/movers")
 def api_movers():
-    """Return top 5 gainers and losers among major US large-cap stocks."""
+    """Return top 5 gainers and losers.
+
+    Yahoo's own screens first, over the whole US market; the fifty-ticker scan
+    below is the fallback, so a screener outage degrades to the old behaviour
+    rather than to an empty card.
+    """
     import yfinance as yf
     log.info("API movers")
 
@@ -8127,6 +8198,14 @@ def api_movers():
         if entry and time.time() - entry["ts"] < _MOVERS_CACHE_TTL:
             return jsonify(entry["data"])
 
+    screened = _movers_from_screener()
+    if screened:
+        ts = time.time()
+        with _MOVERS_CACHE_LOCK:
+            _MOVERS_CACHE["data"] = {"ts": ts, "data": screened}
+        return jsonify(screened)
+
+    log.info("Movers: screener unavailable — falling back to the ticker scan")
     try:
         tickers_str = " ".join(_MOVER_TICKERS)
         raw = yf.download(tickers_str, period="2d", interval="1d",
@@ -8172,6 +8251,7 @@ def api_movers():
         result = {
             "losers":  movers[:5],
             "gainers": movers[-5:][::-1],
+            "source":  "ticker-scan",
         }
     except Exception as exc:
         log.warning("Movers fetch failed: %s", exc)

@@ -61,9 +61,12 @@ BREADTH = {"latest": {"20": 61.2, "50": 58.4, "100": 55.1, "150": 52.9, "200": 4
            "universe": 503, "asof": "2026-08-26",
            "rsp_spy": {"values": [0.6321, 0.6299, 0.6274]}}
 MOVERS = {"gainers": [{"ticker": "NVDA", "price": 184.2, "day_chg": 4.8,
-                       "rel_vol": 2.31, "sector": "Technology"}],
+                       "rel_vol": 2.31, "sector": "Technology",
+                       "name": "NVIDIA Corp", "market_cap": 4210.5}],
+          # Screener hits carry no sector, only a name — the common case now.
           "losers": [{"ticker": "TSLA", "price": 402.1, "day_chg": -5.2,
-                      "rel_vol": 1.88, "sector": "Consumer Discretionary"}]}
+                      "rel_vol": 1.88, "sector": "",
+                      "name": "Tesla, Inc.", "market_cap": 1290.0}]}
 FG = {"score": 58.0, "rating": "Greed", "prev_close": 55.0, "prev_week": 49.0,
       "prev_month": 41.0, "prev_year": 62.0}
 PCR = {"current": 0.88, "day_chg": -2.1, "ma20": 0.94}
@@ -355,6 +358,11 @@ class MarketsSection(unittest.TestCase):
         self.assertIn("+4.80%", self.out)
         self.assertIn("TSLA", self.out)
         self.assertIn("-5.20%", self.out)
+
+    def test_movers_show_company_and_cap(self):
+        self.assertIn("NVIDIA Corp", self.out)
+        self.assertIn("$4.21T", self.out)          # market cap promoted
+        self.assertIn("Tesla, Inc.", self.out)     # name used when sector blank
 
     def test_sentiment_gauges(self):
         self.assertIn("Greed", self.out)

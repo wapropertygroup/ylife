@@ -356,13 +356,19 @@ def _sec_markets(markets: Optional[dict], breadth: Optional[dict],
 
     if movers:
         for side, en in (("gainers", "Top gainers"), ("losers", "Top losers")):
-            rows_m = [[str(m.get("ticker") or "?"), _usd(m.get("price"), 2),
+            # Name/market cap come from Yahoo's screener; sector only from the
+            # hand-maintained map, so it is often blank — show both and let the
+            # model use whichever is there.
+            rows_m = [[str(m.get("ticker") or "?"),
+                       str(m.get("name") or m.get("sector") or "n/a"),
+                       _usd(m.get("price"), 2),
                        _pct(m.get("day_chg")), _num(m.get("rel_vol"), 2),
-                       str(m.get("sector") or "n/a")]
+                       (_bn(m.get("market_cap")) if _isnum(m.get("market_cap")) else "n/a")]
                       for m in (movers.get(side) or [])[:MAX_MOVERS]]
             if rows_m:
-                out += ["", f"{en} (rel vol = volume vs its own average):"]
-                out += _table(["Ticker", "Price", "Day %", "Rel Vol", "Sector"], rows_m)
+                out += ["", f"{en} (rel vol = today's volume against its own 3-month average):"]
+                out += _table(["Ticker", "Company", "Price", "Day %", "Rel Vol",
+                               "Market Cap"], rows_m)
 
     out += ["", "Sentiment gauges:"]
     sent_rows = []
