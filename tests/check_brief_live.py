@@ -22,6 +22,7 @@ from ystocker import routes  # noqa: E402
 
 lang = sys.argv[1] if len(sys.argv) > 1 else "zh"
 warm = "warm" in sys.argv[1:]
+market = "cn" if "cn" in sys.argv[1:] else "us"
 
 # Warming calls Flask views, which need an app context — the same reason the
 # real pre-generator is handed the app. Build a minimal one rather than
@@ -33,11 +34,11 @@ if warm:
     app = Flask(__name__)
     app.register_blueprint(routes.bp)
 
-result = routes._generate_market_brief(lang, warm=warm, app=app)
+result = routes._generate_market_brief(lang, warm=warm, app=app, market=market)
 
 print()
 print("=" * 78)
-print(f"lang={lang}  warm={warm}  generated_at={result['generated_at']}")
+print(f"market={market}  lang={lang}  warm={warm}  generated_at={result['generated_at']}")
 print(f"used  ({len(result['sources_used'])}): {', '.join(result['sources_used'])}")
 print(f"cold  ({len(result['sources_cold'])}): {', '.join(result['sources_cold'])}")
 print(f"stale ({len(result['sources_stale'])}): {', '.join(result['sources_stale'])}")

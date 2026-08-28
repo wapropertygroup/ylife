@@ -589,10 +589,28 @@ class SnapshotAndPrompt(unittest.TestCase):
         self.assertIn("Do not build a", brief.build_prompt(self.snap, "en"))
         self.assertIn("不要为缺失的数据生成表格", brief.build_prompt(self.snap, "zh"))
 
-    def test_prompt_lists_nine_sections(self):
-        for lang, sections in (("en", brief._SECTIONS_EN), ("zh", brief._SECTIONS_ZH)):
+    def test_us_prompt_lists_nine_sections(self):
+        for lang, sections in (("en", brief._SECTIONS_US_EN), ("zh", brief._SECTIONS_US_ZH)):
             self.assertIn(sections, brief.build_prompt(self.snap, lang))
             self.assertEqual(len(sections.strip().splitlines()), 9, lang)
+
+    def test_cn_prompt_lists_five_sections(self):
+        for lang, sections in (("en", brief._SECTIONS_CN_EN), ("zh", brief._SECTIONS_CN_ZH)):
+            prompt = brief.build_prompt(self.snap, lang, market="cn")
+            self.assertIn(sections, prompt)
+            self.assertEqual(len(sections.strip().splitlines()), 5, lang)
+            # Section count must be interpolated, not hardcoded to nine.
+            self.assertNotIn("9 sections", prompt)
+            self.assertNotIn("9 个部分", prompt)
+
+    def test_cn_prompt_forbids_calling_excluded_us_data_missing(self):
+        for lang, needle in (("en", "excluded **by choice**"), ("zh", "有意不纳入")):
+            self.assertIn(needle, brief.build_prompt(self.snap, lang, market="cn"))
+            self.assertNotIn(needle, brief.build_prompt(self.snap, lang, market="us"))
+
+    def test_unknown_market_falls_back_to_us(self):
+        self.assertEqual(brief.build_prompt(self.snap, "en", market="kr"),
+                         brief.build_prompt(self.snap, "en", market="us"))
 
     def test_unknown_lang_falls_back_to_english(self):
         self.assertIn("pipe table", brief.build_prompt(self.snap, "klingon"))

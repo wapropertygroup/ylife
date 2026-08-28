@@ -2,7 +2,27 @@
 {% block title %}yStocker — Daily Report{% endblock %}
 
 {% block content %}
+<script src="{{ url_for('static', filename='markdown.js') }}?v={{ cache_bust or 'dev' }}"></script>
 <style>
+  /* Rendered Markdown for the two AI reports. Same shape as the brief card on
+     /markets — these are now the same artefact, market-scoped. */
+  .dr-md { font-size:13px; line-height:1.75; color:#cbd5e1; overflow-wrap:break-word; }
+  .dr-md h2 { font-size:14px; font-weight:700; color:#e2e8f0; margin:18px 0 8px;
+              padding-bottom:6px; border-bottom:1px solid #1e293b; }
+  .dr-md h2:first-child { margin-top:0; }
+  .dr-md h3 { font-size:13px; font-weight:600; color:#a5b4fc; margin:14px 0 6px; }
+  .dr-md p { margin:8px 0; }
+  .dr-md ul, .dr-md ol { margin:8px 0 8px 20px; }
+  .dr-md li { margin:3px 0; }
+  .dr-md strong { color:#e2e8f0; font-weight:600; }
+  .dr-md em { color:#94a3b8; }
+  .dr-md table { width:100%; border-collapse:collapse; margin:10px 0; font-size:11.5px;
+                 display:block; overflow-x:auto; }
+  .dr-md th, .dr-md td { border:1px solid #1e293b; padding:4px 8px; text-align:left;
+                         white-space:nowrap; }
+  .dr-md th { background:#131c2e; color:#94a3b8; font-weight:600; }
+  .dr-md td:not(:first-child) { font-variant-numeric:tabular-nums; }
+  .dr-md tbody tr:nth-child(even) { background:rgba(30,41,59,.35); }
   .card { background:#0f172a; border:1px solid #1e293b; border-radius:14px; padding:16px 18px; }
   .card-title { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.07em; color:#475569; margin-bottom:10px; }
   .idx-row { display:flex; align-items:center; justify-content:space-between; padding:6px 0; border-bottom:1px solid #1e293b; }
@@ -698,6 +718,14 @@ async function loadMovers() {
 // ── AI Commentary ─────────────────────────────────────────────────
 let _summaryGenerating = { us: false, cn: false };
 
+// Both cards are now the market-scoped AI brief: the same server-side snapshot
+// of every dashboard that /markets shows, rendered for "us" or "cn". It arrives
+// as Markdown with tables, so it goes through the shared markdown.js rather than
+// being split into <p> on blank lines the way the prose summary was.
+//
+// /api/daily-summary is deliberately still there and untouched: it feeds the
+// subscriber email, whose builder splits on blank lines into <p> tags, so a brief
+// with pipe tables would arrive as literal pipes in somebody's inbox.
 async function generateAiSummary(forceLang, market) {
   if (_summaryGenerating[market]) return;
   _summaryGenerating[market] = true;
@@ -708,39 +736,42 @@ async function generateAiSummary(forceLang, market) {
   contentEl.innerHTML = spinner;
 
   try {
-    const body = {
-      lang,
-      market,
-      market_data: {
-        indices: _latestMarketData?.indices || {},
-        vix:     _latestMarketData?.vix || {},
-        sectors: _latestMarketData?.sectors || [],
-        fg:      _latestSentiment.fg || {},
-        pcr:     _latestSentiment.pcr || {},
-        aaii:    _latestSentiment.aaii || {},
-        gainers: _moversData?.gainers || [],
-        losers:  _moversData?.losers  || [],
-        events:  _latestEvents.filter(e => e.impact === 'High').slice(0, 8),
-      }
-    };
-    const resp   = await fetch('/api/daily-summary', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
+    const resp = await fetch('/api/market-brief', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lang, market }),
+    });
     const result = await resp.json();
     if (result.error) throw new Error(result.error);
 
-    const summary = result.summary;
-    if (market === 'us') { _latestSummaryUs = summary; _summaryLangUs = lang; }
-    else                 { _latestSummaryCn = summary; _summaryLangCn = lang; }
+    const md = result.brief || '';
+    if (!md) throw new Error('empty brief');
+    if (market === 'us') { _latestSummaryUs = md; _summaryLangUs = lang; }
+    else                 { _latestSummaryCn = md; _summaryLangCn = lang; }
 
-    const paras = summary.split(/\n\n+/).filter(Boolean);
-    let html = paras.map(p => `<p class="mb-3 last:mb-0">${p.replace(/\n/g,'<br>')}</p>`).join('');
-    if (result.generated_at) {
-      html += `<p class="text-xs text-slate-600 mt-3">Generated ${result.generated_at}</p>`;
+    // innerHTML of *rendered* markup only. markdown.js escapes text before
+    // adding tags; model output is not trusted.
+    contentEl.classList.add('dr-md');
+    contentEl.innerHTML = (typeof Markdown !== 'undefined')
+      ? Markdown.render(md)
+      : '<pre style="white-space:pre-wrap"></pre>';
+    if (typeof Markdown === 'undefined') {
+      contentEl.querySelector('pre').textContent = md;   // escaped fallback
     }
-    contentEl.innerHTML = html;
 
-    // Show per-card translate button
+    const meta = [];
+    if (result.generated_at) meta.push(`Generated ${result.generated_at}`);
+    const cold = (result.sources_cold || []).length;
+    if (cold) meta.push(`${cold} source${cold > 1 ? 's' : ''} unavailable`);
+    if (meta.length) {
+      const p = document.createElement('p');
+      p.className = 'text-xs text-slate-600 mt-3';
+      p.textContent = meta.join(' · ');
+      contentEl.appendChild(p);
+    }
+
     const btnId = market === 'us' ? 'drTranslateBtnUs' : 'drTranslateBtnCn';
-    document.getElementById(btnId).classList.remove('hidden');
+    document.getElementById(btnId)?.classList.remove('hidden');
   } catch(e) {
     contentEl.innerHTML = `<span class="text-rose-400 text-xs">⚠ ${e.message}</span>`;
   }
@@ -807,8 +838,12 @@ async function sendDailyEmail() {
       body: JSON.stringify({
         email,
         lang:        I18n.getLang(),
-        summary_us:  _latestSummaryUs,
-        summary_cn:  _latestSummaryCn,
+        // Deliberately NOT sending the on-screen reports. Those are now Markdown
+        // with pipe tables, and _build_email_sections splits summary text on blank
+        // lines into <p> — so they would arrive as literal ## and | characters.
+        // Omitting them makes /api/send-daily-email fall back to the short prose
+        // summaries in _DAILY_SUMMARY_CACHE, which is the artefact the email
+        // template was actually built for.
         indices:     _latestMarketData?.indices  || {},
         sectors:     _latestMarketData?.sectors  || [],
         vix:         _latestMarketData?.vix      || {},

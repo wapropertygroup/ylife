@@ -838,19 +838,190 @@ def _sec_events(events: Optional[list]) -> list[str]:
 # the counts a caller reports mean what they say.
 _META_KEYS = frozenset({"fed_series_meta", "_stale"})
 
+#: The two report scopes. "us" is the whole-site brief shown on /markets; "cn" is
+#: the Asia-Pacific report on /daily.
+MARKETS = ("us", "cn")
 
-def build_snapshot(sources: dict[str, Any], today_iso: str) -> str:
-    """Render every collected source into one plain-text snapshot.
+# Asia-Pacific index rows, in reading order. FTSE is included as the European
+# handover, since Asia closes into it.
+_INDEX_ROWS_CN: list[tuple[str, str, str]] = [
+    ("sse",    "Shanghai Composite", "上证综指"),
+    ("csi500", "CSI 500",            "中证500"),
+    ("twii",   "Taiwan Weighted",    "台湾加权"),
+    ("kospi",  "KOSPI",              "韩国综合"),
+    ("n225",   "Nikkei 225",         "日经225"),
+    ("ftse",   "FTSE 100",           "英国富时100"),
+]
+
+# The US indices, shown in a CN report only as the overnight handover.
+_INDEX_ROWS_US_OVERNIGHT: list[tuple[str, str, str]] = [
+    ("spx",  "S&P 500",   "标普500"),
+    ("ixic", "Nasdaq",    "纳斯达克"),
+    ("dji",  "Dow Jones", "道琼斯"),
+]
+
+# Sources that are US-only by construction. In a CN report these are *not
+# applicable* rather than unavailable — a distinction worth keeping, because
+# "DATA UNAVAILABLE" reads as a failed fetch and invites the model to apologise
+# for missing US housing figures in a report about Chinese equities.
+_US_ONLY_SOURCES = ("fed", "fedwatch", "housing", "valuation", "evaluation",
+                    "holdings13f", "consensus13f", "breadth", "fg", "pcr",
+                    "aaii", "skew", "movers", "credit_spread")
+
+
+def _sec_index_table(markets: Optional[dict], rows_spec: list, title: str,
+                     source: str) -> list[str]:
+    """One index table for an arbitrary set of index keys."""
+    out = ["", f"=== {title} (source: {source}) ==="]
+    if not markets:
+        return out + _unavailable(title)
+    idx = markets.get("indices") or {}
+    rows = []
+    for key, en, zh in rows_spec:
+        d = idx.get(key) or {}
+        if not isinstance(d, dict) or d.get("error") or not _isnum(d.get("current")):
+            continue
+        rows.append([
+            f"{en} / {zh}",
+            _num(d.get("current")),
+            _pct(d.get("day_chg")),
+            _pct(d.get("ytd")),
+            _num(d.get("hi52")),
+            _num(d.get("lo52")),
+            _pos_in_range(d.get("current"), d.get("lo52"), d.get("hi52")),
+            _num(d.get("rsi14"), 1),
+            _num(d.get("ma50")),
+            _num(d.get("ma200")),
+        ])
+    if not rows:
+        return out + _unavailable(title)
+    out.append("52w range position = where price sits between the 52-week low and high:")
+    out += _table(["Index", "Last", "Day %", "YTD %", "52w High", "52w Low",
+                   "52w Range Pos", "RSI14", "MA50", "MA200"], rows)
+    return out
+
+
+def _sec_asia_rates(yield_curve: Optional[dict]) -> list[str]:
+    """CN and JP 10-year yields, with the US curve as the external driver."""
+    out = ["", "=== 0. ASIA RATES & THE GLOBAL BACKDROP (source: /markets) ==="]
+    if not yield_curve:
+        return out + _unavailable("Yield curves")
+    rows = []
+    for country, label in (("cn", "China 10Y"), ("jp", "Japan 10Y"), ("us", "US 10Y")):
+        y = ((yield_curve.get(country) or {}).get("current") or {}).get("10Y")
+        if _isnum(y):
+            rows.append([label, f"{y:.2f}%"])
+    if rows:
+        out.append("Ten-year government yields:")
+        out += _table(["Market", "Yield"], rows)
+    us = (yield_curve.get("us") or {}).get("current") or {}
+    y10, y2 = us.get("10Y"), us.get("2Y")
+    if _isnum(y10) and _isnum(y2):
+        sp = y10 - y2
+        out.append(f"US 10Y-2Y spread: {sp:+.2f}pp — "
+                   f"{'inverted' if sp < 0 else 'normal'}. The US curve sets the "
+                   f"global discount rate and the dollar, so it drives Asian flows "
+                   f"regardless of local policy.")
+    cn10 = ((yield_curve.get("cn") or {}).get("current") or {}).get("10Y")
+    if _isnum(cn10) and _isnum(y10):
+        out.append(f"US-China 10Y differential: {y10 - cn10:+.2f}pp "
+                   f"(wider favours the dollar and pressures the renminbi).")
+    return out
+
+
+def _sec_asia_events(events: Optional[list]) -> list[str]:
+    """The economic calendar, filtered to Asia-Pacific and Europe."""
+    out = ["", "=== 0. UPCOMING ASIA / EUROPE ECONOMIC EVENTS (source: /markets) ==="]
+    if not events:
+        return out + _unavailable("Economic calendar")
+    keep = {"CN", "JP", "KR", "TW", "HK", "IN", "AU", "NZ", "SG", "EU", "GB", "DE"}
+    rows = []
+    for e in events:
+        if not isinstance(e, dict):
+            continue
+        if (e.get("country") or "").upper() not in keep:
+            continue
+        rows.append([str(e.get("date") or "?"), str(e.get("time") or ""),
+                     str(e.get("country") or ""), str(e.get("event") or "?"),
+                     str(e.get("impact") or ""), str(e.get("forecast") or "—"),
+                     str(e.get("previous") or "—")])
+        if len(rows) >= MAX_EVENTS:
+            break
+    if not rows:
+        out.append("No Asia-Pacific or European entries in the calendar window. "
+                   "US releases still move Asian markets overnight; the US events "
+                   "section is not part of this report.")
+        return out
+    out += _table(["Date", "Time", "Country", "Event", "Impact",
+                   "Forecast", "Previous"], rows)
+    return out
+
+
+def _sec_not_applicable(sources: dict[str, Any]) -> list[str]:
+    """State plainly which dashboards do not bear on an Asia-Pacific report."""
+    present = [k for k in _US_ONLY_SOURCES if sources.get(k)]
+    if not present:
+        return []
+    return [
+        "",
+        "=== SOURCES DELIBERATELY EXCLUDED ===",
+        "This site also tracks the Federal Reserve balance sheet, FOMC pricing, "
+        "US housing, US index multiples, US sector valuation, 13F institutional "
+        "holdings and US sentiment gauges. They are available and current, and are "
+        "excluded here because this is an Asia-Pacific report, not because they "
+        "are missing. Do not describe them as unavailable, and do not report their "
+        "figures as though they were Asian data.",
+    ]
+
+
+def _renumber_sections(lines: list[str]) -> list[str]:
+    """Renumber ``=== N. TITLE ===`` headers sequentially from 1.
+
+    The section builders are shared between the two reports and carry the US
+    report's numbering in their headers, so an Asia-Pacific snapshot that reuses
+    the commodities builder came out numbered 1, 2, 4. The numbers are the only
+    thing tying a snapshot section to the numbered plan in the prompt, so leaving
+    a gap invites the model to invent a third section to fill it.
+
+    Headers with no number — the "sources deliberately excluded" note — are left
+    alone; they are commentary, not data sections.
+    """
+    import re as _re
+    numbered = _re.compile(r"^=== (\d+)\.\s*(.*?)\s*===$")
+    out, n = [], 0
+    for line in lines:
+        m = numbered.match(line)
+        if m:
+            n += 1
+            out.append(f"=== {n}. {m.group(2)} ===")
+        else:
+            out.append(line)
+    return out
+
+
+def build_snapshot(sources: dict[str, Any], today_iso: str,
+                   market: str = "us") -> str:
+    """Render the collected sources into one plain-text snapshot.
 
     ``sources`` is what ``routes._collect_brief_sources`` returns; any key may
     be ``None``, which produces an explicit "unavailable" line rather than a
     missing section. ``sources["_stale"]`` names the sources served past their
     TTL, which are used but dated.
+
+    ``market`` selects the scope. ``"us"`` is the whole-site brief. ``"cn"`` is
+    Asia-Pacific: the same collected data, but only the parts that bear on Asian
+    markets, plus the US indices as the overnight handover — Asia trades off Wall
+    Street's close, so omitting it would leave the most important driver out.
     """
+    if market not in MARKETS:
+        market = "us"
+    scope = ("every dashboard on this site" if market == "us"
+             else "the Asia-Pacific-relevant parts of this site's dashboards")
     lines: list[str] = [
         f"DATE: {today_iso}",
+        f"REPORT SCOPE: {'United States' if market == 'us' else 'Asia-Pacific'}",
         "",
-        "The following is a complete snapshot of every dashboard on this site. "
+        f"The following is a snapshot of {scope}. "
         "All numbers below are measured; treat them as the only facts you have.",
     ]
     stale = sources.get("_stale") or []
@@ -862,29 +1033,41 @@ def build_snapshot(sources: dict[str, Any], today_iso: str) -> str:
             f"its own as-of date; cite that date rather than implying the figure "
             f"is from today.",
         ]
-    lines += _sec_markets(sources.get("markets"), sources.get("breadth"),
-                         sources.get("movers"), sources.get("fg"),
-                         sources.get("pcr"), sources.get("aaii"),
-                         sources.get("skew"))
-    lines += _sec_rates(sources.get("yield_curve"), sources.get("credit_spread"),
-                        sources.get("yield_spread"))
-    lines += _sec_evaluation(sources.get("evaluation"))
-    lines += _sec_commodities(sources.get("commodities"))
-    lines += _sec_13f(sources.get("holdings13f"), sources.get("consensus13f"))
-    lines += _sec_fedwatch(sources.get("fedwatch"))
-    lines += _sec_housing(sources.get("housing"))
-    lines += _sec_multiples(sources.get("valuation"))
-    lines += _sec_fed(sources.get("fed"), sources.get("fed_series_meta"))
-    lines += _sec_events(sources.get("events"))
+
+    if market == "cn":
+        lines += _sec_index_table(sources.get("markets"), _INDEX_ROWS_CN,
+                                  "1. ASIA-PACIFIC INDICES", "/markets")
+        lines += _sec_index_table(sources.get("markets"), _INDEX_ROWS_US_OVERNIGHT,
+                                  "2. US OVERNIGHT HANDOVER", "/markets")
+        lines += _sec_commodities(sources.get("commodities"))
+        lines += _sec_asia_rates(sources.get("yield_curve"))
+        lines += _sec_asia_events(sources.get("events"))
+        lines = _renumber_sections(lines)
+        lines += _sec_not_applicable(sources)
+    else:
+        lines += _sec_markets(sources.get("markets"), sources.get("breadth"),
+                              sources.get("movers"), sources.get("fg"),
+                              sources.get("pcr"), sources.get("aaii"),
+                              sources.get("skew"))
+        lines += _sec_rates(sources.get("yield_curve"), sources.get("credit_spread"),
+                            sources.get("yield_spread"))
+        lines += _sec_evaluation(sources.get("evaluation"))
+        lines += _sec_commodities(sources.get("commodities"))
+        lines += _sec_13f(sources.get("holdings13f"), sources.get("consensus13f"))
+        lines += _sec_fedwatch(sources.get("fedwatch"))
+        lines += _sec_housing(sources.get("housing"))
+        lines += _sec_multiples(sources.get("valuation"))
+        lines += _sec_fed(sources.get("fed"), sources.get("fed_series_meta"))
+        lines += _sec_events(sources.get("events"))
 
     missing = [k for k, v in sources.items() if not v and k not in _META_KEYS]
     if missing:
-        log.info("Market brief: %d/%d sources cold: %s",
+        log.info("Market brief (%s): %d/%d sources cold: %s", market,
                  len(missing), len(sources) - len(_META_KEYS), ", ".join(sorted(missing)))
     return "\n".join(lines)
 
 
-_SECTIONS_EN = """1. Indices & Breadth — index levels, day/YTD moves, RSI, breadth, sector performance, top movers
+_SECTIONS_US_EN = """1. Indices & Breadth — index levels, day/YTD moves, RSI, breadth, sector performance, top movers
 2. Valuation & Multiples — index multiples, forward P/E, percentile ranks, sector medians
 3. Commodities & the Dollar — metals, energy, agriculture, DXY, cross ratios
 4. Institutional Positioning (13F) — consensus positions, largest funds, notable changes
@@ -894,7 +1077,7 @@ _SECTIONS_EN = """1. Indices & Breadth — index levels, day/YTD moves, RSI, bre
 8. Fed Balance Sheet & Liquidity — assets, TGA, reverse repos, net liquidity, real rates
 9. Forward Look & Risks — what to watch, using the economic calendar"""
 
-_SECTIONS_ZH = """1. 指数与市场广度 —— 指数点位、日内与年初至今涨跌、RSI、广度、板块表现、涨跌幅前列个股
+_SECTIONS_US_ZH = """1. 指数与市场广度 —— 指数点位、日内与年初至今涨跌、RSI、广度、板块表现、涨跌幅前列个股
 2. 估值与倍数 —— 指数估值倍数、前瞻市盈率、历史分位、板块中位数
 3. 商品与美元 —— 贵金属、能源、农产品、美元指数、交叉比率
 4. 机构持仓（13F）—— 共识持仓、最大基金、显著变动
@@ -905,29 +1088,57 @@ _SECTIONS_ZH = """1. 指数与市场广度 —— 指数点位、日内与年初
 9. 前瞻与风险 —— 结合经济日历，指出需要关注的事项"""
 
 
-def build_prompt(snapshot: str, lang: str) -> str:
+_SECTIONS_CN_EN = """1. Asia-Pacific Indices — Shanghai, CSI 500, Taiwan, KOSPI, Nikkei, FTSE: levels, day/YTD moves, RSI, position in 52-week range
+2. The US Handover — how Wall Street closed and what that sets up for the Asian session
+3. Commodities & the Dollar — metals, energy, agriculture, DXY, cross ratios, read for Asian importers and exporters
+4. Rates & the Global Backdrop — China and Japan 10-year yields, the US curve, the US-China differential and its currency implication
+5. Forward Look & Risks — what to watch in the Asia-Pacific session, using the economic calendar"""
+
+_SECTIONS_CN_ZH = """1. 亚太股指 —— 上证、中证500、台湾加权、韩国综合、日经225、英国富时：点位、日内与年初至今涨跌、RSI、52周区间位置
+2. 美股隔夜交接 —— 美股收盘情况，以及对亚洲交易时段的指向
+3. 商品与美元 —— 贵金属、能源、农产品、美元指数、交叉比率，并从亚洲进出口国的角度解读
+4. 利率与全球环境 —— 中国与日本10年期国债收益率、美债曲线、中美利差及其对汇率的含义
+5. 前瞻与风险 —— 结合经济日历，指出亚太时段需要关注的事项"""
+
+
+def _sections_for(market: str, lang: str) -> str:
+    if market == "cn":
+        return _SECTIONS_CN_ZH if lang == "zh" else _SECTIONS_CN_EN
+    return _SECTIONS_US_ZH if lang == "zh" else _SECTIONS_US_EN
+
+
+def build_prompt(snapshot: str, lang: str, market: str = "us") -> str:
     """Wrap a snapshot in the brief instructions.
 
-    The output is Markdown on purpose: /markets renders it through
+    The output is Markdown on purpose: /markets and /daily both render it through
     ``static/markdown.js``, which supports pipe tables. The instructions insist
     on tables because the whole point of this brief is the numbers — prose
     alone loses the ability to compare two rows at a glance.
+
+    ``market`` picks the section plan and the framing: ``"us"`` is the nine-section
+    whole-site brief, ``"cn"`` the five-section Asia-Pacific report. The CN variant
+    additionally forbids treating the deliberately-excluded US dashboards as
+    missing data, since they are present and current and simply not the subject.
     """
+    if market not in MARKETS:
+        market = "us"
     zh = lang == "zh"
-    sections = _SECTIONS_ZH if zh else _SECTIONS_EN
+    sections = _sections_for(market, lang)
+    n = len(sections.strip().splitlines())
+    tabled = n - 1              # the last section is the forward look: bullets
 
     if zh:
         return (
             "你是一位资深的市场策略分析师，正在为专业投资者撰写每日市场简报。"
             "请仅依据下方快照中的数据写作。\n\n"
             "输出要求：\n"
-            f"- 使用 Markdown。共分为以下 9 个部分，每部分以 `## ` 二级标题开头：\n{sections}\n"
-            "- 第 1 至第 8 部分中，**凡是有数据的部分都必须包含一个 Markdown 管道表格**，"
+            f"- 使用 Markdown。共分为以下 {n} 个部分，每部分以 `## ` 二级标题开头：\n{sections}\n"
+            f"- 第 1 至第 {tabled} 部分中，**凡是有数据的部分都必须包含一个 Markdown 管道表格**，"
             "把该部分最关键的数据列出来（表头用中文）。可以直接复用快照中的表格，"
             "但要挑选最重要的行与列，不要照抄全部。\n"
             "- 每个表格后面写 2-3 句解读：这些数字说明了什么、彼此之间是否矛盾。"
             "不要只是把表格用文字重复一遍。\n"
-            "- 第 9 部分用 3-5 个要点列出前瞻与风险，并标注对应的数据依据。\n"
+            f"- 第 {n} 部分用 3-5 个要点列出前瞻与风险，并标注对应的数据依据。\n"
             "- 全文控制在 1200-1600 字。\n"
             "- 引用数字时必须与快照完全一致，包括正负号与单位。"
             "**绝对不要编造快照中没有的数字。**\n"
@@ -935,20 +1146,25 @@ def build_prompt(snapshot: str, lang: str) -> str:
             "（例如 `*本节数据暂不可用。*`）后即结束。"
             "**不要为缺失的数据生成表格，不要罗列 DATA UNAVAILABLE 占位行，"
             "也不要用「该指标为何重要」之类的段落充数。**\n"
-            "- 语气专业、直接、中立。不要免责声明，不要投资建议，不要寒暄。\n\n"
+            + ("- 本报告聚焦亚太市场。快照中「SOURCES DELIBERATELY EXCLUDED」列出的"
+               "美国专属数据（联储资产负债表、FOMC定价、美国房地产、美股估值倍数、13F持仓、"
+               "美股情绪指标）是**有意不纳入**，不是缺失。不要说它们不可用，"
+               "也不要把美国数据当作亚洲数据来引用。美股仅作为隔夜外部驱动来讨论。\n"
+               if market == "cn" else "")
+            + "- 语气专业、直接、中立。不要免责声明，不要投资建议，不要寒暄。\n\n"
             f"市场快照：\n{snapshot}"
         )
     return (
         "You are a senior market strategist writing the daily brief for professional "
         "investors. Write only from the data in the snapshot below.\n\n"
         "Output requirements:\n"
-        f"- Use Markdown. Exactly these 9 sections, each opening with a `## ` heading:\n{sections}\n"
-        "- In sections 1 through 8, **every section that has data must contain a Markdown "
+        f"- Use Markdown. Exactly these {n} sections, each opening with a `## ` heading:\n{sections}\n"
+        f"- In sections 1 through {tabled}, **every section that has data must contain a Markdown "
         "pipe table** carrying that section's key numbers. You may reuse the snapshot's "
         "tables, but select the rows and columns that matter — do not copy them wholesale.\n"
         "- After each table, write 2-3 sentences of interpretation: what the numbers mean "
         "and where they disagree with each other. Do not restate the table in prose.\n"
-        "- Section 9 is 3-5 bullets of forward look and risks, each naming the data it rests on.\n"
+        f"- Section {n} is 3-5 bullets of forward look and risks, each naming the data it rests on.\n"
         "- Keep the whole brief between 1,200 and 1,600 words.\n"
         "- Every number you cite must match the snapshot exactly, including sign and unit. "
         "**Never invent a number that is not in the snapshot.**\n"
@@ -956,7 +1172,13 @@ def build_prompt(snapshot: str, lang: str) -> str:
         "section (e.g. `*Data for this section is unavailable.*`) and stop. **Do not build a "
         "table of DATA UNAVAILABLE placeholders, and do not pad the section with a paragraph "
         "on why the missing metric matters.**\n"
-        "- Tone: professional, direct, neutral. No disclaimers, no investment advice, "
+        + ("- This is an Asia-Pacific report. The US-only data listed under SOURCES "
+           "DELIBERATELY EXCLUDED — Fed balance sheet, FOMC pricing, US housing, US "
+           "index multiples, 13F holdings, US sentiment gauges — is excluded **by "
+           "choice**, not missing. Do not call it unavailable, and do not cite US "
+           "figures as though they were Asian ones. US equities appear only as the "
+           "overnight external driver.\n" if market == "cn" else "")
+        + "- Tone: professional, direct, neutral. No disclaimers, no investment advice, "
         "no preamble.\n\n"
         f"Market snapshot:\n{snapshot}"
     )

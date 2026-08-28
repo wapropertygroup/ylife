@@ -103,13 +103,34 @@ resp = client.post("/api/market-brief", data="not json",
 check("malformed body does not 500", resp.status_code == 200, str(resp.status_code))
 
 print()
+print("=== market scoping ===")
+CN_SEEDED = dict(SEEDED, brief="## 1. 亚太股指", market="cn")
+with routes._BRIEF_CACHE_LOCK:
+    routes._BRIEF_CACHE[routes._brief_mem_key("zh", "cn")] = {
+        "ts": time.time(), "data": CN_SEEDED}
+body = client.post("/api/market-brief", json={"lang": "zh", "market": "cn"}).get_json()
+check("cn has its own cache slot", body["brief"] == "## 1. 亚太股指")
+check("cn does not collide with us",
+      client.post("/api/market-brief", json={"lang": "zh"}).get_json()["brief"]
+      == "## 一、指数")
+check("us ddb key keeps its original shape",
+      routes._brief_ddb_key("zh") == "zh_brief_v1", routes._brief_ddb_key("zh"))
+check("cn ddb key is distinct",
+      routes._brief_ddb_key("zh", "cn") == "zh_cn_brief_v1",
+      routes._brief_ddb_key("zh", "cn"))
+check("mem keys distinct",
+      routes._brief_mem_key("zh") != routes._brief_mem_key("zh", "cn"))
+body = client.post("/api/market-brief", json={"lang": "zh", "market": "kr"}).get_json()
+check("unknown market falls back to us", body["brief"] == "## 一、指数")
+
+print()
 print("=== force_refresh bypasses the cache ===")
 calls: list[tuple] = []
 
 
-def _fake_generate(lang, warm=False, app=None):
-    calls.append((lang, warm))
-    return {"brief": "## regenerated", "generated_at": "now",
+def _fake_generate(lang, warm=False, app=None, market="us", sources=None):
+    calls.append((lang, warm, market))
+    return {"brief": "## regenerated", "generated_at": "now", "market": market,
             "sources_used": [], "sources_cold": [], "sources_stale": []}
 
 
@@ -118,12 +139,13 @@ routes._generate_market_brief = _fake_generate
 # _store_market_brief returns the brief to serve — normally what it was given,
 # but the stored one when that was built from more sources. The endpoint jsonifies
 # its return value, so a stub returning None would 500.
-routes._store_market_brief = lambda lang, result, today: result
+routes._store_market_brief = lambda lang, result, today, market="us": result
 try:
     resp = client.post("/api/market-brief", json={"lang": "en", "force_refresh": True})
     check("force_refresh regenerates", resp.get_json()["brief"] == "## regenerated")
     check("generator called exactly once", len(calls) == 1, str(calls))
     check("request path never warms", calls and calls[0][1] is False, str(calls))
+    check("defaults to the us market", calls and calls[0][2] == "us", str(calls))
 
     calls.clear()
     client.post("/api/market-brief", json={"lang": "en"})
@@ -131,7 +153,7 @@ try:
 
     # A worker with cold caches must not replace a richer stored brief.
     calls.clear()
-    routes._store_market_brief = lambda lang, result, today: {
+    routes._store_market_brief = lambda lang, result, today, market="us": {
         "brief": "## the richer stored one", "generated_at": "earlier",
         "sources_used": ["a", "b", "c"], "sources_cold": [], "sources_stale": [],
         "from_cache": True, "superseded_by_cache": True}
@@ -148,7 +170,7 @@ print()
 print("=== generator failure surfaces as 500, not a crash ===")
 
 
-def _boom(lang, warm=False, app=None):
+def _boom(lang, warm=False, app=None, market="us", sources=None):
     raise RuntimeError("gemini exploded")
 
 

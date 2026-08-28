@@ -8497,7 +8497,8 @@ def _collect_brief_sources(warm: bool = False, app=None) -> dict:
     return src
 
 
-def _generate_market_brief(lang: str, warm: bool = False, app=None) -> dict:
+def _generate_market_brief(lang: str, warm: bool = False, app=None,
+                           market: str = "us", sources: Optional[dict] = None) -> dict:
     """Build the snapshot, call Gemini, and return the result dict.
 
     Raises on a Gemini failure so the caller decides whether that is a 500 (the
@@ -8509,11 +8510,14 @@ def _generate_market_brief(lang: str, warm: bool = False, app=None) -> dict:
     from ystocker import brief as brief_mod
 
     today_iso = _date_cls.today().isoformat()
-    sources   = _collect_brief_sources(warm=warm, app=app)
-    snapshot  = brief_mod.build_snapshot(sources, today_iso)
-    prompt    = brief_mod.build_prompt(snapshot, lang)
-    log.info("Market brief: lang=%s snapshot=%d chars prompt=%d chars",
-             lang, len(snapshot), len(prompt))
+    # `sources` lets a caller collect once and render several markets/languages
+    # from it, which is what the pre-generator does — four briefs, one collection.
+    if sources is None:
+        sources = _collect_brief_sources(warm=warm, app=app)
+    snapshot = brief_mod.build_snapshot(sources, today_iso, market=market)
+    prompt   = brief_mod.build_prompt(snapshot, lang, market=market)
+    log.info("Market brief: market=%s lang=%s snapshot=%d chars prompt=%d chars",
+             market, lang, len(snapshot), len(prompt))
 
     # Bounded below gunicorn's --timeout 120. This call can happen inside a
     # request (first visit of the day, or the ↻ button), and a worker killed at
@@ -8536,22 +8540,40 @@ def _generate_market_brief(lang: str, warm: bool = False, app=None) -> dict:
         "sources_cold": sorted(k for k, v in sources.items()
                                if not v and k not in brief_mod._META_KEYS),
         "sources_stale": sorted(sources.get("_stale") or []),
+        "market":        market,
     }
 
 
-def _brief_ddb_key(lang: str) -> str:
-    return f"{lang}_{_BRIEF_KEY_VER}"
+def brief_markets() -> tuple:
+    """The report scopes brief.py supports. Imported lazily to keep routes.py's
+    module-level import list from growing another entry."""
+    from ystocker.brief import MARKETS
+    return MARKETS
+
+
+def _brief_ddb_key(lang: str, market: str = "us") -> str:
+    """DynamoDB sort key. The us variant keeps its original shape so the briefs
+    already stored under `{lang}_brief_v1` are not orphaned by adding cn."""
+    return f"{lang}_{_BRIEF_KEY_VER}" if market == "us" else f"{lang}_{market}_{_BRIEF_KEY_VER}"
+
+
+def _brief_mem_key(lang: str, market: str = "us") -> str:
+    return lang if market == "us" else f"{lang}_{market}"
 
 
 @bp.route("/api/market-brief", methods=["POST"])
 def api_market_brief():
-    """The long-form AI Markets Brief for /markets.
+    """The long-form AI brief, for /markets and /daily.
 
-    Request body:  {"lang": "en"|"zh", "force_refresh": bool}
-    Response:      {"brief": "<markdown>", "generated_at": "...",
+    Request body:  {"lang": "en"|"zh", "market": "us"|"cn", "force_refresh": bool}
+    Response:      {"brief": "<markdown>", "generated_at": "...", "market": "...",
                     "sources_used": [...], "sources_cold": [...]}
 
-    Markdown, not prose: the card renders it through static/markdown.js, which
+    `market` scopes the report: "us" is the nine-section whole-site brief that
+    /markets shows, "cn" the five-section Asia-Pacific report that /daily pairs
+    with it. Both are rendered from one collection of the same sources.
+
+    Markdown, not prose: both callers render it through static/markdown.js, which
     does pipe tables. Cached for the day, since it describes a dated snapshot.
     """
     import time as _time
@@ -8564,16 +8586,20 @@ def api_market_brief():
     lang    = payload.get("lang", "en")
     if lang not in ("en", "zh"):
         lang = "en"
+    market = payload.get("market", "us")
+    if market not in brief_markets():
+        market = "us"
     # force_refresh was accepted and silently ignored by the endpoint this
     # replaces, so the card's refresh button has never refreshed anything.
     force     = bool(payload.get("force_refresh"))
     today_iso = _date_cls.today().isoformat()
-    ddb_key   = _brief_ddb_key(lang)
-    log.info("API market-brief: lang=%s force=%s", lang, force)
+    ddb_key   = _brief_ddb_key(lang, market)
+    mem_key   = _brief_mem_key(lang, market)
+    log.info("API market-brief: market=%s lang=%s force=%s", market, lang, force)
 
     if not force:
         with _BRIEF_CACHE_LOCK:
-            entry = _BRIEF_CACHE.get(lang)
+            entry = _BRIEF_CACHE.get(mem_key)
         if entry and _time.time() - entry["ts"] < _BRIEF_CACHE_TTL:
             return jsonify(entry["data"])
 
@@ -8584,21 +8610,22 @@ def api_market_brief():
                                          "lang_market": ddb_key}).get("Item")
                 if item and item.get("summary"):
                     result = _brief_from_ddb_item(item)
+                    result["market"] = market
                     with _BRIEF_CACHE_LOCK:
-                        _BRIEF_CACHE[lang] = {"ts": _time.time(), "data": result}
+                        _BRIEF_CACHE[mem_key] = {"ts": _time.time(), "data": result}
                     return jsonify(result)
             except Exception as exc:  # noqa: BLE001
                 log.warning("Brief: DynamoDB read failed: %s", exc)
 
     try:
-        result = _generate_market_brief(lang)
+        result = _generate_market_brief(lang, market=market)
     except Exception as exc:  # noqa: BLE001
         log.warning("Brief: generation failed: %s", exc)
         return jsonify({"error": str(exc)}), 500
 
     # _store_market_brief may hand back the stored brief instead, when this
     # worker's caches were too cold to improve on it.
-    return jsonify(_store_market_brief(lang, result, today_iso))
+    return jsonify(_store_market_brief(lang, result, today_iso, market=market))
 
 
 def _brief_from_ddb_item(item: dict) -> dict:
@@ -8619,7 +8646,8 @@ def _brief_from_ddb_item(item: dict) -> dict:
     }
 
 
-def _store_market_brief(lang: str, result: dict, today_iso: str) -> dict:
+def _store_market_brief(lang: str, result: dict, today_iso: str,
+                        market: str = "us") -> dict:
     """Write a generated brief to the memory cache and DynamoDB.
 
     Returns whichever brief should be served — normally ``result``, but the
@@ -8638,33 +8666,35 @@ def _store_market_brief(lang: str, result: dict, today_iso: str) -> dict:
 
     tbl = _get_summaries_table()
     fresh_n = len(result.get("sources_used") or [])
+    mem_key = _brief_mem_key(lang, market)
 
     if tbl:
         try:
             item = tbl.get_item(Key={"date": today_iso,
-                                     "lang_market": _brief_ddb_key(lang)}).get("Item")
+                                     "lang_market": _brief_ddb_key(lang, market)}).get("Item")
             if item and item.get("summary"):
                 stored_n = len(item.get("sources_used") or [])
                 if stored_n > fresh_n:
-                    log.info("Brief: keeping stored %s brief (%d sources) over the "
+                    log.info("Brief: keeping stored %s/%s brief (%d sources) over the "
                              "fresh one (%d) — this worker's caches are colder",
-                             lang, stored_n, fresh_n)
+                             market, lang, stored_n, fresh_n)
                     kept = _brief_from_ddb_item(item)
                     kept["superseded_by_cache"] = True
+                    kept["market"] = market
                     with _BRIEF_CACHE_LOCK:
-                        _BRIEF_CACHE[lang] = {"ts": _time.time(), "data": kept}
+                        _BRIEF_CACHE[mem_key] = {"ts": _time.time(), "data": kept}
                     return kept
         except Exception as exc:  # noqa: BLE001
             log.warning("Brief: DynamoDB compare-before-write failed: %s", exc)
 
     with _BRIEF_CACHE_LOCK:
-        _BRIEF_CACHE[lang] = {"ts": _time.time(), "data": result}
+        _BRIEF_CACHE[mem_key] = {"ts": _time.time(), "data": result}
     if not tbl:
         return result
     try:
         tbl.put_item(Item={
             "date":          today_iso,
-            "lang_market":   _brief_ddb_key(lang),
+            "lang_market":   _brief_ddb_key(lang, market),
             "summary":       result["brief"],
             "generated_at":  result.get("generated_at", ""),
             "sources_used":  list(result.get("sources_used") or []),
@@ -8690,9 +8720,14 @@ def _do_pregen_market_briefs(app=None) -> None:
     there is; a row written by a worker — which sees only its own fork-time cache
     snapshot — is routinely half as complete. Skipping meant whichever request
     happened to land first pinned a thin brief for the whole day, which is
-    exactly what happened on the deploy that shipped this. It costs two Gemini
-    calls per restart, and `_store_market_brief` throws the result away if it did
-    not actually improve on what is stored.
+    exactly what happened on the deploy that shipped this.
+    `_store_market_brief` throws the result away if it did not actually improve on
+    what is stored.
+
+    Sources are collected **once** and all four briefs (us/cn x en/zh) rendered
+    from that one snapshot. Collecting per brief would quadruple the warm-up and,
+    worse, let the four disagree with each other because each saw the market a
+    minute later than the last.
     """
     import time as _time
     from datetime import date as _date_cls
@@ -8703,30 +8738,39 @@ def _do_pregen_market_briefs(app=None) -> None:
 
     today_iso = _date_cls.today().isoformat()
 
-    for i, lang in enumerate(("en", "zh")):
-        # The memory check still applies: it means *this* process already built
-        # today's brief, so regenerating would compare it against itself.
-        with _BRIEF_CACHE_LOCK:
-            entry = _BRIEF_CACHE.get(lang)
-        if entry and _time.time() - entry["ts"] < _BRIEF_PREGEN_SKIP_SECONDS:
-            log.debug("Brief pre-gen: %s already generated in this process, skipping", lang)
-            continue
-        try:
-            # Only the first language needs the warm-up pass; the second reads
-            # the caches the first one filled.
-            result = _generate_market_brief(lang, warm=(i == 0), app=app)
-            served = _store_market_brief(lang, result, today_iso)
-            if served.get("superseded_by_cache"):
-                log.info("Brief pre-gen: %s kept the stored brief (%d sources) over "
-                         "this run's %d", lang, len(served.get("sources_used") or []),
-                         len(result.get("sources_used") or []))
-            else:
-                log.info("Brief pre-gen: stored %s (%d chars, %d sources used, %d cold)",
-                         lang, len(result["brief"]),
-                         len(result.get("sources_used") or []),
-                         len(result.get("sources_cold") or []))
-        except Exception as exc:  # noqa: BLE001
-            log.warning("Brief pre-gen: failed for %s: %s", lang, exc)
+    try:
+        sources = _collect_brief_sources(warm=True, app=app)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("Brief pre-gen: source collection failed: %s", exc)
+        return
+
+    for market in brief_markets():
+        for lang in ("en", "zh"):
+            mem_key = _brief_mem_key(lang, market)
+            # The memory check still applies: it means *this* process already
+            # built today's brief, so regenerating would compare it to itself.
+            with _BRIEF_CACHE_LOCK:
+                entry = _BRIEF_CACHE.get(mem_key)
+            if entry and _time.time() - entry["ts"] < _BRIEF_PREGEN_SKIP_SECONDS:
+                log.debug("Brief pre-gen: %s already generated in this process, "
+                          "skipping", mem_key)
+                continue
+            try:
+                result = _generate_market_brief(lang, app=app, market=market,
+                                                sources=sources)
+                served = _store_market_brief(lang, result, today_iso, market=market)
+                if served.get("superseded_by_cache"):
+                    log.info("Brief pre-gen: %s kept the stored brief (%d sources) "
+                             "over this run's %d", mem_key,
+                             len(served.get("sources_used") or []),
+                             len(result.get("sources_used") or []))
+                else:
+                    log.info("Brief pre-gen: stored %s (%d chars, %d sources used, "
+                             "%d cold)", mem_key, len(result["brief"]),
+                             len(result.get("sources_used") or []),
+                             len(result.get("sources_cold") or []))
+            except Exception as exc:  # noqa: BLE001
+                log.warning("Brief pre-gen: failed for %s: %s", mem_key, exc)
 
 
 # ---------------------------------------------------------------------------
