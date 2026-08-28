@@ -49,6 +49,11 @@ ETFS: list[tuple[str, str, str]] = [
 #: Yahoo's sector keys, in the order the table should read, with labels. Yahoo
 #: returns them in an arbitrary dict order, and a table whose rows move between
 #: refreshes is unreadable — so the order is fixed here.
+#:
+#: It is emitted as an ordered *list* rather than a dict, because Flask's jsonify
+#: sets sort_keys=True: a dict's insertion order does not survive the response,
+#: and the first version of this shipped with the rows alphabetised. Order that
+#: matters has to be encoded as data, not as dict ordering.
 SECTORS: list[tuple[str, str, str]] = [
     ("technology",             "Technology",             "科技"),
     ("communication_services", "Communication Services", "通信服务"),
@@ -97,10 +102,13 @@ def _one(symbol: str) -> dict[str, Any]:
     except Exception as exc:  # noqa: BLE001 - one missing block, not a dead ETF
         log.warning("etf_holdings: %s top_holdings failed: %s", symbol, exc)
 
-    weights: dict[str, Optional[float]] = {}
+    weights: list[dict[str, Any]] = []
     try:
         raw = fd.sector_weightings or {}
-        weights = {key: _pct(raw.get(key)) for key, _en, _zh in SECTORS}
+        # A sector Yahoo omits is kept with weight None rather than dropped, so
+        # the SPY and QQQ columns stay row-aligned in the table.
+        weights = [{"key": key, "weight": _pct(raw.get(key))}
+                   for key, _en, _zh in SECTORS]
     except Exception as exc:  # noqa: BLE001
         log.warning("etf_holdings: %s sector_weightings failed: %s", symbol, exc)
 

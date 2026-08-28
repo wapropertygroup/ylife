@@ -87,19 +87,44 @@ class Composition(unittest.TestCase):
         self.assertEqual([h["ticker"] for h in out["holdings"]], ["NVDA", "AAPL", "MSFT"])
         self.assertEqual(out["holdings"][0]["weight"], 7.55)
         self.assertEqual(out["holdings"][0]["name"], "NVIDIA Corp")
-        self.assertEqual(out["sector_weights"]["technology"], 37.4)
+        weights = {w["key"]: w["weight"] for w in out["sector_weights"]}
+        self.assertEqual(weights["technology"], 37.4)
         self.assertEqual(out["asset_classes"]["stockPosition"], 99.96)
         self.assertEqual(out["overview"]["categoryName"], "Large Blend")
 
-    def test_sector_keys_are_the_fixed_ordered_set(self):
-        """Yahoo's dict order varies; the table's row order must not."""
+    def test_sector_weights_are_an_ordered_list(self):
+        """Order must be data, not dict insertion order.
+
+        Flask's jsonify sets sort_keys=True, so a dict comes back alphabetised —
+        which is how the first version of this shipped with the rows in the wrong
+        order. A list survives the response.
+        """
         out = self._one(top_holdings=SPY_TOP, sector_weightings=SPY_WEIGHTS,
                         asset_classes={}, fund_overview={})
-        self.assertEqual(list(out["sector_weights"]),
+        self.assertIsInstance(out["sector_weights"], list)
+        self.assertEqual([w["key"] for w in out["sector_weights"]],
                          [k for k, _en, _zh in eh.SECTORS])
-        # A sector Yahoo omitted is present as None, not missing, so the table
-        # keeps its rows aligned between the two ETFs.
-        self.assertIsNone(out["sector_weights"]["energy"])
+        # Not alphabetical — that is the bug this guards.
+        self.assertNotEqual([w["key"] for w in out["sector_weights"]],
+                            sorted(k for k, _en, _zh in eh.SECTORS))
+        # A sector Yahoo omitted is present with weight None, not dropped, so the
+        # SPY and QQQ columns stay row-aligned.
+        omitted = [w for w in out["sector_weights"] if w["key"] == "energy"]
+        self.assertEqual(len(omitted), 1)
+        self.assertIsNone(omitted[0]["weight"])
+
+    def test_ordered_list_survives_jsonify(self):
+        """The actual regression: round-trip through Flask's serialiser."""
+        from flask import Flask
+        out = self._one(top_holdings=SPY_TOP, sector_weightings=SPY_WEIGHTS,
+                        asset_classes={}, fund_overview={})
+        app = Flask(__name__)
+        self.assertTrue(app.json.sort_keys, "assumption changed: jsonify no longer sorts")
+        with app.app_context():
+            from flask import jsonify
+            body = jsonify({"composition": {"etfs": {"SPY": out}}}).get_json()
+        keys = [w["key"] for w in body["composition"]["etfs"]["SPY"]["sector_weights"]]
+        self.assertEqual(keys, [k for k, _en, _zh in eh.SECTORS])
 
     def test_concentration_is_computed(self):
         out = self._one(top_holdings=SPY_TOP, sector_weightings=SPY_WEIGHTS,
@@ -113,7 +138,8 @@ class Composition(unittest.TestCase):
                         asset_classes={}, fund_overview={})
         self.assertEqual(out["holdings"], [])
         self.assertIsNone(out["top10_weight"])
-        self.assertEqual(out["sector_weights"]["technology"], 37.4)
+        weights = {w["key"]: w["weight"] for w in out["sector_weights"]}
+        self.assertEqual(weights["technology"], 37.4)
 
     def test_empty_holdings_frame(self):
         out = self._one(top_holdings=FakeDF([]), sector_weightings={},
