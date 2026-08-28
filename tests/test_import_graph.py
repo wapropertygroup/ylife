@@ -62,7 +62,6 @@ DATA_EXPORTS = (
     "reset_yf_for_process",
     "FetchError",
     "latest_price",
-    "YF_TIMEOUT_SECONDS",
     "PROVIDER",
 )
 
@@ -114,6 +113,60 @@ class ImportGraphTests(unittest.TestCase):
                 mod = importlib.import_module(f"ystocker.{name}")
                 self.assertTrue(callable(getattr(mod, "peek", None)),
                                 f"ystocker.{name}.peek() is missing")
+
+    def test_yfinance_internals_the_fork_fix_depends_on(self):
+        """reset_yf_for_process() reaches into yfinance private internals.
+
+        That is deliberate — there is no public way to rebuild the singleton
+        after a fork — but it means a yfinance upgrade can silently break the one
+        thing standing between --preload and a worker crash-loop. These are the
+        exact attributes it touches; if an upgrade moves any of them this fails
+        here rather than as SIGSEGV in production.
+        """
+        from yfinance.data import SingletonMeta, YfData
+
+        self.assertIsInstance(getattr(SingletonMeta, "_instances", None), dict)
+        lock = getattr(SingletonMeta, "_lock", None)
+        self.assertTrue(hasattr(lock, "acquire") and hasattr(lock, "release"),
+                        "SingletonMeta._lock is no longer a lock")
+        self.assertIs(type(YfData), SingletonMeta,
+                      "YfData is no longer built by SingletonMeta")
+
+        inst = YfData()
+        self.assertIn(YfData, SingletonMeta._instances,
+                      "instantiating YfData no longer registers in _instances")
+        cookie_lock = getattr(inst, "_cookie_lock", None)
+        self.assertTrue(hasattr(cookie_lock, "acquire"),
+                        "YfData._cookie_lock is gone — the inherited-lock hang "
+                        "this guards against would no longer be detectable")
+        self.assertIsNotNone(getattr(inst, "_session", None),
+                             "YfData._session is gone")
+
+    def test_reset_yf_rebuilds_the_singleton(self):
+        """The reset must actually replace the instance, not just no-op."""
+        from yfinance.data import SingletonMeta, YfData
+
+        import ystocker.data as data
+        YfData()
+        before = SingletonMeta._instances.get(YfData)
+        data._yf_fork_pid = None          # pretend we are a fresh process
+        self.assertTrue(data.reset_yf_for_process())
+        after = SingletonMeta._instances.get(YfData)
+        self.assertIsNotNone(after)
+        self.assertIsNot(before, after, "singleton was not rebuilt")
+        # Idempotent within a pid.
+        self.assertFalse(data.reset_yf_for_process())
+
+    def test_yfinance_enforces_a_request_timeout(self):
+        """The 30s bound is yfinance's, and data.py's comments rest on it."""
+        import inspect
+
+        from yfinance import data as yd
+        for fn in ("get", "post", "_make_request", "_get_cookie_and_crumb"):
+            with self.subTest(fn=fn):
+                sig = inspect.signature(getattr(yd.YfData, fn))
+                self.assertIn("timeout", sig.parameters,
+                              f"YfData.{fn} lost its timeout parameter")
 
     def test_quota_limits_are_sane(self):
         from ystocker import quota

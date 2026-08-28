@@ -1,5 +1,10 @@
 flask>=3.0
-yfinance>=0.2
+# Upper bound is load-bearing: data.py's reset_yf_for_process() reaches into
+# yfinance.data.SingletonMeta._instances/._lock and YfData._cookie_lock to
+# rebuild the singleton after gunicorn's --preload fork. There is no public
+# equivalent, so a major release moving them would reinstate a worker
+# crash-loop. tests/test_import_graph.py asserts those attributes exist.
+yfinance>=1.7,<2
 pandas>=2.0
 matplotlib>=3.8
 seaborn>=0.13

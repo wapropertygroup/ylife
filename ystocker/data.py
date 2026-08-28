@@ -18,22 +18,24 @@ log = logging.getLogger(__name__)
 #: Breaker/back-off identity for every Yahoo call made through this module.
 PROVIDER = "yahoo"
 
-#: Request timeout applied to yfinance's own session, in seconds.
+#: Yahoo requests time out after 30 seconds, and that is not configurable.
 #:
-#: Note yfinance >=1.x does *not* need this to avoid hanging: every request path
-#: in ``yfinance.data`` already defaults to ``timeout=30`` (verified on the
-#: deployed 1.6.0 — ``get``, ``post``, ``_make_request``,
-#: ``_get_cookie_and_crumb`` and ``_get_cookie_basic`` all carry it), and
-#: curl_cffi's own session default is 30s too. The "yfinance sets no timeout, so
-#: a daemon thread blocks forever" problem was real under the old
-#: requests-based 0.2.x and is not real now.
+#: yfinance enforces it itself: ``_make_request`` builds
+#: ``request_args = {'url':…, 'params':…, 'timeout': timeout}`` and passes it on
+#: every call, with ``timeout`` defaulting to 30 in ``get``, ``post``,
+#: ``_make_request``, ``_get_cookie_and_crumb`` and both cookie/crumb
+#: strategies. Verified in 1.6.0 and 1.7.0.
 #:
-#: So this only tightens 30s to something shorter, which is worth having for
-#: background fetches but is emphatically not worth handing yfinance a session of
-#: our own to achieve. Doing that cost two outages: see reset_yf_for_process.
-#: It is applied to the session yfinance itself creates, so there is still
-#: exactly one session per process.
-YF_TIMEOUT_SECONDS = fetchguard.env_float("YF_TIMEOUT_SECONDS", 15.0, 1.0)
+#: There used to be a ``YF_TIMEOUT_SECONDS`` here, first used to build our own
+#: curl_cffi session and later to stamp ``_session.timeout`` on yfinance's. Both
+#: were pointless: an explicit per-request ``timeout=30`` overrides a session
+#: default, so the value never took effect either way. `YfConfig.network` exposes
+#: only ``proxy`` and ``retries``, so there is no supported knob to lower it, and
+#: a setting that silently does nothing is worse than no setting at all.
+#:
+#: 30s bounded is fine for the purpose the old constant claimed — a background
+#: fetch cannot hang forever — and gunicorn's --timeout 120 bounds the request
+#: path independently.
 
 #: Per-ticker exponential back-off, shared by every consumer of `fetch_group` --
 #: the 8-hour full warm and the 5-minute rolling refresher both consult it, so a
@@ -58,11 +60,13 @@ def reset_yf_for_process() -> bool:
     True if a reset actually happened.
 
     Disabling our own curl_cffi session was not enough, because yfinance builds
-    one itself: ``YfData.__init__`` runs
-    ``self._set_session(session or requests.Session(impersonate="chrome"))``,
-    and in yfinance >=1.x that ``requests`` *is* curl_cffi. So under --preload the
-    master's background threads instantiate the singleton, and every forked worker
-    inherits it holding
+    one itself. In 1.6.0 ``YfData.__init__`` ran
+    ``self._set_session(session or requests.Session(impersonate="chrome"))`` where
+    that ``requests`` *is* curl_cffi; in 1.7.0 it is ``session or new_session()``,
+    which returns a curl_cffi session whenever curl_cffi imports — and it is still
+    a required dependency, so it does. Either way the handle is libcurl's. So under
+    --preload the master's background threads instantiate the singleton, and every
+    forked worker inherits it holding
 
       * a libcurl handle owned by the parent — not fork-safe, which is the
         SIGSEGV, and
@@ -78,10 +82,11 @@ def reset_yf_for_process() -> bool:
     metaclass lock is replaced outright rather than cleared, since there is no way
     to release a lock this process never acquired.
 
-    It then builds that instance eagerly and stamps ``YF_TIMEOUT_SECONDS`` on its
-    session. Eagerly, because doing it here is the only moment there is exactly
-    one session and nothing is using it yet; ``YfData.__init__`` performs no
-    network I/O, it only constructs the session, so this costs nothing.
+    It then builds that instance eagerly rather than leaving it to the first
+    caller, so the session belongs to this pid from the outset. ``YfData.__init__``
+    performs no network I/O — it only constructs the session — so this costs
+    nothing. No timeout is set on it; yfinance passes an explicit per-request one
+    that would override anything we put on the session (see the note above).
 
     This is also why we no longer hand yfinance a session of our own. Passing one
     per thread would have each of the master's background threads rebind the
@@ -108,18 +113,12 @@ def reset_yf_for_process() -> bool:
             SingletonMeta._lock = threading.Lock()
             SingletonMeta._instances.clear()
 
-            # Build this process's instance now, and tighten its timeout.
-            # yfinance's own default is 30s; anything we set is a floor on how
-            # long a background fetch can stall.
-            inst = YfData()
-            try:
-                inst._session.timeout = YF_TIMEOUT_SECONDS
-            except Exception as exc:  # noqa: BLE001 - private attr, upstream may move it
-                log.debug("yfinance: could not set session timeout (%s); "
-                          "leaving upstream's 30s", exc)
+            # Build this process's instance now rather than leaving it to the
+            # first caller, so the session belongs to this pid from the outset.
+            # No timeout is set on it: see the note on _make_request below.
+            YfData()
             _yf_fork_pid = pid
-            log.info("yfinance state reset for pid %d (session timeout %.0fs)",
-                     pid, YF_TIMEOUT_SECONDS)
+            log.info("yfinance state reset for pid %d", pid)
             return True
         except Exception as exc:  # noqa: BLE001 - never block a request over this
             log.warning("yfinance reset failed for pid %d (%s) — continuing", pid, exc)
@@ -215,9 +214,9 @@ def fetch_ticker_data(ticker: str) -> dict:
         raise FetchError(str(exc)) from exc
 
     try:
-        # No session argument: yfinance builds its own curl_cffi session, and
-        # reset_yf_for_process() has already given this process a private one
-        # carrying YF_TIMEOUT_SECONDS.
+        # No session argument: yfinance builds its own, and
+        # reset_yf_for_process() has already made sure that one belongs to this
+        # process rather than being inherited from the gunicorn master.
         info = yf.Ticker(ticker).info
     except Exception as exc:
         # yfinance flattens HTTP status into generic exceptions, so the only
