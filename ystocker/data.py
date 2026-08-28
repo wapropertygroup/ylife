@@ -116,6 +116,63 @@ class FetchError(Exception):
     """Raised when Yahoo Finance data cannot be retrieved."""
 
 
+_yf_fork_pid: int | None = None
+_yf_fork_guard = threading.Lock()
+
+
+def reset_yf_for_process() -> bool:
+    """Give this process its own ``YfData`` singleton. Idempotent, cheap.
+
+    Must be called in a forked worker before it makes any yfinance call. Returns
+    True if a reset actually happened.
+
+    Disabling our own curl_cffi session was not enough, because yfinance builds
+    one itself: ``YfData.__init__`` runs
+    ``self._set_session(session or requests.Session(impersonate="chrome"))``,
+    and in yfinance >=1.x that ``requests`` *is* curl_cffi. So under --preload the
+    master's background threads instantiate the singleton, and every forked worker
+    inherits it holding
+
+      * a libcurl handle owned by the parent — not fork-safe, which is the
+        SIGSEGV, and
+      * two ``threading.Lock`` objects, ``YfData._cookie_lock`` and
+        ``SingletonMeta._lock``. A lock inherited in the *held* state can never be
+        released, because the thread that held it does not exist in the child. The
+        worker blocks in ``_get_cookie_and_crumb`` until gunicorn's --timeout 120
+        aborts it, which is the hang: ``handle_abort`` -> SystemExit -> "Worker
+        exiting", over and over, with requests queueing behind it.
+
+    Clearing ``_instances`` makes the next ``YfData()`` build a fresh instance
+    with a fresh cookie lock and a session belonging to this process. The
+    metaclass lock is replaced outright rather than cleared, since there is no way
+    to release a lock this process never acquired.
+
+    Cost is one Yahoo cookie/crumb negotiation per worker lifetime. Workers
+    recycle every ~200 requests, so that is negligible against a crash loop.
+    """
+    global _yf_fork_pid
+    pid = os.getpid()
+    if _yf_fork_pid == pid:
+        return False
+    with _yf_fork_guard:
+        if _yf_fork_pid == pid:          # another thread won the race
+            return False
+        try:
+            from yfinance.data import SingletonMeta
+
+            # Order matters: take the new lock first, so nothing can block on the
+            # inherited one while _instances is being emptied.
+            SingletonMeta._lock = threading.Lock()
+            SingletonMeta._instances.clear()
+            _yf_fork_pid = pid
+            log.info("yfinance state reset for pid %d", pid)
+            return True
+        except Exception as exc:  # noqa: BLE001 - never block a request over this
+            log.warning("yfinance reset failed for pid %d (%s) — continuing", pid, exc)
+            _yf_fork_pid = pid
+            return False
+
+
 # ── Field helpers ───────────────────────────────────────────────────────────
 # Yahoo silently changes the units and availability of `info` fields. Each
 # helper below normalises one such field and is shared by every call site, so a

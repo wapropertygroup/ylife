@@ -26,7 +26,7 @@ import pandas as pd
 from flask import Blueprint, render_template, redirect, url_for, request, flash, jsonify, Response, has_request_context, session
 
 from ystocker import PEER_GROUPS, YT_CHANNELS
-from ystocker.data import fetch_group, dividend_yield_pct, ps_ratio
+from ystocker.data import fetch_group, dividend_yield_pct, ps_ratio, reset_yf_for_process
 # Per-ticker back-off. Owned by data.py because fetch_group() is what knows which
 # tickers it actually attempted; routes only reads it to pre-filter work lists.
 from ystocker.data import TICKER_BACKOFF as _ticker_backoff
@@ -40,6 +40,24 @@ from ystocker.fed import FRED_USER_AGENT as _FRED_UA
 
 bp = Blueprint("main", __name__)
 log = logging.getLogger(__name__)
+
+
+@bp.before_app_request
+def _yf_fork_safety():
+    """Give this worker its own yfinance singleton before it serves anything.
+
+    Under --preload the master instantiates yfinance's ``YfData`` while warming
+    caches, and every forked worker inherits it — including a libcurl handle
+    owned by the parent and two locks that may have been held at the instant of
+    the fork. That combination crash-looped workers on SIGSEGV and, once the
+    segfaults were dealt with, hung them on ``_cookie_lock`` until gunicorn's
+    --timeout 120 killed them. See ``data.reset_yf_for_process``.
+
+    A request hook rather than a gunicorn ``post_fork`` hook because the unit
+    passes CLI flags only and has no config file to put one in; after the first
+    request of each worker this is a pid comparison against a module global.
+    """
+    reset_yf_for_process()
 
 
 # ---------------------------------------------------------------------------
