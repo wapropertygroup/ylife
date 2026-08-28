@@ -4511,7 +4511,7 @@ function _renderYieldSpread(range) {
   });
 }
 
-DeferLoad.when('#yieldSpreadChartWrap', async function() {
+DeferLoad.when('#yieldSpreadLoading', async function() {
   const loadingEl = document.getElementById('yieldSpreadLoading');
   const wrapEl    = document.getElementById('yieldSpreadChartWrap');
   try {

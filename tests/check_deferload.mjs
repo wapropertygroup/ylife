@@ -100,10 +100,16 @@ console.log('=== display:none target loads eagerly (cannot ever intersect) ===')
 els = install();
 els['#hidden'] = makeEl({ hidden: true });
 calls = 0;
-deferred = DeferLoad.when('#hidden', () => { calls++; });
+const warned = [];
+const realWarn = console.warn;
+console.warn = (...a) => warned.push(a.join(' '));
+deferred = DeferLoad.when('#hidden', () => { calls++; }, { label: 'hidden-panel' });
+console.warn = realWarn;
 t('runs immediately', calls === 1);
 t('reports not deferred', deferred === false);
 t('registers no observer', observers.length === 0);
+t('warns so a bad anchor is not silent',
+  warned.some(w => w.includes('hidden-panel') && w.includes('no box')));
 
 console.log();
 console.log('=== no IntersectionObserver: loads eagerly ===');

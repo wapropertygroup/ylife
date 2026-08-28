@@ -108,7 +108,19 @@
     // it would only fail against missing DOM.
     if (!el) return false;
 
-    if (typeof global.IntersectionObserver !== 'function' || unobservable(el)) {
+    if (typeof global.IntersectionObserver !== 'function') {
+      run(fn, label);
+      return false;
+    }
+
+    if (unobservable(el)) {
+      // Safe — the panel still loads — but it defers nothing, and that is easy
+      // to miss: the page looks like it lazy-loads while quietly fetching
+      // everything up front. #yieldSpreadChartWrap was exactly this, carrying
+      // Tailwind's `hidden` until its data arrived. Anchor on something that is
+      // in flow from the start, such as the panel's loading placeholder.
+      console.warn('[DeferLoad] ' + label + ': target has no box (display:none?) — '
+                   + 'loading eagerly. Anchor on an element that is visible on load.');
       run(fn, label);
       return false;
     }
