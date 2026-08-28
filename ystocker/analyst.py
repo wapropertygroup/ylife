@@ -56,7 +56,7 @@ TTL_SECONDS = 24 * 3600
 #: refetched rather than served into code that expects something else. Every
 #: cached module here carries one; etf_holdings shipped without it and broke
 #: /multiples for a deploy.
-CACHE_VER = "v1"
+CACHE_VER = "v2"   # v2: price_target gained the stale-target filter
 
 #: Yahoo's ``eps_trend`` / ``eps_revisions`` period keys, and what they mean.
 #: "+1y" — next fiscal year — is the one worth leading with: current-quarter
@@ -69,6 +69,19 @@ PERIODS: list[tuple[str, str, str]] = [
     ("+1y", "next year",       "下一年度"),
 ]
 LEAD_PERIOD = "+1y"
+
+#: Above this, a price target is treated as stale data rather than a forecast.
+#:
+#: PARA came back with high == low == mean == median == 42.0 against a price of
+#: 1.115 — one analyst's target, 37x the market, left un-updated through a
+#: collapse — which computes to +3,666% upside. Printed in a table of
+#: single-digit percentages that reads as a broken page, and it would be, because
+#: it is not a forecast anyone holds.
+#:
+#: The bound is deliberately generous: SHEN's +121% has three distinct targets
+#: behind it and is merely aggressive, so it survives. What is filtered is the
+#: order-of-magnitude nonsense, not the optimism.
+IMPLAUSIBLE_UPSIDE_PCT = 300.0
 
 #: Pause between tickers. Not politeness — Yahoo rate-limits, and a 210-ticker
 #: sweep that trips the breaker on ticker 30 leaves 180 without data. Slow and
@@ -198,14 +211,33 @@ def _one(ticker: str) -> Optional[dict[str, Any]]:
     try:
         pt = t.analyst_price_targets or {}
         cur, mean = _f(pt.get("current")), _f(pt.get("mean"))
+        high, low = _f(pt.get("high")), _f(pt.get("low"))
         if mean is not None:
-            out["price_target"] = {
-                "current": cur, "mean": mean,
-                "high": _f(pt.get("high")), "low": _f(pt.get("low")),
+            raw = (round((mean - cur) / cur * 100, 2)
+                   if cur not in (None, 0) else None)
+            # high == low means a single analyst, which is what makes a stale
+            # target dangerous: nothing averages it away. Recorded either way so
+            # the reason a cell is blank is visible in the payload rather than
+            # being a mystery in the UI.
+            single = (high is not None and low is not None and high == low)
+            # One-sided on purpose. Upside is unbounded — a stale target can sit
+            # any multiple above the price — whereas downside cannot pass -100%,
+            # because that is a target of zero. abs() here would imply a symmetry
+            # the arithmetic does not have.
+            suspect = raw is not None and raw > IMPLAUSIBLE_UPSIDE_PCT
+            block = {
+                "current": cur, "mean": mean, "high": high, "low": low,
                 "median": _f(pt.get("median")),
-                "upside_pct": (round((mean - cur) / cur * 100, 2)
-                               if cur not in (None, 0) else None),
+                "upside_pct": None if suspect else raw,
+                "single_analyst": single,
             }
+            if suspect:
+                block["upside_pct_raw"] = raw
+                block["upside_suspect"] = True
+                log.debug("analyst: %s upside %.0f%% looks stale "
+                          "(price %s, target %s, single=%s) — dropped",
+                          ticker, raw, cur, mean, single)
+            out["price_target"] = block
     except Exception as exc:  # noqa: BLE001
         log.debug("analyst: %s analyst_price_targets failed: %s", ticker, exc)
 

@@ -175,6 +175,50 @@ class AnalystOne(unittest.TestCase):
         self.assertNotIn("eps_trend", out)
         self.assertEqual(out["eps_revisions"]["+1y"]["up30"], 4)
 
+    def test_stale_single_analyst_target_is_dropped(self):
+        """PARA: one analyst at 42.0 against a price of 1.115 = +3,666%."""
+        out = self._one(eps_trend=EPS_TREND, eps_revisions=FakeDF({}),
+                        recommendations_summary=FakeDF({}),
+                        analyst_price_targets={"current": 1.115, "mean": 42.0,
+                                               "high": 42.0, "low": 42.0,
+                                               "median": 42.0})
+        pt = out["price_target"]
+        self.assertIsNone(pt["upside_pct"], "nonsense upside must not be displayed")
+        self.assertTrue(pt["upside_suspect"])
+        self.assertTrue(pt["single_analyst"])
+        # The value is still recorded, so a blank cell is explicable.
+        self.assertGreater(pt["upside_pct_raw"], 3000)
+
+    def test_aggressive_but_plausible_upside_survives(self):
+        """SHEN: +121% with three distinct targets is optimism, not bad data."""
+        out = self._one(eps_trend=EPS_TREND, eps_revisions=FakeDF({}),
+                        recommendations_summary=FakeDF({}),
+                        analyst_price_targets={"current": 12.42, "mean": 27.5,
+                                               "high": 29.0, "low": 26.0,
+                                               "median": 27.5})
+        pt = out["price_target"]
+        self.assertAlmostEqual(pt["upside_pct"], 121.42, places=1)
+        self.assertNotIn("upside_suspect", pt)
+        self.assertFalse(pt["single_analyst"])
+
+    def test_the_bound_is_one_sided_because_downside_cannot_run_away(self):
+        """A near-zero target is brutal but arithmetically sane, so it is kept.
+
+        Upside is unbounded — a stale target can sit any multiple above the price.
+        Downside floors at -100%, which is a target of zero. Filtering both would
+        imply a symmetry the arithmetic does not have, and would throw away real
+        forecasts on distressed names.
+        """
+        out = self._one(eps_trend=EPS_TREND, eps_revisions=FakeDF({}),
+                        recommendations_summary=FakeDF({}),
+                        analyst_price_targets={"current": 1000.0, "mean": 1.0,
+                                               "high": 1.0, "low": 1.0})
+        pt = out["price_target"]
+        self.assertAlmostEqual(pt["upside_pct"], -99.9, places=1)
+        self.assertNotIn("upside_suspect", pt)
+        # And the floor really is -100%: no input can produce less.
+        self.assertGreater(pt["upside_pct"], -100.0)
+
     def test_payload_is_valid_json_without_nan(self):
         out = self._one(eps_trend=EPS_TREND, eps_revisions=EPS_REVISIONS,
                         recommendations_summary=RECS, analyst_price_targets={})
