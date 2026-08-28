@@ -148,6 +148,38 @@ class Composition(unittest.TestCase):
         self.assertIsNone(out["top1_weight"])
 
 
+class CacheVersioning(unittest.TestCase):
+    """A cache written by an older build must be refetched, not served.
+
+    The v1 payload stored sector_weights as a dict; v2 stores an ordered list.
+    For one deploy /multiples read a v1 cache and iterated the dict, getting its
+    keys as strings. A version marker is what stops that.
+    """
+
+    def test_fetch_stamps_the_version(self):
+        with mock.patch.object(eh, "_one", return_value={"etf": "X"}):
+            out = eh._fetch()
+        self.assertEqual(out["ver"], eh.CACHE_VER)
+
+    def test_disk_cache_of_a_wrong_version_is_rejected(self):
+        old = {"etfs": {"SPY": {}}, "ver": "v1", "fetched_at": 9e9}
+        with mock.patch.object(pathlib.Path, "read_text",
+                               return_value=__import__("json").dumps(old)):
+            self.assertIsNone(eh._read_disk())
+
+    def test_unversioned_disk_cache_is_rejected(self):
+        old = {"etfs": {"SPY": {}}, "fetched_at": 9e9}
+        with mock.patch.object(pathlib.Path, "read_text",
+                               return_value=__import__("json").dumps(old)):
+            self.assertIsNone(eh._read_disk())
+
+    def test_current_version_is_accepted(self):
+        cur = {"etfs": {"SPY": {}}, "ver": eh.CACHE_VER, "fetched_at": 9e9}
+        with mock.patch.object(pathlib.Path, "read_text",
+                               return_value=__import__("json").dumps(cur)):
+            self.assertIsNotNone(eh._read_disk())
+
+
 class Contract(unittest.TestCase):
     def test_module_surface(self):
         for name in ("get", "peek", "start_background_thread", "ETFS", "SECTORS"):

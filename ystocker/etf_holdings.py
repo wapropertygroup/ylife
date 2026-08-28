@@ -39,6 +39,13 @@ log = logging.getLogger(__name__)
 CACHE_PATH = Path(__file__).parent.parent / "cache" / "etf_holdings.json"
 TTL_SECONDS = 24 * 3600
 
+#: Bump whenever the payload shape changes. Without it a cache written by an
+#: older build is served happily and the consumer breaks on the new shape: v1
+#: stored sector_weights as a dict, v2 as an ordered list, and for one deploy
+#: /multiples read the v1 cache, iterated the dict, and got its keys as strings.
+#: Every other cached module here has this for the same reason.
+CACHE_VER = "v2"
+
 #: The two ETFs /multiples computes a forward P/E for. Kept to those two on
 #: purpose: this exists to explain that number, not to be a fund browser.
 ETFS: list[tuple[str, str, str]] = [
@@ -138,7 +145,8 @@ def _one(symbol: str) -> dict[str, Any]:
 
 
 def _fetch() -> dict[str, Any]:
-    out: dict[str, Any] = {"etfs": {}, "asof": date.today().isoformat(),
+    out: dict[str, Any] = {"etfs": {}, "ver": CACHE_VER,
+                           "asof": date.today().isoformat(),
                            "fetched_at": time.time()}
     errors = []
     for symbol, _en, _zh in ETFS:
@@ -157,7 +165,13 @@ def _fetch() -> dict[str, Any]:
 def _read_disk() -> Optional[dict[str, Any]]:
     try:
         data = json.loads(CACHE_PATH.read_text(encoding="utf-8"))
-        return data if isinstance(data, dict) and data.get("etfs") else None
+        if not isinstance(data, dict) or not data.get("etfs"):
+            return None
+        if data.get("ver") != CACHE_VER:
+            log.info("etf_holdings: cache is %s, want %s — refetching",
+                     data.get("ver"), CACHE_VER)
+            return None
+        return data
     except FileNotFoundError:
         return None
     except Exception as exc:  # noqa: BLE001

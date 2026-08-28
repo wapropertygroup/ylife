@@ -772,10 +772,19 @@ const _explainData = {};
       // sector_weights is an ordered LIST of {key, weight}, not a dict: Flask's
       // jsonify sorts dict keys, which alphabetised these rows the first time
       // round. Iterate the list and look the other ETF up by key.
+      // Defensive: an older cache shape (a dict) would iterate to strings and
+      // throw. Server-side CACHE_VER should prevent that reaching us, but a card
+      // that hides itself beats a page whose script dies.
+      const okShape = e => Array.isArray(e && e.sector_weights);
+      if (!okShape(spy) && !okShape(qqq)) {
+        console.warn('[multiples] composition in an unexpected shape — hiding card');
+        return;
+      }
       const asMap = e => Object.fromEntries(
-        ((e && e.sector_weights) || []).map(w => [w.key, w.weight]));
+        (okShape(e) ? e.sector_weights : []).map(w => [w.key, w.weight]));
       const spyW = asMap(spy), qqqW = asMap(qqq);
-      const keys = ((spy || qqq).sector_weights || []).map(w => w.key);
+      const keys = (okShape(spy) ? spy.sector_weights
+                                 : (okShape(qqq) ? qqq.sector_weights : [])).map(w => w.key);
       body.innerHTML = keys.map(k => {
         const a = spyW[k] != null ? spyW[k] : null;
         const b = qqqW[k] != null ? qqqW[k] : null;
