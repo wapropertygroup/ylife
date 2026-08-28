@@ -5243,10 +5243,26 @@ def _start_cta_staleness_scheduler() -> None:
 
 @bp.route("/api/cta-positioning")
 def api_cta_positioning():
-    """Dated Goldman CTA snapshots and the latest reported SPX trigger levels."""
-    from ystocker.cta import get_cta_positioning
+    """Dated Goldman CTA snapshots and the latest reported SPX trigger levels.
 
-    return jsonify(get_cta_positioning())
+    Also carries ``distance``: how far the live S&P sits above each trigger, and
+    which level fires next. That is the more actionable of the two readings — net
+    length says how much there is to sell, distance-to-trigger says how close the
+    mechanical selling is to starting — and it is computed here rather than in the
+    browser so the brief and the email see the same numbers as the card.
+
+    The S&P level is peeked, never fetched, so a cold cache costs the distance
+    block rather than the whole response.
+    """
+    from ystocker.cta import distance_to_triggers, get_cta_positioning
+
+    payload = get_cta_positioning()
+    spx = _cta_spx_reference()
+    if spx:
+        payload = dict(payload)
+        payload["distance"] = distance_to_triggers(
+            spx, (payload.get("latest") or {}).get("spx_triggers") or {})
+    return jsonify(payload)
 
 
 # ---------------------------------------------------------------------------
