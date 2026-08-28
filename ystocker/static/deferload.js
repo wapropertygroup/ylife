@@ -19,6 +19,16 @@
  *
  * - **Fires once.** The observer disconnects on the first intersection, so a
  *   loader is never run twice by scrolling back and forth.
+ * - **Waits for layout before observing.** Registration happens during initial
+ *   script parse, when the page is still skeletons and fixed-height chart
+ *   wrappers are `display:none` — so it is far shorter than it will be, and
+ *   panels that end up thousands of pixels down are briefly near the fold. An
+ *   observer created then fires immediately and defers nothing. Measured on
+ *   /markets: `#skewChart` settles at 1289px and `#yieldSpreadChartWrap` at
+ *   5984px, yet both fetched on load. So registrations are queued and flushed
+ *   after DOMContentLoaded plus two animation frames plus a short settle, and
+ *   `DeferLoad.settle()` lets a page flush early once its own main render is
+ *   done.
  * - **Loads eagerly when it cannot observe.** A target that is `display:none`
  *   has no box, so IntersectionObserver would never fire for it and its panel
  *   would stay empty forever. Those load immediately — the pre-existing
@@ -37,6 +47,7 @@
   'use strict';
 
   const DEFAULT_ROOT_MARGIN = '300px 0px';
+  const SETTLE_MS = 120;
 
   function resolve(target) {
     if (!target) return null;
@@ -80,6 +91,17 @@
   function when(target, fn, opts) {
     const o = opts || {};
     const label = o.label || (typeof target === 'string' ? target : 'element');
+
+    // Resolution is deferred along with observation: at parse time the element
+    // may not exist yet either.
+    if (!settled) {
+      pending.push({ target: target, fn: fn, opts: o, label: label });
+      return true;
+    }
+    return observeNow(target, fn, o, label);
+  }
+
+  function observeNow(target, fn, o, label) {
     const el = resolve(target);
 
     // Nothing to watch: the panel is not on this page. Do not run the loader —
@@ -105,5 +127,41 @@
     return true;
   }
 
-  global.DeferLoad = { when: when };
+  // ── Settling ──────────────────────────────────────────────────────────────
+  let settled = false;
+  const pending = [];
+
+  /**
+   * Flush queued registrations against the current layout. Idempotent.
+   *
+   * Called automatically after the document is ready; a page can call it sooner
+   * once its own above-the-fold render is done, so panels are measured against
+   * their real positions rather than a half-built page.
+   */
+  function settle() {
+    if (settled) return;
+    settled = true;
+    while (pending.length) {
+      const p = pending.shift();
+      observeNow(p.target, p.fn, p.opts, p.label);
+    }
+  }
+
+  function scheduleSettle() {
+    // Two frames: the first lets style/layout apply, the second runs after it
+    // has been painted. The timeout then gives synchronous post-parse render
+    // work a moment to finish growing the page.
+    const raf = global.requestAnimationFrame || function (f) { return setTimeout(f, 16); };
+    raf(function () { raf(function () { setTimeout(settle, SETTLE_MS); }); });
+  }
+
+  if (typeof document === 'undefined') {
+    settled = true;   // non-browser (tests import the module directly)
+  } else if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', scheduleSettle, { once: true });
+  } else {
+    scheduleSettle();
+  }
+
+  global.DeferLoad = { when: when, settle: settle };
 })(window);

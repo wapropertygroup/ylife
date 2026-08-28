@@ -55,8 +55,16 @@ function install({ withIO = true } = {}) {
     delete global.IntersectionObserver;
   }
   delete global.DeferLoad;
+  // readyState 'complete' + a synchronous rAF stub means scheduleSettle() runs
+  // inline, so each test observes against its own stub layout immediately.
+  global.document.readyState = 'complete';
+  global.document.addEventListener = () => {};
+  global.requestAnimationFrame = f => { f(); return 0; };
+  const realTimeout = global.setTimeout;
+  global.setTimeout = f => { f(); return 0; };
   // eslint-disable-next-line no-eval
   eval(fs.readFileSync(path.join(root, 'ystocker/static/deferload.js'), 'utf8'));
+  global.setTimeout = realTimeout;
   return els;
 }
 
@@ -150,6 +158,59 @@ calls = 0;
 t('defers', DeferLoad.when(direct, () => { calls++; }) === true);
 observers[0].fire(true);
 t('runs', calls === 1);
+
+// ── Registration waits for layout ──────────────────────────────────────────
+// The bug this guards: registering during initial parse measures a page that is
+// still skeletons, so panels destined for 6000px are briefly near the fold and
+// their observers fire at once, deferring nothing.
+console.log();
+console.log('=== queues registrations until the layout has settled ===');
+observers = [];
+const lateEls = {};
+global.window = global;
+let domReadyCb = null;
+global.document = {
+  querySelector: sel => lateEls[sel] || null,
+  readyState: 'loading',
+  addEventListener: (ev, cb) => { if (ev === 'DOMContentLoaded') domReadyCb = cb; },
+};
+global.requestAnimationFrame = f => { f(); return 0; };
+const realTO = global.setTimeout;
+global.setTimeout = f => { f(); return 0; };
+delete global.DeferLoad;
+global.IntersectionObserver = class {
+  constructor(cb, opts) {
+    this.cb = cb; this.opts = opts; this.observed = []; this.disconnected = false;
+    observers.push(this);
+  }
+  observe(el) { this.observed.push(el); }
+  disconnect() { this.disconnected = true; }
+  fire(v = true) { this.cb(this.observed.map(() => ({ isIntersecting: v }))); }
+};
+// eslint-disable-next-line no-eval
+eval(fs.readFileSync(path.join(root, 'ystocker/static/deferload.js'), 'utf8'));
+
+let lateCalls = 0;
+// Registered while the document is still "loading" — and before the element
+// even exists, as happens during parse.
+const wasDeferred = DeferLoad.when('#late', () => { lateCalls++; });
+t('reports deferred while unsettled', wasDeferred === true);
+t('creates no observer yet', observers.length === 0, `got ${observers.length}`);
+t('does not run the loader yet', lateCalls === 0);
+
+// Element appears as the page builds, then the document becomes ready.
+lateEls['#late'] = makeEl();
+t('DOMContentLoaded handler was registered', typeof domReadyCb === 'function');
+domReadyCb();
+t('observes once settled', observers.length === 1, `got ${observers.length}`);
+t('still has not run the loader', lateCalls === 0);
+observers[0].fire(true);
+t('runs on intersection after settling', lateCalls === 1);
+
+// settle() is idempotent and safe to call again.
+DeferLoad.settle();
+t('settle() twice creates no extra observers', observers.length === 1);
+global.setTimeout = realTO;
 
 console.log();
 if (failures.length) {
