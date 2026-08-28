@@ -324,6 +324,42 @@ def _http_get(url: str) -> str:
         return resp.read().decode("utf-8", "replace")
 
 
+def _pubdate_to_iso(raw: str | None, today: date | None = None) -> str | None:
+    """An RSS ``pubDate`` as an ISO date, or None if it will not parse.
+
+    This is load-bearing for two separate reasons, and the first version of the
+    fetcher had neither because it just stamped ``date.today()``:
+
+    * **Honesty.** The card reports how old the snapshot is. Stamping today makes
+      that age unfalsifiable — every pickup reads "fresh, 0 days" no matter when
+      the report was actually written, which defeats the entire point of the
+      staleness work this fetcher was built alongside.
+    * **Stability.** ``report_date`` is also the newness guard. A date that moves
+      every time the same article is re-read lets one unchanging article ratchet
+      the date forward on every poll, so identical numbers would show as freshly
+      published indefinitely. A pubDate is a property of the article, so
+      re-reading it is a no-op.
+
+    A date in the future is a feed or clock error rather than information, so it
+    is refused here and the caller falls back — deliberately *not* passed through
+    to ``_staleness``, which would render it ``unknown`` and hide a good parse
+    behind a bad timestamp.
+    """
+    if not raw or not isinstance(raw, str):
+        return None
+    from email.utils import parsedate_to_datetime
+    try:
+        parsed = parsedate_to_datetime(raw.strip())
+    except (TypeError, ValueError):
+        return None
+    if parsed is None:
+        return None
+    iso = parsed.date().isoformat()
+    if date.fromisoformat(iso) > (today or date.today()):
+        return None
+    return iso
+
+
 def _visible_text(html: str) -> str:
     body = re.sub(r"<script.*?</script>|<style.*?</style>", " ", html, flags=re.S | re.I)
     body = re.sub(r"<[^>]+>", " ", body)
@@ -426,7 +462,7 @@ def fetch_latest_report(spx_ref: float | None = None) -> dict[str, Any] | None:
         return None
 
     items = re.findall(r"<item>(.*?)</item>", rss, re.S)
-    candidates: list[tuple[str, str]] = []
+    candidates: list[tuple[str, str, str | None]] = []
     for item in items:
         title_m = re.search(r"<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?</title>", item, re.S)
         link_m = re.search(r"<link>(.*?)</link>", item, re.S)
@@ -436,7 +472,9 @@ def fetch_latest_report(spx_ref: float | None = None) -> dict[str, Any] | None:
         # Both terms required: "Goldman" alone matches unrelated bank notes, and
         # "CTA" alone is a common enough abbreviation to catch noise.
         if _TITLE_RE.search(title) and re.search(r"\bCTA", title, re.I):
-            candidates.append((title, link_m.group(1).strip()))
+            pub_m = re.search(r"<pubDate>(.*?)</pubDate>", item, re.S)
+            candidates.append((title, link_m.group(1).strip(),
+                               pub_m.group(1) if pub_m else None))
 
     if not candidates:
         log.debug("cta: no CTA item in the %d-item feed window", len(items))
@@ -445,7 +483,7 @@ def fetch_latest_report(spx_ref: float | None = None) -> dict[str, Any] | None:
     current = get_cta_positioning()
     current_date = (current.get("latest") or {}).get("report_date") or ""
 
-    for title, url in candidates:
+    for title, url, pub_raw in candidates:
         try:
             parsed = parse_article(_http_get(url))
         except Exception as exc:  # noqa: BLE001
@@ -461,9 +499,18 @@ def fetch_latest_report(spx_ref: float | None = None) -> dict[str, Any] | None:
             log.warning("cta: REJECTED a parse of %r — %s", title[:70], reason)
             continue
 
-        report_date = date.today().isoformat()
+        # The feed's own publication date, not today. See _pubdate_to_iso: using
+        # today would both overstate freshness and let one article ratchet its
+        # date forward on every poll. The fallback is logged so that a feed which
+        # stops carrying pubDate degrades visibly rather than silently.
+        report_date = _pubdate_to_iso(pub_raw)
+        if not report_date:
+            report_date = date.today().isoformat()
+            log.warning("cta: %r has no usable pubDate (%r) — dating it today, "
+                        "which may overstate freshness", title[:70], pub_raw)
         if report_date <= current_date:
-            log.debug("cta: parsed report is not newer than %s", current_date)
+            log.debug("cta: parsed report (%s) is not newer than %s",
+                      report_date, current_date)
             return None
         snapshot = {
             "latest": {

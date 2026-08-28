@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import importlib.util
 import pathlib
+import re
 import sys
 import unittest
 from datetime import date
@@ -236,6 +237,143 @@ class Precedence(unittest.TestCase):
             out = cta.get_cta_positioning()
         self.assertEqual(out["source_mode"], "ssm")
         self.assertEqual(out["latest"]["report_date"], "2026-08-28")
+
+
+class ReportDateComesFromTheFeed(unittest.TestCase):
+    """``report_date`` must be the article's date, never "today".
+
+    The first version of the fetcher stamped ``date.today()``, which broke both
+    things the date is used for. These tests reproduce each failure rather than
+    just asserting the fixed behaviour.
+    """
+
+    FEED = ('<rss><channel><item>'
+            '<title>Goldman Sachs: CTAs to Net Sell Across the Board</title>'
+            '<link>https://example.invalid/cta-1</link>'
+            '<pubDate>Mon, 10 Aug 2026 13:00:00 GMT</pubDate>'
+            '</item></channel></rss>')
+
+    def _fetch(self, feed=None, tmp=None, current=None):
+        from unittest import mock
+        feed = feed if feed is not None else self.FEED
+        article = REAL_ARTICLE
+
+        def fake_get(url):
+            return feed if url == cta.REPORT_RSS_URL else article
+
+        stack = [
+            mock.patch.object(cta, "_http_get", fake_get),
+            mock.patch.object(cta, "_FETCH_CACHE", tmp or "/dev/null"),
+            mock.patch.object(cta, "_write_fetched", lambda p: None),
+        ]
+        if current is not None:
+            stack.append(mock.patch.object(cta, "_read_fetched", return_value=current))
+        with mock.patch.object(cta, "_http_get", fake_get), \
+             mock.patch.object(cta, "_FETCH_CACHE", tmp or "/dev/null"), \
+             mock.patch.object(cta, "_write_fetched", lambda p: None):
+            if current is not None:
+                with mock.patch.object(cta, "_read_fetched", return_value=current):
+                    return cta.fetch_latest_report(spx_ref=7700.0)
+            return cta.fetch_latest_report(spx_ref=7700.0)
+    def test_pubdate_is_used_not_today(self):
+        got = self._fetch()
+        self.assertIsNotNone(got)
+        self.assertEqual(got["latest"]["report_date"], "2026-08-10")
+        self.assertNotEqual(got["latest"]["report_date"], date.today().isoformat())
+
+    def test_an_old_article_is_dated_honestly_not_marked_fresh(self):
+        """A report published four weeks ago must read as stale, not as new.
+
+        Stamping today would have shown "fresh, 0 days" for numbers four weeks
+        out of date — the exact misrepresentation the staleness work existed to
+        remove. The date chosen is newer than the built-in snapshot (so the
+        newness guard lets it through) but still past STALE_DAYS.
+        """
+        feed = self.FEED.replace("Mon, 10 Aug 2026 13:00:00 GMT",
+                                 "Sat, 01 Aug 2026 13:00:00 GMT")
+        got = self._fetch(feed=feed)
+        self.assertEqual(got["latest"]["report_date"], "2026-08-01")
+        self.assertEqual(cta._staleness("2026-08-01", TODAY)["level"], "stale")
+        # And what the old code would have produced instead reads as fresh:
+        self.assertEqual(cta._staleness(TODAY.isoformat(), TODAY)["level"], "fresh")
+
+    def test_an_article_older_than_what_is_shown_is_refused(self):
+        """Going backwards is worse than showing nothing new.
+
+        The built-in snapshot is dated 2026-07-28, so a June article loses.
+        """
+        feed = self.FEED.replace("Mon, 10 Aug 2026 13:00:00 GMT",
+                                 "Mon, 01 Jun 2026 13:00:00 GMT")
+        self.assertIsNone(self._fetch(feed=feed))
+
+    def test_the_same_article_twice_does_not_re_store(self):
+        """Same-day idempotence: one article read twice stores once."""
+        first = self._fetch()
+        second = self._fetch(current=first)      # same article, snapshot in place
+        self.assertIsNone(second, "an unchanged article must not re-store")
+
+    def test_the_date_does_not_depend_on_when_it_is_read(self):
+        """The property that closes the ratchet, tested where it actually lives.
+
+        With ``report_date = date.today()``, re-reading one unchanged article on
+        a later day yields a *newer* date than the stored one, so it stores again
+        and the card announces a publication that never happened — ratcheting
+        forward on every poll and reading "fresh" forever. Note the same-day test
+        above cannot catch that: within one day ``today <= today`` holds and the
+        guard appears to work.
+
+        A pubDate is a property of the article, so the fix is that this is a pure
+        function of the feed and two different reading days give one answer.
+        """
+        raw = "Mon, 10 Aug 2026 13:00:00 GMT"
+        days = [date(2026, 8, 11), date(2026, 8, 20), date(2026, 9, 30)]
+        got = {cta._pubdate_to_iso(raw, d) for d in days}
+        self.assertEqual(got, {"2026-08-10"})
+        # Whereas "today" would have produced a different answer on each of them.
+        self.assertEqual(len({d.isoformat() for d in days}), 3)
+
+    def test_a_genuinely_newer_article_still_wins(self):
+        """The guard must not be so tight that a real new report is refused."""
+        first = self._fetch()
+        newer = self.FEED.replace("Mon, 10 Aug 2026 13:00:00 GMT",
+                                  "Mon, 17 Aug 2026 13:00:00 GMT")
+        second = self._fetch(feed=newer, current=first)
+        self.assertIsNotNone(second)
+        self.assertEqual(second["latest"]["report_date"], "2026-08-17")
+
+    def test_missing_pubdate_falls_back_to_today_loudly(self):
+        feed = re.sub(r"<pubDate>.*?</pubDate>", "", self.FEED)
+        with self.assertLogs(cta.log, level="WARNING") as logs:
+            got = self._fetch(feed=feed)
+        self.assertEqual(got["latest"]["report_date"], date.today().isoformat())
+        self.assertIn("no usable pubDate", "\n".join(logs.output))
+
+
+class PubDateParsing(unittest.TestCase):
+    REF = date(2026, 8, 28)
+
+    def test_rfc822_forms(self):
+        for raw, want in (
+            ("Mon, 10 Aug 2026 13:00:00 GMT", "2026-08-10"),
+            ("Mon, 10 Aug 2026 13:00:00 +0000", "2026-08-10"),
+            ("10 Aug 2026 13:00:00 GMT", "2026-08-10"),
+            ("Mon, 10 Aug 2026 23:59:59 -0700", "2026-08-10"),
+        ):
+            with self.subTest(raw=raw):
+                self.assertEqual(cta._pubdate_to_iso(raw, self.REF), want)
+
+    def test_unusable_values(self):
+        for bad in (None, "", "   ", "not a date", 12345, [], "Mon, 32 Aug 2026"):
+            with self.subTest(value=bad):
+                self.assertIsNone(cta._pubdate_to_iso(bad, self.REF))
+
+    def test_future_pubdate_refused_so_it_falls_back_rather_than_showing_unknown(self):
+        """A future date is a clock error; passing it through would render the
+        card 'unknown' and hide an otherwise-good parse behind a bad timestamp."""
+        self.assertIsNone(cta._pubdate_to_iso("Mon, 10 Aug 2029 13:00:00 GMT", self.REF))
+        # Today itself is fine — same-day publication is the normal case.
+        self.assertEqual(cta._pubdate_to_iso("Fri, 28 Aug 2026 01:00:00 GMT", self.REF),
+                         "2026-08-28")
 
 
 if __name__ == "__main__":
