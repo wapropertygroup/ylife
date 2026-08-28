@@ -35,6 +35,13 @@ PROVIDER = "yahoo"
 #: exactly one session per process.
 YF_TIMEOUT_SECONDS = fetchguard.env_float("YF_TIMEOUT_SECONDS", 15.0, 1.0)
 
+#: Per-ticker exponential back-off, shared by every consumer of `fetch_group` --
+#: the 8-hour full warm and the 5-minute rolling refresher both consult it, so a
+#: symbol that keeps failing in one is skipped by the other. Persisted, so a
+#: delisted symbol stays skipped across a deploy instead of the whole dead set
+#: being retried at once on the next restart.
+TICKER_BACKOFF = fetchguard.FailureBackoff("tickers", base_seconds=120, max_seconds=3600)
+
 
 class FetchError(Exception):
     """Raised when Yahoo Finance data cannot be retrieved."""
