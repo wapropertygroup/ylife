@@ -23,6 +23,33 @@ PROVIDER = "yahoo"
 #: warmer permanently with nothing in the log to say so.
 YF_TIMEOUT_SECONDS = fetchguard.env_float("YF_TIMEOUT_SECONDS", 15.0, 1.0)
 
+#: Off by default, and it must stay that way until the fork problem below is
+#: solved rather than narrowed. Handing yfinance a curl_cffi session is the only
+#: way to give it a request timeout -- yfinance >=1.x asserts the session type --
+#: but it took stock.li-family.us down twice, the second time for eleven hours.
+#:
+#: The mechanism: under gunicorn --preload this module is imported by the master,
+#: so the session and its libcurl handle are created there, and `YfData` is a
+#: *singleton* that keeps whatever session it was last handed. The master's
+#: background threads bind their session into it before any worker is forked.
+#: routes.py then makes 33 yfinance calls that pass no session of their own, so
+#: each one reaches for the singleton's inherited handle -- a libcurl handle
+#: belonging to the parent process. libcurl handles are not fork-safe, so the
+#: worker dies with SIGSEGV, gunicorn respawns it, and it dies again. Workers
+#: crash-looped every ~2.5 minutes and nothing was served at all: the access log
+#: for the outage window is empty, because no request ever completed.
+#:
+#: Making the session per-thread-per-process (commit 13ec833) was necessary but
+#: nowhere near sufficient -- it fixed the one call site that asks for a session
+#: and left the other 33 inheriting the singleton.
+#:
+#: Re-enabling this needs the singleton reset after fork, not just the session:
+#: a gunicorn `post_fork` hook clearing `YfData._instances`, or every yfinance
+#: call site routed through one helper that passes an explicitly per-process
+#: session. Until then a hung background fetch is the lesser failure -- it is one
+#: stalled thread, against the whole site.
+YF_USE_CURL_CFFI = os.environ.get("YF_USE_CURL_CFFI", "0").strip().lower() in ("1", "true", "yes")
+
 #: Per-ticker exponential back-off, shared by every consumer of `fetch_group` --
 #: the 8-hour full warm and the 5-minute rolling refresher both consult it, so a
 #: symbol that keeps failing in one is skipped by the other. Persisted, so a
@@ -59,10 +86,13 @@ def _yf_session():
     thread-local recorded, and builds its own session instead of touching a
     handle that belongs to a dead parent.
 
-    Returns None if curl_cffi is unavailable, in which case callers fall back to
-    yfinance's own session. That is the old, timeout-less behaviour: worse, but
-    no worse than before, and better than not fetching at all.
+    Returns None if curl_cffi is unavailable or disabled, in which case callers
+    fall back to yfinance's own session. That is the old, timeout-less behaviour:
+    worse, but no worse than before, and better than not fetching at all.
     """
+    if not YF_USE_CURL_CFFI:
+        return None
+
     pid = os.getpid()
     if getattr(_yf_session_state, "pid", None) == pid:
         return _yf_session_state.session
