@@ -9,7 +9,7 @@ fairness nicety, it is the thing standing between a public Google Sign-In button
 and an unbounded bill:
 
 * per user, per day  -- ``AGENTS_DAILY_LIMIT`` (default 3)
-* per VIP, per day   -- ``AGENTS_VIP_DAILY_LIMIT`` (default 50)
+* per VIP, per day   -- ``AGENTS_VIP_DAILY_LIMIT`` (default 15)
 * everyone, per day  -- ``AGENTS_GLOBAL_DAILY_LIMIT`` (default 60)
 
 Past the free daily allowance a user may spend a purchased credit -- see
@@ -85,7 +85,7 @@ def limit_default() -> int:
 
 
 def limit_vip() -> int:
-    return _int_env("AGENTS_VIP_DAILY_LIMIT", 50)
+    return _int_env("AGENTS_VIP_DAILY_LIMIT", 15)
 
 
 def limit_global() -> int:

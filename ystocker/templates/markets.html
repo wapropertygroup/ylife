@@ -3,6 +3,9 @@
 
 {% block content %}
 <script src="{{ url_for('static', filename='markdown.js') }}?v={{ cache_bust or 'dev' }}"></script>
+{# Must be a blocking script, not defer: the panel loaders below call
+   DeferLoad.when() during initial parse. #}
+<script src="{{ url_for('static', filename='deferload.js') }}?v={{ cache_bust or 'dev' }}"></script>
 <style>
   .range-btn {
     font-size: 11px; font-weight: 500; line-height: 1;
@@ -3890,18 +3893,14 @@ function _mktsModalConfig(kind) {
 }
 
 (async function() {
-  // Fire all independent APIs in parallel immediately
+  // Fire the above-the-fold APIs in parallel immediately. Everything further
+  // down the page is registered with DeferLoad and fetched on approach instead —
+  // this batch used to be seven, and the page as a whole used to open twelve
+  // connections at once against two gunicorn workers.
   const fearGreedP    = fetch('/api/fear-greed').then(r => r.json());
   const aaiiP         = fetch('/api/aaii-sentiment').then(r => r.json());
-  const econP         = fetch('/api/economic-events').then(r => r.json());
   const pcrP          = fetch('/api/put-call-ratio').then(r => r.json());
-  const goldRatiosP   = fetch('/api/gold-ratios').then(r => r.json());
   const yieldCurveP   = fetch('/api/yield-curve').then(r => r.json());
-  const ctaP          = fetch('/api/cta-positioning').then(async r => {
-    const data = await r.json();
-    if (!r.ok) throw new Error(data.error || 'CTA data failed');
-    return data;
-  });
 
   // Resolve each as soon as it arrives — don't wait for the slowest
   fearGreedP
@@ -3915,9 +3914,19 @@ function _mktsModalConfig(kind) {
   pcrP
     .then(d => renderPcr(d))
     .catch(e => { document.getElementById('pcrLoading').textContent = '⚠ ' + e.message; });
-  ctaP
-    .then(d => { _ctaData = d; _renderCtaTracker(); })
-    .catch(e => { document.getElementById('ctaLoading').textContent = '⚠ ' + e.message; });
+  // Deferred: this card sits well below the fold, and its fetch was one of the
+  // dozen the page used to fire at once.
+  DeferLoad.when('#ctaPositioningSection', async () => {
+    try {
+      const r = await fetch('/api/cta-positioning');
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'CTA data failed');
+      _ctaData = d;
+      _renderCtaTracker();
+    } catch (e) {
+      document.getElementById('ctaLoading').textContent = '⚠ ' + e.message;
+    }
+  }, { label: 'cta-positioning' });
 
   // VIX vs PCR correlation chart — build after both VIX (from /api/markets) and PCR arrive
   let _vixPcrBuilt = false;
@@ -3994,24 +4003,31 @@ function _mktsModalConfig(kind) {
     return result;
   };
 
-  goldRatiosP
-    .then(renderGoldRatios)
-    .catch(e => {
+  DeferLoad.when('#gsLoading', async () => {
+    try {
+      renderGoldRatios(await fetch('/api/gold-ratios').then(r => r.json()));
+    } catch (e) {
       document.getElementById('gsLoading').textContent = '⚠ ' + e.message;
       document.getElementById('gcLoading').textContent = '⚠ ' + e.message;
-    });
+    }
+  }, { label: 'gold-ratios' });
   yieldCurveP
     .then(renderYieldCurve)
     .catch(e => {
       document.getElementById('usYieldLoading').textContent = '⚠ ' + e.message;
       document.getElementById('cnYieldLoading').textContent = '⚠ ' + e.message;
     });
-  econP
-    .then(d => renderEconEvents(d.events || []))
-    .catch(e => {
+  // The heaviest payload on the page at ~160 KB, and it is the economic calendar
+  // — nobody reads it before scrolling to it.
+  DeferLoad.when('#econSection', async () => {
+    try {
+      const d = await fetch('/api/economic-events').then(r => r.json());
+      renderEconEvents(d.events || []);
+    } catch (e) {
       const el = document.getElementById('econLoading');
       if (el) el.textContent = '⚠ ' + e.message;
-    });
+    }
+  }, { label: 'economic-events' });
 
   try {
     // Check URL hash for a specific index to start on
@@ -4431,7 +4447,10 @@ async function loadCreditSpread(period) {
 }
 
 // Initial load
-loadCreditSpread('1y');
+// The period buttons call loadCreditSpread directly, so only the initial load is
+// deferred — clicking 2y before the card has ever been in view still works.
+DeferLoad.when('#creditChartWrap', () => loadCreditSpread('1y'),
+               { label: 'credit-spread' });
 
 // 10Y-2Y Spread with recession bands + year range buttons
 let _ysData = null, _ysChart = null;
@@ -4492,7 +4511,7 @@ function _renderYieldSpread(range) {
   });
 }
 
-(async function() {
+DeferLoad.when('#yieldSpreadChartWrap', async function() {
   const loadingEl = document.getElementById('yieldSpreadLoading');
   const wrapEl    = document.getElementById('yieldSpreadChartWrap');
   try {
@@ -4529,10 +4548,10 @@ function _renderYieldSpread(range) {
     console.warn('Yield spread chart failed:', e);
     if (loadingEl) loadingEl.textContent = '⚠ Unable to load spread data (FRED timeout). Retry later.';
   }
-})();
+}, { label: 'yield-spread' });
 
 // Crypto prices (from history endpoint)
-(async function() {
+DeferLoad.when('#cryptoChart', async function() {
   try {
     const [btcResp, ethResp] = await Promise.all([
       fetch('/api/history/BTC-USD?period=2d'),
@@ -4616,7 +4635,7 @@ function _renderYieldSpread(range) {
       }
     } catch(e) {}
   } catch(e) {}
-})();
+}, { label: 'crypto-history' });
 
 // ── CBOE SKEW: interpretation bands + cross-market divergence ─────────────
 // The bands are an ordered severity scale, so they take a monotone escalation
@@ -4811,7 +4830,7 @@ document.addEventListener('i18n:langchange', () => {
 });
 
 // CBOE SKEW vs VIX
-(async function() {
+DeferLoad.when('#skewChart', async function() {
   try {
     const resp = await fetch('/api/skew');
     if (!resp.ok) return;
@@ -4861,7 +4880,7 @@ document.addEventListener('i18n:langchange', () => {
       plugins:[_skBandPlugin],
     });
   } catch(e) {}
-})();
+}, { label: 'skew' });
 
 // Market Breadth — every MA period, with range selector (1Y / 3Y / 5Y / 10Y)
 // i18n.js exposes `I18n` as a top-level const, not as window.I18n — reach it by
@@ -5119,7 +5138,7 @@ function _renderBreadth(range) {
   }
 }
 
-(async function() {
+DeferLoad.when('#breadthSection', async function() {
   try {
     // /api/breadth answers 202 + {warming:true} while the background thread does
     // the 500-ticker build, rather than blocking the request for ~82s as it used
@@ -5170,10 +5189,10 @@ function _renderBreadth(range) {
       });
     });
   } catch(e) { console.warn('Breadth chart failed:', e); }
-})();
+}, { label: 'breadth' });
 
 // Sector Rotation Grid
-(async function() {
+DeferLoad.when('#sectorGridTable', async function() {
   try {
     const resp = await fetch('/api/sector-rotation-grid');
     if (!resp.ok) return;
@@ -5192,10 +5211,10 @@ function _renderBreadth(range) {
     html += '</tbody></table>';
     document.getElementById('sectorGridTable').innerHTML = html;
   } catch(e) {}
-})();
+}, { label: 'sector-rotation-grid' });
 
 // Sector Ranking Leaderboard
-(async function() {
+DeferLoad.when('#sectorRankingTable', async function() {
   try {
     const data = await fetch('/api/sector-ranking').then(r=>r.json());
     if (!data || !data.length) return;
@@ -5239,7 +5258,7 @@ function _renderBreadth(range) {
         </tbody>
       </table>`;
   } catch(e) { document.getElementById('sectorRankingTable').innerHTML = ''; }
-})();
+}, { label: 'sector-ranking' });
 </script>
 
 {% endblock %}
