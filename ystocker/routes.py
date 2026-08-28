@@ -3043,6 +3043,31 @@ def api_agents_showcase_job_pdf(job_id):
 # Syndication — iCalendar + RSS
 # ---------------------------------------------------------------------------
 
+@bp.route("/sw.js")
+def service_worker():
+    """Serve the service worker from the site root.
+
+    It cannot simply be linked as ``/static/sw.js``: a worker's default scope is
+    the directory it was served from, so one served under ``/static/`` may only
+    intercept requests under ``/static/`` and could never handle a navigation.
+    Serving the same file from ``/`` gives it root scope with no need for the
+    ``Service-Worker-Allowed`` header.
+
+    ``no-cache`` matters more here than anywhere else on the site. The browser
+    checks for a new worker by re-requesting this URL, so a cached copy is how a
+    bad worker becomes permanent — the mechanism meant to replace it is the very
+    thing being served from cache.
+    """
+    from flask import send_from_directory
+
+    static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
+    resp = send_from_directory(static_dir, "sw.js", mimetype="application/javascript")
+    resp.headers["Cache-Control"] = "no-cache, must-revalidate"
+    return resp
+
+
+# ---------------------------------------------------------------------------
+
 # Alias first, canonical second: url_for() builds from the last rule registered
 # for an endpoint, so this order is what makes the UI link to /calendar.ics
 # rather than the alias.
@@ -5171,14 +5196,32 @@ def _cta_freshness() -> dict:
 def _cta_spx_reference() -> Optional[float]:
     """Live S&P 500 level for validating a parsed trigger, or None.
 
-    Peeked, never fetched: this is a validation input, and it must not be able to
-    drag a 30-symbol Yahoo rebuild into a background timer. Without it
-    cta._validate falls back to a plain range check, which is weaker but still
-    rejects the failure that mattered.
+    Never triggers a Yahoo rebuild: this is a validation input and a side value on
+    a card, and it must not be able to drag 30 symbols with a year of history each
+    into a request or a background timer. Without it cta._validate falls back to a
+    plain range check, which is weaker but still rejects the failure that mattered.
+
+    Memory first, then DynamoDB. The DynamoDB step is not redundant — ``--preload``
+    means the warm-up thread runs in the master, so each *worker* starts with
+    whatever snapshot it inherited at fork and refills only when it happens to
+    serve /api/markets itself. Peeking memory alone therefore made the distance
+    block appear or vanish depending on which of the two workers answered, which
+    was measured on the box: absent on one request, then present ten times running
+    once both workers had warmed. A shared read makes it deterministic, and it is
+    a single key lookup rather than a fetch.
     """
+    entry = None
     try:
         with _MARKETS_CACHE_LOCK:
             entry = _MARKETS_CACHE.get("data")
+    except Exception as exc:  # noqa: BLE001
+        log.debug("cta: markets memory peek failed: %s", exc)
+    if not entry:
+        try:
+            entry = _markets_load_from_dynamo()
+        except Exception as exc:  # noqa: BLE001
+            log.debug("cta: markets DynamoDB peek failed: %s", exc)
+    try:
         spx = (((entry or {}).get("data") or {}).get("indices") or {}).get("spx") or {}
         current = spx.get("current")
         return float(current) if isinstance(current, (int, float)) else None
