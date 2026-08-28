@@ -3210,6 +3210,45 @@ def _adv_dec_cached() -> dict | None:
         return None
 
 
+@bp.route("/api/evaluation-extras")
+def api_evaluation_extras():
+    """Analyst revisions and Yahoo sector aggregates for /evaluation.
+
+    One endpoint for both because the page wants them together and they are both
+    peeks at already-warm caches — two requests for two cache reads would be
+    noise. Deferred client-side, so this is not on the critical path.
+
+    Both use peek(): the analyst sweep is 210 paced Yahoo calls and the sector
+    fetch is eleven, and neither may ever be triggered by a page view. A cold
+    cache yields an absent key and the card hides itself.
+    """
+    log.info("API evaluation-extras")
+    out: dict = {}
+
+    try:
+        from ystocker import analyst
+        payload = analyst.peek()
+        if payload and payload.get("tickers"):
+            out["analyst"] = payload
+    except Exception as exc:  # noqa: BLE001
+        log.debug("evaluation-extras: analyst unavailable: %s", exc)
+
+    try:
+        from ystocker import sectors
+        payload = sectors.peek()
+        if payload and payload.get("sectors"):
+            out["sectors"] = payload
+    except Exception as exc:  # noqa: BLE001
+        log.debug("evaluation-extras: sectors unavailable: %s", exc)
+
+    if not out:
+        # 200 with an empty body, not 404: "warming" is a normal state here and
+        # the client hides both cards either way. A 4xx would show in the console
+        # as though something were broken.
+        log.info("API evaluation-extras: neither cache warm yet")
+    return jsonify(out)
+
+
 @bp.route("/api/multiples")
 def api_multiples():
     """JSON API — index P/E multiples. 202 while the cache is being rebuilt."""

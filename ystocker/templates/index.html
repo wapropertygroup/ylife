@@ -2,6 +2,7 @@
 {% block title %}yStocker — Valuation Dashboard{% endblock %}
 
 {% block content %}
+<script src="{{ url_for('static', filename='deferload.js') }}?v={{ cache_bust or 'dev' }}"></script>
 
 <!-- ── Fullscreen chart modal ────────────────────────────────────────── -->
 <div x-data="chartModal()"
@@ -81,6 +82,74 @@
   .sector-sort-btn:hover { color: #cbd5e1; border-color: #475569; }
   .sector-sort-btn.active { color: #a5b4fc; border-color: #6366f1; background: rgba(99,102,241,0.15); }
 </style>
+<!-- ── Analyst estimate revisions ──────────────────────────────────────────
+     The peer-group tables below show Upside (%) — one target price against the
+     current one — which says nothing about which way estimates are moving. This
+     is that: next-year EPS as it stands now against 30 days ago, and how many
+     analysts moved each way. Deferred, and hidden entirely when the cache is
+     cold, because the sweep behind it is 210 paced Yahoo calls. -->
+<div id="evRevisions" class="mb-8 fade-up" style="display:none">
+  <div class="flex items-baseline justify-between mb-3 flex-wrap gap-2">
+    <h2 class="text-lg sm:text-xl font-semibold text-slate-200"
+        data-i18n="index.rev_title">Estimate Revisions</h2>
+    <span class="text-[11px] text-slate-600">
+      <span data-i18n="index.rev_sub">Next-year EPS vs 30 days ago · analysts moving up/down</span>
+      <span id="evRevAsOf" class="text-slate-700"></span>
+    </span>
+  </div>
+  <div class="flex gap-1 mb-3 flex-wrap" id="evRevTabs">
+    <button class="sector-sort-btn active" data-rev="up" data-i18n="index.rev_upgraded">Raised most</button>
+    <button class="sector-sort-btn" data-rev="down" data-i18n="index.rev_cut">Cut most</button>
+    <button class="sector-sort-btn" data-rev="net" data-i18n="index.rev_net">Most analysts moving</button>
+  </div>
+  <div class="overflow-x-auto bg-slate-900 border border-slate-800 rounded-2xl p-3">
+    <table class="w-full text-xs">
+      <thead>
+        <tr class="text-slate-500 border-b border-slate-800">
+          <th class="text-left font-medium py-1.5 pr-3" data-i18n="index.rev_ticker">Ticker</th>
+          <th class="text-right font-medium py-1.5 px-2" data-i18n="index.rev_eps">+1y EPS</th>
+          <th class="text-right font-medium py-1.5 px-2" data-i18n="index.rev_30d">vs 30d</th>
+          <th class="text-right font-medium py-1.5 px-2" data-i18n="index.rev_updn">Up / Down</th>
+          <th class="text-right font-medium py-1.5 px-2" data-i18n="index.rev_recs">Buy / Hold / Sell</th>
+          <th class="text-right font-medium py-1.5 pl-2" data-i18n="index.rev_target">Target</th>
+        </tr>
+      </thead>
+      <tbody id="evRevBody"></tbody>
+    </table>
+  </div>
+  <p class="text-[10px] text-slate-600 mt-1.5" data-i18n="index.rev_note">Yahoo covers estimates unevenly — tickers with no analyst coverage are omitted rather than shown as zero.</p>
+</div>
+
+<!-- ── Yahoo's canonical sectors ────────────────────────────────────────────
+     Deliberately separate from the peer groups below, and labelled as Yahoo's:
+     a peer group here is our own definition — "AI / Robotics" is not a GICS
+     sector and mixes NVDA with SMCI — so presenting the two together would imply
+     the medians below are sector medians, which they are not. -->
+<div id="evSectors" class="mb-8 fade-up" style="display:none">
+  <div class="flex items-baseline justify-between mb-3 flex-wrap gap-2">
+    <h2 class="text-lg sm:text-xl font-semibold text-slate-200"
+        data-i18n="index.ysec_title">Market Sectors</h2>
+    <span class="text-[11px] text-slate-600">
+      <span data-i18n="index.ysec_sub">Yahoo's eleven sectors by share of total market cap</span>
+      <span id="evSecAsOf" class="text-slate-700"></span>
+    </span>
+  </div>
+  <div class="overflow-x-auto bg-slate-900 border border-slate-800 rounded-2xl p-3">
+    <table class="w-full text-xs">
+      <thead>
+        <tr class="text-slate-500 border-b border-slate-800">
+          <th class="text-left font-medium py-1.5 pr-3" data-i18n="index.ysec_sector">Sector</th>
+          <th class="text-right font-medium py-1.5 px-2" data-i18n="index.ysec_weight">Weight</th>
+          <th class="text-right font-medium py-1.5 px-2" data-i18n="index.ysec_cap">Market cap</th>
+          <th class="text-right font-medium py-1.5 px-2" data-i18n="index.ysec_cos">Companies</th>
+          <th class="text-left font-medium py-1.5 pl-2" data-i18n="index.ysec_leaders">Largest</th>
+        </tr>
+      </thead>
+      <tbody id="evSecBody"></tbody>
+    </table>
+  </div>
+</div>
+
 <h2 id="sectors" class="text-lg sm:text-xl font-semibold text-slate-200 mb-4 fade-up" data-i18n="index.sector_overview">Sector Overview</h2>
 <div class="flex items-center gap-2 mb-3 flex-wrap">
   <span class="text-[10px] text-slate-600 uppercase tracking-widest" data-i18n="index.sort_by">Sort by</span>
@@ -1047,6 +1116,150 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('etfDayChgSort').classList.toggle('border-brand/40', true);
     renderEtf();
   };
+})();
+</script>
+<!-- ── Estimate revisions + Yahoo sectors ──────────────────────────────────
+     Both come from /api/evaluation-extras, one request for two cache peeks. It
+     is deferred rather than fired on load because /evaluation already renders 26
+     peer-group cards and several charts from server-side data, and these two are
+     additions rather than the point of the page. -->
+<script>
+(function () {
+  'use strict';
+  let _extras = null;
+  let _revMode = 'up';
+
+  const num = (v, nd) => (typeof v === 'number' ? v.toFixed(nd == null ? 2 : nd) : '—');
+  const signed = (v, nd) => (typeof v === 'number'
+    ? (v >= 0 ? '+' : '') + v.toFixed(nd == null ? 2 : nd) : '—');
+  const capT = v => (typeof v === 'number'
+    ? (v >= 1e12 ? '$' + (v / 1e12).toFixed(1) + 'T' : '$' + (v / 1e9).toFixed(0) + 'B') : '—');
+
+  function revRows() {
+    const t = (_extras && _extras.analyst && _extras.analyst.tickers) || {};
+    const lead = (_extras.analyst.lead_period) || '+1y';
+    const rows = Object.values(t).map(d => {
+      const tr = (d.eps_trend || {})[lead] || {};
+      const rv = (d.eps_revisions || {})[lead] || {};
+      const rec = (d.recommendations || [])[0] || {};
+      return {
+        ticker: d.ticker,
+        eps: tr.current, chg: tr.chg30_pct, abs: tr.chg30_abs,
+        up: rv.up30, down: rv.down30, net: rv.net30,
+        moved: (rv.up30 || 0) + (rv.down30 || 0),
+        rec, target: (d.price_target || {}).upside_pct,
+      };
+    // Only rows that actually carry the signal the table is about.
+    }).filter(r => typeof r.chg === 'number' || typeof r.net === 'number');
+
+    const by = {
+      up:   (a, b) => (b.chg == null ? -1 : b.chg) - (a.chg == null ? -1 : a.chg),
+      down: (a, b) => (a.chg == null ? 1 : a.chg) - (b.chg == null ? 1 : b.chg),
+      net:  (a, b) => b.moved - a.moved,
+    }[_revMode];
+    return rows.sort(by).slice(0, 15);
+  }
+
+  function renderRevisions() {
+    const wrap = document.getElementById('evRevisions');
+    const body = document.getElementById('evRevBody');
+    if (!wrap || !body || !_extras || !_extras.analyst) return;
+    const rows = revRows();
+    if (!rows.length) return;
+    body.innerHTML = rows.map(r => {
+      const up = typeof r.up === 'number' ? r.up : 0;
+      const dn = typeof r.down === 'number' ? r.down : 0;
+      const chgCls = r.chg == null ? 'text-slate-500'
+                   : r.chg > 0 ? 'text-emerald-400' : r.chg < 0 ? 'text-rose-400' : 'text-slate-400';
+      return `<tr class="border-b border-slate-800/60 last:border-0">
+        <td class="py-1.5 pr-3"><a href="/history/${r.ticker}"
+            class="font-semibold text-slate-200 hover:text-brand transition">${r.ticker}</a></td>
+        <td class="py-1.5 px-2 text-right font-mono text-slate-300">${num(r.eps)}</td>
+        <td class="py-1.5 px-2 text-right font-mono ${chgCls}">${signed(r.chg)}%
+          <span class="text-slate-600 text-[10px]">${r.abs != null ? '(' + signed(r.abs) + ')' : ''}</span></td>
+        <td class="py-1.5 px-2 text-right font-mono">
+          <span class="text-emerald-400">${up}▲</span><span class="text-slate-700">/</span><span class="text-rose-400">${dn}▼</span></td>
+        <td class="py-1.5 px-2 text-right font-mono text-slate-400">
+          ${(r.rec.strong_buy != null || r.rec.buy != null)
+            ? `${(r.rec.strong_buy || 0) + (r.rec.buy || 0)}/${r.rec.hold || 0}/${(r.rec.sell || 0) + (r.rec.strong_sell || 0)}`
+            : '—'}</td>
+        <td class="py-1.5 pl-2 text-right font-mono ${r.target > 0 ? 'text-emerald-400' : 'text-slate-400'}">
+          ${r.target != null ? signed(r.target, 1) + '%' : '—'}</td>
+      </tr>`;
+    }).join('');
+
+    const a = _extras.analyst;
+    const asOf = document.getElementById('evRevAsOf');
+    if (asOf) {
+      asOf.textContent = ' · ' + (a.asof || '') + ' · '
+        + (a.covered || 0) + '/' + (a.universe || 0)
+        + ' ' + (I18n.t('index.rev_covered') || 'covered')
+        + (a.stale ? ' (' + (I18n.t('index.rev_stale') || 'cached') + ')' : '');
+    }
+    wrap.style.display = '';
+  }
+
+  function renderSectors() {
+    const wrap = document.getElementById('evSectors');
+    const body = document.getElementById('evSecBody');
+    const list = _extras && _extras.sectors && _extras.sectors.sectors;
+    if (!wrap || !body || !Array.isArray(list) || !list.length) return;
+    const max = Math.max(...list.map(r => r.market_weight || 0), 1);
+    body.innerHTML = list.map(r => `<tr class="border-b border-slate-800/60 last:border-0">
+      <td class="py-1.5 pr-3 text-slate-300">
+        <span class="inline-block align-middle mr-1.5 h-1.5 rounded"
+              style="width:${Math.round((r.market_weight || 0) / max * 46)}px;background:#6366f1"></span>
+        ${I18n.t('index.ysec_' + r.key) || r.name || r.key}</td>
+      <td class="py-1.5 px-2 text-right font-mono text-slate-300">${num(r.market_weight, 1)}%</td>
+      <td class="py-1.5 px-2 text-right font-mono text-slate-400">${capT(r.market_cap)}</td>
+      <td class="py-1.5 px-2 text-right font-mono text-slate-500">${r.companies != null ? r.companies : '—'}</td>
+      <td class="py-1.5 pl-2 text-slate-500 text-[11px]">
+        ${(r.top_companies || []).slice(0, 3).map(c =>
+          `<a href="/history/${c.ticker}" class="hover:text-brand transition">${c.ticker}</a>`
+        ).join('<span class="text-slate-700"> · </span>')}</td>
+    </tr>`).join('');
+    const asOf = document.getElementById('evSecAsOf');
+    if (asOf) {
+      asOf.textContent = ' · ' + (_extras.sectors.asof || '')
+        + (_extras.sectors.stale ? ' (' + (I18n.t('index.rev_stale') || 'cached') + ')' : '');
+    }
+    wrap.style.display = '';
+  }
+
+  async function load() {
+    try {
+      _extras = await fetch('/api/evaluation-extras').then(r => r.json());
+    } catch (e) {
+      console.warn('[evaluation-extras] unavailable:', e);
+      return;
+    }
+    if (!_extras || (!_extras.analyst && !_extras.sectors)) return;   // caches cold
+    renderRevisions();
+    renderSectors();
+  }
+
+  document.getElementById('evRevTabs')?.addEventListener('click', ev => {
+    const btn = ev.target.closest('[data-rev]');
+    if (!btn) return;
+    _revMode = btn.dataset.rev;
+    document.querySelectorAll('#evRevTabs [data-rev]').forEach(b =>
+      b.classList.toggle('active', b === btn));
+    renderRevisions();
+  });
+
+  // Re-render on a language switch: the labels come from i18n and setLang() does
+  // not reload the page.
+  document.addEventListener('i18n:langchange', () => {
+    if (_extras) { renderRevisions(); renderSectors(); }
+  });
+
+  // Anchored on the "Sector Overview" heading, NOT on #evRevisions: both cards
+  // start display:none until their data arrives, so they have no box and
+  // IntersectionObserver could never fire for them — deferload would load eagerly
+  // and defer nothing. tests/test_deferload_anchors.py catches exactly that, and
+  // caught it here. The heading sits immediately below both cards and is in flow
+  // from parse time, so intersecting it means this region is on screen.
+  DeferLoad.when('#sectors', load, { label: 'evaluation-extras' });
 })();
 </script>
 {% endblock %}
