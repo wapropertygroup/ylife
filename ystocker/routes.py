@@ -3178,6 +3178,19 @@ def multiples_refresh():
     return redirect(url_for("main.multiples"))
 
 
+def _etf_holdings_cached() -> dict | None:
+    """SPY/QQQ composition if it is already cached. Never fetches."""
+    try:
+        from ystocker import etf_holdings
+        payload = etf_holdings.peek()
+        if not payload or not payload.get("etfs"):
+            return None
+        return payload
+    except Exception as exc:  # noqa: BLE001
+        log.debug("etf_holdings unavailable: %s", exc)
+        return None
+
+
 def _adv_dec_cached() -> dict | None:
     """Per-index advancers/decliners, but only if breadth is already cached.
 
@@ -3221,6 +3234,14 @@ def api_multiples():
             adv = _adv_dec_cached()
             if adv:
                 resp["adv_dec"] = adv
+            # ETF composition rides along the same way, and for the same reason:
+            # peek() never fetches, so a cold or rate-limited Yahoo leaves the key
+            # absent and the card hides itself rather than the page failing. It is
+            # here rather than in the valuation payload so adding it did not mean
+            # bumping valuation's _CACHE_VER and forcing a 600-lookup rebuild.
+            comp = _etf_holdings_cached()
+            if comp:
+                resp["composition"] = comp
             log.info("API multiples: served from cache (%d trailing series, %d forward)",
                      len(resp.get("multpl", {})), len(resp.get("forward", {})))
             return jsonify(resp)

@@ -77,6 +77,7 @@ MODULES = (
     "ystocker.breadth",
     "ystocker.sec13f",
     "ystocker.quota",
+    "ystocker.etf_holdings",
     "ystocker.routes",
 )
 
@@ -108,7 +109,8 @@ class ImportGraphTests(unittest.TestCase):
     def test_cached_modules_expose_peek(self):
         """brief.py calls peek() on each of these; a rename would break it."""
         import importlib
-        for name in ("fed", "fedwatch", "housing", "valuation", "breadth"):
+        for name in ("fed", "fedwatch", "housing", "valuation", "breadth",
+                     "etf_holdings"):
             with self.subTest(module=name):
                 mod = importlib.import_module(f"ystocker.{name}")
                 self.assertTrue(callable(getattr(mod, "peek", None)),

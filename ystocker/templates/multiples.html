@@ -152,6 +152,34 @@
       </p>
       <div id="vpAdvDecRows" class="flex flex-wrap gap-x-5 gap-y-1"></div>
     </div>
+
+    <!-- ── What is actually in the two ETFs ─────────────────────────────────
+         The forward P/E above is computed bottom-up from constituents at ~24%
+         coverage by count, and that caveat is printed beside it. This says what
+         the covered part *is*: sector weights, and how much of the index sits in
+         its ten largest names. Rides in on the same payload via
+         etf_holdings.peek(), so it is absent rather than slow when Yahoo is
+         cold. -->
+    <div id="vpComp" class="mt-3 pt-3 border-t border-slate-800" style="display:none">
+      <p class="text-[11px] text-slate-500 mb-2">
+        <span data-i18n="mult.comp_label">Index composition</span>
+        <span id="vpCompAsOf" class="text-slate-600"></span>
+      </p>
+      <div class="overflow-x-auto">
+        <table class="w-full text-[11px]" id="vpCompTable">
+          <thead>
+            <tr class="text-slate-500">
+              <th class="text-left font-medium py-1 pr-3" data-i18n="mult.comp_sector">Sector</th>
+              <th class="text-right font-medium py-1 px-2">SPY</th>
+              <th class="text-right font-medium py-1 px-2">QQQ</th>
+            </tr>
+          </thead>
+          <tbody id="vpCompBody"></tbody>
+        </table>
+      </div>
+      <div id="vpCompConc" class="mt-2 flex flex-wrap gap-x-5 gap-y-1"></div>
+      <div id="vpCompTop" class="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1"></div>
+    </div>
   </div>
 
   <div class="vp-section"><h2 data-i18n="mult.sec_consensus">Consensus Forward P/E — Published History</h2><div class="rule"></div></div>
@@ -727,6 +755,71 @@ const _explainData = {};
         cov.textContent = (I18n.t('mult.computed_over') || 'Computed over') + ' ' + parts.join(' · ');
       }
     }
+
+    // ── Index composition: sector weights, concentration, top holdings ──
+    // Sector order is fixed server-side (etf_holdings.SECTORS) because Yahoo
+    // returns the dict unordered, and a table whose rows move between refreshes
+    // cannot be read.
+    (function renderComposition() {
+      const comp = data.composition;
+      const wrap = document.getElementById('vpComp');
+      const body = document.getElementById('vpCompBody');
+      if (!wrap || !body || !comp || !comp.etfs) return;
+      const spy = comp.etfs.SPY, qqq = comp.etfs.QQQ;
+      if (!spy && !qqq) return;
+
+      const pct = v => (typeof v === 'number' ? v.toFixed(1) + '%' : '—');
+      // Union of the sectors either ETF reported, in the order SPY lists them —
+      // which is the server's fixed order, so QQQ's zero-weight sectors still
+      // line up rather than being dropped.
+      const keys = Object.keys((spy || qqq).sector_weights || {});
+      body.innerHTML = keys.map(k => {
+        const a = spy && spy.sector_weights ? spy.sector_weights[k] : null;
+        const b = qqq && qqq.sector_weights ? qqq.sector_weights[k] : null;
+        if (a == null && b == null) return '';
+        const label = (I18n.t('mult.comp_' + k) || k.replace(/_/g, ' '));
+        const bar = typeof a === 'number' ? Math.min(100, a) : 0;
+        return `<tr class="border-t border-slate-800/60">
+          <td class="py-1 pr-3 text-slate-400">
+            <span class="inline-block align-middle mr-1.5 h-1 rounded"
+                  style="width:${bar.toFixed(0)}px;background:#6366f1"></span>${label}</td>
+          <td class="py-1 px-2 text-right font-mono text-slate-300">${pct(a)}</td>
+          <td class="py-1 px-2 text-right font-mono text-slate-300">${pct(b)}</td>
+        </tr>`;
+      }).join('');
+
+      // Concentration is the reading this card exists for.
+      const conc = document.getElementById('vpCompConc');
+      if (conc) {
+        conc.innerHTML = [['SPY', spy], ['QQQ', qqq]].filter(([, e]) => e).map(([k, e]) =>
+          `<span class="text-[11px] text-slate-400">`
+          + `<span class="font-semibold text-slate-300">${k}</span> `
+          + `${I18n.t('mult.comp_top10') || 'top 10'} `
+          + `<span class="font-mono text-amber-400">${pct(e.top10_weight)}</span>`
+          + (typeof e.top1_weight === 'number'
+              ? ` <span class="text-slate-600">(${I18n.t('mult.comp_largest') || 'largest'} `
+                + `${pct(e.top1_weight)})</span>` : '')
+          + `</span>`).join('');
+      }
+
+      const top = document.getElementById('vpCompTop');
+      if (top) {
+        top.innerHTML = [['SPY', spy], ['QQQ', qqq]].filter(([, e]) => e && e.holdings.length)
+          .map(([k, e]) => `<div class="text-[11px] text-slate-500">`
+            + `<span class="font-semibold text-slate-400">${k}</span> `
+            + e.holdings.slice(0, 5).map(h =>
+                `<span class="text-slate-400">${h.ticker}</span>`
+                + `<span class="text-slate-600"> ${pct(h.weight)}</span>`).join('<span class="text-slate-700"> · </span>')
+            + `</div>`).join('');
+      }
+
+      const asOf = document.getElementById('vpCompAsOf');
+      if (asOf) {
+        asOf.textContent = ' — ' + (comp.asof || '')
+          + (comp.stale ? ' (' + (I18n.t('mult.comp_stale') || 'cached') + ')' : '');
+      }
+      wrap.style.display = '';
+    })();
 
     // ── Advancers / decliners for the same two indices ──────────────────
     // Rides in on the multiples payload via breadth.peek(), so it is absent
