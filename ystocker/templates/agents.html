@@ -87,6 +87,29 @@ window.YSTime = (function () {
 .ag-form-field .ag-input {
   box-sizing: border-box; width: 100%; height: 38px;
 }
+/* Native date controls keep an intrinsic width and center their value on some
+   mobile WebKit builds. Give the real type=date input a stable surface while
+   retaining the platform picker underneath it. */
+.ag-date-wrap { position: relative; min-width: 0; }
+#agDate {
+  display: block; width: 100%; min-width: 0; max-width: 100%;
+  inline-size: 100%; min-inline-size: 0; max-inline-size: 100%;
+  padding-right: 42px; color-scheme: dark; font-family: inherit;
+  line-height: 1.25rem; text-align: left;
+  -webkit-appearance: none; appearance: none;
+}
+#agDate::-webkit-date-and-time-value {
+  min-height: 1.25rem; margin: 0; text-align: left;
+}
+#agDate::-webkit-datetime-edit { padding: 0; }
+#agDate::-webkit-calendar-picker-indicator {
+  position: absolute; inset: 0; width: auto; height: auto;
+  margin: 0; opacity: 0; cursor: pointer;
+}
+.ag-date-icon {
+  position: absolute; right: 12px; top: 50%; width: 17px; height: 17px;
+  transform: translateY(-50%); pointer-events: none; color: #64748b;
+}
 .ag-form-actions {
   display: grid; grid-template-columns: repeat(2, max-content); gap: 8px;
 }
@@ -486,6 +509,8 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
   .ag-btn:active:not(:disabled) { transform: translateY(1px); }
   .ag-signin-btn { width: 100%; max-width: 18rem; }
   .ag-form-grid { grid-template-columns: minmax(0, 1fr); }
+  .ag-form-field .ag-input { height: 44px; min-height: 44px; }
+  #agDate { width: 100%; }
   .ag-form-actions, .ag-form-quota { grid-column: 1; }
   .ag-form-actions { grid-template-columns: minmax(0, 1fr); }
   .ag-form-actions .ag-btn { width: 100%; }
@@ -982,7 +1007,13 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
     </div>
     <div class="ag-form-field">
       <label class="block text-xs text-slate-500 mb-1" for="agDate" data-i18n="agents.date">Analysis date</label>
-      <input id="agDate" class="ag-input" type="date" value="{{ agent_env.today if agent_env.today else '' }}">
+      <div class="ag-date-wrap">
+        <input id="agDate" class="ag-input" type="date" value="{{ agent_env.today if agent_env.today else '' }}">
+        <svg class="ag-date-icon" aria-hidden="true" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
+                d="M7 3v3m10-3v3M4.5 9.5h15M6 5h12a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z"/>
+        </svg>
+      </div>
     </div>
     <div class="ag-form-actions">
       <button id="agRun" class="ag-btn" data-i18n="agents.run">▶ Run analysis</button>
