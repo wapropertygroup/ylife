@@ -679,6 +679,10 @@ def api_cache_age():
         "last_updated": last,
         "providers": fetchguard.snapshot(),
         "tickers_backed_off": _ticker_backoff.snapshot(),
+        # The CTA card has no upstream feed — every value is hand-entered — so
+        # its age is an ops signal, not a cache metric. It belongs next to the
+        # back-off state because both answer "why does this look wrong".
+        "cta": _cta_freshness(),
     })
 
 
@@ -5152,6 +5156,52 @@ def markets():
     """Market overview page — the application home."""
     return render_template("markets.html",
                            peer_groups=list(PEER_GROUPS.keys()))
+
+
+def _cta_freshness() -> dict:
+    """Age of the Goldman CTA snapshot, for /api/cache-age. Never raises."""
+    try:
+        from ystocker import cta
+        return (cta.get_cta_positioning().get("freshness") or {})
+    except Exception as exc:  # noqa: BLE001
+        log.debug("cta freshness unavailable: %s", exc)
+        return {}
+
+
+def _cta_staleness_loop() -> None:
+    """Log the CTA snapshot's age once a day.
+
+    There is nothing to fetch — Goldman's model is proprietary and every number
+    on that card is entered by hand from a public write-up. So this is the whole
+    of what automation can honestly do here: notice, on a schedule, that nobody
+    has updated it, and say so somewhere a human will see. It is why the built-in
+    payload sat a month out of date without anyone noticing.
+    """
+    from ystocker import cta
+
+    while True:
+        try:
+            payload = cta.get_cta_positioning()
+            f = payload.get("freshness") or {}
+            level, age = f.get("level"), f.get("report_age_days")
+            line = ("CTA snapshot: %s (%s days old, source=%s)"
+                    % (level, age, payload.get("source_mode")))
+            if level in ("stale", "unknown"):
+                log.warning("%s — update GOLDMAN_CTA_DATA_JSON in SSM; the card "
+                            "is showing this as historical", line)
+            elif level == "aging":
+                log.info("%s — no new Goldman report recorded for over a week", line)
+            else:
+                log.info("%s", line)
+        except Exception:
+            log.exception("CTA staleness check failed")
+        time.sleep(24 * 3600)
+
+
+def _start_cta_staleness_scheduler() -> None:
+    t = threading.Thread(target=_cta_staleness_loop, daemon=True, name="cta-staleness")
+    t.start()
+    log.info("CTA staleness checker started (daily)")
 
 
 @bp.route("/api/cta-positioning")

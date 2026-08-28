@@ -732,6 +732,13 @@
         <span id="ctaAsOf" class="text-[10px] px-2 py-0.5 rounded-full border border-slate-700 text-slate-500"></span>
       </div>
       <p class="text-xs text-slate-500 mt-0.5" data-i18n="markets.cta_desc">Dated Goldman estimates from public reporting, monitored against the live S&amp;P 500.</p>
+      <!-- Shown only once the snapshot has aged. There is no API behind this card
+           — every value is hand-entered from a public write-up of Goldman's
+           weekly CTA Corner — so the thing that goes wrong is nobody updating it,
+           and a month-old reading in the same grey as yesterday's hides exactly
+           that. Level and age come from the payload (cta._staleness) so the
+           thresholds live in one place. -->
+      <p id="ctaStale" class="text-[11px] mt-1 hidden"></p>
     </div>
     <button onclick="expandMktsChart('cta')" title="Expand" data-i18n-title="markets.expand"
             class="text-slate-500 hover:text-slate-200 transition p-1 rounded-lg hover:bg-slate-800 shrink-0">
@@ -1422,8 +1429,38 @@ function _renderCtaTracker() {
 
   document.getElementById('ctaLoading').style.display = 'none';
   document.getElementById('ctaBody').style.display = '';
-  document.getElementById('ctaAsOf').textContent = _ctaTemplate(
-    'markets.cta_asof', 'GS snapshot · {date}', { date: _ctaDate(latest.report_date) });
+  // Age badge. The date alone was not enough: it read as current at any age.
+  const fresh = _ctaData.freshness || {};
+  const age = fresh.report_age_days;
+  const level = fresh.level || 'unknown';
+  const asOfEl = document.getElementById('ctaAsOf');
+  asOfEl.textContent = _ctaTemplate(
+    'markets.cta_asof', 'GS snapshot · {date}', { date: _ctaDate(latest.report_date) })
+    + (typeof age === 'number' && age >= 0
+        ? ' · ' + _ctaTemplate('markets.cta_age', '{n}d ago', { n: age })
+        : '');
+  asOfEl.className = 'text-[10px] px-2 py-0.5 rounded-full border ' + ({
+    fresh:   'border-slate-700 text-slate-500',
+    aging:   'border-amber-700/60 text-amber-500',
+    stale:   'border-rose-700/60 text-rose-400',
+    unknown: 'border-rose-700/60 text-rose-400',
+  }[level] || 'border-slate-700 text-slate-500');
+
+  const staleEl = document.getElementById('ctaStale');
+  if (staleEl) {
+    if (level === 'fresh') {
+      staleEl.classList.add('hidden');
+    } else {
+      const key = level === 'unknown' ? 'markets.cta_stale_unknown'
+                : level === 'stale'   ? 'markets.cta_stale_bad'
+                                      : 'markets.cta_stale_aging';
+      staleEl.textContent = '⚠ ' + (I18n.t(key) || (level === 'stale'
+        ? 'This snapshot is out of date — treat the levels below as historical.'
+        : 'No new Goldman report has been recorded for over a week.'));
+      staleEl.className = 'text-[11px] mt-1 ' +
+        (level === 'aging' ? 'text-amber-500' : 'text-rose-400');
+    }
+  }
 
   const positionValue = document.getElementById('ctaPositionValue');
   positionValue.textContent = _ctaMoney(position.global_equity_bn);

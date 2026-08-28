@@ -26,6 +26,17 @@ from urllib.parse import urlparse
 
 log = logging.getLogger(__name__)
 
+#: Age thresholds for the latest snapshot, in days.
+#:
+#: Goldman publishes CTA Corner weekly, so one missed report is unremarkable and
+#: three is a card nobody should be reading. There is no API behind this — every
+#: value is hand-entered from a public write-up (see the module docstring), which
+#: is exactly why it needs an age on it: the failure mode is not a bad fetch, it
+#: is a human forgetting, and a month-old positioning number rendered in the same
+#: neutral grey as yesterday's is indistinguishable from current.
+FRESH_DAYS = 10   # within a report cycle plus slack
+STALE_DAYS = 21   # three cycles missed
+
 _PUBLIC_DATA: dict[str, Any] = {
     "positioning": [
         {
@@ -170,6 +181,24 @@ def _latest_snapshot(value: object, fallback: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
+def _staleness(report_date: object, today: date | None = None) -> dict[str, Any]:
+    """Age of the latest snapshot, and what to make of it.
+
+    ``level`` is the thing the UI keys off: ``fresh`` / ``aging`` / ``stale``, or
+    ``unknown`` when the date will not parse — which is treated as suspect rather
+    than fresh, since an unreadable date is not evidence of currency.
+    """
+    parsed = _valid_date(report_date)
+    if not parsed:
+        return {"report_age_days": None, "level": "unknown"}
+    age = ((today or date.today()) - date.fromisoformat(parsed)).days
+    if age < 0:
+        # A future date is a data-entry error, not a fresh report.
+        return {"report_age_days": age, "level": "unknown"}
+    level = "fresh" if age <= FRESH_DAYS else ("aging" if age <= STALE_DAYS else "stale")
+    return {"report_age_days": age, "level": level}
+
+
 def get_cta_positioning() -> dict[str, Any]:
     """Return validated built-in snapshots, optionally replaced by SSM JSON."""
     data = copy.deepcopy(_PUBLIC_DATA)
@@ -192,4 +221,23 @@ def get_cta_positioning() -> dict[str, Any]:
 
     data["positioning"] = _positioning_points(data["positioning"])
     data["latest_positioning"] = data["positioning"][-1] if data["positioning"] else None
+
+    # Age travels with the payload rather than being recomputed by each consumer:
+    # the card, the AI brief and /api/cache-age would otherwise each need to know
+    # the thresholds, and would drift.
+    latest = data.get("latest") or {}
+    data["freshness"] = _staleness(latest.get("report_date"))
+    data["freshness"]["fresh_days"] = FRESH_DAYS
+    data["freshness"]["stale_days"] = STALE_DAYS
     return data
+
+
+def staleness_line() -> str:
+    """One-line status for logs and /api/cache-age. Never raises."""
+    try:
+        f = get_cta_positioning().get("freshness") or {}
+        age, level = f.get("report_age_days"), f.get("level")
+        return ("cta: report_date unreadable" if level == "unknown"
+                else f"cta: snapshot {age}d old ({level})")
+    except Exception as exc:  # noqa: BLE001
+        return f"cta: status unavailable ({exc})"

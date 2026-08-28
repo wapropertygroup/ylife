@@ -78,6 +78,9 @@ MODULES = (
     "ystocker.sec13f",
     "ystocker.quota",
     "ystocker.etf_holdings",
+    "ystocker.analyst",
+    "ystocker.sectors",
+    "ystocker.cta",
     "ystocker.routes",
 )
 
@@ -103,7 +106,8 @@ class ImportGraphTests(unittest.TestCase):
         rules = {str(r) for r in app.url_map.iter_rules()}
         # A few routes that must exist; a blueprint that registers but exposes
         # nothing would otherwise pass.
-        for path in ("/markets", "/api/markets", "/api/market-brief", "/daily"):
+        for path in ("/markets", "/api/markets", "/api/market-brief", "/daily",
+                     "/api/evaluation-extras", "/api/cta-positioning"):
             self.assertIn(path, rules, f"route missing: {path}")
 
     def test_cached_modules_expose_peek(self):
