@@ -5168,18 +5168,53 @@ def _cta_freshness() -> dict:
         return {}
 
 
-def _cta_staleness_loop() -> None:
-    """Log the CTA snapshot's age once a day.
+def _cta_spx_reference() -> Optional[float]:
+    """Live S&P 500 level for validating a parsed trigger, or None.
 
-    There is nothing to fetch — Goldman's model is proprietary and every number
-    on that card is entered by hand from a public write-up. So this is the whole
-    of what automation can honestly do here: notice, on a schedule, that nobody
-    has updated it, and say so somewhere a human will see. It is why the built-in
-    payload sat a month out of date without anyone noticing.
+    Peeked, never fetched: this is a validation input, and it must not be able to
+    drag a 30-symbol Yahoo rebuild into a background timer. Without it
+    cta._validate falls back to a plain range check, which is weaker but still
+    rejects the failure that mattered.
+    """
+    try:
+        with _MARKETS_CACHE_LOCK:
+            entry = _MARKETS_CACHE.get("data")
+        spx = (((entry or {}).get("data") or {}).get("indices") or {}).get("spx") or {}
+        current = spx.get("current")
+        return float(current) if isinstance(current, (int, float)) else None
+    except Exception as exc:  # noqa: BLE001
+        log.debug("cta: no S&P reference available: %s", exc)
+        return None
+
+
+#: Hourly, not daily. The source feed holds only ~50 items spanning about 5.5
+#: hours, so a daily poll would miss a weekly report most weeks; hourly gives
+#: roughly five chances at each one.
+_CTA_POLL_SECONDS = 3600
+
+
+def _cta_loop() -> None:
+    """Hourly: try to pick up a new CTA report, then log the snapshot's age.
+
+    Goldman's model has no API, but the public write-up this card already cites is
+    machine-readable and its host's robots.txt explicitly allows the path. The
+    parse is not trusted — cta._validate gates it on the data's own invariants
+    (short>medium>long, within 30% of the live S&P) and a failure leaves the
+    previous snapshot alone. So the worst case is the card staying honestly stale,
+    which is what it did before this existed.
     """
     from ystocker import cta
 
+    time.sleep(90)          # let the markets cache warm so the S&P gate can run
     while True:
+        try:
+            got = cta.fetch_latest_report(spx_ref=_cta_spx_reference())
+            if got:
+                log.info("CTA: picked up %s from %s",
+                         got["latest"]["report_date"], got.get("fetched_from", "")[:80])
+        except Exception:
+            log.exception("CTA fetch failed")
+
         try:
             payload = cta.get_cta_positioning()
             f = payload.get("freshness") or {}
@@ -5187,21 +5222,23 @@ def _cta_staleness_loop() -> None:
             line = ("CTA snapshot: %s (%s days old, source=%s)"
                     % (level, age, payload.get("source_mode")))
             if level in ("stale", "unknown"):
-                log.warning("%s — update GOLDMAN_CTA_DATA_JSON in SSM; the card "
-                            "is showing this as historical", line)
+                log.warning("%s — no new report picked up; set GOLDMAN_CTA_DATA_JSON "
+                            "in SSM to override by hand", line)
             elif level == "aging":
-                log.info("%s — no new Goldman report recorded for over a week", line)
+                log.info("%s — no new Goldman report in over a week", line)
             else:
                 log.info("%s", line)
         except Exception:
             log.exception("CTA staleness check failed")
-        time.sleep(24 * 3600)
+
+        time.sleep(_CTA_POLL_SECONDS)
 
 
 def _start_cta_staleness_scheduler() -> None:
-    t = threading.Thread(target=_cta_staleness_loop, daemon=True, name="cta-staleness")
+    t = threading.Thread(target=_cta_loop, daemon=True, name="cta-report")
     t.start()
-    log.info("CTA staleness checker started (daily)")
+    log.info("CTA report poller started (every %dmin, validated against live S&P)",
+             _CTA_POLL_SECONDS // 60)
 
 
 @bp.route("/api/cta-positioning")

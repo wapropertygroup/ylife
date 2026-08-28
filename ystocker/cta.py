@@ -20,6 +20,7 @@ import copy
 import json
 import logging
 import os
+import re
 from datetime import date
 from typing import Any
 from urllib.parse import urlparse
@@ -200,8 +201,30 @@ def _staleness(report_date: object, today: date | None = None) -> dict[str, Any]
 
 
 def get_cta_positioning() -> dict[str, Any]:
-    """Return validated built-in snapshots, optionally replaced by SSM JSON."""
+    """Return the best available snapshot.
+
+    Precedence, highest first:
+
+    1. ``GOLDMAN_CTA_DATA_JSON`` from SSM — the manual override. It stays on top
+       so a human can always correct the fetcher rather than fight it.
+    2. The auto-fetched report on disk, written only after passing ``_validate``.
+    3. The built-in payload, as the floor.
+
+    ``source_mode`` says which one answered, so a reader is never guessing.
+    """
     data = copy.deepcopy(_PUBLIC_DATA)
+
+    # Tier 2 before the override, so the override can still win.
+    fetched = _read_fetched()
+    if fetched:
+        candidate = _latest_snapshot(fetched.get("latest"), data["latest"])
+        # Only adopt it if it is actually newer, so a stale file cannot pull the
+        # card backwards after someone has set the SSM value by hand.
+        if (candidate.get("report_date") or "") > (data["latest"].get("report_date") or ""):
+            data["latest"] = candidate
+            data["source_mode"] = "fetched"
+            data["fetched_from"] = fetched.get("fetched_from", "")
+
     raw_override = os.environ.get("GOLDMAN_CTA_DATA_JSON", "").strip()
     if raw_override:
         try:
@@ -215,9 +238,9 @@ def get_cta_positioning() -> dict[str, Any]:
             data["source_mode"] = "ssm"
         except (TypeError, ValueError, json.JSONDecodeError) as exc:
             log.warning("GOLDMAN_CTA_DATA_JSON ignored: %s", exc)
-            data["source_mode"] = "built_in"
+            data.setdefault("source_mode", "built_in")
     else:
-        data["source_mode"] = "built_in"
+        data.setdefault("source_mode", "built_in")
 
     data["positioning"] = _positioning_points(data["positioning"])
     data["latest_positioning"] = data["positioning"][-1] if data["positioning"] else None
@@ -241,3 +264,221 @@ def staleness_line() -> str:
                 else f"cta: snapshot {age}d old ({level})")
     except Exception as exc:  # noqa: BLE001
         return f"cta: status unavailable ({exc})"
+
+# ---------------------------------------------------------------------------
+# Automatic report pickup
+# ---------------------------------------------------------------------------
+# Goldman's model has no API, but the public write-up this module already cites
+# is machine-readable, and its host permits it: nashnova's robots.txt carries an
+# explicit `Allow: /feed/special/`, which is where these pieces live.
+#
+# Measured before building this, because the first answer I gave was that it
+# needed a human:
+#
+#   * All 50 items in that RSS feed are /feed/special/ articles — the same
+#     content type as the CTA Corner piece, so these do flow through it.
+#   * The feed window is only ~5.5 hours for 50 items, so a *daily* poll would
+#     miss a weekly report most weeks. Hourly gives roughly five chances.
+#   * The article states the levels unambiguously: "short-term 7,455 ,
+#     medium-term 7,204 , long-term 6,765". Those are also the only three
+#     6000-9000 numbers on the page.
+#   * The articles are in no sitemap, so the feed is the only discovery route.
+#
+# The danger was never the parse, it was publishing an *invented* Goldman number
+# after a phrasing change. So the parser is not trusted: `_validate` gates it on
+# invariants of what the data has to be, and anything that fails leaves the
+# previous snapshot in place. Failing closed is the whole design.
+
+REPORT_RSS_URL = "https://www.nashnova.com/rss.xml"
+_FETCH_CACHE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                            "cache", "cta_fetched.json")
+_HTTP_TIMEOUT = 20
+_UA = "Mozilla/5.0 (compatible; ystocker/1.0; +https://stock.li-family.us)"
+
+#: A trigger must sit within this fraction of the live S&P 500 to be believed.
+#: This is the gate that makes a mis-parse harmless: "7" or "7.46" or a stray
+#: year like 2026 cannot pass it, and no plausible phrasing change can either.
+SPX_TOLERANCE = 0.30
+
+#: Sanity band for the weekly flow figures, in billions. Goldman's worst-case
+#: numbers run to a couple of hundred billion; a thousand is a parse error.
+MAX_FLOW_BN = 600.0
+
+_TITLE_RE = re.compile(r"\bCTA|\bCTAs\b|Goldman", re.I)
+#: The separator between the three labelled levels varies — the live article uses
+#: " , ", and stripped markup can leave "&" or a bullet. Rather than enumerate
+#: punctuation, allow a bounded run of non-digits: `[^0-9]{0,15}` cannot cross
+#: another number, so it can never reach past the value it is meant to skip, and
+#: the three labels still anchor the whole match.
+_TRIGGER_RE = re.compile(
+    r"short[- ]term\s*([0-9][0-9,]{2,})[^0-9]{0,15}"
+    r"medium[- ]term\s*([0-9][0-9,]{2,})[^0-9]{0,15}"
+    r"long[- ]term\s*([0-9][0-9,]{2,})",
+    re.I)
+
+
+def _http_get(url: str) -> str:
+    import urllib.request
+    req = urllib.request.Request(url, headers={"User-Agent": _UA})
+    with urllib.request.urlopen(req, timeout=_HTTP_TIMEOUT) as resp:
+        return resp.read().decode("utf-8", "replace")
+
+
+def _visible_text(html: str) -> str:
+    body = re.sub(r"<script.*?</script>|<style.*?</style>", " ", html, flags=re.S | re.I)
+    body = re.sub(r"<[^>]+>", " ", body)
+    body = body.replace("&amp;", "&").replace("&nbsp;", " ")
+    return re.sub(r"\s+", " ", body).strip()
+
+
+def _num_from_text(raw: str) -> float | None:
+    return _number(raw.replace(",", "").replace("$", ""))
+
+
+def parse_article(html: str) -> dict[str, Any] | None:
+    """Pull the trigger levels out of an article. No validation here."""
+    text = _visible_text(html)
+    m = _TRIGGER_RE.search(text)
+    if not m:
+        return None
+    triggers = {}
+    for key, group in (("short", 1), ("medium", 2), ("long", 3)):
+        value = _num_from_text(m.group(group))
+        if value is None:
+            return None
+        triggers[key] = value
+
+    flows: dict[str, float] = {}
+    # "$184.3 billion worst-case selling wave" and similar. Only the magnitude is
+    # taken, and only into the down scenario, because that is the one the article
+    # headlines and the only one whose attribution is unambiguous in prose.
+    worst = re.search(r"\$([0-9][0-9.,]*)\s*billion[^.]{0,60}(?:selling|sell|downside)", text, re.I)
+    if worst:
+        value = _num_from_text(worst.group(1))
+        if value is not None:
+            flows["down"] = -abs(value)
+    return {"spx_triggers": triggers, "flows_1m_global_bn": flows}
+
+
+def _validate(parsed: dict[str, Any], spx_ref: float | None) -> tuple[bool, str]:
+    """Gate a parse on invariants of the data. Reasons are returned, not raised."""
+    triggers = (parsed or {}).get("spx_triggers") or {}
+    if set(triggers) != {"short", "medium", "long"}:
+        return False, "expected exactly short/medium/long triggers, got %s" % sorted(triggers)
+    short, medium, long_ = triggers["short"], triggers["medium"], triggers["long"]
+    if not all(isinstance(v, float) and v > 0 for v in (short, medium, long_)):
+        return False, "non-positive trigger"
+    # Goldman's own ordering. A parse that scrambles the labels breaks it.
+    if not short > medium > long_:
+        return False, "triggers not ordered short>medium>long: %s" % triggers
+    if spx_ref:
+        for name, value in (("short", short), ("medium", medium), ("long", long_)):
+            if abs(value - spx_ref) / spx_ref > SPX_TOLERANCE:
+                return False, ("%s trigger %.0f is >%.0f%% from S&P %.0f"
+                               % (name, value, SPX_TOLERANCE * 100, spx_ref))
+    else:
+        # Without a reference the proximity gate cannot run, so require the levels
+        # to at least be in the range an index trades in rather than a year or a
+        # share price.
+        if not all(1000 <= v <= 20000 for v in (short, medium, long_)):
+            return False, "triggers outside a plausible index range: %s" % triggers
+    for scenario, value in ((parsed.get("flows_1m_global_bn") or {}).items()):
+        if abs(value) > MAX_FLOW_BN:
+            return False, "flow %s=%.1fbn exceeds %.0fbn" % (scenario, value, MAX_FLOW_BN)
+    return True, "ok"
+
+
+def _read_fetched() -> dict[str, Any] | None:
+    try:
+        with open(_FETCH_CACHE, encoding="utf-8") as fh:
+            data = json.load(fh)
+        return data if isinstance(data, dict) and data.get("latest") else None
+    except FileNotFoundError:
+        return None
+    except Exception as exc:  # noqa: BLE001
+        log.warning("cta: unreadable fetched cache (%s)", exc)
+        return None
+
+
+def _write_fetched(payload: dict[str, Any]) -> None:
+    import tempfile
+    try:
+        os.makedirs(os.path.dirname(_FETCH_CACHE), exist_ok=True)
+        fd, tmp = tempfile.mkstemp(dir=os.path.dirname(_FETCH_CACHE), suffix=".tmp")
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            json.dump(payload, fh, allow_nan=False)
+        os.replace(tmp, _FETCH_CACHE)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("cta: could not write fetched cache: %s", exc)
+
+
+def fetch_latest_report(spx_ref: float | None = None) -> dict[str, Any] | None:
+    """Look for a newer CTA report and store it if it validates.
+
+    Returns the stored snapshot, or None when there is nothing new or nothing
+    trustworthy. Never raises: this runs on a timer and a bad week upstream must
+    leave the existing card alone rather than break it.
+    """
+    try:
+        rss = _http_get(REPORT_RSS_URL)
+    except Exception as exc:  # noqa: BLE001
+        log.info("cta: RSS unavailable (%s)", exc)
+        return None
+
+    items = re.findall(r"<item>(.*?)</item>", rss, re.S)
+    candidates: list[tuple[str, str]] = []
+    for item in items:
+        title_m = re.search(r"<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?</title>", item, re.S)
+        link_m = re.search(r"<link>(.*?)</link>", item, re.S)
+        if not title_m or not link_m:
+            continue
+        title = title_m.group(1).strip()
+        # Both terms required: "Goldman" alone matches unrelated bank notes, and
+        # "CTA" alone is a common enough abbreviation to catch noise.
+        if _TITLE_RE.search(title) and re.search(r"\bCTA", title, re.I):
+            candidates.append((title, link_m.group(1).strip()))
+
+    if not candidates:
+        log.debug("cta: no CTA item in the %d-item feed window", len(items))
+        return None
+
+    current = get_cta_positioning()
+    current_date = (current.get("latest") or {}).get("report_date") or ""
+
+    for title, url in candidates:
+        try:
+            parsed = parse_article(_http_get(url))
+        except Exception as exc:  # noqa: BLE001
+            log.info("cta: could not read %s (%s)", url, exc)
+            continue
+        if not parsed:
+            log.info("cta: no trigger levels found in %r", title[:70])
+            continue
+        ok, reason = _validate(parsed, spx_ref)
+        if not ok:
+            # The important branch. A rejected parse is logged loudly and changes
+            # nothing, so the card keeps its previous (honestly dated) snapshot.
+            log.warning("cta: REJECTED a parse of %r — %s", title[:70], reason)
+            continue
+
+        report_date = date.today().isoformat()
+        if report_date <= current_date:
+            log.debug("cta: parsed report is not newer than %s", current_date)
+            return None
+        snapshot = {
+            "latest": {
+                "report_date": report_date,
+                "spx_triggers": parsed["spx_triggers"],
+                "flows_1m_global_bn": parsed.get("flows_1m_global_bn") or {},
+                "source_title": title[:120],
+                "source_url": _safe_url(url),
+            },
+            "fetched_at": date.today().isoformat(),
+            "fetched_from": url,
+        }
+        _write_fetched(snapshot)
+        log.info("cta: stored a new report — %s triggers %s (validated against S&P %s)",
+                 report_date, parsed["spx_triggers"], spx_ref)
+        return snapshot
+
+    return None
