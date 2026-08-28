@@ -200,14 +200,30 @@ def create_app() -> Flask:
     def datetimeformat(ts):
         return datetime.datetime.fromtimestamp(float(ts)).strftime("%b %d, %Y %H:%M")
 
-    # Cache-busting token for static assets. Uses the file mtime of i18n.js
-    # so browsers re-download translations whenever they change.
+    # Cache-busting token for static assets: the newest mtime across every
+    # served .js and .css, not just i18n.js.
+    #
+    # It used to be i18n.js alone, which meant a change to any *other* script
+    # shipped under an unchanged ?v= and returning visitors kept running the
+    # cached copy. That is not theoretical — deferload.js was fixed, deployed,
+    # verified present on the server, and the browser still executed the previous
+    # version, which made the fix look ineffective. Only a change that happened
+    # to touch translations would have flushed it.
+    import glob
     import os
-    _i18n_path = os.path.join(app.static_folder, "i18n.js")
-    try:
-        _cache_bust = str(int(os.path.getmtime(_i18n_path)))
-    except OSError:
-        _cache_bust = str(int(datetime.datetime.now().timestamp()))
+
+    def _newest_static_mtime() -> str:
+        newest = 0.0
+        for pattern in ("*.js", "*.css", os.path.join("css", "*.css"),
+                        os.path.join("js", "*.js")):
+            for path in glob.iglob(os.path.join(app.static_folder, pattern)):
+                try:
+                    newest = max(newest, os.path.getmtime(path))
+                except OSError:      # raced with a deploy replacing the file
+                    continue
+        return str(int(newest)) if newest else ""
+
+    _cache_bust = _newest_static_mtime() or str(int(datetime.datetime.now().timestamp()))
 
     @app.context_processor
     def _inject_cache_bust():
