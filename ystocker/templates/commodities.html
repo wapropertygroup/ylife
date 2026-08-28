@@ -161,6 +161,13 @@
   </div>
 
   <!-- ── Seasonality chart ─────────────────────────────────────────── -->
+  <!-- Deferred-load anchor for the card below. The card is display:none until its
+       data arrives, so it cannot observe itself, and the nearest visible element
+       above (#detailChart) sits at 882px — inside the fold on a 900px viewport,
+       so anchoring there fired the fetch on load and deferred nothing. This sits
+       at the card's own place in the flow (1300px) and is zero-height, so it has
+       a box to observe (full width, offsetParent non-null) but changes no layout. -->
+  <div id="seasonalityAnchor" class="h-0" aria-hidden="true"></div>
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up mb-6" id="seasonalitySection" style="display:none">
     <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-2 mb-3">
       <div>
@@ -958,13 +965,17 @@
   // all 14 symbols at 10y — and the panel is a screen down, so it is the one
   // most worth not paying for on load.
   //
-  // Anchored on #detailChart, the canvas in the always-visible card directly
-  // above: #seasonalitySection itself is display:none until _renderSeasonality
-  // reveals it, and #seasonalityChart is inside it, so neither has a box to
-  // observe. Clicking a commodity still calls _loadSeasonality directly through
-  // the _cmdSelect override below, which is why this stays a plain re-entrant
-  // call rather than a one-shot.
-  DeferLoad.when('#detailChart', _loadSeasonality, { label: 'seasonality' });
+  // Anchored on #seasonalityAnchor, the zero-height sentinel immediately before
+  // the card. Measured on the deployed page at 1440x900: the card sits at 1300px
+  // and the fire threshold is viewport+300 = 1200px, so it defers; anchoring on
+  // #detailChart (882px) instead put it inside the fold and fetched on load.
+  // The card itself and #seasonalityChart are both inside the display:none
+  // section, so neither has a box to observe.
+  //
+  // Clicking a commodity still calls _loadSeasonality directly through the
+  // _cmdSelect override below, which is why this stays a plain re-entrant call
+  // rather than a one-shot.
+  DeferLoad.when('#seasonalityAnchor', _loadSeasonality, { label: 'seasonality' });
 
   // ─── Per-commodity educational notes
   const COMMODITY_NOTES = {
