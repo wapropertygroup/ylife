@@ -161,6 +161,18 @@ YT_CHANNELS: list[tuple[str, str, str]] = [
 # together.
 TA_HOSTS = {"trade-agents.com", "www.trade-agents.com"}
 
+# Where /contact points its mailto. Brand-matched for the same reason the
+# checkout host is (_PAY_BY_HOST in credits.py): a TradeAgents visitor asked to
+# mail admin@li-family.us is being shown a domain that has nothing to do with
+# the site they are on, which reads like a misdirected form rather than support.
+#
+# Derived from the same `is_ta` verdict as brand_name, in the same place, so the
+# name in the masthead and the address in the form cannot come apart. Literals
+# rather than an env var, because one env var is process-global and this process
+# serves both brands -- see the note on AGENTS_PAY_URL.
+CONTACT_EMAIL = "admin@li-family.us"
+TA_CONTACT_EMAIL = "admin@trade-agents.com"
+
 
 def _load_secrets_from_ssm() -> None:
     """Fetch secrets from AWS SSM Parameter Store and inject into os.environ.
@@ -336,7 +348,8 @@ def create_app() -> Flask:
             pass
         is_ta = host in TA_HOSTS
         return {"brand_name": "TradeAgents" if is_ta else "yStocker",
-                "brand_is_ta": is_ta}
+                "brand_is_ta": is_ta,
+                "brand_email": TA_CONTACT_EMAIL if is_ta else CONTACT_EMAIL}
 
     @app.context_processor
     def _inject_auth_context():

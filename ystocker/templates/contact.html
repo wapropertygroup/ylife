@@ -21,16 +21,16 @@
       </div>
       <div>
         <p class="text-sm font-semibold text-slate-700 dark:text-slate-200">Yuanxi Li</p>
-        <a href="mailto:admin@li-family.us"
+        <a href="mailto:{{ brand_email }}"
            class="text-brand hover:underline text-sm">
-          admin@li-family.us
+          {{ brand_email }}
         </a>
       </div>
     </div>
 
     <div class="border-t border-slate-200 dark:border-slate-800 pt-6">
       <p class="text-xs text-slate-500 mb-4" data-i18n="contact.or">Or send a message directly:</p>
-      <form action="mailto:admin@li-family.us" method="get" enctype="text/plain" class="space-y-4">
+      <form action="mailto:{{ brand_email }}" method="get" enctype="text/plain" class="space-y-4">
         <div>
           <label class="block text-xs text-slate-500 dark:text-slate-400 mb-1.5" data-i18n="contact.subject">Subject</label>
           <input type="text" name="subject" placeholder="e.g. Bug report, feature request…"

@@ -232,16 +232,45 @@
     /* Brand color tokens — indigo palette */
     :root { --brand: 99 102 241; --brand-dark: 79 70 229; --brand-light: 165 180 252; }
 
-    /* Theme-dependent tokens for the handful of things Tailwind's `dark:`
-       variant cannot reach: pseudo-element scrollbars and the logo gradient.
+    /* Theme-dependent tokens for the handful of things Tailwind's `dark:` variant
+       cannot reach: pseudo-element scrollbars, the logo gradient, and the
+       hand-written <style> blocks in the dashboard templates.
+
        Declared light-first with .dark overriding, so a browser that somehow
-       drops the class falls back to a readable page rather than black-on-black. */
+       drops the class falls back to a readable page rather than black-on-black.
+
+       The `--t-*` set is the SHARED vocabulary for those per-page <style>
+       blocks. Thirteen templates style rendered Markdown, pipe tables, chips and
+       clamp fades in plain CSS, and they all drew from the same dark palette by
+       hand. One vocabulary here means a page cannot drift a shade away from its
+       neighbours, and a future palette change is one edit rather than thirteen. */
     :root {
       --scroll-track: #e2e8f0;
       --scroll-thumb: #94a3b8;
       --grad-from: #4f46e5;
       --grad-via:  #7c3aed;
       --grad-to:   #0284c7;
+
+      --t-surface:      #ffffff;   /* card / page plane            */
+      --t-surface-deep: #f8fafc;   /* sunken: log, code, well      */
+      --t-surface-alt:  #f1f5f9;   /* table header, chip fill      */
+      --t-line:         #e2e8f0;   /* hairline, table cell border  */
+      --t-line-strong:  #cbd5e1;   /* control border               */
+      --t-line-hover:   #94a3b8;   /* control border, hovered      */
+      --t-ink-strong:   #0f172a;   /* headings, <strong>           */
+      --t-ink:          #334155;   /* body copy                    */
+      --t-ink-muted:    #475569;   /* table labels                 */
+      --t-ink-dim:      #64748b;   /* captions; the AA floor, so    */
+                                   /* it is the same in both themes*/
+      --t-accent-ink:   #4338ca;   /* accent TEXT (indigo)         */
+      --t-accent:       #4f46e5;   /* accent line / brand          */
+      --t-accent-line:  #c7d2fe;   /* accent border                */
+      --t-row-alt:      rgba(241,245,249,.7);  /* zebra striping   */
+      /* Both stops of a clamp fade. The transparent end must carry the *surface*
+         hue, not a hardcoded slate: fading to `rgba(15,23,42,0)` over white
+         leaves a grey cast, because some browsers interpolate premultiplied. */
+      --t-fade-from:    rgba(255,255,255,0);
+      --t-fade-to:      #ffffff;
     }
     .dark {
       --scroll-track: #1e293b;
@@ -249,6 +278,23 @@
       --grad-from: #6366f1;
       --grad-via:  #a78bfa;
       --grad-to:   #38bdf8;
+
+      --t-surface:      #0f172a;
+      --t-surface-deep: #0b1120;
+      --t-surface-alt:  #131c2e;
+      --t-line:         #1e293b;
+      --t-line-strong:  #334155;
+      --t-line-hover:   #475569;
+      --t-ink-strong:   #e2e8f0;
+      --t-ink:          #cbd5e1;
+      --t-ink-muted:    #94a3b8;
+      --t-ink-dim:      #64748b;
+      --t-accent-ink:   #a5b4fc;
+      --t-accent:       #6366f1;
+      --t-accent-line:  #312e81;
+      --t-row-alt:      rgba(30,41,59,.35);
+      --t-fade-from:    rgba(15,23,42,0);
+      --t-fade-to:      #0f172a;
     }
 
     body { font-family: 'Inter', sans-serif; }
