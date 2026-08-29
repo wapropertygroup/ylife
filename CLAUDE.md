@@ -233,12 +233,23 @@ Four things hold it together:
   stylesheet renders the whole report as unformatted text in the one client most
   readers use.
 
+The mail is written in the language the *report* was written in (`job["lang"]`,
+frozen at submit), not a UI preference read at send time — chrome, role names,
+team dividers, dates and the elapsed clause all follow it, and `_STR` carries EN
++ ZH with a test asserting neither has a key the other lacks. It signs itself
+with the brand of the host it links to (`brand_for()`): the page derives
+`brand_name` from `request.host`, but there is no request in a background thread,
+so `TA_HOSTS` moved to module scope in `__init__.py` for both to share. The
+masthead mark is drawn in table cells rather than fetched as an `<img>`, because
+Outlook and Apple Mail block remote images by default and the one decorative
+element would otherwise be an empty box.
+
 Sending is on by default once `SES_FROM_EMAIL` is set (already synced from SSM);
 `AGENTS_EMAIL_REPORT=0` is the kill switch, and `AGENTS_BASE_URL` overrides the
 link host, which defaults to `https://trade-agents.com` rather than
 `stock.li-family.us` because that is the domain `/agents` exists to serve.
 Errors are *not* mailed — only finished reports. Tests:
-`tests/test_report_email.py` (52 unit tests, no app, no network, no SES).
+`tests/test_report_email.py` (76 unit tests, no app, no network, no SES).
 
 ### The AI Markets Brief (`/api/market-brief`)
 

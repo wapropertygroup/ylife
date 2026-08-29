@@ -69,6 +69,22 @@ YT_CHANNELS: list[tuple[str, str, str]] = [
 ]
 
 
+# Hostnames that carry the TradeAgents brand rather than yStocker. The same app
+# answers on stock.li-family.us and on trade-agents.com (see deploy.sh), and the
+# second exists precisely so the agents product can carry its own name --
+# redirecting or hardcoding one brand would defeat owning the domain.
+#
+# Matched against a set rather than a substring: a substring test on
+# "trade-agents" would also match a staging host nobody intended to rebrand, and
+# request.host carries the port in development.
+#
+# At module scope, not inside create_app(), because report_email.py brands a mail
+# with no request to read a host from -- it derives the brand from the link host
+# instead, and must agree with this. tests/test_report_email.py pins the two
+# together.
+TA_HOSTS = {"trade-agents.com", "www.trade-agents.com"}
+
+
 def _load_secrets_from_ssm() -> None:
     """Fetch secrets from AWS SSM Parameter Store and inject into os.environ.
 
@@ -229,16 +245,9 @@ def create_app() -> Flask:
     def _inject_cache_bust():
         return {"cache_bust": _cache_bust}
 
-    # Brand by hostname. The same app answers on stock.li-family.us and on
-    # trade-agents.com (see deploy.sh), and the second exists precisely so the
-    # agents product can carry its own name -- redirecting or hardcoding one
-    # brand would defeat owning the domain.
-    #
-    # Matched against a set rather than a substring: a substring test on
-    # "trade-agents" would also match a staging host nobody intended to rebrand,
-    # and request.host carries the port in development.
-    _TA_HOSTS = {"trade-agents.com", "www.trade-agents.com"}
-
+    # Brand by hostname -- the host set and the reasoning live at module scope,
+    # as TA_HOSTS, because report_email.py needs the same verdict with no request
+    # to read a host from.
     @app.context_processor
     def _inject_brand():
         from flask import request as _rq
@@ -248,7 +257,7 @@ def create_app() -> Flask:
             host = (_rq.host or "").split(":")[0].lower()
         except Exception:  # noqa: BLE001 - no request context (CLI, thread)
             pass
-        is_ta = host in _TA_HOSTS
+        is_ta = host in TA_HOSTS
         return {"brand_name": "TradeAgents" if is_ta else "yStocker",
                 "brand_is_ta": is_ta}
 

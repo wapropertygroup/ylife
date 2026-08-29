@@ -332,6 +332,97 @@ class BuildTests(unittest.TestCase):
         assert_inert(self, html)
 
 
+# ── Branding and the masthead ───────────────────────────────────────────────
+
+class BrandTests(unittest.TestCase):
+    """The mail signs itself with the brand of the host it links to.
+
+    The page does this from ``request.host``; the mailer has no request, so it
+    reads the link host instead. The failure this guards is a mail signed
+    "yStocker" that links to trade-agents.com.
+    """
+
+    def test_brand_follows_the_link_host(self):
+        for url, want in (
+                ("https://trade-agents.com", "TradeAgents"),
+                ("https://www.trade-agents.com", "TradeAgents"),
+                ("https://trade-agents.com/agents?job=1", "TradeAgents"),
+                ("http://trade-agents.com:8000", "TradeAgents"),
+                ("TRADE-AGENTS.COM", "TradeAgents"),
+                ("https://stock.li-family.us", "yStocker"),
+                ("https://li-family.us", "yStocker"),
+                # A substring match would wrongly rebrand this one.
+                ("https://staging.trade-agents.com", "yStocker"),
+                ("", "yStocker"),
+        ):
+            self.assertEqual(mail.brand_for(url), want, url)
+
+    def test_host_set_agrees_with_the_app(self):
+        # The app owns TA_HOSTS; brand_for imports it. This pins the fallback
+        # literal inside brand_for to the same value, since that branch is what
+        # runs if the import ever fails.
+        source = (ROOT / "ystocker" / "__init__.py").read_text(encoding="utf-8")
+        m = re.search(r"^TA_HOSTS\s*=\s*\{([^}]*)\}", source, re.M)
+        self.assertIsNotNone(m, "TA_HOSTS is no longer a module-scope literal")
+        declared = set(re.findall(r"['\"]([^'\"]+)['\"]", m.group(1)))
+        self.assertEqual(declared, {"trade-agents.com", "www.trade-agents.com"})
+        for host in declared:
+            self.assertEqual(mail.brand_for(f"https://{host}"), "TradeAgents")
+
+    def test_brand_appears_in_masthead_and_footer(self):
+        _, html, text = mail.build(make_job(), link_base="https://trade-agents.com")
+        self.assertIn("TradeAgents", html)
+        self.assertNotIn("yStocker", html)
+        self.assertIn("TradeAgents", text)
+
+    def test_ystocker_brand_on_the_other_host(self):
+        _, html, _ = mail.build(make_job(), link_base="https://stock.li-family.us")
+        self.assertIn("yStocker", html)
+        self.assertNotIn("TradeAgents", html)
+
+    def test_brand_is_localised_into_both_footers(self):
+        _, html, _ = mail.build(make_job(lang="zh"),
+                                link_base="https://trade-agents.com")
+        self.assertIn("由 TradeAgents 基于", html)
+        self.assertIn("您在 TradeAgents 上运行了", html)
+
+    def test_no_unsubstituted_placeholder_survives(self):
+        # .format() on a string whose placeholder was renamed leaves "{brand}"
+        # sitting in the reader's footer.
+        for lang in ("en", "zh"):
+            _, html, text = mail.build(make_job(lang=lang))
+            for blob in (html, text):
+                self.assertNotRegex(blob, r"\{\w+\}")
+
+    def test_masthead_icon_needs_no_image_loading(self):
+        # Outlook and Apple Mail block remote images by default, so the mark is
+        # drawn in table cells. An <img> here would be an empty box for many.
+        _, html, _ = mail.build(make_job())
+        self.assertNotIn("<img", html)
+        for _w, _h, colour in mail._LOGO_BARS:
+            self.assertIn(f'bgcolor="{colour}"', html)
+
+    def test_masthead_icon_bars_have_distinct_heights(self):
+        # A bar chart whose bars are all one height is not a bar chart. This is
+        # the shape the colour-on-the-outer-cell mistake produces.
+        heights = [h for _w, h, _c in mail._LOGO_BARS]
+        self.assertEqual(len(set(heights)), len(heights))
+        html = mail._logo()
+        for _w, h, _c in mail._LOGO_BARS:
+            self.assertIn(f'height="{h}"', html)
+
+    def test_masthead_wordmark_links_to_the_report(self):
+        _, html, _ = mail.build(make_job(), link_base="https://trade-agents.com")
+        self.assertRegex(
+            html,
+            r'href="https://trade-agents\.com/agents\?job=abc123def4567890"[^>]*>'
+            r"\s*TradeAgents\s*</a>")
+
+    def test_masthead_survives_a_hostile_ticker(self):
+        _, html, _ = mail.build(make_job(ticker='<script>x</script>'))
+        assert_inert(self, html)
+
+
 # ── Localisation ────────────────────────────────────────────────────────────
 
 class LocalisationTests(unittest.TestCase):
