@@ -68,6 +68,7 @@ const I18n = (() => {
     'ptr.pull':           { en: 'Pull to refresh',    zh: '下拉刷新' },
     'ptr.release':        { en: 'Release to refresh', zh: '松开即刷新' },
     'ptr.busy':           { en: 'Refreshing…',        zh: '正在刷新…' },
+    'ptr.offline':        { en: 'No connection',      zh: '无网络连接' },
     'footer.text':        { en: 'yStocker — data via Yahoo Finance', zh: 'yStocker — 数据来源：Yahoo Finance' },
     'footer.contact':     { en: 'Contact Us', zh: '联系我们' },
     'footer.copyright':   { en: '© 2025 yStocker. All rights reserved.', zh: '© 2025 yStocker. 保留所有权利。' },

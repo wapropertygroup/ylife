@@ -35,6 +35,11 @@
  *   these dashboards can least afford. So it is bound on a touchstart that could
  *   still become a pull (single finger, already at scrollTop 0) and unbound on
  *   touchend. A touch anywhere down a scrolled page never installs it at all.
+ * - **Declines rather than reloads when offline.** A reload hands the navigation
+ *   to the service worker, whose `networkFirst` falls through to offline.html —
+ *   so pulling with no connection would swap a readable stale page for one that
+ *   says nothing. The pill says "No connection" instead, from the start of the
+ *   pull rather than only on release.
  * - **Bails on anything that is not plainly a pull.** Multi-touch, a
  *   horizontally-dominant swipe, a pull that starts inside a scrolled sub-list,
  *   an open research-desk sheet, or a focused text field all abandon the
@@ -61,6 +66,7 @@
   var AXIS_SLOP  = 10;   // finger px before the gesture's axis is decided
   var PARKED_Y   = -34;  // indicator resting position, just off the top edge
   var COMMIT_MS  = 220;  // let the committed state paint before reload() blocks
+  var DECLINE_MS = 1100; // how long "No connection" stays readable
 
   var STYLE = [
     /* Suppresses the browser's own pull-to-refresh, so this module replaces it
@@ -88,7 +94,8 @@
   var LABELS = {
     pull:    ['ptr.pull',    'Pull to refresh'],
     release: ['ptr.release', 'Release to refresh'],
-    busy:    ['ptr.busy',    'Refreshing…']
+    busy:    ['ptr.busy',    'Refreshing…'],
+    offline: ['ptr.offline', 'No connection']
   };
 
   function label(kind) {
@@ -138,6 +145,20 @@
     if (typeof global.scrollY === 'number') return global.scrollY;
     var de = doc.documentElement || {};
     return de.scrollTop || (doc.body && doc.body.scrollTop) || 0;
+  }
+
+  /**
+   * True only when the browser is *certain* there is no connection.
+   *
+   * `onLine === true` is famously unreliable — it means "attached to a network",
+   * not "can reach the box" — so it is not worth acting on. `=== false` is
+   * trustworthy in the one direction that matters here: reloading would hand the
+   * navigation to the service worker, whose `networkFirst` would fall through to
+   * offline.html and replace a page the reader could still use with one they
+   * cannot.
+   */
+  function offline() {
+    return !!nav && nav.onLine === false;
   }
 
   /** True when this touch belongs to something other than a page refresh. */
@@ -215,7 +236,9 @@
     place(travel);
     el.style.opacity = String(Math.min(1, travel / 24));
     iconEl.style.transform = 'rotate(' + Math.round(travel * 4) + 'deg)';
-    textEl.textContent = label(armed ? 'release' : 'pull');
+    // Says so during the pull rather than only on release, so the gesture is not
+    // silently inert — which reads as broken rather than as offline.
+    textEl.textContent = offline() ? label('offline') : label(armed ? 'release' : 'pull');
 
     // Suppresses the rubber-band so the pill is the only thing moving. Not
     // cancelable once the browser has committed to a scroll, in which case
@@ -229,8 +252,21 @@
     tracking = false;
     if (!engaged) return;
     engaged = false;
-    if (armed) refresh();
-    else retract();
+    if (!armed) retract();
+    // Re-checked at the moment of commit, not trusted from the pull: the
+    // connection may have come back mid-gesture.
+    else if (offline()) decline();
+    else refresh();
+  }
+
+  /** Armed, but there is nowhere to reload from. Acknowledge, then withdraw. */
+  function decline() {
+    armed = false;
+    el.classList.add('ystk-ptr-snap');
+    place(MAX_TRAVEL);
+    el.style.opacity = '1';
+    textEl.textContent = label('offline');
+    global.setTimeout(retract, DECLINE_MS);
   }
 
   /** Give up mid-gesture: put the pill back, do not refresh. */

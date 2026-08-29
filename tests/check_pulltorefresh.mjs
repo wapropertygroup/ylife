@@ -56,14 +56,15 @@ function makeEl(tag = 'DIV') {
   return el;
 }
 
-let handlers, reloads, styleText, pill, sheet, header;
+let handlers, reloads, styleText, pill, sheet, header, navStub;
 
 // Node ships a getter-only global `navigator`, so it cannot be plainly assigned.
 function setNavigator(value) {
+  navStub = value;
   Object.defineProperty(global, 'navigator', { value, configurable: true, writable: true });
 }
 
-function install({ scrollY = 0, active = null, sheetOpen = false } = {}) {
+function install({ scrollY = 0, active = null, sheetOpen = false, onLine = true } = {}) {
   handlers = {};
   reloads = 0;
   styleText = '';
@@ -78,7 +79,7 @@ function install({ scrollY = 0, active = null, sheetOpen = false } = {}) {
   global.window = global;
   global.console = console;
   global.ontouchstart = null;                 // present => touch device
-  setNavigator({ maxTouchPoints: 5 });
+  setNavigator({ maxTouchPoints: 5, onLine });
   global.scrollY = scrollY;
   global.location = { reload: () => { reloads++; } };
   global.document = {
@@ -325,6 +326,39 @@ pull(LONG);
 t('reloads once the sheet is closed', reloads === 1);
 
 // ── Committed state ────────────────────────────────────────────────────────
+console.log();
+console.log('=== offline, it declines instead of reloading ===');
+// A reload would hand the navigation to the service worker, whose networkFirst
+// falls through to offline.html — swapping a readable stale page for an empty one.
+install({ onLine: false });
+fire('touchstart', [pt(100, 200)]);
+fire('touchmove', [pt(100, 260)]);            // engaged, below threshold
+t('says so from the start of the pull', pill.children[1].textContent === 'No connection',
+  pill.children[1].textContent);
+fire('touchmove', [pt(100, 200 + LONG)]);
+fire('touchend', []);
+t('does not reload', reloads === 0);
+t('the reason is still on screen', pill.children[1].textContent === 'No connection');
+t('withdraws afterwards', pill.style.opacity === '0');
+t('not left in the busy state', !pill.classes.has('ystk-ptr-busy'));
+
+console.log();
+console.log('=== a connection that returns mid-gesture still refreshes ===');
+install({ onLine: false });
+fire('touchstart', [pt(100, 200)]);
+fire('touchmove', [pt(100, 200 + LONG)]);
+navStub.onLine = true;                        // came back before the release
+fire('touchend', []);
+t('reloads', reloads === 1, 'offline is re-checked at commit, not trusted from the pull');
+
+console.log();
+console.log('=== onLine true is not treated as suspicious ===');
+// navigator.onLine === true only means "attached to a network", but it is the
+// normal case and must not be second-guessed into declining every refresh.
+install({ onLine: true });
+pull(LONG);
+t('reloads', reloads === 1);
+
 console.log();
 console.log('=== a committed refresh cannot fire twice ===');
 install();

@@ -316,6 +316,14 @@ Started in `create_app()`, all daemon threads:
   accident. The strings differ for the same reason (`ptr.*` promises less than
   `nav.refresh_body`).
 
+  Offline it declines rather than reloads, and says "No connection" from the
+  start of the pull. A reload would hand the navigation to `sw.js`, whose
+  `networkFirst` falls through to `offline.html` — so the gesture would swap a
+  stale page the reader could still use for one they cannot. `navigator.onLine`
+  is only trusted in the `=== false` direction; `true` merely means "attached to
+  a network" and is not worth acting on. The verdict is re-read at the moment of
+  release, not carried over from the start of the pull.
+
 ### Auth
 - yPlanner/yTracker: Google Sign-In + Apple Sign-In → Flask session → DynamoDB users table
 - yStocker/yPlanter/yHome: Public, no auth
