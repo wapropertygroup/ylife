@@ -210,6 +210,146 @@ Each app follows the same pattern:
   recipient/note validation and the field allowlist that keeps the owner's address
   out of an unauthenticated response. Holds no mail code — the mail is
   `report_email.send_share()`, so there is one renderer.
+- `portfolio.py` / `portfolio_csv.py` / `funddata.py` / `lookthrough.py` /
+  `assets.py` — the `/assets` asset tracker and its 穿透 (look-through). See the
+  section below; `lookthrough.py` is pure and injectable, which is what makes the
+  arithmetic testable without a cache or a network.
+
+### The asset tracker and 穿透 (`/assets`)
+
+A signed-in user's own holdings, and what is actually inside them. Sign-in is the
+only gate: this spends no Gemini budget and starts no subprocess, so there is no
+allowlist, no quota and no credit — a request is arithmetic over a warm cache.
+
+Five modules, split by what can be tested without I/O:
+
+| Module | Job | Pure? |
+|---|---|---|
+| `lookthrough.py` | The recursive 穿透 engine; resolver injected | **yes** |
+| `portfolio_csv.py` | Broker CSV → positions, by header-alias sniffing | **yes** |
+| `funddata.py` | Per-symbol quote + fund composition cache | no (Yahoo) |
+| `portfolio.py` | Per-user positions in `ystocker-assets` | no (DynamoDB) |
+| `assets.py` | Valuation, roll-ups, background warming | no |
+
+**Every figure is a floor, and that is deliberate.** Yahoo discloses a fund's top
+ten holdings only — 37.6% of VOO by weight, 46.3% of QQQ, 13.0% of VXUS. The
+tempting move is to assume the invisible 62% of VOO resembles the visible 38% and
+gross every weight up by `1/0.376`. That is not done, for the reason `brief.py`
+states a cold source instead of dropping it: a fabricated number is
+indistinguishable from a measured one to the reader, and here it would be
+fabricated at the exact moment they are making a concentration decision. So the
+page says "at least 6.2% NVDA" and shows `coverage_pct` beside it. The floor also
+happens to be the more useful quantity — concentration risk is a "have I got more
+than I think" question, which a lower bound answers without inventing anything.
+
+**The residual partition is closed by construction.** `seen + undisclosed_equity +
+non_equity + unclassified + unresolved + truncated + pending == portfolio value`,
+asserted directly by `tests/test_lookthrough.py`. If that ever stops holding then
+every percentage on the page is wrong at once, and wrong *quietly*. Two traps it
+encodes:
+
+- `_partition()` computes the residual as `max(0, stock - visible)` and
+  `1 - max(visible, stock)`, not `1 - visible`. The naive form counts a bond
+  sleeve as "equity we cannot see", which on BND reports the entire fund as hidden
+  stock. `stock is None` (no asset-class block at all) is a *third* answer from
+  `stock == 0.0` (measured: no equities in here) — the first is `unclassified`, the
+  second `non_equity`. Guessing between them invents hidden concentration.
+- A child symbol that does not resolve becomes a **named leaf**, never a discard.
+  `XTSLA`, a BlackRock cash sweep inside AOR, 404s at Yahoo; dropping it would
+  silently shrink the portfolio total, which is the one error that makes every
+  percentage wrong simultaneously.
+
+**Recursion is not optional.** A target-date or allocation fund holds *other
+funds*: VTTSX's largest holding is VSMPX at 54.15%, itself a fund whose largest
+holding is NVDA at 6.40%. One level of look-through on VTTSX reports a 54%
+position in something that is not a company. Depth cap is 3 with cycle detection
+and a node budget; hitting any of them marks `truncated` rather than quietly
+returning a partial answer that reads as complete.
+
+**The request path never fetches.** A twenty-line portfolio of mostly funds needs
+~100 Yahoo calls cold — two per fund plus one per distinct child to learn whether
+*it* is a wrapper — which at `data.fetch_group`'s 0.5s spacing is a minute, and
+`CLAUDE.md` already records what gunicorn's `--timeout 120` does about that. So
+`/api/assets` uses `funddata.peek_resolver()`, unresolved symbols come back as
+`pending` (distinct from `unresolved`, so a cold cache cannot masquerade as a claim
+about the security), and `assets.kick_warm()` fills them on one background thread
+while the client polls and watches coverage climb. Steady state is cheap: fund
+top-tens are overwhelmingly the same few hundred megacaps, shared across users.
+
+**Two axes need no caveat at all.** `asset_classes` and `sector_weightings` arrive
+in the same `funds_data` call and are *already* look-through on Yahoo's side —
+VTTSX's sector weights reflect the underlying companies, not "100% funds", and sum
+to 100%. So the asset and sector mixes are complete where the name-level view is
+partial. Sector keys are emitted in Yahoo's squashed form so the client can reuse
+the `mult.comp_*` strings `/multiples` already ships; note `info["sector"]` returns
+"Real Estate" while `sector_weightings` returns `realestate`, and
+`assets._SECTOR_ALIASES` reconciles them — without it a directly-held REIT and a
+fund's property sleeve land in two half-size buckets.
+
+**Yahoo mis-types some foreign equities as funds.** `005930.KQ` (Samsung) and
+`000660.KQ` (SK hynix) both return `quoteType: MUTUALFUND` with no composition of
+any kind, and a garbage name (`"005930.KQ,0P0000B2XZ,1"` — a Morningstar id).
+`funddata._fetch` demotes a "fund" disclosing neither holdings *nor* asset classes
+to a leaf, because left as a wrapper the engine walks in, finds nothing, and
+buckets a correctly identified company as `unclassified`. The condition is
+holdings AND asset classes, **not** sectors: BND legitimately discloses no
+holdings and no sectors but does report asset classes, and must stay a fund.
+
+**CSV import is header-alias sniffing, not a parser per broker.** One code path
+serves Fidelity, Schwab, Vanguard, IBKR, Robinhood, E*TRADE, Futu and the
+documented `symbol,quantity` template, and an unrecognised export degrades to a
+partial mapping the user can see. Import is **two-phase** — preview then commit —
+because a mis-mapped column produces a portfolio that looks entirely plausible and
+is wrong, and every 穿透 percentage downstream would then be confidently
+incorrect. So `ParseResult.mapping` is shown before anything is written. Traps,
+all observed in real exports: a UTF-8 BOM (`utf-8-sig`); GB18030 Chinese exports,
+where the wrong codec yields mojibake headings that read as "no header found";
+`$1,234.56` and `(123.45)`; Schwab's quoted preamble and `Account Total` footer,
+which parsed as a position would double the portfolio; Fidelity's `SPAXX**`
+footnote markers and trailing disclaimer paragraphs; and cash lines with no symbol
+at all, which become `$CASH` rather than being dropped.
+
+`normalise_symbol` rewrites `BRK.B` → `BRK-B`, and the rule is narrowed to an
+allowlisted share-class letter on an alphabetic root. "Any single letter after a
+dot" is wrong and fails silently: `.L`/`.T`/`.F`/`.V` are London/Tokyo/Frankfurt/
+TSX-Venture, so it would convert `HSBA.L` and `7203.T` — the latter being in this
+repo's own Nikkei peer group — into unresolvable symbols.
+
+Two things that are *not* hedged. Reads **fail closed and loudly**: `portfolio.load`
+raises `StoreUnavailable` and the route answers 503, because returning `[]` renders
+as "you have no positions" on the page whose job is to show them, and a user who
+concludes their data is gone cannot tell the honest recovery (retry) from the
+dishonest one (re-import, now duplicated). And there is **no silent disk
+fallback** — the cache modules degrade to disk-only when a table is missing, which
+is right for a cache and wrong here, since the box is replaceable. Local dev needs
+a path, so a file store sits behind an explicit `ASSETS_LOCAL_STORE=1`.
+
+Share classes (`GOOG`/`GOOGL`) are reported as an `issuer_groups` *hint* rather
+than merged, because merging correctly needs a share-class map and this is name
+matching, which will occasionally group two similarly-named companies. A note the
+reader can check is recoverable; a silently combined row is not.
+
+Server-emitted warnings are **coded** (`{"code": "mixed_valuation", "count": 1}`),
+not prose. There is no request language in the warm thread, so a sentence composed
+server-side appeared in English on a Chinese page — which is what it did before.
+
+Tests: `tests/test_lookthrough.py` (27, incl. the summation invariant under every
+input ordering), `tests/test_portfolio_csv.py` (65, real export shapes), and
+`tests/check_assets_endpoints.py` (49 end-to-end through the Flask test client,
+`check_` so `unittest discover` skips it — it needs an app and stubs matplotlib).
+
+The table is **not** in `deploy/cloudformation.yaml`, matching the six
+observed-series tables and for the same reason — CloudFormation cannot adopt a live
+table without an import operation. IAM needs no change (`table/ystocker-*`). No
+TTL: a portfolio does not expire.
+
+```bash
+aws dynamodb create-table --table-name ystocker-assets --region us-west-2 \
+  --billing-mode PAY_PER_REQUEST \
+  --attribute-definitions AttributeName=id,AttributeType=S \
+  --key-schema AttributeName=id,KeyType=HASH
+```
+
 
 ### Emailing a finished agent report
 

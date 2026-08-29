@@ -1,0 +1,857 @@
+{% extends "base.html" %}
+{% block title %}yStocker — My Assets{% endblock %}
+
+{% block content %}
+{#
+  /assets — holdings plus 穿透 (look-through).
+
+  Two conventions from this codebase that matter here:
+
+  * Page-local CSS declares light-first custom properties with a `.dark` override,
+    because hand-written CSS is unreachable by Tailwind's `dark:` variant and
+    tests/test_theme_classes.py rejects a `dark:` pair inside a selector.
+  * Every string that originated in a user's CSV -- names, accounts, skipped-row
+    excerpts -- goes through esc() before it reaches innerHTML. This is the one
+    page in the app that renders attacker-supplied text, since a CSV cell can hold
+    anything and the file came from outside.
+#}
+<style>
+  #assetsRoot {
+    --as-card:   #ffffff;
+    --as-line:   #e2e8f0;
+    --as-muted:  #64748b;
+    --as-strong: #0f172a;
+    --as-seen:   #6366f1;
+    --as-hidden: #a5b4fc;
+    --as-bond:   #38bdf8;
+    --as-other:  #cbd5e1;
+    --as-warn:   #b45309;
+  }
+  .dark #assetsRoot {
+    --as-card:   #0f172a;
+    --as-line:   #1e293b;
+    --as-muted:  #94a3b8;
+    --as-strong: #f8fafc;
+    --as-seen:   #818cf8;
+    --as-hidden: #4338ca;
+    --as-bond:   #0284c7;
+    --as-other:  #334155;
+    --as-warn:   #fbbf24;
+  }
+  .as-card { background: var(--as-card); border: 1px solid var(--as-line); border-radius: 1rem; }
+  .as-tile-label { color: var(--as-muted); font-size: .7rem; text-transform: uppercase; letter-spacing: .04em; }
+  .as-tile-value { color: var(--as-strong); font-size: 1.5rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .as-tab { color: var(--as-muted); border-bottom: 2px solid transparent; }
+  .as-tab[data-active="1"] { color: var(--as-strong); border-bottom-color: var(--as-seen); }
+  /* The coverage bar: the honesty caveat as a picture. Segment widths are set
+     inline from data, which is also why they are not Tailwind classes -- a class
+     assembled at runtime is absent from the compiled bundle. */
+  .as-cov { display: flex; height: 1.5rem; border-radius: .5rem; overflow: hidden; }
+  .as-cov > span { display: block; height: 100%; }
+  .as-legend-dot { width: .625rem; height: .625rem; border-radius: 2px; display: inline-block; }
+  #assetsRoot table { font-variant-numeric: tabular-nums; }
+  .as-num { text-align: right; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .as-chain { color: var(--as-muted); font-size: .68rem; }
+  .as-drop { border: 2px dashed var(--as-line); border-radius: 1rem; }
+  .as-drop[data-over="1"] { border-color: var(--as-seen); }
+</style>
+
+<div id="assetsRoot">
+
+  <div class="mb-5">
+    <h1 class="text-2xl sm:text-3xl font-bold grad-text mb-1" data-i18n="assets.title">My Assets</h1>
+    <p class="text-slate-500 dark:text-slate-400 text-sm" data-i18n="assets.subtitle">Your holdings, and what is actually inside them.</p>
+  </div>
+
+  {% if not signed_in %}
+  {# Anonymous branch. Renders the pitch rather than redirecting to /login, which
+     matches agents_page: a login form with no context is a worse landing. #}
+  <div class="as-card p-6 sm:p-10 text-center fade-up max-w-2xl mx-auto">
+    <svg class="w-12 h-12 mx-auto mb-4 text-brand" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M3 6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6Zm4 5h10M7 15h6"/>
+    </svg>
+    <h2 class="text-lg font-semibold text-slate-800 dark:text-slate-100 mb-2" data-i18n="assets.signin_title">Sign in to track your assets</h2>
+    <p class="text-sm text-slate-500 dark:text-slate-400 mb-6" data-i18n="assets.signin_body">Your positions are private to your account.</p>
+    <a href="{{ url_for('main.login') }}?next=/assets"
+       class="inline-block px-5 py-2.5 rounded-lg bg-brand text-white text-sm font-medium hover:bg-brand-dark transition"
+       data-i18n="assets.signin_btn">Sign In</a>
+  </div>
+  {% else %}
+
+  <div id="asError" class="hidden mb-4 px-4 py-3 rounded-lg text-sm"
+       style="background:rgba(180,83,9,.12); color:var(--as-warn); border:1px solid rgba(180,83,9,.3)"></div>
+
+  <div id="asLoading" class="as-card p-8 text-center text-sm text-slate-500 dark:text-slate-400">
+    <span data-i18n="assets.warming">Resolving holdings…</span>
+  </div>
+
+  <div id="asBody" class="hidden">
+
+    <!-- ── Summary tiles ─────────────────────────────────────────────── -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+      <div class="as-card p-4"><div class="as-tile-label" data-i18n="assets.total_value">Total value</div><div class="as-tile-value" id="asTotal">—</div><div class="text-xs mt-0.5" id="asGain"></div></div>
+      <div class="as-card p-4"><div class="as-tile-label" data-i18n="assets.positions">Positions</div><div class="as-tile-value" id="asCount">—</div><div class="text-xs mt-0.5" style="color:var(--as-muted)" id="asAccounts"></div></div>
+      <div class="as-card p-4"><div class="as-tile-label" data-i18n="assets.underlying">Underlying names</div><div class="as-tile-value" id="asNames">—</div><div class="text-xs mt-0.5" style="color:var(--as-muted)" id="asOverlapCount"></div></div>
+      <div class="as-card p-4"><div class="as-tile-label" data-i18n="assets.coverage">Look-through coverage</div><div class="as-tile-value" id="asCoverage">—</div><div class="text-xs mt-0.5" style="color:var(--as-muted)" id="asCoverageSub"></div></div>
+    </div>
+
+    <!-- ── Coverage bar + the floor caveat ──────────────────────────────
+         This is not decoration. Yahoo discloses ten holdings per fund, so a
+         reported exposure is a lower bound, and a reader who takes it as an
+         estimate will under-read their concentration. The bar makes the
+         unresolved share impossible to miss. -->
+    <div class="as-card p-4 mb-4">
+      <div class="as-cov mb-2" id="asCovBar"></div>
+      <div class="flex flex-wrap gap-x-4 gap-y-1 text-xs mb-2" id="asCovLegend" style="color:var(--as-muted)"></div>
+      <p class="text-xs" style="color:var(--as-muted)" data-i18n="assets.floor_note">Funds disclose only their top holdings, so every figure below is a floor.</p>
+    </div>
+
+    <div id="asWarming" class="hidden mb-4 px-4 py-3 rounded-lg text-sm as-card">
+      <div class="flex items-center gap-2">
+        <svg class="w-4 h-4 animate-spin text-brand" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8V0C5.4 0 0 5.4 0 12h4Z"/>
+        </svg>
+        <span class="font-medium" data-i18n="assets.warming">Resolving holdings…</span>
+        <span id="asWarmingCount" style="color:var(--as-muted)"></span>
+      </div>
+      <p class="text-xs mt-1" style="color:var(--as-muted)" data-i18n="assets.warming_note">Coverage will climb as fund holdings are fetched.</p>
+    </div>
+
+    <div id="asWarnings" class="hidden mb-4"></div>
+
+    <!-- ── Tabs ──────────────────────────────────────────────────────── -->
+    <div class="flex gap-1 sm:gap-4 mb-4 border-b overflow-x-auto" style="border-color:var(--as-line)">
+      <button type="button" class="as-tab px-3 py-2 text-sm whitespace-nowrap" data-tab="holdings" data-active="1"><span data-i18n="assets.tab_holdings">Holdings</span></button>
+      <button type="button" class="as-tab px-3 py-2 text-sm whitespace-nowrap" data-tab="lookthrough"><span data-i18n="assets.tab_lookthrough">Look-through (穿透)</span></button>
+      <button type="button" class="as-tab px-3 py-2 text-sm whitespace-nowrap" data-tab="overlap"><span data-i18n="assets.tab_overlap">Hidden overlap</span></button>
+      <button type="button" class="as-tab px-3 py-2 text-sm whitespace-nowrap" data-tab="mix"><span data-i18n="assets.tab_mix">Asset &amp; sector mix</span></button>
+      <button type="button" class="as-tab px-3 py-2 text-sm whitespace-nowrap" data-tab="import"><span data-i18n="assets.tab_import">Import</span></button>
+    </div>
+
+    <!-- ── Holdings ──────────────────────────────────────────────────── -->
+    <section data-panel="holdings">
+      <div class="as-card overflow-x-auto mb-4">
+        <table class="w-full text-xs">
+          <thead>
+            <tr class="text-left" style="color:var(--as-muted); border-bottom:1px solid var(--as-line)">
+              <th class="px-3 py-2" data-i18n="assets.th_symbol">Symbol</th>
+              <th class="px-3 py-2" data-i18n="assets.th_name">Name</th>
+              <th class="px-3 py-2" data-i18n="assets.th_type">Type</th>
+              <th class="px-3 py-2 as-num" data-i18n="assets.th_qty">Quantity</th>
+              <th class="px-3 py-2 as-num" data-i18n="assets.th_price">Price</th>
+              <th class="px-3 py-2 as-num" data-i18n="assets.th_value">Value</th>
+              <th class="px-3 py-2 as-num" data-i18n="assets.th_weight">Weight</th>
+              <th class="px-3 py-2 as-num" data-i18n="assets.th_coverage">Seen</th>
+              <th class="px-3 py-2 as-num" data-i18n="assets.th_pl">P/L</th>
+              <th class="px-3 py-2" data-i18n="assets.th_account">Account</th>
+              <th class="px-3 py-2"></th>
+            </tr>
+          </thead>
+          <tbody id="asHoldings"></tbody>
+        </table>
+      </div>
+
+      <div class="as-card p-4">
+        <h3 class="text-sm font-semibold mb-3" style="color:var(--as-strong)" data-i18n="assets.add_title">Add a holding</h3>
+        <form id="asAddForm" class="flex flex-wrap gap-2 items-center">
+          <input name="symbol" required maxlength="14" class="px-3 py-2 rounded-lg text-sm bg-transparent border" style="border-color:var(--as-line); color:var(--as-strong); width:9rem" data-i18n-placeholder="assets.add_symbol_ph" placeholder="Symbol e.g. VOO">
+          <input name="quantity" type="number" step="any" min="0" class="px-3 py-2 rounded-lg text-sm bg-transparent border" style="border-color:var(--as-line); color:var(--as-strong); width:8rem" data-i18n-placeholder="assets.add_qty_ph" placeholder="Quantity">
+          <input name="cost_basis" type="number" step="any" min="0" class="px-3 py-2 rounded-lg text-sm bg-transparent border" style="border-color:var(--as-line); color:var(--as-strong); width:10rem" data-i18n-placeholder="assets.add_cost_ph" placeholder="Cost basis (optional)">
+          <input name="account" maxlength="60" class="px-3 py-2 rounded-lg text-sm bg-transparent border" style="border-color:var(--as-line); color:var(--as-strong); width:10rem" data-i18n-placeholder="assets.add_account_ph" placeholder="Account (optional)">
+          <button type="submit" class="px-4 py-2 rounded-lg bg-brand text-white text-sm font-medium hover:bg-brand-dark transition" data-i18n="assets.add_btn">Add</button>
+        </form>
+      </div>
+    </section>
+
+    <!-- ── Look-through ──────────────────────────────────────────────── -->
+    <section data-panel="lookthrough" class="hidden">
+      <div class="chart-container as-card p-4 mb-4" style="height:340px">
+        <canvas id="asExposureChart"></canvas>
+      </div>
+      <div class="as-card overflow-x-auto mb-4">
+        <table class="w-full text-xs">
+          <thead>
+            <tr class="text-left" style="color:var(--as-muted); border-bottom:1px solid var(--as-line)">
+              <th class="px-3 py-2" data-i18n="assets.th_symbol">Symbol</th>
+              <th class="px-3 py-2" data-i18n="assets.th_name">Name</th>
+              <th class="px-3 py-2 as-num" data-i18n="assets.th_exposure">True exposure</th>
+              <th class="px-3 py-2 as-num" data-i18n="assets.th_direct">Direct</th>
+              <th class="px-3 py-2 as-num" data-i18n="assets.th_indirect">Via funds</th>
+              <th class="px-3 py-2" data-i18n="assets.th_routes">Held via</th>
+            </tr>
+          </thead>
+          <tbody id="asExposures"></tbody>
+        </table>
+      </div>
+      <div class="as-card p-4">
+        <h3 class="text-sm font-semibold mb-1" style="color:var(--as-strong)" data-i18n="assets.residual_title">What look-through could not name</h3>
+        <table class="w-full text-xs mt-2"><tbody id="asResidual"></tbody></table>
+        <p class="text-xs mt-3" style="color:var(--as-muted)" id="asIssuers"></p>
+      </div>
+    </section>
+
+    <!-- ── Overlap ───────────────────────────────────────────────────── -->
+    <section data-panel="overlap" class="hidden">
+      <div class="as-card p-4 mb-4">
+        <h3 class="text-sm font-semibold mb-1" style="color:var(--as-strong)" data-i18n="assets.overlap_title">Concentration you cannot see on a statement</h3>
+        <p class="text-xs" style="color:var(--as-muted)" data-i18n="assets.overlap_body">These companies reach your portfolio through more than one holding.</p>
+      </div>
+      <div id="asOverlaps" class="grid gap-3 sm:grid-cols-2"></div>
+    </section>
+
+    <!-- ── Mix ───────────────────────────────────────────────────────── -->
+    <section data-panel="mix" class="hidden">
+      <div class="grid gap-4 lg:grid-cols-2">
+        <div class="as-card p-4">
+          <h3 class="text-sm font-semibold" style="color:var(--as-strong)" data-i18n="assets.mix_asset">True asset mix</h3>
+          <p class="text-xs mb-3" style="color:var(--as-muted)" data-i18n="assets.mix_asset_note">Complete — funds report their full asset split.</p>
+          <div class="chart-container" style="height:260px"><canvas id="asAssetChart"></canvas></div>
+        </div>
+        <div class="as-card p-4">
+          <h3 class="text-sm font-semibold" style="color:var(--as-strong)" data-i18n="assets.mix_sector">True sector mix</h3>
+          <p class="text-xs mb-3" style="color:var(--as-muted)" data-i18n="assets.mix_sector_note">Share of classified equity, look-through.</p>
+          <div class="chart-container" style="height:260px"><canvas id="asSectorChart"></canvas></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Import ────────────────────────────────────────────────────── -->
+    <section data-panel="import" class="hidden">
+      <div class="as-card p-4 sm:p-6">
+        <h3 class="text-sm font-semibold mb-1" style="color:var(--as-strong)" data-i18n="assets.import_title">Import from your broker</h3>
+        <p class="text-xs mb-4" style="color:var(--as-muted)" data-i18n="assets.import_body">Upload a positions export.</p>
+
+        <div class="as-drop p-6 text-center mb-4" id="asDrop">
+          <input type="file" id="asFile" accept=".csv,.txt,text/csv" class="hidden">
+          <button type="button" id="asPick" class="px-4 py-2 rounded-lg bg-brand text-white text-sm font-medium hover:bg-brand-dark transition" data-i18n="assets.import_pick">Choose CSV file</button>
+          <div class="mt-3 text-xs" style="color:var(--as-muted)"><span id="asFileName"></span></div>
+          <a href="{{ url_for('main.api_assets_template') }}" class="inline-block mt-3 text-xs text-brand hover:underline" data-i18n="assets.import_template">Download template</a>
+        </div>
+
+        <div class="flex flex-wrap gap-4 items-center text-sm mb-4">
+          <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="asMode" value="replace" checked class="accent-indigo-500"><span data-i18n="assets.import_replace">Replace my positions</span></label>
+          <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="asMode" value="merge" class="accent-indigo-500"><span data-i18n="assets.import_merge">Add to my positions</span></label>
+        </div>
+
+        <div id="asPreview" class="hidden"></div>
+      </div>
+    </section>
+
+  </div>
+  {% endif %}
+</div>
+
+{% if signed_in %}
+<script>
+(function () {
+  'use strict';
+
+  // ── helpers ──────────────────────────────────────────────────────────
+  // esc() is mandatory, not stylistic: every name, account and CSV excerpt
+  // rendered below arrived in a file the user got from somewhere else, and all of
+  // it reaches the DOM via innerHTML. A cell containing markup would otherwise
+  // execute. tests/test_report_email.py documents the mirror-image trap on the
+  // server side.
+  function esc(v) {
+    return String(v == null ? '' : v)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+  const t = (k, f) => (typeof I18n !== 'undefined' && I18n.t(k)) || f;
+  const $ = (id) => document.getElementById(id);
+  const money = (v) => v == null ? '—' :
+    '$' + Number(v).toLocaleString(undefined, { maximumFractionDigits: 0 });
+  const pct = (v, d) => v == null ? '—' : Number(v).toFixed(d == null ? 2 : d) + '%';
+  const qty = (v) => v == null ? '—' :
+    Number(v).toLocaleString(undefined, { maximumFractionDigits: 4 });
+
+  const KIND_LABEL = { fund: 'assets.kind_fund', equity: 'assets.kind_equity',
+                       cash: 'assets.kind_cash', other: 'assets.kind_other' };
+  const KIND_FALLBACK = { fund: 'Fund', equity: 'Stock', cash: 'Cash', other: 'Other' };
+  const kindLabel = (k) => k && KIND_LABEL[k] ? t(KIND_LABEL[k], KIND_FALLBACK[k]) : '—';
+
+  // Fills {n} and {list} in a translated string. i18n.js has no interpolation of
+  // its own, and building the sentence server-side is what produced English text
+  // on a Chinese page -- there is no request language in the warm thread.
+  function fill(str, vars) {
+    return String(str).replace(/\{(\w+)\}/g, (m, k) => (k in vars ? vars[k] : m));
+  }
+
+  function warningText(w) {
+    if (typeof w === 'string') return w;               // tolerate an older payload
+    if (!w || !w.code) return '';
+    if (w.code === 'raw') return w.text || '';
+    if (w.code === 'unpriced') {
+      const list = (w.symbols || []).join(', ');
+      return w.extra
+        ? fill(t('assets.warn_unpriced_more',
+                 'No price yet for {list} and {n} more.'), { list: list, n: w.extra })
+        : fill(t('assets.warn_unpriced', 'No price yet for {list}.'), { list: list });
+    }
+    if (w.code === 'mixed_valuation') {
+      return fill(t('assets.warn_mixed',
+                    '{n} line(s) are valued from the imported figure.'), { n: w.count });
+    }
+    return '';
+  }
+
+  // Residual bucket order and colours. Order is fixed rather than taken from the
+  // payload's key order, because a table whose rows move between refreshes is
+  // unreadable -- the same reason etf_holdings.SECTORS is an ordered list.
+  const RESIDUAL_ROWS = [
+    ['undisclosed_equity', 'assets.res_undisclosed', 'Equity the funds do not disclose', '--as-hidden'],
+    ['non_equity',         'assets.res_nonequity',   'Bonds, cash and other',            '--as-bond'],
+    ['unclassified',       'assets.res_unclassified','Fund with no composition published','--as-other'],
+    ['unresolved',         'assets.res_unresolved',  'Symbols the data provider does not know', '--as-other'],
+    ['truncated',          'assets.res_truncated',   'Nested too deep to follow',        '--as-other'],
+    ['pending',            'assets.res_pending',     'Still being fetched',              '--as-other'],
+  ];
+
+  function cssVar(name) {
+    return getComputedStyle($('assetsRoot')).getPropertyValue(name).trim() || '#888';
+  }
+
+  let charts = {};
+  function drawChart(id, config) {
+    const el = $(id);
+    if (!el || typeof Chart === 'undefined') return;
+    if (charts[id]) charts[id].destroy();
+    charts[id] = new Chart(el, config);
+  }
+
+  // ── tabs ─────────────────────────────────────────────────────────────
+  document.querySelectorAll('[data-tab]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      const want = btn.getAttribute('data-tab');
+      document.querySelectorAll('[data-tab]').forEach(function (b) {
+        b.setAttribute('data-active', b === btn ? '1' : '0');
+      });
+      document.querySelectorAll('[data-panel]').forEach(function (p) {
+        // A single class, so classList.toggle is safe here -- the theme test
+        // rejects only space-separated strings.
+        p.classList.toggle('hidden', p.getAttribute('data-panel') !== want);
+      });
+      // Chart.js cannot measure a canvas inside a display:none parent, so a chart
+      // drawn while its tab was hidden comes out 0px high. Resize on reveal.
+      Object.keys(charts).forEach((k) => charts[k] && charts[k].resize());
+    });
+  });
+
+  function showError(msg) {
+    const box = $('asError');
+    box.textContent = msg;
+    box.classList.remove('hidden');
+  }
+
+  // ── render ───────────────────────────────────────────────────────────
+  function render(d) {
+    $('asLoading').classList.add('hidden');
+    $('asBody').classList.remove('hidden');
+
+    const total = d.total_value || 0;
+
+    $('asTotal').textContent = money(total);
+    $('asCount').textContent = d.position_count || 0;
+    $('asNames').textContent = d.exposure_count || 0;
+    $('asCoverage').textContent = pct(d.coverage_pct, 1);
+    $('asCoverageSub').textContent = money(d.seen_value) + ' ' +
+      t('assets.resolved_to_company', 'resolved to a company');
+
+    const accounts = new Set((d.positions || []).map((p) => p.account).filter(Boolean));
+    $('asAccounts').textContent = accounts.size > 1
+      ? fill(t('assets.n_accounts', '{n} accounts'), { n: accounts.size }) : '';
+
+    const cost = d.cost_basis_total || 0;
+    if (cost > 0) {
+      const gain = total - cost;
+      const g = $('asGain');
+      g.textContent = (gain >= 0 ? '+' : '') + money(gain) +
+        ' (' + (gain >= 0 ? '+' : '') + (gain / cost * 100).toFixed(1) + '%)';
+      g.className = 'text-xs mt-0.5 ' + (gain >= 0
+        ? 'text-emerald-700 dark:text-emerald-400'
+        : 'text-rose-700 dark:text-rose-400');
+    }
+
+    const nOverlap = (d.overlaps || []).length;
+    $('asOverlapCount').textContent = nOverlap
+      ? fill(t('assets.held_multi', '{n} held more than one way'), { n: nOverlap }) : '';
+
+    renderCoverageBar(d);
+    renderWarnings(d);
+    renderHoldings(d);
+    renderExposures(d);
+    renderResidual(d);
+    renderOverlaps(d);
+    renderMix(d);
+
+    const warming = $('asWarming');
+    warming.classList.toggle('hidden', !d.warming);
+    if (d.warming) {
+      $('asWarmingCount').textContent = '(' + (d.pending_count || 0) + ')';
+    }
+
+    if (typeof I18n !== 'undefined' && I18n.apply) I18n.apply($('assetsRoot'));
+  }
+
+  function renderCoverageBar(d) {
+    const total = d.total_value || 0;
+    const segs = [['--as-seen', d.seen_value || 0, t('assets.coverage', 'Resolved')]];
+    RESIDUAL_ROWS.forEach(function (row) {
+      const cell = (d.residual || {})[row[0]];
+      if (cell && cell.value > 0) segs.push([row[3], cell.value, t(row[1], row[2])]);
+    });
+
+    $('asCovBar').innerHTML = segs.map(function (s) {
+      const w = total ? (s[1] / total * 100) : 0;
+      return '<span title="' + esc(s[2]) + ' ' + w.toFixed(1) + '%" style="width:' +
+        w.toFixed(3) + '%; background:' + cssVar(s[0]) + '"></span>';
+    }).join('');
+
+    $('asCovLegend').innerHTML = segs.map(function (s) {
+      const w = total ? (s[1] / total * 100) : 0;
+      return '<span class="inline-flex items-center gap-1.5"><i class="as-legend-dot" style="background:' +
+        cssVar(s[0]) + '"></i>' + esc(s[2]) + ' <b style="color:var(--as-strong)">' +
+        w.toFixed(1) + '%</b></span>';
+    }).join('');
+  }
+
+  function renderWarnings(d) {
+    const box = $('asWarnings');
+    const list = (d.warnings || []).map(warningText).filter(Boolean);
+    if (!list.length) { box.classList.add('hidden'); return; }
+    box.classList.remove('hidden');
+    box.innerHTML = '<ul class="as-card p-3 text-xs space-y-1" style="color:var(--as-muted)">' +
+      list.map((w) => '<li>• ' + esc(w) + '</li>').join('') + '</ul>';
+  }
+
+  function renderHoldings(d) {
+    const rows = d.positions || [];
+    const perPos = {};
+    (d.per_position || []).forEach((p) => { perPos[p.symbol] = p; });
+    const total = d.total_value || 0;
+
+    if (!rows.length) {
+      $('asHoldings').innerHTML = '<tr><td colspan="11" class="px-3 py-6 text-center" style="color:var(--as-muted)">' +
+        esc(t('assets.empty', 'No positions yet — import a CSV or add one below.')) + '</td></tr>';
+      return;
+    }
+
+    $('asHoldings').innerHTML = rows.map(function (p) {
+      const cov = perPos[p.symbol];
+      const weight = (total && p.value != null) ? (p.value / total * 100) : null;
+      const gainCls = p.gain == null ? '' : (p.gain >= 0
+        ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400');
+      const src = p.value_source === 'imported'
+        ? ' <span title="' + esc(t('assets.imported_value', 'valued from the imported figure, not a live price')) +
+          '" style="color:var(--as-warn)">*</span>' : '';
+      return '<tr style="border-top:1px solid var(--as-line)">' +
+        '<td class="px-3 py-2 font-semibold" style="color:var(--as-strong)">' + esc(p.symbol) + '</td>' +
+        '<td class="px-3 py-2" style="color:var(--as-muted)">' + esc(p.name || '') + '</td>' +
+        '<td class="px-3 py-2" style="color:var(--as-muted)">' + esc(kindLabel(p.kind)) + '</td>' +
+        '<td class="px-3 py-2 as-num">' + qty(p.quantity) + '</td>' +
+        '<td class="px-3 py-2 as-num">' + (p.price == null ? '—' : '$' + Number(p.price).toFixed(2)) + '</td>' +
+        '<td class="px-3 py-2 as-num" style="color:var(--as-strong)">' + money(p.value) + src + '</td>' +
+        '<td class="px-3 py-2 as-num">' + pct(weight, 1) + '</td>' +
+        '<td class="px-3 py-2 as-num" style="color:var(--as-muted)">' + (cov ? pct(cov.coverage_pct, 0) : '—') + '</td>' +
+        '<td class="px-3 py-2 as-num ' + gainCls + '">' + (p.gain == null ? '—' :
+          (p.gain >= 0 ? '+' : '') + money(p.gain)) + '</td>' +
+        '<td class="px-3 py-2" style="color:var(--as-muted)">' + esc(p.account || '') + '</td>' +
+        '<td class="px-3 py-2 text-right"><button type="button" data-remove="' + esc(p.symbol) +
+          '" class="text-xs text-rose-700 dark:text-rose-400 hover:underline">' +
+          esc(t('assets.remove', 'Remove')) + '</button></td>' +
+        '</tr>';
+    }).join('');
+  }
+
+  function renderExposures(d) {
+    const rows = d.exposures || [];
+    if (!rows.length) {
+      $('asExposures').innerHTML = '<tr><td colspan="6" class="px-3 py-6 text-center" style="color:var(--as-muted)">' +
+        esc(t('assets.lt_empty', 'Nothing resolved yet.')) + '</td></tr>';
+      return;
+    }
+
+    $('asExposures').innerHTML = rows.map(function (e) {
+      const chains = (e.routes || []).slice(0, 4).map(function (r) {
+        const via = (r.chain && r.chain.length) ? r.chain.join(' → ') : t('assets.th_direct', 'Direct');
+        return '<div class="as-chain">' + esc(via) + ' · ' + pct(r.pct) + '</div>';
+      }).join('');
+      const more = (e.routes || []).length > 4
+        ? '<div class="as-chain">+' + ((e.routes || []).length - 4) + '</div>' : '';
+      return '<tr style="border-top:1px solid var(--as-line)">' +
+        '<td class="px-3 py-2 font-semibold align-top" style="color:var(--as-strong)">' + esc(e.symbol) + '</td>' +
+        '<td class="px-3 py-2 align-top" style="color:var(--as-muted)">' + esc(e.name || '') + '</td>' +
+        '<td class="px-3 py-2 as-num align-top font-semibold" style="color:var(--as-strong)">' + pct(e.pct) + '</td>' +
+        '<td class="px-3 py-2 as-num align-top">' + (e.direct_pct ? pct(e.direct_pct) : '—') + '</td>' +
+        '<td class="px-3 py-2 as-num align-top">' + (e.indirect_pct ? pct(e.indirect_pct) : '—') + '</td>' +
+        '<td class="px-3 py-2 align-top">' + '<div style="color:var(--as-strong)">' + e.route_count + ' ' +
+          esc(t('assets.routes_n', 'holding(s)')) + '</div>' + chains + more + '</td>' +
+        '</tr>';
+    }).join('');
+
+    // Stacked direct-vs-indirect, which is the picture of the whole feature: a
+    // long bar with no dark segment is exposure the statement never showed.
+    //
+    // I18n.label() returns {label, i18nKey} to be *spread* into the dataset, not
+    // assigned to `label` -- assigning it renders "[object Object]" in the legend.
+    // The spread also carries i18nKey, which is what lets retranslateCharts()
+    // relabel the legend on a language switch without a redraw.
+    const top = rows.slice(0, 12);
+    const lbl = (k, f) => (typeof I18n !== 'undefined' && I18n.label)
+      ? I18n.label(k, f) : { label: f };
+    drawChart('asExposureChart', {
+      type: 'bar',
+      data: {
+        labels: top.map((e) => e.symbol),
+        datasets: [
+          Object.assign(lbl('assets.th_direct', 'Direct'),
+            { data: top.map((e) => e.direct_pct), backgroundColor: cssVar('--as-seen') }),
+          Object.assign(lbl('assets.th_indirect', 'Via funds'),
+            { data: top.map((e) => e.indirect_pct), backgroundColor: cssVar('--as-hidden') }),
+        ],
+      },
+      options: {
+        indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+        scales: {
+          x: { stacked: true, ticks: { color: CT.c('#64748b'), callback: (v) => v + '%' },
+               grid: { color: CT.c('#1e293b') } },
+          y: { stacked: true, ticks: { color: CT.c('#64748b') }, grid: { display: false } },
+        },
+        plugins: {
+          legend: { position: 'bottom', labels: { color: CT.c('#64748b'), boxWidth: 12 } },
+          tooltip: { callbacks: { label: (c) => c.dataset.label + ': ' + c.parsed.x.toFixed(2) + '%' } },
+        },
+      },
+    });
+  }
+
+  function renderResidual(d) {
+    const res = d.residual || {};
+    const total = d.total_value || 0;
+    const parts = [
+      '<tr style="border-bottom:1px solid var(--as-line)">' +
+      '<td class="py-1.5"><span class="inline-flex items-center gap-1.5"><i class="as-legend-dot" style="background:' +
+      cssVar('--as-seen') + '"></i><b style="color:var(--as-strong)">' +
+      esc(t('assets.coverage', 'Resolved to a company')) + '</b></span></td>' +
+      '<td class="as-num py-1.5" style="color:var(--as-strong)">' + money(d.seen_value) + '</td>' +
+      '<td class="as-num py-1.5" style="color:var(--as-strong)">' + pct(d.coverage_pct) + '</td></tr>',
+    ];
+    RESIDUAL_ROWS.forEach(function (row) {
+      const cell = res[row[0]];
+      if (!cell || cell.value <= 0) return;
+      parts.push('<tr><td class="py-1.5"><span class="inline-flex items-center gap-1.5">' +
+        '<i class="as-legend-dot" style="background:' + cssVar(row[3]) + '"></i>' +
+        esc(t(row[1], row[2])) + '</span></td>' +
+        '<td class="as-num py-1.5">' + money(cell.value) + '</td>' +
+        '<td class="as-num py-1.5">' + pct(cell.pct) + '</td></tr>');
+    });
+    $('asResidual').innerHTML = parts.join('');
+
+    const groups = d.issuer_groups || [];
+    $('asIssuers').innerHTML = groups.length
+      ? esc(t('assets.issuer_note', 'Share classes of one company, listed separately above:')) + ' ' +
+        groups.slice(0, 5).map((g) => '<b style="color:var(--as-strong)">' + esc(g.symbols.join(' + ')) +
+          '</b> = ' + pct(g.pct) + ' ' + esc(g.issuer)).join('; ')
+      : '';
+  }
+
+  function renderOverlaps(d) {
+    const rows = d.overlaps || [];
+    if (!rows.length) {
+      $('asOverlaps').innerHTML = '<div class="as-card p-6 text-center text-sm sm:col-span-2" style="color:var(--as-muted)">' +
+        esc(t('assets.overlap_empty', 'No underlying company is reached through more than one holding.')) + '</div>';
+      return;
+    }
+    $('asOverlaps').innerHTML = rows.slice(0, 24).map(function (e) {
+      const bars = (e.routes || []).map(function (r) {
+        const w = e.pct ? (r.pct / e.pct * 100) : 0;
+        const via = (r.chain && r.chain.length) ? r.chain.join(' → ') : r.root;
+        return '<div class="flex items-center gap-2 text-xs mb-1">' +
+          '<span class="shrink-0" style="width:9rem; color:var(--as-muted)" title="' + esc(via) + '">' +
+            esc(via) + '</span>' +
+          '<span class="flex-1 rounded" style="height:.5rem; background:var(--as-other)">' +
+            '<span class="block rounded" style="height:100%; width:' + w.toFixed(1) +
+            '%; background:' + (r.chain && r.chain.length ? cssVar('--as-hidden') : cssVar('--as-seen')) + '"></span></span>' +
+          '<span class="as-num shrink-0" style="width:3.5rem">' + pct(r.pct) + '</span></div>';
+      }).join('');
+      const hidden = (e.pct || 0) - (e.direct_pct || 0);
+      return '<div class="as-card p-4">' +
+        '<div class="flex items-baseline justify-between mb-1">' +
+          '<div><span class="font-semibold" style="color:var(--as-strong)">' + esc(e.symbol) + '</span> ' +
+          '<span class="text-xs" style="color:var(--as-muted)">' + esc(e.name || '') + '</span></div>' +
+          '<div class="text-lg font-bold" style="color:var(--as-strong)">' + pct(e.pct) + '</div>' +
+        '</div>' +
+        '<div class="text-xs mb-3" style="color:var(--as-muted)">' + pct(hidden) + ' ' +
+          esc(t('assets.of_which_hidden', 'of which not held directly')) + '</div>' +
+        bars + '</div>';
+    }).join('');
+  }
+
+  function renderMix(d) {
+    const asset = d.asset_mix || [];
+    const PALETTE = ['#6366f1', '#38bdf8', '#34d399', '#fbbf24', '#f472b6', '#94a3b8', '#a78bfa'];
+    // Asset classes get their own keys; sectors deliberately reuse the
+    // `mult.comp_*` strings /multiples already ships, because funddata emits
+    // Yahoo's squashed sector keys and a second copy would drift from the first.
+    const acLabel = (k) => t('assets.ac_' + k, k);
+    const secLabel = (k) => t('mult.comp_' + k, k.replace(/_/g, ' '));
+
+    drawChart('asAssetChart', {
+      type: 'doughnut',
+      data: {
+        labels: asset.map((r) => acLabel(r.key)),
+        datasets: [{ data: asset.map((r) => r.pct),
+                     backgroundColor: asset.map((_, i) => PALETTE[i % PALETTE.length]),
+                     borderWidth: 0 }],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false, cutout: '58%',
+        plugins: {
+          legend: { position: 'right', labels: { color: CT.c('#64748b'), boxWidth: 12, font: { size: 11 } } },
+          tooltip: { callbacks: { label: (c) => c.label + ': ' + c.parsed.toFixed(2) + '%' } },
+        },
+      },
+    });
+
+    const sect = (d.sector_mix || []).slice(0, 11);
+    drawChart('asSectorChart', {
+      type: 'bar',
+      data: {
+        labels: sect.map((r) => secLabel(r.key)),
+        datasets: [{ data: sect.map((r) => r.pct), backgroundColor: cssVar('--as-seen'),
+                     borderRadius: 3 }],
+      },
+      options: {
+        indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+        scales: {
+          x: { ticks: { color: CT.c('#64748b'), callback: (v) => v + '%' }, grid: { color: CT.c('#1e293b') } },
+          y: { ticks: { color: CT.c('#64748b'), font: { size: 10 } }, grid: { display: false } },
+        },
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: (c) => c.parsed.x.toFixed(2) + '%' } },
+        },
+      },
+    });
+  }
+
+  // ── data ─────────────────────────────────────────────────────────────
+  // Polls while anything is still resolving, backing off so a portfolio with a
+  // stubbornly unresolvable symbol does not poll forever at 3s.
+  let pollTimer = null, pollDelay = 3000, polls = 0;
+
+  async function load(again) {
+    try {
+      const resp = await fetch('/api/assets', { headers: { 'Accept': 'application/json' } });
+      if (resp.status === 401) { window.location.href = '/login?next=/assets'; return; }
+      const data = await resp.json();
+      if (!resp.ok) {
+        $('asLoading').classList.add('hidden');
+        showError(data.error || t('assets.err_generic', 'Something went wrong.'));
+        return;
+      }
+      $('asError').classList.add('hidden');
+      render(data);
+
+      if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
+      if (data.warming && polls < 25) {
+        polls += 1;
+        pollDelay = Math.min(pollDelay * 1.25, 15000);
+        pollTimer = setTimeout(() => load(true), pollDelay);
+      }
+    } catch (err) {
+      $('asLoading').classList.add('hidden');
+      if (!again) showError(t('assets.err_generic', 'Something went wrong.'));
+      console.warn('assets: load failed', err);
+    }
+  }
+
+  async function post(url, body, isJson) {
+    const opts = { method: 'POST' };
+    if (isJson) {
+      opts.headers = { 'Content-Type': 'application/json' };
+      opts.body = JSON.stringify(body);
+    } else {
+      opts.body = body;
+    }
+    const resp = await fetch(url, opts);
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(data.error || 'Request failed');
+    return data;
+  }
+
+  // ── mutations ────────────────────────────────────────────────────────
+  $('asHoldings').addEventListener('click', async function (ev) {
+    const btn = ev.target.closest('[data-remove]');
+    if (!btn) return;
+    btn.disabled = true;
+    try {
+      await post('/api/assets/position/' + encodeURIComponent(btn.getAttribute('data-remove')), {}, true);
+      polls = 0; pollDelay = 3000;
+      await load();
+    } catch (err) { showError(err.message); btn.disabled = false; }
+  });
+
+  $('asAddForm').addEventListener('submit', async function (ev) {
+    ev.preventDefault();
+    const f = new FormData(ev.target);
+    const body = {
+      symbol: f.get('symbol'), quantity: f.get('quantity') || null,
+      cost_basis: f.get('cost_basis') || null, account: f.get('account') || '',
+    };
+    if (!body.symbol) return;
+    try {
+      await post('/api/assets/position', body, true);
+      ev.target.reset();
+      polls = 0; pollDelay = 3000;
+      await load();
+    } catch (err) { showError(err.message); }
+  });
+
+  // ── import ───────────────────────────────────────────────────────────
+  let pendingFile = null;
+
+  $('asPick').addEventListener('click', () => $('asFile').click());
+  $('asFile').addEventListener('change', function () {
+    if (this.files && this.files[0]) preview(this.files[0]);
+  });
+
+  const drop = $('asDrop');
+  ['dragenter', 'dragover'].forEach((e) => drop.addEventListener(e, function (ev) {
+    ev.preventDefault(); drop.setAttribute('data-over', '1');
+  }));
+  ['dragleave', 'drop'].forEach((e) => drop.addEventListener(e, function (ev) {
+    ev.preventDefault(); drop.setAttribute('data-over', '0');
+  }));
+  drop.addEventListener('drop', function (ev) {
+    const f = ev.dataTransfer && ev.dataTransfer.files && ev.dataTransfer.files[0];
+    if (f) preview(f);
+  });
+
+  function mode() {
+    const el = document.querySelector('input[name="asMode"]:checked');
+    return el ? el.value : 'replace';
+  }
+
+  async function preview(file) {
+    pendingFile = file;
+    $('asFileName').textContent = file.name;
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('mode', mode());
+    try {
+      const data = await post('/api/assets/import?commit=0', fd, false);
+      renderPreview(data, null);
+    } catch (err) {
+      renderPreview(null, err.message);
+    }
+  }
+
+  function renderPreview(d, error) {
+    const box = $('asPreview');
+    box.classList.remove('hidden');
+    if (error) {
+      box.innerHTML = '<div class="p-3 rounded-lg text-sm" style="background:rgba(180,83,9,.12); color:var(--as-warn)">' +
+        esc(error) + '</div>';
+      return;
+    }
+
+    const mapRows = Object.keys(d.mapping || {}).map(function (k) {
+      return '<span class="inline-flex items-center gap-1 px-2 py-1 rounded text-xs mr-1 mb-1" style="background:var(--as-other)">' +
+        '<b style="color:var(--as-strong)">' + esc(k) + '</b> ← ' + esc(d.mapping[k]) + '</span>';
+    }).join('');
+
+    const rows = (d.rows || []).slice(0, 12).map(function (r) {
+      return '<tr style="border-top:1px solid var(--as-line)">' +
+        '<td class="px-2 py-1 font-semibold" style="color:var(--as-strong)">' + esc(r.symbol) + '</td>' +
+        '<td class="px-2 py-1" style="color:var(--as-muted)">' + esc(r.name || '') + '</td>' +
+        '<td class="px-2 py-1 as-num">' + qty(r.quantity) + '</td>' +
+        '<td class="px-2 py-1 as-num">' + money(r.market_value) + '</td>' +
+        '<td class="px-2 py-1 as-num">' + money(r.cost_basis) + '</td>' +
+        '<td class="px-2 py-1" style="color:var(--as-muted)">' + esc(r.account || '') + '</td></tr>';
+    }).join('');
+
+    const skipped = (d.skipped || []).length
+      ? '<details class="mt-3"><summary class="text-xs cursor-pointer" style="color:var(--as-muted)">' +
+        esc(t('assets.rows_skipped', 'Rows skipped')) + ': ' + d.skipped.length +
+        '</summary><ul class="mt-2 text-xs space-y-1" style="color:var(--as-muted)">' +
+        d.skipped.slice(0, 20).map((s) => '<li>' + esc(t('assets.csv_line', 'line')) + ' ' + s.line +
+          ' — ' + esc(t('assets.skip_' + s.reason, s.reason)) + ': <code>' + esc(s.excerpt) + '</code></li>').join('') +
+        '</ul></details>' : '';
+
+    const warns = (d.warnings || []).length
+      ? '<ul class="mt-2 text-xs space-y-1" style="color:var(--as-warn)">' +
+        d.warnings.map((w) => '<li>• ' + esc(w) + '</li>').join('') + '</ul>' : '';
+
+    box.innerHTML =
+      '<div class="p-3 rounded-lg mb-3 text-xs" style="background:rgba(99,102,241,.1); color:var(--as-strong)">' +
+        esc(t('assets.import_check', 'Check the mapping below before confirming.')) + '</div>' +
+      '<div class="text-xs mb-2" style="color:var(--as-muted)">' +
+        esc(t('assets.detected', 'Detected')) + ': <b style="color:var(--as-strong)">' +
+        esc(d.broker || 'CSV') + '</b> · ' + esc(d.encoding || '') + ' · ' +
+        esc(t('assets.will_import', 'Will import')) + ' <b style="color:var(--as-strong)">' +
+        (d.row_count || 0) + '</b></div>' +
+      '<div class="mb-3">' + mapRows + '</div>' +
+      '<div class="overflow-x-auto"><table class="w-full text-xs"><thead><tr class="text-left" style="color:var(--as-muted)">' +
+        '<th class="px-2 py-1">' + esc(t('assets.th_symbol', 'Symbol')) + '</th>' +
+        '<th class="px-2 py-1">' + esc(t('assets.th_name', 'Name')) + '</th>' +
+        '<th class="px-2 py-1 as-num">' + esc(t('assets.th_qty', 'Quantity')) + '</th>' +
+        '<th class="px-2 py-1 as-num">' + esc(t('assets.th_value', 'Value')) + '</th>' +
+        '<th class="px-2 py-1 as-num">' + esc(t('assets.th_cost', 'Cost')) + '</th>' +
+        '<th class="px-2 py-1">' + esc(t('assets.th_account', 'Account')) + '</th>' +
+      '</tr></thead><tbody>' + rows + '</tbody></table></div>' +
+      ((d.rows || []).length > 12 ? '<div class="text-xs mt-1" style="color:var(--as-muted)">+' +
+        ((d.rows || []).length - 12) + '</div>' : '') +
+      warns + skipped +
+      '<div class="flex gap-2 mt-4">' +
+        '<button type="button" id="asCommit" class="px-4 py-2 rounded-lg bg-brand text-white text-sm font-medium hover:bg-brand-dark transition">' +
+          esc(t('assets.import_confirm', 'Confirm import')) + '</button>' +
+        '<button type="button" id="asCancel" class="px-4 py-2 rounded-lg text-sm border" style="border-color:var(--as-line); color:var(--as-muted)">' +
+          esc(t('assets.import_cancel', 'Cancel')) + '</button>' +
+      '</div>';
+
+    $('asCommit').addEventListener('click', commit);
+    $('asCancel').addEventListener('click', function () {
+      pendingFile = null;
+      $('asFile').value = '';
+      $('asFileName').textContent = '';
+      box.classList.add('hidden');
+    });
+  }
+
+  async function commit() {
+    if (!pendingFile) return;
+    const btn = $('asCommit');
+    btn.disabled = true;
+    const fd = new FormData();
+    fd.append('file', pendingFile);
+    fd.append('mode', mode());
+    fd.append('commit', '1');
+    try {
+      const data = await post('/api/assets/import?commit=1', fd, false);
+      $('asPreview').innerHTML = '<div class="p-3 rounded-lg text-sm" ' +
+        'style="background:rgba(16,185,129,.12); color:var(--as-strong)">' +
+        esc(t('assets.import_ok', 'Imported')) + ': ' + (data.count || 0) + '</div>';
+      pendingFile = null;
+      $('asFile').value = '';
+      polls = 0; pollDelay = 3000;
+      await load();
+      const tab = document.querySelector('[data-tab="holdings"]');
+      if (tab) tab.click();
+    } catch (err) {
+      showError(err.message);
+      btn.disabled = false;
+    }
+  }
+
+  document.addEventListener('i18n:langchange', function () {
+    if (typeof I18n !== 'undefined' && I18n.retranslateCharts) I18n.retranslateCharts();
+    load(true);
+  });
+
+  load();
+})();
+</script>
+{% endif %}
+{% endblock %}

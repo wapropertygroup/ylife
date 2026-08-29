@@ -468,6 +468,9 @@
         <a href="{{ url_for('main.daily_report') }}"
            class="px-3 py-1.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition"
            data-i18n="nav.daily">Daily</a>
+        <a href="{{ url_for('main.assets_page') }}"
+           class="px-3 py-1.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+           data-i18n="nav.assets">Assets</a>
         <a href="{{ url_for('main.videos') }}"
            class="px-3 py-1.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition"
            data-i18n="nav.videos">Videos</a>
@@ -698,6 +701,7 @@
           <a href="{{ url_for('main.thirteenf') }}"    class="px-3 py-2 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 truncate" data-i18n="nav.thirteenf">13F</a>
           {# Daily was absent from the mobile list entirely while desktop had it. #}
           <a href="{{ url_for('main.daily_report') }}" class="px-3 py-2 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 truncate" data-i18n="nav.daily">Daily</a>
+          <a href="{{ url_for('main.assets_page') }}"  class="px-3 py-2 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 truncate" data-i18n="nav.assets">Assets</a>
           <a href="{{ url_for('main.videos') }}"       class="px-3 py-2 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 truncate" data-i18n="nav.videos">Videos</a>
           <a href="{{ url_for('main.guide') }}"        class="px-3 py-2 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 truncate" data-i18n="nav.guide">Guide</a>
         </div>

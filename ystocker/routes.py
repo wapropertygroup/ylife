@@ -3392,6 +3392,249 @@ def api_agents_showcase_job_pdf(job_id):
 
 
 # ---------------------------------------------------------------------------
+# Assets — a signed-in user's own holdings, and 穿透 through them
+#
+# Gated on being signed in and nothing else. Unlike /agents this spends no Gemini
+# budget and starts no subprocess, so there is no allowlist, no quota and no
+# credit: the cost of a request is arithmetic over an already-warm cache. What it
+# does touch is *user data*, so every route keys strictly off session e-mail and
+# `portfolio` fails closed rather than returning an empty list -- see its module
+# docstring for why an empty portfolio is a worse answer than an error.
+# ---------------------------------------------------------------------------
+
+#: Ceiling on an uploaded CSV, checked before the body is read into memory. Two
+#: gunicorn workers on a 4 GB box cannot afford to buffer an arbitrary upload, and
+#: a positions export is measured in kilobytes.
+_ASSETS_UPLOAD_MAX = 2 * 1024 * 1024
+
+
+def _assets_user() -> Optional[str]:
+    """Signed-in e-mail, lowercased.
+
+    Normalised *here* rather than at each call site, unlike ``_agent_user()``
+    which returns the raw session value and leaves every consumer to lowercase
+    defensively. This is a storage key: ``Alice@x.com`` and ``alice@x.com``
+    resolving to different portfolios is a data-loss bug, not a display quirk.
+    """
+    email = session.get("user_email")
+    return email.strip().lower() if email else None
+
+
+def _assets_gate():
+    """Error response if the caller may not touch a portfolio, else None.
+
+    Always JSON, never a redirect -- matching ``_agent_gate()`` and the rest of
+    the ``/api/**`` surface.
+    """
+    if not _assets_user():
+        return jsonify({"error": "Sign in required", "reason": "auth"}), 401
+    return None
+
+
+@bp.route("/assets")
+def assets_page():
+    """The asset tracker. Renders for everyone; the body branches on sign-in.
+
+    Deliberately not a redirect to /login for an anonymous visitor, matching
+    ``agents_page``: the page explains what it does and offers a sign-in button,
+    which is a better landing than a login form with no context.
+    """
+    email = _assets_user()
+    return render_template("assets.html",
+                           peer_groups=list(PEER_GROUPS.keys()),
+                           signed_in=bool(email),
+                           user_email=email or "")
+
+
+@bp.route("/api/assets")
+def api_assets():
+    """Positions plus the full 穿透 analysis.
+
+    Never fetches: ``assets.analyse`` resolves against the ``funddata`` cache
+    only, so this is milliseconds of arithmetic regardless of portfolio size. What
+    is missing comes back in ``pending_symbols`` and is queued for a background
+    warm, so the client polls and watches ``coverage_pct`` climb rather than
+    holding a worker open for the ~100 Yahoo calls a cold portfolio implies.
+    """
+    gate = _assets_gate()
+    if gate:
+        return gate
+    from ystocker import assets as assets_svc
+    from ystocker import portfolio
+
+    email = _assets_user()
+    try:
+        positions = portfolio.load(email)
+    except portfolio.StoreUnavailable as exc:
+        # 503, not an empty list: see portfolio's module docstring.
+        return jsonify({"error": str(exc), "reason": "store"}), 503
+
+    payload = assets_svc.analyse(positions)
+    if payload.get("pending_symbols"):
+        depth = assets_svc.kick_warm(payload["pending_symbols"])
+        payload["warm_queued"] = depth
+    payload["warm"] = assets_svc.warm_status()
+    payload["store"] = portfolio.available()[1]
+    return jsonify(payload)
+
+
+@bp.route("/api/assets/positions", methods=["POST"])
+def api_assets_save_positions():
+    """Replace the whole position list. Body: {"positions": [...]}"""
+    gate = _assets_gate()
+    if gate:
+        return gate
+    from ystocker import portfolio
+
+    body = request.get_json(force=True, silent=True) or {}
+    rows = body.get("positions")
+    if not isinstance(rows, list):
+        return jsonify({"error": "Expected a 'positions' list"}), 400
+    if len(rows) > portfolio.MAX_POSITIONS:
+        return jsonify({"error": f"At most {portfolio.MAX_POSITIONS} positions"}), 400
+
+    try:
+        saved = portfolio.save(_assets_user(), rows)
+    except portfolio.StoreUnavailable as exc:
+        return jsonify({"error": str(exc), "reason": "store"}), 503
+    return jsonify({"ok": True, "positions": saved, "count": len(saved)})
+
+
+@bp.route("/api/assets/position", methods=["POST"])
+def api_assets_add_position():
+    """Add or update one position. Body: {"symbol", "quantity", ...}"""
+    gate = _assets_gate()
+    if gate:
+        return gate
+    from ystocker import assets as assets_svc
+    from ystocker import portfolio
+
+    body = request.get_json(force=True, silent=True) or {}
+    try:
+        saved = portfolio.add(_assets_user(), body)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except portfolio.StoreUnavailable as exc:
+        return jsonify({"error": str(exc), "reason": "store"}), 503
+
+    # Warm the new symbol straight away so the first poll after adding it already
+    # has a price and a composition.
+    assets_svc.kick_warm([p["symbol"] for p in saved])
+    return jsonify({"ok": True, "positions": saved, "count": len(saved)})
+
+
+@bp.route("/api/assets/position/<symbol>", methods=["DELETE", "POST"])
+def api_assets_remove_position(symbol):
+    """Delete one position. POST is accepted because `fetch` DELETE is blocked by
+    some corporate proxies, and this is not a REST purity exercise."""
+    gate = _assets_gate()
+    if gate:
+        return gate
+    from ystocker import portfolio
+
+    try:
+        saved = portfolio.remove(_assets_user(), symbol)
+    except portfolio.StoreUnavailable as exc:
+        return jsonify({"error": str(exc), "reason": "store"}), 503
+    return jsonify({"ok": True, "positions": saved, "count": len(saved)})
+
+
+@bp.route("/api/assets/import", methods=["POST"])
+def api_assets_import():
+    """Parse a broker CSV. Previews by default; saves only with ``commit=1``.
+
+    Two phases on purpose. The importer maps columns by alias, and a *mis*-map
+    produces a portfolio that looks entirely plausible and is wrong -- every 穿透
+    percentage downstream would then be confidently incorrect. So the first call
+    returns the detected mapping, the rows and the skipped rows with reasons, and
+    the user confirms before anything is written.
+
+    ``mode=merge`` adds to what is already stored; ``replace`` (the default) is
+    what "import my portfolio" normally means and keeps the write idempotent, so a
+    retry after a timeout cannot double a portfolio.
+    """
+    gate = _assets_gate()
+    if gate:
+        return gate
+    from ystocker import assets as assets_svc
+    from ystocker import portfolio, portfolio_csv
+
+    length = request.content_length or 0
+    if length > _ASSETS_UPLOAD_MAX:
+        return jsonify({"error": f"File is too large; the limit is "
+                                 f"{_ASSETS_UPLOAD_MAX // 1024} KB"}), 413
+
+    raw: bytes = b""
+    upload = request.files.get("file")
+    if upload is not None:
+        raw = upload.read(_ASSETS_UPLOAD_MAX + 1)
+    elif request.form.get("csv"):
+        raw = request.form["csv"].encode("utf-8")
+    else:
+        body = request.get_json(force=True, silent=True) or {}
+        if body.get("csv"):
+            raw = str(body["csv"]).encode("utf-8")
+        else:
+            raw = request.get_data(cache=False)[:_ASSETS_UPLOAD_MAX + 1]
+
+    if not raw:
+        return jsonify({"error": "No CSV supplied"}), 400
+    if len(raw) > _ASSETS_UPLOAD_MAX:
+        return jsonify({"error": f"File is too large; the limit is "
+                                 f"{_ASSETS_UPLOAD_MAX // 1024} KB"}), 413
+
+    result = portfolio_csv.parse(raw)
+    payload = result.as_dict()
+
+    want_merge = (request.args.get("mode")
+                  or request.form.get("mode") or "replace").lower() == "merge"
+    commit = (request.args.get("commit")
+              or request.form.get("commit") or "0") in ("1", "true", "yes")
+
+    if not result.ok:
+        return jsonify(payload), 400 if not commit else 400
+    if not commit:
+        payload["mode"] = "merge" if want_merge else "replace"
+        payload["committed"] = False
+        return jsonify(payload)
+
+    rows = [{"symbol": r.symbol, "name": r.name, "quantity": r.quantity,
+             "value": r.market_value, "cost_basis": r.cost_basis,
+             "account": r.account} for r in result.rows]
+    email = _assets_user()
+    try:
+        if want_merge:
+            existing = portfolio.load(email)
+            saved = portfolio.save(email, list(existing) + rows)
+        else:
+            saved = portfolio.save(email, rows)
+    except portfolio.StoreUnavailable as exc:
+        return jsonify({"error": str(exc), "reason": "store"}), 503
+
+    assets_svc.kick_warm([p["symbol"] for p in saved])
+    payload.update({"committed": True, "positions": saved, "count": len(saved),
+                    "mode": "merge" if want_merge else "replace"})
+    log.info("assets: imported %d positions for %s (%s, broker=%s)",
+             len(saved), email, "merge" if want_merge else "replace",
+             result.broker or "unknown")
+    return jsonify(payload)
+
+
+@bp.route("/api/assets/template.csv")
+def api_assets_template():
+    """The documented minimal import format.
+
+    Public: it is a static example with no user data in it, and requiring sign-in
+    to read the format a user needs *before* importing is a pointless door.
+    """
+    from ystocker.portfolio_csv import TEMPLATE_CSV
+
+    return Response(TEMPLATE_CSV, content_type="text/csv; charset=utf-8",
+                    headers={"Content-Disposition":
+                             'attachment; filename="ystocker-positions-template.csv"'})
+
+
+# ---------------------------------------------------------------------------
 # Syndication — iCalendar + RSS
 # ---------------------------------------------------------------------------
 
