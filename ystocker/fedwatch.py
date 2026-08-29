@@ -925,8 +925,10 @@ def _hist_load_ddb() -> list[dict[str, Any]]:
                 if row:
                     rows.append(row)
             # A scan is paginated; without this the series silently stops at the
-            # first page once there is more than 1 MB of history. A row here is
-            # ~500 bytes, so that is roughly eight years in.
+            # first page once there is more than 1 MB of history. Measured: a
+            # full 8-meeting row is ~890 bytes, so the first page fills after
+            # ~1,120 rows — about 4.5 years of trading days. Far enough out to be
+            # invisible in testing and certain to arrive eventually.
             if "LastEvaluatedKey" not in resp:
                 break
             kwargs["ExclusiveStartKey"] = resp["LastEvaluatedKey"]

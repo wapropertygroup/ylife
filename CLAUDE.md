@@ -254,10 +254,10 @@ Two-tier: in-memory dict + on-disk JSON in `cache/`. All cache access guarded by
 **Observed series are not cache.** The forward-P/E snapshots accumulate one row
 per day and cannot be recomputed from anything, so they live in DynamoDB
 (`ystocker-valuation-history`) as well as in `cache/valuation_cache.json` — the
-same pattern `ystocker-fear-greed`, `ystocker-pcr-history` and
-`ystocker-cta-history` already use. Keeping such a series only in a cache file
-loses it whenever the EC2 instance is replaced, which is exactly how the SPY/QQQ
-chart reset to a single point.
+same pattern `ystocker-fear-greed`, `ystocker-pcr-history`,
+`ystocker-cta-history` and `ystocker-fedwatch-history` already use. Keeping such
+a series only in a cache file loses it whenever the EC2 instance is replaced,
+which is exactly how the SPY/QQQ chart reset to a single point.
 
 The CTA tracker is the clearest case of "cannot be recomputed": each row records
 how far the S&P sat from Goldman's trigger levels *that day*, and the triggers
@@ -267,11 +267,51 @@ fetched report under the sentinel key `_latest_report` — one table rather than
 two, with readers skipping any key that is not an ISO date — so a replaced box
 does not forget every report the fetcher ever picked up.
 
-None of these four tables are in `deploy/cloudformation.yaml`, deliberately: they
+`ystocker-fedwatch-history` is the same story one level subtler, and the contrast
+inside `/fedwatch` is the useful part. That page draws two history charts and only
+one of them is an observed series:
+
+- **Target range history** — what the Fed actually did. Recomputable from FRED in
+  full on every call, so it is *cache* and is deliberately not stored. It costs no
+  extra fetch either: `_latest_fred_value()` was already downloading the whole
+  DFEDTARL/DFEDTARU CSV and keeping the last row, so `_rate_change_points()` just
+  parses what was being discarded, compressing ~13,000 daily observations to ~90
+  change points (a policy rate is a step function; Chart.js draws the flat
+  segments given `stepped`). Snapshotting this daily would start an empty chart
+  and take years to rebuild what one GET already returns.
+- **Expectations over time** — what the market *thought* it would do. Nothing
+  upstream sells back yesterday's ZQ curve, so this is the row that is lost
+  permanently if not written down.
+
+Two details in `fedwatch.record_snapshot()` that are load-bearing. Rows are keyed
+by the curve's own `as_of`, not `date.today()`: the ZQ close on a Saturday *is*
+Friday's, so keying by today would write phantom Sat/Sun rows holding Friday's
+numbers again. And same-date writes overwrite rather than accumulate, so the ~6
+refreshes a 4-hour TTL produces converge on the latest curve — which is why this
+series needs **no scheduler of its own**, unlike the 16:30 ET heatmap snapshot.
+The stored `implied_rate` is absolute for a related reason: the cut/hold/hike
+probabilities are relative to whatever the target range was that day, so a raw
+`cut_prob` plotted across a real rate change silently changes meaning mid-line —
+`base_lower`/`base_upper` travel with the row so a reader can re-base.
+
+Reads on the request path go through `history_cached()`, not `history()`.
+`/api/fedwatch/history` is public and unauthenticated and every uncached call is a
+full table scan, which on `PAY_PER_REQUEST` is billed by volume scanned.
+
+None of these five tables are in `deploy/cloudformation.yaml`, deliberately: they
 already exist, and CloudFormation cannot adopt a live table without an import
 operation, so adding them would break the next `--full` deploy rather than
-converge it. Create by hand, matching the others (`date` string hash key,
-`PAY_PER_REQUEST`):
+converge it. IAM needs no change for a new one — the instance role grants
+`table/ystocker-*` (`cloudformation.yaml`), which also means a missing table is
+never an access error, just a silent fall back to disk-only. Create by hand,
+matching the others (`date` string hash key, `PAY_PER_REQUEST`):
+
+```bash
+aws dynamodb create-table --table-name ystocker-cta-history --region us-west-2 \
+  --billing-mode PAY_PER_REQUEST \
+  --attribute-definitions AttributeName=date,AttributeType=S \
+  --key-schema AttributeName=date,KeyType=HASH
+```
 
 ```bash
 aws dynamodb create-table --table-name ystocker-cta-history --region us-west-2 \
@@ -384,6 +424,17 @@ Started in `create_app()`, all daemon threads:
   `touchmove` this needs costs the browser its fast scroll path, which is why it
   is bound per-gesture on a touch that starts at `scrollTop === 0` rather than for
   the page's lifetime.
+- **There is no Chart.js date adapter, so `type: 'time'` renders nothing.**
+  `base.html` loads `chart.umd.min.js` alone; a time axis without an adapter
+  throws inside Chart.js and leaves an empty canvas. No chart on the site uses
+  one — every existing chart is a category axis, which is fine because they plot
+  evenly-spaced series. For a genuinely irregular series use `type: 'linear'` over
+  epoch milliseconds with a tick `callback`, as the two history charts in
+  `fedwatch.html` do. Reaching for a category axis instead is worse than merely
+  wrong: it spaces points evenly, so on the target-range history the 1982–90
+  flurry of moves and the 2009–15 flat line would occupy equal width and the chart
+  would misstate the history it exists to show. Adding the adapter to `base.html`
+  would cost every page a script for the benefit of one.
 - **Nested `<button>` elements** break DOM structure in templates — browsers auto-close the outer button, causing sibling sections to escape their parent container. Always use `<div>` or `<span>` for clickable elements inside buttons.
 - **`routes.py` is monolithic** (5200+ lines in yStocker) — all routes, API endpoints, cache logic, and background tasks in one file.
 - **Google Maps API** on yPlanner requires a valid billing-enabled API key; errors show "Oops! Something went wrong" with a purple stripe.
