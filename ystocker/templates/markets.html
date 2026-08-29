@@ -1477,20 +1477,45 @@ function _renderCtaTracker() {
   document.getElementById('ctaSpxMeta').textContent = _ctaDate(spx.currentDate);
   document.getElementById('ctaMonthDown').textContent = _ctaMoney(latest.flows_1m_global_bn?.down);
 
-  const triggerRows = [
-    ['short', _ctaT('markets.cta_pivot_short', 'Short-term pivot')],
-    ['medium', _ctaT('markets.cta_pivot_medium', 'Medium-term pivot')],
-    ['long', _ctaT('markets.cta_pivot_long', 'Long-term pivot')],
-  ].filter(([key]) => Number.isFinite(Number(triggers[key])));
-  const nearest = Number.isFinite(current)
-    ? [...triggerRows].sort((a, b) => Math.abs(triggers[a[0]] - current) - Math.abs(triggers[b[0]] - current))[0]
-    : null;
-  if (nearest) {
-    const level = Number(triggers[nearest[0]]);
-    const distance = (level / current - 1) * 100;
-    document.getElementById('ctaNearestPivot').textContent = level.toLocaleString();
-    document.getElementById('ctaNearestMeta').textContent = nearest[1] + ' · ' + _ctaTemplate(
-      'markets.cta_from_spot', '{value}% from spot', { value: `${distance >= 0 ? '+' : ''}${distance.toFixed(1)}` });
+  // Nearest *downside* pivot. Prefer the server's `distance` block: it defines
+  // this as the highest trigger still BELOW the index — the one a decline crosses
+  // next — which is what the label claims. Sorting by absolute distance (what
+  // this did before) picks whichever level is closest in either direction, so
+  // once the index slipped under the short-term pivot the card reported an
+  // already-breached level as the coming "downside" one. The percentages also
+  // disagreed: this used (level/spot - 1), negative for a level below spot, while
+  // the API reports how far the index sits above the level, positive. Two numbers
+  // for the same fact, opposite signs and different denominators.
+  const triggerLabels = {
+    short:  _ctaT('markets.cta_pivot_short', 'Short-term pivot'),
+    medium: _ctaT('markets.cta_pivot_medium', 'Medium-term pivot'),
+    long:   _ctaT('markets.cta_pivot_long', 'Long-term pivot'),
+  };
+  const dist = _ctaData.distance || null;
+  const pivotEl = document.getElementById('ctaNearestPivot');
+  const pivotMeta = document.getElementById('ctaNearestMeta');
+  if (dist && dist.next_trigger) {
+    const pct = dist.next_trigger_distance_pct;
+    pivotEl.textContent = Number(dist.next_trigger_level).toLocaleString();
+    pivotMeta.textContent = (triggerLabels[dist.next_trigger] || dist.next_trigger)
+      + ' · ' + _ctaTemplate('markets.cta_above_pivot', 'index {value}% above',
+                             { value: `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}` });
+  } else if (dist && Array.isArray(dist.breached) && dist.breached.length
+             && dist.levels && dist.levels.length) {
+    // Every level is through: distinct from "no data", and the more urgent state.
+    pivotEl.textContent = _ctaT('markets.cta_all_through', 'all through');
+    pivotMeta.textContent = _ctaT('markets.cta_all_through_meta',
+                                  'index is below every reported pivot');
+  } else {
+    // No server distance (cold markets cache). Fall back to the trigger levels
+    // alone rather than recomputing a second, differently-signed percentage.
+    const below = Object.keys(triggerLabels)
+      .filter((k) => Number.isFinite(Number(triggers[k])) && Number(triggers[k]) < current)
+      .sort((a, b) => Number(triggers[b]) - Number(triggers[a]))[0];
+    if (below) {
+      pivotEl.textContent = Number(triggers[below]).toLocaleString();
+      pivotMeta.textContent = triggerLabels[below];
+    }
   }
 
   const status = document.getElementById('ctaStatus');
