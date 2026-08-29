@@ -1126,6 +1126,13 @@ def _match_rank(job: dict[str, Any], q: str) -> Optional[int]:
     TSM, TSLA and MSFT. A query that looks like a date matches the analysis
     date instead, so the same box finds "everything I ran for 2026-08-14"
     without a second control.
+
+    The ticker checks must stay *above* the date check, and the order is the only
+    thing keeping the two apart: an A-share code is all digits ("002384.SZ",
+    "515050.SH"), so "looks like a date" cannot be decided from the first
+    character. Reversing them would make every Shanghai and Shenzhen symbol
+    unsearchable -- including from the history list, where clicking a ticker
+    submits exactly this query.
     """
     ticker = (job.get("ticker") or "").upper()
     if ticker:
@@ -1133,8 +1140,8 @@ def _match_rank(job: dict[str, Any], q: str) -> Optional[int]:
             return _RANK_TICKER_EXACT
         if ticker.startswith(q):
             return _RANK_TICKER_PREFIX
-    # Digits or a dash mean the user is typing a date, not a symbol: no listed
-    # ticker starts with a digit, so this cannot shadow a symbol match.
+    # Nothing matched as a symbol, so a leading digit means a date is being
+    # typed. Prefix-only: a date is entered left to right.
     if q[0].isdigit() and (job.get("date") or "").startswith(q):
         return _RANK_DATE
     if ticker and q in ticker:

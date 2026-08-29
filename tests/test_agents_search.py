@@ -160,5 +160,61 @@ class SearchSkipTests(unittest.TestCase):
         self.assertIn("log", self.records[0])
 
 
+class DigitLeadingTickerTests(unittest.TestCase):
+    """A-share codes are all digits, so they collide with the date query.
+
+    Clicking a ticker in the history list submits that exact symbol as ``q``, and
+    for a Shanghai or Shenzhen listing that query also looks like a date. What
+    keeps them apart is only the order of the checks in ``_match_rank`` -- hence
+    these tests rather than a comment.
+    """
+
+    def setUp(self):
+        self.records = [
+            _job("a", "002384.SZ", "done", REPORT),
+            _job("b", "002384", "done", REPORT),      # same company, no suffix
+            _job("c", "515050.SH", "done", REPORT),
+            _job("d", "NVDA", "done", REPORT),
+        ]
+        real = agents._records
+        agents._records = lambda **kw: list(self.records)
+        self.addCleanup(setattr, agents, "_records", real)
+
+    def search(self, query="", **kw):
+        return agents.search_jobs(query, user="owner@example.com", **kw)
+
+    def tickers(self, query, **kw):
+        return [j["ticker"] for j in self.search(query, **kw)["jobs"]]
+
+    def test_full_code_matches_that_symbol_alone(self):
+        # What the history list sends when its 002384.SZ row is clicked: the bare
+        # 002384 is a different record and must not be dragged in.
+        self.assertEqual(self.tickers("002384.SZ"), ["002384.SZ"])
+
+    def test_bare_code_matches_exactly_then_by_prefix(self):
+        # Ranking, not just membership: the exact hit leads, the suffixed listing
+        # follows it, and neither is read as a date.
+        self.assertEqual(self.tickers("002384"), ["002384", "002384.SZ"])
+
+    def test_lowercase_click_target_still_matches(self):
+        # The stored ticker is upper-cased; a query is too, so a hand-typed or
+        # legacy lowercase suffix resolves the same way.
+        self.assertEqual(self.tickers("002384.sz"), ["002384.SZ"])
+
+    def test_a_real_date_query_still_matches_every_run(self):
+        # The other side of the ordering: a date prefix matches no ticker here, so
+        # it must fall through to the date check rather than return nothing.
+        self.assertEqual(self.search("2026-08")["found"], 4)
+
+    def test_a_hong_kong_code_ranks_above_the_year_it_looks_like(self):
+        # A 4-digit HK code is indistinguishable from a year, and this is the one
+        # query that genuinely matches both fields. Both sets come back -- the box
+        # cannot know which was meant -- but the symbol leads, so the reader is
+        # not made to scroll past a month of unrelated runs to reach it.
+        self.records.append(_job("e", "2020.HK", "done", REPORT, date="2020-03-05"))
+        self.records.append(_job("f", "NVDA", "done", REPORT, date="2020-03-05"))
+        self.assertEqual(self.tickers("2020"), ["2020.HK", "NVDA"])
+
+
 if __name__ == "__main__":
     unittest.main()

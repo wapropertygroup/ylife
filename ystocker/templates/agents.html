@@ -2326,6 +2326,35 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
     loadHistory();
   });
 
+  // Pressing a ticker in the list filters the panel to it, and pressing the one
+  // already filtered on clears it -- so the press is reversible in place instead
+  // of only through the × in the search box.
+  //
+  // Delegated from the panel rather than bound per row: the renderer rebuilds
+  // every row on each keystroke, while #agHistory itself is only ever emptied,
+  // so one listener registered here survives every re-render.
+  const histBox = document.getElementById('agHistory');
+  if (histBox && searchEl) histBox.addEventListener('click', e => {
+    // closest, not e.target: the press usually lands on the <span> that
+    // highlight() wraps around the matched characters.
+    const tick = e.target.closest('.ag-tick');
+    if (!tick || !histBox.contains(tick)) return;
+    const t = tick.dataset.ticker || '';
+    if (!t) return;
+    const cur = (searchEl.value || '').trim();
+    searchEl.value = cur.toUpperCase() === t.toUpperCase() ? '' : t;
+    // A debounced keystroke still pending would otherwise land after this and
+    // re-query with the text the press just replaced.
+    clearTimeout(histTimer);
+    loadHistory();
+    // Deliberately not focused: on a phone that raises the keyboard over the
+    // very list the press was meant to narrow. Scrolled to instead, because a
+    // press far down a long list moves the filter -- and the found-count that
+    // explains why the list just shrank -- out of view. 'nearest' is a no-op
+    // when it is already on screen.
+    searchEl.scrollIntoView({ block: 'nearest' });
+  });
+
   // ── Follow-up conversation ──────────────────────────────────────────────
   let chatJobId = null;
   let chatBusy = false;

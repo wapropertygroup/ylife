@@ -1314,6 +1314,10 @@ const I18n = (() => {
     // Runs a search dropped for having no report body. Phrased as a suffix to a
     // count ("3 with no report hidden"), so it carries no number of its own.
     'agents.search_hidden': { en: 'with no report hidden', zh: '份无报告已隐藏' },
+    // Tooltip on a ticker in the history list, which is a filter control. No
+    // symbol is interpolated: it is the button's own text.
+    'agents.filter_ticker': { en: 'Show only this ticker', zh: '只看该代码' },
+    'agents.filter_clear':  { en: 'Clear this filter',     zh: '清除筛选' },
     // The Portfolio Manager's turn, shown in full on every search hit.
     'agents.pm_none':       { en: 'No Portfolio Manager section in this report.',
                               zh: '本报告没有投资组合经理部分。' },
