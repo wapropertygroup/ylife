@@ -23,9 +23,9 @@ So this module does three honest things instead, and never mixes them:
    1871, built on actual reported earnings, so the shape is real history rather
    than a rescaled price line. Clearly labelled *trailing*.
 
-2. **Consensus forward P/E for SPY and QQQ**, computed bottom-up from
+2. **Consensus forward P/E for SPY, QQQ and SOX**, computed bottom-up from
    constituents each day and appended to a persisted series. Truly
-   forward-looking and truly per-ETF, but it necessarily starts on the first
+   forward-looking and truly per-index, but it necessarily starts on the first
    snapshot and fills in at one point per day. Shipped as ``forward`` /
    ``forward_history``, headlined as ``{etf}_forward_pe``.
 
@@ -50,6 +50,58 @@ year-old index level. In Aug 2026 they read 19.8x and 24.5x respectively — the
 same index, neither figure wrong. Every label that surfaces one of these must
 say which basis it is on and as of when, or the two get read as a contradiction.
 (4) is a third basis again: same question as (2), different answerer.
+
+5. **Trailing P/E for indices we cannot compute at all**, read straight off a
+   tradeable ETF proxy — see :data:`PROXY_TRAILING`. Shipped as
+   ``proxy_trailing``, kept well away from everything above.
+
+   This is where **Korea** ends up, and the reason is worth recording because
+   the failure is invisible. ``^KS11`` returns no P/E of any kind, and no ETF
+   anywhere returns a forward one (``forwardPE`` is ``None`` for EWY, EWJ, SOXX,
+   SMH, SPY and QQQ alike). Yahoo *does* return a ``forwardPE`` for individual
+   ``.KS`` lines — and it is not usable. Measured on 2026-08-29: Samsung
+   ``005930.KS`` reports ``forwardPE`` 3.75 with ``forwardEps``, ``trailingEps``
+   **and** ``trailingPE`` all ``None``, so nothing supports or cross-checks it;
+   at a price of 257,000 KRW that multiple implies EPS near 68,500 KRW, roughly
+   an order of magnitude above anything Samsung has earned. SK Hynix (3.57) and
+   KEPCO (2.59) are the same shape. Aggregated over the fifteen largest names
+   the result is **4.21x** against a published KOSPI forward P/E around 10-11x —
+   a number that looks plausible, and is meaningless. It also lands below
+   :data:`_PE_MIN`, so the sanity band would discard it anyway; that guard is
+   doing its job and must not be widened to "fix" Korea.
+
+   Japan is the instructive contrast and is **not** here: see (6).
+
+6. **Cap-weighted forward P/E for the Nikkei 225**, bottom-up exactly like (2).
+   Japanese lines survive the check Korean ones fail. Measured over the 40
+   largest constituents, all 40 reconcile — ``currentPrice / forwardEps`` equals
+   the reported ``forwardPE`` to within 2% for every one of them (Toyota: 3116 /
+   324.22 = 9.61, reported 9.610758) — the aggregate reads 19.4x against a
+   published Japan forward multiple around 19-20x, and the largest single weight
+   is 7.3%, so no one name is driving it. That is four independent reasons to
+   trust it and it is why Japan gets a real forward figure while Korea gets an
+   ETF's trailing one.
+
+   Currency does **not** need converting for this to be correct, which is the
+   part that looks like a bug and is not. The aggregation is
+   ``Σcap / Σ(cap/PE)``: both sums are linear in cap, so any single scale factor
+   cancels exactly. Every ``.T`` constituent reports in JPY, so the multiple is
+   FX-invariant. Only the *reported* ``market_cap_b`` is a real dollar figure and
+   needs the conversion :func:`ystocker.data.fetch_ticker_data` now applies —
+   and if that conversion is ever unavailable the multiple is still right.
+
+A caveat that applies to (2) for SOX specifically
+-------------------------------------------------
+``^SOX`` is a *modified* cap-weighted index with a single-name cap; the S&P 500
+and Nasdaq-100 are (near enough) plain cap-weighted, which is why the harmonic
+mean below is the right statistic for them. Applied raw to the semiconductor
+complex it is not the index's own basis: NVDA alone is ~42% of the aggregate
+against ~8-10% in the published index, so the SOX figure is closer to "NVDA's
+multiple, pulled about by the rest" than to what ^SOX tracks. Weighting is
+deliberately left raw so all three numbers are built the same way, and the
+concentration is *measured* rather than asserted — ``top_name`` and
+``top_weight_pct`` travel with every block so the page can state it and so it
+cannot go stale. Do not relabel this "the SOX index P/E".
 
 Aggregation
 -----------
@@ -102,7 +154,7 @@ _CACHE_TTL = 24 * 60 * 60  # multpl updates daily; constituents once a day is pl
 # a field, an existing cache still looks fresh, so the API happily serves a
 # payload the new page cannot read and charts render empty with no explanation.
 # Same idea as _YIELD_CURVE_CACHE_VER in routes.py.
-_CACHE_VER = "v4"
+_CACHE_VER = "v5"
 
 # Browser UA: multpl.com serves a plain client fine, but its CDN is happier
 # with a normal UA and this host is not FRED (see fed.py for why FRED differs).
@@ -150,10 +202,55 @@ NDX100: tuple[str, ...] = (
     "MRNA", "SIRI", "SMCI", "ARM", "PDD", "BKR", "TTWO", "ALGN",
 )
 
-# Which ETF maps to which constituent universe.
+# PHLX Semiconductor (SOX) constituents — 30 names, reviewed annually like NDX.
+# Same failure mode as NDX100: a stale name drops that holding from the
+# aggregate and is reported in `missing` rather than producing a wrong multiple.
+#
+# These must also be listed in ystocker.PEER_GROUPS["Semiconductors"], because
+# that is what actually populates ticker_cache.json and this aggregates the
+# cache, not Yahoo. Adding a name here alone changes nothing at all.
+SOX30: tuple[str, ...] = (
+    "NVDA", "AVGO", "AMD", "TXN", "QCOM", "AMAT", "MU", "LRCX", "ADI", "KLAC",
+    "INTC", "NXPI", "MCHP", "MRVL", "ON", "SWKS", "MPWR", "TER", "ENTG", "QRVO",
+    "ASML", "TSM", "ARM", "GFS", "WOLF", "AMKR", "COHR", "RMBS", "SITM", "ALAB",
+)
+
+# Nikkei 225 — the 40 largest constituents, not all 225.
+#
+# Deliberately a subset. These 40 carry the great majority of the index's market
+# cap, every extra name is another ticker on the rolling refresher, and the
+# honest statement of what was covered already ships as `coverage_pct` /
+# `constituents_used` the same way SPY's 120-of-503 does.
+#
+# Verified 2026-08-29: 40/40 return a usable forwardPE, 40/40 reconcile against
+# currentPrice / forwardEps within 2%, all report in JPY (so the multiple is
+# FX-invariant — see the module docstring), and the largest weight is 7.3%.
+N225: tuple[str, ...] = (
+    "7203.T", "6758.T", "6861.T", "8306.T", "9984.T", "6098.T", "9983.T", "4063.T",
+    "8035.T", "6501.T", "7974.T", "6902.T", "8058.T", "8001.T", "4568.T", "6367.T",
+    "8316.T", "6273.T", "4502.T", "7267.T", "6954.T", "8411.T", "9433.T", "9432.T",
+    "4661.T", "6857.T", "7741.T", "8766.T", "6301.T", "4578.T", "5108.T", "7011.T",
+    "8031.T", "2914.T", "4503.T", "6981.T", "7751.T", "6503.T", "9022.T", "8802.T",
+)
+
+# Which index maps to which constituent universe.
+#
+# `min_constituents` overrides the global floor, which exists to catch a
+# half-populated cache. A 30-name universe can never reach 40, so SOX was
+# rejected outright until this became per-universe; the SOX figure is meant to
+# clear a *higher* share of its index than SPY does (~26/30 against ~120/503).
 INDEX_UNIVERSE: dict[str, dict[str, Any]] = {
-    "SPY": {"label": "SPY (S&P 500)",    "source": "sp500"},
-    "QQQ": {"label": "QQQ (Nasdaq-100)", "source": "ndx100"},
+    "SPY":  {"label": "SPY (S&P 500)",        "source": "sp500"},
+    "QQQ":  {"label": "QQQ (Nasdaq-100)",     "source": "ndx100"},
+    "SOX":  {"label": "SOX (Semiconductors)", "source": "sox30",
+             "min_constituents": 15, "weighting_note": "cap_vs_capped"},
+    # Cap-weighted over Nikkei constituents, which is NOT the index's own basis:
+    # the Nikkei 225 is *price*-weighted, so Fast Retailing carries ~11% of it
+    # for no reason but a high share price. A cap-weighted multiple is the more
+    # meaningful statistic and the only one computable here, but it must be
+    # labelled as what it is. Same treatment as SOX's modified weighting.
+    "N225": {"label": "Nikkei 225 (Japan)",   "source": "n225",
+             "min_constituents": 20, "weighting_note": "cap_vs_price"},
 }
 
 # Sanity band for an index-level forward P/E. Anything outside this is a data
@@ -163,7 +260,33 @@ _PE_MIN, _PE_MAX = 5.0, 80.0
 # record. Guarding on share-of-matched-market-cap instead was the original bug:
 # names that fail leave the denominator as well as the numerator, so coverage
 # read a perfect 100% while only 195 of 503 names had actually been priced.
+# A default, not a constant: see INDEX_UNIVERSE["SOX"]["min_constituents"].
 _MIN_CONSTITUENTS = 40
+
+# Indices with no computable forward multiple, shown as a tradeable proxy's
+# *trailing* P/E instead. Read from ticker_cache.json like everything else, so
+# these cost no network call — every symbol here is already in PEER_GROUPS.
+#
+# Only two entries, and for two different reasons:
+#
+# * EWY is Korea's only option at all — see item (5) in the module docstring for
+#   why the bottom-up route produces 4.21x against a published ~10-11x. Note the
+#   proxy is not the index the reader asked for: EWY tracks MSCI Korea, not the
+#   KOSPI, and the label says so.
+# * SOXX is the one row directly comparable with a figure computed above, and a
+#   trailing 40.8x beside a forward 16.3x is the fastest way to see how much of
+#   the semiconductor multiple is an earnings *forecast* rather than earnings.
+#
+# EWJ is deliberately absent. Japan now has a real forward figure (INDEX_UNIVERSE
+# "N225"), and putting MSCI Japan's trailing 19.8x next to it — nearly the same
+# number on a different basis — is precisely the trailing/forward confusion the
+# rest of this module exists to prevent.
+PROXY_TRAILING: tuple[dict[str, str], ...] = (
+    {"symbol": "SOXX", "index": "PHLX Semiconductor", "index_zh": "费城半导体",
+     "proxy": "iShares Semiconductor ETF",   "proxy_zh": "iShares 半导体 ETF"},
+    {"symbol": "EWY",  "index": "MSCI Korea",         "index_zh": "MSCI 韩国",
+     "proxy": "iShares MSCI South Korea ETF", "proxy_zh": "iShares MSCI 韩国 ETF"},
+)
 
 _SESSION = requests.Session()
 _SESSION.trust_env = False  # system proxies cause silent timeouts
@@ -331,6 +454,10 @@ def _constituents(source: str) -> tuple[str, ...]:
         # dict.fromkeys dedupes while preserving order (the static list can
         # briefly contain a duplicate across a reconstitution edit).
         return tuple(dict.fromkeys(NDX100))
+    if source == "sox30":
+        return tuple(dict.fromkeys(SOX30))
+    if source == "n225":
+        return tuple(dict.fromkeys(N225))
     from ystocker.breadth import SP500_UNIVERSE
     return tuple(dict.fromkeys(SP500_UNIVERSE))
 
@@ -394,6 +521,14 @@ def _fetch_forward_pe(etf: str, meta: dict[str, Any]) -> Optional[dict[str, Any]
     earnings_used = 0.0
     used = 0
     missing: list[str] = []
+    # Largest single contributor by market cap. Recorded rather than asserted
+    # because it is the caveat that makes the SOX figure readable: raw
+    # cap-weighting puts NVDA at ~42% of the semiconductor complex against
+    # ~8-10% in the published index, so the aggregate is far more concentrated
+    # than the index it is named after. Hardcoding "42%" in the page copy would
+    # be wrong within a quarter; this travels with the number.
+    top_name: Optional[str] = None
+    top_cap = 0.0
     # A second, deliberately separate aggregation over the names that carry a
     # trailing multiple *as well*. Growth is the whole reason it exists, and a
     # growth rate is only meaningful when numerator and denominator cover the
@@ -421,6 +556,8 @@ def _fetch_forward_pe(etf: str, meta: dict[str, Any]) -> Optional[dict[str, Any]
         cap_used += cap
         earnings_used += cap / pe
         used += 1
+        if cap > top_cap:
+            top_cap, top_name = cap, sym
         if _pos(ttm):
             cap_both += cap
             fwd_earnings_both += cap / pe
@@ -439,9 +576,10 @@ def _fetch_forward_pe(etf: str, meta: dict[str, Any]) -> Optional[dict[str, Any]
         log.warning("Valuation: %s forward P/E %.2f outside sanity band %.0f-%.0f — "
                     "discarding rather than charting it", etf, fwd_pe, _PE_MIN, _PE_MAX)
         return None
-    if used < _MIN_CONSTITUENTS:
+    floor = int(meta.get("min_constituents") or _MIN_CONSTITUENTS)
+    if used < floor:
         log.warning("Valuation: %s only %d cached constituents (min %d) — discarding",
-                    etf, used, _MIN_CONSTITUENTS)
+                    etf, used, floor)
         return None
 
     log.info("Valuation: %s forward P/E %.2f from %d/%d constituents (%.0f%% by count, "
@@ -461,6 +599,13 @@ def _fetch_forward_pe(etf: str, meta: dict[str, Any]) -> Optional[dict[str, Any]
         # a bond yield, which is the comparison the number is usually wanted for.
         "earnings_yield_pct": round(100.0 / fwd_pe, 2),
     }
+    if top_name and cap_used > 0:
+        out["top_name"] = top_name
+        out["top_weight_pct"] = round(top_cap / cap_used * 100.0, 1)
+    # An opaque token, not prose: the page owns the wording so it can be
+    # translated, and a sentence baked in here would ship English to a zh reader.
+    if meta.get("weighting_note"):
+        out["weighting_note"] = meta["weighting_note"]
 
     # Per-share EPS for the ETF itself, derived rather than fetched: Yahoo
     # returns forwardEps and trailingEps as None for both SPY and QQQ (see the
@@ -477,7 +622,7 @@ def _fetch_forward_pe(etf: str, meta: dict[str, Any]) -> Optional[dict[str, Any]
             out["trailing_eps_share"] = round(float(price) / float(ttm_pe_etf), 2)
 
     # Implied 12-month earnings growth, over the names that have both multiples.
-    if used_both >= _MIN_CONSTITUENTS and ttm_earnings_both > 0:
+    if used_both >= floor and ttm_earnings_both > 0:
         growth = (fwd_earnings_both / ttm_earnings_both - 1.0) * 100.0
         out.update({
             "trailing_pe": round(cap_both / ttm_earnings_both, 2),
@@ -491,6 +636,50 @@ def _fetch_forward_pe(etf: str, meta: dict[str, Any]) -> Optional[dict[str, Any]
     else:
         log.info("Valuation: %s growth skipped — only %d names carry both multiples",
                  etf, used_both)
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Proxy trailing P/E — the only figure free data supports for some indices
+# ---------------------------------------------------------------------------
+
+def _proxy_trailing(recs: Optional[dict[str, dict[str, Any]]] = None) -> list[dict[str, Any]]:
+    """Trailing P/E for each :data:`PROXY_TRAILING` entry, from the ticker cache.
+
+    Costs nothing: every symbol is already in ``PEER_GROUPS``, so the rolling
+    refresher has fetched it. A symbol with no ``PE (TTM)`` is skipped rather
+    than shipped as ``None`` — the page hides absent rows, and an empty row
+    reads as "this index has no P/E" when the truth is "not warm yet".
+
+    Only ever *trailing*. ``forwardPE`` is ``None`` for every ETF Yahoo serves,
+    so there is deliberately no forward field here to be mistaken for one.
+    """
+    recs = recs if recs is not None else _cached_fundamentals()
+    out: list[dict[str, Any]] = []
+    for spec in PROXY_TRAILING:
+        rec = recs.get(spec["symbol"]) or {}
+        ttm = rec.get("PE (TTM)")
+        if not isinstance(ttm, (int, float)) or ttm <= 0:
+            continue
+        row: dict[str, Any] = {
+            "symbol": spec["symbol"],
+            "index": spec["index"], "index_zh": spec["index_zh"],
+            "proxy": spec["proxy"], "proxy_zh": spec["proxy_zh"],
+            "trailing_pe": round(float(ttm), 2),
+            "basis": "trailing",
+        }
+        price = rec.get("Current Price")
+        if isinstance(price, (int, float)) and price > 0:
+            row["price"] = round(float(price), 2)
+            # Derived, exactly as for SPY/QQQ above: Yahoo publishes no EPS for
+            # any ETF, so price over the multiple is the only route.
+            row["trailing_eps_share"] = round(float(price) / float(ttm), 2)
+        out.append(row)
+    if out:
+        log.info("Valuation: proxy trailing P/E for %s",
+                 ", ".join(f"{r['symbol']} {r['trailing_pe']:.1f}x" for r in out))
+    else:
+        log.info("Valuation: no proxy trailing P/E available (cache not warm?)")
     return out
 
 
@@ -686,6 +875,12 @@ def _build_payload() -> dict[str, Any]:
         if got:
             forward[etf] = got
 
+    try:
+        proxy = _proxy_trailing()
+    except Exception as exc:  # noqa: BLE001 - the page survives without it
+        log.warning("Valuation: proxy trailing raised: %s", exc)
+        proxy = []
+
     if not multpl and not forward and not consensus:
         log.error("Valuation: every source failed")
         return {"_ts": time.time(), "error": "valuation data unavailable"}
@@ -774,6 +969,10 @@ def _build_payload() -> dict[str, Any]:
                    if MULTPL_SERIES.get(k, {}).get("ship", True)},
         "forward": forward,
         "forward_history": history,
+        # Trailing only, for indices with no computable multiple. Deliberately a
+        # separate key from `forward` so nothing downstream can iterate the two
+        # together and print a trailing figure under a forward heading.
+        "proxy_trailing": proxy,
         "eps_nominal": eps_nominal,
         "fwd_realized": fwd_realized,
         # Published consensus history. Separate keys, never folded into

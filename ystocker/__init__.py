@@ -16,7 +16,17 @@ PEER_GROUPS: dict[str, list[str]] = {
     "Software":          ["MSFT", "ORCL", "CRM", "ADBE", "PLTR", "INTU", "NOW", "CRWD"],
     "Cloud / SaaS":      ["MSFT", "CRM", "NOW", "AMZN", "ORCL", "SNOW",
                           "DDOG", "CRWD", "MDB", "NET", "ZS", "IGV"],
-    "Semiconductors":    ["NVDA", "AMD", "TSM", "AVGO", "ASML", "INTC", "QCOM", "MU"],
+    # The PHLX Semiconductor (SOX) constituents, not a hand-picked eight. This
+    # group is what puts semiconductor fundamentals into cache/ticker_cache.json,
+    # and valuation.SOX30 aggregates the *cache* — so the SOX forward P/E on
+    # /multiples exists only for names listed here. With the old eight it read
+    # 10 constituents and was discarded outright by the minimum-coverage guard.
+    # Keep in step with valuation.SOX30; a name here that SOX has dropped is
+    # harmless (it is simply not aggregated), a SOX name missing here is not.
+    "Semiconductors":    ["NVDA", "AVGO", "AMD", "TXN", "QCOM", "AMAT", "MU", "LRCX",
+                          "ADI", "KLAC", "INTC", "NXPI", "MCHP", "MRVL", "ON", "SWKS",
+                          "MPWR", "TER", "ENTG", "QRVO", "ASML", "TSM", "ARM", "GFS",
+                          "WOLF", "AMKR", "COHR", "RMBS", "SITM", "ALAB"],
     "Financials":        ["JPM", "BAC", "GS", "MS", "BLK", "BRK-B", "V", "MA", "WFC", "AXP"],
     "Healthcare":        ["UNH", "JNJ", "LLY", "ABBV", "MRK", "ISRG", "PFE", "TMO", "ABT", "DHR"],
     "Biotech":           ["LLY", "AMGN", "VRTX", "REGN", "GILD", "BIIB", "ILMN"],
@@ -37,12 +47,79 @@ PEER_GROUPS: dict[str, list[str]] = {
                           "ANET", "ARM", "DELL", "TSM", "AVGO", "IRBT"],
     "US Broad ETFs":     ["SPY", "QQQ", "IWM", "DIA", "VTI", "VOO", "VXUS", "BND", "AGG",
                           "SHY", "IEF", "HYG", "LQD", "RSP"],
-    "Sector ETFs":       ["XLK", "XLF", "XLE", "XLV", "XLI", "XLY", "XLP", "XLU", "XLC", "XTL"],
+    # SOXX/SMH earn their place here rather than in Semiconductors: they are the
+    # tradeable semiconductor proxies, and their *trailing* P/E is the only P/E
+    # Yahoo publishes for any ETF. /multiples shows it beside the computed SOX
+    # forward figure as a sanity check. Keeping them out of the Semiconductors
+    # group also keeps them out of valuation.SOX30's constituent aggregation,
+    # where an ETF would double-count every name it holds.
+    "Sector ETFs":       ["XLK", "XLF", "XLE", "XLV", "XLI", "XLY", "XLP", "XLU", "XLC",
+                          "XTL", "SOXX", "SMH"],
     "International ETFs":["EWJ", "FXI", "MCHI", "EEM", "VWO", "IXUS", "VXUS", "EWZ", "INDA", "EWY"],
     "Commodities ETFs":  ["GLD", "SLV", "USO", "UNG", "DBC", "PDBC", "URA", "WEAT", "CORN", "SOYB",
                           "PPLT", "PALL", "CPER"],
     "China Tech":        ["BABA", "JD", "PDD", "BIDU", "TME", "TCEHY", "NTES", "BILI"],
+    # Nikkei 225's 40 largest names, and the reason they are here is /multiples:
+    # valuation.N225 aggregates ticker_cache.json, and only PEER_GROUPS fills it.
+    # Keep in step with valuation.N225.
+    #
+    # These are the first non-USD tickers in this file. data.fetch_ticker_data
+    # converts the $B fields to USD via the reported `currency`, so they display
+    # correctly here — and note the forward P/E computed from them is unaffected
+    # by that conversion either way, since a cap-weighted harmonic mean cancels
+    # any single currency scale factor.
+    "Japan (Nikkei)":    ["7203.T", "6758.T", "6861.T", "8306.T", "9984.T", "6098.T",
+                          "9983.T", "4063.T", "8035.T", "6501.T", "7974.T", "6902.T",
+                          "8058.T", "8001.T", "4568.T", "6367.T", "8316.T", "6273.T",
+                          "4502.T", "7267.T", "6954.T", "8411.T", "9433.T", "9432.T",
+                          "4661.T", "6857.T", "7741.T", "8766.T", "6301.T", "4578.T",
+                          "5108.T", "7011.T", "8031.T", "2914.T", "4503.T", "6981.T",
+                          "7751.T", "6503.T", "9022.T", "8802.T"],
 }
+
+# Groups whose *contents* a computed feature depends on, rather than groups that
+# merely exist to be browsed.
+#
+# cache/peer_groups.json is persistent and `_load_groups()` replaces PEER_GROUPS
+# with it wholesale, so before this existed a group defined here could never be
+# changed by a deploy again: the box had a saved copy from the /groups UI and the
+# code default was discarded at startup. That failure is invisible rather than
+# loud — /multiples would simply drop the SOX tile (10 constituents, under its
+# floor) and the Nikkei tile (zero constituents), and the page would render
+# exactly as it did before with nothing in the log to say why.
+#
+# `_load_groups()` therefore unions these back in. A ticker a user *added* to one
+# of these groups survives; a code-defined ticker a user *deleted* comes back,
+# which is the intended trade — the aggregate is wrong without it.
+REQUIRED_GROUPS: frozenset[str] = frozenset({
+    "Semiconductors",      # valuation.SOX30
+    "Japan (Nikkei)",      # valuation.N225
+    "Sector ETFs",         # valuation.PROXY_TRAILING -> SOXX
+    "International ETFs",  # valuation.PROXY_TRAILING -> EWY
+})
+
+
+def merge_saved_groups(saved: dict[str, list[str]],
+                       defaults: dict[str, list[str]]) -> dict[str, list[str]]:
+    """Combine a saved peer-group file with the code defaults.
+
+    The saved copy wins for everything a user browses, which is the long-standing
+    behaviour of the /groups UI. :data:`REQUIRED_GROUPS` are the exception: those
+    are unioned, defaults first, so a group a computed feature depends on cannot
+    be starved by a file written before that feature existed.
+
+    Pure and I/O-free so it can be tested without importing ``routes`` (which
+    pulls in matplotlib). ``routes._load_groups`` supplies the file handling.
+    """
+    merged: dict[str, list[str]] = {name: list(tickers) for name, tickers in saved.items()}
+    for name in REQUIRED_GROUPS:
+        want = defaults.get(name)
+        if not want:
+            continue
+        # dict.fromkeys keeps the default order and appends whatever the user
+        # added on top, without duplicating.
+        merged[name] = list(dict.fromkeys(list(want) + list(merged.get(name) or [])))
+    return merged
 
 # ---------------------------------------------------------------------------
 # YouTube curated channels for the Videos feed.

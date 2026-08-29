@@ -119,6 +119,8 @@ _VALUATION_TILES: list[tuple[str, str, str]] = [
     ("spx_fwd_realized",    "realized forward P/E",      "已实现前瞻市盈率"),
     ("spy_forward_pe",      "SPY forward P/E",           "SPY前瞻市盈率"),
     ("qqq_forward_pe",      "QQQ forward P/E",           "QQQ前瞻市盈率"),
+    ("sox_forward_pe",      "SOX forward P/E",           "SOX前瞻市盈率"),
+    ("n225_forward_pe",     "Nikkei 225 forward P/E",    "日经225前瞻市盈率"),
 ]
 
 
@@ -706,7 +708,16 @@ def _sec_multiples(val: Optional[dict]) -> list[str]:
 
     fwd = val.get("forward") or {}
     f_rows = []
-    for etf in ("SPY", "QQQ"):
+    # Driven by valuation.INDEX_UNIVERSE rather than a literal pair, so an index
+    # added there reaches the brief without a second edit here. The import is
+    # local and guarded: brief.py is imported by the request path and must not
+    # hard-depend on valuation's module-level state.
+    try:
+        from ystocker.valuation import INDEX_UNIVERSE
+        order = list(INDEX_UNIVERSE)
+    except Exception:  # noqa: BLE001
+        order = ["SPY", "QQQ", "SOX", "N225"]
+    for etf in order:
         b = fwd.get(etf)
         if not isinstance(b, dict) or not _isnum(b.get("forward_pe")):
             continue
@@ -724,10 +735,27 @@ def _sec_multiples(val: Optional[dict]) -> list[str]:
     hist = val.get("forward_history") or []
     if len(hist) >= 2:
         first, last = hist[0], hist[-1]
-        out += ["", f"Forward P/E history spans {first.get('date', 'n/a')} to "
-                    f"{last.get('date', 'n/a')} ({len(hist)} daily observations): "
-                    f"SPY {_num(first.get('SPY'))}x -> {_num(last.get('SPY'))}x, "
-                    f"QQQ {_num(first.get('QQQ'))}x -> {_num(last.get('QQQ'))}x."]
+        # Only indices actually present in both endpoints, so a newly added one
+        # does not print "n/a -> 19.4x" for every day before it existed.
+        spans = [f"{etf} {_num(first.get(etf))}x -> {_num(last.get(etf))}x"
+                 for etf in order
+                 if _isnum(first.get(etf)) and _isnum(last.get(etf))]
+        if spans:
+            out += ["", f"Forward P/E history spans {first.get('date', 'n/a')} to "
+                        f"{last.get('date', 'n/a')} ({len(hist)} daily observations): "
+                        + ", ".join(spans) + "."]
+
+    # Trailing-only proxies (Korea, and SOXX as a cross-check on SOX). Stated as
+    # trailing in the line itself: the model is being asked to write about
+    # forward multiples and would otherwise mix these in as if comparable.
+    proxies = val.get("proxy_trailing") or []
+    p_rows = [[str(p.get("index") or p.get("symbol")), str(p.get("symbol")),
+               _num(p.get("trailing_pe")) + "x"]
+              for p in proxies if isinstance(p, dict) and _isnum(p.get("trailing_pe"))]
+    if p_rows:
+        out += ["", "Indices with no free forward figure, shown as an ETF proxy's "
+                    "TRAILING P/E (not comparable with the forward table above):"]
+        out += _table(["Index", "Proxy", "Trailing P/E"], p_rows)
 
     for key, label in (("spx_consensus_fwd", "S&P 500 consensus forward P/E (FactSet)"),
                        ("ndx_consensus_fwd", "Nasdaq 100 consensus forward P/E (Siblis)")):

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}yStocker — Index P/E Multiples (SPY, QQQ, S&P 500){% endblock %}
+{% block title %}yStocker — Index P/E Multiples (SPY, QQQ, SOX, Nikkei 225, S&P 500){% endblock %}
 
 {% block content %}
 <style>
@@ -68,7 +68,7 @@
 <div class="mb-6 sm:mb-8 fade-up">
   <h1 class="text-2xl sm:text-3xl font-bold grad-text mb-1" data-i18n="mult.title">Index P/E Multiples</h1>
   <p class="text-slate-400 text-sm" data-i18n="mult.subtitle">
-    S&amp;P 500 trailing P/E back to 1871, and a cap-weighted forward P/E for SPY and QQQ
+    S&amp;P 500 trailing P/E back to 1871, and a cap-weighted forward P/E for SPY, QQQ, SOX and the Nikkei 225
   </p>
   {% if cache_last_updated %}
   <p class="text-xs text-slate-600 mt-1">
@@ -107,14 +107,14 @@
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up">
     <div class="mb-1">
       <h2 class="text-base font-semibold text-slate-200">
-        <span data-i18n="mult.fwd_title">Forward P/E: SPY vs QQQ — consensus estimates, today</span>
+        <span data-i18n="mult.fwd_title">Forward P/E: SPY vs QQQ vs SOX vs Nikkei 225 — consensus estimates, today</span>
         <span class="src-chip src-forward" data-i18n="mult.chip_forward">Forward</span>
       </h2>
-      <p class="text-xs text-slate-500"><span data-i18n="mult.fwd_scope">Our own reading, computed here from index constituents and recorded once a day, so this series starts at the first snapshot. The chart below plots this same SPY series against FactSet's published history, which is where to see whether today's reading is high or low; QQQ stays here, because no free source measures the Nasdaq-100 on a comparable basis.</span></p>
+      <p class="text-xs text-slate-500"><span data-i18n="mult.fwd_scope">Our own reading, computed here from index constituents and recorded once a day, so this series starts at the first snapshot. The chart below plots this same SPY series against FactSet's published history, which is where to see whether today's reading is high or low; the other three stay here, because no free source measures them on a comparable basis.</span></p>
       <p class="text-xs text-slate-500" data-i18n="mult.fwd_desc">Cap-weighted forward P/E computed from index constituents — total market value divided by total forward earnings, which is the correct aggregation. Snapshotted once a day, so this series begins at the first snapshot and lengthens by one point per day.</p>
     </div>
     <div id="vpFwdEmpty" class="hidden text-xs text-slate-500 bg-slate-800/40 border border-slate-700 rounded-lg px-3 py-2 mt-3">
-      <span data-i18n="mult.fwd_seeding">Only today's reading has been recorded so far, so this shows the two side by side. It becomes a time series once a second daily snapshot lands.</span>
+      <span data-i18n="mult.fwd_seeding">Only today's reading has been recorded so far, so this shows the indices side by side. It becomes a time series once a second daily snapshot lands.</span>
     </div>
     <!-- Two presentations of the same data. A line needs at least two points to
          mean anything, so until the snapshot series has them the comparison is
@@ -124,6 +124,17 @@
     </div>
     <div class="chart-container" id="vpForwardLineWrap" style="height:280px"><canvas id="vpForwardChart"></canvas></div>
     <p class="text-[11px] text-slate-600 mt-2"><span id="vpCoverage"></span></p>
+    <!-- ── Where the aggregation is not the index's own basis ───────────────
+         Raw cap-weighting is correct for SPY and QQQ, because the S&P 500 and
+         Nasdaq-100 really are cap-weighted. It is NOT the basis of the other
+         two: ^SOX caps single-name weight around 8% where raw weighting puts
+         NVDA above a third of the aggregate, and the Nikkei 225 is price-
+         weighted so it has no cap-weighted multiple at all. Both figures are
+         still the more meaningful statistic available, but a reader comparing
+         them with a published number needs to know why they differ. The
+         percentage is read from the payload, never hardcoded — it moves every
+         quarter. -->
+    <div id="vpBasis" class="mt-2 flex flex-col gap-1" style="display:none"></div>
 
     <!-- ── Earnings behind the multiple ─────────────────────────────────────
          The P/E above is a ratio, and a ratio moving tells you nothing about
@@ -215,6 +226,49 @@
     <div class="chart-container" style="height:280px"><canvas id="vpConsensusChart"></canvas></div>
   </div>
 
+  <div class="vp-section"><h2 data-i18n="mult.sec_proxy">Where Only a Trailing P/E Exists</h2><div class="rule"></div></div>
+
+  <!-- ── Trailing P/E via a tradeable proxy ────────────────────────────────
+       The honest bottom of the barrel, and the card exists to say so out loud
+       rather than leave an index silently missing from the page.
+
+       Korea is here because nothing better is purchasable: ^KS11 returns no P/E
+       at all, no ETF anywhere returns a forward one, and Yahoo's per-name
+       forward P/E for .KS lines is unsupported by any EPS field and fails an
+       order-of-magnitude check (Samsung reads 3.75x on a 257,000 KRW price,
+       implying EPS near 68,500). Aggregated it gives 4.21x against a published
+       ~10-11x. See valuation.py item (5).
+
+       SOXX is here for the opposite reason — it is a cross-check. Its trailing
+       40.8x against the forward 16.1x computed above is the same +125% earnings
+       growth the SOX block reports independently, which is a real corroboration
+       of a figure this page computes itself.
+
+       Japan is deliberately NOT here: it earned a genuine forward number. -->
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up" id="vpProxyCard" style="display:none">
+    <div class="mb-1">
+      <h2 class="text-base font-semibold text-slate-200">
+        <span data-i18n="mult.proxy_title">Trailing P/E from a tradeable proxy</span>
+        <span class="src-chip src-trailing" data-i18n="mult.chip_trailing">Trailing</span>
+      </h2>
+      <p class="text-xs text-slate-500" data-i18n="mult.proxy_desc">Read straight off an ETF, because for these there is nothing else. Yahoo publishes no forward P/E for any ETF and no free source publishes one for these indices, so this is <strong>trailing</strong> — not comparable with any forward figure above, and shown here rather than omitted so that a missing index is not mistaken for a broken page.</p>
+      <p class="text-xs text-amber-500/80 mt-1" data-i18n="mult.proxy_korea">Korea is the case worth reading twice. The proxy tracks <strong>MSCI Korea, not the KOSPI</strong> — related, not the same index. A bottom-up KOSPI figure was tried and rejected: Yahoo returns a forward P/E for Korean lines with no EPS behind it, and it implies earnings roughly ten times what Samsung has ever reported, aggregating to 4.21x against a published 10–11x. A number that looks plausible and means nothing is worse than an admitted gap.</p>
+    </div>
+    <div class="overflow-x-auto mt-3">
+      <table class="w-full text-xs" id="vpProxyTable">
+        <thead>
+          <tr class="text-slate-500">
+            <th class="text-left font-medium py-1 pr-3" data-i18n="mult.proxy_index">Index</th>
+            <th class="text-left font-medium py-1 px-2" data-i18n="mult.proxy_via">Proxy</th>
+            <th class="text-right font-medium py-1 px-2" data-i18n="mult.proxy_pe">Trailing P/E</th>
+            <th class="text-right font-medium py-1 pl-2" data-i18n="mult.proxy_eps">EPS / share</th>
+          </tr>
+        </thead>
+        <tbody id="vpProxyBody"></tbody>
+      </table>
+    </div>
+  </div>
+
   <div class="vp-section"><h2 data-i18n="mult.sec_fwdhist">Forward P/E History — S&amp;P 500 / SPY, realized earnings</h2><div class="rule"></div></div>
 
   <!-- ── The forward P/E time series that free data DOES support ──────── -->
@@ -303,6 +357,20 @@ const _explainData = {};
   const gridCol = '#1e293b';
   const tickCol = '#64748b';
   const C_BLUE = '#3987e5', C_ORANGE = '#d95926', C_INDIGO = '#6366f1';
+  // Two more hues for the two indices added after SPY/QQQ. Kept far apart round
+  // the wheel — blue / orange / teal / pink — because four lines share the
+  // forward chart and adjacent hues are indistinguishable at 2px on slate.
+  const C_TEAL = '#14b8a6', C_PINK = '#f472b6';
+
+  // The single source of truth for which indices exist, in what order, in what
+  // colour. There were four separate ['SPY','QQQ'] arrays before — the KPI
+  // tiles, the EPS rows, the coverage line and the advance/decline row — and
+  // they had already drifted out of step with each other once. Anything keyed by
+  // index reads this instead.
+  const IDX = ['SPY', 'QQQ', 'SOX', 'N225'];
+  const IDX_COLOR = { SPY: C_BLUE, QQQ: C_ORANGE, SOX: C_TEAL, N225: C_PINK };
+  const idxRank = e => { const i = IDX.indexOf(e); return i < 0 ? 99 : i; };
+  const byIdx = (a, b) => idxRank(a) - idxRank(b);
 
   async function safeJsonFetch(url) {
     try {
@@ -372,8 +440,12 @@ const _explainData = {};
 
   const RANGE_LABEL = m => (m === 0 ? (I18n.t('mult.range_all') || 'All')
                           : m % 12 === 0 ? (m / 12) + 'Y' : m + 'M');
-  const autoRanges = span => (span > 300 ? [120, 240, 600, 0]
-                            : span > 120 ? [12, 60, 120, 0] : [12, 60, 0]);
+  // 1Y and 2Y on every chart, including the 155-year ones. Previously the long
+  // series offered 10Y as their shortest window, which is useless for the
+  // question "what has this multiple done lately" — on a monthly series 1Y is
+  // twelve points and perfectly legible. All is still one click away.
+  const autoRanges = span => (span > 300 ? [12, 24, 120, 240, 600, 0]
+                            : span > 120 ? [12, 24, 60, 120, 0] : [12, 24, 60, 0]);
   function rangeStart(labels, months) {
     if (!months) return 0;
     const last = labels[labels.length - 1];
@@ -540,6 +612,8 @@ const _explainData = {};
   const KPIS = [
     ['spy_forward_pe',    'mult.kpi_spy',  'SPY forward P/E (consensus)'],
     ['qqq_forward_pe',    'mult.kpi_qqq',  'QQQ forward P/E (consensus)'],
+    ['sox_forward_pe',    'mult.kpi_sox',  'SOX forward P/E (consensus)'],
+    ['n225_forward_pe',   'mult.kpi_n225', 'Nikkei 225 forward P/E (consensus)'],
     ['spx_fwd_realized',  'mult.kpi_fwdreal','S&P 500 forward P/E (realized)'],
     ['spx_trailing_pe',   'mult.kpi_spxpe','S&P 500 trailing P/E'],
     ['spx_pe_percentile', 'mult.kpi_pctl', 'P/E percentile since 1871'],
@@ -619,7 +693,7 @@ const _explainData = {};
     const mk = etf => ({
       dates, values: hist.map(r => (typeof r[etf] === 'number' ? r[etf] : null)),
       label: (F[etf] && F[etf].label) || etf,
-      color: etf === 'SPY' ? C_BLUE : C_ORANGE,
+      color: IDX_COLOR[etf] || C_INDIGO,
       fill: etf === 'SPY',
     });
     // With a single recorded day a line is invisible, so say so rather than
@@ -634,7 +708,7 @@ const _explainData = {};
       if (barWrap) barWrap.style.display = 'block';
       if (lineWrap) lineWrap.style.display = 'none';
 
-      const etfs = Object.keys(F);
+      const etfs = Object.keys(F).sort(byIdx);
       const labels = etfs.map(e => (F[e].label || e));
       const vals = etfs.map(e => F[e].forward_pe);
       const barLabels = {
@@ -657,7 +731,7 @@ const _explainData = {};
         type: 'bar',
         data: { labels, datasets: [{
           data: vals,
-          backgroundColor: etfs.map(e => (e === 'SPY' ? C_BLUE : C_ORANGE)),
+          backgroundColor: etfs.map(e => (IDX_COLOR[e] || C_INDIGO)),
           borderWidth: 0, borderRadius: 3, maxBarThickness: 26,
         }] },
         options: {
@@ -683,14 +757,14 @@ const _explainData = {};
       });
       // Explain still works — it just describes today's readings.
       _explainData['vpForwardChart'] = {
-        label: 'Cap-weighted forward P/E for SPY and QQQ (current reading)',
+        label: 'Cap-weighted forward P/E for ' + etfs.join(', ') + ' (current reading)',
         unit: 'x', dates: [data.as_of], values: [vals[0]],
       };
     } else {
       if (barWrap) barWrap.style.display = 'none';
-      lineChart('vpForwardChart', [mk('SPY'), mk('QQQ')], {
+      lineChart('vpForwardChart', IDX.map(mk), {
         fmt: xmult, showPoints: true, ranges: false, unit: 'x',
-        explainLabel: 'Cap-weighted forward P/E for SPY and QQQ',
+        explainLabel: 'Cap-weighted forward P/E for ' + IDX.join(', '),
       });
     }
 
@@ -698,11 +772,9 @@ const _explainData = {};
     const epsWrap = document.getElementById('vpEps');
     const epsRows = document.getElementById('vpEpsRows');
     if (epsWrap && epsRows) {
-      const ORDER = ['SPY', 'QQQ'];
-      const rank = e => { const i = ORDER.indexOf(e); return i < 0 ? 99 : i; };
       const bn = v => v == null ? '—'
         : v >= 1000 ? '$' + (v / 1000).toFixed(2) + 'T' : '$' + Math.round(v) + 'B';
-      const rows = Object.values(F).slice().sort((a, b) => rank(a.etf) - rank(b.etf))
+      const rows = Object.values(F).slice().sort((a, b) => byIdx(a.etf, b.etf))
         .filter(b => b.forward_earnings_b != null)
         .map(b => {
           const bits = [];
@@ -740,11 +812,9 @@ const _explainData = {};
       // determines whether the aggregate is representative.
       // Ordered to match the tiles above — Flask sorts JSON keys, so plain
       // Object.values puts QQQ first and disagrees with them.
-      const ETF_ORDER = ['SPY', 'QQQ'];
-      const rank = e => { const i = ETF_ORDER.indexOf(e); return i < 0 ? 99 : i; };
       const parts = Object.values(F)
         .slice()
-        .sort((a, b) => rank(a.etf) - rank(b.etf))
+        .sort((a, b) => byIdx(a.etf, b.etf))
         .map(b => {
           const cap = capShort(b.market_cap_b);
           return `${b.etf}: ${b.constituents_used}/${b.constituents_total} `
@@ -755,6 +825,31 @@ const _explainData = {};
         cov.textContent = (I18n.t('mult.computed_over') || 'Computed over') + ' ' + parts.join(' · ');
       }
     }
+
+    // ── Where our aggregation is not the index's own basis ───────────────
+    // Only rendered for the indices that carry a weighting_note, so SPY and QQQ
+    // stay silent: for them raw cap-weighting IS the index's basis and a
+    // disclaimer would imply a problem that does not exist.
+    (function renderBasis() {
+      const wrap = document.getElementById('vpBasis');
+      if (!wrap) return;
+      const notes = Object.values(F).slice().sort((a, b) => byIdx(a.etf, b.etf))
+        .filter(b => b.weighting_note)
+        .map(b => {
+          const key = 'mult.basis_' + b.weighting_note;
+          let txt = I18n.t(key) || '';
+          if (!txt) return '';
+          // The concentration figure is substituted, not written into the
+          // string, so the caveat cannot drift from the number it describes.
+          if (b.top_name && b.top_weight_pct != null) {
+            txt = txt.replace('{top}', b.top_name)
+                     .replace('{pct}', b.top_weight_pct.toFixed(1) + '%');
+          }
+          return `<p class="text-[11px] text-amber-500/80">`
+               + `<span class="font-semibold text-slate-400">${b.etf}</span> ${txt}</p>`;
+        }).filter(Boolean);
+      if (notes.length) { wrap.innerHTML = notes.join(''); wrap.style.display = ''; }
+    })();
 
     // ── Index composition: sector weights, concentration, top holdings ──
     // Sector order is fixed server-side (etf_holdings.SECTORS) because Yahoo
@@ -840,11 +935,7 @@ const _explainData = {};
     const adWrap = document.getElementById('vpAdvDec');
     const adRows = document.getElementById('vpAdvDecRows');
     if (adWrap && adRows && ad && Object.keys(ad).length) {
-      const order = ['SPY', 'QQQ'];
-      const keys = Object.keys(ad).sort((a, b) => {
-        const i = order.indexOf(a), j = order.indexOf(b);
-        return (i < 0 ? 99 : i) - (j < 0 ? 99 : j);
-      });
+      const keys = Object.keys(ad).sort(byIdx);
       adRows.innerHTML = keys.map(k => {
         const d = ad[k];
         const decided = d.up + d.down;
@@ -931,12 +1022,34 @@ const _explainData = {};
       // and keep All one click away.
       lineChart('vpConsensusChart', series, {
         fmt: xmult, showPoints: true, unit: 'x', xTicks: 8,
-        ranges: [12, 60, 0], defaultRange: 12,
+        ranges: [12, 24, 60, 0], defaultRange: 12,
         explainLabel: 'S&P 500 consensus forward 12-month P/E as published by FactSet since 2017, '
           + 'with this app’s own daily cap-weighted SPY reading as a separate series',
       });
     }
   } catch(e) { console.warn('Multiples chart vpConsensusChart failed:', e); }
+
+  // ── Trailing P/E via a tradeable proxy ──────────────────────────────
+  // Hidden entirely when the list is empty, which is the cold-cache state —
+  // an empty table with headers reads as "these indices have no P/E", when the
+  // truth is "not warm yet".
+  try {
+    const rows = data.proxy_trailing || [];
+    const card = document.getElementById('vpProxyCard');
+    const body = document.getElementById('vpProxyBody');
+    if (card && body && rows.length) {
+      const zh = (typeof I18n !== 'undefined' && I18n.getLang && I18n.getLang() === 'zh');
+      body.innerHTML = rows.map(r => `<tr class="border-t border-slate-800/60">
+        <td class="py-1.5 pr-3 text-slate-300">${zh ? (r.index_zh || r.index) : r.index}</td>
+        <td class="py-1.5 px-2 text-slate-500">${zh ? (r.proxy_zh || r.proxy) : r.proxy}
+          <span class="text-slate-600">(${r.symbol})</span></td>
+        <td class="py-1.5 px-2 text-right font-mono text-slate-200">${r.trailing_pe.toFixed(1)}x</td>
+        <td class="py-1.5 pl-2 text-right font-mono text-slate-500">${
+          r.trailing_eps_share != null ? '$' + r.trailing_eps_share.toFixed(2) : '—'}</td>
+      </tr>`).join('');
+      card.style.display = '';
+    }
+  } catch(e) { console.warn('Multiples proxy trailing failed:', e); }
 
   // ── Realized forward P/E, 1871 → 12 months ago ──────────────────────
   try {

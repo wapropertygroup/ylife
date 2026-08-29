@@ -8,6 +8,8 @@ from __future__ import annotations
 import logging
 import os
 import threading
+import time
+from typing import Any
 
 import yfinance as yf
 
@@ -187,6 +189,69 @@ def ps_ratio(info: dict) -> float | None:
     return None
 
 
+# ---------------------------------------------------------------------------
+# Currency — the "$B" and price fields must actually be dollars
+# ---------------------------------------------------------------------------
+# PEER_GROUPS gained non-USD tickers when the Nikkei group was added (see
+# ystocker/__init__.py), and Yahoo reports `marketCap`, `enterpriseValue`,
+# `ebitda`, `freeCashflow` and every price in the listing's own currency. Left
+# raw, Toyota rendered as "36899.2 $B" against Microsoft's "3800.0 $B" — a
+# thousandfold error in a column headed "$B", which sorts to the top of every
+# table and silently poisons anything that cap-weights.
+#
+# Failure blanks the field rather than passing the local-currency number
+# through: a missing cap shows as "—", which is recoverable, while a wrong one
+# is not distinguishable from a real one by anybody reading the page.
+#
+# Only non-USD tickers touch the network. A USD listing short-circuits to 1.0,
+# so the ~230 existing tickers cost exactly what they did before.
+_FX_TTL_SECONDS = 6 * 60 * 60
+_fx_lock = threading.Lock()
+_fx_cache: dict[str, tuple[float | None, float]] = {}
+
+
+def usd_rate(currency: str | None) -> float | None:
+    """Multiplier taking *currency* to USD, or None if it cannot be determined.
+
+    ``usd_rate("JPY")`` is about 0.0065, so ``jpy_value * usd_rate("JPY")`` is
+    dollars. USD (and a missing currency, which Yahoo only omits for US
+    listings) returns 1.0 without a request.
+
+    A negative result is cached as well as a positive one, so a delisted or
+    unsupported pair is not retried on every ticker in the batch.
+    """
+    if not currency:
+        return 1.0
+    code = currency.strip().upper()
+    if code in ("USD", ""):
+        return 1.0
+
+    now = time.time()
+    with _fx_lock:
+        hit = _fx_cache.get(code)
+        if hit and (now - hit[1]) < _FX_TTL_SECONDS:
+            return hit[0]
+
+    rate: float | None = None
+    try:
+        # "{CUR}USD=X" quotes CUR->USD directly, which is the multiplier wanted.
+        # The inverse pair ("JPY=X" is USD/JPY) would need a division and reads
+        # backwards at the call site.
+        info = yf.Ticker(f"{code}USD=X").info
+        got = info.get("regularMarketPrice") or info.get("previousClose")
+        if isinstance(got, (int, float)) and got > 0:
+            rate = float(got)
+            log.info("FX: %s -> USD = %.6g", code, rate)
+        else:
+            log.warning("FX: %sUSD=X returned no price — $ fields will be blank", code)
+    except Exception as exc:  # noqa: BLE001 - a blank field beats a wrong one
+        log.warning("FX: could not price %s -> USD: %s", code, exc)
+
+    with _fx_lock:
+        _fx_cache[code] = (rate, now)
+    return rate
+
+
 def fetch_ticker_data(ticker: str) -> dict:
     """
     Return a flat dict of key valuation metrics for *ticker*.
@@ -263,25 +328,60 @@ def fetch_ticker_data(ticker: str) -> dict:
     if current_price and target_price:
         upside = (target_price - current_price) / current_price * 100
 
+    # Everything below headed "$" or "$B" must be dollars. `fx` is 1.0 for the
+    # US listings that make up almost all of PEER_GROUPS, so this is a no-op for
+    # them; for a JPY line it is ~0.0065, and None if the pair could not be
+    # priced, which blanks those fields instead of shipping a 150x error.
+    #
+    # Ratios are deliberately left alone: PE, PEG, EV/EBITDA, P/S, P/B, every
+    # growth and return percentage and `upside` above all divide one local
+    # figure by another, so the currency cancels and converting would be a
+    # second, opposite bug.
+    fx = usd_rate(info.get("currency"))
+
+    def _usd(value: Any) -> float | None:
+        """Price-like field in USD. A no-op on the USD path, deliberately.
+
+        Not rounded when fx == 1.0: these were full-precision floats before this
+        function existed and a sub-cent price would round to 0.00, which reads as
+        free and makes `price / multiple` a division by zero downstream.
+        """
+        if value is None or fx is None:
+            return None
+        if fx == 1.0:
+            return value
+        try:
+            return round(float(value) * fx, 4)
+        except (TypeError, ValueError):
+            return None
+
+    def _usd_b(value: Any) -> float | None:
+        if value is None or fx is None:
+            return None
+        try:
+            return round(float(value) * fx / 1e9, 1)
+        except (TypeError, ValueError):
+            return None
+
     return {
         "Ticker":              ticker,
         "Name":                info.get("shortName", ticker),
-        "Current Price":       current_price,
-        "Target Price":        target_price,
+        "Current Price":       _usd(current_price),
+        "Target Price":        _usd(target_price),
         "Upside (%)":          upside,
         "PE (TTM)":            pe_ttm,
         "PE (Forward)":        pe_fwd,
         "PEG":                 peg,
-        "Market Cap ($B)":     round(market_cap / 1e9, 1) if market_cap else None,
+        "Market Cap ($B)":     _usd_b(market_cap),
         "EPS Growth TTM (%)":  round(earnings_growth_ttm * 100, 1) if earnings_growth_ttm is not None else None,
         "EPS Growth Q (%)":    round(earnings_growth_q   * 100, 1) if earnings_growth_q   is not None else None,
         "Day Change (%)":      day_change_pct,
         "EV/EBITDA":           round(info.get("enterpriseToEbitda"), 1) if info.get("enterpriseToEbitda") is not None else None,
-        "EV ($B)":             round(info.get("enterpriseValue") / 1e9, 1) if info.get("enterpriseValue") else None,
-        "EBITDA ($B)":         round(info.get("ebitda") / 1e9, 1) if info.get("ebitda") else None,
+        "EV ($B)":             _usd_b(info.get("enterpriseValue")),
+        "EBITDA ($B)":         _usd_b(info.get("ebitda")),
         "P/S Ratio":          ps_ratio(info),
         "P/B Ratio":          round(info.get("priceToBook"), 2) if info.get("priceToBook") else None,
-        "FCF ($B)":           round(info.get("freeCashflow") / 1e9, 1) if info.get("freeCashflow") else None,
+        "FCF ($B)":           _usd_b(info.get("freeCashflow")),
         "Short Float (%)":    round(info.get("shortPercentOfFloat") * 100, 1) if info.get("shortPercentOfFloat") else None,
         "Dividend Yield (%)": dividend_yield_pct(info, current_price),
         "Revenue Growth (%)": round(info.get("revenueGrowth") * 100, 1) if info.get("revenueGrowth") else None,

@@ -264,14 +264,32 @@ def _save_groups() -> None:
 
 
 def _load_groups() -> None:
-    """Load peer groups from disk, overriding the defaults defined in __init__.py."""
+    """Load peer groups from disk, overriding the defaults defined in __init__.py.
+
+    With one exception: the groups in ``REQUIRED_GROUPS`` are *unioned* with the
+    code defaults rather than replaced by the saved copy. Those groups are what
+    populate ticker_cache.json for /multiples' computed multiples, and a saved
+    file from before they were extended would silently starve them — the SOX and
+    Nikkei aggregates would fall under their constituent floors and vanish from
+    the page with nothing logged. See ystocker.REQUIRED_GROUPS.
+    """
     if not _GROUPS_FILE.exists():
         return
+    # PEER_GROUPS still holds the code defaults here: this runs once at startup,
+    # before any /groups edit can have mutated it.
+    from ystocker import merge_saved_groups
+    defaults = {name: list(tickers) for name, tickers in PEER_GROUPS.items()}
     try:
         saved = json.loads(_GROUPS_FILE.read_text())
+        merged = merge_saved_groups(saved, defaults)
+        restored = [f"{name} {len(saved.get(name) or [])}->{len(merged[name])}"
+                    for name in sorted(merged)
+                    if list(saved.get(name) or []) != merged[name]]
         PEER_GROUPS.clear()
-        PEER_GROUPS.update(saved)
+        PEER_GROUPS.update(merged)
         log.info("Loaded %d peer groups from %s", len(PEER_GROUPS), _GROUPS_FILE)
+        if restored:
+            log.info("Peer groups: re-seeded required groups (%s)", ", ".join(restored))
     except Exception:
         log.exception("Failed to load peer groups from disk - using defaults")
 
@@ -2290,8 +2308,10 @@ def _tv_build_digest() -> dict:
                 "fwd_spark": _tv_spark(fv, 40, 1),
             })
         # Our own bottom-up reading, which is a different basis from FactSet's
-        # and is labelled as such on the display.
-        for etf in ("SPY", "QQQ"):
+        # and is labelled as such on the display. Keyed off INDEX_UNIVERSE so a
+        # new index does not silently miss the TV digest.
+        from ystocker.valuation import INDEX_UNIVERSE as _VP_UNIVERSE
+        for etf in _VP_UNIVERSE:
             got = ((vd or {}).get("forward") or {}).get(etf) or {}
             if got.get("forward_pe"):
                 blk[f"{etf.lower()}_fwd"] = got["forward_pe"]
