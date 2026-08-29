@@ -503,6 +503,20 @@ def peek_resolver() -> Callable[[str], Optional[dict[str, Any]]]:
 # Warming
 # ---------------------------------------------------------------------------
 
+def can_warm(symbol: str) -> bool:
+    """Whether a background worker can make progress on *symbol* right now.
+
+    ``pending`` means "no cached answer", not necessarily "fetching".  Keep the
+    two states separate: starting a worker while Yahoo's circuit breaker or the
+    symbol back-off is active only creates a thread that immediately exits and
+    makes the UI look busy forever.
+    """
+    symbol = (symbol or "").upper().strip()
+    if not symbol or _synthetic(symbol) is not None:
+        return False
+    return (fetchguard.cooldown_remaining(PROVIDER) <= 0
+            and SYMBOL_BACKOFF.ready(symbol))
+
 def warm(symbols: Iterable[str], *, budget: int = WARM_BATCH,
          need_quote: bool = False) -> tuple[int, int]:
     """Fetch up to *budget* uncached symbols. Returns (fetched, remaining).

@@ -174,6 +174,9 @@ def main() -> int:
         check("assets page includes the AI memo UI",
               "asAiRun" in r.get_data(as_text=True)
               and "/api/assets/analyze" in r.get_data(as_text=True))
+        check("assets picker accepts CSV, XLSX and PDF",
+              all(ext in r.get_data(as_text=True)
+                  for ext in (".csv", ".xlsx", ".pdf")))
 
         r = client.get("/api/assets")
         check("GET /api/assets is 200 when signed in", r.status_code == 200,

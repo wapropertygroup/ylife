@@ -3402,10 +3402,10 @@ def api_agents_showcase_job_pdf(job_id):
 # docstring for why an empty portfolio is a worse answer than an error.
 # ---------------------------------------------------------------------------
 
-#: Ceiling on an uploaded CSV, checked before the body is read into memory. Two
+#: Ceiling on an uploaded statement, checked before the body is read into memory. Two
 #: gunicorn workers on a 4 GB box cannot afford to buffer an arbitrary upload, and
-#: a positions export is measured in kilobytes.
-_ASSETS_UPLOAD_MAX = 2 * 1024 * 1024
+#: XLSX/PDF containers can be larger than their extracted positions table.
+_ASSETS_UPLOAD_MAX = 5 * 1024 * 1024
 
 
 def _assets_user() -> Optional[str]:
@@ -3474,6 +3474,13 @@ def api_assets():
         depth = assets_svc.kick_warm(payload["pending_symbols"])
         payload["warm_queued"] = depth
     payload["warm"] = assets_svc.warm_status()
+    # ``pending`` is a data-quality state; ``warming`` is an activity state.
+    # Conflating them left the spinner running forever after Yahoo entered
+    # cooldown or the worker exhausted its passes.
+    payload["warming"] = bool(payload.get("pending_symbols")
+                              and payload["warm"]["active"])
+    payload["resolution_paused"] = bool(payload.get("pending_symbols")
+                                         and not payload["warm"]["active"])
     payload["store"] = portfolio.available()[1]
     return jsonify(payload)
 
@@ -3571,7 +3578,7 @@ def api_assets_remove_position(symbol):
 
 @bp.route("/api/assets/import", methods=["POST"])
 def api_assets_import():
-    """Parse a broker CSV. Previews by default; saves only with ``commit=1``.
+    """Parse a broker CSV, XLSX or PDF. Saves only with ``commit=1``.
 
     Two phases on purpose. The importer maps columns by alias, and a *mis*-map
     produces a portfolio that looks entirely plausible and is wrong -- every 穿透
@@ -3587,7 +3594,7 @@ def api_assets_import():
     if gate:
         return gate
     from ystocker import assets as assets_svc
-    from ystocker import portfolio, portfolio_csv
+    from ystocker import portfolio, portfolio_import
 
     length = request.content_length or 0
     if length > _ASSETS_UPLOAD_MAX:
@@ -3595,8 +3602,12 @@ def api_assets_import():
                                  f"{_ASSETS_UPLOAD_MAX // 1024} KB"}), 413
 
     raw: bytes = b""
+    filename = ""
+    content_type = ""
     upload = request.files.get("file")
     if upload is not None:
+        filename = upload.filename or ""
+        content_type = upload.content_type or ""
         raw = upload.read(_ASSETS_UPLOAD_MAX + 1)
     elif request.form.get("csv"):
         raw = request.form["csv"].encode("utf-8")
@@ -3608,12 +3619,13 @@ def api_assets_import():
             raw = request.get_data(cache=False)[:_ASSETS_UPLOAD_MAX + 1]
 
     if not raw:
-        return jsonify({"error": "No CSV supplied"}), 400
+        return jsonify({"error": "No import file supplied"}), 400
     if len(raw) > _ASSETS_UPLOAD_MAX:
         return jsonify({"error": f"File is too large; the limit is "
                                  f"{_ASSETS_UPLOAD_MAX // 1024} KB"}), 413
 
-    result = portfolio_csv.parse(raw)
+    result = portfolio_import.parse(raw, filename=filename,
+                                    content_type=content_type)
     payload = result.as_dict()
 
     want_merge = (request.args.get("mode")

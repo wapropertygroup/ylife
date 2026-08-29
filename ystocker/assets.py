@@ -466,9 +466,14 @@ def kick_warm(symbols: Iterable[str]) -> int:
                 _warm_queue.pop(symbol, None)
         for raw in symbols:
             symbol = (raw or "").upper().strip()
-            if symbol and symbol != CASH_SYMBOL:
+            if symbol and symbol != CASH_SYMBOL and funddata.can_warm(symbol):
                 _warm_queue[symbol] = now
                 queued += 1
+            else:
+                # A queued symbol can become temporarily ineligible after a 429
+                # trips Yahoo's circuit breaker. Leaving it in the queue makes
+                # "queued" look like active work even though no request can run.
+                _warm_queue.pop(symbol, None)
         depth = len(_warm_queue)
         needs_thread = depth > 0 and not _warm_active
         if needs_thread:
@@ -506,6 +511,13 @@ def _warm_loop() -> None:
                     if funddata.is_known(symbol):
                         _warm_queue.pop(symbol, None)
             if not fetched:
+                # No progress means the provider is cooling down or every item
+                # is in per-symbol back-off. These remain ``pending`` in the
+                # analysis, but they are not active work. A later/manual poll can
+                # enqueue them again once funddata.can_warm() turns true.
+                with _warm_lock:
+                    for symbol in wanted:
+                        _warm_queue.pop(symbol, None)
                 return
             if remaining:
                 time.sleep(1.0)

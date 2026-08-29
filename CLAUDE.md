@@ -279,6 +279,14 @@ about the security), and `assets.kick_warm()` fills them on one background threa
 while the client polls and watches coverage climb. Steady state is cheap: fund
 top-tens are overwhelmingly the same few hundred megacaps, shared across users.
 
+`pending` and `warming` are deliberately different states. A symbol can remain
+pending while Yahoo's provider circuit breaker or its per-symbol failure back-off
+prevents any request; only an active warm worker may set `warming=true`. A pass
+that makes no progress clears its active queue, and the client replaces the
+spinner with a paused explanation plus an explicit retry control. The bounded
+poll loop must always render this terminal state when its attempt cap is reached —
+stopping timers alone leaves the last spinner frame visible forever.
+
 **Two axes need no caveat at all.** `asset_classes` and `sector_weightings` arrive
 in the same `funds_data` call and are *already* look-through on Yahoo's side —
 VTTSX's sector weights reflect the underlying companies, not "100% funds", and sum

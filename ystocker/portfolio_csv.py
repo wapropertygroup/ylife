@@ -95,6 +95,13 @@ _ALIASES: dict[str, tuple[str, ...]] = {
     "quantity": (
         "quantity", "qty", "shares", "share", "units", "unit", "sharesheld",
         "quantityheld", "position", "positionquantity", "numberofshares", "sharequantity",
+        # Employee-benefit statements may expose several quantities at once.
+        # Alias order is preference order (see _score_header): unvested shares
+        # match the statement's estimated market value; otherwise use shares
+        # currently sellable before the original purchase/grant quantity.
+        "unvestedqty", "unvestedquantity", "sellableqty", "sellablequantity",
+        "purchasedqty", "purchasedquantity", "vestedqty", "vestedquantity",
+        "grantedqty", "grantedquantity",
         "持仓数量", "持倉數量", "持股数量", "持股數量", "数量", "數量", "股数", "股數",
         "持仓", "持倉",
     ),
@@ -107,6 +114,7 @@ _ALIASES: dict[str, tuple[str, ...]] = {
         "currentvalue", "marketvalue", "value", "mktvalue", "marketvalueusd",
         "positionvalue", "totalvalue", "valueusd", "currentvalueusd", "mktval",
         "marketvaluedollar", "valuedollar",
+        "estimatedmarketvalue", "estmarketvalue",
         # Robinhood heads its market-value column "Equity". Safe as an alias
         # because this matches a *heading*: Schwab's "Security Type" column has
         # "Equity" as a cell value, which is never consulted here.
@@ -390,9 +398,13 @@ def _score_header(cells: Iterable[Any]) -> tuple[int, dict[str, str]]:
     mapping: dict[str, str] = {}
     squashed = [(_squash(c), str(c).strip()) for c in cells]
     for field_name, aliases in _ALIASES.items():
-        for sq, original in squashed:
-            if sq and sq in aliases and field_name not in mapping:
-                mapping[field_name] = original
+        # Alias order is meaningful when a statement contains several plausible
+        # quantity columns (Granted, Vested, Unvested, Sellable).  The old
+        # cell-first loop silently chose whichever appeared furthest left.
+        for alias in aliases:
+            match = next((original for sq, original in squashed if sq == alias), None)
+            if match is not None:
+                mapping[field_name] = match
                 break
     return len(mapping), mapping
 
