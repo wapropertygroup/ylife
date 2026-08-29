@@ -54,6 +54,22 @@
   .as-legend-dot { width: .625rem; height: .625rem; border-radius: 2px; display: inline-block; }
   #assetsRoot table { font-variant-numeric: tabular-nums; }
   .as-num { text-align: right; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .as-sort-button {
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+    width: 100%;
+    color: inherit;
+    font: inherit;
+    letter-spacing: inherit;
+    text-transform: inherit;
+    white-space: nowrap;
+  }
+  .as-num .as-sort-button { justify-content: flex-end; }
+  .as-sort-button:hover, .as-sort-button:focus-visible { color: var(--as-strong); }
+  .as-sort-button:focus-visible { outline: 2px solid var(--as-seen); outline-offset: 2px; border-radius: .2rem; }
+  .as-sort-arrow { min-width: .65rem; color: var(--as-muted); font-size: .7rem; line-height: 1; }
+  .as-sort-button[data-active="1"] .as-sort-arrow { color: var(--as-seen); }
   .as-chain { color: var(--as-muted); font-size: .68rem; }
   .as-exposure-card { overflow: hidden; }
   .as-exposure-toolbar {
@@ -311,18 +327,18 @@
             <col style="width:10rem">
             <col style="width:5rem">
           </colgroup>
-          <thead>
+          <thead id="asHoldingsHead">
             <tr class="text-left" style="color:var(--as-muted); border-bottom:1px solid var(--as-line)">
-              <th class="px-3 py-2" data-i18n="assets.th_symbol">Symbol</th>
-              <th class="px-3 py-2" data-i18n="assets.th_name">Name</th>
-              <th class="px-3 py-2" data-i18n="assets.th_type">Type</th>
-              <th class="px-3 py-2 as-num" data-i18n="assets.th_qty">Quantity</th>
-              <th class="px-3 py-2 as-num" data-i18n="assets.th_price">Price</th>
-              <th class="px-3 py-2 as-num" data-i18n="assets.th_value">Value</th>
-              <th class="px-3 py-2 as-num" data-i18n="assets.th_weight">Weight</th>
-              <th class="px-3 py-2 as-num" data-i18n="assets.th_coverage">Seen</th>
-              <th class="px-3 py-2 as-num" data-i18n="assets.th_pl">P/L</th>
-              <th class="px-3 py-2" data-i18n="assets.th_account">Account</th>
+              <th class="px-3 py-2" aria-sort="none"><button type="button" class="as-sort-button" data-holding-sort="symbol"><span data-i18n="assets.th_symbol">Symbol</span><span class="as-sort-arrow" aria-hidden="true">↕</span></button></th>
+              <th class="px-3 py-2" aria-sort="none"><button type="button" class="as-sort-button" data-holding-sort="name"><span data-i18n="assets.th_name">Name</span><span class="as-sort-arrow" aria-hidden="true">↕</span></button></th>
+              <th class="px-3 py-2" aria-sort="none"><button type="button" class="as-sort-button" data-holding-sort="kind"><span data-i18n="assets.th_type">Type</span><span class="as-sort-arrow" aria-hidden="true">↕</span></button></th>
+              <th class="px-3 py-2 as-num" aria-sort="none"><button type="button" class="as-sort-button" data-holding-sort="quantity"><span data-i18n="assets.th_qty">Quantity</span><span class="as-sort-arrow" aria-hidden="true">↕</span></button></th>
+              <th class="px-3 py-2 as-num" aria-sort="none"><button type="button" class="as-sort-button" data-holding-sort="price"><span data-i18n="assets.th_price">Price</span><span class="as-sort-arrow" aria-hidden="true">↕</span></button></th>
+              <th class="px-3 py-2 as-num" aria-sort="none"><button type="button" class="as-sort-button" data-holding-sort="value"><span data-i18n="assets.th_value">Value</span><span class="as-sort-arrow" aria-hidden="true">↕</span></button></th>
+              <th class="px-3 py-2 as-num" aria-sort="none"><button type="button" class="as-sort-button" data-holding-sort="weight"><span data-i18n="assets.th_weight">Weight</span><span class="as-sort-arrow" aria-hidden="true">↕</span></button></th>
+              <th class="px-3 py-2 as-num" aria-sort="none"><button type="button" class="as-sort-button" data-holding-sort="coverage"><span data-i18n="assets.th_coverage">Seen</span><span class="as-sort-arrow" aria-hidden="true">↕</span></button></th>
+              <th class="px-3 py-2 as-num" aria-sort="none"><button type="button" class="as-sort-button" data-holding-sort="gain"><span data-i18n="assets.th_pl">P/L</span><span class="as-sort-arrow" aria-hidden="true">↕</span></button></th>
+              <th class="px-3 py-2" aria-sort="none"><button type="button" class="as-sort-button" data-holding-sort="account"><span data-i18n="assets.th_account">Account</span><span class="as-sort-arrow" aria-hidden="true">↕</span></button></th>
               <th class="px-3 py-2"></th>
             </tr>
           </thead>
@@ -544,6 +560,8 @@
 
   let charts = {};
   let latestSnapshot = null;
+  let holdingsSort = { key: null, direction: null };
+  const HOLDING_TEXT_SORTS = new Set(['symbol', 'name', 'kind', 'account']);
   function drawChart(id, config) {
     const el = $(id);
     if (!el || typeof Chart === 'undefined') return;
@@ -676,11 +694,51 @@
       list.map((w) => '<li>• ' + esc(w) + '</li>').join('') + '</ul>';
   }
 
+  function holdingSortValue(p, key, perPos, total) {
+    if (key === 'weight') return total && p.value != null ? p.value / total : null;
+    if (key === 'coverage') {
+      const coverage = perPos[p.symbol];
+      return coverage && coverage.coverage_pct != null ? Number(coverage.coverage_pct) : null;
+    }
+    if (key === 'kind') return kindLabel(p.kind);
+    return p[key] == null || p[key] === '' ? null : p[key];
+  }
+
+  function sortedHoldings(rows, perPos, total) {
+    if (!holdingsSort.key) return rows.slice();
+    const key = holdingsSort.key;
+    const direction = holdingsSort.direction === 'ascending' ? 1 : -1;
+    return rows.map((row, index) => ({ row: row, index: index })).sort(function (a, b) {
+      const av = holdingSortValue(a.row, key, perPos, total);
+      const bv = holdingSortValue(b.row, key, perPos, total);
+      if (av == null && bv == null) return a.index - b.index;
+      if (av == null) return 1;
+      if (bv == null) return -1;
+      const compared = HOLDING_TEXT_SORTS.has(key)
+        ? String(av).localeCompare(String(bv), undefined, { numeric: true, sensitivity: 'base' })
+        : Number(av) - Number(bv);
+      return compared === 0 ? a.index - b.index : compared * direction;
+    }).map((item) => item.row);
+  }
+
+  function renderHoldingSortState() {
+    document.querySelectorAll('[data-holding-sort]').forEach(function (button) {
+      const active = button.getAttribute('data-holding-sort') === holdingsSort.key;
+      const th = button.closest('th');
+      const arrow = button.querySelector('.as-sort-arrow');
+      button.setAttribute('data-active', active ? '1' : '0');
+      th.setAttribute('aria-sort', active ? holdingsSort.direction : 'none');
+      arrow.textContent = active
+        ? (holdingsSort.direction === 'ascending' ? '↑' : '↓') : '↕';
+    });
+  }
+
   function renderHoldings(d) {
-    const rows = d.positions || [];
     const perPos = {};
     (d.per_position || []).forEach((p) => { perPos[p.symbol] = p; });
     const total = d.total_value || 0;
+    const rows = sortedHoldings(d.positions || [], perPos, total);
+    renderHoldingSortState();
 
     if (!rows.length) {
       $('asHoldings').innerHTML = '<tr><td colspan="11" class="px-3 py-6 text-center" style="color:var(--as-muted)">' +
@@ -1051,6 +1109,20 @@
   }
 
   $('asAiRun').addEventListener('click', runAiAnalysis);
+
+  $('asHoldingsHead').addEventListener('click', function (ev) {
+    const button = ev.target.closest('[data-holding-sort]');
+    if (!button || !latestSnapshot) return;
+    const key = button.getAttribute('data-holding-sort');
+    if (holdingsSort.key === key) {
+      holdingsSort.direction = holdingsSort.direction === 'ascending'
+        ? 'descending' : 'ascending';
+    } else {
+      holdingsSort.key = key;
+      holdingsSort.direction = HOLDING_TEXT_SORTS.has(key) ? 'ascending' : 'descending';
+    }
+    renderHoldings(latestSnapshot);
+  });
 
   // ── mutations ────────────────────────────────────────────────────────
   $('asHoldings').addEventListener('click', async function (ev) {

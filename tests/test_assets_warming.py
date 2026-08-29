@@ -29,6 +29,15 @@ class AssetsWarmingTests(unittest.TestCase):
         self.assertIn('id="asWarmingSymbols"', template)
         self.assertIn("d.pending_symbols", template)
 
+    def test_holdings_table_has_sortable_data_columns(self) -> None:
+        template = (Path(__file__).parents[1] / "ystocker" / "templates" /
+                    "assets.html").read_text(encoding="utf-8")
+        for key in ("symbol", "name", "kind", "quantity", "price", "value",
+                    "weight", "coverage", "gain", "account"):
+            self.assertIn(f'data-holding-sort="{key}"', template)
+        self.assertIn("function sortedHoldings", template)
+        self.assertIn("aria-sort", template)
+
     def test_no_progress_clears_queue_and_stops_activity(self) -> None:
         with assets._warm_lock:  # noqa: SLF001
             assets._warm_queue["STUCK"] = 1.0  # noqa: SLF001
