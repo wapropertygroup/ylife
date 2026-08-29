@@ -57,6 +57,13 @@ JOBS_USER_INDEX = "user-created-at-index"
 JOBS_STATUS_INDEX = "status-created-at-index"
 _DDB_MAX_PAYLOAD_BYTES = 380_000
 
+# Sidecar marking a job whose report has been emailed. Declared here rather than
+# in report_email because this module owns the directory layout and is what
+# prunes it; report_email reads the name from here so the two cannot drift and
+# start leaking a file per run. Deliberately not a ``.json`` suffix: _record_paths
+# globs those and would read a marker as a bogus job.
+EMAIL_MARKER_SUFFIX = ".emailed"
+
 # Where the other repo lives and which interpreter can import it. ystocker's own
 # venv has none of langchain, so this must point at TradingAgents' environment.
 TA_DIR = os.environ.get("TRADINGAGENTS_DIR", str(Path.home() / "workspace" / "TradingAgents"))
@@ -1372,7 +1379,7 @@ def _prune() -> None:
             # The send-once marker for the report email. Safe to drop with the
             # record: notify() needs a job whose status is done, and the record
             # it would have to read is what this loop just deleted.
-            stem.with_suffix(".emailed").unlink(missing_ok=True)
+            stem.with_suffix(EMAIL_MARKER_SUFFIX).unlink(missing_ok=True)
     except Exception as exc:
         log.debug("agents: prune failed: %s", exc)
 

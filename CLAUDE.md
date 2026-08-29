@@ -195,6 +195,50 @@ Each app follows the same pattern:
   own dates and flags one that has stopped)
 - `brief.py` — The AI Markets Brief: formats all eight dashboards into one
   prompt and asks for a sectioned, table-per-section daily brief
+- `report_email.py` — Mails a finished `/agents` report as HTML. Owns its own
+  Markdown→HTML renderer (a server-side port of `static/markdown.js`, emitting
+  inline styles) rather than reusing `_build_email_sections`, which splits on
+  blank lines into `<p>` and would deliver a report's pipe tables as literal
+  pipes.
+
+### Emailing a finished agent report
+
+A deep run takes tens of minutes and `/agents` only learns it finished by
+polling (`pollJob`, 5s backing off to 30s), so closing the tab means nothing
+tells you. `report_email.notify()` closes that gap. Browser notifications were
+the other option and are not implemented: they would need a push subscription,
+VAPID keys, an installed PWA on iOS, and a server-side completion hook that
+outlives the worker supervising the run — email needs none of it, and the run
+already knows the address because it was charged to it.
+
+Four things hold it together:
+
+- **Completion is detected in two places, so the claim must be atomic.**
+  `agents._run()` reaches the end of a normal run, and `agents._reap()` settles
+  an orphan — and `_reap` runs on *every* read in *every* worker, so two polls
+  can settle the same job milliseconds apart. The guard is an `O_CREAT|O_EXCL`
+  sentinel (`<job>.emailed`, `EMAIL_MARKER_SUFFIX`), not a field on the record:
+  read-then-write lets both through. A failed send releases the claim so a later
+  reap retries; a crash after sending does not.
+- **Gmail clips at ~102 KB, silently.** `_HTML_BUDGET` stops the body at a
+  *section* boundary and says so with a link, because cutting mid-section leaves
+  a dangling table and reads like a short analysis rather than a truncated one.
+  The Portfolio Manager's turn is **reserved out of the budget before anything
+  else is placed** — it is the last section a report emits, so an in-order walk
+  drops the decision and keeps seven analysts, inverting the value of the mail.
+- **Only `status == "done"` is mailed**, and `_reap` only acts on `queued`/
+  `running`. That is what stops a deploy from retro-mailing every historical
+  report: jobs already `done` never reach the hook.
+- **Styling is inline on every element.** Gmail drops a `<style>` block, so a
+  stylesheet renders the whole report as unformatted text in the one client most
+  readers use.
+
+Sending is on by default once `SES_FROM_EMAIL` is set (already synced from SSM);
+`AGENTS_EMAIL_REPORT=0` is the kill switch, and `AGENTS_BASE_URL` overrides the
+link host, which defaults to `https://trade-agents.com` rather than
+`stock.li-family.us` because that is the domain `/agents` exists to serve.
+Errors are *not* mailed — only finished reports. Tests:
+`tests/test_report_email.py` (52 unit tests, no app, no network, no SES).
 
 ### The AI Markets Brief (`/api/market-brief`)
 
@@ -445,3 +489,4 @@ Started in `create_app()`, all daemon threads:
 - **A deploy takes ystocker down for as long as its slowest in-flight request.** The unit sets `KillMode=process`, so systemd signals only gunicorn's master and then waits while workers finish what they are serving; nginx returns 502 for that whole window, and `--preload` adds a few more seconds re-importing the app before anything binds :8000 again. Measured: 2 seconds for a normal deploy, but **32 seconds** for one that landed while a worker was generating an AI brief, which is a Gemini call capped at 90s. So the outage is bounded by `_BRIEF_GEMINI_TIMEOUT_MS`, not by anything about the deploy. Pre-generating the brief keeps request-path generation rare, but if this matters, drain first or move generation off the request path entirely — do not just retry the deploy and assume the 502 was transient.
 - **Not every cache in `routes.py` is keyed `"data"`.** Most are `CACHE["data"] = {"ts", "data"}`, but `_CREDIT_SPREAD_CACHE` is keyed by *period* (`"1y"`, `"2y"`, …) and `_YIELD_CURVE_CACHE` by its schema version (`_YIELD_CURVE_CACHE_VER`). Reading the wrong key returns `None` rather than raising, so the consumer just silently loses a section — `/api/daily-summary` read `_CREDIT_SPREAD_CACHE.get("data")` from the day it was written, which meant its credit-spread line never once appeared in a summary. Check the write site for the key before peeking a cache, and hold its lock.
 - **reportlab fails loudly on height and silently on width.** A flowable taller than the frame raises `LayoutError` and kills the whole PDF (a single-cell `Table` cannot split between rows — pass `splitInRow=1`); a flowable *wider* than the frame is simply drawn through the margin, or off the paper. So every fixed-width flowable in `report_pdf.py` is clamped to the measure, and preformatted text is hard-wrapped before it is handed over. Separately, the CJK line breaker deliberately overruns the measure by up to one em rather than start a line with `、` or `。`, which is why the Chinese path lays out to a slightly narrower measure and leaves a gutter for that overhang.
+- **A test that greps rendered HTML for `onerror=` passes on its own escaping.** `&lt;img src=x onerror=alert(1)&gt;` is inert — a string the client displays, not an element it runs — but it contains the needle, so a naive substring assertion reports a vulnerability that is not there, and (worse) an assertion written to accommodate that noise stops catching the real thing. `tests/test_report_email.py` strips `&lt;…&gt;` before checking, so it only ever asserts on *live* markup. Same trap with `href=`: it appears in escaped text too. Note also that `<a>` is deliberately absent from the inline-tag restore list in both `report_email.py` and `static/markdown.js` — honouring it would mean emitting an attribute without vetting it — so a bare inline `<a href>` in model output is shown as text unless the body *opens* with a block-level tag and takes the allowlist path.
