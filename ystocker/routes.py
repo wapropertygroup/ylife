@@ -3478,6 +3478,36 @@ def api_assets():
     return jsonify(payload)
 
 
+@bp.route("/api/assets/analyze", methods=["POST"])
+def api_assets_analyze():
+    """Stream an AI risk memo built from the signed-in user's current portfolio."""
+    gate = _assets_gate()
+    if gate:
+        return gate
+    if not os.environ.get("GEMINI_API_KEY"):
+        return jsonify({"error": "GEMINI_API_KEY not configured"}), 503
+
+    from ystocker import assets as assets_svc
+    from ystocker import portfolio
+
+    body = request.get_json(force=True, silent=True) or {}
+    lang = "zh" if body.get("lang") == "zh" else "en"
+    try:
+        positions = portfolio.load(_assets_user())
+    except portfolio.StoreUnavailable as exc:
+        return jsonify({"error": str(exc), "reason": "store"}), 503
+    if not positions:
+        return jsonify({"error": "Add or import a position before running analysis",
+                        "reason": "empty"}), 400
+
+    snapshot = assets_svc.analyse(positions)
+    if not snapshot.get("total_value"):
+        return jsonify({"error": "Portfolio values are still resolving",
+                        "reason": "warming"}), 409
+
+    return _stream_gemini(assets_svc.build_ai_prompt(snapshot, lang), "Assets")
+
+
 @bp.route("/api/assets/positions", methods=["POST"])
 def api_assets_save_positions():
     """Replace the whole position list. Body: {"positions": [...]}"""

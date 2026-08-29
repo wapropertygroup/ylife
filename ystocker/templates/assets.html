@@ -2,6 +2,7 @@
 {% block title %}yStocker — My Assets{% endblock %}
 
 {% block content %}
+<script src="{{ url_for('static', filename='markdown.js') }}?v={{ cache_bust or 'dev' }}"></script>
 {#
   /assets — holdings plus 穿透 (look-through).
 
@@ -26,6 +27,7 @@
     --as-bond:   #38bdf8;
     --as-other:  #cbd5e1;
     --as-warn:   #b45309;
+    --as-row-hover: #f8fafc;
   }
   .dark #assetsRoot {
     --as-card:   #0f172a;
@@ -37,6 +39,7 @@
     --as-bond:   #0284c7;
     --as-other:  #334155;
     --as-warn:   #fbbf24;
+    --as-row-hover: #111c2f;
   }
   .as-card { background: var(--as-card); border: 1px solid var(--as-line); border-radius: 1rem; }
   .as-tile-label { color: var(--as-muted); font-size: .7rem; text-transform: uppercase; letter-spacing: .04em; }
@@ -52,8 +55,50 @@
   #assetsRoot table { font-variant-numeric: tabular-nums; }
   .as-num { text-align: right; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
   .as-chain { color: var(--as-muted); font-size: .68rem; }
+  .as-holdings-table { min-width: 78rem; table-layout: fixed; }
+  .as-holdings-table th {
+    font-size: .65rem;
+    font-weight: 650;
+    letter-spacing: .045em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .as-holdings-table td { vertical-align: middle; }
+  .as-holdings-table tbody tr { transition: background-color .15s ease; }
+  .as-holdings-table tbody tr:hover { background: var(--as-row-hover); }
+  .as-holding-name,
+  .as-holding-account {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .as-holding-name { color: var(--as-strong); font-weight: 500; }
+  .as-remove {
+    border-radius: .375rem;
+    padding: .25rem .4rem;
+    transition: background-color .15s ease;
+  }
+  .as-remove:hover { background: rgba(225, 29, 72, .09); text-decoration: none; }
   .as-drop { border: 2px dashed var(--as-line); border-radius: 1rem; }
   .as-drop[data-over="1"] { border-color: var(--as-seen); }
+  .as-ai-shell { position: relative; overflow: hidden; }
+  .as-ai-shell::before { content: ''; position: absolute; inset: 0 auto 0 0; width: .3rem; background: var(--as-seen); }
+  .as-ai-kicker { color: var(--as-seen); font-size: .68rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+  .as-ai-report { color: var(--as-strong); font-size: .9rem; line-height: 1.72; }
+  .as-ai-report h2 { font-size: 1rem; font-weight: 700; margin: 1.35rem 0 .45rem; }
+  .as-ai-report h2:first-child { margin-top: 0; }
+  .as-ai-report p { margin: .55rem 0; }
+  .as-ai-report ol, .as-ai-report ul { margin: .55rem 0 .55rem 1.25rem; }
+  .as-ai-report ol { list-style: decimal; }
+  .as-ai-report ul { list-style: disc; }
+  .as-ai-report strong { font-weight: 700; }
+  .as-ai-report em { color: var(--as-muted); }
+  .as-ai-thinking .dot { display: inline-block; width: .3rem; height: .3rem; margin-left: .2rem; border-radius: 999px; background: currentColor; animation: asAiPulse 1.2s infinite ease-in-out; }
+  .as-ai-thinking .dot:nth-child(2) { animation-delay: .18s; }
+  .as-ai-thinking .dot:nth-child(3) { animation-delay: .36s; }
+  @keyframes asAiPulse { 0%, 60%, 100% { opacity: .25; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-.18rem); } }
+  @media (prefers-reduced-motion: reduce) { .as-ai-thinking .dot { animation: none; } }
 </style>
 
 <div id="assetsRoot">
@@ -126,13 +171,27 @@
       <button type="button" class="as-tab px-3 py-2 text-sm whitespace-nowrap" data-tab="lookthrough"><span data-i18n="assets.tab_lookthrough">Look-through (穿透)</span></button>
       <button type="button" class="as-tab px-3 py-2 text-sm whitespace-nowrap" data-tab="overlap"><span data-i18n="assets.tab_overlap">Hidden overlap</span></button>
       <button type="button" class="as-tab px-3 py-2 text-sm whitespace-nowrap" data-tab="mix"><span data-i18n="assets.tab_mix">Asset &amp; sector mix</span></button>
+      <button type="button" class="as-tab px-3 py-2 text-sm whitespace-nowrap" data-tab="ai"><span data-i18n="assets.tab_ai">AI Analysis</span></button>
       <button type="button" class="as-tab px-3 py-2 text-sm whitespace-nowrap" data-tab="import"><span data-i18n="assets.tab_import">Import</span></button>
     </div>
 
     <!-- ── Holdings ──────────────────────────────────────────────────── -->
     <section data-panel="holdings">
       <div class="as-card overflow-x-auto mb-4">
-        <table class="w-full text-xs">
+        <table class="as-holdings-table w-full text-xs">
+          <colgroup>
+            <col style="width:6rem">
+            <col style="width:16rem">
+            <col style="width:5rem">
+            <col style="width:6rem">
+            <col style="width:6rem">
+            <col style="width:7rem">
+            <col style="width:5rem">
+            <col style="width:5rem">
+            <col style="width:7rem">
+            <col style="width:10rem">
+            <col style="width:5rem">
+          </colgroup>
           <thead>
             <tr class="text-left" style="color:var(--as-muted); border-bottom:1px solid var(--as-line)">
               <th class="px-3 py-2" data-i18n="assets.th_symbol">Symbol</th>
@@ -214,6 +273,35 @@
           <div class="chart-container" style="height:260px"><canvas id="asSectorChart"></canvas></div>
         </div>
       </div>
+    </section>
+
+    <!-- ── AI memo ───────────────────────────────────────────────────── -->
+    <section data-panel="ai" class="hidden">
+      <div class="as-card as-ai-shell p-5 sm:p-7">
+        <div class="sm:flex sm:items-start sm:justify-between gap-6">
+          <div class="pl-2 max-w-2xl">
+            <div class="as-ai-kicker mb-2" data-i18n="assets.ai_kicker">Portfolio intelligence memo</div>
+            <h3 class="text-lg sm:text-xl font-semibold mb-2" style="color:var(--as-strong)" data-i18n="assets.ai_title">See the risks your statement does not show</h3>
+            <p class="text-sm" style="color:var(--as-muted)" data-i18n="assets.ai_body">AI reviews your allocation, look-through concentration and hidden overlap using the latest resolved snapshot.</p>
+          </div>
+          <button type="button" id="asAiRun" class="mt-4 sm:mt-0 ml-2 shrink-0 px-5 py-2.5 rounded-lg bg-brand text-white text-sm font-semibold hover:bg-brand-dark transition disabled:opacity-50 disabled:cursor-not-allowed">
+            <span data-i18n="assets.ai_run">✦ Analyze portfolio</span>
+          </button>
+        </div>
+
+        <div class="pl-2 mt-5 flex flex-wrap gap-2 text-xs" style="color:var(--as-muted)">
+          <span class="px-2.5 py-1 rounded-full" style="background:var(--as-other)"><span data-i18n="assets.ai_scope_positions">Positions</span>: <b id="asAiPositions" style="color:var(--as-strong)">—</b></span>
+          <span class="px-2.5 py-1 rounded-full" style="background:var(--as-other)"><span data-i18n="assets.ai_scope_coverage">Named coverage</span>: <b id="asAiCoverage" style="color:var(--as-strong)">—</b></span>
+        </div>
+        <p class="pl-2 mt-3 text-xs" style="color:var(--as-muted)" data-i18n="assets.ai_privacy">Only a portfolio summary is sent to Gemini. Email, account names, quantities and CSV text are omitted.</p>
+
+        <div id="asAiStatus" class="hidden pl-2 mt-6 as-ai-thinking text-sm" style="color:var(--as-seen)" aria-live="polite">
+          <span data-i18n="assets.ai_thinking">Reviewing concentration and allocation</span><i class="dot"></i><i class="dot"></i><i class="dot"></i>
+        </div>
+        <div id="asAiError" class="hidden pl-2 mt-6 text-sm" style="color:var(--as-warn)" role="alert"></div>
+        <article id="asAiReport" class="hidden pl-2 mt-6 pt-5 as-ai-report" style="border-top:1px solid var(--as-line)" aria-live="polite"></article>
+      </div>
+      <p class="text-xs mt-3 px-1" style="color:var(--as-muted)" data-i18n="assets.ai_disclaimer">AI analysis may be wrong or out of date and is not investment advice. Verify the underlying data before acting.</p>
     </section>
 
     <!-- ── Import ────────────────────────────────────────────────────── -->
@@ -313,6 +401,7 @@
   }
 
   let charts = {};
+  let latestSnapshot = null;
   function drawChart(id, config) {
     const el = $(id);
     if (!el || typeof Chart === 'undefined') return;
@@ -346,6 +435,7 @@
 
   // ── render ───────────────────────────────────────────────────────────
   function render(d) {
+    latestSnapshot = d;
     $('asLoading').classList.add('hidden');
     $('asBody').classList.remove('hidden');
 
@@ -357,6 +447,8 @@
     $('asCoverage').textContent = pct(d.coverage_pct, 1);
     $('asCoverageSub').textContent = money(d.seen_value) + ' ' +
       t('assets.resolved_to_company', 'resolved to a company');
+    $('asAiPositions').textContent = d.position_count || 0;
+    $('asAiCoverage').textContent = pct(d.coverage_pct, 1);
 
     const accounts = new Set((d.positions || []).map((p) => p.account).filter(Boolean));
     $('asAccounts').textContent = accounts.size > 1
@@ -447,7 +539,8 @@
           '" style="color:var(--as-warn)">*</span>' : '';
       return '<tr style="border-top:1px solid var(--as-line)">' +
         '<td class="px-3 py-2 font-semibold" style="color:var(--as-strong)">' + esc(p.symbol) + '</td>' +
-        '<td class="px-3 py-2" style="color:var(--as-muted)">' + esc(p.name || '') + '</td>' +
+        '<td class="px-3 py-2"><span class="as-holding-name" title="' + esc(p.name || '') + '">' +
+          esc(p.name || '') + '</span></td>' +
         '<td class="px-3 py-2" style="color:var(--as-muted)">' + esc(kindLabel(p.kind)) + '</td>' +
         '<td class="px-3 py-2 as-num">' + qty(p.quantity) + '</td>' +
         '<td class="px-3 py-2 as-num">' + (p.price == null ? '—' : '$' + Number(p.price).toFixed(2)) + '</td>' +
@@ -456,9 +549,10 @@
         '<td class="px-3 py-2 as-num" style="color:var(--as-muted)">' + (cov ? pct(cov.coverage_pct, 0) : '—') + '</td>' +
         '<td class="px-3 py-2 as-num ' + gainCls + '">' + (p.gain == null ? '—' :
           (p.gain >= 0 ? '+' : '') + money(p.gain)) + '</td>' +
-        '<td class="px-3 py-2" style="color:var(--as-muted)">' + esc(p.account || '') + '</td>' +
+        '<td class="px-3 py-2" style="color:var(--as-muted)"><span class="as-holding-account" title="' +
+          esc(p.account || '') + '">' + esc(p.account || '') + '</span></td>' +
         '<td class="px-3 py-2 text-right"><button type="button" data-remove="' + esc(p.symbol) +
-          '" class="text-xs text-rose-700 dark:text-rose-400 hover:underline">' +
+          '" class="as-remove text-xs text-rose-700 dark:text-rose-400">' +
           esc(t('assets.remove', 'Remove')) + '</button></td>' +
         '</tr>';
     }).join('');
@@ -681,6 +775,87 @@
     return data;
   }
 
+  // ── AI portfolio memo ─────────────────────────────────────────────────
+  let aiInFlight = false;
+  let aiMarkdown = '';
+
+  function resetAiMemo() {
+    if (aiInFlight) return;
+    aiMarkdown = '';
+    $('asAiStatus').classList.add('hidden');
+    $('asAiError').classList.add('hidden');
+    $('asAiReport').classList.add('hidden');
+    $('asAiReport').innerHTML = '';
+  }
+
+  function renderAiMarkdown() {
+    const report = $('asAiReport');
+    report.innerHTML = (typeof Markdown !== 'undefined')
+      ? Markdown.render(aiMarkdown)
+      : '<pre style="white-space:pre-wrap">' + esc(aiMarkdown) + '</pre>';
+  }
+
+  async function runAiAnalysis() {
+    if (aiInFlight || !latestSnapshot) return;
+    const btn = $('asAiRun');
+    const status = $('asAiStatus');
+    const error = $('asAiError');
+    const report = $('asAiReport');
+    aiInFlight = true;
+    aiMarkdown = '';
+    btn.disabled = true;
+    status.classList.remove('hidden');
+    error.classList.add('hidden');
+    report.classList.add('hidden');
+    report.innerHTML = '';
+
+    try {
+      const lang = (typeof I18n !== 'undefined' && I18n.getLang) ? I18n.getLang() : 'en';
+      const resp = await fetch('/api/assets/analyze', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lang: lang }),
+      });
+      if (!resp.ok) {
+        const data = await resp.json().catch(() => ({}));
+        throw new Error(data.error || resp.statusText);
+      }
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let doneSignal = false;
+      while (!doneSignal) {
+        const chunk = await reader.read();
+        if (chunk.done) break;
+        buffer += decoder.decode(chunk.value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop();
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const raw = line.slice(6);
+          if (raw === '[DONE]') { doneSignal = true; break; }
+          const event = JSON.parse(raw);
+          if (event.error) throw new Error(event.error);
+          if (event.text) {
+            aiMarkdown += event.text;
+            status.classList.add('hidden');
+            report.classList.remove('hidden');
+            renderAiMarkdown();
+          }
+        }
+      }
+      if (!aiMarkdown) throw new Error(t('assets.ai_empty', 'AI returned an empty analysis.'));
+    } catch (err) {
+      status.classList.add('hidden');
+      error.textContent = err.message || t('assets.err_generic', 'Something went wrong.');
+      error.classList.remove('hidden');
+    } finally {
+      aiInFlight = false;
+      btn.disabled = false;
+    }
+  }
+
+  $('asAiRun').addEventListener('click', runAiAnalysis);
+
   // ── mutations ────────────────────────────────────────────────────────
   $('asHoldings').addEventListener('click', async function (ev) {
     const btn = ev.target.closest('[data-remove]');
@@ -688,6 +863,7 @@
     btn.disabled = true;
     try {
       await post('/api/assets/position/' + encodeURIComponent(btn.getAttribute('data-remove')), {}, true);
+      resetAiMemo();
       polls = 0; pollDelay = 3000;
       await load();
     } catch (err) { showError(err.message); btn.disabled = false; }
@@ -703,6 +879,7 @@
     if (!body.symbol) return;
     try {
       await post('/api/assets/position', body, true);
+      resetAiMemo();
       ev.target.reset();
       polls = 0; pollDelay = 3000;
       await load();
@@ -830,6 +1007,7 @@
     fd.append('commit', '1');
     try {
       const data = await post('/api/assets/import?commit=1', fd, false);
+      resetAiMemo();
       $('asPreview').innerHTML = '<div class="p-3 rounded-lg text-sm" ' +
         'style="background:rgba(16,185,129,.12); color:var(--as-strong)">' +
         esc(t('assets.import_ok', 'Imported')) + ': ' + (data.count || 0) + '</div>';
@@ -846,6 +1024,7 @@
   }
 
   document.addEventListener('i18n:langchange', function () {
+    resetAiMemo();
     if (typeof I18n !== 'undefined' && I18n.retranslateCharts) I18n.retranslateCharts();
     load(true);
   });

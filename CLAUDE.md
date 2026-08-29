@@ -217,9 +217,12 @@ Each app follows the same pattern:
 
 ### The asset tracker and 穿透 (`/assets`)
 
-A signed-in user's own holdings, and what is actually inside them. Sign-in is the
-only gate: this spends no Gemini budget and starts no subprocess, so there is no
-allowlist, no quota and no credit — a request is arithmetic over a warm cache.
+A signed-in user's own holdings, and what is actually inside them. Loading and
+editing the tracker spends no Gemini budget and starts no subprocess, so there is
+no allowlist, quota or credit on `/api/assets` — a request is arithmetic over a
+warm cache. The separate, user-triggered `/api/assets/analyze` action is the one
+exception: it streams a Gemini risk memo after the reader explicitly clicks the
+AI Analysis button.
 
 Five modules, split by what can be tested without I/O:
 
@@ -285,6 +288,15 @@ the `mult.comp_*` strings `/multiples` already ships; note `info["sector"]` retu
 "Real Estate" while `sector_weightings` returns `realestate`, and
 `assets._SECTOR_ALIASES` reconciles them — without it a directly-held REIT and a
 fund's property sleeve land in two half-size buckets.
+
+**AI analysis is opt-in and privacy-minimised.** The endpoint reloads the signed-in
+user's current positions server-side rather than trusting a client-supplied
+portfolio snapshot. `assets.build_ai_prompt()` sends symbols, weights, percentage
+P/L, lower-bound exposures, residual coverage and aggregate mixes; it deliberately
+omits e-mail, account labels, quantities, imported names and raw CSV text. The
+prompt tells Gemini that company exposures are floors, that the asset-class mix is
+complete, and that sector weights are percentages of classified equity. Markdown
+is streamed as SSE and rendered through the shared escaping renderer.
 
 **Yahoo mis-types some foreign equities as funds.** `005930.KQ` (Samsung) and
 `000660.KQ` (SK hynix) both return `quoteType: MUTUALFUND` with no composition of
