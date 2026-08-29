@@ -58,6 +58,7 @@ const I18n = (() => {
     'nav.search_empty':   { en: 'Type a symbol, then press Enter.', zh: '输入代码后按回车。' },
     'nav.search_full':    { en: 'Full lookup page →', zh: '完整查询页 →' },
     'nav.sign_in':        { en: 'Sign In',  zh: '登录' },
+    'nav.account':        { en: 'Account',  zh: '账户' },
     'nav.logout':         { en: 'Logout',   zh: '退出登录' },
 
     // ── Share dialog (static/share.js, templates/_share_modal.html) ────
