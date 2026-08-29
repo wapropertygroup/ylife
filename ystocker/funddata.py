@@ -171,6 +171,30 @@ def _synthetic(symbol: str) -> Optional[dict[str, Any]]:
                 "holdings": [], "asset_classes": {"stock": 0.0, "cash": 1.0},
                 "sectors": {}, "price": 1.0, "currency": "USD",
                 "quote_at": None, "comp_at": None, "synthetic": True}
+    if symbol == "NHFSMKX98":
+        # Fidelity identifies this as the NH 529 Fidelity 500 Index Portfolio,
+        # an investment option rather than a publicly quoted mutual fund.  Its
+        # annual report lists Fidelity 500 Index Fund as the sole underlying
+        # holding.  Keep the plan position's imported value (the two products
+        # have different unit NAVs), and use FXAIX only for look-through.
+        return {
+            "symbol": symbol,
+            "name": "NH Fidelity 500 Index Portfolio",
+            "kind": KIND_FUND,
+            "holdings": [{
+                "symbol": "FXAIX",
+                "name": "Fidelity 500 Index Fund",
+                "weight": 1.0,
+            }],
+            "asset_classes": {"stock": 1.0},
+            "sectors": {},
+            "price": None,
+            "currency": "USD",
+            "quote_at": None,
+            "comp_at": None,
+            "synthetic": True,
+            "proxy_symbol": "FXAIX",
+        }
     return None
 
 

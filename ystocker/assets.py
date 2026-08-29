@@ -81,6 +81,7 @@ def value_positions(
     warnings: list[dict[str, Any]] = []
     stale_priced = 0
     unpriced: list[str] = []
+    proxies: list[tuple[str, str]] = []
 
     for pos in positions:
         symbol = pos.get("symbol") or ""
@@ -117,7 +118,10 @@ def value_positions(
             "cost_basis": pos.get("cost_basis"),
             "account": pos.get("account") or "",
             "resolved": record is not None,
+            "proxy_symbol": (record or {}).get("proxy_symbol"),
         }
+        if row["proxy_symbol"]:
+            proxies.append((symbol, row["proxy_symbol"]))
         cost = pos.get("cost_basis")
         if value is not None and cost:
             row["gain"] = round(value - float(cost), 2)
@@ -135,6 +139,9 @@ def value_positions(
                          "extra": max(0, len(distinct) - 8)})
     if stale_priced and any(r["value_source"] == "live" for r in rows):
         warnings.append({"code": "mixed_valuation", "count": stale_priced})
+    for symbol, proxy in sorted(set(proxies)):
+        warnings.append({"code": "analysis_proxy", "symbol": symbol,
+                         "proxy": proxy})
 
     return priced, rows, warnings
 
@@ -164,7 +171,10 @@ def analyse(positions: Iterable[dict[str, Any]], *,
     pending = set(payload.get("pending_symbols") or [])
     for row in rows:
         if not row["resolved"] or (row["value"] is None and row["quantity"] is not None):
-            if row["symbol"] != CASH_SYMBOL:
+            # Plan-unit codes have no public quote to fetch. Their actual
+            # underlying is already emitted by look-through as the actionable
+            # pending symbol, so do not put the unqueryable wrapper back here.
+            if row["symbol"] != CASH_SYMBOL and not row.get("proxy_symbol"):
                 pending.add(row["symbol"])
 
     payload.update({
@@ -359,6 +369,14 @@ def _sector_mix(priced: Iterable[lookthrough.Position]) -> list[dict[str, Any]]:
         record = funddata.peek(pos.symbol)
         if not record:
             continue
+        # A plan-specific synthetic record deliberately has no copied market
+        # data.  If its disclosed underlying is cached, reuse only that fund's
+        # sector composition while valuing the original plan units unchanged.
+        proxy_symbol = record.get("proxy_symbol")
+        if proxy_symbol:
+            proxy_record = funddata.peek(proxy_symbol)
+            if proxy_record:
+                record = proxy_record
         sectors = record.get("sectors") or {}
         if sectors:
             stock_share = float((record.get("asset_classes") or {}).get("stock") or 1.0)

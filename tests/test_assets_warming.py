@@ -5,7 +5,7 @@ from pathlib import Path
 import unittest
 from unittest.mock import patch
 
-from ystocker import assets
+from ystocker import assets, funddata
 
 
 class AssetsWarmingTests(unittest.TestCase):
@@ -38,6 +38,50 @@ class AssetsWarmingTests(unittest.TestCase):
               patch("ystocker.assets.funddata.flush")):
             assets._warm_loop()  # noqa: SLF001
         self.assertEqual(assets.warm_status(), {"queued": 0, "active": False})
+
+    def test_nh_529_code_uses_fxaix_only_as_lookthrough_proxy(self) -> None:
+        record = funddata.peek("NHFSMKX98", need_quote=True)
+        self.assertTrue(record["synthetic"])
+        self.assertEqual(record["kind"], funddata.KIND_FUND)
+        self.assertEqual(record["proxy_symbol"], "FXAIX")
+        self.assertIsNone(record["price"])
+        self.assertEqual(record["holdings"], [{
+            "symbol": "FXAIX",
+            "name": "Fidelity 500 Index Fund",
+            "weight": 1.0,
+        }])
+        self.assertFalse(funddata.can_warm("NHFSMKX98"))
+
+    def test_nh_529_keeps_imported_value_and_explains_proxy(self) -> None:
+        priced, rows, warnings = assets.value_positions([{
+            "symbol": "NHFSMKX98",
+            "quantity": 100,
+            "value": 7_834.0,
+        }])
+        self.assertEqual(priced[0].value, 7_834.0)
+        self.assertEqual(rows[0]["value_source"], "imported")
+        self.assertEqual(rows[0]["proxy_symbol"], "FXAIX")
+        self.assertIn({"code": "analysis_proxy", "symbol": "NHFSMKX98",
+                       "proxy": "FXAIX"}, warnings)
+
+    def test_nh_529_resolves_the_proxy_not_the_plan_code(self) -> None:
+        original_peek = funddata.peek
+
+        def cold_proxy(symbol: str, *, need_quote: bool = False):
+            if symbol == "NHFSMKX98":
+                return original_peek(symbol, need_quote=need_quote)
+            return None
+
+        with (patch("ystocker.assets.funddata.peek", side_effect=cold_proxy),
+              patch("ystocker.assets.funddata.price_of", return_value=None),
+              patch("ystocker.assets.funddata.is_known", return_value=False)):
+            snapshot = assets.analyse([{
+                "symbol": "NHFSMKX98",
+                "quantity": 100,
+                "value": 7_834.0,
+            }])
+        self.assertIn("FXAIX", snapshot["pending_symbols"])
+        self.assertNotIn("NHFSMKX98", snapshot["pending_symbols"])
 
 
 if __name__ == "__main__":

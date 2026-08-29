@@ -2357,6 +2357,10 @@ const I18n = (() => {
                                zh: '{list} 及另外 {n} 个标的暂无价格 — 在解析完成前不计入占比。' },
     'assets.warn_mixed':    { en: '{n} line(s) are valued from the imported figure while others use live prices, so the mix is not all as of one moment.',
                                zh: '有 {n} 条持仓按导入金额计价，其余使用实时价格，因此并非同一时点的数据。' },
+    'assets.warn_proxy':    { en: '{symbol} is a plan investment option. {proxy} is used only as its look-through proxy; the imported value is preserved.',
+                               zh: '{symbol} 是计划投资选项；仅使用 {proxy} 作为穿透代理，市值仍采用导入值。' },
+    'assets.proxy_label':   { en: 'Look-through proxy: {symbol}',
+                               zh: '穿透代理：{symbol}' },
     'assets.cost_basis':    { en: 'Cost basis',         zh: '成本' },
     'assets.gain':          { en: 'Unrealised P/L',     zh: '未实现盈亏' },
     // ── the honesty caveat, which is load-bearing rather than decorative
@@ -2414,6 +2418,11 @@ const I18n = (() => {
     'assets.th_indirect':   { en: 'Via funds',          zh: '通过基金' },
     'assets.th_routes':     { en: 'Held via',           zh: '持有途径' },
     'assets.routes_n':      { en: 'holding(s)',         zh: '个持仓' },
+    'assets.routes_more':   { en: 'Show more routes',   zh: '显示更多持有途径' },
+    'assets.exposure_search': { en: 'Search exposures', zh: '搜索敞口' },
+    'assets.exposure_search_ph': { en: 'Search symbol or company', zh: '搜索代码或公司' },
+    'assets.exposure_names': { en: 'companies',         zh: '家公司' },
+    'assets.exposure_no_match': { en: 'No matching exposure.', zh: '没有匹配的敞口。' },
     'assets.lt_empty':      { en: 'Nothing resolved yet.', zh: '暂无穿透结果。' },
     // ── residual
     'assets.residual_title':    { en: 'What look-through could not name', zh: '穿透未能识别的部分' },

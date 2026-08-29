@@ -177,6 +177,9 @@ def main() -> int:
         check("assets picker accepts CSV, XLSX and PDF",
               all(ext in r.get_data(as_text=True)
                   for ext in (".csv", ".xlsx", ".pdf")))
+        check("look-through table has search and compact route controls",
+              "asExposureSearch" in r.get_data(as_text=True)
+              and "as-route-chip" in r.get_data(as_text=True))
 
         r = client.get("/api/assets")
         check("GET /api/assets is 200 when signed in", r.status_code == 200,

@@ -55,6 +55,105 @@
   #assetsRoot table { font-variant-numeric: tabular-nums; }
   .as-num { text-align: right; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
   .as-chain { color: var(--as-muted); font-size: .68rem; }
+  .as-exposure-card { overflow: hidden; }
+  .as-exposure-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .75rem;
+    padding: .75rem 1rem;
+    border-bottom: 1px solid var(--as-line);
+  }
+  .as-exposure-search {
+    width: min(18rem, 62vw);
+    border: 1px solid var(--as-line);
+    border-radius: .6rem;
+    background: transparent;
+    color: var(--as-strong);
+    font-size: .75rem;
+    padding: .5rem .7rem .5rem 2rem;
+  }
+  .as-exposure-search:focus { border-color: var(--as-seen); outline: 2px solid rgba(99,102,241,.16); }
+  .as-exposure-scroll { max-height: min(70vh, 52rem); overflow: auto; }
+  .as-exposure-table { min-width: 72rem; table-layout: fixed; }
+  .as-exposure-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: var(--as-card);
+    box-shadow: 0 1px 0 var(--as-line);
+    font-size: .65rem;
+    font-weight: 650;
+    letter-spacing: .045em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .as-exposure-table tbody tr { transition: background-color .15s ease; }
+  .as-exposure-table tbody tr:hover { background: var(--as-row-hover); }
+  .as-exposure-name {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .as-exposure-bar {
+    display: flex;
+    width: 100%;
+    height: .28rem;
+    margin-top: .35rem;
+    overflow: hidden;
+    border-radius: 999px;
+    background: var(--as-other);
+  }
+  .as-exposure-bar > i { display: block; height: 100%; }
+  .as-exposure-direct { background: var(--as-seen); }
+  .as-exposure-indirect { background: var(--as-hidden); }
+  .as-route-head { display: flex; align-items: center; gap: .4rem; margin-bottom: .3rem; }
+  .as-route-count {
+    display: inline-flex;
+    align-items: center;
+    min-width: 1.45rem;
+    height: 1.2rem;
+    justify-content: center;
+    border-radius: 999px;
+    background: var(--as-other);
+    color: var(--as-strong);
+    font-size: .65rem;
+    font-weight: 700;
+  }
+  .as-route-list { display: flex; flex-wrap: wrap; gap: .28rem; align-items: center; }
+  .as-route-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: .28rem;
+    max-width: 11rem;
+    padding: .2rem .42rem;
+    border: 1px solid var(--as-line);
+    border-radius: .42rem;
+    color: var(--as-muted);
+    font-size: .66rem;
+    line-height: 1.15;
+  }
+  .as-route-chip b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 550; }
+  .as-route-chip em { color: var(--as-strong); font-style: normal; font-variant-numeric: tabular-nums; }
+  .as-route-more { display: inline-flex; position: relative; }
+  .as-route-more > summary {
+    cursor: pointer;
+    list-style: none;
+    border-radius: .42rem;
+    color: var(--as-seen);
+    font-size: .67rem;
+    font-weight: 650;
+    padding: .22rem .4rem;
+  }
+  .as-route-more > summary::-webkit-details-marker { display: none; }
+  .as-route-more[open] { display: contents; }
+  .as-route-more[open] > summary { order: 99; }
+  @media (max-width: 640px) {
+    .as-exposure-toolbar { align-items: flex-start; flex-direction: column; }
+    .as-exposure-search { width: 100%; }
+    .as-exposure-scroll { max-height: 68vh; }
+  }
   .as-holdings-table { min-width: 78rem; table-layout: fixed; }
   .as-holdings-table th {
     font-size: .65rem;
@@ -248,10 +347,27 @@
       <div class="chart-container as-card p-4 mb-4" style="height:340px">
         <canvas id="asExposureChart"></canvas>
       </div>
-      <div class="as-card overflow-x-auto mb-4">
-        <table class="w-full text-xs">
+      <div class="as-card as-exposure-card mb-4">
+        <div class="as-exposure-toolbar">
+          <div class="relative">
+            <svg aria-hidden="true" class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5" style="color:var(--as-muted)" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg>
+            <label class="sr-only" for="asExposureSearch" data-i18n="assets.exposure_search">Search exposures</label>
+            <input id="asExposureSearch" class="as-exposure-search" type="search" autocomplete="off" data-i18n-placeholder="assets.exposure_search_ph" placeholder="Search symbol or company">
+          </div>
+          <div class="text-xs" style="color:var(--as-muted)"><span id="asExposureVisible">0</span> <span data-i18n="assets.exposure_names">companies</span></div>
+        </div>
+        <div class="as-exposure-scroll">
+        <table class="as-exposure-table w-full text-xs">
+          <colgroup>
+            <col style="width:7rem">
+            <col style="width:16rem">
+            <col style="width:9rem">
+            <col style="width:7rem">
+            <col style="width:7rem">
+            <col style="width:26rem">
+          </colgroup>
           <thead>
-            <tr class="text-left" style="color:var(--as-muted); border-bottom:1px solid var(--as-line)">
+            <tr class="text-left" style="color:var(--as-muted)">
               <th class="px-3 py-2" data-i18n="assets.th_symbol">Symbol</th>
               <th class="px-3 py-2" data-i18n="assets.th_name">Name</th>
               <th class="px-3 py-2 as-num" data-i18n="assets.th_exposure">True exposure</th>
@@ -262,6 +378,7 @@
           </thead>
           <tbody id="asExposures"></tbody>
         </table>
+        </div>
       </div>
       <div class="as-card p-4">
         <h3 class="text-sm font-semibold mb-1" style="color:var(--as-strong)" data-i18n="assets.residual_title">What look-through could not name</h3>
@@ -401,6 +518,11 @@
       return fill(t('assets.warn_mixed',
                     '{n} line(s) are valued from the imported figure.'), { n: w.count });
     }
+    if (w.code === 'analysis_proxy') {
+      return fill(t('assets.warn_proxy',
+                    '{symbol} is a plan investment option. {proxy} is used only for look-through; the imported value is preserved.'),
+                  { symbol: w.symbol || '', proxy: w.proxy || '' });
+    }
     return '';
   }
 
@@ -445,6 +567,10 @@
       // drawn while its tab was hidden comes out 0px high. Resize on reveal.
       Object.keys(charts).forEach((k) => charts[k] && charts[k].resize());
     });
+  });
+
+  $('asExposureSearch').addEventListener('input', function () {
+    if (latestSnapshot) renderExposures(latestSnapshot);
   });
 
   function showError(msg) {
@@ -570,10 +696,14 @@
       const src = p.value_source === 'imported'
         ? ' <span title="' + esc(t('assets.imported_value', 'valued from the imported figure, not a live price')) +
           '" style="color:var(--as-warn)">*</span>' : '';
+      const proxy = p.proxy_symbol
+        ? '<div class="text-xs" style="color:var(--as-muted)">' +
+          esc(fill(t('assets.proxy_label', 'Look-through proxy: {symbol}'),
+                   { symbol: p.proxy_symbol })) + '</div>' : '';
       return '<tr style="border-top:1px solid var(--as-line)">' +
         '<td class="px-3 py-2 font-semibold" style="color:var(--as-strong)">' + esc(p.symbol) + '</td>' +
         '<td class="px-3 py-2"><span class="as-holding-name" title="' + esc(p.name || '') + '">' +
-          esc(p.name || '') + '</span></td>' +
+          esc(p.name || '') + '</span>' + proxy + '</td>' +
         '<td class="px-3 py-2" style="color:var(--as-muted)">' + esc(kindLabel(p.kind)) + '</td>' +
         '<td class="px-3 py-2 as-num">' + qty(p.quantity) + '</td>' +
         '<td class="px-3 py-2 as-num">' + (p.price == null ? '—' : '$' + Number(p.price).toFixed(2)) + '</td>' +
@@ -592,28 +722,51 @@
   }
 
   function renderExposures(d) {
-    const rows = d.exposures || [];
+    const allRows = d.exposures || [];
+    const searchEl = $('asExposureSearch');
+    const query = (searchEl ? searchEl.value : '').trim().toLowerCase();
+    const rows = query ? allRows.filter(function (e) {
+      return String(e.symbol || '').toLowerCase().includes(query) ||
+        String(e.name || '').toLowerCase().includes(query);
+    }) : allRows;
+    if ($('asExposureVisible')) $('asExposureVisible').textContent = rows.length;
     if (!rows.length) {
       $('asExposures').innerHTML = '<tr><td colspan="6" class="px-3 py-6 text-center" style="color:var(--as-muted)">' +
-        esc(t('assets.lt_empty', 'Nothing resolved yet.')) + '</td></tr>';
+        esc(query ? t('assets.exposure_no_match', 'No matching exposure.') :
+          t('assets.lt_empty', 'Nothing resolved yet.')) + '</td></tr>';
       return;
     }
 
     $('asExposures').innerHTML = rows.map(function (e) {
-      const chains = (e.routes || []).slice(0, 4).map(function (r) {
+      function routeChip(r) {
         const via = (r.chain && r.chain.length) ? r.chain.join(' → ') : t('assets.th_direct', 'Direct');
-        return '<div class="as-chain">' + esc(via) + ' · ' + pct(r.pct) + '</div>';
-      }).join('');
-      const more = (e.routes || []).length > 4
-        ? '<div class="as-chain">+' + ((e.routes || []).length - 4) + '</div>' : '';
+        return '<span class="as-route-chip" title="' + esc(via) + '"><b>' + esc(via) +
+          '</b><em>' + pct(r.pct) + '</em></span>';
+      }
+      const routeRows = e.routes || [];
+      const chains = routeRows.slice(0, 3).map(routeChip).join('');
+      const hiddenChains = routeRows.slice(3).map(routeChip).join('');
+      const more = hiddenChains
+        ? '<details class="as-route-more"><summary aria-label="' +
+          esc(t('assets.routes_more', 'Show more routes')) + '">+' + (routeRows.length - 3) +
+          '</summary>' + hiddenChains + '</details>' : '';
+      const directShare = e.pct ? Math.max(0, Math.min(100, (e.direct_pct || 0) / e.pct * 100)) : 0;
+      const indirectShare = e.pct ? Math.max(0, Math.min(100 - directShare,
+        (e.indirect_pct || 0) / e.pct * 100)) : 0;
       return '<tr style="border-top:1px solid var(--as-line)">' +
-        '<td class="px-3 py-2 font-semibold align-top" style="color:var(--as-strong)">' + esc(e.symbol) + '</td>' +
-        '<td class="px-3 py-2 align-top" style="color:var(--as-muted)">' + esc(e.name || '') + '</td>' +
-        '<td class="px-3 py-2 as-num align-top font-semibold" style="color:var(--as-strong)">' + pct(e.pct) + '</td>' +
-        '<td class="px-3 py-2 as-num align-top">' + (e.direct_pct ? pct(e.direct_pct) : '—') + '</td>' +
-        '<td class="px-3 py-2 as-num align-top">' + (e.indirect_pct ? pct(e.indirect_pct) : '—') + '</td>' +
-        '<td class="px-3 py-2 align-top">' + '<div style="color:var(--as-strong)">' + e.route_count + ' ' +
-          esc(t('assets.routes_n', 'holding(s)')) + '</div>' + chains + more + '</td>' +
+        '<td class="px-3 py-2.5 font-semibold align-top" style="color:var(--as-strong)">' + esc(e.symbol) + '</td>' +
+        '<td class="px-3 py-2.5 align-top" style="color:var(--as-muted)"><span class="as-exposure-name" title="' +
+          esc(e.name || '') + '">' + esc(e.name || '') + '</span></td>' +
+        '<td class="px-3 py-2.5 as-num align-top font-semibold" style="color:var(--as-strong)">' + pct(e.pct) +
+          '<span class="as-exposure-bar" aria-hidden="true"><i class="as-exposure-direct" style="width:' +
+          directShare.toFixed(1) + '%"></i><i class="as-exposure-indirect" style="width:' +
+          indirectShare.toFixed(1) + '%"></i></span></td>' +
+        '<td class="px-3 py-2.5 as-num align-top">' + (e.direct_pct ? pct(e.direct_pct) : '—') + '</td>' +
+        '<td class="px-3 py-2.5 as-num align-top">' + (e.indirect_pct ? pct(e.indirect_pct) : '—') + '</td>' +
+        '<td class="px-3 py-2.5 align-top"><div class="as-route-head"><span class="as-route-count">' +
+          Number(e.route_count || routeRows.length) + '</span><span style="color:var(--as-muted)">' +
+          esc(t('assets.routes_n', 'holding(s)')) + '</span></div><div class="as-route-list">' +
+          chains + more + '</div></td>' +
         '</tr>';
     }).join('');
 
@@ -624,7 +777,7 @@
     // assigned to `label` -- assigning it renders "[object Object]" in the legend.
     // The spread also carries i18nKey, which is what lets retranslateCharts()
     // relabel the legend on a language switch without a redraw.
-    const top = rows.slice(0, 12);
+    const top = allRows.slice(0, 12);
     const lbl = (k, f) => (typeof I18n !== 'undefined' && I18n.label)
       ? I18n.label(k, f) : { label: f };
     drawChart('asExposureChart', {
