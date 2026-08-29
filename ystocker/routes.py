@@ -936,6 +936,45 @@ def _get_institutional_holders(ticker: str) -> list:
         log.exception("Failed to get institutional holders for %s", ticker)
         return []
 
+# Yahoo/yfinance market suffix -> Futu (futunn.com) market suffix. Futu makes the
+# market part of the path mandatory, so a symbol cannot simply be passed through
+# the way TradingView tolerates: /stock/TSM alone is a 404, /stock/TSM-US is not.
+_FUTU_MARKETS = {"HK": "HK", "SS": "SH", "SZ": "SZ"}
+
+
+def _futu_symbol(ticker: str) -> str | None:
+    """Map a Yahoo-style ticker to Futu's ``SYMBOL-MARKET`` path segment.
+
+    Returns ``None`` when the market is one this mapping cannot vouch for, so the
+    caller can omit the link rather than point at a 404 — Futu lists far more
+    venues than the four verified here, but each uses its own code format and
+    guessing produces a dead link, which is worse than no link at all.
+
+    >>> _futu_symbol("TSM"), _futu_symbol("BRK-B")
+    ('TSM-US', 'BRK.B-US')
+    >>> _futu_symbol("0700.HK"), _futu_symbol("600519.SS")
+    ('00700-HK', '600519-SH')
+    """
+    ticker = (ticker or "").strip().upper()
+    if not ticker:
+        return None
+
+    if "." in ticker:
+        symbol, _, suffix = ticker.rpartition(".")
+        market = _FUTU_MARKETS.get(suffix)
+        if not market or not symbol:
+            return None
+        # Hong Kong codes are zero-padded to five digits by Futu while Yahoo uses
+        # four: 0700.HK is 00700-HK, and the unpadded form 404s.
+        if market == "HK" and symbol.isdigit():
+            symbol = symbol.zfill(5)
+        return f"{symbol}-{market}"
+
+    # No suffix means a US listing. Yahoo spells share classes with a hyphen
+    # (BRK-B) where Futu uses a dot (BRK.B).
+    return f"{ticker.replace('-', '.')}-US"
+
+
 @bp.route("/history/<ticker>")
 def history(ticker: str):
     """Page showing 1-year historical PE ratio for a single ticker."""
@@ -943,6 +982,7 @@ def history(ticker: str):
     log.info("GET /history/%s", ticker)
     return render_template("history.html",
                            ticker=ticker,
+                           futu_symbol=_futu_symbol(ticker),
                            peer_groups=list(PEER_GROUPS.keys()),
                            fetch_errors=[])
 

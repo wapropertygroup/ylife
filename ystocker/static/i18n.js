@@ -300,6 +300,7 @@ const I18n = (() => {
     'history.group_earnings': { en: 'Earnings',        zh: '盈利' },
     'history.group_sentiment':{ en: 'Price & Sentiment', zh: '价格与情绪' },
     'history.tradingview':    { en: 'TradingView',     zh: 'TradingView' },
+    'history.futu':           { en: 'FuTu',            zh: '富途牛牛' },
 
     'history.pe_title':     { en: 'PE Ratio — 52 Weeks', zh: '市盈率 — 52周' },
     'history.pe_desc':      { en: 'Estimated from weekly closing price ÷ TTM EPS', zh: '由每周收盘价 ÷ 近12月EPS 估算' },
