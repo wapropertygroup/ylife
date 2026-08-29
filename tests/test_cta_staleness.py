@@ -11,6 +11,7 @@ off-by-one here is the difference between "stale" and "looks current".
 from __future__ import annotations
 
 import importlib.util
+import json
 import pathlib
 import re
 import sys
@@ -522,6 +523,195 @@ class DistanceToTrigger(unittest.TestCase):
     def test_defaults_to_the_current_snapshot(self):
         out = cta.distance_to_triggers(7739.0)
         self.assertEqual(len(out["levels"]), 3)
+
+
+class Tracker(unittest.TestCase):
+    """The durable daily series. No AWS, no network.
+
+    Distance-to-trigger is only meaningful as a series, and it cannot be
+    backfilled: each row depends on which report was in force that day, and
+    nothing publishes the history of Goldman's triggers. So losing rows is
+    permanent, which is why they go somewhere that outlives the instance.
+    """
+
+    def setUp(self):
+        import tempfile
+        from unittest import mock
+        self.tmp = tempfile.mkdtemp()
+        self.path = pathlib.Path(self.tmp) / "cta_history.json"
+        self._p = mock.patch.object(cta, "_HIST_PATH", str(self.path))
+        self._p.start()
+        self.addCleanup(self._p.stop)
+        # No DynamoDB in tests: the disk tier must work entirely on its own.
+        self._t = mock.patch.object(cta, "_get_hist_table", return_value=None)
+        self._t.start()
+        self.addCleanup(self._t.stop)
+
+    def test_records_a_row_with_distances(self):
+        row = cta.record_observation(7711.76, today=TODAY)
+        self.assertEqual(row["date"], "2026-08-28")
+        self.assertEqual(row["spx"], 7711.76)
+        self.assertEqual(row["t_short"], 7455.0)
+        self.assertAlmostEqual(row["d_short"], 3.44, places=2)
+        self.assertEqual(row["report_date"], "2026-07-28")
+
+    def test_it_survives_a_reread(self):
+        cta.record_observation(7711.76, today=TODAY)
+        rows = cta.history()
+        self.assertEqual(len(rows), 1)
+        self.assertAlmostEqual(rows[0]["d_short"], 3.44, places=2)
+
+    def test_same_day_updates_rather_than_duplicating(self):
+        """The poller runs hourly, so a day must converge on one row."""
+        cta.record_observation(7711.76, today=TODAY)
+        cta.record_observation(7600.00, today=TODAY)
+        rows = cta.history()
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["spx"], 7600.0)
+
+    def test_days_accumulate_in_order(self):
+        for offset, spx in ((2, 7600.0), (0, 7711.0), (1, 7650.0)):
+            cta.record_observation(
+                spx, today=date.fromordinal(TODAY.toordinal() - offset))
+        rows = cta.history()
+        self.assertEqual([r["date"] for r in rows],
+                         ["2026-08-26", "2026-08-27", "2026-08-28"])
+
+    def test_limit_keeps_the_most_recent(self):
+        for offset in range(5):
+            cta.record_observation(
+                7700.0, today=date.fromordinal(TODAY.toordinal() - offset))
+        self.assertEqual([r["date"] for r in cta.history(limit=2)],
+                         ["2026-08-27", "2026-08-28"])
+
+    def test_no_price_records_nothing_rather_than_a_zero_row(self):
+        self.assertIsNone(cta.record_observation(None, today=TODAY))
+        self.assertIsNone(cta.record_observation(0, today=TODAY))
+        self.assertEqual(cta.history(), [])
+
+    def test_a_corrupt_file_does_not_stop_recording(self):
+        self.path.write_text("{not json", encoding="utf-8")
+        row = cta.record_observation(7711.76, today=TODAY)
+        self.assertIsNotNone(row)
+        self.assertEqual(len(cta.history()), 1)
+
+    def test_rows_are_json_safe(self):
+        cta.record_observation(7711.76, today=TODAY)
+        json.dumps(cta.history(), allow_nan=False)
+
+
+class TrackerDurability(unittest.TestCase):
+    """The DynamoDB tier, faked. This is the instance-replacement path."""
+
+    class FakeTable:
+        def __init__(self):
+            self.items = {}
+
+        def put_item(self, Item):                      # noqa: N803 - boto3 kwarg
+            self.items[Item["date"]] = dict(Item)
+
+        def get_item(self, Key):                       # noqa: N803 - boto3 kwarg
+            item = self.items.get(Key["date"])
+            return {"Item": item} if item else {}
+
+        def scan(self, **kwargs):
+            return {"Items": list(self.items.values())}
+
+    def setUp(self):
+        import tempfile
+        from unittest import mock
+        self.table = self.FakeTable()
+        self.tmp = tempfile.mkdtemp()
+        self.path = pathlib.Path(self.tmp) / "cta_history.json"
+        self.fetch = pathlib.Path(self.tmp) / "cta_fetched.json"
+        for target, value in (("_HIST_PATH", str(self.path)),
+                              ("_FETCH_CACHE", str(self.fetch))):
+            p = mock.patch.object(cta, target, value)
+            p.start()
+            self.addCleanup(p.stop)
+        p = mock.patch.object(cta, "_get_hist_table", return_value=self.table)
+        p.start()
+        self.addCleanup(p.stop)
+
+    def test_values_go_as_strings_because_dynamodb_rejects_float(self):
+        cta.record_observation(7711.76, today=TODAY)
+        item = self.table.items["2026-08-28"]
+        self.assertIsInstance(item["spx"], str)
+        self.assertIsInstance(item["d_short"], str)
+        # And they come back as numbers, not strings.
+        self.assertEqual(cta.history()[0]["spx"], 7711.76)
+
+    def test_the_series_survives_losing_the_disk(self):
+        """A replaced instance keeps the history. This is the whole point.
+
+        The valuation chart once reset to a single point exactly this way, so the
+        test deletes the file rather than trusting that it would work.
+        """
+        cta.record_observation(7711.76, today=TODAY)
+        cta.record_observation(7650.0,
+                               today=date.fromordinal(TODAY.toordinal() - 1))
+        self.path.unlink()
+        rows = cta.history()
+        self.assertEqual(len(rows), 2)
+        self.assertEqual([r["date"] for r in rows], ["2026-08-27", "2026-08-28"])
+
+    def test_a_fetched_report_survives_losing_the_disk(self):
+        snapshot = {"latest": {"report_date": "2026-08-20",
+                               "spx_triggers": {"short": 7500.0, "medium": 7300.0,
+                                                "long": 6900.0}}}
+        cta._write_fetched(snapshot)
+        self.assertTrue(self.fetch.exists())
+        self.fetch.unlink()                       # instance replaced
+        got = cta._read_fetched()
+        self.assertIsNotNone(got, "report must come back from DynamoDB")
+        self.assertEqual(got["latest"]["report_date"], "2026-08-20")
+        # And it is still preferred over the older built-in snapshot.
+        self.assertEqual(cta.get_cta_positioning()["source_mode"], "fetched")
+
+    def test_the_report_sentinel_is_not_read_as_an_observation(self):
+        """One table holds both kinds; a scan must not turn the report row into a
+        data point with no date."""
+        cta._write_fetched({"latest": {"report_date": "2026-08-20"}})
+        cta.record_observation(7711.76, today=TODAY)
+        self.assertIn(cta._REPORT_KEY, self.table.items)
+        self.assertEqual([r["date"] for r in cta.history()], ["2026-08-28"])
+
+    def test_disk_and_ddb_are_unioned_not_preferred(self):
+        """Disk can hold a row written while DynamoDB was unreachable."""
+        from unittest import mock
+        cta.record_observation(7711.76, today=TODAY)
+        with mock.patch.object(cta, "_get_hist_table", return_value=None):
+            cta.record_observation(7650.0,
+                                   today=date.fromordinal(TODAY.toordinal() + 1))
+        self.assertNotIn("2026-08-29", self.table.items)   # never reached DDB
+        self.assertEqual([r["date"] for r in cta.history()],
+                         ["2026-08-28", "2026-08-29"])
+
+    def test_a_broken_ddb_does_not_break_recording(self):
+        from unittest import mock
+        boom = mock.MagicMock()
+        boom.put_item.side_effect = RuntimeError("throttled")
+        boom.scan.side_effect = RuntimeError("throttled")
+        boom.get_item.side_effect = RuntimeError("throttled")
+        with mock.patch.object(cta, "_get_hist_table", return_value=boom):
+            row = cta.record_observation(7711.76, today=TODAY)
+            self.assertIsNotNone(row)
+            self.assertEqual(len(cta.history()), 1)      # disk still answers
+
+    def test_paginated_scan_reads_every_page(self):
+        """Without following LastEvaluatedKey the series silently truncates at
+        1 MB, which would look like history simply stopping."""
+        from unittest import mock
+        pages = [
+            {"Items": [{"date": "2026-08-01", "spx": "7000"}],
+             "LastEvaluatedKey": {"date": "2026-08-01"}},
+            {"Items": [{"date": "2026-08-02", "spx": "7100"}]},
+        ]
+        table = mock.MagicMock()
+        table.scan.side_effect = pages
+        with mock.patch.object(cta, "_get_hist_table", return_value=table):
+            rows = cta._hist_load_ddb()
+        self.assertEqual([r["date"] for r in rows], ["2026-08-01", "2026-08-02"])
 
 
 if __name__ == "__main__":

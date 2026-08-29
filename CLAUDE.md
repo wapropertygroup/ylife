@@ -254,9 +254,31 @@ Two-tier: in-memory dict + on-disk JSON in `cache/`. All cache access guarded by
 **Observed series are not cache.** The forward-P/E snapshots accumulate one row
 per day and cannot be recomputed from anything, so they live in DynamoDB
 (`ystocker-valuation-history`) as well as in `cache/valuation_cache.json` — the
-same pattern `ystocker-fear-greed` and `ystocker-pcr-history` already use. Keeping
-such a series only in a cache file loses it whenever the EC2 instance is replaced,
-which is exactly how the SPY/QQQ chart reset to a single point.
+same pattern `ystocker-fear-greed`, `ystocker-pcr-history` and
+`ystocker-cta-history` already use. Keeping such a series only in a cache file
+loses it whenever the EC2 instance is replaced, which is exactly how the SPY/QQQ
+chart reset to a single point.
+
+The CTA tracker is the clearest case of "cannot be recomputed": each row records
+how far the S&P sat from Goldman's trigger levels *that day*, and the triggers
+change weekly with no published history, so a lost row is lost permanently even
+though the index history is freely available. That table also holds the last
+fetched report under the sentinel key `_latest_report` — one table rather than
+two, with readers skipping any key that is not an ISO date — so a replaced box
+does not forget every report the fetcher ever picked up.
+
+None of these four tables are in `deploy/cloudformation.yaml`, deliberately: they
+already exist, and CloudFormation cannot adopt a live table without an import
+operation, so adding them would break the next `--full` deploy rather than
+converge it. Create by hand, matching the others (`date` string hash key,
+`PAY_PER_REQUEST`):
+
+```bash
+aws dynamodb create-table --table-name ystocker-cta-history --region us-west-2 \
+  --billing-mode PAY_PER_REQUEST \
+  --attribute-definitions AttributeName=date,AttributeType=S \
+  --key-schema AttributeName=date,KeyType=HASH
+```
 
 ### Background threads (yStocker)
 Started in `create_app()`, all daemon threads:

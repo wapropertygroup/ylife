@@ -21,6 +21,8 @@ import json
 import logging
 import os
 import re
+import threading
+import time
 from datetime import date
 from typing import Any
 from urllib.parse import urlparse
@@ -326,7 +328,6 @@ def _http_get(url: str, attempts: int = 3) -> str:
     report could be missed entirely on a 503, since the feed window is only a few
     hours wide and the next poll may find the item already gone.
     """
-    import time
     import urllib.error
     import urllib.request
 
@@ -617,16 +618,246 @@ def distance_to_triggers(spx: float | None,
     return out
 
 
+# ---------------------------------------------------------------------------
+# The tracker: a durable daily series, not a cache
+# ---------------------------------------------------------------------------
+#
+# Distance-to-trigger is only interesting as a *series*. One reading says the S&P
+# is 3.4% above the short-term level; a month of readings says whether it is
+# converging on it. That series cannot be recomputed after the fact, because it
+# depends on which report was in force on each past day — Goldman's triggers
+# change weekly and nothing publishes their history. So this is an observed
+# series in the sense CLAUDE.md means, and keeping it only in `cache/` would lose
+# it whenever the instance is replaced. That is not hypothetical: it is exactly
+# how the SPY/QQQ valuation chart reset to a single point.
+#
+# Same shape as ystocker-valuation-history / -fear-greed / -pcr-history: a `date`
+# string hash key, PAY_PER_REQUEST, values stored as strings because DynamoDB
+# rejects float. Absence of the table is not an error — local dev has no AWS
+# credentials and the disk mirror still works.
+
+_HIST_TABLE_NAME = "ystocker-cta-history"
+_HIST_PATH = os.path.join(os.path.dirname(_FETCH_CACHE), "cta_history.json")
+
+#: Sentinel key for the in-force report snapshot, which is not an observation.
+#: Sharing one table avoids a second thing to provision; the series readers skip
+#: any key that is not an ISO date, so the two cannot be confused.
+_REPORT_KEY = "_latest_report"
+
+_HIST_NUMERIC = ("spx", "t_short", "t_medium", "t_long",
+                 "d_short", "d_medium", "d_long")
+
+_hist_table = None
+_hist_unavail_until = 0.0
+_HIST_LOCK = threading.Lock()
+
+
+def _get_hist_table():
+    """DynamoDB table for the tracker series, or None when unavailable.
+
+    The 5-minute backoff stops every pass paying a connection timeout when the
+    table genuinely is not there, which is the normal case in local dev.
+    """
+    global _hist_table, _hist_unavail_until
+    if _hist_table is not None:
+        return _hist_table
+    if time.time() < _hist_unavail_until:
+        return None
+    with _HIST_LOCK:
+        if _hist_table is not None:
+            return _hist_table
+        if time.time() < _hist_unavail_until:
+            return None
+        try:
+            import boto3
+
+            ddb = boto3.resource(
+                "dynamodb", region_name=os.environ.get("AWS_REGION", "us-west-2"))
+            tbl = ddb.Table(_HIST_TABLE_NAME)
+            tbl.load()
+            _hist_table = tbl
+            log.info("cta: DynamoDB tracker table connected: %s", _HIST_TABLE_NAME)
+        except Exception as exc:  # noqa: BLE001 - degrade to disk-only
+            log.warning("cta: DynamoDB tracker unavailable: %s", exc)
+            _hist_table = None
+            _hist_unavail_until = time.time() + 300
+        return _hist_table
+
+
+def _row_from_item(item: dict[str, Any]) -> dict[str, Any] | None:
+    stamp = _valid_date(item.get("date"))
+    if not stamp:
+        return None                      # the sentinel row, or junk
+    row: dict[str, Any] = {"date": stamp}
+    for key in _HIST_NUMERIC:
+        value = _number(item.get(key))
+        if value is not None:
+            row[key] = value
+    report = _valid_date(item.get("report_date"))
+    if report:
+        row["report_date"] = report
+    return row if len(row) > 1 else None
+
+
+def _hist_load_ddb() -> list[dict[str, Any]]:
+    table = _get_hist_table()
+    if table is None:
+        return []
+    try:
+        rows, kwargs = [], {}
+        while True:
+            resp = table.scan(**kwargs)
+            for item in resp.get("Items", []):
+                row = _row_from_item(item)
+                if row:
+                    rows.append(row)
+            # A scan is paginated; without this the series silently stops at the
+            # first page once there is more than 1 MB of history.
+            if "LastEvaluatedKey" not in resp:
+                break
+            kwargs["ExclusiveStartKey"] = resp["LastEvaluatedKey"]
+        return rows
+    except Exception as exc:  # noqa: BLE001
+        log.warning("cta: tracker load failed: %s", exc)
+        return []
+
+
+def _hist_save_ddb(row: dict[str, Any]) -> None:
+    table = _get_hist_table()
+    if table is None or not row.get("date"):
+        return
+    try:
+        item: dict[str, Any] = {"date": row["date"]}
+        for key in _HIST_NUMERIC:
+            if row.get(key) is not None:
+                item[key] = str(row[key])       # DynamoDB rejects float
+        if row.get("report_date"):
+            item["report_date"] = row["report_date"]
+        table.put_item(Item=item)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("cta: tracker save failed for %s: %s", row.get("date"), exc)
+
+
+def _hist_load_disk() -> list[dict[str, Any]]:
+    try:
+        with open(_HIST_PATH, encoding="utf-8") as fh:
+            data = json.load(fh)
+        rows = data.get("rows") if isinstance(data, dict) else data
+        out = []
+        for raw in rows or []:
+            row = _row_from_item(raw) if isinstance(raw, dict) else None
+            if row:
+                out.append(row)
+        return out
+    except FileNotFoundError:
+        return []
+    except Exception as exc:  # noqa: BLE001
+        log.warning("cta: unreadable tracker file (%s)", exc)
+        return []
+
+
+def _hist_save_disk(rows: list[dict[str, Any]]) -> None:
+    import tempfile
+    try:
+        os.makedirs(os.path.dirname(_HIST_PATH), exist_ok=True)
+        fd, tmp = tempfile.mkstemp(dir=os.path.dirname(_HIST_PATH), suffix=".tmp")
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            json.dump({"rows": rows}, fh, allow_nan=False)
+        os.replace(tmp, _HIST_PATH)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("cta: could not write tracker file: %s", exc)
+
+
+def history(limit: int | None = None) -> list[dict[str, Any]]:
+    """The tracker series, oldest first.
+
+    DynamoDB and disk are unioned by date rather than one being preferred: disk
+    can hold a row written while DynamoDB was briefly unreachable, and DynamoDB
+    holds everything that predates the current instance. Later writes for a date
+    win, which is what makes a same-day re-record an update rather than a
+    duplicate.
+    """
+    merged: dict[str, dict[str, Any]] = {}
+    for row in _hist_load_ddb() + _hist_load_disk():
+        merged[row["date"]] = {**merged.get(row["date"], {}), **row}
+    rows = sorted(merged.values(), key=lambda r: r["date"])
+    return rows[-limit:] if limit else rows
+
+
+def record_observation(spx: float | None,
+                       today: date | None = None) -> dict[str, Any] | None:
+    """Record where the index sat relative to the in-force triggers today.
+
+    One row per calendar day, overwritten if called again the same day, so the
+    hourly poller converges on the latest reading rather than accumulating
+    intraday noise. Returns the row, or None when there is nothing to record.
+    """
+    dist = distance_to_triggers(spx)
+    if not dist.get("levels"):
+        return None
+    stamp = (today or date.today()).isoformat()
+    latest = get_cta_positioning().get("latest") or {}
+    row: dict[str, Any] = {"date": stamp, "spx": dist["spx"]}
+    if _valid_date(latest.get("report_date")):
+        row["report_date"] = latest["report_date"]
+    for level in dist["levels"]:
+        row["t_%s" % level["key"]] = level["trigger"]
+        row["d_%s" % level["key"]] = level["distance_pct"]
+
+    rows = [r for r in history() if r["date"] != stamp] + [row]
+    rows.sort(key=lambda r: r["date"])
+    _hist_save_disk(rows)
+    _hist_save_ddb(row)
+    return row
+
+
+def _report_to_ddb(snapshot: dict[str, Any]) -> None:
+    """Mirror a fetched report into DynamoDB so it survives the instance.
+
+    Without this the fetcher's own output lived only in ``cache/``, so every
+    report it ever picked up would vanish when the box was replaced and the card
+    would silently revert to the built-in snapshot from months earlier.
+    """
+    table = _get_hist_table()
+    if table is None:
+        return
+    try:
+        table.put_item(Item={"date": _REPORT_KEY,
+                             "payload": json.dumps(snapshot, allow_nan=False)})
+    except Exception as exc:  # noqa: BLE001
+        log.warning("cta: could not mirror report to DynamoDB: %s", exc)
+
+
+def _report_from_ddb() -> dict[str, Any] | None:
+    table = _get_hist_table()
+    if table is None:
+        return None
+    try:
+        item = (table.get_item(Key={"date": _REPORT_KEY}) or {}).get("Item") or {}
+        payload = item.get("payload")
+        if not payload:
+            return None
+        data = json.loads(payload)
+        return data if isinstance(data, dict) and data.get("latest") else None
+    except Exception as exc:  # noqa: BLE001
+        log.warning("cta: could not read report from DynamoDB: %s", exc)
+        return None
+
+
 def _read_fetched() -> dict[str, Any] | None:
     try:
         with open(_FETCH_CACHE, encoding="utf-8") as fh:
             data = json.load(fh)
-        return data if isinstance(data, dict) and data.get("latest") else None
+        if isinstance(data, dict) and data.get("latest"):
+            return data
     except FileNotFoundError:
-        return None
+        pass
     except Exception as exc:  # noqa: BLE001
         log.warning("cta: unreadable fetched cache (%s)", exc)
-        return None
+    # Disk is gone or unusable — fall back to the DynamoDB mirror. This is the
+    # path a replaced instance takes, and without it the box would come up having
+    # forgotten every report the fetcher had picked up.
+    return _report_from_ddb()
 
 
 def _write_fetched(payload: dict[str, Any]) -> None:
@@ -639,6 +870,9 @@ def _write_fetched(payload: dict[str, Any]) -> None:
         os.replace(tmp, _FETCH_CACHE)
     except Exception as exc:  # noqa: BLE001
         log.warning("cta: could not write fetched cache: %s", exc)
+    # Independent of the disk write: a full disk must not also cost the durable
+    # copy, and the durable copy is the one that survives this instance.
+    _report_to_ddb(payload)
 
 
 def fetch_latest_report(spx_ref: float | None = None) -> dict[str, Any] | None:

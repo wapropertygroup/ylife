@@ -5250,13 +5250,27 @@ def _cta_loop() -> None:
 
     time.sleep(90)          # let the markets cache warm so the S&P gate can run
     while True:
+        spx = _cta_spx_reference()
         try:
-            got = cta.fetch_latest_report(spx_ref=_cta_spx_reference())
+            got = cta.fetch_latest_report(spx_ref=spx)
             if got:
                 log.info("CTA: picked up %s from %s",
                          got["latest"]["report_date"], got.get("fetched_from", "")[:80])
         except Exception:
             log.exception("CTA fetch failed")
+
+        # One tracker row per day, whether or not a new report arrived: the
+        # distance moves with the index, so the series is the point even during a
+        # week when Goldman publishes nothing.
+        try:
+            row = cta.record_observation(spx)
+            if row:
+                log.info("CTA tracker: %s spx=%.0f short%+.2f%% medium%+.2f%% long%+.2f%%",
+                         row["date"], row.get("spx") or 0.0,
+                         row.get("d_short") or 0.0, row.get("d_medium") or 0.0,
+                         row.get("d_long") or 0.0)
+        except Exception:
+            log.exception("CTA tracker record failed")
 
         try:
             payload = cta.get_cta_positioning()
@@ -5306,6 +5320,36 @@ def api_cta_positioning():
         payload["distance"] = distance_to_triggers(
             spx, (payload.get("latest") or {}).get("spx_triggers") or {})
     return jsonify(payload)
+
+
+@bp.route("/api/cta-history")
+def api_cta_history():
+    """The distance-to-trigger series: one row per day, oldest first.
+
+    A single distance reading says the S&P is some percent above the short-term
+    level; the series says whether it is converging on it, which is the part worth
+    charting. It cannot be backfilled — each row depends on which report was in
+    force that day, and nothing publishes the history of Goldman's triggers — so
+    the rows accumulate from the day the tracker started rather than reaching
+    backwards.
+
+    ``rows`` may be short or empty at first, and that is honest rather than
+    broken; ``count`` and ``since`` let the page say so instead of drawing a
+    confident line through two points.
+    """
+    from ystocker import cta
+
+    try:
+        rows = cta.history(limit=400)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("CTA history unavailable: %s", exc)
+        rows = []
+    return jsonify({
+        "rows": rows,
+        "count": len(rows),
+        "since": rows[0]["date"] if rows else None,
+        "triggers_now": (cta.get_cta_positioning().get("latest") or {}).get("spx_triggers") or {},
+    })
 
 
 # ---------------------------------------------------------------------------
