@@ -56,28 +56,162 @@ window.YSTime = (function () {
 </script>
 
 <style>
+/* ── Theme tokens ────────────────────────────────────────────────────────────
+   This block is hand-written CSS, so Tailwind's `dark:` variant cannot reach a
+   single colour in it. Declared light-first with `.dark` overriding, exactly as
+   base.html does: if the class is ever missing the page degrades to a readable
+   light page rather than black-on-black. Self-contained and --ag- prefixed, so
+   nothing here depends on, or collides with, tokens defined elsewhere.
+
+   Roles, not values: the same dark hex can need opposite treatment. A pale
+   indigo used as TEXT (--ag-accent-ink) inverts to a dark indigo, while the same
+   pale indigo used as a FILL stays pale (those fills are the rgba() tints below,
+   which suit both themes and are deliberately left literal). White-on-saturated
+   never appears here, so no token is theme-independent by accident. */
+:root {
+  /* Surfaces. --ag-surface is the card's own plane (inputs and bubbles sit
+     flush with it in both themes, separated by a border, not a fill). */
+  --ag-surface: #ffffff;
+  --ag-inset: #f1f5f9;                    /* sunken: log, code, th, quota, avatar base */
+  --ag-fill: #f1f5f9;                     /* filled chip: owner tag, the reader's own turn */
+  --ag-float: #ffffff;                    /* elevated: status menu, copy toast */
+  --ag-float-blur: rgba(255,255,255,.92); /* sticky jump bar over the page */
+  --ag-dock-blur: rgba(255,255,255,.92);  /* floating dock button */
+  --ag-fill-soft: rgba(248,250,252,.9);   /* phone ghost button */
+  --ag-row-fill: rgba(248,250,252,.9);    /* phone history row */
+
+  /* Lines. Three weights, kept in the same order of prominence as dark mode:
+     hairline, control border, hover border. */
+  --ag-line: #e2e8f0;
+  --ag-line-2: #cbd5e1;
+  --ag-line-3: #94a3b8;
+  --ag-ring: #cbd5e1;                     /* chip outline, spinner track */
+  --ag-thumb: #cbd5e1;                    /* jump-bar scrollbar */
+
+  /* Ink. Six steps in dark mode; on white the ramp floors at slate-500
+     (4.76:1), which is why --ag-ink-faint and --ag-ink-dim converge there
+     rather than take a value too pale to read. */
+  --ag-ink-strong: #0f172a;
+  --ag-ink: #1e293b;
+  --ag-ink-soft: #334155;
+  --ag-ink-muted: #475569;
+  --ag-ink-faint: #64748b;
+  --ag-ink-dim: #64748b;
+  /* The faint level again, one step darker, for the two labels that sit on the
+     manager box's violet tint -- slate-500 measures 4.42:1 there, not 4.76:1. */
+  --ag-ink-on-tint: #475569;
+  --ag-glyph-faint: #64748b;               /* the per-turn 🔗, faint by design */
+
+  /* Indigo: three line weights and three ink weights. The ink weights are the
+     pale-indigo-as-text cases, so they invert to indigo-700/800/900. */
+  --ag-accent: #4f46e5;
+  --ag-accent-strong: #4338ca;
+  --ag-accent-deep: #3730a3;
+  --ag-accent-ink: #4338ca;
+  --ag-accent-ink-strong: #3730a3;
+  --ag-accent-ink-bright: #312e81;
+
+  /* Violet: the follow-up conversation and the manager's turn. */
+  --ag-violet: #7c3aed;
+  --ag-violet-ink: #5b21b6;
+  --ag-violet-ink-strong: #4c1d95;
+
+  /* Status. The ink tokens double as the filter dots, so a dot and the pill it
+     mirrors stay the same colour (see .ag-sel-dot). */
+  --ag-ok: #15803d;
+  --ag-green-ink: #166534;
+  --ag-red-ink: #b91c1c;
+  --ag-red-line: #fca5a5;
+  --ag-amber-ink: #92400e;
+  --ag-warn-ink: #92400e;
+  --ag-amber-line: #fcd34d;
+  --ag-queued-ink: #475569;
+  --ag-credit-ink: #065f46;
+  --ag-credit-line: #a7f3d0;
+  --ag-credit-fill: rgba(16,185,129,.12);
+
+  /* Elevation. Black at 50% is a dark-mode value; on white it reads as dirt. */
+  --ag-shadow: rgba(15,23,42,.14);
+  --ag-shadow-hard: rgba(15,23,42,.22);
+
+  /* The native date picker's own chrome, which no `color` declaration reaches. */
+  --ag-scheme: light;
+}
+.dark {
+  --ag-surface: #0f172a;
+  --ag-inset: #0b1120;
+  --ag-fill: #1e293b;
+  --ag-float: #0b1120;
+  --ag-float-blur: rgba(11,17,32,.92);
+  --ag-dock-blur: rgba(15,23,42,.92);
+  --ag-fill-soft: rgba(15,23,42,.72);
+  --ag-row-fill: rgba(15,23,42,.58);
+
+  --ag-line: #1e293b;
+  --ag-line-2: #334155;
+  --ag-line-3: #475569;
+  --ag-ring: #24314a;
+  --ag-thumb: #1e293b;
+
+  --ag-ink-strong: #f1f5f9;
+  --ag-ink: #e2e8f0;
+  --ag-ink-soft: #cbd5e1;
+  --ag-ink-muted: #94a3b8;
+  --ag-ink-faint: #64748b;
+  --ag-ink-dim: #475569;
+  --ag-ink-on-tint: #64748b;
+  --ag-glyph-faint: #334155;
+
+  --ag-accent: #6366f1;
+  --ag-accent-strong: #4f46e5;
+  --ag-accent-deep: #4338ca;
+  --ag-accent-ink: #a5b4fc;
+  --ag-accent-ink-strong: #c7d2fe;
+  --ag-accent-ink-bright: #e0e7ff;
+
+  --ag-violet: #8b5cf6;
+  --ag-violet-ink: #c4b5fd;
+  --ag-violet-ink-strong: #ede9fe;
+
+  --ag-ok: #22c55e;
+  --ag-green-ink: #4ade80;
+  --ag-red-ink: #fca5a5;
+  --ag-red-line: #7f1d1d;
+  --ag-amber-ink: #fcd34d;
+  --ag-warn-ink: #fbbf24;
+  --ag-amber-line: #a16207;
+  --ag-queued-ink: #b6c2d1;
+  --ag-credit-ink: #6ee7b7;
+  --ag-credit-line: #065f46;
+  --ag-credit-fill: rgba(6,95,70,.22);
+
+  --ag-shadow: rgba(0,0,0,.5);
+  --ag-shadow-hard: #000;
+
+  --ag-scheme: dark;
+}
 .ag-btn {
   display: inline-flex; align-items: center; gap: 6px;
   padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600;
-  border: 1px solid #6366f1; background: rgba(99,102,241,.15); color: #a5b4fc;
+  border: 1px solid var(--ag-accent); background: rgba(99,102,241,.15); color: var(--ag-accent-ink);
   cursor: pointer; transition: background .15s, border-color .15s, color .15s;
   white-space: nowrap;
 }
-.ag-btn:hover:not(:disabled) { background: rgba(99,102,241,.28); color: #c7d2fe; }
+.ag-btn:hover:not(:disabled) { background: rgba(99,102,241,.28); color: var(--ag-accent-ink-strong); }
 .ag-btn:focus-visible {
-  outline: 2px solid #a5b4fc; outline-offset: 2px;
+  outline: 2px solid var(--ag-accent-ink); outline-offset: 2px;
 }
 .ag-btn:disabled { opacity: .45; cursor: not-allowed; }
 .ag-btn-ghost {
-  border-color: #334155; background: transparent; color: #94a3b8;
+  border-color: var(--ag-line-2); background: transparent; color: var(--ag-ink-muted);
   font-weight: 500; padding: 6px 12px; font-size: 12px;
 }
-.ag-btn-ghost:hover:not(:disabled) { background: rgba(148,163,184,.12); color: #cbd5e1; }
+.ag-btn-ghost:hover:not(:disabled) { background: rgba(148,163,184,.12); color: var(--ag-ink-soft); }
 .ag-input {
-  background: #0f172a; border: 1px solid #334155; border-radius: 8px;
-  color: #e2e8f0; font-size: 13px; padding: 8px 12px;
+  background: var(--ag-surface); border: 1px solid var(--ag-line-2); border-radius: 8px;
+  color: var(--ag-ink); font-size: 13px; padding: 8px 12px;
 }
-.ag-input:focus { outline: none; border-color: #6366f1; }
+.ag-input:focus { outline: none; border-color: var(--ag-accent); }
 .ag-form-grid {
   display: grid;
   grid-template-columns: minmax(110px, 140px) minmax(170px, 190px) max-content max-content;
@@ -94,7 +228,7 @@ window.YSTime = (function () {
 #agDate {
   display: block; width: 100%; min-width: 0; max-width: 100%;
   inline-size: 100%; min-inline-size: 0; max-inline-size: 100%;
-  padding-right: 42px; color-scheme: dark; font-family: inherit;
+  padding-right: 42px; color-scheme: var(--ag-scheme); font-family: inherit;
   line-height: 1.25rem; text-align: left;
   -webkit-appearance: none; appearance: none;
 }
@@ -108,7 +242,7 @@ window.YSTime = (function () {
 }
 .ag-date-icon {
   position: absolute; right: 12px; top: 50%; width: 17px; height: 17px;
-  transform: translateY(-50%); pointer-events: none; color: #64748b;
+  transform: translateY(-50%); pointer-events: none; color: var(--ag-ink-faint);
 }
 .ag-form-actions {
   display: grid; grid-template-columns: repeat(2, max-content); gap: 8px;
@@ -123,80 +257,80 @@ window.YSTime = (function () {
   display: inline-flex; align-items: center; gap: 5px;
   padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 600;
 }
-.ag-queued  { background: rgba(148,163,184,.15); color: #b6c2d1; }
-.ag-running { background: rgba(99,102,241,.18);  color: #a5b4fc; }
-.ag-done    { background: rgba(25,158,112,.18);  color: #4ade80; }
-.ag-error   { background: rgba(230,103,103,.18); color: #fca5a5; }
-.ag-degraded{ background: rgba(251,191,36,.16);  color: #fcd34d; }
+.ag-queued  { background: rgba(148,163,184,.15); color: var(--ag-queued-ink); }
+.ag-running { background: rgba(99,102,241,.18);  color: var(--ag-accent-ink); }
+.ag-done    { background: rgba(25,158,112,.18);  color: var(--ag-green-ink); }
+.ag-error   { background: rgba(230,103,103,.18); color: var(--ag-red-ink); }
+.ag-degraded{ background: rgba(251,191,36,.16);  color: var(--ag-amber-ink); }
 .ag-log {
-  background: #0b1120; border: 1px solid #1e293b; border-radius: 8px;
+  background: var(--ag-inset); border: 1px solid var(--ag-line); border-radius: 8px;
   padding: 12px; font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 11px; line-height: 1.6; color: #94a3b8;
+  font-size: 11px; line-height: 1.6; color: var(--ag-ink-muted);
   white-space: pre-wrap; word-break: break-word;
   max-height: 320px; overflow-y: auto;
 }
-.ag-report { color: #cbd5e1; font-size: 13px; line-height: 1.75; }
+.ag-report { color: var(--ag-ink-soft); font-size: 13px; line-height: 1.75; }
 .ag-report h1, .ag-report h2, .ag-report h3, .ag-report h4 {
-  color: #e2e8f0; font-weight: 600; line-height: 1.35;
+  color: var(--ag-ink); font-weight: 600; line-height: 1.35;
   margin: 1.4em 0 .5em;
 }
 .ag-report h1 { font-size: 19px; }
 .ag-report h2 { font-size: 16px; }
 .ag-report h3 { font-size: 14px; }
-.ag-report h4 { font-size: 13px; color: #cbd5e1; }
+.ag-report h4 { font-size: 13px; color: var(--ag-ink-soft); }
 .ag-report > :first-child { margin-top: 0; }
 .ag-report p { margin: .7em 0; }
 .ag-report ul, .ag-report ol { margin: .7em 0; padding-left: 1.4em; }
 .ag-report ul { list-style: disc; }
 .ag-report ol { list-style: decimal; }
 .ag-report li { margin: .3em 0; }
-.ag-report strong { color: #f1f5f9; font-weight: 600; }
-.ag-report em { color: #cbd5e1; font-style: italic; }
+.ag-report strong { color: var(--ag-ink-strong); font-weight: 600; }
+.ag-report em { color: var(--ag-ink-soft); font-style: italic; }
 .ag-report code {
-  background: #0b1120; border: 1px solid #1e293b; border-radius: 4px;
+  background: var(--ag-inset); border: 1px solid var(--ag-line); border-radius: 4px;
   padding: 1px 5px; font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 11.5px; color: #a5b4fc;
+  font-size: 11.5px; color: var(--ag-accent-ink);
 }
 .ag-report blockquote {
-  border-left: 3px solid #334155; margin: .8em 0; padding: .2em 0 .2em .9em;
-  color: #94a3b8;
+  border-left: 3px solid var(--ag-line-2); margin: .8em 0; padding: .2em 0 .2em .9em;
+  color: var(--ag-ink-muted);
 }
-.ag-report hr { border: 0; border-top: 1px solid #1e293b; margin: 1.2em 0; }
+.ag-report hr { border: 0; border-top: 1px solid var(--ag-line); margin: 1.2em 0; }
 .ag-report table {
   border-collapse: collapse; margin: .9em 0; font-size: 12px;
   display: block; overflow-x: auto; max-width: 100%;
 }
 .ag-report th, .ag-report td {
-  border: 1px solid #1e293b; padding: 6px 10px; text-align: left;
+  border: 1px solid var(--ag-line); padding: 6px 10px; text-align: left;
   white-space: nowrap;
 }
-.ag-report th { background: #0b1120; color: #e2e8f0; font-weight: 600; }
+.ag-report th { background: var(--ag-inset); color: var(--ag-ink); font-weight: 600; }
 .ag-row {
   display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
 }
 .ag-quota {
   display: inline-flex; align-items: baseline; gap: 5px;
   padding: 7px 12px; border-radius: 8px; font-size: 12px;
-  border: 1px solid #1e293b; background: #0b1120; color: #94a3b8;
+  border: 1px solid var(--ag-line); background: var(--ag-inset); color: var(--ag-ink-muted);
   white-space: nowrap;
 }
-.ag-quota b { color: #4ade80; font-size: 14px; font-weight: 700; }
+.ag-quota b { color: var(--ag-green-ink); font-size: 14px; font-weight: 700; }
 .ag-quota em {
   font-style: normal; font-weight: 700; font-size: 10px; letter-spacing: .06em;
-  color: #fbbf24; border: 1px solid #a16207; border-radius: 999px; padding: 1px 6px;
+  color: var(--ag-warn-ink); border: 1px solid var(--ag-amber-line); border-radius: 999px; padding: 1px 6px;
 }
 .ag-credits {
-  font-size: 10.5px; font-weight: 700; color: #6ee7b7;
-  border: 1px solid #065f46; border-radius: 999px; padding: 1px 6px;
-  background: rgba(6,95,70,.22);
+  font-size: 10.5px; font-weight: 700; color: var(--ag-credit-ink);
+  border: 1px solid var(--ag-credit-line); border-radius: 999px; padding: 1px 6px;
+  background: var(--ag-credit-fill);
 }
 .ag-pack {
   display: inline-block; margin-right: 10px; padding: 2px 8px;
-  border: 1px solid #1e293b; border-radius: 999px; background: #0b1120;
-  color: #94a3b8; font-variant-numeric: tabular-nums;
+  border: 1px solid var(--ag-line); border-radius: 999px; background: var(--ag-inset);
+  color: var(--ag-ink-muted); font-variant-numeric: tabular-nums;
 }
-.ag-quota-out { border-color: #7f1d1d; }
-.ag-quota-out b { color: #fca5a5; }
+.ag-quota-out { border-color: var(--ag-red-line); }
+.ag-quota-out b { color: var(--ag-red-ink); }
 
 /* ── Jump bar ───────────────────────────────────────────────────────────── */
 .ag-jump {
@@ -205,19 +339,19 @@ window.YSTime = (function () {
   position: sticky; top: 56px; z-index: 30;
   display: flex; gap: 6px; overflow-x: auto; scrollbar-width: thin;
   padding: 8px 2px; margin: -4px 0 10px;
-  background: rgba(11,17,32,.92); backdrop-filter: blur(6px);
-  border-bottom: 1px solid #1e293b;
+  background: var(--ag-float-blur); backdrop-filter: blur(6px);
+  border-bottom: 1px solid var(--ag-line);
 }
 .ag-jump::-webkit-scrollbar { height: 4px; }
-.ag-jump::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 2px; }
+.ag-jump::-webkit-scrollbar-thumb { background: var(--ag-thumb); border-radius: 2px; }
 .ag-chip {
   flex: 0 0 auto; display: inline-flex; align-items: center; gap: 5px;
   padding: 4px 10px; border-radius: 999px; cursor: pointer;
   font-size: 11.5px; font-weight: 600; white-space: nowrap;
-  color: #94a3b8; background: transparent;
-  border: 1px solid #24314a; transition: color .12s, border-color .12s, background .12s;
+  color: var(--ag-ink-muted); background: transparent;
+  border: 1px solid var(--ag-ring); transition: color .12s, border-color .12s, background .12s;
 }
-.ag-chip:hover { color: #e2e8f0; border-color: var(--role); }
+.ag-chip:hover { color: var(--ag-ink); border-color: var(--role); }
 /* Current speaker, set by the scroll spy. */
 .ag-chip.is-active {
   color: var(--role); border-color: var(--role);
@@ -230,21 +364,21 @@ window.YSTime = (function () {
   flex: 0 0 auto; display: inline-flex; align-items: center; gap: 5px;
   padding: 4px 10px; border-radius: 999px; cursor: pointer;
   font-size: 11.5px; font-weight: 600; white-space: nowrap;
-  color: #cbd5e1; background: rgba(99,102,241,.14);
-  border: 1px solid #4338ca;
+  color: var(--ag-ink-soft); background: rgba(99,102,241,.14);
+  border: 1px solid var(--ag-accent-deep);
 }
-.ag-ctl:hover { background: rgba(99,102,241,.26); color: #e2e8f0; }
+.ag-ctl:hover { background: rgba(99,102,241,.26); color: var(--ag-ink); }
 /* Separates the control from the speaker chips it sits in front of. */
-.ag-ctl-sep { flex: 0 0 auto; width: 1px; align-self: stretch; background: #1e293b; margin: 0 3px; }
+.ag-ctl-sep { flex: 0 0 auto; width: 1px; align-self: stretch; background: var(--ag-line); margin: 0 3px; }
 
 .ag-who { cursor: pointer; user-select: none; }
 .ag-caret {
-  color: #475569; font-size: 10px; line-height: 1;
+  color: var(--ag-ink-dim); font-size: 10px; line-height: 1;
   transition: transform .15s;
 }
 .ag-bubble.is-collapsed .ag-caret { transform: rotate(-90deg); }
 .ag-bubble.is-collapsed .ag-report { display: none; }
-.ag-hidden-note { color: #475569; font-size: 11px; }
+.ag-hidden-note { color: var(--ag-ink-dim); font-size: 11px; }
 .ag-bubble:not(.is-collapsed) .ag-hidden-note { display: none; }
 
 /* Floating controls for a long report. Docked to the *reading column*, not to
@@ -267,11 +401,11 @@ window.YSTime = (function () {
   width: 40px; height: 40px; border-radius: 50%;
   display: none; align-items: center; justify-content: center;
   cursor: pointer; font-size: 15px; line-height: 1;
-  color: #c7d2fe; background: rgba(15,23,42,.92); backdrop-filter: blur(6px);
-  border: 1px solid #4338ca; box-shadow: 0 6px 20px rgba(0,0,0,.5);
+  color: var(--ag-accent-ink-strong); background: var(--ag-dock-blur); backdrop-filter: blur(6px);
+  border: 1px solid var(--ag-accent-deep); box-shadow: 0 6px 20px var(--ag-shadow);
 }
 .ag-dock-btn.is-on { display: flex; }
-.ag-dock-btn:hover { background: rgba(99,102,241,.3); color: #e2e8f0; }
+.ag-dock-btn:hover { background: rgba(99,102,241,.3); color: var(--ag-ink); }
 #agFold { font-size: 17px; }
 
 /* ── Loading ────────────────────────────────────────────────────────────── */
@@ -281,7 +415,7 @@ window.YSTime = (function () {
 @keyframes ag-spin { to { transform: rotate(360deg); } }
 .ag-spinner {
   display: inline-block; width: 13px; height: 13px; border-radius: 50%;
-  border: 2px solid #24314a; border-top-color: #8b5cf6;
+  border: 2px solid var(--ag-ring); border-top-color: var(--ag-violet);
   animation: ag-spin .7s linear infinite;
   vertical-align: -2px; flex: 0 0 auto;
 }
@@ -291,61 +425,61 @@ window.YSTime = (function () {
 }
 .ag-hist-load {
   display: flex; align-items: center; gap: 9px;
-  padding: 14px 2px; color: #64748b; font-size: 12px;
+  padding: 14px 2px; color: var(--ag-ink-faint); font-size: 12px;
 }
 /* Refreshing a list that already has rows dims it instead of replacing it, so
    typing in the search box does not blank the results on every keystroke. */
 .ag-hist-busy { opacity: .45; transition: opacity .12s; }
-.ag-hist-err { color: #fca5a5; font-size: 12px; padding: 10px 2px; }
+.ag-hist-err { color: var(--ag-red-ink); font-size: 12px; padding: 10px 2px; }
 
 /* ── Follow-up conversation ─────────────────────────────────────────────── */
-#agChatWrap { margin-top: 18px; border-top: 1px solid #1e293b; padding-top: 14px; }
+#agChatWrap { margin-top: 18px; border-top: 1px solid var(--ag-line); padding-top: 14px; }
 /* Owner label on a history row a VIP does not own. Defined here rather than as
    Tailwind utilities: this stylesheet is a compiled artifact, so an arbitrary
    class added in markup is silently absent at runtime. */
 .ag-owner {
-  font-size: 10px; color: #94a3b8; background: #1e293b;
-  border: 1px solid #334155; border-radius: 9999px;
+  font-size: 10px; color: var(--ag-ink-muted); background: var(--ag-fill);
+  border: 1px solid var(--ag-line-2); border-radius: 9999px;
   padding: 1px 7px; white-space: nowrap; max-width: 15rem;
   overflow: hidden; text-overflow: ellipsis;
 }
 .ag-chat-head {
   display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
-  color: #94a3b8; font-size: 12px;
+  color: var(--ag-ink-muted); font-size: 12px;
 }
-.ag-chat-head b { color: #8b5cf6; font-size: 13px; }
-.ag-chat-quota { margin-left: auto; color: #475569; font-size: 11px; }
+.ag-chat-head b { color: var(--ag-violet); font-size: 13px; }
+.ag-chat-quota { margin-left: auto; color: var(--ag-ink-dim); font-size: 11px; }
 /* The user's own turns are right-aligned and neutral, so a glance separates the
    question from the answer without reading either. */
 .ag-chat-you { display: flex; justify-content: flex-end; margin-bottom: 10px; }
 .ag-chat-you > div {
-  max-width: 78%; background: #1e293b; border: 1px solid #334155;
+  max-width: 78%; background: var(--ag-fill); border: 1px solid var(--ag-line-2);
   border-radius: 10px 10px 2px 10px; padding: 8px 12px;
-  color: #e2e8f0; font-size: 12.5px; line-height: 1.6; white-space: pre-wrap;
+  color: var(--ag-ink); font-size: 12.5px; line-height: 1.6; white-space: pre-wrap;
 }
 .ag-chat-mgr { display: flex; gap: 12px; margin-bottom: 12px; }
 .ag-chat-form { display: flex; gap: 8px; align-items: flex-end; margin-top: 12px; }
 #agChatInput {
   flex: 1 1 auto; min-height: 40px; max-height: 160px; resize: vertical;
-  background: #0f172a; border: 1px solid #334155; border-radius: 8px;
-  color: #e2e8f0; font-size: 13px; padding: 9px 12px; font-family: inherit;
+  background: var(--ag-surface); border: 1px solid var(--ag-line-2); border-radius: 8px;
+  color: var(--ag-ink); font-size: 13px; padding: 9px 12px; font-family: inherit;
 }
-#agChatInput:focus { outline: none; border-color: #8b5cf6; }
-#agChatSend { border-color: #8b5cf6; background: rgba(139,92,246,.16); color: #c4b5fd; }
-#agChatSend:hover:not(:disabled) { background: rgba(139,92,246,.3); color: #ede9fe; }
-.ag-chat-note { color: #475569; font-size: 11px; margin-top: 6px; }
+#agChatInput:focus { outline: none; border-color: var(--ag-violet); }
+#agChatSend { border-color: var(--ag-violet); background: rgba(139,92,246,.16); color: var(--ag-violet-ink); }
+#agChatSend:hover:not(:disabled) { background: rgba(139,92,246,.3); color: var(--ag-violet-ink-strong); }
+.ag-chat-note { color: var(--ag-ink-dim); font-size: 11px; margin-top: 6px; }
 .ag-chat-err {
   margin-top: 8px; padding: 7px 10px; border-radius: 8px; font-size: 12px;
-  background: rgba(230,103,103,.14); border: 1px solid #7f1d1d; color: #fca5a5;
+  background: rgba(230,103,103,.14); border: 1px solid var(--ag-red-line); color: var(--ag-red-ink);
 }
 
 /* ── Agent conversation ─────────────────────────────────────────────────── */
 .ag-team {
   display: flex; align-items: center; gap: 10px;
-  margin: 22px 0 12px; color: #64748b;
+  margin: 22px 0 12px; color: var(--ag-ink-faint);
   font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase;
 }
-.ag-team::after { content: ""; flex: 1; height: 1px; background: #1e293b; }
+.ag-team::after { content: ""; flex: 1; height: 1px; background: var(--ag-line); }
 .ag-turn {
   display: flex; gap: 12px; margin-bottom: 16px;
   /* Without this, scrollIntoView parks the target underneath the two sticky
@@ -357,12 +491,12 @@ window.YSTime = (function () {
   display: flex; align-items: center; justify-content: center;
   font-size: 17px; line-height: 1; user-select: none;
   border: 1px solid var(--role);
-  background: #0b1120;   /* fallback where color-mix is unsupported */
-  background: color-mix(in srgb, var(--role) 16%, #0b1120);
+  background: var(--ag-inset);   /* fallback where color-mix is unsupported */
+  background: color-mix(in srgb, var(--role) 16%, var(--ag-inset));
 }
 .ag-bubble {
   flex: 1 1 auto; min-width: 0;
-  background: #0f172a; border: 1px solid #1e293b;
+  background: var(--ag-surface); border: 1px solid var(--ag-line);
   border-left: 3px solid var(--role);
   border-radius: 10px; padding: 11px 14px;
 }
@@ -371,7 +505,7 @@ window.YSTime = (function () {
   margin-bottom: 6px;
 }
 .ag-who b { color: var(--role); font-size: 13px; font-weight: 600; }
-.ag-who span { color: #475569; font-size: 11px; }
+.ag-who span { color: var(--ag-ink-dim); font-size: 11px; }
 /* Deep link to one speaker. A span, not a <button>: .ag-who is itself a
    role="button" that folds the turn, and nesting real buttons is the DOM trap
    noted in CLAUDE.md. Kept faint until the turn is hovered so eleven of these
@@ -379,15 +513,15 @@ window.YSTime = (function () {
    because keyboard and screen-reader users cannot hover to discover it. */
 .ag-who .ag-anchor {
   margin-left: auto; flex: none;
-  color: #334155; font-size: 12px; line-height: 1;
+  color: var(--ag-glyph-faint); font-size: 12px; line-height: 1;
   padding: 2px 5px; border-radius: 6px;
   cursor: pointer; user-select: none;
   opacity: 0; transition: opacity .12s, color .12s, background .12s;
 }
 .ag-turn:hover .ag-who .ag-anchor,
 .ag-who .ag-anchor:focus-visible { opacity: 1; }
-.ag-who .ag-anchor:hover { color: var(--role); background: #0b1120; }
-.ag-who .ag-anchor.is-done { opacity: 1; color: #22c55e; }
+.ag-who .ag-anchor:hover { color: var(--role); background: var(--ag-inset); }
+.ag-who .ag-anchor.is-done { opacity: 1; color: var(--ag-ok); }
 /* The turn a deep link just landed on, so arriving at a long report does not
    leave the reader guessing which of eleven speakers was linked. */
 .ag-turn.is-linked .ag-bubble {
@@ -397,9 +531,9 @@ window.YSTime = (function () {
 .ag-toast {
   position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%);
   z-index: 60; pointer-events: none;
-  background: #0b1120; border: 1px solid #1e293b; color: #e2e8f0;
+  background: var(--ag-float); border: 1px solid var(--ag-line); color: var(--ag-ink);
   font-size: 12px; padding: 8px 14px; border-radius: 8px;
-  box-shadow: 0 8px 24px -8px #000;
+  box-shadow: 0 8px 24px -8px var(--ag-shadow-hard);
   opacity: 0; transition: opacity .16s;
 }
 .ag-toast.is-on { opacity: 1; }
@@ -411,14 +545,14 @@ window.YSTime = (function () {
 .ag-bubble .ag-report { font-size: 12.5px; }
 .ag-bubble .ag-report > :first-child { margin-top: 0; }
 .ag-bubble .ag-report > :last-child { margin-bottom: 0; }
-.ag-preamble { color: #64748b; font-size: 12px; margin-bottom: 4px; }
+.ag-preamble { color: var(--ag-ink-faint); font-size: 12px; margin-bottom: 4px; }
 /* History: one shared grid rather than a grid per group, so every group's date
    cell lines up on the same column edge no matter how wide the widest date is. */
 .ag-hist { display: grid; grid-template-columns: max-content minmax(0, 1fr); column-gap: 18px; }
-.ag-hist > * { border-top: 1px solid #1e293b; padding: 9px 0; }
+.ag-hist > * { border-top: 1px solid var(--ag-line); padding: 9px 0; }
 .ag-hist > :nth-child(-n+2) { border-top: 0; padding-top: 0; }   /* first group */
 .ag-hist-date {
-  color: #94a3b8; font-weight: 600; white-space: nowrap;
+  color: var(--ag-ink-muted); font-weight: 600; white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
 .ag-hist-runs { display: flex; flex-direction: column; gap: 8px; }
@@ -434,16 +568,16 @@ window.YSTime = (function () {
 .ag-tick {
   appearance: none; -webkit-appearance: none;
   border: 0; padding: 0; background: none; font: inherit;
-  color: #cbd5e1; font-weight: 500; cursor: pointer;
-  border-bottom: 1px dashed #334155;
+  color: var(--ag-ink-soft); font-weight: 500; cursor: pointer;
+  border-bottom: 1px dashed var(--ag-line-2);
   -webkit-tap-highlight-color: transparent;
 }
-.ag-tick:hover { color: #e0e7ff; border-bottom-color: #6366f1; }
-.ag-tick:focus-visible { outline: 2px solid #6366f1; outline-offset: 2px; border-radius: 3px; }
+.ag-tick:hover { color: var(--ag-accent-ink-bright); border-bottom-color: var(--ag-accent); }
+.ag-tick:focus-visible { outline: 2px solid var(--ag-accent); outline-offset: 2px; border-radius: 3px; }
 /* The symbol the panel is currently filtered to. Says the press landed even
    when the list was already showing only that ticker, and marks the row that
    clears the filter again. */
-.ag-tick.is-on { color: #c7d2fe; border-bottom-style: solid; border-bottom-color: #6366f1; }
+.ag-tick.is-on { color: var(--ag-accent-ink-strong); border-bottom-style: solid; border-bottom-color: var(--ag-accent); }
 /* The Portfolio Manager's turn, carried inline on every search hit so the call
    can be read without opening the report. A 100% flex basis rather than a block:
    .ag-hist-run is a wrapping flex row, so this drops onto its own line beneath
@@ -453,18 +587,18 @@ window.YSTime = (function () {
    panel and produce a horizontal scrollbar on the whole page. */
 .ag-hist-pm {
   flex: 1 1 100%; min-width: 0; margin-top: 1px;
-  border-left: 2px solid var(--role, #8b5cf6);
+  border-left: 2px solid var(--role, var(--ag-violet));
   border-radius: 0 8px 8px 0;
   background: rgba(139, 92, 246, .06);
   padding: 8px 12px; overflow-x: auto;
 }
 .ag-hist-pm-head {
   display: flex; align-items: baseline; gap: 7px; margin-bottom: 4px;
-  font-size: 11px; font-weight: 600; color: var(--role, #8b5cf6);
+  font-size: 11px; font-weight: 600; color: var(--role, var(--ag-violet));
 }
 /* The English name beside the Chinese one, de-emphasised: the cast is named in
    English upstream, so a bilingual reader can still match a section to the PDF. */
-.ag-hist-pm-head .ag-hist-pm-alt { color: #64748b; font-weight: 400; }
+.ag-hist-pm-head .ag-hist-pm-alt { color: var(--ag-ink-on-tint); font-weight: 400; }
 .ag-hist-pm .ag-report { font-size: 12px; line-height: 1.7; }
 /* The turn is LLM-authored markdown and opens with its own heading often as high
    as h1, which at report scale would dwarf the row it sits in. */
@@ -474,7 +608,7 @@ window.YSTime = (function () {
 .ag-hist-pm .ag-report h4 { font-size: 12.5px; margin: .6em 0 .3em; }
 .ag-hist-pm .ag-report > :first-child { margin-top: 0; }
 .ag-hist-pm .ag-report > :last-child { margin-bottom: 0; }
-.ag-hist-pm-note { color: #64748b; font-size: 11px; font-style: italic; }
+.ag-hist-pm-note { color: var(--ag-ink-on-tint); font-size: 11px; font-style: italic; }
 .ag-hist-pm-note:not(:first-child) { margin-top: 5px; }
 /* Search bar above the history. Wraps rather than shrinks so the ticker box
    keeps a usable width on a phone instead of collapsing to a few characters. */
@@ -493,10 +627,10 @@ window.YSTime = (function () {
 .ag-search-wrap .ag-input::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; }
 .ag-search-clear {
   position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
-  border: 0; background: none; color: #475569; cursor: pointer;
+  border: 0; background: none; color: var(--ag-ink-dim); cursor: pointer;
   font-size: 14px; line-height: 1; padding: 2px 3px;
 }
-.ag-search-clear:hover { color: #cbd5e1; }
+.ag-search-clear:hover { color: var(--ag-ink-soft); }
 /* Status filter. Metrics are copied from .ag-hist-tools .ag-input rather than
    inherited, because the trigger is a button and a button's font does not
    default to the page's -- a select that looked one pixel taller than the field
@@ -504,48 +638,48 @@ window.YSTime = (function () {
 .ag-sel { position: relative; display: inline-flex; }
 .ag-sel-btn {
   display: inline-flex; align-items: center; gap: 7px;
-  background: #0f172a; border: 1px solid #334155; border-radius: 8px;
-  color: #cbd5e1; font: inherit; font-size: 12px; line-height: 1.5;
+  background: var(--ag-surface); border: 1px solid var(--ag-line-2); border-radius: 8px;
+  color: var(--ag-ink-soft); font: inherit; font-size: 12px; line-height: 1.5;
   padding: 6px 10px; cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
-.ag-sel-btn:hover { border-color: #475569; color: #e2e8f0; }
+.ag-sel-btn:hover { border-color: var(--ag-line-3); color: var(--ag-ink); }
 /* A ring rather than only the border tint .ag-input uses: this control is opened
    from the keyboard, so where focus sits has to be legible at a glance, and
    focus-visible keeps it away from pointer users. */
 .ag-sel-btn:focus-visible {
-  outline: none; border-color: #6366f1;
+  outline: none; border-color: var(--ag-accent);
   box-shadow: 0 0 0 3px rgba(99,102,241,.28);
 }
 .ag-sel-label { white-space: nowrap; }
 /* A filter that is on says so on the control itself: the found-count line
    mentions the status, but that line is only rendered while something is
    filtered, so the control was the one place with no state. */
-.ag-sel.is-set .ag-sel-btn { border-color: #4f46e5; color: #e0e7ff; background: rgba(79,70,229,.12); }
+.ag-sel.is-set .ag-sel-btn { border-color: var(--ag-accent-strong); color: var(--ag-accent-ink-bright); background: rgba(79,70,229,.12); }
 .ag-sel-chev {
-  width: 9px; height: 6px; flex: none; color: #64748b;
+  width: 9px; height: 6px; flex: none; color: var(--ag-ink-faint);
   transition: transform .15s ease;
 }
-.ag-sel-btn:hover .ag-sel-chev, .ag-sel.is-set .ag-sel-chev { color: #a5b4fc; }
+.ag-sel-btn:hover .ag-sel-chev, .ag-sel.is-set .ag-sel-chev { color: var(--ag-accent-ink); }
 .ag-sel.is-open .ag-sel-chev { transform: rotate(180deg); }
 /* The status colour, taken from the row pills so the filter and the rows it
    filters speak the same language. "Any status" keeps the neutral ring, which is
    why the dot is drawn as a border rather than a fill. */
 .ag-sel-dot {
   width: 7px; height: 7px; flex: none; border-radius: 999px;
-  border: 1px solid #64748b;
+  border: 1px solid var(--ag-ink-faint);
 }
-.ag-dot-done    { background: #4ade80; border-color: #4ade80; }
-.ag-dot-running { background: #a5b4fc; border-color: #a5b4fc; }
-.ag-dot-queued  { background: #b6c2d1; border-color: #b6c2d1; }
-.ag-dot-error   { background: #fca5a5; border-color: #fca5a5; }
+.ag-dot-done    { background: var(--ag-green-ink); border-color: var(--ag-green-ink); }
+.ag-dot-running { background: var(--ag-accent-ink); border-color: var(--ag-accent-ink); }
+.ag-dot-queued  { background: var(--ag-queued-ink); border-color: var(--ag-queued-ink); }
+.ag-dot-error   { background: var(--ag-red-ink); border-color: var(--ag-red-ink); }
 /* Right-aligned to the trigger: the control sits at the panel's right edge, so a
    left-aligned menu wider than the button would hang off the card. */
 .ag-sel-menu {
   position: absolute; top: calc(100% + 5px); right: 0; z-index: 30;
   min-width: 100%; padding: 4px;
-  background: #0b1120; border: 1px solid #1e293b; border-radius: 10px;
-  box-shadow: 0 16px 34px -14px #000, 0 0 0 1px rgba(99,102,241,.08);
+  background: var(--ag-float); border: 1px solid var(--ag-line); border-radius: 10px;
+  box-shadow: 0 16px 34px -14px var(--ag-shadow-hard), 0 0 0 1px rgba(99,102,241,.08);
 }
 .ag-sel-menu[hidden] { display: none; }
 /* Opens upward when the viewport has no room below -- see openMenu(). A native
@@ -555,27 +689,27 @@ window.YSTime = (function () {
 .ag-sel-opt {
   display: flex; align-items: center; gap: 8px; white-space: nowrap;
   padding: 7px 10px; border-radius: 7px; cursor: pointer;
-  color: #94a3b8; font-size: 12px;
+  color: var(--ag-ink-muted); font-size: 12px;
 }
-.ag-sel-opt:hover, .ag-sel-opt.is-active { background: rgba(99,102,241,.14); color: #e2e8f0; }
-.ag-sel-opt[aria-selected="true"] { color: #e0e7ff; font-weight: 600; }
+.ag-sel-opt:hover, .ag-sel-opt.is-active { background: rgba(99,102,241,.14); color: var(--ag-ink); }
+.ag-sel-opt[aria-selected="true"] { color: var(--ag-accent-ink-bright); font-weight: 600; }
 /* The chosen row is marked with a short rule at its trailing edge rather than a
    tick in a sixth column, which would indent every other row past a gap. */
 .ag-sel-opt[aria-selected="true"]::after {
   content: ''; margin-left: auto; width: 4px; height: 12px;
-  border-radius: 999px; background: #6366f1;
+  border-radius: 999px; background: var(--ag-accent);
 }
 @media (prefers-reduced-motion: reduce) {
   .ag-sel-chev { transition: none; }
 }
 .ag-search-meta {
-  color: #64748b; font-size: 11px; margin-bottom: 10px;
+  color: var(--ag-ink-faint); font-size: 11px; margin-bottom: 10px;
   font-variant-numeric: tabular-nums;
 }
-.ag-search-meta b { color: #94a3b8; font-weight: 600; }
+.ag-search-meta b { color: var(--ag-ink-muted); font-weight: 600; }
 /* Highlight of the matched part of a ticker, so a substring hit shows why it
    matched -- "T" inside MSFT is otherwise indistinguishable from noise. */
-.ag-hl { background: rgba(99,102,241,.32); color: #e0e7ff; border-radius: 3px; }
+.ag-hl { background: rgba(99,102,241,.32); color: var(--ag-accent-ink-bright); border-radius: 3px; }
 body.agents-embedded .ag-jump { top: 0; }
 /* Embedded, <main> is full-width with 12px padding, so the column edge is the
    frame edge and the calc above has no gutter to sit in. */
@@ -596,7 +730,7 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
   }
   .ag-btn-ghost {
     padding: 10px 14px; font-size: 13px;
-    background: rgba(15, 23, 42, .72);
+    background: var(--ag-fill-soft);
   }
   .ag-btn:active:not(:disabled) { transform: translateY(1px); }
   .ag-signin-btn { width: 100%; max-width: 18rem; }
@@ -616,15 +750,15 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
   .ag-tick { padding: 4px 0; }
   .ag-hist-run {
     padding: 10px; gap: 9px;
-    background: rgba(15, 23, 42, .58);
-    border: 1px solid #1e293b; border-radius: 12px;
+    background: var(--ag-row-fill);
+    border: 1px solid var(--ag-line); border-radius: 12px;
   }
   .ag-row-actions {
     display: flex; width: 100%; gap: 8px;
   }
   .ag-row-actions .ag-btn { flex: 1 1 0; min-width: 0; }
   .ag-row-actions .ag-btn:first-child {
-    color: #c7d2fe; border-color: #4f46e5;
+    color: var(--ag-accent-ink-strong); border-color: var(--ag-accent-strong);
     background: rgba(79, 70, 229, .2);
   }
   .ag-report-actions { display: flex; width: 100%; }
@@ -651,7 +785,7 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
 {% if not agent_embedded %}
 <div class="mb-6 fade-up">
   <h1 class="text-2xl sm:text-3xl font-bold grad-text mb-1" data-i18n="agents.title">Trading Agents</h1>
-  <p class="text-slate-400 text-sm" data-i18n="agents.subtitle">
+  <p class="text-slate-500 dark:text-slate-400 text-sm" data-i18n="agents.subtitle">
     Runs the TradingAgents multi-agent analysis — analyst, researcher and risk debate rounds — for one ticker and date.
   </p>
   <p class="text-slate-500 text-xs mt-1" data-i18n="agents.astock_roles">
@@ -661,8 +795,8 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
 {% endif %}
 
 {% if not signed_in %}
-<div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 fade-up text-center">
-  <p class="text-slate-300 text-sm mb-1" data-i18n="agents.need_signin">Sign in to run an analysis.</p>
+<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 fade-up text-center">
+  <p class="text-slate-600 dark:text-slate-300 text-sm mb-1" data-i18n="agents.need_signin">Sign in to run an analysis.</p>
   <p class="text-xs text-slate-500 mb-4" data-i18n="agents.need_signin_why">Each run makes live LLM calls that cost real money, so this page is restricted.</p>
   <a href="{{ url_for('main.login', next=url_for('main.agents_page')) }}"
      {% if agent_embedded %}target="_top"{% endif %}
@@ -675,22 +809,22 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
    The sample is anonymous: the API hands over an allowlist of fields and never
    says who ran a report (ystocker/agents.py:_PUBLIC_FIELDS). #}
 <!-- ── Sample reports (not signed in) ─────────────────────────────────── -->
-<div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 mt-6 fade-up">
+<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 mt-6 fade-up">
   <div class="ag-hist-head">
-    <h3 class="text-sm font-semibold text-slate-300" data-i18n="agents.sample">Sample reports</h3>
-    <p class="text-xs text-slate-600" data-i18n="agents.sample_why">A random selection of finished analyses. Sign in to run your own.</p>
+    <h3 class="text-sm font-semibold text-slate-600 dark:text-slate-300" data-i18n="agents.sample">Sample reports</h3>
+    <p class="text-xs text-slate-500 dark:text-slate-600" data-i18n="agents.sample_why">A random selection of finished analyses. Sign in to run your own.</p>
   </div>
   <div id="agSample" class="text-xs text-slate-500" data-i18n="agents.sample_loading">Loading…</div>
 </div>
 
 {# Shown only when a shared /agents?job=<id> link cannot be opened, so a bad or
    private link says so instead of looking like a page that failed to load. #}
-<div id="agDeepMissing" class="hidden bg-slate-900 border border-amber-900/60 rounded-2xl p-4 mt-6 text-sm text-amber-200/90"></div>
+<div id="agDeepMissing" class="hidden bg-white dark:bg-slate-900 border border-amber-200/60 dark:border-amber-900/60 rounded-2xl p-4 mt-6 text-sm text-amber-800/90 dark:text-amber-200/90"></div>
 
-<div id="agSampleCard" class="hidden bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 mt-6 fade-up">
+<div id="agSampleCard" class="hidden bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6 mt-6 fade-up">
   <div class="ag-row justify-between mb-3">
     <div class="ag-row">
-      <span class="text-base font-semibold text-slate-200" id="agSampleTitle">—</span>
+      <span class="text-base font-semibold text-slate-700 dark:text-slate-200" id="agSampleTitle">—</span>
       <span id="agSampleDecision" class="ag-pill ag-done hidden"></span>
       <span id="agSampleRecovered" class="ag-pill ag-degraded hidden"
             data-i18n="agents.recovered">recovered from stream</span>
@@ -703,11 +837,11 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
     </div>
   </div>
   <div class="ag-report" id="agSampleReport"></div>
-  <p class="text-xs text-slate-500 mt-5 pt-4 border-t border-slate-800">
+  <p class="text-xs text-slate-500 mt-5 pt-4 border-t border-slate-200 dark:border-slate-800">
     <span data-i18n="agents.sample_cta">Want this for your own ticker and date?</span>
     <a href="{{ url_for('main.login', next=url_for('main.agents_page')) }}"
        {% if agent_embedded %}target="_top"{% endif %}
-       class="text-indigo-400 hover:underline" data-i18n="nav.sign_in">Sign In</a>
+       class="text-indigo-700 dark:text-indigo-400 hover:underline" data-i18n="nav.sign_in">Sign In</a>
   </p>
 </div>
 
@@ -1004,10 +1138,10 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
         const left = document.createElement('div');
         left.className = 'ag-row';
         const when = fmtWhen(j.finished_at || j.created_at);
-        left.innerHTML = '<span class="text-slate-300 font-medium">' + esc(j.ticker) + '</span>'
-          + (j.decision ? `<span class="text-slate-400">${esc(j.decision)}</span>` : '')
-          + (when ? `<span class="text-slate-600" title="${esc(YSTime.full(j.finished_at || j.created_at))}">${when}</span>` : '')
-          + (j.elapsed_sec ? `<span class="text-slate-600">${esc(j.elapsed_sec)}s</span>` : '');
+        left.innerHTML = '<span class="text-slate-600 dark:text-slate-300 font-medium">' + esc(j.ticker) + '</span>'
+          + (j.decision ? `<span class="text-slate-500 dark:text-slate-400">${esc(j.decision)}</span>` : '')
+          + (when ? `<span class="text-slate-500 dark:text-slate-600" title="${esc(YSTime.full(j.finished_at || j.created_at))}">${when}</span>` : '')
+          + (j.elapsed_sec ? `<span class="text-slate-500 dark:text-slate-600">${esc(j.elapsed_sec)}s</span>` : '');
 
         const actions = document.createElement('div');
         actions.className = 'ag-row ag-row-actions';
@@ -1062,13 +1196,13 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
 {% endif %}
 
 {% elif not allowed %}
-<div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 fade-up">
-  <p class="text-slate-300 text-sm mb-1">
+<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 fade-up">
+  <p class="text-slate-600 dark:text-slate-300 text-sm mb-1">
     <span data-i18n="agents.not_allowed">This account is not on the agent allowlist.</span>
   </p>
   <p class="text-xs text-slate-500">
     <span data-i18n="agents.not_allowed_fix">Add the address to AGENTS_ALLOWED_EMAILS (comma-separated) and restart, or via SSM in production.</span>
-    <span class="text-slate-600">— {{ user_email }}</span>
+    <span class="text-slate-500 dark:text-slate-600">— {{ user_email }}</span>
   </p>
 </div>
 {% else %}
@@ -1076,9 +1210,9 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
 {# The page says up front when a run cannot possibly work, rather than letting
    the user discover it as a failed job. #}
 {% if not agent_env.ready %}
-<div class="mb-6 px-4 py-3 rounded-lg bg-amber-900/25 border border-amber-700/60 text-amber-200 text-sm fade-up">
+<div class="mb-6 px-4 py-3 rounded-lg bg-amber-50 dark:bg-amber-900/25 border border-amber-300/60 dark:border-amber-700/60 text-amber-800 dark:text-amber-200 text-sm fade-up">
   <p class="font-semibold mb-1" data-i18n="agents.env_bad">The agent runner is not fully configured</p>
-  <ul class="text-xs space-y-0.5 text-amber-200/80">
+  <ul class="text-xs space-y-0.5 text-amber-800/80 dark:text-amber-200/80">
     {% if not agent_env.ta_dir_exists %}
     <li>· <span data-i18n="agents.env_dir">TradingAgents directory not found</span>: <code>{{ agent_env.ta_dir }}</code> — <span data-i18n="agents.env_dir_fix">set TRADINGAGENTS_DIR</span></li>
     {% endif %}
@@ -1099,7 +1233,7 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
 {% endif %}
 
 <!-- ── Run form ───────────────────────────────────────────────────────── -->
-<div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 mb-6 fade-up">
+<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6 mb-6 fade-up">
   <div class="ag-form-grid">
     <div class="ag-form-field">
       <label class="block text-xs text-slate-500 mb-1" for="agTicker" data-i18n="agents.ticker">Ticker</label>
@@ -1132,11 +1266,11 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
   </div>
   {# Shown once the free runs are gone and nothing is banked. Hidden by default
      so it never flashes on a page that has runs available. #}
-  <div id="agBuy" class="hidden mt-4 rounded-xl border border-indigo-800/70 bg-indigo-950/30 p-4">
+  <div id="agBuy" class="hidden mt-4 rounded-xl border border-indigo-200/70 dark:border-indigo-800/70 bg-indigo-50 dark:bg-indigo-950/30 p-4">
     <div class="ag-row justify-between">
       <div>
-        <p class="text-sm text-slate-200 font-semibold" data-i18n="agents.buy_title">Out of free runs for today</p>
-        <p class="text-xs text-slate-400 mt-1" data-i18n="agents.buy_why">Buy a pack to keep going. Purchased runs never expire and carry over between days.</p>
+        <p class="text-sm text-slate-700 dark:text-slate-200 font-semibold" data-i18n="agents.buy_title">Out of free runs for today</p>
+        <p class="text-xs text-slate-500 dark:text-slate-400 mt-1" data-i18n="agents.buy_why">Buy a pack to keep going. Purchased runs never expire and carry over between days.</p>
       </div>
       <a id="agBuyLink" class="ag-btn" href="{{ quota.pay_url if quota else '' }}" rel="noopener"
          data-i18n="agents.buy_cta">Buy more runs</a>
@@ -1146,7 +1280,7 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
     </p>
   </div>
 
-  <p class="text-xs text-slate-600 mt-3">
+  <p class="text-xs text-slate-500 dark:text-slate-600 mt-3">
     <span data-i18n="agents.cost_warning">A real run takes several minutes and spends API credits. One run executes at a time; others queue.</span>
     <span data-i18n="agents.timeout_is">Timeout</span>: {{ (agent_env.timeout_sec | int) // 60 }}&nbsp;min.
     &nbsp;·&nbsp; <span data-i18n="agents.model_is">Model</span>: {{ agent_env.provider }} / {{ agent_env.deep_model }}
@@ -1158,14 +1292,14 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
         carries no ?lang=), so the server does not reliably know it. #}
     {% if agent_env.language_pinned %}{{ agent_env.language }}{% else %}<span data-i18n="agents.lang_value">English</span>{% endif %}.
   </p>
-  <div id="agError" class="hidden mt-3 px-3 py-2 rounded-lg bg-red-900/40 border border-red-700 text-red-300 text-xs"></div>
+  <div id="agError" class="hidden mt-3 px-3 py-2 rounded-lg bg-red-50 dark:bg-red-900/40 border border-red-300 dark:border-red-700 text-red-700 dark:text-red-300 text-xs"></div>
 </div>
 
 <!-- ── Current run ────────────────────────────────────────────────────── -->
-<div id="agCurrent" class="hidden bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 mb-6 fade-up">
+<div id="agCurrent" class="hidden bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6 mb-6 fade-up">
   <div class="ag-row justify-between mb-3">
     <div class="ag-row">
-      <span class="text-base font-semibold text-slate-200" id="agJobTitle">—</span>
+      <span class="text-base font-semibold text-slate-700 dark:text-slate-200" id="agJobTitle">—</span>
       <span id="agStatus" class="ag-pill ag-queued">queued</span>
       <span id="agElapsed" class="text-xs text-slate-500"></span>
       {# When the report was produced. Absent until now, which left the report
@@ -1192,7 +1326,7 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
   </div>
   <div id="agDecisionWrap" class="hidden mb-4">
     <p class="text-xs text-slate-500 mb-1" data-i18n="agents.decision">Decision</p>
-    <p class="text-2xl font-semibold text-slate-100" id="agDecision">—</p>
+    <p class="text-2xl font-semibold text-slate-800 dark:text-slate-100" id="agDecision">—</p>
   </div>
   <div id="agReportWrap" class="hidden mb-4">
     <p class="text-xs text-slate-500 mb-1" data-i18n="agents.report">Report</p>
@@ -1237,9 +1371,9 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
 </div>
 
 <!-- ── History ────────────────────────────────────────────────────────── -->
-<div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
+<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
   <div class="ag-hist-head">
-    <h3 class="text-sm font-semibold text-slate-300" data-i18n="agents.history">Recent runs</h3>
+    <h3 class="text-sm font-semibold text-slate-600 dark:text-slate-300" data-i18n="agents.history">Recent runs</h3>
     <div class="ag-hist-tools">
       <div class="ag-search-wrap">
         <input id="agSearch" type="search" class="ag-input w-44" maxlength="32"
@@ -2301,13 +2435,13 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
             ? `<button type="button" class="ag-tick${isFilter ? ' is-on' : ''}"`
                 + ` data-ticker="${esc(j.ticker)}" title="${esc(tickHint)}"`
                 + ` aria-pressed="${isFilter}">${highlight(j.ticker, q)}</button>`
-            : '<span class="text-slate-300 font-medium">—</span>';
+            : '<span class="text-slate-600 dark:text-slate-300 font-medium">—</span>';
           left.innerHTML = tickCell
             + `<span class="ag-pill ${CLS[j.status] || 'ag-queued'}">${esc(j.status)}</span>`
             + (mine ? '' : `<span class="ag-owner" title="Ran by another user">${esc(j.user)}</span>`)
-            + (j.decision ? `<span class="text-slate-400">${esc(decPlain(j.decision))}</span>` : '')
-            + (when ? `<span class="text-slate-600" title="${esc(YSTime.full(j.finished_at || j.started_at || j.created_at))}">${when}</span>` : '')
-            + (j.elapsed_sec ? `<span class="text-slate-600">${j.elapsed_sec}s</span>` : '');
+            + (j.decision ? `<span class="text-slate-500 dark:text-slate-400">${esc(decPlain(j.decision))}</span>` : '')
+            + (when ? `<span class="text-slate-500 dark:text-slate-600" title="${esc(YSTime.full(j.finished_at || j.started_at || j.created_at))}">${when}</span>` : '')
+            + (j.elapsed_sec ? `<span class="text-slate-500 dark:text-slate-600">${j.elapsed_sec}s</span>` : '');
           const actions = document.createElement('div');
           actions.className = 'ag-row ag-row-actions';
           const btn = document.createElement('button');

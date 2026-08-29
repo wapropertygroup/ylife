@@ -61,10 +61,10 @@
 <!-- ── Header ──────────────────────────────────────────────────────────── -->
 <div class="mb-6 sm:mb-8 fade-up">
   <h1 class="text-2xl sm:text-3xl font-bold grad-text mb-1" data-i18n="commodities.title">Commodities</h1>
-  <p class="text-slate-400 text-sm" data-i18n="commodities.subtitle">
+  <p class="text-slate-500 dark:text-slate-400 text-sm" data-i18n="commodities.subtitle">
     Live futures prices, returns, and cross-commodity ratios across precious &amp; industrial metals, energy, and agriculture
   </p>
-  <p class="text-xs text-slate-600 mt-1">
+  <p class="text-xs text-slate-500 dark:text-slate-600 mt-1">
     <span data-i18n="commodities.data_source">Source:</span> Yahoo Finance (continuous front-month futures)
     &nbsp;·&nbsp;
     <span data-i18n="commodities.cache_note">15-minute cache</span>
@@ -77,10 +77,10 @@
     <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
     <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/>
   </svg>
-  <p class="text-slate-400 text-sm animate-pulse" data-i18n="commodities.loading">Fetching commodities data…</p>
+  <p class="text-slate-500 dark:text-slate-400 text-sm animate-pulse" data-i18n="commodities.loading">Fetching commodities data…</p>
 </div>
 
-<div id="cmdError" class="hidden mt-4 px-4 py-3 rounded-lg bg-red-900/40 border border-red-700 text-red-300 text-sm"></div>
+<div id="cmdError" class="hidden mt-4 px-4 py-3 rounded-lg bg-red-50 dark:bg-red-900/40 border border-red-300 dark:border-red-700 text-red-700 dark:text-red-300 text-sm"></div>
 
 <!-- ── Main content (filled by JS) ────────────────────────────────────── -->
 <div id="cmdMain" class="hidden">
@@ -88,7 +88,7 @@
   <!-- Group sections -->
   <!-- RSI Filter -->
   <div id="rsiFilterRow" class="flex items-center gap-2 mb-4 flex-wrap">
-    <span class="text-[10px] text-slate-600 uppercase tracking-widest" data-i18n="commodities.rsi_filter_label">RSI Filter</span>
+    <span class="text-[10px] text-slate-500 dark:text-slate-600 uppercase tracking-widest" data-i18n="commodities.rsi_filter_label">RSI Filter</span>
     <button class="rsi-filter-btn active" data-filter="all" data-i18n="commodities.rsi_all">All</button>
     <button class="rsi-filter-btn" data-filter="oversold" data-i18n="commodities.rsi_os">Oversold (&lt;30)</button>
     <button class="rsi-filter-btn" data-filter="overbought" data-i18n="commodities.rsi_ob">Overbought (&gt;70)</button>
@@ -105,10 +105,10 @@
   <div style="display:none" id="agriGrid"></div>
 
   <!-- ── Detail chart (selected commodity) ───────────────────────────── -->
-  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up mb-6">
+  <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6 fade-up mb-6">
     <div class="flex flex-wrap items-start justify-between gap-3 mb-3">
       <div>
-        <h2 id="detailTitle" class="text-lg font-bold text-slate-200">—</h2>
+        <h2 id="detailTitle" class="text-lg font-bold text-slate-700 dark:text-slate-200">—</h2>
         <p id="detailSub" class="text-xs text-slate-500 mt-0.5">—</p>
       </div>
       <div class="flex items-center gap-2 flex-wrap">
@@ -125,27 +125,27 @@
     </div>
     <!-- Quick-stat row -->
     <div class="grid grid-cols-3 sm:grid-cols-6 gap-2 mb-4 text-xs">
-      <div class="bg-slate-950/50 border border-slate-800 rounded-lg p-2">
+      <div class="bg-white/50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-lg p-2">
         <div class="text-[10px] text-slate-500" data-i18n="commodities.metric_1m">1M</div>
         <div id="detail_1m" class="font-mono font-bold">—</div>
       </div>
-      <div class="bg-slate-950/50 border border-slate-800 rounded-lg p-2">
+      <div class="bg-white/50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-lg p-2">
         <div class="text-[10px] text-slate-500" data-i18n="commodities.metric_3m">3M</div>
         <div id="detail_3m" class="font-mono font-bold">—</div>
       </div>
-      <div class="bg-slate-950/50 border border-slate-800 rounded-lg p-2">
+      <div class="bg-white/50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-lg p-2">
         <div class="text-[10px] text-slate-500" data-i18n="commodities.metric_6m">6M</div>
         <div id="detail_6m" class="font-mono font-bold">—</div>
       </div>
-      <div class="bg-slate-950/50 border border-slate-800 rounded-lg p-2">
+      <div class="bg-white/50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-lg p-2">
         <div class="text-[10px] text-slate-500" data-i18n="commodities.metric_ytd">YTD</div>
         <div id="detail_ytd" class="font-mono font-bold">—</div>
       </div>
-      <div class="bg-slate-950/50 border border-slate-800 rounded-lg p-2">
+      <div class="bg-white/50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-lg p-2">
         <div class="text-[10px] text-slate-500" data-i18n="commodities.metric_1y">1Y</div>
         <div id="detail_1y" class="font-mono font-bold">—</div>
       </div>
-      <div class="bg-slate-950/50 border border-slate-800 rounded-lg p-2">
+      <div class="bg-white/50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-lg p-2">
         <div class="text-[10px] text-slate-500" data-i18n="commodities.metric_rsi">RSI-14</div>
         <div id="detail_rsi" class="font-mono font-bold">—</div>
       </div>
@@ -155,8 +155,8 @@
     </div>
     <p class="text-[11px] text-slate-500 mt-3">
       <span data-i18n="commodities.detail_ma_note">Dashed lines:</span>
-      <span class="text-amber-400">— 50-day MA</span> ·
-      <span class="text-rose-400">— 200-day MA</span>
+      <span class="text-amber-700 dark:text-amber-400">— 50-day MA</span> ·
+      <span class="text-rose-700 dark:text-rose-400">— 200-day MA</span>
     </p>
   </div>
 
@@ -168,15 +168,15 @@
        at the card's own place in the flow (1300px) and is zero-height, so it has
        a box to observe (full width, offsetParent non-null) but changes no layout. -->
   <div id="seasonalityAnchor" class="h-0" aria-hidden="true"></div>
-  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up mb-6" id="seasonalitySection" style="display:none">
+  <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6 fade-up mb-6" id="seasonalitySection" style="display:none">
     <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-2 mb-3">
       <div>
-        <h2 id="seasonalityTitle" class="text-base font-semibold text-slate-200" data-i18n="commodities.seasonality_title">Seasonality</h2>
+        <h2 id="seasonalityTitle" class="text-base font-semibold text-slate-700 dark:text-slate-200" data-i18n="commodities.seasonality_title">Seasonality</h2>
         <p class="text-xs text-slate-500" data-i18n="commodities.seasonality_desc">Average monthly return (%) over 10 years by calendar month</p>
       </div>
       <div class="flex items-center gap-2">
-        <span class="flex items-center gap-1.5 text-xs text-emerald-400"><span class="inline-block w-2 h-2 rounded-sm bg-emerald-500/70"></span> <span data-i18n="commodities.up">Up</span></span>
-        <span class="flex items-center gap-1.5 text-xs text-rose-400"><span class="inline-block w-2 h-2 rounded-sm bg-rose-500/70"></span> <span data-i18n="commodities.down">Down</span></span>
+        <span class="flex items-center gap-1.5 text-xs text-emerald-700 dark:text-emerald-400"><span class="inline-block w-2 h-2 rounded-sm bg-emerald-500/70"></span> <span data-i18n="commodities.up">Up</span></span>
+        <span class="flex items-center gap-1.5 text-xs text-rose-700 dark:text-rose-400"><span class="inline-block w-2 h-2 rounded-sm bg-rose-500/70"></span> <span data-i18n="commodities.down">Down</span></span>
       </div>
     </div>
     <div class="chart-container" style="height:180px">
@@ -185,25 +185,25 @@
   </div>
 
   <!-- Per-commodity educational note -->
-  <div id="commodityNote" class="hidden bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up mb-6 text-[12px] text-slate-400 leading-relaxed">
-    <p class="font-semibold text-slate-300 mb-1" id="commodityNoteTitle">💡 About this commodity</p>
+  <div id="commodityNote" class="hidden bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 fade-up mb-6 text-[12px] text-slate-500 dark:text-slate-400 leading-relaxed">
+    <p class="font-semibold text-slate-600 dark:text-slate-300 mb-1" id="commodityNoteTitle">💡 About this commodity</p>
     <p id="commodityNoteBody"></p>
   </div>
 
   <!-- ── Cross-commodity ratios ─────────────────────────────────────── -->
-  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up mb-6">
+  <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6 fade-up mb-6">
     <div class="mb-4">
-      <h2 class="text-base font-semibold text-slate-200" data-i18n="commodities.ratios_title">Cross-Commodity Ratios</h2>
+      <h2 class="text-base font-semibold text-slate-700 dark:text-slate-200" data-i18n="commodities.ratios_title">Cross-Commodity Ratios</h2>
       <p class="text-xs text-slate-500 mt-0.5" data-i18n="commodities.ratios_desc">Macro indicators built from commodity ratios — sentiment, inflation, and risk-on/off signals.</p>
     </div>
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4" id="ratiosGrid"></div>
   </div>
 
   <!-- Gold vs US Dollar (DXY) overlay -->
-  <div id="goldDxySection" class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up mb-6">
+  <div id="goldDxySection" class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6 fade-up mb-6">
     <div class="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-0 sm:justify-between mb-3">
       <div>
-        <h2 class="text-base font-semibold text-slate-200" data-i18n="commodities.gold_dxy_title">Gold vs US Dollar Index (DXY)</h2>
+        <h2 class="text-base font-semibold text-slate-700 dark:text-slate-200" data-i18n="commodities.gold_dxy_title">Gold vs US Dollar Index (DXY)</h2>
         <p class="text-xs text-slate-500 mt-0.5" data-i18n="commodities.gold_dxy_desc">Gold typically moves inverse to the dollar — rising DXY = headwind for gold</p>
       </div>
       <div class="flex gap-1" id="goldDxyRangeBtns">
@@ -216,21 +216,21 @@
 
     <!-- Overlay chart: both normalised to 100 -->
     <div class="flex items-center gap-3 mb-1.5 text-xs">
-      <span class="flex items-center gap-1 text-yellow-400"><span class="w-3 h-0.5 bg-yellow-400 inline-block"></span> <span data-i18n="commodities.name.gold">Gold</span> (norm)</span>
-      <span class="flex items-center gap-1 text-slate-400"><span class="w-3 h-0.5 border-dashed border border-slate-400 inline-block"></span> DXY (norm)</span>
+      <span class="flex items-center gap-1 text-yellow-700 dark:text-yellow-400"><span class="w-3 h-0.5 bg-yellow-400 inline-block"></span> <span data-i18n="commodities.name.gold">Gold</span> (norm)</span>
+      <span class="flex items-center gap-1 text-slate-500 dark:text-slate-400"><span class="w-3 h-0.5 border-dashed border border-slate-400 inline-block"></span> DXY (norm)</span>
     </div>
     <div class="chart-container" style="height:180px">
       <canvas id="goldDxyChart"></canvas>
     </div>
 
     <!-- Ratio chart: Gold ÷ DXY -->
-    <div class="mt-4 pt-3 border-t border-slate-800">
+    <div class="mt-4 pt-3 border-t border-slate-200 dark:border-slate-800">
       <div class="flex items-center justify-between mb-1.5">
         <div>
-          <p class="text-xs font-medium text-slate-300" data-i18n="commodities.gold_dxy_ratio_title">Gold / DXY Ratio</p>
+          <p class="text-xs font-medium text-slate-600 dark:text-slate-300" data-i18n="commodities.gold_dxy_ratio_title">Gold / DXY Ratio</p>
           <p class="text-[10px] text-slate-500" data-i18n="commodities.gold_dxy_ratio_desc">Rising = gold outperforming the dollar. Falling = dollar strengthening relative to gold.</p>
         </div>
-        <span id="goldDxyRatioVal" class="text-sm font-bold font-mono text-yellow-300">—</span>
+        <span id="goldDxyRatioVal" class="text-sm font-bold font-mono text-yellow-700 dark:text-yellow-300">—</span>
       </div>
       <div class="chart-container" style="height:140px">
         <canvas id="goldDxyRatioChart"></canvas>
@@ -239,44 +239,44 @@
   </div>
 
   <!-- DXY vs Commodities Basket -->
-  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up mb-6" id="dxyBasketSection" style="display:none">
+  <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6 fade-up mb-6" id="dxyBasketSection" style="display:none">
     <div class="mb-3">
-      <h2 class="text-base font-semibold text-slate-200" data-i18n="commodities.dxy_title">US Dollar (DXY) vs Commodities</h2>
+      <h2 class="text-base font-semibold text-slate-700 dark:text-slate-200" data-i18n="commodities.dxy_title">US Dollar (DXY) vs Commodities</h2>
       <p class="text-xs text-slate-500 mt-0.5"><span data-i18n="commodities.dxy_desc">Dollar strength historically inversely correlates with commodity prices (priced in USD). Watch for divergences — they signal regime changes.</span></p>
     </div>
     <div class="flex items-center gap-3 mb-2 text-xs">
-      <span class="text-sky-400">— DXY (normalised, inverted)</span>
-      <span class="text-amber-400">--- Gold</span>
-      <span class="text-orange-400">--- Oil</span>
+      <span class="text-sky-700 dark:text-sky-400">— DXY (normalised, inverted)</span>
+      <span class="text-amber-700 dark:text-amber-400">--- Gold</span>
+      <span class="text-orange-700 dark:text-orange-400">--- Oil</span>
     </div>
     <div class="chart-container" style="height:220px"><canvas id="dxyBasketChart"></canvas></div>
   </div>
 
   <!-- Brent–WTI Spread -->
-  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up mb-6" id="brentWtiSection" style="display:none">
+  <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6 fade-up mb-6" id="brentWtiSection" style="display:none">
     <div class="flex items-start justify-between mb-3">
       <div>
-        <h2 class="text-base font-semibold text-slate-200" data-i18n="commodities.brent_wti_title">Brent–WTI Spread ($)</h2>
+        <h2 class="text-base font-semibold text-slate-700 dark:text-slate-200" data-i18n="commodities.brent_wti_title">Brent–WTI Spread ($)</h2>
         <p class="text-xs text-slate-500 mt-0.5"><span data-i18n="commodities.brent_wti_desc">Brent premium over WTI ($/bbl). Widens during Middle East geopolitical stress or when US domestic supply surges. Normal range: $2–6.</span></p>
       </div>
-      <span id="brentWtiSpreadVal" class="text-base font-bold font-mono text-cyan-400">—</span>
+      <span id="brentWtiSpreadVal" class="text-base font-bold font-mono text-cyan-700 dark:text-cyan-400">—</span>
     </div>
     <div class="chart-container" style="height:180px"><canvas id="brentWtiChart"></canvas></div>
   </div>
 
   <!-- ── Copper vs S&P 500 (Dr. Copper as leading indicator) ─────── -->
-  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up mb-6" id="copperSpySection">
+  <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6 fade-up mb-6" id="copperSpySection">
     <div class="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-0 sm:justify-between mb-3">
       <div>
-        <h2 class="text-base font-semibold text-slate-200" data-i18n="commodities.copper_spy_title">Dr. Copper vs S&amp;P 500</h2>
+        <h2 class="text-base font-semibold text-slate-700 dark:text-slate-200" data-i18n="commodities.copper_spy_title">Dr. Copper vs S&amp;P 500</h2>
         <p class="text-xs text-slate-500 mt-0.5" data-i18n="commodities.copper_spy_desc">Copper tracks global manufacturing demand and often leads equity markets by 3–6 months. Divergence (copper falling, stocks rising) is a classic warning signal.</p>
       </div>
-      <span id="copperSpyRatioVal" class="text-sm font-bold font-mono text-orange-300 shrink-0">—</span>
+      <span id="copperSpyRatioVal" class="text-sm font-bold font-mono text-orange-700 dark:text-orange-300 shrink-0">—</span>
     </div>
     <!-- Ratio chart: Copper ÷ SPY -->
     <div class="flex items-center gap-3 mb-1.5 text-xs">
-      <span class="flex items-center gap-1 text-orange-400"><span class="w-3 h-0.5 bg-orange-400 inline-block"></span> <span data-i18n="commodities.copper_spy_ratio_label">Copper / SPY Ratio</span></span>
-      <span class="text-slate-600 text-[10px]" data-i18n="commodities.copper_spy_ratio_note">Rising = copper outperforming equities (growth signal); falling = equities outperforming (divergence warning)</span>
+      <span class="flex items-center gap-1 text-orange-700 dark:text-orange-400"><span class="w-3 h-0.5 bg-orange-400 inline-block"></span> <span data-i18n="commodities.copper_spy_ratio_label">Copper / SPY Ratio</span></span>
+      <span class="text-slate-500 dark:text-slate-600 text-[10px]" data-i18n="commodities.copper_spy_ratio_note">Rising = copper outperforming equities (growth signal); falling = equities outperforming (divergence warning)</span>
     </div>
     <div class="chart-container" style="height:200px">
       <canvas id="copperSpyChart"></canvas>
@@ -284,25 +284,25 @@
   </div>
 
   <!-- ── Sortable detail table ──────────────────────────────────────── -->
-  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up mb-6">
+  <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6 fade-up mb-6">
     <div class="flex flex-wrap items-start justify-between gap-3 mb-3">
       <div>
-        <h2 class="text-base font-semibold text-slate-200" data-i18n="commodities.table_title">All Commodities — Sortable Table</h2>
+        <h2 class="text-base font-semibold text-slate-700 dark:text-slate-200" data-i18n="commodities.table_title">All Commodities — Sortable Table</h2>
         <p class="text-xs text-slate-500 mt-0.5" data-i18n="commodities.table_desc">Click any column to sort. Click a row to load the chart above.</p>
       </div>
     </div>
     <div class="overflow-x-auto">
       <table class="w-full text-sm" id="cmdTable">
         <thead>
-          <tr class="text-xs text-slate-500 border-b border-slate-800 select-none">
-            <th class="text-left py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-300 transition" data-col="name"><span data-i18n="commodities.col_name">Commodity</span> <span class="sort-icon ml-0.5">↕</span></th>
-            <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-300 transition" data-col="last"><span data-i18n="commodities.col_last">Last</span> <span class="sort-icon ml-0.5">↕</span></th>
-            <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-300 transition" data-col="day_chg_pct"><span data-i18n="commodities.col_day">Day</span> <span class="sort-icon ml-0.5">↕</span></th>
-            <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-300 transition" data-col="ret_1m"><span data-i18n="commodities.col_1m">1M</span> <span class="sort-icon ml-0.5">↕</span></th>
-            <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-300 transition" data-col="ret_3m"><span data-i18n="commodities.col_3m">3M</span> <span class="sort-icon ml-0.5">↕</span></th>
-            <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-300 transition" data-col="ret_ytd"><span data-i18n="commodities.col_ytd">YTD</span> <span class="sort-icon ml-0.5">↕</span></th>
-            <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-300 transition" data-col="ret_1y"><span data-i18n="commodities.col_1y">1Y</span> <span class="sort-icon ml-0.5">↕</span></th>
-            <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-300 transition" data-col="rsi_14"><span data-i18n="commodities.col_rsi">RSI</span> <span class="sort-icon ml-0.5">↕</span></th>
+          <tr class="text-xs text-slate-500 border-b border-slate-200 dark:border-slate-800 select-none">
+            <th class="text-left py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-600 dark:hover:text-slate-300 transition" data-col="name"><span data-i18n="commodities.col_name">Commodity</span> <span class="sort-icon ml-0.5">↕</span></th>
+            <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-600 dark:hover:text-slate-300 transition" data-col="last"><span data-i18n="commodities.col_last">Last</span> <span class="sort-icon ml-0.5">↕</span></th>
+            <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-600 dark:hover:text-slate-300 transition" data-col="day_chg_pct"><span data-i18n="commodities.col_day">Day</span> <span class="sort-icon ml-0.5">↕</span></th>
+            <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-600 dark:hover:text-slate-300 transition" data-col="ret_1m"><span data-i18n="commodities.col_1m">1M</span> <span class="sort-icon ml-0.5">↕</span></th>
+            <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-600 dark:hover:text-slate-300 transition" data-col="ret_3m"><span data-i18n="commodities.col_3m">3M</span> <span class="sort-icon ml-0.5">↕</span></th>
+            <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-600 dark:hover:text-slate-300 transition" data-col="ret_ytd"><span data-i18n="commodities.col_ytd">YTD</span> <span class="sort-icon ml-0.5">↕</span></th>
+            <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-600 dark:hover:text-slate-300 transition" data-col="ret_1y"><span data-i18n="commodities.col_1y">1Y</span> <span class="sort-icon ml-0.5">↕</span></th>
+            <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-600 dark:hover:text-slate-300 transition" data-col="rsi_14"><span data-i18n="commodities.col_rsi">RSI</span> <span class="sort-icon ml-0.5">↕</span></th>
             <th class="text-right py-2 px-3 font-medium" data-i18n="commodities.col_52w">52w Range</th>
           </tr>
         </thead>
@@ -312,8 +312,8 @@
   </div>
 
   <!-- ── Educational footer ─────────────────────────────────────────── -->
-  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up text-[12px] text-slate-400 leading-relaxed">
-    <p class="font-semibold text-slate-300 mb-2" data-i18n="commodities.notes_title">💡 What these signals tell you</p>
+  <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 fade-up text-[12px] text-slate-500 dark:text-slate-400 leading-relaxed">
+    <p class="font-semibold text-slate-600 dark:text-slate-300 mb-2" data-i18n="commodities.notes_title">💡 What these signals tell you</p>
     <ul class="space-y-1 list-disc pl-5">
       <li data-i18n="commodities.note_gold">Gold rises during inflation fears, currency debasement, and geopolitical risk. The 50d/200d MA cross is a common momentum signal.</li>
       <li data-i18n="commodities.note_silver">Silver moves with both gold (precious) and copper (industrial). Higher beta than gold — bigger swings up and down.</li>
@@ -328,7 +328,7 @@
 <!-- ── JS ─────────────────────────────────────────────────────────────── -->
 <script>
 (async function() {
-  const gridCol = '#1e293b', tickCol = '#64748b';
+  const gridCol = CT.c('#1e293b'), tickCol = CT.c('#64748b');
   let DATA = null;
   let CURRENT_KEY = 'gold';
   let CURRENT_RANGE = 252;
@@ -366,7 +366,7 @@
     return n + (unit ? ' ' + unit : '');
   }
   function fmtPct(v) {
-    if (v == null) return '<span class="text-slate-600">—</span>';
+    if (v == null) return '<span class="text-slate-500 dark:text-slate-600">—</span>';
     const cls = v >= 0 ? 'up' : 'down';
     const s = v >= 0 ? '+' : '';
     return `<span class="${cls} font-medium">${s}${v.toFixed(2)}%</span>`;
@@ -404,14 +404,14 @@
     <div class="commodity-card" data-key="${key}" onclick="window._cmdSelect('${key}')">
       <div class="flex items-center gap-2 mb-2">
         <span class="text-xl">${c.emoji || ''}</span>
-        <div class="text-sm font-semibold text-slate-200">${localName(key, c.name)}</div>
+        <div class="text-sm font-semibold text-slate-700 dark:text-slate-200">${localName(key, c.name)}</div>
       </div>
-      <div class="text-xl font-bold text-slate-100 font-mono">${fmtPrice(c.last)}</div>
+      <div class="text-xl font-bold text-slate-800 dark:text-slate-100 font-mono">${fmtPrice(c.last)}</div>
       <div class="text-xs ${dayCls} font-medium mt-0.5">${dayTxt}</div>
       <div class="mt-3">
         <div class="flex items-center justify-between text-[10px] text-slate-500 mb-1">
           <span>${fmtPrice(c.low52)}</span>
-          <span class="text-slate-400">${I18n.t('commodities.card_rsi_label')||'RSI:'} ${rsiBadge(c.rsi_14)}</span>
+          <span class="text-slate-500 dark:text-slate-400">${I18n.t('commodities.card_rsi_label')||'RSI:'} ${rsiBadge(c.rsi_14)}</span>
           <span>${fmtPrice(c.high52)}</span>
         </div>
         <div class="pos-bar">
@@ -514,7 +514,7 @@
     const datasets = [{
       label: c.name,
       data: prices,
-      borderColor: '#a78bfa',
+      borderColor: CT.c('#a78bfa'),
       backgroundColor: 'rgba(167,139,250,0.07)',
       borderWidth: 2, pointRadius: 0, pointHoverRadius: 5,
       fill: true, tension: 0.25, spanGaps: true,
@@ -543,8 +543,8 @@
       return out;
     }
 
-    [[maShort, '#fbbf24', 'commodities.detail_ma50',  '50d MA'],
-     [maLong,  '#f87171', 'commodities.detail_ma200', '200d MA']].forEach(([n, color, key, fallback]) => {
+    [[maShort, CT.c('#fbbf24'), 'commodities.detail_ma50',  '50d MA'],
+     [maLong,  CT.c('#f87171'), 'commodities.detail_ma200', '200d MA']].forEach(([n, color, key, fallback]) => {
       const ma = rollingMa(n).slice(maOffset);
       if (!ma.some(v => v != null)) return;   // not enough history for this average
       datasets.push({
@@ -609,15 +609,15 @@
   // ─── Cross-commodity ratios
   function buildRatioCard(key, r) {
     const wrap = document.createElement('div');
-    wrap.className = 'bg-slate-950/50 border border-slate-800 rounded-xl p-3';
+    wrap.className = 'bg-white/50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-xl p-3';
     wrap.innerHTML = `
       <div class="flex items-start justify-between mb-2">
         <div>
-          <div class="text-sm font-semibold text-slate-200">${I18n.t('markets.ratio_label.' + key) || r.label}</div>
+          <div class="text-sm font-semibold text-slate-700 dark:text-slate-200">${I18n.t('markets.ratio_label.' + key) || r.label}</div>
           <div class="text-[10px] text-slate-500 mt-0.5">${I18n.t('markets.ratio_desc.' + key) || r.desc}</div>
         </div>
         <div class="text-right">
-          <div class="text-lg font-bold font-mono text-slate-100">${r.current == null ? '—' : r.current.toFixed(2)}</div>
+          <div class="text-lg font-bold font-mono text-slate-800 dark:text-slate-100">${r.current == null ? '—' : r.current.toFixed(2)}</div>
           <div class="text-[10px] text-slate-500 uppercase tracking-wide">${I18n.t('commodities.ratio_current')||'current'}</div>
         </div>
       </div>
@@ -635,7 +635,7 @@
       if (py < a.top || py > a.bottom) return;
       c.save(); c.strokeStyle='rgba(251,191,36,0.5)'; c.lineWidth=1; c.setLineDash([4,3]);
       c.beginPath(); c.moveTo(a.left,py); c.lineTo(a.right,py); c.stroke();
-      c.fillStyle='#fbbf24'; c.font='9px Inter';
+      c.fillStyle=CT.c('#fbbf24'); c.font='9px Inter';
       c.fillText('Energy equiv. (1/6)', a.left+4, py-3);
       c.restore();
     }
@@ -696,7 +696,7 @@
       type:'line',
       data:{ labels:slDates, datasets:[
         { label:I18n.t('commodities.name.gold')||'Gold', data:gNorm, borderColor:'#facc15', backgroundColor:'rgba(250,204,21,0.08)', borderWidth:1.5, pointRadius:0, fill:true, tension:0.3, spanGaps:true },
-        { label:'DXY', data:dNorm, borderColor:'#94a3b8', backgroundColor:'transparent', borderWidth:1.5, pointRadius:0, fill:false, tension:0.3, spanGaps:true, borderDash:[4,3] },
+        { label:'DXY', data:dNorm, borderColor:CT.c('#94a3b8'), backgroundColor:'transparent', borderWidth:1.5, pointRadius:0, fill:false, tension:0.3, spanGaps:true, borderDash:[4,3] },
       ]},
       options:{ responsive:true, maintainAspectRatio:false,
         plugins:{ legend:{display:false}, tooltip:{mode:'index',intersect:false, callbacks:{label:c=>c.raw==null?'':` ${c.dataset.label}: ${c.raw.toFixed(1)}`}}},
@@ -716,14 +716,14 @@
     }
     const rColors = ratioVals.map((v,i)=>{
       if (v==null || i===0) return 'rgba(250,204,21,0.7)';
-      return v >= ratioVals.slice(0,i).filter(x=>x!=null).at(-1) ? 'rgba(52,211,153,0.7)' : 'rgba(248,113,113,0.7)';
+      return v >= ratioVals.slice(0,i).filter(x=>x!=null).at(-1) ? 'rgba(52,211,153,0.7)' : CT.c('rgba(248,113,113,0.7)');
     });
     if (_goldDxyRatioInst) { _goldDxyRatioInst.destroy(); _goldDxyRatioInst=null; }
     _goldDxyRatioInst = new Chart(document.getElementById('goldDxyRatioChart'), {
       type:'line',
       data:{ labels:slDates, datasets:[{
         label:'Gold/DXY', data:ratioVals,
-        borderColor:'#fbbf24', backgroundColor:'rgba(251,191,36,0.12)',
+        borderColor:CT.c('#fbbf24'), backgroundColor:'rgba(251,191,36,0.12)',
         borderWidth:2, pointRadius:0, pointHoverRadius:4, fill:true, tension:0.3, spanGaps:true,
       }]},
       options:{ responsive:true, maintainAspectRatio:false,
@@ -755,7 +755,7 @@
       if (!dxy.prices || !dxy.prices.length) return;
       if (!gold?.prices_1y?.length && !oil?.prices_1y?.length) return;
       document.getElementById('dxyBasketSection').style.display = 'block';
-      const gCol = '#1e293b', tCol = '#64748b';
+      const gCol = CT.c('#1e293b'), tCol = CT.c('#64748b');
       const dxyBase = dxy.prices.find(v=>v!=null);
       // Invert DXY so it shows inverse relationship visually
       const dxyNorm = dxy.prices.map(v=>v!=null&&dxyBase?+(200-v/dxyBase*100).toFixed(1):null);
@@ -766,13 +766,13 @@
       new Chart(document.getElementById('dxyBasketChart'), {
         type:'line',
         data:{ labels: dxy.dates, datasets:[
-          {label:'DXY (inv)',data:dxyNorm,borderColor:'#38bdf8',backgroundColor:'rgba(56,189,248,0.07)',borderWidth:1.5,pointRadius:0,fill:true,tension:0.3,spanGaps:true},
-          {label:'Gold',data:goldNorm.slice(-dxy.dates.length),borderColor:'#fbbf24',backgroundColor:'transparent',borderWidth:1.5,pointRadius:0,fill:false,tension:0.3,spanGaps:true,borderDash:[4,3]},
-          {label:'Oil',data:oilNorm.slice(-dxy.dates.length),borderColor:'#fb923c',backgroundColor:'transparent',borderWidth:1.5,pointRadius:0,fill:false,tension:0.3,spanGaps:true,borderDash:[4,3]},
+          {label:'DXY (inv)',data:dxyNorm,borderColor:CT.c('#38bdf8'),backgroundColor:'rgba(56,189,248,0.07)',borderWidth:1.5,pointRadius:0,fill:true,tension:0.3,spanGaps:true},
+          {label:'Gold',data:goldNorm.slice(-dxy.dates.length),borderColor:CT.c('#fbbf24'),backgroundColor:'transparent',borderWidth:1.5,pointRadius:0,fill:false,tension:0.3,spanGaps:true,borderDash:[4,3]},
+          {label:'Oil',data:oilNorm.slice(-dxy.dates.length),borderColor:CT.c('#fb923c'),backgroundColor:'transparent',borderWidth:1.5,pointRadius:0,fill:false,tension:0.3,spanGaps:true,borderDash:[4,3]},
         ]},
         options:{responsive:true,maintainAspectRatio:false,
           plugins:{legend:{display:false},tooltip:{mode:'index',intersect:false,callbacks:{label:c=>` ${c.dataset.label}: ${c.raw?.toFixed(1)}`}}},
-          scales:{x:{grid:{color:gCol},ticks:{color:tCol,maxTicksLimit:8,maxRotation:0}},y:{grid:{color:gCol},ticks:{color:tCol,callback:v=>v.toFixed(0)},title:{display:true,text:'Normalised (start=100, DXY inverted)',color:'#475569',font:{size:10}}}},
+          scales:{x:{grid:{color:gCol},ticks:{color:tCol,maxTicksLimit:8,maxRotation:0}},y:{grid:{color:gCol},ticks:{color:tCol,callback:v=>v.toFixed(0)},title:{display:true,text:'Normalised (start=100, DXY inverted)',color:CT.c('#475569'),font:{size:10}}}},
           interaction:{mode:'index',intersect:false}},
       });
     } catch(e) {}
@@ -812,7 +812,7 @@
         data:{ labels:copDates, datasets:[{
           label:'Copper/SPY ×100',
           data:ratioVals,
-          borderColor:'#fb923c', backgroundColor:'rgba(251,146,60,0.1)',
+          borderColor:CT.c('#fb923c'), backgroundColor:'rgba(251,146,60,0.1)',
           borderWidth:2, pointRadius:0, pointHoverRadius:4, fill:true, tension:0.3, spanGaps:true,
         }]},
         options:{
@@ -822,7 +822,7 @@
           scales:{
             x:{grid:{color:gridCol},ticks:{color:tickCol,maxTicksLimit:8,maxRotation:0}},
             y:{grid:{color:gridCol},ticks:{color:tickCol,callback:v=>v.toFixed(3)},
-               title:{display:true,text:'Copper price / SPY × 100',color:'#475569',font:{size:9}}},
+               title:{display:true,text:'Copper price / SPY × 100',color:CT.c('#475569'),font:{size:9}}},
           },
           interaction:{mode:'index',intersect:false},
         },
@@ -847,13 +847,13 @@
       return av < bv ? -sortDir : av > bv ? sortDir : 0;
     });
     tbody.innerHTML = rows.map(r => `
-      <tr class="border-b border-slate-800/60 hover:bg-slate-800/40 transition cursor-pointer"
+      <tr class="border-b border-slate-200/60 dark:border-slate-800/60 hover:bg-slate-100/40 dark:hover:bg-slate-800/40 transition cursor-pointer"
           onclick="window._cmdSelect('${r.k}')">
         <td class="py-2 px-3">
           <div class="flex items-center gap-2">
             <span>${r.emoji || ''}</span>
             <div>
-              <div class="font-medium text-slate-100">${localName(r.k, r.name)}</div>
+              <div class="font-medium text-slate-800 dark:text-slate-100">${localName(r.k, r.name)}</div>
               <div class="text-[10px] text-slate-500 font-mono">${r.symbol}</div>
             </div>
             <span class="group-pill ${r.group}">${groupName(r.group)}</span>
@@ -934,8 +934,8 @@
     const c = C[key];
     document.getElementById('seasonalityTitle').textContent =
       `${c ? (c.emoji||'') + ' ' + localName(key, c.name) : key} — ${I18n.t('commodities.seasonality_title')||'Seasonality'}`;
-    const colors  = avgs.map(v => v==null?'transparent': v>=0?'rgba(52,211,153,0.7)':'rgba(248,113,113,0.7)');
-    const borders = avgs.map(v => v==null?'transparent': v>=0?'#34d399':'#f87171');
+    const colors  = avgs.map(v => v==null?'transparent': v>=0?'rgba(52,211,153,0.7)':CT.c('rgba(248,113,113,0.7)'));
+    const borders = avgs.map(v => v==null?'transparent': v>=0?CT.c('#34d399'):CT.c('#f87171'));
     if (_seasonChart) { _seasonChart.destroy(); _seasonChart = null; }
     _seasonChart = new Chart(document.getElementById('seasonalityChart'), {
       type: 'bar',
@@ -953,8 +953,8 @@
           label: c => c.raw==null?'': ` ${c.raw>=0?'+':''}${c.raw.toFixed(2)}%`
         }}},
         scales:{
-          x:{grid:{color:'#1e293b'},ticks:{color:'#64748b'}},
-          y:{grid:{color:'#1e293b'},ticks:{color:'#64748b',callback:v=>(v>=0?'+':'')+v.toFixed(1)+'%'}},
+          x:{grid:{color:CT.c('#1e293b')},ticks:{color:CT.c('#64748b')}},
+          y:{grid:{color:CT.c('#1e293b')},ticks:{color:CT.c('#64748b'),callback:v=>(v>=0?'+':'')+v.toFixed(1)+'%'}},
         },
       },
     });
@@ -1043,7 +1043,7 @@
       document.getElementById('brentWtiSpreadVal').textContent = '$' + latest.toFixed(2);
     }
 
-    const gCol='#1e293b', tCol='#64748b';
+    const gCol=CT.c('#1e293b'), tCol=CT.c('#64748b');
     new Chart(document.getElementById('brentWtiChart'), {
       type: 'line',
       data: { labels: dates, datasets: [{
@@ -1064,7 +1064,7 @@
                  const py=ax.getPixelForValue(v);
                  if(py<a.top||py>a.bottom)return;
                  ct.save();ct.strokeStyle=c.replace('0.3','0.5');ct.setLineDash([4,3]);ct.lineWidth=1;ct.beginPath();ct.moveTo(a.left,py);ct.lineTo(a.right,py);ct.stroke();
-                 ct.fillStyle='#64748b';ct.font='9px Inter';ct.fillText(lbl,a.left+4,py-3);ct.restore();
+                 ct.fillStyle=CT.c('#64748b');ct.font='9px Inter';ct.fillText(lbl,a.left+4,py-3);ct.restore();
                });
              }},
         },

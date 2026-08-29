@@ -106,11 +106,11 @@
 <!-- ── Header ─────────────────────────────────────────────────────────── -->
 <div class="mb-6 sm:mb-8 fade-up">
   <h1 class="text-2xl sm:text-3xl font-bold grad-text mb-1" data-i18n="housing.title">US Housing Market</h1>
-  <p class="text-slate-400 text-sm" data-i18n="housing.subtitle">
+  <p class="text-slate-500 dark:text-slate-400 text-sm" data-i18n="housing.subtitle">
     Home values, rents, inventory and affordability · Zillow Research and Redfin Data Center
   </p>
   {% if cache_last_updated %}
-  <p class="text-xs text-slate-600 mt-1">
+  <p class="text-xs text-slate-500 dark:text-slate-600 mt-1">
     <span data-i18n="housing.data_as_of">Data as of</span> {{ cache_last_updated | int | datetimeformat }}
     &nbsp;·&nbsp;
     {% if warming or not cache_fresh %}
@@ -122,7 +122,7 @@
     <a href="{{ url_for('main.housing_refresh') }}" class="text-brand hover:underline" data-i18n="housing.refresh">↻ Refresh</a>
   </p>
   {% else %}
-  <p class="text-xs text-slate-600 mt-1">
+  <p class="text-xs text-slate-500 dark:text-slate-600 mt-1">
     <a href="{{ url_for('main.housing_refresh') }}" class="text-brand hover:underline" data-i18n="housing.load">↻ Load data</a>
   </p>
   {% endif %}
@@ -134,10 +134,10 @@
     <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
     <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/>
   </svg>
-  <p class="text-slate-400 text-sm animate-pulse" data-i18n="housing.loading">Downloading Zillow and Redfin datasets — this may take a moment…</p>
-  <p class="text-xs text-slate-600" data-i18n="housing.loading_hint">This page will refresh automatically when data is ready.</p>
+  <p class="text-slate-500 dark:text-slate-400 text-sm animate-pulse" data-i18n="housing.loading">Downloading Zillow and Redfin datasets — this may take a moment…</p>
+  <p class="text-xs text-slate-500 dark:text-slate-600" data-i18n="housing.loading_hint">This page will refresh automatically when data is ready.</p>
 </div>
-<div id="hzError" class="hidden mt-4 px-4 py-3 rounded-lg bg-red-900/40 border border-red-700 text-red-300 text-sm"></div>
+<div id="hzError" class="hidden mt-4 px-4 py-3 rounded-lg bg-red-50 dark:bg-red-900/40 border border-red-300 dark:border-red-700 text-red-700 dark:text-red-300 text-sm"></div>
 <script>
   (function poll() {
     fetch('/api/housing')
@@ -159,7 +159,7 @@
 {% else %}
 
 <!-- ── KPI row ─────────────────────────────────────────────────────────── -->
-<div id="hzNotice" class="hidden mb-6 px-4 py-3 rounded-lg bg-slate-800/60 border border-slate-700 text-slate-300 text-sm items-center gap-3">
+<div id="hzNotice" class="hidden mb-6 px-4 py-3 rounded-lg bg-slate-100/60 dark:bg-slate-800/60 border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-sm items-center gap-3">
   <svg class="w-4 h-4 text-brand animate-spin inline-block align-middle" fill="none" viewBox="0 0 24 24">
     <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
     <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/>
@@ -174,10 +174,10 @@
   <div class="hz-section"><h2 data-i18n="housing.sec_prices">Prices &amp; Affordability</h2><div class="rule"></div></div>
 
   <!-- ── Affordability — the page's headline insight ───────────────────── -->
-  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up">
+  <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6 fade-up">
     <div class="flex flex-wrap items-start justify-between gap-2 mb-3">
       <div>
-        <h2 class="text-base font-semibold text-slate-200" data-i18n="housing.afford_title">Cost of Buying the Typical US Home</h2>
+        <h2 class="text-base font-semibold text-slate-700 dark:text-slate-200" data-i18n="housing.afford_title">Cost of Buying the Typical US Home</h2>
         <p class="text-xs text-slate-500">
           <span data-i18n="housing.afford_desc">Monthly principal &amp; interest, 20% down on a 30-year fixed. Excludes taxes, insurance and HOA, so it is a floor on the true cost.</span>
           <span class="src-chip src-zillow">Zillow</span> <span class="src-chip src-fred">FRED</span>
@@ -189,11 +189,11 @@
       <div>
         <p class="text-xs text-slate-500 mb-0.5" data-i18n="housing.afford_now">Payment today</p>
         <!-- Hero figure: the one number this page leads with. -->
-        <p class="text-5xl font-semibold text-slate-100 leading-none"><span id="hzPayNow">—</span></p>
+        <p class="text-5xl font-semibold text-slate-800 dark:text-slate-100 leading-none"><span id="hzPayNow">—</span></p>
       </div>
       <div class="text-xs text-slate-500 space-y-1 pb-1">
-        <p><span data-i18n="housing.afford_peak">Peak</span>: <span id="hzPayPeak" class="text-slate-300">—</span></p>
-        <p><span data-i18n="housing.afford_2019">vs Dec 2019</span>: <span id="hzPay2019" class="text-slate-300">—</span></p>
+        <p><span data-i18n="housing.afford_peak">Peak</span>: <span id="hzPayPeak" class="text-slate-600 dark:text-slate-300">—</span></p>
+        <p><span data-i18n="housing.afford_2019">vs Dec 2019</span>: <span id="hzPay2019" class="text-slate-600 dark:text-slate-300">—</span></p>
       </div>
     </div>
     <div class="chart-container" style="height:260px"><canvas id="hzAffordChart"></canvas></div>
@@ -202,9 +202,9 @@
 
   <!-- ── Case-Shiller: the long view, incl. the 2006 bubble ───────────── -->
   <div class="hz-2col">
-    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
+    <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
       <div class="mb-3">
-        <h3 class="text-sm font-semibold text-slate-300">
+        <h3 class="text-sm font-semibold text-slate-600 dark:text-slate-300">
           <span data-i18n="housing.cs_title">Case-Shiller National Home Price Index</span>
           <span class="src-chip src-fred">FRED</span>
         </h3>
@@ -214,15 +214,15 @@
     </div>
 
     <!-- ── Price-to-rent: the valuation question ───────────────────────── -->
-    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
+    <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
       <div class="mb-3">
-        <h3 class="text-sm font-semibold text-slate-300">
+        <h3 class="text-sm font-semibold text-slate-600 dark:text-slate-300">
           <span data-i18n="housing.ptr_title">Price-to-Rent Ratio</span>
           <span class="src-chip src-fred">FRED</span>
         </h3>
         <p class="text-xs text-slate-500 mt-0.5">
           <span data-i18n="housing.ptr_desc">Home prices divided by CPI rent, indexed to 100 at the start. Above its own history means buying is expensive relative to renting.</span>
-          <span id="hzPtrPeak" class="text-slate-400"></span>
+          <span id="hzPtrPeak" class="text-slate-500 dark:text-slate-400"></span>
         </p>
       </div>
       <div class="chart-container" style="height:220px"><canvas id="hzPriceToRentChart"></canvas></div>
@@ -230,9 +230,9 @@
   </div>
 
   <!-- ── Home values vs rents, indexed ─────────────────────────────────── -->
-  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
+  <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
     <div class="mb-3">
-      <h3 class="text-sm font-semibold text-slate-300">
+      <h3 class="text-sm font-semibold text-slate-600 dark:text-slate-300">
         <span data-i18n="housing.idx_title">Home Values vs Rents</span>
         <span class="src-chip src-zillow">Zillow</span>
       </h3>
@@ -244,9 +244,9 @@
   <div class="hz-section"><h2 data-i18n="housing.sec_rents">Rental Market</h2><div class="rule"></div></div>
 
   <!-- ── Market rents lead official rent inflation ─────────────────────── -->
-  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
+  <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
     <div class="mb-3">
-      <h3 class="text-sm font-semibold text-slate-300">
+      <h3 class="text-sm font-semibold text-slate-600 dark:text-slate-300">
         <span data-i18n="housing.rentgrowth_title">Market Rents vs Official Rent Inflation</span>
         <span class="src-chip src-zillow">Zillow</span> <span class="src-chip src-fred">FRED</span>
       </h3>
@@ -256,9 +256,9 @@
   </div>
 
   <!-- ── Vacancy: is there slack? ──────────────────────────────────────── -->
-  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
+  <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
     <div class="mb-3">
-      <h3 class="text-sm font-semibold text-slate-300">
+      <h3 class="text-sm font-semibold text-slate-600 dark:text-slate-300">
         <span data-i18n="housing.vacancy_title">Rental &amp; Homeowner Vacancy Rates</span>
         <span class="src-chip src-fred">FRED</span>
       </h3>
@@ -273,9 +273,9 @@
   {# The listing side. Zillow ZHVI is an estimated value and Redfin is what
      actually sold; this is what sellers are *asking*, which is the dimension the
      page was missing. The three routinely disagree, and the gap is the signal. #}
-  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
+  <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
     <div class="mb-3">
-      <h3 class="text-sm font-semibold text-slate-300">
+      <h3 class="text-sm font-semibold text-slate-600 dark:text-slate-300">
         <span data-i18n="housing.ask_title">Asking vs Sold Price</span>
         <span class="src-chip src-realtor">realtor.com</span>
         <span class="src-chip src-redfin">Redfin</span>
@@ -285,9 +285,9 @@
     <div class="chart-container" style="height:240px"><canvas id="hzAskSoldChart"></canvas></div>
   </div>
 
-  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
+  <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
     <div class="mb-3">
-      <h3 class="text-sm font-semibold text-slate-300">
+      <h3 class="text-sm font-semibold text-slate-600 dark:text-slate-300">
         <span data-i18n="housing.listing_flow_title">Listing Supply</span>
         <span class="src-chip src-realtor">realtor.com</span>
       </h3>
@@ -296,9 +296,9 @@
     <div class="chart-container" style="height:240px"><canvas id="hzListingFlowChart"></canvas></div>
   </div>
 
-  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
+  <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
     <div class="mb-3">
-      <h3 class="text-sm font-semibold text-slate-300">
+      <h3 class="text-sm font-semibold text-slate-600 dark:text-slate-300">
         <span data-i18n="housing.dom_title">Days on Market</span>
         <span class="src-chip src-realtor">realtor.com</span>
       </h3>
@@ -307,9 +307,9 @@
     <div class="chart-container" style="height:240px"><canvas id="hzDomChart"></canvas></div>
   </div>
 
-  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
+  <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
     <div class="mb-3">
-      <h3 class="text-sm font-semibold text-slate-300">
+      <h3 class="text-sm font-semibold text-slate-600 dark:text-slate-300">
         <span data-i18n="housing.pending_title">Demand Pressure</span>
         <span class="src-chip src-realtor">realtor.com</span>
       </h3>
@@ -318,9 +318,9 @@
     <div class="chart-container" style="height:240px"><canvas id="hzPendingChart"></canvas></div>
   </div>
 
-  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
+  <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
     <div class="mb-3">
-      <h3 class="text-sm font-semibold text-slate-300">
+      <h3 class="text-sm font-semibold text-slate-600 dark:text-slate-300">
         <span data-i18n="housing.pipeline_title">Construction Pipeline</span>
         <span class="src-chip src-fred">FRED</span>
       </h3>
@@ -330,9 +330,9 @@
   </div>
 
   <div class="hz-2col">
-    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
+    <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
       <div class="mb-3">
-        <h3 class="text-sm font-semibold text-slate-300">
+        <h3 class="text-sm font-semibold text-slate-600 dark:text-slate-300">
           <span data-i18n="housing.msn_title">Months' Supply of New Homes</span>
           <span class="src-chip src-fred">FRED</span>
         </h3>
@@ -340,9 +340,9 @@
       </div>
       <div class="chart-container" style="height:200px"><canvas id="hzMonthsSupplyChart"></canvas></div>
     </div>
-    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
+    <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
       <div class="mb-3">
-        <h3 class="text-sm font-semibold text-slate-300">
+        <h3 class="text-sm font-semibold text-slate-600 dark:text-slate-300">
           <span data-i18n="housing.nhs_title">New Single-Family Home Sales</span>
           <span class="src-chip src-fred">FRED</span>
         </h3>
@@ -353,9 +353,9 @@
   </div>
 
   <!-- ── Supply: inventory & new listings ──────────────────────────────── -->
-  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
+  <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
     <div class="mb-3">
-      <h3 class="text-sm font-semibold text-slate-300">
+      <h3 class="text-sm font-semibold text-slate-600 dark:text-slate-300">
         <span data-i18n="housing.supply_title">Inventory &amp; New Listings</span>
         <span class="src-chip src-redfin">Redfin</span>
       </h3>
@@ -365,9 +365,9 @@
   </div>
 
   <!-- ── Negotiating power: price drops vs sold above list ─────────────── -->
-  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
+  <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
     <div class="mb-3">
-      <h3 class="text-sm font-semibold text-slate-300">
+      <h3 class="text-sm font-semibold text-slate-600 dark:text-slate-300">
         <span data-i18n="housing.power_title">Who Has the Leverage</span>
         <span class="src-chip src-redfin">Redfin</span>
       </h3>
@@ -379,9 +379,9 @@
   <div class="hz-section"><h2 data-i18n="housing.sec_rates">Mortgage Rates &amp; Credit</h2><div class="rule"></div></div>
 
   <!-- ── 30y vs 15y ────────────────────────────────────────────────────── -->
-  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
+  <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
     <div class="mb-3">
-      <h3 class="text-sm font-semibold text-slate-300">
+      <h3 class="text-sm font-semibold text-slate-600 dark:text-slate-300">
         <span data-i18n="housing.mortrates_title">Mortgage Rates: 30-Year vs 15-Year</span>
         <span class="src-chip src-fred">FRED</span>
       </h3>
@@ -391,10 +391,10 @@
   </div>
 
   <!-- ── The spread: why Fed cuts don't reach mortgages 1:1 ────────────── -->
-  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
+  <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
     <div class="hz-headrow mb-3">
       <div class="max-w-3xl">
-        <h3 class="text-sm font-semibold text-slate-300">
+        <h3 class="text-sm font-semibold text-slate-600 dark:text-slate-300">
           <span data-i18n="housing.spread_title">Mortgage Spread over the 10-Year Treasury</span>
           <span class="src-chip src-fred">FRED</span>
         </h3>
@@ -402,17 +402,17 @@
       </div>
       <div class="shrink-0 sm:text-right">
         <p class="text-xs text-slate-500 mb-0.5" data-i18n="housing.spread_now">Current spread</p>
-        <p class="text-2xl font-semibold text-slate-100"><span id="hzSpreadNow">—</span></p>
-        <p class="text-[11px] text-slate-500"><span data-i18n="housing.spread_range">range</span> <span id="hzSpreadRange" class="text-slate-400">—</span></p>
+        <p class="text-2xl font-semibold text-slate-800 dark:text-slate-100"><span id="hzSpreadNow">—</span></p>
+        <p class="text-[11px] text-slate-500"><span data-i18n="housing.spread_range">range</span> <span id="hzSpreadRange" class="text-slate-500 dark:text-slate-400">—</span></p>
       </div>
     </div>
     <div class="chart-container" style="height:240px"><canvas id="hzSpreadChart"></canvas></div>
   </div>
 
   <!-- ── Credit stress ─────────────────────────────────────────────────── -->
-  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
+  <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
     <div class="mb-3">
-      <h3 class="text-sm font-semibold text-slate-300">
+      <h3 class="text-sm font-semibold text-slate-600 dark:text-slate-300">
         <span data-i18n="housing.delinq_title">Single-Family Mortgage Delinquency Rate</span>
         <span class="src-chip src-fred">FRED</span>
       </h3>
@@ -424,9 +424,9 @@
   <div class="hz-section"><h2 data-i18n="housing.sec_metros">Metro Detail</h2><div class="rule"></div></div>
 
   <!-- ── Metro YoY comparison ──────────────────────────────────────────── -->
-  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
+  <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
     <div class="mb-3">
-      <h3 class="text-sm font-semibold text-slate-300">
+      <h3 class="text-sm font-semibold text-slate-600 dark:text-slate-300">
         <span data-i18n="housing.metro_yoy_title">Home Value Change by Metro, Year over Year</span>
         <span class="src-chip src-zillow">Zillow</span>
       </h3>
@@ -436,26 +436,26 @@
   </div>
 
   <!-- ── Metro time series with selector ───────────────────────────────── -->
-  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
+  <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
     <div class="flex flex-wrap items-start justify-between gap-2 mb-3">
       <div>
-        <h3 class="text-sm font-semibold text-slate-300">
+        <h3 class="text-sm font-semibold text-slate-600 dark:text-slate-300">
           <span data-i18n="housing.metro_trend_title">Typical Home Value by Metro</span>
           <span class="src-chip src-zillow">Zillow</span>
         </h3>
         <p class="text-xs text-slate-500 mt-0.5" data-i18n="housing.metro_trend_desc">Pick a metro to compare its path against the national index.</p>
       </div>
       <select id="hzMetroSelect"
-              class="bg-slate-800 border border-slate-700 rounded-md text-xs text-slate-200 px-2 py-1.5
+              class="bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-md text-xs text-slate-700 dark:text-slate-200 px-2 py-1.5
                      focus:outline-none focus:border-brand"></select>
     </div>
     <div class="chart-container" style="height:240px"><canvas id="hzMetroTrendChart"></canvas></div>
   </div>
 
   <!-- ── Metro detail table ────────────────────────────────────────────── -->
-  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
+  <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
     <div class="mb-3">
-      <h3 class="text-sm font-semibold text-slate-300">
+      <h3 class="text-sm font-semibold text-slate-600 dark:text-slate-300">
         <span data-i18n="housing.metro_table_title">Metro Detail</span>
         <span class="src-chip src-zillow">Zillow</span>
       </h3>
@@ -465,24 +465,24 @@
   </div>
 
   <!-- ── realtor.com geography breakdowns ──────────────────────────────── -->
-  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
+  <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
     <div class="mb-3">
-      <h3 class="text-sm font-semibold text-slate-300">
+      <h3 class="text-sm font-semibold text-slate-600 dark:text-slate-300">
         <span data-i18n="housing.state_table_title">By State</span>
         <span class="src-chip src-realtor">realtor.com</span>
-        <span id="hzStateAsof" class="text-[10px] text-slate-600 font-normal"></span>
+        <span id="hzStateAsof" class="text-[10px] text-slate-500 dark:text-slate-600 font-normal"></span>
       </h3>
       <p class="text-xs text-slate-500 mt-0.5" data-i18n="housing.state_table_desc">All 50 states and DC for the latest month. Click a column to sort. These are asking prices, not sale prices, so they are not comparable with the Zillow or Redfin levels above.</p>
     </div>
     <div class="overflow-x-auto"><table class="hz-table w-full" id="hzStateTable"></table></div>
   </div>
 
-  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
+  <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
     <div class="mb-3">
-      <h3 class="text-sm font-semibold text-slate-300">
+      <h3 class="text-sm font-semibold text-slate-600 dark:text-slate-300">
         <span data-i18n="housing.rmetro_table_title">By Metro</span>
         <span class="src-chip src-realtor">realtor.com</span>
-        <span id="hzRMetroAsof" class="text-[10px] text-slate-600 font-normal"></span>
+        <span id="hzRMetroAsof" class="text-[10px] text-slate-500 dark:text-slate-600 font-normal"></span>
       </h3>
       <p class="text-xs text-slate-500 mt-0.5" data-i18n="housing.rmetro_table_desc">The 50 largest metros by household count. Click a column to sort. County and ZIP level exist upstream but are 97 MB and 784 MB, so they are not carried here.</p>
     </div>
@@ -490,19 +490,19 @@
   </div>
 
   <!-- ── Methodology ───────────────────────────────────────────────────── -->
-  <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
-    <h3 class="text-sm font-semibold text-slate-300 mb-2" data-i18n="housing.method_title">Reading these two sources together</h3>
+  <div class="bg-white/60 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
+    <h3 class="text-sm font-semibold text-slate-600 dark:text-slate-300 mb-2" data-i18n="housing.method_title">Reading these two sources together</h3>
     <p class="text-xs text-slate-500 leading-relaxed" data-i18n="housing.method_body">
       Zillow and Redfin do not measure the same market, so their price levels are not interchangeable. For the same month Redfin reported a median sale price of about $440k against Zillow's $370k — roughly a 19% gap — because Redfin's universe is MLS-centric and metro-weighted while Zillow's is broader. Their price-cut measures differ in definition too, not just in coverage. Each card above therefore names its publisher, and no chart mixes the two on one axis as though they agreed. Use Zillow for home-value and rent levels across metros, and Redfin for market mechanics: inventory, months of supply, days on market and the share selling above asking.
     </p>
-    <p class="text-xs text-slate-600 mt-2" data-i18n="housing.method_caveat">
+    <p class="text-xs text-slate-500 dark:text-slate-600 mt-2" data-i18n="housing.method_caveat">
       Both series are revised as late transactions arrive, and Zillow's home-value and sale-price indices are seasonally adjusted while several supply measures are not. Monthly data, updated once a month.
     </p>
   </div>
 
-  <div id="hzError" class="hidden mt-4 px-4 py-3 rounded-lg bg-red-900/40 border border-red-700 text-red-300 text-sm"></div>
+  <div id="hzError" class="hidden mt-4 px-4 py-3 rounded-lg bg-red-50 dark:bg-red-900/40 border border-red-300 dark:border-red-700 text-red-700 dark:text-red-300 text-sm"></div>
 
-  <p class="text-xs text-slate-600 mt-4">
+  <p class="text-xs text-slate-500 dark:text-slate-600 mt-4">
     <span data-i18n="housing.source">Sources</span>:
     <a href="https://www.zillow.com/research/data/" target="_blank" rel="noopener" class="text-brand hover:underline">Zillow Research</a> ·
     <a href="https://public.tableau.com/app/profile/zillow.economic.research/vizzes" target="_blank" rel="noopener" class="text-brand hover:underline">Zillow dashboards</a> ·
@@ -517,10 +517,10 @@
 const _explainData = {};
 
 (async function() {
-  const gridCol = '#1e293b';
-  const tickCol = '#64748b';
+  const gridCol = CT.c('#1e293b');
+  const tickCol = CT.c('#64748b');
   // Categorical slots 1 & 2, validated for the dark card surface.
-  const C_BLUE = '#3987e5', C_ORANGE = '#d95926', C_INDIGO = '#6366f1';
+  const C_BLUE = '#3987e5', C_ORANGE = '#d95926', C_INDIGO = CT.c('#6366f1');
   const C_UP = '#199e70', C_DOWN = '#e66767';
 
   async function safeJsonFetch(url) {
@@ -710,7 +710,7 @@ const _explainData = {};
         plugins: {
           // A single series needs no legend box — the card title names it.
           legend: live.length > 1
-            ? { display: true, labels: { color: '#94a3b8', boxWidth: 12, font: { size: 11 } } }
+            ? { display: true, labels: { color: CT.c('#94a3b8'), boxWidth: 12, font: { size: 11 } } }
             : { display: false },
           tooltip: {
             mode: 'index', intersect: false,
@@ -816,7 +816,7 @@ const _explainData = {};
       const h = head[key];
       if (!h) return;
       const card = document.createElement('div');
-      card.className = 'bg-slate-900 border border-slate-800 rounded-2xl p-3 sm:p-4 fade-up';
+      card.className = 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-3 sm:p-4 fade-up';
 
       const label = document.createElement('p');
       label.className = 'text-xs text-slate-500 mb-1 flex items-center gap-1.5 flex-wrap';
@@ -829,13 +829,13 @@ const _explainData = {};
       label.appendChild(lt); label.appendChild(chip);
 
       const val = document.createElement('p');
-      val.className = 'text-xl sm:text-2xl font-semibold text-slate-100';
+      val.className = 'text-xl sm:text-2xl font-semibold text-slate-800 dark:text-slate-100';
       val.textContent = fmt(h.value, h.unit);
 
       const delta = document.createElement('p');
       delta.className = 'text-xs mt-0.5';
       if (h.yoy == null) {
-        delta.className += ' text-slate-600';
+        delta.className += ' text-slate-500 dark:text-slate-600';
         delta.textContent = '—';
       } else {
         // A share or a rate moves in percentage POINTS; a level moves in
@@ -1177,7 +1177,7 @@ const _explainData = {};
               else { x = bar.x - pad; align = 'right'; inside = true; }
             }
             // Inside a saturated fill, ink has to be light to stay legible.
-            ctx.fillStyle = inside ? '#0f172a' : '#94a3b8';
+            ctx.fillStyle = inside ? CT.c('#0f172a') : CT.c('#94a3b8');
             ctx.textAlign = align;
             ctx.fillText(txt, x, bar.y);
           });
@@ -1267,7 +1267,7 @@ const _explainData = {};
         options: {
           responsive: true, maintainAspectRatio: false,
           plugins: {
-            legend: { display: true, labels: { color: '#94a3b8', boxWidth: 12, font: { size: 11 } } },
+            legend: { display: true, labels: { color: CT.c('#94a3b8'), boxWidth: 12, font: { size: 11 } } },
             tooltip: { mode: 'index', intersect: false,
               callbacks: { label: c => c.raw == null ? '' : ` ${c.dataset.label}: ${usd(c.raw)}` } },
           },
@@ -1403,7 +1403,7 @@ const _explainData = {};
         const tr = document.createElement('tr');
         const signed = (v, unit) => {
           const td = document.createElement('td');
-          if (v == null) { td.textContent = '—'; td.style.color = '#475569'; return td; }
+          if (v == null) { td.textContent = '—'; td.style.color = CT.c('#475569'); return td; }
           td.textContent = (v > 0 ? '+' : '') + v.toFixed(1) + unit;
           td.className = v > 0 ? 'hz-up' : v < 0 ? 'hz-down' : '';
           return td;
@@ -1531,7 +1531,7 @@ function _explainFinish(panel, chart, lang, btn) {
   const label = lang === 'zh' ? '🌐 View in English' : '🌐 翻译成中文';
   const b = document.createElement('button');
   b.textContent = label;
-  b.className = 'mt-3 block text-xs text-violet-400 hover:text-violet-300 underline underline-offset-2 cursor-pointer bg-transparent border-0 p-0';
+  b.className = 'mt-3 block text-xs text-violet-700 dark:text-violet-400 hover:text-violet-700 dark:hover:text-violet-300 underline underline-offset-2 cursor-pointer bg-transparent border-0 p-0';
   b.onclick = () => _runExplain(chart, otherLang);
   panel.appendChild(document.createElement('br'));
   panel.appendChild(b);

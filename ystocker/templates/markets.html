@@ -133,15 +133,15 @@
 <!-- ── Fullscreen chart modal ────────────────────────────────────────── -->
 <div id="mktsModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
      style="display:none" onclick="closeMktsModal()">
-  <div class="relative w-full max-w-5xl bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl flex flex-col"
+  <div class="relative w-full max-w-5xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-2xl shadow-2xl flex flex-col"
        style="max-height:90vh" onclick="event.stopPropagation()">
-    <div class="flex items-center justify-between px-6 py-4 border-b border-slate-800 shrink-0">
+    <div class="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800 shrink-0">
       <div>
-        <h3 id="mktsModalTitle" class="font-semibold text-slate-100"></h3>
+        <h3 id="mktsModalTitle" class="font-semibold text-slate-800 dark:text-slate-100"></h3>
         <p id="mktsModalSub" class="text-xs text-slate-500 mt-0.5"></p>
       </div>
       <button onclick="closeMktsModal()"
-              class="text-slate-500 hover:text-slate-200 transition p-1 rounded-lg hover:bg-slate-800">
+              class="text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 transition p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
         </svg>
@@ -156,7 +156,7 @@
 <!-- ── Header ─────────────────────────────────────────────────────────── -->
 <div class="mb-6 fade-up">
   <h1 class="text-xl sm:text-2xl font-bold grad-text" data-i18n="markets.title">Market Overview</h1>
-  <p class="text-slate-400 mt-1 text-xs" data-i18n="markets.subtitle">S&amp;P 500 · Nasdaq · Dow Jones — live snapshot &amp; historical charts</p>
+  <p class="text-slate-500 dark:text-slate-400 mt-1 text-xs" data-i18n="markets.subtitle">S&amp;P 500 · Nasdaq · Dow Jones — live snapshot &amp; historical charts</p>
 </div>
 
 <!-- ── Loading overlay ────────────────────────────────────────────────── -->
@@ -181,35 +181,35 @@
    no single timeframe, which is why the best/worst pair read as noise. #}
 
 <!-- ── AI Markets Brief ──────────────────────────────────────────────── -->
-<div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up mb-6" id="aiMarketsBriefCard">
+<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 fade-up mb-6" id="aiMarketsBriefCard">
   <div class="flex items-center justify-between">
     <div class="flex items-center gap-2">
-      <span class="text-[10px] font-semibold uppercase tracking-widest text-slate-600" data-i18n="markets.ai_brief_label">AI Markets Brief</span>
+      <span class="text-[10px] font-semibold uppercase tracking-widest text-slate-500 dark:text-slate-600" data-i18n="markets.ai_brief_label">AI Markets Brief</span>
       <span id="aiMarketsBriefTime" class="text-[10px] text-slate-700"></span>
       <span id="aiMarketsBriefCold" class="text-[10px] text-amber-600/80 hidden"></span>
     </div>
     <div class="flex gap-2">
       <button id="aiMarketsBriefRefresh" onclick="_loadAiBrief(true)"
-        class="text-[10px] text-slate-600 hover:text-slate-400 transition px-2 py-0.5 rounded border border-slate-800 hover:border-slate-700">↻</button>
+        class="text-[10px] text-slate-500 dark:text-slate-600 hover:text-slate-500 dark:hover:text-slate-400 transition px-2 py-0.5 rounded border border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700">↻</button>
     </div>
   </div>
   {# No collapse chevron any more: the body is clamped to a preview by default,
      which is what that control existed to achieve. Two toggles on one small
      card — one hiding it, one clamping it — read as a puzzle. #}
-  <div id="aiMarketsBriefBody" class="mt-2 text-sm text-slate-400 leading-relaxed">
+  <div id="aiMarketsBriefBody" class="mt-2 text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
     <div id="aiMarketsBriefText" class="hidden brief-md is-clamped"></div>
-    <div id="aiMarketsBriefLoading" class="text-slate-600 text-xs animate-pulse" data-i18n="markets.ai_brief_loading">Generating market brief…</div>
+    <div id="aiMarketsBriefLoading" class="text-slate-500 dark:text-slate-600 text-xs animate-pulse" data-i18n="markets.ai_brief_loading">Generating market brief…</div>
     <button id="aiMarketsBriefMore" onclick="_toggleAiBriefMore()"
             class="brief-more-btn hidden" aria-expanded="false"
             data-i18n="markets.ai_brief_more">View more</button>
   </div>
-  <a href="/daily" class="mt-2 inline-block text-[11px] text-brand hover:text-violet-300 transition" data-i18n="markets.ai_brief_full">View full daily report →</a>
+  <a href="/daily" class="mt-2 inline-block text-[11px] text-brand hover:text-violet-700 dark:hover:text-violet-300 transition" data-i18n="markets.ai_brief_full">View full daily report →</a>
 </div>
 
 <!-- ── Index snapshot cards ───────────────────────────────────────────── -->
 <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-4 xl:grid-cols-8 gap-3 mb-6 fade-up" id="indexCards">
   {% for _ in range(16) %}
-  <div class="animate-pulse bg-slate-900 border border-slate-800 rounded-xl p-3 h-24"></div>
+  <div class="animate-pulse bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-3 h-24"></div>
   {% endfor %}
 </div>
 
@@ -217,16 +217,16 @@
 <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4 fade-up">
 
   <!-- VIX card -->
-  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-6">
+  <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 sm:p-6">
     <div class="flex items-start justify-between mb-4">
       <div>
-        <h2 class="text-base font-semibold text-slate-200" data-i18n="markets.vix">VIX (Volatility)</h2>
+        <h2 class="text-base font-semibold text-slate-700 dark:text-slate-200" data-i18n="markets.vix">VIX (Volatility)</h2>
         <p class="text-xs text-slate-500 mt-0.5" data-i18n="markets.vix_desc">CBOE Volatility Index — fear gauge of the S&amp;P 500</p>
       </div>
       <div class="flex items-center gap-1">
         <div id="vixBadge" class="text-right"></div>
         <button onclick="expandMktsChart('vix')" title="Expand"
-                class="text-slate-500 hover:text-slate-200 transition p-1 rounded-lg hover:bg-slate-800 shrink-0">
+                class="text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 transition p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 shrink-0">
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                   d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"/>
@@ -234,38 +234,38 @@
         </button>
       </div>
     </div>
-    <div id="vixSkeleton" class="animate-pulse bg-slate-800 rounded-lg" style="height:200px"></div>
+    <div id="vixSkeleton" class="animate-pulse bg-slate-100 dark:bg-slate-800 rounded-lg" style="height:200px"></div>
     <div id="vixChartWrap" style="height:200px; display:none"><canvas id="vixChart"></canvas></div>
     <div class="mt-3 flex items-center justify-between text-[11px]">
-      <div class="flex gap-2 text-slate-600">
-        <span class="text-emerald-400">■</span> &lt;15 Calm
-        <span class="text-amber-400 ml-2">■</span> 15–25 Normal
-        <span class="text-orange-400 ml-2">■</span> 25–35 Elevated
-        <span class="text-rose-400 ml-2">■</span> &gt;35 Panic
+      <div class="flex gap-2 text-slate-500 dark:text-slate-600">
+        <span class="text-emerald-700 dark:text-emerald-400">■</span> &lt;15 Calm
+        <span class="text-amber-700 dark:text-amber-400 ml-2">■</span> 15–25 Normal
+        <span class="text-orange-700 dark:text-orange-400 ml-2">■</span> 25–35 Elevated
+        <span class="text-rose-700 dark:text-rose-400 ml-2">■</span> &gt;35 Panic
       </div>
       <span id="vixZoneBadge" class="text-xs px-2 py-0.5 rounded font-semibold hidden"></span>
     </div>
     <div id="vixTermRow" class="hidden flex items-center gap-3 text-[11px] mt-2">
-      <span class="text-slate-500">VIX3M <span id="vix3mVal" class="text-slate-300 font-mono">—</span></span>
-      <span class="text-slate-600">·</span>
-      <span class="text-slate-500">VVIX <span id="vvixVal" class="text-slate-300 font-mono">—</span></span>
-      <span class="text-slate-600">·</span>
+      <span class="text-slate-500">VIX3M <span id="vix3mVal" class="text-slate-600 dark:text-slate-300 font-mono">—</span></span>
+      <span class="text-slate-500 dark:text-slate-600">·</span>
+      <span class="text-slate-500">VVIX <span id="vvixVal" class="text-slate-600 dark:text-slate-300 font-mono">—</span></span>
+      <span class="text-slate-500 dark:text-slate-600">·</span>
       <span id="vixTermLabel" class="text-[10px] px-1.5 py-0.5 rounded font-semibold hidden"></span>
     </div>
-    <p class="text-[11px] text-slate-600 mt-2" data-i18n="markets.vix_note">VIX below 15 = complacency; above 30 = fear, often marks near-term bottoms. VIX spikes during market drawdowns and mean-reverts quickly.</p>
+    <p class="text-[11px] text-slate-500 dark:text-slate-600 mt-2" data-i18n="markets.vix_note">VIX below 15 = complacency; above 30 = fear, often marks near-term bottoms. VIX spikes during market drawdowns and mean-reverts quickly.</p>
   </div>
 
   <!-- CNN Fear & Greed card -->
-  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-6">
+  <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 sm:p-6">
     <div class="flex items-start justify-between mb-4">
       <div>
-        <h2 class="text-base font-semibold text-slate-200" data-i18n="markets.fear_greed">Fear &amp; Greed</h2>
+        <h2 class="text-base font-semibold text-slate-700 dark:text-slate-200" data-i18n="markets.fear_greed">Fear &amp; Greed</h2>
         <p class="text-xs text-slate-500 mt-0.5" data-i18n="markets.fear_greed_desc">CNN Fear &amp; Greed Index — composite sentiment</p>
       </div>
       <div class="flex items-center gap-1">
         <div id="fgBadge" class="text-right"></div>
         <button onclick="expandMktsChart('fg')" title="Expand"
-                class="text-slate-500 hover:text-slate-200 transition p-1 rounded-lg hover:bg-slate-800 shrink-0">
+                class="text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 transition p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 shrink-0">
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                   d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"/>
@@ -273,7 +273,7 @@
         </button>
       </div>
     </div>
-    <div id="fgLoading" class="text-xs text-slate-600 py-2" data-i18n="markets.loading">Loading…</div>
+    <div id="fgLoading" class="text-xs text-slate-500 dark:text-slate-600 py-2" data-i18n="markets.loading">Loading…</div>
     <div id="fgBody" style="display:none">
       <!-- Gauge bar -->
       <div class="mb-4">
@@ -294,9 +294,9 @@
       <!-- History chart -->
       <div style="height:110px"><canvas id="fgChart"></canvas></div>
       <!-- F&G vs S&P 500 correlation chart -->
-      <div id="fgSpySection" class="mt-3 border-t border-slate-800 pt-3">
+      <div id="fgSpySection" class="mt-3 border-t border-slate-200 dark:border-slate-800 pt-3">
         <button onclick="_toggleFgSpy()" id="fgSpyToggle"
-          class="text-[11px] text-slate-500 hover:text-slate-300 transition flex items-center gap-1">
+          class="text-[11px] text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 transition flex items-center gap-1">
           <span id="fgSpyChevron">▶</span> <span data-i18n="markets.fg_spy_title">Fear &amp; Greed vs S&amp;P 500</span>
         </button>
         <div id="fgSpyChart" class="chart-container mt-3 hidden" style="height:160px">
@@ -309,113 +309,113 @@
 </div>
 
 <!-- SKEW vs VIX -->
-<div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up mb-6" id="skewSection">
+<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 fade-up mb-6" id="skewSection">
   <div class="flex items-start justify-between mb-3">
     <div>
-      <h2 class="text-base font-semibold text-slate-200" data-i18n="markets.skew_title">CBOE SKEW vs VIX — Tail Risk Divergence</h2>
+      <h2 class="text-base font-semibold text-slate-700 dark:text-slate-200" data-i18n="markets.skew_title">CBOE SKEW vs VIX — Tail Risk Divergence</h2>
       <p class="text-xs text-slate-500 mt-0.5" data-i18n="markets.skew_desc">High SKEW + low VIX = institutions quietly buying tail protection while the index looks calm. Classic "smart money" positioning signal.</p>
     </div>
     <span id="skewBadge" class="text-xs px-2 py-0.5 rounded font-semibold hidden"></span>
   </div>
   <div class="flex items-center gap-3 mb-2 text-xs">
-    <span class="flex items-center gap-1 text-rose-400"><span class="w-3 h-0.5 bg-rose-400 inline-block"></span> <span data-i18n="markets.skew_left">SKEW (left)</span></span>
-    <span class="flex items-center gap-1 text-amber-400"><span class="w-3 h-0.5 border-dashed border border-amber-400 inline-block"></span> <span data-i18n="markets.vix_right">VIX (right)</span></span>
+    <span class="flex items-center gap-1 text-rose-700 dark:text-rose-400"><span class="w-3 h-0.5 bg-rose-400 inline-block"></span> <span data-i18n="markets.skew_left">SKEW (left)</span></span>
+    <span class="flex items-center gap-1 text-amber-700 dark:text-amber-400"><span class="w-3 h-0.5 border-dashed border border-amber-400 inline-block"></span> <span data-i18n="markets.vix_right">VIX (right)</span></span>
   </div>
   <div class="chart-container" style="height:240px"><canvas id="skewChart"></canvas></div>
 
   <!-- ── SKEW band reference. Mirrors the shaded zones on the chart; the live
        reading's row is ringed by _renderSkewBands(). ───────────────────── -->
   <div class="mt-3">
-    <p class="text-[10px] uppercase tracking-wide text-slate-400 mb-1.5"
+    <p class="text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-1.5"
        data-i18n="markets.skew_bands_title">How I read the level</p>
     <div id="skewBands" class="space-y-0.5">
       <div class="skew-band-row flex items-center gap-2 px-2 py-1 rounded text-[11px]" data-band="weak">
         <span class="w-2.5 h-2.5 rounded-sm bg-sky-400/70 shrink-0"></span>
-        <span class="font-mono text-slate-400 w-16 shrink-0">&lt;120</span>
-        <span class="text-slate-400" data-i18n="markets.skew_band_weak">Tail-protection demand is soft</span>
+        <span class="font-mono text-slate-500 dark:text-slate-400 w-16 shrink-0">&lt;120</span>
+        <span class="text-slate-500 dark:text-slate-400" data-i18n="markets.skew_band_weak">Tail-protection demand is soft</span>
       </div>
       <div class="skew-band-row flex items-center gap-2 px-2 py-1 rounded text-[11px]" data-band="neutral">
-        <span class="w-2.5 h-2.5 rounded-sm bg-slate-500/70 shrink-0"></span>
-        <span class="font-mono text-slate-400 w-16 shrink-0">120–135</span>
-        <span class="text-slate-400" data-i18n="markets.skew_band_neutral">Normal / neutral zone</span>
+        <span class="w-2.5 h-2.5 rounded-sm bg-slate-400/70 dark:bg-slate-500/70 shrink-0"></span>
+        <span class="font-mono text-slate-500 dark:text-slate-400 w-16 shrink-0">120–135</span>
+        <span class="text-slate-500 dark:text-slate-400" data-i18n="markets.skew_band_neutral">Normal / neutral zone</span>
       </div>
       <div class="skew-band-row flex items-center gap-2 px-2 py-1 rounded text-[11px]" data-band="notable">
         <span class="w-2.5 h-2.5 rounded-sm bg-amber-400/80 shrink-0"></span>
-        <span class="font-mono text-slate-400 w-16 shrink-0">135–145</span>
-        <span class="text-slate-400" data-i18n="markets.skew_band_notable">Tail-protection demand worth noting</span>
+        <span class="font-mono text-slate-500 dark:text-slate-400 w-16 shrink-0">135–145</span>
+        <span class="text-slate-500 dark:text-slate-400" data-i18n="markets.skew_band_notable">Tail-protection demand worth noting</span>
       </div>
       <div class="skew-band-row flex items-center gap-2 px-2 py-1 rounded text-[11px]" data-band="elevated">
         <span class="w-2.5 h-2.5 rounded-sm bg-orange-500/90 shrink-0"></span>
-        <span class="font-mono text-slate-400 w-16 shrink-0">145–155</span>
-        <span class="text-slate-400" data-i18n="markets.skew_band_elevated">Clearly elevated</span>
+        <span class="font-mono text-slate-500 dark:text-slate-400 w-16 shrink-0">145–155</span>
+        <span class="text-slate-500 dark:text-slate-400" data-i18n="markets.skew_band_elevated">Clearly elevated</span>
       </div>
       <div class="skew-band-row flex items-center gap-2 px-2 py-1 rounded text-[11px]" data-band="extreme">
         <span class="w-2.5 h-2.5 rounded-sm bg-rose-500/95 shrink-0"></span>
-        <span class="font-mono text-slate-400 w-16 shrink-0">&gt;155</span>
-        <span class="text-slate-400" data-i18n="markets.skew_band_extreme">Extreme tail-insurance premium</span>
+        <span class="font-mono text-slate-500 dark:text-slate-400 w-16 shrink-0">&gt;155</span>
+        <span class="text-slate-500 dark:text-slate-400" data-i18n="markets.skew_band_extreme">Extreme tail-insurance premium</span>
       </div>
     </div>
-    <p id="skewPctile" class="text-[10px] text-slate-400 mt-1.5"></p>
+    <p id="skewPctile" class="text-[10px] text-slate-500 dark:text-slate-400 mt-1.5"></p>
   </div>
 
   <!-- ── Cross-market divergence scorecard ───────────────────────────────
        A lone SKEW=150 is weak evidence. What matters is spot calm + ordinary-vol
        calm + the tail-option market disagreeing, confirmed by breadth and credit. -->
-  <div class="mt-4 border-t border-slate-800 pt-3">
+  <div class="mt-4 border-t border-slate-200 dark:border-slate-800 pt-3">
     <div class="flex items-start justify-between gap-2 mb-2">
       <div>
-        <h3 class="text-xs font-semibold text-slate-300" data-i18n="markets.skew_div_title">Cross-market divergence check</h3>
-        <p class="text-[10px] text-slate-400 mt-0.5" data-i18n="markets.skew_div_desc">Spot market calm + ordinary vol calm + tail market disagreeing. Far stronger evidence than SKEW=150 alone.</p>
+        <h3 class="text-xs font-semibold text-slate-600 dark:text-slate-300" data-i18n="markets.skew_div_title">Cross-market divergence check</h3>
+        <p class="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5" data-i18n="markets.skew_div_desc">Spot market calm + ordinary vol calm + tail market disagreeing. Far stronger evidence than SKEW=150 alone.</p>
       </div>
-      <span id="skewDivScore" class="text-[11px] px-2 py-0.5 rounded font-semibold bg-slate-800 text-slate-400 shrink-0">—</span>
+      <span id="skewDivScore" class="text-[11px] px-2 py-0.5 rounded font-semibold bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 shrink-0">—</span>
     </div>
     <div id="skewDivRows" class="space-y-0.5"></div>
     <p id="skewDivVerdict" class="text-[11px] mt-2 px-2.5 py-1.5 rounded-lg hidden"></p>
 
     <!-- Playbook: what the combination licenses, and what it does not. -->
-    <div class="mt-2 bg-slate-800/40 rounded-lg px-3 py-2 text-[11px] text-slate-400 leading-relaxed">
-      <p class="font-semibold text-slate-300 mb-1" data-i18n="markets.skew_div_play_title">If this fires: cut risk budget one notch — don't go short</p>
-      <p class="mb-1"><span class="font-mono text-sky-300">100% risk-on → 90–95%</span></p>
+    <div class="mt-2 bg-slate-100/40 dark:bg-slate-800/40 rounded-lg px-3 py-2 text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+      <p class="font-semibold text-slate-600 dark:text-slate-300 mb-1" data-i18n="markets.skew_div_play_title">If this fires: cut risk budget one notch — don't go short</p>
+      <p class="mb-1"><span class="font-mono text-sky-700 dark:text-sky-300">100% risk-on → 90–95%</span></p>
       <p class="mb-1" data-i18n="markets.skew_div_play_trim">Trim: leverage · high beta · crowded tech/semiconductor exposure · short-volatility positions.</p>
-      <p class="text-slate-400" data-i18n="markets.skew_div_play_not">Not: "liquidate everything and wait for the crash."</p>
+      <p class="text-slate-500 dark:text-slate-400" data-i18n="markets.skew_div_play_not">Not: "liquidate everything and wait for the crash."</p>
     </div>
   </div>
 
   <!-- ── Interpretation guide ──────────────────────────────────────── -->
-  <div class="mt-3 border-t border-slate-800 pt-3">
+  <div class="mt-3 border-t border-slate-200 dark:border-slate-800 pt-3">
     <button onclick="_toggleSkewGuide()" id="skewGuideBtn"
-            class="flex items-center gap-1.5 text-[11px] text-slate-500 hover:text-slate-300 transition mb-2">
+            class="flex items-center gap-1.5 text-[11px] text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 transition mb-2">
       <span id="skewGuideChevron" class="text-[9px]">▶</span>
       <span data-i18n="markets.skew_guide_toggle">How to read this signal</span>
     </button>
-    <div id="skewGuide" class="hidden space-y-2 text-[11px] text-slate-400 leading-relaxed">
+    <div id="skewGuide" class="hidden space-y-2 text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
 
       <!-- What they measure -->
-      <div class="bg-slate-800/50 rounded-lg px-3 py-2">
-        <p class="font-semibold text-slate-300 mb-1" data-i18n="markets.skew_guide_what_title">① What each measures</p>
+      <div class="bg-slate-100/50 dark:bg-slate-800/50 rounded-lg px-3 py-2">
+        <p class="font-semibold text-slate-600 dark:text-slate-300 mb-1" data-i18n="markets.skew_guide_what_title">① What each measures</p>
         <p data-i18n="markets.skew_guide_what_body">VIX = implied volatility for the next 30 days (everyday risk). SKEW = premium for deep OTM puts (tail insurance). Low VIX + High SKEW means: everyday calm, but catastrophe insurance is expensive.</p>
       </div>
 
       <!-- 4-layer framework -->
-      <div class="bg-slate-800/50 rounded-lg px-3 py-2">
-        <p class="font-semibold text-slate-300 mb-1" data-i18n="markets.skew_guide_read_title">② How to read it (4 layers)</p>
+      <div class="bg-slate-100/50 dark:bg-slate-800/50 rounded-lg px-3 py-2">
+        <p class="font-semibold text-slate-600 dark:text-slate-300 mb-1" data-i18n="markets.skew_guide_read_title">② How to read it (4 layers)</p>
         <ul class="space-y-1 list-none">
-          <li><span class="text-sky-400 font-semibold" data-i18n="markets.skew_guide_layer1_label">Percentile, not absolute —</span> <span data-i18n="markets.skew_guide_layer1">SKEW &gt;140–145 is notable; compare to its 1–3 year percentile range, not a fixed number.</span></li>
-          <li><span class="text-sky-400 font-semibold" data-i18n="markets.skew_guide_layer2_label">VIX must truly be low —</span> <span data-i18n="markets.skew_guide_layer2">Divergence only matters when VIX is 12–18. If VIX is already 25+, this is broad risk-off, not a divergence.</span></li>
-          <li><span class="text-sky-400 font-semibold" data-i18n="markets.skew_guide_layer3_label">Duration matters —</span> <span data-i18n="markets.skew_guide_layer3">A single-day SKEW spike is often noise (structured product flows). Sustained elevation over days/weeks carries more weight.</span></li>
-          <li><span class="text-sky-400 font-semibold" data-i18n="markets.skew_guide_layer4_label">Confirm with breadth —</span> <span data-i18n="markets.skew_guide_layer4">High SKEW + low VIX + widening credit spreads + narrowing market breadth = fragile calm. If credit is stable and breadth is healthy, tail insurance may just be expensive, not predictive.</span></li>
+          <li><span class="text-sky-700 dark:text-sky-400 font-semibold" data-i18n="markets.skew_guide_layer1_label">Percentile, not absolute —</span> <span data-i18n="markets.skew_guide_layer1">SKEW &gt;140–145 is notable; compare to its 1–3 year percentile range, not a fixed number.</span></li>
+          <li><span class="text-sky-700 dark:text-sky-400 font-semibold" data-i18n="markets.skew_guide_layer2_label">VIX must truly be low —</span> <span data-i18n="markets.skew_guide_layer2">Divergence only matters when VIX is 12–18. If VIX is already 25+, this is broad risk-off, not a divergence.</span></li>
+          <li><span class="text-sky-700 dark:text-sky-400 font-semibold" data-i18n="markets.skew_guide_layer3_label">Duration matters —</span> <span data-i18n="markets.skew_guide_layer3">A single-day SKEW spike is often noise (structured product flows). Sustained elevation over days/weeks carries more weight.</span></li>
+          <li><span class="text-sky-700 dark:text-sky-400 font-semibold" data-i18n="markets.skew_guide_layer4_label">Confirm with breadth —</span> <span data-i18n="markets.skew_guide_layer4">High SKEW + low VIX + widening credit spreads + narrowing market breadth = fragile calm. If credit is stable and breadth is healthy, tail insurance may just be expensive, not predictive.</span></li>
         </ul>
       </div>
 
       <!-- Yellow flag not red flag -->
-      <div class="bg-amber-900/20 border border-amber-800/40 rounded-lg px-3 py-2">
-        <p class="font-semibold text-amber-300 mb-1" data-i18n="markets.skew_guide_flag_title">⚠ Yellow flag, not red flag</p>
+      <div class="bg-amber-50 dark:bg-amber-900/20 border border-amber-200/40 dark:border-amber-800/40 rounded-lg px-3 py-2">
+        <p class="font-semibold text-amber-700 dark:text-amber-300 mb-1" data-i18n="markets.skew_guide_flag_title">⚠ Yellow flag, not red flag</p>
         <p data-i18n="markets.skew_guide_flag_body">High SKEW can persist for weeks while the index keeps rising. It's a risk thermometer, not a timing signal. Use it to adjust risk budget and check concentrated positions — not to call a top.</p>
       </div>
 
       <!-- Common mistakes -->
-      <div class="bg-slate-800/50 rounded-lg px-3 py-2">
-        <p class="font-semibold text-slate-300 mb-1" data-i18n="markets.skew_guide_mistakes_title">✗ Common mistakes</p>
+      <div class="bg-slate-100/50 dark:bg-slate-800/50 rounded-lg px-3 py-2">
+        <p class="font-semibold text-slate-600 dark:text-slate-300 mb-1" data-i18n="markets.skew_guide_mistakes_title">✗ Common mistakes</p>
         <ul class="space-y-0.5 list-none">
           <li data-i18n="markets.skew_guide_mistake1">High SKEW ≠ crash imminent — it may just reflect structured product hedging or options supply/demand.</li>
           <li data-i18n="markets.skew_guide_mistake2">Deep OTM puts are already expensive when SKEW is high — buying them at this moment is usually poor timing.</li>
@@ -428,26 +428,26 @@
 </div>
 
 <!-- ── Equity Risk Premium card ─────────────────────────────────────── -->
-<div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 fade-up mb-6" id="erpCard">
+<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 fade-up mb-6" id="erpCard">
   <div class="flex items-center justify-between mb-1">
-    <h3 class="text-sm font-semibold text-slate-300" data-i18n="markets.erp_title">Equity Risk Premium</h3>
-    <span class="text-[10px] text-slate-600" data-i18n="markets.erp_formula">ERP = S&amp;P Earnings Yield – 10Y</span>
+    <h3 class="text-sm font-semibold text-slate-600 dark:text-slate-300" data-i18n="markets.erp_title">Equity Risk Premium</h3>
+    <span class="text-[10px] text-slate-500 dark:text-slate-600" data-i18n="markets.erp_formula">ERP = S&amp;P Earnings Yield – 10Y</span>
   </div>
   <div class="flex items-end gap-3">
-    <div id="erpValue" class="text-2xl font-bold font-mono text-slate-100">—</div>
+    <div id="erpValue" class="text-2xl font-bold font-mono text-slate-800 dark:text-slate-100">—</div>
     <div id="erpLabel" class="text-xs text-slate-500 pb-1"></div>
   </div>
-  <p class="text-[11px] text-slate-600 mt-2" data-i18n="markets.erp_note">Above 3% = stocks attractive vs bonds. Below 1% = bonds competitive. Negative = bonds preferred.</p>
+  <p class="text-[11px] text-slate-500 dark:text-slate-600 mt-2" data-i18n="markets.erp_note">Above 3% = stocks attractive vs bonds. Below 1% = bonds competitive. Negative = bonds preferred.</p>
 
   {# Representative ETFs for each side of the ERP argument, with what they have
      actually returned. The side the current reading favours is highlighted; both
      are always shown, because the comparison is the point and hiding the losing
      side would turn a valuation reading into a tip. #}
-  <div id="erpEtf" class="mt-4 pt-3 border-t border-slate-800" style="display:none">
+  <div id="erpEtf" class="mt-4 pt-3 border-t border-slate-200 dark:border-slate-800" style="display:none">
     <div class="flex items-baseline justify-between mb-2">
       <p class="text-[10px] font-semibold tracking-widest uppercase text-slate-500"
          data-i18n="markets.erp_etf_title">Representative ETFs</p>
-      <p class="text-[10px] text-slate-600">
+      <p class="text-[10px] text-slate-500 dark:text-slate-600">
         <span data-i18n="markets.erp_etf_basis">Total return · 3Y/5Y annualised</span>
         <span id="erpEtfAsof" class="ml-1"></span>
       </p>
@@ -456,7 +456,7 @@
       <div id="erpEtfStocks"></div>
       <div id="erpEtfBonds"></div>
     </div>
-    <p class="text-[10px] text-slate-600 mt-2" data-i18n="markets.erp_etf_disclaimer">
+    <p class="text-[10px] text-slate-500 dark:text-slate-600 mt-2" data-i18n="markets.erp_etf_disclaimer">
       Past returns, not a forecast or a recommendation to buy.
     </p>
   </div>
@@ -466,16 +466,16 @@
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6 fade-up">
 
   <!-- AAII Sentiment Survey card -->
-  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-6">
+  <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 sm:p-6">
     <div class="flex items-start justify-between mb-4">
       <div>
-        <h2 class="text-base font-semibold text-slate-200" data-i18n="markets.aaii_title">AAII Sentiment</h2>
+        <h2 class="text-base font-semibold text-slate-700 dark:text-slate-200" data-i18n="markets.aaii_title">AAII Sentiment</h2>
         <p class="text-xs text-slate-500 mt-0.5" data-i18n="markets.aaii_desc">AAII Investor Sentiment Survey — weekly</p>
       </div>
       <div class="flex items-center gap-1">
         <div id="aaiiBadge" class="text-right"></div>
         <button onclick="expandMktsChart('aaii')" title="Expand"
-                class="text-slate-500 hover:text-slate-200 transition p-1 rounded-lg hover:bg-slate-800 shrink-0">
+                class="text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 transition p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 shrink-0">
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                   d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"/>
@@ -483,7 +483,7 @@
         </button>
       </div>
     </div>
-    <div id="aaiiLoading" class="text-xs text-slate-600 py-2" data-i18n="markets.loading">Loading…</div>
+    <div id="aaiiLoading" class="text-xs text-slate-500 dark:text-slate-600 py-2" data-i18n="markets.loading">Loading…</div>
     <div id="aaiiBody" style="display:none">
       <!-- Bull/Bear/Neutral bars -->
       <div class="space-y-3 mb-4" id="aaiiBars"></div>
@@ -493,11 +493,11 @@
       <div class="chart-container mt-3" style="height:80px">
         <canvas id="aaiiBullBearSpread"></canvas>
       </div>
-      <p class="text-[10px] text-slate-600 mt-1" data-i18n="markets.aaii_spread_desc">Spread = Bull% − Bear%. Positive = bullish majority; <span class="text-rose-400">&lt;0 = bearish majority</span> (historically a contrarian buy signal)</p>
+      <p class="text-[10px] text-slate-500 dark:text-slate-600 mt-1" data-i18n="markets.aaii_spread_desc">Spread = Bull% − Bear%. Positive = bullish majority; <span class="text-rose-700 dark:text-rose-400">&lt;0 = bearish majority</span> (historically a contrarian buy signal)</p>
       <!-- AAII Spread vs S&P 500 (collapsible) -->
-      <div id="aaiiSpySection" class="mt-3 border-t border-slate-800 pt-3">
+      <div id="aaiiSpySection" class="mt-3 border-t border-slate-200 dark:border-slate-800 pt-3">
         <button onclick="_toggleAaiiSpy()" id="aaiiSpyToggle"
-          class="text-[11px] text-slate-500 hover:text-slate-300 transition flex items-center gap-1">
+          class="text-[11px] text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 transition flex items-center gap-1">
           <span id="aaiiSpyChevron">▶</span> <span data-i18n="markets.aaii_spy_toggle">AAII Sentiment vs S&P 500</span>
         </button>
         <div id="aaiiSpyChart" class="chart-container mt-3 hidden" style="height:160px">
@@ -508,16 +508,16 @@
   </div>
 
   <!-- Put/Call Ratio card -->
-  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-6">
+  <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 sm:p-6">
     <div class="flex items-start justify-between mb-4">
       <div>
-        <h2 class="text-base font-semibold text-slate-200" data-i18n="markets.pcr_title">Put/Call Ratio</h2>
+        <h2 class="text-base font-semibold text-slate-700 dark:text-slate-200" data-i18n="markets.pcr_title">Put/Call Ratio</h2>
         <p class="text-xs text-slate-500 mt-0.5" data-i18n="markets.pcr_desc">CBOE Equity Put/Call Ratio — options sentiment</p>
       </div>
       <div class="flex items-center gap-1">
         <div id="pcrBadge" class="text-right"></div>
         <button onclick="expandMktsChart('pcr')" title="Expand"
-                class="text-slate-500 hover:text-slate-200 transition p-1 rounded-lg hover:bg-slate-800 shrink-0">
+                class="text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 transition p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 shrink-0">
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                   d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"/>
@@ -525,7 +525,7 @@
         </button>
       </div>
     </div>
-    <div id="pcrLoading" class="text-xs text-slate-600 py-2" data-i18n="markets.loading">Loading…</div>
+    <div id="pcrLoading" class="text-xs text-slate-500 dark:text-slate-600 py-2" data-i18n="markets.loading">Loading…</div>
     <div id="pcrBody" style="display:none">
       <!-- Gauge bar: <0.6 bullish, 0.6-0.8 neutral, >0.8 bearish -->
       <div class="mb-4">
@@ -550,11 +550,11 @@
   </div>
 
   <!-- Sector ETF performance -->
-  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-6">
+  <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 sm:p-6">
     <div class="flex items-center justify-between mb-4">
-      <h2 class="text-base font-semibold text-slate-200" data-i18n="markets.sector_perf">Sector Performance</h2>
+      <h2 class="text-base font-semibold text-slate-700 dark:text-slate-200" data-i18n="markets.sector_perf">Sector Performance</h2>
       <button onclick="expandMktsChart('sectors')" title="Expand"
-              class="text-slate-600 hover:text-slate-300 transition p-1 rounded-lg hover:bg-slate-800 shrink-0">
+              class="text-slate-500 dark:text-slate-600 hover:text-slate-600 dark:hover:text-slate-300 transition p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 shrink-0">
         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                 d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"/>
@@ -572,34 +572,34 @@
 </div>
 
 <!-- Sector Rotation Heatmap -->
-<div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up mb-6" id="sectorGridSection">
+<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6 fade-up mb-6" id="sectorGridSection">
   <div class="mb-3">
-    <h2 class="text-base font-semibold text-slate-200" data-i18n="markets.sector_rot_title">Sector Rotation — vs S&amp;P 500 Performance</h2>
+    <h2 class="text-base font-semibold text-slate-700 dark:text-slate-200" data-i18n="markets.sector_rot_title">Sector Rotation — vs S&amp;P 500 Performance</h2>
     <p class="text-xs text-slate-500 mt-0.5" data-i18n="markets.sector_rot_desc">Green = outperforming S&amp;P 500, Red = underperforming. Shows rotation signals across multiple time horizons.</p>
   </div>
   <div id="sectorGridTable" class="overflow-x-auto"></div>
 </div>
 
 <!-- Sector Ranking Leaderboard -->
-<div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up mb-6" id="sectorRankingSection">
+<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 fade-up mb-6" id="sectorRankingSection">
   <div class="flex items-baseline gap-3 mb-3">
-    <h2 class="text-base font-semibold text-slate-200" data-i18n="markets.sector_rank_title">Sector Rotation Ranking</h2>
+    <h2 class="text-base font-semibold text-slate-700 dark:text-slate-200" data-i18n="markets.sector_rank_title">Sector Rotation Ranking</h2>
     <span class="text-xs text-slate-500" data-i18n="markets.sector_rank_desc">Composite momentum score (1M × 30% + 6M × 70%)</span>
   </div>
   <div id="sectorRankingTable" class="overflow-x-auto">
-    <div class="text-xs text-slate-600 animate-pulse">Loading sector ranking…</div>
+    <div class="text-xs text-slate-500 dark:text-slate-600 animate-pulse">Loading sector ranking…</div>
   </div>
 </div>
 
 <!-- ── VIX vs PCR Correlation ──────────────────────────────────────────── -->
-<div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up mb-6" id="vixPcrCorrelSection">
+<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 fade-up mb-6" id="vixPcrCorrelSection">
   <div class="mb-3">
-    <h3 class="text-sm font-semibold text-slate-300" data-i18n="markets.vix_pcr_title">VIX vs Put/Call Ratio — Correlation</h3>
+    <h3 class="text-sm font-semibold text-slate-600 dark:text-slate-300" data-i18n="markets.vix_pcr_title">VIX vs Put/Call Ratio — Correlation</h3>
     <p class="text-xs text-slate-500 mt-0.5" data-i18n="markets.vix_pcr_desc">When VIX spikes but PCR stays low, hedging demand lags — often a signal that complacency persists. Divergence (one high, one low) = contrarian warning.</p>
   </div>
   <div class="flex items-center gap-3 mb-2 text-xs">
-    <span class="flex items-center gap-1 text-rose-400"><span class="w-3 h-0.5 bg-rose-400 inline-block"></span> VIX</span>
-    <span class="flex items-center gap-1 text-amber-400"><span class="w-3 h-0.5 border-dashed border border-amber-400 inline-block"></span> Put/Call Ratio</span>
+    <span class="flex items-center gap-1 text-rose-700 dark:text-rose-400"><span class="w-3 h-0.5 bg-rose-400 inline-block"></span> VIX</span>
+    <span class="flex items-center gap-1 text-amber-700 dark:text-amber-400"><span class="w-3 h-0.5 border-dashed border border-amber-400 inline-block"></span> Put/Call Ratio</span>
   </div>
   <div class="chart-container" style="height:200px">
     <canvas id="vixPcrChart"></canvas>
@@ -607,10 +607,10 @@
 </div>
 
 <!-- ── Growth vs Broad Market Rotation ──────────────────────── -->
-<div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up mb-6" id="rotationSection">
+<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6 fade-up mb-6" id="rotationSection">
   <div class="flex items-start justify-between mb-3">
     <div>
-      <h2 class="text-base font-semibold text-slate-200" data-i18n="markets.growth_rot_title">Growth vs Broad Market Rotation</h2>
+      <h2 class="text-base font-semibold text-slate-700 dark:text-slate-200" data-i18n="markets.growth_rot_title">Growth vs Broad Market Rotation</h2>
       <p class="text-xs text-slate-500 mt-0.5" data-i18n="markets.growth_rot_desc">Nasdaq/S&amp;P ratio — rising = growth outperforming, falling = rotation to value/defensives</p>
     </div>
     <span id="rotationBadge" class="text-xs px-2 py-0.5 rounded font-semibold hidden"></span>
@@ -621,17 +621,17 @@
 </div>
 
 <!-- ── Crypto ──────────────────────────────────────────────────────────── -->
-<div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 fade-up mb-4" id="cryptoCard">
-  <h3 class="text-sm font-semibold text-slate-300 mb-3" data-i18n="markets.crypto_title">Crypto</h3>
+<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 fade-up mb-4" id="cryptoCard">
+  <h3 class="text-sm font-semibold text-slate-600 dark:text-slate-300 mb-3" data-i18n="markets.crypto_title">Crypto</h3>
   <div class="grid grid-cols-2 gap-3" id="cryptoGrid">
-    <div class="bg-slate-800/40 rounded-xl p-3">
+    <div class="bg-slate-100/40 dark:bg-slate-800/40 rounded-xl p-3">
       <div class="text-xs text-slate-500 mb-0.5" data-i18n="markets.btc_label">Bitcoin</div>
-      <div id="btcPrice" class="text-base font-bold font-mono text-amber-400">—</div>
+      <div id="btcPrice" class="text-base font-bold font-mono text-amber-700 dark:text-amber-400">—</div>
       <div id="btcChg" class="text-xs font-medium mt-0.5">—</div>
     </div>
-    <div class="bg-slate-800/40 rounded-xl p-3">
+    <div class="bg-slate-100/40 dark:bg-slate-800/40 rounded-xl p-3">
       <div class="text-xs text-slate-500 mb-0.5" data-i18n="markets.eth_label">Ethereum</div>
-      <div id="ethPrice" class="text-base font-bold font-mono text-sky-400">—</div>
+      <div id="ethPrice" class="text-base font-bold font-mono text-sky-700 dark:text-sky-400">—</div>
       <div id="ethChg" class="text-xs font-medium mt-0.5">—</div>
     </div>
   </div>
@@ -639,7 +639,7 @@
     <div class="mt-3 chart-container" style="height:180px" id="cryptoChartWrap">
       <canvas id="cryptoChart"></canvas>
     </div>
-    <p class="text-[10px] text-slate-600 mt-2">
+    <p class="text-[10px] text-slate-500 dark:text-slate-600 mt-2">
       <span data-i18n="markets.btc_halving_note">▼ Bitcoin halving dates marked. Next halving: ~April 2028.</span>
     </p>
 </div>
@@ -648,16 +648,16 @@
 <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6 fade-up">
 
   <!-- Gold/Silver Ratio -->
-  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-6">
+  <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 sm:p-6">
     <div class="flex items-start justify-between mb-4">
       <div>
-        <h2 class="text-base font-semibold text-slate-200" data-i18n="markets.gs_title">Gold / Silver Ratio</h2>
+        <h2 class="text-base font-semibold text-slate-700 dark:text-slate-200" data-i18n="markets.gs_title">Gold / Silver Ratio</h2>
         <p class="text-xs text-slate-500 mt-0.5" data-i18n="markets.gs_desc">oz of silver per oz of gold — higher = gold relatively expensive</p>
       </div>
       <div class="flex items-center gap-1">
         <div id="gsBadge" class="text-right"></div>
         <button onclick="expandMktsChart('gs')" title="Expand"
-                class="text-slate-500 hover:text-slate-200 transition p-1 rounded-lg hover:bg-slate-800 shrink-0">
+                class="text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 transition p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 shrink-0">
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                   d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"/>
@@ -665,7 +665,7 @@
         </button>
       </div>
     </div>
-    <div id="gsLoading" class="text-xs text-slate-600 py-2">Loading…</div>
+    <div id="gsLoading" class="text-xs text-slate-500 dark:text-slate-600 py-2">Loading…</div>
     <div id="gsBody" style="display:none">
       <div class="grid grid-cols-3 gap-2 mb-4" id="gsStats"></div>
       <div style="height:140px"><canvas id="gsChart"></canvas></div>
@@ -673,16 +673,16 @@
   </div>
 
   <!-- Gold/Copper Ratio -->
-  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-6">
+  <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 sm:p-6">
     <div class="flex items-start justify-between mb-4">
       <div>
-        <h2 class="text-base font-semibold text-slate-200" data-i18n="markets.gc_title">Gold / Copper Ratio</h2>
+        <h2 class="text-base font-semibold text-slate-700 dark:text-slate-200" data-i18n="markets.gc_title">Gold / Copper Ratio</h2>
         <p class="text-xs text-slate-500 mt-0.5" data-i18n="markets.gc_desc">gold ($/oz) ÷ copper ($/lb) — economic risk indicator</p>
       </div>
       <div class="flex items-center gap-1">
         <div id="gcBadge" class="text-right"></div>
         <button onclick="expandMktsChart('gc')" title="Expand"
-                class="text-slate-500 hover:text-slate-200 transition p-1 rounded-lg hover:bg-slate-800 shrink-0">
+                class="text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 transition p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 shrink-0">
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                   d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"/>
@@ -690,7 +690,7 @@
         </button>
       </div>
     </div>
-    <div id="gcLoading" class="text-xs text-slate-600 py-2">Loading…</div>
+    <div id="gcLoading" class="text-xs text-slate-500 dark:text-slate-600 py-2">Loading…</div>
     <div id="gcBody" style="display:none">
       <div class="grid grid-cols-3 gap-2 mb-4" id="gcStats"></div>
       <div style="height:140px"><canvas id="gcChart"></canvas></div>
@@ -700,15 +700,15 @@
 </div>
 
 <!-- ── Credit Spread (HYG / TLT) ──────────────────────────────────────── -->
-<div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up mb-6" id="creditSpreadSection">
+<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6 fade-up mb-6" id="creditSpreadSection">
   <div class="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-0 sm:justify-between mb-3">
     <div>
-      <h2 class="text-base font-semibold text-slate-200" data-i18n="markets.credit_title">Credit Spread (HYG / TLT)</h2>
+      <h2 class="text-base font-semibold text-slate-700 dark:text-slate-200" data-i18n="markets.credit_title">Credit Spread (HYG / TLT)</h2>
       <p class="text-xs text-slate-500" data-i18n="markets.credit_desc">HYG ÷ TLT ratio — rising = risk-on (credit outperforms treasuries), falling = risk-off / credit stress</p>
     </div>
     <div class="flex items-center gap-2 flex-wrap justify-end">
-      <span id="hygCard" class="flex items-center gap-1.5 text-xs text-slate-400"></span>
-      <span id="tltCard" class="flex items-center gap-1.5 text-xs text-slate-400 mr-1"></span>
+      <span id="hygCard" class="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400"></span>
+      <span id="tltCard" class="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 mr-1"></span>
       <div class="flex gap-1" id="creditRangeBtns">
         <button class="range-btn active" data-period="1y" onclick="loadCreditSpread('1y')">1Y</button>
         <button class="range-btn"        data-period="2y" onclick="loadCreditSpread('2y')">2Y</button>
@@ -724,12 +724,12 @@
 </div>
 
 <!-- ── Goldman CTA Positioning Tracker ────────────────────────────────── -->
-<div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up mb-6" id="ctaPositioningSection">
+<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6 fade-up mb-6" id="ctaPositioningSection">
   <div class="flex items-start justify-between gap-3 mb-3">
     <div>
       <div class="flex items-center gap-2 flex-wrap">
-        <h2 class="text-base font-semibold text-slate-200" data-i18n="markets.cta_title">Goldman Sachs CTA Positioning Tracker</h2>
-        <span id="ctaAsOf" class="text-[10px] px-2 py-0.5 rounded-full border border-slate-700 text-slate-500"></span>
+        <h2 class="text-base font-semibold text-slate-700 dark:text-slate-200" data-i18n="markets.cta_title">Goldman Sachs CTA Positioning Tracker</h2>
+        <span id="ctaAsOf" class="text-[10px] px-2 py-0.5 rounded-full border border-slate-300 dark:border-slate-700 text-slate-500"></span>
       </div>
       <p class="text-xs text-slate-500 mt-0.5" data-i18n="markets.cta_desc">Dated Goldman estimates from public reporting, monitored against the live S&amp;P 500.</p>
       <!-- Shown only once the snapshot has aged. There is no API behind this card
@@ -741,7 +741,7 @@
       <p id="ctaStale" class="text-[11px] mt-1 hidden"></p>
     </div>
     <button onclick="expandMktsChart('cta')" title="Expand" data-i18n-title="markets.expand"
-            class="text-slate-500 hover:text-slate-200 transition p-1 rounded-lg hover:bg-slate-800 shrink-0">
+            class="text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 transition p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 shrink-0">
       <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
               d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"/>
@@ -749,28 +749,28 @@
     </button>
   </div>
 
-  <div id="ctaLoading" class="text-xs text-slate-600 py-3" data-i18n="markets.cta_loading">Loading CTA snapshots…</div>
+  <div id="ctaLoading" class="text-xs text-slate-500 dark:text-slate-600 py-3" data-i18n="markets.cta_loading">Loading CTA snapshots…</div>
   <div id="ctaBody" style="display:none">
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-2 mb-3">
       <div class="stat-card">
         <div class="stat-label" data-i18n="markets.cta_reported_position">Reported global equity position</div>
         <div id="ctaPositionValue" class="stat-val font-mono">—</div>
-        <div id="ctaPositionMeta" class="text-[10px] text-slate-600 mt-1"></div>
+        <div id="ctaPositionMeta" class="text-[10px] text-slate-500 dark:text-slate-600 mt-1"></div>
       </div>
       <div class="stat-card">
         <div class="stat-label" data-i18n="markets.cta_spx_spot">Live S&amp;P 500</div>
         <div id="ctaSpxValue" class="stat-val font-mono">—</div>
-        <div id="ctaSpxMeta" class="text-[10px] text-slate-600 mt-1"></div>
+        <div id="ctaSpxMeta" class="text-[10px] text-slate-500 dark:text-slate-600 mt-1"></div>
       </div>
       <div class="stat-card">
         <div class="stat-label" data-i18n="markets.cta_nearest_pivot">Nearest downside pivot</div>
         <div id="ctaNearestPivot" class="stat-val font-mono">—</div>
-        <div id="ctaNearestMeta" class="text-[10px] text-slate-600 mt-1"></div>
+        <div id="ctaNearestMeta" class="text-[10px] text-slate-500 dark:text-slate-600 mt-1"></div>
       </div>
       <div class="stat-card">
         <div class="stat-label" data-i18n="markets.cta_month_down">1-month downside flow</div>
-        <div id="ctaMonthDown" class="stat-val font-mono text-rose-400">—</div>
-        <div class="text-[10px] text-slate-600 mt-1" data-i18n="markets.cta_global_equities">global equities</div>
+        <div id="ctaMonthDown" class="stat-val font-mono text-rose-700 dark:text-rose-400">—</div>
+        <div class="text-[10px] text-slate-500 dark:text-slate-600 mt-1" data-i18n="markets.cta_global_equities">global equities</div>
       </div>
     </div>
 
@@ -780,7 +780,7 @@
       <div class="lg:col-span-2 min-w-0">
         <div class="flex items-center justify-between mb-1">
           <p class="text-xs text-slate-500" data-i18n="markets.cta_trigger_chart">S&amp;P 500 vs latest reported CTA pivots</p>
-          <span class="text-[10px] text-slate-600" data-i18n="markets.cta_trigger_note">Lines begin on the report date</span>
+          <span class="text-[10px] text-slate-500 dark:text-slate-600" data-i18n="markets.cta_trigger_note">Lines begin on the report date</span>
         </div>
         <div class="chart-container" style="height:230px"><canvas id="ctaTriggerChart"></canvas></div>
       </div>
@@ -797,29 +797,29 @@
          gap stays comparable across reports. Hidden until there are at least
          two readings, because one point is a dot and drawing it with an axis
          would imply a trend that does not exist yet. -->
-    <div id="ctaDistanceWrap" class="mt-4 pt-4 border-t border-slate-800" style="display:none">
+    <div id="ctaDistanceWrap" class="mt-4 pt-4 border-t border-slate-200 dark:border-slate-800" style="display:none">
       <div class="flex items-center justify-between mb-1">
         <p class="text-xs text-slate-500" data-i18n="markets.cta_distance_chart">S&amp;P 500 distance to each CTA pivot (%)</p>
-        <span id="ctaDistanceMeta" class="text-[10px] text-slate-600"></span>
+        <span id="ctaDistanceMeta" class="text-[10px] text-slate-500 dark:text-slate-600"></span>
       </div>
       <div class="chart-container" style="height:190px"><canvas id="ctaDistanceChart"></canvas></div>
-      <p class="text-[10px] text-slate-600 mt-1.5" data-i18n="markets.cta_distance_note">Zero is the pivot itself: below the line, mechanical selling has been triggered.</p>
+      <p class="text-[10px] text-slate-500 dark:text-slate-600 mt-1.5" data-i18n="markets.cta_distance_note">Zero is the pivot itself: below the line, mechanical selling has been triggered.</p>
     </div>
-    <div id="ctaDistanceCollecting" class="mt-4 pt-4 border-t border-slate-800 text-[11px] text-slate-600" style="display:none"></div>
+    <div id="ctaDistanceCollecting" class="mt-4 pt-4 border-t border-slate-200 dark:border-slate-800 text-[11px] text-slate-500 dark:text-slate-600" style="display:none"></div>
 
-    <div class="mt-4 pt-3 border-t border-slate-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5">
-      <p class="text-[10px] leading-relaxed text-slate-600" data-i18n="markets.cta_disclaimer">Goldman's model is proprietary. This is a dated public-report tracker, not a live Goldman feed or an independent estimate.</p>
+    <div class="mt-4 pt-3 border-t border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5">
+      <p class="text-[10px] leading-relaxed text-slate-500 dark:text-slate-600" data-i18n="markets.cta_disclaimer">Goldman's model is proprietary. This is a dated public-report tracker, not a live Goldman feed or an independent estimate.</p>
       <a id="ctaSource" href="#" target="_blank" rel="noopener noreferrer"
-         class="text-[10px] text-indigo-400 hover:text-indigo-300 whitespace-nowrap" data-i18n="markets.cta_source">View latest public source ↗</a>
+         class="text-[10px] text-indigo-700 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 whitespace-nowrap" data-i18n="markets.cta_source">View latest public source ↗</a>
     </div>
   </div>
 </div>
 
 <!-- Market Breadth -->
-<div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up mb-6" id="breadthSection">
+<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6 fade-up mb-6" id="breadthSection">
   <div class="flex items-start justify-between mb-3">
     <div>
-      <h2 class="text-base font-semibold text-slate-200" data-i18n="markets.breadth_title">Market Breadth &amp; Concentration</h2>
+      <h2 class="text-base font-semibold text-slate-700 dark:text-slate-200" data-i18n="markets.breadth_title">Market Breadth &amp; Concentration</h2>
       <p class="text-xs text-slate-500 mt-0.5" data-i18n="markets.breadth_desc">Is the rally broad or narrow? High concentration risk = fragile bull market.</p>
     </div>
     <div class="flex gap-1" id="breadthRangeBtns">
@@ -836,11 +836,11 @@
            valued in text, so identity is never carried by colour alone. -->
       <div id="breadthMaLegend" class="flex flex-wrap items-center gap-x-2.5 gap-y-1 mb-1.5"></div>
       <div class="chart-container" style="height:196px"><canvas id="breadth50Chart"></canvas></div>
-      <p class="text-[10px] text-slate-600 mt-1.5" id="breadthFootnote"></p>
+      <p class="text-[10px] text-slate-500 dark:text-slate-600 mt-1.5" id="breadthFootnote"></p>
     </div>
     <div>
       <p class="text-xs text-slate-500 mb-1" data-i18n="markets.breadth_rsp_label">Equal-Weight / Cap-Weight (RSP/SPY) Ratio</p>
-      <p class="text-[10px] text-slate-600 mb-1" data-i18n="markets.breadth_rsp_note">Rising = breadth expanding. Falling = mega-cap concentration increasing.</p>
+      <p class="text-[10px] text-slate-500 dark:text-slate-600 mb-1" data-i18n="markets.breadth_rsp_note">Rising = breadth expanding. Falling = mega-cap concentration increasing.</p>
       <div class="chart-container" style="height:196px"><canvas id="rspSpyChart"></canvas></div>
     </div>
   </div>
@@ -850,10 +850,10 @@
        a different and more immediate question. Populated from the same download,
        so it costs nothing extra, and it is the only place on this page where the
        Nasdaq-100 gets a breadth reading of its own. -->
-  <div id="advDecBlock" class="mt-4 pt-4 border-t border-slate-800" style="display:none">
+  <div id="advDecBlock" class="mt-4 pt-4 border-t border-slate-200 dark:border-slate-800" style="display:none">
     <p class="text-xs text-slate-500 mb-2" data-i18n="markets.advdec_label">Advancers vs Decliners — last completed session</p>
     <div id="advDecRows" class="grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
-    <p class="text-[10px] text-slate-600 mt-2" id="advDecNote"></p>
+    <p class="text-[10px] text-slate-500 dark:text-slate-600 mt-2" id="advDecNote"></p>
   </div>
 </div>
 
@@ -861,16 +861,16 @@
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6 fade-up">
 
   <!-- US Treasury Yield Curve -->
-  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-6">
+  <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 sm:p-6">
     <div class="flex items-start justify-between mb-4">
       <div>
-        <h2 class="text-base font-semibold text-slate-200" data-i18n="markets.us_yield_title">US Treasury Yield Curve</h2>
+        <h2 class="text-base font-semibold text-slate-700 dark:text-slate-200" data-i18n="markets.us_yield_title">US Treasury Yield Curve</h2>
         <p class="text-xs text-slate-500 mt-0.5" data-i18n="markets.us_yield_desc">Current yields by maturity — inverted curve signals recession risk</p>
       </div>
       <div class="flex items-center gap-1">
         <div id="usYieldBadge" class="text-right"></div>
         <button onclick="expandMktsChart('usYield')" title="Expand"
-                class="text-slate-500 hover:text-slate-200 transition p-1 rounded-lg hover:bg-slate-800 shrink-0">
+                class="text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 transition p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 shrink-0">
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                   d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"/>
@@ -878,7 +878,7 @@
         </button>
       </div>
     </div>
-    <div id="usYieldLoading" class="text-xs text-slate-600 py-2">Loading…</div>
+    <div id="usYieldLoading" class="text-xs text-slate-500 dark:text-slate-600 py-2">Loading…</div>
     <div id="usYieldBody" style="display:none">
       <div id="usYieldStats" class="flex gap-3 flex-wrap mb-3"></div>
       <div class="relative h-44"><canvas id="usYieldChart"></canvas></div>
@@ -890,16 +890,16 @@
   </div>
 
   <!-- CN Treasury Yield Curve -->
-  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-6">
+  <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 sm:p-6">
     <div class="flex items-start justify-between mb-4">
       <div>
-        <h2 class="text-base font-semibold text-slate-200" data-i18n="markets.cn_yield_title">CN Treasury Yield Curve</h2>
+        <h2 class="text-base font-semibold text-slate-700 dark:text-slate-200" data-i18n="markets.cn_yield_title">CN Treasury Yield Curve</h2>
         <p class="text-xs text-slate-500 mt-0.5" data-i18n="markets.cn_yield_desc">Current CN government bond yields by maturity</p>
       </div>
       <div class="flex items-center gap-1">
         <div id="cnYieldBadge" class="text-right"></div>
         <button onclick="expandMktsChart('cnYield')" title="Expand"
-                class="text-slate-500 hover:text-slate-200 transition p-1 rounded-lg hover:bg-slate-800 shrink-0">
+                class="text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 transition p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 shrink-0">
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                   d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"/>
@@ -907,7 +907,7 @@
         </button>
       </div>
     </div>
-    <div id="cnYieldLoading" class="text-xs text-slate-600 py-2">Loading…</div>
+    <div id="cnYieldLoading" class="text-xs text-slate-500 dark:text-slate-600 py-2">Loading…</div>
     <div id="cnYieldBody" style="display:none">
       <div id="cnYieldStats" class="flex gap-3 flex-wrap mb-3"></div>
       <div class="relative h-44"><canvas id="cnYieldChart"></canvas></div>
@@ -920,16 +920,16 @@
 
 
   <!-- JP Treasury Yield Curve (JGB) -->
-  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-6">
+  <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 sm:p-6">
     <div class="flex items-start justify-between mb-4">
       <div>
-        <h2 class="text-base font-semibold text-slate-200" data-i18n="markets.jp_yield_title">JP Treasury Yield Curve</h2>
+        <h2 class="text-base font-semibold text-slate-700 dark:text-slate-200" data-i18n="markets.jp_yield_title">JP Treasury Yield Curve</h2>
         <p class="text-xs text-slate-500 mt-0.5" data-i18n="markets.jp_yield_desc">Japan Government Bond (JGB) yields — BoJ YCC policy shapes the short end</p>
       </div>
       <div class="flex items-center gap-1">
         <div id="jpYieldBadge" class="text-right"></div>
         <button onclick="expandMktsChart('jpYield')" title="Expand"
-                class="text-slate-500 hover:text-slate-200 transition p-1 rounded-lg hover:bg-slate-800 shrink-0">
+                class="text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 transition p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 shrink-0">
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                   d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"/>
@@ -937,7 +937,7 @@
         </button>
       </div>
     </div>
-    <div id="jpYieldLoading" class="text-xs text-slate-600 py-2">Loading…</div>
+    <div id="jpYieldLoading" class="text-xs text-slate-500 dark:text-slate-600 py-2">Loading…</div>
     <div id="jpYieldBody" style="display:none">
       <div id="jpYieldStats" class="flex gap-3 flex-wrap mb-3"></div>
       <div class="relative h-44"><canvas id="jpYieldChart"></canvas></div>
@@ -950,10 +950,10 @@
 </div>
 
 <!-- ── 10Y–2Y Spread (Recession Predictor) ──────────────────────── -->
-<div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up mb-6" id="yieldSpreadSection">
+<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6 fade-up mb-6" id="yieldSpreadSection">
   <div class="flex items-start justify-between mb-3">
     <div>
-      <h2 class="text-base font-semibold text-slate-200" data-i18n="markets.yield_spread_title">10Y – 2Y Treasury Spread</h2>
+      <h2 class="text-base font-semibold text-slate-700 dark:text-slate-200" data-i18n="markets.yield_spread_title">10Y – 2Y Treasury Spread</h2>
       <p class="text-xs text-slate-500 mt-0.5" data-i18n="markets.yield_spread_desc">Inversion (below 0) has preceded every US recession since 1978. Red shading = NBER-defined recessions.</p>
     </div>
     <div class="flex items-center gap-2">
@@ -965,18 +965,18 @@
       </div>
     </div>
   </div>
-  <div id="yieldSpreadLoading" class="text-xs text-slate-600 animate-pulse py-4 text-center">Loading spread data from FRED…</div>
+  <div id="yieldSpreadLoading" class="text-xs text-slate-500 dark:text-slate-600 animate-pulse py-4 text-center">Loading spread data from FRED…</div>
   <div class="chart-container hidden" style="height:200px" id="yieldSpreadChartWrap">
     <canvas id="yieldSpreadChart"></canvas>
   </div>
-  <p class="text-[11px] text-slate-600 mt-2">Current spread: <span id="spreadCurrent" class="font-mono font-semibold"></span> · Source: FRED (DGS10 – DGS2)</p>
+  <p class="text-[11px] text-slate-500 dark:text-slate-600 mt-2">Current spread: <span id="spreadCurrent" class="font-mono font-semibold"></span> · Source: FRED (DGS10 – DGS2)</p>
 </div>
 
 <!-- Global Markets 1Y Normalized -->
-<div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up mb-6" id="globalNormSection">
+<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6 fade-up mb-6" id="globalNormSection">
   <div class="flex items-start justify-between mb-3">
     <div>
-      <h2 class="text-base font-semibold text-slate-200" data-i18n="markets.global_title">Global Markets — Normalized</h2>
+      <h2 class="text-base font-semibold text-slate-700 dark:text-slate-200" data-i18n="markets.global_title">Global Markets — Normalized</h2>
       <p class="text-xs text-slate-500 mt-0.5" data-i18n="markets.global_desc">All major indices rebased to 100 at period start — compare relative performance at a glance.</p>
     </div>
     <div class="flex gap-1" id="globalNormBtns">
@@ -989,8 +989,8 @@
 </div>
 
 <!-- ── Per-index detail tabs ──────────────────────────────────────────── -->
-<div id="idxDetail" class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up">
-  <div class="flex gap-1 border-b border-slate-800 mb-5 -mx-4 sm:-mx-6 px-4 sm:px-6 overflow-x-auto">
+<div id="idxDetail" class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6 fade-up">
+  <div class="flex gap-1 border-b border-slate-200 dark:border-slate-800 mb-5 -mx-4 sm:-mx-6 px-4 sm:px-6 overflow-x-auto">
     <button class="idx-tab-btn active whitespace-nowrap" id="tabSpx"   onclick="switchIdx('spx')"   data-i18n="markets.tab_spx">S&amp;P 500</button>
     <button class="idx-tab-btn whitespace-nowrap"        id="tabIxic"  onclick="switchIdx('ixic')"  data-i18n="markets.tab_ixic">Nasdaq</button>
     <button class="idx-tab-btn whitespace-nowrap"        id="tabDji"   onclick="switchIdx('dji')"   data-i18n="markets.tab_dji">Dow Jones</button>
@@ -999,7 +999,7 @@
     <button class="idx-tab-btn whitespace-nowrap"        id="tabSse"   onclick="switchIdx('sse')"   data-i18n="markets.tab_sse">Shanghai</button>
     <button class="idx-tab-btn whitespace-nowrap"        id="tabTwii"  onclick="switchIdx('twii')"  data-i18n="markets.tab_twii">Taiwan</button>
     <button class="idx-tab-btn whitespace-nowrap"        id="tabKospi" onclick="switchIdx('kospi')" data-i18n="markets.tab_kospi">KOSPI</button>
-    <span class="self-center mx-1 h-5 w-px bg-slate-700/70" aria-hidden="true"></span>
+    <span class="self-center mx-1 h-5 w-px bg-slate-200/70 dark:bg-slate-700/70" aria-hidden="true"></span>
     <button class="idx-tab-btn whitespace-nowrap"        id="tabGold"   onclick="switchIdx('gold')"   data-i18n="markets.tab_gold">Gold</button>
     <button class="idx-tab-btn whitespace-nowrap"        id="tabSilver" onclick="switchIdx('silver')" data-i18n="markets.tab_silver">Silver</button>
     <button class="idx-tab-btn whitespace-nowrap"        id="tabOil"    onclick="switchIdx('oil')"    data-i18n="markets.tab_oil">Crude Oil</button>
@@ -1014,12 +1014,12 @@
   <div id="idxRangeBar" class="mt-3 hidden">
     <div class="flex items-center justify-between text-[10px] text-slate-500 mb-1">
       <span id="idxRangeLow">—</span>
-      <span class="text-slate-400 font-medium" id="idxRangeCurrent">—</span>
+      <span class="text-slate-500 dark:text-slate-400 font-medium" id="idxRangeCurrent">—</span>
       <span id="idxRangeHigh">—</span>
     </div>
-    <div class="relative h-2 bg-slate-800 rounded-full">
+    <div class="relative h-2 bg-slate-100 dark:bg-slate-800 rounded-full">
       <div class="absolute inset-y-0 left-0 bg-gradient-to-r from-rose-500 via-amber-400 to-emerald-500 rounded-full opacity-40" style="width:100%"></div>
-      <div id="idxRangeMarker" class="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-white shadow ring-2 ring-slate-900" style="left:50%"></div>
+      <div id="idxRangeMarker" class="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-white shadow ring-2 ring-slate-200 dark:ring-slate-900" style="left:50%"></div>
     </div>
     <div class="text-center text-[10px] text-slate-500 mt-1" id="idxRangePct"></div>
   </div>
@@ -1027,12 +1027,12 @@
   <!-- Technical indicators -->
   <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
     <!-- MA status -->
-    <div class="bg-slate-800/50 rounded-xl p-3">
+    <div class="bg-slate-100/50 dark:bg-slate-800/50 rounded-xl p-3">
       <p class="text-[10px] font-semibold uppercase tracking-widest text-slate-500 mb-2" data-i18n="markets.moving_avg">Moving Averages</p>
       <div id="maStatus" class="space-y-1.5 text-sm"></div>
     </div>
     <!-- RSI gauge -->
-    <div class="bg-slate-800/50 rounded-xl p-3">
+    <div class="bg-slate-100/50 dark:bg-slate-800/50 rounded-xl p-3">
       <p class="text-[10px] font-semibold uppercase tracking-widest text-slate-500 mb-2">RSI-14</p>
       <div id="rsiGauge"></div>
     </div>
@@ -1040,7 +1040,7 @@
 
   <!-- Chart + range buttons -->
   <div class="flex items-center justify-between mb-3">
-    <h3 class="text-sm font-semibold text-slate-300" data-i18n="markets.hist_title">Price History</h3>
+    <h3 class="text-sm font-semibold text-slate-600 dark:text-slate-300" data-i18n="markets.hist_title">Price History</h3>
     <div class="flex items-center gap-2">
       <div class="flex gap-1" id="idxRangeBtns">
       <button class="range-btn" data-period="1m"      onclick="switchIdxRange('1m')">1M</button>
@@ -1050,11 +1050,11 @@
       <button class="range-btn" data-period="monthly" onclick="switchIdxRange('monthly')">5Y</button>
       </div>
       <button id="idxBBToggle" onclick="_toggleIdxBB()"
-        class="text-[11px] px-2 py-0.5 rounded border border-slate-700 text-slate-500 hover:text-violet-400 hover:border-violet-700 transition">
+        class="text-[11px] px-2 py-0.5 rounded border border-slate-300 dark:border-slate-700 text-slate-500 hover:text-violet-700 dark:hover:text-violet-400 hover:border-violet-300 dark:hover:border-violet-700 transition">
         BB
       </button>
       <button onclick="expandMktsChart('idx')" title="Expand"
-              class="text-slate-600 hover:text-slate-300 transition p-1 rounded-lg hover:bg-slate-800">
+              class="text-slate-500 dark:text-slate-600 hover:text-slate-600 dark:hover:text-slate-300 transition p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800">
         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                 d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"/>
@@ -1065,18 +1065,18 @@
   <div style="height:320px"><canvas id="idxChart"></canvas></div>
 
   <!-- ── MACD ──────────────────────────────────────────────────────── -->
-  <div class="mt-5 pt-4 border-t border-slate-800">
+  <div class="mt-5 pt-4 border-t border-slate-200 dark:border-slate-800">
     <div class="flex items-center justify-between mb-2">
       <div>
-        <span class="text-sm font-semibold text-slate-300">MACD</span>
+        <span class="text-sm font-semibold text-slate-600 dark:text-slate-300">MACD</span>
         <span class="text-xs text-slate-500 ml-2" data-i18n="markets.macd_desc_full">12 / 26 / 9 — daily</span>
       </div>
       <div class="flex items-center gap-3 text-[11px]">
-        <span class="flex items-center gap-1 text-slate-400"><span class="w-3 h-0.5 inline-block" style="background:#38bdf8"></span>MACD</span>
-        <span class="flex items-center gap-1 text-slate-400"><span class="w-3 h-0.5 inline-block border-t border-dashed border-current"></span><span style="color:#fb923c" data-i18n="markets.macd_signal">Signal</span></span>
-        <span class="flex items-center gap-1 text-slate-400"><span class="w-3 h-3 inline-block rounded-sm" style="background:#6366f144"></span><span data-i18n="markets.macd_histogram">Histogram</span></span>
+        <span class="flex items-center gap-1 text-slate-500 dark:text-slate-400"><span class="w-3 h-0.5 inline-block" style="background:#38bdf8"></span>MACD</span>
+        <span class="flex items-center gap-1 text-slate-500 dark:text-slate-400"><span class="w-3 h-0.5 inline-block border-t border-dashed border-current"></span><span style="color:#fb923c" data-i18n="markets.macd_signal">Signal</span></span>
+        <span class="flex items-center gap-1 text-slate-500 dark:text-slate-400"><span class="w-3 h-3 inline-block rounded-sm" style="background:#6366f144"></span><span data-i18n="markets.macd_histogram">Histogram</span></span>
         <button onclick="expandMktsChart('macd')" title="Expand"
-                class="text-slate-600 hover:text-slate-300 transition p-1 rounded-lg hover:bg-slate-800">
+                class="text-slate-500 dark:text-slate-600 hover:text-slate-600 dark:hover:text-slate-300 transition p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800">
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                   d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"/>
@@ -1088,14 +1088,14 @@
   </div>
 
   <!-- ── RSI chart ─────────────────────────────────────────────────── -->
-  <div class="mt-5 pt-4 border-t border-slate-800">
+  <div class="mt-5 pt-4 border-t border-slate-200 dark:border-slate-800">
     <div class="flex items-center justify-between mb-2">
-      <span class="text-sm font-semibold text-slate-300">RSI-14</span>
+      <span class="text-sm font-semibold text-slate-600 dark:text-slate-300">RSI-14</span>
       <div class="flex items-center gap-3 text-[11px] text-slate-500">
-        <span class="text-rose-400" data-i18n="markets.rsi_overbought">70 Overbought</span>
-        <span class="text-emerald-400" data-i18n="markets.rsi_oversold">30 Oversold</span>
+        <span class="text-rose-700 dark:text-rose-400" data-i18n="markets.rsi_overbought">70 Overbought</span>
+        <span class="text-emerald-700 dark:text-emerald-400" data-i18n="markets.rsi_oversold">30 Oversold</span>
         <button onclick="expandMktsChart('rsi')" title="Expand"
-                class="text-slate-600 hover:text-slate-300 transition p-1 rounded-lg hover:bg-slate-800">
+                class="text-slate-500 dark:text-slate-600 hover:text-slate-600 dark:hover:text-slate-300 transition p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800">
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                   d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"/>
@@ -1107,19 +1107,19 @@
   </div>
 
   <!-- ── Forecast section ──────────────────────────────────────────── -->
-  <div class="mt-6 pt-5 border-t border-slate-800">
+  <div class="mt-6 pt-5 border-t border-slate-200 dark:border-slate-800">
     <div class="flex items-center justify-between mb-3">
       <div>
-        <h3 class="text-sm font-semibold text-slate-300" data-i18n="forecast.title">Price Forecast — 90 Days</h3>
+        <h3 class="text-sm font-semibold text-slate-600 dark:text-slate-300" data-i18n="forecast.title">Price Forecast — 90 Days</h3>
         <p class="text-xs text-slate-500" data-i18n="forecast.desc">Statistical projections from 3 independent models. Not investment advice.</p>
       </div>
       <div class="flex items-center gap-3 flex-wrap justify-end text-[11px]">
-        <span class="flex items-center gap-1.5 text-slate-400"><span class="w-3 h-1 rounded-sm inline-block" style="background:#38bdf8"></span><span data-i18n="forecast.actual">Actual</span></span>
+        <span class="flex items-center gap-1.5 text-slate-500 dark:text-slate-400"><span class="w-3 h-1 rounded-sm inline-block" style="background:#38bdf8"></span><span data-i18n="forecast.actual">Actual</span></span>
         <span class="flex items-center gap-1.5" style="color:#a78bfa"><span class="w-3 h-1 rounded-sm inline-block" style="background:#a78bfa"></span>Prophet</span>
         <span class="flex items-center gap-1.5" style="color:#fb923c"><span class="w-3 h-1 rounded-sm inline-block" style="background:#fb923c"></span>ARIMA</span>
         <span class="flex items-center gap-1.5" style="color:#34d399"><span class="w-3 h-1 rounded-sm inline-block" style="background:#34d399"></span><span data-i18n="forecast.linear">Linear</span></span>
         <button onclick="expandMktsChart('forecast')" title="Expand"
-                class="text-slate-600 hover:text-slate-300 transition p-1 rounded-lg hover:bg-slate-800">
+                class="text-slate-500 dark:text-slate-600 hover:text-slate-600 dark:hover:text-slate-300 transition p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800">
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                   d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"/>
@@ -1135,23 +1135,23 @@
       <span data-i18n="forecast.loading">Running models…</span>
     </div>
     <div style="height:360px; display:none" id="idxForecastWrap"><canvas id="idxForecastChart"></canvas></div>
-    <p class="text-[11px] text-slate-600 mt-2" data-i18n="forecast.disclaimer">⚠ Statistical projections only — not financial advice.</p>
+    <p class="text-[11px] text-slate-500 dark:text-slate-600 mt-2" data-i18n="forecast.disclaimer">⚠ Statistical projections only — not financial advice.</p>
   </div>
 
 </div>
 
 <!-- ── Economic Events Calendar ──────────────────────────────────────── -->
-<div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 mt-6 fade-up" id="econSection">
+<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6 mt-6 fade-up" id="econSection">
   <!-- Header row -->
   <div class="flex items-center justify-between cursor-pointer" onclick="toggleEconSection()">
     <div>
-      <h2 class="text-sm font-semibold text-slate-200" data-i18n="markets.econ_events_title">Economic Events</h2>
+      <h2 class="text-sm font-semibold text-slate-700 dark:text-slate-200" data-i18n="markets.econ_events_title">Economic Events</h2>
       <p class="text-xs text-slate-500 mt-0.5" data-i18n="markets.econ_events_desc">Key macro releases &amp; central bank decisions this week</p>
     </div>
     <div class="flex items-center gap-2" onclick="event.stopPropagation()">
       <button id="econTranslateBtn" onclick="translateEconEvents()"
-              class="text-xs px-3 py-1.5 rounded-lg border border-slate-700 text-slate-400
-                     hover:border-indigo-500 hover:text-indigo-300 transition-all">
+              class="text-xs px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400
+                     hover:border-indigo-500 hover:text-indigo-700 dark:hover:text-indigo-300 transition-all">
         <span data-i18n="markets.econ_translate">Translate to Chinese</span>
       </button>
       <span onclick="event.stopPropagation(); toggleEconSection()" class="cursor-pointer p-1">
@@ -1164,38 +1164,38 @@
   </div>
   <!-- Collapsible body -->
   <div id="econCollapse">
-    <div id="econLoading" class="text-xs text-slate-600 py-2 mt-3" data-i18n="markets.loading">Loading…</div>
+    <div id="econLoading" class="text-xs text-slate-500 dark:text-slate-600 py-2 mt-3" data-i18n="markets.loading">Loading…</div>
     <div id="econBody" style="display:none" class="mt-3">
       <!-- Region filter buttons -->
       <div id="econFilters" class="flex flex-wrap gap-1.5 mb-3">
         <button onclick="filterEcon('all')" id="econFilter-all"
-                class="econ-filter-btn px-2.5 py-1 rounded-lg text-[11px] font-medium border border-slate-700 text-slate-400 hover:border-indigo-500 hover:text-indigo-300 transition-all"
+                class="econ-filter-btn px-2.5 py-1 rounded-lg text-[11px] font-medium border border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:border-indigo-500 hover:text-indigo-700 dark:hover:text-indigo-300 transition-all"
                 data-i18n="markets.econ_filter_all">All</button>
         <button onclick="filterEcon('us')" id="econFilter-us"
-                class="econ-filter-btn px-2.5 py-1 rounded-lg text-[11px] font-medium border border-slate-700 text-slate-400 hover:border-indigo-500 hover:text-indigo-300 transition-all"
+                class="econ-filter-btn px-2.5 py-1 rounded-lg text-[11px] font-medium border border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:border-indigo-500 hover:text-indigo-700 dark:hover:text-indigo-300 transition-all"
                 data-i18n="markets.econ_filter_us">US</button>
         <button onclick="filterEcon('eu')" id="econFilter-eu"
-                class="econ-filter-btn px-2.5 py-1 rounded-lg text-[11px] font-medium border border-slate-700 text-slate-400 hover:border-indigo-500 hover:text-indigo-300 transition-all"
+                class="econ-filter-btn px-2.5 py-1 rounded-lg text-[11px] font-medium border border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:border-indigo-500 hover:text-indigo-700 dark:hover:text-indigo-300 transition-all"
                 data-i18n="markets.econ_filter_eu">EU</button>
         <button onclick="filterEcon('cn')" id="econFilter-cn"
-                class="econ-filter-btn px-2.5 py-1 rounded-lg text-[11px] font-medium border border-slate-700 text-slate-400 hover:border-indigo-500 hover:text-indigo-300 transition-all"
+                class="econ-filter-btn px-2.5 py-1 rounded-lg text-[11px] font-medium border border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:border-indigo-500 hover:text-indigo-700 dark:hover:text-indigo-300 transition-all"
                 data-i18n="markets.econ_filter_cn">CN</button>
         <button onclick="filterEcon('jp')" id="econFilter-jp"
-                class="econ-filter-btn px-2.5 py-1 rounded-lg text-[11px] font-medium border border-slate-700 text-slate-400 hover:border-indigo-500 hover:text-indigo-300 transition-all"
+                class="econ-filter-btn px-2.5 py-1 rounded-lg text-[11px] font-medium border border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:border-indigo-500 hover:text-indigo-700 dark:hover:text-indigo-300 transition-all"
                 data-i18n="markets.econ_filter_jp">JP</button>
         <button onclick="filterEcon('high')" id="econFilter-high"
-                class="econ-filter-btn active px-2.5 py-1 rounded-lg text-[11px] font-medium border border-rose-500 text-rose-300 hover:border-rose-500 hover:text-rose-300 transition-all"
+                class="econ-filter-btn active px-2.5 py-1 rounded-lg text-[11px] font-medium border border-rose-500 text-rose-700 dark:text-rose-300 hover:border-rose-500 hover:text-rose-700 dark:hover:text-rose-300 transition-all"
                 data-i18n="markets.econ_filter_high">High Impact</button>
-        <label class="flex items-center gap-1.5 ml-auto text-[11px] text-slate-400 cursor-pointer select-none">
+        <label class="flex items-center gap-1.5 ml-auto text-[11px] text-slate-500 dark:text-slate-400 cursor-pointer select-none">
           <input type="checkbox" id="econHidePast" onchange="_renderEconTable(_econData)"
-                 class="rounded border-slate-600 bg-slate-800 text-brand focus:ring-brand" checked>
+                 class="rounded border-slate-300 dark:border-slate-600 bg-slate-100 dark:bg-slate-800 text-brand focus:ring-brand" checked>
           <span data-i18n="markets.econ_hide_past">Hide past</span>
         </label>
       </div>
       <div class="overflow-x-auto">
         <table class="w-full text-xs text-left">
           <thead>
-            <tr class="border-b border-slate-800 text-slate-500 text-[10px] uppercase tracking-wider">
+            <tr class="border-b border-slate-200 dark:border-slate-800 text-slate-500 text-[10px] uppercase tracking-wider">
               <th class="pb-2 pr-3 font-medium" data-i18n="markets.econ_col_date">Date</th>
               <th class="pb-2 pr-3 font-medium" id="econTimeColHeader"><span data-i18n="markets.econ_col_time">Time</span></th>
               <th class="pb-2 pr-3 font-medium" data-i18n="markets.econ_col_country">Country</th>
@@ -1206,7 +1206,7 @@
               <th class="pb-2 font-medium text-right" data-i18n="markets.econ_col_previous">Previous</th>
             </tr>
           </thead>
-          <tbody id="econTableBody" class="divide-y divide-slate-800/60"></tbody>
+          <tbody id="econTableBody" class="divide-y divide-slate-200/60 dark:divide-slate-800/60"></tbody>
         </table>
       </div>
     </div>
@@ -1249,10 +1249,10 @@ const IDX_SYMBOLS = {
   dxy: 'DX-Y.NYB',
 };
 const IDX_COLORS = {
-  spx: '#a78bfa', ixic: '#38bdf8', dji: '#fb923c',
-  ftse: '#34d399', n225: '#f472b6', sse: '#fbbf24', csi500: '#f59e0b', twii: '#60a5fa', kospi: '#4ade80',
-  gold: '#facc15', silver: '#cbd5e1', oil: '#14b8a6', brent: '#0ea5e9', natgas: '#60a5fa', copper: '#d97706',
-  dxy: '#94a3b8',
+  spx: CT.c('#a78bfa'), ixic: CT.c('#38bdf8'), dji: CT.c('#fb923c'),
+  ftse: CT.c('#34d399'), n225: '#f472b6', sse: CT.c('#fbbf24'), csi500: '#f59e0b', twii: '#60a5fa', kospi: '#4ade80',
+  gold: '#facc15', silver: CT.c('#cbd5e1'), oil: '#14b8a6', brent: '#0ea5e9', natgas: '#60a5fa', copper: '#d97706',
+  dxy: CT.c('#94a3b8'),
 };
 const IDX_ALL_KEYS = ['spx', 'ixic', 'dji', 'ftse', 'n225', 'sse', 'csi500', 'twii', 'kospi',
                       'gold', 'silver', 'oil', 'brent', 'natgas', 'copper', 'dxy'];
@@ -1265,7 +1265,7 @@ const IDX_LABELS = {
 function idxLabel(key) {
   return (typeof I18n !== 'undefined' && I18n.tIdx) ? I18n.tIdx(key) : (IDX_LABELS[key] || key.toUpperCase());
 }
-const GRID_COL = '#1e293b', TICK_COL = '#64748b';
+const GRID_COL = CT.c('#1e293b'), TICK_COL = CT.c('#64748b');
 
 function _fmt(v, prefix='', suffix='', dec=2) {
   if (v == null) return '—';
@@ -1351,17 +1351,17 @@ function _buildCtaTriggerChart(canvasId) {
         },
         {
           ...I18n.label('markets.cta_pivot_short', 'Short-term pivot'),
-          data: triggerData(triggers.short), borderColor: '#fbbf24',
+          data: triggerData(triggers.short), borderColor: CT.c('#fbbf24'),
           borderWidth: 1.5, borderDash: [7, 4], pointRadius: 0, spanGaps: false,
         },
         {
           ...I18n.label('markets.cta_pivot_medium', 'Medium-term pivot'),
-          data: triggerData(triggers.medium), borderColor: '#fb923c',
+          data: triggerData(triggers.medium), borderColor: CT.c('#fb923c'),
           borderWidth: 1.5, borderDash: [5, 4], pointRadius: 0, spanGaps: false,
         },
         {
           ...I18n.label('markets.cta_pivot_long', 'Long-term pivot'),
-          data: triggerData(triggers.long), borderColor: '#f87171',
+          data: triggerData(triggers.long), borderColor: CT.c('#f87171'),
           borderWidth: 1.5, borderDash: [3, 4], pointRadius: 0, spanGaps: false,
         },
       ],
@@ -1370,7 +1370,7 @@ function _buildCtaTriggerChart(canvasId) {
       responsive: true, maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
       plugins: {
-        legend: { position: 'bottom', labels: { color: '#94a3b8', boxWidth: 18, boxHeight: 2, font: { size: 10 } } },
+        legend: { position: 'bottom', labels: { color: CT.c('#94a3b8'), boxWidth: 18, boxHeight: 2, font: { size: 10 } } },
         tooltip: { callbacks: { label: context => ` ${context.dataset.label}: ${context.raw == null ? '—' : Number(context.raw).toLocaleString()}` } },
       },
       scales: {
@@ -1387,9 +1387,9 @@ function _buildCtaTriggerChart(canvasId) {
 // zero (= at the pivot), which a price axis cannot show.
 let _ctaDistChartInst = null;
 const _CTA_DIST_SERIES = [
-  ['d_short',  'markets.cta_pivot_short',  'Short-term pivot',  '#f87171'],
-  ['d_medium', 'markets.cta_pivot_medium', 'Medium-term pivot', '#fbbf24'],
-  ['d_long',   'markets.cta_pivot_long',   'Long-term pivot',   '#34d399'],
+  ['d_short',  'markets.cta_pivot_short',  'Short-term pivot',  CT.c('#f87171')],
+  ['d_medium', 'markets.cta_pivot_medium', 'Medium-term pivot', CT.c('#fbbf24')],
+  ['d_long',   'markets.cta_pivot_long',   'Long-term pivot',   CT.c('#34d399')],
 ];
 
 function _renderCtaDistanceHistory(payload) {
@@ -1467,7 +1467,7 @@ function _buildCtaPositionChart() {
       datasets: [{
         ...I18n.label('markets.cta_reported_position', 'Reported global equity position'),
         data: points.map(point => point.global_equity_bn),
-        borderColor: '#38bdf8', backgroundColor: 'rgba(56,189,248,.12)',
+        borderColor: CT.c('#38bdf8'), backgroundColor: 'rgba(56,189,248,.12)',
         borderWidth: 2, pointRadius: 4, pointHoverRadius: 6,
         pointBackgroundColor: '#0ea5e9', pointBorderColor: '#bae6fd',
         fill: true, tension: .2,
@@ -1499,12 +1499,12 @@ function _renderCtaFlowGrid(latest) {
   ].forEach(([scenario, key, fallback]) => {
     const value = flows[scenario];
     const card = document.createElement('div');
-    card.className = 'rounded-lg border border-slate-800 bg-slate-950/60 px-2 py-2 min-w-0';
+    card.className = 'rounded-lg border border-slate-200 dark:border-slate-800 bg-white/60 dark:bg-slate-950/60 px-2 py-2 min-w-0';
     const label = document.createElement('div');
-    label.className = 'text-[9px] text-slate-600 truncate';
+    label.className = 'text-[9px] text-slate-500 dark:text-slate-600 truncate';
     label.textContent = _ctaT(key, fallback);
     const amount = document.createElement('div');
-    amount.className = 'text-xs font-semibold font-mono mt-1 ' + (value >= 0 ? 'text-emerald-400' : 'text-rose-400');
+    amount.className = 'text-xs font-semibold font-mono mt-1 ' + (value >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400');
     amount.textContent = _ctaMoney(value);
     card.append(label, amount);
     grid.appendChild(card);
@@ -1532,11 +1532,11 @@ function _renderCtaTracker() {
         ? ' · ' + _ctaTemplate('markets.cta_age', '{n}d ago', { n: age })
         : '');
   asOfEl.className = 'text-[10px] px-2 py-0.5 rounded-full border ' + ({
-    fresh:   'border-slate-700 text-slate-500',
-    aging:   'border-amber-700/60 text-amber-500',
-    stale:   'border-rose-700/60 text-rose-400',
-    unknown: 'border-rose-700/60 text-rose-400',
-  }[level] || 'border-slate-700 text-slate-500');
+    fresh:   'border-slate-300 dark:border-slate-700 text-slate-500',
+    aging:   'border-amber-300/60 dark:border-amber-700/60 text-amber-700 dark:text-amber-500',
+    stale:   'border-rose-300/60 dark:border-rose-700/60 text-rose-700 dark:text-rose-400',
+    unknown: 'border-rose-300/60 dark:border-rose-700/60 text-rose-700 dark:text-rose-400',
+  }[level] || 'border-slate-300 dark:border-slate-700 text-slate-500');
 
   const staleEl = document.getElementById('ctaStale');
   if (staleEl) {
@@ -1550,13 +1550,13 @@ function _renderCtaTracker() {
         ? 'This snapshot is out of date — treat the levels below as historical.'
         : 'No new Goldman report has been recorded for over a week.'));
       staleEl.className = 'text-[11px] mt-1 ' +
-        (level === 'aging' ? 'text-amber-500' : 'text-rose-400');
+        (level === 'aging' ? 'text-amber-700 dark:text-amber-500' : 'text-rose-700 dark:text-rose-400');
     }
   }
 
   const positionValue = document.getElementById('ctaPositionValue');
   positionValue.textContent = _ctaMoney(position.global_equity_bn);
-  positionValue.className = 'stat-val font-mono ' + (position.global_equity_bn >= 0 ? 'text-sky-400' : 'text-rose-400');
+  positionValue.className = 'stat-val font-mono ' + (position.global_equity_bn >= 0 ? 'text-sky-700 dark:text-sky-400' : 'text-rose-700 dark:text-rose-400');
   const positionMeta = [_ctaDate(position.date)];
   if (position.percentile != null) {
     positionMeta.push(_ctaTemplate('markets.cta_percentile', '{value}th percentile', { value: position.percentile }));
@@ -1613,23 +1613,23 @@ function _renderCtaTracker() {
   const status = document.getElementById('ctaStatus');
   let statusKey = 'markets.cta_status_all_broken';
   let fallback = 'Below all reported pivots.';
-  let statusClass = 'bg-rose-900/25 border-rose-800/60 text-rose-200';
+  let statusClass = 'bg-rose-50 dark:bg-rose-900/25 border-rose-200/60 dark:border-rose-800/60 text-rose-800 dark:text-rose-200';
   if (!Number.isFinite(current)) {
     statusKey = 'markets.cta_status_waiting';
     fallback = 'Waiting for the live S&P 500 snapshot.';
-    statusClass = 'bg-slate-800/60 border-slate-700 text-slate-300';
+    statusClass = 'bg-slate-100/60 dark:bg-slate-800/60 border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300';
   } else if (current >= Number(triggers.short)) {
     statusKey = 'markets.cta_status_above_all';
     fallback = 'Above all reported pivots.';
-    statusClass = 'bg-emerald-900/20 border-emerald-800/60 text-emerald-200';
+    statusClass = 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200/60 dark:border-emerald-800/60 text-emerald-800 dark:text-emerald-200';
   } else if (Number.isFinite(current) && current >= Number(triggers.medium)) {
     statusKey = 'markets.cta_status_short_broken';
     fallback = 'Short-term pivot breached.';
-    statusClass = 'bg-amber-900/20 border-amber-800/60 text-amber-200';
+    statusClass = 'bg-amber-50 dark:bg-amber-900/20 border-amber-200/60 dark:border-amber-800/60 text-amber-800 dark:text-amber-200';
   } else if (Number.isFinite(current) && current >= Number(triggers.long)) {
     statusKey = 'markets.cta_status_medium_broken';
     fallback = 'Medium-term pivot breached.';
-    statusClass = 'bg-orange-900/20 border-orange-800/60 text-orange-200';
+    statusClass = 'bg-orange-50 dark:bg-orange-900/20 border-orange-200/60 dark:border-orange-800/60 text-orange-800 dark:text-orange-200';
   }
   status.className = 'text-xs px-3 py-2 rounded-lg border mb-4 ' + statusClass;
   status.textContent = _ctaT(statusKey, fallback);
@@ -1678,13 +1678,13 @@ function renderCards(data) {
     const ytdCls = _chgClass(ytd);
     return `
     <button onclick="switchIdx('${k}', true)"
-            class="bg-slate-900 border border-slate-800 rounded-2xl p-4 text-left
-                   hover:border-slate-600 active:scale-95 transition-all cursor-pointer group">
+            class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 text-left
+                   hover:border-slate-300 dark:hover:border-slate-600 active:scale-95 transition-all cursor-pointer group">
       <div class="flex items-center justify-between mb-1">
         <span class="text-xs font-semibold tracking-wide truncate" style="color:${col}">${label}</span>
-        <span class="text-[10px] text-slate-600 ml-1 shrink-0">${d.symbol || ''}</span>
+        <span class="text-[10px] text-slate-500 dark:text-slate-600 ml-1 shrink-0">${d.symbol || ''}</span>
       </div>
-      <div class="text-xl font-bold text-slate-100 tabular-nums">${d.current != null ? d.current.toLocaleString(undefined,{maximumFractionDigits:2}) : '—'}</div>
+      <div class="text-xl font-bold text-slate-800 dark:text-slate-100 tabular-nums">${d.current != null ? d.current.toLocaleString(undefined,{maximumFractionDigits:2}) : '—'}</div>
       <div class="flex items-center gap-2 mt-1 flex-wrap">
         <span class="text-sm font-semibold ${chgCls}">${_chgSign(d.day_chg)}${_fmt(d.day_chg,'','%',2)}</span>
         <span class="text-xs ${ytdCls}">${_chgSign(ytd)}${_fmt(ytd,'','% YTD',1)}</span>
@@ -1703,10 +1703,10 @@ function renderVix(vix, canvasId) {
     const badgeEl = document.getElementById('vixBadge');
     const level   = vix.current;
     let label = '', col = '';
-    if (level < 15)      { label = I18n.t('markets.vix_calm')    || 'Calm';     col = '#34d399'; }
-    else if (level < 20) { label = I18n.t('markets.vix_normal')  || 'Normal';   col = '#a5b4fc'; }
-    else if (level < 30) { label = I18n.t('markets.vix_elevated')|| 'Elevated'; col = '#fb923c'; }
-    else                  { label = I18n.t('markets.vix_extreme') || 'Extreme';  col = '#f87171'; }
+    if (level < 15)      { label = I18n.t('markets.vix_calm')    || 'Calm';     col = CT.c('#34d399'); }
+    else if (level < 20) { label = I18n.t('markets.vix_normal')  || 'Normal';   col = CT.c('#a5b4fc'); }
+    else if (level < 30) { label = I18n.t('markets.vix_elevated')|| 'Elevated'; col = CT.c('#fb923c'); }
+    else                  { label = I18n.t('markets.vix_extreme') || 'Extreme';  col = CT.c('#f87171'); }
 
     badgeEl.innerHTML = `
       <div class="text-2xl font-bold tabular-nums" style="color:${col}">${level?.toFixed(2) ?? '—'}</div>
@@ -1718,10 +1718,10 @@ function renderVix(vix, canvasId) {
     const vixBadge = document.getElementById('vixZoneBadge');
     if (vixBadge && vixLast != null) {
       vixBadge.classList.remove('hidden');
-      if (vixLast < 15)      { vixBadge.textContent = 'Calm'; vixBadge.className = 'text-xs px-2 py-0.5 rounded font-semibold bg-emerald-900/50 text-emerald-300'; }
-      else if (vixLast < 25) { vixBadge.textContent = 'Normal'; vixBadge.className = 'text-xs px-2 py-0.5 rounded font-semibold bg-amber-900/50 text-amber-300'; }
-      else if (vixLast < 35) { vixBadge.textContent = 'Elevated Fear'; vixBadge.className = 'text-xs px-2 py-0.5 rounded font-semibold bg-orange-900/50 text-orange-300'; }
-      else                   { vixBadge.textContent = 'Panic'; vixBadge.className = 'text-xs px-2 py-0.5 rounded font-semibold bg-rose-900/50 text-rose-300'; }
+      if (vixLast < 15)      { vixBadge.textContent = 'Calm'; vixBadge.className = 'text-xs px-2 py-0.5 rounded font-semibold bg-emerald-50 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300'; }
+      else if (vixLast < 25) { vixBadge.textContent = 'Normal'; vixBadge.className = 'text-xs px-2 py-0.5 rounded font-semibold bg-amber-50 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300'; }
+      else if (vixLast < 35) { vixBadge.textContent = 'Elevated Fear'; vixBadge.className = 'text-xs px-2 py-0.5 rounded font-semibold bg-orange-50 dark:bg-orange-900/50 text-orange-700 dark:text-orange-300'; }
+      else                   { vixBadge.textContent = 'Panic'; vixBadge.className = 'text-xs px-2 py-0.5 rounded font-semibold bg-rose-50 dark:bg-rose-900/50 text-rose-700 dark:text-rose-300'; }
     }
 
     // VIX term structure row (VIX3M / VVIX)
@@ -1735,10 +1735,10 @@ function renderVix(vix, canvasId) {
         termLabel.classList.remove('hidden');
         if (vixData.term_ratio < 1) {
           termLabel.textContent = 'Backwardation ⚠';
-          termLabel.className = 'text-[10px] px-1.5 py-0.5 rounded font-semibold bg-rose-900/50 text-rose-300';
+          termLabel.className = 'text-[10px] px-1.5 py-0.5 rounded font-semibold bg-rose-50 dark:bg-rose-900/50 text-rose-700 dark:text-rose-300';
         } else {
           termLabel.textContent = 'Contango ✓';
-          termLabel.className = 'text-[10px] px-1.5 py-0.5 rounded font-semibold bg-emerald-900/50 text-emerald-300';
+          termLabel.className = 'text-[10px] px-1.5 py-0.5 rounded font-semibold bg-emerald-50 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300';
         }
       }
     }
@@ -1752,7 +1752,7 @@ function renderVix(vix, canvasId) {
     type: 'line',
     data: { labels: dates, datasets: [{
       ...I18n.label('chart.vix', 'VIX'), data: prices,
-      borderColor: '#a78bfa', backgroundColor: 'rgba(167,139,250,0.07)',
+      borderColor: CT.c('#a78bfa'), backgroundColor: 'rgba(167,139,250,0.07)',
       borderWidth: 2, pointRadius: 0, fill: true, tension: 0.3, spanGaps: true,
     }]},
     options: {
@@ -1766,7 +1766,7 @@ function renderVix(vix, canvasId) {
     plugins: [{
       afterDraw(chart) {
         const { ctx: c, chartArea: a, scales: { y } } = chart;
-        [[20, '#fb923c', I18n.t('markets.vix_elevated') || 'Elevated'], [30, '#f87171', I18n.t('markets.vix_extreme') || 'Extreme']].forEach(([lvl, clr, lbl]) => {
+        [[20, CT.c('#fb923c'), I18n.t('markets.vix_elevated') || 'Elevated'], [30, CT.c('#f87171'), I18n.t('markets.vix_extreme') || 'Extreme']].forEach(([lvl, clr, lbl]) => {
           const py = y.getPixelForValue(lvl);
           if (py < a.top || py > a.bottom) return;
           c.save(); c.strokeStyle = clr + '66'; c.lineWidth = 1; c.setLineDash([4, 4]);
@@ -1787,7 +1787,7 @@ let _sectorPeriod = 'day';
 function renderSectors(sectors) {
   _mkSectorData = sectors;  // save for modal expand
   const el = document.getElementById('sectorBars');
-  if (!sectors || !sectors.length) { el.innerHTML = '<p class="text-xs text-slate-600">' + (I18n.t('markets.no_data') || 'No data') + '.</p>'; return; }
+  if (!sectors || !sectors.length) { el.innerHTML = '<p class="text-xs text-slate-500 dark:text-slate-600">' + (I18n.t('markets.no_data') || 'No data') + '.</p>'; return; }
   const sorted = [...sectors].sort((a, b) => {
     const va = (_sectorPeriod === 'week' ? (a.week_chg_pct ?? a.day_chg) : a.day_chg) ?? -999;
     const vb = (_sectorPeriod === 'week' ? (b.week_chg_pct ?? b.day_chg) : b.day_chg) ?? -999;
@@ -1800,15 +1800,15 @@ function renderSectors(sectors) {
   el.innerHTML = sorted.map(s => {
     const chg = _sectorPeriod === 'week' ? (s.week_chg_pct ?? s.day_chg) : s.day_chg;
     const pct = chg;
-    const col = pct == null ? '#475569' : pct >= 0 ? '#34d399' : '#f87171';
+    const col = pct == null ? CT.c('#475569') : pct >= 0 ? CT.c('#34d399') : CT.c('#f87171');
     const w   = pct == null ? 0 : Math.round(Math.abs(pct) / maxAbs * 100);
     const sign = _chgSign(pct);
     const labelKey = 'markets.sector.' + s.label;
     const label = (typeof I18n !== 'undefined' && I18n.t(labelKey)) || s.label;
     return `
     <div class="flex items-center gap-2">
-      <span class="text-xs text-slate-400 w-28 shrink-0">${label}</span>
-      <div class="flex-1 bg-slate-800 rounded-full h-2 overflow-hidden">
+      <span class="text-xs text-slate-500 dark:text-slate-400 w-28 shrink-0">${label}</span>
+      <div class="flex-1 bg-slate-100 dark:bg-slate-800 rounded-full h-2 overflow-hidden">
         <div class="bar-fill" style="width:${w}%; background:${col}"></div>
       </div>
       <span class="text-xs font-semibold tabular-nums w-14 text-right" style="color:${col}">
@@ -1831,10 +1831,10 @@ let _globalNormChart = null;
 function _buildGlobalNorm(range) {
   if (!_mkData) return;
   const KEYS = ['spx','ixic','dji','ftse','n225','sse','twii'];
-  const COLORS = ['#a78bfa','#38bdf8','#fb923c','#34d399','#f472b6','#fbbf24','#60a5fa'];
+  const COLORS = [CT.c('#a78bfa'),CT.c('#38bdf8'),CT.c('#fb923c'),CT.c('#34d399'),'#f472b6',CT.c('#fbbf24'),'#60a5fa'];
   const LABELS = { spx:'S&P 500', ixic:'Nasdaq', dji:'Dow', ftse:'FTSE', n225:'Nikkei', sse:'Shanghai', twii:'Taiwan' };
   const cutDays = range === '1m' ? 21 : range === '6m' ? 126 : 252;
-  const gridCol = '#1e293b', tickCol = '#64748b';
+  const gridCol = CT.c('#1e293b'), tickCol = CT.c('#64748b');
 
   // Build datasets from existing daily data
   const datasets = [];
@@ -1860,7 +1860,7 @@ function _buildGlobalNorm(range) {
       plugins:{ legend:{labels:{color:tickCol,boxWidth:12,font:{size:10}}}, tooltip:{mode:'index',intersect:false,callbacks:{label:c=>` ${c.dataset.label}: ${c.raw?.toFixed(0)}`}} },
       scales:{
         x:{grid:{color:gridCol},ticks:{color:tickCol,maxTicksLimit:6,maxRotation:0}},
-        y:{grid:{color:gridCol},ticks:{color:tickCol,callback:v=>v.toFixed(0)},title:{display:true,text: I18n.t('markets.norm_axis_label') || 'Normalised (start=100)',color:'#475569',font:{size:10}}},
+        y:{grid:{color:gridCol},ticks:{color:tickCol,callback:v=>v.toFixed(0)},title:{display:true,text: I18n.t('markets.norm_axis_label') || 'Normalised (start=100)',color:CT.c('#475569'),font:{size:10}}},
       },
       interaction:{mode:'index',intersect:false},
     },
@@ -1890,7 +1890,7 @@ function _buildSectorMomentum(movers) {
   const el = document.getElementById('sectorMomentumGrid');
   if (!el || !entries.length) return;
   el.innerHTML = entries.slice(0, 8).map(e => `
-    <span class="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded ${e.avg>=0?'bg-emerald-900/30 text-emerald-400':'bg-rose-900/30 text-rose-400'}">
+    <span class="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded ${e.avg>=0?'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400':'bg-rose-50 dark:bg-rose-900/30 text-rose-700 dark:text-rose-400'}">
       ${e.sector} ${e.avg>=0?'+':''}${e.avg.toFixed(1)}%
     </span>`).join('');
 }
@@ -1921,7 +1921,7 @@ function renderIdxStats(key, data) {
   if (ma50 != null) {
     const diff = cur != null ? ((cur - ma50) / ma50 * 100).toFixed(1) : null;
     const cls  = cur != null && cur > ma50 ? 'up' : 'down';
-    maRows.push(`<div class="flex justify-between"><span class="text-slate-400">${I18n.t('markets.ma50') || '50-day MA'}</span>
+    maRows.push(`<div class="flex justify-between"><span class="text-slate-500 dark:text-slate-400">${I18n.t('markets.ma50') || '50-day MA'}</span>
       <span>${fmtPt(ma50)} <span class="${cls} text-xs">(${diff != null ? (diff >= 0 ? '+' : '') + diff + '%' : '—'})</span></span></div>`);
   }
   if (ma200 != null) {
@@ -1930,34 +1930,34 @@ function renderIdxStats(key, data) {
     let cross = '';
     if (ma50 != null && ma200 != null) {
       cross = ma50 > ma200
-        ? `<span class="text-[10px] text-emerald-400 ml-1 font-semibold">${I18n.t('markets.golden_cross') || 'Golden Cross'}</span>`
-        : `<span class="text-[10px] text-rose-400 ml-1 font-semibold">${I18n.t('markets.death_cross') || 'Death Cross'}</span>`;
+        ? `<span class="text-[10px] text-emerald-700 dark:text-emerald-400 ml-1 font-semibold">${I18n.t('markets.golden_cross') || 'Golden Cross'}</span>`
+        : `<span class="text-[10px] text-rose-700 dark:text-rose-400 ml-1 font-semibold">${I18n.t('markets.death_cross') || 'Death Cross'}</span>`;
     }
-    maRows.push(`<div class="flex justify-between"><span class="text-slate-400">${I18n.t('markets.ma200') || '200-day MA'}${cross}</span>
+    maRows.push(`<div class="flex justify-between"><span class="text-slate-500 dark:text-slate-400">${I18n.t('markets.ma200') || '200-day MA'}${cross}</span>
       <span>${fmtPt(ma200)} <span class="${cls} text-xs">(${diff != null ? (diff >= 0 ? '+' : '') + diff + '%' : '—'})</span></span></div>`);
   }
-  document.getElementById('maStatus').innerHTML = maRows.length ? maRows.join('') : `<span class="text-slate-600 text-xs">${I18n.t('markets.no_data') || 'No data'}</span>`;
+  document.getElementById('maStatus').innerHTML = maRows.length ? maRows.join('') : `<span class="text-slate-500 dark:text-slate-600 text-xs">${I18n.t('markets.no_data') || 'No data'}</span>`;
 
   // RSI gauge
   const rsi = d.rsi14;  const rsiEl = document.getElementById('rsiGauge');
-  if (rsi == null) { rsiEl.innerHTML = `<span class="text-slate-600 text-xs">${I18n.t('markets.no_data') || 'No data'}</span>`; }
+  if (rsi == null) { rsiEl.innerHTML = `<span class="text-slate-500 dark:text-slate-600 text-xs">${I18n.t('markets.no_data') || 'No data'}</span>`; }
   else {
     let zone = '', zoneCol = '';
-    if (rsi > 70)      { zone = I18n.t('markets.rsi_zone_ob')      || 'Overbought'; zoneCol = '#f87171'; }
-    else if (rsi > 55) { zone = I18n.t('markets.rsi_zone_bullish') || 'Bullish';    zoneCol = '#34d399'; }
-    else if (rsi > 45) { zone = I18n.t('markets.rsi_zone_neutral') || 'Neutral';    zoneCol = '#94a3b8'; }
-    else if (rsi > 30) { zone = I18n.t('markets.rsi_zone_bearish') || 'Bearish';    zoneCol = '#fb923c'; }
-    else                { zone = I18n.t('markets.rsi_zone_os')     || 'Oversold';   zoneCol = '#a78bfa'; }
+    if (rsi > 70)      { zone = I18n.t('markets.rsi_zone_ob')      || 'Overbought'; zoneCol = CT.c('#f87171'); }
+    else if (rsi > 55) { zone = I18n.t('markets.rsi_zone_bullish') || 'Bullish';    zoneCol = CT.c('#34d399'); }
+    else if (rsi > 45) { zone = I18n.t('markets.rsi_zone_neutral') || 'Neutral';    zoneCol = CT.c('#94a3b8'); }
+    else if (rsi > 30) { zone = I18n.t('markets.rsi_zone_bearish') || 'Bearish';    zoneCol = CT.c('#fb923c'); }
+    else                { zone = I18n.t('markets.rsi_zone_os')     || 'Oversold';   zoneCol = CT.c('#a78bfa'); }
     const pct = Math.round(rsi);
     rsiEl.innerHTML = `
       <div class="flex items-center justify-between mb-2">
-        <span class="text-xl font-bold text-slate-100">${rsi.toFixed(1)}</span>
+        <span class="text-xl font-bold text-slate-800 dark:text-slate-100">${rsi.toFixed(1)}</span>
         <span class="rsi-zone font-semibold" style="background:${zoneCol}22;color:${zoneCol}">${zone}</span>
       </div>
-      <div class="bg-slate-700 rounded-full h-2 overflow-hidden">
+      <div class="bg-slate-200 dark:bg-slate-700 rounded-full h-2 overflow-hidden">
         <div class="bar-fill" style="width:${pct}%; background:${zoneCol}"></div>
       </div>
-      <div class="flex justify-between text-[10px] text-slate-600 mt-1"><span>0</span><span>30</span><span>50</span><span>70</span><span>100</span></div>`;
+      <div class="flex justify-between text-[10px] text-slate-500 dark:text-slate-600 mt-1"><span>0</span><span>30</span><span>50</span><span>70</span><span>100</span></div>`;
   }
 
   // 52-week range bar
@@ -1999,8 +1999,8 @@ function _toggleIdxBB() {
   const btn = document.getElementById('idxBBToggle');
   if (btn) {
     btn.className = _idxShowBB
-      ? 'text-[11px] px-2 py-0.5 rounded border border-violet-600 text-violet-400 bg-violet-900/20 transition'
-      : 'text-[11px] px-2 py-0.5 rounded border border-slate-700 text-slate-500 hover:text-violet-400 hover:border-violet-700 transition';
+      ? 'text-[11px] px-2 py-0.5 rounded border border-violet-300 dark:border-violet-600 text-violet-700 dark:text-violet-400 bg-violet-50 dark:bg-violet-900/20 transition'
+      : 'text-[11px] px-2 py-0.5 rounded border border-slate-300 dark:border-slate-700 text-slate-500 hover:text-violet-700 dark:hover:text-violet-400 hover:border-violet-300 dark:hover:border-violet-700 transition';
   }
   if (_mkData) renderIdxChart(_curIdx, _curRange, _mkData);
 }
@@ -2022,7 +2022,7 @@ function renderIdxChart(key, range, data, canvasId) {
     dates  = series.dates  || [];
     prices = series.prices || [];
   }
-  const col = IDX_COLORS[key] || '#6366f1';
+  const col = IDX_COLORS[key] || CT.c('#6366f1');
 
   if (canvasId === 'idxChart') {
     if (_idxChartInst) { _idxChartInst.destroy(); _idxChartInst = null; }
@@ -2069,8 +2069,8 @@ function renderIdxChart(key, range, data, canvasId) {
         // Draw MA-200 and MA-50 as reference lines for daily-based ranges
         if (range !== 'daily' && range !== '1m' && range !== '6m') return;
         const { ctx: c, chartArea: a, scales: { y } } = chart;
-        [[d.ma50, '#34d399', I18n.t('markets.ma50') || '50MA'],
-         [d.ma200,'#fb923c', I18n.t('markets.ma200') || '200MA']].forEach(([val, clr, lbl]) => {
+        [[d.ma50, CT.c('#34d399'), I18n.t('markets.ma50') || '50MA'],
+         [d.ma200,CT.c('#fb923c'), I18n.t('markets.ma200') || '200MA']].forEach(([val, clr, lbl]) => {
           if (val == null) return;
           const py = y.getPixelForValue(val);
           if (py < a.top || py > a.bottom) return;
@@ -2156,7 +2156,7 @@ function renderMacdChart(key, data, range, canvasId) {
 
   // Histogram bar colors: positive = green, negative = red
   const histColors  = histSlice.map(v => v == null ? 'transparent' : v >= 0 ? 'rgba(52,211,153,0.55)' : 'rgba(248,113,113,0.55)');
-  const histBorders = histSlice.map(v => v == null ? 'transparent' : v >= 0 ? '#34d399' : '#f87171');
+  const histBorders = histSlice.map(v => v == null ? 'transparent' : v >= 0 ? CT.c('#34d399') : CT.c('#f87171'));
 
   const _inst = new Chart(document.getElementById(canvasId), {
     type: 'bar',
@@ -2176,7 +2176,7 @@ function renderMacdChart(key, data, range, canvasId) {
           type: 'line',
           ...I18n.label('chart.macd', 'MACD'),
           data: macdSlice,
-          borderColor: '#38bdf8',
+          borderColor: CT.c('#38bdf8'),
           backgroundColor: 'transparent',
           borderWidth: 1.5, pointRadius: 0, spanGaps: true, tension: 0.2, order: 1,
           elements: { point: { hitRadius: 6, radius: 0, hoverRadius: 3 } },
@@ -2185,7 +2185,7 @@ function renderMacdChart(key, data, range, canvasId) {
           type: 'line',
           ...I18n.label('markets.macd_signal', 'Signal'),
           data: signalSlice,
-          borderColor: '#fb923c',
+          borderColor: CT.c('#fb923c'),
           backgroundColor: 'transparent',
           borderWidth: 1.5, pointRadius: 0, spanGaps: true, tension: 0.2, order: 2,
           borderDash: [4, 3],
@@ -2254,7 +2254,7 @@ function renderRsiChart(key, data, range, canvasId) {
       datasets: [{
         ...I18n.label('chart.rsi14', 'RSI-14'),
         data: rsiVals,
-        borderColor: '#a78bfa',
+        borderColor: CT.c('#a78bfa'),
         backgroundColor: 'rgba(167,139,250,0.06)',
         borderWidth: 1.5, pointRadius: 0, fill: true, tension: 0.2, spanGaps: true,
         elements: { point: { hitRadius: 6, radius: 0, hoverRadius: 3 } },
@@ -2279,7 +2279,7 @@ function renderRsiChart(key, data, range, canvasId) {
     plugins: [{
       afterDraw(chart) {
         const { ctx: c, chartArea: a, scales: { y } } = chart;
-        [[70, '#f87171', 'OB 70'], [30, '#34d399', 'OS 30']].forEach(([lvl, clr, lbl]) => {
+        [[70, CT.c('#f87171'), 'OB 70'], [30, CT.c('#34d399'), 'OS 30']].forEach(([lvl, clr, lbl]) => {
           const py = y.getPixelForValue(lvl);
           if (py < a.top || py > a.bottom) return;
           c.save();
@@ -2422,7 +2422,7 @@ function _buildForecastChart(result, canvasId) {
   const trainDates  = (result.train || []).map(p => p.date);
   const trainPrices = (result.train || []).map(p => p.value);
   const fcModels    = ['prophet', 'arima', 'linear'];
-  const modelColors = { prophet: '#a78bfa', arima: '#fb923c', linear: '#34d399' };
+  const modelColors = { prophet: CT.c('#a78bfa'), arima: CT.c('#fb923c'), linear: CT.c('#34d399') };
 
   const firstFC  = fcModels.map(m => result[m]?.forecast || []).find(fc => fc.length > 0) || [];
   const fcDates  = firstFC.map(p => p.date);
@@ -2433,7 +2433,7 @@ function _buildForecastChart(result, canvasId) {
   const datasets = [{
     label: I18n.t('forecast.actual') || 'Actual',
     data: actualData,
-    borderColor: '#38bdf8', backgroundColor: 'rgba(56,189,248,0.06)',
+    borderColor: CT.c('#38bdf8'), backgroundColor: 'rgba(56,189,248,0.06)',
     borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, hitRadius: 8,
     fill: 'origin', tension: 0.3, spanGaps: true,
     elements: { point: { hitRadius: 8, radius: 0, hoverRadius: 4 } },
@@ -2496,7 +2496,7 @@ function _buildForecastChart(result, canvasId) {
           if (bx >= a.left && bx <= a.right) {
             c.save(); c.strokeStyle = 'rgba(100,116,139,0.5)'; c.lineWidth = 1; c.setLineDash([4,4]);
             c.beginPath(); c.moveTo(bx, a.top); c.lineTo(bx, a.bottom); c.stroke();
-            c.fillStyle = '#64748b'; c.font = '10px Inter,sans-serif';
+            c.fillStyle = CT.c('#64748b'); c.font = '10px Inter,sans-serif';
             c.fillText(I18n.t('markets.forecast_arrow') || 'Forecast →', bx + 4, a.top + 12); c.restore();
           }
         }
@@ -2535,7 +2535,7 @@ async function loadIdxForecast(key) {
     wrapEl.style.display = '';
     _idxForecastInst = _buildForecastChart(result);
   } catch(e) {
-    loadEl.innerHTML = `<span class="text-slate-600 text-xs">${I18n.t('forecast.failed') || 'Forecast unavailable.'} ${e.message}</span>`;
+    loadEl.innerHTML = `<span class="text-slate-500 dark:text-slate-600 text-xs">${I18n.t('forecast.failed') || 'Forecast unavailable.'} ${e.message}</span>`;
   }
 }
 
@@ -2574,16 +2574,16 @@ async function _toggleFgSpy() {
     const spyMax = Math.max(...spyPrices.filter(v=>v!=null));
     const spyNorm = spyPrices.map(v => v != null ? ((v-spyMin)/(spyMax-spyMin))*100 : null);
 
-    const gridCol = '#1e293b', tickCol = '#64748b';
+    const gridCol = CT.c('#1e293b'), tickCol = CT.c('#64748b');
     if (_fgSpyChart) _fgSpyChart.destroy();
     _fgSpyChart = new Chart(document.getElementById('fgSpyCanvas'), {
       type: 'line',
       data: {
         labels: fgDates,
         datasets: [
-          { label:'Fear & Greed', data:fgVals, borderColor:'#a78bfa', backgroundColor:'rgba(167,139,250,0.08)',
+          { label:'Fear & Greed', data:fgVals, borderColor:CT.c('#a78bfa'), backgroundColor:'rgba(167,139,250,0.08)',
             borderWidth:1.5, pointRadius:0, fill:true, tension:0.3, spanGaps:true, yAxisID:'y' },
-          { label:'S&P 500 (norm)', data:spyNorm.slice(-fgDates.length), borderColor:'#38bdf8', backgroundColor:'transparent',
+          { label:'S&P 500 (norm)', data:spyNorm.slice(-fgDates.length), borderColor:CT.c('#38bdf8'), backgroundColor:'transparent',
             borderWidth:1.5, pointRadius:0, fill:false, tension:0.3, spanGaps:true, yAxisID:'y' },
         ]
       },
@@ -2637,13 +2637,13 @@ async function _toggleAaiiSpy() {
     const spyBase = spyNormVals.find(v=>v!=null);
     const spyNorm = spyNormVals.map(v=>v!=null&&spyBase?+(v/spyBase*100).toFixed(1):null);
 
-    const gridCol = '#1e293b', tickCol = '#64748b';
+    const gridCol = CT.c('#1e293b'), tickCol = CT.c('#64748b');
     if (_aaiiSpyChart) _aaiiSpyChart.destroy();
     _aaiiSpyChart = new Chart(document.getElementById('aaiiSpyCanvas'), {
       type: 'line',
       data: { labels: spreadDates, datasets: [
-        { label:'Bull-Bear Spread', data:spreadVals, borderColor:'#a78bfa', backgroundColor:'rgba(167,139,250,0.08)', borderWidth:1.5, pointRadius:0, fill:true, tension:0.3, spanGaps:true, yAxisID:'y' },
-        { label:'S&P 500 (norm)', data:spyNorm, borderColor:'#38bdf8', backgroundColor:'transparent', borderWidth:1.5, pointRadius:0, fill:false, tension:0.3, spanGaps:true, yAxisID:'ySpy', borderDash:[4,3] },
+        { label:'Bull-Bear Spread', data:spreadVals, borderColor:CT.c('#a78bfa'), backgroundColor:'rgba(167,139,250,0.08)', borderWidth:1.5, pointRadius:0, fill:true, tension:0.3, spanGaps:true, yAxisID:'y' },
+        { label:'S&P 500 (norm)', data:spyNorm, borderColor:CT.c('#38bdf8'), backgroundColor:'transparent', borderWidth:1.5, pointRadius:0, fill:false, tension:0.3, spanGaps:true, yAxisID:'ySpy', borderDash:[4,3] },
       ]},
       options: {
         responsive:true, maintainAspectRatio:false,
@@ -2652,8 +2652,8 @@ async function _toggleAaiiSpy() {
         }}},
         scales:{
           x:{grid:{color:gridCol},ticks:{color:tickCol,maxTicksLimit:6,maxRotation:0}},
-          y:{grid:{color:gridCol},ticks:{color:'rgba(167,139,250,0.6)',callback:v=>(v>=0?'+':'')+v.toFixed(0)+'%'}},
-          ySpy:{position:'right',grid:{drawOnChartArea:false},ticks:{color:'rgba(56,189,248,0.6)',callback:v=>v.toFixed(0)}},
+          y:{grid:{color:gridCol},ticks:{color:CT.c('rgba(167,139,250,0.6)'),callback:v=>(v>=0?'+':'')+v.toFixed(0)+'%'}},
+          ySpy:{position:'right',grid:{drawOnChartArea:false},ticks:{color:CT.c('rgba(56,189,248,0.6)'),callback:v=>v.toFixed(0)}},
         },
         interaction:{mode:'index',intersect:false},
       },
@@ -2678,7 +2678,7 @@ function renderFearGreed(data, canvasId) {
     if (lo.includes('fear'))         return '#ef4444';
     if (lo.includes('extreme greed'))return '#065f46';
     if (lo.includes('greed'))        return '#10b981';
-    return '#94a3b8';
+    return CT.c('#94a3b8');
   }
   const col = _fgColor(rating);
 
@@ -2689,7 +2689,7 @@ function renderFearGreed(data, canvasId) {
     document.getElementById('fgBadge').innerHTML = score != null
       ? `<div class="text-2xl font-bold tabular-nums" style="color:${col}">${score}</div>
          <div class="text-xs font-semibold mt-0.5" style="color:${col}">${rating}</div>`
-      : '<div class="text-slate-600 text-xs">—</div>';
+      : '<div class="text-slate-500 dark:text-slate-600 text-xs">—</div>';
 
     // Needle position (0–100 → 0–100%)
     if (score != null) {
@@ -2707,11 +2707,11 @@ function renderFearGreed(data, canvasId) {
       if (c.val == null) return '';
       const v   = Math.round(c.val);
       const diff = score != null ? score - v : null;
-      const col2 = diff == null ? '#94a3b8' : diff >= 0 ? '#34d399' : '#f87171';
+      const col2 = diff == null ? CT.c('#94a3b8') : diff >= 0 ? CT.c('#34d399') : CT.c('#f87171');
       const sign = diff != null && diff >= 0 ? '+' : '';
-      return `<div class="bg-slate-800/60 rounded-lg p-1.5 text-center">
+      return `<div class="bg-slate-100/60 dark:bg-slate-800/60 rounded-lg p-1.5 text-center">
         <div class="text-[9px] text-slate-500 mb-0.5">${c.label}</div>
-        <div class="text-xs font-semibold text-slate-300">${v}</div>
+        <div class="text-xs font-semibold text-slate-600 dark:text-slate-300">${v}</div>
         ${diff != null ? `<div class="text-[9px]" style="color:${col2}">${sign}${diff}</div>` : ''}
       </div>`;
     }).join('');
@@ -2734,7 +2734,7 @@ function renderFearGreed(data, canvasId) {
         datasets: [{
           ...I18n.label('chart.fear_greed', 'Fear & Greed'),
           data: values,
-          borderColor: '#a78bfa',
+          borderColor: CT.c('#a78bfa'),
           backgroundColor: 'rgba(167,139,250,0.07)',
           borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 3,
           fill: true, tension: 0.3, spanGaps: true,
@@ -2793,7 +2793,7 @@ function renderAaii(data, canvasId) {
     _aaiiData = data;
     if (data._stale) {
       const badge = document.createElement('span');
-      badge.className = 'ml-2 text-[10px] text-amber-500/70';
+      badge.className = 'ml-2 text-[10px] text-amber-700/70 dark:text-amber-500/70';
       badge.textContent = '(cached)';
       document.querySelector('[data-i18n="markets.aaii_title"]')?.appendChild(badge);
     }
@@ -2810,14 +2810,14 @@ function renderAaii(data, canvasId) {
 
     // Bull / Neutral / Bear bars
     const barsData = [
-      { label: I18n.t('markets.aaii_bullish') || 'Bullish',  val: bull, col: '#34d399' },
-      { label: I18n.t('markets.aaii_neutral') || 'Neutral',  val: neu,  col: '#94a3b8' },
-      { label: I18n.t('markets.aaii_bearish') || 'Bearish',  val: bear, col: '#f87171' },
+      { label: I18n.t('markets.aaii_bullish') || 'Bullish',  val: bull, col: CT.c('#34d399') },
+      { label: I18n.t('markets.aaii_neutral') || 'Neutral',  val: neu,  col: CT.c('#94a3b8') },
+      { label: I18n.t('markets.aaii_bearish') || 'Bearish',  val: bear, col: CT.c('#f87171') },
     ];
     document.getElementById('aaiiBars').innerHTML = barsData.map(b => `
       <div class="flex items-center gap-2">
-        <span class="text-[10px] text-slate-400 w-14 shrink-0">${b.label}</span>
-        <div class="flex-1 bg-slate-800 rounded-full h-2 overflow-hidden">
+        <span class="text-[10px] text-slate-500 dark:text-slate-400 w-14 shrink-0">${b.label}</span>
+        <div class="flex-1 bg-slate-100 dark:bg-slate-800 rounded-full h-2 overflow-hidden">
           <div style="width:${b.val ?? 0}%; background:${b.col}; height:100%; border-radius:4px; transition:width 0.4s"></div>
         </div>
         <span class="text-[11px] font-semibold tabular-nums w-10 text-right" style="color:${b.col}">
@@ -2837,10 +2837,10 @@ function renderAaii(data, canvasId) {
         labels: histLabels,
         datasets: [
           { label: I18n.t('markets.aaii_bullish') || 'Bullish', data: hist.map(h => h.bullish),
-            borderColor: '#34d399', backgroundColor: 'rgba(52,211,153,0.15)',
+            borderColor: CT.c('#34d399'), backgroundColor: 'rgba(52,211,153,0.15)',
             borderWidth: 1.5, pointRadius: 0, fill: true, tension: 0.3, spanGaps: true },
           { label: I18n.t('markets.aaii_bearish') || 'Bearish', data: hist.map(h => h.bearish),
-            borderColor: '#f87171', backgroundColor: 'rgba(248,113,113,0.1)',
+            borderColor: CT.c('#f87171'), backgroundColor: 'rgba(248,113,113,0.1)',
             borderWidth: 1.5, pointRadius: 0, fill: true, tension: 0.3, spanGaps: true },
         ],
       },
@@ -2866,7 +2866,7 @@ function renderAaii(data, canvasId) {
           if (avg >= a.top && avg <= a.bottom) {
             c.save(); c.strokeStyle = '#34d39955'; c.lineWidth = 1; c.setLineDash([4, 3]);
             c.beginPath(); c.moveTo(a.left, avg); c.lineTo(a.right, avg); c.stroke();
-            c.fillStyle = '#34d399'; c.font = '9px Inter,sans-serif';
+            c.fillStyle = CT.c('#34d399'); c.font = '9px Inter,sans-serif';
             c.fillText(I18n.t('markets.aaii_avg') || 'Avg 37.5%', a.right - 55, avg - 3); c.restore();
           }
         },
@@ -2880,7 +2880,7 @@ function renderAaii(data, canvasId) {
     // Bull-Bear Spread chart
     const spreadVals = (data.history || []).slice(-52).map(h => h.bull_bear_spread ?? null);
     const spreadDates = (data.history || []).slice(-52).map(h => h.date || '');
-    const spreadColors = spreadVals.map(v => v == null ? 'transparent' : v >= 0 ? 'rgba(52,211,153,0.6)' : 'rgba(248,113,113,0.6)');
+    const spreadColors = spreadVals.map(v => v == null ? 'transparent' : v >= 0 ? CT.c('rgba(52,211,153,0.6)') : CT.c('rgba(248,113,113,0.6)'));
     if (window._aaiiSpreadChart) window._aaiiSpreadChart.destroy();
     window._aaiiSpreadChart = new Chart(document.getElementById('aaiiBullBearSpread'), {
       type: 'bar',
@@ -2923,9 +2923,9 @@ function renderPcr(data, canvasId) {
 
   // Badge: signal based on ratio level
   let signal, sigCol;
-  if (val < 0.6)      { signal = I18n.t('markets.pcr_bullish') || 'Bullish';  sigCol = '#34d399'; }
-  else if (val < 0.8) { signal = I18n.t('markets.pcr_neutral') || 'Neutral';  sigCol = '#94a3b8'; }
-  else                { signal = I18n.t('markets.pcr_bearish') || 'Bearish';  sigCol = '#f87171'; }
+  if (val < 0.6)      { signal = I18n.t('markets.pcr_bullish') || 'Bullish';  sigCol = CT.c('#34d399'); }
+  else if (val < 0.8) { signal = I18n.t('markets.pcr_neutral') || 'Neutral';  sigCol = CT.c('#94a3b8'); }
+  else                { signal = I18n.t('markets.pcr_bearish') || 'Bearish';  sigCol = CT.c('#f87171'); }
 
   if (canvasId === 'pcrChart') {
     _pcrData = data;
@@ -2939,7 +2939,7 @@ function renderPcr(data, canvasId) {
     document.getElementById('pcrNeedle').style.left = pct + '%';
 
     // Stats
-    const chgCls  = chg == null ? 'text-slate-500' : chg >= 0 ? 'text-rose-400' : 'text-emerald-400';
+    const chgCls  = chg == null ? 'text-slate-500' : chg >= 0 ? 'text-rose-700 dark:text-rose-400' : 'text-emerald-700 dark:text-emerald-400';
     const chgSign = chg == null ? '' : chg >= 0 ? '+' : '';
     document.getElementById('pcrStats').innerHTML = `
       <div class="stat-card">
@@ -2948,7 +2948,7 @@ function renderPcr(data, canvasId) {
       </div>
       <div class="stat-card">
         <div class="stat-label">${I18n.t('markets.pcr_ma20') || '20-day MA'}</div>
-        <div class="stat-val text-sm text-slate-200">${ma20 != null ? ma20.toFixed(2) : '—'}</div>
+        <div class="stat-val text-sm text-slate-700 dark:text-slate-200">${ma20 != null ? ma20.toFixed(2) : '—'}</div>
       </div>`;
 
     if (_pcrChartInst) { _pcrChartInst.destroy(); _pcrChartInst = null; }
@@ -2963,7 +2963,7 @@ function renderPcr(data, canvasId) {
       {
         ...I18n.label('chart.put_call', 'Put/Call'),
         data: closes,
-        borderColor: '#a5b4fc', backgroundColor: 'rgba(165,180,252,0.08)',
+        borderColor: CT.c('#a5b4fc'), backgroundColor: 'rgba(165,180,252,0.08)',
         borderWidth: 1.5, pointRadius: 0, fill: true, tension: 0.3, spanGaps: true,
       },
       {
@@ -2976,7 +2976,7 @@ function renderPcr(data, canvasId) {
           }
           return out;
         })(),
-        borderColor: '#fb923c', borderWidth: 1.5, borderDash: [4,3],
+        borderColor: CT.c('#fb923c'), borderWidth: 1.5, borderDash: [4,3],
         pointRadius: 0, fill: false, tension: 0.3, spanGaps: true,
       },
     ]},
@@ -3049,7 +3049,7 @@ function _renderRatioChart(data, canvasId, ratioKey, color) {
       {
         label: maLabel,
         data: maData,
-        borderColor: '#94a3b8', borderWidth: 1.2, borderDash: [4, 3],
+        borderColor: CT.c('#94a3b8'), borderWidth: 1.2, borderDash: [4, 3],
         pointRadius: 0, fill: false, spanGaps: true,
       },
     ]},
@@ -3079,23 +3079,23 @@ function renderGoldRatios(data) {
 
   function _ratioChg(v) {
     if (v == null) return '<span class="text-slate-500">—</span>';
-    const cls = v >= 0 ? 'text-rose-400' : 'text-emerald-400';
+    const cls = v >= 0 ? 'text-rose-700 dark:text-rose-400' : 'text-emerald-700 dark:text-emerald-400';
     return `<span class="${cls}">${v >= 0 ? '+' : ''}${v.toFixed(2)}</span>`;
   }
 
   // Gold/Silver card
   const gs = data.current_gs;
   const gsChg = data.gs_day_chg;
-  const gsCls = gsChg == null ? 'text-slate-200' : gsChg >= 0 ? 'text-rose-400' : 'text-emerald-400';
+  const gsCls = gsChg == null ? 'text-slate-700 dark:text-slate-200' : gsChg >= 0 ? 'text-rose-700 dark:text-rose-400' : 'text-emerald-700 dark:text-emerald-400';
   document.getElementById('gsBadge').innerHTML = `
-    <div class="text-2xl font-bold tabular-nums text-yellow-300">${gs != null ? gs.toFixed(1) : '—'}</div>
+    <div class="text-2xl font-bold tabular-nums text-yellow-700 dark:text-yellow-300">${gs != null ? gs.toFixed(1) : '—'}</div>
     <div class="text-xs text-slate-500 mt-0.5">${_ratioChg(gsChg)} ${I18n.t('markets.ratio_today')||'today'}</div>`;
   document.getElementById('gsStats').innerHTML = `
-    <div class="stat-card text-center"><div class="stat-label">${I18n.t('markets.ratio_gold')||'Gold'}</div><div class="stat-val text-sm text-yellow-300">$${data.gold_price?.toFixed(0) ?? '—'}</div></div>
-    <div class="stat-card text-center"><div class="stat-label">${I18n.t('markets.ratio_silver')||'Silver'}</div><div class="stat-val text-sm text-slate-300">$${data.silver_price?.toFixed(2) ?? '—'}</div></div>
-    <div class="stat-card text-center"><div class="stat-label">${I18n.t('markets.ratio_52w')||'52w Range'}</div><div class="stat-val text-xs text-slate-400">${data.gs_52wk_lo?.toFixed(0) ?? '—'}–${data.gs_52wk_hi?.toFixed(0) ?? '—'}</div></div>`;
+    <div class="stat-card text-center"><div class="stat-label">${I18n.t('markets.ratio_gold')||'Gold'}</div><div class="stat-val text-sm text-yellow-700 dark:text-yellow-300">$${data.gold_price?.toFixed(0) ?? '—'}</div></div>
+    <div class="stat-card text-center"><div class="stat-label">${I18n.t('markets.ratio_silver')||'Silver'}</div><div class="stat-val text-sm text-slate-600 dark:text-slate-300">$${data.silver_price?.toFixed(2) ?? '—'}</div></div>
+    <div class="stat-card text-center"><div class="stat-label">${I18n.t('markets.ratio_52w')||'52w Range'}</div><div class="stat-val text-xs text-slate-500 dark:text-slate-400">${data.gs_52wk_lo?.toFixed(0) ?? '—'}–${data.gs_52wk_hi?.toFixed(0) ?? '—'}</div></div>`;
   if (_gsChartInst) { _gsChartInst.destroy(); _gsChartInst = null; }
-  _gsChartInst = _renderRatioChart(data, 'gsChart', 'gs_ratio', '#fbbf24');
+  _gsChartInst = _renderRatioChart(data, 'gsChart', 'gs_ratio', CT.c('#fbbf24'));
   document.getElementById('gsLoading').style.display = 'none';
   document.getElementById('gsBody').style.display = '';
 
@@ -3103,14 +3103,14 @@ function renderGoldRatios(data) {
   const gc = data.current_gc;
   const gcChg = data.gc_day_chg;
   document.getElementById('gcBadge').innerHTML = `
-    <div class="text-2xl font-bold tabular-nums text-orange-300">${gc != null ? gc.toFixed(1) : '—'}</div>
+    <div class="text-2xl font-bold tabular-nums text-orange-700 dark:text-orange-300">${gc != null ? gc.toFixed(1) : '—'}</div>
     <div class="text-xs text-slate-500 mt-0.5">${_ratioChg(gcChg)} ${I18n.t('markets.ratio_today')||'today'}</div>`;
   document.getElementById('gcStats').innerHTML = `
-    <div class="stat-card text-center"><div class="stat-label">${I18n.t('markets.ratio_gold')||'Gold'}</div><div class="stat-val text-sm text-yellow-300">$${data.gold_price?.toFixed(0) ?? '—'}</div></div>
-    <div class="stat-card text-center"><div class="stat-label">${I18n.t('markets.ratio_copper')||'Copper'}</div><div class="stat-val text-sm text-orange-300">$${data.copper_price?.toFixed(3) ?? '—'}</div></div>
-    <div class="stat-card text-center"><div class="stat-label">${I18n.t('markets.ratio_52w')||'52w Range'}</div><div class="stat-val text-xs text-slate-400">${data.gc_52wk_lo?.toFixed(0) ?? '—'}–${data.gc_52wk_hi?.toFixed(0) ?? '—'}</div></div>`;
+    <div class="stat-card text-center"><div class="stat-label">${I18n.t('markets.ratio_gold')||'Gold'}</div><div class="stat-val text-sm text-yellow-700 dark:text-yellow-300">$${data.gold_price?.toFixed(0) ?? '—'}</div></div>
+    <div class="stat-card text-center"><div class="stat-label">${I18n.t('markets.ratio_copper')||'Copper'}</div><div class="stat-val text-sm text-orange-700 dark:text-orange-300">$${data.copper_price?.toFixed(3) ?? '—'}</div></div>
+    <div class="stat-card text-center"><div class="stat-label">${I18n.t('markets.ratio_52w')||'52w Range'}</div><div class="stat-val text-xs text-slate-500 dark:text-slate-400">${data.gc_52wk_lo?.toFixed(0) ?? '—'}–${data.gc_52wk_hi?.toFixed(0) ?? '—'}</div></div>`;
   if (_gcChartInst) { _gcChartInst.destroy(); _gcChartInst = null; }
-  _gcChartInst = _renderRatioChart(data, 'gcChart', 'gc_ratio', '#fb923c');
+  _gcChartInst = _renderRatioChart(data, 'gcChart', 'gc_ratio', CT.c('#fb923c'));
   document.getElementById('gcLoading').style.display = 'none';
   document.getElementById('gcBody').style.display = '';
 }
@@ -3141,16 +3141,16 @@ function renderYieldCurve(data) {
 
   const y10 = cur['10Y'];
   document.getElementById('usYieldBadge').innerHTML = y10 != null
-    ? `<div class="text-sm font-bold ${inverted ? 'text-red-400' : 'text-sky-300'}">${y10.toFixed(2)}%</div>
-       <div class="text-[10px] ${inverted ? 'text-red-500' : 'text-slate-500'}">${inverted ? '⚠ Inverted' : 'Normal'}</div>`
+    ? `<div class="text-sm font-bold ${inverted ? 'text-red-700 dark:text-red-400' : 'text-sky-700 dark:text-sky-300'}">${y10.toFixed(2)}%</div>
+       <div class="text-[10px] ${inverted ? 'text-red-700 dark:text-red-500' : 'text-slate-500'}">${inverted ? '⚠ Inverted' : 'Normal'}</div>`
     : '';
 
   const statsEl = document.getElementById('usYieldStats');
   statsEl.innerHTML = mats.map((m, i) => yields[i] != null
-    ? `<div class="stat-card text-center"><div class="stat-label">${m}</div><div class="stat-val text-sm text-sky-300">${yields[i].toFixed(2)}%</div></div>`
+    ? `<div class="stat-card text-center"><div class="stat-label">${m}</div><div class="stat-val text-sm text-sky-700 dark:text-sky-300">${yields[i].toFixed(2)}%</div></div>`
     : '').join('');
   if (spread != null) {
-    const sc = inverted ? 'text-red-400' : 'text-emerald-400';
+    const sc = inverted ? 'text-red-700 dark:text-red-400' : 'text-emerald-700 dark:text-emerald-400';
     statsEl.innerHTML += `<div class="stat-card text-center"><div class="stat-label">10Y–3M</div><div class="stat-val text-sm ${sc}">${spread > 0 ? '+' : ''}${spread.toFixed(2)}%</div></div>`;
   }
 
@@ -3185,10 +3185,10 @@ function renderYieldCurve(data) {
         tooltip: { callbacks: { label: ctx => ` ${ctx.parsed.y?.toFixed(3)}%` } },
       },
       scales: {
-        x: { grid: { color: '#1e293b' }, ticks: { color: '#64748b', font: { size: 11 } } },
+        x: { grid: { color: CT.c('#1e293b') }, ticks: { color: CT.c('#64748b'), font: { size: 11 } } },
         y: {
-          grid: { color: '#1e293b' },
-          ticks: { color: '#64748b', font: { size: 11 }, callback: v => v.toFixed(1) + '%' },
+          grid: { color: CT.c('#1e293b') },
+          ticks: { color: CT.c('#64748b'), font: { size: 11 }, callback: v => v.toFixed(1) + '%' },
           suggestedMin: Math.max(0, Math.min(...yields.filter(v => v != null)) - 0.5),
           suggestedMax: Math.max(...yields.filter(v => v != null)) + 0.5,
         },
@@ -3211,16 +3211,16 @@ function renderYieldCurve(data) {
   const cnInverted = cnSpread !== null && cnSpread < 0;
 
   document.getElementById('cnYieldBadge').innerHTML = cn10y != null
-    ? `<div class="text-sm font-bold ${cnInverted ? 'text-red-400' : 'text-rose-400'}">${cn10y.toFixed(2)}%</div>
-       <div class="text-[10px] ${cnInverted ? 'text-red-500' : 'text-slate-500'}">${cnInverted ? '⚠ Inverted' : 'Normal'}</div>`
+    ? `<div class="text-sm font-bold ${cnInverted ? 'text-red-700 dark:text-red-400' : 'text-rose-700 dark:text-rose-400'}">${cn10y.toFixed(2)}%</div>
+       <div class="text-[10px] ${cnInverted ? 'text-red-700 dark:text-red-500' : 'text-slate-500'}">${cnInverted ? '⚠ Inverted' : 'Normal'}</div>`
     : '';
 
   const cnStatsEl = document.getElementById('cnYieldStats');
   cnStatsEl.innerHTML = cnMats.map((m, i) => cnYields[i] != null
-    ? `<div class="stat-card text-center"><div class="stat-label">${m}</div><div class="stat-val text-sm text-rose-400">${cnYields[i].toFixed(2)}%</div></div>`
+    ? `<div class="stat-card text-center"><div class="stat-label">${m}</div><div class="stat-val text-sm text-rose-700 dark:text-rose-400">${cnYields[i].toFixed(2)}%</div></div>`
     : '').join('');
   if (cnSpread != null) {
-    const sc = cnInverted ? 'text-red-400' : 'text-emerald-400';
+    const sc = cnInverted ? 'text-red-700 dark:text-red-400' : 'text-emerald-700 dark:text-emerald-400';
     cnStatsEl.innerHTML += `<div class="stat-card text-center"><div class="stat-label">10Y–3M</div><div class="stat-val text-sm ${sc}">${cnSpread > 0 ? '+' : ''}${cnSpread.toFixed(2)}%</div></div>`;
   }
 
@@ -3255,10 +3255,10 @@ function renderYieldCurve(data) {
         tooltip: { callbacks: { label: ctx => ` ${ctx.parsed.y?.toFixed(3)}%` } },
       },
       scales: {
-        x: { grid: { color: '#1e293b' }, ticks: { color: '#64748b', font: { size: 11 } } },
+        x: { grid: { color: CT.c('#1e293b') }, ticks: { color: CT.c('#64748b'), font: { size: 11 } } },
         y: {
-          grid: { color: '#1e293b' },
-          ticks: { color: '#64748b', font: { size: 11 }, callback: v => v.toFixed(1) + '%' },
+          grid: { color: CT.c('#1e293b') },
+          ticks: { color: CT.c('#64748b'), font: { size: 11 }, callback: v => v.toFixed(1) + '%' },
           suggestedMin: Math.max(0, Math.min(...cnYields.filter(v => v != null)) - 0.5),
           suggestedMax: Math.max(...cnYields.filter(v => v != null)) + 0.5,
         },
@@ -3283,16 +3283,16 @@ function renderYieldCurve(data) {
   const jpSpread = (jp10y != null && jp1y != null) ? Math.round((jp10y - jp1y) * 1000) / 1000 : null;
 
   document.getElementById('jpYieldBadge').innerHTML = jp10y != null
-    ? `<div class="text-sm font-bold text-amber-300">${jp10y.toFixed(2)}%</div>
+    ? `<div class="text-sm font-bold text-amber-700 dark:text-amber-300">${jp10y.toFixed(2)}%</div>
        <div class="text-[10px] text-slate-500">10Y JGB</div>`
     : '';
 
   const jpStatsEl = document.getElementById('jpYieldStats');
   jpStatsEl.innerHTML = jpMats.map((m, i) =>
-    `<div class="stat-card text-center"><div class="stat-label">${m}</div><div class="stat-val text-sm text-amber-300">${jpYields[i].toFixed(2)}%</div></div>`
+    `<div class="stat-card text-center"><div class="stat-label">${m}</div><div class="stat-val text-sm text-amber-700 dark:text-amber-300">${jpYields[i].toFixed(2)}%</div></div>`
   ).join('');
   if (jpSpread != null) {
-    const sc = jpSpread < 0 ? 'text-red-400' : 'text-emerald-400';
+    const sc = jpSpread < 0 ? 'text-red-700 dark:text-red-400' : 'text-emerald-700 dark:text-emerald-400';
     jpStatsEl.innerHTML += `<div class="stat-card text-center"><div class="stat-label">10Y–1Y</div><div class="stat-val text-sm ${sc}">${jpSpread > 0 ? '+' : ''}${jpSpread.toFixed(2)}%</div></div>`;
   }
 
@@ -3312,9 +3312,9 @@ function renderYieldCurve(data) {
       plugins: { legend: { display: false },
                  tooltip: { callbacks: { label: ctx => ` ${ctx.parsed.y?.toFixed(3)}%` } } },
       scales: {
-        x: { grid: { color: '#1e293b' }, ticks: { color: '#64748b', font: { size: 11 } } },
-        y: { grid: { color: '#1e293b' },
-             ticks: { color: '#64748b', font: { size: 11 }, callback: v => v.toFixed(2) + '%' },
+        x: { grid: { color: CT.c('#1e293b') }, ticks: { color: CT.c('#64748b'), font: { size: 11 } } },
+        y: { grid: { color: CT.c('#1e293b') },
+             ticks: { color: CT.c('#64748b'), font: { size: 11 }, callback: v => v.toFixed(2) + '%' },
              suggestedMin: Math.max(0, Math.min(...jpYields) - 0.2),
              suggestedMax: Math.max(...jpYields) + 0.2 },
       },
@@ -3408,7 +3408,7 @@ function _yieldExplainFinish(panel, chart, lang, btn) {
   const label = lang === 'zh' ? '🌐 View in English' : '🌐 翻译成中文';
   const tBtn = document.createElement('button');
   tBtn.textContent = label;
-  tBtn.className = 'mt-3 block text-xs text-violet-400 hover:text-violet-300 underline underline-offset-2 cursor-pointer bg-transparent border-0 p-0';
+  tBtn.className = 'mt-3 block text-xs text-violet-700 dark:text-violet-400 hover:text-violet-700 dark:hover:text-violet-300 underline underline-offset-2 cursor-pointer bg-transparent border-0 p-0';
   tBtn.onclick = () => { panel.innerHTML = ''; panel.classList.add('visible'); explainYieldLang(chart, otherLang, panel, btn); };
   panel.appendChild(document.createElement('br'));
   panel.appendChild(tBtn);
@@ -3548,13 +3548,13 @@ function _econCountryRegion(country) {
 function filterEcon(region) {
   _econFilter = region;
   // Update button active state
-  document.querySelectorAll('.econ-filter-btn').forEach(b => b.classList.remove('active','border-indigo-500','text-indigo-300','border-rose-500','text-rose-300'));
+  document.querySelectorAll('.econ-filter-btn').forEach(b => b.classList.remove('active','border-indigo-500','text-indigo-700 dark:text-indigo-300','border-rose-500','text-rose-700 dark:text-rose-300'));
   const activeBtn = document.getElementById('econFilter-' + region);
   if (activeBtn) {
     if (region === 'high') {
-      activeBtn.classList.add('active','border-rose-500','text-rose-300');
+      activeBtn.classList.add('active','border-rose-500','text-rose-700 dark:text-rose-300');
     } else {
-      activeBtn.classList.add('active','border-indigo-500','text-indigo-300');
+      activeBtn.classList.add('active','border-indigo-500','text-indigo-700 dark:text-indigo-300');
     }
   }
   _renderEconTable(_econData);
@@ -3569,7 +3569,7 @@ function _renderEconTable(events) {
   if (hdr) {
     const label = (typeof I18n !== 'undefined' ? I18n.t('markets.econ_col_time') : null) || 'Time';
     hdr.innerHTML = tzAbbr
-      ? `<span>${label}</span> <span class="normal-case text-slate-600 font-normal">(${tzAbbr})</span>`
+      ? `<span>${label}</span> <span class="normal-case text-slate-500 dark:text-slate-600 font-normal">(${tzAbbr})</span>`
       : `<span>${label}</span>`;
   }
   const hidePast = hidePastEl ? hidePastEl.checked : true;
@@ -3613,10 +3613,10 @@ function _renderEconTable(events) {
     if (!impact) return '';
     const i = String(impact).toLowerCase();
     if (i === 'high' || i === '3')
-      return '<span class="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded border bg-rose-950/60 text-rose-400 border-rose-900/50 font-semibold">● High</span>';
+      return '<span class="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded border bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-400 border-rose-200/50 dark:border-rose-900/50 font-semibold">● High</span>';
     if (i === 'medium' || i === 'moderate' || i === '2')
-      return '<span class="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded border bg-amber-950/50 text-amber-400 border-amber-900/50 font-semibold">● Med</span>';
-    return '<span class="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-500 font-medium">· Low</span>';
+      return '<span class="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded border bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-400 border-amber-200/50 dark:border-amber-900/50 font-semibold">● Med</span>';
+    return '<span class="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 font-medium">· Low</span>';
   };
 
   let rows = '';
@@ -3630,13 +3630,13 @@ function _renderEconTable(events) {
       const rowClass = isNext
         ? 'border-l-2 border-brand/70 bg-brand/5 transition-colors'
         : isHigh
-          ? 'hover:bg-rose-950/30 bg-rose-950/10 transition-colors border-l-2 border-rose-800/60'
+          ? 'hover:bg-rose-50 dark:hover:bg-rose-950/30 bg-rose-50 dark:bg-rose-950/10 transition-colors border-l-2 border-rose-200/60 dark:border-rose-800/60'
           : isPast
             ? 'opacity-40 transition-colors'
-            : 'hover:bg-slate-800/40 transition-colors';
+            : 'hover:bg-slate-100/40 dark:hover:bg-slate-800/40 transition-colors';
       const nameText = ev.zh
-        ? `<span class="${isHigh ? 'text-rose-200' : isNext ? 'text-brand' : 'text-slate-200'}">${ev.zh}</span><br><span class="text-slate-500 text-[10px]">${ev.event}</span>`
-        : `<span class="${isHigh ? 'text-rose-200' : isNext ? 'text-brand' : 'text-slate-200'}">${ev.event}</span>`;
+        ? `<span class="${isHigh ? 'text-rose-800 dark:text-rose-200' : isNext ? 'text-brand' : 'text-slate-700 dark:text-slate-200'}">${ev.zh}</span><br><span class="text-slate-500 text-[10px]">${ev.event}</span>`
+        : `<span class="${isHigh ? 'text-rose-800 dark:text-rose-200' : isNext ? 'text-brand' : 'text-slate-700 dark:text-slate-200'}">${ev.event}</span>`;
       const nameCell = ev.url
         ? `<a href="${ev.url}" target="_blank" rel="noopener" class="hover:underline underline-offset-2">${nameText}</a>`
         : nameText;
@@ -3645,23 +3645,23 @@ function _renderEconTable(events) {
         if (!ev.actual || !ev.forecast) return '';
         const a = parseFloat(ev.actual), f = parseFloat(ev.forecast);
         if (isNaN(a) || isNaN(f)) return '';
-        return a > f ? ' <span class="text-emerald-400">▲</span>' : a < f ? ' <span class="text-rose-400">▼</span>' : '';
+        return a > f ? ' <span class="text-emerald-700 dark:text-emerald-400">▲</span>' : a < f ? ' <span class="text-rose-700 dark:text-rose-400">▼</span>' : '';
       })();
       // Format time in client's local timezone
       const localTime = ev._dt
         ? ev._dt.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
-        : (ev.time ? `${ev.time} <span class="text-slate-600">ET</span>` : '—');
+        : (ev.time ? `${ev.time} <span class="text-slate-500 dark:text-slate-600">ET</span>` : '—');
       const timeCell = ev._dt && tzAbbr
         ? `${localTime}`
         : localTime;
       rows += `<tr class="${rowClass}">
-        <td class="py-2 pr-3 text-slate-400 whitespace-nowrap">${i === 0 ? date : ''}</td>
-        <td class="py-2 pr-3 text-slate-400 whitespace-nowrap">${timeCell}${nextBadge}</td>
-        <td class="py-2 pr-3 text-slate-400 whitespace-nowrap">${ev.country || '—'}</td>
+        <td class="py-2 pr-3 text-slate-500 dark:text-slate-400 whitespace-nowrap">${i === 0 ? date : ''}</td>
+        <td class="py-2 pr-3 text-slate-500 dark:text-slate-400 whitespace-nowrap">${timeCell}${nextBadge}</td>
+        <td class="py-2 pr-3 text-slate-500 dark:text-slate-400 whitespace-nowrap">${ev.country || '—'}</td>
         <td class="py-2 pr-3 max-w-xs">${nameCell}</td>
         <td class="py-2 pr-3">${impactBadge(ev.impact)}</td>
-        <td class="py-2 pr-3 text-right tabular-nums font-semibold ${ev.actual ? (isHigh ? 'text-rose-300' : 'text-slate-200') : 'text-slate-600'}">${ev.actual || '—'}${actualVsForecast}</td>
-        <td class="py-2 pr-3 text-right tabular-nums text-slate-400">${ev.forecast || '—'}</td>
+        <td class="py-2 pr-3 text-right tabular-nums font-semibold ${ev.actual ? (isHigh ? 'text-rose-700 dark:text-rose-300' : 'text-slate-700 dark:text-slate-200') : 'text-slate-500 dark:text-slate-600'}">${ev.actual || '—'}${actualVsForecast}</td>
+        <td class="py-2 pr-3 text-right tabular-nums text-slate-500 dark:text-slate-400">${ev.forecast || '—'}</td>
         <td class="py-2 text-right tabular-nums text-slate-500">${ev.previous || '—'}</td>
       </tr>`;
       globalIdx++;
@@ -3675,7 +3675,7 @@ function _renderEconTable(events) {
       _renderEconTable(_econData);
       return;
     }
-    rows = `<tr><td colspan="8" class="py-6 text-center text-slate-600 text-xs">${I18n.t('markets.econ_no_events') || 'No events for this filter.'}</td></tr>`;
+    rows = `<tr><td colspan="8" class="py-6 text-center text-slate-500 dark:text-slate-600 text-xs">${I18n.t('markets.econ_no_events') || 'No events for this filter.'}</td></tr>`;
   }
 
   document.getElementById('econTableBody').innerHTML = rows;
@@ -3819,7 +3819,7 @@ function expandMktsChart(kind) {
     });
     const labels = sorted.map(s => (I18n.t('markets.sector.' + s.label)) || s.label);
     const vals   = sorted.map(s => (_sectorPeriod === 'week' ? (s.week_chg_pct ?? s.day_chg) : s.day_chg) ?? 0);
-    const colors = vals.map(v => v >= 0 ? 'rgba(52,211,153,0.7)' : 'rgba(248,113,113,0.7)');
+    const colors = vals.map(v => v >= 0 ? 'rgba(52,211,153,0.7)' : CT.c('rgba(248,113,113,0.7)'));
     modal.style.display = 'flex';
     _mktsModalChart = new Chart(document.getElementById('mktsModalCanvas'), {
       type: 'bar',
@@ -3830,7 +3830,7 @@ function expandMktsChart(kind) {
         plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => ` ${c.raw >= 0 ? '+' : ''}${c.raw.toFixed(2)}%` } } },
         scales: {
           x: { grid: { color: GRID_COL }, ticks: { color: TICK_COL, callback: v => v + '%' } },
-          y: { grid: { color: 'transparent' }, ticks: { color: '#cbd5e1', font: { size: 12 } } },
+          y: { grid: { color: 'transparent' }, ticks: { color: CT.c('#cbd5e1'), font: { size: 12 } } },
         },
       },
     });
@@ -3877,14 +3877,14 @@ function expandMktsChart(kind) {
     titleEl.textContent = I18n.t('markets.gold_silver_title') || 'Gold / Silver Ratio';
     subEl.textContent   = I18n.t('markets.gold_silver_desc') || '2-year daily — oz of silver per oz of gold';
     modal.style.display = 'flex';
-    _mktsModalChart = _renderRatioChart(_goldRatioData, 'mktsModalCanvas', 'gs_ratio', '#fbbf24');
+    _mktsModalChart = _renderRatioChart(_goldRatioData, 'mktsModalCanvas', 'gs_ratio', CT.c('#fbbf24'));
     return;
   }
   if (kind === 'gc' && _goldRatioData) {
     titleEl.textContent = I18n.t('markets.gold_copper_title') || 'Gold / Copper Ratio';
     subEl.textContent   = I18n.t('markets.gold_copper_desc') || '2-year daily — gold ($/oz) ÷ copper ($/lb)';
     modal.style.display = 'flex';
-    _mktsModalChart = _renderRatioChart(_goldRatioData, 'mktsModalCanvas', 'gc_ratio', '#fb923c');
+    _mktsModalChart = _renderRatioChart(_goldRatioData, 'mktsModalCanvas', 'gc_ratio', CT.c('#fb923c'));
     return;
   }
   if (kind === 'usYield' && _yieldData) {
@@ -3911,8 +3911,8 @@ function expandMktsChart(kind) {
       ]},
       options: { responsive: true, maintainAspectRatio: false,
         plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ` ${ctx.parsed.y?.toFixed(3)}%` } } },
-        scales: { x: { grid: { color: '#1e293b' }, ticks: { color: '#64748b' } },
-          y: { grid: { color: '#1e293b' }, ticks: { color: '#64748b', callback: v => v.toFixed(1)+'%' },
+        scales: { x: { grid: { color: CT.c('#1e293b') }, ticks: { color: CT.c('#64748b') } },
+          y: { grid: { color: CT.c('#1e293b') }, ticks: { color: CT.c('#64748b'), callback: v => v.toFixed(1)+'%' },
             suggestedMin: Math.max(0, Math.min(...ylds.filter(v=>v!=null))-0.5),
             suggestedMax: Math.max(...ylds.filter(v=>v!=null))+0.5 } } },
     });
@@ -3940,8 +3940,8 @@ function expandMktsChart(kind) {
       ]},
       options: { responsive: true, maintainAspectRatio: false,
         plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ` ${ctx.parsed.y?.toFixed(3)}%` } } },
-        scales: { x: { grid: { color: '#1e293b' }, ticks: { color: '#64748b' } },
-          y: { grid: { color: '#1e293b' }, ticks: { color: '#64748b', callback: v => v.toFixed(1)+'%' },
+        scales: { x: { grid: { color: CT.c('#1e293b') }, ticks: { color: CT.c('#64748b') } },
+          y: { grid: { color: CT.c('#1e293b') }, ticks: { color: CT.c('#64748b'), callback: v => v.toFixed(1)+'%' },
             suggestedMin: Math.max(0, Math.min(...cnYlds.filter(v=>v!=null))-0.5),
             suggestedMax: Math.max(...cnYlds.filter(v=>v!=null))+0.5 } } },
     });
@@ -3968,8 +3968,8 @@ function expandMktsChart(kind) {
       ]},
       options: { responsive: true, maintainAspectRatio: false,
         plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ` ${ctx.parsed.y?.toFixed(3)}%` } } },
-        scales: { x: { grid: { color: '#1e293b' }, ticks: { color: '#64748b' } },
-          y: { grid: { color: '#1e293b' }, ticks: { color: '#64748b', callback: v => v.toFixed(2)+'%' },
+        scales: { x: { grid: { color: CT.c('#1e293b') }, ticks: { color: CT.c('#64748b') } },
+          y: { grid: { color: CT.c('#1e293b') }, ticks: { color: CT.c('#64748b'), callback: v => v.toFixed(2)+'%' },
             suggestedMin: Math.max(0, Math.min(...jpYlds)-0.2),
             suggestedMax: Math.max(...jpYlds)+0.2 } } },
     });
@@ -4131,13 +4131,13 @@ function _mktsModalConfig(kind) {
       return null;
     });
 
-    const gridCol = '#1e293b', tickCol = '#64748b';
+    const gridCol = CT.c('#1e293b'), tickCol = CT.c('#64748b');
     new Chart(document.getElementById('vixPcrChart'), {
       type: 'line',
       data: { labels: dateSlice, datasets: [
-        { label:'VIX', data:vixAligned, borderColor:'#f87171', backgroundColor:'rgba(248,113,113,0.06)',
+        { label:'VIX', data:vixAligned, borderColor:CT.c('#f87171'), backgroundColor:'rgba(248,113,113,0.06)',
           borderWidth:1.5, pointRadius:0, fill:true, tension:0.3, spanGaps:true, yAxisID:'y' },
-        { label:'PCR', data:pcrSlice, borderColor:'#fbbf24', backgroundColor:'transparent',
+        { label:'PCR', data:pcrSlice, borderColor:CT.c('#fbbf24'), backgroundColor:'transparent',
           borderWidth:1.5, pointRadius:0, fill:false, tension:0.3, spanGaps:true, yAxisID:'yPcr', borderDash:[4,3] },
       ]},
       options: {
@@ -4147,8 +4147,8 @@ function _mktsModalConfig(kind) {
         }}},
         scales:{
           x:{grid:{color:gridCol},ticks:{color:tickCol,maxTicksLimit:6,maxRotation:0}},
-          y:{grid:{color:gridCol},ticks:{color:'rgba(248,113,113,0.7)',callback:v=>v.toFixed(0)}},
-          yPcr:{position:'right',grid:{drawOnChartArea:false},ticks:{color:'rgba(251,191,36,0.7)',callback:v=>v.toFixed(2)}},
+          y:{grid:{color:gridCol},ticks:{color:CT.c('rgba(248,113,113,0.7)'),callback:v=>v.toFixed(0)}},
+          yPcr:{position:'right',grid:{drawOnChartArea:false},ticks:{color:CT.c('rgba(251,191,36,0.7)'),callback:v=>v.toFixed(2)}},
         },
         interaction:{mode:'index',intersect:false},
       },
@@ -4247,7 +4247,7 @@ function _mktsModalConfig(kind) {
           if (erpEl) {
             erpEl.textContent = (erp >= 0 ? '+' : '') + erp.toFixed(2) + '%';
             erpEl.className = 'text-2xl font-bold font-mono ' +
-              (erp >= 3 ? 'text-emerald-400' : erp >= 1 ? 'text-amber-400' : erp >= 0 ? 'text-orange-400' : 'text-rose-400');
+              (erp >= 3 ? 'text-emerald-700 dark:text-emerald-400' : erp >= 1 ? 'text-amber-700 dark:text-amber-400' : erp >= 0 ? 'text-orange-700 dark:text-orange-400' : 'text-rose-700 dark:text-rose-400');
           }
           if (lblEl) {
             lblEl.textContent = erp >= 3 ? (I18n.t('markets.erp_stocks_attractive')||'Stocks attractive') : erp >= 1 ? (I18n.t('markets.erp_fairly_valued')||'Fairly valued') : erp >= 0 ? (I18n.t('markets.erp_expensive')||'Expensive') : (I18n.t('markets.erp_bonds_preferred')||'Bonds preferred');
@@ -4280,24 +4280,24 @@ function _mktsModalConfig(kind) {
 
     const isZh = () => (I18n.getLang && I18n.getLang() === 'zh');
     const pct = v => (typeof v === 'number')
-      ? `<span class="${v >= 0 ? 'text-emerald-400' : 'text-rose-400'}">${v >= 0 ? '+' : ''}${v.toFixed(1)}%</span>`
-      : '<span class="text-slate-600">—</span>';
+      ? `<span class="${v >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'}">${v >= 0 ? '+' : ''}${v.toFixed(1)}%</span>`
+      : '<span class="text-slate-500 dark:text-slate-600">—</span>';
 
     const table = (rows, heading, favoured) => {
       const head = `<div class="flex items-center gap-2 mb-1.5">
-          <span class="text-[11px] font-semibold ${favoured ? 'text-slate-100' : 'text-slate-400'}">${heading}</span>
-          ${favoured ? `<span class="text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-800">${I18n.t('markets.erp_etf_favoured') || 'favoured now'}</span>` : ''}
+          <span class="text-[11px] font-semibold ${favoured ? 'text-slate-800 dark:text-slate-100' : 'text-slate-500 dark:text-slate-400'}">${heading}</span>
+          ${favoured ? `<span class="text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">${I18n.t('markets.erp_etf_favoured') || 'favoured now'}</span>` : ''}
         </div>`;
-      const body = rows.map(r => `<tr class="border-t border-slate-800/70">
-            <td class="py-1 pr-2 font-mono text-[11px] text-slate-200">${r.ticker}</td>
+      const body = rows.map(r => `<tr class="border-t border-slate-200/70 dark:border-slate-800/70">
+            <td class="py-1 pr-2 font-mono text-[11px] text-slate-700 dark:text-slate-200">${r.ticker}</td>
             <td class="py-1 pr-2 text-[10px] text-slate-500 truncate">${isZh() ? (r.name_zh || r.name) : r.name}</td>
             <td class="py-1 pr-2 text-right font-mono text-[11px]">${pct(r.r1)}</td>
             <td class="py-1 pr-2 text-right font-mono text-[11px]">${pct(r.r3)}</td>
             <td class="py-1 text-right font-mono text-[11px]">${pct(r.r5)}</td>
           </tr>`).join('');
-      return head + `<div class="rounded-lg border ${favoured ? 'border-emerald-900/60 bg-emerald-950/10' : 'border-slate-800'} p-2">
+      return head + `<div class="rounded-lg border ${favoured ? 'border-emerald-200/60 dark:border-emerald-900/60 bg-emerald-50 dark:bg-emerald-950/10' : 'border-slate-200 dark:border-slate-800'} p-2">
           <table class="w-full table-fixed">
-            <thead><tr class="text-[9px] uppercase tracking-wider text-slate-600">
+            <thead><tr class="text-[9px] uppercase tracking-wider text-slate-500 dark:text-slate-600">
               <th class="text-left font-semibold w-12"></th><th></th>
               <th class="text-right font-semibold w-12">1Y</th>
               <th class="text-right font-semibold w-12">3Y</th>
@@ -4350,16 +4350,16 @@ function _mktsModalConfig(kind) {
         badge.classList.remove('hidden');
         badge.textContent = (pct >= 0 ? '▲ +' : '▼ ') + pct + '% YTD';
         badge.className = 'text-xs px-2 py-0.5 rounded font-semibold ' +
-          (pct >= 0 ? 'bg-emerald-900/50 text-emerald-300' : 'bg-rose-900/50 text-rose-300');
+          (pct >= 0 ? 'bg-emerald-50 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300' : 'bg-rose-50 dark:bg-rose-900/50 text-rose-700 dark:text-rose-300');
       }
 
-      const gridCol = '#1e293b', tickCol = '#64748b';
+      const gridCol = CT.c('#1e293b'), tickCol = CT.c('#64748b');
       new Chart(document.getElementById('rotationChart'), {
         type: 'line',
         data: { labels: dates, datasets: [{
           ...I18n.label('chart.nasdaq_sp_ratio', 'Nasdaq/S&P Ratio'),
           data: ratio,
-          borderColor: '#38bdf8', backgroundColor: 'rgba(56,189,248,0.08)',
+          borderColor: CT.c('#38bdf8'), backgroundColor: 'rgba(56,189,248,0.08)',
           borderWidth: 2, pointRadius: 0, fill: true, tension: 0.3, spanGaps: true,
         }]},
         options: {
@@ -4560,15 +4560,15 @@ async function loadCreditSpread(period) {
         const el = document.getElementById(id);
         if (!el || !data) return;
         const pct = data.day_chg_pct;
-        const cls = pct == null ? 'text-slate-400' : pct >= 0 ? 'text-emerald-400' : 'text-rose-400';
+        const cls = pct == null ? 'text-slate-500 dark:text-slate-400' : pct >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400';
         const sign = pct == null ? '' : pct >= 0 ? '+' : '';
-        el.innerHTML = `<span class="font-mono font-semibold text-slate-200">${ticker}</span><span class="${cls} text-[11px] ml-1">${pct!=null ? sign+pct.toFixed(2)+'%' : ''}</span>`;
+        el.innerHTML = `<span class="font-mono font-semibold text-slate-700 dark:text-slate-200">${ticker}</span><span class="${cls} text-[11px] ml-1">${pct!=null ? sign+pct.toFixed(2)+'%' : ''}</span>`;
       }
       fmtChip('hygCard', 'HYG', cs.hyg);
       fmtChip('tltCard', 'TLT', cs.tlt);
     }
 
-    const gridCol = '#1e293b', tickCol = '#64748b';
+    const gridCol = CT.c('#1e293b'), tickCol = CT.c('#64748b');
     const cfg = {
       type: 'line',
       data: {
@@ -4631,7 +4631,7 @@ function _renderYieldSpread(range) {
   const dates    = _ysData.dates.slice(si);
   const spread   = _ysData.spread.slice(si);
   const recession = _ysData.recession.slice(si);
-  const gridCol = '#1e293b', tickCol = '#64748b';
+  const gridCol = CT.c('#1e293b'), tickCol = CT.c('#64748b');
 
   const recessionPlugin = {
     id: 'recessionBands',
@@ -4661,7 +4661,7 @@ function _renderYieldSpread(range) {
     type: 'line',
     data: { labels: dates, datasets: [{
       label: '10Y-2Y Spread', data: spread,
-      borderColor: '#38bdf8', backgroundColor: 'rgba(56,189,248,0.07)',
+      borderColor: CT.c('#38bdf8'), backgroundColor: 'rgba(56,189,248,0.07)',
       borderWidth: 1.5, pointRadius: 0, fill: true, tension: 0.2, spanGaps: true,
     }]},
     plugins: [recessionPlugin],
@@ -4697,7 +4697,7 @@ DeferLoad.when('#yieldSpreadLoading', async function() {
       badge.classList.remove('hidden');
       badge.textContent = (last >= 0 ? '+' : '') + last.toFixed(2) + '%';
       badge.className = 'text-xs px-2 py-0.5 rounded font-semibold ' +
-        (last >= 0 ? 'bg-emerald-900/50 text-emerald-300' : 'bg-rose-900/50 text-rose-300');
+        (last >= 0 ? 'bg-emerald-50 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300' : 'bg-rose-50 dark:bg-rose-900/50 text-rose-700 dark:text-rose-300');
     }
     if (cur) cur.textContent = (last >= 0 ? '+' : '') + last.toFixed(2) + 'pp';
 
@@ -4738,7 +4738,7 @@ DeferLoad.when('#cryptoChart', async function() {
       }
       if (chEl && chgPct != null) {
         chEl.textContent = (chgPct >= 0 ? '+' : '') + chgPct.toFixed(2) + '%';
-        chEl.className = 'text-xs font-medium mt-0.5 ' + (chgPct >= 0 ? 'text-emerald-400' : 'text-rose-400');
+        chEl.className = 'text-xs font-medium mt-0.5 ' + (chgPct >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400');
       }
     }
     fillCrypto(btc.prices, 'btcPrice', 'btcChg');
@@ -4753,7 +4753,7 @@ DeferLoad.when('#cryptoChart', async function() {
       const btcHist = await btcHistResp.json();
       const ethHist = await ethHistResp.json();
       if (btcHist.prices && btcHist.prices.length) {
-        const gridCol = '#1e293b', tickCol = '#64748b';
+        const gridCol = CT.c('#1e293b'), tickCol = CT.c('#64748b');
         // Normalise ETH to BTC scale
         const ethMap = {};
         (ethHist.dates||[]).forEach((d,i) => { if(ethHist.prices[i]!=null) ethMap[d] = ethHist.prices[i]; });
@@ -4775,7 +4775,7 @@ DeferLoad.when('#cryptoChart', async function() {
               const px = x.getPixelForValue(idx);
               c.save(); c.strokeStyle = 'rgba(251,191,36,0.5)'; c.lineWidth = 1; c.setLineDash([3,3]);
               c.beginPath(); c.moveTo(px, a.top); c.lineTo(px, a.bottom); c.stroke();
-              c.fillStyle = '#fbbf24'; c.font = '9px Inter'; c.fillText('Halving', px+3, a.top+12);
+              c.fillStyle = CT.c('#fbbf24'); c.font = '9px Inter'; c.fillText('Halving', px+3, a.top+12);
               c.restore();
             });
           }
@@ -4785,7 +4785,7 @@ DeferLoad.when('#cryptoChart', async function() {
           type: 'line',
           data: { labels: btcHist.dates, datasets: [
             { label:'BTC', data:btcNorm, borderColor:'#f59e0b', backgroundColor:'rgba(245,158,11,0.07)', borderWidth:1.5, pointRadius:0, fill:true, tension:0.3, spanGaps:true },
-            { label:'ETH', data:ethNorm, borderColor:'#6366f1', backgroundColor:'transparent', borderWidth:1.5, pointRadius:0, fill:false, tension:0.3, spanGaps:true, borderDash:[4,3] },
+            { label:'ETH', data:ethNorm, borderColor:CT.c('#6366f1'), backgroundColor:'transparent', borderWidth:1.5, pointRadius:0, fill:false, tension:0.3, spanGaps:true, borderDash:[4,3] },
           ]},
           plugins: [halvingPlugin],
           options: {
@@ -4826,11 +4826,11 @@ const _skBandOf = v => v == null ? null
   : v < 120 ? 'weak' : v < 135 ? 'neutral' : v < 145 ? 'notable' : v < 155 ? 'elevated' : 'extreme';
 
 const _SK_BANDS = {
-  weak:     { badge:'bg-sky-900/50 text-sky-300',       k:'markets.skew_band_weak',     fb:'Tail-protection demand is soft',        label(){ return _skT(this.k,this.fb); } },
-  neutral:  { badge:'bg-slate-800 text-slate-400',      k:'markets.skew_band_neutral',  fb:'Normal / neutral zone',                 label(){ return _skT(this.k,this.fb); } },
-  notable:  { badge:'bg-amber-900/50 text-amber-300',   k:'markets.skew_band_notable',  fb:'Tail-protection demand worth noting',   label(){ return _skT(this.k,this.fb); } },
-  elevated: { badge:'bg-orange-900/50 text-orange-300', k:'markets.skew_band_elevated', fb:'Clearly elevated',                      label(){ return _skT(this.k,this.fb); } },
-  extreme:  { badge:'bg-rose-900/60 text-rose-200',     k:'markets.skew_band_extreme',  fb:'Extreme tail-insurance premium',        label(){ return _skT(this.k,this.fb); } },
+  weak:     { badge:'bg-sky-50 dark:bg-sky-900/50 text-sky-700 dark:text-sky-300',       k:'markets.skew_band_weak',     fb:'Tail-protection demand is soft',        label(){ return _skT(this.k,this.fb); } },
+  neutral:  { badge:'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400',      k:'markets.skew_band_neutral',  fb:'Normal / neutral zone',                 label(){ return _skT(this.k,this.fb); } },
+  notable:  { badge:'bg-amber-50 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300',   k:'markets.skew_band_notable',  fb:'Tail-protection demand worth noting',   label(){ return _skT(this.k,this.fb); } },
+  elevated: { badge:'bg-orange-50 dark:bg-orange-900/50 text-orange-700 dark:text-orange-300', k:'markets.skew_band_elevated', fb:'Clearly elevated',                      label(){ return _skT(this.k,this.fb); } },
+  extreme:  { badge:'bg-rose-50 dark:bg-rose-900/60 text-rose-800 dark:text-rose-200',     k:'markets.skew_band_extreme',  fb:'Extreme tail-insurance premium',        label(){ return _skT(this.k,this.fb); } },
 };
 
 let _skData = null;
@@ -4877,14 +4877,14 @@ function _renderSkewBands(sk) {
   const band = sk?.latest?.band || _skBandOf(sk?.latest?.skew);
   document.querySelectorAll('#skewBands .skew-band-row').forEach(row => {
     const on = row.dataset.band === band;
-    row.classList.toggle('bg-slate-800/60', on);
+    row.classList.toggle('bg-slate-100/60 dark:bg-slate-800/60', on);
     row.classList.toggle('ring-1', on);
-    row.classList.toggle('ring-slate-700', on);
-    row.querySelector('[data-i18n]')?.classList.toggle('text-slate-200', on);
+    row.classList.toggle('ring-slate-300 dark:ring-slate-700', on);
+    row.querySelector('[data-i18n]')?.classList.toggle('text-slate-700 dark:text-slate-200', on);
     let pill = row.querySelector('.sk-now');
     if (on && !pill) {
       pill = document.createElement('span');
-      pill.className = 'sk-now ml-auto text-[9px] px-1.5 py-0.5 rounded bg-slate-700 text-slate-200 shrink-0';
+      pill.className = 'sk-now ml-auto text-[9px] px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 shrink-0';
       row.appendChild(pill);
     } else if (!on && pill) {
       pill.remove(); pill = null;
@@ -4917,8 +4917,8 @@ const _SK_DIV_LABELS = {
 
 // Status is glyph + text + colour, never colour alone.
 const _SK_DIV_STATE = {
-  met:     { glyph:'✓', cls:'text-rose-300'   },
-  near:    { glyph:'~', cls:'text-amber-400'  },
+  met:     { glyph:'✓', cls:'text-rose-700 dark:text-rose-300'   },
+  near:    { glyph:'~', cls:'text-amber-700 dark:text-amber-400'  },
   unmet:   { glyph:'·', cls:'text-slate-500'  },
   unknown: { glyph:'?', cls:'text-slate-500'  },
 };
@@ -4938,10 +4938,10 @@ const _SK_FMT = {
 };
 
 const _SK_DIV_VERDICT = {
-  strong:   { cls:'bg-rose-900/30 border border-rose-800/50 text-rose-200',       k:'markets.skew_div_v_strong',   fb:'Cross-market divergence present: spot calm, ordinary vol calm, tail market disagreeing. This is the combination worth acting on — cut risk budget one notch.' },
-  building: { cls:'bg-amber-900/25 border border-amber-800/50 text-amber-200',    k:'markets.skew_div_v_building', fb:'Forming: the tail bid is there but the cross-market confirmation is incomplete. Watch breadth and credit.' },
-  partial:  { cls:'bg-slate-800/60 border border-slate-700 text-slate-300',       k:'markets.skew_div_v_partial',  fb:'Some legs present but no coherent divergence — this is ordinary noise, not fragile calm.' },
-  quiet:    { cls:'bg-slate-800/50 border border-slate-800 text-slate-400',       k:'markets.skew_div_v_quiet',    fb:'No divergence: the tail-option market broadly agrees with spot. Nothing to act on here.' },
+  strong:   { cls:'bg-rose-50 dark:bg-rose-900/30 border border-rose-200/50 dark:border-rose-800/50 text-rose-800 dark:text-rose-200',       k:'markets.skew_div_v_strong',   fb:'Cross-market divergence present: spot calm, ordinary vol calm, tail market disagreeing. This is the combination worth acting on — cut risk budget one notch.' },
+  building: { cls:'bg-amber-50 dark:bg-amber-900/25 border border-amber-200/50 dark:border-amber-800/50 text-amber-800 dark:text-amber-200',    k:'markets.skew_div_v_building', fb:'Forming: the tail bid is there but the cross-market confirmation is incomplete. Watch breadth and credit.' },
+  partial:  { cls:'bg-slate-100/60 dark:bg-slate-800/60 border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300',       k:'markets.skew_div_v_partial',  fb:'Some legs present but no coherent divergence — this is ordinary noise, not fragile calm.' },
+  quiet:    { cls:'bg-slate-100/50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400',       k:'markets.skew_div_v_quiet',    fb:'No divergence: the tail-option market broadly agrees with spot. Nothing to act on here.' },
 };
 
 function _renderSkewDivergence(sk) {
@@ -4959,8 +4959,8 @@ function _renderSkewDivergence(sk) {
     row.className = 'flex items-baseline gap-2 text-[11px] px-1';
     row.innerHTML =
       `<span class="${st.cls} font-mono w-3 shrink-0 text-center">${st.glyph}</span>` +
-      `<span class="${c.met === true ? 'text-slate-200' : 'text-slate-400'} flex-1 leading-snug"></span>` +
-      `<span class="text-slate-400 font-mono text-[10px] shrink-0 text-right"></span>`;
+      `<span class="${c.met === true ? 'text-slate-700 dark:text-slate-200' : 'text-slate-500 dark:text-slate-400'} flex-1 leading-snug"></span>` +
+      `<span class="text-slate-500 dark:text-slate-400 font-mono text-[10px] shrink-0 text-right"></span>`;
     row.children[1].textContent = key ? _skT(key, fb) : fb;
     row.children[2].textContent = (_SK_FMT[c.fmt] || _SK_FMT.na)(c);
     box.appendChild(row);
@@ -4968,9 +4968,9 @@ function _renderSkewDivergence(sk) {
 
   if (chip) {
     chip.textContent = `${dv.met} / ${dv.total}`;
-    const tone = dv.level === 'strong' ? 'bg-rose-900/60 text-rose-200'
-               : dv.level === 'building' ? 'bg-amber-900/50 text-amber-300'
-               : 'bg-slate-800 text-slate-400';
+    const tone = dv.level === 'strong' ? 'bg-rose-50 dark:bg-rose-900/60 text-rose-800 dark:text-rose-200'
+               : dv.level === 'building' ? 'bg-amber-50 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300'
+               : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400';
     chip.className = 'text-[11px] px-2 py-0.5 rounded font-semibold shrink-0 ' + tone;
   }
   if (verdict) {
@@ -4981,7 +4981,7 @@ function _renderSkewDivergence(sk) {
   }
   if (dv.known < dv.total) {
     const note = document.createElement('p');
-    note.className = 'text-[10px] text-slate-400 mt-1 px-1';
+    note.className = 'text-[10px] text-slate-500 dark:text-slate-400 mt-1 px-1';
     note.textContent = _skT('markets.skew_div_partial_data', '? = data unavailable right now; that leg is not counted.');
     box.appendChild(note);
   }
@@ -5010,17 +5010,17 @@ DeferLoad.when('#skewChart', async function() {
     if (badge && last != null) {
       badge.classList.remove('hidden');
       badge.textContent = 'SKEW ' + last.toFixed(0);
-      badge.className = 'text-xs px-2 py-0.5 rounded font-semibold ' + (_SK_BANDS[band]?.badge || 'bg-slate-800 text-slate-400');
+      badge.className = 'text-xs px-2 py-0.5 rounded font-semibold ' + (_SK_BANDS[band]?.badge || 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400');
     }
     _renderSkewBands(sk);
     _renderSkewDivergence(sk);
 
-    const g='#1e293b', t='#64748b';
+    const g=CT.c('#1e293b'), t=CT.c('#64748b');
     new Chart(document.getElementById('skewChart'), {
       type:'line',
       data:{ labels:sk.dates, datasets:[
-        { label:'SKEW',  data:sk.skew, borderColor:'#f87171', backgroundColor:'transparent', borderWidth:2,   pointRadius:0, fill:false, tension:0.2, spanGaps:true, yAxisID:'y' },
-        { label:'VIX',   data:sk.vix,  borderColor:'#fbbf24', backgroundColor:'transparent', borderWidth:1.5, pointRadius:0, fill:false, tension:0.2, spanGaps:true, yAxisID:'yVix', borderDash:[4,3] },
+        { label:'SKEW',  data:sk.skew, borderColor:CT.c('#f87171'), backgroundColor:'transparent', borderWidth:2,   pointRadius:0, fill:false, tension:0.2, spanGaps:true, yAxisID:'y' },
+        { label:'VIX',   data:sk.vix,  borderColor:CT.c('#fbbf24'), backgroundColor:'transparent', borderWidth:1.5, pointRadius:0, fill:false, tension:0.2, spanGaps:true, yAxisID:'yVix', borderDash:[4,3] },
       ]},
       options:{
         responsive:true, maintainAspectRatio:false,
@@ -5038,8 +5038,8 @@ DeferLoad.when('#skewChart', async function() {
           x:{grid:{color:g},ticks:{color:t,maxTicksLimit:6,maxRotation:0}},
           // suggestedMin/Max keep the band structure legible without clipping a
           // genuine spike — SKEW has printed >170 before.
-          y:{grid:{color:g},suggestedMin:115,suggestedMax:160,ticks:{color:'rgba(248,113,113,0.6)',callback:v=>v.toFixed(0)}},
-          yVix:{position:'right',grid:{drawOnChartArea:false},ticks:{color:'rgba(251,191,36,0.6)',callback:v=>v.toFixed(1)}},
+          y:{grid:{color:g},suggestedMin:115,suggestedMax:160,ticks:{color:CT.c('rgba(248,113,113,0.6)'),callback:v=>v.toFixed(0)}},
+          yVix:{position:'right',grid:{drawOnChartArea:false},ticks:{color:CT.c('rgba(251,191,36,0.6)'),callback:v=>v.toFixed(1)}},
         },
         interaction:{mode:'index',intersect:false},
       },
@@ -5063,11 +5063,11 @@ let _brRange = '3y';
 const _BR_MA_COLORS = {
   20:  '#0284c7',
   50:  '#0ea5e9',
-  100: '#38bdf8',
+  100: CT.c('#38bdf8'),
   150: '#7dd3fc',
   200: '#bae6fd',
 };
-const _BR_MA_FALLBACK = '#38bdf8';
+const _BR_MA_FALLBACK = CT.c('#38bdf8');
 // Line weight also steps with the period — a second, colour-independent cue for
 // the same ordering, and it keeps the noisy fast MAs from shouting over the
 // slow ones they are meant to be read against.
@@ -5174,19 +5174,19 @@ function _renderAdvDec() {
       ? ` · ${d.unchanged} ${T('markets.advdec_flat') || 'flat'}` : '';
     return `<div>
       <div class="flex items-baseline justify-between mb-1">
-        <span class="text-xs font-semibold text-slate-300">${d.label || k}</span>
+        <span class="text-xs font-semibold text-slate-600 dark:text-slate-300">${d.label || k}</span>
         <span class="text-xs font-mono">
-          <span class="text-emerald-400">${d.up} ▲</span>
-          <span class="text-slate-600 mx-1">/</span>
-          <span class="text-rose-400">${d.down} ▼</span>
+          <span class="text-emerald-700 dark:text-emerald-400">${d.up} ▲</span>
+          <span class="text-slate-500 dark:text-slate-600 mx-1">/</span>
+          <span class="text-rose-700 dark:text-rose-400">${d.down} ▼</span>
         </span>
       </div>
-      <div class="flex h-1.5 rounded-full overflow-hidden bg-slate-800" role="img"
+      <div class="flex h-1.5 rounded-full overflow-hidden bg-slate-100 dark:bg-slate-800" role="img"
            aria-label="${d.up} up, ${d.down} down">
         <div class="bg-emerald-500" style="width:${pct.toFixed(1)}%"></div>
         <div class="bg-rose-500" style="width:${(100 - pct).toFixed(1)}%"></div>
       </div>
-      <p class="text-[10px] text-slate-600 mt-1">
+      <p class="text-[10px] text-slate-500 dark:text-slate-600 mt-1">
         ${pct.toFixed(0)}% ${T('markets.advdec_advancing') || 'advancing'}${ratio != null
           ? ` · ${ratio.toFixed(2)}:1` : ''} · ${d.counted}/${d.universe} ${
           T('markets.advdec_counted') || 'counted'}${flat}
@@ -5211,7 +5211,7 @@ function _renderBreadth(range) {
   if (!_brData) return;
   _brRange = range || _brRange;
   const weeks = _BR_WEEKS[_brRange] || 156;
-  const g = '#1e293b', t = '#64748b';
+  const g = CT.c('#1e293b'), t = CT.c('#64748b');
   const periods = _brPeriods();
 
   // Align every MA on one date axis by lookup, not by array index: the series
@@ -5288,7 +5288,7 @@ function _renderBreadth(range) {
       type: 'line',
       data: { labels: sRsp.dates, datasets: [{
         label:'RSP/SPY', data: sRsp.values,
-        borderColor:'#34d399', backgroundColor:'rgba(52,211,153,0.07)',
+        borderColor:CT.c('#34d399'), backgroundColor:'rgba(52,211,153,0.07)',
         borderWidth:2, pointRadius:0, pointHitRadius:12, fill:true, tension:0.3, spanGaps:true,
       }]},
       options: {
@@ -5296,7 +5296,7 @@ function _renderBreadth(range) {
         plugins:{ legend:{display:false}, tooltip:{callbacks:{label:c=>` RSP/SPY: ${c.raw?.toFixed(4)}`}} },
         scales:{
           x:{grid:{color:g},ticks:{color:t,maxTicksLimit:6,maxRotation:0}},
-          y:{grid:{color:g},ticks:{color:'rgba(52,211,153,0.6)',callback:v=>v.toFixed(3)}},
+          y:{grid:{color:g},ticks:{color:CT.c('rgba(52,211,153,0.6)'),callback:v=>v.toFixed(3)}},
         },
         interaction:{mode:'index',intersect:false},
       },
@@ -5364,12 +5364,12 @@ DeferLoad.when('#sectorGridTable', async function() {
     if (!resp.ok) return;
     const gr = await resp.json();
     const { rows, periods } = gr;
-    let html = `<table class="w-full text-xs border-collapse"><thead><tr class="text-slate-500 border-b border-slate-800"><th class="text-left py-1.5 px-2 font-medium">Sector</th>${periods.map(p=>`<th class="text-right py-1.5 px-2 font-medium">${p}</th>`).join('')}</tr></thead><tbody>`;
+    let html = `<table class="w-full text-xs border-collapse"><thead><tr class="text-slate-500 border-b border-slate-200 dark:border-slate-800"><th class="text-left py-1.5 px-2 font-medium">Sector</th>${periods.map(p=>`<th class="text-right py-1.5 px-2 font-medium">${p}</th>`).join('')}</tr></thead><tbody>`;
     rows.forEach(row => {
-      html += `<tr class="border-b border-slate-800/50 hover:bg-slate-800/30"><td class="py-1.5 px-2 font-medium text-slate-300">${row.etf} <span class="text-slate-600 text-[10px]">${row.name}</span></td>`;
+      html += `<tr class="border-b border-slate-200/50 dark:border-slate-800/50 hover:bg-slate-100/30 dark:hover:bg-slate-800/30"><td class="py-1.5 px-2 font-medium text-slate-600 dark:text-slate-300">${row.etf} <span class="text-slate-500 dark:text-slate-600 text-[10px]">${row.name}</span></td>`;
       periods.forEach(p => {
         const v = row.returns[p];
-        const cls = v == null ? 'text-slate-600' : v >= 2 ? 'bg-emerald-900/60 text-emerald-300' : v >= 0.5 ? 'bg-emerald-900/30 text-emerald-400' : v >= -0.5 ? 'text-slate-400' : v >= -2 ? 'bg-rose-900/30 text-rose-400' : 'bg-rose-900/60 text-rose-300';
+        const cls = v == null ? 'text-slate-500 dark:text-slate-600' : v >= 2 ? 'bg-emerald-50 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300' : v >= 0.5 ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400' : v >= -0.5 ? 'text-slate-500 dark:text-slate-400' : v >= -2 ? 'bg-rose-50 dark:bg-rose-900/30 text-rose-700 dark:text-rose-400' : 'bg-rose-50 dark:bg-rose-900/60 text-rose-700 dark:text-rose-300';
         html += `<td class="py-1.5 px-2 text-right font-mono rounded ${cls}">${v == null ? '—' : (v >= 0 ? '+' : '') + v.toFixed(1) + '%'}</td>`;
       });
       html += '</tr>';
@@ -5387,7 +5387,7 @@ DeferLoad.when('#sectorRankingTable', async function() {
     const maxScore = Math.max(...data.map(d=>Math.abs(d.momentum_score||0)));
     document.getElementById('sectorRankingTable').innerHTML = `
       <table class="w-full text-xs">
-        <thead><tr class="border-b border-slate-800 text-slate-500 text-[10px]">
+        <thead><tr class="border-b border-slate-200 dark:border-slate-800 text-slate-500 text-[10px]">
           <th class="text-left py-1.5 px-2">Sector ETF</th>
           <th class="text-right py-1.5 px-2">1M</th>
           <th class="text-right py-1.5 px-2">6M</th>
@@ -5399,9 +5399,9 @@ DeferLoad.when('#sectorRankingTable', async function() {
         <tbody>
           ${data.map((d, i) => {
             const barW = maxScore > 0 ? Math.abs(d.momentum_score||0)/maxScore*100 : 0;
-            const barCol = (d.momentum_score||0)>=0 ? '#34d399' : '#f87171';
-            const fmtPct = v => v==null ? '—' : `<span class="${v>=0?'text-emerald-400':'text-rose-400'}">${v>=0?'+':''}${v.toFixed(1)}%</span>`;
-            return `<tr class="border-b border-slate-800/40 hover:bg-slate-800/30">
+            const barCol = (d.momentum_score||0)>=0 ? CT.c('#34d399') : CT.c('#f87171');
+            const fmtPct = v => v==null ? '—' : `<span class="${v>=0?'text-emerald-700 dark:text-emerald-400':'text-rose-700 dark:text-rose-400'}">${v>=0?'+':''}${v.toFixed(1)}%</span>`;
+            return `<tr class="border-b border-slate-200/40 dark:border-slate-800/40 hover:bg-slate-100/30 dark:hover:bg-slate-800/30">
               <td class="py-1.5 px-2">
                 <a href="/history/${d.ticker}" class="font-bold text-brand">${d.ticker}</a>
                 <span class="text-slate-500 ml-1">${d.sector}</span>
@@ -5409,11 +5409,11 @@ DeferLoad.when('#sectorRankingTable', async function() {
               <td class="py-1.5 px-2 text-right">${fmtPct(d.m1)}</td>
               <td class="py-1.5 px-2 text-right">${fmtPct(d.m6)}</td>
               <td class="py-1.5 px-2 text-right">${fmtPct(d.ytd)}</td>
-              <td class="py-1.5 px-2 text-right font-mono text-slate-300">${d.pe ? d.pe+'x' : '—'}</td>
-              <td class="py-1.5 px-2 text-right font-mono text-emerald-400">${d.div_yield ? d.div_yield+'%' : '—'}</td>
+              <td class="py-1.5 px-2 text-right font-mono text-slate-600 dark:text-slate-300">${d.pe ? d.pe+'x' : '—'}</td>
+              <td class="py-1.5 px-2 text-right font-mono text-emerald-700 dark:text-emerald-400">${d.div_yield ? d.div_yield+'%' : '—'}</td>
               <td class="py-1.5 px-2">
                 <div class="flex items-center gap-1">
-                  <div class="flex-1 h-1.5 bg-slate-800 rounded overflow-hidden">
+                  <div class="flex-1 h-1.5 bg-slate-100 dark:bg-slate-800 rounded overflow-hidden">
                     <div style="width:${barW}%;background:${barCol};height:100%"></div>
                   </div>
                   <span class="text-[10px] font-mono" style="color:${barCol}">${(d.momentum_score||0)>=0?'+':''}${(d.momentum_score||0).toFixed(1)}</span>

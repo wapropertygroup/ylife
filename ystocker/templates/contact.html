@@ -7,10 +7,10 @@
 
   <div class="mb-8">
     <h1 class="text-2xl sm:text-3xl font-bold grad-text mb-2" data-i18n="contact.title">Contact Us</h1>
-    <p class="text-slate-400 text-sm" data-i18n="contact.subtitle">Have a question, suggestion, or found a bug? We'd love to hear from you.</p>
+    <p class="text-slate-500 dark:text-slate-400 text-sm" data-i18n="contact.subtitle">Have a question, suggestion, or found a bug? We'd love to hear from you.</p>
   </div>
 
-  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 sm:p-8">
+  <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 sm:p-8">
 
     <div class="flex items-center gap-4 mb-6">
       <div class="w-10 h-10 rounded-xl bg-brand/20 flex items-center justify-center shrink-0">
@@ -20,7 +20,7 @@
         </svg>
       </div>
       <div>
-        <p class="text-sm font-semibold text-slate-200">Yuanxi Li</p>
+        <p class="text-sm font-semibold text-slate-700 dark:text-slate-200">Yuanxi Li</p>
         <a href="mailto:admin@li-family.us"
            class="text-brand hover:underline text-sm">
           admin@li-family.us
@@ -28,23 +28,23 @@
       </div>
     </div>
 
-    <div class="border-t border-slate-800 pt-6">
+    <div class="border-t border-slate-200 dark:border-slate-800 pt-6">
       <p class="text-xs text-slate-500 mb-4" data-i18n="contact.or">Or send a message directly:</p>
       <form action="mailto:admin@li-family.us" method="get" enctype="text/plain" class="space-y-4">
         <div>
-          <label class="block text-xs text-slate-400 mb-1.5" data-i18n="contact.subject">Subject</label>
+          <label class="block text-xs text-slate-500 dark:text-slate-400 mb-1.5" data-i18n="contact.subject">Subject</label>
           <input type="text" name="subject" placeholder="e.g. Bug report, feature request…"
                  data-i18n-placeholder="contact.subject_ph"
-                 class="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-sm
-                        text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2
+                 class="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm
+                        text-slate-800 dark:text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2
                         focus:ring-brand transition">
         </div>
         <div>
-          <label class="block text-xs text-slate-400 mb-1.5" data-i18n="contact.message">Message</label>
+          <label class="block text-xs text-slate-500 dark:text-slate-400 mb-1.5" data-i18n="contact.message">Message</label>
           <textarea name="body" rows="5" placeholder="Describe your question or feedback…"
                     data-i18n-placeholder="contact.message_ph"
-                    class="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-sm
-                           text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2
+                    class="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm
+                           text-slate-800 dark:text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2
                            focus:ring-brand transition resize-none"></textarea>
         </div>
         <button type="submit"

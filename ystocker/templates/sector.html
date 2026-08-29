@@ -15,14 +15,14 @@
 <!-- ── Header ────────────────────────────────────────────────────────── -->
 <div class="mb-6 sm:mb-8 fade-up">
   <div class="flex items-center gap-3 mb-1">
-    <a href="{{ url_for('main.evaluation') }}" class="text-slate-500 hover:text-slate-300 text-sm transition" data-i18n="sector.dashboard">← Dashboard</a>
+    <a href="{{ url_for('main.evaluation') }}" class="text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 text-sm transition" data-i18n="sector.dashboard">← Dashboard</a>
     <span class="text-slate-700">/</span>
-    <span class="text-slate-300 text-sm font-medium"
+    <span class="text-slate-600 dark:text-slate-300 text-sm font-medium"
           data-i18n="sector.name.{{ sector_name }}">{{ sector_name }}</span>
   </div>
   <h1 class="text-2xl sm:text-3xl font-bold grad-text"
       data-i18n="sector.name.{{ sector_name }}">{{ sector_name }}</h1>
-  <p class="text-slate-400 mt-1 text-sm" data-i18n="sector.subtitle">Valuation analysis for this peer group</p>
+  <p class="text-slate-500 dark:text-slate-400 mt-1 text-sm" data-i18n="sector.subtitle">Valuation analysis for this peer group</p>
 </div>
 
 <!-- ── Tab nav ───────────────────────────────────────────────────────── -->
@@ -48,77 +48,77 @@
 
 <div x-data="{ tab: 'day_change' }" class="fade-up">
 
-  <div class="flex gap-1 mb-6 bg-slate-900 border border-slate-800 rounded-xl p-1 w-full sm:w-fit flex-wrap">
+  <div class="flex gap-1 mb-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-1 w-full sm:w-fit flex-wrap">
     {% if has_day_change.v %}
     <button @click="tab='day_change'"
-            :class="tab==='day_change' ? 'bg-brand text-white shadow' : 'text-slate-400 hover:text-slate-200'"
+            :class="tab==='day_change' ? 'bg-brand text-white shadow' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'"
             class="px-4 py-1.5 rounded-lg text-sm font-medium transition-all" data-i18n="sector.tab_day_change">
       Day Change
     </button>
     {% endif %}
     <button @click="tab='pe'"
-            :class="tab==='pe' ? 'bg-brand text-white shadow' : 'text-slate-400 hover:text-slate-200'"
+            :class="tab==='pe' ? 'bg-brand text-white shadow' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'"
             class="px-4 py-1.5 rounded-lg text-sm font-medium transition-all" data-i18n="sector.tab_pe">
       PE & PEG
     </button>
     {% if has_price.v %}
     <button @click="tab='prices'"
-            :class="tab==='prices' ? 'bg-brand text-white shadow' : 'text-slate-400 hover:text-slate-200'"
+            :class="tab==='prices' ? 'bg-brand text-white shadow' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'"
             class="px-4 py-1.5 rounded-lg text-sm font-medium transition-all" data-i18n="sector.tab_prices">
       Prices
     </button>
     {% endif %}
     {% if has_upside.v %}
     <button @click="tab='upside'"
-            :class="tab==='upside' ? 'bg-brand text-white shadow' : 'text-slate-400 hover:text-slate-200'"
+            :class="tab==='upside' ? 'bg-brand text-white shadow' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'"
             class="px-4 py-1.5 rounded-lg text-sm font-medium transition-all" data-i18n="sector.tab_upside">
       Upside
     </button>
     {% endif %}
     {% if has_peg.v %}
     <button @click="tab='peg'"
-            :class="tab==='peg' ? 'bg-brand text-white shadow' : 'text-slate-400 hover:text-slate-200'"
+            :class="tab==='peg' ? 'bg-brand text-white shadow' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'"
             class="px-4 py-1.5 rounded-lg text-sm font-medium transition-all" data-i18n="sector.tab_peg">
       PEG Map
     </button>
     {% endif %}
     {% if has_growth.v %}
     <button @click="tab='growth'"
-            :class="tab==='growth' ? 'bg-brand text-white shadow' : 'text-slate-400 hover:text-slate-200'"
+            :class="tab==='growth' ? 'bg-brand text-white shadow' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'"
             class="px-4 py-1.5 rounded-lg text-sm font-medium transition-all" data-i18n="sector.tab_growth">
       Growth
     </button>
     {% endif %}
     {% if has_ev_ebitda.v %}
     <button @click="tab='ev_ebitda'"
-            :class="tab==='ev_ebitda' ? 'bg-brand text-white shadow' : 'text-slate-400 hover:text-slate-200'"
+            :class="tab==='ev_ebitda' ? 'bg-brand text-white shadow' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'"
             class="px-4 py-1.5 rounded-lg text-sm font-medium transition-all" data-i18n="sector.tab_ev_ebitda">
       EV/EBITDA
     </button>
     {% endif %}
     <button @click="tab='table'"
-            :class="tab==='table' ? 'bg-brand text-white shadow' : 'text-slate-400 hover:text-slate-200'"
+            :class="tab==='table' ? 'bg-brand text-white shadow' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'"
             class="px-4 py-1.5 rounded-lg text-sm font-medium transition-all" data-i18n="sector.tab_table">
       Data Table
     </button>
     <button @click="tab='performance'; loadSectorPerformance()"
-            :class="tab==='performance' ? 'bg-brand text-white shadow' : 'text-slate-400 hover:text-slate-200'"
+            :class="tab==='performance' ? 'bg-brand text-white shadow' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'"
             class="px-4 py-1.5 rounded-lg text-sm font-medium transition-all" data-i18n="sector.tab_performance">
       Performance
     </button>
   </div>
 
   <!-- Day Change -->
-  <div x-show="tab==='day_change'" x-transition class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 mb-6">
+  <div x-show="tab==='day_change'" x-transition class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6 mb-6">
     <div class="flex flex-col sm:flex-row sm:items-start gap-3 sm:gap-0 sm:justify-between mb-1">
       <div>
-        <h2 class="text-base font-semibold text-slate-200" data-i18n="sector.day_change_title">Last Close — Day Change</h2>
+        <h2 class="text-base font-semibold text-slate-700 dark:text-slate-200" data-i18n="sector.day_change_title">Last Close — Day Change</h2>
         <p class="text-xs text-slate-500 mb-2 sm:mb-4" data-i18n="sector.day_change_desc">Percentage change from previous close. Green = up, red = down.</p>
       </div>
       <div class="flex gap-2">
         <button onclick="sortChart('day_change')" data-chart="day_change"
-                class="chart-sort flex items-center gap-1 text-xs text-slate-400 border border-slate-700 bg-slate-800
-                       hover:text-slate-200 transition px-2 py-1 rounded-lg">
+                class="chart-sort flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400 border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800
+                       hover:text-slate-700 dark:hover:text-slate-200 transition px-2 py-1 rounded-lg">
           <span class="sort-text">Lo→Hi</span>
         </button>
         <button onclick="toggleValues('day_change')" data-chart="day_change"
@@ -127,7 +127,7 @@
           <span class="toggle-text">Hide values</span>
         </button>
         <button onclick="expandSectorChart('day_change')" title="Expand"
-                class="text-slate-600 hover:text-slate-300 transition p-1 rounded-lg hover:bg-slate-800">
+                class="text-slate-500 dark:text-slate-600 hover:text-slate-600 dark:hover:text-slate-300 transition p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800">
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                   d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"/>
@@ -139,25 +139,25 @@
   </div>
 
   <!-- PE & PEG grouped bars -->
-  <div x-show="tab==='pe'" x-transition class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 mb-6">
+  <div x-show="tab==='pe'" x-transition class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6 mb-6">
     <div class="flex flex-col sm:flex-row sm:items-start gap-3 sm:gap-0 sm:justify-between mb-1">
       <div>
-        <h2 class="text-base font-semibold text-slate-200" data-i18n="sector.pe_title">PE Ratios (TTM &amp; Forward) + PEG</h2>
+        <h2 class="text-base font-semibold text-slate-700 dark:text-slate-200" data-i18n="sector.pe_title">PE Ratios (TTM &amp; Forward) + PEG</h2>
         <p class="text-xs text-slate-500 mb-2 sm:mb-4" data-i18n="sector.pe_desc">Left axis: PE ratios. Right axis (green bars): PEG ratio. Dashed line = PEG 1.0.</p>
       </div>
       <div class="flex gap-2 flex-wrap">
-        <div class="flex items-center gap-1 bg-slate-800 border border-slate-700 rounded-lg p-0.5">
+        <div class="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg p-0.5">
           <span class="text-[10px] text-slate-500 px-1.5" data-i18n="sector.sort">Sort</span>
           <button onclick="sortPeChart('pe_ttm')" id="pe-sort-pe_ttm"
-                  class="pe-sort-btn text-xs px-2 py-1 rounded-md transition text-slate-400 hover:text-slate-200">
+                  class="pe-sort-btn text-xs px-2 py-1 rounded-md transition text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200">
             TTM <span class="pe-sort-arrow"></span>
           </button>
           <button onclick="sortPeChart('pe_fwd')" id="pe-sort-pe_fwd"
-                  class="pe-sort-btn text-xs px-2 py-1 rounded-md transition text-slate-400 hover:text-slate-200">
+                  class="pe-sort-btn text-xs px-2 py-1 rounded-md transition text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200">
             Fwd <span class="pe-sort-arrow"></span>
           </button>
           <button onclick="sortPeChart('peg')" id="pe-sort-peg"
-                  class="pe-sort-btn text-xs px-2 py-1 rounded-md transition text-slate-400 hover:text-slate-200">
+                  class="pe-sort-btn text-xs px-2 py-1 rounded-md transition text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200">
             PEG <span class="pe-sort-arrow"></span>
           </button>
         </div>
@@ -167,7 +167,7 @@
           <span class="toggle-text" data-i18n="sector.hide_values">Hide values</span>
         </button>
         <button onclick="expandSectorChart('pe')" title="Expand"
-                class="text-slate-600 hover:text-slate-300 transition p-1 rounded-lg hover:bg-slate-800">
+                class="text-slate-500 dark:text-slate-600 hover:text-slate-600 dark:hover:text-slate-300 transition p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800">
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                   d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"/>
@@ -179,16 +179,16 @@
   </div>
 
   <!-- Price vs Target -->
-  <div x-show="tab==='prices'" x-transition class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 mb-6">
+  <div x-show="tab==='prices'" x-transition class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6 mb-6">
     <div class="flex flex-col sm:flex-row sm:items-start gap-3 sm:gap-0 sm:justify-between mb-1">
       <div>
-        <h2 class="text-base font-semibold text-slate-200" data-i18n="sector.prices_title">Current Price vs Analyst 12-month Target</h2>
+        <h2 class="text-base font-semibold text-slate-700 dark:text-slate-200" data-i18n="sector.prices_title">Current Price vs Analyst 12-month Target</h2>
         <p class="text-xs text-slate-500 mb-2 sm:mb-4" data-i18n="sector.prices_desc">Bars = current price. Diamond markers = analyst consensus target.</p>
       </div>
       <div class="flex gap-2">
         <button onclick="sortChart('prices')" data-chart="prices"
-                class="chart-sort flex items-center gap-1 text-xs text-slate-400 border border-slate-700 bg-slate-800
-                       hover:text-slate-200 transition px-2 py-1 rounded-lg">
+                class="chart-sort flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400 border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800
+                       hover:text-slate-700 dark:hover:text-slate-200 transition px-2 py-1 rounded-lg">
           <span class="sort-text" data-i18n="sector.sort_az">A→Z</span>
         </button>
         <button onclick="toggleValues('prices')" data-chart="prices"
@@ -197,7 +197,7 @@
           <span class="toggle-text" data-i18n="sector.hide_values">Hide values</span>
         </button>
         <button onclick="expandSectorChart('prices')" title="Expand"
-                class="text-slate-600 hover:text-slate-300 transition p-1 rounded-lg hover:bg-slate-800">
+                class="text-slate-500 dark:text-slate-600 hover:text-slate-600 dark:hover:text-slate-300 transition p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800">
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                   d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"/>
@@ -209,16 +209,16 @@
   </div>
 
   <!-- Upside -->
-  <div x-show="tab==='upside'" x-transition class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 mb-6">
+  <div x-show="tab==='upside'" x-transition class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6 mb-6">
     <div class="flex flex-col sm:flex-row sm:items-start gap-3 sm:gap-0 sm:justify-between mb-1">
       <div>
-        <h2 class="text-base font-semibold text-slate-200" data-i18n="sector.upside_title">Implied Analyst Upside (%)</h2>
+        <h2 class="text-base font-semibold text-slate-700 dark:text-slate-200" data-i18n="sector.upside_title">Implied Analyst Upside (%)</h2>
         <p class="text-xs text-slate-500 mb-2 sm:mb-4" data-i18n="sector.upside_desc">Implied return if stock reaches the analyst consensus 12-month target.</p>
       </div>
       <div class="flex gap-2">
         <button onclick="sortChart('upside')" data-chart="upside"
-                class="chart-sort flex items-center gap-1 text-xs text-slate-400 border border-slate-700 bg-slate-800
-                       hover:text-slate-200 transition px-2 py-1 rounded-lg">
+                class="chart-sort flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400 border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800
+                       hover:text-slate-700 dark:hover:text-slate-200 transition px-2 py-1 rounded-lg">
           <span class="sort-text" data-i18n="sector.sort_lohi">Lo→Hi</span>
         </button>
         <button onclick="toggleValues('upside')" data-chart="upside"
@@ -227,7 +227,7 @@
           <span class="toggle-text" data-i18n="sector.hide_values">Hide values</span>
         </button>
         <button onclick="expandSectorChart('upside')" title="Expand"
-                class="text-slate-600 hover:text-slate-300 transition p-1 rounded-lg hover:bg-slate-800">
+                class="text-slate-500 dark:text-slate-600 hover:text-slate-600 dark:hover:text-slate-300 transition p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800">
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                   d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"/>
@@ -239,26 +239,26 @@
   </div>
 
   <!-- PEG valuation map -->
-  <div x-show="tab==='peg'" x-transition class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 mb-6">
+  <div x-show="tab==='peg'" x-transition class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6 mb-6">
     <div class="flex flex-col sm:flex-row sm:items-start gap-3 sm:gap-0 sm:justify-between mb-1">
       <div>
-        <h2 class="text-base font-semibold text-slate-200" data-i18n="sector.peg_title">PEG Valuation Map</h2>
+        <h2 class="text-base font-semibold text-slate-700 dark:text-slate-200" data-i18n="sector.peg_title">PEG Valuation Map</h2>
         <p class="text-xs text-slate-500 mb-2 sm:mb-4">
           <span data-i18n="sector.peg_desc">PEG = PE ÷ EPS growth rate.</span> &nbsp;
-          <span class="text-emerald-400">■</span> <span data-i18n="sector.peg_under">&lt;1 undervalued</span> &nbsp;
-          <span class="text-amber-400">■</span> <span data-i18n="sector.peg_moderate">1-2 moderate</span> &nbsp;
-          <span class="text-rose-400">■</span> <span data-i18n="sector.peg_expensive">&gt;2 expensive</span>
+          <span class="text-emerald-700 dark:text-emerald-400">■</span> <span data-i18n="sector.peg_under">&lt;1 undervalued</span> &nbsp;
+          <span class="text-amber-700 dark:text-amber-400">■</span> <span data-i18n="sector.peg_moderate">1-2 moderate</span> &nbsp;
+          <span class="text-rose-700 dark:text-rose-400">■</span> <span data-i18n="sector.peg_expensive">&gt;2 expensive</span>
         </p>
       </div>
       <div class="flex gap-2">
         <button onclick="togglePegTickers()" id="pegTickerBtn"
-                class="flex items-center gap-1 text-xs text-slate-400 border border-slate-700 bg-slate-800
-                       hover:text-slate-200 transition px-2 py-1 rounded-lg" data-i18n="sector.hide_tickers">
+                class="flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400 border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800
+                       hover:text-slate-700 dark:hover:text-slate-200 transition px-2 py-1 rounded-lg" data-i18n="sector.hide_tickers">
           Hide tickers
         </button>
         <button onclick="sortChart('peg')" data-chart="peg"
-                class="chart-sort flex items-center gap-1 text-xs text-slate-400 border border-slate-700 bg-slate-800
-                       hover:text-slate-200 transition px-2 py-1 rounded-lg">
+                class="chart-sort flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400 border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800
+                       hover:text-slate-700 dark:hover:text-slate-200 transition px-2 py-1 rounded-lg">
           <span class="sort-text" data-i18n="sector.sort_lohi">Lo→Hi</span>
         </button>
         <button onclick="toggleValues('peg')" data-chart="peg"
@@ -267,7 +267,7 @@
           <span class="toggle-text" data-i18n="sector.hide_values">Hide values</span>
         </button>
         <button onclick="expandSectorChart('peg')" title="Expand"
-                class="text-slate-600 hover:text-slate-300 transition p-1 rounded-lg hover:bg-slate-800">
+                class="text-slate-500 dark:text-slate-600 hover:text-slate-600 dark:hover:text-slate-300 transition p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800">
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                   d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"/>
@@ -279,26 +279,26 @@
   </div>
 
   <!-- Growth chart -->
-  <div x-show="tab==='growth'" x-transition class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 mb-6">
+  <div x-show="tab==='growth'" x-transition class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6 mb-6">
     <div class="flex flex-col sm:flex-row sm:items-start gap-3 sm:gap-0 sm:justify-between mb-1">
       <div>
-        <h2 class="text-base font-semibold text-slate-200" data-i18n="sector.growth_title">EPS Growth</h2>
+        <h2 class="text-base font-semibold text-slate-700 dark:text-slate-200" data-i18n="sector.growth_title">EPS Growth</h2>
         <p class="text-xs text-slate-500 mb-2 sm:mb-4" data-i18n="sector.growth_desc">Year-over-year earnings growth — TTM (trailing 12 months) and most recent quarter.</p>
       </div>
       <div class="flex gap-2 flex-wrap">
-        <div class="flex items-center gap-1 bg-slate-800 border border-slate-700 rounded-lg p-0.5">
+        <div class="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg p-0.5">
           <span class="text-[10px] text-slate-500 px-1.5" data-i18n="sector.sort">Sort</span>
           <button onclick="sortGrowthChart('eps_growth_ttm')" id="growth-sort-ttm"
-                  class="growth-sort-btn text-xs px-2 py-1 rounded-md transition text-slate-400 hover:text-slate-200">
+                  class="growth-sort-btn text-xs px-2 py-1 rounded-md transition text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200">
             TTM <span class="growth-sort-arrow"></span>
           </button>
           <button onclick="sortGrowthChart('eps_growth_q')" id="growth-sort-q"
-                  class="growth-sort-btn text-xs px-2 py-1 rounded-md transition text-slate-400 hover:text-slate-200">
+                  class="growth-sort-btn text-xs px-2 py-1 rounded-md transition text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200">
             Q <span class="growth-sort-arrow"></span>
           </button>
         </div>
         <button id="revGrowthToggle" onclick="_toggleRevGrowth()"
-          class="text-[11px] px-2 py-0.5 rounded border border-slate-700 text-slate-500 hover:text-emerald-400 hover:border-emerald-700 transition">
+          class="text-[11px] px-2 py-0.5 rounded border border-slate-300 dark:border-slate-700 text-slate-500 hover:text-emerald-700 dark:hover:text-emerald-400 hover:border-emerald-300 dark:hover:border-emerald-700 transition">
           Rev Growth
         </button>
         <button onclick="toggleValues('growth')" data-chart="growth"
@@ -307,7 +307,7 @@
           <span class="toggle-text" data-i18n="sector.hide_values">Hide values</span>
         </button>
         <button onclick="expandSectorChart('growth')" title="Expand"
-                class="text-slate-600 hover:text-slate-300 transition p-1 rounded-lg hover:bg-slate-800">
+                class="text-slate-500 dark:text-slate-600 hover:text-slate-600 dark:hover:text-slate-300 transition p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800">
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                   d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"/>
@@ -319,22 +319,22 @@
   </div>
 
   <!-- EV/EBITDA horizontal bar -->
-  <div x-show="tab==='ev_ebitda'" x-transition class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 mb-6">
+  <div x-show="tab==='ev_ebitda'" x-transition class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6 mb-6">
     <div class="flex flex-col sm:flex-row sm:items-start gap-3 sm:gap-0 sm:justify-between mb-1">
       <div>
-        <h2 class="text-base font-semibold text-slate-200" data-i18n="sector.ev_ebitda_title">EV/EBITDA</h2>
+        <h2 class="text-base font-semibold text-slate-700 dark:text-slate-200" data-i18n="sector.ev_ebitda_title">EV/EBITDA</h2>
         <p class="text-xs text-slate-500 mb-2 sm:mb-4" data-i18n="sector.ev_ebitda_desc">Enterprise Value ÷ EBITDA — lower = cheaper relative to operating earnings (capital-structure neutral).</p>
-        <p class="text-xs text-slate-600 mb-2">
-          <span class="text-emerald-400">■</span> <span data-i18n="ev.band_cheap">&lt;8x Cheap</span> &nbsp;
-          <span class="text-sky-400">■</span> <span data-i18n="ev.band_fair">8–13x Fair</span> &nbsp;
-          <span class="text-amber-400">■</span> <span data-i18n="ev.band_growth">13–20x Growth</span> &nbsp;
-          <span class="text-rose-400">■</span> <span data-i18n="ev.band_bubble">&gt;20x Expensive</span>
+        <p class="text-xs text-slate-500 dark:text-slate-600 mb-2">
+          <span class="text-emerald-700 dark:text-emerald-400">■</span> <span data-i18n="ev.band_cheap">&lt;8x Cheap</span> &nbsp;
+          <span class="text-sky-700 dark:text-sky-400">■</span> <span data-i18n="ev.band_fair">8–13x Fair</span> &nbsp;
+          <span class="text-amber-700 dark:text-amber-400">■</span> <span data-i18n="ev.band_growth">13–20x Growth</span> &nbsp;
+          <span class="text-rose-700 dark:text-rose-400">■</span> <span data-i18n="ev.band_bubble">&gt;20x Expensive</span>
         </p>
       </div>
       <div class="flex gap-2">
         <button onclick="sortChart('ev_ebitda')" data-chart="ev_ebitda"
-                class="chart-sort flex items-center gap-1 text-xs text-slate-400 border border-slate-700 bg-slate-800
-                       hover:text-slate-200 transition px-2 py-1 rounded-lg">
+                class="chart-sort flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400 border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800
+                       hover:text-slate-700 dark:hover:text-slate-200 transition px-2 py-1 rounded-lg">
           <span class="sort-text" data-i18n="sector.sort_lohi">Lo→Hi</span>
         </button>
         <button onclick="toggleValues('ev_ebitda')" data-chart="ev_ebitda"
@@ -343,7 +343,7 @@
           <span class="toggle-text" data-i18n="sector.hide_values">Hide values</span>
         </button>
         <button onclick="expandSectorChart('ev_ebitda')" title="Expand"
-                class="text-slate-600 hover:text-slate-300 transition p-1 rounded-lg hover:bg-slate-800">
+                class="text-slate-500 dark:text-slate-600 hover:text-slate-600 dark:hover:text-slate-300 transition p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800">
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                   d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"/>
@@ -355,29 +355,29 @@
 
     <!-- EV ($B) -->
     <div class="mt-6">
-      <h3 class="text-sm font-semibold text-slate-300 mb-1" data-i18n="sector.ev_title">Enterprise Value ($B)</h3>
+      <h3 class="text-sm font-semibold text-slate-600 dark:text-slate-300 mb-1" data-i18n="sector.ev_title">Enterprise Value ($B)</h3>
       <p class="text-xs text-slate-500 mb-3" data-i18n="sector.ev_desc">Total enterprise value in billions USD.</p>
       <div class="chart-container" style="height:{{ [table|length * 36 + 40, 200]|max }}px"><canvas id="evChart"></canvas></div>
     </div>
 
     <!-- EBITDA ($B) -->
     <div class="mt-6">
-      <h3 class="text-sm font-semibold text-slate-300 mb-1" data-i18n="sector.ebitda_title">EBITDA ($B)</h3>
+      <h3 class="text-sm font-semibold text-slate-600 dark:text-slate-300 mb-1" data-i18n="sector.ebitda_title">EBITDA ($B)</h3>
       <p class="text-xs text-slate-500 mb-3" data-i18n="sector.ebitda_desc">Earnings before interest, taxes, depreciation &amp; amortisation, in billions USD.</p>
       <div class="chart-container" style="height:{{ [table|length * 36 + 40, 200]|max }}px"><canvas id="ebitdaChart"></canvas></div>
     </div>
   </div>
 
   <!-- Performance Comparison -->
-  <div x-show="tab==='performance'" x-transition class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 mb-6">
+  <div x-show="tab==='performance'" x-transition class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6 mb-6">
     <div class="flex flex-col sm:flex-row sm:items-start gap-3 sm:gap-0 sm:justify-between mb-4">
       <div>
-        <h2 class="text-base font-semibold text-slate-200" data-i18n="sector.perf_title">Performance Comparison</h2>
+        <h2 class="text-base font-semibold text-slate-700 dark:text-slate-200" data-i18n="sector.perf_title">Performance Comparison</h2>
         <p class="text-xs text-slate-500" data-i18n="sector.perf_desc">All tickers normalised to 100 at period start — higher = outperformed</p>
       </div>
       <div class="flex items-center gap-2 flex-wrap justify-end">
         <button id="spyRelativeToggle" onclick="_toggleSpyRelative()"
-          class="text-[11px] px-2 py-0.5 rounded border border-slate-700 text-slate-500 hover:text-emerald-400 hover:border-emerald-700 transition">
+          class="text-[11px] px-2 py-0.5 rounded border border-slate-300 dark:border-slate-700 text-slate-500 hover:text-emerald-700 dark:hover:text-emerald-400 hover:border-emerald-300 dark:hover:border-emerald-700 transition">
           vs SPY
         </button>
         <div class="flex gap-1" id="perfRangeBtns">
@@ -391,43 +391,43 @@
     <div class="chart-container" style="height:340px; display:none" id="perfChartWrap">
       <canvas id="perfChart"></canvas>
     </div>
-    <p id="perfError" class="text-rose-400 text-sm hidden"></p>
+    <p id="perfError" class="text-rose-700 dark:text-rose-400 text-sm hidden"></p>
   </div>
 
   <!-- Data Table -->
-  <div x-show="tab==='table'" x-transition class="bg-slate-900 border border-slate-800 rounded-2xl p-6 mb-6">
-    <h2 class="text-base font-semibold text-slate-200 mb-4" data-i18n="sector.table_title">Data Table</h2>
+  <div x-show="tab==='table'" x-transition class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 mb-6">
+    <h2 class="text-base font-semibold text-slate-700 dark:text-slate-200 mb-4" data-i18n="sector.table_title">Data Table</h2>
 
     <!-- Sector PE Context (current vs recent range) -->
-    <div id="sectorPeContext" class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 mb-4 hidden">
+    <div id="sectorPeContext" class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 mb-4 hidden">
       <div class="flex items-center justify-between mb-3">
         <div>
-          <h3 class="text-sm font-semibold text-slate-300">Sector Valuation Context</h3>
+          <h3 class="text-sm font-semibold text-slate-600 dark:text-slate-300">Sector Valuation Context</h3>
           <p class="text-xs text-slate-500 mt-0.5">Current average PE vs 1-year range within this peer group</p>
         </div>
         <div id="peContextBadge" class="text-xs px-2 py-0.5 rounded font-semibold hidden"></div>
       </div>
       <div id="peContextCards" class="grid grid-cols-3 gap-2">
-        <div class="bg-slate-800/40 rounded-lg p-2 text-center">
+        <div class="bg-slate-100/40 dark:bg-slate-800/40 rounded-lg p-2 text-center">
           <div class="text-[10px] text-slate-500">Min PE (1Y)</div>
-          <div id="peCtxMin" class="text-sm font-bold font-mono text-emerald-400">—</div>
+          <div id="peCtxMin" class="text-sm font-bold font-mono text-emerald-700 dark:text-emerald-400">—</div>
         </div>
-        <div class="bg-slate-800/40 rounded-lg p-2 text-center">
+        <div class="bg-slate-100/40 dark:bg-slate-800/40 rounded-lg p-2 text-center">
           <div class="text-[10px] text-slate-500">Current Avg PE</div>
-          <div id="peCtxCur" class="text-sm font-bold font-mono text-slate-200">—</div>
+          <div id="peCtxCur" class="text-sm font-bold font-mono text-slate-700 dark:text-slate-200">—</div>
         </div>
-        <div class="bg-slate-800/40 rounded-lg p-2 text-center">
+        <div class="bg-slate-100/40 dark:bg-slate-800/40 rounded-lg p-2 text-center">
           <div class="text-[10px] text-slate-500">Max PE (1Y)</div>
-          <div id="peCtxMax" class="text-sm font-bold font-mono text-rose-400">—</div>
+          <div id="peCtxMax" class="text-sm font-bold font-mono text-rose-700 dark:text-rose-400">—</div>
         </div>
       </div>
       <!-- PE range bar -->
       <div class="mt-3">
-        <div class="relative h-2.5 bg-slate-800 rounded-full">
+        <div class="relative h-2.5 bg-slate-100 dark:bg-slate-800 rounded-full">
           <div class="absolute inset-y-0 left-0 bg-gradient-to-r from-emerald-500 via-amber-400 to-rose-500 rounded-full opacity-40" style="width:100%"></div>
-          <div id="peCtxMarker" class="absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full bg-white shadow ring-2 ring-slate-900" style="left:50%"></div>
+          <div id="peCtxMarker" class="absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full bg-white shadow ring-2 ring-slate-200 dark:ring-slate-900" style="left:50%"></div>
         </div>
-        <div class="flex justify-between text-[9px] text-slate-600 mt-1">
+        <div class="flex justify-between text-[9px] text-slate-500 dark:text-slate-600 mt-1">
           <span>Cheapest</span><span id="peCtxPctile"></span><span>Most Expensive</span>
         </div>
       </div>
@@ -436,41 +436,41 @@
     <div class="overflow-x-auto">
       <table class="w-full text-sm" id="sectorTable">
         <thead>
-          <tr class="text-xs text-slate-500 border-b border-slate-800 select-none">
-            <th class="text-left py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-300 transition whitespace-nowrap"
+          <tr class="text-xs text-slate-500 border-b border-slate-200 dark:border-slate-800 select-none">
+            <th class="text-left py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-600 dark:hover:text-slate-300 transition whitespace-nowrap"
                 data-col="ticker"><span data-i18n="th.ticker">Ticker</span> <span class="sort-icon ml-0.5">&#8597;</span></th>
-            <th class="text-left py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-300 transition whitespace-nowrap"
+            <th class="text-left py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-600 dark:hover:text-slate-300 transition whitespace-nowrap"
                 data-col="name"><span data-i18n="th.name">Name</span> <span class="sort-icon ml-0.5">&#8597;</span></th>
-            <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-300 transition whitespace-nowrap"
+            <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-600 dark:hover:text-slate-300 transition whitespace-nowrap"
                 data-col="market_cap"><span data-i18n="th.mkt_cap">Mkt Cap</span> <span class="sort-icon ml-0.5">&#8597;</span></th>
-            <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-300 transition whitespace-nowrap"
+            <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-600 dark:hover:text-slate-300 transition whitespace-nowrap"
                 data-col="price"><span data-i18n="th.price">Price</span> <span class="sort-icon ml-0.5">&#8597;</span></th>
-            <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-300 transition whitespace-nowrap"
+            <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-600 dark:hover:text-slate-300 transition whitespace-nowrap"
                 data-col="target"><span data-i18n="th.target">Target</span> <span class="sort-icon ml-0.5">&#8597;</span></th>
-            <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-300 transition whitespace-nowrap"
+            <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-600 dark:hover:text-slate-300 transition whitespace-nowrap"
                 data-col="upside"><span data-i18n="th.upside">Upside</span> <span class="sort-icon ml-0.5">&#8597;</span></th>
-            <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-300 transition whitespace-nowrap"
+            <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-600 dark:hover:text-slate-300 transition whitespace-nowrap"
                 data-col="pe_ttm"><span data-i18n="th.pe_ttm">PE (TTM)</span> <span class="sort-icon ml-0.5">&#8597;</span></th>
-            <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-300 transition whitespace-nowrap"
+            <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-600 dark:hover:text-slate-300 transition whitespace-nowrap"
                 data-col="pe_fwd"><span data-i18n="th.pe_fwd">PE (Fwd)</span> <span class="sort-icon ml-0.5">&#8597;</span></th>
-            <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-300 transition whitespace-nowrap"
+            <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-600 dark:hover:text-slate-300 transition whitespace-nowrap"
                 data-col="peg"><span data-i18n="th.peg">PEG</span> <span class="sort-icon ml-0.5">&#8597;</span></th>
-            <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-300 transition whitespace-nowrap"
+            <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-600 dark:hover:text-slate-300 transition whitespace-nowrap"
                 data-col="eps_growth_ttm"><span data-i18n="th.eps_growth_ttm">EPS Gr TTM</span> <span class="sort-icon ml-0.5">&#8597;</span></th>
-            <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-300 transition whitespace-nowrap"
+            <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-600 dark:hover:text-slate-300 transition whitespace-nowrap"
                 data-col="eps_growth_q"><span data-i18n="th.eps_growth_q">EPS Gr Q</span> <span class="sort-icon ml-0.5">&#8597;</span></th>
-            <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-300 transition whitespace-nowrap"
+            <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-600 dark:hover:text-slate-300 transition whitespace-nowrap"
                 data-col="ev_ebitda"><span data-i18n="th.ev_ebitda">EV/EBITDA</span> <span class="sort-icon ml-0.5">&#8597;</span></th>
-            <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-300 transition whitespace-nowrap"
+            <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-600 dark:hover:text-slate-300 transition whitespace-nowrap"
                 data-col="ev"><span data-i18n="th.ev">EV ($B)</span> <span class="sort-icon ml-0.5">&#8597;</span></th>
-            <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-300 transition whitespace-nowrap"
+            <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-600 dark:hover:text-slate-300 transition whitespace-nowrap"
                 data-col="ebitda"><span data-i18n="th.ebitda">EBITDA ($B)</span> <span class="sort-icon ml-0.5">&#8597;</span></th>
-            <th class="text-right py-2 px-2 font-medium sortable cursor-pointer hover:text-slate-300 transition whitespace-nowrap" data-col="ps_ratio"><span data-i18n="th.ps_ratio">P/S</span> <span class="sort-icon">↕</span></th>
-            <th class="text-right py-2 px-2 font-medium sortable cursor-pointer hover:text-slate-300 transition whitespace-nowrap" data-col="pb_ratio"><span data-i18n="th.pb_ratio">P/B</span> <span class="sort-icon">↕</span></th>
-            <th class="text-right py-2 px-2 font-medium sortable cursor-pointer hover:text-slate-300 transition whitespace-nowrap" data-col="fcf"><span data-i18n="th.fcf">FCF ($B)</span> <span class="sort-icon">↕</span></th>
-            <th class="text-right py-2 px-2 font-medium sortable cursor-pointer hover:text-slate-300 transition whitespace-nowrap" data-col="short_float"><span data-i18n="th.short_float">Short %</span> <span class="sort-icon">↕</span></th>
-            <th class="text-right py-2 px-2 font-medium sortable cursor-pointer hover:text-slate-300 transition whitespace-nowrap" data-col="div_yield"><span data-i18n="th.div_yield">Div Yield</span> <span class="sort-icon">↕</span></th>
-            <th class="text-right py-2 px-2 font-medium sortable cursor-pointer hover:text-slate-300 transition whitespace-nowrap" data-col="rev_growth"><span data-i18n="th.rev_growth">Rev Growth</span> <span class="sort-icon">↕</span></th>
+            <th class="text-right py-2 px-2 font-medium sortable cursor-pointer hover:text-slate-600 dark:hover:text-slate-300 transition whitespace-nowrap" data-col="ps_ratio"><span data-i18n="th.ps_ratio">P/S</span> <span class="sort-icon">↕</span></th>
+            <th class="text-right py-2 px-2 font-medium sortable cursor-pointer hover:text-slate-600 dark:hover:text-slate-300 transition whitespace-nowrap" data-col="pb_ratio"><span data-i18n="th.pb_ratio">P/B</span> <span class="sort-icon">↕</span></th>
+            <th class="text-right py-2 px-2 font-medium sortable cursor-pointer hover:text-slate-600 dark:hover:text-slate-300 transition whitespace-nowrap" data-col="fcf"><span data-i18n="th.fcf">FCF ($B)</span> <span class="sort-icon">↕</span></th>
+            <th class="text-right py-2 px-2 font-medium sortable cursor-pointer hover:text-slate-600 dark:hover:text-slate-300 transition whitespace-nowrap" data-col="short_float"><span data-i18n="th.short_float">Short %</span> <span class="sort-icon">↕</span></th>
+            <th class="text-right py-2 px-2 font-medium sortable cursor-pointer hover:text-slate-600 dark:hover:text-slate-300 transition whitespace-nowrap" data-col="div_yield"><span data-i18n="th.div_yield">Div Yield</span> <span class="sort-icon">↕</span></th>
+            <th class="text-right py-2 px-2 font-medium sortable cursor-pointer hover:text-slate-600 dark:hover:text-slate-300 transition whitespace-nowrap" data-col="rev_growth"><span data-i18n="th.rev_growth">Rev Growth</span> <span class="sort-icon">↕</span></th>
           </tr>
         </thead>
         <tbody id="sectorTableBody"></tbody>
@@ -483,12 +483,12 @@
 <!-- ── Sector fullscreen modal ────────────────────────────────────────── -->
 <div id="sectorModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
      style="display:none" onclick="closeSectorModal()">
-  <div class="relative w-full max-w-5xl bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl flex flex-col"
+  <div class="relative w-full max-w-5xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-2xl shadow-2xl flex flex-col"
        style="max-height:90vh" onclick="event.stopPropagation()">
-    <div class="flex items-center justify-between px-6 py-4 border-b border-slate-800 shrink-0">
-      <h3 id="sectorModalTitle" class="font-semibold text-slate-100"></h3>
+    <div class="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800 shrink-0">
+      <h3 id="sectorModalTitle" class="font-semibold text-slate-800 dark:text-slate-100"></h3>
       <button onclick="closeSectorModal()"
-              class="text-slate-500 hover:text-slate-200 transition p-1 rounded-lg hover:bg-slate-800">
+              class="text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 transition p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
         </svg>
@@ -505,8 +505,8 @@ const DATA = {{ chartdata | safe }};
 const SECTOR_NAME = {{ sector_name | tojson }};
 
 const labels  = DATA.map(d => d.ticker);
-const gridCol = '#1e293b';
-const tickCol = '#64748b';
+const gridCol = CT.c('#1e293b');
+const tickCol = CT.c('#64748b');
 
 // ---- Value toggle state ----
 const chartInstances = {};
@@ -534,11 +534,11 @@ function sortGrowthChart(field) {
     const arrow = btn.querySelector('.growth-sort-arrow');
     if (btn.id === 'growth-sort-' + (field === 'eps_growth_ttm' ? 'ttm' : 'q')) {
       btn.classList.add('bg-brand/20', 'text-white');
-      btn.classList.remove('text-slate-400');
+      btn.classList.remove('text-slate-500 dark:text-slate-400');
       arrow.textContent = dir === 1 ? ' ↑' : ' ↓';
     } else {
       btn.classList.remove('bg-brand/20', 'text-white');
-      btn.classList.add('text-slate-400');
+      btn.classList.add('text-slate-500 dark:text-slate-400');
       arrow.textContent = '';
     }
   });
@@ -574,11 +574,11 @@ function sortPeChart(field) {
     const arrow = btn.querySelector('.pe-sort-arrow');
     if (btn.id === 'pe-sort-' + field) {
       btn.classList.add('bg-brand/20', 'text-white');
-      btn.classList.remove('text-slate-400');
+      btn.classList.remove('text-slate-500 dark:text-slate-400');
       arrow.textContent = dir === 1 ? ' ↑' : ' ↓';
     } else {
       btn.classList.remove('bg-brand/20', 'text-white');
-      btn.classList.add('text-slate-400');
+      btn.classList.add('text-slate-500 dark:text-slate-400');
       arrow.textContent = '';
     }
   });
@@ -724,7 +724,7 @@ function valueLabelPlugin(chartKey, formatter) {
           if (val == null) return;
           const label = formatter ? formatter(val, di) : val.toFixed(1);
           c.save();
-          c.fillStyle = '#cbd5e1';
+          c.fillStyle = CT.c('#cbd5e1');
           c.font = '10px Inter,sans-serif';
           c.textAlign = 'center';
           if (chart.options.indexAxis === 'y') {
@@ -742,7 +742,7 @@ function valueLabelPlugin(chartKey, formatter) {
 
 const chartDefaults = {
   responsive: true, maintainAspectRatio: false,
-  plugins: { legend: { labels: { color: '#94a3b8', font: { size: 11 } } } },
+  plugins: { legend: { labels: { color: CT.c('#94a3b8'), font: { size: 11 } } } },
 };
 
 // -- PE + PEG grouped bars (dual axis)
@@ -763,7 +763,7 @@ const chartDefaults = {
       onClick: tickerOnClick(() => chartInstances.pe ? chartInstances.pe.data.labels : labels),
       scales: {
         yPE:  { position:'left',  grid:{color:gridCol}, ticks:{color:tickCol}, title:{display:true,text:'PE Ratio',color:tickCol} },
-        yPEG: { position:'right', grid:{display:false},  ticks:{color:'#34d399'}, title:{display:true,text:'PEG',color:'#34d399'} },
+        yPEG: { position:'right', grid:{display:false},  ticks:{color:CT.c('#34d399')}, title:{display:true,text:'PEG',color:CT.c('#34d399')} },
         x:    { grid:{display:false}, ticks:{color:tickCol} }
       },
       plugins: {
@@ -779,7 +779,7 @@ const chartDefaults = {
         if (y1 > a.top && y1 < a.bottom) {
           c.save(); c.strokeStyle='#34d39966'; c.lineWidth=1.5; c.setLineDash([5,4]);
           c.beginPath(); c.moveTo(a.left, y1); c.lineTo(a.right, y1); c.stroke();
-          c.fillStyle='#34d399'; c.font='10px Inter'; c.fillText('PEG = 1', a.right-50, y1-4);
+          c.fillStyle=CT.c('#34d399'); c.font='10px Inter'; c.fillText('PEG = 1', a.right-50, y1-4);
           c.restore();
         }
       }
@@ -834,14 +834,14 @@ const chartDefaults = {
       plugins: { legend:{display:false}, tooltip:{callbacks:{label:c=>` ${c.raw?.toFixed(1)}%`}} },
       scales: {
         x: { grid:{color:gridCol}, ticks:{color:tickCol,callback:v=>v+'%'} },
-        y: { grid:{display:false}, ticks:{color:'#94a3b8'} }
+        y: { grid:{display:false}, ticks:{color:CT.c('#94a3b8')} }
       }
     },
     plugins: [tickerClickPlugin(), valueLabelPlugin('upside', v => v.toFixed(1)+'%'), {
       afterDraw(chart){
         const {ctx:c,chartArea:a,scales:{x}} = chart;
         const z = x.getPixelForValue(0);
-        if(z>a.left&&z<a.right){ c.save();c.strokeStyle='#475569';c.lineWidth=1;c.beginPath();c.moveTo(z,a.top);c.lineTo(z,a.bottom);c.stroke();c.restore(); }
+        if(z>a.left&&z<a.right){ c.save();c.strokeStyle=CT.c('#475569');c.lineWidth=1;c.beginPath();c.moveTo(z,a.top);c.lineTo(z,a.bottom);c.stroke();c.restore(); }
       }
     }]
   });
@@ -869,7 +869,7 @@ const chartDefaults = {
       plugins: { legend:{display:false}, tooltip:{callbacks:{label:c=>` PEG: ${c.raw?.toFixed(2)}`}} },
       scales: {
         x: { grid:{color:gridCol}, ticks:{color:tickCol} },
-        y: { grid:{display:false}, ticks:{color:'#94a3b8'} }
+        y: { grid:{display:false}, ticks:{color:CT.c('#94a3b8')} }
       }
     },
     plugins: [tickerClickPlugin(), valueLabelPlugin('peg', v => v.toFixed(2)), {
@@ -880,7 +880,7 @@ const chartDefaults = {
           if(px>a.left&&px<a.right){
             c.save();c.strokeStyle='#47556966';c.lineWidth=1;c.setLineDash([4,3]);
             c.beginPath();c.moveTo(px,a.top);c.lineTo(px,a.bottom);c.stroke();
-            c.fillStyle='#64748b';c.font='10px Inter';c.fillText('PEG='+v,px+3,a.top+12);
+            c.fillStyle=CT.c('#64748b');c.font='10px Inter';c.fillText('PEG='+v,px+3,a.top+12);
             c.restore();
           }
         });
@@ -927,7 +927,7 @@ const chartDefaults = {
       },
       scales: {
         x: { grid:{color:gridCol}, ticks:{color:tickCol, callback: v => v+'%'} },
-        y: { grid:{display:false}, ticks:{color:'#94a3b8'} }
+        y: { grid:{display:false}, ticks:{color:CT.c('#94a3b8')} }
       }
     },
     plugins: [tickerClickPlugin(), valueLabelPlugin('day_change', v => (v>=0?'+':'')+v.toFixed(2)+'%'), {
@@ -935,7 +935,7 @@ const chartDefaults = {
         const {ctx:c,chartArea:a,scales:{x}} = chart;
         const z = x.getPixelForValue(0);
         if(z>a.left&&z<a.right){
-          c.save();c.strokeStyle='#475569';c.lineWidth=1;
+          c.save();c.strokeStyle=CT.c('#475569');c.lineWidth=1;
           c.beginPath();c.moveTo(z,a.top);c.lineTo(z,a.bottom);c.stroke();c.restore();
         }
       }
@@ -979,7 +979,7 @@ const chartDefaults = {
       },
       scales: {
         x: { grid:{color:gridCol}, ticks:{color:tickCol, callback: v => v+'%'} },
-        y: { grid:{display:false}, ticks:{color:'#94a3b8'} }
+        y: { grid:{display:false}, ticks:{color:CT.c('#94a3b8')} }
       }
     },
     plugins: [tickerClickPlugin(), valueLabelPlugin('growth', v => v.toFixed(1)+'%'), {
@@ -987,7 +987,7 @@ const chartDefaults = {
         const {ctx:c,chartArea:a,scales:{x}} = chart;
         const z = x.getPixelForValue(0);
         if(z>a.left&&z<a.right){
-          c.save();c.strokeStyle='#475569';c.lineWidth=1;
+          c.save();c.strokeStyle=CT.c('#475569');c.lineWidth=1;
           c.beginPath();c.moveTo(z,a.top);c.lineTo(z,a.bottom);c.stroke();c.restore();
         }
       }
@@ -1032,11 +1032,11 @@ const chartDefaults = {
       }}},
       scales: {
         x: { grid:{color:gridCol}, ticks:{color:tickCol, callback: v => v+'x'} },
-        y: { grid:{display:false}, ticks:{color:'#94a3b8'} }
+        y: { grid:{display:false}, ticks:{color:CT.c('#94a3b8')} }
       }
     },
     plugins: [tickerClickPlugin(), valueLabelPlugin('ev_ebitda', v => v.toFixed(1)+'x'),
-              avgLinePlugin(() => avg, v => v.toFixed(1)+'x', '#94a3b8')]
+              avgLinePlugin(() => avg, v => v.toFixed(1)+'x', CT.c('#94a3b8'))]
   });
 })();
 
@@ -1093,11 +1093,11 @@ function avgLinePlugin(getAvg, fmt, color) {
       plugins: { legend:{display:false}, tooltip:{callbacks:{label:c=>` EV: $${c.raw?.toFixed(1)}B`}} },
       scales: {
         x: { grid:{color:gridCol}, ticks:{color:tickCol, callback: v => '$'+v+'B'} },
-        y: { grid:{display:false}, ticks:{color:'#94a3b8'} }
+        y: { grid:{display:false}, ticks:{color:CT.c('#94a3b8')} }
       }
     },
     plugins: [tickerClickPlugin(), valueLabelPlugin('ev', v => '$'+v.toFixed(1)+'B'),
-              avgLinePlugin(() => avg, v => '$'+v.toFixed(1)+'B', '#38bdf8')]
+              avgLinePlugin(() => avg, v => '$'+v.toFixed(1)+'B', CT.c('#38bdf8'))]
   });
 })();
 
@@ -1127,11 +1127,11 @@ function avgLinePlugin(getAvg, fmt, color) {
       plugins: { legend:{display:false}, tooltip:{callbacks:{label:c=>` EBITDA: $${c.raw?.toFixed(1)}B`}} },
       scales: {
         x: { grid:{color:gridCol}, ticks:{color:tickCol, callback: v => '$'+v+'B'} },
-        y: { grid:{display:false}, ticks:{color:'#94a3b8'} }
+        y: { grid:{display:false}, ticks:{color:CT.c('#94a3b8')} }
       }
     },
     plugins: [tickerClickPlugin(), valueLabelPlugin('ebitda', v => '$'+v.toFixed(1)+'B'),
-              avgLinePlugin(() => avg, v => '$'+v.toFixed(1)+'B', '#a78bfa')]
+              avgLinePlugin(() => avg, v => '$'+v.toFixed(1)+'B', CT.c('#a78bfa'))]
   });
 })();
 
@@ -1190,32 +1190,32 @@ function avgLinePlugin(getAvg, fmt, color) {
 (function(){
   let sortCol = 'ticker', sortDir = 1;
 
-  function fmtNull(s){ return '<span class="text-slate-600">-</span>'; }
+  function fmtNull(s){ return '<span class="text-slate-500 dark:text-slate-600">-</span>'; }
   function fmtPrice(v){ return v==null ? fmtNull() : '$'+v.toFixed(2); }
   function fmtPE(v){ return v==null ? fmtNull() : v.toFixed(1)+'x'; }
   function fmtPct(v){
     if(v==null) return fmtNull();
-    const col = v>=0 ? 'text-emerald-400' : 'text-rose-400';
+    const col = v>=0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400';
     return `<span class="${col} font-semibold">${v.toFixed(1)}%</span>`;
   }
   function fmtPeg(v){
     if(v==null) return fmtNull();
-    const col = v<1?'text-emerald-400':v<2?'text-amber-400':'text-rose-400';
+    const col = v<1?'text-emerald-700 dark:text-emerald-400':v<2?'text-amber-700 dark:text-amber-400':'text-rose-700 dark:text-rose-400';
     return `<span class="${col} font-semibold">${v.toFixed(2)}</span>`;
   }
   function fmtCap(v){ return v==null ? fmtNull() : '$'+v.toFixed(1)+'B'; }
   function fmtGrowth(v){
     if(v==null) return fmtNull();
-    const col = v>0 ? 'text-emerald-400' : 'text-rose-400';
+    const col = v>0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400';
     return `<span class="${col}">${v.toFixed(1)}%</span>`;
   }
   function fmtEvEbitda(v){
     if(v==null) return fmtNull();
-    return `<span class="text-slate-200">${v.toFixed(1)}x</span>`;
+    return `<span class="text-slate-700 dark:text-slate-200">${v.toFixed(1)}x</span>`;
   }
   function fmtBillions(v){
     if(v==null) return fmtNull();
-    return `<span class="text-slate-200">$${v.toFixed(1)}B</span>`;
+    return `<span class="text-slate-700 dark:text-slate-200">$${v.toFixed(1)}B</span>`;
   }
 
   function render() {
@@ -1244,9 +1244,9 @@ function avgLinePlugin(getAvg, fmt, color) {
     });
 
     document.getElementById('sectorTableBody').innerHTML = rows.map(d => `
-      <tr class="border-b border-slate-800/60 hover:bg-slate-800/40 transition">
+      <tr class="border-b border-slate-200/60 dark:border-slate-800/60 hover:bg-slate-100/40 dark:hover:bg-slate-800/40 transition">
         <td class="py-2.5 px-3"><a href="/history/${d.ticker}" class="font-mono font-bold text-brand hover:underline">${d.ticker}</a></td>
-        <td class="py-2.5 px-3 text-slate-400 text-xs max-w-[140px] truncate" title="${I18n.stockName(d.ticker, d.name)}">${I18n.stockName(d.ticker, d.name)}</td>
+        <td class="py-2.5 px-3 text-slate-500 dark:text-slate-400 text-xs max-w-[140px] truncate" title="${I18n.stockName(d.ticker, d.name)}">${I18n.stockName(d.ticker, d.name)}</td>
         <td class="py-2.5 px-3 text-right font-mono text-sm">${fmtCap(d.market_cap)}</td>
         <td class="py-2.5 px-3 text-right font-mono">${fmtPrice(d.price)}</td>
         <td class="py-2.5 px-3 text-right font-mono">${fmtPrice(d.target)}</td>
@@ -1261,10 +1261,10 @@ function avgLinePlugin(getAvg, fmt, color) {
         <td class="py-2.5 px-3 text-right font-mono">${fmtBillions(d.ebitda)}</td>
       <td class="py-2 px-2 text-right font-mono text-xs ${d.ps_ratio != null ? '' : 'text-slate-700'}">${d.ps_ratio != null ? d.ps_ratio.toFixed(1)+'x' : '—'}</td>
       <td class="py-2 px-2 text-right font-mono text-xs ${d.pb_ratio != null ? '' : 'text-slate-700'}">${d.pb_ratio != null ? d.pb_ratio.toFixed(1)+'x' : '—'}</td>
-      <td class="py-2 px-2 text-right font-mono text-xs ${d.fcf != null ? (d.fcf >= 0 ? 'text-emerald-400' : 'text-rose-400') : 'text-slate-700'}">${d.fcf != null ? (d.fcf >= 0 ? '+' : '') + d.fcf.toFixed(1) : '—'}</td>
-      <td class="py-2 px-2 text-right font-mono text-xs ${d.short_float != null ? (d.short_float > 15 ? 'text-rose-400' : d.short_float > 7 ? 'text-amber-400' : '') : 'text-slate-700'}">${d.short_float != null ? d.short_float.toFixed(1)+'%' : '—'}</td>
-      <td class="py-2 px-2 text-right font-mono text-xs ${d.div_yield != null ? 'text-emerald-400' : 'text-slate-700'}">${d.div_yield != null ? d.div_yield.toFixed(2)+'%' : '—'}</td>
-      <td class="py-2 px-2 text-right font-mono text-xs ${d.rev_growth != null ? (d.rev_growth > 15 ? 'text-emerald-400' : d.rev_growth > 5 ? 'text-amber-400' : d.rev_growth > 0 ? 'text-slate-300' : 'text-rose-400') : 'text-slate-700'}">${d.rev_growth != null ? (d.rev_growth >= 0 ? '+' : '') + d.rev_growth.toFixed(1) + '%' : '—'}</td>
+      <td class="py-2 px-2 text-right font-mono text-xs ${d.fcf != null ? (d.fcf >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400') : 'text-slate-700'}">${d.fcf != null ? (d.fcf >= 0 ? '+' : '') + d.fcf.toFixed(1) : '—'}</td>
+      <td class="py-2 px-2 text-right font-mono text-xs ${d.short_float != null ? (d.short_float > 15 ? 'text-rose-700 dark:text-rose-400' : d.short_float > 7 ? 'text-amber-700 dark:text-amber-400' : '') : 'text-slate-700'}">${d.short_float != null ? d.short_float.toFixed(1)+'%' : '—'}</td>
+      <td class="py-2 px-2 text-right font-mono text-xs ${d.div_yield != null ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-700'}">${d.div_yield != null ? d.div_yield.toFixed(2)+'%' : '—'}</td>
+      <td class="py-2 px-2 text-right font-mono text-xs ${d.rev_growth != null ? (d.rev_growth > 15 ? 'text-emerald-700 dark:text-emerald-400' : d.rev_growth > 5 ? 'text-amber-700 dark:text-amber-400' : d.rev_growth > 0 ? 'text-slate-600 dark:text-slate-300' : 'text-rose-700 dark:text-rose-400') : 'text-slate-700'}">${d.rev_growth != null ? (d.rev_growth >= 0 ? '+' : '') + d.rev_growth.toFixed(1) + '%' : '—'}</td>
       </tr>`).join('');
   }
 
@@ -1300,7 +1300,7 @@ function avgLinePlugin(getAvg, fmt, color) {
       badge.classList.remove('hidden');
       badge.textContent = pctile >= 75 ? '⚠ Expensive range' : pctile <= 25 ? '✓ Cheap range' : 'Fair range';
       badge.className = 'text-xs px-2 py-0.5 rounded font-semibold ' +
-        (pctile >= 75 ? 'bg-rose-900/50 text-rose-300' : pctile <= 25 ? 'bg-emerald-900/50 text-emerald-300' : 'bg-amber-900/50 text-amber-300');
+        (pctile >= 75 ? 'bg-rose-50 dark:bg-rose-900/50 text-rose-700 dark:text-rose-300' : pctile <= 25 ? 'bg-emerald-50 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300' : 'bg-amber-50 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300');
     } catch(e) {}
   })();
 })();
@@ -1342,10 +1342,10 @@ function expandSectorChart(kind) {
     options: {
       responsive: true, maintainAspectRatio: false,
       indexAxis: opts.indexAxis || 'x',
-      plugins: { legend: { labels: { color: '#94a3b8', font: { size: 12 } } } },
+      plugins: { legend: { labels: { color: CT.c('#94a3b8'), font: { size: 12 } } } },
       scales: {
-        x: { grid: { color: '#1e293b' }, ticks: { color: '#64748b' } },
-        y: { grid: { color: kind === 'pe' ? '#1e293b' : 'transparent' }, ticks: { color: '#94a3b8', font: { size: 12 } } },
+        x: { grid: { color: CT.c('#1e293b') }, ticks: { color: CT.c('#64748b') } },
+        y: { grid: { color: kind === 'pe' ? CT.c('#1e293b') : 'transparent' }, ticks: { color: CT.c('#94a3b8'), font: { size: 12 } } },
       },
     },
   });
@@ -1356,9 +1356,9 @@ let _perfLoaded = false;
 let _perfPeriod = '1y';
 
 const _PERF_COLORS = [
-  '#818cf8','#34d399','#f472b6','#fb923c','#38bdf8',
-  '#a3e635','#c084fc','#fbbf24','#2dd4bf','#f87171',
-  '#6ee7b7','#a5b4fc','#fca5a5','#fde68a','#bae6fd',
+  '#818cf8',CT.c('#34d399'),'#f472b6',CT.c('#fb923c'),CT.c('#38bdf8'),
+  '#a3e635','#c084fc',CT.c('#fbbf24'),'#2dd4bf',CT.c('#f87171'),
+  '#6ee7b7',CT.c('#a5b4fc'),'#fca5a5','#fde68a','#bae6fd',
 ];
 
 async function loadSectorPerformance(forceReload) {
@@ -1388,7 +1388,7 @@ async function loadSectorPerformance(forceReload) {
   if (_perfChart) { _perfChart.destroy(); _perfChart = null; }
 
   const tickers  = Object.keys(data.series || {});
-  const gridCol  = '#1e293b', tickCol = '#64748b';
+  const gridCol  = CT.c('#1e293b'), tickCol = CT.c('#64748b');
 
   const datasets = tickers.map((tk, i) => ({
     label: tk,
@@ -1409,7 +1409,7 @@ async function loadSectorPerformance(forceReload) {
     options: {
       responsive: true, maintainAspectRatio: false,
       plugins: {
-        legend: { labels: { color: '#94a3b8', font: { size: 11 }, boxWidth: 12 } },
+        legend: { labels: { color: CT.c('#94a3b8'), font: { size: 11 }, boxWidth: 12 } },
         tooltip: {
           mode: 'index', intersect: false,
           callbacks: {
@@ -1431,7 +1431,7 @@ async function loadSectorPerformance(forceReload) {
         if (y100 >= a.top && y100 <= a.bottom) {
           c.save(); c.strokeStyle = 'rgba(148,163,184,0.4)'; c.lineWidth = 1; c.setLineDash([4,4]);
           c.beginPath(); c.moveTo(a.left, y100); c.lineTo(a.right, y100); c.stroke();
-          c.fillStyle = '#64748b'; c.font = '10px Inter,sans-serif';
+          c.fillStyle = CT.c('#64748b'); c.font = '10px Inter,sans-serif';
           c.fillText('100 (start)', a.left + 4, y100 - 4); c.restore();
         }
       }
@@ -1451,7 +1451,7 @@ document.querySelectorAll('#perfRangeBtns .range-btn').forEach(btn => {
     _perfLoaded = false;
     _spyRelative = false;
     const spyBtn = document.getElementById('spyRelativeToggle');
-    if (spyBtn) spyBtn.className = 'text-[11px] px-2 py-0.5 rounded border border-slate-700 text-slate-500 hover:text-emerald-400 hover:border-emerald-700 transition';
+    if (spyBtn) spyBtn.className = 'text-[11px] px-2 py-0.5 rounded border border-slate-300 dark:border-slate-700 text-slate-500 hover:text-emerald-700 dark:hover:text-emerald-400 hover:border-emerald-300 dark:hover:border-emerald-700 transition';
     loadSectorPerformance(true);
   });
 });
@@ -1463,8 +1463,8 @@ function _toggleRevGrowth() {
   _showRevGrowth = !_showRevGrowth;
   const btn = document.getElementById('revGrowthToggle');
   if (btn) btn.className = _showRevGrowth
-    ? 'text-[11px] px-2 py-0.5 rounded border border-emerald-600 text-emerald-400 bg-emerald-900/20 transition'
-    : 'text-[11px] px-2 py-0.5 rounded border border-slate-700 text-slate-500 hover:text-emerald-400 hover:border-emerald-700 transition';
+    ? 'text-[11px] px-2 py-0.5 rounded border border-emerald-300 dark:border-emerald-600 text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 transition'
+    : 'text-[11px] px-2 py-0.5 rounded border border-slate-300 dark:border-slate-700 text-slate-500 hover:text-emerald-700 dark:hover:text-emerald-400 hover:border-emerald-300 dark:hover:border-emerald-700 transition';
   const chart = window._growthChartInst;
   if (!chart) return;
   const sorted = window._sortedGrowthData || [];
@@ -1472,7 +1472,7 @@ function _toggleRevGrowth() {
     const revData = sorted.map(d => d.rev_growth);
     chart.data.datasets[0].data = revData;
     chart.data.datasets[0].label = 'Revenue Growth (%)';
-    chart.data.datasets[0].backgroundColor = revData.map(v => (v ?? 0) >= 0 ? 'rgba(52,211,153,0.7)' : 'rgba(248,113,113,0.7)');
+    chart.data.datasets[0].backgroundColor = revData.map(v => (v ?? 0) >= 0 ? 'rgba(52,211,153,0.7)' : CT.c('rgba(248,113,113,0.7)'));
     chart.data.datasets[1].data = [];
   } else {
     chart.data.datasets[0].data = sorted.map(d => d.eps_growth_ttm);
@@ -1487,8 +1487,8 @@ function _toggleSpyRelative() {
   _spyRelative = !_spyRelative;
   const btn = document.getElementById('spyRelativeToggle');
   if (btn) btn.className = _spyRelative
-    ? 'text-[11px] px-2 py-0.5 rounded border border-emerald-600 text-emerald-400 bg-emerald-900/20 transition'
-    : 'text-[11px] px-2 py-0.5 rounded border border-slate-700 text-slate-500 hover:text-emerald-400 hover:border-emerald-700 transition';
+    ? 'text-[11px] px-2 py-0.5 rounded border border-emerald-300 dark:border-emerald-600 text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 transition'
+    : 'text-[11px] px-2 py-0.5 rounded border border-slate-300 dark:border-slate-700 text-slate-500 hover:text-emerald-700 dark:hover:text-emerald-400 hover:border-emerald-300 dark:hover:border-emerald-700 transition';
   if (!window._perfChart) return;
   const ds = window._perfChart.data.datasets;
   const spyDs = ds.find(d => d.label === 'SPY');
@@ -1503,7 +1503,7 @@ function _toggleSpyRelative() {
     window._perfChart.options.scales.y.title = I18n.axis('chart.axis_alpha_spy', 'Alpha vs SPY', { font: { size: 9 } });
   } else {
     ds.forEach(d => { if (d._origData) d.data = [...d._origData]; });
-    window._perfChart.options.scales.y.title = { display: true, text: 'Normalised (start=100)', color: '#64748b', font: { size: 10 } };
+    window._perfChart.options.scales.y.title = { display: true, text: 'Normalised (start=100)', color: CT.c('#64748b'), font: { size: 10 } };
   }
   window._perfChart.update();
 }

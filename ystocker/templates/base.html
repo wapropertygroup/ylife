@@ -7,10 +7,31 @@
 {% set _agents_floating = not _agents_embedded
        and request.endpoint not in ('main.agents_page', 'main.login') %}
 <!doctype html>
-<html lang="en" class="h-full">
+<html lang="en" class="h-full dark">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  {# ── Theme, applied before first paint ────────────────────────────────────
+     Must stay here, above every stylesheet and inline <style>: the class is
+     read by Tailwind's `dark:` variant during the very first style resolution,
+     so a script placed at the end of <head> (never mind the body) would let one
+     dark frame paint before flipping to light. That flash is the whole reason
+     this is an inline blocking script rather than part of a bundle.
+
+     Dark is the default when nothing is stored, matching the other seven apps,
+     and `prefers-color-scheme` is deliberately not consulted — a reader on a
+     light-mode laptop would otherwise find this site changed appearance
+     overnight without having asked for anything. #}
+  <script>
+    (function () {
+      try {
+        if (localStorage.getItem('ystocker_theme') === 'light') {
+          document.documentElement.classList.remove('dark');
+        }
+      } catch (_) { /* private mode: keep the default */ }
+    })();
+  </script>
   {# One filter rebrands every page title, including the two dozen templates
      that spell "yStocker" into their own {% block title %}. #}
   <title>{% filter replace("yStocker", brand_name) %}{% block title %}yStocker{% endblock %}{% endfilter %}</title>
@@ -33,7 +54,11 @@
        under the clock, which would need safe-area insets applied across every
        template. -->
   <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}?v={{ cache_bust or 'dev' }}">
-  <meta name="theme-color" content="#0f172a">
+  {# Kept in step with the theme by Theme.apply() below. This is the colour iOS
+     and Android paint the status bar and address bar with, so leaving it at the
+     dark navy would frame a light page in a dark bezel — most visible in the
+     installed PWA, which has no address bar to explain it. #}
+  <meta name="theme-color" id="themeColorMeta" content="#0f172a">
   <link rel="apple-touch-icon" href="{{ url_for('static', filename='img/pwa-icon-180.png') }}">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -71,6 +96,86 @@
     Chart.defaults.elements.point.hitRadius  = 8;
     Chart.defaults.elements.point.radius     = 0;
     Chart.defaults.elements.point.hoverRadius = 4;
+  })();
+
+  // ── Chart theming ─────────────────────────────────────────────────────────
+  // A canvas is not styled by CSS, so Tailwind's `dark:` variant cannot reach
+  // any of the ~490 colour literals in the dashboards' chart configs. `CT.c()`
+  // maps a *dark-mode* colour to its light-mode equivalent, so every call site
+  // stays a mechanical wrap of the value already there:
+  //
+  //     ticks: { color: '#64748b' }   ->   ticks: { color: CT.c('#64748b') }
+  //
+  // Templates therefore remain written in one theme (dark, as before) and this
+  // table is the only place that knows about the other. An unmapped colour is
+  // returned unchanged, which is what keeps a mistaken wrap of a *data* colour
+  // harmless rather than a silent recolouring.
+  //
+  // Deliberately NOT a Chart.js plugin that rewrites options on `beforeUpdate`.
+  // Two reasons: v4 resolves `chart.options` through a proxy *before* that hook
+  // fires, so writes there are not reliably picked up; and a blanket grey-out
+  // would destroy the axis colour-coding on the dual-axis charts, where a red
+  // right-hand axis is how a reader knows which line CPI is. Those semantic
+  // hues are mapped here to their 600-level counterparts instead — same hue,
+  // enough contrast to survive a white background.
+  window.CT = (function () {
+    const dark = document.documentElement.classList.contains('dark');
+
+    // dark value -> light value. Keys are normalised (lowercased, spaces
+    // stripped) so 'rgba(51,65,85,0.3)' and 'rgba(51, 65, 85, .3)' both hit.
+    const MAP = {
+      // Chrome: grid lines, axis ticks, borders, in-chart labels.
+      '#0f172a': '#ffffff',              // page/panel fill behind a chart
+      '#1e293b': '#e2e8f0',              // grid line              slate-800 -> 200
+      '#334155': '#cbd5e1',              // heavier grid / border  slate-700 -> 300
+      '#475569': '#94a3b8',              // slate-600 -> 400
+      '#64748b': '#475569',              // axis tick label        slate-500 -> 600
+      '#94a3b8': '#64748b',              // dim tick               slate-400 -> 500
+      '#cbd5e1': '#334155',              // in-chart text          slate-300 -> 700
+      '#e2e8f0': '#1e293b',              // bright label           slate-200 -> 800
+      'rgba(51,65,85,0.3)':   'rgba(203,213,225,0.55)',
+      'rgba(148,163,184,.55)':'rgba(71,85,105,.6)',
+
+      // Data series. Tailwind 400 -> 600: a 400-level line is chosen to glow
+      // against near-black and is washed out to the point of illegibility on
+      // white, so the hue is kept and the lightness dropped. Series and their
+      // matching axis therefore still agree on hue in both themes.
+      '#34d399': '#059669',              // emerald
+      '#f87171': '#dc2626',              // red
+      '#6366f1': '#4f46e5',              // indigo (brand)
+      '#a5b4fc': '#4f46e5',              // indigo-300 -> 600
+      '#a78bfa': '#7c3aed',              // violet
+      '#38bdf8': '#0284c7',              // sky
+      '#fbbf24': '#d97706',              // amber
+      '#fb923c': '#ea580c',              // orange
+
+      // Semantic axis/series hues: Tailwind 400 -> 600, alpha raised because
+      // 60% of a 400-level colour is close to invisible on white.
+      'rgba(248,113,113,0.5)':'rgba(220,38,38,0.75)',   // red
+      'rgba(248,113,113,0.6)':'rgba(220,38,38,0.85)',
+      'rgba(248,113,113,0.7)':'rgba(220,38,38,0.9)',
+      'rgba(56,189,248,0.6)': 'rgba(2,132,199,0.85)',   // sky
+      'rgba(52,211,153,0.5)': 'rgba(5,150,105,0.75)',   // emerald
+      'rgba(52,211,153,0.6)': 'rgba(5,150,105,0.85)',
+      'rgba(251,191,36,0.6)': 'rgba(217,119,6,0.85)',   // amber
+      'rgba(251,191,36,0.7)': 'rgba(217,119,6,0.9)',
+      'rgba(245,158,11,0.6)': 'rgba(217,119,6,0.85)',
+      'rgba(167,139,250,0.6)':'rgba(124,58,237,0.85)',  // violet
+      'rgba(167,139,250,0.7)':'rgba(124,58,237,0.9)',
+      'rgba(251,146,60,0.6)': 'rgba(234,88,12,0.85)',   // orange
+    };
+
+    function c(color) {
+      if (dark || typeof color !== 'string') return color;
+      return MAP[color.toLowerCase().replace(/\s+/g, '')] || color;
+    }
+
+    // Anything a chart config leaves unset (legend text, tooltip title) comes
+    // from these, so they have to follow the theme too.
+    Chart.defaults.color       = c('#94a3b8');
+    Chart.defaults.borderColor = c('#1e293b');
+
+    return { dark: dark, c: c };
   })();
 
   // ── Fetch with automatic retry ────────────────────────────────────────────
@@ -126,19 +231,40 @@
   <style>
     /* Brand color tokens — indigo palette */
     :root { --brand: 99 102 241; --brand-dark: 79 70 229; --brand-light: 165 180 252; }
+
+    /* Theme-dependent tokens for the handful of things Tailwind's `dark:`
+       variant cannot reach: pseudo-element scrollbars and the logo gradient.
+       Declared light-first with .dark overriding, so a browser that somehow
+       drops the class falls back to a readable page rather than black-on-black. */
+    :root {
+      --scroll-track: #e2e8f0;
+      --scroll-thumb: #94a3b8;
+      --grad-from: #4f46e5;
+      --grad-via:  #7c3aed;
+      --grad-to:   #0284c7;
+    }
+    .dark {
+      --scroll-track: #1e293b;
+      --scroll-thumb: #475569;
+      --grad-from: #6366f1;
+      --grad-via:  #a78bfa;
+      --grad-to:   #38bdf8;
+    }
+
     body { font-family: 'Inter', sans-serif; }
     .app-container { max-width: 1475px; }
     .chart-container { position: relative; }
     /* Custom scrollbar */
     ::-webkit-scrollbar { width: 6px; height: 6px; }
-    ::-webkit-scrollbar-track { background: #1e293b; }
-    ::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
+    ::-webkit-scrollbar-track { background: var(--scroll-track); }
+    ::-webkit-scrollbar-thumb { background: var(--scroll-thumb); border-radius: 3px; }
     /* Animate fade-in */
     @keyframes fadeUp { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
     .fade-up { animation: fadeUp .35s ease both; }
-    /* Gradient text */
-    .grad-text { background: linear-gradient(135deg,#6366f1,#a78bfa,#38bdf8); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
-    /* Table hover */
+    /* Gradient text — darker stops in light mode; the dark-mode sky blue drops
+       to roughly 2:1 against white, which is unreadable for a wordmark. */
+    .grad-text { background: linear-gradient(135deg,var(--grad-from),var(--grad-via),var(--grad-to)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
+    /* Table hover — indigo at 8% reads as a tint on both themes. */
     tbody tr:hover td { background: rgba(99,102,241,.08); }
     /* Hide x-cloak elements until Alpine.js initializes */
     [x-cloak] { display: none !important; }
@@ -146,12 +272,12 @@
   </style>
 </head>
 
-<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col{% if _agents_embedded %} agents-embedded{% endif %}"
+<body class="bg-white dark:bg-slate-950 text-slate-800 dark:text-slate-100 min-h-screen flex flex-col{% if _agents_embedded %} agents-embedded{% endif %}"
       x-data='{ navOpen: false, user: {{ current_user|tojson if current_user is defined else "{\"email\":\"\",\"name\":\"\",\"picture\":\"\"}"|safe }} }'>
 
   {% if not _agents_embedded %}
   <!-- ── Top navigation bar ──────────────────────────────────────────── -->
-  <header class="sticky top-0 z-50 bg-slate-900/80 backdrop-blur border-b border-slate-800">
+  <header class="sticky top-0 z-50 bg-white/80 dark:bg-slate-900/80 backdrop-blur border-b border-slate-200 dark:border-slate-800">
     <div class="app-container mx-auto px-4 sm:px-6 flex items-center h-14 gap-4">
 
       <!-- Logo -->
@@ -162,17 +288,17 @@
       <!-- Desktop nav -->
       <nav class="hidden md:flex items-center gap-1 ml-4 flex-1">
         <a href="{{ url_for('main.markets') }}"
-           class="px-3 py-1.5 rounded-md text-sm text-slate-300 hover:text-white hover:bg-slate-800 transition"
+           class="px-3 py-1.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition"
            data-i18n="markets.nav">Markets</a>
         <a href="{{ url_for('main.evaluation') }}"
-           class="px-3 py-1.5 rounded-md text-sm text-slate-300 hover:text-white hover:bg-slate-800 transition"
+           class="px-3 py-1.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition"
            data-i18n="nav.home">Valuation</a>
 
         <!-- Sectors dropdown -->
         <div class="relative" x-data="{ open: false }" @mouseenter="open=true" @mouseleave="open=false">
-          <button class="flex items-center gap-1 px-3 py-1.5 rounded-md text-sm text-slate-300
-                         hover:text-white hover:bg-slate-800 transition"
-                  :class="open && 'text-white bg-slate-800'">
+          <button class="flex items-center gap-1 px-3 py-1.5 rounded-md text-sm text-slate-600 dark:text-slate-300
+                         hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                  :class="open && 'text-white bg-slate-100 dark:bg-slate-800'">
             <span data-i18n="nav.sectors">Sectors</span>
             <svg class="w-3.5 h-3.5 mt-0.5 transition-transform duration-200" :class="open && 'rotate-180'"
                  fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -186,7 +312,7 @@
                x-transition:leave="transition ease-in duration-100"
                x-transition:leave-start="opacity-100 translate-y-0"
                x-transition:leave-end="opacity-0 -translate-y-1"
-               class="absolute left-0 top-full mt-1.5 bg-slate-900 border border-slate-700/80
+               class="absolute left-0 top-full mt-1.5 bg-white dark:bg-slate-900 border border-slate-300/80 dark:border-slate-700/80
                       rounded-2xl shadow-2xl shadow-black/60 z-50 overflow-hidden"
                style="min-width:220px">
             <div class="px-3 pt-2.5 pb-1">
@@ -194,8 +320,8 @@
               <div class="grid grid-cols-2 gap-x-1 gap-y-0.5">
                 {% for g in peer_groups %}
                 <a href="{{ url_for('main.sector', sector_name=g) }}"
-                   class="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs text-slate-300
-                          hover:text-white hover:bg-brand/20 hover:border-brand/30
+                   class="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs text-slate-600 dark:text-slate-300
+                          hover:text-slate-900 dark:hover:text-white hover:bg-brand/20 hover:border-brand/30
                           border border-transparent transition-all duration-100 truncate">
                   <span class="w-1.5 h-1.5 rounded-full bg-brand/50 shrink-0"></span>
                   <span data-i18n="sector.name.{{ g }}">{{ g }}</span>
@@ -203,7 +329,7 @@
                 {% endfor %}
               </div>
             </div>
-            <div class="border-t border-slate-800 px-3 py-2 mt-1">
+            <div class="border-t border-slate-200 dark:border-slate-800 px-3 py-2 mt-1">
               <a href="{{ url_for('main.evaluation') }}#sectors"
                  class="flex items-center justify-center gap-1 text-xs text-slate-500 hover:text-brand transition"
                  data-i18n="nav.view_all">View all sectors ↓</a>
@@ -213,19 +339,19 @@
 
         <!-- Commodities — direct link (no dropdown needed, everything is on one page) -->
         <a href="{{ url_for('main.commodities') }}"
-           class="px-3 py-1.5 rounded-md text-sm text-slate-300 hover:text-white hover:bg-slate-800 transition"
+           class="px-3 py-1.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition"
            data-i18n="nav.commodities">Commodities</a>
 
         <a href="{{ url_for('main.thirteenf') }}"
-           class="px-3 py-1.5 rounded-md text-sm text-slate-300 hover:text-white hover:bg-slate-800 transition"
+           class="px-3 py-1.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition"
            data-i18n="nav.thirteenf">13F</a>
         <!-- Macro dropdown: Fed, Rates, Housing and P/E as one item. Four
              separate links pushed the bar past its width and made the
              right-hand buttons wrap. -->
         <div class="relative" x-data="{ open: false }" @mouseenter="open=true" @mouseleave="open=false">
-          <button class="flex items-center gap-1 px-3 py-1.5 rounded-md text-sm text-slate-300
-                         hover:text-white hover:bg-slate-800 transition whitespace-nowrap"
-                  :class="open && 'text-white bg-slate-800'">
+          <button class="flex items-center gap-1 px-3 py-1.5 rounded-md text-sm text-slate-600 dark:text-slate-300
+                         hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition whitespace-nowrap"
+                  :class="open && 'text-white bg-slate-100 dark:bg-slate-800'">
             <span data-i18n="nav.macro">Macro</span>
             <svg class="w-3.5 h-3.5 mt-0.5 transition-transform duration-200" :class="open && 'rotate-180'"
                  fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -239,31 +365,31 @@
                x-transition:leave="transition ease-in duration-100"
                x-transition:leave-start="opacity-100 translate-y-0"
                x-transition:leave-end="opacity-0 -translate-y-1"
-               class="absolute left-0 top-full mt-1.5 bg-slate-900 border border-slate-700/80
+               class="absolute left-0 top-full mt-1.5 bg-white dark:bg-slate-900 border border-slate-300/80 dark:border-slate-700/80
                       rounded-2xl shadow-2xl shadow-black/60 z-50 overflow-hidden py-2"
                style="min-width:190px">
             <a href="{{ url_for('main.fed') }}"
-               class="block px-4 py-2 text-xs text-slate-300 hover:text-white hover:bg-brand/20 transition"
+               class="block px-4 py-2 text-xs text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-brand/20 transition"
                data-i18n="nav.fed_long">Fed Balance Sheet</a>
             <a href="{{ url_for('main.fedwatch') }}"
-               class="block px-4 py-2 text-xs text-slate-300 hover:text-white hover:bg-brand/20 transition"
+               class="block px-4 py-2 text-xs text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-brand/20 transition"
                data-i18n="nav.fedwatch_long">Interest Rates</a>
             <a href="{{ url_for('main.housing') }}"
-               class="block px-4 py-2 text-xs text-slate-300 hover:text-white hover:bg-brand/20 transition"
+               class="block px-4 py-2 text-xs text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-brand/20 transition"
                data-i18n="nav.housing_long">Housing Market</a>
             <a href="{{ url_for('main.multiples') }}"
-               class="block px-4 py-2 text-xs text-slate-300 hover:text-white hover:bg-brand/20 transition"
+               class="block px-4 py-2 text-xs text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-brand/20 transition"
                data-i18n="nav.multiples_long">P/E Multiples</a>
           </div>
         </div>
         <a href="{{ url_for('main.daily_report') }}"
-           class="px-3 py-1.5 rounded-md text-sm text-slate-300 hover:text-white hover:bg-slate-800 transition"
+           class="px-3 py-1.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition"
            data-i18n="nav.daily">Daily</a>
         <a href="{{ url_for('main.videos') }}"
-           class="px-3 py-1.5 rounded-md text-sm text-slate-300 hover:text-white hover:bg-slate-800 transition"
+           class="px-3 py-1.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition"
            data-i18n="nav.videos">Videos</a>
         <a href="{{ url_for('main.guide') }}"
-           class="px-3 py-1.5 rounded-md text-sm text-slate-300 hover:text-white hover:bg-slate-800 transition"
+           class="px-3 py-1.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition"
            data-i18n="nav.guide">Guide</a>
       </nav>
 
@@ -282,25 +408,25 @@
                   title="Search Ticker"
                   data-i18n-title="nav.search_ticker"
                   aria-label="Search Ticker" aria-expanded="false"
-                  class="whitespace-nowrap shrink-0 p-1.5 rounded-md text-slate-500 hover:text-slate-200 hover:bg-slate-800 transition">
+                  class="whitespace-nowrap shrink-0 p-1.5 rounded-md text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                     d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
             </svg>
           </button>
           <div data-navsearch-panel hidden
-               class="absolute right-0 top-full mt-1.5 w-80 bg-slate-900 border border-slate-700/80
+               class="absolute right-0 top-full mt-1.5 w-80 bg-white dark:bg-slate-900 border border-slate-300/80 dark:border-slate-700/80
                       rounded-2xl shadow-2xl shadow-black/60 z-50 overflow-hidden">
-            <div class="p-2 border-b border-slate-800">
+            <div class="p-2 border-b border-slate-200 dark:border-slate-800">
               <input data-navsearch-input type="text"
                      placeholder="Ticker, e.g. AAPL" data-i18n-placeholder="nav.search_ph"
                      maxlength="12" autocomplete="off" spellcheck="false"
-                     class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm
-                            text-slate-100 font-mono uppercase placeholder:normal-case placeholder:text-slate-500
+                     class="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-sm
+                            text-slate-800 dark:text-slate-100 font-mono uppercase placeholder:normal-case placeholder:text-slate-500
                             focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent transition">
             </div>
             <div data-navsearch-results class="max-h-72 overflow-y-auto py-1"></div>
-            <div class="border-t border-slate-800 px-3 py-2">
+            <div class="border-t border-slate-200 dark:border-slate-800 px-3 py-2">
               <a data-navsearch-full href="{{ url_for('main.lookup') }}"
                  class="block text-center text-[11px] text-slate-500 hover:text-brand transition"
                  data-i18n="nav.search_full">Full lookup page →</a>
@@ -310,10 +436,10 @@
 
         <!-- Auth: signed-in chip / sign-in button -->
         <div x-show="user && user.email" class="flex items-center gap-2" x-cloak>
-          <img x-show="user && user.picture" :src="user && user.picture" class="w-7 h-7 rounded-full border border-slate-700" referrerpolicy="no-referrer">
-          <span class="text-xs text-slate-400 max-w-[8rem] truncate" x-text="user && user.name"></span>
+          <img x-show="user && user.picture" :src="user && user.picture" class="w-7 h-7 rounded-full border border-slate-300 dark:border-slate-700" referrerpolicy="no-referrer">
+          <span class="text-xs text-slate-500 dark:text-slate-400 max-w-[8rem] truncate" x-text="user && user.name"></span>
           <button @click="fetch('/api/auth/logout',{method:'POST'}).then(()=>{user={email:'',name:'',picture:''}})"
-                  class="text-xs text-slate-500 hover:text-red-400 transition"
+                  class="text-xs text-slate-500 hover:text-red-700 dark:hover:text-red-400 transition"
                   data-i18n="nav.logout">Logout</button>
         </div>
         <div x-show="!user || !user.email" x-cloak class="shrink-0">
@@ -326,9 +452,26 @@
           </a>
         </div>
 
+        <!-- Theme toggle. The two icons swap on the `dark` class rather than in
+             JS, so the correct one is already showing at first paint. -->
+        <button onclick="toggleTheme()" type="button"
+                title="Toggle light / dark" data-i18n-title="nav.theme"
+                aria-label="Toggle light / dark"
+                class="p-1.5 rounded-md text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-200
+                       hover:bg-slate-100 dark:hover:bg-slate-800 transition shrink-0">
+          <svg class="w-4 h-4 hidden dark:block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/>
+          </svg>
+          <svg class="w-4 h-4 block dark:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
+          </svg>
+        </button>
+
         <!-- Language toggle -->
         <button onclick="I18n.toggle()"
-                class="lang-toggle-btn px-2.5 py-1.5 rounded-md text-sm border border-slate-700 text-slate-300
+                class="lang-toggle-btn px-2.5 py-1.5 rounded-md text-sm border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300
                        hover:border-brand hover:text-brand transition font-medium whitespace-nowrap shrink-0">
           中文
         </button>
@@ -356,18 +499,18 @@
           <!-- Tooltip -->
           <div id="refreshTooltip" class="absolute right-0 top-full mt-2 w-64 z-50 pointer-events-none
                       opacity-0 group-hover:opacity-100 transition-opacity duration-150">
-            <div class="bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-xs text-slate-300 shadow-xl shadow-black/50">
-              <p id="refreshTooltipTitle" class="font-semibold text-slate-100 mb-1" data-i18n="nav.refresh_title">Refresh data</p>
+            <div class="bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-3 text-xs text-slate-600 dark:text-slate-300 shadow-xl shadow-black/50">
+              <p id="refreshTooltipTitle" class="font-semibold text-slate-800 dark:text-slate-100 mb-1" data-i18n="nav.refresh_title">Refresh data</p>
               <p id="refreshTooltipBody" {% if not _refresh %}data-i18n="nav.refresh_body"{% endif %}>{% if _refresh %}{{ _refresh[1] }}{% else %}Clears the in-memory cache and re-fetches live prices, PE ratios, and analyst targets for all tickers from Yahoo Finance.{% endif %}</p>
             </div>
             <!-- Arrow -->
-            <div class="absolute right-4 -top-1.5 w-3 h-3 bg-slate-800 border-l border-t border-slate-700 rotate-45"></div>
+            <div class="absolute right-4 -top-1.5 w-3 h-3 bg-slate-100 dark:bg-slate-800 border-l border-t border-slate-300 dark:border-slate-700 rotate-45"></div>
           </div>
         </div>
       </div>
 
       <!-- Mobile hamburger -->
-      <button class="md:hidden ml-auto p-2 rounded-md hover:bg-slate-800" @click="navOpen = !navOpen">
+      <button class="md:hidden ml-auto p-2 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800" @click="navOpen = !navOpen">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                 d="M4 6h16M4 12h16M4 18h16"/>
@@ -376,7 +519,7 @@
     </div>
 
     <!-- Mobile menu -->
-    <div x-show="navOpen" x-transition class="md:hidden border-t border-slate-800 bg-slate-900 px-4 pb-4">
+    <div x-show="navOpen" x-transition class="md:hidden border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 pb-4">
       <div class="flex flex-col gap-1 pt-2">
         {#
           The hamburger had no search entry at all, so on a phone the only way
@@ -384,17 +527,17 @@
           without [data-navsearch-toggle] is treated as permanently open, since
           the menu itself is already the disclosure.
         #}
-        <div class="pb-2 mb-1 border-b border-slate-800" data-navsearch>
+        <div class="pb-2 mb-1 border-b border-slate-200 dark:border-slate-800" data-navsearch>
           <input data-navsearch-input type="text"
                  placeholder="Ticker, e.g. AAPL" data-i18n-placeholder="nav.search_ph"
                  maxlength="12" autocomplete="off" spellcheck="false"
-                 class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2.5 text-sm
-                        text-slate-100 font-mono uppercase placeholder:normal-case placeholder:text-slate-500
+                 class="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2.5 text-sm
+                        text-slate-800 dark:text-slate-100 font-mono uppercase placeholder:normal-case placeholder:text-slate-500
                         focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent transition">
           <div data-navsearch-results class="max-h-60 overflow-y-auto mt-1"></div>
         </div>
-        <a href="{{ url_for('main.markets') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-300 hover:bg-slate-800" data-i18n="markets.nav">Markets</a>
-        <a href="{{ url_for('main.evaluation') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-300 hover:bg-slate-800" data-i18n="nav.home">Valuation</a>
+        <a href="{{ url_for('main.markets') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800" data-i18n="markets.nav">Markets</a>
+        <a href="{{ url_for('main.evaluation') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800" data-i18n="nav.home">Valuation</a>
         {#
           Sectors and Commodities collapse, and the remaining links sit in
           two-column grids. Flat, the menu measured 1279px on an 844px screen —
@@ -404,7 +547,7 @@
         <div x-data="{ open: false }">
           <button @click="open = !open"
                   class="w-full flex items-center justify-between px-3 py-2.5 rounded-md text-sm
-                         text-slate-300 hover:bg-slate-800">
+                         text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800">
             <span data-i18n="nav.sectors">Sectors</span>
             <svg class="w-3.5 h-3.5 transition-transform duration-200" :class="open && 'rotate-180'"
                  fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -414,7 +557,7 @@
           <div x-show="open" x-transition class="grid grid-cols-2 gap-1 mb-1 mt-1">
             {% for g in peer_groups %}
             <a href="{{ url_for('main.sector', sector_name=g) }}"
-               class="px-3 py-2 rounded-md text-sm text-slate-300 hover:bg-slate-800 truncate"
+               class="px-3 py-2 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 truncate"
                data-i18n="sector.name.{{ g }}">{{ g }}</a>
             {% endfor %}
           </div>
@@ -423,7 +566,7 @@
         <div x-data="{ open: false }">
           <button @click="open = !open"
                   class="w-full flex items-center justify-between px-3 py-2.5 rounded-md text-sm
-                         text-slate-300 hover:bg-slate-800">
+                         text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800">
             <span data-i18n="nav.commodities">Commodities</span>
             <svg class="w-3.5 h-3.5 transition-transform duration-200" :class="open && 'rotate-180'"
                  fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -431,47 +574,63 @@
             </svg>
           </button>
           <div x-show="open" x-transition class="grid grid-cols-2 gap-1 mb-1 mt-1">
-            <a href="{{ url_for('main.commodities') }}"        class="px-3 py-2 rounded-md text-sm text-slate-300 hover:bg-slate-800 truncate" data-i18n="nav.commodities_all">All</a>
-            <a href="{{ url_for('main.commodities') }}#gold"   class="px-3 py-2 rounded-md text-sm text-slate-300 hover:bg-slate-800 truncate" data-i18n="markets.tab_gold">Gold</a>
-            <a href="{{ url_for('main.commodities') }}#silver" class="px-3 py-2 rounded-md text-sm text-slate-300 hover:bg-slate-800 truncate" data-i18n="markets.tab_silver">Silver</a>
-            <a href="{{ url_for('main.commodities') }}#oil"    class="px-3 py-2 rounded-md text-sm text-slate-300 hover:bg-slate-800 truncate" data-i18n="markets.tab_oil">Crude Oil</a>
-            <a href="{{ url_for('main.commodities') }}#natgas" class="px-3 py-2 rounded-md text-sm text-slate-300 hover:bg-slate-800 truncate" data-i18n="markets.tab_natgas">Nat Gas</a>
-            <a href="{{ url_for('main.commodities') }}#copper" class="px-3 py-2 rounded-md text-sm text-slate-300 hover:bg-slate-800 truncate" data-i18n="markets.tab_copper">Copper</a>
+            <a href="{{ url_for('main.commodities') }}"        class="px-3 py-2 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 truncate" data-i18n="nav.commodities_all">All</a>
+            <a href="{{ url_for('main.commodities') }}#gold"   class="px-3 py-2 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 truncate" data-i18n="markets.tab_gold">Gold</a>
+            <a href="{{ url_for('main.commodities') }}#silver" class="px-3 py-2 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 truncate" data-i18n="markets.tab_silver">Silver</a>
+            <a href="{{ url_for('main.commodities') }}#oil"    class="px-3 py-2 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 truncate" data-i18n="markets.tab_oil">Crude Oil</a>
+            <a href="{{ url_for('main.commodities') }}#natgas" class="px-3 py-2 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 truncate" data-i18n="markets.tab_natgas">Nat Gas</a>
+            <a href="{{ url_for('main.commodities') }}#copper" class="px-3 py-2 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 truncate" data-i18n="markets.tab_copper">Copper</a>
           </div>
         </div>
 
-        <div class="px-3 py-1.5 text-[10px] font-semibold tracking-widest uppercase text-slate-600 mt-1" data-i18n="nav.macro">Macro</div>
+        <div class="px-3 py-1.5 text-[10px] font-semibold tracking-widest uppercase text-slate-500 dark:text-slate-600 mt-1" data-i18n="nav.macro">Macro</div>
         <div class="grid grid-cols-2 gap-1 mb-1">
-          <a href="{{ url_for('main.fed') }}"       class="px-3 py-2 rounded-md text-sm text-slate-300 hover:bg-slate-800 truncate" data-i18n="nav.fed">Fed</a>
-          <a href="{{ url_for('main.fedwatch') }}"  class="px-3 py-2 rounded-md text-sm text-slate-300 hover:bg-slate-800 truncate" data-i18n="nav.fedwatch">Rates</a>
-          <a href="{{ url_for('main.housing') }}"   class="px-3 py-2 rounded-md text-sm text-slate-300 hover:bg-slate-800 truncate" data-i18n="nav.housing">Housing</a>
-          <a href="{{ url_for('main.multiples') }}" class="px-3 py-2 rounded-md text-sm text-slate-300 hover:bg-slate-800 truncate" data-i18n="nav.multiples">P/E</a>
+          <a href="{{ url_for('main.fed') }}"       class="px-3 py-2 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 truncate" data-i18n="nav.fed">Fed</a>
+          <a href="{{ url_for('main.fedwatch') }}"  class="px-3 py-2 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 truncate" data-i18n="nav.fedwatch">Rates</a>
+          <a href="{{ url_for('main.housing') }}"   class="px-3 py-2 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 truncate" data-i18n="nav.housing">Housing</a>
+          <a href="{{ url_for('main.multiples') }}" class="px-3 py-2 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 truncate" data-i18n="nav.multiples">P/E</a>
         </div>
 
         <div class="grid grid-cols-2 gap-1">
-          <a href="{{ url_for('main.thirteenf') }}"    class="px-3 py-2 rounded-md text-sm text-slate-300 hover:bg-slate-800 truncate" data-i18n="nav.thirteenf">13F</a>
+          <a href="{{ url_for('main.thirteenf') }}"    class="px-3 py-2 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 truncate" data-i18n="nav.thirteenf">13F</a>
           {# Daily was absent from the mobile list entirely while desktop had it. #}
-          <a href="{{ url_for('main.daily_report') }}" class="px-3 py-2 rounded-md text-sm text-slate-300 hover:bg-slate-800 truncate" data-i18n="nav.daily">Daily</a>
-          <a href="{{ url_for('main.videos') }}"       class="px-3 py-2 rounded-md text-sm text-slate-300 hover:bg-slate-800 truncate" data-i18n="nav.videos">Videos</a>
-          <a href="{{ url_for('main.guide') }}"        class="px-3 py-2 rounded-md text-sm text-slate-300 hover:bg-slate-800 truncate" data-i18n="nav.guide">Guide</a>
+          <a href="{{ url_for('main.daily_report') }}" class="px-3 py-2 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 truncate" data-i18n="nav.daily">Daily</a>
+          <a href="{{ url_for('main.videos') }}"       class="px-3 py-2 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 truncate" data-i18n="nav.videos">Videos</a>
+          <a href="{{ url_for('main.guide') }}"        class="px-3 py-2 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 truncate" data-i18n="nav.guide">Guide</a>
         </div>
 
-        <a id="refreshBtnMobile" href="{{ refresh_url }}" class="px-3 py-2.5 rounded-md text-sm text-brand hover:bg-slate-800 mt-1" data-i18n="nav.refresh">↻ Refresh</a>
+        <a id="refreshBtnMobile" href="{{ refresh_url }}" class="px-3 py-2.5 rounded-md text-sm text-brand hover:bg-slate-100 dark:hover:bg-slate-800 mt-1" data-i18n="nav.refresh">↻ Refresh</a>
 
         <!-- Mobile auth -->
-        <div x-show="user && user.email" class="flex items-center gap-2 px-3 py-2.5 border-t border-slate-800 mt-1 pt-3" x-cloak>
-          <img x-show="user && user.picture" :src="user && user.picture" class="w-7 h-7 rounded-full border border-slate-700" referrerpolicy="no-referrer">
-          <span class="text-xs text-slate-300 flex-1 truncate" x-text="user && user.name"></span>
+        <div x-show="user && user.email" class="flex items-center gap-2 px-3 py-2.5 border-t border-slate-200 dark:border-slate-800 mt-1 pt-3" x-cloak>
+          <img x-show="user && user.picture" :src="user && user.picture" class="w-7 h-7 rounded-full border border-slate-300 dark:border-slate-700" referrerpolicy="no-referrer">
+          <span class="text-xs text-slate-600 dark:text-slate-300 flex-1 truncate" x-text="user && user.name"></span>
           <button @click="fetch('/api/auth/logout',{method:'POST'}).then(()=>{user={email:'',name:'',picture:''}})"
-                  class="text-xs text-slate-400 hover:text-red-400" data-i18n="nav.logout">Logout</button>
+                  class="text-xs text-slate-500 dark:text-slate-400 hover:text-red-700 dark:hover:text-red-400" data-i18n="nav.logout">Logout</button>
         </div>
         <a x-show="!user || !user.email" x-cloak
            href="{{ url_for('main.login') }}"
            class="px-3 py-2.5 rounded-md text-sm border border-brand text-brand hover:bg-brand hover:text-white transition mt-1 text-center"
            data-i18n="nav.sign_in">Sign In</a>
 
+        <button onclick="toggleTheme()" type="button"
+                class="mt-1 px-3 py-2.5 rounded-md text-sm border border-slate-300 dark:border-slate-700
+                       text-slate-600 dark:text-slate-300 hover:border-brand hover:text-brand transition
+                       text-left font-medium flex items-center gap-2">
+          <svg class="w-4 h-4 hidden dark:block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/>
+          </svg>
+          <svg class="w-4 h-4 block dark:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
+          </svg>
+          <span class="hidden dark:inline" data-i18n="nav.theme_light">Light mode</span>
+          <span class="inline dark:hidden" data-i18n="nav.theme_dark">Dark mode</span>
+        </button>
+
         <button onclick="I18n.toggle()"
-                class="lang-toggle-btn mt-1 px-3 py-2.5 rounded-md text-sm border border-slate-700 text-slate-300
+                class="lang-toggle-btn mt-1 px-3 py-2.5 rounded-md text-sm border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300
                        hover:border-brand hover:text-brand transition text-left font-medium">
           中文
         </button>
@@ -492,8 +651,8 @@
       {% if messages %}
         {% for category, message in messages %}
         <div class="mb-4 px-4 py-3 rounded-lg text-sm font-medium fade-up
-          {{ 'bg-emerald-900/50 border border-emerald-700 text-emerald-300' if category == 'success'
-             else 'bg-red-900/50 border border-red-700 text-red-300' }}">
+          {{ 'bg-emerald-50 dark:bg-emerald-900/50 border border-emerald-300 dark:border-emerald-700 text-emerald-800 dark:text-emerald-300' if category == 'success'
+             else 'bg-red-50 dark:bg-red-900/50 border border-red-300 dark:border-red-700 text-red-800 dark:text-red-300' }}">
           {{ message }}
         </div>
         {% endfor %}
@@ -508,7 +667,7 @@
   {% endif %}
 
   {% if not _agents_embedded %}
-  <footer class="border-t border-slate-800 py-4 text-center text-xs text-slate-600">
+  <footer class="border-t border-slate-200 dark:border-slate-800 py-4 text-center text-xs text-slate-500 dark:text-slate-600">
     <span data-i18n="footer.text">{{ brand_name }} — data via Yahoo Finance</span> &nbsp;·&nbsp;
     <a href="{{ url_for('main.contact') }}" class="hover:text-brand transition" data-i18n="footer.contact">Contact Us</a>
     &nbsp;·&nbsp;
@@ -530,6 +689,33 @@
     &nbsp;·&nbsp; <span data-i18n="footer.copyright">© 2025 {{ brand_name }}. All rights reserved.</span>
   </footer>
   {% endif %}
+
+<script>
+// ── Theme toggle ────────────────────────────────────────────────────────────
+// The class flip restyles everything CSS owns instantly. Canvases are the
+// exception: a Chart.js instance bakes its colours in at construction, and
+// these dashboards build their charts inside async fetch callbacks that cannot
+// be replayed from here. So a page that actually contains a chart is reloaded
+// to rebuild them, and a page that does not (guide, contact, groups, login)
+// toggles in place with no navigation at all.
+//
+// The write to localStorage happens before the reload, which is what makes the
+// reload land on the new theme rather than undoing it.
+function toggleTheme() {
+  const html = document.documentElement;
+  const toLight = html.classList.contains('dark');
+
+  html.classList.toggle('dark', !toLight);
+  try {
+    localStorage.setItem('ystocker_theme', toLight ? 'light' : 'dark');
+  } catch (_) { /* private mode: the toggle still applies for this page */ }
+
+  const meta = document.getElementById('themeColorMeta');
+  if (meta) meta.setAttribute('content', toLight ? '#ffffff' : '#0f172a');
+
+  if (document.querySelector('canvas')) location.reload();
+}
+</script>
 
 <script>
 (function() {

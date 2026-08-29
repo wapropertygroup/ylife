@@ -67,11 +67,11 @@
 <!-- ── Header ─────────────────────────────────────────────────────────── -->
 <div class="mb-6 sm:mb-8 fade-up">
   <h1 class="text-2xl sm:text-3xl font-bold grad-text mb-1" data-i18n="mult.title">Index P/E Multiples</h1>
-  <p class="text-slate-400 text-sm" data-i18n="mult.subtitle">
+  <p class="text-slate-500 dark:text-slate-400 text-sm" data-i18n="mult.subtitle">
     S&amp;P 500 trailing P/E back to 1871, and a cap-weighted forward P/E for SPY, QQQ, SOX and the Nikkei 225
   </p>
   {% if cache_last_updated %}
-  <p class="text-xs text-slate-600 mt-1">
+  <p class="text-xs text-slate-500 dark:text-slate-600 mt-1">
     <span data-i18n="mult.data_as_of">Data as of</span> {{ cache_last_updated | int | datetimeformat }}
     &nbsp;·&nbsp;
     {% if warming or not cache_fresh %}
@@ -83,13 +83,13 @@
     <a href="{{ url_for('main.multiples_refresh') }}" class="text-brand hover:underline" data-i18n="mult.refresh">↻ Refresh</a>
   </p>
   {% else %}
-  <p class="text-xs text-slate-600 mt-1">
+  <p class="text-xs text-slate-500 dark:text-slate-600 mt-1">
     <a href="{{ url_for('main.multiples_refresh') }}" class="text-brand hover:underline" data-i18n="mult.load">↻ Load data</a>
   </p>
   {% endif %}
 </div>
 
-<div id="vpNotice" class="hidden mb-6 px-4 py-3 rounded-lg bg-slate-800/60 border border-slate-700 text-slate-300 text-sm items-center gap-3">
+<div id="vpNotice" class="hidden mb-6 px-4 py-3 rounded-lg bg-slate-100/60 dark:bg-slate-800/60 border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-sm items-center gap-3">
   <svg class="w-4 h-4 text-brand animate-spin inline-block align-middle" fill="none" viewBox="0 0 24 24">
     <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
     <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/>
@@ -104,16 +104,16 @@
   <div class="vp-section"><h2 data-i18n="mult.sec_forward">Forward P/E — Today's Reading</h2><div class="rule"></div></div>
 
   <!-- ── The accumulating forward series ──────────────────────────────── -->
-  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up">
+  <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6 fade-up">
     <div class="mb-1">
-      <h2 class="text-base font-semibold text-slate-200">
+      <h2 class="text-base font-semibold text-slate-700 dark:text-slate-200">
         <span data-i18n="mult.fwd_title">Forward P/E: SPY vs QQQ vs SOX vs Nikkei 225 — consensus estimates, today</span>
         <span class="src-chip src-forward" data-i18n="mult.chip_forward">Forward</span>
       </h2>
       <p class="text-xs text-slate-500"><span data-i18n="mult.fwd_scope">Our own reading, computed here from index constituents and recorded once a day, so this series starts at the first snapshot. The chart below plots this same SPY series against FactSet's published history, which is where to see whether today's reading is high or low; the other three stay here, because no free source measures them on a comparable basis.</span></p>
       <p class="text-xs text-slate-500" data-i18n="mult.fwd_desc">Cap-weighted forward P/E computed from index constituents — total market value divided by total forward earnings, which is the correct aggregation. Snapshotted once a day, so this series begins at the first snapshot and lengthens by one point per day.</p>
     </div>
-    <div id="vpFwdEmpty" class="hidden text-xs text-slate-500 bg-slate-800/40 border border-slate-700 rounded-lg px-3 py-2 mt-3">
+    <div id="vpFwdEmpty" class="hidden text-xs text-slate-500 bg-slate-100/40 dark:bg-slate-800/40 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 mt-3">
       <span data-i18n="mult.fwd_seeding">Only today's reading has been recorded so far, so this shows the indices side by side. It becomes a time series once a second daily snapshot lands.</span>
     </div>
     <!-- Two presentations of the same data. A line needs at least two points to
@@ -123,7 +123,7 @@
       <canvas id="vpForwardBar"></canvas>
     </div>
     <div class="chart-container" id="vpForwardLineWrap" style="height:280px"><canvas id="vpForwardChart"></canvas></div>
-    <p class="text-[11px] text-slate-600 mt-2"><span id="vpCoverage"></span></p>
+    <p class="text-[11px] text-slate-500 dark:text-slate-600 mt-2"><span id="vpCoverage"></span></p>
     <!-- ── Where the aggregation is not the index's own basis ───────────────
          Raw cap-weighting is correct for SPY and QQQ, because the S&P 500 and
          Nasdaq-100 really are cap-weighted. It is NOT the basis of the other
@@ -140,13 +140,13 @@
          The P/E above is a ratio, and a ratio moving tells you nothing about
          which half moved. These are its two halves plus what they imply, on the
          same basis and over the same constituents. -->
-    <div id="vpEps" class="mt-3 pt-3 border-t border-slate-800" style="display:none">
+    <div id="vpEps" class="mt-3 pt-3 border-t border-slate-200 dark:border-slate-800" style="display:none">
       <p class="text-xs text-slate-500 mb-2">
         <span data-i18n="mult.eps_label">Earnings behind the multiple</span>
-        <span class="text-slate-600" data-i18n="mult.eps_derived">— per-share figures are price divided by the multiple, because Yahoo publishes no EPS at all for either ETF.</span>
+        <span class="text-slate-500 dark:text-slate-600" data-i18n="mult.eps_derived">— per-share figures are price divided by the multiple, because Yahoo publishes no EPS at all for either ETF.</span>
       </p>
       <div id="vpEpsRows" class="flex flex-col gap-1"></div>
-      <p class="text-[11px] text-slate-600 mt-2" data-i18n="mult.eps_growth_note">Implied growth compares forward with trailing earnings over only the names carrying both multiples, so the two sides cover the same companies. It is a by-product of Yahoo's per-name estimates, not a forecast of ours — worth noting it lands close to FactSet's stated 30.0% for CY 2026.</p>
+      <p class="text-[11px] text-slate-500 dark:text-slate-600 mt-2" data-i18n="mult.eps_growth_note">Implied growth compares forward with trailing earnings over only the names carrying both multiples, so the two sides cover the same companies. It is a by-product of Yahoo's per-name estimates, not a forecast of ours — worth noting it lands close to FactSet's stated 30.0% for CY 2026.</p>
     </div>
     <!-- ── Advancers / decliners ───────────────────────────────────────────
          Same two indices, so it belongs on this card, but it is a different
@@ -156,10 +156,10 @@
          are therefore printed with their own denominator -- sharing a card
          without sharing a label is how "120/503" would get read as the number
          of names in the up/down split. -->
-    <div id="vpAdvDec" class="mt-3 pt-3 border-t border-slate-800" style="display:none">
+    <div id="vpAdvDec" class="mt-3 pt-3 border-t border-slate-200 dark:border-slate-800" style="display:none">
       <p class="text-[11px] text-slate-500 mb-1.5">
         <span data-i18n="mult.advdec_label">Constituents up vs down, last completed session</span>
-        <span id="vpAdvDecAsOf" class="text-slate-600"></span>
+        <span id="vpAdvDecAsOf" class="text-slate-500 dark:text-slate-600"></span>
       </p>
       <div id="vpAdvDecRows" class="flex flex-wrap gap-x-5 gap-y-1"></div>
     </div>
@@ -171,10 +171,10 @@
          its ten largest names. Rides in on the same payload via
          etf_holdings.peek(), so it is absent rather than slow when Yahoo is
          cold. -->
-    <div id="vpComp" class="mt-3 pt-3 border-t border-slate-800" style="display:none">
+    <div id="vpComp" class="mt-3 pt-3 border-t border-slate-200 dark:border-slate-800" style="display:none">
       <p class="text-[11px] text-slate-500 mb-2">
         <span data-i18n="mult.comp_label">Index composition</span>
-        <span id="vpCompAsOf" class="text-slate-600"></span>
+        <span id="vpCompAsOf" class="text-slate-500 dark:text-slate-600"></span>
       </p>
       <div class="overflow-x-auto">
         <table class="w-full text-[11px]" id="vpCompTable">
@@ -207,21 +207,21 @@
        Siblis' own largest move is 8.3%, and the eight Q2 seasons on record move
        the S&P forward P/E by only -4.7%..+10.8%. The gap is 45/97 constituent
        coverage, so QQQ stays out of this chart and in the card above. -->
-  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up">
+  <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6 fade-up">
     <div class="mb-1">
-      <h2 class="text-base font-semibold text-slate-200">
+      <h2 class="text-base font-semibold text-slate-700 dark:text-slate-200">
         <span data-i18n="mult.consensus_title">Consensus Forward P/E — published history</span>
         <span class="src-chip src-forward" data-i18n="mult.chip_forward">Forward</span>
       </h2>
       <p class="text-xs text-slate-500">
         <span data-i18n="mult.consensus_desc">What analysts actually expected on each past date — the same question as the card above, answered by the firms that publish it, so it has real history. The S&amp;P 500 line is FactSet's stated forward 12-month P/E, back to 2017, and our own daily SPY reading is drawn alongside it as a separate line.</span>
-        <span id="vpConsensusStat" class="text-slate-400"></span>
+        <span id="vpConsensusStat" class="text-slate-500 dark:text-slate-400"></span>
       </p>
       <p class="text-xs text-slate-500 mt-1" data-i18n="mult.consensus_gap">FactSet publishes these during earnings season, so the line is dense in Jan/Feb, Apr/May, Jul/Aug and Oct/Nov and flat across the gaps between — the straight stretches are missing weeks, not still markets.</p>
       <!-- Why one index is merged and the other is not. -->
       <p class="text-xs text-slate-500 mt-1" data-i18n="mult.consensus_spy_note">The two S&amp;P 500 lines are separate series and are never joined end to end. They are different constructions — FactSet aggregates its own analyst collection over the full index, this app cap-weights Yahoo's per-name estimates over the constituents it holds — and they read 20.0x and 19.9x on their nearest dates. Agreeing to within half a percent today is a fact about today, not a guarantee, so the seam stays visible.</p>
       <!-- The obvious question: why is the Nasdaq dotted and so much higher. -->
-      <p class="text-xs text-amber-500/80 mt-1" data-i18n="mult.consensus_ndx_note">The Nasdaq-100 points are month-end readings from Siblis, the only free forward figure for that index — eight points from Dec 2023. They sit several turns above the QQQ number in the card above (25.2x vs 20.3x on 30 Jun 2026), and that gap is not an earnings-season effect: across 147 FactSet observations no 40–70 day gap since 2017 moves more than 14.4%, Siblis' own largest move between readings is 8.3%, and the eight Q2 seasons on record move the S&amp;P forward P/E by only −4.7% to +10.8%. It is constituent coverage — 45 of 97 names — so QQQ is left out of this chart rather than drawn into a cliff that never happened.</p>
+      <p class="text-xs text-amber-700/80 dark:text-amber-500/80 mt-1" data-i18n="mult.consensus_ndx_note">The Nasdaq-100 points are month-end readings from Siblis, the only free forward figure for that index — eight points from Dec 2023. They sit several turns above the QQQ number in the card above (25.2x vs 20.3x on 30 Jun 2026), and that gap is not an earnings-season effect: across 147 FactSet observations no 40–70 day gap since 2017 moves more than 14.4%, Siblis' own largest move between readings is 8.3%, and the eight Q2 seasons on record move the S&amp;P forward P/E by only −4.7% to +10.8%. It is constituent coverage — 45 of 97 names — so QQQ is left out of this chart rather than drawn into a cliff that never happened.</p>
     </div>
     <div class="chart-container" style="height:280px"><canvas id="vpConsensusChart"></canvas></div>
   </div>
@@ -245,14 +245,14 @@
        of a figure this page computes itself.
 
        Japan is deliberately NOT here: it earned a genuine forward number. -->
-  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up" id="vpProxyCard" style="display:none">
+  <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6 fade-up" id="vpProxyCard" style="display:none">
     <div class="mb-1">
-      <h2 class="text-base font-semibold text-slate-200">
+      <h2 class="text-base font-semibold text-slate-700 dark:text-slate-200">
         <span data-i18n="mult.proxy_title">Trailing P/E from a tradeable proxy</span>
         <span class="src-chip src-trailing" data-i18n="mult.chip_trailing">Trailing</span>
       </h2>
       <p class="text-xs text-slate-500" data-i18n="mult.proxy_desc">Read straight off an ETF, because for these there is nothing else. Yahoo publishes no forward P/E for any ETF and no free source publishes one for these indices, so this is <strong>trailing</strong> — not comparable with any forward figure above, and shown here rather than omitted so that a missing index is not mistaken for a broken page.</p>
-      <p class="text-xs text-amber-500/80 mt-1" data-i18n="mult.proxy_korea">Korea is the case worth reading twice. The proxy tracks <strong>MSCI Korea, not the KOSPI</strong> — related, not the same index. A bottom-up KOSPI figure was tried and rejected: Yahoo returns a forward P/E for Korean lines with no EPS behind it, and it implies earnings roughly ten times what Samsung has ever reported, aggregating to 4.21x against a published 10–11x. A number that looks plausible and means nothing is worse than an admitted gap.</p>
+      <p class="text-xs text-amber-700/80 dark:text-amber-500/80 mt-1" data-i18n="mult.proxy_korea">Korea is the case worth reading twice. The proxy tracks <strong>MSCI Korea, not the KOSPI</strong> — related, not the same index. A bottom-up KOSPI figure was tried and rejected: Yahoo returns a forward P/E for Korean lines with no EPS behind it, and it implies earnings roughly ten times what Samsung has ever reported, aggregating to 4.21x against a published 10–11x. A number that looks plausible and means nothing is worse than an admitted gap.</p>
     </div>
     <div class="overflow-x-auto mt-3">
       <table class="w-full text-xs" id="vpProxyTable">
@@ -272,16 +272,16 @@
   <div class="vp-section"><h2 data-i18n="mult.sec_fwdhist">Forward P/E History — S&amp;P 500 / SPY, realized earnings</h2><div class="rule"></div></div>
 
   <!-- ── The forward P/E time series that free data DOES support ──────── -->
-  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up">
+  <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6 fade-up">
     <div class="mb-1">
-      <h2 class="text-base font-semibold text-slate-200">
+      <h2 class="text-base font-semibold text-slate-700 dark:text-slate-200">
         <span data-i18n="mult.fwdhist_title">S&amp;P 500 (SPY) Forward P/E History — on realized earnings</span>
         <span class="src-chip src-forward" data-i18n="mult.chip_forward">Forward</span>
       </h2>
       <p class="text-xs text-slate-500">
         <span data-i18n="mult.fwdhist_desc">Index level divided by the earnings of the following twelve months — the multiple buyers actually paid for the earnings that arrived. Real history since 1871, because the denominator moves independently of price. It uses hindsight rather than the consensus of the day, so it stops twelve months short of today.</span>
-        <span id="vpFwdHistStat" class="text-slate-400"></span>
-        <span class="text-slate-600" data-i18n="mult.log_note">Log scale — the 2009 reading near 193x would otherwise flatten the rest.</span>
+        <span id="vpFwdHistStat" class="text-slate-500 dark:text-slate-400"></span>
+        <span class="text-slate-500 dark:text-slate-600" data-i18n="mult.log_note">Log scale — the 2009 reading near 193x would otherwise flatten the rest.</span>
       </p>
       <p class="text-xs text-slate-500 mt-1">
         <span data-i18n="mult.fwdhist_scope">This is the S&amp;P 500 — the index SPY tracks. There is no equivalent for the Nasdaq-100: nobody publishes its earnings history for free, which is why the Nasdaq appears only as today's reading above and as eight month-end consensus points in the chart above that.</span>
@@ -289,7 +289,7 @@
       <!-- The one question this page reliably provokes: two tiles both saying
            "forward P/E", ~5x apart. Answer it here rather than leaving the
            reader to assume one of them is broken. -->
-      <p class="text-xs text-amber-500/80 mt-1">
+      <p class="text-xs text-amber-700/80 dark:text-amber-500/80 mt-1">
         <span data-i18n="mult.fwdhist_vs_consensus">Not comparable with the consensus tiles above, and not meant to be: those divide today's price by analyst estimates of the next twelve months, this divides a year-old price by the earnings that actually arrived. Same index, different denominators and different dates — so the two readings differ by several turns of multiple.</span>
       </p>
     </div>
@@ -299,24 +299,24 @@
   <div class="vp-section"><h2 data-i18n="mult.sec_trailing">S&amp;P 500 Trailing P/E — 155 Years</h2><div class="rule"></div></div>
 
   <!-- ── The real long history ────────────────────────────────────────── -->
-  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up">
+  <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6 fade-up">
     <div class="mb-1">
-      <h2 class="text-base font-semibold text-slate-200">
+      <h2 class="text-base font-semibold text-slate-700 dark:text-slate-200">
         <span data-i18n="mult.spxpe_title">S&amp;P 500 Trailing P/E</span>
         <span class="src-chip src-trailing" data-i18n="mult.chip_trailing">Trailing</span>
       </h2>
       <p class="text-xs text-slate-500">
         <span data-i18n="mult.spxpe_desc">Monthly since 1871, built on actual reported earnings rather than a constant-EPS approximation — so the shape is real valuation history, not a rescaled price chart.</span>
-        <span id="vpPctile" class="text-slate-400"></span>
+        <span id="vpPctile" class="text-slate-500 dark:text-slate-400"></span>
       </p>
     </div>
     <div class="chart-container" style="height:280px"><canvas id="vpSpxPeChart"></canvas></div>
   </div>
 
   <!-- ── Earnings, the denominator ────────────────────────────────────── -->
-  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
+  <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
     <div class="mb-1">
-      <h3 class="text-sm font-semibold text-slate-300">
+      <h3 class="text-sm font-semibold text-slate-600 dark:text-slate-300">
         <span data-i18n="mult.spxeps_title">S&amp;P 500 Trailing Earnings per Share (as reported)</span>
         <span class="src-chip src-trailing" data-i18n="mult.chip_trailing">Trailing</span>
       </h3>
@@ -326,24 +326,24 @@
            figures for the same index circulate widely and differ by ~50%, so the
            basis is stated here rather than leaving a reader to conclude the
            series is simply wrong. -->
-      <p class="text-xs text-amber-500/80 mt-1" data-i18n="mult.spxeps_basis">Sources quoting $300 or $400+ are not contradicting this. Three different earnings figures circulate for the same index: this is <strong>as-reported</strong> (GAAP) trailing 12-month EPS, which is what multpl&rsquo;s P/E is built on; <strong>operating</strong> (adjusted) trailing EPS excludes write-downs and typically runs 10&ndash;20% higher; and <strong>forward</strong> 12-month operating EPS &mdash; the FactSet consensus above, at 20.0x &mdash; is higher again, roughly 48% above this series. All three are real; they differ by what is excluded and by which twelve months they cover.</p>
+      <p class="text-xs text-amber-700/80 dark:text-amber-500/80 mt-1" data-i18n="mult.spxeps_basis">Sources quoting $300 or $400+ are not contradicting this. Three different earnings figures circulate for the same index: this is <strong>as-reported</strong> (GAAP) trailing 12-month EPS, which is what multpl&rsquo;s P/E is built on; <strong>operating</strong> (adjusted) trailing EPS excludes write-downs and typically runs 10&ndash;20% higher; and <strong>forward</strong> 12-month operating EPS &mdash; the FactSet consensus above, at 20.0x &mdash; is higher again, roughly 48% above this series. All three are real; they differ by what is excluded and by which twelve months they cover.</p>
     <div class="chart-container" style="height:240px"><canvas id="vpSpxEpsChart"></canvas></div>
   </div>
 
   <!-- ── Methodology ──────────────────────────────────────────────────── -->
-  <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
-    <h3 class="text-sm font-semibold text-slate-300 mb-2" data-i18n="mult.method_title">Why there is no long forward-P/E history</h3>
+  <div class="bg-white/60 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
+    <h3 class="text-sm font-semibold text-slate-600 dark:text-slate-300 mb-2" data-i18n="mult.method_title">Why there is no long forward-P/E history</h3>
     <p class="text-xs text-slate-500 leading-relaxed" data-i18n="mult.method_body">
       A historical forward P/E for SPY or QQQ is not available from free data. Yahoo returns no forward P/E, forward EPS or trailing EPS for either ETF — only a current trailing P/E — and no free source publishes past forward estimates. The tempting shortcut, dividing historical prices by today's consensus EPS, produces a line mathematically identical to the price chart: it implies earnings expectations never changed, so 2020 prices over 2026 earnings yield a badly wrong multiple. Rather than ship that, this page keeps two honest series apart: a genuine trailing P/E with 155 years of real earnings behind it, and a true forward P/E that starts the day snapshots began and grows daily.
     </p>
-    <p class="text-xs text-slate-600 mt-2" data-i18n="mult.method_caveat">
+    <p class="text-xs text-slate-500 dark:text-slate-600 mt-2" data-i18n="mult.method_caveat">
       Trailing and forward multiples are not comparable to each other — forward earnings are normally higher, so a forward P/E sits below the trailing one for the same market. The forward figure is an estimate over the index members whose fundamentals the app already tracks, cap-weighted; the constituent count is shown beneath the chart. It is computed from cached fundamentals rather than by querying every constituent, because bulk per-name requests get the whole app throttled by Yahoo.
     </p>
   </div>
 
-  <div id="vpError" class="hidden mt-4 px-4 py-3 rounded-lg bg-red-900/40 border border-red-700 text-red-300 text-sm"></div>
+  <div id="vpError" class="hidden mt-4 px-4 py-3 rounded-lg bg-red-50 dark:bg-red-900/40 border border-red-300 dark:border-red-700 text-red-700 dark:text-red-300 text-sm"></div>
 
-  <p class="text-xs text-slate-600 mt-4">
+  <p class="text-xs text-slate-500 dark:text-slate-600 mt-4">
     <span data-i18n="mult.source">Sources</span>:
     <a href="https://www.multpl.com/s-p-500-pe-ratio" target="_blank" rel="noopener" class="text-brand hover:underline">multpl.com</a>
     <span data-i18n="mult.source_tail">for S&amp;P 500 trailing P/E and earnings; forward P/E computed from constituent fundamentals via Yahoo Finance</span>
@@ -354,9 +354,9 @@
 const _explainData = {};
 
 (async function() {
-  const gridCol = '#1e293b';
-  const tickCol = '#64748b';
-  const C_BLUE = '#3987e5', C_ORANGE = '#d95926', C_INDIGO = '#6366f1';
+  const gridCol = CT.c('#1e293b');
+  const tickCol = CT.c('#64748b');
+  const C_BLUE = '#3987e5', C_ORANGE = '#d95926', C_INDIGO = CT.c('#6366f1');
   // Two more hues for the two indices added after SPY/QQQ. Kept far apart round
   // the wheel — blue / orange / teal / pink — because four lines share the
   // forward chart and adjacent hues are indistinguishable at 2px on slate.
@@ -500,7 +500,7 @@ const _explainData = {};
       if (wrap) {
         wrap.innerHTML = '';
         const note = document.createElement('p');
-        note.className = 'text-xs text-slate-500 bg-slate-800/40 border border-slate-700 '
+        note.className = 'text-xs text-slate-500 bg-slate-100/40 dark:bg-slate-800/40 border border-slate-300 dark:border-slate-700 '
                        + 'rounded-lg px-3 py-2';
         note.textContent = I18n.t('mult.series_missing')
           || 'This series is unavailable right now. Try ↻ Refresh.';
@@ -541,7 +541,7 @@ const _explainData = {};
         responsive: true, maintainAspectRatio: false,
         plugins: {
           legend: live.length > 1
-            ? { display: true, labels: { color: '#94a3b8', boxWidth: 12, font: { size: 11 } } }
+            ? { display: true, labels: { color: CT.c('#94a3b8'), boxWidth: 12, font: { size: 11 } } }
             : { display: false },
           tooltip: {
             mode: 'index', intersect: false,
@@ -669,16 +669,16 @@ const _explainData = {};
       const h = head[key];
       if (!h) return;
       const card = document.createElement('div');
-      card.className = 'bg-slate-900 border border-slate-800 rounded-2xl p-3 sm:p-4 fade-up';
+      card.className = 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-3 sm:p-4 fade-up';
       const label = document.createElement('p');
       label.className = 'text-xs text-slate-500 mb-1';
       label.setAttribute('data-i18n', i18nKey);
       label.textContent = I18n.t(i18nKey) || fallback;
       const val = document.createElement('p');
-      val.className = 'text-xl sm:text-2xl font-semibold text-slate-100';
+      val.className = 'text-xl sm:text-2xl font-semibold text-slate-800 dark:text-slate-100';
       val.textContent = fmtKpi(h.value, h.unit);
       const sub = document.createElement('p');
-      sub.className = 'text-xs text-slate-600 mt-0.5';
+      sub.className = 'text-xs text-slate-500 dark:text-slate-600 mt-0.5';
       sub.textContent = kpiSub(h);
       card.append(label, val, sub);
       wrap.appendChild(card);
@@ -719,7 +719,7 @@ const _explainData = {};
           ctx.font = '600 12px system-ui, -apple-system, sans-serif';
           ctx.textBaseline = 'middle';
           ctx.textAlign = 'left';
-          ctx.fillStyle = '#cbd5e1';
+          ctx.fillStyle = CT.c('#cbd5e1');
           chart.getDatasetMeta(0).data.forEach((bar, i) => {
             if (vals[i] == null) return;
             ctx.fillText(vals[i].toFixed(1) + 'x', bar.x + 8, bar.y);
@@ -780,26 +780,26 @@ const _explainData = {};
           const bits = [];
           if (b.forward_eps_share != null) {
             bits.push(`${I18n.t('mult.eps_fwd') || 'fwd EPS'} `
-              + `<b class="text-slate-300">$${b.forward_eps_share.toFixed(2)}</b>`
+              + `<b class="text-slate-600 dark:text-slate-300">$${b.forward_eps_share.toFixed(2)}</b>`
               + (b.trailing_eps_share != null
-                 ? ` <span class="text-slate-600">${I18n.t('mult.eps_vs') || 'vs'} `
+                 ? ` <span class="text-slate-500 dark:text-slate-600">${I18n.t('mult.eps_vs') || 'vs'} `
                    + `$${b.trailing_eps_share.toFixed(2)} ${I18n.t('mult.eps_ttm') || 'ttm'}</span>` : ''));
           }
           bits.push(`${I18n.t('mult.eps_pool') || 'earnings'} `
-            + `<b class="text-slate-300">${bn(b.forward_earnings_b)}</b>`);
+            + `<b class="text-slate-600 dark:text-slate-300">${bn(b.forward_earnings_b)}</b>`);
           if (b.earnings_yield_pct != null) {
             bits.push(`${I18n.t('mult.eps_yield') || 'earnings yield'} `
-              + `<b class="text-slate-300">${b.earnings_yield_pct.toFixed(2)}%</b>`);
+              + `<b class="text-slate-600 dark:text-slate-300">${b.earnings_yield_pct.toFixed(2)}%</b>`);
           }
           if (b.growth_pct != null) {
             const g = b.growth_pct;
             bits.push(`${I18n.t('mult.eps_growth') || 'implied growth'} `
               + `<b class="${g >= 0 ? 'vp-up' : 'vp-down'}">${g >= 0 ? '+' : ''}${g.toFixed(1)}%</b>`
-              + `<span class="text-slate-600"> (${b.growth_names}`
+              + `<span class="text-slate-500 dark:text-slate-600"> (${b.growth_names}`
               + `${I18n.t('mult.eps_names_suffix') || ' names'})</span>`);
           }
           return `<div class="text-[11px] text-slate-500">`
-               + `<span class="text-slate-400 font-semibold">${b.etf}</span> `
+               + `<span class="text-slate-500 dark:text-slate-400 font-semibold">${b.etf}</span> `
                + bits.join(' <span class="text-slate-700">·</span> ') + `</div>`;
         });
       if (rows.length) { epsRows.innerHTML = rows.join(''); epsWrap.style.display = ''; }
@@ -845,8 +845,8 @@ const _explainData = {};
             txt = txt.replace('{top}', b.top_name)
                      .replace('{pct}', b.top_weight_pct.toFixed(1) + '%');
           }
-          return `<p class="text-[11px] text-amber-500/80">`
-               + `<span class="font-semibold text-slate-400">${b.etf}</span> ${txt}</p>`;
+          return `<p class="text-[11px] text-amber-700/80 dark:text-amber-500/80">`
+               + `<span class="font-semibold text-slate-500 dark:text-slate-400">${b.etf}</span> ${txt}</p>`;
         }).filter(Boolean);
       if (notes.length) { wrap.innerHTML = notes.join(''); wrap.style.display = ''; }
     })();
@@ -886,12 +886,12 @@ const _explainData = {};
         if (a == null && b == null) return '';
         const label = (I18n.t('mult.comp_' + k) || k.replace(/_/g, ' '));
         const bar = typeof a === 'number' ? Math.min(100, a) : 0;
-        return `<tr class="border-t border-slate-800/60">
-          <td class="py-1 pr-3 text-slate-400">
+        return `<tr class="border-t border-slate-200/60 dark:border-slate-800/60">
+          <td class="py-1 pr-3 text-slate-500 dark:text-slate-400">
             <span class="inline-block align-middle mr-1.5 h-1 rounded"
                   style="width:${bar.toFixed(0)}px;background:#6366f1"></span>${label}</td>
-          <td class="py-1 px-2 text-right font-mono text-slate-300">${pct(a)}</td>
-          <td class="py-1 px-2 text-right font-mono text-slate-300">${pct(b)}</td>
+          <td class="py-1 px-2 text-right font-mono text-slate-600 dark:text-slate-300">${pct(a)}</td>
+          <td class="py-1 px-2 text-right font-mono text-slate-600 dark:text-slate-300">${pct(b)}</td>
         </tr>`;
       }).join('');
 
@@ -899,12 +899,12 @@ const _explainData = {};
       const conc = document.getElementById('vpCompConc');
       if (conc) {
         conc.innerHTML = [['SPY', spy], ['QQQ', qqq]].filter(([, e]) => e).map(([k, e]) =>
-          `<span class="text-[11px] text-slate-400">`
-          + `<span class="font-semibold text-slate-300">${k}</span> `
+          `<span class="text-[11px] text-slate-500 dark:text-slate-400">`
+          + `<span class="font-semibold text-slate-600 dark:text-slate-300">${k}</span> `
           + `${I18n.t('mult.comp_top10') || 'top 10'} `
-          + `<span class="font-mono text-amber-400">${pct(e.top10_weight)}</span>`
+          + `<span class="font-mono text-amber-700 dark:text-amber-400">${pct(e.top10_weight)}</span>`
           + (typeof e.top1_weight === 'number'
-              ? ` <span class="text-slate-600">(${I18n.t('mult.comp_largest') || 'largest'} `
+              ? ` <span class="text-slate-500 dark:text-slate-600">(${I18n.t('mult.comp_largest') || 'largest'} `
                 + `${pct(e.top1_weight)})</span>` : '')
           + `</span>`).join('');
       }
@@ -913,10 +913,10 @@ const _explainData = {};
       if (top) {
         top.innerHTML = [['SPY', spy], ['QQQ', qqq]].filter(([, e]) => e && e.holdings.length)
           .map(([k, e]) => `<div class="text-[11px] text-slate-500">`
-            + `<span class="font-semibold text-slate-400">${k}</span> `
+            + `<span class="font-semibold text-slate-500 dark:text-slate-400">${k}</span> `
             + e.holdings.slice(0, 5).map(h =>
-                `<span class="text-slate-400">${h.ticker}</span>`
-                + `<span class="text-slate-600"> ${pct(h.weight)}</span>`).join('<span class="text-slate-700"> · </span>')
+                `<span class="text-slate-500 dark:text-slate-400">${h.ticker}</span>`
+                + `<span class="text-slate-500 dark:text-slate-600"> ${pct(h.weight)}</span>`).join('<span class="text-slate-700"> · </span>')
             + `</div>`).join('');
       }
 
@@ -940,12 +940,12 @@ const _explainData = {};
         const d = ad[k];
         const decided = d.up + d.down;
         const pct = decided > 0 ? (d.up / decided * 100) : null;
-        return `<span class="text-[11px] text-slate-400">`
-          + `<span class="font-semibold text-slate-300">${k}</span> `
-          + `<span class="text-emerald-400 font-mono">${d.up}▲</span>`
-          + `<span class="text-slate-600">/</span>`
-          + `<span class="text-rose-400 font-mono">${d.down}▼</span>`
-          + (pct != null ? ` <span class="text-slate-600">(${pct.toFixed(0)}% `
+        return `<span class="text-[11px] text-slate-500 dark:text-slate-400">`
+          + `<span class="font-semibold text-slate-600 dark:text-slate-300">${k}</span> `
+          + `<span class="text-emerald-700 dark:text-emerald-400 font-mono">${d.up}▲</span>`
+          + `<span class="text-slate-500 dark:text-slate-600">/</span>`
+          + `<span class="text-rose-700 dark:text-rose-400 font-mono">${d.down}▼</span>`
+          + (pct != null ? ` <span class="text-slate-500 dark:text-slate-600">(${pct.toFixed(0)}% `
               + `${I18n.t('mult.advdec_up') || 'up'}, ${d.counted}/${d.universe})</span>` : '')
           + `</span>`;
       }).join('');
@@ -1039,11 +1039,11 @@ const _explainData = {};
     const body = document.getElementById('vpProxyBody');
     if (card && body && rows.length) {
       const zh = (typeof I18n !== 'undefined' && I18n.getLang && I18n.getLang() === 'zh');
-      body.innerHTML = rows.map(r => `<tr class="border-t border-slate-800/60">
-        <td class="py-1.5 pr-3 text-slate-300">${zh ? (r.index_zh || r.index) : r.index}</td>
+      body.innerHTML = rows.map(r => `<tr class="border-t border-slate-200/60 dark:border-slate-800/60">
+        <td class="py-1.5 pr-3 text-slate-600 dark:text-slate-300">${zh ? (r.index_zh || r.index) : r.index}</td>
         <td class="py-1.5 px-2 text-slate-500">${zh ? (r.proxy_zh || r.proxy) : r.proxy}
-          <span class="text-slate-600">(${r.symbol})</span></td>
-        <td class="py-1.5 px-2 text-right font-mono text-slate-200">${r.trailing_pe.toFixed(1)}x</td>
+          <span class="text-slate-500 dark:text-slate-600">(${r.symbol})</span></td>
+        <td class="py-1.5 px-2 text-right font-mono text-slate-700 dark:text-slate-200">${r.trailing_pe.toFixed(1)}x</td>
         <td class="py-1.5 pl-2 text-right font-mono text-slate-500">${
           r.trailing_eps_share != null ? '$' + r.trailing_eps_share.toFixed(2) : '—'}</td>
       </tr>`).join('');
@@ -1065,7 +1065,7 @@ const _explainData = {};
         { dates: fr.dates, values: fr.values, color: C_ORANGE, fill: true,
           label: I18n.t('mult.series_fwdhist') || 'Forward P/E (realized earnings)' },
         // A flat median makes an absolute multiple readable at a glance.
-        { dates: fr.dates, values: fr.dates.map(() => fr.median), color: 'rgba(148,163,184,.55)',
+        { dates: fr.dates, values: fr.dates.map(() => fr.median), color: CT.c('rgba(148,163,184,.55)'),
           dash: [4, 3], label: I18n.t('mult.series_median') || 'Long-run median' },
       ], { fmt: xmult, xTicks: 8, unit: 'x', fillRgba: 'rgba(217,89,38,.10)', logY: true,
            explainLabel: 'S&P 500 forward P/E computed on realized next-12-month earnings, since 1871' });
@@ -1179,7 +1179,7 @@ function _explainFinish(panel, chart, lang, btn) {
   const otherLang = lang === 'zh' ? 'en' : 'zh';
   const b = document.createElement('button');
   b.textContent = lang === 'zh' ? '🌐 View in English' : '🌐 翻译成中文';
-  b.className = 'mt-3 block text-xs text-violet-400 hover:text-violet-300 underline underline-offset-2 cursor-pointer bg-transparent border-0 p-0';
+  b.className = 'mt-3 block text-xs text-violet-700 dark:text-violet-400 hover:text-violet-700 dark:hover:text-violet-300 underline underline-offset-2 cursor-pointer bg-transparent border-0 p-0';
   b.onclick = () => _runExplain(chart, otherLang);
   panel.appendChild(document.createElement('br'));
   panel.appendChild(b);

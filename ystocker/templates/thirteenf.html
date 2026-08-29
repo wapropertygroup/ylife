@@ -6,9 +6,9 @@
 <!-- ── Header ────────────────────────────────────────────────────────── -->
 <div class="mb-6 sm:mb-8 fade-up">
   <h1 class="text-2xl sm:text-3xl font-bold grad-text mb-1" data-i18n="thirteenf.title">13F Institutional Holdings</h1>
-  <p class="text-slate-400 text-sm" data-i18n="thirteenf.subtitle">Latest quarterly 13F-HR filings from SEC EDGAR · Top 50 equity positions per fund</p>
+  <p class="text-slate-500 dark:text-slate-400 text-sm" data-i18n="thirteenf.subtitle">Latest quarterly 13F-HR filings from SEC EDGAR · Top 50 equity positions per fund</p>
   {% if cache_last_updated %}
-  <p class="text-xs text-slate-600 mt-1">
+  <p class="text-xs text-slate-500 dark:text-slate-600 mt-1">
     <span data-i18n="thirteenf.data_as_of">Data as of</span> {{ cache_last_updated | int | datetimeformat }}
     &nbsp;·&nbsp;
     {% if warming %}
@@ -27,14 +27,14 @@
 
 <!-- Top Consensus Positions (most widely held) -->
 {% if consensus_positions %}
-<div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up mb-6">
+<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 fade-up mb-6">
   <div class="flex items-baseline gap-3 mb-3">
-    <h2 class="text-base font-semibold text-slate-200" data-i18n="thirteenf.consensus_title">Top Consensus Positions</h2>
+    <h2 class="text-base font-semibold text-slate-700 dark:text-slate-200" data-i18n="thirteenf.consensus_title">Top Consensus Positions</h2>
     <span class="text-xs text-slate-500" data-i18n="thirteenf.consensus_desc">Stocks held by the most funds — reflects institutional conviction</span>
   </div>
   <div class="overflow-x-auto">
     <table class="w-full text-xs">
-      <thead><tr class="border-b border-slate-800 text-slate-500">
+      <thead><tr class="border-b border-slate-200 dark:border-slate-800 text-slate-500">
         <th class="text-left py-2 px-2 font-medium">#</th>
         <th class="text-left py-2 px-2 font-medium">Ticker</th>
         <th class="text-right py-2 px-2 font-medium">Funds</th>
@@ -43,13 +43,13 @@
       </tr></thead>
       <tbody>
         {% for pos in consensus_positions[:20] %}
-        <tr class="border-b border-slate-800/40 hover:bg-slate-800/30 cursor-pointer" onclick="window.location='/history/{{ pos.ticker }}'">
-          <td class="py-1.5 px-2 text-slate-600">{{ loop.index }}</td>
+        <tr class="border-b border-slate-200/40 dark:border-slate-800/40 hover:bg-slate-100/30 dark:hover:bg-slate-800/30 cursor-pointer" onclick="window.location='/history/{{ pos.ticker }}'">
+          <td class="py-1.5 px-2 text-slate-500 dark:text-slate-600">{{ loop.index }}</td>
           <td class="py-1.5 px-2 font-bold text-brand">{{ pos.ticker }}</td>
           <td class="py-1.5 px-2 text-right">
             <span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-brand/15 text-brand">{{ pos.fund_count }} funds</span>
           </td>
-          <td class="py-1.5 px-2 text-right font-mono text-slate-300">
+          <td class="py-1.5 px-2 text-right font-mono text-slate-600 dark:text-slate-300">
             ${{ '{:,.0f}'.format(pos.total_value_m) }}M
           </td>
           <td class="py-1.5 px-2 text-slate-500 text-[10px]">{{ pos.fund_names[:3] | join(', ') }}{% if pos.fund_names|length > 3 %} +{{ pos.fund_names|length - 3 }}{% endif %}</td>
@@ -85,10 +85,10 @@ const TICKER_SECTOR = {
   SBUX:'Consumer',MCD:'Consumer',NKE:'Consumer',F:'Consumer',GM:'Consumer',
 };
 const DONUT_SECTOR_COLORS = {
-  Tech:'#818cf8',Financials:'#34d399',Healthcare:'#f472b6',
-  Energy:'#fb923c',Consumer:'#38bdf8',Media:'#a78bfa',
-  Retail:'#fbbf24',Industrials:'#94a3b8','Real Estate':'#22d3ee',
-  Utilities:'#6ee7b7','China Tech':'#f87171',Other:'#475569',
+  Tech:'#818cf8',Financials:CT.c('#34d399'),Healthcare:'#f472b6',
+  Energy:CT.c('#fb923c'),Consumer:CT.c('#38bdf8'),Media:CT.c('#a78bfa'),
+  Retail:CT.c('#fbbf24'),Industrials:CT.c('#94a3b8'),'Real Estate':'#22d3ee',
+  Utilities:'#6ee7b7','China Tech':CT.c('#f87171'),Other:CT.c('#475569'),
 };
 const _donutCharts = {};
 function buildSectorDonut(fundSlug, holdingsArray) {
@@ -109,7 +109,7 @@ function buildSectorDonut(fundSlug, holdingsArray) {
   if (_donutCharts[fundSlug]) _donutCharts[fundSlug].destroy();
   _donutCharts[fundSlug] = new Chart(canvas, {
     type:'doughnut',
-    data:{ labels, datasets:[{ data, backgroundColor:colors, borderColor:'#0f172a', borderWidth:2, hoverOffset:6 }] },
+    data:{ labels, datasets:[{ data, backgroundColor:colors, borderColor:CT.c('#0f172a'), borderWidth:2, hoverOffset:6 }] },
     options:{ responsive:true, maintainAspectRatio:false, cutout:'62%',
       plugins:{ legend:{display:false}, tooltip:{callbacks:{label:c=>` ${c.label}: ${c.raw.toFixed(1)}%`}} } },
   });
@@ -145,7 +145,7 @@ function buildSectorDonut(fundSlug, holdingsArray) {
             {% if has_error %}disabled title="{{ fd.error }}"{% endif %}
             :class="activeFund === '{{ slug }}'
               ? 'border-brand bg-brand/15 text-white shadow-sm shadow-brand/20'
-              : 'border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-500'"
+              : 'border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:border-slate-400 dark:hover:border-slate-500'"
             class="px-4 py-2 rounded-xl border text-sm font-medium transition-all
                    {% if has_error %}opacity-30 cursor-not-allowed pointer-events-none{% endif %}">
       {{ name }}
@@ -159,7 +159,7 @@ function buildSectorDonut(fundSlug, holdingsArray) {
   {% set fd = holdings.get(name, {}) %}
 
   <div x-show="activeFund === '{{ slug }}'" x-transition
-       class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6">
+       class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6">
 
     {% if not fd %}
     <!-- No data yet -->
@@ -177,7 +177,7 @@ function buildSectorDonut(fundSlug, holdingsArray) {
     {% elif fd.get('error') %}
     <!-- Error state -->
     <div class="py-10 text-center">
-      <span class="text-rose-400 text-sm mb-2"><span data-i18n="thirteenf.fetch_failed">Failed to fetch:</span> {{ fd.error }}</span>
+      <span class="text-rose-700 dark:text-rose-400 text-sm mb-2"><span data-i18n="thirteenf.fetch_failed">Failed to fetch:</span> {{ fd.error }}</span>
       <a href="{{ url_for('main.thirteenf_refresh') }}"
          class="text-brand text-xs hover:underline" data-i18n="thirteenf.retry">↻ Retry</a>
     </div>
@@ -185,34 +185,34 @@ function buildSectorDonut(fundSlug, holdingsArray) {
     {% else %}
     <!-- Fund metadata row -->
     <div class="flex flex-wrap items-center gap-x-6 gap-y-1 mb-5 text-xs text-slate-500">
-      <span><span data-i18n="thirteenf.cik">CIK:</span> <span class="font-mono text-slate-300">{{ cik }}</span></span>
-      <span><span data-i18n="thirteenf.filing_date">Filing date:</span> <span class="text-slate-300 font-medium">{{ fd.filing_date }}</span></span>
-      <span><span data-i18n="thirteenf.period">Period:</span> <span class="text-slate-300 font-medium">{{ fd.period_of_report }}</span></span>
+      <span><span data-i18n="thirteenf.cik">CIK:</span> <span class="font-mono text-slate-600 dark:text-slate-300">{{ cik }}</span></span>
+      <span><span data-i18n="thirteenf.filing_date">Filing date:</span> <span class="text-slate-600 dark:text-slate-300 font-medium">{{ fd.filing_date }}</span></span>
+      <span><span data-i18n="thirteenf.period">Period:</span> <span class="text-slate-600 dark:text-slate-300 font-medium">{{ fd.period_of_report }}</span></span>
       <span><span data-i18n="thirteenf.aum">Reported AUM:</span>
-        <span class="text-slate-100 font-bold">
+        <span class="text-slate-800 dark:text-slate-100 font-bold">
           ${{ "{:,.0f}".format(fd.total_value_millions) }}M
         </span>
       </span>
-      <span><span data-i18n="thirteenf.shown">Holdings shown:</span> <span class="text-slate-300">{{ fd.holdings | length }} / {{ fd.total_holdings }}</span></span>
+      <span><span data-i18n="thirteenf.shown">Holdings shown:</span> <span class="text-slate-600 dark:text-slate-300">{{ fd.holdings | length }} / {{ fd.total_holdings }}</span></span>
       {% set shown_total = fd.holdings | sum(attribute='value_millions') %}
       {% set shown_pct = (shown_total / fd.total_value_millions * 100) if fd.total_value_millions else 0 %}
-      <span class="text-slate-400">·</span>
+      <span class="text-slate-500 dark:text-slate-400">·</span>
       <span><span data-i18n="thirteenf.shown_value">Shown value:</span>
-        <span class="text-emerald-400 font-bold">${{ "{:,.0f}".format(shown_total) }}M</span>
-        <span class="text-slate-600 ml-1">({{ "{:.1f}".format(shown_pct) }}% of AUM)</span>
+        <span class="text-emerald-700 dark:text-emerald-400 font-bold">${{ "{:,.0f}".format(shown_total) }}M</span>
+        <span class="text-slate-500 dark:text-slate-600 ml-1">({{ "{:.1f}".format(shown_pct) }}% of AUM)</span>
       </span>
     </div>
 
     <!-- AUM history across quarters -->
     {% if fd.quarters and fd.quarters | length > 1 %}
     {% set slug = name | lower | replace(' ', '-') %}
-    <div class="mb-5 p-3 bg-slate-800/40 rounded-xl border border-slate-700/50">
+    <div class="mb-5 p-3 bg-slate-100/40 dark:bg-slate-800/40 rounded-xl border border-slate-300/50 dark:border-slate-700/50">
       <div class="flex items-center justify-between mb-2">
         <p class="text-xs text-slate-500 font-medium" data-i18n="thirteenf.aum_history">AUM by Quarter</p>
         <button onclick="explainAum('{{ slug }}', '{{ name | e }}')"
                 class="explain-aum-btn text-[11px] inline-flex items-center gap-1 px-2 py-1 rounded-md
-                       border border-violet-700/40 bg-violet-900/20 text-violet-300
-                       hover:bg-violet-900/40 hover:text-violet-200 transition">
+                       border border-violet-300/40 dark:border-violet-700/40 bg-violet-50 dark:bg-violet-900/20 text-violet-700 dark:text-violet-300
+                       hover:bg-violet-50 dark:hover:bg-violet-900/40 hover:text-violet-800 dark:hover:text-violet-200 transition">
           <span>✦</span>
           <span data-i18n="thirteenf.explain_aum">AI Explain</span>
         </button>
@@ -221,8 +221,8 @@ function buildSectorDonut(fundSlug, holdingsArray) {
         <canvas id="aumChart_{{ slug }}"></canvas>
       </div>
       <!-- AI explain output panel (hidden until clicked) -->
-      <div id="aumExplain_{{ slug }}" class="hidden mt-3 p-3 rounded-lg bg-violet-950/30 border border-violet-800/40 text-xs text-slate-300 leading-relaxed">
-        <div class="flex items-center gap-2 text-violet-300 mb-1.5 text-[11px] font-medium">
+      <div id="aumExplain_{{ slug }}" class="hidden mt-3 p-3 rounded-lg bg-violet-50 dark:bg-violet-950/30 border border-violet-200/40 dark:border-violet-800/40 text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+        <div class="flex items-center gap-2 text-violet-700 dark:text-violet-300 mb-1.5 text-[11px] font-medium">
           <span>✦</span>
           <span data-i18n="thirteenf.ai_analysis">AI Analysis</span>
         </div>
@@ -236,7 +236,7 @@ function buildSectorDonut(fundSlug, holdingsArray) {
       const aum_only = [{% for q in fd.quarters | reverse %}{{ 'true' if q.get('aum_only') else 'false' }}{% if not loop.last %},{% endif %}{% endfor %}];
       const ctx = document.getElementById('aumChart_{{ slug }}');
       if (!ctx) return;
-      const colors = values.map((v, i) => i === values.length - 1 ? '#6366f1' : 'rgba(99,102,241,0.5)');
+      const colors = values.map((v, i) => i === values.length - 1 ? CT.c('#6366f1') : 'rgba(99,102,241,0.5)');
       new Chart(ctx, {
         type: 'bar',
         data: {
@@ -262,8 +262,8 @@ function buildSectorDonut(fundSlug, holdingsArray) {
             }},
           },
           scales: {
-            x: { grid: { color: '#1e293b' }, ticks: { color: '#64748b', font: { size: 9 }, maxRotation: 45 } },
-            y: { grid: { color: '#1e293b' }, ticks: { color: '#64748b', font: { size: 9 },
+            x: { grid: { color: CT.c('#1e293b') }, ticks: { color: CT.c('#64748b'), font: { size: 9 }, maxRotation: 45 } },
+            y: { grid: { color: CT.c('#1e293b') }, ticks: { color: CT.c('#64748b'), font: { size: 9 },
               callback: v => v >= 1000 ? '$'+(v/1000).toFixed(1)+'T' : '$'+v+'B'
             }},
           },
@@ -275,13 +275,13 @@ function buildSectorDonut(fundSlug, holdingsArray) {
 
     <!-- Sector concentration donut chart -->
     {% set slug = name | lower | replace(' ', '-') %}
-    <div class="mb-5 p-3 bg-slate-800/40 rounded-xl border border-slate-700/50">
+    <div class="mb-5 p-3 bg-slate-100/40 dark:bg-slate-800/40 rounded-xl border border-slate-300/50 dark:border-slate-700/50">
       <p class="text-xs text-slate-500 font-medium mb-3" data-i18n="thirteenf.sector_concentration">Sector Concentration</p>
       <div class="flex items-center gap-4">
         <div style="width:140px;height:140px;flex-shrink:0;position:relative">
           <canvas id="donut_{{ slug }}"></canvas>
         </div>
-        <div id="donutLegend_{{ slug }}" class="flex flex-col gap-1 text-xs text-slate-400 min-w-0"></div>
+        <div id="donutLegend_{{ slug }}" class="flex flex-col gap-1 text-xs text-slate-500 dark:text-slate-400 min-w-0"></div>
       </div>
     </div>
     <script>
@@ -299,13 +299,13 @@ function buildSectorDonut(fundSlug, holdingsArray) {
     <div class="overflow-x-auto">
 {% set new_buys = fd.holdings | selectattr("change", "equalto", "new") | list | sort(attribute="value_millions", reverse=True) %}
 {% if new_buys %}
-<div class="mb-3 p-3 bg-slate-800/40 rounded-xl">
+<div class="mb-3 p-3 bg-slate-100/40 dark:bg-slate-800/40 rounded-xl">
   <p class="text-[10px] text-slate-500 uppercase tracking-widest mb-2" data-i18n="thirteenf.new_buys">New Positions This Quarter</p>
   <div class="flex flex-wrap gap-2">
     {% for h in new_buys[:5] %}
-    <a href="/history/{{ h.ticker }}" class="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-emerald-900/20 border border-emerald-800/40 hover:border-emerald-600/60 transition">
-      <span class="text-xs font-bold text-emerald-400">{{ h.ticker }}</span>
-      <span class="text-[10px] text-slate-400">${{ '%.1f'|format(h.value_millions/1000) }}B</span>
+    <a href="/history/{{ h.ticker }}" class="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200/40 dark:border-emerald-800/40 hover:border-emerald-300/60 dark:hover:border-emerald-600/60 transition">
+      <span class="text-xs font-bold text-emerald-700 dark:text-emerald-400">{{ h.ticker }}</span>
+      <span class="text-[10px] text-slate-500 dark:text-slate-400">${{ '%.1f'|format(h.value_millions/1000) }}B</span>
     </a>
     {% endfor %}
   </div>
@@ -313,36 +313,36 @@ function buildSectorDonut(fundSlug, holdingsArray) {
 {% endif %}
       <table class="w-full text-sm" data-sortable>
         <thead>
-          <tr class="text-xs text-slate-500 border-b border-slate-800 select-none">
-            <th class="text-right py-2 px-3 font-medium w-8 cursor-pointer hover:text-slate-300" data-col="0"><span data-i18n="thirteenf.th_rank">#</span> ↕</th>
-            <th class="text-left  py-2 px-3 font-medium cursor-pointer hover:text-slate-300" data-col="1"><span data-i18n="thirteenf.th_ticker">Ticker</span> ↕</th>
-            <th class="text-left  py-2 px-3 font-medium cursor-pointer hover:text-slate-300" data-col="2"><span data-i18n="thirteenf.th_company">Company</span> ↕</th>
+          <tr class="text-xs text-slate-500 border-b border-slate-200 dark:border-slate-800 select-none">
+            <th class="text-right py-2 px-3 font-medium w-8 cursor-pointer hover:text-slate-600 dark:hover:text-slate-300" data-col="0"><span data-i18n="thirteenf.th_rank">#</span> ↕</th>
+            <th class="text-left  py-2 px-3 font-medium cursor-pointer hover:text-slate-600 dark:hover:text-slate-300" data-col="1"><span data-i18n="thirteenf.th_ticker">Ticker</span> ↕</th>
+            <th class="text-left  py-2 px-3 font-medium cursor-pointer hover:text-slate-600 dark:hover:text-slate-300" data-col="2"><span data-i18n="thirteenf.th_company">Company</span> ↕</th>
             <th class="text-left  py-2 px-3 font-medium" data-i18n="thirteenf.th_52w">52-week</th>
-            <th class="text-right py-2 px-3 font-medium cursor-pointer hover:text-slate-300" data-col="3"><span data-i18n="thirteenf.th_shares">Shares</span> ↕</th>
-            <th class="text-right py-2 px-3 font-medium cursor-pointer hover:text-slate-300" data-col="4"><span data-i18n="thirteenf.th_value">Value ($M)</span> ↕</th>
-            <th class="text-right py-2 px-3 font-medium cursor-pointer hover:text-slate-300" data-col="5"><span data-i18n="thirteenf.th_pct">% Portfolio</span> ↕</th>
+            <th class="text-right py-2 px-3 font-medium cursor-pointer hover:text-slate-600 dark:hover:text-slate-300" data-col="3"><span data-i18n="thirteenf.th_shares">Shares</span> ↕</th>
+            <th class="text-right py-2 px-3 font-medium cursor-pointer hover:text-slate-600 dark:hover:text-slate-300" data-col="4"><span data-i18n="thirteenf.th_value">Value ($M)</span> ↕</th>
+            <th class="text-right py-2 px-3 font-medium cursor-pointer hover:text-slate-600 dark:hover:text-slate-300" data-col="5"><span data-i18n="thirteenf.th_pct">% Portfolio</span> ↕</th>
             <th class="text-center py-2 px-3 font-medium" data-i18n="thirteenf.th_change">Change</th>
           </tr>
         </thead>
         <tbody>
           {% for h in fd.holdings %}
-          <tr class="border-b border-slate-800/50 hover:bg-slate-800/40 transition"
+          <tr class="border-b border-slate-200/50 dark:border-slate-800/50 hover:bg-slate-100/40 dark:hover:bg-slate-800/40 transition"
               data-rank="{{ h.rank }}"
               data-ticker="{{ h.ticker or h.cusip }}"
               data-name="{{ h.name }}"
               data-shares="{{ h.shares }}"
               data-value="{{ h.value_millions }}"
               data-pct="{{ h.pct_portfolio }}">
-            <td class="py-2.5 px-3 text-right text-slate-600 text-xs">{{ h.rank }}</td>
+            <td class="py-2.5 px-3 text-right text-slate-500 dark:text-slate-600 text-xs">{{ h.rank }}</td>
             <td class="py-2.5 px-3">
               {% if h.ticker %}
               <a href="{{ url_for('main.history', ticker=h.ticker) }}"
                  class="font-mono font-bold text-brand hover:underline">{{ h.ticker }}</a>
               {% else %}
-              <span class="text-slate-600 font-mono text-xs">{{ h.cusip }}</span>
+              <span class="text-slate-500 dark:text-slate-600 font-mono text-xs">{{ h.cusip }}</span>
               {% endif %}
             </td>
-            <td class="py-2.5 px-3 text-slate-300 text-xs max-w-[180px] truncate" title="{{ h.name }}">{{ h.name }}</td>
+            <td class="py-2.5 px-3 text-slate-600 dark:text-slate-300 text-xs max-w-[180px] truncate" title="{{ h.name }}">{{ h.name }}</td>
             <td class="py-2.5 px-3">
               {% if h.ticker %}
               <div class="flex items-center gap-2">
@@ -351,40 +351,40 @@ function buildSectorDonut(fundSlug, holdingsArray) {
               </div>
               {% endif %}
             </td>
-            <td class="py-2.5 px-3 text-right font-mono text-sm text-slate-300">
+            <td class="py-2.5 px-3 text-right font-mono text-sm text-slate-600 dark:text-slate-300">
               {{ "{:,}".format(h.shares) }}
             </td>
             <td class="py-2.5 px-3 text-right font-mono text-sm">
               ${{ "{:,.1f}".format(h.value_millions) }}
             </td>
-            <td class="py-2.5 px-3 text-right font-mono text-sm text-slate-300">
+            <td class="py-2.5 px-3 text-right font-mono text-sm text-slate-600 dark:text-slate-300">
               {{ "{:.2f}".format(h.pct_portfolio) }}%
             </td>
             <td class="py-2.5 px-3 text-center">
               {% if h.change == 'new' %}
-              <span class="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-emerald-900/50 text-emerald-300 border border-emerald-800" data-i18n="inst.change_new">New</span>
+              <span class="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-emerald-50 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800" data-i18n="inst.change_new">New</span>
               {% elif h.change == 'increased' %}
-              <span class="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-sky-900/50 text-sky-300 border border-sky-800" data-i18n="inst.change_added">▲ Added</span>
-              {% if h.change_pct %}<span class="text-sky-400 text-xs font-mono ml-1">+{{ h.change_pct }}%</span>{% endif %}
+              <span class="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-sky-50 dark:bg-sky-900/50 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800" data-i18n="inst.change_added">▲ Added</span>
+              {% if h.change_pct %}<span class="text-sky-700 dark:text-sky-400 text-xs font-mono ml-1">+{{ h.change_pct }}%</span>{% endif %}
               {% if h.change_shares %}
-              <div class="text-[10px] font-mono text-sky-500 mt-0.5">
+              <div class="text-[10px] font-mono text-sky-700 dark:text-sky-500 mt-0.5">
                 +{% if h.change_shares >= 1000000 %}{{ "{:.1f}".format(h.change_shares / 1000000) }}M{% elif h.change_shares >= 1000 %}{{ "{:.0f}".format(h.change_shares / 1000) }}K{% else %}{{ "{:,}".format(h.change_shares) }}{% endif %} shares
               </div>
               {% endif %}
               {% elif h.change == 'reduced' %}
-              <span class="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-amber-900/50 text-amber-300 border border-amber-800" data-i18n="inst.change_reduced">▼ Reduced</span>
-              {% if h.change_pct %}<span class="text-amber-400 text-xs font-mono ml-1">{{ h.change_pct }}%</span>{% endif %}
+              <span class="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-amber-50 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800" data-i18n="inst.change_reduced">▼ Reduced</span>
+              {% if h.change_pct %}<span class="text-amber-700 dark:text-amber-400 text-xs font-mono ml-1">{{ h.change_pct }}%</span>{% endif %}
               {% if h.change_shares %}
               <div class="text-[10px] font-mono text-amber-600 mt-0.5">
                 {% set abs_shares = -h.change_shares %}{% if abs_shares >= 1000000 %}-{{ "{:.1f}".format(abs_shares / 1000000) }}M{% elif abs_shares >= 1000 %}-{{ "{:.0f}".format(abs_shares / 1000) }}K{% else %}-{{ "{:,}".format(abs_shares) }}{% endif %} shares
               </div>
               {% endif %}
               {% elif h.change == 'closed' %}
-              <span class="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-rose-900/50 text-rose-300 border border-rose-800" data-i18n="inst.change_closed">Closed</span>
+              <span class="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-rose-50 dark:bg-rose-900/50 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800" data-i18n="inst.change_closed">Closed</span>
               {% elif h.change == 'unchanged' %}
-              <span class="text-slate-600 text-xs">—</span>
+              <span class="text-slate-500 dark:text-slate-600 text-xs">—</span>
               {% elif h.change == 'unknown' %}
-              <span class="text-slate-600 text-xs">—</span>
+              <span class="text-slate-500 dark:text-slate-600 text-xs">—</span>
               {% else %}
               <span class="text-slate-700 text-xs">?</span>
               {% endif %}
@@ -395,11 +395,11 @@ function buildSectorDonut(fundSlug, holdingsArray) {
         <tfoot>
           {% set total_shown_value = fd.holdings | sum(attribute='value_millions') %}
           {% set total_shown_pct   = fd.holdings | sum(attribute='pct_portfolio') %}
-          <tr class="border-t-2 border-slate-700 bg-slate-800/30 text-xs font-semibold text-slate-300">
+          <tr class="border-t-2 border-slate-300 dark:border-slate-700 bg-slate-100/30 dark:bg-slate-800/30 text-xs font-semibold text-slate-600 dark:text-slate-300">
             <td class="py-2.5 px-3"></td>
-            <td class="py-2.5 px-3 text-slate-400" colspan="3" data-i18n="thirteenf.total_shown">Total (shown)</td>
-            <td class="py-2.5 px-3 text-right font-mono text-slate-400">—</td>
-            <td class="py-2.5 px-3 text-right font-mono text-emerald-400">${{ "{:,.1f}".format(total_shown_value) }}</td>
+            <td class="py-2.5 px-3 text-slate-500 dark:text-slate-400" colspan="3" data-i18n="thirteenf.total_shown">Total (shown)</td>
+            <td class="py-2.5 px-3 text-right font-mono text-slate-500 dark:text-slate-400">—</td>
+            <td class="py-2.5 px-3 text-right font-mono text-emerald-700 dark:text-emerald-400">${{ "{:,.1f}".format(total_shown_value) }}</td>
             <td class="py-2.5 px-3 text-right font-mono">{{ "{:.2f}".format(total_shown_pct) }}%</td>
             <td class="py-2.5 px-3"></td>
           </tr>
@@ -415,10 +415,10 @@ function buildSectorDonut(fundSlug, holdingsArray) {
 
 <!-- Legend -->
 <div class="mt-6 flex flex-wrap gap-4 text-xs text-slate-500 fade-up">
-  <span class="flex items-center gap-1.5"><span class="px-1.5 py-0.5 rounded bg-emerald-900/50 text-emerald-300 border border-emerald-800 text-[10px] font-semibold" data-i18n="inst.change_new">New</span> <span data-i18n="thirteenf.legend_new">New position this quarter</span></span>
-  <span class="flex items-center gap-1.5"><span class="px-1.5 py-0.5 rounded bg-sky-900/50 text-sky-300 border border-sky-800 text-[10px] font-semibold" data-i18n="inst.change_added">▲ Added</span> <span data-i18n="thirteenf.legend_added">Shares increased vs prior quarter</span></span>
-  <span class="flex items-center gap-1.5"><span class="px-1.5 py-0.5 rounded bg-amber-900/50 text-amber-300 border border-amber-800 text-[10px] font-semibold" data-i18n="inst.change_reduced">▼ Reduced</span> <span data-i18n="thirteenf.legend_reduced">Shares decreased vs prior quarter</span></span>
-  <span class="flex items-center gap-1.5"><span class="px-1.5 py-0.5 rounded bg-rose-900/50 text-rose-300 border border-rose-800 text-[10px] font-semibold" data-i18n="inst.change_closed">Closed</span> <span data-i18n="thirteenf.legend_closed">Position exited (prior quarter only)</span></span>
+  <span class="flex items-center gap-1.5"><span class="px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-[10px] font-semibold" data-i18n="inst.change_new">New</span> <span data-i18n="thirteenf.legend_new">New position this quarter</span></span>
+  <span class="flex items-center gap-1.5"><span class="px-1.5 py-0.5 rounded bg-sky-50 dark:bg-sky-900/50 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800 text-[10px] font-semibold" data-i18n="inst.change_added">▲ Added</span> <span data-i18n="thirteenf.legend_added">Shares increased vs prior quarter</span></span>
+  <span class="flex items-center gap-1.5"><span class="px-1.5 py-0.5 rounded bg-amber-50 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 text-[10px] font-semibold" data-i18n="inst.change_reduced">▼ Reduced</span> <span data-i18n="thirteenf.legend_reduced">Shares decreased vs prior quarter</span></span>
+  <span class="flex items-center gap-1.5"><span class="px-1.5 py-0.5 rounded bg-rose-50 dark:bg-rose-900/50 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 text-[10px] font-semibold" data-i18n="inst.change_closed">Closed</span> <span data-i18n="thirteenf.legend_closed">Position exited (prior quarter only)</span></span>
   <span>· <span data-i18n="thirteenf.source">Data source:</span> <a href="https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&type=13F" target="_blank" rel="noopener" class="text-brand hover:underline">SEC EDGAR</a></span>
 </div>
 
@@ -460,7 +460,7 @@ function drawSparkline(canvas, prices) {
   const mn = Math.min(...valid), mx = Math.max(...valid);
   const range = mx - mn || 1;
   const first = valid[0], last = valid[valid.length - 1];
-  const color = last >= first ? '#34d399' : '#f43f5e';
+  const color = last >= first ? CT.c('#34d399') : '#f43f5e';
   ctx.clearRect(0, 0, w, h);
   ctx.beginPath();
   ctx.strokeStyle = color;
@@ -501,7 +501,7 @@ const observer = new IntersectionObserver(async entries => {
       const el = document.querySelector(`.spark-pct[data-ticker="${ticker}"]`);
       if (el) {
         el.textContent = (pct >= 0 ? '+' : '') + pct.toFixed(1) + '%';
-        el.className = 'spark-pct text-xs font-mono ' + (pct >= 0 ? 'text-emerald-400' : 'text-rose-400');
+        el.className = 'spark-pct text-xs font-mono ' + (pct >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400');
       }
     }
   }

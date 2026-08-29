@@ -76,11 +76,11 @@
 <!-- ── Header ─────────────────────────────────────────────────────────── -->
 <div class="mb-6 sm:mb-8 fade-up">
   <h1 class="text-2xl sm:text-3xl font-bold grad-text mb-1" data-i18n="fedwatch.title">Interest Rate Probabilities</h1>
-  <p class="text-slate-400 text-sm" data-i18n="fedwatch.subtitle">
+  <p class="text-slate-500 dark:text-slate-400 text-sm" data-i18n="fedwatch.subtitle">
     Market-implied odds of each Fed target range at every upcoming FOMC meeting · derived from CME 30-Day Fed Funds futures
   </p>
   {% if cache_last_updated %}
-  <p class="text-xs text-slate-600 mt-1">
+  <p class="text-xs text-slate-500 dark:text-slate-600 mt-1">
     <span data-i18n="fedwatch.data_as_of">Data as of</span> {{ cache_last_updated | int | datetimeformat }}
     &nbsp;·&nbsp;
     {% if warming or not cache_fresh %}
@@ -97,7 +97,7 @@
        class="text-brand hover:underline" data-i18n="fedwatch.subscribe">🗓 Subscribe to meeting dates</a>
   </p>
   {% else %}
-  <p class="text-xs text-slate-600 mt-1">
+  <p class="text-xs text-slate-500 dark:text-slate-600 mt-1">
     <a href="{{ url_for('main.fedwatch_refresh') }}" class="text-brand hover:underline" data-i18n="fedwatch.load">↻ Load data</a>
   </p>
   {% endif %}
@@ -109,10 +109,10 @@
     <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
     <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/>
   </svg>
-  <p class="text-slate-400 text-sm animate-pulse" data-i18n="fedwatch.loading">Reading the Fed Funds futures curve — this may take a moment…</p>
-  <p class="text-xs text-slate-600" data-i18n="fedwatch.loading_hint">This page will refresh automatically when data is ready.</p>
+  <p class="text-slate-500 dark:text-slate-400 text-sm animate-pulse" data-i18n="fedwatch.loading">Reading the Fed Funds futures curve — this may take a moment…</p>
+  <p class="text-xs text-slate-500 dark:text-slate-600" data-i18n="fedwatch.loading_hint">This page will refresh automatically when data is ready.</p>
 </div>
-<div id="fwError" class="hidden mt-4 px-4 py-3 rounded-lg bg-red-900/40 border border-red-700 text-red-300 text-sm"></div>
+<div id="fwError" class="hidden mt-4 px-4 py-3 rounded-lg bg-red-50 dark:bg-red-900/40 border border-red-300 dark:border-red-700 text-red-700 dark:text-red-300 text-sm"></div>
 <script>
   // Poll until the futures curve has been priced, then reload.
   (function poll() {
@@ -135,7 +135,7 @@
 {% else %}
 
 <!-- ── Headline: what the next meeting looks like ──────────────────────── -->
-<div id="fwNotice" class="hidden mb-6 px-4 py-3 rounded-lg bg-slate-800/60 border border-slate-700 text-slate-300 text-sm items-center gap-3">
+<div id="fwNotice" class="hidden mb-6 px-4 py-3 rounded-lg bg-slate-100/60 dark:bg-slate-800/60 border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-sm items-center gap-3">
   <svg class="w-4 h-4 text-brand animate-spin inline-block align-middle" fill="none" viewBox="0 0 24 24">
     <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
     <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/>
@@ -144,22 +144,22 @@
 </div>
 
 <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
+  <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
     <p class="text-xs text-slate-500 mb-1" data-i18n="fedwatch.current_range">Current target range</p>
-    <p class="text-2xl font-semibold text-slate-100"><span id="fwCurrentRange">—</span></p>
+    <p class="text-2xl font-semibold text-slate-800 dark:text-slate-100"><span id="fwCurrentRange">—</span></p>
     <p class="text-xs text-slate-500 mt-1">
-      <span data-i18n="fedwatch.effr">Effective rate</span> <span id="fwEffr" class="text-slate-400">—</span>
+      <span data-i18n="fedwatch.effr">Effective rate</span> <span id="fwEffr" class="text-slate-500 dark:text-slate-400">—</span>
     </p>
   </div>
-  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
+  <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
     <p class="text-xs text-slate-500 mb-1" data-i18n="fedwatch.next_meeting">Next FOMC decision</p>
-    <p class="text-2xl font-semibold text-slate-100"><span id="fwNextDate">—</span></p>
-    <p class="text-xs text-slate-500 mt-1"><span id="fwDaysAway" class="text-slate-400">—</span></p>
+    <p class="text-2xl font-semibold text-slate-800 dark:text-slate-100"><span id="fwNextDate">—</span></p>
+    <p class="text-xs text-slate-500 mt-1"><span id="fwDaysAway" class="text-slate-500 dark:text-slate-400">—</span></p>
   </div>
-  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
+  <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
     <p class="text-xs text-slate-500 mb-1" data-i18n="fedwatch.base_case">Base case at that meeting</p>
     <!-- The hero figure: the one number this page leads with. -->
-    <p class="text-5xl font-semibold text-slate-100 leading-none mt-1"><span id="fwBaseProb">—</span></p>
+    <p class="text-5xl font-semibold text-slate-800 dark:text-slate-100 leading-none mt-1"><span id="fwBaseProb">—</span></p>
     <p class="text-xs text-slate-500 mt-1.5"><span id="fwBaseLabel">—</span></p>
   </div>
 </div>
@@ -167,16 +167,16 @@
 <div class="space-y-6" id="fwChartsArea">
 
   <!-- ── Primary: probability of each target range, per meeting ─────────── -->
-  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 fade-up">
+  <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6 fade-up">
     <div class="flex flex-wrap items-start justify-between gap-2 mb-1">
       <div>
-        <h2 class="text-base font-semibold text-slate-200" data-i18n="fedwatch.chart_title">Probability of Each Target Range by Meeting</h2>
+        <h2 class="text-base font-semibold text-slate-700 dark:text-slate-200" data-i18n="fedwatch.chart_title">Probability of Each Target Range by Meeting</h2>
         <p class="text-xs text-slate-500" data-i18n="fedwatch.chart_desc">Each column totals 100%. The spread widens further out because uncertainty compounds across meetings.</p>
       </div>
       <button class="explain-btn" onclick="explainChart('fedwatch')" data-i18n="fedwatch.explain">✦ Explain</button>
     </div>
     <!-- Legend is always present: identity never rests on colour alone. -->
-    <div id="fwLegend" class="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-3 mb-3 text-[11px] text-slate-400"></div>
+    <div id="fwLegend" class="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-3 mb-3 text-[11px] text-slate-500 dark:text-slate-400"></div>
     <div class="chart-container" style="height:340px">
       <canvas id="fwProbChart"></canvas>
     </div>
@@ -184,9 +184,9 @@
   </div>
 
   <!-- ── Secondary: the implied policy path (single series, no legend) ──── -->
-  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
+  <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
     <div class="mb-3">
-      <h3 class="text-sm font-semibold text-slate-300" data-i18n="fedwatch.path_title">Market-Implied Policy Rate Path</h3>
+      <h3 class="text-sm font-semibold text-slate-600 dark:text-slate-300" data-i18n="fedwatch.path_title">Market-Implied Policy Rate Path</h3>
       <p class="text-xs text-slate-500 mt-0.5" data-i18n="fedwatch.path_desc">The expected effective fed funds rate after each meeting, backed out of the futures curve. The dashed line is today's rate.</p>
     </div>
     <div class="chart-container" style="height:220px">
@@ -195,33 +195,33 @@
   </div>
 
   <!-- ── How we got here: realised target-range steps ────────────────────── -->
-  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up" id="fwHistCard">
+  <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 fade-up" id="fwHistCard">
     <div class="mb-3">
-      <h3 class="text-sm font-semibold text-slate-300" data-i18n="fedwatch.hist_title">Target Range History</h3>
+      <h3 class="text-sm font-semibold text-slate-600 dark:text-slate-300" data-i18n="fedwatch.hist_title">Target Range History</h3>
       <p class="text-xs text-slate-500 mt-0.5" data-i18n="fedwatch.hist_desc">Every change the Fed has actually made, as a step function. The band is the target range; before December 2008 the Fed set a single target rather than a range, so the band closes to a line.</p>
     </div>
     <div class="chart-container" style="height:240px">
       <canvas id="fwHistChart"></canvas>
     </div>
-    <p class="text-xs text-slate-600 mt-2" id="fwHistNote"></p>
+    <p class="text-xs text-slate-500 dark:text-slate-600 mt-2" id="fwHistNote"></p>
   </div>
 
   <!-- ── What the market expected, over time (observed series) ───────────── -->
-  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up hidden" id="fwExpCard">
+  <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 fade-up hidden" id="fwExpCard">
     <div class="mb-3">
-      <h3 class="text-sm font-semibold text-slate-300" data-i18n="fedwatch.exp_title">Expectations Over Time</h3>
+      <h3 class="text-sm font-semibold text-slate-600 dark:text-slate-300" data-i18n="fedwatch.exp_title">Expectations Over Time</h3>
       <p class="text-xs text-slate-500 mt-0.5" data-i18n="fedwatch.exp_desc">How the rate implied for each upcoming meeting has moved as the futures curve repriced. One line per meeting, recorded once per trading day — this is the market changing its mind, not the Fed acting.</p>
     </div>
     <div class="chart-container" style="height:240px">
       <canvas id="fwExpChart"></canvas>
     </div>
-    <p class="text-xs text-slate-600 mt-2" id="fwExpNote"></p>
+    <p class="text-xs text-slate-500 dark:text-slate-600 mt-2" id="fwExpNote"></p>
   </div>
 
   <!-- ── The table view: every value, no colour needed to read it ───────── -->
-  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
+  <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
     <div class="mb-3">
-      <h3 class="text-sm font-semibold text-slate-300" data-i18n="fedwatch.grid_title">Probability Grid</h3>
+      <h3 class="text-sm font-semibold text-slate-600 dark:text-slate-300" data-i18n="fedwatch.grid_title">Probability Grid</h3>
       <p class="text-xs text-slate-500 mt-0.5" data-i18n="fedwatch.grid_desc">The same numbers as the chart above, in full. Rows are target ranges; columns are meeting dates.</p>
     </div>
     <div class="overflow-x-auto">
@@ -230,19 +230,19 @@
   </div>
 
   <!-- ── How this is computed ───────────────────────────────────────────── -->
-  <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
-    <h3 class="text-sm font-semibold text-slate-300 mb-2" data-i18n="fedwatch.method_title">How this is calculated</h3>
+  <div class="bg-white/60 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
+    <h3 class="text-sm font-semibold text-slate-600 dark:text-slate-300 mb-2" data-i18n="fedwatch.method_title">How this is calculated</h3>
     <p class="text-xs text-slate-500 leading-relaxed" data-i18n="fedwatch.method_body">
       A CME 30-Day Fed Funds future (ZQ) settles to 100 minus the average daily effective fed funds rate over its delivery month, so 100 − price is the rate the market expects for that month. Because a new target range takes effect the day after an FOMC decision, a month containing a meeting blends the old and new rate in proportion to the days on each side — that lets the expected post-meeting rate be backed out contract by contract. Each meeting then moves in 25bp increments, so an expected change of, say, +10bp reads as a 40% chance of a 25bp move and 60% chance of no change. Chaining those odds across meetings produces the widening distribution above.
     </p>
-    <p class="text-xs text-slate-600 mt-2" data-i18n="fedwatch.method_caveat">
+    <p class="text-xs text-slate-500 dark:text-slate-600 mt-2" data-i18n="fedwatch.method_caveat">
       These are market-implied probabilities, not a forecast, and they move whenever the futures curve does. This page reproduces the CME FedWatch methodology from public data; it is not affiliated with CME Group.
     </p>
   </div>
 
-  <div id="fwError" class="hidden mt-4 px-4 py-3 rounded-lg bg-red-900/40 border border-red-700 text-red-300 text-sm"></div>
+  <div id="fwError" class="hidden mt-4 px-4 py-3 rounded-lg bg-red-50 dark:bg-red-900/40 border border-red-300 dark:border-red-700 text-red-700 dark:text-red-300 text-sm"></div>
 
-  <p class="text-xs text-slate-600 mt-4">
+  <p class="text-xs text-slate-500 dark:text-slate-600 mt-4">
     <span data-i18n="fedwatch.source">Sources</span>:
     <a href="https://www.cmegroup.com/markets/interest-rates/cme-fedwatch-tool.html" target="_blank" rel="noopener" class="text-brand hover:underline">CME FedWatch</a> ·
     <a href="https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm" target="_blank" rel="noopener" class="text-brand hover:underline">FOMC calendar</a> ·
@@ -255,8 +255,8 @@
 const _explainData = {};
 
 (async function() {
-  const gridCol = '#1e293b';
-  const tickCol = '#64748b';
+  const gridCol = CT.c('#1e293b');
+  const tickCol = CT.c('#64748b');
 
   // Diverging scale, anchored on today's target range.
   //   cuts  → blue arm, hikes → red arm, current → neutral gray.
@@ -264,8 +264,8 @@ const _explainData = {};
   // ΔL ≥ 0.06, light end ≥ 2:1 on the slate-900 card). Index 0 is the step
   // nearest today's range; the last entry is reused if the tail ever runs
   // past 5 steps so a colour is never undefined.
-  const NEUTRAL  = '#94a3b8';
-  const HIKE_RAMP = ['#b91c1c', '#ef4444', '#f87171', '#fca5a5', '#fecaca'];
+  const NEUTRAL  = CT.c('#94a3b8');
+  const HIKE_RAMP = ['#b91c1c', '#ef4444', CT.c('#f87171'), '#fca5a5', '#fecaca'];
   const CUT_RAMP  = ['#1d4ed8', '#3b82f6', '#60a5fa', '#93c5fd', '#bfdbfe'];
 
   function rangeColor(steps) {
@@ -278,7 +278,7 @@ const _explainData = {};
   function inkOn(hex) {
     const r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
     const lum = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
-    return lum > 0.55 ? '#0f172a' : '#f8fafc';
+    return lum > 0.55 ? CT.c('#0f172a') : '#f8fafc';
   }
 
   async function safeJsonFetch(url, options = {}) {
@@ -405,7 +405,7 @@ const _explainData = {};
       // A 2px gap in the card colour is what separates touching segments —
       // never a contrasting stroke, which would add ink that isn't data.
       // Top-only, so there is exactly one consistent gap between neighbours.
-      borderColor: '#0f172a',
+      borderColor: CT.c('#0f172a'),
       borderWidth: { top: 2, right: 0, bottom: 0, left: 0 },
       borderSkipped: false,
       // The 24px mark cap is relaxed to 48px here: the inline "39%" labels sit
@@ -504,15 +504,15 @@ const _explainData = {};
           {
             label: I18n.t('fedwatch.implied_rate') || 'Implied fed funds rate',
             data: pathVals,
-            borderColor: '#6366f1',
+            borderColor: CT.c('#6366f1'),
             backgroundColor: 'rgba(99,102,241,0.10)',
             borderWidth: 2,
             pointRadius: 4,
             pointHoverRadius: 6,
-            pointBackgroundColor: '#6366f1',
+            pointBackgroundColor: CT.c('#6366f1'),
             // A surface-coloured ring keeps the markers legible where they
             // sit on the line.
-            pointBorderColor: '#0f172a',
+            pointBorderColor: CT.c('#0f172a'),
             pointBorderWidth: 2,
             fill: true,
             tension: 0.25,
@@ -532,7 +532,7 @@ const _explainData = {};
       options: {
         responsive: true, maintainAspectRatio: false,
         plugins: {
-          legend: { display: true, labels: { color: '#94a3b8', boxWidth: 12, font: { size: 11 } } },
+          legend: { display: true, labels: { color: CT.c('#94a3b8'), boxWidth: 12, font: { size: 11 } } },
           tooltip: {
             mode: 'index', intersect: false,
             callbacks: { label: c => (c.raw == null ? '' : ` ${c.dataset.label}: ${c.raw.toFixed(3)}%`) },
@@ -580,7 +580,7 @@ const _explainData = {};
             {
               label: I18n.t('fedwatch.hist_upper') || 'Upper bound',
               data: hi,
-              borderColor: '#6366f1',
+              borderColor: CT.c('#6366f1'),
               backgroundColor: 'rgba(99,102,241,0.18)',
               borderWidth: 1.5,
               pointRadius: 0,
@@ -652,8 +652,8 @@ const _explainData = {};
       const live = meetings.map(m => m.date);
       // Nearer meetings darker: a sequential ramp on the same indigo the path
       // chart uses, monotone in lightness so the ordering is readable.
-      const RAMP = ['#4338ca', '#4f46e5', '#6366f1', '#818cf8',
-                    '#a5b4fc', '#c7d2fe', '#ddd6fe', '#ede9fe'];
+      const RAMP = ['#4338ca', '#4f46e5', CT.c('#6366f1'), '#818cf8',
+                    CT.c('#a5b4fc'), '#c7d2fe', '#ddd6fe', '#ede9fe'];
 
       const datasets = live.map((mdate, i) => {
         const pts = [];
@@ -687,7 +687,7 @@ const _explainData = {};
           options: {
             responsive: true, maintainAspectRatio: false,
             plugins: {
-              legend: { display: true, labels: { color: '#94a3b8', boxWidth: 12, font: { size: 11 } } },
+              legend: { display: true, labels: { color: CT.c('#94a3b8'), boxWidth: 12, font: { size: 11 } } },
               tooltip: {
                 mode: 'index', intersect: false,
                 callbacks: {
@@ -760,7 +760,7 @@ const _explainData = {};
           td.style.background = c + Math.round(18 + (p / 100) * 120).toString(16).padStart(2, '0');
           td.style.color = '#f1f5f9';
         } else {
-          td.style.color = '#475569';
+          td.style.color = CT.c('#475569');
         }
         tr.appendChild(td);
       });
@@ -859,7 +859,7 @@ function _explainFinish(panel, chart, lang, btn) {
   const label = lang === 'zh' ? '🌐 View in English' : '🌐 翻译成中文';
   const translateBtn = document.createElement('button');
   translateBtn.textContent = label;
-  translateBtn.className = 'mt-3 block text-xs text-violet-400 hover:text-violet-300 underline underline-offset-2 cursor-pointer bg-transparent border-0 p-0';
+  translateBtn.className = 'mt-3 block text-xs text-violet-700 dark:text-violet-400 hover:text-violet-700 dark:hover:text-violet-300 underline underline-offset-2 cursor-pointer bg-transparent border-0 p-0';
   translateBtn.onclick = () => _runExplain(chart, otherLang);
   panel.appendChild(document.createElement('br'));
   panel.appendChild(translateBtn);

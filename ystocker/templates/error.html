@@ -2,11 +2,11 @@
 {% block title %}yStocker — Error{% endblock %}
 {% block content %}
 <div class="max-w-lg mx-auto mt-16 fade-up">
-  <div class="bg-slate-900 border border-rose-800/50 rounded-2xl p-8 text-center">
+  <div class="bg-white dark:bg-slate-900 border border-rose-200/50 dark:border-rose-800/50 rounded-2xl p-8 text-center">
     <div class="text-5xl mb-4">⚠</div>
-    <h1 class="text-xl font-bold text-slate-100 mb-2" data-i18n="error.title">Something went wrong</h1>
-    <p class="font-mono text-sm text-rose-400 bg-rose-900/20 rounded-lg px-4 py-2 mb-4 break-all">{{ error }}</p>
-    <p class="text-slate-400 text-sm mb-6">
+    <h1 class="text-xl font-bold text-slate-800 dark:text-slate-100 mb-2" data-i18n="error.title">Something went wrong</h1>
+    <p class="font-mono text-sm text-rose-700 dark:text-rose-400 bg-rose-50 dark:bg-rose-900/20 rounded-lg px-4 py-2 mb-4 break-all">{{ error }}</p>
+    <p class="text-slate-500 dark:text-slate-400 text-sm mb-6">
       <span data-i18n="error.hint1">This usually means Yahoo Finance could not be reached.</span><br>
       <span data-i18n="error.hint2">Check your internet connection then try refreshing.</span>
     </p>

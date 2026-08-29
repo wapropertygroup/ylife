@@ -59,6 +59,12 @@ const I18n = (() => {
     'nav.sign_in':        { en: 'Sign In',  zh: '登录' },
     'nav.logout':         { en: 'Logout',   zh: '退出登录' },
     'nav.refresh':        { en: '↻ Refresh', zh: '↻ 刷新' },
+    // Theme toggle. The tooltip names both states rather than the destination
+    // ("Switch to light") because the same string serves the button in either
+    // mode, and the icon already shows which way it is going.
+    'nav.theme':          { en: 'Toggle light / dark', zh: '切换浅色 / 深色' },
+    'nav.theme_light':    { en: 'Light mode', zh: '浅色模式' },
+    'nav.theme_dark':     { en: 'Dark mode', zh: '深色模式' },
     'nav.refresh_title':  { en: 'Refresh data', zh: '刷新数据' },
     'nav.refresh_body':   { en: 'Clears the in-memory cache and re-fetches live prices, PE ratios, and analyst targets for all tickers from Yahoo Finance.',
                             zh: '清除内存缓存，从 Yahoo Finance 重新获取所有股票的最新价格、市盈率及分析师目标价。' },
@@ -338,7 +344,14 @@ const I18n = (() => {
     'history.volume_desc':  { en: 'Shares traded per period — green when price rose, red when fell', zh: '每期成交量 — 涨绿跌红' },
     'history.volume_up':    { en: 'Up',              zh: '上涨' },
     'history.volume_down':  { en: 'Down',            zh: '下跌' },
-    'history.rsi_title':    { en: 'RSI (14)',         zh: 'RSI（14日）' },
+    'history.rsi_title':    { en: 'RSI',              zh: 'RSI' },
+    // Bar-size words for indicator windows. `history.html` appends these to a
+    // window length (#rsiWin, #stochWin, the HV and MA legend chips) so a "14"
+    // reads as 14 weeks on the weekly views instead of the 14 days the ZH RSI
+    // header used to claim outright.
+    'history.bar_unit_d':   { en: 'd',                zh: '日' },
+    'history.bar_unit_w':   { en: 'w',                zh: '周' },
+    'history.bar_unit_m':   { en: 'm',                zh: '月' },
     'history.rsi_desc':     { en: 'Relative Strength Index — overbought (>70) / oversold (<30)', zh: '相对强弱指数 — 超买（>70）/ 超卖（<30）' },
     'history.rsi_ob':       { en: '70 Overbought',   zh: '70 超买' },
     'history.rsi_os':       { en: '30 Oversold',     zh: '30 超卖' },
@@ -368,8 +381,8 @@ const I18n = (() => {
     'history.volume_explain_body': { en: 'Volume confirms price moves. Green bars = price closed up; red = down. High volume on a price move = conviction. The MA20 line shows average volume — spikes above it signal unusual institutional activity.', zh: '成交量确认价格走势。绿色柱 = 收涨，红色柱 = 收跌。放量上涨说明资金流入有支撑，MA20显示平均成交量，突破均线代表异常交投活动。' },
     'history.rsi_explain_body':    { en: 'RSI measures momentum on a 0–100 scale. Above 70 = overbought (possible pullback); below 30 = oversold (possible bounce). RSI can stay extreme in strong trends — use with price action and volume for confirmation.', zh: 'RSI在0–100区间衡量动量。高于70为超买（可能回调），低于30为超卖（可能反弹）。强趋势中RSI可持续处于极端区域，需结合价格和成交量综合判断。' },
     'history.macd_explain_body':   { en: 'MACD subtracts the 26-period EMA from the 12-period EMA. MACD crossing above the signal line (9-period EMA) is bullish; below is bearish. The histogram shows the gap — widening = strengthening momentum, shrinking = fading.', zh: 'MACD = 12期EMA − 26期EMA。MACD上穿信号线（9期EMA）为看多，下穿为看空。柱状图显示差距：扩大表示动量增强，收窄表示动量减弱。' },
-    'history.hv_explain_body':     { en: 'Historical Volatility measures how much the stock has moved, annualized as a percentage. HV20 = short-term; HV60 = longer-term. Rising HV = increasing uncertainty. Low HV followed by a spike often precedes a big price move.', zh: '历史波动率衡量股票的价格波动幅度，以年化百分比表示。HV20为短期，HV60为中长期。波动率上升代表不确定性增加；低波动率后骤然上升往往预示大行情。' },
-    'history.bb_explain_body':     { en: 'Bollinger Bands (violet) surround price with upper/lower bands at ±2σ from the 20-period MA. Squeeze = low vol / upcoming breakout. Price at upper band = extended; at lower band = short-term oversold. MA20 (amber) and MA50 (rose) show trend direction.', zh: '布林带（紫色区域）在20期均线上下各±2σ形成轨道。带宽收窄（挤压）预示低波动后的突破行情。价格触及上轨=阶段性超买；触及下轨=短期超卖。黄色MA20和红色MA50显示中期趋势方向。' },
+    'history.hv_explain_body':     { en: 'Historical Volatility measures how much the stock has moved, annualized as a percentage. The shorter window tracks recent turbulence, the longer one the prevailing regime. Rising HV = increasing uncertainty. Low HV followed by a spike often precedes a big price move.', zh: '历史波动率衡量股票的价格波动幅度，以年化百分比表示。较短窗口反映近期波动，较长窗口反映整体波动水平。波动率上升代表不确定性增加；低波动率后骤然上升往往预示大行情。' },
+    'history.bb_explain_body':     { en: 'Bollinger Bands (violet) surround price with upper/lower bands at ±2σ from its moving average. Squeeze = low vol / upcoming breakout. Price at upper band = extended; at lower band = short-term oversold. The amber and rose dashed lines are the short and long moving averages; the legend states the window each was computed over.', zh: '布林带（紫色区域）在均线上下各±2σ形成轨道。带宽收窄（挤压）预示低波动后的突破行情。价格触及上轨=阶段性超买；触及下轨=短期超卖。黄色与红色虚线分别为短期和长期均线，图例标注了各自的窗口长度。' },
     // ETF info + key dates stat cards
     'history.group_etf':        { en: 'ETF Info',         zh: 'ETF 信息' },
     'history.expense_ratio':    { en: 'Expense Ratio',    zh: '费用率' },
@@ -393,7 +406,7 @@ const I18n = (() => {
     'history.range_bar_label':  { en: '52-Week Range',    zh: '52周价格区间' },
     // Stochastic Oscillator
     'history.stoch_title':      { en: 'Stochastic Oscillator', zh: '随机指标' },
-    'history.stoch_desc':       { en: '%K (14) and %D (3) — overbought >80 / oversold <20', zh: '%K（14）与 %D（3）— 超买>80 / 超卖<20' },
+    'history.stoch_desc':       { en: '%K vs %D — overbought >80 / oversold <20', zh: '%K 与 %D — 超买>80 / 超卖<20' },
     'history.stoch_signal':     { en: 'Signal', zh: '信号线' },
     'history.stoch_explain_title': { en: '📖 How to read this chart', zh: '📖 图表解读' },
     'history.stoch_explain_body':  { en: 'The Stochastic Oscillator compares closing price to its 14-period range. %K (green) is the raw reading; %D (amber dashed) is its 3-period MA signal line. Above 80 = overbought; below 20 = oversold. %K crossing above %D = bullish momentum; crossing below = bearish.', zh: '随机指标将收盘价与14期价格区间对比。%K（绿）为原始动量值；%D（橙虚线）为其3期均线信号线。高于80为超买；低于20为超卖。%K上穿%D为看多信号，下穿为看空信号。' },

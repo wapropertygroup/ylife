@@ -1,5 +1,95 @@
+/* Theme tokens for the floating research desk.
+   Declared light-first in `:root` with `.dark` overriding, so a page that
+   somehow renders without the `dark` class degrades to a readable light widget
+   instead of black-on-black. The `.dark` column is the original hardcoded
+   palette, value for value, so dark mode renders exactly as before.
+   Deliberately self-contained and `--agf-` prefixed: this sheet is loaded on
+   its own, so it must not depend on tokens declared in `base.html` — nor
+   collide with them. */
+:root {
+  /* Surfaces and structure */
+  --agf-surface: #ffffff;
+  --agf-bar: #f8fafc;
+  --agf-bar-wash: rgba(99, 102, 241, .10);
+  --agf-divider: #e2e8f0;
+  --agf-panel-border: rgba(79, 70, 229, .22);
+  /* Geometry is identical in both themes; only the ink softens. A 90px black
+     bloom and a near-opaque slate ring read as grime on a light page. */
+  --agf-panel-shadow: 0 30px 90px rgba(15, 23, 42, .16), 0 0 0 1px rgba(15, 23, 42, .06);
+
+  /* Launcher chip. Its fill is a surface (slate-800 → slate-950 in dark), so it
+     inverts; the gradient *border* is brand and does not. */
+  --agf-launcher-from: rgba(255, 255, 255, .98);
+  --agf-launcher-to: rgba(248, 250, 252, .98);
+  --agf-launcher-ink: #312e81;
+  --agf-launcher-shadow: 0 18px 48px rgba(15, 23, 42, .14), 0 0 0 1px rgba(99, 102, 241, .10);
+  --agf-launcher-shadow-hover: 0 22px 56px rgba(15, 23, 42, .18), 0 0 28px rgba(99, 102, 241, .16);
+
+  /* Text */
+  --agf-ink: #0f172a;
+  --agf-ink-muted: #64748b;   /* slate-500 — 4.76:1 on white, the legible floor.
+                                 Unchanged in dark, where it is the original
+                                 value; anything lighter fails on white. */
+
+  /* Accent. Pale indigo is legible on a dark panel and invisible on a light
+     one, so every pale-indigo *glyph* becomes indigo-600 here; the pale indigo
+     *fills* stay pale. */
+  --agf-accent: #4f46e5;
+  --agf-mark-ink: #4f46e5;
+  --agf-mark-bg: rgba(99, 102, 241, .10);
+  --agf-mark-border: rgba(79, 70, 229, .24);
+
+  /* Title-bar icon buttons */
+  --agf-btn-ink: #64748b;
+  --agf-btn-bg-hover: #f1f5f9;
+  --agf-btn-border-hover: #cbd5e1;
+
+  /* Status green. The dot and its pulse are a saturated fill, so they are
+     identical in both themes and have no `.dark` override. Only the tint chip
+     behind the dot and its bloom are re-weighted for a light bar. */
+  --agf-live: #34d399;
+  --agf-live-ring: rgba(52, 211, 153, .46);
+  --agf-signal-bg: rgba(52, 211, 153, .12);
+  --agf-signal-border: rgba(16, 185, 129, .28);
+  --agf-signal-glow: rgba(52, 211, 153, .45);
+
+  /* Brand gradient on the launcher's border — identical in both themes, hence
+     no `.dark` override. */
+  --agf-brand-from: #6366f1;
+  --agf-brand-to: #38bdf8;
+}
+
+.dark {
+  --agf-surface: #020617;
+  --agf-bar: #0b1120;
+  --agf-bar-wash: rgba(99, 102, 241, .13);
+  --agf-divider: #1e293b;
+  --agf-panel-border: rgba(129, 140, 248, .34);
+  --agf-panel-shadow: 0 30px 90px rgba(0, 0, 0, .72), 0 0 0 1px rgba(15, 23, 42, .9);
+
+  --agf-launcher-from: rgba(30, 41, 59, .97);
+  --agf-launcher-to: rgba(15, 23, 42, .98);
+  --agf-launcher-ink: #e0e7ff;
+  --agf-launcher-shadow: 0 18px 48px rgba(0, 0, 0, .46), 0 0 0 1px rgba(99, 102, 241, .08);
+  --agf-launcher-shadow-hover: 0 22px 56px rgba(0, 0, 0, .54), 0 0 28px rgba(99, 102, 241, .18);
+
+  --agf-ink: #e2e8f0;
+
+  --agf-accent: #818cf8;
+  --agf-mark-ink: #a5b4fc;
+  --agf-mark-bg: rgba(99, 102, 241, .13);
+  --agf-mark-border: rgba(129, 140, 248, .3);
+
+  --agf-btn-ink: #94a3b8;
+  --agf-btn-bg-hover: #172033;
+  --agf-btn-border-hover: #28364e;
+
+  --agf-signal-bg: rgba(52, 211, 153, .08);
+  --agf-signal-border: rgba(52, 211, 153, .18);
+  --agf-signal-glow: rgba(52, 211, 153, .75);
+}
+
 .agents-floating-root {
-  --agents-panel-border: rgba(129, 140, 248, .34);
   position: fixed;
   inset: 0;
   z-index: 80;
@@ -17,13 +107,13 @@
   gap: 11px;
   min-width: 196px;
   padding: 10px 13px 10px 10px;
-  color: #e0e7ff;
+  color: var(--agf-launcher-ink);
   background:
-    linear-gradient(120deg, rgba(30, 41, 59, .97), rgba(15, 23, 42, .98)) padding-box,
-    linear-gradient(120deg, #6366f1, #38bdf8) border-box;
+    linear-gradient(120deg, var(--agf-launcher-from), var(--agf-launcher-to)) padding-box,
+    linear-gradient(120deg, var(--agf-brand-from), var(--agf-brand-to)) border-box;
   border: 1px solid transparent;
   border-radius: 16px;
-  box-shadow: 0 18px 48px rgba(0, 0, 0, .46), 0 0 0 1px rgba(99, 102, 241, .08);
+  box-shadow: var(--agf-launcher-shadow);
   cursor: pointer;
   pointer-events: auto;
   transition: transform .18s ease, box-shadow .18s ease;
@@ -31,12 +121,12 @@
 
 .agents-floating-launcher:hover {
   transform: translateY(-2px);
-  box-shadow: 0 22px 56px rgba(0, 0, 0, .54), 0 0 28px rgba(99, 102, 241, .18);
+  box-shadow: var(--agf-launcher-shadow-hover);
 }
 
 .agents-floating-launcher:focus-visible,
 .agents-floating-actions button:focus-visible {
-  outline: 2px solid #818cf8;
+  outline: 2px solid var(--agf-accent);
   outline-offset: 3px;
 }
 
@@ -45,9 +135,9 @@
   place-items: center;
   width: 38px;
   height: 38px;
-  color: #a5b4fc;
-  background: rgba(99, 102, 241, .13);
-  border: 1px solid rgba(129, 140, 248, .3);
+  color: var(--agf-mark-ink);
+  background: var(--agf-mark-bg);
+  border: 1px solid var(--agf-mark-border);
   border-radius: 12px;
   flex: 0 0 auto;
 }
@@ -56,7 +146,7 @@
 .agents-floating-launcher-copy { display: flex; flex: 1; flex-direction: column; align-items: flex-start; line-height: 1.15; }
 .agents-floating-launcher-copy span,
 .agents-floating-heading span {
-  color: #64748b;
+  color: var(--agf-ink-muted);
   font: 600 9px/1.2 'JetBrains Mono', monospace;
   letter-spacing: .11em;
   text-transform: uppercase;
@@ -66,9 +156,9 @@
 .agents-floating-live {
   width: 7px;
   height: 7px;
-  background: #34d399;
+  background: var(--agf-live);
   border-radius: 50%;
-  box-shadow: 0 0 0 0 rgba(52, 211, 153, .46);
+  box-shadow: 0 0 0 0 var(--agf-live-ring);
   animation: agentsLive 2.2s ease-out infinite;
 }
 
@@ -81,11 +171,11 @@
   min-width: 390px;
   min-height: 360px;
   overflow: hidden;
-  color: #e2e8f0;
-  background: #020617;
-  border: 1px solid var(--agents-panel-border);
+  color: var(--agf-ink);
+  background: var(--agf-surface);
+  border: 1px solid var(--agf-panel-border);
   border-radius: 18px;
-  box-shadow: 0 30px 90px rgba(0, 0, 0, .72), 0 0 0 1px rgba(15, 23, 42, .9);
+  box-shadow: var(--agf-panel-shadow);
   pointer-events: auto;
   isolation: isolate;
   animation: agentsPanelIn .22s cubic-bezier(.2, .8, .2, 1) both;
@@ -100,9 +190,9 @@
   height: 54px;
   padding: 0 10px 0 13px;
   background:
-    linear-gradient(90deg, rgba(99, 102, 241, .13), transparent 38%),
-    #0b1120;
-  border-bottom: 1px solid #1e293b;
+    linear-gradient(90deg, var(--agf-bar-wash), transparent 38%),
+    var(--agf-bar);
+  border-bottom: 1px solid var(--agf-divider);
   cursor: grab;
   user-select: none;
   touch-action: none;
@@ -116,18 +206,18 @@
   gap: 3px;
   opacity: .55;
 }
-.agents-floating-grip i { width: 2px; height: 2px; background: #64748b; border-radius: 50%; }
+.agents-floating-grip i { width: 2px; height: 2px; background: var(--agf-ink-muted); border-radius: 50%; }
 
 .agents-floating-signal {
   display: grid;
   place-items: center;
   width: 22px;
   height: 22px;
-  background: rgba(52, 211, 153, .08);
-  border: 1px solid rgba(52, 211, 153, .18);
+  background: var(--agf-signal-bg);
+  border: 1px solid var(--agf-signal-border);
   border-radius: 7px;
 }
-.agents-floating-signal i { width: 6px; height: 6px; background: #34d399; border-radius: 50%; box-shadow: 0 0 10px rgba(52, 211, 153, .75); }
+.agents-floating-signal i { width: 6px; height: 6px; background: var(--agf-live); border-radius: 50%; box-shadow: 0 0 10px var(--agf-signal-glow); }
 
 .agents-floating-heading { display: flex; min-width: 0; flex: 1; flex-direction: column; line-height: 1.12; }
 .agents-floating-heading strong { margin-top: 3px; overflow: hidden; font-size: 13px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
@@ -138,18 +228,18 @@
   place-items: center;
   width: 32px;
   height: 32px;
-  color: #94a3b8;
+  color: var(--agf-btn-ink);
   background: transparent;
   border: 1px solid transparent;
   border-radius: 9px;
   cursor: pointer;
   transition: color .15s ease, background .15s ease, border-color .15s ease;
 }
-.agents-floating-actions button:hover { color: #e2e8f0; background: #172033; border-color: #28364e; }
+.agents-floating-actions button:hover { color: var(--agf-ink); background: var(--agf-btn-bg-hover); border-color: var(--agf-btn-border-hover); }
 .agents-floating-actions svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-width: 1.7; }
 
-.agents-floating-body { position: absolute; inset: 54px 0 0; background: #020617; }
-.agents-floating-body iframe { display: block; width: 100%; height: 100%; border: 0; background: #020617; }
+.agents-floating-body { position: absolute; inset: 54px 0 0; background: var(--agf-surface); }
+.agents-floating-body iframe { display: block; width: 100%; height: 100%; border: 0; background: var(--agf-surface); }
 
 .agents-floating-loading {
   position: absolute;
@@ -159,16 +249,16 @@
   place-content: center;
   justify-items: center;
   gap: 12px;
-  color: #64748b;
-  background: #020617;
+  color: var(--agf-ink-muted);
+  background: var(--agf-surface);
   font-size: 12px;
 }
 .agents-floating-loading[hidden] { display: none; }
 .agents-floating-loading span {
   width: 28px;
   height: 28px;
-  border: 2px solid #1e293b;
-  border-top-color: #818cf8;
+  border: 2px solid var(--agf-divider);
+  border-top-color: var(--agf-accent);
   border-radius: 50%;
   animation: agentsSpin .8s linear infinite;
 }
@@ -190,8 +280,8 @@
   bottom: 4px;
   width: 8px;
   height: 8px;
-  border-right: 1px solid #64748b;
-  border-bottom: 1px solid #64748b;
+  border-right: 1px solid var(--agf-ink-muted);
+  border-bottom: 1px solid var(--agf-ink-muted);
 }
 
 body.agents-float-interacting { user-select: none; }
@@ -202,6 +292,8 @@ body.agents-float-interacting iframe { pointer-events: none; }
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
 @keyframes agentsLive {
+  /* Fully transparent, so theme-independent — the ring fades out from
+     --agf-live-ring to nothing in both themes. */
   70%, 100% { box-shadow: 0 0 0 8px rgba(52, 211, 153, 0); }
 }
 @keyframes agentsSpin { to { transform: rotate(360deg); } }

@@ -18,11 +18,11 @@
       <h1 class="text-2xl font-extrabold tracking-tight mb-1">
         <span class="grad-text">{{ brand_name }}</span>
       </h1>
-      <p class="text-sm text-slate-400" data-i18n="login.subtitle">Sign in to personalize your stock dashboard</p>
+      <p class="text-sm text-slate-500 dark:text-slate-400" data-i18n="login.subtitle">Sign in to personalize your stock dashboard</p>
     </div>
 
     <!-- Sign-In Card -->
-    <div class="rounded-2xl border border-slate-800 bg-slate-900/50 p-6 shadow-sm fade-up">
+    <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white/50 dark:bg-slate-900/50 p-6 shadow-sm fade-up">
 
       {% if google_client_id %}
       <!-- Google Sign-In -->
@@ -43,16 +43,16 @@
       </div>
 
       <div class="relative my-5">
-        <div class="absolute inset-0 flex items-center"><div class="w-full border-t border-slate-700"></div></div>
+        <div class="absolute inset-0 flex items-center"><div class="w-full border-t border-slate-300 dark:border-slate-700"></div></div>
         <div class="relative flex justify-center text-xs">
-          <span class="bg-slate-900/50 px-3 text-slate-500" data-i18n="login.or">or</span>
+          <span class="bg-white/50 dark:bg-slate-900/50 px-3 text-slate-500" data-i18n="login.or">or</span>
         </div>
       </div>
       {% endif %}
 
       <!-- Continue as Guest -->
       <a href="{{ url_for('main.markets') }}"
-         class="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-xl border border-slate-700 text-sm font-medium text-slate-300 hover:border-brand hover:text-brand transition">
+         class="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 text-sm font-medium text-slate-600 dark:text-slate-300 hover:border-brand hover:text-brand transition">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
         </svg>
@@ -60,8 +60,8 @@
       </a>
 
       {% if not google_client_id %}
-      <div class="mt-4 p-3 rounded-xl bg-amber-900/20 border border-amber-700/50">
-        <p class="text-xs text-amber-300" data-i18n="login.not_configured">
+      <div class="mt-4 p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-300/50 dark:border-amber-700/50">
+        <p class="text-xs text-amber-700 dark:text-amber-300" data-i18n="login.not_configured">
           <strong>Google Sign-In not configured.</strong> Set <code class="text-[11px]">GOOGLE_CLIENT_ID</code> in your <code class="text-[11px]">.env</code> file to enable login.
         </p>
       </div>
@@ -71,17 +71,17 @@
     <!-- Features Preview -->
     <div class="mt-6 space-y-2 fade-up">
       <p class="text-center text-xs text-slate-500 uppercase tracking-wider font-medium mb-3" data-i18n="login.why_sign_in">Why sign in?</p>
-      <div class="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-slate-800/30">
+      <div class="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-slate-100/30 dark:bg-slate-800/30">
         <span class="text-lg">&#x1f4ca;</span>
-        <span class="text-xs text-slate-400" data-i18n="login.feature_watchlist">Save tickers to a personal watchlist</span>
+        <span class="text-xs text-slate-500 dark:text-slate-400" data-i18n="login.feature_watchlist">Save tickers to a personal watchlist</span>
       </div>
-      <div class="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-slate-800/30">
+      <div class="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-slate-100/30 dark:bg-slate-800/30">
         <span class="text-lg">&#x1f4e7;</span>
-        <span class="text-xs text-slate-400" data-i18n="login.feature_daily">Get the daily report delivered by email</span>
+        <span class="text-xs text-slate-500 dark:text-slate-400" data-i18n="login.feature_daily">Get the daily report delivered by email</span>
       </div>
-      <div class="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-slate-800/30">
+      <div class="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-slate-100/30 dark:bg-slate-800/30">
         <span class="text-lg">&#x1f514;</span>
-        <span class="text-xs text-slate-400" data-i18n="login.feature_alerts">Set price &amp; valuation alerts (coming soon)</span>
+        <span class="text-xs text-slate-500 dark:text-slate-400" data-i18n="login.feature_alerts">Set price &amp; valuation alerts (coming soon)</span>
       </div>
     </div>
 
