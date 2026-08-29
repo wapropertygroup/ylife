@@ -319,32 +319,6 @@ def emit(payload):
     sys.stdout.write("\n" + BEGIN + "\n" + json.dumps(payload) + "\n" + END + "\n")
     sys.stdout.flush()
 
-# Plumbing check that never touches an LLM, so the job lifecycle can be tested
-# without spending credits.
-if os.environ.get("YSTOCKER_AGENT_SELFTEST") == "1":
-    emit({"ok": True, "selftest": True, "ticker": ticker, "date": day,
-          "decision": "HOLD (selftest — no LLM call was made)",
-          "report": "## Self-test\n\nSubprocess, argument passing, result "
-                    "delimiting and JSON parsing all exercised.\n\n"
-                    "### Markdown coverage\n\n- **bold** and *italic* text\n"
-                    "- a ratio written as P/E < 20 & a stray > character\n"
-                    "- curly quotes \u201clike this\u201d and an em dash \u2014 here\n"
-                    "\n| col | value |\n| --- | --- |\n| a | 1 |\n"
-                    # A run only writes Chinese when its caller was reading the
-                    # page in Chinese, so the CJK font path in the PDF can go
-                    # untested for a long time. The free plumbing check
-                    # exercises it every time instead -- otherwise the only
-                    # thing catching a font regression is a run that costs
-                    # money.
-                    "\n### 中文渲染检查\n\n"
-                    "验证 PDF 中文字体（STSong-Light）与换行是否正常；"
-                    "中英文混排：NVDA 同比增长 94%。\n"
-                    "\n### Policy Analyst\n\n政策角色自检。\n"
-                    "\n### Hot Money Tracker\n\n游资角色自检。\n"
-                    "\n### Lock-up Monitor\n\n解禁角色自检。\n",
-          "selected_analysts": os.environ.get("YSTOCKER_SELECTED_ANALYSTS", "")})
-    raise SystemExit(0)
-
 try:
     from tradingagents.graph.trading_graph import TradingAgentsGraph
     from tradingagents.default_config import DEFAULT_CONFIG
@@ -812,6 +786,10 @@ def _reap(job: Optional[dict[str, Any]]) -> Optional[dict[str, Any]]:
                 _write(job)
             except Exception:
                 pass
+            # This is the path that matters most for the email: the supervising
+            # thread died, so nothing else will ever notice this run finished.
+            # background=True because _reap runs inside a request.
+            _email_report(job, background=True)
             return job
     except Exception:
         pass   # fall through to the liveness and clock checks
@@ -871,6 +849,7 @@ def _reap(job: Optional[dict[str, Any]]) -> Optional[dict[str, Any]]:
             _write(job)
         except Exception:
             pass
+        _email_report(job, background=True)
         return job
 
     job.update(status="error",
@@ -1035,8 +1014,8 @@ def portfolio_section(report: str) -> Optional[dict[str, Any]]:
     ``agent_roles.ROLES``.
 
     None is not an error and every caller must handle it: a run that has not
-    produced a report yet, a self-test whose fixture carries no role headings at
-    all, and a real report that stopped before the decision all reach it.
+    produced a report yet, a body that carries no role headings at all, and a
+    real report that stopped before the decision all reach it.
     """
     body = (report or "").strip()
     if not body:
@@ -1270,15 +1249,14 @@ def showcase_emails() -> set[str]:
 def _is_showcase(job: Optional[dict[str, Any]]) -> bool:
     """Whether this run may appear in the public sample.
 
-    Finished, non-empty and not a self-test: a queued or errored run says nothing
-    about what the agents produce, and a self-test makes no LLM call, so its
-    "report" is a fixture rather than analysis. Ownership is deliberately *not*
-    checked — that is the point of the sample — so every caller must go through
-    ``_publishable`` rather than hand a raw record out.
+    Finished and non-empty: a queued or errored run says nothing about what the
+    agents produce. Ownership is deliberately *not* checked — that is the point
+    of the sample — so every caller must go through ``_publishable`` rather than
+    hand a raw record out.
     """
     if not job or not showcase_enabled():
         return False
-    if job.get("status") != "done" or job.get("selftest"):
+    if job.get("status") != "done":
         return False
     if not (job.get("report") or "").strip():
         return False
@@ -1391,6 +1369,10 @@ def _prune() -> None:
             stem = p.with_suffix("")
             stem.with_suffix(".result.json").unlink(missing_ok=True)
             stem.with_suffix(".events.jsonl").unlink(missing_ok=True)
+            # The send-once marker for the report email. Safe to drop with the
+            # record: notify() needs a job whose status is done, and the record
+            # it would have to read is what this loop just deleted.
+            stem.with_suffix(".emailed").unlink(missing_ok=True)
     except Exception as exc:
         log.debug("agents: prune failed: %s", exc)
 
@@ -1399,7 +1381,7 @@ def _prune() -> None:
 # Running
 # ---------------------------------------------------------------------------
 
-def submit(ticker: str, day: str, user: str, selftest: bool = False,
+def submit(ticker: str, day: str, user: str,
            lang: str = "", paid: bool = False) -> tuple[Optional[str], Optional[str]]:
     """Validate and queue a run. Returns (job_id, error).
 
@@ -1427,7 +1409,6 @@ def submit(ticker: str, day: str, user: str, selftest: bool = False,
         "ticker": ticker,
         "date": day,
         "user": user,
-        "selftest": bool(selftest),
         # Frozen at submit time, not read at run time: the reader may toggle the
         # page to the other language while this sits in the queue, and a report
         # half-written in each would be worse than either.
@@ -1455,8 +1436,8 @@ def submit(ticker: str, day: str, user: str, selftest: bool = False,
 
     threading.Thread(target=_run, args=(job_id,), daemon=True,
                      name=f"agent-{job_id}").start()
-    log.info("agents: queued %s %s@%s (selftest=%s, language=%s) for %s",
-             job_id, ticker, day, selftest, language, user)
+    log.info("agents: queued %s %s@%s (language=%s) for %s",
+             job_id, ticker, day, language, user)
     return job_id, None
 
 
@@ -1593,8 +1574,6 @@ def _try_salvage(job: dict[str, Any], why: str) -> bool:
     the report is usable, but whatever broke still needs diagnosing, and a job
     that silently reports success would hide it.
     """
-    if job.get("selftest"):
-        return False
     try:
         recovered, decision = salvage_from_events(job["id"])
     except Exception as exc:  # noqa: BLE001
@@ -1620,7 +1599,7 @@ def _refund_preflight(job: dict[str, Any], why: str) -> None:
     so it is not refunded -- silently handing quota back for those would let a
     run that burns credits and then dies be repeated for free.
     """
-    if job.get("selftest") or job.get("quota_refunded"):
+    if job.get("quota_refunded"):
         return          # never charged
     try:
         from ystocker import quota
@@ -1661,8 +1640,6 @@ def _run(job_id: str) -> None:
         env["YSTOCKER_SELECTED_ANALYSTS"] = ",".join(
             analysts_for_ticker(job.get("ticker") or "")
         )
-        if job.get("selftest"):
-            env["YSTOCKER_AGENT_SELFTEST"] = "1"
 
         result_path = str(_result_path(job_id))
         cmd = [_interpreter(), "-c", _RUNNER, job["ticker"], job["date"],
@@ -1772,6 +1749,30 @@ def _run(job_id: str) -> None:
                  job_id, job.get("status"), rc, elapsed)
     finally:
         _slot.release()
+
+    # Mail the report, if it produced one. Deliberately *after* the slot is
+    # released: SES can take seconds, and the single run slot is what a queued
+    # run is blocked on -- holding it for a notification would delay somebody
+    # else's analysis. Sent inline rather than on another thread because this is
+    # already a background thread with nothing left to do.
+    _email_report(job)
+
+
+def _email_report(job: Optional[dict[str, Any]], background: bool = False) -> None:
+    """Hand a finished job to the report mailer, tolerating its absence.
+
+    Wrapped so that neither an import problem nor a bug in the renderer can
+    reach the bookkeeping around it: by the time this is called the report is
+    already durable, and losing the notification is a far smaller failure than
+    losing the record of a run that cost twenty Pro calls.
+    """
+    try:
+        from ystocker import report_email
+
+        report_email.notify(job, background=background)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("agents: report email failed for %s: %s",
+                    (job or {}).get("id"), exc)
 
 
 # Third-party chatter that appears on every run and means nothing to whoever is

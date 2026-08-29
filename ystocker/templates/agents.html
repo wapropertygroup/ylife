@@ -958,8 +958,8 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
     const box = document.getElementById('agDeepMissing');
     if (!box) return;
     // 404 is the only expected answer: the showcase route returns it for an id
-    // that does not exist, for a run that is not finished, and for a self-test
-    // alike, precisely so it cannot be used to probe which ids are real.
+    // that does not exist and for a run that is not finished alike, precisely so
+    // it cannot be used to probe which ids are real.
     box.textContent = status === 404
       ? (I18n.t('agents.deep_missing') || 'That report is not available. It may still be running, or the link may be wrong.')
       : (I18n.t('agents.deep_failed') || 'Could not load that report.') + ' (HTTP ' + status + ')';
@@ -1117,8 +1117,6 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
     </div>
     <div class="ag-form-actions">
       <button id="agRun" class="ag-btn" data-i18n="agents.run">▶ Run analysis</button>
-      {# A free path to prove the plumbing works end to end without an LLM bill. #}
-      <button id="agSelftest" class="ag-btn ag-btn-ghost" data-i18n="agents.selftest">Self-test (no LLM)</button>
     </div>
     {% if quota %}
     <div class="ag-form-quota">
@@ -1316,7 +1314,6 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
   const runBtn = document.getElementById('agRun');
   if (!runBtn) return;   // not signed in / not allowed — nothing to wire
 
-  const selfBtn = document.getElementById('agSelftest');
   const tickerEl = document.getElementById('agTicker');
   const dateEl = document.getElementById('agDate');
   const errEl = document.getElementById('agError');
@@ -1337,8 +1334,8 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
   // read from a response, because the buy prompt can appear before any API call.
   const AG_USER = {{ (user_email or '') | tojson }};
 
-  // Poll interval grows 5s -> 30s. Short at first so a self-test (which
-  // finishes in under a second) still feels immediate.
+  // Poll interval grows 5s -> 30s. Short at first so a run that fails fast
+  // still reports back promptly instead of sitting on a long delay.
   const POLL_MIN = 5000, POLL_MAX = 30000;
   const schedulePoll = (id, delay) => {
     poll = setTimeout(async () => {
@@ -1399,7 +1396,7 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
 
   function render(job) {
     card.classList.remove('hidden');
-    titleEl.textContent = `${job.ticker} · ${job.date}` + (job.selftest ? '  (self-test)' : '');
+    titleEl.textContent = `${job.ticker} · ${job.date}`;
     setStatus(job.status);
     elapsedEl.textContent = job.elapsed_sec ? `${job.elapsed_sec}s` : '';
     const whenEl = document.getElementById('agWhen');
@@ -1476,7 +1473,7 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
     // Running jobs disable the buttons: the server allows one at a time anyway,
     // so letting a second be queued from here would just confuse.
     const busy = job.status === 'queued' || job.status === 'running';
-    runBtn.disabled = busy; selfBtn.disabled = busy;
+    runBtn.disabled = busy;
     return busy;
   }
 
@@ -2001,13 +1998,13 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
     }
   }
 
-  async function start(selftest) {
+  async function start() {
     clearErr();
-    runBtn.disabled = true; selfBtn.disabled = true;
+    runBtn.disabled = true;
     try {
       const r = await fetch('/api/agents/run', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ticker: tickerEl.value, date: dateEl.value, selftest: !!selftest,
+        body: JSON.stringify({ ticker: tickerEl.value, date: dateEl.value,
                                // Write the report in the language the page is
                                // being read in.
                                lang: I18n.getLang() }),
@@ -2019,7 +2016,7 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
         // The API says whether a top-up is on offer. It deliberately is not for
         // the site-wide cap, which no amount of money can lift today.
         if (d.buy) paintBuy(d.buy);
-        runBtn.disabled = false; selfBtn.disabled = false;
+        runBtn.disabled = false;
         return;
       }
       if (d.quota) paintQuota(d.quota);
@@ -2037,7 +2034,7 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
       await pollJob(d.job_id);
       schedulePoll(d.job_id, POLL_MIN);
     } catch (e) {
-      showErr(e.message); runBtn.disabled = false; selfBtn.disabled = false;
+      showErr(e.message); runBtn.disabled = false;
     }
   }
 
@@ -2310,7 +2307,6 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
             + (mine ? '' : `<span class="ag-owner" title="Ran by another user">${esc(j.user)}</span>`)
             + (j.decision ? `<span class="text-slate-400">${esc(decPlain(j.decision))}</span>` : '')
             + (when ? `<span class="text-slate-600" title="${esc(YSTime.full(j.finished_at || j.started_at || j.created_at))}">${when}</span>` : '')
-            + (j.selftest ? '<span class="text-slate-600">self-test</span>' : '')
             + (j.elapsed_sec ? `<span class="text-slate-600">${j.elapsed_sec}s</span>` : '');
           const actions = document.createElement('div');
           actions.className = 'ag-row ag-row-actions';
@@ -2382,9 +2378,9 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
                 pmBox.appendChild(more);
               }
             } else {
-              // A report with no decision section: a self-test fixture, or a run
-              // that stopped before the Portfolio Manager spoke. The row stays,
-              // because the analyst sections are still readable via View.
+              // A report with no decision section: a run that stopped before
+              // the Portfolio Manager spoke. The row stays, because the analyst
+              // sections are still readable via View.
               const note = document.createElement('div');
               note.className = 'ag-hist-pm-note';
               note.textContent = I18n.t('agents.pm_none')
@@ -2806,12 +2802,11 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
     syncCollapseBtn();
   })();
 
-  runBtn.addEventListener('click', () => start(false));
-  selfBtn.addEventListener('click', () => start(true));
+  runBtn.addEventListener('click', () => start());
   document.getElementById('agHide').addEventListener('click', () => {
     card.classList.add('hidden');
     if (poll) { clearTimeout(poll); poll = null; }
-    runBtn.disabled = false; selfBtn.disabled = false;
+    runBtn.disabled = false;
   });
   loadHistory();
 

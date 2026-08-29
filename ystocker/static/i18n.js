@@ -1269,7 +1269,6 @@ const I18n = (() => {
     'agents.ticker':       { en: 'Ticker',        zh: '股票代码' },
     'agents.date':         { en: 'Analysis date', zh: '分析日期' },
     'agents.run':          { en: '▶ Run analysis', zh: '▶ 运行分析' },
-    'agents.selftest':     { en: 'Self-test (no LLM)', zh: '自检(不调用大模型)' },
     'agents.cost_warning': { en: 'A real run takes several minutes and spends API credits. One run executes at a time; others queue.',
                              zh: '真实运行需要数分钟并消耗 API 费用。同一时间仅运行一个任务,其余排队。' },
     'agents.timeout_is':   { en: 'Timeout',       zh: '超时时间' },

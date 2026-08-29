@@ -2657,52 +2657,45 @@ def api_agents_run():
 
     body = request.get_json(force=True, silent=True) or {}
     email = _agent_user() or ""
-    selftest = bool(body.get("selftest"))
 
     # Validate before charging quota, so a typo'd ticker does not cost a run.
-    # Self-tests make no LLM call, so they are free and deliberately unmetered.
-    charged = False
-    paid_run = False
-    if not selftest:
-        ok, reason, info = quota.try_consume(email)
-        if not ok:
-            from ystocker import credits
+    ok, reason, info = quota.try_consume(email)
+    if not ok:
+        from ystocker import credits
 
-            if reason == "global":
-                # Not offered a top-up: this ceiling is about what the box and
-                # the upstream model quota can deliver today, so selling a credit
-                # would be selling capacity that does not exist.
-                msg = ("The site-wide daily limit for agent runs has been "
-                       "reached. This protects the shared API budget — please "
-                       "try again tomorrow.")
-                buy = None
-            else:
-                msg = (f"You have used your {info['limit']} free runs for today "
-                       f"(resets at midnight, {info['tz']}). "
-                       f"Buy more runs to keep going.")
-                buy = {"url": credits.PAY_URL, "packs": credits.packs_public()}
-            log.info("agents: quota denied (%s) for %s: %s", reason, email, info)
-            payload = {"error": msg, "reason": "quota", "quota": info}
-            if buy:
-                payload["buy"] = buy
-            return jsonify(payload), 429
-        charged = True
-        paid_run = bool(info.get("paid"))
+        if reason == "global":
+            # Not offered a top-up: this ceiling is about what the box and
+            # the upstream model quota can deliver today, so selling a credit
+            # would be selling capacity that does not exist.
+            msg = ("The site-wide daily limit for agent runs has been "
+                   "reached. This protects the shared API budget — please "
+                   "try again tomorrow.")
+            buy = None
+        else:
+            msg = (f"You have used your {info['limit']} free runs for today "
+                   f"(resets at midnight, {info['tz']}). "
+                   f"Buy more runs to keep going.")
+            buy = {"url": credits.PAY_URL, "packs": credits.packs_public()}
+        log.info("agents: quota denied (%s) for %s: %s", reason, email, info)
+        payload = {"error": msg, "reason": "quota", "quota": info}
+        if buy:
+            payload["buy"] = buy
+        return jsonify(payload), 429
+    paid_run = bool(info.get("paid"))
 
     job_id, err = submit(
         ticker=body.get("ticker", ""),
         day=body.get("date", ""),
         user=email,
-        selftest=selftest,
         # The report is written in the language the page is being read in. A
         # caller that sends nothing gets English, as everywhere else here.
         lang="zh" if body.get("lang") == "zh" else "en",
         paid=paid_run,
     )
     if err:
-        # Rejected before anything was spent, so hand the run back.
-        if charged:
-            quota.refund(email, paid=paid_run)
+        # Rejected before anything was spent, so hand the run back. Every run
+        # reaching here was charged: the un-metered path returned above.
+        quota.refund(email, paid=paid_run)
         return jsonify({"error": err, "quota": quota.usage(email)}), 400
     return jsonify({"job_id": job_id, "status": "queued",
                     "quota": quota.usage(email)}), 202
@@ -2897,10 +2890,10 @@ def api_agents_search():
 
     A call with ``q`` set is a search result, and each hit carries a ``portfolio``
     object -- the Portfolio Manager's turn (投资组合经理), body and role metadata --
-    or null where the report has no such section, which a self-test fixture and a
-    run that died before the decision both produce. Without ``q`` this is the
-    recent-runs index and the key is absent entirely, which is a distinct case
-    from null.
+    or null where the report has no such section, which a body carrying no role
+    headings and a run that died before the decision both produce. Without ``q``
+    this is the recent-runs index and the key is absent entirely, which is a
+    distinct case from null.
 
     A search by ``q`` also drops runs with no report at all, counting them in
     ``skipped_empty``. The index and an explicit ``status`` still show them, so a

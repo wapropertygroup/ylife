@@ -846,7 +846,7 @@ class _Layout:
         """Caveats that travel with the artefact.
 
         The PDF is the thing that gets saved and forwarded, so a downgraded or
-        self-test run has to disclose itself on the document, not only in the
+        recovered run has to disclose itself on the document, not only in the
         web UI.
         """
         label = "运行提示" if self.cjk else "PLEASE NOTE"
@@ -1442,10 +1442,6 @@ def _job_facts(job: dict[str, Any], day: str, cjk: bool,
 def _job_advisories(job: dict[str, Any], cjk: bool) -> list[str]:
     """Caveats that have to appear on the document itself."""
     out = []
-    if job.get("selftest"):
-        out.append("自检运行，未调用大模型，内容仅用于验证渲染。" if cjk else
-                   "Self-test run: no LLM was called, so the content only "
-                   "exercises the renderer.")
     if job.get("recovered"):
         out.append("本报告由实时流恢复：运行中断，最终汇总可能缺失。" if cjk else
                    "Recovered from the live stream: the run was interrupted, so "

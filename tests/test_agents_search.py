@@ -44,14 +44,15 @@ FINAL TRANSACTION PROPOSAL: **BUY**
 2% of book, stop at 168.
 """
 
-# What a self-test writes: a body with no role headings anywhere in it.
-FIXTURE = "## Self-test\n\nSubprocess and JSON parsing exercised.\n"
+# A report body with no role headings anywhere in it — a run that died before
+# any analyst spoke, or output the parser could not attribute.
+FIXTURE = "## Notice\n\nNo analyst section was produced.\n"
 
 
 class PortfolioSectionTests(unittest.TestCase):
     def test_absent_for_no_report_and_for_a_roleless_fixture(self):
         # All three are ordinary states, not errors: nothing has run yet, and a
-        # self-test makes no LLM call so its report names no speaker.
+        # body with no role headings names no speaker.
         self.assertIsNone(agents.portfolio_section(""))
         self.assertIsNone(agents.portfolio_section(None))
         self.assertIsNone(agents.portfolio_section(FIXTURE))
@@ -90,7 +91,7 @@ class SearchSkipTests(unittest.TestCase):
             _job("a", "NVDA", "done", REPORT),
             _job("b", "NVDA", "error"),                 # failed: no report
             _job("c", "NVDA", "queued"),                # not started: no report
-            _job("d", "NVDA", "done", FIXTURE, selftest=True),
+            _job("d", "NVDA", "done", FIXTURE),
             _job("e", "AMD", "done", REPORT),
         ]
         real = agents._records
@@ -109,8 +110,8 @@ class SearchSkipTests(unittest.TestCase):
 
     def test_require_report_drops_only_the_unreadable_rows(self):
         res = self.search("NVDA", require_report=True)
-        # The errored and queued runs go; the self-test stays, because it has a
-        # body a reader can open even though no role speaks in it.
+        # The errored and queued runs go; the roleless body stays, because it has
+        # a body a reader can open even though no role speaks in it.
         self.assertEqual([j["id"] for j in res["jobs"]], ["a", "d"])
         self.assertEqual(res["skipped_empty"], 2)
 
