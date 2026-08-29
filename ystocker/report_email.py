@@ -531,9 +531,8 @@ def _minutes(job: dict[str, Any], lang: str) -> str:
     except (TypeError, ValueError):
         return ""
     if secs < 90:
-        return f"{secs:.0f}s" if lang == "en" else f"{secs:.0f} 秒"
-    mins = secs / 60.0
-    return f"{mins:.0f} min" if lang == "en" else f"{mins:.0f} 分钟"
+        return _t(lang, "secs").format(n=f"{secs:.0f}")
+    return _t(lang, "mins").format(n=f"{secs / 60.0:.0f}")
 
 
 def _decision_chip(job: dict[str, Any], lang: str) -> str:
@@ -716,7 +715,7 @@ def build(job: dict[str, Any], link_base: str = "") -> Optional[tuple[str, str, 
 
     lang = _lang_of(job)
     ticker = _plain(job.get("ticker") or "?", 12)
-    day = _plain(job.get("date") or "", 20)
+    day = _fmt_day(_plain(job.get("date") or "", 20), lang)
     link = f"{(link_base or base_url()).rstrip('/')}/agents?job={job.get('id')}"
 
     # The verdict's first line only. A decision can run to a paragraph, and
@@ -753,7 +752,8 @@ def build(job: dict[str, Any], link_base: str = "") -> Optional[tuple[str, str, 
             f'{_esc(_t(lang, "decision"))}</div>{chip}</td></tr>')
 
     html = f"""<!DOCTYPE html>
-<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<html lang="{_esc(_t(lang, 'html_lang'))}"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{_esc(subject)}</title></head>
 <body style="margin:0;padding:0;background:{_BG};font-family:{_SANS}">
   <table width="100%" cellpadding="0" cellspacing="0" style="background:{_BG};padding:28px 12px">

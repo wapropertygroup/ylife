@@ -69,6 +69,12 @@ FORBIDDEN = ("<script", "<iframe", "<style", "<svg", "<object", "<embed",
 
 _ESCAPED = re.compile(r"&lt;.*?&gt;", re.S)
 
+# The clip notice is the only dashed-border element in the mail. Identified by
+# that rather than by its prose, which is localised and gets reworded — two
+# earlier tests here asserted on copy and broke the moment it was aligned with
+# i18n.js.
+CLIP_MARKER = "border:1px dashed"
+
 
 def assert_inert(case: unittest.TestCase, html: str, label: str = "") -> None:
     live = _ESCAPED.sub("", html).lower()
@@ -263,7 +269,11 @@ class BuildTests(unittest.TestCase):
         subject, _, _ = mail.build(make_job())
         self.assertIn("NVDA", subject)
         self.assertIn("BUY", subject)
-        self.assertIn("2026-08-29", subject)
+        # Long form, not ISO, matching the daily broadcast's subject convention
+        # in routes._build_daily_email_cache.
+        self.assertIn("August 29, 2026", subject)
+        zh_subject, _, _ = mail.build(make_job(lang="zh"))
+        self.assertIn("2026年8月29日", zh_subject)
 
     def test_chinese_report_gets_chinese_chrome(self):
         subject, html, _ = mail.build(make_job(lang="zh"))
@@ -322,8 +332,106 @@ class BuildTests(unittest.TestCase):
         assert_inert(self, html)
 
 
-# ── The Gmail clip budget ───────────────────────────────────────────────────
+# ── Localisation ────────────────────────────────────────────────────────────
 
+class LocalisationTests(unittest.TestCase):
+    """The email is written in the language the *report* was written in.
+
+    That language is frozen at submit time (agents.submit stores `language`/
+    `lang`), so it is the reader's own choice from the moment they queued the run
+    — and pairing a Chinese report with English chrome would be worse than
+    either. _t() falls back to English for a missing key, which is the right
+    thing at runtime and exactly why a missing translation needs a test: it would
+    otherwise ship silently.
+    """
+
+    def test_no_string_is_missing_a_translation(self):
+        en = set(mail._STR["en"])
+        for code, table in mail._STR.items():
+            self.assertEqual(en, set(table), f"{code} key set differs from en")
+            for key, value in table.items():
+                self.assertTrue(str(value).strip(), f"{code}.{key} is empty")
+
+    def test_translations_are_actually_translated(self):
+        # Guards the copy-paste failure: a zh entry left as its English text.
+        same = [k for k, v in mail._STR["zh"].items()
+                if v == mail._STR["en"][k] and k not in ("html_lang",)]
+        self.assertEqual(same, [], f"untranslated zh keys: {same}")
+
+    def test_format_placeholders_match_across_languages(self):
+        # A zh string missing {models} or {mins} renders a sentence with a hole
+        # in it, and .format() silently accepts the extra keyword.
+        holes = re.compile(r"\{(\w+)\}")
+        for key, en_value in mail._STR["en"].items():
+            for code, table in mail._STR.items():
+                self.assertEqual(
+                    sorted(holes.findall(en_value)),
+                    sorted(holes.findall(table[key])),
+                    f"{code}.{key} placeholders differ from en")
+
+    def test_unknown_language_code_falls_back_to_english(self):
+        for code in ("fr", "", None, "EN", "zh-TW"):
+            _, html, _ = mail.build(make_job(lang=code))
+            self.assertIn("AI research report", html, repr(code))
+
+    def test_zh_is_selected_by_the_report_language(self):
+        _, html, _ = mail.build(make_job(lang="zh"))
+        self.assertIn("AI 研究报告", html)
+        self.assertNotIn("AI research report", html)
+
+    def test_html_lang_attribute_is_set(self):
+        self.assertIn('<html lang="en"', mail.build(make_job())[1])
+        self.assertIn('<html lang="zh-CN"', mail.build(make_job(lang="zh"))[1])
+
+    def test_dates_are_written_the_local_way(self):
+        _, en_html, _ = mail.build(make_job(date="2026-08-29"))
+        self.assertIn("August 29, 2026", en_html)
+        _, zh_html, _ = mail.build(make_job(date="2026-08-29", lang="zh"))
+        self.assertIn("2026年8月29日", zh_html)
+
+    def test_malformed_dates_degrade_to_the_stored_string(self):
+        for bad in ("", "not-a-date", "2026-13-01", "2026-08", "20260829"):
+            built = mail.build(make_job(date=bad))
+            self.assertIsNotNone(built, repr(bad))
+
+    def test_elapsed_time_is_localised(self):
+        self.assertIn("31 min", mail.build(make_job(elapsed_sec=1834))[1])
+        self.assertIn("31 分钟", mail.build(make_job(elapsed_sec=1834, lang="zh"))[1])
+        self.assertIn("45s", mail.build(make_job(elapsed_sec=45))[1])
+        self.assertIn("45 秒", mail.build(make_job(elapsed_sec=45, lang="zh"))[1])
+
+    def test_missing_elapsed_omits_the_clause(self):
+        for value in (None, "", "abc"):
+            _, html, _ = mail.build(make_job(elapsed_sec=value))
+            self.assertNotIn("Completed in", html)
+
+    def test_role_names_and_team_dividers_are_localised(self):
+        _, html, _ = mail.build(make_job(lang="zh"))
+        self.assertIn("市场分析师", html)          # role, from agent_roles.ROLES
+        self.assertIn("投资组合经理", html)
+        self.assertIn("分析师团队报告", html)      # team divider, team_label_zh
+        self.assertNotIn("Market Analyst", html)
+
+    def test_advisories_are_localised(self):
+        job = make_job(lang="zh", degraded=True, fallback_models=["gemini-2.5-flash"])
+        _, html, _ = mail.build(job)
+        self.assertIn("已用完当日额度", html)
+        self.assertIn("gemini-2.5-flash", html)
+        _, html2, _ = mail.build(make_job(lang="zh", recovered=True))
+        self.assertIn("由实时流恢复", html2)
+
+    def test_clip_notice_is_localised(self):
+        _, html, _ = mail.build(make_job(lang="zh", report=build_report(8)))
+        self.assertIn("邮件仅显示到此处", html)
+
+    def test_text_alternative_is_localised_too(self):
+        _, _, text = mail.build(make_job(lang="zh"))
+        self.assertIn("AI 研究报告", text)
+        self.assertIn("决策", text)
+        self.assertIn("打开完整报告", text)
+
+
+# ── The Gmail clip budget ───────────────────────────────────────────────────
 class BudgetTests(unittest.TestCase):
     def _roles_in(self, html: str) -> list[str]:
         return re.findall(r">([A-Za-z][A-Za-z \-]+?)</span></div>", html)
@@ -331,7 +439,7 @@ class BudgetTests(unittest.TestCase):
     def test_small_report_arrives_whole(self):
         _, html, _ = mail.build(make_job(report=build_report(1)))
         self.assertLess(len(html), mail._HTML_BUDGET)
-        self.assertNotIn("remaining sections", html)
+        self.assertNotIn(CLIP_MARKER, html)
         self.assertIn("Market Analyst", html)
         self.assertIn("Portfolio Manager", html)
 
@@ -343,7 +451,7 @@ class BudgetTests(unittest.TestCase):
 
     def test_clip_is_announced_with_a_link(self):
         _, html, _ = mail.build(make_job(report=build_report(8)))
-        self.assertIn("remaining sections", html)
+        self.assertIn(CLIP_MARKER, html)
         self.assertIn("/agents?job=", html)
 
     def test_decision_survives_any_clip(self):
