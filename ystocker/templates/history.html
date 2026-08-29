@@ -4,26 +4,54 @@
 {% block content %}
 <script src="{{ url_for('static', filename='markdown.js') }}?v={{ cache_bust or 'dev' }}"></script>
 <style>
+  /* ── Theme tokens ────────────────────────────────────────────────────────
+     Hand-written CSS, so Tailwind's `dark:` variant reaches none of it. The
+     shared `--t-*` vocabulary in base.html covers all but two roles on this
+     page; those two are declared here, --hi- prefixed, light-first with `.dark`
+     overriding, exactly as base.html does.
+
+     Roles, not values: the pale indigo (#a5b4fc) is TEXT everywhere it appears
+     here — an active range, a hovered ✦ Explain, a Markdown h3, inline `code` —
+     so it resolves through --t-accent-ink and darkens on white. The 4-15%
+     indigo tints it sits on are FILLS and stay literal: a tint of the brand hue
+     reads as a tint over the white card and the near-black one alike. */
+  :root {
+    /* One step off the card plane: a hovered ghost control, and the fill behind
+       inline `code`. --t-surface-alt is the right role, but its dark value
+       (#131c2e) is a fainter step than this page has always had. */
+    --hi-fill: #f1f5f9;
+    /* The dimmest interactive grey: the expand-chart icon (an SVG on
+       `currentColor`) and the research input's placeholder. Slate-600 in the
+       dark, one step below --t-ink-dim; on white the ramp floors at slate-500
+       (4.76:1), so it converges with --t-ink-dim there rather than take a value
+       too pale to read. */
+    --hi-ink-dim: #64748b;
+  }
+  .dark {
+    --hi-fill: #1e293b;
+    --hi-ink-dim: #475569;
+  }
   .range-btn {
     font-size: 11px;
     font-weight: 500;
     line-height: 1;
     padding: 3px 7px;
     border-radius: 5px;
-    border: 1px solid #334155;
+    border: 1px solid var(--t-line-strong);
     background: transparent;
-    color: #64748b;
+    color: var(--t-ink-dim);
     cursor: pointer;
     transition: color 0.15s, background 0.15s, border-color 0.15s;
   }
   .range-btn:hover {
-    color: #cbd5e1;
-    border-color: #475569;
-    background: #1e293b;
+    color: var(--t-ink);
+    border-color: var(--t-line-hover);
+    background: var(--hi-fill);
   }
+  /* 15% indigo tints white and slate alike, so the active fill stays literal. */
   .range-btn.active {
-    color: #a5b4fc;
-    border-color: #6366f1;
+    color: var(--t-accent-ink);
+    border-color: var(--t-accent);
     background: rgba(99,102,241,0.15);
   }
   .expand-btn {
@@ -33,11 +61,11 @@
     padding: 3px;
     border: none;
     background: transparent;
-    color: #475569;
+    color: var(--hi-ink-dim);
     cursor: pointer;
     transition: color 0.15s;
   }
-  .expand-btn:hover { color: #cbd5e1; }
+  .expand-btn:hover { color: var(--t-ink); }
   .explain-btn {
     display: inline-flex;
     align-items: center;
@@ -46,15 +74,15 @@
     font-weight: 500;
     padding: 3px 9px;
     border-radius: 5px;
-    border: 1px solid #334155;
+    border: 1px solid var(--t-line-strong);
     background: transparent;
-    color: #64748b;
+    color: var(--t-ink-dim);
     cursor: pointer;
     transition: color 0.15s, border-color 0.15s, background 0.15s;
   }
   .explain-btn:hover {
-    color: #a5b4fc;
-    border-color: #6366f1;
+    color: var(--t-accent-ink);
+    border-color: var(--t-accent);
     background: rgba(99,102,241,0.10);
   }
   .explain-btn.loading {
@@ -65,9 +93,9 @@
     margin-top: 14px;
     padding: 12px 14px;
     border-radius: 10px;
-    border: 1px solid #1e293b;
+    border: 1px solid var(--t-line);
     background: rgba(99,102,241,0.04);
-    color: #94a3b8;
+    color: var(--t-ink-muted);
     font-size: 13px;
     line-height: 1.65;
     white-space: pre-wrap;
@@ -75,17 +103,17 @@
   }
   .forecast-model-btn {
     font-size: 10px; padding: 2px 8px; border-radius: 4px;
-    border: 1px solid #334155; background: transparent; color: #64748b; cursor: pointer;
+    border: 1px solid var(--t-line-strong); background: transparent; color: var(--t-ink-dim); cursor: pointer;
     transition: all 0.15s;
   }
-  .forecast-model-btn:hover { color: #cbd5e1; border-color: #475569; }
-  .forecast-model-btn.active { color: #a5b4fc; border-color: #6366f1; background: rgba(99,102,241,0.15); }
+  .forecast-model-btn:hover { color: var(--t-ink); border-color: var(--t-line-hover); }
+  .forecast-model-btn.active { color: var(--t-accent-ink); border-color: var(--t-accent); background: rgba(99,102,241,0.15); }
   .section-nav-btn {
     font-size: 10px; padding: 3px 10px; border-radius: 20px;
-    border: 1px solid #334155; background: transparent; color: #64748b; cursor: pointer;
+    border: 1px solid var(--t-line-strong); background: transparent; color: var(--t-ink-dim); cursor: pointer;
     transition: all 0.15s; flex-shrink: 0;
   }
-  .section-nav-btn:hover { color: #cbd5e1; border-color: #475569; background: #1e293b; }
+  .section-nav-btn:hover { color: var(--t-ink); border-color: var(--t-line-hover); background: var(--hi-fill); }
   .scrollbar-hide::-webkit-scrollbar { display: none; }
   .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
 
@@ -95,54 +123,57 @@
     font-size: 12px;
     padding: 6px 8px;
     border-radius: 6px;
-    border: 1px solid #334155;
-    background: #0f172a;
-    color: #e2e8f0;
+    border: 1px solid var(--t-line-strong);
+    /* The input sits *on* the card and takes the card's own plane in both
+       themes — in dark that is the slate-900 it always was, so on white it is
+       white, held apart by its border exactly as before. */
+    background: var(--t-surface);
+    color: var(--t-ink-strong);
     outline: none;
     transition: border-color 0.15s;
   }
-  .research-input:focus { border-color: #6366f1; }
-  .research-input::placeholder { color: #475569; }
+  .research-input:focus { border-color: var(--t-accent); }
+  .research-input::placeholder { color: var(--hi-ink-dim); }
   /* Rendered markdown report */
   .md-body {
     font-size: 13.5px;
     line-height: 1.75;
-    color: #cbd5e1;
+    color: var(--t-ink);
     padding: 18px 20px;
     border-radius: 12px;
-    border: 1px solid #1e293b;
+    border: 1px solid var(--t-line);
     background: rgba(99,102,241,0.04);
     overflow-wrap: break-word;
   }
   .md-body h1, .md-body h2 {
-    font-size: 15px; font-weight: 700; color: #e2e8f0;
-    margin: 22px 0 8px; padding-bottom: 6px; border-bottom: 1px solid #1e293b;
+    font-size: 15px; font-weight: 700; color: var(--t-ink-strong);
+    margin: 22px 0 8px; padding-bottom: 6px; border-bottom: 1px solid var(--t-line);
   }
   .md-body h1:first-child, .md-body h2:first-child { margin-top: 0; }
-  .md-body h3 { font-size: 13.5px; font-weight: 600; color: #a5b4fc; margin: 16px 0 6px; }
-  .md-body h4 { font-size: 13px; font-weight: 600; color: #94a3b8; margin: 12px 0 4px; }
+  .md-body h3 { font-size: 13.5px; font-weight: 600; color: var(--t-accent-ink); margin: 16px 0 6px; }
+  .md-body h4 { font-size: 13px; font-weight: 600; color: var(--t-ink-muted); margin: 12px 0 4px; }
   .md-body p  { margin: 8px 0; }
   .md-body ul, .md-body ol { margin: 8px 0 8px 20px; }
   .md-body li { margin: 3px 0; }
-  .md-body strong { color: #e2e8f0; font-weight: 600; }
+  .md-body strong { color: var(--t-ink-strong); font-weight: 600; }
   .md-body code {
     font-family: ui-monospace, SFMono-Regular, monospace; font-size: 12px;
-    background: #1e293b; padding: 1px 5px; border-radius: 4px; color: #a5b4fc;
+    background: var(--hi-fill); padding: 1px 5px; border-radius: 4px; color: var(--t-accent-ink);
   }
-  .md-body hr { border: 0; border-top: 1px solid #1e293b; margin: 18px 0; }
+  .md-body hr { border: 0; border-top: 1px solid var(--t-line); margin: 18px 0; }
   .md-body blockquote {
     margin: 10px 0; padding: 8px 14px;
-    border-left: 3px solid #6366f1; background: rgba(99,102,241,0.06);
-    border-radius: 0 6px 6px 0; color: #cbd5e1;
+    border-left: 3px solid var(--t-accent); background: rgba(99,102,241,0.06);
+    border-radius: 0 6px 6px 0; color: var(--t-ink);
   }
   .md-body table {
     width: 100%; border-collapse: collapse; margin: 12px 0;
     font-size: 12px; display: block; overflow-x: auto;
   }
   .md-body th, .md-body td {
-    border: 1px solid #1e293b; padding: 5px 9px; text-align: left; white-space: nowrap;
+    border: 1px solid var(--t-line); padding: 5px 9px; text-align: left; white-space: nowrap;
   }
-  .md-body th { background: #131c2e; color: #94a3b8; font-weight: 600; }
+  .md-body th { background: var(--t-surface-alt); color: var(--t-ink-muted); font-weight: 600; }
 </style>
 
 <div class="mb-6 sm:mb-8 fade-up">
@@ -161,7 +192,16 @@
         <span data-i18n="history.tradingview">TradingView</span>
       </a>
       {% if futu_symbol %}
+      {#  The href stays the web quote page: it is what desktop uses, what a
+          phone without Futubull installed falls back to, and what is served if
+          the stockId is not yet known. futuApp() below upgrades the click to a
+          native deep link when it can — see ystocker/futu.py for why the app
+          cannot be reached by this URL alone.  #}
       <a href="https://www.futunn.com/en/stock/{{ futu_symbol }}" target="_blank" rel="noopener"
+         id="futuLink" onclick="return futuApp(event)"
+         data-futu-symbol="{{ futu_symbol }}"
+         {% if futu_deeplink %}data-futu-deeplink="{{ futu_deeplink }}"{% endif %}
+         {% if futu_intent %}data-futu-intent="{{ futu_intent }}"{% endif %}
          class="flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400 border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800
                 hover:text-slate-700 dark:hover:text-slate-200 hover:border-slate-400 dark:hover:border-slate-500 transition px-2.5 py-1 rounded-lg">
         <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -585,7 +625,7 @@
 </div>
 
 <!-- ── Sticky section jump bar ───────────────────────────────── -->
-  <div id="sectionNav" class="sticky top-0 z-20 -mx-4 sm:-mx-6 px-4 sm:px-6 py-2 bg-white/95 dark:bg-slate-950/95 backdrop-blur border-b border-slate-200 dark:border-slate-800 mb-4 flex gap-1.5 overflow-x-auto scrollbar-hide">
+  <div id="sectionNav" class="sticky top-0 z-20 -mx-4 sm:-mx-6 px-4 sm:px-6 py-2 bg-slate-50/95 dark:bg-slate-950/95 backdrop-blur border-b border-slate-200 dark:border-slate-800 mb-4 flex gap-1.5 overflow-x-auto scrollbar-hide">
     <button onclick="document.getElementById('peHistSection').scrollIntoView({behavior:'smooth',block:'start'})" class="section-nav-btn whitespace-nowrap" data-i18n="history.nav_valuation">Valuation</button>
     <button onclick="document.getElementById('priceChartSection')?.scrollIntoView({behavior:'smooth',block:'start'})||document.querySelector('[id*=price]')?.scrollIntoView({behavior:'smooth',block:'start'})" class="section-nav-btn whitespace-nowrap" data-i18n="history.nav_price_sec">Price</button>
     <button onclick="document.getElementById('rsiSection').scrollIntoView({behavior:'smooth',block:'start'})" class="section-nav-btn whitespace-nowrap" data-i18n="history.nav_technical">Technical</button>
@@ -1099,17 +1139,17 @@
     <div id="forecastModelStatus" class="hidden flex flex-wrap gap-3 mt-3 text-[11px]"></div>
     <!-- forecast target summary row -->
     <div id="forecastSummaryRow" class="grid grid-cols-3 gap-2 mt-3 hidden">
-      <div class="bg-white/50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-lg p-2 text-center">
+      <div class="bg-slate-100 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-lg p-2 text-center">
         <div class="text-[9px] text-slate-500 mb-0.5 uppercase tracking-wider" data-i18n="history.forecast_prophet">Prophet</div>
         <div id="fcastProphetTarget" class="text-sm font-bold font-mono text-slate-700 dark:text-slate-200">—</div>
         <div id="fcastProphetRange" class="text-[10px] text-slate-500">—</div>
       </div>
-      <div class="bg-white/50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-lg p-2 text-center">
+      <div class="bg-slate-100 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-lg p-2 text-center">
         <div class="text-[9px] text-slate-500 mb-0.5 uppercase tracking-wider" data-i18n="history.forecast_arima">ARIMA</div>
         <div id="fcastArimaTarget" class="text-sm font-bold font-mono text-slate-700 dark:text-slate-200">—</div>
         <div id="fcastArimaRange" class="text-[10px] text-slate-500">—</div>
       </div>
-      <div class="bg-white/50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-lg p-2 text-center">
+      <div class="bg-slate-100 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-lg p-2 text-center">
         <div class="text-[9px] text-slate-500 mb-0.5 uppercase tracking-wider" data-i18n="history.forecast_linear">Linear</div>
         <div id="fcastLinearTarget" class="text-sm font-bold font-mono text-slate-700 dark:text-slate-200">—</div>
         <div id="fcastLinearRange" class="text-[10px] text-slate-500">—</div>
@@ -1484,6 +1524,83 @@
 
 <script>
 const TICKER = {{ ticker | tojson }};
+
+// ── FuTu button: open the native app, fall back to the web quote page ────────
+//
+// The anchor's href is always the futunn.com page, so doing nothing here is a
+// working link. This only *upgrades* the click when there is something better to
+// do, which is why every branch below ends in "let the browser follow href".
+//
+// Why the platforms differ: Futu's apple-app-site-association does not claim
+// /en/stock/*, so the https URL can never open the iOS app on its own (see
+// ystocker/futu.py). Android is declarative — intent:// carries its own
+// browser_fallback_url and Chrome picks. iOS has no equivalent, so a custom
+// scheme is tried and the web page opened only if we are still here afterwards.
+function futuApp(ev) {
+  const a = ev.currentTarget;
+  if (ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey || ev.button) return true;
+
+  const ua = navigator.userAgent || '';
+  const isAndroid = /Android/i.test(ua);
+  // iPadOS 13+ reports itself as Macintosh; touch points are what separate it
+  // from a desktop, where there is no app to open and the web page is correct.
+  const isIOS = /iPhone|iPad|iPod/i.test(ua)
+             || (/Macintosh/i.test(ua) && (navigator.maxTouchPoints || 0) > 1);
+  if (!isAndroid && !isIOS) return true;          // desktop: web page is right
+
+  if (isAndroid) {
+    const intent = a.dataset.futuIntent;
+    if (!intent) return true;
+    ev.preventDefault();
+    window.location.href = intent;                // Chrome falls back on its own
+    return false;
+  }
+
+  const deeplink = a.dataset.futuDeeplink;
+  if (!deeplink) return true;
+  ev.preventDefault();
+
+  // If the app takes over, the page is backgrounded and the timer never fires.
+  // Cancel on the first sign of that rather than trusting the timeout alone —
+  // a slow app handoff would otherwise open the web page on top of it.
+  let done = false;
+  const cancel = () => { done = true; };
+  document.addEventListener('visibilitychange', cancel, { once: true });
+  window.addEventListener('pagehide', cancel, { once: true });
+  window.addEventListener('blur', cancel, { once: true });
+
+  setTimeout(() => {
+    document.removeEventListener('visibilitychange', cancel);
+    if (done || document.visibilityState === 'hidden') return;
+    // No app installed. window.open is tried first to honour target="_blank",
+    // but the click gesture has expired by now so Safari may block it — a null
+    // return means blocked, and navigating this tab is the reliable fallback.
+    // Getting this wrong looks like a button that does nothing at all.
+    const opened = window.open(a.href, '_blank', 'noopener');
+    if (!opened) window.location.href = a.href;
+  }, 900);
+
+  window.location.href = deeplink;
+  return false;
+}
+
+// The stockId Futu routes its native screen by is not derivable from a ticker,
+// so it is resolved server-side and cached forever. Asking here — off the page
+// render — keeps a cold symbol from putting a vendor fetch in front of first
+// paint; the button works as a web link until the answer lands, which for a
+// reader who clicks immediately is the same behaviour as before.
+(function futuWarm() {
+  const a = document.getElementById('futuLink');
+  if (!a || a.dataset.futuDeeplink) return;       // absent, or already known
+  fetch('/api/futu/' + encodeURIComponent(TICKER))
+    .then(r => r.ok ? r.json() : null)
+    .then(d => {
+      if (!d || !d.stock_id) return;
+      if (d.deeplink) a.dataset.futuDeeplink = d.deeplink;
+      if (d.intent)   a.dataset.futuIntent   = d.intent;
+    })
+    .catch(() => {});                             // web link already works
+})();
 
 // ── Range buttons + expand modal ─────────────────────────────────────────────
 const _chartConfigs   = {};   // key → latest Chart.js config object
@@ -4113,9 +4230,9 @@ function _buildTimeline(articles) {
       // Highlight active segment
       document.querySelectorAll('.tl-seg').forEach(b => {
         b.classList.toggle('border-indigo-500', b === btn);
-        b.classList.toggle('bg-indigo-50 dark:bg-indigo-900/30', b === btn);
-        b.classList.toggle('border-slate-300 dark:border-slate-700', b !== btn);
-        b.classList.toggle('bg-slate-100/60 dark:bg-slate-800/60',  b !== btn);
+        toggleClasses(b, 'bg-indigo-50 dark:bg-indigo-900/30', b === btn);
+        toggleClasses(b, 'border-slate-300 dark:border-slate-700', b !== btn);
+        toggleClasses(b, 'bg-slate-100/60 dark:bg-slate-800/60', b !== btn);
       });
     });
 

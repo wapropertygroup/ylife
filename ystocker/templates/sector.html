@@ -3,13 +3,19 @@
 
 {% block content %}
 <style>
+  /* The hovered fill sits one step off the page plane. --t-surface-alt is the
+     right role but its dark value (#131c2e) is a fainter hover than this page
+     has always had, so it gets a local pair rather than a quieter dark mode. */
+  :root { --sc-btn-fill-hover: #f1f5f9; }
+  .dark { --sc-btn-fill-hover: #1e293b; }
   .range-btn {
     font-size: 11px; font-weight: 500; line-height: 1; padding: 3px 7px;
-    border-radius: 5px; border: 1px solid #334155; background: transparent;
-    color: #64748b; cursor: pointer; transition: color 0.15s, background 0.15s, border-color 0.15s;
+    border-radius: 5px; border: 1px solid var(--t-line-strong); background: transparent;
+    color: var(--t-ink-dim); cursor: pointer; transition: color 0.15s, background 0.15s, border-color 0.15s;
   }
-  .range-btn:hover { color: #cbd5e1; border-color: #475569; background: #1e293b; }
-  .range-btn.active { color: #a5b4fc; border-color: #6366f1; background: rgba(99,102,241,0.15); }
+  .range-btn:hover { color: var(--t-ink); border-color: var(--t-line-hover); background: var(--sc-btn-fill-hover); }
+  /* 15% indigo tints white and slate alike, so the active fill stays literal. */
+  .range-btn.active { color: var(--t-accent-ink); border-color: var(--t-accent); background: rgba(99,102,241,0.15); }
 </style>
 
 <!-- ── Header ────────────────────────────────────────────────────────── -->
@@ -534,11 +540,11 @@ function sortGrowthChart(field) {
     const arrow = btn.querySelector('.growth-sort-arrow');
     if (btn.id === 'growth-sort-' + (field === 'eps_growth_ttm' ? 'ttm' : 'q')) {
       btn.classList.add('bg-brand/20', 'text-white');
-      btn.classList.remove('text-slate-500 dark:text-slate-400');
+      btn.classList.remove('text-slate-500', 'dark:text-slate-400');
       arrow.textContent = dir === 1 ? ' ↑' : ' ↓';
     } else {
       btn.classList.remove('bg-brand/20', 'text-white');
-      btn.classList.add('text-slate-500 dark:text-slate-400');
+      btn.classList.add('text-slate-500', 'dark:text-slate-400');
       arrow.textContent = '';
     }
   });
@@ -574,11 +580,11 @@ function sortPeChart(field) {
     const arrow = btn.querySelector('.pe-sort-arrow');
     if (btn.id === 'pe-sort-' + field) {
       btn.classList.add('bg-brand/20', 'text-white');
-      btn.classList.remove('text-slate-500 dark:text-slate-400');
+      btn.classList.remove('text-slate-500', 'dark:text-slate-400');
       arrow.textContent = dir === 1 ? ' ↑' : ' ↓';
     } else {
       btn.classList.remove('bg-brand/20', 'text-white');
-      btn.classList.add('text-slate-500 dark:text-slate-400');
+      btn.classList.add('text-slate-500', 'dark:text-slate-400');
       arrow.textContent = '';
     }
   });

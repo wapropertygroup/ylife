@@ -1,0 +1,216 @@
+{% extends "base.html" %}
+
+{% block title %}{{ brand_name }} — {{ shared_ticker }}{% endblock %}
+{% block main_class %}max-w-4xl mx-auto{% endblock %}
+
+{#  Read-only view of a report somebody shared, reachable without signing in.
+
+    Its own template rather than a branch inside agents.html: that page is ~3000
+    lines organised around a signed-in owner who is running something, and adding
+    an anonymous read-only mode to it would put the page the product sells at risk
+    in order to serve one static report. What is genuinely shared with it is the
+    part that would drift if copied -- the Markdown renderer (static/markdown.js,
+    the same one report_email.py is a server-side port of) and the role cast, which
+    is injected from agent_roles.ROLES rather than restated here.
+
+    The turn styling below is deliberately self-contained CSS and not Tailwind
+    utilities: Tailwind in this repo is *compiled* (css/tailwind.css via
+    build_css.sh), so a class invented in a template that no other page uses is
+    simply absent from the bundle and silently does nothing. #}
+
+{% block content %}
+<style>
+  .sh-note{border-left:3px solid rgb(147 197 253 / .8);white-space:pre-wrap}
+  .sh-team{margin:26px 0 10px;font-size:11px;font-weight:700;letter-spacing:.09em;
+           text-transform:uppercase;color:#64748b;display:flex;align-items:center;gap:10px}
+  .sh-team::after{content:"";flex:1;height:1px;background:currentColor;opacity:.25}
+  .sh-turn{display:flex;gap:12px;margin:0 0 16px}
+  .sh-avatar{flex:0 0 34px;width:34px;height:34px;border-radius:10px;display:flex;
+             align-items:center;justify-content:center;font-size:17px;
+             border:1px solid var(--role,#475569);background:rgb(148 163 184 / .08)}
+  .sh-bubble{flex:1;min-width:0;border:1px solid rgb(148 163 184 / .22);
+             border-left:3px solid var(--role,#475569);border-radius:10px;
+             padding:12px 14px;background:rgb(148 163 184 / .04)}
+  .sh-who{display:flex;align-items:baseline;gap:8px;margin:0 0 8px}
+  .sh-who b{font-size:13px;color:var(--role,inherit)}
+  .sh-who span{font-size:11px;color:#94a3b8}
+  /* The report body. Styling by descendant selector rather than by class,
+     because the HTML comes from Markdown.render() and carries no classes. */
+  .sh-report{font-size:14px;line-height:1.7}
+  .sh-report h1,.sh-report h2,.sh-report h3,.sh-report h4{
+    font-weight:700;margin:16px 0 7px;line-height:1.35}
+  .sh-report h1{font-size:17px}.sh-report h2{font-size:16px}
+  .sh-report h3{font-size:14px}.sh-report h4{font-size:13px;color:#93c5fd}
+  .sh-report p{margin:0 0 10px}
+  .sh-report ul,.sh-report ol{margin:0 0 10px;padding-left:20px}
+  .sh-report li{margin:0 0 4px}
+  .sh-report table{border-collapse:collapse;width:100%;margin:0 0 14px;font-size:12.5px;display:block;overflow-x:auto}
+  .sh-report th,.sh-report td{border:1px solid rgb(148 163 184 / .28);padding:6px 9px;text-align:left;vertical-align:top}
+  .sh-report th{background:rgb(148 163 184 / .1);font-weight:600}
+  .sh-report code{font-size:12px;padding:1px 5px;border-radius:3px;background:rgb(148 163 184 / .14)}
+  .sh-report pre{margin:0 0 12px;padding:10px;border-radius:6px;overflow-x:auto;
+                 background:rgb(148 163 184 / .1);font-size:12px}
+  .sh-report blockquote{margin:0 0 12px;padding:6px 12px;border-left:3px solid rgb(148 163 184 / .4);color:#94a3b8}
+  .sh-report hr{border:0;border-top:1px solid rgb(148 163 184 / .25);margin:16px 0}
+</style>
+
+<!-- Provenance first. Somebody is opening this from a mail they did not ask
+     for, so "who sent this and why" has to precede the content, not follow it. -->
+<div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white/60 dark:bg-slate-900/50 p-5 mb-6 fade-up">
+  <div class="flex items-start justify-between gap-4 flex-wrap">
+    <div class="min-w-0">
+      <p class="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1"
+         data-i18n="shared.badge">Shared report</p>
+      <h1 class="text-xl font-extrabold tracking-tight text-slate-800 dark:text-slate-100">
+        <span id="shTicker">{{ shared_ticker }}</span>
+        <span class="text-slate-400 dark:text-slate-500 font-semibold text-base" id="shDate"></span>
+      </h1>
+      {% if shared_by %}
+      <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
+        <span data-i18n="shared.by">Shared by</span>
+        <b class="text-slate-600 dark:text-slate-300">{{ shared_by }}</b>
+      </p>
+      {% endif %}
+    </div>
+    <div class="flex items-center gap-2 shrink-0">
+      <span id="shDecision" class="hidden px-2.5 py-1 rounded-lg text-xs font-bold"></span>
+      <a href="{{ url_for('main.api_agents_shared_pdf', token=shared_token) }}"
+         class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-brand hover:text-brand transition">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v12m0 0-4-4m4 4 4-4M4 20h16"/>
+        </svg>
+        <span data-i18n="shared.pdf">PDF</span>
+      </a>
+    </div>
+  </div>
+
+  {% if shared_note %}
+  <div class="sh-note mt-4 pl-3 py-1 text-sm text-slate-600 dark:text-slate-300">{{ shared_note }}</div>
+  {% endif %}
+</div>
+
+<div id="shLoading" class="text-center py-16 text-sm text-slate-500" data-i18n="shared.loading">Loading the report…</div>
+<div id="shError" class="hidden rounded-xl border border-rose-300/50 dark:border-rose-800/50 bg-rose-50 dark:bg-rose-900/20 p-4 text-sm text-rose-700 dark:text-rose-300"></div>
+<div id="shBody"></div>
+
+<!-- The one call to action. A reader who found this useful has no account, and
+     this is the only page on the site that knows that about them. -->
+<div class="mt-10 pt-6 border-t border-slate-200 dark:border-slate-800 text-center">
+  <p class="text-xs text-slate-500 mb-3" data-i18n="shared.footer">
+    Generated by a multi-agent AI research team. For research only — not investment advice.</p>
+  <a href="{{ url_for('main.agents_page') }}"
+     class="inline-flex items-center gap-2 px-5 py-2.5 bg-brand hover:bg-brand-dark text-white rounded-xl text-sm font-medium transition"
+     data-i18n="shared.cta">Run your own analysis</a>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const TOKEN = {{ shared_token|tojson }};
+  const ROLES = {{ agent_roles|tojson }};
+  const byKey = Object.fromEntries(ROLES.map(r => [r.key, r]));
+
+  const loading = document.getElementById('shLoading');
+  const errBox  = document.getElementById('shError');
+  const body    = document.getElementById('shBody');
+
+  const zh = () => (window.I18n && I18n.getLang && I18n.getLang() === 'zh');
+
+  function fail(msg) {
+    loading.classList.add('hidden');
+    errBox.classList.remove('hidden');
+    errBox.textContent = msg;
+  }
+
+  // Verdict colouring mirrors the chip in report_email._decision_chip, so a
+  // reader who saw the mail sees the same colour on the page.
+  function decorateDecision(text) {
+    const el = document.getElementById('shDecision');
+    if (!text) return;
+    const first = String(text).split('\n')[0].trim().slice(0, 40);
+    if (!first) return;
+    const up = first.toUpperCase();
+    let cls = 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200';
+    if (/\bBUY\b|买入|看多/.test(up))       cls = 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400';
+    else if (/\bSELL\b|卖出|看空/.test(up)) cls = 'bg-rose-500/15 text-rose-600 dark:text-rose-400';
+    else if (/\bHOLD\b|持有|观望/.test(up)) cls = 'bg-amber-500/15 text-amber-600 dark:text-amber-400';
+    el.className = 'px-2.5 py-1 rounded-lg text-xs font-bold ' + cls;
+    el.textContent = first;
+  }
+
+  function renderSections(sections) {
+    body.innerHTML = '';
+    let team = null;
+    for (const sec of sections) {
+      if (sec.team && sec.team !== team) {
+        team = sec.team;
+        const h = document.createElement('div');
+        h.className = 'sh-team';
+        h.textContent = (zh() && sec.team_zh) ? sec.team_zh : team;
+        body.appendChild(h);
+      }
+      // Markdown.render is the shared renderer; textContent is the fallback so a
+      // failed script load degrades to readable plain text rather than nothing.
+      const md = window.Markdown ? Markdown.render(sec.body || '') : null;
+
+      if (!sec.role) {
+        const pre = document.createElement('div');
+        pre.className = 'sh-report text-slate-600 dark:text-slate-300 mb-6';
+        if (md) pre.innerHTML = md; else pre.textContent = sec.body || '';
+        body.appendChild(pre);
+        continue;
+      }
+
+      const role = byKey[sec.role.key] || sec.role;
+      const turn = document.createElement('div');
+      turn.className = 'sh-turn';
+      turn.style.setProperty('--role', role.color || CT.c('#475569'));
+
+      const av = document.createElement('div');
+      av.className = 'sh-avatar';
+      av.setAttribute('aria-hidden', 'true');
+      av.textContent = role.icon || '•';
+
+      const bubble = document.createElement('div');
+      bubble.className = 'sh-bubble';
+      const who = document.createElement('div');
+      who.className = 'sh-who';
+      const nm = document.createElement('b');
+      nm.textContent = (zh() && role.zh) ? role.zh : role.name;
+      who.appendChild(nm);
+      if (zh() && role.zh) {
+        const sub = document.createElement('span');
+        sub.textContent = role.name;
+        who.appendChild(sub);
+      }
+      const rep = document.createElement('div');
+      rep.className = 'sh-report text-slate-700 dark:text-slate-200';
+      if (md) rep.innerHTML = md; else rep.textContent = sec.body || '';
+
+      bubble.appendChild(who);
+      bubble.appendChild(rep);
+      turn.appendChild(av);
+      turn.appendChild(bubble);
+      body.appendChild(turn);
+    }
+  }
+
+  fetch('/api/agents/shared/' + encodeURIComponent(TOKEN))
+    .then(r => r.json().then(d => ({ ok: r.ok, d })))
+    .then(({ ok, d }) => {
+      if (!ok) { fail(d.error || 'This link is not valid.'); return; }
+      loading.classList.add('hidden');
+      if (d.date) document.getElementById('shDate').textContent = '· ' + d.date;
+      decorateDecision(d.decision);
+      if (!d.has_report || !(d.sections || []).length) {
+        fail((window.I18n && I18n.t && I18n.t('shared.empty')) ||
+             'This report has no content to show.');
+        return;
+      }
+      renderSections(d.sections);
+    })
+    .catch(e => fail(String(e && e.message || e)));
+})();
+</script>
+{% endblock %}

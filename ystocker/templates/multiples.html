@@ -3,37 +3,73 @@
 
 {% block content %}
 <style>
+/* ── Theme tokens ─────────────────────────────────────────────────────────
+   Hand-written CSS, so Tailwind's `dark:` variant reaches none of it. The
+   shared `--t-*` vocabulary in base.html covers most of this block; what has no
+   shared equivalent is declared here, --mu- prefixed, light-first with `.dark`
+   overriding so a missing class degrades to a readable light page.
+
+   Roles, not values: the violet and the pale indigo below are TEXT, so they
+   invert to a 600/700-level hue on white. The rgba() tints they sit on are
+   FILLS and stay literal -- 6-18% of a hue reads as a tint over either plane. */
+:root {
+  /* Violet as text: the explain button's hover state, the thinking line and its
+     dots (one token, so a dot always matches the words beside it). Violet-700,
+     the same value /housing gives the identical control. */
+  --mu-violet-ink: #6d28d9;
+  /* The trailing-source chip's label. Its own fill is a 15% blue, so this is
+     still text on a near-white plane and has to darken with it -- matching the
+     Zillow chip on /housing, which is the same chip with the same fill. */
+  --mu-src-blue-ink: #1d63c4;
+  /* Up / down. The 400-level pair glows on near-black and measures ~3.2-3.4:1
+     on white, under the 4.5:1 these numbers need, so light mode drops both to
+     the 700 weight -- the same pair /housing uses for its table deltas. */
+  --mu-up: #047857;
+  --mu-down: #b91c1c;
+}
+.dark {
+  --mu-violet-ink: #a78bfa;
+  --mu-src-blue-ink: #7cb2f0;
+  --mu-up: #199e70;
+  --mu-down: #e66767;
+}
 .explain-btn {
   display: inline-flex; align-items: center; gap: 5px;
   padding: 3px 10px; border-radius: 6px;
-  border: 1px solid #334155; background: transparent;
-  color: #94a3b8; font-size: 11px; font-weight: 500;
+  border: 1px solid var(--t-line-strong); background: transparent;
+  color: var(--t-ink-muted); font-size: 11px; font-weight: 500;
   cursor: pointer; transition: color .15s, border-color .15s, background .15s;
   letter-spacing: .02em; white-space: nowrap;
 }
-.explain-btn:hover { color: #a78bfa; border-color: #7c3aed; }
+/* The hover border stays literal violet-600: a saturated mid-tone at 5.7:1 on
+   white and 3.1:1 on the dark plane, so it needs no theme of its own. Only the
+   ink beside it does. */
+.explain-btn:hover { color: var(--mu-violet-ink); border-color: #7c3aed; }
 .explain-btn:disabled { opacity: .5; cursor: not-allowed; }
 .range-btn {
-  padding: 3px 9px; border-radius: 6px; border: 1px solid #334155;
-  background: transparent; color: #64748b; font-size: 11px; font-weight: 500;
+  padding: 3px 9px; border-radius: 6px; border: 1px solid var(--t-line-strong);
+  background: transparent; color: var(--t-ink-dim); font-size: 11px; font-weight: 500;
   cursor: pointer; transition: color .15s, border-color .15s, background .15s;
   letter-spacing: .02em;
 }
-.range-btn:hover { color: #cbd5e1; border-color: #64748b; }
-.range-btn.active { color: #a5b4fc; border-color: #6366f1; background: rgba(99,102,241,.12); }
+/* Slate-500 as a border, not as ink: it is the one step that reads on both
+   planes, so the hover border stays more prominent than the resting one either
+   way (slate-300 -> 500 on white, slate-700 -> 500 in the dark). */
+.range-btn:hover { color: var(--t-ink); border-color: #64748b; }
+.range-btn.active { color: var(--t-accent-ink); border-color: var(--t-accent); background: rgba(99,102,241,.12); }
 .card-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
 .explain-panel {
   margin-top: 12px; padding: 14px 16px; border-radius: 10px;
   background: rgba(167,139,250,.06); border: 1px solid rgba(167,139,250,.2);
-  color: #cbd5e1; font-size: 13px; line-height: 1.65; display: none;
+  color: var(--t-ink); font-size: 13px; line-height: 1.65; display: none;
 }
 .explain-panel.visible { display: block; }
 .explain-thinking {
   display: inline-flex; align-items: center; gap: 6px;
-  color: #a78bfa; font-size: 12px; font-style: italic;
+  color: var(--mu-violet-ink); font-size: 12px; font-style: italic;
 }
 .explain-thinking .dot {
-  width: 5px; height: 5px; border-radius: 50%; background: #a78bfa;
+  width: 5px; height: 5px; border-radius: 50%; background: var(--mu-violet-ink);
   animation: explainBounce 1.2s infinite ease-in-out;
 }
 .explain-thinking .dot:nth-child(2) { animation-delay: .2s; }
@@ -47,8 +83,8 @@
   font-size: 9px; font-weight: 600; letter-spacing: .04em;
   text-transform: uppercase; vertical-align: middle;
 }
-.src-trailing { background: rgba(57,135,229,.15);  color: #7cb2f0; }
-.src-forward  { background: rgba(99,102,241,.18);  color: #a5b4fc; }
+.src-trailing { background: rgba(57,135,229,.15);  color: var(--mu-src-blue-ink); }
+.src-forward  { background: rgba(99,102,241,.18);  color: var(--t-accent-ink); }
 /* Local layout utilities. static/css/tailwind.css is compiled by
    `bash build_css.sh`, so a class introduced without a rebuild silently does
    nothing; keeping this page's grid local makes it independent of that. */
@@ -57,11 +93,11 @@
 .vp-section { display: flex; align-items: center; gap: 10px; margin: 30px 0 -2px; padding-top: 4px; }
 .vp-section h2 {
   font-size: 11px; font-weight: 700; letter-spacing: .09em;
-  text-transform: uppercase; color: #94a3b8; white-space: nowrap;
+  text-transform: uppercase; color: var(--t-ink-muted); white-space: nowrap;
 }
-.vp-section .rule { flex: 1; height: 1px; background: #1e293b; }
-.vp-up { color: #199e70; }
-.vp-down { color: #e66767; }
+.vp-section .rule { flex: 1; height: 1px; background: var(--t-line); }
+.vp-up { color: var(--mu-up); }
+.vp-down { color: var(--mu-down); }
 </style>
 
 <!-- ── Header ─────────────────────────────────────────────────────────── -->

@@ -34,6 +34,7 @@ from ystocker import breadth
 from ystocker import charts
 from ystocker import fetchguard
 from ystocker import freshness
+from ystocker import futu
 # Plain client UA for every fred.stlouisfed.org request. A spoofed browser UA is
 # silently blackholed by FRED's Akamai bot detection — see fed.py for details.
 from ystocker.fed import FRED_USER_AGENT as _FRED_UA
@@ -980,11 +981,45 @@ def history(ticker: str):
     """Page showing 1-year historical PE ratio for a single ticker."""
     ticker = ticker.strip().upper()
     log.info("GET /history/%s", ticker)
+    futu_symbol = _futu_symbol(ticker)
     return render_template("history.html",
                            ticker=ticker,
-                           futu_symbol=_futu_symbol(ticker),
                            peer_groups=list(PEER_GROUPS.keys()),
-                           fetch_errors=[])
+                           fetch_errors=[],
+                           # Supplies futu_symbol plus the app-link attributes,
+                           # from cache only: a miss renders the plain web link,
+                           # which is also the no-app fallback. See ystocker/futu.py.
+                           **futu.link_context(futu_symbol))
+
+
+@bp.route("/api/futu/<ticker>")
+def api_futu(ticker: str):
+    """Resolve *ticker* to a Futu stockId so the FuTu button can open the app.
+
+    Separate from the page render on purpose. Futu only routes its native quote
+    screen by an opaque internal id, which costs one ~1.3 MB page fetch to learn
+    and is then permanent -- so it is looked up here, off the request path that
+    renders /history, and the page upgrades its own link when the answer arrives.
+    A failure returns 200 with a null id rather than an error status: the button
+    already works as a web link and the client has nothing to report.
+    """
+    futu_symbol = _futu_symbol(ticker.strip().upper())
+    if not futu_symbol:
+        # Same key set as the success path: a consumer should not have to probe
+        # for which fields exist to learn there is no link.
+        return jsonify({"symbol": None, "stock_id": None, "web": None,
+                        "deeplink": None, "intent": None, "store": None})
+
+    stock_id = futu.resolve_stock_id(futu_symbol)
+    web = futu.web_url(futu_symbol)
+    return jsonify({
+        "symbol":   futu_symbol,
+        "stock_id": stock_id,
+        "web":      web,
+        "deeplink": futu.deep_link(stock_id),
+        "intent":   futu.android_intent_url(stock_id, web),
+        "store":    futu.ios_store_url(),
+    })
 
 
 @bp.route("/api/history/<ticker>")
@@ -3010,6 +3045,242 @@ def api_agents_search():
     out["viewer"] = viewer or ""
     out["vip"] = vip
     return jsonify(out)
+
+
+# ---------------------------------------------------------------------------
+# Sharing a finished report with somebody else
+#
+# One authenticated write (mint a share, mail it) and three unauthenticated
+# reads keyed on the token. See ystocker/share.py for why this is a capability
+# URL rather than a grant against the recipient's address -- briefly: yStocker
+# persists no user record at all, so there is nothing to grant *to*, and the
+# recipient is by design somebody with no account.
+#
+# The authorization rule here is ``owns``, not ``can_read``. A VIP may read
+# anyone's run, and letting that also mean "may publish anyone's run to an
+# unauthenticated URL" would quietly convert a read grant into a disclosure
+# power over other people's paid work.
+# ---------------------------------------------------------------------------
+
+@bp.route("/api/agents/share", methods=["POST"])
+def api_agents_share():
+    """Mail one of your finished reports to somebody, behind a capability link."""
+    gate = _agent_gate()
+    if gate:
+        return gate
+    from ystocker import quota, report_email, share
+    from ystocker.agents import get_job, owns
+
+    if not share.enabled():
+        return jsonify({"error": "Sharing is not configured",
+                        "reason": "disabled"}), 503
+
+    sharer = _agent_user()
+    data = request.get_json(force=True, silent=True) or {}
+
+    job = get_job(str(data.get("job_id") or "").strip())
+    # 404 for "not yours" as well as "not found", matching every other read here:
+    # a distinguishable 403 would confirm a job id exists.
+    if not job or not owns(job, sharer):
+        return jsonify({"error": "No such job"}), 404
+    if job.get("status") != "done":
+        return jsonify({"error": f"Run is {job.get('status')}, not done",
+                        "reason": "not_done"}), 409
+    if not (job.get("report") or "").strip():
+        return jsonify({"error": "That run produced no report to share",
+                        "reason": "empty"}), 409
+
+    to_addr = share.normalise_email(data.get("to"))
+    if not to_addr:
+        return jsonify({"error": "That does not look like an email address",
+                        "reason": "bad_recipient"}), 400
+    if to_addr == (sharer or "").strip().lower():
+        # Not an error worth a failure: the completion mail already went here.
+        return jsonify({"error": "That is your own address",
+                        "reason": "self"}), 400
+
+    note = share.clean_note(data.get("note"))
+
+    # Counted before anything is sent. A share costs us almost no compute and
+    # instead spends sending reputation, so the bound that matters is on attempts
+    # rather than on successes -- see quota.try_consume_share.
+    ok, usage = quota.try_consume_share(sharer)
+    if not ok:
+        return jsonify({"error": "Daily share limit reached",
+                        "reason": "quota", "share_quota": usage}), 429
+
+    # The row before the mail, always. It is what makes the link resolve, so a
+    # send that got ahead of it would deliver a button that 404s -- and the case
+    # where this ordering matters is precisely when DynamoDB is unreachable.
+    row = share.create(job, sharer=sharer, recipient=to_addr, note=note)
+    if row is None:
+        return jsonify({"error": "Could not record the share; nothing was sent",
+                        "reason": "storage"}), 503
+
+    url = share.share_url(row["token"], base=_share_base())
+    sent = report_email.send_share(job, to_addr, sharer, note, url)
+    if not sent:
+        # The share stands even though the mail did not: the sharer is holding a
+        # working link and can pass it on by hand, which is a better outcome than
+        # revoking it and leaving them with nothing.
+        log.warning("agents: share of %s recorded but mail to %s failed",
+                    job.get("id"), to_addr)
+    return jsonify({"ok": True, "sent": sent, "url": url,
+                    "token": row["token"], "to": to_addr,
+                    "expires_at": row["expires_at"],
+                    "share_quota": usage}), 200
+
+
+@bp.route("/api/agents/share/<token>/revoke", methods=["POST"])
+def api_agents_share_revoke(token):
+    """Kill a link you handed out. Only the person who minted it may."""
+    gate = _agent_gate()
+    if gate:
+        return gate
+    from ystocker import share
+
+    if not share.revoke(token, _agent_user()):
+        # 404 whether the token never existed, is already gone, or belongs to
+        # somebody else -- the same reasoning as everywhere else on this page.
+        return jsonify({"error": "No such share"}), 404
+    return jsonify({"ok": True})
+
+
+def _share_base() -> str:
+    """Host to build shared links against.
+
+    Keyed on ``request.host`` rather than always using
+    ``report_email.base_url()`` so a link minted on trade-agents.com stays on
+    trade-agents.com. That is not only branding: ``SESSION_COOKIE_DOMAIN`` is
+    unset, so the two hostnames do not share a session, and bouncing a reader to
+    the other one would show a signed-in sharer as signed out.
+
+    The scheme is **forced to https** rather than taken from ``request.host_url``,
+    and that is the whole reason this helper exists. nginx terminates TLS and
+    forwards plain HTTP with ``X-Forwarded-Proto: $scheme``, but no app in this
+    repo installs ``ProxyFix`` -- so Flask sees a bare HTTP request and
+    ``request.host_url`` returns ``http://``. Emailing an ``http://`` link would
+    work, because nginx redirects, but it would be a plaintext URL in a mail to a
+    stranger and reads as exactly the thing a phishing filter is looking for.
+    ``X-Forwarded-Proto`` is honoured when present so a genuinely plain-HTTP dev
+    box still gets a usable link.
+
+    Falls back to the configured base outside a request context.
+    """
+    from ystocker import report_email
+
+    try:
+        host = (request.host or "").strip()
+        if not host:
+            return report_email.base_url()
+        proto = (request.headers.get("X-Forwarded-Proto") or "").split(",")[0].strip()
+        if not proto:
+            # Local development is the only place there is no proxy in front.
+            local = host.split(":")[0] in ("localhost", "127.0.0.1", "[::1]")
+            proto = "http" if local else "https"
+        return f"{proto}://{host}"
+    except RuntimeError:            # outside a request
+        return report_email.base_url()
+
+
+def _shared_or_404(token):
+    """Resolve a share token to ``(row, job)``, or return a 404 response.
+
+    Returns a 3-tuple whose first element is the error response, so callers read
+    as ``err, row, job = ...; if err: return err``.
+    """
+    from ystocker import share
+    from ystocker.agents import get_job
+
+    row = share.lookup(token)
+    if not row:
+        return (jsonify({"error": "This link is not valid, or has expired"}), 404), None, None
+    job = get_job(str(row.get("job_id") or ""))
+    # A share whose job has gone is indistinguishable from a bad token on
+    # purpose: the reader can do nothing about either, and saying which would
+    # confirm that the token itself was real.
+    if not job or job.get("status") != "done":
+        return (jsonify({"error": "This link is not valid, or has expired"}), 404), None, None
+    return None, row, job
+
+
+@bp.route("/agents/shared/<token>")
+def agents_shared_page(token):
+    """Read a report somebody shared with you. No sign-in required.
+
+    Its own template rather than ``agents.html`` in a "shared" mode. That page is
+    ~3000 lines built around a signed-in owner -- the run form, the quota ladder,
+    the history panel, the follow-up chat -- and threading a read-only anonymous
+    branch through all of it risks the page the product actually sells in order to
+    serve a page that shows one static report. ``shared.html`` reuses the parts
+    that matter (``markdown.js``, the role palette from ``agent_roles``) and can
+    break nothing but itself.
+    """
+    from ystocker import share
+    from ystocker.agent_roles import roles_json
+
+    err, row, job = _shared_or_404(token)
+    if err:
+        # A rendered page, not JSON: this URL is opened from a mail client by a
+        # person, and a bare JSON error is the worst possible landing.
+        return render_template("shared_gone.html"), 404
+    log.info("agents: served shared report %s via %s…", job.get("id"), token[:6])
+    return render_template(
+        "shared.html",
+        shared_token=token,
+        shared_by=share.mask_email(row.get("sharer")),
+        shared_note=str(row.get("note") or ""),
+        shared_ticker=str(job.get("ticker") or ""),
+        agent_roles=roles_json(),
+    )
+
+
+@bp.route("/api/agents/shared/<token>")
+def api_agents_shared(token):
+    """One shared report, split into agent turns. No sign-in required."""
+    from ystocker import share
+    from ystocker.agent_roles import split_sections
+
+    err, row, job = _shared_or_404(token)
+    if err:
+        return err
+
+    # Through share.public_payload, never straight off the record: this response
+    # is unauthenticated, and the job dict carries the owner's address, the
+    # runner's pid and its stderr.
+    payload = share.public_payload(row, job)
+    report = payload.pop("report", None) or ""
+    payload["sections"] = split_sections(report) if report.strip() else []
+    payload["has_report"] = bool(report.strip())
+    return jsonify(payload)
+
+
+@bp.route("/api/agents/shared/<token>/pdf")
+def api_agents_shared_pdf(token):
+    """A shared report as a PDF. No sign-in required."""
+    from ystocker import share
+    from ystocker.report_pdf import build_report_pdf, pdf_filename
+
+    err, row, job = _shared_or_404(token)
+    if err:
+        return err
+
+    # Built from the filtered payload rather than the raw record, so the owner's
+    # address cannot reach the document even if the PDF template later grows a
+    # byline -- the same precaution the showcase PDF route takes.
+    safe = share.public_payload(row, job)
+    pdf = build_report_pdf(safe, tz=_reader_tz())
+    if not pdf:
+        return jsonify({"error": "Could not render a PDF for this report"}), 500
+
+    log.info("agents: served shared PDF for %s (%d bytes)", job.get("id"), len(pdf))
+    return Response(pdf, content_type="application/pdf", headers={
+        "Content-Disposition": f'attachment; filename="{pdf_filename(safe)}"',
+        "Content-Length": str(len(pdf)),
+        # private, unlike the showcase's "public": this report was shared with
+        # one person, not published, so it must not land in a shared cache.
+        "Cache-Control": "private, max-age=300",
+    })
 
 
 # ---------------------------------------------------------------------------

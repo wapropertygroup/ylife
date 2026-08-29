@@ -75,11 +75,12 @@
 <style>
   .sector-sort-btn {
     font-size: 10px; padding: 2px 8px; border-radius: 4px;
-    border: 1px solid #334155; background: transparent; color: #64748b; cursor: pointer;
+    border: 1px solid var(--t-line-strong); background: transparent; color: var(--t-ink-dim); cursor: pointer;
     transition: color 0.15s, background 0.15s, border-color 0.15s;
   }
-  .sector-sort-btn:hover { color: #cbd5e1; border-color: #475569; }
-  .sector-sort-btn.active { color: #a5b4fc; border-color: #6366f1; background: rgba(99,102,241,0.15); }
+  .sector-sort-btn:hover { color: var(--t-ink); border-color: var(--t-line-hover); }
+  /* 15% indigo tints white and slate alike, so the active fill stays literal. */
+  .sector-sort-btn.active { color: var(--t-accent-ink); border-color: var(--t-accent); background: rgba(99,102,241,0.15); }
 </style>
 <!-- ── Analyst estimate revisions ──────────────────────────────────────────
      The peer-group tables below show Upside (%) — one target price against the
@@ -456,15 +457,15 @@ function toggleScatterLabels() {
   if (scatterLabelsVisible) {
     text.textContent = I18n.t('index.hide_tickers');
     btn.classList.remove('bg-brand', 'text-white');
-    btn.classList.add('text-slate-500 dark:text-slate-400', 'bg-slate-100 dark:bg-slate-800');
+    btn.classList.add('text-slate-500', 'dark:text-slate-400', 'bg-slate-100', 'dark:bg-slate-800');
     btn.classList.remove('border-brand/40');
-    btn.classList.add('border-slate-300 dark:border-slate-700');
+    btn.classList.add('border-slate-300', 'dark:border-slate-700');
   } else {
     text.textContent = I18n.t('index.show_tickers');
     btn.classList.add('bg-brand', 'text-white');
-    btn.classList.remove('text-slate-500 dark:text-slate-400', 'bg-slate-100 dark:bg-slate-800');
+    btn.classList.remove('text-slate-500', 'dark:text-slate-400', 'bg-slate-100', 'dark:bg-slate-800');
     btn.classList.add('border-brand/40');
-    btn.classList.remove('border-slate-300 dark:border-slate-700');
+    btn.classList.remove('border-slate-300', 'dark:border-slate-700');
   }
   if (_inlineScatterChart) {
     _inlineScatterChart.data.datasets.forEach((ds, di) => {
@@ -524,7 +525,7 @@ function buildScatterChart(ctx) {
               const text = document.getElementById('scatterLabelToggleText');
               text.textContent = I18n.t('index.hide_tickers');
               btn.classList.remove('bg-brand', 'text-white', 'border-brand/40');
-              btn.classList.add('text-slate-500 dark:text-slate-400', 'bg-slate-100 dark:bg-slate-800', 'border-slate-300 dark:border-slate-700');
+              btn.classList.add('text-slate-500', 'dark:text-slate-400', 'bg-slate-100', 'dark:bg-slate-800', 'border-slate-300', 'dark:border-slate-700');
             }
             chart.update();
           }
@@ -923,8 +924,8 @@ document.addEventListener('DOMContentLoaded', () => {
         p.classList.toggle('border-brand', active);
         p.classList.toggle('text-brand', active);
         p.classList.toggle('bg-brand\/10', active);
-        p.classList.toggle('border-slate-300 dark:border-slate-700', !active);
-        p.classList.toggle('text-slate-500 dark:text-slate-400', !active);
+        toggleClasses(p, 'border-slate-300 dark:border-slate-700', !active);
+        toggleClasses(p, 'text-slate-500 dark:text-slate-400', !active);
       });
       render();
     });

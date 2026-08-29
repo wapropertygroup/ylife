@@ -3,15 +3,29 @@
 
 {% block content %}
 <style>
+/* Violet is the ✦ Explain accent and has no shared --t-* equivalent, so this
+   page declares its own pair, light-first like base.html's. It mirrors the way
+   --t-accent-ink / --t-accent-line behave: the TEXT value darkens on white
+   while the BORDER value lightens, so each keeps the weight it carries against
+   near-black (violet-400 on slate-950 is 6.5:1, violet-600 on white 5.7:1;
+   both rings land near 2.7:1). */
+:root {
+  --fw-violet-ink:  #7c3aed;   /* violet text and glyphs   */
+  --fw-violet-line: #a78bfa;   /* hovered control border   */
+}
+.dark {
+  --fw-violet-ink:  #a78bfa;
+  --fw-violet-line: #7c3aed;
+}
 .explain-btn {
   display: inline-flex;
   align-items: center;
   gap: 5px;
   padding: 3px 10px;
   border-radius: 6px;
-  border: 1px solid #334155;
+  border: 1px solid var(--t-line-strong);
   background: transparent;
-  color: #94a3b8;
+  color: var(--t-ink-muted);
   font-size: 11px;
   font-weight: 500;
   cursor: pointer;
@@ -20,8 +34,8 @@
   white-space: nowrap;
 }
 .explain-btn:hover {
-  color: #a78bfa;
-  border-color: #7c3aed;
+  color: var(--fw-violet-ink);
+  border-color: var(--fw-violet-line);
 }
 .explain-btn:disabled {
   opacity: 0.5;
@@ -31,9 +45,11 @@
   margin-top: 12px;
   padding: 14px 16px;
   border-radius: 10px;
+  /* Violet at 6% / 20% resolves to near-white over white and near-slate over
+     slate-950, so the tint reads the same on both themes and stays literal. */
   background: rgba(167,139,250,0.06);
   border: 1px solid rgba(167,139,250,0.2);
-  color: #cbd5e1;
+  color: var(--t-ink);
   font-size: 13px;
   line-height: 1.65;
   display: none;
@@ -43,14 +59,14 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  color: #a78bfa;
+  color: var(--fw-violet-ink);
   font-size: 12px;
   font-style: italic;
 }
 .explain-thinking .dot {
   width: 5px; height: 5px;
   border-radius: 50%;
-  background: #a78bfa;
+  background: var(--fw-violet-ink);
   animation: explainBounce 1.2s infinite ease-in-out;
 }
 .explain-thinking .dot:nth-child(2) { animation-delay: 0.2s; }
@@ -69,8 +85,8 @@
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
-.fw-grid th { color: #94a3b8; font-weight: 600; }
-.fw-grid td.fw-range { color: #cbd5e1; text-align: right; font-weight: 600; }
+.fw-grid th { color: var(--t-ink-muted); font-weight: 600; }
+.fw-grid td.fw-range { color: var(--t-ink); text-align: right; font-weight: 600; }
 </style>
 
 <!-- ── Header ─────────────────────────────────────────────────────────── -->

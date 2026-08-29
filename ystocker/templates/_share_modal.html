@@ -1,0 +1,73 @@
+{#  Share dialog. Included from base.html for every yStocker page, so a signed-in
+    reader can send a finished report from wherever they are rather than only from
+    /agents.
+
+    Markup only — behaviour is in static/share.js and styling in static/share.css.
+    Rendered inert (no [data-open]) and never populated until it is opened, so on
+    the vast majority of page views this costs one hidden div and no requests: the
+    report list is fetched on first open, not on load. #}
+
+<div id="shareDlg" class="sd-backdrop" role="dialog" aria-modal="true"
+     aria-labelledby="shareDlgTitle" hidden>
+  <div class="sd-card" role="document">
+
+    <div class="sd-head">
+      <h2 id="shareDlgTitle" class="sd-title" data-i18n="share.title">Share a report</h2>
+      <p class="sd-sub" data-i18n="share.subtitle">They will get the full report by
+        email, plus a link that works without signing in.</p>
+    </div>
+
+    <div class="sd-body">
+      <!-- Status line. One element for both outcomes; share.js sets data-kind. -->
+      <div id="shareMsg" class="sd-msg sd-hidden" role="status" aria-live="polite"></div>
+
+      <!-- ── Compose ──────────────────────────────────────────────────── -->
+      <div id="shareForm">
+        <div class="sd-field">
+          <label class="sd-label" for="shareJob" data-i18n="share.report">Report</label>
+          <select id="shareJob" class="sd-select"></select>
+        </div>
+
+        <div class="sd-field">
+          <label class="sd-label" for="shareTo" data-i18n="share.to">Send to</label>
+          {#  type=email, but the address is validated server-side by
+              share.normalise_email regardless: the browser's own check is a
+              convenience and is trivially bypassed. #}
+          <input id="shareTo" class="sd-input" type="email" autocomplete="off"
+                 spellcheck="false" inputmode="email"
+                 placeholder="name@example.com"
+                 data-i18n-placeholder="share.to_ph">
+        </div>
+
+        <div class="sd-field">
+          <label class="sd-label" for="shareNote" data-i18n="share.note">Note (optional)</label>
+          <textarea id="shareNote" class="sd-textarea" maxlength="500"
+                    placeholder="Why you are sending this…"
+                    data-i18n-placeholder="share.note_ph"></textarea>
+          <p id="shareCount" class="sd-count">0 / 500</p>
+        </div>
+      </div>
+
+      <!-- ── Sent ─────────────────────────────────────────────────────── -->
+      <div id="shareDone" class="sd-hidden">
+        <code id="shareLink" class="sd-link"></code>
+        <p class="sd-sub" data-i18n="share.link_warn">Anyone with this link can read
+          the report, so treat it as a secret. It stops working in 30 days, or as
+          soon as you revoke it.</p>
+      </div>
+    </div>
+
+    <div class="sd-foot">
+      <button id="shareRevoke" type="button" class="sd-btn sd-btn-danger sd-hidden"
+              data-i18n="share.revoke">Revoke</button>
+      <button id="shareCopy" type="button" class="sd-btn sd-hidden"
+              data-i18n="share.copy">Copy link</button>
+      <span class="sd-spacer"></span>
+      <button id="shareCancel" type="button" class="sd-btn"
+              data-i18n="share.cancel">Cancel</button>
+      <button id="shareSend" type="button" class="sd-btn sd-btn-primary"
+              data-i18n="share.send">Send</button>
+    </div>
+
+  </div>
+</div>

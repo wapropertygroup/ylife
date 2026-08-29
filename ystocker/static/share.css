@@ -1,0 +1,155 @@
+/* Share dialog — send a finished agent report to somebody by email.
+ *
+ * Self-contained CSS rather than Tailwind utilities, for the reason recorded in
+ * CLAUDE.md: Tailwind here is *compiled* (css/tailwind.css, rebuilt with
+ * build_css.sh), so a class a script or a one-off partial invents is simply
+ * absent from the bundle and silently does nothing. Everything below is plain
+ * CSS with its own `sd-` prefix, so this file is correct whether or not anyone
+ * remembers to rebuild the bundle.
+ *
+ * Dark mode is driven by `html.dark`, matching the rest of the site, and not by
+ * `prefers-color-scheme` — the site has an explicit toggle, so honouring the OS
+ * here would make the dialog disagree with the page behind it.
+ */
+
+.sd-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;                 /* above the sticky header (z-50) */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgb(15 23 42 / .55);
+  backdrop-filter: blur(2px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .16s ease;
+}
+.sd-backdrop[data-open="1"] { opacity: 1; pointer-events: auto; }
+
+.sd-card {
+  width: 100%;
+  max-width: 27rem;
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  border-radius: 16px;
+  border: 1px solid rgb(203 213 225);
+  background: #fff;
+  box-shadow: 0 20px 45px rgb(15 23 42 / .28);
+  transform: translateY(8px) scale(.98);
+  transition: transform .16s ease;
+}
+.sd-backdrop[data-open="1"] .sd-card { transform: none; }
+html.dark .sd-card { border-color: rgb(51 65 85); background: rgb(15 23 42); }
+
+.sd-head { padding: 18px 20px 0; }
+.sd-title { margin: 0; font-size: 15px; font-weight: 700; color: rgb(30 41 59); }
+html.dark .sd-title { color: rgb(241 245 249); }
+.sd-sub { margin: 4px 0 0; font-size: 12px; line-height: 1.55; color: rgb(100 116 139); }
+
+.sd-body { padding: 16px 20px 4px; }
+.sd-field { margin: 0 0 14px; }
+.sd-label {
+  display: block;
+  margin: 0 0 5px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: rgb(100 116 139);
+}
+.sd-input, .sd-select, .sd-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 9px 11px;
+  border-radius: 9px;
+  border: 1px solid rgb(203 213 225);
+  background: #fff;
+  color: rgb(30 41 59);
+  font: inherit;
+  font-size: 13px;
+}
+.sd-textarea { min-height: 74px; resize: vertical; line-height: 1.55; }
+html.dark .sd-input, html.dark .sd-select, html.dark .sd-textarea {
+  border-color: rgb(51 65 85); background: rgb(30 41 59); color: rgb(226 232 240);
+}
+.sd-input:focus, .sd-select:focus, .sd-textarea:focus {
+  outline: 2px solid rgb(59 130 246 / .45); outline-offset: 1px; border-color: rgb(59 130 246);
+}
+.sd-input[aria-invalid="true"] { border-color: rgb(225 29 72); }
+
+.sd-count { margin: 4px 0 0; font-size: 11px; text-align: right; color: rgb(148 163 184); }
+.sd-count[data-over="1"] { color: rgb(225 29 72); font-weight: 600; }
+
+.sd-msg {
+  margin: 0 0 14px;
+  padding: 9px 11px;
+  border-radius: 9px;
+  font-size: 12px;
+  line-height: 1.55;
+  border: 1px solid transparent;
+}
+.sd-msg[data-kind="error"] {
+  border-color: rgb(253 164 175); background: rgb(255 241 242); color: rgb(159 18 57);
+}
+html.dark .sd-msg[data-kind="error"] {
+  border-color: rgb(159 18 57); background: rgb(76 5 25 / .5); color: rgb(253 205 211);
+}
+.sd-msg[data-kind="ok"] {
+  border-color: rgb(134 239 172); background: rgb(240 253 244); color: rgb(21 92 55);
+}
+html.dark .sd-msg[data-kind="ok"] {
+  border-color: rgb(21 128 61); background: rgb(5 46 22 / .5); color: rgb(187 247 208);
+}
+
+/* The minted link. `break-all` matters: a 22-character token plus the host
+   overflows the dialog on a phone otherwise. */
+.sd-link {
+  display: block;
+  margin: 0 0 10px;
+  padding: 9px 11px;
+  border-radius: 9px;
+  border: 1px dashed rgb(203 213 225);
+  background: rgb(248 250 252);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11.5px;
+  line-height: 1.5;
+  word-break: break-all;
+  color: rgb(51 65 85);
+}
+html.dark .sd-link {
+  border-color: rgb(51 65 85); background: rgb(15 23 42); color: rgb(203 213 225);
+}
+
+.sd-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 20px 18px;
+}
+.sd-foot .sd-spacer { flex: 1; }
+.sd-btn {
+  padding: 8px 14px;
+  border-radius: 9px;
+  border: 1px solid rgb(203 213 225);
+  background: transparent;
+  color: rgb(71 85 105);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color .14s, color .14s, background .14s;
+}
+html.dark .sd-btn { border-color: rgb(51 65 85); color: rgb(203 213 225); }
+.sd-btn:hover:not(:disabled) { border-color: rgb(59 130 246); color: rgb(59 130 246); }
+.sd-btn-primary {
+  border-color: rgb(37 99 235); background: rgb(37 99 235); color: #fff; font-weight: 600;
+}
+.sd-btn-primary:hover:not(:disabled) {
+  border-color: rgb(29 78 216); background: rgb(29 78 216); color: #fff;
+}
+.sd-btn-danger:hover:not(:disabled) { border-color: rgb(225 29 72); color: rgb(225 29 72); }
+.sd-btn:disabled { opacity: .55; cursor: not-allowed; }
+
+.sd-hidden { display: none !important; }

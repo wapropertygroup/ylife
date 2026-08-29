@@ -5,48 +5,70 @@
 <script src="{{ url_for('static', filename='markdown.js') }}?v={{ cache_bust or 'dev' }}"></script>
 <style>
   /* Rendered Markdown for the two AI reports. Same shape as the brief card on
-     /markets — these are now the same artefact, market-scoped. */
-  .dr-md { font-size:13px; line-height:1.75; color:#cbd5e1; overflow-wrap:break-word; }
-  .dr-md h2 { font-size:14px; font-weight:700; color:#e2e8f0; margin:18px 0 8px;
-              padding-bottom:6px; border-bottom:1px solid #1e293b; }
+     /markets — these are now the same artefact, market-scoped.
+
+     Colours draw on the shared `--t-*` vocabulary in base.html; the three
+     `--dr-*` pairs below are the roles it has no token for, declared light-first
+     with `.dark` overriding, as base.html does. The two rgba()/8-digit-hex
+     tints are left literal — at 4-10% alpha they read the same over the white
+     and the near-black plane. */
+  :root {
+    /* One step dimmer than --t-ink-dim in dark mode, which is what these
+       all-caps micro-labels want. On white the ramp floors at slate-500
+       (4.76:1), so light mode converges with --t-ink-dim rather than take a
+       value too pale to read. Mirrors --ag-ink-dim on /agents. */
+    --dr-ink-dim: #64748b;
+    /* Up/down ink. Emerald-400 and red-400 are ~1.9:1 and ~2.8:1 on white, so
+       both drop to the 700 weight; they are text, never fills. */
+    --dr-up:   #047857;
+    --dr-down: #b91c1c;
+  }
+  .dark {
+    --dr-ink-dim: #475569;
+    --dr-up:   #34d399;
+    --dr-down: #f87171;
+  }
+  .dr-md { font-size:13px; line-height:1.75; color:var(--t-ink); overflow-wrap:break-word; }
+  .dr-md h2 { font-size:14px; font-weight:700; color:var(--t-ink-strong); margin:18px 0 8px;
+              padding-bottom:6px; border-bottom:1px solid var(--t-line); }
   .dr-md h2:first-child { margin-top:0; }
-  .dr-md h3 { font-size:13px; font-weight:600; color:#a5b4fc; margin:14px 0 6px; }
+  .dr-md h3 { font-size:13px; font-weight:600; color:var(--t-accent-ink); margin:14px 0 6px; }
   .dr-md p { margin:8px 0; }
   .dr-md ul, .dr-md ol { margin:8px 0 8px 20px; }
   .dr-md li { margin:3px 0; }
-  .dr-md strong { color:#e2e8f0; font-weight:600; }
-  .dr-md em { color:#94a3b8; }
+  .dr-md strong { color:var(--t-ink-strong); font-weight:600; }
+  .dr-md em { color:var(--t-ink-muted); }
   .dr-md table { width:100%; border-collapse:collapse; margin:10px 0; font-size:11.5px;
                  display:block; overflow-x:auto; }
-  .dr-md th, .dr-md td { border:1px solid #1e293b; padding:4px 8px; text-align:left;
+  .dr-md th, .dr-md td { border:1px solid var(--t-line); padding:4px 8px; text-align:left;
                          white-space:nowrap; }
-  .dr-md th { background:#131c2e; color:#94a3b8; font-weight:600; }
+  .dr-md th { background:var(--t-surface-alt); color:var(--t-ink-muted); font-weight:600; }
   .dr-md td:not(:first-child) { font-variant-numeric:tabular-nums; }
-  .dr-md tbody tr:nth-child(even) { background:rgba(30,41,59,.35); }
-  .card { background:#0f172a; border:1px solid #1e293b; border-radius:14px; padding:16px 18px; }
-  .card-title { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.07em; color:#475569; margin-bottom:10px; }
-  .idx-row { display:flex; align-items:center; justify-content:space-between; padding:6px 0; border-bottom:1px solid #1e293b; }
+  .dr-md tbody tr:nth-child(even) { background:var(--t-row-alt); }
+  .card { background:var(--t-surface); border:1px solid var(--t-line); border-radius:14px; padding:16px 18px; }
+  .card-title { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.07em; color:var(--dr-ink-dim); margin-bottom:10px; }
+  .idx-row { display:flex; align-items:center; justify-content:space-between; padding:6px 0; border-bottom:1px solid var(--t-line); }
   .idx-row:last-child { border-bottom:none; }
-  .up   { color:#34d399; }
-  .down { color:#f87171; }
-  .neutral { color:#94a3b8; }
-  .range-btn { padding:2px 9px; border-radius:6px; font-size:11px; font-weight:600; border:1px solid #334155; color:#94a3b8; background:transparent; cursor:pointer; transition:all .15s; }
-  .range-btn.active, .range-btn:hover { border-color:#6366f1; color:#a5b4fc; background:#6366f11a; }
-  .metric-chip { background:#0f172a; border:1px solid #1e293b; border-radius:10px; padding:10px 14px; }
-  .metric-chip .lbl { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:#475569; margin-bottom:4px; }
+  .up   { color:var(--dr-up); }
+  .down { color:var(--dr-down); }
+  .neutral { color:var(--t-ink-muted); }
+  .range-btn { padding:2px 9px; border-radius:6px; font-size:11px; font-weight:600; border:1px solid var(--t-line-strong); color:var(--t-ink-muted); background:transparent; cursor:pointer; transition:all .15s; }
+  .range-btn.active, .range-btn:hover { border-color:var(--t-accent); color:var(--t-accent-ink); background:#6366f11a; }
+  .metric-chip { background:var(--t-surface); border:1px solid var(--t-line); border-radius:10px; padding:10px 14px; }
+  .metric-chip .lbl { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--dr-ink-dim); margin-bottom:4px; }
   .metric-chip .val { font-size:20px; font-weight:800; tabular-nums; }
-  .metric-chip .sub { font-size:11px; color:#64748b; margin-top:2px; }
-  .stat-card  { background:#0f172a; border:1px solid #1e293b; border-radius:10px; padding:10px 12px; }
-  .stat-label { font-size:11px; color:#64748b; margin-bottom:4px; }
-  .stat-val   { font-size:16px; font-weight:700; color:#f1f5f9; }
+  .metric-chip .sub { font-size:11px; color:var(--t-ink-dim); margin-top:2px; }
+  .stat-card  { background:var(--t-surface); border:1px solid var(--t-line); border-radius:10px; padding:10px 12px; }
+  .stat-label { font-size:11px; color:var(--t-ink-dim); margin-bottom:4px; }
+  .stat-val   { font-size:16px; font-weight:700; color:var(--t-ink-strong); }
   /* Events table */
   .ev-table { width:100%; border-collapse:collapse; font-size:12px; }
-  .ev-table th { padding:5px 8px; text-align:left; color:#475569; font-weight:700; font-size:10px; text-transform:uppercase; letter-spacing:.06em; border-bottom:1px solid #1e293b; }
-  .ev-table td { padding:6px 8px; border-bottom:1px solid #1e293b0a; color:#94a3b8; vertical-align:middle; }
+  .ev-table th { padding:5px 8px; text-align:left; color:var(--dr-ink-dim); font-weight:700; font-size:10px; text-transform:uppercase; letter-spacing:.06em; border-bottom:1px solid var(--t-line); }
+  .ev-table td { padding:6px 8px; border-bottom:1px solid #1e293b0a; color:var(--t-ink-muted); vertical-align:middle; }
   .ev-table tr:last-child td { border-bottom:none; }
-  .ev-table tr.ev-date-header td { background:#0f172a; color:#64748b; font-size:10px; font-weight:700; padding:8px 8px 4px; border-bottom:1px solid #1e293b; }
-  .ev-table .ev-name { color:#e2e8f0; }
-  .ev-table .ev-country { font-weight:600; color:#94a3b8; }
+  .ev-table tr.ev-date-header td { background:var(--t-surface); color:var(--t-ink-dim); font-size:10px; font-weight:700; padding:8px 8px 4px; border-bottom:1px solid var(--t-line); }
+  .ev-table .ev-name { color:var(--t-ink-strong); }
+  .ev-table .ev-country { font-weight:600; color:var(--t-ink-muted); }
 </style>
 
 <!-- Header -->

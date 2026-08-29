@@ -143,6 +143,48 @@ def try_consume_chat(email: Optional[str]) -> tuple[bool, dict[str, Any]]:
                   "remaining": max(0, lim - used - 1), "tz": QUOTA_TZ}
 
 
+def limit_share() -> int:
+    """Reports a user may mail to somebody else per day.
+
+    Low, and low for a different reason than the other two ceilings. A run costs
+    us model calls and a chat costs one; a share costs almost nothing to compute
+    and instead spends *reputation* — it sends mail from our SES identity to an
+    address we have never seen, chosen by anyone who can sign in with Google. The
+    number that matters is therefore not "what can we afford" but "how much
+    unsolicited mail can one account cause before someone reports the domain",
+    which is a much smaller number.
+    """
+    return _int_env("AGENTS_SHARE_DAILY_LIMIT", 20)
+
+
+def try_consume_share(email: Optional[str]) -> tuple[bool, dict[str, Any]]:
+    """Reserve one outbound share. Counted separately from runs and chat.
+
+    Same file and same lock as the other two counters so the three cannot
+    interleave a lost update, under its own key so that sharing a report can
+    never eat into the allowance for producing one.
+
+    Deliberately consumed *before* the send rather than after: the failure mode
+    worth preventing is a loop that mails hundreds of addresses, and a counter
+    that only increments on success does not stop one.
+    """
+    key = (email or "").strip().lower()
+    if not key:
+        return False, {"used": 0, "limit": limit_share(), "remaining": 0}
+    day, lim = today(), limit_share()
+    with _Guard():
+        data = _read(day)
+        shares = data.setdefault("share", {})
+        used = int(shares.get(key, 0))
+        if used >= lim:
+            return False, {"used": used, "limit": lim, "remaining": 0, "tz": QUOTA_TZ}
+        shares[key] = used + 1
+        data["day"] = day
+        _write(day, data)
+    return True, {"used": used + 1, "limit": lim,
+                  "remaining": max(0, lim - used - 1), "tz": QUOTA_TZ}
+
+
 def today() -> str:
     """Current quota day as YYYY-MM-DD in the configured timezone."""
     try:

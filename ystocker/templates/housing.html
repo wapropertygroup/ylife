@@ -3,40 +3,76 @@
 
 {% block content %}
 <style>
+/* ── Theme tokens ──────────────────────────────────────────────────────────
+   Hand-written CSS, so Tailwind's `dark:` variant reaches none of it. Most
+   colours here map onto the shared `--t-*` vocabulary in base.html; the `--hs-*`
+   pairs below are the roles it has no token for, declared light-first with
+   `.dark` overriding, as base.html does.
+
+   The four source chips are brand hues used as 9px uppercase TEXT, so each one
+   inverts: violet-400, sky-blue, salmon and rose all sit near 2.2-2.7:1 on
+   white, which is unreadable. Their 15%-alpha *fills* stay literal, because a
+   15% brand tint reads as a tint over both planes — the chip keeps its publisher
+   colour in both themes, only the lettering flips. Contrast was measured against
+   the chip's own tinted background, not plain white: every light value clears
+   4.5:1 there. */
+:root {
+  --hs-violet-ink:  #6d28d9;   /* Explain affordance: label, dots, hover ink */
+  --hs-zillow-ink:  #1d63c4;
+  --hs-redfin-ink:  #a63c14;
+  --hs-fred-ink:    #475569;
+  --hs-realtor-ink: #a8202f;
+  /* Table up/down. The dark values are a teal-green and a soft red at ~3.2-3.4:1
+     on white, under the 4.5:1 these numbers need; both drop to the 700 weight. */
+  --hs-up:   #047857;
+  --hs-down: #b91c1c;
+}
+.dark {
+  --hs-violet-ink:  #a78bfa;
+  --hs-zillow-ink:  #7cb2f0;
+  --hs-redfin-ink:  #e89a76;
+  --hs-fred-ink:    #b6c2d1;
+  --hs-realtor-ink: #f0919e;
+  --hs-up:   #199e70;
+  --hs-down: #e66767;
+}
 .explain-btn {
   display: inline-flex; align-items: center; gap: 5px;
   padding: 3px 10px; border-radius: 6px;
-  border: 1px solid #334155; background: transparent;
-  color: #94a3b8; font-size: 11px; font-weight: 500;
+  border: 1px solid var(--t-line-strong); background: transparent;
+  color: var(--t-ink-muted); font-size: 11px; font-weight: 500;
   cursor: pointer; transition: color .15s, border-color .15s, background .15s;
   letter-spacing: .02em; white-space: nowrap;
 }
-.explain-btn:hover { color: #a78bfa; border-color: #7c3aed; }
+/* The hover border stays literal violet-600: a saturated mid-tone at 5.7:1 on
+   white and 3.1:1 on the dark plane, so it needs no theme of its own. Only the
+   ink beside it does. */
+.explain-btn:hover { color: var(--hs-violet-ink); border-color: #7c3aed; }
 .explain-btn:disabled { opacity: .5; cursor: not-allowed; }
 .range-btn {
   padding: 3px 9px; border-radius: 6px;
-  border: 1px solid #334155; background: transparent;
-  color: #64748b; font-size: 11px; font-weight: 500;
+  border: 1px solid var(--t-line-strong); background: transparent;
+  color: var(--t-ink-dim); font-size: 11px; font-weight: 500;
   cursor: pointer; transition: color .15s, border-color .15s, background .15s;
   letter-spacing: .02em;
 }
-.range-btn:hover { color: #cbd5e1; border-color: #64748b; }
-.range-btn.active { color: #a5b4fc; border-color: #6366f1; background: rgba(99,102,241,.12); }
+.range-btn:hover { color: var(--t-ink); border-color: var(--t-line-hover); }
+.range-btn.active { color: var(--t-accent-ink); border-color: var(--t-accent); background: rgba(99,102,241,.12); }
 .card-tools {
   display: flex; flex-wrap: wrap; align-items: center; gap: 4px;
 }
 .explain-panel {
   margin-top: 12px; padding: 14px 16px; border-radius: 10px;
   background: rgba(167,139,250,.06); border: 1px solid rgba(167,139,250,.2);
-  color: #cbd5e1; font-size: 13px; line-height: 1.65; display: none;
+  color: var(--t-ink); font-size: 13px; line-height: 1.65; display: none;
 }
 .explain-panel.visible { display: block; }
 .explain-thinking {
   display: inline-flex; align-items: center; gap: 6px;
-  color: #a78bfa; font-size: 12px; font-style: italic;
+  color: var(--hs-violet-ink); font-size: 12px; font-style: italic;
 }
 .explain-thinking .dot {
-  width: 5px; height: 5px; border-radius: 50%; background: #a78bfa;
+  width: 5px; height: 5px; border-radius: 50%; background: var(--hs-violet-ink);
   animation: explainBounce 1.2s infinite ease-in-out;
 }
 .explain-thinking .dot:nth-child(2) { animation-delay: .2s; }
@@ -52,27 +88,27 @@
   font-size: 9px; font-weight: 600; letter-spacing: .04em;
   text-transform: uppercase; vertical-align: middle;
 }
-.src-zillow { background: rgba(57,135,229,.15);  color: #7cb2f0; }
-.src-redfin { background: rgba(217,89,38,.15);   color: #e89a76; }
-.src-fred   { background: rgba(148,163,184,.15); color: #b6c2d1; }
-.src-realtor{ background: rgba(212,42,61,.15);   color: #f0919e; }
+.src-zillow { background: rgba(57,135,229,.15);  color: var(--hs-zillow-ink); }
+.src-redfin { background: rgba(217,89,38,.15);   color: var(--hs-redfin-ink); }
+.src-fred   { background: rgba(148,163,184,.15); color: var(--hs-fred-ink); }
+.src-realtor{ background: rgba(212,42,61,.15);   color: var(--hs-realtor-ink); }
 .hz-table { border-collapse: separate; border-spacing: 0 2px; }
 .hz-table th {
-  font-size: 10px; font-weight: 600; color: #94a3b8;
+  font-size: 10px; font-weight: 600; color: var(--t-ink-muted);
   text-transform: uppercase; letter-spacing: .04em;
   padding: 4px 10px; text-align: right; white-space: nowrap;
 }
 .hz-table th:first-child, .hz-table td:first-child { text-align: left; }
 .hz-table td {
-  font-size: 12px; color: #cbd5e1; padding: 6px 10px;
+  font-size: 12px; color: var(--t-ink); padding: 6px 10px;
   text-align: right; white-space: nowrap;
   font-variant-numeric: tabular-nums;
-  background: rgba(30,41,59,.4);
+  background: var(--t-row-alt);
 }
-.hz-table tr td:first-child  { border-radius: 6px 0 0 6px; color: #e2e8f0; }
+.hz-table tr td:first-child  { border-radius: 6px 0 0 6px; color: var(--t-ink-strong); }
 .hz-table tr td:last-child   { border-radius: 0 6px 6px 0; }
-.hz-up   { color: #199e70; }
-.hz-down { color: #e66767; }
+.hz-up   { color: var(--hs-up); }
+.hz-down { color: var(--hs-down); }
 /* Section divider — the page now spans prices, rents, supply and credit, so
    the eye needs anchors between groups of cards. */
 .hz-section {
@@ -81,9 +117,9 @@
 }
 .hz-section h2 {
   font-size: 11px; font-weight: 700; letter-spacing: .09em;
-  text-transform: uppercase; color: #94a3b8; white-space: nowrap;
+  text-transform: uppercase; color: var(--t-ink-muted); white-space: nowrap;
 }
-.hz-section .rule { flex: 1; height: 1px; background: #1e293b; }
+.hz-section .rule { flex: 1; height: 1px; background: var(--t-line); }
 /* Layout utilities kept local deliberately.
    static/css/tailwind.css is a compiled artifact: a utility only exists if it
    was present in a template when `bash build_css.sh` last ran, so a newly

@@ -4,6 +4,39 @@
 
 {% block content %}
 <style>
+/* ── Theme tokens ─────────────────────────────────────────────────────────
+   Hand-written CSS, so Tailwind's `dark:` variant reaches none of it. The
+   shared `--t-*` vocabulary in base.html covers the chrome; only what has no
+   shared equivalent is declared here, --hm- prefixed, light-first with `.dark`
+   overriding so a missing class degrades to a readable light page.
+
+   The tile colour SCALE below is data, not chrome: those hues encode the
+   percentage change this page exists to show, they are saturated enough to
+   carry white labels on either background, and they are deliberately identical
+   in both themes. Only the zero step is themed -- see --hm-flat. */
+:root {
+  /* The neutral tile, and the legend's centre cell. In dark mode this is the
+     page's own slate, so a flat stock recedes into the background. That trick
+     is not available on white: the tile's label is white, so the fill has to
+     stay dark enough to carry it (slate-600 is 7:1) while still reading as
+     "grey = flat" beside the saturated tiles. */
+  --hm-flat: #475569;
+  /* Hover ring. Drawn outside the tile, over the grid gaps and its neighbours,
+     so it takes the page's contrast direction rather than the tile's: white at
+     22% is invisible over a white page. */
+  --hm-tile-ring: rgba(15,23,42,.28);
+  --hm-shadow: rgba(15,23,42,.16);   /* tooltip elevation; black at 60% is dirt on white */
+  --hm-scheme: light;                /* the native date picker's own chrome */
+  --hm-picker-invert: 0;             /* ...and its indicator glyph, which is dark already */
+}
+.dark {
+  --hm-flat: #1e293b;
+  --hm-tile-ring: rgba(255,255,255,.22);
+  --hm-shadow: rgba(0,0,0,.6);
+  --hm-scheme: dark;
+  --hm-picker-invert: .6;
+}
+
 /* ── Tile colours ─────────────────────────────────────────────────────── */
 .hm-tile {
   position: relative; border-radius: 5px; cursor: pointer; overflow: hidden;
@@ -11,19 +44,20 @@
   text-align: center; padding: 4px 3px; user-select: none;
   transition: filter .12s, transform .12s, box-shadow .12s;
 }
-.hm-tile:hover { filter: brightness(1.22); transform: scale(1.035); box-shadow: 0 0 0 2px rgba(255,255,255,.22); z-index: 3; }
+.hm-tile:hover { filter: brightness(1.22); transform: scale(1.035); box-shadow: 0 0 0 2px var(--hm-tile-ring); z-index: 3; }
+/* White on a saturated data fill: identical in both themes by design. */
 .hm-tile .ht  { font-size: 11px; font-weight: 700; line-height: 1.25; color: rgba(255,255,255,.95); }
 .hm-tile .hc  { font-size: 10px; font-weight: 600; line-height: 1.2;  color: rgba(255,255,255,.82); }
 .hm-tile .hn  { font-size: 9px;  font-weight: 400; line-height: 1.1;  color: rgba(255,255,255,.55); margin-top: 1px; }
 
-/* Colour scale */
+/* Colour scale — data, not chrome. See the note above. */
 .cc-n5  { background: #7f1d1d; }
 .cc-n4  { background: #9b1c1c; }
 .cc-n3  { background: #b91c1c; }
 .cc-n2  { background: #dc2626; }
 .cc-n1  { background: #ef4444; }
 .cc-n05 { background: #f87171; }
-.cc-0   { background: #1e293b; }
+.cc-0   { background: var(--hm-flat); }
 .cc-p05 { background: #6ee7b7; }
 .cc-p1  { background: #34d399; }
 .cc-p2  { background: #10b981; }
@@ -39,7 +73,11 @@
 }
 .sector-name {
   font-size: 10px; font-weight: 700; text-transform: uppercase;
-  letter-spacing: .08em; color: #475569;
+  letter-spacing: .08em;
+  /* A fallback only: the sector's own hue arrives as an inline style from
+     SECTOR_COLORS. Slate-600 is the shared muted-label value on white and is
+     what dark mode already used, so this needs no token. */
+  color: #475569;
 }
 .sector-avg {
   font-size: 10px; font-weight: 600; padding: 1px 6px;
@@ -49,10 +87,10 @@
 /* Tooltip */
 #hmTooltip {
   position: fixed; z-index: 999; pointer-events: none;
-  background: #0f172a; border: 1px solid #334155;
+  background: var(--t-surface); border: 1px solid var(--t-line-strong);
   border-radius: 10px; padding: 8px 12px; min-width: 160px;
-  box-shadow: 0 8px 32px rgba(0,0,0,.6);
-  font-size: 12px; color: #e2e8f0;
+  box-shadow: 0 8px 32px var(--hm-shadow);
+  font-size: 12px; color: var(--t-ink-strong);
   opacity: 0; transition: opacity .1s;
 }
 #hmTooltip #ttDetailsLink { pointer-events: auto; }
@@ -61,15 +99,15 @@
 .lg-cell { height: 10px; border-radius: 2px; flex: 1; }
 
 /* Date input */
-input[type="date"] { color-scheme: dark; }
-input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(.6); }
+input[type="date"] { color-scheme: var(--hm-scheme); }
+input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(var(--hm-picker-invert)); }
 .hm-toggle-btn {
   font-size: 10px; padding: 2px 8px; border-radius: 4px;
-  border: 1px solid #334155; background: transparent; color: #64748b; cursor: pointer;
+  border: 1px solid var(--t-line-strong); background: transparent; color: var(--t-ink-dim); cursor: pointer;
   transition: all 0.15s;
 }
-.hm-toggle-btn:hover { color: #cbd5e1; border-color: #475569; }
-.hm-toggle-btn.active { color: #a5b4fc; border-color: #6366f1; background: rgba(99,102,241,0.15); }
+.hm-toggle-btn:hover { color: var(--t-ink); border-color: var(--t-line-hover); }
+.hm-toggle-btn.active { color: var(--t-accent-ink); border-color: var(--t-accent); background: rgba(99,102,241,0.15); }
 </style>
 
 <!-- ── Tooltip ──────────────────────────────────────────────────────────── -->

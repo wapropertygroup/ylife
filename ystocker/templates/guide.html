@@ -3,6 +3,35 @@
 
 {% block content %}
 <style>
+/* ── Theme tokens ─────────────────────────────────────────────────────────
+   Hand-written CSS, so Tailwind's `dark:` variant reaches none of it. The
+   shared `--t-*` vocabulary in base.html covers most of this block; what has no
+   shared equivalent is declared here, --gd- prefixed, light-first with `.dark`
+   overriding so a missing class degrades to a readable light page.
+
+   The pale indigo used as TEXT (tips, TOC, section numbers) resolves through
+   --t-accent-ink, which inverts to indigo-700 on white. The 8-30% indigo it
+   sits on are FILLS and stay literal: a tint of the brand hue reads as a tint
+   over either plane. */
+:root {
+  /* The fake browser title bar. Slate-100 rather than the shared
+     --t-surface-alt so dark mode keeps the slate-800 it had, and because the
+     bar's URL label is a plain `text-slate-500`: every step darker costs it
+     contrast it does not have to spare. */
+  --gd-bar: #f1f5f9;
+  --gd-shadow: rgba(15,23,42,.14);      /* the frame's elevation; 50% black is dirt on white */
+  --gd-ghost-ink: #64748b;              /* "screenshot coming soon", faint by design */
+  /* The placeholder's diagonal hatch. The alpha direction inverts with the
+     plane: a 40% slate is barely there over near-black and loud over white, so
+     light mode takes a lighter hue at a lower alpha to stay a hint. */
+  --gd-hatch: rgba(148,163,184,.25);
+}
+.dark {
+  --gd-bar: #1e293b;
+  --gd-shadow: rgba(0,0,0,0.5);
+  --gd-ghost-ink: #475569;
+  --gd-hatch: rgba(30,41,59,0.4);
+}
 .guide-section {
   scroll-margin-top: 80px;
 }
@@ -14,7 +43,7 @@
   border-radius: 8px;
   background: rgba(99,102,241,0.10);
   border: 1px solid rgba(99,102,241,0.20);
-  color: #a5b4fc;
+  color: var(--t-accent-ink);
   font-size: 12.5px;
   line-height: 1.5;
 }
@@ -22,18 +51,18 @@
 .screen-frame {
   border-radius: 14px;
   overflow: hidden;
-  border: 1px solid #1e293b;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
-  background: #0f172a;
+  border: 1px solid var(--t-line);
+  box-shadow: 0 8px 32px var(--gd-shadow);
+  background: var(--t-surface);
   position: relative;
 }
 .screen-frame .bar {
-  background: #1e293b;
+  background: var(--gd-bar);
   padding: 8px 14px;
   display: flex;
   align-items: center;
   gap: 6px;
-  border-bottom: 1px solid #334155;
+  border-bottom: 1px solid var(--t-line-strong);
 }
 .screen-frame .dot { width:10px; height:10px; border-radius:50%; }
 .screen-placeholder {
@@ -43,14 +72,14 @@
   align-items: center;
   justify-content: center;
   gap: 10px;
-  color: #475569;
+  color: var(--gd-ghost-ink);
   font-size: 13px;
   background: repeating-linear-gradient(
     45deg,
     transparent,
     transparent 10px,
-    rgba(30,41,59,0.4) 10px,
-    rgba(30,41,59,0.4) 11px
+    var(--gd-hatch) 10px,
+    var(--gd-hatch) 11px
   );
 }
 .toc-link {
@@ -58,18 +87,18 @@
   padding: 5px 10px;
   border-radius: 6px;
   font-size: 13px;
-  color: #64748b;
+  color: var(--t-ink-dim);
   transition: color 0.15s, background 0.15s;
   border-left: 2px solid transparent;
 }
 .toc-link:hover {
-  color: #a5b4fc;
+  color: var(--t-accent-ink);
   background: rgba(99,102,241,0.08);
-  border-left-color: #6366f1;
+  border-left-color: var(--t-accent);
 }
 .toc-link.active {
-  color: #a5b4fc;
-  border-left-color: #6366f1;
+  color: var(--t-accent-ink);
+  border-left-color: var(--t-accent);
   background: rgba(99,102,241,0.10);
 }
 .section-num {
@@ -81,7 +110,7 @@
   border-radius: 8px;
   background: rgba(99,102,241,0.15);
   border: 1px solid rgba(99,102,241,0.3);
-  color: #a5b4fc;
+  color: var(--t-accent-ink);
   font-size: 13px;
   font-weight: 700;
   flex-shrink: 0;

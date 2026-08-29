@@ -6,6 +6,14 @@
    anyway. #}
 {% set _agents_floating = not _agents_embedded
        and request.endpoint not in ('main.agents_page', 'main.login') %}
+{#  The share dialog. Gated server-side on being signed in so an anonymous
+    reader — including the recipient of a shared link, who lands on a page that
+    also extends this template — downloads neither the CSS, the JS nor the markup.
+    The button itself is additionally x-show'd on Alpine's `user`, so a
+    client-side logout hides it without waiting for a reload, matching the auth
+    chip beside it. Suppressed in the embedded /agents iframe: a modal inside a
+    240px-tall frame is unusable, and the hosting page has its own. #}
+{% set _share_ui = current_user.email and not _agents_embedded %}
 <!doctype html>
 <html lang="en" class="h-full dark">
 <head>
@@ -54,11 +62,21 @@
        under the clock, which would need safe-area insets applied across every
        template. -->
   <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}?v={{ cache_bust or 'dev' }}">
-  {# Kept in step with the theme by Theme.apply() below. This is the colour iOS
-     and Android paint the status bar and address bar with, so leaving it at the
-     dark navy would frame a light page in a dark bezel — most visible in the
-     installed PWA, which has no address bar to explain it. #}
+  {# The colour iOS and Android paint the status bar and address bar with.
+     Leaving it at the dark navy would frame a light page in a dark bezel — most
+     visible in the installed PWA, which has no address bar to explain it.
+
+     The default below is the DARK value because dark is the default theme; the
+     script that follows corrects it for a returning light-mode reader. That sync
+     cannot live in the class-flipping script at the top of <head>, because this
+     element does not exist yet at that point — hence two scripts rather than
+     one. toggleTheme() keeps it in step from then on. #}
   <meta name="theme-color" id="themeColorMeta" content="#0f172a">
+  <script>
+    if (!document.documentElement.classList.contains('dark')) {
+      document.getElementById('themeColorMeta').setAttribute('content', '#f8fafc');
+    }
+  </script>
   <link rel="apple-touch-icon" href="{{ url_for('static', filename='img/pwa-icon-180.png') }}">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -178,6 +196,21 @@
     return { dark: dark, c: c };
   })();
 
+  // ── Theme-pair class toggling ─────────────────────────────────────────────
+  // `classList.toggle()` takes exactly ONE token and throws
+  // InvalidCharacterError on a string containing a space, while `add`/`remove`
+  // are variadic and take one token per argument. Light-mode support turned
+  // every hardcoded class into a PAIR ("bg-slate-100 dark:bg-slate-800"), so
+  // every `toggle('<pair>', cond)` in the dashboards became a call that throws —
+  // and because these run inside click handlers, the throw aborted the rest of
+  // the handler rather than showing up as a broken colour.
+  window.toggleClasses = function (el, classes, on) {
+    if (!el) return;
+    classes.split(/\s+/).filter(Boolean).forEach(function (c) {
+      el.classList.toggle(c, on);
+    });
+  };
+
   // ── Fetch with automatic retry ────────────────────────────────────────────
   // Wraps same-origin API calls with up to 4 retries + exponential back-off
   // (1 s → 2 s → 4 s → 8 s = 15 s total).  External URLs pass through unchanged.
@@ -221,6 +254,10 @@
 
   {% if _agents_floating %}
   <link rel="stylesheet" href="{{ url_for('static', filename='agents_float.css') }}?v={{ cache_bust or 'dev' }}">
+  {% endif %}
+
+  {% if _share_ui %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='share.css') }}?v={{ cache_bust or 'dev' }}">
   {% endif %}
 
   <!-- Google Identity Services (only when configured) -->
@@ -318,7 +355,7 @@
   </style>
 </head>
 
-<body class="bg-white dark:bg-slate-950 text-slate-800 dark:text-slate-100 min-h-screen flex flex-col{% if _agents_embedded %} agents-embedded{% endif %}"
+<body class="bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 min-h-screen flex flex-col{% if _agents_embedded %} agents-embedded{% endif %}"
       x-data='{ navOpen: false, user: {{ current_user|tojson if current_user is defined else "{\"email\":\"\",\"name\":\"\",\"picture\":\"\"}"|safe }} }'>
 
   {% if not _agents_embedded %}
@@ -481,6 +518,26 @@
         </div>
 
         <!-- Auth: signed-in chip / sign-in button -->
+        {% if _share_ui %}
+        {#  Share lives beside the identity chip rather than in the nav proper:
+            it acts on something the signed-in reader owns, so it belongs with the
+            other per-account controls and not next to the dashboards. The trigger
+            is declarative — share.js binds one delegated listener for anything
+            carrying [data-share-open] — so this button needs no script of its own
+            and neither will any page that later wants one. #}
+        <button type="button" data-share-open=""
+                x-show="user && user.email" x-cloak
+                title="Share a report" data-i18n-title="share.nav_title"
+                class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium
+                       text-slate-500 dark:text-slate-400 hover:text-brand
+                       hover:bg-slate-100 dark:hover:bg-slate-800 transition shrink-0">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7M12 3v12M12 3 8 7m4-4 4 4"/>
+          </svg>
+          <span class="hidden lg:inline" data-i18n="share.nav">Share</span>
+        </button>
+        {% endif %}
         <div x-show="user && user.email" class="flex items-center gap-2" x-cloak>
           <img x-show="user && user.picture" :src="user && user.picture" class="w-7 h-7 rounded-full border border-slate-300 dark:border-slate-700" referrerpolicy="no-referrer">
           <span class="text-xs text-slate-500 dark:text-slate-400 max-w-[8rem] truncate" x-text="user && user.name"></span>
@@ -648,6 +705,18 @@
         <a id="refreshBtnMobile" href="{{ refresh_url }}" class="px-3 py-2.5 rounded-md text-sm text-brand hover:bg-slate-100 dark:hover:bg-slate-800 mt-1" data-i18n="nav.refresh">↻ Refresh</a>
 
         <!-- Mobile auth -->
+        {% if _share_ui %}
+        <button type="button" data-share-open=""
+                x-show="user && user.email" x-cloak
+                class="flex items-center gap-2 px-3 py-2.5 rounded-md text-sm text-left
+                       text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 mt-1">
+          <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7M12 3v12M12 3 8 7m4-4 4 4"/>
+          </svg>
+          <span data-i18n="share.nav">Share</span>
+        </button>
+        {% endif %}
         <div x-show="user && user.email" class="flex items-center gap-2 px-3 py-2.5 border-t border-slate-200 dark:border-slate-800 mt-1 pt-3" x-cloak>
           <img x-show="user && user.picture" :src="user && user.picture" class="w-7 h-7 rounded-full border border-slate-300 dark:border-slate-700" referrerpolicy="no-referrer">
           <span class="text-xs text-slate-600 dark:text-slate-300 flex-1 truncate" x-text="user && user.name"></span>
@@ -712,6 +781,10 @@
     {% include "_agents_float.html" %}
   {% endif %}
 
+  {% if _share_ui %}
+    {% include "_share_modal.html" %}
+  {% endif %}
+
   {% if not _agents_embedded %}
   <footer class="border-t border-slate-200 dark:border-slate-800 py-4 text-center text-xs text-slate-500 dark:text-slate-600">
     <span data-i18n="footer.text">{{ brand_name }} — data via Yahoo Finance</span> &nbsp;·&nbsp;
@@ -757,7 +830,7 @@ function toggleTheme() {
   } catch (_) { /* private mode: the toggle still applies for this page */ }
 
   const meta = document.getElementById('themeColorMeta');
-  if (meta) meta.setAttribute('content', toLight ? '#ffffff' : '#0f172a');
+  if (meta) meta.setAttribute('content', toLight ? '#f8fafc' : '#0f172a');
 
   if (document.querySelector('canvas')) location.reload();
 }
@@ -812,6 +885,10 @@ function toggleTheme() {
 
 {% if _agents_floating %}
 <script src="{{ url_for('static', filename='agents_float.js') }}?v={{ cache_bust or 'dev' }}"></script>
+{% endif %}
+
+{% if _share_ui %}
+<script src="{{ url_for('static', filename='share.js') }}?v={{ cache_bust or 'dev' }}"></script>
 {% endif %}
 
 {#

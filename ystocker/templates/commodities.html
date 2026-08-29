@@ -3,59 +3,113 @@
 
 {% block content %}
 <style>
+  /* ── Theme tokens ────────────────────────────────────────────────────────
+     Hand-written CSS, so Tailwind's `dark:` variant reaches none of it. Most
+     colours here map onto the shared `--t-*` vocabulary in base.html; the
+     `--cm-*` pairs below are the ones that do not, declared light-first with
+     `.dark` overriding, exactly as base.html does.
+
+     Roles, not values: #f87171 appears both as pill/change TEXT and as the hot
+     end of the 52-week range BAR, and the two invert differently — the text
+     needs red-700 to clear 4.5:1 on white, the bar fill only red-600, which is
+     all the 3:1 of a meaningful graphic asks. Hence two tokens for one dark hex.
+     The rgba() indigo tints are deliberately left literal: at 5-18% alpha they
+     read as a tint over both the white and the near-black plane. */
+  :root {
+    --cm-fill-hover: #f1f5f9;   /* ghost-button hover plane             */
+    --cm-track:      #e2e8f0;   /* unfilled remainder of the range bar  */
+
+    /* 52-week range bar, cheap → dear. Fills rather than text, so the light
+       values stop at the 600 weights: enough for 3:1 against white without
+       turning a 6px bar into a black stripe. */
+    --cm-range-low:  #059669;
+    --cm-range-mid:  #d97706;
+    --cm-range-high: #dc2626;
+    /* The marker needle inverts outright — a near-white needle is maximum
+       contrast on a dark card and invisible on a white one. Its glow inverts
+       with it, since that is what separates it from the bar beneath. */
+    --cm-marker:      #0f172a;
+    --cm-marker-glow: rgba(15,23,42,.5);
+
+    /* Status and group hues used as TEXT at 9-11px, so each needs 4.5:1 on its
+       own pale tint — which puts most of them at the 700 weight. Orange and
+       green go one further to the 800: measured against their *own* 15% tint
+       rather than plain white, the 700s land at 4.44 and 4.40, just short. */
+    --cm-up:         #047857;
+    --cm-red-ink:    #b91c1c;
+    --cm-amber-ink:  #b45309;
+    --cm-orange-ink: #9a3412;
+    --cm-green-ink:  #166534;
+  }
+  .dark {
+    --cm-fill-hover: #1e293b;
+    --cm-track:      #1e293b;
+
+    --cm-range-low:  #34d399;
+    --cm-range-mid:  #fbbf24;
+    --cm-range-high: #f87171;
+    --cm-marker:      #f1f5f9;
+    --cm-marker-glow: rgba(255,255,255,0.6);
+
+    --cm-up:         #34d399;
+    --cm-red-ink:    #f87171;
+    --cm-amber-ink:  #fbbf24;
+    --cm-orange-ink: #f97316;
+    --cm-green-ink:  #22c55e;
+  }
   .range-btn {
     font-size: 11px; font-weight: 500; line-height: 1;
     padding: 3px 8px; border-radius: 5px;
-    border: 1px solid #334155; background: transparent; color: #64748b;
+    border: 1px solid var(--t-line-strong); background: transparent; color: var(--t-ink-dim);
     cursor: pointer; transition: color 0.15s, background 0.15s, border-color 0.15s;
   }
-  .range-btn:hover  { color: #cbd5e1; border-color: #475569; background: #1e293b; }
-  .range-btn.active { color: #a5b4fc; border-color: #6366f1; background: rgba(99,102,241,0.15); }
+  .range-btn:hover  { color: var(--t-ink); border-color: var(--t-line-hover); background: var(--cm-fill-hover); }
+  .range-btn.active { color: var(--t-accent-ink); border-color: var(--t-accent); background: rgba(99,102,241,0.15); }
   .commodity-card {
-    background: #0f172a;
-    border: 1px solid #1e293b;
+    background: var(--t-surface);
+    border: 1px solid var(--t-line);
     border-radius: 14px;
     padding: 14px 16px;
     transition: border-color 0.15s, transform 0.15s;
     cursor: pointer;
   }
-  .commodity-card:hover { border-color: #475569; transform: translateY(-1px); }
-  .commodity-card.active { border-color: #6366f1; background: rgba(99,102,241,0.05); }
+  .commodity-card:hover { border-color: var(--t-line-hover); transform: translateY(-1px); }
+  .commodity-card.active { border-color: var(--t-accent); background: rgba(99,102,241,0.05); }
   .pos-bar {
-    position: relative; height: 6px; background: #1e293b; border-radius: 3px; overflow: hidden;
+    position: relative; height: 6px; background: var(--cm-track); border-radius: 3px; overflow: hidden;
   }
   .pos-bar-fill {
     position: absolute; top: 0; bottom: 0; left: 0;
-    background: linear-gradient(to right, #34d399, #fbbf24, #f87171);
+    background: linear-gradient(to right, var(--cm-range-low), var(--cm-range-mid), var(--cm-range-high));
   }
   .pos-bar-marker {
     position: absolute; top: -3px; bottom: -3px; width: 2px;
-    background: #f1f5f9; box-shadow: 0 0 4px rgba(255,255,255,0.6);
+    background: var(--cm-marker); box-shadow: 0 0 4px var(--cm-marker-glow);
     transform: translateX(-1px);
   }
   .group-pill {
     font-size: 9px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase;
     padding: 2px 7px; border-radius: 999px;
   }
-  .group-pill.metals     { background: rgba(251,191,36,0.15);  color: #fbbf24; }
-  .group-pill.industrial { background: rgba(249,115,22,0.15);  color: #f97316; }
-  .group-pill.energy     { background: rgba(248,113,113,0.15); color: #f87171; }
-  .group-pill.agri       { background: rgba(34,197,94,0.15);   color: #22c55e; }
-  .up   { color: #34d399 !important; }
-  .down { color: #f87171 !important; }
+  .group-pill.metals     { background: rgba(251,191,36,0.15);  color: var(--cm-amber-ink); }
+  .group-pill.industrial { background: rgba(249,115,22,0.15);  color: var(--cm-orange-ink); }
+  .group-pill.energy     { background: rgba(248,113,113,0.15); color: var(--cm-red-ink); }
+  .group-pill.agri       { background: rgba(34,197,94,0.15);   color: var(--cm-green-ink); }
+  .up   { color: var(--cm-up) !important; }
+  .down { color: var(--cm-red-ink) !important; }
   .rsi-badge {
     font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 4px;
   }
-  .rsi-ob { background: rgba(248,113,113,0.18); color: #f87171; }
-  .rsi-os { background: rgba(52,211,153,0.18);  color: #34d399; }
-  .rsi-nu { background: rgba(148,163,184,0.15); color: #94a3b8; }
+  .rsi-ob { background: rgba(248,113,113,0.18); color: var(--cm-red-ink); }
+  .rsi-os { background: rgba(52,211,153,0.18);  color: var(--cm-up); }
+  .rsi-nu { background: rgba(148,163,184,0.15); color: var(--t-ink-muted); }
   .rsi-filter-btn {
     font-size: 10px; padding: 2px 8px; border-radius: 4px;
-    border: 1px solid #334155; background: transparent; color: #64748b; cursor: pointer;
+    border: 1px solid var(--t-line-strong); background: transparent; color: var(--t-ink-dim); cursor: pointer;
     transition: all 0.15s;
   }
-  .rsi-filter-btn:hover { color: #cbd5e1; border-color: #475569; }
-  .rsi-filter-btn.active { color: #a5b4fc; border-color: #6366f1; background: rgba(99,102,241,0.15); }
+  .rsi-filter-btn:hover { color: var(--t-ink); border-color: var(--t-line-hover); }
+  .rsi-filter-btn.active { color: var(--t-accent-ink); border-color: var(--t-accent); background: rgba(99,102,241,0.15); }
 </style>
 
 <!-- ── Header ──────────────────────────────────────────────────────────── -->
@@ -125,27 +179,27 @@
     </div>
     <!-- Quick-stat row -->
     <div class="grid grid-cols-3 sm:grid-cols-6 gap-2 mb-4 text-xs">
-      <div class="bg-white/50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-lg p-2">
+      <div class="bg-slate-100 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-lg p-2">
         <div class="text-[10px] text-slate-500" data-i18n="commodities.metric_1m">1M</div>
         <div id="detail_1m" class="font-mono font-bold">—</div>
       </div>
-      <div class="bg-white/50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-lg p-2">
+      <div class="bg-slate-100 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-lg p-2">
         <div class="text-[10px] text-slate-500" data-i18n="commodities.metric_3m">3M</div>
         <div id="detail_3m" class="font-mono font-bold">—</div>
       </div>
-      <div class="bg-white/50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-lg p-2">
+      <div class="bg-slate-100 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-lg p-2">
         <div class="text-[10px] text-slate-500" data-i18n="commodities.metric_6m">6M</div>
         <div id="detail_6m" class="font-mono font-bold">—</div>
       </div>
-      <div class="bg-white/50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-lg p-2">
+      <div class="bg-slate-100 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-lg p-2">
         <div class="text-[10px] text-slate-500" data-i18n="commodities.metric_ytd">YTD</div>
         <div id="detail_ytd" class="font-mono font-bold">—</div>
       </div>
-      <div class="bg-white/50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-lg p-2">
+      <div class="bg-slate-100 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-lg p-2">
         <div class="text-[10px] text-slate-500" data-i18n="commodities.metric_1y">1Y</div>
         <div id="detail_1y" class="font-mono font-bold">—</div>
       </div>
-      <div class="bg-white/50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-lg p-2">
+      <div class="bg-slate-100 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-lg p-2">
         <div class="text-[10px] text-slate-500" data-i18n="commodities.metric_rsi">RSI-14</div>
         <div id="detail_rsi" class="font-mono font-bold">—</div>
       </div>
@@ -609,7 +663,7 @@
   // ─── Cross-commodity ratios
   function buildRatioCard(key, r) {
     const wrap = document.createElement('div');
-    wrap.className = 'bg-white/50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-xl p-3';
+    wrap.className = 'bg-slate-100 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-xl p-3';
     wrap.innerHTML = `
       <div class="flex items-start justify-between mb-2">
         <div>

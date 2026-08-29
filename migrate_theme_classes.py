@@ -24,8 +24,12 @@ from pathlib import Path
 # dark value -> light value, per property. A property/shade pair absent from this
 # table is left exactly as found.
 MAP: dict[str, str] = {
-    # Surfaces: the page and its panels invert; insets and hovers become tints.
-    "bg-slate-950": "bg-white",
+    # Surfaces. Three tiers, mirroring how the dark theme layers: the page plane
+    # (slate-950 -> slate-50), the card raised above it (slate-900 -> white), and
+    # the well recessed into the card (slate-800 -> slate-100). Mapping the page
+    # to white as well as the card left the two indistinguishable, so every card
+    # read as a floating border with no plane behind it.
+    "bg-slate-950": "bg-slate-50",
     "bg-slate-900": "bg-white",
     "bg-slate-800": "bg-slate-100",
     "bg-slate-700": "bg-slate-200",

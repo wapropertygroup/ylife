@@ -195,11 +195,21 @@ Each app follows the same pattern:
   own dates and flags one that has stopped)
 - `brief.py` — The AI Markets Brief: formats all eight dashboards into one
   prompt and asks for a sectioned, table-per-section daily brief
+- `futu.py` — Deep-links the `/history` FuTu button into the Futubull app
+  (`ftnn://quote/stockDetail/<stockId>/1`), with the futunn.com page as the
+  fallback. Futu routes its native quote screen by an opaque internal id, not the
+  ticker, so the id is scraped from the quote page once and cached forever in
+  `cache/futu_ids.json`.
 - `report_email.py` — Mails a finished `/agents` report as HTML. Owns its own
   Markdown→HTML renderer (a server-side port of `static/markdown.js`, emitting
   inline styles) rather than reusing `_build_email_sections`, which splits on
   blank lines into `<p>` and would deliver a report's pipe tables as literal
   pipes.
+- `share.py` — Sharing a finished report with somebody who did not run it: mints
+  and resolves the capability tokens behind `/agents/shared/<token>`, and owns the
+  recipient/note validation and the field allowlist that keeps the owner's address
+  out of an unauthenticated response. Holds no mail code — the mail is
+  `report_email.send_share()`, so there is one renderer.
 
 ### Emailing a finished agent report
 
@@ -250,6 +260,83 @@ link host, which defaults to `https://trade-agents.com` rather than
 `stock.li-family.us` because that is the domain `/agents` exists to serve.
 Errors are *not* mailed — only finished reports. Tests:
 `tests/test_report_email.py` (76 unit tests, no app, no network, no SES).
+
+### Sharing a report with another user
+
+`share.py` plus five routes let a signed-in user mail one of their finished
+reports to anybody, and it is the only user-to-user feature in the monorepo. The
+unit of sharing is a **capability**: a row keyed by `secrets.token_urlsafe(16)`
+in `ystocker-agent-shares`, and `GET /agents/shared/<token>` will render whatever
+job that row names, to anyone, with no sign-in.
+
+That shape is forced, not chosen. yStocker **persists no user record at all** —
+every gate, quota and credit balance keys off `session["user_email"]` at use
+time, so there is nothing to grant permission *to*, no way to check a typed
+recipient is real, and no way to tell a typo from a stranger. And the recipient
+is by design somebody with no account: `/agents` is the paid surface, so the
+whole point of sharing is to show a report to someone who has not run one.
+
+The cost is not hedged anywhere and should not be: **anyone holding the token can
+read the report**, so forwarding re-shares it. The mitigations bound the blast
+radius rather than remove it — 128 bits of entropy, a 30-day `expires_at`, an
+explicit revoke, and the sharer's own address masked to `alice@…` on the public
+page so a forwarded link does not also leak who sent it.
+
+Five things hold it together:
+
+- **The row is written before the mail, always.** The row is what makes the link
+  resolve, so a send that got ahead of it would deliver a button that 404s — and
+  the case where the ordering matters is exactly when DynamoDB is unreachable.
+  `share._get_table()` therefore fails *closed*, the opposite of `quota`.
+- **A shared mail must not link to `/agents?job=<id>`.** That route is
+  owner-or-VIP and answers 404 to everybody else, so the one button in the mail
+  would be dead for the one person it is for. `build(..., link_override=)` exists
+  for this; it also fixes the clip notice, which hands off to that same link when
+  Gmail truncates at ~102 KB.
+- **The banner is reserved out of the size budget** (`_body_rows(..., reserved=)`).
+  Chrome added outside the rows still counts against Gmail's limit, and a mail
+  pushed over it is clipped *by Gmail*, mid-element — the exact outcome the
+  whole-sections rule exists to avoid.
+- **Authorization is `owns`, not `can_read`.** A VIP may read anyone's run;
+  letting that also mean "may publish anyone's run to an unauthenticated URL"
+  would quietly convert a read grant into a disclosure power over other people's
+  paid work.
+- **The public payload is an allowlist** (`share._SHAREABLE_JOB_FIELDS`),
+  mirroring `agents._PUBLIC_FIELDS`. It omits `user`, `log`, `pid` and `chat` —
+  the follow-up conversation was never part of the report and is owner-only even
+  in the authenticated API.
+
+Two smaller traps. `_share_base()` **forces https** rather than reading
+`request.host_url`: nginx forwards `X-Forwarded-Proto` but no app here installs
+`ProxyFix`, so Flask sees plain HTTP and would email an `http://` link — which
+works, since nginx redirects, but reads like phishing. And the daily cap
+(`quota.try_consume_share`, 20/day, `AGENTS_SHARE_DAILY_LIMIT`) is consumed
+**before** the send and is not refunded: a share costs almost no compute and
+instead spends sending reputation, so the bound has to be on attempts.
+
+`AGENTS_SHARE=0` is the kill switch, separate from `AGENTS_EMAIL_REPORT` so that
+turning off completion mail does not also turn off sharing. The table is **not**
+in `deploy/cloudformation.yaml`, matching the other five observed-series tables —
+create it by hand (IAM already grants `table/ystocker-*`):
+
+```bash
+aws dynamodb create-table --table-name ystocker-agent-shares --region us-west-2 \
+  --billing-mode PAY_PER_REQUEST \
+  --attribute-definitions AttributeName=token,AttributeType=S \
+  --key-schema AttributeName=token,KeyType=HASH
+
+# create-table returns as soon as the table is CREATING, and update-time-to-live
+# refuses a table that is not yet ACTIVE — so the wait is required, not tidiness.
+aws dynamodb wait table-exists --table-name ystocker-agent-shares --region us-west-2
+
+aws dynamodb update-time-to-live --table-name ystocker-agent-shares \
+  --region us-west-2 \
+  --time-to-live-specification "Enabled=true,AttributeName=expires_at"
+```
+
+TTL is a convenience, not the guarantee: DynamoDB's sweeper can run up to 48h
+late, so `share.lookup()` re-checks `expires_at` on every read and a row past its
+date is expected to still be present.
 
 ### The AI Markets Brief (`/api/market-brief`)
 
@@ -388,6 +475,39 @@ Started in `create_app()`, all daemon threads:
 - **Chart.js 4** for yStocker charts
 - **Google Maps API** for yPlanner
 - **i18n**: Each app has `static/i18n.js` with EN + ZH translations, toggled via `I18n.toggle()`
+- **Light / dark theme**: All 8 apps toggle. Each stores `<app>_theme` in
+  `localStorage`, defaults to **dark**, and flips `class="dark"` on `<html>` from a
+  blocking inline script at the very top of `<head>` — above every stylesheet, or
+  one dark frame paints before the flip. `prefers-color-scheme` is deliberately
+  **not** consulted: it would change the site's appearance for existing readers
+  who never asked.
+
+  yStocker was the last one converted and is the interesting case, because its
+  dark look was 2,715 *hardcoded* utilities (`bg-slate-900`, `text-slate-100`)
+  rather than `dark:` variants. Three things Tailwind's `dark:` variant cannot
+  reach had to be handled separately, and each has its own mechanism:
+
+  - **Canvas** — a chart takes no CSS. `CT.c('<dark colour>')` in `base.html`
+    maps a dark literal to its light counterpart, so each of the ~585 call sites
+    is a mechanical wrap of the value already there. Unmapped colours pass
+    through, which is what makes a mistaken wrap harmless. It is *not* a
+    Chart.js plugin: v4 resolves `chart.options` through a proxy before
+    `beforeUpdate` fires, and a blanket grey-out would flatten the axis
+    colour-coding on the dual-axis charts, where a red right-hand axis is how a
+    reader knows which line is CPI.
+  - **Hand-written `<style>` blocks** — 14 templates style rendered Markdown,
+    pipe tables and chips in plain CSS. These use the shared `--t-*` custom
+    properties defined in `base.html` (light-first, `.dark` overriding), so a
+    page cannot drift a shade from its neighbours.
+  - **`toggleTheme()` reloads only if the page has a `<canvas>`.** The class flip
+    restyles everything CSS owns instantly, but a Chart.js instance bakes its
+    colours in at construction inside an async fetch callback that cannot be
+    replayed. Chart-free pages toggle with no navigation.
+
+  Re-running `migrate_theme_classes.py` / `migrate_chart_colors.py` (both
+  idempotent) converts a newly added dark-only template. `/tv` is excluded by
+  design — it is a standalone kiosk with its own CSS variables, asserted by
+  `tests/test_theme_classes.py`.
 - **Deferred panel loading**: `static/deferload.js` exposes `DeferLoad.when(anchor, loader)`,
   which runs a panel's fetch when that panel nears the viewport. Loaded blocking
   from `base.html` for every yStocker page, because pages call it during their
@@ -448,10 +568,39 @@ Started in `create_app()`, all daemon threads:
 - All modules have docstrings and structured logging (`logging.getLogger(__name__)`)
 - Private helpers prefixed with `_`
 - No bare `except:` — always catch specific exceptions
-- Templates extend `base.html` with Tailwind CSS dark mode (`class="dark"`)
+- Templates extend `base.html` with Tailwind CSS dark mode (`class="dark"`), and
+  are written **dark-first**: the bare utility is the dark value and the light
+  counterpart is added alongside it (`bg-white dark:bg-slate-900`). Light mode is
+  a three-tier hierarchy — page `slate-50`, card `white`, inset well `slate-100`
+  — because mapping both page and card to white left every card as a floating
+  border with no plane behind it.
 
 ## Known Pitfalls
 
+- **A Tailwind class pair is not a DOM token.** Light mode turned every hardcoded
+  colour utility into a pair (`bg-slate-100 dark:bg-slate-800`), which is fine in
+  a `class=` attribute and broken everywhere a template passed the same string to
+  the DOM as a *token*: `classList.add`/`remove` are variadic and take one token
+  per argument, `classList.toggle`/`contains` take exactly one, and a space in any
+  of them throws `InvalidCharacterError`. A selector is worse — `closest('.a
+  dark:b')` parses as a *descendant* selector, so it throws or silently matches
+  nothing. This bit 42 call sites and one `closest()`, and it is invisible on page
+  load: the throw happens on a click, or inside an IIFE whose `catch` swallows it.
+  In `fed.html` it killed that page's entire init block, and the only symptom was
+  a console line. Use the variadic form, or `toggleClasses(el, pair, on)` from
+  `base.html`; for a selector use a `[data-*]` hook, which restyling cannot
+  invalidate. `tests/test_theme_classes.py` fails on all three shapes and needs
+  no browser.
+- **`text-<hue>-400` is invisible in light mode.** The dark theme picks 400-level
+  hues so they glow against near-black; `text-emerald-400` on white is 1.87:1, so
+  a table of percentage changes reads as a smudge. Light counterparts land on
+  **shade-700**, the first rung that clears AA on white for every hue in the set
+  (emerald-600 is 3.4:1 and amber-600 only 3.0:1). Same trap in reverse for
+  greys: `slate-500` is the muted-text floor at 4.76:1 on white, so both
+  `text-slate-500` and `text-slate-600` collapse onto it rather than going paler.
+  A fade overlay is the loud version of this — `linear-gradient(…, #0f172a)` over
+  a white card renders as a **black block**, which is why `--t-fade-from/to`
+  exist.
 - **`kill -HUP` does not reload code under `--preload`.** Gunicorn's HUP handler re-reads the config file, not the WSGI app, which the master imported once at `ExecStart`. Workers re-fork from the old module state, so new Python never runs — while templates *do* refresh, because a fresh worker has an empty Jinja cache. The deploy one-liner in this file used HUP for a long time and was therefore shipping stale code. Use `systemctl restart`.
 - **A `DeferLoad` anchor that is hidden defers nothing, and says so only in the console.**
   `IntersectionObserver` can never fire for an element with no box, so
@@ -500,4 +649,5 @@ Started in `create_app()`, all daemon threads:
 - **A deploy takes ystocker down for as long as its slowest in-flight request.** The unit sets `KillMode=process`, so systemd signals only gunicorn's master and then waits while workers finish what they are serving; nginx returns 502 for that whole window, and `--preload` adds a few more seconds re-importing the app before anything binds :8000 again. Measured: 2 seconds for a normal deploy, but **32 seconds** for one that landed while a worker was generating an AI brief, which is a Gemini call capped at 90s. So the outage is bounded by `_BRIEF_GEMINI_TIMEOUT_MS`, not by anything about the deploy. Pre-generating the brief keeps request-path generation rare, but if this matters, drain first or move generation off the request path entirely — do not just retry the deploy and assume the 502 was transient.
 - **Not every cache in `routes.py` is keyed `"data"`.** Most are `CACHE["data"] = {"ts", "data"}`, but `_CREDIT_SPREAD_CACHE` is keyed by *period* (`"1y"`, `"2y"`, …) and `_YIELD_CURVE_CACHE` by its schema version (`_YIELD_CURVE_CACHE_VER`). Reading the wrong key returns `None` rather than raising, so the consumer just silently loses a section — `/api/daily-summary` read `_CREDIT_SPREAD_CACHE.get("data")` from the day it was written, which meant its credit-spread line never once appeared in a summary. Check the write site for the key before peeking a cache, and hold its lock.
 - **reportlab fails loudly on height and silently on width.** A flowable taller than the frame raises `LayoutError` and kills the whole PDF (a single-cell `Table` cannot split between rows — pass `splitInRow=1`); a flowable *wider* than the frame is simply drawn through the margin, or off the paper. So every fixed-width flowable in `report_pdf.py` is clamped to the measure, and preformatted text is hard-wrapped before it is handed over. Separately, the CJK line breaker deliberately overruns the measure by up to one em rather than start a line with `、` or `。`, which is why the Chinese path lays out to a slightly narrower measure and leaves a gutter for that overhang.
+- **An `https://` link opens a vendor's app only for the paths that vendor's association file claims.** Universal links feel automatic, so the natural assumption is that pointing at `futunn.com/en/stock/SMCI-US` will open Futubull on a phone that has it. It will not, and nothing reports the miss — Futu's `/.well-known/apple-app-site-association` claims only `/qq_conn/1101195293/*`, `/weixin_ios/*`, `/app/*` and `/deeplink/*`, so `/en/stock/*` is a plain web page on iOS forever, however the anchor is written. **Read the vendor's `apple-app-site-association` and `assetlinks.json` before assuming, and before hand-rolling a scheme.** The verified route for Futu is the scheme `ftnn://quote/stockDetail/<stockId>/1` (from Futu's own `al:ios:url` tag and its `af_dp=` AppsFlyer parameter; Android package `cn.futu.trader`, iOS App Store id `592031984`; moomoo is `ftmm`). Two traps behind it: `stockId` is Futu's **opaque internal id, not the ticker** — SMCI is `203319`, and HK/A-share ids are 14-digit strings (`00700-HK` is `54047868453564`), so anything that narrows the type breaks exactly the non-US venues `_futu_symbol` exists to support — and the quote page carries **dozens of unrelated `stockId`s** in its "hot stocks" rails, so a positional parse links to the wrong company, which is worse than not linking. `futu.py` round-trips `stockCode` + `marketLabel` back into the requested symbol and refuses a mismatch. Note the Android side is the easy one only because `intent://` carries a declarative `S.browser_fallback_url` (percent-encoded — `intent://` is `;`-delimited, so a raw URL truncates); iOS has no equivalent, so it needs a visibility-timer fallback, and `window.open` after that timer can be popup-blocked because the click gesture has expired.
 - **A test that greps rendered HTML for `onerror=` passes on its own escaping.** `&lt;img src=x onerror=alert(1)&gt;` is inert — a string the client displays, not an element it runs — but it contains the needle, so a naive substring assertion reports a vulnerability that is not there, and (worse) an assertion written to accommodate that noise stops catching the real thing. `tests/test_report_email.py` strips `&lt;…&gt;` before checking, so it only ever asserts on *live* markup. Same trap with `href=`: it appears in escaped text too. Note also that `<a>` is deliberately absent from the inline-tag restore list in both `report_email.py` and `static/markdown.js` — honouring it would mean emitting an attribute without vetting it — so a bare inline `<a href>` in model output is shown as text unless the body *opens* with a block-level tag and takes the allowlist path.

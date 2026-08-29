@@ -52,6 +52,18 @@ def _install_plot_stubs() -> None:
 
 _install_plot_stubs()
 
+# Import the real package *now*, at module load, before any other test module
+# gets the chance to put a stub in its place. tests/test_report_email.py
+# deliberately installs a fake ``ystocker`` package with
+# ``sys.modules.setdefault`` so it can run without an app, and whichever module
+# unittest loads first wins. Discovery happens to load this file first
+# (alphabetically), so the suite passes -- but naming both modules explicitly
+# (``python -m unittest tests.test_import_graph tests.test_report_email``) loads
+# every named module before running any of them, the stub wins, and every import
+# here fails with a baffling "cannot import name PEER_GROUPS from ystocker
+# (unknown location)". One line here makes the order stop mattering.
+import ystocker  # noqa: E402,F401  - load order is the point
+
 # Names routes.py takes from data.py at module scope. Listed explicitly so a
 # deletion fails here with a readable message rather than at gunicorn start.
 DATA_EXPORTS = (
@@ -77,10 +89,12 @@ MODULES = (
     "ystocker.breadth",
     "ystocker.sec13f",
     "ystocker.quota",
+    "ystocker.share",
     "ystocker.etf_holdings",
     "ystocker.analyst",
     "ystocker.sectors",
     "ystocker.cta",
+    "ystocker.futu",
     "ystocker.routes",
 )
 
@@ -107,8 +121,33 @@ class ImportGraphTests(unittest.TestCase):
         # A few routes that must exist; a blueprint that registers but exposes
         # nothing would otherwise pass.
         for path in ("/markets", "/api/markets", "/api/market-brief", "/daily",
-                     "/api/evaluation-extras", "/api/cta-positioning"):
+                     "/api/evaluation-extras", "/api/cta-positioning",
+                     # Sharing: the public read side is what matters here. An
+                     # emailed capability URL outlives any deploy, so a route
+                     # rename would break links already sitting in inboxes --
+                     # unlike an in-app path, where nothing holds a stale copy.
+                     "/agents/shared/<token>", "/api/agents/shared/<token>",
+                     "/api/agents/shared/<token>/pdf", "/api/agents/share"):
             self.assertIn(path, rules, f"route missing: {path}")
+
+    def test_share_and_report_email_agree_on_expiry(self):
+        """The mail promises a window; share.lookup enforces one.
+
+        report_email.build() prints share.TTL_DAYS into the footer, so these
+        cannot drift while that import stands -- this asserts the import is still
+        how it gets there, since replacing it with a local constant would be an
+        easy "cleanup" that makes the mail lie.
+        """
+        from ystocker import report_email, share
+
+        self.assertIsInstance(share.TTL_DAYS, int)
+        self.assertGreater(share.TTL_DAYS, 0)
+        job = {"id": "x", "ticker": "NVDA", "date": "2026-08-29", "status": "done",
+               "lang": "en", "report": "# NVDA\n\n## Market Analyst\n\nUp."}
+        built = report_email.build(job, shared_by="a@b.com", note="",
+                                   link_override="https://example.com/agents/shared/t")
+        self.assertIsNotNone(built)
+        self.assertIn(str(share.TTL_DAYS), built[1])
 
     def test_cached_modules_expose_peek(self):
         """brief.py calls peek() on each of these; a rename would break it."""

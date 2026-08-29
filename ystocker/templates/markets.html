@@ -4,14 +4,64 @@
 {% block content %}
 <script src="{{ url_for('static', filename='markdown.js') }}?v={{ cache_bust or 'dev' }}"></script>
 <style>
+  /* ── Theme tokens ────────────────────────────────────────────────────────
+     Hand-written CSS, so Tailwind's `dark:` variant reaches none of it. Most
+     colours here resolve through the shared `--t-*` vocabulary in base.html;
+     the `--mk-*` pairs below are the roles it has no token for, declared
+     light-first with `.dark` overriding, exactly as base.html does.
+
+     Roles, not values: the pale indigo and violet inks (#a5b4fc, #c4b5fd) have
+     to become DARK indigo and violet on white or they vanish, while the same
+     families used as a RING or a WELL (#4c1d95, #1e1b4b, #0c0f1a) lighten
+     instead. The rgba() indigo and violet tints stay literal — at 6-15% alpha
+     they read as a tint over the white card and the near-black one alike. */
+  :root {
+    /* One step off the card plane: a hovered ghost control, and the fill behind
+       inline `code`. --t-surface-alt is the right role, but its dark value
+       (#131c2e) is a fainter step than this page has always had. */
+    --mk-fill: #f1f5f9;
+    /* Up / down. The 400-weight pair glows on near-black and measures 1.9:1 and
+       2.8:1 on white, so light mode drops both to the 700 weight — the pair
+       /daily and /housing already give the same numbers. */
+    --mk-up:   #047857;
+    --mk-down: #b91c1c;
+    /* The brightest ink on the page: a stat value, one step above a heading in
+       dark mode. The ink ramp floors at slate-900 on white, so this converges
+       with --t-ink-strong there rather than invent a darker grey. */
+    --mk-ink-bright: #0f172a;
+    /* "View more", hovered. One step deeper than --t-accent-ink on white, one
+       step brighter in the dark — the direction a hover has to travel on each. */
+    --mk-accent-ink-hover: #3730a3;
+
+    /* Violet: the yield-curve ✦ Explain button and the panel it opens. */
+    --mk-violet-ink:  #6d28d9;   /* button label                       */
+    --mk-violet-line: #ddd6fe;   /* button ring                        */
+    --mk-panel-fill:  #f5f3ff;   /* the panel's own sunken plane       */
+    --mk-panel-line:  #ddd6fe;   /* its ring                           */
+    --mk-panel-ink:   #5b21b6;   /* its copy; 8:1 on the fill above    */
+  }
+  .dark {
+    --mk-fill: #1e293b;
+    --mk-up:   #34d399;
+    --mk-down: #f87171;
+    --mk-ink-bright: #f1f5f9;
+    --mk-accent-ink-hover: #c7d2fe;
+
+    --mk-violet-ink:  #a78bfa;
+    --mk-violet-line: #4c1d95;
+    --mk-panel-fill:  #0c0f1a;
+    --mk-panel-line:  #1e1b4b;
+    --mk-panel-ink:   #c4b5fd;
+  }
   .range-btn {
     font-size: 11px; font-weight: 500; line-height: 1;
     padding: 3px 7px; border-radius: 5px;
-    border: 1px solid #334155; background: transparent; color: #64748b;
+    border: 1px solid var(--t-line-strong); background: transparent; color: var(--t-ink-dim);
     cursor: pointer; transition: color 0.15s, background 0.15s, border-color 0.15s;
   }
-  .range-btn:hover  { color: #cbd5e1; border-color: #475569; background: #1e293b; }
-  .range-btn.active { color: #a5b4fc; border-color: #6366f1; background: rgba(99,102,241,0.15); }
+  .range-btn:hover  { color: var(--t-ink); border-color: var(--t-line-hover); background: var(--mk-fill); }
+  /* 15% indigo tints white and slate alike, so the active fill stays literal. */
+  .range-btn.active { color: var(--t-accent-ink); border-color: var(--t-accent); background: rgba(99,102,241,0.15); }
   /* Breadth MA legend chips — click to toggle a series. The swatch carries the
      series colour; the label and value stay in text ink so the reading never
      depends on colour alone. Hit area is >=24px tall for touch. */
@@ -22,40 +72,49 @@
     border: 1px solid transparent; background: transparent;
     cursor: pointer; transition: background 0.15s, border-color 0.15s, opacity 0.15s;
   }
-  .ma-chip:hover { background: #1e293b; border-color: #334155; }
-  .ma-chip:focus-visible { outline: 2px solid #6366f1; outline-offset: 1px; }
+  .ma-chip:hover { background: var(--mk-fill); border-color: var(--t-line-strong); }
+  .ma-chip:focus-visible { outline: 2px solid var(--t-accent); outline-offset: 1px; }
   .ma-chip[aria-pressed="false"] { opacity: 0.4; }
-  .ma-chip[aria-pressed="false"] .ma-swatch { background: #475569 !important; }
+  /* The off-state swatch is a line, not ink: --t-line-hover is the one slate
+     that stays a faint mark on either plane, and the chip's own 0.4 opacity is
+     already doing most of the work. */
+  .ma-chip[aria-pressed="false"] .ma-swatch { background: var(--t-line-hover) !important; }
   .ma-swatch { width: 14px; height: 2px; border-radius: 1px; flex: none; }
-  .ma-chip-label { color: #94a3b8; }
-  .ma-chip-value { color: #e2e8f0; font-weight: 600; }
+  .ma-chip-label { color: var(--t-ink-muted); }
+  .ma-chip-value { color: var(--t-ink-strong); font-weight: 600; }
   .idx-tab-btn {
     padding: 8px 16px; font-size: 14px; font-weight: 500;
-    border-bottom: 2px solid transparent; color: #94a3b8;
+    border-bottom: 2px solid transparent; color: var(--t-ink-muted);
     cursor: pointer; transition: color 0.15s, border-color 0.15s;
     background: transparent; border-top: none; border-left: none; border-right: none;
   }
-  .idx-tab-btn.active { color: #a5b4fc; border-bottom-color: #6366f1; }
-  .idx-tab-btn:hover:not(.active) { color: #e2e8f0; }
-  .stat-card { background: #0f172a; border: 1px solid #1e293b; border-radius: 12px; padding: 12px 14px; }
-  .stat-label { font-size: 11px; color: #64748b; margin-bottom: 4px; }
-  .stat-val   { font-size: 16px; font-weight: 700; color: #f1f5f9; }
-  .up   { color: #34d399 !important; }
-  .down { color: #f87171 !important; }
-  .neutral { color: #94a3b8 !important; }
+  .idx-tab-btn.active { color: var(--t-accent-ink); border-bottom-color: var(--t-accent); }
+  .idx-tab-btn:hover:not(.active) { color: var(--t-ink-strong); }
+  /* An inset on the card plane, not a well: in dark mode this is the enclosing
+     card's own slate-900, held apart by its border alone, so on white it is
+     white for the same reason. */
+  .stat-card { background: var(--t-surface); border: 1px solid var(--t-line); border-radius: 12px; padding: 12px 14px; }
+  .stat-label { font-size: 11px; color: var(--t-ink-dim); margin-bottom: 4px; }
+  .stat-val   { font-size: 16px; font-weight: 700; color: var(--mk-ink-bright); }
+  .up   { color: var(--mk-up) !important; }
+  .down { color: var(--mk-down) !important; }
+  .neutral { color: var(--t-ink-muted) !important; }
   .bar-fill { height: 8px; border-radius: 4px; transition: width 0.4s; }
   .rsi-zone { font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 4px; }
   .yield-explain-btn {
     font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 6px;
-    border: 1px solid #4c1d95; color: #a78bfa; background: transparent;
+    border: 1px solid var(--mk-violet-line); color: var(--mk-violet-ink); background: transparent;
     cursor: pointer; transition: all 0.15s; white-space: nowrap;
   }
+  /* Violet-600 and a 12% violet stay literal: a saturated mid-tone at 5.5:1 on
+     white and 3.2:1 on the dark plane, and a tint that reads as a tint on both.
+     The thinking line below takes the same value for the same reason. */
   .yield-explain-btn:hover:not(:disabled) { background: rgba(139,92,246,0.12); border-color: #7c3aed; }
   .yield-explain-btn:disabled { opacity: 0.5; cursor: default; }
   .yield-explain-panel {
     display: none; margin-top: 10px; padding: 10px 12px;
-    background: #0c0f1a; border: 1px solid #1e1b4b; border-radius: 10px;
-    font-size: 12px; line-height: 1.6; color: #c4b5fd;
+    background: var(--mk-panel-fill); border: 1px solid var(--mk-panel-line); border-radius: 10px;
+    font-size: 12px; line-height: 1.6; color: var(--mk-panel-ink);
   }
   .yield-explain-panel.visible { display: block; }
   .yield-explain-thinking { display: inline-flex; align-items: center; gap: 4px; color: #7c3aed; font-size: 12px; }
@@ -65,14 +124,14 @@
   @keyframes yldBounce { 0%,80%,100% { transform: scale(0.6); opacity:.5 } 40% { transform: scale(1); opacity:1 } }
   .sector-period-btn {
     font-size: 10px; padding: 2px 8px; border-radius: 4px;
-    border: 1px solid #334155; background: transparent; color: #64748b; cursor: pointer;
+    border: 1px solid var(--t-line-strong); background: transparent; color: var(--t-ink-dim); cursor: pointer;
     transition: all 0.15s;
   }
-  .sector-period-btn:hover { color: #cbd5e1; border-color: #475569; }
-  .sector-period-btn.active { color: #a5b4fc; border-color: #6366f1; background: rgba(99,102,241,0.15); }
+  .sector-period-btn:hover { color: var(--t-ink); border-color: var(--t-line-hover); }
+  .sector-period-btn.active { color: var(--t-accent-ink); border-color: var(--t-accent); background: rgba(99,102,241,0.15); }
   /* AI Markets Brief — rendered Markdown, including pipe tables. Mirrors the
      .md-body rules on /history so LLM output reads the same everywhere. */
-  .brief-md { font-size: 13px; line-height: 1.75; color: #cbd5e1; overflow-wrap: break-word; }
+  .brief-md { font-size: 13px; line-height: 1.75; color: var(--t-ink); overflow-wrap: break-word; }
   /* Clamped to a preview by default. The brief runs ~1,500 words and a dozen
      tables, which pushed the index cards two screens down — it is a summary at
      the top of a dashboard, not the page's subject. The fade is what makes the
@@ -85,35 +144,42 @@
   }
   .brief-md.is-clamped::after {
     content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 64px;
-    background: linear-gradient(to bottom, rgba(15,23,42,0), #0f172a 85%);
+    /* Both stops follow the card's own plane. Hardcoded slate here painted a
+       black block across the white card — a fade has to end in the surface it
+       sits on, and its transparent end has to carry that same hue or a browser
+       interpolating premultiplied greys the whole ramp. */
+    background: linear-gradient(to bottom, var(--t-fade-from), var(--t-fade-to) 85%);
     pointer-events: none;
   }
   .brief-more-btn {
     margin-top: 8px; font-size: 11px; font-weight: 600;
-    color: #a5b4fc; background: transparent;
-    border: 1px solid #312e81; border-radius: 6px; padding: 3px 10px;
+    color: var(--t-accent-ink); background: transparent;
+    border: 1px solid var(--t-accent-line); border-radius: 6px; padding: 3px 10px;
     cursor: pointer; transition: background 0.15s, border-color 0.15s, color 0.15s;
   }
-  .brief-more-btn:hover { background: rgba(99,102,241,0.12); border-color: #4f46e5; color: #c7d2fe; }
-  .brief-more-btn:focus-visible { outline: 2px solid #6366f1; outline-offset: 1px; }
+  /* Indigo-600 as the hovered ring stays literal: it is a step up from
+     --t-accent-line in both directions, pale-to-saturated on white and
+     dark-to-saturated in the dark. The 12% fill tints either plane. */
+  .brief-more-btn:hover { background: rgba(99,102,241,0.12); border-color: #4f46e5; color: var(--mk-accent-ink-hover); }
+  .brief-more-btn:focus-visible { outline: 2px solid var(--t-accent); outline-offset: 1px; }
   .brief-md h2 {
-    font-size: 14px; font-weight: 700; color: #e2e8f0;
-    margin: 20px 0 8px; padding-bottom: 6px; border-bottom: 1px solid #1e293b;
+    font-size: 14px; font-weight: 700; color: var(--t-ink-strong);
+    margin: 20px 0 8px; padding-bottom: 6px; border-bottom: 1px solid var(--t-line);
   }
   .brief-md h2:first-child { margin-top: 0; }
-  .brief-md h3 { font-size: 13px; font-weight: 600; color: #a5b4fc; margin: 14px 0 6px; }
+  .brief-md h3 { font-size: 13px; font-weight: 600; color: var(--t-accent-ink); margin: 14px 0 6px; }
   .brief-md p  { margin: 8px 0; }
   .brief-md ul, .brief-md ol { margin: 8px 0 8px 20px; }
   .brief-md li { margin: 3px 0; }
-  .brief-md strong { color: #e2e8f0; font-weight: 600; }
+  .brief-md strong { color: var(--t-ink-strong); font-weight: 600; }
   .brief-md code {
     font-family: ui-monospace, SFMono-Regular, monospace; font-size: 11.5px;
-    background: #1e293b; padding: 1px 5px; border-radius: 4px; color: #a5b4fc;
+    background: var(--mk-fill); padding: 1px 5px; border-radius: 4px; color: var(--t-accent-ink);
   }
-  .brief-md hr { border: 0; border-top: 1px solid #1e293b; margin: 16px 0; }
+  .brief-md hr { border: 0; border-top: 1px solid var(--t-line); margin: 16px 0; }
   .brief-md blockquote {
     margin: 10px 0; padding: 8px 14px;
-    border-left: 3px solid #6366f1; background: rgba(99,102,241,0.06);
+    border-left: 3px solid var(--t-accent); background: rgba(99,102,241,0.06);
     border-radius: 0 6px 6px 0;
   }
   /* display:block + overflow-x lets a wide table scroll inside the card instead
@@ -123,11 +189,11 @@
     font-size: 11.5px; display: block; overflow-x: auto;
   }
   .brief-md th, .brief-md td {
-    border: 1px solid #1e293b; padding: 4px 8px; text-align: left; white-space: nowrap;
+    border: 1px solid var(--t-line); padding: 4px 8px; text-align: left; white-space: nowrap;
   }
-  .brief-md th { background: #131c2e; color: #94a3b8; font-weight: 600; }
+  .brief-md th { background: var(--t-surface-alt); color: var(--t-ink-muted); font-weight: 600; }
   .brief-md td:not(:first-child) { font-variant-numeric: tabular-nums; }
-  .brief-md tbody tr:nth-child(even) { background: rgba(30,41,59,0.35); }
+  .brief-md tbody tr:nth-child(even) { background: var(--t-row-alt); }
 </style>
 
 <!-- ── Fullscreen chart modal ────────────────────────────────────────── -->
@@ -1499,7 +1565,7 @@ function _renderCtaFlowGrid(latest) {
   ].forEach(([scenario, key, fallback]) => {
     const value = flows[scenario];
     const card = document.createElement('div');
-    card.className = 'rounded-lg border border-slate-200 dark:border-slate-800 bg-white/60 dark:bg-slate-950/60 px-2 py-2 min-w-0';
+    card.className = 'rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-950/60 px-2 py-2 min-w-0';
     const label = document.createElement('div');
     label.className = 'text-[9px] text-slate-500 dark:text-slate-600 truncate';
     label.textContent = _ctaT(key, fallback);
@@ -3548,13 +3614,13 @@ function _econCountryRegion(country) {
 function filterEcon(region) {
   _econFilter = region;
   // Update button active state
-  document.querySelectorAll('.econ-filter-btn').forEach(b => b.classList.remove('active','border-indigo-500','text-indigo-700 dark:text-indigo-300','border-rose-500','text-rose-700 dark:text-rose-300'));
+  document.querySelectorAll('.econ-filter-btn').forEach(b => b.classList.remove('active','border-indigo-500','text-indigo-700', 'dark:text-indigo-300','border-rose-500','text-rose-700', 'dark:text-rose-300'));
   const activeBtn = document.getElementById('econFilter-' + region);
   if (activeBtn) {
     if (region === 'high') {
-      activeBtn.classList.add('active','border-rose-500','text-rose-700 dark:text-rose-300');
+      activeBtn.classList.add('active','border-rose-500','text-rose-700', 'dark:text-rose-300');
     } else {
-      activeBtn.classList.add('active','border-indigo-500','text-indigo-700 dark:text-indigo-300');
+      activeBtn.classList.add('active','border-indigo-500','text-indigo-700', 'dark:text-indigo-300');
     }
   }
   _renderEconTable(_econData);
@@ -4877,10 +4943,10 @@ function _renderSkewBands(sk) {
   const band = sk?.latest?.band || _skBandOf(sk?.latest?.skew);
   document.querySelectorAll('#skewBands .skew-band-row').forEach(row => {
     const on = row.dataset.band === band;
-    row.classList.toggle('bg-slate-100/60 dark:bg-slate-800/60', on);
+    toggleClasses(row, 'bg-slate-100/60 dark:bg-slate-800/60', on);
     row.classList.toggle('ring-1', on);
-    row.classList.toggle('ring-slate-300 dark:ring-slate-700', on);
-    row.querySelector('[data-i18n]')?.classList.toggle('text-slate-700 dark:text-slate-200', on);
+    toggleClasses(row, 'ring-slate-300 dark:ring-slate-700', on);
+    toggleClasses(row.querySelector('[data-i18n]'), 'text-slate-700 dark:text-slate-200', on);
     let pill = row.querySelector('.sk-now');
     if (on && !pill) {
       pill = document.createElement('span');

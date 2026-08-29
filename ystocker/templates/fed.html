@@ -3,12 +3,26 @@
 
 {% block content %}
 <style>
+/* Violet is the ✦ Explain accent and has no shared --t-* equivalent, so this
+   page declares its own pair, light-first like base.html's. It mirrors the way
+   --t-accent-ink / --t-accent-line behave: the TEXT value darkens on white
+   while the BORDER value lightens, so each keeps the weight it carries against
+   near-black (violet-400 on slate-950 is 6.5:1, violet-600 on white 5.7:1;
+   both rings land near 2.7:1). */
+:root {
+  --fd-violet-ink:  #7c3aed;   /* violet text and glyphs   */
+  --fd-violet-line: #a78bfa;   /* hovered control border   */
+}
+.dark {
+  --fd-violet-ink:  #a78bfa;
+  --fd-violet-line: #7c3aed;
+}
 .range-btn {
   padding: 3px 9px;
   border-radius: 6px;
-  border: 1px solid #334155;
+  border: 1px solid var(--t-line-strong);
   background: transparent;
-  color: #64748b;
+  color: var(--t-ink-dim);
   font-size: 11px;
   font-weight: 500;
   cursor: pointer;
@@ -16,13 +30,16 @@
   letter-spacing: 0.02em;
 }
 .range-btn:hover {
-  color: #cbd5e1;
-  border-color: #64748b;
+  color: var(--t-ink);
+  /* The border steps up to exactly where the resting label was, which is what
+     --t-ink-dim carries — the one slate that is correct in both themes, so the
+     hover keeps the two-step lift off --t-line-strong that it has in dark. */
+  border-color: var(--t-ink-dim);
 }
 .range-btn.active {
-  color: #a5b4fc;
-  border-color: #6366f1;
-  background: rgba(99,102,241,0.12);
+  color: var(--t-accent-ink);
+  border-color: var(--t-accent);
+  background: rgba(99,102,241,0.12);   /* 12% indigo tints white and slate alike */
 }
 /* A range whose window holds too few observations to plot. Shown rather than
    removed so the ladder reads the same on every chart, and so the reason is
@@ -33,8 +50,8 @@
   text-decoration: line-through;
 }
 .range-btn:disabled:hover {
-  color: #64748b;
-  border-color: #334155;
+  color: var(--t-ink-dim);
+  border-color: var(--t-line-strong);
 }
 .explain-btn {
   display: inline-flex;
@@ -42,9 +59,9 @@
   gap: 5px;
   padding: 3px 10px;
   border-radius: 6px;
-  border: 1px solid #334155;
+  border: 1px solid var(--t-line-strong);
   background: transparent;
-  color: #94a3b8;
+  color: var(--t-ink-muted);
   font-size: 11px;
   font-weight: 500;
   cursor: pointer;
@@ -53,8 +70,8 @@
   white-space: nowrap;
 }
 .explain-btn:hover {
-  color: #a78bfa;
-  border-color: #7c3aed;
+  color: var(--fd-violet-ink);
+  border-color: var(--fd-violet-line);
 }
 .explain-btn:disabled {
   opacity: 0.5;
@@ -64,9 +81,11 @@
   margin-top: 12px;
   padding: 14px 16px;
   border-radius: 10px;
+  /* Violet at 6% / 20% resolves to near-white over white and near-slate over
+     slate-950, so the tint reads the same on both themes and stays literal. */
   background: rgba(167,139,250,0.06);
   border: 1px solid rgba(167,139,250,0.2);
-  color: #cbd5e1;
+  color: var(--t-ink);
   font-size: 13px;
   line-height: 1.65;
   display: none;
@@ -76,14 +95,14 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  color: #a78bfa;
+  color: var(--fd-violet-ink);
   font-size: 12px;
   font-style: italic;
 }
 .explain-thinking .dot {
   width: 5px; height: 5px;
   border-radius: 50%;
-  background: #a78bfa;
+  background: var(--fd-violet-ink);
   animation: explainBounce 1.2s infinite ease-in-out;
 }
 .explain-thinking .dot:nth-child(2) { animation-delay: 0.2s; }
@@ -355,7 +374,7 @@
 
   <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
     <!-- Assets side -->
-    <div class="bg-white/50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-xl p-3">
+    <div class="bg-slate-100 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-xl p-3">
       <div class="flex items-center justify-between mb-2 pb-2 border-b border-slate-200 dark:border-slate-800">
         <span class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide" data-i18n="fed.balance_assets">Assets</span>
         <span class="font-mono text-right">
@@ -396,7 +415,7 @@
     </div>
 
     <!-- Liabilities + Capital side -->
-    <div class="bg-white/50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-xl p-3">
+    <div class="bg-slate-100 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-xl p-3">
       <div class="flex items-center justify-between mb-2 pb-2 border-b border-slate-200 dark:border-slate-800">
         <span class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide" data-i18n="fed.balance_liab">Liabilities + Capital</span>
         <span class="font-mono text-right">
@@ -461,7 +480,7 @@
     The Fed's balance sheet has more line items than the cards above. The "Other Assets" total is the sum of everything we don't break out individually. Here's what's typically in it:
   </p>
   <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-    <div class="bg-white/50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-lg p-3">
+    <div class="bg-slate-100 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-lg p-3">
       <div class="flex items-start gap-2">
         <span class="text-base shrink-0">🔁</span>
         <div>
@@ -470,7 +489,7 @@
         </div>
       </div>
     </div>
-    <div class="bg-white/50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-lg p-3">
+    <div class="bg-slate-100 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-lg p-3">
       <div class="flex items-start gap-2">
         <span class="text-base shrink-0">🌐</span>
         <div>
@@ -479,7 +498,7 @@
         </div>
       </div>
     </div>
-    <div class="bg-white/50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-lg p-3">
+    <div class="bg-slate-100 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-lg p-3">
       <div class="flex items-start gap-2">
         <span class="text-base shrink-0">📈</span>
         <div>
@@ -488,7 +507,7 @@
         </div>
       </div>
     </div>
-    <div class="bg-white/50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-lg p-3">
+    <div class="bg-slate-100 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-lg p-3">
       <div class="flex items-start gap-2">
         <span class="text-base shrink-0">💰</span>
         <div>
@@ -497,7 +516,7 @@
         </div>
       </div>
     </div>
-    <div class="bg-white/50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-lg p-3">
+    <div class="bg-slate-100 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-lg p-3">
       <div class="flex items-start gap-2">
         <span class="text-base shrink-0">🏆</span>
         <div>
@@ -506,7 +525,7 @@
         </div>
       </div>
     </div>
-    <div class="bg-white/50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-lg p-3">
+    <div class="bg-slate-100 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-lg p-3">
       <div class="flex items-start gap-2">
         <span class="text-base shrink-0">📋</span>
         <div>
@@ -537,22 +556,22 @@
   </div>
 
   <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
-    <div class="bg-white/50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-lg p-3">
+    <div class="bg-slate-100 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-lg p-3">
       <div class="text-[11px] text-slate-500 mb-1" data-i18n="fed.tbills_total">Total Outstanding</div>
       <div id="tbillsTotal" class="text-lg font-bold text-slate-800 dark:text-slate-100 font-mono">—</div>
       <div id="tbillsTotalChg" class="text-[11px] mt-0.5 text-slate-500">—</div>
     </div>
-    <div class="bg-white/50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-lg p-3">
+    <div class="bg-slate-100 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-lg p-3">
       <div class="text-[11px] text-slate-500 mb-1" data-i18n="fed.tbills_wow">Week-over-Week</div>
       <div id="tbillsWow" class="text-lg font-bold text-slate-800 dark:text-slate-100 font-mono">—</div>
       <div class="text-[11px] mt-0.5 text-slate-500" data-i18n="fed.tbills_wow_desc">Last 7 days</div>
     </div>
-    <div class="bg-white/50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-lg p-3">
+    <div class="bg-slate-100 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-lg p-3">
       <div class="text-[11px] text-slate-500 mb-1" data-i18n="fed.tbills_yoy">Year-over-Year</div>
       <div id="tbillsYoy" class="text-lg font-bold text-slate-800 dark:text-slate-100 font-mono">—</div>
       <div class="text-[11px] mt-0.5 text-slate-500" data-i18n="fed.tbills_yoy_desc">vs 52 weeks ago</div>
     </div>
-    <div class="bg-white/50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-lg p-3">
+    <div class="bg-slate-100 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-lg p-3">
       <div class="text-[11px] text-slate-500 mb-1" data-i18n="fed.tbills_pct_assets">% of Fed Assets</div>
       <div id="tbillsPctAssets" class="text-lg font-bold text-slate-800 dark:text-slate-100 font-mono">—</div>
       <div class="text-[11px] mt-0.5 text-slate-500" data-i18n="fed.tbills_pct_desc">If Fed held them all</div>
@@ -587,7 +606,7 @@
   <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
 
     <!-- ── Central Bank Liquidity Swaps ── -->
-    <div class="bg-white/50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-xl p-4">
+    <div class="bg-slate-100 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-xl p-4">
       <div class="flex items-start gap-2 mb-3">
         <span class="text-base shrink-0">🌐</span>
         <div class="flex-1">
@@ -616,7 +635,7 @@
     </div>
 
     <!-- ── Gold Certificate Account ── -->
-    <div class="bg-white/50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-xl p-4">
+    <div class="bg-slate-100 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-xl p-4">
       <div class="flex items-start gap-2 mb-3">
         <span class="text-base shrink-0">🏆</span>
         <div class="flex-1">
@@ -645,7 +664,7 @@
     </div>
 
     <!-- ── SDR Certificate Account ── -->
-    <div class="bg-white/50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-xl p-4">
+    <div data-sdr-card class="bg-slate-100 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-xl p-4">
       <div class="flex items-start gap-2 mb-3">
         <span class="text-base shrink-0">💎</span>
         <div class="flex-1">
@@ -701,32 +720,32 @@
   </div>
 
   <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 text-sm">
-    <div class="bg-white/50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-lg p-3">
+    <div class="bg-slate-100 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-lg p-3">
       <div class="text-[11px] text-slate-500 mb-1" data-i18n="fed.curr_speed_total">Current Level</div>
       <div id="currSpeedTotal" class="text-lg font-bold text-slate-800 dark:text-slate-100 font-mono">—</div>
       <div class="text-[11px] mt-0.5 text-slate-500" data-i18n="fed.curr_speed_total_desc">Outstanding</div>
     </div>
-    <div class="bg-white/50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-lg p-3">
+    <div class="bg-slate-100 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-lg p-3">
       <div class="text-[11px] text-slate-500 mb-1" data-i18n="fed.curr_speed_wow">Δ Week (WoW)</div>
       <div id="currSpeedWow" class="text-lg font-bold text-slate-800 dark:text-slate-100 font-mono">—</div>
       <div class="text-[11px] mt-0.5 text-slate-500" data-i18n="fed.curr_speed_wow_desc">Last 7 days</div>
     </div>
-    <div class="bg-white/50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-lg p-3">
+    <div class="bg-slate-100 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-lg p-3">
       <div class="text-[11px] text-slate-500 mb-1" data-i18n="fed.curr_speed_4w">Δ 4-Week</div>
       <div id="currSpeed4w" class="text-lg font-bold text-slate-800 dark:text-slate-100 font-mono">—</div>
       <div class="text-[11px] mt-0.5 text-slate-500" data-i18n="fed.curr_speed_4w_desc">~Last month</div>
     </div>
-    <div class="bg-white/50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-lg p-3">
+    <div class="bg-slate-100 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-lg p-3">
       <div class="text-[11px] text-slate-500 mb-1" data-i18n="fed.curr_speed_13w">Δ 13-Week</div>
       <div id="currSpeed13w" class="text-lg font-bold text-slate-800 dark:text-slate-100 font-mono">—</div>
       <div class="text-[11px] mt-0.5 text-slate-500" data-i18n="fed.curr_speed_13w_desc">~Last quarter</div>
     </div>
-    <div class="bg-white/50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-lg p-3">
+    <div class="bg-slate-100 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-lg p-3">
       <div class="text-[11px] text-slate-500 mb-1" data-i18n="fed.curr_speed_yoy">Δ 52-Week (YoY)</div>
       <div id="currSpeedYoy" class="text-lg font-bold text-slate-800 dark:text-slate-100 font-mono">—</div>
       <div class="text-[11px] mt-0.5 text-slate-500" data-i18n="fed.curr_speed_yoy_desc">vs 52w ago</div>
     </div>
-    <div class="bg-white/50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-lg p-3">
+    <div class="bg-slate-100 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-lg p-3">
       <div class="text-[11px] text-slate-500 mb-1" data-i18n="fed.curr_speed_yoy_pct">YoY %</div>
       <div id="currSpeedYoyPct" class="text-lg font-bold text-slate-800 dark:text-slate-100 font-mono">—</div>
       <div class="text-[11px] mt-0.5 text-slate-500" data-i18n="fed.curr_speed_yoy_pct_desc">Annualized speed</div>
@@ -1804,7 +1823,7 @@ let _fedSeriesData = {};
   } else {
     // Series unavailable — replace the metrics grid with an inline note so
     // the card still looks intentional rather than broken.
-    const sdrCard = document.getElementById('sdrCurrent')?.closest('.bg-white dark:bg-slate-950\\/50');
+    const sdrCard = document.getElementById('sdrCurrent')?.closest('[data-sdr-card]');
     if (sdrCard) {
       const grid = sdrCard.querySelector('.grid');
       if (grid) {
