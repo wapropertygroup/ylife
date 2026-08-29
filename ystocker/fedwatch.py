@@ -70,6 +70,7 @@ import calendar
 import json
 import logging
 import math
+import os
 import re
 import tempfile
 import threading
@@ -89,7 +90,7 @@ _CACHE_TTL = 4 * 60 * 60  # 4 hours
 # a field, an existing cache still looks fresh, so the API happily serves a
 # payload the new page cannot read and charts render empty with no explanation.
 # Same idea as _YIELD_CURVE_CACHE_VER in routes.py.
-_CACHE_VER = "v1"
+_CACHE_VER = "v2"
 
 # Futures month codes: Jan..Dec
 _MONTH_CODES = "FGHJKMNQUVXZ"
@@ -233,36 +234,130 @@ def fetch_fomc_meetings() -> list[date]:
 
 
 # ---------------------------------------------------------------------------
-# Current policy rate
+# Current policy rate, and the target-range history
 # ---------------------------------------------------------------------------
 
-def _latest_fred_value(series_id: str) -> Optional[float]:
-    """Return the most recent non-empty observation of a FRED series."""
+_ISO_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def _fred_series(series_id: str) -> list[tuple[str, float]]:
+    """Every non-empty observation of a FRED series, as (ISO date, value).
+
+    Returns ``[]`` on any failure — the caller decides whether that is fatal.
+    It is for the current target range; it is not for the history chart, which
+    is decoration on a page whose point is the forward curve.
+    """
     try:
         resp = _SESSION.get(_FRED_CSV.format(series=series_id), timeout=30)
         resp.raise_for_status()
-        for line in reversed(resp.text.strip().splitlines()):
-            parts = line.split(",")
-            if len(parts) < 2:
-                continue
-            val = parts[1].strip()
-            if val and val not in (".", "ND", "N/A"):
-                try:
-                    return float(val)
-                except ValueError:
-                    continue
     except Exception as exc:
         log.warning("FedWatch: FRED %s fetch failed: %s", series_id, exc)
-    return None
+        return []
+
+    out: list[tuple[str, float]] = []
+    # FRED CSV: "observation_date,<SERIES_ID>" then one row per observation.
+    for line in resp.text.strip().splitlines()[1:]:
+        parts = line.split(",")
+        if len(parts) < 2:
+            continue
+        stamp, raw = parts[0].strip(), parts[1].strip()
+        if not raw or raw in (".", "ND", "N/A"):
+            continue
+        if not _ISO_DATE_RE.match(stamp):
+            continue
+        try:
+            out.append((stamp, float(raw)))
+        except ValueError:
+            continue
+    return out
 
 
-def _fetch_current_rate() -> dict[str, Optional[float]]:
-    """Current target range and effective fed funds rate."""
-    lower = _latest_fred_value("DFEDTARL")
-    upper = _latest_fred_value("DFEDTARU")
+def _latest_fred_value(series_id: str) -> Optional[float]:
+    """Return the most recent non-empty observation of a FRED series."""
+    series = _fred_series(series_id)
+    return series[-1][1] if series else None
+
+
+def _rate_change_points(
+    lower: list[tuple[str, float]],
+    upper: list[tuple[str, float]],
+    legacy: Optional[list[tuple[str, float]]] = None,
+) -> list[dict[str, Any]]:
+    """Compress the daily target series into one row per *change*.
+
+    DFEDTARL/DFEDTARU are daily and run to ~6,500 rows each since 2008, so
+    shipping them raw would add a megabyte of duplicated numbers to a payload
+    read on every page load. A policy rate is a step function: every row between
+    two moves is redundant, and Chart.js draws the flat segments itself given
+    ``stepped: true``. ~40 change points replace ~13,000 observations.
+
+    *legacy* is DFEDTAR, the single target in force before the Fed moved to a
+    range in December 2008. Those rows carry ``lower == upper``, which draws as a
+    zero-width band and takes the chart back to 1982 instead of 2008. The range
+    series wins wherever the two overlap, since DFEDTAR lingers as a
+    discontinued series rather than stopping cleanly.
+    """
+    merged: dict[str, tuple[float, float]] = {}
+    for stamp, val in (legacy or []):
+        merged[stamp] = (val, val)
+    lows = dict(lower)
+    for stamp, hi in upper:
+        lo = lows.get(stamp)
+        if lo is not None:
+            merged[stamp] = (lo, hi)
+
+    points: list[dict[str, Any]] = []
+    prev: Optional[tuple[float, float]] = None
+    for stamp in sorted(merged):
+        lo, hi = merged[stamp]
+        rounded = (round(lo, 4), round(hi, 4))
+        if rounded == prev:
+            continue
+        points.append({"date": stamp, "lower": rounded[0], "upper": rounded[1]})
+        prev = rounded
+
+    # Anchor the final step at the last observation, or the flat segment since
+    # the most recent move has zero length and the last change vanishes.
+    if points and merged:
+        last_stamp = max(merged)
+        if last_stamp != points[-1]["date"]:
+            lo, hi = merged[last_stamp]
+            points.append({"date": last_stamp,
+                           "lower": round(lo, 4), "upper": round(hi, 4)})
+
+    log.info("FedWatch: target-range history compressed to %d change points (%s … %s)",
+             len(points),
+             points[0]["date"] if points else "—",
+             points[-1]["date"] if points else "—")
+    return points
+
+
+def _fetch_current_rate() -> dict[str, Any]:
+    """Current target range and EFFR, plus the target-range step history.
+
+    The history is free: ``_latest_fred_value`` was already downloading the whole
+    DFEDTARL/DFEDTARU CSV and keeping the last row, so this is the same two
+    responses parsed rather than discarded. Only DFEDTAR, for the pre-2008 depth,
+    is an additional call — and it is optional, so a failure costs earlier
+    history and nothing else.
+    """
+    lower_series = _fred_series("DFEDTARL")
+    upper_series = _fred_series("DFEDTARU")
+
+    lower = lower_series[-1][1] if lower_series else None
+    upper = upper_series[-1][1] if upper_series else None
     effr = _latest_fred_value("EFFR")
     mid = round((lower + upper) / 2, 4) if lower is not None and upper is not None else None
-    return {"lower": lower, "upper": upper, "mid": mid, "effr": effr}
+
+    history: list[dict[str, Any]] = []
+    try:
+        history = _rate_change_points(
+            lower_series, upper_series, legacy=_fred_series("DFEDTAR"))
+    except Exception as exc:  # noqa: BLE001 - the forward curve is the page
+        log.warning("FedWatch: target-range history unavailable: %s", exc)
+
+    return {"lower": lower, "upper": upper, "mid": mid, "effr": effr,
+            "history": history}
 
 
 # ---------------------------------------------------------------------------
@@ -593,6 +688,11 @@ def _build_payload() -> dict[str, Any]:
         },
         "meetings": meetings_out,
         "ranges": ranges,
+        # Past target-range steps, oldest first. Recomputable from FRED at any
+        # time, so this is cache and deliberately *not* the DynamoDB series
+        # below — snapshotting it daily would start an empty chart today and take
+        # years to rebuild what one GET already returns in full.
+        "rate_history": current.get("history") or [],
         "contracts": [
             {"month": f"{y}-{m:02d}", **curve[(y, m)]}
             for (y, m) in sorted(curve)
@@ -669,6 +769,363 @@ def _save_disk_cache(data: dict[str, Any]) -> None:
         log.warning("FedWatch: failed to write disk cache: %s", exc)
 
 
+# ---------------------------------------------------------------------------
+# Observed series — what the market expected, on each past day
+# ---------------------------------------------------------------------------
+# This is the one thing here that cannot be recomputed. The target-range history
+# above is free from FRED forever, but nothing upstream will sell you yesterday's
+# ZQ curve, so "in September, what odds did the market give a December cut?" is
+# answerable only if we wrote it down at the time. Same reasoning as
+# ystocker-cta-history: a lost row is lost permanently.
+#
+# Keeping it only in cache/ was the flaw that reset the SPY/QQQ valuation chart
+# to a single point when the EC2 instance was replaced, so DynamoDB is the
+# system of record and the disk copy is a fallback for writes made while
+# DynamoDB was briefly unreachable.
+#
+# The trio below is a near-copy of the one in cta.py and valuation.py. That is
+# three copies and wants extracting into a shared HistorySeries helper; done
+# deliberately as a copy here to keep this change inside one module.
+#
+# The table is NOT in deploy/cloudformation.yaml, matching the other four:
+# CloudFormation cannot adopt a live table without an import operation, so
+# adding it would break the next --full deploy rather than converge it. IAM
+# already covers the name via the table/ystocker-* wildcard. Create by hand:
+#
+#   aws dynamodb create-table --table-name ystocker-fedwatch-history \
+#     --region us-west-2 --billing-mode PAY_PER_REQUEST \
+#     --attribute-definitions AttributeName=date,AttributeType=S \
+#     --key-schema AttributeName=date,KeyType=HASH
+
+_HIST_TABLE_NAME = "ystocker-fedwatch-history"
+_HIST_PATH = _CACHE_FILE.parent / "fedwatch_history.json"
+
+#: Scalar columns. The per-meeting detail cannot be one attribute per meeting —
+#: the column set would change every time a meeting rolls off — so it travels as
+#: a JSON string under "meetings". Nothing ever queries by meeting; the chart
+#: always reads the whole series, so queryability buys nothing here.
+_HIST_NUMERIC = ("base_lower", "base_upper", "effr")
+
+_hist_table = None
+_hist_unavail_until = 0.0
+_HIST_LOCK = threading.Lock()
+
+# Memo for history(). Short, because the only writer is this process's own
+# refresh and it invalidates explicitly — the TTL is a backstop for the other
+# gunicorn worker, which writes nothing but must not serve a stale series
+# indefinitely either.
+_HIST_MEMO_TTL = 300
+_hist_memo: Optional[list[dict[str, Any]]] = None
+_hist_memo_ts = 0.0
+_HIST_MEMO_LOCK = threading.Lock()
+
+
+def _get_hist_table():
+    """DynamoDB table for the expectations series, or None when unavailable.
+
+    Absence is not an error: local dev has no AWS credentials and the disk copy
+    still works. The 5-minute backoff stops every refresh paying a connection
+    timeout when the table genuinely is not there.
+    """
+    global _hist_table, _hist_unavail_until
+    if _hist_table is not None:
+        return _hist_table
+    if time.time() < _hist_unavail_until:
+        return None
+    with _HIST_LOCK:
+        if _hist_table is not None:
+            return _hist_table
+        if time.time() < _hist_unavail_until:
+            return None
+        try:
+            import boto3
+
+            ddb = boto3.resource(
+                "dynamodb", region_name=os.environ.get("AWS_REGION", "us-west-2"))
+            tbl = ddb.Table(_HIST_TABLE_NAME)
+            tbl.load()
+            _hist_table = tbl
+            log.info("FedWatch: DynamoDB history table connected: %s", _HIST_TABLE_NAME)
+        except Exception as exc:  # noqa: BLE001 - degrade to disk-only
+            log.warning("FedWatch: DynamoDB history unavailable: %s", exc)
+            _hist_table = None
+            _hist_unavail_until = time.time() + 300
+        return _hist_table
+
+
+def _valid_date(value: object) -> Optional[str]:
+    text = str(value).strip() if value is not None else ""
+    return text if _ISO_DATE_RE.match(text) else None
+
+
+def _number(value: object) -> Optional[float]:
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        out = float(value)
+    except (TypeError, ValueError):
+        return None
+    return out if math.isfinite(out) else None
+
+
+def _row_from_item(item: dict[str, Any]) -> Optional[dict[str, Any]]:
+    """Normalise one stored row, or None if it is not an observation.
+
+    Rejecting a non-ISO ``date`` is what lets a sentinel key share the table
+    later without the series readers picking it up, as cta.py does with
+    ``_latest_report``.
+    """
+    stamp = _valid_date(item.get("date"))
+    if not stamp:
+        return None
+    row: dict[str, Any] = {"date": stamp}
+    for key in _HIST_NUMERIC:
+        val = _number(item.get(key))
+        if val is not None:
+            row[key] = val
+
+    raw = item.get("meetings")
+    meetings: list[dict[str, Any]] = []
+    if isinstance(raw, str) and raw:
+        try:
+            raw = json.loads(raw)
+        except ValueError:
+            log.warning("FedWatch: unreadable meetings blob for %s", stamp)
+            raw = None
+    for entry in raw or []:
+        if not isinstance(entry, dict):
+            continue
+        when = _valid_date(entry.get("d"))
+        rate = _number(entry.get("r"))
+        if not when or rate is None:
+            continue
+        out: dict[str, Any] = {"date": when, "implied_rate": rate}
+        for src, dst in (("c", "cut_prob"), ("h", "hold_prob"), ("k", "hike_prob")):
+            val = _number(entry.get(src))
+            if val is not None:
+                out[dst] = val
+        meetings.append(out)
+    if meetings:
+        row["meetings"] = meetings
+
+    return row if len(row) > 1 else None
+
+
+def _hist_load_ddb() -> list[dict[str, Any]]:
+    table = _get_hist_table()
+    if table is None:
+        return []
+    try:
+        rows: list[dict[str, Any]] = []
+        kwargs: dict[str, Any] = {}
+        while True:
+            resp = table.scan(**kwargs)
+            for item in resp.get("Items", []):
+                row = _row_from_item(item)
+                if row:
+                    rows.append(row)
+            # A scan is paginated; without this the series silently stops at the
+            # first page once there is more than 1 MB of history. A row here is
+            # ~500 bytes, so that is roughly eight years in.
+            if "LastEvaluatedKey" not in resp:
+                break
+            kwargs["ExclusiveStartKey"] = resp["LastEvaluatedKey"]
+        return rows
+    except Exception as exc:  # noqa: BLE001
+        log.warning("FedWatch: history load failed: %s", exc)
+        return []
+
+
+def _item_from_row(row: dict[str, Any]) -> dict[str, Any]:
+    """Canonical stored form of one row — the exact inverse of _row_from_item.
+
+    DynamoDB and the disk file deliberately hold the *same* shape. An earlier cut
+    of this had the disk copy storing the expanded row while DynamoDB stored the
+    compact one, and since _row_from_item only understands the compact keys,
+    every row read back from disk silently lost its meetings and the fallback
+    preserved nothing but the baseline. One shape, one parser, symmetric by
+    construction.
+    """
+    item: dict[str, Any] = {"date": row["date"]}
+    for key in _HIST_NUMERIC:
+        if row.get(key) is not None:
+            item[key] = str(row[key])            # DynamoDB rejects float
+    if row.get("meetings"):
+        item["meetings"] = json.dumps([
+            {"d": m["date"], "r": m["implied_rate"],
+             "c": m.get("cut_prob"), "h": m.get("hold_prob"),
+             "k": m.get("hike_prob")}
+            for m in row["meetings"]
+        ], separators=(",", ":"), allow_nan=False)
+    return item
+
+
+def _hist_save_ddb(row: dict[str, Any]) -> None:
+    table = _get_hist_table()
+    if table is None or not row.get("date"):
+        return
+    try:
+        table.put_item(Item=_item_from_row(row))
+    except Exception as exc:  # noqa: BLE001
+        log.warning("FedWatch: history save failed for %s: %s", row.get("date"), exc)
+
+
+def _hist_load_disk() -> list[dict[str, Any]]:
+    try:
+        payload = json.loads(_HIST_PATH.read_text(encoding="utf-8"))
+        rows = payload.get("rows") if isinstance(payload, dict) else payload
+        out = []
+        for raw in rows or []:
+            row = _row_from_item(raw) if isinstance(raw, dict) else None
+            if row:
+                out.append(row)
+        return out
+    except FileNotFoundError:
+        return []
+    except Exception as exc:  # noqa: BLE001
+        log.warning("FedWatch: unreadable history file (%s)", exc)
+        return []
+
+
+def _hist_save_disk(rows: list[dict[str, Any]]) -> None:
+    try:
+        _HIST_PATH.parent.mkdir(parents=True, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(dir=_HIST_PATH.parent, suffix=".tmp")
+        try:
+            with open(fd, "w", encoding="utf-8") as fh:
+                json.dump({"rows": [_item_from_row(r) for r in rows]},
+                          fh, allow_nan=False)
+            Path(tmp).replace(_HIST_PATH)
+        except BaseException:
+            Path(tmp).unlink(missing_ok=True)
+            raise
+    except Exception as exc:  # noqa: BLE001
+        log.warning("FedWatch: could not write history file: %s", exc)
+
+
+def history(limit: Optional[int] = None) -> list[dict[str, Any]]:
+    """The expectations series, oldest first. Always reads both stores.
+
+    DynamoDB and disk are unioned by date rather than one being preferred: disk
+    can hold a row written while DynamoDB was briefly unreachable, and DynamoDB
+    holds everything that predates the current instance. Later writes for a date
+    win, which is what makes a same-day re-record an update rather than a
+    duplicate.
+
+    Deliberately *not* memoised — it is a pure function of the two stores, which
+    is what makes it testable and what callers reading right after a write
+    expect. Request paths want :func:`history_cached` instead.
+    """
+    merged: dict[str, dict[str, Any]] = {}
+    for row in _hist_load_ddb() + _hist_load_disk():
+        merged[row["date"]] = {**merged.get(row["date"], {}), **row}
+    rows = sorted(merged.values(), key=lambda r: r["date"])
+    return rows[-limit:] if limit else rows
+
+
+def history_cached(limit: Optional[int] = None) -> list[dict[str, Any]]:
+    """:func:`history`, memoised for _HIST_MEMO_TTL. For request paths.
+
+    The reason is billing, not latency. ``/api/fedwatch/history`` is public and
+    unauthenticated, and every uncached call is a *full table scan* — on
+    PAY_PER_REQUEST that is billed by the volume scanned, so anything hitting the
+    endpoint in a loop multiplies read cost without limit as the series grows.
+    The memo bounds that to one scan per TTL per worker. (It also happens to save
+    ~80ms a page load, which is the part nobody would have noticed.)
+
+    Writes go through ``record_snapshot``, which clears the memo, so a fresh row
+    is never hidden behind the TTL. The TTL is the backstop for the *other*
+    gunicorn worker, which writes nothing and would otherwise never learn.
+
+    *limit* slices the memoised list rather than keying it, so a mix of limits
+    cannot multiply the scans.
+    """
+    global _hist_memo, _hist_memo_ts
+
+    with _HIST_MEMO_LOCK:
+        if _hist_memo is not None and (time.time() - _hist_memo_ts) < _HIST_MEMO_TTL:
+            rows = _hist_memo
+            return list(rows[-limit:]) if limit else list(rows)
+
+    # The read runs outside the lock: holding it across the network would make
+    # concurrent readers queue behind one another, which is the thing the memo
+    # exists to avoid.
+    rows = history()
+
+    with _HIST_MEMO_LOCK:
+        _hist_memo = rows
+        _hist_memo_ts = time.time()
+    return list(rows[-limit:]) if limit else list(rows)
+
+
+def record_snapshot(payload: dict[str, Any]) -> Optional[dict[str, Any]]:
+    """Store one day of expectations. Returns the row, or None if there is none.
+
+    Keyed by the curve's own ``as_of`` rather than ``date.today()``. The ZQ close
+    on a Saturday *is* Friday's, so keying by today would write a phantom weekend
+    row holding Friday's numbers a second time; keying by as_of makes a weekend
+    refresh overwrite Friday's row with identical values, and the series comes
+    out trading-day-only for free.
+
+    Same-day writes overwrite rather than accumulate, so the ~6 refreshes a
+    4-hour TTL produces converge on the latest curve instead of storing intraday
+    noise — the rationale cta.record_observation documents for the same choice.
+    That is also why this needs no scheduler of its own.
+
+    ``implied_rate`` is stored *absolute*, which is the point: the cut/hold/hike
+    probabilities are relative to whatever the target range was that day, so once
+    the Fed actually moves, a raw cut_prob plotted across the step changes
+    meaning mid-line. base_lower/base_upper travel with the row so a reader can
+    re-base; implied_rate needs no re-basing at all.
+    """
+    stamp = _valid_date(payload.get("as_of"))
+    meetings_in = payload.get("meetings") or []
+    if not stamp or not meetings_in:
+        return None
+
+    current = payload.get("current") or {}
+    row: dict[str, Any] = {"date": stamp}
+    for src, dst in (("lower", "base_lower"), ("upper", "base_upper"),
+                     ("effr", "effr")):
+        val = _number(current.get(src))
+        if val is not None:
+            row[dst] = val
+
+    meetings: list[dict[str, Any]] = []
+    for m in meetings_in:
+        when = _valid_date(m.get("date"))
+        rate = _number(m.get("implied_rate"))
+        if not when or rate is None:
+            continue
+        entry: dict[str, Any] = {"date": when, "implied_rate": round(rate, 4)}
+        for key in ("cut_prob", "hold_prob", "hike_prob"):
+            val = _number(m.get(key))
+            if val is not None:
+                entry[key] = val
+        meetings.append(entry)
+    if not meetings:
+        return None
+    row["meetings"] = meetings
+
+    _hist_save_ddb(row)
+    # Union through the disk copy so the file keeps rows DynamoDB has but this
+    # process has not loaded, rather than truncating to what we just wrote.
+    merged = {r["date"]: r for r in _hist_load_disk()}
+    merged[stamp] = row
+    _hist_save_disk(sorted(merged.values(), key=lambda r: r["date"]))
+
+    # Drop the memo, or today's row stays invisible for up to _HIST_MEMO_TTL and
+    # the chart looks like the write silently failed.
+    global _hist_memo, _hist_memo_ts
+    with _HIST_MEMO_LOCK:
+        _hist_memo = None
+        _hist_memo_ts = 0.0
+
+    log.info("FedWatch: recorded expectations for %s (%d meetings)",
+             stamp, len(meetings))
+    return row
+
+
 def get_fedwatch_data(force: bool = False) -> dict[str, Any]:
     """Return cached FedWatch probabilities. memory -> disk -> network.
 
@@ -707,6 +1164,13 @@ def get_fedwatch_data(force: bool = False) -> dict[str, Any]:
                 _cache_data = fresh
                 _cache_ts = fresh["_ts"]
             _save_disk_cache(fresh)
+            # Never let the series write cost us the payload: every store path
+            # below already swallows its own errors, so this guards only against
+            # a malformed payload reaching the normaliser.
+            try:
+                record_snapshot(fresh)
+            except Exception as exc:  # noqa: BLE001
+                log.warning("FedWatch: could not record expectations: %s", exc)
         else:
             # Don't cache a failure — serve stale data if we have any.
             with _cache_lock:

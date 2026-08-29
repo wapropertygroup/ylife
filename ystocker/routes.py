@@ -2526,6 +2526,34 @@ def api_fedwatch():
         return jsonify({"status": "error", "error": str(exc), "warming": True}), 500
 
 
+@bp.route("/api/fedwatch/history")
+def api_fedwatch_history():
+    """JSON API — the recorded expectations series, one row per trading day.
+
+    Deliberately a second endpoint rather than a key on /api/fedwatch. That
+    payload is also read by /tv and by brief.py, it is cached whole on disk, and
+    this series grows without bound — folding them together would make every
+    consumer pay for years of history to render today's probability grid.
+
+    Unlike /api/fedwatch this never 202s: the series is read from DynamoDB and
+    disk, not from the futures curve, so there is nothing to warm. An empty list
+    is a valid answer and means only that nothing has been recorded yet — which
+    is the normal state on the day this ships.
+    """
+    try:
+        from ystocker.fedwatch import history_cached
+
+        limit = request.args.get("limit", type=int)
+        if limit is not None:
+            limit = max(1, min(limit, 2000))
+        rows = history_cached(limit=limit)
+        log.info("API fedwatch history: %d rows", len(rows))
+        return jsonify({"status": "ok", "rows": rows, "count": len(rows)})
+    except Exception as exc:
+        log.error("API fedwatch history: error: %s", exc, exc_info=True)
+        return jsonify({"status": "error", "error": str(exc), "rows": []}), 500
+
+
 # ---------------------------------------------------------------------------
 # Trading agents — gated, subprocess-per-run
 # ---------------------------------------------------------------------------

@@ -929,6 +929,14 @@ const I18n = (() => {
     'fedwatch.today':          { en: 'Today',             zh: '当前' },
     'fedwatch.implied_rate':   { en: 'Implied fed funds rate', zh: '隐含联邦基金利率' },
     'fedwatch.today_rate':     { en: "Today's rate",      zh: '当前利率' },
+    'fedwatch.hist_title':     { en: 'Target Range History', zh: '历史利率变动' },
+    'fedwatch.hist_desc':      { en: 'Every change the Fed has actually made, as a step function. The band is the target range; before December 2008 the Fed set a single target rather than a range, so the band closes to a line.',
+                                 zh: '美联储历次实际利率变动，以阶梯图呈现。色带为目标区间；2008 年 12 月之前美联储设定单一目标利率而非区间，因此色带收敛为一条线。' },
+    'fedwatch.hist_lower':     { en: 'Lower bound',       zh: '区间下限' },
+    'fedwatch.hist_upper':     { en: 'Upper bound',       zh: '区间上限' },
+    'fedwatch.exp_title':      { en: 'Expectations Over Time', zh: '市场预期的演变' },
+    'fedwatch.exp_desc':       { en: 'How the rate implied for each upcoming meeting has moved as the futures curve repriced. One line per meeting, recorded once per trading day — this is the market changing its mind, not the Fed acting.',
+                                 zh: '随着期货曲线重新定价，各次未来会议的隐含利率如何变化。每次会议一条线，每个交易日记录一次——反映的是市场预期的改变，而非美联储的实际行动。' },
     'fedwatch.grid_title':     { en: 'Probability Grid',  zh: '概率明细表' },
     'fedwatch.grid_desc':      { en: 'The same numbers as the chart above, in full. Rows are target ranges; columns are meeting dates.',
                                  zh: '与上方图表相同的完整数据。行为利率区间，列为会议日期。' },
@@ -1329,6 +1337,13 @@ const I18n = (() => {
     'agents.status_running':{ en: 'Running',      zh: '运行中' },
     'agents.status_queued': { en: 'Queued',       zh: '排队中' },
     'agents.status_error':  { en: 'Error',        zh: '出错' },
+    // Names what the status listbox's visible value is *of*, since the button's
+    // own text is the value: without it a screen reader announces a bare "Done".
+    'agents.status_label':  { en: 'Status filter', zh: '状态筛选' },
+    // On the × beside the search box. Names the key as well, because Esc clears
+    // the status too and there is nowhere else to learn that.
+    'agents.search_clear':  { en: 'Clear search (Esc clears both filters)',
+                              zh: '清除搜索(Esc 可清除全部筛选)' },
     // Shown only to visitors who are not signed in: a sample of finished
     // reports, so the page shows what it produces instead of a dead end.
     'agents.sample':        { en: 'Sample reports', zh: '报告样例' },
@@ -2156,6 +2171,7 @@ const I18n = (() => {
     'markets.cta_distance_note': { en: 'Zero is the pivot itself: below the line, mechanical selling has been triggered.', zh: '零即触发位本身：跌破该线即已触发机械卖盘。' },
     'markets.cta_distance_since': { en: '{n} readings since {date}', zh: '自 {date} 起 {n} 条记录' },
     'markets.cta_distance_collecting': { en: 'Collecting daily distance readings — {n} so far. The chart appears once there are two.', zh: '正在累积每日距离记录 — 目前 {n} 条。满两条后显示图表。' },
+    'markets.cta_all_through_meta': { en: 'index is below every reported pivot', zh: '指数已低于所有已公布触发位' },
     'markets.cta_pivot_short': { en: 'Short-term pivot', zh: '短期触发位' },
     'markets.cta_pivot_medium': { en: 'Medium-term pivot', zh: '中期触发位' },
     'markets.cta_pivot_long': { en: 'Long-term pivot', zh: '长期触发位' },
@@ -2263,6 +2279,9 @@ const I18n = (() => {
     'chart.mktcap_gdp':      { en: 'Market Cap / GDP (%)', zh: '总市值 / GDP (%)' },
     'chart.fed_assets_t':    { en: 'Fed Assets ($T)', zh: '美联储总资产（万亿美元）' },
     'chart.fed_total_assets':{ en: 'Fed Total Assets', zh: '美联储总资产' },
+    'chart.ten_year_yield':  { en: '10Y Yield (%)',   zh: '10年期美债收益率 (%)' },
+    'chart.indpro':          { en: 'Industrial Production', zh: '工业生产指数' },
+    'chart.housing_starts':  { en: 'Housing Starts',  zh: '新屋开工' },
     'chart.spy_10y_ratio':   { en: 'SPY / 10Y Ratio', zh: 'SPY / 10年期美债比率' },
     'chart.spy':             { en: 'S&P 500',        zh: '标普500' },
     'chart.annual_dividend': { en: 'Annual Dividend ($)', zh: '年度股息（美元）' },

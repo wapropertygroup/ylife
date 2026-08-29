@@ -497,6 +497,77 @@ window.YSTime = (function () {
   font-size: 14px; line-height: 1; padding: 2px 3px;
 }
 .ag-search-clear:hover { color: #cbd5e1; }
+/* Status filter. Metrics are copied from .ag-hist-tools .ag-input rather than
+   inherited, because the trigger is a button and a button's font does not
+   default to the page's -- a select that looked one pixel taller than the field
+   beside it was most of what made the old control look bolted on. */
+.ag-sel { position: relative; display: inline-flex; }
+.ag-sel-btn {
+  display: inline-flex; align-items: center; gap: 7px;
+  background: #0f172a; border: 1px solid #334155; border-radius: 8px;
+  color: #cbd5e1; font: inherit; font-size: 12px; line-height: 1.5;
+  padding: 6px 10px; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.ag-sel-btn:hover { border-color: #475569; color: #e2e8f0; }
+/* A ring rather than only the border tint .ag-input uses: this control is opened
+   from the keyboard, so where focus sits has to be legible at a glance, and
+   focus-visible keeps it away from pointer users. */
+.ag-sel-btn:focus-visible {
+  outline: none; border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99,102,241,.28);
+}
+.ag-sel-label { white-space: nowrap; }
+/* A filter that is on says so on the control itself: the found-count line
+   mentions the status, but that line is only rendered while something is
+   filtered, so the control was the one place with no state. */
+.ag-sel.is-set .ag-sel-btn { border-color: #4f46e5; color: #e0e7ff; background: rgba(79,70,229,.12); }
+.ag-sel-chev {
+  width: 9px; height: 6px; flex: none; color: #64748b;
+  transition: transform .15s ease;
+}
+.ag-sel-btn:hover .ag-sel-chev, .ag-sel.is-set .ag-sel-chev { color: #a5b4fc; }
+.ag-sel.is-open .ag-sel-chev { transform: rotate(180deg); }
+/* The status colour, taken from the row pills so the filter and the rows it
+   filters speak the same language. "Any status" keeps the neutral ring, which is
+   why the dot is drawn as a border rather than a fill. */
+.ag-sel-dot {
+  width: 7px; height: 7px; flex: none; border-radius: 999px;
+  border: 1px solid #64748b;
+}
+.ag-dot-done    { background: #4ade80; border-color: #4ade80; }
+.ag-dot-running { background: #a5b4fc; border-color: #a5b4fc; }
+.ag-dot-queued  { background: #b6c2d1; border-color: #b6c2d1; }
+.ag-dot-error   { background: #fca5a5; border-color: #fca5a5; }
+/* Right-aligned to the trigger: the control sits at the panel's right edge, so a
+   left-aligned menu wider than the button would hang off the card. */
+.ag-sel-menu {
+  position: absolute; top: calc(100% + 5px); right: 0; z-index: 30;
+  min-width: 100%; padding: 4px;
+  background: #0b1120; border: 1px solid #1e293b; border-radius: 10px;
+  box-shadow: 0 16px 34px -14px #000, 0 0 0 1px rgba(99,102,241,.08);
+}
+.ag-sel-menu[hidden] { display: none; }
+/* Opens upward when the viewport has no room below -- see openMenu(). A native
+   <select> popup is an OS window and escapes its frame; this one cannot, and
+   /agents?embed=1 renders the panel inside a short iframe. */
+.ag-sel-menu.is-up { top: auto; bottom: calc(100% + 5px); }
+.ag-sel-opt {
+  display: flex; align-items: center; gap: 8px; white-space: nowrap;
+  padding: 7px 10px; border-radius: 7px; cursor: pointer;
+  color: #94a3b8; font-size: 12px;
+}
+.ag-sel-opt:hover, .ag-sel-opt.is-active { background: rgba(99,102,241,.14); color: #e2e8f0; }
+.ag-sel-opt[aria-selected="true"] { color: #e0e7ff; font-weight: 600; }
+/* The chosen row is marked with a short rule at its trailing edge rather than a
+   tick in a sixth column, which would indent every other row past a gap. */
+.ag-sel-opt[aria-selected="true"]::after {
+  content: ''; margin-left: auto; width: 4px; height: 12px;
+  border-radius: 999px; background: #6366f1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ag-sel-chev { transition: none; }
+}
 .ag-search-meta {
   color: #64748b; font-size: 11px; margin-bottom: 10px;
   font-variant-numeric: tabular-nums;
@@ -568,6 +639,11 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
   .ag-hist-tools .ag-search-wrap .ag-input { width: 100%; }
   .ag-hist-tools .ag-input { min-height: 44px; }
   .ag-search-clear { right: 0; width: 40px; height: 40px; padding: 0; font-size: 18px; }
+  /* The trigger keeps its content width beside the stretched search box, but the
+     menu gets thumb-sized rows -- a 26px row is a miss-tap, and the panel it
+     filters is a whole screen below. */
+  .ag-sel-btn { min-height: 44px; padding: 6px 12px; }
+  .ag-sel-opt { padding: 11px 12px; font-size: 13px; }
 }
 </style>
 
@@ -1174,15 +1250,57 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
                data-i18n-placeholder="agents.search_ph"
                aria-label="Search reports by ticker or analysis date">
         <button id="agSearchClear" class="ag-search-clear hidden" type="button"
-                title="Clear search" aria-label="Clear search">×</button>
+                title="Clear search (Esc clears both filters)"
+                data-i18n-title="agents.search_clear"
+                aria-label="Clear search">×</button>
       </div>
-      <select id="agStatusFilter" class="ag-input" aria-label="Filter by status">
-        <option value=""        data-i18n="agents.status_any">Any status</option>
-        <option value="done"    data-i18n="agents.status_done">Done</option>
-        <option value="running" data-i18n="agents.status_running">Running</option>
-        <option value="queued"  data-i18n="agents.status_queued">Queued</option>
-        <option value="error"   data-i18n="agents.status_error">Error</option>
-      </select>
+      {# Status filter. A listbox built here rather than a <select>, because the
+         native option list is drawn by the OS: it cannot carry the status
+         colours the rows use, ignores this page's palette, and on macOS opens
+         as a light menu with a system checkmark over a dark panel. The value
+         still lives in #agStatusFilter and still emits "change", so everything
+         that reads the filter is unchanged -- it is simply an input now. #}
+      <div class="ag-sel" id="agStatusSel">
+        {# autocomplete=off for the same reason #agSearch carries it: Firefox
+           restores form values on a soft reload, and a restored "error" here
+           would filter the list while the trigger still read "Any status". #}
+        <input type="hidden" id="agStatusFilter" value="" autocomplete="off">
+        <button type="button" class="ag-sel-btn" id="agStatusBtn"
+                aria-haspopup="listbox" aria-expanded="false"
+                aria-controls="agStatusMenu">
+          <span class="ag-sel-dot"></span>
+          <span class="ag-sel-label" data-i18n="agents.status_any">Any status</span>
+          <svg class="ag-sel-chev" viewBox="0 0 12 8" aria-hidden="true">
+            <path d="M1 1.6 6 6.4l5-4.8" fill="none" stroke="currentColor"
+                  stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+        {# aria-selected is maintained on every option, not just the chosen one:
+           a listbox that omits it on the rest reads as five selected rows. #}
+        <div class="ag-sel-menu" id="agStatusMenu" role="listbox" tabindex="-1"
+             aria-label="Filter by status" hidden>
+          <div class="ag-sel-opt" role="option" id="agStatusOpt0" data-value="" aria-selected="true">
+            <span class="ag-sel-dot"></span>
+            <span data-i18n="agents.status_any">Any status</span>
+          </div>
+          <div class="ag-sel-opt" role="option" id="agStatusOpt1" data-value="done" aria-selected="false">
+            <span class="ag-sel-dot ag-dot-done"></span>
+            <span data-i18n="agents.status_done">Done</span>
+          </div>
+          <div class="ag-sel-opt" role="option" id="agStatusOpt2" data-value="running" aria-selected="false">
+            <span class="ag-sel-dot ag-dot-running"></span>
+            <span data-i18n="agents.status_running">Running</span>
+          </div>
+          <div class="ag-sel-opt" role="option" id="agStatusOpt3" data-value="queued" aria-selected="false">
+            <span class="ag-sel-dot ag-dot-queued"></span>
+            <span data-i18n="agents.status_queued">Queued</span>
+          </div>
+          <div class="ag-sel-opt" role="option" id="agStatusOpt4" data-value="error" aria-selected="false">
+            <span class="ag-sel-dot ag-dot-error"></span>
+            <span data-i18n="agents.status_error">Error</span>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
   <p id="agSearchMeta" class="ag-search-meta hidden"></p>
@@ -2316,7 +2434,9 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
     searchEl.addEventListener('search', loadHistory);
     searchEl.addEventListener('keydown', e => {
       if (e.key === 'Enter') { clearTimeout(histTimer); loadHistory(); }
-      if (e.key === 'Escape' && searchEl.value) { searchEl.value = ''; loadHistory(); }
+      // Escape is handled once, on the document, so that it clears the status
+      // as well -- see clearFilters(). Handling it here too would clear the text
+      // and then run a second, identical query.
     });
   }
   if (statusFilterEl) statusFilterEl.addEventListener('change', loadHistory);
@@ -2353,6 +2473,180 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
     // explains why the list just shrank -- out of view. 'nearest' is a no-op
     // when it is already on screen.
     searchEl.scrollIntoView({ block: 'nearest' });
+  });
+
+  // ── Status listbox ───────────────────────────────────────────────────────
+  // Drives the hidden #agStatusFilter, so loadHistory() and the change listener
+  // above read the value exactly as they did from the <select> this replaced.
+  const selWrap = document.getElementById('agStatusSel');
+  const selBtn = document.getElementById('agStatusBtn');
+  const selMenu = document.getElementById('agStatusMenu');
+  const selLabel = selBtn?.querySelector('.ag-sel-label');
+  const selDot = selBtn?.querySelector('.ag-sel-dot');
+  const selOpts = selMenu ? [...selMenu.querySelectorAll('.ag-sel-opt')] : [];
+  const selOpen = () => selWrap?.classList.contains('is-open') || false;
+
+  // The chosen option's own markup is the source of truth for the trigger's
+  // face: one place decides what "running" looks like, so the dot beside the
+  // label and the dot in the list cannot drift apart.
+  function syncTrigger() {
+    if (!selBtn) return;
+    const opt = selOpts.find(o => o.getAttribute('aria-selected') === 'true')
+      || selOpts[0];
+    if (!opt) return;
+    const src = opt.querySelector('.ag-sel-dot');
+    const text = opt.querySelector('[data-i18n]');
+    selDot.className = src ? src.className : 'ag-sel-dot';
+    if (text) {
+      // Carry the key, not just the words: I18n.apply() relabels anything with
+      // data-i18n, so the trigger follows a language toggle without this file
+      // knowing which language is current.
+      selLabel.dataset.i18n = text.dataset.i18n;
+      selLabel.textContent = text.textContent;
+    }
+    // The visible text is the value, so the name has to say what the value is
+    // *of*, or a screen reader announces a bare "Done".
+    selBtn.setAttribute('aria-label',
+      (I18n.t('agents.status_label') || 'Status filter') + ': ' + selLabel.textContent);
+    selWrap.classList.toggle('is-set', !!statusFilterEl.value);
+  }
+
+  function closeMenu({ focus = false } = {}) {
+    if (!selMenu) return;
+    selMenu.hidden = true;
+    selWrap.classList.remove('is-open');
+    selBtn.setAttribute('aria-expanded', 'false');
+    selOpts.forEach(o => o.classList.remove('is-active'));
+    selMenu.removeAttribute('aria-activedescendant');
+    if (focus) selBtn.focus();
+  }
+
+  function openMenu() {
+    if (!selMenu) return;
+    selMenu.hidden = false;
+    selWrap.classList.add('is-open');
+    selBtn.setAttribute('aria-expanded', 'true');
+    // Flip above the trigger when the menu would not clear the bottom of the
+    // viewport. Measured rather than assumed: the panel's position depends on how
+    // many runs are listed, and embedded it sits in an iframe a few hundred
+    // pixels tall. The 8px margin is not cosmetic -- landing flush on the edge
+    // reads as clipped, and one pixel over produces a scrollbar.
+    const EDGE = 8;
+    selMenu.classList.remove('is-up');
+    const box = selMenu.getBoundingClientRect();
+    // Free space left over on each side, negative where the menu would overhang.
+    const below = window.innerHeight - box.bottom;
+    const above = selBtn.getBoundingClientRect().top - box.height;
+    // In a frame too short for either side, the roomier one is the lesser evil:
+    // refusing to flip there leaves the menu clipped with nothing gained.
+    if (below < EDGE && above > below) selMenu.classList.add('is-up');
+    // Keyboard focus starts on the current value rather than the first row, so
+    // ArrowDown from "Error" does not jump back to the top of the list.
+    const cur = selOpts.findIndex(o => o.getAttribute('aria-selected') === 'true');
+    markActive(cur < 0 ? 0 : cur);
+    // preventScroll for the same reason markActive() guards its scrollIntoView:
+    // focus() scrolls its target into view by default, which moved the page by a
+    // couple of pixels every time the menu opened near the bottom edge -- and the
+    // flip above has already put it fully on screen.
+    selMenu.focus({ preventScroll: true });
+  }
+
+  function markActive(i) {
+    selOpts.forEach((o, n) => o.classList.toggle('is-active', n === i));
+    // The focus stays on the menu itself, so the highlighted row has to be named
+    // for a screen reader -- the class alone is a purely visual cursor.
+    if (selOpts[i]) selMenu.setAttribute('aria-activedescendant', selOpts[i].id);
+    // Only when the menu is the thing that scrolls. Five rows never overflow it,
+    // so an unguarded scrollIntoView here scrolls the *page* instead: opening the
+    // filter dragged the list out from under the reader, and it also hid the
+    // flip above by making an off-screen menu on-screen the wrong way.
+    if (selMenu.scrollHeight > selMenu.clientHeight) {
+      selOpts[i]?.scrollIntoView({ block: 'nearest' });
+    }
+  }
+
+  const activeIndex = () => selOpts.findIndex(o => o.classList.contains('is-active'));
+
+  function choose(opt, { reload = true } = {}) {
+    if (!opt) return;
+    selOpts.forEach(o => o.setAttribute('aria-selected', String(o === opt)));
+    const next = opt.dataset.value || '';
+    const changed = next !== statusFilterEl.value;
+    statusFilterEl.value = next;
+    syncTrigger();
+    // Dispatched rather than called directly: a hidden input emits no change of
+    // its own, and everything else in this file listens for one.
+    if (reload && changed) statusFilterEl.dispatchEvent(new Event('change'));
+  }
+
+  if (selBtn && selMenu) {
+    selBtn.addEventListener('click', () => selOpen() ? closeMenu() : openMenu());
+    selBtn.addEventListener('keydown', e => {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        openMenu();
+      }
+    });
+    // mousedown, not click: the row is chosen before the menu can lose focus,
+    // which on Safari fires blur first and would close it under the pointer.
+    selMenu.addEventListener('mousedown', e => {
+      const opt = e.target.closest('.ag-sel-opt');
+      if (!opt) return;
+      e.preventDefault();
+      choose(opt);
+      closeMenu({ focus: true });
+    });
+    selMenu.addEventListener('mousemove', e => {
+      const opt = e.target.closest('.ag-sel-opt');
+      if (opt) markActive(selOpts.indexOf(opt));
+    });
+    selMenu.addEventListener('keydown', e => {
+      const i = activeIndex();
+      if (e.key === 'ArrowDown') { e.preventDefault(); markActive(Math.min(i + 1, selOpts.length - 1)); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); markActive(Math.max(i - 1, 0)); }
+      else if (e.key === 'Home') { e.preventDefault(); markActive(0); }
+      else if (e.key === 'End') { e.preventDefault(); markActive(selOpts.length - 1); }
+      else if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        choose(selOpts[i < 0 ? 0 : i]);
+        closeMenu({ focus: true });
+      } else if (e.key === 'Escape' || e.key === 'Tab') {
+        // Stopped here so the document handler below does not read this as "clear
+        // the filters": dismissing a menu must not also discard what is set.
+        e.stopPropagation();
+        closeMenu({ focus: e.key === 'Escape' });
+      }
+    });
+    // Pointer-down rather than click, so a press that starts outside dismisses
+    // the menu even if it ends on a scrollbar or outside the window.
+    document.addEventListener('pointerdown', e => {
+      if (selOpen() && !selWrap.contains(e.target)) closeMenu();
+    });
+    syncTrigger();
+    document.addEventListener('i18n:langchange', syncTrigger);
+  }
+
+  // ── Escape clears the filters ────────────────────────────────────────────
+  // The query and the status are two controls but one filter, and getting back
+  // to the full list meant finding the × and then setting the dropdown back to
+  // "Any status". One key, from anywhere on the page.
+  function clearFilters() {
+    if (searchEl) searchEl.value = '';
+    choose(selOpts[0], { reload: false });   // "Any status", without a second query
+    clearTimeout(histTimer);
+    loadHistory();
+  }
+
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape' || e.defaultPrevented) return;
+    // Typing somewhere else is not filtering: Escape in the ticker box or the
+    // follow-up composer must leave the panel below them alone. The search box
+    // is the exception, since it *is* one of the filters.
+    const el = document.activeElement;
+    if (el && el !== searchEl
+        && (/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || el.isContentEditable)) return;
+    if (!(searchEl?.value || statusFilterEl?.value)) return;   // nothing set
+    clearFilters();
   });
 
   // ── Follow-up conversation ──────────────────────────────────────────────
