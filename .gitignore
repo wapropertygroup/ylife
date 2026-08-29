@@ -205,3 +205,10 @@ cache/
 
 # Playwright MCP browser debug output (screenshots, snapshots from AI debugging sessions)
 .playwright-mcp/
+
+# Xcode (ios/) — build products, per-user state, and the resolved SPM cache.
+# xcodebuild drops ~100 MB into ios/TradeAgents/build on every build.
+ios/**/build/
+*.xcuserstate
+xcuserdata/
+DerivedData/
