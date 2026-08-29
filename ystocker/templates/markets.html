@@ -791,6 +791,22 @@
       </div>
     </div>
 
+    <!-- Distance to trigger, over time. This is the tracker series from
+         /api/cta-history, not something derivable from the chart above: when
+         Goldman moves the pivots the level chart steps, whereas a percentage
+         gap stays comparable across reports. Hidden until there are at least
+         two readings, because one point is a dot and drawing it with an axis
+         would imply a trend that does not exist yet. -->
+    <div id="ctaDistanceWrap" class="mt-4 pt-4 border-t border-slate-800" style="display:none">
+      <div class="flex items-center justify-between mb-1">
+        <p class="text-xs text-slate-500" data-i18n="markets.cta_distance_chart">S&amp;P 500 distance to each CTA pivot (%)</p>
+        <span id="ctaDistanceMeta" class="text-[10px] text-slate-600"></span>
+      </div>
+      <div class="chart-container" style="height:190px"><canvas id="ctaDistanceChart"></canvas></div>
+      <p class="text-[10px] text-slate-600 mt-1.5" data-i18n="markets.cta_distance_note">Zero is the pivot itself: below the line, mechanical selling has been triggered.</p>
+    </div>
+    <div id="ctaDistanceCollecting" class="mt-4 pt-4 border-t border-slate-800 text-[11px] text-slate-600" style="display:none"></div>
+
     <div class="mt-4 pt-3 border-t border-slate-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5">
       <p class="text-[10px] leading-relaxed text-slate-600" data-i18n="markets.cta_disclaimer">Goldman's model is proprietary. This is a dated public-report tracker, not a live Goldman feed or an independent estimate.</p>
       <a id="ctaSource" href="#" target="_blank" rel="noopener noreferrer"
@@ -1218,6 +1234,7 @@ let _fgData           = null;
 let _aaiiData         = null;
 let _pcrData          = null;
 let _ctaData          = null;
+let _ctaHistory       = null;   // /api/cta-history, the durable tracker series
 let _ctaTriggerChartInst = null;
 let _ctaPositionChartInst = null;
 let _idxShowBB        = false;
@@ -1359,6 +1376,81 @@ function _buildCtaTriggerChart(canvasId) {
       scales: {
         x: { grid: { color: GRID_COL }, ticks: { color: TICK_COL, maxTicksLimit: 7, maxRotation: 0, font: { size: 9 } } },
         y: { grid: { color: GRID_COL }, ticks: { color: TICK_COL, callback: value => Number(value).toLocaleString(), font: { size: 9 } } },
+      },
+    },
+  });
+}
+
+// Distance-to-pivot over time, from the durable tracker series. Deliberately a
+// separate chart rather than another dataset on the level chart: these are
+// percentages against three different bases, and the useful reference line is
+// zero (= at the pivot), which a price axis cannot show.
+let _ctaDistChartInst = null;
+const _CTA_DIST_SERIES = [
+  ['d_short',  'markets.cta_pivot_short',  'Short-term pivot',  '#f87171'],
+  ['d_medium', 'markets.cta_pivot_medium', 'Medium-term pivot', '#fbbf24'],
+  ['d_long',   'markets.cta_pivot_long',   'Long-term pivot',   '#34d399'],
+];
+
+function _renderCtaDistanceHistory(payload) {
+  const wrap = document.getElementById('ctaDistanceWrap');
+  const collecting = document.getElementById('ctaDistanceCollecting');
+  if (!wrap || !collecting) return;
+  const rows = (payload && payload.rows) || [];
+
+  // One reading is not a series. Say so rather than drawing a lone dot on a
+  // full axis, which reads as a trend that has not been observed.
+  if (rows.length < 2) {
+    wrap.style.display = 'none';
+    collecting.style.display = '';
+    collecting.textContent = _ctaTemplate(
+      'markets.cta_distance_collecting',
+      'Collecting daily distance readings — {n} so far. The chart appears once there are two.',
+      { n: rows.length });
+    return;
+  }
+  collecting.style.display = 'none';
+  wrap.style.display = '';
+
+  const meta = document.getElementById('ctaDistanceMeta');
+  if (meta) {
+    meta.textContent = _ctaTemplate('markets.cta_distance_since',
+                                    '{n} readings since {date}',
+                                    { n: rows.length, date: _ctaDate(payload.since) });
+  }
+
+  const canvas = document.getElementById('ctaDistanceChart');
+  if (!canvas) return;
+  if (_ctaDistChartInst) _ctaDistChartInst.destroy();
+  _ctaDistChartInst = new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels: rows.map(r => r.date),
+      datasets: _CTA_DIST_SERIES.map(([key, i18nKey, fallback, colour]) => ({
+        ...I18n.label(i18nKey, fallback),
+        // null rather than 0 for a missing level: a gap is honest, a zero would
+        // read as "sitting exactly on the pivot", which is the alarming value.
+        data: rows.map(r => (r[key] == null ? null : r[key])),
+        borderColor: colour, backgroundColor: 'transparent',
+        borderWidth: 2, pointRadius: rows.length > 40 ? 0 : 2.5,
+        pointHoverRadius: 5, spanGaps: false, tension: .2,
+      })),
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: true, position: 'bottom',
+                  labels: { color: TICK_COL, boxWidth: 10, font: { size: 9 } } },
+        tooltip: { callbacks: {
+          label: c => ` ${c.dataset.label}: ${c.raw >= 0 ? '+' : ''}${Number(c.raw).toFixed(2)}%`,
+        } },
+      },
+      scales: {
+        x: { grid: { color: GRID_COL },
+             ticks: { color: TICK_COL, maxTicksLimit: 5, maxRotation: 0, font: { size: 9 } } },
+        y: { grid: { color: GRID_COL },
+             ticks: { color: TICK_COL, callback: v => `${v > 0 ? '+' : ''}${v}%`, font: { size: 9 } } },
       },
     },
   });
@@ -1555,6 +1647,9 @@ function _renderCtaTracker() {
 
 document.addEventListener('i18n:langchange', () => {
   if (_ctaData) _renderCtaTracker();
+  // The distance chart's legend and tooltip come from I18n.label, which is read
+  // at construction time — without this the legend keeps the old language.
+  if (_ctaHistory) _renderCtaDistanceHistory(_ctaHistory);
 });
 
 // ── Compute YTD from daily data when server value is null ────────────
@@ -3984,6 +4079,18 @@ function _mktsModalConfig(kind) {
       _renderCtaTracker();
     } catch (e) {
       document.getElementById('ctaLoading').textContent = '⚠ ' + e.message;
+    }
+    // Separate request, and separately guarded: the tracker series is an extra
+    // on this card, so a failure here must not blank the snapshot above it.
+    try {
+      const r = await fetch('/api/cta-history');
+      const d = await r.json();
+      if (r.ok) {
+        _ctaHistory = d;
+        _renderCtaDistanceHistory(d);
+      }
+    } catch (e) {
+      console.warn('CTA history unavailable:', e.message);
     }
   }, { label: 'cta-positioning' });
 
