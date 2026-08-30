@@ -1161,6 +1161,16 @@ def _record_structured(job: dict[str, Any], payload: dict[str, Any]) -> None:
         job["risk_gate_violation"] = bool(compliance.get("violated"))
         job["risk_gate_status"] = str(compliance.get("status") or "")
 
+    # The decision ledger. Written here rather than by the caller so both
+    # completion paths get it from one place, and wrapped because a bookkeeping
+    # failure must not turn a finished, paid-for analysis into an error.
+    try:
+        from ystocker import decisions
+
+        decisions.record(job)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("agents: ledger write failed for %s: %s", job.get("id"), exc)
+
 
 def _record_paths() -> list[Path]:
     """Job record files, newest first.

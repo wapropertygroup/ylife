@@ -429,6 +429,12 @@ def create_app() -> Flask:
 
     _start_cta_staleness_scheduler()
 
+    # Fills forward returns into the decision ledger. Daily, and off the request
+    # path for the reason its module docstring gives -- a pass is one price history
+    # per distinct ticker with an unsettled row.
+    from ystocker.settle import start as _start_settle_thread
+    _start_settle_thread()
+
     # Start markets cache warm-up (pre-fetches index/VIX/sector data every 5 min)
     _start_markets_warmup_thread(app)
     # Keeps the long ^GSPC series off the request path; see its docstring for the
