@@ -563,9 +563,29 @@ try:
             val = state.get(key)
             if isinstance(val, str) and val.strip():
                 report += "## %s\n\n%s\n\n" % (key.replace("_", " ").title(), val.strip())
+    # The structured tail of the run: the numbers the Portfolio Manager committed
+    # to, and whether they honoured the deterministic gate. Carried out of the
+    # child because they are the two things a decision ledger needs and the only
+    # place they exist is the final state -- the report has them as prose, and
+    # scraping prose back into numbers is what the structured fields exist to
+    # avoid. Both are {} on an older TradingAgents or on the free-text path.
+    def _plain(value):
+        """JSON-safe, and never a partial object. A ledger field that half
+        serialised would be worse than an absent one."""
+        if not isinstance(value, dict):
+            return {}
+        try:
+            return json.loads(json.dumps(value, default=str))
+        except (TypeError, ValueError):
+            return {}
+
     emit({"ok": True, "ticker": ticker, "date": day,
           "decision": decision if isinstance(decision, str) else json.dumps(decision, default=str),
-          "report": report.strip()})
+          "report": report.strip(),
+          "pm_levels": _plain(state.get("pm_levels") if isinstance(state, dict) else None),
+          "gate_compliance": _plain(state.get("gate_compliance") if isinstance(state, dict) else None),
+          "trader_levels": _plain(state.get("trader_levels") if isinstance(state, dict) else None),
+          "risk_gate": _plain(state.get("risk_gate") if isinstance(state, dict) else None)})
 except Exception as exc:
     # A traceback here is the only diagnosis available: the message alone can be
     # useless. pandas raises EmptyDataError("No columns to parse from file")
@@ -980,6 +1000,7 @@ def _reap(job: Optional[dict[str, Any]]) -> Optional[dict[str, Any]]:
             if payload.get("ok"):
                 job.update(status="done", decision=payload.get("decision"),
                            report=payload.get("report") or "")
+                _record_structured(job, payload)
             else:
                 job.update(status="error",
                            error=str(payload.get("error", "unknown error")))
@@ -1115,6 +1136,30 @@ def can_read(job: Optional[dict[str, Any]], email: Optional[str]) -> bool:
     from ystocker.quota import is_vip
 
     return is_vip(email)
+
+
+def _record_structured(job: dict[str, Any], payload: dict[str, Any]) -> None:
+    """Copy the run's structured tail from the child's payload onto the job.
+
+    Called from **both** completion paths. ``_reap`` settles a run whose supervising
+    thread died and ``_run`` settles a normal one, and a ledger that only recorded
+    one of them would silently lose every orphaned run -- which are exactly the
+    long, expensive ones most worth having in the record.
+
+    ``risk_gate_violation`` is lifted to a top-level boolean because the whole point
+    of computing compliance is that nobody should have to read a report to find out
+    the answer. It is False for a compliant run and for an unverified one; the
+    ``gate_compliance`` block below distinguishes those, and conflating "not
+    checked" with "checked and fine" is the failure this field exists to avoid.
+    """
+    for key in ("pm_levels", "gate_compliance", "trader_levels", "risk_gate"):
+        value = payload.get(key)
+        if isinstance(value, dict) and value:
+            job[key] = value
+    compliance = job.get("gate_compliance") or {}
+    if compliance:
+        job["risk_gate_violation"] = bool(compliance.get("violated"))
+        job["risk_gate_status"] = str(compliance.get("status") or "")
 
 
 def _record_paths() -> list[Path]:
@@ -1997,6 +2042,7 @@ def _run(job_id: str) -> None:
             else:
                 job.update(status="done", decision=payload.get("decision"),
                            report=payload.get("report") or "")
+                _record_structured(job, payload)
         job["finished_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
         _write(job)
         # Exit code 2 is the runner's "could not import tradingagents", raised

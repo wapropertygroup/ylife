@@ -217,3 +217,81 @@ class TestDisclosureGuards(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestStructuredTail(unittest.TestCase):
+    """The four fields a decision ledger needs, recorded on both completion paths.
+
+    ``_reap`` settles a run whose supervising thread died and ``_run`` settles a
+    normal one. A ledger wired into only one would silently lose every orphaned
+    run — which are the long, expensive ones most worth recording.
+    """
+
+    PAYLOAD = {
+        "ok": True, "decision": "Buy", "report": "# r",
+        "pm_levels": {"rating": "Buy", "position_size_pct": 20.0, "flags": []},
+        "gate_compliance": {"status": "violated", "violated": True,
+                            "final_size_pct": 20.0, "approved_size_pct": 5.0,
+                            "reasons": ["size_exceeds_approved"]},
+        "trader_levels": {"action": "Buy", "reward_risk": 3.0},
+        "risk_gate": {"verdict": "clamped", "approved_size_pct": 5.0},
+    }
+
+    def test_all_four_fields_are_copied(self):
+        job = {}
+        agents._record_structured(job, self.PAYLOAD)
+        for key in ("pm_levels", "gate_compliance", "trader_levels", "risk_gate"):
+            self.assertIn(key, job, key)
+
+    def test_a_violation_is_lifted_to_a_top_level_flag(self):
+        # Nobody should have to read a report to learn the answer.
+        job = {}
+        agents._record_structured(job, self.PAYLOAD)
+        self.assertIs(job["risk_gate_violation"], True)
+        self.assertEqual(job["risk_gate_status"], "violated")
+
+    def test_unverified_is_not_recorded_as_a_violation(self):
+        job = {}
+        agents._record_structured(job, {**self.PAYLOAD, "gate_compliance": {
+            "status": "unverifiable", "violated": False, "reasons": ["no_ruling"]}})
+        self.assertIs(job["risk_gate_violation"], False)
+        self.assertEqual(job["risk_gate_status"], "unverifiable")
+
+    def test_compliant_is_recorded_as_no_violation(self):
+        job = {}
+        agents._record_structured(job, {**self.PAYLOAD, "gate_compliance": {
+            "status": "compliant", "violated": False, "reasons": []}})
+        self.assertIs(job["risk_gate_violation"], False)
+        self.assertEqual(job["risk_gate_status"], "compliant")
+
+    def test_empty_fields_are_not_written(self):
+        # {} means the free-text path or an older TradingAgents; a key present and
+        # empty would read as "recorded, and it said nothing".
+        job = {}
+        agents._record_structured(job, {"ok": True, "pm_levels": {},
+                                        "gate_compliance": {}})
+        self.assertNotIn("pm_levels", job)
+        self.assertNotIn("risk_gate_violation", job)
+
+    def test_non_dict_values_are_ignored(self):
+        job = {}
+        agents._record_structured(job, {"pm_levels": "oops",
+                                        "gate_compliance": ["nope"]})
+        self.assertEqual(job, {})
+
+    def test_both_completion_paths_call_it(self):
+        import inspect
+
+        for fn in (agents._run, agents._reap):
+            self.assertIn("_record_structured", inspect.getsource(fn),
+                          f"{fn.__name__} does not record the structured tail")
+
+    def test_ledger_fields_stay_out_of_the_public_allowlist(self):
+        # gate_compliance carries sizes derived from the holder's portfolio.
+        for key in ("pm_levels", "gate_compliance", "trader_levels", "risk_gate",
+                    "risk_gate_violation"):
+            self.assertNotIn(key, agents._PUBLIC_FIELDS, key)
+
+    def test_child_emits_the_fields(self):
+        for key in ("pm_levels", "gate_compliance", "trader_levels", "risk_gate"):
+            self.assertIn(f'"{key}": _plain', agents._RUNNER, key)
