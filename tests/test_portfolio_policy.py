@@ -27,7 +27,7 @@ class TestNormalisePolicy(unittest.TestCase):
         p = portfolio.normalise_policy({})
         self.assertIsNone(p["max_single_name_pct"])
         self.assertIsNone(p["max_issuer_pct"])
-        self.assertEqual(p["cash"], 0.0)
+        self.assertIsNone(p["cash"])
         self.assertEqual(p["holding_types"], {})
 
     def test_non_dict_input_degrades_to_defaults(self):
@@ -68,10 +68,17 @@ class TestNormalisePolicy(unittest.TestCase):
         # float(True) == 1.0 would silently install a 1% limit.
         p = portfolio.normalise_policy({"max_single_name_pct": True, "cash": True})
         self.assertIsNone(p["max_single_name_pct"])
-        self.assertEqual(p["cash"], 0.0)
+        self.assertIsNone(p["cash"])
 
-    def test_negative_cash_becomes_zero(self):
-        self.assertEqual(portfolio.normalise_policy({"cash": -100})["cash"], 0.0)
+    def test_negative_cash_is_unset_not_zero(self):
+        # Unusable input means the balance was not stated. Zero would be a claim
+        # that there is no cash, which fails every proposed buy.
+        self.assertIsNone(portfolio.normalise_policy({"cash": -100})["cash"])
+
+    def test_zero_cash_is_a_stated_value(self):
+        # Distinct from silence: "I have no cash" is checkable, "I did not say" is
+        # not, and only the first may fail a buy.
+        self.assertEqual(portfolio.normalise_policy({"cash": 0})["cash"], 0.0)
 
     def test_unknown_keys_are_dropped(self):
         p = portfolio.normalise_policy({"max_single_name_pct": 8,
@@ -112,7 +119,7 @@ class TestNormalisePolicy(unittest.TestCase):
         a["holding_types"]["AAPL"] = "core"
         a["cash"] = 999.0
         self.assertEqual(portfolio.DEFAULT_POLICY["holding_types"], {})
-        self.assertEqual(portfolio.DEFAULT_POLICY["cash"], 0.0)
+        self.assertIsNone(portfolio.DEFAULT_POLICY["cash"])
 
     def test_two_fresh_policies_share_no_nested_objects(self):
         a = portfolio.normalise_policy({})
@@ -157,7 +164,7 @@ class TestPolicyBridge(unittest.TestCase):
     def test_missing_keys_do_not_raise(self):
         p = policy_from_stored({})
         self.assertIsNone(p.max_single_name_pct)
-        self.assertEqual(p.cash, 0.0)
+        self.assertIsNone(p.cash)
 
     def test_holding_types_are_copied_not_aliased(self):
         stored = portfolio.normalise_policy({"holding_types": {"aapl": "core"}})
@@ -215,3 +222,45 @@ class TestConstraintsBlock(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestUnstatedCash(unittest.TestCase):
+    """An unstated balance must not read as no cash.
+
+    The regression this pins: ``cash`` defaulted to 0.0, so a user who never
+    opened the limits form had every proposed buy come back a liquidity BREACH —
+    and because ``Assessment.verdict`` folds liquidity in, the whole assessment
+    read BREACH for a $100 trade with no concentration issue at all.
+    """
+
+    def _assess(self, policy):
+        from tests.test_exposure import resolver
+        from ystocker.exposure import Trade, assess
+        from ystocker.lookthrough import Position
+
+        return assess([Position("AAPL", 1_000.0)], policy, resolver,
+                      trade=Trade("MSFT", 100.0))
+
+    def test_unstated_cash_is_not_checked(self):
+        from ystocker.exposure import PortfolioPolicy
+
+        a = self._assess(PortfolioPolicy())
+        self.assertIsNone(a.liquidity)
+
+    def test_stated_zero_cash_does_fail_a_buy(self):
+        from ystocker.exposure import VERDICT_BREACH, PortfolioPolicy
+
+        a = self._assess(PortfolioPolicy(cash=0.0))
+        self.assertEqual(a.liquidity.verdict, VERDICT_BREACH)
+
+    def test_sufficient_stated_cash_passes(self):
+        from ystocker.exposure import VERDICT_PASS, PortfolioPolicy
+
+        a = self._assess(PortfolioPolicy(cash=500.0))
+        self.assertEqual(a.liquidity.verdict, VERDICT_PASS)
+
+    def test_unstated_cash_does_not_poison_the_overall_verdict(self):
+        from ystocker.exposure import VERDICT_PASS, PortfolioPolicy
+
+        a = self._assess(PortfolioPolicy(max_single_name_pct=95.0))
+        self.assertEqual(a.verdict, VERDICT_PASS)

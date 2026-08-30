@@ -1226,7 +1226,9 @@
     const body = {
       max_single_name_pct: num('max_single_name_pct'),
       max_issuer_pct: num('max_issuer_pct'),
-      cash: num('cash') ?? 0
+      // null, not 0: an unstated balance must not read as no cash, or every
+      // proposed buy comes back a liquidity breach.
+      cash: num('cash')
     };
     form.querySelector('button[type="submit"]').disabled = true;
     status.textContent = t('assets.limit_saving', 'Saving…');

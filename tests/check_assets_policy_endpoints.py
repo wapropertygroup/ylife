@@ -94,13 +94,15 @@ def main() -> int:
     check("200", resp.status_code == 200)
     check("single-name limit starts unset", policy["max_single_name_pct"] is None)
     check("issuer limit starts unset", policy["max_issuer_pct"] is None)
-    check("cash starts at zero", policy["cash"] == 0.0)
+    # None, not 0.0: an unstated balance must not read as no cash, or every
+    # proposed buy comes back a liquidity breach.
+    check("cash starts unstated", policy["cash"] is None)
 
     section("normalisation on write")
     resp = client.put("/api/assets/policy", json={"policy": {
         "max_single_name_pct": 8,
         "max_issuer_pct": 0,            # zero is not a limit anybody meant
-        "cash": -5,                     # negative cash is not cash
+        "cash": -5,                     # unusable -> unstated, not zero
         "risk_budget": 99,              # not a field this store knows
         "holding_types": {"aapl": "core", "nvda": "speculative"},
     }})
@@ -108,7 +110,7 @@ def main() -> int:
     check("200", resp.status_code == 200)
     check("valid limit kept", stored["max_single_name_pct"] == 8.0)
     check("zero limit rejected to None", stored["max_issuer_pct"] is None)
-    check("negative cash clamped to zero", stored["cash"] == 0.0)
+    check("negative cash is unset, not zero", stored["cash"] is None)
     check("unknown key dropped", "risk_budget" not in stored)
     check("holding type normalised and allowlisted",
           stored["holding_types"] == {"AAPL": "core"})

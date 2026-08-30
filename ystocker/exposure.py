@@ -125,6 +125,10 @@ VERDICT_PASS = "pass"
 VERDICT_INDETERMINATE = "indeterminate"
 VERDICT_BREACH = "breach"
 
+#: Severity order, worst first. Module level so the check sort and the ladder's
+#: worst-rung pick cannot disagree about which of two verdicts is worse.
+_VERDICT_RANK = {VERDICT_BREACH: 0, VERDICT_INDETERMINATE: 1, VERDICT_PASS: 2}
+
 #: Holding-type tags. Free-form beyond these two is allowed — they are the
 #: caller's labels and this module only carries them through — but these are the
 #: pair the UI offers, kept here so a consumer has something to compare against.
@@ -135,6 +139,25 @@ HOLDING_TACTICAL = "tactical"
 #: in a prompt alongside everything else; the tail of a long-tail exposure list
 #: is noise for a concentration question.
 DEFAULT_TOP_NAMES = 15
+
+#: Candidate trade sizes, as a percentage of current portfolio value, at which
+#: :func:`size_ladder` evaluates the policy.
+#:
+#: A **grid** rather than a search, and that is forced by the arithmetic. The
+#: feasible sizes are not an interval anchored at zero, so bisecting from zero on
+#: the assumption that "small is safe" is invalid. Both directions are real and
+#: were measured:
+#:
+#: * A portfolio of 100% AAPL against an 8% limit breaches at every small size and
+#:   *starts passing* above ~$125k of a bond fund, because the purchase dilutes the
+#:   breach. Feasible set excludes zero.
+#: * A portfolio of bonds buying QQQ passes up to ~$30k and breaches above it,
+#:   because MSFT sits at 32% of that fund. Feasible set is bounded above.
+#:
+#: Rungs are dense where retail position sizes actually land and sparse above,
+#: because the granularity of the answer is the granularity of the clamp.
+DEFAULT_SIZE_RUNGS = (0.0, 0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0, 5.0,
+                      6.0, 8.0, 10.0, 12.5, 15.0, 20.0, 25.0)
 
 
 # ---------------------------------------------------------------------------
@@ -157,8 +180,14 @@ class PortfolioPolicy:
     """
     max_single_name_pct: Optional[float] = None
     max_issuer_pct: Optional[float] = None
-    #: Investable cash, USD. Used only by the liquidity check.
-    cash: float = 0.0
+    #: Investable cash, USD, or None for "not stated".
+    #:
+    #: None rather than 0.0, on the same terms as the limits above. Defaulting to
+    #: zero meant an unstated balance read as *no cash*, so every buy came back a
+    #: liquidity BREACH for any user who had not filled the field in -- and since
+    #: ``Assessment.verdict`` folds liquidity in, the whole assessment did too.
+    #: Zero is still a legal stated value and is checked; silence is not.
+    cash: Optional[float] = None
     #: symbol -> free-form tag, e.g. ``{"AAPL": "core", "SOXQ": "tactical"}``.
     holding_types: Mapping[str, str] = field(default_factory=dict)
 
@@ -296,14 +325,10 @@ class Assessment:
         A caller asking one question ("may I place this trade?") needs one answer,
         and the safe fold is the pessimistic one.
         """
-        order = (VERDICT_BREACH, VERDICT_INDETERMINATE, VERDICT_PASS)
         found = {c.verdict for c in self.checks}
         if self.liquidity is not None:
             found.add(self.liquidity.verdict)
-        for v in order:
-            if v in found:
-                return v
-        return VERDICT_PASS
+        return _fold(found)
 
     @property
     def breaches(self) -> list[Check]:
@@ -535,11 +560,13 @@ def _build(*, before: Result, after: Result, policy: PortfolioPolicy,
 
     # Worst first: a caller rendering a truncated list must not lose a breach to
     # a long tail of larger-but-passing names.
-    _rank = {VERDICT_BREACH: 0, VERDICT_INDETERMINATE: 1, VERDICT_PASS: 2}
-    checks.sort(key=lambda c: (_rank.get(c.verdict, 3), -c.after.floor_value))
+    checks.sort(key=lambda c: (_VERDICT_RANK.get(c.verdict, 3),
+                               -c.after.floor_value))
 
+    # Only when a balance was actually stated. An unknown balance cannot fail a
+    # check, and inventing zero would fail every buy.
     liquidity = None
-    if trade is not None and trade.is_buy:
+    if trade is not None and trade.is_buy and policy.cash is not None:
         liquidity = LiquidityCheck(
             required_value=trade.delta_value, cash=policy.cash,
             verdict=(VERDICT_PASS if trade.delta_value <= policy.cash
@@ -563,6 +590,119 @@ def _build(*, before: Result, after: Result, policy: PortfolioPolicy,
     )
 
 
+def size_ladder(positions: Iterable[Position],
+                policy: PortfolioPolicy,
+                resolve: Callable[[str], Optional[dict[str, Any]]],
+                symbol: str,
+                rungs_pct: Iterable[float] = DEFAULT_SIZE_RUNGS,
+                max_depth: int = lookthrough.DEFAULT_MAX_DEPTH,
+                issuer_groups: Optional[Mapping[str, Iterable[str]]] = None,
+                ) -> dict[str, Any]:
+    """Evaluate *policy* at a grid of candidate buy sizes for *symbol*.
+
+    Exists so a gate running somewhere else — inside the analysis subprocess, with
+    no access to a portfolio or a fund cache — can decide whether a proposed size
+    is allowed without re-deriving any of the band arithmetic. All of that stays
+    here; the consumer does a lookup and a comparison.
+
+    Sizes are percentages of *current* portfolio value, so rung ``5.0`` means
+    "spend 5% of what the portfolio is worth today", and the resulting weight of
+    the new position is slightly less than 5% because the purchase enlarges the
+    denominator. That is the same effect ``Check.floor_delta_pct`` exposes and is
+    why the rung is labelled by what is spent rather than by the weight achieved.
+
+    A grid and not a search: see :data:`DEFAULT_SIZE_RUNGS` for the two measured
+    cases that make the feasible set something other than an interval starting at
+    zero.
+
+    Returns the rungs plus the baseline verdict at zero, which a consumer needs in
+    order to tell "this trade would breach a limit" from "this portfolio already
+    breaches one and the trade is irrelevant to it".
+    """
+    base = lookthrough.analyse([p for p in positions], resolve,
+                               max_depth=max_depth)
+    total = base.total_value
+    rows: list[dict[str, Any]] = []
+    seen_pct: set[float] = set()
+
+    for pct in sorted({round(float(p), 4) for p in rungs_pct if float(p) >= 0}):
+        if pct in seen_pct:
+            continue
+        seen_pct.add(pct)
+        value = total * pct / 100.0
+        trade = Trade(symbol, value) if value > 0 else None
+        assessment = assess(positions, policy, resolve, trade=trade,
+                            max_depth=max_depth, issuer_groups=issuer_groups)
+        concentration = [c for c in assessment.checks]
+        worst = min(concentration,
+                    key=lambda c: _VERDICT_RANK.get(c.verdict, 3),
+                    default=None)
+        rows.append({
+            "pct": pct,
+            "value": round(value, 2),
+            # The concentration verdict only. Cash is excluded deliberately: it is
+            # checked against a figure the user typed, it moves independently of
+            # the portfolio, and folding it in here would make every rung above the
+            # cash balance look like a concentration breach.
+            "verdict": _fold([c.verdict for c in concentration]),
+            "breach_count": sum(1 for c in concentration
+                                if c.verdict == VERDICT_BREACH),
+            "worst_symbol": worst.symbol if worst else "",
+            "worst_floor_pct": round(worst.after.floor_pct, 4) if worst else 0.0,
+            "worst_ceiling_pct": round(worst.after.ceiling_pct, 4) if worst else 0.0,
+        })
+
+    return {
+        "symbol": str(symbol).upper().strip(),
+        "total_value": round(total, 2),
+        "cash": (round(policy.cash, 2) if policy.cash is not None
+                 else None),
+        "max_single_name_pct": policy.max_single_name_pct,
+        "max_issuer_pct": policy.max_issuer_pct,
+        "rungs": rows,
+        # Stated so a consumer can say what it did not test rather than implying
+        # the grid was exhaustive -- a silent cap reads as full coverage.
+        "rung_count": len(rows),
+        "max_rung_pct": rows[-1]["pct"] if rows else 0.0,
+    }
+
+
+def largest_allowed_pct(ladder: Mapping[str, Any], proposed_pct: float,
+                        allow_indeterminate: bool = False) -> Optional[float]:
+    """The largest rung at or below *proposed_pct* whose verdict is acceptable.
+
+    ``None`` when no rung at or below the proposal is acceptable, which a caller
+    must treat as "do not place this trade" rather than as zero.
+
+    **Only ever clamps downward.** A larger trade can legitimately pass where a
+    smaller one breaches — dilution rescues an existing concentration — but a gate
+    that responded by *enlarging* a position would be inventing a trade nobody
+    proposed, on the reasoning that a bigger bet fixes a risk limit. Rungs above
+    the proposal are ignored here; :func:`size_ladder` still reports them so the
+    fact can be surfaced to a human.
+
+    ``allow_indeterminate`` is off by default: an unverifiable limit is not a
+    satisfied one, matching :func:`verdict_for`.
+    """
+    ok = {VERDICT_PASS} | ({VERDICT_INDETERMINATE} if allow_indeterminate else set())
+    best: Optional[float] = None
+    for row in ladder.get("rungs") or []:
+        pct = float(row.get("pct") or 0.0)
+        if pct <= proposed_pct + 1e-9 and row.get("verdict") in ok:
+            if best is None or pct > best:
+                best = pct
+    return best
+
+
+def _fold(verdicts: Iterable[str]) -> str:
+    """The worst of *verdicts*. Empty folds to PASS: nothing checked, nothing failed."""
+    found = set(verdicts)
+    for v in (VERDICT_BREACH, VERDICT_INDETERMINATE, VERDICT_PASS):
+        if v in found:
+            return v
+    return VERDICT_PASS
+
+
 def policy_from_stored(stored: Mapping[str, Any]) -> PortfolioPolicy:
     """A :class:`PortfolioPolicy` from ``portfolio.load_policy``'s dict.
 
@@ -573,7 +713,8 @@ def policy_from_stored(stored: Mapping[str, Any]) -> PortfolioPolicy:
     return PortfolioPolicy(
         max_single_name_pct=stored.get("max_single_name_pct"),
         max_issuer_pct=stored.get("max_issuer_pct"),
-        cash=float(stored.get("cash") or 0.0),
+        cash=(float(stored["cash"])
+              if stored.get("cash") is not None else None),
         holding_types=dict(stored.get("holding_types") or {}),
     )
 

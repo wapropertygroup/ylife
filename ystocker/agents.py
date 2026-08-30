@@ -400,10 +400,20 @@ RESULT_PATH = sys.argv[5] if len(sys.argv) > 5 else ""
 # portfolio rather than killing a run that costs real money.
 PORTFOLIO_PATH = sys.argv[6] if len(sys.argv) > 6 else ""
 PORTFOLIO_CONTEXT = ""
+PORTFOLIO_DATA = {}
 if PORTFOLIO_PATH:
     try:
         with open(PORTFOLIO_PATH, encoding="utf-8") as _pf:
-            PORTFOLIO_CONTEXT = _pf.read()
+            _raw = _pf.read()
+        try:
+            _bundle = json.loads(_raw)
+        except ValueError:
+            # A bare block from an older parent. Losing the size ladder costs the
+            # deterministic gate; losing the block would cost the whole feature.
+            _bundle = {"block": _raw, "ladder": {}}
+        if isinstance(_bundle, dict):
+            PORTFOLIO_CONTEXT = _bundle.get("block") or ""
+            PORTFOLIO_DATA = _bundle.get("ladder") or {}
     except Exception as _exc:
         sys.stderr.write("portfolio context unreadable (%s); continuing without it\n" % _exc)
 
@@ -516,15 +526,18 @@ try:
                   debug=False, config=cfg, progress_callback=on_progress)
     if PORTFOLIO_CONTEXT.strip():
         kwargs["portfolio_context"] = PORTFOLIO_CONTEXT
+    if PORTFOLIO_DATA:
+        kwargs["portfolio_data"] = PORTFOLIO_DATA
     try:
         graph = TradingAgentsGraph(**kwargs)
     except TypeError as _exc:
         # A checkout predating portfolio_context. Losing one feature beats failing
         # a run the user has already been charged for.
-        if "portfolio_context" not in str(_exc):
+        if "portfolio_context" not in str(_exc) and "portfolio_data" not in str(_exc):
             raise
         sys.stderr.write("TradingAgents has no portfolio_context; running without it\n")
         kwargs.pop("portfolio_context", None)
+        kwargs.pop("portfolio_data", None)
         graph = TradingAgentsGraph(**kwargs)
     state, decision = graph.propagate(ticker, day)
 
@@ -834,7 +847,8 @@ def _portfolio_path(job_id: str) -> Path:
     return JOB_DIR / f"{job_id}.portfolio.txt"
 
 
-def build_portfolio_context(email: str) -> str:
+def build_portfolio_context(email: str, ticker: str = "",
+                            ) -> dict[str, Any]:
     """The holder's constraint block for the decision agents, or "" if none.
 
     Empty in every failure case, and that is the safe direction here: the block is
@@ -848,16 +862,16 @@ def build_portfolio_context(email: str) -> str:
     not *flat*, which is why no placeholder is synthesised.
     """
     if os.environ.get("AGENTS_PORTFOLIO_CONTEXT", "").strip() in ("0", "false", "no"):
-        return ""
+        return {"block": "", "ladder": {}}
     if not email:
-        return ""
+        return {"block": "", "ladder": {}}
     try:
         from ystocker import assets as assets_svc
         from ystocker import exposure, funddata, lookthrough, portfolio
 
         positions = portfolio.load(email)
         if not positions:
-            return ""
+            return {"block": "", "ladder": {}}
         stored_policy = portfolio.load_policy(email)
         policy = exposure.policy_from_stored(stored_policy)
 
@@ -868,16 +882,27 @@ def build_portfolio_context(email: str) -> str:
         # the honest answer rather than a missing one.
         priced, _rows, _warnings = assets_svc.value_positions(positions)
         if not priced:
-            return ""
+            return {"block": "", "ladder": {}}
         result = lookthrough.analyse(priced, funddata.peek_resolver())
         groups = assets_svc._issuer_groups(result.as_dict().get("exposures") or [])
         assessment = exposure.review(
             result, policy,
             issuer_groups={g["issuer"]: g["symbols"] for g in groups})
-        return exposure.render_block(assessment)
+        block = exposure.render_block(assessment)
+        # The ladder the deterministic gate checks a proposed size against. Built
+        # here because it needs the fund cache and the recursive walk, neither of
+        # which exists in the child -- and computing it there would be a second
+        # copy of the band arithmetic that must agree exactly with this one.
+        ladder: dict[str, Any] = {}
+        if stored_policy.get("max_single_name_pct") is not None or \
+                stored_policy.get("max_issuer_pct") is not None:
+            ladder = exposure.size_ladder(
+                priced, policy, funddata.peek_resolver(), ticker,
+                issuer_groups={g["issuer"]: g["symbols"] for g in groups})
+        return {"block": block, "ladder": ladder}
     except Exception as exc:  # noqa: BLE001 - a missing block must not fail a run
         log.warning("agents: portfolio context unavailable (%s)", exc)
-        return ""
+        return {"block": "", "ladder": {}}
 
 
 def _job_path(job_id: str) -> Path:
@@ -1872,13 +1897,16 @@ def _run(job_id: str) -> None:
         # portfolio as it stands when the analysis actually begins -- a run can sit
         # in the queue behind another for a quarter of an hour.
         portfolio_arg = ""
-        block = build_portfolio_context(job.get("user") or "")
-        if block.strip():
+        bundle = build_portfolio_context(job.get("user") or "",
+                                         job.get("ticker") or "")
+        if (bundle.get("block") or "").strip():
             try:
                 path = _portfolio_path(job_id)
-                path.write_text(block, encoding="utf-8")
+                path.write_text(json.dumps(bundle, ensure_ascii=False),
+                                encoding="utf-8")
                 portfolio_arg = str(path)
                 job["portfolio_context"] = True
+                job["risk_gate_armed"] = bool(bundle.get("ladder"))
                 _write(job)
             except OSError as exc:
                 log.warning("agents: could not stage portfolio for %s: %s",

@@ -22,6 +22,16 @@ from ystocker import agents
 class TestRunnerContract(unittest.TestCase):
     """The child is an inline `-c` program; its argv contract is a real interface."""
 
+    def test_child_reads_a_json_envelope_not_bare_text(self):
+        # The sidecar carries the prose block *and* the size ladder, because both
+        # come from one computation and must describe the same portfolio.
+        self.assertIn("json.loads(_raw)", agents._RUNNER)
+        self.assertIn('kwargs["portfolio_data"] = PORTFOLIO_DATA', agents._RUNNER)
+
+    def test_child_tolerates_a_bare_block_from_an_older_parent(self):
+        # Losing the ladder costs the gate; losing the block would cost the feature.
+        self.assertIn('_bundle = {"block": _raw, "ladder": {}}', agents._RUNNER)
+
     def test_child_reads_the_block_from_argv_six(self):
         # A file, not argv or an env var: the block is a few KB and both of those
         # have OS length limits whose failure is an opaque E2BIG at exec time.
@@ -62,14 +72,14 @@ class TestBuildPortfolioContext(unittest.TestCase):
     """Every failure path must yield "", never a placeholder and never a raise."""
 
     def test_no_email_yields_empty(self):
-        self.assertEqual(agents.build_portfolio_context(""), "")
-        self.assertEqual(agents.build_portfolio_context(None), "")
+        self.assertEqual(agents.build_portfolio_context("")["block"], "")
+        self.assertEqual(agents.build_portfolio_context(None)["block"], "")
 
     def test_kill_switch_yields_empty(self):
         for value in ("0", "false", "no"):
             with mock.patch.dict("os.environ",
                                  {"AGENTS_PORTFOLIO_CONTEXT": value}):
-                self.assertEqual(agents.build_portfolio_context("a@b.com"), "")
+                self.assertEqual(agents.build_portfolio_context("a@b.com")["block"], "")
 
     def test_store_outage_yields_empty_not_a_raise(self):
         # A run must not fail because a portfolio could not be read. The block is
@@ -78,20 +88,20 @@ class TestBuildPortfolioContext(unittest.TestCase):
 
         with mock.patch.object(portfolio, "load",
                                side_effect=portfolio.StoreUnavailable("down")):
-            self.assertEqual(agents.build_portfolio_context("a@b.com"), "")
+            self.assertEqual(agents.build_portfolio_context("a@b.com")["block"], "")
 
     def test_no_positions_yields_empty(self):
         from ystocker import portfolio
 
         with mock.patch.object(portfolio, "load", return_value=[]):
-            self.assertEqual(agents.build_portfolio_context("a@b.com"), "")
+            self.assertEqual(agents.build_portfolio_context("a@b.com")["block"], "")
 
     def test_unexpected_error_yields_empty(self):
         from ystocker import portfolio
 
         with mock.patch.object(portfolio, "load",
                                side_effect=RuntimeError("boom")):
-            self.assertEqual(agents.build_portfolio_context("a@b.com"), "")
+            self.assertEqual(agents.build_portfolio_context("a@b.com")["block"], "")
 
     def test_a_real_portfolio_produces_a_delimited_block(self):
         from ystocker import funddata, portfolio
@@ -110,7 +120,7 @@ class TestBuildPortfolioContext(unittest.TestCase):
                     "cash": 0.0, "holding_types": {}}), \
              mock.patch.object(funddata, "peek",
                                side_effect=lambda s, **kw: universe.get(s.upper())):
-            block = agents.build_portfolio_context("a@b.com")
+            block = agents.build_portfolio_context("a@b.com")["block"]
 
         self.assertTrue(block.startswith("<start_of_portfolio_constraints>"))
         self.assertIn("AAPL", block)
@@ -132,7 +142,7 @@ class TestBuildPortfolioContext(unittest.TestCase):
              mock.patch.object(funddata, "peek", side_effect=lambda s, **kw: {
                     "symbol": "AAPL", "name": "Apple", "kind": "equity",
                     "holdings": [], "asset_classes": {}, "price": 10.0}):
-            block = agents.build_portfolio_context("a@b.com")
+            block = agents.build_portfolio_context("a@b.com")["block"]
 
         self.assertIn("<start_of_portfolio_constraints>", block)
         self.assertIn("no limits were stated", block)

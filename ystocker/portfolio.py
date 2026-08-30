@@ -409,7 +409,7 @@ MAX_HOLDING_TYPES = MAX_POSITIONS
 DEFAULT_POLICY: dict[str, Any] = {
     "max_single_name_pct": None,
     "max_issuer_pct": None,
-    "cash": 0.0,
+    "cash": None,
     "holding_types": {},
 }
 
@@ -446,8 +446,10 @@ def normalise_policy(raw: dict[str, Any]) -> dict[str, Any]:
         "max_issuer_pct": _pct_or_none(raw.get("max_issuer_pct")),
     }
 
+    # None for "not stated", not 0.0. An unstated balance defaulting to zero made
+    # every proposed buy a liquidity breach; zero remains a legal stated value.
     cash = _num(raw.get("cash"))
-    out["cash"] = round(cash, 2) if cash is not None and cash >= 0 else 0.0
+    out["cash"] = round(cash, 2) if cash is not None and cash >= 0 else None
 
     types: dict[str, str] = {}
     for key, value in (raw.get("holding_types") or {}).items():
