@@ -7,6 +7,7 @@ Track prices from Amazon, Walmart, Home Depot, and more — get notified on drop
 from __future__ import annotations
 
 import os
+from datetime import timedelta
 
 from flask import Flask
 
@@ -60,6 +61,12 @@ def create_app() -> Flask:
     app.secret_key = os.environ.get("YTRACKER_SECRET_KEY", "ytracker-dev-secret")
     app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
     app.config["SESSION_COOKIE_HTTPONLY"] = True
+    # See ystocker/__init__.py for why this matters: auth routes set
+    # session.permanent = True, and without a lifetime configured here that
+    # only buys a cookie with no Expires/Max-Age — a "session" cookie the
+    # browser/OS can drop at any time (tab close, memory pressure, PWA
+    # relaunch), which reads as a random early logout.
+    app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=30)
 
     from ytracker.routes import bp
     app.register_blueprint(bp)

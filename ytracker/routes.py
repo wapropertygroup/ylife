@@ -138,6 +138,7 @@ def auth_google():
         if not email:
             return jsonify({"error": "No email in token"}), 400
 
+        session.permanent = True
         session["user_email"] = email
         session["user_name"] = name
         session["user_picture"] = picture

@@ -417,6 +417,27 @@ if PORTFOLIO_PATH:
     except Exception as _exc:
         sys.stderr.write("portfolio context unreadable (%s); continuing without it\n" % _exc)
 
+# Market-regime and relative-strength notes, same file-not-argv channel and
+# same reason, in a bundle separate from the portfolio one above -- this one
+# is staged on every run regardless of whether the caller has a portfolio.
+CONTEXT_PATH = sys.argv[7] if len(sys.argv) > 7 else ""
+MARKET_CONTEXT = ""
+RELATIVE_STRENGTH_CONTEXT = ""
+if CONTEXT_PATH:
+    try:
+        with open(CONTEXT_PATH, encoding="utf-8") as _cf:
+            _craw = _cf.read()
+        try:
+            _cbundle = json.loads(_craw)
+        except ValueError:
+            _cbundle = {}
+        if isinstance(_cbundle, dict):
+            MARKET_CONTEXT = _cbundle.get("market") or ""
+            RELATIVE_STRENGTH_CONTEXT = _cbundle.get("relative_strength") or ""
+    except Exception as _exc:
+        sys.stderr.write("market/relative-strength context unreadable (%s); "
+                          "continuing without it\n" % _exc)
+
 def emit(payload):
     # Written to a file as well as stdout. stdout only reaches the parent while
     # the parent is alive, and this process deliberately outlives it (gunicorn
@@ -528,16 +549,26 @@ try:
         kwargs["portfolio_context"] = PORTFOLIO_CONTEXT
     if PORTFOLIO_DATA:
         kwargs["portfolio_data"] = PORTFOLIO_DATA
+    if MARKET_CONTEXT.strip():
+        kwargs["market_context"] = MARKET_CONTEXT
+    if RELATIVE_STRENGTH_CONTEXT.strip():
+        kwargs["relative_strength_context"] = RELATIVE_STRENGTH_CONTEXT
     try:
         graph = TradingAgentsGraph(**kwargs)
     except TypeError as _exc:
-        # A checkout predating portfolio_context. Losing one feature beats failing
-        # a run the user has already been charged for.
-        if "portfolio_context" not in str(_exc) and "portfolio_data" not in str(_exc):
+        # A checkout predating one of these four. Losing them beats failing a
+        # run the user has already been charged for.
+        _msg = str(_exc)
+        if not any(name in _msg for name in
+                  ("portfolio_context", "portfolio_data",
+                   "market_context", "relative_strength_context")):
             raise
-        sys.stderr.write("TradingAgents has no portfolio_context; running without it\n")
+        sys.stderr.write("TradingAgents predates one of portfolio/market/"
+                          "relative-strength context; running without them\n")
         kwargs.pop("portfolio_context", None)
         kwargs.pop("portfolio_data", None)
+        kwargs.pop("market_context", None)
+        kwargs.pop("relative_strength_context", None)
         graph = TradingAgentsGraph(**kwargs)
     state, decision = graph.propagate(ticker, day)
 
@@ -865,6 +896,72 @@ def _portfolio_path(job_id: str) -> Path:
     """
     JOB_DIR.mkdir(parents=True, exist_ok=True)
     return JOB_DIR / f"{job_id}.portfolio.txt"
+
+
+def _context_path(job_id: str) -> Path:
+    """Sidecar for the market/relative-strength bundle. Same channel and same
+    reason as :func:`_portfolio_path`: a file rather than argv or an env var.
+
+    Deliberately a *separate* file from the portfolio one. The portfolio block
+    is user-specific and only staged when that user has positions; this one is
+    ticker-specific and staged on every run regardless of portfolio state, so
+    tying their lifecycles together would make an unrelated feature's absence
+    (no portfolio) also suppress this one.
+    """
+    JOB_DIR.mkdir(parents=True, exist_ok=True)
+    return JOB_DIR / f"{job_id}.context.txt"
+
+
+def build_market_context() -> str:
+    """Market-regime notes for the decision agents, or "" if unavailable.
+
+    Ticker-independent, unlike :func:`build_portfolio_context` — the same
+    block is valid for every job started around the same time. Pulls only the
+    never-fetching ``peek()``/cheap-read forms (never ``get()``,
+    ``get_valuation_data()``, ``refresh_cache()`` etc., which are
+    background-thread-only and can take minutes cold) so this is always safe
+    to call on the submit path. Wrapped in one broad except for the same
+    reason ``build_portfolio_context`` is: this is an input to a judgement,
+    and losing it costs specificity, while raising here would cost the user a
+    paid analysis over a market-data hiccup.
+    """
+    if os.environ.get("AGENTS_MARKET_CONTEXT", "").strip() in ("0", "false", "no"):
+        return ""
+    try:
+        from ystocker import breadth, cta, fedwatch, market_context, valuation
+
+        return market_context.render_market_block(
+            valuation=valuation.peek(),
+            breadth=breadth.peek(),
+            cta=cta.get_cta_positioning(),
+            fedwatch=fedwatch.peek(),
+        )
+    except Exception as exc:  # noqa: BLE001 - a missing block must not fail a run
+        log.warning("agents: market context unavailable (%s)", exc)
+        return ""
+
+
+def build_relative_strength_context(ticker: str) -> str:
+    """Peer-comparison notes for ``ticker``, or "" if unavailable.
+
+    Same peek-only, exception-safe posture as :func:`build_market_context`.
+    Empty whenever the ticker sits in no ``PEER_GROUPS`` entry, Yahoo covers it
+    with no analyst estimates, or every peer in its group is likewise
+    uncovered — see ``relative_strength.render_relative_strength_block`` for
+    why a comparison of one is refused rather than rendered.
+    """
+    if not ticker:
+        return ""
+    if os.environ.get("AGENTS_RELATIVE_STRENGTH_CONTEXT", "").strip() in ("0", "false", "no"):
+        return ""
+    try:
+        from ystocker import PEER_GROUPS, analyst, relative_strength
+
+        return relative_strength.render_relative_strength_block(
+            ticker, analyst.peek(), PEER_GROUPS)
+    except Exception as exc:  # noqa: BLE001 - a missing block must not fail a run
+        log.warning("agents: relative-strength context unavailable (%s)", exc)
+        return ""
 
 
 def build_portfolio_context(email: str, ticker: str = "",
@@ -1487,6 +1584,12 @@ _PUBLIC_FIELDS = (
     # sampled report. ``model_choice`` is deliberately absent: it is an internal
     # table key, and the three fields beside it say what actually ran.
     "provider", "deep_model", "quick_model", "thinking",
+    # Whether market-regime / relative-strength notes were injected. Unlike
+    # portfolio_context (deliberately absent from this tuple -- it is derived
+    # from the requesting user's own holdings), these two describe only public
+    # market data and this ticker's public peer group, so there is nothing
+    # user-specific to protect by hiding them from a shared or showcased report.
+    "market_context", "relative_strength_context",
 )
 
 
@@ -1644,6 +1747,7 @@ def _prune() -> None:
             stem.with_suffix(".result.json").unlink(missing_ok=True)
             stem.with_suffix(".events.jsonl").unlink(missing_ok=True)
             stem.with_suffix(".portfolio.txt").unlink(missing_ok=True)
+            stem.with_suffix(".context.txt").unlink(missing_ok=True)
             # The send-once marker for the report email. Safe to drop with the
             # record: notify() needs a job whose status is done, and the record
             # it would have to read is what this loop just deleted.
@@ -1967,8 +2071,31 @@ def _run(job_id: str) -> None:
                 log.warning("agents: could not stage portfolio for %s: %s",
                             job_id, exc)
 
+        # Same staging-at-run-time reasoning as the portfolio block above, and
+        # unconditional on the user having a portfolio: market regime is a
+        # property of the moment the run starts, and relative strength is a
+        # property of the ticker, neither of the holder.
+        context_arg = ""
+        market_block = build_market_context()
+        relstrength_block = build_relative_strength_context(job.get("ticker") or "")
+        if market_block.strip() or relstrength_block.strip():
+            try:
+                cpath = _context_path(job_id)
+                cpath.write_text(
+                    json.dumps({"market": market_block,
+                                "relative_strength": relstrength_block},
+                               ensure_ascii=False),
+                    encoding="utf-8")
+                context_arg = str(cpath)
+                job["market_context"] = bool(market_block.strip())
+                job["relative_strength_context"] = bool(relstrength_block.strip())
+                _write(job)
+            except OSError as exc:
+                log.warning("agents: could not stage market context for %s: %s",
+                            job_id, exc)
+
         cmd = [_interpreter(), "-c", _RUNNER, job["ticker"], job["date"],
-               _BEGIN, _END, result_path, portfolio_arg]
+               _BEGIN, _END, result_path, portfolio_arg, context_arg]
         started = time.time()
         try:
             # start_new_session detaches the child into its own process group so

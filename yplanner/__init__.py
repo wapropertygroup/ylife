@@ -6,6 +6,7 @@ Flask application factory for the yPlanner trip planning app.
 from __future__ import annotations
 
 import os
+from datetime import timedelta
 
 from flask import Flask
 
@@ -63,6 +64,12 @@ def create_app() -> Flask:
     app.secret_key = os.environ.get("YPLANNER_SECRET_KEY", "yplanner-dev-secret")
     app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
     app.config["SESSION_COOKIE_HTTPONLY"] = True
+    # See ystocker/__init__.py for why this matters: auth routes set
+    # session.permanent = True, and without a lifetime configured here that
+    # only buys a cookie with no Expires/Max-Age — a "session" cookie the
+    # browser/OS can drop at any time (tab close, memory pressure, PWA
+    # relaunch), which reads as a random early logout.
+    app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=30)
 
     from yplanner.routes import bp
     app.register_blueprint(bp)

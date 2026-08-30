@@ -300,6 +300,14 @@ def create_app() -> Flask:
     app.secret_key = _os.environ.get("YSTOCKER_SECRET_KEY", "ystocker-dev-secret")  # needed for flash + session
     app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
     app.config["SESSION_COOKIE_HTTPONLY"] = True
+    # Google Sign-In sets session.permanent = True (routes.py auth_google), so
+    # this is what actually governs how long a signed-in visitor stays signed
+    # in. Without it Flask's default (session.permanent = False) issues the
+    # cookie with no Expires/Max-Age at all, so it lives only as long as the
+    # browser/OS chooses to keep a "session" cookie around — closing the tab,
+    # iOS Safari reclaiming memory, or a PWA relaunch all drop it immediately,
+    # which reads as "keeps logging me out" even though nothing failed.
+    app.config["PERMANENT_SESSION_LIFETIME"] = datetime.timedelta(days=30)
 
     # Register the main blueprint (routes live in routes.py)
     from ystocker.routes import bp, _start_background_thread, _start_heatmap_scheduler, _start_daily_broadcast_scheduler, _start_rolling_refresh_thread, _start_daily_pregen_scheduler, _start_markets_warmup_thread, _start_spx_history_warmup_thread, _start_cta_staleness_scheduler
