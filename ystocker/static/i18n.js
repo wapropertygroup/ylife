@@ -709,6 +709,18 @@ const I18n = (() => {
     'thirteenf.explain_aum': { en: 'AI Explain',      zh: 'AI 解读' },
     'thirteenf.analyzing':   { en: 'Analyzing AUM trend…', zh: '正在分析持仓规模趋势…' },
     'thirteenf.ai_analysis': { en: 'AI Analysis',     zh: 'AI 分析' },
+    'thirteenf.th_funds':        { en: 'Funds',              zh: '基金数' },
+    'thirteenf.th_total_value':  { en: 'Total Value ($M)',   zh: '总市值（百万$）' },
+    'thirteenf.th_held_by':      { en: 'Held By',            zh: '持仓机构' },
+    'thirteenf.consensus_title': { en: 'Top Consensus Positions', zh: '机构共识持仓' },
+    'thirteenf.consensus_desc':  { en: 'Stocks held by the most funds — reflects institutional conviction',
+                                    zh: '被最多基金持有的股票 — 反映机构信心' },
+    'thirteenf.netbuys_title':   { en: 'Top Net Buys This Quarter', zh: '本季度增持/建仓最多个股' },
+    'thirteenf.netbuys_desc':    { en: 'Stocks the most funds added to or newly opened this quarter — aggregated across every tracked 13F filer',
+                                    zh: '本季度被最多机构加仓或新建仓的股票 — 汇总所有追踪的13F申报机构' },
+    'thirteenf.th_funds_buying': { en: 'Funds Buying',       zh: '加仓机构数' },
+    'thirteenf.th_increased':    { en: 'Increased',          zh: '加仓' },
+    'thirteenf.th_combined_value':{ en: 'Combined Value ($M)', zh: '合计市值（百万$）' },
 
     // ── change badge labels ────────────────────────────────────────────
     'inst.change_new':     { en: 'New',       zh: '新建' },

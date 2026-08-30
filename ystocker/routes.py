@@ -4733,19 +4733,40 @@ def thirteenf():
     cache_ts   = get_cache_ts()
     warming    = sec_warming()
 
-    # Build consensus positions (tickers held by most funds)
+    # Build consensus positions (tickers held by most funds) and top net buys
+    # (tickers the most funds increased or newly opened this quarter) in one
+    # pass over every fund's holdings.
+    #
+    # `fd.get("error")` -- not `"error" in fd` -- because fetch_fund_holdings()
+    # always returns an "error" key (None on success, a message on failure),
+    # so a presence check skipped every fund unconditionally and left
+    # consensus_positions permanently empty.
     from collections import defaultdict
     ticker_funds: dict[str, list] = defaultdict(list)
     ticker_value: dict[str, float] = defaultdict(float)
+    buy_funds: dict[str, list] = defaultdict(list)
+    buy_value: dict[str, float] = defaultdict(float)
+    buy_new_count: dict[str, int] = defaultdict(int)
+    buy_increased_count: dict[str, int] = defaultdict(int)
     for fund_name, fd in holdings.items():
-        if "error" in fd:
+        if not isinstance(fd, dict) or fd.get("error"):
             continue
         for h in fd.get("holdings", []):
             t = h.get("ticker")
             if not t:
                 continue
+            v = h.get("value_millions", 0) or 0
             ticker_funds[t].append(fund_name)
-            ticker_value[t] += h.get("value_millions", 0) or 0
+            ticker_value[t] += v
+            change = h.get("change")
+            if change in ("new", "increased"):
+                buy_funds[t].append(fund_name)
+                buy_value[t] += v
+                if change == "new":
+                    buy_new_count[t] += 1
+                else:
+                    buy_increased_count[t] += 1
+
     consensus_positions = sorted(
         [
             {
@@ -4760,6 +4781,26 @@ def thirteenf():
         key=lambda x: -x["fund_count"],
     )[:25]
 
+    # Direction-aware, unlike consensus_positions above: a ticker only lands
+    # here if funds are actively adding to or opening it this quarter, not
+    # merely holding it (a stock everyone holds but is trimming would still
+    # top the consensus table above).
+    top_net_buys = sorted(
+        [
+            {
+                "ticker": t,
+                "fund_count": len(fnames),
+                "new_count": buy_new_count[t],
+                "increased_count": buy_increased_count[t],
+                "total_value_m": round(buy_value[t]),
+                "fund_names": fnames,
+            }
+            for t, fnames in buy_funds.items()
+            if len(fnames) >= 2
+        ],
+        key=lambda x: (-x["fund_count"], -x["total_value_m"]),
+    )[:25]
+
     return render_template(
         "thirteenf.html",
         peer_groups=list(PEER_GROUPS.keys()),
@@ -4769,6 +4810,7 @@ def thirteenf():
         cache_fresh=is_cache_fresh(),
         warming=warming,
         consensus_positions=consensus_positions,
+        top_net_buys=top_net_buys,
     )
 
 
