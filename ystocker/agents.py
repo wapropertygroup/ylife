@@ -506,7 +506,13 @@ try:
         os.environ.get("YSTOCKER_SELECTED_ANALYSTS", "").split(",")
         if part.strip()
     )
-    kwargs = dict(selected_analysts=selected or BASE_ANALYSTS,
+    # Spelled out rather than referencing the parent's BASE_ANALYSTS: this is a
+    # separate process and cannot import ystocker.agents, so the name was simply
+    # undefined here and the documented fallback above raised NameError instead of
+    # falling back. Never reached in production -- _run always exports the
+    # variable -- which is why it went unnoticed.
+    fallback = ("market", "social", "news", "fundamentals")
+    kwargs = dict(selected_analysts=selected or fallback,
                   debug=False, config=cfg, progress_callback=on_progress)
     if PORTFOLIO_CONTEXT.strip():
         kwargs["portfolio_context"] = PORTFOLIO_CONTEXT

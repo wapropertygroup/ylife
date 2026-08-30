@@ -3125,15 +3125,6 @@ def api_agents_share():
         return jsonify({"error": "Daily share limit reached",
                         "reason": "quota", "share_quota": usage}), 429
 
-    # A run given the owner's portfolio cannot be published to an unauthenticated
-    # URL. Refused before the quota is touched and with its own reason, because
-    # "storage" would send the sharer to retry a thing that will never work.
-    if job.get("portfolio_context"):
-        return jsonify({
-            "error": "This analysis included your portfolio, so it cannot be "
-                     "shared. Run it without portfolio context to share it.",
-            "reason": "portfolio"}), 409
-
     # The row before the mail, always. It is what makes the link resolve, so a
     # send that got ahead of it would deliver a button that 404s -- and the case
     # where this ordering matters is precisely when DynamoDB is unreachable.
