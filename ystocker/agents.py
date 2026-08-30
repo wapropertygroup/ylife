@@ -297,7 +297,7 @@ _TICKER_RE = re.compile(r"^[A-Za-z][A-Za-z0-9.\-]{0,9}$")
 # in two places would also drift as 北交所 ranges are added.
 _ASHARE_RE = re.compile(r"^(?:(?:SH|SZ|BJ)\.?)?\d{6}(?:\.(?:SS|SZ|SH|BJ))?$")
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
-BASE_ANALYSTS = ("market", "social", "news", "fundamentals")
+BASE_ANALYSTS = ("market", "social", "news", "quality", "valuation")
 ASTOCK_ANALYSTS = BASE_ANALYSTS + ("policy", "hot_money", "lockup")
 
 
@@ -478,6 +478,9 @@ try:
         ("sentiment_report", "sentiment"),
         ("news_report", "news"),
         ("fundamentals_report", "fundamentals"),
+        ("earnings_report", "earnings"),
+        ("quality_report", "quality"),
+        ("valuation_report", "valuation"),
         ("policy_report", "policy"),
         ("hot_money_report", "hot_money"),
         ("lockup_report", "lockup"),
@@ -542,7 +545,7 @@ try:
     # undefined here and the documented fallback above raised NameError instead of
     # falling back. Never reached in production -- _run always exports the
     # variable -- which is why it went unnoticed.
-    fallback = ("market", "social", "news", "fundamentals")
+    fallback = ("market", "social", "news", "quality", "valuation")
     kwargs = dict(selected_analysts=selected or fallback,
                   debug=False, config=cfg, progress_callback=on_progress)
     if PORTFOLIO_CONTEXT.strip():

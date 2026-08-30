@@ -13,12 +13,16 @@ SPEC.loader.exec_module(MODULE)
 
 
 class AgentSelectionTests(unittest.TestCase):
-    def test_a_share_gets_seven_analysts(self):
+    def test_a_share_gets_every_astock_analyst(self):
+        # Derived rather than a hardcoded count, so a future roster change
+        # (like fundamentals -> quality+valuation) cannot make this test stale.
         for ticker in ("600519", "SH600519", "600519.SS", "000001.SZ", "BJ920002"):
             with self.subTest(ticker=ticker):
-                self.assertEqual(len(MODULE.analysts_for_ticker(ticker)), 7)
+                self.assertEqual(
+                    len(MODULE.analysts_for_ticker(ticker)), len(MODULE.ASTOCK_ANALYSTS)
+                )
 
-    def test_non_a_share_keeps_four(self):
+    def test_non_a_share_keeps_base_analysts(self):
         self.assertEqual(MODULE.analysts_for_ticker("AAPL"), MODULE.BASE_ANALYSTS)
 
     def test_embedded_runner_streams_specialist_reports(self):
