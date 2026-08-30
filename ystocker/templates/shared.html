@@ -3,6 +3,31 @@
 {% block title %}{{ brand_name }} — {{ shared_ticker }}{% endblock %}
 {% block main_class %}max-w-4xl mx-auto{% endblock %}
 
+{#  The one page in the app meant to be pasted into somebody else's compose
+    box -- a text message, a forwarded email, a Slack paste -- rather than
+    reached by clicking around signed in, so it is the one page that carries
+    Open Graph / Twitter Card tags at all (base.html's head_extra block is
+    empty everywhere else). og_title/og_description/og_image all come from
+    routes.agents_shared_page, sourced from share_card.card_text() /
+    share_card.render() so the words here and the picture at og_image describe
+    the same report by construction rather than by two call sites agreeing to
+    stay in sync. #}
+{% block head_extra %}
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="{{ brand_name }}">
+<meta property="og:title" content="{{ og_title }}">
+<meta property="og:description" content="{{ og_description }}">
+<meta property="og:url" content="{{ og_url }}">
+<meta property="og:image" content="{{ og_image }}">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="{{ og_title }}">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="{{ og_title }}">
+<meta name="twitter:description" content="{{ og_description }}">
+<meta name="twitter:image" content="{{ og_image }}">
+{% endblock %}
+
 {#  Read-only view of a report somebody shared, reachable without signing in.
 
     Its own template rather than a branch inside agents.html: that page is ~3000

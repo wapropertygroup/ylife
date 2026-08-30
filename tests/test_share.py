@@ -745,6 +745,36 @@ class CreateTests(TableCase):
         self.assertNotIn("report", row)
         self.assertNotIn("user", row)
 
+    def test_channel_defaults_to_email(self):
+        # Every caller before the SMS channel existed omitted this argument, so
+        # the default has to reproduce the only behaviour that ever shipped.
+        row = share.create(make_job(), SHARER, FRIEND)
+        self.assertEqual(row["channel"], "email")
+
+    def test_an_sms_share_is_recorded_with_no_recipient(self):
+        # The whole point of "sms" is that this process never learns who the
+        # link goes to -- the client never even collects an address for it, so
+        # create() must accept an empty recipient for this channel rather than
+        # refusing it the way a blank email address would be refused upstream.
+        row = share.create(make_job(), SHARER, "", channel="sms")
+        self.assertIsNotNone(row)
+        self.assertEqual(row["channel"], "sms")
+        self.assertEqual(row["recipient"], "")
+
+    def test_an_unrecognised_channel_falls_back_to_email(self):
+        # A client from the future sending a channel this version does not
+        # know about should degrade to the original behaviour, not be refused
+        # or silently mis-recorded as something unrecognisable.
+        for bad in ("carrier-pigeon", "EMAIL", "Sms", "", None, 123, ["sms"]):
+            row = share.create(make_job(), SHARER, FRIEND, channel=bad)
+            self.assertEqual(row["channel"], "email", repr(bad))
+
+    def test_channel_does_not_affect_the_rest_of_the_row(self):
+        email_row = share.create(make_job(), SHARER, FRIEND, "hi", "email")
+        sms_row = share.create(make_job(), SHARER, "", "hi", "sms")
+        for key in ("job_id", "owner", "sharer", "note", "ticker", "lang"):
+            self.assertEqual(email_row[key], sms_row[key], key)
+
     def test_a_token_collision_fails_the_write_rather_than_repointing_a_share(self):
         first = share.create(make_job(), SHARER, FRIEND)
         fixed = first["token"]
@@ -936,6 +966,15 @@ class PublicPayloadTests(unittest.TestCase):
         self.assertEqual(payload["shared"]["note"], "have a look")
         self.assertEqual(payload["shared"]["at"], "2026-08-29T12:00:00+00:00")
         self.assertEqual(payload["shared"]["expires_at"], 1800000000)
+
+    def test_the_delivery_channel_is_not_published(self):
+        # channel is bookkeeping for this process's own logs, not something a
+        # reader landing on the page needs -- "how did this link reach me" is
+        # not part of what the sharer agreed to publish, the same reasoning
+        # mask_email already applies to who sent it.
+        payload = share.public_payload(self._row(channel="sms"), self._loaded_job())
+        self.assertNotIn("channel", payload)
+        self.assertNotIn("channel", payload["shared"])
 
     def test_a_decimal_expiry_is_serialisable(self):
         # Straight off a DynamoDB read, expires_at is a Decimal, which

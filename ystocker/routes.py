@@ -3072,7 +3072,19 @@ def api_agents_search():
 
 @bp.route("/api/agents/share", methods=["POST"])
 def api_agents_share():
-    """Mail one of your finished reports to somebody, behind a capability link."""
+    """Mint a capability link for one of your finished reports, and mail it if
+    the channel is email.
+
+    Two channels share this one endpoint rather than getting one each, because
+    everything through minting the link is identical: the same job checks, the
+    same daily counter, the same row in ``ystocker-agent-shares``. They part
+    ways only at delivery. ``"sms"`` never learns a phone number and never
+    sends anything server-side -- the client hands the returned URL to the
+    device's own Messages app (an ``sms:`` link) and lets the sharer pick a
+    contact there, the same trust boundary a ``mailto:`` link would have. See
+    ``share.create``'s docstring for why that is a deliberate scope limit and
+    not a missing feature.
+    """
     gate = _agent_gate()
     if gate:
         return gate
@@ -3107,20 +3119,31 @@ def api_agents_share():
                      "shared. Run it without portfolio context to share it.",
             "reason": "portfolio"}), 409
 
-    to_addr = share.normalise_email(data.get("to"))
-    if not to_addr:
-        return jsonify({"error": "That does not look like an email address",
-                        "reason": "bad_recipient"}), 400
-    if to_addr == (sharer or "").strip().lower():
-        # Not an error worth a failure: the completion mail already went here.
-        return jsonify({"error": "That is your own address",
-                        "reason": "self"}), 400
+    # Anything unrecognised collapses to "email" -- an older client can only
+    # ever send that anyway, and a client sending a channel from the future
+    # should degrade rather than 400.
+    channel = str(data.get("channel") or "email").strip().lower()
+    if channel not in ("email", "sms"):
+        channel = "email"
+
+    to_addr = ""
+    if channel == "email":
+        to_addr = share.normalise_email(data.get("to"))
+        if not to_addr:
+            return jsonify({"error": "That does not look like an email address",
+                            "reason": "bad_recipient"}), 400
+        if to_addr == (sharer or "").strip().lower():
+            # Not an error worth a failure: the completion mail already went here.
+            return jsonify({"error": "That is your own address",
+                            "reason": "self"}), 400
+    # channel == "sms": no recipient to validate. There is nothing to type --
+    # the whole point is that this process never learns who the link goes to.
 
     note = share.clean_note(data.get("note"))
 
-    # Counted before anything is sent. A share costs us almost no compute and
-    # instead spends sending reputation, so the bound that matters is on attempts
-    # rather than on successes -- see quota.try_consume_share.
+    # Counted before anything is sent, and on *every* channel: the row and its
+    # DynamoDB write are the expensive, abusable part, not the mail step that
+    # only "email" performs -- see quota.try_consume_share.
     ok, usage = quota.try_consume_share(sharer)
     if not ok:
         return jsonify({"error": "Daily share limit reached",
@@ -3129,20 +3152,23 @@ def api_agents_share():
     # The row before the mail, always. It is what makes the link resolve, so a
     # send that got ahead of it would deliver a button that 404s -- and the case
     # where this ordering matters is precisely when DynamoDB is unreachable.
-    row = share.create(job, sharer=sharer, recipient=to_addr, note=note)
+    row = share.create(job, sharer=sharer, recipient=to_addr, note=note,
+                       channel=channel)
     if row is None:
         return jsonify({"error": "Could not record the share; nothing was sent",
                         "reason": "storage"}), 503
 
     url = share.share_url(row["token"], base=_share_base())
-    sent = report_email.send_share(job, to_addr, sharer, note, url)
-    if not sent:
-        # The share stands even though the mail did not: the sharer is holding a
-        # working link and can pass it on by hand, which is a better outcome than
-        # revoking it and leaving them with nothing.
-        log.warning("agents: share of %s recorded but mail to %s failed",
-                    job.get("id"), to_addr)
-    return jsonify({"ok": True, "sent": sent, "url": url,
+    sent = False
+    if channel == "email":
+        sent = report_email.send_share(job, to_addr, sharer, note, url)
+        if not sent:
+            # The share stands even though the mail did not: the sharer is
+            # holding a working link and can pass it on by hand, which is a
+            # better outcome than revoking it and leaving them with nothing.
+            log.warning("agents: share of %s recorded but mail to %s failed",
+                        job.get("id"), to_addr)
+    return jsonify({"ok": True, "sent": sent, "url": url, "channel": channel,
                     "token": row["token"], "to": to_addr,
                     "expires_at": row["expires_at"],
                     "share_quota": usage}), 200
@@ -3233,7 +3259,7 @@ def agents_shared_page(token):
     that matter (``markdown.js``, the role palette from ``agent_roles``) and can
     break nothing but itself.
     """
-    from ystocker import share
+    from ystocker import share, share_card
     from ystocker.agent_roles import roles_json
 
     err, row, job = _shared_or_404(token)
@@ -3242,6 +3268,12 @@ def agents_shared_page(token):
         # person, and a bare JSON error is the worst possible landing.
         return render_template("shared_gone.html"), 404
     log.info("agents: served shared report %s via %s…", job.get("id"), token[:6])
+
+    lang = str(row.get("lang") or job.get("lang") or "en")
+    share_url = share.share_url(token, base=_share_base())
+    card_url = _share_base().rstrip("/") + url_for(
+        "main.api_agents_shared_card", token=token)
+    og = share_card.card_text(job, lang=lang)
     return render_template(
         "shared.html",
         shared_token=token,
@@ -3249,6 +3281,16 @@ def agents_shared_page(token):
         shared_note=str(row.get("note") or ""),
         shared_ticker=str(job.get("ticker") or ""),
         agent_roles=roles_json(),
+        # Open Graph / Twitter Card: this is the one page in the app meant to
+        # be pasted into somebody else's compose box (a text, an email quoted
+        # back, a Slack paste), so it is the one page where a link-preview
+        # fetcher -- not a signed-in reader clicking around -- is the audience
+        # for these tags. og_title/og_description come from share_card so the
+        # words describing the picture and the picture itself cannot disagree.
+        og_title=og["title"],
+        og_description=og["description"],
+        og_url=share_url,
+        og_image=card_url,
     )
 
 
@@ -3297,6 +3339,42 @@ def api_agents_shared_pdf(token):
         # private, unlike the showcase's "public": this report was shared with
         # one person, not published, so it must not land in a shared cache.
         "Cache-Control": "private, max-age=300",
+    })
+
+
+@bp.route("/api/agents/shared/<token>/card.png")
+def api_agents_shared_card(token):
+    """The 1200x630 preview image behind this share's ``og:image``.
+
+    No sign-in, matching the JSON and PDF siblings -- a link-preview fetcher
+    (iMessage's LPMetadataProvider, WhatsApp's or Slack's unfurler) has no
+    session cookie and no way to acquire one. Draws only the ticker and the
+    first line of the decision, which ``share.public_payload`` already exposes
+    to anyone holding the token, so this discloses nothing the JSON endpoint
+    does not.
+
+    Cached for a few minutes rather than not at all: the same link is commonly
+    unfurled more than once in quick succession (a group chat where several
+    people's clients each fetch the preview), and the image is deterministic
+    for the life of the token. Not cached *long*, because revoking a share
+    should stop the picture along with the page within a reasonable window, and
+    a public, non-private Cache-Control here (unlike the PDF route's) is fine
+    precisely because a preview image is meant to be handed to a third-party
+    fetcher, not kept between the sharer and one recipient.
+    """
+    from ystocker import report_email, share, share_card
+
+    err, row, job = _shared_or_404(token)
+    if err:
+        return err
+
+    png = share_card.render(job, lang=str(row.get("lang") or job.get("lang") or "en"),
+                            brand=report_email.brand_for(_share_base()))
+    log.info("agents: served shared-card image for %s (%d bytes)",
+             job.get("id"), len(png))
+    return Response(png, content_type="image/png", headers={
+        "Content-Length": str(len(png)),
+        "Cache-Control": "public, max-age=600",
     })
 
 
@@ -4748,6 +4826,7 @@ def thirteenf():
     buy_value: dict[str, float] = defaultdict(float)
     buy_new_count: dict[str, int] = defaultdict(int)
     buy_increased_count: dict[str, int] = defaultdict(int)
+    buy_new_value: dict[str, float] = defaultdict(float)
     for fund_name, fd in holdings.items():
         if not isinstance(fd, dict) or fd.get("error"):
             continue
@@ -4764,6 +4843,7 @@ def thirteenf():
                 buy_value[t] += v
                 if change == "new":
                     buy_new_count[t] += 1
+                    buy_new_value[t] += v
                 else:
                     buy_increased_count[t] += 1
 
@@ -4792,6 +4872,7 @@ def thirteenf():
                 "fund_count": len(fnames),
                 "new_count": buy_new_count[t],
                 "increased_count": buy_increased_count[t],
+                "new_value_m": round(buy_new_value[t]),
                 "total_value_m": round(buy_value[t]),
                 "fund_names": fnames,
             }

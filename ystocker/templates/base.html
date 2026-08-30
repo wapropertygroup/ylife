@@ -422,6 +422,14 @@
     [x-cloak] { display: none !important; }
     body.agents-embedded > main { max-width: none; padding: 12px; }
   </style>
+  {#  Open Graph / Twitter Card tags, for the one page that needs them:
+      templates/shared.html overrides this to describe the report a
+      link-preview fetcher (iMessage, WhatsApp, Slack) is unfurling. Empty on
+      every other page -- a signed-in reader navigating this site is not the
+      audience for a preview card, and og:title/og:description without a
+      matching og:image would be worse than no tags at all on pages nobody
+      pastes into a compose box. #}
+  {% block head_extra %}{% endblock %}
 </head>
 
 <body class="bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 min-h-screen flex flex-col{% if _agents_embedded %} agents-embedded{% endif %}"

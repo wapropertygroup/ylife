@@ -423,11 +423,12 @@ Errors are *not* mailed — only finished reports. Tests:
 
 ### Sharing a report with another user
 
-`share.py` plus five routes let a signed-in user mail one of their finished
-reports to anybody, and it is the only user-to-user feature in the monorepo. The
-unit of sharing is a **capability**: a row keyed by `secrets.token_urlsafe(16)`
-in `ystocker-agent-shares`, and `GET /agents/shared/<token>` will render whatever
-job that row names, to anyone, with no sign-in.
+`share.py` plus six routes let a signed-in user mail or text one of their
+finished reports to anybody, and it is the only user-to-user feature in the
+monorepo. The unit of sharing is a **capability**: a row keyed by
+`secrets.token_urlsafe(16)` in `ystocker-agent-shares`, and `GET
+/agents/shared/<token>` will render whatever job that row names, to anyone,
+with no sign-in.
 
 That shape is forced, not chosen. yStocker **persists no user record at all** —
 every gate, quota and credit balance keys off `session["user_email"]` at use
@@ -497,6 +498,49 @@ aws dynamodb update-time-to-live --table-name ystocker-agent-shares \
 TTL is a convenience, not the guarantee: DynamoDB's sweeper can run up to 48h
 late, so `share.lookup()` re-checks `expires_at` on every read and a row past its
 date is expected to still be present.
+
+**Two delivery channels mint the identical row.** `channel` on the
+`/api/agents/share` call is `"email"` or `"sms"`, and only `"email"` ever asks
+the server to send anything — same job checks, same `quota.try_consume_share`
+counter, same 30-day expiry either way. `"sms"` hands the URL to
+`static/share.js`, which opens the device's own Messages compose sheet with a
+`sms:` link (`smsHref()`) and lets the sharer pick a contact there. This
+process never collects a phone number, and that is the scope limit, not a gap:
+doing it for real would mean a telephony vendor (Twilio, AWS SNS/Pinpoint),
+carrier registration and a per-message cost, none of which this box has, for a
+capability the sharer's own phone already provides — the same reason there is
+no server-side mail composer either and `mailto:` was never reinvented.
+`recipient` is simply `""` for this channel, which is why `share.create()`
+takes a `channel` argument instead of inferring one from whether an address was
+supplied: an empty string is a valid *value* here, not a validation failure.
+iOS's `sms:` handler wants `&body=`; Android's wants `?body=`; `smsHref()`
+picks by user-agent because there is no feature to test for which one a
+platform's compose intent accepts, and sending the wrong separator is not an
+error, just a silently empty compose box — the same "read what the platform
+actually does" trap this file already documents for Futu's universal links.
+
+**The link carries its own preview.** `/api/agents/shared/<token>/card.png`
+renders a 1200×630 `og:image` — ticker, a decision chip in the same colours as
+the completion mail's (`report_email._decision_chip`), brand mark, date — with
+matplotlib's Agg backend, the same one `charts.py` already uses for every other
+server-rendered PNG. `shared.html` is the only template with Open Graph /
+Twitter Card tags at all (`base.html`'s `head_extra` block is empty everywhere
+else), because it is the only page meant to be pasted into somebody else's
+compose box rather than reached by clicking around signed in. `og:title` /
+`og:description` and the picture both come from `share_card.card_text()` /
+`share_card.render()`, so the words describing the report and the report
+itself cannot disagree. It discloses nothing new: the ticker and the
+decision's first line are already public through `share.public_payload`, so
+the card is a preview of the JSON, not a second disclosure.
+
+A fixed 96pt ticker size ran a 16-character symbol off the edge of the card
+before `share_card._fit_size()` existed — caught by actually rendering a PNG
+and looking at it, not by reasoning about the geometry, which is why
+`share_card.py`'s own docstring records which environment that check ran in:
+this repo's dev checkout cannot import `matplotlib.pyplot` at all (the same
+broken Homebrew `pyexpat` `tests/test_import_graph.py`'s module docstring
+already works around), so proving the layout correct needed a second,
+throwaway venv with a working one.
 
 ### Choosing the model and thinking depth (`agent_models.py`)
 

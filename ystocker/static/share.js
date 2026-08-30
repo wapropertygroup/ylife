@@ -1,10 +1,16 @@
 /**
- * Share a finished agent report with somebody, by email.
+ * Share a finished agent report with somebody, by email or by SMS.
  *
  * Drives templates/_share_modal.html. Loaded on every yStocker page from
  * base.html, so the cost on a page nobody shares from has to be ~nothing: this
  * file binds one click handler and fetches the report list on *first open*, never
  * on load. There is no work at parse time beyond wiring.
+ *
+ * Both channels mint the same capability link through /api/agents/share; only
+ * "email" asks the server to send anything. "sms" hands the link to the
+ * device's own Messages app via a `sms:` URI (smsHref()) and never collects a
+ * phone number — see share.py's create() docstring for why that is a
+ * deliberate scope limit, not a missing feature.
  *
  * Exposes `window.Share.open(jobId)` so a page that knows which report is in
  * front of the reader can preselect it. /agents needs no such call — it already
@@ -17,7 +23,7 @@
   var NOTE_MAX = 500;                    // must match share.NOTE_MAX server-side
 
   var dlg, msg, form, done, selJob, inTo, inNote, count,
-      btnSend, btnCancel, btnCopy, btnRevoke, lastFocus;
+      btnSend, btnSms, btnCancel, btnCopy, btnRevoke, lastFocus;
   var token = null, busy = false;
 
   function t(key, fallback) {
@@ -74,6 +80,9 @@
     btnSend.classList.remove('sd-hidden');
     btnSend.disabled = false;
     btnSend.textContent = t('share.send', 'Send');
+    btnSms.classList.remove('sd-hidden');
+    btnSms.disabled = false;
+    btnSms.textContent = t('share.sms', 'Share via SMS');
     btnCancel.textContent = t('share.cancel', 'Cancel');
     inNote.value = '';
     updateCount();
@@ -208,17 +217,88 @@
     done.classList.remove('sd-hidden');
     $('shareLink').textContent = d.url || '';
     btnSend.classList.add('sd-hidden');
+    btnSms.classList.add('sd-hidden');
     btnCopy.classList.remove('sd-hidden');
     btnRevoke.classList.remove('sd-hidden');
     btnCancel.textContent = t('share.done', 'Done');
-    // The distinction is load-bearing: the link works either way, so a failed
-    // send must not read as a failed share — it means "pass this on yourself".
-    if (d.sent) {
+    // Three outcomes, not two. An emailed share can succeed or fail to send,
+    // but an SMS share never attempts a send at all -- routes.api_agents_share
+    // only calls send_share() for channel "email", so `d.sent` is always false
+    // here by design. Treating that the same as a *failed* email would tell the
+    // sharer something broke when nothing did.
+    if (d.channel === 'sms') {
+      say('ok', t('share.sms_sent', 'Opening Messages with the link ready to '
+        + 'send. If nothing happens, copy the link below.'));
+    } else if (d.sent) {
       say('ok', t('share.sent', 'Sent to') + ' ' + (d.to || ''));
     } else {
       say('error', t('share.unsent', 'The link is ready, but the email could not '
         + 'be sent. Copy the link and pass it on yourself.'));
     }
+  }
+
+  // ── Share via SMS ────────────────────────────────────────────────────────
+  // Mints the same capability link as an email share (channel: 'sms' skips the
+  // recipient checks server-side — see share.create()'s docstring) and hands
+  // it to the device's own Messages app rather than mailing anything. This
+  // process never learns a phone number: the sharer picks a contact inside
+  // Messages after the handoff, exactly as a mailto: link would leave the
+  // recipient choice to the mail client.
+  function smsHref(body) {
+    // iOS Safari's `sms:` handler wants `&body=`; Android's wants `?body=`.
+    // There is no feature to detect for "which query-string form does this
+    // platform's SMS compose intent accept" — sending the wrong one is not an
+    // error, just a silently ignored parameter that opens Messages with
+    // nothing pre-filled. Same class of "read what the platform actually
+    // does, not what looks symmetric" trap CLAUDE.md documents for Futu's
+    // universal links; UA-sniffing is what is left once there is no feature to
+    // test.
+    var isIOS = /iPad|iPhone|iPod/i.test(navigator.userAgent || '');
+    return (isIOS ? 'sms:&body=' : 'sms:?body=') + encodeURIComponent(body);
+  }
+
+  function sendSms() {
+    if (busy) return;
+    var jobId = selJob.value;
+    if (!jobId) {
+      say('error', t('share.none', 'You have no finished reports to share yet.'));
+      return;
+    }
+
+    busy = true;
+    clearSay();
+    btnSms.disabled = true;
+    btnSms.textContent = t('share.sending', 'Sending…');
+
+    fetch('/api/agents/share', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ job_id: jobId, channel: 'sms', note: inNote.value })
+    })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+      .then(function (res) {
+        busy = false;
+        btnSms.disabled = false;
+        btnSms.textContent = t('share.sms', 'Share via SMS');
+        if (!res.ok) {
+          say('error', res.d.error || t('share.err', 'Something went wrong.'));
+          return;
+        }
+        token = res.d.token;
+        showSent(res.d);
+        // Best-effort hand-off. On a desktop browser with no SMS handler this
+        // silently does nothing, which is exactly why showSent() always
+        // leaves the link on screen with a Copy button too.
+        var lead = t('share.sms_lead', 'Check out this AI stock report:');
+        location.href = smsHref(lead + ' ' + (res.d.url || ''));
+      })
+      .catch(function (e) {
+        busy = false;
+        btnSms.disabled = false;
+        btnSms.textContent = t('share.sms', 'Share via SMS');
+        say('error', String((e && e.message) || e));
+      });
   }
 
   function copy() {
@@ -280,11 +360,13 @@
     inNote = $('shareNote');
     count = $('shareCount');
     btnSend = $('shareSend');
+    btnSms = $('shareSms');
     btnCancel = $('shareCancel');
     btnCopy = $('shareCopy');
     btnRevoke = $('shareRevoke');
 
     btnSend.addEventListener('click', send);
+    btnSms.addEventListener('click', sendSms);
     btnCancel.addEventListener('click', close);
     btnCopy.addEventListener('click', copy);
     btnRevoke.addEventListener('click', revoke);

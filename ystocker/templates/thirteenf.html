@@ -76,6 +76,7 @@
         <th class="text-left  py-2 px-2 font-medium" data-i18n="thirteenf.th_ticker">Ticker</th>
         <th class="text-right py-2 px-2 font-medium" data-i18n="thirteenf.th_funds_buying">Funds Buying</th>
         <th class="text-right py-2 px-2 font-medium"><span class="text-emerald-700 dark:text-emerald-400" data-i18n="inst.change_new">New</span></th>
+        <th class="text-right py-2 px-2 font-medium"><span class="text-emerald-700 dark:text-emerald-400" data-i18n="thirteenf.th_new_value">New Value ($M)</span></th>
         <th class="text-right py-2 px-2 font-medium"><span class="text-sky-700 dark:text-sky-400" data-i18n="thirteenf.th_increased">Increased</span></th>
         <th class="text-right py-2 px-2 font-medium" data-i18n="thirteenf.th_combined_value">Combined Value ($M)</th>
         <th class="text-left  py-2 px-2 font-medium" data-i18n="thirteenf.th_held_by">Held By</th>
@@ -89,6 +90,7 @@
             <span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-brand/15 text-brand">{{ pos.fund_count }}</span>
           </td>
           <td class="py-1.5 px-2 text-right font-mono text-emerald-700 dark:text-emerald-400">{{ pos.new_count or '—' }}</td>
+          <td class="py-1.5 px-2 text-right font-mono text-emerald-700 dark:text-emerald-400">{% if pos.new_value_m %}${{ '{:,.0f}'.format(pos.new_value_m) }}M{% else %}—{% endif %}</td>
           <td class="py-1.5 px-2 text-right font-mono text-sky-700 dark:text-sky-400">{{ pos.increased_count or '—' }}</td>
           <td class="py-1.5 px-2 text-right font-mono text-slate-600 dark:text-slate-300">
             ${{ '{:,.0f}'.format(pos.total_value_m) }}M

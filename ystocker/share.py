@@ -190,7 +190,7 @@ def _now() -> datetime:
 # ---------------------------------------------------------------------------
 
 def create(job: dict[str, Any], sharer: str, recipient: str,
-           note: str = "") -> Optional[dict[str, Any]]:
+           note: str = "", channel: str = "email") -> Optional[dict[str, Any]]:
     """Record a share of ``job`` and return the row, or None if it cannot be.
 
     Callers must treat None as "do not send anything". The row is the thing that
@@ -201,6 +201,18 @@ def create(job: dict[str, Any], sharer: str, recipient: str,
     ``agents``: the authorization decision (may this caller share this job?)
     belongs to the route, which already holds the session, and keeping it there
     means this function cannot be the place someone forgets to check it.
+
+    ``channel`` records how the link left the sharer's hands and is *not* a
+    delivery mechanism this module owns. ``"email"`` still means "the route is
+    about to mail ``recipient``". ``"sms"`` means the opposite: there is no
+    ``recipient`` to speak of, because the whole point is handing the link to the
+    sharer's own Messages app and letting them pick a contact there — this
+    process never learns who that is, and never should, since collecting a phone
+    number is a materially different (and unimplemented) feature from opening a
+    ``sms:`` link. Anything else collapses to ``"email"`` rather than being
+    refused, matching how a stale ``model_choice`` falls back instead of erroring
+    in ``agent_models.py`` — a client sending a channel this version does not
+    know about should degrade, not break the share.
     """
     table = _get_table()
     if table is None:
@@ -234,6 +246,7 @@ def create(job: dict[str, Any], sharer: str, recipient: str,
         "owner":      owner,
         "sharer":     (sharer or "").strip().lower(),
         "recipient":  (recipient or "").strip().lower(),
+        "channel":    channel if channel in ("email", "sms") else "email",
         "note":       clean_note(note),
         "ticker":     str(job.get("ticker") or "")[:16],
         "lang":       "zh" if str(job.get("lang") or "").lower() == "zh" else "en",
@@ -254,8 +267,9 @@ def create(job: dict[str, Any], sharer: str, recipient: str,
         log.warning("share: could not record share of %s by %s: %s",
                     job_id, sharer, exc)
         return None
-    log.info("share: %s shared %s (%s) with %s [token=%s…]",
-             row["sharer"], job_id, row["ticker"], row["recipient"],
+    log.info("share: %s shared %s (%s) via %s%s [token=%s…]",
+             row["sharer"], job_id, row["ticker"], row["channel"],
+             f" with {row['recipient']}" if row["recipient"] else "",
              row["token"][:6])
     return row
 
