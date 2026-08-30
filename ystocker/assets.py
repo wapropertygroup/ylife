@@ -152,11 +152,18 @@ def value_positions(
 
 def analyse(positions: Iterable[dict[str, Any]], *,
             top: int = 60,
-            max_depth: int = lookthrough.DEFAULT_MAX_DEPTH) -> dict[str, Any]:
+            max_depth: int = lookthrough.DEFAULT_MAX_DEPTH,
+            policy: Optional[dict[str, Any]] = None) -> dict[str, Any]:
     """Full /assets payload: valued rows plus 穿透.
 
     Never fetches. Safe on the request path — that is the whole point of the
     ``peek`` resolver.
+
+    ``policy`` is ``portfolio.load_policy``'s dict. When it states any limit, the
+    payload gains a ``constraints`` block from :func:`exposure.review`. Evaluated
+    here rather than in the route because the ``Result`` needed is local to this
+    function, and handing it out would let a caller run the walk a second time on
+    the request path for no new information.
     """
     started = time.time()
     stored = list(positions)
@@ -177,6 +184,7 @@ def analyse(positions: Iterable[dict[str, Any]], *,
             if row["symbol"] != CASH_SYMBOL and not row.get("proxy_symbol"):
                 pending.add(row["symbol"])
 
+    groups = _issuer_groups(payload.get("exposures") or [])
     payload.update({
         "positions": rows,
         "position_count": len(rows),
@@ -190,11 +198,43 @@ def analyse(positions: Iterable[dict[str, Any]], *,
             sum(float(r["cost_basis"]) for r in rows if r.get("cost_basis")), 2),
         "asset_mix": _asset_mix(priced),
         "sector_mix": _sector_mix(priced),
-        "issuer_groups": _issuer_groups(payload.get("exposures") or []),
+        "issuer_groups": groups,
         "elapsed_ms": int((time.time() - started) * 1000),
         "cache": funddata.stats(),
     })
+    payload["constraints"] = _constraints(result, policy, groups)
     return payload
+
+
+def _constraints(result: lookthrough.Result, policy: Optional[dict[str, Any]],
+                 groups: list[dict[str, Any]]) -> Optional[dict[str, Any]]:
+    """The limit verdicts, or None when the user has stated no limits.
+
+    None rather than an empty structure with everything passing: a policy nobody
+    filled in has not been satisfied, it has not been *asked*, and a client
+    rendering "0 breaches" would say the opposite.
+
+    Issuer groups are passed through from ``_issuer_groups``, which is name
+    matching and will occasionally group two unrelated companies. That is
+    acceptable for a hint and would not be for a limit, so the check exists only
+    because the same caveat travels with it in the payload — the client shows the
+    group's members next to the verdict.
+    """
+    from ystocker import exposure
+
+    if not policy:
+        return None
+    if policy.get("max_single_name_pct") is None and \
+            policy.get("max_issuer_pct") is None:
+        return None
+    try:
+        assessment = exposure.review(
+            result, exposure.policy_from_stored(policy),
+            issuer_groups={g["issuer"]: g["symbols"] for g in groups})
+    except Exception as exc:  # noqa: BLE001 - a verdict must not break the page
+        log.warning("assets: constraint check failed (%s)", exc)
+        return None
+    return assessment.as_dict()
 
 
 def build_ai_prompt(snapshot: dict[str, Any], lang: str) -> str:

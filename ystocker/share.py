@@ -355,6 +355,12 @@ _SHAREABLE_JOB_FIELDS = (
     "id", "ticker", "date", "status", "decision", "report", "lang", "language",
     "created_at", "finished_at", "elapsed_sec", "degraded", "fallback_models",
     "recovered",
+    # Provenance. The recipient did not choose the configuration and cannot see
+    # the sharer's picker, so without these a report on the cheapest tier is
+    # indistinguishable from one on the most capable -- and this surface has no
+    # sign-in behind which to go and check. ``model_choice`` is omitted for the
+    # same reason it is in ``agents._PUBLIC_FIELDS``: it is an internal key.
+    "provider", "deep_model", "quick_model", "thinking",
 )
 
 

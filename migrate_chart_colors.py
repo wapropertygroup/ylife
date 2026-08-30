@@ -24,6 +24,10 @@ import sys
 from pathlib import Path
 
 # Must mirror the keys of window.CT's MAP in base.html.
+# tests/test_chart_theme_map.py asserts the two stay in step, because the drift
+# is silent: a key here that base.html lacks wraps a literal that then passes
+# through unmapped, and a key there that this list lacks leaves the call site
+# unwrapped. Either way the colour simply stays the dark value on a white card.
 LITERALS = [
     # chrome
     "#0f172a", "#1e293b", "#334155", "#475569", "#64748b", "#94a3b8",
@@ -32,11 +36,26 @@ LITERALS = [
     # data series
     "#34d399", "#f87171", "#6366f1", "#a5b4fc", "#a78bfa", "#38bdf8",
     "#fbbf24", "#fb923c",
+    # data series, second rung (600 misses 3:1 for yellow)
+    "#facc15", "#22d3ee", "#60a5fa", "#fb7185", "#f59e0b", "#f97316",
+    "#818cf8", "#c4b5fd", "#bae6fd", "#0ea5e9",
     # semantic axis hues
+    "rgba(248,113,113,0.35)", "rgba(248,113,113,0.4)",
     "rgba(248,113,113,0.5)", "rgba(248,113,113,0.6)", "rgba(248,113,113,0.7)",
-    "rgba(56,189,248,0.6)", "rgba(52,211,153,0.5)", "rgba(52,211,153,0.6)",
+    "rgba(239,68,68,0.45)", "rgba(244,63,94,0.4)",
+    "rgba(56,189,248,0.4)", "rgba(56,189,248,0.6)",
+    "rgba(52,211,153,0.35)", "rgba(52,211,153,0.4)", "rgba(52,211,153,0.45)",
+    "rgba(52,211,153,0.5)", "rgba(52,211,153,0.6)", "rgba(34,211,153,0.7)",
+    "rgba(251,191,36,0.3)", "rgba(251,191,36,0.4)",
     "rgba(251,191,36,0.6)", "rgba(251,191,36,0.7)", "rgba(245,158,11,0.6)",
-    "rgba(167,139,250,0.6)", "rgba(167,139,250,0.7)", "rgba(251,146,60,0.6)",
+    "rgba(167,139,250,0.5)", "rgba(167,139,250,0.6)", "rgba(167,139,250,0.7)",
+    "rgba(251,146,60,0.6)", "rgba(99,102,241,0.75)",
+    # slate zero lines / muted comparison series. Both alpha spellings occur in
+    # the templates and MAP lookup only lowercases and strips spaces — it does
+    # not rewrite ".6" into "0.6" — so each spelling is its own key.
+    "rgba(148,163,184,0.3)", "rgba(148,163,184,0.35)",
+    "rgba(148,163,184,0.55)", "rgba(148,163,184,.6)",
+    "rgba(148,163,184,0.7)", "rgba(148,163,184,0.9)",
 ]
 
 SCRIPT_BLOCK = re.compile(r"<script\b[^>]*>.*?</script>", re.DOTALL | re.IGNORECASE)
@@ -47,7 +66,16 @@ QUOTED = re.compile("|".join(re.escape(f"'{lit}'") for lit in LITERALS))
 # `CT.c('#0f172a'): '#ffffff'` -- a syntax error -- and the two Chart.defaults
 # assignments became `CT.c(...)` calls evaluated inside the IIFE that has not
 # returned yet, so CT was still undefined. It also has no chart of its own.
-SKIP = {"base.html"}
+#
+# tv.html must never be processed for the opposite reason: it does not extend
+# base.html, so `CT` is not merely unmapped there, it is *undefined*. A wrap
+# would raise ReferenceError and take out whatever init block it landed in --
+# and the kiosk is the one page with nobody watching it fail. It has always been
+# a candidate (its line 531 ternary holds '#fbbf24', already in LITERALS) and was
+# only ever spared because the caller passed an explicit file list; relying on
+# that is one forgotten glob away from a dark screen. /tv is deliberately
+# dark-only anyway -- tests/test_theme_classes.py asserts it.
+SKIP = {"base.html", "tv.html"}
 
 
 def wrap_scripts(text: str) -> tuple[str, int]:
@@ -75,7 +103,8 @@ def main(paths: list[str]) -> int:
     for p in paths:
         path = Path(p)
         if path.name in SKIP:
-            print(f"    -  {path} (skipped: defines CT)")
+            why = "defines CT" if path.name == "base.html" else "no CT: not a base.html child"
+            print(f"    -  {path} (skipped: {why})")
             continue
         original = path.read_text(encoding="utf-8")
         converted, n = wrap_scripts(original)

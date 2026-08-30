@@ -1931,7 +1931,7 @@ function _yieldCurve() {
           const sw = hd.sector_weights;
           if (sw && Object.keys(sw).length) {
             const entries = Object.entries(sw).sort((a,b) => (b[1]||0)-(a[1]||0)).slice(0, 8);
-            const colors = ['#818cf8',CT.c('#34d399'),'#f472b6',CT.c('#fb923c'),CT.c('#38bdf8'),CT.c('#fbbf24'),CT.c('#94a3b8'),'#22d3ee'];
+            const colors = [CT.c('#818cf8'),CT.c('#34d399'),'#f472b6',CT.c('#fb923c'),CT.c('#38bdf8'),CT.c('#fbbf24'),CT.c('#94a3b8'),CT.c('#22d3ee')];
             new Chart(document.getElementById('etfSectorChart'), {
               type: 'doughnut',
               data: { labels: entries.map(e=>e[0]), datasets: [{ data: entries.map(e=>e[1]||0), backgroundColor: colors, borderColor: CT.c('#0f172a'), borderWidth: 2 }] },
@@ -2061,7 +2061,7 @@ function _yieldCurve() {
             { label:'Revenue ($B)',    data:finRevenue, backgroundColor:revColors, borderColor:revColors.map(c=>c.replace('0.7','1').replace('0.35','0.6')), borderWidth:1, yAxisID:'y', order:3 },
             { label:'Net Income ($B)', data:finNI,      backgroundColor:niColors,  borderColor:niColors.map(c=>c.replace('0.65','1').replace('0.25','0.5')),  borderWidth:1, yAxisID:'y', order:3 },
             { type:'line', label:'EPS', data:finEps, borderColor:CT.c('#fbbf24'), backgroundColor:'transparent', borderWidth:2, pointRadius:4, pointHoverRadius:6, fill:false, tension:0.3, spanGaps:true, yAxisID:'yEps', order:1 },
-            { type:'line', label:'Gross Margin %', data:finGrossMarginPct, borderColor:'rgba(34,211,153,0.7)', backgroundColor:'transparent', borderWidth:1.5, pointRadius:3, fill:false, tension:0.3, spanGaps:true, yAxisID:'yMargin', borderDash:[4,3], order:2 },
+            { type:'line', label:'Gross Margin %', data:finGrossMarginPct, borderColor:CT.c('rgba(34,211,153,0.7)'), backgroundColor:'transparent', borderWidth:1.5, pointRadius:3, fill:false, tension:0.3, spanGaps:true, yAxisID:'yMargin', borderDash:[4,3], order:2 },
             { type:'line', label:'Net Margin %',   data:finNetMarginPct,   borderColor:CT.c('rgba(167,139,250,0.7)'), backgroundColor:'transparent', borderWidth:1.5, pointRadius:3, fill:false, tension:0.3, spanGaps:true, yAxisID:'yMargin', borderDash:[4,3], order:2 },
           ]},
           options: {
@@ -2103,7 +2103,7 @@ function _yieldCurve() {
             type: 'bar',
             data: { labels: qt.map(r => r.quarter?.slice(0,7) || ''), datasets: [
               { label:'Revenue ($B)', data:qt.map(r=>r.revenue), backgroundColor:qtRevColors, borderColor:qtRevColors.map(c=>c.replace('0.6','1')), borderWidth:1, yAxisID:'y', order:3 },
-              { type:'line', label:'EPS (Est)', data:qtEpsEst, borderColor:'rgba(251,191,36,0.4)', backgroundColor:'transparent', borderWidth:1.5, pointRadius:3, fill:false, tension:0.3, spanGaps:true, yAxisID:'yEps', borderDash:[4,3], order:2 },
+              { type:'line', label:'EPS (Est)', data:qtEpsEst, borderColor:CT.c('rgba(251,191,36,0.4)'), backgroundColor:'transparent', borderWidth:1.5, pointRadius:3, fill:false, tension:0.3, spanGaps:true, yAxisID:'yEps', borderDash:[4,3], order:2 },
               { type:'line', label:'EPS', data:qtEpsActual, borderColor:CT.c('#fbbf24'), backgroundColor:'transparent', borderWidth:2, pointRadius:6, pointBackgroundColor:qtEpsColors, pointBorderColor:qtEpsColors, fill:false, tension:0.3, spanGaps:true, yAxisID:'yEps', order:1 },
             ]},
             options: {
@@ -2265,7 +2265,7 @@ function _yieldCurve() {
                   {
                     ...I18n.label('chart.zscore14', 'Z-Score (14d)'),
                     data: zVals,
-                    borderColor: '#818cf8',
+                    borderColor: CT.c('#818cf8'),
                     backgroundColor: 'rgba(129,140,248,0.08)',
                     borderWidth: 1.5,
                     pointRadius: 0,
@@ -2278,7 +2278,7 @@ function _yieldCurve() {
                   {
                     label: '14d MA of Z',
                     data: zMA,
-                    borderColor: '#facc15',
+                    borderColor: CT.c('#facc15'),
                     borderWidth: 2,
                     borderDash: [6, 3],
                     pointRadius: 0,
@@ -2302,11 +2302,11 @@ function _yieldCurve() {
                     order: 1,
                   },
                   // Horizontal reference lines (on Z-Score axis)
-                  { label: '+2σ', data: labels.map(() => 2),  borderColor: 'rgba(244,63,94,0.4)',  borderWidth: 1, borderDash: [4,4], pointRadius: 0, pointHoverRadius: 0, fill: false, yAxisID: 'y', order: 0 },
-                  { label: '+1σ', data: labels.map(() => 1),  borderColor: 'rgba(251,191,36,0.3)', borderWidth: 1, borderDash: [4,4], pointRadius: 0, pointHoverRadius: 0, fill: false, yAxisID: 'y', order: 0 },
-                  { label: '0',   data: labels.map(() => 0),  borderColor: 'rgba(148,163,184,0.3)', borderWidth: 1, pointRadius: 0, pointHoverRadius: 0, fill: false, yAxisID: 'y', order: 0 },
-                  { label: '-1σ', data: labels.map(() => -1), borderColor: 'rgba(251,191,36,0.3)', borderWidth: 1, borderDash: [4,4], pointRadius: 0, pointHoverRadius: 0, fill: false, yAxisID: 'y', order: 0 },
-                  { label: '-2σ', data: labels.map(() => -2), borderColor: 'rgba(56,189,248,0.4)', borderWidth: 1, borderDash: [4,4], pointRadius: 0, pointHoverRadius: 0, fill: false, yAxisID: 'y', order: 0 },
+                  { label: '+2σ', data: labels.map(() => 2),  borderColor: CT.c('rgba(244,63,94,0.4)'),  borderWidth: 1, borderDash: [4,4], pointRadius: 0, pointHoverRadius: 0, fill: false, yAxisID: 'y', order: 0 },
+                  { label: '+1σ', data: labels.map(() => 1),  borderColor: CT.c('rgba(251,191,36,0.3)'), borderWidth: 1, borderDash: [4,4], pointRadius: 0, pointHoverRadius: 0, fill: false, yAxisID: 'y', order: 0 },
+                  { label: '0',   data: labels.map(() => 0),  borderColor: CT.c('rgba(148,163,184,0.3)'), borderWidth: 1, pointRadius: 0, pointHoverRadius: 0, fill: false, yAxisID: 'y', order: 0 },
+                  { label: '-1σ', data: labels.map(() => -1), borderColor: CT.c('rgba(251,191,36,0.3)'), borderWidth: 1, borderDash: [4,4], pointRadius: 0, pointHoverRadius: 0, fill: false, yAxisID: 'y', order: 0 },
+                  { label: '-2σ', data: labels.map(() => -2), borderColor: CT.c('rgba(56,189,248,0.4)'), borderWidth: 1, borderDash: [4,4], pointRadius: 0, pointHoverRadius: 0, fill: false, yAxisID: 'y', order: 0 },
                 ],
               },
               options: {
@@ -2780,7 +2780,7 @@ function _yieldCurve() {
 
         // ── Grouped bar chart: shares held per fund per quarter ─────────────
         const COLORS = [
-          '#818cf8',CT.c('#34d399'),'#f472b6',CT.c('#fb923c'),CT.c('#38bdf8'),
+          CT.c('#818cf8'),CT.c('#34d399'),'#f472b6',CT.c('#fb923c'),CT.c('#38bdf8'),
           '#a3e635','#c084fc',CT.c('#fbbf24'),'#2dd4bf',CT.c('#f87171'),
         ];
         const chartCtx = document.getElementById('instSharesChart');
@@ -2971,8 +2971,8 @@ async function _loadOptionsData() {
       type: 'bar',
       data: { labels: pcLabels, datasets: [
         { label:'P/C Ratio', data:pcRatios, backgroundColor:pcColors, borderColor:pcBorders, borderWidth:1, borderRadius:3, order:1 },
-        { label:'1.2 (Bearish)', data:pcLabels.map(()=>1.2), type:'line', borderColor:'rgba(239,68,68,0.45)', borderWidth:1, borderDash:[4,3], pointRadius:0, fill:false, order:0 },
-        { label:'0.7 (Bullish)', data:pcLabels.map(()=>0.7), type:'line', borderColor:'rgba(52,211,153,0.45)', borderWidth:1, borderDash:[4,3], pointRadius:0, fill:false, order:0 },
+        { label:'1.2 (Bearish)', data:pcLabels.map(()=>1.2), type:'line', borderColor:CT.c('rgba(239,68,68,0.45)'), borderWidth:1, borderDash:[4,3], pointRadius:0, fill:false, order:0 },
+        { label:'0.7 (Bullish)', data:pcLabels.map(()=>0.7), type:'line', borderColor:CT.c('rgba(52,211,153,0.45)'), borderWidth:1, borderDash:[4,3], pointRadius:0, fill:false, order:0 },
       ]},
       options: {
         responsive:true, maintainAspectRatio:false,
@@ -3258,7 +3258,7 @@ function _buildConfig(key, d, staticData) {
           if (py < a.top || py > a.bottom) return;
           c.save(); c.strokeStyle='#f59e0b88'; c.lineWidth=1.5; c.setLineDash([5,4]);
           c.beginPath(); c.moveTo(a.left,py); c.lineTo(a.right,py); c.stroke();
-          c.fillStyle='#f59e0b'; c.font='11px Inter,sans-serif';
+          c.fillStyle=CT.c('#f59e0b'); c.font='11px Inter,sans-serif';
           c.fillText('Current PE '+pe.toFixed(1)+'x', a.left+6, py-5); c.restore();
         }
       }],
@@ -3289,11 +3289,11 @@ function _buildConfig(key, d, staticData) {
     // '+1', i.e. to whatever dataset follows it.
     if (bands) _ds.push(
         { label:'BB Upper', data:bands.upper,
-          borderColor:'rgba(167,139,250,0.5)', backgroundColor:'rgba(167,139,250,0.04)',
+          borderColor:CT.c('rgba(167,139,250,0.5)'), backgroundColor:'rgba(167,139,250,0.04)',
           borderWidth:1, pointRadius:0, pointHoverRadius:0, fill:'+1', tension:0.3, spanGaps:true,
           borderDash:[2,2] },
         { label:'BB Lower', data:bands.lower,
-          borderColor:'rgba(167,139,250,0.5)', backgroundColor:'rgba(167,139,250,0.04)',
+          borderColor:CT.c('rgba(167,139,250,0.5)'), backgroundColor:'rgba(167,139,250,0.04)',
           borderWidth:1, pointRadius:0, pointHoverRadius:0, fill:false, tension:0.3, spanGaps:true,
           borderDash:[2,2] });
     return {
@@ -3325,7 +3325,7 @@ function _buildConfig(key, d, staticData) {
             c.fillText(label, a.left+6, py+off); c.restore();
           }
           drawRef(staticData.target_price,'#34d39988',CT.c('#34d399'),'Target $'+staticData.target_price?.toFixed(2),-5);
-          drawRef(staticData.call_wall,   '#f59e0b88','#f59e0b','Call Wall $'+staticData.call_wall?.toFixed(2),-5);
+          drawRef(staticData.call_wall,   '#f59e0b88',CT.c('#f59e0b'),'Call Wall $'+staticData.call_wall?.toFixed(2),-5);
           drawRef(staticData.put_wall,    '#f43f5e88','#f43f5e','Put Wall $'+staticData.put_wall?.toFixed(2),12);
           // Earnings date markers
           if (Array.isArray(staticData.earnings_markers) && staticData.earnings_markers.length > 0) {
@@ -3452,9 +3452,9 @@ function _buildConfig(key, d, staticData) {
         { label:'RSI', data:rsi,
           borderColor:CT.c('#a78bfa'), backgroundColor:'rgba(167,139,250,0.08)',
           borderWidth:1.5, pointRadius:0, pointHoverRadius:4, fill:true, tension:0.3, spanGaps:true },
-        { label:'OB 70', data:ob, borderColor:'rgba(248,113,113,0.4)', backgroundColor:'transparent',
+        { label:'OB 70', data:ob, borderColor:CT.c('rgba(248,113,113,0.4)'), backgroundColor:'transparent',
           borderWidth:1, pointRadius:0, borderDash:[4,3], fill:false },
-        { label:'OS 30', data:os, borderColor:'rgba(52,211,153,0.4)', backgroundColor:'transparent',
+        { label:'OS 30', data:os, borderColor:CT.c('rgba(52,211,153,0.4)'), backgroundColor:'transparent',
           borderWidth:1, pointRadius:0, borderDash:[4,3], fill:false },
       ]},
       options: {
@@ -3521,9 +3521,9 @@ function _buildConfig(key, d, staticData) {
           borderWidth:1.5, pointRadius:0, pointHoverRadius:4, fill:false, tension:0.3, spanGaps:true },
         { label:'%D', data:dArr, borderColor:CT.c('#fbbf24'), backgroundColor:'transparent',
           borderWidth:1.5, pointRadius:0, pointHoverRadius:4, fill:false, tension:0.3, spanGaps:true, borderDash:[4,3] },
-        { label:'OB 80', data:ob80, borderColor:'rgba(248,113,113,0.35)', backgroundColor:'transparent',
+        { label:'OB 80', data:ob80, borderColor:CT.c('rgba(248,113,113,0.35)'), backgroundColor:'transparent',
           borderWidth:1, pointRadius:0, borderDash:[4,3], fill:false },
-        { label:'OS 20', data:os20, borderColor:'rgba(52,211,153,0.35)', backgroundColor:'transparent',
+        { label:'OS 20', data:os20, borderColor:CT.c('rgba(52,211,153,0.35)'), backgroundColor:'transparent',
           borderWidth:1, pointRadius:0, borderDash:[4,3], fill:false },
       ]},
       options: {
@@ -3617,7 +3617,7 @@ function _buildConfig(key, d, staticData) {
             if (py < a.top || py > a.bottom) return;
             c.save(); c.strokeStyle=i===0?'#f59e0b88':'#f43f5e66'; c.lineWidth=1.5; c.setLineDash([5,4]);
             c.beginPath(); c.moveTo(a.left,py); c.lineTo(a.right,py); c.stroke();
-            c.fillStyle=i===0?'#f59e0b':'#f43f5e'; c.font='11px Inter,sans-serif';
+            c.fillStyle=i===0?CT.c('#f59e0b'):'#f43f5e'; c.font='11px Inter,sans-serif';
             c.fillText('PEG = '+ref, a.left+6, py-5); c.restore();
           });
         }
@@ -3659,7 +3659,7 @@ function _buildConfig(key, d, staticData) {
           if (fy < a.top || fy > a.bottom) return;
           c.save(); c.strokeStyle='#f59e0b88'; c.lineWidth=1.5; c.setLineDash([5,4]);
           c.beginPath(); c.moveTo(a.left,fy); c.lineTo(a.right,fy); c.stroke();
-          c.fillStyle='#f59e0b'; c.font='11px Inter,sans-serif';
+          c.fillStyle=CT.c('#f59e0b'); c.font='11px Inter,sans-serif';
           c.fillText('Current Fwd PE '+fpe.toFixed(1)+'x', a.left+6, fy-5); c.restore();
         }
       }],
@@ -3716,7 +3716,7 @@ function _buildConfig(key, d, staticData) {
           borderColor: CT.c('#a78bfa'), backgroundColor: 'rgba(167,139,250,0.08)',
           borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 4, fill: 'origin', tension: 0.3, spanGaps: true },
         { ...I18n.label('chart.baseline_100', 'Baseline 100'), data: ref,
-          borderColor: 'rgba(148,163,184,0.35)', backgroundColor: 'transparent',
+          borderColor: CT.c('rgba(148,163,184,0.35)'), backgroundColor: 'transparent',
           borderWidth: 1, pointRadius: 0, borderDash: [4,3], fill: false },
       ]},
       options: {

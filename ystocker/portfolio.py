@@ -192,6 +192,19 @@ def _key(email: str) -> str:
     return "u#" + (email or "").strip().lower()
 
 
+def _policy_key(email: str) -> str:
+    """Partition key for the limits, on its own row.
+
+    Deliberately **not** another attribute on the ``u#`` item. :func:`save` is a
+    whole-item ``put_item`` — that is what makes a CSV import atomic — so a policy
+    stored alongside the positions would be erased by the very next import, and
+    silently: the write would succeed, the page would still render, and the limits
+    would simply be gone. A separate row costs one extra read and cannot be
+    clobbered by a position write at all.
+    """
+    return "p#" + (email or "").strip().lower()
+
+
 def _get_table():
     """The assets table, or None when DynamoDB is unreachable.
 
@@ -373,3 +386,158 @@ def remove(email: str, symbol: str) -> list[dict[str, Any]]:
 def clear(email: str) -> None:
     """Delete every position for this user."""
     save(email, [])
+
+
+# ---------------------------------------------------------------------------
+# The policy — stated limits, which are not derivable from the holdings
+# ---------------------------------------------------------------------------
+
+#: Holding-type tags a user may attach to a symbol. An allowlist rather than free
+#: text because these are read by ``exposure.PortfolioPolicy`` and shown in the UI;
+#: an arbitrary string would render as an unlabelled chip and mean nothing to a
+#: second reader.
+HOLDING_TYPES = ("core", "tactical")
+
+#: Ceiling on tagged symbols, so the policy row cannot grow unbounded. Well past
+#: :data:`MAX_POSITIONS` is pointless — a tag on a symbol you do not hold is inert.
+MAX_HOLDING_TYPES = MAX_POSITIONS
+
+#: What a user who has never opened the form has. Every limit unset, because an
+#: absent limit must not read as a satisfied one — ``exposure.assess`` emits no
+#: check at all for ``None`` rather than defaulting to some house number the user
+#: never agreed to.
+DEFAULT_POLICY: dict[str, Any] = {
+    "max_single_name_pct": None,
+    "max_issuer_pct": None,
+    "cash": 0.0,
+    "holding_types": {},
+}
+
+
+def _pct_or_none(value: Any) -> Optional[float]:
+    """A percentage in (0, 100], or None for "not stated".
+
+    Zero is rejected rather than stored: a 0% limit means "hold none of anything",
+    which is never what somebody typing into a form meant, and it would mark every
+    position a breach. An out-of-range value is dropped to None for the same reason
+    the whole module fails closed — a limit nobody can satisfy is worse than no
+    limit, because the page would then be permanently red.
+    """
+    out = _num(value)
+    if out is None or out <= 0 or out > 100:
+        return None
+    return round(out, 4)
+
+
+def normalise_policy(raw: dict[str, Any]) -> dict[str, Any]:
+    """One policy, cleaned for storage. Unknown keys are dropped.
+
+    A whitelist on the same terms as :func:`normalise`, and it runs on read as
+    well as write, so a field injected straight into DynamoDB cannot survive a
+    round trip.
+    """
+    from ystocker.portfolio_csv import normalise_symbol
+
+    if not isinstance(raw, dict):
+        return dict(DEFAULT_POLICY)
+
+    out: dict[str, Any] = {
+        "max_single_name_pct": _pct_or_none(raw.get("max_single_name_pct")),
+        "max_issuer_pct": _pct_or_none(raw.get("max_issuer_pct")),
+    }
+
+    cash = _num(raw.get("cash"))
+    out["cash"] = round(cash, 2) if cash is not None and cash >= 0 else 0.0
+
+    types: dict[str, str] = {}
+    for key, value in (raw.get("holding_types") or {}).items():
+        if len(types) >= MAX_HOLDING_TYPES:
+            break
+        symbol = normalise_symbol(key)
+        tag = str(value or "").strip().lower()
+        if symbol and tag in HOLDING_TYPES:
+            types[symbol] = tag
+    out["holding_types"] = types
+    return out
+
+
+def load_policy(email: str) -> dict[str, Any]:
+    """This user's stated limits, or :data:`DEFAULT_POLICY` if they set none.
+
+    Fails closed like :func:`load`, and for a sharper reason: a policy that reads
+    as absent does not just look empty, it turns every limit check off. A page
+    quietly reporting no breaches because the store was unreachable is worse than
+    one saying it could not check.
+    """
+    email = (email or "").strip().lower()
+    if not email:
+        return dict(DEFAULT_POLICY)
+
+    table = _get_table()
+    if table is None:
+        if not LOCAL_STORE:
+            raise StoreUnavailable(
+                "Your position limits could not be loaded, so nothing was "
+                "checked against them. Please retry shortly.")
+        with _local_lock:
+            stored = _local_read().get(_policy_key(email), {}).get("policy")
+        return normalise_policy(stored or {})
+
+    try:
+        resp = table.get_item(Key={"id": _policy_key(email)}, ConsistentRead=True)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("portfolio: policy read failed for %s: %s", email, exc)
+        raise StoreUnavailable(
+            "Your position limits could not be read. Please retry shortly."
+        ) from exc
+
+    item = resp.get("Item")
+    if not item:
+        return dict(DEFAULT_POLICY)
+    raw = item.get("policy_json")
+    if not raw:
+        return dict(DEFAULT_POLICY)
+    try:
+        data = json.loads(raw)
+    except (TypeError, ValueError) as exc:
+        log.warning("portfolio: unparseable policy for %s: %s", item.get("id"), exc)
+        return dict(DEFAULT_POLICY)
+    return normalise_policy(data if isinstance(data, dict) else {})
+
+
+def save_policy(email: str, policy: dict[str, Any]) -> dict[str, Any]:
+    """Replace this user's limits wholesale. Returns what was stored."""
+    email = (email or "").strip().lower()
+    if not email:
+        raise StoreUnavailable("Not signed in")
+
+    cleaned = normalise_policy(policy)
+    body = json.dumps(cleaned, ensure_ascii=False, separators=(",", ":"))
+
+    table = _get_table()
+    if table is None:
+        if not LOCAL_STORE:
+            raise StoreUnavailable(
+                "Your limits could not be saved. Please retry shortly.")
+        with _local_lock:
+            data = _local_read()
+            data[_policy_key(email)] = {"email": email, "policy": cleaned,
+                                        "updated_at": int(time.time())}
+            _local_write(data)
+        return cleaned
+
+    from decimal import Decimal
+    try:
+        table.put_item(Item={
+            "id": _policy_key(email),
+            "email": email,
+            "policy_json": body,
+            "updated_at": Decimal(str(int(time.time()))),
+        })
+    except Exception as exc:  # noqa: BLE001
+        log.warning("portfolio: policy save failed for %s: %s", email, exc)
+        raise StoreUnavailable(
+            "Your limits could not be saved. Please retry shortly.") from exc
+
+    log.info("portfolio: saved policy for %s", email)
+    return cleaned

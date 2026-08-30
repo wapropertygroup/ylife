@@ -199,6 +199,11 @@ def _load_secrets_from_ssm() -> None:
 
     SSM_PARAMS = {
         "/ystocker/GEMINI_API_KEY":     "GEMINI_API_KEY",
+        # Second /agents provider, so a reader can pick something other than
+        # Gemini. Optional: absent, agent_models reports DeepSeek unavailable and
+        # the picker disables those rows rather than offering a run that would
+        # die on a missing credential.
+        "/ystocker/DEEPSEEK_API_KEY":   "DEEPSEEK_API_KEY",
         "/ystocker/FRED_API_KEY":       "FRED_API_KEY",
         "/ystocker/YOUTUBE_API_KEY":    "YOUTUBE_API_KEY",
         "/ystocker/SES_FROM_EMAIL":     "SES_FROM_EMAIL",

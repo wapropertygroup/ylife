@@ -699,6 +699,50 @@ Started in `create_app()`, all daemon threads:
   a network" and is not worth acting on. The verdict is re-read at the moment of
   release, not carried over from the start of the pull.
 
+- **Auto-refresh for a tab left open**: `static/autorefresh.js`, mounted only by
+  `/housing` so far via `AutoRefresh.watch({meta, stamp})`. The server side of
+  these dashboards already refreshes itself — housing re-downloads its eight
+  upstreams every 24h from a background thread — but the *browser* never learned,
+  so a tab opened on Tuesday still rendered Tuesday's payload on Thursday under a
+  header confidently reading "Data as of Tuesday". Nothing was broken and nothing
+  said so. Tests: `node tests/check_autorefresh.mjs` (35, no browser).
+
+  Four things hold it together:
+
+  - **It polls a stamp, not the payload.** `/api/housing` is 361 KB raw and ~100
+    KB gzipped; polling *that* to answer "is there anything new" costs ~17 MB a
+    day per open tab for data that changes once a day. `/api/housing/meta` is 43
+    bytes and touches no upstream — two lock reads. It never 500s either: a stamp
+    that cannot be read is indistinguishable from "nothing new", and erroring
+    would only teach the client to back off from a page that is rendering fine.
+  - **It reloads rather than re-rendering in place.** `housing.html` builds ~19
+    Chart.js instances inside a single `async` IIFE closed over `data`, so there
+    is no `render()` to call twice — but the deciding reason is that a *partial*
+    in-place update on a numbers dashboard is worse than none: a KPI tile showing
+    today above a chart still showing yesterday is wrong without looking wrong.
+    A reload renders everything at one vintage, and the page's own cold-start path
+    already reloads when data lands.
+  - **A stamp disagreement between workers must not become a reload loop.** Under
+    `--preload` the refresh thread lives in the master, so a forked worker serves
+    the snapshot it inherited until it is recycled, and `get_cache_ts()` never
+    consults disk once it holds one. So two workers can disagree, and "stamp
+    differs → reload" ping-pongs forever between the one that has the new payload
+    and the one that does not. Three guards: the stamp must be strictly *greater*
+    than the rendered one, the stamp it reloaded *for* is recorded in
+    `sessionStorage` (which has to survive the very reload it authorises, so a
+    variable will not do), and `MIN_GAP_MS` floors two reloads at 5 minutes.
+  - **It does not yank the page out from under a reader.** A reload discards
+    scroll position, the metro selection, every chart's range button and any open
+    AI explanation. An interaction inside the last 60s therefore turns the reload
+    into a dismissible offer, and the automatic path is reserved for a tab being
+    *returned to* — which is the case the module exists for, and why the
+    `visibilitychange` check matters more than the 30-minute timer (hidden tabs
+    have their timers throttled to roughly once a minute). Dismissing claims the
+    stamp, so the same news does not reappear every interval all day. The pill's
+    text is set from JS, where `I18n.apply()` cannot reach it, so it re-reads its
+    labels on `i18n:langchange` as well — otherwise an English pill ends up on a
+    page switched to Chinese.
+
 ### Auth
 - yPlanner/yTracker: Google Sign-In + Apple Sign-In → Flask session → DynamoDB users table
 - yStocker/yPlanter/yHome: Public, no auth

@@ -702,6 +702,35 @@ window.YSTime = (function () {
 @media (prefers-reduced-motion: reduce) {
   .ag-sel-chev { transition: none; }
 }
+/* ── Run options: model + thinking ──────────────────────────────────────────
+   A row of their own rather than two more columns in .ag-form-grid, whose
+   template is declared in three places (the grid plus two width breakpoints) —
+   widening it means keeping three lists in step, and these two controls belong
+   beside each other anyway. */
+.ag-run-opts { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 14px; }
+.ag-run-opt { display: flex; flex-direction: column; min-width: 0; }
+/* Left-aligned menu. The status filter sits at its panel's right edge and hangs
+   the menu off that corner; these sit at the left, where right: 0 would push a
+   menu wider than its trigger out past the card's left border. */
+.ag-sel-left .ag-sel-menu { right: auto; left: 0; }
+/* A provider with no credential on this box. Dimmed *and* labelled: dimming
+   alone reads as a rendering artefact, and the label is what tells a reader who
+   came looking for DeepSeek that it is absent by configuration rather than
+   missing from the list. Contrast stays at the muted-text floor rather than
+   going paler — see the light-mode note in CLAUDE.md. */
+.ag-sel-opt[data-unavailable] { cursor: not-allowed; color: var(--ag-ink-faint); }
+.ag-sel-opt[data-unavailable]:hover,
+.ag-sel-opt[data-unavailable].is-active { background: none; color: var(--ag-ink-faint); }
+.ag-sel-na {
+  font-style: normal; font-size: 10px; margin-left: auto; padding-left: 12px;
+  text-transform: uppercase; letter-spacing: .04em; color: var(--ag-ink-faint);
+}
+/* The thinking control while the chosen provider has no such parameter. Kept in
+   the layout rather than removed, so switching model does not reflow the row and
+   move the Run button out from under the pointer. */
+.ag-sel.is-disabled { opacity: .55; }
+.ag-sel.is-disabled .ag-sel-btn { cursor: not-allowed; }
+.ag-sel-opt[hidden] { display: none; }
 .ag-search-meta {
   color: var(--ag-ink-faint); font-size: 11px; margin-bottom: 10px;
   font-variant-numeric: tabular-nums;
@@ -1264,6 +1293,92 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
     </div>
     {% endif %}
   </div>
+  {% if agent_env.model_choice_enabled %}
+  {# Model + thinking. Two listboxes rather than <select>s, for the reason given
+     at the status filter below: the native option list is drawn by the OS and
+     cannot carry this page's palette. Both drive a hidden input, so the submit
+     handler reads a value exactly as it would from a <select>.
+
+     Every option's value is a *table key* from agent_models.CHOICES, never a
+     model id — a model id the client made up would reach the child process and
+     die deep inside the vendor SDK minutes into a paid run, because
+     TradingAgents only warns on an unknown model. #}
+  <div class="ag-run-opts">
+    <div class="ag-run-opt">
+      <label class="block text-xs text-slate-500 mb-1" for="agModelBtn"
+             data-i18n="agents.model_label">Model</label>
+      <div class="ag-sel ag-sel-left" id="agModelSel">
+        <input type="hidden" id="agModel" value="" autocomplete="off">
+        <button type="button" class="ag-sel-btn" id="agModelBtn"
+                aria-haspopup="listbox" aria-expanded="false" aria-controls="agModelMenu">
+          <span class="ag-sel-label">—</span>
+          <svg class="ag-sel-chev" viewBox="0 0 12 8" aria-hidden="true">
+            <path d="M1 1.6 6 6.4l5-4.8" fill="none" stroke="currentColor"
+                  stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+        <div class="ag-sel-menu" id="agModelMenu" role="listbox" tabindex="-1"
+             aria-label="Model" hidden>
+          {# Offered only when this box is configured for a triple the table
+             cannot name, so the reader is never shown two rows that do the same
+             thing. Its thinking set is empty on purpose: with no choice sent,
+             resolve_models() returns the deployment's own level and ignores any
+             thinking value, so an enabled control there would do nothing. #}
+          {% if not agent_env.model_choice_default %}
+          <div class="ag-sel-opt" role="option" id="agModelOpt0" data-value=""
+               aria-selected="true" data-thinking="" data-thinking-default="">
+            <span data-i18n="agents.model_server_default">Server default</span>
+          </div>
+          {% endif %}
+          {% for m in agent_env.model_choices %}
+          <div class="ag-sel-opt" role="option" id="agModelOpt{{ loop.index }}"
+               data-value="{{ m.key }}"
+               aria-selected="false"
+               data-thinking="{{ m.thinking | join(',') }}"
+               data-thinking-default="{{ m.thinking_default }}"
+               {% if not m.available %}data-unavailable="1" aria-disabled="true"{% endif %}>
+            <span data-i18n="{{ m.label_key }}">{{ m.label }}</span>
+            {% if not m.available %}
+            <em class="ag-sel-na" data-i18n="agents.model_unavailable">not configured</em>
+            {% endif %}
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+    <div class="ag-run-opt">
+      <label class="block text-xs text-slate-500 mb-1" for="agThinkBtn"
+             data-i18n="agents.thinking_label">Thinking</label>
+      <div class="ag-sel ag-sel-left" id="agThinkSel">
+        <input type="hidden" id="agThink" value="" autocomplete="off">
+        <button type="button" class="ag-sel-btn" id="agThinkBtn"
+                aria-haspopup="listbox" aria-expanded="false" aria-controls="agThinkMenu">
+          <span class="ag-sel-label">—</span>
+          <svg class="ag-sel-chev" viewBox="0 0 12 8" aria-hidden="true">
+            <path d="M1 1.6 6 6.4l5-4.8" fill="none" stroke="currentColor"
+                  stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+        {# All four levels are rendered and the model's own set decides which stay
+           visible. Which levels a model accepts differs per model and the
+           mismatch is silent — "medium" on Gemini Pro is forwarded to the API
+           verbatim and rejected — so the visible set is filtered from the
+           selected option's data-thinking rather than assumed here. #}
+        <div class="ag-sel-menu" id="agThinkMenu" role="listbox" tabindex="-1"
+             aria-label="Thinking level" hidden>
+          <div class="ag-sel-opt" role="option" id="agThinkOpt0" data-value="minimal"
+               aria-selected="false"><span data-i18n="agents.think_minimal">Minimal</span></div>
+          <div class="ag-sel-opt" role="option" id="agThinkOpt1" data-value="low"
+               aria-selected="false"><span data-i18n="agents.think_low">Low</span></div>
+          <div class="ag-sel-opt" role="option" id="agThinkOpt2" data-value="medium"
+               aria-selected="false"><span data-i18n="agents.think_medium">Medium</span></div>
+          <div class="ag-sel-opt" role="option" id="agThinkOpt3" data-value="high"
+               aria-selected="true"><span data-i18n="agents.think_high">High</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
   {# Shown once the free runs are gone and nothing is banked. Hidden by default
      so it never flashes on a page that has runs available. #}
   <div id="agBuy" class="hidden mt-4 rounded-xl border border-indigo-200/70 dark:border-indigo-800/70 bg-indigo-50 dark:bg-indigo-950/30 p-4">
@@ -1283,8 +1398,15 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
   <p class="text-xs text-slate-500 dark:text-slate-600 mt-3">
     <span data-i18n="agents.cost_warning">A real run takes several minutes and spends API credits. One run executes at a time; others queue.</span>
     <span data-i18n="agents.timeout_is">Timeout</span>: {{ (agent_env.timeout_sec | int) // 60 }}&nbsp;min.
+    {% if agent_env.model_choice_enabled %}
+    {#- The model and the thinking level are live controls above, so this line
+        reports only what is still fixed. Repeating them here as static text put
+        a second, stale answer next to the control that owns them. #}
+    &nbsp;·&nbsp; <span data-i18n="agents.depth_is">Depth</span>: {{ agent_env.debate_rounds }}+{{ agent_env.risk_rounds }} <span data-i18n="agents.rounds">rounds</span>
+    {% else %}
     &nbsp;·&nbsp; <span data-i18n="agents.model_is">Model</span>: {{ agent_env.provider }} / {{ agent_env.deep_model }}
     &nbsp;·&nbsp; <span data-i18n="agents.depth_is">Depth</span>: {{ agent_env.debate_rounds }}+{{ agent_env.risk_rounds }} <span data-i18n="agents.rounds">rounds</span>, thinking={{ agent_env.thinking }}
+    {% endif %}
     &nbsp;·&nbsp; <span data-i18n="agents.lang_is">Report language</span>:
     {#- Follows the language toggle, because that is what the run will follow.
         Rendered client-side rather than from the request: the language can come

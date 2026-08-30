@@ -83,8 +83,28 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <meta name="apple-mobile-web-app-title" content="trade-agents">
 
-  <!-- Tailwind CSS (compiled — regenerate with: bash build_css.sh) -->
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind.css') }}">
+  <!-- Tailwind CSS (compiled — regenerate with: bash build_css.sh)
+
+       The ?v= is load-bearing, not decoration. sw.js serves the whole /static/
+       tree **cache first**, and says in its own header comment that this is
+       "safe only because every asset URL carries ?v=<cache_bust>". This link was
+       the one exception, so /static/css/tailwind.css was a stable URL under a
+       cache-first worker: pinned for the life of the ta-v1 cache generation,
+       which only a hand-edit of CACHE_VERSION rotates. nginx pins it too, at
+       max-age=604800.
+
+       Stale *here* does not degrade gracefully, because this bundle is compiled:
+       a utility exists only if some template used it at build time. The
+       light-mode pass (da5b7a5) rewrote every hardcoded colour into a pair
+       (`bg-white dark:bg-slate-900`) and grew the bundle from 124 `dark:`
+       variants to 246. A reader holding the pre-migration copy therefore gets
+       fresh HTML — navigations are network-first — asking for 122 dark overrides
+       that their stylesheet does not contain, so the light half of each pair
+       wins and the page renders light-mode *while* <html> carries class="dark".
+       CT.dark reads that same class and is true, so the canvases paint dark. The
+       symptom is a dark-mode page with light-mode chart cards, and it is
+       invisible to anyone whose cache is cold. -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind.css') }}?v={{ cache_bust or 'dev' }}">
 
   <!-- Feed autodiscovery: lets an RSS reader or calendar client find these
        from any page rather than needing the URL typed in. -->
@@ -167,20 +187,63 @@
       '#fbbf24': '#d97706',              // amber
       '#fb923c': '#ea580c',              // orange
 
+      // Second rung, for the hues where 600 does not clear 3:1 on white.
+      // Yellow is the case that forces the exception: yellow-600 (#ca8a04) is
+      // 2.94:1, so a yellow-400 series line stayed illegible even after being
+      // mapped. 700 is the first rung that clears the bar for it.
+      '#facc15': '#a16207',              // yellow-400 -> 700 (600 is 2.94:1)
+      '#22d3ee': '#0891b2',              // cyan-400 -> 600
+      '#60a5fa': '#2563eb',              // blue-400 -> 600
+      '#fb7185': '#e11d48',              // rose-400 -> 600
+      '#f59e0b': '#d97706',              // amber-500 -> 600
+      '#f97316': '#ea580c',              // orange-500 -> 600
+      '#818cf8': '#4f46e5',              // indigo-400 -> 600
+      '#c4b5fd': '#7c3aed',              // violet-300 -> 600
+      '#bae6fd': '#0284c7',              // sky-200 -> 600
+      '#0ea5e9': '#0284c7',              // sky-500 -> 600
+
       // Semantic axis/series hues: Tailwind 400 -> 600, alpha raised because
-      // 60% of a 400-level colour is close to invisible on white.
-      'rgba(248,113,113,0.5)':'rgba(220,38,38,0.75)',   // red
+      // 60% of a 400-level colour is close to invisible on white. The rule is
+      // alpha + 0.25, floored at whatever that hue needs to reach 3:1 — so a
+      // deliberately faint reference line stays the faintest thing on the chart
+      // without becoming a line the reader cannot see. Amber and emerald hit the
+      // floor rather than the +0.25, which is why their alphas bunch up at the
+      // top: at 600 they need 0.95 and 0.85 respectively before they clear it.
+      'rgba(248,113,113,0.35)':'rgba(220,38,38,0.7)',   // red
+      'rgba(248,113,113,0.4)':'rgba(220,38,38,0.7)',
+      'rgba(248,113,113,0.5)':'rgba(220,38,38,0.75)',
       'rgba(248,113,113,0.6)':'rgba(220,38,38,0.85)',
       'rgba(248,113,113,0.7)':'rgba(220,38,38,0.9)',
-      'rgba(56,189,248,0.6)': 'rgba(2,132,199,0.85)',   // sky
-      'rgba(52,211,153,0.5)': 'rgba(5,150,105,0.75)',   // emerald
+      'rgba(239,68,68,0.45)': 'rgba(220,38,38,0.7)',    // red-500
+      'rgba(244,63,94,0.4)':  'rgba(225,29,72,0.7)',    // rose-500
+      'rgba(56,189,248,0.4)': 'rgba(2,132,199,0.8)',    // sky
+      'rgba(56,189,248,0.6)': 'rgba(2,132,199,0.85)',
+      'rgba(52,211,153,0.35)':'rgba(5,150,105,0.85)',   // emerald
+      'rgba(52,211,153,0.4)': 'rgba(5,150,105,0.85)',
+      'rgba(52,211,153,0.45)':'rgba(5,150,105,0.85)',
+      'rgba(52,211,153,0.5)': 'rgba(5,150,105,0.85)',
       'rgba(52,211,153,0.6)': 'rgba(5,150,105,0.85)',
-      'rgba(251,191,36,0.6)': 'rgba(217,119,6,0.85)',   // amber
-      'rgba(251,191,36,0.7)': 'rgba(217,119,6,0.9)',
-      'rgba(245,158,11,0.6)': 'rgba(217,119,6,0.85)',
-      'rgba(167,139,250,0.6)':'rgba(124,58,237,0.85)',  // violet
+      'rgba(34,211,153,0.7)': 'rgba(5,150,105,0.95)',   // near-emerald variant
+      'rgba(251,191,36,0.3)': 'rgba(217,119,6,0.95)',   // amber
+      'rgba(251,191,36,0.4)': 'rgba(217,119,6,0.95)',
+      'rgba(251,191,36,0.6)': 'rgba(217,119,6,0.95)',
+      'rgba(251,191,36,0.7)': 'rgba(217,119,6,1)',
+      'rgba(245,158,11,0.6)': 'rgba(217,119,6,0.95)',
+      'rgba(167,139,250,0.5)':'rgba(124,58,237,0.75)',  // violet
+      'rgba(167,139,250,0.6)':'rgba(124,58,237,0.85)',
       'rgba(167,139,250,0.7)':'rgba(124,58,237,0.9)',
-      'rgba(251,146,60,0.6)': 'rgba(234,88,12,0.85)',   // orange
+      'rgba(251,146,60,0.6)': 'rgba(234,88,12,0.95)',   // orange
+      'rgba(99,102,241,0.75)':'rgba(79,70,229,1)',      // indigo
+      // Slate, for zero lines and unhighlighted comparison series. These are the
+      // one family where the source alpha spans 0.3 to 0.9, so the ordering has
+      // to survive the mapping or six deliberately distinct weights collapse
+      // into one flat grey.
+      'rgba(148,163,184,0.3)': 'rgba(71,85,105,0.65)',
+      'rgba(148,163,184,0.35)':'rgba(71,85,105,0.65)',
+      'rgba(148,163,184,0.55)':'rgba(71,85,105,0.8)',
+      'rgba(148,163,184,.6)':  'rgba(71,85,105,0.85)',
+      'rgba(148,163,184,0.7)': 'rgba(71,85,105,0.95)',
+      'rgba(148,163,184,0.9)': 'rgba(71,85,105,1)',
     };
 
     function c(color) {
@@ -471,9 +534,11 @@
         <a href="{{ url_for('main.videos') }}"
            class="px-3 py-1.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition"
            data-i18n="nav.videos">Videos</a>
-        <a href="{{ url_for('main.guide') }}"
-           class="px-3 py-1.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition"
-           data-i18n="nav.guide">Guide</a>
+        {# Guide moved into the account dropdown, and into the footer so that a
+           signed-out reader still has a link to it — the dropdown only renders
+           for a signed-in session, and the guide documents the agent packs,
+           which is exactly what somebody who has not signed in yet is reading
+           it for. #}
       </nav>
 
       <!-- Refresh button + Language toggle -->
@@ -570,6 +635,15 @@
                 <path stroke-linecap="round" stroke-linejoin="round" d="M4 19V9m5 10V5m5 14v-7m5 7V3"/>
               </svg>
               <span data-i18n="nav.assets">Assets</span>
+            </a>
+            <a href="{{ url_for('main.guide') }}" role="menuitem"
+               class="flex items-center gap-2.5 px-3.5 py-2 text-sm text-slate-600 dark:text-slate-300
+                      hover:text-slate-900 dark:hover:text-white hover:bg-brand/10 transition">
+              <svg class="w-4 h-4 text-brand" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round"
+                      d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.247m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.247"/>
+              </svg>
+              <span data-i18n="nav.guide">Guide</span>
             </a>
             <div class="mx-3 my-1 border-t border-slate-200 dark:border-slate-800"></div>
             <button type="button" role="menuitem"
@@ -738,7 +812,6 @@
           {# Daily was absent from the mobile list entirely while desktop had it. #}
           <a href="{{ url_for('main.daily_report') }}" class="px-3 py-2 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 truncate" data-i18n="nav.daily">Daily</a>
           <a href="{{ url_for('main.videos') }}"       class="px-3 py-2 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 truncate" data-i18n="nav.videos">Videos</a>
-          <a href="{{ url_for('main.guide') }}"        class="px-3 py-2 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 truncate" data-i18n="nav.guide">Guide</a>
         </div>
 
         <a id="refreshBtnMobile" href="{{ refresh_url }}" class="px-3 py-2.5 rounded-md text-sm text-brand hover:bg-slate-100 dark:hover:bg-slate-800 mt-1" data-i18n="nav.refresh">↻ Refresh</a>
@@ -765,6 +838,16 @@
             <path stroke-linecap="round" stroke-linejoin="round" d="M4 19V9m5 10V5m5 14v-7m5 7V3"/>
           </svg>
           <span data-i18n="nav.assets">Assets</span>
+        </a>
+        <a x-show="user && user.email" x-cloak
+           href="{{ url_for('main.guide') }}"
+           class="flex items-center gap-2 px-3 py-2.5 rounded-md text-sm text-slate-600 dark:text-slate-300
+                  hover:bg-slate-100 dark:hover:bg-slate-800">
+          <svg class="w-4 h-4 text-brand" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.247m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.247"/>
+          </svg>
+          <span data-i18n="nav.guide">Guide</span>
         </a>
         {% endif %}
         <div x-show="user && user.email" class="flex items-center gap-2 px-3 py-2.5 border-t border-slate-200 dark:border-slate-800 mt-1 pt-3" x-cloak>
@@ -838,6 +921,16 @@
   {% if not _agents_embedded %}
   <footer class="border-t border-slate-200 dark:border-slate-800 py-4 text-center text-xs text-slate-500 dark:text-slate-600">
     <span data-i18n="footer.text">{{ brand_name }} — data via Yahoo Finance</span> &nbsp;·&nbsp;
+    {#
+      Guide is in the footer as well as the account dropdown, and the footer copy
+      is the one that must not be removed: the dropdown is inside
+      `{% if current_user.email %}`, so it is the only link a signed-out reader
+      has to the page that explains the agent packs.
+      Reuses `nav.guide` rather than minting `footer.guide` — same word, and one
+      key cannot drift from the other.
+    #}
+    <a href="{{ url_for('main.guide') }}" class="hover:text-brand transition" data-i18n="nav.guide">Guide</a>
+    &nbsp;·&nbsp;
     <a href="{{ url_for('main.contact') }}" class="hover:text-brand transition" data-i18n="footer.contact">Contact Us</a>
     &nbsp;·&nbsp;
     <a href="{{ url_for('main.rss_feed') }}" class="hover:text-brand transition"

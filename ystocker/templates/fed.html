@@ -1475,7 +1475,7 @@ let _fedSeriesData = {};
         type: 'line',
         data: { labels: t10yie.dates.slice(-500), datasets: [
           { label:'Breakeven', data:t10yie.values.slice(-500), borderColor:CT.c('#fbbf24'), backgroundColor:'rgba(251,191,36,0.07)', borderWidth:1.5, pointRadius:0, fill:true, tension:0.3, spanGaps:true },
-          { label:'2% Target', data:new Array(Math.min(t10yie.dates.length,500)).fill(2), borderColor:'rgba(52,211,153,0.4)', backgroundColor:'transparent', borderWidth:1, pointRadius:0, borderDash:[4,3] },
+          { label:'2% Target', data:new Array(Math.min(t10yie.dates.length,500)).fill(2), borderColor:CT.c('rgba(52,211,153,0.4)'), backgroundColor:'transparent', borderWidth:1, pointRadius:0, borderDash:[4,3] },
         ]},
         options:{
           responsive:true,maintainAspectRatio:false,
@@ -2033,7 +2033,7 @@ let _fedSeriesData = {};
           {
             label: I18n.t('fed.stat_reserves') || 'Reserve Balances',
             data: bd.res.values,
-            borderColor: '#f59e0b', backgroundColor: 'transparent',
+            borderColor: CT.c('#f59e0b'), backgroundColor: 'transparent',
             borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 4, fill: false, tension: 0.3, spanGaps: true,
             borderDash: [4, 3],
           },
@@ -2159,13 +2159,13 @@ let _fedSeriesData = {};
             {
               label: I18n.t('fed.chart_onrrp') || 'ON RRP ($B)',
               data: ld.rrp.values,
-              borderColor: '#fb7185', backgroundColor: 'rgba(251,113,133,0.07)',
+              borderColor: CT.c('#fb7185'), backgroundColor: 'rgba(251,113,133,0.07)',
               borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, fill: true, tension: 0.3, spanGaps: true,
             },
             {
               label: I18n.t('fed.chart_tga') || 'TGA ($B)',
               data: ld.tga.values,
-              borderColor: '#facc15', backgroundColor: 'transparent',
+              borderColor: CT.c('#facc15'), backgroundColor: 'transparent',
               borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 4, fill: false, tension: 0.3, spanGaps: true,
               borderDash: [4, 3],
             },
@@ -2240,7 +2240,7 @@ let _fedSeriesData = {};
             {
               label: I18n.t('fed.chart_fedloans') || 'Fed Loans incl. BTFP ($B)',
               data: cld.loan.values,
-              borderColor: '#f97316', backgroundColor: 'transparent',
+              borderColor: CT.c('#f97316'), backgroundColor: 'transparent',
               borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 4, fill: false, tension: 0.3, spanGaps: true,
               yAxisID: 'yLoan',
             },
@@ -2270,7 +2270,7 @@ let _fedSeriesData = {};
             },
             yLoan: {
               type: 'linear', position: 'right',
-              grid:{drawOnChartArea:false}, ticks:{color:'#f97316', callback: v => '$'+v+'B'}
+              grid:{drawOnChartArea:false}, ticks:{color:CT.c('#f97316'), callback: v => '$'+v+'B'}
             },
           },
           interaction: { mode:'index', intersect:false },
@@ -2361,7 +2361,7 @@ let _fedSeriesData = {};
             {
               label: I18n.t('fed.curr_speed_trend_4w')  || '4W ann. %',
               data: csd.r4,
-              borderColor: '#fb7185', backgroundColor: 'transparent',
+              borderColor: CT.c('#fb7185'), backgroundColor: 'transparent',
               borderWidth: 1, pointRadius: 0, pointHoverRadius: 4,
               fill: false, tension: 0.3, spanGaps: true, borderDash: [3, 3],
             },
@@ -2506,7 +2506,7 @@ let _fedSeriesData = {};
         });
         new Chart(document.getElementById('spyTnxChart'), {
           type: 'line',
-          data: { labels: ratioDates.slice(-500), datasets: [{ ...I18n.label('chart.spy_10y_ratio', 'SPY / 10Y Ratio'), data: ratioValues.slice(-500), borderColor: '#60a5fa', backgroundColor: 'rgba(96,165,250,0.08)', borderWidth: 2, pointRadius: 0, fill: true, tension: 0.3, spanGaps: true }]},
+          data: { labels: ratioDates.slice(-500), datasets: [{ ...I18n.label('chart.spy_10y_ratio', 'SPY / 10Y Ratio'), data: ratioValues.slice(-500), borderColor: CT.c('#60a5fa'), backgroundColor: 'rgba(96,165,250,0.08)', borderWidth: 2, pointRadius: 0, fill: true, tension: 0.3, spanGaps: true }]},
           options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false } }, scales: { x: { grid: { color: CT.c('#1e293b') }, ticks: { color: CT.c('#64748b'), maxTicksLimit: 6, maxRotation: 0 } }, y: { grid: { color: CT.c('#1e293b') }, ticks: { color: CT.c('#64748b') } } }, interaction: { mode: 'index', intersect: false } },
         });
       }
@@ -2556,7 +2556,7 @@ let _fedSeriesData = {};
           type: 'line',
           data: { labels: cDates, datasets: [
             { ...I18n.label('chart.indpro', 'Industrial Production'), data:cIndproVals, borderColor:CT.c('#34d399'), backgroundColor:'rgba(52,211,153,0.07)', borderWidth:1.5, pointRadius:0, fill:true, tension:0.3, spanGaps:true, yAxisID:'y' },
-            { ...I18n.label('chart.housing_starts', 'Housing Starts'), data:cHousVals,   borderColor:'#f59e0b', backgroundColor:'transparent',           borderWidth:1.5, pointRadius:0, fill:false,tension:0.3, spanGaps:true, yAxisID:'yH', borderDash:[4,3] },
+            { ...I18n.label('chart.housing_starts', 'Housing Starts'), data:cHousVals,   borderColor:CT.c('#f59e0b'), backgroundColor:'transparent',           borderWidth:1.5, pointRadius:0, fill:false,tension:0.3, spanGaps:true, yAxisID:'yH', borderDash:[4,3] },
           ]},
           options: {
             responsive:true, maintainAspectRatio:false,
@@ -2656,7 +2656,7 @@ let _fedSeriesData = {};
         _m2InflChart = new Chart(document.getElementById('m2InflChart'), {
           type:'line',
           data:{labels:m2Dates.slice(idx), datasets:[
-            {label:'M2 Growth YoY%',data:m2YoY.slice(idx),borderColor:'#22d3ee',backgroundColor:'rgba(34,211,238,0.07)',borderWidth:1.5,pointRadius:0,fill:true,tension:0.3,spanGaps:true,yAxisID:'y'},
+            {label:'M2 Growth YoY%',data:m2YoY.slice(idx),borderColor:CT.c('#22d3ee'),backgroundColor:'rgba(34,211,238,0.07)',borderWidth:1.5,pointRadius:0,fill:true,tension:0.3,spanGaps:true,yAxisID:'y'},
             {label:'10Y Breakeven',data:bieAligned.slice(idx),borderColor:CT.c('#fbbf24'),backgroundColor:'transparent',borderWidth:1.5,pointRadius:0,fill:false,tension:0.3,spanGaps:true,yAxisID:'y',borderDash:[4,3]},
           ]},
           options:{responsive:true,maintainAspectRatio:false, plugins:{legend:{display:false},tooltip:{mode:'index',intersect:false,callbacks:{label:c=>` ${c.dataset.label}: ${c.raw?.toFixed(2)}%`}}}, scales:{x:{grid:{color:gridCol},ticks:{color:tickCol,maxTicksLimit:6,maxRotation:0}},y:{grid:{color:gridCol},ticks:{color:tickCol,callback:v=>(v>=0?'+':'')+v.toFixed(1)+'%'}}}, interaction:{mode:'index',intersect:false}},

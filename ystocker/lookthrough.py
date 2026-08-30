@@ -226,6 +226,73 @@ class Residual:
 
 
 @dataclass
+class Pocket:
+    """One fund's unnamed dollars, plus what its disclosure bounds them to.
+
+    Exists so a caller can put a *ceiling* on one company's exposure without
+    estimating anything. The portfolio-level residual only says "these dollars
+    could be any company"; a top-ten disclosure says considerably more, because it
+    is ordered by weight:
+
+    * A **disclosed** name's weight in this fund is exact — it cannot also be
+      hiding in the undisclosed tail, because the tail is by construction the
+      holdings *outside* the top ten. So a disclosed name draws nothing from here.
+    * An **undisclosed** name's weight is at most :attr:`min_disclosed_weight`.
+      Anything heavier would have made the disclosed set.
+
+    Both deductions need the tail to consist of holdings each listed once, which
+    fails if the tail contains *funds* — a company can hide inside several of them
+    at once. :attr:`flat` records whether that is safe here, and a caller must fall
+    back to the whole of :attr:`hidden_value` when it is False.
+
+    Not included in :meth:`Result.as_dict`: this is in-process metadata for a
+    constraint check, and a fund-by-fund breakdown would multiply the size of a
+    payload the client has no use for.
+    """
+    #: The fund these dollars sit inside.
+    fund: str
+    #: Dollars allocated to this fund node. A fund held twice yields two pockets.
+    fund_value: float
+    #: Dollars inside it that the walk could not name.
+    hidden_value: float
+    #: Smallest disclosed weight as a 0..1 fraction, or None if it disclosed none.
+    min_disclosed_weight: Optional[float]
+    #: Symbols this fund disclosed, upper-cased.
+    disclosed: tuple[str, ...] = ()
+    #: Which residual bucket :attr:`hidden_value` was added to.
+    bucket: str = ""
+    #: True when no disclosed holding of this fund is itself a fund. Set after the
+    #: walk completes, since it depends on what the children turned out to be.
+    flat: bool = True
+
+    def ceiling_for_any(self, symbols: Iterable[str]) -> float:
+        """The most that *symbols*, taken together, could be hiding here.
+
+        Several undisclosed names can each be up to
+        :attr:`min_disclosed_weight`, so a group's allowance scales with how many
+        of its members are undisclosed — but never past :attr:`hidden_value`,
+        which is all the dollars there are.
+        """
+        wanted = {str(s).upper().strip() for s in symbols if str(s).strip()}
+        if not wanted:
+            return 0.0
+        if not self.flat:
+            # A wrapper's tail may hold funds, each of which could hold the name.
+            return self.hidden_value
+        undisclosed = wanted - set(self.disclosed)
+        if not undisclosed:
+            return 0.0
+        if self.min_disclosed_weight is None:
+            return self.hidden_value
+        allowance = self.fund_value * float(self.min_disclosed_weight) * len(undisclosed)
+        return min(self.hidden_value, allowance)
+
+    def ceiling_for(self, symbol: str) -> float:
+        """The most of *symbol* that could be hiding in this pocket, in dollars."""
+        return self.ceiling_for_any((symbol,))
+
+
+@dataclass
 class Result:
     total_value: float
     exposures: list[Exposure]
@@ -233,6 +300,9 @@ class Result:
     per_position: list[dict[str, Any]]
     pending_symbols: list[str]
     notes: list[str]
+    #: Per-fund unnamed dollars with their disclosure bounds. See :class:`Pocket`.
+    #: Sums to ``residual.undisclosed_equity + residual.unclassified``.
+    pockets: list[Pocket] = field(default_factory=list)
 
     @property
     def seen_value(self) -> float:
@@ -346,6 +416,13 @@ def analyse(positions: Iterable[Position],
     per_position: list[dict[str, Any]] = []
     pending: set[str] = set()
     notes: list[str] = []
+    pockets: list[Pocket] = []
+    #: Funds observed to disclose a holding that is itself a fund. Collected during
+    #: the walk rather than probed separately: a child frame that finds itself to be
+    #: a fund knows its parent is ``chain[-1]``, so this costs no extra resolver
+    #: calls. Applied to the pockets afterwards, because a fund's flatness is not
+    #: known until its children have been walked.
+    wrapper_parents: set[str] = set()
     # A one-element list so the recursion can decrement a shared counter without
     # threading a return value through every frame.
     budget = [max(1, int(max_nodes))]
@@ -369,7 +446,8 @@ def analyse(positions: Iterable[Position],
         _walk(symbol=pos.symbol.upper(), name=pos.name, dollars=value,
               root=pos.symbol.upper(), chain=(), depth=0, max_depth=max_depth,
               resolve=resolve, out=pos_leaves, residual=residual,
-              pending=pending, notes=notes, budget=budget)
+              pending=pending, notes=notes, budget=budget, pockets=pockets,
+              wrapper_parents=wrapper_parents)
         leaves.extend(pos_leaves)
 
         seen = sum(l.value for l in pos_leaves if l.kind in _COUNTS_AS_SEEN)
@@ -404,16 +482,22 @@ def analyse(positions: Iterable[Position],
             residual.pending += leaf.value
 
     exposures = _aggregate(leaves)
+    # A fund's flatness depends on what its disclosed holdings turned out to be,
+    # which is only known once the whole walk has finished.
+    for pocket in pockets:
+        if pocket.fund in wrapper_parents:
+            pocket.flat = False
     return Result(total_value=total_value, exposures=exposures, residual=residual,
                   per_position=per_position,
-                  pending_symbols=sorted(pending), notes=notes)
+                  pending_symbols=sorted(pending), notes=notes, pockets=pockets)
 
 
 def _walk(*, symbol: str, name: str, dollars: float, root: str,
           chain: tuple[str, ...], depth: int, max_depth: int,
           resolve: Callable[[str], Optional[dict[str, Any]]],
           out: list[_Leaf], residual: Residual, pending: set[str],
-          notes: list[str], budget: list[int]) -> None:
+          notes: list[str], budget: list[int],
+          pockets: list[Pocket], wrapper_parents: set[str]) -> None:
     """Allocate *dollars* held via *symbol* down to leaves. Appends to *out*."""
     if dollars <= 0:
         return
@@ -462,6 +546,13 @@ def _walk(*, symbol: str, name: str, dollars: float, root: str,
         out.append(_Leaf(symbol, node_name, LEAF_EQUITY, dollars, root, chain))
         return
 
+    # This node is a fund, so whichever fund disclosed it is a wrapper and its own
+    # hidden tail may contain funds too -- which breaks the "a name appears once"
+    # deduction :class:`Pocket` relies on. Recorded from here because the child is
+    # the frame that knows, and this needs no second resolver call.
+    if chain:
+        wrapper_parents.add(chain[-1])
+
     if depth >= max_depth:
         out.append(_Leaf(symbol, node_name, LEAF_TRUNCATED, dollars, root, chain))
         notes.append(f"{root}: depth limit at {symbol} — not looked through further")
@@ -487,10 +578,25 @@ def _walk(*, symbol: str, name: str, dollars: float, root: str,
     if stock is None:
         # No asset-class data: the residual is real but its nature is unknown, and
         # assuming equity would invent hidden concentration.
-        residual.unclassified += dollars * (1.0 - visible)
+        hidden = dollars * (1.0 - visible)
+        residual.unclassified += hidden
+        bucket = "unclassified"
     else:
-        residual.undisclosed_equity += dollars * undisclosed_equity
+        hidden = dollars * undisclosed_equity
+        residual.undisclosed_equity += hidden
         residual.non_equity += dollars * non_equity
+        bucket = "undisclosed_equity"
+
+    if hidden > 0:
+        # The disclosure metadata travels with the dollars it bounds. Weights are
+        # read after any renormalisation above, so a vendor payload summing past
+        # tolerance cannot inflate the per-name ceiling this supports.
+        weights = [float(h["weight"]) for h in holdings]
+        pockets.append(Pocket(
+            fund=symbol, fund_value=dollars, hidden_value=hidden,
+            min_disclosed_weight=(min(weights) if weights else None),
+            disclosed=tuple(str(h["symbol"]).upper().strip() for h in holdings),
+            bucket=bucket))
 
     for h in holdings:
         child = str(h["symbol"]).upper().strip()
@@ -500,7 +606,8 @@ def _walk(*, symbol: str, name: str, dollars: float, root: str,
               dollars=dollars * float(h["weight"]), root=root,
               chain=chain + (symbol,), depth=depth + 1, max_depth=max_depth,
               resolve=resolve, out=out, residual=residual, pending=pending,
-              notes=notes, budget=budget)
+              notes=notes, budget=budget, pockets=pockets,
+              wrapper_parents=wrapper_parents)
 
 
 def _stock_fraction(node: dict[str, Any]) -> Optional[float]:

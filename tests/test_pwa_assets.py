@@ -116,6 +116,34 @@ class BaseTemplate(unittest.TestCase):
         """A worker registered under /static/ could not see a navigation."""
         self.assertIn("serviceWorker.register('/sw.js')", self.html)
 
+    def test_every_css_and_js_asset_is_cache_busted(self) -> None:
+        """sw.js serves /static/ cache-first, which is only safe if URLs change.
+
+        An unversioned css/js URL is a stable key under a cache-first worker, so
+        it is pinned until CACHE_VERSION is hand-bumped — and nginx pins it for a
+        further max-age=604800 even with no worker installed. That breaks in the
+        worst direction for `css/tailwind.css`, which is *compiled*: a utility
+        exists only if a template used it at build time. Fresh HTML paired with a
+        pre-light-mode bundle asks for `dark:` overrides that are not in the file,
+        so every pair falls back to its light half and the page renders light
+        while <html class="dark"> is set — with the canvases, which read that
+        class via CT.dark, still painted dark.
+
+        Images are exempt: their content is stable, and a stale one degrades to
+        an old picture rather than to a stylesheet that disagrees with the DOM.
+        """
+        refs = re.findall(
+            r"""url_for\(\s*['"]static['"]\s*,\s*filename=['"]([^'"]+\.(?:css|js))['"][^)]*\)\s*\}\}(\?v=)?""",
+            self.html,
+        )
+        self.assertTrue(refs, "no static css/js refs parsed — matcher is stale")
+        unversioned = sorted({name for name, bust in refs if not bust})
+        self.assertFalse(
+            unversioned,
+            "static css/js referenced without ?v={{ cache_bust }}, which sw.js's "
+            f"cache-first rule requires: {unversioned}",
+        )
+
 
 class ServiceWorker(unittest.TestCase):
     def setUp(self) -> None:

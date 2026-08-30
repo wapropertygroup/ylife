@@ -928,7 +928,7 @@
 
   function renderMix(d) {
     const asset = d.asset_mix || [];
-    const PALETTE = ['#6366f1', '#38bdf8', '#34d399', '#fbbf24', '#f472b6', '#94a3b8', '#a78bfa'];
+    const PALETTE = [CT.c('#6366f1'), CT.c('#38bdf8'), CT.c('#34d399'), CT.c('#fbbf24'), '#f472b6', CT.c('#94a3b8'), CT.c('#a78bfa')];
     // Asset classes get their own keys; sectors deliberately reuse the
     // `mult.comp_*` strings /multiples already ships, because funddata emits
     // Yahoo's squashed sector keys and a second copy would drift from the first.

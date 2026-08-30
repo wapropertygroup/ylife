@@ -704,7 +704,7 @@
         datasets: [{
           label: r.label,
           data: r.values,
-          borderColor: '#22d3ee', backgroundColor: 'rgba(34,211,238,0.07)',
+          borderColor: CT.c('#22d3ee'), backgroundColor: 'rgba(34,211,238,0.07)',
           borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 4,
           fill: true, tension: 0.25, spanGaps: true,
         }],
@@ -749,7 +749,7 @@
     _goldDxyOverlayInst = new Chart(document.getElementById('goldDxyChart'), {
       type:'line',
       data:{ labels:slDates, datasets:[
-        { label:I18n.t('commodities.name.gold')||'Gold', data:gNorm, borderColor:'#facc15', backgroundColor:'rgba(250,204,21,0.08)', borderWidth:1.5, pointRadius:0, fill:true, tension:0.3, spanGaps:true },
+        { label:I18n.t('commodities.name.gold')||'Gold', data:gNorm, borderColor:CT.c('#facc15'), backgroundColor:'rgba(250,204,21,0.08)', borderWidth:1.5, pointRadius:0, fill:true, tension:0.3, spanGaps:true },
         { label:'DXY', data:dNorm, borderColor:CT.c('#94a3b8'), backgroundColor:'transparent', borderWidth:1.5, pointRadius:0, fill:false, tension:0.3, spanGaps:true, borderDash:[4,3] },
       ]},
       options:{ responsive:true, maintainAspectRatio:false,
@@ -1103,7 +1103,7 @@
       data: { labels: dates, datasets: [{
         ...I18n.label('chart.brent_wti_spread', 'Brent–WTI Spread'),
         data: spread,
-        borderColor: '#22d3ee', backgroundColor: 'rgba(34,211,238,0.08)',
+        borderColor: CT.c('#22d3ee'), backgroundColor: 'rgba(34,211,238,0.08)',
         borderWidth: 1.5, pointRadius: 0, fill: true, tension: 0.3, spanGaps: true,
       }]},
       options: {
@@ -1114,7 +1114,7 @@
           y:{grid:{color:gCol},ticks:{color:tCol,callback:v=>'$'+v.toFixed(1)},
              afterDraw(ax){
                const ct=ax.chart.ctx,a=ax.chart.chartArea;
-               [[2,'rgba(52,211,153,0.3)','$2 low'],[6,'rgba(251,191,36,0.3)','$6 high']].forEach(([v,c,lbl])=>{
+               [[2,'rgba(52,211,153,0.3)','$2 low'],[6,CT.c('rgba(251,191,36,0.3)'),'$6 high']].forEach(([v,c,lbl])=>{
                  const py=ax.getPixelForValue(v);
                  if(py<a.top||py>a.bottom)return;
                  ct.save();ct.strokeStyle=c.replace('0.3','0.5');ct.setLineDash([4,3]);ct.lineWidth=1;ct.beginPath();ct.moveTo(a.left,py);ct.lineTo(a.right,py);ct.stroke();

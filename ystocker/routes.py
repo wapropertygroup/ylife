@@ -2786,6 +2786,13 @@ def api_agents_run():
         # caller that sends nothing gets English, as everywhere else here.
         lang="zh" if body.get("lang") == "zh" else "en",
         paid=paid_run,
+        # A key from agent_models.CHOICES and a thinking level, both passed
+        # through rather than validated here: submit() owns the resolution, and
+        # it maps an unknown key onto a working configuration instead of
+        # rejecting it, so a stale tab still runs. Neither value ever reaches
+        # the child as a model id.
+        model=str(body.get("model", "") or "")[:64],
+        thinking=str(body.get("thinking", "") or "")[:32],
     )
     if err:
         # Rejected before anything was spent, so hand the run back. Every run
@@ -3816,6 +3823,39 @@ def api_housing():
     except Exception as exc:
         log.error("API housing: error: %s", exc, exc_info=True)
         return jsonify({"status": "error", "error": str(exc), "warming": True}), 500
+
+
+@bp.route("/api/housing/meta")
+def api_housing_meta():
+    """Just the cache stamp — what `autorefresh.js` polls, in ~60 bytes.
+
+    A left-open /housing tab has to learn that the 24h background refresh has
+    landed, and the only signal for that was `/api/housing` itself: 361 KB raw,
+    ~100 KB gzipped. Polling *that* to answer a yes/no question costs ~17 MB a
+    day per open tab for data that changes once a day, so the stamp gets its own
+    endpoint. No fetch, no rebuild, no DynamoDB — two lock reads.
+
+    `fetched_at` is deliberately the same `get_cache_ts()` the page render uses
+    (see `housing()`), so the number the client compares against is the number
+    it was rendered with, in the same units. It is *not* guaranteed identical
+    across workers: under `--preload` the refresh thread lives in the master, so
+    a forked worker serves the snapshot it inherited until it is recycled, and
+    two workers can briefly disagree. The client must therefore treat a newer
+    stamp as advisory and guard against reloading in a loop — `autorefresh.js`
+    does, by remembering the stamp it reloaded *for*.
+
+    `warming` lets the client poll faster while a rebuild is in flight instead
+    of sitting out the full interval waiting for a stamp it knows is coming.
+    """
+    try:
+        from ystocker.housing import get_cache_ts, is_warming as hz_warming_fn
+        return jsonify({"fetched_at": get_cache_ts(), "warming": hz_warming_fn()})
+    except Exception as exc:
+        # Never 500 a poller: a stamp we cannot read is indistinguishable from
+        # "nothing new", which is the safe answer. Reporting an error here would
+        # only teach the client to back off from a page that is rendering fine.
+        log.warning("API housing/meta: %s", exc)
+        return jsonify({"fetched_at": None, "warming": False})
 
 
 # ---------------------------------------------------------------------------

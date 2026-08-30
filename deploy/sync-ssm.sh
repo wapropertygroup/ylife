@@ -21,6 +21,7 @@ fi
 get_ssm_path() {
   case "$1" in
     GEMINI_API_KEY)           echo "/ystocker/GEMINI_API_KEY" ;;
+    DEEPSEEK_API_KEY)         echo "/ystocker/DEEPSEEK_API_KEY" ;;
     FRED_API_KEY)             echo "/ystocker/FRED_API_KEY" ;;
     GOLDMAN_CTA_DATA_JSON)    echo "/ystocker/GOLDMAN_CTA_DATA_JSON" ;;
     YOUTUBE_API_KEY)          echo "/ystocker/YOUTUBE_API_KEY" ;;

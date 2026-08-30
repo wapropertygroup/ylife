@@ -160,8 +160,72 @@ def language_code(language: str) -> str:
     return ""
 
 
-def _child_env(language: str = "") -> dict[str, str]:
-    """Environment for the run, with the Gemini key aliased for TradingAgents."""
+def resolve_models(choice: str = "", thinking: str = "") -> dict[str, str]:
+    """The provider, models and thinking level a run will use.
+
+    Resolved once in :func:`submit` and frozen on the job, for the same reason
+    the report language is: a queued run must reproduce the choice the reader
+    made even though the request that queued it is long gone.
+
+    Always returns a full triple, including for the "server default" case, so
+    that :func:`_run` has one code path and every finished report can say what
+    produced it. An unrecognised choice lands here too -- see
+    :func:`agent_models.resolve` for why that is a fallback and not an error.
+    """
+    from ystocker import agent_models
+
+    picked = agent_models.resolve(choice, thinking)
+    if picked is not None:
+        return picked
+    return {
+        "model_choice": "",
+        "provider": DEFAULT_PROVIDER,
+        "deep_model": DEFAULT_DEEP_MODEL,
+        "quick_model": DEFAULT_QUICK_MODEL,
+        "thinking": DEFAULT_THINKING,
+    }
+
+
+def job_models(job: dict[str, Any]) -> dict[str, str]:
+    """The models recorded on a job, or this deployment's defaults.
+
+    A record written before the picker existed carries none of these keys, so it
+    resolves to the defaults and runs exactly as it always did. ``provider`` is
+    the field tested because it is the one that must be present for the other
+    two to mean anything.
+    """
+    if not (job.get("provider") or "").strip():
+        return resolve_models()
+    return {
+        "model_choice": job.get("model_choice") or "",
+        "provider": job["provider"],
+        "deep_model": job.get("deep_model") or DEFAULT_DEEP_MODEL,
+        "quick_model": job.get("quick_model") or DEFAULT_QUICK_MODEL,
+        "thinking": job.get("thinking") or "",
+    }
+
+
+def model_choice_enabled() -> bool:
+    """Whether readers may pick the model, or the deployment decides for them.
+
+    A named kill switch rather than a code change, matching AGENTS_EMAIL_REPORT
+    and AGENTS_SHARE: an operator whose Gemini budget is under pressure, or who
+    has had a model withdrawn upstream, can force every run onto the configured
+    default without a deploy.
+    """
+    return os.environ.get("AGENTS_MODEL_CHOICE", "1").strip().lower() \
+        not in ("0", "false", "no")
+
+
+def _child_env(language: str = "",
+               models: Optional[dict[str, str]] = None) -> dict[str, str]:
+    """Environment for the run, with the Gemini key aliased for TradingAgents.
+
+    ``models`` is the run's own frozen choice of provider and models, as
+    :func:`resolve_models` produced it at submit time. Passing nothing keeps the
+    process-wide defaults, which is what an older job record (written before the
+    picker existed) resolves to.
+    """
     env = os.environ.copy()
     gemini = env.get("GEMINI_API_KEY", "").strip()
     if gemini and not env.get("GOOGLE_API_KEY", "").strip():
@@ -179,6 +243,25 @@ def _child_env(language: str = "") -> dict[str, str]:
     env.setdefault("TRADINGAGENTS_GOOGLE_THINKING_LEVEL", DEFAULT_THINKING)
     env.setdefault("TRADINGAGENTS_MAX_DEBATE_ROUNDS", DEFAULT_DEBATE_ROUNDS)
     env.setdefault("TRADINGAGENTS_MAX_RISK_ROUNDS", DEFAULT_RISK_ROUNDS)
+    # The run's own choice of provider and models, assigned rather than
+    # setdefault for exactly the reason the language line below is: setdefault
+    # means "whatever this process inherited wins", so on a box whose unit file
+    # pins TRADINGAGENTS_DEEP_THINK_LLM the reader's selection would be accepted
+    # by the UI, recorded on the job, shown back to them on the finished
+    # report -- and silently ignored by the process that actually ran.
+    if models:
+        env["TRADINGAGENTS_LLM_PROVIDER"] = models["provider"]
+        env["TRADINGAGENTS_DEEP_THINK_LLM"] = models["deep_model"]
+        env["TRADINGAGENTS_QUICK_THINK_LLM"] = models["quick_model"]
+        # Set only for a provider that reads one. An empty level means the chosen
+        # provider has no thinking knob at all, and TradingAgents' own gate
+        # ignores the variable there -- but clearing it keeps the child's
+        # environment an honest description of the run instead of carrying an
+        # inherited "high" that nothing consults.
+        if models.get("thinking"):
+            env["TRADINGAGENTS_GOOGLE_THINKING_LEVEL"] = models["thinking"]
+        else:
+            env.pop("TRADINGAGENTS_GOOGLE_THINKING_LEVEL", None)
     # Assigned, not setdefault: this is the run's own choice and must win over
     # whatever this process inherited -- and what it inherited is precisely
     # FORCED_LANGUAGE, which would otherwise pin every run to one language and
@@ -197,7 +280,8 @@ def _child_env(language: str = "") -> dict[str, str]:
 def has_llm_key() -> bool:
     """Whether some usable provider credential is present."""
     return any(os.environ.get(k, "").strip() for k in
-               ("GEMINI_API_KEY", "GOOGLE_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY"))
+               ("GEMINI_API_KEY", "GOOGLE_API_KEY", "OPENAI_API_KEY",
+                "ANTHROPIC_API_KEY", "DEEPSEEK_API_KEY"))
 
 _TICKER_RE = re.compile(r"^[A-Za-z][A-Za-z0-9.\-]{0,9}$")
 # A-share codes are all digits, so the letter-initial pattern above rejects every
@@ -1228,6 +1312,13 @@ _PUBLIC_FIELDS = (
     "created_at", "started_at", "finished_at", "elapsed_sec",
     # Kept so a sampled report cannot pass itself off as better than it is.
     "degraded", "fallback_models", "recovered",
+    # Which models produced it, for that same reason: a run on the cheapest tier
+    # should not read as one on the most capable. Publishing a model name to an
+    # unauthenticated visitor is not a new disclosure -- ``fallback_models``
+    # above already names them -- and it is the reader's only way to weigh a
+    # sampled report. ``model_choice`` is deliberately absent: it is an internal
+    # table key, and the three fields beside it say what actually ran.
+    "provider", "deep_model", "quick_model", "thinking",
 )
 
 
@@ -1389,12 +1480,20 @@ def _prune() -> None:
 # ---------------------------------------------------------------------------
 
 def submit(ticker: str, day: str, user: str,
-           lang: str = "", paid: bool = False) -> tuple[Optional[str], Optional[str]]:
+           lang: str = "", paid: bool = False,
+           model: str = "", thinking: str = "") -> tuple[Optional[str], Optional[str]]:
     """Validate and queue a run. Returns (job_id, error).
 
     ``lang`` is the caller's UI language code, which selects the language the
     report is written in -- see :data:`LANGUAGES`.
+
+    ``model`` is a key from :data:`agent_models.CHOICES`, never a model id, and
+    ``thinking`` a level that choice accepts. Both are advisory: an unknown key
+    or an unsupported level resolves to a working configuration rather than
+    failing, and what was actually used is recorded on the job.
     """
+    from ystocker import agent_models
+
     ticker = (ticker or "").strip().upper()
     day = (day or "").strip() or _date.today().isoformat()
 
@@ -1409,6 +1508,20 @@ def submit(ticker: str, day: str, user: str,
     except ValueError:
         return None, "Invalid date"
 
+    # Ignored wholesale when the deployment has taken the choice away, so that
+    # the kill switch cannot be bypassed by a client that keeps sending one.
+    models = resolve_models(model if model_choice_enabled() else "", thinking)
+
+    # The one case that is an error rather than a fallback. A provider with no
+    # credential cannot run at all -- TradingAgents raises before the first
+    # token -- and quietly substituting a different vendor's model would put a
+    # name on the report that did not produce it. Unreachable from the page,
+    # which does not offer an unavailable provider, so this catches a stale tab
+    # or a hand-made request and costs nothing: the caller refunds on error.
+    if not agent_models.provider_available(models["provider"]):
+        return None, (f"The {models['provider']} models are not configured on "
+                      f"this server. Pick another model.")
+
     job_id = uuid.uuid4().hex[:16]
     language = resolve_language(lang)
     job = {
@@ -1421,6 +1534,11 @@ def submit(ticker: str, day: str, user: str,
         # half-written in each would be worse than either.
         "language": language,
         "lang": language_code(language),
+        # Frozen for the same reason, and recorded even when the reader chose
+        # nothing: "which models produced this" is part of reading a finished
+        # report, and a run that fell back to the server default has to be able
+        # to say so rather than look like a choice nobody made.
+        **models,
         "status": "queued",
         "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "started_at": None,
@@ -1643,7 +1761,11 @@ def _run(job_id: str) -> None:
                    started_at=datetime.now(timezone.utc).isoformat(timespec="seconds"))
         _write(job)
 
-        env = _child_env(job.get("language") or "")
+        # Read straight off the record rather than resolved again here. The
+        # choice was frozen at submit and is what the finished report claims
+        # produced it, so re-deriving it now would let a table that shifted
+        # under a queued job run one configuration while reporting another.
+        env = _child_env(job.get("language") or "", models=job_models(job))
         env["YSTOCKER_SELECTED_ANALYSTS"] = ",".join(
             analysts_for_ticker(job.get("ticker") or "")
         )
@@ -1839,6 +1961,8 @@ def _extract(stdout: str) -> Optional[dict[str, Any]]:
 
 def environment_report() -> dict[str, Any]:
     """What the page shows when a run cannot work, instead of failing opaquely."""
+    from ystocker import agent_models
+
     interp = _interpreter()
     ta_dir_ok = Path(TA_DIR).is_dir()
     interp_ok = Path(interp).exists() or interp == "python3"
@@ -1858,6 +1982,18 @@ def environment_report() -> dict[str, Any]:
         "deep_model": DEFAULT_DEEP_MODEL,
         "quick_model": DEFAULT_QUICK_MODEL,
         "thinking": DEFAULT_THINKING,
+        # The picker. ``model_choices`` carries each option's accepted thinking
+        # levels because the client rebuilds that control when the model changes
+        # and the accepted set is a property of the model -- shipping it from one
+        # place stops the two ends disagreeing about whether Pro takes "medium".
+        "model_choices": agent_models.options_public(),
+        # Which row to preselect. Empty when this box is configured for a triple
+        # the table cannot express, in which case the page offers an explicit
+        # "server default" row rather than highlighting the nearest match and
+        # misreporting what a run will do.
+        "model_choice_default": agent_models.choice_for(
+            DEFAULT_PROVIDER, DEFAULT_DEEP_MODEL, DEFAULT_QUICK_MODEL),
+        "model_choice_enabled": model_choice_enabled(),
         "debate_rounds": DEFAULT_DEBATE_ROUNDS,
         "risk_rounds": DEFAULT_RISK_ROUNDS,
         # Only set when a deployment pinned one language for everybody. Normally

@@ -125,6 +125,13 @@ const I18n = (() => {
     'ptr.release':        { en: 'Release to refresh', zh: '松开即刷新' },
     'ptr.busy':           { en: 'Refreshing…',        zh: '正在刷新…' },
     'ptr.offline':        { en: 'No connection',      zh: '无网络连接' },
+    // Auto-refresh (static/autorefresh.js). Shown only when a background
+    // refresh has replaced what this tab rendered *and* the reader is mid-page,
+    // so it is an offer rather than a notice — hence a verb, not "data updated".
+    // Like ptr.* above it promises a reload, not a server-cache purge.
+    'autorefresh.new_data': { en: 'Newer data is available', zh: '有更新的数据' },
+    'autorefresh.refresh':  { en: 'Refresh',                 zh: '刷新' },
+    'autorefresh.dismiss':  { en: 'Dismiss',                 zh: '忽略' },
     'footer.text':        { en: 'yStocker — data via Yahoo Finance', zh: 'yStocker — 数据来源：Yahoo Finance' },
     'footer.contact':     { en: 'Contact Us', zh: '联系我们' },
     'footer.copyright':   { en: '© 2025 yStocker. All rights reserved.', zh: '© 2025 yStocker. 保留所有权利。' },
@@ -1382,6 +1389,36 @@ const I18n = (() => {
                              zh: '配置的模型已用完当日额度，本报告部分内容由能力较弱的模型生成。' },
     'agents.depth_is':     { en: 'Depth',         zh: '深度' },
     'agents.rounds':       { en: 'rounds',        zh: '轮辩论' },
+    // ── Model + thinking picker ───────────────────────────────────────────
+    // The option labels double as the trigger's face, so they have to read as a
+    // choice on their own ("Gemini 3.5 Flash — faster"), not as a bare model id.
+    // They are the English fallback inlined in the template too; keep the two in
+    // step or a language toggle changes the wording of a row that never moved.
+    'agents.model_label':  { en: 'Model',         zh: '模型' },
+    'agents.model_server_default': { en: 'Server default', zh: '服务器默认' },
+    'agents.model_google_pro':   { en: 'Gemini 3.1 Pro — highest quality',
+                                   zh: 'Gemini 3.1 Pro — 质量最高' },
+    'agents.model_google_flash': { en: 'Gemini 3.5 Flash — faster',
+                                   zh: 'Gemini 3.5 Flash — 更快' },
+    'agents.model_google_lite':  { en: 'Gemini 3.5 Flash + 3.1 Flash Lite — cheapest',
+                                   zh: 'Gemini 3.5 Flash + 3.1 Flash Lite — 最省' },
+    'agents.model_deepseek_pro':   { en: 'DeepSeek V4 Pro', zh: 'DeepSeek V4 Pro' },
+    'agents.model_deepseek_flash': { en: 'DeepSeek V4 Flash — fastest',
+                                     zh: 'DeepSeek V4 Flash — 最快' },
+    // Shown on a row whose provider has no API key on this box. Named rather
+    // than hidden: a reader who has heard of the model should learn it is not
+    // configured here, not silently fail to find it.
+    'agents.model_unavailable':  { en: 'not configured', zh: '未配置' },
+    'agents.thinking_label': { en: 'Thinking',     zh: '思考深度' },
+    // Depth of reasoning, not quantity of output. "最小" rather than "无" because
+    // minimal is not off.
+    'agents.think_minimal': { en: 'Minimal',       zh: '最小' },
+    'agents.think_low':     { en: 'Low',           zh: '低' },
+    'agents.think_medium':  { en: 'Medium',        zh: '中' },
+    'agents.think_high':    { en: 'High',          zh: '高' },
+    // Replaces the control entirely for a provider that has no such parameter,
+    // so the row is never an input that does nothing.
+    'agents.think_na':      { en: 'Not applicable', zh: '不适用' },
     'agents.lang_is':      { en: 'Report language', zh: '报告语言' },
     // The value, not a label: a run writes its report in whichever language the
     // page is being read in, so this line has to move with the toggle.

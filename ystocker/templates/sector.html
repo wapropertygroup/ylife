@@ -803,7 +803,7 @@ const chartDefaults = {
       datasets: [
         { label:'Current Price', data: DATA.map(d=>d.price),  backgroundColor:'#6366f1cc', borderRadius:4 },
         { label:'Target Price',  data: DATA.map(d=>d.target), backgroundColor:'#f59e0b44',
-          borderColor:'#f59e0b', borderWidth:2, borderRadius:4 },
+          borderColor:CT.c('#f59e0b'), borderWidth:2, borderRadius:4 },
       ]
     },
     options: {
@@ -1362,9 +1362,9 @@ let _perfLoaded = false;
 let _perfPeriod = '1y';
 
 const _PERF_COLORS = [
-  '#818cf8',CT.c('#34d399'),'#f472b6',CT.c('#fb923c'),CT.c('#38bdf8'),
+  CT.c('#818cf8'),CT.c('#34d399'),'#f472b6',CT.c('#fb923c'),CT.c('#38bdf8'),
   '#a3e635','#c084fc',CT.c('#fbbf24'),'#2dd4bf',CT.c('#f87171'),
-  '#6ee7b7',CT.c('#a5b4fc'),'#fca5a5','#fde68a','#bae6fd',
+  '#6ee7b7',CT.c('#a5b4fc'),'#fca5a5','#fde68a',CT.c('#bae6fd'),
 ];
 
 async function loadSectorPerformance(forceReload) {

@@ -164,6 +164,26 @@
   {% endif %}
 </div>
 
+{#
+  Keep a tab that is left open from going on showing this render's numbers after
+  the 24h background refresh has replaced them. Polls the ~60-byte stamp
+  endpoint, not the 361 KB payload, and reloads only on a strictly newer stamp —
+  see the header comment in autorefresh.js for the loop guard that a two-worker
+  stamp disagreement makes necessary.
+
+  Only mounted when there is a render to go stale. On the cold-start path below
+  there is no data yet and its own 4-second poll already owns the reload.
+#}
+{% if cache_last_updated %}
+<script src="{{ url_for('static', filename='autorefresh.js') }}?v={{ cache_bust or 'dev' }}"></script>
+<script>
+  AutoRefresh.watch({
+    meta: '/api/housing/meta',
+    stamp: {{ cache_last_updated | int }}
+  });
+</script>
+{% endif %}
+
 {% if not cache_last_updated and warming %}
 <div class="flex flex-col items-center justify-center py-24 gap-4 fade-up">
   <svg class="w-8 h-8 text-brand animate-spin" fill="none" viewBox="0 0 24 24">
@@ -1296,7 +1316,7 @@ const _explainData = {};
               backgroundColor: 'rgba(57,135,229,.10)', borderWidth: 2,
               pointRadius: 0, pointHoverRadius: 4, fill: true, tension: .25, spanGaps: true },
             { label: I18n.t('housing.series_national') || 'United States',
-              data: natl, borderColor: 'rgba(148,163,184,.6)', backgroundColor: 'transparent',
+              data: natl, borderColor: CT.c('rgba(148,163,184,.6)'), backgroundColor: 'transparent',
               borderWidth: 1.5, borderDash: [4, 3], pointRadius: 0, fill: false, tension: .25, spanGaps: true },
           ],
         },

@@ -282,7 +282,7 @@ const _explainData = {};
   // past 5 steps so a colour is never undefined.
   const NEUTRAL  = CT.c('#94a3b8');
   const HIKE_RAMP = ['#b91c1c', '#ef4444', CT.c('#f87171'), '#fca5a5', '#fecaca'];
-  const CUT_RAMP  = ['#1d4ed8', '#3b82f6', '#60a5fa', '#93c5fd', '#bfdbfe'];
+  const CUT_RAMP  = ['#1d4ed8', '#3b82f6', CT.c('#60a5fa'), '#93c5fd', '#bfdbfe'];
 
   function rangeColor(steps) {
     if (steps === 0) return NEUTRAL;
@@ -537,7 +537,7 @@ const _explainData = {};
           {
             label: I18n.t('fedwatch.today_rate') || "Today's rate",
             data: pathVals.map(() => current.effr),
-            borderColor: 'rgba(148,163,184,0.55)',
+            borderColor: CT.c('rgba(148,163,184,0.55)'),
             borderWidth: 1.5,
             borderDash: [4, 3],
             pointRadius: 0,
@@ -587,7 +587,7 @@ const _explainData = {};
             {
               label: I18n.t('fedwatch.hist_lower') || 'Lower bound',
               data: lo,
-              borderColor: 'rgba(99,102,241,0.75)',
+              borderColor: CT.c('rgba(99,102,241,0.75)'),
               borderWidth: 1.5,
               pointRadius: 0,
               stepped: 'after',
@@ -668,7 +668,7 @@ const _explainData = {};
       const live = meetings.map(m => m.date);
       // Nearer meetings darker: a sequential ramp on the same indigo the path
       // chart uses, monotone in lightness so the ordering is readable.
-      const RAMP = ['#4338ca', '#4f46e5', CT.c('#6366f1'), '#818cf8',
+      const RAMP = ['#4338ca', '#4f46e5', CT.c('#6366f1'), CT.c('#818cf8'),
                     CT.c('#a5b4fc'), '#c7d2fe', '#ddd6fe', '#ede9fe'];
 
       const datasets = live.map((mdate, i) => {

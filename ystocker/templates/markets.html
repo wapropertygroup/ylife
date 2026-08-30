@@ -1316,8 +1316,8 @@ const IDX_SYMBOLS = {
 };
 const IDX_COLORS = {
   spx: CT.c('#a78bfa'), ixic: CT.c('#38bdf8'), dji: CT.c('#fb923c'),
-  ftse: CT.c('#34d399'), n225: '#f472b6', sse: CT.c('#fbbf24'), csi500: '#f59e0b', twii: '#60a5fa', kospi: '#4ade80',
-  gold: '#facc15', silver: CT.c('#cbd5e1'), oil: '#14b8a6', brent: '#0ea5e9', natgas: '#60a5fa', copper: '#d97706',
+  ftse: CT.c('#34d399'), n225: '#f472b6', sse: CT.c('#fbbf24'), csi500: CT.c('#f59e0b'), twii: CT.c('#60a5fa'), kospi: '#4ade80',
+  gold: CT.c('#facc15'), silver: CT.c('#cbd5e1'), oil: '#14b8a6', brent: CT.c('#0ea5e9'), natgas: CT.c('#60a5fa'), copper: '#d97706',
   dxy: CT.c('#94a3b8'),
 };
 const IDX_ALL_KEYS = ['spx', 'ixic', 'dji', 'ftse', 'n225', 'sse', 'csi500', 'twii', 'kospi',
@@ -1412,7 +1412,7 @@ function _buildCtaTriggerChart(canvasId) {
       datasets: [
         {
           ...I18n.label('markets.idx_spx', 'S&P 500'), data: prices,
-          borderColor: '#c4b5fd', backgroundColor: 'rgba(139,92,246,.08)',
+          borderColor: CT.c('#c4b5fd'), backgroundColor: 'rgba(139,92,246,.08)',
           borderWidth: 2, pointRadius: 0, fill: true, tension: .22, spanGaps: true,
         },
         {
@@ -1535,7 +1535,7 @@ function _buildCtaPositionChart() {
         data: points.map(point => point.global_equity_bn),
         borderColor: CT.c('#38bdf8'), backgroundColor: 'rgba(56,189,248,.12)',
         borderWidth: 2, pointRadius: 4, pointHoverRadius: 6,
-        pointBackgroundColor: '#0ea5e9', pointBorderColor: '#bae6fd',
+        pointBackgroundColor: CT.c('#0ea5e9'), pointBorderColor: CT.c('#bae6fd'),
         fill: true, tension: .2,
       }],
     },
@@ -1897,7 +1897,7 @@ let _globalNormChart = null;
 function _buildGlobalNorm(range) {
   if (!_mkData) return;
   const KEYS = ['spx','ixic','dji','ftse','n225','sse','twii'];
-  const COLORS = [CT.c('#a78bfa'),CT.c('#38bdf8'),CT.c('#fb923c'),CT.c('#34d399'),'#f472b6',CT.c('#fbbf24'),'#60a5fa'];
+  const COLORS = [CT.c('#a78bfa'),CT.c('#38bdf8'),CT.c('#fb923c'),CT.c('#34d399'),'#f472b6',CT.c('#fbbf24'),CT.c('#60a5fa')];
   const LABELS = { spx:'S&P 500', ixic:'Nasdaq', dji:'Dow', ftse:'FTSE', n225:'Nikkei', sse:'Shanghai', twii:'Taiwan' };
   const cutDays = range === '1m' ? 21 : range === '6m' ? 126 : 252;
   const gridCol = CT.c('#1e293b'), tickCol = CT.c('#64748b');
@@ -2105,12 +2105,12 @@ function renderIdxChart(key, range, data, canvasId) {
     const bb = _bbBands(prices, 20);
     datasets.push({
       ...I18n.label('chart.bb_upper', 'BB Upper'), data: bb.upper,
-      borderColor: 'rgba(167,139,250,0.5)', backgroundColor: 'rgba(167,139,250,0.06)',
+      borderColor: CT.c('rgba(167,139,250,0.5)'), backgroundColor: 'rgba(167,139,250,0.06)',
       borderWidth: 1, pointRadius: 0, fill: '+1', tension: 0.3, spanGaps: true, borderDash: [2,2],
     });
     datasets.push({
       ...I18n.label('chart.bb_lower', 'BB Lower'), data: bb.lower,
-      borderColor: 'rgba(167,139,250,0.5)', backgroundColor: 'rgba(167,139,250,0.06)',
+      borderColor: CT.c('rgba(167,139,250,0.5)'), backgroundColor: 'rgba(167,139,250,0.06)',
       borderWidth: 1, pointRadius: 0, fill: false, tension: 0.3, spanGaps: true, borderDash: [2,2],
     });
   }
@@ -2285,7 +2285,7 @@ function renderMacdChart(key, data, range, canvasId) {
         const { ctx: c, chartArea: a, scales: { y } } = chart;
         const z = y.getPixelForValue(0);
         if (z >= a.top && z <= a.bottom) {
-          c.save(); c.strokeStyle = 'rgba(148,163,184,0.3)'; c.lineWidth = 1;
+          c.save(); c.strokeStyle = CT.c('rgba(148,163,184,0.3)'); c.lineWidth = 1;
           c.beginPath(); c.moveTo(a.left, z); c.lineTo(a.right, z); c.stroke(); c.restore();
         }
       },
@@ -3067,7 +3067,7 @@ function renderPcr(data, canvasId) {
           const py = y.getPixelForValue(lvl);
           if (py >= a.top && py <= a.bottom) {
             c.save();
-            c.strokeStyle = i === 0 ? 'rgba(52,211,153,0.4)' : 'rgba(248,113,113,0.4)';
+            c.strokeStyle = i === 0 ? CT.c('rgba(52,211,153,0.4)') : CT.c('rgba(248,113,113,0.4)');
             c.lineWidth = 1; c.setLineDash([4,3]);
             c.beginPath(); c.moveTo(a.left, py); c.lineTo(a.right, py); c.stroke();
             c.restore();
@@ -3236,10 +3236,10 @@ function renderYieldCurve(data) {
       {
         type: 'line',
         data: yields,
-        borderColor: 'rgba(148,163,184,0.7)',
+        borderColor: CT.c('rgba(148,163,184,0.7)'),
         borderWidth: 1.5,
         pointRadius: 3,
-        pointBackgroundColor: 'rgba(148,163,184,0.9)',
+        pointBackgroundColor: CT.c('rgba(148,163,184,0.9)'),
         pointBorderColor: 'transparent',
         fill: false, tension: 0.4, spanGaps: true,
       },
@@ -3306,10 +3306,10 @@ function renderYieldCurve(data) {
       {
         type: 'line',
         data: cnYields,
-        borderColor: 'rgba(148,163,184,0.7)',
+        borderColor: CT.c('rgba(148,163,184,0.7)'),
         borderWidth: 1.5,
         pointRadius: 3,
-        pointBackgroundColor: 'rgba(148,163,184,0.9)',
+        pointBackgroundColor: CT.c('rgba(148,163,184,0.9)'),
         pointBorderColor: 'transparent',
         fill: false, tension: 0.4, spanGaps: true,
       },
@@ -3369,8 +3369,8 @@ function renderYieldCurve(data) {
     data: { labels: jpMats, datasets: [
       { type: 'bar', data: jpYields, backgroundColor: jpBarColor,
         borderColor: jpBarColor.replace('0.75','1'), borderWidth: 1, borderRadius: 4 },
-      { type: 'line', data: jpYields, borderColor: 'rgba(148,163,184,0.7)', borderWidth: 1.5,
-        pointRadius: 3, pointBackgroundColor: 'rgba(148,163,184,0.9)',
+      { type: 'line', data: jpYields, borderColor: CT.c('rgba(148,163,184,0.7)'), borderWidth: 1.5,
+        pointRadius: 3, pointBackgroundColor: CT.c('rgba(148,163,184,0.9)'),
         pointBorderColor: 'transparent', fill: false, tension: 0.4, spanGaps: true },
     ]},
     options: {
@@ -3971,8 +3971,8 @@ function expandMktsChart(kind) {
       data: { labels: mats, datasets: [
         { type: 'bar', data: ylds, backgroundColor: cols,
           borderColor: cols.map(c => c.replace('0.75','1')), borderWidth: 1, borderRadius: 4 },
-        { type: 'line', data: ylds, borderColor: 'rgba(148,163,184,0.7)', borderWidth: 2,
-          pointRadius: 4, pointBackgroundColor: 'rgba(148,163,184,0.9)', pointBorderColor: 'transparent',
+        { type: 'line', data: ylds, borderColor: CT.c('rgba(148,163,184,0.7)'), borderWidth: 2,
+          pointRadius: 4, pointBackgroundColor: CT.c('rgba(148,163,184,0.9)'), pointBorderColor: 'transparent',
           fill: false, tension: 0.4, spanGaps: true },
       ]},
       options: { responsive: true, maintainAspectRatio: false,
@@ -4000,8 +4000,8 @@ function expandMktsChart(kind) {
       data: { labels: cnMats, datasets: [
         { type: 'bar', data: cnYlds, backgroundColor: cnCols,
           borderColor: cnCols.map(c => c.replace('0.75','1')), borderWidth: 1, borderRadius: 4 },
-        { type: 'line', data: cnYlds, borderColor: 'rgba(148,163,184,0.7)', borderWidth: 2,
-          pointRadius: 4, pointBackgroundColor: 'rgba(148,163,184,0.9)', pointBorderColor: 'transparent',
+        { type: 'line', data: cnYlds, borderColor: CT.c('rgba(148,163,184,0.7)'), borderWidth: 2,
+          pointRadius: 4, pointBackgroundColor: CT.c('rgba(148,163,184,0.9)'), pointBorderColor: 'transparent',
           fill: false, tension: 0.4, spanGaps: true },
       ]},
       options: { responsive: true, maintainAspectRatio: false,
@@ -4028,8 +4028,8 @@ function expandMktsChart(kind) {
       data: { labels: jpMats, datasets: [
         { type: 'bar', data: jpYlds, backgroundColor: jpCol,
           borderColor: jpCol.replace('0.75','1'), borderWidth: 1, borderRadius: 4 },
-        { type: 'line', data: jpYlds, borderColor: 'rgba(148,163,184,0.7)', borderWidth: 2,
-          pointRadius: 4, pointBackgroundColor: 'rgba(148,163,184,0.9)', pointBorderColor: 'transparent',
+        { type: 'line', data: jpYlds, borderColor: CT.c('rgba(148,163,184,0.7)'), borderWidth: 2,
+          pointRadius: 4, pointBackgroundColor: CT.c('rgba(148,163,184,0.9)'), pointBorderColor: 'transparent',
           fill: false, tension: 0.4, spanGaps: true },
       ]},
       options: { responsive: true, maintainAspectRatio: false,
@@ -4642,7 +4642,7 @@ async function loadCreditSpread(period) {
         datasets: [{
           ...I18n.label('chart.hyg_tlt', 'HYG/TLT'),
           data: cs.spread,
-          borderColor: '#22d3ee',
+          borderColor: CT.c('#22d3ee'),
           backgroundColor: 'rgba(34,211,238,0.07)',
           borderWidth: 1.8, pointRadius: 0, pointHoverRadius: 5,
           fill: true, tension: 0.3, spanGaps: true,
@@ -4716,7 +4716,7 @@ function _renderYieldSpread(range) {
         }
       }
       if (inRec) ctx.fillRect(recStart, a.top, a.right - recStart, a.bottom - a.top);
-      ctx.strokeStyle = 'rgba(248,113,113,0.4)'; ctx.lineWidth = 1; ctx.setLineDash([4,4]);
+      ctx.strokeStyle = CT.c('rgba(248,113,113,0.4)'); ctx.lineWidth = 1; ctx.setLineDash([4,4]);
       ctx.beginPath(); ctx.moveTo(a.left, zeroY); ctx.lineTo(a.right, zeroY); ctx.stroke();
       ctx.restore();
     }
@@ -4850,7 +4850,7 @@ DeferLoad.when('#cryptoChart', async function() {
         const cryptoChart = new Chart(document.getElementById('cryptoChart'), {
           type: 'line',
           data: { labels: btcHist.dates, datasets: [
-            { label:'BTC', data:btcNorm, borderColor:'#f59e0b', backgroundColor:'rgba(245,158,11,0.07)', borderWidth:1.5, pointRadius:0, fill:true, tension:0.3, spanGaps:true },
+            { label:'BTC', data:btcNorm, borderColor:CT.c('#f59e0b'), backgroundColor:'rgba(245,158,11,0.07)', borderWidth:1.5, pointRadius:0, fill:true, tension:0.3, spanGaps:true },
             { label:'ETH', data:ethNorm, borderColor:CT.c('#6366f1'), backgroundColor:'transparent', borderWidth:1.5, pointRadius:0, fill:false, tension:0.3, spanGaps:true, borderDash:[4,3] },
           ]},
           plugins: [halvingPlugin],
@@ -5128,10 +5128,10 @@ let _brRange = '3y';
 // L, adjacent dL >= 0.06, single hue (12deg spread), darkest step 4.36:1.
 const _BR_MA_COLORS = {
   20:  '#0284c7',
-  50:  '#0ea5e9',
+  50:  CT.c('#0ea5e9'),
   100: CT.c('#38bdf8'),
   150: '#7dd3fc',
-  200: '#bae6fd',
+  200: CT.c('#bae6fd'),
 };
 const _BR_MA_FALLBACK = CT.c('#38bdf8');
 // Line weight also steps with the period — a second, colour-independent cue for
@@ -5322,7 +5322,7 @@ function _renderBreadth(range) {
         const {ctx, chartArea:a, scales:{y}} = c;
         const py = y.getPixelForValue(50);
         if (py >= a.top && py <= a.bottom) {
-          ctx.save(); ctx.strokeStyle='rgba(251,191,36,0.4)'; ctx.lineWidth=1; ctx.setLineDash([3,3]);
+          ctx.save(); ctx.strokeStyle=CT.c('rgba(251,191,36,0.4)'); ctx.lineWidth=1; ctx.setLineDash([3,3]);
           ctx.beginPath(); ctx.moveTo(a.left,py); ctx.lineTo(a.right,py); ctx.stroke();
           ctx.setLineDash([]); ctx.fillStyle='#fbbf24aa'; ctx.font='9px Inter';
           ctx.textAlign='right'; ctx.fillText('50%', a.right-2, py-3); ctx.restore();
