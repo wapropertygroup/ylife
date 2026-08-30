@@ -439,7 +439,7 @@ def normalise_policy(raw: dict[str, Any]) -> dict[str, Any]:
     from ystocker.portfolio_csv import normalise_symbol
 
     if not isinstance(raw, dict):
-        return dict(DEFAULT_POLICY)
+        return normalise_policy({})
 
     out: dict[str, Any] = {
         "max_single_name_pct": _pct_or_none(raw.get("max_single_name_pct")),
@@ -471,7 +471,7 @@ def load_policy(email: str) -> dict[str, Any]:
     """
     email = (email or "").strip().lower()
     if not email:
-        return dict(DEFAULT_POLICY)
+        return normalise_policy({})
 
     table = _get_table()
     if table is None:
@@ -493,15 +493,15 @@ def load_policy(email: str) -> dict[str, Any]:
 
     item = resp.get("Item")
     if not item:
-        return dict(DEFAULT_POLICY)
+        return normalise_policy({})
     raw = item.get("policy_json")
     if not raw:
-        return dict(DEFAULT_POLICY)
+        return normalise_policy({})
     try:
         data = json.loads(raw)
     except (TypeError, ValueError) as exc:
         log.warning("portfolio: unparseable policy for %s: %s", item.get("id"), exc)
-        return dict(DEFAULT_POLICY)
+        return normalise_policy({})
     return normalise_policy(data if isinstance(data, dict) else {})
 
 

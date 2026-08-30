@@ -731,6 +731,16 @@ window.YSTime = (function () {
 .ag-sel.is-disabled { opacity: .55; }
 .ag-sel.is-disabled .ag-sel-btn { cursor: not-allowed; }
 .ag-sel-opt[hidden] { display: none; }
+/* Lifted while a menu inside it is open. Raising .ag-sel-menu's own z-index does
+   not work: every card on this page animates in with `.fade-up`, and
+   `animation: ... both` makes each one a *permanent* stacking context, so the
+   menu's z-index is resolved inside its own card and a later sibling card paints
+   over it however high that value goes. The status filter never hit this only
+   because it lives in the last card on the page. Applied while open rather than
+   always, so a closed control leaves the sticky sub-header (z-30) on top where it
+   belongs; 35 clears that bar but stays under the dock (40) and header (50). */
+[data-sel-raise] { position: relative; }
+[data-sel-raise].ag-raised { z-index: 35; }
 .ag-search-meta {
   color: var(--ag-ink-faint); font-size: 11px; margin-bottom: 10px;
   font-variant-numeric: tabular-nums;
@@ -1262,7 +1272,7 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
 {% endif %}
 
 <!-- ── Run form ───────────────────────────────────────────────────────── -->
-<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6 mb-6 fade-up">
+<div data-sel-raise class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6 mb-6 fade-up">
   <div class="ag-form-grid">
     <div class="ag-form-field">
       <label class="block text-xs text-slate-500 mb-1" for="agTicker" data-i18n="agents.ticker">Ticker</label>
@@ -2263,7 +2273,15 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
         body: JSON.stringify({ ticker: tickerEl.value, date: dateEl.value,
                                // Write the report in the language the page is
                                // being read in.
-                               lang: I18n.getLang() }),
+                               lang: I18n.getLang(),
+                               // A table key and a thinking level, absent when
+                               // the deployment turned the picker off (the
+                               // elements are then not rendered at all). The
+                               // server resolves both and records what it used,
+                               // so a stale key here costs a fallback, not a
+                               // failed run.
+                               model: document.getElementById('agModel')?.value || '',
+                               thinking: document.getElementById('agThink')?.value || '' }),
       });
       const d = await r.json().catch(() => ({}));
       if (!r.ok) {
@@ -2727,113 +2745,141 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
     searchEl.scrollIntoView({ block: 'nearest' });
   });
 
-  // ── Status listbox ───────────────────────────────────────────────────────
-  // Drives the hidden #agStatusFilter, so loadHistory() and the change listener
-  // above read the value exactly as they did from the <select> this replaced.
-  const selWrap = document.getElementById('agStatusSel');
-  const selBtn = document.getElementById('agStatusBtn');
-  const selMenu = document.getElementById('agStatusMenu');
-  const selLabel = selBtn?.querySelector('.ag-sel-label');
-  const selDot = selBtn?.querySelector('.ag-sel-dot');
-  const selOpts = selMenu ? [...selMenu.querySelectorAll('.ag-sel-opt')] : [];
-  const selOpen = () => selWrap?.classList.contains('is-open') || false;
+  // ── Listboxes ────────────────────────────────────────────────────────────
+  // One controller, three instances: the status filter, and the model and
+  // thinking pickers on the run form. Built as a factory because every awkward
+  // part of this control is worth having exactly once -- the flip-up
+  // measurement, choosing on mousedown so Safari's blur cannot close the menu
+  // under the pointer, keeping aria-selected on every row, and carrying the
+  // i18n *key* onto the trigger so a language toggle relabels it.
+  //
+  // Each instance drives a hidden input and dispatches "change" on it, so a
+  // reader of the value cannot tell this from the <select> it replaced.
+  function makeListbox(wrapId, inputId, btnId, menuId, labelKey) {
+    const wrap = document.getElementById(wrapId);
+    const input = document.getElementById(inputId);
+    const btn = document.getElementById(btnId);
+    const menu = document.getElementById(menuId);
+    if (!wrap || !input || !btn || !menu) return null;
+    const label = btn.querySelector('.ag-sel-label');
+    const dot = btn.querySelector('.ag-sel-dot');
+    const all = [...menu.querySelectorAll('.ag-sel-opt')];
+    // Recomputed rather than captured: the thinking menu hides the levels the
+    // selected model does not accept, and a hidden row must not be reachable by
+    // ArrowDown or land under Home/End.
+    const opts = () => all.filter(o => !o.hidden);
+    const isOpen = () => wrap.classList.contains('is-open');
+    const disabled = () => wrap.classList.contains('is-disabled');
+    // The card that has to be lifted while this menu is open -- see the
+    // [data-sel-raise] rule for why the menu's own z-index cannot do it. Null for
+    // a control whose card is the last on the page, which needs no lifting.
+    const raise = wrap.closest('[data-sel-raise]');
 
-  // The chosen option's own markup is the source of truth for the trigger's
-  // face: one place decides what "running" looks like, so the dot beside the
-  // label and the dot in the list cannot drift apart.
-  function syncTrigger() {
-    if (!selBtn) return;
-    const opt = selOpts.find(o => o.getAttribute('aria-selected') === 'true')
-      || selOpts[0];
-    if (!opt) return;
-    const src = opt.querySelector('.ag-sel-dot');
-    const text = opt.querySelector('[data-i18n]');
-    selDot.className = src ? src.className : 'ag-sel-dot';
-    if (text) {
-      // Carry the key, not just the words: I18n.apply() relabels anything with
-      // data-i18n, so the trigger follows a language toggle without this file
-      // knowing which language is current.
-      selLabel.dataset.i18n = text.dataset.i18n;
-      selLabel.textContent = text.textContent;
+    // The chosen option's own markup is the source of truth for the trigger's
+    // face: one place decides what "running" looks like, so the dot beside the
+    // label and the dot in the list cannot drift apart.
+    function syncTrigger() {
+      const opt = all.find(o => o.getAttribute('aria-selected') === 'true')
+        || opts()[0];
+      if (!opt) return;
+      const src = opt.querySelector('.ag-sel-dot');
+      const text = opt.querySelector('[data-i18n]');
+      if (dot) dot.className = src ? src.className : 'ag-sel-dot';
+      if (text && label) {
+        // Carry the key, not just the words: I18n.apply() relabels anything with
+        // data-i18n, so the trigger follows a language toggle without this file
+        // knowing which language is current.
+        label.dataset.i18n = text.dataset.i18n;
+        label.textContent = text.textContent;
+      }
+      // The visible text is the value, so the name has to say what the value is
+      // *of*, or a screen reader announces a bare "Done".
+      if (label) {
+        btn.setAttribute('aria-label',
+          (I18n.t(labelKey) || labelKey) + ': ' + label.textContent);
+      }
+      wrap.classList.toggle('is-set', !!input.value);
     }
-    // The visible text is the value, so the name has to say what the value is
-    // *of*, or a screen reader announces a bare "Done".
-    selBtn.setAttribute('aria-label',
-      (I18n.t('agents.status_label') || 'Status filter') + ': ' + selLabel.textContent);
-    selWrap.classList.toggle('is-set', !!statusFilterEl.value);
-  }
 
-  function closeMenu({ focus = false } = {}) {
-    if (!selMenu) return;
-    selMenu.hidden = true;
-    selWrap.classList.remove('is-open');
-    selBtn.setAttribute('aria-expanded', 'false');
-    selOpts.forEach(o => o.classList.remove('is-active'));
-    selMenu.removeAttribute('aria-activedescendant');
-    if (focus) selBtn.focus();
-  }
-
-  function openMenu() {
-    if (!selMenu) return;
-    selMenu.hidden = false;
-    selWrap.classList.add('is-open');
-    selBtn.setAttribute('aria-expanded', 'true');
-    // Flip above the trigger when the menu would not clear the bottom of the
-    // viewport. Measured rather than assumed: the panel's position depends on how
-    // many runs are listed, and embedded it sits in an iframe a few hundred
-    // pixels tall. The 8px margin is not cosmetic -- landing flush on the edge
-    // reads as clipped, and one pixel over produces a scrollbar.
-    const EDGE = 8;
-    selMenu.classList.remove('is-up');
-    const box = selMenu.getBoundingClientRect();
-    // Free space left over on each side, negative where the menu would overhang.
-    const below = window.innerHeight - box.bottom;
-    const above = selBtn.getBoundingClientRect().top - box.height;
-    // In a frame too short for either side, the roomier one is the lesser evil:
-    // refusing to flip there leaves the menu clipped with nothing gained.
-    if (below < EDGE && above > below) selMenu.classList.add('is-up');
-    // Keyboard focus starts on the current value rather than the first row, so
-    // ArrowDown from "Error" does not jump back to the top of the list.
-    const cur = selOpts.findIndex(o => o.getAttribute('aria-selected') === 'true');
-    markActive(cur < 0 ? 0 : cur);
-    // preventScroll for the same reason markActive() guards its scrollIntoView:
-    // focus() scrolls its target into view by default, which moved the page by a
-    // couple of pixels every time the menu opened near the bottom edge -- and the
-    // flip above has already put it fully on screen.
-    selMenu.focus({ preventScroll: true });
-  }
-
-  function markActive(i) {
-    selOpts.forEach((o, n) => o.classList.toggle('is-active', n === i));
-    // The focus stays on the menu itself, so the highlighted row has to be named
-    // for a screen reader -- the class alone is a purely visual cursor.
-    if (selOpts[i]) selMenu.setAttribute('aria-activedescendant', selOpts[i].id);
-    // Only when the menu is the thing that scrolls. Five rows never overflow it,
-    // so an unguarded scrollIntoView here scrolls the *page* instead: opening the
-    // filter dragged the list out from under the reader, and it also hid the
-    // flip above by making an off-screen menu on-screen the wrong way.
-    if (selMenu.scrollHeight > selMenu.clientHeight) {
-      selOpts[i]?.scrollIntoView({ block: 'nearest' });
+    function closeMenu({ focus = false } = {}) {
+      menu.hidden = true;
+      wrap.classList.remove('is-open');
+      raise?.classList.remove('ag-raised');
+      btn.setAttribute('aria-expanded', 'false');
+      all.forEach(o => o.classList.remove('is-active'));
+      menu.removeAttribute('aria-activedescendant');
+      if (focus) btn.focus();
     }
-  }
 
-  const activeIndex = () => selOpts.findIndex(o => o.classList.contains('is-active'));
+    function openMenu() {
+      if (disabled()) return;
+      menu.hidden = false;
+      wrap.classList.add('is-open');
+      raise?.classList.add('ag-raised');
+      btn.setAttribute('aria-expanded', 'true');
+      // Flip above the trigger when the menu would not clear the bottom of the
+      // viewport. Measured rather than assumed: the panel's position depends on how
+      // many runs are listed, and embedded it sits in an iframe a few hundred
+      // pixels tall. The 8px margin is not cosmetic -- landing flush on the edge
+      // reads as clipped, and one pixel over produces a scrollbar.
+      const EDGE = 8;
+      menu.classList.remove('is-up');
+      const box = menu.getBoundingClientRect();
+      // Free space left over on each side, negative where the menu would overhang.
+      const below = window.innerHeight - box.bottom;
+      const above = btn.getBoundingClientRect().top - box.height;
+      // In a frame too short for either side, the roomier one is the lesser evil:
+      // refusing to flip there leaves the menu clipped with nothing gained.
+      if (below < EDGE && above > below) menu.classList.add('is-up');
+      // Keyboard focus starts on the current value rather than the first row, so
+      // ArrowDown from "Error" does not jump back to the top of the list.
+      const rows = opts();
+      const cur = rows.findIndex(o => o.getAttribute('aria-selected') === 'true');
+      markActive(cur < 0 ? 0 : cur);
+      // preventScroll for the same reason markActive() guards its scrollIntoView:
+      // focus() scrolls its target into view by default, which moved the page by a
+      // couple of pixels every time the menu opened near the bottom edge -- and the
+      // flip above has already put it fully on screen.
+      menu.focus({ preventScroll: true });
+    }
 
-  function choose(opt, { reload = true } = {}) {
-    if (!opt) return;
-    selOpts.forEach(o => o.setAttribute('aria-selected', String(o === opt)));
-    const next = opt.dataset.value || '';
-    const changed = next !== statusFilterEl.value;
-    statusFilterEl.value = next;
-    syncTrigger();
-    // Dispatched rather than called directly: a hidden input emits no change of
-    // its own, and everything else in this file listens for one.
-    if (reload && changed) statusFilterEl.dispatchEvent(new Event('change'));
-  }
+    function markActive(i) {
+      const rows = opts();
+      all.forEach(o => o.classList.remove('is-active'));
+      if (rows[i]) rows[i].classList.add('is-active');
+      // The focus stays on the menu itself, so the highlighted row has to be named
+      // for a screen reader -- the class alone is a purely visual cursor.
+      if (rows[i]) menu.setAttribute('aria-activedescendant', rows[i].id);
+      // Only when the menu is the thing that scrolls. A handful of rows never
+      // overflow it, so an unguarded scrollIntoView here scrolls the *page*
+      // instead: opening the filter dragged the list out from under the reader,
+      // and it also hid the flip above by making an off-screen menu on-screen the
+      // wrong way.
+      if (menu.scrollHeight > menu.clientHeight) {
+        rows[i]?.scrollIntoView({ block: 'nearest' });
+      }
+    }
 
-  if (selBtn && selMenu) {
-    selBtn.addEventListener('click', () => selOpen() ? closeMenu() : openMenu());
-    selBtn.addEventListener('keydown', e => {
+    const activeIndex = () => opts().findIndex(o => o.classList.contains('is-active'));
+
+    function choose(opt, { notify = true } = {}) {
+      if (!opt) return;
+      // A provider with no credential on this box. Refused here as well as
+      // dimmed, because the dimming is only a hint and Enter on the row would
+      // otherwise queue a run that dies on a missing key.
+      if (opt.dataset.unavailable) return;
+      all.forEach(o => o.setAttribute('aria-selected', String(o === opt)));
+      const next = opt.dataset.value || '';
+      const changed = next !== input.value;
+      input.value = next;
+      syncTrigger();
+      // Dispatched rather than called directly: a hidden input emits no change of
+      // its own, and everything else in this file listens for one.
+      if (notify && changed) input.dispatchEvent(new Event('change'));
+    }
+
+    btn.addEventListener('click', () => isOpen() ? closeMenu() : openMenu());
+    btn.addEventListener('keydown', e => {
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
         openMenu();
@@ -2841,26 +2887,28 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
     });
     // mousedown, not click: the row is chosen before the menu can lose focus,
     // which on Safari fires blur first and would close it under the pointer.
-    selMenu.addEventListener('mousedown', e => {
+    menu.addEventListener('mousedown', e => {
       const opt = e.target.closest('.ag-sel-opt');
       if (!opt) return;
       e.preventDefault();
+      if (opt.dataset.unavailable) return;
       choose(opt);
       closeMenu({ focus: true });
     });
-    selMenu.addEventListener('mousemove', e => {
+    menu.addEventListener('mousemove', e => {
       const opt = e.target.closest('.ag-sel-opt');
-      if (opt) markActive(selOpts.indexOf(opt));
+      if (opt) markActive(opts().indexOf(opt));
     });
-    selMenu.addEventListener('keydown', e => {
+    menu.addEventListener('keydown', e => {
+      const rows = opts();
       const i = activeIndex();
-      if (e.key === 'ArrowDown') { e.preventDefault(); markActive(Math.min(i + 1, selOpts.length - 1)); }
+      if (e.key === 'ArrowDown') { e.preventDefault(); markActive(Math.min(i + 1, rows.length - 1)); }
       else if (e.key === 'ArrowUp') { e.preventDefault(); markActive(Math.max(i - 1, 0)); }
       else if (e.key === 'Home') { e.preventDefault(); markActive(0); }
-      else if (e.key === 'End') { e.preventDefault(); markActive(selOpts.length - 1); }
+      else if (e.key === 'End') { e.preventDefault(); markActive(rows.length - 1); }
       else if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
-        choose(selOpts[i < 0 ? 0 : i]);
+        choose(rows[i < 0 ? 0 : i]);
         closeMenu({ focus: true });
       } else if (e.key === 'Escape' || e.key === 'Tab') {
         // Stopped here so the document handler below does not read this as "clear
@@ -2872,10 +2920,130 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
     // Pointer-down rather than click, so a press that starts outside dismisses
     // the menu even if it ends on a scrollbar or outside the window.
     document.addEventListener('pointerdown', e => {
-      if (selOpen() && !selWrap.contains(e.target)) closeMenu();
+      if (isOpen() && !wrap.contains(e.target)) closeMenu();
     });
     syncTrigger();
     document.addEventListener('i18n:langchange', syncTrigger);
+
+    return {
+      value: () => input.value,
+      options: () => all,
+      selected: () => all.find(o => o.getAttribute('aria-selected') === 'true'),
+      // notify:false for programmatic selection, so restoring a stored preference
+      // on load does not look like the reader having just changed it.
+      select(v, { notify = true } = {}) {
+        const opt = all.find(o => (o.dataset.value || '') === v && !o.hidden);
+        if (opt) choose(opt, { notify });
+        return !!opt;
+      },
+      setEnabled(on, naKey) {
+        wrap.classList.toggle('is-disabled', !on);
+        btn.setAttribute('aria-disabled', String(!on));
+        // Taken out of the tab order rather than left focusable-but-inert: a
+        // control that takes focus and then refuses every key reads as broken.
+        btn.tabIndex = on ? 0 : -1;
+        if (!on) closeMenu();
+        // A disabled control must not keep displaying the last value, dimmed:
+        // greyed-out "High" beside a provider that has no thinking parameter
+        // states something false about the run. Carry the key so a language
+        // toggle relabels it like everything else.
+        if (!on && naKey && label) {
+          label.dataset.i18n = naKey;
+          label.textContent = I18n.t(naKey) || 'Not applicable';
+          btn.setAttribute('aria-label',
+            (I18n.t(labelKey) || labelKey) + ': ' + label.textContent);
+        } else if (on) {
+          syncTrigger();
+        }
+      },
+      refresh: syncTrigger,
+      // Used when the control becomes inapplicable rather than merely unset, so
+      // the hidden input stops contributing a value to the request.
+      clear() {
+        all.forEach(o => o.setAttribute('aria-selected', 'false'));
+        input.value = '';
+        wrap.classList.remove('is-set');
+      },
+    };
+  }
+
+  // Drives the hidden #agStatusFilter, so loadHistory() and the change listener
+  // above read the value exactly as they did from the <select> this replaced.
+  makeListbox('agStatusSel', 'agStatusFilter', 'agStatusBtn', 'agStatusMenu',
+              'agents.status_label');
+
+  // ── Model + thinking pickers ─────────────────────────────────────────────
+  // The two are coupled: which thinking levels exist is a property of the model,
+  // and the mismatch is silent upstream -- "medium" on Gemini Pro is forwarded to
+  // the API verbatim and rejected, minutes into a paid run. So the model's own
+  // data-thinking is what decides which rows the thinking menu shows, and the
+  // value is re-clamped every time the model changes.
+  const modelSel = makeListbox('agModelSel', 'agModel', 'agModelBtn',
+                               'agModelMenu', 'agents.model_label');
+  const thinkSel = makeListbox('agThinkSel', 'agThink', 'agThinkBtn',
+                               'agThinkMenu', 'agents.thinking_label');
+  // Remembered so a reader who prefers the cheap tier does not re-pick it every
+  // visit. Namespaced like <app>_theme, and validated on read rather than
+  // trusted: model ids churn, so a stored key may name a row that no longer
+  // exists or one whose provider has since lost its credential.
+  const MODEL_LS = 'ystocker_agents_model';
+  const THINK_LS = 'ystocker_agents_thinking';
+  const lsGet = k => { try { return localStorage.getItem(k) || ''; } catch (_) { return ''; } };
+  const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch (_) {} };
+
+  if (modelSel && thinkSel) {
+    // Reflect the chosen model onto the thinking control: show only the levels it
+    // accepts, and disable the control outright for a provider that has no such
+    // parameter rather than leaving an input that silently does nothing.
+    //
+    // ``reset`` is the difference between the reader changing model and the page
+    // restoring state. Changing model adopts that model's own default, because a
+    // tier means both halves of its bargain -- carrying "high" onto the cheapest
+    // tier spends back exactly what the cheaper model saved. Restoring does not,
+    // because a stored level *is* the reader's expressed choice.
+    function syncThinking({ notify = false, reset = false } = {}) {
+      const opt = modelSel.selected();
+      const raw = (opt?.dataset.thinking || '').trim();
+      const allowed = raw ? raw.split(',').filter(Boolean) : [];
+      thinkSel.options().forEach(o => {
+        o.hidden = !allowed.includes(o.dataset.value || '');
+      });
+      thinkSel.setEnabled(allowed.length > 0, 'agents.think_na');
+      if (!allowed.length) {
+        // Cleared as well as disabled, so a level left over from the previous
+        // model is not what the run POST sends for a provider that has none.
+        if (thinkSel.value()) thinkSel.clear();
+        return;
+      }
+      const want = thinkSel.value();
+      const fallback = opt?.dataset.thinkingDefault || allowed[allowed.length - 1];
+      if (reset || !allowed.includes(want)) thinkSel.select(fallback, { notify });
+      else thinkSel.refresh();
+    }
+
+    // Restore, most specific first. An unavailable or retired row simply fails to
+    // select, leaving the server-rendered default in place -- which is why select()
+    // reports whether it matched.
+    const storedModel = lsGet(MODEL_LS);
+    if (storedModel) modelSel.select(storedModel, { notify: false });
+    if (!modelSel.value()) {
+      modelSel.select('{{ agent_env.model_choice_default }}', { notify: false });
+    }
+    syncThinking();
+    const storedThink = lsGet(THINK_LS);
+    if (storedThink) thinkSel.select(storedThink, { notify: false });
+    syncThinking();
+
+    document.getElementById('agModel')?.addEventListener('change', () => {
+      lsSet(MODEL_LS, modelSel.value());
+      // reset + notify so the level this model actually ended up with is the one
+      // stored, rather than leaving a "medium" behind that Pro would reject on
+      // the next visit.
+      syncThinking({ notify: true, reset: true });
+    });
+    document.getElementById('agThink')?.addEventListener('change', () => {
+      lsSet(THINK_LS, thinkSel.value());
+    });
   }
 
   // ── Escape clears the filters ────────────────────────────────────────────

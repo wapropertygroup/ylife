@@ -212,6 +212,21 @@ def create(job: dict[str, Any], sharer: str, recipient: str,
         log.warning("share: refusing to share a job with no id or no owner")
         return None
 
+    # A run given the holder's portfolio must not become a public URL. The block
+    # only ever reached the decision agents' prompts, but those agents write prose
+    # and routinely quote what they were told, so the report can carry the owner's
+    # position weights and stated limits — and `/agents/shared/<token>` answers to
+    # anybody holding the token, with no sign-in. This is the one refusal that
+    # cannot be recovered from afterwards: once the mail is out, the report is out.
+    #
+    # Refused rather than redacted. Redaction here would mean pattern-matching
+    # percentages out of free prose written by a model, which fails quietly in the
+    # direction that discloses.
+    if job.get("portfolio_context"):
+        log.info("share: refusing to share %s — the run included the owner's "
+                 "portfolio", job_id)
+        return None
+
     now = _now()
     row = {
         "token":      secrets.token_urlsafe(TOKEN_BYTES),

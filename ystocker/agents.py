@@ -393,6 +393,19 @@ import json, sys, os, tempfile
 BEGIN, END = sys.argv[3], sys.argv[4]
 ticker, day = sys.argv[1], sys.argv[2]
 RESULT_PATH = sys.argv[5] if len(sys.argv) > 5 else ""
+# The holder's portfolio block, passed as a *file* rather than argv or an env var.
+# It is a few KB of text and both of those channels have OS length limits that
+# fail as an opaque E2BIG at exec time, which would present as "the analysis
+# never started". Reading it here also means an unreadable file degrades to no
+# portfolio rather than killing a run that costs real money.
+PORTFOLIO_PATH = sys.argv[6] if len(sys.argv) > 6 else ""
+PORTFOLIO_CONTEXT = ""
+if PORTFOLIO_PATH:
+    try:
+        with open(PORTFOLIO_PATH, encoding="utf-8") as _pf:
+            PORTFOLIO_CONTEXT = _pf.read()
+    except Exception as _exc:
+        sys.stderr.write("portfolio context unreadable (%s); continuing without it\n" % _exc)
 
 def emit(payload):
     # Written to a file as well as stdout. stdout only reaches the parent while
@@ -493,9 +506,20 @@ try:
         os.environ.get("YSTOCKER_SELECTED_ANALYSTS", "").split(",")
         if part.strip()
     )
-    graph = TradingAgentsGraph(selected_analysts=selected or BASE_ANALYSTS,
-                               debug=False, config=cfg,
-                               progress_callback=on_progress)
+    kwargs = dict(selected_analysts=selected or BASE_ANALYSTS,
+                  debug=False, config=cfg, progress_callback=on_progress)
+    if PORTFOLIO_CONTEXT.strip():
+        kwargs["portfolio_context"] = PORTFOLIO_CONTEXT
+    try:
+        graph = TradingAgentsGraph(**kwargs)
+    except TypeError as _exc:
+        # A checkout predating portfolio_context. Losing one feature beats failing
+        # a run the user has already been charged for.
+        if "portfolio_context" not in str(_exc):
+            raise
+        sys.stderr.write("TradingAgents has no portfolio_context; running without it\n")
+        kwargs.pop("portfolio_context", None)
+        graph = TradingAgentsGraph(**kwargs)
     state, decision = graph.propagate(ticker, day)
 
     # Prefer the package's own report builder: reporting.write_report_tree
@@ -790,6 +814,64 @@ def _result_path(job_id: str) -> Path:
     """Where the detached child writes its result, independent of stdout."""
     JOB_DIR.mkdir(parents=True, exist_ok=True)
     return JOB_DIR / f"{job_id}.result.json"
+
+
+def _portfolio_path(job_id: str) -> Path:
+    """Where the holder's constraint block is staged for the child.
+
+    A file rather than argv or an env var: the block runs to a few KB and both of
+    those channels have OS length limits whose failure is an opaque ``E2BIG`` at
+    exec time, which would present to the user as an analysis that never started.
+    Pruned with the other sidecars by :func:`_prune`.
+    """
+    JOB_DIR.mkdir(parents=True, exist_ok=True)
+    return JOB_DIR / f"{job_id}.portfolio.txt"
+
+
+def build_portfolio_context(email: str) -> str:
+    """The holder's constraint block for the decision agents, or "" if none.
+
+    Empty in every failure case, and that is the safe direction here: the block is
+    an *input* to a judgement, so losing it costs specificity, while blocking the
+    run would cost the user a paid analysis. The store failing closed matters on
+    ``/assets``, where the page's whole job is to show holdings; it does not
+    matter here.
+
+    Returns "" when the user has no positions, has stated no limits, or the store
+    is unreachable. The agents are told that an absent block means *unknown* and
+    not *flat*, which is why no placeholder is synthesised.
+    """
+    if os.environ.get("AGENTS_PORTFOLIO_CONTEXT", "").strip() in ("0", "false", "no"):
+        return ""
+    if not email:
+        return ""
+    try:
+        from ystocker import assets as assets_svc
+        from ystocker import exposure, funddata, lookthrough, portfolio
+
+        positions = portfolio.load(email)
+        if not positions:
+            return ""
+        stored_policy = portfolio.load_policy(email)
+        policy = exposure.policy_from_stored(stored_policy)
+
+        # peek_resolver, never a fetching one: this runs inside submit(), on the
+        # request path, and a cold portfolio of funds is ~100 Yahoo calls at
+        # data.fetch_group's 0.5s spacing -- comfortably past gunicorn's
+        # --timeout 120. A cold cache widens the bands to INDETERMINATE, which is
+        # the honest answer rather than a missing one.
+        priced, _rows, _warnings = assets_svc.value_positions(positions)
+        if not priced:
+            return ""
+        result = lookthrough.analyse(priced, funddata.peek_resolver())
+        groups = assets_svc._issuer_groups(result.as_dict().get("exposures") or [])
+        assessment = exposure.review(
+            result, policy,
+            issuer_groups={g["issuer"]: g["symbols"] for g in groups})
+        return exposure.render_block(assessment)
+    except Exception as exc:  # noqa: BLE001 - a missing block must not fail a run
+        log.warning("agents: portfolio context unavailable (%s)", exc)
+        return ""
 
 
 def _job_path(job_id: str) -> Path:
@@ -1358,6 +1440,14 @@ def _is_showcase(job: Optional[dict[str, Any]]) -> bool:
         return False
     if not (job.get("report") or "").strip():
         return False
+    # A run that was given the holder's portfolio is never public. The block
+    # reached only the decision agents, but they write prose and quote what they
+    # were told, so the report can carry position weights and stated limits. This
+    # path is more exposed than sharing: the showcase needs no token, only the
+    # ``/agents`` page. Checked here rather than in ``_publishable`` so it also
+    # excludes the run from the *listing*, not just from having its body served.
+    if job.get("portfolio_context"):
+        return False
     only = showcase_emails()
     if only and (job.get("user") or "").strip().lower() not in only:
         return False
@@ -1467,6 +1557,7 @@ def _prune() -> None:
             stem = p.with_suffix("")
             stem.with_suffix(".result.json").unlink(missing_ok=True)
             stem.with_suffix(".events.jsonl").unlink(missing_ok=True)
+            stem.with_suffix(".portfolio.txt").unlink(missing_ok=True)
             # The send-once marker for the report email. Safe to drop with the
             # record: notify() needs a job whose status is done, and the record
             # it would have to read is what this loop just deleted.
@@ -1771,8 +1862,24 @@ def _run(job_id: str) -> None:
         )
 
         result_path = str(_result_path(job_id))
+        # Staged now rather than at submit time so the snapshot is of the
+        # portfolio as it stands when the analysis actually begins -- a run can sit
+        # in the queue behind another for a quarter of an hour.
+        portfolio_arg = ""
+        block = build_portfolio_context(job.get("user") or "")
+        if block.strip():
+            try:
+                path = _portfolio_path(job_id)
+                path.write_text(block, encoding="utf-8")
+                portfolio_arg = str(path)
+                job["portfolio_context"] = True
+                _write(job)
+            except OSError as exc:
+                log.warning("agents: could not stage portfolio for %s: %s",
+                            job_id, exc)
+
         cmd = [_interpreter(), "-c", _RUNNER, job["ticker"], job["date"],
-               _BEGIN, _END, result_path]
+               _BEGIN, _END, result_path, portfolio_arg]
         started = time.time()
         try:
             # start_new_session detaches the child into its own process group so

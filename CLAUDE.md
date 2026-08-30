@@ -498,6 +498,90 @@ TTL is a convenience, not the guarantee: DynamoDB's sweeper can run up to 48h
 late, so `share.lookup()` re-checks `expires_at` on every read and a row past its
 date is expected to still be present.
 
+### Choosing the model and thinking depth (`agent_models.py`)
+
+The run form on `/agents` lets a reader pick which models write their report and
+how hard the model thinks. `agent_models.py` is a pure table of five choices —
+`google-pro`, `google-flash`, `google-lite`, `deepseek-pro`, `deepseek-flash` —
+each naming a provider, a `deep_think_llm`, a `quick_think_llm`, the thinking
+levels it accepts and its default. Every model id is copied from
+`tradingagents/llm_clients/model_catalog.py`, never invented.
+
+**The client sends a table key, never a model id.** TradingAgents does not fail
+fast on an unknown model: `base_client.warn_if_unknown_model()` emits a
+`RuntimeWarning` reading "Continuing anyway" and the run then dies inside the
+vendor SDK on its first call — which is minutes after the credit was spent, with
+the reader watching a progress bar. There is no pre-flight validator for the
+triple either; `validators.validate_model` checks only (provider, model), returns
+`True` for any provider it does not know, and lets the CLI's `"custom"` sentinel
+through. So resolution is a dict lookup and a string the client invented cannot
+reach the child environment at all, which is a stronger guarantee than validating
+one that can. The keys carry **no version** for the same reason
+`gemini-3.1-pro-preview` is a preview id: `google-pro` survives the rename, so a
+catalog bump does not invalidate every reader's stored preference or make
+historical jobs unreadable.
+
+**Accepted thinking levels are per model, and the mismatch is silent.** Gemini
+Pro takes `low`/`high`; Flash also takes `minimal`/`medium`. `google_client.py`
+remaps exactly one of the four mismatches — `minimal` on Pro becomes `low` — and
+forwards `medium` on Pro **verbatim**, so it reaches the API and 400s. Rather
+than reproduce that asymmetry in the UI and hope, each choice carries the exact
+set it accepts and `resolve()` clamps anything else to that choice's default, so
+an out-of-range level is unrepresentable downstream. Providers with no thinking
+knob get an empty set and the control is disabled outright: only `google`,
+`openai` and `anthropic` are read by `TradingAgentsGraph._get_provider_kwargs`,
+so for DeepSeek the parameter is inert and offering it would be a lie about what
+the run does.
+
+**A per-job override must be assigned, not `setdefault`ed.** `_child_env` builds
+the child's environment with `setdefault` for the shared knobs, which means
+"whatever this process inherited wins" — so on a box whose unit file pins
+`TRADINGAGENTS_DEEP_THINK_LLM` a reader's selection would be accepted by the UI,
+recorded on the job, shown back on the finished report, and silently ignored by
+the process that ran it. This is the same trap the `TRADINGAGENTS_OUTPUT_LANGUAGE`
+line was already commented for. `tests/test_agent_models.py` asserts the override
+beats a pin.
+
+**Unknown key falls back; unavailable provider is an error.** Those two are
+deliberately different. A retired or stale key resolves to the deployment's
+default, because model ids churn and a reader whose browser restored a dead
+preference must not get a hard failure they cannot clear without knowing to
+reload. A provider with **no credential** is refused with a 400 instead, because
+TradingAgents raises before the first token and quietly substituting a different
+vendor's model would put a name on the report that did not produce it — and
+`routes.py` refunds the quota on any `submit()` error, so the rejection is free.
+It is unreachable from the page, which disables an unavailable row in both the
+pointer and keyboard paths.
+
+The effective triple is **frozen on the job at submit** and `_run` reads it back
+rather than re-resolving, for the reason the language is frozen: a queued job
+must reproduce the choice the reader made, and re-deriving it would let a table
+that shifted under it run one configuration while the report claimed another. A
+record written before the picker existed carries no `provider`, which
+`job_models()` turns back into the deployment's defaults, so an old queued job
+runs exactly as it always did — and because a DynamoDB row is one gzipped opaque
+blob, the schema addition needs no table change.
+
+`provider`, `deep_model`, `quick_model` and `thinking` are added to **both**
+publishing allowlists (`agents._PUBLIC_FIELDS`, `share._SHAREABLE_JOB_FIELDS`):
+a report on the cheapest tier must not read as one on the most capable, and the
+share recipient cannot see the sharer's picker. `model_choice` is omitted from
+both — it is an internal table key. Publishing a model name to an
+unauthenticated visitor is not a new disclosure; `fallback_models` already did.
+
+Selecting a model spends nothing extra: credits are flat (1/run) and the quotas
+count runs, not tokens, while the default was already the most expensive setting
+(Pro on **both** roles at `thinking=high`). So every choice is at most as costly
+as before. `AGENTS_MODEL_CHOICE=0` is the kill switch — with it off the controls
+are not rendered, a client that keeps sending a choice is ignored, and the
+read-only `Model:` line returns. DeepSeek needs `/ystocker/DEEPSEEK_API_KEY` in
+SSM (already set, and IAM's `parameter/ystocker/*` needed no change); without it
+`agent_models.provider_available()` reports it unavailable and the rows are
+disabled rather than offering a run that would die on a missing key.
+
+Tests: `tests/test_agent_models.py` (43, no app/network/subprocess), including a
+cross-check that every offered id appears in TradingAgents' own catalog file.
+
 ### The AI Markets Brief (`/api/market-brief`)
 
 The card at the top of `/markets` is generated from **every** dashboard —
@@ -844,6 +928,21 @@ Started in `create_app()`, all daemon threads:
   would misstate the history it exists to show. Adding the adapter to `base.html`
   would cost every page a script for the benefit of one.
 - **Nested `<button>` elements** break DOM structure in templates — browsers auto-close the outer button, causing sibling sections to escape their parent container. Always use `<div>` or `<span>` for clickable elements inside buttons.
+- **`animation: … both` makes every card a permanent stacking context, so a
+  dropdown's own `z-index` cannot lift it.** `.fade-up` in `base.html` is
+  `animation: fadeUp .35s ease both`, and the `both` fill mode means the
+  animation's effect never stops applying — so each card is a stacking context
+  for the life of the page, not just for 350 ms. An absolutely-positioned menu
+  inside card A therefore resolves its `z-index` *within card A*, and card B
+  further down the document paints over it however high that number goes. On
+  `/agents` the model and thinking menus opened, rendered, looked correct, and
+  silently swallowed every click: Playwright named the intercepting element,
+  which is the only reason it was diagnosed rather than filed as a flaky click.
+  The fix has to lift the **ancestor card** (`[data-sel-raise].ag-raised`,
+  toggled in the listbox's own open/close so a closed control leaves the sticky
+  sub-header on top), not the menu. Note the status filter never hit this only
+  because it lives in the last card on the page — so "the existing dropdown
+  works" is not evidence that a new one will.
 - **`routes.py` is monolithic** (5200+ lines in yStocker) — all routes, API endpoints, cache logic, and background tasks in one file.
 - **Google Maps API** on yPlanner requires a valid billing-enabled API key; errors show "Oops! Something went wrong" with a purple stripe.
 - **SSH deploy** requires a `.pem` key file; the `id_ed25519` key on this machine doesn't have EC2 access. Use SSM `send-command` instead.

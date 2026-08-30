@@ -305,6 +305,7 @@
       <button type="button" class="as-tab px-3 py-2 text-sm whitespace-nowrap" data-tab="holdings" data-active="1"><span data-i18n="assets.tab_holdings">Holdings</span></button>
       <button type="button" class="as-tab px-3 py-2 text-sm whitespace-nowrap" data-tab="lookthrough"><span data-i18n="assets.tab_lookthrough">Look-through (穿透)</span></button>
       <button type="button" class="as-tab px-3 py-2 text-sm whitespace-nowrap" data-tab="overlap"><span data-i18n="assets.tab_overlap">Hidden overlap</span></button>
+      <button type="button" class="as-tab px-3 py-2 text-sm whitespace-nowrap" data-tab="limits"><span data-i18n="assets.tab_limits">Limits</span><span id="asLimitBadge" class="hidden ml-1.5 px-1.5 py-0.5 rounded text-xs font-semibold"></span></button>
       <button type="button" class="as-tab px-3 py-2 text-sm whitespace-nowrap" data-tab="mix"><span data-i18n="assets.tab_mix">Asset &amp; sector mix</span></button>
       <button type="button" class="as-tab px-3 py-2 text-sm whitespace-nowrap" data-tab="ai"><span data-i18n="assets.tab_ai">AI Analysis</span></button>
       <button type="button" class="as-tab px-3 py-2 text-sm whitespace-nowrap" data-tab="import"><span data-i18n="assets.tab_import">Import</span></button>
@@ -410,6 +411,66 @@
         <p class="text-xs" style="color:var(--as-muted)" data-i18n="assets.overlap_body">These companies reach your portfolio through more than one holding.</p>
       </div>
       <div id="asOverlaps" class="grid gap-3 sm:grid-cols-2"></div>
+    </section>
+
+    <!-- ── Limits ────────────────────────────────────────────────────────
+         The stated policy, and the three-valued verdicts against it. The
+         vocabulary is the point of this panel: a floor under the limit is not a
+         pass, because a fund's undisclosed tail can hold more of the same name.
+    -->
+    <section data-panel="limits" class="hidden">
+      <div class="as-card p-4 mb-4">
+        <h3 class="text-sm font-semibold mb-1" style="color:var(--as-strong)" data-i18n="assets.limits_title">Your stated limits</h3>
+        <p class="text-xs mb-4" style="color:var(--as-muted)" data-i18n="assets.limits_body">Look-through measures what you hold; only you can say what the ceiling should be. Leave a field empty and no check is made against it.</p>
+        <form id="asPolicyForm" class="grid gap-4 sm:grid-cols-3">
+          <label class="block">
+            <span class="block text-xs mb-1" style="color:var(--as-muted)" data-i18n="assets.limit_single">Max per company (%)</span>
+            <input type="number" name="max_single_name_pct" min="0.01" max="100" step="0.1" placeholder="8"
+                   class="w-full px-3 py-2 rounded-lg text-sm bg-transparent border" style="border-color:var(--as-line); color:var(--as-strong)">
+          </label>
+          <label class="block">
+            <span class="block text-xs mb-1" style="color:var(--as-muted)" data-i18n="assets.limit_issuer">Max per issuer (%)</span>
+            <input type="number" name="max_issuer_pct" min="0.01" max="100" step="0.1" placeholder="10"
+                   class="w-full px-3 py-2 rounded-lg text-sm bg-transparent border" style="border-color:var(--as-line); color:var(--as-strong)">
+          </label>
+          <label class="block">
+            <span class="block text-xs mb-1" style="color:var(--as-muted)" data-i18n="assets.limit_cash">Investable cash</span>
+            <input type="number" name="cash" min="0" step="0.01" placeholder="0"
+                   class="w-full px-3 py-2 rounded-lg text-sm bg-transparent border" style="border-color:var(--as-line); color:var(--as-strong)">
+          </label>
+          <div class="sm:col-span-3 flex items-center gap-3">
+            <button type="submit" class="px-4 py-2 rounded-lg bg-brand text-white text-sm font-medium hover:bg-brand-dark transition" data-i18n="assets.limit_save">Save limits</button>
+            <span id="asPolicyStatus" class="text-xs" style="color:var(--as-muted)" aria-live="polite"></span>
+          </div>
+        </form>
+      </div>
+
+      <div id="asLimitEmpty" class="as-card p-6 text-center text-sm hidden" style="color:var(--as-muted)"
+           data-i18n="assets.limits_none">No limits stated yet, so nothing has been checked. An unset limit is not a satisfied one.</div>
+
+      <div id="asLimitResults" class="hidden">
+        <div class="as-card p-4 mb-4">
+          <h3 class="text-sm font-semibold mb-1" style="color:var(--as-strong)" data-i18n="assets.limits_how_title">How to read a verdict</h3>
+          <ul class="text-xs space-y-1 mt-2" style="color:var(--as-muted)">
+            <li><span class="font-semibold" style="color:var(--as-warn)" data-i18n="assets.verdict_breach">Breach</span> — <span data-i18n="assets.verdict_breach_body">the measured floor alone exceeds the limit.</span></li>
+            <li><span class="font-semibold" style="color:var(--as-hidden)" data-i18n="assets.verdict_indeterminate">Cannot verify</span> — <span data-i18n="assets.verdict_indeterminate_body">the floor is under the limit, but the funds' disclosures cannot rule out a breach.</span></li>
+            <li><span class="font-semibold" style="color:var(--as-seen)" data-i18n="assets.verdict_pass">Verified</span> — <span data-i18n="assets.verdict_pass_body">even the ceiling is under the limit. The only real pass.</span></li>
+          </ul>
+          <p class="text-xs mt-3" style="color:var(--as-muted)" id="asLimitUnknown"></p>
+        </div>
+        <div class="as-card p-4 overflow-x-auto">
+          <table class="w-full text-xs">
+            <thead><tr style="color:var(--as-muted)">
+              <th class="text-left pb-2" data-i18n="assets.col_name">Name</th>
+              <th class="text-right pb-2" data-i18n="assets.col_limit">Limit</th>
+              <th class="text-right pb-2" data-i18n="assets.col_atleast">At least</th>
+              <th class="text-right pb-2" data-i18n="assets.col_atmost">At most</th>
+              <th class="text-left pb-2 pl-3" data-i18n="assets.col_verdict">Verdict</th>
+            </tr></thead>
+            <tbody id="asLimitRows"></tbody>
+          </table>
+        </div>
+      </div>
     </section>
 
     <!-- ── Mix ───────────────────────────────────────────────────────── -->
@@ -640,6 +701,7 @@
     renderResidual(d);
     renderOverlaps(d);
     renderMix(d);
+    renderLimits(d);
 
     const activelyWarming = !!d.warming && polls < 25;
     const warming = $('asWarming');
@@ -1028,6 +1090,119 @@
     if (!resp.ok) throw new Error(data.error || 'Request failed');
     return data;
   }
+
+  // ── Limits ────────────────────────────────────────────────────────────
+  // Verdict colours reuse the page's existing look-through palette, which already
+  // means the right things: --as-seen is what has been resolved, --as-hidden is
+  // what is hiding, --as-warn is trouble. That is exactly pass / cannot-verify /
+  // breach, so a reader who has understood the coverage bar needs no new legend.
+  const VERDICT = {
+    breach:        { key: 'assets.verdict_breach',        fb: 'Breach',       colour: 'var(--as-warn)' },
+    indeterminate: { key: 'assets.verdict_indeterminate', fb: 'Cannot verify', colour: 'var(--as-hidden)' },
+    pass:          { key: 'assets.verdict_pass',          fb: 'Verified',      colour: 'var(--as-seen)' }
+  };
+
+  let policyDirty = false;
+
+  function renderLimits(d) {
+    const policy = d.policy || {};
+    // Do not stomp on half-typed input if a poll lands mid-edit. The warm loop
+    // re-renders every few seconds and would otherwise reset the field under the
+    // cursor.
+    if (!policyDirty) {
+      const form = $('asPolicyForm');
+      form.elements.max_single_name_pct.value = policy.max_single_name_pct ?? '';
+      form.elements.max_issuer_pct.value = policy.max_issuer_pct ?? '';
+      form.elements.cash.value = policy.cash ? policy.cash : '';
+    }
+
+    const c = d.constraints;
+    const badge = $('asLimitBadge');
+    if (!c) {
+      // No limits stated. Deliberately not "0 breaches": nothing was asked.
+      $('asLimitEmpty').classList.remove('hidden');
+      $('asLimitResults').classList.add('hidden');
+      badge.classList.add('hidden');
+      return;
+    }
+    $('asLimitEmpty').classList.add('hidden');
+    $('asLimitResults').classList.remove('hidden');
+
+    const nBreach = c.breach_count || 0;
+    const nUnverified = (c.checks || []).filter((k) => k.verdict === 'indeterminate').length;
+    // The badge shows breaches when there are any, because that is the only
+    // unambiguous state; otherwise it shows how much could not be verified, which
+    // must not be presented as clean.
+    if (nBreach > 0) {
+      badge.textContent = String(nBreach);
+      badge.style.background = 'var(--as-warn)';
+      badge.style.color = '#fff';
+      badge.classList.remove('hidden');
+    } else if (nUnverified > 0) {
+      badge.textContent = '?';
+      badge.style.background = 'var(--as-hidden)';
+      badge.style.color = '#fff';
+      badge.classList.remove('hidden');
+    } else {
+      badge.classList.add('hidden');
+    }
+
+    $('asLimitUnknown').textContent = fill(
+      t('assets.limits_unknown',
+        '{pct} of the portfolio is unidentified overall. Each band below is narrower than that, because a fund cannot be hiding a company it already discloses.'),
+      { pct: pct(c.unknown_pct, 1) });
+
+    const rows = (c.checks || []).map(function (k) {
+      const v = VERDICT[k.verdict] || VERDICT.indeterminate;
+      const after = k.after || {};
+      const verified = after.verified
+        ? ' <span class="as-chain">' + esc(t('assets.band_verified', 'exact')) + '</span>' : '';
+      const kindNote = k.kind === 'issuer'
+        ? ' <span class="as-chain">' + esc(t('assets.limit_issuer_tag', 'issuer')) + '</span>' : '';
+      return '<tr style="border-top:1px solid var(--as-line)">' +
+        '<td class="py-2" style="color:var(--as-strong)">' + esc(k.symbol) + kindNote + '</td>' +
+        '<td class="as-num py-2" style="color:var(--as-muted)">' + pct(k.limit_pct, 1) + '</td>' +
+        '<td class="as-num py-2" style="color:var(--as-strong)">' + pct(after.floor_pct, 2) + '</td>' +
+        '<td class="as-num py-2" style="color:var(--as-strong)">' + pct(after.ceiling_pct, 2) + verified + '</td>' +
+        '<td class="py-2 pl-3 font-semibold" style="color:' + v.colour + '">' +
+          esc(t(v.key, v.fb)) + '</td>' +
+        '</tr>';
+    }).join('');
+    $('asLimitRows').innerHTML = rows ||
+      '<tr><td colspan="5" class="py-3 text-center" style="color:var(--as-muted)">' +
+      esc(t('assets.limits_no_names', 'No named exposures to check yet.')) + '</td></tr>';
+  }
+
+  $('asPolicyForm').addEventListener('input', function () { policyDirty = true; });
+
+  $('asPolicyForm').addEventListener('submit', async function (ev) {
+    ev.preventDefault();
+    const form = ev.target;
+    const status = $('asPolicyStatus');
+    // An empty field means "no limit", which is not the same as zero -- the server
+    // emits no check at all for null. Sending 0 would mark every position a breach.
+    const num = (name) => {
+      const raw = form.elements[name].value.trim();
+      return raw === '' ? null : Number(raw);
+    };
+    const body = {
+      max_single_name_pct: num('max_single_name_pct'),
+      max_issuer_pct: num('max_issuer_pct'),
+      cash: num('cash') ?? 0
+    };
+    form.querySelector('button[type="submit"]').disabled = true;
+    status.textContent = t('assets.limit_saving', 'Saving…');
+    try {
+      await post('/api/assets/policy', { policy: body }, true);
+      policyDirty = false;
+      status.textContent = t('assets.limit_saved', 'Saved');
+      await load();
+    } catch (err) {
+      status.textContent = err.message || t('assets.err_generic', 'Something went wrong.');
+    } finally {
+      form.querySelector('button[type="submit"]').disabled = false;
+    }
+  });
 
   // ── AI portfolio memo ─────────────────────────────────────────────────
   let aiInFlight = false;

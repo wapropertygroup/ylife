@@ -3096,6 +3096,15 @@ def api_agents_share():
     if not (job.get("report") or "").strip():
         return jsonify({"error": "That run produced no report to share",
                         "reason": "empty"}), 409
+    # A run given the owner's portfolio cannot be published to an unauthenticated
+    # URL. Grouped with the other job-state refusals, and deliberately *above*
+    # try_consume_share: that counter is not refunded, so checking it later would
+    # charge a share attempt against a run that can never be shared.
+    if job.get("portfolio_context"):
+        return jsonify({
+            "error": "This analysis included your portfolio, so it cannot be "
+                     "shared. Run it without portfolio context to share it.",
+            "reason": "portfolio"}), 409
 
     to_addr = share.normalise_email(data.get("to"))
     if not to_addr:
@@ -3115,6 +3124,15 @@ def api_agents_share():
     if not ok:
         return jsonify({"error": "Daily share limit reached",
                         "reason": "quota", "share_quota": usage}), 429
+
+    # A run given the owner's portfolio cannot be published to an unauthenticated
+    # URL. Refused before the quota is touched and with its own reason, because
+    # "storage" would send the sharer to retry a thing that will never work.
+    if job.get("portfolio_context"):
+        return jsonify({
+            "error": "This analysis included your portfolio, so it cannot be "
+                     "shared. Run it without portfolio context to share it.",
+            "reason": "portfolio"}), 409
 
     # The row before the mail, always. It is what makes the link resolve, so a
     # send that got ahead of it would deliver a button that 404s -- and the case
@@ -3476,7 +3494,18 @@ def api_assets():
         # 503, not an empty list: see portfolio's module docstring.
         return jsonify({"error": str(exc), "reason": "store"}), 503
 
-    payload = assets_svc.analyse(positions)
+    # A policy read failure is reported, never swallowed. Passing None here would
+    # turn every limit check off silently, and the client would then render "no
+    # breaches" for a portfolio nobody managed to check. Not a 503 either: the
+    # holdings loaded, and they are most of what this page is for.
+    policy = None
+    policy_error = ""
+    try:
+        policy = portfolio.load_policy(email)
+    except portfolio.StoreUnavailable as exc:
+        policy_error = str(exc)
+
+    payload = assets_svc.analyse(positions, policy=policy)
     if payload.get("pending_symbols"):
         depth = assets_svc.kick_warm(payload["pending_symbols"])
         payload["warm_queued"] = depth
@@ -3489,7 +3518,47 @@ def api_assets():
     payload["resolution_paused"] = bool(payload.get("pending_symbols")
                                          and not payload["warm"]["active"])
     payload["store"] = portfolio.available()[1]
+    payload["policy"] = (policy if policy is not None
+                         else portfolio.normalise_policy({}))
+    if policy_error:
+        payload["policy_error"] = policy_error
     return jsonify(payload)
+
+
+@bp.route("/api/assets/policy", methods=["GET", "PUT", "POST"])
+def api_assets_policy():
+    """The signed-in user's stated position limits.
+
+    Separate from ``/api/assets`` on the write side because a policy save must not
+    have to round-trip a whole portfolio, and separate on the read side because the
+    settings form opens before the analysis finishes.
+
+    ``PUT`` replaces wholesale, matching ``portfolio.save``: a partial merge would
+    make "clear this limit" indistinguishable from "leave it alone", and an absent
+    limit is load-bearing here — it means no check is emitted at all.
+    """
+    gate = _assets_gate()
+    if gate:
+        return gate
+    from ystocker import portfolio
+
+    email = _assets_user()
+    if request.method == "GET":
+        try:
+            return jsonify({"policy": portfolio.load_policy(email)})
+        except portfolio.StoreUnavailable as exc:
+            return jsonify({"error": str(exc), "reason": "store"}), 503
+
+    body = request.get_json(silent=True) or {}
+    raw = body.get("policy") if isinstance(body.get("policy"), dict) else body
+    try:
+        stored = portfolio.save_policy(email, raw)
+    except portfolio.StoreUnavailable as exc:
+        return jsonify({"error": str(exc), "reason": "store"}), 503
+    # Echo what was stored, not what was sent: normalise_policy drops unknown keys
+    # and out-of-range limits, so a client that showed its own input back would
+    # display a limit that is not in force.
+    return jsonify({"policy": stored})
 
 
 @bp.route("/api/assets/analyze", methods=["POST"])
