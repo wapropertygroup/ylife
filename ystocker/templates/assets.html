@@ -383,14 +383,14 @@
             <col style="width:7rem">
             <col style="width:26rem">
           </colgroup>
-          <thead>
+          <thead id="asExposuresHead">
             <tr class="text-left" style="color:var(--as-muted)">
-              <th class="px-3 py-2" data-i18n="assets.th_symbol">Symbol</th>
-              <th class="px-3 py-2" data-i18n="assets.th_name">Name</th>
-              <th class="px-3 py-2 as-num" data-i18n="assets.th_exposure">True exposure</th>
-              <th class="px-3 py-2 as-num" data-i18n="assets.th_direct">Direct</th>
-              <th class="px-3 py-2 as-num" data-i18n="assets.th_indirect">Via funds</th>
-              <th class="px-3 py-2" data-i18n="assets.th_routes">Held via</th>
+              <th class="px-3 py-2" aria-sort="none"><button type="button" class="as-sort-button" data-exposure-sort="symbol"><span data-i18n="assets.th_symbol">Symbol</span><span class="as-sort-arrow" aria-hidden="true">↕</span></button></th>
+              <th class="px-3 py-2" aria-sort="none"><button type="button" class="as-sort-button" data-exposure-sort="name"><span data-i18n="assets.th_name">Name</span><span class="as-sort-arrow" aria-hidden="true">↕</span></button></th>
+              <th class="px-3 py-2 as-num" aria-sort="none"><button type="button" class="as-sort-button" data-exposure-sort="pct"><span data-i18n="assets.th_exposure">True exposure</span><span class="as-sort-arrow" aria-hidden="true">↕</span></button></th>
+              <th class="px-3 py-2 as-num" aria-sort="none"><button type="button" class="as-sort-button" data-exposure-sort="direct_pct"><span data-i18n="assets.th_direct">Direct</span><span class="as-sort-arrow" aria-hidden="true">↕</span></button></th>
+              <th class="px-3 py-2 as-num" aria-sort="none"><button type="button" class="as-sort-button" data-exposure-sort="indirect_pct"><span data-i18n="assets.th_indirect">Via funds</span><span class="as-sort-arrow" aria-hidden="true">↕</span></button></th>
+              <th class="px-3 py-2" aria-sort="none"><button type="button" class="as-sort-button" data-exposure-sort="route_count"><span data-i18n="assets.th_routes">Held via</span><span class="as-sort-arrow" aria-hidden="true">↕</span></button></th>
             </tr>
           </thead>
           <tbody id="asExposures"></tbody>
@@ -623,6 +623,8 @@
   let latestSnapshot = null;
   let holdingsSort = { key: null, direction: null };
   const HOLDING_TEXT_SORTS = new Set(['symbol', 'name', 'kind', 'account']);
+  let exposuresSort = { key: null, direction: null };
+  const EXPOSURE_TEXT_SORTS = new Set(['symbol', 'name']);
   function drawChart(id, config) {
     const el = $(id);
     if (!el || typeof Chart === 'undefined') return;
@@ -841,14 +843,50 @@
     }).join('');
   }
 
+  function exposureSortValue(e, key) {
+    if (key === 'route_count') return Number(e.route_count || 0);
+    return e[key] == null || e[key] === '' ? null : e[key];
+  }
+
+  function sortedExposures(rows) {
+    if (!exposuresSort.key) return rows.slice();
+    const key = exposuresSort.key;
+    const direction = exposuresSort.direction === 'ascending' ? 1 : -1;
+    return rows.map((row, index) => ({ row: row, index: index })).sort(function (a, b) {
+      const av = exposureSortValue(a.row, key);
+      const bv = exposureSortValue(b.row, key);
+      if (av == null && bv == null) return a.index - b.index;
+      if (av == null) return 1;
+      if (bv == null) return -1;
+      const compared = EXPOSURE_TEXT_SORTS.has(key)
+        ? String(av).localeCompare(String(bv), undefined, { numeric: true, sensitivity: 'base' })
+        : Number(av) - Number(bv);
+      return compared === 0 ? a.index - b.index : compared * direction;
+    }).map((item) => item.row);
+  }
+
+  function renderExposureSortState() {
+    document.querySelectorAll('[data-exposure-sort]').forEach(function (button) {
+      const active = button.getAttribute('data-exposure-sort') === exposuresSort.key;
+      const th = button.closest('th');
+      const arrow = button.querySelector('.as-sort-arrow');
+      button.setAttribute('data-active', active ? '1' : '0');
+      th.setAttribute('aria-sort', active ? exposuresSort.direction : 'none');
+      arrow.textContent = active
+        ? (exposuresSort.direction === 'ascending' ? '↑' : '↓') : '↕';
+    });
+  }
+
   function renderExposures(d) {
     const allRows = d.exposures || [];
     const searchEl = $('asExposureSearch');
     const query = (searchEl ? searchEl.value : '').trim().toLowerCase();
-    const rows = query ? allRows.filter(function (e) {
+    const matched = query ? allRows.filter(function (e) {
       return String(e.symbol || '').toLowerCase().includes(query) ||
         String(e.name || '').toLowerCase().includes(query);
     }) : allRows;
+    const rows = sortedExposures(matched);
+    renderExposureSortState();
     if ($('asExposureVisible')) $('asExposureVisible').textContent = rows.length;
     if (!rows.length) {
       $('asExposures').innerHTML = '<tr><td colspan="6" class="px-3 py-6 text-center" style="color:var(--as-muted)">' +
@@ -1297,6 +1335,20 @@
       holdingsSort.direction = HOLDING_TEXT_SORTS.has(key) ? 'ascending' : 'descending';
     }
     renderHoldings(latestSnapshot);
+  });
+
+  $('asExposuresHead').addEventListener('click', function (ev) {
+    const button = ev.target.closest('[data-exposure-sort]');
+    if (!button || !latestSnapshot) return;
+    const key = button.getAttribute('data-exposure-sort');
+    if (exposuresSort.key === key) {
+      exposuresSort.direction = exposuresSort.direction === 'ascending'
+        ? 'descending' : 'ascending';
+    } else {
+      exposuresSort.key = key;
+      exposuresSort.direction = EXPOSURE_TEXT_SORTS.has(key) ? 'ascending' : 'descending';
+    }
+    renderExposures(latestSnapshot);
   });
 
   // ── mutations ────────────────────────────────────────────────────────
