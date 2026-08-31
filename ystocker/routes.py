@@ -3075,15 +3075,17 @@ def api_agents_share():
     """Mint a capability link for one of your finished reports, and mail it if
     the channel is email.
 
-    Two channels share this one endpoint rather than getting one each, because
-    everything through minting the link is identical: the same job checks, the
-    same daily counter, the same row in ``ystocker-agent-shares``. They part
-    ways only at delivery. ``"sms"`` never learns a phone number and never
-    sends anything server-side -- the client hands the returned URL to the
-    device's own Messages app (an ``sms:`` link) and lets the sharer pick a
-    contact there, the same trust boundary a ``mailto:`` link would have. See
-    ``share.create``'s docstring for why that is a deliberate scope limit and
-    not a missing feature.
+    Three channels share this one endpoint rather than getting one each,
+    because everything through minting the link is identical: the same job
+    checks, the same daily counter, the same row in ``ystocker-agent-shares``.
+    They part ways only at delivery, and only ``"email"`` ever asks the server
+    to send anything. ``"sms"`` and ``"wechat"`` never learn who the link goes
+    to: the client hands the returned URL to something already on the
+    sharer's own phone -- Messages via a ``sms:`` link, or WeChat via
+    ``/api/agents/shared/<token>/qr.png``'s QR code and its own scanner -- and
+    lets the sharer pick a recipient there, the same trust boundary a
+    ``mailto:`` link would have. See ``share.create``'s docstring for why that
+    is a deliberate scope limit and not a missing feature.
     """
     gate = _agent_gate()
     if gate:
@@ -3123,10 +3125,11 @@ def api_agents_share():
 
     # Anything unrecognised collapses to "email" -- an older client can only
     # ever send that anyway, and a client sending a channel from the future
-    # should degrade rather than 400.
+    # should degrade rather than 400. share.CHANNELS rather than a literal
+    # tuple here, so this list and create()'s own cannot drift apart.
     channel = str(data.get("channel") or "email").strip().lower()
-    if channel not in ("email", "sms"):
-        channel = "email"
+    if channel not in share.CHANNELS:
+        channel = share.CHANNELS[0]
 
     to_addr = ""
     if channel == "email":
@@ -3138,8 +3141,9 @@ def api_agents_share():
             # Not an error worth a failure: the completion mail already went here.
             return jsonify({"error": "That is your own address",
                             "reason": "self"}), 400
-    # channel == "sms": no recipient to validate. There is nothing to type --
-    # the whole point is that this process never learns who the link goes to.
+    # channel in ("sms", "wechat"): no recipient to validate. There is nothing
+    # to type -- the whole point is that this process never learns who the
+    # link goes to.
 
     note = share.clean_note(data.get("note"))
 
@@ -3385,6 +3389,45 @@ def api_agents_shared_card(token):
     })
 
 
+@bp.route("/api/agents/shared/<token>/qr.png")
+def api_agents_shared_qr(token):
+    """A QR code encoding this share's URL, for "分享至微信".
+
+    WeChat has no ``sms:``-equivalent URL scheme a page can hand a share off
+    to, and the real integration (a verified WeChat Official Account, its
+    JS-SDK, a per-request signed ``wx.config()`` call) is an external business
+    process this box has no part of. Scanning a QR code with WeChat's own
+    built-in scanner needs none of that — see ``ystocker/qr.py``'s module
+    docstring for the fuller reasoning.
+
+    The encoded text is always ``share.share_url(token, ...)``, computed here
+    from a token this route already validated -- never a caller-supplied
+    string -- so this cannot become a general "encode arbitrary text as a QR
+    code" utility open to anyone who finds the route.
+
+    No sign-in and cached like ``card.png``, for the same reasons: an
+    unauthenticated link-only surface, and a deterministic image for the life
+    of the token that is worth not re-rendering on every scan attempt.
+    """
+    from ystocker import qr, share
+
+    err, row, job = _shared_or_404(token)
+    if err:
+        return err
+
+    url = share.share_url(token, base=_share_base())
+    png = qr.render(url)
+    if not png:
+        return jsonify({"error": "Could not render a QR code for this link"}), 500
+
+    log.info("agents: served shared-qr image for %s (%d bytes)",
+             job.get("id"), len(png))
+    return Response(png, content_type="image/png", headers={
+        "Content-Length": str(len(png)),
+        "Cache-Control": "public, max-age=600",
+    })
+
+
 # ---------------------------------------------------------------------------
 # Public showcase — a sample of finished reports for visitors who are not
 # signed in. These two routes deliberately skip ``_agent_gate()``: every other
@@ -3583,8 +3626,18 @@ def api_assets():
         policy_error = str(exc)
 
     payload = assets_svc.analyse(positions, policy=policy)
-    if payload.get("pending_symbols"):
-        depth = assets_svc.kick_warm(payload["pending_symbols"])
+    # Two different reasons to warm the same queue: pending_symbols have never
+    # resolved at all, stale_quote_symbols resolved once but their quote has aged
+    # past funddata.QUOTE_TTL_SECONDS. Warming both here -- not just on add/import
+    # -- is what makes a portfolio's prices actually refresh while the page is
+    # open, instead of freezing at whatever they were on first fetch. Merged into
+    # one kick_warm call since it is one queue either way; only pending_symbols
+    # feeds warming/resolution_paused below, so a quiet quote refresh cannot turn
+    # the coverage spinner back on for a holding that was never actually pending.
+    warm_targets = (set(payload.get("pending_symbols") or [])
+                    | set(payload.get("stale_quote_symbols") or []))
+    if warm_targets:
+        depth = assets_svc.kick_warm(warm_targets)
         payload["warm_queued"] = depth
     payload["warm"] = assets_svc.warm_status()
     # ``pending`` is a data-quality state; ``warming`` is an activity state.
@@ -3742,6 +3795,12 @@ def api_assets_import():
     ``mode=merge`` adds to what is already stored; ``replace`` (the default) is
     what "import my portfolio" normally means and keeps the write idempotent, so a
     retry after a timeout cannot double a portfolio.
+
+    ``account_override`` (optional, <=60 chars) relabels every row's ``account``
+    regardless of what the file said, for a statement whose export has no account
+    column at all or whose broker-assigned name is not what the reader wants to
+    see on the page. Independent of ``mode``: it only changes the label written on
+    each row, never which existing rows a commit replaces or adds to.
     """
     gate = _assets_gate()
     if gate:
@@ -3779,6 +3838,22 @@ def api_assets_import():
 
     result = portfolio_import.parse(raw, filename=filename,
                                     content_type=content_type)
+
+    account_override = (request.args.get("account_override")
+                         or request.form.get("account_override") or "").strip()[:60]
+    if account_override:
+        # An explicit label the reader typed beats whatever the file's own
+        # account column said (or, for XLSX, the sheet-title fallback in
+        # portfolio_import._parse_xlsx) -- "override", not "fill blanks only",
+        # because relabelling a whole statement under one name (a broker
+        # renamed an account, or the export has no account column at all) is
+        # the actual use case, not just patching the rows the parser missed.
+        # Applied before the preview is built so what gets confirmed is
+        # exactly what gets saved -- the same rule the column mapping itself
+        # already follows.
+        for row in result.rows:
+            row.account = account_override
+
     payload = result.as_dict()
 
     want_merge = (request.args.get("mode")
@@ -3809,9 +3884,10 @@ def api_assets_import():
     assets_svc.kick_warm([p["symbol"] for p in saved])
     payload.update({"committed": True, "positions": saved, "count": len(saved),
                     "mode": "merge" if want_merge else "replace"})
-    log.info("assets: imported %d positions for %s (%s, broker=%s)",
+    log.info("assets: imported %d positions for %s (%s, broker=%s%s)",
              len(saved), email, "merge" if want_merge else "replace",
-             result.broker or "unknown")
+             result.broker or "unknown",
+             f", account_override={account_override!r}" if account_override else "")
     return jsonify(payload)
 
 

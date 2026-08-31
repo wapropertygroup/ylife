@@ -776,19 +776,36 @@ class CreateTests(TableCase):
         self.assertEqual(row["channel"], "sms")
         self.assertEqual(row["recipient"], "")
 
+    def test_a_wechat_share_is_recorded_with_no_recipient(self):
+        # Same reasoning as sms: WeChat has no recipient field at all, only a
+        # QR code the reader scans, so this must accept an empty recipient too.
+        row = share.create(make_job(), SHARER, "", channel="wechat")
+        self.assertIsNotNone(row)
+        self.assertEqual(row["channel"], "wechat")
+        self.assertEqual(row["recipient"], "")
+
+    def test_channels_constant_is_exactly_the_three_known_values(self):
+        # routes.py validates against this same tuple rather than a literal of
+        # its own; pinning its contents here is what stops the two from
+        # drifting apart the next time a channel is added or renamed.
+        self.assertEqual(share.CHANNELS, ("email", "sms", "wechat"))
+
     def test_an_unrecognised_channel_falls_back_to_email(self):
         # A client from the future sending a channel this version does not
         # know about should degrade to the original behaviour, not be refused
         # or silently mis-recorded as something unrecognisable.
-        for bad in ("carrier-pigeon", "EMAIL", "Sms", "", None, 123, ["sms"]):
+        for bad in ("carrier-pigeon", "EMAIL", "Sms", "WECHAT", "", None, 123,
+                    ["sms"]):
             row = share.create(make_job(), SHARER, FRIEND, channel=bad)
             self.assertEqual(row["channel"], "email", repr(bad))
 
     def test_channel_does_not_affect_the_rest_of_the_row(self):
         email_row = share.create(make_job(), SHARER, FRIEND, "hi", "email")
         sms_row = share.create(make_job(), SHARER, "", "hi", "sms")
+        wechat_row = share.create(make_job(), SHARER, "", "hi", "wechat")
         for key in ("job_id", "owner", "sharer", "note", "ticker", "lang"):
             self.assertEqual(email_row[key], sms_row[key], key)
+            self.assertEqual(email_row[key], wechat_row[key], key)
 
     def test_a_token_collision_fails_the_write_rather_than_repointing_a_share(self):
         first = share.create(make_job(), SHARER, FRIEND)

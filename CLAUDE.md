@@ -499,12 +499,14 @@ TTL is a convenience, not the guarantee: DynamoDB's sweeper can run up to 48h
 late, so `share.lookup()` re-checks `expires_at` on every read and a row past its
 date is expected to still be present.
 
-**Two delivery channels mint the identical row.** `channel` on the
-`/api/agents/share` call is `"email"` or `"sms"`, and only `"email"` ever asks
-the server to send anything — same job checks, same `quota.try_consume_share`
-counter, same 30-day expiry either way. `"sms"` hands the URL to
-`static/share.js`, which opens the device's own Messages compose sheet with a
-`sms:` link (`smsHref()`) and lets the sharer pick a contact there. This
+**Three delivery channels mint the identical row.** `channel` on the
+`/api/agents/share` call is `"email"`, `"sms"` or `"wechat"`, and only
+`"email"` ever asks the server to send anything — same job checks, same
+`quota.try_consume_share` counter, same 30-day expiry either way, via the
+single shared `share.CHANNELS` tuple both this route and `share.create()`
+validate against rather than two literals that could drift. `"sms"` hands the
+URL to `static/share.js`, which opens the device's own Messages compose sheet
+with a `sms:` link (`smsHref()`) and lets the sharer pick a contact there. This
 process never collects a phone number, and that is the scope limit, not a gap:
 doing it for real would mean a telephony vendor (Twilio, AWS SNS/Pinpoint),
 carrier registration and a per-message cost, none of which this box has, for a
@@ -518,6 +520,27 @@ picks by user-agent because there is no feature to test for which one a
 platform's compose intent accepts, and sending the wrong separator is not an
 error, just a silently empty compose box — the same "read what the platform
 actually does" trap this file already documents for Futu's universal links.
+
+**"wechat" has no URL scheme to hand off to at all**, which is the whole reason
+it is a QR code and not a fourth deep link. WeChat's real share integration
+(`wx.updateAppMessageShareData`) needs a verified WeChat Official Account, a
+bound JS-SDK domain and a per-request signed `wx.config()` call — an external
+Tencent registration this box has no part of, not a code change. So
+`/api/agents/shared/<token>/qr.png` renders the share URL as a QR code instead,
+which WeChat's own built-in scanner ("扫一扫") already reads without any of
+that — the same reasoning that makes a QR code the universal fallback on every
+Chinese site that shares to WeChat without an Official Account behind it.
+`ystocker/qr.py` delegates the actual encoding to the `qrcode` package (Reed-
+Solomon and the version/mask tables are not worth hand-rolling — a subtly wrong
+implementation produces a code that *looks* right and does not scan) but
+rasterises the resulting module grid to a PNG **by hand**, with `zlib` +
+`struct` rather than Pillow or matplotlib: `imshow()`'s default interpolation
+would blur the crisp module edges a scanner depends on, and a solid-block
+rasteriser simply has no antialiasing setting to get wrong. `tests/test_qr.py`
+proves the encoder byte-for-byte by decompressing its own PNG output and
+diffing it against `qrcode`'s matrix directly, plus a geometric check for the
+three finder-pattern squares — no imaging or QR-decoding library needed as a
+test dependency for either.
 
 **The link carries its own preview.** `/api/agents/shared/<token>/card.png`
 renders a 1200×630 `og:image` — ticker, a decision chip in the same colours as
@@ -537,10 +560,10 @@ A fixed 96pt ticker size ran a 16-character symbol off the edge of the card
 before `share_card._fit_size()` existed — caught by actually rendering a PNG
 and looking at it, not by reasoning about the geometry, which is why
 `share_card.py`'s own docstring records which environment that check ran in:
-this repo's dev checkout cannot import `matplotlib.pyplot` at all (the same
-broken Homebrew `pyexpat` `tests/test_import_graph.py`'s module docstring
-already works around), so proving the layout correct needed a second,
-throwaway venv with a working one.
+this repo's dev checkout intermittently cannot import `matplotlib.pyplot` at
+all (the same broken Homebrew `pyexpat` `tests/test_import_graph.py`'s module
+docstring already works around) — proving the layout correct needed a second,
+throwaway venv with a working one the one time this checkout's own was down.
 
 ### Choosing the model and thinking depth (`agent_models.py`)
 

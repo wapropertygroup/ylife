@@ -122,6 +122,23 @@ html.dark .sd-link {
   border-color: rgb(51 65 85); background: rgb(15 23 42); color: rgb(203 213 225);
 }
 
+/* The WeChat QR code. Deliberately not tinted for dark mode -- the PNG already
+   bakes in its own white quiet zone per the QR spec (ystocker/qr.py), and a
+   dark-mode filter would either leave that zone glowing white anyway or invert
+   the modules themselves, which most scanners do not expect. The white card
+   behind it is what actually reads as intentional on a dark dialog rather than
+   a stray light rectangle. */
+.sd-qr {
+  display: block;
+  margin: 0 auto 8px;
+  padding: 10px;
+  border-radius: 9px;
+  background: #fff;
+  border: 1px solid rgb(203 213 225);
+}
+html.dark .sd-qr { border-color: rgb(51 65 85); }
+.sd-center { text-align: center; }
+
 .sd-foot {
   display: flex;
   align-items: center;

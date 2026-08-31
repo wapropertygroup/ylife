@@ -91,6 +91,7 @@ MODULES = (
     "ystocker.quota",
     "ystocker.share",
     "ystocker.share_card",
+    "ystocker.qr",
     "ystocker.etf_holdings",
     "ystocker.analyst",
     "ystocker.sectors",
@@ -127,12 +128,14 @@ class ImportGraphTests(unittest.TestCase):
                      # emailed capability URL outlives any deploy, so a route
                      # rename would break links already sitting in inboxes --
                      # unlike an in-app path, where nothing holds a stale copy.
-                     # The card image is the same story: it is what og:image in
-                     # an already-sent mail or text points at, so a rename here
-                     # breaks a preview silently rather than loudly.
+                     # The card and QR images are the same story: they are what
+                     # og:image and the WeChat share panel already point at, so
+                     # a rename here breaks a preview or a scan silently rather
+                     # than loudly.
                      "/agents/shared/<token>", "/api/agents/shared/<token>",
                      "/api/agents/shared/<token>/pdf",
-                     "/api/agents/shared/<token>/card.png", "/api/agents/share"):
+                     "/api/agents/shared/<token>/card.png",
+                     "/api/agents/shared/<token>/qr.png", "/api/agents/share"):
             self.assertIn(path, rules, f"route missing: {path}")
 
     def test_share_and_report_email_agree_on_expiry(self):

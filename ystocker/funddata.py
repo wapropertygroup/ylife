@@ -69,9 +69,19 @@ CACHE_VER = "v2"
 
 #: Composition: holdings and asset classes are restated monthly at best.
 COMP_TTL_SECONDS = 24 * 3600
-#: Quote: only used to value a position the user gave no market value for, so it
-#: matches the ticker cache rather than chasing intraday prices.
-QUOTE_TTL_SECONDS = 8 * 3600
+#: Quote: how long a cached quote is treated as fresh before a warm pass will
+#: re-fetch it. Originally 8h, "matching the ticker cache rather than chasing
+#: intraday prices" -- but that number was never actually a refresh cadence in
+#: practice, because nothing ever re-queued an *already resolved* symbol for
+#: another look (see assets.analyse's stale_quote_symbols, which closes that
+#: gap). Once a viewed portfolio's holdings really do get re-warmed on this
+#: cadence, 8h reads as "the price on /assets can be arbitrarily old" rather
+#: than "refreshed every 8h", so this now matches the 15-minute market-hours
+#: realtime threshold freshness.py already uses elsewhere in the app. Tunable
+#: because "how real-time" is a cost/staleness trade-off against the same
+#: Yahoo breaker the main dashboard shares (funddata.PROVIDER == data.PROVIDER
+#: == "yahoo"), not a constant either side of it can get right for everyone.
+QUOTE_TTL_SECONDS = fetchguard.env_int("FUNDDATA_QUOTE_TTL_SECONDS", 15 * 60, 60)
 #: A symbol Yahoo does not know is unlikely to appear later, but "unlikely" is not
 #: "never" — a newly listed ETF resolves eventually.
 NEGATIVE_TTL_SECONDS = 7 * 24 * 3600
@@ -301,14 +311,16 @@ def _fetch(symbol: str) -> dict[str, Any]:
         # forever, so this is an explicit miss.
         raise ValueError(f"{symbol}: no quoteType in response")
 
-    from ystocker.data import latest_price
+    from ystocker.data import day_change_pct, latest_price
 
+    price = latest_price(info)
     record: dict[str, Any] = {
         "symbol": symbol,
         "name": _clean_name(info.get("shortName") or info.get("longName"), symbol),
         "kind": kind,
         "quote_type": quote_type,
-        "price": latest_price(info),
+        "price": price,
+        "day_change_pct": day_change_pct(info, price),
         "currency": str(info.get("currency") or ""),
         "sector": info.get("sector") or "",
         "holdings": [],

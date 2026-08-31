@@ -279,6 +279,31 @@ def main() -> int:
             content_type="multipart/form-data")
         check("merge added a row", r.get_json()["count"] == 4, str(r.get_json()["count"]))
 
+        print("\n── import account override ───────────────────────────────────")
+        override_csv = b"symbol,quantity\nTLT,7\n"          # file carries no account column
+        r = client.post("/api/assets/import?commit=0", data={
+            "file": (__import__("io").BytesIO(override_csv), "tlt.csv"),
+            "mode": "merge", "account_override": "Household IRA"},
+            content_type="multipart/form-data")
+        check("override preview returns 200", r.status_code == 200, r.get_data(as_text=True)[:200])
+        preview_rows = r.get_json().get("rows") or []
+        check("override relabels the previewed row before anything is saved",
+              bool(preview_rows) and preview_rows[0]["account"] == "Household IRA",
+              str(preview_rows))
+
+        r = client.post("/api/assets/import?commit=1", data={
+            "file": (__import__("io").BytesIO(override_csv), "tlt.csv"),
+            "mode": "merge", "commit": "1", "account_override": "Household IRA"},
+            content_type="multipart/form-data")
+        check("override commit returns 200", r.status_code == 200, r.get_data(as_text=True)[:200])
+        check("override commit added a row", r.get_json()["count"] == 5,
+              str(r.get_json()["count"]))
+        d = client.get("/api/assets").get_json()
+        saved = {p["symbol"]: p for p in d["positions"]}
+        check("saved position carries the override account, not a blank one",
+              saved.get("TLT", {}).get("account") == "Household IRA",
+              str(saved.get("TLT")))
+
         print("\n── malformed input ──────────────────────────────────────────")
         r = client.post("/api/assets/import?commit=0", data={
             "file": (__import__("io").BytesIO(b"alpha,beta\n1,2\n"), "junk.csv")},

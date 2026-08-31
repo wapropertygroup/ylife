@@ -50,6 +50,15 @@
 
       <!-- ── Sent ─────────────────────────────────────────────────────── -->
       <div id="shareDone" class="sd-hidden">
+        {#  Shown only for channel "wechat" (share.js's showSent()). WeChat has
+            no sms:-equivalent hand-off, so the QR code *is* the share -- the
+            image already carries its own white quiet zone per the QR spec, so
+            it is left untinted against the dialog's own light/dark background
+            rather than styled to match either theme. #}
+        <img id="shareQr" class="sd-qr sd-hidden" alt="" width="220" height="220">
+        <p id="shareQrHint" class="sd-sub sd-hidden sd-center"
+           data-i18n="share.wechat_hint">Scan with WeChat's own scanner to open
+          the report.</p>
         <code id="shareLink" class="sd-link"></code>
         {#  Shown only when the shared run used the sharer's portfolio (share.js
             toggles it from the /api/agents/share response). Reuses the sd-msg
@@ -68,6 +77,8 @@
     </div>
 
     <div class="sd-foot">
+      <button id="shareWechat" type="button" class="sd-btn"
+              data-i18n="share.wechat">Share to WeChat</button>
       <button id="shareSms" type="button" class="sd-btn"
               data-i18n="share.sms">Share via SMS</button>
       <button id="shareRevoke" type="button" class="sd-btn sd-btn-danger sd-hidden"

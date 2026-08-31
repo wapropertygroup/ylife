@@ -21,3 +21,8 @@ xlrd>=2.0.1
 openpyxl>=3.1
 reportlab>=4.0
 pdfplumber>=0.11
+# No [pil] extra: ystocker/qr.py only calls QRCode.get_matrix(), a plain
+# boolean grid, and rasterises it by hand -- pulling in Pillow just for that
+# would cost every deploy a real dependency for a PNG encoder this repo
+# already writes itself.
+qrcode>=7.4

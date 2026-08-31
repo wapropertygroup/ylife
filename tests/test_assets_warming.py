@@ -1,6 +1,7 @@
 """Regression tests for the /assets pending-versus-warming state."""
 from __future__ import annotations
 
+import time
 from pathlib import Path
 import unittest
 from unittest.mock import patch
@@ -32,8 +33,8 @@ class AssetsWarmingTests(unittest.TestCase):
     def test_holdings_table_has_sortable_data_columns(self) -> None:
         template = (Path(__file__).parents[1] / "ystocker" / "templates" /
                     "assets.html").read_text(encoding="utf-8")
-        for key in ("symbol", "name", "kind", "quantity", "price", "value",
-                    "weight", "coverage", "gain", "account"):
+        for key in ("symbol", "name", "kind", "quantity", "price", "day_change_value",
+                    "value", "weight", "coverage", "gain", "account"):
             self.assertIn(f'data-holding-sort="{key}"', template)
         self.assertIn("function sortedHoldings", template)
         self.assertIn("aria-sort", template)
@@ -99,6 +100,109 @@ class AssetsWarmingTests(unittest.TestCase):
             }])
         self.assertIn("FXAIX", snapshot["pending_symbols"])
         self.assertNotIn("NHFSMKX98", snapshot["pending_symbols"])
+
+    def test_live_row_reports_todays_change(self) -> None:
+        fake_record = {"symbol": "VOO", "kind": funddata.KIND_EQUITY,
+                       "price": 500.0, "day_change_pct": 1.25,
+                       "quote_at": time.time()}
+
+        with (patch("ystocker.assets.funddata.peek", return_value=fake_record),
+              patch("ystocker.assets.funddata.price_of", return_value=500.0)):
+            _priced, rows, _warnings = assets.value_positions([
+                {"symbol": "VOO", "quantity": 10}])
+
+        self.assertEqual(rows[0]["value_source"], "live")
+        self.assertEqual(rows[0]["day_change_pct"], 1.25)
+        # value is quantity x price = 5000; day_change_value is that times pct/100.
+        self.assertAlmostEqual(rows[0]["day_change_value"], 62.5)
+
+    def test_imported_row_with_no_price_has_no_day_change(self) -> None:
+        with (patch("ystocker.assets.funddata.peek", return_value=None),
+              patch("ystocker.assets.funddata.price_of", return_value=None)):
+            _priced, rows, _warnings = assets.value_positions([
+                {"symbol": "GME", "quantity": 10, "value": 250.0}])
+
+        self.assertEqual(rows[0]["value_source"], "imported")
+        self.assertIsNone(rows[0]["day_change_pct"])
+        self.assertIsNone(rows[0]["day_change_value"])
+
+    def test_nh_529_reports_the_proxy_funds_day_change(self) -> None:
+        # The plan code itself is a synthetic record with no market data of its
+        # own (funddata._synthetic), so today's move has to come from FXAIX, the
+        # same underlying _sector_mix already substitutes for composition.
+        real_peek = funddata.peek
+
+        def fake_peek(symbol: str, *, need_quote: bool = False):
+            if symbol == "FXAIX":
+                return {"symbol": "FXAIX", "kind": funddata.KIND_FUND,
+                        "price": 200.0, "day_change_pct": -0.5,
+                        "quote_at": time.time()}
+            return real_peek(symbol, need_quote=need_quote)
+
+        with patch("ystocker.assets.funddata.peek", side_effect=fake_peek):
+            _priced, rows, _warnings = assets.value_positions([{
+                "symbol": "NHFSMKX98", "quantity": 100, "value": 7_834.0,
+            }])
+
+        self.assertEqual(rows[0]["value_source"], "imported")
+        self.assertEqual(rows[0]["day_change_pct"], -0.5)
+        self.assertAlmostEqual(rows[0]["day_change_value"], round(7_834.0 * -0.5 / 100, 2))
+
+    def test_stale_live_quote_is_queued_without_becoming_pending(self) -> None:
+        # A resolved, live-priced holding is not "pending" -- but nothing else
+        # ever re-asks funddata for a symbol once it first resolves, so its
+        # quote would otherwise freeze forever. analyse() has to notice this
+        # itself and queue a re-warm, without perturbing pending_symbols /
+        # pending_count / warming, which mean "never resolved", not "aging".
+        ancient = time.time() - 999_999
+        fake_record = {"symbol": "VOO", "kind": funddata.KIND_EQUITY,
+                       "price": 500.0, "day_change_pct": 0.1, "quote_at": ancient}
+
+        with (patch("ystocker.assets.funddata.peek", return_value=fake_record),
+              patch("ystocker.assets.funddata.price_of", return_value=500.0)):
+            snapshot = assets.analyse([{"symbol": "VOO", "quantity": 10}])
+
+        self.assertIn("VOO", snapshot["stale_quote_symbols"])
+        self.assertNotIn("VOO", snapshot["pending_symbols"])
+        self.assertEqual(snapshot["pending_count"], 0)
+        self.assertFalse(snapshot["warming"])
+
+    def test_fresh_live_quote_is_not_queued_for_a_repeat_fetch(self) -> None:
+        fake_record = {"symbol": "VOO", "kind": funddata.KIND_EQUITY,
+                       "price": 500.0, "day_change_pct": 0.1,
+                       "quote_at": time.time()}
+
+        with (patch("ystocker.assets.funddata.peek", return_value=fake_record),
+              patch("ystocker.assets.funddata.price_of", return_value=500.0)):
+            snapshot = assets.analyse([{"symbol": "VOO", "quantity": 10}])
+
+        self.assertEqual(snapshot["stale_quote_symbols"], [])
+
+    def test_portfolio_day_change_aggregates_across_positions(self) -> None:
+        records = {
+            "VOO": {"symbol": "VOO", "kind": funddata.KIND_EQUITY, "price": 500.0,
+                    "day_change_pct": 2.0, "quote_at": time.time()},
+            "BND": {"symbol": "BND", "kind": funddata.KIND_EQUITY, "price": 70.0,
+                    "day_change_pct": -1.0, "quote_at": time.time()},
+        }
+
+        def fake_peek(symbol: str, *, need_quote: bool = False):
+            return records.get(symbol)
+
+        def fake_price_of(symbol: str):
+            rec = records.get(symbol)
+            return rec["price"] if rec else None
+
+        with (patch("ystocker.assets.funddata.peek", side_effect=fake_peek),
+              patch("ystocker.assets.funddata.price_of", side_effect=fake_price_of)):
+            snapshot = assets.analyse([
+                {"symbol": "VOO", "quantity": 10},   # value 5000, +2%   -> +100
+                {"symbol": "BND", "quantity": 100},  # value 7000, -1%  -> -70
+            ])
+
+        self.assertAlmostEqual(snapshot["day_change_value"], 30.0)
+        # Against yesterday's close: (5000+7000-30) prior value.
+        self.assertAlmostEqual(snapshot["day_change_pct"], round(30.0 / 11_970.0 * 100, 2))
 
 
 if __name__ == "__main__":

@@ -58,6 +58,15 @@ TOKEN_BYTES = 16
 #: link keeps paying out, and keeps the table from growing without limit.
 TTL_DAYS = 30
 
+#: How a share left the sharer's hands. A single shared tuple rather than a
+#: literal repeated in both this module and routes.py's own validation, so the
+#: two cannot silently drift apart the next time a channel is added -- which
+#: already almost happened once, when "sms" joined "email" as two independent
+#: hardcoded tuples in two files. Order is not meaningful; ``create()``'s
+#: default and the "unrecognised falls back to email" rule both key off the
+#: first element.
+CHANNELS = ("email", "sms", "wechat")
+
 #: The sharer's covering note. Capped because it is rendered into an HTML mail
 #: sent from our domain to an address we do not control: an uncapped free-text
 #: field there is a spam payload with a report attached.
@@ -204,15 +213,16 @@ def create(job: dict[str, Any], sharer: str, recipient: str,
 
     ``channel`` records how the link left the sharer's hands and is *not* a
     delivery mechanism this module owns. ``"email"`` still means "the route is
-    about to mail ``recipient``". ``"sms"`` means the opposite: there is no
-    ``recipient`` to speak of, because the whole point is handing the link to the
-    sharer's own Messages app and letting them pick a contact there — this
-    process never learns who that is, and never should, since collecting a phone
-    number is a materially different (and unimplemented) feature from opening a
-    ``sms:`` link. Anything else collapses to ``"email"`` rather than being
-    refused, matching how a stale ``model_choice`` falls back instead of erroring
-    in ``agent_models.py`` — a client sending a channel this version does not
-    know about should degrade, not break the share.
+    about to mail ``recipient``". ``"sms"`` and ``"wechat"`` both mean the
+    opposite: there is no ``recipient`` to speak of, because the whole point is
+    handing the link to something already on the sharer's phone (Messages via a
+    ``sms:`` link, or WeChat via a QR code its own scanner reads) and letting
+    them pick who sees it from there — this process never learns who that is,
+    and never should. A value outside :data:`CHANNELS` collapses to
+    ``"email"`` rather than being refused, matching how a stale
+    ``model_choice`` falls back instead of erroring in ``agent_models.py`` — a
+    client sending a channel this version does not know about should degrade,
+    not break the share.
     """
     table = _get_table()
     if table is None:
@@ -254,7 +264,7 @@ def create(job: dict[str, Any], sharer: str, recipient: str,
         "owner":      owner,
         "sharer":     (sharer or "").strip().lower(),
         "recipient":  (recipient or "").strip().lower(),
-        "channel":    channel if channel in ("email", "sms") else "email",
+        "channel":    channel if channel in CHANNELS else CHANNELS[0],
         "note":       clean_note(note),
         "ticker":     str(job.get("ticker") or "")[:16],
         "lang":       "zh" if str(job.get("lang") or "").lower() == "zh" else "en",

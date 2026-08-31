@@ -70,6 +70,13 @@ def value_positions(
     the table renders, including ``value_source`` so a reader can see which lines
     were priced live and which came from the import.
 
+    Each row also carries ``day_change_pct``/``day_change_value`` -- today's move,
+    distinct from ``gain``/``gain_pct`` below which is unrealised P/L against cost
+    basis. ``day_change_value`` is ``value * day_change_pct / 100``, an
+    approximation on an imported-valued row (the CSV's dollar figure may be days
+    old) but still the answer a reader wants: "today's move applied to about this
+    much money", not a claim that the value itself is current.
+
     Warnings are **coded**, not prose: ``{"code": ..., ...}`` rather than an
     English sentence. There is no request language available here (and none at all
     when this runs under the warm thread), so a sentence composed server-side
@@ -107,6 +114,25 @@ def value_positions(
             # shrink the denominator and inflate every other position's share.
             unpriced.append(symbol)
 
+        # Today's move is a fact about the *security*, independent of whether
+        # our dollar value above came from a live price or a stale import --
+        # unlike price/value there is no "quantity x price" alternative
+        # derivation, so this is the one field that uses whatever funddata has
+        # even on an imported-valued row. A plan-unit proxy (the 529 codes in
+        # funddata._synthetic) carries no market data of its own, so borrow the
+        # underlying fund's change the same way _sector_mix already does for
+        # composition -- the plan unit still has no public quote to move by.
+        day_record = record
+        proxy_symbol = (record or {}).get("proxy_symbol")
+        if proxy_symbol:
+            proxy_record = funddata.peek(proxy_symbol, need_quote=True)
+            if proxy_record:
+                day_record = proxy_record
+        day_change_pct = (day_record or {}).get("day_change_pct")
+        day_change_value = (round(value * float(day_change_pct) / 100.0, 2)
+                            if day_change_pct is not None and value is not None
+                            else None)
+
         row = {
             "symbol": symbol,
             "name": pos.get("name") or (record or {}).get("name") or symbol,
@@ -115,6 +141,8 @@ def value_positions(
             "price": price,
             "value": round(value, 2) if value is not None else None,
             "value_source": source,
+            "day_change_pct": day_change_pct,
+            "day_change_value": day_change_value,
             "cost_basis": pos.get("cost_basis"),
             "account": pos.get("account") or "",
             "resolved": record is not None,
@@ -157,7 +185,9 @@ def analyse(positions: Iterable[dict[str, Any]], *,
     """Full /assets payload: valued rows plus 穿透.
 
     Never fetches. Safe on the request path — that is the whole point of the
-    ``peek`` resolver.
+    ``peek`` resolver. It does decide what the *next* background pass should warm,
+    via ``pending_symbols`` (unresolved) and ``stale_quote_symbols`` (resolved, but
+    the quote has aged past ``funddata.QUOTE_TTL_SECONDS``) — the route kicks both.
 
     ``policy`` is ``portfolio.load_policy``'s dict. When it states any limit, the
     payload gains a ``constraints`` block from :func:`exposure.review`. Evaluated
@@ -184,6 +214,34 @@ def analyse(positions: Iterable[dict[str, Any]], *,
             if row["symbol"] != CASH_SYMBOL and not row.get("proxy_symbol"):
                 pending.add(row["symbol"])
 
+    # A resolved, live-priced holding is not "pending" -- look-through already has
+    # what it needs from it -- but its quote still ages, and nothing else ever
+    # re-asks funddata for a symbol once it first resolves: kick_warm is only ever
+    # fed pending_symbols plus whatever was just added or imported. Left alone, a
+    # holding's price freezes at whatever it was on first fetch, forever,
+    # regardless of QUOTE_TTL_SECONDS -- the TTL only gates whether a fetch that
+    # actually happens counts as necessary, and nothing was making that fetch
+    # happen again. Tracked separately from `pending` so the coverage bar and the
+    # warming spinner keep meaning exactly what they already mean: unresolved, not
+    # merely aging.
+    stale_quote: set[str] = set()
+    now = time.time()
+    for row in rows:
+        if row["value_source"] != "live":
+            continue
+        record = funddata.peek(row["symbol"], need_quote=True)
+        if record and now - float(record.get("quote_at") or 0.0) >= funddata.QUOTE_TTL_SECONDS:
+            stale_quote.add(row["symbol"])
+
+    day_change_total = round(
+        sum(r["day_change_value"] for r in rows if r.get("day_change_value") is not None), 2)
+    # Percentage against *yesterday's* close (today's value minus today's move),
+    # matching how a brokerage statement states a day's return -- against the
+    # total itself would understate the move by exactly the move.
+    prior_value = (payload.get("total_value") or 0.0) - day_change_total
+    day_change_pct_total = (round(day_change_total / prior_value * 100, 2)
+                            if prior_value > 0 else None)
+
     groups = _issuer_groups(payload.get("exposures") or [])
     payload.update({
         "positions": rows,
@@ -194,6 +252,9 @@ def analyse(positions: Iterable[dict[str, Any]], *,
         "pending_symbols": sorted(pending),
         "pending_count": len(pending),
         "warming": bool(pending),
+        "stale_quote_symbols": sorted(stale_quote),
+        "day_change_value": day_change_total,
+        "day_change_pct": day_change_pct_total,
         "cost_basis_total": round(
             sum(float(r["cost_basis"]) for r in rows if r.get("cost_basis")), 2),
         "asset_mix": _asset_mix(priced),

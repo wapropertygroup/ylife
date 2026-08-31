@@ -145,6 +145,28 @@ def latest_price(info: dict) -> float | None:
             or info.get("previousClose"))
 
 
+def day_change_pct(info: dict, price: float | None = None) -> float | None:
+    """
+    Today's price change as a percentage, e.g. 1.23 means +1.23%.
+
+    Prefers Yahoo's own ``regularMarketChangePercent``; funds and some foreign
+    listings omit it, so this falls back to deriving it from *price* (or
+    `latest_price(info)` when not given) against whichever previous-close field
+    Yahoo populated. Shared by the main dashboard's ticker cache and
+    ``funddata``'s per-symbol quotes so "today's change" means the same thing
+    in both places rather than drifting into two slightly different formulas.
+    """
+    pct = info.get("regularMarketChangePercent")
+    if pct is not None:
+        return round(pct, 2)
+    if price is None:
+        price = latest_price(info)
+    prev_close = info.get("regularMarketPreviousClose") or info.get("previousClose")
+    if price and prev_close and prev_close > 0:
+        return round((price - prev_close) / prev_close * 100, 2)
+    return None
+
+
 def dividend_yield_pct(info: dict, price: float | None = None) -> float | None:
     """
     Annual dividend yield as a percentage — 2.44 means 2.44%.
@@ -294,15 +316,7 @@ def fetch_ticker_data(ticker: str) -> dict:
         raise FetchError(f"Could not fetch data for {ticker}: {exc}") from exc
 
     current_price = latest_price(info)
-
-    # Day change %: use Yahoo's pre-computed value first, fall back to manual calc
-    day_change_pct = info.get("regularMarketChangePercent")
-    if day_change_pct is None:
-        prev_close = info.get("regularMarketPreviousClose") or info.get("previousClose")
-        if current_price and prev_close and prev_close > 0:
-            day_change_pct = round((current_price - prev_close) / prev_close * 100, 2)
-    else:
-        day_change_pct = round(day_change_pct, 2)
+    day_chg_pct = day_change_pct(info, current_price)
 
     target_price  = info.get("targetMeanPrice")
     pe_ttm        = info.get("trailingPE")
@@ -375,7 +389,7 @@ def fetch_ticker_data(ticker: str) -> dict:
         "Market Cap ($B)":     _usd_b(market_cap),
         "EPS Growth TTM (%)":  round(earnings_growth_ttm * 100, 1) if earnings_growth_ttm is not None else None,
         "EPS Growth Q (%)":    round(earnings_growth_q   * 100, 1) if earnings_growth_q   is not None else None,
-        "Day Change (%)":      day_change_pct,
+        "Day Change (%)":      day_chg_pct,
         "EV/EBITDA":           round(info.get("enterpriseToEbitda"), 1) if info.get("enterpriseToEbitda") is not None else None,
         "EV ($B)":             _usd_b(info.get("enterpriseValue")),
         "EBITDA ($B)":         _usd_b(info.get("ebitda")),

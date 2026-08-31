@@ -1,16 +1,20 @@
 /**
- * Share a finished agent report with somebody, by email or by SMS.
+ * Share a finished agent report with somebody, by email, SMS or WeChat.
  *
  * Drives templates/_share_modal.html. Loaded on every yStocker page from
  * base.html, so the cost on a page nobody shares from has to be ~nothing: this
  * file binds one click handler and fetches the report list on *first open*, never
  * on load. There is no work at parse time beyond wiring.
  *
- * Both channels mint the same capability link through /api/agents/share; only
- * "email" asks the server to send anything. "sms" hands the link to the
+ * All three channels mint the same capability link through /api/agents/share;
+ * only "email" asks the server to send anything. "sms" hands the link to the
  * device's own Messages app via a `sms:` URI (smsHref()) and never collects a
- * phone number — see share.py's create() docstring for why that is a
- * deliberate scope limit, not a missing feature.
+ * phone number. "wechat" has no URL scheme to hand off to at all — WeChat's
+ * real share integration needs a verified Official Account and its JS-SDK,
+ * which this box has no part of — so it shows a QR code
+ * (/api/agents/shared/<token>/qr.png) for WeChat's own scanner to read
+ * instead. See share.py's create() docstring for why both are a deliberate
+ * scope limit, not a missing feature.
  *
  * Exposes `window.Share.open(jobId)` so a page that knows which report is in
  * front of the reader can preselect it. /agents needs no such call — it already
@@ -23,7 +27,8 @@
   var NOTE_MAX = 500;                    // must match share.NOTE_MAX server-side
 
   var dlg, msg, form, done, selJob, inTo, inNote, count, portfolioWarn,
-      btnSend, btnSms, btnCancel, btnCopy, btnRevoke, lastFocus;
+      qrImg, qrHint, btnSend, btnSms, btnWechat, btnCancel, btnCopy, btnRevoke,
+      lastFocus;
   var token = null, busy = false;
 
   function t(key, fallback) {
@@ -83,8 +88,14 @@
     btnSms.classList.remove('sd-hidden');
     btnSms.disabled = false;
     btnSms.textContent = t('share.sms', 'Share via SMS');
+    btnWechat.classList.remove('sd-hidden');
+    btnWechat.disabled = false;
+    btnWechat.textContent = t('share.wechat', 'Share to WeChat');
     btnCancel.textContent = t('share.cancel', 'Cancel');
     portfolioWarn.classList.add('sd-hidden');
+    qrImg.classList.add('sd-hidden');
+    qrImg.removeAttribute('src');          // drop the old token's image eagerly
+    qrHint.classList.add('sd-hidden');
     inNote.value = '';
     updateCount();
     inTo.removeAttribute('aria-invalid');
@@ -219,9 +230,24 @@
     $('shareLink').textContent = d.url || '';
     btnSend.classList.add('sd-hidden');
     btnSms.classList.add('sd-hidden');
+    btnWechat.classList.add('sd-hidden');
     btnCopy.classList.remove('sd-hidden');
     btnRevoke.classList.remove('sd-hidden');
     btnCancel.textContent = t('share.done', 'Done');
+    // The QR image is the share for this channel -- WeChat has no sms:-style
+    // hand-off, so scanning it *is* the action, not a fallback shown after one
+    // failed. Pointed at the per-token route rather than generated client-side
+    // so a client-side QR library never has to ship to every page load for a
+    // button most visits never click.
+    if (d.channel === 'wechat' && d.token) {
+      qrImg.src = '/api/agents/shared/' + encodeURIComponent(d.token) + '/qr.png';
+      qrImg.classList.remove('sd-hidden');
+      qrHint.classList.remove('sd-hidden');
+    } else {
+      qrImg.classList.add('sd-hidden');
+      qrImg.removeAttribute('src');
+      qrHint.classList.add('sd-hidden');
+    }
     // Persistent, not part of the status line below: `say()` gets overwritten
     // by later transient messages (a revoke, a retry), but "this one talks
     // about your portfolio" should stay visible for as long as the link itself
@@ -231,12 +257,15 @@
     } else {
       portfolioWarn.classList.add('sd-hidden');
     }
-    // Three outcomes, not two. An emailed share can succeed or fail to send,
-    // but an SMS share never attempts a send at all -- routes.api_agents_share
-    // only calls send_share() for channel "email", so `d.sent` is always false
-    // here by design. Treating that the same as a *failed* email would tell the
-    // sharer something broke when nothing did.
-    if (d.channel === 'sms') {
+    // Not two outcomes, but three. An emailed share can succeed or fail to
+    // send; an SMS or WeChat share never attempts a send at all --
+    // routes.api_agents_share only calls send_share() for channel "email", so
+    // `d.sent` is always false for the other two by design. Treating that the
+    // same as a *failed* email would tell the sharer something broke when
+    // nothing did.
+    if (d.channel === 'wechat') {
+      say('ok', t('share.wechat_sent', 'Scan the code below with WeChat to open the report.'));
+    } else if (d.channel === 'sms') {
       say('ok', t('share.sms_sent', 'Opening Messages with the link ready to '
         + 'send. If nothing happens, copy the link below.'));
     } else if (d.sent) {
@@ -267,7 +296,15 @@
     return (isIOS ? 'sms:&body=' : 'sms:?body=') + encodeURIComponent(body);
   }
 
-  function sendSms() {
+  // Shared by sendSms() and sendWechat(): both mint the same capability link
+  // through /api/agents/share and differ only in the channel string and what
+  // happens after showSent() renders the result -- SMS hands off to the
+  // Messages app, WeChat has nothing further to do since the QR code
+  // showSent() already displays *is* the share. send() (email) stays separate
+  // rather than folding in here too: it has its own recipient-field validation
+  // and focus handling that would only complicate this helper's signature for
+  // a channel that already works.
+  function mintShare(channel, btn, label, onSuccess) {
     if (busy) return;
     var jobId = selJob.value;
     if (!jobId) {
@@ -277,38 +314,53 @@
 
     busy = true;
     clearSay();
-    btnSms.disabled = true;
-    btnSms.textContent = t('share.sending', 'Sending…');
+    btn.disabled = true;
+    btn.textContent = t('share.sending', 'Sending…');
 
     fetch('/api/agents/share', {
       method: 'POST',
       credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ job_id: jobId, channel: 'sms', note: inNote.value })
+      body: JSON.stringify({ job_id: jobId, channel: channel, note: inNote.value })
     })
       .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
       .then(function (res) {
         busy = false;
-        btnSms.disabled = false;
-        btnSms.textContent = t('share.sms', 'Share via SMS');
+        btn.disabled = false;
+        btn.textContent = label;
         if (!res.ok) {
           say('error', res.d.error || t('share.err', 'Something went wrong.'));
           return;
         }
         token = res.d.token;
         showSent(res.d);
-        // Best-effort hand-off. On a desktop browser with no SMS handler this
-        // silently does nothing, which is exactly why showSent() always
-        // leaves the link on screen with a Copy button too.
-        var lead = t('share.sms_lead', 'Check out this AI stock report:');
-        location.href = smsHref(lead + ' ' + (res.d.url || ''));
+        if (onSuccess) onSuccess(res.d);
       })
       .catch(function (e) {
         busy = false;
-        btnSms.disabled = false;
-        btnSms.textContent = t('share.sms', 'Share via SMS');
+        btn.disabled = false;
+        btn.textContent = label;
         say('error', String((e && e.message) || e));
       });
+  }
+
+  function sendSms() {
+    mintShare('sms', btnSms, t('share.sms', 'Share via SMS'), function (d) {
+      // Best-effort hand-off. On a desktop browser with no SMS handler this
+      // silently does nothing, which is exactly why showSent() always leaves
+      // the link on screen with a Copy button too.
+      var lead = t('share.sms_lead', 'Check out this AI stock report:');
+      location.href = smsHref(lead + ' ' + (d.url || ''));
+    });
+  }
+
+  // ── Share to WeChat ──────────────────────────────────────────────────────
+  // Mints the same capability link and renders the QR code showSent() already
+  // knows how to display -- there is no hand-off step here the way SMS has
+  // smsHref(), because WeChat has no URL scheme a page can invoke at all
+  // (see ystocker/qr.py's module docstring). The scan *is* the share.
+  function sendWechat() {
+    mintShare('wechat', btnWechat, t('share.wechat', 'Share to WeChat'));
   }
 
   function copy() {
@@ -370,14 +422,18 @@
     inNote = $('shareNote');
     count = $('shareCount');
     portfolioWarn = $('sharePortfolioWarn');
+    qrImg = $('shareQr');
+    qrHint = $('shareQrHint');
     btnSend = $('shareSend');
     btnSms = $('shareSms');
+    btnWechat = $('shareWechat');
     btnCancel = $('shareCancel');
     btnCopy = $('shareCopy');
     btnRevoke = $('shareRevoke');
 
     btnSend.addEventListener('click', send);
     btnSms.addEventListener('click', sendSms);
+    btnWechat.addEventListener('click', sendWechat);
     btnCancel.addEventListener('click', close);
     btnCopy.addEventListener('click', copy);
     btnRevoke.addEventListener('click', revoke);

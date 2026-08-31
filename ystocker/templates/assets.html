@@ -249,7 +249,7 @@
 
     <!-- ── Summary tiles ─────────────────────────────────────────────── -->
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
-      <div class="as-card p-4"><div class="as-tile-label" data-i18n="assets.total_value">Total value</div><div class="as-tile-value" id="asTotal">—</div><div class="text-xs mt-0.5" id="asGain"></div></div>
+      <div class="as-card p-4"><div class="as-tile-label" data-i18n="assets.total_value">Total value</div><div class="as-tile-value" id="asTotal">—</div><div class="text-xs mt-0.5" id="asDayChange"></div><div class="text-xs mt-0.5" id="asGain"></div></div>
       <div class="as-card p-4"><div class="as-tile-label" data-i18n="assets.positions">Positions</div><div class="as-tile-value" id="asCount">—</div><div class="text-xs mt-0.5" style="color:var(--as-muted)" id="asAccounts"></div></div>
       <div class="as-card p-4"><div class="as-tile-label" data-i18n="assets.underlying">Underlying names</div><div class="as-tile-value" id="asNames">—</div><div class="text-xs mt-0.5" style="color:var(--as-muted)" id="asOverlapCount"></div></div>
       <div class="as-card p-4"><div class="as-tile-label" data-i18n="assets.coverage">Look-through coverage</div><div class="as-tile-value" id="asCoverage">—</div><div class="text-xs mt-0.5" style="color:var(--as-muted)" id="asCoverageSub"></div></div>
@@ -322,6 +322,7 @@
             <col style="width:6rem">
             <col style="width:6rem">
             <col style="width:7rem">
+            <col style="width:7rem">
             <col style="width:5rem">
             <col style="width:5rem">
             <col style="width:7rem">
@@ -335,6 +336,7 @@
               <th class="px-3 py-2" aria-sort="none"><button type="button" class="as-sort-button" data-holding-sort="kind"><span data-i18n="assets.th_type">Type</span><span class="as-sort-arrow" aria-hidden="true">↕</span></button></th>
               <th class="px-3 py-2 as-num" aria-sort="none"><button type="button" class="as-sort-button" data-holding-sort="quantity"><span data-i18n="assets.th_qty">Quantity</span><span class="as-sort-arrow" aria-hidden="true">↕</span></button></th>
               <th class="px-3 py-2 as-num" aria-sort="none"><button type="button" class="as-sort-button" data-holding-sort="price"><span data-i18n="assets.th_price">Price</span><span class="as-sort-arrow" aria-hidden="true">↕</span></button></th>
+              <th class="px-3 py-2 as-num" aria-sort="none"><button type="button" class="as-sort-button" data-holding-sort="day_change_value"><span data-i18n="assets.th_day_change">Today</span><span class="as-sort-arrow" aria-hidden="true">↕</span></button></th>
               <th class="px-3 py-2 as-num" aria-sort="none"><button type="button" class="as-sort-button" data-holding-sort="value"><span data-i18n="assets.th_value">Value</span><span class="as-sort-arrow" aria-hidden="true">↕</span></button></th>
               <th class="px-3 py-2 as-num" aria-sort="none"><button type="button" class="as-sort-button" data-holding-sort="weight"><span data-i18n="assets.th_weight">Weight</span><span class="as-sort-arrow" aria-hidden="true">↕</span></button></th>
               <th class="px-3 py-2 as-num" aria-sort="none"><button type="button" class="as-sort-button" data-holding-sort="coverage"><span data-i18n="assets.th_coverage">Seen</span><span class="as-sort-arrow" aria-hidden="true">↕</span></button></th>
@@ -536,6 +538,15 @@
           <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="asMode" value="merge" class="accent-indigo-500"><span data-i18n="assets.import_merge">Add to my positions</span></label>
         </div>
 
+        <div class="mb-4">
+          <label for="asAccountOverride" class="block text-xs mb-1" style="color:var(--as-muted)" data-i18n="assets.import_account_override">Override account (optional)</label>
+          <input type="text" id="asAccountOverride" maxlength="60"
+                 class="px-3 py-2 rounded-lg text-sm bg-transparent border w-full sm:w-72"
+                 style="border-color:var(--as-line); color:var(--as-strong)"
+                 data-i18n-placeholder="assets.import_account_override_ph"
+                 placeholder="e.g. Schwab IRA — applies to every row in this file">
+        </div>
+
         <div id="asPreview" class="hidden"></div>
       </div>
     </section>
@@ -681,6 +692,23 @@
     $('asAccounts').textContent = accounts.size > 1
       ? fill(t('assets.n_accounts', '{n} accounts'), { n: accounts.size }) : '';
 
+    // Today's move, distinct from the unrealised-P/L line below it: same tile,
+    // different timeframe. d.day_change_value can legitimately be 0 (a flat
+    // day), so this checks != null rather than truthiness.
+    const dayVal = d.day_change_value;
+    const dc = $('asDayChange');
+    if (dayVal != null) {
+      const dayPct = d.day_change_pct;
+      dc.textContent = t('assets.th_day_change', 'Today') + ': ' +
+        (dayVal >= 0 ? '+' : '') + money(dayVal) +
+        (dayPct != null ? ' (' + (dayPct >= 0 ? '+' : '') + dayPct.toFixed(1) + '%)' : '');
+      dc.className = 'text-xs mt-0.5 ' + (dayVal >= 0
+        ? 'text-emerald-700 dark:text-emerald-400'
+        : 'text-rose-700 dark:text-rose-400');
+    } else {
+      dc.textContent = '';
+    }
+
     const cost = d.cost_basis_total || 0;
     if (cost > 0) {
       const gain = total - cost;
@@ -805,7 +833,7 @@
     renderHoldingSortState();
 
     if (!rows.length) {
-      $('asHoldings').innerHTML = '<tr><td colspan="11" class="px-3 py-6 text-center" style="color:var(--as-muted)">' +
+      $('asHoldings').innerHTML = '<tr><td colspan="12" class="px-3 py-6 text-center" style="color:var(--as-muted)">' +
         esc(t('assets.empty', 'No positions yet — import a statement or add one below.')) + '</td></tr>';
       return;
     }
@@ -815,6 +843,14 @@
       const weight = (total && p.value != null) ? (p.value / total * 100) : null;
       const gainCls = p.gain == null ? '' : (p.gain >= 0
         ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400');
+      // Today's move, not the P/L column: distinct timeframe (since this
+      // morning's close vs. since cost basis), so it gets its own colour class
+      // and its own null case rather than reusing gainCls/p.gain.
+      const dayVal = p.day_change_value;
+      const dayCls = dayVal == null ? '' : (dayVal >= 0
+        ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400');
+      const dayTitle = p.day_change_pct == null ? '' :
+        ' title="' + esc((p.day_change_pct >= 0 ? '+' : '') + Number(p.day_change_pct).toFixed(2) + '%') + '"';
       const src = p.value_source === 'imported'
         ? ' <span title="' + esc(t('assets.imported_value', 'valued from the imported figure, not a live price')) +
           '" style="color:var(--as-warn)">*</span>' : '';
@@ -829,6 +865,8 @@
         '<td class="px-3 py-2" style="color:var(--as-muted)">' + esc(kindLabel(p.kind)) + '</td>' +
         '<td class="px-3 py-2 as-num">' + qty(p.quantity) + '</td>' +
         '<td class="px-3 py-2 as-num">' + (p.price == null ? '—' : '$' + Number(p.price).toFixed(2)) + '</td>' +
+        '<td class="px-3 py-2 as-num ' + dayCls + '"' + dayTitle + '>' + (dayVal == null ? '—' :
+          (dayVal >= 0 ? '+' : '') + money(dayVal)) + '</td>' +
         '<td class="px-3 py-2 as-num" style="color:var(--as-strong)">' + money(p.value) + src + '</td>' +
         '<td class="px-3 py-2 as-num">' + pct(weight, 1) + '</td>' +
         '<td class="px-3 py-2 as-num" style="color:var(--as-muted)">' + (cov ? pct(cov.coverage_pct, 0) : '—') + '</td>' +
@@ -1078,6 +1116,11 @@
   // Polls while anything is still resolving, backing off so a portfolio with a
   // stubbornly unresolvable symbol does not poll forever at 3s.
   let pollTimer = null, pollDelay = 3000, polls = 0;
+  let idlePollTimer = null;
+  // Roughly funddata's own quote refresh cadence (FUNDDATA_QUOTE_TTL_SECONDS
+  // defaults to 15m) -- polling faster than the server could ever have a new
+  // price would just be a request that always comes back unchanged.
+  const IDLE_POLL_MS = 5 * 60 * 1000;
 
   async function load(again) {
     try {
@@ -1093,6 +1136,7 @@
       render(data);
 
       if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
+      if (idlePollTimer) { clearTimeout(idlePollTimer); idlePollTimer = null; }
       // Pending data gets a bounded number of follow-ups even if a fast worker
       // finishes between responses. The activity spinner is controlled
       // separately by data.warming, so stopping these polls cannot leave it on.
@@ -1100,6 +1144,16 @@
         polls += 1;
         pollDelay = Math.min(pollDelay * 1.25, 15000);
         pollTimer = setTimeout(() => load(true), pollDelay);
+      } else if (document.visibilityState !== 'hidden') {
+        // Nothing left to resolve, but a resolved holding's quote still ages
+        // (funddata re-warms it roughly every IDLE_POLL_MS in the background --
+        // see assets.analyse's stale_quote_symbols), and nothing else re-renders
+        // this page. Without a slow heartbeat here a tab left open would keep
+        // showing whatever price it first loaded with, all day. A hidden tab
+        // schedules nothing; the visibilitychange listener below catches it up
+        // on return instead, so a laptop closed overnight does not fire a
+        // backlog of missed polls the moment it wakes.
+        idlePollTimer = setTimeout(() => load(true), IDLE_POLL_MS);
       }
     } catch (err) {
       $('asLoading').classList.add('hidden');
@@ -1107,6 +1161,21 @@
       console.warn('assets: load failed', err);
     }
   }
+
+  // A returning tab refreshes immediately rather than waiting out whatever was
+  // left of IDLE_POLL_MS, matching autorefresh.js's rule that visibility matters
+  // more than the timer -- a tab hidden for an hour should not go on showing an
+  // hour-old price for another five minutes. Guarded on latestSnapshot so this
+  // cannot fire before the first load() lands, and on both timers being idle so
+  // it cannot stack a second in-flight request onto an active pending-resolution
+  // poll.
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'hidden') {
+      if (idlePollTimer) { clearTimeout(idlePollTimer); idlePollTimer = null; }
+      return;
+    }
+    if (latestSnapshot && !pollTimer && !idlePollTimer) load(true);
+  });
 
   $('asRetryWarm').addEventListener('click', function () {
     polls = 0;
@@ -1408,12 +1477,18 @@
     return el ? el.value : 'replace';
   }
 
+  function accountOverride() {
+    return $('asAccountOverride').value.trim();
+  }
+
   async function preview(file) {
     pendingFile = file;
     $('asFileName').textContent = file.name;
     const fd = new FormData();
     fd.append('file', file);
     fd.append('mode', mode());
+    const override = accountOverride();
+    if (override) fd.append('account_override', override);
     try {
       const data = await post('/api/assets/import?commit=0', fd, false);
       renderPreview(data, null);
@@ -1502,6 +1577,8 @@
     fd.append('file', pendingFile);
     fd.append('mode', mode());
     fd.append('commit', '1');
+    const override = accountOverride();
+    if (override) fd.append('account_override', override);
     try {
       const data = await post('/api/assets/import?commit=1', fd, false);
       resetAiMemo();
