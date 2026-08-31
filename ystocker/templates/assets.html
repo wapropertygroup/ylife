@@ -321,11 +321,11 @@
             <col style="width:5rem">
             <col style="width:6rem">
             <col style="width:6rem">
-            <col style="width:7rem">
+            <col style="width:9rem">
             <col style="width:7rem">
             <col style="width:5rem">
             <col style="width:5rem">
-            <col style="width:7rem">
+            <col style="width:9rem">
             <col style="width:10rem">
             <col style="width:5rem">
           </colgroup>
@@ -579,6 +579,20 @@
   const qty = (v) => v == null ? '—' :
     Number(v).toLocaleString(undefined, { maximumFractionDigits: 4 });
 
+  // "+$1,234 (+5.3%)" -- the signed money-plus-percentage format shared by the
+  // summary tiles and the per-row Today/P&L columns, so a gain and a day change
+  // read the same way everywhere on the page instead of the percentage being
+  // visible in one place and a hover-only afterthought in another.
+  function moneyPct(value, pctValue, decimals) {
+    if (value == null) return '—';
+    let out = (value >= 0 ? '+' : '') + money(value);
+    if (pctValue != null) {
+      out += ' (' + (pctValue >= 0 ? '+' : '') +
+        Number(pctValue).toFixed(decimals == null ? 1 : decimals) + '%)';
+    }
+    return out;
+  }
+
   const KIND_LABEL = { fund: 'assets.kind_fund', equity: 'assets.kind_equity',
                        cash: 'assets.kind_cash', other: 'assets.kind_other' };
   const KIND_FALLBACK = { fund: 'Fund', equity: 'Stock', cash: 'Cash', other: 'Other' };
@@ -698,10 +712,7 @@
     const dayVal = d.day_change_value;
     const dc = $('asDayChange');
     if (dayVal != null) {
-      const dayPct = d.day_change_pct;
-      dc.textContent = t('assets.th_day_change', 'Today') + ': ' +
-        (dayVal >= 0 ? '+' : '') + money(dayVal) +
-        (dayPct != null ? ' (' + (dayPct >= 0 ? '+' : '') + dayPct.toFixed(1) + '%)' : '');
+      dc.textContent = t('assets.th_day_change', 'Today') + ': ' + moneyPct(dayVal, d.day_change_pct);
       dc.className = 'text-xs mt-0.5 ' + (dayVal >= 0
         ? 'text-emerald-700 dark:text-emerald-400'
         : 'text-rose-700 dark:text-rose-400');
@@ -713,8 +724,7 @@
     if (cost > 0) {
       const gain = total - cost;
       const g = $('asGain');
-      g.textContent = (gain >= 0 ? '+' : '') + money(gain) +
-        ' (' + (gain >= 0 ? '+' : '') + (gain / cost * 100).toFixed(1) + '%)';
+      g.textContent = moneyPct(gain, gain / cost * 100);
       g.className = 'text-xs mt-0.5 ' + (gain >= 0
         ? 'text-emerald-700 dark:text-emerald-400'
         : 'text-rose-700 dark:text-rose-400');
@@ -849,8 +859,6 @@
       const dayVal = p.day_change_value;
       const dayCls = dayVal == null ? '' : (dayVal >= 0
         ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400');
-      const dayTitle = p.day_change_pct == null ? '' :
-        ' title="' + esc((p.day_change_pct >= 0 ? '+' : '') + Number(p.day_change_pct).toFixed(2) + '%') + '"';
       const src = p.value_source === 'imported'
         ? ' <span title="' + esc(t('assets.imported_value', 'valued from the imported figure, not a live price')) +
           '" style="color:var(--as-warn)">*</span>' : '';
@@ -865,13 +873,11 @@
         '<td class="px-3 py-2" style="color:var(--as-muted)">' + esc(kindLabel(p.kind)) + '</td>' +
         '<td class="px-3 py-2 as-num">' + qty(p.quantity) + '</td>' +
         '<td class="px-3 py-2 as-num">' + (p.price == null ? '—' : '$' + Number(p.price).toFixed(2)) + '</td>' +
-        '<td class="px-3 py-2 as-num ' + dayCls + '"' + dayTitle + '>' + (dayVal == null ? '—' :
-          (dayVal >= 0 ? '+' : '') + money(dayVal)) + '</td>' +
+        '<td class="px-3 py-2 as-num ' + dayCls + '">' + moneyPct(dayVal, p.day_change_pct) + '</td>' +
         '<td class="px-3 py-2 as-num" style="color:var(--as-strong)">' + money(p.value) + src + '</td>' +
         '<td class="px-3 py-2 as-num">' + pct(weight, 1) + '</td>' +
         '<td class="px-3 py-2 as-num" style="color:var(--as-muted)">' + (cov ? pct(cov.coverage_pct, 0) : '—') + '</td>' +
-        '<td class="px-3 py-2 as-num ' + gainCls + '">' + (p.gain == null ? '—' :
-          (p.gain >= 0 ? '+' : '') + money(p.gain)) + '</td>' +
+        '<td class="px-3 py-2 as-num ' + gainCls + '">' + moneyPct(p.gain, p.gain_pct) + '</td>' +
         '<td class="px-3 py-2" style="color:var(--as-muted)"><span class="as-holding-account" title="' +
           esc(p.account || '') + '">' + esc(p.account || '') + '</span></td>' +
         '<td class="px-3 py-2 text-right"><button type="button" data-remove="' + esc(p.symbol) +

@@ -96,6 +96,12 @@
         <b class="text-slate-600 dark:text-slate-300">{{ shared_by }}</b>
       </p>
       {% endif %}
+      {#- Which models produced this report -- share._SHAREABLE_JOB_FIELDS
+          carries the triple specifically because this page has no sign-in
+          behind which a recipient could otherwise go and check: "a report on
+          the cheapest tier must not read as one on the most capable." Hidden
+          for a job written before the picker existed (no provider recorded). #}
+      <p id="shModel" class="hidden text-xs text-slate-500 dark:text-slate-400 mt-1"></p>
     </div>
     <div class="flex items-center gap-2 shrink-0">
       <span id="shDecision" class="hidden px-2.5 py-1 rounded-lg text-xs font-bold"></span>
@@ -162,6 +168,28 @@
     else if (/\bHOLD\b|持有|观望/.test(up)) cls = 'bg-amber-500/15 text-amber-600 dark:text-amber-400';
     el.className = 'px-2.5 py-1 rounded-lg text-xs font-bold ' + cls;
     el.textContent = first;
+  }
+
+  // Which models produced this report -- see the #shModel element's own
+  // comment for why share._SHAREABLE_JOB_FIELDS carries the triple at all.
+  // Wording mirrors report_email._model_summary and the owner's own job card
+  // (agents.html) so a reader who saw one does not have to reconcile it
+  // against the others. "" (job predates the picker) leaves #shModel hidden.
+  function decorateModel(job) {
+    if (!job.provider || !job.deep_model || !job.quick_model) return;
+    const THINK = { minimal: 'agents.think_minimal', low: 'agents.think_low',
+                     medium: 'agents.think_medium', high: 'agents.think_high' };
+    const t = (key, fallback) => (window.I18n && I18n.t && I18n.t(key)) || fallback;
+    let line = job.deep_model === job.quick_model
+      ? `${job.provider} · ${job.deep_model}`
+      : `${job.provider} · ${t('agents.model_deep', 'deep')} ${job.deep_model}`
+        + ` · ${t('agents.model_quick', 'quick')} ${job.quick_model}`;
+    if (job.thinking) {
+      line += ` · ${t(THINK[job.thinking] || '', job.thinking)}`;
+    }
+    document.getElementById('shModel').textContent =
+      `${t('agents.model_label', 'Model')}: ${line}`;
+    document.getElementById('shModel').classList.remove('hidden');
   }
 
   function renderSections(sections) {

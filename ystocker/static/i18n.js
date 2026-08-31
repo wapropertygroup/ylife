@@ -1434,6 +1434,13 @@ const I18n = (() => {
     // than hidden: a reader who has heard of the model should learn it is not
     // configured here, not silently fail to find it.
     'agents.model_unavailable':  { en: 'not configured', zh: '未配置' },
+    // Labels the deep/quick roles when a *finished* job's frozen triple names
+    // two different models (google-lite) -- on the owner's job card, the
+    // showcase sample card, and mirrored in report_email._STR for the mail.
+    // Collapsed to one bare id when the two roles share a model, so these two
+    // words appear only when there is something to distinguish.
+    'agents.model_deep':   { en: 'deep',  zh: '深度' },
+    'agents.model_quick':  { en: 'quick', zh: '快速' },
     'agents.thinking_label': { en: 'Thinking',     zh: '思考深度' },
     // Depth of reasoning, not quantity of output. "最小" rather than "无" because
     // minimal is not off.

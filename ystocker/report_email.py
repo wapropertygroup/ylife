@@ -451,6 +451,17 @@ _STR: dict[str, dict[str, str]] = {
         "elapsed":    "Completed in {mins}",
         "secs":       "{n}s",
         "mins":       "{n} min",
+        # The provider/model/thinking triple frozen on the job at submit time
+        # (agent_models.py) -- what this specific report actually ran on, not
+        # the server's current default for a run about to start. Only the
+        # "different deep vs. quick model" shape is templated: when they're
+        # equal (every choice but google-lite) the line is built directly, in
+        # code, from "{provider} · {model}" -- pure data with no language-
+        # specific word in it, so storing it here would be a copy-pasted zh
+        # entry by construction and trip test_translations_are_actually_translated.
+        "model_label":     "Model",
+        "model_line_diff": "{provider} · deep {deep} · quick {quick}",
+        "thinking_line":   "thinking {level}",
         # Mirrors i18n.js agents.degraded_why, with the models named. Keeping the
         # wording identical to the page matters: a reader who saw the badge there
         # should not have to work out that this is the same condition.
@@ -488,6 +499,9 @@ _STR: dict[str, dict[str, str]] = {
         "elapsed":    "耗时 {mins}",
         "secs":       "{n} 秒",
         "mins":       "{n} 分钟",
+        "model_label":     "模型",
+        "model_line_diff": "{provider} · 深度模型 {deep} · 快速模型 {quick}",
+        "thinking_line":   "思考深度 {level}",
         "degraded":   "配置的模型已用完当日额度，本报告部分内容由能力较弱的模型（{models}）生成。",
         "recovered":  "本次运行在生成报告前失败，以下分析由实时流恢复。",
         "clipped":    "邮件仅显示到此处，打开报告查看全文。",
@@ -507,6 +521,19 @@ _STR: dict[str, dict[str, str]] = {
 # LC_ALL=C, so %B is always English regardless of the report's language.
 _MONTHS_EN = ("January", "February", "March", "April", "May", "June", "July",
               "August", "September", "October", "November", "December")
+
+# Mirrors i18n.js agents.think_minimal/low/medium/high -- the words the picker
+# itself shows for these four levels. Duplicated rather than imported: that
+# table lives in client-side JS, so there is nothing in Python to import from,
+# and four words are cheaper to keep in step by hand than to bridge across the
+# language boundary for. Untranslated levels (an id this table has not caught
+# up with) fall back to the raw value rather than disappearing.
+_THINKING_ZH = {"minimal": "最小", "low": "低", "medium": "中", "high": "高"}
+
+
+def _thinking_display(level: str, lang: str) -> str:
+    """The thinking level as the reader's own language names it."""
+    return _THINKING_ZH.get(level, level) if lang == "zh" else level
 
 
 def _t(lang: str, key: str) -> str:
@@ -570,6 +597,62 @@ def _decision_chip(job: dict[str, Any], lang: str) -> str:
     return (f'<span style="display:inline-block;padding:4px 12px;border-radius:999px;'
             f'background:{bg};color:{fg};font-size:14px;font-weight:700;'
             f'letter-spacing:.02em">{_esc(first)}</span>')
+
+
+def _model_summary(job: dict[str, Any], lang: str) -> str:
+    """'{provider} · deep {x} · quick {y}[ · thinking {level}]', or "".
+
+    The triple is frozen on the job at submit time (``agent_models.resolve``)
+    and is what this *specific* report ran on -- distinct from the "Model: …"
+    line on the live page, which states the server's current default for a run
+    about to start. A catalog bump or a per-job picker choice can make those two
+    answers differ, and the run that already happened is the one a finished
+    report needs to be honest about. Mirrors why ``agents._PUBLIC_FIELDS`` and
+    ``share._SHAREABLE_JOB_FIELDS`` carry these four fields at all: "a report on
+    the cheapest tier must not read as one on the most capable."
+
+    "" for a job written before the picker existed (no ``provider`` recorded).
+    Deliberately not backfilled with today's defaults -- model ids get renamed
+    and retired, so "the server's current default" is not the same claim as
+    "what this job ran", and a permanent record should not assert one for the
+    other.
+    """
+    provider = _plain(job.get("provider") or "", 40)
+    deep = _plain(job.get("deep_model") or "", 80)
+    quick = _plain(job.get("quick_model") or "", 80)
+    if not provider or not deep or not quick:
+        return ""
+    if deep == quick:
+        # No language-specific word in this shape -- see the _STR comment for
+        # why it is built here rather than stored as a second "translation".
+        line = f"{provider} · {deep}"
+    else:
+        line = _t(lang, "model_line_diff").format(provider=provider, deep=deep,
+                                                   quick=quick)
+    thinking = _plain(job.get("thinking") or "", 20)
+    if thinking:
+        line += " · " + _t(lang, "thinking_line").format(
+            level=_thinking_display(thinking, lang))
+    return line
+
+
+def _model_row(summary: str, lang: str) -> str:
+    """The model summary as its own labelled row, styled like the decision chip's
+    uppercase label above the chip itself -- the two are both "facts about this
+    run" and read as a pair.
+
+    Takes the pre-built ``summary`` rather than ``job`` so ``build()`` and the
+    plain-text alternative below share one computed string instead of
+    formatting it twice and risking the two drift.
+    """
+    if not summary:
+        return ""
+    return (f'<tr><td style="padding:14px 28px 0">'
+            f'<div style="color:{_DIM};font-size:11px;font-weight:700;'
+            f'letter-spacing:.08em;text-transform:uppercase;margin:0 0 4px">'
+            f'{_esc(_t(lang, "model_label"))}</div>'
+            f'<div style="color:{_TEXT};font-size:12px;font-family:{_MONO}">'
+            f'{_esc(summary)}</div></td></tr>')
 
 
 def _advisory(text: str) -> str:
@@ -920,6 +1003,8 @@ def build(job: dict[str, Any], link_base: str = "", *,
     if elapsed:
         meta_bits.append(_t(lang, "elapsed").format(mins=elapsed))
     meta = " · ".join(b for b in meta_bits if b)
+    model_summary = _model_summary(job, lang)
+    model_row = _model_row(model_summary, lang)
 
     chip_row = ""
     if chip:
@@ -957,6 +1042,7 @@ def build(job: dict[str, Any], link_base: str = "", *,
         </td></tr>
         {banner}
         {chip_row}
+        {model_row}
         <tr><td style="padding:18px 28px 0">
           <a href="{_esc(link)}" style="display:inline-block;padding:9px 18px;border-radius:8px;
              background:#1d4ed8;color:#fff;font-size:13px;font-weight:600;text-decoration:none">
@@ -988,6 +1074,8 @@ def build(job: dict[str, Any], link_base: str = "", *,
             head_lines.append(f"{_t(lang, 'share_note')}: {note}")
     if short:
         head_lines.append(f"{_t(lang, 'decision')}: {short}")
+    if model_summary:
+        head_lines.append(f"{_t(lang, 'model_label')}: {model_summary}")
     head_lines.append(f"{cta}: {link}")
     text = "\n".join([
         *[h for h in head_lines if h],

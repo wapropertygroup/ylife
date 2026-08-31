@@ -868,6 +868,10 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
       <span id="agSampleRecovered" class="ag-pill ag-degraded hidden"
             data-i18n="agents.recovered">recovered from stream</span>
       <span id="agSampleDegraded" class="ag-pill ag-degraded hidden"></span>
+      {# Which models produced this sample -- agents._PUBLIC_FIELDS carries the
+         triple specifically so a visitor weighing an anonymous sample is not
+         silently shown a cheap-tier run passed off as the product's ceiling. #}
+      <span id="agSampleModel" class="text-xs text-slate-500 hidden"></span>
     </div>
     <div class="ag-row ag-report-actions">
       <a id="agSamplePdf" class="ag-btn ag-btn-ghost hidden" href="#" download
@@ -1079,6 +1083,26 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
         deg.classList.remove('hidden');
       } else {
         deg.classList.add('hidden');
+      }
+
+      // Which models actually produced this sample. Wording mirrors the owner's
+      // own job card and the emailed report (report_email._model_summary) so a
+      // reader who saw one does not have to reconcile it against the others.
+      const sampleModelEl = document.getElementById('agSampleModel');
+      if (job.provider && job.deep_model && job.quick_model) {
+        const THINK_KEYS = { minimal: 'agents.think_minimal', low: 'agents.think_low',
+                              medium: 'agents.think_medium', high: 'agents.think_high' };
+        let modelLine = job.deep_model === job.quick_model
+          ? `${job.provider} · ${job.deep_model}`
+          : `${job.provider} · ${I18n.t('agents.model_deep') || 'deep'} ${job.deep_model}`
+            + ` · ${I18n.t('agents.model_quick') || 'quick'} ${job.quick_model}`;
+        if (job.thinking) {
+          modelLine += ` · ${I18n.t(THINK_KEYS[job.thinking] || '') || job.thinking}`;
+        }
+        sampleModelEl.textContent = (I18n.t('agents.model_label') || 'Model') + ': ' + modelLine;
+        sampleModelEl.classList.remove('hidden');
+      } else {
+        sampleModelEl.classList.add('hidden');
       }
 
       drawConversation(document.getElementById('agSampleReport'), job.sections || []);
@@ -1442,6 +1466,15 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
          the run is queued, so a reader who toggles afterwards would otherwise
          have no explanation for the text in front of them. #}
       <span id="agLang" class="text-xs text-slate-500 hidden"></span>
+      {# The provider/model/thinking triple this *specific* run actually used,
+         frozen on the job at submit (agent_models.py). Distinct from the
+         "Model: …" line further down the run form, which states the server's
+         current default for a run about to start -- a catalog bump or a
+         per-job picker choice can make the two answers differ, and this is
+         the one a reader is actually asking about once a report exists.
+         Hidden for a job written before the picker existed (no provider
+         recorded), rather than backfilled with today's defaults. #}
+      <span id="agModel" class="text-xs text-slate-500 hidden"></span>
       {# Shown only when the configured model ran out of daily quota mid-run, so
          a Flash-written report is never mistaken for a Pro one. #}
       <span id="agDegraded" class="ag-pill ag-degraded hidden"></span>
@@ -1660,6 +1693,31 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
   };
   const show = (id, on) => document.getElementById(id).classList.toggle('hidden', !on);
 
+  // Mirrors report_email._model_summary / _thinking_display: the
+  // provider/model/thinking triple a *specific* job actually ran on, not the
+  // server's current default shown near the run button below (agent_env.*).
+  // Wording is kept parallel to the emailed report on purpose, so a reader who
+  // saw one does not have to reconcile it against the other.
+  const THINK_KEYS = { minimal: 'agents.think_minimal', low: 'agents.think_low',
+                        medium: 'agents.think_medium', high: 'agents.think_high' };
+  const thinkLabel = level => I18n.t(THINK_KEYS[level] || '') || level;
+
+  function modelSummary(job) {
+    // "" for a job written before the picker existed (no provider recorded),
+    // rather than backfilled with today's defaults -- the catalog changes over
+    // time, so "the server's current default" is not the same claim as "what
+    // this job ran".
+    if (!job.provider || !job.deep_model || !job.quick_model) return '';
+    const line = job.deep_model === job.quick_model
+      ? `${job.provider} · ${job.deep_model}`
+      // Named twice rather than once when the deep and quick roles differ
+      // (google-lite): collapsing to one id would silently drop which model
+      // actually wrote the analysts' many tool calls versus the final report.
+      : `${job.provider} · ${I18n.t('agents.model_deep') || 'deep'} ${job.deep_model}`
+        + ` · ${I18n.t('agents.model_quick') || 'quick'} ${job.quick_model}`;
+    return job.thinking ? `${line} · ${thinkLabel(job.thinking)}` : line;
+  }
+
   function render(job) {
     card.classList.remove('hidden');
     titleEl.textContent = `${job.ticker} · ${job.date}`;
@@ -1681,6 +1739,11 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
     const langDiffers = !!runLang && (job.lang || '') !== I18n.getLang();
     langEl.classList.toggle('hidden', !langDiffers);
     if (langDiffers) langEl.textContent = runLang;
+
+    const modelEl = document.getElementById('agModel');
+    const summary = modelSummary(job);
+    modelEl.classList.toggle('hidden', !summary);
+    if (summary) modelEl.textContent = `${I18n.t('agents.model_label') || 'Model'}: ${summary}`;
 
     document.getElementById('agRecovered').classList.toggle('hidden', !job.recovered);
 

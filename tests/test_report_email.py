@@ -332,6 +332,93 @@ class BuildTests(unittest.TestCase):
         assert_inert(self, html)
 
 
+# ── Model + parameter provenance ────────────────────────────────────────────
+
+class ModelSummaryTests(unittest.TestCase):
+    """The provider/model/thinking triple frozen on the job at submit time
+    (agent_models.py), not the server's *current* default for a run about to
+    start -- see report_email._model_summary's own docstring for why a catalog
+    bump can make those two answers disagree. Mirrors why the same four fields
+    are in agents._PUBLIC_FIELDS and share._SHAREABLE_JOB_FIELDS: "a report on
+    the cheapest tier must not read as one on the most capable."
+    """
+
+    def test_omitted_when_job_predates_the_picker(self):
+        # make_job() carries no provider/deep_model/quick_model, matching a
+        # record written before the picker existed.
+        self.assertEqual(mail._model_summary(make_job(), "en"), "")
+        _, html, text = mail.build(make_job())
+        self.assertNotIn(">Model<", html)
+        self.assertNotIn("Model:", text)
+
+    def test_omitted_when_only_partially_recorded(self):
+        # Defensive: a malformed record must not render a dangling "google /".
+        job = make_job(provider="google", deep_model="", quick_model="")
+        _, html, _ = mail.build(job)
+        self.assertNotIn(">Model<", html)
+
+    def test_shown_when_recorded(self):
+        job = make_job(provider="google", deep_model="gemini-3.1-pro-preview",
+                        quick_model="gemini-3.1-pro-preview", thinking="high")
+        _, html, text = mail.build(job)
+        self.assertIn(">Model<", html)
+        self.assertIn("google", html)
+        self.assertIn("gemini-3.1-pro-preview", html)
+        self.assertIn("thinking high", html)
+        self.assertIn("google", text)
+        self.assertIn("Model: google", text)
+        self.assertIn("thinking high", text)
+
+    def test_deep_and_quick_named_once_when_equal(self):
+        # google-pro and both deepseek choices use one model for both roles --
+        # naming it twice would read as a typo, not as confirmation.
+        job = make_job(provider="google", deep_model="gemini-3.1-pro-preview",
+                        quick_model="gemini-3.1-pro-preview")
+        _, html, _ = mail.build(job)
+        self.assertEqual(html.count("gemini-3.1-pro-preview"), 1)
+
+    def test_deep_and_quick_both_named_when_different(self):
+        # google-lite: Flash decides, Lite fetches -- a real split worth stating.
+        job = make_job(provider="google", deep_model="gemini-3.5-flash",
+                        quick_model="gemini-3.1-flash-lite")
+        _, html, _ = mail.build(job)
+        self.assertIn("gemini-3.5-flash", html)
+        self.assertIn("gemini-3.1-flash-lite", html)
+
+    def test_thinking_omitted_for_a_provider_with_no_knob(self):
+        job = make_job(provider="deepseek", deep_model="deepseek-v4-pro",
+                        quick_model="deepseek-v4-flash", thinking="")
+        _, html, _ = mail.build(job)
+        self.assertIn("deepseek-v4-pro", html)
+        self.assertNotIn("thinking", html.lower())
+
+    def test_localised_into_chinese(self):
+        job = make_job(lang="zh", provider="google",
+                        deep_model="gemini-3.1-pro-preview",
+                        quick_model="gemini-3.1-pro-preview", thinking="high")
+        _, html, text = mail.build(job)
+        self.assertIn("模型", html)
+        # The level itself is translated too, matching i18n.js's own picker
+        # labels (agents.think_high) -- "思考深度 high" would be half-translated.
+        self.assertIn("思考深度 高", html)
+        self.assertNotIn("thinking high", html.lower())
+        self.assertIn("模型", text)
+
+    def test_model_line_ids_are_escaped(self):
+        job = make_job(provider="<script>x</script>", deep_model="y", quick_model="y")
+        _, html, _ = mail.build(job)
+        assert_inert(self, html)
+
+    def test_no_unsubstituted_placeholder_in_model_line(self):
+        for lang in ("en", "zh"):
+            job = make_job(lang=lang, provider="google",
+                            deep_model="gemini-3.5-flash",
+                            quick_model="gemini-3.1-flash-lite", thinking="low")
+            _, html, text = mail.build(job)
+            for blob in (html, text):
+                self.assertNotRegex(blob, r"\{\w+\}")
+
+
 # ── Branding and the masthead ───────────────────────────────────────────────
 
 class BrandTests(unittest.TestCase):
