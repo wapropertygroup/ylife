@@ -1473,8 +1473,14 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
          per-job picker choice can make the two answers differ, and this is
          the one a reader is actually asking about once a report exists.
          Hidden for a job written before the picker existed (no provider
-         recorded), rather than backfilled with today's defaults. #}
-      <span id="agModel" class="text-xs text-slate-500 hidden"></span>
+         recorded), rather than backfilled with today's defaults.
+
+         Named agJobModel, not agModel: the run form above already owns
+         #agModel as the hidden input backing its own model picker, and a
+         second element sharing that id would make getElementById resolve to
+         whichever one the DOM happens to put first, silently breaking either
+         the picker or this display. #}
+      <span id="agJobModel" class="text-xs text-slate-500 hidden"></span>
       {# Shown only when the configured model ran out of daily quota mid-run, so
          a Flash-written report is never mistaken for a Pro one. #}
       <span id="agDegraded" class="ag-pill ag-degraded hidden"></span>
@@ -1740,7 +1746,7 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
     langEl.classList.toggle('hidden', !langDiffers);
     if (langDiffers) langEl.textContent = runLang;
 
-    const modelEl = document.getElementById('agModel');
+    const modelEl = document.getElementById('agJobModel');
     const summary = modelSummary(job);
     modelEl.classList.toggle('hidden', !summary);
     if (summary) modelEl.textContent = `${I18n.t('agents.model_label') || 'Model'}: ${summary}`;

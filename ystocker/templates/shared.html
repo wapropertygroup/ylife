@@ -256,6 +256,7 @@
       loading.classList.add('hidden');
       if (d.date) document.getElementById('shDate').textContent = '· ' + d.date;
       decorateDecision(d.decision);
+      decorateModel(d);
       if (!d.has_report || !(d.sections || []).length) {
         fail((window.I18n && I18n.t && I18n.t('shared.empty')) ||
              'This report has no content to show.');
