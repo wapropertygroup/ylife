@@ -745,6 +745,21 @@ class CreateTests(TableCase):
         self.assertNotIn("report", row)
         self.assertNotIn("user", row)
 
+    def test_a_portfolio_bearing_run_is_shareable(self):
+        # Reversed from a hard refusal at the account holder's own request; see
+        # this function's docstring for the reasoning. tests/
+        # test_agents_portfolio_context.py::TestDisclosureGuards is the fuller
+        # treatment (including that agents._is_showcase's own, unconditional
+        # portfolio_context guard is unaffected) -- this just pins the same
+        # behaviour where every other create() test already lives.
+        row = share.create(make_job(portfolio_context=True), SHARER, FRIEND)
+        self.assertIsNotNone(row)
+        self.assertEqual(self.table.puts, 1)
+
+    def test_the_portfolio_flag_is_not_copied_into_the_row(self):
+        row = share.create(make_job(portfolio_context=True), SHARER, FRIEND)
+        self.assertNotIn("portfolio_context", row)
+
     def test_channel_defaults_to_email(self):
         # Every caller before the SMS channel existed omitted this argument, so
         # the default has to reproduce the only behaviour that ever shipped.

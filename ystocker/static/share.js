@@ -22,7 +22,7 @@
 
   var NOTE_MAX = 500;                    // must match share.NOTE_MAX server-side
 
-  var dlg, msg, form, done, selJob, inTo, inNote, count,
+  var dlg, msg, form, done, selJob, inTo, inNote, count, portfolioWarn,
       btnSend, btnSms, btnCancel, btnCopy, btnRevoke, lastFocus;
   var token = null, busy = false;
 
@@ -84,6 +84,7 @@
     btnSms.disabled = false;
     btnSms.textContent = t('share.sms', 'Share via SMS');
     btnCancel.textContent = t('share.cancel', 'Cancel');
+    portfolioWarn.classList.add('sd-hidden');
     inNote.value = '';
     updateCount();
     inTo.removeAttribute('aria-invalid');
@@ -221,6 +222,15 @@
     btnCopy.classList.remove('sd-hidden');
     btnRevoke.classList.remove('sd-hidden');
     btnCancel.textContent = t('share.done', 'Done');
+    // Persistent, not part of the status line below: `say()` gets overwritten
+    // by later transient messages (a revoke, a retry), but "this one talks
+    // about your portfolio" should stay visible for as long as the link itself
+    // is on screen, since that is the window in which it could still be sent.
+    if (d.portfolio_context) {
+      portfolioWarn.classList.remove('sd-hidden');
+    } else {
+      portfolioWarn.classList.add('sd-hidden');
+    }
     // Three outcomes, not two. An emailed share can succeed or fail to send,
     // but an SMS share never attempts a send at all -- routes.api_agents_share
     // only calls send_share() for channel "email", so `d.sent` is always false
@@ -359,6 +369,7 @@
     inTo = $('shareTo');
     inNote = $('shareNote');
     count = $('shareCount');
+    portfolioWarn = $('sharePortfolioWarn');
     btnSend = $('shareSend');
     btnSms = $('shareSms');
     btnCancel = $('shareCancel');

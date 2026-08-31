@@ -51,6 +51,16 @@
       <!-- ── Sent ─────────────────────────────────────────────────────── -->
       <div id="shareDone" class="sd-hidden">
         <code id="shareLink" class="sd-link"></code>
+        {#  Shown only when the shared run used the sharer's portfolio (share.js
+            toggles it from the /api/agents/share response). Reuses the sd-msg
+            error styling for a separate, persistent element rather than the
+            transient #shareMsg status line above, which showSent() already
+            uses for "sent to…" / "link ready" and would otherwise overwrite
+            this the moment that message changes. #}
+        <p id="sharePortfolioWarn" class="sd-msg sd-hidden" data-kind="error"
+           data-i18n="share.portfolio_warn">This run used your portfolio, so the
+          report may quote specific positions or weights. Anyone with this link
+          can read them — make sure you meant to send it to this person.</p>
         <p class="sd-sub" data-i18n="share.link_warn">Anyone with this link can read
           the report, so treat it as a secret. It stops working in 30 days, or as
           soon as you revoke it.</p>

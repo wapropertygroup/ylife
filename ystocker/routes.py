@@ -3109,15 +3109,17 @@ def api_agents_share():
     if not (job.get("report") or "").strip():
         return jsonify({"error": "That run produced no report to share",
                         "reason": "empty"}), 409
-    # A run given the owner's portfolio cannot be published to an unauthenticated
-    # URL. Grouped with the other job-state refusals, and deliberately *above*
-    # try_consume_share: that counter is not refunded, so checking it later would
-    # charge a share attempt against a run that can never be shared.
-    if job.get("portfolio_context"):
-        return jsonify({
-            "error": "This analysis included your portfolio, so it cannot be "
-                     "shared. Run it without portfolio context to share it.",
-            "reason": "portfolio"}), 409
+    # A run given the owner's portfolio USED to be refused here unconditionally.
+    # It no longer is -- see share.create()'s docstring for the full reasoning,
+    # in short: this is always the owner's own report, gated on the `owns()`
+    # check above, shared by the owner's own deliberate action to a recipient
+    # the owner chose, which is a different shape of exposure from
+    # agents._is_showcase's *own*, still-unconditional portfolio_context check
+    # (that one publishes automatically to anonymous strangers with no owner in
+    # the loop at all). What the removal does not change: the report text can
+    # still quote specific position weights, and the recipient still needs no
+    # sign-in -- so the flag rides along in the response instead, purely so the
+    # client can show a stronger warning for this case (share.js's showSent()).
 
     # Anything unrecognised collapses to "email" -- an older client can only
     # ever send that anyway, and a client sending a channel from the future
@@ -3171,6 +3173,11 @@ def api_agents_share():
     return jsonify({"ok": True, "sent": sent, "url": url, "channel": channel,
                     "token": row["token"], "to": to_addr,
                     "expires_at": row["expires_at"],
+                    # Not published anywhere -- share._SHAREABLE_JOB_FIELDS
+                    # still omits it -- this is the authenticated response to
+                    # the sharer themselves, telling their own client to show a
+                    # stronger warning before they forward the link on.
+                    "portfolio_context": bool(job.get("portfolio_context")),
                     "share_quota": usage}), 200
 
 

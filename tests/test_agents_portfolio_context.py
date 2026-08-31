@@ -2,13 +2,22 @@
 Unit tests for the portfolio-context handoff into TradingAgents.
 
 No app, no subprocess, no LLM: this covers the parent side of the bridge —
-building the block, staging it for the child, the child's argv contract, and the
-two disclosure guards that keep a portfolio-bearing run off a public URL.
+building the block, staging it for the child, the child's argv contract, and
+the two disclosure guards that decide who else may ever see a portfolio-bearing
+run.
 
-The tests that matter most are the disclosure ones. ``build_portfolio_context``
-failing open (returning "") is deliberate and safe, but a *report* built from that
-block reaching ``/agents/shared/<token>`` or the anonymous showcase is not
-recoverable — once the mail is out, the holdings are out.
+The tests that matter most are the disclosure ones, and the two guards are
+deliberately *not* symmetric. ``build_portfolio_context`` failing open
+(returning "") is safe on its own, but what happens next to a report built from
+that block differs by path: the anonymous showcase (``agents._is_showcase``)
+refuses one unconditionally, because that path publishes automatically, to
+strangers, with no owner in the loop at all. Explicit sharing (``share.create``)
+does not refuse — the account holder may send their own portfolio-bearing
+report to somebody they choose, because it is their report and their call, made
+by their own signed-in action. Once such a link is sent it is still not
+recoverable — the recipient needs no sign-in and the report text can still
+quote specific positions — which is why the UI shows a stronger warning for
+exactly this case (share.js) rather than treating it like any other share.
 """
 
 from __future__ import annotations
@@ -149,7 +158,9 @@ class TestBuildPortfolioContext(unittest.TestCase):
 
 
 class TestDisclosureGuards(unittest.TestCase):
-    """A portfolio-bearing run must never become readable without sign-in."""
+    """The showcase never publishes a portfolio-bearing run; sharing it
+    explicitly is the account holder's own call to make.
+    """
 
     def _job(self, **over):
         job = {"id": "j1", "user": "owner@example.com", "status": "done",
@@ -158,7 +169,8 @@ class TestDisclosureGuards(unittest.TestCase):
         return job
 
     def test_showcase_excludes_a_portfolio_run(self):
-        # The riskier of the two paths: the showcase needs no token at all.
+        # The riskier of the two paths, and the one guard that stays absolute:
+        # the showcase needs no token and no owner action at all.
         with mock.patch.object(agents, "showcase_enabled", return_value=True), \
              mock.patch.object(agents, "showcase_emails", return_value=set()):
             self.assertTrue(agents._is_showcase(self._job()))
@@ -173,25 +185,38 @@ class TestDisclosureGuards(unittest.TestCase):
         self.assertIn("portfolio_context",
                       inspect.getsource(agents._is_showcase))
 
-    def test_share_refuses_a_portfolio_run(self):
-        from ystocker import share
-
-        with mock.patch.object(share, "_get_table", return_value=object()):
-            self.assertIsNone(share.create(self._job(portfolio_context=True),
-                                           sharer="owner@example.com",
-                                           recipient="friend@example.com"))
-
-    def test_share_refusal_happens_before_the_row_is_written(self):
-        # The row is the share. Writing it and then refusing would leave a live
-        # capability behind.
+    def test_share_now_allows_a_portfolio_run(self):
+        # Reversed from a hard refusal, at the account holder's own request --
+        # see share.create()'s docstring for the full reasoning. This is the
+        # owner sharing their own report by their own deliberate action, which
+        # is a different shape of exposure from the showcase's automatic,
+        # ownerless publication tested above -- that guard is unaffected by
+        # this one changing.
         from ystocker import share
 
         table = mock.Mock()
+        table.put_item.return_value = None
         with mock.patch.object(share, "_get_table", return_value=table):
-            share.create(self._job(portfolio_context=True),
-                         sharer="owner@example.com",
-                         recipient="friend@example.com")
-        table.put_item.assert_not_called()
+            row = share.create(self._job(portfolio_context=True),
+                               sharer="owner@example.com",
+                               recipient="friend@example.com")
+        self.assertIsNotNone(row)
+        table.put_item.assert_called_once()
+
+    def test_the_stored_row_never_carries_the_portfolio_flag(self):
+        # Allowing the share must not start copying job-level fields into the
+        # row beyond what create() already wrote before this change. The flag
+        # was never a row field and still is not one, so it cannot leak through
+        # a forwarded link either.
+        from ystocker import share
+
+        table = mock.Mock()
+        table.put_item.return_value = None
+        with mock.patch.object(share, "_get_table", return_value=table):
+            row = share.create(self._job(portfolio_context=True),
+                               sharer="owner@example.com",
+                               recipient="friend@example.com")
+        self.assertNotIn("portfolio_context", row)
 
     def test_portfolio_flag_is_not_in_the_public_field_allowlist(self):
         # It would only leak a boolean, but the allowlist is the design and a

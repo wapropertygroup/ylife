@@ -92,6 +92,8 @@ const I18n = (() => {
                             zh: '链接已生成，但邮件发送失败。请复制链接自行转发。' },
     'share.link_warn':    { en: 'Anyone with this link can read the report, so treat it as a secret. It stops working in 30 days, or as soon as you revoke it.',
                             zh: '任何拿到此链接的人都能阅读该报告，请妥善保管。链接将在 30 天后失效，你也可以随时撤销。' },
+    'share.portfolio_warn': { en: 'This run used your portfolio, so the report may quote specific positions or weights. Anyone with this link can read them — make sure you meant to send it to this person.',
+                            zh: '本次分析使用了你的持仓信息，报告内容可能提到具体的仓位或占比。任何拿到此链接的人都能看到——发送前请确认对象无误。' },
     'share.loading':      { en: 'Loading your reports…', zh: '正在加载你的报告…' },
     'share.none':         { en: 'You have no finished reports to share yet.',
                             zh: '你还没有可分享的已完成报告。' },

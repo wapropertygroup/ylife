@@ -224,20 +224,28 @@ def create(job: dict[str, Any], sharer: str, recipient: str,
         log.warning("share: refusing to share a job with no id or no owner")
         return None
 
-    # A run given the holder's portfolio must not become a public URL. The block
-    # only ever reached the decision agents' prompts, but those agents write prose
-    # and routinely quote what they were told, so the report can carry the owner's
-    # position weights and stated limits — and `/agents/shared/<token>` answers to
-    # anybody holding the token, with no sign-in. This is the one refusal that
-    # cannot be recovered from afterwards: once the mail is out, the report is out.
+    # A run given the holder's portfolio USED to be refused here unconditionally.
+    # It no longer is, at the account holder's own request: a run that discussed
+    # their specific positions is exactly the kind of thing they want to text a
+    # family member, and a hard refusal here means their only way to share it is
+    # to burn a second run with no portfolio context, which answers a different
+    # question. What still makes this safe to remove is who is asking: this
+    # function has exactly one production caller, routes.api_agents_share, which
+    # gates on `owns(job, sharer)` before it is ever reached -- so this is always
+    # the owner's own report, being sent by the owner's own deliberate action, to
+    # a recipient the owner chose. That is a different shape of exposure from
+    # ``agents._is_showcase``'s *own* portfolio_context check, which stays
+    # unconditional and always will: the showcase publishes automatically, to
+    # anonymous strangers, with no owner and no recipient choice in the loop at
+    # all -- refusing there is not this decision's call to revisit.
     #
-    # Refused rather than redacted. Redaction here would mean pattern-matching
-    # percentages out of free prose written by a model, which fails quietly in the
-    # direction that discloses.
-    if job.get("portfolio_context"):
-        log.info("share: refusing to share %s — the run included the owner's "
-                 "portfolio", job_id)
-        return None
+    # What has not changed: the report text can still quote the specific
+    # position weights the model was told, the recipient still needs no
+    # sign-in, and nothing about a link can be recalled once it has been read --
+    # so routes.api_agents_share reports ``portfolio_context`` back in its
+    # response specifically so the UI can show a stronger warning for this case
+    # (share.js's showSent()) rather than treating it identically to an
+    # ordinary share.
 
     now = _now()
     row = {
