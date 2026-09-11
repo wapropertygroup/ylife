@@ -435,6 +435,14 @@ def create_app() -> Flask:
     from ystocker.analyst import start_background_thread as _start_analyst_thread
     _start_analyst_thread()
 
+    # Banks one forward-basis valuation row per cached ticker per day. Costs no
+    # Yahoo call at all -- it reads the ticker cache the rolling refresher already
+    # maintains -- and it deliberately does *not* pre-build any /dca
+    # reconstruction, which is six reads per symbol and stays lazy. See
+    # ystocker/dca_history.py.
+    from ystocker.dca_history import start_background_thread as _start_dca_thread
+    _start_dca_thread()
+
     _start_cta_staleness_scheduler()
 
     # Fills forward returns into the decision ledger. Daily, and off the request
