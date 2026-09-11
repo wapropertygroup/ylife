@@ -32,6 +32,7 @@ from ystocker.data import fetch_group, dividend_yield_pct, ps_ratio, reset_yf_fo
 from ystocker.data import TICKER_BACKOFF as _ticker_backoff
 from ystocker import breadth
 from ystocker import charts
+from ystocker import dca_history
 from ystocker import fetchguard
 from ystocker import freshness
 from ystocker import futu
@@ -991,6 +992,284 @@ def history(ticker: str):
                            # from cache only: a miss renders the plain web link,
                            # which is also the no-app fallback. See ystocker/futu.py.
                            **futu.link_context(futu_symbol))
+
+
+@bp.route("/dca/<ticker>")
+def dca_page(ticker: str):
+    """The DCA Valuation Engine page for one ticker.
+
+    Renders unconditionally, like ``/history``: the reconstruction behind it can
+    take a minute cold, so the page paints and ``/api/dca/<ticker>`` fills it.
+    """
+    ticker = ticker.strip().upper()
+    log.info("GET /dca/%s", ticker)
+    return render_template("dca.html",
+                           ticker=ticker,
+                           peer_groups=list(PEER_GROUPS.keys()))
+
+
+#: Tickers currently being rebuilt, so N concurrent readers of one cold symbol
+#: cost one set of Yahoo calls rather than N. Keyed by symbol; the value is the
+#: thread, kept only so a finished build clears itself out.
+_DCA_BUILDING: Dict[str, threading.Thread] = {}
+_DCA_BUILD_LOCK = threading.Lock()
+
+
+def _dca_kick(ticker: str) -> None:
+    """Rebuild *ticker* on a background thread, at most one at a time.
+
+    Mirrors ``assets.kick_warm``: the six Yahoo reads take tens of seconds cold,
+    and gunicorn's ``--timeout 120`` kills a worker that blocks on them -- taking
+    every other request that worker was serving with it, which is the failure
+    ``CLAUDE.md`` records for ``api_markets()``. So the request path never
+    fetches; it starts this and answers ``warming``.
+    """
+    symbol = ticker.strip().upper()
+
+    def _run() -> None:
+        try:
+            dca_history.get(symbol, force=True)
+        except Exception as exc:  # noqa: BLE001 - a cold ticker is not an error
+            log.info("DCA: rebuild failed for %s: %s", symbol, exc)
+        finally:
+            with _DCA_BUILD_LOCK:
+                _DCA_BUILDING.pop(symbol, None)
+
+    with _DCA_BUILD_LOCK:
+        if symbol in _DCA_BUILDING:
+            return
+        thread = threading.Thread(target=_run, name=f"dca-build-{symbol}", daemon=True)
+        _DCA_BUILDING[symbol] = thread
+    thread.start()
+
+
+@bp.route("/api/dca/<ticker>")
+def api_dca(ticker: str):
+    """Valuation percentiles, the V score and a sized contribution for one ticker.
+
+    ``base`` is a query parameter rather than stored state: ``/dca`` is public,
+    like ``/history``, and the page keeps the reader's own figure in
+    ``localStorage``. It only scales the final line -- every percentile, the
+    score and all three multipliers are independent of it, which is why a bad
+    value degrades to the default instead of failing the request.
+
+    The response always carries ``equation``: the same numbers the score was
+    built from, laid out term by term, because a multiplier on somebody's money
+    that cannot be checked by hand is not worth showing.
+    """
+    from ystocker import dca
+
+    symbol = ticker.strip().upper()
+
+    try:
+        base = float(request.args.get("base", "1000"))
+    except (TypeError, ValueError):
+        base = 1000.0
+    # A negative or absurd base is a typo, not an instruction. Clamped rather
+    # than rejected: the rest of the payload is still correct and useful.
+    if not (0 < base <= 1_000_000):
+        base = 1000.0
+
+    payload = dca_history.peek(symbol)
+    if payload is None:
+        _dca_kick(symbol)
+        return jsonify({"ticker": symbol, "status": "warming",
+                        "message": "Rebuilding valuation history from filings."}), 202
+
+    percentiles = dict(payload.get("percentiles") or {})
+    peer = dca_history.peer_percentiles(symbol)
+    if peer.get("percentile") is not None:
+        percentiles["peer"] = peer["percentile"]
+
+    drift = dca_history.eps_drift(symbol)
+    position = _dca_position_pct(symbol)
+
+    result = dca.evaluate(
+        ticker=symbol,
+        percentiles=percentiles,
+        sector=payload.get("sector"),
+        industry=payload.get("industry"),
+        base_dca=base,
+        eps_drift=drift.get("drift"),
+        position_pct=position.get("pct"),
+    )
+
+    weights = dca.TEMPLATES[result["model"]]
+    line = dca_history.v_history(payload.get("series") or {}, weights,
+                                 minimum=dca.MIN_OBSERVATIONS)
+
+    # The banked forward-basis series. Read back here rather than only written,
+    # because a series nobody reads is a series nobody notices has stopped being
+    # written -- and this one cannot be backfilled, so the day that is noticed is
+    # the day the gap becomes permanent. It is reported beside the reconstruction
+    # and never merged into it: different basis, see dca_history's module
+    # docstring. Until it is long enough to rank against, its own job is simply
+    # to say how much of it there is.
+    banked = dca_history.load_series(symbol)
+
+    return jsonify({
+        "ticker": symbol,
+        "status": "ok",
+        "name": payload.get("name"),
+        "sector": payload.get("sector"),
+        "industry": payload.get("industry"),
+        **result,
+        "weights": weights,
+        "peer": peer,
+        "earnings": drift,
+        "portfolio": position,
+        "window": payload.get("window"),
+        "vintages": payload.get("vintages"),
+        "series": payload.get("series"),
+        "prices": payload.get("prices"),
+        "v_history": line,
+        "banked": {
+            "rows": banked,
+            "count": len(banked),
+            "start": banked[0]["date"] if banked else None,
+            "end": banked[-1]["date"] if banked else None,
+            "basis": "forward",
+            "min_observations": dca.MIN_OBSERVATIONS,
+            "rankable": len(banked) >= dca.MIN_OBSERVATIONS,
+        },
+        "forward_context": payload.get("forward_context"),
+        "unavailable": payload.get("unavailable"),
+        "equation": _dca_equation(result, weights),
+        "built_at": payload.get("_ts"),
+        "stale": (time.time() - (payload.get("_ts") or 0)) > dca_history.TTL_SECONDS,
+    })
+
+
+def _dca_position_pct(ticker: str) -> dict:
+    """The signed-in reader's look-through weight in *ticker*, if any.
+
+    Uses the 穿透 exposure, not the raw line weight, because the concentration
+    ``M_portfolio`` guards against is mostly reached *through* funds -- somebody
+    holding 3% NVDA directly and VOO besides is not at 3%. It goes through
+    ``assets.analyse``'s public payload rather than ``exposure.band_for``,
+    because that needs the internal ``Result`` which ``analyse`` deliberately
+    does not hand out: obtaining one here would mean walking the tree a second
+    time on the request path for no new information.
+
+    The **floor** is used, matching the rest of ``/assets``: it is a lower bound
+    on how much of this name the reader owns, and the residual that would lift it
+    is undisclosed fund holdings which are mostly *not* this name. ``coverage_pct``
+    travels back so the page can say how much of the portfolio was actually seen
+    through -- a 2% floor at 40% coverage and one at 95% are different claims.
+
+    Signed out is ``None``, never zero. Zero is a measurement -- "you hold none of
+    this" -- and it happens to produce the same 1.0x multiplier, so the two would
+    be indistinguishable on the page exactly where the reader needs to know
+    whether the overlay is switched on at all.
+
+    Never fetches, and never fails the page: this overlay is one term of three,
+    and a portfolio that cannot be read must not take the valuation score with it.
+    """
+    email = session.get("user_email")
+    if not email:
+        return {"pct": None, "reason": "signed_out"}
+    try:
+        from ystocker import assets as assets_svc
+        from ystocker import portfolio
+
+        positions = portfolio.load(email)
+        if not positions:
+            return {"pct": None, "reason": "no_positions"}
+        payload = assets_svc.analyse(positions)
+        symbol = ticker.strip().upper()
+        for exp in payload.get("exposures") or []:
+            if exp.get("symbol") == symbol:
+                return {"pct": exp.get("pct"),
+                        "direct_pct": exp.get("direct_pct"),
+                        "indirect_pct": exp.get("indirect_pct"),
+                        "coverage_pct": payload.get("coverage_pct"),
+                        "basis": "lookthrough_floor"}
+        # Analysed cleanly and the name is simply not in there. That is a
+        # measurement, so it is 0.0 rather than None -- the overlay is on and
+        # says "no exposure", which is a different statement from "not checked".
+        return {"pct": 0.0, "coverage_pct": payload.get("coverage_pct"),
+                "basis": "lookthrough_floor"}
+    except Exception as exc:  # noqa: BLE001 - the overlay is optional, the page is not
+        log.info("DCA: portfolio overlay unavailable for %s: %s", ticker, exc)
+        return {"pct": None, "reason": "unavailable"}
+
+
+def _dca_equation(result: dict, weights: dict) -> dict:
+    """The score restated as substituted arithmetic, for the page to render.
+
+    Built server-side so the strings the reader checks come from the same dict
+    the score came from. Composing them in JavaScript from the same payload
+    would work until one of the two rounded differently, at which point the
+    page would show an equation that does not evaluate to its own answer.
+
+    Every term is optional. When too little of a template survives,
+    ``expensiveness`` returns ``E`` of ``None`` and leaves each surviving row's
+    ``weight`` and ``contribution`` unset -- it has deliberately not rescaled
+    them, because rescaling is the thing it refused to do. Formatting those with
+    ``:.2f`` raises ``TypeError`` and 500s the request, so every line here is
+    guarded and an unscorable ticker renders as "no equation" rather than as an
+    error page. The factor rows still come back, which is what lets the page
+    show *which* factors were missing.
+    """
+    terms = [
+        {"factor": row["factor"],
+         "weight": row["weight"],
+         "base_weight": row["base_weight"],
+         "percentile": row["oriented_pct"],
+         "raw_percentile": row["raw_pct"],
+         "contribution": row["contribution"]}
+        for row in result.get("factors") or []
+    ]
+    scored = [t for t in terms if t["weight"] is not None and t["percentile"] is not None]
+    e_terms = " + ".join(f"{t['weight']:.2f}({t['percentile']:.1f})" for t in scored)
+
+    e_value, v_value = result.get("E"), result.get("V")
+    m_value, base = result.get("m_valuation"), result.get("base_dca")
+    return {
+        "terms": terms,
+        "dropped": result.get("dropped") or [],
+        "renormalised": result.get("renormalised"),
+        "surviving_weight": result.get("surviving_weight"),
+        "e_expression": f"E = {e_terms}" if e_terms else None,
+        "e_value": e_value,
+        "v_expression": None if e_value is None else f"V = 100 - {e_value:.2f}",
+        "v_value": v_value,
+        "m_expression": None if v_value is None else f"M_valuation = 0.5 + {v_value:.2f} / 100",
+        "m_value": m_value,
+        "dca_expression": (
+            None if (m_value is None or base is None) else
+            f"DCA = {base:,.2f} x {m_value:.4f}"
+            f" x {result['m_earnings']:.2f} x {result['m_portfolio']:.2f}"),
+        "dca_value": result.get("amount"),
+        "capped": result.get("capped"),
+        "uncapped_multiplier": result.get("uncapped_multiplier"),
+        "max_multiplier": dca_max_multiplier(),
+    }
+
+
+def dca_max_multiplier() -> float:
+    """The 1.5x ceiling, read from the engine so the page cannot quote a stale one."""
+    from ystocker import dca
+
+    return dca.MAX_TOTAL_MULTIPLIER
+
+
+@bp.route("/dca/<ticker>/refresh")
+def dca_refresh(ticker: str):
+    """Force a rebuild for one ticker, then return to its page.
+
+    Cooldown-gated on the disk cache's own age rather than a separate timer: the
+    payload records when it was built, so "was this refreshed recently" needs no
+    second piece of state that could disagree with it.
+    """
+    symbol = ticker.strip().upper()
+    current = dca_history.peek(symbol)
+    age = time.time() - ((current or {}).get("_ts") or 0)
+    if current is not None and age < 600:
+        log.info("DCA refresh for %s ignored - rebuilt %.0fs ago", symbol, age)
+    else:
+        _dca_kick(symbol)
+    return redirect(url_for("main.dca_page", ticker=symbol))
 
 
 @bp.route("/api/futu/<ticker>")

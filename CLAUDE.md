@@ -371,6 +371,170 @@ aws dynamodb create-table --table-name ystocker-assets --region us-west-2 \
 ```
 
 
+### The DCA Valuation Engine (`/dca/<ticker>`)
+
+A per-ticker page that ranks a company's valuation against **its own history**,
+folds the ranks into one 0-100 `V` score, and turns that into a multiplier on a
+recurring contribution. `V` is a *cheapness* score: `M_valuation = 0.5 + V/100`,
+so V=0 → 0.50x, V=50 → 1.00x, V=100 → 1.50x, and
+`DCA = Base × M_valuation × M_earnings × M_portfolio`. Valuation sets the pace of
+buying; it never answers whether to buy. Linked from the `/history/<ticker>`
+header; the page is public, like `/history`.
+
+Two modules, split by what can be tested without I/O:
+
+| Module | Job | Pure? |
+|---|---|---|
+| `dca.py` | Weight templates, the direction table, E→V→multipliers | **yes** |
+| `dca_history.py` | Reconstructing the distributions, banking the snapshots | mostly |
+
+**The percentile's basis is the whole ballgame.** A forward P/E and a trailing
+P/E are different numbers about the same company, and for anything growing the
+forward one is *lower*. Rank today's forward multiple against a distribution of
+trailing ones and the answer is not slightly off — it is biased **cheap**, every
+time, for every growing company, and that bias flows straight into a larger
+contribution while looking entirely normal on the page. So `reconstruct()`
+derives today's value as **the last point of its own series**, on the same basis
+as every historical point, rather than reading `forwardPE` off Yahoo. A rank
+within one consistent series is then correct by construction and there is
+nowhere left to make the mistake. This is the same separation `valuation.py`
+draws between its bottom-up `forward` series and its `fwd_realized` one.
+
+**There are two histories and they are never spliced.** The *reconstructed* one
+(weekly price ÷ statements public that week, ~5y, trailing) is what the score
+uses and it works on first page load. The *banked* one
+(`ystocker-dca-history`, one row per ticker per day, forward basis) is observed
+state on the same terms as `ystocker-valuation-history` — nothing sells back
+yesterday's consensus forward multiple, so a row not written is gone. It starts
+empty and is worth nothing for months, which is precisely why the reconstruction
+exists. The API returns it as a separate `banked` block, reported **even at zero
+rows**: a daily series that has silently stopped being written looks exactly
+like one that has not started, and this one cannot be backfilled, so the day
+that is noticed is the day the gap becomes permanent.
+
+**Point-in-time, or it is not history.** A fiscal year ending 31 Dec is not
+knowable on 1 Jan; the 10-K lands 60–90 days later. `ANNUAL_LAG_DAYS` (90) and
+`QUARTERLY_LAG_DAYS` (45) hold each vintage back until it was public, and
+`percentile_series()` ranks each week against **only the weeks before it**. Both
+guards are invisible when wrong and both flatter: step on the period-end and
+January is priced on earnings nobody had; rank against the whole sample and a
+2022 trough only registers as a trough because 2024 is in the denominator.
+
+**Direction lives on the factor, never in a formula.** The source framework
+writes the software template as `0.30 P_EVSales + … + 0.25 (100 − P_FCFYield)` —
+the inversion inline, because a high FCF yield is cheap while a high EV/Sales is
+dear. Copying that shape invites applying the flip twice (once in the shared
+table, once in the template), and a double inversion is silent: still 0-100,
+still renders as a percentile, now says the opposite. `DIRECTION` owns it exactly
+once and `TEMPLATES` contains no `100 −` anywhere, asserted by a test.
+
+**A dropped factor renormalises, but only so far.** A negative P/E is not "very
+cheap", it is *not a measurement*, so the factor is dropped and the survivors
+rescaled — the framework's own adaptive rule. Taken literally that rule has no
+floor, and one surviving factor rescaled to 100% produces a score that renders
+identically to a five-factor one. `MIN_SURVIVING_WEIGHT` (0.5) refuses instead,
+and the page lists what was dropped. `MIN_OBSERVATIONS` (60) is the same idea for
+the distribution: a rank over eleven points can only return eleven answers and
+will happily say 100.0.
+
+**The 1.5x ceiling is on the product.** `M_valuation` alone tops out at 1.50x, so
+a cap applied to that term only is invisible until a cheap stock *also* has
+estimates being raised (1.08x → 1.62x) — the exact case the ceiling was written
+for. `combine()` caps the product and reports `capped` plus the uncapped figure
+rather than quietly handing back a number that does not follow from the formula.
+
+**Nothing in the request path fetches.** A cold ticker costs six Yahoo reads
+(`info`, `income_stmt`, `balance_sheet`, `cashflow`, `quarterly_income_stmt`,
+`history`), which is tens of seconds — and gunicorn's `--timeout 120` would take
+the worker's other requests with it. So `/api/dca` answers `202 warming`, kicks
+one background rebuild per symbol (deduped), and the client polls with a bounded
+loop that **must render its terminal state**: stopping the timer alone leaves the
+spinner on screen forever. Cached 24h on disk, one file per ticker.
+
+The daily snapshot sweep costs **no Yahoo call at all** — it reads the
+`ticker_cache.json` the rolling refresher already maintains, which is what makes
+banking ~230 symbols a day free. It deliberately does *not* pre-build any
+reconstruction: that is six reads per symbol across the universe, which is
+exactly the sweep `valuation.py` records having got this box hard-blocked.
+
+The two overlays cost nothing extra either. `M_earnings` comes from
+`analyst.peek()`, which already sweeps `eps_trend` for the whole universe — a
+*vendor-reported* revision rather than one inferred from our own snapshots.
+`M_portfolio` comes from `/assets`' 穿透 exposure, so an ETF sleeve counts toward
+the name, which is how concentration is actually reached. Both are **neutral when
+absent** (1.0x, band `unknown`), never a penalty: docking a contribution because
+a feed was down makes the answer depend on vendor uptime. Signed out is `None`
+and zero exposure is `0.0` — the same multiplier, deliberately distinguishable,
+because the reader needs to know whether the overlay is switched on.
+
+**`peer` is cross-sectional and has no history.** We know what NVDA's peer group
+looks like today, not what it looked like in 2023. So the headline V includes the
+peer factor and the V-history line does not — the adaptive rule drops it and
+renormalises automatically — and the chart says where it ends versus the
+headline. Holding today's peer percentile constant back through 2021 would draw
+a smoother line the data cannot support.
+
+Model selection is ticker → industry → sector → `compounder`, and the ticker map
+beats the rest for a reason: AMZN and TSLA are both "Consumer Cyclical" on Yahoo,
+so letting sector decide would score AMZN on a P/E its business model makes
+meaningless. Semiconductors sit under "Technology" and need the cycle adjustment,
+which is what `INDUSTRY_MODELS` is for.
+
+`nav_premium` and `affo_yield` are **not** reconstructed — they need an appraised
+NAV and an AFFO reconciliation, neither of which is in a Yahoo statement — so a
+REIT scores on FFO and peers and the page names what was dropped. FFO is
+`net income + D&A`, NAREIT's first two terms, labelled as the approximation it is.
+
+**Two arithmetic traps in the reconstruction, both found by rendering the numbers
+rather than by reading the code.** Yahoo's `quarterly_income_stmt` reports *that
+quarter's* EPS, not a trailing-twelve-month one, so feeding it straight into
+`price / eps` reports a P/E about **four times too high** — 90x where the truth
+is 23x — and because those points land in the same series as the annual ones the
+history grows a sawtooth that reads as genuine multiple expansion.
+`build_quarterly_ttm()` sums the four-quarter window, and sums **flows only**:
+debt, cash, share count and book value are *stocks*, and adding four of them
+reports four times the company. Second, once quarterly vintages are interleaved
+with annual ones the *adjacent* vintage is often one quarter back, so
+`current.eps / previous.eps` measures a quarter's growth and hands it to PEG as
+if it were annual — ~3.7% where the truth is ~10%, inflating PEG about 2.7x and
+reading as a far more expensive stock. `_year_ago()` searches a 300–430 day
+window instead and returns `None` when nothing sits in it, because growth over
+the wrong interval is a different quantity, not a rough one. It also excludes
+the same-period duplicate: a quarterly TTM ending 31 Dec and that year's annual
+are the same period with different publication dates, and comparing them yields
+exactly 0% growth. PEG carries 15–25% of the weight in three templates.
+
+**`expensiveness()` leaves `weight` unset when it refuses to score**, and
+`_dca_equation` must guard for it. Formatting `None` with `:.2f` raises
+`TypeError`, which 500s the request — and this is not an edge case: a bank with
+no tangible book value, or an ADR with thin statements, lands there routinely.
+
+Tests: `tests/test_dca.py` (48, no app/network — including the framework's own
+worked example, E=75.55 → $3,722.50 on a $5,000 base, and a check that every
+band/model/factor key exists in **both** EN and ZH, since those are composed in
+JS by string concatenation where `I18n.apply()` cannot reach them),
+`tests/test_dca_history.py` (51, the look-ahead guards, the TTM sum, the
+year-ago growth window and the capex sign trap), and
+`tests/check_dca_endpoints.py` (18 end-to-end, `check_` so `unittest discover`
+skips it — it needs an app and stubs matplotlib).
+
+The table is **not** in `deploy/cloudformation.yaml`, matching every other
+observed series here and for the same reason. IAM needs no change
+(`table/ystocker-*`). Note the key schema differs from the others: `ticker` HASH
++ `date` RANGE, so reading one symbol is a Query rather than a full-table Scan —
+on `PAY_PER_REQUEST` a scan is billed by volume scanned, and a per-ticker page
+would otherwise pay for every other ticker's rows on every load. No TTL: the
+whole point is that these rows cannot be recreated.
+
+```bash
+aws dynamodb create-table --table-name ystocker-dca-history --region us-west-2 \
+  --billing-mode PAY_PER_REQUEST \
+  --attribute-definitions AttributeName=ticker,AttributeType=S \
+                          AttributeName=date,AttributeType=S \
+  --key-schema AttributeName=ticker,KeyType=HASH \
+               AttributeName=date,KeyType=RANGE
+```
+
 ### Emailing a finished agent report
 
 A deep run takes tens of minutes and `/agents` only learns it finished by

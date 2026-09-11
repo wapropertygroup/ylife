@@ -1,0 +1,652 @@
+{% extends "base.html" %}
+{% block title %}yStocker — {{ ticker }} DCA Valuation{% endblock %}
+
+{% block content %}
+<style>
+  /* Hand-written CSS, so Tailwind's `dark:` variant reaches none of it. Shared
+     roles come from base.html's --t-* vocabulary; the three this page needs and
+     that vocabulary lacks are declared here, --dca- prefixed, light-first with
+     `.dark` overriding, exactly as base.html and history.html do. */
+  :root {
+    --dca-track: #e2e8f0;
+    --dca-well:  #f1f5f9;
+    --dca-mono:  #f8fafc;
+  }
+  .dark {
+    --dca-track: #1e293b;
+    --dca-well:  #131c2e;
+    --dca-mono:  #0b1120;
+  }
+  /* The percentile bar. A raw percentile is an abstraction; a filled track next
+     to it is read at a glance, and the fill is coloured by *expensiveness* so
+     the whole column scans in one direction. */
+  .pct-track {
+    position: relative; height: 6px; border-radius: 3px;
+    background: var(--dca-track); overflow: hidden; min-width: 60px;
+  }
+  .pct-fill { position: absolute; inset: 0 auto 0 0; border-radius: 3px; }
+  .eq-line {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12px; line-height: 1.9; color: var(--t-ink);
+    background: var(--dca-mono); border: 1px solid var(--t-line);
+    border-radius: 8px; padding: 10px 12px; overflow-x: auto; white-space: nowrap;
+  }
+  .eq-line .eq-res { color: var(--t-accent-ink); font-weight: 600; }
+  .factor-row td { padding: 8px 10px; border-top: 1px solid var(--t-line); font-size: 13px; }
+  .factor-row:hover td { background: var(--t-row-alt); }
+  .dropped td { opacity: .55; }
+  .band-cell { padding: 6px 10px; border-top: 1px solid var(--t-line); font-size: 12px; }
+  .well { background: var(--dca-well); border: 1px solid var(--t-line); border-radius: 10px; }
+  .factor-btn {
+    font-size: 11px; font-weight: 500; line-height: 1; padding: 3px 8px;
+    border-radius: 5px; border: 1px solid var(--t-line-strong);
+    background: transparent; color: var(--t-ink-dim); cursor: pointer;
+    transition: color .15s, background .15s, border-color .15s;
+  }
+  .factor-btn:hover { color: var(--t-ink); border-color: var(--t-line-hover); }
+  .factor-btn.active {
+    color: var(--t-accent-ink); border-color: var(--t-accent);
+    background: rgba(99,102,241,0.15);
+  }
+</style>
+
+<!-- ── Header ──────────────────────────────────────────────────────────── -->
+<div class="mb-6 fade-up">
+  <div class="flex items-center gap-3 mb-1">
+    <button onclick="history.back()" class="text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 text-sm transition" data-i18n="dca.back">← Back</button>
+    <span class="text-slate-400 dark:text-slate-700">/</span>
+    <span class="text-slate-600 dark:text-slate-300 text-sm font-mono font-semibold">{{ ticker }}</span>
+    <div class="ml-auto flex items-center gap-2">
+      <a href="{{ url_for('main.history', ticker=ticker) }}"
+         class="flex items-center gap-1 text-xs text-slate-600 dark:text-slate-400 border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-200 px-2 py-1 rounded transition"
+         data-i18n="dca.to_history">Price &amp; PE history</a>
+      <a href="{{ url_for('main.dca_refresh', ticker=ticker) }}"
+         class="flex items-center gap-1 text-xs text-slate-600 dark:text-slate-400 border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-200 px-2 py-1 rounded transition"
+         data-i18n="dca.rebuild" data-i18n-title="dca.rebuild_tip"
+         title="Re-reads this ticker's filings from Yahoo. Limited to once every 10 minutes.">↻ Rebuild</a>
+    </div>
+  </div>
+  <h1 class="text-2xl sm:text-3xl font-bold">
+    <span class="font-mono grad-text">{{ ticker }}</span>
+    <span id="stockName" class="text-slate-500 dark:text-slate-400 text-lg sm:text-xl font-normal ml-2 sm:ml-3"></span>
+  </h1>
+  <p class="text-slate-500 text-sm mt-1" data-i18n="dca.subtitle">DCA Valuation Engine — valuation percentile, V score and contribution sizing</p>
+</div>
+
+<!-- ── Warming / error ─────────────────────────────────────────────────── -->
+<div id="dcaWarming" class="mb-6 px-4 py-6 rounded-xl well text-center">
+  <div class="text-sm text-slate-600 dark:text-slate-300 mb-1" data-i18n="dca.warming">Rebuilding valuation history from this company's filings…</div>
+  <div class="text-xs text-slate-500" data-i18n="dca.warming_note">Five years of weekly prices against point-in-time statements. This runs once a day per ticker.</div>
+  <div id="dcaWarmDots" class="text-xs text-slate-400 dark:text-slate-600 mt-2 font-mono"></div>
+</div>
+<div id="dcaError" class="hidden mb-6 px-4 py-3 rounded-lg bg-red-50 dark:bg-red-900/40 border border-red-300 dark:border-red-700 text-red-700 dark:text-red-300 text-sm"></div>
+
+<div id="dcaBody" class="hidden">
+
+  <!-- ── Score + multiplier chain ───────────────────────────────────────── -->
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+    <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 fade-up">
+      <div class="text-xs text-slate-500 mb-1" data-i18n="dca.v_score">Valuation Score (V)</div>
+      <div class="flex items-baseline gap-3">
+        <div id="vScore" class="text-4xl font-bold">—</div>
+        <div id="vBand" class="text-sm font-medium"></div>
+      </div>
+      <div class="pct-track mt-3"><div id="vFill" class="pct-fill" style="width:0"></div></div>
+      <div class="flex justify-between text-[10px] text-slate-500 mt-1">
+        <span data-i18n="dca.axis_dear">0 · dear</span><span data-i18n="dca.axis_cheap">100 · cheap</span>
+      </div>
+      <div class="text-xs text-slate-500 mt-3">
+        <span data-i18n="dca.model_used">Model</span>:
+        <span id="modelName" class="text-slate-700 dark:text-slate-300 font-medium"></span>
+        <span id="modelWhy" class="text-slate-400 dark:text-slate-600"></span>
+      </div>
+    </div>
+
+    <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 fade-up lg:col-span-2">
+      <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+        <div class="text-xs text-slate-500" data-i18n="dca.this_period">This period's contribution</div>
+        <div class="flex items-center gap-2">
+          <label for="baseInput" class="text-xs text-slate-500" data-i18n="dca.base_dca">Base DCA</label>
+          <input id="baseInput" type="number" min="1" step="50" value="1000"
+                 class="w-28 px-2 py-1 text-sm rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-800 dark:text-slate-200"/>
+        </div>
+      </div>
+      <div class="flex items-baseline gap-2 flex-wrap">
+        <div id="dcaAmount" class="text-4xl font-bold text-emerald-700 dark:text-emerald-400">—</div>
+        <div id="dcaMult" class="text-sm text-slate-500"></div>
+      </div>
+      <div id="dcaCapped" class="hidden mt-2 text-xs text-amber-700 dark:text-amber-400"></div>
+      <div class="grid grid-cols-3 gap-2 mt-4">
+        <div class="well px-3 py-2">
+          <div class="text-[10px] text-slate-500" data-i18n="dca.m_val">M_valuation</div>
+          <div id="mVal" class="text-base font-semibold">—</div>
+          <div id="mValWhy" class="text-[10px] text-slate-500 truncate"></div>
+        </div>
+        <div class="well px-3 py-2">
+          <div class="text-[10px] text-slate-500" data-i18n="dca.m_earn">M_earnings</div>
+          <div id="mEarn" class="text-base font-semibold">—</div>
+          <div id="mEarnWhy" class="text-[10px] text-slate-500 truncate"></div>
+        </div>
+        <div class="well px-3 py-2">
+          <div class="text-[10px] text-slate-500" data-i18n="dca.m_port">M_portfolio</div>
+          <div id="mPort" class="text-base font-semibold">—</div>
+          <div id="mPortWhy" class="text-[10px] text-slate-500 truncate"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── The equation, with this ticker's numbers in it ─────────────────── -->
+  <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 mb-6 fade-up">
+    <h2 class="text-sm font-semibold mb-1" data-i18n="dca.eq_title">The calculation</h2>
+    <p class="text-xs text-slate-500 mb-3" data-i18n="dca.eq_note">Every term below is this ticker's own number. The general form is at the bottom of the page.</p>
+    <div class="space-y-2">
+      <div id="eqE"   class="eq-line"></div>
+      <div id="eqV"   class="eq-line"></div>
+      <div id="eqM"   class="eq-line"></div>
+      <div id="eqDCA" class="eq-line"></div>
+    </div>
+    <div id="eqDropped" class="hidden mt-3 text-xs text-amber-700 dark:text-amber-400"></div>
+  </div>
+
+  <!-- ── Factor table ───────────────────────────────────────────────────── -->
+  <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 mb-6 fade-up">
+    <h2 class="text-sm font-semibold mb-1" data-i18n="dca.factors_title">Factors</h2>
+    <p class="text-xs text-slate-500 mb-3" data-i18n="dca.factors_note">Each multiple is ranked against its own history on the same trailing basis. A high expensiveness percentile means dear.</p>
+    <div class="overflow-x-auto">
+      <table class="w-full text-left">
+        <thead>
+          <tr class="text-[10px] uppercase tracking-widest text-slate-500 dark:text-slate-600">
+            <th class="pb-2 px-2.5" data-i18n="dca.col_factor">Factor</th>
+            <th class="pb-2 px-2.5 text-right" data-i18n="dca.col_now">Now</th>
+            <th class="pb-2 px-2.5 text-right" data-i18n="dca.col_raw">Raw pct</th>
+            <th class="pb-2 px-2.5" data-i18n="dca.col_exp">Expensiveness</th>
+            <th class="pb-2 px-2.5 text-right" data-i18n="dca.col_weight">Weight</th>
+            <th class="pb-2 px-2.5 text-right" data-i18n="dca.col_contrib">Contribution</th>
+          </tr>
+        </thead>
+        <tbody id="factorBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── Charts ─────────────────────────────────────────────────────────── -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+    <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 fade-up">
+      <h2 class="text-sm font-semibold mb-1" data-i18n="dca.vhist_title">V score over time</h2>
+      <p id="vhistNote" class="text-xs text-slate-500 mb-3"></p>
+      <div style="height:260px"><canvas id="vHistChart"></canvas></div>
+      <div id="vhistEmpty" class="hidden text-xs text-slate-500 py-8 text-center" data-i18n="dca.vhist_empty">Not enough history to rank yet.</div>
+    </div>
+    <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 fade-up">
+      <div class="flex items-center justify-between mb-1 gap-2 flex-wrap">
+        <h2 class="text-sm font-semibold" data-i18n="dca.mult_title">Multiple history</h2>
+        <div id="factorPicker" class="flex gap-1 flex-wrap"></div>
+      </div>
+      <p class="text-xs text-slate-500 mb-3" data-i18n="dca.mult_note">Weekly price over the fundamentals published as of that week.</p>
+      <div style="height:260px"><canvas id="multChart"></canvas></div>
+    </div>
+  </div>
+
+  <!-- ── Provenance ─────────────────────────────────────────────────────── -->
+  <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 mb-6 fade-up">
+    <h2 class="text-sm font-semibold mb-3" data-i18n="dca.window_title">What the percentiles are measured against</h2>
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
+      <div class="well px-3 py-2"><div class="text-[10px] text-slate-500" data-i18n="dca.w_window">Window</div><div id="wWindow" class="text-sm font-semibold">—</div></div>
+      <div class="well px-3 py-2"><div class="text-[10px] text-slate-500" data-i18n="dca.w_obs">Observations</div><div id="wObs" class="text-sm font-semibold">—</div></div>
+      <div class="well px-3 py-2"><div class="text-[10px] text-slate-500" data-i18n="dca.w_vintages">Filing vintages</div><div id="wVintages" class="text-sm font-semibold">—</div></div>
+      <div class="well px-3 py-2"><div class="text-[10px] text-slate-500" data-i18n="dca.w_basis">Basis</div><div id="wBasis" class="text-sm font-semibold">—</div></div>
+    </div>
+    <p class="text-xs text-slate-500 leading-relaxed" data-i18n="dca.window_caveat">
+      The distribution is built from weekly prices divided by the statements that were public that week, so the denominator really moves — but it only steps once per filing. A five-year window is ~260 weekly points and far fewer independent fundamental readings, which is the number that bounds how much a percentile is worth. Forward figures Yahoo publishes today are shown below for context and are deliberately never ranked against this trailing distribution: for anything growing, a forward multiple is lower, so ranking one against the other reads cheap every time.
+    </p>
+    <div id="forwardCtx" class="mt-3 flex flex-wrap gap-2"></div>
+    <div id="bankedRow" class="mt-3 pt-3 border-t border-slate-200 dark:border-slate-800">
+      <div class="text-[10px] uppercase tracking-widest text-slate-500 dark:text-slate-600 mb-1" data-i18n="dca.banked_title">Forward-basis series being banked</div>
+      <div id="bankedText" class="text-xs text-slate-500"></div>
+    </div>
+  </div>
+
+  <!-- ── The framework ──────────────────────────────────────────────────── -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+    <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 fade-up">
+      <h2 class="text-sm font-semibold mb-1" data-i18n="dca.general_title">General form</h2>
+      <p class="text-xs text-slate-500 mb-3" data-i18n="dca.general_note">Valuation sets the pace of contribution; it does not decide whether to buy.</p>
+      <div class="space-y-2">
+        <div class="eq-line">P<sub>metric</sub> = percentile_rank(current vs own history)</div>
+        <div class="eq-line">E = Σ w<sub>f</sub> · P<sub>f</sub>&nbsp;&nbsp;&nbsp;(yields enter as 100 − P)</div>
+        <div class="eq-line">V = 100 − E</div>
+        <div class="eq-line">M<sub>valuation</sub> = 0.5 + V / 100</div>
+        <div class="eq-line">DCA<sub>i</sub> = Base<sub>i</sub> × M<sub>val</sub> × M<sub>earn</sub> × M<sub>port</sub></div>
+      </div>
+      <p class="text-xs text-slate-500 mt-3" id="capNote"></p>
+    </div>
+    <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 fade-up">
+      <h2 class="text-sm font-semibold mb-3" data-i18n="dca.bands_title">Score bands</h2>
+      <table class="w-full text-left">
+        <thead>
+          <tr class="text-[10px] uppercase tracking-widest text-slate-500 dark:text-slate-600">
+            <th class="pb-2 px-2.5">V</th>
+            <th class="pb-2 px-2.5" data-i18n="dca.col_state">State</th>
+            <th class="pb-2 px-2.5" data-i18n="dca.col_mult">Multiplier</th>
+            <th class="pb-2 px-2.5" data-i18n="dca.col_meaning">Meaning</th>
+          </tr>
+        </thead>
+        <tbody id="bandBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <p class="text-xs text-slate-500 dark:text-slate-600 mb-8" data-i18n="dca.disclaimer">
+    A research and capital-discipline framework, not a return guarantee or an automated trading instruction. Weights should be re-tested periodically and revised when a company's business model changes.
+  </p>
+</div>
+
+<script>
+const TICKER = {{ ticker | tojson }};
+const BASE_KEY = 'ystocker_dca_base';
+let _dcaData = null, _vChart = null, _mChart = null, _pickedFactor = null;
+
+/* Bands mirror ystocker/dca.py's _BANDS. The multiplier column is derived from
+   M = 0.5 + V/100 at each edge rather than typed, so the table cannot drift
+   away from the formula printed directly above it. */
+const BANDS = [
+  ['very_expensive', 0, 20], ['expensive', 20, 40], ['fair', 40, 60],
+  ['cheap', 60, 80], ['very_cheap', 80, 100],
+];
+
+const fmtMoney = v => v == null ? '—'
+  : v.toLocaleString(undefined, {style:'currency', currency:'USD', maximumFractionDigits:2});
+const fmtPct = v => v == null ? '—' : v.toFixed(1);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g,
+  c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+function tf(factor) { return I18n.t('dca.f_' + factor) || factor; }
+
+/* Expensiveness colour. Cheap is green, dear is red, and the mid band is grey
+   rather than amber so "fair" does not read as a warning. */
+function pctColor(p) {
+  if (p == null) return 'var(--t-line-strong)';
+  if (p >= 80) return CT.c('#f87171');
+  if (p >= 60) return CT.c('#fb923c');
+  if (p <= 20) return CT.c('#34d399');
+  if (p <= 40) return CT.c('#22d3ee');
+  return CT.c('#94a3b8');
+}
+
+function readBase() {
+  const stored = parseFloat(localStorage.getItem(BASE_KEY) || '');
+  return (isFinite(stored) && stored > 0) ? stored : 1000;
+}
+
+/* ── Render ─────────────────────────────────────────────────────────────── */
+
+function renderScore(d) {
+  document.getElementById('stockName').textContent = d.name && d.name !== d.ticker ? d.name : '';
+  const v = d.V;
+  document.getElementById('vScore').textContent = v == null ? '—' : v.toFixed(1);
+  const fill = document.getElementById('vFill');
+  fill.style.width = (v == null ? 0 : v) + '%';
+  // V is a cheapness score, so its colour is the inverse of an expensiveness one.
+  fill.style.background = pctColor(v == null ? null : 100 - v);
+  const band = document.getElementById('vBand');
+  band.textContent = d.band ? (I18n.t('dca.band_' + d.band) || d.band) : '';
+  band.style.color = pctColor(v == null ? null : 100 - v);
+
+  document.getElementById('modelName').textContent = I18n.t('dca.model_' + d.model) || d.model;
+  const why = I18n.t('dca.why_' + d.model_reason);
+  document.getElementById('modelWhy').textContent = why ? '· ' + why : '';
+
+  document.getElementById('dcaAmount').textContent = fmtMoney(d.amount);
+  document.getElementById('dcaMult').textContent =
+    d.multiplier == null ? '' : '= ' + d.multiplier.toFixed(3) + '× ' + (I18n.t('dca.of_base') || 'of base');
+
+  const capped = document.getElementById('dcaCapped');
+  if (d.capped) {
+    capped.textContent = '⚠ ' + (I18n.t('dca.capped') || 'Capped at the ceiling') +
+      ' (' + d.uncapped_multiplier.toFixed(3) + '× → ' + d.multiplier.toFixed(3) + '×)';
+    capped.classList.remove('hidden');
+  } else {
+    capped.classList.add('hidden');
+  }
+
+  const set = (id, val, why) => {
+    document.getElementById(id).textContent = val == null ? '—' : val.toFixed(2) + '×';
+    document.getElementById(id + 'Why').textContent = why || '';
+  };
+  set('mVal', d.m_valuation, d.band ? (I18n.t('dca.band_' + d.band) || d.band) : '');
+  set('mEarn', d.m_earnings, I18n.t('dca.earn_' + d.earnings_band) || d.earnings_band);
+  set('mPort', d.m_portfolio, I18n.t('dca.port_' + d.portfolio_band) || d.portfolio_band);
+}
+
+function renderEquation(d) {
+  const eq = d.equation || {};
+  const put = (id, text, result) => {
+    const el = document.getElementById(id);
+    if (!text) { el.textContent = '—'; return; }
+    el.innerHTML = esc(text) + (result == null ? ''
+      : ' = <span class="eq-res">' + esc(result) + '</span>');
+  };
+  put('eqE', eq.e_expression, eq.e_value == null ? null : eq.e_value.toFixed(2));
+  put('eqV', eq.v_expression, eq.v_value == null ? null : eq.v_value.toFixed(2));
+  put('eqM', eq.m_expression, eq.m_value == null ? null : eq.m_value.toFixed(4));
+  put('eqDCA', eq.dca_expression, eq.dca_value == null ? null : fmtMoney(eq.dca_value));
+
+  const dropped = document.getElementById('eqDropped');
+  if ((eq.dropped || []).length) {
+    const names = eq.dropped.map(tf).join(', ');
+    const share = eq.surviving_weight == null ? '' :
+      ' ' + (I18n.t('dca.renorm_share') || 'Remaining weight rescaled from') +
+      ' ' + (eq.surviving_weight * 100).toFixed(0) + '%.';
+    dropped.textContent = '⚠ ' + (I18n.t('dca.dropped_pre') || 'Not measurable, so dropped:') +
+      ' ' + names + '.' + share;
+    dropped.classList.remove('hidden');
+  } else {
+    dropped.classList.add('hidden');
+  }
+
+  document.getElementById('capNote').textContent =
+    (I18n.t('dca.cap_note') || 'Final contribution is capped at') + ' ' +
+    (eq.max_multiplier || 1.5).toFixed(1) + '× ' + (I18n.t('dca.of_base') || 'of base') + '.';
+}
+
+function renderFactors(d) {
+  const body = document.getElementById('factorBody');
+  const rows = [];
+  const series = d.series || {};
+
+  (d.factors || []).forEach(f => {
+    const pts = series[f.factor];
+    const now = pts && pts.length ? pts[pts.length - 1][1] : null;
+    rows.push(`<tr class="factor-row">
+      <td class="font-medium">${esc(tf(f.factor))}</td>
+      <td class="text-right font-mono">${now == null ? '—' : now.toFixed(2)}</td>
+      <td class="text-right font-mono text-slate-500">${fmtPct(f.raw_pct)}</td>
+      <td>
+        <div class="flex items-center gap-2">
+          <div class="pct-track flex-1"><div class="pct-fill" style="width:${f.oriented_pct}%;background:${pctColor(f.oriented_pct)}"></div></div>
+          <span class="font-mono text-xs w-9 text-right">${fmtPct(f.oriented_pct)}</span>
+        </div>
+      </td>
+      <td class="text-right font-mono">${(f.weight * 100).toFixed(0)}%</td>
+      <td class="text-right font-mono">${f.contribution == null ? '—' : f.contribution.toFixed(2)}</td>
+    </tr>`);
+  });
+
+  (d.dropped || []).forEach(name => {
+    rows.push(`<tr class="factor-row dropped">
+      <td class="font-medium">${esc(tf(name))}</td>
+      <td class="text-right">—</td><td class="text-right">—</td>
+      <td class="text-xs text-slate-500">${esc(I18n.t('dca.not_measurable') || 'not measurable')}</td>
+      <td class="text-right">${((d.weights || {})[name] * 100 || 0).toFixed(0)}%</td>
+      <td class="text-right">—</td>
+    </tr>`);
+  });
+
+  body.innerHTML = rows.join('') ||
+    `<tr><td colspan="6" class="text-xs text-slate-500 py-4">${esc(I18n.t('dca.no_factors') || 'No factor could be measured.')}</td></tr>`;
+}
+
+function renderBands(d) {
+  document.getElementById('bandBody').innerHTML = BANDS.map(([key, lo, hi]) => {
+    const active = d.V != null && d.V >= lo && (d.V < hi || hi === 100);
+    return `<tr${active ? ' style="background:var(--t-row-alt)"' : ''}>
+      <td class="band-cell font-mono">${lo}–${hi}</td>
+      <td class="band-cell" style="color:${pctColor(100 - (lo + hi) / 2)}">${esc(I18n.t('dca.band_' + key) || key)}</td>
+      <td class="band-cell font-mono">${(0.5 + lo / 100).toFixed(2)}–${(0.5 + hi / 100).toFixed(2)}×</td>
+      <td class="band-cell text-slate-500">${esc(I18n.t('dca.bandmean_' + key) || '')}</td>
+    </tr>`;
+  }).join('');
+}
+
+function renderWindow(d) {
+  const w = d.window || {};
+  document.getElementById('wWindow').textContent =
+    w.start && w.end ? w.start + ' → ' + w.end : '—';
+  document.getElementById('wObs').textContent =
+    w.observations ? w.observations + ' (' + w.years + 'y ' + (I18n.t('dca.weekly') || 'weekly') + ')' : '—';
+  document.getElementById('wVintages').textContent = w.vintages || '—';
+  document.getElementById('wBasis').textContent = I18n.t('dca.basis_trailing') || 'Trailing';
+
+  const ctx = d.forward_context || {};
+  const chips = [];
+  const add = (labelKey, fallback, val, suffix) => {
+    if (val == null) return;
+    chips.push(`<span class="well px-2 py-1 text-[11px] text-slate-600 dark:text-slate-400">
+      ${esc(I18n.t(labelKey) || fallback)} <span class="font-mono text-slate-800 dark:text-slate-200">${
+        typeof val === 'number' ? val.toFixed(2) : esc(val)}${suffix || ''}</span></span>`);
+  };
+  add('dca.fwd_pe', 'Forward P/E (Yahoo)', ctx.forwardPE, '×');
+  add('dca.ttm_pe', 'Trailing P/E (Yahoo)', ctx.trailingPE, '×');
+  add('dca.fwd_eps', 'Forward EPS', ctx.forwardEps, '');
+  if (d.peer && d.peer.percentile != null) {
+    add('dca.peer_chip', 'Peer percentile', d.peer.percentile, '');
+  }
+  const holder = document.getElementById('forwardCtx');
+  holder.innerHTML = chips.join('');
+
+  /* The banked series. Reported even at zero rows — a daily series that has
+     silently stopped being written looks exactly like one that has not started,
+     and this one cannot be backfilled, so "0 days" has to be visible rather
+     than rendering as an empty element. */
+  const b = d.banked || {};
+  const bt = document.getElementById('bankedText');
+  if (!b.count) {
+    bt.textContent = I18n.t('dca.banked_none') ||
+      'No days banked yet. One row per day is stored from today onward; nothing upstream sells back a past forward multiple, so this series can only grow forward.';
+  } else {
+    const need = Math.max(0, (b.min_observations || 60) - b.count);
+    bt.textContent =
+      b.count + ' ' + (I18n.t('dca.banked_days') || 'days banked') +
+      ' (' + b.start + ' → ' + b.end + '). ' +
+      (b.rankable
+        ? (I18n.t('dca.banked_ready') || 'Long enough to rank against on its own forward basis.')
+        : (I18n.t('dca.banked_need') || 'Needs') + ' ' + need + ' ' +
+          (I18n.t('dca.banked_more') || 'more before it can be ranked.'));
+  }
+}
+
+/* ── Charts ─────────────────────────────────────────────────────────────── */
+
+function drawVHistory(d) {
+  const line = d.v_history || [];
+  const note = document.getElementById('vhistNote');
+  const empty = document.getElementById('vhistEmpty');
+  if (!line.length) {
+    empty.classList.remove('hidden');
+    document.getElementById('vHistChart').style.display = 'none';
+    note.textContent = '';
+    return;
+  }
+  // Stated, not buried: this line excludes the peer factor because peer is a
+  // cross-section of today and has no history, so its last point is legitimately
+  // not the headline V. Silently holding today's peer percentile constant back
+  // through 2021 would draw a smoother line the data cannot support.
+  const last = line[line.length - 1];
+  note.textContent = (I18n.t('dca.vhist_note') ||
+    'Point-in-time: each week is ranked only against the weeks before it. Excludes the peer factor, which has no history — so this line ends at')
+    + ' ' + last.v.toFixed(1) + (d.V == null ? '' : ' ' + (I18n.t('dca.vs_headline') || 'vs headline') + ' ' + d.V.toFixed(1));
+
+  const gridCol = CT.c('#1e293b'), tickCol = CT.c('#64748b');
+  const cfg = {
+    type: 'line',
+    data: {
+      labels: line.map(p => p.date),
+      datasets: [{
+        ...I18n.label('dca.chart_v', 'V score'),
+        data: line.map(p => p.v),
+        borderColor: CT.c('#6366f1'), backgroundColor: 'rgba(99,102,241,0.10)',
+        borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, fill: true, tension: 0.25,
+      }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false },
+                 tooltip: { mode: 'index', intersect: false,
+                            callbacks: { label: c => ' V ' + c.raw.toFixed(1) } } },
+      scales: {
+        x: { grid: { color: gridCol }, ticks: { color: tickCol, maxTicksLimit: 7, maxRotation: 0 } },
+        y: { min: 0, max: 100, grid: { color: gridCol },
+             ticks: { color: tickCol, stepSize: 25 } },
+      },
+      interaction: { mode: 'index', intersect: false },
+    },
+    plugins: [{
+      // The V=50 "fair value" line. Without it the reader has no anchor for
+      // whether a wandering line is expensive or merely moving.
+      afterDraw(chart) {
+        const { ctx: c, chartArea: a, scales: { y } } = chart;
+        const py = y.getPixelForValue(50);
+        if (py < a.top || py > a.bottom) return;
+        c.save();
+        c.strokeStyle = CT.c('rgba(148,163,184,0.55)'); c.lineWidth = 1; c.setLineDash([4, 4]);
+        c.beginPath(); c.moveTo(a.left, py); c.lineTo(a.right, py); c.stroke();
+        c.fillStyle = CT.c('#94a3b8'); c.font = '10px Inter,sans-serif';
+        c.fillText('V 50 · ' + (I18n.t('dca.fair') || 'fair'), a.left + 6, py - 4);
+        c.restore();
+      },
+    }],
+  };
+  if (_vChart) _vChart.destroy();
+  _vChart = new Chart(document.getElementById('vHistChart'), cfg);
+}
+
+function drawMultiple(d, factor) {
+  _pickedFactor = factor;
+  document.querySelectorAll('#factorPicker .factor-btn').forEach(b => {
+    // classList.toggle takes exactly one token; 'active' is a single class so
+    // this is safe, but any Tailwind pair here must go through toggleClasses.
+    b.classList.toggle('active', b.dataset.factor === factor);
+  });
+  const pts = (d.series || {})[factor] || [];
+  const gridCol = CT.c('#1e293b'), tickCol = CT.c('#64748b');
+  const values = pts.map(p => p[1]);
+  const mean = values.length ? values.reduce((s, v) => s + v, 0) / values.length : null;
+
+  const cfg = {
+    type: 'line',
+    data: {
+      labels: pts.map(p => p[0]),
+      datasets: [{
+        ...I18n.label('dca.f_' + factor, tf(factor)),
+        data: values,
+        borderColor: CT.c('#38bdf8'), backgroundColor: 'rgba(56,189,248,0.08)',
+        borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, fill: true, tension: 0.25,
+      }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false },
+                 tooltip: { mode: 'index', intersect: false,
+                            callbacks: { label: c => ' ' + c.raw.toFixed(2) } } },
+      scales: {
+        x: { grid: { color: gridCol }, ticks: { color: tickCol, maxTicksLimit: 7, maxRotation: 0 } },
+        y: { grid: { color: gridCol }, ticks: { color: tickCol } },
+      },
+      interaction: { mode: 'index', intersect: false },
+    },
+    plugins: [{
+      afterDraw(chart) {
+        if (mean == null) return;
+        const { ctx: c, chartArea: a, scales: { y } } = chart;
+        const py = y.getPixelForValue(mean);
+        if (py < a.top || py > a.bottom) return;
+        c.save();
+        c.strokeStyle = 'rgba(148,163,184,0.5)'; c.lineWidth = 1; c.setLineDash([4, 4]);
+        c.beginPath(); c.moveTo(a.left, py); c.lineTo(a.right, py); c.stroke();
+        c.fillStyle = CT.c('#94a3b8'); c.font = '10px Inter,sans-serif';
+        c.fillText((I18n.t('dca.avg') || 'Avg') + ' ' + mean.toFixed(2), a.left + 6, py - 4);
+        c.restore();
+      },
+    }],
+  };
+  if (_mChart) _mChart.destroy();
+  _mChart = new Chart(document.getElementById('multChart'), cfg);
+}
+
+function buildPicker(d) {
+  const keys = Object.keys(d.series || {});
+  document.getElementById('factorPicker').innerHTML = keys.map(k =>
+    `<button type="button" class="factor-btn" data-factor="${esc(k)}">${esc(tf(k))}</button>`).join('');
+  document.querySelectorAll('#factorPicker .factor-btn').forEach(b => {
+    b.addEventListener('click', () => drawMultiple(_dcaData, b.dataset.factor));
+  });
+  if (keys.length) drawMultiple(d, keys.includes('pe') ? 'pe' : keys[0]);
+}
+
+/* ── Load ───────────────────────────────────────────────────────────────── */
+
+function renderAll(d) {
+  _dcaData = d;
+  renderScore(d); renderEquation(d); renderFactors(d);
+  renderBands(d); renderWindow(d);
+  drawVHistory(d); buildPicker(d);
+  document.getElementById('dcaWarming').classList.add('hidden');
+  document.getElementById('dcaBody').classList.remove('hidden');
+  I18n.apply(document.getElementById('dcaBody'));
+}
+
+function showError(msg) {
+  const el = document.getElementById('dcaError');
+  el.textContent = '⚠ ' + msg;
+  el.classList.remove('hidden');
+  document.getElementById('dcaWarming').classList.add('hidden');
+}
+
+let _attempt = 0;
+async function load() {
+  const base = readBase();
+  let resp, data;
+  try {
+    resp = await fetch(`/api/dca/${encodeURIComponent(TICKER)}?base=${encodeURIComponent(base)}`);
+    data = await resp.json();
+  } catch (e) {
+    showError('Network error: ' + e);
+    return;
+  }
+  if (resp.status === 202 || data.status === 'warming') {
+    _attempt += 1;
+    // A bounded poll. The terminal state has to render something: stopping the
+    // timer alone leaves the last spinner frame on screen forever, which reads
+    // as "still working" long after nothing is.
+    if (_attempt > 40) {
+      showError(I18n.t('dca.warm_timeout') ||
+        'Still rebuilding. Yahoo may be rate-limiting — reload in a few minutes.');
+      return;
+    }
+    document.getElementById('dcaWarmDots').textContent =
+      '· '.repeat(Math.min(_attempt, 20));
+    setTimeout(load, _attempt < 6 ? 3000 : 8000);
+    return;
+  }
+  if (!resp.ok) { showError(data.error || ('HTTP ' + resp.status)); return; }
+  if (data.unavailable) {
+    showError(I18n.t('dca.unavailable_' + data.unavailable) ||
+      'Not enough published history to rank this symbol.');
+    return;
+  }
+  renderAll(data);
+}
+
+/* Base DCA is the reader's own figure and only scales the final line, so a
+   change re-asks the server rather than re-deriving locally: the equation
+   strings are composed server-side precisely so the page cannot print an
+   equation that disagrees with its own answer. */
+const baseInput = document.getElementById('baseInput');
+baseInput.value = readBase();
+let _baseTimer = null;
+baseInput.addEventListener('input', () => {
+  const v = parseFloat(baseInput.value);
+  if (!isFinite(v) || v <= 0) return;
+  localStorage.setItem(BASE_KEY, String(v));
+  clearTimeout(_baseTimer);
+  _baseTimer = setTimeout(() => { _attempt = 0; load(); }, 400);
+});
+
+// Labels set from JS are invisible to I18n.apply(), so re-render on a language
+// change or an English table ends up on a page switched to Chinese.
+document.addEventListener('i18n:langchange', () => { if (_dcaData) renderAll(_dcaData); });
+
+load();
+</script>
+{% endblock %}
