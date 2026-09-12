@@ -25,8 +25,37 @@ APP_DIR="/opt/ystocker"
 RUN_USER="ystocker"
 CERT_EMAIL="admin@li-family.us"
 
-INSTANCE="${YSTOCKER_INSTANCE:-i-059a024daff6bd015}"
 SSM_REGION="${AWS_REGION:-us-west-2}"
+
+# The box, resolved by its Name tag rather than pinned to an id.
+#
+# A hardcoded id survives exactly until the instance is replaced, and then every
+# deploy fails with "InvalidInstanceId: Instances not in a valid state for
+# account" -- which reads like an SSM permissions or agent problem, not like a
+# stale constant, so it is easy to chase for a while. That is what happened when
+# the box was rebuilt on 2026-08-31: the elastic IP moved across, the site stayed
+# up, and only deploys broke. Asking EC2 which instance currently carries the tag
+# means a rebuild needs no edit here.
+#
+# YSTOCKER_INSTANCE still overrides, and the last-known id remains the fallback
+# so a deploy is not blocked by an ec2:DescribeInstances denial or an untagged
+# instance -- it just goes back to failing loudly on a stale id, which is where
+# this started rather than something worse.
+INSTANCE_NAME_TAG="${YSTOCKER_INSTANCE_TAG:-ystocker-instance}"
+INSTANCE="${YSTOCKER_INSTANCE:-}"
+if [[ -z "$INSTANCE" ]]; then
+  INSTANCE="$(aws ec2 describe-instances --region "$SSM_REGION" \
+      --filters "Name=tag:Name,Values=$INSTANCE_NAME_TAG" \
+                "Name=instance-state-name,Values=running" \
+      --query 'Reservations[].Instances[0].InstanceId' --output text 2>/dev/null \
+    | head -n1 | tr -d '[:space:]')"
+  if [[ -z "$INSTANCE" || "$INSTANCE" == "None" ]]; then
+    INSTANCE="i-0bb73b171210c002e"
+    echo "[deploy] WARNING: could not resolve a running instance tagged" \
+         "'$INSTANCE_NAME_TAG' — falling back to $INSTANCE" >&2
+  fi
+fi
+
 # Our fork, not TauricResearch: this is where our commits live.
 TA_REMOTE="https://github.com/15th-Ave-NE/TradingAgents.git"
 

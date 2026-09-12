@@ -88,11 +88,11 @@ rather than assuming a 502 was transient.
 ## Single-app deploy without a `.pem` (SSM)
 
 ```bash
-aws ssm send-command --instance-ids i-059a024daff6bd015 --region us-west-2 \
+aws ssm send-command --instance-ids i-0bb73b171210c002e --region us-west-2 \
   --document-name AWS-RunShellScript \
   --parameters '{"commands":["cd /opt/ystocker && sudo git fetch origin && sudo git reset --hard origin/main && sudo systemctl restart yplanner"]}'
 
-aws ssm get-command-invocation --command-id <CMD_ID> --instance-id i-059a024daff6bd015 \
+aws ssm get-command-invocation --command-id <CMD_ID> --instance-id i-0bb73b171210c002e \
   --region us-west-2 --query "[Status, StandardOutputContent]" --output text
 ```
 
@@ -159,7 +159,7 @@ behind a TradingAgents-side feature, check both repos, not just this one.
 
 ## Production facts
 
-- Instance `i-059a024daff6bd015`, `us-west-2`, Amazon Linux 2023, `t3.medium`.
+- Instance `i-0bb73b171210c002e`, `us-west-2`, Amazon Linux 2023, `t3.medium`.
 - nginx → 8 gunicorn systemd services on ports 8000–8007, 2 workers each,
   `--preload`, recycled every ~200 requests.
 - 4 GB RAM + 2 GB swap total. yStocker gets `MemoryMax=1800M`; the other
