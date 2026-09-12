@@ -26,6 +26,25 @@
     padding: 3px 6px; border-radius: 4px; border: 1px solid var(--t-line-strong);
     color: var(--t-ink-dim); white-space: nowrap;
   }
+  /* Search. Positioned relative so the suggestion list can hang off it — note
+     the card must NOT be a .fade-up: `animation: … both` makes every card a
+     permanent stacking context, and an absolutely-positioned dropdown inside
+     one resolves its z-index within that card, so the card below paints over
+     it however high the number goes. base.html documents this; /agents hit it. */
+  .search-wrap { position: relative; }
+  .search-list {
+    position: absolute; z-index: 40; left: 0; right: 0; top: calc(100% + 4px);
+    background: var(--t-surface); border: 1px solid var(--t-line-strong);
+    border-radius: 10px; overflow: hidden; box-shadow: 0 12px 32px rgba(0,0,0,.18);
+    max-height: 19rem; overflow-y: auto;
+  }
+  .search-item {
+    display: flex; align-items: center; gap: 10px; width: 100%;
+    padding: 8px 12px; font-size: 13px; text-align: left; cursor: pointer;
+    color: var(--t-ink); background: transparent; border: 0;
+  }
+  .search-item:hover, .search-item.active { background: var(--t-surface-alt); }
+  .search-item + .search-item { border-top: 1px solid var(--t-line); }
 </style>
 
 <div class="mb-6 fade-up">
@@ -35,6 +54,32 @@
   <p class="text-slate-500 text-sm mt-1" data-i18n="dcx.subtitle">
     Every tracked name ranked by how cheap it is against its own history — and what that does to a recurring contribution.
   </p>
+</div>
+
+<!-- ── Search ──────────────────────────────────────────────────────────── -->
+{# Deliberately not .fade-up: that class's `animation: … both` would make this
+   card a permanent stacking context and the suggestion list would be painted
+   over by the card below it. See base.html. #}
+<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 mb-4">
+  <label for="tickerSearch" class="block text-xs text-slate-500 mb-1.5" data-i18n="dcx.search_label">Score any ticker</label>
+  <div class="search-wrap">
+    <div class="flex gap-2">
+      <input id="tickerSearch" type="text" autocomplete="off" spellcheck="false"
+             class="flex-1 px-3 py-2 text-sm rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-800 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-600"
+             data-i18n-placeholder="dcx.search_ph" placeholder="Ticker or company — e.g. AAPL, Nvidia, 7203.T"/>
+      <button id="searchGo" type="button"
+              class="px-4 py-2 text-sm rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition"
+              data-i18n="dcx.search_go">Score</button>
+    </div>
+    <div id="searchList" class="search-list" style="display:none"></div>
+  </div>
+  <p class="text-xs text-slate-500 mt-2" data-i18n="dcx.search_note">
+    Any listed symbol works, not just the ranked ones — a name that has not been scored yet builds on first open, which takes a minute. Suggestions cover the tracked universe; anything else, just type the symbol.
+  </p>
+  <div id="recentWrap" class="hidden mt-2 flex items-center gap-1.5 flex-wrap">
+    <span class="text-[10px] uppercase tracking-widest text-slate-500 dark:text-slate-600" data-i18n="dcx.recent">Recent</span>
+    <span id="recentList" class="flex gap-1.5 flex-wrap"></span>
+  </div>
 </div>
 
 <!-- ── Controls + coverage ─────────────────────────────────────────────── -->
@@ -265,6 +310,137 @@ document.querySelectorAll('th.sortable').forEach(th => {
     render();
   });
 });
+
+/* ── Ticker search ──────────────────────────────────────────────────────
+   Mirrors static/navsearch.js rather than importing it: that module is bound
+   to the banner's own markup and hardcodes /history as its destination. What
+   is copied deliberately is its two non-obvious decisions —
+
+   1. The typed symbol always leads the list. /api/search only knows
+      PEER_GROUPS members, but /dca/<TICKER> takes anything, so without a lead
+      row most of the market would look unsearchable.
+   2. I18n is a script-scoped `const`, not a property of window, so guarding on
+      `window.I18n` fails open and silently drops ?lang=zh from every link.   */
+const RECENT_KEY = 'ystocker_recent_tickers';   // shared with navsearch + lookup
+const SEARCH_DEBOUNCE_MS = 130;
+let _sugg = [], _active = -1, _suggTimer = null;
+
+/* Yahoo symbols are not just letters: BRK-B, ^GSPC, GC=F and 7203.T all have to
+   survive. Anything outside that set is dropped rather than escaped, so a
+   pasted "$AAPL" or a stray space still resolves. */
+function cleanSymbol(raw) {
+  return String(raw || '').toUpperCase().replace(/[^A-Z0-9.\-^=]/g, '').slice(0, 12);
+}
+
+function langSuffix() {
+  try { return (I18n && I18n.getLang && I18n.getLang() === 'zh') ? '?lang=zh' : ''; }
+  catch (_) { return ''; }
+}
+
+function dcaUrl(ticker) {
+  return '/dca/' + encodeURIComponent(ticker) + langSuffix();
+}
+
+function getRecent() {
+  try {
+    const a = JSON.parse(localStorage.getItem(RECENT_KEY) || '[]');
+    return Array.isArray(a) ? a.filter(x => typeof x === 'string') : [];
+  } catch (_) { return []; }
+}
+
+function addRecent(ticker) {
+  try {
+    const next = [ticker].concat(getRecent().filter(t => t !== ticker)).slice(0, 8);
+    localStorage.setItem(RECENT_KEY, JSON.stringify(next));
+  } catch (_) { /* private mode: recents are a convenience, not a feature */ }
+}
+
+function renderRecent() {
+  const list = getRecent();
+  const wrap = document.getElementById('recentWrap');
+  if (!list.length) { wrap.classList.add('hidden'); return; }
+  wrap.classList.remove('hidden');
+  document.getElementById('recentList').innerHTML = list.map(t =>
+    `<a href="${esc(dcaUrl(t))}" class="chip hover:border-slate-400 dark:hover:border-slate-500">${esc(t)}</a>`
+  ).join('');
+}
+
+function goTo(ticker) {
+  const sym = cleanSymbol(ticker);
+  if (!sym) return;
+  addRecent(sym);
+  window.location.href = dcaUrl(sym);
+}
+
+function closeSuggestions() {
+  document.getElementById('searchList').style.display = 'none';
+  _sugg = []; _active = -1;
+}
+
+function renderSuggestions(typed, matches) {
+  const scored = new Set(_rows.map(r => r.ticker));
+  const lead = { ticker: typed, name: (matches.find(m => m.ticker === typed) || {}).name || '',
+                 group: '', lead: true };
+  _sugg = [lead].concat(matches.filter(m => m.ticker !== typed).slice(0, 7));
+
+  document.getElementById('searchList').innerHTML = _sugg.map((s, i) => `
+    <button type="button" class="search-item${i === _active ? ' active' : ''}" data-i="${i}">
+      <span class="font-mono font-semibold w-20 shrink-0">${esc(s.ticker)}</span>
+      <span class="flex-1 truncate text-slate-600 dark:text-slate-400">${esc(s.name || '')}</span>
+      ${scored.has(s.ticker)
+        ? `<span class="chip" style="border-color:${CT.c('#34d399')};color:${CT.c('#34d399')}">${esc(I18n.t('dcx.already_scored') || 'scored')}</span>`
+        : (s.group ? `<span class="chip">${esc(s.group)}</span>` : '')}
+    </button>`).join('');
+  document.getElementById('searchList').style.display = 'block';
+
+  document.querySelectorAll('#searchList .search-item').forEach(btn => {
+    btn.addEventListener('mousedown', ev => {      // mousedown, not click: blur fires first
+      ev.preventDefault();
+      goTo(_sugg[parseInt(btn.dataset.i, 10)].ticker);
+    });
+  });
+}
+
+async function suggest(typed) {
+  let matches = [];
+  try {
+    const r = await fetch('/api/search?q=' + encodeURIComponent(typed));
+    if (r.ok) matches = await r.json();
+  } catch (_) { /* suggestions are a nicety; typing the symbol still works */ }
+  if (!Array.isArray(matches)) matches = [];
+  renderSuggestions(typed, matches);
+}
+
+const searchBox = document.getElementById('tickerSearch');
+
+searchBox.addEventListener('input', () => {
+  const typed = cleanSymbol(searchBox.value);
+  clearTimeout(_suggTimer);
+  if (!typed) { closeSuggestions(); return; }
+  _active = -1;
+  _suggTimer = setTimeout(() => suggest(typed), SEARCH_DEBOUNCE_MS);
+});
+
+searchBox.addEventListener('keydown', ev => {
+  if (ev.key === 'Escape') { closeSuggestions(); return; }
+  if (ev.key === 'Enter') {
+    ev.preventDefault();
+    goTo(_active >= 0 && _sugg[_active] ? _sugg[_active].ticker : searchBox.value);
+    return;
+  }
+  if (ev.key !== 'ArrowDown' && ev.key !== 'ArrowUp') return;
+  if (!_sugg.length) return;
+  ev.preventDefault();
+  _active = (_active + (ev.key === 'ArrowDown' ? 1 : -1) + _sugg.length) % _sugg.length;
+  document.querySelectorAll('#searchList .search-item').forEach((b, i) => {
+    // One token, so classList.toggle is safe here — a Tailwind pair would throw.
+    b.classList.toggle('active', i === _active);
+  });
+});
+
+searchBox.addEventListener('blur', () => setTimeout(closeSuggestions, 120));
+document.getElementById('searchGo').addEventListener('click', () => goTo(searchBox.value));
+renderRecent();
 
 const baseInput = document.getElementById('baseInput');
 baseInput.value = readBase();
