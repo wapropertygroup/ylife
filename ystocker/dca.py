@@ -312,6 +312,35 @@ TICKER_MODELS: dict[str, str] = {
     "JPM":  "bank",
     "UNH":  "healthcare_consumer",
     "NKE":  "healthcare_consumer",
+
+    # ---- Not in the framework. Added because the label fallback below gets
+    # these specific companies wrong, and a template is not a cosmetic choice:
+    # it decides which five multiples the score is built from.
+    #
+    # Yahoo publishes **no usable sector or industry** for the Korean listings
+    # — the same metadata failure that makes it report them as MUTUALFUND with
+    # a Morningstar id for a name (see funddata._fetch). So they fell through
+    # to the `compounder` default, which is the one template with no cycle
+    # adjustment in it, for two of the largest memory manufacturers in the
+    # world. Memory is the most cyclical corner of semis.
+    "005930.KQ": "semiconductor",   # Samsung Electronics
+    "000660.KQ": "semiconductor",   # SK hynix
+    # Cycle-driven hardware Yahoo files under "Computer Hardware" and
+    # "Communication Equipment" — labels that also cover Dell and Cisco, so
+    # they cannot be routed by industry without dragging those along.
+    "SNDK": "semiconductor",        # Sandisk, NAND
+    "LITE": "semiconductor",        # Lumentum, optical components
+    # High-growth software. Yahoo calls these "Software - Infrastructure",
+    # which is also what it calls MSFT, so no label can separate them — see
+    # INDUSTRY_MODELS. Scored on the compounder template they were reading
+    # 極貴 on a P/E that §8 says is not the anchor for this business model.
+    "NET":  "high_growth_software",  # Cloudflare
+    "CRWD": "high_growth_software",  # CrowdStrike
+    "MDB":  "high_growth_software",  # MongoDB
+    # Leveraged media: earnings swing through the cycle and the balance sheet
+    # dominates, which "Entertainment" shares with Netflix and Disney — both
+    # of which score sensibly as compounders, so the label must stay put.
+    "WBD":  "cyclical",             # Warner Bros. Discovery
 }
 
 #: Fallback by Yahoo ``sector``. Keys are lowercased and stripped of spaces so
@@ -338,8 +367,24 @@ SECTOR_MODELS: dict[str, str] = {
 #: lowercase substring of Yahoo's ``industry``. Semiconductors sit under
 #: "Technology", which would otherwise score a foundry at the top of its cycle
 #: on the compounder template and miss the cycle adjustment entirely.
+#:
+#: **A label can only separate what the label distinguishes**, and the software
+#: row is the standing example: Yahoo files Microsoft and Cloudflare under the
+#: same "Software - Infrastructure", so no entry here can route one to
+#: ``compounder`` and the other to ``high_growth_software``. What actually
+#: separates them is growth and cash-flow margin, which this function cannot
+#: see — so the handful that matter are named in :data:`TICKER_MODELS` instead,
+#: and this row keeps the mature reading as the default for everything else.
 INDUSTRY_MODELS: tuple[tuple[str, str], ...] = (
     ("semiconductor", "semiconductor"),
+    # Payment networks before the bank rows. Yahoo files Visa and Mastercard
+    # under Financial Services, which sent them to the bank template — 40% of
+    # whose weight is P/TBV. A card network is asset-light and carries almost
+    # no tangible book, so that factor came back as noise or not at all, and
+    # with it gone the template fell under MIN_SURVIVING_WEIGHT: both companies
+    # were not merely mis-scored, they were unscorable. They are ordinary
+    # high-margin compounders and score as such.
+    ("credit services", "compounder"),
     ("software",      "compounder"),
     ("reit",          "reit"),
     ("bank",          "bank"),

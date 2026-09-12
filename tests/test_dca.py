@@ -521,6 +521,90 @@ class DcfWorkedExample(unittest.TestCase):
         self.assertGreater(self.out["V"], without["V"])
 
 
+class RoutingCorrections(unittest.TestCase):
+    """Templates for companies the label fallback gets wrong.
+
+    A template is not cosmetic: it decides which five multiples the score is
+    built from, so a misrouted company is not slightly off, it is measured
+    against the wrong yardstick. Each case below was observed on the live
+    ranked table.
+    """
+
+    def test_a_card_network_is_not_a_bank(self):
+        """40% of the bank template is P/TBV, and a payment network carries
+        almost no tangible book. The factor came back as noise or not at all,
+        and losing it dropped the template under MIN_SURVIVING_WEIGHT — so Visa
+        and Mastercard were not merely mis-scored, they were unscorable."""
+        for ticker in ("V", "MA"):
+            model, why = dca.pick_model(ticker, "Financial Services",
+                                        "Credit Services")
+            self.assertEqual(model, "compounder", msg=ticker)
+            self.assertEqual(why, "industry", msg=ticker)
+
+    def test_real_banks_still_route_to_the_bank_template(self):
+        """The credit-services row sits before the bank rows, so it must not
+        shadow them."""
+        for ticker in ("JPM", "MUFG", "GS"):
+            self.assertEqual(
+                dca.pick_model(ticker, "Financial Services",
+                               "Banks - Diversified")[0], "bank", msg=ticker)
+
+    def test_the_korean_listings_are_semiconductors(self):
+        """Yahoo publishes no usable sector or industry for these — the same
+        metadata failure that reports them as MUTUALFUND with a Morningstar id
+        for a name. They fell through to `compounder`, the one template with no
+        cycle adjustment, for two of the largest memory makers in the world."""
+        for ticker in ("005930.KQ", "000660.KQ"):
+            model, why = dca.pick_model(ticker, None, None)
+            self.assertEqual(model, "semiconductor", msg=ticker)
+            self.assertEqual(why, "ticker", msg=ticker)
+
+    def test_high_growth_software_is_named_because_no_label_separates_it(self):
+        """Yahoo files Microsoft and Cloudflare under the same
+        "Software - Infrastructure", so the industry row cannot route one to
+        each. The few that matter are named; the label keeps the mature
+        reading for everything else."""
+        for ticker in ("NET", "CRWD", "MDB"):
+            self.assertEqual(
+                dca.pick_model(ticker, "Technology", "Software - Infrastructure")[0],
+                "high_growth_software", msg=ticker)
+        for ticker in ("MSFT", "ORCL"):
+            self.assertEqual(
+                dca.pick_model(ticker, "Technology", "Software - Infrastructure")[0],
+                "compounder", msg=ticker)
+
+    def test_naming_a_ticker_does_not_move_its_whole_industry(self):
+        """SNDK and LITE are routed by ticker precisely because "Computer
+        Hardware" and "Communication Equipment" also cover Dell and Cisco."""
+        self.assertEqual(dca.pick_model("SNDK", "Technology", "Computer Hardware")[0],
+                         "semiconductor")
+        self.assertEqual(dca.pick_model("DELL", "Technology", "Computer Hardware")[0],
+                         "compounder")
+        self.assertEqual(dca.pick_model("LITE", "Technology", "Communication Equipment")[0],
+                         "semiconductor")
+        self.assertEqual(dca.pick_model("CSCO", "Technology", "Communication Equipment")[0],
+                         "compounder")
+
+    def test_leveraged_media_is_named_rather_than_routed_by_label(self):
+        """"Entertainment" also covers Netflix and Disney, both of which score
+        sensibly as compounders, so the label must stay put."""
+        self.assertEqual(
+            dca.pick_model("WBD", "Communication Services", "Entertainment")[0],
+            "cyclical")
+        for ticker in ("NFLX", "DIS"):
+            self.assertEqual(
+                dca.pick_model(ticker, "Communication Services", "Entertainment")[0],
+                "compounder", msg=ticker)
+
+    def test_every_named_ticker_points_at_a_real_template(self):
+        for ticker, model in dca.TICKER_MODELS.items():
+            self.assertIn(model, dca.TEMPLATES, msg=f"{ticker} -> {model}")
+
+    def test_every_industry_row_points_at_a_real_template(self):
+        for needle, model in dca.INDUSTRY_MODELS:
+            self.assertIn(model, dca.TEMPLATES, msg=f"{needle} -> {model}")
+
+
 class Translations(unittest.TestCase):
     """Every key the page composes in JS must exist in both languages.
 

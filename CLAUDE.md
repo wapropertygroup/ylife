@@ -626,6 +626,36 @@ so letting sector decide would score AMZN on a P/E its business model makes
 meaningless. Semiconductors sit under "Technology" and need the cycle adjustment,
 which is what `INDUSTRY_MODELS` is for.
 
+**A label can only separate what the label distinguishes**, and `TICKER_MODELS`
+now carries a second block beyond the framework's sixteen for exactly the cases
+where it cannot. Each was observed misrouted on the live ranked table, and a
+template is not cosmetic — it decides which five multiples the score is built
+from:
+
+- **Card networks were scoring as banks.** Yahoo files Visa and Mastercard under
+  Financial Services, and 40% of the bank template is P/TBV. A payment network is
+  asset-light and carries almost no tangible book, so that factor returned noise
+  or nothing — and losing it dropped the template under `MIN_SURVIVING_WEIGHT`.
+  Both were not merely mis-scored, they rendered as `—`, unscorable. Fixed by
+  label (`credit services`), ordered *before* the bank rows so it does not shadow
+  them.
+- **Yahoo publishes no usable sector or industry for the Korean listings**, the
+  same metadata failure that reports them as `MUTUALFUND` with a Morningstar id
+  for a name. `005930.KQ` and `000660.KQ` fell through to `compounder` — the one
+  template with no cycle adjustment — for two of the largest memory makers there
+  are. Named explicitly, because there is no label to fix.
+- **No label separates Microsoft from Cloudflare**: Yahoo calls both
+  "Software - Infrastructure". `NET`, `CRWD` and `MDB` are named to
+  `high_growth_software`; the industry row keeps the mature reading as the
+  default for everything else, which is right for ORCL, ADBE, NOW and CRM.
+- `SNDK` and `LITE` are named rather than routed, because "Computer Hardware" and
+  "Communication Equipment" also cover Dell and Cisco. `WBD` likewise, because
+  "Entertainment" also covers Netflix and Disney, both of which score sensibly as
+  compounders.
+
+The tests assert both halves: that each named company moved, **and** that the
+companies sharing its label did not.
+
 `nav_premium` and `affo_yield` are **not** reconstructed — they need an appraised
 NAV and an AFFO reconciliation, neither of which is in a Yahoo statement — so a
 REIT scores on FFO and peers and the page names what was dropped. FFO is
