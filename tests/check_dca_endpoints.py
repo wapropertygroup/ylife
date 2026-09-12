@@ -364,6 +364,21 @@ class DcaOverview(unittest.TestCase):
     def test_nav_links_to_the_overview(self):
         self.assertIn('href="/dca"', self.client.get("/dca/MSFT").data.decode())
 
+    def test_the_overview_carries_a_ticker_search(self):
+        """Any listed symbol must be reachable, not just the ranked universe."""
+        body = self.client.get("/dca").data.decode()
+        self.assertIn('id="tickerSearch"', body)
+        self.assertIn("/api/search", body)
+
+    def test_the_search_backend_answers(self):
+        r = self.client.get("/api/search?q=NVD")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("NVDA", [m["ticker"] for m in r.get_json()])
+
+    def test_an_off_universe_symbol_still_has_a_page(self):
+        """The search leads with whatever was typed, so that page must exist."""
+        self.assertEqual(self.client.get("/dca/GDX").status_code, 200)
+
 
 if __name__ == "__main__":  # pragma: no cover
     unittest.main(verbosity=2)
