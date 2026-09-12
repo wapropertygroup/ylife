@@ -303,7 +303,10 @@ class DcaOverview(unittest.TestCase):
         cls.built = ["MSFT", "NVDA"]
         for sym in cls.built:
             _seed(sym)
-        dh.cached_tickers = lambda: list(cls.built)
+        # Reflect whatever has been seeded rather than a frozen list, so a test
+        # that seeds a new ticker sees it as cached — which is what the real
+        # cached_tickers() (a glob of the cache dir) would do.
+        dh.cached_tickers = lambda: sorted(dh._mem)
         # The warm kick must never fire a real sweep from a test.
         dh.warm_universe = lambda *a, **k: 0
 
@@ -378,6 +381,59 @@ class DcaOverview(unittest.TestCase):
     def test_an_off_universe_symbol_still_has_a_page(self):
         """The search leads with whatever was typed, so that page must exist."""
         self.assertEqual(self.client.get("/dca/GDX").status_code, 200)
+
+    def test_a_scored_ticker_joins_the_tracked_list(self):
+        """Searching a name that scores must add it to the ranked table.
+
+        Registration lives in dca_history.get() so it happens once, on a
+        successful build, rather than at each of the several places a ticker can
+        be reached from.
+        """
+        from ystocker import dca_universe as du
+
+        payload = _seed("SHOP")
+        self.assertFalse(payload.get("unavailable"))
+        du.remember("SHOP")
+        try:
+            self.assertIn("SHOP", du.all_tickers())
+            self.assertIn("SHOP", [r["ticker"] for r in
+                                   self.client.get("/api/dca").get_json()["rows"]])
+        finally:
+            du.forget("SHOP")
+
+    def test_a_name_that_cannot_score_is_not_tracked(self):
+        """An ETF has no statements: a permanently blank row that still costs
+        six Yahoo reads a day to re-confirm."""
+        from ystocker import dca_universe as du
+
+        self.assertNotIn("GDX", du.all_tickers())
+
+    def test_untracking_removes_a_name(self):
+        from ystocker import dca_universe as du
+
+        du.remember("SHOP")
+        try:
+            r = self.client.delete("/api/dca/track/SHOP")
+            self.assertEqual(r.status_code, 200)
+            self.assertTrue(r.get_json()["removed"])
+            self.assertNotIn("SHOP", du.all_tickers())
+        finally:
+            du.forget("SHOP")
+
+    def test_a_seed_name_cannot_be_untracked(self):
+        """It would reappear on the next sweep, which reads as a bug."""
+        from ystocker import dca_universe as du
+
+        r = self.client.delete("/api/dca/track/MSFT")
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.get_json()["reason"], "seed")
+        self.assertIn("MSFT", du.all_tickers())
+
+    def test_the_list_reports_registry_capacity(self):
+        reg = self.client.get("/api/dca").get_json()["registry"]
+        self.assertIn("max", reg)
+        self.assertIn("effective", reg)
+        self.assertLessEqual(reg["effective"], reg["max"])
 
 
 if __name__ == "__main__":  # pragma: no cover

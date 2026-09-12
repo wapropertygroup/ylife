@@ -74,7 +74,7 @@
     <div id="searchList" class="search-list" style="display:none"></div>
   </div>
   <p class="text-xs text-slate-500 mt-2" data-i18n="dcx.search_note">
-    Any listed symbol works, not just the ranked ones — a name that has not been scored yet builds on first open, which takes a minute. Suggestions cover the tracked universe; anything else, just type the symbol.
+    Any listed symbol works. A name that scores is added to the table below and refreshed daily from then on; one that has no published statements (most ETFs) is shown but not added. First build takes about a minute.
   </p>
   <div id="recentWrap" class="hidden mt-2 flex items-center gap-1.5 flex-wrap">
     <span class="text-[10px] uppercase tracking-widest text-slate-500 dark:text-slate-600" data-i18n="dcx.recent">Recent</span>
@@ -130,6 +130,7 @@
           <th class="pb-2 px-2.5 text-right" data-i18n="dcx.col_mport">M_port</th>
           <th class="pb-2 px-2.5 sortable text-right" data-sort="amount" data-i18n="dcx.col_amount">Contribution</th>
           <th class="pb-2 px-2.5" data-i18n="dcx.col_window">Window</th>
+          <th class="pb-2 px-2.5"><span class="sr-only" data-i18n="dcx.col_remove">Remove</span></th>
         </tr>
       </thead>
       <tbody id="rankBody"></tbody>
@@ -191,7 +192,9 @@ function render() {
   if (!d) return;
 
   document.getElementById('coverage').textContent =
-    d.scored + ' / ' + d.universe + ' ' + (I18n.t('dcx.scored') || 'scored');
+    d.scored + ' / ' + d.universe + ' ' + (I18n.t('dcx.scored') || 'scored') +
+    (d.registry ? ' · ' + (I18n.t('dcx.tracking') || 'tracking') + ' ' +
+      d.registry.effective + '/' + d.registry.max : '');
 
   const warn = document.getElementById('warmNote');
   if (d.pending && d.pending.length) {
@@ -256,9 +259,30 @@ function render() {
         r.capped ? ' <span class="chip" title="' + esc(I18n.t('dca.capped') || 'Capped') + '">⌃</span>' : ''}</td>
       <td class="text-[11px] text-slate-500">${r.years == null ? '—' : r.years + 'y · ' + r.vintages + ' ' + esc(I18n.t('dcx.filings') || 'filings')}${
         r.dropped && r.dropped.length ? ' <span class="chip" title="' + esc(r.dropped.map(f => label('dca.f_', f)).join(', ')) + '">−' + r.dropped.length + '</span>' : ''}</td>
+      <td class="text-right">${r.seed ? '' :
+        `<button type="button" class="untrack text-slate-400 hover:text-red-600 dark:hover:text-red-400 transition px-1"
+                 data-ticker="${esc(r.ticker)}"
+                 title="${esc(I18n.t('dcx.untrack_tip') || 'Stop tracking this name')}">✕</button>`}</td>
     </tr>`).join('') ||
-    `<tr><td colspan="9" class="text-xs text-slate-500 py-6 text-center">${
+    `<tr><td colspan="10" class="text-xs text-slate-500 py-6 text-center">${
       esc(I18n.t('dcx.none_yet') || 'Nothing scored yet.')}</td></tr>`;
+
+  document.querySelectorAll('#rankBody .untrack').forEach(btn => {
+    btn.addEventListener('click', () => untrack(btn.dataset.ticker));
+  });
+}
+
+async function untrack(ticker) {
+  if (!ticker) return;
+  try {
+    const r = await fetch('/api/dca/track/' + encodeURIComponent(ticker), { method: 'DELETE' });
+    if (!r.ok) return;
+  } catch (_) { return; }
+  // Drop it locally rather than refetching: the row is gone either way, and a
+  // full reload would re-run every score for one deletion.
+  _rows = _rows.filter(x => x.ticker !== ticker);
+  if (_data) { _data.rows = _rows; _data.scored = _rows.length; }
+  render();
 }
 
 async function load(poll) {
