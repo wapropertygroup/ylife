@@ -88,11 +88,18 @@ rather than assuming a 502 was transient.
 ## Single-app deploy without a `.pem` (SSM)
 
 ```bash
-aws ssm send-command --instance-ids i-0bb73b171210c002e --region us-west-2 \
+# Resolve the box by tag. Never pin the id: it has changed twice, and a stale
+# one fails with "InvalidInstanceId", which reads like a permissions fault.
+IID=$(aws ec2 describe-instances --region us-west-2 \
+  --filters "Name=tag:Name,Values=ystocker-instance" \
+            "Name=instance-state-name,Values=running" \
+  --query 'Reservations[].Instances[].InstanceId' --output text)
+
+aws ssm send-command --instance-ids "$IID" --region us-west-2 \
   --document-name AWS-RunShellScript \
   --parameters '{"commands":["cd /opt/ystocker && sudo git fetch origin && sudo git reset --hard origin/main && sudo systemctl restart yplanner"]}'
 
-aws ssm get-command-invocation --command-id <CMD_ID> --instance-id i-0bb73b171210c002e \
+aws ssm get-command-invocation --command-id <CMD_ID> --instance-id "$IID" \
   --region us-west-2 --query "[Status, StandardOutputContent]" --output text
 ```
 
@@ -159,7 +166,8 @@ behind a TradingAgents-side feature, check both repos, not just this one.
 
 ## Production facts
 
-- Instance `i-0bb73b171210c002e`, `us-west-2`, Amazon Linux 2023, `t3.medium`.
+- Instance: resolve by the tag `Name=ystocker-instance` in `us-west-2`; the id
+  has changed twice and must not be pinned. Amazon Linux 2023, `t3.medium`.
 - nginx → 8 gunicorn systemd services on ports 8000–8007, 2 workers each,
   `--preload`, recycled every ~200 requests.
 - 4 GB RAM + 2 GB swap total. yStocker gets `MemoryMax=1800M`; the other
