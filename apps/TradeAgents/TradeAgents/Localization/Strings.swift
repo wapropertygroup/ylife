@@ -168,6 +168,7 @@ enum S {
         "Google 禁止在内嵌网页视图中完成登录。若下方页面拒绝加载，请在浏览器中打开 —— "
         + "但浏览器中的会话无法带回本应用，这正是原生登录需要 iOS OAuth 客户端 ID 的原因。")
     static let signInHost    = LocalizedString("Signing in to", "登录到")
+    static let reload        = LocalizedString("Reload page", "重新加载")
 
     // MARK: - Markets
 
