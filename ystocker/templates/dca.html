@@ -298,6 +298,27 @@
         <tbody id="factorBody"></tbody>
       </table>
     </div>
+
+    <!-- What each multiple is actually a price for. Collapsed: a reader who
+         knows what EV/EBITDA measures should not scroll past a glossary. -->
+    <details class="mt-4 pt-3 border-t border-slate-200 dark:border-slate-800">
+      <summary class="text-xs font-medium cursor-pointer text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+               data-i18n="dca.buy_title">What each multiple is buying</summary>
+      <p class="text-xs text-slate-500 mt-2 mb-2" data-i18n="dca.buy_note">
+        The rows this ticker is actually scored on are marked with their weight.
+      </p>
+      <div class="overflow-x-auto">
+        <table class="w-full text-left">
+          <thead>
+            <tr class="text-[10px] uppercase tracking-widest text-slate-500 dark:text-slate-600">
+              <th class="pb-2 px-2.5" data-i18n="dca.buy_h_metric">Metric</th>
+              <th class="pb-2 px-2.5" data-i18n="dca.buy_h_what">What you are buying</th>
+            </tr>
+          </thead>
+          <tbody id="buyBody"></tbody>
+        </table>
+      </div>
+    </details>
   </div>
 
   <!-- ── Charts ─────────────────────────────────────────────────────────── -->
@@ -500,7 +521,55 @@ function renderEquation(d) {
     (eq.max_multiplier || 1.5).toFixed(1) + '× ' + (I18n.t('dca.of_base') || 'of base') + '.';
 }
 
+/* Every multiple the glossary can explain, in the order a reader meets them:
+   the earnings-based prices first, then cash flow, then the balance-sheet and
+   cycle-adjusted ones, and the DCF last because it is the only row that is not
+   a multiple at all. `ev_ebit` is deliberately present and is NOT a scored
+   factor anywhere — it earns its place next to ev_ebitda, where the contrast
+   (before depreciation versus after) is the whole point of having both names. */
+const BUY_ORDER = [
+  'pe', 'peg', 'pfcf', 'fcf_yield', 'ev_ebitda', 'ev_ebit',
+  'ev_sales', 'ev_sales_growth', 'normalized_margin',
+  'cycle_adjusted', 'mid_cycle', 'ptbv', 'ptbv_rotce',
+  'pffo', 'nav_premium', 'affo_yield', 'dividend_yield', 'peer',
+];
+
+function renderBuying(d) {
+  const body = document.getElementById('buyBody');
+  if (!body) return;
+  const weights = d.weights || {};
+  // A row this ticker is scored on carries its weight; the rest are contrast,
+  // dimmed so the distinction survives a glance. Showing every metric on every
+  // template would imply a bank is scored on EV/EBITDA.
+  const scored = BUY_ORDER.filter(k => weights[k] != null);
+  const rest = BUY_ORDER.filter(k => weights[k] == null);
+  const dq = (d.equation || {}).dcf;
+  const rows = [];
+
+  const line = (key, label, weight) =>
+    '<tr class="factor-row' + (weight == null ? ' dropped' : '') + '">'
+    + '<td class="font-medium whitespace-nowrap">' + esc(label)
+    + (weight == null
+        ? ' <span class="text-[10px] text-slate-400 dark:text-slate-600">'
+          + esc(I18n.t('dca.buy_unscored') || 'not scored here') + '</span>'
+        : ' <span class="text-[10px] font-mono text-slate-500">'
+          + (weight * 100).toFixed(0) + '%</span>')
+    + '</td><td class="text-slate-600 dark:text-slate-400">'
+    + esc(I18n.t('dca.buy_' + key) || '') + '</td></tr>';
+
+  scored.forEach(k => rows.push(line(k, tf(k), weights[k])));
+  // The DCF is a branch, not a factor, so it carries w_dcf rather than a
+  // template weight — and is absent entirely when the branch did not score.
+  if (dq && !dq.refused) {
+    rows.push(line('dcf', I18n.t('dca.dcf_v') || 'V_dcf',
+                   (d.equation || {}).w_dcf || null));
+  }
+  rest.forEach(k => rows.push(line(k, tf(k), null)));
+  body.innerHTML = rows.join('');
+}
+
 function renderFactors(d) {
+  renderBuying(d);
   const body = document.getElementById('factorBody');
   const rows = [];
   const series = d.series || {};

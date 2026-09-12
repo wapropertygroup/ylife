@@ -909,6 +909,10 @@ const I18n = (() => {
     'dca.f_pe':                { en: 'P/E',                zh: '市盈率' },
     'dca.f_pfcf':              { en: 'P/FCF',              zh: '市现率（自由现金流）' },
     'dca.f_ev_ebitda':         { en: 'EV/EBITDA',          zh: 'EV/EBITDA' },
+    // Not a scored factor — it exists only so the glossary can set it beside
+    // EV/EBITDA, where the contrast is the point. Without a label here it
+    // rendered in the glossary as the raw identifier "ev_ebit".
+    'dca.f_ev_ebit':           { en: 'EV/EBIT',            zh: 'EV/EBIT' },
     'dca.f_peg':               { en: 'PEG',                zh: 'PEG' },
     'dca.f_ev_sales':          { en: 'EV/Sales',           zh: 'EV/营收' },
     'dca.f_ev_sales_growth':   { en: 'EV/Sales ÷ growth',  zh: 'EV/营收 ÷ 增速' },
@@ -923,6 +927,59 @@ const I18n = (() => {
     'dca.f_fcf_yield':         { en: 'FCF yield',          zh: '自由现金流收益率' },
     'dca.f_affo_yield':        { en: 'AFFO yield',         zh: 'AFFO 收益率' },
     'dca.f_dividend_yield':    { en: 'Dividend yield',     zh: '股息率' },
+
+    // ── "What are you buying?" ─────────────────────────────────────────
+    // A percentile means nothing until the reader knows what the multiple is
+    // measuring. Each line answers the same question — what does one dollar
+    // buy — so the factor table above reads as a set of prices rather than a
+    // set of ratios. Keyed 'dca.buy_<factor>'; a factor in DIRECTION without
+    // one renders an empty cell, which the tests forbid.
+    'dca.buy_title':  { en: 'What each multiple is buying', zh: '这些指标在买什么' },
+    'dca.buy_note':   { en: 'The rows this ticker is actually scored on are marked with their weight; the rest are here for contrast.',
+                        zh: '标有权重的是该股票实际参与评分的指标；其余仅作对照。' },
+    'dca.buy_h_metric': { en: 'Metric', zh: '指标' },
+    'dca.buy_h_what':   { en: 'What you are buying', zh: '你在买什么' },
+    'dca.buy_unscored': { en: 'not scored here', zh: '此处不计分' },
+
+    'dca.buy_pe':        { en: 'What you pay for $1 of net profit',
+                           zh: '每 $1 净利润付多少钱' },
+    'dca.buy_pfcf':      { en: 'What you pay for $1 of free cash flow',
+                           zh: '每 $1 自由现金流付多少钱' },
+    'dca.buy_ev_ebitda': { en: 'What the whole business costs per $1 of core operating EBITDA',
+                           zh: '每 $1 核心经营 EBITDA，整个企业值多少钱' },
+    'dca.buy_ev_ebit':   { en: 'What the business costs per $1 of operating profit after depreciation',
+                           zh: '每 $1 扣除折旧后的经营利润，企业值多少钱' },
+    'dca.buy_fcf_yield': { en: 'Current free cash flow as a yield on the share price',
+                           zh: '当前自由现金流相对股价的收益率' },
+    'dca.buy_dcf':       { en: 'What every future cash flow is worth once discounted back to today',
+                           zh: '未来所有现金流折现后值多少钱' },
+
+    'dca.buy_peg':       { en: 'What you pay for $1 of profit, per point of expected growth',
+                           zh: '每 $1 净利润、每一个百分点的预期增速，付多少钱' },
+    'dca.buy_ev_sales':  { en: 'What the whole business costs per $1 of revenue — used where profit is not yet the anchor',
+                           zh: '每 $1 营收，整个企业值多少钱 — 用于利润尚未成为锚的公司' },
+    'dca.buy_ev_sales_growth': { en: 'The same, per point of revenue growth, so a fast grower is not dear by definition',
+                           zh: '同上，但按每一个百分点的营收增速折算，避免高增长公司天然显贵' },
+    'dca.buy_ptbv':      { en: 'What you pay for $1 of tangible book — the anchor for a bank, whose assets are the business',
+                           zh: '每 $1 有形净资产付多少钱 — 银行的主锚，因为资产就是它的生意' },
+    'dca.buy_ptbv_rotce': { en: 'The same, adjusted for the return actually earned on that book',
+                           zh: '同上，但按其有形净资产的实际回报率调整' },
+    'dca.buy_pffo':      { en: 'What you pay for $1 of funds from operations — a REIT’s earnings measure',
+                           zh: '每 $1 营运现金流（FFO）付多少钱 — 房地产信托的盈利口径' },
+    'dca.buy_nav_premium': { en: 'How far above appraised asset value the market is pricing it',
+                           zh: '市场定价高出评估净资产价值多少' },
+    'dca.buy_affo_yield': { en: 'Distributable cash flow as a yield on the price',
+                           zh: '可分配现金流相对股价的收益率' },
+    'dca.buy_dividend_yield': { en: 'Cash actually paid out, as a yield on the price',
+                           zh: '实际派发的现金相对股价的收益率' },
+    'dca.buy_cycle_adjusted': { en: 'What you pay for $1 of average earnings across the cycle, not this year’s',
+                           zh: '每 $1 跨周期平均盈利付多少钱，而不是今年的盈利' },
+    'dca.buy_mid_cycle': { en: 'The same idea for a commodity business: priced off mid-cycle, not the peak',
+                           zh: '同样的思路用于周期性公司：按中周期而非峰值定价' },
+    'dca.buy_normalized_margin': { en: 'What you pay for $1 of profit at a sustainable margin, not a peak or trough one',
+                           zh: '按可持续利润率（而非峰值或谷底）计算，每 $1 盈利付多少钱' },
+    'dca.buy_peer':      { en: 'How much more, or less, than comparable companies are trading at today',
+                           zh: '相对同类公司当前的估值贵多少或便宜多少' },
 
     // ── The DCF branch (dca.html) ──────────────────────────────────────
     'dca.dcf_title':     { en: 'DCF — the absolute anchor', zh: 'DCF — 绝对估值锚' },
