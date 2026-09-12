@@ -711,6 +711,37 @@ class Translations(unittest.TestCase):
         self._assert_key("dca.dcf_help")
         self._assert_key("dca.dcf_help_body")
 
+    def test_every_factor_explains_what_it_is_a_price_for(self):
+        """A percentile means nothing until the reader knows what the multiple
+        measures. Composed as ``'dca.buy_' + factor``, so a factor added to
+        DIRECTION without a line here renders an empty cell in the glossary."""
+        for factor in dca.DIRECTION:
+            self._assert_key(f"dca.buy_{factor}")
+        for key in ("dca.buy_dcf", "dca.buy_ev_ebit", "dca.buy_title",
+                    "dca.buy_note", "dca.buy_h_metric", "dca.buy_h_what",
+                    "dca.buy_unscored"):
+            self._assert_key(key)
+
+    def test_the_glossary_lists_every_factor_it_can_explain(self):
+        """The template's BUY_ORDER drives the rendering. A factor in DIRECTION
+        that is missing from it is explained nowhere, however good its string."""
+        import re as _re
+
+        html = (ROOT / "ystocker" / "templates" / "dca.html").read_text(encoding="utf-8")
+        block = _re.search(r"const BUY_ORDER = \[(.*?)\];", html, _re.DOTALL)
+        self.assertIsNotNone(block, "dca.html has no BUY_ORDER")
+        listed = set(_re.findall(r"'([a-z_]+)'", block.group(1)))
+        missing = sorted(set(dca.DIRECTION) - listed)
+        self.assertEqual(missing, [], f"not in BUY_ORDER: {missing}")
+
+        # Every row also needs a *name*, not just an explanation. The glossary
+        # labels through `tf()`, which falls back to the raw identifier — which
+        # is exactly how "ev_ebit" shipped into a rendered table, since it is
+        # not in DIRECTION and so escaped the factor-label check above.
+        for key in listed:
+            self._assert_key(f"dca.f_{key}")
+            self._assert_key(f"dca.buy_{key}")
+
     def test_the_three_multipliers_explain_how_they_are_calculated(self):
         """The tiles showed 1.21× / 0.90× / 0.85× and a band name, with nothing
         saying where any of them came from."""
