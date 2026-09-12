@@ -197,11 +197,32 @@
   .as-remove:hover { background: rgba(225, 29, 72, .09); text-decoration: none; }
   /* The DCA table. Its own min-width rather than .as-holdings-table's 78rem:
      that figure is sized for the twelve-column holdings grid, and borrowing it
-     forced a horizontal scrollbar onto a table that fits a laptop comfortably. */
+     forced a horizontal scrollbar onto a table that fits a laptop comfortably.
+
+     The slack goes to the **company column, and only to it**. Six narrow
+     columns inside a `w-full` table get the leftover width shared out between
+     them, which on a desktop left every figure marooned in its own patch of
+     whitespace — the multiplier chain a hand-span from the V it follows from,
+     and an exposure bar stretched to ~180px under a five-character number.
+     Reading a row meant crossing the table three times. Giving the first cell
+     `width:100%` makes it absorb everything the others do not claim, so the
+     numeric columns close up into one scannable block no matter how wide the
+     viewport is. Every other cell is nowrap so it asks for exactly its content
+     and no more. */
   .as-dca-table { min-width: 44rem; }
   .as-dca-table th { font-size: .65rem; font-weight: 650; letter-spacing: .045em;
                      text-transform: uppercase; white-space: nowrap; }
   .as-dca-table td { vertical-align: middle; padding: .5rem .6rem; }
+  .as-dca-table th:first-child,
+  .as-dca-table td:first-child { width: 100%; }
+  .as-dca-table th:not(:first-child),
+  .as-dca-table td:not(:first-child) { white-space: nowrap; }
+  /* The exposure bar shows the direct/indirect *split*, normalised to the row,
+     so it carries no magnitude — at full column width it read as "every
+     position is the same size". Capped so it stays a sparkline beside the
+     figure rather than the loudest thing in the row. */
+  .as-dca-table .as-exposure-bar { max-width: 7rem; }
+  .as-dca-table .as-vbar { max-width: 5rem; }
   .as-dca-table tbody tr { transition: background-color .15s ease; }
   .as-dca-table tbody tr:hover { background: var(--as-row-hover); }
   /* A row the concentration term is actively throttling. The signal the panel

@@ -43,6 +43,15 @@
   {# One filter rebrands every page title, including the two dozen templates
      that spell "yStocker" into their own {% block title %}. #}
   <title>{% filter replace("yStocker", brand_name) %}{% block title %}yStocker{% endblock %}{% endfilter %}</title>
+  {# The <title> above is server-rendered Jinja, so I18n.apply() — which walks
+     [data-i18n] elements — can never reach it, and a page switched to Chinese
+     kept an English browser tab. A page that declares a key here gets its tab
+     translated as well, and re-translated on a language switch. The brand rides
+     along because it is a server-side value (yStocker vs Trading Agents, by
+     host) that the client has no other way to know. Pages that declare nothing
+     leave content empty and i18n.js skips them, so the Jinja title stands. #}
+  <meta name="i18n-title" content="{% block title_key %}{% endblock %}"
+        data-brand="{{ brand_name }}" data-arg="{% block title_arg %}{% endblock %}">
   <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
 
   <!-- ── Installable web app ───────────────────────────────────────────────

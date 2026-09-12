@@ -744,6 +744,10 @@ const I18n = (() => {
     'inst.change_closed':  { en: 'Closed',    zh: '清仓' },
 
     // ── dca.html (DCA Valuation Engine) ────────────────────────────────
+    // Browser-tab title. `{arg}` is the ticker, substituted by I18n.apply()
+    // from the meta tag base.html emits — the <title> itself is Jinja and
+    // apply() cannot reach it.
+    'dca.doc_title':       { en: '{arg} DCA Valuation', zh: '{arg} DCA 估值' },
     'dca.back':            { en: '← Back', zh: '← 返回' },
     'dca.subtitle':        { en: 'DCA Valuation Engine — valuation percentile, V score and contribution sizing',
                              zh: 'DCA 估值引擎 — 估值分位、V 分数与定投金额调节' },
@@ -936,6 +940,45 @@ const I18n = (() => {
     'dca.dcf_absent':    { en: 'No DCF for this name, so V is the relative score alone. The weight is moved onto the relative block rather than filled with a neutral 50 — a made-up middle would quietly dilute the evidence that does exist.',
                            zh: '该公司没有可用的 DCF，因此 V 仅由相对估值决定。缺失的权重会重新分配给相对估值，而不是补成中性的 50 分 — 用一个编造的中间值会悄悄稀释真实存在的信息。' },
     'dca.dcf_why':       { en: 'Why there is no DCF', zh: '没有 DCF 的原因' },
+
+    // "How to read this" — the card shows eight numbers and a reader who does
+    // not know which ones are measured and which are assumed cannot weigh any
+    // of them. Every label below is also a tooltip, keyed 'dca.dcf_h_<field>'.
+    'dca.dcf_help':      { en: 'How to read this', zh: '如何解读' },
+    'dca.dcf_help_body': {
+      en: 'A DCF projects the cash this business is expected to throw off, discounts it back at the cost of capital, and calls the total what the company is worth today. Three scenarios are run and weighted 25/50/25, then the blended score is pulled toward a neutral 50 by the confidence <b>c</b> — so a model built on thin or volatile history speaks more quietly rather than being trusted at face value.<br><br><b>The width of the scenario band is itself the finding.</b> It is measured from this company’s own year-on-year cash-flow swings, not a house assumption, so a band spanning several multiples is the model saying the future genuinely is not narrow here. When it is that wide the bear and bull cases usually pin at 0 and 100 and stop carrying information, and the base case is doing nearly all the work.<br><br>Watch the notes underneath. <i>Growth capped</i> means the observed rate was too high to extrapolate and was cut to the ceiling, so the fair value is a floor rather than a forecast. <i>Beta assumed</i>, <i>cost of debt assumed</i> and <i>capital structure unknown</i> each mean a discount-rate input was not published and a standing assumption was used. <i>Terminal share</i> is how much of the valuation sits past the forecast horizon; above about 80% the answer is mostly the terminal assumption, and confidence is cut for it.<br><br>The DCF never decides on its own. It is blended with the relative score at the weight shown, and where it cannot be built honestly it is dropped entirely rather than filled with a neutral 50.',
+      zh: 'DCF 把这家公司未来预计产生的自由现金流按资本成本折现，加总后得出"今天值多少钱"。模型跑悲观/中性/乐观三种情景，按 25/50/25 加权，再用置信度 <b>c</b> 把结果向中性的 50 收缩 —— 历史越短、现金流越不稳定，模型说话的音量就越低，而不是被照单全收。<br><br><b>情景区间的宽度本身就是结论。</b>它取自这家公司自身的现金流年度波动，而不是统一套用的假设；区间跨度达到数倍，说明未来在这家公司身上确实不收敛。区间一旦这么宽，悲观与乐观两档通常会顶到 0 和 100 而不再携带信息，实际起作用的几乎只剩中性情景。<br><br>请留意下方的提示。<i>已对增速设上限</i>表示观测到的增速高到不适合外推，已被截断，因此公允价值是下限而非预测。<i>未披露 Beta</i>、<i>债务成本按估算</i>、<i>资本结构未知</i>各自表示折现率的某个输入没有公开数据，使用了通用假设。<i>终值占比</i>是预测期之外的价值占总额的比例；超过约 80% 时，结论主要由永续假设决定，置信度会因此下调。<br><br>DCF 从不单独下结论：它按显示的权重与相对估值合成，无法诚实构建时则整支剔除，而不是补成中性的 50 分。',
+    },
+
+    // Tooltips, one per figure on the card.
+    'dca.dcf_h_v':       { en: 'The DCF branch on the same 0-100 cheapness scale as the relative score. 50 means the price is about the modelled fair value.',
+                           zh: '把 DCF 结果换算到与相对估值相同的 0–100 便宜度标尺。50 表示股价大致等于模型算出的公允价值。' },
+    'dca.dcf_h_weight':  { en: 'How much of the headline V this branch carries. Set by how forecastable the business is, never above 30%.',
+                           zh: '该分支在最终 V 中所占的权重。由业务的可预测性决定，上限为 30%。' },
+    'dca.dcf_h_conf':    { en: 'How far the result is trusted, 0.50 to 1.00. Deducted for short history, a wide scenario band, and a heavy terminal value. Lower c pulls the score toward a neutral 50.',
+                           zh: '对结果的信任程度，取值 0.50–1.00。历史过短、情景区间过宽、终值占比过高都会扣减。c 越低，分数越向中性的 50 收缩。' },
+    'dca.dcf_h_price':   { en: 'The close the upside is measured against. Deliberately the same close the relative percentiles use, so both halves of V describe one price rather than two moments.',
+                           zh: '计算相对空间所用的收盘价。刻意与相对估值分位使用同一个收盘价，使 V 的两个分支描述同一个价格，而非两个时点。' },
+    'dca.dcf_h_wacc':    { en: 'Weighted average cost of capital — the rate future cash is discounted at. A higher rate means a lower fair value.',
+                           zh: '加权平均资本成本，即未来现金流的折现率。折现率越高，公允价值越低。' },
+    'dca.dcf_h_g':       { en: 'The rate cash flow is assumed to grow at for ever after the forecast period. Held below long-run nominal GDP on purpose.',
+                           zh: '预测期结束后假设的永续增长率。刻意设在长期名义 GDP 之下。' },
+    'dca.dcf_h_tv':      { en: 'Share of the valuation coming from beyond the forecast horizon. Above ~80% the answer is mostly the terminal assumption, and confidence is cut.',
+                           zh: '来自预测期之外的价值占比。超过约 80% 时结论主要由永续假设决定，置信度会被下调。' },
+    'dca.dcf_h_sens':    { en: 'How far the fair value moves if terminal growth is raised half a point. Measured, not estimated. A large figure means the answer is mostly assumption.',
+                           zh: '永续增长率上调 0.5 个百分点时公允价值的变动幅度。实测而非估算。数值越大，说明结论越依赖假设。' },
+    'dca.dcf_h_years':   { en: 'Years modelled explicitly before the terminal value takes over. Longer for faster growers, whose growth needs room to converge.',
+                           zh: '在进入终值之前显式建模的年数。增速越高的公司越长，让增长有收敛的空间。' },
+    'dca.dcf_h_growth':  { en: 'Compound free-cash-flow growth measured over this company’s own filings, then capped before extrapolating.',
+                           zh: '取自该公司自身财报的自由现金流复合增速，外推前会先设上限。' },
+    'dca.dcf_h_case':    { en: 'Bear, Base and Bull. The spread comes from this company’s own cash-flow volatility, not a fixed house range.',
+                           zh: '悲观 / 中性 / 乐观。区间宽度取自该公司自身的现金流波动，而非统一的固定幅度。' },
+    'dca.dcf_h_fv':      { en: 'Modelled value per share under that scenario.',
+                           zh: '该情景下每股的模型价值。' },
+    'dca.dcf_h_up':      { en: 'How far the modelled value sits above or below the price.',
+                           zh: '模型价值相对当前股价的高低幅度。' },
+    'dca.dcf_h_scenv':   { en: 'That scenario mapped onto 0-100. Saturates at 0 below -40% and 100 above +40%, so extremes stop adding.',
+                           zh: '该情景映射到 0–100 的分数。低于 −40% 记 0，高于 +40% 记 100，极端值不再继续放大。' },
 
     // Refusal reasons. Composed in JS as 'dca.dcf_r_' + reason, so a missing
     // key renders the raw identifier — which is why every entry in
@@ -3191,6 +3234,21 @@ const I18n = (() => {
       const v = t(el.dataset.i18nHtml);
       if (v != null) el.innerHTML = v;
     });
+    // Browser tab. The <title> is server-rendered Jinja and has no [data-i18n]
+    // to walk, so a page switched to Chinese kept an English tab. Done here
+    // rather than once at load so a language toggle retranslates it too.
+    // Always queried from `document`: the meta lives in <head>, which is never
+    // inside the `root` a caller passes when retranslating one panel.
+    const titleMeta = document.querySelector('meta[name="i18n-title"]');
+    if (titleMeta && titleMeta.content) {
+      const v = t(titleMeta.content);
+      if (v != null) {
+        const arg = titleMeta.dataset.arg || '';
+        const brand = titleMeta.dataset.brand || '';
+        const text = v.replace('{arg}', arg);
+        document.title = brand ? brand + ' — ' + text : text;
+      }
+    }
   }
 
   function setLang(lang) {

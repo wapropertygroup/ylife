@@ -535,11 +535,34 @@ class Translations(unittest.TestCase):
     def setUpClass(cls):
         cls.js = (ROOT / "ystocker" / "static" / "i18n.js").read_text(encoding="utf-8")
 
-    def _assert_key(self, key: str):
-        pattern = re.compile(r"['\"]" + re.escape(key) + r"['\"]\s*:\s*\{([^}]*)\}")
-        match = pattern.search(self.js)
+    def _entry_body(self, key: str) -> str:
+        """The ``{ en: …, zh: … }`` body for *key*, brace-balanced.
+
+        Not a single regex. The obvious ``\\{([^}]*)\\}`` stops at the first
+        closing brace, which is fine until a *value* contains one — and
+        ``'dca.doc_title'`` legitimately does, since ``{arg}`` is the ticker
+        substitution slot. The naive form truncated its body to ``" en: '{arg"``
+        and reported the Chinese string as missing when it was right there,
+        which is a test that fails on correct code: the worst kind, because the
+        obvious response is to "fix" the key.
+        """
+        opener = re.compile(r"['\"]" + re.escape(key) + r"['\"]\s*:\s*\{")
+        match = opener.search(self.js)
         self.assertIsNotNone(match, f"i18n.js has no entry for {key!r}")
-        body = match.group(1)
+        start = match.end()
+        depth = 1
+        for i in range(start, len(self.js)):
+            char = self.js[i]
+            if char == "{":
+                depth += 1
+            elif char == "}":
+                depth -= 1
+                if depth == 0:
+                    return self.js[start:i]
+        self.fail(f"i18n.js entry for {key!r} is not brace-balanced")
+
+    def _assert_key(self, key: str):
+        body = self._entry_body(key)
         self.assertIn("en:", body, f"{key!r} has no English string")
         self.assertIn("zh:", body, f"{key!r} has no Chinese string")
 
@@ -592,6 +615,31 @@ class Translations(unittest.TestCase):
             self._assert_key(f"dca.dcf_basis_{basis}")
         for source in ("derived", "override"):
             self._assert_key(f"dca.dcf_src_{source}")
+
+    def test_every_figure_on_the_dcf_card_has_an_explanation(self):
+        """The card shows eight numbers. A reader who cannot tell which are
+        measured and which are assumed cannot weigh any of them, so each one
+        carries a tooltip — and a tooltip that falls back to its raw key is
+        worse than none, because it looks like a bug rather than a gap."""
+        for field in ("v", "weight", "conf", "price", "wacc", "g", "tv",
+                      "sens", "years", "growth", "case", "fv", "up", "scenv"):
+            self._assert_key(f"dca.dcf_h_{field}")
+        self._assert_key("dca.dcf_help")
+        self._assert_key("dca.dcf_help_body")
+
+    def test_the_browser_tab_keys_exist_in_both_languages(self):
+        """``<title>`` is server-rendered Jinja, so ``I18n.apply()`` cannot
+        reach it; base.html emits a meta tag the client reads instead. A missing
+        key leaves the tab in English on a Chinese page, which is what it did."""
+        self._assert_key("dcx.title")
+        self._assert_key("dca.doc_title")
+
+    def test_the_ticker_tab_title_carries_its_substitution_slot(self):
+        """``{arg}`` is replaced with the ticker by ``I18n.apply()``. Without it
+        every ticker's tab would read the same."""
+        body = self._entry_body("dca.doc_title")
+        self.assertEqual(body.count("{arg}"), 2,
+                         "both languages need the substitution slot")
 
     def test_every_model_reason_has_a_label(self):
         for reason in ("ticker", "industry", "sector", "default", "explicit"):
