@@ -223,15 +223,33 @@
   .as-dca-table { width: max-content; max-width: 100%; min-width: 44rem; }
   .as-dca-table th { font-size: .65rem; font-weight: 650; letter-spacing: .045em;
                      text-transform: uppercase; white-space: nowrap; }
-  .as-dca-table td { vertical-align: middle; padding: .5rem .6rem; }
+  .as-dca-table td { vertical-align: middle; padding: .45rem .7rem; }
   .as-dca-table th:not(:first-child),
   .as-dca-table td:not(:first-child) { white-space: nowrap; }
-  /* The exposure bar shows the direct/indirect *split*, normalised to the row,
-     so it carries no magnitude — at full column width it read as "every
-     position is the same size". Capped so it stays a sparkline beside the
-     figure rather than the loudest thing in the row. */
-  .as-dca-table .as-exposure-bar { max-width: 7rem; }
-  .as-dca-table .as-vbar { max-width: 5rem; }
+
+  /* Thirty rows is a different design problem from three, and the panel was
+     built for three. Three changes, all about scanning a column rather than
+     reading a row:
+
+     1. A line between rows. Hover alone tells you where you are only once the
+        pointer is already there, which is no help to the eye crossing 30 rows.
+     2. Numbers right-aligned and tabular. Left-ragged figures of different
+        lengths cannot be compared down a column at all — $711 and $1,365 did
+        not share a decimal position, so the column carried no shape.
+     3. One bar per row, not two. The exposure bar is normalised *within* the
+        row, so it shows the direct/indirect split and says nothing about size:
+        sixty bars of which thirty are the same length by construction is noise
+        with no signal in it. The split survives as the route-count chip, which
+        is the part a reader acts on. The V bar stays, because V is what the
+        column is for and a filled track is the one thing here read at a glance.
+  */
+  .as-dca-table tbody tr + tr td { border-top: 1px solid var(--as-line); }
+  .as-dca-table td.as-num { font-variant-numeric: tabular-nums; }
+  .as-dca-table .as-vbar { max-width: 4.5rem; margin-left: auto; }
+  /* The amount is the only figure here a reader acts on, so it anchors the row;
+     the chain above is the working behind it and steps back. */
+  .as-dca-table td.as-amount { font-weight: 650; color: var(--as-strong); }
+  .as-dca-table .as-chain-cell { font-size: .72rem; color: var(--as-muted); }
   .as-dca-table tbody tr { transition: background-color .15s ease; }
   .as-dca-table tbody tr:hover { background: var(--as-row-hover); }
   /* A row the concentration term is actively throttling. The signal the panel
@@ -579,9 +597,9 @@
           <thead>
             <tr>
               <th><button type="button" class="as-sort-button" data-dsort="ticker"><span data-i18n="adca.col_symbol">Company</span><span class="as-sort-arrow"></span></button></th>
-              <th><button type="button" class="as-sort-button" data-dsort="value"><span data-i18n="adca.col_weight">Your exposure</span><span class="as-sort-arrow"></span></button></th>
-              <th><button type="button" class="as-sort-button" data-dsort="V"><span data-i18n="adca.col_v">V</span><span class="as-sort-arrow"></span></button></th>
-              <th data-i18n="adca.col_chain">M_val × M_earn × M_port</th>
+              <th class="as-num"><button type="button" class="as-sort-button" data-dsort="value"><span data-i18n="adca.col_weight">Your exposure</span><span class="as-sort-arrow"></span></button></th>
+              <th class="as-num"><button type="button" class="as-sort-button" data-dsort="V"><span data-i18n="adca.col_v">V</span><span class="as-sort-arrow"></span></button></th>
+              <th class="as-num" data-i18n="adca.col_chain">M_val × M_earn × M_port</th>
               <th class="as-num"><button type="button" class="as-sort-button" data-dsort="multiplier"><span data-i18n="adca.col_mult">Total ×</span><span class="as-sort-arrow"></span></button></th>
               <th class="as-num"><button type="button" class="as-sort-button" data-dsort="amount"><span data-i18n="adca.col_amount">Per base unit</span><span class="as-sort-arrow"></span></button></th>
             </tr>
@@ -838,25 +856,23 @@
         esc(fill(t('adca.routes', 'Reached through {n} holdings'), { n: r.route_count })) +
         '">' + r.route_count + '</span>'
       : '';
-    return '<td style="min-width:8.5rem">' +
-      '<span class="font-mono">' + pct(total, 2) + '</span>' + routes +
-      '<span class="ml-1" style="color:var(--as-muted)">' + money(r.value) + '</span>' +
-      '<span class="as-exposure-bar">' +
-        '<i class="as-exposure-direct" style="width:' + (direct * scale).toFixed(2) + '%"></i>' +
-        '<i class="as-exposure-indirect" style="width:' + (indirect * scale).toFixed(2) + '%"></i>' +
-      '</span></td>';
+    return '<td class="as-num">' +
+      '<div><span class="font-mono">' + pct(total, 2) + '</span>' + routes + '</div>' +
+      '<div class="text-[11px]" style="color:var(--as-muted)">' + money(r.value) + '</div>' +
+      '</td>';
   }
 
-  /* V with a bar, matching /dca. A bare percentile is an abstraction; a filled
-     track is read at a glance. */
+  /* V with a bar. A bare percentile is an abstraction; a filled track is read
+     at a glance, and this is the column the table exists for — which is also
+     why it is the only bar left in the row. */
   function vCell(r) {
-    if (r.V == null) return '<td style="color:var(--as-muted)">—</td>';
+    if (r.V == null) return '<td class="as-num" style="color:var(--as-muted)">—</td>';
     const colour = r.V >= 60 ? cssVar('--as-seen')
                  : r.V <= 20 ? cssVar('--as-warn') : cssVar('--as-muted');
-    return '<td style="min-width:6.5rem">' +
-      '<span class="font-mono ' + vClass(r.V) + '">' + r.V.toFixed(0) + '</span>' +
-      '<span class="ml-1" style="color:var(--as-muted)">' +
-        esc(r.band ? t('dca.band_' + r.band, r.band) : '') + '</span>' +
+    return '<td class="as-num">' +
+      '<div><span class="font-mono ' + vClass(r.V) + '">' + r.V.toFixed(0) + '</span>' +
+      '<span class="ml-1 text-[11px]" style="color:var(--as-muted)">' +
+        esc(r.band ? t('dca.band_' + r.band, r.band) : '') + '</span></div>' +
       '<span class="as-vbar"><i style="width:' + r.V + '%;background:' + colour + '"></i></span>' +
       '</td>';
   }
@@ -867,7 +883,7 @@
   function chainCell(r) {
     const term = (v, key, band) => '<span class="' + (v === 1 ? 'dim' : '') +
       '" title="' + esc(t(key + band, band || '')) + '">' + v.toFixed(2) + '</span>';
-    return '<td class="as-chain-cell">' +
+    return '<td class="as-chain-cell as-num">' +
       term(r.m_valuation, 'dca.band_', r.band || '') + ' × ' +
       term(r.m_earnings, 'dca.earn_', r.earnings_band || '') + ' × ' +
       term(r.m_portfolio, 'dca.port_', r.portfolio_band || '') + '</td>';
@@ -914,7 +930,7 @@
         nameCell(r) + exposureCell(r) + vCell(r) + chainCell(r) +
         '<td class="as-num font-semibold">' + r.multiplier.toFixed(2) + '×' +
           (r.capped ? ' <span title="' + esc(t('dca.capped', 'Capped')) + '">⌃</span>' : '') + '</td>' +
-        '<td class="as-num font-semibold">' + money(r.amount) + '</td>' +
+        '<td class="as-num as-amount">' + money(r.amount) + '</td>' +
       '</tr>';
     }).join('');
 
