@@ -453,6 +453,9 @@
         <a href="{{ url_for('main.evaluation') }}"
            class="px-3 py-1.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition"
            data-i18n="nav.home">Valuation</a>
+        <a href="{{ url_for('main.dca_index') }}"
+           class="px-3 py-1.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+           data-i18n="nav.dca">DCA</a>
 
         <!-- Sectors dropdown -->
         <div class="relative" x-data="{ open: false }" @mouseenter="open=true" @mouseleave="open=false">
@@ -768,6 +771,7 @@
         </div>
         <a href="{{ url_for('main.markets') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800" data-i18n="markets.nav">Markets</a>
         <a href="{{ url_for('main.evaluation') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800" data-i18n="nav.home">Valuation</a>
+        <a href="{{ url_for('main.dca_index') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800" data-i18n="nav.dca">DCA</a>
         {#
           Sectors and Commodities collapse, and the remaining links sit in
           two-column grids. Flat, the menu measured 1279px on an 844px screen —
