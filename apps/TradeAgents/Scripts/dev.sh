@@ -116,28 +116,47 @@ shot() {
 	echo "$OUT"
 }
 
-# Select a sidebar section by name.
+# Select a sidebar section, by name or by 1-based index.
 #
-# By name through the accessibility tree, never by clicking a screen coordinate.
-# Coordinates drift the moment a toolbar item or a back button changes the layout, and
-# a click that lands somewhere unintended can move focus to another application
-# entirely — after which a capture photographs *that* application. Selecting the row
-# directly cannot miss, and a wrong name fails loudly instead of clicking something
-# else.
+# An index is accepted because the app is bilingual: matching "Settings" fails outright
+# once the reader switches to Chinese, where the row reads 设置. Rather than teach this
+# script every string in both languages — a second copy of the translation table, which
+# would drift — a number addresses the row regardless of language.
+#
+# Selection goes through the accessibility tree, never a screen coordinate. Coordinates
+# drift the moment a toolbar item or a back button changes the layout, and a click that
+# lands somewhere unintended can move focus to another application entirely — after
+# which a capture photographs *that* application.
 select_section() {
-	local name="$1"
+	local wanted="$1"
+	if [[ "$wanted" =~ ^[0-9]+$ ]]; then
+		osascript <<-APPLESCRIPT 2>&1
+			tell application "System Events"
+				tell process "TradeAgents"
+					set theOutline to outline 1 of scroll area 1 of group 1 of ¬
+						splitter group 1 of group 1 of window 1
+					if (count of rows of theOutline) < $wanted then
+						return "no row $wanted"
+					end if
+					set selected of row $wanted of theOutline to true
+					return "ok"
+				end tell
+			end tell
+		APPLESCRIPT
+		return
+	fi
 	osascript <<-APPLESCRIPT 2>&1
 		tell application "System Events"
 			tell process "TradeAgents"
 				set theOutline to outline 1 of scroll area 1 of group 1 of ¬
 					splitter group 1 of group 1 of window 1
 				repeat with r in rows of theOutline
-					if (value of static text 1 of UI element 1 of r) is "$name" then
+					if (value of static text 1 of UI element 1 of r) is "$wanted" then
 						set selected of r to true
 						return "ok"
 					end if
 				end repeat
-				return "no such section: $name"
+				return "no such section: $wanted"
 			end tell
 		end tell
 	APPLESCRIPT
@@ -172,5 +191,30 @@ case "${1:-shot}" in
 				-target arm64-apple-ios17.0 -swift-version 5
 		echo "iOS type-check clean."
 		;;
-	*) echo "usage: $0 {build|run|shot|ios} [out.png]" >&2; exit 2 ;;
+	install)
+		# Build Release and install into /Applications.
+		#
+		# Release rather than Debug for two reasons beyond speed: a Debug build carries
+		# `get-task-allow`, which is a debugging entitlement that has no business on an
+		# app you actually use; and `SMAppService` ("Open at login") will only launch an
+		# app from a stable location, so an app left in `build/` cannot register.
+		#
+		# Signed ad-hoc (`-`), which is what the project already does for macOS. That is
+		# enough for this Mac to run and to register a login item; it is *not* enough to
+		# distribute — that needs a Developer ID certificate and notarisation.
+		xcodebuild -project TradeAgents.xcodeproj \
+			-target TradeAgents -configuration Release -quiet \
+			-sdk macosx ARCHS=arm64 ONLY_ACTIVE_ARCH=NO build
+		pkill -f "TradeAgents.app/Contents/MacOS/TradeAgents" 2>/dev/null || true
+		sleep 1
+		rm -rf "/Applications/TradeAgents.app"
+		cp -R "build/Release/TradeAgents.app" "/Applications/TradeAgents.app"
+		# Re-sign after the copy. Ad-hoc signatures cover the bundle's contents by path,
+		# and `cp -R` can perturb extended attributes enough for Gatekeeper to consider
+		# the copy damaged — re-signing in place is cheaper than debugging that later.
+		codesign --force --sign - --entitlements TradeAgents.entitlements \
+			"/Applications/TradeAgents.app" 2>/dev/null || true
+		echo "installed /Applications/TradeAgents.app"
+		;;
+	*) echo "usage: $0 {build|run|shot|section|ios|install} [out.png]" >&2; exit 2 ;;
 esac

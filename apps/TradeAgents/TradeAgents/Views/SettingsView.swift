@@ -6,6 +6,10 @@ struct SettingsView: View {
     @Environment(Localization.self) private var loc
     @State private var host = AppSettings.host
     @State private var signingOut = false
+    @State private var signingIn = false
+    #if os(macOS)
+    @State private var launch = LaunchAtLogin()
+    #endif
 
     var body: some View {
         @Bindable var localization = loc
@@ -24,6 +28,9 @@ struct SettingsView: View {
                     .disabled(signingOut)
                 } else {
                     LabeledContent(loc(S.status), value: loc(S.notSignedIn))
+                    Button(loc(S.signIn)) { signingIn = true }
+                        .buttonStyle(.borderedProminent)
+                        .tint(Palette.brand)
                     Text(loc(S.signInBlocked))
                         .font(.caption)
                         .foregroundStyle(Palette.secondaryText)
@@ -85,6 +92,40 @@ struct SettingsView: View {
                 Text(loc(S.notifications))
             }
 
+            #if os(macOS)
+            Section {
+                Toggle(loc(S.launchAtLogin), isOn: Binding(
+                    get: { launch.isEnabled },
+                    set: { launch.set($0) }
+                ))
+
+                if launch.needsApproval {
+                    // A distinct state from "off": macOS accepted the registration but
+                    // is waiting for the user to allow it, and nothing this app does
+                    // can complete that step.
+                    Label(loc(S.launchNeedsApproval), systemImage: "hand.raised")
+                        .font(.caption)
+                        .foregroundStyle(Palette.warn)
+                    Button(loc(S.openLoginItems)) { launch.openSystemSettings() }
+                }
+
+                if let failure = launch.failure {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Label(loc(S.launchFailed), systemImage: "exclamationmark.triangle")
+                            .font(.caption)
+                            .foregroundStyle(Palette.down)
+                        Text(failure)
+                            .font(.caption2)
+                            .foregroundStyle(Palette.mutedText)
+                    }
+                }
+            } header: {
+                Text(loc(S.launchAtLogin))
+            } footer: {
+                Text(loc(S.launchAtLoginNote))
+            }
+            #endif
+
             Section(loc(S.about)) {
                 LabeledContent(loc(S.version), value: Self.version)
                 LabeledContent(loc(S.platform), value: Self.platform)
@@ -92,6 +133,11 @@ struct SettingsView: View {
         }
         .formStyle(.grouped)
         .navigationTitle(loc(S.settings))
+        .sheet(isPresented: $signingIn) {
+            LoginView()
+                .environment(loc)
+                .environment(session)
+        }
     }
 
     private static var version: String {
