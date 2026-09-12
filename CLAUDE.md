@@ -595,29 +595,47 @@ aws dynamodb create-table --table-name ystocker-dca-universe --region us-west-2 
   --key-schema AttributeName=ticker,KeyType=HASH
 ```
 
-**`/assets` carries a DCA sizing tab** (`/api/dca/portfolio`), and that is where
-the loop closes: `M_portfolio` is *derived from* the 穿透 exposure, so the page
-that already knows those weights is the natural place to show what they do to a
-contribution — and it is the only surface where a reader sees the valuation term
-and the concentration term pulling against each other on their own money. It
-uses the **look-through** weight, not the line weight, which is the entire point:
-somebody holding 3% NVDA directly and VOO besides is not at 3%.
+**`/assets` carries a Dollar-Cost Averaging tab** (`/api/dca/portfolio`), and
+its unit of analysis is the **company after full 穿透**, not the held line. A
+reader holding VOO does not own "a fund" — they own Apple and Microsoft and 498
+others, and only a business has a valuation. So the panel walks
+`assets.analyse`'s look-through exposures (already equity-only and value-sorted)
+rather than `positions`. Before that it ran off the lines and rendered
+"fund — not scored", which left the tab empty for an index investor: the exact
+population the engine is most useful to.
 
-It never fetches on the request path. A held name with no reconstruction comes
-back `pending` and a **bounded** (4 per request) budget-throttled rebuild is
-kicked, so a portfolio fills in over a few minutes rather than costing six Yahoo
-reads per position on one page load. Funds are reported as `fund` rather than
-left blank — the engine ranks a company against its own multiple history and an
-ETF has no P/E of its own here, so an empty cell would read as "we could not
-work it out" instead of "this is not the kind of thing this measures". Equities
-are the only thing chased; re-discovering that a fund cannot score costs six
-reads and learns nothing.
+That is also what makes `M_portfolio` mean something. Measured on a two-line
+fixture: MSFT held directly at 19.8% *plus* VOO takes the real exposure to
+25.4% through two routes, tripping the concentration throttle to 0.25× — a
+figure invisible on any per-line view.
 
-The panel loads on tab reveal, not with the page, and the flat comparison counts
-**only scored rows** — quietly valuing an unscored holding at 1.0x would make
-the engine look like it moved less than it did. `_dca_score()` is shared with
-`/dca` and `/dca/<ticker>`, so a row here cannot disagree with the ticker's own
-page; `check_dca_endpoints.py` asserts it.
+- **The headline is the exposure-weighted portfolio multiplier**, because it is
+  the only number here a reader can act on: one contribution into the existing
+  mix scales by it. A look-through row is analysis, not an order — you buy the
+  fund, not the Apple inside it — so the per-name amount is explicitly "what one
+  base unit into this company would size to".
+- **Weighted, not averaged flat.** A 12% position and a 0.3% one do not get
+  equal say in how the next payment is sized.
+- **Scope and floor are both stated.** The weighted figures report what share of
+  penetrated equity they actually cover, and `coverage_pct` rides along because
+  Yahoo discloses a fund's top ten only — every exposure is a lower bound.
+- **Truncation is reported, never silent.** `DCA_PORTFOLIO_MAX` (30) ranks by
+  exposure; a three-ETF portfolio penetrates to over a thousand leaves and each
+  is six Yahoo reads. The tail is sub-0.1% slivers no contribution turns on, but
+  the response says how many were dropped and what they are worth.
+- **The tail's totals come from `seen_value`, not from serialising it.**
+  `analyse(top=None)` builds a dict per leaf *including its full routes list*,
+  so asking for all of them to add up two numbers was hundreds of kilobytes of
+  garbage per request. `seen_value` is the named-equity total whatever `top` is,
+  so the exact figures fall out of one subtraction.
+
+The table has its own `min-width` (44rem): borrowing `.as-holdings-table`'s
+78rem, which is sized for the twelve-column holdings grid, forced a horizontal
+scrollbar onto a table that fits a laptop. The three multiplier terms are one
+cell rather than three columns, dimmed at 1.00× rather than hidden — "did not
+move" and "could not be measured" are different statements. A row the
+concentration term is actually throttling gets a warning rail, since that is the
+one signal worth acting on and it is easy to lose in a number.
 
 Tests: `tests/test_dca.py` (48, no app/network — including the framework's own
 worked example, E=75.55 → $3,722.50 on a $5,000 base, and a check that every
@@ -626,7 +644,7 @@ JS by string concatenation where `I18n.apply()` cannot reach them),
 `tests/test_dca_history.py` (58, the look-ahead guards, the TTM sum, the
 year-ago growth window, the build budget and the capex sign trap),
 `tests/test_dca_universe.py` (24, the cap and what it evicts), and
-`tests/check_dca_endpoints.py` (48 end-to-end, `check_` so `unittest discover`
+`tests/check_dca_endpoints.py` (54 end-to-end, `check_` so `unittest discover`
 skips it — it needs an app and stubs matplotlib).
 
 The table is **not** in `deploy/cloudformation.yaml`, matching every other
