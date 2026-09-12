@@ -5,6 +5,8 @@ import SwiftUI
 /// prominently — how old the data is.
 struct MarketsView: View {
     @State private var state: LoadState = .loading
+    @Environment(Localization.self) private var loc
+    @Environment(AlertCenter.self) private var alerts
 
     enum LoadState {
         case loading
@@ -27,7 +29,7 @@ struct MarketsView: View {
             Palette.background.ignoresSafeArea()
             content
         }
-        .navigationTitle("Markets")
+        .navigationTitle(loc(S.markets))
         .task { await load() }
     }
 
@@ -76,6 +78,11 @@ struct MarketsView: View {
         do {
             let data = try await APIClient.shared.markets()
             state = .loaded(data)
+            // Raised from here rather than from inside the client, because the language
+            // an alert is written in is a reader preference and there is no environment
+            // to read it from in `AlertCenter`. Dedupe lives in `raise`, so re-observing
+            // the same payload on every refresh costs nothing.
+            alerts.observe(markets: data, language: loc.language)
         } catch {
             state = .failed(error)
         }
@@ -188,4 +195,6 @@ private struct InstrumentCard: View {
 
 #Preview {
     MarketsView()
+        .environment(Localization())
+        .environment(AlertCenter())
 }

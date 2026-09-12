@@ -14,6 +14,7 @@ import SwiftUI
 struct RunComposer: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(Session.self) private var session
+    @Environment(Localization.self) private var loc
 
     @State private var ticker = ""
     @State private var date = Date()
@@ -24,28 +25,29 @@ struct RunComposer: View {
         NavigationStack {
             Form {
                 Section {
-                    TextField("Ticker", text: $ticker)
+                    TextField(loc(S.ticker), text: $ticker)
                         .font(.body.monospaced())
                         #if os(iOS)
                         .textInputAutocapitalization(.characters)
                         .autocorrectionDisabled()
                         #endif
-                    DatePicker("Analysis date", selection: $date, displayedComponents: .date)
+                    DatePicker(loc(S.analysisDate), selection: $date, displayedComponents: .date)
                 } header: {
-                    Text("Run")
+                    Text(loc(S.run))
                 } footer: {
                     // Naming the omission rather than quietly running on defaults. The
                     // reader is entitled to know a choice exists that this client
                     // cannot yet offer.
-                    Text("Uses the deployment's default models. Choosing a model needs a "
-                         + "server endpoint that exposes the model table; duplicating it "
-                         + "here would drift from what actually runs.")
+                    Text(loc(S.modelNote))
                 }
 
                 if !session.isSignedIn {
                     Section {
                         Label {
-                            Text(Session.signInBlockedReason)
+                            // The localized copy. `Session.signInBlockedKey` points at
+                            // this same string; the long-form explanation of *why*
+                            // sign-in is unavailable lives in a comment there.
+                            Text(loc(S.signInBlocked))
                                 .font(.caption)
                                 .foregroundStyle(Palette.secondaryText)
                         } icon: {
@@ -59,7 +61,7 @@ struct RunComposer: View {
                     Section {
                         switch result {
                         case .success(let accepted):
-                            Label("Queued as \(accepted.jobId)", systemImage: "checkmark.circle")
+                            Label("\(loc(S.queuedAs)) \(accepted.jobId)", systemImage: "checkmark.circle")
                                 .foregroundStyle(Palette.up)
                                 .font(.caption)
                         case .failure(let error):
@@ -71,13 +73,13 @@ struct RunComposer: View {
                 }
             }
             .formStyle(.grouped)
-            .navigationTitle("New run")
+            .navigationTitle(loc(S.newRun))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Close") { dismiss() }
+                    Button(loc(S.close)) { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(submitting ? "Submitting…" : "Run") { Task { await submit() } }
+                    Button(submitting ? loc(S.submitting) : loc(S.run)) { Task { await submit() } }
                         .disabled(submitting || trimmedTicker.isEmpty)
                 }
             }
@@ -95,7 +97,12 @@ struct RunComposer: View {
         do {
             let accepted = try await APIClient.shared.submitRun(
                 ticker: trimmedTicker,
-                date: Self.dayFormatter.string(from: date)
+                date: Self.dayFormatter.string(from: date),
+                // The report is written in the language the reader is using — which is
+                // the whole reason `/api/agents/run` takes `lang`. Sent at submit
+                // because the server freezes it onto the job, so a later toggle does
+                // not retitle a report that has already been written.
+                language: loc.language.apiCode
             )
             result = .success(accepted)
         } catch {

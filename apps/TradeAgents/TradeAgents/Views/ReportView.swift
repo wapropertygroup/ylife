@@ -12,6 +12,7 @@ struct ReportView: View {
 
     @State private var state: LoadState = .loading
     @State private var expanded: Set<Int> = []
+    @Environment(Localization.self) private var loc
 
     /// The section to scroll to once loaded. Separate from `expanded` so that a reader
     /// opening other turns afterwards does not get yanked back to this one.
@@ -39,15 +40,15 @@ struct ReportView: View {
     private var content: some View {
         switch state {
         case .loading:
-            LoadingPane(label: "Loading report")
+            LoadingPane(label: loc(S.loadingReport))
 
         case .failed(let error):
             LoadFailure(error: error) { Task { await load() } }
 
         case .loaded(let report) where report.sections.isEmpty:
             EmptyPane(icon: "doc.text",
-                      title: "This report has no readable sections",
-                      detail: "The run finished but produced no transcript.")
+                      title: loc(S.noSections),
+                      detail: loc(S.noSectionsHint))
 
         case .loaded(let report):
             ScrollViewReader { proxy in
@@ -113,6 +114,7 @@ struct ReportView: View {
 private struct ReportHeader: View {
     let report: ShowcaseReport
     let job: AgentJob
+    @Environment(Localization.self) private var loc
 
     var body: some View {
         Card {
@@ -126,18 +128,18 @@ private struct ReportHeader: View {
                             .foregroundStyle(Palette.secondaryText)
                     }
                     Spacer()
-                    Chip(text: Decision.label(report.decision),
+                    Chip(text: Decision.label(report.decision, fallback: loc(S.noDecision)),
                          tint: Decision.tint(report.decision))
                 }
 
                 Divider().overlay(Palette.border)
 
                 HStack(spacing: 16) {
-                    StatTile(label: "Finished", value: Format.timestamp(report.finishedAt))
+                    StatTile(label: loc(S.finished), value: Format.timestamp(report.finishedAt))
                     if let elapsed = job.elapsedSec {
-                        StatTile(label: "Took", value: Format.elapsed(elapsed))
+                        StatTile(label: loc(S.took), value: Format.elapsed(elapsed))
                     }
-                    StatTile(label: "Turns", value: "\(report.sections.count)")
+                    StatTile(label: loc(S.turns), value: "\(report.sections.count)")
                     Spacer()
                 }
 
@@ -159,7 +161,7 @@ private struct ReportHeader: View {
         let unique = Array(NSOrderedSet(array: parts)).compactMap { $0 as? String }
         var line = unique.joined(separator: " · ")
         if let thinking = job.thinking, !thinking.isEmpty {
-            line += " · thinking: \(thinking)"
+            line += " · \(loc(S.thinkingLabel)): \(thinking)"
         }
         return line
     }
@@ -175,6 +177,7 @@ private struct ReportSectionCard: View {
     let section: ReportSection
     let isExpanded: Bool
     let toggle: () -> Void
+    @Environment(Localization.self) private var loc
 
     /// Parsed once, on first expansion, and kept. Parsing inside `body` would redo it
     /// on every SwiftUI evaluation.
@@ -188,7 +191,18 @@ private struct ReportSectionCard: View {
         // A section with no role is the report's preamble, not an agent's turn — the
         // first one usually is. Labelling it with the team name or a placeholder role
         // would invent a speaker.
-        section.role?.name ?? "Summary"
+        //
+        // `agent_roles.py` already ships both spellings of every role (`name` / `zh`),
+        // so a Chinese reader gets 市场分析师 by *picking* one the server sent rather
+        // than by translating here — which would be a second opinion about what an
+        // agent is called, drifting from the web page and the completion mail.
+        loc.pick(section.role?.name, section.role?.zh) ?? loc(S.summary)
+    }
+
+    /// The team divider under the role, likewise picked rather than translated. `pick`
+    /// also treats a blank string as absent, which the API sends more often than null.
+    private var team: String? {
+        loc.pick(section.team, section.teamZh)
     }
 
     var body: some View {
@@ -209,7 +223,7 @@ private struct ReportSectionCard: View {
                             Text(title)
                                 .font(.subheadline.weight(.semibold))
                                 .foregroundStyle(roleColor)
-                            if let team = section.team {
+                            if let team {
                                 Text(team)
                                     .font(.caption2)
                                     .foregroundStyle(Palette.mutedText)

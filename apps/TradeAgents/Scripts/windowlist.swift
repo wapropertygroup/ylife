@@ -8,15 +8,28 @@
 // happens to be on the main display instead. That failure produced screenshots of
 // unrelated applications more than once while this app was being built.
 //
-// Run with `swift Scripts/windowlist.swift TradeAgents`. Deliberately a script rather
-// than a compiled helper: it runs a handful of times during development and is not
-// worth a build product, and CoreGraphics is in the system frameworks so it needs no
-// package dependency.
+// Run with `swift Scripts/windowlist.swift TradeAgents` to list, or
+// `swift Scripts/windowlist.swift TradeAgents <out.png> <maxWidth>` to also capture the
+// first matching window narrower than maxWidth.
+//
+// The capture is folded in rather than left to a second `screencapture -l <id>` call
+// because a menu-bar popover is an NSPopover: it closes as soon as it stops being the
+// key window, so anything that happens between finding its id and photographing it can
+// dismiss it first.
+//
+// Deliberately a script rather than a compiled helper: it runs a handful of times
+// during development and is not worth a build product, and CoreGraphics is in the
+// system frameworks so it needs no package dependency.
 
 import CoreGraphics
 import Foundation
+import ImageIO
+import UniformTypeIdentifiers
 
-let wanted = CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : "TradeAgents"
+let args = CommandLine.arguments
+let wanted = args.count > 1 ? args[1] : "TradeAgents"
+let outPath: String? = args.count > 2 ? args[2] : nil
+let maxWidth = args.count > 3 ? (Int(args[3]) ?? Int.max) : Int.max
 
 // .optionOnScreenOnly excludes windows that exist but are not displayed, which is what
 // keeps a closed popover from being captured as a blank rectangle.
@@ -44,6 +57,30 @@ for window in raw {
     let title = window[kCGWindowName as String] as? String ?? ""
     print("\(id)\t\(w)x\(h)\t\(title)")
     found = true
+
+    guard let outPath, w <= maxWidth else { continue }
+    // `screencapture -l` rather than CGWindowListCreateImage, which macOS 26 removed
+    // ("Please use ScreenCaptureKit instead"). ScreenCaptureKit would work but is async
+    // and needs its own permission prompt, where the command-line tool already has the
+    // grant this terminal was given. Spawning it from here still counts as one
+    // invocation from the shell's point of view, which is the property that matters:
+    // the popover must not lose key status between being found and being photographed.
+    let task = Process()
+    task.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+    task.arguments = ["-x", "-o", "-l", String(id), outPath]
+    do {
+        try task.run()
+        task.waitUntilExit()
+    } catch {
+        FileHandle.standardError.write(Data("screencapture failed: \(error)\n".utf8))
+        exit(3)
+    }
+    guard task.terminationStatus == 0 else {
+        FileHandle.standardError.write(Data("screencapture exited \(task.terminationStatus)\n".utf8))
+        exit(3)
+    }
+    print("captured \(id) -> \(outPath)")
+    exit(0)
 }
 
 if !found {

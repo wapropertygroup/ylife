@@ -53,12 +53,10 @@ final class Session {
     /// `APIClient.signInWithGoogle` already implements the half that lives here, and
     /// the server needs no change at all.
     ///
+    /// The wording shown to the reader is `S.signInBlocked`, so it exists in both
+    /// languages; this comment is the explanation for whoever picks the work up.
     /// Stated in the UI rather than shown as a dead button, on the same principle the
     /// backend applies to a cold data source: an unavailable thing is named, not
     /// quietly omitted.
-    static let signInBlockedReason = """
-        Native sign-in needs a Google iOS OAuth client ID, which has to be created in \
-        the Google Cloud console. The server side already works — /api/auth/google \
-        accepts an ID token and returns a session cookie.
-        """
+    static let signInBlockedKey = S.signInBlocked
 }

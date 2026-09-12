@@ -5,6 +5,7 @@ import SwiftUI
 /// horizons CNN publishes, and the stored history behind it.
 struct SentimentView: View {
     @State private var state: LoadState = .loading
+    @Environment(Localization.self) private var loc
 
     enum LoadState {
         case loading
@@ -17,7 +18,7 @@ struct SentimentView: View {
             Palette.background.ignoresSafeArea()
             content
         }
-        .navigationTitle("Sentiment")
+        .navigationTitle(loc(S.sentiment))
         .task { await load() }
     }
 
@@ -124,13 +125,14 @@ private enum FearGreedBand {
 private struct ScoreCard: View {
     let score: Double?
     let rating: String?
+    @Environment(Localization.self) private var loc
 
     private var band: FearGreedBand? { score.map(FearGreedBand.of) }
 
     var body: some View {
         Card {
             VStack(alignment: .leading, spacing: 8) {
-                Text("Fear & Greed")
+                Text(loc(S.fearGreed))
                     .font(.system(size: 9).weight(.medium))
                     .foregroundStyle(Palette.mutedText)
                     .textCase(.uppercase)
@@ -145,7 +147,7 @@ private struct ScoreCard: View {
                 }
                 // The number is meaningless without its scale, and this screen has no
                 // gauge to carry it: 28 is only alarming once you know the range.
-                Text("0 is Extreme Fear, 100 is Extreme Greed.")
+                Text(loc(S.fearGreedHint))
                     .font(.caption2)
                     .foregroundStyle(Palette.mutedText)
             }
@@ -164,19 +166,20 @@ private struct ScoreCard: View {
 
 private struct ComparisonCard: View {
     let data: FearGreed
+    @Environment(Localization.self) private var loc
 
     var body: some View {
         Card {
             VStack(alignment: .leading, spacing: 10) {
-                Text("Compared with")
+                Text(loc(S.comparedWith))
                     .font(.system(size: 9).weight(.medium))
                     .foregroundStyle(Palette.mutedText)
                     .textCase(.uppercase)
                 HStack(alignment: .top, spacing: 10) {
-                    tile("Prev close", data.prevClose)
-                    tile("1 week", data.prevWeek)
-                    tile("1 month", data.prevMonth)
-                    tile("1 year", data.prevYear)
+                    tile(loc(S.prevClose), data.prevClose)
+                    tile(loc(S.oneWeek), data.prevWeek)
+                    tile(loc(S.oneMonth), data.prevMonth)
+                    tile(loc(S.oneYear), data.prevYear)
                 }
             }
         }
@@ -197,11 +200,12 @@ private struct ComparisonCard: View {
 
 private struct HistoryCard: View {
     let history: [FearGreedPoint]
+    @Environment(Localization.self) private var loc
 
     var body: some View {
         Card {
             VStack(alignment: .leading, spacing: 10) {
-                Text("History")
+                Text(loc(S.history))
                     .font(.system(size: 9).weight(.medium))
                     .foregroundStyle(Palette.mutedText)
                     .textCase(.uppercase)
@@ -245,7 +249,7 @@ private struct HistoryCard: View {
                     .frame(height: 170)
                 } else {
                     // Stated, not skipped. A blank space here would read as a flat index.
-                    Text("No history")
+                    Text(loc(S.noReadings))
                         .font(.caption2)
                         .foregroundStyle(Palette.secondaryText)
                         .frame(height: 170, alignment: .center)
@@ -272,4 +276,5 @@ private struct HistoryCard: View {
 
 #Preview {
     SentimentView()
+        .environment(Localization())
 }

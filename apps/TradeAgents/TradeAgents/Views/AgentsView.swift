@@ -10,6 +10,8 @@ import SwiftUI
 struct AgentsView: View {
     @State private var state: LoadState = .loading
     @State private var composing = false
+    @Environment(Localization.self) private var loc
+    @Environment(AlertCenter.self) private var alerts
 
     enum LoadState {
         case loading
@@ -22,13 +24,13 @@ struct AgentsView: View {
             Palette.background.ignoresSafeArea()
             content
         }
-        .navigationTitle("Agents")
+        .navigationTitle(loc(S.agents))
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button {
                     composing = true
                 } label: {
-                    Label("New run", systemImage: "plus.circle")
+                    Label(loc(S.newRun), systemImage: "plus.circle")
                 }
             }
         }
@@ -40,7 +42,7 @@ struct AgentsView: View {
     private var content: some View {
         switch state {
         case .loading:
-            LoadingPane(label: "Loading reports")
+            LoadingPane(label: loc(S.loadingReports))
 
         case .failed(let error):
             LoadFailure(error: error) { Task { await load() } }
@@ -49,13 +51,13 @@ struct AgentsView: View {
             // The server can turn the sample off entirely (`showcase_enabled`). Saying
             // so is better than an empty list, which reads as "no reports exist".
             EmptyPane(icon: "eye.slash",
-                      title: "The public sample is switched off",
-                      detail: "Finished reports are still readable on the web app when signed in.")
+                      title: loc(S.sampleOff),
+                      detail: loc(S.sampleOffHint))
 
         case .loaded(let list) where list.jobs.isEmpty:
             EmptyPane(icon: "tray",
-                      title: "No sampled reports yet",
-                      detail: "A run has to finish before it can appear here.")
+                      title: loc(S.noReports),
+                      detail: loc(S.noReportsHint))
 
         case .loaded(let list):
             ScrollView {
@@ -80,7 +82,12 @@ struct AgentsView: View {
 
     private func load() async {
         do {
-            state = .loaded(try await APIClient.shared.showcase())
+            let list = try await APIClient.shared.showcase()
+            state = .loaded(list)
+            // Raised from here rather than from inside the client: the language an
+            // alert is written in is a reader preference, and `AlertCenter` has no
+            // environment to read it from.
+            alerts.observe(showcase: list.jobs, language: loc.language)
         } catch {
             state = .failed(error)
         }
@@ -90,6 +97,7 @@ struct AgentsView: View {
 /// Explains what signing in would add, without pretending it is available.
 private struct SignInNotice: View {
     @Environment(Session.self) private var session
+    @Environment(Localization.self) private var loc
 
     var body: some View {
         if !session.isSignedIn {
@@ -98,9 +106,9 @@ private struct SignInNotice: View {
                     Image(systemName: "person.crop.circle.badge.questionmark")
                         .foregroundStyle(Palette.warn)
                     VStack(alignment: .leading, spacing: 3) {
-                        Text("Reading the public sample")
+                        Text(loc(S.readingSample))
                             .font(.caption.weight(.semibold))
-                        Text("Your own runs and reports need sign-in, which is not wired up yet.")
+                        Text(loc(S.readingHint))
                             .font(.caption2)
                             .foregroundStyle(Palette.secondaryText)
                     }
@@ -114,6 +122,7 @@ private struct SignInNotice: View {
 /// One report in the list.
 private struct JobCard: View {
     let job: AgentJob
+    @Environment(Localization.self) private var loc
 
     var body: some View {
         Card {
@@ -122,7 +131,8 @@ private struct JobCard: View {
                     Text(job.ticker)
                         .font(.headline.monospaced())
                     Spacer()
-                    Chip(text: Decision.label(job.decision), tint: Decision.tint(job.decision))
+                    Chip(text: Decision.label(job.decision, fallback: loc(S.noDecision)),
+                         tint: Decision.tint(job.decision))
                 }
 
                 HStack(spacing: 10) {
@@ -143,10 +153,10 @@ private struct JobCard: View {
                 if job.degraded == true || job.recovered == true || job.provider != nil {
                     HStack(spacing: 6) {
                         if job.degraded == true {
-                            Chip(text: "Degraded", tint: Palette.warn)
+                            Chip(text: loc(S.degraded), tint: Palette.warn)
                         }
                         if job.recovered == true {
-                            Chip(text: "Recovered", tint: Palette.warn)
+                            Chip(text: loc(S.recovered), tint: Palette.warn)
                         }
                         if let provider = job.provider {
                             Chip(text: provider, tint: Palette.mutedText)

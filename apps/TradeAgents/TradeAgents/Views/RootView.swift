@@ -14,13 +14,15 @@ enum AppSection: String, CaseIterable, Identifiable, Hashable {
 
     var id: String { rawValue }
 
-    var title: String {
+    /// The tab's name, in both languages. Resolved by the caller, which has the
+    /// environment; an enum has no access to one.
+    var title: LocalizedString {
         switch self {
-        case .agents:    return "Agents"
-        case .markets:   return "Markets"
-        case .rates:     return "Rates"
-        case .sentiment: return "Sentiment"
-        case .settings:  return "Settings"
+        case .agents:    return S.agents
+        case .markets:   return S.markets
+        case .rates:     return S.rates
+        case .sentiment: return S.sentiment
+        case .settings:  return S.settings
         }
     }
 
@@ -54,6 +56,7 @@ enum AppSection: String, CaseIterable, Identifiable, Hashable {
 /// expect anyway: a Mac dashboard with five sections wants a source list, and a phone
 /// wants a tab bar.
 struct RootView: View {
+    @Environment(Localization.self) private var loc
     @State private var selection: AppSection = .agents
     @State private var session = Session()
 
@@ -74,7 +77,7 @@ struct RootView: View {
             // the visible symptom is a sidebar whose highlight disagrees with what the
             // detail pane is showing.
             List(AppSection.allCases, selection: $selection) { section in
-                Label(section.title, systemImage: section.icon)
+                Label(loc(section.title), systemImage: section.icon)
                     .tag(section)
             }
             .navigationSplitViewColumnWidth(min: 170, ideal: 190, max: 240)
@@ -83,6 +86,7 @@ struct RootView: View {
             NavigationStack {
                 selection.destination
                     .background(Palette.background)
+                    .toolbar { ToolbarItem(placement: .primaryAction) { AlertsButton() } }
             }
         }
         #else
@@ -90,8 +94,9 @@ struct RootView: View {
             ForEach(AppSection.allCases) { section in
                 NavigationStack {
                     section.destination
+                        .toolbar { ToolbarItem(placement: .primaryAction) { AlertsButton() } }
                 }
-                .tabItem { Label(section.title, systemImage: section.icon) }
+                .tabItem { Label(loc(section.title), systemImage: section.icon) }
                 .tag(section)
             }
         }
