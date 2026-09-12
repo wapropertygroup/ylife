@@ -31,6 +31,10 @@ build() {
 	# project has no shared scheme. Pinning ARCHS achieves the same thing — one slice
 	# instead of arm64 plus x86_64, which is twice the work for a binary only ever run
 	# on this machine.
+	#
+	# `set -e` makes a failure here abort the script, which matters: `run` and `shot`
+	# would otherwise carry on and relaunch or photograph the *previous* build, and a
+	# screenshot of stale code is worse than no screenshot.
 	xcodebuild -project TradeAgents.xcodeproj \
 		-target TradeAgents -configuration Debug -quiet \
 		-sdk macosx ARCHS=arm64 ONLY_ACTIVE_ARCH=NO build
