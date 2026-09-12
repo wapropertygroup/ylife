@@ -211,7 +211,15 @@
      layout fault. So the table takes its natural 858px and leaves the rest of
      the card empty, which is the quiet answer. `max-width:100%` keeps it
      inside the card and `min-width` keeps the columns legible on a phone,
-     where the wrapper scrolls exactly as the holdings table already does. */
+     where the wrapper scrolls exactly as the holdings table already does.
+
+     The element must NOT carry Tailwind's `w-full`. It did, and that shipped a
+     no-op: `.w-full { width: 100% }` and `.as-dca-table { width: max-content }`
+     have identical specificity, so the utility won the cascade and the table
+     went on stretching. Nothing looked wrong in a local check that removed the
+     class in JavaScript first — that measures the intended state, not the
+     shipped one. Verify layout on the rendered template, never on a mutated
+     DOM. */
   .as-dca-table { width: max-content; max-width: 100%; min-width: 44rem; }
   .as-dca-table th { font-size: .65rem; font-weight: 650; letter-spacing: .045em;
                      text-transform: uppercase; white-space: nowrap; }
@@ -567,7 +575,7 @@
       <div id="asDcaEmpty" class="as-card p-6 text-center text-sm hidden" style="color:var(--as-muted)"></div>
 
       <div class="as-card overflow-x-auto">
-        <table class="as-dca-table w-full text-xs">
+        <table class="as-dca-table text-xs">
           <thead>
             <tr>
               <th><button type="button" class="as-sort-button" data-dsort="ticker"><span data-i18n="adca.col_symbol">Company</span><span class="as-sort-arrow"></span></button></th>
