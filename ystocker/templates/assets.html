@@ -195,6 +195,30 @@
     transition: background-color .15s ease;
   }
   .as-remove:hover { background: rgba(225, 29, 72, .09); text-decoration: none; }
+  /* The DCA table. Its own min-width rather than .as-holdings-table's 78rem:
+     that figure is sized for the twelve-column holdings grid, and borrowing it
+     forced a horizontal scrollbar onto a table that fits a laptop comfortably. */
+  .as-dca-table { min-width: 44rem; }
+  .as-dca-table th { font-size: .65rem; font-weight: 650; letter-spacing: .045em;
+                     text-transform: uppercase; white-space: nowrap; }
+  .as-dca-table td { vertical-align: middle; padding: .5rem .6rem; }
+  .as-dca-table tbody tr { transition: background-color .15s ease; }
+  .as-dca-table tbody tr:hover { background: var(--as-row-hover); }
+  /* A row the concentration term is actively throttling. The signal the panel
+     exists for, so it gets a rail rather than being left to a 0.60x in one
+     column among nine. */
+  .as-dca-table tr[data-throttled="1"] td:first-child {
+    box-shadow: inset 3px 0 0 var(--as-warn);
+  }
+  .as-vbar { position: relative; height: 5px; border-radius: 3px;
+             background: var(--as-other); overflow: hidden; margin-top: .3rem; }
+  .as-vbar > i { position: absolute; inset: 0 auto 0 0; border-radius: 3px; }
+  /* The multiplier chain, shown as one cell instead of three columns. A term at
+     1.00x is dimmed rather than dropped: "not throttled" and "not measured" are
+     different, and hiding the neutral ones would make them indistinguishable. */
+  .as-chain-cell { font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+                   font-size: .68rem; white-space: nowrap; }
+  .as-chain-cell .dim { color: var(--as-muted); }
   .as-drop { border: 2px dashed var(--as-line); border-radius: 1rem; }
   .as-drop[data-over="1"] { border-color: var(--as-seen); }
   .as-ai-shell { position: relative; overflow: hidden; }
@@ -307,7 +331,7 @@
       <button type="button" class="as-tab px-3 py-2 text-sm whitespace-nowrap" data-tab="overlap"><span data-i18n="assets.tab_overlap">Hidden overlap</span></button>
       <button type="button" class="as-tab px-3 py-2 text-sm whitespace-nowrap" data-tab="limits"><span data-i18n="assets.tab_limits">Limits</span><span id="asLimitBadge" class="hidden ml-1.5 px-1.5 py-0.5 rounded text-xs font-semibold"></span></button>
       <button type="button" class="as-tab px-3 py-2 text-sm whitespace-nowrap" data-tab="mix"><span data-i18n="assets.tab_mix">Asset &amp; sector mix</span></button>
-      <button type="button" class="as-tab px-3 py-2 text-sm whitespace-nowrap" data-tab="dca"><span data-i18n="assets.tab_dca">DCA sizing</span></button>
+      <button type="button" class="as-tab px-3 py-2 text-sm whitespace-nowrap" data-tab="dca"><span data-i18n="assets.tab_dca">Dollar-Cost Averaging</span></button>
       <button type="button" class="as-tab px-3 py-2 text-sm whitespace-nowrap" data-tab="ai"><span data-i18n="assets.tab_ai">AI Analysis</span></button>
       <button type="button" class="as-tab px-3 py-2 text-sm whitespace-nowrap" data-tab="import"><span data-i18n="assets.tab_import">Import</span></button>
     </div>
@@ -521,18 +545,15 @@
       <div id="asDcaEmpty" class="as-card p-6 text-center text-sm hidden" style="color:var(--as-muted)"></div>
 
       <div class="as-card overflow-x-auto">
-        <table class="as-holdings-table w-full text-xs">
+        <table class="as-dca-table w-full text-xs">
           <thead>
             <tr>
-              <th data-i18n="adca.col_symbol">Company</th>
-              <th data-i18n="adca.col_weight">Your exposure</th>
-              <th class="text-right" data-i18n="adca.col_v">V</th>
-              <th data-i18n="adca.col_band">State</th>
-              <th class="text-right" data-i18n="adca.col_mval">M_val</th>
-              <th class="text-right" data-i18n="adca.col_mearn">M_earn</th>
-              <th class="text-right" data-i18n="adca.col_mport">M_port</th>
-              <th class="text-right" data-i18n="adca.col_mult">Total ×</th>
-              <th class="text-right" data-i18n="adca.col_amount">Per base unit</th>
+              <th><button type="button" class="as-sort-button" data-dsort="ticker"><span data-i18n="adca.col_symbol">Company</span><span class="as-sort-arrow"></span></button></th>
+              <th><button type="button" class="as-sort-button" data-dsort="value"><span data-i18n="adca.col_weight">Your exposure</span><span class="as-sort-arrow"></span></button></th>
+              <th><button type="button" class="as-sort-button" data-dsort="V"><span data-i18n="adca.col_v">V</span><span class="as-sort-arrow"></span></button></th>
+              <th data-i18n="adca.col_chain">M_val × M_earn × M_port</th>
+              <th class="as-num"><button type="button" class="as-sort-button" data-dsort="multiplier"><span data-i18n="adca.col_mult">Total ×</span><span class="as-sort-arrow"></span></button></th>
+              <th class="as-num"><button type="button" class="as-sort-button" data-dsort="amount"><span data-i18n="adca.col_amount">Per base unit</span><span class="as-sort-arrow"></span></button></th>
             </tr>
           </thead>
           <tbody id="asDcaBody"></tbody>
@@ -736,7 +757,7 @@
   // a reader typed on one surface is the figure every other one uses. It is the
   // only piece of state here that is not derived from the portfolio.
   const DCA_BASE_KEY = 'ystocker_dca_base';
-  let _dcaLoaded = false, _dcaPolls = 0, _dcaTimer = null;
+  let _dcaLoaded = false, _dcaPolls = 0, _dcaTimer = null, _dcaData = null;
 
   function dcaBase() {
     const v = parseFloat(localStorage.getItem(DCA_BASE_KEY) || '');
@@ -765,26 +786,62 @@
       '<div style="color:var(--as-muted)" class="truncate">' + esc(r.name || '') + '</div></td>';
   }
 
-  /* Exposure after full penetration, with the two things that make it mean
-     something: the money behind the percentage, and how many holdings reach the
-     company. A route count above 1 is the entire point of 穿透 -- it is
-     concentration the reader did not know they had, and the number they would
-     otherwise have to add up by hand across every fund. */
-  function exposureCell(r) {
-    const routes = (r.route_count || 0) > 1
-      ? ' <span class="as-route-count" title="' +
-        esc(fill(t('adca.routes', 'Reached through {n} holdings'), { n: r.route_count })) +
-        '">' + r.route_count + '</span>'
-      : '';
-    return '<td>' + pct(r.position_pct, 2) + routes +
-      '<div style="color:var(--as-muted)">' + money(r.value) + '</div></td>';
-  }
-
   const DCA_STATUS = {
     pending:       ['adca.st_pending', 'Building…'],
     no_statements: ['adca.st_nostmt',  'No published statements'],
     no_score:      ['adca.st_noscore', 'Too few measurable factors'],
   };
+
+  let _dcaSort = { key: 'value', dir: -1 };
+
+  /* Exposure after full penetration. The split bar is the informative part:
+     indigo is held directly, pale is reached through a fund, and a row that is
+     almost all pale is concentration the reader never chose. Reuses the
+     look-through tab's own bar classes so the two panels read identically. */
+  function exposureCell(r) {
+    const total = r.position_pct || 0;
+    const direct = r.direct_pct || 0;
+    const indirect = Math.max(0, total - direct);
+    const scale = total > 0 ? 100 / total : 0;
+    const routes = (r.route_count || 0) > 1
+      ? ' <span class="as-route-count" title="' +
+        esc(fill(t('adca.routes', 'Reached through {n} holdings'), { n: r.route_count })) +
+        '">' + r.route_count + '</span>'
+      : '';
+    return '<td style="min-width:8.5rem">' +
+      '<span class="font-mono">' + pct(total, 2) + '</span>' + routes +
+      '<span class="ml-1" style="color:var(--as-muted)">' + money(r.value) + '</span>' +
+      '<span class="as-exposure-bar">' +
+        '<i class="as-exposure-direct" style="width:' + (direct * scale).toFixed(2) + '%"></i>' +
+        '<i class="as-exposure-indirect" style="width:' + (indirect * scale).toFixed(2) + '%"></i>' +
+      '</span></td>';
+  }
+
+  /* V with a bar, matching /dca. A bare percentile is an abstraction; a filled
+     track is read at a glance. */
+  function vCell(r) {
+    if (r.V == null) return '<td style="color:var(--as-muted)">—</td>';
+    const colour = r.V >= 60 ? cssVar('--as-seen')
+                 : r.V <= 20 ? cssVar('--as-warn') : cssVar('--as-muted');
+    return '<td style="min-width:6.5rem">' +
+      '<span class="font-mono ' + vClass(r.V) + '">' + r.V.toFixed(0) + '</span>' +
+      '<span class="ml-1" style="color:var(--as-muted)">' +
+        esc(r.band ? t('dca.band_' + r.band, r.band) : '') + '</span>' +
+      '<span class="as-vbar"><i style="width:' + r.V + '%;background:' + colour + '"></i></span>' +
+      '</td>';
+  }
+
+  /* The three terms in one cell. Dimmed at 1.00x rather than hidden: a term
+     that did not move and a term that could not be measured are different
+     statements, and collapsing them would lose that. */
+  function chainCell(r) {
+    const term = (v, key, band) => '<span class="' + (v === 1 ? 'dim' : '') +
+      '" title="' + esc(t(key + band, band || '')) + '">' + v.toFixed(2) + '</span>';
+    return '<td class="as-chain-cell">' +
+      term(r.m_valuation, 'dca.band_', r.band || '') + ' × ' +
+      term(r.m_earnings, 'dca.earn_', r.earnings_band || '') + ' × ' +
+      term(r.m_portfolio, 'dca.port_', r.portfolio_band || '') + '</td>';
+  }
 
   function renderDca(d) {
     const body = $('asDcaBody');
@@ -792,46 +849,50 @@
 
     if (!d.rows || !d.rows.length) {
       body.innerHTML = '';
-      empty.textContent = d.reason === 'no_positions'
-        ? t('adca.none', 'Add a holding and its contribution will be sized here.')
-        : t('adca.none', 'Add a holding and its contribution will be sized here.');
+      empty.textContent = t('adca.none',
+        'Add a holding and the companies inside it will be scored here.');
       empty.classList.remove('hidden');
       $('asDcaTotals').innerHTML = '';
+      $('asDcaCaveat').textContent = '';
       return;
     }
     empty.classList.add('hidden');
 
-    // Scored first and cheapest at the top, then everything that could not be
-    // scored — a row with no multiplier is not a 0x row and must not sort as one.
     const rows = d.rows.slice().sort(function (a, b) {
-      const av = a.amount == null ? -1 : 1, bv = b.amount == null ? -1 : 1;
-      if (av !== bv) return bv - av;
-      if (a.amount == null) return String(a.ticker).localeCompare(b.ticker);
-      return (b.V == null ? -1 : b.V) - (a.V == null ? -1 : a.V);
+      const k = _dcaSort.key;
+      const av = a[k], bv = b[k];
+      // Unscored always last, whichever way the column is pointing: a row with
+      // no multiplier is not a 0x row and must never sort as one.
+      if (av == null && bv == null) return String(a.ticker).localeCompare(b.ticker);
+      if (av == null) return 1;
+      if (bv == null) return -1;
+      if (typeof av === 'string') return _dcaSort.dir * av.localeCompare(bv);
+      return _dcaSort.dir * (av - bv);
     });
 
     body.innerHTML = rows.map(function (r) {
       if (r.amount == null) {
-        const s = DCA_STATUS[r.status] || ['adca.st_unknown', '—'];
-        return '<tr>' +
-          nameCell(r) + exposureCell(r) +
-          '<td colspan="7" style="color:var(--as-muted)">' + esc(t(s[0], s[1])) + '</td>' +
+        const st = DCA_STATUS[r.status] || ['adca.st_unknown', '—'];
+        return '<tr>' + nameCell(r) + exposureCell(r) +
+          '<td colspan="4" style="color:var(--as-muted)">' + esc(t(st[0], st[1])) + '</td>' +
         '</tr>';
       }
-      return '<tr>' +
-        nameCell(r) + exposureCell(r) +
-        '<td class="text-right font-mono ' + vClass(r.V) + '">' + (r.V == null ? '—' : r.V.toFixed(0)) + '</td>' +
-        '<td class="' + vClass(r.V) + '">' + esc(r.band ? t('dca.band_' + r.band, r.band) : '—') + '</td>' +
-        '<td class="text-right font-mono">' + r.m_valuation.toFixed(2) + '×</td>' +
-        '<td class="text-right font-mono"' + (r.m_earnings === 1 ? ' style="color:var(--as-muted)"' : '') +
-          ' title="' + esc(t('dca.earn_' + r.earnings_band, r.earnings_band)) + '">' + r.m_earnings.toFixed(2) + '×</td>' +
-        '<td class="text-right font-mono"' + (r.m_portfolio === 1 ? ' style="color:var(--as-muted)"' : '') +
-          ' title="' + esc(t('dca.port_' + r.portfolio_band, r.portfolio_band)) + '">' + r.m_portfolio.toFixed(2) + '×</td>' +
-        '<td class="text-right font-mono font-semibold">' + r.multiplier.toFixed(2) + '×' +
+      // The rail marks a row the concentration term is actually holding back --
+      // the one signal a reader should act on, and easy to miss in a number.
+      const throttled = r.m_portfolio < 1 ? ' data-throttled="1"' : '';
+      return '<tr' + throttled + '>' +
+        nameCell(r) + exposureCell(r) + vCell(r) + chainCell(r) +
+        '<td class="as-num font-semibold">' + r.multiplier.toFixed(2) + '×' +
           (r.capped ? ' <span title="' + esc(t('dca.capped', 'Capped')) + '">⌃</span>' : '') + '</td>' +
-        '<td class="text-right font-mono font-semibold">' + money(r.amount) + '</td>' +
+        '<td class="as-num font-semibold">' + money(r.amount) + '</td>' +
       '</tr>';
     }).join('');
+
+    document.querySelectorAll('[data-dsort]').forEach(function (btn) {
+      btn.setAttribute('data-active', btn.dataset.dsort === _dcaSort.key ? '1' : '0');
+      btn.querySelector('.as-sort-arrow').textContent =
+        btn.dataset.dsort === _dcaSort.key ? (_dcaSort.dir < 0 ? '▼' : '▲') : '';
+    });
 
     // The portfolio multiplier leads, because it is the only figure here a
     // reader can act on directly: one contribution into the existing mix scales
@@ -887,6 +948,7 @@
       $('asDcaEmpty').classList.remove('hidden');
       return;
     }
+    _dcaData = d;
     renderDca(d);
 
     // Poll only while something is still building, and stop at a bound. Leaving
@@ -898,6 +960,18 @@
       _dcaTimer = setTimeout(function () { loadDca(true); }, _dcaPolls < 4 ? 6000 : 15000);
     }
   }
+
+  document.querySelectorAll('[data-dsort]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      const key = btn.dataset.dsort;
+      // Text ascends by default, numbers descend -- nobody opens this wanting
+      // their smallest exposure or their lowest V first.
+      _dcaSort = (_dcaSort.key === key)
+        ? { key: key, dir: -_dcaSort.dir }
+        : { key: key, dir: key === 'ticker' ? 1 : -1 };
+      if (_dcaData) renderDca(_dcaData);
+    });
+  });
 
   const dcaBaseInput = $('asDcaBase');
   dcaBaseInput.value = dcaBase();

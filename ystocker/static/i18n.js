@@ -2661,7 +2661,7 @@ const I18n = (() => {
     'assets.tab_lookthrough': { en: 'Look-through (穿透)', zh: '穿透分析' },
     'assets.tab_overlap':   { en: 'Hidden overlap',     zh: '隐藏重叠' },
     'assets.tab_mix':       { en: 'Asset & sector mix', zh: '资产与行业分布' },
-    'assets.tab_dca':       { en: 'DCA sizing', zh: '定投调节' },
+    'assets.tab_dca':       { en: 'Dollar-Cost Averaging', zh: '定额定投调节' },
 
     // ── /assets → DCA sizing panel ─────────────────────────────────────
     'adca.title':      { en: 'Sizing across your penetrated holdings', zh: '穿透后各公司的定投调节' },
@@ -2687,6 +2687,7 @@ const I18n = (() => {
     'adca.col_weight': { en: 'Your exposure', zh: '你的敞口' },
     'adca.col_v':      { en: 'V', zh: 'V' },
     'adca.col_band':   { en: 'State', zh: '估值状态' },
+    'adca.col_chain':  { en: 'M_val × M_earn × M_port', zh: 'M_估值 × M_盈利 × M_组合' },
     'adca.col_mval':   { en: 'M_val', zh: 'M_估值' },
     'adca.col_mearn':  { en: 'M_earn', zh: 'M_盈利' },
     'adca.col_mport':  { en: 'M_port', zh: 'M_组合' },

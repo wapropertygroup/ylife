@@ -1365,21 +1365,21 @@ def api_dca_portfolio():
         return jsonify({"base_dca": base, "rows": [], "scored": 0,
                         "exposure_count": 0, "pending": [], "reason": "no_positions"})
 
-    # top=None, not the default 60: the truncation this endpoint reports has to
-    # be measured against *every* penetrated company, and `analyse` would
-    # otherwise have already dropped the tail before we counted it. The extra
-    # rows are never serialised to the client -- they exist so `not_ranked` and
-    # the equity total are true rather than "true of the first 60".
-    analysis = assets_svc.analyse(positions, top=None)
-    leaves = analysis.get("exposures") or []
+    # top=DCA_PORTFOLIO_MAX, and the tail's totals come from `seen_value` rather
+    # than from serialising it. A three-ETF portfolio penetrates to well over a
+    # thousand leaves and `as_dict` builds a dict per leaf *including its full
+    # routes list* -- so asking for all of them to add up two numbers was hundreds
+    # of kilobytes of garbage per request for data that never left this function.
+    # `seen_value` is the named-equity total whatever `top` is, so the exact
+    # figures fall out of one subtraction.
+    analysis = assets_svc.analyse(positions, top=DCA_PORTFOLIO_MAX)
+    ranked = analysis.get("exposures") or []
     exposure = {
-        "map": {e.get("symbol"): e for e in leaves},
+        "map": {e.get("symbol"): e for e in ranked},
         "coverage_pct": analysis.get("coverage_pct"),
     }
     recs = _cached_fundamentals()
 
-    ranked = leaves[:DCA_PORTFOLIO_MAX]
-    dropped = leaves[DCA_PORTFOLIO_MAX:]
     rows, pending, kicked = [], [], 0
 
     for leaf in ranked:
@@ -1442,18 +1442,20 @@ def api_dca_portfolio():
         weighted_mult = round(sum(r["multiplier"] * (r["value"] or 0.0)
                                   for r in scored) / scored_value, 4)
 
-    equity_value = sum(e.get("value") or 0.0 for e in leaves)
+    equity_value = analysis.get("seen_value") or 0.0
+    ranked_value = sum(e.get("value") or 0.0 for e in ranked)
+    exposure_count = analysis.get("exposure_count") or len(ranked)
     return jsonify({
         "base_dca": base,
         "rows": rows,
         "scored": len(scored),
         "ranked": len(rows),
-        "exposure_count": analysis.get("exposure_count") or len(leaves),
+        "exposure_count": exposure_count,
         "pending": pending,
         # Truncation is reported, never silent: a ranked table missing names is
         # only honest if it says how many and how much they are worth.
-        "not_ranked": len(dropped),
-        "not_ranked_value": round(sum(e.get("value") or 0.0 for e in dropped), 2),
+        "not_ranked": max(0, exposure_count - len(ranked)),
+        "not_ranked_value": round(max(0.0, equity_value - ranked_value), 2),
         "equity_value": round(equity_value, 2),
         "scored_value": round(scored_value, 2),
         # What share of the *penetrated equity* the weighted figures actually
