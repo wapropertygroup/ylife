@@ -462,6 +462,69 @@ class QuarterlyTTM(unittest.TestCase):
             self.assertLess(v.eps, max(annual_eps) * 2.0)
 
 
+class BuildBudget(unittest.TestCase):
+    """One global limit on rebuilds, shared by the on-demand and swept paths.
+
+    Per-symbol de-duplication bounds nothing when the symbols differ: a reader
+    clicking through ticker pages triggers a fresh six-read burst each time, and
+    twenty distinct names in eight minutes was measured on the first afternoon
+    this shipped. The budget is what turns that into a queue.
+    """
+
+    def setUp(self):
+        dh._inflight = 0
+        dh._last_build_start = 0.0
+
+    def tearDown(self):
+        dh._inflight = 0
+        dh._last_build_start = 0.0
+
+    def test_the_first_reservation_succeeds(self):
+        self.assertTrue(dh.try_reserve_build())
+
+    def test_a_second_reservation_is_refused_by_the_gap(self):
+        self.assertTrue(dh.try_reserve_build())
+        self.assertFalse(dh.try_reserve_build(),
+                         "two rebuilds must not start back to back")
+
+    def test_the_gap_alone_refuses_even_with_slots_free(self):
+        dh.release_build()          # nothing in flight at all
+        self.assertTrue(dh.try_reserve_build())
+        dh.release_build()
+        self.assertFalse(dh.try_reserve_build(),
+                         "an empty in-flight count does not license a burst")
+
+    def test_inflight_is_capped_once_the_gap_has_passed(self):
+        for _ in range(dh.MAX_INFLIGHT_BUILDS):
+            dh._last_build_start = 0.0      # pretend the gap elapsed
+            self.assertTrue(dh.try_reserve_build())
+        dh._last_build_start = 0.0
+        self.assertFalse(dh.try_reserve_build(),
+                         f"more than {dh.MAX_INFLIGHT_BUILDS} concurrent rebuilds")
+
+    def test_release_frees_a_slot(self):
+        dh._last_build_start = 0.0
+        self.assertTrue(dh.try_reserve_build())
+        dh.release_build()
+        dh._last_build_start = 0.0
+        self.assertTrue(dh.try_reserve_build())
+
+    def test_release_never_goes_negative(self):
+        """A leaked or doubled release must not manufacture budget.
+
+        A negative counter would silently raise the ceiling for ever, which is
+        the failure mode of a limiter nobody would notice until Yahoo blocks.
+        """
+        for _ in range(5):
+            dh.release_build()
+        self.assertEqual(dh.build_budget()["inflight"], 0)
+
+    def test_the_budget_is_reportable(self):
+        b = dh.build_budget()
+        self.assertEqual(b["max_inflight"], dh.MAX_INFLIGHT_BUILDS)
+        self.assertEqual(b["min_gap_seconds"], dh.BUILD_MIN_GAP_SECONDS)
+
+
 class Snapshots(unittest.TestCase):
     """The accumulating forward-basis row, without touching DynamoDB."""
 

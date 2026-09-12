@@ -536,13 +536,26 @@ the top of a column headed cheapest would be a plain lie. The page also states
 what V is not — a cross-company ranking. Each row is scored on its own model,
 and a 70 means "cheap for this company", not "cheaper than the row above".
 
+**Every rebuild draws on one global budget** (`MAX_INFLIGHT_BUILDS`,
+`BUILD_MIN_GAP_SECONDS`), shared by the on-demand path and the sweep. The
+per-symbol guard in `_dca_kick` stops N readers of one ticker costing N
+rebuilds and **bounds nothing when the symbols differ** — which is the case that
+actually happens. Measured on the afternoon this shipped: one person following
+the DCA link off `/history` pages hit twenty distinct tickers in eight minutes,
+~120 Yahoo reads with nothing in between. A refused slot is invisible and cheap:
+the API already answered 202 and the client was already polling, so the work
+just starts on a later poll — it reports `queued` so the page can say "waiting
+for a slot" rather than implying progress. `release_build()` floors at zero,
+because a doubled release would silently raise the ceiling for ever, which is
+the one limiter failure nobody notices until Yahoo blocks.
+
 Tests: `tests/test_dca.py` (48, no app/network — including the framework's own
 worked example, E=75.55 → $3,722.50 on a $5,000 base, and a check that every
 band/model/factor key exists in **both** EN and ZH, since those are composed in
 JS by string concatenation where `I18n.apply()` cannot reach them),
-`tests/test_dca_history.py` (51, the look-ahead guards, the TTM sum, the
-year-ago growth window and the capex sign trap), and
-`tests/check_dca_endpoints.py` (27 end-to-end, `check_` so `unittest discover`
+`tests/test_dca_history.py` (58, the look-ahead guards, the TTM sum, the
+year-ago growth window, the build budget and the capex sign trap), and
+`tests/check_dca_endpoints.py` (29 end-to-end, `check_` so `unittest discover`
 skips it — it needs an app and stubs matplotlib).
 
 The table is **not** in `deploy/cloudformation.yaml`, matching every other

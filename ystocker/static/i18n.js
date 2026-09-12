@@ -758,6 +758,8 @@ const I18n = (() => {
                              zh: '用五年周线价格对应当时已公布的财报。每只股票每天重建一次。' },
     'dca.warm_timeout':    { en: 'Still rebuilding. Yahoo may be rate-limiting — reload in a few minutes.',
                              zh: '仍在重建。Yahoo 可能正在限流，请几分钟后刷新。' },
+    'dca.queued':          { en: 'Waiting for a rebuild slot — the engine paces its data fetches.',
+                             zh: '正在排队等待重建 — 引擎会控制数据抓取节奏。' },
     'dca.unavailable_too_few_vintages': {
                              en: 'Too few published filings to rank this symbol against its own history.',
                              zh: '已公布财报期数太少，无法与自身历史比较分位。' },

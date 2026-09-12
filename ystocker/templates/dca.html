@@ -618,7 +618,9 @@ async function load() {
       return;
     }
     document.getElementById('dcaWarmDots').textContent =
-      '· '.repeat(Math.min(_attempt, 20));
+      (data.queued
+        ? (I18n.t('dca.queued') || 'Waiting for a rebuild slot — the engine paces its data fetches.')
+        : '') + ' ' + '· '.repeat(Math.min(_attempt, 20));
     setTimeout(load, _attempt < 6 ? 3000 : 8000);
     return;
   }

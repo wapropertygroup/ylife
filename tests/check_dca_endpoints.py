@@ -210,6 +210,50 @@ class DcaEndpoints(unittest.TestCase):
         self.assertEqual(d["portfolio_band"], "unknown")
         self.assertEqual(d["portfolio"]["reason"], "signed_out")
 
+    def test_a_burst_of_distinct_cold_tickers_is_throttled(self):
+        """The regression: per-symbol de-duplication bounds nothing here.
+
+        Twenty *different* symbols is twenty six-read bursts with nothing in
+        between, which is what one person clicking through ticker pages actually
+        produced. Every request must still answer 202 — the reader is not shown
+        an error for browsing — but only the budget's worth may start work.
+        """
+        import ystocker.dca_history as dhm
+
+        dhm._inflight = 0
+        dhm._last_build_start = 0.0
+        started = []
+        real_get = dhm.get
+        dhm.get = lambda sym, **k: (started.append(sym), real_get(sym, **k))[1]
+        try:
+            codes = []
+            for i in range(12):
+                r = self.client.get(f"/api/dca/COLD{i}")
+                codes.append(r.status_code)
+                self.assertEqual(r.get_json()["status"], "warming")
+            self.assertEqual(set(codes), {202},
+                             "a throttled rebuild is still a 202, never an error")
+        finally:
+            dhm.get = real_get
+            dhm._inflight = 0
+            dhm._last_build_start = 0.0
+        self.assertLessEqual(
+            len(started), dhm.MAX_INFLIGHT_BUILDS,
+            f"12 distinct cold tickers started {len(started)} rebuilds; the "
+            f"global budget allows {dhm.MAX_INFLIGHT_BUILDS}")
+
+    def test_a_throttled_request_says_it_is_queued(self):
+        """"Queued" and "running" are different states and the page says which."""
+        import ystocker.dca_history as dhm
+
+        dhm._inflight = dhm.MAX_INFLIGHT_BUILDS      # nothing available
+        try:
+            d = self.client.get("/api/dca/ALSOCOLD").get_json()
+            self.assertTrue(d["queued"])
+            self.assertEqual(d["budget"]["max_inflight"], dhm.MAX_INFLIGHT_BUILDS)
+        finally:
+            dhm._inflight = 0
+
     def test_the_refresh_route_redirects_back_to_the_page(self):
         r = self.client.get("/dca/MSFT/refresh")
         self.assertEqual(r.status_code, 302)

@@ -1218,6 +1218,74 @@ def cached_tickers() -> list[str]:
 #: while still covering a 15-name universe inside ten minutes.
 WARM_SPACING_SECONDS = 30
 
+# ---------------------------------------------------------------------------
+# One global budget for every rebuild, on-demand or swept
+# ---------------------------------------------------------------------------
+#
+# The background sweep paces itself, and that is not enough on its own: a reader
+# clicking through ticker pages triggers an *on-demand* rebuild each time, and
+# per-symbol de-duplication does not bound anything when the symbols are all
+# different. Twenty distinct names in eight minutes is 120 Yahoo reads with
+# nothing in between -- observed on the first afternoon this shipped, from one
+# person following the DCA link off /history pages. Two readers, or one faster
+# one, multiplies it.
+#
+# So both paths draw on one budget. Refusal is cheap and invisible: the API was
+# already answering 202 and the client was already polling, so a refused slot
+# just means the rebuild starts on a later poll instead of immediately.
+
+#: Most rebuilds running at once. Each is six Yahoo reads back to back, so two
+#: concurrent is already a ~12-read burst.
+MAX_INFLIGHT_BUILDS = 2
+
+#: Floor on the gap between *starting* two rebuilds, on-demand or swept.
+BUILD_MIN_GAP_SECONDS = 8.0
+
+#: How long a sweep waits for a build slot before abandoning the pass. Longer
+#: than the on-demand path would ever hold one, short enough that a leaked
+#: counter shows up as a stalled sweep in the log rather than a wedged thread.
+_WARM_SLOT_WAIT_SECONDS = 120.0
+
+_budget_lock = threading.Lock()
+_inflight = 0
+_last_build_start = 0.0
+
+
+def try_reserve_build() -> bool:
+    """Claim a slot for one rebuild, or return ``False``.
+
+    Callers that get ``True`` **must** call :func:`release_build` in a ``finally``
+    -- a leaked slot is permanent and would silently stop every future rebuild,
+    which looks exactly like Yahoo being down.
+    """
+    global _inflight, _last_build_start
+
+    now = time.monotonic()
+    with _budget_lock:
+        if _inflight >= MAX_INFLIGHT_BUILDS:
+            return False
+        if now - _last_build_start < BUILD_MIN_GAP_SECONDS:
+            return False
+        _inflight += 1
+        _last_build_start = now
+        return True
+
+
+def release_build() -> None:
+    """Give back a slot claimed by :func:`try_reserve_build`."""
+    global _inflight
+
+    with _budget_lock:
+        _inflight = max(0, _inflight - 1)
+
+
+def build_budget() -> dict[str, Any]:
+    """What the limiter currently allows, for the page to explain a wait."""
+    with _budget_lock:
+        return {"inflight": _inflight, "max_inflight": MAX_INFLIGHT_BUILDS,
+                "min_gap_seconds": BUILD_MIN_GAP_SECONDS}
+
+
 _warm_lock = threading.Lock()
 _warming = False
 
@@ -1229,6 +1297,12 @@ def warm_universe(symbols: Optional[Sequence[str]] = None, *,
     Skips anything already fresh, so a restart does not re-fetch the world --
     the disk cache survives a deploy and only a genuinely expired entry costs
     anything.
+
+    Draws on the same global budget as an on-demand rebuild, so a reader
+    browsing ticker pages while this runs cannot double the request rate. A
+    refused slot is waited out rather than skipped: the sweep has nowhere else
+    to be, and dropping the ticker would leave the overview permanently short of
+    it.
 
     Stops on a provider cool-down rather than pushing more requests at a vendor
     that has just said no, exactly as ``analyst._fetch`` does. A partial pass is
@@ -1260,11 +1334,24 @@ def warm_universe(symbols: Optional[Sequence[str]] = None, *,
                 break
             if built and spacing:
                 time.sleep(spacing)
+            # Wait for a slot rather than skipping the ticker: the sweep has
+            # nowhere else to be, and dropping it would leave the overview
+            # permanently short of that name. Bounded, so a leaked counter
+            # cannot hang the sweep for ever.
+            waited = 0.0
+            while waited < _WARM_SLOT_WAIT_SECONDS and not try_reserve_build():
+                time.sleep(2.0)
+                waited += 2.0
+            if waited >= _WARM_SLOT_WAIT_SECONDS:
+                log.warning("dca_history: warm gave up waiting for a build slot")
+                break
             try:
                 get(symbol, force=True)
                 built += 1
             except Exception as exc:  # noqa: BLE001 - one bad ticker is not a bad sweep
                 log.info("dca_history: warm failed for %s: %s", symbol, exc)
+            finally:
+                release_build()
         if built:
             log.info("dca_history: warmed %d ticker(s)", built)
         return built

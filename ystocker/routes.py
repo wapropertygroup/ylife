@@ -1015,16 +1015,33 @@ _DCA_BUILDING: Dict[str, threading.Thread] = {}
 _DCA_BUILD_LOCK = threading.Lock()
 
 
-def _dca_kick(ticker: str) -> None:
-    """Rebuild *ticker* on a background thread, at most one at a time.
+def _dca_kick(ticker: str) -> bool:
+    """Rebuild *ticker* on a background thread, if the global budget allows.
 
     Mirrors ``assets.kick_warm``: the six Yahoo reads take tens of seconds cold,
     and gunicorn's ``--timeout 120`` kills a worker that blocks on them -- taking
     every other request that worker was serving with it, which is the failure
     ``CLAUDE.md`` records for ``api_markets()``. So the request path never
     fetches; it starts this and answers ``warming``.
+
+    Two limits, and the second is the one that matters. The per-symbol guard
+    stops N readers of one ticker costing N rebuilds. It bounds nothing when the
+    symbols differ -- a reader clicking through ticker pages triggers a fresh
+    six-read burst every time, measured at 120 reads in eight minutes on the
+    afternoon this shipped. So the spawn also draws on ``dca_history``'s global
+    budget, shared with the background sweep.
+
+    Returns whether a rebuild actually started. Refusal is cheap and invisible:
+    the caller answers 202 either way and the client is already polling, so the
+    work simply begins on a later poll.
     """
     symbol = ticker.strip().upper()
+
+    with _DCA_BUILD_LOCK:
+        if symbol in _DCA_BUILDING:
+            return False
+    if not dca_history.try_reserve_build():
+        return False
 
     def _run() -> None:
         try:
@@ -1032,15 +1049,19 @@ def _dca_kick(ticker: str) -> None:
         except Exception as exc:  # noqa: BLE001 - a cold ticker is not an error
             log.info("DCA: rebuild failed for %s: %s", symbol, exc)
         finally:
+            dca_history.release_build()
             with _DCA_BUILD_LOCK:
                 _DCA_BUILDING.pop(symbol, None)
 
     with _DCA_BUILD_LOCK:
         if symbol in _DCA_BUILDING:
-            return
+            # Lost a race between the check above and here.
+            dca_history.release_build()
+            return False
         thread = threading.Thread(target=_run, name=f"dca-build-{symbol}", daemon=True)
         _DCA_BUILDING[symbol] = thread
     thread.start()
+    return True
 
 
 def _dca_base(default: float = 1000.0) -> float:
@@ -1114,8 +1135,14 @@ def api_dca(ticker: str):
 
     payload = dca_history.peek(symbol)
     if payload is None:
-        _dca_kick(symbol)
+        started = _dca_kick(symbol)
+        # 202 either way. "queued" tells the client the work has not begun yet,
+        # which is the difference between a slow rebuild and a throttled one --
+        # and the page can then say "waiting for a slot" instead of implying
+        # progress that is not happening.
         return jsonify({"ticker": symbol, "status": "warming",
+                        "queued": not started,
+                        "budget": dca_history.build_budget(),
                         "message": "Rebuilding valuation history from filings."}), 202
 
     result, peer, drift, position = _dca_score(symbol, payload, base)
