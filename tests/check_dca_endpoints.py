@@ -42,6 +42,10 @@ for _name in ("matplotlib", "matplotlib.pyplot", "matplotlib.ticker",
         sys.modules[_name] = _mod
 
 os.environ.setdefault("YSTOCKER_SECRET_KEY", "check-dca-secret")
+# The portfolio side of these checks writes real positions. Keep them in the
+# local file store rather than the shared DynamoDB table -- a test run must not
+# be able to edit somebody's actual holdings.
+os.environ["ASSETS_LOCAL_STORE"] = "1"
 
 import time                                                       # noqa: E402
 import tempfile                                                   # noqa: E402
@@ -474,6 +478,104 @@ class DcaOverview(unittest.TestCase):
         finally:
             du.forget("ETFISH")
             dh._mem.pop("ETFISH", None)
+
+
+class DcaPortfolio(unittest.TestCase):
+    """/api/dca/portfolio — the multiplier applied to real holdings.
+
+    Uses the local file store (``ASSETS_LOCAL_STORE``) so no DynamoDB portfolio
+    is touched, and seeds funddata with a synthetic universe so the look-through
+    resolves without a network call.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.app = create_app()
+        cls.app.config["TESTING"] = True
+        dh.peer_percentiles = lambda t, recs=None: {"percentile": 50.0, "group": "Tech"}
+        dh.eps_drift = lambda t: {"drift": 0.0}
+        _seed("MSFT")
+        _seed("NVDA")
+
+    def setUp(self):
+        self.client = self.app.test_client()
+        with self.client.session_transaction() as sess:
+            sess["user_email"] = "dca-check@example.com"
+
+    def _positions(self, rows):
+        from ystocker import portfolio
+
+        portfolio.save("dca-check@example.com", rows)
+
+    def test_signed_out_is_refused(self):
+        anon = self.app.test_client()
+        self.assertEqual(anon.get("/api/dca/portfolio").status_code, 401)
+
+    def test_an_empty_portfolio_says_so(self):
+        self._positions([])
+        d = self.client.get("/api/dca/portfolio").get_json()
+        self.assertEqual(d["rows"], [])
+        self.assertEqual(d["reason"], "no_positions")
+
+    def test_a_held_equity_is_sized(self):
+        self._positions([{"symbol": "MSFT", "quantity": 10}])
+        d = self.client.get("/api/dca/portfolio?base=1000").get_json()
+        row = next(r for r in d["rows"] if r["ticker"] == "MSFT")
+        self.assertEqual(row["status"], "ok")
+        self.assertIsNotNone(row["m_valuation"])
+        self.assertIsNotNone(row["amount"])
+        self.assertEqual(d["base_dca"], 1000.0)
+
+    def test_the_multiplier_is_the_product_of_its_three_terms(self):
+        """The page prints all four numbers; they have to reconcile by hand."""
+        self._positions([{"symbol": "MSFT", "quantity": 10}])
+        row = next(r for r in self.client.get("/api/dca/portfolio").get_json()["rows"]
+                   if r["ticker"] == "MSFT")
+        product = row["m_valuation"] * row["m_earnings"] * row["m_portfolio"]
+        expected = min(product, dca.MAX_TOTAL_MULTIPLIER)
+        self.assertAlmostEqual(row["multiplier"], expected, places=3)
+
+    def test_the_portfolio_term_reflects_look_through_weight(self):
+        """The whole reason this lives on /assets rather than /dca."""
+        self._positions([{"symbol": "MSFT", "quantity": 10}])
+        row = next(r for r in self.client.get("/api/dca/portfolio").get_json()["rows"]
+                   if r["ticker"] == "MSFT")
+        self.assertIsNotNone(row["position_pct"])
+        self.assertNotEqual(row["portfolio_band"], "unknown",
+                            "a signed-in reader with holdings must get a real band")
+
+    def test_rows_agree_with_the_per_ticker_endpoint(self):
+        """One scoring path, so /assets and /dca/<ticker> cannot disagree."""
+        self._positions([{"symbol": "MSFT", "quantity": 10}])
+        row = next(r for r in
+                   self.client.get("/api/dca/portfolio?base=2500").get_json()["rows"]
+                   if r["ticker"] == "MSFT")
+        detail = self.client.get("/api/dca/MSFT?base=2500").get_json()
+        for key in ("V", "band", "model", "m_valuation", "m_earnings",
+                    "m_portfolio", "multiplier", "amount"):
+            self.assertEqual(row[key], detail[key], f"{key} differs")
+
+    def test_totals_count_only_scored_rows(self):
+        """Counting an unscored holding at 1.0x would understate what the
+        engine actually moved."""
+        self._positions([{"symbol": "MSFT", "quantity": 10},
+                         {"symbol": "NOSUCHTICKER", "quantity": 5}])
+        d = self.client.get("/api/dca/portfolio?base=1000").get_json()
+        self.assertLess(d["scored"], d["held"])
+        self.assertAlmostEqual(d["flat_total"], d["scored"] * 1000.0, places=2)
+
+    def test_an_unscorable_holding_has_no_amount_not_a_zero(self):
+        self._positions([{"symbol": "NOSUCHTICKER", "quantity": 5}])
+        row = next(r for r in self.client.get("/api/dca/portfolio").get_json()["rows"]
+                   if r["ticker"] == "NOSUCHTICKER")
+        self.assertIsNone(row.get("amount"))
+        self.assertIn(row["status"], ("pending", "no_statements", "fund", "no_score"))
+
+    def test_the_assets_page_carries_the_dca_tab(self):
+        body = self.client.get("/assets").data.decode()
+        self.assertIn('data-tab="dca"', body)
+        self.assertIn('data-panel="dca"', body)
+        self.assertIn("/api/dca/portfolio", body)
 
 
 if __name__ == "__main__":  # pragma: no cover

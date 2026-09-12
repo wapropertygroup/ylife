@@ -307,6 +307,7 @@
       <button type="button" class="as-tab px-3 py-2 text-sm whitespace-nowrap" data-tab="overlap"><span data-i18n="assets.tab_overlap">Hidden overlap</span></button>
       <button type="button" class="as-tab px-3 py-2 text-sm whitespace-nowrap" data-tab="limits"><span data-i18n="assets.tab_limits">Limits</span><span id="asLimitBadge" class="hidden ml-1.5 px-1.5 py-0.5 rounded text-xs font-semibold"></span></button>
       <button type="button" class="as-tab px-3 py-2 text-sm whitespace-nowrap" data-tab="mix"><span data-i18n="assets.tab_mix">Asset &amp; sector mix</span></button>
+      <button type="button" class="as-tab px-3 py-2 text-sm whitespace-nowrap" data-tab="dca"><span data-i18n="assets.tab_dca">DCA sizing</span></button>
       <button type="button" class="as-tab px-3 py-2 text-sm whitespace-nowrap" data-tab="ai"><span data-i18n="assets.tab_ai">AI Analysis</span></button>
       <button type="button" class="as-tab px-3 py-2 text-sm whitespace-nowrap" data-tab="import"><span data-i18n="assets.tab_import">Import</span></button>
     </div>
@@ -491,6 +492,51 @@
       </div>
     </section>
 
+    <!-- ── DCA sizing ────────────────────────────────────────────────── -->
+    <section data-panel="dca" class="hidden">
+      <div class="as-card p-4 sm:p-5 mb-4">
+        <div class="flex items-start justify-between gap-4 flex-wrap">
+          <div class="max-w-2xl">
+            <h3 class="text-sm font-semibold mb-1" data-i18n="adca.title">This period's contribution, per holding</h3>
+            <p class="text-xs" style="color:var(--as-muted)" data-i18n="adca.intro">
+              Base × M_valuation × M_earnings × M_portfolio. The concentration term uses your 穿透 weight, not the line weight — holding NVDA directly and an S&amp;P fund besides is more NVDA than the row says, and this is the one place that shows both terms pulling against each other on your own money.
+            </p>
+          </div>
+          <div class="flex items-center gap-2 shrink-0">
+            <label for="asDcaBase" class="text-xs" style="color:var(--as-muted)" data-i18n="adca.base">Base per name</label>
+            <input id="asDcaBase" type="number" min="1" step="50" value="1000"
+                   class="w-28 px-2 py-1 text-sm rounded border bg-transparent"
+                   style="border-color:var(--as-line)"/>
+          </div>
+        </div>
+        <div id="asDcaTotals" class="mt-3 flex gap-2 flex-wrap"></div>
+      </div>
+
+      <div id="asDcaEmpty" class="as-card p-6 text-center text-sm hidden" style="color:var(--as-muted)"></div>
+
+      <div class="as-card overflow-x-auto">
+        <table class="as-holdings-table w-full text-xs">
+          <thead>
+            <tr>
+              <th data-i18n="adca.col_symbol">Symbol</th>
+              <th data-i18n="adca.col_weight">Weight (穿透)</th>
+              <th class="text-right" data-i18n="adca.col_v">V</th>
+              <th data-i18n="adca.col_band">State</th>
+              <th class="text-right" data-i18n="adca.col_mval">M_val</th>
+              <th class="text-right" data-i18n="adca.col_mearn">M_earn</th>
+              <th class="text-right" data-i18n="adca.col_mport">M_port</th>
+              <th class="text-right" data-i18n="adca.col_mult">Total ×</th>
+              <th class="text-right" data-i18n="adca.col_amount">Contribution</th>
+            </tr>
+          </thead>
+          <tbody id="asDcaBody"></tbody>
+        </table>
+      </div>
+      <p class="text-xs mt-3" style="color:var(--as-muted)" data-i18n="adca.footnote">
+        Valuation sets the pace of buying; it never decides whether to buy. Funds are not scored — the engine ranks a company against its own multiple history, and an ETF has no P/E of its own here. A name with no published statements, or too few measurable factors, shows no multiplier rather than a guessed one.
+      </p>
+    </section>
+
     <!-- ── AI memo ───────────────────────────────────────────────────── -->
     <section data-panel="ai" class="hidden">
       <div class="as-card as-ai-shell p-5 sm:p-7">
@@ -672,7 +718,149 @@
       // Chart.js cannot measure a canvas inside a display:none parent, so a chart
       // drawn while its tab was hidden comes out 0px high. Resize on reveal.
       Object.keys(charts).forEach((k) => charts[k] && charts[k].resize());
+      // The DCA panel is loaded on reveal rather than with the page: it walks
+      // every holding and may kick rebuilds, which is wasted work for a reader
+      // who never opens the tab.
+      if (want === 'dca') loadDca();
     });
+  });
+
+  // ── DCA sizing ───────────────────────────────────────────────────────
+  // Shares the base-contribution key with /dca and /dca/<ticker>, so the figure
+  // a reader typed on one surface is the figure every other one uses. It is the
+  // only piece of state here that is not derived from the portfolio.
+  const DCA_BASE_KEY = 'ystocker_dca_base';
+  let _dcaLoaded = false, _dcaPolls = 0, _dcaTimer = null;
+
+  function dcaBase() {
+    const v = parseFloat(localStorage.getItem(DCA_BASE_KEY) || '');
+    return (isFinite(v) && v > 0) ? v : 1000;
+  }
+
+  /* Cheap is green, dear is red, mid inherits rather than going amber so "fair"
+     does not read as a warning. Returns a Tailwind PAIR, which is safe in a
+     class= attribute and must never reach classList -- add/remove are variadic
+     and toggle/contains take exactly one token, so a space throws
+     InvalidCharacterError. See base.html's toggleClasses and
+     tests/test_theme_classes.py. Takes a V (cheapness), unlike the /dca pages,
+     which pass an expensiveness percentile. */
+  function vClass(v) {
+    if (v == null) return '';
+    if (v >= 60) return 'text-emerald-700 dark:text-emerald-400';
+    if (v <= 20) return 'text-rose-700 dark:text-rose-400';
+    return '';
+  }
+
+  const DCA_STATUS = {
+    fund:          ['adca.st_fund',    'Fund — not scored'],
+    pending:       ['adca.st_pending', 'Building…'],
+    no_statements: ['adca.st_nostmt',  'No published statements'],
+    no_score:      ['adca.st_noscore', 'Too few measurable factors'],
+  };
+
+  function renderDca(d) {
+    const body = $('asDcaBody');
+    const empty = $('asDcaEmpty');
+
+    if (!d.rows || !d.rows.length) {
+      body.innerHTML = '';
+      empty.textContent = d.reason === 'no_positions'
+        ? t('adca.none', 'Add a holding and its contribution will be sized here.')
+        : t('adca.none', 'Add a holding and its contribution will be sized here.');
+      empty.classList.remove('hidden');
+      $('asDcaTotals').innerHTML = '';
+      return;
+    }
+    empty.classList.add('hidden');
+
+    // Scored first and cheapest at the top, then everything that could not be
+    // scored — a row with no multiplier is not a 0x row and must not sort as one.
+    const rows = d.rows.slice().sort(function (a, b) {
+      const av = a.amount == null ? -1 : 1, bv = b.amount == null ? -1 : 1;
+      if (av !== bv) return bv - av;
+      if (a.amount == null) return String(a.ticker).localeCompare(b.ticker);
+      return (b.V == null ? -1 : b.V) - (a.V == null ? -1 : a.V);
+    });
+
+    body.innerHTML = rows.map(function (r) {
+      if (r.amount == null) {
+        const s = DCA_STATUS[r.status] || ['adca.st_unknown', '—'];
+        return '<tr>' +
+          '<td><a href="/dca/' + encodeURIComponent(r.ticker) + '" class="font-mono font-semibold hover:underline">' + esc(r.ticker) + '</a>' +
+            '<div style="color:var(--as-muted)" class="truncate">' + esc(r.name || '') + '</div></td>' +
+          '<td>' + pct(r.position_pct, 2) + '</td>' +
+          '<td colspan="7" style="color:var(--as-muted)">' + esc(t(s[0], s[1])) + '</td>' +
+        '</tr>';
+      }
+      return '<tr>' +
+        '<td><a href="/dca/' + encodeURIComponent(r.ticker) + '" class="font-mono font-semibold hover:underline">' + esc(r.ticker) + '</a>' +
+          '<div style="color:var(--as-muted)" class="truncate">' + esc(r.name || '') + '</div></td>' +
+        '<td>' + pct(r.position_pct, 2) + '</td>' +
+        '<td class="text-right font-mono ' + vClass(r.V) + '">' + (r.V == null ? '—' : r.V.toFixed(0)) + '</td>' +
+        '<td class="' + vClass(r.V) + '">' + esc(r.band ? t('dca.band_' + r.band, r.band) : '—') + '</td>' +
+        '<td class="text-right font-mono">' + r.m_valuation.toFixed(2) + '×</td>' +
+        '<td class="text-right font-mono"' + (r.m_earnings === 1 ? ' style="color:var(--as-muted)"' : '') +
+          ' title="' + esc(t('dca.earn_' + r.earnings_band, r.earnings_band)) + '">' + r.m_earnings.toFixed(2) + '×</td>' +
+        '<td class="text-right font-mono"' + (r.m_portfolio === 1 ? ' style="color:var(--as-muted)"' : '') +
+          ' title="' + esc(t('dca.port_' + r.portfolio_band, r.portfolio_band)) + '">' + r.m_portfolio.toFixed(2) + '×</td>' +
+        '<td class="text-right font-mono font-semibold">' + r.multiplier.toFixed(2) + '×' +
+          (r.capped ? ' <span title="' + esc(t('dca.capped', 'Capped')) + '">⌃</span>' : '') + '</td>' +
+        '<td class="text-right font-mono font-semibold">' + money(r.amount) + '</td>' +
+      '</tr>';
+    }).join('');
+
+    const delta = d.flat_total ? (d.total / d.flat_total - 1) * 100 : 0;
+    $('asDcaTotals').innerHTML =
+      tile(t('adca.total', 'This period'), money(d.total)) +
+      tile(t('adca.vs_flat', 'vs flat'), money(d.flat_total) +
+           ' (' + (delta >= 0 ? '+' : '') + delta.toFixed(1) + '%)') +
+      tile(t('adca.scored', 'Scored'), d.scored + ' / ' + d.held);
+  }
+
+  function tile(label, value) {
+    return '<div class="px-3 py-2 rounded-lg border" style="border-color:var(--as-line)">' +
+      '<div class="text-xs" style="color:var(--as-muted)">' + esc(label) + '</div>' +
+      '<div class="text-sm font-semibold">' + esc(value) + '</div></div>';
+  }
+
+  async function loadDca(force) {
+    if (_dcaLoaded && !force) return;
+    _dcaLoaded = true;
+    let d;
+    try {
+      const resp = await fetch('/api/dca/portfolio?base=' + encodeURIComponent(dcaBase()));
+      d = await resp.json();
+      if (!resp.ok) {
+        $('asDcaEmpty').textContent = d.error || ('HTTP ' + resp.status);
+        $('asDcaEmpty').classList.remove('hidden');
+        return;
+      }
+    } catch (e) {
+      $('asDcaEmpty').textContent = String(e);
+      $('asDcaEmpty').classList.remove('hidden');
+      return;
+    }
+    renderDca(d);
+
+    // Poll only while something is still building, and stop at a bound. Leaving
+    // "Building…" on screen for ever would read as progress long after the
+    // rebuild budget gave up on it.
+    clearTimeout(_dcaTimer);
+    if (d.pending && d.pending.length && _dcaPolls < 20) {
+      _dcaPolls += 1;
+      _dcaTimer = setTimeout(function () { loadDca(true); }, _dcaPolls < 4 ? 6000 : 15000);
+    }
+  }
+
+  const dcaBaseInput = $('asDcaBase');
+  dcaBaseInput.value = dcaBase();
+  let _dcaBaseTimer = null;
+  dcaBaseInput.addEventListener('input', function () {
+    const v = parseFloat(dcaBaseInput.value);
+    if (!isFinite(v) || v <= 0) return;
+    localStorage.setItem(DCA_BASE_KEY, String(v));
+    clearTimeout(_dcaBaseTimer);
+    _dcaBaseTimer = setTimeout(function () { _dcaPolls = 0; loadDca(true); }, 400);
   });
 
   $('asExposureSearch').addEventListener('input', function () {

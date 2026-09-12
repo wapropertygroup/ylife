@@ -595,6 +595,30 @@ aws dynamodb create-table --table-name ystocker-dca-universe --region us-west-2 
   --key-schema AttributeName=ticker,KeyType=HASH
 ```
 
+**`/assets` carries a DCA sizing tab** (`/api/dca/portfolio`), and that is where
+the loop closes: `M_portfolio` is *derived from* the 穿透 exposure, so the page
+that already knows those weights is the natural place to show what they do to a
+contribution — and it is the only surface where a reader sees the valuation term
+and the concentration term pulling against each other on their own money. It
+uses the **look-through** weight, not the line weight, which is the entire point:
+somebody holding 3% NVDA directly and VOO besides is not at 3%.
+
+It never fetches on the request path. A held name with no reconstruction comes
+back `pending` and a **bounded** (4 per request) budget-throttled rebuild is
+kicked, so a portfolio fills in over a few minutes rather than costing six Yahoo
+reads per position on one page load. Funds are reported as `fund` rather than
+left blank — the engine ranks a company against its own multiple history and an
+ETF has no P/E of its own here, so an empty cell would read as "we could not
+work it out" instead of "this is not the kind of thing this measures". Equities
+are the only thing chased; re-discovering that a fund cannot score costs six
+reads and learns nothing.
+
+The panel loads on tab reveal, not with the page, and the flat comparison counts
+**only scored rows** — quietly valuing an unscored holding at 1.0x would make
+the engine look like it moved less than it did. `_dca_score()` is shared with
+`/dca` and `/dca/<ticker>`, so a row here cannot disagree with the ticker's own
+page; `check_dca_endpoints.py` asserts it.
+
 Tests: `tests/test_dca.py` (48, no app/network — including the framework's own
 worked example, E=75.55 → $3,722.50 on a $5,000 base, and a check that every
 band/model/factor key exists in **both** EN and ZH, since those are composed in
@@ -602,7 +626,7 @@ JS by string concatenation where `I18n.apply()` cannot reach them),
 `tests/test_dca_history.py` (58, the look-ahead guards, the TTM sum, the
 year-ago growth window, the build budget and the capex sign trap),
 `tests/test_dca_universe.py` (24, the cap and what it evicts), and
-`tests/check_dca_endpoints.py` (37 end-to-end, `check_` so `unittest discover`
+`tests/check_dca_endpoints.py` (48 end-to-end, `check_` so `unittest discover`
 skips it — it needs an app and stubs matplotlib).
 
 The table is **not** in `deploy/cloudformation.yaml`, matching every other
