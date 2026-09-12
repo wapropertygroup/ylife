@@ -144,12 +144,119 @@
     <h2 class="text-sm font-semibold mb-1" data-i18n="dca.eq_title">The calculation</h2>
     <p class="text-xs text-slate-500 mb-3" data-i18n="dca.eq_note">Every term below is this ticker's own number. The general form is at the bottom of the page.</p>
     <div class="space-y-2">
-      <div id="eqE"   class="eq-line"></div>
-      <div id="eqV"   class="eq-line"></div>
-      <div id="eqM"   class="eq-line"></div>
-      <div id="eqDCA" class="eq-line"></div>
+      <div id="eqE"    class="eq-line"></div>
+      <div id="eqVrel" class="eq-line"></div>
+      <div id="eqVdcf" class="eq-line"></div>
+      <div id="eqV"    class="eq-line"></div>
+      <div id="eqM"    class="eq-line"></div>
+      <div id="eqDCA"  class="eq-line"></div>
     </div>
     <div id="eqDropped" class="hidden mt-3 text-xs text-amber-700 dark:text-amber-400"></div>
+  </div>
+
+  <!-- ── The DCF branch ─────────────────────────────────────────────────── -->
+  <div id="dcfCard" class="hidden bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 mb-6 fade-up">
+    <div class="flex items-start justify-between gap-3 flex-wrap mb-1">
+      <h2 class="text-sm font-semibold" data-i18n="dca.dcf_title">DCF — the absolute anchor</h2>
+      <div class="flex items-center gap-2">
+        <span id="dcfSource" class="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400"></span>
+        <button id="dcfEditToggle" class="hidden text-[11px] px-2 py-1 rounded-lg border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800"
+                data-i18n="dca.dcf_edit">Set DCF inputs</button>
+      </div>
+    </div>
+    <p class="text-xs text-slate-500 mb-3" data-i18n="dca.dcf_note">What the cash flows are worth, discounted.</p>
+
+    <!-- Present when the branch produced a score -->
+    <div id="dcfScored" class="hidden">
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
+        <div class="well px-3 py-2">
+          <div class="text-[10px] text-slate-500" data-i18n="dca.dcf_v">V_dcf</div>
+          <div id="dcfV" class="text-base font-semibold">—</div>
+        </div>
+        <div class="well px-3 py-2">
+          <div class="text-[10px] text-slate-500" data-i18n="dca.dcf_weight">Weight in V</div>
+          <div id="dcfW" class="text-base font-semibold">—</div>
+        </div>
+        <div class="well px-3 py-2">
+          <div class="text-[10px] text-slate-500" data-i18n="dca.dcf_conf">Confidence (c)</div>
+          <div id="dcfC" class="text-base font-semibold">—</div>
+        </div>
+        <div class="well px-3 py-2">
+          <div class="text-[10px] text-slate-500" data-i18n="dca.dcf_price">Priced against</div>
+          <div id="dcfPrice" class="text-base font-semibold">—</div>
+          <div id="dcfPriceDate" class="text-[10px] text-slate-500"></div>
+        </div>
+      </div>
+
+      <div class="overflow-x-auto mb-3">
+        <table class="w-full text-left">
+          <thead>
+            <tr class="text-[10px] uppercase tracking-widest text-slate-500 dark:text-slate-600">
+              <th class="pb-2 px-2.5" data-i18n="dca.dcf_col_case">Case</th>
+              <th class="pb-2 px-2.5 text-right" data-i18n="dca.dcf_col_fv">Fair value</th>
+              <th class="pb-2 px-2.5 text-right" data-i18n="dca.dcf_col_up">Upside</th>
+              <th class="pb-2 px-2.5 text-right" data-i18n="dca.dcf_col_v">V</th>
+              <th class="pb-2 px-2.5 text-right" data-i18n="dca.dcf_col_w">Weight</th>
+            </tr>
+          </thead>
+          <tbody id="dcfScenarioBody"></tbody>
+        </table>
+      </div>
+      <p id="dcfBasis" class="text-xs text-slate-500 mb-3"></p>
+
+      <div class="text-[10px] uppercase tracking-widest text-slate-500 dark:text-slate-600 mb-2"
+           data-i18n="dca.dcf_assum">Assumptions</div>
+      <div id="dcfAssumptions" class="grid grid-cols-2 sm:grid-cols-3 gap-2"></div>
+      <div id="dcfNotes" class="hidden mt-3 text-xs text-slate-500 space-y-1"></div>
+      <div id="dcfOverrideMeta" class="hidden mt-3 pt-3 border-t border-slate-200 dark:border-slate-800 text-xs text-slate-500"></div>
+    </div>
+
+    <!-- Present when the branch declined -->
+    <div id="dcfRefused" class="hidden">
+      <div class="well px-3 py-3">
+        <div class="text-[10px] uppercase tracking-widest text-slate-500 dark:text-slate-600 mb-1"
+             data-i18n="dca.dcf_why">Why there is no DCF</div>
+        <div id="dcfReason" class="text-sm text-slate-700 dark:text-slate-300 leading-relaxed"></div>
+      </div>
+      <p class="text-xs text-slate-500 mt-3 leading-relaxed" data-i18n="dca.dcf_absent">
+        No DCF for this name, so V is the relative score alone.
+      </p>
+    </div>
+
+    <!-- The override editor. Rendered only for the site owner; the write is
+         re-checked server-side, because a hidden form is not a boundary. -->
+    <div id="dcfEditor" class="hidden mt-4 pt-4 border-t border-slate-200 dark:border-slate-800">
+      <p class="text-xs text-slate-500 mb-3" data-i18n="dca.dcf_edit_note">
+        Fair values replace the model’s output; WACC and terminal growth replace its inputs.
+      </p>
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-2">
+        <label class="text-[10px] text-slate-500"><span data-i18n="dca.dcf_bear">Bear</span>
+          <input id="ovBear" type="number" step="any" class="w-full mt-1 px-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-sm"></label>
+        <label class="text-[10px] text-slate-500"><span data-i18n="dca.dcf_base">Base</span>
+          <input id="ovBase" type="number" step="any" class="w-full mt-1 px-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-sm"></label>
+        <label class="text-[10px] text-slate-500"><span data-i18n="dca.dcf_bull">Bull</span>
+          <input id="ovBull" type="number" step="any" class="w-full mt-1 px-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-sm"></label>
+        <label class="text-[10px] text-slate-500"><span data-i18n="dca.dcf_conf">Confidence (c)</span>
+          <input id="ovConf" type="number" step="0.05" min="0.5" max="1" class="w-full mt-1 px-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-sm"></label>
+        <label class="text-[10px] text-slate-500"><span data-i18n="dca.dcf_wacc">WACC</span>
+          <input id="ovWacc" type="number" step="0.005" class="w-full mt-1 px-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-sm"></label>
+        <label class="text-[10px] text-slate-500"><span data-i18n="dca.dcf_g">Terminal growth</span>
+          <input id="ovG" type="number" step="0.005" class="w-full mt-1 px-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-sm"></label>
+        <label class="text-[10px] text-slate-500"><span data-i18n="dca.dcf_edit_w">Weight override</span>
+          <input id="ovW" type="number" step="0.05" min="0" max="0.30" class="w-full mt-1 px-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-sm"></label>
+        <label class="text-[10px] text-slate-500"><span data-i18n="dca.dcf_edit_date">Valuation date</span>
+          <input id="ovDate" type="date" class="w-full mt-1 px-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-sm"></label>
+      </div>
+      <label class="text-[10px] text-slate-500 block mb-2"><span data-i18n="dca.dcf_edit_note_field">Note</span>
+        <input id="ovNote" type="text" maxlength="500" class="w-full mt-1 px-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-sm"></label>
+      <div class="flex items-center gap-2 flex-wrap">
+        <button id="ovSave" class="text-xs px-3 py-1.5 rounded-lg bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 font-medium"
+                data-i18n="dca.dcf_save">Save</button>
+        <button id="ovClear" class="text-xs px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700"
+                data-i18n="dca.dcf_clear">Clear override</button>
+        <span id="ovMsg" class="text-xs"></span>
+      </div>
+    </div>
   </div>
 
   <!-- ── Factor table ───────────────────────────────────────────────────── -->
@@ -217,11 +324,17 @@
       <p class="text-xs text-slate-500 mb-3" data-i18n="dca.general_note">Valuation sets the pace of contribution; it does not decide whether to buy.</p>
       <div class="space-y-2">
         <div class="eq-line">P<sub>metric</sub> = percentile_rank(current vs own history)</div>
-        <div class="eq-line">E = Σ w<sub>f</sub> · P<sub>f</sub>&nbsp;&nbsp;&nbsp;(yields enter as 100 − P)</div>
-        <div class="eq-line">V = 100 − E</div>
+        <div class="eq-line">E<sub>rel</sub> = Σ w<sub>f</sub> · P<sub>f</sub>&nbsp;&nbsp;&nbsp;(yields enter as 100 − P)</div>
+        <div class="eq-line">V<sub>rel</sub> = 100 − E<sub>rel</sub></div>
+        <div class="eq-line">V<sub>dcf</sub> = 50 + c · (Σ w<sub>s</sub> · V<sub>s</sub> − 50)</div>
+        <div class="eq-line">V = w<sub>dcf</sub> · V<sub>dcf</sub> + (1 − w<sub>dcf</sub>) · V<sub>rel</sub></div>
         <div class="eq-line">M<sub>valuation</sub> = 0.5 + V / 100</div>
         <div class="eq-line">DCA<sub>i</sub> = Base<sub>i</sub> × M<sub>val</sub> × M<sub>earn</sub> × M<sub>port</sub></div>
       </div>
+      <p class="text-xs text-slate-500 mt-3" data-i18n-html="dca.general_dcf">
+        With no usable DCF, w<sub>dcf</sub> is 0 and V is the relative score alone — the
+        missing branch is never filled with a neutral 50.
+      </p>
       <p class="text-xs text-slate-500 mt-3" id="capNote"></p>
     </div>
     <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 fade-up">
@@ -331,9 +444,23 @@ function renderEquation(d) {
       : ' = <span class="eq-res">' + esc(result) + '</span>');
   };
   put('eqE', eq.e_expression, eq.e_value == null ? null : eq.e_value.toFixed(2));
+  // V_rel and V_dcf are intermediate steps and only exist when a blend
+  // happened. Without a DCF the headline V *is* 100 - E, so eqV carries it and
+  // these two stay empty rather than printing a step that did not occur.
+  put('eqVrel', eq.v_rel_expression, eq.v_rel_value == null ? null : eq.v_rel_value.toFixed(2));
+  const dq = eq.dcf || {};
+  put('eqVdcf', dq.refused ? null : dq.v_expression,
+      dq.v_value == null ? null : dq.v_value.toFixed(2));
   put('eqV', eq.v_expression, eq.v_value == null ? null : eq.v_value.toFixed(2));
   put('eqM', eq.m_expression, eq.m_value == null ? null : eq.m_value.toFixed(4));
   put('eqDCA', eq.dca_expression, eq.dca_value == null ? null : fmtMoney(eq.dca_value));
+
+  // A line with no expression renders '—', which is noise for the two steps
+  // that legitimately do not exist most of the time.
+  ['eqVrel', 'eqVdcf'].forEach(id => {
+    const el = document.getElementById(id);
+    el.classList.toggle('hidden', el.textContent === '—');
+  });
 
   const dropped = document.getElementById('eqDropped');
   if ((eq.dropped || []).length) {
@@ -577,13 +704,199 @@ function buildPicker(d) {
   if (keys.length) drawMultiple(d, keys.includes('pe') ? 'pe' : keys[0]);
 }
 
+/* ── The DCF branch ─────────────────────────────────────────────────────── */
+
+const SCEN_KEYS = { bear: 'dca.dcf_bear', base: 'dca.dcf_base', bull: 'dca.dcf_bull' };
+const fmtPctSigned = v => v == null ? '—' : (v >= 0 ? '+' : '') + (v * 100).toFixed(1) + '%';
+const fmtRate = v => v == null ? '—' : (v * 100).toFixed(2) + '%';
+
+function renderDcf(d) {
+  const card = document.getElementById('dcfCard');
+  const eq = (d.equation || {}).dcf;
+
+  // The whole card is hidden when the branch is switched off, rather than
+  // rendered empty: a card headed "DCF" with nothing in it reads as a failure
+  // on a page whose entire job is to say which inputs were measurable.
+  if (!d.dcf_enabled || !eq) { card.classList.add('hidden'); return; }
+  card.classList.remove('hidden');
+
+  const src = document.getElementById('dcfSource');
+  src.textContent = I18n.t('dca.dcf_src_' + (eq.source || 'derived')) || '';
+  src.classList.toggle('hidden', !eq.source);
+
+  const scored = document.getElementById('dcfScored');
+  const refused = document.getElementById('dcfRefused');
+
+  if (eq.refused) {
+    scored.classList.add('hidden');
+    refused.classList.remove('hidden');
+    document.getElementById('dcfReason').textContent =
+      I18n.t('dca.dcf_r_' + eq.reason) || eq.reason || '';
+    renderOverrideMeta(eq);
+    return;
+  }
+
+  refused.classList.add('hidden');
+  scored.classList.remove('hidden');
+
+  document.getElementById('dcfV').textContent =
+    eq.v_value == null ? '—' : eq.v_value.toFixed(1);
+  document.getElementById('dcfW').textContent =
+    ((d.equation || {}).w_dcf == null) ? '—'
+      : ((d.equation.w_dcf * 100).toFixed(0) + '%');
+  document.getElementById('dcfC').textContent =
+    eq.confidence == null ? '—' : eq.confidence.toFixed(2);
+  document.getElementById('dcfPrice').textContent =
+    eq.price == null ? '—' : fmtMoney(eq.price);
+  document.getElementById('dcfPriceDate').textContent = eq.price_date || '';
+
+  const rows = (eq.scenarios || []).map(s => {
+    const label = I18n.t(SCEN_KEYS[s.name]) || s.name;
+    return '<tr class="border-t border-slate-100 dark:border-slate-800">'
+      + '<td class="py-1.5 px-2.5 text-sm">' + esc(label) + '</td>'
+      + '<td class="py-1.5 px-2.5 text-sm text-right tabular-nums">'
+      + esc(fmtMoney(s.fair_value)) + '</td>'
+      + '<td class="py-1.5 px-2.5 text-sm text-right tabular-nums" style="color:'
+      + pctColor(s.upside == null ? null : 100 - (s.V == null ? 50 : s.V)) + '">'
+      + esc(fmtPctSigned(s.upside)) + '</td>'
+      + '<td class="py-1.5 px-2.5 text-sm text-right tabular-nums">'
+      + (s.V == null ? '—' : s.V.toFixed(1)) + '</td>'
+      + '<td class="py-1.5 px-2.5 text-sm text-right tabular-nums text-slate-500">'
+      + (s.weight == null ? '—' : s.weight.toFixed(2)) + '</td>'
+      + '</tr>';
+  });
+  document.getElementById('dcfScenarioBody').innerHTML = rows.join('');
+  document.getElementById('dcfBasis').textContent =
+    I18n.t('dca.dcf_basis_' + (eq.basis || '')) || '';
+
+  const cells = [
+    ['dca.dcf_wacc', fmtRate(eq.wacc)],
+    ['dca.dcf_g', fmtRate(eq.terminal_growth)],
+    ['dca.dcf_tv', eq.terminal_share == null ? '—' : (eq.terminal_share * 100).toFixed(0) + '%'],
+    ['dca.dcf_sens', eq.sensitivity == null ? '—' : (eq.sensitivity * 100).toFixed(1) + '%'],
+    ['dca.dcf_years', eq.years == null ? '—' : String(eq.years)],
+    ['dca.dcf_growth', (eq.growth && eq.growth.base != null) ? fmtRate(eq.growth.base) : '—'],
+  ];
+  document.getElementById('dcfAssumptions').innerHTML = cells.map(([k, v]) =>
+    '<div class="well px-3 py-2"><div class="text-[10px] text-slate-500">'
+    + esc(I18n.t(k) || k) + '</div><div class="text-sm font-semibold tabular-nums">'
+    + esc(v) + '</div></div>').join('');
+
+  // §2 requires every assumption to be reported, which includes the ones the
+  // model had to invent or cap. A clamp nobody is told about reads as a choice.
+  const notes = document.getElementById('dcfNotes');
+  const lines = (eq.notes || []).map(n => I18n.t('dca.dcf_n_' + n) || n);
+  notes.innerHTML = lines.map(t => '<div>· ' + esc(t) + '</div>').join('');
+  notes.classList.toggle('hidden', lines.length === 0);
+
+  renderOverrideMeta(eq);
+}
+
+function renderOverrideMeta(eq) {
+  const box = document.getElementById('dcfOverrideMeta');
+  const ov = eq.override;
+  if (!ov) { box.classList.add('hidden'); return; }
+  const bits = [];
+  if (ov.valuation_date) {
+    bits.push((I18n.t('dca.dcf_on') || 'valued') + ' ' + ov.valuation_date);
+  }
+  if (ov.by) bits.push((I18n.t('dca.dcf_by') || 'Entered by') + ' ' + ov.by);
+  if (ov.w_dcf != null) {
+    bits.push((I18n.t('dca.dcf_edit_w') || 'Weight override') + ' '
+      + (ov.w_dcf * 100).toFixed(0) + '%');
+  }
+  // The note is typed by a person, so it is escaped like any other free text.
+  const note = ov.note ? '<div class="mt-1">' + esc(ov.note) + '</div>' : '';
+  box.innerHTML = esc(bits.join(' · ')) + note;
+  box.classList.remove('hidden');
+}
+
+/* ── The override editor ────────────────────────────────────────────────── */
+
+function wireDcfEditor(d) {
+  const toggle = document.getElementById('dcfEditToggle');
+  if (!d.dcf_editable) { toggle.classList.add('hidden'); return; }
+  toggle.classList.remove('hidden');
+
+  const editor = document.getElementById('dcfEditor');
+  const msg = document.getElementById('ovMsg');
+  const fields = {
+    bear: 'ovBear', base: 'ovBase', bull: 'ovBull', confidence: 'ovConf',
+    wacc: 'ovWacc', terminal_growth: 'ovG', w_dcf: 'ovW',
+  };
+
+  toggle.addEventListener('click', async () => {
+    editor.classList.toggle('hidden');
+    if (editor.classList.contains('hidden')) return;
+    try {
+      const r = await fetch(`/api/dca/${encodeURIComponent(TICKER)}/dcf`);
+      const j = await r.json();
+      const ov = j.override || {};
+      Object.entries(fields).forEach(([key, id]) => {
+        document.getElementById(id).value = ov[key] == null ? '' : ov[key];
+      });
+      document.getElementById('ovDate').value = ov.valuation_date || '';
+      document.getElementById('ovNote').value = ov.note || '';
+    } catch (e) { /* an empty form is the right fallback */ }
+  });
+
+  const say = (text, ok) => {
+    msg.textContent = text;
+    // One token per argument. A single string holding two classes throws
+    // InvalidCharacterError, which is the light-mode class-pair trap
+    // CLAUDE.md records and tests/test_theme_classes.py scans for.
+    msg.classList.remove('text-emerald-700', 'dark:text-emerald-400',
+                         'text-rose-700', 'dark:text-rose-400');
+    msg.classList.add(ok ? 'text-emerald-700' : 'text-rose-700',
+                      ok ? 'dark:text-emerald-400' : 'dark:text-rose-400');
+  };
+
+  document.getElementById('ovSave').addEventListener('click', async () => {
+    const body = {};
+    Object.entries(fields).forEach(([key, id]) => {
+      const raw = document.getElementById(id).value.trim();
+      if (raw !== '') body[key] = parseFloat(raw);
+    });
+    const date = document.getElementById('ovDate').value.trim();
+    if (date) body.valuation_date = date;
+    const note = document.getElementById('ovNote').value.trim();
+    if (note) body.note = note;
+    try {
+      const r = await fetch(`/api/dca/${encodeURIComponent(TICKER)}/dcf`, {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(body),
+      });
+      const j = await r.json();
+      if (!r.ok) { say('⚠ ' + (j.error || r.status), false); return; }
+      say('✓ ' + (I18n.t('dca.dcf_saved') || 'Saved. Reload to rescore.'), true);
+    } catch (e) { say('⚠ ' + e, false); }
+  });
+
+  document.getElementById('ovClear').addEventListener('click', async () => {
+    try {
+      const r = await fetch(`/api/dca/${encodeURIComponent(TICKER)}/dcf`,
+                            {method: 'DELETE'});
+      const j = await r.json();
+      if (!r.ok) { say('⚠ ' + (j.error || r.status), false); return; }
+      Object.values(fields).forEach(id => { document.getElementById(id).value = ''; });
+      document.getElementById('ovNote').value = '';
+      say('✓ ' + (I18n.t('dca.dcf_saved') || 'Saved. Reload to rescore.'), true);
+    } catch (e) { say('⚠ ' + e, false); }
+  });
+}
+
 /* ── Load ───────────────────────────────────────────────────────────────── */
+
+let _editorWired = false;
 
 function renderAll(d) {
   _dcaData = d;
   renderScore(d); renderEquation(d); renderFactors(d);
-  renderBands(d); renderWindow(d);
+  renderBands(d); renderWindow(d); renderDcf(d);
   drawVHistory(d); buildPicker(d);
+  // Wired once. renderAll runs again on every base-amount change, and binding
+  // the listeners each time would fire one save per re-render.
+  if (!_editorWired) { wireDcfEditor(d); _editorWired = true; }
   document.getElementById('dcaWarming').classList.add('hidden');
   document.getElementById('dcaBody').classList.remove('hidden');
   I18n.apply(document.getElementById('dcaBody'));

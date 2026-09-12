@@ -177,6 +177,19 @@ function readBase() {
 
 function label(prefix, key) { return I18n.t(prefix + key) || key; }
 
+/* A row whose V is a blend of two anchors is not the same claim as one scored
+   on relative valuation alone, and the column is the same width either way. So
+   a blended row is tagged with the DCF's own score and its weight, and an
+   unblended one is left plain — the absence is the honest signal, and adding a
+   "no DCF" badge to seven rows in ten would be noise rather than information. */
+function dcfTag(r) {
+  if (!r.blended || r.V_dcf == null) return '';
+  const title = (I18n.t('dca.dcf_v') || 'V_dcf') + ' ' + r.V_dcf.toFixed(0)
+    + ' @ ' + ((r.w_dcf || 0) * 100).toFixed(0) + '%';
+  return `<div class="text-[10px] text-slate-500 tabular-nums" title="${esc(title)}">`
+    + `DCF ${r.V_dcf.toFixed(0)} · ${((r.w_dcf || 0) * 100).toFixed(0)}%</div>`;
+}
+
 function summaryRow(r) {
   return `<a href="/dca/${encodeURIComponent(r.ticker)}"
              class="flex items-center gap-3 px-3 py-2 rounded-lg well hover:border-slate-400 dark:hover:border-slate-600 transition">
@@ -248,6 +261,7 @@ function render() {
           <span class="pct-track w-14"><span class="pct-fill" style="width:${r.V == null ? 0 : r.V}%;background:${vColor(r.V)}"></span></span>
           <span class="font-mono w-8 text-right" style="color:${vColor(r.V)}">${r.V == null ? '—' : r.V.toFixed(0)}</span>
         </div>
+        ${dcfTag(r)}
       </td>
       <td class="text-xs" style="color:${vColor(r.V)}">${esc(r.band ? label('dca.band_', r.band) : '—')}</td>
       <td class="text-right font-mono">${r.m_valuation == null ? '—' : r.m_valuation.toFixed(2) + '×'}</td>

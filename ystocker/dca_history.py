@@ -83,6 +83,7 @@ __all__ = [
     "Vintage", "build_vintages", "build_quarterly_ttm", "vintage_at", "reconstruct",
     "percentile_series", "latest_percentiles",
     "snapshot_row", "load_series", "save_row",
+    "dcf_inputs", "dcf_for",
     "universe", "cached_tickers", "warm_universe", "is_warming",
     "get", "peek", "refresh", "start_background_thread",
 ]
@@ -1058,15 +1059,186 @@ def eps_drift(ticker: str) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# The absolute branch's inputs
+# ---------------------------------------------------------------------------
+
+def dcf_inputs(payload: Mapping[str, Any]) -> dict[str, Any]:
+    """Everything :func:`ystocker.dcf.from_fundamentals` needs, from one payload.
+
+    Pure, and reads only what :func:`build` already stored, so the DCF branch
+    costs **no extra Yahoo call at all** — the same property that makes the daily
+    snapshot sweep free.
+
+    **Only annual vintages contribute the cash-flow series, and that is not a
+    detail.** :func:`build` fills each quarterly TTM vintage's ``fcf`` from the
+    annual vintage in force at the same date, which is right for computing a
+    weekly P/FCF and catastrophic here: the same free-cash-flow figure would
+    appear three or four times in a row, making the observed growth between those
+    points exactly zero and the dispersion far too narrow. A ten-year CAGR would
+    be computed over a series that is mostly repeats. Filtering on ``kind`` is
+    the whole fix, and the failure it prevents is silent — the series would still
+    have the right length and the right magnitudes.
+
+    The balance-sheet items are **stocks**, so the latest reading wins rather
+    than anything being summed or averaged; the cash-flow item is a **flow**, so
+    the whole series is kept. That is the same distinction
+    :func:`build_quarterly_ttm` turns on.
+
+    The price is the **last weekly close of the reconstruction**, not a live
+    quote. That keeps ``V_DCF`` and ``V_REL`` describing one price: the relative
+    branch ranks multiples computed at that close, so measuring the DCF upside
+    against a different one would make the two halves of a single score refer to
+    two different moments.
+    """
+    vintages = [v for v in (payload.get("vintages") or [])
+                if isinstance(v, Mapping) and v.get("kind") == "annual"]
+    vintages.sort(key=lambda v: str(v.get("period_end") or ""))
+
+    fcf_series = [float(v["fcf"]) for v in vintages if _fin(v.get("fcf"))]
+
+    latest: dict[str, Optional[float]] = {"debt": None, "cash": None, "shares": None}
+    for vintage in vintages:
+        for slot in latest:
+            if _fin(vintage.get(slot)):
+                latest[slot] = float(vintage[slot])
+
+    prices = payload.get("prices") or []
+    price = price_date = None
+    if prices:
+        last = prices[-1]
+        try:
+            price_date, price = str(last[0]), float(last[1])
+        except (IndexError, TypeError, ValueError):
+            price = price_date = None
+
+    context = payload.get("forward_context") or {}
+    return {
+        "fcf_series": fcf_series,
+        "shares": latest["shares"],
+        "cash": latest["cash"] or 0.0,
+        "debt": latest["debt"] or 0.0,
+        "beta": context.get("beta") if _fin(context.get("beta")) else None,
+        "price": price,
+        "price_date": price_date,
+        "annual_vintages": len(vintages),
+    }
+
+
+def dcf_for(ticker: str, payload: Mapping[str, Any], *,
+            model: str,
+            override: Optional[Mapping[str, Any]] = None,
+            as_of: Optional[str] = None) -> dict[str, Any]:
+    """The ``V_DCF`` payload for one ticker: override if there is one, else derived.
+
+    *override* is injected rather than looked up, for the reason ``_dca_score``
+    takes ``recs`` and ``exposure`` as arguments: ``dcf_store.all_rows()`` is a
+    DynamoDB Scan, and calling it once per row would make a twenty-row table
+    twenty scans for one answer.
+
+    An override supplying **fair values** replaces the model's output and goes
+    straight to :func:`ystocker.dcf.score`; one supplying only **assumptions**
+    replaces its inputs and lets it run. Both end at the same mapping function,
+    so the two cannot disagree about how an upside becomes a score.
+
+    A refusal comes back as a payload with ``V`` of ``None``, never as an
+    exception and never as 50 — :func:`ystocker.dca.blend_v` then moves the whole
+    weight onto the relative branch.
+    """
+    from ystocker import dca, dcf
+
+    form = dca.DCF_FORMS.get(model, dcf.FORM_FCFF)
+    mid_cycle = model in dca.DCF_MID_CYCLE
+    inputs = dcf_inputs(payload)
+    override = dict(override or {})
+
+    # A stored fair value is a claim about the company, so it is honoured even
+    # for a form the derived model refuses: §10 does not say a bank cannot be
+    # valued, it says *we* cannot value one with FCFF. Somebody who has built an
+    # excess-return model is exactly the case the override exists for.
+    if override.get("mode") == "dcf_store_values" or override.get("base") is not None:
+        out = dcf.score(price=inputs["price"],
+                        bear=override.get("bear"),
+                        base=override.get("base"),
+                        bull=override.get("bull"),
+                        confidence=override.get("confidence"),
+                        valuation_date=override.get("valuation_date"),
+                        as_of=as_of,
+                        price_date=inputs["price_date"],
+                        source="override")
+        out["override"] = _override_meta(override)
+        return out
+
+    if form != dcf.FORM_FCFF:
+        out = dcf._refused("form_not_applicable", form=form, source="derived")
+        if override:
+            out["override"] = _override_meta(override)
+        return out
+
+    out = dcf.from_fundamentals(
+        price=inputs["price"],
+        fcf_series=inputs["fcf_series"],
+        shares=inputs["shares"],
+        cash=inputs["cash"],
+        debt=inputs["debt"],
+        beta=inputs["beta"],
+        # An overridden WACC replaces the derived one rather than being blended
+        # with it. There is no sensible average of two discount rates, and a
+        # blend would mean the reported WACC was not the one used.
+        wacc_override=override.get("wacc"),
+        form=form,
+        mid_cycle=mid_cycle,
+        terminal_growth=override.get("terminal_growth", dcf.TERMINAL_GROWTH),
+        price_date=inputs["price_date"],
+        as_of=as_of,
+    )
+    if override:
+        out["override"] = _override_meta(override)
+    return out
+
+
+def _override_meta(override: Mapping[str, Any]) -> dict[str, Any]:
+    """What the page shows about a stored override. Never the author's address.
+
+    ``/dca`` is public, so the e-mail on the row is masked the same way
+    ``share.public_payload`` masks a sharer's: enough to say a person stands
+    behind the number, not enough to publish who.
+    """
+    author = str(override.get("author") or "")
+    return {
+        "mode": override.get("mode"),
+        "valuation_date": override.get("valuation_date"),
+        "note": override.get("note"),
+        "w_dcf": override.get("w_dcf"),
+        "wacc": override.get("wacc"),
+        "terminal_growth": override.get("terminal_growth"),
+        "by": (author.split("@")[0] + "@…") if "@" in author else None,
+        "updated_at": override.get("updated_at"),
+    }
+
+
+# ---------------------------------------------------------------------------
 # Building one ticker's payload
 # ---------------------------------------------------------------------------
 
 #: ``info`` keys kept as forward-basis context. Shown beside the score and never
 #: percentiled -- see this module's docstring on why ranking a forward multiple
 #: against a trailing distribution is biased cheap for every growing company.
+#:
+#: ``beta`` is the exception and is not context at all: it is a DCF input, used
+#: by ``dcf.wacc``. It is added here rather than fetched separately because
+#: ``info`` is already one of the six reads.
+#:
+#: Note this list grew **without** a :data:`CACHE_VER` bump, deliberately. A bump
+#: invalidates every reconstruction on disk at once, which at the registry cap is
+#: ~360 Yahoo reads in one sweep -- the shape of request burst this module's whole
+#: budget exists to prevent. A payload written before ``beta`` was collected
+#: simply has no beta, ``dcf.wacc`` assumes 1.0 and says so in its ``notes``, and
+#: the next daily rebuild fixes it. Degrading visibly for a day beats a refetch
+#: storm on deploy.
 _FORWARD_KEYS = ("forwardPE", "trailingPE", "forwardEps", "trailingEps",
                  "pegRatio", "enterpriseToEbitda", "priceToBook",
-                 "marketCap", "quoteType", "sector", "industry", "shortName")
+                 "marketCap", "quoteType", "sector", "industry", "shortName",
+                 "beta")
 
 
 def build(ticker: str) -> dict[str, Any]:

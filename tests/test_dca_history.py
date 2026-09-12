@@ -559,6 +559,172 @@ class Snapshots(unittest.TestCase):
         self.assertNotIn("pfcf", row)
 
 
+class DcfInputs(unittest.TestCase):
+    """Assembling the absolute branch's inputs from a built payload.
+
+    Pure — it reads only what ``build`` already stored, which is what makes the
+    DCF branch cost no extra Yahoo call.
+    """
+
+    def _payload(self, **over):
+        base = {
+            "vintages": [
+                {"kind": "annual", "period_end": "2022-12-31", "fcf": 1.0e9,
+                 "debt": 5.0e9, "cash": 2.0e9, "shares": 1.0e9},
+                {"kind": "annual", "period_end": "2023-12-31", "fcf": 1.2e9,
+                 "debt": 5.5e9, "cash": 2.5e9, "shares": 0.98e9},
+                {"kind": "annual", "period_end": "2024-12-31", "fcf": 1.5e9,
+                 "debt": 6.0e9, "cash": 3.0e9, "shares": 0.96e9},
+            ],
+            "prices": [["2026-09-04", 98.0], ["2026-09-11", 101.5]],
+            "forward_context": {"beta": 1.15},
+        }
+        base.update(over)
+        return base
+
+    def test_only_annual_vintages_contribute_the_cash_flow_series(self):
+        """``build`` copies the annual FCF onto every quarterly TTM vintage, so
+        including them would repeat the same figure three or four times: the
+        observed growth between those points is exactly zero and the dispersion
+        collapses. The series would still look the right length."""
+        payload = self._payload()
+        payload["vintages"] = payload["vintages"] + [
+            {"kind": "quarterly", "period_end": "2025-03-31", "fcf": 1.5e9,
+             "debt": 6.0e9, "cash": 3.0e9, "shares": 0.96e9},
+            {"kind": "quarterly", "period_end": "2025-06-30", "fcf": 1.5e9,
+             "debt": 6.0e9, "cash": 3.0e9, "shares": 0.96e9},
+        ]
+        out = dh.dcf_inputs(payload)
+        self.assertEqual(out["fcf_series"], [1.0e9, 1.2e9, 1.5e9])
+        self.assertEqual(out["annual_vintages"], 3)
+
+    def test_the_series_is_ordered_oldest_first(self):
+        payload = self._payload()
+        payload["vintages"] = list(reversed(payload["vintages"]))
+        self.assertEqual(dh.dcf_inputs(payload)["fcf_series"],
+                         [1.0e9, 1.2e9, 1.5e9])
+
+    def test_balance_sheet_items_take_the_latest_reading(self):
+        """Debt, cash and shares are *stocks*. Summing or averaging them would
+        report several times the company — the same distinction
+        ``build_quarterly_ttm`` turns on."""
+        out = dh.dcf_inputs(self._payload())
+        self.assertEqual(out["debt"], 6.0e9)
+        self.assertEqual(out["cash"], 3.0e9)
+        self.assertEqual(out["shares"], 0.96e9)
+
+    def test_the_price_is_the_last_weekly_close_of_the_reconstruction(self):
+        """V_DCF and V_REL must describe one price. The relative branch ranks
+        multiples computed at this close, so measuring the DCF upside against a
+        live quote would make two halves of one score refer to two moments."""
+        out = dh.dcf_inputs(self._payload())
+        self.assertEqual(out["price"], 101.5)
+        self.assertEqual(out["price_date"], "2026-09-11")
+
+    def test_a_payload_with_no_prices_yields_no_price(self):
+        out = dh.dcf_inputs(self._payload(prices=[]))
+        self.assertIsNone(out["price"])
+        self.assertIsNone(out["price_date"])
+
+    def test_beta_comes_from_the_forward_context_and_is_optional(self):
+        self.assertEqual(dh.dcf_inputs(self._payload())["beta"], 1.15)
+        self.assertIsNone(dh.dcf_inputs(self._payload(forward_context={}))["beta"])
+
+    def test_a_payload_written_before_beta_was_collected_still_works(self):
+        """No CACHE_VER bump was taken for the beta addition, so old payloads
+        must degrade rather than fail — see the note on _FORWARD_KEYS."""
+        payload = self._payload()
+        payload.pop("forward_context")
+        out = dh.dcf_inputs(payload)
+        self.assertIsNone(out["beta"])
+        self.assertEqual(out["fcf_series"], [1.0e9, 1.2e9, 1.5e9])
+
+    def test_an_empty_payload_does_not_raise(self):
+        out = dh.dcf_inputs({})
+        self.assertEqual(out["fcf_series"], [])
+        self.assertIsNone(out["shares"])
+
+
+class DcfFor(unittest.TestCase):
+    """Choosing between the derived model and a stored override."""
+
+    def _payload(self):
+        vintages = []
+        fcf = 4.0e9
+        for year in range(2019, 2025):
+            vintages.append({"kind": "annual", "period_end": f"{year}-12-31",
+                             "fcf": fcf, "debt": 5.0e9, "cash": 8.0e9,
+                             "shares": 1.0e9})
+            fcf *= 1.09
+        return {"vintages": vintages,
+                "prices": [["2026-09-11", 60.0]],
+                "forward_context": {"beta": 1.0}}
+
+    def test_the_derived_path_scores_a_compounder(self):
+        out = dh.dcf_for("MSFT", self._payload(), model="compounder",
+                         as_of="2026-09-12")
+        self.assertFalse(out["refused"], out.get("reason"))
+        self.assertEqual(out["source"], "derived")
+        self.assertEqual(out["basis"], "three_scenario")
+
+    def test_a_bank_is_refused_by_form_with_no_override(self):
+        out = dh.dcf_for("JPM", self._payload(), model="bank", as_of="2026-09-12")
+        self.assertTrue(out["refused"])
+        self.assertEqual(out["reason"], "form_not_applicable")
+        self.assertIsNone(out["V"])
+
+    def test_an_override_scores_even_a_form_the_model_refuses(self):
+        """§10 says *we* cannot value a bank with FCFF, not that a bank cannot
+        be valued. Somebody who built an excess-return model by hand is exactly
+        who the override exists for."""
+        out = dh.dcf_for("JPM", self._payload(), model="bank",
+                         override={"base": 75.0, "valuation_date": "2026-09-01"},
+                         as_of="2026-09-12")
+        self.assertFalse(out["refused"])
+        self.assertEqual(out["source"], "override")
+
+    def test_a_mid_cycle_template_starts_from_the_mean(self):
+        out = dh.dcf_for("NVDA", self._payload(), model="semiconductor",
+                         as_of="2026-09-12")
+        if not out["refused"]:
+            self.assertTrue(out["model"]["mid_cycle"])
+            self.assertIn("mid_cycle_base", out["notes"])
+
+    def test_an_override_wacc_is_used_and_reported(self):
+        plain = dh.dcf_for("MSFT", self._payload(), model="compounder",
+                           as_of="2026-09-12")
+        forced = dh.dcf_for("MSFT", self._payload(), model="compounder",
+                            override={"wacc": 0.12}, as_of="2026-09-12")
+        self.assertFalse(forced["refused"], forced.get("reason"))
+        self.assertAlmostEqual(forced["model"]["capital"]["wacc"], 0.12, places=6)
+        # A higher discount rate is a lower fair value, so a lower score.
+        self.assertLess(forced["V"], plain["V"])
+
+    def test_the_override_metadata_never_carries_the_authors_address(self):
+        """``/dca`` is public. The address is masked the way
+        ``share.public_payload`` masks a sharer's."""
+        out = dh.dcf_for("MSFT", self._payload(), model="compounder",
+                         override={"base": 90.0, "author": "alice@example.com",
+                                   "valuation_date": "2026-09-01"},
+                         as_of="2026-09-12")
+        meta = out["override"]
+        self.assertEqual(meta["by"], "alice@…")
+        self.assertNotIn("example.com", str(meta))
+
+    def test_a_stale_override_refuses_rather_than_silently_reverting(self):
+        out = dh.dcf_for("MSFT", self._payload(), model="compounder",
+                         override={"base": 90.0, "valuation_date": "2024-01-01"},
+                         as_of="2026-09-12")
+        self.assertTrue(out["refused"])
+        self.assertEqual(out["reason"], "valuation_stale")
+
+    def test_a_refusal_is_never_a_score_of_fifty(self):
+        for model in ("bank", "reit", "utility"):
+            out = dh.dcf_for("X", self._payload(), model=model, as_of="2026-09-12")
+            self.assertIsNone(out["V"], msg=model)
+            self.assertEqual(out["w_dcf_hint"], 0.0, msg=model)
+
+
 class Filenames(unittest.TestCase):
     """The per-ticker cache path is built from a URL segment."""
 

@@ -212,3 +212,6 @@ ios/**/build/
 *.xcuserstate
 xcuserdata/
 DerivedData/
+
+# macOS Finder metadata. Swept in by `git add -A` and never wanted.
+.DS_Store

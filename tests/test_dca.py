@@ -314,6 +314,212 @@ class WorkedExample(unittest.TestCase):
         self.assertEqual(out["m_portfolio"], 1.0)
         self.assertEqual(out["amount"], 1000.0)
 
+    def test_the_relative_only_example_is_unchanged_by_the_dcf_branch(self):
+        """The DCF edition left every relative template alone, so the original
+        worked example must still hold when no DCF is supplied. If adding the
+        branch moved this, the branch is not additive."""
+        out = dca.evaluate(
+            ticker="MSFT", base_dca=5000.0,
+            percentiles={"pe": 80, "pfcf": 75, "ev_ebitda": 82, "peg": 65, "peer": 70})
+        self.assertEqual(out["V"], out["V_rel"])
+        self.assertEqual(out["w_dcf"], 0.0)
+        self.assertFalse(out["blended"])
+        self.assertEqual(out["blend_reason"], "no_dcf")
+
+
+class DcfWeights(unittest.TestCase):
+    """§4-§12 — the weight the absolute branch carries in each template."""
+
+    def test_every_template_has_a_dcf_weight_and_a_form(self):
+        """A template with no entry would silently score at w_DCF=0, which is a
+        policy decision ("this business is not DCF-able") wearing the costume of
+        an oversight."""
+        for name in dca.TEMPLATES:
+            self.assertIn(name, dca.DCF_WEIGHTS, msg=name)
+            self.assertIn(name, dca.DCF_FORMS, msg=name)
+
+    def test_no_weight_exceeds_the_published_ceiling(self):
+        """The framework never sanctions more than 30%: the DCF is an anchor,
+        never the whole answer."""
+        for name, weight in dca.DCF_WEIGHTS.items():
+            self.assertGreaterEqual(weight, 0.0, msg=name)
+            self.assertLessEqual(weight, dca.MAX_DCF_WEIGHT, msg=name)
+
+    def test_the_published_point_values(self):
+        """Transcribed from the §5-§12 section equations, not from §4's ranges."""
+        self.assertEqual(dca.DCF_WEIGHTS["compounder"], 0.30)
+        self.assertEqual(dca.DCF_WEIGHTS["healthcare_consumer"], 0.25)
+        self.assertEqual(dca.DCF_WEIGHTS["semiconductor"], 0.20)
+        self.assertEqual(dca.DCF_WEIGHTS["high_growth_software"], 0.15)
+        self.assertEqual(dca.DCF_WEIGHTS["amzn"], 0.25)
+        self.assertEqual(dca.DCF_WEIGHTS["tsla"], 0.15)
+        self.assertEqual(dca.DCF_WEIGHTS["bank"], 0.10)
+        self.assertEqual(dca.DCF_WEIGHTS["cyclical"], 0.15)
+        self.assertEqual(dca.DCF_WEIGHTS["reit"], 0.15)
+        self.assertEqual(dca.DCF_WEIGHTS["utility"], 0.25)
+
+    def test_the_forms_we_cannot_build_are_named_not_approximated(self):
+        """§10 and §12. Running FCFF on a bank or a REIT produces a per-share
+        number that renders exactly like a valid one."""
+        from ystocker import dcf
+
+        self.assertEqual(dca.DCF_FORMS["bank"], "excess_return")
+        self.assertEqual(dca.DCF_FORMS["reit"], "affo")
+        self.assertEqual(dca.DCF_FORMS["utility"], "fcfe")
+        for name in ("bank", "reit", "utility"):
+            self.assertIn(dca.DCF_FORMS[name], dcf.FORM_EQUITY_ONLY, msg=name)
+
+    def test_mid_cycle_templates_are_the_cyclical_ones(self):
+        """§7/§11. Both are named in the framework as mid-cycle DCFs."""
+        self.assertEqual(dca.DCF_MID_CYCLE, frozenset({"semiconductor", "cyclical"}))
+        for name in dca.DCF_MID_CYCLE:
+            self.assertIn(name, dca.TEMPLATES, msg=name)
+
+
+class BlendingTheTwoBranches(unittest.TestCase):
+    """§13's omission rule, which is the whole reason this is not a sixth factor."""
+
+    def test_the_published_blend(self):
+        out = dca.blend_v(44.0, 71.0, 0.30)
+        self.assertAlmostEqual(out["V"], 52.1, places=4)
+        self.assertTrue(out["blended"])
+
+    def test_a_missing_dcf_renormalises_onto_the_relative_score(self):
+        """Never 50. The framework's own emphasis: filling the gap with the
+        neutral value silently dilutes the information that *is* there."""
+        out = dca.blend_v(80.0, None, 0.30)
+        self.assertEqual(out["V"], 80.0)
+        self.assertEqual(out["w_dcf"], 0.0)
+        self.assertFalse(out["blended"])
+        self.assertEqual(out["reason"], "no_dcf")
+        # The value a filled-in 50 would have produced, which must not appear.
+        self.assertNotAlmostEqual(out["V"], 0.30 * 50 + 0.70 * 80, places=4)
+
+    def test_a_missing_relative_score_is_fatal_even_with_a_dcf(self):
+        """A 100%-DCF score is not on the same scale as a 30%-blended one and
+        would sit in a ranked column beside scores it cannot be compared to."""
+        out = dca.blend_v(None, 71.0, 0.30)
+        self.assertIsNone(out["V"])
+        self.assertEqual(out["w_dcf"], 0.0)
+        self.assertEqual(out["reason"], "no_relative_score")
+
+    def test_a_zero_weight_leaves_the_relative_score_untouched(self):
+        out = dca.blend_v(44.0, 99.0, 0.0)
+        self.assertEqual(out["V"], 44.0)
+        self.assertFalse(out["blended"])
+        self.assertEqual(out["reason"], "zero_weight")
+
+    def test_the_weight_cannot_exceed_the_ceiling(self):
+        capped = dca.blend_v(40.0, 100.0, 0.95)
+        expected = dca.MAX_DCF_WEIGHT * 100.0 + (1 - dca.MAX_DCF_WEIGHT) * 40.0
+        self.assertAlmostEqual(capped["V"], round(expected, 2), places=2)
+        self.assertEqual(capped["w_dcf"], dca.MAX_DCF_WEIGHT)
+
+    def test_the_blend_is_bounded_by_its_two_branches(self):
+        """A weighted average of two numbers in 0-100 cannot leave the interval
+        between them. If it does, a sign or a weight is inverted."""
+        for v_rel in (0.0, 12.5, 50.0, 88.0, 100.0):
+            for v_dcf in (0.0, 33.0, 50.0, 71.0, 100.0):
+                out = dca.blend_v(v_rel, v_dcf, 0.30)
+                self.assertGreaterEqual(out["V"], min(v_rel, v_dcf) - 1e-9)
+                self.assertLessEqual(out["V"], max(v_rel, v_dcf) + 1e-9)
+
+    def test_evaluate_uses_the_templates_weight_by_default(self):
+        out = dca.evaluate(
+            ticker="MSFT",
+            percentiles={"pe": 50, "pfcf": 50, "ev_ebitda": 50, "peg": 50, "peer": 50},
+            dcf={"V": 100.0})
+        self.assertEqual(out["w_dcf"], dca.DCF_WEIGHTS["compounder"])
+        self.assertAlmostEqual(out["V"], 0.30 * 100.0 + 0.70 * 50.0, places=2)
+
+    def test_an_explicit_weight_overrides_the_template(self):
+        """§4's dynamic down-weighting needs this: 'lower w_DCF by 5-15 points
+        and reallocate proportionally to the relative factors'."""
+        out = dca.evaluate(
+            ticker="MSFT",
+            percentiles={"pe": 50, "pfcf": 50, "ev_ebitda": 50, "peg": 50, "peer": 50},
+            dcf={"V": 100.0}, w_dcf=0.15)
+        self.assertEqual(out["w_dcf"], 0.15)
+
+    def test_a_refused_dcf_payload_scores_as_relative_only(self):
+        """The shape ``ystocker.dcf`` actually returns when it declines."""
+        from ystocker import dcf as dcf_mod
+
+        refused = dcf_mod.score(price=100.0, base=None)
+        out = dca.evaluate(
+            ticker="MSFT",
+            percentiles={"pe": 50, "pfcf": 50, "ev_ebitda": 50, "peg": 50, "peer": 50},
+            dcf=refused)
+        self.assertEqual(out["V"], 50.0)
+        self.assertEqual(out["w_dcf"], 0.0)
+        self.assertFalse(out["blended"])
+
+
+class DcfWorkedExample(unittest.TestCase):
+    """§15, end to end: both branches, both overlays, one contribution.
+
+    A mature tech company at $400 with Bear/Base/Bull DCF fair values of
+    $360/$500/$560 and c=0.80 gives V_DCF=71.0. Relative percentiles of
+    P/E=60, P/FCF=55, EV/EBITDA=65, PEG=45, Peer=50 give E_REL=56.0 and
+    V_REL=44.0. Blended at 30%, V=52.1 and M_valuation=1.021. A mild earnings
+    cut (0.90) and moderate existing exposure (0.85) take the final multiplier
+    to 0.781 and, on a $5,000 base, about $3,905.
+
+    This is the test that fails if the two branches are ever averaged, if the
+    weight drifts, or if a refusal starts scoring as 50.
+    """
+
+    def setUp(self):
+        from ystocker import dcf
+
+        self.dcf = dcf.score(price=400.0, bear=360.0, base=500.0, bull=560.0,
+                             confidence=0.80)
+        self.out = dca.evaluate(
+            ticker="MSFT", base_dca=5000.0,
+            percentiles={"pe": 60, "pfcf": 55, "ev_ebitda": 65,
+                         "peg": 45, "peer": 50},
+            dcf=self.dcf, eps_drift=-0.03, position_pct=5.0)
+
+    def test_the_dcf_branch_matches(self):
+        self.assertAlmostEqual(self.dcf["raw"], 76.25, places=4)
+        self.assertAlmostEqual(self.dcf["V"], 71.0, places=4)
+
+    def test_the_relative_branch_matches(self):
+        self.assertEqual(self.out["E"], 56.0)
+        self.assertEqual(self.out["V_rel"], 44.0)
+
+    def test_the_blended_score_matches(self):
+        self.assertEqual(self.out["w_dcf"], 0.30)
+        self.assertAlmostEqual(self.out["V"], 52.1, places=2)
+        self.assertEqual(self.out["m_valuation"], 1.021)
+        self.assertEqual(self.out["band"], "fair")
+
+    def test_the_overlays_and_the_final_contribution_match(self):
+        self.assertEqual(self.out["m_earnings"], 0.90)
+        self.assertEqual(self.out["m_portfolio"], 0.85)
+        self.assertAlmostEqual(self.out["multiplier"], 0.7811, places=3)
+        # The document rounds the multiplier to three places before multiplying
+        # and reports $3,905. ``combine`` carries full precision and rounds once
+        # at the end, so the cent is not expected to agree — the dollar is.
+        self.assertEqual(round(self.out["amount"]), 3905)
+
+    def test_a_dcf_upside_does_not_by_itself_raise_the_contribution(self):
+        """§15's own reading: 'DCF 有 upside' does not automatically mean buy
+        more. The final multiplier is below 1.0 despite a cheap DCF."""
+        self.assertGreater(self.dcf["V"], 50.0)
+        self.assertLess(self.out["multiplier"], 1.0)
+
+    def test_the_blend_moved_the_score(self):
+        """Guards against the branch being plumbed in but never applied — the
+        failure that looks like everything working."""
+        without = dca.evaluate(
+            ticker="MSFT", base_dca=5000.0,
+            percentiles={"pe": 60, "pfcf": 55, "ev_ebitda": 65,
+                         "peg": 45, "peer": 50},
+            eps_drift=-0.03, position_pct=5.0)
+        self.assertEqual(without["V"], 44.0)
+        self.assertGreater(self.out["V"], without["V"])
+
 
 class Translations(unittest.TestCase):
     """Every key the page composes in JS must exist in both languages.
@@ -357,6 +563,35 @@ class Translations(unittest.TestCase):
         for _upper, key, _mult in dca._PORTFOLIO_BANDS:
             self._assert_key(f"dca.port_{key}")
         self._assert_key("dca.port_unknown")
+
+    def test_every_dcf_refusal_has_an_explanation(self):
+        """Composed as ``'dca.dcf_r_' + reason``. A refusal is the *normal* path
+        for three of the ten templates, so a missing key would put a raw
+        identifier on the page at the moment it is explaining itself."""
+        from ystocker import dcf
+
+        for reason in dcf.REFUSALS:
+            self._assert_key(f"dca.dcf_r_{reason}")
+
+    def test_every_dcf_note_has_a_label(self):
+        """``'dca.dcf_n_' + note``. These are the clamps and assumptions the
+        model is required to disclose (§2), so an untranslated one defeats the
+        disclosure."""
+        for note in ("growth_clamped", "spread_clamped", "beta_assumed",
+                     "beta_clamped", "cost_of_debt_assumed", "structure_assumed",
+                     "wacc_clamped", "wacc_overridden", "terminal_heavy",
+                     "mid_cycle_base", "partial_scenarios_ignored"):
+            self._assert_key(f"dca.dcf_n_{note}")
+
+    def test_every_dcf_scenario_and_basis_has_a_label(self):
+        from ystocker import dcf
+
+        for name in dcf.SCENARIO_WEIGHTS:
+            self._assert_key(f"dca.dcf_{name}")
+        for basis in ("three_scenario", "base_only"):
+            self._assert_key(f"dca.dcf_basis_{basis}")
+        for source in ("derived", "override"):
+            self._assert_key(f"dca.dcf_src_{source}")
 
     def test_every_model_reason_has_a_label(self):
         for reason in ("ticker", "industry", "sector", "default", "explicit"):

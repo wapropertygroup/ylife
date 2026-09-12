@@ -1,13 +1,22 @@
 """
 ystocker.dca
 ~~~~~~~~~~~~
-The DCA Valuation Engine: per-ticker valuation percentiles folded into a single
-0-100 ``V`` score, and from that a multiplier on a recurring contribution.
+The DCA Valuation Engine: a company's valuation reduced to a single 0-100 ``V``
+score, and from that a multiplier on a recurring contribution.
 
-    E = sum(weight_f * P_f)          expensiveness, 0 = very cheap, 100 = very dear
-    V = 100 - E                      the score the page headlines
+``V`` has two branches and they are combined, never averaged into one pool::
+
+    E_REL = sum(weight_f * P_f)      relative: where each multiple sits in its own history
+    V_REL = 100 - E_REL
+    V_DCF = f(FV_DCF / P - 1)        absolute: see ystocker.dcf
+    V     = w_DCF * V_DCF + (1 - w_DCF) * V_REL
     M_valuation = 0.5 + V / 100      so V=0 -> 0.50x, V=50 -> 1.00x, V=100 -> 1.50x
     DCA = Base * M_valuation * M_earnings * M_portfolio
+
+The DCF is an *absolute* anchor — what the cash flows are worth — and the
+relative block is a *market* anchor — what this market has paid for them before.
+Neither subsumes the other, which is why they are scored separately and blended
+at the end rather than the DCF being dropped in as a sixth percentile.
 
 Valuation sets the odds; the earnings overlay stops a collapsing forecast reading
 as a bargain; the portfolio overlay stops a good score adding to a position that
@@ -19,7 +28,7 @@ arrives as an argument and every resolver is injected, for the reason
 :mod:`ystocker.lookthrough` is pure: the arithmetic is the part that has to be
 right, and it is only cheaply testable if proving it needs no I/O.
 
-Three decisions here are load-bearing, and each one is a way this could report a
+Four decisions here are load-bearing, and each one is a way this could report a
 confident number that is wrong.
 
 **Direction lives on the factor, never in a formula.** The source framework
@@ -40,6 +49,15 @@ floor, and one surviving factor rescaled to 100% produces a V score that looks
 exactly like a five-factor one. :data:`MIN_SURVIVING_WEIGHT` refuses instead:
 below it :func:`expensiveness` returns ``None`` and the caller has to say so.
 
+**A missing DCF renormalises the same way, and must never become a 50.** This is
+the rule the framework states most emphatically — *"不要把缺失的 V_DCF 填成 50，
+因为这会隐性稀释有效信息"* — and it is the one an implementation is most likely to
+get wrong, because 50 is the neutral value and substituting it feels harmless. It
+is not: a genuinely cheap stock at ``V_REL=80`` with ``w_DCF=0.30`` and a filled
+50 reports 71, which renders identically to a measured 71. :func:`blend_v` moves
+the weight onto ``V_REL`` instead and reports ``w_dcf`` of 0, so the page can say
+the branch is absent rather than neutral.
+
 **A percentile needs a distribution, and a short one is not a small problem.**
 ``percentile_rank`` over eleven observations can only return eleven distinct
 answers, all of them spaced 9 points apart, and it will happily return 100.0
@@ -49,7 +67,8 @@ is the floor, and :func:`percentile_rank` returns ``None`` under it rather than
 a number the page cannot distinguish from a real one.
 
 See :mod:`ystocker.dca_history` for where the distributions come from and why
-there are two of them that must never be mixed.
+there are two of them that must never be mixed, and :mod:`ystocker.dcf` for the
+absolute branch and the eleven conditions under which it declines to produce one.
 """
 from __future__ import annotations
 
@@ -58,8 +77,9 @@ from typing import Any, Iterable, Mapping, Optional, Sequence
 
 __all__ = [
     "DIRECTION", "TEMPLATES", "TICKER_MODELS", "SECTOR_MODELS", "FACTOR_LABELS",
+    "DCF_WEIGHTS", "DCF_FORMS", "DCF_MID_CYCLE", "MAX_DCF_WEIGHT",
     "MIN_OBSERVATIONS", "MIN_SURVIVING_WEIGHT", "MAX_TOTAL_MULTIPLIER",
-    "percentile_rank", "pick_model", "expensiveness", "v_score",
+    "percentile_rank", "pick_model", "expensiveness", "v_score", "blend_v",
     "valuation_multiplier", "score_band", "earnings_multiplier",
     "portfolio_multiplier", "combine", "evaluate",
 ]
@@ -185,6 +205,91 @@ TEMPLATES: dict[str, dict[str, float]] = {
         "pe": 0.35, "ev_ebitda": 0.25, "dividend_yield": 0.20, "peer": 0.20,
     },
 }
+
+# ---------------------------------------------------------------------------
+# The DCF branch's weight in each template
+# ---------------------------------------------------------------------------
+
+#: ``w_DCF`` per template, taken from the point values the framework's own
+#: section equations use (§5-§12) rather than from the ranges in its weight
+#: matrix (§4). A range cannot be transcribed into code without choosing a number
+#: anyway, and choosing it here — once, visibly — beats choosing it implicitly at
+#: each call site.
+#:
+#: The weights are ordered by how *forecastable* the business is, which is §4's
+#: stated principle and worth restating because the intuitive ordering is the
+#: wrong one: a mega-cap compounder gets the highest DCF weight not because it is
+#: the best company but because its cash flows are the most predictable, and a
+#: high-growth name gets the lowest because most of its value sits in a terminal
+#: value nobody can check.
+#:
+#: A weight here is a *ceiling on the branch's influence*, not a promise that the
+#: branch exists. :func:`blend_v` renormalises it to zero whenever
+#: :mod:`ystocker.dcf` declines to produce a score, which for three of these
+#: templates is the normal case — see :data:`DCF_FORMS`.
+DCF_WEIGHTS: dict[str, float] = {
+    "compounder":           0.30,   # §5
+    "healthcare_consumer":  0.25,   # §6
+    "semiconductor":        0.20,   # §7
+    "high_growth_software": 0.15,   # §8
+    "amzn":                 0.25,   # §9
+    "tsla":                 0.15,   # §9
+    "bank":                 0.10,   # §10
+    "cyclical":             0.15,   # §11
+    "reit":                 0.15,   # §12
+    "utility":              0.25,   # §12
+}
+
+#: Ceiling on any blended DCF weight. The framework never sanctions more than
+#: 30%, and the reason is the one §15's worked example exists to make: a DCF that
+#: says a stock is cheap does not on its own mean buy more. An override that
+#: raised this would let one set of assumptions dominate a score the page
+#: presents as a blend of two.
+MAX_DCF_WEIGHT: float = 0.30
+
+#: Which valuation form each template's DCF would have to take. Only
+#: :data:`ystocker.dcf.FORM_FCFF` is implemented, and the other three are named
+#: rather than approximated.
+#:
+#: This is where the framework's most emphatic structural rule lands. §10: a
+#: bank's debt is raw material rather than financing, so enterprise value and
+#: free cash flow are not defined the usual way and the standard FCFF DCF
+#: *"应省略"*. §12 wants an AFFO or NAV valuation for a REIT and warns in the same
+#: breath about confusing maintenance capex with development capex — a split no
+#: Yahoo cash-flow statement exposes — and an FCFE/DDM for a utility, which needs
+#: net borrowing we likewise cannot see.
+#:
+#: So for those three the DCF branch simply does not run, ``w_DCF`` renormalises
+#: to zero and the score is the relative block alone. That is a worse-informed
+#: answer than the framework describes and a much better one than the
+#: alternative: running FCFF anyway would produce a per-share number that renders
+#: on the page exactly like a valid one, for the companies where it is least
+#: meaningful.
+DCF_FORMS: dict[str, str] = {
+    "compounder":           "fcff",
+    "healthcare_consumer":  "fcff",
+    "semiconductor":        "fcff",
+    "high_growth_software": "fcff",
+    "amzn":                 "fcff",
+    "tsla":                 "fcff",
+    "bank":                 "excess_return",
+    "cyclical":             "fcff",
+    "reit":                 "affo",
+    "utility":              "fcfe",
+}
+
+#: Templates whose DCF must start from a mid-cycle cash flow rather than the most
+#: recent year (§7, §11: *"中周期情景"*, *"不要外推峰值商品价格"*).
+#:
+#: The trap is specific and it is not the growth rate. Clamping growth stops a
+#: peak *rate* being extrapolated, but the projection still starts from
+#: ``fcf0`` — and at the top of a semiconductor or commodity cycle that starting
+#: level is itself the peak. Growing a peak at a modest rate for ten years values
+#: the company as though the peak were the new floor, which is precisely the
+#: error §13 lists as *"周期峰值利润/商品价格被永久外推"*. These templates average
+#: the window instead.
+DCF_MID_CYCLE: frozenset[str] = frozenset({"semiconductor", "cyclical"})
+
 
 #: Explicit per-ticker assignment, from the framework's own mapping table. These
 #: beat the sector fallback because the whole point of the AMZN and TSLA rows is
@@ -476,10 +581,62 @@ def expensiveness(percentiles: Mapping[str, Optional[float]],
 
 
 def v_score(e_score: Optional[float]) -> Optional[float]:
-    """``V = 100 - E``. Higher is cheaper."""
+    """``V_REL = 100 - E``. Higher is cheaper.
+
+    This is the *relative* branch only. The headline ``V`` the page shows is
+    :func:`blend_v`'s output, which folds the DCF branch in on top of this — they
+    are equal exactly when there is no DCF, which is the common case and the
+    reason this name did not change.
+    """
     if e_score is None or not _finite(e_score):
         return None
     return round(100.0 - float(e_score), 2)
+
+
+def blend_v(v_rel: Optional[float],
+            v_dcf: Optional[float] = None,
+            w_dcf: float = 0.0) -> dict[str, Any]:
+    """``V = w_DCF V_DCF + (1 - w_DCF) V_REL``, with the omission rule (§13).
+
+    Returns the blended score plus both branches and the weight actually applied,
+    because a reader looking at a V of 52 is entitled to know whether it came
+    from one anchor or two and in what proportion.
+
+    **A missing ``V_DCF`` moves its weight onto ``V_REL``. It is never filled
+    with 50.** The framework is unusually direct about this and the reason is
+    that the wrong behaviour is invisible: 50 is the neutral score, so
+    substituting it produces a number in range, in the right shape, that renders
+    identically to a measured one — while silently pulling every score toward the
+    middle in proportion to ``w_DCF``. A stock at ``V_REL=80`` with ``w_DCF=0.30``
+    would report 71 and nothing on the page would look wrong.
+
+    **A missing ``V_REL`` is fatal, and the DCF cannot rescue it.** The reverse
+    substitution is just as tempting — the DCF branch is right there — and it is
+    refused for a different reason: a score derived entirely from a DCF is not on
+    the same scale as one blended at 30%, so it would sit in a ranked column
+    beside scores it is not comparable to. The framework caps ``w_DCF`` at 30%
+    everywhere, which is exactly the statement that the DCF is never the whole
+    answer. ``V`` of ``None`` sorts last, which is what the overview already does
+    with an unscorable row.
+    """
+    if v_rel is None or not _finite(v_rel):
+        return {"V": None, "V_rel": None, "V_dcf": v_dcf, "w_dcf": 0.0,
+                "blended": False, "reason": "no_relative_score"}
+
+    v_rel = round(max(0.0, min(100.0, float(v_rel))), 4)
+    if v_dcf is None or not _finite(v_dcf):
+        return {"V": round(v_rel, 2), "V_rel": v_rel, "V_dcf": None,
+                "w_dcf": 0.0, "blended": False, "reason": "no_dcf"}
+
+    weight = max(0.0, min(MAX_DCF_WEIGHT, float(w_dcf) if _finite(w_dcf) else 0.0))
+    if weight <= 0.0:
+        return {"V": round(v_rel, 2), "V_rel": v_rel, "V_dcf": round(float(v_dcf), 2),
+                "w_dcf": 0.0, "blended": False, "reason": "zero_weight"}
+
+    v_dcf = round(max(0.0, min(100.0, float(v_dcf))), 4)
+    blended = weight * v_dcf + (1.0 - weight) * v_rel
+    return {"V": round(blended, 2), "V_rel": v_rel, "V_dcf": v_dcf,
+            "w_dcf": round(weight, 4), "blended": True, "reason": None}
 
 
 def valuation_multiplier(v: Optional[float]) -> Optional[float]:
@@ -562,13 +719,22 @@ def evaluate(*, ticker: str,
              industry: Optional[str] = None,
              base_dca: float = 1000.0,
              eps_drift: Optional[float] = None,
-             position_pct: Optional[float] = None) -> dict[str, Any]:
+             position_pct: Optional[float] = None,
+             dcf: Optional[Mapping[str, Any]] = None,
+             w_dcf: Optional[float] = None) -> dict[str, Any]:
     """One ticker, end to end: percentiles in, a sized contribution out.
 
     The whole chain in one call so the page and the tests exercise the same path.
     *model* forces a template; otherwise :func:`pick_model` chooses and reports
     why. Everything needed to render the equation with numbers substituted comes
     back in the result.
+
+    *dcf* is a payload from :mod:`ystocker.dcf` — either branch of it, derived or
+    overridden — and is optional in the strong sense: passing nothing produces
+    exactly the score this engine produced before the DCF branch existed, because
+    :func:`blend_v` puts the whole weight on ``V_REL``. *w_dcf* overrides
+    :data:`DCF_WEIGHTS` for the chosen template, which is what the dynamic
+    down-weighting rule in §4 needs.
     """
     if model and model in TEMPLATES:
         model_key, reason = model, "explicit"
@@ -577,7 +743,13 @@ def evaluate(*, ticker: str,
 
     weights = TEMPLATES[model_key]
     breakdown = expensiveness(percentiles, weights)
-    v = v_score(breakdown["E"])
+    v_rel = v_score(breakdown["E"])
+
+    v_dcf = (dcf or {}).get("V")
+    weight = DCF_WEIGHTS.get(model_key, 0.0) if w_dcf is None else w_dcf
+    blend = blend_v(v_rel, v_dcf, weight)
+
+    v = blend["V"]
     m_val = valuation_multiplier(v)
     m_earn, earn_band = earnings_multiplier(eps_drift)
     m_port, port_band = portfolio_multiplier(position_pct)
@@ -589,6 +761,13 @@ def evaluate(*, ticker: str,
         "model_reason": reason,
         "E": breakdown["E"],
         "V": v,
+        "V_rel": blend["V_rel"],
+        "V_dcf": blend["V_dcf"],
+        "w_dcf": blend["w_dcf"],
+        "w_dcf_template": round(DCF_WEIGHTS.get(model_key, 0.0), 4),
+        "blended": blend["blended"],
+        "blend_reason": blend["reason"],
+        "dcf": dict(dcf) if dcf else None,
         "band": score_band(v),
         "factors": breakdown["factors"],
         "dropped": breakdown["dropped"],

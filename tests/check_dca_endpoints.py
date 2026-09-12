@@ -156,12 +156,31 @@ class DcaEndpoints(unittest.TestCase):
 
         This is the check that a rounding change in one place cannot silently
         make the shown arithmetic disagree with the shown result.
+
+        Since the DCF edition ``V`` is no longer ``100 - E``: that is ``V_rel``,
+        and the headline is the blend of it with ``V_dcf``. Both steps are
+        asserted, so the chain is checked end to end rather than at one link —
+        and a DCF that stopped being folded in would now fail here instead of
+        passing an identity that had quietly stopped describing the engine.
         """
         d = self.client.get("/api/dca/MSFT?base=5000").get_json()
         eq = d["equation"]
         total = sum(t["weight"] * t["percentile"] for t in eq["terms"])
         self.assertAlmostEqual(total, eq["e_value"], places=1)
-        self.assertAlmostEqual(eq["v_value"], 100 - eq["e_value"], places=2)
+
+        # Relative branch.
+        self.assertAlmostEqual(d["V_rel"], 100 - eq["e_value"], places=2)
+
+        # Blend, or the identity when there is no DCF to blend.
+        if d["blended"]:
+            self.assertAlmostEqual(
+                eq["v_value"],
+                round(d["w_dcf"] * d["V_dcf"] + (1 - d["w_dcf"]) * d["V_rel"], 2),
+                places=1)
+        else:
+            self.assertAlmostEqual(eq["v_value"], 100 - eq["e_value"], places=2)
+            self.assertEqual(d["w_dcf"], 0.0)
+
         self.assertAlmostEqual(eq["m_value"], 0.5 + eq["v_value"] / 100, places=3)
 
     def test_base_scales_only_the_final_line(self):
@@ -682,6 +701,117 @@ class DcaPortfolio(unittest.TestCase):
         self.assertIn('data-tab="dca"', body)
         self.assertIn('data-panel="dca"', body)
         self.assertIn("/api/dca/portfolio", body)
+
+
+class DcfBranch(unittest.TestCase):
+    """The absolute branch, through the API that serves it."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.app = create_app()
+        cls.app.config["TESTING"] = True
+        cls.client = cls.app.test_client()
+        dh.peer_percentiles = lambda t, recs=None: {"percentile": 62.5,
+                                                    "group": "Tech"}
+        dh.eps_drift = lambda t: {"drift": 0.0}
+        _seed("MSFT")
+
+    def _api(self, ticker="MSFT"):
+        return self.client.get(f"/api/dca/{ticker}?base=5000").get_json()
+
+    def test_the_branch_is_reported_on_every_scored_response(self):
+        d = self._api()
+        for key in ("V_rel", "V_dcf", "w_dcf", "w_dcf_template", "blended",
+                    "dcf_enabled", "dcf_editable"):
+            self.assertIn(key, d, key)
+
+    def test_the_blend_reconstructs_the_headline(self):
+        """The number the page shows must follow from the two it shows beside
+        it. A reader checking it by hand is exactly who finds a drift."""
+        d = self._api()
+        if not d["blended"]:
+            self.skipTest("no DCF for this fixture")
+        expected = d["w_dcf"] * d["V_dcf"] + (1 - d["w_dcf"]) * d["V_rel"]
+        self.assertAlmostEqual(d["V"], round(expected, 2), places=1)
+
+    def test_the_equation_carries_a_dcf_block(self):
+        eq = self._api()["equation"]
+        self.assertIn("dcf", eq)
+        self.assertIn("w_dcf", eq)
+
+    def test_the_headline_v_line_is_never_missing(self):
+        """Whether or not a DCF exists, the page must have a line explaining V.
+        Losing it for the common case would leave the card blank."""
+        eq = self._api()["equation"]
+        self.assertIsNotNone(eq["v_expression"])
+
+    def test_an_unblended_row_shows_no_intermediate_step(self):
+        """Printing "V = 0.00(—) + 1.00(44.0)" for a ticker with no DCF reads as
+        though the branch had been measured and found neutral."""
+        eq = self._api()["equation"]
+        if not eq["blended"]:
+            self.assertIsNone(eq["v_rel_expression"])
+            self.assertEqual(eq["w_dcf"], 0.0)
+
+    def test_a_refused_branch_never_scores_as_fifty(self):
+        d = self._api()
+        dq = d["equation"]["dcf"] or {}
+        if dq.get("refused"):
+            self.assertIsNone(d["V_dcf"])
+            self.assertEqual(d["w_dcf"], 0.0)
+            self.assertEqual(d["V"], d["V_rel"])
+
+    def test_the_overview_reports_the_branch_per_row(self):
+        d = self.client.get("/api/dca").get_json()
+        self.assertIn("dcf_enabled", d)
+        for row in d["rows"]:
+            for key in ("V_rel", "V_dcf", "w_dcf", "blended"):
+                self.assertIn(key, row, key)
+
+    # ── the override, and who may write one ───────────────────────────────
+    def test_reading_an_override_is_public(self):
+        r = self.client.get("/api/dca/MSFT/dcf")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("override", r.get_json())
+
+    def test_writing_an_override_signed_out_is_refused(self):
+        r = self.client.post("/api/dca/MSFT/dcf", json={"base": 400})
+        self.assertEqual(r.status_code, 403)
+
+    def test_writing_an_override_as_a_non_vip_is_refused(self):
+        with self.client.session_transaction() as sess:
+            sess["user_email"] = "stranger@example.com"
+        r = self.client.post("/api/dca/MSFT/dcf", json={"base": 400})
+        self.assertEqual(r.status_code, 403)
+        r = self.client.delete("/api/dca/MSFT/dcf")
+        self.assertEqual(r.status_code, 403)
+        with self.client.session_transaction() as sess:
+            sess.clear()
+
+    def test_a_public_read_never_leaks_the_author(self):
+        """``/dca`` is public, so an address on the row must not travel with
+        it — the same rule ``share.public_payload`` applies to a sharer's."""
+        body = self.client.get("/api/dca/MSFT/dcf").data.decode()
+        self.assertNotIn("author", body)
+
+    def test_the_page_renders_the_dcf_card(self):
+        body = self.client.get("/dca/MSFT").data.decode()
+        self.assertIn('id="dcfCard"', body)
+        self.assertIn('id="dcfScenarioBody"', body)
+        self.assertIn('id="dcfRefused"', body)
+
+    def test_the_editor_is_in_the_page_but_starts_hidden(self):
+        """A hidden form is not an authorization boundary — the write is
+        re-checked server-side — but it must not be visible by default."""
+        body = self.client.get("/dca/MSFT").data.decode()
+        self.assertIn('id="dcfEditor"', body)
+        self.assertIn('id="dcfEditor" class="hidden', body)
+
+    def test_the_printed_general_form_matches_what_the_engine_computes(self):
+        """The page prints the formula directly under the substituted one. If
+        the two disagree, the reader checking by hand is who finds out."""
+        body = self.client.get("/dca/MSFT").data.decode()
+        self.assertIn("w<sub>dcf</sub>", body)
 
 
 if __name__ == "__main__":  # pragma: no cover
