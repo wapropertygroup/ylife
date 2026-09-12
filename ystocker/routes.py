@@ -1078,21 +1078,58 @@ def _dca_base(default: float = 1000.0) -> float:
     return base if 0 < base <= 1_000_000 else default
 
 
+def _dca_overrides() -> dict:
+    """Every hand-entered DCF, once per request rather than once per row.
+
+    ``dcf_store.all_rows()`` is a DynamoDB Scan. Calling it inside ``_dca_score``
+    would make a twenty-row table twenty scans for one answer, which is the same
+    mistake ``peer_percentiles`` avoids by taking ``recs`` — and on
+    ``PAY_PER_REQUEST`` a scan is billed by volume scanned, so it is the
+    expensive kind of duplicated work rather than merely the slow kind.
+
+    Never fails the page. An unreachable override table means the derived DCF
+    runs, which is a complete answer; the payload says which one produced the
+    score.
+    """
+    if not dca_dcf_enabled():
+        return {}
+    try:
+        from ystocker import dcf_store
+
+        return dcf_store.all_rows()
+    except Exception as exc:  # noqa: BLE001
+        log.info("DCA: DCF overrides unavailable: %s", exc)
+        return {}
+
+
+def dca_dcf_enabled() -> bool:
+    """The DCF branch's kill switch.
+
+    With ``DCA_DCF=0`` the engine scores exactly as it did before the branch
+    existed: ``_dca_score`` passes no ``dcf``, :func:`ystocker.dca.blend_v` puts
+    the whole weight on ``V_REL``, and the page's DCF card is not rendered. The
+    switch is here rather than in ``dca.py`` so the pure module stays free of
+    environment reads.
+    """
+    return os.environ.get("DCA_DCF", "1").strip().lower() not in ("0", "false", "no")
+
+
 def _dca_score(symbol: str, payload: dict, base: float, *,
-               recs=None, exposure=None) -> tuple[dict, dict, dict, dict]:
+               recs=None, exposure=None, overrides=None) -> tuple[dict, dict, dict, dict]:
     """Score one ticker. Returns ``(result, peer, drift, position)``.
 
-    The single scoring path, shared by ``/api/dca/<ticker>`` and the overview
-    list. Two implementations of one formula would agree the day they were
-    written and drift afterwards, and the page shows both a row and a detail
-    view of the same company -- a reader comparing them is exactly who would
-    find the disagreement.
+    The single scoring path, shared by ``/api/dca/<ticker>``, the overview list
+    and the ``/assets`` sizing tab. Two implementations of one formula would
+    agree the day they were written and drift afterwards, and the page shows both
+    a row and a detail view of the same company -- a reader comparing them is
+    exactly who would find the disagreement.
 
-    *recs* and *exposure* are the two lookups that are per-request rather than
-    per-ticker. ``peer_percentiles`` re-parses a ~170 KB file when not given
-    records, and the look-through walk behind ``position`` is a whole-portfolio
-    analysis; doing either once per row makes a twenty-row table twenty times
-    the work for the same answer.
+    *recs*, *exposure* and *overrides* are the three lookups that are per-request
+    rather than per-ticker. ``peer_percentiles`` re-parses a ~170 KB file when not
+    given records, the look-through walk behind ``position`` is a whole-portfolio
+    analysis, and ``dcf_store.all_rows()`` is a DynamoDB scan; doing any of them
+    once per row makes a twenty-row table twenty times the work for the same
+    answer.
     """
     from ystocker import dca
 
@@ -1104,6 +1141,33 @@ def _dca_score(symbol: str, payload: dict, base: float, *,
     drift = dca_history.eps_drift(symbol)
     position = _dca_position(symbol, exposure)
 
+    # The model has to be chosen before the DCF runs, because the template
+    # decides both the valuation *form* (§10/§12 exclude FCFF for three of them)
+    # and whether the projection starts from a mid-cycle cash flow (§7/§11).
+    # `evaluate` re-derives the same choice from the same inputs, so the two
+    # cannot diverge.
+    model, _why = dca.pick_model(symbol, payload.get("sector"),
+                                 payload.get("industry"))
+    dcf_payload = w_dcf = None
+    if dca_dcf_enabled():
+        import datetime as _dt
+
+        override = (overrides or {}).get(symbol) if overrides is not None \
+            else _dca_overrides().get(symbol)
+        try:
+            dcf_payload = dca_history.dcf_for(
+                symbol, payload, model=model, override=override,
+                as_of=_dt.date.today().isoformat())
+        except Exception as exc:  # noqa: BLE001 - one branch of three must not
+            # take the score with it. A DCF that raised is an absent DCF, which
+            # blend_v already renormalises away.
+            log.info("DCA: DCF branch failed for %s: %s", symbol, exc)
+            dcf_payload = None
+        if override and override.get("w_dcf") is not None:
+            # §4's dynamic down-weighting. Nothing derives this; it is the
+            # judgement that a particular DCF deserves less influence.
+            w_dcf = override["w_dcf"]
+
     result = dca.evaluate(
         ticker=symbol,
         percentiles=percentiles,
@@ -1112,6 +1176,8 @@ def _dca_score(symbol: str, payload: dict, base: float, *,
         base_dca=base,
         eps_drift=drift.get("drift"),
         position_pct=position.get("pct"),
+        dcf=dcf_payload,
+        w_dcf=w_dcf,
     )
     return result, peer, drift, position
 
@@ -1205,6 +1271,8 @@ def api_dca(ticker: str):
         "forward_context": payload.get("forward_context"),
         "unavailable": payload.get("unavailable"),
         "equation": _dca_equation(result, weights),
+        "dcf_enabled": dca_dcf_enabled(),
+        "dcf_editable": _dca_dcf_editable(),
         "built_at": payload.get("_ts"),
         "stale": (time.time() - (payload.get("_ts") or 0)) > dca_history.TTL_SECONDS,
     })
@@ -1246,6 +1314,7 @@ def api_dca_list():
     # One read of each per-request lookup, not one per row. See _dca_score.
     recs = _cached_fundamentals()
     exposure = _dca_exposure()
+    overrides = _dca_overrides()
 
     rows, pending = [], []
     for symbol in wanted:
@@ -1254,7 +1323,8 @@ def api_dca_list():
             pending.append(symbol)
             continue
         result, peer, drift, position = _dca_score(
-            symbol, payload, base, recs=recs, exposure=exposure)
+            symbol, payload, base, recs=recs, exposure=exposure,
+            overrides=overrides)
         window = payload.get("window") or {}
         rows.append({
             "ticker": symbol,
@@ -1263,6 +1333,12 @@ def api_dca_list():
             "model": result["model"],
             "V": result["V"],
             "E": result["E"],
+            "V_rel": result["V_rel"],
+            "V_dcf": result["V_dcf"],
+            "w_dcf": result["w_dcf"],
+            "blended": result["blended"],
+            "dcf_reason": (result.get("dcf") or {}).get("reason"),
+            "dcf_source": (result.get("dcf") or {}).get("source"),
             "band": result["band"],
             "m_valuation": result["m_valuation"],
             "m_earnings": result["m_earnings"],
@@ -1299,6 +1375,7 @@ def api_dca_list():
         "warming": dca_history.is_warming(),
         "registry": dca_universe.stats(),
         "max_multiplier": dca_max_multiplier(),
+        "dcf_enabled": dca_dcf_enabled(),
         "generated_at": time.time(),
     })
 
@@ -1379,6 +1456,7 @@ def api_dca_portfolio():
         "coverage_pct": analysis.get("coverage_pct"),
     }
     recs = _cached_fundamentals()
+    overrides = _dca_overrides()
 
     rows, pending, kicked = [], [], 0
 
@@ -1410,12 +1488,16 @@ def api_dca_portfolio():
             continue
 
         result, _peer, _drift, _position = _dca_score(
-            symbol, payload, base, recs=recs, exposure=exposure)
+            symbol, payload, base, recs=recs, exposure=exposure,
+            overrides=overrides)
         rows.append({
             **row,
             "status": "ok" if result["V"] is not None else "no_score",
             "model": result["model"],
             "V": result["V"],
+            "V_rel": result["V_rel"],
+            "V_dcf": result["V_dcf"],
+            "w_dcf": result["w_dcf"],
             "band": result["band"],
             "m_valuation": result["m_valuation"],
             "m_earnings": result["m_earnings"],
@@ -1626,15 +1708,42 @@ def _dca_equation(result: dict, weights: dict) -> dict:
 
     e_value, v_value = result.get("E"), result.get("V")
     m_value, base = result.get("m_valuation"), result.get("base_dca")
+    v_rel, v_dcf = result.get("V_rel"), result.get("V_dcf")
+    w_dcf = result.get("w_dcf") or 0.0
+
+    # The blend line only appears when a blend happened. Rendering
+    # "V = 0.00(—) + 1.00(44.0)" for every ticker without a DCF would be
+    # arithmetically honest and would read as though the branch had been
+    # measured and found neutral -- which is precisely the confusion §13's
+    # "do not fill a missing V_DCF with 50" rule exists to prevent.
+    #
+    # ``v_expression`` therefore always explains the *headline* V and changes
+    # shape rather than appearing and disappearing: without a DCF the headline
+    # simply is ``100 - E``, and ``v_rel_expression`` stays empty because there
+    # is no intermediate step to show. A page that lost its V line whenever the
+    # DCF was absent would be blank for the common case.
+    blended = bool(result.get("blended")) and v_rel is not None and v_dcf is not None
     return {
         "terms": terms,
         "dropped": result.get("dropped") or [],
         "renormalised": result.get("renormalised"),
         "surviving_weight": result.get("surviving_weight"),
-        "e_expression": f"E = {e_terms}" if e_terms else None,
+        "e_expression": f"E_rel = {e_terms}" if e_terms else None,
         "e_value": e_value,
-        "v_expression": None if e_value is None else f"V = 100 - {e_value:.2f}",
+        "v_rel_expression": (
+            f"V_rel = 100 - {e_value:.2f}"
+            if (blended and e_value is not None) else None),
+        "v_rel_value": v_rel,
+        "v_expression": (
+            f"V = {w_dcf:.2f}({v_dcf:.1f}) + {1 - w_dcf:.2f}({v_rel:.1f})"
+            if blended else
+            (None if e_value is None else f"V = 100 - {e_value:.2f}")),
         "v_value": v_value,
+        "blended": blended,
+        "w_dcf": w_dcf,
+        "w_dcf_template": result.get("w_dcf_template"),
+        "blend_reason": result.get("blend_reason"),
+        "dcf": _dcf_equation(result.get("dcf")),
         "m_expression": None if v_value is None else f"M_valuation = 0.5 + {v_value:.2f} / 100",
         "m_value": m_value,
         "dca_expression": (
@@ -1648,11 +1757,157 @@ def _dca_equation(result: dict, weights: dict) -> dict:
     }
 
 
+def _dcf_equation(dcf_payload: Optional[dict]) -> Optional[dict]:
+    """The absolute branch restated as substituted arithmetic.
+
+    Same contract as ``_dca_equation``: composed server-side from the dict the
+    score came from, so the strings a reader checks cannot round differently
+    from the answer above them.
+
+    Every line is guarded for ``None`` for the reason the relative equation is —
+    a refused DCF leaves ``V``, ``raw`` and ``confidence`` unset, and formatting
+    any of those with ``:.2f`` raises ``TypeError`` and 500s a public page. A
+    refusal is the *normal* path for three of the ten templates, so this is not
+    an edge case.
+    """
+    if not dcf_payload:
+        return None
+    if dcf_payload.get("refused"):
+        return {"refused": True, "reason": dcf_payload.get("reason"),
+                "source": dcf_payload.get("source"),
+                "override": dcf_payload.get("override")}
+
+    raw, conf, v = (dcf_payload.get("raw"), dcf_payload.get("confidence"),
+                    dcf_payload.get("V"))
+    scenarios = dcf_payload.get("scenarios") or []
+    weighted = " + ".join(
+        f"{s['weight']:.2f}({s['V']:.1f})" for s in scenarios
+        if s.get("weight") and s.get("V") is not None)
+    model = dcf_payload.get("model") or {}
+    return {
+        "refused": False,
+        "reason": None,
+        "source": dcf_payload.get("source"),
+        "basis": dcf_payload.get("basis"),
+        "scenarios": scenarios,
+        "raw_expression": f"V_dcf,raw = {weighted}" if weighted else None,
+        "raw_value": raw,
+        "v_expression": (
+            None if (raw is None or conf is None) else
+            f"V_dcf = 50 + {conf:.2f}({raw:.2f} - 50)"),
+        "v_value": v,
+        "confidence": conf,
+        "price": dcf_payload.get("price"),
+        "price_date": dcf_payload.get("price_date"),
+        "valuation_date": dcf_payload.get("valuation_date"),
+        "notes": dcf_payload.get("notes") or [],
+        "override": dcf_payload.get("override"),
+        "wacc": (model.get("capital") or {}).get("wacc"),
+        "terminal_growth": model.get("terminal_growth"),
+        "terminal_share": model.get("terminal_share"),
+        "sensitivity": model.get("sensitivity"),
+        "years": model.get("years"),
+        "mid_cycle": model.get("mid_cycle"),
+        "growth": model.get("growth"),
+        "capital": model.get("capital"),
+    }
+
+
 def dca_max_multiplier() -> float:
     """The 1.5x ceiling, read from the engine so the page cannot quote a stale one."""
     from ystocker import dca
 
     return dca.MAX_TOTAL_MULTIPLIER
+
+
+def _dca_dcf_editable() -> bool:
+    """Whether this visitor may set a DCF override.
+
+    Drives whether the editor is rendered at all. It is a convenience, not the
+    control: ``api_dca_dcf`` re-checks on the write, because a hidden form is
+    not an authorization boundary.
+    """
+    try:
+        from ystocker.quota import is_vip
+
+        return dca_dcf_enabled() and is_vip(session.get("user_email"))
+    except Exception:  # noqa: BLE001 - a missing session must not 500 the page
+        return False
+
+
+@bp.route("/api/dca/<ticker>/dcf", methods=["GET", "POST", "DELETE"])
+def api_dca_dcf(ticker: str):
+    """Read, store or clear the hand-entered DCF for one ticker.
+
+    **Writes are VIP-gated and reads are not**, which is a deliberate asymmetry
+    rather than an oversight. ``/dca`` is public like ``/history``, so the stored
+    values are already visible in every score the page renders — hiding the
+    inputs behind a sign-in while publishing the output would be security
+    theatre. Writing is different in kind: an override changes the number every
+    visitor sees, so it is the one action here that needs an identity behind it.
+
+    The gate is ``quota.is_vip``, the same list ``agents.can_read`` uses for its
+    one deliberate privacy exception. It is checked here rather than inside
+    ``dcf_store`` because a store that consults the session is a store that
+    cannot be tested without one.
+
+    A rejected override returns 400 with the validator's own message. That
+    message is written to be read by the person who typed the value — "the bear
+    case cannot exceed the bull case" is actionable in a way that "validation
+    failed" is not.
+    """
+    from ystocker import dcf_store
+    from ystocker.quota import is_vip
+
+    symbol = ticker.strip().upper()
+    if not dca_dcf_enabled():
+        return jsonify({"error": "The DCF branch is disabled.",
+                        "reason": "disabled"}), 404
+
+    if request.method == "GET":
+        row = dcf_store.get(symbol) or {}
+        # The author's address never leaves the server on a public route, for
+        # the reason share.public_payload masks a sharer's.
+        row.pop("author", None)
+        return jsonify({"ticker": symbol, "override": row or None,
+                        "editable": is_vip(session.get("user_email"))})
+
+    email = session.get("user_email")
+    if not is_vip(email):
+        return jsonify({"error": "Only the site owner can set a DCF override.",
+                        "reason": "forbidden"}), 403
+
+    if request.method == "DELETE":
+        removed = dcf_store.delete(symbol)
+        log.info("DCA: DCF override cleared for %s by %s", symbol, email)
+        _dca_drop_cached(symbol)
+        return jsonify({"ticker": symbol, "removed": removed})
+
+    body = request.get_json(silent=True) or {}
+    try:
+        row = dcf_store.validate(symbol, {**body, "author": email})
+    except dcf_store.ValidationError as exc:
+        return jsonify({"error": str(exc), "reason": "invalid"}), 400
+
+    stored = dcf_store.put(row)
+    log.info("DCA: DCF override stored for %s by %s (%s)",
+             symbol, email, stored.get("mode"))
+    _dca_drop_cached(symbol)
+    stored.pop("author", None)
+    return jsonify({"ticker": symbol, "override": stored})
+
+
+def _dca_drop_cached(symbol: str) -> None:
+    """Forget any in-process score for *symbol* after an override changes.
+
+    There is nothing to invalidate today — ``_dca_score`` recomputes from the
+    reconstruction on every request and the override is read per request — so
+    this is a no-op placeholder kept deliberately small. It exists as the single
+    named place to hook a cache, because the failure mode if one is ever added
+    without it is the worst kind: the override is stored, the API reports
+    success, and the page keeps showing the old number.
+    """
+    return None
 
 
 @bp.route("/dca/<ticker>/refresh")

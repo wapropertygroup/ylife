@@ -214,6 +214,10 @@ Each app follows the same pattern:
   `assets.py` — the `/assets` asset tracker and its 穿透 (look-through). See the
   section below; `lookthrough.py` is pure and injectable, which is what makes the
   arithmetic testable without a cache or a network.
+- `dca.py` / `dcf.py` / `dcf_store.py` / `dca_history.py` / `dca_universe.py` —
+  the `/dca` valuation engine. `dca.py` and `dcf.py` are **pure** for the same
+  reason `lookthrough.py` is: a DCF is mostly assumption, so the arithmetic on
+  top of those assumptions is the one part that can actually be proven.
 
 ### The asset tracker and 穿透 (`/assets`)
 
@@ -373,20 +377,153 @@ aws dynamodb create-table --table-name ystocker-assets --region us-west-2 \
 
 ### The DCA Valuation Engine (`/dca/<ticker>`)
 
-A per-ticker page that ranks a company's valuation against **its own history**,
-folds the ranks into one 0-100 `V` score, and turns that into a multiplier on a
-recurring contribution. `V` is a *cheapness* score: `M_valuation = 0.5 + V/100`,
-so V=0 → 0.50x, V=50 → 1.00x, V=100 → 1.50x, and
-`DCA = Base × M_valuation × M_earnings × M_portfolio`. Valuation sets the pace of
+A per-ticker page that scores a company's valuation on two anchors, folds them
+into one 0-100 `V` score, and turns that into a multiplier on a recurring
+contribution. `V` is a *cheapness* score:
+
+```
+E_REL = Σ wf·Pf          relative: each multiple against its own history
+V_REL = 100 − E_REL
+V_DCF = 50 + c·(Σ ws·Vs − 50)     absolute: a discounted cash flow, see dcf.py
+V     = w_DCF·V_DCF + (1 − w_DCF)·V_REL
+M_valuation = 0.5 + V/100
+DCA = Base × M_valuation × M_earnings × M_portfolio
+```
+
+so V=0 → 0.50x, V=50 → 1.00x, V=100 → 1.50x. Valuation sets the pace of
 buying; it never answers whether to buy. Linked from the `/history/<ticker>`
 header; the page is public, like `/history`.
 
-Two modules, split by what can be tested without I/O:
+Five modules, split by what can be tested without I/O:
 
 | Module | Job | Pure? |
 |---|---|---|
-| `dca.py` | Weight templates, the direction table, E→V→multipliers | **yes** |
+| `dca.py` | Weight templates, the direction table, E→V→multipliers, the blend | **yes** |
+| `dcf.py` | The absolute branch: WACC, projection, upside→`V_DCF` | **yes** |
+| `dcf_store.py` | Hand-entered DCF inputs (`ystocker-dca-dcf`) | validator is |
 | `dca_history.py` | Reconstructing the distributions, banking the snapshots | mostly |
+| `dca_universe.py` | Which tickers the overview ranks | no |
+
+#### The two anchors, and why they are blended rather than pooled
+
+The DCF answers "what are these cash flows worth"; the relative block answers
+"what has this market paid for them before". Neither subsumes the other, so the
+DCF is **not** added as a sixth percentile — each is reduced to a cheapness
+score on its own terms and only then combined. `w_DCF` is ordered by how
+*forecastable* the business is, not how good it is: a mega-cap compounder gets
+30% because its cash flows are predictable, high-growth software 15% because
+most of its value sits in a terminal value nobody can check.
+
+**A missing `V_DCF` renormalises onto `V_REL` and is never filled with 50.**
+This is the framework's own most emphatic rule and the easiest one to get wrong,
+because 50 is the neutral value and substituting it feels harmless. It is not: a
+stock at `V_REL=80` with `w_DCF=0.30` and a filled 50 reports 71, which renders
+identically to a measured 71 while quietly dragging every score toward the
+middle. `blend_v()` moves the weight instead and reports `w_dcf: 0`, so the page
+says the branch is *absent* rather than neutral.
+
+The reverse substitution is refused too, for a different reason: a `V` derived
+entirely from a DCF is not on the same scale as one blended at 30%, so it would
+sit in a ranked column beside scores it cannot be compared to. A missing
+`V_REL` is fatal and sorts last.
+
+**Three of the ten templates never run a DCF at all, and that is the design.**
+`DCF_FORMS` names the form each template would need; only FCFF is implemented.
+A bank's debt is raw material rather than financing, so enterprise value and
+free cash flow are not defined the usual way (§10 says omit the standard DCF); a
+REIT needs an AFFO or NAV valuation and the maintenance-versus-development capex
+split no Yahoo statement exposes; a utility needs FCFE or a dividend model.
+Running FCFF anyway would produce a per-share number that renders on the page
+exactly like a valid one, for the companies where it is least meaningful. So
+they score on `V_REL` alone and the page says which form was missing.
+
+**Refusals are named, not inferred, and there are eleven of them** (`REFUSALS`).
+Two are worth calling out because the tempting implementation is a clamp:
+
+- `WACC ≤ g` is *not a low-confidence DCF, it is not a DCF*. The Gordon
+  denominator goes negative or explodes and the per-share figure is meaningless
+  rather than merely uncertain. `MIN_WACC_SPREAD` (1.5pp) refuses; just inside
+  the singularity the formula returns a huge *finite* number, which is the
+  dangerous case because it looks like an answer.
+- The **sensitivity test is run, not reasoned about**. §13 asks whether the
+  result moves violently for +0.5pp on `g`; that is measurable, so
+  `growth_sensitivity()` re-values and compares rather than proxying it with the
+  terminal share. The two correlate and are not the same thing.
+
+**Two different guards stop a cyclical being valued at its peak, and only one of
+them is the growth rate.** Clamping growth (`GROWTH_CEILING`) stops a peak
+*rate* being extrapolated — but at the top of a semiconductor or commodity cycle
+the starting *level* `fcf0` is itself the peak, and growing a peak slowly for ten
+years values the company as though the peak were the new floor. `DCF_MID_CYCLE`
+(semiconductor, cyclical) starts from the window mean instead, per §7 and §11.
+
+**Scenarios come from the company's own dispersion, not a house ±20%.** Bear and
+Bull are Base plus and minus the standard deviation of that company's own
+year-over-year FCF growth, so a utility gets a narrow band and a foundry a wide
+one — measured from the same vintages the relative percentiles are built on.
+Confidence `c` is likewise derived only from things visible on the page (history
+length, terminal share, band width), so every deduction is checkable. Base-only
+caps `c` at 0.75 per §3, and a lone wing is dropped rather than half-used:
+filling a missing Bear with the Base case narrows the band and therefore *raises*
+implied confidence in exactly the situation where less is known.
+
+**The DCF costs no extra Yahoo call.** `dcf_inputs()` reads only what `build()`
+already stored. One trap in it is silent and total: `build()` copies the annual
+FCF onto every quarterly TTM vintage (right for a weekly P/FCF), so including
+those here would repeat one figure three or four times, making observed growth
+exactly zero and the dispersion collapse — with a series that still looks the
+right length. Filtering on `kind == "annual"` is the whole fix.
+
+**The price is the reconstruction's last weekly close, not a live quote**, so
+`V_DCF` and `V_REL` describe one price rather than two moments. Consequently
+§13's staleness gate does **not** fire on the derived path: fair value and price
+are struck at the same close, so the upside is internally consistent whatever the
+date. Applying it anyway is actively incoherent — an old reconstruction would
+drop the DCF for stale prices while `V_REL` went on ranking multiples built from
+those *same* stale prices. The gate still applies to a stored valuation, which is
+the case it was written for (`MAX_VALUATION_AGE_DAYS`, 120).
+
+Adding `beta` to `_FORWARD_KEYS` was done **without** a `CACHE_VER` bump,
+deliberately: a bump invalidates every reconstruction at once, which at the
+registry cap is ~360 Yahoo reads in one sweep — the exact burst this module's
+budget exists to prevent. An older payload has no beta, `wacc()` assumes 1.0 and
+says so in `notes`, and the next daily rebuild fixes it. Degrading visibly for a
+day beats a refetch storm on deploy.
+
+**The override is VIP-gated on write and public on read**, which is deliberate
+asymmetry: the stored values are already visible in every score the public page
+renders, so hiding the inputs while publishing the output would be theatre.
+Writing changes the number every visitor sees, so `quota.is_vip` guards it — in
+`routes.py`, not in `dcf_store`, because a store that consults the session cannot
+be tested without one. Fair values replace the model's *output*; `wacc` /
+`terminal_growth` replace its *inputs* and let it run; `w_dcf` is the only
+implementation of §4's dynamic down-weighting, which nothing can derive. An
+overridden WACC must **replace** the derived rate, not feed into it — setting the
+risk-free rate to the target and zeroing the ERP looks equivalent and is not, as
+the debt weighting still applies and a requested 12% comes out at 11.9% with the
+page reporting a rate the valuation did not use.
+
+`dcf_store` **degrades** where `portfolio` fails closed, and the difference is
+which silence misleads: a missing override means the derived DCF runs, which is a
+complete answer, and the payload's `source` says which produced it.
+
+`DCA_DCF=0` is the kill switch — the engine then scores exactly as it did before
+the branch existed, because `blend_v` puts the whole weight on `V_REL` and the
+card is not rendered.
+
+```bash
+aws dynamodb create-table --table-name ystocker-dca-dcf --region us-west-2 \
+  --billing-mode PAY_PER_REQUEST \
+  --attribute-definitions AttributeName=ticker,AttributeType=S \
+  --key-schema AttributeName=ticker,KeyType=HASH
+```
+
+Not in `deploy/cloudformation.yaml`, matching every other table here and for the
+same reason. IAM needs no change (`table/ystocker-*`). No TTL: a hand-built
+valuation is exactly the thing that must not evaporate — the 120-day staleness
+rule refuses to *score* an old row while leaving it visible and editable.
+
+#### The relative branch
 
 **The percentile's basis is the whole ballgame.** A forward P/E and a trailing
 P/E are different numbers about the same company, and for anything growing the
@@ -473,6 +610,15 @@ peer factor and the V-history line does not — the adaptive rule drops it and
 renormalises automatically — and the chart says where it ends versus the
 headline. Holding today's peer percentile constant back through 2021 would draw
 a smoother line the data cannot support.
+
+**The DCF branch has no history either, for the same reason and with the same
+consequence.** A DCF struck today says nothing about what a DCF struck in 2023
+would have concluded, and back-solving one from the statements public that week
+would need a point-in-time WACC and a point-in-time consensus neither of which is
+recoverable. So `v_history()` is a **`V_REL` line**, not a `V` line, and on a
+blended ticker its last point is deliberately not the headline — exactly as with
+peer, and labelled the same way. Two branches now sit between the chart and the
+headline rather than one.
 
 Model selection is ticker → industry → sector → `compounder`, and the ticker map
 beats the rest for a reason: AMZN and TSLA are both "Consumer Cyclical" on Yahoo,
@@ -637,15 +783,30 @@ move" and "could not be measured" are different statements. A row the
 concentration term is actually throttling gets a warning rail, since that is the
 one signal worth acting on and it is easy to lose in a number.
 
-Tests: `tests/test_dca.py` (48, no app/network — including the framework's own
-worked example, E=75.55 → $3,722.50 on a $5,000 base, and a check that every
-band/model/factor key exists in **both** EN and ZH, since those are composed in
-JS by string concatenation where `I18n.apply()` cannot reach them),
-`tests/test_dca_history.py` (58, the look-ahead guards, the TTM sum, the
-year-ago growth window, the build budget and the capex sign trap),
-`tests/test_dca_universe.py` (24, the cap and what it evicts), and
-`tests/check_dca_endpoints.py` (54 end-to-end, `check_` so `unittest discover`
-skips it — it needs an app and stubs matplotlib).
+Tests: `tests/test_dca.py` (72, no app/network — including **both** worked
+examples: the relative-only one (E=75.55 → $3,722.50 on a $5,000 base) and §15's
+DCF-integrated one (V_DCF=71.0, V_REL=44.0 → V=52.1 → ~$3,905), plus a check that
+every band/model/factor key *and every DCF refusal and note* exists in **both** EN
+and ZH, since those are composed in JS by string concatenation where
+`I18n.apply()` cannot reach them), `tests/test_dcf.py` (56, the upside map's
+monotonicity and clamps, the scenario weighting, every refusal, and the
+zero-growth perpetuity identity that pins the discounting),
+`tests/test_dcf_store.py` (18, the override validator — scenarios out of order,
+a WACC that could never score, bands refused rather than clamped),
+`tests/test_dca_history.py` (74, the look-ahead guards, the TTM sum, the
+year-ago growth window, the build budget, the capex sign trap and the
+annual-only DCF series), `tests/test_dca_universe.py` (24, the cap and what it
+evicts), and `tests/check_dca_endpoints.py` (68 end-to-end, `check_` so
+`unittest discover` skips it — it needs an app and stubs matplotlib).
+
+Two of those are worth knowing about before changing the engine. The endpoint
+check `test_the_equation_evaluates_to_its_own_answer` no longer asserts
+`V == 100 − E` — that is `V_REL` now — and instead walks the whole chain, so a
+DCF that silently stopped being folded in fails there rather than passing an
+identity that had quietly stopped describing the engine. And
+`tests/test_theme_classes.py` scans templates for `classList` calls holding more
+than one token; it cannot tell code from comment, so an explanatory comment
+*quoting* the broken form fails the build.
 
 The table is **not** in `deploy/cloudformation.yaml`, matching every other
 observed series here and for the same reason. IAM needs no change
