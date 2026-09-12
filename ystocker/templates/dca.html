@@ -122,22 +122,30 @@
       </div>
       <div id="dcaCapped" class="hidden mt-2 text-xs text-amber-700 dark:text-amber-400"></div>
       <div class="grid grid-cols-3 gap-2 mt-4">
-        <div class="well px-3 py-2">
+        <div class="well px-3 py-2" data-i18n-title="dca.m_h_val">
           <div class="text-[10px] text-slate-500" data-i18n="dca.m_val">M_valuation</div>
           <div id="mVal" class="text-base font-semibold">—</div>
           <div id="mValWhy" class="text-[10px] text-slate-500 truncate"></div>
         </div>
-        <div class="well px-3 py-2">
+        <div class="well px-3 py-2" data-i18n-title="dca.m_h_earn">
           <div class="text-[10px] text-slate-500" data-i18n="dca.m_earn">M_earnings</div>
           <div id="mEarn" class="text-base font-semibold">—</div>
           <div id="mEarnWhy" class="text-[10px] text-slate-500 truncate"></div>
         </div>
-        <div class="well px-3 py-2">
+        <div class="well px-3 py-2" data-i18n-title="dca.m_h_port">
           <div class="text-[10px] text-slate-500" data-i18n="dca.m_port">M_portfolio</div>
           <div id="mPort" class="text-base font-semibold">—</div>
           <div id="mPortWhy" class="text-[10px] text-slate-500 truncate"></div>
         </div>
       </div>
+      <!-- Collapsed: the three tiles showed a number and a band name with
+           nothing saying where either came from. -->
+      <details class="mt-3">
+        <summary class="text-xs font-medium cursor-pointer text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+                 data-i18n="dca.m_help">How these three are calculated</summary>
+        <div class="text-xs text-slate-500 leading-relaxed mt-2"
+             data-i18n-html="dca.m_help_body"></div>
+      </details>
     </div>
   </div>
 
