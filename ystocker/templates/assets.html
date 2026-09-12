@@ -502,9 +502,9 @@
       <div class="as-card p-4 sm:p-5 mb-4">
         <div class="flex items-start justify-between gap-4 flex-wrap">
           <div class="max-w-2xl">
-            <h3 class="text-sm font-semibold mb-1" data-i18n="adca.title">This period's contribution, per holding</h3>
+            <h3 class="text-sm font-semibold mb-1" data-i18n="adca.title">Sizing across your penetrated holdings</h3>
             <p class="text-xs" style="color:var(--as-muted)" data-i18n="adca.intro">
-              Base × M_valuation × M_earnings × M_portfolio. The concentration term uses your 穿透 weight, not the line weight — holding NVDA directly and an S&amp;P fund besides is more NVDA than the row says, and this is the one place that shows both terms pulling against each other on your own money.
+              Funds are fully penetrated first, so the unit here is the company, not the line. You do not own "a fund" — you own the businesses inside it, and only a business has a valuation. Each name is scored against its own multiple history, weighted by what you actually hold through every route.
             </p>
           </div>
           <div class="flex items-center gap-2 shrink-0">
@@ -515,6 +515,7 @@
           </div>
         </div>
         <div id="asDcaTotals" class="mt-3 flex gap-2 flex-wrap"></div>
+        <p id="asDcaCaveat" class="text-xs mt-3" style="color:var(--as-muted)"></p>
       </div>
 
       <div id="asDcaEmpty" class="as-card p-6 text-center text-sm hidden" style="color:var(--as-muted)"></div>
@@ -523,22 +524,22 @@
         <table class="as-holdings-table w-full text-xs">
           <thead>
             <tr>
-              <th data-i18n="adca.col_symbol">Symbol</th>
-              <th data-i18n="adca.col_weight">Weight (穿透)</th>
+              <th data-i18n="adca.col_symbol">Company</th>
+              <th data-i18n="adca.col_weight">Your exposure</th>
               <th class="text-right" data-i18n="adca.col_v">V</th>
               <th data-i18n="adca.col_band">State</th>
               <th class="text-right" data-i18n="adca.col_mval">M_val</th>
               <th class="text-right" data-i18n="adca.col_mearn">M_earn</th>
               <th class="text-right" data-i18n="adca.col_mport">M_port</th>
               <th class="text-right" data-i18n="adca.col_mult">Total ×</th>
-              <th class="text-right" data-i18n="adca.col_amount">Contribution</th>
+              <th class="text-right" data-i18n="adca.col_amount">Per base unit</th>
             </tr>
           </thead>
           <tbody id="asDcaBody"></tbody>
         </table>
       </div>
       <p class="text-xs mt-3" style="color:var(--as-muted)" data-i18n="adca.footnote">
-        Valuation sets the pace of buying; it never decides whether to buy. Funds are not scored — the engine ranks a company against its own multiple history, and an ETF has no P/E of its own here. A name with no published statements, or too few measurable factors, shows no multiplier rather than a guessed one.
+        Valuation sets the pace of buying; it never decides whether to buy. A look-through row is analysis, not an order — you buy the fund, not the Apple inside it, so the actionable figure is the portfolio multiplier above and the per-name amount is what one base unit into that company would size to. Every exposure is a lower bound: Yahoo discloses a fund's top ten holdings only, so the real weight is at least what is shown here.
       </p>
     </section>
 
@@ -756,8 +757,30 @@
     return '';
   }
 
+  /* The company cell. Links to that name's own DCA page, which is where the
+     equation and the multiple history live. */
+  function nameCell(r) {
+    return '<td><a href="/dca/' + encodeURIComponent(r.ticker) +
+      '" class="font-mono font-semibold hover:underline">' + esc(r.ticker) + '</a>' +
+      '<div style="color:var(--as-muted)" class="truncate">' + esc(r.name || '') + '</div></td>';
+  }
+
+  /* Exposure after full penetration, with the two things that make it mean
+     something: the money behind the percentage, and how many holdings reach the
+     company. A route count above 1 is the entire point of 穿透 -- it is
+     concentration the reader did not know they had, and the number they would
+     otherwise have to add up by hand across every fund. */
+  function exposureCell(r) {
+    const routes = (r.route_count || 0) > 1
+      ? ' <span class="as-route-count" title="' +
+        esc(fill(t('adca.routes', 'Reached through {n} holdings'), { n: r.route_count })) +
+        '">' + r.route_count + '</span>'
+      : '';
+    return '<td>' + pct(r.position_pct, 2) + routes +
+      '<div style="color:var(--as-muted)">' + money(r.value) + '</div></td>';
+  }
+
   const DCA_STATUS = {
-    fund:          ['adca.st_fund',    'Fund — not scored'],
     pending:       ['adca.st_pending', 'Building…'],
     no_statements: ['adca.st_nostmt',  'No published statements'],
     no_score:      ['adca.st_noscore', 'Too few measurable factors'],
@@ -791,16 +814,12 @@
       if (r.amount == null) {
         const s = DCA_STATUS[r.status] || ['adca.st_unknown', '—'];
         return '<tr>' +
-          '<td><a href="/dca/' + encodeURIComponent(r.ticker) + '" class="font-mono font-semibold hover:underline">' + esc(r.ticker) + '</a>' +
-            '<div style="color:var(--as-muted)" class="truncate">' + esc(r.name || '') + '</div></td>' +
-          '<td>' + pct(r.position_pct, 2) + '</td>' +
+          nameCell(r) + exposureCell(r) +
           '<td colspan="7" style="color:var(--as-muted)">' + esc(t(s[0], s[1])) + '</td>' +
         '</tr>';
       }
       return '<tr>' +
-        '<td><a href="/dca/' + encodeURIComponent(r.ticker) + '" class="font-mono font-semibold hover:underline">' + esc(r.ticker) + '</a>' +
-          '<div style="color:var(--as-muted)" class="truncate">' + esc(r.name || '') + '</div></td>' +
-        '<td>' + pct(r.position_pct, 2) + '</td>' +
+        nameCell(r) + exposureCell(r) +
         '<td class="text-right font-mono ' + vClass(r.V) + '">' + (r.V == null ? '—' : r.V.toFixed(0)) + '</td>' +
         '<td class="' + vClass(r.V) + '">' + esc(r.band ? t('dca.band_' + r.band, r.band) : '—') + '</td>' +
         '<td class="text-right font-mono">' + r.m_valuation.toFixed(2) + '×</td>' +
@@ -814,12 +833,35 @@
       '</tr>';
     }).join('');
 
-    const delta = d.flat_total ? (d.total / d.flat_total - 1) * 100 : 0;
+    // The portfolio multiplier leads, because it is the only figure here a
+    // reader can act on directly: one contribution into the existing mix scales
+    // by it. Everything else is the working behind it.
     $('asDcaTotals').innerHTML =
-      tile(t('adca.total', 'This period'), money(d.total)) +
-      tile(t('adca.vs_flat', 'vs flat'), money(d.flat_total) +
-           ' (' + (delta >= 0 ? '+' : '') + delta.toFixed(1) + '%)') +
-      tile(t('adca.scored', 'Scored'), d.scored + ' / ' + d.held);
+      tile(t('adca.pf_mult', 'Portfolio multiplier'),
+           d.weighted_multiplier == null ? '—' : d.weighted_multiplier.toFixed(2) + '×') +
+      tile(t('adca.pf_v', 'Weighted V'),
+           d.weighted_v == null ? '—' : d.weighted_v.toFixed(1)) +
+      tile(t('adca.scored', 'Scored'), d.scored + ' / ' + d.ranked) +
+      tile(t('adca.pf_share', 'of your equity'), pct(d.scored_share_pct, 0));
+
+    // Two caveats, both load-bearing, both stated rather than implied: the
+    // weighted figures speak only for the share of equity actually scored, and
+    // every exposure is a floor because a fund discloses its top ten only.
+    const bits = [];
+    bits.push(fill(t('adca.cav_scope',
+        'Weighted figures cover {share} of your penetrated equity ({scored} of {total} companies).'),
+      { share: pct(d.scored_share_pct, 0), scored: d.scored, total: d.exposure_count }));
+    if (d.not_ranked) {
+      bits.push(fill(t('adca.cav_tail',
+          '{n} smaller companies ({value}) are below the ranking cut and not scored.'),
+        { n: d.not_ranked, value: money(d.not_ranked_value) }));
+    }
+    if (d.coverage_pct != null) {
+      bits.push(fill(t('adca.cav_floor',
+          'Look-through coverage is {cov} — funds disclose their top ten holdings only, so every exposure above is a lower bound.'),
+        { cov: pct(d.coverage_pct, 0) }));
+    }
+    $('asDcaCaveat').textContent = bits.join(' ');
   }
 
   function tile(label, value) {

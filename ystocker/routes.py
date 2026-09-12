@@ -1303,33 +1303,50 @@ def api_dca_list():
     })
 
 
+#: How many look-through companies the DCA panel scores, by exposure value.
+#:
+#: A portfolio with three broad ETFs penetrates to several hundred names, and
+#: each one is six Yahoo reads to reconstruct. Scoring the lot on a page load is
+#: the fan-out this whole feature is built to avoid. Ranking by exposure and
+#: stopping is not an arbitrary truncation either: the tail of a penetrated
+#: portfolio is hundreds of sub-0.1% slivers, and no contribution decision turns
+#: on the 200th name. What is *not* acceptable is doing it silently, so the
+#: response reports how many were left out and what share of the equity they are.
+DCA_PORTFOLIO_MAX = 30
+
+
 @bp.route("/api/dca/portfolio")
 def api_dca_portfolio():
-    """The DCA multiplier applied to the signed-in reader's actual holdings.
+    """DCA sizing across the reader's holdings **after full 穿透**.
 
-    This is the loop closing. ``M_portfolio`` is *derived from* ``/assets``' 穿透
-    exposure, so the one page that already knows those weights is the natural
-    place to show what they do to a contribution — and it is the only surface
-    where the reader sees the valuation term and the concentration term acting
-    against each other on their own money.
+    The unit of analysis is the *company*, not the line. A reader holding VOO
+    does not own "a fund", they own Apple and Microsoft and 498 others, and the
+    question "am I buying this expensively" is only answerable about the
+    companies. So this walks ``assets.analyse``'s look-through exposures —
+    already equity-only and value-sorted — rather than the held positions, and
+    scores each underlying name.
 
-    Uses the **look-through** weight, not the line weight, which is the whole
-    point: somebody holding 3% NVDA directly and VOO besides is not at 3%, and
-    the throttle should reflect what they actually own.
+    That also makes ``M_portfolio`` mean what it should. Someone holding NVDA
+    directly *and* an S&P fund is far more concentrated in NVDA than either line
+    shows, and the throttle now sees the combined figure.
 
-    Never fetches on the request path. A held name with no reconstruction comes
-    back as ``pending`` and a bounded, budget-throttled rebuild is kicked, so a
-    portfolio fills in over a few minutes rather than costing six Yahoo reads per
-    position on one page load.
+    Two honesty constraints ride along, both inherited from ``/assets`` and
+    neither hedged:
 
-    Funds are reported as ``fund``, not as a blank. The engine scores companies
-    against their own multiple history; an ETF has no P/E of its own here, and
-    an empty cell would read as "we could not work it out" rather than "this is
-    not the kind of thing this measures".
+    * **Every exposure is a floor.** Yahoo discloses a fund's top ten holdings
+      only, so ``coverage_pct`` is what the whole table is scaled by — see
+      ``lookthrough.Result.coverage_pct``. The weighted score therefore states
+      the share of equity value it actually covers rather than implying the
+      portfolio.
+    * **A look-through row is analysis, not an order.** You buy the ETF, not the
+      Apple inside it. The per-name amount is what one base unit into that
+      company would size to; the actionable number is the portfolio multiplier.
+
+    Never fetches on the request path: an unscored name comes back ``pending``
+    and a bounded, budget-throttled rebuild is kicked behind it.
     """
     from ystocker import dca
     from ystocker import assets as assets_svc
-    from ystocker import funddata
     from ystocker import portfolio
     from ystocker.valuation import _cached_fundamentals
 
@@ -1346,30 +1363,43 @@ def api_dca_portfolio():
         return jsonify({"error": str(exc), "reason": "store"}), 503
     if not positions:
         return jsonify({"base_dca": base, "rows": [], "scored": 0,
-                        "held": 0, "pending": [], "reason": "no_positions"})
+                        "exposure_count": 0, "pending": [], "reason": "no_positions"})
 
-    analysis = assets_svc.analyse(positions)
+    # top=None, not the default 60: the truncation this endpoint reports has to
+    # be measured against *every* penetrated company, and `analyse` would
+    # otherwise have already dropped the tail before we counted it. The extra
+    # rows are never serialised to the client -- they exist so `not_ranked` and
+    # the equity total are true rather than "true of the first 60".
+    analysis = assets_svc.analyse(positions, top=None)
+    leaves = analysis.get("exposures") or []
     exposure = {
-        "map": {e.get("symbol"): e for e in (analysis.get("exposures") or [])},
+        "map": {e.get("symbol"): e for e in leaves},
         "coverage_pct": analysis.get("coverage_pct"),
     }
     recs = _cached_fundamentals()
 
+    ranked = leaves[:DCA_PORTFOLIO_MAX]
+    dropped = leaves[DCA_PORTFOLIO_MAX:]
     rows, pending, kicked = [], [], 0
-    for held in analysis.get("positions") or []:
-        symbol = (held.get("symbol") or "").upper()
+
+    for leaf in ranked:
+        symbol = (leaf.get("symbol") or "").upper()
         if not symbol or symbol == assets_svc.CASH_SYMBOL:
             continue
-        row = {"ticker": symbol, "name": held.get("name") or symbol,
-               "value": held.get("value"), "kind": held.get("kind") or ""}
+        row = {
+            "ticker": symbol,
+            "name": leaf.get("name") or symbol,
+            "value": leaf.get("value"),
+            "position_pct": leaf.get("pct"),
+            "direct_pct": leaf.get("direct_pct"),
+            "indirect_pct": leaf.get("indirect_pct"),
+            # How many holdings reach this company. >1 is the whole point of
+            # 穿透 -- it is concentration the reader did not know they had.
+            "route_count": leaf.get("route_count"),
+        }
 
         payload = dca_history.peek(symbol)
         if payload is None:
-            # Only chase equities. A fund will never score, so spending six
-            # reads to discover that again on every portfolio view is pure cost.
-            if row["kind"] and row["kind"] != funddata.KIND_EQUITY:
-                rows.append({**row, "status": "fund"})
-                continue
             pending.append(symbol)
             if kicked < 4 and _dca_kick(symbol):
                 kicked += 1
@@ -1379,7 +1409,7 @@ def api_dca_portfolio():
             rows.append({**row, "status": "no_statements"})
             continue
 
-        result, peer, drift, position = _dca_score(
+        result, _peer, _drift, _position = _dca_score(
             symbol, payload, base, recs=recs, exposure=exposure)
         rows.append({
             **row,
@@ -1392,26 +1422,53 @@ def api_dca_portfolio():
             "earnings_band": result["earnings_band"],
             "m_portfolio": result["m_portfolio"],
             "portfolio_band": result["portfolio_band"],
-            "position_pct": position.get("pct"),
             "multiplier": result["multiplier"],
             "amount": result["amount"],
             "capped": result["capped"],
         })
 
     scored = [r for r in rows if r.get("amount") is not None]
-    total = round(sum(r["amount"] for r in scored), 2)
+
+    # The headline, and the one figure a reader can act on directly: weight each
+    # scored company's multiplier by how much of it they actually own. A single
+    # contribution into the existing mix scales by this. Weighted by exposure
+    # value rather than averaged flat, because a 12% position and a 0.3% one do
+    # not deserve equal say in how the next payment is sized.
+    scored_value = sum(r["value"] or 0.0 for r in scored)
+    weighted_v = weighted_mult = None
+    if scored_value > 0:
+        weighted_v = round(sum((r["V"] or 0.0) * (r["value"] or 0.0)
+                               for r in scored) / scored_value, 2)
+        weighted_mult = round(sum(r["multiplier"] * (r["value"] or 0.0)
+                                  for r in scored) / scored_value, 4)
+
+    equity_value = sum(e.get("value") or 0.0 for e in leaves)
     return jsonify({
         "base_dca": base,
         "rows": rows,
-        "held": len(rows),
         "scored": len(scored),
+        "ranked": len(rows),
+        "exposure_count": analysis.get("exposure_count") or len(leaves),
         "pending": pending,
-        # Stated rather than folded in: the flat comparison is only meaningful
-        # against the same set of names, and quietly counting unscored holdings
-        # at 1.0x would make the engine look like it moved less than it did.
-        "total": total,
+        # Truncation is reported, never silent: a ranked table missing names is
+        # only honest if it says how many and how much they are worth.
+        "not_ranked": len(dropped),
+        "not_ranked_value": round(sum(e.get("value") or 0.0 for e in dropped), 2),
+        "equity_value": round(equity_value, 2),
+        "scored_value": round(scored_value, 2),
+        # What share of the *penetrated equity* the weighted figures actually
+        # speak for. Without it a weighted V looks like a claim about the whole
+        # portfolio when it may cover a third of it.
+        "scored_share_pct": (round(scored_value / equity_value * 100, 2)
+                             if equity_value > 0 else 0.0),
+        "weighted_v": weighted_v,
+        "weighted_multiplier": weighted_mult,
+        "total": round(sum(r["amount"] for r in scored), 2),
         "flat_total": round(len(scored) * base, 2),
+        "total_value": analysis.get("total_value"),
+        # The floor caveat, travelling with the numbers it qualifies.
         "coverage_pct": analysis.get("coverage_pct"),
+        "residual": analysis.get("residual"),
         "max_multiplier": dca_max_multiplier(),
         "generated_at": time.time(),
     })
