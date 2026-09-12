@@ -2817,7 +2817,9 @@ const I18n = (() => {
     'assets.tab_lookthrough': { en: 'Look-through (穿透)', zh: '穿透分析' },
     'assets.tab_overlap':   { en: 'Hidden overlap',     zh: '隐藏重叠' },
     'assets.tab_mix':       { en: 'Asset & sector mix', zh: '资产与行业分布' },
-    'assets.tab_dca':       { en: 'Dollar-Cost Averaging', zh: '定额定投调节' },
+    // 定投 already means dollar-cost averaging, so 定额定投 said it twice — the
+    // same redundancy nav.dca had. Sits beside 持仓 / 穿透分析 / 仓位上限.
+    'assets.tab_dca':       { en: 'Dollar-Cost Averaging', zh: '定投调节' },
 
     // ── /assets → DCA sizing panel ─────────────────────────────────────
     'adca.title':      { en: 'Sizing across your penetrated holdings', zh: '穿透后各公司的定投调节' },

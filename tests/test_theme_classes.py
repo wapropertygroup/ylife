@@ -143,6 +143,50 @@ class TestThemeWiring(unittest.TestCase):
         self.assertNotIn("toggleTheme", kiosk)
 
 
+class TestUtilityOverridesOwnCss(unittest.TestCase):
+    """A Tailwind utility on the element beats a hand-written rule of equal
+    specificity, and the override is completely silent.
+
+    ``.as-dca-table { width: max-content }`` and Tailwind's
+    ``.w-full { width: 100% }`` are both one class, so the cascade decides and
+    the utility won. The rule was written, reviewed, committed and deployed,
+    and changed nothing — the table went on stretching exactly as before.
+
+    The reason it survived a check is worth recording: the fix was verified in a
+    browser by removing ``w-full`` in JavaScript first and measuring *that*,
+    which tests the intended state rather than the shipped one. There is no
+    general scan for this, so the specific pairs that have already bitten are
+    pinned here: if a template declares a width for one of these classes, the
+    element must not also carry the utility that would override it.
+    """
+
+    #: ``(template, css class, utility it conflicts with, property)``
+    CONFLICTS = (
+        ("assets.html", "as-dca-table", "w-full", "width"),
+    )
+
+    def test_no_element_carries_a_utility_its_own_css_fights(self) -> None:
+        for template, klass, utility, prop in self.CONFLICTS:
+            body = (TEMPLATES / template).read_text(encoding="utf-8")
+
+            declares = re.search(
+                r"\." + re.escape(klass) + r"\s*\{[^}]*\b" + re.escape(prop) + r"\s*:",
+                body,
+            )
+            if not declares:
+                continue  # the rule was removed; nothing left to conflict
+
+            for match in re.finditer(
+                r'class="([^"]*\b' + re.escape(klass) + r'\b[^"]*)"', body
+            ):
+                self.assertNotIn(
+                    utility, match.group(1).split(),
+                    msg=(f"{template}: .{klass} sets {prop}, but the element also "
+                         f"carries '{utility}'. Same specificity, so the utility "
+                         f"wins and the rule is a no-op."),
+                )
+
+
 class TestThemeStrings(unittest.TestCase):
     """Both languages must define the toggle's strings.
 
