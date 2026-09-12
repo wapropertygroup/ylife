@@ -1,0 +1,286 @@
+{% extends "base.html" %}
+{% block title %}yStocker — DCA Valuation Engine{% endblock %}
+
+{% block content %}
+<style>
+  /* Hand-written CSS, so Tailwind's `dark:` variant reaches none of it. Shared
+     roles come from base.html's --t-* vocabulary; the two this page needs and
+     that vocabulary lacks are declared here, --dcx- prefixed, light-first with
+     `.dark` overriding, exactly as base.html and history.html do. */
+  :root { --dcx-track: #e2e8f0; --dcx-well: #f1f5f9; }
+  .dark { --dcx-track: #1e293b; --dcx-well: #131c2e; }
+
+  .pct-track {
+    position: relative; height: 6px; border-radius: 3px;
+    background: var(--dcx-track); overflow: hidden; min-width: 56px;
+  }
+  .pct-fill { position: absolute; inset: 0 auto 0 0; border-radius: 3px; }
+  .well { background: var(--dcx-well); border: 1px solid var(--t-line); border-radius: 10px; }
+  .rank-row td { padding: 9px 10px; border-top: 1px solid var(--t-line); font-size: 13px; }
+  .rank-row:hover td { background: var(--t-row-alt); }
+  .rank-row a { color: inherit; }
+  th.sortable { cursor: pointer; user-select: none; }
+  th.sortable:hover { color: var(--t-ink); }
+  .chip {
+    display: inline-block; font-size: 10px; line-height: 1;
+    padding: 3px 6px; border-radius: 4px; border: 1px solid var(--t-line-strong);
+    color: var(--t-ink-dim); white-space: nowrap;
+  }
+</style>
+
+<div class="mb-6 fade-up">
+  <h1 class="text-2xl sm:text-3xl font-bold">
+    <span class="grad-text" data-i18n="dcx.title">DCA Valuation Engine</span>
+  </h1>
+  <p class="text-slate-500 text-sm mt-1" data-i18n="dcx.subtitle">
+    Every tracked name ranked by how cheap it is against its own history — and what that does to a recurring contribution.
+  </p>
+</div>
+
+<!-- ── Controls + coverage ─────────────────────────────────────────────── -->
+<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 mb-6 fade-up">
+  <div class="flex items-center justify-between gap-3 flex-wrap">
+    <div class="flex items-center gap-2">
+      <label for="baseInput" class="text-xs text-slate-500" data-i18n="dcx.base_dca">Base DCA per name</label>
+      <input id="baseInput" type="number" min="1" step="50" value="1000"
+             class="w-28 px-2 py-1 text-sm rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-800 dark:text-slate-200"/>
+    </div>
+    <div id="coverage" class="text-xs text-slate-500"></div>
+  </div>
+  <div id="warmNote" class="hidden mt-3 text-xs text-amber-700 dark:text-amber-400"></div>
+</div>
+
+<div id="dcxError" class="hidden mb-6 px-4 py-3 rounded-lg bg-red-50 dark:bg-red-900/40 border border-red-300 dark:border-red-700 text-red-700 dark:text-red-300 text-sm"></div>
+
+<!-- ── Cheapest / dearest summary ──────────────────────────────────────── -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+  <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 fade-up">
+    <h2 class="text-sm font-semibold mb-1" data-i18n="dcx.cheapest">Cheapest against own history</h2>
+    <p class="text-xs text-slate-500 mb-3" data-i18n="dcx.cheapest_note">Highest V. Contribute faster — the odds are better, not the outcome.</p>
+    <div id="cheapList" class="space-y-2"></div>
+  </div>
+  <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 fade-up">
+    <h2 class="text-sm font-semibold mb-1" data-i18n="dcx.dearest">Dearest against own history</h2>
+    <p class="text-xs text-slate-500 mb-3" data-i18n="dcx.dearest_note">Lowest V. Slow down, but never stop — that is the whole point of the ramp.</p>
+    <div id="dearList" class="space-y-2"></div>
+  </div>
+</div>
+
+<!-- ── The table ───────────────────────────────────────────────────────── -->
+<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 mb-6 fade-up">
+  <div class="flex items-center justify-between mb-3 gap-2 flex-wrap">
+    <h2 class="text-sm font-semibold" data-i18n="dcx.table_title">All scored names</h2>
+    <div id="totalLine" class="text-xs text-slate-500"></div>
+  </div>
+  <div class="overflow-x-auto">
+    <table class="w-full text-left">
+      <thead>
+        <tr class="text-[10px] uppercase tracking-widest text-slate-500 dark:text-slate-600">
+          <th class="pb-2 px-2.5 sortable" data-sort="ticker" data-i18n="dcx.col_ticker">Ticker</th>
+          <th class="pb-2 px-2.5" data-i18n="dcx.col_model">Model</th>
+          <th class="pb-2 px-2.5 sortable text-right" data-sort="V" data-i18n="dcx.col_v">V</th>
+          <th class="pb-2 px-2.5" data-i18n="dcx.col_band">State</th>
+          <th class="pb-2 px-2.5 sortable text-right" data-sort="m_valuation" data-i18n="dcx.col_mval">M_val</th>
+          <th class="pb-2 px-2.5 text-right" data-i18n="dcx.col_mearn">M_earn</th>
+          <th class="pb-2 px-2.5 text-right" data-i18n="dcx.col_mport">M_port</th>
+          <th class="pb-2 px-2.5 sortable text-right" data-sort="amount" data-i18n="dcx.col_amount">Contribution</th>
+          <th class="pb-2 px-2.5" data-i18n="dcx.col_window">Window</th>
+        </tr>
+      </thead>
+      <tbody id="rankBody"></tbody>
+    </table>
+  </div>
+  {# data-i18n-html, not data-i18n: this string carries an <em>, and the plain
+     variant sets textContent so the tag would render as literal markup. Safe
+     here because the value is our own translation, never user input. #}
+  <p class="text-xs text-slate-500 mt-3" data-i18n-html="dcx.table_note">
+    V is a cheapness score against the name's <em>own</em> reconstructed history, so it is not a cross-company ranking of quality or of absolute value — a 70 here means "cheap for this company", not "cheaper than the one above it". Each row is also scored on its own model, and the models weight different multiples.
+  </p>
+</div>
+
+<p class="text-xs text-slate-500 dark:text-slate-600 mb-8" data-i18n="dcx.disclaimer">
+  A research and capital-discipline framework, not a return guarantee or an automated trading instruction. Valuation sets the pace of contribution; it does not decide whether to buy.
+</p>
+
+<script>
+const BASE_KEY = 'ystocker_dca_base';
+let _rows = [], _sort = { key: 'V', dir: -1 }, _data = null, _pollTimer = null, _polls = 0;
+
+const fmtMoney = v => v == null ? '—'
+  : v.toLocaleString(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g,
+  c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+/* Cheap is green, dear is red, mid is grey rather than amber so "fair" does not
+   read as a warning. Takes an EXPENSIVENESS percentile, so callers holding a V
+   (cheapness) must pass 100 - V. */
+function pctColor(p) {
+  if (p == null) return 'var(--t-line-strong)';
+  if (p >= 80) return CT.c('#f87171');
+  if (p >= 60) return CT.c('#fb923c');
+  if (p <= 20) return CT.c('#34d399');
+  if (p <= 40) return CT.c('#22d3ee');
+  return CT.c('#94a3b8');
+}
+const vColor = v => pctColor(v == null ? null : 100 - v);
+
+function readBase() {
+  const stored = parseFloat(localStorage.getItem(BASE_KEY) || '');
+  return (isFinite(stored) && stored > 0) ? stored : 1000;
+}
+
+function label(prefix, key) { return I18n.t(prefix + key) || key; }
+
+function summaryRow(r) {
+  return `<a href="/dca/${encodeURIComponent(r.ticker)}"
+             class="flex items-center gap-3 px-3 py-2 rounded-lg well hover:border-slate-400 dark:hover:border-slate-600 transition">
+    <span class="font-mono font-semibold text-sm w-16">${esc(r.ticker)}</span>
+    <span class="pct-track flex-1"><span class="pct-fill" style="width:${r.V == null ? 0 : r.V}%;background:${vColor(r.V)}"></span></span>
+    <span class="font-mono text-sm w-10 text-right" style="color:${vColor(r.V)}">${r.V == null ? '—' : r.V.toFixed(0)}</span>
+    <span class="font-mono text-xs w-16 text-right text-slate-500">${r.m_valuation == null ? '—' : r.m_valuation.toFixed(2) + '×'}</span>
+  </a>`;
+}
+
+function render() {
+  const d = _data;
+  if (!d) return;
+
+  document.getElementById('coverage').textContent =
+    d.scored + ' / ' + d.universe + ' ' + (I18n.t('dcx.scored') || 'scored');
+
+  const warn = document.getElementById('warmNote');
+  if (d.pending && d.pending.length) {
+    warn.textContent = '⏳ ' + (I18n.t('dcx.pending_pre') || 'Still rebuilding:') + ' ' +
+      d.pending.join(', ') + '. ' +
+      (I18n.t('dcx.pending_note') || 'Each name is six filings reads, paced to stay well inside Yahoo’s limits — this page fills itself over a few minutes.');
+    warn.classList.remove('hidden');
+  } else {
+    warn.classList.add('hidden');
+  }
+
+  // Sorted copies for the two summary cards. A null V sorts out of both, since
+  // "could not be measured" belongs in neither "cheapest" nor "dearest".
+  const scored = _rows.filter(r => r.V != null);
+  const byV = scored.slice().sort((a, b) => b.V - a.V);
+  document.getElementById('cheapList').innerHTML =
+    byV.slice(0, 5).map(summaryRow).join('') ||
+    `<p class="text-xs text-slate-500">${esc(I18n.t('dcx.none_yet') || 'Nothing scored yet.')}</p>`;
+  document.getElementById('dearList').innerHTML =
+    byV.slice(-5).reverse().map(summaryRow).join('') ||
+    `<p class="text-xs text-slate-500">${esc(I18n.t('dcx.none_yet') || 'Nothing scored yet.')}</p>`;
+
+  const total = scored.reduce((s, r) => s + (r.amount || 0), 0);
+  const flat = scored.length * d.base_dca;
+  document.getElementById('totalLine').textContent = scored.length
+    ? (I18n.t('dcx.total_pre') || 'Total this period') + ': ' + fmtMoney(total) +
+      ' ' + (I18n.t('dcx.vs_flat') || 'vs') + ' ' + fmtMoney(flat) + ' ' +
+      (I18n.t('dcx.flat') || 'flat') +
+      ' (' + (total >= flat ? '+' : '') + ((total / flat - 1) * 100).toFixed(1) + '%)'
+    : '';
+
+  const sorted = _rows.slice().sort((a, b) => {
+    const k = _sort.key;
+    const av = a[k], bv = b[k];
+    if (av == null && bv == null) return 0;
+    if (av == null) return 1;            // unscored always last, either direction
+    if (bv == null) return -1;
+    if (typeof av === 'string') return _sort.dir * av.localeCompare(bv);
+    return _sort.dir * (av - bv);
+  });
+
+  document.getElementById('rankBody').innerHTML = sorted.map(r => `
+    <tr class="rank-row">
+      <td>
+        <a href="/dca/${encodeURIComponent(r.ticker)}" class="font-mono font-semibold hover:underline">${esc(r.ticker)}</a>
+        <div class="text-[10px] text-slate-500 truncate max-w-[11rem]">${esc(r.name || '')}</div>
+      </td>
+      <td><span class="chip">${esc(label('dca.model_', r.model))}</span></td>
+      <td class="text-right">
+        <div class="flex items-center gap-2 justify-end">
+          <span class="pct-track w-14"><span class="pct-fill" style="width:${r.V == null ? 0 : r.V}%;background:${vColor(r.V)}"></span></span>
+          <span class="font-mono w-8 text-right" style="color:${vColor(r.V)}">${r.V == null ? '—' : r.V.toFixed(0)}</span>
+        </div>
+      </td>
+      <td class="text-xs" style="color:${vColor(r.V)}">${esc(r.band ? label('dca.band_', r.band) : '—')}</td>
+      <td class="text-right font-mono">${r.m_valuation == null ? '—' : r.m_valuation.toFixed(2) + '×'}</td>
+      <td class="text-right font-mono ${r.m_earnings === 1 ? 'text-slate-400 dark:text-slate-600' : ''}"
+          title="${esc(label('dca.earn_', r.earnings_band))}">${r.m_earnings.toFixed(2)}×</td>
+      <td class="text-right font-mono ${r.m_portfolio === 1 ? 'text-slate-400 dark:text-slate-600' : ''}"
+          title="${esc(label('dca.port_', r.portfolio_band))}">${r.m_portfolio.toFixed(2)}×</td>
+      <td class="text-right font-mono font-semibold">${fmtMoney(r.amount)}${
+        r.capped ? ' <span class="chip" title="' + esc(I18n.t('dca.capped') || 'Capped') + '">⌃</span>' : ''}</td>
+      <td class="text-[11px] text-slate-500">${r.years == null ? '—' : r.years + 'y · ' + r.vintages + ' ' + esc(I18n.t('dcx.filings') || 'filings')}${
+        r.dropped && r.dropped.length ? ' <span class="chip" title="' + esc(r.dropped.map(f => label('dca.f_', f)).join(', ')) + '">−' + r.dropped.length + '</span>' : ''}</td>
+    </tr>`).join('') ||
+    `<tr><td colspan="9" class="text-xs text-slate-500 py-6 text-center">${
+      esc(I18n.t('dcx.none_yet') || 'Nothing scored yet.')}</td></tr>`;
+}
+
+async function load(poll) {
+  let resp, d;
+  try {
+    resp = await fetch('/api/dca?base=' + encodeURIComponent(readBase()));
+    d = await resp.json();
+  } catch (e) {
+    document.getElementById('dcxError').textContent = '⚠ Network error: ' + e;
+    document.getElementById('dcxError').classList.remove('hidden');
+    return;
+  }
+  if (!resp.ok) {
+    document.getElementById('dcxError').textContent = '⚠ ' + (d.error || ('HTTP ' + resp.status));
+    document.getElementById('dcxError').classList.remove('hidden');
+    return;
+  }
+  _data = d;
+  _rows = d.rows || [];
+  render();
+  I18n.apply(document.getElementById('rankBody'));
+
+  // Poll only while something is still being built, and stop at a bound. The
+  // terminal state has to render as itself: leaving the "still rebuilding" note
+  // up forever would read as progress long after the sweep gave up.
+  clearTimeout(_pollTimer);
+  if (d.pending && d.pending.length) {
+    _polls += 1;
+    if (_polls <= 30) {
+      _pollTimer = setTimeout(() => load(true), _polls < 5 ? 5000 : 15000);
+    } else {
+      const warn = document.getElementById('warmNote');
+      warn.textContent = '⚠ ' + (I18n.t('dcx.pending_stalled') ||
+        'Some names are still unbuilt — Yahoo may be rate-limiting. Reload later, or open a ticker directly to retry it.');
+      warn.classList.remove('hidden');
+    }
+  } else {
+    _polls = 0;
+  }
+}
+
+document.querySelectorAll('th.sortable').forEach(th => {
+  th.addEventListener('click', () => {
+    const key = th.dataset.sort;
+    // Text ascends by default, numbers descend — nobody wants the lowest V first.
+    _sort = (_sort.key === key)
+      ? { key, dir: -_sort.dir }
+      : { key, dir: key === 'ticker' ? 1 : -1 };
+    render();
+  });
+});
+
+const baseInput = document.getElementById('baseInput');
+baseInput.value = readBase();
+let _baseTimer = null;
+baseInput.addEventListener('input', () => {
+  const v = parseFloat(baseInput.value);
+  if (!isFinite(v) || v <= 0) return;
+  localStorage.setItem(BASE_KEY, String(v));
+  clearTimeout(_baseTimer);
+  _baseTimer = setTimeout(() => { _polls = 0; load(); }, 400);
+});
+
+// Labels set from JS are invisible to I18n.apply(), so re-render on a language
+// change or an English table ends up on a page switched to Chinese.
+document.addEventListener('i18n:langchange', render);
+
+load();
+</script>
+{% endblock %}

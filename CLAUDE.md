@@ -509,13 +509,40 @@ exactly 0% growth. PEG carries 15–25% of the weight in three templates.
 `TypeError`, which 500s the request — and this is not an edge case: a bank with
 no tangible book value, or an ADR with thin statements, lands there routinely.
 
+**`/dca` (no ticker) is the ranked overview**, in the header nav. It scores the
+universe — derived from `dca.TICKER_MODELS` rather than kept as a second list,
+so the set the framework names and the set the page ranks cannot drift, with
+`GOOG` dropped in favour of `GOOGL` since they are one company and only `GOOGL`
+is in `PEER_GROUPS`. It is built **only from reconstructions already on disk**:
+a fan-out of six reads per name on a page load is exactly the sweep
+`valuation.py` records having got this box hard-blocked. Missing names come back
+in `pending` with a count so the page says "12 of 15 scored" — a league table
+silently missing its cheapest entry is worse than an honest gap — and a paced
+background warm (`WARM_SPACING_SECONDS`, stops on a provider cool-down like
+`analyst._fetch`) fills it within a few minutes of the first visit.
+
+`_dca_score()` is the **single scoring path** behind both the row and the detail
+page. Two implementations of one formula would agree the day they were written
+and drift after, and a reader comparing a row against that ticker's own page is
+exactly who would find it; `check_dca_endpoints.py` asserts they match. The two
+lookups that are per-request rather than per-ticker are hoisted out of it:
+`peer_percentiles` re-parses a ~170 KB file when not handed records, and the
+look-through behind `M_portfolio` is a whole-portfolio walk — doing either per
+row makes a twenty-row table twenty times the work for the same answer.
+
+The table sorts cheapest-first and an **unscorable row sorts last, not as V=0**:
+"could not be measured" is not "at its most expensive ever", and putting it at
+the top of a column headed cheapest would be a plain lie. The page also states
+what V is not — a cross-company ranking. Each row is scored on its own model,
+and a 70 means "cheap for this company", not "cheaper than the row above".
+
 Tests: `tests/test_dca.py` (48, no app/network — including the framework's own
 worked example, E=75.55 → $3,722.50 on a $5,000 base, and a check that every
 band/model/factor key exists in **both** EN and ZH, since those are composed in
 JS by string concatenation where `I18n.apply()` cannot reach them),
 `tests/test_dca_history.py` (51, the look-ahead guards, the TTM sum, the
 year-ago growth window and the capex sign trap), and
-`tests/check_dca_endpoints.py` (18 end-to-end, `check_` so `unittest discover`
+`tests/check_dca_endpoints.py` (27 end-to-end, `check_` so `unittest discover`
 skips it — it needs an app and stubs matplotlib).
 
 The table is **not** in `deploy/cloudformation.yaml`, matching every other

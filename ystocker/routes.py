@@ -1043,46 +1043,45 @@ def _dca_kick(ticker: str) -> None:
     thread.start()
 
 
-@bp.route("/api/dca/<ticker>")
-def api_dca(ticker: str):
-    """Valuation percentiles, the V score and a sized contribution for one ticker.
+def _dca_base(default: float = 1000.0) -> float:
+    """The reader's base contribution, from the query string.
 
-    ``base`` is a query parameter rather than stored state: ``/dca`` is public,
-    like ``/history``, and the page keeps the reader's own figure in
-    ``localStorage``. It only scales the final line -- every percentile, the
-    score and all three multipliers are independent of it, which is why a bad
-    value degrades to the default instead of failing the request.
+    A negative or absurd value is a typo, not an instruction, so it is clamped
+    rather than rejected: it only scales the final line, and every percentile,
+    the score and all three multipliers are independent of it.
+    """
+    try:
+        base = float(request.args.get("base", str(default)))
+    except (TypeError, ValueError):
+        return default
+    return base if 0 < base <= 1_000_000 else default
 
-    The response always carries ``equation``: the same numbers the score was
-    built from, laid out term by term, because a multiplier on somebody's money
-    that cannot be checked by hand is not worth showing.
+
+def _dca_score(symbol: str, payload: dict, base: float, *,
+               recs=None, exposure=None) -> tuple[dict, dict, dict, dict]:
+    """Score one ticker. Returns ``(result, peer, drift, position)``.
+
+    The single scoring path, shared by ``/api/dca/<ticker>`` and the overview
+    list. Two implementations of one formula would agree the day they were
+    written and drift afterwards, and the page shows both a row and a detail
+    view of the same company -- a reader comparing them is exactly who would
+    find the disagreement.
+
+    *recs* and *exposure* are the two lookups that are per-request rather than
+    per-ticker. ``peer_percentiles`` re-parses a ~170 KB file when not given
+    records, and the look-through walk behind ``position`` is a whole-portfolio
+    analysis; doing either once per row makes a twenty-row table twenty times
+    the work for the same answer.
     """
     from ystocker import dca
 
-    symbol = ticker.strip().upper()
-
-    try:
-        base = float(request.args.get("base", "1000"))
-    except (TypeError, ValueError):
-        base = 1000.0
-    # A negative or absurd base is a typo, not an instruction. Clamped rather
-    # than rejected: the rest of the payload is still correct and useful.
-    if not (0 < base <= 1_000_000):
-        base = 1000.0
-
-    payload = dca_history.peek(symbol)
-    if payload is None:
-        _dca_kick(symbol)
-        return jsonify({"ticker": symbol, "status": "warming",
-                        "message": "Rebuilding valuation history from filings."}), 202
-
     percentiles = dict(payload.get("percentiles") or {})
-    peer = dca_history.peer_percentiles(symbol)
+    peer = dca_history.peer_percentiles(symbol, recs)
     if peer.get("percentile") is not None:
         percentiles["peer"] = peer["percentile"]
 
     drift = dca_history.eps_drift(symbol)
-    position = _dca_position_pct(symbol)
+    position = _dca_position(symbol, exposure)
 
     result = dca.evaluate(
         ticker=symbol,
@@ -1093,6 +1092,33 @@ def api_dca(ticker: str):
         eps_drift=drift.get("drift"),
         position_pct=position.get("pct"),
     )
+    return result, peer, drift, position
+
+
+@bp.route("/api/dca/<ticker>")
+def api_dca(ticker: str):
+    """Valuation percentiles, the V score and a sized contribution for one ticker.
+
+    ``base`` is a query parameter rather than stored state: ``/dca`` is public,
+    like ``/history``, and the page keeps the reader's own figure in
+    ``localStorage``.
+
+    The response always carries ``equation``: the same numbers the score was
+    built from, laid out term by term, because a multiplier on somebody's money
+    that cannot be checked by hand is not worth showing.
+    """
+    from ystocker import dca
+
+    symbol = ticker.strip().upper()
+    base = _dca_base()
+
+    payload = dca_history.peek(symbol)
+    if payload is None:
+        _dca_kick(symbol)
+        return jsonify({"ticker": symbol, "status": "warming",
+                        "message": "Rebuilding valuation history from filings."}), 202
+
+    result, peer, drift, position = _dca_score(symbol, payload, base)
 
     weights = dca.TEMPLATES[result["model"]]
     line = dca_history.v_history(payload.get("series") or {}, weights,
@@ -1140,58 +1166,190 @@ def api_dca(ticker: str):
     })
 
 
-def _dca_position_pct(ticker: str) -> dict:
-    """The signed-in reader's look-through weight in *ticker*, if any.
+@bp.route("/dca")
+def dca_index():
+    """The DCA overview: every scored ticker, ranked by valuation."""
+    log.info("GET /dca")
+    return render_template("dca_index.html",
+                           peer_groups=list(PEER_GROUPS.keys()))
 
-    Uses the 穿透 exposure, not the raw line weight, because the concentration
-    ``M_portfolio`` guards against is mostly reached *through* funds -- somebody
-    holding 3% NVDA directly and VOO besides is not at 3%. It goes through
-    ``assets.analyse``'s public payload rather than ``exposure.band_for``,
-    because that needs the internal ``Result`` which ``analyse`` deliberately
-    does not hand out: obtaining one here would mean walking the tree a second
-    time on the request path for no new information.
 
-    The **floor** is used, matching the rest of ``/assets``: it is a lower bound
-    on how much of this name the reader owns, and the residual that would lift it
-    is undisclosed fund holdings which are mostly *not* this name. ``coverage_pct``
-    travels back so the page can say how much of the portfolio was actually seen
-    through -- a 2% floor at 40% coverage and one at 95% are different claims.
+@bp.route("/api/dca")
+def api_dca_list():
+    """Rank the universe by V score. Never fetches.
 
-    Signed out is ``None``, never zero. Zero is a measurement -- "you hold none of
-    this" -- and it happens to produce the same 1.0x multiplier, so the two would
-    be indistinguishable on the page exactly where the reader needs to know
-    whether the overlay is switched on at all.
+    Built **only from reconstructions already on disk**, which is what keeps a
+    ranked table off the Yahoo budget: scoring a name costs six reads, and a
+    fan-out across the universe on a page load is the sweep ``valuation.py``
+    records having got this box hard-blocked. Missing names come back in
+    ``pending`` with a count, so the page says "12 of 15 scored" rather than
+    quietly presenting a partial ranking as a complete one -- a league table
+    silently missing its cheapest entry is worse than an honest gap.
 
-    Never fetches, and never fails the page: this overlay is one term of three,
-    and a portfolio that cannot be read must not take the valuation score with it.
+    A background warm is kicked for whatever is missing, so an empty overview
+    fills itself within a few minutes of the first visit rather than needing
+    somebody to open each ticker by hand.
+    """
+    from ystocker import dca
+    from ystocker.valuation import _cached_fundamentals
+
+    base = _dca_base()
+    wanted = dca_history.universe()
+    have = set(dca_history.cached_tickers())
+
+    # One read of each per-request lookup, not one per row. See _dca_score.
+    recs = _cached_fundamentals()
+    exposure = _dca_exposure()
+
+    rows, pending = [], []
+    for symbol in wanted:
+        payload = dca_history.peek(symbol) if symbol in have else None
+        if payload is None or payload.get("unavailable"):
+            pending.append(symbol)
+            continue
+        result, peer, drift, position = _dca_score(
+            symbol, payload, base, recs=recs, exposure=exposure)
+        window = payload.get("window") or {}
+        rows.append({
+            "ticker": symbol,
+            "name": payload.get("name"),
+            "sector": payload.get("sector"),
+            "model": result["model"],
+            "V": result["V"],
+            "E": result["E"],
+            "band": result["band"],
+            "m_valuation": result["m_valuation"],
+            "m_earnings": result["m_earnings"],
+            "earnings_band": result["earnings_band"],
+            "m_portfolio": result["m_portfolio"],
+            "portfolio_band": result["portfolio_band"],
+            "position_pct": position.get("pct"),
+            "multiplier": result["multiplier"],
+            "amount": result["amount"],
+            "capped": result["capped"],
+            "dropped": result["dropped"],
+            "peer_pct": peer.get("percentile"),
+            "eps_drift": drift.get("drift"),
+            "years": window.get("years"),
+            "vintages": window.get("vintages"),
+            "stale": (time.time() - (payload.get("_ts") or 0)) > dca_history.TTL_SECONDS,
+        })
+
+    if pending and not dca_history.is_warming():
+        _dca_kick_universe()
+
+    # Cheapest first, and an unscorable row sorts last rather than as V=0 --
+    # "could not be measured" is not "at its most expensive ever", and putting it
+    # at the top of a table headed "cheapest" would be a straightforward lie.
+    rows.sort(key=lambda r: (r["V"] is None, -(r["V"] or 0)))
+
+    return jsonify({
+        "base_dca": base,
+        "rows": rows,
+        "scored": len(rows),
+        "universe": len(wanted),
+        "pending": pending,
+        "warming": dca_history.is_warming(),
+        "max_multiplier": dca_max_multiplier(),
+        "generated_at": time.time(),
+    })
+
+
+_DCA_UNIVERSE_THREAD: Optional[threading.Thread] = None
+
+
+def _dca_kick_universe() -> None:
+    """Warm the overview universe on one background thread, at most one at a time.
+
+    Separate from ``_dca_kick`` because that one is per-symbol and unspaced; a
+    universe pass has to be paced (``WARM_SPACING_SECONDS``) or it is the bulk
+    per-symbol sweep this codebase already learned not to run.
+    """
+    global _DCA_UNIVERSE_THREAD
+
+    with _DCA_BUILD_LOCK:
+        if _DCA_UNIVERSE_THREAD is not None and _DCA_UNIVERSE_THREAD.is_alive():
+            return
+        thread = threading.Thread(target=_dca_warm_universe_safely,
+                                  name="dca-warm-universe", daemon=True)
+        _DCA_UNIVERSE_THREAD = thread
+    thread.start()
+
+
+def _dca_warm_universe_safely() -> None:
+    try:
+        dca_history.warm_universe()
+    except Exception as exc:  # noqa: BLE001 - a warm failure must not kill the thread
+        log.info("DCA: universe warm failed: %s", exc)
+
+
+def _dca_exposure() -> dict:
+    """The signed-in reader's whole look-through exposure map, or ``None``.
+
+    Computed once per request and handed to every row, because the walk behind
+    it is a whole-portfolio analysis -- running it per ticker would make a
+    twenty-row table twenty full walks for one answer.
+
+    Never fetches (``assets.analyse`` resolves against the ``funddata`` cache
+    only) and never fails the page: this overlay is one term of three, and a
+    portfolio that cannot be read must not take the valuation score with it.
     """
     email = session.get("user_email")
     if not email:
-        return {"pct": None, "reason": "signed_out"}
+        return {"map": None, "reason": "signed_out"}
     try:
         from ystocker import assets as assets_svc
         from ystocker import portfolio
 
         positions = portfolio.load(email)
         if not positions:
-            return {"pct": None, "reason": "no_positions"}
+            return {"map": None, "reason": "no_positions"}
         payload = assets_svc.analyse(positions)
-        symbol = ticker.strip().upper()
-        for exp in payload.get("exposures") or []:
-            if exp.get("symbol") == symbol:
-                return {"pct": exp.get("pct"),
-                        "direct_pct": exp.get("direct_pct"),
-                        "indirect_pct": exp.get("indirect_pct"),
-                        "coverage_pct": payload.get("coverage_pct"),
-                        "basis": "lookthrough_floor"}
+        return {
+            "map": {e.get("symbol"): e for e in (payload.get("exposures") or [])},
+            "coverage_pct": payload.get("coverage_pct"),
+        }
+    except Exception as exc:  # noqa: BLE001
+        log.info("DCA: portfolio overlay unavailable: %s", exc)
+        return {"map": None, "reason": "unavailable"}
+
+
+def _dca_position(ticker: str, exposure: Optional[dict] = None) -> dict:
+    """This reader's look-through weight in *ticker*, from a prepared map.
+
+    Uses the 穿透 exposure, not the raw line weight, because the concentration
+    ``M_portfolio`` guards against is mostly reached *through* funds -- somebody
+    holding 3% NVDA directly and VOO besides is not at 3%.
+
+    The **floor** is used, matching the rest of ``/assets``: it is a lower bound
+    on how much of this name the reader owns, and the residual that would lift it
+    is undisclosed fund holdings which are mostly *not* this name.
+    ``coverage_pct`` travels back so the page can say how much of the portfolio
+    was actually seen through -- a 2% floor at 40% coverage and one at 95% are
+    different claims.
+
+    Signed out is ``None``, never zero. Zero is a measurement -- "you hold none
+    of this" -- and it happens to produce the same 1.0x multiplier, so the two
+    would be indistinguishable exactly where the reader needs to know whether the
+    overlay is switched on at all.
+    """
+    if exposure is None:
+        exposure = _dca_exposure()
+    if exposure.get("map") is None:
+        return {"pct": None, "reason": exposure.get("reason", "unavailable")}
+
+    hit = exposure["map"].get(ticker.strip().upper())
+    if hit is None:
         # Analysed cleanly and the name is simply not in there. That is a
         # measurement, so it is 0.0 rather than None -- the overlay is on and
-        # says "no exposure", which is a different statement from "not checked".
-        return {"pct": 0.0, "coverage_pct": payload.get("coverage_pct"),
+        # says "no exposure", which is different from "not checked".
+        return {"pct": 0.0, "coverage_pct": exposure.get("coverage_pct"),
                 "basis": "lookthrough_floor"}
-    except Exception as exc:  # noqa: BLE001 - the overlay is optional, the page is not
-        log.info("DCA: portfolio overlay unavailable for %s: %s", ticker, exc)
-        return {"pct": None, "reason": "unavailable"}
+    return {"pct": hit.get("pct"),
+            "direct_pct": hit.get("direct_pct"),
+            "indirect_pct": hit.get("indirect_pct"),
+            "coverage_pct": exposure.get("coverage_pct"),
+            "basis": "lookthrough_floor"}
 
 
 def _dca_equation(result: dict, weights: dict) -> dict:

@@ -83,6 +83,7 @@ __all__ = [
     "Vintage", "build_vintages", "build_quarterly_ttm", "vintage_at", "reconstruct",
     "percentile_series", "latest_percentiles",
     "snapshot_row", "load_series", "save_row",
+    "universe", "cached_tickers", "warm_universe", "is_warming",
     "get", "peek", "refresh", "start_background_thread",
 ]
 
@@ -961,12 +962,18 @@ def v_history(series: Mapping[str, Sequence[tuple[str, float]]],
     return out
 
 
-def peer_percentiles(ticker: str) -> dict[str, Any]:
+def peer_percentiles(ticker: str,
+                     recs: Optional[Mapping[str, Mapping[str, Any]]] = None) -> dict[str, Any]:
     """Where *ticker* sits among its peer group today, on forward P/E.
 
     Free: ``valuation._cached_fundamentals`` reads ``ticker_cache.json``, which
     the rolling refresher in ``routes.py`` already repopulates every five
     minutes. No Yahoo call is made here at all.
+
+    *recs* lets a caller pass those records in. ``_cached_fundamentals`` re-reads
+    and re-parses a ~170 KB file on **every** call, which is invisible for one
+    ticker and quadratic for a ranked list -- twenty rows would mean twenty
+    parses of the same file inside one request.
 
     Falls back to trailing P/E when Yahoo publishes no forward one -- but only
     when it can compare like with like, so the peer values fall back together or
@@ -983,7 +990,8 @@ def peer_percentiles(ticker: str) -> dict[str, Any]:
     if not group:
         return {"percentile": None, "group": None, "reason": "no_group"}
 
-    recs = _cached_fundamentals()
+    if recs is None:
+        recs = _cached_fundamentals()
     mine = recs.get(symbol)
     if not mine:
         return {"percentile": None, "group": group, "reason": "not_cached"}
@@ -1165,6 +1173,113 @@ def refresh(ticker: str) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# The overview universe
+# ---------------------------------------------------------------------------
+
+def universe() -> list[str]:
+    """The tickers the ``/dca`` overview ranks.
+
+    Derived from ``dca.TICKER_MODELS`` rather than kept as a second list, so the
+    set the framework names and the set the page ranks cannot drift apart. That
+    map is also the only place where a template was chosen deliberately rather
+    than inferred, which is exactly the population worth showing side by side --
+    a ranked table is only meaningful if every row was scored on a model somebody
+    stands behind.
+
+    ``GOOG`` is dropped in favour of ``GOOGL``: they are share classes of one
+    company and would occupy two rows saying the same thing, and only ``GOOGL``
+    is in ``PEER_GROUPS``, so ``GOOG`` could never get a peer percentile anyway.
+    """
+    from ystocker.dca import TICKER_MODELS
+
+    return sorted(set(TICKER_MODELS) - {"GOOG"})
+
+
+def cached_tickers() -> list[str]:
+    """Symbols with a reconstruction already on disk. Never fetches.
+
+    This is what makes the overview safe on the request path: the page ranks
+    what has been built, and says how many of the universe that is, rather than
+    triggering a fan-out of six Yahoo reads per missing symbol.
+    """
+    try:
+        if not CACHE_DIR.exists():
+            return []
+        return sorted(p.stem.upper() for p in CACHE_DIR.glob("*.json"))
+    except OSError as exc:  # pragma: no cover - defensive
+        log.debug("dca_history: could not list cache dir: %s", exc)
+        return []
+
+
+#: Seconds between tickers in a warm sweep. Deliberately large. One ticker is
+#: six Yahoo reads back to back, so this is ~5 calls/second at the burst and one
+#: ticker every half minute on average -- an order of magnitude gentler than the
+#: per-symbol sweep ``valuation.py`` records having got this box hard-blocked,
+#: while still covering a 15-name universe inside ten minutes.
+WARM_SPACING_SECONDS = 30
+
+_warm_lock = threading.Lock()
+_warming = False
+
+
+def warm_universe(symbols: Optional[Sequence[str]] = None, *,
+                  spacing: float = WARM_SPACING_SECONDS) -> int:
+    """Rebuild any universe ticker that has no fresh payload. Returns rows built.
+
+    Skips anything already fresh, so a restart does not re-fetch the world --
+    the disk cache survives a deploy and only a genuinely expired entry costs
+    anything.
+
+    Stops on a provider cool-down rather than pushing more requests at a vendor
+    that has just said no, exactly as ``analyst._fetch`` does. A partial pass is
+    kept: half a ranked table beats none of it, and the next pass fills the rest.
+
+    Guarded by a module-level flag so two callers cannot run overlapping sweeps.
+    """
+    global _warming
+
+    from ystocker import fetchguard
+    from ystocker import data as ydata
+
+    with _warm_lock:
+        if _warming:
+            log.info("dca_history: warm already in progress — skipping")
+            return 0
+        _warming = True
+    try:
+        targets = [s.strip().upper() for s in (symbols or universe())]
+        built = 0
+        for i, symbol in enumerate(targets):
+            if _read_disk(symbol) is not None:
+                continue
+            try:
+                fetchguard.guard(ydata.PROVIDER)
+            except fetchguard.CooldownActive as exc:
+                log.warning("dca_history: warm stopped at %d/%d — %s",
+                            i, len(targets), exc)
+                break
+            if built and spacing:
+                time.sleep(spacing)
+            try:
+                get(symbol, force=True)
+                built += 1
+            except Exception as exc:  # noqa: BLE001 - one bad ticker is not a bad sweep
+                log.info("dca_history: warm failed for %s: %s", symbol, exc)
+        if built:
+            log.info("dca_history: warmed %d ticker(s)", built)
+        return built
+    finally:
+        with _warm_lock:
+            _warming = False
+
+
+def is_warming() -> bool:
+    """True while a universe sweep is running, so the page can say so."""
+    with _warm_lock:
+        return _warming
+
+
+# ---------------------------------------------------------------------------
 # Daily snapshot sweep
 # ---------------------------------------------------------------------------
 
@@ -1193,12 +1308,16 @@ def snapshot_universe() -> int:
 
 
 def start_background_thread() -> None:
-    """Bank a snapshot shortly after startup, then once a day.
+    """Bank a snapshot shortly after startup, then once a day, and warm the
+    overview universe behind it.
 
-    Deliberately does **not** pre-build any reconstruction: that is six Yahoo
-    reads per symbol and there are ~230 of them, which is precisely the sweep
-    that got this box throttled once already. Reconstruction stays lazy, one
-    ticker at a time, on first page view.
+    The snapshot sweep costs no Yahoo call at all. The universe warm does -- six
+    reads per ticker -- so it runs *after* the snapshot, spaced, and only for
+    tickers whose payload has actually expired. It is deliberately limited to
+    ``universe()`` (about fifteen names) rather than everything in
+    ``PEER_GROUPS`` (about 230): that larger sweep is precisely what
+    ``valuation.py`` records having got this box throttled, and a reader who
+    wants a name outside the list still gets it on demand by opening its page.
 
     Under gunicorn ``--preload`` this runs only in the master, like every other
     background thread here.
@@ -1213,6 +1332,10 @@ def start_background_thread() -> None:
                 snapshot_universe()
             except Exception as exc:  # noqa: BLE001
                 log.warning("dca_history: snapshot sweep failed: %s", exc)
+            try:
+                warm_universe()
+            except Exception as exc:  # noqa: BLE001
+                log.warning("dca_history: universe warm failed: %s", exc)
             time.sleep(24 * 3600)
 
     threading.Thread(target=_loop, name="dca-history-snapshot", daemon=True).start()

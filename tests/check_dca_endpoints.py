@@ -94,9 +94,9 @@ class DcaEndpoints(unittest.TestCase):
         cls.app.config["TESTING"] = True
         cls.client = cls.app.test_client()
         # Neither of these may touch the network from a request.
-        dh.peer_percentiles = lambda t: {"percentile": 62.5, "group": "Tech",
-                                         "basis": "forward", "value": 21.8,
-                                         "peers": 11, "median": 24.0}
+        dh.peer_percentiles = lambda t, recs=None: {"percentile": 62.5, "group": "Tech",
+                                                    "basis": "forward", "value": 21.8,
+                                                    "peers": 11, "median": 24.0}
         dh.eps_drift = lambda t: {"drift": 0.031, "current": 14.2, "prior": 13.77,
                                   "period": "+1y", "lookback_days": 90}
         _seed("MSFT")
@@ -229,8 +229,8 @@ class DcaEndpoints(unittest.TestCase):
         thin["percentiles"] = {"pe": 55.0}
         dh._mem["THIN"] = (thin["_ts"], thin)
         try:
-            dh.peer_percentiles = lambda t: {"percentile": None, "group": None,
-                                             "reason": "no_group"}
+            dh.peer_percentiles = lambda t, recs=None: {"percentile": None, "group": None,
+                                                        "reason": "no_group"}
             r = self.client.get("/api/dca/THIN")
             self.assertEqual(r.status_code, 200)
             d = r.get_json()
@@ -239,9 +239,86 @@ class DcaEndpoints(unittest.TestCase):
             self.assertIsNone(d["equation"]["e_expression"])
             self.assertTrue(d["dropped"], "the page still needs to say what was missing")
         finally:
-            dh.peer_percentiles = lambda t: {"percentile": 62.5, "group": "Tech",
-                                             "basis": "forward", "value": 21.8,
-                                             "peers": 11, "median": 24.0}
+            dh.peer_percentiles = lambda t, recs=None: {"percentile": 62.5, "group": "Tech",
+                                                        "basis": "forward", "value": 21.8,
+                                                        "peers": 11, "median": 24.0}
+
+
+class DcaOverview(unittest.TestCase):
+    """The /dca ranked overview."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.app = create_app()
+        cls.app.config["TESTING"] = True
+        cls.client = cls.app.test_client()
+        dh.peer_percentiles = lambda t, recs=None: {"percentile": 40.0, "group": "Tech"}
+        dh.eps_drift = lambda t: {"drift": 0.0}
+        # Two names cached, the rest of the universe deliberately not, so the
+        # partial-coverage path is what gets exercised.
+        cls.built = ["MSFT", "NVDA"]
+        for sym in cls.built:
+            _seed(sym)
+        dh.cached_tickers = lambda: list(cls.built)
+        # The warm kick must never fire a real sweep from a test.
+        dh.warm_universe = lambda *a, **k: 0
+
+    def test_page_renders(self):
+        r = self.client.get("/dca")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("DCA Valuation Engine", r.data.decode())
+
+    def test_it_ranks_only_what_is_already_built(self):
+        """A ranked table must never trigger a fan-out of six reads per name."""
+        d = self.client.get("/api/dca").get_json()
+        self.assertEqual({r["ticker"] for r in d["rows"]}, set(self.built))
+        self.assertEqual(d["scored"], len(self.built))
+        self.assertGreater(d["universe"], d["scored"])
+
+    def test_partial_coverage_is_stated_not_hidden(self):
+        """A league table silently missing entries is worse than an honest gap."""
+        d = self.client.get("/api/dca").get_json()
+        self.assertTrue(d["pending"])
+        self.assertNotIn("MSFT", d["pending"])
+
+    def test_cheapest_sorts_first(self):
+        d = self.client.get("/api/dca").get_json()
+        vs = [r["V"] for r in d["rows"] if r["V"] is not None]
+        self.assertEqual(vs, sorted(vs, reverse=True))
+
+    def test_rows_agree_with_the_detail_endpoint(self):
+        """One scoring path, so a row and its detail page cannot disagree.
+
+        A reader comparing the table against a ticker's own page is exactly who
+        would find a drift between two implementations of the same formula.
+        """
+        d = self.client.get("/api/dca?base=2500").get_json()
+        row = next(r for r in d["rows"] if r["ticker"] == "MSFT")
+        detail = self.client.get("/api/dca/MSFT?base=2500").get_json()
+        for key in ("V", "E", "band", "model", "m_valuation", "m_earnings",
+                    "m_portfolio", "multiplier", "amount"):
+            self.assertEqual(row[key], detail[key], f"{key} differs between list and detail")
+
+    def test_base_scales_every_row(self):
+        a = self.client.get("/api/dca?base=1000").get_json()
+        b = self.client.get("/api/dca?base=2000").get_json()
+        self.assertEqual(b["base_dca"], 2000.0)
+        for ra, rb in zip(a["rows"], b["rows"]):
+            self.assertEqual(ra["V"], rb["V"])
+            self.assertAlmostEqual(rb["amount"], ra["amount"] * 2, delta=0.02)
+
+    def test_a_nonsense_base_falls_back(self):
+        for bad in ("abc", "-1", "0"):
+            self.assertEqual(
+                self.client.get(f"/api/dca?base={bad}").get_json()["base_dca"], 1000.0)
+
+    def test_the_universe_is_derived_from_the_ticker_map(self):
+        """One list, so the framework's named set and the ranked set cannot drift."""
+        self.assertEqual(set(dh.universe()), set(dca.TICKER_MODELS) - {"GOOG"})
+        self.assertNotIn("GOOG", dh.universe(), "GOOG and GOOGL are one company")
+
+    def test_nav_links_to_the_overview(self):
+        self.assertIn('href="/dca"', self.client.get("/dca/MSFT").data.decode())
 
 
 if __name__ == "__main__":  # pragma: no cover
