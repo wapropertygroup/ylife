@@ -521,7 +521,7 @@ local `.env` up to SSM.
 
 ## Production infrastructure
 
-- **Region**: us-west-2. **Instance**: `i-059a024daff6bd015`, Amazon Linux
+- **Region**: us-west-2. **Instance**: `i-0bb73b171210c002e`, Amazon Linux
   2023, `t3.medium`.
 - **Process model**: nginx → 8 Gunicorn systemd services (ports 8000–8007, 2
   workers each, `--preload`, recycled every ~200 requests).
@@ -559,11 +559,11 @@ changes.
 <details><summary>One app, by hand, via SSM (no .pem needed)</summary>
 
 ```bash
-aws ssm send-command --instance-ids i-059a024daff6bd015 --region us-west-2 \
+aws ssm send-command --instance-ids i-0bb73b171210c002e --region us-west-2 \
   --document-name AWS-RunShellScript \
   --parameters '{"commands":["cd /opt/ystocker && sudo git fetch origin && sudo git reset --hard origin/main && sudo systemctl restart yplanner"]}'
 
-aws ssm get-command-invocation --command-id <CMD_ID> --instance-id i-059a024daff6bd015 \
+aws ssm get-command-invocation --command-id <CMD_ID> --instance-id i-0bb73b171210c002e \
   --region us-west-2 --query "[Status, StandardOutputContent]" --output text
 ```
 

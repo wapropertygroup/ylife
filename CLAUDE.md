@@ -151,12 +151,12 @@ successful deploy.
 
 ```bash
 # One app, by hand
-aws ssm send-command --instance-ids i-059a024daff6bd015 --region us-west-2 \
+aws ssm send-command --instance-ids i-0bb73b171210c002e --region us-west-2 \
   --document-name AWS-RunShellScript \
   --parameters '{"commands":["cd /opt/ystocker && sudo git fetch origin && sudo git reset --hard origin/main && sudo systemctl restart yplanner"]}'
 
 # Read a command result
-aws ssm get-command-invocation --command-id <CMD_ID> --instance-id i-059a024daff6bd015 \
+aws ssm get-command-invocation --command-id <CMD_ID> --instance-id i-0bb73b171210c002e \
   --region us-west-2 --query "[Status, StandardOutputContent]" --output text
 ```
 </details>
@@ -1071,7 +1071,14 @@ Started in `create_app()`, all daemon threads:
 
 ### Infrastructure
 - **Region**: us-west-2
-- **EC2 Instance**: `i-059a024daff6bd015` (Amazon Linux 2023, `t3.medium`)
+- **EC2 Instance**: `i-0bb73b171210c002e` (Amazon Linux 2023, `t3.medium`),
+  tagged `Name=ystocker-instance`. **Do not pin this id anywhere that matters** —
+  `deploy.sh` resolves it from the tag and only falls back to the literal. The
+  box was rebuilt on 2026-08-31 and the elastic IP moved with it, so the site
+  never went down and nothing looked wrong; the only symptom was every deploy
+  failing with `InvalidInstanceId: Instances not in a valid state for account`,
+  which reads like an SSM agent or permissions fault rather than a stale
+  constant.
 - **App directory**: `/opt/ystocker`
 - **Process model**: nginx → 8 Gunicorn systemd services (ports 8000-8007, 2 workers each, `--preload`, recycled every ~200 requests)
 - **Memory budget**: 4 GB total + 2 GB swap. ystocker runs ~1 GB (`MemoryMax=1800M`); the other seven ~100 MB each (`MemoryMax=400M`). With `--preload`, `create_app()` runs once in the master, so the background refresh threads live **only in the master** — forked workers inherit a cache snapshot and refill on demand.
