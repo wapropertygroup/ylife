@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  macOS only. Deliberately kept outside the TradeAgents/ folder: that folder is a
+  PBXFileSystemSynchronizedRootGroup, so anything dropped inside it is adopted by the
+  target automatically — which for a non-source file means being copied into the app
+  bundle as a resource. An entitlements file shipped as a resource is both useless and
+  a disclosure of the app's capabilities, so it lives at the project level instead.
+
+  iOS needs no equivalent: the sandbox is implicit there and outbound HTTP needs no
+  entitlement, which is why CODE_SIGN_ENTITLEMENTS is scoped [sdk=macosx*].
+-->
+<plist version="1.0">
+<dict>
+	<key>com.apple.security.app-sandbox</key>
+	<true/>
+	<!--
+	  The whole app is a client for the Flask backend, so without this every request
+	  fails. Note the failure mode is not a clear "sandbox denied" — URLSession reports
+	  a generic NSURLErrorNotConnectedToInternet (-1009), which reads as the user's
+	  network being down rather than as a missing entitlement.
+	-->
+	<key>com.apple.security.network.client</key>
+	<true/>
+</dict>
+</plist>

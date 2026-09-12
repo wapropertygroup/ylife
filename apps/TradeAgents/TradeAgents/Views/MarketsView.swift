@@ -9,7 +9,7 @@ struct MarketsView: View {
     enum LoadState {
         case loading
         case loaded(MarketsResponse)
-        case failed(String)
+        case failed(Error)
     }
 
     /// Display order for the instruments `/api/markets` returns. The payload is a
@@ -23,14 +23,11 @@ struct MarketsView: View {
     ]
 
     var body: some View {
-        NavigationStack {
-            ZStack {
-                Palette.background.ignoresSafeArea()
-                content
-            }
-            .navigationTitle("trade-agents")
-            .toolbarTitleDisplayMode(.inlineLarge)
+        ZStack {
+            Palette.background.ignoresSafeArea()
+            content
         }
+        .navigationTitle("Markets")
         .task { await load() }
     }
 
@@ -38,22 +35,10 @@ struct MarketsView: View {
     private var content: some View {
         switch state {
         case .loading:
-            ProgressView().tint(Palette.brand)
+            LoadingPane()
 
-        case .failed(let message):
-            VStack(spacing: 14) {
-                Image(systemName: "exclamationmark.triangle")
-                    .font(.largeTitle)
-                    .foregroundStyle(Palette.down)
-                Text(message)
-                    .font(.footnote)
-                    .foregroundStyle(Palette.secondaryText)
-                    .multilineTextAlignment(.center)
-                Button("Retry") { Task { await load() } }
-                    .buttonStyle(.borderedProminent)
-                    .tint(Palette.brand)
-            }
-            .padding(32)
+        case .failed(let error):
+            LoadFailure(error: error) { Task { await load() } }
 
         case .loaded(let data):
             ScrollView {
@@ -92,47 +77,8 @@ struct MarketsView: View {
             let data = try await APIClient.shared.markets()
             state = .loaded(data)
         } catch {
-            state = .failed(error.localizedDescription)
+            state = .failed(error)
         }
-    }
-}
-
-/// The server's freshness verdict, shown rather than hidden.
-///
-/// `status` distinguishes a live quote from a session close from genuinely stale
-/// data — a distinction the backend works to compute and that every web page
-/// surfaces. Reproducing it here is the point: the risk in a phone app is a number
-/// that looks current because it is on screen.
-private struct FreshnessBanner: View {
-    let meta: Meta
-
-    private var isStale: Bool { meta.stale == true || meta.status == "stale" }
-
-    private var label: String {
-        switch meta.status {
-        case "realtime":      return "Live"
-        case "session_close": return "At session close"
-        case "stale":         return "Stale"
-        default:              return meta.status?.capitalized ?? "Unknown"
-        }
-    }
-
-    var body: some View {
-        HStack(spacing: 8) {
-            Circle()
-                .fill(isStale ? Palette.down : (meta.marketOpen == true ? Palette.up : Palette.secondaryText))
-                .frame(width: 7, height: 7)
-            Text(label)
-                .font(.caption.weight(.medium))
-                .foregroundStyle(isStale ? Palette.down : Palette.secondaryText)
-            if let age = meta.ageLabel {
-                Text("· \(age)")
-                    .font(.caption)
-                    .foregroundStyle(Palette.secondaryText)
-            }
-            Spacer()
-        }
-        .padding(.horizontal, 4)
     }
 }
 
@@ -214,13 +160,13 @@ private struct InstrumentCard: View {
             }
 
             HStack(spacing: 14) {
-                Stat(label: "YTD", value: Format.signedPercent(instrument.ytd),
-                     tint: Format.tint(instrument.ytd))
+                StatTile(label: "YTD", value: Format.signedPercent(instrument.ytd),
+                         tint: Format.tint(instrument.ytd))
                 if let rsi = instrument.rsi14 {
-                    Stat(label: "RSI", value: Format.number(rsi), tint: .primary)
+                    StatTile(label: "RSI", value: Format.number(rsi))
                 }
                 if let pe = instrument.pe {
-                    Stat(label: "P/E", value: Format.number(pe), tint: .primary)
+                    StatTile(label: "P/E", value: Format.number(pe))
                 }
                 Spacer()
             }
@@ -237,49 +183,6 @@ private struct InstrumentCard: View {
         }
         let pad = (high - low) * 0.08
         return (low - pad)...(high + pad)
-    }
-}
-
-private struct Stat: View {
-    let label: String
-    let value: String
-    let tint: Color
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 1) {
-            Text(label)
-                .font(.system(size: 9))
-                .foregroundStyle(Palette.secondaryText)
-            Text(value)
-                .font(.caption2.monospacedDigit())
-                .foregroundStyle(tint)
-        }
-    }
-}
-
-/// Formatting helpers. An absent value prints as an em dash rather than 0 — the
-/// payload is full of legitimate nulls (a commodity has no P/E) and rendering those
-/// as zero would be a false statement about the instrument.
-enum Format {
-    static func price(_ value: Double?) -> String {
-        guard let value else { return "—" }
-        return value.formatted(.number.precision(.fractionLength(2)))
-    }
-
-    static func number(_ value: Double?) -> String {
-        guard let value else { return "—" }
-        return value.formatted(.number.precision(.fractionLength(1)))
-    }
-
-    static func signedPercent(_ value: Double?) -> String {
-        guard let value else { return "—" }
-        let sign = value >= 0 ? "+" : ""
-        return sign + value.formatted(.number.precision(.fractionLength(2))) + "%"
-    }
-
-    static func tint(_ value: Double?) -> Color {
-        guard let value else { return Palette.secondaryText }
-        return value >= 0 ? Palette.up : Palette.down
     }
 }
 
