@@ -66,6 +66,7 @@ struct StatTile: View {
 /// current merely because it is on screen.
 struct FreshnessBanner: View {
     let meta: Meta
+    @Environment(Localization.self) private var loc
 
     private var isStale: Bool { meta.stale == true || meta.status == "stale" }
 
@@ -76,11 +77,15 @@ struct FreshnessBanner: View {
     /// reads as *we could not establish how fresh this is* — an alarming claim to make
     /// about a perfectly good payload. Absent means the question does not apply, so
     /// the age is shown on its own.
+    ///
+    /// An unrecognised status is passed through untranslated rather than dropped: it
+    /// is a value the server invented after this app was built, and showing it is more
+    /// useful than hiding it.
     private var label: String? {
         switch meta.status {
-        case "realtime":      return "Live"
-        case "session_close": return "At session close"
-        case "stale":         return "Stale"
+        case "realtime":      return loc(S.live)
+        case "session_close": return loc(S.sessionClose)
+        case "stale":         return loc(S.stale)
         case let other?  where !other.isEmpty: return other.capitalized
         default:              return nil
         }
@@ -118,10 +123,19 @@ struct FreshnessBanner: View {
 struct LoadFailure: View {
     let error: Error
     let retry: () -> Void
+    @Environment(Localization.self) private var loc
 
     private var isWarming: Bool {
         if case APIError.warming = error { return true }
         return false
+    }
+
+    /// `APIError.warming`'s own description is English, built where there is no
+    /// environment to read a language from — so the localized copy is substituted
+    /// here, at the one place it is shown. Every other error keeps its own message,
+    /// which is usually the server's and already in the reader's language.
+    private var message: String {
+        isWarming ? loc(S.warming) : error.localizedDescription
     }
 
     var body: some View {
@@ -129,11 +143,11 @@ struct LoadFailure: View {
             Image(systemName: isWarming ? "hourglass" : "exclamationmark.triangle")
                 .font(.largeTitle)
                 .foregroundStyle(isWarming ? Palette.warn : Palette.down)
-            Text(error.localizedDescription)
+            Text(message)
                 .font(.footnote)
                 .foregroundStyle(Palette.secondaryText)
                 .multilineTextAlignment(.center)
-            Button(isWarming ? "Check again" : "Retry", action: retry)
+            Button(isWarming ? loc(S.checkAgain) : loc(S.retry), action: retry)
                 .buttonStyle(.borderedProminent)
                 .tint(Palette.brand)
         }
@@ -219,9 +233,9 @@ enum Decision {
         return Palette.warn
     }
 
-    static func label(_ raw: String?) -> String {
+    static func label(_ raw: String?, fallback: String) -> String {
         let first = headline(raw)
-        return first.isEmpty ? "No decision" : first
+        return first.isEmpty ? fallback : first
     }
 
     /// The first non-empty line, trimmed and capped at 120 characters — the same

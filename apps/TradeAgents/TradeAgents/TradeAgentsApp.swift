@@ -10,9 +10,20 @@ struct TradeAgentsApp: App {
     static let mainWindowID = "main"
     #endif
 
+    /// Owned by the App, not by `RootView`, because the menu-bar popover is a separate
+    /// scene: a `Localization` created inside the window's view tree would leave the
+    /// status item speaking whatever language it started in after the reader switched.
+    @State private var localization = Localization()
+
+    /// Likewise shared. Alerts are raised by whichever surface happens to be polling,
+    /// and the badge has to agree with the list.
+    @State private var alerts = AlertCenter()
+
     var body: some Scene {
         WindowGroup(id: Self.sceneID) {
             RootView()
+                .environment(localization)
+                .environment(alerts)
                 // The web app is dark-only (`<html class="dark">`, bg-slate-950) and
                 // the palette is lifted from it so the two do not look like different
                 // products. Forced rather than following the system, for the same
@@ -39,9 +50,17 @@ struct TradeAgentsApp: App {
         // panel — rows with colour-coded verdicts and a market line — and `.menu` style
         // only renders a list of menu items.
         #if os(macOS)
-        MenuBarExtra("trade-agents", systemImage: "chart.line.uptrend.xyaxis") {
+        MenuBarExtra {
             MenuBarView()
+                .environment(localization)
+                .environment(alerts)
                 .preferredColorScheme(.dark)
+        } label: {
+            // A dot on the icon when something is waiting, so the status item is
+            // informative while closed -- which is the only state it is usually in.
+            Image(systemName: alerts.unread.isEmpty
+                  ? "chart.line.uptrend.xyaxis"
+                  : "chart.line.uptrend.xyaxis.circle.fill")
         }
         .menuBarExtraStyle(.window)
         #endif

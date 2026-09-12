@@ -27,7 +27,57 @@ problems and all of them are outside a checkout.
 - **Rates** — the FOMC path from fed funds futures: target range, per-meeting implied
   rate, and a cut/hold/hike bar with the outcome distribution for the nearest meeting.
 - **Sentiment** — the fear & greed composite, its comparisons, and 273 days of history.
-- **Settings** — account state, a backend switch between the two vhosts, build info.
+- **Settings** — account state, language, a backend switch between the two vhosts,
+  build info.
+- **A menu-bar item** (macOS) — recent verdicts and a three-index glance, in a popover.
+- **EN / ZH throughout**, and **in-app alerts** for the few events worth interrupting
+  for. Both are described below.
+
+### Localization
+
+EN + ZH, toggled in Settings, matching the web app's `static/i18n.js`. An explicit
+toggle rather than following the system locale, for the reason the site has one: the
+language also decides what a *new report* is written in — `/api/agents/run` takes
+`lang` and freezes it onto the job — so it is a product choice, not a display
+preference.
+
+Three things worth knowing:
+
+- **The compiler enforces key parity.** `LocalizedString` is a struct with two
+  non-optional fields, so a string cannot exist in one language and not the other.
+  The web side needs a *test* for this (CLAUDE.md records it for the DCA band and
+  factor strings, composed in JS where `I18n.apply()` cannot reach them); here it is
+  unrepresentable.
+- **Server-supplied text is never re-translated.** The agents API already ships
+  `role.zh` and `team_zh` beside their English counterparts, and the app ignored both
+  before this existed — a Chinese reader now gets 市场分析师 / 分析师团队报告 from the
+  payload. Decision verdicts and report bodies likewise come through as the run wrote
+  them. Translating any of it here would be a second source of truth that disagrees
+  with the report.
+- **Dates and numbers follow the toggle**, via `Format.locale`. Chinese UI copy above
+  `Aug 28, 2026` is the visible bug that motivates the one piece of mutable global
+  state in the app.
+
+### In-app alerts
+
+`AlertCenter` raises an alert for three events, all derivable from data the app already
+fetches: a **report finishing** (a showcase id not seen before), a **large index move**
+(≥ 2% on the day), and **market data going stale** (the server's own freshness verdict,
+which is a claim about the upstream feed rather than about cache age).
+
+Deliberately **in-app only**, not `UNUserNotificationCenter`. Nothing here runs in the
+background, so a system notification would promise delivery while the app is closed and
+then silently stop arriving — worse than one that never claimed to. Every event above is
+noticed only because a screen or the menu-bar popover happened to be loading anyway.
+
+Two details that are load-bearing:
+
+- **The first payload seeds silently.** On a cold start every report in the feed is
+  "new", so without that the reader's first action produces ten notifications about
+  runs that finished days ago.
+- **Dedupe is on identity, not recency.** Every source is polled, so the same condition
+  is re-observed on each load; appending each time would turn one stale feed into a
+  list of hundreds.
 
 ### Not done
 

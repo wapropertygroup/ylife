@@ -7,25 +7,34 @@ import SwiftUI
 /// and rendering those as zero would be a false statement about the instrument
 /// rather than a cosmetic one.
 enum Format {
+    /// The locale dates and numbers are rendered in.
+    ///
+    /// Set by `Localization` when the reader changes language, rather than threaded
+    /// through every call site: a date appears in a dozen views and adding a `locale:`
+    /// argument to each would be noise at every one of them. The cost is a piece of
+    /// mutable global state — acceptable because it has exactly one writer, and the
+    /// alternative (Chinese UI copy above `Aug 28, 2026`) is the visible bug.
+    static var locale: Locale = .autoupdatingCurrent
+
     static func price(_ value: Double?) -> String {
         guard let value else { return "—" }
-        return value.formatted(.number.precision(.fractionLength(2)))
+        return value.formatted(.number.precision(.fractionLength(2)).locale(locale))
     }
 
     static func number(_ value: Double?, places: Int = 1) -> String {
         guard let value else { return "—" }
-        return value.formatted(.number.precision(.fractionLength(places)))
+        return value.formatted(.number.precision(.fractionLength(places)).locale(locale))
     }
 
     static func signedPercent(_ value: Double?, places: Int = 2) -> String {
         guard let value else { return "—" }
         let sign = value >= 0 ? "+" : ""
-        return sign + value.formatted(.number.precision(.fractionLength(places))) + "%"
+        return sign + value.formatted(.number.precision(.fractionLength(places)).locale(locale)) + "%"
     }
 
     static func percent(_ value: Double?, places: Int = 1) -> String {
         guard let value else { return "—" }
-        return value.formatted(.number.precision(.fractionLength(places))) + "%"
+        return value.formatted(.number.precision(.fractionLength(places)).locale(locale)) + "%"
     }
 
     static func tint(_ value: Double?) -> Color {
@@ -41,13 +50,15 @@ enum Format {
     /// match the string exactly.
     static func timestamp(_ raw: String?) -> String {
         guard let date = parseISO(raw) else { return raw ?? "—" }
-        return date.formatted(date: .abbreviated, time: .shortened)
+        return date.formatted(Date.FormatStyle(date: .abbreviated, time: .shortened)
+            .locale(locale))
     }
 
     static func day(_ raw: String?) -> String {
         guard let raw else { return "—" }
         guard let date = Self.dayParser.date(from: raw) else { return raw }
-        return date.formatted(date: .abbreviated, time: .omitted)
+        return date.formatted(Date.FormatStyle(date: .abbreviated, time: .omitted)
+            .locale(locale))
     }
 
     static func parseISO(_ raw: String?) -> Date? {

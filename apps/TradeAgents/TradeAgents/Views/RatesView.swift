@@ -8,6 +8,7 @@ import SwiftUI
 /// sees and reads as fact.
 struct RatesView: View {
     @State private var state: LoadState = .loading
+    @Environment(Localization.self) private var loc
 
     enum LoadState {
         case loading
@@ -20,7 +21,7 @@ struct RatesView: View {
             Palette.background.ignoresSafeArea()
             content
         }
-        .navigationTitle("Rates")
+        .navigationTitle(loc(S.rates))
         .task { await load() }
     }
 
@@ -42,8 +43,8 @@ struct RatesView: View {
             // scroll view, which reads as a rendering bug.
             EmptyPane(
                 icon: "building.columns",
-                title: "No meetings priced",
-                detail: "The futures curve was too sparse to derive a path."
+                title: loc(S.noMeetings),
+                detail: loc(S.noMeetingsHint)
             )
 
         case .loaded(let data):
@@ -86,6 +87,7 @@ private struct CurrentRangeCard: View {
     let current: FedCurrent?
     let asOf: String?
     let meta: Meta?
+    @Environment(Localization.self) private var loc
 
     var body: some View {
         Card {
@@ -93,16 +95,16 @@ private struct CurrentRangeCard: View {
                 if let meta {
                     FreshnessBanner(meta: meta)
                 }
-                Text("Target range")
+                Text(loc(S.targetRange))
                     .font(.system(size: 9).weight(.medium))
                     .foregroundStyle(Palette.mutedText)
                     .textCase(.uppercase)
                 Text(rangeLabel)
                     .font(.system(size: 34, weight: .semibold, design: .rounded).monospacedDigit())
                 HStack(alignment: .top, spacing: 18) {
-                    StatTile(label: "Effective", value: Format.percent(current?.effr, places: 2))
-                    StatTile(label: "Midpoint", value: Format.percent(current?.mid, places: 2))
-                    StatTile(label: "Curve as of", value: Format.day(asOf))
+                    StatTile(label: loc(S.effective), value: Format.percent(current?.effr, places: 2))
+                    StatTile(label: loc(S.midpoint), value: Format.percent(current?.mid, places: 2))
+                    StatTile(label: loc(S.curveAsOf), value: Format.day(asOf))
                     Spacer()
                 }
             }
@@ -123,16 +125,23 @@ private struct CurrentRangeCard: View {
 private struct MeetingCard: View {
     let meeting: FedMeeting
     let showsOutcomes: Bool
+    @Environment(Localization.self) private var loc
 
     var body: some View {
-        Card {
+        // The three labels are resolved *here* and handed down. `ProbabilitySlice` is a
+        // plain value type with no environment of its own, and `slices(…)` runs outside
+        // the view hierarchy — so the choice is between threading the resolved strings
+        // through or giving the slice its own opinion about what "Cut" says, which is a
+        // second source of truth for a word already in the table.
+        let slices = slices(cut: loc(S.cut), hold: loc(S.hold), hike: loc(S.hike))
+        return Card {
             VStack(alignment: .leading, spacing: 10) {
                 header
 
                 if slices.isEmpty {
                     // Stated, not skipped — a missing bar with nothing in its place
                     // reads as a certainty rather than as an absence.
-                    Text("No probability breakdown")
+                    Text(loc(S.noBreakdown))
                         .font(.caption2)
                         .foregroundStyle(Palette.secondaryText)
                 } else {
@@ -224,11 +233,14 @@ private struct MeetingCard: View {
     /// the legend entirely rather than drawn as a zero-width segment labelled 0.0% —
     /// which would be a claim about the meeting instead of an admission about the feed.
     /// A genuine `0.0` is kept: that one *is* a measurement.
-    private var slices: [ProbabilitySlice] {
+    ///
+    /// Takes the labels rather than resolving them, so this stays callable from anywhere
+    /// — see the note in `body`.
+    private func slices(cut: String, hold: String, hike: String) -> [ProbabilitySlice] {
         let raw: [(String, Double?, Color)] = [
-            ("Cut", meeting.cutProb, Palette.up),
-            ("Hold", meeting.holdProb, Palette.secondaryText),
-            ("Hike", meeting.hikeProb, Palette.down),
+            (cut, meeting.cutProb, Palette.up),
+            (hold, meeting.holdProb, Palette.secondaryText),
+            (hike, meeting.hikeProb, Palette.down),
         ]
         return raw.compactMap { label, value, tint in
             guard let value else { return nil }
@@ -292,10 +304,11 @@ private struct DirectionBar: View {
 
 private struct OutcomeTable: View {
     let outcomes: [FedOutcome]
+    @Environment(Localization.self) private var loc
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Where the range lands")
+            Text(loc(S.whereRange))
                 .font(.system(size: 9).weight(.medium))
                 .foregroundStyle(Palette.mutedText)
                 .textCase(.uppercase)
@@ -312,13 +325,16 @@ private struct OutcomeTable: View {
 
 private struct OutcomeRow: View {
     let outcome: FedOutcome
+    @Environment(Localization.self) private var loc
 
     var body: some View {
         HStack(spacing: 8) {
             Text(rangeLabel)
                 .font(.caption.monospacedDigit())
             if let steps = outcome.steps {
-                Chip(text: Self.stepsLabel(steps))
+                // Resolved at the call site for the same reason the direction labels
+                // are: `stepsLabel` is a pure string builder with no environment.
+                Chip(text: Self.stepsLabel(steps, noChange: loc(S.noChange)))
             }
             Spacer()
             Text(Format.percent(outcome.prob, places: 1))
@@ -342,8 +358,8 @@ private struct OutcomeRow: View {
     /// `steps` is a signed count of 25bp moves away from *today's* range, so the sign is
     /// the direction and has to survive into the label: "25 bp" on its own does not say
     /// whether the Fed cut or hiked to get there.
-    private static func stepsLabel(_ steps: Int) -> String {
-        guard steps != 0 else { return "No change" }
+    private static func stepsLabel(_ steps: Int, noChange: String) -> String {
+        guard steps != 0 else { return noChange }
         let sign = steps > 0 ? "+" : ""
         return sign + Format.number(Double(steps * 25), places: 0) + " bp"
     }
@@ -351,4 +367,5 @@ private struct OutcomeRow: View {
 
 #Preview {
     RatesView()
+        .environment(Localization())
 }

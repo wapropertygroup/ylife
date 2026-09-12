@@ -1,17 +1,20 @@
 import SwiftUI
 
-/// Account, backend and build information.
+/// Account, language, backend and build information.
 struct SettingsView: View {
     @Environment(Session.self) private var session
+    @Environment(Localization.self) private var loc
     @State private var host = AppSettings.host
     @State private var signingOut = false
 
     var body: some View {
+        @Bindable var localization = loc
+
         Form {
-            Section("Account") {
+            Section(loc(S.account)) {
                 if session.isSignedIn {
-                    LabeledContent("Signed in as", value: session.user.email)
-                    Button(signingOut ? "Signing out…" : "Sign out", role: .destructive) {
+                    LabeledContent(loc(S.signedInAs), value: session.user.email)
+                    Button(signingOut ? loc(S.signingOut) : loc(S.signOut), role: .destructive) {
                         Task {
                             signingOut = true
                             await session.signOut()
@@ -20,8 +23,8 @@ struct SettingsView: View {
                     }
                     .disabled(signingOut)
                 } else {
-                    LabeledContent("Status", value: "Not signed in")
-                    Text(Session.signInBlockedReason)
+                    LabeledContent(loc(S.status), value: loc(S.notSignedIn))
+                    Text(loc(S.signInBlocked))
                         .font(.caption)
                         .foregroundStyle(Palette.secondaryText)
                 }
@@ -36,12 +39,26 @@ struct SettingsView: View {
                         .foregroundStyle(Palette.warn)
                 }
 
-                Button("Refresh") { Task { await session.refresh() } }
+                Button(loc(S.refresh)) { Task { await session.refresh() } }
                     .disabled(session.isLoading)
             }
 
             Section {
-                Picker("Backend", selection: $host) {
+                Picker(loc(S.language), selection: $localization.language) {
+                    ForEach(Language.allCases) { option in
+                        // Each language named in itself. "Chinese" is no use to
+                        // somebody who cannot read the language currently showing.
+                        Text(option.endonym).tag(option)
+                    }
+                }
+            } header: {
+                Text(loc(S.language))
+            } footer: {
+                Text(loc(S.languageNote))
+            }
+
+            Section {
+                Picker(loc(S.backend), selection: $host) {
                     ForEach(AppHost.allCases) { option in
                         Text(option.label).tag(option)
                     }
@@ -55,20 +72,26 @@ struct SettingsView: View {
                     Task { await session.refresh() }
                 }
             } header: {
-                Text("Backend")
+                Text(loc(S.backend))
             } footer: {
-                Text("Both hosts serve the same Flask app — trade-agents.com proxies every "
-                     + "path to it rather than redirecting. Switching is for diagnosing a "
-                     + "DNS or certificate problem, not for changing what you see.")
+                Text(loc(S.backendNote))
             }
 
-            Section("About") {
-                LabeledContent("Version", value: Self.version)
-                LabeledContent("Platform", value: Self.platform)
+            Section {
+                Text(loc(S.notificationsNote))
+                    .font(.caption)
+                    .foregroundStyle(Palette.secondaryText)
+            } header: {
+                Text(loc(S.notifications))
+            }
+
+            Section(loc(S.about)) {
+                LabeledContent(loc(S.version), value: Self.version)
+                LabeledContent(loc(S.platform), value: Self.platform)
             }
         }
         .formStyle(.grouped)
-        .navigationTitle("Settings")
+        .navigationTitle(loc(S.settings))
     }
 
     private static var version: String {
