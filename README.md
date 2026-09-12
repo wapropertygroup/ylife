@@ -521,8 +521,17 @@ local `.env` up to SSM.
 
 ## Production infrastructure
 
-- **Region**: us-west-2. **Instance**: `i-0bb73b171210c002e`, Amazon Linux
-  2023, `t3.medium`.
+- **Region**: us-west-2. **Instance**: resolve by tag, never by a pinned id —
+  the box is tagged `Name=ystocker-instance` and has been rebuilt twice, each
+  time keeping its elastic IP so the only symptom was SSM failing with
+  `InvalidInstanceId`. Amazon Linux 2023, `t3.medium`.
+
+  ```bash
+  aws ec2 describe-instances --region us-west-2 \
+    --filters "Name=tag:Name,Values=ystocker-instance" \
+              "Name=instance-state-name,Values=running" \
+    --query 'Reservations[].Instances[].InstanceId' --output text
+  ```
 - **Process model**: nginx → 8 Gunicorn systemd services (ports 8000–8007, 2
   workers each, `--preload`, recycled every ~200 requests).
 - **Memory budget**: 4 GB + 2 GB swap. yStocker runs ~1 GB
@@ -559,11 +568,17 @@ changes.
 <details><summary>One app, by hand, via SSM (no .pem needed)</summary>
 
 ```bash
-aws ssm send-command --instance-ids i-0bb73b171210c002e --region us-west-2 \
+# Resolve by tag — the id has changed twice and must not be pinned.
+IID=$(aws ec2 describe-instances --region us-west-2 \
+  --filters "Name=tag:Name,Values=ystocker-instance" \
+            "Name=instance-state-name,Values=running" \
+  --query 'Reservations[].Instances[].InstanceId' --output text)
+
+aws ssm send-command --instance-ids "$IID" --region us-west-2 \
   --document-name AWS-RunShellScript \
   --parameters '{"commands":["cd /opt/ystocker && sudo git fetch origin && sudo git reset --hard origin/main && sudo systemctl restart yplanner"]}'
 
-aws ssm get-command-invocation --command-id <CMD_ID> --instance-id i-0bb73b171210c002e \
+aws ssm get-command-invocation --command-id <CMD_ID> --instance-id "$IID" \
   --region us-west-2 --query "[Status, StandardOutputContent]" --output text
 ```
 

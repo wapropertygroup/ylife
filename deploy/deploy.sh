@@ -50,9 +50,16 @@ if [[ -z "$INSTANCE" ]]; then
       --query 'Reservations[].Instances[0].InstanceId' --output text 2>/dev/null \
     | head -n1 | tr -d '[:space:]')"
   if [[ -z "$INSTANCE" || "$INSTANCE" == "None" ]]; then
-    INSTANCE="i-0bb73b171210c002e"
+    # Last known good, and it *will* rot again: the box has been rebuilt twice
+    # (2026-08-31, and again before 2026-09-12), each time keeping the elastic IP
+    # so nothing looked wrong except every SSM call failing with
+    # "InvalidInstanceId: Instances not in a valid state for account" -- which
+    # reads like a permissions fault rather than a stale constant. The tag lookup
+    # above is the real answer; this only covers an ec2:DescribeInstances denial.
+    INSTANCE="i-061f92cc5b31c7e72"
     echo "[deploy] WARNING: could not resolve a running instance tagged" \
-         "'$INSTANCE_NAME_TAG' — falling back to $INSTANCE" >&2
+         "'$INSTANCE_NAME_TAG' — falling back to $INSTANCE, which is a" \
+         "last-known id and may be stale." >&2
   fi
 fi
 

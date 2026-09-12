@@ -41,10 +41,10 @@ PEER_GROUPS: dict[str, list[str]] = {
     "Consumer Staples":  ["PG", "KO", "PEP", "COST", "WMT", "PM", "MO", "MDLZ"],
     "Airlines & Travel": ["DAL", "UAL", "AAL", "LUV", "BKNG", "EXPE", "ABNB", "MAR", "HLT", "RCL"],
     "Communication":     ["GOOGL", "META", "NFLX", "DIS", "VZ", "T", "TMUS", "CHTR", "EA", "TTWO"],
-    "Telecom":           ["VZ", "T", "TMUS", "CHTR", "LUMN", "ATUS", "CCOI", "SHEN", "XTL"],
+    "Telecom":           ["VZ", "T", "TMUS", "CHTR", "LUMN", "CCOI", "SHEN", "XTL"],
     "Utilities":         ["NEE", "DUK", "SO", "D", "AEP", "EXC", "SRE", "XEL"],
     "AI / Robotics":     ["NVDA", "MSFT", "GOOGL", "META", "AMZN", "PLTR", "AI", "SMCI",
-                          "ANET", "ARM", "DELL", "TSM", "AVGO", "IRBT"],
+                          "ANET", "ARM", "DELL", "TSM", "AVGO"],
     "US Broad ETFs":     ["SPY", "QQQ", "IWM", "DIA", "VTI", "VOO", "VXUS", "BND", "AGG",
                           "SHY", "IEF", "HYG", "LQD", "RSP"],
     # SOXX/SMH earn their place here rather than in Semiconductors: they are the
