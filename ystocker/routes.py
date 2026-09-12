@@ -12290,6 +12290,39 @@ def _is_us_trading_day(dt_obj) -> bool:
     return dt_obj not in _us_market_holidays(dt_obj.year)
 
 
+#: Earliest UTC hour at which a stored daily summary can be describing *today's*
+#: US session. 21:00 UTC is 16:00 EST — the **latest** the US market ever
+#: closes in UTC terms, since EDT closes an hour earlier at 20:00 UTC.
+#:
+#: Deliberately the later of the two rather than the current one. Getting this
+#: wrong in the permissive direction mails a summary written before the close it
+#: claims to describe; getting it wrong in the strict direction spends one extra
+#: Gemini call. Only one of those is visible to a reader.
+_MIN_SUMMARY_UTC_HOUR = 21
+
+
+def _summary_is_post_close(generated_at, today_iso: str) -> bool:
+    """Was *generated_at* written after today's US close?
+
+    ``generated_at`` is the string this module stores alongside every summary,
+    ``"%Y-%m-%d %H:%M UTC"``. Anything unparseable, absent, or from another day
+    is refused: "we cannot tell when this was written" must not read as "it is
+    current", which is the same reasoning ``dcf._age_days`` applies to a
+    valuation date.
+    """
+    if not isinstance(generated_at, str):
+        return False
+    import datetime as _dt_mod
+
+    try:
+        stamp = _dt_mod.datetime.strptime(generated_at.strip(), "%Y-%m-%d %H:%M UTC")
+    except (ValueError, AttributeError):
+        return False
+    if stamp.date().isoformat() != today_iso:
+        return False
+    return stamp.hour >= _MIN_SUMMARY_UTC_HOUR
+
+
 def _do_auto_broadcast() -> None:
     """
     Collect market data from in-memory caches, get/generate AI summaries,
@@ -12395,7 +12428,30 @@ def _do_auto_broadcast() -> None:
     tbl = _get_summaries_table()
 
     def _get_or_generate_summary(lang: str, market: str, prompt_fn) -> str:
-        """Load from cache/DynamoDB or generate via Gemini. Returns summary text."""
+        """A summary of the session that just closed. Returns summary text.
+
+        **Nothing written before today's close may be reused here**, and that is
+        the whole point of this function rather than a plain cache read. The
+        pre-generator fires at 00:05 ET from the same in-memory caches, which at
+        that hour still hold the *previous* session's close — and it stores the
+        result under today's date, because that is what ``date.today()`` says.
+        A bare `get_item(date=today)` therefore found a summary of yesterday's
+        session and mailed it out as today's, one trading day behind, every day.
+        Observed 2026-09-11: all four summaries stamped 05:05 UTC, which is
+        01:05 ET, hours before the session the email claimed to describe.
+
+        The gate is the close, not an age: a summary is about a session, so the
+        question is whether it was written after that session ended, not whether
+        it is recent. :data:`_MIN_SUMMARY_UTC_HOUR` is the *latest* possible
+        close (21:00 UTC, 16:00 EST) rather than the current one, so the check
+        never needs to know which side of daylight saving it is on. Erring that
+        way costs at most one extra Gemini call in summer and cannot admit a
+        pre-close copy in winter.
+
+        The in-memory cache is read for the same reason but needs no clock: its
+        30-minute TTL is already far shorter than the gap between the overnight
+        pre-gen and this broadcast, so anything live in it was written since.
+        """
         cache_key = f"{lang}_{market}"
         with _DAILY_SUMMARY_CACHE_LOCK:
             cached_entry = _DAILY_SUMMARY_CACHE.get(cache_key, {})
@@ -12404,7 +12460,8 @@ def _do_auto_broadcast() -> None:
         if tbl:
             try:
                 item = tbl.get_item(Key={"date": today_iso, "lang_market": cache_key}).get("Item")
-                if item and item.get("summary"):
+                if item and item.get("summary") and \
+                        _summary_is_post_close(item.get("generated_at"), today_iso):
                     result = {"summary": item["summary"], "generated_at": item.get("generated_at", "")}
                     with _DAILY_SUMMARY_CACHE_LOCK:
                         _DAILY_SUMMARY_CACHE[cache_key] = {"ts": _time_mod.time(), "data": result}

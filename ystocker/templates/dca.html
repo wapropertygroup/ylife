@@ -1,5 +1,7 @@
 {% extends "base.html" %}
 {% block title %}yStocker — {{ ticker }} DCA Valuation{% endblock %}
+{% block title_key %}dca.doc_title{% endblock %}
+{% block title_arg %}{{ ticker }}{% endblock %}
 
 {% block content %}
 <style>
@@ -169,19 +171,19 @@
     <!-- Present when the branch produced a score -->
     <div id="dcfScored" class="hidden">
       <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
-        <div class="well px-3 py-2">
+        <div class="well px-3 py-2" data-i18n-title="dca.dcf_h_v">
           <div class="text-[10px] text-slate-500" data-i18n="dca.dcf_v">V_dcf</div>
           <div id="dcfV" class="text-base font-semibold">—</div>
         </div>
-        <div class="well px-3 py-2">
+        <div class="well px-3 py-2" data-i18n-title="dca.dcf_h_weight">
           <div class="text-[10px] text-slate-500" data-i18n="dca.dcf_weight">Weight in V</div>
           <div id="dcfW" class="text-base font-semibold">—</div>
         </div>
-        <div class="well px-3 py-2">
+        <div class="well px-3 py-2" data-i18n-title="dca.dcf_h_conf">
           <div class="text-[10px] text-slate-500" data-i18n="dca.dcf_conf">Confidence (c)</div>
           <div id="dcfC" class="text-base font-semibold">—</div>
         </div>
-        <div class="well px-3 py-2">
+        <div class="well px-3 py-2" data-i18n-title="dca.dcf_h_price">
           <div class="text-[10px] text-slate-500" data-i18n="dca.dcf_price">Priced against</div>
           <div id="dcfPrice" class="text-base font-semibold">—</div>
           <div id="dcfPriceDate" class="text-[10px] text-slate-500"></div>
@@ -192,10 +194,10 @@
         <table class="w-full text-left">
           <thead>
             <tr class="text-[10px] uppercase tracking-widest text-slate-500 dark:text-slate-600">
-              <th class="pb-2 px-2.5" data-i18n="dca.dcf_col_case">Case</th>
-              <th class="pb-2 px-2.5 text-right" data-i18n="dca.dcf_col_fv">Fair value</th>
-              <th class="pb-2 px-2.5 text-right" data-i18n="dca.dcf_col_up">Upside</th>
-              <th class="pb-2 px-2.5 text-right" data-i18n="dca.dcf_col_v">V</th>
+              <th class="pb-2 px-2.5" data-i18n="dca.dcf_col_case" data-i18n-title="dca.dcf_h_case">Case</th>
+              <th class="pb-2 px-2.5 text-right" data-i18n="dca.dcf_col_fv" data-i18n-title="dca.dcf_h_fv">Fair value</th>
+              <th class="pb-2 px-2.5 text-right" data-i18n="dca.dcf_col_up" data-i18n-title="dca.dcf_h_up">Upside</th>
+              <th class="pb-2 px-2.5 text-right" data-i18n="dca.dcf_col_v" data-i18n-title="dca.dcf_h_scenv">V</th>
               <th class="pb-2 px-2.5 text-right" data-i18n="dca.dcf_col_w">Weight</th>
             </tr>
           </thead>
@@ -209,6 +211,16 @@
       <div id="dcfAssumptions" class="grid grid-cols-2 sm:grid-cols-3 gap-2"></div>
       <div id="dcfNotes" class="hidden mt-3 text-xs text-slate-500 space-y-1"></div>
       <div id="dcfOverrideMeta" class="hidden mt-3 pt-3 border-t border-slate-200 dark:border-slate-800 text-xs text-slate-500"></div>
+
+      <!-- How to read the card. Collapsed by default: a reader who already
+           knows what a terminal share is should not have to scroll past a
+           paragraph saying so on every visit. -->
+      <details class="mt-4 pt-3 border-t border-slate-200 dark:border-slate-800">
+        <summary class="text-xs font-medium cursor-pointer text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+                 data-i18n="dca.dcf_help">How to read this</summary>
+        <div class="text-xs text-slate-500 leading-relaxed mt-2 space-y-2"
+             data-i18n-html="dca.dcf_help_body"></div>
+      </details>
     </div>
 
     <!-- Present when the branch declined -->
@@ -769,16 +781,20 @@ function renderDcf(d) {
   document.getElementById('dcfBasis').textContent =
     I18n.t('dca.dcf_basis_' + (eq.basis || '')) || '';
 
+  // Each tile carries its own explanation. A reader cannot weigh "terminal
+  // share 52%" without knowing that above ~80% the answer is mostly the
+  // perpetuity assumption — and that is not derivable from the number.
   const cells = [
-    ['dca.dcf_wacc', fmtRate(eq.wacc)],
-    ['dca.dcf_g', fmtRate(eq.terminal_growth)],
-    ['dca.dcf_tv', eq.terminal_share == null ? '—' : (eq.terminal_share * 100).toFixed(0) + '%'],
-    ['dca.dcf_sens', eq.sensitivity == null ? '—' : (eq.sensitivity * 100).toFixed(1) + '%'],
-    ['dca.dcf_years', eq.years == null ? '—' : String(eq.years)],
-    ['dca.dcf_growth', (eq.growth && eq.growth.base != null) ? fmtRate(eq.growth.base) : '—'],
+    ['dca.dcf_wacc',   fmtRate(eq.wacc),                          'dca.dcf_h_wacc'],
+    ['dca.dcf_g',      fmtRate(eq.terminal_growth),               'dca.dcf_h_g'],
+    ['dca.dcf_tv',     eq.terminal_share == null ? '—' : (eq.terminal_share * 100).toFixed(0) + '%', 'dca.dcf_h_tv'],
+    ['dca.dcf_sens',   eq.sensitivity == null ? '—' : (eq.sensitivity * 100).toFixed(1) + '%',       'dca.dcf_h_sens'],
+    ['dca.dcf_years',  eq.years == null ? '—' : String(eq.years), 'dca.dcf_h_years'],
+    ['dca.dcf_growth', (eq.growth && eq.growth.base != null) ? fmtRate(eq.growth.base) : '—',        'dca.dcf_h_growth'],
   ];
-  document.getElementById('dcfAssumptions').innerHTML = cells.map(([k, v]) =>
-    '<div class="well px-3 py-2"><div class="text-[10px] text-slate-500">'
+  document.getElementById('dcfAssumptions').innerHTML = cells.map(([k, v, h]) =>
+    '<div class="well px-3 py-2" title="' + esc(I18n.t(h) || '') + '">'
+    + '<div class="text-[10px] text-slate-500">'
     + esc(I18n.t(k) || k) + '</div><div class="text-sm font-semibold tabular-nums">'
     + esc(v) + '</div></div>').join('');
 
