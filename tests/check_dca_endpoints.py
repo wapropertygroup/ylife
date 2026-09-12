@@ -44,12 +44,26 @@ for _name in ("matplotlib", "matplotlib.pyplot", "matplotlib.ticker",
 os.environ.setdefault("YSTOCKER_SECRET_KEY", "check-dca-secret")
 
 import time                                                       # noqa: E402
+import tempfile                                                   # noqa: E402
 from datetime import date, timedelta                              # noqa: E402
+from pathlib import Path                                          # noqa: E402
 
 from ystocker import dca, dca_history as dh                       # noqa: E402
+from ystocker import dca_universe as du                           # noqa: E402
 
 # No background sweeps during a check run.
 dh.start_background_thread = lambda: None                          # type: ignore[assignment]
+
+# The registry is isolated to a scratch mirror with DynamoDB switched off.
+# Without this the checks read and *write* the live ystocker-dca-universe table:
+# a test that remembers or forgets a ticker would be editing what the deployed
+# overview ranks, and a leftover row would then leak into the next run's
+# assertions. Setting the unavailability deadline to infinity is what keeps
+# _get_table() from ever connecting.
+_REG_DIR = tempfile.TemporaryDirectory()
+du.LOCAL_PATH = Path(_REG_DIR.name) / "dca_universe.json"
+du._table = None
+du._table_unavail_until = float("inf")
 
 from ystocker import create_app                                    # noqa: E402
 
@@ -318,8 +332,10 @@ class DcaOverview(unittest.TestCase):
     def test_it_ranks_only_what_is_already_built(self):
         """A ranked table must never trigger a fan-out of six reads per name."""
         d = self.client.get("/api/dca").get_json()
-        self.assertEqual({r["ticker"] for r in d["rows"]}, set(self.built))
-        self.assertEqual(d["scored"], len(self.built))
+        ranked = {r["ticker"] for r in d["rows"]}
+        self.assertTrue(set(self.built).issubset(ranked))
+        # Everything ranked must have a payload; nothing was fetched to build it.
+        self.assertTrue(ranked.issubset(set(dh.cached_tickers())))
         self.assertGreater(d["universe"], d["scored"])
 
     def test_partial_coverage_is_stated_not_hidden(self):
@@ -359,9 +375,13 @@ class DcaOverview(unittest.TestCase):
             self.assertEqual(
                 self.client.get(f"/api/dca?base={bad}").get_json()["base_dca"], 1000.0)
 
-    def test_the_universe_is_derived_from_the_ticker_map(self):
-        """One list, so the framework's named set and the ranked set cannot drift."""
-        self.assertEqual(set(dh.universe()), set(dca.TICKER_MODELS) - {"GOOG"})
+    def test_the_universe_always_contains_the_seed(self):
+        """The registry grows, but the framework's named set is the floor.
+
+        A burst of lookups must not be able to push MSFT out of the table the
+        overview exists to show.
+        """
+        self.assertTrue(du.seed().issubset(set(dh.universe())))
         self.assertNotIn("GOOG", dh.universe(), "GOOG and GOOGL are one company")
 
     def test_nav_links_to_the_overview(self):
@@ -389,8 +409,6 @@ class DcaOverview(unittest.TestCase):
         successful build, rather than at each of the several places a ticker can
         be reached from.
         """
-        from ystocker import dca_universe as du
-
         payload = _seed("SHOP")
         self.assertFalse(payload.get("unavailable"))
         du.remember("SHOP")
@@ -404,13 +422,9 @@ class DcaOverview(unittest.TestCase):
     def test_a_name_that_cannot_score_is_not_tracked(self):
         """An ETF has no statements: a permanently blank row that still costs
         six Yahoo reads a day to re-confirm."""
-        from ystocker import dca_universe as du
-
         self.assertNotIn("GDX", du.all_tickers())
 
     def test_untracking_removes_a_name(self):
-        from ystocker import dca_universe as du
-
         du.remember("SHOP")
         try:
             r = self.client.delete("/api/dca/track/SHOP")
@@ -422,8 +436,6 @@ class DcaOverview(unittest.TestCase):
 
     def test_a_seed_name_cannot_be_untracked(self):
         """It would reappear on the next sweep, which reads as a bug."""
-        from ystocker import dca_universe as du
-
         r = self.client.delete("/api/dca/track/MSFT")
         self.assertEqual(r.status_code, 400)
         self.assertEqual(r.get_json()["reason"], "seed")
@@ -434,6 +446,34 @@ class DcaOverview(unittest.TestCase):
         self.assertIn("max", reg)
         self.assertIn("effective", reg)
         self.assertLessEqual(reg["effective"], reg["max"])
+
+    def test_viewing_an_already_cached_ticker_registers_it(self):
+        """The gap that made the registry miss everything opened before it.
+
+        dca_history.get() only registers on a *build*, so a payload already on
+        disk would never enter the registry — which is every name looked up
+        before this existed, and any name untracked and then opened again.
+        """
+        _seed("SHOP")                        # cached, but not registered
+        du.forget("SHOP")
+        self.assertNotIn("SHOP", du.all_tickers())
+        try:
+            self.assertEqual(self.client.get("/api/dca/SHOP").status_code, 200)
+            self.assertIn("SHOP", du.all_tickers())
+        finally:
+            du.forget("SHOP")
+
+    def test_viewing_an_unscorable_cached_ticker_does_not_register_it(self):
+        payload = _seed("ETFISH")
+        payload["unavailable"] = "too_few_vintages"
+        payload["series"] = {}
+        dh._mem["ETFISH"] = (payload["_ts"], payload)
+        try:
+            self.assertEqual(self.client.get("/api/dca/ETFISH").status_code, 200)
+            self.assertNotIn("ETFISH", du.all_tickers())
+        finally:
+            du.forget("ETFISH")
+            dh._mem.pop("ETFISH", None)
 
 
 if __name__ == "__main__":  # pragma: no cover

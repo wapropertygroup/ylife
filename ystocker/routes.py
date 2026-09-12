@@ -1147,15 +1147,22 @@ def api_dca(ticker: str):
 
     result, peer, drift, position = _dca_score(symbol, payload, base)
 
-    # Bump recency so a name somebody keeps opening is not the one evicted for a
-    # name they looked at once. Registration itself happens on a successful
-    # build, in dca_history.get(); this only reorders what is already there.
-    try:
-        from ystocker import dca_universe
+    # Register here as well as in dca_history.get(), and for a reason that is
+    # not redundancy: get() only runs on a *build*, so a ticker whose payload is
+    # already on disk would never be registered at all. That covers two real
+    # cases -- every name opened before this registry existed, and any name
+    # untracked and then deliberately opened again. remember() is idempotent and
+    # doubles as the recency bump, so this replaces the earlier touch().
+    #
+    # Still gated on having actually scored: an ETF builds to an `unavailable`
+    # payload and must not enter a table headed "all scored names".
+    if not payload.get("unavailable") and payload.get("series"):
+        try:
+            from ystocker import dca_universe
 
-        dca_universe.touch(symbol)
-    except Exception as exc:  # noqa: BLE001 - the registry is a convenience
-        log.debug("DCA: could not touch %s: %s", symbol, exc)
+            dca_universe.remember(symbol)
+        except Exception as exc:  # noqa: BLE001 - the registry is a convenience
+            log.debug("DCA: could not register %s: %s", symbol, exc)
 
     weights = dca.TEMPLATES[result["model"]]
     line = dca_history.v_history(payload.get("series") or {}, weights,
