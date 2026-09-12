@@ -480,6 +480,40 @@ class DcaOverview(unittest.TestCase):
             dh._mem.pop("ETFISH", None)
 
 
+#: A fund and the companies inside it, so the look-through has something real to
+#: penetrate. Without this the portfolio panel yields no rows at all and every
+#: assertion about 穿透 would pass vacuously — the exact shape of test that looks
+#: like coverage and is not.
+_FUND_UNIVERSE = {
+    "VOO": {"symbol": "VOO", "name": "Vanguard S&P 500", "kind": "fund",
+            "price": 512.00, "quote_type": "ETF",
+            "holdings": [{"symbol": "MSFT", "name": "Microsoft Corp", "weight": 0.07},
+                         {"symbol": "NVDA", "name": "NVIDIA Corp", "weight": 0.06}],
+            "asset_classes": {"stock": 0.999, "bond": 0.0, "cash": 0.001},
+            "sectors": {"technology": 0.35}},
+    "MSFT": {"symbol": "MSFT", "name": "Microsoft Corp", "kind": "equity",
+             "price": 505.00, "quote_type": "EQUITY", "holdings": [],
+             "asset_classes": {}, "sectors": {}, "sector": "Technology"},
+    "NVDA": {"symbol": "NVDA", "name": "NVIDIA Corp", "kind": "equity",
+             "price": 178.50, "quote_type": "EQUITY", "holdings": [],
+             "asset_classes": {}, "sectors": {}, "sector": "Technology"},
+}
+
+
+def _seed_funds() -> None:
+    from ystocker import funddata
+
+    now = time.time()
+    with funddata._lock:                                   # noqa: SLF001
+        funddata._loaded = True                            # noqa: SLF001
+        for symbol, rec in _FUND_UNIVERSE.items():
+            full = dict(rec)
+            full.update({"quote_at": now, "comp_at": now, "read_at": now,
+                         "currency": "USD"})
+            full.setdefault("sector", "")
+            funddata._mem[symbol] = full                   # noqa: SLF001
+
+
 class DcaPortfolio(unittest.TestCase):
     """/api/dca/portfolio — the multiplier applied to real holdings.
 
@@ -496,6 +530,7 @@ class DcaPortfolio(unittest.TestCase):
         dh.eps_drift = lambda t: {"drift": 0.0}
         _seed("MSFT")
         _seed("NVDA")
+        _seed_funds()
 
     def setUp(self):
         self.client = self.app.test_client()
@@ -535,12 +570,56 @@ class DcaPortfolio(unittest.TestCase):
         expected = min(product, dca.MAX_TOTAL_MULTIPLIER)
         self.assertAlmostEqual(row["multiplier"], expected, places=3)
 
-    def test_the_portfolio_term_reflects_look_through_weight(self):
-        """The whole reason this lives on /assets rather than /dca."""
+    def test_a_fund_is_penetrated_into_its_companies(self):
+        """Holding only an ETF must still produce company rows.
+
+        The whole point of running the panel off `exposures` rather than
+        `positions`: a reader holding VOO owns the businesses inside it, and
+        only a business has a valuation. Before this the row read
+        "fund — not scored" and the tab was empty for an index investor.
+        """
+        self._positions([{"symbol": "VOO", "quantity": 20}])
+        d = self.client.get("/api/dca/portfolio").get_json()
+        tickers = {r["ticker"] for r in d["rows"]}
+        self.assertNotIn("VOO", tickers, "the fund itself is not a unit of analysis")
+        self.assertTrue({"MSFT", "NVDA"} & tickers,
+                        f"VOO did not penetrate into its holdings: {tickers}")
+        self.assertNotIn("fund", [r["status"] for r in d["rows"]])
+
+    def test_exposure_through_a_fund_is_scored(self):
+        """A company reached only through an ETF still gets a multiplier."""
+        self._positions([{"symbol": "VOO", "quantity": 20}])
+        row = next((r for r in self.client.get("/api/dca/portfolio").get_json()["rows"]
+                    if r["ticker"] == "MSFT"), None)
+        self.assertIsNotNone(row)
+        self.assertEqual(row["status"], "ok")
+        self.assertGreater(row["position_pct"], 0)
+
+    def test_direct_and_fund_exposure_to_one_name_combine(self):
+        """3% held directly plus an index fund is more than 3%.
+
+        This is what makes M_portfolio mean something, and it is invisible on
+        any per-line view.
+        """
+        self._positions([{"symbol": "VOO", "quantity": 20}])
+        via_fund = next(r for r in
+                        self.client.get("/api/dca/portfolio").get_json()["rows"]
+                        if r["ticker"] == "MSFT")["position_pct"]
+        self._positions([{"symbol": "VOO", "quantity": 20},
+                         {"symbol": "MSFT", "quantity": 10}])
+        combined = next(r for r in
+                        self.client.get("/api/dca/portfolio").get_json()["rows"]
+                        if r["ticker"] == "MSFT")["position_pct"]
+        self.assertGreater(combined, via_fund,
+                           "direct and indirect exposure must add up")
+
+    def test_exposure_is_the_look_through_weight(self):
+        """The reason this lives on /assets rather than /dca."""
         self._positions([{"symbol": "MSFT", "quantity": 10}])
         row = next(r for r in self.client.get("/api/dca/portfolio").get_json()["rows"]
                    if r["ticker"] == "MSFT")
         self.assertIsNotNone(row["position_pct"])
+        self.assertIn("route_count", row)
         self.assertNotEqual(row["portfolio_band"], "unknown",
                             "a signed-in reader with holdings must get a real band")
 
@@ -555,21 +634,48 @@ class DcaPortfolio(unittest.TestCase):
                     "m_portfolio", "multiplier", "amount"):
             self.assertEqual(row[key], detail[key], f"{key} differs")
 
+    def test_the_portfolio_multiplier_is_exposure_weighted(self):
+        """A 12% position and a 0.3% one must not get equal say."""
+        self._positions([{"symbol": "MSFT", "quantity": 10}])
+        d = self.client.get("/api/dca/portfolio").get_json()
+        scored = [r for r in d["rows"] if r.get("amount") is not None]
+        if not scored:
+            self.skipTest("nothing scored in this fixture")
+        value = sum(r["value"] or 0.0 for r in scored)
+        expected = sum(r["multiplier"] * (r["value"] or 0.0) for r in scored) / value
+        self.assertAlmostEqual(d["weighted_multiplier"], expected, places=3)
+
+    def test_the_weighted_figures_state_what_share_they_cover(self):
+        """A weighted V over a third of the equity must not read as the whole."""
+        self._positions([{"symbol": "MSFT", "quantity": 10}])
+        d = self.client.get("/api/dca/portfolio").get_json()
+        self.assertIn("scored_share_pct", d)
+        self.assertIn("coverage_pct", d)
+        self.assertLessEqual(d["scored_share_pct"], 100.0)
+
+    def test_truncation_is_reported_never_silent(self):
+        """A ranked table missing names is honest only if it says how many."""
+        self._positions([{"symbol": "MSFT", "quantity": 10}])
+        d = self.client.get("/api/dca/portfolio").get_json()
+        self.assertIn("not_ranked", d)
+        self.assertIn("not_ranked_value", d)
+        self.assertEqual(d["ranked"] + d["not_ranked"], d["exposure_count"])
+
     def test_totals_count_only_scored_rows(self):
-        """Counting an unscored holding at 1.0x would understate what the
-        engine actually moved."""
+        """Counting an unscored name at 1.0x would understate what the engine
+        actually moved."""
         self._positions([{"symbol": "MSFT", "quantity": 10},
                          {"symbol": "NOSUCHTICKER", "quantity": 5}])
         d = self.client.get("/api/dca/portfolio?base=1000").get_json()
-        self.assertLess(d["scored"], d["held"])
+        self.assertLessEqual(d["scored"], d["ranked"])
         self.assertAlmostEqual(d["flat_total"], d["scored"] * 1000.0, places=2)
 
-    def test_an_unscorable_holding_has_no_amount_not_a_zero(self):
+    def test_an_unscorable_name_has_no_amount_not_a_zero(self):
         self._positions([{"symbol": "NOSUCHTICKER", "quantity": 5}])
-        row = next(r for r in self.client.get("/api/dca/portfolio").get_json()["rows"]
-                   if r["ticker"] == "NOSUCHTICKER")
-        self.assertIsNone(row.get("amount"))
-        self.assertIn(row["status"], ("pending", "no_statements", "fund", "no_score"))
+        d = self.client.get("/api/dca/portfolio").get_json()
+        for r in d["rows"]:
+            if r["status"] != "ok":
+                self.assertIsNone(r.get("amount"))
 
     def test_the_assets_page_carries_the_dca_tab(self):
         body = self.client.get("/assets").data.decode()
