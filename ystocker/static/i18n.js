@@ -15,7 +15,9 @@ const I18n = (() => {
     // ── base.html ──────────────────────────────────────────────────────
     'nav.home':           { en: 'Valuation', zh: '估值' },
     'nav.sectors':        { en: 'Sectors',   zh: '板块' },
-    'nav.dca':            { en: 'DCA',       zh: 'DCA 定投' },
+    // 定投 *is* dollar-cost averaging (定期定额投资), so "DCA 定投" said it twice
+    // and was the only mixed-script item in a nav of 市场 / 估值 / 板块 / 宏观.
+    'nav.dca':            { en: 'DCA',       zh: '定投' },
     'nav.peer_groups':    { en: 'Peer Groups', zh: '同类组' },
     'nav.view_all':       { en: 'View all sectors ↓', zh: '查看全部板块 ↓' },
     'nav.commodities':    { en: 'Commodities', zh: '大宗商品' },
@@ -779,9 +781,23 @@ const I18n = (() => {
     'dca.base_dca':        { en: 'Base DCA', zh: '基础定投' },
     'dca.of_base':         { en: 'of base', zh: '倍基础金额' },
     'dca.capped':          { en: 'Capped at the ceiling', zh: '已触及上限' },
-    'dca.m_val':           { en: 'M_valuation', zh: 'M_估值' },
-    'dca.m_earn':          { en: 'M_earnings',  zh: 'M_盈利' },
+    'dca.m_val':           { en: 'M_valuation', zh: 'M_估值' },    'dca.m_earn':          { en: 'M_earnings',  zh: 'M_盈利' },
     'dca.m_port':          { en: 'M_portfolio', zh: 'M_组合' },
+
+    // How the three multipliers are computed. Asked for directly: the tiles
+    // showed 1.21× / 0.90× / 0.85× and a band name, with nothing saying where
+    // any of them came from.
+    'dca.m_help':      { en: 'How these three are calculated', zh: '这三个系数如何计算' },
+    'dca.m_help_body': {
+      en: 'The contribution is <b>Base × M_valuation × M_earnings × M_portfolio</b>. Valuation sets the pace; the other two are brakes, and neither can speed anything up beyond its own ceiling.<br><br><b>M_valuation = 0.5 + V / 100.</b> A direct restatement of the V score above, so V=0 gives 0.50×, V=50 gives 1.00× and V=100 gives 1.50×. This is the only term that can raise a contribution much above par, and it is the only one derived from valuation at all.<br><br><b>M_earnings</b> comes from how far the next-year consensus EPS has moved over the last 90 days — a figure the vendor reports, not one inferred from our own snapshots. Raised by more than 1% is 1.08×; flat within ±1% is 1.00×; cut between 1% and 5% is 0.90×; cut by more than 5% is 0.70×. It exists so a collapsing forecast does not read as a bargain: a stock gets cheap on a falling multiple and on falling earnings, and only the first is an opportunity.<br><br><b>M_portfolio</b> comes from how much of this company you already hold <i>after look-through</i>, so an index fund’s sleeve counts toward the name — which is how concentration is actually reached. Under 4% is 1.00×; under 7% is 0.85×; under 10% is 0.60×; at or above 10% is 0.25×.<br><br>Both overlays are <b>1.00× when unknown, never a penalty</b>. A revision feed that is down, or a reader who is signed out, is a gap in our data — docking someone’s contribution for it would make the answer depend on vendor uptime. The product is capped at 1.5×, and the cap is on the product rather than on the valuation term, because a cheap stock that also has estimates being raised is exactly the case a ceiling is for.',
+      zh: '投入金额为 <b>基础金额 × M_估值 × M_盈利 × M_组合</b>。估值决定投入节奏，另外两项只是刹车，都不能把金额推高到各自上限之上。<br><br><b>M_估值 = 0.5 + V / 100。</b>它只是上方 V 分数的另一种写法：V=0 对应 0.50×，V=50 对应 1.00×，V=100 对应 1.50×。这是唯一能把投入明显推高的一项，也是唯一真正来自估值的一项。<br><br><b>M_盈利</b>取自明年一致预期 EPS 在过去 90 天的变动幅度 —— 这是数据商公布的修正，而不是我们用自己的快照反推的。上修超过 1% 为 1.08×；在 ±1% 以内为 1.00×；下修 1%–5% 为 0.90×；下修超过 5% 为 0.70×。它的作用是防止"盈利崩塌"被误读成"便宜"：股价变便宜既可能因为倍数下降，也可能因为盈利下降，只有前者是机会。<br><br><b>M_组合</b>取自你<i>穿透之后</i>已经持有的该公司份额，因此指数基金里的那一部分也会计入该公司 —— 现实中的集中度正是这样累积起来的。低于 4% 为 1.00×；低于 7% 为 0.85×；低于 10% 为 0.60×；达到或超过 10% 为 0.25×。<br><br>两个叠加项在<b>数据缺失时一律取 1.00×，绝不惩罚</b>。数据源中断，或者读者未登录，那是我们这边的数据缺口；因此扣减投入，等于让结论取决于数据商的可用性。三项乘积上限为 1.5×，上限加在<b>乘积</b>而非估值项上 —— 因为"股票便宜、同时盈利还在上修"正是需要设上限的那种情况。',
+    },
+    'dca.m_h_val':  { en: 'M_valuation = 0.5 + V / 100. The V score above, restated as a multiplier: 0.50× at V=0, 1.00× at V=50, 1.50× at V=100.',
+                      zh: 'M_估值 = 0.5 + V / 100。即上方 V 分数换算成的系数：V=0 为 0.50×，V=50 为 1.00×，V=100 为 1.50×。' },
+    'dca.m_h_earn': { en: 'From the 90-day drift in next-year consensus EPS. Raised >1% is 1.08×, flat 1.00×, cut 1–5% is 0.90×, cut >5% is 0.70×. Unknown is 1.00×, never a penalty.',
+                      zh: '取自明年一致预期 EPS 在 90 天内的变动。上修 >1% 为 1.08×，持平 1.00×，下修 1–5% 为 0.90×，下修 >5% 为 0.70×。数据缺失取 1.00×，绝不惩罚。' },
+    'dca.m_h_port': { en: 'From your look-through weight in this company, so fund sleeves count toward the name. Under 4% is 1.00×, under 7% 0.85×, under 10% 0.60×, at or above 10% 0.25×. Signed out is 1.00×.',
+                      zh: '取自你穿透后持有该公司的份额，基金里的部分也会计入。低于 4% 为 1.00×，低于 7% 为 0.85×，低于 10% 为 0.60×，达到或超过 10% 为 0.25×。未登录取 1.00×。' },
 
     'dca.eq_title':        { en: 'The calculation', zh: '计算过程' },
     'dca.eq_note':         { en: "Every term below is this ticker's own number. The general form is at the bottom of the page.",

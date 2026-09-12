@@ -627,6 +627,14 @@ class Translations(unittest.TestCase):
         self._assert_key("dca.dcf_help")
         self._assert_key("dca.dcf_help_body")
 
+    def test_the_three_multipliers_explain_how_they_are_calculated(self):
+        """The tiles showed 1.21× / 0.90× / 0.85× and a band name, with nothing
+        saying where any of them came from."""
+        for field in ("val", "earn", "port"):
+            self._assert_key(f"dca.m_h_{field}")
+        self._assert_key("dca.m_help")
+        self._assert_key("dca.m_help_body")
+
     def test_the_browser_tab_keys_exist_in_both_languages(self):
         """``<title>`` is server-rendered Jinja, so ``I18n.apply()`` cannot
         reach it; base.html emits a meta tag the client reads instead. A missing

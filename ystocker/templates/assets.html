@@ -199,22 +199,23 @@
      that figure is sized for the twelve-column holdings grid, and borrowing it
      forced a horizontal scrollbar onto a table that fits a laptop comfortably.
 
-     The slack goes to the **company column, and only to it**. Six narrow
-     columns inside a `w-full` table get the leftover width shared out between
-     them, which on a desktop left every figure marooned in its own patch of
-     whitespace — the multiplier chain a hand-span from the V it follows from,
-     and an exposure bar stretched to ~180px under a five-character number.
-     Reading a row meant crossing the table three times. Giving the first cell
-     `width:100%` makes it absorb everything the others do not claim, so the
-     numeric columns close up into one scannable block no matter how wide the
-     viewport is. Every other cell is nowrap so it asks for exactly its content
-     and no more. */
-  .as-dca-table { min-width: 44rem; }
+     **Shrink-to-fit, not `w-full`** — and the distinction is the whole reason
+     this table kept reading as broken. Six short columns stretched across a
+     1146px card leaves ~290px of slack that has to go *somewhere inside* the
+     table: spread across all six it marooned every figure in its own patch of
+     whitespace, and pushed into the first column it opened a ~290px canyon
+     between the company name and its numbers — measured 337px → 623px on a
+     real thirty-row portfolio, a void the eye had to cross thirty times.
+
+     Slack outside a table reads as page margin; slack inside reads as a
+     layout fault. So the table takes its natural 858px and leaves the rest of
+     the card empty, which is the quiet answer. `max-width:100%` keeps it
+     inside the card and `min-width` keeps the columns legible on a phone,
+     where the wrapper scrolls exactly as the holdings table already does. */
+  .as-dca-table { width: max-content; max-width: 100%; min-width: 44rem; }
   .as-dca-table th { font-size: .65rem; font-weight: 650; letter-spacing: .045em;
                      text-transform: uppercase; white-space: nowrap; }
   .as-dca-table td { vertical-align: middle; padding: .5rem .6rem; }
-  .as-dca-table th:first-child,
-  .as-dca-table td:first-child { width: 100%; }
   .as-dca-table th:not(:first-child),
   .as-dca-table td:not(:first-child) { white-space: nowrap; }
   /* The exposure bar shows the direct/indirect *split*, normalised to the row,
