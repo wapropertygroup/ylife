@@ -1303,6 +1303,120 @@ def api_dca_list():
     })
 
 
+@bp.route("/api/dca/portfolio")
+def api_dca_portfolio():
+    """The DCA multiplier applied to the signed-in reader's actual holdings.
+
+    This is the loop closing. ``M_portfolio`` is *derived from* ``/assets``' 穿透
+    exposure, so the one page that already knows those weights is the natural
+    place to show what they do to a contribution — and it is the only surface
+    where the reader sees the valuation term and the concentration term acting
+    against each other on their own money.
+
+    Uses the **look-through** weight, not the line weight, which is the whole
+    point: somebody holding 3% NVDA directly and VOO besides is not at 3%, and
+    the throttle should reflect what they actually own.
+
+    Never fetches on the request path. A held name with no reconstruction comes
+    back as ``pending`` and a bounded, budget-throttled rebuild is kicked, so a
+    portfolio fills in over a few minutes rather than costing six Yahoo reads per
+    position on one page load.
+
+    Funds are reported as ``fund``, not as a blank. The engine scores companies
+    against their own multiple history; an ETF has no P/E of its own here, and
+    an empty cell would read as "we could not work it out" rather than "this is
+    not the kind of thing this measures".
+    """
+    from ystocker import dca
+    from ystocker import assets as assets_svc
+    from ystocker import funddata
+    from ystocker import portfolio
+    from ystocker.valuation import _cached_fundamentals
+
+    gate = _assets_gate()
+    if gate:
+        return gate
+
+    base = _dca_base()
+    email = _assets_user()
+    try:
+        positions = portfolio.load(email)
+    except portfolio.StoreUnavailable as exc:
+        # 503, not an empty list: see portfolio's module docstring.
+        return jsonify({"error": str(exc), "reason": "store"}), 503
+    if not positions:
+        return jsonify({"base_dca": base, "rows": [], "scored": 0,
+                        "held": 0, "pending": [], "reason": "no_positions"})
+
+    analysis = assets_svc.analyse(positions)
+    exposure = {
+        "map": {e.get("symbol"): e for e in (analysis.get("exposures") or [])},
+        "coverage_pct": analysis.get("coverage_pct"),
+    }
+    recs = _cached_fundamentals()
+
+    rows, pending, kicked = [], [], 0
+    for held in analysis.get("positions") or []:
+        symbol = (held.get("symbol") or "").upper()
+        if not symbol or symbol == assets_svc.CASH_SYMBOL:
+            continue
+        row = {"ticker": symbol, "name": held.get("name") or symbol,
+               "value": held.get("value"), "kind": held.get("kind") or ""}
+
+        payload = dca_history.peek(symbol)
+        if payload is None:
+            # Only chase equities. A fund will never score, so spending six
+            # reads to discover that again on every portfolio view is pure cost.
+            if row["kind"] and row["kind"] != funddata.KIND_EQUITY:
+                rows.append({**row, "status": "fund"})
+                continue
+            pending.append(symbol)
+            if kicked < 4 and _dca_kick(symbol):
+                kicked += 1
+            rows.append({**row, "status": "pending"})
+            continue
+        if payload.get("unavailable"):
+            rows.append({**row, "status": "no_statements"})
+            continue
+
+        result, peer, drift, position = _dca_score(
+            symbol, payload, base, recs=recs, exposure=exposure)
+        rows.append({
+            **row,
+            "status": "ok" if result["V"] is not None else "no_score",
+            "model": result["model"],
+            "V": result["V"],
+            "band": result["band"],
+            "m_valuation": result["m_valuation"],
+            "m_earnings": result["m_earnings"],
+            "earnings_band": result["earnings_band"],
+            "m_portfolio": result["m_portfolio"],
+            "portfolio_band": result["portfolio_band"],
+            "position_pct": position.get("pct"),
+            "multiplier": result["multiplier"],
+            "amount": result["amount"],
+            "capped": result["capped"],
+        })
+
+    scored = [r for r in rows if r.get("amount") is not None]
+    total = round(sum(r["amount"] for r in scored), 2)
+    return jsonify({
+        "base_dca": base,
+        "rows": rows,
+        "held": len(rows),
+        "scored": len(scored),
+        "pending": pending,
+        # Stated rather than folded in: the flat comparison is only meaningful
+        # against the same set of names, and quietly counting unscored holdings
+        # at 1.0x would make the engine look like it moved less than it did.
+        "total": total,
+        "flat_total": round(len(scored) * base, 2),
+        "coverage_pct": analysis.get("coverage_pct"),
+        "max_multiplier": dca_max_multiplier(),
+        "generated_at": time.time(),
+    })
+
+
 @bp.route("/api/dca/track/<ticker>", methods=["DELETE", "POST"])
 def api_dca_untrack(ticker: str):
     """Stop tracking *ticker*, so it leaves the ranked table and the daily sweep.
