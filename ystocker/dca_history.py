@@ -1147,6 +1147,19 @@ def get(ticker: str, *, force: bool = False) -> dict[str, Any]:
     with _mem_lock:
         _mem[symbol] = (payload["_ts"], payload)
     _write_disk(symbol, payload)
+
+    # Register only what actually scored. An ETF publishes no statements, so it
+    # builds to an `unavailable` payload -- putting those in a list headed "all
+    # scored names" would fill it with rows that can never carry a score while
+    # still costing six Yahoo reads a day each to re-confirm it. Ten of the
+    # twenty names opened on this feature's first afternoon were exactly that.
+    if not payload.get("unavailable") and payload.get("series"):
+        try:
+            from ystocker import dca_universe
+
+            dca_universe.remember(symbol)
+        except Exception as exc:  # noqa: BLE001 - the registry is a convenience
+            log.info("dca_history: could not register %s: %s", symbol, exc)
     return payload
 
 
@@ -1179,20 +1192,14 @@ def refresh(ticker: str) -> dict[str, Any]:
 def universe() -> list[str]:
     """The tickers the ``/dca`` overview ranks.
 
-    Derived from ``dca.TICKER_MODELS`` rather than kept as a second list, so the
-    set the framework names and the set the page ranks cannot drift apart. That
-    map is also the only place where a template was chosen deliberately rather
-    than inferred, which is exactly the population worth showing side by side --
-    a ranked table is only meaningful if every row was scored on a model somebody
-    stands behind.
-
-    ``GOOG`` is dropped in favour of ``GOOGL``: they are share classes of one
-    company and would occupy two rows saying the same thing, and only ``GOOGL``
-    is in ``PEER_GROUPS``, so ``GOOG`` could never get a peer percentile anyway.
+    Delegates to :mod:`ystocker.dca_universe`, which is the persistent registry:
+    the framework's named companies as an unevictable seed, plus every ticker
+    somebody has opened that actually scored, capped and refreshed daily. Kept
+    as a thin accessor here so the warm and the routes have one name for it.
     """
-    from ystocker.dca import TICKER_MODELS
+    from ystocker import dca_universe
 
-    return sorted(set(TICKER_MODELS) - {"GOOG"})
+    return dca_universe.all_tickers()
 
 
 def cached_tickers() -> list[str]:

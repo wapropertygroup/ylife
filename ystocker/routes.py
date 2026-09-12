@@ -1147,6 +1147,16 @@ def api_dca(ticker: str):
 
     result, peer, drift, position = _dca_score(symbol, payload, base)
 
+    # Bump recency so a name somebody keeps opening is not the one evicted for a
+    # name they looked at once. Registration itself happens on a successful
+    # build, in dca_history.get(); this only reorders what is already there.
+    try:
+        from ystocker import dca_universe
+
+        dca_universe.touch(symbol)
+    except Exception as exc:  # noqa: BLE001 - the registry is a convenience
+        log.debug("DCA: could not touch %s: %s", symbol, exc)
+
     weights = dca.TEMPLATES[result["model"]]
     line = dca_history.v_history(payload.get("series") or {}, weights,
                                  minimum=dca.MIN_OBSERVATIONS)
@@ -1218,11 +1228,13 @@ def api_dca_list():
     somebody to open each ticker by hand.
     """
     from ystocker import dca
+    from ystocker import dca_universe
     from ystocker.valuation import _cached_fundamentals
 
     base = _dca_base()
     wanted = dca_history.universe()
     have = set(dca_history.cached_tickers())
+    protected = dca_universe.seed()
 
     # One read of each per-request lookup, not one per row. See _dca_score.
     recs = _cached_fundamentals()
@@ -1259,6 +1271,7 @@ def api_dca_list():
             "eps_drift": drift.get("drift"),
             "years": window.get("years"),
             "vintages": window.get("vintages"),
+            "seed": symbol in protected,
             "stale": (time.time() - (payload.get("_ts") or 0)) > dca_history.TTL_SECONDS,
         })
 
@@ -1277,9 +1290,32 @@ def api_dca_list():
         "universe": len(wanted),
         "pending": pending,
         "warming": dca_history.is_warming(),
+        "registry": dca_universe.stats(),
         "max_multiplier": dca_max_multiplier(),
         "generated_at": time.time(),
     })
+
+
+@bp.route("/api/dca/track/<ticker>", methods=["DELETE", "POST"])
+def api_dca_untrack(ticker: str):
+    """Stop tracking *ticker*, so it leaves the ranked table and the daily sweep.
+
+    ``POST`` as well as ``DELETE`` because the service worker and some proxies
+    are friendlier to it, matching ``/api/assets/position/<symbol>``.
+
+    Seed names are refused rather than silently ignored: they are the companies
+    the framework assigns a model to by name, and a reader who removed MSFT and
+    watched it come back on the next sweep would reasonably read that as a bug.
+    """
+    from ystocker import dca_universe
+
+    symbol = ticker.strip().upper()
+    if symbol in dca_universe.seed():
+        return jsonify({"error": "This name is part of the standard set.",
+                        "reason": "seed", "ticker": symbol}), 400
+    removed = dca_universe.forget(symbol)
+    return jsonify({"ticker": symbol, "removed": removed,
+                    "registry": dca_universe.stats()})
 
 
 _DCA_UNIVERSE_THREAD: Optional[threading.Thread] = None

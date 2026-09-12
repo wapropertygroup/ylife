@@ -549,13 +549,60 @@ for a slot" rather than implying progress. `release_build()` floors at zero,
 because a doubled release would silently raise the ceiling for ever, which is
 the one limiter failure nobody notices until Yahoo blocks.
 
+**The ranked universe is a registry, not a constant** (`dca_universe.py`,
+`ystocker-dca-universe`). Opening `/dca/<TICKER>` for a name that *scores* adds
+it, and from then on it is in the table and refreshed by the daily sweep. The
+framework's fifteen named companies are an unevictable **seed**, so a burst of
+lookups cannot quietly turn the overview into a list of whatever somebody typed
+last week.
+
+Three things hold it together:
+
+- **The cap is a daily Yahoo bill, not a storage limit.** Every tracked ticker
+  is six reads a day, for ever, so an unbounded registry is a slow-motion
+  version of the bulk sweep `valuation.py` records having got this box
+  hard-blocked — it would not fail on the day it went wrong, it would just get
+  heavier every week. `MAX_TRACKED` (60) bounds it and the **least recently
+  opened** non-seed entry is evicted; `touch()` bumps recency on every view, so
+  a name somebody opens daily outlives one they opened once. Eviction prunes the
+  *store*, not just the view — hiding the overflow from the page would leave the
+  table growing.
+- **Only what actually scored gets in.** Registration is in `dca_history.get()`,
+  after a successful build that produced a series — never on the search itself.
+  Yahoo publishes no statements for an ETF, so `GDX` and `IGV` build to an
+  `unavailable` payload; admitting those would fill a table headed "all scored
+  names" with rows that can never carry a score while still costing six reads a
+  day each to re-confirm it. Ten of the twenty names opened on this feature's
+  first afternoon were exactly that shape.
+- **It degrades, it does not fail closed.** Unlike `portfolio`, a lost row here
+  costs one lookup — open the ticker again and it comes back. So DynamoDB and an
+  on-disk mirror are both read and unioned (matching
+  `valuation._previous_snapshots`), and with neither available the seed still
+  ranks.
+
+A seed name cannot be untracked (`/api/dca/track/<ticker>` returns 400): it
+would reappear on the next sweep, which reads as a bug rather than a policy.
+
+Note the key schema differs from `ystocker-dca-history` on purpose. This table
+is one short row per tracked ticker and bounded by `MAX_TRACKED`, so listing it
+is a Scan; the history table gains a row per ticker per day and is therefore
+always queried on its `ticker` hash key.
+
+```bash
+aws dynamodb create-table --table-name ystocker-dca-universe --region us-west-2 \
+  --billing-mode PAY_PER_REQUEST \
+  --attribute-definitions AttributeName=ticker,AttributeType=S \
+  --key-schema AttributeName=ticker,KeyType=HASH
+```
+
 Tests: `tests/test_dca.py` (48, no app/network — including the framework's own
 worked example, E=75.55 → $3,722.50 on a $5,000 base, and a check that every
 band/model/factor key exists in **both** EN and ZH, since those are composed in
 JS by string concatenation where `I18n.apply()` cannot reach them),
 `tests/test_dca_history.py` (58, the look-ahead guards, the TTM sum, the
-year-ago growth window, the build budget and the capex sign trap), and
-`tests/check_dca_endpoints.py` (29 end-to-end, `check_` so `unittest discover`
+year-ago growth window, the build budget and the capex sign trap),
+`tests/test_dca_universe.py` (24, the cap and what it evicts), and
+`tests/check_dca_endpoints.py` (37 end-to-end, `check_` so `unittest discover`
 skips it — it needs an app and stubs matplotlib).
 
 The table is **not** in `deploy/cloudformation.yaml`, matching every other
