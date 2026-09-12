@@ -182,6 +182,25 @@ enum S {
         "CNN 未返回数据，且尚无已保存的历史记录。")
     static let dailyReadings   = LocalizedString("daily readings", "个交易日数据")
 
+    // MARK: - Launch at login (macOS)
+
+    static let launchAtLogin     = LocalizedString("Open at login", "登录时启动")
+    static let launchAtLoginNote = LocalizedString(
+        "Starts the app when you log in, so the menu-bar item is there without opening "
+        + "the window. Nothing runs in the background before that — alerts are only "
+        + "checked while the app is open.",
+        "登录 Mac 时自动启动，菜单栏图标无需打开主窗口即可使用。"
+        + "在此之前不会有任何后台活动 —— 提醒仅在应用运行时检查。")
+    static let launchNeedsApproval = LocalizedString(
+        "Approve it in System Settings ▸ General ▸ Login Items.",
+        "请在「系统设置 ▸ 通用 ▸ 登录项」中允许。")
+    static let launchFailed      = LocalizedString(
+        "Could not register. An app has to be signed and in /Applications for macOS to "
+        + "launch it at login; a Debug build run from the build folder usually cannot.",
+        "注册失败。macOS 要求应用已签名且位于 /Applications 才能开机启动；"
+        + "直接从 build 目录运行的 Debug 版本通常无法注册。")
+    static let openLoginItems    = LocalizedString("Open Login Items", "打开登录项设置")
+
     // MARK: - Notifications
 
     static let notifications      = LocalizedString("Notifications", "通知")
