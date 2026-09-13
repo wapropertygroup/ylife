@@ -714,6 +714,114 @@ class TrackerDurability(unittest.TestCase):
         self.assertEqual([r["date"] for r in rows], ["2026-08-01", "2026-08-02"])
 
 
+class MultiSource(unittest.TestCase):
+    """Discovery across every source, which is the fix for a dry single feed.
+
+    This was one feed whose window holds ~50 items over ~5.5 hours, against a
+    report published weekly. When that site stopped carrying CTA write-ups the
+    card just aged — 47 days before anyone looked — because one dry source and
+    one quiet week are the same observation. Seven publishers cannot all go
+    quiet at once.
+    """
+
+    FEED = ("<rss><item><title>Goldman sees CTAs poised to buy $34b next week</title>"
+            "<link>https://example.invalid/a</link>"
+            "<pubDate>Mon, 08 Sep 2026 07:00:00 GMT</pubDate></item>"
+            "<item><title>Unrelated story</title>"
+            "<link>https://example.invalid/b</link></item></rss>")
+    EMPTY = ("<rss><item><title>Nothing here</title>"
+             "<link>https://x.invalid/1</link></item></rss>")
+
+    def setUp(self):
+        import tempfile
+        from unittest import mock
+        self.mock = mock
+        self._status = cta._STATUS_CACHE
+        self._tmp = tempfile.mkdtemp()
+        cta._STATUS_CACHE = str(pathlib.Path(self._tmp) / "status.json")
+
+    def tearDown(self):
+        cta._STATUS_CACHE = self._status
+
+    def test_the_legacy_name_still_points_at_a_real_source(self):
+        self.assertEqual(cta.REPORT_RSS_URL, cta.REPORT_SOURCES[0])
+        self.assertGreater(len(cta.REPORT_SOURCES), 1)
+
+    def test_every_source_is_polled_not_just_the_first(self):
+        """A CTA report in the fourth feed is worth exactly as much as one in
+        the first, and the old code would never have seen it."""
+        calls = []
+
+        def get(url, attempts=3):
+            calls.append(url)
+            return self.FEED if url == cta.REPORT_SOURCES[3] else self.EMPTY
+
+        with self.mock.patch.object(cta, "_http_get", get):
+            items, ok, _seen = cta._collect_candidates()
+        self.assertEqual(len(calls), len(cta.REPORT_SOURCES))
+        self.assertEqual(ok, len(cta.REPORT_SOURCES))
+        self.assertEqual([u for _t, u, _p in items], ["https://example.invalid/a"])
+
+    def test_one_dead_source_does_not_cost_the_others(self):
+        """The entire reason for having more than one."""
+        def get(url, attempts=3):
+            if url == cta.REPORT_SOURCES[0]:
+                raise OSError("connection refused")
+            return self.FEED if url == cta.REPORT_SOURCES[2] else self.EMPTY
+
+        with self.mock.patch.object(cta, "_http_get", get):
+            items, ok, _seen = cta._collect_candidates()
+        self.assertEqual(ok, len(cta.REPORT_SOURCES) - 1)
+        self.assertEqual(len(items), 1)
+
+    def test_a_syndicated_story_is_one_candidate_not_seven(self):
+        """The same wire story appears in several feeds; fetching it once per
+        feed would spend seven requests to reach the same conclusion."""
+        with self.mock.patch.object(cta, "_http_get",
+                                    lambda u, attempts=3: self.FEED):
+            items, _ok, _seen = cta._collect_candidates()
+        self.assertEqual(len(items), 1)
+
+    def test_google_news_redirects_are_skipped_before_they_are_fetched(self):
+        """Their targets resolve only under JavaScript — fetching one returns a
+        582 KB shell with 11 bytes of text, which would burn a request and log a
+        misleading "no trigger levels found"."""
+        feed = ('<rss><item><title>Goldman CTAs to net sell</title>'
+                '<link>https://news.google.com/rss/articles/CBMiABCD?oc=5</link>'
+                '</item></rss>')
+        with self.mock.patch.object(cta, "_http_get", lambda u, attempts=3: feed):
+            items, _ok, _seen = cta._collect_candidates()
+        self.assertEqual(items, [])
+
+    def test_all_sources_down_is_distinct_from_none_publishing(self):
+        """Seven publishers going quiet together is a network fault at this end,
+        and calls for a different response than a genuinely quiet week."""
+        def dead(url, attempts=3):
+            raise OSError("refused")
+        with self.mock.patch.object(cta, "_http_get", dead):
+            self.assertIsNone(cta.fetch_latest_report(spx_ref=7000.0))
+        self.assertIn("unreachable", cta.last_fetch_diagnosis())
+
+        with self.mock.patch.object(cta, "_http_get",
+                                    lambda u, attempts=3: self.EMPTY):
+            self.assertIsNone(cta.fetch_latest_report(spx_ref=7000.0))
+        reason = cta.last_fetch_diagnosis()
+        self.assertIn("no CTA article", reason)
+        self.assertNotIn("unreachable", reason)
+
+    def test_the_diagnosis_survives_a_fork(self):
+        """Under --preload the poller runs in the master and the API in a forked
+        worker, so a module global never reaches the reader. It shipped that way
+        once: /api/cta-positioning said "not yet run" while the master's log
+        carried the real reason."""
+        def dead(url, attempts=3):
+            raise OSError("refused")
+        with self.mock.patch.object(cta, "_http_get", dead):
+            cta.fetch_latest_report(spx_ref=7000.0)
+        cta._LAST_FETCH_DIAGNOSIS = "not yet run"     # a fresh worker
+        self.assertNotEqual(cta.last_fetch_diagnosis(), "not yet run")
+
+
 class FetchDiagnosis(unittest.TestCase):
     """Every empty fetch pass must say *why* it was empty.
 

@@ -291,9 +291,58 @@ def staleness_line() -> str:
 # invariants of what the data has to be, and anything that fails leaves the
 # previous snapshot in place. Failing closed is the whole design.
 
-REPORT_RSS_URL = "https://www.nashnova.com/rss.xml"
+#: Discovery feeds, polled together each pass. Every one was checked reachable
+#: from the box on 2026-09-13 (a dev sandbox cannot reach any of them — its
+#: proxy 403s, so this list can only be verified in production).
+#:
+#: **Breadth is the point, and it is a fix for a specific failure.** This was one
+#: feed, and that feed's window holds ~50 items spanning about 5.5 hours while
+#: Goldman publishes weekly. When the site stopped carrying CTA write-ups
+#: altogether the card simply aged — 47 days by the time anyone looked — because
+#: a single dry source and a healthy quiet week are the same observation. Seven
+#: independent publishers cannot all go quiet at once, so a dry spell now means
+#: the report was not published rather than that one site changed its mind.
+#:
+#: Order does not matter: every source is polled, the candidates are pooled, and
+#: the strict parse + :func:`_validate` gate decides. Adding a source therefore
+#: cannot weaken the data — the worst a bad feed can do is waste one fetch.
+REPORT_SOURCES: tuple[str, ...] = (
+    "https://www.nashnova.com/rss.xml",
+    "https://finance.yahoo.com/news/rssindex",
+    "https://feeds.finance.yahoo.com/rss/2.0/headline?s=%5EGSPC&region=US&lang=en-US",
+    "https://www.investing.com/rss/news_25.rss",
+    "https://seekingalpha.com/market_currents.xml",
+    "https://www.marketwatch.com/rss/marketpulse",
+    "https://www.cnbc.com/id/10000664/device/rss/rss.html",
+)
+
+#: Kept as the historical name for the first source. Some callers and tests
+#: reference it, and it is still a real feed.
+REPORT_RSS_URL = REPORT_SOURCES[0]
+
+#: Google News search RSS surfaces CTA write-ups from publishers not in the list
+#: above, and it is a *search* rather than a rolling window — which is exactly
+#: what a weekly report needs. It is nonetheless **not** in REPORT_SOURCES,
+#: because its links are unusable: every one is an opaque
+#: ``news.google.com/rss/articles/CBMi…`` redirect whose target is resolved by
+#: JavaScript. Fetching one returns a 582 KB shell with 11 bytes of visible text,
+#: the identifier does not base64-decode to a URL, and ``<source url=…>`` gives
+#: only the publisher's domain. Verified on the box; recorded so nobody spends
+#: the afternoon rediscovering it.
+GOOGLE_NEWS_SEARCH = (
+    "https://news.google.com/rss/search"
+    "?q=Goldman+CTA+equity+positioning&hl=en-US&gl=US&ceid=US:en"
+)
+
 _FETCH_CACHE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                             "cache", "cta_fetched.json")
+#: The diagnosis is written here as well as held in memory. Under gunicorn
+#: ``--preload`` the poller thread lives in the *master* and every request is
+#: served by a forked worker, so a module-level string set by the poller is
+#: invisible to the API for the life of that worker — which is exactly what
+#: shipped: ``/api/cta-positioning`` reported "not yet run" while the master's
+#: own log carried the real reason. Disk is the only channel the two share.
+_STATUS_CACHE = os.path.join(os.path.dirname(_FETCH_CACHE), "cta_fetch_status.json")
 _HTTP_TIMEOUT = 20
 _UA = "Mozilla/5.0 (compatible; ystocker/1.0; +https://stock.li-family.us)"
 
@@ -313,8 +362,37 @@ _UA = "Mozilla/5.0 (compatible; ystocker/1.0; +https://stock.li-family.us)"
 _LAST_FETCH_DIAGNOSIS: str = "not yet run"
 
 
+def _set_diagnosis(reason: str) -> None:
+    """Record why a pass ended, in memory and on disk.
+
+    Disk because of ``--preload``: the poller runs in the master and the API in
+    a forked worker, so an in-process string never reaches the reader.
+    """
+    global _LAST_FETCH_DIAGNOSIS
+    _LAST_FETCH_DIAGNOSIS = reason
+    try:
+        os.makedirs(os.path.dirname(_STATUS_CACHE), exist_ok=True)
+        tmp = _STATUS_CACHE + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump({"reason": reason, "at": date.today().isoformat()}, fh)
+        os.replace(tmp, _STATUS_CACHE)
+    except Exception as exc:  # noqa: BLE001 - a status write must never fail a pass
+        log.debug("cta: could not persist fetch status: %s", exc)
+
+
 def last_fetch_diagnosis() -> str:
-    """Why the most recent fetch pass produced no new report."""
+    """Why the most recent fetch pass produced no new report.
+
+    Prefers the on-disk record, because the process asking is usually not the
+    process that ran the fetch.
+    """
+    try:
+        with open(_STATUS_CACHE, encoding="utf-8") as fh:
+            reason = (json.load(fh) or {}).get("reason")
+        if isinstance(reason, str) and reason:
+            return reason
+    except Exception:  # noqa: BLE001 - absent or unreadable falls back to memory
+        pass
     return _LAST_FETCH_DIAGNOSIS
 
 #: A trigger must sit within this fraction of the live S&P 500 to be believed.
@@ -895,51 +973,92 @@ def _write_fetched(payload: dict[str, Any]) -> None:
     _report_to_ddb(payload)
 
 
+def _candidates_from_feed(xml: str) -> list[tuple[str, str, str | None]]:
+    """``(title, url, pubDate)`` for every CTA-looking item in one feed body.
+
+    Handles RSS ``<item>`` and Atom ``<entry>``, because the seven sources are
+    not all RSS. Both terms are still required in the title: "Goldman" alone
+    matches unrelated bank notes and "CTA" alone is a common abbreviation.
+    """
+    out: list[tuple[str, str, str | None]] = []
+    blocks = re.findall(r"<item[ >](.*?)</item>", xml, re.S) \
+        or re.findall(r"<item>(.*?)</item>", xml, re.S) \
+        or re.findall(r"<entry[ >](.*?)</entry>", xml, re.S)
+    for block in blocks:
+        title_m = re.search(r"<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?</title>", block, re.S)
+        link_m = re.search(r"<link>(.*?)</link>", block, re.S) \
+            or re.search(r'<link[^>]*href="([^"]+)"', block, re.S)
+        if not title_m or not link_m:
+            continue
+        title = " ".join(title_m.group(1).split())
+        if not (_TITLE_RE.search(title) and re.search(r"\bCTA", title, re.I)):
+            continue
+        url = link_m.group(1).strip()
+        # Google News redirects resolve only under JavaScript — fetching one
+        # yields a shell page with no article in it, so it would burn a request
+        # and log a misleading "no trigger levels found". See GOOGLE_NEWS_SEARCH.
+        if "news.google.com/rss/articles" in url:
+            continue
+        pub_m = re.search(r"<pubDate>(.*?)</pubDate>", block, re.S) \
+            or re.search(r"<updated>(.*?)</updated>", block, re.S)
+        out.append((title, url, pub_m.group(1) if pub_m else None))
+    return out
+
+
+def _collect_candidates() -> tuple[list[tuple[str, str, str | None]], int, int]:
+    """Pool CTA candidates across every source. Returns ``(items, feeds_ok, seen)``.
+
+    One unreachable feed must not end the pass — that is the entire reason there
+    is more than one. Failures are counted and logged, not raised.
+    """
+    pooled: list[tuple[str, str, str | None]] = []
+    seen_urls: set[str] = set()
+    feeds_ok = 0
+    seen_items = 0
+
+    for source in REPORT_SOURCES:
+        try:
+            body = _http_get(source)
+        except Exception as exc:  # noqa: BLE001
+            log.info("cta: source unreachable, continuing — %s (%s)",
+                     source[:60], str(exc)[:60])
+            continue
+        feeds_ok += 1
+        seen_items += len(re.findall(r"<item[ >]|<item>|<entry[ >]", body))
+        for title, url, pub in _candidates_from_feed(body):
+            if url in seen_urls:
+                continue          # the same story syndicated to two feeds
+            seen_urls.add(url)
+            pooled.append((title, url, pub))
+    return pooled, feeds_ok, seen_items
+
+
 def fetch_latest_report(spx_ref: float | None = None) -> dict[str, Any] | None:
-    """Look for a newer CTA report and store it if it validates.
+    """Look for a newer CTA report across every source and store it if it validates.
 
     Returns the stored snapshot, or None when there is nothing new or nothing
     trustworthy. Never raises: this runs on a timer and a bad week upstream must
     leave the existing card alone rather than break it.
 
-    Every ``return None`` records *why* in :data:`_LAST_FETCH_DIAGNOSIS` before
-    it goes. An empty pass is the normal outcome — weekly report, hourly poll —
-    so without a reason attached, a source that has gone dry is indistinguishable
-    from a parser that has broken, and both are indistinguishable from a healthy
-    week with no news. That ambiguity is what let this sit stale for 47 days.
+    Every ``return None`` records *why* via :func:`_set_diagnosis` before it
+    goes. An empty pass is the normal outcome — weekly report, hourly poll — so
+    without a reason attached, a source that has gone dry is indistinguishable
+    from a parser that has broken, and both from a healthy quiet week. That
+    ambiguity is what let this sit stale for 47 days.
     """
-    global _LAST_FETCH_DIAGNOSIS
+    candidates, feeds_ok, seen_items = _collect_candidates()
 
-    try:
-        rss = _http_get(REPORT_RSS_URL)
-    except Exception as exc:  # noqa: BLE001
-        # Warning, not info. A source that is unreachable looks exactly like a
-        # source with nothing new, and the second is normal — so the first has to
-        # be loud or the fetcher can be broken for weeks while the card just sits
-        # there quietly going stale.
-        _LAST_FETCH_DIAGNOSIS = f"feed unreachable ({type(exc).__name__})"
-        log.warning("cta: feed unreachable after retries (%s) — no update this pass", exc)
+    if feeds_ok == 0:
+        # Every source down at once is a network problem at this end, not seven
+        # publishers going quiet together.
+        _set_diagnosis(f"all {len(REPORT_SOURCES)} sources unreachable")
+        log.warning("cta: every source unreachable — no update this pass")
         return None
 
-    items = re.findall(r"<item>(.*?)</item>", rss, re.S)
-    candidates: list[tuple[str, str, str | None]] = []
-    for item in items:
-        title_m = re.search(r"<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?</title>", item, re.S)
-        link_m = re.search(r"<link>(.*?)</link>", item, re.S)
-        if not title_m or not link_m:
-            continue
-        title = title_m.group(1).strip()
-        # Both terms required: "Goldman" alone matches unrelated bank notes, and
-        # "CTA" alone is a common enough abbreviation to catch noise.
-        if _TITLE_RE.search(title) and re.search(r"\bCTA", title, re.I):
-            pub_m = re.search(r"<pubDate>(.*?)</pubDate>", item, re.S)
-            candidates.append((title, link_m.group(1).strip(),
-                               pub_m.group(1) if pub_m else None))
-
     if not candidates:
-        _LAST_FETCH_DIAGNOSIS = (
-            f"feed healthy ({len(items)} items) but no CTA article in it")
-        log.debug("cta: no CTA item in the %d-item feed window", len(items))
+        _set_diagnosis(f"{feeds_ok}/{len(REPORT_SOURCES)} sources healthy "
+                       f"({seen_items} items), no CTA article in any")
+        log.debug("cta: no CTA item across %d sources (%d items)", feeds_ok, seen_items)
         return None
 
     current = get_cta_positioning()
@@ -971,7 +1090,7 @@ def fetch_latest_report(spx_ref: float | None = None) -> dict[str, Any] | None:
             log.warning("cta: %r has no usable pubDate (%r) — dating it today, "
                         "which may overstate freshness", title[:70], pub_raw)
         if report_date <= current_date:
-            _LAST_FETCH_DIAGNOSIS = (
+            _set_diagnosis(
                 f"newest CTA article ({report_date}) is not newer than {current_date}")
             log.debug("cta: parsed report (%s) is not newer than %s",
                       report_date, current_date)
@@ -988,7 +1107,7 @@ def fetch_latest_report(spx_ref: float | None = None) -> dict[str, Any] | None:
             "fetched_from": url,
         }
         _write_fetched(snapshot)
-        _LAST_FETCH_DIAGNOSIS = f"stored {report_date}"
+        _set_diagnosis(f"stored {report_date}")
         log.info("cta: stored a new report — %s triggers %s (validated against S&P %s)",
                  report_date, parsed["spx_triggers"], spx_ref)
         return snapshot
@@ -996,5 +1115,5 @@ def fetch_latest_report(spx_ref: float | None = None) -> dict[str, Any] | None:
     # Candidates existed but every one was unreadable, unparseable or rejected;
     # each logged its own reason above. Named so the summary line does not imply
     # the feed was empty, which is a different problem with a different fix.
-    _LAST_FETCH_DIAGNOSIS = f"{len(candidates)} CTA article(s) found, none usable"
+    _set_diagnosis(f"{len(candidates)} CTA article(s) found, none usable")
     return None
