@@ -258,7 +258,13 @@
   .as-dca-table tr[data-throttled="1"] td:first-child {
     box-shadow: inset 3px 0 0 var(--as-warn);
   }
-  .as-vbar { position: relative; height: 5px; border-radius: 3px;
+  /* `display: block` is load-bearing, not tidying. This is a <span>, and
+     browsers ignore height on a non-replaced inline element — so the bar has
+     been rendering at zero height, i.e. invisible, for as long as it has
+     existed. Nothing looked broken because a missing bar looks like a design
+     choice; it only surfaced from comparing a screenshot against what the
+     markup claimed to draw. */
+  .as-vbar { display: block; position: relative; height: 5px; border-radius: 3px;
              background: var(--as-other); overflow: hidden; margin-top: .3rem; }
   .as-vbar > i { position: absolute; inset: 0 auto 0 0; border-radius: 3px; }
   /* The multiplier chain, shown as one cell instead of three columns. A term at
