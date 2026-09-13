@@ -233,6 +233,12 @@
 
      1. A line between rows. Hover alone tells you where you are only once the
         pointer is already there, which is no help to the eye crossing 30 rows.
+        Drawn in `--as-other` rather than `--as-line`: the latter is the hairline
+        used for card edges and is deliberately almost invisible, which is right
+        for a border around a shape and too faint to separate thirty rows inside
+        one. `--as-other` is a single step stronger and, being a defined
+        variable, steps up in both themes rather than only the one it was
+        eyeballed in.
      2. Numbers right-aligned and tabular. Left-ragged figures of different
         lengths cannot be compared down a column at all — $711 and $1,365 did
         not share a decimal position, so the column carried no shape.
@@ -243,7 +249,10 @@
         is the part a reader acts on. The V bar stays, because V is what the
         column is for and a filled track is the one thing here read at a glance.
   */
-  .as-dca-table tbody tr + tr td { border-top: 1px solid var(--as-line); }
+  .as-dca-table tbody tr + tr td { border-top: 1px solid var(--as-other); }
+  /* The header rule is heavier still, so the column titles read as a band
+     rather than as one more row. */
+  .as-dca-table thead th { border-bottom: 2px solid var(--as-other); padding-bottom: .45rem; }
   .as-dca-table td.as-num { font-variant-numeric: tabular-nums; }
   .as-dca-table .as-vbar { max-width: 4.5rem; margin-left: auto; }
   /* The amount is the only figure here a reader acts on, so it anchors the row;
@@ -602,12 +611,12 @@
         <table class="as-dca-table text-xs">
           <thead>
             <tr>
-              <th><button type="button" class="as-sort-button" data-dsort="ticker"><span data-i18n="adca.col_symbol">Company</span><span class="as-sort-arrow"></span></button></th>
-              <th class="as-num"><button type="button" class="as-sort-button" data-dsort="value"><span data-i18n="adca.col_weight">Your exposure</span><span class="as-sort-arrow"></span></button></th>
-              <th class="as-num"><button type="button" class="as-sort-button" data-dsort="V"><span data-i18n="adca.col_v">V</span><span class="as-sort-arrow"></span></button></th>
-              <th class="as-num" data-i18n="adca.col_chain">M_val × M_earn × M_port</th>
-              <th class="as-num"><button type="button" class="as-sort-button" data-dsort="multiplier"><span data-i18n="adca.col_mult">Total ×</span><span class="as-sort-arrow"></span></button></th>
-              <th class="as-num"><button type="button" class="as-sort-button" data-dsort="amount"><span data-i18n="adca.col_amount">Per base unit</span><span class="as-sort-arrow"></span></button></th>
+              <th aria-sort="none"><button type="button" class="as-sort-button" data-dsort="ticker"><span data-i18n="adca.col_symbol">Company</span><span class="as-sort-arrow" aria-hidden="true">↕</span></button></th>
+              <th class="as-num" aria-sort="none" data-i18n-title="adca.tt_weight"><button type="button" class="as-sort-button" data-dsort="value"><span data-i18n="adca.col_weight">Exposure</span><span class="as-sort-arrow" aria-hidden="true">↕</span></button></th>
+              <th class="as-num" aria-sort="none" data-i18n-title="adca.tt_v"><button type="button" class="as-sort-button" data-dsort="V"><span data-i18n="adca.col_v">V</span><span class="as-sort-arrow" aria-hidden="true">↕</span></button></th>
+              <th class="as-num" data-i18n="adca.col_chain" data-i18n-title="adca.tt_chain">Adjustments</th>
+              <th class="as-num" aria-sort="none" data-i18n-title="adca.tt_mult"><button type="button" class="as-sort-button" data-dsort="multiplier"><span data-i18n="adca.col_mult">Total</span><span class="as-sort-arrow" aria-hidden="true">↕</span></button></th>
+              <th class="as-num" aria-sort="none" data-i18n-title="adca.tt_amount"><button type="button" class="as-sort-button" data-dsort="amount"><span data-i18n="adca.col_amount">Per unit</span><span class="as-sort-arrow" aria-hidden="true">↕</span></button></th>
             </tr>
           </thead>
           <tbody id="asDcaBody"></tbody>
@@ -941,9 +950,15 @@
     }).join('');
 
     document.querySelectorAll('[data-dsort]').forEach(function (btn) {
-      btn.setAttribute('data-active', btn.dataset.dsort === _dcaSort.key ? '1' : '0');
+      const active = btn.dataset.dsort === _dcaSort.key;
+      btn.setAttribute('data-active', active ? '1' : '0');
+      const th = btn.closest('th');
+      if (th) th.setAttribute('aria-sort', active
+        ? (_dcaSort.dir < 0 ? 'descending' : 'ascending') : 'none');
+      // '↕' when inactive rather than blank, matching the holdings table: an
+      // empty cell gives no hint the column can be sorted at all.
       btn.querySelector('.as-sort-arrow').textContent =
-        btn.dataset.dsort === _dcaSort.key ? (_dcaSort.dir < 0 ? '▼' : '▲') : '';
+        active ? (_dcaSort.dir < 0 ? '↓' : '↑') : '↕';
     });
 
     // The portfolio multiplier leads, because it is the only figure here a
