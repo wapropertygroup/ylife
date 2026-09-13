@@ -215,3 +215,10 @@ DerivedData/
 
 # macOS Finder metadata. Swept in by `git add -A` and never wanted.
 .DS_Store
+
+# Throwaway preview/scratch scripts. These get written to the repo root to
+# render a page against the real templates, then deleted — but a concurrent
+# `git add -A` can sweep one in before it goes (it did: e46a8c4).
+.preview.py
+.*_preview.py
+.*_smoke.py
