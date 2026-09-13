@@ -7155,13 +7155,19 @@ def _cta_loop() -> None:
             payload = cta.get_cta_positioning()
             f = payload.get("freshness") or {}
             level, age = f.get("level"), f.get("report_age_days")
-            line = ("CTA snapshot: %s (%s days old, source=%s)"
-                    % (level, age, payload.get("source_mode")))
+            # The diagnosis is the whole value of this line. "No new report" was
+            # all it used to say, which is equally true when the source has gone
+            # dry, when the parser has broken and when it is simply Tuesday —
+            # three situations with three different responses. This card sat 47
+            # days stale because the log could not tell them apart.
+            line = ("CTA snapshot: %s (%s days old, source=%s) — last fetch: %s"
+                    % (level, age, payload.get("source_mode"),
+                       cta.last_fetch_diagnosis()))
             if level in ("stale", "unknown"):
-                log.warning("%s — no new report picked up; set GOLDMAN_CTA_DATA_JSON "
-                            "in SSM to override by hand", line)
+                log.warning("%s; set GOLDMAN_CTA_DATA_JSON in SSM to override by hand",
+                            line)
             elif level == "aging":
-                log.info("%s — no new Goldman report in over a week", line)
+                log.info("%s", line)
             else:
                 log.info("%s", line)
         except Exception:
@@ -7190,7 +7196,8 @@ def api_cta_positioning():
     The S&P level is peeked, never fetched, so a cold cache costs the distance
     block rather than the whole response.
     """
-    from ystocker.cta import distance_to_triggers, get_cta_positioning
+    from ystocker.cta import (distance_to_triggers, get_cta_positioning,
+                              last_fetch_diagnosis)
 
     payload = get_cta_positioning()
     spx = _cta_spx_reference()
@@ -7198,6 +7205,11 @@ def api_cta_positioning():
         payload = dict(payload)
         payload["distance"] = distance_to_triggers(
             spx, (payload.get("latest") or {}).get("spx_triggers") or {})
+    # Why the snapshot is as old as it is. The card already says *that* it is
+    # stale; a reader who wants to know whether anyone is coming to fix it needs
+    # to know whether the source went dry or the fetcher broke.
+    payload = dict(payload)
+    payload["last_fetch"] = last_fetch_diagnosis()
     return jsonify(payload)
 
 
