@@ -199,28 +199,29 @@
      that figure is sized for the twelve-column holdings grid, and borrowing it
      forced a horizontal scrollbar onto a table that fits a laptop comfortably.
 
-     **Shrink-to-fit, not `w-full`** — and the distinction is the whole reason
-     this table kept reading as broken. Six short columns stretched across a
-     1146px card leaves ~290px of slack that has to go *somewhere inside* the
-     table: spread across all six it marooned every figure in its own patch of
-     whitespace, and pushed into the first column it opened a ~290px canyon
-     between the company name and its numbers — measured 337px → 623px on a
-     real thirty-row portfolio, a void the eye had to cross thirty times.
+     **Full width, with the columns pinned.** The table fills its card, and the
+     slack that creates is divided by the <colgroup> in the markup rather than
+     by the browser. That distinction is this table's whole history: left to
+     auto layout, ~290px of leftover width went somewhere unhelpful every time
+     — shared between all six columns it marooned each figure in its own patch
+     of whitespace, and pushed into the first column it opened a canyon between
+     the company name and its numbers, measured 337px → 623px on a real
+     thirty-row portfolio. `table-layout: fixed` makes the declared shares
+     exact, so neither happens: the table is as wide as the card and every
+     column is the width it should be.
 
-     Slack outside a table reads as page margin; slack inside reads as a
-     layout fault. So the table takes its natural 858px and leaves the rest of
-     the card empty, which is the quiet answer. `max-width:100%` keeps it
-     inside the card and `min-width` keeps the columns legible on a phone,
-     where the wrapper scrolls exactly as the holdings table already does.
+     Fixed layout also means content can no longer widen a column, which is why
+     the company name truncates rather than one long name setting the column
+     for all thirty rows. `min-width` keeps things legible on a phone, where
+     the wrapper scrolls exactly as the holdings table already does.
 
-     The element must NOT carry Tailwind's `w-full`. It did, and that shipped a
-     no-op: `.w-full { width: 100% }` and `.as-dca-table { width: max-content }`
-     have identical specificity, so the utility won the cascade and the table
-     went on stretching. Nothing looked wrong in a local check that removed the
-     class in JavaScript first — that measures the intended state, not the
-     shipped one. Verify layout on the rendered template, never on a mutated
-     DOM. */
-  .as-dca-table { width: max-content; max-width: 100%; min-width: 44rem; }
+     One trap, already paid for once: the element must NOT carry Tailwind's
+     `w-full` *and* a conflicting width here. Both are one class, so the
+     cascade decides — a `width: max-content` rule lost to the utility and
+     shipped as a no-op. It went unnoticed because the local check removed the
+     class in JavaScript first, which measures the intended state rather than
+     the shipped one. tests/test_theme_classes.py now pins the pair. */
+  .as-dca-table { width: 100%; table-layout: fixed; min-width: 44rem; }
   .as-dca-table th { font-size: .65rem; font-weight: 650; letter-spacing: .045em;
                      text-transform: uppercase; white-space: nowrap; }
   .as-dca-table td { vertical-align: middle; padding: .45rem .7rem; }
@@ -609,6 +610,15 @@
 
       <div class="as-card overflow-x-auto">
         <table class="as-dca-table text-xs">
+          {# Column shares, honoured exactly because the table is
+             `table-layout: fixed`. Sized to the widest real content in each
+             (the chain cell is "1.03 × 1.08 × 0.60"; the company cell holds a
+             ticker over a name that truncates), with the remainder given to
+             the company column — which is the one that can use it. #}
+          <colgroup>
+            <col style="width:30%"><col style="width:16%"><col style="width:13%">
+            <col style="width:19%"><col style="width:9%"><col style="width:13%">
+          </colgroup>
           <thead>
             <tr>
               <th aria-sort="none"><button type="button" class="as-sort-button" data-dsort="ticker"><span data-i18n="adca.col_symbol">Company</span><span class="as-sort-arrow" aria-hidden="true">↕</span></button></th>
