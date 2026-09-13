@@ -297,6 +297,26 @@ _FETCH_CACHE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__fi
 _HTTP_TIMEOUT = 20
 _UA = "Mozilla/5.0 (compatible; ystocker/1.0; +https://stock.li-family.us)"
 
+#: Why the last fetch pass produced nothing, as a short phrase for the log and
+#: the API.
+#:
+#: A pass that finds no new report is the *normal* outcome — Goldman publishes
+#: weekly and this polls hourly, so ~167 of every 168 passes are correctly
+#: empty. That made the one failure that matters invisible: "the feed is healthy
+#: and simply has no CTA article" and "our fetcher is broken" both logged at
+#: DEBUG, i.e. not at all, and the card just sat there aging.
+#:
+#: Observed 2026-09-13 after 47 days stale: the feed was fine (50 items, 34 KB)
+#: and contained no CTA item whatsoever — the source had stopped publishing
+#: them. Nothing in the logs could distinguish that from a parse regression,
+#: which is the difference between "go find another source" and "fix the code".
+_LAST_FETCH_DIAGNOSIS: str = "not yet run"
+
+
+def last_fetch_diagnosis() -> str:
+    """Why the most recent fetch pass produced no new report."""
+    return _LAST_FETCH_DIAGNOSIS
+
 #: A trigger must sit within this fraction of the live S&P 500 to be believed.
 #: This is the gate that makes a mis-parse harmless: "7" or "7.46" or a stray
 #: year like 2026 cannot pass it, and no plausible phrasing change can either.
@@ -881,7 +901,15 @@ def fetch_latest_report(spx_ref: float | None = None) -> dict[str, Any] | None:
     Returns the stored snapshot, or None when there is nothing new or nothing
     trustworthy. Never raises: this runs on a timer and a bad week upstream must
     leave the existing card alone rather than break it.
+
+    Every ``return None`` records *why* in :data:`_LAST_FETCH_DIAGNOSIS` before
+    it goes. An empty pass is the normal outcome — weekly report, hourly poll —
+    so without a reason attached, a source that has gone dry is indistinguishable
+    from a parser that has broken, and both are indistinguishable from a healthy
+    week with no news. That ambiguity is what let this sit stale for 47 days.
     """
+    global _LAST_FETCH_DIAGNOSIS
+
     try:
         rss = _http_get(REPORT_RSS_URL)
     except Exception as exc:  # noqa: BLE001
@@ -889,6 +917,7 @@ def fetch_latest_report(spx_ref: float | None = None) -> dict[str, Any] | None:
         # source with nothing new, and the second is normal — so the first has to
         # be loud or the fetcher can be broken for weeks while the card just sits
         # there quietly going stale.
+        _LAST_FETCH_DIAGNOSIS = f"feed unreachable ({type(exc).__name__})"
         log.warning("cta: feed unreachable after retries (%s) — no update this pass", exc)
         return None
 
@@ -908,6 +937,8 @@ def fetch_latest_report(spx_ref: float | None = None) -> dict[str, Any] | None:
                                pub_m.group(1) if pub_m else None))
 
     if not candidates:
+        _LAST_FETCH_DIAGNOSIS = (
+            f"feed healthy ({len(items)} items) but no CTA article in it")
         log.debug("cta: no CTA item in the %d-item feed window", len(items))
         return None
 
@@ -940,6 +971,8 @@ def fetch_latest_report(spx_ref: float | None = None) -> dict[str, Any] | None:
             log.warning("cta: %r has no usable pubDate (%r) — dating it today, "
                         "which may overstate freshness", title[:70], pub_raw)
         if report_date <= current_date:
+            _LAST_FETCH_DIAGNOSIS = (
+                f"newest CTA article ({report_date}) is not newer than {current_date}")
             log.debug("cta: parsed report (%s) is not newer than %s",
                       report_date, current_date)
             return None
@@ -955,8 +988,13 @@ def fetch_latest_report(spx_ref: float | None = None) -> dict[str, Any] | None:
             "fetched_from": url,
         }
         _write_fetched(snapshot)
+        _LAST_FETCH_DIAGNOSIS = f"stored {report_date}"
         log.info("cta: stored a new report — %s triggers %s (validated against S&P %s)",
                  report_date, parsed["spx_triggers"], spx_ref)
         return snapshot
 
+    # Candidates existed but every one was unreadable, unparseable or rejected;
+    # each logged its own reason above. Named so the summary line does not imply
+    # the feed was empty, which is a different problem with a different fix.
+    _LAST_FETCH_DIAGNOSIS = f"{len(candidates)} CTA article(s) found, none usable"
     return None

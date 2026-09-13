@@ -714,5 +714,59 @@ class TrackerDurability(unittest.TestCase):
         self.assertEqual([r["date"] for r in rows], ["2026-08-01", "2026-08-02"])
 
 
+class FetchDiagnosis(unittest.TestCase):
+    """Every empty fetch pass must say *why* it was empty.
+
+    An empty pass is the normal outcome here — Goldman publishes weekly and the
+    poller runs hourly, so ~167 of every 168 passes correctly find nothing. That
+    made the one failure that matters invisible: "the feed is healthy and has no
+    CTA article in it" and "our parser broke" both logged at DEBUG, and the card
+    aged 47 days while the log repeated "no new report picked up" — a sentence
+    equally true of all three situations and useful in none of them.
+    """
+
+    def setUp(self):
+        from unittest import mock
+        self.mock = mock
+
+    def test_an_unreachable_feed_is_named_as_such(self):
+        def boom(url, attempts=3):
+            raise OSError("connection refused")
+        with self.mock.patch.object(cta, "_http_get", boom):
+            self.assertIsNone(cta.fetch_latest_report(spx_ref=7000.0))
+        self.assertIn("unreachable", cta.last_fetch_diagnosis())
+
+    def test_a_healthy_feed_with_no_cta_article_is_distinguishable(self):
+        """The case actually observed: 50 items, 34 KB, zero CTA articles. This
+        must not read the same as a broken fetcher."""
+        feed = "<rss>" + "".join(
+            f"<item><title>Unrelated market story {i}</title>"
+            f"<link>https://example.invalid/{i}</link></item>" for i in range(50)
+        ) + "</rss>"
+        with self.mock.patch.object(cta, "_http_get", lambda u, attempts=3: feed):
+            self.assertIsNone(cta.fetch_latest_report(spx_ref=7000.0))
+        reason = cta.last_fetch_diagnosis()
+        self.assertIn("no CTA article", reason)
+        self.assertIn("50", reason)          # says how big the window was
+        self.assertNotIn("unreachable", reason)
+
+    def test_the_placeholder_never_survives_a_pass(self):
+        """'not yet run' means the poller has not started. If it can still be
+        read after a pass, some branch returns without recording a reason."""
+        cta._LAST_FETCH_DIAGNOSIS = "not yet run"
+        with self.mock.patch.object(
+                cta, "_http_get", lambda u, attempts=3: "<rss></rss>"):
+            cta.fetch_latest_report(spx_ref=7000.0)
+        self.assertNotEqual(cta.last_fetch_diagnosis(), "not yet run")
+
+    def test_the_diagnosis_is_a_short_phrase_fit_for_a_log_line(self):
+        with self.mock.patch.object(
+                cta, "_http_get", lambda u, attempts=3: "<rss></rss>"):
+            cta.fetch_latest_report(spx_ref=7000.0)
+        reason = cta.last_fetch_diagnosis()
+        self.assertLess(len(reason), 120)
+        self.assertNotIn("\n", reason)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
