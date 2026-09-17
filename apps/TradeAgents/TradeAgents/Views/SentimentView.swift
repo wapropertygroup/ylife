@@ -97,13 +97,33 @@ private enum FearGreedBand {
         }
     }
 
-    var label: String {
+    var label: LocalizedString {
         switch self {
-        case .extremeFear:  return "Extreme Fear"
-        case .fear:         return "Fear"
-        case .neutral:      return "Neutral"
-        case .greed:        return "Greed"
-        case .extremeGreed: return "Extreme Greed"
+        case .extremeFear:  return S.fgExtremeFear
+        case .fear:         return S.fgFear
+        case .neutral:      return S.fgNeutral
+        case .greed:        return S.fgGreed
+        case .extremeGreed: return S.fgExtremeGreed
+        }
+    }
+
+    /// CNN's own wording, mapped back onto a band.
+    ///
+    /// The rule this screen was built on is that CNN's `rating` wins over a locally
+    /// derived one, so a boundary CNN moves cannot silently disagree with the number
+    /// beside it. Rendering that string directly is fine in English and wrong in
+    /// Chinese — it put the single word "Fear" under a headline reading 恐慌与贪婪.
+    /// Matching it to a band keeps CNN as the authority on *which* band while letting
+    /// the app own the words, and an unrecognised rating still falls through to the
+    /// raw string rather than being dropped.
+    static func matching(rating: String) -> FearGreedBand? {
+        switch rating.lowercased().trimmingCharacters(in: .whitespacesAndNewlines) {
+        case "extreme fear":  return .extremeFear
+        case "fear":          return .fear
+        case "neutral":       return .neutral
+        case "greed":         return .greed
+        case "extreme greed": return .extremeGreed
+        default:              return nil
         }
     }
 
@@ -154,13 +174,16 @@ private struct ScoreCard: View {
         }
     }
 
-    /// CNN's wording first, the local band only as a fallback — and `rating` arrives as
-    /// an empty string, not `nil`, when the upstream fetch returned nothing, so this has
-    /// to be a trim-and-test rather than an `if let`.
+    /// CNN's classification, in the reader's language — see `FearGreedBand.matching`.
+    /// `rating` arrives as an empty string, not `nil`, when the upstream fetch returned
+    /// nothing, so this has to be a trim-and-test rather than an `if let`.
     private var ratingLabel: String? {
         let text = rating?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        if !text.isEmpty { return text }
-        return band?.label
+        if !text.isEmpty {
+            if let matched = FearGreedBand.matching(rating: text) { return loc(matched.label) }
+            return text        // a word CNN added; shown as-is beats not shown
+        }
+        return band.map { loc($0.label) }
     }
 }
 
@@ -240,12 +263,7 @@ private struct HistoryCard: View {
                             AxisValueLabel().foregroundStyle(Palette.mutedText)
                         }
                     }
-                    .chartXAxis {
-                        AxisMarks(values: .automatic(desiredCount: 4)) { _ in
-                            AxisGridLine().foregroundStyle(Palette.border)
-                            AxisValueLabel().foregroundStyle(Palette.mutedText)
-                        }
-                    }
+                    .localizedDateAxis()
                     .frame(height: 170)
                 } else {
                     // Stated, not skipped. A blank space here would read as a flat index.
@@ -270,7 +288,7 @@ private struct HistoryCard: View {
     /// looking at one year or five.
     private var countLabel: String? {
         guard !history.isEmpty else { return nil }
-        return Format.number(Double(history.count), places: 0) + " daily readings"
+        return Format.number(Double(history.count), places: 0) + " " + loc(S.fgReadings)
     }
 }
 

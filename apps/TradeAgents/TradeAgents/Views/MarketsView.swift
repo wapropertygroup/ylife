@@ -238,16 +238,21 @@ private struct SectorCard: View {
             // rotation is a comparison between sectors, and a row of numbers makes
             // the reader do that comparison themselves.
             Chart(ranked) { sector in
+                // `height` is explicit because Chart's default bar thickness is
+                // derived from the band, and with a dozen categories in a short
+                // plot area that collapses to a hairline — the bars rendered as
+                // thin rules and the chart read as a table of lines.
                 BarMark(
                     x: .value("Change", window.value(sector) ?? 0),
-                    y: .value("Sector", name(sector))
+                    y: .value("Sector", name(sector)),
+                    height: .fixed(11)
                 )
                 .foregroundStyle(Format.tint(window.value(sector)))
-                .cornerRadius(3)
+                .cornerRadius(2)
             }
             .chartXAxis { AxisMarks(format: Decimal.FormatStyle.Percent.percent.scale(1)) }
-            .chartYAxis { AxisMarks(position: .leading) }
-            .frame(height: CGFloat(ranked.count) * 19 + 24)
+            .categoryNameAxis()
+            .frame(height: CGFloat(ranked.count) * 22 + 24)
         }
         .padding(14)
         .background(Palette.card, in: RoundedRectangle(cornerRadius: 14))

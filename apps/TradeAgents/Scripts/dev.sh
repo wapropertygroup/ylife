@@ -53,7 +53,13 @@ relaunch() {
 	# compiled never runs and the screenshot shows the previous one.
 	pkill -f "TradeAgents.app/Contents/MacOS/TradeAgents" 2>/dev/null || true
 	sleep 1
-	open "$APP"
+	# $1, when given, is an AppSection raw value. AppKit folds `--args -Key value`
+	# into UserDefaults, which is how the app is told which section to open on.
+	if [ -n "${1:-}" ]; then
+		open "$APP" --args -TradeAgentsSection "$1"
+	else
+		open "$APP"
+	fi
 }
 
 # Capture only the app's own window, after moving it somewhere capturable.
@@ -73,93 +79,93 @@ RECT_W=1280
 RECT_H=900
 
 shot() {
-	osascript -e 'tell application "TradeAgents" to activate' >/dev/null 2>&1 || true
-	sleep 1
-
-	osascript <<-APPLESCRIPT >/dev/null 2>&1 || true
-		tell application "System Events"
-			tell process "TradeAgents"
-				set position of window 1 to {$RECT_X, $RECT_Y}
-				set size of window 1 to {$RECT_W, $RECT_H}
-			end tell
-		end tell
-	APPLESCRIPT
-	sleep 2
-
-	local geom expected front
+	local geom expected front attempt
 	expected="$RECT_X,$RECT_Y,$RECT_W,$RECT_H"
-	if ! geom=$(osascript -e \
-		'tell application "System Events" to tell process "TradeAgents" to get {position, size} of window 1' \
-		2>&1); then
-		echo "Refusing to capture: no TradeAgents window (${geom})." >&2
-		echo "The app may have failed to launch, or Accessibility permission is not" >&2
-		echo "granted to this terminal (System Settings > Privacy & Security)." >&2
-		return 1
-	fi
 
-	geom=$(echo "$geom" | tr -d ' ')
-	if [ "$geom" != "$expected" ]; then
-		echo "Refusing to capture: window is at '$geom', expected '$expected'." >&2
-		echo "It may be on a secondary display, which -R cannot address." >&2
-		return 1
-	fi
+	# Retried, because every precondition here is something another application can
+	# take away a fraction of a second after it was checked. On a working machine a
+	# notification, a build finishing, or a chat window opening steals focus; the
+	# checks below are still worth keeping — capturing the wrong app is the failure
+	# this whole function exists to prevent — but failing the run outright on a
+	# transient steal just means re-running it by hand. So: re-assert, re-check, and
+	# only give up after several rounds, reporting the last reason.
+	for attempt in 1 2 3 4 5; do
+		osascript -e 'tell application "TradeAgents" to activate' >/dev/null 2>&1 || true
+		sleep 1
 
-	front=$(osascript -e \
-		'tell application "System Events" to get name of first process whose frontmost is true' \
-		2>/dev/null || echo "?")
-	if [ "$front" != "TradeAgents" ]; then
-		echo "Refusing to capture: '$front' is frontmost, not TradeAgents." >&2
-		return 1
-	fi
-
-	screencapture -x -o -R "$expected" "$OUT"
-	echo "$OUT"
-}
-
-# Select a sidebar section, by name or by 1-based index.
-#
-# An index is accepted because the app is bilingual: matching "Settings" fails outright
-# once the reader switches to Chinese, where the row reads 设置. Rather than teach this
-# script every string in both languages — a second copy of the translation table, which
-# would drift — a number addresses the row regardless of language.
-#
-# Selection goes through the accessibility tree, never a screen coordinate. Coordinates
-# drift the moment a toolbar item or a back button changes the layout, and a click that
-# lands somewhere unintended can move focus to another application entirely — after
-# which a capture photographs *that* application.
-select_section() {
-	local wanted="$1"
-	if [[ "$wanted" =~ ^[0-9]+$ ]]; then
-		osascript <<-APPLESCRIPT 2>&1
+		osascript <<-APPLESCRIPT >/dev/null 2>&1 || true
 			tell application "System Events"
 				tell process "TradeAgents"
-					set theOutline to outline 1 of scroll area 1 of group 1 of ¬
-						splitter group 1 of group 1 of window 1
-					if (count of rows of theOutline) < $wanted then
-						return "no row $wanted"
-					end if
-					set selected of row $wanted of theOutline to true
-					return "ok"
+					set position of window 1 to {$RECT_X, $RECT_Y}
+					set size of window 1 to {$RECT_W, $RECT_H}
 				end tell
 			end tell
 		APPLESCRIPT
-		return
+		sleep 2
+
+		if ! geom=$(osascript -e \
+			'tell application "System Events" to tell process "TradeAgents" to get {position, size} of window 1' \
+			2>&1); then
+			front="no TradeAgents window (${geom})"
+			continue
+		fi
+
+		geom=$(echo "$geom" | tr -d ' ')
+		if [ "$geom" != "$expected" ]; then
+			front="window is at '$geom', expected '$expected' (secondary display?)"
+			continue
+		fi
+
+		front=$(osascript -e \
+			'tell application "System Events" to get name of first process whose frontmost is true' \
+			2>/dev/null || echo "?")
+		if [ "$front" != "TradeAgents" ]; then
+			front="'$front' is frontmost, not TradeAgents"
+			continue
+		fi
+
+		screencapture -x -o -R "$expected" "$OUT"
+		echo "$OUT"
+		return 0
+	done
+
+	echo "Refusing to capture after 5 attempts: $front" >&2
+	echo "If this is a window-position failure the app may be opening on a secondary" >&2
+	echo "display; if it is an Accessibility failure, grant this terminal permission" >&2
+	echo "in System Settings > Privacy & Security." >&2
+	return 1
+}
+
+# The sidebar sections, in the order AppSection declares them. Used only to map a
+# 1-based index or a case-insensitive name onto the raw value the app expects.
+#
+# There is no AppleScript path here any more, and that is the point. Driving the
+# sidebar from outside the process cannot be done reliably: SwiftUI's List rows expose
+# no AXPress action, `set selected of row N to true` mutates the accessibility tree
+# without moving the real selection, and a synthetic click at the row's own AX
+# coordinates is ignored as well. All three report success and leave the app on
+# whatever section it launched with, so the script cheerfully photographed the wrong
+# screen and named the file after the right one. The app now takes the section as a
+# launch argument instead, which either works or fails visibly.
+SECTIONS=(agents markets dca valuation holdings13f fed rates sentiment settings)
+
+resolve_section() {
+	local wanted="$1"
+	if [[ "$wanted" =~ ^[0-9]+$ ]]; then
+		if [ "$wanted" -lt 1 ] || [ "$wanted" -gt "${#SECTIONS[@]}" ]; then
+			echo "no section $wanted (there are ${#SECTIONS[@]})" >&2
+			return 1
+		fi
+		echo "${SECTIONS[$((wanted - 1))]}"
+		return 0
 	fi
-	osascript <<-APPLESCRIPT 2>&1
-		tell application "System Events"
-			tell process "TradeAgents"
-				set theOutline to outline 1 of scroll area 1 of group 1 of ¬
-					splitter group 1 of group 1 of window 1
-				repeat with r in rows of theOutline
-					if (value of static text 1 of UI element 1 of r) is "$wanted" then
-						set selected of r to true
-						return "ok"
-					end if
-				end repeat
-				return "no such section: $wanted"
-			end tell
-		end tell
-	APPLESCRIPT
+	local lower
+	lower=$(echo "$wanted" | tr 'A-Z' 'a-z')
+	for s in "${SECTIONS[@]}"; do
+		if [ "$s" = "$lower" ]; then echo "$s"; return 0; fi
+	done
+	echo "no such section: $wanted (one of: ${SECTIONS[*]})" >&2
+	return 1
 }
 
 case "${1:-shot}" in
@@ -167,14 +173,21 @@ case "${1:-shot}" in
 	run)   build; relaunch ;;
 	shot)  build; relaunch; sleep 8; shot ;;
 	section)
-		# Screenshot one section of an already-running app, without rebuilding.
-		[ -n "${2:-}" ] || { echo "usage: $0 section <Name> [out.png]" >&2; exit 2; }
-		OUT="${3:-/tmp/tradeagents-$(echo "$2" | tr 'A-Z' 'a-z').png}"
-		osascript -e 'tell application "TradeAgents" to activate' >/dev/null 2>&1 || true
-		sleep 1
-		result=$(select_section "$2")
-		[ "$result" = "ok" ] || { echo "$result" >&2; exit 1; }
-		sleep 7
+		# Relaunch straight onto one section and screenshot it.
+		#
+		# Relaunching rather than navigating is not a compromise: it is the only way
+		# the requested section is guaranteed to be the one captured. See the note
+		# above resolve_section.
+		[ -n "${2:-}" ] || {
+			echo "usage: $0 section <name|index> [out.png]" >&2
+			echo "sections: ${SECTIONS[*]}" >&2
+			exit 2
+		}
+		sec=$(resolve_section "$2") || exit 1
+		OUT="${3:-/tmp/tradeagents-$sec.png}"
+		build
+		relaunch "$sec"
+		sleep 8
 		shot
 		;;
 	ios)

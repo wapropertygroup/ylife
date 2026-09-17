@@ -18,6 +18,67 @@ enum S {
     static let rates     = LocalizedString("Rates", "利率")
     static let sentiment = LocalizedString("Sentiment", "情绪")
     static let settings  = LocalizedString("Settings", "设置")
+    static let holdings13f = LocalizedString("13F", "13F")
+    static let fed         = LocalizedString("Fed", "美联储")
+    static let valuation   = LocalizedString("Valuation", "估值")
+    static let dca         = LocalizedString("DCA", "定投")
+
+    // MARK: - 13F
+
+    static let f13Title     = LocalizedString("Institutional holdings", "机构持仓")
+    static let f13Portfolio = LocalizedString("of portfolio", "占组合")
+    static let f13Filed     = LocalizedString("Filed", "申报日")
+    static let f13Period    = LocalizedString("Quarter end", "报告期")
+    static let f13Positions = LocalizedString("Positions", "持仓数")
+    static let f13Value     = LocalizedString("Reported value", "申报市值")
+    static let f13Top       = LocalizedString("Largest positions", "最大持仓")
+    static let f13New       = LocalizedString("new", "新建仓")
+    static let f13Added     = LocalizedString("added", "加仓")
+    static let f13Trimmed   = LocalizedString("trimmed", "减仓")
+    static let f13Unchanged = LocalizedString("unchanged", "未变动")
+    static let f13Lag       = LocalizedString(
+        "A 13F is filed up to 45 days after quarter end, so this is a snapshot of what was held then — not now.",
+        "13F 最晚在季度结束后 45 天申报，因此这是当时的持仓快照，并非当前持仓。")
+
+    // MARK: - Fed
+
+    static let fedTitle   = LocalizedString("Balance sheet", "资产负债表")
+    static let fedTotal   = LocalizedString("Total assets", "总资产")
+    static let fedNote    = LocalizedString(
+        "Weekly H.4.1 from FRED. Balance-sheet lines are in billions of dollars.",
+        "来自 FRED 的每周 H.4.1 数据。资产负债表项目单位为十亿美元。")
+    static let fedSeriesWALCL   = LocalizedString("Total assets", "总资产")
+    static let fedSeriesTREAST  = LocalizedString("Treasuries held", "持有国债")
+    static let fedSeriesWSHOMCB = LocalizedString("Mortgage-backed", "抵押贷款支持证券")
+    static let fedSeriesWRESBAL = LocalizedString("Reserve balances", "准备金余额")
+    static let fedSeriesRRPONTSYD = LocalizedString("Reverse repo", "逆回购")
+    static let fedSeriesWTREGEN = LocalizedString("Treasury account", "财政部一般账户")
+
+    // MARK: - Valuation
+
+    static let valTitle    = LocalizedString("Index multiples", "指数估值倍数")
+    static let valCape     = LocalizedString("S&P CAPE", "标普 CAPE")
+    static let valCapePct  = LocalizedString("CAPE percentile", "CAPE 历史分位")
+    static let valFwdSpx   = LocalizedString("S&P realised fwd", "标普实际远期")
+    static let valFwdQqq   = LocalizedString("QQQ forward", "纳指 100 远期")
+    static let valFwdSox   = LocalizedString("SOX forward", "费城半导体远期")
+    static let valFwdN225  = LocalizedString("Nikkei forward", "日经 225 远期")
+    static let valBanked   = LocalizedString("Banked forward P/E", "已记录的远期市盈率")
+    static let valBankedNote = LocalizedString(
+        "One row per day. Nothing sells back yesterday's consensus, so this series can only grow forward.",
+        "每日一行。没有任何数据源会回卖昨天的一致预期，因此该序列只能向前累积。")
+
+    // MARK: - DCA
+
+    static let dcaTitle   = LocalizedString("Contribution sizing", "定投金额调节")
+    static let dcaScored  = LocalizedString("scored", "已评分")
+    static let dcaCheap   = LocalizedString("Cheapest against own history", "相对自身历史最便宜")
+    static let dcaDear    = LocalizedString("Dearest against own history", "相对自身历史最贵")
+    static let dcaPerName = LocalizedString("per name", "每只金额")
+    static let dcaNotRank = LocalizedString(
+        "V is not a ranking across companies. Each is scored on its own model, so 70 means cheap for this company — not cheaper than the row above.",
+        "V 不是公司之间的横向排名。每家公司按各自的模型评分，因此 70 表示「相对该公司自身便宜」，而不是比上一行更便宜。")
+    static let dcaUnscored = LocalizedString("not scorable", "无法评分")
 
     // MARK: - Shared
 
@@ -282,4 +343,18 @@ enum S {
     static let notifyStale        = LocalizedString("Market data went stale", "行情数据已过期")
     static let dismissAll         = LocalizedString("Dismiss all", "全部忽略")
     static let noAlerts           = LocalizedString("Nothing to report", "暂无提醒")
+
+    // Fear & Greed bands. Held here rather than as literals on the enum so the chip
+    // under a Chinese headline is not the one English word on the screen.
+    static let fgExtremeFear  = LocalizedString("Extreme Fear", "极度恐慌")
+    static let fgFear         = LocalizedString("Fear", "恐慌")
+    static let fgNeutral      = LocalizedString("Neutral", "中性")
+    static let fgGreed        = LocalizedString("Greed", "贪婪")
+    static let fgExtremeGreed = LocalizedString("Extreme Greed", "极度贪婪")
+    static let fgReadings     = LocalizedString("daily readings", "个每日读数")
+
+    // Basis points. "bp" is not universal notation the way "%" is — the web app
+    // writes 基点 throughout, and an app reading "+12 bp" beside a page reading
+    // "+12 基点" is the same figure in two vocabularies.
+    static let basisPoints    = LocalizedString("bp", "基点")
 }

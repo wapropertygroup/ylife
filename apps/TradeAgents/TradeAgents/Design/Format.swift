@@ -26,6 +26,18 @@ enum Format {
         return value.formatted(.number.precision(.fractionLength(places)).locale(locale))
     }
 
+    /// A large whole number with thousands separators and no decimals.
+    ///
+    /// Used where the *unit* is not reliably known — a 13F's reported value is
+    /// labelled "millions" by the endpoint and is plainly not — so the figure is
+    /// shown as the filing states it rather than scaled into a suffix. Printing
+    /// "$299T" from a misread unit is a fabricated number; a grouped integer is
+    /// just the filing's own.
+    static func grouped(_ value: Double?) -> String {
+        guard let value else { return "—" }
+        return value.formatted(.number.precision(.fractionLength(0)).locale(locale))
+    }
+
     static func signedPercent(_ value: Double?, places: Int = 2) -> String {
         guard let value else { return "—" }
         let sign = value >= 0 ? "+" : ""
@@ -59,6 +71,30 @@ enum Format {
         guard let date = Self.dayParser.date(from: raw) else { return raw }
         return date.formatted(Date.FormatStyle(date: .abbreviated, time: .omitted)
             .locale(locale))
+    }
+
+    /// A short day label for a chart axis — month and day, no year.
+    /// Exists because Swift Charts formats a date axis from the *system* locale,
+    /// which this app's language toggle deliberately does not touch. A reader on
+    /// Chinese therefore got `Aug 23` under a fully translated chart title, on the
+    /// one element of the screen no `loc()` call reaches. The year is dropped
+    /// because the surrounding series already establishes it and a three-part date
+    /// is wide enough to force Charts to drop half the labels.
+    static func axisDay(_ date: Date) -> String {
+        date.formatted(.dateTime.month(.abbreviated).day().locale(locale))
+    }
+
+    /// Month and year, from a `yyyy-MM-dd` string.
+    ///
+    /// For the FOMC meeting cards, whose `label` the server builds with
+    /// `strftime("%b %Y")` — English on every request, with no locale to negotiate.
+    /// That label is derived entirely from the same date sent alongside it, so
+    /// rebuilding it here loses no information and gains the reader's language;
+    /// `nil` when the date will not parse, so the caller can fall back to the
+    /// server's string rather than print nothing.
+    static func monthYear(_ raw: String?) -> String? {
+        guard let raw, let date = Self.dayParser.date(from: raw) else { return nil }
+        return date.formatted(.dateTime.year().month(.abbreviated).locale(locale))
     }
 
     static func parseISO(_ raw: String?) -> Date? {

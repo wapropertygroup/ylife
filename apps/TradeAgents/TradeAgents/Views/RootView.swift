@@ -8,6 +8,10 @@ import SwiftUI
 enum AppSection: String, CaseIterable, Identifiable, Hashable {
     case agents
     case markets
+    case dca
+    case valuation
+    case holdings13f
+    case fed
     case rates
     case sentiment
     case settings
@@ -18,33 +22,71 @@ enum AppSection: String, CaseIterable, Identifiable, Hashable {
     /// environment; an enum has no access to one.
     var title: LocalizedString {
         switch self {
-        case .agents:    return S.agents
-        case .markets:   return S.markets
-        case .rates:     return S.rates
-        case .sentiment: return S.sentiment
-        case .settings:  return S.settings
+        case .agents:      return S.agents
+        case .markets:     return S.markets
+        case .dca:         return S.dca
+        case .valuation:   return S.valuation
+        case .holdings13f: return S.holdings13f
+        case .fed:         return S.fed
+        case .rates:       return S.rates
+        case .sentiment:   return S.sentiment
+        case .settings:    return S.settings
         }
     }
 
     var icon: String {
         switch self {
-        case .agents:    return "person.3.sequence.fill"
-        case .markets:   return "chart.line.uptrend.xyaxis"
-        case .rates:     return "building.columns"
-        case .sentiment: return "gauge.with.dots.needle.33percent"
-        case .settings:  return "gearshape"
+        case .agents:      return "person.3.sequence.fill"
+        case .markets:     return "chart.line.uptrend.xyaxis"
+        case .dca:         return "calendar.badge.plus"
+        case .valuation:   return "function"
+        case .holdings13f: return "building.2"
+        case .fed:         return "banknote"
+        case .rates:       return "building.columns"
+        case .sentiment:   return "gauge.with.dots.needle.33percent"
+        case .settings:    return "gearshape"
         }
     }
 
     @ViewBuilder
     var destination: some View {
         switch self {
-        case .agents:    AgentsView()
-        case .markets:   MarketsView()
-        case .rates:     RatesView()
-        case .sentiment: SentimentView()
-        case .settings:  SettingsView()
+        case .agents:      AgentsView()
+        case .markets:     MarketsView()
+        case .dca:         DcaView()
+        case .valuation:   ValuationView()
+        case .holdings13f: ThirteenFView()
+        case .fed:         FedView()
+        case .rates:       RatesView()
+        case .sentiment:   SentimentView()
+        case .settings:    SettingsView()
         }
+    }
+
+    /// The section named by `-TradeAgentsSection` or `$TRADEAGENTS_SECTION`, for
+    /// screenshot automation.
+    ///
+    /// This exists because there is no reliable way to drive the sidebar from
+    /// outside the process. SwiftUI's `List(selection:)` rows expose no `AXPress`
+    /// action, `set selected of row N to true` mutates the accessibility tree
+    /// without moving the actual selection, and a synthetic click at the row's own
+    /// AX coordinates is ignored too — all three *report success*, which is how a
+    /// screenshot of the wrong screen ends up labelled as the right one.
+    ///
+    /// So the section is chosen before the window exists, by the one mechanism that
+    /// cannot half-work: if the value names a section, that is the section that
+    /// renders. An unset or unrecognised value falls through to the normal default
+    /// rather than failing, so this is inert in a normal launch.
+    ///
+    /// Two channels because the launcher decides which is available. A sandboxed app
+    /// has to be started with `open`, which passes arguments but not environment —
+    /// and AppKit folds `--args -Key value` straight into `UserDefaults`. The
+    /// environment variable is kept for a direct `swift run`-style launch.
+    static var launchSection: AppSection? {
+        let raw = UserDefaults.standard.string(forKey: "TradeAgentsSection")
+            ?? ProcessInfo.processInfo.environment["TRADEAGENTS_SECTION"]
+        guard let raw else { return nil }
+        return AppSection(rawValue: raw.trimmingCharacters(in: .whitespaces))
     }
 }
 
@@ -57,7 +99,7 @@ enum AppSection: String, CaseIterable, Identifiable, Hashable {
 /// wants a tab bar.
 struct RootView: View {
     @Environment(Localization.self) private var loc
-    @State private var selection: AppSection = .agents
+    @State private var selection: AppSection = AppSection.launchSection ?? .agents
     @State private var session = Session()
 
     var body: some View {
