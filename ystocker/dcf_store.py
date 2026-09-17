@@ -119,6 +119,55 @@ def _num(value: Any) -> Optional[float]:
     return out if out == out and abs(out) != float("inf") else None
 
 
+def _factor_values(value: Any) -> dict[str, float]:
+    """Validate a ``{factor: current multiple}`` map, or raise.
+
+    **This is the override to reach for.** It replaces the *"Now"* column — the
+    multiple itself, 31.23 rather than "the 11th percentile" — and the engine
+    then ranks it against that factor's own reconstructed history exactly as it
+    ranks a measured one. So the rank stays *measured*: only the input is
+    hand-set, and the distribution it is judged against is untouched.
+
+    That is a materially weaker claim than :func:`_factor_percentiles`, which
+    asserts the rank outright. A person knows what a P/E is; almost nobody knows
+    where it sits in five years of weekly history, and the engine does. Prefer
+    this wherever a series exists.
+
+    Values must be positive: every factor here is a price-to-something multiple
+    or a yield, and a negative one is the absence of a measurement rather than a
+    cheap reading — which is the same rule :func:`ystocker.dca_history.reconstruct`
+    applies when it skips rather than clamps a negative denominator.
+    """
+    if value in (None, "", {}):
+        return {}
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except ValueError as exc:
+            raise ValidationError("Factor values must be a JSON object.") from exc
+    if not isinstance(value, Mapping):
+        raise ValidationError("Factor values must be a JSON object.")
+
+    from ystocker.dca import DIRECTION
+
+    out: dict[str, float] = {}
+    for key, raw in value.items():
+        factor = str(key).strip()
+        if factor not in DIRECTION:
+            raise ValidationError(
+                f"Unknown factor {factor!r}. Known factors: "
+                f"{', '.join(sorted(DIRECTION))}.")
+        num = _num(raw)
+        if num is None:
+            continue
+        if num <= 0:
+            raise ValidationError(
+                f"{factor} must be a positive multiple (got {num:g}). "
+                "A negative reading is an absent measurement, not a cheap one.")
+        out[factor] = round(num, 4)
+    return out
+
+
 def _factor_percentiles(value: Any) -> dict[str, float]:
     """Validate a ``{factor: percentile}`` map, or raise.
 
@@ -213,13 +262,27 @@ def validate(ticker: str, payload: Mapping[str, Any]) -> dict[str, Any]:
             raise ValidationError("The bull case cannot be below the base case.")
 
     has_assumptions = "wacc" in row or "terminal_growth" in row
+    values = _factor_values(payload.get("values"))
+    if values:
+        row["values"] = values
     factors = _factor_percentiles(payload.get("factors"))
     if factors:
         row["factors"] = factors
-    if not has_values and not has_assumptions and "w_dcf" not in row and not factors:
+    # A factor set both ways is a contradiction rather than a belt-and-braces:
+    # the value would be re-ranked to one percentile and the percentile would
+    # assert another, and whichever the code happened to apply second would win
+    # silently. Refused while the person who typed both is still looking.
+    both = sorted(set(values) & set(factors))
+    if both:
+        raise ValidationError(
+            f"Give a value or a percentile for {', '.join(both)}, not both. "
+            "A value is re-ranked against the real history; a percentile "
+            "replaces the rank outright.")
+    if (not has_values and not has_assumptions and "w_dcf" not in row
+            and not factors and not values):
         raise ValidationError(
             "Nothing to store: give fair values, assumptions, a DCF weight, "
-            "or a factor percentile.")
+            "a factor value, or a factor percentile.")
 
     # §13 refuses a valuation whose WACC is not meaningfully above g. Caught
     # here as well as in `dcf`, because an override that can never score is
@@ -346,15 +409,18 @@ def _ddb_rows() -> dict[str, dict[str, Any]]:
                 # `factors` is a map, and everything else here goes to DynamoDB
                 # as a string — so it round-trips as JSON text rather than as a
                 # second storage convention in the same row.
-                if item.get("factors"):
+                for mapfield in ("factors", "values"):
+                    if not item.get(mapfield):
+                        continue
                     try:
-                        parsed = json.loads(str(item["factors"]))
+                        parsed = json.loads(str(item[mapfield]))
                         if isinstance(parsed, dict):
-                            row["factors"] = {
+                            row[mapfield] = {
                                 k: v for k, v in parsed.items()
                                 if isinstance(v, (int, float))}
                     except ValueError:
-                        log.warning("dcf_store: unreadable factors for %s", symbol)
+                        log.warning("dcf_store: unreadable %s for %s",
+                                    mapfield, symbol)
                 row["updated_at"] = _num(item.get("updated_at")) or 0.0
                 out[symbol] = row
             if "LastEvaluatedKey" not in resp:
