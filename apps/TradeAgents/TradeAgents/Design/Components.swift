@@ -1,9 +1,67 @@
+import Charts
 import SwiftUI
 
 // Shared chrome. These live here rather than as private types inside one screen
 // because the second screen that needs a card or a freshness badge is where the two
 // silently drift apart — and a freshness badge that means something different on two
 // screens is worse than not having one.
+
+extension View {
+    /// The y-axis for a horizontal bar chart whose categories are names.
+    ///
+    /// Exists because the obvious spelling is wrong in a way that still renders.
+    /// `.chartYAxis { AxisMarks(position: .leading) }` draws the category labels
+    /// *inside* the plot area, directly on top of the bars: on the 13F screen every
+    /// ticker sat across its own bar and the plot began at the card's edge. The
+    /// chart looked populated and was unreadable, which is why it survived a build
+    /// and a compile-check and was only caught by looking at a screenshot.
+    ///
+    /// Two things fix it and both are needed. `preset: .aligned` reserves a gutter
+    /// outside the plot rather than letting the label overlap it, and the explicit
+    /// `AxisValueLabel` gives Swift Charts a view to *measure* when sizing that
+    /// gutter — with the default label it can resolve to nothing and the bars run
+    /// back under the text.
+    ///
+    /// Only the y-axis, deliberately: the three charts using this plot percentages,
+    /// percentages and a 0-100 score, so folding an x-format in here would put a `%`
+    /// on the DCA chart's V scores.
+    func categoryNameAxis() -> some View {
+        chartYAxis {
+            AxisMarks(preset: .aligned, position: .leading) { value in
+                AxisValueLabel(horizontalSpacing: 8) {
+                    if let name = value.as(String.self) {
+                        Text(name)
+                            .font(.caption2)
+                            .foregroundStyle(Palette.secondaryText)
+                            .lineLimit(1)
+                    }
+                }
+            }
+        }
+    }
+
+    /// An x-axis of dates, labelled in the reader's language.
+    ///
+    /// Swift Charts renders a date axis through the system locale, so the labels are
+    /// the one part of a chart that ignores the app's language toggle entirely — a
+    /// Chinese page showing `Aug 23`. See `Format.axisDay`.
+    ///
+    /// Only for spans of weeks or months. A multi-year series (the Fed balance sheet)
+    /// is left on the automatic formatter, which resolves to bare years — locale
+    /// neutral already, and far more useful there than twenty labels reading 1月1日.
+    func localizedDateAxis(desiredCount: Int = 4) -> some View {
+        chartXAxis {
+            AxisMarks(values: .automatic(desiredCount: desiredCount)) { value in
+                AxisGridLine().foregroundStyle(Palette.border)
+                AxisValueLabel {
+                    if let date = value.as(Date.self) {
+                        Text(Format.axisDay(date)).foregroundStyle(Palette.mutedText)
+                    }
+                }
+            }
+        }
+    }
+}
 
 /// A bordered surface, matching the web app's card.
 struct Card<Content: View>: View {

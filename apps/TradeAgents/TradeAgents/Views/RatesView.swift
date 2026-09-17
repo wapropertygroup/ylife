@@ -198,17 +198,23 @@ private struct MeetingCard: View {
         }
     }
 
+    /// The meeting's month, in the reader's language.
+    ///
+    /// Derived from `date` rather than shown from `label`: the server builds that
+    /// with `strftime("%b %Y")`, so it is English whatever the reader chose, and it
+    /// sat directly above a correctly localized `2026年10月27日`. The server string
+    /// is still the fallback for a date that will not parse.
     private var title: String {
+        if let derived = Format.monthYear(meeting.date) { return derived }
         let label = meeting.label?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return label.isEmpty ? Format.day(meeting.date) : label
     }
 
-    /// The decision date under the month label. Suppressed when the server sent no
-    /// label, because the title has then already fallen back to this same string and
-    /// the card would print the date twice.
+    /// The decision date under the month label. Suppressed when the title has fallen
+    /// all the way back to that same date string, so the card does not print it twice.
     private var subtitle: String? {
-        let label = meeting.label?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return label.isEmpty ? nil : Format.day(meeting.date)
+        let day = Format.day(meeting.date)
+        return title == day ? nil : day
     }
 
     /// `note` arrives as `""` far more often than as `nil` — the server writes an empty
@@ -224,7 +230,7 @@ private struct MeetingCard: View {
     private var changeLabel: String {
         guard let bp = meeting.changeBp else { return "—" }
         let sign = bp > 0 ? "+" : ""
-        return sign + Format.number(bp, places: 1) + " bp"
+        return sign + Format.number(bp, places: 1) + " " + loc(S.basisPoints)
     }
 
     /// Cut / hold / hike, dropping whichever the server did not send.
@@ -334,7 +340,9 @@ private struct OutcomeRow: View {
             if let steps = outcome.steps {
                 // Resolved at the call site for the same reason the direction labels
                 // are: `stepsLabel` is a pure string builder with no environment.
-                Chip(text: Self.stepsLabel(steps, noChange: loc(S.noChange)))
+                Chip(text: Self.stepsLabel(steps,
+                                           noChange: loc(S.noChange),
+                                           bp: loc(S.basisPoints)))
             }
             Spacer()
             Text(Format.percent(outcome.prob, places: 1))
@@ -358,10 +366,10 @@ private struct OutcomeRow: View {
     /// `steps` is a signed count of 25bp moves away from *today's* range, so the sign is
     /// the direction and has to survive into the label: "25 bp" on its own does not say
     /// whether the Fed cut or hiked to get there.
-    private static func stepsLabel(_ steps: Int, noChange: String) -> String {
+    private static func stepsLabel(_ steps: Int, noChange: String, bp: String) -> String {
         guard steps != 0 else { return noChange }
         let sign = steps > 0 ? "+" : ""
-        return sign + Format.number(Double(steps * 25), places: 0) + " bp"
+        return sign + Format.number(Double(steps * 25), places: 0) + " " + bp
     }
 }
 

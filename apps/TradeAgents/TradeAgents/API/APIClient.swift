@@ -87,6 +87,21 @@ actor APIClient {
     func fedwatch() async throws -> FedWatch { try await get("/api/fedwatch") }
     func fearGreed() async throws -> FearGreed { try await get("/api/fear-greed") }
 
+    /// The research dashboards. All four are public and unauthenticated, exactly
+    /// as their web pages are, so none needs a session.
+    func fed() async throws -> FedResponse { try await get("/api/fed") }
+    func multiples() async throws -> Multiples { try await get("/api/multiples") }
+    func dca() async throws -> DcaList { try await get("/api/dca") }
+
+    /// One fund's latest 13F. The slug is the fund name lowercased with spaces
+    /// hyphenated — percent-encoded here anyway, because a name with a dot in it
+    /// ("T. Rowe Price") would otherwise produce a path segment the router reads
+    /// differently from the one intended.
+    func thirteenF(slug: String) async throws -> ThirteenF {
+        let safe = slug.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? slug
+        return try await get("/api/13f/\(safe)")
+    }
+
     // MARK: - Agents
 
     func showcase() async throws -> ShowcaseList { try await get("/api/agents/showcase") }
