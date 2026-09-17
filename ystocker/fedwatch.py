@@ -90,7 +90,35 @@ _CACHE_TTL = 4 * 60 * 60  # 4 hours
 # a field, an existing cache still looks fresh, so the API happily serves a
 # payload the new page cannot read and charts render empty with no explanation.
 # Same idea as _YIELD_CURVE_CACHE_VER in routes.py.
-_CACHE_VER = "v2"
+_CACHE_VER = "v3"
+
+# --- Target-range probe ----------------------------------------------------
+#
+# The two halves of this payload have opposite refresh needs. The ZQ curve
+# reprices all session and wants the 4-hour TTL above. The *target range* is a
+# fact rather than a forecast, changes eight times a year, and is two small
+# FRED CSVs — and on 2026-09-17 the page showed 3.50–3.75 for hours after the
+# Fed had moved to 3.75–4.00, because the payload happened to be built ninety
+# minutes before FRED published the new row. The range is the one number on
+# that card a reader is entitled to treat as settled, so it gets its own,
+# shorter cycle.
+#
+# What the probe must NOT do is patch the range into a cached payload. `lower`
+# and `upper` are not merely displayed: they set the baseline `_expected_path`
+# projects every meeting from, and they are snapshotted into
+# ystocker-fedwatch-history as base_lower/base_upper so a reader can re-base the
+# implied rates. Overwriting them alone would render a new range above
+# probabilities computed from the old one — and then write that pairing into a
+# series that cannot be recomputed. So a changed range invalidates the *whole*
+# payload and triggers a normal full rebuild; the probe only decides *when*.
+_RANGE_PROBE_INTERVAL = 30 * 60      # 30 min: catches anything the calendar misses
+_RANGE_PROBE_INTERVAL_HOT = 5 * 60   # on a day a change can actually land
+# How long after a decision to stay on the fast cycle. A decision on day D takes
+# effect on D+1, but FRED can publish that row late, so the window is generous:
+# probing four extra days costs a handful of CSV reads, and missing the change
+# means the wrong policy rate until the next 4-hour rebuild.
+_HOT_WINDOW_DAYS = 4
+
 
 # Futures month codes: Jan..Dec
 _MONTH_CODES = "FGHJKMNQUVXZ"
@@ -276,6 +304,76 @@ def _latest_fred_value(series_id: str) -> Optional[float]:
     """Return the most recent non-empty observation of a FRED series."""
     series = _fred_series(series_id)
     return series[-1][1] if series else None
+
+
+def probe_target_range() -> Optional[tuple[float, float]]:
+    """Fetch just the current target range. Two small CSVs, nothing else.
+
+    Deliberately *not* ``_fetch_current_rate``: that also pulls EFFR and DFEDTAR
+    and builds the step history, which is the right cost once every four hours
+    and the wrong one every thirty minutes. This is the cheapest question that
+    answers "has the Fed moved?".
+
+    Returns ``None`` on any failure, which callers must read as "don't know"
+    rather than "unchanged" — a FRED outage must not be able to trigger a
+    rebuild, nor to suppress one.
+    """
+    lower = _fred_series("DFEDTARL")
+    upper = _fred_series("DFEDTARU")
+    if not lower or not upper:
+        return None
+    return (lower[-1][1], upper[-1][1])
+
+
+def _in_effective_window(schedule: list[str], today: Optional[date] = None) -> bool:
+    """True when a target-range change could plausibly land in the next hours.
+
+    *schedule* is the FOMC decision dates the payload was built with, as ISO
+    strings. A decision on day D takes effect on D+1, so the window opens on the
+    decision itself and stays open ``_HOT_WINDOW_DAYS`` afterwards to absorb a
+    late FRED publication or a holiday.
+
+    An unparseable entry is skipped rather than raising: this only decides a
+    polling interval, and the 30-minute baseline is the backstop.
+    """
+    today = today or date.today()
+    for raw in schedule or []:
+        try:
+            decided = date.fromisoformat(raw)
+        except (TypeError, ValueError):
+            continue
+        if 0 <= (today - decided).days <= _HOT_WINDOW_DAYS:
+            return True
+    return False
+
+
+def _probe_interval(payload: Optional[dict[str, Any]],
+                    today: Optional[date] = None) -> float:
+    """Seconds until the next target-range probe."""
+    schedule = (payload or {}).get("schedule") or []
+    if _in_effective_window(schedule, today=today):
+        return _RANGE_PROBE_INTERVAL_HOT
+    return _RANGE_PROBE_INTERVAL
+
+
+def range_changed(payload: Optional[dict[str, Any]],
+                  probed: Optional[tuple[float, float]]) -> bool:
+    """True when *probed* disagrees with the range *payload* was built on.
+
+    Both unknowns are treated as "no": a probe that failed says nothing, and a
+    payload with no range recorded is already being rebuilt for other reasons.
+    Rounded before comparing because these arrive as floats from a CSV and
+    3.75 != 3.7500000001 would rebuild the payload every thirty minutes forever.
+    """
+    if not probed or not payload:
+        return False
+    current = payload.get("current") or {}
+    have_lo, have_hi = current.get("lower"), current.get("upper")
+    if have_lo is None or have_hi is None:
+        return False
+    return (round(have_lo, 4), round(have_hi, 4)) != (round(probed[0], 4),
+                                                      round(probed[1], 4))
+
 
 
 def _rate_change_points(
@@ -688,6 +786,14 @@ def _build_payload() -> dict[str, Any]:
         },
         "meetings": meetings_out,
         "ranges": ranges,
+        # Every scheduled decision date this build saw, not just the upcoming
+        # ones in `meetings`. The target-range probe needs to know whether a
+        # decision has *just happened* in order to poll faster, and `meetings`
+        # cannot tell it that — a decision is dropped from that list the moment
+        # it is in the past, which is exactly when the new range is landing.
+        # Carried here so the probe costs no federalreserve.gov scrape of its
+        # own; `fetch_fomc_meetings()` is not memoised.
+        "schedule": [d.isoformat() for d in scheduled],
         # Past target-range steps, oldest first. Recomputable from FRED at any
         # time, so this is cache and deliberately *not* the DynamoDB series
         # below — snapshotting it daily would start an empty chart today and take
@@ -707,11 +813,24 @@ def _build_payload() -> dict[str, Any]:
 _cache_lock = threading.Lock()
 _cache_data: Optional[dict[str, Any]] = None
 _cache_ts: Optional[float] = None
+# mtime of the disk copy `_cache_data` came from, or 0.0 if it was built in this
+# process. See `_disk_mtime` for why this is tracked rather than compared against
+# `_cache_ts`: the file is always written a beat *after* the payload is stamped,
+# so any epsilon against `_ts` either re-reads on every request or never fires.
+_cache_mtime: float = 0.0
 
 _warming = False
 _warming_lock = threading.Lock()
 
 _fetch_in_progress = threading.Event()
+
+
+def _disk_mtime() -> float:
+    """mtime of the cache file, or 0.0 if it cannot be read. One stat(), no parse."""
+    try:
+        return _CACHE_FILE.stat().st_mtime
+    except OSError:
+        return 0.0
 
 
 def _load_disk_cache(ignore_ttl: bool = False) -> Optional[dict[str, Any]]:
@@ -1135,19 +1254,44 @@ def get_fedwatch_data(force: bool = False) -> dict[str, Any]:
     arrives mid-refresh gets stale data immediately instead of blocking a
     gunicorn worker.
     """
-    global _cache_data, _cache_ts
+    global _cache_data, _cache_ts, _cache_mtime
 
     with _cache_lock:
         now = time.time()
-        if not force and _cache_data and _cache_ts and (now - _cache_ts) < _CACHE_TTL:
-            return _cache_data
+        held = _cache_data
+        held_ts = _cache_ts
+        held_mtime = _cache_mtime
+
+    if not force and held and held_ts and (now - held_ts) < _CACHE_TTL:
+        # Under gunicorn --preload the refresh thread runs only in the master, so
+        # a worker forks a snapshot and — without this — serves it for the entire
+        # four-hour TTL, never once looking at disk. That makes the whole
+        # target-range probe pointless from a reader's seat: the master would
+        # rebuild within minutes of a Fed move and the workers would go on
+        # answering with the old range until they happened to be recycled.
+        #
+        # The gate is one stat() per request; the payload is only re-read and
+        # re-parsed when the file has actually been rewritten since we loaded it.
+        if _disk_mtime() > held_mtime:
+            disk = _load_disk_cache()
+            if disk and (disk.get("_ts") or 0) > (held_ts or 0):
+                log.info("FedWatch: picked up a newer payload from disk "
+                         "(built %.0fs after ours)", (disk["_ts"] - held_ts))
+                with _cache_lock:
+                    _cache_data = disk
+                    _cache_ts = disk.get("_ts", time.time())
+                    _cache_mtime = _disk_mtime()
+                return disk
+        return held
 
     if not force:
+        mtime = _disk_mtime()
         disk = _load_disk_cache()
         if disk:
             with _cache_lock:
                 _cache_data = disk
                 _cache_ts = disk.get("_ts", time.time())
+                _cache_mtime = mtime
             return disk
 
     if not force and _fetch_in_progress.is_set():
@@ -1166,6 +1310,10 @@ def get_fedwatch_data(force: bool = False) -> dict[str, Any]:
                 _cache_data = fresh
                 _cache_ts = fresh["_ts"]
             _save_disk_cache(fresh)
+            # After our own write, so a later stat() does not read as somebody
+            # else's rebuild and send us back to disk for what we already hold.
+            with _cache_lock:
+                _cache_mtime = _disk_mtime()
             # Never let the series write cost us the payload: every store path
             # below already swallows its own errors, so this guards only against
             # a malformed payload reaching the normaliser.
@@ -1241,13 +1389,19 @@ def start_background_thread() -> None:
     from ystocker import warmup
 
     def _loop() -> None:
+        # Starts at zero, not at now, so the first probe fires on the first pass.
+        # A box that boots the morning after a decision must not wait out a whole
+        # interval before noticing the range it warmed from is already wrong.
+        last_probe = 0.0
         try:
+            mtime = _disk_mtime()
             disk = _load_disk_cache()
             if disk:
-                global _cache_data, _cache_ts
+                global _cache_data, _cache_ts, _cache_mtime
                 with _cache_lock:
                     _cache_data = disk
                     _cache_ts = disk.get("_ts", time.time())
+                    _cache_mtime = mtime
                 log.info("FedWatch background: memory cache warmed from disk (%d meetings)",
                          len(disk.get("meetings", [])))
             else:
@@ -1258,25 +1412,63 @@ def start_background_thread() -> None:
             log.warning("FedWatch background: startup warm failed: %s", exc)
 
         while True:
-            # Sleep until the payload we actually hold expires, not a full TTL
-            # from startup. Warming from a disk cache that was already 3h old
-            # and then sleeping 4h left a ~3h window where every request saw a
-            # stale cache, and the page rendered blank charts under a "data as
-            # of" header. Re-derived each pass so a failed refresh retries soon
+            # Two clocks, not one. The full rebuild stays on the 4-hour TTL — it
+            # is the ZQ curve fetch and it is the expensive half. The target-range
+            # probe runs far more often and costs two small CSVs; it does not
+            # shorten the TTL, it only detects the one event that should cut a
+            # cycle short. Whichever is due first decides how long we sleep.
+            #
+            # The full-refresh deadline is re-derived each pass rather than
+            # counted from startup. Warming from a disk cache that was already 3h
+            # old and then sleeping 4h left a ~3h window where every request saw
+            # a stale cache, and the page rendered blank charts under a "data as
+            # of" header. Re-deriving also means a failed refresh retries soon
             # rather than waiting another whole TTL.
             with _cache_lock:
                 ts = _cache_ts
+                held = _cache_data
             age = (time.time() - ts) if ts else _CACHE_TTL
-            sleep_for = max(60.0, _CACHE_TTL - age)
-            log.info("FedWatch background: next refresh in %.0f min (cache age %.0f min)",
-                     sleep_for / 60, age / 60)
+            full_due = max(0.0, _CACHE_TTL - age)
+            probe_every = _probe_interval(held)
+            probe_due = max(0.0, probe_every - (time.time() - last_probe))
+            sleep_for = max(60.0, min(full_due, probe_due))
+            log.info("FedWatch background: sleeping %.0f min "
+                     "(full refresh in %.0f min, probe in %.0f min, cache age %.0f min)",
+                     sleep_for / 60, full_due / 60, probe_due / 60, age / 60)
             time.sleep(sleep_for)
+
+            if full_due <= sleep_for:
+                try:
+                    log.info("FedWatch background: refreshing (TTL)")
+                    with warmup.cold_build('fedwatch'):
+                        refresh_cache()
+                except Exception as exc:
+                    log.warning("FedWatch background: refresh failed: %s", exc)
+                # A full rebuild has just re-read the range, so the probe clock
+                # restarts with it rather than firing again seconds later.
+                last_probe = time.time()
+                continue
+
+            # Probe only. A failure returns None and is treated as "don't know":
+            # it must not trigger a rebuild, and it must not suppress the next
+            # attempt either, so the clock still advances.
+            last_probe = time.time()
             try:
-                log.info("FedWatch background: refreshing")
-                with warmup.cold_build('fedwatch'):
-                    refresh_cache()
-            except Exception as exc:
-                log.warning("FedWatch background: refresh failed: %s", exc)
+                probed = probe_target_range()
+            except Exception as exc:  # noqa: BLE001 - the curve is the page
+                log.warning("FedWatch background: target-range probe failed: %s", exc)
+                continue
+            if range_changed(held, probed):
+                got = (held.get("current") or {})
+                log.warning("FedWatch background: target range moved %s–%s -> %.2f–%.2f "
+                            "— rebuilding ahead of TTL",
+                            got.get("lower"), got.get("upper"), probed[0], probed[1])
+                try:
+                    with warmup.cold_build('fedwatch'):
+                        refresh_cache()
+                except Exception as exc:
+                    log.warning("FedWatch background: rebuild after probe failed: %s", exc)
+                last_probe = time.time()
 
     t = threading.Thread(target=_loop, name="fedwatch-background-refresh", daemon=True)
     t.start()
