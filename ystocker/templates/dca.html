@@ -46,6 +46,11 @@
     background: rgba(99,102,241,0.12); white-space: nowrap;
   }
   .factor-row.overridden td:first-child { box-shadow: inset 3px 0 0 var(--t-accent); }
+  /* The displaced value, kept beside its replacement. Struck rather than
+     removed: what a hand-entered rank overrode is part of reading it. */
+  .ov-was { text-decoration: line-through; color: var(--t-ink-dim); opacity: .75; }
+  .ov-arrow { margin: 0 4px; color: var(--t-ink-dim); }
+  .ov-now { color: var(--t-accent-ink); font-weight: 600; }
   .band-cell { padding: 6px 10px; border-top: 1px solid var(--t-line); font-size: 12px; }
   .well { background: var(--dca-well); border: 1px solid var(--t-line); border-radius: 10px; }
   .factor-btn {
@@ -105,6 +110,11 @@
         <div id="vScore" class="text-4xl font-bold">—</div>
         <div id="vBand" class="text-sm font-medium"></div>
       </div>
+      <!-- The tag is a child span, not this div. Putting `display:inline-block`
+           on .ov-tag would sit at the same specificity as Tailwind's `.hidden`
+           and win the cascade from a body <style>, so the element could never
+           be hidden — the same trap the assets table hit with `w-full`. -->
+      <div id="vOverridden" class="hidden mt-1"></div>
       <div class="pct-track mt-3"><div id="vFill" class="pct-fill" style="width:0"></div></div>
       <div class="flex justify-between text-[10px] text-slate-500 mt-1">
         <span data-i18n="dca.axis_dear">0 · dear</span><span data-i18n="dca.axis_cheap">100 · cheap</span>
@@ -475,6 +485,22 @@ function renderScore(d) {
   band.textContent = d.band ? (I18n.t('dca.band_' + d.band) || d.band) : '';
   band.style.color = pctColor(v == null ? null : 100 - v);
 
+  // The headline inherits the tag. A V built partly on hand-entered ranks is
+  // not the same claim as one built entirely on measurement, and marking only
+  // the individual rows leaves the number at the top of the page — the one
+  // people actually read and act on — looking fully derived.
+  const vOv = document.getElementById('vOverridden');
+  const names = d.overridden || [];
+  if (names.length) {
+    vOv.innerHTML = '<span class="ov-tag" style="margin-left:0" title="'
+      + esc(I18n.t('dca.v_ov_tip') || '') + '">'
+      + esc((I18n.t('dca.f_ov') || 'entered') + ' · ' + names.map(tf).join(', '))
+      + '</span>';
+    vOv.classList.remove('hidden');
+  } else {
+    vOv.classList.add('hidden');
+  }
+
   document.getElementById('modelName').textContent = I18n.t('dca.model_' + d.model) || d.model;
   const why = I18n.t('dca.why_' + d.model_reason);
   document.getElementById('modelWhy').textContent = why ? '· ' + why : '';
@@ -604,15 +630,21 @@ function renderFactors(d) {
     const now = pts && pts.length ? pts[pts.length - 1][1] : null;
     // A hand-typed rank and a reconstructed one are the same number on screen
     // and very different claims, so an overridden row is marked rather than
-    // blending in. Editing is elsewhere; this is only the label.
+    // blending in — and the value it replaced is shown beside it. Hiding what
+    // was displaced conceals the size of the intervention: 11.1 → 62.0 is an
+    // argument with the data, "— → 62.0" is filling a gap.
     const mark = f.overridden
       ? ` <span class="ov-tag" title="${esc(I18n.t('dca.f_ov_tip') || '')}">${
           esc(I18n.t('dca.f_ov') || 'entered')}</span>`
       : '';
+    const rawCell = f.overridden
+      ? `<span class="ov-was">${f.measured_pct == null ? '—' : fmtPct(f.measured_pct)}</span>`
+        + `<span class="ov-arrow">→</span><span class="ov-now">${fmtPct(f.raw_pct)}</span>`
+      : fmtPct(f.raw_pct);
     rows.push(`<tr class="factor-row${f.overridden ? ' overridden' : ''}">
       <td class="font-medium">${esc(tf(f.factor))}${mark}</td>
       <td class="text-right font-mono">${now == null ? '—' : now.toFixed(2)}</td>
-      <td class="text-right font-mono text-slate-500">${fmtPct(f.raw_pct)}</td>
+      <td class="text-right font-mono text-slate-500">${rawCell}</td>
       <td>
         <div class="flex items-center gap-2">
           <div class="pct-track flex-1"><div class="pct-fill" style="width:${f.oriented_pct}%;background:${pctColor(f.oriented_pct)}"></div></div>

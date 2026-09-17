@@ -559,7 +559,8 @@ def pick_model(ticker: str,
 
 def expensiveness(percentiles: Mapping[str, Optional[float]],
                   weights: Mapping[str, float],
-                  overridden: Optional[Iterable[str]] = None) -> dict[str, Any]:
+                  overridden: Optional[Iterable[str]] = None,
+                  measured: Optional[Mapping[str, Optional[float]]] = None) -> dict[str, Any]:
     """Fold per-factor percentiles into one expensiveness score.
 
     *percentiles* are **raw** percentiles of the metric itself -- the caller does
@@ -582,8 +583,16 @@ def expensiveness(percentiles: Mapping[str, Optional[float]],
     measured. It changes no arithmetic — it is carried onto each row so the page
     can mark them, because a hand-typed rank and a reconstructed one are the same
     number on screen and very different claims.
+
+    *measured* carries what the reconstruction found for those factors *before*
+    the override replaced it, so the page can show both. Substituting a value and
+    discarding the one it replaced hides the size of the intervention: a hand-set
+    62 over a measured 11 is a different act from a hand-set 62 over nothing at
+    all, and only the second is filling a gap. ``None`` means nothing was
+    measured, which is the usual reason to override in the first place.
     """
     hand = frozenset(overridden or ())
+    before = dict(measured or {})
     kept: list[dict[str, Any]] = []
     dropped: list[str] = []
     surviving = 0.0
@@ -605,7 +614,10 @@ def expensiveness(percentiles: Mapping[str, Optional[float]],
         kept.append({"factor": factor, "raw_pct": round(raw, 2),
                      "oriented_pct": round(oriented, 2),
                      "base_weight": round(float(weight), 4),
-                     "overridden": factor in hand})
+                     "overridden": factor in hand,
+                     "measured_pct": (round(float(before[factor]), 2)
+                                      if factor in hand and _finite(before.get(factor))
+                                      else None)})
 
     share = (surviving / total) if total > 0 else 0.0
     enough = bool(kept) and share >= MIN_SURVIVING_WEIGHT
@@ -776,7 +788,8 @@ def evaluate(*, ticker: str,
              position_pct: Optional[float] = None,
              dcf: Optional[Mapping[str, Any]] = None,
              w_dcf: Optional[float] = None,
-             overridden: Optional[Iterable[str]] = None) -> dict[str, Any]:
+             overridden: Optional[Iterable[str]] = None,
+             measured: Optional[Mapping[str, Optional[float]]] = None) -> dict[str, Any]:
     """One ticker, end to end: percentiles in, a sized contribution out.
 
     The whole chain in one call so the page and the tests exercise the same path.
@@ -797,7 +810,7 @@ def evaluate(*, ticker: str,
         model_key, reason = pick_model(ticker, sector, industry)
 
     weights = TEMPLATES[model_key]
-    breakdown = expensiveness(percentiles, weights, overridden)
+    breakdown = expensiveness(percentiles, weights, overridden, measured)
     v_rel = v_score(breakdown["E"])
 
     v_dcf = (dcf or {}).get("V")

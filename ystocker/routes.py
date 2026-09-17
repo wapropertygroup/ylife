@@ -1152,12 +1152,17 @@ def _dca_score(symbol: str, payload: dict, base: float, *,
     # a semiconductor template left with only P/FCF and EV/EBITDA: 30% against a
     # 50% floor, so five factors and the whole score came back empty.
     #
-    # Which ones were supplied travels with them, because a hand-typed rank and
-    # a reconstructed one are the same number on screen and different claims.
+    # Which ones were supplied travels with them, and so does what they
+    # replaced. Substituting a value and discarding the one it replaced hides
+    # the size of the intervention: a hand-set 62 over a measured 11 is a
+    # different act from a hand-set 62 over nothing, and only the second is
+    # filling a gap.
     overridden: list[str] = []
+    measured: dict = {}
     if override and isinstance(override.get("factors"), dict):
         for factor, pct in override["factors"].items():
             if isinstance(pct, (int, float)):
+                measured[factor] = percentiles.get(factor)
                 percentiles[factor] = float(pct)
                 overridden.append(factor)
 
@@ -1197,6 +1202,7 @@ def _dca_score(symbol: str, payload: dict, base: float, *,
         dcf=dcf_payload,
         w_dcf=w_dcf,
         overridden=overridden,
+        measured=measured,
     )
     return result, peer, drift, position
 

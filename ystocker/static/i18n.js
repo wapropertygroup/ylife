@@ -1119,6 +1119,8 @@ const I18n = (() => {
     'dca.f_ov_tip':      { en: 'This percentile was entered by hand, not measured from the reconstructed history.',
                            zh: '该分位为人工录入，并非由重建的历史数据测算得出。' },
     'dca.f_ov_title':    { en: 'Factor percentiles', zh: '因子分位' },
+    'dca.v_ov_tip':      { en: 'This score rests partly on hand-entered percentiles. The factor table shows each one beside the value it replaced.',
+                           zh: '该分数部分基于人工录入的分位。因子表中会同时显示每一项被替换掉的原始值。' },
     'dca.f_ov_note':     { en: '0-100, where higher means dearer. Leave blank to use the measured value. Use these where a factor has no reconstructable history — a company with negative earnings has no P/E series to rank against, and enough missing factors stop the whole ticker scoring.',
                            zh: '取值 0–100，数值越高表示越贵。留空则使用测算值。当某个因子没有可重建的历史时使用它 —— 例如亏损公司没有市盈率序列可供排名，而缺失的因子一旦过多，整只股票就无法评分。' },
     'dca.general_dcf':   { en: 'With no usable DCF, w<sub>dcf</sub> is 0 and V is the relative score alone — the missing branch is never filled with a neutral 50, because a made-up middle dilutes the evidence that does exist.',
