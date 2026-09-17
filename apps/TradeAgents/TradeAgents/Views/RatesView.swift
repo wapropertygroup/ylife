@@ -1,3 +1,4 @@
+import Charts
 import SwiftUI
 
 /// The rates screen: what fed funds futures say the FOMC will do, meeting by meeting.
@@ -8,6 +9,8 @@ import SwiftUI
 /// sees and reads as fact.
 struct RatesView: View {
     @State private var state: LoadState = .loading
+    @State private var curves: YieldCurves?
+    @State private var spread: YieldSpread?
     @Environment(Localization.self) private var loc
 
     enum LoadState {
@@ -51,6 +54,15 @@ struct RatesView: View {
             ScrollView {
                 LazyVStack(spacing: 12) {
                     CurrentRangeCard(current: data.current, asOf: data.asOf, meta: data.meta)
+
+                    // The curve and the spread sit above the meeting cards: they are
+                    // what the market has already done to the whole term structure,
+                    // where the meetings below are one instrument's forecast of the
+                    // front end. They load separately and are simply absent until they
+                    // arrive, rather than blocking the screen the view is named for.
+                    if let curves { YieldCurveCard(curves: curves) }
+                    if let spread { YieldSpreadCard(spread: spread) }
+
                     ForEach(data.meetings) { meeting in
                         // Outcome tables for the nearest meeting only. The probability
                         // tree widens with the horizon, so the last meeting carries a
@@ -78,6 +90,14 @@ struct RatesView: View {
         } catch {
             state = .failed(error)
         }
+        // Fetched after, and independently: these two are additions to the screen, so
+        // a failure in either must not take down the FOMC path the screen exists for.
+        // Concurrently with each other, because they share nothing — sequentially they
+        // are two round trips to the same box for no reason.
+        async let curveTask = try? APIClient.shared.yieldCurves()
+        async let spreadTask = try? APIClient.shared.yieldSpread()
+        curves = await curveTask
+        spread = await spreadTask
     }
 }
 
@@ -376,4 +396,190 @@ private struct OutcomeRow: View {
 #Preview {
     RatesView()
         .environment(Localization())
+}
+
+// MARK: - Yield curve
+
+/// The three sovereign curves the endpoint carries, one at a time.
+///
+/// A picker rather than three stacked charts: the reader is comparing shape against
+/// shape — inverted, flat, steep — and three small charts in a column is the one
+/// layout that makes that comparison hard. The y-domain is fitted per country because
+/// JGBs at 1.5-4% and Treasuries at 4-5.4% on a shared axis flattens both.
+private struct YieldCurveCard: View {
+    let curves: YieldCurves
+    @State private var country: Country = .us
+    @Environment(Localization.self) private var loc
+
+    enum Country: String, CaseIterable, Identifiable {
+        case us, cn, jp
+        var id: String { rawValue }
+        var label: LocalizedString {
+            switch self {
+            case .us: return S.curveUS
+            case .cn: return S.curveCN
+            case .jp: return S.curveJP
+            }
+        }
+    }
+
+    private var curve: YieldCurve? {
+        switch country {
+        case .us: return curves.us
+        case .cn: return curves.cn
+        case .jp: return curves.jp
+        }
+    }
+
+    private struct Point: Identifiable {
+        let id: String
+        let months: Int
+        let yield: Double
+    }
+
+    private var points: [Point] {
+        (curve?.ordered ?? []).map { Point(id: $0.label, months: $0.months, yield: $0.yield) }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text(loc(S.yieldCurve)).font(.subheadline.weight(.semibold))
+                Spacer()
+                Picker("", selection: $country) {
+                    ForEach(Country.allCases) { c in Text(loc(c.label)).tag(c) }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(width: 190)
+            }
+
+            if points.count > 1 {
+                Chart(points) { p in
+                    LineMark(x: .value("Tenor", p.id), y: .value("Yield", p.yield))
+                        .interpolationMethod(.monotone)
+                        .foregroundStyle(Palette.brand)
+                    PointMark(x: .value("Tenor", p.id), y: .value("Yield", p.yield))
+                        .foregroundStyle(Palette.brand)
+                        .symbolSize(18)
+                }
+                // Ordered explicitly. A category axis otherwise arranges the tenors by
+                // first appearance in the data, which is dictionary order and therefore
+                // arbitrary between launches — the curve would redraw scrambled, and
+                // differently each time.
+                .chartXScale(domain: points.map(\.id))
+                .chartYScale(domain: yDomain)
+                .chartYAxis { AxisMarks(position: .leading) }
+                .frame(height: 150)
+
+                if let spread = curve?.spread10y3m {
+                    HStack(spacing: 8) {
+                        Text(loc(S.spread10y3m))
+                            .font(.caption2).foregroundStyle(Palette.secondaryText)
+                        Text(Format.signedPercent(spread, places: 2))
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(Format.tint(spread))
+                        // An inverted curve is the single thing this chart is read for,
+                        // and a small negative number does not announce itself.
+                        if spread < 0 {
+                            Chip(text: loc(S.inverted), tint: Palette.down)
+                        }
+                    }
+                }
+            } else {
+                Text(loc(S.noPriceHistory))
+                    .font(.caption2).foregroundStyle(Palette.secondaryText)
+            }
+        }
+        .padding(14)
+        .background(Palette.card, in: RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Palette.border))
+    }
+
+    /// Padded around the data, never zero-based: the shape of a curve spanning
+    /// 4.14-5.39% is invisible against an axis starting at zero, and that shape is
+    /// the entire content of the chart.
+    private var yDomain: ClosedRange<Double> {
+        let ys = points.map(\.yield)
+        guard let lo = ys.min(), let hi = ys.max() else { return 0...1 }
+        guard hi > lo else { return (lo - 0.5)...(hi + 0.5) }
+        let pad = (hi - lo) * 0.2
+        return (lo - pad)...(hi + pad)
+    }
+}
+
+// MARK: - 10Y − 3M spread
+
+/// The classic inversion chart, with the recession flag the endpoint ships beside it.
+private struct YieldSpreadCard: View {
+    let spread: YieldSpread
+    @Environment(Localization.self) private var loc
+
+    private struct Point: Identifiable {
+        let id = UUID()
+        let date: Date
+        let value: Double
+        let recession: Bool
+    }
+
+    /// Thinned to roughly a weekly cadence. The payload is ~2,500 daily observations
+    /// and a ten-year line drawn at that density is slower to render than to read;
+    /// the last point is kept whatever the stride, so the chart still ends today.
+    private var points: [Point] {
+        let parsed: [Point] = zip(zip(spread.dates, spread.spread), spread.recession)
+            .compactMap { pair, rec in
+                let (date, value) = pair
+                guard let value, let parsed = DateParse.iso(date) else { return nil }
+                return Point(date: parsed, value: value, recession: (rec ?? 0) != 0)
+            }
+        guard parsed.count > 600 else { return parsed }
+        let stride = parsed.count / 600 + 1
+        var thinned = parsed.enumerated().filter { $0.offset % stride == 0 }.map(\.element)
+        if let last = parsed.last, thinned.last?.date != last.date { thinned.append(last) }
+        return thinned
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(loc(S.yieldSpread)).font(.subheadline.weight(.semibold))
+                Spacer()
+                if let latest = points.last {
+                    Text(Format.signedPercent(latest.value, places: 2))
+                        .font(.callout.weight(.semibold).monospacedDigit())
+                        .foregroundStyle(Format.tint(latest.value))
+                }
+            }
+
+            if points.count > 1 {
+                Chart {
+                    // Recession bars first so the line draws over them.
+                    ForEach(points.filter(\.recession)) { p in
+                        RuleMark(x: .value("Date", p.date))
+                            .foregroundStyle(Palette.secondaryText.opacity(0.18))
+                            .lineStyle(StrokeStyle(lineWidth: 3))
+                    }
+                    // Zero is the whole point of this chart — below it is an inversion
+                    // — so it is drawn rather than left to an axis tick that may or may
+                    // not land there.
+                    RuleMark(y: .value("Zero", 0))
+                        .foregroundStyle(Palette.border)
+                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                    ForEach(points) { p in
+                        LineMark(x: .value("Date", p.date), y: .value("Spread", p.value))
+                            .foregroundStyle(Palette.brand)
+                    }
+                }
+                .chartYAxis { AxisMarks(position: .leading) }
+                .localizedDateAxis(desiredCount: 4, dates: points.map(\.date))
+                .frame(height: 150)
+
+                Text(loc(S.recessionShade))
+                    .font(.caption2).foregroundStyle(Palette.mutedText)
+            }
+        }
+        .padding(14)
+        .background(Palette.card, in: RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Palette.border))
+    }
 }

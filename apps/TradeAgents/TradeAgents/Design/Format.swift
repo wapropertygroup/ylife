@@ -84,6 +84,24 @@ enum Format {
         date.formatted(.dateTime.month(.abbreviated).day().locale(locale))
     }
 
+    /// An axis label whose precision follows the span being plotted.
+    ///
+    /// Dropping the year is right for a month of data and actively broken for ten
+    /// years of it: the automatic ticks on a decade land on 1 January, so every label
+    /// on the 10Y−3M spread chart read `1月1日` — five identical labels on a chart
+    /// whose x-axis is the entire point. The span decides, rather than the call site,
+    /// because the call site is a human guess that goes stale the moment an endpoint
+    /// starts returning more history.
+    static func axisDate(_ date: Date, spanDays: Double) -> String {
+        if spanDays > 1100 {                     // ~3 years: the year alone
+            return date.formatted(.dateTime.year().locale(locale))
+        }
+        if spanDays > 300 {                      // ~1 year: month and year
+            return date.formatted(.dateTime.year().month(.abbreviated).locale(locale))
+        }
+        return axisDay(date)
+    }
+
     /// Month and year, from a `yyyy-MM-dd` string.
     ///
     /// For the FOMC meeting cards, whose `label` the server builds with

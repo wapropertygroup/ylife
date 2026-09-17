@@ -357,4 +357,45 @@ enum S {
     // writes 基点 throughout, and an app reading "+12 bp" beside a page reading
     // "+12 基点" is the same figure in two vocabularies.
     static let basisPoints    = LocalizedString("bp", "基点")
+
+    // Yield curves
+    static let yieldCurve     = LocalizedString("Yield curve", "收益率曲线")
+    static let curveUS        = LocalizedString("United States", "美国")
+    static let curveCN        = LocalizedString("China", "中国")
+    static let curveJP        = LocalizedString("Japan", "日本")
+    static let spread10y3m    = LocalizedString("10Y − 3M", "10年 − 3月")
+    // 10Y−2Y, which is what /api/yield-spread computes (DGS10 − DGS2). Not the same
+    // pair as the curve card's own `spread_10y_3m` above it, and the two disagree by
+    // half a point — so the label has to say which is which or the card reads as a
+    // contradiction of the one directly above it.
+    static let yieldSpread    = LocalizedString("10Y − 2Y spread", "10年期与2年期利差")
+    static let inverted       = LocalizedString("Inverted", "倒挂")
+    static let recessionShade = LocalizedString("Shaded: NBER recession", "阴影为 NBER 衰退期")
+
+    // Breadth
+    static let breadth        = LocalizedString("Breadth", "市场宽度")
+    static let breadthAboveMa = LocalizedString("S&P 500 above moving average",
+                                                "标普500成分股位于均线上方比例")
+    static let breadthLatest  = LocalizedString("Above MA today", "今日位于均线上方")
+    static let rspSpy         = LocalizedString("Equal weight vs cap weight (RSP/SPY)",
+                                                "等权重对市值加权（RSP/SPY）")
+    static let dayMa          = LocalizedString("day", "日")
+    static let ofNames        = LocalizedString("names", "只成分股")
+
+    // Options sentiment
+    static let putCall        = LocalizedString("Put / call ratio", "认沽认购比")
+    static let putCall20d     = LocalizedString("20-day average", "20日均值")
+    static let skewIndex      = LocalizedString("SKEW index", "SKEW 指数")
+    static let skewVsVix      = LocalizedString("SKEW against VIX", "SKEW 与 VIX 对比")
+    static let percentileLbl  = LocalizedString("Percentile", "历史分位")
+    static let skewNote       = LocalizedString(
+        "SKEW prices the tail. A high reading means crash protection is dear relative "
+        + "to VIX, not that a fall is expected.",
+        "SKEW 反映尾部风险定价。读数偏高表示相对 VIX 而言崩盘保护更贵，并不代表预期下跌。")
+
+    // SKEW bands, as the endpoint names them.
+    static let skewLow        = LocalizedString("Low", "偏低")
+    static let skewNormal     = LocalizedString("Normal", "正常")
+    static let skewElevated   = LocalizedString("Elevated", "偏高")
+    static let skewExtreme    = LocalizedString("Extreme", "极高")
 }

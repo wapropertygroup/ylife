@@ -16,6 +16,7 @@ struct MarketsView: View {
     @State private var state: LoadState = .loading
     @State private var timeframe: Timeframe = .daily
     @State private var sectorWindow: SectorWindow = .day
+    @State private var breadth: Breadth?
     @Environment(Localization.self) private var loc
     @Environment(AlertCenter.self) private var alerts
 
@@ -91,6 +92,12 @@ struct MarketsView: View {
                     if !data.sectors.isEmpty {
                         SectorCard(sectors: data.sectors, window: $sectorWindow)
                     }
+                    // Breadth sits above the per-instrument cards because it qualifies
+                    // them: an index up 1% on a third of its members participating is a
+                    // different tape from the same 1% broadly earned, and the reader
+                    // should have that before the index cards, not after fourteen of
+                    // them. Absent until it loads — see `load()`.
+                    if let breadth { BreadthCard(data: breadth) }
                     ForEach(ordered(data.indices)) { instrument in
                         InstrumentCard(instrument: instrument, timeframe: $timeframe)
                     }
@@ -126,6 +133,10 @@ struct MarketsView: View {
         } catch {
             state = .failed(error)
         }
+        // A separate endpoint, so a separate failure. `/api/breadth` recomputes across
+        // 503 names and is the slowest thing this screen touches; letting it fail the
+        // whole view would trade the screen's entire contents for one card.
+        breadth = try? await APIClient.shared.breadth()
     }
 }
 
@@ -423,4 +434,122 @@ private struct RangeBar: View {
     MarketsView()
         .environment(Localization())
         .environment(AlertCenter())
+}
+
+// MARK: - Breadth
+
+/// How many S&P 500 members are above their own moving average.
+///
+/// The index can rise while most of its members fall — that is what a cap-weighted
+/// benchmark led by a handful of megacaps does — and no amount of index level says so.
+/// This card is the check: the tiles are today's reading at five lookbacks, the chart
+/// is one of them through time, and RSP/SPY is the same question asked a second way.
+struct BreadthCard: View {
+    let data: Breadth
+    @State private var period: Int = 50
+    @Environment(Localization.self) private var loc
+
+    private var series: [PricePoint] {
+        // Two years of daily readings. The payload runs to ~570 weekly points back to
+        // 2015; the whole span compresses the last year into a few pixels, and the
+        // question this answers ("is participation narrowing?") is a recent one.
+        (data.pctAboveMa[String(period)]?.tail(160)) ?? []
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text(loc(S.breadth)).font(.subheadline.weight(.semibold))
+                Spacer()
+                if let universe = data.universe {
+                    Text("\(universe) \(loc(S.ofNames))")
+                        .font(.caption2).foregroundStyle(Palette.mutedText)
+                }
+            }
+
+            // Today at each lookback. Ordered numerically — `latest` is keyed by
+            // integer-valued strings, where "100" sorts before "20" as text.
+            HStack(spacing: 8) {
+                ForEach(data.orderedLatest, id: \.period) { item in
+                    let selected = item.period == period
+                    VStack(spacing: 2) {
+                        Text("\(item.period)\(loc(S.dayMa))")
+                            .font(.system(size: 9)).foregroundStyle(Palette.mutedText)
+                        Text(Format.number(item.pct, places: 0) + "%")
+                            .font(.callout.weight(.semibold).monospacedDigit())
+                            .foregroundStyle(Self.tint(item.pct))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
+                    .background(selected ? Palette.brand.opacity(0.18) : Palette.well,
+                                in: RoundedRectangle(cornerRadius: 8))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(selected ? Palette.brand : .clear)
+                    )
+                    .contentShape(Rectangle())
+                    .onTapGesture { period = item.period }
+                }
+            }
+
+            if series.count > 1 {
+                Text("\(period)\(loc(S.dayMa)) · \(loc(S.breadthAboveMa))")
+                    .font(.caption2).foregroundStyle(Palette.secondaryText)
+                Chart(series) { p in
+                    AreaMark(x: .value("Date", p.date), y: .value("Percent", p.price))
+                        .foregroundStyle(Palette.brand.opacity(0.14))
+                    LineMark(x: .value("Date", p.date), y: .value("Percent", p.price))
+                        .foregroundStyle(Palette.brand)
+                        .interpolationMethod(.monotone)
+                    // 50% is the line that makes the number mean something: below it,
+                    // most of the index is below its own average.
+                    RuleMark(y: .value("Half", 50))
+                        .foregroundStyle(Palette.border)
+                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                }
+                // Fixed 0-100, not fitted. This is a percentage of a fixed universe, so
+                // the absolute level is the reading — a fitted domain would redraw a
+                // quiet range as a dramatic one and make no two loads comparable.
+                .chartYScale(domain: 0.0...100.0)
+                .chartYAxis { AxisMarks(position: .leading, values: [0.0, 50, 100]) }
+                .localizedDateAxis(dates: series.map(\.date))
+                .frame(height: 130)
+            }
+
+            if let rsp = data.rspSpy?.tail(160), rsp.count > 1 {
+                Text(loc(S.rspSpy))
+                    .font(.caption2).foregroundStyle(Palette.secondaryText)
+                Chart(rsp) { p in
+                    LineMark(x: .value("Date", p.date), y: .value("Ratio", p.price))
+                        .foregroundStyle(Palette.warn)
+                        .interpolationMethod(.monotone)
+                }
+                // Fitted here, unlike the panel above: a ratio has no meaningful
+                // absolute level, only a direction — falling means cap-weighted is
+                // pulling ahead of equal-weighted, which is narrowing.
+                .chartYScale(domain: Self.fitted(rsp.map(\.price)))
+                .chartYAxis { AxisMarks(position: .leading) }
+                .localizedDateAxis(dates: rsp.map(\.date))
+                .frame(height: 90)
+            }
+        }
+        .padding(14)
+        .background(Palette.card, in: RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Palette.border))
+    }
+
+    /// Breadth is not a price: a low reading is weak participation whichever way the
+    /// index went, so the colour tracks the level rather than a change.
+    static func tint(_ pct: Double) -> Color {
+        if pct >= 60 { return Palette.up }
+        if pct <= 35 { return Palette.down }
+        return Palette.secondaryText
+    }
+
+    static func fitted(_ values: [Double]) -> ClosedRange<Double> {
+        guard let lo = values.min(), let hi = values.max() else { return 0...1 }
+        guard hi > lo else { return (lo - 0.01)...(hi + 0.01) }
+        let pad = (hi - lo) * 0.15
+        return (lo - pad)...(hi + pad)
+    }
 }

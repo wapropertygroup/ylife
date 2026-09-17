@@ -44,18 +44,24 @@ extension View {
     ///
     /// Swift Charts renders a date axis through the system locale, so the labels are
     /// the one part of a chart that ignores the app's language toggle entirely — a
-    /// Chinese page showing `Aug 23`. See `Format.axisDay`.
+    /// Chinese page showing `Aug 23`.
     ///
-    /// Only for spans of weeks or months. A multi-year series (the Fed balance sheet)
-    /// is left on the automatic formatter, which resolves to bare years — locale
-    /// neutral already, and far more useful there than twenty labels reading 1月1日.
-    func localizedDateAxis(desiredCount: Int = 4) -> some View {
-        chartXAxis {
+    /// `dates` is the series being plotted, and is used only to measure its span so
+    /// the label precision can follow it: see `Format.axisDate`. Pass it. Omitting it
+    /// assumes a short series, which on a decade of data prints the same `1月1日` at
+    /// every tick.
+    func localizedDateAxis(desiredCount: Int = 4, dates: [Date] = []) -> some View {
+        let span: Double = {
+            guard let lo = dates.min(), let hi = dates.max() else { return 0 }
+            return hi.timeIntervalSince(lo) / 86_400
+        }()
+        return chartXAxis {
             AxisMarks(values: .automatic(desiredCount: desiredCount)) { value in
                 AxisGridLine().foregroundStyle(Palette.border)
                 AxisValueLabel {
                     if let date = value.as(Date.self) {
-                        Text(Format.axisDay(date)).foregroundStyle(Palette.mutedText)
+                        Text(Format.axisDate(date, spanDays: span))
+                            .foregroundStyle(Palette.mutedText)
                     }
                 }
             }

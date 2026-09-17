@@ -92,6 +92,11 @@ actor APIClient {
     func fed() async throws -> FedResponse { try await get("/api/fed") }
     func multiples() async throws -> Multiples { try await get("/api/multiples") }
     func dca() async throws -> DcaList { try await get("/api/dca") }
+    func yieldCurves() async throws -> YieldCurves { try await get("/api/yield-curve") }
+    func yieldSpread() async throws -> YieldSpread { try await get("/api/yield-spread") }
+    func breadth() async throws -> Breadth { try await get("/api/breadth") }
+    func putCall() async throws -> PutCall { try await get("/api/put-call-ratio") }
+    func skew() async throws -> Skew { try await get("/api/skew") }
 
     /// One fund's latest 13F. The slug is the fund name lowercased with spaces
     /// hyphenated — percent-encoded here anyway, because a name with a dot in it
