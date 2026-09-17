@@ -169,18 +169,15 @@ private struct VolatilityCard: View {
             }
 
             if points.count > 1 {
-                Chart(points) { point in
-                    AreaMark(x: .value("Date", point.date), y: .value("VIX", point.price))
-                        .foregroundStyle(.orange.opacity(0.14))
-                    LineMark(x: .value("Date", point.date), y: .value("VIX", point.price))
-                        .interpolationMethod(.monotone)
-                        .foregroundStyle(.orange)
-                }
-                // 20 is the line the web page draws too: the rough boundary between
-                // an ordinary tape and a nervous one.
-                .chartYAxis { AxisMarks(position: .leading, values: [10, 20, 30, 40]) }
-                .chartXAxis(.hidden)
-                .frame(height: 96)
+                TimeSeriesChart(
+                    series: [ChartSeries(id: "VIX", color: .orange,
+                                         points: points, filled: true)],
+                    height: 96,
+                    // 20 is the rough boundary between an ordinary tape and a
+                    // nervous one — the same line the web page draws.
+                    rules: [20],
+                    format: { Format.number($0, places: 2) }
+                )
                 Text(loc(S.twoYearRange))
                     .font(.caption2)
                     .foregroundStyle(Palette.secondaryText)
@@ -305,36 +302,20 @@ private struct InstrumentCard: View {
             }
 
             if points.count > 1 {
-                Chart {
-                    ForEach(points) { point in
-                        LineMark(
-                            x: .value("Date", point.date),
-                            y: .value("Price", point.price)
-                        )
-                        .interpolationMethod(.monotone)
-                        .foregroundStyle(Format.tint(instrument.dayChange))
-                    }
-                    // The moving averages are in the payload and are the context
-                    // that turns a squiggle into a position: above or below is the
-                    // whole question a trend follower asks.
-                    if let ma50 = instrument.ma50 {
-                        RuleMark(y: .value("MA50", ma50))
-                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
-                            .foregroundStyle(Palette.secondaryText.opacity(0.55))
-                    }
-                    if let ma200 = instrument.ma200 {
-                        RuleMark(y: .value("MA200", ma200))
-                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 4]))
-                            .foregroundStyle(Palette.secondaryText.opacity(0.35))
-                    }
-                }
-                // A sparkline: no axes, and the y-domain clamped to the data so a
-                // small move is still visible instead of flattened against a
-                // zero-based axis.
-                .chartXAxis(.hidden)
-                .chartYAxis(.hidden)
-                .chartYScale(domain: yDomain)
-                .frame(height: 56)
+                // A sparkline that can still be read off: no axes and the
+                // y-domain clamped to the data so a small move is visible rather
+                // than flattened, but hover reports the value and date. The moving
+                // averages ride along as rules — above or below is the whole
+                // question a trend follower asks.
+                TimeSeriesChart(
+                    series: [ChartSeries(id: instrument.symbol,
+                                         color: Format.tint(instrument.dayChange),
+                                         points: points)],
+                    height: 56,
+                    rules: [instrument.ma50, instrument.ma200].compactMap { $0 },
+                    compact: true,
+                    format: { Format.price($0) }
+                )
             } else {
                 // Stated, not skipped. An empty gap here would read as a flat market.
                 Text(loc(S.noPriceHistory))
@@ -495,42 +476,28 @@ struct BreadthCard: View {
             if series.count > 1 {
                 Text("\(period)\(loc(S.dayMa)) · \(loc(S.breadthAboveMa))")
                     .font(.caption2).foregroundStyle(Palette.secondaryText)
-                Chart(series) { p in
-                    AreaMark(x: .value("Date", p.date), y: .value("Percent", p.price))
-                        .foregroundStyle(Palette.brand.opacity(0.14))
-                    LineMark(x: .value("Date", p.date), y: .value("Percent", p.price))
-                        .foregroundStyle(Palette.brand)
-                        .interpolationMethod(.monotone)
-                    // 50% is the line that makes the number mean something: below it,
-                    // most of the index is below its own average.
-                    RuleMark(y: .value("Half", 50))
-                        .foregroundStyle(Palette.border)
-                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
-                }
-                // Fixed 0-100, not fitted. This is a percentage of a fixed universe, so
-                // the absolute level is the reading — a fitted domain would redraw a
-                // quiet range as a dramatic one and make no two loads comparable.
-                .chartYScale(domain: 0.0...100.0)
-                .chartYAxis { AxisMarks(position: .leading, values: [0.0, 50, 100]) }
-                .localizedDateAxis(dates: series.map(\.date))
-                .frame(height: 130)
+                TimeSeriesChart(
+                    series: [ChartSeries(id: loc(S.breadth), color: Palette.brand,
+                                         points: series, filled: true)],
+                    height: 130,
+                    // Fixed 0-100, not fitted: a share of a fixed universe, where
+                    // the absolute level is the reading.
+                    fixedYDomain: 0.0...100.0,
+                    rules: [50],
+                    format: { Format.number($0, places: 1) + "%" }
+                )
             }
 
             if let rsp = data.rspSpy?.tail(160), rsp.count > 1 {
                 Text(loc(S.rspSpy))
                     .font(.caption2).foregroundStyle(Palette.secondaryText)
-                Chart(rsp) { p in
-                    LineMark(x: .value("Date", p.date), y: .value("Ratio", p.price))
-                        .foregroundStyle(Palette.warn)
-                        .interpolationMethod(.monotone)
-                }
-                // Fitted here, unlike the panel above: a ratio has no meaningful
-                // absolute level, only a direction — falling means cap-weighted is
-                // pulling ahead of equal-weighted, which is narrowing.
-                .chartYScale(domain: Self.fitted(rsp.map(\.price)))
-                .chartYAxis { AxisMarks(position: .leading) }
-                .localizedDateAxis(dates: rsp.map(\.date))
-                .frame(height: 90)
+                TimeSeriesChart(
+                    series: [ChartSeries(id: "RSP/SPY", color: Palette.warn, points: rsp)],
+                    height: 90,
+                    // Fitted, unlike the panel above: a ratio has no meaningful
+                    // absolute level, only a direction.
+                    format: { Format.number($0, places: 3) }
+                )
             }
         }
         .padding(14)

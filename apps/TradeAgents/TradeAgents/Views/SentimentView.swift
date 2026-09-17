@@ -245,37 +245,20 @@ private struct HistoryCard: View {
                     .textCase(.uppercase)
 
                 if history.count > 1 {
-                    Chart(history) { point in
-                        // The x value is the parsed `Date` itself: Swift Charts scales a
-                        // date axis natively, with none of the web side's missing
-                        // Chart.js adapter problem. Plotting the index of the point
-                        // instead would space an irregular series evenly and hide every
-                        // gap in the history — the misstatement a category axis makes.
-                        LineMark(
-                            x: .value("Date", point.date),
-                            y: .value("Score", point.y)
-                        )
-                        .interpolationMethod(.monotone)
-                        .foregroundStyle(Palette.brand)
-                    }
-                    // Fixed 0…100 because the index is bounded, unlike the price
-                    // sparklines on /markets which clamp to their own data. A domain
-                    // fitted to the window would redraw a quiet fortnight's 6-point
-                    // wobble as a dramatic swing, and no two loads of this screen would
-                    // be comparable to each other. Spelled as Doubles, not `0...100`:
-                    // an integer domain does not match a Double axis, and the failure is
-                    // a silently unscaled chart rather than a compiler complaint.
-                    .chartYScale(domain: 0.0...100.0)
-                    .chartYAxis {
-                        // The band boundaries, so the gridlines say something rather
-                        // than falling wherever an automatic stride puts them.
-                        AxisMarks(values: [0.0, 25, 50, 75, 100]) { _ in
-                            AxisGridLine().foregroundStyle(Palette.border)
-                            AxisValueLabel().foregroundStyle(Palette.mutedText)
-                        }
-                    }
-                    .localizedDateAxis(dates: history.map(\.date))
-                    .frame(height: 170)
+                    TimeSeriesChart(
+                        series: [ChartSeries(
+                            id: loc(S.fearGreed), color: Palette.brand,
+                            // FearGreedPoint carries epoch millis and its own
+                            // `rating`; only the date and score are plotted.
+                            points: history.map { PricePoint(date: $0.date, price: $0.y) })],
+                        height: 170,
+                        // Fixed 0-100: this is an index with published band
+                        // boundaries, so the absolute level is the reading and a
+                        // fitted domain would make a quiet fortnight look dramatic.
+                        fixedYDomain: 0.0...100.0,
+                        rules: [25, 50, 75],
+                        format: { Format.number($0, places: 0) }
+                    )
                 } else {
                     // Stated, not skipped. A blank space here would read as a flat index.
                     Text(loc(S.noReadings))
@@ -338,22 +321,13 @@ struct PutCallCard: View {
             }
 
             if points.count > 1 {
-                Chart {
-                    ForEach(points) { p in
-                        LineMark(x: .value("Date", p.date), y: .value("Ratio", p.price))
-                            .foregroundStyle(Palette.brand)
-                            .interpolationMethod(.monotone)
-                    }
-                    if let ma = data.ma20 {
-                        RuleMark(y: .value("MA20", ma))
-                            .foregroundStyle(Palette.secondaryText.opacity(0.6))
-                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
-                    }
-                }
-                .chartYScale(domain: BreadthCard.fitted(points.map(\.price)))
-                .chartYAxis { AxisMarks(position: .leading) }
-                .localizedDateAxis(dates: points.map(\.date))
-                .frame(height: 120)
+                TimeSeriesChart(
+                    series: [ChartSeries(id: loc(S.putCall), color: Palette.brand,
+                                         points: points)],
+                    height: 120,
+                    rules: data.ma20.map { [$0] } ?? [],
+                    format: { Format.number($0, places: 2) }
+                )
 
                 if let ma = data.ma20 {
                     Text("\(loc(S.putCall20d)) \(Format.number(ma, places: 2))")
@@ -431,28 +405,21 @@ struct SkewCard: View {
             }
 
             if skewPoints.count > 1 {
-                Chart(skewPoints) { p in
-                    LineMark(x: .value("Date", p.date), y: .value("SKEW", p.price))
-                        .foregroundStyle(Palette.brand)
-                        .interpolationMethod(.monotone)
-                }
-                .chartYScale(domain: BreadthCard.fitted(skewPoints.map(\.price)))
-                .chartYAxis { AxisMarks(position: .leading) }
-                .localizedDateAxis(dates: skewPoints.map(\.date))
-                .frame(height: 110)
+                TimeSeriesChart(
+                    series: [ChartSeries(id: loc(S.skewIndex), color: Palette.brand,
+                                         points: skewPoints)],
+                    height: 110,
+                    format: { Format.number($0, places: 1) }
+                )
             }
 
             if vixPoints.count > 1 {
                 Text("VIX").font(.caption2).foregroundStyle(Palette.secondaryText)
-                Chart(vixPoints) { p in
-                    LineMark(x: .value("Date", p.date), y: .value("VIX", p.price))
-                        .foregroundStyle(.orange)
-                        .interpolationMethod(.monotone)
-                }
-                .chartYScale(domain: BreadthCard.fitted(vixPoints.map(\.price)))
-                .chartYAxis { AxisMarks(position: .leading) }
-                .localizedDateAxis(dates: vixPoints.map(\.date))
-                .frame(height: 80)
+                TimeSeriesChart(
+                    series: [ChartSeries(id: "VIX", color: .orange, points: vixPoints)],
+                    height: 80,
+                    format: { Format.number($0, places: 1) }
+                )
             }
 
             // What a high reading does and does not mean. Without this the number is

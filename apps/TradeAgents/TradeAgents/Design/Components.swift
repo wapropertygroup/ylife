@@ -56,7 +56,11 @@ extension View {
             return hi.timeIntervalSince(lo) / 86_400
         }()
         return chartXAxis {
-            AxisMarks(values: .automatic(desiredCount: desiredCount)) { value in
+            // `.aligned` keeps the outermost labels inside the plot. Without it the
+            // last one is centred on a gridline at the right edge and clipped by the
+            // card — a zoomed Fed chart ended in "2…", which reads as a rendering
+            // fault rather than as a date.
+            AxisMarks(preset: .aligned, values: .automatic(desiredCount: desiredCount)) { value in
                 AxisGridLine().foregroundStyle(Palette.border)
                 AxisValueLabel {
                     if let date = value.as(Date.self) {

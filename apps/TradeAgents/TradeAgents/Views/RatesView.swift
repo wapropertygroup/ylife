@@ -539,6 +539,30 @@ private struct YieldSpreadCard: View {
         return thinned
     }
 
+    /// The recession flag collapsed into contiguous spans.
+    ///
+    /// The endpoint ships one 0/1 per observation, which the previous chart drew
+    /// as one translucent rule per flagged day — hundreds of overlapping strokes
+    /// for a single recession. As spans it is one rectangle each, and the footnote
+    /// promising shading is honoured rather than merely claimed.
+    private var recessions: [ClosedRange<Date>] {
+        var out: [ClosedRange<Date>] = []
+        var start: Date?
+        var previous: Date?
+        for p in points {
+            if p.recession {
+                if start == nil { start = p.date }
+                previous = p.date
+            } else if let s = start, let e = previous {
+                out.append(s...max(e, s))
+                start = nil
+                previous = nil
+            }
+        }
+        if let s = start, let e = previous { out.append(s...max(e, s)) }
+        return out
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
@@ -552,27 +576,18 @@ private struct YieldSpreadCard: View {
             }
 
             if points.count > 1 {
-                Chart {
-                    // Recession bars first so the line draws over them.
-                    ForEach(points.filter(\.recession)) { p in
-                        RuleMark(x: .value("Date", p.date))
-                            .foregroundStyle(Palette.secondaryText.opacity(0.18))
-                            .lineStyle(StrokeStyle(lineWidth: 3))
-                    }
-                    // Zero is the whole point of this chart — below it is an inversion
-                    // — so it is drawn rather than left to an axis tick that may or may
-                    // not land there.
-                    RuleMark(y: .value("Zero", 0))
-                        .foregroundStyle(Palette.border)
-                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
-                    ForEach(points) { p in
-                        LineMark(x: .value("Date", p.date), y: .value("Spread", p.value))
-                            .foregroundStyle(Palette.brand)
-                    }
-                }
-                .chartYAxis { AxisMarks(position: .leading) }
-                .localizedDateAxis(desiredCount: 4, dates: points.map(\.date))
-                .frame(height: 150)
+                // Zero is drawn as a rule rather than left to an axis tick, because
+                // below it is an inversion and that is the whole reading.
+                TimeSeriesChart(
+                    series: [ChartSeries(id: loc(S.yieldSpread), color: Palette.brand,
+                                         points: points.map {
+                                             PricePoint(date: $0.date, price: $0.value)
+                                         })],
+                    height: 150,
+                    rules: [0],
+                    bands: recessions,
+                    format: { Format.signedPercent($0, places: 2) }
+                )
 
                 Text(loc(S.recessionShade))
                     .font(.caption2).foregroundStyle(Palette.mutedText)

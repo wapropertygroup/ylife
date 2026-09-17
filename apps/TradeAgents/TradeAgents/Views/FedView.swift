@@ -100,16 +100,11 @@ struct SeriesCard: View {
                     }
                 }
             }
-            Chart(points) { p in
-                AreaMark(x: .value("Date", p.date), y: .value("Value", p.price))
-                    .foregroundStyle(tint.opacity(0.13))
-                LineMark(x: .value("Date", p.date), y: .value("Value", p.price))
-                    .interpolationMethod(.monotone)
-                    .foregroundStyle(tint)
-            }
-            .chartYAxis { AxisMarks(position: .leading) }
-            .localizedDateAxis(dates: points.map(\.date))
-            .frame(height: 110)
+            TimeSeriesChart(
+                series: [ChartSeries(id: title, color: tint, points: points, filled: true)],
+                height: 118,
+                format: { Format.number($0, places: 1) }
+            )
         }
         .padding(14)
         .background(Palette.card, in: RoundedRectangle(cornerRadius: 14))
