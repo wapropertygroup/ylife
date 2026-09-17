@@ -558,7 +558,8 @@ def pick_model(ticker: str,
 # ---------------------------------------------------------------------------
 
 def expensiveness(percentiles: Mapping[str, Optional[float]],
-                  weights: Mapping[str, float]) -> dict[str, Any]:
+                  weights: Mapping[str, float],
+                  overridden: Optional[Iterable[str]] = None) -> dict[str, Any]:
     """Fold per-factor percentiles into one expensiveness score.
 
     *percentiles* are **raw** percentiles of the metric itself -- the caller does
@@ -576,7 +577,13 @@ def expensiveness(percentiles: Mapping[str, Optional[float]],
 
     ``E`` is ``None`` when too little weight survived; the other fields still
     come back so the page can say which factors were missing.
+
+    *overridden* names factors whose percentile was supplied by hand rather than
+    measured. It changes no arithmetic — it is carried onto each row so the page
+    can mark them, because a hand-typed rank and a reconstructed one are the same
+    number on screen and very different claims.
     """
+    hand = frozenset(overridden or ())
     kept: list[dict[str, Any]] = []
     dropped: list[str] = []
     surviving = 0.0
@@ -597,7 +604,8 @@ def expensiveness(percentiles: Mapping[str, Optional[float]],
         surviving += float(weight)
         kept.append({"factor": factor, "raw_pct": round(raw, 2),
                      "oriented_pct": round(oriented, 2),
-                     "base_weight": round(float(weight), 4)})
+                     "base_weight": round(float(weight), 4),
+                     "overridden": factor in hand})
 
     share = (surviving / total) if total > 0 else 0.0
     enough = bool(kept) and share >= MIN_SURVIVING_WEIGHT
@@ -620,6 +628,7 @@ def expensiveness(percentiles: Mapping[str, Optional[float]],
         "E": e_score,
         "factors": kept,
         "dropped": dropped,
+        "overridden": sorted(f for f in hand if f in weights),
         "surviving_weight": round(share, 4),
         "renormalised": bool(kept) and surviving < total - 1e-9,
     }
@@ -766,7 +775,8 @@ def evaluate(*, ticker: str,
              eps_drift: Optional[float] = None,
              position_pct: Optional[float] = None,
              dcf: Optional[Mapping[str, Any]] = None,
-             w_dcf: Optional[float] = None) -> dict[str, Any]:
+             w_dcf: Optional[float] = None,
+             overridden: Optional[Iterable[str]] = None) -> dict[str, Any]:
     """One ticker, end to end: percentiles in, a sized contribution out.
 
     The whole chain in one call so the page and the tests exercise the same path.
@@ -787,7 +797,7 @@ def evaluate(*, ticker: str,
         model_key, reason = pick_model(ticker, sector, industry)
 
     weights = TEMPLATES[model_key]
-    breakdown = expensiveness(percentiles, weights)
+    breakdown = expensiveness(percentiles, weights, overridden)
     v_rel = v_score(breakdown["E"])
 
     v_dcf = (dcf or {}).get("V")
@@ -816,6 +826,7 @@ def evaluate(*, ticker: str,
         "band": score_band(v),
         "factors": breakdown["factors"],
         "dropped": breakdown["dropped"],
+        "overridden": breakdown["overridden"],
         "surviving_weight": breakdown["surviving_weight"],
         "renormalised": breakdown["renormalised"],
         "m_valuation": m_val,

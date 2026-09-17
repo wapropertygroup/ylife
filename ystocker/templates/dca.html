@@ -37,6 +37,15 @@
   .factor-row td { padding: 8px 10px; border-top: 1px solid var(--t-line); font-size: 13px; }
   .factor-row:hover td { background: var(--t-row-alt); }
   .dropped td { opacity: .55; }
+  /* A hand-entered percentile. Marked, never blended in: it is the same number
+     on screen as a reconstructed one and a completely different claim. */
+  .ov-tag {
+    font-size: 10px; font-weight: 600; letter-spacing: .02em;
+    padding: 1px 5px; border-radius: 4px; margin-left: 6px;
+    color: var(--t-accent-ink); border: 1px solid var(--t-accent);
+    background: rgba(99,102,241,0.12); white-space: nowrap;
+  }
+  .factor-row.overridden td:first-child { box-shadow: inset 3px 0 0 var(--t-accent); }
   .band-cell { padding: 6px 10px; border-top: 1px solid var(--t-line); font-size: 12px; }
   .well { background: var(--dca-well); border: 1px solid var(--t-line); border-radius: 10px; }
   .factor-btn {
@@ -269,7 +278,23 @@
       </div>
       <label class="text-[10px] text-slate-500 block mb-2"><span data-i18n="dca.dcf_edit_note_field">Note</span>
         <input id="ovNote" type="text" maxlength="500" class="w-full mt-1 px-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-sm"></label>
-      <div class="flex items-center gap-2 flex-wrap">
+
+      <!-- Relative-factor percentiles. Separate from the DCF fields above
+           because they fix a different failure: a factor whose series could not
+           be reconstructed leaves nothing to rank, and enough of those take the
+           whole ticker under MIN_SURVIVING_WEIGHT. Only the factors this
+           template actually uses are offered — a percentile for a factor the
+           model does not weight would be stored and silently ignored. -->
+      <div class="mt-4 pt-3 border-t border-slate-200 dark:border-slate-800">
+        <div class="text-[10px] uppercase tracking-widest text-slate-500 dark:text-slate-600 mb-1"
+             data-i18n="dca.f_ov_title">Factor percentiles</div>
+        <p class="text-xs text-slate-500 mb-2" data-i18n="dca.f_ov_note">
+          0-100, where higher means dearer. Leave blank to use the measured value.
+        </p>
+        <div id="ovFactors" class="grid grid-cols-2 sm:grid-cols-3 gap-2"></div>
+      </div>
+
+      <div class="flex items-center gap-2 flex-wrap mt-3">
         <button id="ovSave" class="text-xs px-3 py-1.5 rounded-lg bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 font-medium"
                 data-i18n="dca.dcf_save">Save</button>
         <button id="ovClear" class="text-xs px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700"
@@ -577,8 +602,15 @@ function renderFactors(d) {
   (d.factors || []).forEach(f => {
     const pts = series[f.factor];
     const now = pts && pts.length ? pts[pts.length - 1][1] : null;
-    rows.push(`<tr class="factor-row">
-      <td class="font-medium">${esc(tf(f.factor))}</td>
+    // A hand-typed rank and a reconstructed one are the same number on screen
+    // and very different claims, so an overridden row is marked rather than
+    // blending in. Editing is elsewhere; this is only the label.
+    const mark = f.overridden
+      ? ` <span class="ov-tag" title="${esc(I18n.t('dca.f_ov_tip') || '')}">${
+          esc(I18n.t('dca.f_ov') || 'entered')}</span>`
+      : '';
+    rows.push(`<tr class="factor-row${f.overridden ? ' overridden' : ''}">
+      <td class="font-medium">${esc(tf(f.factor))}${mark}</td>
       <td class="text-right font-mono">${now == null ? '—' : now.toFixed(2)}</td>
       <td class="text-right font-mono text-slate-500">${fmtPct(f.raw_pct)}</td>
       <td>
@@ -587,7 +619,7 @@ function renderFactors(d) {
           <span class="font-mono text-xs w-9 text-right">${fmtPct(f.oriented_pct)}</span>
         </div>
       </td>
-      <td class="text-right font-mono">${(f.weight * 100).toFixed(0)}%</td>
+      <td class="text-right font-mono">${f.weight == null ? '—' : (f.weight * 100).toFixed(0) + '%'}</td>
       <td class="text-right font-mono">${f.contribution == null ? '—' : f.contribution.toFixed(2)}</td>
     </tr>`);
   });
@@ -921,6 +953,16 @@ function wireDcfEditor(d) {
   toggle.addEventListener('click', async () => {
     editor.classList.toggle('hidden');
     if (editor.classList.contains('hidden')) return;
+    // Only the factors this template weights. Offering the rest would store a
+    // percentile the engine never reads, which looks like it took effect.
+    const weights = (_dcaData && _dcaData.weights) || {};
+    document.getElementById('ovFactors').innerHTML = Object.keys(weights).map(k =>
+      '<label class="text-[10px] text-slate-500">' + esc(tf(k))
+      + ' <span class="text-slate-400 dark:text-slate-600">'
+      + (weights[k] * 100).toFixed(0) + '%</span>'
+      + '<input data-ovf="' + esc(k) + '" type="number" step="1" min="0" max="100"'
+      + ' class="w-full mt-1 px-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-800'
+      + ' border border-slate-300 dark:border-slate-700 text-sm"></label>').join('');
     try {
       const r = await fetch(`/api/dca/${encodeURIComponent(TICKER)}/dcf`);
       const j = await r.json();
@@ -930,6 +972,10 @@ function wireDcfEditor(d) {
       });
       document.getElementById('ovDate').value = ov.valuation_date || '';
       document.getElementById('ovNote').value = ov.note || '';
+      const f = ov.factors || {};
+      document.querySelectorAll('[data-ovf]').forEach(el => {
+        el.value = f[el.dataset.ovf] == null ? '' : f[el.dataset.ovf];
+      });
     } catch (e) { /* an empty form is the right fallback */ }
   });
 
@@ -954,6 +1000,14 @@ function wireDcfEditor(d) {
     if (date) body.valuation_date = date;
     const note = document.getElementById('ovNote').value.trim();
     if (note) body.note = note;
+    // An empty input clears that factor rather than sending 0, which would be a
+    // claim that the multiple is at its cheapest ever.
+    const factors = {};
+    document.querySelectorAll('[data-ovf]').forEach(el => {
+      const raw = el.value.trim();
+      if (raw !== '') factors[el.dataset.ovf] = parseFloat(raw);
+    });
+    if (Object.keys(factors).length) body.factors = factors;
     try {
       const r = await fetch(`/api/dca/${encodeURIComponent(TICKER)}/dcf`, {
         method: 'POST', headers: {'Content-Type': 'application/json'},
@@ -973,6 +1027,7 @@ function wireDcfEditor(d) {
       if (!r.ok) { say('⚠ ' + (j.error || r.status), false); return; }
       Object.values(fields).forEach(id => { document.getElementById(id).value = ''; });
       document.getElementById('ovNote').value = '';
+      document.querySelectorAll('[data-ovf]').forEach(el => { el.value = ''; });
       say('✓ ' + (I18n.t('dca.dcf_saved') || 'Saved. Reload to rescore.'), true);
     } catch (e) { say('⚠ ' + e, false); }
   });
