@@ -144,7 +144,7 @@ private struct BankedForwardCard: View {
                 }
                 .chartYScale(domain: yDomain)
                 .chartYAxis { AxisMarks(position: .leading) }
-                .localizedDateAxis(desiredCount: 3)
+                .localizedDateAxis(desiredCount: 3, dates: plots.map(\.date))
                 .chartLegend(position: .top, alignment: .leading)
                 .frame(height: 150)
             } else {

@@ -108,7 +108,7 @@ struct SeriesCard: View {
                     .foregroundStyle(tint)
             }
             .chartYAxis { AxisMarks(position: .leading) }
-            .chartXAxis { AxisMarks(values: .automatic(desiredCount: 4)) }
+            .localizedDateAxis(dates: points.map(\.date))
             .frame(height: 110)
         }
         .padding(14)

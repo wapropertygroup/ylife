@@ -11,6 +11,8 @@
 #   Scripts/dev.sh build          # build only
 #   Scripts/dev.sh run            # build, then relaunch
 #   Scripts/dev.sh shot [out.png] # build, relaunch, screenshot the window
+#   Scripts/dev.sh section <name> # relaunch straight onto one section, screenshot it
+#   Scripts/dev.sh scroll [ticks] # scroll the running app's detail pane, screenshot
 #   Scripts/dev.sh ios            # compile-check the iOS target (device SDK)
 #
 set -euo pipefail
@@ -168,10 +170,35 @@ resolve_section() {
 	return 1
 }
 
+# Compile the scroll helper on demand. Kept out of the app target: it posts CGEvents
+# and has no business being linked into a shipping binary.
+SCROLLER="build/tascroll"
+build_scroller() {
+	if [ ! -x "$SCROLLER" ] || [ Scripts/scroll.swift -nt "$SCROLLER" ]; then
+		mkdir -p build
+		xcrun swiftc -O Scripts/scroll.swift -o "$SCROLLER"
+	fi
+}
+
 case "${1:-shot}" in
 	build) build ;;
 	run)   build; relaunch ;;
 	shot)  build; relaunch; sleep 8; shot ;;
+	scroll)
+		# Scroll the detail pane of the running app, then capture.
+		#
+		# Needed because nothing else reaches a card below the fold: a SwiftUI
+		# ScrollView takes no keyboard focus, so `key code 121` does nothing, and it
+		# exposes no accessibility action to scroll either. A real wheel event does
+		# work — but it is delivered by cursor *location*, not to the focused view, so
+		# the helper warps the pointer over the pane first.
+		ticks="${2:-10}"
+		OUT="${3:-/tmp/tradeagents-scrolled.png}"
+		build_scroller
+		"$SCROLLER" 900 600 "$ticks"
+		sleep 1
+		shot
+		;;
 	section)
 		# Relaunch straight onto one section and screenshot it.
 		#

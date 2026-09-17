@@ -5,6 +5,8 @@ import SwiftUI
 /// horizons CNN publishes, and the stored history behind it.
 struct SentimentView: View {
     @State private var state: LoadState = .loading
+    @State private var putCall: PutCall?
+    @State private var skew: Skew?
     @Environment(Localization.self) private var loc
 
     enum LoadState {
@@ -34,8 +36,8 @@ struct SentimentView: View {
         case .loaded(let data) where data.score == nil && data.history.isEmpty:
             EmptyPane(
                 icon: "gauge.with.dots.needle.33percent",
-                title: "No sentiment data",
-                detail: "CNN returned nothing and there is no stored history yet."
+                title: loc(S.noSentiment),
+                detail: loc(S.noSentimentHint)
             )
 
         case .loaded(let data):
@@ -49,6 +51,11 @@ struct SentimentView: View {
                     ScoreCard(score: data.score, rating: data.rating)
                     ComparisonCard(data: data)
                     HistoryCard(history: data.history)
+                    // Two independent reads on the same question the gauge above
+                    // answers. They load separately so neither can take the CNN
+                    // composite down with it.
+                    if let putCall { PutCallCard(data: putCall) }
+                    if let skew { SkewCard(data: skew) }
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
@@ -66,6 +73,10 @@ struct SentimentView: View {
         } catch {
             state = .failed(error)
         }
+        async let pcTask = try? APIClient.shared.putCall()
+        async let skewTask = try? APIClient.shared.skew()
+        putCall = await pcTask
+        skew = await skewTask
     }
 }
 
@@ -263,7 +274,7 @@ private struct HistoryCard: View {
                             AxisValueLabel().foregroundStyle(Palette.mutedText)
                         }
                     }
-                    .localizedDateAxis()
+                    .localizedDateAxis(dates: history.map(\.date))
                     .frame(height: 170)
                 } else {
                     // Stated, not skipped. A blank space here would read as a flat index.
@@ -295,4 +306,162 @@ private struct HistoryCard: View {
 #Preview {
     SentimentView()
         .environment(Localization())
+}
+
+// MARK: - Options-derived sentiment
+
+/// The equity put/call ratio, against its own 20-day average.
+///
+/// A second opinion on the same question the Fear & Greed gauge answers, and an
+/// independent one: this is what option buyers actually paid for, where the composite
+/// above is CNN's blend of seven indicators.
+struct PutCallCard: View {
+    let data: PutCall
+    @Environment(Localization.self) private var loc
+
+    private var points: [PricePoint] { data.series.tail(180) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(loc(S.putCall)).font(.subheadline.weight(.semibold))
+                Spacer()
+                Text(Format.number(data.current, places: 2))
+                    .font(.title3.weight(.semibold).monospacedDigit())
+                if let chg = data.dayChg {
+                    // A rising put/call is more hedging, which is risk-off — so the
+                    // usual green-is-up tint is inverted here, as it is for VIX.
+                    Text(Format.signedPercent(chg, places: 2))
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(Format.tint(-chg))
+                }
+            }
+
+            if points.count > 1 {
+                Chart {
+                    ForEach(points) { p in
+                        LineMark(x: .value("Date", p.date), y: .value("Ratio", p.price))
+                            .foregroundStyle(Palette.brand)
+                            .interpolationMethod(.monotone)
+                    }
+                    if let ma = data.ma20 {
+                        RuleMark(y: .value("MA20", ma))
+                            .foregroundStyle(Palette.secondaryText.opacity(0.6))
+                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                    }
+                }
+                .chartYScale(domain: BreadthCard.fitted(points.map(\.price)))
+                .chartYAxis { AxisMarks(position: .leading) }
+                .localizedDateAxis(dates: points.map(\.date))
+                .frame(height: 120)
+
+                if let ma = data.ma20 {
+                    Text("\(loc(S.putCall20d)) \(Format.number(ma, places: 2))")
+                        .font(.caption2).foregroundStyle(Palette.mutedText)
+                }
+            }
+        }
+        .padding(14)
+        .background(Palette.card, in: RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Palette.border))
+    }
+}
+
+/// CBOE SKEW against VIX.
+///
+/// Two series on one chart because the comparison is the content: SKEW is the price of
+/// the tail *relative* to at-the-money vol, so a high SKEW with a low VIX — which is
+/// what the current reading is — says something a single line cannot.
+struct SkewCard: View {
+    let data: Skew
+    @Environment(Localization.self) private var loc
+
+    private struct Plot: Identifiable {
+        let id = UUID()
+        let date: Date
+        let value: Double
+        let series: String
+    }
+
+    /// SKEW runs around 110-170 and VIX around 12-40, so they cannot share an axis
+    /// without flattening VIX into a line along the floor. VIX is plotted on its own
+    /// scale underneath instead of being rescaled onto SKEW's — a rescaled series
+    /// renders as though it were the real number, which is the mistake this file's
+    /// neighbours all avoid.
+    private var skewPoints: [PricePoint] { data.skewSeries.tail(250) }
+    private var vixPoints: [PricePoint] { data.vixSeries.tail(250) }
+
+    private var bandLabel: LocalizedString? {
+        switch data.latest?.band?.lowercased() {
+        case "low":      return S.skewLow
+        case "normal":   return S.skewNormal
+        case "elevated": return S.skewElevated
+        case "extreme":  return S.skewExtreme
+        default:         return nil
+        }
+    }
+
+    private var bandTint: Color {
+        switch data.latest?.band?.lowercased() {
+        case "extreme":  return Palette.down
+        case "elevated": return Palette.warn
+        default:         return Palette.secondaryText
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(loc(S.skewIndex)).font(.subheadline.weight(.semibold))
+                Spacer()
+                Text(Format.number(data.latest?.skew, places: 1))
+                    .font(.title3.weight(.semibold).monospacedDigit())
+                if let band = bandLabel {
+                    Chip(text: loc(band), tint: bandTint)
+                }
+            }
+
+            if let pct = data.latest?.percentile {
+                HStack(spacing: 6) {
+                    Text(loc(S.percentileLbl))
+                        .font(.caption2).foregroundStyle(Palette.secondaryText)
+                    Text(Format.number(pct, places: 1))
+                        .font(.caption.monospacedDigit())
+                }
+            }
+
+            if skewPoints.count > 1 {
+                Chart(skewPoints) { p in
+                    LineMark(x: .value("Date", p.date), y: .value("SKEW", p.price))
+                        .foregroundStyle(Palette.brand)
+                        .interpolationMethod(.monotone)
+                }
+                .chartYScale(domain: BreadthCard.fitted(skewPoints.map(\.price)))
+                .chartYAxis { AxisMarks(position: .leading) }
+                .localizedDateAxis(dates: skewPoints.map(\.date))
+                .frame(height: 110)
+            }
+
+            if vixPoints.count > 1 {
+                Text("VIX").font(.caption2).foregroundStyle(Palette.secondaryText)
+                Chart(vixPoints) { p in
+                    LineMark(x: .value("Date", p.date), y: .value("VIX", p.price))
+                        .foregroundStyle(.orange)
+                        .interpolationMethod(.monotone)
+                }
+                .chartYScale(domain: BreadthCard.fitted(vixPoints.map(\.price)))
+                .chartYAxis { AxisMarks(position: .leading) }
+                .localizedDateAxis(dates: vixPoints.map(\.date))
+                .frame(height: 80)
+            }
+
+            // What a high reading does and does not mean. Without this the number is
+            // routinely read as a crash forecast, which it is not.
+            Text(loc(S.skewNote))
+                .font(.caption2).foregroundStyle(Palette.mutedText)
+        }
+        .padding(14)
+        .background(Palette.card, in: RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Palette.border))
+    }
 }

@@ -205,8 +205,166 @@ struct DcaRow: Decodable, Sendable, Identifiable {
     }
 }
 
-// MARK: - Shared date parsing
+// MARK: - Dated series
 
+/// Parallel `dates` / `values` arrays, which is how most of these endpoints ship a
+/// series. Shared rather than re-declared per payload.
+struct DateSeries: Decodable, Sendable {
+    let dates: [String]
+    let values: [Double?]
+
+    /// Zipped and gap-dropped, parsed once — a SwiftUI body runs many times a second
+    /// and re-parsing a few hundred ISO dates inside one is how a chart screen turns
+    /// janky. A null value is dropped rather than plotted as zero: these are yields
+    /// and percentages where 0 is a real, and very wrong, reading.
+    var points: [PricePoint] {
+        zip(dates, values).compactMap { date, value in
+            guard let value, let parsed = DateParse.iso(date) else { return nil }
+            return PricePoint(date: parsed, price: value)
+        }
+    }
+
+    /// The last `count` points. Most of these series run to 500-2,500 observations
+    /// and the recent window is what a reader is asking about.
+    func tail(_ count: Int) -> [PricePoint] {
+        let all = points
+        return all.count > count ? Array(all.suffix(count)) : all
+    }
+}
+
+// MARK: - Yield curves
+
+struct YieldCurves: Decodable, Sendable {
+    let us: YieldCurve?
+    let cn: YieldCurve?
+    let jp: YieldCurve?
+    let spxPe: Double?
+
+    enum CodingKeys: String, CodingKey {
+        case us, cn, jp
+        case spxPe = "spx_pe"
+    }
+}
+
+struct YieldCurve: Decodable, Sendable {
+    let current: [String: Double]
+    let history10y: DateSeries?
+    let spread10y3m: Double?
+
+    enum CodingKeys: String, CodingKey {
+        case current
+        case history10y = "history_10y"
+        case spread10y3m = "spread_10y_3m"
+    }
+
+    /// The curve, short end first.
+    ///
+    /// The ordering is the whole chart, and the obvious spelling of it is wrong in a
+    /// way that still draws. `current` is keyed by tenor *strings* — `3M`, `6M`,
+    /// `1Y` … `30Y` — and sorting those as text puts `10Y` before `1Y`, `20Y` before
+    /// `2Y`, and `3M` after `30Y`. The result is not an error or an empty chart: it
+    /// is a plausible-looking line through the right values in the wrong order, on
+    /// the one chart whose entire meaning is the shape of that line. So each label is
+    /// converted to a number of months and sorted on that, and a tenor that does not
+    /// parse is dropped rather than sorted to an arbitrary position.
+    var ordered: [(label: String, months: Int, yield: Double)] {
+        current.compactMap { label, yield in
+            guard let months = Self.months(label) else { return nil }
+            return (label, months, yield)
+        }
+        .sorted { $0.months < $1.months }
+    }
+
+    /// `3M` → 3, `10Y` → 120. Nil for anything else, which is how an unexpected key
+    /// stays out of the chart instead of landing at position zero.
+    static func months(_ tenor: String) -> Int? {
+        let text = tenor.uppercased().trimmingCharacters(in: .whitespaces)
+        guard let unit = text.last, let n = Int(text.dropLast()) else { return nil }
+        switch unit {
+        case "M": return n
+        case "Y": return n * 12
+        default:  return nil
+        }
+    }
+}
+
+/// The 10Y-3M spread, with the recession flag the endpoint ships beside it.
+struct YieldSpread: Decodable, Sendable {
+    let dates: [String]
+    let spread: [Double?]
+    let recession: [Int?]
+}
+
+// MARK: - Breadth
+
+struct Breadth: Decodable, Sendable {
+    let asof: String?
+    let latest: [String: Double]
+    let maPeriods: [Int]
+    let pctAboveMa: [String: DateSeries]
+    let rspSpy: DateSeries?
+    let universe: Int?
+    let stale: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case asof, latest, universe, stale
+        case maPeriods = "ma_periods"
+        case pctAboveMa = "pct_above_ma"
+        case rspSpy = "rsp_spy"
+    }
+
+    /// `latest` keyed by an *integer-valued string*, so the same sort trap as the
+    /// yield curve: "100" sorts before "20" as text.
+    var orderedLatest: [(period: Int, pct: Double)] {
+        latest.compactMap { key, value in Int(key).map { ($0, value) } }
+            .sorted { $0.0 < $1.0 }
+    }
+}
+
+// MARK: - Put/call ratio
+
+struct PutCall: Decodable, Sendable {
+    let dates: [String]
+    let closes: [Double?]
+    let current: Double?
+    let dayChg: Double?
+    let ma20: Double?
+
+    enum CodingKeys: String, CodingKey {
+        case dates, closes, current, ma20
+        case dayChg = "day_chg"
+    }
+
+    var series: DateSeries { DateSeries(dates: dates, values: closes) }
+}
+
+// MARK: - SKEW
+
+struct Skew: Decodable, Sendable {
+    let dates: [String]
+    let skew: [Double?]
+    let vix: [Double?]
+    let latest: SkewLatest?
+
+    var skewSeries: DateSeries { DateSeries(dates: dates, values: skew) }
+    var vixSeries: DateSeries { DateSeries(dates: dates, values: vix) }
+}
+
+struct SkewLatest: Decodable, Sendable {
+    let band: String?
+    let percentile: Double?
+    let skew: Double?
+    let skewDate: String?
+    let vix: Double?
+    let vvix: Double?
+
+    enum CodingKeys: String, CodingKey {
+        case band, percentile, skew, vix, vvix
+        case skewDate = "skew_date"
+    }
+}
+
+// MARK: - Shared date parsing
 /// `yyyy-MM-dd` with a fixed locale and UTC, shared by every model here.
 ///
 /// One formatter, not one per type: `DateFormatter` is expensive to build and
