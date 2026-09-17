@@ -247,5 +247,78 @@ class FactorOverridesUnblockScoring(unittest.TestCase):
         self.assertEqual(tagged["E"], plain["E"])
 
 
+class FactorValueOverrides(unittest.TestCase):
+    """Overriding the *multiple*, which is the override to reach for.
+
+    It replaces the "Now" column — 31.23, not "the 11th percentile" — and the
+    engine ranks it against that factor's own reconstructed history exactly as
+    it ranks a measured one. The rank therefore stays measured; only the input
+    is hand-set. A person knows what a P/E is; almost nobody knows where it
+    sits in five years of weekly history, and the engine does.
+    """
+
+    def test_a_value_map_is_enough_on_its_own(self):
+        row = dcf_store.validate("NVDA", {"values": {"pe": 31.23, "peg": 1.58}})
+        self.assertEqual(row["values"], {"pe": 31.23, "peg": 1.58})
+
+    def test_a_non_positive_multiple_is_refused(self):
+        """Every factor here is a price-to-something or a yield. A negative
+        reading is an absent measurement, not a cheap one — the same rule
+        `reconstruct` applies when it skips rather than clamps."""
+        for bad in (0, -5, -0.01):
+            with self.assertRaises(dcf_store.ValidationError, msg=str(bad)):
+                dcf_store.validate("NVDA", {"values": {"pe": bad}})
+
+    def test_both_kinds_on_one_factor_is_refused(self):
+        """The value would be re-ranked to one percentile and the percentile
+        would assert another; whichever was applied second would win silently."""
+        with self.assertRaises(dcf_store.ValidationError):
+            dcf_store.validate("NVDA", {"values": {"pe": 30},
+                                        "factors": {"pe": 50}})
+
+    def test_both_kinds_on_different_factors_is_fine(self):
+        row = dcf_store.validate("NVDA", {"values": {"pe": 30},
+                                          "factors": {"peg": 50}})
+        self.assertEqual(row["values"], {"pe": 30.0})
+        self.assertEqual(row["factors"], {"peg": 50.0})
+
+    def test_an_unknown_factor_is_refused(self):
+        with self.assertRaises(dcf_store.ValidationError):
+            dcf_store.validate("NVDA", {"values": {"p_e": 30}})
+
+    def test_a_json_string_is_accepted(self):
+        row = dcf_store.validate("NVDA", {"values": '{"pe": 31.23}'})
+        self.assertEqual(row["values"], {"pe": 31.23})
+
+
+class ReRankingKeepsThePercentileMeasured(unittest.TestCase):
+    """The property that makes a value override weaker — and better — than a
+    percentile one."""
+
+    # 200 weekly points evenly spanning 15 to 35.
+    DIST = [15 + (i * 20 / 199) for i in range(200)]
+
+    def test_an_entered_multiple_is_ranked_not_asserted(self):
+        from ystocker import dca
+
+        mid = dca.percentile_rank(25.0, self.DIST, minimum=dca.MIN_OBSERVATIONS)
+        self.assertAlmostEqual(mid, 50.0, delta=1.0)
+
+    def test_a_dearer_multiple_ranks_dearer(self):
+        from ystocker import dca
+
+        low = dca.percentile_rank(16.0, self.DIST, minimum=dca.MIN_OBSERVATIONS)
+        high = dca.percentile_rank(34.0, self.DIST, minimum=dca.MIN_OBSERVATIONS)
+        self.assertLess(low, high)
+
+    def test_too_short_a_history_refuses_rather_than_guessing(self):
+        """A value with nowhere to sit is not a percentile. The override is then
+        skipped, which is what the percentile override exists to make explicit."""
+        from ystocker import dca
+
+        self.assertIsNone(
+            dca.percentile_rank(25.0, self.DIST[:10], minimum=dca.MIN_OBSERVATIONS))
+
+
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()

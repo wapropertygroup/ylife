@@ -1159,12 +1159,42 @@ def _dca_score(symbol: str, payload: dict, base: float, *,
     # filling a gap.
     overridden: list[str] = []
     measured: dict = {}
-    if override and isinstance(override.get("factors"), dict):
-        for factor, pct in override["factors"].items():
-            if isinstance(pct, (int, float)):
-                measured[factor] = percentiles.get(factor)
-                percentiles[factor] = float(pct)
-                overridden.append(factor)
+    value_overrides: dict = {}
+    if override:
+        series = payload.get("series") or {}
+
+        # Value overrides first, and they are the preferred kind. Replacing the
+        # *multiple* and re-ranking it against that factor's own reconstructed
+        # history leaves the rank measured -- only the input is hand-set. A
+        # person knows what a P/E is; almost nobody knows where it sits in five
+        # years of weekly history, and the engine does.
+        for factor, val in (override.get("values") or {}).items():
+            if not isinstance(val, (int, float)):
+                continue
+            distribution = [v for _stamp, v in (series.get(factor) or [])]
+            pct = dca.percentile_rank(float(val), distribution,
+                                      minimum=dca.MIN_OBSERVATIONS)
+            if pct is None:
+                # No series, or too short to rank against. Refused rather than
+                # guessed: a value with nowhere to sit is not a percentile, and
+                # inventing one here would be the very thing the percentile
+                # override exists to make explicit.
+                continue
+            measured[factor] = percentiles.get(factor)
+            value_overrides[factor] = float(val)
+            percentiles[factor] = pct
+            overridden.append(factor)
+
+        # Percentile overrides are the fallback, for the case a value cannot
+        # reach: no reconstructable series at all, so there is no distribution
+        # to rank against. This asserts the rank outright, which is the stronger
+        # claim -- hence second.
+        for factor, pct in (override.get("factors") or {}).items():
+            if not isinstance(pct, (int, float)) or factor in value_overrides:
+                continue
+            measured[factor] = percentiles.get(factor)
+            percentiles[factor] = float(pct)
+            overridden.append(factor)
 
     # The model has to be chosen before the DCF runs, because the template
     # decides both the valuation *form* (§10/§12 exclude FCFF for three of them)
@@ -1204,6 +1234,20 @@ def _dca_score(symbol: str, payload: dict, base: float, *,
         overridden=overridden,
         measured=measured,
     )
+
+    # Display metadata for a value override: what was entered, and what the
+    # reconstruction's own last point was. Attached here rather than threaded
+    # through `dca` because it changes no arithmetic -- the percentile it
+    # produced is already in the row, computed the ordinary way.
+    if value_overrides:
+        series = payload.get("series") or {}
+        for row in result.get("factors") or []:
+            entered = value_overrides.get(row["factor"])
+            if entered is None:
+                continue
+            points = series.get(row["factor"]) or []
+            row["override_value"] = entered
+            row["measured_value"] = points[-1][1] if points else None
     return result, peer, drift, position
 
 

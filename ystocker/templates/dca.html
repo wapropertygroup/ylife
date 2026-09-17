@@ -637,13 +637,24 @@ function renderFactors(d) {
       ? ` <span class="ov-tag" title="${esc(I18n.t('dca.f_ov_tip') || '')}">${
           esc(I18n.t('dca.f_ov') || 'entered')}</span>`
       : '';
-    const rawCell = f.overridden
+    // Where the override is shown depends on which kind it is, and that is the
+    // point rather than a detail. A *value* override replaces the multiple in
+    // the "Now" column and the percentile beside it stays computed — the rank
+    // is still measured, only the input was typed. A *percentile* override
+    // replaces the rank itself, which is the stronger claim, so it shows in the
+    // percentile column instead. Marking both the same way would hide which
+    // one is in force.
+    const nowCell = f.override_value != null
+      ? `<span class="ov-was">${f.measured_value == null ? '—' : f.measured_value.toFixed(2)}</span>`
+        + `<span class="ov-arrow">→</span><span class="ov-now">${f.override_value.toFixed(2)}</span>`
+      : (now == null ? '—' : now.toFixed(2));
+    const rawCell = (f.overridden && f.override_value == null)
       ? `<span class="ov-was">${f.measured_pct == null ? '—' : fmtPct(f.measured_pct)}</span>`
         + `<span class="ov-arrow">→</span><span class="ov-now">${fmtPct(f.raw_pct)}</span>`
       : fmtPct(f.raw_pct);
     rows.push(`<tr class="factor-row${f.overridden ? ' overridden' : ''}">
       <td class="font-medium">${esc(tf(f.factor))}${mark}</td>
-      <td class="text-right font-mono">${now == null ? '—' : now.toFixed(2)}</td>
+      <td class="text-right font-mono">${nowCell}</td>
       <td class="text-right font-mono text-slate-500">${rawCell}</td>
       <td>
         <div class="flex items-center gap-2">
@@ -988,13 +999,24 @@ function wireDcfEditor(d) {
     // Only the factors this template weights. Offering the rest would store a
     // percentile the engine never reads, which looks like it took effect.
     const weights = (_dcaData && _dcaData.weights) || {};
-    document.getElementById('ovFactors').innerHTML = Object.keys(weights).map(k =>
-      '<label class="text-[10px] text-slate-500">' + esc(tf(k))
-      + ' <span class="text-slate-400 dark:text-slate-600">'
-      + (weights[k] * 100).toFixed(0) + '%</span>'
-      + '<input data-ovf="' + esc(k) + '" type="number" step="1" min="0" max="100"'
-      + ' class="w-full mt-1 px-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-800'
-      + ' border border-slate-300 dark:border-slate-700 text-sm"></label>').join('');
+    const series = (_dcaData && _dcaData.series) || {};
+    document.getElementById('ovFactors').innerHTML = Object.keys(weights).map(k => {
+      // A factor with a reconstructed series takes a *value*, re-ranked against
+      // that history. One without has no distribution to rank against, so it
+      // takes a percentile — the stronger claim, offered only where the weaker
+      // one is impossible.
+      const hasSeries = (series[k] || []).length >= 2;
+      const attr = hasSeries ? 'data-ovv' : 'data-ovf';
+      const hint = hasSeries ? (I18n.t('dca.f_ov_value') || 'value')
+                             : (I18n.t('dca.f_ov_pct') || 'percentile');
+      return '<label class="text-[10px] text-slate-500">' + esc(tf(k))
+        + ' <span class="text-slate-400 dark:text-slate-600">'
+        + (weights[k] * 100).toFixed(0) + '% · ' + esc(hint) + '</span>'
+        + '<input ' + attr + '="' + esc(k) + '" type="number" step="any"'
+        + (hasSeries ? '' : ' min="0" max="100"')
+        + ' class="w-full mt-1 px-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-800'
+        + ' border border-slate-300 dark:border-slate-700 text-sm"></label>';
+    }).join('');
     try {
       const r = await fetch(`/api/dca/${encodeURIComponent(TICKER)}/dcf`);
       const j = await r.json();
@@ -1004,9 +1026,12 @@ function wireDcfEditor(d) {
       });
       document.getElementById('ovDate').value = ov.valuation_date || '';
       document.getElementById('ovNote').value = ov.note || '';
-      const f = ov.factors || {};
+      const f = ov.factors || {}, vv = ov.values || {};
       document.querySelectorAll('[data-ovf]').forEach(el => {
         el.value = f[el.dataset.ovf] == null ? '' : f[el.dataset.ovf];
+      });
+      document.querySelectorAll('[data-ovv]').forEach(el => {
+        el.value = vv[el.dataset.ovv] == null ? '' : vv[el.dataset.ovv];
       });
     } catch (e) { /* an empty form is the right fallback */ }
   });
@@ -1034,12 +1059,17 @@ function wireDcfEditor(d) {
     if (note) body.note = note;
     // An empty input clears that factor rather than sending 0, which would be a
     // claim that the multiple is at its cheapest ever.
-    const factors = {};
+    const factors = {}, vals = {};
     document.querySelectorAll('[data-ovf]').forEach(el => {
       const raw = el.value.trim();
       if (raw !== '') factors[el.dataset.ovf] = parseFloat(raw);
     });
+    document.querySelectorAll('[data-ovv]').forEach(el => {
+      const raw = el.value.trim();
+      if (raw !== '') vals[el.dataset.ovv] = parseFloat(raw);
+    });
     if (Object.keys(factors).length) body.factors = factors;
+    if (Object.keys(vals).length) body.values = vals;
     try {
       const r = await fetch(`/api/dca/${encodeURIComponent(TICKER)}/dcf`, {
         method: 'POST', headers: {'Content-Type': 'application/json'},
@@ -1059,7 +1089,7 @@ function wireDcfEditor(d) {
       if (!r.ok) { say('⚠ ' + (j.error || r.status), false); return; }
       Object.values(fields).forEach(id => { document.getElementById(id).value = ''; });
       document.getElementById('ovNote').value = '';
-      document.querySelectorAll('[data-ovf]').forEach(el => { el.value = ''; });
+      document.querySelectorAll('[data-ovf],[data-ovv]').forEach(el => { el.value = ''; });
       say('✓ ' + (I18n.t('dca.dcf_saved') || 'Saved. Reload to rescore.'), true);
     } catch (e) { say('⚠ ' + e, false); }
   });
