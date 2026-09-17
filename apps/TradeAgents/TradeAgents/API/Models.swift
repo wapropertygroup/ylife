@@ -108,9 +108,13 @@ struct Vix: Decodable, Sendable {
     let vix3m: Double?
     let vvix: Double?
     let termRatio: Double?
+    /// Two years of weekly closes. Present in the payload all along and simply
+    /// not decoded, so the app showed no VIX at all while carrying 105 points of
+    /// it on every refresh.
+    let weekly: Series?
 
     enum CodingKeys: String, CodingKey {
-        case current, vix3m, vvix
+        case current, vix3m, vvix, weekly
         case dayChange = "day_chg"
         case termRatio = "term_ratio"
     }

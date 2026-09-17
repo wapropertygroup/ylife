@@ -1,10 +1,21 @@
 import Charts
 import SwiftUI
 
-/// The markets screen: index cards with native sparklines, the sector strip, and —
-/// prominently — how old the data is.
+/// The markets screen: volatility, sector rotation, and one card per instrument
+/// with a switchable sparkline — and, prominently, how old the data is.
+///
+/// Everything here comes from the single `/api/markets` call the screen already
+/// made. The payload carried VIX with two years of weekly closes, per-instrument
+/// weekly and monthly series, both moving averages and the 52-week range, and the
+/// screen showed none of it: one daily sparkline and a sector strip. No new
+/// endpoint was needed to fix that, which also means no new way for the screen to
+/// fail — a second request is a second thing that can be slow, rate-limited or
+/// down, and `CLAUDE.md` records what the Yahoo budget does to this backend when
+/// callers multiply.
 struct MarketsView: View {
     @State private var state: LoadState = .loading
+    @State private var timeframe: Timeframe = .daily
+    @State private var sectorWindow: SectorWindow = .day
     @Environment(Localization.self) private var loc
     @Environment(AlertCenter.self) private var alerts
 
@@ -12,6 +23,32 @@ struct MarketsView: View {
         case loading
         case loaded(MarketsResponse)
         case failed(Error)
+    }
+
+    enum Timeframe: CaseIterable {
+        case daily, weekly, monthly
+
+        var label: LocalizedString {
+            switch self {
+            case .daily:   return S.tfDaily
+            case .weekly:  return S.tfWeekly
+            case .monthly: return S.tfMonthly
+            }
+        }
+
+        func series(_ i: Instrument) -> Series? {
+            switch self {
+            case .daily:   return i.daily
+            case .weekly:  return i.weekly
+            case .monthly: return i.monthly
+            }
+        }
+    }
+
+    enum SectorWindow: CaseIterable {
+        case day, week
+        var label: LocalizedString { self == .day ? S.sectorsToday : S.sectorsWeek }
+        func value(_ s: Sector) -> Double? { self == .day ? s.dayChange : s.weekChangePct }
     }
 
     /// Display order for the instruments `/api/markets` returns. The payload is a
@@ -48,11 +85,14 @@ struct MarketsView: View {
                     if let meta = data.meta {
                         FreshnessBanner(meta: meta)
                     }
+                    if let vix = data.vix {
+                        VolatilityCard(vix: vix)
+                    }
                     if !data.sectors.isEmpty {
-                        SectorStrip(sectors: data.sectors)
+                        SectorCard(sectors: data.sectors, window: $sectorWindow)
                     }
                     ForEach(ordered(data.indices)) { instrument in
-                        InstrumentCard(instrument: instrument)
+                        InstrumentCard(instrument: instrument, timeframe: $timeframe)
                     }
                 }
                 .padding(.horizontal, 16)
@@ -89,37 +129,143 @@ struct MarketsView: View {
     }
 }
 
-private struct SectorStrip: View {
-    let sectors: [Sector]
+// MARK: - Volatility
+
+private struct VolatilityCard: View {
+    let vix: Vix
+    @Environment(Localization.self) private var loc
+
+    private var points: [PricePoint] { vix.weekly?.points ?? [] }
+
+    /// Below 1 the curve is inverted — near-term fear above three-month — which is
+    /// the stressed reading. Stated in words as well as shown, because this is the
+    /// one figure on the screen whose direction is not self-evident.
+    private var inverted: Bool { (vix.termRatio ?? 1) < 1 }
 
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(sectors) { sector in
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(sector.label)
-                            .font(.caption2)
-                            .foregroundStyle(Palette.secondaryText)
-                        Text(Format.signedPercent(sector.dayChange))
-                            .font(.caption.weight(.semibold).monospacedDigit())
-                            .foregroundStyle(Format.tint(sector.dayChange))
-                    }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 8)
-                    .background(Palette.card, in: RoundedRectangle(cornerRadius: 8))
-                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Palette.border))
-                }
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(loc(S.volatility))
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+                Text(Format.number(vix.current))
+                    .font(.title3.weight(.semibold).monospacedDigit())
+                Text(Format.signedPercent(vix.dayChange))
+                    .font(.caption.monospacedDigit())
+                    // VIX up is risk-off, so the usual green-is-up tint is inverted
+                    // here: a spike is not good news.
+                    .foregroundStyle(Format.tint(vix.dayChange.map { -$0 }))
             }
-            .padding(.horizontal, 4)
+
+            if points.count > 1 {
+                Chart(points) { point in
+                    AreaMark(x: .value("Date", point.date), y: .value("VIX", point.price))
+                        .foregroundStyle(.orange.opacity(0.14))
+                    LineMark(x: .value("Date", point.date), y: .value("VIX", point.price))
+                        .interpolationMethod(.monotone)
+                        .foregroundStyle(.orange)
+                }
+                // 20 is the line the web page draws too: the rough boundary between
+                // an ordinary tape and a nervous one.
+                .chartYAxis { AxisMarks(position: .leading, values: [10, 20, 30, 40]) }
+                .chartXAxis(.hidden)
+                .frame(height: 96)
+                Text(loc(S.twoYearRange))
+                    .font(.caption2)
+                    .foregroundStyle(Palette.secondaryText)
+            }
+
+            HStack(spacing: 14) {
+                StatTile(label: loc(S.vixTerm),
+                         value: Format.number(vix.termRatio),
+                         tint: inverted ? Palette.down : Palette.secondaryText)
+                if vix.vix3m != nil {
+                    StatTile(label: "VIX3M", value: Format.number(vix.vix3m))
+                }
+                if vix.vvix != nil {
+                    StatTile(label: loc(S.vvix), value: Format.number(vix.vvix))
+                }
+                Spacer()
+            }
+            if vix.termRatio != nil {
+                Text(loc(inverted ? S.vixInverted : S.vixContango))
+                    .font(.caption2)
+                    .foregroundStyle(inverted ? Palette.down : Palette.secondaryText)
+                    .help(loc(S.vixTermTip))
+            }
         }
+        .padding(14)
+        .background(Palette.card, in: RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Palette.border))
     }
 }
 
+// MARK: - Sectors
+
+private struct SectorCard: View {
+    let sectors: [Sector]
+    @Binding var window: MarketsView.SectorWindow
+    @Environment(Localization.self) private var loc
+
+    /// Sorted by the window on show, so the chart reads as a ranking rather than
+    /// as whatever order the server happened to send.
+    private var ranked: [Sector] {
+        sectors.sorted { (window.value($0) ?? 0) > (window.value($1) ?? 0) }
+    }
+
+    /// Keyed on the fund ticker, falling back to the server's own label so a
+    /// sector added upstream appears in English rather than vanishing.
+    private func name(_ sector: Sector) -> String {
+        S.sectorNames[sector.ticker].map { loc($0) } ?? sector.label
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text(loc(S.sectors)).font(.subheadline.weight(.semibold))
+                Spacer()
+                Picker("", selection: $window) {
+                    ForEach(MarketsView.SectorWindow.allCases, id: \.self) { w in
+                        Text(loc(w.label)).tag(w)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(width: 150)
+            }
+
+            // A diverging bar chart rather than the old horizontal strip of chips:
+            // rotation is a comparison between sectors, and a row of numbers makes
+            // the reader do that comparison themselves.
+            Chart(ranked) { sector in
+                BarMark(
+                    x: .value("Change", window.value(sector) ?? 0),
+                    y: .value("Sector", name(sector))
+                )
+                .foregroundStyle(Format.tint(window.value(sector)))
+                .cornerRadius(3)
+            }
+            .chartXAxis { AxisMarks(format: Decimal.FormatStyle.Percent.percent.scale(1)) }
+            .chartYAxis { AxisMarks(position: .leading) }
+            .frame(height: CGFloat(ranked.count) * 19 + 24)
+        }
+        .padding(14)
+        .background(Palette.card, in: RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Palette.border))
+    }
+}
+
+// MARK: - One instrument
+
 private struct InstrumentCard: View {
     let instrument: Instrument
+    @Binding var timeframe: MarketsView.Timeframe
+    @Environment(Localization.self) private var loc
 
     /// Parsed once per card rather than inside the chart body.
-    private var points: [PricePoint] { instrument.daily?.points ?? [] }
+    private var points: [PricePoint] {
+        (timeframe.series(instrument) ?? instrument.daily)?.points ?? []
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -143,13 +289,28 @@ private struct InstrumentCard: View {
             }
 
             if points.count > 1 {
-                Chart(points) { point in
-                    LineMark(
-                        x: .value("Date", point.date),
-                        y: .value("Price", point.price)
-                    )
-                    .interpolationMethod(.monotone)
-                    .foregroundStyle(Format.tint(instrument.dayChange))
+                Chart {
+                    ForEach(points) { point in
+                        LineMark(
+                            x: .value("Date", point.date),
+                            y: .value("Price", point.price)
+                        )
+                        .interpolationMethod(.monotone)
+                        .foregroundStyle(Format.tint(instrument.dayChange))
+                    }
+                    // The moving averages are in the payload and are the context
+                    // that turns a squiggle into a position: above or below is the
+                    // whole question a trend follower asks.
+                    if let ma50 = instrument.ma50 {
+                        RuleMark(y: .value("MA50", ma50))
+                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                            .foregroundStyle(Palette.secondaryText.opacity(0.55))
+                    }
+                    if let ma200 = instrument.ma200 {
+                        RuleMark(y: .value("MA200", ma200))
+                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 4]))
+                            .foregroundStyle(Palette.secondaryText.opacity(0.35))
+                    }
                 }
                 // A sparkline: no axes, and the y-domain clamped to the data so a
                 // small move is still visible instead of flattened against a
@@ -157,17 +318,32 @@ private struct InstrumentCard: View {
                 .chartXAxis(.hidden)
                 .chartYAxis(.hidden)
                 .chartYScale(domain: yDomain)
-                .frame(height: 44)
+                .frame(height: 56)
             } else {
                 // Stated, not skipped. An empty gap here would read as a flat market.
-                Text("No price history")
+                Text(loc(S.noPriceHistory))
                     .font(.caption2)
                     .foregroundStyle(Palette.secondaryText)
-                    .frame(height: 44, alignment: .center)
+                    .frame(height: 56, alignment: .center)
+            }
+
+            if instrument.weekly != nil || instrument.monthly != nil {
+                Picker("", selection: $timeframe) {
+                    ForEach(MarketsView.Timeframe.allCases, id: \.self) { tf in
+                        Text(loc(tf.label)).tag(tf)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+            }
+
+            if let low = instrument.lo52, let high = instrument.hi52,
+               let now = instrument.current, high > low {
+                RangeBar(low: low, high: high, now: now, label: loc(S.range52))
             }
 
             HStack(spacing: 14) {
-                StatTile(label: "YTD", value: Format.signedPercent(instrument.ytd),
+                StatTile(label: loc(S.ytd), value: Format.signedPercent(instrument.ytd),
                          tint: Format.tint(instrument.ytd))
                 if let rsi = instrument.rsi14 {
                     StatTile(label: "RSI", value: Format.number(rsi))
@@ -184,12 +360,57 @@ private struct InstrumentCard: View {
     }
 
     private var yDomain: ClosedRange<Double> {
-        let values = points.map(\.price)
+        // The moving averages are drawn as rules inside this chart, so they have to
+        // be inside the domain too — clamping to the visible prices alone would push
+        // a 200-day line off the top of a card in a sharp drawdown, and a missing
+        // reference line reads as "price is not near it".
+        var values = points.map(\.price)
+        if let ma50 = instrument.ma50 { values.append(ma50) }
+        if let ma200 = instrument.ma200 { values.append(ma200) }
         guard let low = values.min(), let high = values.max(), high > low else {
             return 0...1
         }
         let pad = (high - low) * 0.08
         return (low - pad)...(high + pad)
+    }
+}
+
+/// Where the price sits between its 52-week low and high.
+///
+/// A number pair says 6316 and 7816; a filled track says "near the top", which is
+/// the question being asked. Both are shown, because the position is only
+/// interpretable next to the bounds it is a position within.
+private struct RangeBar: View {
+    let low: Double
+    let high: Double
+    let now: Double
+    let label: String
+
+    private var fraction: Double {
+        min(1, max(0, (now - low) / (high - low)))
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(label)
+                    .font(.caption2)
+                    .foregroundStyle(Palette.secondaryText)
+                Spacer()
+                Text("\(Format.price(low)) – \(Format.price(high))")
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(Palette.secondaryText)
+            }
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Palette.border)
+                    Capsule()
+                        .fill(Palette.brand)
+                        .frame(width: max(2, geo.size.width * fraction))
+                }
+            }
+            .frame(height: 4)
+        }
     }
 }
 

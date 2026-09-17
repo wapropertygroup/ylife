@@ -91,6 +91,24 @@ struct FreshnessBanner: View {
         }
     }
 
+    /// Cache age in the reader's language.
+    ///
+    /// `meta.age_label` arrives already rendered in English, which is the one
+    /// piece of chrome on these screens the language toggle could not reach. The
+    /// same payload carries `age_seconds`, so the app says it itself. The
+    /// server's string is the fallback: a stale-looking label beats showing no
+    /// freshness at all, which is the thing every one of these banners exists
+    /// to prevent.
+    private var age: String? {
+        guard let seconds = meta.ageSeconds else { return meta.ageLabel }
+        switch seconds {
+        case ..<60:    return loc(S.ageJustNow)
+        case ..<3600:  return loc(S.ageMinutes(seconds / 60))
+        case ..<86400: return loc(S.ageHours(seconds / 3600))
+        default:       return loc(S.ageDays(seconds / 86400))
+        }
+    }
+
     var body: some View {
         HStack(spacing: 8) {
             Circle()
@@ -102,7 +120,7 @@ struct FreshnessBanner: View {
                     .font(.caption.weight(.medium))
                     .foregroundStyle(isStale ? Palette.down : Palette.secondaryText)
             }
-            if let age = meta.ageLabel {
+            if let age {
                 // The separator belongs to the age only when something precedes it.
                 Text(label == nil ? age : "· \(age)")
                     .font(.caption)

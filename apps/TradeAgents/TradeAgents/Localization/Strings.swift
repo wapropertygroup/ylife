@@ -32,6 +32,24 @@ enum S {
     static let stale        = LocalizedString("Stale", "数据陈旧")
     static let noDecision   = LocalizedString("No decision", "无结论")
 
+    /// Cache age, formatted here rather than taken from `meta.age_label`.
+    ///
+    /// The server sends that label already rendered — "4m ago" — which is English
+    /// on a Chinese screen and the one bit of chrome no toggle could reach. The
+    /// same payload carries `age_seconds`, so the app can say it in the reader's
+    /// language from the same fact. Falls back to the server's string when the
+    /// seconds are absent, since a stale label beats no freshness at all.
+    static let ageJustNow = LocalizedString("just now", "刚刚")
+    static func ageMinutes(_ n: Int) -> LocalizedString {
+        LocalizedString("\(n)m ago", "\(n) 分钟前")
+    }
+    static func ageHours(_ n: Int) -> LocalizedString {
+        LocalizedString("\(n)h ago", "\(n) 小时前")
+    }
+    static func ageDays(_ n: Int) -> LocalizedString {
+        LocalizedString("\(n)d ago", "\(n) 天前")
+    }
+
     // MARK: - Agents
 
     static let loadingReports = LocalizedString("Loading reports", "正在加载报告")
@@ -174,6 +192,56 @@ enum S {
 
     static let noPriceHistory = LocalizedString("No price history", "暂无价格历史")
     static let ytd            = LocalizedString("YTD", "年初至今")
+
+    // Volatility. `vixTermTip` explains the one number on this screen whose
+    // direction is not self-evident: the ratio is normally above 1, and below 1
+    // is the stressed reading, which is the opposite of the intuition that a
+    // bigger number is worse.
+    static let volatility   = LocalizedString("Volatility", "波动率")
+    static let vixTerm      = LocalizedString("Term", "期限结构")
+    static let vixTermTip   = LocalizedString(
+        "VIX3M ÷ VIX. Above 1 is the normal upward-sloping curve; below 1 means near-term fear exceeds three-month, which is the stressed reading.",
+        "VIX3M ÷ VIX。大于 1 为正常的向上倾斜曲线；小于 1 表示近月恐慌高于三个月，属于紧张状态。")
+    static let vixContango  = LocalizedString("Normal curve", "曲线正常")
+    static let vixInverted  = LocalizedString("Inverted — near-term fear", "倒挂 — 近月恐慌")
+    static let vvix         = LocalizedString("VVIX", "VVIX")
+    static let twoYearRange = LocalizedString("2-year weekly", "两年周线")
+
+    // Sector rotation.
+    static let sectors      = LocalizedString("Sectors", "板块")
+    static let sectorsToday = LocalizedString("Today", "今日")
+    static let sectorsWeek  = LocalizedString("Week", "本周")
+
+    /// SPDR sector names, keyed by **ticker** rather than by the English label the
+    /// server sends. The label is server copy and can be reworded — "Comm." was
+    /// "Communications" at one point — whereas XLK is the fund and will not
+    /// change. Matching on the English string would also mean an app translating
+    /// its own copy against text it does not own.
+    ///
+    /// An unknown ticker falls back to the server's label, so a sector added
+    /// upstream appears in English rather than disappearing.
+    static let sectorNames: [String: LocalizedString] = [
+        "XLK":  LocalizedString("Tech", "科技"),
+        "XLF":  LocalizedString("Financials", "金融"),
+        "XLE":  LocalizedString("Energy", "能源"),
+        "XLV":  LocalizedString("Healthcare", "医疗健康"),
+        "XLI":  LocalizedString("Industrials", "工业"),
+        "XLY":  LocalizedString("Consumer Disc.", "非必需消费"),
+        "XLP":  LocalizedString("Consumer Stap.", "必需消费"),
+        "XLU":  LocalizedString("Utilities", "公用事业"),
+        "XLB":  LocalizedString("Materials", "材料"),
+        "XLRE": LocalizedString("Real Estate", "房地产"),
+        "XLC":  LocalizedString("Comm.", "通信"),
+        "XTL":  LocalizedString("Telecom", "电信"),
+    ]
+
+    // Per-instrument context, all of it already in the payload.
+    static let range52  = LocalizedString("52-week range", "52 周区间")
+    static let ma50     = LocalizedString("50d", "50 日均线")
+    static let ma200    = LocalizedString("200d", "200 日均线")
+    static let tfDaily   = LocalizedString("1D", "日线")
+    static let tfWeekly  = LocalizedString("1W", "周线")
+    static let tfMonthly = LocalizedString("1M", "月线")
 
     // MARK: - Sentiment (empty state)
 
