@@ -1241,6 +1241,39 @@ Reads on the request path go through `history_cached()`, not `history()`.
 `/api/fedwatch/history` is public and unauthenticated and every uncached call is a
 full table scan, which on `PAY_PER_REQUEST` is billed by volume scanned.
 
+**The target range gets its own refresh cycle, and it must not get its own
+update.** The two halves of the fedwatch payload have opposite needs: the ZQ
+curve reprices all session and wants the 4-hour TTL, while the target range is a
+*fact*, changes eight times a year, and is two small FRED CSVs. On 2026-09-17 the
+FOMC moved to 3.75–4.00, FRED published the row, and the page showed 3.50–3.75
+for hours — the payload happened to have been built ninety minutes earlier. So
+`probe_target_range()` reads just DFEDTARL/DFEDTARU every 30 minutes, and every 5
+within `_HOT_WINDOW_DAYS` of a decision (`schedule` is in the payload because
+`meetings` holds only *upcoming* decisions — the one that caused the change is
+dropped from it on exactly the morning it lands, and `fetch_fomc_meetings()` is
+not memoised, so reading the calendar per probe would mean scraping
+federalreserve.gov 48 times a day).
+
+A changed range then triggers a **full rebuild**; it is never patched into the
+cached payload. `lower`/`upper` are not merely displayed — they are the baseline
+`_expected_path()` projects every meeting from, and they are written into
+`ystocker-fedwatch-history` as `base_lower`/`base_upper`. Patching them alone
+would render a new range above probabilities computed from the old one and then
+bank that pairing into a series that cannot be recomputed. A failed probe returns
+`None`, which is "don't know" and neither triggers nor suppresses a rebuild;
+comparison is rounded, since `3.75 != 3.7500000001` off a CSV would otherwise
+rebuild the ZQ curve every 30 minutes for ever.
+
+**And the probe is worthless without the disk re-read.** Under `--preload` the
+refresh thread runs only in the master, so each worker forks a `_cache_data`
+snapshot and — before this — served it for the whole 4-hour TTL without ever
+looking at disk again. The master would detect the move within minutes and every
+reader would still be told the old range. `get_fedwatch_data()` now compares
+`_disk_mtime()` against the mtime its copy came from (one `stat()`, no parse) and
+reloads only when the file has actually been rewritten. Ordering is by the
+payload's own `_ts`, so a restored backup or a clock step cannot roll a good cache
+backwards. Tests: `tests/test_fedwatch_range_probe.py` (27, no app/network).
+
 None of these five tables are in `deploy/cloudformation.yaml`, deliberately: they
 already exist, and CloudFormation cannot adopt a live table without an import
 operation, so adding them would break the next `--full` deploy rather than
