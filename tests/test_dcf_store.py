@@ -140,5 +140,112 @@ class StoredRowFeedsTheEngine(unittest.TestCase):
         self.assertEqual(out["source"], "override")
 
 
+class FactorOverrides(unittest.TestCase):
+    """Hand-entered relative-factor percentiles.
+
+    These exist for a failure the DCF override cannot reach. A factor goes
+    unmeasurable when its *series* could not be reconstructed at all — negative
+    earnings leave no P/E history — and when enough of them go, the surviving
+    weight drops under MIN_SURVIVING_WEIGHT and the whole ticker refuses to
+    score. Reported on a semiconductor template left with only P/FCF and
+    EV/EBITDA: 30% against a 50% floor, so five factors produced nothing.
+
+    The unit is a **percentile**, not a multiple, and that is forced rather than
+    chosen: with no reconstructed history there is nothing to rank a hand-typed
+    multiple against.
+    """
+
+    def test_a_factor_map_is_enough_on_its_own(self):
+        row = dcf_store.validate("NVDA", {"factors": {"pe": 62, "peg": 45.5}})
+        self.assertEqual(row["factors"], {"pe": 62.0, "peg": 45.5})
+
+    def test_an_empty_submission_is_still_refused(self):
+        with self.assertRaises(dcf_store.ValidationError):
+            dcf_store.validate("NVDA", {})
+
+    def test_a_percentile_outside_0_100_is_refused_not_clamped(self):
+        """Outside the range is a mistake, not a strong opinion — and clamping
+        would store a number the reader did not type."""
+        for bad in (140, -3, 100.5):
+            with self.assertRaises(dcf_store.ValidationError, msg=str(bad)):
+                dcf_store.validate("NVDA", {"factors": {"pe": bad}})
+
+    def test_an_unknown_factor_is_refused_rather_than_ignored(self):
+        """A typo that stores silently looks exactly like an override that
+        took effect, which is the worst of both."""
+        with self.assertRaises(dcf_store.ValidationError):
+            dcf_store.validate("NVDA", {"factors": {"p_e": 50}})
+
+    def test_every_known_factor_is_accepted(self):
+        from ystocker.dca import DIRECTION
+
+        row = dcf_store.validate("NVDA", {"factors": {k: 50 for k in DIRECTION}})
+        self.assertEqual(len(row["factors"]), len(DIRECTION))
+
+    def test_a_json_string_is_accepted(self):
+        """A form post may send it encoded rather than as a nested object."""
+        row = dcf_store.validate("NVDA", {"factors": '{"pe": 50}'})
+        self.assertEqual(row["factors"], {"pe": 50.0})
+
+    def test_malformed_json_is_refused_with_a_readable_message(self):
+        with self.assertRaises(dcf_store.ValidationError):
+            dcf_store.validate("NVDA", {"factors": "{pe: 50"})
+
+    def test_a_blank_value_clears_rather_than_scoring_zero(self):
+        """Zero is a real percentile meaning "cheapest it has ever been", so a
+        blanked field must not arrive as one."""
+        row = dcf_store.validate("NVDA", {"factors": {"pe": "", "peg": 40}})
+        self.assertEqual(row["factors"], {"peg": 40.0})
+
+
+class FactorOverridesUnblockScoring(unittest.TestCase):
+    """The reported failure, end to end through the pure engine."""
+
+    MEASURED = {"pfcf": 95.5, "ev_ebitda": 35.6}
+
+    def test_the_reported_case_refuses_before_any_override(self):
+        from ystocker import dca
+
+        out = dca.evaluate(ticker="NVDA", model="semiconductor",
+                           percentiles=self.MEASURED)
+        self.assertIsNone(out["V"])
+        self.assertAlmostEqual(out["surviving_weight"], 0.30, places=4)
+
+    def test_filling_the_gaps_restores_a_score(self):
+        from ystocker import dca
+
+        filled = dict(self.MEASURED, pe=62.0, peg=45.0, cycle_adjusted=55.0)
+        out = dca.evaluate(ticker="NVDA", model="semiconductor",
+                           percentiles=filled,
+                           overridden=["pe", "peg", "cycle_adjusted"])
+        self.assertIsNotNone(out["V"])
+        self.assertAlmostEqual(out["surviving_weight"], 1.0, places=4)
+
+    def test_overridden_rows_are_marked_and_measured_ones_are_not(self):
+        from ystocker import dca
+
+        filled = dict(self.MEASURED, pe=62.0)
+        out = dca.evaluate(ticker="NVDA", model="semiconductor",
+                           percentiles=filled, overridden=["pe"])
+        marked = {f["factor"] for f in out["factors"] if f["overridden"]}
+        plain = {f["factor"] for f in out["factors"] if not f["overridden"]}
+        self.assertEqual(marked, {"pe"})
+        self.assertEqual(plain, {"pfcf", "ev_ebitda"})
+        self.assertEqual(out["overridden"], ["pe"])
+
+    def test_marking_changes_no_arithmetic(self):
+        """The tag is presentation. If it moved the score, an override would be
+        worth a different amount depending on whether we admitted to it."""
+        from ystocker import dca
+
+        filled = dict(self.MEASURED, pe=62.0, peg=45.0, cycle_adjusted=55.0)
+        tagged = dca.evaluate(ticker="NVDA", model="semiconductor",
+                              percentiles=filled, overridden=list(filled))
+        plain = dca.evaluate(ticker="NVDA", model="semiconductor",
+                             percentiles=filled)
+        self.assertEqual(tagged["V"], plain["V"])
+        self.assertEqual(tagged["E"], plain["E"])
+
+
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()

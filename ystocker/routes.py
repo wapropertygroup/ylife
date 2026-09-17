@@ -1141,6 +1141,26 @@ def _dca_score(symbol: str, payload: dict, base: float, *,
     drift = dca_history.eps_drift(symbol)
     position = _dca_position(symbol, exposure)
 
+    override = (overrides or {}).get(symbol) if overrides is not None \
+        else _dca_overrides().get(symbol)
+
+    # Hand-entered factor percentiles, applied before scoring. These exist for
+    # the failure the DCF override cannot reach: when a factor's *series* could
+    # not be reconstructed at all -- negative EPS leaves no P/E history -- enough
+    # of them go missing that the surviving weight drops under
+    # MIN_SURVIVING_WEIGHT and the ticker refuses to score entirely. Observed on
+    # a semiconductor template left with only P/FCF and EV/EBITDA: 30% against a
+    # 50% floor, so five factors and the whole score came back empty.
+    #
+    # Which ones were supplied travels with them, because a hand-typed rank and
+    # a reconstructed one are the same number on screen and different claims.
+    overridden: list[str] = []
+    if override and isinstance(override.get("factors"), dict):
+        for factor, pct in override["factors"].items():
+            if isinstance(pct, (int, float)):
+                percentiles[factor] = float(pct)
+                overridden.append(factor)
+
     # The model has to be chosen before the DCF runs, because the template
     # decides both the valuation *form* (§10/§12 exclude FCFF for three of them)
     # and whether the projection starts from a mid-cycle cash flow (§7/§11).
@@ -1152,8 +1172,6 @@ def _dca_score(symbol: str, payload: dict, base: float, *,
     if dca_dcf_enabled():
         import datetime as _dt
 
-        override = (overrides or {}).get(symbol) if overrides is not None \
-            else _dca_overrides().get(symbol)
         try:
             dcf_payload = dca_history.dcf_for(
                 symbol, payload, model=model, override=override,
@@ -1178,6 +1196,7 @@ def _dca_score(symbol: str, payload: dict, base: float, *,
         position_pct=position.get("pct"),
         dcf=dcf_payload,
         w_dcf=w_dcf,
+        overridden=overridden,
     )
     return result, peer, drift, position
 

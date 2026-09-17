@@ -1114,6 +1114,13 @@ const I18n = (() => {
     'dca.dcf_saved':     { en: 'Saved. Reload to rescore.', zh: '已保存，刷新后重新评分。' },
     'dca.dcf_by':        { en: 'Entered by', zh: '录入人' },
     'dca.dcf_on':        { en: 'valued', zh: '估值日' },
+    // Hand-entered relative-factor percentiles.
+    'dca.f_ov':          { en: 'entered', zh: '人工录入' },
+    'dca.f_ov_tip':      { en: 'This percentile was entered by hand, not measured from the reconstructed history.',
+                           zh: '该分位为人工录入，并非由重建的历史数据测算得出。' },
+    'dca.f_ov_title':    { en: 'Factor percentiles', zh: '因子分位' },
+    'dca.f_ov_note':     { en: '0-100, where higher means dearer. Leave blank to use the measured value. Use these where a factor has no reconstructable history — a company with negative earnings has no P/E series to rank against, and enough missing factors stop the whole ticker scoring.',
+                           zh: '取值 0–100，数值越高表示越贵。留空则使用测算值。当某个因子没有可重建的历史时使用它 —— 例如亏损公司没有市盈率序列可供排名，而缺失的因子一旦过多，整只股票就无法评分。' },
     'dca.general_dcf':   { en: 'With no usable DCF, w<sub>dcf</sub> is 0 and V is the relative score alone — the missing branch is never filled with a neutral 50, because a made-up middle dilutes the evidence that does exist.',
                            zh: '若没有可用的 DCF，w<sub>dcf</sub> 取 0，V 完全由相对估值决定 — 缺失的分支绝不补成中性的 50 分，因为编造的中间值会稀释真实存在的信息。' },
 

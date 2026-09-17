@@ -119,6 +119,56 @@ def _num(value: Any) -> Optional[float]:
     return out if out == out and abs(out) != float("inf") else None
 
 
+def _factor_percentiles(value: Any) -> dict[str, float]:
+    """Validate a ``{factor: percentile}`` map, or raise.
+
+    These are **relative-branch** overrides and they exist for a failure the DCF
+    override cannot reach. A factor goes unmeasurable when its *series* could not
+    be reconstructed at all — negative EPS leaves no P/E history, a young listing
+    leaves too few vintages — and when enough of them go, the surviving weight
+    drops under :data:`ystocker.dca.MIN_SURVIVING_WEIGHT` and the whole ticker
+    refuses to score. Observed on a semiconductor template with only P/FCF and
+    EV/EBITDA left: 30% surviving against a 50% floor, so five factors produced
+    no number at all.
+
+    A **percentile** is the unit, not the multiple, and that is forced rather
+    than chosen: when there is no reconstructed history there is nothing to rank
+    a hand-typed multiple against, so a "current P/E" would have nowhere to go.
+    The percentile is the rank itself — the thing the engine actually consumes.
+
+    Keys are checked against :data:`ystocker.dca.DIRECTION` so a typo cannot
+    become a silently ignored field, and values must be a real 0-100: a
+    percentile outside that range is not a strong opinion, it is a mistake.
+    """
+    if value in (None, "", {}):
+        return {}
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except ValueError as exc:
+            raise ValidationError("Factor overrides must be a JSON object.") from exc
+    if not isinstance(value, Mapping):
+        raise ValidationError("Factor overrides must be a JSON object.")
+
+    from ystocker.dca import DIRECTION
+
+    out: dict[str, float] = {}
+    for key, raw in value.items():
+        factor = str(key).strip()
+        if factor not in DIRECTION:
+            raise ValidationError(
+                f"Unknown factor {factor!r}. Known factors: "
+                f"{', '.join(sorted(DIRECTION))}.")
+        pct = _num(raw)
+        if pct is None:
+            continue          # blanking a field clears it, same as the numerics
+        if not 0.0 <= pct <= 100.0:
+            raise ValidationError(
+                f"{factor} percentile must be between 0 and 100 (got {pct:g}).")
+        out[factor] = round(pct, 2)
+    return out
+
+
 def validate(ticker: str, payload: Mapping[str, Any]) -> dict[str, Any]:
     """Turn a submitted form into a storable row, or raise :class:`ValidationError`.
 
@@ -163,9 +213,13 @@ def validate(ticker: str, payload: Mapping[str, Any]) -> dict[str, Any]:
             raise ValidationError("The bull case cannot be below the base case.")
 
     has_assumptions = "wacc" in row or "terminal_growth" in row
-    if not has_values and not has_assumptions and "w_dcf" not in row:
+    factors = _factor_percentiles(payload.get("factors"))
+    if factors:
+        row["factors"] = factors
+    if not has_values and not has_assumptions and "w_dcf" not in row and not factors:
         raise ValidationError(
-            "Nothing to store: give fair values, assumptions, or a DCF weight.")
+            "Nothing to store: give fair values, assumptions, a DCF weight, "
+            "or a factor percentile.")
 
     # §13 refuses a valuation whose WACC is not meaningfully above g. Caught
     # here as well as in `dcf`, because an override that can never score is
@@ -289,6 +343,18 @@ def _ddb_rows() -> dict[str, dict[str, Any]]:
                 for field in ("valuation_date", "mode", "note", "author"):
                     if item.get(field):
                         row[field] = str(item[field])
+                # `factors` is a map, and everything else here goes to DynamoDB
+                # as a string — so it round-trips as JSON text rather than as a
+                # second storage convention in the same row.
+                if item.get("factors"):
+                    try:
+                        parsed = json.loads(str(item["factors"]))
+                        if isinstance(parsed, dict):
+                            row["factors"] = {
+                                k: v for k, v in parsed.items()
+                                if isinstance(v, (int, float))}
+                    except ValueError:
+                        log.warning("dcf_store: unreadable factors for %s", symbol)
                 row["updated_at"] = _num(item.get("updated_at")) or 0.0
                 out[symbol] = row
             if "LastEvaluatedKey" not in resp:
@@ -348,6 +414,12 @@ def put(row: Mapping[str, Any]) -> dict[str, Any]:
             item: dict[str, Any] = {"ticker": symbol}
             for key, value in row.items():
                 if key == "ticker" or value is None:
+                    continue
+                if isinstance(value, Mapping):
+                    # `factors`. json.dumps rather than str(): str() on a dict
+                    # emits single quotes, which json.loads then refuses on the
+                    # way back — the row would store and silently fail to read.
+                    item[key] = json.dumps(dict(value), sort_keys=True)
                     continue
                 # DynamoDB rejects float; every numeric here goes as a string
                 # and comes back through _num, matching dca_history.save_row.
