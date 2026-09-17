@@ -398,4 +398,14 @@ enum S {
     static let skewNormal     = LocalizedString("Normal", "正常")
     static let skewElevated   = LocalizedString("Elevated", "偏高")
     static let skewExtreme    = LocalizedString("Extreme", "极高")
+
+    // Chart range buttons. Short by necessity — six of these sit in a row under
+    // a chart, and a translated word would wrap the row onto two lines.
+    static let range1M        = LocalizedString("1M", "1月")
+    static let range3M        = LocalizedString("3M", "3月")
+    static let range6M        = LocalizedString("6M", "6月")
+    static let range1Y        = LocalizedString("1Y", "1年")
+    static let range5Y        = LocalizedString("5Y", "5年")
+    static let rangeAll       = LocalizedString("All", "全部")
+    static let chartReset     = LocalizedString("Reset", "重置")
 }

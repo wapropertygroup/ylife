@@ -137,16 +137,21 @@ private struct BankedForwardCard: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(loc(S.valBanked)).font(.subheadline.weight(.semibold))
             if plots.count > 1 {
-                Chart(plots) { p in
-                    LineMark(x: .value("Date", p.date), y: .value("P/E", p.value))
-                        .foregroundStyle(by: .value("Series", p.series))
-                        .interpolationMethod(.monotone)
-                }
-                .chartYScale(domain: yDomain)
-                .chartYAxis { AxisMarks(position: .leading) }
-                .localizedDateAxis(desiredCount: 3, dates: plots.map(\.date))
-                .chartLegend(position: .top, alignment: .leading)
-                .frame(height: 150)
+                TimeSeriesChart(
+                    series: [
+                        ChartSeries(id: "SPY", color: Palette.brand,
+                                    points: plots.filter { $0.series == "SPY" }
+                                        .map { PricePoint(date: $0.date, price: $0.value) }),
+                        ChartSeries(id: "QQQ", color: Palette.up,
+                                    points: plots.filter { $0.series == "QQQ" }
+                                        .map { PricePoint(date: $0.date, price: $0.value) }),
+                    ],
+                    height: 150,
+                    // No chart legend: the readout above already names both series
+                    // with their colour swatches *and* their current values, so a
+                    // second legend underneath is the same information twice.
+                    format: { Format.number($0, places: 2) }
+                )
             } else {
                 // The series starts empty and is worth nothing for months. Saying so
                 // is the point: a silently missing chart looks like a broken screen,
