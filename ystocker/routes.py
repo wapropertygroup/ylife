@@ -460,9 +460,24 @@ def _rolling_refresh_loop() -> None:
                 if raw:
                     with _cache_lock:
                         if _cache is not None:
-                            for group_data in _cache.values():
+                            # Keyed off PEER_GROUPS membership, not off what the
+                            # cache already holds. The obvious spelling —
+                            # `if ticker in group_data` — only *patches* keys that
+                            # are already present, so a ticker newly added to a
+                            # group is fetched (it is in `all_tickers`) and then
+                            # silently discarded, for ever: the rolling path can
+                            # never admit a new member, only the full 8-hourly
+                            # rebuild can. It pays the Yahoo call either way.
+                            #
+                            # Found after adding 30 names to PEER_GROUPS and
+                            # watching the cache sit at exactly 271 through
+                            # several cycles while the log said it was fetching.
+                            for group, members in PEER_GROUPS.items():
+                                group_data = _cache.get(group)
+                                if group_data is None:
+                                    continue
                                 for ticker, data in raw.items():
-                                    if ticker in group_data:
+                                    if ticker in members:
                                         group_data[ticker] = data
                             _cache_last_updated = time.time()
                 if errs:
