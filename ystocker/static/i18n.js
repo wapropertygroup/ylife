@@ -1162,6 +1162,18 @@ const I18n = (() => {
     'dcx.vs_flat':      { en: 'vs', zh: '对比' },
     'dcx.flat':         { en: 'flat', zh: '等额定投' },
     'dcx.filings':      { en: 'filings', zh: '期财报' },
+    // Latin 'y' read as an untranslated unit on the Chinese page, on all 60 rows.
+    'dcx.years_unit':   { en: 'y', zh: '年' },
+    'dcx.dropped':      { en: 'dropped', zh: '已剔除' },
+    // Why a row has no V. "Not yet" and "cannot" are different answers and were
+    // both rendering as a bare em dash.
+    'dcx.why_young':    { en: 'history too short', zh: '历史不足，暂无法评分' },
+    'dcx.why_no_peer_group': { en: 'no peer group', zh: '无同行组' },
+    'dcx.why_factors':  { en: 'too few factors', zh: '可用因子不足' },
+    'dcx.port_signed_out': {
+      en: 'Sign in and M_portfolio sizes by your own look-through exposure; until then it stays at 1.00×.',
+      zh: '登录后，M_组合 会按你自己的穿透持仓暴露调节；在此之前一直是 1.00×。' },
+    'dcx.sign_in':      { en: 'Sign in', zh: '登录' },
     'dcx.col_ticker':   { en: 'Ticker', zh: '代码' },
     'dcx.col_model':    { en: 'Model', zh: '模型' },
     'dcx.col_v':        { en: 'V', zh: 'V' },
@@ -1170,7 +1182,7 @@ const I18n = (() => {
     'dcx.col_mearn':    { en: 'M_earn', zh: 'M_盈利' },
     'dcx.col_mport':    { en: 'M_port', zh: 'M_组合' },
     'dcx.col_amount':   { en: 'Contribution', zh: '投入金额' },
-    'dcx.col_window':   { en: 'Window', zh: '区间' },
+    'dcx.col_window':  { en: 'Coverage', zh: '数据覆盖' },
     'dcx.table_note':   { en: 'V is a cheapness score against the name’s <em>own</em> reconstructed history, so it is not a cross-company ranking of quality or of absolute value — a 70 here means "cheap for this company", not "cheaper than the one above it". Each row is also scored on its own model, and the models weight different multiples.',
                           zh: 'V 衡量的是相对该股票<em>自身</em>重建历史的便宜程度，因此不是跨公司的质量或绝对价值排名 — 70 表示「对这家公司而言便宜」，而不是「比上一行更便宜」。且每一行使用各自的模型，不同模型对倍数的加权也不同。' },
     'dcx.disclaimer':   { en: 'A research and capital-discipline framework, not a return guarantee or an automated trading instruction. Valuation sets the pace of contribution; it does not decide whether to buy.',

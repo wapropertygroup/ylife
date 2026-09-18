@@ -207,3 +207,53 @@ class Degradation(RegistryBase):
 
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()
+
+
+class PeerGroupCoverageTests(unittest.TestCase):
+    """Every seed name must sit in some ``PEER_GROUPS`` entry.
+
+    These are two hand-maintained lists that grow for different reasons —
+    ``PEER_GROUPS`` is curated site-wide (it also drives the analyst sweep,
+    relative strength and the agents' peer context), while the DCA seed is the
+    framework's own named companies — so nothing stops them drifting apart, and
+    when they do the failure is silent and doubly expensive.
+
+    Measured on 2026-09-18, before this was fixed: 30 of the 60 tracked tickers
+    were in no peer group, and the correlation with the damage was exact.
+
+      * All 25 rows that dropped the ``peer`` factor were tickers with no group.
+        ``peer`` carries 15-20% in nine of the ten templates, so those names
+        scored on a renormalised subset of their own model while rendering in the
+        same column as names that did not.
+      * All 30 showed ``M_盈利`` as a flat 1.00x, because ``analyst.py`` sweeps
+        exactly ``PEER_GROUPS`` — so a name outside it can never have revision
+        data, and the overlay is inert rather than neutral.
+
+    One missing entry therefore costs a factor *and* an overlay.
+
+    Note what this test does and does not cover. The seed is 23 names; the other
+    37 tracked tickers arrived through the registry because a reader opened them,
+    and 25 of the 30 gaps were exactly those. So this guards the curated core and
+    nothing else — a registry ticker still arrives with no group and no way for a
+    test to anticipate it. That case is handled by disclosure instead: the payload
+    carries ``no_peer_group`` and the page says so, rather than renormalising in
+    silence.
+    """
+
+    def test_every_seed_ticker_has_a_peer_group(self):
+        from ystocker import PEER_GROUPS
+
+        members = {t for group in PEER_GROUPS.values() for t in group}
+        orphans = sorted(du.seed() - members)
+        self.assertEqual(
+            orphans, [],
+            "seed tickers with no peer group (they will score with `peer` dropped "
+            f"and no earnings overlay): {orphans}")
+
+    def test_goog_is_excluded_rather_than_orphaned(self):
+        """The one deliberate omission, so the assertion above cannot be made to
+        pass by quietly dropping a name from the seed instead of grouping it."""
+        from ystocker.dca import TICKER_MODELS
+
+        self.assertIn("GOOG", TICKER_MODELS)
+        self.assertNotIn("GOOG", du.seed())

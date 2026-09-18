@@ -117,18 +117,22 @@
   <div class="flex items-center justify-between mb-3 gap-2 flex-wrap">
     <h2 class="text-sm font-semibold" data-i18n="dcx.table_title">All scored names</h2>
     <div id="totalLine" class="text-xs text-slate-500"></div>
+    <div id="portfolioHint" class="hidden text-xs mt-1 text-slate-500">
+      <span data-i18n="dcx.port_signed_out">Sign in to let M_portfolio size by your own look-through exposure; it stays at 1.00× until then.</span>
+      <a href="/login" class="underline hover:no-underline ml-1" data-i18n="dcx.sign_in">Sign in</a>
+    </div>
   </div>
   <div class="overflow-x-auto">
     <table class="w-full text-left">
       <thead>
         <tr class="text-[10px] uppercase tracking-widest text-slate-500 dark:text-slate-600">
           <th class="pb-2 px-2.5 sortable" data-sort="ticker" data-i18n="dcx.col_ticker">Ticker</th>
-          <th class="pb-2 px-2.5" data-i18n="dcx.col_model">Model</th>
+          <th class="pb-2 px-2.5 sortable" data-sort="model" data-i18n="dcx.col_model">Model</th>
           <th class="pb-2 px-2.5 sortable text-right" data-sort="V" data-i18n="dcx.col_v">V</th>
           <th class="pb-2 px-2.5" data-i18n="dcx.col_band">State</th>
           <th class="pb-2 px-2.5 sortable text-right" data-sort="m_valuation" data-i18n="dcx.col_mval">M_val</th>
-          <th class="pb-2 px-2.5 text-right" data-i18n="dcx.col_mearn">M_earn</th>
-          <th class="pb-2 px-2.5 text-right" data-i18n="dcx.col_mport">M_port</th>
+          <th class="pb-2 px-2.5 sortable text-right" data-sort="m_earnings" data-i18n="dcx.col_mearn">M_earn</th>
+          <th class="pb-2 px-2.5 sortable text-right" data-sort="m_portfolio" data-i18n="dcx.col_mport">M_port</th>
           <th class="pb-2 px-2.5 sortable text-right" data-sort="amount" data-i18n="dcx.col_amount">Contribution</th>
           <th class="pb-2 px-2.5" data-i18n="dcx.col_window">Window</th>
           <th class="pb-2 px-2.5"><span class="sr-only" data-i18n="dcx.col_remove">Remove</span></th>
@@ -152,6 +156,7 @@
 <script>
 const BASE_KEY = 'ystocker_dca_base';
 let _rows = [], _sort = { key: 'V', dir: -1 }, _data = null, _pollTimer = null, _polls = 0;
+let _allPortfolioUnknown = false;
 
 const fmtMoney = v => v == null ? '—'
   : v.toLocaleString(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
@@ -189,6 +194,64 @@ function dcfTag(r) {
     + ' @ ' + ((r.w_dcf || 0) * 100).toFixed(0) + '%';
   return `<div class="text-[10px] text-slate-500 tabular-nums" title="${esc(title)}">`
     + `DCF ${r.V_dcf.toFixed(0)} · ${((r.w_dcf || 0) * 100).toFixed(0)}%</div>`;
+}
+
+/* An overlay multiplier, with the reason it holds that value written underneath.
+
+   Both of these terms are 1.00x most of the time, and for two entirely different
+   reasons: analysts genuinely did not move their estimates, or there is no
+   estimate data at all. Those rendered identically — a dimmed `1.00×` with the
+   explanation in a `title` attribute, which does not exist on a touch device and
+   is not discoverable on a desktop either. Measured on the live page: 37 of 60
+   rows on M_盈利 and all 60 on M_组合.
+
+   The number stays, because it is the multiplier that was actually applied and a
+   reader checking amount = base x M_val x M_earn x M_port needs to see it. The
+   band goes underneath, where it is legible without a pointer.
+
+   `suppress` collapses the sub-label when every row would carry the same one —
+   sixty repetitions of "not signed in" is noise, and the banner above the table
+   says it once instead. */
+function overlayCell(value, band, prefix, suppress) {
+  const neutral = value === 1;
+  const unknown = !band || band === 'unknown';
+  const note = (unknown && suppress) ? ''
+    : `<div class="text-[10px] ${unknown ? 'text-slate-400 dark:text-slate-600 italic' : 'text-slate-500'}">`
+      + esc(label(prefix, band)) + '</div>';
+  return `<td class="text-right font-mono ${neutral ? 'text-slate-400 dark:text-slate-600' : ''}">`
+    + value.toFixed(2) + '×' + note + '</td>';
+}
+
+/* Why a row has no V.
+
+   A bare em dash said only "no score" and left two different futures looking
+   the same: EquipmentShare has 0.7 years of history and will score by itself
+   once it has enough, while Lumentum has three years and cannot assemble half
+   its template's weight no matter how long it waits. The server decides which
+   (`no_score_reason`) — the page must not re-derive it from `years`, or the two
+   would drift. */
+function noScoreTag(r) {
+  if (!r.no_score_reason) return '';
+  const txt = I18n.t('dcx.why_' + r.no_score_reason)
+    || {young: 'history too short', no_peer_group: 'no peer group', factors: 'too few factors'}[r.no_score_reason]
+    || '';
+  return `<div class="text-[10px] text-amber-600 dark:text-amber-500">${esc(txt)}</div>`;
+}
+
+/* History length, vintage count, and which factors were dropped.
+
+   The dropped list used to be a `−N` chip whose contents were a tooltip, so on a
+   phone the only thing a reader could learn was that *some* number of factors
+   went missing. It is named inline now: it is the difference between a score
+   built from five multiples and one built from three. */
+function coverageCell(r) {
+  if (r.years == null) return '—';
+  const yrs = r.years + (I18n.t('dcx.years_unit') || 'y');
+  const head = yrs + ' · ' + r.vintages + ' ' + esc(I18n.t('dcx.filings') || 'filings');
+  if (!r.dropped || !r.dropped.length) return head;
+  const names = r.dropped.map(f => esc(label('dca.f_', f))).join('、');
+  return head + `<div class="text-[10px] text-slate-400 dark:text-slate-600">`
+    + esc(I18n.t('dcx.dropped') || 'dropped') + ': ' + names + '</div>';
 }
 
 function summaryRow(r) {
@@ -240,6 +303,17 @@ function render() {
       ' (' + (total >= flat ? '+' : '') + ((total / flat - 1) * 100).toFixed(1) + '%)'
     : '';
 
+  /* True when the portfolio overlay is switched off for the whole table, which
+     is every signed-out visitor. The multiplier is 1.00x on all sixty rows and
+     the only thing saying why was a `title="not signed in"` tooltip. Said once,
+     above the table, with a way to act on it. */
+  _allPortfolioUnknown = _rows.length > 0 &&
+    _rows.every(r => !r.portfolio_band || r.portfolio_band === 'unknown');
+  const banner = document.getElementById('portfolioHint');
+  if (banner) {
+    banner.classList.toggle('hidden', !_allPortfolioUnknown);
+  }
+
   const sorted = _rows.slice().sort((a, b) => {
     const k = _sort.key;
     const av = a[k], bv = b[k];
@@ -262,18 +336,15 @@ function render() {
           <span class="pct-track w-14"><span class="pct-fill" style="width:${r.V == null ? 0 : r.V}%;background:${vColor(r.V)}"></span></span>
           <span class="font-mono w-8 text-right" style="color:${vColor(r.V)}">${r.V == null ? '—' : r.V.toFixed(0)}</span>
         </div>
-        ${dcfTag(r)}
+        ${r.V == null ? noScoreTag(r) : dcfTag(r)}
       </td>
       <td class="text-xs" style="color:${vColor(r.V)}">${esc(r.band ? label('dca.band_', r.band) : '—')}</td>
       <td class="text-right font-mono">${r.m_valuation == null ? '—' : r.m_valuation.toFixed(2) + '×'}</td>
-      <td class="text-right font-mono ${r.m_earnings === 1 ? 'text-slate-400 dark:text-slate-600' : ''}"
-          title="${esc(label('dca.earn_', r.earnings_band))}">${r.m_earnings.toFixed(2)}×</td>
-      <td class="text-right font-mono ${r.m_portfolio === 1 ? 'text-slate-400 dark:text-slate-600' : ''}"
-          title="${esc(label('dca.port_', r.portfolio_band))}">${r.m_portfolio.toFixed(2)}×</td>
+      ${overlayCell(r.m_earnings, r.earnings_band, 'dca.earn_')}
+      ${overlayCell(r.m_portfolio, r.portfolio_band, 'dca.port_', _allPortfolioUnknown)}
       <td class="text-right font-mono font-semibold">${fmtMoney(r.amount)}${
         r.capped ? ' <span class="chip" title="' + esc(I18n.t('dca.capped') || 'Capped') + '">⌃</span>' : ''}</td>
-      <td class="text-[11px] text-slate-500">${r.years == null ? '—' : r.years + 'y · ' + r.vintages + ' ' + esc(I18n.t('dcx.filings') || 'filings')}${
-        r.dropped && r.dropped.length ? ' <span class="chip" title="' + esc(r.dropped.map(f => label('dca.f_', f)).join(', ')) + '">−' + r.dropped.length + '</span>' : ''}</td>
+      <td class="text-[11px] text-slate-500">${coverageCell(r)}</td>
       <td class="text-right">${r.seed ? '' :
         `<button type="button" class="untrack text-slate-400 hover:text-red-600 dark:hover:text-red-400 transition px-1"
                  data-ticker="${esc(r.ticker)}"
