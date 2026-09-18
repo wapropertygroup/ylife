@@ -1114,6 +1114,36 @@ def dca_dcf_enabled() -> bool:
     return os.environ.get("DCA_DCF", "1").strip().lower() not in ("0", "false", "no")
 
 
+def _dca_no_score_reason(result: dict, peer: dict, window: dict) -> Optional[str]:
+    """Why a row has no V, in one word the page can render.
+
+    ``None`` when it scored. Otherwise the page previously showed a bare em dash
+    for every unscorable row, which collapsed two genuinely different statements
+    into one: EquipmentShare had 0.7 years of reconstructed history and will score
+    on its own once it has enough, while Lumentum has three years and simply
+    cannot assemble half its template's weight. "Not yet" and "cannot" are the
+    same distinction this codebase already draws between ``pending`` and
+    ``unresolved`` in the look-through, and between an unscorable row and V=0.
+
+    Order matters: too-short history is checked first because it *causes* the
+    dropped factors — ``MIN_OBSERVATIONS`` refuses to rank against a distribution
+    of eleven points — so reporting "not enough factors" for a six-month-old
+    listing would name the symptom and hide the cause.
+    """
+    from ystocker import dca
+
+    if result.get("V") is not None:
+        return None
+    # Roughly the years of weekly vintages MIN_OBSERVATIONS needs. Approximate on
+    # purpose: this only picks which sentence to show, not whether to score.
+    years = window.get("years")
+    if years is not None and years < dca.MIN_OBSERVATIONS / 52.0:
+        return "young"
+    if peer.get("reason") == "no_group":
+        return "no_peer_group"
+    return "factors"
+
+
 def _dca_score(symbol: str, payload: dict, base: float, *,
                recs=None, exposure=None, overrides=None) -> tuple[dict, dict, dict, dict]:
     """Score one ticker. Returns ``(result, peer, drift, position)``.
@@ -1423,6 +1453,8 @@ def api_dca_list():
             "eps_drift": drift.get("drift"),
             "years": window.get("years"),
             "vintages": window.get("vintages"),
+            "no_score_reason": _dca_no_score_reason(result, peer, window),
+            "peer_group": peer.get("group"),
             "seed": symbol in protected,
             "stale": (time.time() - (payload.get("_ts") or 0)) > dca_history.TTL_SECONDS,
         })

@@ -12,10 +12,11 @@ from flask import Flask
 # Each key is a group name; each value is a list of Yahoo Finance ticker symbols.
 # ---------------------------------------------------------------------------
 PEER_GROUPS: dict[str, list[str]] = {
-    "Tech":              ["MSFT", "AAPL", "GOOGL", "META", "NVDA", "AMZN", "TSLA", "NFLX", "ADBE", "CRM", "PLTR", "ORCL"],
+    "Tech":              ["MSFT", "AAPL", "GOOGL", "META", "NVDA", "AMZN", "TSLA", "NFLX",
+                         "ADBE", "CRM", "PLTR", "ORCL", "IBM"],
     "Software":          ["MSFT", "ORCL", "CRM", "ADBE", "PLTR", "INTU", "NOW", "CRWD"],
-    "Cloud / SaaS":      ["MSFT", "CRM", "NOW", "AMZN", "ORCL", "SNOW",
-                          "DDOG", "CRWD", "MDB", "NET", "ZS", "IGV"],
+    "Cloud / SaaS":      ["MSFT", "CRM", "NOW", "AMZN", "ORCL", "SNOW", "DDOG", "CRWD",
+                         "MDB", "NET", "ZS", "IGV", "DT"],
     # The PHLX Semiconductor (SOX) constituents, not a hand-picked eight. This
     # group is what puts semiconductor fundamentals into cache/ticker_cache.json,
     # and valuation.SOX30 aggregates the *cache* — so the SOX forward P/E on
@@ -24,27 +25,48 @@ PEER_GROUPS: dict[str, list[str]] = {
     # Keep in step with valuation.SOX30; a name here that SOX has dropped is
     # harmless (it is simply not aggregated), a SOX name missing here is not.
     "Semiconductors":    ["NVDA", "AVGO", "AMD", "TXN", "QCOM", "AMAT", "MU", "LRCX",
-                          "ADI", "KLAC", "INTC", "NXPI", "MCHP", "MRVL", "ON", "SWKS",
-                          "MPWR", "TER", "ENTG", "QRVO", "ASML", "TSM", "ARM", "GFS",
-                          "WOLF", "AMKR", "COHR", "RMBS", "SITM", "ALAB"],
-    "Financials":        ["JPM", "BAC", "GS", "MS", "BLK", "BRK-B", "V", "MA", "WFC", "AXP"],
-    "Healthcare":        ["UNH", "JNJ", "LLY", "ABBV", "MRK", "ISRG", "PFE", "TMO", "ABT", "DHR"],
+                         "ADI", "KLAC", "INTC", "NXPI", "MCHP",
+                         "MRVL", "ON", "SWKS", "MPWR", "TER",
+                         "ENTG", "QRVO", "ASML", "TSM", "ARM",
+                         "GFS", "WOLF", "AMKR", "COHR", "RMBS",
+                         "SITM", "ALAB", "STM", "LITE", "SNDK",
+                         "005930.KQ", "000660.KQ"],
+    "Financials":        ["JPM", "BAC", "GS", "MS", "BLK", "BRK-B", "V", "MA", "WFC",
+                         "AXP", "ARES", "RY"],
+    "Healthcare":        ["UNH", "JNJ", "LLY", "ABBV", "MRK", "ISRG", "PFE", "TMO", "ABT",
+                         "DHR", "BSX", "SOLV", "VTRS"],
     "Biotech":           ["LLY", "AMGN", "VRTX", "REGN", "GILD", "BIIB", "ILMN"],
     "Retail":            ["WMT", "AMZN", "COST", "TGT", "HD", "LOW", "TJX", "DG"],
-    "E-commerce":        ["AMZN", "SHOP", "MELI", "EBAY", "ETSY", "CHWY", "W", "PDD", "JD", "BABA"],
-    "Streaming / Media": ["NFLX", "DIS", "PARA", "CMCSA", "SPOT", "ROKU", "FUBO", "TME", "BIDU"],
-    "Real Estate":       ["AMT", "PLD", "EQIX", "SPG", "O", "DLR", "PSA", "WELL"],
-    "Metals & Mining":   ["FCX", "NEM", "BHP", "RIO", "VALE", "GOLD", "SCCO", "WPM"],
-    "Energy / Oil & Gas":["XOM", "CVX", "COP", "EOG", "SLB", "PSX", "MPC", "OXY"],
-    "Industrials":       ["BA", "RTX", "HON", "CAT", "DE", "GE", "LMT", "MMM", "UNP", "UPS"],
+    "E-commerce":        ["AMZN", "SHOP", "MELI", "EBAY", "ETSY", "CHWY", "W", "PDD", "JD",
+                         "BABA", "DASH"],
+    "Streaming / Media": ["NFLX", "DIS", "PARA", "CMCSA", "SPOT", "ROKU", "FUBO", "TME",
+                         "BIDU", "FOX", "WBD"],
+    "Real Estate":       ["AMT", "PLD", "EQIX", "SPG", "O", "DLR", "PSA", "WELL", "SEG"],
+    "Metals & Mining":   ["FCX", "NEM", "BHP", "RIO", "VALE", "GOLD", "SCCO", "WPM", "TECK"],
+    "Energy / Oil & Gas":["XOM", "CVX", "COP", "EOG", "SLB", "PSX", "MPC", "OXY", "ENB",
+                         "PBR"],
+    "Industrials":       ["BA", "RTX", "HON", "CAT", "DE", "GE", "LMT", "MMM", "UNP",
+                         "UPS", "ITW", "NSC", "HWM", "ITRI",
+                         "EQPT"],
     "Apparel & Footwear":["NKE", "LULU", "DECK", "ONON", "BIRK", "CROX", "RL", "TPR", "UAA"],
+    # Homebuilders and the engineering/construction names, which had no home: the
+    # "Real Estate" group above is REITs, and ranking a homebuilder's forward P/E
+    # against a landlord's is a category error. DHI/FIX/STRL arrived through the
+    # DCA registry (someone opened them) and so scored with the peer factor dropped
+    # entirely until this existed. The extra six are here to make the rank mean
+    # something — a cross-sectional percentile over three names can only return
+    # three answers.
+    "Homebuilders & Construction":
+                         ["DHI", "LEN", "PHM", "NVR", "TOL", "BLDR",
+                          "FIX", "STRL", "PWR", "ACM"],
     "Consumer Staples":  ["PG", "KO", "PEP", "COST", "WMT", "PM", "MO", "MDLZ"],
     "Airlines & Travel": ["DAL", "UAL", "AAL", "LUV", "BKNG", "EXPE", "ABNB", "MAR", "HLT", "RCL"],
     "Communication":     ["GOOGL", "META", "NFLX", "DIS", "VZ", "T", "TMUS", "CHTR", "EA", "TTWO"],
     "Telecom":           ["VZ", "T", "TMUS", "CHTR", "LUMN", "CCOI", "SHEN", "XTL"],
-    "Utilities":         ["NEE", "DUK", "SO", "D", "AEP", "EXC", "SRE", "XEL"],
+    "Utilities":         ["NEE", "DUK", "SO", "D", "AEP", "EXC", "SRE", "XEL", "PPL", "AQN"],
     "AI / Robotics":     ["NVDA", "MSFT", "GOOGL", "META", "AMZN", "PLTR", "AI", "SMCI",
-                          "ANET", "ARM", "DELL", "TSM", "AVGO"],
+                         "ANET", "ARM", "DELL", "TSM", "AVGO",
+                         "AEVA"],
     "US Broad ETFs":     ["SPY", "QQQ", "IWM", "DIA", "VTI", "VOO", "VXUS", "BND", "AGG",
                           "SHY", "IEF", "HYG", "LQD", "RSP"],
     # SOXX/SMH earn their place here rather than in Semiconductors: they are the
