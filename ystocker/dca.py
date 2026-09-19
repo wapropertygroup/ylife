@@ -80,6 +80,7 @@ __all__ = [
     "DCF_WEIGHTS", "DCF_FORMS", "DCF_MID_CYCLE", "MAX_DCF_WEIGHT",
     "MIN_OBSERVATIONS", "MIN_SURVIVING_WEIGHT", "MAX_TOTAL_MULTIPLIER",
     "percentile_rank", "pick_model", "expensiveness", "v_score", "blend_v",
+    "PRICE_RESPONSE", "ev_scale", "price_scaled",
     "valuation_multiplier", "score_band", "earnings_multiplier",
     "portfolio_multiplier", "combine", "evaluate",
 ]
@@ -156,6 +157,97 @@ DERIVED_FACTORS: dict[str, tuple[str, str]] = {
     "mid_cycle":        ("cycle_adjusted", "same"),
     "cycle_adjusted":   ("mid_cycle", "same"),
 }
+
+
+#: How each reconstructed factor responds to a change in the share price.
+#:
+#: ``"linear"``   price (or market cap) is the numerator, so the multiple scales
+#:                by the same factor the price does.
+#: ``"inverse"``  price is in the *denominator* — a yield — so it scales by 1/k.
+#: ``"ev"``       enterprise value, which is ``cap + debt - cash``. **Not
+#:                proportional**, and this is the whole reason this table exists
+#:                rather than a blanket multiply: only the equity part of EV
+#:                moves with the price, so a leveraged company's EV multiples
+#:                move less than its equity multiples. Treating them as linear
+#:                would overstate the effect of a price move by exactly the
+#:                leverage, on the companies EV multiples are chosen *for*.
+#:
+#: ``peer`` is absent on purpose. It is a cross-sectional rank against peers at
+#: *their* prices, so re-ranking it means re-ranking one member of a distribution
+#: this module does not hold — see :mod:`ystocker.dca_history`.
+PRICE_RESPONSE: dict[str, str] = {
+    "pe":                "linear",
+    "peg":               "linear",   # pe / growth; growth is unaffected by price
+    "cycle_adjusted":    "linear",
+    "mid_cycle":         "linear",
+    "pfcf":              "linear",
+    "ptbv":              "linear",
+    "pffo":              "linear",
+    "normalized_margin": "linear",
+    "fcf_yield":         "inverse",
+    "dividend_yield":    "inverse",
+    "ev_ebitda":         "ev",
+    "ev_sales":          "ev",
+    "ev_sales_growth":   "ev",
+}
+
+
+def ev_scale(k: float, cap: Optional[float], net_debt: Optional[float]) -> Optional[float]:
+    """How an EV multiple responds when the price moves by *k*.
+
+    ``EV = cap + net_debt``, and a price move scales only ``cap``::
+
+        EV' / EV = (k·cap + net_debt) / (cap + net_debt)
+
+    Returns ``None`` when the capital structure is unknown — the caller must then
+    decline to scale the EV factors rather than assume they behave like the
+    equity ones, which is the mistake this function exists to prevent.
+
+    ``None`` too when the denominator is non-positive: negative enterprise value
+    (net cash exceeding market cap) makes the ratio meaningless rather than
+    merely odd, and it is a real state for a cash-rich small cap.
+    """
+    if cap is None or net_debt is None or cap <= 0:
+        return None
+    ev = cap + net_debt
+    if ev <= 0:
+        return None
+    return (k * cap + net_debt) / ev
+
+
+def price_scaled(values: Mapping[str, float], k: float, *,
+                 cap: Optional[float] = None,
+                 net_debt: Optional[float] = None) -> dict[str, float]:
+    """Every multiple in *values*, restated at a price *k* times the current one.
+
+    This is the one propagation in this module that is exact for the whole set
+    rather than for a pair: the multiples all share a numerator, so a claim about
+    the *price* is a claim about all of them simultaneously. A claim about
+    earnings is not — which is why overriding ``pe`` deliberately does not move
+    ``pfcf``: those two are measured from different statements and only share the
+    price. See :data:`DERIVED_FACTORS`.
+
+    Factors whose response cannot be computed are omitted, never passed through
+    unscaled. A multiple left at its measured value inside a set that has all
+    moved is worse than an absent one — it reads as "this one did not react".
+    """
+    if not k or k <= 0:
+        return {}
+    ev_k = ev_scale(k, cap, net_debt)
+    out: dict[str, float] = {}
+    for factor, value in values.items():
+        if value is None:
+            continue
+        response = PRICE_RESPONSE.get(factor)
+        if response == "linear":
+            out[factor] = round(float(value) * k, 6)
+        elif response == "inverse":
+            out[factor] = round(float(value) / k, 6)
+        elif response == "ev" and ev_k is not None:
+            out[factor] = round(float(value) * ev_k, 6)
+        # everything else — peer, an unknown factor, or EV with no capital
+        # structure — is left out.
+    return out
 
 
 def derive_overrides(values: Mapping[str, float],

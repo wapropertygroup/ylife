@@ -354,6 +354,33 @@
       <p class="text-xs" style="color:var(--as-muted)" data-i18n="assets.floor_note">Funds disclose only their top holdings, so every figure below is a floor.</p>
     </div>
 
+    <!-- ── Concentration ────────────────────────────────────────────────
+         The page lists every exposure and every limit breach but never said how
+         concentrated the whole thing is, which is the question 穿透 exists to
+         answer. "487 names, effectively 23" is the sentence a list of 487 rows
+         cannot say. Hidden entirely when there is nothing to measure rather than
+         rendered as zeros — a zero HHI reads as perfectly diversified. -->
+    <div class="as-card p-4 mb-4 hidden" id="asConcCard">
+      <div class="flex items-baseline justify-between gap-3 flex-wrap mb-2">
+        <h2 class="text-sm font-semibold" data-i18n="assets.conc_title">Concentration</h2>
+        <span class="text-xs" style="color:var(--as-muted)" id="asConcBasis"></span>
+      </div>
+      <div class="flex flex-wrap gap-x-6 gap-y-2 items-baseline">
+        <div>
+          <div class="as-tile-label" data-i18n="assets.conc_effective">Effective holdings</div>
+          <div class="text-xl font-semibold as-num" id="asConcEff">—</div>
+        </div>
+        <div class="flex flex-wrap gap-x-5 gap-y-1 text-sm" id="asConcTops"></div>
+        <div>
+          <div class="as-tile-label" title="Herfindahl-Hirschman Index">HHI</div>
+          <div class="as-num text-sm" style="color:var(--as-muted)" id="asConcHhi">—</div>
+        </div>
+      </div>
+      <p class="text-xs mt-2" style="color:var(--as-muted)" data-i18n="assets.conc_note">
+        A floor, like every exposure here: undisclosed fund holdings are smaller than the disclosed ones, so the true concentration is lower and the true effective count higher. This is the pessimistic end.
+      </p>
+    </div>
+
     <div id="asWarming" class="hidden mb-4 px-4 py-3 rounded-lg text-sm as-card">
       <div class="flex items-center gap-2">
         <svg class="w-4 h-4 animate-spin text-brand" fill="none" viewBox="0 0 24 24">
@@ -786,6 +813,35 @@
     ['pending',            'assets.res_pending',     'Still being fetched',              '--as-other'],
   ];
 
+  /* The concentration card.
+     Hidden outright when there is nothing to measure. A zero HHI would render as
+     perfectly diversified, which is the opposite of "we cannot say" — the same
+     reason an unscorable DCA row sorts last rather than as V=0. */
+  function renderConcentration(c) {
+    const card = $('asConcCard');
+    if (!card) return;
+    if (!c || !c.names || c.effective_holdings == null) {
+      card.classList.add('hidden');
+      return;
+    }
+    card.classList.remove('hidden');
+    $('asConcEff').textContent = Number(c.effective_holdings).toFixed(1);
+    $('asConcHhi').textContent = Number(c.hhi).toFixed(3);
+    /* States the denominator, because a share of penetrated equity and a share
+       of the portfolio are different numbers and this one is the former. */
+    $('asConcBasis').textContent = fill(
+      t('assets.conc_basis', 'of {n} penetrated names · {cov} coverage'),
+      { n: c.names, cov: pct(c.coverage_pct, 0) });
+    const tops = [1, 5, 10, 25]
+      .filter((n) => c['top' + n + '_pct'] != null)
+      .map((n) => '<div><span class="as-tile-label">' +
+        esc(fill(t('assets.conc_topn', 'Top {n}'), { n: n })) + '</span> ' +
+        '<span class="as-num font-medium" style="color:var(--as-strong)">' +
+        esc(pct(c['top' + n + '_pct'], 1)) + '</span></div>')
+      .join('');
+    $('asConcTops').innerHTML = tops;
+  }
+
   function cssVar(name) {
     return getComputedStyle($('assetsRoot')).getPropertyValue(name).trim() || '#888';
   }
@@ -1085,6 +1141,7 @@
     $('asCoverage').textContent = pct(d.coverage_pct, 1);
     $('asCoverageSub').textContent = money(d.seen_value) + ' ' +
       t('assets.resolved_to_company', 'resolved to a company');
+    renderConcentration(d.concentration);
     $('asAiPositions').textContent = d.position_count || 0;
     $('asAiCoverage').textContent = pct(d.coverage_pct, 1);
 

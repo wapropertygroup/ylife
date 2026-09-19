@@ -318,12 +318,71 @@ class Result:
         """
         return (self.seen_value / self.total_value * 100) if self.total_value else 0.0
 
+    def concentration(self) -> dict[str, Any]:
+        """How concentrated the *penetrated* part of the portfolio is.
+
+        The page already lists every exposure and every limit breach, but had no
+        summary figure — and concentration is the one question 穿透 exists to
+        answer. A reader holding three index funds can see 487 names and still not
+        know whether that is diversified.
+
+        Two numbers do most of the work:
+
+        ``hhi``
+            The Herfindahl index over penetrated equity: the sum of squared
+            weights. Scale-free, so it is comparable between a $10k account and a
+            $10m one.
+        ``effective_holdings``
+            ``1 / hhi``, the number of *equally weighted* positions that would be
+            this concentrated. "487 names, effectively 23" is the sentence a list
+            of 487 rows cannot say. Standard, and it is the reciprocal of the
+            index rather than anything invented here.
+
+        Weights are shares of ``seen_value``, not of the whole portfolio. Against
+        the total, a portfolio that is half bonds would report a flatteringly low
+        HHI for its equity sleeve — the cash and bond residual is not diversifying
+        the stocks, it is simply not stocks. Stated in the payload as
+        ``basis: "penetrated_equity"`` so the denominator is never in doubt.
+
+        Every figure is a floor, for the same reason every exposure is: Yahoo
+        discloses a fund's top ten only. The direction of the error is knowable
+        though, and worth stating — undisclosed holdings are *smaller* than the
+        disclosed ones, so a true HHI is **lower** than this and the true
+        effective count **higher**. That makes this the pessimistic end, which is
+        the right end for a risk figure.
+        """
+        named = [e for e in self.exposures if e.kind in _COUNTS_AS_SEEN]
+        seen = self.seen_value
+        if not named or seen <= 0:
+            return {"basis": "penetrated_equity", "names": 0}
+
+        weights = sorted((e.value / seen for e in named), reverse=True)
+        hhi = sum(w * w for w in weights)
+        out: dict[str, Any] = {
+            "basis": "penetrated_equity",
+            "names": len(weights),
+            "hhi": round(hhi, 6),
+            # Guarded even though `weights` is non-empty and each is positive:
+            # a zero here would be a divide-by-zero on a page, and the cost of
+            # the check is nothing.
+            "effective_holdings": round(1.0 / hhi, 1) if hhi > 0 else None,
+            "coverage_pct": round(self.coverage_pct, 2),
+        }
+        # Cumulative share at the classic cut-offs, skipping any the portfolio is
+        # too small to reach: "top 10 = 100%" on a six-name account is arithmetic
+        # rather than information.
+        for n in (1, 5, 10, 25):
+            if len(weights) >= n:
+                out[f"top{n}_pct"] = round(sum(weights[:n]) * 100, 2)
+        return out
+
     def as_dict(self, top: Optional[int] = None) -> dict[str, Any]:
         named = [e for e in self.exposures if e.kind in _COUNTS_AS_SEEN]
         other = [e for e in self.exposures if e.kind not in _COUNTS_AS_SEEN]
         shown = named[:top] if top else named
         rows = [e.as_dict(self.total_value) for e in shown]
         return {
+            "concentration": self.concentration(),
             "total_value": round(self.total_value, 2),
             "seen_value": round(self.seen_value, 2),
             "coverage_pct": round(self.coverage_pct, 2),

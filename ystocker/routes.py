@@ -553,6 +553,11 @@ def _safe(v):
     return v
 
 
+#: The fields the per-sector sparkline in index.html actually reads.
+#: Verified against that loop; see the note where it is used.
+_SPARK_FIELDS = ("ticker", "upside", "pe_fwd", "pe_ttm", "ps_ratio", "short_float")
+
+
 def _df_to_chartdata(df: pd.DataFrame) -> str:
     """Serialize a group DataFrame to a JSON string for Chart.js templates."""
     rows = []
@@ -580,7 +585,46 @@ def _df_to_chartdata(df: pd.DataFrame) -> str:
             "rev_growth":       _safe(row.get("Revenue Growth (%)")),
             "short_float":      _safe(row.get("Short Float (%)")),
         })
+    _attach_cashflow(rows)
     return json.dumps(rows).replace("&", r"\u0026").replace("<", r"\u003c").replace(">", r"\u003e")
+
+
+def _attach_cashflow(rows: list[dict]) -> None:
+    """Add the cash-flow block to each row, in place.
+
+    Costs no fetch. ``FCF ($B)`` and both P/Es are already in every cached
+    record, and the analyst consensus is `analyst.peek()` — the same sweep
+    ``/evaluation`` already renders its revisions panel from. Before this the
+    page scored companies on earnings alone while the cash-flow field sat in the
+    cache being refreshed every eight hours and never shown.
+
+    A failure here must not cost the page its rows: the valuation table is the
+    screen, and the cash-flow columns are an addition to it.
+    """
+    from ystocker import fcf as fcf_mod
+
+    trend: dict = {}
+    try:
+        from ystocker import analyst
+        snapshot = analyst.peek() or {}
+        trend = snapshot.get("tickers") or {}
+    except Exception as exc:  # noqa: BLE001 - the table is the page
+        log.debug("chartdata: analyst consensus unavailable: %s", exc)
+
+    for row in rows:
+        eps_fy0 = eps_fy1 = None
+        entry = (trend.get(row.get("ticker")) or {}).get("eps_trend") or {}
+        if entry:
+            eps_fy0 = (entry.get("0y") or {}).get("current")
+            eps_fy1 = (entry.get("+1y") or {}).get("current")
+        row["cash"] = fcf_mod.estimate(
+            fcf_ttm=row.get("fcf"),
+            market_cap=row.get("market_cap"),
+            eps_fy0=eps_fy0,
+            eps_fy1=eps_fy1,
+            pe_ttm=row.get("pe_ttm"),
+            pe_fwd=row.get("pe_fwd"),
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -619,7 +663,21 @@ def evaluation():
         cd = json.loads(_df_to_chartdata(df))
         sector_cards[group] = {
             "tickers":   list(df.index),
-            "chartdata": cd,
+            # Only what the sector-card sparkline reads, not the whole record.
+            #
+            # This block is emitted once per group and there are 29 of them, with
+            # names like MSFT appearing in four — so the full row was being
+            # serialised into the page some 500 times to drive a sparkline that
+            # touches six fields. The cross-sector `ALL` array below is the one
+            # complete copy, and it is deduped.
+            #
+            # Keep in step with the sparkline loop in index.html: a field read
+            # there and missing here renders as `undefined`, which Chart.js plots
+            # as a gap rather than raising.
+            "chartdata": [
+                {k: row.get(k) for k in _SPARK_FIELDS}
+                for row in cd
+            ],
         }
         for row in cd:
             ticker = row.get("ticker") or row.get("Ticker")
@@ -1129,6 +1187,68 @@ def dca_dcf_enabled() -> bool:
     return os.environ.get("DCA_DCF", "1").strip().lower() not in ("0", "false", "no")
 
 
+def _dca_price_scenario(payload: dict, raw: Optional[str]) -> dict:
+    """Restate every multiple at a hypothetical price. Returns ``{}`` when asked
+    for nothing, and a ``reason`` when asked for something that cannot be done.
+
+    The capital structure comes from the payload's own last vintage, so this adds
+    no fetch and needs no schema change — `vintages` already carries debt, cash
+    and shares, and bumping `CACHE_VER` for a read-only what-if would invalidate
+    every reconstruction at once (~360 Yahoo reads at the registry cap, which is
+    the burst this module's budget exists to prevent).
+
+    The baseline is the reconstruction's own last close, not a live quote. Every
+    multiple in the series was struck against that close, so measuring the move
+    from anywhere else would scale them by a factor that does not correspond to
+    the prices they were built from.
+    """
+    from ystocker import dca
+
+    if not raw:
+        return {}
+    try:
+        target = float(raw)
+    except (TypeError, ValueError):
+        return {"reason": "not_a_number"}
+    if target <= 0:
+        return {"reason": "not_a_number"}
+
+    prices = payload.get("prices") or []
+    last = prices[-1][1] if prices and len(prices[-1]) > 1 else None
+    if not last or float(last) <= 0:
+        return {"reason": "no_baseline_price"}
+
+    k = target / float(last)
+
+    # Capital structure at the latest vintage, for the EV factors. Absent is
+    # fine: `price_scaled` omits the EV multiples rather than pretending they
+    # move like the equity ones.
+    cap = net_debt = None
+    vintages = payload.get("vintages") or []
+    if vintages:
+        v = vintages[-1]
+        shares, debt, cash = v.get("shares"), v.get("debt"), v.get("cash")
+        if shares and float(shares) > 0:
+            cap = float(last) * float(shares)
+            if debt is not None and cash is not None:
+                net_debt = float(debt) - float(cash)
+
+    current = {f: (rows[-1][1] if rows else None)
+               for f, rows in (payload.get("series") or {}).items()}
+    values = dca.price_scaled(current, k, cap=cap, net_debt=net_debt)
+    return {
+        "values": values,
+        "price": round(target, 4),
+        "baseline": round(float(last), 4),
+        "change_pct": round((k - 1) * 100, 2),
+        "scaled": sorted(values),
+        # Named, so the page can say *which* factors the scenario could not move
+        # rather than leaving them silently at their measured values.
+        "unscaled": sorted(f for f in current if current[f] is not None
+                           and f not in values),
+    }
+
+
 def _dca_no_score_reason(result: dict, peer: dict, window: dict) -> Optional[str]:
     """Why a row has no V, in one word the page can render.
 
@@ -1160,7 +1280,8 @@ def _dca_no_score_reason(result: dict, peer: dict, window: dict) -> Optional[str
 
 
 def _dca_score(symbol: str, payload: dict, base: float, *,
-               recs=None, exposure=None, overrides=None) -> tuple[dict, dict, dict, dict]:
+               recs=None, exposure=None, overrides=None,
+               price_override=None) -> tuple[dict, dict, dict, dict]:
     """Score one ticker. Returns ``(result, peer, drift, position)``.
 
     The single scoring path, shared by ``/api/dca/<ticker>``, the overview list
@@ -1205,10 +1326,17 @@ def _dca_score(symbol: str, payload: dict, base: float, *,
     overridden: list[str] = []
     measured: dict = {}
     value_overrides: dict = {}
+    # A price what-if restates the whole set at once, and is merged into the
+    # value-override loop below rather than seeded here. That loop is the single
+    # place a value is re-ranked and recorded, and it *refuses* anything it
+    # cannot rank — pre-seeding would mark such a factor as overridden while its
+    # percentile stayed measured, which is the one inconsistency the override
+    # display exists to make visible.
     # dependent -> the factor its value was derived from, so the page can say
     # "followed from your P/E" rather than presenting it as hand-entered.
     derived_from: dict = {}
-    if override:
+    if override or price_override:
+        override = override or {}
         series = payload.get("series") or {}
 
         # Value overrides first, and they are the preferred kind. Replacing the
@@ -1216,7 +1344,7 @@ def _dca_score(symbol: str, payload: dict, base: float, *,
         # history leaves the rank measured -- only the input is hand-set. A
         # person knows what a P/E is; almost nobody knows where it sits in five
         # years of weekly history, and the engine does.
-        for factor, val in (override.get("values") or {}).items():
+        for factor, val in {**(price_override or {}), **(override.get("values") or {})}.items():
             if not isinstance(val, (int, float)):
                 continue
             distribution = [v for _stamp, v in (series.get(factor) or [])]
@@ -1354,7 +1482,16 @@ def api_dca(ticker: str):
                         "budget": dca_history.build_budget(),
                         "message": "Rebuilding valuation history from filings."}), 202
 
-    result, peer, drift, position = _dca_score(symbol, payload, base)
+    # `?price=` restates every multiple at a hypothetical share price and
+    # rescores from there. Read-only and public, like the rest of this endpoint:
+    # it changes nothing stored, it only answers "what would V be at this price".
+    #
+    # A *price* what-if is the one claim that propagates exactly across the whole
+    # factor set, because the multiples genuinely share a numerator. Overriding
+    # an earnings-based factor does not — see `dca.DERIVED_FACTORS`.
+    scenario = _dca_price_scenario(payload, request.args.get("price"))
+    result, peer, drift, position = _dca_score(
+        symbol, payload, base, price_override=scenario.get("values") or None)
 
     # Register here as well as in dca_history.get(), and for a reason that is
     # not redundancy: get() only runs on a *build*, so a ticker whose payload is

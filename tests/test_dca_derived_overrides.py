@@ -191,3 +191,103 @@ class TableIntegrityTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PriceScalingTests(unittest.TestCase):
+    """A what-if on the *price*, which moves every multiple at once.
+
+    This is the one propagation here that is exact across the whole set rather
+    than for a pair, because the multiples genuinely share a numerator. Contrast
+    `DERIVED_FACTORS`, where overriding `pe` deliberately does not move `pfcf`:
+    those two are measured from different statements and share only the price.
+    """
+
+    VALUES = {"pe": 30.0, "pfcf": 25.0, "ptbv": 4.0, "cycle_adjusted": 40.0,
+              "fcf_yield": 4.0, "ev_ebitda": 18.0, "peer": 62.0}
+
+    def test_equity_multiples_scale_with_the_price(self):
+        out = dca.price_scaled(self.VALUES, 0.8, cap=1000.0, net_debt=0.0)
+        self.assertAlmostEqual(out["pe"], 24.0, places=4)
+        self.assertAlmostEqual(out["pfcf"], 20.0, places=4)
+        self.assertAlmostEqual(out["ptbv"], 3.2, places=4)
+        self.assertAlmostEqual(out["cycle_adjusted"], 32.0, places=4)
+
+    def test_a_yield_moves_the_other_way(self):
+        """FCF yield has price in the denominator. Scaling it like a multiple
+        would report a cheaper stock as yielding *less*."""
+        out = dca.price_scaled(self.VALUES, 0.8, cap=1000.0, net_debt=0.0)
+        self.assertAlmostEqual(out["fcf_yield"], 5.0, places=4)
+
+    def test_ev_matches_equity_only_when_there_is_no_net_debt(self):
+        out = dca.price_scaled(self.VALUES, 0.8, cap=1000.0, net_debt=0.0)
+        self.assertAlmostEqual(out["ev_ebitda"], 14.4, places=4)   # == 18 x 0.8
+
+    def test_leverage_damps_the_ev_response(self):
+        """EV = cap + net debt and only the equity part moves. At 1:1 leverage a
+        20% price fall moves EV multiples 10%, not 20%. Treating them as linear
+        would overstate the effect by exactly the leverage — on the companies EV
+        multiples are chosen for."""
+        out = dca.price_scaled(self.VALUES, 0.8, cap=1000.0, net_debt=1000.0)
+        self.assertAlmostEqual(out["ev_ebitda"], 16.2, places=4)
+        self.assertLess(out["pe"] / 30.0, out["ev_ebitda"] / 18.0)
+
+    def test_net_cash_amplifies_it(self):
+        """The mirror case, and it must not be forgotten: a company holding net
+        cash has EV below its market cap, so EV multiples move *more* than the
+        price, not less."""
+        out = dca.price_scaled(self.VALUES, 0.8, cap=1000.0, net_debt=-500.0)
+        self.assertLess(out["ev_ebitda"], 14.4)
+
+    def test_ev_is_omitted_when_the_capital_structure_is_unknown(self):
+        """Never passed through unscaled. A multiple left at its measured value
+        inside a set that has all moved reads as "this one did not react"."""
+        out = dca.price_scaled(self.VALUES, 0.8)
+        self.assertNotIn("ev_ebitda", out)
+        self.assertIn("pe", out)
+
+    def test_negative_enterprise_value_is_refused(self):
+        """Net cash exceeding market cap is a real state for a cash-rich small
+        cap, and the ratio is meaningless rather than merely odd."""
+        out = dca.price_scaled(self.VALUES, 0.8, cap=1000.0, net_debt=-1200.0)
+        self.assertNotIn("ev_ebitda", out)
+        self.assertIsNone(dca.ev_scale(0.8, 1000.0, -1200.0))
+
+    def test_peer_is_never_scaled(self):
+        """A cross-sectional rank against peers at *their* prices. Re-ranking it
+        needs the peer distribution, which this module does not hold."""
+        out = dca.price_scaled(self.VALUES, 0.8, cap=1000.0, net_debt=0.0)
+        self.assertNotIn("peer", out)
+
+    def test_k_of_one_is_the_identity(self):
+        out = dca.price_scaled(self.VALUES, 1.0, cap=1000.0, net_debt=500.0)
+        for factor, value in out.items():
+            self.assertAlmostEqual(value, self.VALUES[factor], places=4,
+                                   msg=f"{factor} moved at k=1")
+
+    def test_round_trip(self):
+        down = dca.price_scaled(self.VALUES, 0.5, cap=1000.0, net_debt=400.0)
+        # Scaling back needs the *new* capital structure: cap has halved.
+        back = dca.price_scaled(down, 2.0, cap=500.0, net_debt=400.0)
+        for factor, value in back.items():
+            self.assertAlmostEqual(value, self.VALUES[factor], places=3,
+                                   msg=f"{factor} did not round-trip")
+
+    def test_a_non_positive_price_factor_yields_nothing(self):
+        self.assertEqual(dca.price_scaled(self.VALUES, 0.0, cap=1.0, net_debt=0.0), {})
+        self.assertEqual(dca.price_scaled(self.VALUES, -1.0, cap=1.0, net_debt=0.0), {})
+
+    def test_none_values_are_skipped_not_crashed(self):
+        out = dca.price_scaled({"pe": None, "pfcf": 25.0}, 0.8, cap=1.0, net_debt=0.0)
+        self.assertNotIn("pe", out)
+        self.assertIn("pfcf", out)
+
+    def test_every_reconstructed_factor_has_a_declared_response(self):
+        """A factor with no entry is silently dropped from every what-if. It
+        would look like the scenario simply did not affect it."""
+        from ystocker.dca_history import RECONSTRUCTED
+
+        missing = [f for f in RECONSTRUCTED if f not in dca.PRICE_RESPONSE]
+        self.assertEqual(missing, [], f"no price response declared for: {missing}")
+
+    def test_responses_are_from_the_known_set(self):
+        self.assertTrue(set(dca.PRICE_RESPONSE.values()) <= {"linear", "inverse", "ev"})
