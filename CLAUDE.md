@@ -1213,6 +1213,58 @@ disabled rather than offering a run that would die on a missing key.
 Tests: `tests/test_agent_models.py` (43, no app/network/subprocess), including a
 cross-check that every offered id appears in TradingAgents' own catalog file.
 
+### The Earnings Analyst, and the Alpha Vantage key behind it
+
+`earnings` joined `BASE_ANALYSTS` in `agents.py`, so every run now draws a sixth
+analyst (ninth for A-shares) and every report gains an Earnings section. Nothing
+else had to change to render it: `agent_roles.py` already carried the role —
+name, 盈利预期修正分析师, icon, colour — so the page and the PDF were waiting for a
+turn that was never being generated.
+
+It is ordered between `news` and `quality` to match `agent_roles.ROLES`, which is
+the order both renderers lay the turns out in. A roster that disagrees with the
+renderer does not error; it reads as agents answering out of turn.
+
+**It is the only analyst with a vendor requirement, and the vendor is opt-in by
+credential.** Its evidence tool routes through TradingAgents' `earnings_data`
+chain, and `_RUNNER` puts `alpha_vantage` in front of that chain when
+`ALPHA_VANTAGE_API_KEY` is set — on by default once the key exists, the same
+shape as "sending is on once `SES_FROM_EMAIL` is set" and for the same reason: a
+second switch that must be flipped in step with a credential is a switch somebody
+forgets. `YSTOCKER_ALPHA_VANTAGE=0` is the kill switch.
+
+Three things about that chain are deliberate:
+
+- **Alpha Vantage goes in *front* of yfinance, not behind it.** The tempting
+  reading is "spare tyre for when Yahoo is down", which would put it last. But
+  the two answer different questions: Yahoo is the only free source of a real
+  7/30/60/90-day revision history, and it publishes **no** announcement dates and
+  no release timing — so post-earnings drift cannot be computed from it at all.
+  A vendor that supplies what the next one structurally cannot belongs first.
+  yfinance sits directly behind it, which is what covers the free tier
+  premium-gating the estimate and transcript endpoints, and `a_stock` stays last
+  for 沪深京.
+- **A keyless box runs exactly as it did.** The vendor raises before any network
+  call, the chain falls through to `yfinance,a_stock`, and the analyst still runs
+  — reporting the fields it cannot source as stated gaps rather than zeroes.
+  That is why this needed no feature flag beyond the kill switch.
+- **`DEFAULT_CONFIG.copy()` is shallow**, so `_RUNNER` copies `data_vendors`
+  before touching `earnings_data`. Mutating the nested dict in place edits the
+  module-level default every later reader sees — invisible in a one-shot child,
+  wrong the moment anything in that process builds a second config.
+
+The key is plumbed like every other secret: `/ystocker/ALPHA_VANTAGE_API_KEY` in
+`SSM_PARAMS`, and a row in `deploy/sync-ssm.sh`'s `get_ssm_path`. That second row
+is not optional and its absence is quiet — `sync-ssm.sh` prints
+`SKIP … (no SSM mapping)` and exits 0, so a key added to `.env` alone syncs
+nothing while the run reports success. `_child_env` copies `os.environ`, so once
+the variable is in the parent there is no further plumbing to the child.
+
+Note the free tier premium-gates `EARNINGS_ESTIMATES` and
+`EARNINGS_CALL_TRANSCRIPT`. Those degrade to a stated data gap rather than
+failing the run, so the practical purchase is announcement dates, release timing
+and the drift figures that depend on them.
+
 ### The AI Markets Brief (`/api/market-brief`)
 
 The card at the top of `/markets` is generated from **every** dashboard —

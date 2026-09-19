@@ -297,7 +297,15 @@ _TICKER_RE = re.compile(r"^[A-Za-z][A-Za-z0-9.\-]{0,9}$")
 # in two places would also drift as 北交所 ranges are added.
 _ASHARE_RE = re.compile(r"^(?:(?:SH|SZ|BJ)\.?)?\d{6}(?:\.(?:SS|SZ|SH|BJ))?$")
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
-BASE_ANALYSTS = ("market", "social", "news", "quality", "valuation")
+# "earnings" is ordered between news and quality to match agent_roles.ROLES, which
+# is what the page and the PDF lay the turns out in -- a roster in a different
+# order than the renderer reads as agents answering out of turn. It is the one
+# analyst here with a vendor requirement: its evidence tool routes through the
+# earnings_data chain, which _RUNNER puts alpha_vantage in front of when a key is
+# present. Without a key the chain is yfinance,a_stock and the analyst still runs,
+# reporting the fields Yahoo cannot supply (announcement dates, release timing,
+# and the post-earnings drift that needs them) as stated gaps rather than zeroes.
+BASE_ANALYSTS = ("market", "social", "news", "earnings", "quality", "valuation")
 ASTOCK_ANALYSTS = BASE_ANALYSTS + ("policy", "hot_money", "lockup")
 
 
@@ -463,6 +471,35 @@ except Exception as exc:
 
 try:
     cfg = DEFAULT_CONFIG.copy()
+
+    # Alpha Vantage on the earnings chain, on by default once the key is set --
+    # the same shape as report_email's "sending is on once SES_FROM_EMAIL is
+    # set", and for the same reason: a second switch that has to be flipped in
+    # step with a credential is a switch somebody forgets. YSTOCKER_ALPHA_VANTAGE=0
+    # is the kill switch.
+    #
+    # It goes in front of yfinance rather than behind it because the two are not
+    # interchangeable here. Yahoo is the only free source of a real 7/30/60/90-day
+    # revision history, but it publishes no announcement dates and no release
+    # timing, and post-earnings drift cannot be computed without them -- so this
+    # is a vendor that answers questions the next one in the chain cannot, not a
+    # spare tyre for when Yahoo is down. yfinance stays in the chain directly
+    # behind it, which is what covers the free tier premium-gating the estimate
+    # endpoints, and a_stock stays last for 沪深京.
+    #
+    # data_vendors is copied first: DEFAULT_CONFIG.copy() is shallow, so mutating
+    # the nested dict in place would edit the module-level default that every
+    # later reader of DEFAULT_CONFIG sees. Harmless in a one-shot child, wrong
+    # the moment anything in this process builds a second config.
+    if os.environ.get("ALPHA_VANTAGE_API_KEY", "").strip() and \
+            os.environ.get("YSTOCKER_ALPHA_VANTAGE", "1").strip() != "0":
+        cfg["data_vendors"] = dict(cfg.get("data_vendors") or {})
+        _chain = [v for v in
+                  (cfg["data_vendors"].get("earnings_data") or "").split(",")
+                  if v.strip()]
+        if "alpha_vantage" not in [v.strip() for v in _chain]:
+            cfg["data_vendors"]["earnings_data"] = ",".join(
+                ["alpha_vantage"] + [v.strip() for v in _chain])
 
     # Live progress. The graph streams full state snapshots (stream_mode
     # "values"), so each agent's output can be published the moment it exists
