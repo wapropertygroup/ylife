@@ -478,7 +478,7 @@
       <p class="text-[10px] font-semibold uppercase tracking-widest text-slate-500 dark:text-slate-600 mb-2 px-1" data-i18n="history.group_health">Balance sheet &amp; cash</p>
       <div class="grid grid-cols-3 sm:grid-cols-5 gap-2 sm:gap-3">
         <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-3">
-          <div class="text-xs text-slate-500 mb-1" data-i18n="history.net_debt">Net debt</div>
+          <div id="statNetDebtLabel" class="text-xs text-slate-500 mb-1" data-i18n="history.net_debt">Net debt</div>
           <div id="statNetDebt" class="text-base font-bold text-slate-800 dark:text-slate-100">—</div>
           <div id="statNetDebtSub" class="text-[10px] text-slate-500 mt-0.5"></div>
         </div>
@@ -1700,10 +1700,15 @@ function renderHealth(h) {
   // Net cash is shown as net cash, positive, not as negative debt: a reader
   // scanning a debt column reads -$62B as a typo.
   if (h.net_cash != null && h.net_cash > 0) {
+    // The *label* flips, not just the sub-line. "$23.6B" under a heading
+    // reading "net debt" says the opposite of what it means, and a sub-line
+    // saying "net cash" underneath is a correction a reader has to notice.
+    set('statNetDebtLabel', T('history.net_cash_label', 'Net cash'));
     set('statNetDebt', money(h.net_cash));
-    setSub('statNetDebtSub', T('history.net_cash', 'net cash'),
+    setSub('statNetDebtSub', T('history.net_cash_sub', 'no net borrowings'),
            'text-[10px] mt-0.5 text-emerald-700 dark:text-emerald-400');
   } else if (h.net_debt != null) {
+    set('statNetDebtLabel', T('history.net_debt', 'Net debt'));
     set('statNetDebt', money(h.net_debt));
     setSub('statNetDebtSub', '');
   } else {
