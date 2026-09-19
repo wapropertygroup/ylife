@@ -1205,6 +1205,9 @@ def _dca_score(symbol: str, payload: dict, base: float, *,
     overridden: list[str] = []
     measured: dict = {}
     value_overrides: dict = {}
+    # dependent -> the factor its value was derived from, so the page can say
+    # "followed from your P/E" rather than presenting it as hand-entered.
+    derived_from: dict = {}
     if override:
         series = payload.get("series") or {}
 
@@ -1227,6 +1230,27 @@ def _dca_score(symbol: str, payload: dict, base: float, *,
                 continue
             measured[factor] = percentiles.get(factor)
             value_overrides[factor] = float(val)
+            percentiles[factor] = pct
+            overridden.append(factor)
+
+        # Carry a hand-set multiple to whatever the reconstruction derived from
+        # it. PEG is P/E over growth and FCF yield is literally 100/(P/FCF), so
+        # overriding the source and leaving the dependent alone puts two numbers
+        # on the page that cannot both describe the same company. Derived values
+        # are re-ranked against their own history exactly like a typed one --
+        # only the input is inferred, never the percentile.
+        explicit_values = dict(value_overrides)
+        now = {f: (rows[-1][1] if rows else None)
+               for f, rows in series.items()}
+        for factor, val in dca.derive_overrides(explicit_values, now).items():
+            distribution = [v for _stamp, v in (series.get(factor) or [])]
+            pct = dca.percentile_rank(float(val), distribution,
+                                      minimum=dca.MIN_OBSERVATIONS)
+            if pct is None:
+                continue
+            measured[factor] = percentiles.get(factor)
+            value_overrides[factor] = float(val)
+            derived_from[factor] = dca.DERIVED_FACTORS[factor][0]
             percentiles[factor] = pct
             overridden.append(factor)
 
@@ -1293,6 +1317,11 @@ def _dca_score(symbol: str, payload: dict, base: float, *,
             points = series.get(row["factor"]) or []
             row["override_value"] = entered
             row["measured_value"] = points[-1][1] if points else None
+            # A value the reader typed and one this engine inferred from what
+            # they typed are different claims, and the second must not be shown
+            # as though a person asserted it.
+            if row["factor"] in derived_from:
+                row["derived_from"] = derived_from[row["factor"]]
     return result, peer, drift, position
 
 
