@@ -1667,6 +1667,15 @@ def api_dca_list():
             "amount": result["amount"],
             "capped": result["capped"],
             "dropped": result["dropped"],
+            # How much history each dropped factor actually has. The names alone
+            # make a factor three weeks from qualifying look identical to one
+            # forty weeks short — measured across the universe, both shapes are
+            # common: of ten rows dropping `pe`, NEM had 57 of 60 and WBD had 6.
+            # Free: the series is already in hand from the scoring pass.
+            "dropped_obs": {
+                f: len((payload.get("series") or {}).get(f) or [])
+                for f in result["dropped"]
+            },
             "peer_pct": peer.get("percentile"),
             "eps_drift": drift.get("drift"),
             "years": window.get("years"),
@@ -1688,6 +1697,9 @@ def api_dca_list():
     return jsonify({
         "base_dca": base,
         "rows": rows,
+        # Emitted once rather than on every row: it is a constant of the engine,
+        # and the page needs it to render "57/60" beside a dropped factor.
+        "min_observations": dca.MIN_OBSERVATIONS,
         "scored": len(rows),
         "universe": len(wanted),
         "pending": pending,

@@ -244,12 +244,23 @@ function noScoreTag(r) {
    phone the only thing a reader could learn was that *some* number of factors
    went missing. It is named inline now: it is the difference between a score
    built from five multiples and one built from three. */
-function coverageCell(r) {
+function coverageCell(r, need) {
   if (r.years == null) return '—';
   const yrs = r.years + (I18n.t('dcx.years_unit') || 'y');
   const head = yrs + ' · ' + r.vintages + ' ' + esc(I18n.t('dcx.filings') || 'filings');
   if (!r.dropped || !r.dropped.length) return head;
-  const names = r.dropped.map(f => esc(label('dca.f_', f))).join('、');
+  /* Each dropped factor with the history it actually has, not just its name.
+     "57" beside a floor of 60 is a different statement from "6", and the names
+     alone render them identically — measured across the universe both shapes
+     are common. A factor with no series at all gets no count: zero of sixty
+     would imply it is merely short, when nothing is ever going to arrive. */
+  need = need || 60;
+  const names = r.dropped.map(f => {
+    const n = (r.dropped_obs || {})[f];
+    const txt = esc(label('dca.f_', f));
+    if (n == null || n === 0) return txt;
+    return txt + ' <span class="tabular-nums">(' + n + '/' + need + ')</span>';
+  }).join('、');
   return head + `<div class="text-[10px] text-slate-400 dark:text-slate-600">`
     + esc(I18n.t('dcx.dropped') || 'dropped') + ': ' + names + '</div>';
 }
@@ -344,7 +355,7 @@ function render() {
       ${overlayCell(r.m_portfolio, r.portfolio_band, 'dca.port_', _allPortfolioUnknown)}
       <td class="text-right font-mono font-semibold">${fmtMoney(r.amount)}${
         r.capped ? ' <span class="chip" title="' + esc(I18n.t('dca.capped') || 'Capped') + '">⌃</span>' : ''}</td>
-      <td class="text-[11px] text-slate-500">${coverageCell(r)}</td>
+      <td class="text-[11px] text-slate-500">${coverageCell(r, (_data || {}).min_observations)}</td>
       <td class="text-right">${r.seed ? '' :
         `<button type="button" class="untrack text-slate-400 hover:text-red-600 dark:hover:text-red-400 transition px-1"
                  data-ticker="${esc(r.ticker)}"
