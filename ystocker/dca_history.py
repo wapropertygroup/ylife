@@ -76,6 +76,8 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Optional, Sequence
 
+from ystocker import listing
+
 log = logging.getLogger(__name__)
 
 __all__ = [
@@ -700,7 +702,50 @@ def _fetch_raw(ticker: str) -> dict[str, Any]:
         "annual_cashflow": annual_cfs,
         "quarterly_income": quarterly_inc,
         "prices": prices,
+        "fx": _fetch_fx_series(info.get("financialCurrency"), info.get("currency")),
     }
+
+
+def _fetch_fx_series(statement_currency: Any,
+                     price_currency: Any) -> list[tuple[str, float]]:
+    """Weekly history for the filer's currency against the listing's.
+
+    A **seventh** Yahoo read, and it fires only when the two currencies actually
+    differ — so the ~59 of 60 tracked tickers that file in the currency they
+    trade in cost exactly what they did before, and an ADR costs one more read a
+    day. That is the whole price of not reporting TSM's P/E as 1.01.
+
+    Spot would have been free (``data.usd_rate`` is already cached and shared)
+    and is wrong in the specific way this engine is least able to absorb: a
+    single rate applied across five years converts a 2021 statement at a 2026
+    rate, which shifts that week's multiple by the whole intervening drift and
+    then ranks today's multiple against the result. That is the forward-versus-
+    trailing basis error in another costume, and this module's docstring already
+    explains why it is fatal rather than approximate.
+
+    Returns ``[]`` rather than raising. A missing series falls back to spot at
+    the call site and is reported as such; both together failing is what makes
+    the reconstruction refuse.
+    """
+    pair = listing.fx_pair(statement_currency, price_currency)
+    if not pair:
+        return []
+    import yfinance as yf
+
+    out: list[tuple[str, float]] = []
+    try:
+        frame = yf.Ticker(pair).history(period=PRICE_PERIOD, interval=PRICE_INTERVAL)
+        if frame is not None and not frame.empty and "Close" in frame:
+            for stamp, close in frame["Close"].items():
+                try:
+                    value = float(close)
+                except (TypeError, ValueError):
+                    continue
+                if math.isfinite(value) and value > 0:
+                    out.append((stamp.date().isoformat(), value))
+    except Exception as exc:  # noqa: BLE001 - spot is the documented fallback
+        log.warning("dca_history: FX history %s unavailable: %s", pair, exc)
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -1290,7 +1335,12 @@ def _override_meta(override: Mapping[str, Any]) -> dict[str, Any]:
 _FORWARD_KEYS = ("forwardPE", "trailingPE", "forwardEps", "trailingEps",
                  "pegRatio", "enterpriseToEbitda", "priceToBook",
                  "marketCap", "quoteType", "sector", "industry", "shortName",
-                 "beta")
+                 "beta",
+                 # The three the listing basis is derived from. `currency` and
+                 # `financialCurrency` say whether a conversion is needed at all;
+                 # `sharesOutstanding` is the quoted-basis count the filer's
+                 # ordinary count is divided against to recover the ADR ratio.
+                 "currency", "financialCurrency", "sharesOutstanding")
 
 
 def build(ticker: str) -> dict[str, Any]:
@@ -1323,9 +1373,18 @@ def build(ticker: str) -> dict[str, Any]:
                 setattr(q, slot, getattr(annual_at, slot))
 
     merged = sorted([*vintages, *quarterly], key=lambda v: v.effective)
-    series = reconstruct(raw["prices"], merged) if len(merged) >= MIN_VINTAGES else {}
 
     info = raw.get("info") or {}
+    # Restate the statements into the currency and share basis the price is
+    # quoted in, *before* anything divides one by the other. Doing it here rather
+    # than inside reconstruct() means the stored vintages are converted too, so
+    # dcf_inputs' per-share fair value comes out in the currency the reader sees
+    # on the ticker rather than the filer's.
+    basis = _apply_listing_basis(merged, raw.get("fx") or [], info)
+
+    buildable = len(merged) >= MIN_VINTAGES and basis.usable
+    series = reconstruct(raw["prices"], merged) if buildable else {}
+
     payload: dict[str, Any] = {
         "_ver": CACHE_VER,
         "_ts": time.time(),
@@ -1341,10 +1400,77 @@ def build(ticker: str) -> dict[str, Any]:
         "forward_context": {k: info.get(k) for k in _FORWARD_KEYS if info.get(k) is not None},
         "prices": raw["prices"][-260:],
     }
+    # Only carried when something actually had to be reconciled, so the payload
+    # of an ordinary US listing is byte-for-byte what it was before.
+    if not basis.aligned:
+        payload["listing_basis"] = basis.as_dict()
     if not series:
         payload["unavailable"] = (
-            "too_few_vintages" if len(merged) < MIN_VINTAGES else "no_reconstructable_factors")
+            "currency_unreconciled" if not basis.usable else
+            "too_few_vintages" if len(merged) < MIN_VINTAGES else
+            "no_reconstructable_factors")
     return payload
+
+
+def _apply_listing_basis(vintages: Sequence[Any],
+                         fx_series: Sequence[tuple[str, float]],
+                         info: Mapping[str, Any]) -> listing.Basis:
+    """Restate *vintages* in place into the quoted currency and share basis.
+
+    Returns what was done, which the payload carries so the page can say it.
+
+    **Each vintage is converted at the rate in force when it became public**, not
+    at today's. A single rate across the window is the tempting implementation
+    and is wrong in the way this engine notices least: it cancels out of a
+    percentile rank, so every check would pass, while the *levels* the page
+    prints beside the rank drift by the whole five-year FX move.
+
+    Refusal is the third outcome and it is deliberate. With the currencies
+    differing and no rate obtainable from either the series or spot, the choice
+    is between publishing multiples wrong by an exchange rate and publishing
+    none, and this engine's output is a cheapness score — the failure lands on
+    the "extraordinarily cheap" side every time.
+    """
+    statement_currency = (info.get("financialCurrency") or "").strip().upper()
+    price_currency = (info.get("currency") or "").strip().upper()
+    needs_fx = bool(statement_currency and price_currency
+                    and statement_currency != price_currency)
+
+    # The most recent counts and earnings on file — paired against today's
+    # `sharesOutstanding` and `trailingEps`, which are also the latest.
+    statement_shares = next((v.shares for v in reversed(vintages) if _pos(v.shares)), None)
+    statement_eps = next((v.eps for v in reversed(vintages) if _pos(v.eps)), None)
+
+    spot: Optional[float] = None
+    source: Optional[str] = None
+    if needs_fx:
+        if fx_series:
+            spot, source = float(fx_series[-1][1]), "series"
+        elif price_currency == "USD":
+            # `data.usd_rate` only ever converts *to* USD, so it can stand in
+            # here and nowhere else. A non-USD listing of a foreign filer gets no
+            # fallback and is refused rather than approximated.
+            from ystocker import data as ydata
+            rate = ydata.usd_rate(statement_currency)
+            if _pos(rate):
+                spot, source = float(rate), "spot"
+
+    basis = listing.detect(info,
+                           statement_shares=statement_shares,
+                           statement_eps=statement_eps,
+                           rate=spot,
+                           fx_source=source)
+    if basis.aligned or not basis.usable:
+        return basis
+
+    for vintage in vintages:
+        rate = listing.rate_at(fx_series, vintage.effective,
+                               fallback=spot) if needs_fx else None
+        for slot, value in listing.convert(vintage.as_dict(), rate=rate,
+                                           ratio=basis.share_ratio,
+                                           scale=basis.eps_scale).items():
+            setattr(vintage, slot, value)
+    return basis
 
 
 def get(ticker: str, *, force: bool = False) -> dict[str, Any]:
