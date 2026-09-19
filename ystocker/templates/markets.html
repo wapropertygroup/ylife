@@ -365,8 +365,14 @@
           class="text-[11px] text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 transition flex items-center gap-1">
           <span id="fgSpyChevron">▶</span> <span data-i18n="markets.fg_spy_title">Fear &amp; Greed vs S&amp;P 500</span>
         </button>
-        <div id="fgSpyChart" class="chart-container mt-3 hidden" style="height:160px">
-          <canvas id="fgSpyCanvas"></canvas>
+        <div id="fgSpyChart" class="mt-3 hidden">
+          <div class="flex items-center gap-3 mb-2 text-xs">
+            <span class="flex items-center gap-1 text-violet-700 dark:text-violet-400"><span class="w-3 h-0.5 bg-violet-400 inline-block"></span> <span data-i18n="markets.fg_left">Fear &amp; Greed (left)</span></span>
+            <span class="flex items-center gap-1 text-sky-700 dark:text-sky-400"><span class="w-3 h-0.5 border-dashed border border-sky-400 inline-block"></span> <span data-i18n="markets.spx_right">S&amp;P 500 (right)</span></span>
+          </div>
+          <div class="chart-container" style="height:160px">
+            <canvas id="fgSpyCanvas"></canvas>
+          </div>
         </div>
       </div>
     </div>
@@ -1732,6 +1738,9 @@ document.addEventListener('i18n:langchange', () => {
   // The distance chart's legend and tooltip come from I18n.label, which is read
   // at construction time — without this the legend keeps the old language.
   if (_ctaHistory) _renderCtaDistanceHistory(_ctaHistory);
+  // Same reason, one level out: the Fear & Greed band and the four comparison
+  // tiles are composed in JS, where I18n.apply() cannot reach them.
+  if (_fgData) renderFearGreed(_fgData);
 });
 
 // ── Compute YTD from daily data when server value is null ────────────
@@ -2624,6 +2633,37 @@ async function loadIdxForecast(key) {
 // ── Fear & Greed ──────────────────────────────────────────────────────
 let _fgChartInst = null;
 let _fgSpyLoaded = false, _fgSpyChart = null;
+
+/** Axis label for a Fear & Greed point, read in UTC.
+ *
+ *  The server builds these timestamps from a bare `YYYY-MM-DD` at UTC
+ *  midnight, so reading them in a negative-offset zone — which is where this
+ *  box's readers are — dates every point one day early.
+ */
+function _fgLabel(ms) {
+  return new Date(ms).toLocaleDateString(undefined,
+    { month: 'short', day: 'numeric', year: '2-digit', timeZone: 'UTC' });
+}
+const _fgKey = ms => new Date(ms).toISOString().slice(0, 10);
+
+/** CNN's own wording for a band, in the reader's language.
+ *
+ *  CNN stays the authority on *which* band, so a boundary it moves cannot
+ *  disagree with the number beside it — but the words are ours, or the Chinese
+ *  page puts a bare "Fear" under a heading reading 恐慌与贪婪. A rating we do
+ *  not recognise falls through to CNN's string rather than being dropped.
+ */
+function _fgRatingText(r) {
+  const key = {
+    'extreme fear':  'markets.fg_extreme_fear',
+    'fear':          'markets.fg_fear',
+    'neutral':       'markets.fg_neutral',
+    'greed':         'markets.fg_greed',
+    'extreme greed': 'markets.fg_extreme_greed',
+  }[(r || '').trim().toLowerCase()];
+  return (key && I18n.t(key)) || r || '';
+}
+
 async function _toggleFgSpy() {
   const wrap = document.getElementById('fgSpyChart');
   const chevron = document.getElementById('fgSpyChevron');
@@ -2645,37 +2685,71 @@ async function _toggleFgSpy() {
     const fg = await fgResp.json();
     const spy = await spyResp.json();
 
-    const fgHistory = (fg.history || []).slice(-252);
-    const fgDates  = fgHistory.map(p => p.t || p.date || '');
-    const fgVals   = fgHistory.map(p => p.y ?? p.value ?? null);
+    const fgHistory = (fg.history || []).filter(p => p.t && p.y != null).slice(-252);
+    if (!fgHistory.length) return;
+    const fgKeys   = fgHistory.map(p => _fgKey(p.t));
+    const fgLabels = fgHistory.map(p => _fgLabel(p.t));
+    const fgVals   = fgHistory.map(p => p.y);
 
+    // Join the two series by date, never by index.
+    //
+    // They agree on neither cadence nor span. Fear & Greed is one point per
+    // trading day; /api/history returns *weekly* bars over a window deliberately
+    // extended behind the one asked for, to give /history's indicators a warm-up.
+    // A `1y` request is therefore ~105 weekly bars reaching back two years.
+    // Handing that over positionally — `spyNorm.slice(-fgDates.length)` — drew two
+    // years of S&P across the first 40% of a one-year axis: a smooth, plausible
+    // line, on the wrong dates. `display_from` needs no attention here, because a
+    // warm-up bar simply matches no label and drops out of the join.
     const spyDates  = spy.dates  || [];
     const spyPrices = spy.prices || [];
-    // Normalize SPY to 0-100 range for overlay
-    const spyMin = Math.min(...spyPrices.filter(v=>v!=null));
-    const spyMax = Math.max(...spyPrices.filter(v=>v!=null));
-    const spyNorm = spyPrices.map(v => v != null ? ((v-spyMin)/(spyMax-spyMin))*100 : null);
+    const spyOnFg   = new Array(fgKeys.length).fill(null);
+    let cursor = 0;
+    for (let b = 0; b < spyDates.length; b++) {
+      if (spyPrices[b] == null || spyDates[b] < fgKeys[0]) continue;
+      // Snap each bar to the first F&G date at or after it. Yahoo stamps a weekly
+      // bar on its Monday, and four Mondays a year are market holidays with no
+      // F&G reading, so an exact-match join drops those weeks without a word.
+      while (cursor < fgKeys.length && fgKeys[cursor] < spyDates[b]) cursor++;
+      if (cursor >= fgKeys.length) break;
+      spyOnFg[cursor] = spyPrices[b];
+    }
 
     const gridCol = CT.c('#1e293b'), tickCol = CT.c('#64748b');
     if (_fgSpyChart) _fgSpyChart.destroy();
     _fgSpyChart = new Chart(document.getElementById('fgSpyCanvas'), {
       type: 'line',
       data: {
-        labels: fgDates,
+        labels: fgLabels,
         datasets: [
-          { label:'Fear & Greed', data:fgVals, borderColor:CT.c('#a78bfa'), backgroundColor:'rgba(167,139,250,0.08)',
+          { ...I18n.label('chart.fear_greed', 'Fear & Greed'),
+            data:fgVals, borderColor:CT.c('#a78bfa'), backgroundColor:'rgba(167,139,250,0.08)',
             borderWidth:1.5, pointRadius:0, fill:true, tension:0.3, spanGaps:true, yAxisID:'y' },
-          { label:'S&P 500 (norm)', data:spyNorm.slice(-fgDates.length), borderColor:CT.c('#38bdf8'), backgroundColor:'transparent',
-            borderWidth:1.5, pointRadius:0, fill:false, tension:0.3, spanGaps:true, yAxisID:'y' },
+          // The S&P keeps its own axis and its own units. Normalising it to 0–100
+          // put it on the sentiment scale, where its height said nothing and
+          // invited reading the two lines as the same measurement.
+          { ...I18n.label('chart.spy', 'S&P 500'),
+            data:spyOnFg, borderColor:CT.c('#38bdf8'), backgroundColor:'transparent',
+            borderWidth:1.5, pointRadius:0, fill:false, tension:0.3, spanGaps:true,
+            yAxisID:'ySpy', borderDash:[4,3] },
         ]
       },
       options: {
         responsive:true, maintainAspectRatio:false,
         plugins:{ legend:{display:false}, tooltip:{mode:'index',intersect:false,
-          callbacks:{ label: c => ` ${c.dataset.label}: ${c.raw?.toFixed(1)}` }}},
+          // A weekly bar lands on one day in five, so most days carry no S&P
+          // point at all and would otherwise read as `undefined` beside a
+          // perfectly good sentiment reading.
+          filter: c => c.raw != null,
+          callbacks:{ label: c => c.dataset.yAxisID === 'ySpy'
+            ? ` ${c.dataset.label}: ${c.raw.toFixed(0)}`
+            : ` ${c.dataset.label}: ${c.raw.toFixed(1)}` }}},
         scales:{
           x:{grid:{color:gridCol},ticks:{color:tickCol,maxTicksLimit:6,maxRotation:0}},
-          y:{grid:{color:gridCol},ticks:{color:tickCol},min:0,max:100},
+          y:{grid:{color:gridCol},min:0,max:100,
+             ticks:{color:CT.c('rgba(167,139,250,0.6)'),stepSize:25}},
+          ySpy:{position:'right',grid:{drawOnChartArea:false},
+                ticks:{color:CT.c('rgba(56,189,248,0.6)'),callback:v=>v.toFixed(0)}},
         },
         interaction:{mode:'index',intersect:false},
       },
@@ -2770,7 +2844,7 @@ function renderFearGreed(data, canvasId) {
     // Badge
     document.getElementById('fgBadge').innerHTML = score != null
       ? `<div class="text-2xl font-bold tabular-nums" style="color:${col}">${score}</div>
-         <div class="text-xs font-semibold mt-0.5" style="color:${col}">${rating}</div>`
+         <div class="text-xs font-semibold mt-0.5" style="color:${col}">${_fgRatingText(rating)}</div>`
       : '<div class="text-slate-500 dark:text-slate-600 text-xs">—</div>';
 
     // Needle position (0–100 → 0–100%)
@@ -2802,10 +2876,7 @@ function renderFearGreed(data, canvasId) {
   // History chart
   const hist = (data.history || []).filter(h => h.t && h.y != null);
   if (hist.length) {
-    const labels  = hist.map(h => {
-      const d = new Date(h.t);
-      return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: '2-digit' });
-    });
+    const labels  = hist.map(h => _fgLabel(h.t));
     const values  = hist.map(h => h.y);
 
     if (canvasId === 'fgChart' && _fgChartInst) { _fgChartInst.destroy(); _fgChartInst = null; }
@@ -2829,7 +2900,7 @@ function renderFearGreed(data, canvasId) {
           tooltip: {
             mode: 'index', intersect: false,
             callbacks: {
-              label: c => ` ${c.raw?.toFixed(1)} — ${hist[c.dataIndex]?.rating || ''}`,
+              label: c => ` ${c.raw?.toFixed(1)} — ${_fgRatingText(hist[c.dataIndex]?.rating)}`,
             },
           },
         },
