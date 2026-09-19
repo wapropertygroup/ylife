@@ -117,6 +117,92 @@ DIRECTION: dict[str, bool] = {
     "dividend_yield":    False,
 }
 
+#: Factors that are arithmetically *determined* by another factor.
+#:
+#: Overriding a multiple by hand has to carry to whatever the reconstruction
+#: derived from it, or the page shows two numbers about one company that cannot
+#: both be true: a hand-set P/E of 20 beside a PEG still computed from the
+#: measured P/E of 30. The rank of each is then taken against its own history in
+#: the ordinary way, so only the input is hand-set — the same principle that
+#: makes a value override preferable to a percentile override.
+#:
+#: Each entry is ``dependent -> (source, kind)``. Two kinds, because the
+#: recoverable relationship differs:
+#:
+#: ``"ratio"``  the dependent is the source divided by something this module
+#:              measured and did not keep — PEG is P/E over realised EPS growth,
+#:              ``ev_sales_growth`` is EV/Sales over revenue growth. The divisor
+#:              is recovered from the measured pair (``dep_old / src_old``) and
+#:              held fixed, so the override changes the multiple and leaves the
+#:              growth rate the reconstruction actually observed alone. Deriving
+#:              it any other way would mean inventing a growth rate.
+#: ``"inverse"`` an exact identity with no hidden term: ``fcf_yield`` is
+#:              ``100 / pfcf`` by construction, three lines apart in
+#:              ``dca_history._series``.
+#: ``"same"``   literally the same number under two names — ``mid_cycle`` and
+#:              ``cycle_adjusted`` are assigned from one variable.
+#:
+#: Note what is deliberately absent. ``pe`` has no parent here even though it is
+#: price over EPS: a reader overriding P/E is asserting the multiple, not
+#: claiming an EPS, and back-solving one to move ``cycle_adjusted`` or
+#: ``normalized_margin`` would ripple a single opinion through factors built on
+#: different denominators. Only relationships that are exact, and internal to one
+#: vintage, propagate.
+DERIVED_FACTORS: dict[str, tuple[str, str]] = {
+    "peg":              ("pe", "ratio"),
+    "ev_sales_growth":  ("ev_sales", "ratio"),
+    "fcf_yield":        ("pfcf", "inverse"),
+    "pfcf":             ("fcf_yield", "inverse"),
+    "mid_cycle":        ("cycle_adjusted", "same"),
+    "cycle_adjusted":   ("mid_cycle", "same"),
+}
+
+
+def derive_overrides(values: Mapping[str, float],
+                     measured_now: Mapping[str, Optional[float]]
+                     ) -> dict[str, float]:
+    """Values implied for dependent factors by hand-set *values*.
+
+    *measured_now* is each factor's own last reconstructed point — the "now"
+    figure the page shows beside the override box.
+
+    Returns only the factors that were *not* overridden explicitly: an entry a
+    reader typed is their claim and always wins over one inferred from another
+    of their claims. Derives in a single pass from the explicit set alone, which
+    is also what stops the two ``inverse`` pairs from bouncing between each other.
+
+    Refuses rather than guesses, in every case where the relationship cannot be
+    recovered exactly — a missing measured pair, a non-positive divisor, a
+    source the reconstruction never produced. A propagated number that is merely
+    plausible is worse than an absent one here, because it renders identically to
+    a measured multiple.
+    """
+    out: dict[str, float] = {}
+    for dependent, (source, kind) in DERIVED_FACTORS.items():
+        if dependent in values:
+            continue                      # the reader set it; their value stands
+        if source not in values:
+            continue                      # its source was not overridden
+        new_src = values[source]
+        if not isinstance(new_src, (int, float)) or new_src <= 0:
+            continue
+
+        if kind == "same":
+            out[dependent] = float(new_src)
+        elif kind == "inverse":
+            out[dependent] = round(100.0 / float(new_src), 4)
+        else:  # "ratio"
+            old_src = measured_now.get(source)
+            old_dep = measured_now.get(dependent)
+            if not old_src or not old_dep or old_src <= 0 or old_dep <= 0:
+                # Without both measured points the implied divisor -- the growth
+                # rate -- is unrecoverable, and assuming one would put a
+                # fabricated growth assumption behind a rendered multiple.
+                continue
+            out[dependent] = round(float(new_src) * (float(old_dep) / float(old_src)), 4)
+    return out
+
+
 #: Human labels, English only. The page translates via ``dca.f_*`` i18n keys and
 #: uses these purely as the fallback when a key is missing, so that a factor
 #: added here without a translation degrades to a readable name rather than to
