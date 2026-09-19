@@ -1183,6 +1183,31 @@ const I18n = (() => {
     // /evaluation cash-flow columns. The refusal strings matter as much as the
     // headers: a reason with no translation renders as a raw identifier in a
     // tooltip under a number somebody is about to act on.
+    // /history balance-sheet block. The refusal strings matter as much as the
+    // labels: "a bank's leverage ratio is not meaningful" is a different
+    // statement from "we could not compute it", and a missing key renders the
+    // raw identifier under a figure somebody is about to act on.
+    'history.group_health':   { en: 'Balance sheet & cash', zh: '资产负债与现金' },
+    'history.net_debt':       { en: 'Net debt', zh: '净负债' },
+    'history.net_cash':       { en: 'net cash', zh: '净现金' },
+    'history.leverage':       { en: 'Net debt / EBITDA', zh: '净负债 / EBITDA' },
+    'history.cash_conversion':{ en: 'FCF / net income', zh: '自由现金流 / 净利润' },
+    'history.fcf_margin':     { en: 'FCF margin', zh: '自由现金流利润率' },
+    'history.current_ratio':  { en: 'Current ratio', zh: '流动比率' },
+    'health.band_net_cash':   { en: 'net cash', zh: '净现金' },
+    'health.band_low':        { en: 'low leverage', zh: '低杠杆' },
+    'health.band_moderate':   { en: 'moderate', zh: '中等' },
+    'health.band_elevated':   { en: 'elevated', zh: '偏高' },
+    'health.band_high':       { en: 'high leverage', zh: '高杠杆' },
+    'health.band_poor':       { en: 'poor conversion', zh: '现金转化差' },
+    'health.band_weak':       { en: 'weak', zh: '偏弱' },
+    'health.band_healthy':    { en: 'healthy', zh: '健康' },
+    'health.band_strong':     { en: 'strong', zh: '强' },
+    'health.why_financial_sector': { en: 'not meaningful for a financial — debt is raw material, not financing',
+                                     zh: '对金融企业无意义 — 负债是原材料而非融资' },
+    'health.why_negative_ebitda':  { en: 'EBITDA is negative', zh: 'EBITDA 为负' },
+    'health.why_negative_income':  { en: 'net income is negative', zh: '净利润为负' },
+    'health.why_no_data':          { en: 'no EBITDA reported', zh: '未披露 EBITDA' },
     'th.pfcf':          { en: 'P/FCF', zh: '市现率' },
     'th.fwd_pfcf':      { en: 'P/FCF (Fwd)', zh: '预期市现率' },
     'fcf.negative':     { en: 'Negative free cash flow — shown as FCF yield, since price over negative cash flow is not a multiple',

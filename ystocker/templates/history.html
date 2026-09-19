@@ -467,6 +467,42 @@
     </div>
   </div>
 
+  <!-- Balance sheet & cash conversion ──────────────────────────────────
+       The dimension this page had no answer for. Twenty-two charts of
+       valuation, momentum and sentiment could say a stock was cheap and
+       nothing about whether the company was fragile, or whether the profit
+       the P/E is built on arrives as money. Every figure comes from the
+       `info` dict already fetched for the cards above. Hidden entirely when
+       there is nothing to show — see renderHealth. -->
+    <div id="healthGroup" class="hidden">
+      <p class="text-[10px] font-semibold uppercase tracking-widest text-slate-500 dark:text-slate-600 mb-2 px-1" data-i18n="history.group_health">Balance sheet &amp; cash</p>
+      <div class="grid grid-cols-3 sm:grid-cols-5 gap-2 sm:gap-3">
+        <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-3">
+          <div class="text-xs text-slate-500 mb-1" data-i18n="history.net_debt">Net debt</div>
+          <div id="statNetDebt" class="text-base font-bold text-slate-800 dark:text-slate-100">—</div>
+          <div id="statNetDebtSub" class="text-[10px] text-slate-500 mt-0.5"></div>
+        </div>
+        <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-3">
+          <div class="text-xs text-slate-500 mb-1" data-i18n="history.leverage">Net debt / EBITDA</div>
+          <div id="statLeverage" class="text-base font-bold text-slate-800 dark:text-slate-100">—</div>
+          <div id="statLeverageSub" class="text-[10px] mt-0.5"></div>
+        </div>
+        <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-3">
+          <div class="text-xs text-slate-500 mb-1" data-i18n="history.cash_conversion">FCF / net income</div>
+          <div id="statConversion" class="text-base font-bold text-slate-800 dark:text-slate-100">—</div>
+          <div id="statConversionSub" class="text-[10px] mt-0.5"></div>
+        </div>
+        <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-3">
+          <div class="text-xs text-slate-500 mb-1" data-i18n="history.fcf_margin">FCF margin</div>
+          <div id="statFcfMargin" class="text-base font-bold text-slate-800 dark:text-slate-100">—</div>
+        </div>
+        <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-3">
+          <div class="text-xs text-slate-500 mb-1" data-i18n="history.current_ratio">Current ratio</div>
+          <div id="statCurrentRatio" class="text-base font-bold text-slate-800 dark:text-slate-100">—</div>
+        </div>
+      </div>
+    </div>
+
   <!-- Profitability & Risk -->
     <div>
       <p class="text-[10px] font-semibold uppercase tracking-widest text-slate-500 dark:text-slate-600 mb-2 px-1" data-i18n="history.group_profitability">Profitability &amp; Risk</p>
@@ -1633,6 +1669,82 @@ let   _forecastLoad   = null;   // () => Promise, memoised, safe to call twice
 // so a later caller still gets its own attempt rather than inheriting a
 // permanently rejected promise.
 let   _ycPromise      = null;
+/* Balance sheet and cash conversion.
+
+   Hidden outright when the block is empty rather than rendered as a row of em
+   dashes: an ADR with thin Yahoo coverage has nothing to say here, and five
+   blank tiles read as a broken page rather than as absent data.
+
+   Every refusal is shown as *why*, not as a blank. A bank has no meaningful
+   net debt / EBITDA — its debt is raw material, not financing — and saying so
+   is different from having failed to compute it. */
+function renderHealth(h) {
+  const group = document.getElementById('healthGroup');
+  if (!group) return;
+  if (!h || !Object.keys(h).length) { group.classList.add('hidden'); return; }
+  group.classList.remove('hidden');
+
+  const T = (k, f) => (typeof I18n !== 'undefined' && I18n.t(k)) || f;
+  const set = (id, txt) => { const e = document.getElementById(id); if (e) e.textContent = txt; };
+  const setSub = (id, txt, cls) => {
+    const e = document.getElementById(id);
+    if (!e) return;
+    e.textContent = txt || '';
+    e.className = 'text-[10px] mt-0.5 ' + (cls || 'text-slate-500');
+  };
+  const money = (v) => v == null ? '—'
+    : (Math.abs(v) >= 1e9 ? '$' + (v / 1e9).toFixed(1) + 'B'
+                          : '$' + (v / 1e6).toFixed(0) + 'M');
+
+  // Net cash is shown as net cash, positive, not as negative debt: a reader
+  // scanning a debt column reads -$62B as a typo.
+  if (h.net_cash != null && h.net_cash > 0) {
+    set('statNetDebt', money(h.net_cash));
+    setSub('statNetDebtSub', T('history.net_cash', 'net cash'),
+           'text-[10px] mt-0.5 text-emerald-700 dark:text-emerald-400');
+  } else if (h.net_debt != null) {
+    set('statNetDebt', money(h.net_debt));
+    setSub('statNetDebtSub', '');
+  } else {
+    set('statNetDebt', '—');
+  }
+
+  const bandTone = {
+    net_cash: 'text-emerald-700 dark:text-emerald-400',
+    low:      'text-emerald-700 dark:text-emerald-400',
+    moderate: 'text-slate-500',
+    elevated: 'text-amber-700 dark:text-amber-400',
+    high:     'text-rose-700 dark:text-rose-400',
+    poor:     'text-rose-700 dark:text-rose-400',
+    weak:     'text-amber-700 dark:text-amber-400',
+    healthy:  'text-emerald-700 dark:text-emerald-400',
+    strong:   'text-emerald-700 dark:text-emerald-400',
+  };
+
+  if (h.net_debt_ebitda != null) {
+    set('statLeverage', h.net_debt_ebitda.toFixed(2) + 'x');
+    setSub('statLeverageSub', T('health.band_' + h.leverage_band, h.leverage_band),
+           'text-[10px] mt-0.5 ' + (bandTone[h.leverage_band] || 'text-slate-500'));
+  } else {
+    set('statLeverage', '—');
+    setSub('statLeverageSub',
+           h.leverage_reason ? T('health.why_' + h.leverage_reason, h.leverage_reason) : '');
+  }
+
+  if (h.cash_conversion != null) {
+    set('statConversion', h.cash_conversion.toFixed(2) + 'x');
+    setSub('statConversionSub', T('health.band_' + h.conversion_band, h.conversion_band),
+           'text-[10px] mt-0.5 ' + (bandTone[h.conversion_band] || 'text-slate-500'));
+  } else {
+    set('statConversion', '—');
+    setSub('statConversionSub',
+           h.conversion_reason ? T('health.why_' + h.conversion_reason, h.conversion_reason) : '');
+  }
+
+  set('statFcfMargin', h.fcf_margin != null ? h.fcf_margin.toFixed(1) + '%' : '—');
+  set('statCurrentRatio', h.current_ratio != null ? h.current_ratio.toFixed(2) : '—');
+}
+
 function _yieldCurve() {
   if (!_ycPromise) {
     _ycPromise = fetch('/api/yield-curve')
@@ -1758,6 +1870,7 @@ function _yieldCurve() {
     el.textContent = (val >= 0 ? '' : '') + val.toFixed(1) + '%';
     el.className = 'text-base font-bold ' + (goodHigh ? (val > 15 ? 'text-emerald-700 dark:text-emerald-400' : val > 5 ? 'text-amber-700 dark:text-amber-400' : 'text-rose-700 dark:text-rose-400') : (val < 50 ? 'text-emerald-700 dark:text-emerald-400' : val < 100 ? 'text-amber-700 dark:text-amber-400' : 'text-rose-700 dark:text-rose-400'));
   }
+  renderHealth(data.health);
   setPct('statGrossMargin', data.gross_margin);
   setPct('statNetMargin',   data.net_margin);
   setPct('statRoe',         data.roe);
