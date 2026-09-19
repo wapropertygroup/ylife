@@ -768,6 +768,66 @@ class DcfBranch(unittest.TestCase):
             for key in ("V_rel", "V_dcf", "w_dcf", "blended"):
                 self.assertIn(key, row, key)
 
+    # ── a stored override the engine cannot apply ─────────────────────────
+    def test_an_unrankable_value_override_is_reported_not_dropped(self):
+        """The failure this was written for.
+
+        A P/E override stored against NEM changed nothing: that ticker's P/E
+        series is 57 weekly points against a floor of 60, so `percentile_rank`
+        refused and the loop `continue`d. The value was saved, the page accepted
+        it, the score did not move, and nothing anywhere said the input had been
+        discarded — which reads as the engine disagreeing rather than as the
+        override being thrown away.
+
+        The refusal is still correct: a rank over 57 points is not a percentile.
+        What was wrong is that it was silent.
+        """
+        from ystocker import dca, routes
+
+        payload = {
+            # Deliberately one short of the floor.
+            "series": {"pe": [(f"2026-01-{i:02d}", 20.0 + i)
+                              for i in range(1, dca.MIN_OBSERVATIONS)]},
+            "prices": [["2026-09-14", 100.0]],
+            "vintages": [],
+            "sector": "Basic Materials",
+        }
+        override = {"values": {"pe": 12.8}}
+        # A request context: _dca_score reaches the session for the portfolio
+        # overlay, which is request-scoped.
+        with self.app.test_request_context("/api/dca/TEST"):
+            result, _peer, _drift, _pos = routes._dca_score(
+                "TEST", payload, 1000.0, overrides={"TEST": override})
+
+        refusals = result.get("override_refusals") or []
+        self.assertTrue(refusals, "a refused override must be reported")
+        row = refusals[0]
+        self.assertEqual(row["factor"], "pe")
+        self.assertEqual(row["value"], 12.8)
+        self.assertEqual(row["reason"], "too_few_observations")
+        self.assertEqual(row["observations"], dca.MIN_OBSERVATIONS - 1)
+        self.assertEqual(row["short_by"], 1)
+        # And it genuinely did not take effect — the report is not cosmetic.
+        self.assertNotIn("pe", result.get("overridden") or [])
+
+    def test_a_rankable_value_override_still_applies_and_is_not_reported(self):
+        """Guards the other direction: a refusal path that swallowed everything
+        would satisfy the test above for ever."""
+        from ystocker import dca, routes
+
+        payload = {
+            "series": {"pe": [(f"2026-01-{i:02d}", 20.0 + i)
+                              for i in range(1, dca.MIN_OBSERVATIONS + 20)]},
+            "prices": [["2026-09-14", 100.0]],
+            "vintages": [],
+            "sector": "Basic Materials",
+        }
+        with self.app.test_request_context("/api/dca/TEST"):
+            result, _p, _d, _x = routes._dca_score(
+                "TEST", payload, 1000.0, overrides={"TEST": {"values": {"pe": 12.8}}})
+        self.assertIn("pe", result.get("overridden") or [])
+        self.assertFalse(result.get("override_refusals"))
+
     # ── the override, and who may write one ───────────────────────────────
     def test_reading_an_override_is_public(self):
         r = self.client.get("/api/dca/MSFT/dcf")

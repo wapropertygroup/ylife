@@ -1327,6 +1327,10 @@ def _dca_score(symbol: str, payload: dict, base: float, *,
     overridden: list[str] = []
     measured: dict = {}
     value_overrides: dict = {}
+    # Overrides that were stored but could not be applied. Never silently
+    # dropped: a saved value that changes nothing, with nothing saying so, is
+    # the worst outcome available here.
+    refused: list[dict] = []
     # A price what-if restates the whole set at once, and is merged into the
     # value-override loop below rather than seeded here. That loop is the single
     # place a value is re-ranked and recorded, and it *refuses* anything it
@@ -1347,6 +1351,8 @@ def _dca_score(symbol: str, payload: dict, base: float, *,
         # years of weekly history, and the engine does.
         for factor, val in {**(price_override or {}), **(override.get("values") or {})}.items():
             if not isinstance(val, (int, float)):
+                refused.append({"factor": factor, "value": val,
+                                "reason": "not_a_number"})
                 continue
             distribution = [v for _stamp, v in (series.get(factor) or [])]
             pct = dca.percentile_rank(float(val), distribution,
@@ -1356,6 +1362,21 @@ def _dca_score(symbol: str, payload: dict, base: float, *,
                 # guessed: a value with nowhere to sit is not a percentile, and
                 # inventing one here would be the very thing the percentile
                 # override exists to make explicit.
+                #
+                # Recorded rather than skipped. A `continue` here means a reader
+                # types a P/E, the page saves it, and the score does not move —
+                # with nothing anywhere saying the value was discarded. Observed
+                # on NEM: a stored `{"pe": 12.8}` had no effect because that
+                # ticker's P/E series is 57 weeks against a floor of 60, and the
+                # page reported neither the override nor its refusal.
+                refused.append({
+                    "factor": factor,
+                    "value": float(val),
+                    "observations": len(distribution),
+                    "needed": dca.MIN_OBSERVATIONS,
+                    "reason": "too_few_observations" if distribution else "no_series",
+                    "short_by": max(0, dca.MIN_OBSERVATIONS - len(distribution)) or None,
+                })
                 continue
             measured[factor] = percentiles.get(factor)
             value_overrides[factor] = float(val)
@@ -1432,6 +1453,15 @@ def _dca_score(symbol: str, payload: dict, base: float, *,
         overridden=overridden,
         measured=measured,
     )
+
+    # Overrides the reader saved that the engine could not use. Attached to the
+    # result rather than logged, because the only person who can act on it is
+    # the one looking at the page — and the documented remedy is a *percentile*
+    # override, which asserts the rank directly and needs no distribution.
+    if refused:
+        result["override_refusals"] = refused
+        log.info("DCA %s: %d stored override(s) refused: %s", symbol, len(refused),
+                 ", ".join(f"{r['factor']}({r['reason']})" for r in refused))
 
     # Display metadata for a value override: what was entered, and what the
     # reconstruction's own last point was. Attached here rather than threaded
