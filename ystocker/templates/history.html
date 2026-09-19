@@ -497,8 +497,9 @@
           <div id="statFcfMargin" class="text-base font-bold text-slate-800 dark:text-slate-100">—</div>
         </div>
         <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-3">
-          <div class="text-xs text-slate-500 mb-1" data-i18n="history.current_ratio">Current ratio</div>
-          <div id="statCurrentRatio" class="text-base font-bold text-slate-800 dark:text-slate-100">—</div>
+          <div class="text-xs text-slate-500 mb-1" data-i18n="history.capex_intensity">Capex intensity</div>
+          <div id="statCapex" class="text-base font-bold text-slate-800 dark:text-slate-100">—</div>
+          <div class="text-[10px] text-slate-500 mt-0.5" data-i18n="history.capex_sub">of operating cash</div>
         </div>
       </div>
     </div>
@@ -1742,7 +1743,9 @@ function renderHealth(h) {
   }
 
   set('statFcfMargin', h.fcf_margin != null ? h.fcf_margin.toFixed(1) + '%' : '—');
-  set('statCurrentRatio', h.current_ratio != null ? h.current_ratio.toFixed(2) : '—');
+  // Current ratio is already rendered by the Profitability block below;
+  // duplicating the id put two writers on one element and the other one won.
+  set('statCapex', h.capex_intensity != null ? h.capex_intensity.toFixed(0) + '%' : '—');
 }
 
 function _yieldCurve() {
