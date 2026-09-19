@@ -226,6 +226,15 @@ def _load_secrets_from_ssm() -> None:
         # the picker disables those rows rather than offering a run that would
         # die on a missing credential.
         "/ystocker/DEEPSEEK_API_KEY":   "DEEPSEEK_API_KEY",
+        # Earnings vendor for /agents runs, read by TradingAgents' alpha_vantage
+        # adapter out of the child's environment -- agents._child_env copies
+        # os.environ, so landing it here is the whole plumbing. Optional in the
+        # same sense DeepSeek is: with no key the vendor raises before any
+        # network call and the earnings chain falls through to yfinance, so a
+        # keyless box runs exactly as it did. Note the free tier premium-gates
+        # the estimate and transcript endpoints, which degrade to a stated data
+        # gap rather than failing the run.
+        "/ystocker/ALPHA_VANTAGE_API_KEY": "ALPHA_VANTAGE_API_KEY",
         "/ystocker/FRED_API_KEY":       "FRED_API_KEY",
         "/ystocker/YOUTUBE_API_KEY":    "YOUTUBE_API_KEY",
         "/ystocker/SES_FROM_EMAIL":     "SES_FROM_EMAIL",
