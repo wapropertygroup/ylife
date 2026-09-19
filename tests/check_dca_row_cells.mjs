@@ -130,15 +130,26 @@ console.log('noScoreTag');
 
 console.log('coverageCell');
 {
-  check('no history renders an em dash', coverageCell({ years: null }) === '—');
-  const clean = coverageCell({ years: 3.5, vintages: 9, dropped: [] });
+  check('no history renders an em dash', coverageCell({ years: null }, 60) === '—');
+  // `need` is passed in rather than read from a module global — the checker
+  // caught exactly that, which is also why the function is easier to reason
+  // about now.
+  const clean = coverageCell({ years: 3.5, vintages: 9, dropped: [] }, 60);
   check('clean row shows length and vintages', clean.includes('3.5y') && clean.includes('9 filings'));
   check('clean row adds no dropped line', !clean.includes('dropped'));
 
-  const lossy = coverageCell({ years: 3.5, vintages: 9, dropped: ['pe', 'peg', 'peer'] });
+  const lossy = coverageCell(
+    { years: 3.5, vintages: 9, dropped: ['pe', 'peg', 'peer'],
+      dropped_obs: { pe: 57, peg: 6, peer: 0 } }, 60);
   check('dropped factors are named inline, not hidden in a tooltip',
         lossy.includes('dca.f_pe') && lossy.includes('dca.f_peg') && lossy.includes('dca.f_peer'));
   check('dropped line is not a bare count', !/>−3</.test(lossy));
+
+  // A factor three weeks from qualifying and one forty weeks short render
+  // identically without this, and across the universe both shapes are common.
+  check('a short factor shows how short', lossy.includes('57/60'));
+  check('a factor with no series at all shows no count',
+        !lossy.includes('0/60'), 'zero of sixty implies it is merely short');
 }
 
 console.log(failed ? `\n${failed} check(s) failed` : '\nall checks passed');
