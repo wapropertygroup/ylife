@@ -362,7 +362,10 @@
       <h2 class="text-sm font-semibold mb-1" data-i18n="dca.vhist_title">V score over time</h2>
       <p id="vhistNote" class="text-xs text-slate-500 mb-3"></p>
       <div style="height:260px"><canvas id="vHistChart"></canvas></div>
-      <div id="vhistEmpty" class="hidden text-xs text-slate-500 py-8 text-center" data-i18n="dca.vhist_empty">Not enough history to rank yet.</div>
+      <div id="vhistEmpty" class="hidden text-xs text-slate-500 py-8 text-center">
+        <div data-i18n="dca.vhist_empty">Not enough history to rank yet.</div>
+        <div id="vhistWhy"></div>
+      </div>
     </div>
     <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 fade-up">
       <div class="flex items-center justify-between mb-1 gap-2 flex-wrap">
@@ -742,6 +745,45 @@ function renderWindow(d) {
 
 /* ── Charts ─────────────────────────────────────────────────────────────── */
 
+function renderCoverage(cov) {
+  const box = document.getElementById('vhistWhy');
+  if (!box) return;
+  if (!cov || !cov.factors || !cov.factors.length) { box.innerHTML = ''; return; }
+  const T = (k, f) => (typeof I18n !== 'undefined' && I18n.t(k)) || f;
+  const esc = (v) => String(v == null ? '' : v)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const label = (f) => esc((typeof I18n !== 'undefined' && I18n.t('dca.f_' + f)) || f);
+
+  const rows = cov.factors.map(f => {
+    if (f.usable) {
+      return `<div class="flex items-baseline gap-2">
+        <span class="w-28 shrink-0">${label(f.factor)}</span>
+        <span class="text-emerald-700 dark:text-emerald-400">${f.observations}</span>
+        <span class="text-slate-500">${esc(T('dca.cov_weeks', 'weeks'))}</span></div>`;
+    }
+    // "3 more weeks" is actionable; "no history, ever" is not. They must not
+    // render as the same sentence.
+    const why = f.reason === 'no_history'
+      ? esc(T('dca.cov_no_history', 'cross-sectional — never accumulates history'))
+      : esc(T('dca.cov_short', '{n} of {need} weeks — {short} short')
+            .replace('{n}', f.observations).replace('{need}', f.needed)
+            .replace('{short}', f.short_by));
+    return `<div class="flex items-baseline gap-2">
+      <span class="w-28 shrink-0">${label(f.factor)}</span>
+      <span class="text-amber-700 dark:text-amber-400">${why}</span></div>`;
+  }).join('');
+
+  box.innerHTML = `<div class="text-[11px] text-slate-500 space-y-0.5 mt-3 text-left inline-block">
+      ${rows}
+      <div class="pt-1 mt-1 border-t border-slate-200 dark:border-slate-800">
+        ${esc(T('dca.cov_surviving', 'Usable weight'))}
+        <strong>${(cov.surviving_weight * 100).toFixed(0)}%</strong>
+        <span class="text-slate-500">${esc(T('dca.cov_needs', 'of the'))}
+        ${(cov.minimum_weight * 100).toFixed(0)}% ${esc(T('dca.cov_minimum', 'minimum'))}</span>
+      </div>
+    </div>`;
+}
+
 function drawVHistory(d) {
   const line = d.v_history || [];
   const note = document.getElementById('vhistNote');
@@ -750,8 +792,14 @@ function drawVHistory(d) {
     empty.classList.remove('hidden');
     document.getElementById('vHistChart').style.display = 'none';
     note.textContent = '';
+    // Say *why*, factor by factor. "Not enough history" on its own reads the
+    // same for a factor three weeks from qualifying and one that can never
+    // qualify — NEM's P/E had 57 of the 60 weeks needed, because Newmont
+    // reported losses until early 2025 and a loss quarter produces no P/E.
+    renderCoverage(d.v_history_coverage);
     return;
   }
+  document.getElementById('vhistWhy').innerHTML = '';
   // Stated, not buried: this line excludes the peer factor because peer is a
   // cross-section of today and has no history, so its last point is legitimately
   // not the headline V. Silently holding today's peer percentile constant back

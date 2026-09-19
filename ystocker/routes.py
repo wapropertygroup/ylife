@@ -1514,6 +1514,11 @@ def api_dca(ticker: str):
     weights = dca.TEMPLATES[result["model"]]
     line = dca_history.v_history(payload.get("series") or {}, weights,
                                  minimum=dca.MIN_OBSERVATIONS)
+    # Why the line is short or absent. Without it the page can only say "not
+    # enough history", which reads the same for a factor three weeks from
+    # qualifying and one that can never qualify at all.
+    coverage = dca_history.history_coverage(payload.get("series") or {}, weights,
+                                            minimum=dca.MIN_OBSERVATIONS)
 
     # The banked forward-basis series. Read back here rather than only written,
     # because a series nobody reads is a series nobody notices has stopped being
@@ -1540,6 +1545,7 @@ def api_dca(ticker: str):
         "series": payload.get("series"),
         "prices": payload.get("prices"),
         "v_history": line,
+        "v_history_coverage": coverage,
         "banked": {
             "rows": banked,
             "count": len(banked),
@@ -2564,6 +2570,8 @@ def api_upcoming_earnings():
     other field and discarded; see ``ystocker.earnings`` on why the field name is
     not trusted.
     """
+    import datetime as _dt
+
     from ystocker import earnings
 
     try:
@@ -2594,7 +2602,7 @@ def api_upcoming_earnings():
         # Stated so the page can say "0 of 308 in the next 21 days" rather than
         # rendering an empty list that looks like a failure. Between seasons an
         # empty calendar is the correct answer.
-        "asof": datetime.datetime.now(datetime.timezone.utc).date().isoformat(),
+        "asof": _dt.datetime.now(_dt.timezone.utc).date().isoformat(),
     })
 
 
