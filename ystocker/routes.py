@@ -1571,6 +1571,12 @@ def api_dca(ticker: str):
         "earnings": drift,
         "portfolio": position,
         "window": payload.get("window"),
+        # Absent for an ordinary listing, so the response of a US ticker is
+        # unchanged. Present only when the statements had to be restated into
+        # the currency and share basis the price is quoted in — which the
+        # Provenance card names, because a P/E carries a hidden step when the
+        # earnings behind it were filed in another currency.
+        "listing_basis": payload.get("listing_basis"),
         "vintages": payload.get("vintages"),
         "series": payload.get("series"),
         "prices": payload.get("prices"),

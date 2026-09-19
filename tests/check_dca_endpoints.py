@@ -72,7 +72,7 @@ du._table_unavail_until = float("inf")
 from ystocker import create_app                                    # noqa: E402
 
 
-def _seed(ticker: str = "MSFT") -> dict:
+def _seed(ticker: str = "MSFT", *, listing_basis: dict | None = None) -> dict:
     """A believable reconstruction, built from literals rather than fetched."""
     inc, bal, cfs = {}, {}, {}
     for i, year in enumerate((2020, 2021, 2022, 2023)):
@@ -100,6 +100,8 @@ def _seed(ticker: str = "MSFT") -> dict:
         "forward_context": {"forwardPE": 21.78, "trailingPE": 28.58},
         "prices": prices[-260:],
     }
+    if listing_basis is not None:
+        payload["listing_basis"] = listing_basis
     dh._mem[ticker] = (payload["_ts"], payload)
     return payload
 
@@ -118,6 +120,27 @@ class DcaEndpoints(unittest.TestCase):
         dh.eps_drift = lambda t: {"drift": 0.031, "current": 14.2, "prior": 13.77,
                                   "period": "+1y", "lookback_days": 90}
         _seed("MSFT")
+
+    # ── the listing basis reaches the client ──────────────────────────────
+    #
+    # `build()` computes it and `/api/dca` assembles its response field by field
+    # rather than passing the payload through, so the two can disagree silently
+    # — and did: the ADR fix shipped with the reconciliation correct in the
+    # payload and `listing_basis: null` on the wire, leaving the page unable to
+    # say that a P/E had been converted out of another currency. Caught by
+    # reading a live response, not by any of the 70 checks here.
+    def test_a_listing_basis_is_surfaced_to_the_client(self):
+        basis = {"statement_currency": "TWD", "price_currency": "USD",
+                 "share_ratio": 5.0, "eps_scale": 1.0,
+                 "fx_source": "series", "notes": []}
+        _seed("TSMX", listing_basis=basis)
+        body = self.client.get("/api/dca/TSMX").get_json()
+        self.assertEqual(body.get("listing_basis"), basis)
+
+    def test_an_ordinary_listing_reports_no_basis(self):
+        """The field has to be absent-or-null for a US filer, or the Provenance
+        card grows a reconciliation note on every ticker on the site."""
+        self.assertIsNone(self.client.get("/api/dca/MSFT").get_json().get("listing_basis"))
 
     # ── the page ──────────────────────────────────────────────────────────
     def test_page_renders_for_a_known_ticker(self):
