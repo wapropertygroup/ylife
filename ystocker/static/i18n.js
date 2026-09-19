@@ -1188,6 +1188,15 @@ const I18n = (() => {
     // statement from "we could not compute it", and a missing key renders the
     // raw identifier under a figure somebody is about to act on.
     // /markets earnings calendar.
+    // /dca — why the V-history line is absent, factor by factor.
+    'dca.cov_weeks':       { en: 'weeks', zh: '周' },
+    'dca.cov_short':       { en: '{n} of {need} weeks — {short} short',
+                             zh: '{n} / {need} 周 — 还差 {short} 周' },
+    'dca.cov_no_history':  { en: 'cross-sectional — never accumulates history',
+                             zh: '横截面指标 — 不会累积历史' },
+    'dca.cov_surviving':   { en: 'Usable weight', zh: '可用权重' },
+    'dca.cov_needs':       { en: 'of the', zh: '，最低要求' },
+    'dca.cov_minimum':     { en: 'minimum', zh: '' },
     'markets.earnings_title':   { en: 'Reporting soon', zh: '即将发布财报' },
     'markets.earnings_meta':    { en: 'tracked, next 21 days', zh: '只追踪标的 · 未来 21 天' },
     'markets.earnings_none':    { en: 'No tracked company reports in the next 21 days.',

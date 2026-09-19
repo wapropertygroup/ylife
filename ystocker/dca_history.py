@@ -963,6 +963,58 @@ def v_history(series: Mapping[str, Sequence[tuple[str, float]]],
     return out
 
 
+def history_coverage(series: Mapping[str, Sequence[tuple[str, float]]],
+                     weights: Mapping[str, float],
+                     *, minimum: int) -> dict[str, Any]:
+    """Why the V-history line is short or absent, factor by factor.
+
+    :func:`v_history` returns an empty list whenever too little of the template
+    survives, and the page could only say "not enough history" — which collapses
+    two very different situations. NEM on 2026-09-19 is the case that motivated
+    this: its P/E series had **57** weekly observations against a floor of 60,
+    because Newmont reported losses until early 2025 and the reconstruction emits
+    no P/E for a loss quarter. Three weeks from working, and indistinguishable on
+    the page from a permanent refusal.
+
+    Reports the observation count against the floor for every factor the template
+    names, and the weight that survives. ``peer`` is listed as having no history
+    at all rather than as short — it is cross-sectional, so it is *never* going to
+    accumulate any, and that is the reason the headline V and this line can
+    legitimately differ.
+    """
+    from ystocker.dca import MIN_SURVIVING_WEIGHT
+
+    factors: list[dict[str, Any]] = []
+    surviving = 0.0
+    for factor, weight in sorted(weights.items(), key=lambda kv: -kv[1]):
+        rows = series.get(factor)
+        count = len(rows) if rows else 0
+        # A factor with no series at all and no prospect of one is a different
+        # statement from one that is merely short.
+        historyless = factor not in RECONSTRUCTED
+        usable = (not historyless) and count >= minimum
+        if usable:
+            surviving += float(weight)
+        factors.append({
+            "factor": factor,
+            "weight": round(float(weight), 4),
+            "observations": count,
+            "needed": minimum,
+            "usable": usable,
+            "reason": None if usable else ("no_history" if historyless else "too_few"),
+            # How many more weekly points would admit it. Only meaningful for a
+            # factor that can accumulate them.
+            "short_by": None if usable or historyless else minimum - count,
+        })
+
+    return {
+        "factors": factors,
+        "surviving_weight": round(surviving, 4),
+        "minimum_weight": MIN_SURVIVING_WEIGHT,
+        "sufficient": surviving >= MIN_SURVIVING_WEIGHT,
+    }
+
+
 def peer_percentiles(ticker: str,
                      recs: Optional[Mapping[str, Mapping[str, Any]]] = None) -> dict[str, Any]:
     """Where *ticker* sits among its peer group today, on forward P/E.
