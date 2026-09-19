@@ -2289,6 +2289,34 @@ def api_futu(ticker: str):
     })
 
 
+#: How far back to fetch for each requested period, at the same bar size.
+#:
+#: Sized to cover the longest window any indicator on /history uses at that
+#: interval — HV60 and MA50 on daily bars, HV26 on weekly, HV24 on monthly —
+#: plus MACD's EMA-26. Below that the front of the reader's window is still
+#: blank, which is the thing being fixed.
+#:
+#: The interval is *not* changed alongside it. `1mo` and `3mo` are daily bars;
+#: asking for `6mo` at the default interval would return weekly ones and quietly
+#: swap the chart's bar size underneath the reader.
+_HISTORY_WARMUP: dict[str, str] = {
+    "1mo": "6mo",    # ~126 daily bars for a ~22-bar window
+    "3mo": "1y",     # ~252 daily for ~65
+    "6mo": "1y",     # ~52 weekly for ~26
+    "1y":  "2y",     # ~104 weekly for ~53
+    "2y":  "5y",     # ~260 weekly for ~105
+    "5y":  "10y",    # ~120 monthly for ~60
+    "10y": "max",    # whatever exists, for ~120
+}
+
+#: Calendar days each period covers, for locating where the reader's window
+#: begins inside the warm-up series.
+_HISTORY_SPAN_DAYS: dict[str, int] = {
+    "1mo": 31, "3mo": 92, "6mo": 183,
+    "1y": 366, "2y": 731, "5y": 1827, "10y": 3653,
+}
+
+
 @bp.route("/api/history/<ticker>")
 def api_history(ticker: str):
     """
@@ -2315,7 +2343,25 @@ def api_history(ticker: str):
         interval = "1wk"
     else:  # 5y, 10y
         interval = "1mo"
-    log.info("API history: %s period=%s", ticker, period)
+
+    # Fetch further back than the reader asked for, at the *same* bar size, and
+    # tell the client where their window starts.
+    #
+    # Every indicator on this page is computed client-side from the array this
+    # endpoint returns, so an indicator's warm-up used to eat the front of
+    # whatever window was requested. On 1M — 22 daily bars — that meant MACD
+    # (EMA-26) could not produce a single point and its whole card vanished,
+    # historical volatility rendered axes with no series at all, and RSI drew 8
+    # points out of 22. The indicators were not wrong; they were being asked to
+    # start from a standing start every time the range changed.
+    #
+    # Extending the *period* while holding the interval gives the same bars a
+    # running start, which is what every charting tool does. It costs no extra
+    # Yahoo call — one request either way — only a larger response, and the
+    # constraint this backend actually lives under is call count.
+    warmup_period = _HISTORY_WARMUP.get(period, period)
+    log.info("API history: %s period=%s (fetching %s for warm-up)",
+             ticker, period, warmup_period)
 
     cache_key = (ticker, period)
     with _HISTORY_CACHE_LOCK:
@@ -2334,12 +2380,12 @@ def api_history(ticker: str):
             return yf.Ticker(ticker).info
 
         def _get_hist():
-            return yf.Ticker(ticker).history(period=period, interval=interval)
+            return yf.Ticker(ticker).history(period=warmup_period, interval=interval)
 
         def _get_spy():
             if ticker == "SPY":
                 return None
-            return yf.Ticker("SPY").history(period=period, interval=interval)
+            return yf.Ticker("SPY").history(period=warmup_period, interval=interval)
 
         with _cf_h.ThreadPoolExecutor(max_workers=3) as _pool:
             _info_fut = _pool.submit(_get_info)
@@ -2494,9 +2540,31 @@ def api_history(ticker: str):
     put_call_ratio = None
     pc_by_expiry: list = []
 
+    # Where the reader's window begins inside the warm-up series. Everything
+    # before it is context for the indicators and must not be plotted — the
+    # client trims to this index after computing, so a 1M MACD now starts at the
+    # first visible bar instead of 26 bars into it.
+    #
+    # Located by date rather than by counting back a fixed number of bars: a
+    # holiday-shortened month has fewer bars than a normal one, and an index
+    # arithmetic'd from a bar count would silently show a slightly wrong window.
+    display_from = 0
+    span_days = _HISTORY_SPAN_DAYS.get(period)
+    if span_days and dates:
+        import datetime as _dth
+        cutoff = (_dth.datetime.now(_dth.timezone.utc).date()
+                  - _dth.timedelta(days=span_days)).isoformat()
+        display_from = next((i for i, d in enumerate(dates) if d >= cutoff), 0)
+        # Never trim to nothing: a symbol listed inside the warm-up span has all
+        # its history after the cutoff, and a short one may have none before it.
+        if len(dates) - display_from < 2:
+            display_from = 0
+
     result = {
         "ticker":           ticker,
         "name":             name,
+        "display_from":     display_from,
+        "warmup_bars":      display_from,
         "dates":            dates,
         "prices":           prices,
         "volumes":           volumes,
