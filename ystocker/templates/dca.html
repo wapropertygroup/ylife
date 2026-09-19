@@ -397,6 +397,10 @@
       <div class="text-[10px] uppercase tracking-widest text-slate-500 dark:text-slate-600 mb-1" data-i18n="dca.banked_title">Forward-basis series being banked</div>
       <div id="bankedText" class="text-xs text-slate-500"></div>
     </div>
+    <div id="basisRow" class="mt-3 pt-3 border-t border-slate-200 dark:border-slate-800" style="display:none">
+      <div class="text-[10px] uppercase tracking-widest text-slate-500 dark:text-slate-600 mb-1" data-i18n="dca.listing_basis_title">Quote and filings reconciled</div>
+      <div id="basisText" class="text-xs text-slate-500"></div>
+    </div>
   </div>
 
   <!-- ── The framework ──────────────────────────────────────────────────── -->
@@ -700,6 +704,36 @@ function renderBands(d) {
   }).join('');
 }
 
+// A reconstruction whose statements had to be restated says so. The multiples
+// are honest either way, but "P/E 32.5" carries a hidden step when the earnings
+// behind it were filed in New Taiwan dollars and the price is in US ones — and
+// this is the page that already names every other thing it had to do to the
+// numbers to make them comparable.
+function renderListingBasis(b) {
+  const row = document.getElementById('basisRow');
+  if (!b) { row.style.display = 'none'; return; }
+  const bits = [];
+  const t = (k, fb) => I18n.t(k) || fb;
+  if (b.statement_currency && b.price_currency &&
+      b.statement_currency !== b.price_currency) {
+    bits.push(t('dca.basis_fx', 'Filed in {a}, quoted in {b} — every figure here is converted at the rate in force when that filing became public.')
+      .replace('{a}', b.statement_currency).replace('{b}', b.price_currency));
+    if (b.fx_source === 'spot') {
+      bits.push(t('dca.basis_fx_spot', 'No rate history was available, so today’s rate is applied across the whole window; historical points carry that drift.'));
+    }
+  }
+  if (b.share_ratio && Math.abs(b.share_ratio - 1) > 0.01) {
+    bits.push(t('dca.basis_shares', 'Share counts are restated at {n} filed shares per quoted share.')
+      .replace('{n}', b.share_ratio.toFixed(2)));
+  }
+  if (b.eps_scale && Math.abs(b.eps_scale - 1) > 0.01) {
+    bits.push(t('dca.basis_eps', 'Earnings per share are rebased onto the quoted share.'));
+  }
+  if (!bits.length) { row.style.display = 'none'; return; }
+  document.getElementById('basisText').textContent = bits.join(' ');
+  row.style.display = '';
+}
+
 function renderWindow(d) {
   const w = d.window || {};
   document.getElementById('wWindow').textContent =
@@ -708,6 +742,8 @@ function renderWindow(d) {
     w.observations ? w.observations + ' (' + w.years + 'y ' + (I18n.t('dca.weekly') || 'weekly') + ')' : '—';
   document.getElementById('wVintages').textContent = w.vintages || '—';
   document.getElementById('wBasis').textContent = I18n.t('dca.basis_trailing') || 'Trailing';
+
+  renderListingBasis(d.listing_basis);
 
   const ctx = d.forward_context || {};
   const chips = [];

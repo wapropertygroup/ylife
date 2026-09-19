@@ -782,6 +782,19 @@ const I18n = (() => {
     'dca.unavailable_no_reconstructable_factors': {
                              en: 'No valuation factor could be rebuilt from the available filings.',
                              zh: '现有财报无法重建任何估值因子。' },
+    'dca.unavailable_currency_unreconciled': {
+                             en: 'This listing is priced in a different currency from the one its company reports in, and no exchange rate was available — so no multiple could be struck honestly.',
+                             zh: '该股票的交易货币与公司财报货币不同，且暂时取不到汇率，因此无法给出可信的估值倍数。' },
+    'dca.listing_basis_title': {
+                             en: 'Quote and filings reconciled', zh: '报价与财报口径已对齐' },
+    'dca.basis_fx':        { en: 'Filed in {a}, quoted in {b} — every figure here is converted at the rate in force when that filing became public.',
+                             zh: '财报以 {a} 编制，股价以 {b} 报价 — 此处每个数字都按该期财报公开当时的汇率换算。' },
+    'dca.basis_fx_spot':   { en: 'No rate history was available, so today’s rate is applied across the whole window; historical points carry that drift.',
+                             zh: '暂时取不到历史汇率，整段区间统一按当前汇率换算，历史点位会带有汇率漂移。' },
+    'dca.basis_shares':    { en: 'Share counts are restated at {n} filed shares per quoted share.',
+                             zh: '股本数量已按每 1 份报价股对应 {n} 股财报股本折算。' },
+    'dca.basis_eps':       { en: 'Earnings per share are rebased onto the quoted share.',
+                             zh: '每股收益已换算到报价股口径。' },
 
     'dca.v_score':         { en: 'Valuation Score (V)', zh: '估值分数 V' },
     'dca.axis_dear':       { en: '0 · dear',  zh: '0 · 贵' },

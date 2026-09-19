@@ -406,6 +406,7 @@ Five modules, split by what can be tested without I/O:
 |---|---|---|
 | `dca.py` | Weight templates, the direction table, E→V→multipliers, the blend | **yes** |
 | `dcf.py` | The absolute branch: WACC, projection, upside→`V_DCF` | **yes** |
+| `listing.py` | Reconciling a quote's currency and share basis with its filer's | **yes** |
 | `dcf_store.py` | Hand-entered DCF inputs (`ystocker-dca-dcf`) | validator is |
 | `dca_history.py` | Reconstructing the distributions, banking the snapshots | mostly |
 | `dca_universe.py` | Which tickers the overview ranks | no |
@@ -528,6 +529,79 @@ Not in `deploy/cloudformation.yaml`, matching every other table here and for the
 same reason. IAM needs no change (`table/ystocker-*`). No TTL: a hand-built
 valuation is exactly the thing that must not evaporate — the 120-day staleness
 rule refuses to *score* an old row while leaving it visible and editable.
+
+#### An ADR is priced in one currency and files in another (`listing.py`)
+
+Reported from the page on 2026-09-19: **TSM's P/E showing 1.01**. It was not a
+data glitch but three mutually inconsistent bases in one reconstruction, all
+handed back by the same Yahoo `Ticker` and reconciled by none of them:
+
+| | basis |
+|---|---|
+| price 434.67 | USD, **per ADR** |
+| `Diluted EPS` 431.35 (TTM) | TWD, **per ADR** |
+| `Ordinary Shares Number` 25.93e9 | **ordinary** shares |
+| `info.sharesOutstanding` 5.19e9 | ADR-equivalent (= ordinary ÷ 5, exactly) |
+
+So `close / eps` was **1.01** against a true 32.46, and `P/FCF` read 11.4 where
+the truth is ~73. The direction matters: every error here makes a company look
+*cheaper*, on a page whose only output is a cheapness score driving a
+contribution multiplier. It also corrupted the DCF branch, which was comparing a
+TWD fair value against a USD quote and returning `V_DCF` ≈ 83 — pulling TSM's
+headline V up by ~12 points on nothing.
+
+**Only ADRs are affected, and that is the whole population — not a heuristic.**
+A foreign *local* listing prices and files in the same currency, so it was always
+right: measured, Samsung reconstructs to 40.9 on KRW/KRW and Itochu to 18.0 on
+JPY/JPY. The screen against `data.py`'s independently-converted `PE (TTM)` found
+exactly 1 of 60 tracked tickers wrong. But the registry is dynamic, so the real
+population is "every ADR anybody opens".
+
+Four things hold the fix together:
+
+- **Two corrections, and fixing one is worse than fixing neither.** Currency and
+  share basis are independent. Converting the currency alone leaves market cap
+  wrong by the depositary ratio, so P/E would come out right and P/FCF, EV/EBITDA
+  and P/TBV would not — and a reader has no way to tell which columns were
+  repaired.
+- **The ADR ratio is derived, never looked up.** `statement_shares /
+  info.sharesOutstanding` gives 5.0 for TSM, so there is no table of known ratios
+  to maintain. Inside `SHARE_RATIO_TOLERANCE` the two counts are the same number
+  differing by treasury stock or basic-vs-diluted, and are left alone.
+- **The EPS basis is measured, not assumed.** Yahoo's EPS row is *already*
+  per-ADR for TSM — 5.06x the figure `Net Income / Ordinary Shares Number`
+  implies — so applying the share ratio there as well would divide the P/E by
+  five. Assuming that holds for every issuer is the guess this repo keeps getting
+  punished for, so `eps_scale()` checks the converted figure against
+  `info.trailingEps`, which Yahoo publishes independently on the quoted basis,
+  and accepts a correction only when it is 1.0 or the share ratio. A third answer
+  is named, not split.
+- **The rate is historical, and that is the same trap as forward-vs-trailing.**
+  Spot would have been free — `data.usd_rate` is already cached — and applies a
+  2026 rate to a 2021 statement, then ranks today's multiple against the result.
+  So `_fetch_fx_series` pulls `{FIN}{PX}=X` weekly, a **seventh** Yahoo read that
+  fires only when the currencies actually differ, and each vintage converts at
+  the rate in force when it became public. Spot is the labelled fallback; neither
+  available is `unavailable: currency_unreconciled`, because the choice is then
+  between publishing multiples wrong by an exchange rate and publishing none.
+
+Converting the statements rather than the price is a free choice for the
+multiples — every factor is a ratio, so the two are algebraically identical, and
+`tests/test_listing.py` pins that. It is *not* free for what the payload stores:
+converting the statements leaves `prices` and the DCF's per-share fair value in
+the currency the reader sees quoted, where converting the price would put a fair
+value in TWD next to a USD ticker.
+
+No `CACHE_VER` bump, matching the `beta` precedent — a bump is ~360 Yahoo reads
+in one sweep. Affected payloads self-heal within the 24h TTL; force-refresh the
+handful of ADRs instead.
+
+Tests: `tests/test_listing.py` (52, no app/network, anchored on TSM's measured
+figures and checked against `trailingEps`, `sharesOutstanding` and `marketCap`),
+plus `ListingBasisIntegrationTests` in `tests/test_dca_history.py` (9, `build()`
+with the fetch stubbed) — because the arithmetic being right and the arithmetic
+being *called* are different questions, and mutating the call out of `build()`
+left the pure suite green.
 
 #### The relative branch
 

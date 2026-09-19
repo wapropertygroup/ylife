@@ -27,6 +27,7 @@ The others:
 from __future__ import annotations
 
 import unittest
+from datetime import date, timedelta
 
 from ystocker import dca, dca_history as dh
 
@@ -738,6 +739,174 @@ class Filenames(unittest.TestCase):
 
     def test_an_empty_name_never_yields_an_empty_path(self):
         self.assertTrue(dh._safe_name("///"))
+
+
+class ListingBasisIntegrationTests(unittest.TestCase):
+    """``build()`` on an ADR, with the six Yahoo reads stubbed out.
+
+    The unit tests in ``test_listing.py`` prove the arithmetic; this proves it is
+    actually *wired in*, which is a different question and the one that has bitten
+    this repo before — a module can be perfect and never called. It also covers
+    the part no pure test reaches: that the vintages ``dcf_inputs`` reads back are
+    the converted ones, so the DCF's per-share fair value is struck in the
+    currency the price is quoted in.
+
+    ``build()`` writes nothing (``get()`` owns the disk cache), so stubbing the
+    fetch is enough to keep this free of network and free of side effects.
+    """
+
+    YEARS = ["2021-12-31", "2022-12-31", "2023-12-31", "2024-12-31", "2025-12-31"]
+    NET_INCOME = [5.97e11, 1.017e12, 8.38e11, 1.17e12, 1.698e12]   # TWD
+
+    def _raw(self, *, adr=True, eps_per_adr=True, fx=True):
+        """A TSM-shaped payload. ``adr=False`` models an ordinary US listing,
+        which differs on *both* axes at once — a domestic filer has neither a
+        foreign reporting currency nor a depositary ratio, and varying only the
+        currency would describe a company that does not exist.
+        """
+        # Yahoo's EPS row is per-ADR for TSM; the fixture can produce either
+        # basis so the cross-check has something to distinguish.
+        per_ordinary = [ni / 25_932_524_521 for ni in self.NET_INCOME]
+        ratio = 5.0 if adr else 1.0
+        eps = [e * ratio for e in per_ordinary] if eps_per_adr else per_ordinary
+        inc = {y: {"Total Revenue": 1.6e12 + i * 4e11,
+                   "Net Income": self.NET_INCOME[i],
+                   "Diluted EPS": eps[i],
+                   "EBITDA": self.NET_INCOME[i] * 1.6}
+               for i, y in enumerate(self.YEARS)}
+        bal = {y: {"Ordinary Shares Number": 25_932_524_521,
+                   "Total Debt": 9.0e11,
+                   "Cash And Cash Equivalents": 1.3e12,
+                   "Tangible Book Value": 2.6e12 + i * 3e11}
+               for i, y in enumerate(self.YEARS)}
+        cfs = {y: {"Free Cash Flow": self.NET_INCOME[i] * 0.45,
+                   "Depreciation And Amortization": 4.0e11}
+               for i, y in enumerate(self.YEARS)}
+
+        prices, rates = [], []
+        day = date(2021, 1, 3)
+        while day < date(2026, 9, 14):
+            age = (day - date(2021, 1, 3)).days
+            prices.append((day.isoformat(), 120.0 + age * 0.15))
+            rates.append((day.isoformat(), 1 / 28.0 + (age / 2080) * (1 / 32.21 - 1 / 28.0)))
+            day += timedelta(days=7)
+
+        # trailingEps is what the cross-check measures against: the last annual
+        # EPS on the quoted basis, converted at the final rate.
+        rate = rates[-1][1] if adr else 1.0
+        trailing = per_ordinary[-1] * ratio * rate
+        return {
+            "info": {"currency": "USD",
+                     "financialCurrency": "TWD" if adr else "USD",
+                     "sharesOutstanding": 25_932_524_521 / ratio,
+                     "trailingEps": trailing,
+                     "shortName": "TSMC", "sector": "Technology",
+                     "industry": "Semiconductors", "quoteType": "EQUITY"},
+            "annual_income": inc, "annual_balance": bal, "annual_cashflow": cfs,
+            "quarterly_income": {}, "prices": prices,
+            "fx": rates if (fx and adr) else [],
+        }
+
+    def _build(self, **kwargs):
+        raw = self._raw(**kwargs)
+        original = dh._fetch_raw
+        dh._fetch_raw = lambda _t: raw
+        try:
+            return dh.build("TSM")
+        finally:
+            dh._fetch_raw = original
+
+    def test_the_basis_is_detected_and_recorded(self):
+        basis = self._build().get("listing_basis")
+        self.assertIsNotNone(basis)
+        self.assertEqual(basis["statement_currency"], "TWD")
+        self.assertEqual(basis["price_currency"], "USD")
+        self.assertAlmostEqual(basis["share_ratio"], 5.0, places=3)
+        self.assertEqual(basis["fx_source"], "series")
+
+    def test_the_pe_is_no_longer_a_currency_ratio(self):
+        """The reported symptom. Unconverted, ``close / eps`` on an ADR lands
+        near 1 because a TWD earnings figure and a USD price are the same order
+        of magnitude — which is the whole reason it looked like a data glitch
+        rather than a unit error."""
+        payload = self._build()
+        pe = payload["series"]["pe"][-1][1]
+        self.assertGreater(pe, 10.0, "P/E still looks like an FX ratio")
+
+    def test_stored_vintages_are_converted_for_the_dcf(self):
+        """``dcf_inputs`` reads the stored vintages and compares its per-share
+        fair value against the stored price. Leaving the vintages in the filer's
+        currency there would value a USD quote against TWD cash flows."""
+        payload = self._build()
+        inputs = dh.dcf_inputs(payload)
+        self.assertAlmostEqual(inputs["shares"] / 5_186_474_013, 1.0, places=4)
+        # FCF is 45% of net income; the last year's is ~1.7e12 TWD, which is
+        # tens of billions of dollars, not trillions of anything.
+        self.assertLess(max(inputs["fcf_series"]), 1e11)
+        self.assertGreater(max(inputs["fcf_series"]), 1e10)
+
+    def test_an_ordinary_basis_eps_row_is_detected_and_rebased(self):
+        """The reason the EPS basis is measured rather than assumed from TSM."""
+        basis = self._build(eps_per_adr=False)["listing_basis"]
+        self.assertAlmostEqual(basis["eps_scale"], 5.0, places=3)
+        self.assertIn("eps_rebased_to_quoted_shares", basis["notes"])
+
+    def test_either_eps_basis_reaches_the_same_pe(self):
+        """The two fixtures describe one company whose filer happens to quote
+        EPS differently. If the correction works, the multiple is the same — and
+        if it silently did nothing, the two would differ by five."""
+        with_adr = self._build()["series"]["pe"][-1][1]
+        with_ordinary = self._build(eps_per_adr=False)["series"]["pe"][-1][1]
+        self.assertAlmostEqual(with_adr, with_ordinary, places=3)
+
+    def test_the_fx_read_short_circuits_before_touching_yfinance(self):
+        """The seventh Yahoo read must fire only for a real currency mismatch —
+        that is the whole cost claim, and the ~59 of 60 tracked tickers that file
+        in the currency they trade in have to keep paying nothing. The guard sits
+        above the ``import yfinance`` for that reason, so this runs with the
+        module absent as well as present.
+
+        It does **not** prove ``_fetch_raw`` calls this; the integration tests
+        above stub that out wholesale, and mutating the call away leaves them
+        green. That path is covered by checking a live ADR payload reports
+        ``fx_source: series``.
+        """
+        self.assertEqual(dh._fetch_fx_series("USD", "USD"), [])
+        self.assertEqual(dh._fetch_fx_series(None, None), [])
+        self.assertEqual(dh._fetch_fx_series("TWD", None), [])
+
+    def test_a_us_filer_is_left_completely_alone(self):
+        """No basis block at all, so an ordinary listing's payload is what it
+        was before this existed. Asserted on the key set rather than the payload
+        so a failure prints a diff instead of five years of weekly series."""
+        self.assertNotIn("listing_basis", sorted(self._build(adr=False)))
+
+    def test_no_rate_at_all_refuses_rather_than_publishes(self):
+        """With the currencies differing and neither a series nor a spot rate,
+        the only honest output is none. ``usd_rate`` is stubbed to fail the way
+        a blocked or delisted pair does."""
+        from ystocker import data as ydata
+        original = ydata.usd_rate
+        ydata.usd_rate = lambda _c: None
+        try:
+            payload = self._build(fx=False)
+        finally:
+            ydata.usd_rate = original
+        self.assertEqual(payload.get("unavailable"), "currency_unreconciled")
+        self.assertEqual(payload["series"], {})
+
+    def test_spot_is_used_and_labelled_when_the_series_is_missing(self):
+        """Degrading visibly beats refusing outright — but the payload has to
+        say which rate it used, because the historical points carry the drift."""
+        from ystocker import data as ydata
+        original = ydata.usd_rate
+        ydata.usd_rate = lambda _c: 1 / 32.21
+        try:
+            payload = self._build(fx=False)
+        finally:
+            ydata.usd_rate = original
+        self.assertEqual(payload["listing_basis"]["fx_source"], "spot")
+        self.assertGreater(payload["series"]["pe"][-1][1], 10.0)
 
 
 if __name__ == "__main__":  # pragma: no cover
