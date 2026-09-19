@@ -115,6 +115,9 @@
            and win the cascade from a body <style>, so the element could never
            be hidden — the same trap the assets table hit with `w-full`. -->
       <div id="vOverridden" class="hidden mt-1"></div>
+      <div id="ovRefused" class="hidden mt-2 text-[11px] px-2.5 py-2 rounded-lg
+           bg-amber-50 dark:bg-amber-900/25 border border-amber-300 dark:border-amber-700
+           text-amber-800 dark:text-amber-300 space-y-1"></div>
       <div class="pct-track mt-3"><div id="vFill" class="pct-fill" style="width:0"></div></div>
       <div class="flex justify-between text-[10px] text-slate-500 mt-1">
         <span data-i18n="dca.axis_dear">0 · dear</span><span data-i18n="dca.axis_cheap">100 · cheap</span>
@@ -503,6 +506,7 @@ function renderScore(d) {
   } else {
     vOv.classList.add('hidden');
   }
+  renderOverrideRefusals(d.override_refusals);
 
   document.getElementById('modelName').textContent = I18n.t('dca.model_' + d.model) || d.model;
   const why = I18n.t('dca.why_' + d.model_reason);
@@ -784,6 +788,40 @@ function renderCoverage(cov) {
       ${rows}
       <div class="pt-1 mt-1 border-t border-slate-200 dark:border-slate-800">${summary}</div>
     </div>`;
+}
+
+/* Overrides that were saved and could not be used.
+
+   A value a reader typed, the page accepted, and the score then ignored — with
+   nothing saying so — is the worst outcome this feature can produce: it looks
+   like the engine disagreed rather than like the input was discarded. Observed
+   on NEM, where a stored P/E of 12.8 changed nothing because that ticker's P/E
+   series is 57 weeks against a floor of 60.
+
+   The remedy is named rather than implied. A percentile override asserts the
+   rank directly and needs no distribution, which is exactly the case it exists
+   for — but nobody would guess that from a value silently doing nothing. */
+function renderOverrideRefusals(list) {
+  const box = document.getElementById('ovRefused');
+  if (!box) return;
+  if (!list || !list.length) { box.classList.add('hidden'); box.innerHTML = ''; return; }
+  const T = (k, f) => (typeof I18n !== 'undefined' && I18n.t(k)) || f;
+  const label = (f) => esc(T('dca.f_' + f, f));
+
+  box.innerHTML = list.map(r => {
+    const why = r.reason === 'too_few_observations'
+      ? esc(T('dca.ovref_short', '{n} of {need} weeks of history — a rank over {n} points is not a percentile')
+            .replace(/\{n\}/g, r.observations).replace('{need}', r.needed))
+      : r.reason === 'no_series'
+        ? esc(T('dca.ovref_none', 'no reconstructed history for this factor'))
+        : esc(T('dca.ovref_nan', 'not a number'));
+    return `<div>
+      <strong>${label(r.factor)} ${r.value != null ? esc(Number(r.value).toFixed(2)) : ''}</strong>
+      ${esc(T('dca.ovref_lead', 'was saved but could not be applied'))}: ${why}.
+      <span class="text-slate-500">${esc(T('dca.ovref_fix', 'Use a percentile override instead — it asserts the rank directly and needs no distribution.'))}</span>
+    </div>`;
+  }).join('');
+  box.classList.remove('hidden');
 }
 
 function drawVHistory(d) {

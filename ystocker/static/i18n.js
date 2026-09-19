@@ -1189,6 +1189,18 @@ const I18n = (() => {
     // raw identifier under a figure somebody is about to act on.
     // /markets earnings calendar.
     // /dca — why the V-history line is absent, factor by factor.
+    // A saved override the engine could not apply. Every string here has to
+    // stand on its own — the reader's input vanished and nothing else explains
+    // where it went.
+    'dca.ovref_lead':      { en: 'was saved but could not be applied',
+                             zh: '已保存，但未能生效' },
+    'dca.ovref_short':     { en: '{n} of {need} weeks of history — a rank over {n} points is not a percentile',
+                             zh: '仅有 {n} / {need} 周历史 — 在 {n} 个点上取分位不构成百分位' },
+    'dca.ovref_none':      { en: 'no reconstructed history for this factor',
+                             zh: '该因子没有可重建的历史' },
+    'dca.ovref_nan':       { en: 'not a number', zh: '不是数值' },
+    'dca.ovref_fix':       { en: 'Use a percentile override instead — it asserts the rank directly and needs no distribution.',
+                             zh: '改用分位数覆盖 — 它直接指定排名，不需要分布。' },
     'dca.cov_weeks':       { en: 'weeks', zh: '周' },
     'dca.cov_short':       { en: '{n} of {need} weeks — {short} short',
                              zh: '{n} / {need} 周 — 还差 {short} 周' },
