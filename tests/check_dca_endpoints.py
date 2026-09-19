@@ -142,6 +142,51 @@ class DcaEndpoints(unittest.TestCase):
         card grows a reconciliation note on every ticker on the site."""
         self.assertIsNone(self.client.get("/api/dca/MSFT").get_json().get("listing_basis"))
 
+    # ── the forward basis reaches the client ──────────────────────────────
+    #
+    # Same failure mode the listing basis just had: computed correctly inside
+    # `_dca_score` and dropped on the way out, leaving the page unable to say
+    # which basis produced a rank. These are the fields `renderFactors` reads.
+    def test_a_factor_carries_both_multiples_and_the_basis_it_ranked_on(self):
+        rows = self.client.get("/api/dca/MSFT").get_json()["factors"]
+        pe = next(r for r in rows if r["factor"] == "pe")
+        self.assertAlmostEqual(pe["forward_value"], 21.78)
+        self.assertIsNotNone(pe["trailing_value"])
+        self.assertEqual(pe["basis"], "trailing")
+
+    def test_nothing_switches_basis_without_a_banked_distribution(self):
+        """The fallback, and the reason this could ship years before the banked
+        series is useful. A forward value ranked against the trailing
+        reconstruction is biased cheap — measured at a median of 14.6 percentile
+        points — so an empty or short banked series must change no score."""
+        body = self.client.get("/api/dca/MSFT").get_json()
+        self.assertTrue(all(r.get("basis") != "forward" for r in body["factors"]))
+        # And the rank still equals the reconstruction's own latest percentile.
+        pe = next(r for r in body["factors"] if r["factor"] == "pe")
+        self.assertAlmostEqual(pe["raw_pct"], dh._mem["MSFT"][1]["percentiles"]["pe"],
+                               places=4)
+
+    def test_a_long_banked_distribution_switches_that_factor_only(self):
+        _seed("FWDX")
+        original = dh.banked_distributions
+        dh.banked_distributions = lambda t: (
+            {"pe": [float(v) for v in range(5, 65)]} if t == "FWDX" else {})
+        try:
+            rows = self.client.get("/api/dca/FWDX").get_json()["factors"]
+        finally:
+            dh.banked_distributions = original
+        pe = next(r for r in rows if r["factor"] == "pe")
+        self.assertEqual(pe["basis"], "forward")
+        self.assertEqual(pe["basis_observations"], 60)
+        # The rank it replaced travels with it, so the switch is visible rather
+        # than just having happened.
+        self.assertIsNotNone(pe["trailing_percentile"])
+        self.assertNotEqual(pe["raw_pct"], pe["trailing_percentile"])
+        # Per factor, never per ticker: P/FCF has no forward distribution here.
+        pfcf = next((r for r in rows if r["factor"] == "pfcf"), None)
+        if pfcf is not None:
+            self.assertNotEqual(pfcf.get("basis"), "forward")
+
     # ── the page ──────────────────────────────────────────────────────────
     def test_page_renders_for_a_known_ticker(self):
         r = self.client.get("/dca/MSFT")

@@ -1305,6 +1305,23 @@ def _dca_score(symbol: str, payload: dict, base: float, *,
     if peer.get("percentile") is not None:
         percentiles["peer"] = peer["percentile"]
 
+    # Score on the forward basis wherever there is a forward *distribution* to
+    # rank against, and on the reconstruction everywhere else. That fallback is
+    # the whole design: a forward multiple ranked against trailing history is
+    # biased cheap by a measured median of 14.6 percentile points, so the switch
+    # is per factor and happens only once `ystocker-dca-history` holds
+    # MIN_OBSERVATIONS forward rows for that factor -- months after this ships,
+    # and never at all for a ticker nobody keeps tracked.
+    #
+    # Before the overrides below, deliberately: a hand-entered value must win
+    # over an automatic basis switch, and the override loop then records this
+    # percentile as the one it replaced.
+    banked = dca_history.banked_distributions(symbol)
+    forward = dca_history.forward_basis(payload, banked,
+                                        minimum=dca.MIN_OBSERVATIONS)
+    for factor, entry in forward.items():
+        percentiles[factor] = entry["percentile"]
+
     drift = dca_history.eps_drift(symbol)
     position = _dca_position(symbol, exposure)
 
@@ -1344,6 +1361,19 @@ def _dca_score(symbol: str, payload: dict, base: float, *,
         override = override or {}
         series = payload.get("series") or {}
 
+        def _distribution(factor: str) -> list[float]:
+            """The distribution this factor is currently being ranked in.
+
+            Not always the reconstruction. Once a factor has switched to the
+            forward basis above, a value the reader types is a *forward*
+            multiple — they are reading one off the page — and ranking it
+            against the trailing history would reintroduce, by hand, exactly
+            the bias the switch just removed.
+            """
+            if factor in forward:
+                return [float(v) for v in (banked.get(factor) or [])]
+            return [v for _stamp, v in (series.get(factor) or [])]
+
         # Value overrides first, and they are the preferred kind. Replacing the
         # *multiple* and re-ranking it against that factor's own reconstructed
         # history leaves the rank measured -- only the input is hand-set. A
@@ -1354,7 +1384,7 @@ def _dca_score(symbol: str, payload: dict, base: float, *,
                 refused.append({"factor": factor, "value": val,
                                 "reason": "not_a_number"})
                 continue
-            distribution = [v for _stamp, v in (series.get(factor) or [])]
+            distribution = _distribution(factor)
             pct = dca.percentile_rank(float(val), distribution,
                                       minimum=dca.MIN_OBSERVATIONS)
             if pct is None:
@@ -1392,8 +1422,14 @@ def _dca_score(symbol: str, payload: dict, base: float, *,
         explicit_values = dict(value_overrides)
         now = {f: (rows[-1][1] if rows else None)
                for f, rows in series.items()}
+        # A factor on the forward basis contributes its forward value here, not
+        # the reconstruction's last point: `derive_overrides` carries a hand-set
+        # P/E through to PEG, and feeding it the trailing figure would derive a
+        # PEG from one basis for a P/E on another.
+        for factor, entry in forward.items():
+            now[factor] = entry["value"]
         for factor, val in dca.derive_overrides(explicit_values, now).items():
-            distribution = [v for _stamp, v in (series.get(factor) or [])]
+            distribution = _distribution(factor)
             pct = dca.percentile_rank(float(val), distribution,
                                       minimum=dca.MIN_OBSERVATIONS)
             if pct is None:
@@ -1475,12 +1511,39 @@ def _dca_score(symbol: str, payload: dict, base: float, *,
                 continue
             points = series.get(row["factor"]) or []
             row["override_value"] = entered
-            row["measured_value"] = points[-1][1] if points else None
+            # What the override replaced, on whatever basis the factor is
+            # scored: showing the reconstruction's last point beside a forward
+            # override would misreport the size of the intervention as the gap
+            # between two bases rather than between two opinions.
+            fwd_entry = forward.get(row["factor"])
+            row["measured_value"] = (fwd_entry["value"] if fwd_entry
+                                     else (points[-1][1] if points else None))
             # A value the reader typed and one this engine inferred from what
             # they typed are different claims, and the second must not be shown
             # as though a person asserted it.
             if row["factor"] in derived_from:
                 row["derived_from"] = derived_from[row["factor"]]
+
+    # Which basis each factor was actually scored on, and both multiples where
+    # they exist. Every figure here is already public in `series` and
+    # `forward_context`; stating it per factor is what stops "14.2x" and "9.0x"
+    # reading as a contradiction on a page that now shows both.
+    context = dca_history.forward_context_values(payload)
+    for row in result.get("factors") or []:
+        factor = row["factor"]
+        entry = forward.get(factor)
+        if entry is not None:
+            row["basis"] = "forward"
+            row["basis_observations"] = entry["observations"]
+            row["trailing_percentile"] = entry["trailing_percentile"]
+        elif factor in context:
+            # A forward multiple exists but nothing can rank it yet. Saying so
+            # is the point: otherwise the page shows a forward number beside a
+            # trailing score with nothing to say which produced which.
+            row["basis"] = "trailing"
+        if factor in context:
+            row["forward_value"] = context[factor]["forward"]
+            row["trailing_value"] = context[factor]["trailing"]
     return result, peer, drift, position
 
 
