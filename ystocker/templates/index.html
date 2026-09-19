@@ -89,11 +89,13 @@
 
   /* "Stock Valuation Dashboard" is two words in English and one compound noun in
      Chinese — 股票估值仪表盘 — so the literal space that used to sit between the
-     two spans put a gap in the middle of a Chinese word. The gap is CSS now, and
-     `:lang()` removes it; that selector is only live because I18n keeps
-     `<html lang>` in step with the language being rendered. */
-  .hero-sub { margin-left: 0.3em; }
-  html:lang(zh) .hero-sub { margin-left: 0; }
+     two spans put a gap in the middle of a Chinese word. The gap is a generated
+     no-break space now, and `:lang()` drops it; that selector is only live
+     because I18n keeps `<html lang>` in step with the language being rendered.
+     Generated content rather than a margin because the browser puts it in the
+     accessible name too, so a screen reader still hears two English words. */
+  .hero-sub::before { content: '\00a0'; }
+  html:lang(zh) .hero-sub::before { content: none; }
 
   /* One tile wall, not seven rows of different heights.
      CSS Grid already equalises a row, but a row is as tall as its tallest card
@@ -1105,9 +1107,33 @@ document.addEventListener('DOMContentLoaded', () => {
       : `background:rgba(244,63,94,${alpha})`;         // dark red   = large down
   }
 
+  /* Where a column's value actually lives.
+     Ten of the twelve columns are `d[col]` and two are not: the cash-flow block
+     is nested, as `d.cash.pfcf` and `d.cash.forward_pfcf`. `sortRows` read
+     `a['pfcf']`, got `undefined` for every row, and `undefined == null` is true
+     — so the comparator hit its "both missing" branch and returned 0 for every
+     pair. The failure looks like a *wrong* sort rather than an absent one:
+     `render()` re-filters from the source array each time, so the first click
+     dropped the table back into Yahoo's order (which looks shuffled), and the
+     second click flipped `sortDir` against a comparator that ignores it and
+     changed nothing at all.
+
+     The null is the load-bearing half, not the lookup. `fmtPfcf` renders a
+     negative FCF *yield* for a company that burns cash, because price over
+     negative cash flow is not a multiple — and sorting on that number would put
+     exactly the companies with no multiple at the top of a column the reader is
+     scanning as cheapest. Returning null instead puts them last in both
+     directions, which is what the comparator already does with every other
+     unmeasurable cell. */
+  function sortValue(d, col) {
+    if (col === 'pfcf')     return (d.cash || {}).pfcf ?? null;
+    if (col === 'fwd_pfcf') return (d.cash || {}).forward_pfcf ?? null;
+    return d[col];
+  }
+
   function sortRows(rows, col, dir) {
     return [...rows].sort((a, b) => {
-      let av = a[col], bv = b[col];
+      let av = sortValue(a, col), bv = sortValue(b, col);
       if (typeof av === 'string') av = av.toLowerCase();
       if (typeof bv === 'string') bv = bv.toLowerCase();
       if (av == null && bv == null) return 0;

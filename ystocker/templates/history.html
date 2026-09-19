@@ -3277,7 +3277,41 @@ document.addEventListener('i18n:langchange', () => {
 });
 
 // Build a fresh Chart.js config from fetched data for a given chart key
+/* Trim the warm-up bars off a finished config.
+   `/api/history` now returns more history than was asked for, so every
+   indicator computes with a running start instead of from a standing start at
+   the left edge of the window — that is what made MACD's card vanish on 1M
+   (EMA-26 could not produce a point from 22 bars) and HV render axes with no
+   series. The extra bars are context, never plotted.
+
+   Trimmed after the config is built, not before, which is the whole point: the
+   indicators have already been computed across the full array by then.
+
+   Only touches datasets whose length matches the label count. The forecast
+   chart extends past the last bar, and pe/fwdpe run on their own series — a
+   blanket slice would cut those to the wrong window. */
+function _trimWarmup(cfg, d) {
+  const n = (d && d.display_from) | 0;
+  if (!n || !cfg || !cfg.data || !Array.isArray(cfg.data.labels)) return cfg;
+  const full = (d.dates || []).length;
+  if (cfg.data.labels.length !== full) return cfg;
+  cfg.data.labels = cfg.data.labels.slice(n);
+  (cfg.data.datasets || []).forEach(ds => {
+    if (Array.isArray(ds.data) && ds.data.length === full) ds.data = ds.data.slice(n);
+    // Per-point styling arrays have to travel with their points.
+    ['backgroundColor', 'borderColor', 'pointRadius', 'pointBackgroundColor']
+      .forEach(prop => {
+        if (Array.isArray(ds[prop]) && ds[prop].length === full) ds[prop] = ds[prop].slice(n);
+      });
+  });
+  return cfg;
+}
+
 function _buildConfig(key, d, staticData) {
+  return _trimWarmup(_buildConfigInner(key, d, staticData), d);
+}
+
+function _buildConfigInner(key, d, staticData) {
   const gridCol = CT.c('#1e293b'), tickCol = CT.c('#64748b');
   const W    = _indWindows(d.dates);
   const fits = n => _indFits(d.dates, n);

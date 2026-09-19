@@ -135,5 +135,57 @@ console.log('escaping');
   check('null is not rendered as the string null', esc(null) === '');
 }
 
+// ── Sorting the cash-flow columns ───────────────────────────────────────────
+// These two columns are the only ones whose value is not `d[col]` — the block
+// is nested under `d.cash` — so a comparator reading `a[col]` compared
+// `undefined` with `undefined` and returned 0 for every pair. That does not
+// render as "nothing happened": the click drops the table into source order and
+// the second click does nothing, which reads as a broken sort. Shipped that way.
+console.log('sorting');
+{
+  const sortSrc = ['sortValue', 'sortRows'].map(extract).join('\n');
+  const { sortRows } = new Function(`${sortSrc}; return { sortRows };`)();
+
+  const rows = [
+    { ticker: 'A', cash: { pfcf: 30.0, forward_pfcf: 25.0 } },
+    { ticker: 'B', cash: { pfcf: 10.0, forward_pfcf: 40.0 } },
+    // No multiple: burning cash. fmtPfcf shows the negative yield instead.
+    { ticker: 'C', cash: { pfcf: null, fcf_yield: -3.2, forward_pfcf: null } },
+    { ticker: 'D', cash: { pfcf: 20.0, forward_pfcf: null } },
+    { ticker: 'E' },                                   // no cash block at all
+  ];
+  const order = (col, dir) => sortRows(rows, col, dir).map(r => r.ticker).join('');
+
+  check('P/FCF sorts ascending', order('pfcf', 1).startsWith('BDA'),
+        `got ${order('pfcf', 1)}`);
+  check('P/FCF sorts descending', order('pfcf', -1).startsWith('ADB'),
+        `got ${order('pfcf', -1)}`);
+  check('the two directions differ', order('pfcf', 1) !== order('pfcf', -1));
+
+  // The half that matters. A cash burner has no multiple, and a column headed
+  // cheapest must not open with the companies that could not be measured.
+  check('rows with no multiple sort last ascending',
+        order('pfcf', 1).slice(3).split('').sort().join('') === 'CE',
+        `got ${order('pfcf', 1)}`);
+  check('rows with no multiple sort last descending too',
+        order('pfcf', -1).slice(3).split('').sort().join('') === 'CE',
+        `got ${order('pfcf', -1)}`);
+
+  check('forward P/FCF reads its own nested key', order('fwd_pfcf', 1).startsWith('AB'),
+        `got ${order('fwd_pfcf', 1)}`);
+  check('a refused forward estimate sorts last, not as zero',
+        order('fwd_pfcf', 1).slice(2).split('').sort().join('') === 'CDE',
+        `got ${order('fwd_pfcf', 1)}`);
+
+  // The ten columns that were never broken must keep working through the same
+  // accessor.
+  const flat = [{ ticker: 'Z', peg: 2 }, { ticker: 'Y', peg: 1 }];
+  check('a top-level column still sorts',
+        sortRows(flat, 'peg', 1).map(r => r.ticker).join('') === 'YZ');
+  check('a string column still sorts case-insensitively',
+        sortRows([{ ticker: 'b' }, { ticker: 'A' }], 'ticker', 1)
+          .map(r => r.ticker).join('') === 'Ab');
+}
+
 console.log(failed ? `\n${failed} check(s) failed` : '\nall checks passed');
 process.exit(failed ? 1 : 0);
