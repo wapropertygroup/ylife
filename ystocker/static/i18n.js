@@ -1190,6 +1190,8 @@ const I18n = (() => {
     'history.group_health':   { en: 'Balance sheet & cash', zh: '资产负债与现金' },
     'history.net_debt':       { en: 'Net debt', zh: '净负债' },
     'history.net_cash':       { en: 'net cash', zh: '净现金' },
+    'history.net_cash_label': { en: 'Net cash', zh: '净现金' },
+    'history.net_cash_sub':   { en: 'no net borrowings', zh: '无净借款' },
     'history.leverage':       { en: 'Net debt / EBITDA', zh: '净负债 / EBITDA' },
     'history.cash_conversion':{ en: 'FCF / net income', zh: '自由现金流 / 净利润' },
     'history.fcf_margin':     { en: 'FCF margin', zh: '自由现金流利润率' },
