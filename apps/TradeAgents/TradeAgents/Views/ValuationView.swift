@@ -17,13 +17,13 @@ struct ValuationView: View {
             case .failed(let e): LoadFailure(error: e) { Task { await load() } }
             case .loaded(let data):
                 ScrollView {
-                    LazyVStack(spacing: 12) {
+                    LazyVStack(spacing: Metrics.stackSpacing) {
                         if let meta = data.meta { FreshnessBanner(meta: meta) }
                         if let h = data.headline { HeadlineGrid(headline: h) }
                         BankedForwardCard(points: data.forwardHistory)
                         Footnote(text: loc(S.valBankedNote))
                     }
-                    .padding(.horizontal, 16).padding(.vertical, 12)
+                    .padding(.horizontal, Metrics.screenH).padding(.vertical, Metrics.screenV)
                 }
                 .refreshable { await load() }
             }
@@ -87,9 +87,9 @@ private struct HeadlineGrid: View {
                 }
             }
         }
-        .padding(14)
-        .background(Palette.card, in: RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Palette.border))
+        .padding(Metrics.cardPadding)
+        .background(Palette.card, in: RoundedRectangle(cornerRadius: Metrics.cardRadius))
+        .overlay(RoundedRectangle(cornerRadius: Metrics.cardRadius).stroke(Palette.border))
     }
 }
 
@@ -160,8 +160,8 @@ private struct BankedForwardCard: View {
                     .font(.caption2).foregroundStyle(Palette.secondaryText)
             }
         }
-        .padding(14)
-        .background(Palette.card, in: RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Palette.border))
+        .padding(Metrics.cardPadding)
+        .background(Palette.card, in: RoundedRectangle(cornerRadius: Metrics.cardRadius))
+        .overlay(RoundedRectangle(cornerRadius: Metrics.cardRadius).stroke(Palette.border))
     }
 }

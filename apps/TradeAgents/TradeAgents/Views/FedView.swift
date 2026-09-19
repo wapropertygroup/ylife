@@ -33,7 +33,7 @@ struct FedView: View {
             case .failed(let e): LoadFailure(error: e) { Task { await load() } }
             case .loaded(let data):
                 ScrollView {
-                    LazyVStack(spacing: 12) {
+                    LazyVStack(spacing: Metrics.stackSpacing) {
                         if let meta = data.meta { FreshnessBanner(meta: meta) }
                         ForEach(Self.shown, id: \.0) { id, label in
                             if let series = data.series[id], series.points.count > 1 {
@@ -43,7 +43,7 @@ struct FedView: View {
                         }
                         Footnote(text: loc(S.fedNote))
                     }
-                    .padding(.horizontal, 16).padding(.vertical, 12)
+                    .padding(.horizontal, Metrics.screenH).padding(.vertical, Metrics.screenV)
                 }
                 .refreshable { await load() }
             }
@@ -106,9 +106,9 @@ struct SeriesCard: View {
                 format: { Format.number($0, places: 1) }
             )
         }
-        .padding(14)
-        .background(Palette.card, in: RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Palette.border))
+        .padding(Metrics.cardPadding)
+        .background(Palette.card, in: RoundedRectangle(cornerRadius: Metrics.cardRadius))
+        .overlay(RoundedRectangle(cornerRadius: Metrics.cardRadius).stroke(Palette.border))
     }
 }
 

@@ -47,7 +47,7 @@ struct SentimentView: View {
             // headline above a full chart is a real response, not a broken screen, and
             // gating the chart on the score would throw away the part that survived.
             ScrollView {
-                LazyVStack(spacing: 12) {
+                LazyVStack(spacing: Metrics.stackSpacing) {
                     ScoreCard(score: data.score, rating: data.rating)
                     ComparisonCard(data: data)
                     HistoryCard(history: data.history)
@@ -57,8 +57,8 @@ struct SentimentView: View {
                     if let putCall { PutCallCard(data: putCall) }
                     if let skew { SkewCard(data: skew) }
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
+                .padding(.horizontal, Metrics.screenH)
+                .padding(.vertical, Metrics.screenV)
             }
             // Matches the gesture the web app grew for its installed PWA, where
             // there is no reload button in standalone mode.
@@ -335,9 +335,9 @@ struct PutCallCard: View {
                 }
             }
         }
-        .padding(14)
-        .background(Palette.card, in: RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Palette.border))
+        .padding(Metrics.cardPadding)
+        .background(Palette.card, in: RoundedRectangle(cornerRadius: Metrics.cardRadius))
+        .overlay(RoundedRectangle(cornerRadius: Metrics.cardRadius).stroke(Palette.border))
     }
 }
 
@@ -427,8 +427,8 @@ struct SkewCard: View {
             Text(loc(S.skewNote))
                 .font(.caption2).foregroundStyle(Palette.mutedText)
         }
-        .padding(14)
-        .background(Palette.card, in: RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Palette.border))
+        .padding(Metrics.cardPadding)
+        .background(Palette.card, in: RoundedRectangle(cornerRadius: Metrics.cardRadius))
+        .overlay(RoundedRectangle(cornerRadius: Metrics.cardRadius).stroke(Palette.border))
     }
 }

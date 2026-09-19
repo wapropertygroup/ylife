@@ -61,7 +61,7 @@ struct AgentsView: View {
 
         case .loaded(let list):
             ScrollView {
-                LazyVStack(spacing: 12) {
+                LazyVStack(spacing: Metrics.stackSpacing) {
                     SignInNotice()
                     ForEach(list.jobs) { job in
                         NavigationLink(value: job) {
@@ -70,8 +70,8 @@ struct AgentsView: View {
                         .buttonStyle(.plain)
                     }
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
+                .padding(.horizontal, Metrics.screenH)
+                .padding(.vertical, Metrics.screenV)
             }
             .refreshable { await load() }
             .navigationDestination(for: AgentJob.self) { job in

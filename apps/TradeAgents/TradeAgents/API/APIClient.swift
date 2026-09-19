@@ -97,6 +97,7 @@ actor APIClient {
     func breadth() async throws -> Breadth { try await get("/api/breadth") }
     func putCall() async throws -> PutCall { try await get("/api/put-call-ratio") }
     func skew() async throws -> Skew { try await get("/api/skew") }
+    func commodities() async throws -> CommoditiesResponse { try await get("/api/commodities") }
 
     /// One fund's latest 13F. The slug is the fund name lowercased with spaces
     /// hyphenated — percent-encoded here anyway, because a name with a dot in it

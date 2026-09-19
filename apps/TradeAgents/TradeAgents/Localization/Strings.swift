@@ -408,4 +408,30 @@ enum S {
     static let range5Y        = LocalizedString("5Y", "5年")
     static let rangeAll       = LocalizedString("All", "全部")
     static let chartReset     = LocalizedString("Reset", "重置")
+
+    // Commodities.
+    static let commodities    = LocalizedString("Commodities", "大宗商品")
+    static let comEnergy      = LocalizedString("Energy", "能源")
+    static let comMetals      = LocalizedString("Precious metals", "贵金属")
+    static let comIndustrial  = LocalizedString("Industrial", "工业金属")
+    static let comAgri        = LocalizedString("Agriculture", "农产品")
+    static let comMacro       = LocalizedString("Macro", "宏观")
+    static let comRatios      = LocalizedString("Cross-commodity ratios", "商品比价")
+    static let comOneYear     = LocalizedString("1 year", "一年")
+    static let comFiveYear    = LocalizedString("5 years", "五年")
+    static let com1w          = LocalizedString("1W", "一周")
+    static let com1m          = LocalizedString("1M", "一月")
+    static let com3m          = LocalizedString("3M", "三月")
+    static let com6m          = LocalizedString("6M", "六月")
+    static let comYtd         = LocalizedString("YTD", "年初至今")
+    static let com1y          = LocalizedString("1Y", "一年")
+
+    // Kiosk / TV mode.
+    static let kioskStart     = LocalizedString("TV mode", "电视模式")
+    static let kioskJustNow   = LocalizedString("live", "实时")
+    static let kioskDwell     = LocalizedString("Seconds per screen", "每屏停留秒数")
+    static let kioskRefresh   = LocalizedString("Refresh every", "刷新间隔")
+    static let kioskTypeSize  = LocalizedString("Text size", "字号")
+    static let kioskExitHint  = LocalizedString("Esc to exit", "按 Esc 退出")
+    static let kioskExitTap   = LocalizedString("Double-tap to exit", "双击退出")
 }

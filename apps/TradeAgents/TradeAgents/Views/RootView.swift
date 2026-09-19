@@ -13,6 +13,7 @@ enum AppSection: String, CaseIterable, Identifiable, Hashable {
     case holdings13f
     case fed
     case rates
+    case commodities
     case sentiment
     case settings
 
@@ -29,6 +30,7 @@ enum AppSection: String, CaseIterable, Identifiable, Hashable {
         case .holdings13f: return S.holdings13f
         case .fed:         return S.fed
         case .rates:       return S.rates
+        case .commodities: return S.commodities
         case .sentiment:   return S.sentiment
         case .settings:    return S.settings
         }
@@ -43,6 +45,7 @@ enum AppSection: String, CaseIterable, Identifiable, Hashable {
         case .holdings13f: return "building.2"
         case .fed:         return "banknote"
         case .rates:       return "building.columns"
+        case .commodities: return "drop.fill"
         case .sentiment:   return "gauge.with.dots.needle.33percent"
         case .settings:    return "gearshape"
         }
@@ -58,6 +61,7 @@ enum AppSection: String, CaseIterable, Identifiable, Hashable {
         case .holdings13f: ThirteenFView()
         case .fed:         FedView()
         case .rates:       RatesView()
+        case .commodities: CommoditiesView()
         case .sentiment:   SentimentView()
         case .settings:    SettingsView()
         }
@@ -101,11 +105,61 @@ struct RootView: View {
     @Environment(Localization.self) private var loc
     @State private var selection: AppSection = AppSection.launchSection ?? .agents
     @State private var session = Session()
+    @State private var kiosk = Kiosk()
+    /// `-TradeAgentsKiosk 1` starts straight in kiosk mode. Same reasoning as
+    /// `launchSection`: the toolbar button cannot be driven from outside the
+    /// process any more reliably than the sidebar could.
+    private static var launchKiosk: Bool {
+        UserDefaults.standard.string(forKey: "TradeAgentsKiosk") == "1"
+    }
 
     var body: some View {
-        content
-            .environment(session)
-            .task { await session.refresh() }
+        Group {
+            if kiosk.active {
+                // Replaces the whole hierarchy rather than covering it. A sheet or
+                // an overlay leaves the sidebar and toolbar alive underneath, still
+                // laying out and still reachable by keyboard — which on a wall
+                // display is a set of controls nobody can see but a passing cat can
+                // still trigger.
+                kioskSurface
+            } else {
+                content
+            }
+        }
+        .environment(session)
+        .task { await session.refresh() }
+        .task {
+            if Self.launchKiosk && !kiosk.active {
+                kiosk.index = Kiosk.rotation.firstIndex(of: selection) ?? 0
+                kiosk.start()
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var kioskSurface: some View {
+        let view = KioskView(kiosk: kiosk)
+        #if os(macOS)
+        view
+        #else
+        // No keyboard on a phone or a TV-mirrored iPad, so the gesture is the way
+        // out. Two taps, not one: a kiosk is exactly the surface a sleeve or a
+        // passing hand brushes, and dropping out of full screen by accident is
+        // the one failure that needs somebody to walk over and fix it.
+        view.onTapGesture(count: 2) { kiosk.stop() }
+        #endif
+    }
+
+    /// Enters the kiosk. Exposed on the toolbar and bound to a shortcut.
+    private var kioskButton: some View {
+        Button {
+            kiosk.index = Kiosk.rotation.firstIndex(of: selection) ?? 0
+            kiosk.start()
+        } label: {
+            Label(loc(S.kioskStart), systemImage: "tv")
+        }
+        .help(loc(S.kioskStart))
+        .keyboardShortcut("k", modifiers: [.command, .shift])
     }
 
     @ViewBuilder
@@ -128,7 +182,10 @@ struct RootView: View {
             NavigationStack {
                 selection.destination
                     .background(Palette.background)
-                    .toolbar { ToolbarItem(placement: .primaryAction) { AlertsButton() } }
+                    .toolbar {
+                        ToolbarItem(placement: .primaryAction) { kioskButton }
+                        ToolbarItem(placement: .primaryAction) { AlertsButton() }
+                    }
             }
         }
         #else
@@ -136,7 +193,10 @@ struct RootView: View {
             ForEach(AppSection.allCases) { section in
                 NavigationStack {
                     section.destination
-                        .toolbar { ToolbarItem(placement: .primaryAction) { AlertsButton() } }
+                        .toolbar {
+                            ToolbarItem(placement: .primaryAction) { kioskButton }
+                            ToolbarItem(placement: .primaryAction) { AlertsButton() }
+                        }
                 }
                 .tabItem { Label(loc(section.title), systemImage: section.icon) }
                 .tag(section)

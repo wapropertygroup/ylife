@@ -40,6 +40,10 @@ build() {
 	xcodebuild -project TradeAgents.xcodeproj \
 		-target TradeAgents -configuration Debug -quiet \
 		-sdk macosx ARCHS=arm64 ONLY_ACTIVE_ARCH=NO build
+	# Tiny helper used by `shot` to address the window by id. Built here so a
+	# capture can never silently fall back to a screen rect.
+	mkdir -p build
+	xcrun swiftc -O Scripts/winid.swift -o build/tawinid 2>/dev/null || true
 }
 
 # Launch through `open`.
@@ -81,60 +85,55 @@ RECT_W=1280
 RECT_H=900
 
 shot() {
-	local geom expected front attempt
-	expected="$RECT_X,$RECT_Y,$RECT_W,$RECT_H"
-
-	# Retried, because every precondition here is something another application can
-	# take away a fraction of a second after it was checked. On a working machine a
-	# notification, a build finishing, or a chat window opening steals focus; the
-	# checks below are still worth keeping — capturing the wrong app is the failure
-	# this whole function exists to prevent — but failing the run outright on a
-	# transient steal just means re-running it by hand. So: re-assert, re-check, and
-	# only give up after several rounds, reporting the last reason.
+	# Capture the app's own window, addressed by window id.
+	#
+	# Two earlier designs were wrong in the same way. `screencapture -R <rect>`
+	# grabs whatever pixels occupy those coordinates, and a "the app is frontmost
+	# and its window is at this rect" precondition does not make that the app's
+	# window — twice it produced a screenshot of another application's document,
+	# once a chat window and once a personal PDF. `-l<id>` addresses the window
+	# itself, so the failure mode is a missing screenshot rather than a wrong one,
+	# and no display-coordinate reasoning is needed at all: a window on a second
+	# monitor, behind another app, or in full screen all capture correctly.
+	#
+	# The accessibility geometry checks that used to live here are gone with it.
+	# They also read `window 1`, which on this app is the 39pt menu-bar extra
+	# rather than the content window, so they refused every full-screen capture.
+	local wid geom attempt
 	for attempt in 1 2 3 4 5; do
 		osascript -e 'tell application "TradeAgents" to activate' >/dev/null 2>&1 || true
 		sleep 1
 
-		osascript <<-APPLESCRIPT >/dev/null 2>&1 || true
-			tell application "System Events"
-				tell process "TradeAgents"
-					set position of window 1 to {$RECT_X, $RECT_Y}
-					set size of window 1 to {$RECT_W, $RECT_H}
-				end tell
-			end tell
-		APPLESCRIPT
+		if [ ! -x build/tawinid ]; then
+			xcrun swiftc -O Scripts/winid.swift -o build/tawinid 2>/dev/null || true
+		fi
+		geom=$(./build/tawinid TradeAgents 2>/dev/null) || geom=""
+		wid=$(echo "$geom" | awk '{print $1}')
+		size=$(echo "$geom" | awk '{print $2}')
+
+		if [ -z "$wid" ]; then
+			sleep 2
+			continue
+		fi
+		# A window too small to be the dashboard is the menu-bar extra or a
+		# sheet; keep waiting rather than photographing it.
+		if ! echo "$size" | awk -F x '{exit !($1 > 600 && $2 > 400)}'; then
+			sleep 2
+			continue
+		fi
+
+		screencapture -x -o -l"$wid" "$OUT"
+		if [ -s "$OUT" ]; then
+			echo "$OUT"
+			return 0
+		fi
 		sleep 2
-
-		if ! geom=$(osascript -e \
-			'tell application "System Events" to tell process "TradeAgents" to get {position, size} of window 1' \
-			2>&1); then
-			front="no TradeAgents window (${geom})"
-			continue
-		fi
-
-		geom=$(echo "$geom" | tr -d ' ')
-		if [ "$geom" != "$expected" ]; then
-			front="window is at '$geom', expected '$expected' (secondary display?)"
-			continue
-		fi
-
-		front=$(osascript -e \
-			'tell application "System Events" to get name of first process whose frontmost is true' \
-			2>/dev/null || echo "?")
-		if [ "$front" != "TradeAgents" ]; then
-			front="'$front' is frontmost, not TradeAgents"
-			continue
-		fi
-
-		screencapture -x -o -R "$expected" "$OUT"
-		echo "$OUT"
-		return 0
 	done
 
-	echo "Refusing to capture after 5 attempts: $front" >&2
-	echo "If this is a window-position failure the app may be opening on a secondary" >&2
-	echo "display; if it is an Accessibility failure, grant this terminal permission" >&2
-	echo "in System Settings > Privacy & Security." >&2
+	echo "Refusing to capture: no TradeAgents window large enough to be the" >&2
+	echo "dashboard (last seen: '${geom:-none}'). The app may have failed to" >&2
+	echo "launch, or Screen Recording permission is not granted to this terminal" >&2
+	echo "(System Settings > Privacy & Security)." >&2
 	return 1
 }
 
@@ -149,7 +148,7 @@ shot() {
 # whatever section it launched with, so the script cheerfully photographed the wrong
 # screen and named the file after the right one. The app now takes the section as a
 # launch argument instead, which either works or fails visibly.
-SECTIONS=(agents markets dca valuation holdings13f fed rates sentiment settings)
+SECTIONS=(agents markets dca valuation holdings13f fed rates commodities sentiment settings)
 
 resolve_section() {
 	local wanted="$1"
