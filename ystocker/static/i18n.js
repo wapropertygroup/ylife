@@ -1142,6 +1142,16 @@ const I18n = (() => {
     'dca.f_ov_tip':      { en: 'This percentile was entered by hand, not measured from the reconstructed history.',
                            zh: '该分位为人工录入，并非由重建的历史数据测算得出。' },
     'dca.f_ov_title':    { en: 'Factor overrides', zh: '因子覆盖' },
+    // Which basis a factor was ranked on. Composed in JS by concatenation, so
+    // I18n.apply() cannot reach them — tests/test_dca.py asserts both languages
+    // carry every one.
+    'dca.basis_fwd':     { en: 'forward', zh: '预测' },
+    'dca.basis_ttm_is':  { en: 'TTM',     zh: '滚动' },
+    'dca.basis_ttm':     { en: 'ranked on TTM', zh: '按滚动值排名' },
+    'dca.basis_fwd_tip': { en: 'Ranked against {n} banked forward-basis observations — the same basis as the value itself.',
+                           zh: '与 {n} 条已累积的预测口径观测值进行排名——与该数值本身口径一致。' },
+    'dca.basis_ttm_tip': { en: 'The forward multiple is known but not ranked: a forward value ranked against trailing history reads cheap for any growing company. It is scored on the trailing reconstruction until enough forward observations have accumulated to rank it on its own basis.',
+                           zh: '预测口径的倍数已知但不参与排名：把预测值放进滚动口径的历史里排名，对任何成长型公司都会偏低估。在累积到足够的预测口径观测值之前，评分仍以重建的滚动口径为准。' },
     'dca.f_ov_value':    { en: 'value', zh: '当前值' },
     'dca.f_ov_pct':      { en: 'percentile', zh: '分位' },
     'dca.v_ov_tip':      { en: 'This score rests partly on hand-entered percentiles. The factor table shows each one beside the value it replaced.',

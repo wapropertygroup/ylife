@@ -559,6 +559,108 @@ class Snapshots(unittest.TestCase):
                                     "FCF ($B)": 5.0}, stamp="2026-09-11")
         self.assertNotIn("pfcf", row)
 
+    def test_the_forward_pfcf_is_banked_beside_the_trailing_one(self):
+        """The series cannot be backfilled, so a forward factor that is not
+        banked today can never be ranked on its own basis later."""
+        row = dh.snapshot_row("MSFT", self.RECORD, stamp="2026-09-11")
+        self.assertIn("forward_pfcf", row)
+        # Growth is implied by PE_ttm / PE_fwd, so the forward multiple is the
+        # trailing one divided by it — cheaper for a company expected to grow.
+        self.assertLess(row["forward_pfcf"], row["pfcf"])
+
+    def test_a_cash_burner_banks_no_forward_pfcf(self):
+        """`fcf.estimate` refuses a negative trailing FCF rather than scaling
+        it, and a refusal must not be banked as a number."""
+        record = dict(self.RECORD, **{"FCF ($B)": -4.0})
+        row = dh.snapshot_row("X", record, stamp="2026-09-11")
+        self.assertNotIn("forward_pfcf", row)
+        self.assertNotIn("pfcf", row)
+
+
+class ForwardBasis(unittest.TestCase):
+    """Scoring a forward multiple against forward history, or not at all.
+
+    The fallback is the whole design: ranking today's forward P/E against the
+    *trailing* reconstruction moved the percentile by a measured median of −14.6
+    points across the live universe, so a factor with no forward distribution
+    must stay on the reconstruction rather than borrow it.
+    """
+
+    PAYLOAD = {
+        "forward_context": {"forwardPE": 9.0, "trailingPE": 14.0,
+                            "marketCap": 100e9},
+        "vintages": [
+            {"kind": "annual", "period_end": "2024-11-29", "fcf": 8.0e9},
+            {"kind": "annual", "period_end": "2025-11-28", "fcf": 10.0e9},
+            # build() copies the annual figure onto quarterly vintages, so a
+            # naive "last vintage" would read this and learn nothing new.
+            {"kind": "quarterly", "period_end": "2026-05-29", "fcf": 10.0e9},
+        ],
+        "series": {"pe": [("2026-09-14", 14.24)], "pfcf": [("2026-09-14", 10.4)]},
+        "percentiles": {"pe": 2.1, "pfcf": 8.6},
+    }
+
+    def test_forward_multiples_read_only_what_build_stored(self):
+        out = dh.forward_multiples(self.PAYLOAD)
+        self.assertAlmostEqual(out["pe"], 9.0)
+        # 100e9 / (10e9 * 14/9) = 6.43x, cheaper than the trailing 10x.
+        self.assertAlmostEqual(out["pfcf"], 6.43, places=1)
+
+    def test_the_annual_vintage_is_used_not_the_copied_quarterly_one(self):
+        """Same trap `dcf_inputs` documents: the quarterly rows carry a copy of
+        the annual FCF, so taking the last of any kind repeats one year."""
+        payload = dict(self.PAYLOAD)
+        payload["vintages"] = [*self.PAYLOAD["vintages"],
+                               {"kind": "quarterly", "period_end": "2026-08-29",
+                                "fcf": 99.0e9}]
+        self.assertAlmostEqual(dh.forward_multiples(payload)["pfcf"],
+                               dh.forward_multiples(self.PAYLOAD)["pfcf"], places=6)
+
+    def test_no_forward_pe_yields_no_forward_factor(self):
+        payload = dict(self.PAYLOAD, forward_context={"marketCap": 100e9})
+        self.assertNotIn("pe", dh.forward_multiples(payload))
+
+    def test_only_genuinely_forward_banked_fields_become_distributions(self):
+        """The banked `pfcf` divides by *trailing* FCF and `pe_ttm` is trailing
+        by name; admitting either would store the basis error."""
+        rows = [{"date": "2026-09-12", "pe": 9.1, "pe_ttm": 14.1,
+                 "pfcf": 10.4, "forward_pfcf": 6.4, "peg": 0.6}]
+        dists = dh.forward_distributions(rows)
+        self.assertEqual(sorted(dists), ["pe", "pfcf"])
+        self.assertEqual(dists["pfcf"], [6.4])      # the forward one, not 10.4
+        self.assertEqual(dists["pe"], [9.1])
+
+    def test_a_short_distribution_falls_back_rather_than_ranking(self):
+        """Eight rows can only return eight answers. Silence here is the
+        fallback working, not a failure."""
+        dists = {"pe": [9.0] * 8}
+        self.assertEqual(
+            dh.forward_basis(self.PAYLOAD, dists, minimum=60), {})
+
+    def test_a_long_distribution_ranks_forward_against_forward(self):
+        dists = {"pe": [float(v) for v in range(5, 65)]}     # 60 points, 5..64
+        out = dh.forward_basis(self.PAYLOAD, dists, minimum=60)
+        self.assertIn("pe", out)
+        self.assertEqual(out["pe"]["observations"], 60)
+        self.assertAlmostEqual(out["pe"]["value"], 9.0)
+        # 9.0 sits low in 5..64, so it ranks cheap on its own basis.
+        self.assertLess(out["pe"]["percentile"], 15.0)
+        # What it replaced travels with it, so the switch is visible.
+        self.assertEqual(out["pe"]["trailing_percentile"], 2.1)
+
+    def test_a_factor_without_a_forward_distribution_is_simply_absent(self):
+        """Per factor, not per ticker: P/E can switch while P/FCF waits."""
+        dists = {"pe": [float(v) for v in range(5, 65)]}
+        out = dh.forward_basis(self.PAYLOAD, dists, minimum=60)
+        self.assertNotIn("pfcf", out)
+
+    def test_context_reports_both_multiples_even_when_nothing_can_rank(self):
+        """A reader must be able to tell "the engine has no forward number"
+        from "it has one and is declining to rank it"."""
+        ctx = dh.forward_context_values(self.PAYLOAD)
+        self.assertAlmostEqual(ctx["pe"]["forward"], 9.0)
+        self.assertAlmostEqual(ctx["pe"]["trailing"], 14.24)
+
 
 class DcfInputs(unittest.TestCase):
     """Assembling the absolute branch's inputs from a built payload.

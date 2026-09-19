@@ -824,8 +824,9 @@ def _write_disk(ticker: str, payload: Mapping[str, Any]) -> None:
 TABLE_NAME = os.environ.get("DCA_HISTORY_TABLE", "ystocker-dca-history").strip()
 
 #: The forward-basis fields banked each day, and the ``ticker_cache.json`` key
-#: each comes from. Derived fields (``pfcf``, ``fcf_yield``) are computed in
-#: :func:`snapshot_row` from market cap and FCF, which that cache already holds.
+#: each comes from. Derived fields (``pfcf``, ``fcf_yield``, ``forward_pfcf``)
+#: are computed in :func:`snapshot_row` from market cap and FCF, which that
+#: cache already holds.
 _SNAPSHOT_FIELDS: dict[str, str] = {
     "pe": "PE (Forward)",
     "pe_ttm": "PE (TTM)",
@@ -875,6 +876,40 @@ def _get_table():
         return _table
 
 
+#: Banked fields that are genuinely a *forward* multiple, mapped to the factor
+#: they may be used to rank. Everything else in :data:`_SNAPSHOT_FIELDS` is a
+#: trailing figure banked for context, and must never rank a forward value —
+#: that is the bias this module's docstring opens with.
+#:
+#: ``pe`` was forward from the first row. ``forward_pfcf`` was not banked at all
+#: until it was added here, which is the whole reason it is worth adding on its
+#: own: a row not written is gone, so the series cannot start retroactively and
+#: every day without it is a day permanently missing from a distribution that
+#: needs :data:`ystocker.dca.MIN_OBSERVATIONS` of them.
+_FORWARD_BANKED: dict[str, str] = {"pe": "pe", "forward_pfcf": "pfcf"}
+
+
+def _forward_pfcf(record: Mapping[str, Any]) -> Optional[float]:
+    """Today's *forward* P/FCF for a ``ticker_cache.json`` record, or ``None``.
+
+    Split out and pure so the banked value and the one ``/evaluation`` renders
+    come from one implementation. :mod:`ystocker.fcf` owns the arithmetic and
+    every refusal in it — a negative trailing FCF scaled by a growth factor is
+    not a forecast, and a negative P/E makes the P/E-derived growth negative —
+    so nothing is recomputed here, only fed.
+    """
+    from ystocker import fcf as _fcf
+
+    est = _fcf.estimate(
+        fcf_ttm=record.get("FCF ($B)"),
+        market_cap=record.get("Market Cap ($B)"),
+        pe_ttm=record.get("PE (TTM)"),
+        pe_fwd=record.get("PE (Forward)"),
+    )
+    value = est.get("forward_pfcf")
+    return float(value) if _pos(value) else None
+
+
 def snapshot_row(ticker: str, record: Mapping[str, Any],
                  *, stamp: Optional[str] = None) -> dict[str, Any]:
     """Today's forward-basis row for *ticker*, from a ``ticker_cache.json`` record.
@@ -894,6 +929,14 @@ def snapshot_row(ticker: str, record: Mapping[str, Any],
     if _pos(cap) and _pos(fcf):
         row["pfcf"] = round(float(cap) / float(fcf), 4)
         row["fcf_yield"] = round(float(fcf) / float(cap) * 100.0, 4)
+
+    # The forward counterpart, and the only banked field besides `pe` that can
+    # rank a forward value. `pfcf` above divides by *trailing* FCF, so ranking
+    # today's forward multiple against a history of those is the same basis
+    # error in stored form.
+    fwd_pfcf = _forward_pfcf(record)
+    if fwd_pfcf is not None:
+        row["forward_pfcf"] = round(fwd_pfcf, 4)
 
     if not row:
         return {}
@@ -942,7 +985,7 @@ def load_series(ticker: str) -> list[dict[str, Any]]:
                 row: dict[str, Any] = {"date": item.get("date")}
                 if not row["date"]:
                     continue
-                for key in (*_SNAPSHOT_FIELDS, "pfcf", "fcf_yield"):
+                for key in (*_SNAPSHOT_FIELDS, "pfcf", "fcf_yield", "forward_pfcf"):
                     raw = item.get(key)
                     if raw is None:
                         continue
@@ -959,6 +1002,181 @@ def load_series(ticker: str) -> list[dict[str, Any]]:
     except Exception as exc:  # noqa: BLE001
         log.warning("dca_history: series load failed for %s: %s", ticker, exc)
         return []
+
+
+# ---------------------------------------------------------------------------
+# The forward basis
+# ---------------------------------------------------------------------------
+#
+# Everything above ranks a *trailing* multiple against a trailing history, and
+# the module docstring says why that is not negotiable. This section is the only
+# honest way to score on forward figures: rank a forward multiple against a
+# distribution of forward multiples, both on the same basis, and fall back to the
+# reconstruction when there is no such distribution yet.
+#
+# Measured on 31 tickers of the live universe on 2026-09-19, ranking today's
+# forward P/E against the *trailing* reconstruction instead moved the percentile
+# by a median of −14.6 points and a mean of −17.8, cheaper in 25 of 31 — and the
+# spread ran from −99.1 (8001.T) to +45.7 (TSM), so it is not even a constant
+# anyone could calibrate out. P/E carries 35% of the compounder template and PEG
+# derives from it for another 15%, which puts roughly half the relative score on
+# a number biased one way. That is the measurement this section exists to avoid
+# having to make again.
+
+def forward_multiples(payload: Mapping[str, Any]) -> dict[str, float]:
+    """Today's forward-basis multiple per factor, from a built payload.
+
+    Pure, and reads only what :func:`build` already stored — no fetch, for the
+    same reason ``dcf_inputs`` does not: this runs on the request path.
+
+    ``pe`` is Yahoo's own ``forwardPE``. ``pfcf`` is derived by
+    :mod:`ystocker.fcf` from the latest annual FCF and the P/E-implied growth,
+    which is the same estimate ``/evaluation`` renders — and it inherits every
+    refusal in that module rather than reproducing any of them.
+
+    Deliberately not here: ``ev_ebitda`` (Yahoo publishes only a trailing
+    ``enterpriseToEbitda``), ``peer`` (cross-sectional, no basis to speak of) and
+    ``peg``. PEG is not omitted for want of a number — ``pegRatio`` exists — but
+    because its growth denominator is on neither basis consistently, so a forward
+    PEG ranked against banked PEGs would mix two conventions inside one ratio.
+    :func:`ystocker.dca.derive_overrides` already carries a hand-set P/E through
+    to PEG, which is the path that keeps the two describing one company.
+    """
+    ctx = payload.get("forward_context") or {}
+    out: dict[str, float] = {}
+
+    fwd_pe = ctx.get("forwardPE")
+    if _pos(fwd_pe):
+        out["pe"] = float(fwd_pe)
+
+    # Latest *annual* FCF, matching `dcf_inputs`: `build()` copies the annual
+    # figure onto every quarterly TTM vintage, so taking the last vintage of any
+    # kind would repeat one year's cash flow and say nothing new.
+    fcf_ttm = None
+    for vintage in reversed(payload.get("vintages") or []):
+        if vintage.get("kind") == "annual" and _fin(vintage.get("fcf")):
+            fcf_ttm = float(vintage["fcf"])
+            break
+
+    if fcf_ttm is not None and _pos(ctx.get("marketCap")):
+        from ystocker import fcf as _fcf
+
+        est = _fcf.estimate(
+            # `fcf.estimate` is unit-agnostic — it only ever divides one by the
+            # other — so passing both in raw currency is fine, where
+            # `snapshot_row` passes both in $B.
+            fcf_ttm=fcf_ttm,
+            market_cap=float(ctx["marketCap"]),
+            pe_ttm=ctx.get("trailingPE"),
+            pe_fwd=ctx.get("forwardPE"),
+        )
+        if _pos(est.get("forward_pfcf")):
+            out["pfcf"] = float(est["forward_pfcf"])
+
+    return out
+
+
+def forward_distributions(rows: Sequence[Mapping[str, Any]]) -> dict[str, list[float]]:
+    """Banked forward-basis distributions, keyed by the factor they rank.
+
+    Pure. Only :data:`_FORWARD_BANKED` is admitted: the banked ``pfcf`` divides
+    by trailing FCF and the banked ``pe_ttm`` is trailing by name, so letting
+    either through here would store the very mistake the split exists to prevent.
+    """
+    out: dict[str, list[float]] = {}
+    for row in rows:
+        for banked_key, factor in _FORWARD_BANKED.items():
+            value = row.get(banked_key)
+            if _pos(value):
+                out.setdefault(factor, []).append(float(value))
+    return out
+
+
+#: One banked read per ticker per hour rather than per request. `_dca_score` is
+#: the single scoring path and the overview scores sixty rows, so an uncached
+#: Query here would be sixty of them on every page load — on PAY_PER_REQUEST
+#: that is billed by volume, the same reason `fedwatch.history_cached` exists.
+#: An hour is generous against a series that gains one row a day.
+_BANKED_TTL_SECONDS = 3600.0
+_banked_memo: dict[str, tuple[float, dict[str, list[float]]]] = {}
+_BANKED_MEMO_LOCK = threading.Lock()
+
+
+def banked_distributions(ticker: str) -> dict[str, list[float]]:
+    """:func:`forward_distributions` for *ticker*, memoised.
+
+    Degrades to ``{}`` exactly as :func:`load_series` does — with no table the
+    forward basis is simply unavailable and every factor falls back to the
+    reconstruction, which is a complete answer rather than a broken one.
+    """
+    symbol = ticker.strip().upper()
+    now = time.time()
+    with _BANKED_MEMO_LOCK:
+        hit = _banked_memo.get(symbol)
+        if hit and now - hit[0] < _BANKED_TTL_SECONDS:
+            return hit[1]
+    dists = forward_distributions(load_series(symbol))
+    with _BANKED_MEMO_LOCK:
+        _banked_memo[symbol] = (now, dists)
+    return dists
+
+
+def forward_basis(payload: Mapping[str, Any],
+                  distributions: Mapping[str, Sequence[float]],
+                  *, minimum: int) -> dict[str, dict[str, Any]]:
+    """Which factors can be scored forward-against-forward today.
+
+    Returns one entry per factor that has *both* a forward value now and a
+    banked forward distribution long enough to rank it in, carrying the rank and
+    what it replaced. A factor missing from the result is not an error and not a
+    refusal — it simply stays on the reconstruction, which is the fallback the
+    whole design rests on and the reason this can ship years before the banked
+    series is useful.
+
+    The ``minimum`` is :data:`ystocker.dca.MIN_OBSERVATIONS`, and it is the same
+    floor the reconstruction answers to: a rank over eleven points can only
+    return eleven answers and will happily say 100.0.
+    """
+    from ystocker.dca import percentile_rank
+
+    values = forward_multiples(payload)
+    trailing = payload.get("percentiles") or {}
+    out: dict[str, dict[str, Any]] = {}
+    for factor, value in values.items():
+        dist = list(distributions.get(factor) or [])
+        pct = percentile_rank(value, dist, minimum=minimum)
+        if pct is None:
+            continue
+        out[factor] = {
+            "percentile": pct,
+            "value": value,
+            "observations": len(dist),
+            # What the trailing reconstruction said, kept so the page can show
+            # the size of the switch rather than only its result.
+            "trailing_percentile": trailing.get(factor),
+        }
+    return out
+
+
+def forward_context_values(payload: Mapping[str, Any]) -> dict[str, Any]:
+    """Display-only companion to :func:`forward_basis`.
+
+    Every forward multiple that exists today, whether or not anything can be
+    ranked against it — so a reader three months from the first rankable
+    distribution still sees "forward 9.0x vs trailing 14.2x" beside the score,
+    and can tell that the engine knows the number and is declining to rank it
+    rather than not having it.
+    """
+    values = forward_multiples(payload)
+    series = payload.get("series") or {}
+    out: dict[str, Any] = {}
+    for factor, value in values.items():
+        points = series.get(factor) or []
+        out[factor] = {
+            "forward": value,
+            "trailing": points[-1][1] if points else None,
+        }
+    return out
 
 
 # ---------------------------------------------------------------------------

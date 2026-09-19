@@ -51,6 +51,15 @@
   .ov-was { text-decoration: line-through; color: var(--t-ink-dim); opacity: .75; }
   .ov-arrow { margin: 0 4px; color: var(--t-ink-dim); }
   .ov-now { color: var(--t-accent-ink); font-weight: 600; }
+  /* The basis line under a multiple. Deliberately quiet: on most rows today it
+     says "we have the forward number and are not ranking it", which is context,
+     not a finding. It goes loud only when the rank actually came from the
+     forward distribution, because that is a change in what the score means. */
+  .fb {
+    font-size: 10px; line-height: 1.3; margin-top: 2px;
+    color: var(--t-ink-dim); font-weight: 400; white-space: nowrap;
+  }
+  .fb-on { color: var(--t-accent-ink); }
   .band-cell { padding: 6px 10px; border-top: 1px solid var(--t-line); font-size: 12px; }
   .well { background: var(--dca-well); border: 1px solid var(--t-line); border-radius: 10px; }
   .factor-btn {
@@ -655,17 +664,41 @@ function renderFactors(d) {
     // replaces the rank itself, which is the stronger claim, so it shows in the
     // percentile column instead. Marking both the same way would hide which
     // one is in force.
+    /* The multiple that produced the rank, with the other basis under it.
+       Which one is on top is the whole message. Yahoo's forward figure exists
+       for most companies and this engine has always refused to *rank* it,
+       because a forward multiple ranked against the trailing reconstruction is
+       biased cheap — measured at a median of 14.6 percentile points across this
+       universe. It ranks it only once `ystocker-dca-history` holds enough
+       forward rows to rank it against its own basis. Until then the forward
+       number is shown and labelled as not-ranked, so a reader can tell that the
+       engine has it and is declining to score on it, rather than not having it. */
+    const onForward = f.basis === 'forward';
+    const headline = onForward ? f.forward_value : now;
     const nowCell = f.override_value != null
       ? `<span class="ov-was">${f.measured_value == null ? '—' : f.measured_value.toFixed(2)}</span>`
         + `<span class="ov-arrow">→</span><span class="ov-now">${f.override_value.toFixed(2)}</span>`
-      : (now == null ? '—' : now.toFixed(2));
+      : (headline == null ? '—' : headline.toFixed(2));
+    let basisCell = '';
+    if (onForward) {
+      basisCell = `<div class="fb fb-on" title="${esc((I18n.t('dca.basis_fwd_tip') || '')
+                    .replace('{n}', f.basis_observations))}">`
+                + `${esc(I18n.t('dca.basis_fwd') || 'forward')}`
+                + (f.trailing_value == null ? ''
+                   : ` · ${esc(I18n.t('dca.basis_ttm_is') || 'TTM')} ${f.trailing_value.toFixed(2)}`)
+                + `</div>`;
+    } else if (f.forward_value != null) {
+      basisCell = `<div class="fb" title="${esc(I18n.t('dca.basis_ttm_tip') || '')}">`
+                + `${esc(I18n.t('dca.basis_fwd') || 'forward')} ${f.forward_value.toFixed(2)}`
+                + ` · ${esc(I18n.t('dca.basis_ttm') || 'ranked on TTM')}</div>`;
+    }
     const rawCell = (f.overridden && f.override_value == null)
       ? `<span class="ov-was">${f.measured_pct == null ? '—' : fmtPct(f.measured_pct)}</span>`
         + `<span class="ov-arrow">→</span><span class="ov-now">${fmtPct(f.raw_pct)}</span>`
       : fmtPct(f.raw_pct);
     rows.push(`<tr class="factor-row${f.overridden ? ' overridden' : ''}">
       <td class="font-medium">${esc(tf(f.factor))}${mark}</td>
-      <td class="text-right font-mono">${nowCell}</td>
+      <td class="text-right font-mono">${nowCell}${basisCell}</td>
       <td class="text-right font-mono text-slate-500">${rawCell}</td>
       <td>
         <div class="flex items-center gap-2">
