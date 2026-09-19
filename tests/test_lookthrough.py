@@ -15,6 +15,9 @@ import unittest
 
 from ystocker.lookthrough import (
     DEFAULT_MAX_DEPTH,
+    Exposure,
+    Residual,
+    Result,
     LEAF_EQUITY,
     LEAF_PENDING,
     LEAF_TRUNCATED,
@@ -344,3 +347,112 @@ class TestDefaults(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ConcentrationTests(unittest.TestCase):
+    """The summary figure the page was missing.
+
+    `/assets` exists to answer "have I got more of this than I think", and it
+    listed every exposure without ever stating how concentrated the whole thing
+    was. A reader holding three index funds can see 487 names and still not know.
+    """
+
+    def _result(self, weights, *, extra_non_equity=0.0):
+        """A Result whose named exposures carry the given dollar values."""
+        exposures = [
+            Exposure(symbol=f"S{i}", name=f"Name {i}", kind=LEAF_EQUITY,
+                     value=float(v), direct_value=float(v), indirect_value=0.0,
+                     routes=[])
+            for i, v in enumerate(weights)
+        ]
+        if extra_non_equity:
+            exposures.append(
+                Exposure(symbol="BOND", name="Bonds", kind="non_equity",
+                         value=extra_non_equity, direct_value=extra_non_equity,
+                         indirect_value=0.0, routes=[]))
+        total = sum(weights) + extra_non_equity
+        return Result(total_value=total, exposures=exposures,
+                      residual=Residual(), per_position=[],
+                      pending_symbols=[], notes=[])
+
+    def test_equal_weights_give_back_the_name_count(self):
+        """Ten equal positions are effectively ten positions. The identity that
+        makes the figure interpretable at all."""
+        c = self._result([10] * 10).concentration()
+        self.assertEqual(c["names"], 10)
+        self.assertAlmostEqual(c["effective_holdings"], 10.0, places=1)
+        self.assertAlmostEqual(c["hhi"], 0.1, places=6)
+
+    def test_effective_holdings_is_below_the_count_when_lopsided(self):
+        """Ninety percent in one name and the rest spread over nine is nine names
+        and effectively barely more than one."""
+        c = self._result([90] + [10 / 9] * 9).concentration()
+        self.assertEqual(c["names"], 10)
+        self.assertLess(c["effective_holdings"], 1.3)
+
+    def test_hhi_is_scale_free(self):
+        """Comparable between a small account and a large one, which is the
+        reason for using shares rather than dollars."""
+        small = self._result([1, 2, 3]).concentration()
+        large = self._result([1_000_000, 2_000_000, 3_000_000]).concentration()
+        self.assertAlmostEqual(small["hhi"], large["hhi"], places=6)
+
+    def test_effective_holdings_is_the_reciprocal_of_hhi(self):
+        c = self._result([50, 30, 20]).concentration()
+        self.assertAlmostEqual(c["effective_holdings"], round(1 / c["hhi"], 1), places=1)
+
+    def test_the_denominator_is_penetrated_equity_not_the_portfolio(self):
+        """A half-bond portfolio must not report a flattering HHI for its equity
+        sleeve: the bonds are not diversifying the stocks, they are simply not
+        stocks. Same equities, with and without a bond sleeve, must score the
+        same."""
+        without = self._result([10] * 10).concentration()
+        with_bonds = self._result([10] * 10, extra_non_equity=100.0).concentration()
+        self.assertAlmostEqual(without["hhi"], with_bonds["hhi"], places=6)
+        self.assertEqual(with_bonds["basis"], "penetrated_equity")
+
+    def test_cumulative_cutoffs_are_monotonic_and_bounded(self):
+        c = self._result(list(range(30, 0, -1))).concentration()
+        self.assertLessEqual(c["top1_pct"], c["top5_pct"])
+        self.assertLessEqual(c["top5_pct"], c["top10_pct"])
+        self.assertLessEqual(c["top10_pct"], c["top25_pct"])
+        self.assertLessEqual(c["top25_pct"], 100.0 + 1e-9)
+
+    def test_cutoffs_beyond_the_holding_count_are_omitted(self):
+        """"Top 10 = 100%" on a six-name account is arithmetic, not information."""
+        c = self._result([10] * 6).concentration()
+        self.assertIn("top5_pct", c)
+        self.assertNotIn("top10_pct", c)
+        self.assertNotIn("top25_pct", c)
+
+    def test_a_single_holding_is_fully_concentrated(self):
+        c = self._result([42]).concentration()
+        self.assertAlmostEqual(c["hhi"], 1.0, places=6)
+        self.assertAlmostEqual(c["effective_holdings"], 1.0, places=1)
+        self.assertAlmostEqual(c["top1_pct"], 100.0, places=2)
+
+    def test_an_empty_portfolio_reports_no_figures_rather_than_zeros(self):
+        """A zero HHI would render as perfectly diversified, which is the
+        opposite of 'we have nothing to say'."""
+        c = self._result([]).concentration()
+        self.assertEqual(c["names"], 0)
+        self.assertNotIn("hhi", c)
+        self.assertNotIn("effective_holdings", c)
+
+    def test_non_equity_only_portfolio_reports_no_figures(self):
+        c = self._result([], extra_non_equity=100.0).concentration()
+        self.assertEqual(c["names"], 0)
+        self.assertNotIn("hhi", c)
+
+    def test_it_is_published_in_the_payload(self):
+        payload = self._result([10] * 10).as_dict(top=5)
+        self.assertIn("concentration", payload)
+        self.assertEqual(payload["concentration"]["names"], 10)
+
+    def test_the_figure_ignores_the_top_cap(self):
+        """`top` truncates the rendered rows. The statistic must describe the
+        whole portfolio, or a 60-row cap would make every large account look
+        identically concentrated."""
+        full = self._result([10] * 30).as_dict(top=None)["concentration"]
+        capped = self._result([10] * 30).as_dict(top=5)["concentration"]
+        self.assertEqual(full, capped)

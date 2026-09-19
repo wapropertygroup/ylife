@@ -351,6 +351,10 @@
           <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-600 dark:hover:text-slate-300 transition whitespace-nowrap"
               data-col="ev_ebitda"><span data-i18n="th.ev_ebitda">EV/EBITDA</span> <span class="sort-icon ml-0.5">↕</span></th>
           <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-600 dark:hover:text-slate-300 transition whitespace-nowrap"
+              data-col="pfcf"><span data-i18n="th.pfcf">P/FCF</span> <span class="sort-icon ml-0.5">↕</span></th>
+          <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-600 dark:hover:text-slate-300 transition whitespace-nowrap"
+              data-col="fwd_pfcf"><span data-i18n="th.fwd_pfcf">P/FCF (Fwd)</span> <span class="sort-icon ml-0.5">↕</span></th>
+          <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-600 dark:hover:text-slate-300 transition whitespace-nowrap"
               data-col="market_cap"><span data-i18n="th.mkt_cap">Mkt Cap</span> <span class="sort-icon ml-0.5">↕</span></th>
         </tr>
       </thead>
@@ -968,7 +972,53 @@ document.addEventListener('DOMContentLoaded', () => {
     return `background:rgba(${col[0]},${col[1]},${col[2]},0.22)`;
   }
   function fmtPE(v){ return v==null?'<span class="text-slate-500 dark:text-slate-600">—</span>':v.toFixed(1)+'x'; }
+  /* Attribute-safe escaping for the strings interpolated into `title=` below.
+     Every value that reaches these is our own i18n copy or a server-computed
+     number, so nothing here is user input today — but a `title` built by string
+     concatenation is exactly the shape that stops being safe the first time
+     somebody interpolates a company name into it, and quoting after the fact is
+     how that gets missed. */
+  function esc(v){
+    return String(v == null ? '' : v)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
   function fmtCap(v){ return v==null?'<span class="text-slate-500 dark:text-slate-600">—</span>':'$'+v.toFixed(1)+'B'; }
+
+  /* Trailing P/FCF — a measured ratio, shown like any other multiple.
+     A company burning cash gets its negative FCF *yield* instead: "price over
+     negative cash flow" is not a multiple, and left as one it would sort to the
+     top of a column read as cheapest. */
+  function fmtPfcf(d){
+    const c = d.cash || {};
+    if (c.pfcf != null) return c.pfcf.toFixed(1) + 'x';
+    if (c.fcf_yield != null && c.fcf_yield < 0) {
+      return `<span class="text-rose-500 dark:text-rose-400" title="${esc(I18n.t('fcf.negative') || 'Negative free cash flow')}">`
+        + c.fcf_yield.toFixed(1) + '%</span>';
+    }
+    return '<span class="text-slate-500 dark:text-slate-600">—</span>';
+  }
+
+  /* Forward P/FCF — an *estimate*, and marked as one.
+     Trailing FCF grown by expected earnings growth, which is an approximation
+     whose error is largest exactly where cash-flow analysis matters most: a
+     capex cycle or a working-capital swing is precisely when FCF and EPS come
+     apart. So it is dimmed, italic and carries the growth factor and its source
+     in the tooltip, rather than sitting in the same weight as the measured
+     column to its left. When there is no honest estimate the refusal is named. */
+  function fmtFwdPfcf(d){
+    const c = d.cash || {};
+    if (c.forward_pfcf != null) {
+      const src = I18n.t('fcf.src_' + c.forward_source) || c.forward_source;
+      const tip = (I18n.t('fcf.est_tip') || 'Estimated: trailing FCF grown by {g}x ({src})')
+        .replace('{g}', c.growth).replace('{src}', src);
+      return `<span class="italic text-slate-500 dark:text-slate-400" title="${esc(tip)}">~`
+        + c.forward_pfcf.toFixed(1) + 'x</span>';
+    }
+    const why = c.reason ? (I18n.t('fcf.why_' + c.reason) || c.reason) : '';
+    return `<span class="text-slate-500 dark:text-slate-600" title="${esc(why)}">—</span>`;
+  }
   function fmtGrowth(v){
     if(v==null) return '<span class="text-slate-500 dark:text-slate-600">—</span>';
     const col = v>0?'text-emerald-700 dark:text-emerald-400':'text-rose-700 dark:text-rose-400';
@@ -1047,10 +1097,12 @@ document.addEventListener('DOMContentLoaded', () => {
         <td class="py-2 px-3 text-right font-mono text-sm">${fmtGrowth(d.eps_growth_q)}</td>
         <td class="py-2 px-3 text-right">${fmtPct(d.upside)}</td>
         <td class="py-2 px-3 text-right font-mono text-sm">${d.ev_ebitda != null ? d.ev_ebitda.toFixed(1)+'x' : '<span class="text-slate-500 dark:text-slate-600">-</span>'}</td>
+        <td class="py-2 px-3 text-right font-mono text-sm" style="${heatColor((d.cash||{}).pfcf,10,60)}">${fmtPfcf(d)}</td>
+        <td class="py-2 px-3 text-right font-mono text-sm">${fmtFwdPfcf(d)}</td>
         <td class="py-2 px-3 text-right font-mono text-xs text-slate-500 dark:text-slate-400">${fmtCap(d.market_cap)}</td>
       </tr>`;
     }).join('')
-    : `<tr><td colspan="10" class="py-8 text-center text-slate-500 dark:text-slate-600 text-sm">${I18n.t('index.no_results')}</td></tr>`;
+    : `<tr><td colspan="12" class="py-8 text-center text-slate-500 dark:text-slate-600 text-sm">${I18n.t('index.no_results')}</td></tr>`;
   }
 
   // ── ETF render
