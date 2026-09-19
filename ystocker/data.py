@@ -14,6 +14,7 @@ from typing import Any
 import yfinance as yf
 
 from ystocker import fetchguard
+from ystocker import health
 
 log = logging.getLogger(__name__)
 
@@ -401,6 +402,11 @@ def fetch_ticker_data(ticker: str) -> dict:
         "Revenue Growth (%)": round(info.get("revenueGrowth") * 100, 1) if info.get("revenueGrowth") else None,
         "52W Return (%)":  round(info.get("52WeekChange") * 100, 1) if info.get("52WeekChange") else None,
         "YTD Return (%)":  round(info.get("ytdReturn") * 100, 1) if info.get("ytdReturn") else None,
+        # Balance-sheet strength and cash conversion. Costs nothing: every field
+        # behind it is already in this `info` dict and was being discarded, and
+        # the site could say a stock was cheap without ever saying whether the
+        # company was fragile. See ystocker.health.
+        "Health":          health.assess(info, sector=info.get("sector")),
     }
 
 

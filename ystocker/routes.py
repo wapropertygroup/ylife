@@ -26,6 +26,7 @@ import pandas as pd
 from flask import Blueprint, render_template, redirect, url_for, request, flash, jsonify, Response, has_request_context, session
 
 from ystocker import PEER_GROUPS, YT_CHANNELS
+from ystocker import health
 from ystocker.data import fetch_group, dividend_yield_pct, ps_ratio, reset_yf_for_process
 # Per-ticker back-off. Owned by data.py because fetch_group() is what knows which
 # tickers it actually attempted; routes only reads it to pre-filter work lists.
@@ -2496,6 +2497,9 @@ def api_history(ticker: str):
         "net_margin":        _safe(round(info.get("profitMargins") * 100, 1)) if info.get("profitMargins") else None,
         "roe":               _safe(round(info.get("returnOnEquity") * 100, 1)) if info.get("returnOnEquity") else None,
         "debt_equity":       _safe(round(info.get("debtToEquity"), 2)) if info.get("debtToEquity") else None,
+        # Balance-sheet strength and cash conversion, from the same `info` dict
+        # the fields above are read from. See ystocker.health.
+        "health":            health.assess(info, sector=info.get("sector")),
         "beta":              _safe(round(info.get("beta"), 2)) if info.get("beta") else None,
         # High/Low series for Stochastic Oscillator
         "highs":             [round(float(v), 2) if not math.isnan(float(v)) else None for v in hist["High"]],
