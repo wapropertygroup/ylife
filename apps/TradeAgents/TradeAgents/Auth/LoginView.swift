@@ -91,7 +91,7 @@ struct LoginView: View {
                 .foregroundStyle(Palette.mutedText)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(14)
+        .padding(Metrics.cardPadding)
     }
 
     private var footer: some View {

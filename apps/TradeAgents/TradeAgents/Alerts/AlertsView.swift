@@ -28,7 +28,7 @@ struct AlertsView: View {
                     .font(.caption)
                     .foregroundStyle(Palette.secondaryText)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(14)
+                    .padding(Metrics.cardPadding)
             } else {
                 ScrollView {
                     VStack(spacing: 0) {

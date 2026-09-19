@@ -52,7 +52,7 @@ struct RatesView: View {
 
         case .loaded(let data):
             ScrollView {
-                LazyVStack(spacing: 12) {
+                LazyVStack(spacing: Metrics.stackSpacing) {
                     CurrentRangeCard(current: data.current, asOf: data.asOf, meta: data.meta)
 
                     // The curve and the spread sit above the meeting cards: they are
@@ -74,8 +74,8 @@ struct RatesView: View {
                         )
                     }
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
+                .padding(.horizontal, Metrics.screenH)
+                .padding(.vertical, Metrics.screenV)
             }
             // Matches the gesture the web app grew for its installed PWA, where
             // there is no reload button in standalone mode.
@@ -491,9 +491,9 @@ private struct YieldCurveCard: View {
                     .font(.caption2).foregroundStyle(Palette.secondaryText)
             }
         }
-        .padding(14)
-        .background(Palette.card, in: RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Palette.border))
+        .padding(Metrics.cardPadding)
+        .background(Palette.card, in: RoundedRectangle(cornerRadius: Metrics.cardRadius))
+        .overlay(RoundedRectangle(cornerRadius: Metrics.cardRadius).stroke(Palette.border))
     }
 
     /// Padded around the data, never zero-based: the shape of a curve spanning
@@ -593,8 +593,8 @@ private struct YieldSpreadCard: View {
                     .font(.caption2).foregroundStyle(Palette.mutedText)
             }
         }
-        .padding(14)
-        .background(Palette.card, in: RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Palette.border))
+        .padding(Metrics.cardPadding)
+        .background(Palette.card, in: RoundedRectangle(cornerRadius: Metrics.cardRadius))
+        .overlay(RoundedRectangle(cornerRadius: Metrics.cardRadius).stroke(Palette.border))
     }
 }

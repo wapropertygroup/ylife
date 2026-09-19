@@ -64,7 +64,7 @@ struct ReportView: View {
                             .id(section.id)
                         }
                     }
-                    .padding(.horizontal, 16)
+                    .padding(.horizontal, Metrics.screenH)
                     .padding(.vertical, 12)
                 }
                 .task(id: focus) {
@@ -236,7 +236,7 @@ private struct ReportSectionCard: View {
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(Palette.mutedText)
                     }
-                    .padding(14)
+                    .padding(Metrics.cardPadding)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -244,7 +244,7 @@ private struct ReportSectionCard: View {
                 if isExpanded {
                     Divider().overlay(Palette.border)
                     MarkdownView(blocks: blocks)
-                        .padding(14)
+                        .padding(Metrics.cardPadding)
                 }
             }
         }

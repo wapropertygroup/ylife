@@ -82,8 +82,8 @@ struct Card<Content: View>: View {
         content
             .padding(padding)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Palette.card, in: RoundedRectangle(cornerRadius: 14))
-            .overlay(RoundedRectangle(cornerRadius: 14).stroke(Palette.border))
+            .background(Palette.card, in: RoundedRectangle(cornerRadius: Metrics.cardRadius))
+            .overlay(RoundedRectangle(cornerRadius: Metrics.cardRadius).stroke(Palette.border))
     }
 }
 

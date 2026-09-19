@@ -17,7 +17,7 @@ struct DcaView: View {
             case .failed(let e): LoadFailure(error: e) { Task { await load() } }
             case .loaded(let data):
                 ScrollView {
-                    LazyVStack(spacing: 12) {
+                    LazyVStack(spacing: Metrics.stackSpacing) {
                         CoverageBar(data: data)
                         // Unscorable rows sort last, never as V=0 — "could not be
                         // measured" is not "at its most expensive ever", and putting
@@ -30,7 +30,7 @@ struct DcaView: View {
                         ForEach(rows) { row in DcaRowCard(row: row) }
                         Footnote(text: loc(S.dcaNotRank))
                     }
-                    .padding(.horizontal, 16).padding(.vertical, 12)
+                    .padding(.horizontal, Metrics.screenH).padding(.vertical, Metrics.screenV)
                 }
                 .refreshable { await load() }
             }
@@ -97,9 +97,9 @@ private struct VScoreChart: View {
             .categoryNameAxis()
             .frame(height: CGFloat(shown.count) * 20 + 24)
         }
-        .padding(14)
-        .background(Palette.card, in: RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Palette.border))
+        .padding(Metrics.cardPadding)
+        .background(Palette.card, in: RoundedRectangle(cornerRadius: Metrics.cardRadius))
+        .overlay(RoundedRectangle(cornerRadius: Metrics.cardRadius).stroke(Palette.border))
     }
 
     /// V is a *cheapness* score, so the colour runs the opposite way to a price
@@ -174,8 +174,8 @@ private struct DcaRowCard: View {
                 Spacer()
             }
         }
-        .padding(14)
-        .background(Palette.card, in: RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Palette.border))
+        .padding(Metrics.cardPadding)
+        .background(Palette.card, in: RoundedRectangle(cornerRadius: Metrics.cardRadius))
+        .overlay(RoundedRectangle(cornerRadius: Metrics.cardRadius).stroke(Palette.border))
     }
 }

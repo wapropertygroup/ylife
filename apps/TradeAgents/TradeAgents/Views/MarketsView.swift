@@ -82,7 +82,7 @@ struct MarketsView: View {
 
         case .loaded(let data):
             ScrollView {
-                LazyVStack(spacing: 12) {
+                LazyVStack(spacing: Metrics.stackSpacing) {
                     if let meta = data.meta {
                         FreshnessBanner(meta: meta)
                     }
@@ -102,8 +102,8 @@ struct MarketsView: View {
                         InstrumentCard(instrument: instrument, timeframe: $timeframe)
                     }
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
+                .padding(.horizontal, Metrics.screenH)
+                .padding(.vertical, Metrics.screenV)
             }
             // Matches the gesture the web app grew for its installed PWA, where
             // there is no reload button in standalone mode.
@@ -202,9 +202,9 @@ private struct VolatilityCard: View {
                     .help(loc(S.vixTermTip))
             }
         }
-        .padding(14)
-        .background(Palette.card, in: RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Palette.border))
+        .padding(Metrics.cardPadding)
+        .background(Palette.card, in: RoundedRectangle(cornerRadius: Metrics.cardRadius))
+        .overlay(RoundedRectangle(cornerRadius: Metrics.cardRadius).stroke(Palette.border))
     }
 }
 
@@ -262,9 +262,9 @@ private struct SectorCard: View {
             .categoryNameAxis()
             .frame(height: CGFloat(ranked.count) * 22 + 24)
         }
-        .padding(14)
-        .background(Palette.card, in: RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Palette.border))
+        .padding(Metrics.cardPadding)
+        .background(Palette.card, in: RoundedRectangle(cornerRadius: Metrics.cardRadius))
+        .overlay(RoundedRectangle(cornerRadius: Metrics.cardRadius).stroke(Palette.border))
     }
 }
 
@@ -351,9 +351,9 @@ private struct InstrumentCard: View {
                 Spacer()
             }
         }
-        .padding(14)
-        .background(Palette.card, in: RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Palette.border))
+        .padding(Metrics.cardPadding)
+        .background(Palette.card, in: RoundedRectangle(cornerRadius: Metrics.cardRadius))
+        .overlay(RoundedRectangle(cornerRadius: Metrics.cardRadius).stroke(Palette.border))
     }
 
     private var yDomain: ClosedRange<Double> {
@@ -500,9 +500,9 @@ struct BreadthCard: View {
                 )
             }
         }
-        .padding(14)
-        .background(Palette.card, in: RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Palette.border))
+        .padding(Metrics.cardPadding)
+        .background(Palette.card, in: RoundedRectangle(cornerRadius: Metrics.cardRadius))
+        .overlay(RoundedRectangle(cornerRadius: Metrics.cardRadius).stroke(Palette.border))
     }
 
     /// Breadth is not a price: a low reading is weak participation whichever way the

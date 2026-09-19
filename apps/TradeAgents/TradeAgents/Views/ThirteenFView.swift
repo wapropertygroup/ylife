@@ -45,7 +45,7 @@ struct ThirteenFView: View {
                 }
                 .pickerStyle(.menu)
                 .labelsHidden()
-                .padding(.horizontal, 16).padding(.top, 8)
+                .padding(.horizontal, Metrics.screenH).padding(.top, 8)
 
                 switch state {
                 case .loading: LoadingPane()
@@ -61,7 +61,7 @@ struct ThirteenFView: View {
     @ViewBuilder
     private func loaded(_ data: ThirteenF) -> some View {
         ScrollView {
-            LazyVStack(spacing: 12) {
+            LazyVStack(spacing: Metrics.stackSpacing) {
                 FilingHeader(data: data)
                 if !data.holdings.isEmpty {
                     ConcentrationCard(holdings: data.holdings)
@@ -69,7 +69,7 @@ struct ThirteenFView: View {
                 }
                 Footnote(text: loc(S.f13Lag))
             }
-            .padding(.horizontal, 16).padding(.vertical, 12)
+            .padding(.horizontal, Metrics.screenH).padding(.vertical, Metrics.screenV)
         }
         .refreshable { await load() }
     }
@@ -103,9 +103,9 @@ private struct FilingHeader: View {
                     .font(.caption).foregroundStyle(Palette.secondaryText)
             }
         }
-        .padding(14)
-        .background(Palette.card, in: RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Palette.border))
+        .padding(Metrics.cardPadding)
+        .background(Palette.card, in: RoundedRectangle(cornerRadius: Metrics.cardRadius))
+        .overlay(RoundedRectangle(cornerRadius: Metrics.cardRadius).stroke(Palette.border))
     }
 }
 
@@ -138,9 +138,9 @@ private struct ConcentrationCard: View {
             .categoryNameAxis()
             .frame(height: CGFloat(top.count) * 22 + 24)
         }
-        .padding(14)
-        .background(Palette.card, in: RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Palette.border))
+        .padding(Metrics.cardPadding)
+        .background(Palette.card, in: RoundedRectangle(cornerRadius: Metrics.cardRadius))
+        .overlay(RoundedRectangle(cornerRadius: Metrics.cardRadius).stroke(Palette.border))
     }
 }
 
@@ -202,8 +202,8 @@ private struct HoldingRow: View {
                 }
             }
         }
-        .padding(.horizontal, 14).padding(.vertical, 10)
-        .background(Palette.card, in: RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Palette.border))
+        .padding(.horizontal, Metrics.cardPadding).padding(.vertical, 8)
+        .background(Palette.card, in: RoundedRectangle(cornerRadius: Metrics.cardRadius))
+        .overlay(RoundedRectangle(cornerRadius: Metrics.cardRadius).stroke(Palette.border))
     }
 }
