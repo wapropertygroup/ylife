@@ -1187,6 +1187,15 @@ const I18n = (() => {
     // labels: "a bank's leverage ratio is not meaningful" is a different
     // statement from "we could not compute it", and a missing key renders the
     // raw identifier under a figure somebody is about to act on.
+    // /markets earnings calendar.
+    'markets.earnings_title':   { en: 'Reporting soon', zh: '即将发布财报' },
+    'markets.earnings_meta':    { en: 'tracked, next 21 days', zh: '只追踪标的 · 未来 21 天' },
+    'markets.earnings_none':    { en: 'No tracked company reports in the next 21 days.',
+                                  zh: '未来 21 天内没有追踪标的发布财报。' },
+    'markets.earnings_today':   { en: 'Today', zh: '今天' },
+    'markets.earnings_tomorrow':{ en: 'Tomorrow', zh: '明天' },
+    'markets.earnings_fwd_pe':  { en: 'fwd P/E', zh: '预期市盈率' },
+    'markets.earnings_last_q':  { en: 'last Q EPS growth', zh: '上季 EPS 增长' },
     'history.group_health':   { en: 'Balance sheet & cash', zh: '资产负债与现金' },
     'history.net_debt':       { en: 'Net debt', zh: '净负债' },
     'history.net_cash':       { en: 'net cash', zh: '净现金' },

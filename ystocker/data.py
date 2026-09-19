@@ -15,6 +15,7 @@ import yfinance as yf
 
 from ystocker import fetchguard
 from ystocker import health
+from ystocker import earnings as earnings_mod
 
 log = logging.getLogger(__name__)
 
@@ -407,6 +408,10 @@ def fetch_ticker_data(ticker: str) -> dict:
         # the site could say a stock was cheap without ever saying whether the
         # company was fragile. See ystocker.health.
         "Health":          health.assess(info, sector=info.get("sector")),
+        # The next reporting date, chosen by date rather than by field name —
+        # Yahoo's `earningsTimestamp` is the *last* report on some tickers and
+        # the next on others. See ystocker.earnings.
+        "Earnings Date":   earnings_mod.next_earnings(info),
     }
 
 

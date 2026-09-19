@@ -2552,62 +2552,50 @@ def api_history(ticker: str):
 
 @bp.route("/api/upcoming-earnings")
 def api_upcoming_earnings():
-    """Return tickers with earnings in the next 7 days from the cache."""
-    import datetime
+    """Tracked companies reporting soon, soonest first.
 
-    results = []
-    seen = set()
+    Reads the ticker cache — all ~308 names in ``PEER_GROUPS``, refreshed every
+    eight hours — rather than ``_HISTORY_CACHE``, which this endpoint used to
+    walk. That cache only holds tickers whose ``/history`` page somebody happened
+    to open, so the calendar was whatever a visitor had browsed: sparse,
+    arbitrary, and different for every deploy. Nothing on the site consumed it.
 
-    # Check all cached tickers for upcoming earnings dates
-    with _HISTORY_CACHE_LOCK:
-        cached_tickers = list(_HISTORY_CACHE.keys())
+    No fetch on the request path. The dates were already being pulled with every
+    other field and discarded; see ``ystocker.earnings`` on why the field name is
+    not trusted.
+    """
+    from ystocker import earnings
 
-    now = datetime.datetime.utcnow()
-    cutoff = now + datetime.timedelta(days=7)
+    try:
+        days = max(1, min(90, int(request.args.get("days", 21))))
+    except (TypeError, ValueError):
+        days = 21
 
-    for cache_key in cached_tickers:
-        try:
-            ticker = cache_key[0] if isinstance(cache_key, tuple) else cache_key
-            if ticker in seen:
+    records: list[tuple[str, dict]] = []
+    with _cache_lock:
+        snapshot = _cache or {}
+        seen: set[str] = set()
+        for group_data in snapshot.values():
+            if not isinstance(group_data, dict):
                 continue
-            with _HISTORY_CACHE_LOCK:
-                entry = _HISTORY_CACHE.get(cache_key)
-            if not entry:
-                continue
-            data = entry.get("data", {})
-            ed = data.get("earnings_date")
-            if not ed:
-                continue
-            # Parse "Mon DD, YYYY" format
-            try:
-                dt = datetime.datetime.strptime(ed, "%b %d, %Y")
-            except ValueError:
-                continue
-            if now <= dt <= cutoff:
+            for ticker, record in group_data.items():
+                if ticker in seen or not isinstance(record, dict):
+                    continue
                 seen.add(ticker)
-                results.append({
-                    "ticker": ticker,
-                    "name": data.get("name", ticker),
-                    "earnings_date": ed,
-                    "days_away": (dt - now).days,
-                })
-        except Exception:
-            continue
+                records.append((ticker, record))
 
-    results.sort(key=lambda x: x["days_away"])
-    return jsonify({"upcoming": results[:20]})
-
-
-# ---------------------------------------------------------------------------
-# Options walls endpoint  (/api/options/<ticker>)
-# Separated from /api/history so the price/stats page loads instantly.
-# Uses a ThreadPoolExecutor to fetch all expirations in parallel.
-# ---------------------------------------------------------------------------
-
-_OPTIONS_CACHE: Dict[str, dict] = {}
-_OPTIONS_CACHE_LOCK = threading.Lock()
-_OPTIONS_CACHE_TTL  = 20 * 60          # 20 minutes
-_OPTIONS_MAX_EXPIRATIONS = 12          # cap: covers ~3 months of weeklies + monthlies
+    rows = earnings.upcoming(records, within_days=days)
+    log.info("API upcoming-earnings: %d of %d tracked report within %dd",
+             len(rows), len(records), days)
+    return jsonify({
+        "upcoming": rows,
+        "tracked": len(records),
+        "within_days": days,
+        # Stated so the page can say "0 of 308 in the next 21 days" rather than
+        # rendering an empty list that looks like a failure. Between seasons an
+        # empty calendar is the correct answer.
+        "asof": datetime.datetime.now(datetime.timezone.utc).date().isoformat(),
+    })
 
 
 @bp.route("/api/options/<ticker>")
