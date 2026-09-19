@@ -54,18 +54,23 @@
 <!-- ── Hero ──────────────────────────────────────────────────────────── -->
 <div class="mb-6 sm:mb-8 fade-up">
   <h1 class="text-xl sm:text-2xl font-bold mb-1.5">
-    <span class="grad-text" data-i18n="index.hero_title">Stock Valuation</span> <span data-i18n="index.hero_sub">Dashboard</span>
+    <span class="grad-text" data-i18n="index.hero_title">Stock Valuation</span><span
+      class="hero-sub" data-i18n="index.hero_sub">Dashboard</span>
   </h1>
   <p class="text-slate-500 dark:text-slate-400 text-sm">
     <span data-i18n="index.hero_desc">PE ratios, PEG ratios &amp; analyst targets across</span> {{ sector_cards|length }} <span data-i18n="index.peer_groups">peer groups.</span>
   </p>
   {% if cache_last_updated %}
+  {# Dates as `data-ts`, not as rendered text: `datetimeformat` writes
+     "Sep 19, 2026" whatever language the page is in, and being server-rendered it
+     could not follow a language the reader switches without reloading either.
+     I18n.datetime() composes it, and reproduces this exact format in English. #}
   <p class="text-xs text-slate-500 dark:text-slate-600 mt-1">
-    <span data-i18n="index.data_as_of">Data as of</span> {{ cache_last_updated | int | datetimeformat }}
+    <span data-i18n="index.data_as_of">Data as of</span> <span data-ts="{{ cache_last_updated | int }}">{{ cache_last_updated | int | datetimeformat }}</span>
     {% if warming %}
       &nbsp;·&nbsp;<span class="text-brand animate-pulse" data-i18n="index.refreshing">refreshing now…</span>
     {% else %}
-      &nbsp;·&nbsp;<span data-i18n="index.next_refresh">next refresh</span> {{ (cache_last_updated | int + 28800) | datetimeformat }}
+      &nbsp;·&nbsp;<span data-i18n="index.next_refresh">next refresh</span> <span data-ts="{{ cache_last_updated | int + 28800 }}">{{ (cache_last_updated | int + 28800) | datetimeformat }}</span>
     {% endif %}
   </p>
   {% endif %}
@@ -81,6 +86,61 @@
   .sector-sort-btn:hover { color: var(--t-ink); border-color: var(--t-line-hover); }
   /* 15% indigo tints white and slate alike, so the active fill stays literal. */
   .sector-sort-btn.active { color: var(--t-accent-ink); border-color: var(--t-accent); background: rgba(99,102,241,0.15); }
+
+  /* "Stock Valuation Dashboard" is two words in English and one compound noun in
+     Chinese — 股票估值仪表盘 — so the literal space that used to sit between the
+     two spans put a gap in the middle of a Chinese word. The gap is CSS now, and
+     `:lang()` removes it; that selector is only live because I18n keeps
+     `<html lang>` in step with the language being rendered. */
+  .hero-sub { margin-left: 0.3em; }
+  html:lang(zh) .hero-sub { margin-left: 0; }
+
+  /* One tile wall, not seven rows of different heights.
+     CSS Grid already equalises a row, but a row is as tall as its tallest card
+     and a card is as tall as its ticker list — Japan (Nikkei) lists forty
+     symbols over nine lines, which left the three cards beside it each carrying
+     ~110px of void beneath their stats, and made every row a different height
+     from the last. Clamping the list to two lines and floating the chart to the
+     bottom puts every sparkline on the same baseline. Nothing is lost: the card
+     links to the sector page, and the full list is in `title`. */
+  .sector-card { display: flex; flex-direction: column; }
+  .sector-tickers {
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+    overflow: hidden;
+    min-height: 2rem;        /* exactly two lines of text-xs, so a short list
+                                does not raise its card above its neighbours */
+  }
+  .sector-card .chart-container { margin-top: auto; }
+
+  /* The two deferred panels below sit side by side once there is room for both.
+     Full-width they were six and five narrow columns stretched across 1475px,
+     which put 200-300px of nothing between a ticker and its own numbers — the
+     longest eye-travel on the page, for its densest tables. `flex-basis` rather
+     than a grid so that a cold cache showing only one of them still gets a
+     card the full width instead of a half-width one floating left.
+     Margin on the children, never on the wrapper: both start `display:none`, and
+     a wrapper margin would hold 2rem of blank page open above "Sector Overview"
+     on every visit where neither cache is warm. */
+  .ev-extras { display: flex; flex-wrap: wrap; column-gap: 1.5rem; }
+  .ev-extras > * { flex: 1 1 34rem; min-width: 0; margin-bottom: 2rem; }
+
+  /* Chinese wraps between any two characters — and between an atomic inline box
+     and a Han character even with no whitespace between them — so a cell narrow
+     enough to break turned 上调/下调 into 上调/下 + 调, and dropped the weight
+     gauge onto its own line above 科技. Both tables are short numeric rows
+     already inside a horizontal scroller, so nowrap costs nothing and is what
+     keeps every row one line high on a phone. */
+  .ev-extras th, .ev-extras td { white-space: nowrap; }
+
+  /* A gauge with a track, rather than a bare bar sized to its own value. As a
+     bare bar it was an inline element of varying width *before* the sector name,
+     so no two names in the column started at the same x. */
+  .ysec-bar {
+    display: inline-block; vertical-align: middle; overflow: hidden;
+    width: 46px; height: 6px; margin-right: 0.5rem; border-radius: 3px;
+    background: var(--t-surface-alt);
+  }
+  .ysec-bar > i { display: block; height: 100%; border-radius: 3px; background: var(--t-accent); }
 </style>
 <!-- ── Analyst estimate revisions ──────────────────────────────────────────
      The peer-group tables below show Upside (%) — one target price against the
@@ -88,13 +148,14 @@
      is that: next-year EPS as it stands now against 30 days ago, and how many
      analysts moved each way. Deferred, and hidden entirely when the cache is
      cold, because the sweep behind it is 210 paced Yahoo calls. -->
-<div id="evRevisions" class="mb-8 fade-up" style="display:none">
+<div class="ev-extras">
+<div id="evRevisions" class="fade-up" style="display:none">
   <div class="flex items-baseline justify-between mb-3 flex-wrap gap-2">
     <h2 class="text-lg sm:text-xl font-semibold text-slate-700 dark:text-slate-200"
         data-i18n="index.rev_title">Estimate Revisions</h2>
     <span class="text-[11px] text-slate-500 dark:text-slate-600">
       <span data-i18n="index.rev_sub">Next-year EPS vs 30 days ago · analysts moving up/down</span>
-      <span id="evRevAsOf" class="text-slate-700"></span>
+      <span id="evRevAsOf"></span>
     </span>
   </div>
   <div class="flex gap-1 mb-3 flex-wrap" id="evRevTabs">
@@ -125,13 +186,13 @@
      a peer group here is our own definition — "AI / Robotics" is not a GICS
      sector and mixes NVDA with SMCI — so presenting the two together would imply
      the medians below are sector medians, which they are not. -->
-<div id="evSectors" class="mb-8 fade-up" style="display:none">
+<div id="evSectors" class="fade-up" style="display:none">
   <div class="flex items-baseline justify-between mb-3 flex-wrap gap-2">
     <h2 class="text-lg sm:text-xl font-semibold text-slate-700 dark:text-slate-200"
         data-i18n="index.ysec_title">Market Sectors</h2>
     <span class="text-[11px] text-slate-500 dark:text-slate-600">
       <span data-i18n="index.ysec_sub">Yahoo's eleven sectors by share of total market cap</span>
-      <span id="evSecAsOf" class="text-slate-700"></span>
+      <span id="evSecAsOf"></span>
     </span>
   </div>
   <div class="overflow-x-auto bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-3">
@@ -148,6 +209,7 @@
       <tbody id="evSecBody"></tbody>
     </table>
   </div>
+</div>
 </div>
 
 <h2 id="sectors" class="text-lg sm:text-xl font-semibold text-slate-700 dark:text-slate-200 mb-4 fade-up" data-i18n="index.sector_overview">Sector Overview</h2>
@@ -168,12 +230,13 @@
      class="sector-card group bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 hover:border-brand/60
             hover:shadow-lg hover:shadow-brand/10 transition-all duration-200 fade-up block">
     <div class="flex items-start justify-between mb-3">
-      <div>
+      <div class="min-w-0">
         <h3 class="font-semibold text-slate-800 dark:text-slate-100 group-hover:text-brand transition"
             data-i18n="sector.name.{{ group }}">{{ group }}</h3>
-        <p class="text-xs text-slate-500 mt-0.5">{{ info.tickers | join(' · ') }}</p>
+        <p class="sector-tickers text-xs text-slate-500 mt-0.5"
+           title="{{ info.tickers | join(' · ') }}">{{ info.tickers | join(' · ') }}</p>
       </div>
-      <span class="sector-day-chg text-xs font-semibold px-1.5 py-0.5 rounded-md transition text-slate-500 dark:text-slate-600"></span>
+      <span class="sector-day-chg text-xs font-semibold px-1.5 py-0.5 rounded-md transition text-slate-500 dark:text-slate-600 shrink-0"></span>
     </div>
     <div class="chart-container" style="height:80px">
       <canvas id="spark_{{ loop.index }}"></canvas>
@@ -319,7 +382,7 @@
               onclick="heatmapSortByDayChg()"
               class="flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400 border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800
                      hover:text-slate-700 dark:hover:text-slate-200 transition px-2 py-1.5 rounded-lg whitespace-nowrap">
-        Day Chg <span id="heatmapDayChgArrow">↕</span>
+        <span data-i18n="index.day_chg_sort">Day Chg</span> <span id="heatmapDayChgArrow">↕</span>
       </button>
 
       <!-- Row count -->
@@ -387,7 +450,7 @@
               onclick="etfSortByDayChg()"
               class="flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400 border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800
                      hover:text-slate-700 dark:hover:text-slate-200 transition px-2 py-1.5 rounded-lg whitespace-nowrap">
-        Day Chg <span id="etfDayChgArrow">↕</span>
+        <span data-i18n="index.day_chg_sort">Day Chg</span> <span id="etfDayChgArrow">↕</span>
       </button>
       <span id="etfHeatmapCount" class="text-xs text-slate-500 dark:text-slate-600 whitespace-nowrap"></span>
     </div>
@@ -682,7 +745,7 @@ function chartModal() {
         this.subtitle = I18n.t('index.valuation_map_desc');
       } else {
         this.title    = I18n.t('index.peg_map');
-        this.subtitle = 'Price/Earnings-to-Growth ratio — all tickers';
+        this.subtitle = I18n.t('index.peg_map_desc');
       }
       this.open = true;
       // Defer until the canvas is visible in the DOM
@@ -1067,6 +1130,14 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  // Row count. Two keys rather than a `s` appended in JS: English inflects here
+  // and Chinese does not, and the inline ternary was untranslatable — it is why
+  // the Chinese page used to read "274 tickers".
+  function countLabel(n, oneKey, manyKey, fallback) {
+    const key = n === 1 ? oneKey : manyKey;
+    return (I18n.t(key) || fallback).replace('{n}', n);
+  }
+
   // ── Stock render
   function render() {
     const q = filterText.toLowerCase();
@@ -1077,7 +1148,8 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     rows = sortRows(rows, sortCol, sortDir);
     updateIcons('heatmapTable', sortCol, sortDir);
-    document.getElementById('heatmapCount').textContent = `${rows.length} ticker${rows.length !== 1 ? 's' : ''}`;
+    document.getElementById('heatmapCount').textContent =
+      countLabel(rows.length, 'index.n_tickers_one', 'index.n_tickers', '{n} tickers');
     document.getElementById('heatmapBody').innerHTML = rows.length ? rows.map(d => {
       const chgStyle = dayChgHeat(d.day_change_pct);
       const chgText  = d.day_change_pct != null ? (d.day_change_pct >= 0 ? '+' : '') + d.day_change_pct.toFixed(2) + '%' : '';
@@ -1109,7 +1181,8 @@ document.addEventListener('DOMContentLoaded', () => {
   function renderEtf() {
     const rows = sortRows(etfRows, etfSortCol, etfSortDir);
     updateIcons('etfHeatmapTable', etfSortCol, etfSortDir);
-    document.getElementById('etfHeatmapCount').textContent = `${rows.length} ETF${rows.length !== 1 ? 's' : ''}`;
+    document.getElementById('etfHeatmapCount').textContent =
+      countLabel(rows.length, 'index.n_etfs_one', 'index.n_etfs', '{n} ETFs');
     document.getElementById('etfHeatmapBody').innerHTML = rows.map(d => {
       const chgStyle = dayChgHeat(d.day_change_pct);
       const chgText  = d.day_change_pct != null ? (d.day_change_pct >= 0 ? '+' : '') + d.day_change_pct.toFixed(2) + '%' : '';
@@ -1149,6 +1222,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
   render();
   renderEtf();
+
+  /* Both tables compose their own text — sector name, company name, row count —
+     so `I18n.apply()` cannot reach any of it, and `setLang()` does not reload.
+     Switching to Chinese therefore left 274 rows and every filter pill in
+     English under a Chinese header. The pills keep their own filter value in
+     `dataset.sector`, so re-labelling them is a text swap rather than a rebuild
+     and the active filter survives the switch. */
+  document.addEventListener('i18n:langchange', () => {
+    document.querySelectorAll('.sector-filter-pill').forEach(p => {
+      p.textContent = p.dataset.sector
+        ? I18n.tSector(p.dataset.sector)
+        : (I18n.t('index.all_sectors') || 'All');
+    });
+    render();
+    renderEtf();
+  });
 
   // ── Day Chg sort buttons
   window.heatmapSortByDayChg = function() {
@@ -1230,7 +1319,7 @@ document.addEventListener('DOMContentLoaded', () => {
         <td class="py-1.5 px-2 text-right font-mono ${chgCls}">${signed(r.chg)}%
           <span class="text-slate-500 dark:text-slate-600 text-[10px]">${r.abs != null ? '(' + signed(r.abs) + ')' : ''}</span></td>
         <td class="py-1.5 px-2 text-right font-mono">
-          <span class="text-emerald-700 dark:text-emerald-400">${up}▲</span><span class="text-slate-700">/</span><span class="text-rose-700 dark:text-rose-400">${dn}▼</span></td>
+          <span class="text-emerald-700 dark:text-emerald-400">${up}▲</span><span class="text-slate-400 dark:text-slate-600">/</span><span class="text-rose-700 dark:text-rose-400">${dn}▼</span></td>
         <td class="py-1.5 px-2 text-right font-mono text-slate-500 dark:text-slate-400">
           ${(r.rec.strong_buy != null || r.rec.buy != null)
             ? `${(r.rec.strong_buy || 0) + (r.rec.buy || 0)}/${r.rec.hold || 0}/${(r.rec.sell || 0) + (r.rec.strong_sell || 0)}`
@@ -1259,16 +1348,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const max = Math.max(...list.map(r => r.market_weight || 0), 1);
     body.innerHTML = list.map(r => `<tr class="border-b border-slate-200/60 dark:border-slate-800/60 last:border-0">
       <td class="py-1.5 pr-3 text-slate-600 dark:text-slate-300">
-        <span class="inline-block align-middle mr-1.5 h-1.5 rounded"
-              style="width:${Math.round((r.market_weight || 0) / max * 46)}px;background:#6366f1"></span>
-        ${I18n.t('index.ysec_' + r.key) || r.name || r.key}</td>
+        <span class="ysec-bar"><i style="width:${Math.round((r.market_weight || 0) / max * 100)}%"></i></span
+        >${I18n.t('index.ysec_' + r.key) || r.name || r.key}</td>
       <td class="py-1.5 px-2 text-right font-mono text-slate-600 dark:text-slate-300">${num(r.market_weight, 1)}%</td>
       <td class="py-1.5 px-2 text-right font-mono text-slate-500 dark:text-slate-400">${capT(r.market_cap)}</td>
       <td class="py-1.5 px-2 text-right font-mono text-slate-500">${r.companies != null ? r.companies : '—'}</td>
       <td class="py-1.5 pl-2 text-slate-500 text-[11px]">
         ${(r.top_companies || []).slice(0, 3).map(c =>
           `<a href="/history/${c.ticker}" class="hover:text-brand transition">${c.ticker}</a>`
-        ).join('<span class="text-slate-700"> · </span>')}</td>
+        ).join('<span class="text-slate-400 dark:text-slate-600"> · </span>')}</td>
     </tr>`).join('');
     const asOf = document.getElementById('evSecAsOf');
     if (asOf) {

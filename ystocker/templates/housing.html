@@ -147,12 +147,12 @@
   </p>
   {% if cache_last_updated %}
   <p class="text-xs text-slate-500 dark:text-slate-600 mt-1">
-    <span data-i18n="housing.data_as_of">Data as of</span> {{ cache_last_updated | int | datetimeformat }}
+    <span data-i18n="housing.data_as_of">Data as of</span> <span data-ts="{{ cache_last_updated | int }}">{{ cache_last_updated | int | datetimeformat }}</span>
     &nbsp;·&nbsp;
     {% if warming or not cache_fresh %}
     <span class="text-brand animate-pulse" data-i18n="housing.refreshing">refreshing now…</span>
     {% else %}
-    <span data-i18n="housing.next_refresh">next refresh</span> {{ (cache_last_updated | int + 86400) | datetimeformat }}
+    <span data-i18n="housing.next_refresh">next refresh</span> <span data-ts="{{ cache_last_updated | int + 86400 }}">{{ (cache_last_updated | int + 86400) | datetimeformat }}</span>
     {% endif %}
     &nbsp;·&nbsp;
     <a href="{{ url_for('main.housing_refresh') }}" class="text-brand hover:underline" data-i18n="housing.refresh">↻ Refresh</a>

@@ -336,9 +336,19 @@ def create_app() -> Flask:
     app.register_blueprint(bp)
 
     # Jinja2 filter: unix timestamp → "Feb 21, 2026 15:30"
+    #
+    # Explicitly UTC, where this used to be `fromtimestamp()` — the *server's*
+    # local clock, which is UTC on this box and so renders identically. The point
+    # is that it now says so: `I18n.datetime()` re-renders these same timestamps
+    # client-side (they travel as `data-ts`, because a date baked into the HTML
+    # cannot follow a language the reader switches without reloading), and a
+    # server whose TZ drifted off UTC would have the two disagree — the rendered
+    # fallback saying one hour and the hydrated text another, on a line whose
+    # entire job is to say how fresh the data is.
     @app.template_filter("datetimeformat")
     def datetimeformat(ts):
-        return datetime.datetime.fromtimestamp(float(ts)).strftime("%b %d, %Y %H:%M")
+        return datetime.datetime.fromtimestamp(
+            float(ts), datetime.timezone.utc).strftime("%b %d, %Y %H:%M")
 
     # Cache-busting token for static assets: the newest mtime across every
     # served .js and .css, not just i18n.js.

@@ -412,7 +412,18 @@
       --t-fade-to:      #0f172a;
     }
 
-    body { font-family: 'Inter', sans-serif; }
+    /* Inter carries no CJK glyphs, so on a Chinese page every Han character fell
+       out of this stack and into whatever the reader's OS resolves `sans-serif`
+       to — which is not one answer: a Mac lands on PingFang, an un-updated
+       Windows can land on SimSun, a *serif*. So the Chinese pages were typeset by
+       accident and differently per visitor, beside Latin that was typeset on
+       purpose. Naming the faces after Inter fixes the Han glyphs to one
+       deliberate choice per platform while leaving Latin and digits on Inter
+       inside a mixed sentence, which is the whole point of a fallback chain.
+       See also I18n._syncDocumentLang(): `<html lang>` is what tells the browser
+       which regional glyph forms to pick for the codepoints CJK scripts share. */
+    body { font-family: 'Inter', 'PingFang SC', 'Hiragino Sans GB',
+                        'Microsoft YaHei', 'Noto Sans SC', sans-serif; }
     .app-container { max-width: 1475px; }
     .chart-container { position: relative; }
     /* Custom scrollbar */

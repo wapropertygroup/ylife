@@ -216,7 +216,7 @@ const I18n = (() => {
     'index.sort_ps':         { en: 'P/S',        zh: '市销率' },
     'index.sort_short':      { en: 'Short %',    zh: '做空比例' },
     'index.jump_stock_pe':  { en: '↓ Stock PE',  zh: '↓ 个股市盈率' },
-    'index.jump_etf_pe':    { en: '↓ ETF PE',    zh: '↓ ETF市盈率' },
+    'index.jump_etf_pe':    { en: '↓ ETF PE',    zh: '↓ ETF 市盈率' },
     'index.jump_sectors':   { en: '↓ Sectors',   zh: '↓ 板块概览' },
 
     'index.valuation_map':      { en: 'Valuation Map', zh: '估值地图' },
@@ -231,6 +231,8 @@ const I18n = (() => {
     'index.expand':             { en: 'Expand', zh: '展开' },
 
     'index.peg_map':       { en: 'PEG Valuation Map', zh: 'PEG 估值地图' },
+    'index.peg_map_desc':  { en: 'Price/Earnings-to-Growth ratio — all tickers',
+                             zh: '市盈率相对盈利增长比率 — 全部标的' },
     'index.peg_under':     { en: '< 1 — undervalued', zh: '< 1 — 低估' },
     'index.peg_moderate':  { en: '1–2 — moderate',    zh: '1–2 — 合理' },
     'index.peg_expensive': { en: '> 2 — expensive',   zh: '> 2 — 高估' },
@@ -247,6 +249,14 @@ const I18n = (() => {
     'index.search':        { en: 'Search…',     zh: '搜索…' },
     'index.search_ph':     { en: 'Search…',     zh: '搜索股票或名称…' },
     'index.no_results':    { en: 'No results',  zh: '无结果' },
+    // Row counts. Two English keys for one Chinese string because English
+    // inflects and Chinese does not — the alternative is the `n === 1 ? 's' : ''`
+    // the JS used to do inline, which is untranslatable by construction and is
+    // why the Chinese page read "274 tickers".
+    'index.n_tickers_one': { en: '{n} ticker',  zh: '{n} 只标的' },
+    'index.n_tickers':     { en: '{n} tickers', zh: '{n} 只标的' },
+    'index.n_etfs_one':    { en: '{n} ETF',     zh: '{n} 只 ETF' },
+    'index.n_etfs':        { en: '{n} ETFs',    zh: '{n} 只 ETF' },
     'index.analyst_upside': { en: 'analyst upside %', zh: '分析师上涨空间 %' },
     'index.fwd_pe':         { en: 'forward PE',        zh: '预测市盈率' },
 
@@ -2177,6 +2187,13 @@ const I18n = (() => {
     'sector.name.International ETFs':{ en: 'International ETFs', zh: '国际ETF' },
     'sector.name.Commodities ETFs':  { en: 'Commodities ETFs',   zh: '大宗商品ETF' },
     'sector.name.China Tech':        { en: 'China Tech',         zh: '中概科技股' },
+    // These two had no entry at all, so the peer-group card, the heatmap's
+    // sector pill and the scatter legend all printed English in the middle of a
+    // Chinese page — and the card is the widest title in the grid, so the miss
+    // was the most visible thing on it.
+    'sector.name.Homebuilders & Construction':
+                                     { en: 'Homebuilders & Construction', zh: '住宅与建筑' },
+    'sector.name.Japan (Nikkei)':    { en: 'Japan (Nikkei)',     zh: '日本（日经）' },
 
     // ── daily_report.html ─────────────────────────────────────────────
     'daily.title':            { en: 'Daily Markets Report',      zh: '每日市场报告' },
@@ -3360,6 +3377,57 @@ const I18n = (() => {
     return v != null ? v : key.toUpperCase();
   }
 
+  /** A unix timestamp as a date the current language would write.
+   *
+   *  The six dashboards that carry a "Data as of …" line rendered it server-side
+   *  through Jinja's `datetimeformat` (`%b %d, %Y %H:%M`), which has two problems
+   *  on a Chinese page and only one of them is the month name: `setLang()` does
+   *  not reload, so a date baked into the HTML cannot follow a language the
+   *  reader switches. Composing it here means `apply()` re-renders it like any
+   *  other string.
+   *
+   *  The English branch reproduces the server's format exactly — `Sep 19, 2026
+   *  19:31` — so moving a page onto `data-ts` changes nothing in English.
+   *
+   *  UTC, not the reader's clock, because that is what the server has always
+   *  rendered (`datetimeformat`, which now says so out loud). Re-basing every
+   *  dashboard's "data as of" onto local time might well be an improvement, but
+   *  it is a separate decision about what the line means, not a typographic one,
+   *  and doing it here would move the times on six pages as a side effect of
+   *  translating the month.
+   */
+  const _MONTHS_EN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  function datetime(ts) {
+    const d = new Date(Number(ts) * 1000);
+    if (isNaN(d.getTime())) return '';
+    const p = n => String(n).padStart(2, '0');
+    const clock = p(d.getUTCHours()) + ':' + p(d.getUTCMinutes());
+    if (current === 'zh') {
+      return `${d.getUTCFullYear()}年${d.getUTCMonth() + 1}月${d.getUTCDate()}日 ${clock}`;
+    }
+    return `${_MONTHS_EN[d.getUTCMonth()]} ${p(d.getUTCDate())}, ${d.getUTCFullYear()} ${clock}`;
+  }
+
+  /** `<html lang>`, kept in step with the language actually being rendered.
+   *
+   *  It was a static `lang="en"`, which is not cosmetic: Chrome picks the Han
+   *  glyph variant for a shared codepoint from the document language, so a
+   *  Chinese page declaring English can be typeset with Japanese glyph forms
+   *  wherever a CJK font is chosen by fallback. It also drives `:lang()` — the
+   *  hero's word gap on /evaluation hangs off it — and is what a screen reader
+   *  switches voice on. `zh-CN` rather than `zh`, because the regional subtag is
+   *  the part that selects Simplified forms.
+   */
+  function _syncDocumentLang() {
+    try {
+      document.documentElement.lang = current === 'zh' ? 'zh-CN' : 'en';
+    } catch (_) {}
+  }
+  // Immediately, not on DOMContentLoaded: this file is a blocking <head> script,
+  // so doing it here means the first paint is already in the right language.
+  _syncDocumentLang();
+
   // ── Chart.js label binding ─────────────────────────────────────────────
   // Chart.js copies label strings into its own config at construction time, so
   // apply() (which only walks [data-i18n] elements) cannot reach a legend entry
@@ -3433,6 +3501,13 @@ const I18n = (() => {
       const v = t(el.dataset.i18nHtml);
       if (v != null) el.innerHTML = v;
     });
+    // Timestamps. A unix `data-ts` rather than rendered text, so the date is
+    // written in whatever language is current at the time apply() runs — see
+    // datetime().
+    root.querySelectorAll('[data-ts]').forEach(el => {
+      const v = datetime(el.dataset.ts);
+      if (v) el.textContent = v;
+    });
     // Browser tab. The <title> is server-rendered Jinja and has no [data-i18n]
     // to walk, so a page switched to Chinese kept an English tab. Done here
     // rather than once at load so a language toggle retranslates it too.
@@ -3453,6 +3528,7 @@ const I18n = (() => {
   function setLang(lang) {
     current = lang;
     localStorage.setItem('ystocker_lang', lang);
+    _syncDocumentLang();
     apply();
     // Charts before the event: pages listening on i18n:langchange may fully
     // rebuild a chart, and rebuilding after an in-place update is harmless,
@@ -3503,5 +3579,5 @@ const I18n = (() => {
   });
 
   return { t, tSector, tIdx, stockName, apply, toggle, setLang, getLang,
-           label, axis, retranslateCharts };
+           label, axis, retranslateCharts, datetime };
 })();
