@@ -851,6 +851,41 @@ aws dynamodb create-table --table-name ystocker-dca-universe --region us-west-2 
   --key-schema AttributeName=ticker,KeyType=HASH
 ```
 
+**`/dca/<ticker>` carries a peer panel** (`/api/dca/<t>/peers`): the same V, band
+and sized contribution for the rest of that company's `PEER_GROUPS` entry, with
+its own row sorted into place so the reader can see where it sits.
+
+The group is `dca_history.peer_group()`, extracted so the panel and the `peer`
+factor above it cannot name two different peer sets for one company, and the P/E
+column is pinned to the basis `peer_percentiles` actually ranked on — one basis
+for the whole group or none, since a forward P/E beside a trailing one under a
+single heading makes the forward name read cheaper on nothing but a data gap.
+
+**It never fetches and, more to the point, never builds.** The first half is the
+overview's rule (six Yahoo reads per name). The second is the one that is easy
+to miss: `dca_history.get()` *registers* whatever it successfully builds, so
+warming eleven peers because somebody opened one ticker would push eleven names
+into a registry capped at 60 and evict whatever was least recently opened. A
+side panel must not be able to rewrite what the overview ranks. So an unbuilt
+peer is **named, not fetched** — with the cross-sectional P/E it already has from
+`ticker_cache.json` and a link that builds it if the reader actually wants that.
+`not_built` and `unavailable` stay apart for the reason `pending` and
+`unresolved` do in the look-through: only one of the two is worth clicking.
+
+The panel's whole risk is that a column of V scores reads as a ranking, which it
+is not — each is a company against its *own* history. Two things push back: the
+note says so, and a peer scored on a **different template** is marked (`✻`),
+because two V scores built from different five-factor templates are less
+comparable than two built from the same one. `same_model` is `None`, not `false`,
+when nothing on disk can answer it — flagging every peer as a mismatch on no
+evidence is worse than saying nothing.
+
+Its CSS is hand-written rather than Tailwind utilities, and that is not taste:
+`css/tailwind.css` is **compiled**, so a class that only ever appears inside a JS
+template literal can be missing from the bundle. Measured — `mr-3`,
+`hover:underline` and `max-w-[11rem]` are all absent from the shipped file, which
+ran every ticker in the unscored list together into one unreadable string.
+
 **`/assets` carries a Dollar-Cost Averaging tab** (`/api/dca/portfolio`), and
 its unit of analysis is the **company after full 穿透**, not the held line. A
 reader holding VOO does not own "a fund" — they own Apple and Microsoft and 498
@@ -906,8 +941,11 @@ a WACC that could never score, bands refused rather than clamped),
 `tests/test_dca_history.py` (74, the look-ahead guards, the TTM sum, the
 year-ago growth window, the build budget, the capex sign trap and the
 annual-only DCF series), `tests/test_dca_universe.py` (24, the cap and what it
-evicts), and `tests/check_dca_endpoints.py` (68 end-to-end, `check_` so
-`unittest discover` skips it — it needs an app and stubs matplotlib).
+evicts), `tests/check_dca_endpoints.py` (94 end-to-end, `check_` so
+`unittest discover` skips it — it needs an app and stubs matplotlib), and
+`node tests/check_dca_peers_panel.mjs` (15, no browser — it extracts
+`renderPeers` from the template rather than copying it, since a copy agrees on
+the day it is written and drifts after).
 
 Two of those are worth knowing about before changing the engine. The endpoint
 check `test_the_equation_evaluates_to_its_own_answer` no longer asserts

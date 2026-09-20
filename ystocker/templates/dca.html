@@ -84,11 +84,24 @@
   .peer-row td { padding: 9px 10px; border-top: 1px solid var(--t-line); font-size: 13px; }
   .peer-row:hover td { background: var(--t-row-alt); }
   .peer-row a { color: inherit; }
+  .peer-row a:hover { text-decoration: underline; }
   /* The row for the ticker whose page this is. Marked with a rail rather than a
      background, so it stays legible in both themes and does not compete with
      the V colour the row is actually carrying. */
   .peer-row.peer-self td { background: var(--t-row-alt); font-weight: 600; }
   .peer-row.peer-self td:first-child { box-shadow: inset 3px 0 0 var(--t-accent); }
+  /* Hand-written rather than Tailwind utilities, and not a style preference:
+     `css/tailwind.css` is **compiled**, so a class that only ever appears
+     inside a JS template literal can be absent from the bundle. Measured here —
+     `mr-3`, `hover:underline` and `max-w-[11rem]` are all missing from the
+     shipped file, which ran every ticker in the unscored list together into one
+     unreadable string. */
+  .peer-name {
+    font-size: 10px; color: var(--t-ink-dim); max-width: 11rem;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .peer-unscored a { display: inline-block; margin: 0 14px 4px 0; }
+  .peer-unscored .pe { color: var(--t-ink-dim); opacity: .8; }
 </style>
 
 <!-- ── Header ──────────────────────────────────────────────────────────── -->
@@ -395,6 +408,48 @@
         </table>
       </div>
     </details>
+  </div>
+
+  <!-- ── Peer comparison ────────────────────────────────────────────────── -->
+  <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 mb-6 fade-up">
+    <div class="flex items-center justify-between gap-2 flex-wrap mb-1">
+      <h2 class="text-sm font-semibold" data-i18n="dca.peers_title">Peers, scored the same way</h2>
+      <span id="peersGroup" class="chip hidden"></span>
+    </div>
+    <p class="text-xs text-slate-500 mb-3" data-i18n="dca.peers_note">
+      Every V here is a company against its own history, so a higher number means "cheaper than this company usually is", not "cheaper than the row above". A ✻ marks a peer scored on a different template, whose V is therefore built from a different set of multiples. The P/E column is the one figure that does compare across the group — it is the same multiple the peer factor is ranked on.
+    </p>
+    <div id="peersLoading" class="text-xs text-slate-500 py-6 text-center" data-i18n="dca.peers_loading">Scoring peers…</div>
+    <div id="peersEmpty" class="hidden text-xs text-slate-500 py-6 text-center"></div>
+    <div id="peersWrap" class="hidden overflow-x-auto">
+      <table class="w-full text-left">
+        <thead>
+          <tr class="text-[10px] uppercase tracking-widest text-slate-500 dark:text-slate-600">
+            <th class="pb-2 px-2.5" data-i18n="dca.peers_col_name">Company</th>
+            <th class="pb-2 px-2.5" data-i18n="dca.peers_col_model">Model</th>
+            <th class="pb-2 px-2.5 text-right" data-i18n="dca.peers_col_v">V</th>
+            <th class="pb-2 px-2.5" data-i18n="dca.peers_col_band">Band</th>
+            <th class="pb-2 px-2.5 text-right" id="peersColPe">P/E</th>
+            <th class="pb-2 px-2.5 text-right" data-i18n="dca.peers_col_mult">Multiplier</th>
+            <th class="pb-2 px-2.5 text-right" data-i18n="dca.peers_col_amount">Contribution</th>
+          </tr>
+        </thead>
+        <tbody id="peersBody"></tbody>
+      </table>
+    </div>
+    <p id="peersTrunc" class="hidden mt-2 text-xs text-slate-500"></p>
+    <!-- Group members with no reconstruction. Listed rather than dropped: a
+         comparison table quietly missing half its group is a different claim
+         from one that says which half it is missing and why. -->
+    <div id="peersUnscoredRow" class="hidden mt-3 pt-3 border-t border-slate-200 dark:border-slate-800">
+      <div class="text-[10px] uppercase tracking-widest text-slate-500 dark:text-slate-600 mb-1">
+        <span data-i18n="dca.peers_unscored_title">Not scored yet</span><span id="peersUnscoredBasis"></span>
+      </div>
+      <div id="peersUnscored" class="peer-unscored text-xs text-slate-500 leading-relaxed"></div>
+      <p class="text-[11px] text-slate-500 mt-2" data-i18n="dca.peers_unscored_note">
+        Nothing is built here on your behalf — each name is six filings reads, and building them off a side panel would push them into the tracked universe and evict something else. Open one to score it.
+      </p>
+    </div>
   </div>
 
   <!-- ── Charts ─────────────────────────────────────────────────────────── -->
@@ -1393,6 +1448,142 @@ function renderAll(d) {
   document.getElementById('dcaWarming').classList.add('hidden');
   document.getElementById('dcaBody').classList.remove('hidden');
   I18n.apply(document.getElementById('dcaBody'));
+  // Re-rendered here too, because renderAll is what a language change calls and
+  // every label in the peer table is composed in JS where I18n.apply() cannot
+  // reach it. The fetch itself is kicked once, below.
+  if (_peersData) renderPeers(_peersData);
+  if (!_peersKicked) { _peersKicked = true; loadPeers(); }
+}
+
+/* ── Peers ────────────────────────────────────────────────────────────────
+   The same V, for the group the `peer` factor above is already ranked against.
+   A separate request rather than a field on the main payload: that one is
+   polled up to forty times while a cold reconstruction builds, and scoring
+   eleven other companies on every poll would be forty times the work for one
+   answer. It is kicked from renderAll instead, which runs once the body is
+   actually on screen. */
+let _peersData = null, _peersKicked = false;
+
+async function loadPeers() {
+  const base = readBase();
+  try {
+    const r = await fetch(`/api/dca/${encodeURIComponent(TICKER)}/peers?base=${encodeURIComponent(base)}`);
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    _peersData = await r.json();
+  } catch (e) {
+    // A failed side panel must not read as an empty peer group. "Could not
+    // load" and "nothing to show" are different statements and only one of
+    // them is worth reloading for.
+    _peersData = { error: String(e) };
+  }
+  renderPeers(_peersData);
+}
+
+function peersEmpty(msg) {
+  document.getElementById('peersWrap').classList.add('hidden');
+  const el = document.getElementById('peersEmpty');
+  el.textContent = msg;
+  el.classList.remove('hidden');
+}
+
+function renderPeers(d) {
+  document.getElementById('peersLoading').classList.add('hidden');
+  const wrap = document.getElementById('peersWrap');
+  const empty = document.getElementById('peersEmpty');
+  const chip = document.getElementById('peersGroup');
+  empty.classList.add('hidden');
+
+  if (d.error) {
+    peersEmpty(I18n.t('dca.peers_failed') || 'Could not load peers.');
+    return;
+  }
+
+  chip.textContent = d.group || '';
+  chip.classList.toggle('hidden', !d.group);
+
+  if (!d.group) {
+    peersEmpty(I18n.t('dca.peers_no_group') ||
+      'This ticker is in no peer group, so there is nothing to compare it against.');
+    return;
+  }
+
+  // The column heading has to say which multiple it holds. A forward P/E and a
+  // trailing one are different numbers about the same company, and an unlabelled
+  // column invites reading one as the other — the same mistake the whole
+  // reconstruction is built to avoid, committed in a table cell.
+  const peLabel =
+    d.basis === 'forward' ? (I18n.t('dca.peers_col_fwd_pe') || 'Fwd P/E')
+    : d.basis === 'trailing' ? (I18n.t('dca.peers_col_ttm_pe') || 'P/E (TTM)')
+    : (I18n.t('dca.peers_col_pe') || 'P/E');
+  document.getElementById('peersColPe').textContent = peLabel;
+
+  const rows = d.rows || [];
+  if (!rows.length) {
+    peersEmpty((I18n.t('dca.peers_none') ||
+      'No peer in {g} has been scored yet.').replace('{g}', d.group));
+  } else {
+    wrap.classList.remove('hidden');
+    document.getElementById('peersBody').innerHTML = rows.map(r => {
+      const v = r.V;
+      const colour = pctColor(v == null ? null : 100 - v);
+      const cell = r.self
+        ? `<span class="font-mono font-semibold">${esc(r.ticker)}</span>`
+        : `<a href="/dca/${encodeURIComponent(r.ticker)}" class="font-mono font-semibold hover:underline">${esc(r.ticker)}</a>`;
+      // A template mismatch is stated, never inferred from the chip text. Two V
+      // scores off different five-factor templates are less comparable than two
+      // off the same one, and that is precisely what the reader is doing here.
+      const model = `<span class="chip"${r.same_model === false
+        ? ` title="${esc(I18n.t('dca.peers_other_model') || 'Scored on a different template')}"` : ''
+        }>${esc(I18n.t('dca.model_' + r.model) || r.model)}${r.same_model === false ? ' ✻' : ''}</span>`;
+      return `
+    <tr class="peer-row${r.self ? ' peer-self' : ''}">
+      <td>
+        ${cell}
+        <div class="peer-name">${esc(r.name || '')}</div>
+      </td>
+      <td>${model}</td>
+      <td class="text-right">
+        <div class="flex items-center gap-2 justify-end">
+          <span class="pct-track w-14"><span class="pct-fill" style="width:${v == null ? 0 : v}%;background:${colour}"></span></span>
+          <span class="font-mono w-8 text-right" style="color:${colour}">${v == null ? '—' : v.toFixed(0)}</span>
+        </div>
+      </td>
+      <td class="text-xs" style="color:${colour}">${
+        v == null ? esc(I18n.t('dcx.why_' + (r.no_score_reason || 'factors')) || '—')
+                  : esc(I18n.t('dca.band_' + r.band) || r.band)}</td>
+      <td class="text-right font-mono">${r.value == null ? '—' : r.value.toFixed(1)}</td>
+      <td class="text-right font-mono">${r.multiplier == null ? '—' : r.multiplier.toFixed(2) + '×'}${
+        r.capped ? ' <span class="chip">⌃</span>' : ''}</td>
+      <td class="text-right font-mono font-semibold">${fmtMoney(r.amount)}</td>
+    </tr>`;
+    }).join('');
+  }
+
+  const trunc = document.getElementById('peersTrunc');
+  trunc.classList.toggle('hidden', !d.truncated);
+  if (d.truncated) {
+    trunc.textContent = (I18n.t('dca.peers_truncated') ||
+      '{n} further scored peers in this group are not shown — the full ranking is on the overview.')
+      .replace('{n}', d.truncated);
+  }
+
+  const list = d.unscored || [];
+  document.getElementById('peersUnscoredRow').classList.toggle('hidden', !list.length);
+  if (list.length) {
+    // The bare number beside each ticker is a P/E, and on a page whose whole
+    // subject is a 0-100 score it reads as one unless the heading says
+    // otherwise. Cheaper than a column heading per name.
+    document.getElementById('peersUnscoredBasis').textContent =
+      list.some(u => u.value != null)
+        ? (I18n.t('dca.peers_unscored_basis') || ' · {pe} shown').replace('{pe}', peLabel)
+        : '';
+    document.getElementById('peersUnscored').innerHTML = list.map(u => {
+      const why = I18n.t('dca.peers_r_' + u.reason) || u.reason;
+      const pe = u.value == null ? '' : ` <span class="pe">${u.value.toFixed(1)}</span>`;
+      return `<a href="/dca/${encodeURIComponent(u.ticker)}" title="${esc(why)}"
+              ><span class="font-mono">${esc(u.ticker)}</span>${pe}</a>`;
+    }).join('');
+  }
 }
 
 function showError(msg) {
@@ -1451,7 +1642,13 @@ baseInput.addEventListener('input', () => {
   if (!isFinite(v) || v <= 0) return;
   localStorage.setItem(BASE_KEY, String(v));
   clearTimeout(_baseTimer);
-  _baseTimer = setTimeout(() => { _attempt = 0; load(); }, 400);
+  _baseTimer = setTimeout(() => {
+    _attempt = 0;
+    load();
+    // The peer table sizes a contribution off the same base, so leaving it
+    // alone would print two different answers to one question on one screen.
+    if (_peersKicked) loadPeers();
+  }, 400);
 });
 
 // Labels set from JS are invisible to I18n.apply(), so re-render on a language
