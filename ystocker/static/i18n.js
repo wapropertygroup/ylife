@@ -1148,6 +1148,7 @@ const I18n = (() => {
     'dca.basis_fwd':     { en: 'forward', zh: '预测' },
     'dca.basis_ttm_is':  { en: 'TTM',     zh: '滚动' },
     'dca.basis_ttm':     { en: 'ranked on TTM', zh: '按滚动值排名' },
+    'dca.basis_hindsight': { en: '(hindsight)', zh: '（事后口径）' },
     'dca.basis_fwd_tip': { en: 'Ranked against {n} banked forward-basis observations — the same basis as the value itself.',
                            zh: '与 {n} 条已累积的预测口径观测值进行排名——与该数值本身口径一致。' },
     'dca.basis_ttm_tip': { en: 'The forward multiple is known but not ranked: a forward value ranked against trailing history reads cheap for any growing company. It is scored on the trailing reconstruction until enough forward observations have accumulated to rank it on its own basis.',
@@ -1159,6 +1160,12 @@ const I18n = (() => {
     'dca.sb_mixed':      { en: '{f}% forward, {t}% TTM', zh: '{f}% 预测口径，{t}% 滚动口径' },
     'dca.sb_tip':        { en: 'By weight of the factors that survived, not by how many there are — a P/E carrying 35% and one carrying 5% are not the same share of the score.',
                            zh: '按参与打分的因子权重计算，而非按因子个数——权重 35% 的市盈率和权重 5% 的因子对分数的影响并不相同。' },
+    // Which forward history a rank came from. Both are forward; only the banked
+    // one is point-in-time.
+    'dca.sb_src_banked': { en: 'from banked forward history',
+                           zh: '基于已累积的预测口径历史' },
+    'dca.sb_src_reconstructed_forward': { en: 'from reconstructed forward history (hindsight denominator)',
+                                          zh: '基于重建的预测口径历史（分母用事后实际值）' },
     // Keeping a name in the shared ranked universe.
     'dca.pin_on':        { en: 'Kept',  zh: '已保留' },
     'dca.pin_off':       { en: 'Keep',  zh: '保留' },

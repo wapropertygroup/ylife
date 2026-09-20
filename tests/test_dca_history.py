@@ -662,6 +662,120 @@ class ForwardBasis(unittest.TestCase):
         self.assertAlmostEqual(ctx["pe"]["trailing"], 14.24)
 
 
+class ForwardReconstruction(unittest.TestCase):
+    """Price over the earnings of the year *ahead*, for the historical half.
+
+    The look-ahead is deliberate and is the only way to rank a forward multiple
+    against forward history before the banked series matures. It is kept out of
+    `reconstruct()` precisely so nobody inherits it by accident.
+    """
+
+    def _vintages(self):
+        V = dh.Vintage
+        return [
+            # period_end / effective are ~90 days apart, as ANNUAL_LAG_DAYS.
+            V(period_end="2022-12-31", effective="2023-03-31", kind="annual",
+              eps=10.0, fcf=1000.0, shares=100.0),
+            V(period_end="2023-12-31", effective="2024-03-31", kind="annual",
+              eps=12.0, fcf=1200.0, shares=100.0),
+            V(period_end="2024-12-31", effective="2025-03-31", kind="annual",
+              eps=15.0, fcf=1500.0, shares=100.0),
+        ]
+
+    def test_it_divides_by_the_year_ahead_not_the_year_reported(self):
+        out = dh.reconstruct_forward([("2023-06-30", 120.0)], self._vintages())
+        # At 2023-06-30 the 2022 book is public and the market is estimating
+        # FY2023, whose EPS turned out to be 12.0 → 120/12 = 10.0, not 120/10.
+        self.assertAlmostEqual(out["pe"][0][1], 10.0)
+
+    def test_it_keys_on_publication_not_period_end(self):
+        """Between a year closing and its 10-K landing, the forward figure still
+        refers to the next year — `effective` is what captures that."""
+        # 2024-01-15: FY2023 has *ended* but not been filed, so the year under
+        # estimate is still FY2023 (eps 12.0), not FY2024.
+        out = dh.reconstruct_forward([("2024-01-15", 120.0)], self._vintages())
+        self.assertAlmostEqual(out["pe"][0][1], 10.0)
+
+    def test_weeks_with_no_reported_year_ahead_drop_out(self):
+        """The last ~1y of history has no outturn yet. Dropping those points is
+        right; inventing a denominator for them is not."""
+        out = dh.reconstruct_forward([("2026-06-30", 120.0)], self._vintages())
+        self.assertEqual(out, {})
+
+    def test_the_forward_series_is_cheaper_than_the_trailing_one(self):
+        """The whole reason the bases cannot be mixed: for anything growing, the
+        forward multiple is lower, every week."""
+        prices = [("2023-06-30", 120.0), ("2024-06-30", 150.0)]
+        vintages = self._vintages()
+        fwd = dict(dh.reconstruct_forward(prices, vintages))
+        ttm = dict(dh.reconstruct(prices, vintages))
+        for (stamp, f), (_s, t) in zip(fwd["pe"], ttm["pe"]):
+            self.assertLess(f, t, f"forward should be cheaper at {stamp}")
+
+    def test_pfcf_uses_the_share_count_of_the_day(self):
+        """A forward multiple has a forward *denominator*, not a forward share
+        count — using the future count folds in a buyback nobody had seen."""
+        out = dh.reconstruct_forward([("2023-06-30", 120.0)], self._vintages())
+        # cap = 120 * 100 shares = 12000; FY2023 FCF = 1200 → 10.0x
+        self.assertAlmostEqual(out["pfcf"][0][1], 10.0)
+
+    def test_quarterly_vintages_are_ignored(self):
+        """`build()` copies the annual FCF onto every quarterly TTM vintage, so
+        admitting them would repeat one year's figures as if they were new."""
+        V = dh.Vintage
+        noisy = [*self._vintages(),
+                 V(period_end="2023-06-30", effective="2023-08-14",
+                   kind="quarterly", eps=99.0, fcf=9900.0, shares=100.0)]
+        clean = dh.reconstruct_forward([("2023-06-30", 120.0)], self._vintages())
+        self.assertEqual(dh.reconstruct_forward([("2023-06-30", 120.0)], noisy),
+                         clean)
+
+    def test_forward_basis_prefers_banked_over_reconstructed(self):
+        """Banked is what the market actually thought on the day; reconstructed
+        divides by an outturn nobody had. When both can rank, banked wins."""
+        payload = {
+            "forward_context": {"forwardPE": 9.0, "trailingPE": 14.0},
+            "vintages": [], "series": {}, "percentiles": {},
+            "forward_series": {"pe": [(f"2024-01-{i:02d}", 50.0)
+                                      for i in range(1, 29)] * 3},
+        }
+        banked = {"pe": [float(v) for v in range(5, 65)]}
+        out = dh.forward_basis(payload, banked, minimum=60)
+        self.assertEqual(out["pe"]["source"], "banked")
+
+    def test_it_falls_back_to_the_reconstruction_when_nothing_is_banked(self):
+        payload = {
+            "forward_context": {"forwardPE": 9.0},
+            "vintages": [], "series": {}, "percentiles": {"pe": 2.1},
+            "forward_series": {"pe": [("2024-01-01", float(v))
+                                      for v in range(5, 70)]},
+        }
+        out = dh.forward_basis(payload, {}, minimum=60)
+        self.assertEqual(out["pe"]["source"], "reconstructed_forward")
+        self.assertEqual(out["pe"]["observations"], 65)
+        self.assertEqual(out["pe"]["trailing_percentile"], 2.1)
+
+    def test_the_kill_switch_drops_only_the_look_ahead_tier(self):
+        import os
+
+        payload = {
+            "forward_context": {"forwardPE": 9.0},
+            "vintages": [], "series": {}, "percentiles": {},
+            "forward_series": {"pe": [("2024-01-01", float(v))
+                                      for v in range(5, 70)]},
+        }
+        os.environ["DCA_FORWARD_RECONSTRUCTED"] = "0"
+        try:
+            self.assertEqual(dh.forward_basis(payload, {}, minimum=60), {})
+            # Banked still ranks — only the reconstructed tier is off.
+            banked = {"pe": [float(v) for v in range(5, 65)]}
+            self.assertEqual(
+                dh.forward_basis(payload, banked, minimum=60)["pe"]["source"],
+                "banked")
+        finally:
+            os.environ.pop("DCA_FORWARD_RECONSTRUCTED", None)
+
+
 class DcfInputs(unittest.TestCase):
     """Assembling the absolute branch's inputs from a built payload.
 

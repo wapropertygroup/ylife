@@ -1368,11 +1368,17 @@ def _dca_score(symbol: str, payload: dict, base: float, *,
             forward basis above, a value the reader types is a *forward*
             multiple — they are reading one off the page — and ranking it
             against the trailing history would reintroduce, by hand, exactly
-            the bias the switch just removed.
+            the bias the switch just removed. Which forward distribution
+            depends on which tier won, so it is read back off the entry rather
+            than guessed.
             """
-            if factor in forward:
+            entry = forward.get(factor)
+            if entry is None:
+                return [v for _stamp, v in (series.get(factor) or [])]
+            if entry.get("source") == "banked":
                 return [float(v) for v in (banked.get(factor) or [])]
-            return [v for _stamp, v in (series.get(factor) or [])]
+            fwd_series = payload.get("forward_series") or {}
+            return [v for _stamp, v in (fwd_series.get(factor) or [])]
 
         # Value overrides first, and they are the preferred kind. Replacing the
         # *multiple* and re-ranking it against that factor's own reconstructed
@@ -1534,6 +1540,7 @@ def _dca_score(symbol: str, payload: dict, base: float, *,
         entry = forward.get(factor)
         if entry is not None:
             row["basis"] = "forward"
+            row["basis_source"] = entry.get("source")
             row["basis_observations"] = entry["observations"]
             row["trailing_percentile"] = entry["trailing_percentile"]
         elif factor in context:
@@ -1714,6 +1721,8 @@ def _dca_score_basis(result: dict) -> dict:
         return {"basis": "unknown", "forward_weight": 0.0, "trailing_weight": 0.0}
     forward = sum(f["weight"] for f in factors if f.get("basis") == "forward")
     share = forward / total
+    sources = sorted({f.get("basis_source") for f in factors
+                      if f.get("basis") == "forward" and f.get("basis_source")})
     return {
         "basis": "forward" if share >= 0.999 else
                  "trailing" if share <= 0.001 else "mixed",
@@ -1721,6 +1730,11 @@ def _dca_score_basis(result: dict) -> dict:
         "trailing_weight": round(1.0 - share, 4),
         "forward_factors": [f["factor"] for f in factors
                             if f.get("basis") == "forward"],
+        # Which forward history the ranks came from. A banked distribution is
+        # what the market actually thought on the day; a reconstructed one
+        # divides by earnings nobody had yet. Both are forward, and the reader
+        # is entitled to know which, because only one of them is point-in-time.
+        "sources": sources,
     }
 
 
@@ -1836,6 +1850,157 @@ def api_dca_list():
         "registry": dca_universe.stats(),
         "max_multiplier": dca_max_multiplier(),
         "dcf_enabled": dca_dcf_enabled(),
+        "generated_at": time.time(),
+    })
+
+
+#: How many peer rows ``/api/dca/<t>/peers`` renders, self excluded.
+#:
+#: The candidate pool is already bounded twice over -- a peer group is at most
+#: forty names and only a name in the capped registry can have a reconstruction
+#: on disk -- so this is a *reading* limit, not a cost one. Eight comparables
+#: beside the company you opened is a table; thirty is the overview, which
+#: already exists one click away.
+DCA_PEERS_MAX = 8
+
+
+@bp.route("/api/dca/<ticker>/peers")
+def api_dca_peers(ticker: str):
+    """The same V score for this ticker's peer group. Never fetches, never builds.
+
+    "Built only from reconstructions already on disk" is the same rule
+    :func:`api_dca_list` follows, and here it is load-bearing twice. A fan-out of
+    six Yahoo reads per peer on a page load is the sweep ``valuation.py`` records
+    having got this box hard-blocked -- but the second reason is the one that is
+    easy to miss: :func:`ystocker.dca_history.get` *registers* whatever it builds,
+    so warming eleven peers because somebody opened one ticker would push eleven
+    names into a registry capped at sixty and silently evict whatever was least
+    recently opened. A side panel must not be able to rewrite what the overview
+    ranks.
+
+    So a peer with no reconstruction is reported, not fetched -- with the
+    cross-sectional P/E it does have, and a link that will build it if the reader
+    actually wants that. ``not_built`` and ``unavailable`` are kept apart for the
+    reason ``pending`` and ``unresolved`` are kept apart in the look-through: the
+    first is "nobody has opened this yet", the second is "this symbol publishes
+    nothing rankable", and only the first is worth clicking.
+
+    The group is :func:`ystocker.dca_history.peer_group`'s, which is also the one
+    the ``peer`` factor ranks against, and the P/E column is pinned to the basis
+    that factor actually used -- so the panel and the score above it cannot name
+    two different peer sets or two different multiples for one company.
+    """
+    from ystocker import dca
+    from ystocker.valuation import _cached_fundamentals
+
+    symbol = ticker.strip().upper()
+    base = _dca_base()
+    group = dca_history.peer_group(symbol)
+
+    # One read of each per-request lookup, not one per row. See _dca_score.
+    recs = _cached_fundamentals()
+    exposure = _dca_exposure()
+    overrides = _dca_overrides()
+
+    def _row(sym: str, payload: dict) -> dict:
+        result, peer, _drift, position = _dca_score(
+            sym, payload, base, recs=recs, exposure=exposure, overrides=overrides)
+        window = payload.get("window") or {}
+        return {
+            "ticker": sym,
+            "name": payload.get("name"),
+            "model": result["model"],
+            "V": result["V"],
+            "band": result["band"],
+            "m_valuation": result["m_valuation"],
+            "m_earnings": result["m_earnings"],
+            "m_portfolio": result["m_portfolio"],
+            "multiplier": result["multiplier"],
+            "amount": result["amount"],
+            "capped": result["capped"],
+            "position_pct": position.get("pct"),
+            "no_score_reason": _dca_no_score_reason(result, peer, window),
+            "stale": (time.time() - (payload.get("_ts") or 0)) > dca_history.TTL_SECONDS,
+        }
+
+    # This ticker's own row, scored on the identical path so the panel cannot
+    # disagree with the headline a few hundred pixels above it. Absent while the
+    # reconstruction is still warming, which is fine: the peers are independent
+    # of it and are worth showing on their own.
+    #
+    # The basis is read from the peer factor whether or not that row exists, so a
+    # warming ticker still gets a column of like-for-like multiples.
+    own = dca_history.peek(symbol)
+    basis = dca_history.peer_percentiles(symbol, recs).get("basis")
+    self_row = None
+    if own is not None and not own.get("unavailable"):
+        self_row = _row(symbol, own)
+        self_row["self"] = True
+
+    # The template this ticker scores on, so a peer scored on a *different* one
+    # can be marked. Two V scores built from different five-factor templates are
+    # less comparable than two built from the same one, and the page has no way
+    # to say so unless the server says which is which. ``None`` when nothing on
+    # disk can answer it -- flagging every peer as a mismatch on no evidence
+    # would be worse than saying nothing.
+    model = (self_row or {}).get("model")
+    if model is None and own is not None:
+        model = dca.pick_model(symbol, own.get("sector"), own.get("industry"))[0]
+    if model is None:
+        model = dca.TICKER_MODELS.get(symbol)
+
+    table = dca_history.peer_multiples(group, recs, basis=basis)
+    values = table["values"]
+    cached = set(dca_history.cached_tickers())
+
+    rows, unscored = [], []
+    for member in table["members"]:
+        if member == symbol:
+            continue
+        payload = dca_history.peek(member) if member in cached else None
+        if payload is None:
+            unscored.append({"ticker": member, "value": values.get(member),
+                             "reason": "not_built"})
+            continue
+        if payload.get("unavailable"):
+            unscored.append({"ticker": member, "name": payload.get("name"),
+                             "value": values.get(member),
+                             "reason": "unavailable",
+                             "detail": payload.get("unavailable")})
+            continue
+        rows.append(_row(member, payload))
+
+    for row in rows + ([self_row] if self_row else []):
+        row["value"] = values.get(row["ticker"])
+        row["same_model"] = None if model is None else (row["model"] == model)
+
+    # Cheapest first, unscorable last -- the overview's rule, and for its reason:
+    # "could not be measured" is not "at its most expensive ever".
+    rows.sort(key=lambda r: (r["V"] is None, -(r["V"] or 0)))
+    truncated = max(0, len(rows) - DCA_PEERS_MAX)
+    rows = rows[:DCA_PEERS_MAX]
+
+    # Self is inserted after the cap rather than before it, so opening a ticker
+    # that ranks eleventh in its own group still shows its own row -- and it
+    # sorts into its rank rather than sitting on top, because where it sits is
+    # the comparison the panel exists to make.
+    if self_row is not None:
+        rows.append(self_row)
+        rows.sort(key=lambda r: (r["V"] is None, -(r["V"] or 0)))
+
+    return jsonify({
+        "ticker": symbol,
+        "group": group,
+        "model": model,
+        # Which P/E the value column holds, for the whole group or for nobody.
+        "basis": table["basis"],
+        "rows": rows,
+        "unscored": unscored,
+        "scored": len(rows) - (1 if self_row else 0),
+        "members": max(0, len(table["members"]) - 1),
+        "truncated": truncated,
+        "base_dca": base,
+        "max_multiplier": dca_max_multiplier(),
         "generated_at": time.time(),
     })
 
