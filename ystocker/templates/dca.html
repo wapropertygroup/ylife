@@ -1563,7 +1563,7 @@ function renderPeers(d) {
   trunc.classList.toggle('hidden', !d.truncated);
   if (d.truncated) {
     trunc.textContent = (I18n.t('dca.peers_truncated') ||
-      '{n} further scored peers in this group are not shown — the full ranking is on the overview.')
+      '{n} further scored peers in this group are not shown — they are the dearest against their own history, since this table is sorted cheapest first.')
       .replace('{n}', d.truncated);
   }
 
