@@ -72,7 +72,12 @@ Parameters:
 
   GitRepo:
     Type: String
-    Default: "https://github.com/15th-Ave-NE/ylife.git"
+    # Canonical URL. The repo has been renamed twice — 15th-Ave-NE/ystocker ->
+    # 15th-Ave-NE/ylife -> wapropertygroup/ylife — and GitHub redirects all
+    # three, so an old name here still clones. It is written out in full anyway:
+    # a redirect only survives while nobody creates a new repo at the old path,
+    # and this parameter is what a brand-new box clones from on first boot.
+    Default: "https://github.com/wapropertygroup/ylife.git"
     Description: HTTPS URL of the git repo to clone on first boot
 
   LatestAL2023Ami:

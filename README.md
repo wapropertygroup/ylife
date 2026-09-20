@@ -76,8 +76,10 @@ which is why the two open items below are also manual:
 ## Project structure
 
 ```
-ystocker/                       <- git repo root (remote is 15th-Ave-NE/ylife —
-|                                   a name from before the monorepo grew to 8 apps)
+ystocker/                       <- git repo root (remote is wapropertygroup/ylife;
+|                                   "ylife" is a name from before the monorepo grew
+|                                   to 8 apps, and GitHub still redirects the two
+|                                   older names, 15th-Ave-NE/ystocker and .../ylife)
 +-- run/                        <- one dev entry point per app
 |   +-- run_stocker.py   run_home.py     run_planner.py  run_planter.py
 |   +-- run_tracker.py   run_pay.py      run_image.py    run_bg.py
