@@ -1601,6 +1601,29 @@ Started in `create_app()`, all daemon threads:
 
 ## Known Pitfalls
 
+- **Several agent sessions share this one checkout, so `git commit -a` commits
+  other people's work.** There is no auto-committer and no hook — it is simply
+  four Claude sessions in `/Users/yuanxili/workspace/ystocker` at once, each
+  with files mid-edit in the same working tree. `625d2ef` ("history: give
+  indicators a warm-up…") therefore also contains an unrelated `/evaluation`
+  P/FCF sort fix and its test, pushed under a message that does not mention
+  them: nothing was lost, but the attribution is wrong and reverting that commit
+  would now undo a second change. It is not one-directional and not confined to
+  this repo — the same sweep put four of another session's in-flight test files
+  into `d7a4860` ("add more features") over in `/Users/yuanxili/workspace/
+  TradingAgents`, a commit that contains no features.
+
+  So: `git add <the files you actually touched>` for an ordinary commit, and
+  read `git status` first — a modified file you do not recognise is somebody
+  else's, still being verified. `git commit -a` is the one to never reach for,
+  because it stages and commits in a single step with nothing in between to
+  look at. `git add -A` is *not* in the same category: resolving a merge
+  requires every conflicted path to be staged before `git merge --continue`
+  will run, and naming eighteen of them by hand invites missing one. The same
+  goes for editing rather than committing — check `git log --oneline -5` before
+  starting on a module, because a commit from ten minutes ago means another
+  session is probably still in it.
+
 - **A Tailwind class pair is not a DOM token.** Light mode turned every hardcoded
   colour utility into a pair (`bg-slate-100 dark:bg-slate-800`), which is fine in
   a `class=` attribute and broken everywhere a template passed the same string to
