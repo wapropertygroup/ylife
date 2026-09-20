@@ -540,6 +540,71 @@ def reconstruct(prices: Sequence[tuple[str, float]],
     return {key: rows for key, rows in out.items() if rows}
 
 
+def reconstruct_forward(prices: Sequence[tuple[str, float]],
+                        vintages: Sequence[Vintage]) -> dict[str, list[tuple[str, float]]]:
+    """A *forward*-basis history: price over the earnings of the year ahead.
+
+    Separate from :func:`reconstruct` rather than a branch inside it, because it
+    breaks that function's central rule on purpose. ``reconstruct`` divides by
+    what was **public** at each week; this divides by what the year ahead
+    **turned out to be**, which is knowledge nobody had at the time. Putting
+    both in one function would make the look-ahead an easy thing to inherit by
+    accident, and the no-look-ahead guarantee is the reason the trailing series
+    can be trusted at all.
+
+    The look-ahead is the point, and it is not a backtest. The question a
+    forward multiple asks is "is 9x next year's earnings cheap *for this
+    company*", and the only honest denominator for the historical half of that
+    comparison is what next year's earnings actually were. Ranking today's
+    consensus-based forward multiple against a distribution of *trailing* ones
+    instead is what biases the answer cheap for everything that grows —
+    measured at a median of 14.6 percentile points across this universe, which
+    is what this function exists to avoid.
+
+    What it does not remove: consensus is systematically more optimistic than
+    outturn, so today's point has a slightly larger denominator than the
+    historical ones and still reads a little cheap. That residual is the gap
+    between estimate and result, not the gap between two different measures of
+    earnings, and it is perhaps a tenth the size. It is named in the payload
+    (``basis: reconstructed_forward``) rather than hidden.
+
+    The last ~1 year of weeks drop out, because no fiscal year after them has
+    reported yet. A distribution does not need to be contiguous, but it does
+    mean the most recent regime is absent from it.
+    """
+    annual = sorted([v for v in vintages if v.kind == "annual"
+                     and v.period_end and v.effective],
+                    key=lambda v: v.period_end)
+    if not annual:
+        return {}
+
+    out: dict[str, list[tuple[str, float]]] = {"pe": [], "pfcf": []}
+    for stamp, close in prices:
+        if not _pos(close):
+            continue
+        # The fiscal year the market was estimating at `stamp`: the earliest one
+        # that had not yet been reported. Keying on `effective` (when the filing
+        # landed) rather than `period_end` is what makes this the year under
+        # estimate rather than the year already in the bag -- in the months
+        # between a period closing and its 10-K, the forward figure still refers
+        # to the *next* year, which is exactly what `effective` captures.
+        ahead = next((v for v in annual if v.effective > stamp), None)
+        if ahead is None:
+            continue
+        if _pos(ahead.eps):
+            out["pe"].append((stamp, round(close / float(ahead.eps), 4)))
+        # Shares from the vintage in force at the time: a forward multiple is a
+        # forward *denominator*, not a forward share count, and using the future
+        # count would fold a buyback nobody had seen into the price side.
+        current = vintage_at(annual, stamp)
+        shares = current.shares if current is not None else None
+        if _pos(shares) and _pos(ahead.fcf):
+            out["pfcf"].append((stamp, round(close * float(shares)
+                                             / float(ahead.fcf), 4)))
+
+    return {key: rows for key, rows in out.items() if rows}
+
+
 # ---------------------------------------------------------------------------
 # Percentiles over a reconstructed series
 # ---------------------------------------------------------------------------
@@ -1126,36 +1191,67 @@ def forward_basis(payload: Mapping[str, Any],
                   *, minimum: int) -> dict[str, dict[str, Any]]:
     """Which factors can be scored forward-against-forward today.
 
-    Returns one entry per factor that has *both* a forward value now and a
-    banked forward distribution long enough to rank it in, carrying the rank and
-    what it replaced. A factor missing from the result is not an error and not a
-    refusal — it simply stays on the reconstruction, which is the fallback the
-    whole design rests on and the reason this can ship years before the banked
-    series is useful.
+    Two sources of forward history, tried in that order, and a factor takes the
+    first that can rank it:
 
-    The ``minimum`` is :data:`ystocker.dca.MIN_OBSERVATIONS`, and it is the same
-    floor the reconstruction answers to: a rank over eleven points can only
-    return eleven answers and will happily say 100.0.
+    ``banked``
+        :data:`TABLE_NAME`, one genuinely point-in-time row per day. What the
+        market actually thought, on the day. Worth the wait and starts empty.
+    ``reconstructed_forward``
+        :func:`reconstruct_forward` -- price over the earnings the year ahead
+        turned out to deliver. Available on first page load, at the cost of a
+        denominator nobody could have known at the time.
+
+    A factor with neither stays on the trailing reconstruction and is simply
+    absent from the result. That is the fallback the whole design rests on.
+
+    ``DCA_FORWARD_RECONSTRUCTED=0`` drops the second tier, leaving the
+    conservative behaviour: forward multiples shown, never ranked until the
+    banked series matures.
+
+    The ``minimum`` is :data:`ystocker.dca.MIN_OBSERVATIONS`, the same floor the
+    trailing series answers to: a rank over eleven points can only return eleven
+    answers and will happily say 100.0.
     """
     from ystocker.dca import percentile_rank
 
     values = forward_multiples(payload)
     trailing = payload.get("percentiles") or {}
+    reconstructed = ((payload.get("forward_series") or {})
+                     if _forward_reconstruction_enabled() else {})
     out: dict[str, dict[str, Any]] = {}
     for factor, value in values.items():
-        dist = list(distributions.get(factor) or [])
-        pct = percentile_rank(value, dist, minimum=minimum)
-        if pct is None:
-            continue
-        out[factor] = {
-            "percentile": pct,
-            "value": value,
-            "observations": len(dist),
-            # What the trailing reconstruction said, kept so the page can show
-            # the size of the switch rather than only its result.
-            "trailing_percentile": trailing.get(factor),
-        }
+        for source, dist in (
+                ("banked", [float(v) for v in (distributions.get(factor) or [])]),
+                ("reconstructed_forward",
+                 [v for _stamp, v in (reconstructed.get(factor) or [])]),
+        ):
+            pct = percentile_rank(value, dist, minimum=minimum)
+            if pct is None:
+                continue
+            out[factor] = {
+                "percentile": pct,
+                "value": value,
+                "observations": len(dist),
+                "source": source,
+                # What the trailing reconstruction said, kept so the page can
+                # show the size of the switch rather than only its result.
+                "trailing_percentile": trailing.get(factor),
+            }
+            break
     return out
+
+
+def _forward_reconstruction_enabled() -> bool:
+    """Kill switch for the look-ahead tier.
+
+    Off, the engine scores exactly as it did before :func:`reconstruct_forward`
+    existed: forward multiples rendered, ranked only once the banked series is
+    long enough. Separate from any other flag because this is the one tier whose
+    denominator was not knowable at the time, and a reader who does not want
+    that in their score should be able to say so without losing the rest.
+    """
+    return os.environ.get("DCA_FORWARD_RECONSTRUCTED", "1").strip() not in ("0", "false", "False")
 
 
 def forward_context_values(payload: Mapping[str, Any]) -> dict[str, Any]:
@@ -1278,6 +1374,68 @@ def history_coverage(series: Mapping[str, Sequence[tuple[str, float]]],
     }
 
 
+def peer_group(ticker: str) -> Optional[str]:
+    """The ``PEER_GROUPS`` entry *ticker* is scored against, or ``None``.
+
+    First match in insertion order, not the smallest match -- deliberately
+    different from ``relative_strength._peer_candidates``, and extracted here so
+    that :func:`peer_percentiles` and the peer comparison table behind
+    ``/api/dca/<t>/peers`` cannot name two different groups for one company. A
+    page that ranks NVDA against "Semiconductors" in one card and lists the
+    "Tech" members in the next is not showing two views; it is contradicting
+    itself, and neither number tells the reader which group produced it.
+    """
+    from ystocker import PEER_GROUPS
+
+    symbol = (ticker or "").strip().upper()
+    return next((name for name, members in PEER_GROUPS.items()
+                 if symbol in members), None)
+
+
+def peer_multiples(group: Optional[str],
+                   recs: Optional[Mapping[str, Mapping[str, Any]]] = None,
+                   *, basis: Optional[str] = None) -> dict[str, Any]:
+    """Every member of *group* on **one** P/E basis, for a side-by-side table.
+
+    Free, for the reason :func:`peer_percentiles` is free: ``ticker_cache.json``
+    is already maintained by the rolling refresher and no Yahoo call happens
+    here. *recs* is passed in for the same reason too.
+
+    The basis is chosen once for the whole group and never per member. Filling a
+    missing forward P/E with a member's trailing one would put a column of
+    mixed-basis numbers under a single heading -- and since a forward multiple
+    is the lower of the two for anything growing, the members that fell back
+    would read as systematically *dearer* than their peers on nothing but a data
+    gap. That is the cross-sectional form of the basis error this whole module
+    exists to prevent.
+
+    *basis* pins the choice to whatever :func:`peer_percentiles` actually ranked
+    on, so the table and the ``peer`` factor above it describe one measurement.
+    Unpinned, it prefers forward and falls back to trailing for the group.
+    """
+    from ystocker import PEER_GROUPS
+    from ystocker.valuation import _cached_fundamentals
+
+    members = list(PEER_GROUPS.get(group or "", []))
+    if not members:
+        return {"basis": None, "field": None, "values": {}, "members": []}
+
+    if recs is None:
+        recs = _cached_fundamentals()
+
+    choices = [("PE (Forward)", "forward"), ("PE (TTM)", "trailing")]
+    if basis:
+        choices = [c for c in choices if c[1] == basis] or choices
+
+    for field, name in choices:
+        values = {t: round(float((recs.get(t) or {}).get(field)), 2)
+                  for t in members if _pos((recs.get(t) or {}).get(field))}
+        if values:
+            return {"basis": name, "field": field, "values": values,
+                    "members": members}
+    return {"basis": None, "field": None, "values": {}, "members": members}
+
+
 def peer_percentiles(ticker: str,
                      recs: Optional[Mapping[str, Mapping[str, Any]]] = None) -> dict[str, Any]:
     """Where *ticker* sits among its peer group today, on forward P/E.
@@ -1302,7 +1460,7 @@ def peer_percentiles(ticker: str,
     from ystocker.valuation import _cached_fundamentals
 
     symbol = ticker.strip().upper()
-    group = next((name for name, members in PEER_GROUPS.items() if symbol in members), None)
+    group = peer_group(symbol)
     if not group:
         return {"percentile": None, "group": None, "reason": "no_group"}
 
@@ -1602,6 +1760,21 @@ def build(ticker: str) -> dict[str, Any]:
 
     buildable = len(merged) >= MIN_VINTAGES and basis.usable
     series = reconstruct(raw["prices"], merged) if buildable else {}
+    # The forward-basis companion. Costs no extra fetch -- same prices, same
+    # vintages, different denominator -- and is what lets a forward multiple be
+    # ranked against forward history years before the banked series is long
+    # enough to do it properly.
+    #
+    # Added **without** a CACHE_VER bump, matching the `beta` precedent: a bump
+    # invalidates every reconstruction at once, which at the registry cap is
+    # ~360 Yahoo reads in one sweep -- the exact burst this module's budget
+    # exists to prevent. An older payload simply has no `forward_series`, so
+    # `forward_basis` finds nothing to rank against and the factor stays on the
+    # trailing reconstruction, which is a complete answer rather than a broken
+    # one. The daily rebuild fills it in, and `/dca/<ticker>`'s Rebuild button
+    # forces it for one name now.
+    forward_series = (reconstruct_forward(raw["prices"], merged)
+                      if buildable else {})
 
     payload: dict[str, Any] = {
         "_ver": CACHE_VER,
@@ -1612,6 +1785,7 @@ def build(ticker: str) -> dict[str, Any]:
         "industry": info.get("industry"),
         "quote_type": info.get("quoteType"),
         "series": {k: v for k, v in series.items()},
+        "forward_series": {k: v for k, v in forward_series.items()},
         "percentiles": latest_percentiles(series, minimum=MIN_OBSERVATIONS),
         "window": window_meta(series, merged),
         "vintages": [v.as_dict() for v in merged],
