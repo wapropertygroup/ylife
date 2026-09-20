@@ -152,18 +152,28 @@ class DcaEndpoints(unittest.TestCase):
         pe = next(r for r in rows if r["factor"] == "pe")
         self.assertAlmostEqual(pe["forward_value"], 21.78)
         self.assertIsNotNone(pe["trailing_value"])
-        self.assertEqual(pe["basis"], "trailing")
+        # The seeded payload carries prices and vintages, so a forward history
+        # derives from it and the factor ranks forward-against-forward.
+        self.assertEqual(pe["basis"], "forward")
+        self.assertEqual(pe["basis_source"], "reconstructed_forward")
 
-    def test_nothing_switches_basis_without_a_banked_distribution(self):
-        """The fallback, and the reason this could ship years before the banked
-        series is useful. A forward value ranked against the trailing
-        reconstruction is biased cheap — measured at a median of 14.6 percentile
-        points — so an empty or short banked series must change no score."""
-        body = self.client.get("/api/dca/MSFT").get_json()
+    def test_the_fallback_holds_when_no_forward_history_can_be_built(self):
+        """The property the whole design rests on, and the one that must not
+        rot: a factor with no forward distribution of *either* kind stays on the
+        trailing reconstruction rather than borrowing it. A forward value ranked
+        against trailing history is biased cheap — measured at a median of 11.3
+        percentile points, and saturating at exactly 0.0 for half the universe,
+        which is the ranking being thrown away rather than merely shifted."""
+        seeded = _seed("NOFWD")
+        # No prices means nothing to reconstruct a forward series from, and no
+        # banked rows either — the state every ETF and every thin ADR is in.
+        seeded["prices"] = []
+        seeded.pop("forward_series", None)
+        body = self.client.get("/api/dca/NOFWD").get_json()
         self.assertTrue(all(r.get("basis") != "forward" for r in body["factors"]))
-        # And the rank still equals the reconstruction's own latest percentile.
+        self.assertEqual(body["score_basis"]["basis"], "trailing")
         pe = next(r for r in body["factors"] if r["factor"] == "pe")
-        self.assertAlmostEqual(pe["raw_pct"], dh._mem["MSFT"][1]["percentiles"]["pe"],
+        self.assertAlmostEqual(pe["raw_pct"], seeded["percentiles"]["pe"],
                                places=4)
 
     def test_a_long_banked_distribution_switches_that_factor_only(self):
@@ -194,10 +204,19 @@ class DcaEndpoints(unittest.TestCase):
     # had no way to know whether the 90.6 above used it without adding up
     # weights themselves. Reported as exactly that.
     def test_the_score_declares_which_basis_it_used(self):
-        sb = self.client.get("/api/dca/MSFT").get_json()["score_basis"]
-        self.assertEqual(sb["basis"], "trailing")
-        self.assertEqual(sb["forward_weight"], 0.0)
-        self.assertEqual(sb["trailing_weight"], 1.0)
+        body = self.client.get("/api/dca/MSFT").get_json()
+        sb = body["score_basis"]
+        self.assertEqual(sb["basis"], "mixed")
+        self.assertEqual(sb["sources"], ["reconstructed_forward"])
+        # The two shares are the surviving, renormalised weights, so they close.
+        self.assertAlmostEqual(sb["forward_weight"] + sb["trailing_weight"], 1.0,
+                               places=6)
+        # And they are the weights of the factors that actually switched.
+        switched = sum(f["weight"] for f in body["factors"]
+                       if f.get("basis") == "forward")
+        total = sum(f["weight"] for f in body["factors"]
+                    if isinstance(f.get("weight"), (int, float)))
+        self.assertAlmostEqual(sb["forward_weight"], switched / total, places=3)
 
     def test_a_mixed_score_is_reported_by_weight_not_by_count(self):
         """One forward factor out of five is not "20% forward" if it is the

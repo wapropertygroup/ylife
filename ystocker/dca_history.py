@@ -74,7 +74,7 @@ import threading
 import time
 from datetime import date, datetime, timedelta
 from pathlib import Path
-from typing import Any, Iterable, Mapping, Optional, Sequence
+from typing import Any, Iterable, Mapping, MutableMapping, Optional, Sequence
 
 from ystocker import listing
 
@@ -1186,6 +1186,48 @@ def banked_distributions(ticker: str) -> dict[str, list[float]]:
     return dists
 
 
+def forward_series_for(payload: MutableMapping[str, Any]) -> dict[str, list[tuple[str, float]]]:
+    """The forward-basis history for *payload*, deriving it if it is not stored.
+
+    Every payload built before :func:`reconstruct_forward` existed has no
+    ``forward_series``, and without a :data:`CACHE_VER` bump — which would be
+    ~360 Yahoo reads in one sweep — those would sit on the trailing basis until
+    each ticker's 24h TTL happened to expire. That is days of the registry
+    scoring on one basis while whichever names were rebuilt score on another.
+
+    It does not need a rebuild. ``reconstruct_forward`` takes prices and
+    vintages, and **both are already in the payload** — the same reason
+    ``dcf_inputs`` costs no extra call. So derive it here, once, and write it
+    back into the cached dict so the next request reuses it. No network, a few
+    hundred divisions, safe on the request path.
+
+    The payload is mutated rather than copied deliberately: ``get()`` hands back
+    the object held in ``_mem``, so storing the result there is what makes this
+    once-per-process rather than once-per-request.
+    """
+    existing = payload.get("forward_series")
+    if existing is not None:
+        return existing
+
+    prices = payload.get("prices") or []
+    raw_vintages = payload.get("vintages") or []
+    if not prices or not raw_vintages:
+        payload["forward_series"] = {}
+        return {}
+
+    slots = Vintage.__slots__
+    vintages = [Vintage(**{k: v.get(k) for k in slots})
+                for v in raw_vintages
+                if v.get("period_end") and v.get("effective")]
+    derived = reconstruct_forward([(s, c) for s, c in prices], vintages)
+    payload["forward_series"] = derived
+    if derived:
+        log.debug("dca_history: derived forward series for %s (%s)",
+                  payload.get("ticker"),
+                  ", ".join(f"{k}={len(v)}" for k, v in derived.items()))
+    return derived
+
+
 def forward_basis(payload: Mapping[str, Any],
                   distributions: Mapping[str, Sequence[float]],
                   *, minimum: int) -> dict[str, dict[str, Any]]:
@@ -1217,7 +1259,7 @@ def forward_basis(payload: Mapping[str, Any],
 
     values = forward_multiples(payload)
     trailing = payload.get("percentiles") or {}
-    reconstructed = ((payload.get("forward_series") or {})
+    reconstructed = (forward_series_for(payload)   # type: ignore[arg-type]
                      if _forward_reconstruction_enabled() else {})
     out: dict[str, dict[str, Any]] = {}
     for factor, value in values.items():

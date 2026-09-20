@@ -775,6 +775,66 @@ class ForwardReconstruction(unittest.TestCase):
         finally:
             os.environ.pop("DCA_FORWARD_RECONSTRUCTED", None)
 
+    # ── deriving it for payloads built before it existed ──────────────────
+    #
+    # Without this the feature reaches a ticker only when its 24h TTL happens to
+    # expire, so for days half the registry scores on one basis and half on the
+    # other — and a CACHE_VER bump, the obvious alternative, is ~360 Yahoo reads
+    # in one sweep.
+    def _stored_payload(self):
+        V = dh.Vintage
+        vintages = [
+            V(period_end="2022-12-31", effective="2023-03-31", kind="annual",
+              eps=10.0, fcf=1000.0, shares=100.0),
+            V(period_end="2023-12-31", effective="2024-03-31", kind="annual",
+              eps=12.0, fcf=1200.0, shares=100.0),
+        ]
+        return {
+            "ticker": "OLDX",
+            "prices": [("2023-06-30", 120.0), ("2023-09-30", 132.0)],
+            "vintages": [v.as_dict() for v in vintages],
+        }
+
+    def test_a_payload_without_the_series_derives_it_from_what_it_has(self):
+        payload = self._stored_payload()
+        self.assertNotIn("forward_series", payload)
+        out = dh.forward_series_for(payload)
+        self.assertEqual(len(out["pe"]), 2)
+        self.assertAlmostEqual(out["pe"][0][1], 10.0)      # 120 / FY2023 eps 12
+
+    def test_the_derived_series_is_written_back_so_it_is_computed_once(self):
+        payload = self._stored_payload()
+        dh.forward_series_for(payload)
+        self.assertIn("forward_series", payload)
+        # Second call must return the stored object, not recompute it.
+        payload["forward_series"] = {"pe": [("sentinel", 1.0)]}
+        self.assertEqual(dh.forward_series_for(payload),
+                         {"pe": [("sentinel", 1.0)]})
+
+    def test_a_stored_empty_series_is_not_recomputed_every_request(self):
+        """An ETF has no statements, so the honest answer is {} — and `{}` must
+        not read as "not derived yet" or every request pays for the walk."""
+        payload = {"ticker": "GDX", "prices": [], "vintages": []}
+        self.assertEqual(dh.forward_series_for(payload), {})
+        self.assertEqual(payload["forward_series"], {})
+
+    def test_forward_basis_ranks_from_a_derived_series(self):
+        """End to end: an old payload with no forward_series still switches."""
+        payload = {
+            "forward_context": {"forwardPE": 9.0},
+            "percentiles": {"pe": 2.1},
+            "prices": [(f"2023-{m:02d}-01", 100.0 + m) for m in range(1, 13)] * 6,
+            "vintages": [
+                dh.Vintage(period_end="2022-12-31", effective="2023-03-31",
+                           kind="annual", eps=10.0, shares=100.0).as_dict(),
+                dh.Vintage(period_end="2023-12-31", effective="2024-03-31",
+                           kind="annual", eps=12.0, shares=100.0).as_dict(),
+            ],
+        }
+        out = dh.forward_basis(payload, {}, minimum=60)
+        self.assertEqual(out["pe"]["source"], "reconstructed_forward")
+        self.assertEqual(out["pe"]["trailing_percentile"], 2.1)
+
 
 class DcfInputs(unittest.TestCase):
     """Assembling the absolute branch's inputs from a built payload.

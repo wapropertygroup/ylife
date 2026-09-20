@@ -1377,7 +1377,7 @@ def _dca_score(symbol: str, payload: dict, base: float, *,
                 return [v for _stamp, v in (series.get(factor) or [])]
             if entry.get("source") == "banked":
                 return [float(v) for v in (banked.get(factor) or [])]
-            fwd_series = payload.get("forward_series") or {}
+            fwd_series = dca_history.forward_series_for(payload)
             return [v for _stamp, v in (fwd_series.get(factor) or [])]
 
         # Value overrides first, and they are the preferred kind. Replacing the
@@ -3054,6 +3054,26 @@ def api_upcoming_earnings():
         # empty calendar is the correct answer.
         "asof": _dt.datetime.now(_dt.timezone.utc).date().isoformat(),
     })
+
+
+# ---------------------------------------------------------------------------
+# Options walls endpoint  (/api/options/<ticker>)
+# Separated from /api/history so the price/stats page loads instantly.
+# Uses a ThreadPoolExecutor to fetch all expirations in parallel.
+#
+# These four were deleted by fe5ea3b (the earnings calendar) while every use of
+# them stayed, so `/api/options/<ticker>` raised `NameError` on its first line
+# and 500'd for every visitor from that commit onward. Nothing failed at import
+# or at startup — a name only has to exist when the line runs — so the endpoint
+# looked fine until somebody opened a /history page, and the only trace was a
+# traceback in the journal. Restored here, beside the endpoint, in the shape
+# every other cache in this file uses.
+# ---------------------------------------------------------------------------
+
+_OPTIONS_CACHE: Dict[str, dict] = {}
+_OPTIONS_CACHE_LOCK = threading.Lock()
+_OPTIONS_CACHE_TTL = 20 * 60           # 20 minutes
+_OPTIONS_MAX_EXPIRATIONS = 12          # cap: ~3 months of weeklies + monthlies
 
 
 @bp.route("/api/options/<ticker>")
