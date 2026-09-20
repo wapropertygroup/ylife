@@ -3,6 +3,14 @@
 Scratch tool. Builds the same context routes.evaluation() passes, rewrites
 /static/ to absolute file paths, and stubs /api/evaluation-extras so the two
 deferred panels render.
+
+Run from anywhere: ``python tools/render_eval.py [en|zh]``. Both paths below are
+anchored on the repo root rather than on this file's directory, which is what
+broke when the script moved out of the root — `sys.path` picked up ``tools/``
+and the import failed, and `STATIC` resolved to ``tools/ystocker/static`` so
+every asset 404'd and the page died on ``I18n is not defined``. A file:// page
+whose scripts do not load still renders its server-side HTML, so the failure
+looked like a layout bug rather than a missing stylesheet.
 """
 from __future__ import annotations
 
@@ -14,7 +22,8 @@ import sys
 import types
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
 
 
 class _Any:
@@ -40,7 +49,13 @@ os.environ.setdefault("YSTOCKER_SECRET_KEY", "render-eval-secret")
 
 from ystocker import PEER_GROUPS, create_app  # noqa: E402
 
-STATIC = (Path(__file__).resolve().parent / "ystocker" / "static").as_uri()
+_STATIC_DIR = ROOT / "ystocker" / "static"
+if not _STATIC_DIR.is_dir():                       # pragma: no cover - guard
+    raise SystemExit(
+        f"static directory not found at {_STATIC_DIR}. Without it every asset "
+        "404s and the rendered page dies on `I18n is not defined` while still "
+        "looking almost right — so fail loudly here instead.")
+STATIC = _STATIC_DIR.as_uri()
 
 NAMES = {
     "NVDA": "NVIDIA Corporation", "AAPL": "Apple Inc.", "MSFT": "Microsoft Corporation",
