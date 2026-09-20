@@ -768,6 +768,40 @@ class Translations(unittest.TestCase):
         for reason in ("ticker", "industry", "sector", "default", "explicit"):
             self._assert_key(f"dca.why_{reason}")
 
+    def test_the_peer_panel_explains_why_a_peer_has_no_score(self):
+        """``'dca.peers_r_' + reason`` and ``'dcx.why_' + reason``, both built by
+        concatenation in ``renderPeers``.
+
+        The two sets answer different questions and the panel shows both: a
+        member with no reconstruction at all carries ``peers_r_*`` ("nobody has
+        opened this yet" versus "publishes nothing rankable"), while a member
+        that *was* scored and still has no V carries ``why_*``. A missing key
+        here puts a raw identifier in the one cell whose whole job is to say why
+        a number is absent.
+        """
+        for reason in ("not_built", "unavailable"):
+            self._assert_key(f"dca.peers_r_{reason}")
+        for reason in ("young", "no_peer_group", "factors"):
+            self._assert_key(f"dcx.why_{reason}")
+
+    def test_the_peer_column_names_which_multiple_it_holds(self):
+        """A forward P/E and a trailing one are different numbers about one
+        company, so the heading is swapped from JS depending on which basis the
+        group resolved to — and an unlabelled column invites reading one as the
+        other."""
+        for key in ("dca.peers_col_pe", "dca.peers_col_fwd_pe",
+                    "dca.peers_col_ttm_pe", "dca.peers_title",
+                    "dca.peers_none", "dca.peers_no_group",
+                    "dca.peers_failed", "dca.peers_truncated",
+                    "dca.peers_other_model"):
+            self._assert_key(key)
+
+    def test_the_peer_messages_keep_their_substitution_slots(self):
+        """``{g}`` is the group name and ``{n}`` the count of hidden rows. A
+        translation that drops the slot renders a sentence with a hole in it."""
+        self.assertEqual(self._entry_body("dca.peers_none").count("{g}"), 2)
+        self.assertEqual(self._entry_body("dca.peers_truncated").count("{n}"), 2)
+
     def test_the_python_factor_labels_cover_every_direction_entry(self):
         """The server-side fallback, used when a translation is missing."""
         self.assertEqual(set(dca.FACTOR_LABELS), set(dca.DIRECTION))

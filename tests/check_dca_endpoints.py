@@ -72,8 +72,15 @@ du._table_unavail_until = float("inf")
 from ystocker import create_app                                    # noqa: E402
 
 
-def _seed(ticker: str = "MSFT", *, listing_basis: dict | None = None) -> dict:
-    """A believable reconstruction, built from literals rather than fetched."""
+def _seed(ticker: str = "MSFT", *, listing_basis: dict | None = None,
+          price_k: float = 1.0, name: str = "Microsoft Corporation") -> dict:
+    """A believable reconstruction, built from literals rather than fetched.
+
+    *price_k* scales the whole price path, which is the cheapest way to give two
+    seeded tickers genuinely different scores: every multiple is price over the
+    same statements, so a scaled path moves V without touching the fundamentals
+    the rest of these checks assert on.
+    """
     inc, bal, cfs = {}, {}, {}
     for i, year in enumerate((2020, 2021, 2022, 2023)):
         key = f"{year}-12-31"
@@ -85,13 +92,14 @@ def _seed(ticker: str = "MSFT", *, listing_basis: dict | None = None) -> dict:
 
     vintages = dh.build_vintages(inc, bal, cfs)
     day = date(2021, 1, 4)
-    prices = [((day + timedelta(weeks=w)).isoformat(), round(60 + 0.22 * w, 4))
+    prices = [((day + timedelta(weeks=w)).isoformat(),
+               round((60 + 0.22 * w) * price_k, 4))
               for w in range(240)]
     series = dh.reconstruct(prices, vintages)
 
     payload = {
         "_ver": dh.CACHE_VER, "_ts": time.time(), "ticker": ticker,
-        "name": "Microsoft Corporation", "sector": "Technology",
+        "name": name, "sector": "Technology",
         "industry": "Software - Infrastructure", "quote_type": "EQUITY",
         "series": series,
         "percentiles": dh.latest_percentiles(series, minimum=dca.MIN_OBSERVATIONS),
@@ -1007,6 +1015,198 @@ class DcfBranch(unittest.TestCase):
         the two disagree, the reader checking by hand is who finds out."""
         body = self.client.get("/dca/MSFT").data.decode()
         self.assertIn("w<sub>dcf</sub>", body)
+
+
+class DcaPeers(unittest.TestCase):
+    """``/api/dca/<t>/peers`` — the same V for the rest of the peer group.
+
+    The two properties worth protecting here are both about *not* doing
+    something: the panel must never fetch (six Yahoo reads per name) and must
+    never build (a build registers the name, so a side panel could otherwise
+    evict whatever was least recently opened from a registry capped at sixty).
+    Everything else it does is arithmetic over payloads already on disk.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.app = create_app()
+        cls.app.config["TESTING"] = True
+        cls.client = cls.app.test_client()
+        dh.eps_drift = lambda t: {"drift": 0.0}
+        dh.start_background_thread = lambda: None  # type: ignore[assignment]
+
+        # MSFT's first PEER_GROUPS entry, which is what dca_history.peer_group()
+        # resolves and therefore what the panel must list.
+        from ystocker import PEER_GROUPS
+        cls.group = "Tech"
+        cls.members = list(PEER_GROUPS[cls.group])
+
+        # Six of the thirteen built, deliberately: partial coverage is the
+        # normal state of this table and the case the reasons exist for.
+        cls.built = ["MSFT", "AAPL", "NVDA", "META", "ADBE", "ORCL"]
+        for i, sym in enumerate(cls.built):
+            _seed(sym, price_k=0.7 + 0.18 * i, name=f"{sym} Inc.")
+        # Built, but publishes nothing this engine can rank. Distinct from "not
+        # built" and the page says so differently.
+        dh._mem["IBM"] = (time.time(), {"_ver": dh.CACHE_VER, "_ts": time.time(),
+                                        "ticker": "IBM",
+                                        "unavailable": "too_few_vintages"})
+        cls.cached = cls.built + ["IBM"]
+        dh.cached_tickers = lambda: sorted(dh._mem)
+
+        # Forward P/E for part of the group and a trailing one for all of it, so
+        # the "one basis for everybody" rule has something to choose between.
+        recs = {t: {"PE (Forward)": 18.0 + i, "PE (TTM)": 25.0 + i}
+                for i, t in enumerate(cls.members)}
+        from ystocker import valuation
+        valuation._cached_fundamentals = lambda: recs      # type: ignore[assignment]
+
+        # Nothing in this endpoint may reach the network. A build would also
+        # register the ticker, which is the failure that matters most.
+        def _forbidden(*_a, **_k):
+            raise AssertionError("the peer panel fetched")
+        dh.get = _forbidden                                # type: ignore[assignment]
+        dh.build = _forbidden                              # type: ignore[assignment]
+
+    def _peers(self, ticker="MSFT", **params):
+        query = "&".join(f"{k}={v}" for k, v in params.items())
+        r = self.client.get(f"/api/dca/{ticker}/peers" + (f"?{query}" if query else ""))
+        self.assertEqual(r.status_code, 200)
+        return r.get_json()
+
+    def test_it_scores_only_what_is_already_built(self):
+        d = self._peers()
+        listed = {r["ticker"] for r in d["rows"]}
+        self.assertTrue(listed.issubset(set(self.cached)),
+                        f"scored something unbuilt: {listed - set(self.cached)}")
+
+    def test_the_group_is_the_one_the_peer_factor_ranks_against(self):
+        """Two cards on one page naming two different peer groups is not two
+        views of the company, it is the page contradicting itself."""
+        d = self._peers()
+        self.assertEqual(d["group"], dh.peer_group("MSFT"))
+        detail = self.client.get("/api/dca/MSFT").get_json()
+        self.assertEqual(d["group"], detail["peer"]["group"])
+
+    def test_the_ticker_itself_is_in_the_table_and_marked(self):
+        """The comparison the panel exists to make is "where do I sit", which
+        needs the reader's own row in the same sorted column."""
+        d = self._peers()
+        own = [r for r in d["rows"] if r["ticker"] == "MSFT"]
+        self.assertEqual(len(own), 1)
+        self.assertTrue(own[0]["self"])
+        self.assertEqual(d["scored"], len(d["rows"]) - 1)
+
+    def test_a_row_agrees_with_that_tickers_own_page(self):
+        """One scoring path. A reader who clicks a peer through to its own page
+        is exactly who would find two implementations of one formula."""
+        d = self._peers(base=2500)
+        row = next(r for r in d["rows"] if r["ticker"] == "NVDA")
+        detail = self.client.get("/api/dca/NVDA?base=2500").get_json()
+        for key in ("V", "band", "model", "m_valuation", "multiplier", "amount"):
+            self.assertEqual(row[key], detail[key], key)
+
+    def test_cheapest_sorts_first_and_unscorable_last(self):
+        d = self._peers()
+        vs = [r["V"] for r in d["rows"]]
+        scored = [v for v in vs if v is not None]
+        self.assertEqual(scored, sorted(scored, reverse=True))
+        self.assertEqual(vs[:len(scored)], scored, "an unscorable row sorted early")
+
+    def test_unbuilt_members_are_named_rather_than_dropped(self):
+        """A comparison table quietly missing half its group is a different
+        claim from one that says which half is missing."""
+        d = self._peers()
+        unscored = {u["ticker"]: u for u in d["unscored"]}
+        self.assertIn("TSLA", unscored)
+        self.assertEqual(unscored["TSLA"]["reason"], "not_built")
+        seen = {r["ticker"] for r in d["rows"]} | set(unscored)
+        self.assertEqual(seen, set(self.members),
+                         "every group member must be accounted for exactly once")
+
+    def test_publishing_nothing_rankable_is_a_different_reason_from_unbuilt(self):
+        """``pending`` vs ``unresolved`` in the look-through, again: only one of
+        the two is worth clicking, so collapsing them wastes the reader's time
+        on a name that can never score."""
+        d = self._peers()
+        ibm = next(u for u in d["unscored"] if u["ticker"] == "IBM")
+        self.assertEqual(ibm["reason"], "unavailable")
+        self.assertEqual(ibm["detail"], "too_few_vintages")
+
+    def test_the_pe_column_is_one_basis_for_the_whole_group(self):
+        """A forward P/E beside a trailing one under a single heading reads as
+        the forward name being cheaper, on nothing but a data gap."""
+        d = self._peers()
+        self.assertEqual(d["basis"], "forward")
+        for row in d["rows"]:
+            self.assertIsNotNone(row["value"])
+
+    def test_a_template_mismatch_is_stated_not_left_to_the_reader(self):
+        d = self._peers()
+        for row in d["rows"]:
+            self.assertEqual(row["same_model"], row["model"] == d["model"])
+
+    def test_base_scales_the_peer_contributions_too(self):
+        """Two answers to "how much should I put in" on one screen, differing
+        because one of them did not hear about the base change, is the failure."""
+        a = self._peers(base=1000)
+        b = self._peers(base=2000)
+        for x, y in zip(a["rows"], b["rows"]):
+            self.assertEqual(x["V"], y["V"])
+            if x["amount"] is not None:
+                self.assertAlmostEqual(y["amount"], x["amount"] * 2, places=4)
+
+    def test_a_ticker_in_no_group_says_so_rather_than_erroring(self):
+        d = self._peers("ZZZZ")
+        self.assertIsNone(d["group"])
+        self.assertEqual(d["rows"], [])
+        self.assertEqual(d["unscored"], [])
+
+    def test_a_ticker_with_no_reconstruction_still_gets_its_peers(self):
+        """The peers do not depend on this ticker's own reconstruction.
+
+        A name that has never been scored must answer with the group rather than
+        500 or, worse, invent a self row for a company it holds nothing about.
+        (The card itself lives inside ``#dcaBody`` and so stays hidden until the
+        main payload lands — this pins the endpoint, not the reveal.)
+        """
+        d = self._peers("GOOGL")          # in Tech, never seeded
+        self.assertEqual(d["group"], "Tech")
+        self.assertTrue(d["rows"])
+        self.assertFalse(any(r.get("self") for r in d["rows"]))
+
+    def test_the_table_is_capped_and_says_by_how_much(self):
+        from ystocker import routes as _routes
+
+        original = _routes.DCA_PEERS_MAX
+        _routes.DCA_PEERS_MAX = 2
+        try:
+            d = self._peers()
+        finally:
+            _routes.DCA_PEERS_MAX = original
+        # Self is added after the cap, so it is never the row that gets cut.
+        self.assertEqual(len(d["rows"]), 3)
+        self.assertTrue(any(r.get("self") for r in d["rows"]))
+        self.assertEqual(d["truncated"], len(self.built) - 1 - 2)
+
+    def test_the_panel_never_enters_a_name_into_the_tracked_registry(self):
+        """The reason this endpoint refuses to build, stated as an assertion.
+
+        ``dca_history.get`` registers whatever it successfully builds, and the
+        registry is capped at sixty with least-recently-opened eviction. A panel
+        that warmed eleven peers because somebody opened one ticker would
+        silently rewrite what the overview ranks — and the eviction, not the
+        Yahoo bill, is the part nobody would notice.
+        """
+        before = set(du.tracked())
+        self._peers()
+        self.assertEqual(set(du.tracked()), before)
+
+    def test_the_page_carries_the_panel(self):
+        body = self.client.get("/dca/MSFT").data.decode()
+        self.assertIn('id="peersBody"', body)
+        self.assertIn('id="peersUnscored"', body)
+        self.assertIn("/peers?base=", body)
 
 
 if __name__ == "__main__":  # pragma: no cover
