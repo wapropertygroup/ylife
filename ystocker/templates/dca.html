@@ -82,6 +82,13 @@
     <span class="text-slate-400 dark:text-slate-700">/</span>
     <span class="text-slate-600 dark:text-slate-300 text-sm font-mono font-semibold">{{ ticker }}</span>
     <div class="ml-auto flex items-center gap-2">
+      <!-- Keep this name in the ranked universe. Hidden until the payload says
+           this visitor may write, and hidden for a seed name, which is already
+           unevictable. The registry is one shared list at its cap, so without
+           this every new ticker anybody opens deletes the least-recently-viewed
+           of the reader's own. -->
+      <button id="pinBtn" type="button" onclick="togglePin()"
+              class="hidden items-center gap-1 text-xs border px-2 py-1 rounded transition"></button>
       <a href="{{ url_for('main.dca_index') }}"
          class="flex items-center gap-1 text-xs text-slate-600 dark:text-slate-400 border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-200 px-2 py-1 rounded transition"
          data-i18n="dca.all_names">All names</a>
@@ -136,6 +143,12 @@
         <span id="modelName" class="text-slate-700 dark:text-slate-300 font-medium"></span>
         <span id="modelWhy" class="text-slate-400 dark:text-slate-600"></span>
       </div>
+      <!-- Which basis the headline rests on. Beside the model rather than in
+           the factor table, because V is a weighted blend whose factors can sit
+           on different bases, and a reader should not have to add up weights to
+           learn whether the number above used the forward multiple they can see
+           two cards down. -->
+      <div id="vBasis" class="hidden text-xs text-slate-500 mt-1"></div>
     </div>
 
     <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 fade-up lg:col-span-2">
@@ -474,6 +487,92 @@ const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g,
 
 function tf(factor) { return I18n.t('dca.f_' + factor) || factor; }
 
+/* Keeping a name in the ranked universe.
+   `_pinState` is the last payload's view of it, so the button can re-render on
+   a language switch without another round trip. The registry is shared and at
+   its cap, which is why the refusal matters as much as the success: `no_room`
+   means every keepable slot is already spoken for, and a button that just
+   failed silently would be indistinguishable from a broken one. */
+let _pinState = null;
+
+function renderPin(d) {
+  const btn = document.getElementById('pinBtn');
+  if (!btn) return;
+  if (d) _pinState = {pinned: !!d.pinned, editable: !!d.pin_editable,
+                      registry: d.registry || {}};
+  const s = _pinState;
+  if (!s || !s.editable) { btn.classList.add('hidden'); return; }
+  btn.classList.remove('hidden');
+  btn.classList.add('flex');
+  const on = s.pinned;
+  btn.textContent = (on ? '★ ' : '☆ ')
+    + (I18n.t(on ? 'dca.pin_on' : 'dca.pin_off') || (on ? 'Kept' : 'Keep'));
+  btn.title = (I18n.t(on ? 'dca.pin_on_tip' : 'dca.pin_off_tip') || '')
+    .replace('{n}', s.registry.pinned == null ? '?' : s.registry.pinned)
+    .replace('{max}', s.registry.max_pinned == null ? '?' : s.registry.max_pinned);
+  toggleClasses(btn, 'border-indigo-400 dark:border-indigo-500', on);
+  toggleClasses(btn, 'text-indigo-700 dark:text-indigo-300', on);
+  toggleClasses(btn, 'border-slate-300 dark:border-slate-700', !on);
+  toggleClasses(btn, 'text-slate-600 dark:text-slate-400', !on);
+  toggleClasses(btn, 'bg-slate-100 dark:bg-slate-800', !on);
+}
+
+async function togglePin() {
+  if (!_pinState) return;
+  const want = !_pinState.pinned;
+  const btn = document.getElementById('pinBtn');
+  btn.disabled = true;
+  try {
+    const r = await fetch('/api/dca/pin/' + encodeURIComponent(TICKER),
+                          { method: want ? 'POST' : 'DELETE' });
+    const body = await r.json().catch(() => ({}));
+    _pinState.pinned = !!body.pinned;
+    if (body.registry) _pinState.registry = body.registry;
+    if (!r.ok) {
+      // Named, not a generic failure: `no_room` is the one the reader can do
+      // something about, and it is the likely one on a saturated registry.
+      const why = (I18n.t('dca.pin_err_' + (body.reason || 'unknown'))
+                   || I18n.t('dca.pin_err_unknown') || 'Could not save.')
+        .replace('{max}', body.max_pinned == null ? '?' : body.max_pinned);
+      alert(why);
+    }
+  } catch (e) {
+    alert(I18n.t('dca.pin_err_unknown') || 'Could not save.');
+  } finally {
+    btn.disabled = false;
+    renderPin(null);
+  }
+}
+
+/* The basis line under the headline V.
+   Stated by *weight*, not by factor count: "1 of 5 factors is forward"
+   understates a P/E carrying 35% and overstates one carrying 5. `mixed` is the
+   case worth spelling out — wholly-one-basis needs three words, half-and-half
+   is where a reader would otherwise assume the headline means whichever basis
+   they last looked at in the table. */
+function renderScoreBasis(sb) {
+  const el = document.getElementById('vBasis');
+  if (!el) return;
+  if (!sb || sb.basis === 'unknown') { el.classList.add('hidden'); return; }
+  const label = I18n.t('dca.sb_label') || 'Ranked on';
+  let body;
+  if (sb.basis === 'trailing') {
+    body = I18n.t('dca.sb_ttm') || 'trailing (TTM) history';
+  } else if (sb.basis === 'forward') {
+    body = I18n.t('dca.sb_fwd') || 'forward history';
+  } else {
+    body = (I18n.t('dca.sb_mixed') || '{f}% forward, {t}% TTM')
+      .replace('{f}', Math.round((sb.forward_weight || 0) * 100))
+      .replace('{t}', Math.round((sb.trailing_weight || 0) * 100))
+      + ' · ' + (sb.forward_factors || []).map(tf).join(', ');
+  }
+  el.innerHTML = `<span>${esc(label)}</span>: `
+    + `<span class="${sb.basis === 'trailing' ? 'text-slate-600 dark:text-slate-400'
+                                              : 'text-indigo-700 dark:text-indigo-300'} font-medium"
+             title="${esc(I18n.t('dca.sb_tip') || '')}">${esc(body)}</span>`;
+  el.classList.remove('hidden');
+}
+
 /* Expensiveness colour. Cheap is green, dear is red, and the mid band is grey
    rather than amber so "fair" does not read as a warning. */
 function pctColor(p) {
@@ -524,6 +623,8 @@ function renderScore(d) {
   document.getElementById('modelName').textContent = I18n.t('dca.model_' + d.model) || d.model;
   const why = I18n.t('dca.why_' + d.model_reason);
   document.getElementById('modelWhy').textContent = why ? '· ' + why : '';
+  renderScoreBasis(d.score_basis);
+  renderPin(d);
 
   document.getElementById('dcaAmount').textContent = fmtMoney(d.amount);
   document.getElementById('dcaMult').textContent =

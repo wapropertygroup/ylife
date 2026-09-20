@@ -1659,9 +1659,69 @@ def api_dca(ticker: str):
         "equation": _dca_equation(result, weights),
         "dcf_enabled": dca_dcf_enabled(),
         "dcf_editable": _dca_dcf_editable(),
+        # Which basis the *score* rests on, not just each factor. V is a
+        # weighted blend and its factors can now sit on different bases, so the
+        # headline needs to declare the mix -- a reader who sees "forward 8.99"
+        # in the table should not have to add up weights to learn whether the
+        # 90.6 above it used that number.
+        "score_basis": _dca_score_basis(result),
+        # Registry state for this ticker, so the page can offer to keep it. The
+        # table is at its cap, where every new lookup evicts the
+        # least-recently-viewed name that nobody pinned.
+        "pinned": symbol in dca_universe_pinned(),
+        "pin_editable": _dca_pin_editable(),
+        "registry": _dca_registry_stats(),
         "built_at": payload.get("_ts"),
         "stale": (time.time() - (payload.get("_ts") or 0)) > dca_history.TTL_SECONDS,
     })
+
+
+def dca_universe_pinned() -> set:
+    """`dca_universe.pinned()`, tolerant of the table being unreachable."""
+    try:
+        from ystocker import dca_universe
+
+        return dca_universe.pinned()
+    except Exception:  # noqa: BLE001 - the score is the page, not the registry
+        return set()
+
+
+def _dca_registry_stats() -> dict:
+    try:
+        from ystocker import dca_universe
+
+        return dca_universe.stats()
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+def _dca_score_basis(result: dict) -> dict:
+    """How much of the relative score came from forward multiples.
+
+    By *weight*, not by count: saying "1 of 5 factors is forward" understates a
+    P/E carrying 35% and overstates a factor carrying 5. The weights here are
+    the surviving, renormalised ones the score actually used, so the two shares
+    sum to the relative branch and can be read straight off.
+
+    ``mixed`` is the state worth naming. A page that is wholly one basis can say
+    so in three words; one that is half and half is where a reader would
+    otherwise assume the headline means whichever basis they last looked at.
+    """
+    factors = [f for f in (result.get("factors") or [])
+               if isinstance(f.get("weight"), (int, float))]
+    total = sum(f["weight"] for f in factors)
+    if not factors or total <= 0:
+        return {"basis": "unknown", "forward_weight": 0.0, "trailing_weight": 0.0}
+    forward = sum(f["weight"] for f in factors if f.get("basis") == "forward")
+    share = forward / total
+    return {
+        "basis": "forward" if share >= 0.999 else
+                 "trailing" if share <= 0.001 else "mixed",
+        "forward_weight": round(share, 4),
+        "trailing_weight": round(1.0 - share, 4),
+        "forward_factors": [f["factor"] for f in factors
+                            if f.get("basis") == "forward"],
+    }
 
 
 @bp.route("/dca")
@@ -1978,6 +2038,52 @@ def api_dca_untrack(ticker: str):
     removed = dca_universe.forget(symbol)
     return jsonify({"ticker": symbol, "removed": removed,
                     "registry": dca_universe.stats()})
+
+
+@bp.route("/api/dca/pin/<ticker>", methods=["POST", "DELETE"])
+def api_dca_pin(ticker: str):
+    """Keep *ticker* in the ranked universe, or stop keeping it.
+
+    ``POST`` pins, ``DELETE`` unpins. Unpinning is not untracking: the name
+    stays in the table and goes back to ordinary recency eviction, which is a
+    different thing from ``/api/dca/track/<ticker>`` removing it outright.
+
+    **VIP-gated on write, like the DCF override, and for the same reason.** The
+    registry is one shared list rather than per-reader state -- ``/dca`` is
+    public like ``/history`` and this app persists no user record to hang a
+    watchlist off -- so a pin changes what every visitor's overview contains and
+    adds six Yahoo reads a day to the box's bill, for ever. Reads are open.
+
+    The refusals come back named rather than as a bare 400: ``no_room`` in
+    particular is the one a reader can act on, and "pin failed" without the
+    count would be indistinguishable from a bug.
+    """
+    from ystocker import dca_universe
+
+    if not _dca_pin_editable():
+        return jsonify({"error": "Not permitted.", "reason": "forbidden"}), 403
+
+    symbol = ticker.strip().upper()
+    result = (dca_universe.pin(symbol) if request.method == "POST"
+              else dca_universe.unpin(symbol))
+    result["registry"] = dca_universe.stats()
+    status = 200 if (result.get("pinned") or result.get("reason") in
+                     ("already", None)) else 400
+    return jsonify(result), status
+
+
+def _dca_pin_editable() -> bool:
+    """Whether this visitor may change the shared registry.
+
+    Mirrors ``_dca_dcf_editable``: a convenience for the page, re-checked on the
+    write, because a hidden button is not an authorization boundary.
+    """
+    try:
+        from ystocker.quota import is_vip
+
+        return is_vip(session.get("user_email"))
+    except Exception:  # noqa: BLE001 - a missing session must not 500 the page
+        return False
 
 
 _DCA_UNIVERSE_THREAD: Optional[threading.Thread] = None

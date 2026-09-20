@@ -169,6 +169,108 @@ class Capacity(RegistryBase):
         du.remember("SECOND")
         self.assertNotIn("FIRST", du.tracked())
 
+
+class Pinning(RegistryBase):
+    """Keeping a name against recency eviction.
+
+    The complaint this answers: the live registry reached its cap (60 of 60, 23
+    of them seed), so the reader's own 37 names sat in a pure LRU queue and
+    every new lookup silently deleted the least-recently-viewed one. Registration
+    is automatic, so there was no way to say "this one is not a browse".
+
+    What pinning must *not* do is raise the ceiling. Every row is six Yahoo reads
+    a day whatever it is marked, and the cap is that bill.
+    """
+
+    def test_a_pinned_name_outlives_an_unpinned_one(self):
+        du.MAX_TRACKED = len(du.seed()) + 2
+        du.remember("KEEPER")
+        du.pin("KEEPER")
+        du.remember("FILLER1")
+        du.remember("FILLER2")        # forces an eviction
+        kept = set(du.all_tickers())
+        self.assertIn("KEEPER", kept)
+        self.assertNotIn("FILLER1", kept)
+
+    def test_pinning_beats_recency_not_just_ties_with_it(self):
+        """The whole point: the pinned name is the *oldest* here, so plain LRU
+        would drop it first."""
+        du.MAX_TRACKED = len(du.seed()) + 2
+        du.remember("OLD_PINNED")
+        du.pin("OLD_PINNED")
+        du.remember("NEWER1")
+        du.touch("NEWER1")
+        du.remember("NEWER2")
+        self.assertIn("OLD_PINNED", du.all_tickers())
+
+    def test_pinning_does_not_raise_the_cap(self):
+        du.MAX_TRACKED = len(du.seed()) + 2
+        for i in range(6):
+            du.remember(f"X{i}")
+            du.pin(f"X{i}")
+        self.assertLessEqual(len(du.all_tickers()), du.MAX_TRACKED)
+
+    def test_the_cap_refuses_a_pin_rather_than_evicting_another_pin(self):
+        """Losing one saved name to gain another is the behaviour being
+        complained about, not a fix for it."""
+        du.MAX_TRACKED = len(du.seed()) + 2
+        du.remember("A"); du.pin("A")
+        du.remember("B"); du.pin("B")
+        du.remember("C")
+        result = du.pin("C")
+        self.assertFalse(result["pinned"])
+        self.assertEqual(result["reason"], "no_room")
+        self.assertEqual(result["max_pinned"], 2)
+        self.assertEqual(du.pinned(), {"A", "B"})
+
+    def test_a_view_does_not_unpin(self):
+        """`remember` preserves an existing source and is called on every view,
+        so looking at a kept name must not quietly release it."""
+        du.remember("KEEPER")
+        du.pin("KEEPER")
+        du.touch("KEEPER")
+        du.remember("KEEPER")
+        self.assertIn("KEEPER", du.pinned())
+
+    def test_unpinning_keeps_it_tracked(self):
+        """Release is not delete: `forget` is the one that removes."""
+        du.remember("SHOP")
+        du.pin("SHOP")
+        du.unpin("SHOP")
+        self.assertNotIn("SHOP", du.pinned())
+        self.assertIn("SHOP", du.all_tickers())
+
+    def test_pinning_an_untracked_name_is_refused_not_created(self):
+        """Registration is gated on actually scoring — that is what keeps ETFs
+        out of a table headed "all scored names"."""
+        result = du.pin("NEVEROPENED")
+        self.assertFalse(result["pinned"])
+        self.assertEqual(result["reason"], "not_tracked")
+        self.assertNotIn("NEVEROPENED", du.tracked())
+
+    def test_pinning_a_seed_name_is_refused_as_redundant(self):
+        """It is already unevictable; consuming a slot for it would shrink the
+        budget for names that need one."""
+        result = du.pin("MSFT")
+        self.assertFalse(result["pinned"])
+        self.assertEqual(result["reason"], "seed")
+        self.assertNotIn("MSFT", du.pinned())
+
+    def test_remember_reports_survival_not_merely_novelty(self):
+        """With every slot pinned the new row is evicted on the way through, and
+        a True here would claim it was registered."""
+        du.MAX_TRACKED = len(du.seed()) + 1
+        du.remember("A"); du.pin("A")
+        self.assertFalse(du.remember("B"))
+        self.assertNotIn("B", du.tracked())
+
+    def test_stats_report_the_pin_budget(self):
+        du.MAX_TRACKED = len(du.seed()) + 3
+        du.remember("SHOP"); du.pin("SHOP")
+        s = du.stats()
+        self.assertEqual(s["pinned"], 1)
+        self.assertEqual(s["max_pinned"], 3)
+
     def test_stats_report_capacity_honestly(self):
         du.MAX_TRACKED = len(du.seed()) + 5
         du.remember("SHOP")
