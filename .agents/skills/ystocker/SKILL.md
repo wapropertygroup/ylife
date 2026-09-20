@@ -157,10 +157,11 @@ before touching any of these areas:
 ## Cross-repo planning docs
 
 Feature work spanning both this repo and TradingAgents gets written up as a
-pair of design docs: `Codex/research-<slug>.md` + `Codex/todo-<slug>.md`.
-Note the **lowercase `Codex/`** — a plain directory at the repo root,
-distinct from the dot-directory `.Codex/` that holds this skill. The pair
-can end up in either repo's `Codex/` dir depending on which was the session
+pair of design docs: `claude/research-<slug>.md` + `claude/todo-<slug>.md`.
+Note the directory really is spelled **`claude/`** on disk whichever agent is
+reading — a plain directory at the repo root, distinct from the dot-directory
+that holds this skill. The pair can end up in either repo's `claude/` dir
+depending on which was the session
 root when it was written, so if you're looking for the design rationale
 behind a TradingAgents-side feature, check both repos, not just this one.
 
@@ -178,8 +179,25 @@ behind a TradingAgents-side feature, check both repos, not just this one.
 
 ## See also
 
+Four sibling skills split this repo by the kind of work rather than by app.
+Prefer the specific one — each carries traps this file only indexes:
+
+- `ystocker-frontend` — templates and `static/`: the light/dark theme, `CT.c()`
+  chart colours, the Tailwind-pair-is-not-a-DOM-token trap, EN/ZH i18n, and the
+  four hand-rolled JS modules. Read before touching any template.
+- `ystocker-testing` — how to run the suite (the venv is mandatory), the
+  known-failing baseline of 4 environmental tests, and what each static guard
+  protects.
+- `ystocker-data` — cache vs DynamoDB observed series, `peek()` /
+  `is_cache_fresh()`, `_CACHE_VER` economics, `fetchguard`, `freshness`, the
+  full table inventory and the never-fetch-on-the-request-path rule.
+- `ystocker-sibling-apps` — the seven non-yStocker apps, which share this
+  skeleton and nothing else.
 - `tradingagents` skill — the multi-agent engine behind `/agents`, a separate
   git repo not vendored into this one.
-- `AGENTS.md` at the repo root — the full architectural detail this skill
-  was condensed from (asset-tracker look-through, the AI Markets Brief,
-  report emailing/sharing, model selection, theming conversion, etc.).
+- `CLAUDE.md` at the repo root — the full architectural detail this skill was
+  condensed from (asset-tracker look-through, the AI Markets Brief, report
+  emailing/sharing, model selection, theming conversion, etc.). Read that one
+  rather than `AGENTS.md` beside it whichever agent you are: `AGENTS.md` is a
+  **stale** copy that still pins a long-dead EC2 instance id, still recommends
+  `kill -HUP`, and still describes `routes.py` as 5,200 lines (it is 13,345).
