@@ -1856,12 +1856,14 @@ def api_dca_list():
 
 #: How many peer rows ``/api/dca/<t>/peers`` renders, self excluded.
 #:
-#: The candidate pool is already bounded twice over -- a peer group is at most
-#: forty names and only a name in the capped registry can have a reconstruction
-#: on disk -- so this is a *reading* limit, not a cost one. Eight comparables
-#: beside the company you opened is a table; thirty is the overview, which
-#: already exists one click away.
-DCA_PEERS_MAX = 8
+#: Purely a reading limit, and it saves no work at all: every candidate is
+#: scored before the sort, so the cap only decides how many survive it. Sized to
+#: cover a whole ordinary group rather than to be tidy — Financials is 12 and
+#: Tech 13, and cutting three names off a twelve-name group leaves them
+#: unreachable, because ``/dca`` ranks the entire universe and offers no
+#: per-group view to go and find them in. The genuinely large groups
+#: (Semiconductors at 33, Nikkei at 40) still truncate, and say so.
+DCA_PEERS_MAX = 13
 
 
 @bp.route("/api/dca/<ticker>/peers")
