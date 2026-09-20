@@ -126,6 +126,23 @@
   .ev-extras { display: flex; flex-wrap: wrap; column-gap: 1.5rem; }
   .ev-extras > * { flex: 1 1 34rem; min-width: 0; margin-bottom: 2rem; }
 
+  /* Side by side only counts if the two line up, and three things had to hold
+     for that, none of them automatic:
+
+     - The headings must occupy the same height even when one subtitle wraps and
+       the other does not, so `min-height` rather than whatever the text needs.
+     - The card boxes must start at the same y. The left panel's filter tabs sat
+       between its heading and its box and pushed the table ~29px down, which is
+       exactly the misalignment putting them side by side was meant to remove;
+       the tabs are inside the box now.
+     - The boxes must end at the same y. The flex line already stretches the two
+       outer columns to equal height, but the box inside each was auto-height,
+       so a 15-row table and an 11-row one ended 160px apart. Column + `flex:1`
+       hands the slack to the box, where it reads as a card with room in it. */
+  .ev-extras > * { display: flex; flex-direction: column; }
+  .ev-head { min-height: 2.25rem; }
+  .ev-box  { flex: 1; }
+
   /* Chinese wraps between any two characters — and between an atomic inline box
      and a Han character even with no whitespace between them — so a cell narrow
      enough to break turned 上调/下调 into 上调/下 + 调, and dropped the weight
@@ -152,7 +169,7 @@
      cold, because the sweep behind it is 210 paced Yahoo calls. -->
 <div class="ev-extras">
 <div id="evRevisions" class="fade-up" style="display:none">
-  <div class="flex items-baseline justify-between mb-3 flex-wrap gap-2">
+  <div class="ev-head flex items-baseline justify-between mb-3 flex-wrap gap-2">
     <h2 class="text-lg sm:text-xl font-semibold text-slate-700 dark:text-slate-200"
         data-i18n="index.rev_title">Estimate Revisions</h2>
     <span class="text-[11px] text-slate-500 dark:text-slate-600">
@@ -160,12 +177,17 @@
       <span id="evRevAsOf"></span>
     </span>
   </div>
-  <div class="flex gap-1 mb-3 flex-wrap" id="evRevTabs">
-    <button class="sector-sort-btn active" data-rev="up" data-i18n="index.rev_upgraded">Raised most</button>
-    <button class="sector-sort-btn" data-rev="down" data-i18n="index.rev_cut">Cut most</button>
-    <button class="sector-sort-btn" data-rev="net" data-i18n="index.rev_net">Most analysts moving</button>
-  </div>
-  <div class="overflow-x-auto bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-3">
+  <div class="ev-box overflow-x-auto bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-3">
+    {# Inside the card, not above it. Sitting between the heading and the box it
+       pushed this card's table ~29px below its neighbour's, so two panels that
+       are otherwise a matched pair read as misaligned — the one thing putting
+       them side by side was supposed to fix. Inside, the offset is part of the
+       card rather than a gap between two of them. #}
+    <div class="flex gap-1 mb-2.5 flex-wrap" id="evRevTabs">
+      <button class="sector-sort-btn active" data-rev="up" data-i18n="index.rev_upgraded">Raised most</button>
+      <button class="sector-sort-btn" data-rev="down" data-i18n="index.rev_cut">Cut most</button>
+      <button class="sector-sort-btn" data-rev="net" data-i18n="index.rev_net">Most analysts moving</button>
+    </div>
     <table class="w-full text-xs">
       <thead>
         <tr class="text-slate-500 border-b border-slate-200 dark:border-slate-800">
@@ -179,8 +201,12 @@
       </thead>
       <tbody id="evRevBody"></tbody>
     </table>
+    {# In the card for the same reason the tabs are: outside it, this note was
+       the only thing below the left box, so that box gave up its height and
+       stopped 21px above its neighbour's. It is a caveat about these rows
+       anyway, which is inside the card by rights. #}
+    <p class="text-[10px] text-slate-500 dark:text-slate-600 mt-2" data-i18n="index.rev_note">Yahoo covers estimates unevenly — tickers with no analyst coverage are omitted rather than shown as zero.</p>
   </div>
-  <p class="text-[10px] text-slate-500 dark:text-slate-600 mt-1.5" data-i18n="index.rev_note">Yahoo covers estimates unevenly — tickers with no analyst coverage are omitted rather than shown as zero.</p>
 </div>
 
 <!-- ── Yahoo's canonical sectors ────────────────────────────────────────────
@@ -189,7 +215,7 @@
      sector and mixes NVDA with SMCI — so presenting the two together would imply
      the medians below are sector medians, which they are not. -->
 <div id="evSectors" class="fade-up" style="display:none">
-  <div class="flex items-baseline justify-between mb-3 flex-wrap gap-2">
+  <div class="ev-head flex items-baseline justify-between mb-3 flex-wrap gap-2">
     <h2 class="text-lg sm:text-xl font-semibold text-slate-700 dark:text-slate-200"
         data-i18n="index.ysec_title">Market Sectors</h2>
     <span class="text-[11px] text-slate-500 dark:text-slate-600">
@@ -197,7 +223,7 @@
       <span id="evSecAsOf"></span>
     </span>
   </div>
-  <div class="overflow-x-auto bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-3">
+  <div class="ev-box overflow-x-auto bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-3">
     <table class="w-full text-xs">
       <thead>
         <tr class="text-slate-500 border-b border-slate-200 dark:border-slate-800">
