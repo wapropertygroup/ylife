@@ -65,8 +65,8 @@ from typing import Any, Iterable, Mapping, Optional
 log = logging.getLogger(__name__)
 
 __all__ = [
-    "TABLE_NAME", "MAX_TRACKED", "seed", "tracked", "all_tickers",
-    "remember", "forget", "touch", "stats",
+    "TABLE_NAME", "MAX_TRACKED", "PINNED", "seed", "tracked", "all_tickers",
+    "remember", "forget", "touch", "stats", "pin", "unpin", "pinned",
 ]
 
 TABLE_NAME = os.environ.get("DCA_UNIVERSE_TABLE", "ystocker-dca-universe").strip()
@@ -76,6 +76,21 @@ TABLE_NAME = os.environ.get("DCA_UNIVERSE_TABLE", "ystocker-dca-universe").strip
 #: a storage question, so it is set by what the sweep can afford rather than by
 #: what DynamoDB can hold.
 MAX_TRACKED = int(os.environ.get("DCA_MAX_TRACKED", "60"))
+
+#: ``source`` marking a row the reader asked to keep.
+#:
+#: Registration is automatic — opening a ticker that scores puts it in the table
+#: — and eviction was therefore pure recency over everything the seed did not
+#: protect. That is right for a name somebody glanced at once and wrong for one
+#: they went and found: with the registry saturated (it reached 60/60, of which
+#: 23 are seed) every new lookup silently deleted the least-recently-viewed of
+#: the reader's own 37, which reads exactly as the page losing their list.
+#:
+#: Pinning does not raise the ceiling, because the ceiling is the daily Yahoo
+#: bill and a pin costs the same six reads a day as any other row. It only
+#: changes the *order*: unpinned names go first, and when only pinned ones are
+#: left :func:`pin` refuses rather than quietly dropping one to admit another.
+PINNED = "pinned"
 
 #: Disk mirror. Small, rewritten whole, atomic — it is a set of short strings.
 LOCAL_PATH = Path(__file__).parent.parent / "cache" / "dca_universe.json"
@@ -288,19 +303,32 @@ def remember(ticker: str, *, source: str = "opened") -> bool:
     _write_disk(rows)
     if existing is None:
         log.info("dca_universe: now tracking %s (%d total)", symbol, len(rows))
-    return existing is None
+    # Whether it is actually *in* the table, not merely whether it was new.
+    # With every non-seed slot pinned, `_evict` drops this row again on the way
+    # through — which is the pinned list winning, as intended, but a `True` here
+    # would tell the caller a name was registered when it was not.
+    return existing is None and symbol in rows
 
 
 def _evict(rows: dict[str, dict[str, Any]]) -> None:
-    """Drop the least-recently-opened non-seed rows until inside the cap."""
+    """Drop the least-recently-opened rows until inside the cap, pinned last.
+
+    The sort key is ``(pinned, last_seen_at)`` descending, so a name the reader
+    asked to keep is only considered once every unpinned one is already gone.
+    The cap itself is unchanged: pinning reorders the queue, it does not lengthen
+    it, because every row in the table is six Yahoo reads a day whatever it is
+    marked. :func:`pin` refuses before it can come to evicting one pinned name
+    to make room for another.
+    """
     protected = seed()
     room = max(0, MAX_TRACKED - len(protected))
-    extra = [(row.get("last_seen_at") or 0.0, symbol)
+    extra = [(1 if row.get("source") == PINNED else 0,
+              row.get("last_seen_at") or 0.0, symbol)
              for symbol, row in rows.items() if symbol not in protected]
     if len(extra) <= room:
         return
     extra.sort(reverse=True)
-    for _seen, symbol in extra[room:]:
+    for _pin, _seen, symbol in extra[room:]:
         rows.pop(symbol, None)
         _delete(symbol)
         log.info("dca_universe: evicted %s (cap %d)", symbol, MAX_TRACKED)
@@ -336,6 +364,116 @@ def forget(ticker: str) -> bool:
     return True
 
 
+def pinned() -> set[str]:
+    """Tracked names the reader asked to keep. Seed names are not among them —
+    they are already unevictable and marking them would only overstate the
+    pin budget."""
+    return {symbol for symbol, row in tracked().items()
+            if row.get("source") == PINNED and symbol not in seed()}
+
+
+def pin(ticker: str) -> dict[str, Any]:
+    """Protect *ticker* from recency eviction. Reports what it did, and why not.
+
+    Never silently succeeds-as-noop and never silently evicts to make room. The
+    three refusals are all cases where doing the obvious thing would be worse
+    than saying no:
+
+    ``seed``
+        Already unevictable. Reporting it as pinned would consume a slot in the
+        reader's pin budget for a guarantee they already had.
+    ``not_tracked``
+        Registration happens on a rebuild that actually scored — see
+        :func:`remember`. Creating a row here would put a name in a table headed
+        "all scored names" without knowing that it can score, which is precisely
+        what keeps ETFs out of it.
+    ``no_room``
+        Every non-seed slot is already pinned. Pinning this one would mean
+        evicting another pinned name, i.e. losing one saved list entry to gain
+        another, which is the behaviour being complained about rather than a fix
+        for it. The cap is a daily Yahoo bill and is not negotiable here.
+
+        Checked *before* ``not_tracked``, which looks like the wrong order and
+        is not: with the budget full, :func:`remember` evicts a newly opened
+        name on the way through, so the symbol the reader is looking at is
+        genuinely absent from the table — and telling them "not tracked" sends
+        them to rebuild it, which will not help. The full budget is the cause
+        and the only thing they can act on.
+    """
+    symbol = (ticker or "").strip().upper()
+    if not symbol:
+        return {"pinned": False, "reason": "not_tracked", "ticker": symbol}
+    if symbol in seed():
+        return {"pinned": False, "reason": "seed", "ticker": symbol}
+
+    rows = tracked()
+    row = rows.get(symbol)
+    if row is not None and row.get("source") == PINNED:
+        return {"pinned": True, "reason": "already", "ticker": symbol}
+
+    room = max(0, MAX_TRACKED - len(seed()))
+    have = pinned()
+    if len(have) >= room:
+        return {"pinned": False, "reason": "no_room", "ticker": symbol,
+                "pinned_count": len(have), "max_pinned": room}
+    if row is None:
+        return {"pinned": False, "reason": "not_tracked", "ticker": symbol}
+
+    _set_source(symbol, PINNED)
+    log.info("dca_universe: pinned %s (%d pinned of %d slots)",
+             symbol, len(pinned()), room)
+    return {"pinned": True, "ticker": symbol}
+
+
+def unpin(ticker: str) -> dict[str, Any]:
+    """Return *ticker* to ordinary recency eviction. It stays tracked.
+
+    Distinct from :func:`forget`, which removes it outright. Unpinning says
+    "stop protecting this", not "lose it now".
+    """
+    symbol = (ticker or "").strip().upper()
+    rows = tracked()
+    if not symbol or symbol not in rows:
+        return {"pinned": False, "reason": "not_tracked", "ticker": symbol}
+    if rows[symbol].get("source") != PINNED:
+        return {"pinned": False, "reason": "already", "ticker": symbol}
+    _set_source(symbol, "opened")
+    log.info("dca_universe: unpinned %s", symbol)
+    return {"pinned": False, "ticker": symbol}
+
+
+def _set_source(symbol: str, source: str) -> None:
+    """Rewrite one row's ``source``, in the table and the mirror.
+
+    Separate from :func:`remember` because that one deliberately *preserves* an
+    existing ``source`` -- it is called on every view, and letting a view reset
+    the marker would unpin a name simply for being looked at.
+    """
+    rows = tracked()
+    row = rows.get(symbol)
+    if row is None:
+        return
+    row["source"] = source
+    # Recency is bumped too: pinning is an interaction, and leaving the row
+    # stale would make a just-pinned name the first candidate the moment it is
+    # unpinned again.
+    row["last_seen_at"] = time.time()
+    rows[symbol] = row
+
+    table = _get_table()
+    if table is not None:
+        try:
+            table.put_item(Item={
+                "ticker": symbol,
+                "added_at": str(round(_num(row.get("added_at")), 3)),
+                "last_seen_at": str(round(_num(row.get("last_seen_at")), 3)),
+                "source": source,
+            })
+        except Exception as exc:  # noqa: BLE001
+            log.warning("dca_universe: could not re-source %s: %s", symbol, exc)
+    _write_disk(rows)
+
+
 def touch(ticker: str) -> None:
     """Bump recency for an already-registered ticker, cheaply.
 
@@ -361,4 +499,10 @@ def stats() -> dict[str, Any]:
         "max": MAX_TRACKED,
         "room": max(0, MAX_TRACKED - len(protected) -
                     len([s for s in rows if s not in protected])),
+        # Both numbers, because "room: 0" alone does not tell a reader whether
+        # the next name they open will cost them one they wanted. With 37 of 37
+        # slots pinned nothing is evictable and the *new* name is the one that
+        # will not stick; with 0 pinned, every one of theirs is a candidate.
+        "pinned": len(pinned()),
+        "max_pinned": max(0, MAX_TRACKED - len(protected)),
     }

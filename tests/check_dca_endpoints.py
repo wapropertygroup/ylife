@@ -187,6 +187,54 @@ class DcaEndpoints(unittest.TestCase):
         if pfcf is not None:
             self.assertNotEqual(pfcf.get("basis"), "forward")
 
+    # ── the score states its own basis ────────────────────────────────────
+    #
+    # The factor table already labelled each row, but V is a weighted blend and
+    # the headline said nothing — a reader seeing "forward 8.99" two cards down
+    # had no way to know whether the 90.6 above used it without adding up
+    # weights themselves. Reported as exactly that.
+    def test_the_score_declares_which_basis_it_used(self):
+        sb = self.client.get("/api/dca/MSFT").get_json()["score_basis"]
+        self.assertEqual(sb["basis"], "trailing")
+        self.assertEqual(sb["forward_weight"], 0.0)
+        self.assertEqual(sb["trailing_weight"], 1.0)
+
+    def test_a_mixed_score_is_reported_by_weight_not_by_count(self):
+        """One forward factor out of five is not "20% forward" if it is the
+        P/E: the share has to be the weight it actually carried."""
+        _seed("MIXY")
+        original = dh.banked_distributions
+        dh.banked_distributions = lambda t: (
+            {"pe": [float(v) for v in range(5, 65)]} if t == "MIXY" else {})
+        try:
+            body = self.client.get("/api/dca/MIXY").get_json()
+        finally:
+            dh.banked_distributions = original
+        sb = body["score_basis"]
+        self.assertEqual(sb["basis"], "mixed")
+        self.assertEqual(sb["forward_factors"], ["pe"])
+        pe = next(r for r in body["factors"] if r["factor"] == "pe")
+        self.assertAlmostEqual(sb["forward_weight"], pe["weight"], places=3)
+        self.assertAlmostEqual(sb["forward_weight"] + sb["trailing_weight"], 1.0,
+                               places=6)
+
+    # ── keeping a name in the shared registry ─────────────────────────────
+    def test_pinning_is_refused_when_signed_out(self):
+        """The registry is one shared list and every row is six Yahoo reads a
+        day, so a write is VIP-gated like the DCF override."""
+        r = self.client.post("/api/dca/pin/MSFT")
+        self.assertEqual(r.status_code, 403)
+        self.assertFalse(self.client.get("/api/dca/MSFT").get_json()["pin_editable"])
+
+    def test_the_detail_response_reports_pin_state_and_budget(self):
+        body = self.client.get("/api/dca/MSFT").get_json()
+        self.assertIn("pinned", body)
+        self.assertIn("registry", body)
+        # Both numbers: "room: 0" alone does not say whether the next lookup
+        # costs the reader a name they wanted.
+        self.assertIn("pinned", body["registry"])
+        self.assertIn("max_pinned", body["registry"])
+
     # ── the page ──────────────────────────────────────────────────────────
     def test_page_renders_for_a_known_ticker(self):
         r = self.client.get("/dca/MSFT")
