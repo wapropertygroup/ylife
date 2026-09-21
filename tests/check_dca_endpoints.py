@@ -593,10 +593,13 @@ class DcaOverview(unittest.TestCase):
         self.assertEqual(sorted(dca_history.fund_symbols() & {"SPY", "XTL", "IGV"}),
                          ["IGV", "SPY", "XTL"])
         # All three consumers, so a filter dropped from one is not hidden by the
-        # other two still working.
+        # other two still working. The Score button and the Enter key both call
+        # goTo with whatever is in the box, which is why the list filter alone
+        # would leave two ways through.
         self.assertIn("UNSCORABLE.has(m.ticker)", body)      # suggestions
         self.assertIn("!UNSCORABLE.has(t)", body)            # recent chips
-        self.assertIn("UNSCORABLE.has(s.ticker)", body)      # the typed row
+        self.assertIn("UNSCORABLE.has(typed)", body)         # the typed row
+        self.assertIn("UNSCORABLE.has(sym)", body)           # goTo: Enter + Score
 
     def test_rows_agree_with_the_detail_endpoint(self):
         """One scoring path, so a row and its detail page cannot disagree.
