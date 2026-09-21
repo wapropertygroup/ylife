@@ -192,6 +192,47 @@ console.log('=== the media allowlist has no handler in it ===');
   t('no element may keep a style attribute', !/['"]style['"]/.test(allowed));
 }
 
+console.log('=== a refused media address is stated, not swallowed ===');
+// Reported from the live page as "图片还是加载不出来". The picture had been a
+// `cid:` reference — an inline mail attachment, which is not on this server and
+// never will be — and the renderer skipped the attribute while keeping the
+// element, leaving an empty picture frame with nothing anywhere saying why. An
+// empty frame reads as "failed to load", which invites a retry; the truth was
+// "can never load", which needs the sender changed.
+//
+// safeSrc is exported precisely so these rules are testable here: sanitize()
+// needs DOMParser and this suite has none by design.
+{
+  const S = Markdown.safeSrc;
+  t('cid: is refused',            S('cid:part1.abc@mail') === null);
+  t('file: is refused',           S('file:///Users/me/x.png') === null);
+  t('javascript: is refused',     S('javascript:alert(1)') === null);
+  t('ftp: is refused',            S('ftp://h/f.png') === null);
+  t('data:text/html is refused',  S('data:text/html;base64,AAA') === null);
+  t('https is allowed',           S('https://i.ytimg.com/vi/a/hq.jpg') !== null);
+  t('http is allowed',            S('http://a.test/i.png') !== null);
+  t('data:image is allowed',      S('data:image/png;base64,AAA') !== null);
+  t('a relative path is allowed', S('/static/x.png') === '/static/x.png');
+
+  // safeHref stays *wider* than safeSrc, and deliberately so: an href is not
+  // fetched until the reader clicks, so mailto belongs there and nowhere else.
+  t('mailto is a link but never a src',
+    Markdown.safeHref('mailto:a@b.test') !== null && S('mailto:a@b.test') === null);
+
+  const src = fs.readFileSync(path.join(root, 'ystocker/static/markdown.js'), 'utf8');
+  t('a refused media src emits a marker instead of the element',
+    /md-src-refused/.test(src));
+  t('the marker carries the scheme', /data-scheme/.test(src));
+  t('the marker carries no prose — the page owns the copy',
+    !/md-src-refused[\s\S]{0,400}(not supported|unsupported|cannot)/i.test(src));
+  t('only media refusals are marked, not links',
+    /const MEDIA = \{[^}]*IMG/.test(src) && !/MEDIA[^}]*\bA\b\s*:/.test(src));
+  // The URL itself must not reach the markup: a refused src can be a tracking
+  // address, and the scheme alone answers why it was refused.
+  t('schemeOf returns only the scheme',
+    /function schemeOf[\s\S]{0,400}m\[1\]\.toLowerCase\(\)/.test(src));
+}
+
 console.log();
 if (failures.length) {
   console.log(`RESULT: FAIL — ${failures.length}: ${failures.join(', ')}`);

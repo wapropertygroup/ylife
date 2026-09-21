@@ -78,6 +78,20 @@
     return v;                                   // relative or protocol-less
   }
 
+  // Tags whose src the browser fetches unprompted. A refusal on one of these is
+  // worth reporting; a refused <a href> is not, because nothing was going to be
+  // fetched and the text is still there to read.
+  const MEDIA = { IMG: 1, VIDEO: 1, AUDIO: 1, SOURCE: 1 };
+
+  function schemeOf(value) {
+    // The scheme alone, never the rest of the URL. A refused src can be a
+    // tracking address or a local file path, and neither belongs in markup this
+    // page is about to render -- the reader needs to know *why* it was refused,
+    // which the scheme answers on its own.
+    const m = /^([a-z][a-z0-9+.-]*):/i.exec(String(value || '').trim());
+    return m ? m[1].toLowerCase() : 'relative';
+  }
+
   function copyInto(from, to) {
     for (let node = from.firstChild; node; node = node.nextSibling) {
       if (node.nodeType === 3) {                       // text
@@ -90,6 +104,29 @@
       // hasOwnProperty, not a truthiness test: ALLOWED['CONSTRUCTOR'] would
       // otherwise inherit a value from Object.prototype and let a tag through.
       if (!has(ALLOWED, tag)) { copyInto(node, to); continue; }
+
+      // A media element whose src is refused becomes a marker rather than an
+      // empty box. Skipping the attribute and keeping the element -- which is
+      // what this did -- renders a broken picture frame with nothing anywhere
+      // saying why, and the reader reasonably reads that as "the image failed to
+      // load". It is not a failure, it is a refusal, and those need different
+      // responses: one is worth retrying and the other never will be.
+      //
+      // The marker carries the scheme and the alt text and *no prose*. The copy
+      // belongs to the page, which has i18n; a sentence composed in here would
+      // arrive in English on a Chinese page, which is a trap this codebase has
+      // already paid for once.
+      if (has(MEDIA, tag) && node.hasAttribute('src')
+          && safeSrc(node.getAttribute('src')) === null) {
+        const mark = document.createElement('span');
+        mark.className = 'md-src-refused';
+        mark.setAttribute('data-kind', tag.toLowerCase());
+        mark.setAttribute('data-scheme', schemeOf(node.getAttribute('src')));
+        const alt = node.getAttribute('alt');
+        if (alt) mark.setAttribute('data-alt', alt);
+        to.appendChild(mark);
+        continue;
+      }
 
       const el = document.createElement(tag.toLowerCase());
       for (const name of ALLOWED[tag]) {
@@ -280,5 +317,8 @@
     closeList();
     return out.join('\n');
   }
-  global.Markdown = { render: renderMd, escape: esc, inline: inline, sanitize: sanitize };
+  // safeSrc/safeHref are exported so the *refusal rules* can be tested without a
+  // DOM. sanitize() needs DOMParser and the test suite deliberately has none.
+  global.Markdown = { render: renderMd, escape: esc, inline: inline,
+                      sanitize: sanitize, safeSrc: safeSrc, safeHref: safeHref };
 })(window);

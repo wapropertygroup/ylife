@@ -109,8 +109,14 @@
   }
   /* Folded, not truncated — see `card()`. -webkit-line-clamp needs the box
      model, and `max-height` is the fallback for a renderer that ignores it. */
+  /* Clamped by height, not by line count. `-webkit-line-clamp` needs
+     `display:-webkit-box`, which is a *text* clamping mode: measured here, the
+     browser did not even apply it (computed display came back `flow-root`), and
+     where an engine does apply it a block child like an <img> or a <table> can
+     collapse — which is precisely what a posted email is full of. max-height is
+     universally supported, clamps a document rather than a paragraph, and is
+     what was actually doing the work. */
   .ib-clamp {
-    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 16;
     overflow: hidden; max-height: 24rem;
     /* A fade rather than a hard cut, so it reads as folded rather than broken.
        Both stops carry the *card* colour — fading to a hardcoded slate over a
@@ -119,7 +125,27 @@
     mask-image: linear-gradient(180deg, #000 78%, transparent 100%);
     -webkit-mask-image: linear-gradient(180deg, #000 78%, transparent 100%);
   }
-  .ib-clamp-sm { -webkit-line-clamp: 8; max-height: 12rem; }
+  /* Compound, not a standalone class. As `.ib-clamp-sm` on its own it kept
+     `max-height` after `bindMore` removed `.ib-clamp`, so expanding a card on
+     the board dropped the line-clamp and the mask but left the height cap —
+     the body spilled out of a box that never grew. The list view worked only
+     because it never gets this class. Bound to `.ib-clamp` so one toggle
+     governs both. */
+  .ib-clamp.ib-clamp-sm { max-height: 12rem; }
+  /* A refused media address. Visible on purpose: the alternative is an empty
+     picture frame, which reads as "failed to load" when the truth is "will never
+     load", and those deserve different reactions. Amber rather than red — it is
+     a limitation of what this page accepts, not an error in the post. */
+  .md-src-refused {
+    display: inline-flex; align-items: center; gap: 0.3rem;
+    font-size: 11px; line-height: 1.4; vertical-align: middle;
+    padding: 0.1rem 0.45rem; margin: 0.15rem 0;
+    border: 1px dashed rgba(180,83,9,.45); border-radius: 0.35rem;
+    color: #b45309; background: rgba(180,83,9,.07);
+  }
+  .dark .md-src-refused { color: #fcd34d; border-color: rgba(252,211,77,.35);
+                          background: rgba(252,211,77,.07); }
+  .md-src-refused::before { content: '⃠'; opacity: .7; }
   .ib-more {
     font-size: 11px; color: var(--t-accent-ink); margin-top: 0.25rem;
     background: none; border: 0; padding: 0; cursor: pointer;
@@ -386,6 +412,25 @@ function card(m, { compact = false } = {}) {
   </article>`;
 }
 
+/* Say out loud that a media address was refused.
+   `Markdown.render` leaves a bare `<span class="md-src-refused">` carrying the
+   scheme and alt text and no words — the copy lives here, where i18n does. This
+   is the difference between "the image failed to load" and "this address can
+   never be loaded": the first invites a retry and the second needs the sender
+   fixed, and an empty picture frame says the wrong one of those. */
+function annotateRefused(root) {
+  root.querySelectorAll('.md-src-refused').forEach(el => {
+    const scheme = el.dataset.scheme || '?';
+    const alt = el.dataset.alt || '';
+    const kind = I18n.t('inbox.media_' + (el.dataset.kind || 'img'))
+              || (el.dataset.kind || 'image');
+    el.textContent = (I18n.t('inbox.src_refused') || '{kind} address not supported ({scheme})')
+      .replace('{kind}', kind).replace('{scheme}', scheme)
+      + (alt ? ` · ${alt}` : '');
+    el.title = I18n.t('inbox.src_refused_tip') || '';
+  });
+}
+
 /* Unfold a clamped card. Delegated from the board rather than bound per card,
    so re-rendering a lane does not leak a listener per post. */
 function bindMore(root) {
@@ -432,6 +477,7 @@ function renderList() {
     list.classList.remove('hidden');
     list.innerHTML = rows.map(m => card(m)).join('');
     bindMore(list);
+    annotateRefused(list);
   }
 }
 
@@ -462,6 +508,7 @@ function renderBoard(board, rows) {
       </div>
     </section>`).join('');
   bindMore(board);
+  annotateRefused(board);
 }
 
 function renderCurl(retention) {
