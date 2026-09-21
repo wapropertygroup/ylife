@@ -79,14 +79,21 @@
      post at a time and wrong once several systems are posting — hence the width
      swap rather than a board squeezed into the same column. */
   #inboxRoot.ib-wide { max-width: none; }
+  /* The page's own 4xl cap is not the binding one — base.html wraps every page
+     in `main.app-container`, which stops at 1475px. Lifted here, from a class on
+     <body> rather than a `:has()` selector so the rule is explicit about who
+     sets it, and only while the board is open: the list is prose and wants its
+     reading measure back. `main` keeps its own px-4/sm:px-6 padding, so the
+     lanes still do not touch the screen edge. */
+  body.ib-board-open main { max-width: none; }
   .ib-board {
     display: flex; gap: 0.75rem; align-items: flex-start;
     overflow-x: auto; padding-bottom: 0.5rem;
   }
   .ib-lane {
-    flex: 0 0 22rem; min-width: 0; display: flex; flex-direction: column;
+    flex: 0 0 26rem; min-width: 0; display: flex; flex-direction: column;
     background: var(--ib-well); border: 1px solid var(--ib-line);
-    border-radius: 0.75rem; max-height: 76vh;
+    border-radius: 0.75rem; max-height: 84vh;
   }
   .ib-lane-head {
     display: flex; align-items: center; gap: 0.5rem;
@@ -131,7 +138,7 @@
      the body spilled out of a box that never grew. The list view worked only
      because it never gets this class. Bound to `.ib-clamp` so one toggle
      governs both. */
-  .ib-clamp.ib-clamp-sm { max-height: 12rem; }
+  .ib-clamp.ib-clamp-sm { max-height: 16rem; }
   /* A refused media address. Visible on purpose: the alternative is an empty
      picture frame, which reads as "failed to load" when the truth is "will never
      load", and those deserve different reactions. Amber rather than red — it is
@@ -467,6 +474,9 @@ function renderList() {
   const root = document.getElementById('inboxRoot');
   root.classList.toggle('max-w-4xl', _view !== 'board');
   root.classList.toggle('ib-wide', _view === 'board');
+  // On <body>, because the element being widened is base.html's <main>, which is
+  // this template's parent and therefore out of reach of a class on #inboxRoot.
+  document.body.classList.toggle('ib-board-open', _view === 'board');
 
   if (_view === 'board') {
     list.classList.add('hidden');
