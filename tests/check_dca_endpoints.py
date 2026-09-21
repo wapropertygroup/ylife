@@ -495,6 +495,63 @@ class DcaOverview(unittest.TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertIn("DCA Valuation Engine", r.data.decode())
 
+    # ── holdings join the ranked universe permanently ─────────────────────
+    #
+    # The names a reader has money in are the ones most worth the six reads a
+    # day, so they are protected a tier above pins. The registry is global,
+    # though, so the sync spends the box's budget on one person's portfolio —
+    # hence the same gate the pin write uses, and hence a signed-out visit must
+    # change nothing at all.
+    def _with_holdings(self, symbols, *, vip=True):
+        """Run one /api/dca with a stubbed portfolio and permission."""
+        import ystocker.routes as rt
+
+        original_expo, original_gate = rt._dca_exposure, rt._dca_pin_editable
+        rt._dca_exposure = lambda: {"map": None, "positions": list(symbols)}
+        rt._dca_pin_editable = lambda: vip
+        try:
+            return self.client.get("/api/dca").get_json()
+        finally:
+            rt._dca_exposure, rt._dca_pin_editable = original_expo, original_gate
+
+    def test_a_holding_is_marked_and_flagged_on_its_row(self):
+        _seed("OWNED")
+        du.remember("OWNED")          # as a real build would, having scored
+        body = self._with_holdings(["OWNED"])
+        self.assertEqual(body["held_sync"]["held"], ["OWNED"])
+        row = next(r for r in body["rows"] if r["ticker"] == "OWNED")
+        self.assertTrue(row["held"])
+        self.assertTrue(all(not r["held"] for r in body["rows"]
+                            if r["ticker"] != "OWNED"))
+
+    def test_an_unbuilt_holding_is_queued_rather_than_registered(self):
+        """Registration stays gated on a rebuild that scored — that is what
+        keeps ETFs out. It joins `pending` so the paced warm picks it up."""
+        body = self._with_holdings(["NEVERBUILT"])
+        self.assertIn("NEVERBUILT", body["pending"])
+        self.assertIn("NEVERBUILT", body["held_sync"]["not_tracked"])
+        self.assertNotIn("NEVERBUILT", body["held_sync"]["held"])
+
+    def test_a_signed_out_visit_syncs_nothing(self):
+        """Reads are open; writing the shared registry is not."""
+        _seed("OWNED")
+        du.remember("OWNED")
+        body = self._with_holdings(["OWNED"], vip=False)
+        self.assertIsNone(body["held_sync"])
+        self.assertTrue(all(not r["held"] for r in body["rows"]))
+
+    def test_selling_demotes_without_deleting(self):
+        """A sold position stops being protected. It keeps its reconstruction,
+        which cost six reads to build."""
+        _seed("SOLDX"); du.remember("SOLDX")
+        _seed("OWNED"); du.remember("OWNED")
+        self._with_holdings(["SOLDX"])
+        self.assertIn("SOLDX", du.held())
+        body = self._with_holdings(["OWNED"])
+        self.assertIn("SOLDX", body["held_sync"]["demoted"])
+        self.assertNotIn("SOLDX", du.held())
+        self.assertIn("SOLDX", du.all_tickers())
+
     def test_it_ranks_only_what_is_already_built(self):
         """A ranked table must never trigger a fan-out of six reads per name."""
         d = self.client.get("/api/dca").get_json()
