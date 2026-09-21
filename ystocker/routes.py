@@ -1743,7 +1743,16 @@ def dca_index():
     """The DCA overview: every scored ticker, ranked by valuation."""
     log.info("GET /dca")
     return render_template("dca_index.html",
-                           peer_groups=list(PEER_GROUPS.keys()))
+                           peer_groups=list(PEER_GROUPS.keys()),
+                           # Handed to the page rather than filtered behind
+                           # /api/search, because that endpoint also serves
+                           # /history and /lookup, where an ETF is a perfectly
+                           # good answer. Inlining the set costs ~49 short
+                           # strings once and lets the page filter suggestions,
+                           # recents and the typed row with no request at all --
+                           # an autocomplete cannot afford a round trip to learn
+                           # something that never changes between keystrokes.
+                           unscorable=sorted(dca_history.fund_symbols()))
 
 
 @bp.route("/api/dca")

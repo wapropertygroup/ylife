@@ -1185,5 +1185,72 @@ class ListingBasisIntegrationTests(unittest.TestCase):
         self.assertGreater(payload["series"]["pe"][-1][1], 10.0)
 
 
+class FundSymbols(unittest.TestCase):
+    """``fund_symbols()`` — what the /dca search must not offer.
+
+    Yahoo publishes no statements for a fund, so a reconstruction of one cannot
+    exist: ``build()`` spends six reads and returns ``unavailable``. Suggesting
+    such a name is suggesting a minute of waiting for a guaranteed dead end,
+    which is what the overview's search box was doing.
+    """
+
+    def setUp(self):
+        from ystocker import dca_history
+
+        self.symbols = dca_history.fund_symbols()
+
+    def test_every_member_of_an_etf_named_group_is_caught(self):
+        from ystocker import PEER_GROUPS
+
+        for name, members in PEER_GROUPS.items():
+            if "ETF" not in name.upper():
+                continue
+            for ticker in members:
+                self.assertIn(ticker, self.symbols, f"{ticker} in {name}")
+
+    def test_a_fund_wearing_an_equity_group_label_is_still_caught(self):
+        """``XTL`` is filed under "Telecom" first, so ``peer_group()`` reports it
+        as an equity and the suggestion list showed it as one. Membership of
+        *any* ETF-named group is the rule, not membership of the first."""
+        from ystocker import dca_history
+
+        self.assertEqual(dca_history.peer_group("XTL"), "Telecom")
+        self.assertIn("XTL", self.symbols)
+
+    def test_the_hand_kept_residue_is_still_needed_and_still_right(self):
+        """``FUNDS_IN_EQUITY_GROUPS`` exists only for funds no group name gives
+        away. An entry that the structural rule now covers is dead weight; one
+        that has left PEER_GROUPS entirely is worse, because it reads as a rule
+        still doing something."""
+        from ystocker import PEER_GROUPS, dca_history
+
+        everything = {t for members in PEER_GROUPS.values() for t in members}
+        structural = {t for name, members in PEER_GROUPS.items()
+                      if "ETF" in name.upper() for t in members}
+        for ticker in dca_history.FUNDS_IN_EQUITY_GROUPS:
+            self.assertIn(ticker, everything, f"{ticker} is no longer tracked")
+            self.assertNotIn(ticker, structural,
+                             f"{ticker} is already caught by its group name")
+
+    def test_ordinary_companies_are_not_caught(self):
+        """The cost of a false positive is a company that silently stops being
+        searchable on the page built to score it."""
+        for ticker in ("MSFT", "JPM", "NVDA", "GOLD", "TSM", "7203.T", "BRK-B"):
+            self.assertNotIn(ticker, self.symbols)
+
+    def test_it_follows_a_runtime_edit_to_the_peer_groups(self):
+        """``routes._load_groups()`` replaces PEER_GROUPS wholesale at startup
+        and the /groups UI edits it live, so a set frozen at import would
+        describe a configuration the site is no longer running."""
+        from ystocker import PEER_GROUPS, dca_history
+
+        PEER_GROUPS["Scratch ETFs"] = ["ZZTOP"]
+        try:
+            self.assertIn("ZZTOP", dca_history.fund_symbols())
+        finally:
+            PEER_GROUPS.pop("Scratch ETFs", None)
+        self.assertNotIn("ZZTOP", dca_history.fund_symbols())
+
+
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()

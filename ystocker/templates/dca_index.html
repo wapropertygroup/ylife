@@ -75,7 +75,7 @@
     <div id="searchList" class="search-list" style="display:none"></div>
   </div>
   <p class="text-xs text-slate-500 mt-2" data-i18n="dcx.search_note">
-    Any listed symbol works. A name that scores is added to the table below and refreshed daily from then on; one that has no published statements (most ETFs) is shown but not added. First build takes about a minute.
+    Any listed company works. A name that scores is added to the table below and refreshed daily from then on. Funds are not suggested — an ETF publishes no statements, so there is nothing to reconstruct a valuation history from. First build takes about a minute.
   </p>
   <div id="recentWrap" class="hidden mt-2 flex items-center gap-1.5 flex-wrap">
     <span class="text-[10px] uppercase tracking-widest text-slate-500 dark:text-slate-600" data-i18n="dcx.recent">Recent</span>
@@ -446,6 +446,18 @@ const RECENT_KEY = 'ystocker_recent_tickers';   // shared with navsearch + looku
 const SEARCH_DEBOUNCE_MS = 130;
 let _sugg = [], _active = -1, _suggTimer = null;
 
+/* Tickers this engine can never score: Yahoo publishes no statements for a
+   fund, so a DCA reconstruction of one cannot exist. Server-computed from
+   PEER_GROUPS (see dca_history.fund_symbols) and inlined, because an
+   autocomplete cannot afford a round trip to learn something that does not
+   change between keystrokes.
+
+   RECENT_KEY is shared with navsearch and /lookup, where an ETF is a perfectly
+   reasonable thing to have looked at — so this page inherits recents it must
+   not offer, which is why the filter is applied in three places and not just
+   to the suggestion list. */
+const UNSCORABLE = new Set({{ unscorable | tojson }});
+
 /* Yahoo symbols are not just letters: BRK-B, ^GSPC, GC=F and 7203.T all have to
    survive. Anything outside that set is dropped rather than escaped, so a
    pasted "$AAPL" or a stray space still resolves. */
@@ -477,7 +489,10 @@ function addRecent(ticker) {
 }
 
 function renderRecent() {
-  const list = getRecent();
+  // A fund the reader looked at on /history is not a candidate here, and the
+  // chip gives no hint of that — it would just be a link to a minute of
+  // rebuilding and an error.
+  const list = getRecent().filter(t => !UNSCORABLE.has(t));
   const wrap = document.getElementById('recentWrap');
   if (!list.length) { wrap.classList.add('hidden'); return; }
   wrap.classList.remove('hidden');
@@ -502,13 +517,23 @@ function renderSuggestions(typed, matches) {
   const scored = new Set(_rows.map(r => r.ticker));
   const lead = { ticker: typed, name: (matches.find(m => m.ticker === typed) || {}).name || '',
                  group: '', lead: true };
-  _sugg = [lead].concat(matches.filter(m => m.ticker !== typed).slice(0, 7));
+  /* Funds are dropped from the suggestions and kept on the lead row, and the
+     asymmetry is the point. A name the reader did not ask for is not worth one
+     of eight slots when following it can only end in "no published statements"
+     — SPY and XTL were both being offered here. But a symbol they typed in full
+     is worth an explanation: swallowing it silently would read as the search
+     being broken, and they can still press Enter. Informed, not blocked. */
+  _sugg = [lead].concat(matches.filter(
+    m => m.ticker !== typed && !UNSCORABLE.has(m.ticker)).slice(0, 7));
 
   document.getElementById('searchList').innerHTML = _sugg.map((s, i) => `
     <button type="button" class="search-item${i === _active ? ' active' : ''}" data-i="${i}">
       <span class="font-mono font-semibold w-20 shrink-0">${esc(s.ticker)}</span>
       <span class="flex-1 truncate text-slate-600 dark:text-slate-400">${esc(s.name || '')}</span>
-      ${scored.has(s.ticker)
+      ${UNSCORABLE.has(s.ticker)
+        ? `<span class="chip" style="border-color:${CT.c('#fb923c')};color:${CT.c('#fb923c')}">${
+            esc(I18n.t('dcx.not_scorable') || 'fund — no statements')}</span>`
+        : scored.has(s.ticker)
         ? `<span class="chip" style="border-color:${CT.c('#34d399')};color:${CT.c('#34d399')}">${esc(I18n.t('dcx.already_scored') || 'scored')}</span>`
         : (s.group ? `<span class="chip">${esc(s.group)}</span>` : '')}
     </button>`).join('');

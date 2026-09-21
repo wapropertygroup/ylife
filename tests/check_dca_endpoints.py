@@ -572,6 +572,32 @@ class DcaOverview(unittest.TestCase):
         vs = [r["V"] for r in d["rows"] if r["V"] is not None]
         self.assertEqual(vs, sorted(vs, reverse=True))
 
+    def test_the_page_never_offers_a_fund_to_score(self):
+        """``SPY`` and ``XTL`` were both in the suggestion list, and following
+        either costs six Yahoo reads and a minute to reach "no statements".
+
+        The set is inlined rather than filtered behind ``/api/search``, because
+        that endpoint also serves /history and /lookup where an ETF is a fine
+        answer — so this asserts the page carries it and that the three places
+        that consume it are all still wired.
+        """
+        from ystocker import dca_history
+
+        body = self.client.get("/dca").data.decode()
+        self.assertIn("const UNSCORABLE = new Set(", body)
+        for ticker in ("SPY", "XTL", "IGV", "GLD"):
+            self.assertIn(f'"{ticker}"', body, f"{ticker} missing from the set")
+        # A company must not be in it: a false positive silently removes a name
+        # from the search on the page built to score it.
+        self.assertNotIn('"MSFT"', body.split("const UNSCORABLE")[1].split(")")[0])
+        self.assertEqual(sorted(dca_history.fund_symbols() & {"SPY", "XTL", "IGV"}),
+                         ["IGV", "SPY", "XTL"])
+        # All three consumers, so a filter dropped from one is not hidden by the
+        # other two still working.
+        self.assertIn("UNSCORABLE.has(m.ticker)", body)      # suggestions
+        self.assertIn("!UNSCORABLE.has(t)", body)            # recent chips
+        self.assertIn("UNSCORABLE.has(s.ticker)", body)      # the typed row
+
     def test_rows_agree_with_the_detail_endpoint(self):
         """One scoring path, so a row and its detail page cannot disagree.
 

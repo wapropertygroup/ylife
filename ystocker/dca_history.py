@@ -1416,6 +1416,55 @@ def history_coverage(series: Mapping[str, Sequence[tuple[str, float]]],
     }
 
 
+#: Funds that sit in an equity-named peer group, where nothing about the group
+#: gives them away.
+#:
+#: :func:`fund_symbols` gets everything else structurally — a ticker in any
+#: group whose *name* says ETF — and that covers 48 of the 49, including ``XTL``,
+#: which is filed under "Telecom" first but also appears in "Sector ETFs". Only
+#: ``IGV`` is in an equity group and nowhere else.
+#:
+#: A name missing from here fails exactly the way the whole set did before it
+#: existed: the fund is offered, the reader waits a minute, and the build comes
+#: back ``unavailable``. That is the pre-existing behaviour, not a new one — so
+#: the cost of this list falling behind is bounded, which is why a hand-kept
+#: list is acceptable at all.
+FUNDS_IN_EQUITY_GROUPS: frozenset[str] = frozenset({"IGV"})
+
+
+def fund_symbols() -> frozenset[str]:
+    """Every ``PEER_GROUPS`` ticker this engine can never score.
+
+    Yahoo publishes no income statement, balance sheet or cash-flow statement
+    for a fund, so a DCA reconstruction of one cannot exist — ``build()`` spends
+    six reads and returns ``unavailable``. Offering such a name in the ``/dca``
+    search is offering a minute of waiting for a guaranteed dead end, and the
+    page's own search box was doing exactly that for ``SPY`` and ``XTL``.
+
+    Structural and cheap on purpose: no disk read, no ``peek()``, no network.
+    The tempting alternative is to ask the DCA cache, which knows for certain
+    because it has the ``unavailable`` payload — but that is a per-symbol JSON
+    parse behind an autocomplete that fires on every keystroke, and it knows
+    nothing at all about a name nobody has opened yet, which is the case that
+    matters.
+
+    Membership of *any* ETF-named group, not just the first one
+    :func:`peer_group` would return. ``XTL`` is in "Telecom" and "Sector ETFs",
+    and reading only the first would let it through wearing an equity label —
+    which is precisely how it reached the suggestion list.
+
+    Recomputed rather than cached at import: ``routes._load_groups()`` replaces
+    ``PEER_GROUPS`` wholesale at startup and the ``/groups`` UI edits it at
+    runtime, so a set frozen at import would describe a configuration the site
+    is no longer running.
+    """
+    from ystocker import PEER_GROUPS
+
+    return frozenset(FUNDS_IN_EQUITY_GROUPS).union(
+        t for name, members in PEER_GROUPS.items()
+        if "ETF" in name.upper() for t in members)
+
+
 def peer_group(ticker: str) -> Optional[str]:
     """The ``PEER_GROUPS`` entry *ticker* is scored against, or ``None``.
 
