@@ -67,6 +67,7 @@ log = logging.getLogger(__name__)
 __all__ = [
     "TABLE_NAME", "MAX_TRACKED", "PINNED", "seed", "tracked", "all_tickers",
     "remember", "forget", "touch", "stats", "pin", "unpin", "pinned",
+    "HELD", "held", "sync_held",
 ]
 
 TABLE_NAME = os.environ.get("DCA_UNIVERSE_TABLE", "ystocker-dca-universe").strip()
@@ -91,6 +92,21 @@ MAX_TRACKED = int(os.environ.get("DCA_MAX_TRACKED", "60"))
 #: changes the *order*: unpinned names go first, and when only pinned ones are
 #: left :func:`pin` refuses rather than quietly dropping one to admit another.
 PINNED = "pinned"
+
+#: ``source`` marking a row that is one of the signed-in reader's own holdings.
+#:
+#: Ranked above :data:`PINNED` in :func:`_evict` and below the framework seed,
+#: which is the order the names deserve: a company somebody actually owns is the
+#: one they most need scored, ahead of one they merely asked to keep, ahead of
+#: one they once opened. Kept as a *source* on the row rather than resolved at
+#: eviction time because `_evict` runs on the background sweep where there is no
+#: request and therefore no session to ask who is signed in.
+#:
+#: Synced rather than set once. A position that is sold stops being a holding,
+#: so :func:`sync_held` demotes it back to ``opened`` — otherwise the protected
+#: set would only ever grow and would end up pinning a portfolio from months ago
+#: against the cap.
+HELD = "held"
 
 #: Disk mirror. Small, rewritten whole, atomic — it is a set of short strings.
 LOCAL_PATH = Path(__file__).parent.parent / "cache" / "dca_universe.json"
@@ -311,24 +327,24 @@ def remember(ticker: str, *, source: str = "opened") -> bool:
 
 
 def _evict(rows: dict[str, dict[str, Any]]) -> None:
-    """Drop the least-recently-opened rows until inside the cap, pinned last.
+    """Drop the least-recently-opened rows until inside the cap, in tiers.
 
-    The sort key is ``(pinned, last_seen_at)`` descending, so a name the reader
-    asked to keep is only considered once every unpinned one is already gone.
-    The cap itself is unchanged: pinning reorders the queue, it does not lengthen
-    it, because every row in the table is six Yahoo reads a day whatever it is
-    marked. :func:`pin` refuses before it can come to evicting one pinned name
-    to make room for another.
+    The sort key is ``(held, pinned, last_seen_at)`` descending, so a holding is
+    considered only after every pin is gone, and a pin only after every plain
+    browse. The cap itself is unchanged by any of it: pinning and holding
+    reorder the queue, they do not lengthen it, because every row in the table
+    is six Yahoo reads a day whatever it is marked.
     """
     protected = seed()
     room = max(0, MAX_TRACKED - len(protected))
-    extra = [(1 if row.get("source") == PINNED else 0,
+    extra = [(1 if row.get("source") == HELD else 0,
+              1 if row.get("source") == PINNED else 0,
               row.get("last_seen_at") or 0.0, symbol)
              for symbol, row in rows.items() if symbol not in protected]
     if len(extra) <= room:
         return
     extra.sort(reverse=True)
-    for _pin, _seen, symbol in extra[room:]:
+    for _held, _pin, _seen, symbol in extra[room:]:
         rows.pop(symbol, None)
         _delete(symbol)
         log.info("dca_universe: evicted %s (cap %d)", symbol, MAX_TRACKED)
@@ -370,6 +386,81 @@ def pinned() -> set[str]:
     pin budget."""
     return {symbol for symbol, row in tracked().items()
             if row.get("source") == PINNED and symbol not in seed()}
+
+
+def held() -> set[str]:
+    """Tracked names that are one of the reader's own holdings."""
+    return {symbol for symbol, row in tracked().items()
+            if row.get("source") == HELD and symbol not in seed()}
+
+
+def sync_held(symbols: Iterable[str]) -> dict[str, Any]:
+    """Reconcile the held set against the reader's current positions.
+
+    *symbols* is the whole portfolio, in the order the caller wants them
+    admitted — largest position first is the sane one, because the cap can bite.
+    Returns what changed and, more usefully, what did not fit.
+
+    Three deliberate refusals to do the obvious thing:
+
+    * **Only names already in the registry are marked.** Registration stays
+      gated on a rebuild that actually scored, which is what keeps an ETF — the
+      thing most portfolios are mostly made of — out of a table headed "all
+      scored names". A holding that has never been built comes back in
+      ``not_tracked`` so the caller can queue it for the warm instead.
+    * **It does not evict to make room.** A holding that does not fit is
+      reported, not forced in over something else. The cap is a daily Yahoo
+      bill, and quietly doubling it because somebody imported a broker CSV is
+      the failure this whole module exists to prevent.
+    * **Demotion is to ``opened``, never to deleted.** Selling a position is not
+      a reason to lose its reconstruction; it just stops being protected.
+
+    ``not_tracked`` and ``no_room`` are separated because they need different
+    actions and are easy to confuse. An untracked holding in a registry with
+    space is simply waiting for its first build, and the warm will get to it. An
+    untracked holding in a registry whose whole non-seed budget is already
+    protected will *never* arrive however long anyone waits — nothing is
+    evictable, so there is no slot for it — and the only fix is to release
+    something or raise the cap, which is a decision about daily spend.
+    """
+    wanted = [s.strip().upper() for s in symbols if s and s.strip()]
+    wanted = [s for s in dict.fromkeys(wanted) if s not in seed()]
+    rows = tracked()
+    room = max(0, MAX_TRACKED - len(seed()))
+
+    marked, not_tracked, no_room = [], [], []
+    for symbol in wanted:
+        if symbol in rows:
+            if rows[symbol].get("source") != HELD:
+                _set_source(symbol, HELD)
+                # Keep the local snapshot in step. `_set_source` re-reads the
+                # store, so without this the `evictable` count below still sees
+                # rows this pass has already protected and reports a holding as
+                # "awaiting a build" when in fact there is no slot for it.
+                rows[symbol] = {**rows[symbol], "source": HELD}
+            marked.append(symbol)
+            continue
+        # Absent. Whether that is temporary depends on whether anything in the
+        # table could ever be evicted to admit it.
+        evictable = sum(1 for s, r in rows.items()
+                        if s not in seed() and r.get("source") != HELD)
+        if len(marked) >= room and not evictable:
+            no_room.append(symbol)
+        else:
+            not_tracked.append(symbol)
+
+    still = set(marked)
+    demoted = [s for s in held() if s not in still]
+    for symbol in demoted:
+        _set_source(symbol, "opened")
+
+    if marked or demoted:
+        log.info("dca_universe: held sync — %d marked, %d demoted, "
+                 "%d awaiting a build, %d with no slot",
+                 len(marked), len(demoted), len(not_tracked), len(no_room))
+    return {"held": sorted(still), "marked": len(marked),
+            "demoted": sorted(demoted), "not_tracked": not_tracked,
+            "no_room": no_room, "max_held": room}
 
 
 def pin(ticker: str) -> dict[str, Any]:
@@ -505,4 +596,7 @@ def stats() -> dict[str, Any]:
         # will not stick; with 0 pinned, every one of theirs is a candidate.
         "pinned": len(pinned()),
         "max_pinned": max(0, MAX_TRACKED - len(protected)),
+        # Holdings are protected above pins, so this is the share of the
+        # non-seed budget that is spoken for before anything can be evicted.
+        "held": len(held()),
     }

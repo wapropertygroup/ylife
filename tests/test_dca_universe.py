@@ -271,6 +271,103 @@ class Pinning(RegistryBase):
         self.assertEqual(s["pinned"], 1)
         self.assertEqual(s["max_pinned"], 3)
 
+
+class Holdings(RegistryBase):
+    """The reader's own positions, protected above pins.
+
+    A company somebody has money in is the one they most need scored, so it
+    outranks a name they asked to keep, which outranks one they once opened.
+    What it does *not* do is raise the ceiling: the cap is a daily Yahoo bill
+    and a holding costs the same six reads as anything else.
+    """
+
+    def test_a_holding_outranks_a_pin_and_a_browse(self):
+        du.MAX_TRACKED = len(du.seed()) + 2
+        du.remember("OWNED")
+        du.remember("KEPT"); du.pin("KEPT")
+        du.sync_held(["OWNED"])
+        du.remember("BROWSED")          # forces an eviction
+        kept = set(du.all_tickers())
+        self.assertIn("OWNED", kept)
+        self.assertIn("KEPT", kept)
+        self.assertNotIn("BROWSED", kept)
+
+    def test_a_holding_survives_when_a_pin_must_go(self):
+        du.MAX_TRACKED = len(du.seed()) + 1
+        du.remember("OWNED"); du.sync_held(["OWNED"])
+        du.remember("KEPT"); du.pin("KEPT")
+        self.assertIn("OWNED", du.all_tickers())
+
+    def test_selling_demotes_rather_than_deletes(self):
+        """A sold position stops being protected; it does not lose its
+        reconstruction, which cost six reads to build."""
+        du.remember("SOLD"); du.sync_held(["SOLD"])
+        self.assertEqual(du.held(), {"SOLD"})
+        du.sync_held([])
+        self.assertEqual(du.held(), set())
+        self.assertIn("SOLD", du.all_tickers())
+
+    def test_a_holding_that_never_built_is_reported_not_invented(self):
+        """Registration stays gated on a rebuild that scored — that is what
+        keeps ETFs, which most portfolios are mostly made of, out of a table
+        headed "all scored names"."""
+        out = du.sync_held(["NEVERBUILT"])
+        self.assertEqual(out["not_tracked"], ["NEVERBUILT"])
+        self.assertNotIn("NEVERBUILT", du.tracked())
+        self.assertEqual(du.held(), set())
+
+    def test_a_portfolio_larger_than_the_budget_reports_no_slot(self):
+        """It does not evict to make room. Quietly doubling the daily data bill
+        because somebody imported a broker CSV is the failure this module
+        exists to prevent — and with every non-seed slot held, a further holding
+        will never arrive however long the warm runs, which is a different
+        message from "still building"."""
+        du.MAX_TRACKED = len(du.seed()) + 2
+        du.remember("A"); du.remember("B")
+        du.sync_held(["A", "B"])
+        out = du.sync_held(["A", "B", "C", "D"])
+        self.assertEqual(out["max_held"], 2)
+        self.assertEqual(sorted(out["held"]), ["A", "B"])
+        self.assertEqual(out["no_room"], ["C", "D"])
+        self.assertEqual(out["not_tracked"], [])
+        self.assertLessEqual(len(du.all_tickers()), du.MAX_TRACKED)
+
+    def test_an_absent_holding_with_room_left_is_only_awaiting_a_build(self):
+        """The distinction that decides what the reader should do: wait, or
+        release a slot."""
+        du.MAX_TRACKED = len(du.seed()) + 5
+        du.remember("A"); du.sync_held(["A"])
+        out = du.sync_held(["A", "NEWONE"])
+        self.assertEqual(out["not_tracked"], ["NEWONE"])
+        self.assertEqual(out["no_room"], [])
+
+    def test_the_caller_order_decides_who_gets_protection(self):
+        """The route passes positions largest-first, so when the cap bites the
+        names with the most money behind them are the ones that keep it."""
+        du.MAX_TRACKED = len(du.seed()) + 2
+        du.remember("BIG"); du.remember("MID")
+        out = du.sync_held(["BIG", "MID", "SMALL"])
+        self.assertEqual(sorted(out["held"]), ["BIG", "MID"])
+        self.assertEqual(out["no_room"], ["SMALL"])
+
+    def test_a_seed_name_in_the_portfolio_is_not_double_counted(self):
+        """It is already unevictable; consuming a held slot for it would shrink
+        the budget available to holdings that actually need one."""
+        out = du.sync_held(["MSFT"])
+        self.assertEqual(out["held"], [])
+        self.assertNotIn("MSFT", du.held())
+
+    def test_syncing_twice_is_idempotent(self):
+        du.remember("OWNED")
+        first = du.sync_held(["OWNED"])
+        second = du.sync_held(["OWNED"])
+        self.assertEqual(first["held"], second["held"])
+        self.assertEqual(second["demoted"], [])
+
+    def test_stats_report_the_held_count(self):
+        du.remember("OWNED"); du.sync_held(["OWNED"])
+        self.assertEqual(du.stats()["held"], 1)
+
     def test_stats_report_capacity_honestly(self):
         du.MAX_TRACKED = len(du.seed()) + 5
         du.remember("SHOP")

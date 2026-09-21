@@ -1776,6 +1776,32 @@ def api_dca_list():
     exposure = _dca_exposure()
     overrides = _dca_overrides()
 
+    # Every holding belongs in the ranked table, and belongs there permanently.
+    # These are the names the reader has money in, so they are worth the six
+    # reads a day ahead of anything somebody merely browsed — `sync_held` marks
+    # them a tier above pins in the eviction order and demotes whatever has
+    # since been sold.
+    #
+    # Gated the same way pinning is, and for the same reason rather than out of
+    # caution: the registry is one shared list and a sync spends the box's daily
+    # Yahoo budget on one person's portfolio. Reads stay open.
+    #
+    # A holding that has never been built is *not* registered here — that stays
+    # gated on a rebuild that scored, which is what keeps ETFs out — it is
+    # unioned into `wanted` instead, so it shows as pending and the paced warm
+    # picks it up. Whether it sticks is then decided by whether it can score.
+    held_sync = None
+    if _dca_pin_editable():
+        holdings = (exposure or {}).get("positions") or []
+        if holdings:
+            try:
+                held_sync = dca_universe.sync_held(holdings)
+                wanted = list(dict.fromkeys([*wanted, *holdings]))
+                have = set(dca_history.cached_tickers())
+            except Exception as exc:  # noqa: BLE001 - the table is the page
+                log.info("DCA: could not sync holdings into the registry: %s", exc)
+    held_names = set((held_sync or {}).get("held") or ())
+
     rows, pending = [], []
     for symbol in wanted:
         payload = dca_history.peek(symbol) if symbol in have else None
@@ -1826,6 +1852,10 @@ def api_dca_list():
             "no_score_reason": _dca_no_score_reason(result, peer, window),
             "peer_group": peer.get("group"),
             "seed": symbol in protected,
+            # Marked so the table can show which rows are there because the
+            # reader owns them, rather than leaving a held name looking like
+            # any other browse that happens to be near the top.
+            "held": symbol in held_names,
             "stale": (time.time() - (payload.get("_ts") or 0)) > dca_history.TTL_SECONDS,
         })
 
@@ -1848,6 +1878,11 @@ def api_dca_list():
         "pending": pending,
         "warming": dca_history.is_warming(),
         "registry": dca_universe.stats(),
+        # What the holdings sync did, including what it could not do. `no_room`
+        # is the one a reader can act on: the cap is a daily data budget, so a
+        # portfolio larger than the non-seed budget is a decision about spend,
+        # not something to paper over.
+        "held_sync": held_sync,
         "max_multiplier": dca_max_multiplier(),
         "dcf_enabled": dca_dcf_enabled(),
         "generated_at": time.time(),
@@ -2306,10 +2341,47 @@ def _dca_exposure() -> dict:
         return {
             "map": {e.get("symbol"): e for e in (payload.get("exposures") or [])},
             "coverage_pct": payload.get("coverage_pct"),
+            # The held *lines*, largest first — not the look-through leaves.
+            # `analyse` penetrates three ETFs to over a thousand names, which is
+            # the right unit for a concentration overlay and exactly the wrong
+            # one for a registry capped at sixty. Carried here rather than
+            # re-loaded because this function has already paid for the read.
+            "positions": _dca_held_symbols(positions),
         }
     except Exception as exc:  # noqa: BLE001
         log.info("DCA: portfolio overlay unavailable: %s", exc)
         return {"map": None, "reason": "unavailable"}
+
+
+def _dca_held_symbols(positions) -> list[str]:
+    """Held tickers, largest position first, cash and blanks dropped.
+
+    Order matters because the cap can bite: when a portfolio is bigger than the
+    non-seed budget, the names that get protection should be the ones with the
+    most money behind them rather than whichever the store happened to return
+    first. Value is quantity x price where both are known, and a line missing
+    either sorts last rather than being dropped — an unpriced holding is still a
+    holding.
+    """
+    scored: list[tuple[float, str]] = []
+    for pos in positions or []:
+        symbol = (getattr(pos, "symbol", None)
+                  or (pos.get("symbol") if isinstance(pos, dict) else None) or "")
+        symbol = str(symbol).strip().upper()
+        if not symbol or symbol.startswith("$"):     # $CASH and friends
+            continue
+        def _f(name):
+            raw = (getattr(pos, name, None)
+                   if not isinstance(pos, dict) else pos.get(name))
+            try:
+                return float(raw)
+            except (TypeError, ValueError):
+                return None
+        qty, price = _f("quantity"), _f("price")
+        value = qty * price if (qty is not None and price is not None) else -1.0
+        scored.append((value, symbol))
+    scored.sort(key=lambda p: -p[0])
+    return list(dict.fromkeys(sym for _v, sym in scored))
 
 
 def _dca_position(ticker: str, exposure: Optional[dict] = None) -> dict:
