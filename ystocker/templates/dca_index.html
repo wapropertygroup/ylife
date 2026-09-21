@@ -501,9 +501,27 @@ function renderRecent() {
   ).join('');
 }
 
+/* A fund is refused here as well as filtered out of the suggestions, because
+   the suggestion list is not the only way to reach one: the Score button and
+   the Enter key both take whatever is in the box. Refusing without saying why
+   would read as a broken search, so the explanation goes where the suggestions
+   would have been -- and it is a div, not a button, so there is nothing to
+   click and nothing for the arrow keys to land on. */
+function unscorableNote(sym) {
+  document.getElementById('searchList').innerHTML = `
+    <div class="search-item" style="cursor:default">
+      <span class="font-mono font-semibold w-20 shrink-0">${esc(sym)}</span>
+      <span class="flex-1 text-slate-500">${esc(I18n.t('dcx.not_scorable')
+        || 'A fund publishes no statements, so it has no valuation history to score.')}</span>
+    </div>`;
+  document.getElementById('searchList').style.display = 'block';
+  _sugg = []; _active = -1;
+}
+
 function goTo(ticker) {
   const sym = cleanSymbol(ticker);
   if (!sym) return;
+  if (UNSCORABLE.has(sym)) { unscorableNote(sym); return; }
   addRecent(sym);
   window.location.href = dcaUrl(sym);
 }
@@ -514,15 +532,16 @@ function closeSuggestions() {
 }
 
 function renderSuggestions(typed, matches) {
+  /* Funds are skipped outright -- the typed one included. Yahoo publishes no
+     statements for one, so following it can only end in "no published
+     statements" after six reads and about a minute; SPY and XTL were both
+     being offered here. Nothing unscorable can reach _sugg, which is what
+     makes the Enter and arrow-key paths safe without a second guard. */
+  if (UNSCORABLE.has(typed)) { unscorableNote(typed); return; }
+
   const scored = new Set(_rows.map(r => r.ticker));
   const lead = { ticker: typed, name: (matches.find(m => m.ticker === typed) || {}).name || '',
                  group: '', lead: true };
-  /* Funds are dropped from the suggestions and kept on the lead row, and the
-     asymmetry is the point. A name the reader did not ask for is not worth one
-     of eight slots when following it can only end in "no published statements"
-     — SPY and XTL were both being offered here. But a symbol they typed in full
-     is worth an explanation: swallowing it silently would read as the search
-     being broken, and they can still press Enter. Informed, not blocked. */
   _sugg = [lead].concat(matches.filter(
     m => m.ticker !== typed && !UNSCORABLE.has(m.ticker)).slice(0, 7));
 
@@ -530,10 +549,7 @@ function renderSuggestions(typed, matches) {
     <button type="button" class="search-item${i === _active ? ' active' : ''}" data-i="${i}">
       <span class="font-mono font-semibold w-20 shrink-0">${esc(s.ticker)}</span>
       <span class="flex-1 truncate text-slate-600 dark:text-slate-400">${esc(s.name || '')}</span>
-      ${UNSCORABLE.has(s.ticker)
-        ? `<span class="chip" style="border-color:${CT.c('#fb923c')};color:${CT.c('#fb923c')}">${
-            esc(I18n.t('dcx.not_scorable') || 'fund — no statements')}</span>`
-        : scored.has(s.ticker)
+      ${scored.has(s.ticker)
         ? `<span class="chip" style="border-color:${CT.c('#34d399')};color:${CT.c('#34d399')}">${esc(I18n.t('dcx.already_scored') || 'scored')}</span>`
         : (s.group ? `<span class="chip">${esc(s.group)}</span>` : '')}
     </button>`).join('');

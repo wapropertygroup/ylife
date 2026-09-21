@@ -45,6 +45,8 @@ const STRINGS = {
   'dcx.filings': 'filings',
   'dcx.years_unit': 'y',
   'dcx.dropped': 'dropped',
+  'dcx.already_scored': 'scored',
+  'dcx.not_scorable': 'A fund publishes no statements, so it has no valuation history to score.',
 };
 const asked = [];
 const I18n = { t: (k) => { asked.push(k); return STRINGS[k] ?? null; } };
@@ -150,6 +152,94 @@ console.log('coverageCell');
   check('a short factor shows how short', lossy.includes('57/60'));
   check('a factor with no series at all shows no count',
         !lossy.includes('0/60'), 'zero of sixty implies it is merely short');
+}
+
+/* ── The fund filter ──────────────────────────────────────────────────────
+   A fund publishes no statements, so following one from this page costs six
+   Yahoo reads and about a minute to arrive at "no published statements". SPY
+   and XTL were both being suggested. Three entry points reach /dca/<t> — the
+   suggestion list, the Enter key and the Score button — and the last two take
+   whatever is in the box, so filtering the list alone leaves two ways through.
+   That is what these checks are for. */
+console.log('\nfund filter');
+{
+  const dom = {};
+  const el = () => {
+    const node = { innerHTML: '', style: {}, _c: new Set(),
+      classList: { add: c => node._c.add(c), remove: c => node._c.delete(c),
+                   contains: c => node._c.has(c),
+                   toggle: (c, f) => { const on = f === undefined ? !node._c.has(c) : !!f;
+                                       if (on) node._c.add(c); else node._c.delete(c); return on; } } };
+    return node;
+  };
+  for (const id of ['searchList', 'recentWrap', 'recentList']) dom[id] = el();
+
+  let navigated = null;
+  const globals = {
+    document: { getElementById: id => dom[id], querySelectorAll: () => [] },
+    I18n: { t: k => STRINGS[k] ?? null },
+    esc: s => String(s ?? ''),
+    CT: { c: v => v },
+    UNSCORABLE: new Set(['SPY', 'XTL', 'IGV']),
+    // A module-level const in the template, so `extract` (which only takes
+    // functions) does not bring it along. Without it `getRecent` throws on an
+    // undefined name, its own try/catch swallows that, and every recent-chip
+    // assertion passes against an empty list — which is how the paired
+    // "companies stay" check earns its keep.
+    RECENT_KEY: 'ystocker_recent_tickers',
+    window: { location: { set href(v) { navigated = v; } } },
+    localStorage: { _v: '["SPY","MSFT"]', getItem: () => globals.localStorage._v,
+                    setItem: (_k, v) => { globals.localStorage._v = v; } },
+    _rows: [{ ticker: 'MSFT' }],
+  };
+  const names = ['cleanSymbol', 'langSuffix', 'dcaUrl', 'getRecent', 'addRecent',
+                 'renderRecent', 'unscorableNote', 'goTo', 'renderSuggestions'];
+  const fnSrc = names.map(extract).join('\n');
+  const fns = new Function(...Object.keys(globals),
+    `let _sugg = [], _active = -1; ${fnSrc}; return { ${names.join(', ')}, peek: () => _sugg };`
+  )(...Object.values(globals));
+
+  fns.renderSuggestions('SP', [
+    { ticker: 'SPOT', name: 'Spotify', group: 'Streaming / Media' },
+    { ticker: 'SPY',  name: 'SPDR S&P 500 ETF', group: 'US Broad ETFs' },
+    { ticker: 'XTL',  name: 'SPDR Telecom ETF', group: 'Telecom' },
+  ]);
+  check('a fund is not suggested', !dom.searchList.innerHTML.includes('SPY'));
+  // XTL is filed under "Telecom", so its group label gives nothing away — the
+  // one that would slip through a rule reading only the first peer group.
+  check('a fund wearing an equity group label is not suggested',
+        !dom.searchList.innerHTML.includes('XTL'));
+  check('companies are still suggested', dom.searchList.innerHTML.includes('SPOT'));
+
+  // Typed in full: skipped too, but not in silence. An empty dropdown for a
+  // symbol somebody spelled out reads as the search being broken.
+  fns.renderSuggestions('SPY', [{ ticker: 'SPY', name: 'SPDR S&P 500 ETF', group: 'US Broad ETFs' }]);
+  check('a typed fund offers nothing to click',
+        !dom.searchList.innerHTML.includes('<button'));
+  check('a typed fund says why', dom.searchList.innerHTML.includes(STRINGS['dcx.not_scorable']));
+  check('a typed fund is unreachable by keyboard', fns.peek().length === 0,
+        'arrow keys and Enter both index _sugg');
+
+  // The Score button and the Enter key both call goTo directly.
+  navigated = null;
+  fns.goTo('SPY');
+  check('the Score button refuses a fund', navigated === null);
+  check('refusing still explains itself',
+        dom.searchList.innerHTML.includes(STRINGS['dcx.not_scorable']));
+  check('a refused fund is not remembered as recent',
+        !JSON.parse(globals.localStorage._v).includes('QQQ'));
+
+  navigated = null;
+  fns.goTo('MSFT');
+  check('a company still navigates', navigated === '/dca/MSFT');
+
+  // RECENT_KEY is shared with navsearch and /lookup, so a fund opened on
+  // /history arrives here as a chip linking to a page that cannot score it.
+  fns.renderRecent();
+  check('a fund is dropped from the recent chips',
+        !dom.recentList.innerHTML.includes('SPY'));
+  check('companies stay in the recent chips',
+        dom.recentList.innerHTML.includes('MSFT'));
 }
 
 console.log(failed ? `\n${failed} check(s) failed` : '\nall checks passed');
