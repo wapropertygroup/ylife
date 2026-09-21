@@ -1,9 +1,10 @@
 {% extends "base.html" %}
-{% block title %}yStocker — Inbox{% endblock %}
+{% block title %}yStocker — Posts{% endblock %}
 
 {% block content %}
+<script src="{{ url_for('static', filename='markdown.js') }}?v={{ cache_bust or 'dev' }}"></script>
 {#
-  /inbox — messages posted by external systems through /api/inbox.
+  /posts — content posted by external systems through /api/posts.
 
   Two conventions from this codebase that matter here:
 
@@ -73,7 +74,54 @@
     padding: 0.5rem 0.65rem; margin-top: 0.5rem;
     max-height: 16rem; overflow: auto; white-space: pre-wrap; word-break: break-word;
   }
-  .ib-body { white-space: pre-wrap; word-break: break-word; }
+  .ib-body { word-break: break-word; }
+  /* Rendered Markdown / allowlisted HTML. Plain CSS rather than Tailwind
+     because these elements are created by the renderer and carry no classes,
+     and it draws from the shared --t-* vocabulary so a post cannot end up a
+     shade away from the rest of the site. */
+  .ib-rich > :first-child { margin-top: 0; }
+  .ib-rich > :last-child  { margin-bottom: 0; }
+  .ib-rich p { margin: 0.4rem 0; }
+  .ib-rich h1, .ib-rich h2, .ib-rich h3,
+  .ib-rich h4, .ib-rich h5, .ib-rich h6 {
+    color: var(--t-ink-strong); font-weight: 600; line-height: 1.3;
+    margin: 0.9rem 0 0.35rem;
+  }
+  .ib-rich h1 { font-size: 1.05rem; }
+  .ib-rich h2 { font-size: 1rem; }
+  .ib-rich h3, .ib-rich h4, .ib-rich h5, .ib-rich h6 { font-size: 0.9rem; }
+  .ib-rich ul, .ib-rich ol { margin: 0.4rem 0; padding-left: 1.25rem; }
+  .ib-rich ul { list-style: disc; }
+  .ib-rich ol { list-style: decimal; }
+  .ib-rich li { margin: 0.15rem 0; }
+  .ib-rich a { color: var(--t-accent-ink); text-decoration: underline; }
+  .ib-rich strong { color: var(--t-ink-strong); font-weight: 600; }
+  .ib-rich blockquote {
+    margin: 0.5rem 0; padding: 0.15rem 0 0.15rem 0.75rem;
+    border-left: 3px solid var(--t-accent-line); color: var(--t-ink-dim);
+  }
+  .ib-rich hr { border: 0; border-top: 1px solid var(--ib-line); margin: 0.75rem 0; }
+  .ib-rich code {
+    background: var(--ib-well); border: 1px solid var(--ib-line);
+    border-radius: 0.25rem; padding: 0.05rem 0.3rem; font-size: 0.85em;
+  }
+  .ib-rich pre {
+    background: var(--ib-well); border: 1px solid var(--ib-line);
+    border-radius: 0.5rem; padding: 0.5rem 0.65rem; margin: 0.5rem 0;
+    overflow-x: auto; font-size: 11px; line-height: 1.5;
+  }
+  .ib-rich pre code { background: none; border: 0; padding: 0; }
+  /* A posted table can be wider than the card, and a table is the one block a
+     sender is most likely to send. Scrolls rather than forcing the card wide. */
+  .ib-rich table {
+    display: block; overflow-x: auto; max-width: 100%;
+    border-collapse: collapse; margin: 0.5rem 0; font-size: 12px;
+  }
+  .ib-rich th, .ib-rich td {
+    border: 1px solid var(--ib-line); padding: 0.25rem 0.5rem; text-align: left;
+  }
+  .ib-rich th { background: var(--ib-well); color: var(--t-ink-strong); font-weight: 600; }
+  .ib-rich img { max-width: 100%; height: auto; }
 </style>
 
 <div id="inboxRoot" class="max-w-4xl mx-auto">
@@ -140,6 +188,27 @@
 
 /* Everything rendered here arrived from outside, so esc() is not optional on
    any of it — see the note at the top of this file. */
+
+/* The body is rich text: Markdown, or HTML for a sender that finds that easier.
+   Both go through the shared renderer rather than innerHTML, which is the whole
+   safety argument — `Markdown.render` escapes text before adding any tag, and
+   where it honours HTML it *rebuilds* it against an allowlist rather than
+   passing it through, dropping <script>/<style>/<iframe> with their contents and
+   putting every href past a scheme check. It is the same renderer /agents uses
+   on model output, for the same reason: this content is not ours either.
+
+   Falls back to escaped plain text if the script failed to load, rather than
+   rendering nothing or — much worse — reaching for innerHTML unescaped. */
+function richText(raw) {
+  if (typeof Markdown === 'undefined' || !Markdown || !Markdown.render) {
+    return esc(raw).replace(/\n/g, '<br>');
+  }
+  try {
+    return Markdown.render(String(raw));
+  } catch (e) {
+    return esc(raw).replace(/\n/g, '<br>');
+  }
+}
 function esc(v) {
   return String(v == null ? '' : v)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -227,7 +296,7 @@ function renderList() {
         <time class="text-[11px] text-slate-500 dark:text-slate-600 whitespace-nowrap">${fmtWhen(m.received_at)}</time>
       </div>
       ${m.title ? `<h3 class="font-semibold text-slate-800 dark:text-slate-100">${esc(m.title)}</h3>` : ''}
-      ${m.text ? `<p class="ib-body text-sm text-slate-600 dark:text-slate-300 mt-1">${esc(m.text)}</p>` : ''}
+      ${m.text ? `<div class="ib-body ib-rich text-sm text-slate-600 dark:text-slate-300 mt-1">${richText(m.text)}</div>` : ''}
       ${link}
       ${extra}
     </article>`;
@@ -238,7 +307,7 @@ function renderCurl(retention) {
   const el = document.getElementById('ibCurl');
   if (!el) return;
   el.textContent =
-    `curl -X POST ${location.origin}/api/inbox \\\n`
+    `curl -X POST ${location.origin}/api/posts \\\n`
     + `  -H 'Authorization: Bearer <INBOX_TOKEN>' \\\n`
     + `  -H 'Content-Type: application/json' \\\n`
     + `  -d '{"title":"Hello","text":"from my script",`
@@ -253,7 +322,7 @@ async function loadInbox() {
   loading.classList.remove('hidden');
   err.classList.add('hidden');
   try {
-    const r = await fetch('/api/inbox?limit=100');
+    const r = await fetch('/api/posts?limit=100');
     const body = await r.json().catch(() => ({}));
     if (!r.ok) {
       // Named, not generic: `store_unavailable` must never render as "you have

@@ -13784,6 +13784,10 @@ def _start_daily_pregen_scheduler(app=None) -> None:
 # Inbox — the one write endpoint external systems can reach
 # ---------------------------------------------------------------------------
 
+@bp.route("/api/posts", methods=["POST"])
+# `/api/inbox` was the name this shipped under for a day. Kept as an alias
+# rather than removed: a sender is a script somebody configured by hand, and
+# breaking it to tidy a URL would cost them a silent outage to save nothing.
 @bp.route("/api/inbox", methods=["POST"])
 def api_inbox_post():
     """Accept one JSON message from an external system.
@@ -13885,6 +13889,7 @@ def _inbox_try_consume() -> tuple[bool, dict]:
                   "remaining": max(0, limit - used - 1)}
 
 
+@bp.route("/api/posts", methods=["GET"])
 @bp.route("/api/inbox", methods=["GET"])
 def api_inbox_list():
     """The feed, for the page. Signed in only.
@@ -13918,14 +13923,24 @@ def api_inbox_list():
     })
 
 
-@bp.route("/inbox")
-def inbox_page():
+@bp.route("/posts")
+def posts_page():
     """The feed. Renders for everyone; the body branches on sign-in, matching
     ``assets_page`` — a login form with no context is a worse landing than a
     page that says what it is."""
     email = session.get("user_email")
     log.info("GET /inbox")
-    return render_template("inbox.html",
+    return render_template("posts.html",
                            peer_groups=list(PEER_GROUPS.keys()),
                            signed_in=bool(email),
                            user_email=email or "")
+
+
+@bp.route("/inbox")
+def inbox_page():
+    """The name this shipped under for a day. Redirects rather than serving the
+    same page at two addresses, so a bookmark moves itself to the canonical URL
+    instead of quietly diverging from it. A second `@bp.route` on the view above
+    would have been fewer lines and is what this was: `url_for` then picked the
+    old name for every nav link, which is the drift a redirect prevents."""
+    return redirect(url_for("main.posts_page"), code=302)

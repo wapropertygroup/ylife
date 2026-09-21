@@ -1023,11 +1023,21 @@ link host, which defaults to `https://trade-agents.com` rather than
 Errors are *not* mailed — only finished reports. Tests:
 `tests/test_report_email.py` (76 unit tests, no app, no network, no SES).
 
-### The external inbox (`/api/inbox`, `/inbox`)
+### Posts — the external write door (`/api/posts`, `/posts`)
 
 A write-only door for anything that can make an HTTP request — a cron job, a
 broker webhook, a script on another machine — and a signed-in feed that renders
-what came through it. The message shape is loose on purpose: a handful of
+what came through it. `text` is rendered by the shared `static/markdown.js`, so
+a sender can post Markdown **or** HTML: that renderer escapes text before adding
+any tag and rebuilds HTML against an allowlist rather than passing it through,
+which is what makes accepting HTML from a token holder safe at all.
+
+Shipped for one day as `/inbox`. `/api/inbox` is still a live alias, because a
+sender is a script somebody configured by hand and breaking it to tidy a URL
+costs a silent outage to save nothing; the *page* 302s to `/posts` instead, so a
+bookmark moves itself rather than leaving two addresses serving one thing. The
+module and table keep the `inbox` name — a DynamoDB table cannot be renamed in
+place, and the module follows the table it owns. The message shape is loose on purpose: a handful of
 optional fields the page knows how to render (`title`, `text`, `source`,
 `level`, `ticker`, `tags`, `url`) and **everything else kept verbatim** under
 `data`, so a sender never has to ask permission to add a field.
