@@ -1,0 +1,287 @@
+{% extends "base.html" %}
+{% block title %}yStocker — Inbox{% endblock %}
+
+{% block content %}
+{#
+  /inbox — messages posted by external systems through /api/inbox.
+
+  Two conventions from this codebase that matter here:
+
+  * Page-local CSS declares light-first custom properties with a `.dark`
+    override, because hand-written CSS is unreachable by Tailwind's `dark:`
+    variant and tests/test_theme_classes.py rejects a `dark:` pair in a selector.
+  * **Every field rendered here came from outside.** The sender is a script
+    holding a bearer token, not a signed-in human, so title, text, source,
+    ticker, tags, url and the whole `data` object are attacker-controlled in
+    exactly the sense /assets' imported cells are. Everything goes through esc()
+    before it reaches innerHTML, and `url` is additionally scheme-checked at
+    write time — an href is the one place escaping alone is not enough, because
+    `javascript:` survives HTML-escaping intact.
+#}
+<style>
+  #inboxRoot {
+    --ib-card:   #ffffff;
+    --ib-line:   #e2e8f0;
+    --ib-muted:  #64748b;
+    --ib-strong: #0f172a;
+    --ib-well:   #f8fafc;
+  }
+  .dark #inboxRoot {
+    --ib-card:   #0f172a;
+    --ib-line:   #1e293b;
+    --ib-muted:  #94a3b8;
+    --ib-strong: #e2e8f0;
+    --ib-well:   #0b1120;
+  }
+  .ib-card {
+    background: var(--ib-card); border: 1px solid var(--ib-line);
+    border-radius: 0.75rem;
+  }
+  .ib-msg { border-left: 3px solid var(--ib-line); }
+  .ib-info    { border-left-color: #6366f1; }
+  .ib-success { border-left-color: #10b981; }
+  .ib-warn    { border-left-color: #f59e0b; }
+  .ib-error   { border-left-color: #ef4444; }
+  .ib-chip {
+    font-size: 10px; padding: 1px 7px; border-radius: 9999px;
+    border: 1px solid var(--ib-line); color: var(--ib-muted); white-space: nowrap;
+  }
+  .ib-chip-info    { color: #4338ca; border-color: #c7d2fe; }
+  .ib-chip-success { color: #047857; border-color: #a7f3d0; }
+  .ib-chip-warn    { color: #b45309; border-color: #fde68a; }
+  .ib-chip-error   { color: #b91c1c; border-color: #fecaca; }
+  .dark .ib-chip-info    { color: #a5b4fc; border-color: #312e81; }
+  .dark .ib-chip-success { color: #6ee7b7; border-color: #065f46; }
+  .dark .ib-chip-warn    { color: #fcd34d; border-color: #78350f; }
+  .dark .ib-chip-error   { color: #fca5a5; border-color: #7f1d1d; }
+  .ib-filter {
+    font-size: 11px; padding: 2px 9px; border-radius: 9999px; cursor: pointer;
+    border: 1px solid var(--t-line-strong); background: transparent;
+    color: var(--t-ink-dim); transition: color .15s, border-color .15s, background .15s;
+  }
+  .ib-filter:hover { color: var(--t-ink); border-color: var(--t-line-hover); }
+  .ib-filter.active {
+    color: var(--t-accent-ink); border-color: var(--t-accent);
+    background: rgba(99,102,241,0.15);
+  }
+  /* The verbatim remainder. Preformatted so a sender's JSON is readable, and
+     scrollable so one enormous payload cannot push the next message off the
+     page — the cap at write time bounds the bytes, not the line count. */
+  .ib-data {
+    background: var(--ib-well); border: 1px solid var(--ib-line);
+    border-radius: 0.5rem; font-size: 11px; line-height: 1.5;
+    padding: 0.5rem 0.65rem; margin-top: 0.5rem;
+    max-height: 16rem; overflow: auto; white-space: pre-wrap; word-break: break-word;
+  }
+  .ib-body { white-space: pre-wrap; word-break: break-word; }
+</style>
+
+<div id="inboxRoot" class="max-w-4xl mx-auto">
+
+  <div class="mb-6 fade-up">
+    <h1 class="text-2xl sm:text-3xl font-bold grad-text mb-1" data-i18n="inbox.title">Inbox</h1>
+    <p class="text-slate-500 dark:text-slate-400 text-sm" data-i18n="inbox.subtitle">Messages posted here by external systems.</p>
+  </div>
+
+  {% if not signed_in %}
+  {# Anonymous branch. The pitch rather than a redirect to /login, matching
+     assets_page and agents_page. #}
+  <div class="ib-card p-6 sm:p-10 text-center fade-up max-w-2xl mx-auto">
+    <svg class="w-12 h-12 mx-auto mb-4 text-brand" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M3 8l7.89 5.26a2 2 0 0 0 2.22 0L21 8M5 19h14a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2Z"/>
+    </svg>
+    <h2 class="text-lg font-semibold text-slate-800 dark:text-slate-100 mb-2" data-i18n="inbox.signin_title">Sign in to read the inbox</h2>
+    <p class="text-sm text-slate-500 dark:text-slate-400 mb-6" data-i18n="inbox.signin_body">Anything posted here is private to this site. Writing is authenticated separately, with a token.</p>
+    <a href="{{ url_for('main.login') }}?next=/inbox"
+       class="inline-block px-5 py-2.5 rounded-lg bg-brand text-white text-sm font-medium hover:bg-brand-dark transition"
+       data-i18n="inbox.signin_btn">Sign In</a>
+  </div>
+  {% else %}
+
+  <div id="ibError" class="hidden mb-4 px-4 py-3 rounded-lg text-sm"
+       style="background:rgba(180,83,9,.12); color:#b45309; border:1px solid rgba(180,83,9,.3)"></div>
+
+  <div class="flex items-center gap-2 mb-3 flex-wrap">
+    <div id="ibFilters" class="flex gap-1 flex-wrap"></div>
+    <span id="ibCount" class="ml-auto text-xs text-slate-500 dark:text-slate-600"></span>
+    <button type="button" onclick="loadInbox()"
+            class="text-xs text-slate-600 dark:text-slate-400 border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-200 px-2 py-1 rounded transition"
+            data-i18n="inbox.refresh">↻ Refresh</button>
+  </div>
+
+  <div id="ibLoading" class="ib-card p-8 text-center text-sm text-slate-500" data-i18n="inbox.loading">Loading…</div>
+  <div id="ibList" class="space-y-3"></div>
+
+  <div id="ibEmpty" class="hidden ib-card p-8 text-center fade-up">
+    <p class="text-sm text-slate-500 dark:text-slate-400 mb-3" data-i18n="inbox.empty">Nothing here yet.</p>
+    <p class="text-xs text-slate-500 dark:text-slate-600" data-i18n="inbox.empty_hint">Post a message to get started — the example below works as-is once the token is set.</p>
+  </div>
+
+  {# The usage note is on the page rather than in a README because the person
+     wiring a sender up is the person reading this, and a curl line they can
+     copy is the difference between "there is an endpoint" and using it. #}
+  <details class="ib-card p-4 mt-6 text-sm">
+    <summary class="cursor-pointer text-slate-700 dark:text-slate-300 font-medium" data-i18n="inbox.how_title">How to post a message</summary>
+    <p class="text-xs text-slate-500 dark:text-slate-400 mt-3 mb-2" data-i18n="inbox.how_body">Every field is optional except that at least one of title or text must be present. Anything else you send is kept verbatim and shown under the message.</p>
+    <pre class="ib-data" id="ibCurl"></pre>
+    <p class="text-xs text-slate-500 dark:text-slate-600 mt-2">
+      <span data-i18n="inbox.retention">Messages are kept for</span>
+      <span id="ibRetention" class="font-medium"></span>
+      <span data-i18n="inbox.retention_days">days.</span>
+    </p>
+  </details>
+
+  {% endif %}
+</div>
+
+{% if signed_in %}
+<script>
+'use strict';
+
+/* Everything rendered here arrived from outside, so esc() is not optional on
+   any of it — see the note at the top of this file. */
+function esc(v) {
+  return String(v == null ? '' : v)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+let _messages = [];
+let _filter = '';       // '' = all; otherwise a source name
+let _level = '';        // '' = all; otherwise a level
+
+function fmtWhen(iso) {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return esc(iso);
+  return I18n.datetime(Math.floor(d.getTime() / 1000));
+}
+
+function renderFilters() {
+  const wrap = document.getElementById('ibFilters');
+  if (!wrap) return;
+  const sources = [...new Set(_messages.map(m => m.source).filter(Boolean))].sort();
+  const levels = [...new Set(_messages.map(m => m.level).filter(Boolean))];
+  const chip = (label, value, active, kind) =>
+    `<button type="button" class="ib-filter${active ? ' active' : ''}" `
+    + `data-kind="${kind}" data-value="${esc(value)}">${esc(label)}</button>`;
+  const parts = [chip(I18n.t('inbox.all') || 'All', '', !_filter && !_level, 'reset')];
+  sources.forEach(s => parts.push(chip(s, s, _filter === s, 'source')));
+  levels.forEach(l => parts.push(
+    chip(I18n.t('inbox.level_' + l) || l, l, _level === l, 'level')));
+  wrap.innerHTML = parts.join('');
+  wrap.querySelectorAll('.ib-filter').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const kind = btn.dataset.kind, value = btn.dataset.value;
+      if (kind === 'reset') { _filter = ''; _level = ''; }
+      else if (kind === 'source') { _filter = (_filter === value) ? '' : value; }
+      else { _level = (_level === value) ? '' : value; }
+      renderFilters(); renderList();
+    });
+  });
+}
+
+function renderList() {
+  const list = document.getElementById('ibList');
+  const empty = document.getElementById('ibEmpty');
+  const count = document.getElementById('ibCount');
+  if (!list) return;
+
+  const rows = _messages.filter(m =>
+    (!_filter || m.source === _filter) && (!_level || m.level === _level));
+
+  count.textContent = (I18n.t('inbox.n_messages') || '{n} messages')
+    .replace('{n}', rows.length);
+  empty.classList.toggle('hidden', rows.length > 0);
+
+  list.innerHTML = rows.map(m => {
+    const level = ['info', 'success', 'warn', 'error'].includes(m.level) ? m.level : 'info';
+    const chips = [];
+    chips.push(`<span class="ib-chip ib-chip-${level}">`
+               + `${esc(I18n.t('inbox.level_' + level) || level)}</span>`);
+    if (m.source) chips.push(`<span class="ib-chip">${esc(m.source)}</span>`);
+    if (m.ticker) {
+      // The one link built from sender input, and it is built from a path
+      // segment we encode rather than from a URL they supplied.
+      chips.push(`<a class="ib-chip hover:text-brand" `
+        + `href="/history/${encodeURIComponent(m.ticker)}">${esc(m.ticker)}</a>`);
+    }
+    (m.tags || []).forEach(t => chips.push(`<span class="ib-chip">#${esc(t)}</span>`));
+
+    let link = '';
+    if (m.url) {
+      // `url` was scheme-checked to http(s) at write time; rel=noopener because
+      // the destination is chosen by whoever holds the token.
+      link = `<a href="${esc(m.url)}" target="_blank" rel="noopener noreferrer" `
+           + `class="text-xs text-brand hover:underline mt-2 inline-block">`
+           + `${esc(I18n.t('inbox.open_link') || 'Open link')} ↗</a>`;
+    }
+
+    let extra = '';
+    if (m.data && Object.keys(m.data).length) {
+      extra = `<pre class="ib-data">${esc(JSON.stringify(m.data, null, 2))}</pre>`;
+    }
+
+    return `<article class="ib-card ib-msg ib-${level} p-4 fade-up">
+      <div class="flex items-start justify-between gap-3 mb-1 flex-wrap">
+        <div class="flex items-center gap-1.5 flex-wrap">${chips.join('')}</div>
+        <time class="text-[11px] text-slate-500 dark:text-slate-600 whitespace-nowrap">${fmtWhen(m.received_at)}</time>
+      </div>
+      ${m.title ? `<h3 class="font-semibold text-slate-800 dark:text-slate-100">${esc(m.title)}</h3>` : ''}
+      ${m.text ? `<p class="ib-body text-sm text-slate-600 dark:text-slate-300 mt-1">${esc(m.text)}</p>` : ''}
+      ${link}
+      ${extra}
+    </article>`;
+  }).join('');
+}
+
+function renderCurl(retention) {
+  const el = document.getElementById('ibCurl');
+  if (!el) return;
+  el.textContent =
+    `curl -X POST ${location.origin}/api/inbox \\\n`
+    + `  -H 'Authorization: Bearer <INBOX_TOKEN>' \\\n`
+    + `  -H 'Content-Type: application/json' \\\n`
+    + `  -d '{"title":"Hello","text":"from my script",`
+    + `"source":"cron","level":"info","ticker":"NVDA","tags":["test"]}'`;
+  const r = document.getElementById('ibRetention');
+  if (r) r.textContent = retention == null ? '—' : retention;
+}
+
+async function loadInbox() {
+  const loading = document.getElementById('ibLoading');
+  const err = document.getElementById('ibError');
+  loading.classList.remove('hidden');
+  err.classList.add('hidden');
+  try {
+    const r = await fetch('/api/inbox?limit=100');
+    const body = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      // Named, not generic: `store_unavailable` must never render as "you have
+      // no messages" on the page whose job is to show them.
+      err.textContent = I18n.t('inbox.err_' + (body.reason || 'unknown'))
+        || I18n.t('inbox.err_unknown') || 'Could not load the inbox.';
+      err.classList.remove('hidden');
+      document.getElementById('ibEmpty').classList.add('hidden');
+      return;
+    }
+    _messages = body.messages || [];
+    renderFilters();
+    renderList();
+    renderCurl(body.retention_days);
+  } catch (e) {
+    err.textContent = I18n.t('inbox.err_unknown') || 'Could not load the inbox.';
+    err.classList.remove('hidden');
+  } finally {
+    loading.classList.add('hidden');
+  }
+}
+
+// The list is composed in JS, so I18n.apply() cannot reach it.
+document.addEventListener('i18n:langchange', () => {
+  if (_messages.length) { renderFilters(); renderList(); }
+});
+
+loadInbox();
+</script>
+{% endif %}
+{% endblock %}

@@ -235,8 +235,11 @@ def _load_secrets_from_ssm() -> None:
         # the estimate and transcript endpoints, which degrade to a stated data
         # gap rather than failing the run.
         "/ystocker/ALPHA_VANTAGE_API_KEY": "ALPHA_VANTAGE_API_KEY",
-        "/ystocker/FRED_API_KEY":       "FRED_API_KEY",
-        "/ystocker/YOUTUBE_API_KEY":    "YOUTUBE_API_KEY",
+        # Bearer credential for /api/inbox, the one write endpoint external
+        # systems can reach. Absent, that endpoint returns 503 and stores
+        # nothing -- "no token configured" must never degrade to "no check".
+        "/ystocker/INBOX_TOKEN":        "INBOX_TOKEN",
+        "/ystocker/FRED_API_KEY":       "FRED_API_KEY",        "/ystocker/YOUTUBE_API_KEY":    "YOUTUBE_API_KEY",
         "/ystocker/SES_FROM_EMAIL":     "SES_FROM_EMAIL",
         "/ystocker/GOOGLE_CLIENT_ID":   "GOOGLE_CLIENT_ID",
         "/ystocker/YSTOCKER_SECRET_KEY": "YSTOCKER_SECRET_KEY",
