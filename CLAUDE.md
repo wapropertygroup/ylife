@@ -1023,6 +1023,87 @@ link host, which defaults to `https://trade-agents.com` rather than
 Errors are *not* mailed — only finished reports. Tests:
 `tests/test_report_email.py` (76 unit tests, no app, no network, no SES).
 
+### The external inbox (`/api/inbox`, `/inbox`)
+
+A write-only door for anything that can make an HTTP request — a cron job, a
+broker webhook, a script on another machine — and a signed-in feed that renders
+what came through it. The message shape is loose on purpose: a handful of
+optional fields the page knows how to render (`title`, `text`, `source`,
+`level`, `ticker`, `tags`, `url`) and **everything else kept verbatim** under
+`data`, so a sender never has to ask permission to add a field.
+
+It is the **first write endpoint on this box not behind a Google session**, and
+that is the whole reason `inbox.py` is careful out of proportion to its size.
+The access log shows what the internet does to a public address unprompted —
+`/.env`, `/.git/config`, `/phpinfo.php`, hundreds of probes a day — so an
+unauthenticated write endpoint would be found and filled, not in theory.
+
+Four rules, none negotiable:
+
+- **No token configured means the door is shut, not open.** `INBOX_TOKEN` unset
+  returns 503 and stores nothing. Treating "unset" as "unchecked" is the single
+  mistake that turns a missing SSM parameter into an open relay, and it fails in
+  the direction where nothing looks wrong.
+- **The token check runs before the body is read.** An unauthenticated caller
+  must not be able to make us parse, size or store anything — a malformed body
+  from a caller with no credential returns 401, not 400. Comparison is
+  `hmac.compare_digest`; `==` leaks the prefix through timing and this is a
+  bearer credential with nothing behind it.
+- **Every field is bounded before storage, not at render.** An unbounded `text`
+  fills a table and a page with one request, and a length check on the way *out*
+  has already paid for the storage.
+- **Reads are gated even though writes are authenticated.** `/inbox` is
+  signed-in only, which decides what a leaked token *is*: a nuisance (somebody
+  fills your inbox) rather than a publishing channel onto trade-agents.com in
+  your name. Those are different incidents and the difference costs one check.
+
+`url` is scheme-checked to http(s) **at write time** rather than escaped at
+render time, because `javascript:` survives HTML-escaping intact and an `href`
+is the one place escaping alone is not enough. Everything else the page renders
+goes through `esc()` — every field came from a token holder, not a human.
+
+A store failure is a 503 on both verbs, never a 200 or an empty list. A POST
+accepted and dropped leaves the sender with no way to know and no reason to
+retry; a GET that answers "no messages" when it means "cannot reach the table"
+is the one wrong answer on the page whose job is to show them.
+
+Rate-limited on `quota.py`'s `flock`ed counter (`INBOX_DAILY_LIMIT`, 500/day),
+reusing that file's lock so two gunicorn workers cannot both read the same count
+and write the same increment.
+
+Key schema is `bucket` (`YYYY-MM`) HASH + `sk` (`<iso8601>#<id>`) RANGE, so "the
+most recent fifty" is a Query with `ScanIndexForward=False` rather than a Scan —
+on `PAY_PER_REQUEST` a Scan is billed by volume scanned. Monthly buckets rather
+than one fixed partition so it cannot grow without bound; `recent()` walks back
+a bounded number of buckets so a page opened on the 1st does not show nothing
+while the previous month is full. TTL is on at `INBOX_RETENTION_DAYS` (90) —
+unlike the observed series in `dca_history`, these rows *can* be re-sent by
+whatever produced them, so keeping them for ever buys nothing.
+
+Tests: `tests/test_inbox.py` (28, no app/network/AWS — the fail-closed token,
+the caps, the refusals) and `tests/check_inbox_endpoints.py` (17 end-to-end,
+`check_` so `unittest discover` skips it).
+
+```bash
+aws dynamodb create-table --table-name ystocker-inbox --region us-west-2 \
+  --billing-mode PAY_PER_REQUEST \
+  --attribute-definitions AttributeName=bucket,AttributeType=S \
+                          AttributeName=sk,AttributeType=S \
+  --key-schema AttributeName=bucket,KeyType=HASH \
+               AttributeName=sk,KeyType=RANGE
+
+aws dynamodb wait table-exists --table-name ystocker-inbox --region us-west-2
+aws dynamodb update-time-to-live --table-name ystocker-inbox --region us-west-2 \
+  --time-to-live-specification "Enabled=true,AttributeName=expires_at"
+
+# The credential. SecureString, read into the app by _load_secrets_from_ssm.
+aws ssm put-parameter --name /ystocker/INBOX_TOKEN --region us-west-2 \
+  --type SecureString --value "$(python3 -c 'import secrets;print(secrets.token_urlsafe(32))')"
+```
+
+Not in `deploy/cloudformation.yaml`, matching every other table here and for the
+same reason. IAM needs no change (`table/ystocker-*`, `parameter/ystocker/*`).
+
 ### Sharing a report with another user
 
 `share.py` plus six routes let a signed-in user mail or text one of their

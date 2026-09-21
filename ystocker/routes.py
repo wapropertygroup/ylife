@@ -13717,3 +13717,154 @@ def _start_daily_pregen_scheduler(app=None) -> None:
                          daemon=True, name="daily-pregen")
     t.start()
     log.info("Daily summary pre-gen scheduler started")
+
+
+# ---------------------------------------------------------------------------
+# Inbox — the one write endpoint external systems can reach
+# ---------------------------------------------------------------------------
+
+@bp.route("/api/inbox", methods=["POST"])
+def api_inbox_post():
+    """Accept one JSON message from an external system.
+
+    The only route on this box that writes without a Google session behind it,
+    so the order of checks below is the security design rather than plumbing:
+
+    1. **Token first, before the body is read.** A caller without a credential
+       must not be able to make us parse — or size, or store — anything. It is
+       also why an unconfigured token returns 503: "no token set" must never be
+       read as "no check needed", which is the mistake that turns a missing SSM
+       parameter into an open relay.
+    2. **Size before parse.** `MAX_BODY_BYTES` is checked against the declared
+       length and against what actually arrived, because `Content-Length` is
+       supplied by the client and a chunked body has none at all.
+    3. **A daily ceiling**, for the same reason `/agents` has one: the token is
+       a bearer credential with nothing behind it, so the bound on damage from
+       a leak is whatever the counter says.
+
+    Returns 201 with the stored id. Every refusal is named in `reason`, because
+    the caller is a script — a 400 with prose in it is something a person reads
+    and a machine cannot act on.
+    """
+    from ystocker import inbox
+
+    if not inbox.token_configured():
+        log.warning("Inbox: POST refused — INBOX_TOKEN is not configured")
+        return jsonify({"error": "Inbox is not configured.",
+                        "reason": "not_configured"}), 503
+    if not inbox.check_token(inbox.token_from_headers(request.headers)):
+        log.info("Inbox: POST rejected (bad or missing token)")
+        return jsonify({"error": "Unauthorized.", "reason": "unauthorized"}), 401
+
+    declared = request.content_length or 0
+    if declared > inbox.MAX_BODY_BYTES:
+        return jsonify({"error": "Body too large.", "reason": "too_large",
+                        "max_bytes": inbox.MAX_BODY_BYTES}), 413
+    raw = request.get_data(cache=False, as_text=False) or b""
+    if len(raw) > inbox.MAX_BODY_BYTES:
+        return jsonify({"error": "Body too large.", "reason": "too_large",
+                        "max_bytes": inbox.MAX_BODY_BYTES}), 413
+
+    ok, usage = _inbox_try_consume()
+    if not ok:
+        return jsonify({"error": "Daily inbox limit reached.",
+                        "reason": "rate_limited", **usage}), 429
+
+    try:
+        body = json.loads(raw.decode("utf-8") or "{}")
+    except (UnicodeDecodeError, ValueError) as exc:
+        return jsonify({"error": f"Body is not valid JSON: {exc}",
+                        "reason": "bad_json"}), 400
+
+    try:
+        record = inbox.normalise(body)
+    except inbox.InboxError as exc:
+        return jsonify({"error": exc.detail or exc.reason,
+                        "reason": exc.reason}), 400
+
+    try:
+        inbox.put(record)
+    except inbox.StoreUnavailable as exc:
+        # 503, never 200. A POST that is accepted and dropped leaves the sender
+        # with no way to know and no reason to retry.
+        log.warning("Inbox: store unavailable: %s", exc)
+        return jsonify({"error": "Store unavailable.",
+                        "reason": "store_unavailable"}), 503
+
+    log.info("Inbox: stored %s from %s", record["id"], record.get("source") or "—")
+    return jsonify({"ok": True, "id": record["id"],
+                    "received_at": record["received_at"], **usage}), 201
+
+
+def _inbox_try_consume() -> tuple[bool, dict]:
+    """One slot off the daily inbox allowance, on quota.py's locked counter.
+
+    Reuses that file's lock so two gunicorn workers cannot both read the same
+    count and write the same increment — the lost update this app already
+    documents for run quota, which here would mean the ceiling silently is not
+    one.
+    """
+    from ystocker import quota
+
+    limit = quota._int_env("INBOX_DAILY_LIMIT", 500)
+    day = quota.today()
+    try:
+        with quota._Guard():
+            data = quota._read(day)
+            used = int((data.setdefault("inbox", {})).get("all", 0))
+            if used >= limit:
+                return False, {"used": used, "limit": limit, "remaining": 0}
+            data["inbox"]["all"] = used + 1
+            data["day"] = day
+            quota._write(day, data)
+    except Exception as exc:  # noqa: BLE001 - never 500 on the counter
+        log.warning("Inbox: quota counter unavailable, allowing: %s", exc)
+        return True, {}
+    return True, {"used": used + 1, "limit": limit,
+                  "remaining": max(0, limit - used - 1)}
+
+
+@bp.route("/api/inbox", methods=["GET"])
+def api_inbox_list():
+    """The feed, for the page. Signed in only.
+
+    Writes are authenticated and reads are gated, which is not belt-and-braces:
+    it decides what a leaked token *is*. Gated, somebody who takes it can fill
+    your inbox; ungated, they can publish to trade-agents.com under your name.
+    """
+    email = session.get("user_email")
+    if not email:
+        return jsonify({"error": "Sign in to read the inbox.",
+                        "reason": "signed_out"}), 401
+
+    from ystocker import inbox
+
+    try:
+        rows = inbox.recent(request.args.get("limit", type=int) or 50)
+    except inbox.StoreUnavailable as exc:
+        # Fails loudly rather than rendering as "you have no messages", which
+        # is the one wrong answer on the page whose job is to show them.
+        log.warning("Inbox: list unavailable: %s", exc)
+        return jsonify({"error": "Store unavailable.",
+                        "reason": "store_unavailable"}), 503
+    return jsonify({
+        "messages": rows,
+        "count": len(rows),
+        "sources": inbox.sources(rows),
+        "levels": list(inbox.LEVELS),
+        "retention_days": inbox.RETENTION_DAYS,
+        "configured": inbox.token_configured(),
+    })
+
+
+@bp.route("/inbox")
+def inbox_page():
+    """The feed. Renders for everyone; the body branches on sign-in, matching
+    ``assets_page`` — a login form with no context is a worse landing than a
+    page that says what it is."""
+    email = session.get("user_email")
+    log.info("GET /inbox")
+    return render_template("inbox.html",
+                           peer_groups=list(PEER_GROUPS.keys()),
+                           signed_in=bool(email),
+                           user_email=email or "")
