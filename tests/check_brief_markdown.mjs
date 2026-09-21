@@ -128,6 +128,71 @@ t('only the orphan close tag leaks, no handler',
   !EVENT_HANDLER.test(liveMarkup(Markdown.render('<b onclick="alert(1)">x</b>'))));
 
 console.log();
+console.log('=== the HTML-document opener rule ===');
+// /posts accepts whole HTML documents from external senders, and the first real
+// one rendered wrong: `<!DOCTYPE html>` matched no block opener, so the entire
+// mail took the Markdown path and printed its own <html>/<head>/<body> as
+// escaped text with every <img> beside it.
+//
+// The regex is pure, so it is tested directly rather than through render() —
+// which is the only part of this fix reachable without a DOM. `sanitize()` needs
+// DOMParser and this suite has none by design (see the stub above, which throws
+// precisely to prove the brief path never reaches it), so the media behaviour
+// was verified in a real browser instead: image rendered, `onerror` stripped,
+// `javascript:` src dropped, iframe and script dropped with contents, <style>
+// and <title> not leaked, nothing left escaped.
+{
+  const src = fs.readFileSync(path.join(root, 'ystocker/static/markdown.js'), 'utf8');
+  const m = src.match(/const BLOCK_HTML\s*=\s*([\s\S]*?);\n/);
+  t('the opener regex is still where this test looks for it', !!m);
+  const OPENER = m ? eval(m[1]) : /$^/;
+
+  // The bug, pinned.
+  t('<!DOCTYPE html> opens a document', OPENER.test('<!DOCTYPE html>'));
+  t('<html> opens a document', OPENER.test('<html lang="zh-CN">'));
+  t('<body> opens a document', OPENER.test('<body style="margin:0">'));
+  t('<table> still opens a block', OPENER.test('<table><tr><td>a'));
+  t('<p> still opens a block', OPENER.test('<p>hello'));
+
+  // The narrowing that shipped with it. A body *opening* with a bare <img> is
+  // the shape an injected payload takes, not the shape a document takes, so it
+  // must stay on the Markdown path where it is escaped and shown as text.
+  t('a lone <img> is not an opener', !OPENER.test('<img src=x onerror=alert(1)>'));
+  t('<center>/<font> are not openers',
+    !OPENER.test('<center>x') && !OPENER.test('<font color=red>x'));
+  t('prose is not an opener', !OPENER.test('WTI touched $98.6'));
+  t('a Markdown heading is not an opener', !OPENER.test('## Heading'));
+}
+
+// Behaviour, on the path this suite can reach: the lone <img> stays inert.
+console.log();
+console.log('=== a lone <img> stays text ===');
+t('it is escaped rather than rendered',
+  Markdown.render('<img src=x onerror=alert(1)>').includes('&lt;img'));
+t('its handler is inert',
+  !EVENT_HANDLER.test(liveMarkup(Markdown.render('<img src=x onerror=alert(1)>'))));
+
+// Static guards on the allowlist. Weaker than behaviour, and the right shape for
+// the regression that actually matters: somebody adding a handler attribute to a
+// media tag, or dropping the src vetting, in a file six pages render through.
+console.log();
+console.log('=== the media allowlist has no handler in it ===');
+{
+  const src = fs.readFileSync(path.join(root, 'ystocker/static/markdown.js'), 'utf8');
+  const allowed = src.slice(src.indexOf('const ALLOWED'), src.indexOf('DROP_ENTIRELY'));
+  t('no on* attribute is allowed on anything', !/['"]on[a-z]+['"]/i.test(allowed));
+  t('IMG carries a src', /IMG:\s*\[[^\]]*'src'/.test(allowed));
+  t('every src goes through safeSrc', /name === 'src'[\s\S]{0,200}safeSrc\(/.test(src));
+  t('safeSrc limits data: URIs to images', /\^data:image/.test(src));
+  t('safeSrc allows no other scheme', /https\?:/.test(src));
+  t('IFRAME is still dropped entirely', /DROP_ENTIRELY[\s\S]{0,200}IFRAME:\s*1/.test(src));
+  t('SCRIPT and STYLE are still dropped entirely',
+    /DROP_ENTIRELY[\s\S]{0,200}SCRIPT:\s*1/.test(src) &&
+    /DROP_ENTIRELY[\s\S]{0,200}STYLE:\s*1/.test(src));
+  t('no element may keep a style attribute', !/['"]style['"]/.test(allowed));
+}
+
+console.log();
 if (failures.length) {
   console.log(`RESULT: FAIL — ${failures.length}: ${failures.join(', ')}`);
   process.exit(1);

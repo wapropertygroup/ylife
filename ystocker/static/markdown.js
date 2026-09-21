@@ -31,6 +31,20 @@
     TH: ['colspan', 'rowspan'], TD: ['colspan', 'rowspan'],
     H1: [], H2: [], H3: [], H4: [], H5: [], H6: [], BLOCKQUOTE: [],
     A: ['href'],
+    // Media. `src` is vetted by safeSrc() exactly as `href` is by safeHref(),
+    // and no handler attribute is in any of these lists, so there is nothing to
+    // smuggle -- an <img onerror> loses the onerror and keeps the picture.
+    //
+    // A remote image is a tracking pixel: loading one tells whoever chose the
+    // URL that this reader opened this page, from this address. Accepted
+    // knowingly, because the alternative is that an emailed digest full of
+    // charts renders as a column of alt text, and the content here is already
+    // trusted enough to be shown at all.
+    IMG: ['src', 'alt', 'width', 'height', 'title'],
+    FIGURE: [], FIGCAPTION: [],
+    VIDEO: ['src', 'poster', 'controls', 'width', 'height'],
+    AUDIO: ['src', 'controls'],
+    SOURCE: ['src', 'type'],
   };
   // Dropped with their contents. Their text is markup or code, not prose, so
   // unwrapping them would paste a stylesheet into the middle of a report.
@@ -48,6 +62,20 @@
       return /^(https?|mailto):/i.test(v) ? v : null;
     }
     return v;
+  }
+
+  function safeSrc(value) {
+    // Narrower than safeHref on purpose. A src is fetched by the browser
+    // without the reader clicking anything, so `data:` is limited to images
+    // (a data: document would be same-origin-ish script) and nothing else with
+    // a scheme is allowed through at all.
+    const v = String(value || '').trim();
+    if (!v) return null;
+    if (/^data:image\/(png|jpe?g|gif|webp|svg\+xml);base64,/i.test(v)) return v;
+    if (/^[a-z][a-z0-9+.-]*:/i.test(v)) {
+      return /^https?:/i.test(v) ? v : null;
+    }
+    return v;                                   // relative or protocol-less
   }
 
   function copyInto(from, to) {
@@ -72,6 +100,19 @@
           if (value === null) continue;
           el.setAttribute('rel', 'noopener noreferrer nofollow');
           el.setAttribute('target', '_blank');
+        } else if (name === 'src') {
+          value = safeSrc(value);
+          if (value === null) continue;
+          if (tag === 'IMG') {
+            // Not decorative: a referrer would carry the page URL to whoever
+            // chose the image, and lazy loading keeps a long digest from
+            // fetching forty pictures at once.
+            el.setAttribute('loading', 'lazy');
+            el.setAttribute('referrerpolicy', 'no-referrer');
+          }
+        } else if (name === 'controls') {
+          el.setAttribute('controls', '');      // boolean: value is irrelevant
+          continue;
         }
         el.setAttribute(name, value);
       }
@@ -123,7 +164,22 @@
   // A line opening a block-level element. Models that answer in HTML emit whole
   // <p>/<table> blocks, and feeding those to the Markdown paragraph rule would
   // wrap each <tr> in its own <p>.
-  const BLOCK_HTML = /^<(p|div|section|table|ul|ol|dl|pre|blockquote|h[1-6]|figure)\b/i;
+  // Includes the document openers, which is what a forwarded email starts with:
+  // `<!DOCTYPE html>` matched none of the tags below, so an entire HTML mail took
+  // the Markdown path and printed its own <html>/<head>/<body> as escaped text
+  // before dropping every <img> the same way. Observed on a real emailed digest.
+  //
+  // Still decided on the *first* tag rather than "contains HTML anywhere", which
+  // is what keeps a Markdown report with one stray <div> on the Markdown path
+  // instead of silently losing all of its formatting.
+  const BLOCK_HTML =
+    /^(<!doctype\s|<(html|head|body|article|main|header|footer|p|div|section|table|tbody|thead|tr|td|ul|ol|dl|pre|blockquote|h[1-6]|figure)\b)/i;
+  // Deliberately NOT here: `img`, `center`, `font`. A body *opening* with a bare
+  // <img> is the shape an injected payload takes, not the shape a document
+  // takes, and routing it to sanitize() would render the picture (stripped of
+  // its onerror, but rendered) where it is currently shown as text. An email
+  // opens with <!doctype>, <html> or <table>; none of it needs a lone image to
+  // be a block opener.
 
   function renderMd(md) {
     // A body that *opens* with a block-level tag is an HTML answer, not Markdown
