@@ -676,7 +676,7 @@
             {# /inbox sits beside /assets rather than in the top bar: both are
                per-reader and both are signed-in-only, and the top bar is the
                market-data navigation. #}
-            <a href="{{ url_for('main.inbox_page') }}" role="menuitem"
+            <a href="{{ url_for('main.posts_page') }}" role="menuitem"
                class="flex items-center gap-2.5 px-3.5 py-2 text-sm text-slate-600 dark:text-slate-300
                       hover:text-slate-900 dark:hover:text-white hover:bg-brand/10 transition">
               <svg class="w-4 h-4 text-brand" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true">
@@ -889,7 +889,7 @@
           <span data-i18n="nav.assets">Assets</span>
         </a>
         <a x-show="user && user.email" x-cloak
-           href="{{ url_for('main.inbox_page') }}"
+           href="{{ url_for('main.posts_page') }}"
            class="flex items-center gap-2 px-3 py-2.5 rounded-md text-sm text-slate-600 dark:text-slate-300
                   hover:bg-slate-100 dark:hover:bg-slate-800">
           <svg class="w-4 h-4 text-brand" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true">

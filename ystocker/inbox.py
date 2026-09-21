@@ -92,7 +92,10 @@ MAX_BODY_BYTES = int(os.environ.get("INBOX_MAX_BODY", str(64 * 1024)))
 #: Per-field caps. Generous for anything a person would send, small enough that
 #: a loop is refused rather than absorbed.
 MAX_TITLE = 200
-MAX_TEXT = 8_000
+#: `text` is rendered as Markdown-or-HTML by the shared renderer, so it is a
+#: small document rather than a sentence. Raised from 8k accordingly, and still
+#: bounded: the cap is what stops one request filling a table and a page.
+MAX_TEXT = 40_000
 MAX_SOURCE = 60
 MAX_TICKER = 24
 MAX_URL = 500

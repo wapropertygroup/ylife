@@ -1,5 +1,5 @@
 """
-End-to-end check of /api/inbox and /inbox, through Flask's test client.
+End-to-end check of /api/posts and /posts, through Flask's test client.
 
 Named ``check_`` so ``unittest discover`` skips it: it builds a real app (which
 starts background threads). No network and no AWS — the store is swapped for an
@@ -97,7 +97,7 @@ class InboxEndpoints(unittest.TestCase):
         headers = {"Content-Type": "application/json"}
         if token is not None:
             headers["Authorization"] = f"Bearer {token}"
-        return self.client.post("/api/inbox",
+        return self.client.post("/api/posts",
                                 data=json.dumps(body) if not isinstance(body, (bytes, str))
                                 else body,
                                 headers=headers, **kw)
@@ -170,15 +170,32 @@ class InboxEndpoints(unittest.TestCase):
         self.assertEqual(r.status_code, 503)
         self.assertEqual(r.get_json()["reason"], "store_unavailable")
 
+    def test_the_old_names_still_work(self):
+        """`/api/inbox` shipped first and a sender may already be pointed at it.
+        Breaking a hand-configured script to tidy a URL costs a silent outage to
+        save nothing, so the alias is asserted rather than assumed. The *page*
+        redirects instead — a bookmark should move itself rather than leave two
+        addresses serving one thing."""
+        r = self.post({"title": "via the old name"}, )
+        self.assertEqual(r.status_code, 201)
+        r = self.client.post("/api/inbox",
+                             data=json.dumps({"title": "alias"}),
+                             headers={"Content-Type": "application/json",
+                                      "Authorization": f"Bearer {TOKEN}"})
+        self.assertEqual(r.status_code, 201)
+        moved = self.client.get("/inbox")
+        self.assertEqual(moved.status_code, 302)
+        self.assertTrue(moved.headers["Location"].endswith("/posts"))
+
     def test_get_is_not_a_way_to_write(self):
-        self.assertEqual(self.client.put("/api/inbox").status_code, 405)
-        self.assertEqual(self.client.delete("/api/inbox").status_code, 405)
+        self.assertEqual(self.client.put("/api/posts").status_code, 405)
+        self.assertEqual(self.client.delete("/api/posts").status_code, 405)
 
     # ── reads are gated even though writes are authenticated ──────────────
     def test_reading_signed_out_is_refused(self):
         """This is what decides whether a leaked token is a nuisance or a
         publishing channel onto a public domain."""
-        r = self.client.get("/api/inbox")
+        r = self.client.get("/api/posts")
         self.assertEqual(r.status_code, 401)
         self.assertEqual(r.get_json()["reason"], "signed_out")
 
@@ -187,7 +204,7 @@ class InboxEndpoints(unittest.TestCase):
         self.post({"title": "Two", "source": "bot"})
         with self.client.session_transaction() as sess:
             sess["user_email"] = "someone@example.com"
-        body = self.client.get("/api/inbox").get_json()
+        body = self.client.get("/api/posts").get_json()
         self.assertEqual(body["count"], 2)
         self.assertEqual(body["messages"][0]["title"], "Two")   # newest first
         self.assertEqual(body["sources"], ["bot", "cron"])
@@ -198,21 +215,21 @@ class InboxEndpoints(unittest.TestCase):
         with self.client.session_transaction() as sess:
             sess["user_email"] = "someone@example.com"
         self.store.fail = True
-        r = self.client.get("/api/inbox")
+        r = self.client.get("/api/posts")
         self.assertEqual(r.status_code, 503)
         self.assertEqual(r.get_json()["reason"], "store_unavailable")
 
     # ── the page ──────────────────────────────────────────────────────────
     def test_the_page_renders_signed_out_without_the_feed_script(self):
-        html = self.client.get("/inbox").data.decode()
-        self.assertEqual(self.client.get("/inbox").status_code, 200)
+        html = self.client.get("/posts").data.decode()
+        self.assertEqual(self.client.get("/posts").status_code, 200)
         self.assertIn("inbox.signin_title", html)
         self.assertNotIn("loadInbox()", html)
 
     def test_the_page_renders_the_feed_when_signed_in(self):
         with self.client.session_transaction() as sess:
             sess["user_email"] = "someone@example.com"
-        html = self.client.get("/inbox").data.decode()
+        html = self.client.get("/posts").data.decode()
         self.assertIn("loadInbox()", html)
         self.assertIn('id="ibList"', html)
 
@@ -223,7 +240,7 @@ class InboxEndpoints(unittest.TestCase):
         block only renders for a reader who can see the feed."""
         with self.client.session_transaction() as sess:
             sess["user_email"] = "someone@example.com"
-        html = self.client.get("/inbox").data.decode()
+        html = self.client.get("/posts").data.decode()
         self.assertIn("function esc(", html)
         # The two places escaping alone would not be enough.
         self.assertIn("encodeURIComponent(m.ticker)", html)
