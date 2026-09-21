@@ -1795,17 +1795,21 @@ def api_dca_list():
     # caution: the registry is one shared list and a sync spends the box's daily
     # Yahoo budget on one person's portfolio. Reads stay open.
     #
-    # A holding that has never been built is *not* registered here — that stays
-    # gated on a rebuild that scored, which is what keeps ETFs out — it is
-    # unioned into `wanted` instead, so it shows as pending and the paced warm
-    # picks it up. Whether it sticks is then decided by whether it can score.
+    # Only the holdings that *could* score are queued. A portfolio is mostly
+    # funds, and a fund has no statements to reconstruct from — see
+    # `_dca_scorable_holdings`, which exists because the first version of this
+    # unioned the lot and put fifteen ETFs and money-market funds into a
+    # "still rebuilding… this page will fill itself in a few minutes" banner
+    # that could never come true.
     held_sync = None
     if _dca_pin_editable():
         holdings = (exposure or {}).get("positions") or []
         if holdings:
             try:
-                held_sync = dca_universe.sync_held(holdings)
-                wanted = list(dict.fromkeys([*wanted, *holdings]))
+                buildable, unscorable = _dca_scorable_holdings(holdings)
+                held_sync = dca_universe.sync_held(buildable)
+                held_sync["unscorable"] = unscorable
+                wanted = list(dict.fromkeys([*wanted, *buildable]))
                 have = set(dca_history.cached_tickers())
             except Exception as exc:  # noqa: BLE001 - the table is the page
                 log.info("DCA: could not sync holdings into the registry: %s", exc)
@@ -2360,6 +2364,63 @@ def _dca_exposure() -> dict:
     except Exception as exc:  # noqa: BLE001
         log.info("DCA: portfolio overlay unavailable: %s", exc)
         return {"map": None, "reason": "unavailable"}
+
+
+def _dca_scorable_holdings(symbols) -> tuple[list[str], dict]:
+    """Split holdings into those worth building and those that can never score.
+
+    A portfolio is mostly funds. Yahoo publishes no income statement, balance
+    sheet or cash-flow statement for one, so `build()` spends six reads and
+    returns `unavailable` — for ever, on every sweep. Queueing them does not
+    merely waste the budget: they land in `pending`, and the page tells the
+    reader "still rebuilding, this will fill itself in a few minutes" about
+    fifteen names that never will. Observed on the first real portfolio: COPX,
+    XLK, GDX, IGV, QQQM, SOXQ, XTL, FLKR, SPAXX, VOO, FDRXX, FTEC, FXAIX, FSPTX
+    — every one a fund, every one promised.
+
+    Three signals, cheapest first, and none of them touch the network:
+
+    ``fund_symbols()``
+        Structural, from `PEER_GROUPS`. Catches the funds this site already
+        tracks, and is the same check the `/dca` search box uses — but it knows
+        nothing about a holding that is not in any group, which is most of them.
+    ``funddata.peek()``
+        The look-through resolver, already warm because `_dca_exposure` walked
+        this exact portfolio a few lines above. This is the one that catches
+        SPAXX and FXAIX: it carries Yahoo's `quoteType`, so a money-market fund
+        and a mutual fund are as visible as an ETF.
+    ``dca_history.peek().unavailable``
+        Definitive but only for names already built. Last because it is a
+        per-symbol JSON parse, and first-in-line would make it the common path.
+
+    An unresolved symbol is queued rather than refused: not knowing is not the
+    same as knowing it is a fund, and refusing on ignorance would keep a genuine
+    equity out of the reader's own list for ever. It costs six reads once, after
+    which the third signal knows the answer.
+    """
+    from ystocker import funddata
+
+    funds = dca_history.fund_symbols()
+    buildable: list[str] = []
+    unscorable: dict[str, str] = {}
+    for symbol in symbols:
+        if symbol in funds:
+            unscorable[symbol] = "fund"
+            continue
+        record = funddata.peek(symbol)
+        kind = (record or {}).get("kind")
+        if kind and kind != funddata.KIND_EQUITY:
+            unscorable[symbol] = kind
+            continue
+        payload = dca_history.peek(symbol)
+        if payload is not None and payload.get("unavailable"):
+            unscorable[symbol] = payload["unavailable"]
+            continue
+        buildable.append(symbol)
+    if unscorable:
+        log.info("DCA: %d holding(s) cannot be scored and were not queued: %s",
+                 len(unscorable), ", ".join(sorted(unscorable)))
+    return buildable, unscorable
 
 
 def _dca_held_symbols(positions) -> list[str]:

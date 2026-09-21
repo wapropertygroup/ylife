@@ -532,6 +532,55 @@ class DcaOverview(unittest.TestCase):
         self.assertIn("NEVERBUILT", body["held_sync"]["not_tracked"])
         self.assertNotIn("NEVERBUILT", body["held_sync"]["held"])
 
+    def test_a_fund_holding_is_never_queued_for_a_build(self):
+        """The bug this replaces: a real portfolio is mostly funds, and every
+        one of them was unioned into `pending` under a banner reading "still
+        rebuilding — this page will fill itself in a few minutes". A fund has no
+        statements, so `build()` spends six reads and returns `unavailable`,
+        for ever. Fifteen names were promised; none could arrive.
+
+        Three signals, and the test covers each: structural (`PEER_GROUPS` ETF
+        groups), the look-through resolver's `quoteType` for a fund that is in
+        no group at all, and a payload already proven `unavailable`."""
+        from ystocker import funddata
+
+        original = funddata.peek
+        # SPAXX is a money-market fund in no PEER_GROUPS entry — exactly the
+        # shape `fund_symbols()` cannot see and the resolver can.
+        funddata.peek = lambda s, **k: (
+            {"kind": funddata.KIND_CASH} if s == "SPAXX"
+            else {"kind": funddata.KIND_FUND} if s == "FXAIX"
+            else None)
+        try:
+            body = self._with_holdings(["XLK", "SPAXX", "FXAIX", "EQUITYX"])
+        finally:
+            funddata.peek = original
+
+        unscorable = body["held_sync"]["unscorable"]
+        self.assertEqual(sorted(unscorable), ["FXAIX", "SPAXX", "XLK"])
+        self.assertEqual(unscorable["XLK"], "fund")          # structural
+        self.assertEqual(unscorable["SPAXX"], funddata.KIND_CASH)
+        for fund in ("XLK", "SPAXX", "FXAIX"):
+            self.assertNotIn(fund, body["pending"],
+                             f"{fund} was promised a build it can never finish")
+        # An unresolved symbol is still queued — not knowing is not the same as
+        # knowing it is a fund, and the filter must not become a blanket that
+        # keeps a genuine equity out of the reader's own list.
+        self.assertIn("EQUITYX", body["pending"])
+
+    def test_a_holding_already_proven_unscorable_is_not_requeued(self):
+        """Definitive signal: it has been built, it came back `unavailable`, and
+        nothing about that will change on the next six reads."""
+        _seed("DEADX")
+        dh._mem["DEADX"][1]["unavailable"] = "no_reconstructable_factors"
+        try:
+            body = self._with_holdings(["DEADX"])
+        finally:
+            dh._mem["DEADX"][1].pop("unavailable", None)
+        self.assertEqual(body["held_sync"]["unscorable"]["DEADX"],
+                         "no_reconstructable_factors")
+        self.assertNotIn("DEADX", body["pending"])
+
     def test_a_signed_out_visit_syncs_nothing(self):
         """Reads are open; writing the shared registry is not."""
         _seed("OWNED")
