@@ -783,7 +783,23 @@
     </div>
 
     <!-- Mobile menu -->
-    <div x-show="navOpen" x-transition class="md:hidden border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 pb-4">
+    {# The mobile menu is eighteen links and a search box, and it had no height
+       cap at all — so on a phone it rendered taller than the screen and pushed
+       the page down behind it, which is the "下滑太多" this fixes.
+
+       `dvh`, not `vh`, and that is the iOS-specific part: on iOS Safari `100vh`
+       is the viewport with the address bar *hidden*, so a `100vh` panel is
+       always taller than what you can actually see and the last items sit under
+       the chrome. `dvh` tracks the visible height as the bar collapses.
+
+       `overscroll-behavior: contain` keeps a flick inside the menu from
+       scrolling the page underneath it — and matters twice here, because
+       pulltorefresh.js arms on a touch that starts at `scrollTop === 0`, so
+       without it an overscroll at the top of the menu would trigger a page
+       reload while the reader was only trying to reach the first link. #}
+    <div x-show="navOpen" x-transition
+         class="md:hidden border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 pb-4 overflow-y-auto"
+         style="max-height: calc(100dvh - 3.5rem); overscroll-behavior: contain">
       <div class="flex flex-col gap-1 pt-2">
         {#
           The hamburger had no search entry at all, so on a phone the only way

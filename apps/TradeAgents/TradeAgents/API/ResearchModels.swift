@@ -160,12 +160,17 @@ struct DcaList: Decodable, Sendable {
     let maxMultiplier: Double?
     let warming: Bool?
     let dcfEnabled: Bool?
+    /// The floor a distribution must clear before it can be ranked against. Sent
+    /// once because it is a constant of the engine, and the app needs it to render
+    /// "57/60" beside a dropped factor rather than a bare count.
+    let minObservations: Int?
 
     enum CodingKeys: String, CodingKey {
         case rows, scored, universe, warming
         case baseDca = "base_dca"
         case maxMultiplier = "max_multiplier"
         case dcfEnabled = "dcf_enabled"
+        case minObservations = "min_observations"
     }
 }
 
@@ -190,18 +195,54 @@ struct DcaRow: Decodable, Sendable, Identifiable {
     let vintages: Int?
     let stale: Bool?
 
+    // Everything below was already on the wire and thrown away here. The two
+    // overlay multipliers were the costly omission: `multiplier` is the *product*
+    // of three terms, so a card showing only the product says a contribution
+    // moved without saying whether valuation, estimate revisions or portfolio
+    // concentration moved it — and those call for different reactions.
+    let e: Double?
+    let earningsBand: String?
+    let portfolioBand: String?
+    let positionPct: Double?
+    let peerPct: Double?
+    let epsDrift: Double?
+    /// Factors the adaptive rule dropped, and how much history each actually has.
+    /// The names alone make a factor three weeks from qualifying look identical to
+    /// one forty weeks short; across the universe both shapes are common.
+    let dropped: [String]?
+    let droppedObs: [String: Int]?
+    /// Why a row carries no V. Without it the app says only "not scorable", which
+    /// is the same sentence for "a bank with no tangible book" and "an ETF that
+    /// files no statements at all".
+    let noScoreReason: String?
+    let dcfReason: String?
+    let peerGroup: String?
+    /// Part of the framework's unevictable seed, or one of the reader's holdings.
+    let seed: Bool?
+    let held: Bool?
+
     var id: String { ticker }
 
     enum CodingKeys: String, CodingKey {
         case ticker, name, sector, model, band, multiplier, amount, capped
-        case years, vintages, stale, blended
+        case years, vintages, stale, blended, dropped, seed, held
         case v = "V"
+        case e = "E"
         case vRel = "V_rel"
         case vDcf = "V_dcf"
         case wDcf = "w_dcf"
         case mValuation = "m_valuation"
         case mEarnings = "m_earnings"
         case mPortfolio = "m_portfolio"
+        case earningsBand = "earnings_band"
+        case portfolioBand = "portfolio_band"
+        case positionPct = "position_pct"
+        case peerPct = "peer_pct"
+        case epsDrift = "eps_drift"
+        case droppedObs = "dropped_obs"
+        case noScoreReason = "no_score_reason"
+        case dcfReason = "dcf_reason"
+        case peerGroup = "peer_group"
     }
 }
 

@@ -79,6 +79,21 @@ enum S {
         "V is not a ranking across companies. Each is scored on its own model, so 70 means cheap for this company — not cheaper than the row above.",
         "V 不是公司之间的横向排名。每家公司按各自的模型评分，因此 70 表示「相对该公司自身便宜」，而不是比上一行更便宜。")
     static let dcaUnscored = LocalizedString("not scorable", "无法评分")
+    static let dcaValuation = LocalizedString("Valuation", "估值")
+    static let dcaEarnings  = LocalizedString("Revisions", "盈利修正")
+    static let dcaPortfolio = LocalizedString("Concentration", "持仓集中度")
+    static let dcaCapped    = LocalizedString("at ceiling", "已触顶")
+    static let dcaDropped   = LocalizedString("Dropped", "已剔除因子")
+    static let dcaPeer      = LocalizedString("vs peers", "同业分位")
+    static let dcaDrift     = LocalizedString("Est. drift", "预期漂移")
+    static let dcaPosition  = LocalizedString("Held", "穿透持仓")
+    static let dcaHeldTag   = LocalizedString("holding", "持仓")
+    static let dcaSeedTag   = LocalizedString("standard", "标准组合")
+    /// Why the product stopped at the ceiling. The cap is on the *product*, which
+    /// is why it can bite when no single term looks extreme.
+    static let dcaCappedTip = LocalizedString(
+        "The product of the three is capped, so a cheap name whose estimates are also rising stops here.",
+        "三项相乘后设有上限，因此一只本就便宜、同时盈利预期还在上调的股票会停在这里。")
 
     // MARK: - Shared
 
