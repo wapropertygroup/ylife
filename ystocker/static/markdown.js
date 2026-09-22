@@ -73,7 +73,17 @@
     if (!v) return null;
     if (/^data:image\/(png|jpe?g|gif|webp|svg\+xml);base64,/i.test(v)) return v;
     if (/^[a-z][a-z0-9+.-]*:/i.test(v)) {
-      return /^https?:/i.test(v) ? v : null;
+      if (!/^https?:/i.test(v)) return null;
+      // Upgraded, not merely allowed. This page is https, so an http image is
+      // mixed content: Safari and older Chrome block it outright and the picture
+      // vanishes with *no* notice — worse than the refusals above, which at least
+      // say something. Current Chrome happens to auto-upgrade, so doing it here
+      // only makes every browser behave the way one of them already does, and a
+      // host that cannot serve https was failing in that browser anyway.
+      //
+      // Observed on a real emailed digest: one of seven images arrived as
+      // http://p1.img.cctvpic.com/..., which loads fine over https.
+      return v.replace(/^http:/i, 'https:');
     }
     return v;                                   // relative or protocol-less
   }
