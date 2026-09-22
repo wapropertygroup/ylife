@@ -23,8 +23,10 @@ an open write door goes wrong:
 """
 from __future__ import annotations
 
+import base64
 import json
 import unittest
+from email.message import EmailMessage
 from datetime import datetime, timezone
 
 from ystocker import inbox
@@ -118,7 +120,7 @@ class NormaliseTests(unittest.TestCase):
     def test_every_field_is_capped_before_storage(self):
         out = self.norm({
             "title": "T" * 5_000,
-            "text": "X" * 50_000,
+            "text": "X" * (inbox.MAX_TEXT + 5_000),
             "source": "s" * 500,
             "ticker": "n" * 100,
             "tags": [f"tag{i}" for i in range(50)],
@@ -208,6 +210,162 @@ class NormaliseTests(unittest.TestCase):
 
     def test_a_ticker_is_upper_cased(self):
         self.assertEqual(self.norm({"text": "x", "ticker": "nvda"})["ticker"], "NVDA")
+
+
+class RawEmailTests(unittest.TestCase):
+    """Resolving `cid:` on the receiving side.
+
+    This is the only place it *can* be resolved. A `cid:` reference points at a
+    part of the MIME message, so a sender that pre-extracts the HTML has already
+    thrown the picture away — which is what happened to a real digest, whose
+    banner arrived as `cid:digest-header` with the bytes nowhere on this box.
+    """
+
+    PNG = base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAAFUlEQVR42mNk"
+        "YPhfz0BhYGBgYGAAAEeoAxWZk1WhAAAAAElFTkSuQmCC")
+
+    def build(self, *, banner=True, oversized=False, pdf=False,
+              missing_ref=False, plain_only=False):
+        msg = EmailMessage()
+        msg["Subject"] = "NYT + WSJ 新闻摘要"
+        msg["From"] = "digest@example.test"
+        msg.set_content("plain fallback")
+        if plain_only:
+            return msg.as_bytes()
+        html = ('<html><body><img src="cid:digest-header" alt="banner">'
+                '<h2>头条</h2>'
+                '<img src="https://i.ytimg.com/vi/abc/hqdefault.jpg" alt="thumb">')
+        if missing_ref:
+            html += '<img src="cid:never-attached" alt="missing">'
+        if oversized:
+            html += '<img src="cid:too-big" alt="oversized">'
+        if pdf:
+            html += '<img src="cid:a-pdf" alt="not an image">'
+        html += '</body></html>'
+        msg.add_alternative(html, subtype="html")
+        part = msg.get_payload()[1]
+        part.make_related()
+        if banner:
+            part.add_related(self.PNG, maintype="image", subtype="png",
+                             cid="<digest-header>")
+        if oversized:
+            part.add_related(b"x" * (inbox.MAX_INLINE_IMAGE_BYTES + 10),
+                             maintype="image", subtype="png", cid="<too-big>")
+        if pdf:
+            part.add_related(b"%PDF-1.4", maintype="application", subtype="pdf",
+                             cid="<a-pdf>")
+        return msg.as_bytes()
+
+    def test_an_inline_banner_becomes_a_data_uri(self):
+        out = inbox.parse_email(self.build())
+        self.assertIn("data:image/png;base64,", out["text"])
+        self.assertNotIn("cid:digest-header", out["text"])
+        self.assertEqual(out["data"]["inline"]["rewritten"], 1)
+
+    def test_the_subject_becomes_the_title(self):
+        self.assertEqual(inbox.parse_email(self.build())["title"],
+                         "NYT + WSJ 新闻摘要")
+
+    def test_remote_images_are_left_alone(self):
+        """Only `cid:` is ours to resolve. Rewriting an https URL would be
+        inventing a change nobody asked for."""
+        self.assertIn("i.ytimg.com", inbox.parse_email(self.build())["text"])
+
+    def test_a_cid_with_no_attachment_is_left_for_the_renderer(self):
+        """The sender referenced something it did not attach. Left as `cid:` so
+        the page's refusal marker says so, rather than deleted here where nobody
+        would ever learn of it."""
+        out = inbox.parse_email(self.build(missing_ref=True))
+        self.assertIn("cid:never-attached", out["text"])
+
+    def test_an_oversized_image_is_refused_with_its_size(self):
+        """Refused, not resized. Resizing needs an imaging library on the request
+        path, and a silently downscaled picture is a different picture."""
+        out = inbox.parse_email(self.build(oversized=True))
+        refused = out["data"]["inline"]["refused"]
+        entry = next(r for r in refused if r["cid"] == "too-big")
+        self.assertEqual(entry["reason"], "too_large")
+        self.assertGreater(entry["bytes"], inbox.MAX_INLINE_IMAGE_BYTES)
+        self.assertIn("cid:too-big", out["text"])   # still visible as a refusal
+
+    def test_a_non_image_part_is_refused_by_type(self):
+        out = inbox.parse_email(self.build(pdf=True))
+        entry = next(r for r in out["data"]["inline"]["refused"]
+                     if r["cid"] == "a-pdf")
+        self.assertEqual(entry["reason"], "type")
+        self.assertEqual(entry["detail"], "application/pdf")
+
+    def test_the_inline_total_is_budgeted(self):
+        """The row has a 400 KB ceiling in DynamoDB, so the budget is not "how big
+        is the picture" but "how much of the row is left"."""
+        msg = EmailMessage()
+        msg["Subject"] = "many"
+        msg.set_content("x")
+        msg.add_alternative("<html><body>" + "".join(
+            f'<img src="cid:i{i}">' for i in range(8)) + "</body></html>",
+            subtype="html")
+        part = msg.get_payload()[1]
+        part.make_related()
+        chunk = b"y" * (inbox.MAX_INLINE_IMAGE_BYTES - 1)
+        for i in range(8):
+            part.add_related(chunk, maintype="image", subtype="png", cid=f"<i{i}>")
+        out = inbox.parse_email(msg.as_bytes())
+        inlined = len(out["data"]["inline"]["available"])
+        self.assertLessEqual(inlined * inbox.MAX_INLINE_IMAGE_BYTES,
+                             inbox.MAX_INLINE_TOTAL_BYTES + inbox.MAX_INLINE_IMAGE_BYTES)
+        self.assertTrue(any(r["reason"] == "budget"
+                            for r in out["data"]["inline"]["refused"]))
+
+    def test_a_data_uri_survives_normalise(self):
+        """The trap this nearly shipped with: MAX_TEXT was 40_000 and a 96 KB
+        image is ~128 KB of base64, so `normalise` clipped the URI in half and the
+        picture vanished — silently, which is the exact failure this path exists
+        to remove."""
+        msg = EmailMessage()
+        msg["Subject"] = "big banner"
+        msg.set_content("x")
+        msg.add_alternative('<html><body><img src="cid:b"></body></html>',
+                            subtype="html")
+        part = msg.get_payload()[1]
+        part.make_related()
+        part.add_related(b"z" * (inbox.MAX_INLINE_IMAGE_BYTES - 1),
+                         maintype="image", subtype="png", cid="<b>")
+        out = inbox.parse_email(msg.as_bytes())
+        after = inbox.normalise(out)["text"]
+        # Whole, not merely long: a clipped base64 payload is still ~128 KB of
+        # plausible-looking characters, so length alone would not have caught it.
+        # The closing tag proves the document survived past the URI.
+        self.assertIn("data:image/png;base64,", after)
+        self.assertTrue(after.rstrip().endswith("</body></html>"),
+                        "the document was truncated mid-URI")
+        self.assertGreater(len(after), inbox.MAX_INLINE_IMAGE_BYTES)
+
+    def test_a_plain_text_only_message_still_posts(self):
+        out = inbox.parse_email(self.build(plain_only=True))
+        self.assertIn("plain fallback", out["text"])
+        self.assertNotIn("data", out)        # nothing inline to report
+
+    def test_an_empty_message_is_left_for_normalise_to_refuse(self):
+        """`parse_email` extracts; it does not adjudicate. An empty body is a
+        valid message with nothing in it, and "a post needs a title or text" is
+        `normalise`'s rule — duplicating it here would be two places to change."""
+        out = inbox.parse_email(b"Subject: \r\n\r\n")
+        with self.assertRaises(inbox.InboxError) as ctx:
+            inbox.normalise(out)
+        self.assertEqual(ctx.exception.reason, "empty")
+
+    def test_unparsable_bytes_are_refused_with_a_reason(self):
+        """A subject that survives is still a post; bytes that are not a message
+        at all are not."""
+        out = inbox.parse_email(b"Subject: only a subject\r\n\r\n")
+        self.assertEqual(out["title"], "only a subject")
+
+    def test_angle_brackets_on_the_content_id_are_stripped(self):
+        """`Content-ID: <x>` and `src="cid:x"` are the same reference written two
+        ways, and matching them literally resolves nothing."""
+        self.assertEqual(inbox._cid_key("<digest-header>"), "digest-header")
+        self.assertEqual(inbox._cid_key(" digest-header "), "digest-header")
 
 
 class BucketTests(unittest.TestCase):

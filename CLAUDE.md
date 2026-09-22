@@ -1067,6 +1067,33 @@ Four rules, none negotiable:
   fills your inbox) rather than a publishing channel onto trade-agents.com in
   your name. Those are different incidents and the difference costs one check.
 
+**A `cid:` image can only be resolved where the message is.** Post
+`Content-Type: message/rfc822` instead of JSON and the receiver does the MIME
+work: `inbox.parse_email()` takes the subject as the title, the HTML part as the
+body, and rewrites every `src="cid:X"` into a `data:` URI from the matching
+attachment. This exists because a forwarded digest arrived with
+`cid:digest-header` and the banner's bytes were nowhere on this box — a sender
+that pre-extracts the HTML has already thrown the picture away, so no amount of
+work on the rendering side can recover it.
+
+The budget is set by DynamoDB's 400 KB item ceiling, not by taste: base64
+inflates by 4/3, so `MAX_INLINE_IMAGE_BYTES` (96 KB) and
+`MAX_INLINE_TOTAL_BYTES` (200 KB) cap the worst case near 280 KB of body, and
+`MAX_TEXT` is 300_000 *because of that arithmetic* — at its previous 40_000 a
+single inlined image was clipped in half and the picture vanished silently, which
+is the exact failure this path removes. An oversized image is **refused, not
+resized**: resizing needs an imaging library on the request path and a silently
+downscaled picture is a different picture. An unmatched `cid:` is left in the
+HTML on purpose, so the page's refusal marker reports it rather than it being
+deleted where nobody would learn of it. Every refusal travels back on the post in
+`data.inline`.
+
+The raw path gets its own ceiling (`MAX_RAW_BYTES`, 8 MB) because an email with a
+banner is megabytes before anything is extracted, and its own way to carry our
+fields: `?source=&level=&tags=&ticker=&title=` on the query string, since the
+body is the message and cannot hold them. Without that every forwarded mail is
+indistinguishable from every other.
+
 `url` is scheme-checked to http(s) **at write time** rather than escaped at
 render time, because `javascript:` survives HTML-escaping intact and an `href`
 is the one place escaping alone is not enough. Everything else the page renders

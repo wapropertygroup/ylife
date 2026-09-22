@@ -61,8 +61,10 @@ only grows.
 """
 from __future__ import annotations
 
+import base64
 import hmac
 import json
+import re
 import logging
 import os
 import secrets
@@ -74,9 +76,9 @@ from typing import Any, Iterable, Mapping, Optional
 log = logging.getLogger(__name__)
 
 __all__ = [
-    "TABLE_NAME", "LEVELS", "MAX_BODY_BYTES", "RETENTION_DAYS",
+    "TABLE_NAME", "LEVELS", "MAX_BODY_BYTES", "MAX_RAW_BYTES", "RETENTION_DAYS",
     "token_configured", "check_token", "normalise", "InboxError",
-    "put", "recent", "sources", "StoreUnavailable",
+    "put", "recent", "sources", "StoreUnavailable", "parse_email",
 ]
 
 TABLE_NAME = os.environ.get("INBOX_TABLE", "ystocker-inbox").strip()
@@ -85,17 +87,32 @@ TABLE_NAME = os.environ.get("INBOX_TABLE", "ystocker-inbox").strip()
 #: rather than refused — a sender inventing a level should not lose a message.
 LEVELS: tuple[str, ...] = ("info", "success", "warn", "error")
 
-#: Whole-request ceiling. Checked before parsing, so a 10 MB body is refused
-#: without being read into memory and turned into a dict first.
+#: Whole-request ceiling for a JSON post. Checked before parsing, so a 10 MB body
+#: is refused without being read into memory and turned into a dict first.
 MAX_BODY_BYTES = int(os.environ.get("INBOX_MAX_BODY", str(64 * 1024)))
+
+#: Ceiling for a raw `message/rfc822` post, which is a different order of size:
+#: an email carrying a banner and a few thumbnails is megabytes before anything
+#: is extracted from it. Still bounded, and still checked before parsing.
+MAX_RAW_BYTES = int(os.environ.get("INBOX_MAX_RAW", str(8 * 1024 * 1024)))
 
 #: Per-field caps. Generous for anything a person would send, small enough that
 #: a loop is refused rather than absorbed.
 MAX_TITLE = 200
 #: `text` is rendered as Markdown-or-HTML by the shared renderer, so it is a
-#: small document rather than a sentence. Raised from 8k accordingly, and still
-#: bounded: the cap is what stops one request filling a table and a page.
-MAX_TEXT = 40_000
+#: small document rather than a sentence — and on the raw-email path it also
+#: carries inlined `cid:` images as data URIs.
+#:
+#: Sized from that, not guessed: the inline budget is
+#: :data:`MAX_INLINE_TOTAL_BYTES` of image bytes, which base64 inflates by 4/3 to
+#: ~267 KB, plus prose. At 40_000 this clipped a data URI in half and the picture
+#: silently vanished — the one failure this whole path exists to remove.
+#:
+#: It does not loosen the JSON path: a JSON post is already bounded by
+#: :data:`MAX_BODY_BYTES` (64 KB), so this cap can never be the binding one
+#: there. And it stays clear of DynamoDB's 400 KB item ceiling, which is the real
+#: limit.
+MAX_TEXT = 300_000
 MAX_SOURCE = 60
 MAX_TICKER = 24
 MAX_URL = 500
@@ -103,6 +120,28 @@ MAX_TAGS = 10
 MAX_TAG = 40
 #: The verbatim remainder, serialised. Bounded for the same reason as `text`.
 MAX_DATA_BYTES = 16 * 1024
+
+#: Inlining a `cid:` attachment as a data URI, and the arithmetic that bounds it.
+#:
+#: A DynamoDB item is capped at 400 KB *total*, and base64 inflates by 4/3 — so
+#: the budget is not "how big is the picture" but "how much of the row is left
+#: after it". These two caps keep the worst case around 280 KB of body, which
+#: leaves room for the prose and every other attribute.
+#:
+#: An image over the per-image cap is **refused, not resized**. Resizing needs an
+#: imaging library in the request path, and a silently downscaled picture is a
+#: different picture — the existing refusal notice says which ones did not fit,
+#: which is the honest outcome and the one the reader can act on.
+MAX_INLINE_IMAGE_BYTES = int(os.environ.get("INBOX_MAX_INLINE_IMAGE", str(96 * 1024)))
+MAX_INLINE_TOTAL_BYTES = int(os.environ.get("INBOX_MAX_INLINE_TOTAL", str(200 * 1024)))
+
+#: Types worth inlining. Matches what `markdown.js`'s safeSrc will accept back,
+#: because an inlined type the renderer then refuses is worse than not inlining:
+#: the bytes are spent and the picture still does not appear.
+INLINE_IMAGE_TYPES: frozenset[str] = frozenset({
+    "image/png", "image/jpeg", "image/jpg", "image/gif", "image/webp",
+    "image/svg+xml",
+})
 
 #: How long a message lives. See the module docstring on why this is not a
 #: ledger.
@@ -260,6 +299,147 @@ def normalise(body: Any, *, now: Optional[datetime] = None) -> dict[str, Any]:
         "data": extra,
         "expires_at": int(stamp.timestamp()) + RETENTION_DAYS * 86400,
     }
+
+
+# ---------------------------------------------------------------------------
+# Raw email
+# ---------------------------------------------------------------------------
+
+def _cid_key(value: Any) -> str:
+    """A Content-ID with its angle brackets stripped.
+
+    `Content-ID: <digest-header>` and `src="cid:digest-header"` are the same
+    reference written two ways, and matching them literally is why a naive
+    implementation resolves nothing at all.
+    """
+    return str(value or "").strip().strip("<>").strip()
+
+
+def _inline_parts(msg) -> tuple[dict[str, str], list[dict[str, Any]]]:
+    """Every attachment with a Content-ID, as `{cid: data-uri}`.
+
+    Returns the map and a list of the ones refused, each with a reason — the same
+    contract the renderer's refusal marker has, and for the same purpose: a
+    picture that did not make it must say why rather than leaving a hole.
+
+    Walks `walk()` rather than `iter_attachments()`, because an inline image in a
+    `multipart/related` is not an *attachment* in the MIME sense — it has no
+    `Content-Disposition: attachment` — and the tidy-looking iterator skips
+    exactly the parts this function exists to find.
+    """
+    inline: dict[str, str] = {}
+    refused: list[dict[str, Any]] = []
+    total = 0
+    for part in msg.walk():
+        if part.is_multipart():
+            continue
+        cid = _cid_key(part.get("Content-ID"))
+        if not cid:
+            continue
+        ctype = (part.get_content_type() or "").lower()
+        if ctype not in INLINE_IMAGE_TYPES:
+            refused.append({"cid": cid, "reason": "type", "detail": ctype})
+            continue
+        try:
+            raw = part.get_payload(decode=True) or b""
+        except Exception as exc:  # noqa: BLE001 - one bad part must not lose the mail
+            refused.append({"cid": cid, "reason": "undecodable", "detail": str(exc)[:80]})
+            continue
+        if not raw:
+            refused.append({"cid": cid, "reason": "empty"})
+            continue
+        if len(raw) > MAX_INLINE_IMAGE_BYTES:
+            refused.append({"cid": cid, "reason": "too_large", "bytes": len(raw)})
+            continue
+        if total + len(raw) > MAX_INLINE_TOTAL_BYTES:
+            # Budget spent. Reported rather than silently skipped, because the
+            # reader can see the picture is missing either way and only this says
+            # it was a size decision rather than a broken sender.
+            refused.append({"cid": cid, "reason": "budget", "bytes": len(raw)})
+            continue
+        total += len(raw)
+        inline[cid] = ("data:" + ctype + ";base64,"
+                       + base64.b64encode(raw).decode("ascii"))
+    return inline, refused
+
+
+_CID_SRC = re.compile(r"""(src\s*=\s*)(['"]?)cid:([^'"\s>]+)\2""", re.I)
+
+
+def _rewrite_cids(html: str, inline: Mapping[str, str]) -> tuple[str, int]:
+    """Replace `src="cid:X"` with the data URI for X. Returns the count rewritten.
+
+    A `cid:` with no matching part is left exactly as it was, so it reaches the
+    renderer and gets the refusal marker — which is the right outcome: the
+    sender referenced something it did not attach, and that is worth saying.
+    """
+    done = 0
+
+    def sub(m):
+        nonlocal done
+        key = _cid_key(m.group(3))
+        uri = inline.get(key)
+        if uri is None:
+            return m.group(0)
+        done += 1
+        quote = m.group(2) or '"'
+        return f"{m.group(1)}{quote}{uri}{quote}"
+
+    return _CID_SRC.sub(sub, html or ""), done
+
+
+def parse_email(raw: bytes) -> dict[str, Any]:
+    """One raw RFC-822 message into the shape :func:`normalise` accepts.
+
+    This is the whole point of accepting raw mail rather than pre-extracted HTML:
+    `cid:` references point at MIME parts, so they can only be resolved where the
+    *message* is, not where a copy of its HTML is. Whatever forwards the mail
+    stops having to understand any of this — it posts the bytes it already has.
+
+    Pure: no network, no clock, no AWS. Refusals travel back in `data.inline`
+    rather than raising, because one oversized banner must not cost the digest.
+    """
+    import email
+    from email import policy
+
+    try:
+        msg = email.message_from_bytes(raw, policy=policy.default)
+    except Exception as exc:  # noqa: BLE001
+        raise InboxError("bad_email", f"could not parse the message: {exc}")
+
+    body = None
+    try:
+        body = msg.get_body(preferencelist=("html", "plain"))
+    except Exception:  # noqa: BLE001 - malformed structure, fall through
+        body = None
+    if body is None:
+        raise InboxError("no_body", "the message has no text or html part")
+
+    is_html = (body.get_content_type() or "").lower() == "text/html"
+    try:
+        text = body.get_content()
+    except Exception:  # noqa: BLE001 - undeclared charset, decode leniently
+        text = (body.get_payload(decode=True) or b"").decode("utf-8", "replace")
+
+    inline, refused = ({}, [])
+    if is_html:
+        inline, refused = _inline_parts(msg)
+        text, rewritten = _rewrite_cids(str(text), inline)
+    else:
+        rewritten = 0
+
+    out: dict[str, Any] = {
+        "title": str(msg.get("Subject") or "").strip(),
+        "text": text,
+        "source": "email",
+    }
+    # Reported on the post rather than logged: the reader looking at a missing
+    # banner is the only person who can act on it.
+    if refused or rewritten:
+        out["data"] = {"inline": {"rewritten": rewritten,
+                                  "refused": refused,
+                                  "available": sorted(inline)}}
+    return out
 
 
 # ---------------------------------------------------------------------------
