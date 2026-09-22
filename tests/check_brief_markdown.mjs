@@ -210,7 +210,12 @@ console.log('=== a refused media address is stated, not swallowed ===');
   t('ftp: is refused',            S('ftp://h/f.png') === null);
   t('data:text/html is refused',  S('data:text/html;base64,AAA') === null);
   t('https is allowed',           S('https://i.ytimg.com/vi/a/hq.jpg') !== null);
-  t('http is allowed',            S('http://a.test/i.png') !== null);
+  // Upgraded rather than merely allowed: this page is https, so an http image is
+  // mixed content and Safari drops it with no notice at all.
+  t('http is upgraded to https',  S('http://a.test/i.png') === 'https://a.test/i.png');
+  t('https is left alone',        S('https://a.test/i.png') === 'https://a.test/i.png');
+  t('the upgrade does not touch a path that merely contains http',
+    S('/img/http-logo.png') === '/img/http-logo.png');
   t('data:image is allowed',      S('data:image/png;base64,AAA') !== null);
   t('a relative path is allowed', S('/static/x.png') === '/static/x.png');
 
