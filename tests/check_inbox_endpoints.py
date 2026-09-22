@@ -187,6 +187,91 @@ class InboxEndpoints(unittest.TestCase):
         self.assertEqual(moved.status_code, 302)
         self.assertTrue(moved.headers["Location"].endswith("/posts"))
 
+    # ── raw email: the receiver does the MIME work ────────────────────────
+    #
+    # A `cid:` reference points at a part of *this message*, so it can only be
+    # resolved where the message is. A sender that pre-extracts the HTML has
+    # already thrown the picture away — which is what happened to a real digest,
+    # whose banner arrived as `cid:digest-header` with the bytes nowhere on the
+    # box. Posting the raw message moves that work here.
+    def _digest(self):
+        import base64
+        from email.message import EmailMessage
+
+        png = base64.b64decode(
+            "iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAAFUlEQVR42mNk"
+            "YPhfz0BhYGBgYGAAAEeoAxWZk1WhAAAAAElFTkSuQmCC")
+        msg = EmailMessage()
+        msg["Subject"] = "NYT + WSJ 新闻摘要"
+        msg.set_content("fallback")
+        msg.add_alternative(
+            '<html><body><img src="cid:digest-header" alt="banner">'
+            '<h2>头条</h2></body></html>', subtype="html")
+        part = msg.get_payload()[1]
+        part.make_related()
+        part.add_related(png, maintype="image", subtype="png", cid="<digest-header>")
+        return msg.as_bytes()
+
+    def test_a_raw_email_resolves_its_inline_images(self):
+        r = self.client.post("/api/posts", data=self._digest(),
+                             headers={"Content-Type": "message/rfc822",
+                                      "Authorization": f"Bearer {TOKEN}"})
+        self.assertEqual(r.status_code, 201)
+        stored = self.store.rows[-1]
+        self.assertEqual(stored["title"], "NYT + WSJ 新闻摘要")
+        self.assertEqual(stored["source"], "email")
+        self.assertIn("data:image/png;base64,", stored["text"])
+        self.assertNotIn("cid:digest-header", stored["text"])
+        self.assertEqual(stored["data"]["inline"]["rewritten"], 1)
+
+    def test_the_query_string_supplies_what_the_raw_body_cannot(self):
+        """Without this every forwarded message is indistinguishable from every
+        other: one source, no level, no tags."""
+        r = self.client.post("/api/posts?source=muse&level=warn&tags=digest,news",
+                             data=self._digest(),
+                             headers={"Content-Type": "message/rfc822",
+                                      "Authorization": f"Bearer {TOKEN}"})
+        self.assertEqual(r.status_code, 201)
+        stored = self.store.rows[-1]
+        self.assertEqual(stored["source"], "muse")
+        self.assertEqual(stored["level"], "warn")
+        self.assertEqual(stored["tags"], ["digest", "news"])
+
+    def test_a_raw_post_is_still_token_gated(self):
+        r = self.client.post("/api/posts", data=self._digest(),
+                             headers={"Content-Type": "message/rfc822"})
+        self.assertEqual(r.status_code, 401)
+        self.assertEqual(self.store.rows, [])
+
+    def test_a_raw_email_gets_its_own_size_ceiling(self):
+        """An email carrying a banner is megabytes before anything is extracted,
+        so the JSON ceiling would refuse every real message."""
+        self.assertGreater(inbox.MAX_RAW_BYTES, inbox.MAX_BODY_BYTES)
+        r = self.client.post("/api/posts", data=b"x" * (inbox.MAX_RAW_BYTES + 10),
+                             headers={"Content-Type": "message/rfc822",
+                                      "Authorization": f"Bearer {TOKEN}"})
+        self.assertEqual(r.status_code, 413)
+        self.assertEqual(r.get_json()["max_bytes"], inbox.MAX_RAW_BYTES)
+
+    def test_malformed_mail_never_500s_and_never_vanishes(self):
+        """Python's email parser is deliberately lenient: bytes with no headers
+        become a body rather than an error. So garbage is *stored* rather than
+        refused, and that is the better outcome — a forwarder that starts sending
+        rubbish is visible on the page, where a 400 it does not log would not be.
+
+        The invariant is therefore not "it is refused" but "it is never a 500 and
+        never silently dropped": either it lands, or it comes back with a named
+        reason."""
+        r = self.client.post("/api/posts", data=b"\xff\xfe not a message at all",
+                             headers={"Content-Type": "message/rfc822",
+                                      "Authorization": f"Bearer {TOKEN}"})
+        self.assertLess(r.status_code, 500)
+        if r.status_code == 201:
+            self.assertTrue(self.store.rows, "accepted but not stored")
+        else:
+            self.assertIn(r.get_json()["reason"],
+                          ("empty", "no_body", "bad_email"))
+
     def test_get_is_not_a_way_to_write(self):
         self.assertEqual(self.client.put("/api/posts").status_code, 405)
         self.assertEqual(self.client.delete("/api/posts").status_code, 405)

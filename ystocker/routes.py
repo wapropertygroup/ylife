@@ -13821,25 +13821,52 @@ def api_inbox_post():
         log.info("Inbox: POST rejected (bad or missing token)")
         return jsonify({"error": "Unauthorized.", "reason": "unauthorized"}), 401
 
+    # A raw message is a different order of size and gets its own ceiling: an
+    # email carrying a banner and a few thumbnails is megabytes before anything
+    # is extracted from it.
+    as_email = (request.content_type or "").lower().startswith("message/rfc822")
+    ceiling = inbox.MAX_RAW_BYTES if as_email else inbox.MAX_BODY_BYTES
+
     declared = request.content_length or 0
-    if declared > inbox.MAX_BODY_BYTES:
+    if declared > ceiling:
         return jsonify({"error": "Body too large.", "reason": "too_large",
-                        "max_bytes": inbox.MAX_BODY_BYTES}), 413
+                        "max_bytes": ceiling}), 413
     raw = request.get_data(cache=False, as_text=False) or b""
-    if len(raw) > inbox.MAX_BODY_BYTES:
+    if len(raw) > ceiling:
         return jsonify({"error": "Body too large.", "reason": "too_large",
-                        "max_bytes": inbox.MAX_BODY_BYTES}), 413
+                        "max_bytes": ceiling}), 413
 
     ok, usage = _inbox_try_consume()
     if not ok:
         return jsonify({"error": "Daily inbox limit reached.",
                         "reason": "rate_limited", **usage}), 429
 
-    try:
-        body = json.loads(raw.decode("utf-8") or "{}")
-    except (UnicodeDecodeError, ValueError) as exc:
-        return jsonify({"error": f"Body is not valid JSON: {exc}",
-                        "reason": "bad_json"}), 400
+    if as_email:
+        # The receiver does the MIME work, which is the only place it *can* be
+        # done: a `cid:` reference points at a part of this message, so a sender
+        # that pre-extracts the HTML has already thrown the picture away. Whatever
+        # forwards the mail now posts the bytes it already has and understands
+        # none of this.
+        try:
+            body = inbox.parse_email(raw)
+        except inbox.InboxError as exc:
+            return jsonify({"error": exc.detail or exc.reason,
+                            "reason": exc.reason}), 400
+        # The raw body cannot carry our own fields, so the query string does.
+        # Without this every forwarded message is indistinguishable from every
+        # other one: one `source`, no level, no tags.
+        for field in ("source", "level", "ticker", "title"):
+            supplied = request.args.get(field)
+            if supplied:
+                body[field] = supplied
+        if request.args.get("tags"):
+            body["tags"] = request.args.get("tags")
+    else:
+        try:
+            body = json.loads(raw.decode("utf-8") or "{}")
+        except (UnicodeDecodeError, ValueError) as exc:
+            return jsonify({"error": f"Body is not valid JSON: {exc}",
+                            "reason": "bad_json"}), 400
 
     try:
         record = inbox.normalise(body)
