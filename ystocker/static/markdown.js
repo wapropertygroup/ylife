@@ -61,7 +61,19 @@
     if (!v || /^[a-z][a-z0-9+.-]*:/i.test(v)) {
       return /^(https?|mailto):/i.test(v) ? v : null;
     }
-    return v;
+    // A scheme-less value still has to look like a path. `href="完整URL"` — an
+    // unsubstituted placeholder — is not a URL, but it *is* a valid relative
+    // reference, so it used to render as a working link that resolved against
+    // our own origin and 404'd. Eighteen of them arrived in one day's digests.
+    //
+    // That is worse than not linking at all: the text looks clickable and the
+    // failure only shows up after the click, on a page that looks like ours.
+    // Accepted shapes are a rooted path, a fragment, a query, and a bare
+    // host-looking token (`example.com/x`) — everything a real relative link in
+    // this app actually uses.
+    if (/^[/#?]/.test(v)) return v;
+    if (/^[a-z0-9-]+(\.[a-z0-9-]+)+(\/|$|\?)/i.test(v)) return v;
+    return null;
   }
 
   function safeSrc(value) {
@@ -134,6 +146,21 @@
         mark.setAttribute('data-scheme', schemeOf(node.getAttribute('src')));
         const alt = node.getAttribute('alt');
         if (alt) mark.setAttribute('data-alt', alt);
+        to.appendChild(mark);
+        continue;
+      }
+
+      // A link whose href is refused keeps its text and loses the anchor, with a
+      // marker saying so. Silently unwrapping it would leave the reader unable
+      // to tell "this was never a link" from "the link is missing" — and the
+      // case that prompted it, an unsubstituted `完整URL`, was previously worse
+      // than either: a live anchor onto our own 404.
+      if (tag === 'A' && node.hasAttribute('href')
+          && safeHref(node.getAttribute('href')) === null) {
+        copyInto(node, to);
+        const mark = document.createElement('span');
+        mark.className = 'md-href-refused';
+        mark.setAttribute('data-href', schemeOf(node.getAttribute('href')));
         to.appendChild(mark);
         continue;
       }

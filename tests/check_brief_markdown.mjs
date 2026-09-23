@@ -238,6 +238,29 @@ console.log('=== a refused media address is stated, not swallowed ===');
     /function schemeOf[\s\S]{0,400}m\[1\]\.toLowerCase\(\)/.test(src));
 }
 
+console.log('=== an href that is not a URL is not a link ===');
+// Eighteen links in one day of digests were the literal string `完整URL` — a
+// template placeholder the sender never substituted. It is a *valid* relative
+// reference, so it rendered as a working anchor that resolved against our own
+// origin and 404'd. Worse than not linking: it looks clickable, and the failure
+// only shows up after the click on a page that looks like ours.
+{
+  const H = Markdown.safeHref;
+  t('an unsubstituted placeholder is refused', H('完整URL') === null);
+  t('a bare word is refused',                  H('TODO') === null);
+  t('a rooted path is still a link',           H('/history/NVDA') === '/history/NVDA');
+  t('a fragment is still a link',              H('#top') === '#top');
+  t('a query is still a link',                 H('?tab=1') === '?tab=1');
+  t('a bare host is still a link',             H('example.com/a') === 'example.com/a');
+  t('https is untouched',                      H('https://a.test/x') === 'https://a.test/x');
+  t('mailto is untouched',                     H('mailto:a@b.test') === 'mailto:a@b.test');
+  t('javascript: is still refused',            H('javascript:alert(1)') === null);
+
+  const src = fs.readFileSync(path.join(root, 'ystocker/static/markdown.js'), 'utf8');
+  t('a refused link keeps its text and gains a marker',
+    /md-href-refused/.test(src) && /tag === 'A'[\s\S]{0,300}copyInto\(node, to\)/.test(src));
+}
+
 console.log();
 if (failures.length) {
   console.log(`RESULT: FAIL — ${failures.length}: ${failures.join(', ')}`);
