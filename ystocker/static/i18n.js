@@ -3070,8 +3070,19 @@ const I18n = (() => {
     'inbox.href_refused':   { en: 'link missing', zh: '链接缺失' },
     'inbox.href_refused_tip': { en: 'The href was not a URL — usually a template placeholder the sender never substituted. It is dropped rather than left clickable, because a relative value resolves against this site and lands on a 404 that looks like ours.',
                               zh: 'href 不是一个网址——通常是发送方模板里没有被替换掉的占位符。这里直接去掉而不是留成可点击的链接，因为相对地址会解析到本站，点开是一个看起来像我们自己的 404。' },
-    'inbox.how_title':      { en: 'How to post', zh: '如何推送' },
-    'inbox.how_body':       { en: 'Every field is optional except that at least one of title or text must be present. `text` is rendered as Markdown, or as HTML if you send that instead. Anything else you send is kept verbatim and shown under the post.',
+    // Tags nobody sent, read off the title. Normalised keys rather than the
+    // matched word, so 日报 and "Daily" are one facet and the chip is in the
+    // reader's language rather than the sender's.
+    'inbox.auto_tag':       { en: 'Inferred from the title — nobody tagged this',
+                              zh: '按标题自动归类——发送方并没有打这个标签' },
+    'inbox.kind_daily':     { en: 'Daily',    zh: '日报' },
+    'inbox.kind_weekly':    { en: 'Weekly',   zh: '周报' },
+    'inbox.kind_digest':    { en: 'Digest',   zh: '摘要' },
+    'inbox.kind_report':    { en: 'Report',   zh: '报告' },
+    'inbox.kind_reminder':  { en: 'Reminder', zh: '提醒' },
+    'inbox.kind_alert':     { en: 'Alert',    zh: '预警' },
+    'inbox.kind_update':    { en: 'Update',   zh: '更新' },
+    'inbox.how_title':      { en: 'How to post', zh: '如何推送' },    'inbox.how_body':       { en: 'Every field is optional except that at least one of title or text must be present. `text` is rendered as Markdown, or as HTML if you send that instead. Anything else you send is kept verbatim and shown under the post.',
                               zh: '除了 title 和 text 至少要有一个，其余字段均为可选。text 按 Markdown 渲染，直接发 HTML 也可以。你发的其他字段会原样保留，并显示在内容下方。' },
     'inbox.retention':      { en: 'Posts are kept for', zh: '推送保留' },
     'inbox.retention_days': { en: 'days.', zh: '天。' },
