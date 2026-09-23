@@ -130,6 +130,32 @@ t('series equal to the source is suppressed',
 t('no series and no source emits nothing',
   autoTags({ title: '', source: '' }).length === 0);
 
+console.log('\nCSS contract — a layout table must not be drawn as a data table');
+// Lives here rather than in a file of its own because it guards the same kind
+// of failure as everything above: something that still renders, just wrongly.
+// 251 of the 262 tables the board renders are email layout scaffolding, and
+// the rule that separates them from real data tables is one selector.
+const css = tpl.slice(tpl.indexOf('<style>'), tpl.indexOf('</style>'));
+const dataSel = /table:has\(([^)]*)\)/g;
+const hasSelectors = [...css.matchAll(dataSel)].map(m => m[1].trim());
+t('the data-table rule exists', hasSelectors.length >= 3);
+// The trap: `:has(th)` matches a *descendant* at any depth, so a layout table
+// wrapping a data table would take the full grid treatment — and an email is
+// made of exactly that nesting. Every one must be child-scoped.
+t('every :has() is scoped to the table\'s own rows',
+  hasSelectors.length > 0 && hasSelectors.every(s => s.split(',').every(p => p.trim().startsWith('>'))),
+  `unscoped: ${hasSelectors.filter(s => !s.trim().startsWith('>')).join(' | ')}`);
+// The base rule must not put a border on cells: that is what drew a grid
+// around every fragment of a forwarded article.
+const baseCell = /\.ib-rich table td,\s*\.ib-rich table th \{([^}]*)\}/.exec(css);
+t('the base cell rule clears the border', !!baseCell && /border:\s*0/.test(baseCell[1]),
+  baseCell ? baseCell[1].trim().slice(0, 60) : 'rule not found');
+// …and must not pin a font size, which shrank whole articles to 12px.
+const baseTable = /\.ib-rich table \{([^}]*)\}/.exec(css);
+t('the base table rule sets no font-size',
+  !!baseTable && !/font-size/.test(baseTable[1]),
+  baseTable ? baseTable[1].trim().slice(0, 60) : 'rule not found');
+
 console.log('\ni18n — every key the chips compose exists in both languages');
 // These are built by string concatenation in JS, where I18n.apply() cannot
 // reach them, so a missing key ships the raw key to the page.
