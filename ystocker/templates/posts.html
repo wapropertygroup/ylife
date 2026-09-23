@@ -98,10 +98,17 @@
     display: flex; gap: 0.75rem; align-items: flex-start;
     overflow-x: auto; padding-bottom: 0.5rem;
   }
+  /* Lane width scales with the viewport rather than being one fixed number.
+     A post here is a whole forwarded document, not a ticket stub, and 26rem
+     showed about four lines of one before the fold. The clamp keeps three
+     lanes visible on a laptop and widens the cards rather than adding a fourth
+     on a large monitor, which is the right trade for this content: reading one
+     post is the task, scanning twelve lanes is not. */
   .ib-lane {
-    flex: 0 0 26rem; min-width: 0; display: flex; flex-direction: column;
+    flex: 0 0 clamp(28rem, 32vw, 40rem); min-width: 0;
+    display: flex; flex-direction: column;
     background: var(--ib-well); border: 1px solid var(--ib-line);
-    border-radius: 0.75rem; max-height: 84vh;
+    border-radius: 0.75rem; max-height: 88vh;
   }
   .ib-lane-head {
     display: flex; align-items: center; gap: 0.5rem;
@@ -132,7 +139,7 @@
      universally supported, clamps a document rather than a paragraph, and is
      what was actually doing the work. */
   .ib-clamp {
-    overflow: hidden; max-height: 24rem;
+    overflow: hidden; max-height: 32rem;
     /* A fade rather than a hard cut, so it reads as folded rather than broken.
        Both stops carry the *card* colour — fading to a hardcoded slate over a
        white card renders as a grey band, which is the trap CLAUDE.md records
@@ -146,7 +153,7 @@
      the body spilled out of a box that never grew. The list view worked only
      because it never gets this class. Bound to `.ib-clamp` so one toggle
      governs both. */
-  .ib-clamp.ib-clamp-sm { max-height: 16rem; }
+  .ib-clamp.ib-clamp-sm { max-height: 28rem; }
   /* A refused media address. Visible on purpose: the alternative is an empty
      picture frame, which reads as "failed to load" when the truth is "will never
      load", and those deserve different reactions. Amber rather than red — it is
@@ -194,7 +201,10 @@
   .ib-rich ol { list-style: decimal; }
   .ib-rich li { margin: 0.15rem 0; }
   .ib-rich a { color: var(--t-accent-ink); text-decoration: underline; }
-  .ib-rich strong { color: var(--t-ink-strong); font-weight: 600; }
+  /* `b` alongside `strong`: 154 of the bold runs in the live feed are `<b>`,
+     which mail clients emit and Markdown never does, so styling only `strong`
+     left most of a forwarded digest's emphasis unstyled. */
+  .ib-rich strong, .ib-rich b { color: var(--t-ink-strong); font-weight: 600; }
   .ib-rich blockquote {
     margin: 0.5rem 0; padding: 0.15rem 0 0.15rem 0.75rem;
     border-left: 3px solid var(--t-accent-line); color: var(--t-ink-dim);
@@ -210,16 +220,49 @@
     overflow-x: auto; font-size: 11px; line-height: 1.5;
   }
   .ib-rich pre code { background: none; border: 0; padding: 0; }
-  /* A posted table can be wider than the card, and a table is the one block a
-     sender is most likely to send. Scrolls rather than forcing the card wide. */
+  /* Tables are two completely different things here, and treating them as one
+     was the single worst thing on the board.
+
+     Measured on the live feed: of the 262 tables the board renders, **251 have
+     no header cell at all**. They are not data — they are email layout
+     scaffolding, the `<table cellpadding cellspacing>` nesting every mail
+     client has used since 1998. `style`, `cellpadding`, `width` and `bgcolor`
+     are all stripped by the sanitiser (correctly — a sender's hardcoded black
+     text is unreadable in dark mode), so what reaches this stylesheet is bare
+     scaffolding. Styling it as data drew a 1px grid around every fragment of a
+     forwarded article and, because the rule also set `font-size: 12px`,
+     rendered the whole body two sizes small. A NYT digest arrived looking like
+     a stack of broken form fields.
+
+     So the base rule now assumes scaffolding, which is what 96% of them are,
+     and the data treatment is opt-in on having a header row. A Markdown pipe
+     table always emits `<thead><th>`, so everything this site generates itself
+     stays on the data path.
+
+     The `:has()` is scoped to the table's *own* rows on purpose: bare
+     `:has(th)` matches a descendant at any depth, so a layout table wrapping a
+     data table would match and take the full grid treatment — which is exactly
+     the nesting an email is made of. Caught by measuring rather than reading:
+     a table my own probe had filtered as layout still computed to
+     `display:block` at 12px. */
   .ib-rich table {
-    display: block; overflow-x: auto; max-width: 100%;
-    border-collapse: collapse; margin: 0.5rem 0; font-size: 12px;
+    max-width: 100%; border-collapse: collapse; margin: 0.35rem 0;
   }
-  .ib-rich th, .ib-rich td {
-    border: 1px solid var(--ib-line); padding: 0.25rem 0.5rem; text-align: left;
+  .ib-rich table td, .ib-rich table th {
+    border: 0; padding: 0; background: none; vertical-align: top; text-align: left;
   }
-  .ib-rich th { background: var(--ib-well); color: var(--t-ink-strong); font-weight: 600; }
+  .ib-rich table:has(> tr > th, > thead > tr > th,
+                     > tbody > tr > th, > tfoot > tr > th) {
+    display: block; overflow-x: auto; margin: 0.5rem 0; font-size: 12px;
+  }
+  .ib-rich table:has(> tr > th, > thead > tr > th,
+                     > tbody > tr > th, > tfoot > tr > th) :is(th, td) {
+    border: 1px solid var(--ib-line); padding: 0.25rem 0.5rem;
+  }
+  .ib-rich table:has(> tr > th, > thead > tr > th,
+                     > tbody > tr > th, > tfoot > tr > th) th {
+    background: var(--ib-well); color: var(--t-ink-strong); font-weight: 600;
+  }
   .ib-rich img { max-width: 100%; height: auto; }
 </style>
 
