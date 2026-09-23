@@ -55,6 +55,14 @@
   .dark .ib-chip-success { color: #6ee7b7; border-color: #065f46; }
   .dark .ib-chip-warn    { color: #fcd34d; border-color: #78350f; }
   .dark .ib-chip-error   { color: #fca5a5; border-color: #7f1d1d; }
+  /* Dashed = nobody sent this, it was read off the title. Same reason a derived
+     figure is never rendered like a measured one anywhere else here. */
+  .ib-chip-auto {
+    border-style: dashed; cursor: pointer; background: transparent;
+    font: inherit; font-size: 10px; line-height: inherit;
+  }
+  .ib-chip-auto:hover { color: var(--t-ink); border-color: var(--t-line-hover); }
+  .ib-filter-auto { border-style: dashed; }
   .ib-filter {
     font-size: 11px; padding: 2px 9px; border-radius: 9999px; cursor: pointer;
     border: 1px solid var(--t-line-strong); background: transparent;
@@ -314,6 +322,7 @@ function esc(v) {
 let _messages = [];
 let _filter = '';       // '' = all; otherwise a source name
 let _level = '';        // '' = all; otherwise a level
+let _tag = '';          // '' = all; otherwise a derived key, `series:…`/`kind:…`
 
 /* Which view, remembered. A reader who prefers the board should not have to
    pick it again on every visit, and this is a display preference rather than
@@ -344,19 +353,33 @@ function renderFilters() {
   if (!wrap) return;
   const sources = [...new Set(_messages.map(m => m.source).filter(Boolean))].sort();
   const levels = [...new Set(_messages.map(m => m.level).filter(Boolean))];
-  const chip = (label, value, active, kind) =>
-    `<button type="button" class="ib-filter${active ? ' active' : ''}" `
+  const chip = (label, value, active, kind, extra = '') =>
+    `<button type="button" class="ib-filter${active ? ' active' : ''}${extra ? ' ' + extra : ''}" `
     + `data-kind="${kind}" data-value="${esc(value)}">${esc(label)}</button>`;
-  const parts = [chip(I18n.t('inbox.all') || 'All', '', !_filter && !_level, 'reset')];
+  const parts = [chip(I18n.t('inbox.all') || 'All', '', !_filter && !_level && !_tag, 'reset')];
   sources.forEach(s => parts.push(chip(s, s, _filter === s, 'source')));
   levels.forEach(l => parts.push(
     chip(I18n.t('inbox.level_' + l) || l, l, _level === l, 'level')));
+  // Only the cadences, and only the ones actually present. The series keys are
+  // unbounded — eleven of them today, one more per new sender — and a filter bar
+  // that grows without limit stops being a bar. A series is still filterable by
+  // clicking its chip on a card, and when one is active it is appended below so
+  // the state is visible and dismissible rather than a mystery empty list.
+  const present = new Set();
+  _messages.forEach(m => autoTags(m).forEach(t => present.add(t.key)));
+  const kinds = KIND_RULES.map(([k]) => k).filter(k => present.has('kind:' + k));
+  kinds.forEach(k => parts.push(chip(
+    I18n.t('inbox.kind_' + k) || k, 'kind:' + k, _tag === 'kind:' + k, 'tag', 'ib-filter-auto')));
+  if (_tag.startsWith('series:')) {
+    parts.push(chip(_tag.slice(7), _tag, true, 'tag', 'ib-filter-auto'));
+  }
   wrap.innerHTML = parts.join('');
   wrap.querySelectorAll('.ib-filter').forEach(btn => {
     btn.addEventListener('click', () => {
       const kind = btn.dataset.kind, value = btn.dataset.value;
-      if (kind === 'reset') { _filter = ''; _level = ''; }
+      if (kind === 'reset') { _filter = ''; _level = ''; _tag = ''; }
       else if (kind === 'source') { _filter = (_filter === value) ? '' : value; }
+      else if (kind === 'tag') { _tag = (_tag === value) ? '' : value; }
       else { _level = (_level === value) ? '' : value; }
       renderFilters(); renderList();
     });
@@ -383,6 +406,15 @@ function card(m, { compact = false } = {}) {
       + `href="/history/${encodeURIComponent(m.ticker)}">${esc(m.ticker)}</a>`);
   }
   (m.tags || []).forEach(t => chips.push(`<span class="ib-chip">#${esc(t)}</span>`));
+  // Derived last, so the sender's own facts lead. `compact` is the board, where
+  // the lane header already names the series — the cadence chips still earn
+  // their place there.
+  autoTags(m).forEach(t => {
+    if (compact && t.key.startsWith('series:')) return;
+    chips.push(`<button type="button" class="ib-chip ib-chip-auto" data-tag="${esc(t.key)}" `
+      + `title="${esc(I18n.t('inbox.auto_tag') || 'Inferred from the title')}">`
+      + `${esc(t.label)}</button>`);
+  });
 
   let link = '';
   if (m.url) {
@@ -462,11 +494,22 @@ function bindMore(root) {
         || (open ? 'Show more' : 'Show less');
     });
   });
+  // A derived chip is also the filter for its own facet — the series ones are
+  // reachable no other way, since the bar deliberately does not list them all.
+  root.querySelectorAll('[data-tag]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const v = btn.dataset.tag;
+      _tag = (_tag === v) ? '' : v;
+      renderFilters(); renderList();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+  });
 }
 
 function visibleRows() {
   return _messages.filter(m =>
-    (!_filter || m.source === _filter) && (!_level || m.level === _level));
+    (!_filter || m.source === _filter) && (!_level || m.level === _level)
+    && (!_tag || autoTags(m).some(t => t.key === _tag)));
 }
 
 function renderList() {
@@ -516,6 +559,60 @@ function renderList() {
    be, because the cost of getting it wrong is one lane too many rather than a
    wrong number — and the alternative, asking every sender to set `source`, is
    the sender-side change this feed exists without. */
+/* Tags nobody sent.
+
+   `tags` is a field on the wire and almost nothing sets it — 0 of the 44 posts
+   in the live feed carry one, because the senders are forwarded mail and small
+   scripts, and the whole point of this endpoint is that a sender needs no
+   schema beyond a title. So the only material to classify on is the title, and
+   it turns out to be enough: every recurring series in the feed ends in one of
+   five words (更新 / 日报 / 报告 / 摘要 / 提醒), which is a cadence, and begins
+   with the series name, which `laneKey` already extracts for the board.
+
+   Two rules, and the second is the one that matters:
+
+   - A derived tag is **normalised, not copied**. 日报 and "Daily" are the same
+     facet, so both map to `daily` and render in the reader's language. Copying
+     the matched word instead would split one facet in two the first time a
+     sender wrote in English, and would put a Chinese chip on an English page.
+   - A derived tag **must not look like a sender's tag**. This is the same rule
+     the rest of this codebase applies to a derived number: `#foo` came from
+     whoever posted, a dotted chip was inferred here from the title and can be
+     wrong. Rendering them identically would make a guess indistinguishable
+     from a fact, and the guess is the one a reader might want to discount. */
+const KIND_RULES = [
+  ['daily',    /日报|每日|\bdaily\b/i],
+  ['weekly',   /周报|每周|\bweekly\b/i],
+  ['digest',   /摘要|汇总|\b(digest|summary|roundup)\b/i],
+  ['report',   /报告|\breport\b/i],
+  ['reminder', /提醒|日历|\b(reminder|calendar)\b/i],
+  ['alert',    /预警|警戒|触发|\balert\b/i],
+  ['update',   /更新|\bupdate\b/i],
+];
+const MAX_KINDS = 2;   // "每日财务报告" is honestly both; three chips is soup.
+
+function autoTags(m) {
+  const out = [];
+  const series = laneKey(m);
+  // Skip when the series fell back to the source: that chip is already there,
+  // and a tag repeating a neighbouring chip reads as two facts, not one.
+  if (series && series !== m.source) out.push({ key: 'series:' + series, label: series });
+  // Match the *head*, not the whole title. The cadence word is part of the
+  // series name; everything after the delimiter is that run's content, and
+  // scanning it produces false positives that read as real classifications —
+  // 「视频日报 9/21：油价逼近$100、美债5%警戒线」 is a daily video digest, and
+  // matching 警戒 in the headline labelled it an alert.
+  let kinds = 0;
+  for (const [k, re] of KIND_RULES) {
+    if (kinds >= MAX_KINDS) break;
+    if (re.test(series)) {
+      out.push({ key: 'kind:' + k, label: I18n.t('inbox.kind_' + k) || k });
+      kinds++;
+    }
+  }
+  return out;
+}
+
 function laneKey(m) {
   const t = (m.title || '').trim();
   if (!t) return m.source || '';
