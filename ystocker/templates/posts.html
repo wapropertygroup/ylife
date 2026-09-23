@@ -153,6 +153,14 @@
   .dark .md-src-refused { color: #fcd34d; border-color: rgba(252,211,77,.35);
                           background: rgba(252,211,77,.07); }
   .md-src-refused::before { content: '⃠'; opacity: .7; }
+  /* A link whose target was not a URL. Its text is still there; this says the
+     link that should have wrapped it is missing, rather than leaving the reader
+     to wonder why some words are not clickable. */
+  .md-href-refused {
+    font-size: 10px; margin-left: 0.25rem; vertical-align: baseline;
+    color: #b45309; white-space: nowrap;
+  }
+  .dark .md-href-refused { color: #fcd34d; }
   .ib-more {
     font-size: 11px; color: var(--t-accent-ink); margin-top: 0.25rem;
     background: none; border: 0; padding: 0; cursor: pointer;
@@ -365,9 +373,9 @@ function card(m, { compact = false } = {}) {
   const chips = [];
   chips.push(`<span class="ib-chip ib-chip-${level}">`
              + `${esc(I18n.t('inbox.level_' + level) || level)}</span>`);
-  // The source is the lane heading on the board, so repeating it on every card
-  // in that lane is noise.
-  if (m.source && !compact) chips.push(`<span class="ib-chip">${esc(m.source)}</span>`);
+  // Kept on the board too, now that the lane is the title series rather than the
+  // source: the two are different facts and the lane no longer carries this one.
+  if (m.source) chips.push(`<span class="ib-chip">${esc(m.source)}</span>`);
   if (m.ticker) {
     // The one link built from sender input, and it is built from a path
     // segment we encode rather than from a URL they supplied.
@@ -426,6 +434,10 @@ function card(m, { compact = false } = {}) {
    never be loaded": the first invites a retry and the second needs the sender
    fixed, and an empty picture frame says the wrong one of those. */
 function annotateRefused(root) {
+  root.querySelectorAll('.md-href-refused').forEach(el => {
+    el.textContent = '[' + (I18n.t('inbox.href_refused') || 'link missing') + ']';
+    el.title = I18n.t('inbox.href_refused_tip') || '';
+  });
   root.querySelectorAll('.md-src-refused').forEach(el => {
     const scheme = el.dataset.scheme || '?';
     const alt = el.dataset.alt || '';
@@ -491,15 +503,38 @@ function renderList() {
   }
 }
 
-/* One lane per source, newest first inside each.
-   Source rather than level: level has four values and is already a colour on
-   every card, whereas the source *is* the other system — a lane per sender is
-   the distinction a reader actually scans by when several of them are posting.
-   Posts with no source share one lane rather than being hidden. */
+/* The lane a post belongs to.
+   `source` was the obvious key and turned out to be the wrong one: everything
+   arriving by forwarded mail is `source: email`, so 36 of 40 posts piled into a
+   single lane and the board bought nothing. The real grouping was sitting in the
+   titles — 美卡论坛更新（9/22 18:48 轮）· 1 条, 小红书更新（…）, NYT + WSJ 新闻
+   摘要 | …, Monarch 每日财务报告（…） — each a recurring series with the run's
+   date and count tacked on.
+
+   So the key is the title with that tail removed: everything from the first
+   bracket, pipe, middot or dash onwards. It is a heuristic and it is allowed to
+   be, because the cost of getting it wrong is one lane too many rather than a
+   wrong number — and the alternative, asking every sender to set `source`, is
+   the sender-side change this feed exists without. */
+function laneKey(m) {
+  const t = (m.title || '').trim();
+  if (!t) return m.source || '';
+  // Structural delimiters only. `\s\d` was tempting and wrong — it split
+  // 未来 3 天日历提醒 into a lane called 未来.
+  const cut = t.search(/[（(|·—\[]|\s[-–—]\s|：|:/);
+  let head = (cut > 1 ? t.slice(0, cut) : t).trim();
+  // Then drop a trailing run date, or every day makes its own lane:
+  // "TradeAgents 视频日报 9/22" and "…9/21" are one series, not two.
+  head = head.replace(
+    /\s*(\d{4}-\d{1,2}-\d{1,2}|\d{1,2}\/\d{1,2}|\d{1,2}月\d{1,2}日)\s*$/, '').trim();
+  return head || m.source || '';
+}
+
+/* One lane per series, newest first inside each. */
 function renderBoard(board, rows) {
   const lanes = new Map();
   rows.forEach(m => {
-    const key = m.source || '';
+    const key = laneKey(m);
     if (!lanes.has(key)) lanes.set(key, []);
     lanes.get(key).push(m);
   });
@@ -507,10 +542,10 @@ function renderBoard(board, rows) {
   const ordered = [...lanes.entries()].sort((a, b) => b[1].length - a[1].length);
   const unnamed = I18n.t('inbox.no_source') || 'no source';
 
-  board.innerHTML = ordered.map(([source, items]) => `
+  board.innerHTML = ordered.map(([series, items]) => `
     <section class="ib-lane">
       <header class="ib-lane-head">
-        <span class="truncate ${source ? '' : 'italic'}">${esc(source || unnamed)}</span>
+        <span class="truncate ${series ? '' : 'italic'}" title="${esc(series || unnamed)}">${esc(series || unnamed)}</span>
         <span class="ib-lane-n">${items.length}</span>
       </header>
       <div class="ib-lane-body">
