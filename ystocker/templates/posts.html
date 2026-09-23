@@ -405,7 +405,13 @@ function card(m, { compact = false } = {}) {
     chips.push(`<a class="ib-chip hover:text-brand" `
       + `href="/history/${encodeURIComponent(m.ticker)}">${esc(m.ticker)}</a>`);
   }
-  (m.tags || []).forEach(t => chips.push(`<span class="ib-chip">#${esc(t)}</span>`));
+  // A tag that merely repeats the source is not a second fact. 33 of the 44
+  // live posts arrive tagged `email` from a source already displayed as
+  // `email`, so the card carried the same word twice, in two chips, for three
+  // quarters of the feed. Same rule as the derived series tag below.
+  (m.tags || [])
+    .filter(t => String(t).toLowerCase() !== String(m.source || '').toLowerCase())
+    .forEach(t => chips.push(`<span class="ib-chip">#${esc(t)}</span>`));
   // Derived last, so the sender's own facts lead. `compact` is the board, where
   // the lane header already names the series — the cadence chips still earn
   // their place there.
