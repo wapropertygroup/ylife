@@ -64,7 +64,11 @@
   {# Dates as `data-ts`, not as rendered text: `datetimeformat` writes
      "Sep 19, 2026" whatever language the page is in, and being server-rendered it
      could not follow a language the reader switches without reloading either.
-     I18n.datetime() composes it, and reproduces this exact format in English. #}
+     I18n.datetime() composes it, reproducing this exact *format* in English —
+     but on the reader's own clock, so the value differs from the server's UTC
+     fallback by their offset. That is the point, not a mismatch: this line is a
+     claim about freshness, and "next refresh 22:56" is only actionable in the
+     zone the reader is actually in. #}
   <p class="text-xs text-slate-500 dark:text-slate-600 mt-1">
     <span data-i18n="index.data_as_of">Data as of</span> <span data-ts="{{ cache_last_updated | int }}">{{ cache_last_updated | int | datetimeformat }}</span>
     {% if warming %}

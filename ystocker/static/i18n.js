@@ -3524,7 +3524,8 @@ const I18n = (() => {
     return v != null ? v : key.toUpperCase();
   }
 
-  /** A unix timestamp as a date the current language would write.
+  /** A unix timestamp as a date the current language would write, on the
+   *  reader's own clock.
    *
    *  The six dashboards that carry a "Data as of …" line rendered it server-side
    *  through Jinja's `datetimeformat` (`%b %d, %Y %H:%M`), which has two problems
@@ -3533,15 +3534,27 @@ const I18n = (() => {
    *  reader switches. Composing it here means `apply()` re-renders it like any
    *  other string.
    *
-   *  The English branch reproduces the server's format exactly — `Sep 19, 2026
-   *  19:31` — so moving a page onto `data-ts` changes nothing in English.
+   *  The English branch reproduces the server's *format* exactly — `Sep 19, 2026
+   *  19:31` — so moving a page onto `data-ts` was a typographic no-op.
    *
-   *  UTC, not the reader's clock, because that is what the server has always
-   *  rendered (`datetimeformat`, which now says so out loud). Re-basing every
-   *  dashboard's "data as of" onto local time might well be an improvement, but
-   *  it is a separate decision about what the line means, not a typographic one,
-   *  and doing it here would move the times on six pages as a side effect of
-   *  translating the month.
+   *  **Local, not UTC.** This was UTC originally, matching what the server had
+   *  always rendered, and that was deliberately left alone as a separate
+   *  decision from translating the month. It is the wrong answer, and `/posts`
+   *  is what made it obvious: a feed timestamps events a reader compares
+   *  against the clock on their wall, and a post that arrived at 07:56 in
+   *  Seattle read 14:56. The dashboards are the same kind of value and were
+   *  wrong in the same way — worse, actually, since "next refresh 22:56" on a
+   *  line whose whole job is freshness is a claim about the future the reader
+   *  cannot act on if it is in a zone they are not in.
+   *
+   *  No zone label, because local time is the unmarked default everywhere else
+   *  a person reads a time. UTC is the reading that needs announcing, and it no
+   *  longer happens here.
+   *
+   *  Every caller passes an *absolute instant* — an epoch second, or an ISO
+   *  string with a `Z` that `new Date` resolves before it gets here — so the
+   *  re-basing is a display change only. An ISO string without a zone would
+   *  already have been parsed as local by `new Date` and been wrong before this.
    */
   const _MONTHS_EN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
                       'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -3549,11 +3562,11 @@ const I18n = (() => {
     const d = new Date(Number(ts) * 1000);
     if (isNaN(d.getTime())) return '';
     const p = n => String(n).padStart(2, '0');
-    const clock = p(d.getUTCHours()) + ':' + p(d.getUTCMinutes());
+    const clock = p(d.getHours()) + ':' + p(d.getMinutes());
     if (current === 'zh') {
-      return `${d.getUTCFullYear()}年${d.getUTCMonth() + 1}月${d.getUTCDate()}日 ${clock}`;
+      return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日 ${clock}`;
     }
-    return `${_MONTHS_EN[d.getUTCMonth()]} ${p(d.getUTCDate())}, ${d.getUTCFullYear()} ${clock}`;
+    return `${_MONTHS_EN[d.getMonth()]} ${p(d.getDate())}, ${d.getFullYear()} ${clock}`;
   }
 
   /** `<html lang>`, kept in step with the language actually being rendered.

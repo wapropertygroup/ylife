@@ -347,16 +347,21 @@ def create_app() -> Flask:
     from ystocker.routes import bp, _start_background_thread, _start_heatmap_scheduler, _start_daily_broadcast_scheduler, _start_rolling_refresh_thread, _start_daily_pregen_scheduler, _start_markets_warmup_thread, _start_spx_history_warmup_thread, _start_cta_staleness_scheduler
     app.register_blueprint(bp)
 
-    # Jinja2 filter: unix timestamp → "Feb 21, 2026 15:30"
+    # Jinja2 filter: unix timestamp → "Feb 21, 2026 15:30", UTC.
     #
-    # Explicitly UTC, where this used to be `fromtimestamp()` — the *server's*
-    # local clock, which is UTC on this box and so renders identically. The point
-    # is that it now says so: `I18n.datetime()` re-renders these same timestamps
-    # client-side (they travel as `data-ts`, because a date baked into the HTML
-    # cannot follow a language the reader switches without reloading), and a
-    # server whose TZ drifted off UTC would have the two disagree — the rendered
-    # fallback saying one hour and the hydrated text another, on a line whose
-    # entire job is to say how fresh the data is.
+    # This is the *pre-hydration fallback only*, and it deliberately no longer
+    # agrees with what the reader ends up seeing. `I18n.datetime()` re-renders
+    # every one of these client-side on DOMContentLoaded (they travel as
+    # `data-ts`, because a date baked into the HTML cannot follow a language the
+    # reader switches without reloading) and now does so on the reader's own
+    # clock — so the hydrated text differs from this by their UTC offset, by
+    # design, on every load.
+    #
+    # It stays UTC rather than guessing: the server has no idea where the reader
+    # is, and rendering the box's own zone would be a different wrong answer
+    # with no marker on it. Explicit `timezone.utc` rather than the bare
+    # `fromtimestamp()` this used to be, so a box whose TZ drifted cannot change
+    # what is emitted here without anyone noticing.
     @app.template_filter("datetimeformat")
     def datetimeformat(ts):
         return datetime.datetime.fromtimestamp(
