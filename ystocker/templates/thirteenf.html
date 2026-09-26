@@ -569,7 +569,7 @@ async function explainAum(slug, fundName) {
   out.dataset.loaded = '';
 
   try {
-    const lang = (typeof I18n !== 'undefined' && I18n.lang === 'zh') ? 'zh' : 'en';
+    const lang = (typeof I18n !== 'undefined' && I18n.getLang() === 'zh') ? 'zh' : 'en';
     const resp = await fetch('/api/13f/aum-explain', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

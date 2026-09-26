@@ -6549,7 +6549,7 @@ DeferLoad.when('#gicsTable', async function() {
     if (daysAway === 1) return T('markets.earnings_tomorrow', 'Tomorrow');
     const d2 = new Date(iso + 'T00:00:00Z');
     return d2.toLocaleDateString(
-      (typeof I18n !== 'undefined' && I18n.lang === 'zh') ? 'zh-CN' : 'en-US',
+      (typeof I18n !== 'undefined' && I18n.getLang() === 'zh') ? 'zh-CN' : 'en-US',
       { month: 'short', day: 'numeric', weekday: 'short', timeZone: 'UTC' });
   };
 
