@@ -467,27 +467,106 @@ def _parse_wikipedia(html: str) -> list[dict[str, str]]:
             for _, r in table.iterrows()]
 
 
+_XLSX_MAIN = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
+_XLSX_REL = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
+
+
+def _xlsx_column(ref: str) -> int:
+    """'B7' -> 1. Letters only; the row number is read from the <row> itself."""
+    n = 0
+    for ch in ref:
+        if not ch.isalpha():
+            break
+        n = n * 26 + (ord(ch.upper()) - ord("A") + 1)
+    return n - 1
+
+
+def _xlsx_rows(xlsx: bytes) -> list[list[Any]]:
+    """The first worksheet of an .xlsx as rows of cell values, without openpyxl.
+
+    ``pandas.read_excel`` goes through openpyxl, which reads every part with the
+    standard library's ElementTree — and ElementTree's parser is ``pyexpat``.
+    On this repo's dev Mac that extension cannot be loaded at all: Homebrew's
+    Python 3.12.14 was built against a newer libexpat than the
+    ``/usr/lib/libexpat.1.dylib`` it finds at runtime (``Symbol not found:
+    _XML_SetAllocTrackerActivationThreshold``), the same breakage CLAUDE.md
+    records under matplotlib. So the snapshot command fetched both sources and
+    then died reading the one spreadsheet.
+
+    An .xlsx is a zip of XML parts, and lxml — already required for the
+    Wikipedia table through ``read_html``, and carrying its own libxml2 — reads
+    them without expat. Row positions follow each ``<row r=…>``, so a blank row
+    in the preamble stays a blank row, as it does under ``read_excel(header=None)``.
+    """
+    import io
+    import zipfile
+
+    from lxml import etree
+
+    with zipfile.ZipFile(io.BytesIO(xlsx)) as z:
+        names = set(z.namelist())
+        shared: list[str] = []
+        if "xl/sharedStrings.xml" in names:
+            for si in etree.fromstring(z.read("xl/sharedStrings.xml")).iter(f"{_XLSX_MAIN}si"):
+                # Rich text splits one string into runs; the phonetic guide
+                # (<rPh>) is annotation, not text, and is left out.
+                shared.append("".join(t.text or "" for t in si.iter(f"{_XLSX_MAIN}t")
+                                      if t.getparent().tag != f"{_XLSX_MAIN}rPh"))
+        # The first sheet by the workbook's own order, via its relationship —
+        # not "sheet1.xml" by name, which is only a writer's habit.
+        path = "xl/worksheets/sheet1.xml"
+        try:
+            first = etree.fromstring(z.read("xl/workbook.xml")).find(f".//{_XLSX_MAIN}sheet")
+            rid = first.get(f"{_XLSX_REL}id")
+            for rel in etree.fromstring(z.read("xl/_rels/workbook.xml.rels")):
+                if rel.get("Id") == rid:
+                    target = rel.get("Target", "")
+                    path = target.lstrip("/") if target.startswith("/") else "xl/" + target
+        except (KeyError, AttributeError, etree.XMLSyntaxError):
+            pass
+        sheet = etree.fromstring(z.read(path))
+
+    rows: list[list[Any]] = []
+    for row in sheet.iter(f"{_XLSX_MAIN}row"):
+        r = int(row.get("r") or len(rows) + 1) - 1
+        while len(rows) < r:
+            rows.append([])
+        cells: dict[int, Any] = {}
+        col = -1
+        for c in row.iter(f"{_XLSX_MAIN}c"):
+            col = _xlsx_column(c.get("r")) if c.get("r") else col + 1
+            kind, v = c.get("t"), c.findtext(f"{_XLSX_MAIN}v")
+            if kind == "s":
+                cells[col] = shared[int(v)] if v is not None else None
+            elif kind == "inlineStr":
+                cells[col] = "".join(t.text or "" for t in c.iter(f"{_XLSX_MAIN}t"))
+            elif kind in ("str", "e"):
+                cells[col] = v
+            elif kind == "b":
+                cells[col] = v == "1"
+            else:
+                cells[col] = float(v) if v not in (None, "") else None
+        rows.append([cells.get(i) for i in range(max(cells) + 1)] if cells else [])
+    return rows
+
+
 def _parse_holdings(xlsx: bytes) -> tuple[str, dict[str, float]]:
     """SPY's daily holdings file -> (as-of ISO date, {yahoo symbol: weight %})."""
-    import io
-
-    import pandas as pd
-
-    raw = pd.read_excel(io.BytesIO(xlsx), header=None)
+    rows = _xlsx_rows(xlsx)
+    cell = lambda row, i: row[i] if i < len(row) else None  # noqa: E731
     asof = None
-    # str() per cell, not .astype(str): pandas 3 keeps NaN as NaN through
-    # astype(str), so the blank cells in the preamble arrive as floats.
-    for cell in raw.iloc[:6, 1]:
-        m = re.search(r"As of (\d{1,2}-[A-Za-z]{3}-\d{4})", str(cell))
+    for row in rows[:6]:
+        m = re.search(r"As of (\d{1,2}-[A-Za-z]{3}-\d{4})", str(cell(row, 1) or ""))
         if m:
             asof = datetime.strptime(m.group(1), "%d-%b-%Y").date().isoformat()
-    hdr = raw.index[(raw[0] == "Name") & (raw[1] == "Ticker")]
-    if asof is None or not len(hdr):
+    hdr = next((i for i, row in enumerate(rows)
+                if cell(row, 0) == "Name" and cell(row, 1) == "Ticker"), None)
+    if asof is None or hdr is None or "Weight" not in rows[hdr]:
         raise ValueError("SPY holdings file changed shape (no as-of date or header row)")
-    body = raw.iloc[hdr[0] + 1:, :8]
-    body.columns = list(raw.iloc[hdr[0], :8])
+    ti, wi = rows[hdr].index("Ticker"), rows[hdr].index("Weight")
     weights: dict[str, float] = {}
-    for tick, w in zip(body["Ticker"], body["Weight"]):
+    for row in rows[hdr + 1:]:
+        tick, w = cell(row, ti), cell(row, wi)
         try:
             weights[yahoo_symbol(str(tick))] = float(w)
         except (TypeError, ValueError):

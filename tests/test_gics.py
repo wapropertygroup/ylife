@@ -174,6 +174,122 @@ class BuildSnapshotTests(unittest.TestCase):
             gics.build_snapshot(rows, w, weights_asof="x", members_asof="x")
 
 
+class HoldingsFileTests(unittest.TestCase):
+    """SPY's holdings .xlsx, read without openpyxl — and therefore without expat.
+
+    ``pandas.read_excel`` failed on the dev Mac with "No module named expat":
+    its Homebrew Python's pyexpat cannot be loaded (built against a newer
+    libexpat than the system's). Every test here runs with pyexpat *blocked*, so
+    a return to any expat-backed reader fails here rather than on that laptop.
+    """
+
+    M = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+    R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+
+    def _xlsx(self, rows: dict[int, list], *, sheet_path="worksheets/holdings.xml", rich=False) -> bytes:
+        """A minimal .xlsx: shared strings, numbers, a gap row, the sheet not
+        named sheet1.xml, and a decoy sheet1.xml that must not be read."""
+        import io
+        import zipfile
+        from xml.sax.saxutils import escape
+
+        strings: list[str] = []
+        def s_idx(v: str) -> int:
+            if v not in strings:
+                strings.append(v)
+            return strings.index(v)
+        body = []
+        for r, cells in sorted(rows.items()):
+            cs = []
+            for i, v in enumerate(cells):
+                ref = f"{chr(ord('A') + i)}{r}"
+                if v is None:
+                    continue
+                if isinstance(v, str):
+                    cs.append(f'<c r="{ref}" t="s"><v>{s_idx(v)}</v></c>')
+                else:
+                    cs.append(f'<c r="{ref}"><v>{v}</v></c>')
+            body.append(f'<row r="{r}">{"".join(cs)}</row>')
+        def si(v: str) -> str:
+            if rich and " " in v:     # the same text split across two runs
+                a, b = v.split(" ", 1)
+                return f"<si><r><t>{escape(a)} </t></r><r><t>{escape(b)}</t></r></si>"
+            return f"<si><t>{escape(v)}</t></si>"
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as z:
+            z.writestr("xl/workbook.xml",
+                       f'<workbook xmlns="{self.M}" xmlns:r="{self.R}"><sheets>'
+                       f'<sheet name="holdings" sheetId="1" r:id="rId7"/></sheets></workbook>')
+            z.writestr("xl/_rels/workbook.xml.rels",
+                       '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+                       f'<Relationship Id="rId7" Target="{sheet_path}"/></Relationships>')
+            z.writestr("xl/sharedStrings.xml",
+                       f'<sst xmlns="{self.M}">{"".join(si(v) for v in strings)}</sst>')
+            z.writestr(f"xl/{sheet_path}", f'<worksheet xmlns="{self.M}"><sheetData>{"".join(body)}</sheetData></worksheet>')
+            if sheet_path != "worksheets/sheet1.xml":
+                z.writestr("xl/worksheets/sheet1.xml",
+                           f'<worksheet xmlns="{self.M}"><sheetData><row r="1"><c r="A1"><v>1</v></c></row></sheetData></worksheet>')
+        return buf.getvalue()
+
+    SPY = {
+        1: ["Fund Name:", "State Street SPDR S&P 500 ETF Trust"],
+        2: ["Ticker Symbol:", "SPY"],
+        3: ["Holdings:", "As of 24-Sep-2026"],
+        # row 4 is blank in the real file
+        5: ["Name", "Ticker", "Identifier", "SEDOL", "Weight", "Sector", "Shares Held", "Local Currency"],
+        6: ["NVIDIA CORP", "NVDA", "67066G104", "2379504", 8.185276, "-", 296315057, "USD"],
+        7: ["APPLE INC", "AAPL", "037833100", "2046251", 7.383483, "-", 178696860, "USD"],
+        8: ["BERKSHIRE HATHAWAY INC CL B", "BRK.B", "084670702", "2073390", 1.417019, "-", 1, "USD"],
+        9: ["US DOLLAR", "-", None, None, 0.011, None, None, None],
+        11: ["Before investing in a fund, consider its investment objectives…"],
+    }
+
+    def _blocked(self):
+        return mock.patch.dict(sys.modules, {"pyexpat": None, "xml.parsers.expat": None})
+
+    def test_parses_the_holdings_without_expat(self):
+        with self._blocked():
+            asof, w = gics._parse_holdings(self._xlsx(self.SPY))
+        self.assertEqual(asof, "2026-09-24")
+        self.assertEqual(w["NVDA"], 8.185276)
+        self.assertEqual(w["BRK-B"], 1.417019, "BRK.B must arrive in Yahoo form")
+        self.assertNotIn("NAN", w, "a blank row is not a ticker")   # the old path's junk key
+        self.assertNotIn("NONE", w)
+
+    def test_the_block_is_real(self):
+        # If blocking pyexpat did not break the stdlib parser, the test above
+        # would prove nothing about avoiding it.
+        with self._blocked():
+            import xml.etree.ElementTree as ET
+            with self.assertRaises(ImportError):
+                ET.XMLParser()
+
+    def test_rows_keep_their_positions_and_runs_join(self):
+        with self._blocked():
+            rows = gics._xlsx_rows(self._xlsx(self.SPY, rich=True))
+        self.assertEqual(rows[3], [], "the blank preamble row stays a row")
+        self.assertEqual(rows[4][1], "Ticker")
+        self.assertEqual(rows[0][1], "State Street SPDR S&P 500 ETF Trust", "rich-text runs rejoin")
+        self.assertEqual(rows[5][4], 8.185276)
+
+    def test_the_first_sheet_is_found_through_the_workbook(self):
+        # The decoy sheet1.xml holds a single 1; reading it by filename would
+        # find no header and refuse.
+        with self._blocked():
+            asof, _ = gics._parse_holdings(self._xlsx(self.SPY, sheet_path="worksheets/holdings.xml"))
+        self.assertEqual(asof, "2026-09-24")
+
+    def test_a_changed_layout_is_refused(self):
+        broken = dict(self.SPY)
+        broken[5] = ["Security", "Symbol", "Weight"]
+        with self._blocked(), self.assertRaisesRegex(ValueError, "changed shape"):
+            gics._parse_holdings(self._xlsx(broken))
+
+    def test_column_letters(self):
+        self.assertEqual([gics._xlsx_column(r) for r in ("A1", "B7", "Z3", "AA10", "AZ2")],
+                         [0, 1, 25, 26, 51])
+
+
 class PerformanceTests(unittest.TestCase):
     """The arithmetic, on prices small enough to check by hand."""
 
