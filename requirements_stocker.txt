@@ -19,6 +19,11 @@ statsmodels>=0.14
 numpy>=1.26
 xlrd>=2.0.1
 openpyxl>=3.1
+# ystocker/gics.py reads the constituent table (pandas.read_html) and SPY's
+# holdings .xlsx with lxml, not openpyxl — openpyxl parses through pyexpat,
+# which the dev Mac's Homebrew Python cannot load. It worked only because
+# requirements_tracker.txt happened to install lxml into the same venv.
+lxml>=5.0
 reportlab>=4.0
 pdfplumber>=0.11
 # No [pil] extra: ystocker/qr.py only calls QRCode.get_matrix(), a plain
