@@ -1,0 +1,179 @@
+{#  Research Lab: "Every look-through number is a floor" (2026-08-29): the design
+    of the /assets look-through (穿透) engine, and why it refuses to extrapolate.
+
+    Built from CLAUDE.md "The asset tracker and 穿透" and, in "The DCA Valuation
+    Engine", the MSFT example (a two-line fixture, commit of 2026-09-12); the
+    lookthrough.py and funddata.py docstrings as written in the commit of
+    2026-08-29; the limit-check ceiling added 2026-08-30 and the concentration
+    summary added 2026-09-19 (both in lookthrough.py); tests/test_lookthrough.py
+    (39 tests today, 27 on 2026-08-29). The 10% line for the 0.25x throttle is
+    the DCA page's own published band. #}
+<div data-l="en"><p class="w-article-lead">A brokerage statement lists your funds, not how much NVIDIA you own through them: each fund reports only itself. Answering that means looking through every fund to the companies inside — 穿透, look-through — with data that for most funds stops at the top ten holdings. So we report what can be seen as a floor, say how much could not be seen, and refuse to fill the gap with a guess.</p></div>
+<div data-l="zh"><p class="w-article-lead">券商对账单列出的是你的基金，却不会告诉你通过这些基金持有多少英伟达：每只基金只报告它自己。要回答这个问题，就得穿透每一只基金、看到里面的公司——而对大多数基金来说，数据只到前十大持仓为止。所以我们把能看到的部分作为下限报告，说明有多少部分看不到，并且拒绝用猜测去填补空白。</p></div>
+
+<div class="w-prose">
+<section id="tldr">
+  <h2><span data-l="en">TL;DR</span><span data-l="zh">要点</span></h2>
+  <div data-l="en">
+    <p>On our asset tracker every company exposure is a lower bound — at least this much — shown beside the share of the portfolio we could name. The rest is neither dropped nor estimated: it goes into labelled buckets that, with the named part, add back exactly to the portfolio's value. Funds that hold funds are followed down to companies, and the asset-class and sector mixes are complete.</p>
+  </div>
+  <div data-l="zh">
+    <p>在我们的资产追踪页上，每一项公司敞口都是下限——至少这么多——旁边标明组合中能识别到具体公司的比例。其余部分既不丢弃，也不估算：它被分进几个有标签的类别，与已识别部分相加，恰好等于组合总市值。持有基金的基金会被一路穿透到公司，而资产类别分布与行业分布是完整的。</p>
+  </div>
+  <div class="w-stats">
+    <div>
+      <span class="w-stat-label"><span data-l="en">VOO · top ten cover</span><span data-l="zh">VOO · 前十大覆盖</span></span>
+      <span class="w-stat-value is-num">37.6%</span>
+      <span class="w-stat-note"><span data-l="en">Vanguard S&amp;P 500, by weight.</span><span data-l="zh">先锋标普 500 ETF，按权重计。</span></span>
+    </div>
+    <div>
+      <span class="w-stat-label"><span data-l="en">QQQ · top ten cover</span><span data-l="zh">QQQ · 前十大覆盖</span></span>
+      <span class="w-stat-value is-num">46.3%</span>
+      <span class="w-stat-note"><span data-l="en">Invesco QQQ, tracking the Nasdaq-100.</span><span data-l="zh">景顺 QQQ，跟踪纳斯达克 100 指数。</span></span>
+    </div>
+    <div>
+      <span class="w-stat-label"><span data-l="en">VXUS · top ten cover</span><span data-l="zh">VXUS · 前十大覆盖</span></span>
+      <span class="w-stat-value is-num">13.0%</span>
+      <span class="w-stat-note"><span data-l="en">Vanguard Total International Stock: the broader the fund, the less is visible.</span><span data-l="zh">先锋全球（除美国）股票 ETF：基金越分散，能看到的越少。</span></span>
+    </div>
+  </div>
+  <div class="w-callout"><span data-l="en">Figures as recorded from Yahoo's fund data on 2026-08-29, when the engine was built; the Microsoft example is a test portfolio from 2026-09-12. Top-ten lists change, so today's figures may differ.</span><span data-l="zh">数字为 2026-08-29 构建穿透引擎时从 Yahoo 基金数据中记录所得；微软的例子来自 2026-09-12 的一个测试组合。前十大持仓会变动，今天的数字可能不同。</span></div>
+</section>
+
+<section id="what-a-statement-hides">
+  <h2><span data-l="en">What a statement hides</span><span data-l="zh">对账单藏起了什么</span></h2>
+  <div data-l="en">
+    <p>Take someone holding VOO, QQQ, VGT and a little Apple: four lines, apparently diversified, but all four contain Apple. "How much of one company do I really own?" is on no statement. Look-through walks each holding down to the securities underneath and adds up what reaches each company by every route.</p>
+    <p>The gap is easy to underestimate. In a two-line test portfolio on 2026-09-12, Microsoft held directly at 19.8%, plus VOO, came to 25.4% Microsoft — reached two ways, and visible on no per-line view. Our DCA page sizes contributions from that look-through figure, cutting them to 0.25× at 10% or more. (That fixture's direct line was past 10% already; what look-through changed is the number the reader is told.)</p>
+  </div>
+  <div data-l="zh">
+    <p>设想有人持有 VOO、QQQ、VGT，外加少量苹果股票：四行持仓，看似分散，但四样里都有苹果。“我到底持有多少某一家公司？”这个问题不会出现在任何对账单上。穿透，就是把每一项持仓追到底层证券，再把经由各条路径到达同一家公司的金额加总。</p>
+    <p>这个差距很容易被低估。在 2026-09-12 的一个两行测试组合里，直接持有的微软占 19.8%，加上 VOO 之后，微软合计占 25.4%——经由两条路径到达，在任何按行查看的视图里都看不到。我们的定投估值页面按这个穿透后的数字调节投入，达到或超过 10% 时把投入降到 0.25 倍。（这个测试组合中，直接持有的那一行本身就已超过 10%；穿透改变的，是读者看到的那个数字。）</p>
+  </div>
+</section>
+
+<section id="the-data-stops-at-ten">
+  <h2><span data-l="en">What we found: the data stops at ten</span><span data-l="zh">发现：数据止于前十</span></h2>
+  <div data-l="en">
+    <p>For a fund, the data we use discloses the top ten holdings only. For VOO on 2026-08-29 they summed to 37.62% of the fund, against an equity share of 99.87%:</p>
+    <div class="w-hbars">
+      <div class="w-hbar-row"><span class="w-hbar-label">Named: top ten</span><span class="w-hbar-track"><span class="w-hbar-fill" style="left:0;width:37.6%"></span></span><span class="w-hbar-val">37.6%</span></div>
+      <div class="w-hbar-row"><span class="w-hbar-label">Unnamed stock</span><span class="w-hbar-track"><span class="w-hbar-fill" style="left:0;width:62%"></span></span><span class="w-hbar-val">~62%</span></div>
+      <div class="w-hbar-row"><span class="w-hbar-label">Not stock</span><span class="w-hbar-track"><span class="w-hbar-fill" style="left:0;width:0.13%"></span></span><span class="w-hbar-val">0.13%</span></div>
+    </div>
+    <p>The tempting move is to assume the invisible 62% resembles the visible 38% and scale every disclosed weight up by 1/0.376. We refuse, for two reasons. It is not a measurement: a fabricated number looks exactly like a measured one, and this one would be fabricated at the very moment the reader is judging concentration. And it is wrong in a knowable direction. The top ten are a fund's largest positions, each listed once, so a top-ten company cannot also hide in the other 62%: its weight in that fund is exact, and scaling it up would inflate a number we already know. A company outside the top ten weighs no more there than the smallest name inside it.</p>
+    <p>So the page says <em>at least</em> — a lower bound, the smallest value the data allows — with coverage beside it. For concentration risk, a have-I-got-more-than-I-think question, a lower bound is also the more useful answer.</p>
+  </div>
+  <div data-l="zh">
+    <p>对于基金，我们使用的数据只披露前十大持仓。2026-08-29，VOO 的前十大合计占基金的 37.62%，而它的股票仓位为 99.87%：</p>
+    <div class="w-hbars">
+      <div class="w-hbar-row"><span class="w-hbar-label">前十大中已披露</span><span class="w-hbar-track"><span class="w-hbar-fill" style="left:0;width:37.6%"></span></span><span class="w-hbar-val">37.6%</span></div>
+      <div class="w-hbar-row"><span class="w-hbar-label">股票，未披露</span><span class="w-hbar-track"><span class="w-hbar-fill" style="left:0;width:62%"></span></span><span class="w-hbar-val">~62%</span></div>
+      <div class="w-hbar-row"><span class="w-hbar-label">非股票</span><span class="w-hbar-track"><span class="w-hbar-fill" style="left:0;width:0.13%"></span></span><span class="w-hbar-val">0.13%</span></div>
+    </div>
+    <p>最省事的做法，是假设看不见的 62% 与看得见的 38% 相似，把每个已披露权重都乘以 1/0.376。我们拒绝这样做，理由有二。它不是测量：编造的数字与测得的数字看上去一模一样，而这个数字恰恰会在读者判断集中度的那一刻被编造出来。而且它的错误方向是可知的。前十大是基金最大的仓位，每只证券只列一次，所以前十大里的公司不可能同时藏在另外 62% 里：它在这只基金里的权重是精确的，放大它，等于把一个已知的数字改大。前十大之外的公司，在这只基金里的权重不会超过前十大中最小的那一个。</p>
+    <p>所以页面写的是<em>“至少”</em>——下限，即数据所允许的最小值——并在旁边标出覆盖率。集中度风险问的是“我是不是比自己以为的持有得更多”，对这个问题而言，下限也是更有用的答案。</p>
+  </div>
+</section>
+
+<section id="a-closed-partition">
+  <h2><span data-l="en">A partition that always adds up</span><span data-l="zh">永远对得上的拆分</span></h2>
+  <div data-l="en">
+    <p>What cannot be named is output, not rounding. Every dollar lands in exactly one bucket, and the buckets always sum to the portfolio's value; if that ever failed, every percentage on the page would be wrong at once, and quietly.</p>
+    <div class="w-table-wrap"><table>
+      <thead><tr><th>Bucket</th><th>Meaning</th><th>Example</th></tr></thead>
+      <tbody>
+        <tr><td>Named</td><td>Reached a company</td><td>NVDA via VOO's top ten</td></tr>
+        <tr><td>Undisclosed equity</td><td>Stock a fund does not name</td><td>VOO beyond its top ten</td></tr>
+        <tr><td>Non-equity</td><td>Known not to be companies</td><td>BND: no holdings shown, a 98.36% bond sleeve</td></tr>
+        <tr><td>Unclassified</td><td>No asset split reported</td><td>Never assumed to be stock</td></tr>
+        <tr><td>Unresolved</td><td>A named holding the data cannot find</td><td>XTSLA, a BlackRock cash sweep inside AOR</td></tr>
+        <tr><td>Truncated</td><td>Where the walk had to stop</td><td>A depth, cycle or budget limit</td></tr>
+        <tr><td>Pending</td><td>Not looked up yet — not the same as unresolved</td><td>Fills in while the page is open</td></tr>
+      </tbody>
+    </table></div>
+    <ul>
+      <li><strong>A bond sleeve is not hidden stock.</strong> One minus the disclosed weight would report the whole of BND as equity we cannot see. The split uses the fund's own equity share instead, and holds whichever way round the two inputs fall.</li>
+      <li><strong>Zero is not missing.</strong> BND's equity share of 0.0 is a measurement: no stocks in here. A fund reporting no asset split has told us nothing, so its remainder is unclassified. Guessing between the two invents hidden concentration.</li>
+      <li><strong>A name we cannot find is kept.</strong> XTSLA returns nothing when looked up. Dropping it would silently shrink the total — the one error that makes every percentage wrong at once — so it stays, by name, as unresolved.</li>
+    </ul>
+  </div>
+  <div data-l="zh">
+    <p>识别不了的部分是正式输出，而不是舍入误差。每一美元都恰好落入一个类别，各类别之和永远等于组合总市值；一旦不再成立，页面上的每一个百分比会同时出错，而且错得悄无声息。</p>
+    <div class="w-table-wrap"><table>
+      <thead><tr><th>类别</th><th>含义</th><th>例子</th></tr></thead>
+      <tbody>
+        <tr><td>已识别</td><td>穿透到了具体公司</td><td>经由 VOO 前十大持有的英伟达</td></tr>
+        <tr><td>未披露股票</td><td>基金持有、但未列名的股票</td><td>VOO 前十大以外的部分</td></tr>
+        <tr><td>非股票资产</td><td>已知不是公司股票</td><td>BND：未披露任何持仓，债券仓位 98.36%</td></tr>
+        <tr><td>未分类</td><td>没有报告资产类别构成</td><td>绝不默认为股票</td></tr>
+        <tr><td>无法解析</td><td>有名称、但数据中查不到的持仓</td><td>XTSLA，AOR 里的一只贝莱德现金归集工具</td></tr>
+        <tr><td>已截断</td><td>穿透不得不停下的地方</td><td>层数、循环或计算预算上限</td></tr>
+        <tr><td>待解析</td><td>尚未查询——不同于无法解析</td><td>页面打开期间陆续补齐</td></tr>
+      </tbody>
+    </table></div>
+    <ul>
+      <li><strong>债券仓位不是隐藏的股票。</strong>用 1 减去已披露权重，会把整只 BND 报成“看不见的股票”。拆分时改用基金自己报告的股票占比，并且无论两个输入孰大孰小都成立。</li>
+      <li><strong>零不等于缺失。</strong>BND 的股票占比为 0.0，这是一个测量结果：里面没有股票。完全没有报告资产类别构成的基金，什么也没告诉我们，所以它的剩余部分算作未分类。在两者之间靠猜，会凭空制造隐藏的集中度。</li>
+      <li><strong>查不到的名字要留下。</strong>XTSLA 查不到任何数据。把它丢掉，会悄悄缩小组合总额——这是唯一一种能让所有百分比同时出错的错误——所以它以原名保留，归为无法解析。</li>
+    </ul>
+  </div>
+</section>
+
+<section id="funds-inside-funds">
+  <h2><span data-l="en">Funds inside funds, and companies dressed as funds</span><span data-l="zh">基金里的基金，伪装成基金的公司</span></h2>
+  <div data-l="en">
+    <p>A target-date fund holds funds. VTTSX's largest holding is VSMPX at 54.15%, itself a fund whose largest holding is NVDA at 6.40%; one level of look-through would report a 54% position in something that is not a company. So the walk continues to real companies — up to three levels, one more than any retail product we have seen needs — with cycle detection and a budget. Hitting a limit marks the rest truncated, instead of returning a partial answer that reads as complete.</p>
+    <p>The reverse happens too. Samsung (005930.KQ) and SK hynix (000660.KQ) arrive typed as mutual funds with no composition at all — Samsung with a Morningstar identifier for a name. Left as funds, they would be filed as unclassified, so a "fund" disclosing neither holdings nor an asset split is treated as a company. Sectors are not the test: BND discloses no holdings and no sectors but does report its asset split, and must stay a fund so its bonds land in non-equity.</p>
+    <p>Two views need no caveat: the asset-class and sector mixes arrive already looked-through — VTTSX's sector weights describe the companies underneath and sum to 100% — so they are complete. And share classes such as GOOG and GOOGL are flagged as a group rather than merged, because name matching will occasionally pair two different companies. A note the reader can check is recoverable; a silently combined row is not.</p>
+  </div>
+  <div data-l="zh">
+    <p>目标日期基金持有的是基金。VTTSX 最大的持仓是 VSMPX，占 54.15%，而 VSMPX 本身又是一只基金，最大持仓是英伟达，占 6.40%；只穿透一层，就会报出一个 54% 的仓位，而它根本不是一家公司。所以穿透会一直进行到具体公司——最多三层，比我们见过的任何零售产品所需多一层——同时检测循环引用，并设有计算预算。触及任何上限，剩余部分都标为已截断，而不是返回一个看上去完整的残缺答案。</p>
+    <p>反过来的情况也有。三星（005930.KQ）和 SK 海力士（000660.KQ）返回时被标成共同基金，没有任何成分数据——三星的名称处甚至是一个晨星（Morningstar）内部编号。如果当作基金，它们会被归为未分类，所以一只既不披露持仓、也不报告资产类别构成的“基金”会被当作公司处理。判断依据不是行业：BND 既不披露持仓也不披露行业，但报告了资产类别构成，它必须保留为基金，债券部分才会落入非股票资产。</p>
+    <p>有两个视图不需要任何附加说明：资产类别分布和行业分布传来时就已是穿透后的——VTTSX 的行业权重描述的是底层公司，合计为 100%——所以它们是完整的。另外，GOOG 与 GOOGL 这类不同股份类别会作为一组提示给读者核对，而不是直接合并，因为按名称匹配偶尔会把两家不同的公司归到一起。读者能核对的提示可以挽回；悄悄合并的一行则不能。</p>
+  </div>
+</section>
+
+<section id="caveats">
+  <h2><span data-l="en">Caveats — what it still does not do</span><span data-l="zh">局限：它仍然做不到什么</span></h2>
+  <div data-l="en">
+    <ul>
+      <li><strong>A floor can sit far below the truth.</strong> At low coverage, a reported exposure is consistent with anything from that figure to a great deal more. Read every number against the coverage beside it.</li>
+      <li><strong>A ceiling exists only where it can be proved.</strong> Since 2026-08-30, limits you set are checked against a band — at least, at most — whose upper end relies on the top ten being a fund's largest holdings. Where a fund's disclosed holdings include funds, a company could hide in several at once, and the only honest ceiling is the whole unnamed amount.</li>
+      <li><strong>The concentration summary leans pessimistic.</strong> Since 2026-09-19 the page condenses the named part into an effective number of holdings. The unseen names are each smaller than the seen ones, so the truth is less concentrated than shown.</li>
+      <li><strong>A cold start is slow.</strong> Many funds mean many lookups, so names fill in while the page is open; if the data source is refusing requests, the page says so and offers a retry.</li>
+    </ul>
+  </div>
+  <div data-l="zh">
+    <ul>
+      <li><strong>下限可能远低于真实值。</strong>覆盖率低时，一个报告出来的敞口与“从这个数字到大得多”之间的任何值都相容。每个数字都要对照旁边的覆盖率来读。</li>
+      <li><strong>上限只在能被证明的地方才有。</strong>自 2026-08-30 起，你设定的上限会用一个区间——至少、至多——来检查，其上沿依赖于“前十大就是基金最大的持仓”。如果基金披露的持仓里还有基金，一家公司可能同时藏在好几只里，唯一诚实的上限就是全部未识别金额。</li>
+      <li><strong>集中度摘要偏向悲观。</strong>自 2026-09-19 起，页面还会把已识别部分浓缩成一个“有效持仓数”。看不到的持仓每一只都比看得到的小，所以真实情况比显示的更分散。</li>
+      <li><strong>冷启动较慢。</strong>基金多，查询就多，名称会在页面打开期间陆续补齐；如果数据源在拒绝请求，页面会如实说明并提供重试。</li>
+    </ul>
+  </div>
+</section>
+
+<section id="check-it-yourself">
+  <h2><span data-l="en">Check it yourself</span><span data-l="zh">亲自验证</span></h2>
+  <div data-l="en">
+    <p>The asset tracker is for signed-in users only, because it shows your own holdings. Add positions by hand or import a broker statement. The summary shows <strong>Look-through coverage</strong>, and the note under the coverage bar reads: "Funds disclose only their top holdings, so every figure below is a floor — your true exposure is at least this much, never less." Set limits, and each is checked in <strong>At least</strong> and <strong>At most</strong> columns.</p>
+    <p>A check anyone can run: enter one index fund as your only position. Once it resolves, coverage should sit near that fund's top-ten share on the day — 37.6% for VOO when we built this — with the rest shown as undisclosed equity.</p>
+    <p>For the record, 39 tests pin the engine — 27 when it shipped on 2026-08-29, twelve more for the concentration summary of 2026-09-19 — including the summation identity, checked for every ordering of disclosed weight against equity share.</p>
+  </div>
+  <div data-l="zh">
+    <p>资产追踪页只对已登录用户开放，因为它显示的是你自己的持仓。手动添加持仓或导入券商对账单后，摘要里会显示<strong>“穿透覆盖率”</strong>，覆盖率条下方的说明写着：“基金仅披露前十大持仓，因此以下数字均为下限 — 你的真实敞口至少为此，不会更低。”设定上限后，每一项都会在<strong>“至少”</strong>与<strong>“至多”</strong>两列中接受检查。</p>
+    <p>有一项任何人都能做的检查：只录入一只指数基金作为唯一持仓。解析完成后，覆盖率应当接近该基金当天前十大持仓的占比——我们构建时 VOO 为 37.6%——其余部分显示为未披露股票。</p>
+    <p>备查：39 个测试锁定了穿透引擎——2026-08-29 上线时为 27 个，另外 12 个针对 2026-09-19 加入的集中度摘要——其中包括上面的加总恒等式，对已披露权重与股票占比的每一种大小顺序都做了检查。</p>
+  </div>
+  <div class="w-actions">
+    <a class="w-btn w-btn-primary" href="{{ url_for('main.assets_page') }}"><span data-l="en">Open the asset tracker (sign-in required)</span><span data-l="zh">打开资产追踪页（需登录）</span> <span aria-hidden="true">→</span></a>
+    <a class="w-btn" href="{{ url_for('main.research_lab') }}"><span data-l="en">All Research Lab posts</span><span data-l="zh">全部研究文章</span></a>
+  </div>
+</section>
+</div>
+
+<div class="w-article-foot">
+  <div data-l="en"><p>Sources: the look-through engine, built 2026-08-29 (lookthrough.py, funddata.py); the limit-check band, 2026-08-30; the DCA test-portfolio example, 2026-09-12; the concentration summary, 2026-09-19; tests/test_lookthrough.py. Funds are named as examples of what gets disclosed, not as recommendations.</p></div>
+  <div data-l="zh"><p>资料来源：2026-08-29 建成的穿透引擎（lookthrough.py、funddata.py）；上限检查区间，2026-08-30；定投估值页的测试组合示例，2026-09-12；集中度摘要，2026-09-19；tests/test_lookthrough.py。文中提到的基金只是说明披露情况的例子，不构成推荐。</p></div>
+</div>

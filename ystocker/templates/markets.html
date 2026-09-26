@@ -6097,9 +6097,9 @@ document.querySelectorAll('[data-gics-mode]').forEach(btn => {
    keep their colour and the rest fade — the within-sector comparison this
    panel exists for.
 
-   Each group also trails a line back through its position at the last few
-   weekly closes (gics.trail(): the same arithmetic re-run at each close), so
-   the chart shows which way a group is moving and not only where it stands. */
+   Each group also draws a line back to where it stood a week earlier
+   (gics.trail(): the same arithmetic re-run at that close), so the chart
+   shows which way a group is moving and not only where it stands. */
 // [shorter, longer] — the y axis, then the x. 1M against 3M is the default as
 // the pair nearest a weekly relative-rotation chart's usual windows.
 const _GICS_MAP_PAIRS = [['1W', '1M'], ['1M', '3M'], ['1M', '6M'], ['3M', '1Y']];
@@ -6109,7 +6109,7 @@ const _GICS_MAP = { pair: '1M|3M', focus: null, chart: null };
 // Clockwise from top right, the order a group rotates through them.
 const _GICS_MAP_Q = { lead: 'markets.gics_map_q_lead', weak: 'markets.gics_map_q_weak',
                       lag: 'markets.gics_map_q_lag', improve: 'markets.gics_map_q_improve' };
-// Per quadrant: the bubble and its trail, the bubble hovered, and the wash
+// Per quadrant: the bubble and its line, the bubble hovered, and the wash
 // behind the quadrant. The first two are pairs base.html's CT table already
 // maps; the wash is faint enough to need no light-mode counterpart.
 const _GICS_MAP_QCOL = {
@@ -6133,14 +6133,15 @@ function _gicsMapPoints(d, ys, xs) {
   (d.sectors || []).forEach(sec => (sec.groups || []).forEach(g => {
     const x = (g.rel || {})[xs], y = (g.rel || {})[ys];
     if (x == null || y == null || !(g.weight > 0)) { missing++; return; }
-    // Newest first, as gics.trail() sends it, so [0] is the bubble itself. A
-    // week missing either figure is a gap in the line, never a point at zero.
+    // Newest first, as gics.trail() sends it: [0] is the bubble itself and
+    // [1] the weekly close before, the one other point the map draws — so a
+    // cache built while trails still ran five weeks back draws the same single
+    // line. A week missing either figure is no line, never a line to zero.
     const r = tr && tr[g.code];
-    const trail = r && r[xs] && r[ys]
-      ? r[xs].map((vx, k) => (vx == null || r[ys][k] == null ? null : { x: vx, y: r[ys][k] }))
-      : [];
+    const prev = r && r[xs] && r[ys] && r[xs][1] != null && r[ys][1] != null
+      ? { x: r[xs][1], y: r[ys][1] } : null;
     pts.push({ x, y, w: g.weight, n: g.n, code: g.code, name: g.name, top: g.top || [],
-               sector: sec.code, sectorName: sec.name, q: _gicsQuad(x, y), trail });
+               sector: sec.code, sectorName: sec.name, q: _gicsQuad(x, y), prev });
   }));
   // Largest first: a small group is then painted over a large one rather than
   // hidden beneath it, and when there is not room to label every bubble the
@@ -6203,36 +6204,32 @@ function _gicsPlaceLabels(items, area, measure, h, reserved = []) {
   return out;
 }
 
-// Each group's path over the last weeks into its bubble, oldest faintest, in
-// its quadrant's colour. Drawn before the bubbles, so every trail ends under
-// one. A line is as heavy as its group, the way a bubble is as big: the small
-// groups swing furthest and matter least, and drawn at full strength their
-// lines were most of a 25-trail tangle. Hovering a sector drops the others and
-// draws its own at full strength whatever their weight, as with the labels.
+// Each group's last week: a line from a dot where it stood a week earlier
+// into its bubble, in its quadrant's colour. Drawn before the bubbles, so
+// every line ends under one. One segment, not a five-week trail: these are raw
+// window returns, which zigzag from week to week, and 25 such trails were a
+// tangle. A line is as heavy as its group, the way a bubble is as big: the
+// small groups swing furthest and matter least. Hovering a sector drops the
+// others and draws its own at full strength whatever their weight, as with the
+// labels.
 function _gicsDrawTrails(chart) {
   const { ctx, scales: { x: sx, y: sy } } = chart;
   const focus = _GICS_MAP.focus;
   ctx.save();
-  ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  ctx.lineCap = 'round';
   chart.data.datasets[0].data.forEach(p => {
-    if (!p.trail || p.trail.length < 2 || (focus && p.sector !== focus)) return;
-    const n = p.trail.length;
-    const heft = focus ? 1 : Math.max(0.15, Math.min(1, Math.sqrt(p.w) / 3.5));
+    if (!p.prev || (focus && p.sector !== focus)) return;
+    const ax = sx.getPixelForValue(p.prev.x), ay = sy.getPixelForValue(p.prev.y);
+    ctx.globalAlpha = focus ? 1 : Math.max(0.15, Math.min(1, Math.sqrt(p.w) / 3.5));
     ctx.lineWidth = focus ? 2 : Math.min(2.25, 1 + Math.sqrt(p.w) / 3);
     ctx.strokeStyle = ctx.fillStyle = _GICS_MAP_QCOL[p.q].fill;
-    for (let k = 1; k < n; k++) {
-      const a = p.trail[k - 1], b = p.trail[k];
-      if (!a || !b) continue;   // a missing week breaks the line, never bridges it
-      const bx = sx.getPixelForValue(b.x), by = sy.getPixelForValue(b.y);
-      ctx.globalAlpha = heft * (1 - (k - 1) / n);
-      ctx.beginPath();
-      ctx.moveTo(sx.getPixelForValue(a.x), sy.getPixelForValue(a.y));
-      ctx.lineTo(bx, by);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.arc(bx, by, 2, 0, Math.PI * 2);
-      ctx.fill();
-    }
+    ctx.beginPath();
+    ctx.moveTo(ax, ay);
+    ctx.lineTo(sx.getPixelForValue(p.x), sy.getPixelForValue(p.y));
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(ax, ay, 2, 0, Math.PI * 2);
+    ctx.fill();
   });
   ctx.restore();
 }
@@ -6317,14 +6314,10 @@ function _gicsMapTipLines(item) {
   const p = item.raw, [ys, xs] = _GICS_MAP.pair.split('|');
   const at = (q, x, y) => `${t(_GICS_MAP_Q[q], q)} · ${per(ys)} ${_gicsFmt(y, 'rel')} · ${per(xs)} ${_gicsFmt(x, 'rel')}`;
   const lines = [at(p.q, p.x, p.y)];
-  // Where it came from: the trail's oldest week, and the quadrant it was in.
-  const dates = (_GICS.data && _GICS.data.trail && _GICS.data.trail.dates) || [];
-  const k = (p.trail || []).reduce((last, pt, i) => (pt && i ? i : last), 0);
-  if (k && dates[k]) {
-    const weeks = Math.round((Date.parse(dates[0]) - Date.parse(dates[k])) / (7 * 86400000));
-    const then = p.trail[k];
-    lines.push(t('markets.gics_map_tip_then', '{n} weeks ago: {at}').replace('{n}', weeks)
-      .replace('{at}', at(_gicsQuad(then.x, then.y), then.x, then.y)));
+  // Where it came from: a week earlier, and the quadrant it was in then.
+  if (p.prev) {
+    lines.push(t('markets.gics_map_tip_then', 'A week earlier: {at}')
+      .replace('{at}', at(_gicsQuad(p.prev.x, p.prev.y), p.prev.x, p.prev.y)));
   }
   lines.push(
     t('markets.gics_map_tip_weight', 'Weight {w} · {n} names').replace('{w}', p.w.toFixed(1) + '%').replace('{n}', p.n),
@@ -6402,10 +6395,11 @@ function _renderGicsMapNote(pts, missing, t) {
   // to the plotted part of it — short of 100 by exactly what is not plotted.
   const counts = Object.keys(_GICS_MAP_Q).map(q => t('markets.gics_map_count', '{q}: {n} ({w})')
     .replace('{q}', t(_GICS_MAP_Q[q], q)).replace('{n}', by[q][0]).replace('{w}', by[q][1].toFixed(0) + '%'));
-  const dates = (_GICS.data.trail && _GICS.data.trail.dates) || [];
   const lines = [
     t('markets.gics_map_counts', '{list}').replace('{list}', counts.join(' · ')),
-    dates.length > 1 ? t('markets.gics_map_trail_note', '').replace('{n}', dates.length - 1) : '',
+    // Only when this pair drew a line: a payload without a week before, or
+    // without these windows then, would be explaining lines nobody can see.
+    pts.some(p => p.prev) ? t('markets.gics_map_trail_note', '') : '',
     t('markets.gics_map_note', ''),
     missing ? t('markets.gics_map_missing', '{n} groups are not plotted.').replace('{n}', missing) : '',
     t('markets.gics_asof', 'As of the {date} close.').replace('{date}', _GICS.data.asof),
@@ -6439,8 +6433,8 @@ function renderGicsMap() {
 
     const width = (canvas.parentNode && canvas.parentNode.clientWidth) || 600;
     const data = pts.map(p => ({ ...p, r: _gicsMapRadius(p.w, width) }));
-    // Fitted to the trails as well, or a group's line runs off the plot.
-    const all = pts.flatMap(p => [p, ...p.trail.filter(Boolean)]);
+    // Fitted to the lines as well, or a group's line runs off the plot.
+    const all = pts.flatMap(p => (p.prev ? [p, p.prev] : [p]));
     const bx = _gicsMapBound(all.map(p => p.x)), by = _gicsMapBound(all.map(p => p.y));
     const chart = _GICS_MAP.chart;
     if (chart) {

@@ -47,6 +47,9 @@ DOC_GROUPS: tuple[dict[str, Any], ...] = (
 )
 
 #: In reading order. Prev/next follow this order, across group boundaries.
+#: Summaries carry no counts ("3 free runs", "six analysts"): the sidebar is
+#: static text, and a number here would go stale the day a quota or the
+#: roster moved. The pages quote those from routes._wiki_facts() instead.
 DOCS: tuple[dict[str, Any], ...] = (
     {"slug": "overview", "group": "start",
      "title": {"en": "Overview", "zh": "概览"},
@@ -58,20 +61,20 @@ DOCS: tuple[dict[str, Any], ...] = (
                  "zh": "登录，选择股票和日期，读完你的第一份报告。"}},
     {"slug": "pricing", "group": "start",
      "title": {"en": "Pricing and credits", "zh": "价格与次数"},
-     "summary": {"en": "Three free runs a day, then run packs that never expire.",
-                 "zh": "每天 3 次免费分析，之后可购买永不过期的次数包。"}},
+     "summary": {"en": "Free runs every day, then run packs that never expire.",
+                 "zh": "每天都有免费次数，之后可购买永不过期的次数包。"}},
     {"slug": "workflow", "group": "concepts",
      "title": {"en": "How a run works", "zh": "一次分析如何运作"},
-     "summary": {"en": "From six analyst reports to one signed decision, stage by stage.",
-                 "zh": "从六份分析师报告到一份签发的决策，逐阶段拆解。"}},
+     "summary": {"en": "From the analysts' reports to one signed decision, stage by stage.",
+                 "zh": "从分析师报告到一份签发的决策，逐阶段拆解。"}},
     {"slug": "desk", "group": "concepts",
      "title": {"en": "The desk", "zh": "投研团队"},
      "summary": {"en": "Every role on the team, what it reads and what it writes.",
                  "zh": "团队里的每个角色：读什么，写什么。"}},
     {"slug": "models", "group": "concepts",
      "title": {"en": "Models and thinking depth", "zh": "模型与思考深度"},
-     "summary": {"en": "Five model choices, the thinking levels each accepts, and why a run records what ran.",
-                 "zh": "五种模型选择、各自支持的思考深度，以及报告为何记录实际运行的模型。"}},
+     "summary": {"en": "The model choices, the thinking levels each accepts, and why a run records what ran.",
+                 "zh": "可选模型、各自支持的思考深度，以及报告为何记录实际运行的模型。"}},
     {"slug": "markets", "group": "concepts",
      "title": {"en": "Markets and data", "zh": "市场与数据"},
      "summary": {"en": "US listings, ADRs and China A-shares, and where each analyst's evidence comes from.",
@@ -82,8 +85,8 @@ DOCS: tuple[dict[str, Any], ...] = (
                  "zh": "对话视图、最终决策、PDF、邮件通知与追问。"}},
     {"slug": "sharing", "group": "using",
      "title": {"en": "Sharing a report", "zh": "分享报告"},
-     "summary": {"en": "Send a finished report by email, text or WeChat — and take it back.",
-                 "zh": "通过邮件、短信或微信发送已完成的报告，并可随时撤回。"}},
+     "summary": {"en": "Send a finished report by email, text or WeChat to someone with no account.",
+                 "zh": "通过邮件、短信或微信，把已完成的报告发给没有账号的人。"}},
     {"slug": "limits", "group": "reference",
      "title": {"en": "Limits and quotas", "zh": "限额与配额"},
      "summary": {"en": "Every daily ceiling, and the reason each one exists.",
@@ -141,10 +144,11 @@ POSTS: tuple[dict[str, Any], ...] = (
                "zh": "市盈率 1.01 倍的台积电"},
      "summary": {"en": "A reader spotted TSM trading at one times earnings. It was three "
                        "incompatible bases from one data feed — dollars per ADR, Taiwan dollars "
-                       "per ADR, and ordinary shares — and every one of them pointed cheap.",
+                       "per ADR, and ordinary shares — and every figure they touched came out "
+                       "cheaper than the truth.",
                  "zh": "一位读者发现台积电的市盈率只有 1 倍。原因是同一个数据源给出了三种互不"
                        "兼容的口径——每份 ADR 的美元价格、每份 ADR 的新台币收益、以及普通股"
-                       "股数——而且每一个错误都指向“更便宜”。"},
+                       "股数——而每一个受影响的数字，都比真实值更“便宜”。"},
      "tags": ({"en": "ADRs", "zh": "ADR"},
               {"en": "Currency", "zh": "币种"},
               {"en": "Share basis", "zh": "股本口径"},
@@ -197,7 +201,9 @@ DESK_TEAMS: tuple[dict[str, Any], ...] = (
 #: (tradingagents/agents/analysts/*.py and managers/*.py), not from what the role
 #: names suggest: the sentiment analyst reads StockTwits and Reddit as well as
 #: headlines, and the quality and valuation analysts only *narrate* numbers that
-#: code has already computed. A role with no entry here renders without a note
+#: code has already computed. The A-share seats' notes do not say "A-shares
+#: only" — every place that shows them marks that from ``a_share_only``.
+#: A role with no entry here renders without a note
 #: rather than failing — the test is what insists every seated role has one.
 ROLE_NOTES: dict[str, dict[str, dict[str, str]]] = {
     "market": {
@@ -208,13 +214,13 @@ ROLE_NOTES: dict[str, dict[str, dict[str, str]]] = {
                  "zh": "读取截至分析日期的价格历史，从均线、MACD、RSI、布林带、ATR 等指标中"
                        "挑选最多八个互补的指标，描述趋势、动量与波动。"}},
     "sentiment": {
-        "short": {"en": "headlines, StockTwits & Reddit", "zh": "新闻标题、StockTwits 与 Reddit"},
-        "desc": {"en": "Weighs a week of Yahoo Finance headlines against retail chatter on "
-                       "StockTwits and Reddit (r/wallstreetbets, r/stocks, r/investing), and treats "
-                       "a gap between the two as a signal in itself.",
-                 "zh": "把一周的 Yahoo Finance 新闻标题，与 StockTwits 和 Reddit（r/wallstreetbets、"
-                       "r/stocks、r/investing）上的散户讨论放在一起比较，并把两者之间的分歧本身"
-                       "视为一种信号。"}},
+        "short": {"en": "headlines vs retail chatter", "zh": "新闻标题与散户情绪"},
+        "desc": {"en": "Weighs a week of headlines against retail chatter — for US listings, "
+                       "StockTwits and Reddit (r/wallstreetbets, r/stocks, r/investing) — and "
+                       "treats a gap between the two as a signal in itself.",
+                 "zh": "把一周的新闻标题与散户讨论放在一起比较——美股使用 StockTwits 和 Reddit"
+                       "（r/wallstreetbets、r/stocks、r/investing）——并把两者之间的分歧本身视为"
+                       "一种信号。"}},
     "news": {
         "short": {"en": "company & macro news", "zh": "公司与宏观新闻"},
         "desc": {"en": "Covers the past week of company and world news, grounded in FRED macro "
@@ -244,24 +250,24 @@ ROLE_NOTES: dict[str, dict[str, dict[str, str]]] = {
                        "分析师解释这个价格隐含了什么假设。"}},
     "policy": {
         "short": {"en": "policy & regulation", "zh": "政策与监管"},
-        "desc": {"en": "A-shares only. Traces monetary, fiscal, CSRC and industrial policy through "
-                       "sector to company, separating announced policy from speculation.",
-                 "zh": "仅限 A 股。沿“政策 → 行业 → 公司”的链条，追踪货币、财政、证监会与产业"
-                       "政策的影响，并区分已发布的政策与市场猜测。"}},
+        "desc": {"en": "Traces monetary, fiscal, CSRC and industrial policy through sector to "
+                       "company, separating announced policy from speculation.",
+                 "zh": "沿“政策 → 行业 → 公司”的链条，追踪货币、财政、证监会与产业政策的影响，"
+                       "并区分已发布的政策与市场猜测。"}},
     "hot_money": {
         "short": {"en": "Dragon-Tiger seats & flows", "zh": "龙虎榜席位与资金流"},
-        "desc": {"en": "A-shares only. Follows Dragon-Tiger List seats, main-capital and northbound "
-                       "flow, limit-up behaviour and theme rotation — keeping verified seat data "
-                       "apart from inference.",
-                 "zh": "仅限 A 股。跟踪龙虎榜席位、主力与北向资金、涨停行为和题材轮动，并把"
-                       "已核实的席位数据与推断严格分开。"}},
+        "desc": {"en": "Follows Dragon-Tiger List seats, main-capital and northbound flow, "
+                       "limit-up behaviour and theme rotation — keeping verified seat data apart "
+                       "from inference.",
+                 "zh": "跟踪龙虎榜席位、主力与北向资金、涨停行为和题材轮动，并把已核实的席位"
+                       "数据与推断严格分开。"}},
     "lockup": {
         "short": {"en": "unlocks & reductions", "zh": "解禁与减持"},
-        "desc": {"en": "A-shares only. Watches the next 90 days of restricted-share unlocks against "
-                       "the float, plus announced reductions and pledges — an unlock is potential "
-                       "supply, not proof of selling.",
-                 "zh": "仅限 A 股。关注未来 90 天限售股解禁相对流通盘的规模，以及已公告的减持与"
-                       "质押——解禁只是潜在供给，并不等于一定会卖出。"}},
+        "desc": {"en": "Watches the next 90 days of restricted-share unlocks against the float, "
+                       "plus announced reductions and pledges — an unlock is potential supply, "
+                       "not proof of selling.",
+                 "zh": "关注未来 90 天限售股解禁相对流通盘的规模，以及已公告的减持与质押——"
+                       "解禁只是潜在供给，并不等于一定会卖出。"}},
     "bull": {
         "short": {"en": "argues the upside", "zh": "论证上行空间"},
         "desc": {"en": "Builds the strongest case for owning it from the analysts' reports, and "

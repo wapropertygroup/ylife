@@ -135,13 +135,18 @@ class WikiPages(unittest.TestCase):
         self.assertIn(str(share.TTL_DAYS), html)
 
     def test_the_desk_page_lists_every_seat_the_runner_uses(self):
+        import re
         from ystocker import agent_roles
         from ystocker.agents import ASTOCK_ANALYSTS, BASE_ANALYSTS
         html = self._get("/docs/desk").get_data(as_text=True)
+        # The roster cards only: the prose is allowed to say the Fundamentals
+        # Analyst existed (older reports still carry its turn), but it must not
+        # be listed as a seat.
+        cards = " ".join(re.findall(r'<div class="w-role-name">(.*?)</div>', html, re.S))
         for team in wiki.desk(agent_roles.ROLES, BASE_ANALYSTS, ASTOCK_ANALYSTS):
             for role in team["roles"]:
-                self.assertIn(role["name"], html)
-        self.assertNotIn("Fundamentals Analyst", html)
+                self.assertIn(role["name"], cards)
+        self.assertNotIn("Fundamentals Analyst", cards)
 
     # ── /research ─────────────────────────────────────────────────────────
     def test_the_research_index_lists_every_post_newest_first(self):

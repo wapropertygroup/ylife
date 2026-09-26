@@ -92,7 +92,7 @@
 <section id="point-in-time">
   <h2><span data-l="en">Dated to the run</span><span data-l="zh">以分析日期为准</span></h2>
   <div data-l="en">
-    <p>Every dated data tool takes its date from the run, so a model cannot ask a source for anything later, and a date after today is refused. Not every source can look back, though:</p>
+    <p>Every dated data tool takes its date from the run, so a model cannot ask a source for anything later — the first guard against look-ahead bias — and a date after today is refused at the door and costs nothing. Not every source can look back, though:</p>
     <div class="w-table-wrap">
       <table>
         <thead><tr><th>Evidence</th><th>On a run dated in the past</th></tr></thead>
@@ -103,7 +103,7 @@
           <tr><td>Prediction-market odds</td><td>Withheld: Polymarket serves only live odds.</td></tr>
           <tr><td>Earnings estimates</td><td>From snapshots the desk recorded on or before the date; with none, no numbers.</td></tr>
           <tr><td>Quality and valuation figures</td><td><strong>Not dated.</strong> Yahoo Finance's company snapshot has no history, so these are today's ratios and multiples.</td></tr>
-          <tr><td>A-share forecasts, flows, rankings</td><td>Today's snapshot, flagged as not being that day's.</td></tr>
+          <tr><td>A-share consensus, northbound flow, industry rankings</td><td>Today's snapshot, flagged as not being that day's.</td></tr>
           <tr><td>Market-regime and peer notes</td><td>The market as the run starts, with their own dates.</td></tr>
           <tr><td>Lessons from earlier calls</td><td>Only outcomes known by the date.</td></tr>
         </tbody>
@@ -112,7 +112,7 @@
     <p>So the further back the date, the more a report rests on prices and macro data — and the more of its other sources say they could not see that day.</p>
   </div>
   <div data-l="zh">
-    <p>每个带日期的数据工具都从分析任务本身读取日期，模型无法向数据源索取更晚的数据，晚于今天的日期也会被拒绝。不过，并非每个数据源都能回溯：</p>
+    <p>每个带日期的数据工具都从分析任务本身读取日期，模型无法向数据源索取更晚的数据——这是防范前视偏差的第一道关口；晚于今天的日期会在排队之前就被拒绝，不消耗次数。不过，并非每个数据源都能回溯：</p>
     <div class="w-table-wrap">
       <table>
         <thead><tr><th>证据</th><th>分析日期在过去时</th></tr></thead>
@@ -123,7 +123,7 @@
           <tr><td>预测市场赔率</td><td>不提供：Polymarket 只有实时赔率。</td></tr>
           <tr><td>盈利预期</td><td>读取投研台在该日期当天或之前记录的快照；没有快照就不给数字。</td></tr>
           <tr><td>质量与估值数据</td><td><strong>不按日期回溯。</strong>Yahoo Finance 的公司快照没有历史版本，看到的是今天的比率与估值倍数。</td></tr>
-          <tr><td>A 股一致预期、资金流向、排名</td><td>当前快照，并注明并非当天的版本。</td></tr>
+          <tr><td>A 股一致预期、北向资金、行业排名</td><td>当前快照，并注明并非当天的版本。</td></tr>
           <tr><td>市场环境与同业对比</td><td>分析启动时的市场状况，标注各自数据的日期。</td></tr>
           <tr><td>过往判断的经验</td><td>只包含该日期之前已知结果的判断。</td></tr>
         </tbody>

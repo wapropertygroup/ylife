@@ -1,0 +1,154 @@
+{#  /docs/faq. Numbers come from `facts` (routes._wiki_facts). Each answer is a
+    short form of a docs page and links to it; the verification lives with the
+    longer page. The ticker answer follows agents._TICKER_RE / _ASHARE_RE (a
+    digit-initial Hong Kong code such as 0700.HK is refused), and the refund
+    answer agents._refund_preflight plus submit()'s refusal of future dates. #}
+{% set reset_en = 'midnight Pacific time' if facts.quota_tz == 'America/Los_Angeles' else 'midnight (' ~ facts.quota_tz ~ ')' %}
+{% set reset_zh = '美国太平洋时间零点' if facts.quota_tz == 'America/Los_Angeles' else facts.quota_tz ~ ' 时区零点' %}
+<section id="about-the-desk">
+  <h2><span data-l="en">About the desk</span><span data-l="zh">关于投研台</span></h2>
+
+  <h3><span data-l="en">Is this investment advice?</span><span data-l="zh">这是投资建议吗？</span></h3>
+  <div data-l="en">
+    <p>No. A report is a model's argument about one company on one date. It can be wrong, and it can be confidently wrong. The rating it ends on is the desk's conclusion, not a recommendation to buy or sell anything — the decision is yours. See <a href="{{ url_for('main.docs_page', slug='overview') }}#boundaries">Boundaries</a>.</p>
+  </div>
+  <div data-l="zh">
+    <p>不是。报告是模型针对某家公司、某个日期给出的论证，它可能出错，而且可能错得很自信。报告最后给出的评级只是投研台的结论，并不构成买入或卖出任何资产的建议——决定权在你。详见<a href="{{ url_for('main.docs_page', slug='overview') }}#boundaries">边界</a>。</p>
+  </div>
+
+  <h3><span data-l="en">Does it place trades for me?</span><span data-l="zh">它会替我下单吗？</span></h3>
+  <div data-l="en">
+    <p>No. {{ product }} places no orders, connects to no brokerage account and holds no money. The entry, stop and position size the trader and portfolio manager name are part of the argument, written down for you to check.</p>
+  </div>
+  <div data-l="zh">
+    <p>不会。{{ product }} 不下单、不连接任何券商账户，也不持有任何资金。交易员和投资组合经理给出的入场位、止损位和仓位，只是论证的一部分，写出来供你核查。</p>
+  </div>
+
+  <h3><span data-l="en">Can I analyse China A-shares? Hong Kong stocks?</span><span data-l="zh">可以分析 A 股吗？港股呢？</span></h3>
+  <div data-l="en">
+    <p>A-shares, yes, alongside US-listed stocks and ADRs. Enter the six-digit code — <code>600519</code>, <code>000001</code> — with or without an exchange prefix or suffix (<code>SH600519</code>, <code>600519.SS</code>, <code>000001.SZ</code>). Shanghai, Shenzhen and Beijing listings all work, and the desk adds policy, hot-money and lock-up specialists, for {{ facts.n_astock }} analysts in all.</p>
+    <p>Hong Kong listings are not supported: a code such as <code>0700.HK</code> is refused as an invalid ticker. A company with a US-listed ADR can be analysed through that listing. More in <a href="{{ url_for('main.docs_page', slug='markets') }}">Markets and data</a>.</p>
+  </div>
+  <div data-l="zh">
+    <p>A 股可以，美国上市的股票和 ADR 也可以。A 股请输入六位代码——如 <code>600519</code>、<code>000001</code>——带不带交易所前缀或后缀都可以（<code>SH600519</code>、<code>600519.SS</code>、<code>000001.SZ</code>）。沪深京三地上市的股票都能分析，投研台还会加入政策、游资和解禁三位专项分析师，共 {{ facts.n_astock }} 位分析师。</p>
+    <p>港股目前不支持：<code>0700.HK</code> 这类代码会被判定为无效代码。在美国发行了 ADR 的公司，可以通过其 ADR 进行分析。详见<a href="{{ url_for('main.docs_page', slug='markets') }}">市场与数据</a>。</p>
+  </div>
+
+  <h3><span data-l="en">Which languages does it write in?</span><span data-l="zh">报告支持哪些语言？</span></h3>
+  <div data-l="en">
+    <p>English and Simplified Chinese. A report is written in the language the page is in when you start the run, so switch with the language toggle first. The choice is fixed once the run starts, and the PDF, the completion email and the share preview all follow the report's language.</p>
+  </div>
+  <div data-l="zh">
+    <p>英文和简体中文。报告使用你发起分析时页面所用的语言撰写，所以请先用语言切换按钮选好语言。语言在分析开始时即已确定，之后切换页面也不会改变报告；PDF、完成通知邮件和分享预览都跟随报告本身的语言。</p>
+  </div>
+</section>
+
+<section id="runs-and-results">
+  <h2><span data-l="en">Runs and results</span><span data-l="zh">分析与结果</span></h2>
+
+  <h3><span data-l="en">How long does a run take?</span><span data-l="zh">一次分析需要多长时间？</span></h3>
+  <div data-l="en">
+    <p>A deep run takes ten minutes or more: {{ facts.n_base }} analysts ({{ facts.n_astock }} for A-shares), then {{ facts.debate_rounds }} rounds of bull-versus-bear debate and {{ facts.risk_rounds }} of risk debate by default, each turn answering the last. Faster models in the model menu finish sooner, and a run may first wait its turn in the queue. You do not have to watch: sections appear as they are written, and an email arrives when it is done.</p>
+  </div>
+  <div data-l="zh">
+    <p>一次深度分析需要十分钟或更久：先由 {{ facts.n_base }} 位分析师（A 股为 {{ facts.n_astock }} 位）各自研究，再默认进行 {{ facts.debate_rounds }} 轮多空辩论和 {{ facts.risk_rounds }} 轮风险辩论，每一轮都要回应上一轮。在模型菜单里选择更快的模型，会结束得更早；分析也可能需要先排队。你不必一直盯着：章节随写随出，完成后还会收到邮件。</p>
+  </div>
+
+  <h3><span data-l="en">Can I close the tab while it runs?</span><span data-l="zh">分析进行时可以关闭页面吗？</span></h3>
+  <div data-l="en">
+    <p>Yes. The run happens on our side, not in your browser. Come back to <strong>Recent runs</strong> to open it, or wait for the email.</p>
+  </div>
+  <div data-l="zh">
+    <p>可以。分析在我们的服务器上运行，而不是在你的浏览器里。之后回到<strong>最近运行</strong>即可打开报告，也可以等待通知邮件。</p>
+  </div>
+
+  <h3><span data-l="en">Why does my report name a different model than I picked?</span><span data-l="zh">为什么报告上的模型和我选的不一样？</span></h3>
+  <div data-l="en">
+    <p>The Model line records what the run was started with. If that model ran out of its daily capacity with the provider partway through, the run carried on with a fallback model rather than failing, and the report says so: a <em>ran on fallback model</em> label on the page naming the model, and a note in the PDF and the email. Part of that report is a weaker model's work, so weigh it accordingly. See <a href="{{ url_for('main.docs_page', slug='models') }}">Models and thinking depth</a>.</p>
+  </div>
+  <div data-l="zh">
+    <p>报告上的“模型”一栏记录的是分析启动时的配置。如果该模型在运行途中用完了服务商的当日额度，分析不会就此失败，而是换用备用模型继续完成，报告也会如实标出：页面上会出现<em>“已降级模型”</em>标签并写明接手的模型，PDF 和邮件中也会附上相应说明。这样的报告有一部分出自能力较弱的模型，阅读时请相应斟酌。详见<a href="{{ url_for('main.docs_page', slug='models') }}">模型与思考深度</a>。</p>
+  </div>
+
+  <h3><span data-l="en">Does a past date make it a backtest?</span><span data-l="zh">选一个过去的日期，就等于回测吗？</span></h3>
+  <div data-l="en">
+    <p>Not by itself. The data tools are asked for what was known on the run's date — prices up to that day, macro data as it was published then, news and posts from that window — and a source with nothing for the window says so instead of guessing. Four limits remain:</p>
+    <ul>
+      <li>the language models may already know, from their training, what happened after your date;</li>
+      <li>a few inputs describe the moment you start the run, not the analysis date: the notes on the broad market and on how the company's peers are rated, and your holdings if you keep them in My Assets;</li>
+      <li>two runs of the same ticker and date can come out differently;</li>
+      <li>one run is one decision. Whether the desk decides well can only be measured across many dated decisions, scored against what happened next — see <a href="{{ url_for('main.research_post', slug='decision-ledger') }}">Grading the desk without flattering it</a>.</li>
+    </ul>
+  </div>
+  <div data-l="zh">
+    <p>单凭这一点并不算。数据工具只被询问分析日期当天已知的信息——截至当天的价格、当时发布的宏观数据、那段时间内的新闻和帖子；某个数据源在该时间窗口内没有数据时，会如实说明，而不是凭空猜测。但仍有四点局限：</p>
+    <ul>
+      <li>语言模型可能已经从训练数据中知道你所选日期之后发生的事；</li>
+      <li>少数输入反映的是你发起分析那一刻的情况，而不是分析日期：关于大盘环境和同业评级的说明，以及你在“我的资产”中记录的持仓；</li>
+      <li>同一只股票、同一个日期跑两次，结果可能不同；</li>
+      <li>一次分析只是一个决策。投研台的决策质量，只能通过大量带日期的决策、对照事后的走势来衡量——参见<a href="{{ url_for('main.research_post', slug='decision-ledger') }}">给投研台打分，而不美化它</a>。</li>
+    </ul>
+  </div>
+
+  <h3><span data-l="en">What happens if a run fails?</span><span data-l="zh">分析失败了怎么办？</span></h3>
+  <div data-l="en">
+    <p>It depends on when it failed:</p>
+    <ul>
+      <li>refused at submission — an invalid ticker, a date in the future, a model that is not available — nothing is charged;</li>
+      <li>failed before any model was called, or stopped with no report because the provider's daily capacity ran out: the run is given back;</li>
+      <li>failed after the models started work, including a run that hit the time limit: not given back, because that work has been paid for;</li>
+      <li>broke near the end: the report is rebuilt from the sections already written and marked <em>recovered from stream</em>.</li>
+    </ul>
+    <p>The page shows what went wrong. Details in <a href="{{ url_for('main.docs_page', slug='limits') }}#refunds">Limits and quotas</a>.</p>
+  </div>
+  <div data-l="zh">
+    <p>取决于在哪个阶段失败：</p>
+    <ul>
+      <li>提交时被拒绝——股票代码无效、日期在未来、所选模型不可用——不扣任何次数；</li>
+      <li>在调用任何模型之前失败，或因服务商当日额度用尽而中止、没有产出报告：退还次数；</li>
+      <li>模型开始工作之后失败，包括运行超时：不退还，因为这些工作已经付了费；</li>
+      <li>在接近尾声时出错：报告会用已经写好的章节重建，并标注<em>“由实时流恢复”</em>。</li>
+    </ul>
+    <p>页面会显示出错原因。详见<a href="{{ url_for('main.docs_page', slug='limits') }}#refunds">限额与配额</a>。</p>
+  </div>
+</section>
+
+<section id="accounts-and-privacy">
+  <h2><span data-l="en">Accounts and privacy</span><span data-l="zh">账号与隐私</span></h2>
+
+  <h3><span data-l="en">Who can see my reports?</span><span data-l="zh">谁能看到我的报告？</span></h3>
+  <div data-l="en">
+    <p>Your history, and a report's full view with its follow-up questions, belong to your account; other signed-in users cannot open them. Finished reports can still be read anonymously, without your address: visitors who are not signed in are shown a random sample of them, and a report's address opens that anonymous view for anyone who is not signed in. A run that used your holdings from My Assets is never shown either way. Details in <a href="{{ url_for('main.docs_page', slug='reports') }}#who-can-see">Reading a report</a>.</p>
+  </div>
+  <div data-l="zh">
+    <p>你的历史记录，以及报告的完整视图（含追问），都只属于你的账号，其他已登录用户无法打开。不过，已完成的报告仍可能被匿名阅读，页面上不会出现你的邮箱：未登录的访客会看到随机抽取的报告样例，未登录的人打开报告地址，也会看到这种匿名视图。使用了你在“我的资产”中持仓信息的分析，不会以任何方式公开。详见<a href="{{ url_for('main.docs_page', slug='reports') }}#who-can-see">阅读报告</a>。</p>
+  </div>
+
+  <h3><span data-l="en">Can I send a report to someone without an account?</span><span data-l="zh">可以把报告发给没有账号的人吗？</span></h3>
+  <div data-l="en">
+    <p>Yes — by email, text message or a WeChat QR code. The link opens without signing in, expires after {{ facts.share_days }} days, and can be revoked from the share dialog right after you make it. Anyone holding the link can read the report, so forwarding it shares it again. See <a href="{{ url_for('main.docs_page', slug='sharing') }}">Sharing a report</a>.</p>
+  </div>
+  <div data-l="zh">
+    <p>可以——通过邮件、短信或微信二维码。链接无需登录即可打开，{{ facts.share_days }} 天后失效；生成链接后，可以立即在分享对话框中撤销。任何拿到链接的人都能阅读报告，所以转发链接就等于再次分享。详见<a href="{{ url_for('main.docs_page', slug='sharing') }}">分享报告</a>。</p>
+  </div>
+</section>
+
+<section id="money">
+  <h2><span data-l="en">Money</span><span data-l="zh">费用</span></h2>
+
+  <h3><span data-l="en">Do purchased runs expire?</span><span data-l="zh">购买的次数会过期吗？</span></h3>
+  <div data-l="en">
+    <p>No. Purchased runs never expire and carry over from day to day. Your {{ facts.free_runs }} free runs reset at {{ reset_en }} and are always used first, so you are never charged while a free run is left. See <a href="{{ url_for('main.docs_page', slug='pricing') }}">Pricing and credits</a>.</p>
+  </div>
+  <div data-l="zh">
+    <p>不会。购买的次数永不过期，可以跨天累积使用。每天的 {{ facts.free_runs }} 次免费分析在{{ reset_zh }}重置，并且总是优先使用，所以只要还有免费次数，就不会扣费。详见<a href="{{ url_for('main.docs_page', slug='pricing') }}">价格与次数</a>。</p>
+  </div>
+
+  <h3><span data-l="en">Why was my run refused?</span><span data-l="zh">为什么我的分析请求被拒绝了？</span></h3>
+  <div data-l="en">
+    <p>Usually a daily ceiling. If your {{ facts.free_runs }} free runs are used and you have no purchased runs left, the page offers run packs when they are on sale. If the whole site has used its {{ facts.global_runs }} runs for the day, the page says so and offers no pack, because buying a run cannot add capacity; try again after {{ reset_en }}. A ticker the form cannot read, or a date in the future, is refused too — and costs nothing. See <a href="{{ url_for('main.docs_page', slug='limits') }}">Limits and quotas</a>.</p>
+  </div>
+  <div data-l="zh">
+    <p>通常是触及了每日上限。如果你的 {{ facts.free_runs }} 次免费分析已经用完，也没有剩余的购买次数，页面会提供次数包（在售时）。如果全站当天的 {{ facts.global_runs }} 次分析已经用完，页面会明确告知，并且不会推荐购买次数包，因为花钱也增加不了容量；请在{{ reset_zh }}之后再试。无法识别的股票代码或未来的日期也会被拒绝——同样不消耗次数。详见<a href="{{ url_for('main.docs_page', slug='limits') }}">限额与配额</a>。</p>
+  </div>
+</section>
