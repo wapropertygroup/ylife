@@ -70,6 +70,25 @@ _PUBLIC_DATA: dict[str, Any] = {
             "source_title": "Goldman Sachs via public reporting",
             "source_url": "https://finance.yahoo.com/markets/stocks/articles/cta-positioning-carries-lingering-selloff-110153773.html",
         },
+        {
+            # The write-up leads with BofA's systematic estimate; this is the
+            # Goldman figure quoted inside it ("upper end of the distribution",
+            # +$2bn on the week), not BofA's.
+            "date": "2026-09-02",
+            "global_equity_bn": 146.5,
+            "source_title": "Goldman Sachs via Wallstreetcn",
+            "source_url": "https://wallstreetcn.com/articles/3780920",
+        },
+        {
+            # US only: no global figure was published that week. Two weeks and
+            # a Fed hike after the reading above, US length was "near the bottom
+            # of its one-year range" — see _positioning_points for why a
+            # one-region reading is kept rather than dropped.
+            "date": "2026-09-17",
+            "us_equity_bn": 37.3,
+            "source_title": "Goldman Sachs via Wallstreetcn",
+            "source_url": "https://wallstreetcn.com/articles/3782033",
+        },
     ],
     "latest": {
         "report_date": "2026-07-28",
@@ -123,6 +142,16 @@ def _safe_url(value: object) -> str:
 
 
 def _positioning_points(value: object) -> list[dict[str, Any]]:
+    """Dated positioning readings, oldest first.
+
+    A reading needs a figure for *at least one* region, not specifically the
+    global one. Goldman's public write-ups quote whichever region the note was
+    about, and this used to require global — which on 2026-09-17 dropped the
+    only reading after a Fed hike (US length near a one-year low) and left the
+    card headlining the 2026-09-02 global figure near the top of its range as
+    the latest word on positioning. Every number shown was dated and real; the
+    newest evidence was simply missing, which misleads just as well.
+    """
     if not isinstance(value, list):
         return []
     points: list[dict[str, Any]] = []
@@ -130,19 +159,19 @@ def _positioning_points(value: object) -> list[dict[str, Any]]:
         if not isinstance(raw, dict):
             continue
         point_date = _valid_date(raw.get("date"))
-        global_equity = _number(raw.get("global_equity_bn"))
-        if not point_date or global_equity is None:
+        if not point_date:
             continue
         point: dict[str, Any] = {
             "date": point_date,
-            "global_equity_bn": global_equity,
             "source_title": str(raw.get("source_title") or "Goldman Sachs public report")[:120],
             "source_url": _safe_url(raw.get("source_url")),
         }
-        for key in ("percentile", "us_equity_bn"):
+        for key in ("global_equity_bn", "percentile", "us_equity_bn"):
             number = _number(raw.get(key))
             if number is not None:
                 point[key] = number
+        if "global_equity_bn" not in point and "us_equity_bn" not in point:
+            continue
         points.append(point)
     return sorted(points, key=lambda point: point["date"])
 
@@ -245,7 +274,13 @@ def get_cta_positioning() -> dict[str, Any]:
         data.setdefault("source_mode", "built_in")
 
     data["positioning"] = _positioning_points(data["positioning"])
-    data["latest_positioning"] = data["positioning"][-1] if data["positioning"] else None
+    # Per region, because the newest point may carry only one: the card's
+    # headline is the global figure, and "the last point" would now hand it a
+    # US-only reading with no global number to show.
+    data["latest_positioning"] = next(
+        (p for p in reversed(data["positioning"]) if "global_equity_bn" in p), None)
+    data["latest_us_positioning"] = next(
+        (p for p in reversed(data["positioning"]) if "us_equity_bn" in p), None)
 
     # Age travels with the payload rather than being recomputed by each consumer:
     # the card, the AI brief and /api/cache-age would otherwise each need to know

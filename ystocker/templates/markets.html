@@ -915,6 +915,10 @@
         <div class="stat-label" data-i18n="markets.cta_reported_position">Reported global equity position</div>
         <div id="ctaPositionValue" class="stat-val font-mono">—</div>
         <div id="ctaPositionMeta" class="text-[10px] text-slate-500 dark:text-slate-600 mt-1"></div>
+        <!-- A US-only reading newer than the global headline. It is the fresher
+             evidence, so it sits under the headline rather than only on the
+             chart — see cta._positioning_points. -->
+        <div id="ctaPositionUs" class="text-[10px] text-violet-700 dark:text-violet-400 mt-0.5 hidden"></div>
       </div>
       <div class="stat-card">
         <div class="stat-label" data-i18n="markets.cta_spx_spot">Live S&amp;P 500</div>
@@ -944,7 +948,7 @@
         <div class="chart-container" style="height:230px"><canvas id="ctaTriggerChart"></canvas></div>
       </div>
       <div class="min-w-0">
-        <p class="text-xs text-slate-500 mb-1" data-i18n="markets.cta_position_chart">Reported global equity net length ($bn)</p>
+        <p class="text-xs text-slate-500 mb-1" data-i18n="markets.cta_position_chart">Reported CTA equity net length ($bn)</p>
         <div class="chart-container" style="height:150px"><canvas id="ctaPositionChart"></canvas></div>
         <div id="ctaFlowGrid" class="grid grid-cols-3 gap-1.5 mt-3"></div>
       </div>
@@ -1619,27 +1623,57 @@ function _buildCtaPositionChart() {
   const canvas = document.getElementById('ctaPositionChart');
   const points = _ctaData?.positioning || [];
   if (!canvas || !points.length) return null;
+  // One line per region. A write-up quotes whichever region its note was about
+  // (2026-09-17 gave US only), so each line carries just the dates it has a
+  // figure for, and the legend appears once there are two lines, because
+  // colour alone would not say which is which.
+  //
+  // Linear time, not a category axis: these readings are irregular — four in
+  // May, then nothing until September — and a category axis spaces points
+  // evenly, drawing a three-month silence as wide as one week.
+  const at = date => Date.parse(date + 'T12:00:00Z');
+  const series = key => points.filter(point => point[key] != null)
+    .map(point => ({ x: at(point.date), y: point[key] }));
+  const day = ms => new Date(ms).toISOString().slice(0, 10);
+  // Pinned to the readings: left alone, the axis rounds out to a "nice" bound
+  // weeks before the first one and spends a fifth of the width on nothing.
+  const xs = points.map(point => at(point.date));
+  const pad = Math.max((Math.max(...xs) - Math.min(...xs)) * 0.04, 86400000);
+  const us = series('us_equity_bn');
+  const datasets = [{
+    ...I18n.label('markets.cta_global_equities', 'global equities'),
+    data: series('global_equity_bn'),
+    borderColor: CT.c('#38bdf8'), backgroundColor: 'rgba(56,189,248,.12)',
+    borderWidth: 2, pointRadius: 4, pointHoverRadius: 6,
+    pointBackgroundColor: CT.c('#0ea5e9'), pointBorderColor: CT.c('#bae6fd'),
+    fill: true, tension: .2,
+  }];
+  if (us.length) {
+    datasets.push({
+      ...I18n.label('markets.cta_us_equities', 'US equities'),
+      data: us,
+      borderColor: CT.c('#a78bfa'), backgroundColor: CT.c('#a78bfa'),
+      borderWidth: 2, borderDash: [4, 3], pointRadius: 3, pointHoverRadius: 5,
+      fill: false, tension: .2,
+    });
+  }
   return new Chart(canvas, {
     type: 'line',
-    data: {
-      labels: points.map(point => point.date),
-      datasets: [{
-        ...I18n.label('markets.cta_reported_position', 'Reported global equity position'),
-        data: points.map(point => point.global_equity_bn),
-        borderColor: CT.c('#38bdf8'), backgroundColor: 'rgba(56,189,248,.12)',
-        borderWidth: 2, pointRadius: 4, pointHoverRadius: 6,
-        pointBackgroundColor: CT.c('#0ea5e9'), pointBorderColor: CT.c('#bae6fd'),
-        fill: true, tension: .2,
-      }],
-    },
+    data: { datasets },
     options: {
       responsive: true, maintainAspectRatio: false,
       plugins: {
-        legend: { display: false },
-        tooltip: { callbacks: { label: context => ` ${_ctaMoney(context.raw)}` } },
+        legend: { display: us.length > 0, labels: { color: TICK_COL, boxWidth: 10, font: { size: 9 } } },
+        tooltip: { callbacks: {
+          title: items => _ctaDate(day(items[0].parsed.x)),
+          label: context => ` ${context.dataset.label}: ${_ctaMoney(context.parsed.y)}`,
+        } },
       },
       scales: {
-        x: { grid: { color: GRID_COL }, ticks: { color: TICK_COL, maxTicksLimit: 4, maxRotation: 0, font: { size: 9 } } },
+        x: { type: 'linear', min: Math.min(...xs) - pad, max: Math.max(...xs) + pad,
+             grid: { color: GRID_COL },
+             ticks: { color: TICK_COL, maxTicksLimit: 4, maxRotation: 0, font: { size: 9 },
+                      includeBounds: false, callback: value => day(value).slice(5) } },
         y: { grid: { color: GRID_COL }, ticks: { color: TICK_COL, callback: value => `$${value}B`, font: { size: 9 } }, suggestedMin: 0 },
       },
     },
@@ -1723,6 +1757,19 @@ function _renderCtaTracker() {
     positionMeta.push(_ctaT('markets.cta_public_snapshot', 'dated public snapshot'));
   }
   document.getElementById('ctaPositionMeta').textContent = positionMeta.join(' · ');
+  // Only a US reading *newer* than the global headline earns this line: an
+  // older one under a newer headline would read as the current US figure.
+  const usPoint = _ctaData.latest_us_positioning || null;
+  const usEl = document.getElementById('ctaPositionUs');
+  if (usEl) {
+    const newer = usPoint && usPoint.us_equity_bn != null
+      && (!position.date || usPoint.date > position.date);
+    usEl.textContent = newer
+      ? _ctaTemplate('markets.cta_us_reading', 'US {value} · {date}',
+                     { value: _ctaMoney(usPoint.us_equity_bn), date: _ctaDate(usPoint.date) })
+      : '';
+    if (newer) usEl.classList.remove('hidden'); else usEl.classList.add('hidden');
+  }
 
   document.getElementById('ctaSpxValue').textContent = Number.isFinite(current) ? current.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—';
   document.getElementById('ctaSpxMeta').textContent = _ctaDate(spx.currentDate);
