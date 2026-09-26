@@ -106,19 +106,19 @@ _ADV_MIN_SHARE = 0.5
 # ---------------------------------------------------------------------------
 # S&P 500 universe (Yahoo ticker format: dots -> dashes, e.g. BRK.B -> BRK-B)
 #
-# Read from the committed GICS snapshot (ystocker/data/gics_sp500.json), which
-# is built from the live constituent list by `python -m ystocker.gics
-# --write-snapshot`. This used to be a hand-edited tuple of the same 503 names,
+# Read from the GICS snapshot — the box's own daily refresh of the live
+# constituent list, else the committed baseline (ystocker/data/gics_sp500.json)
+# — and re-read at the start of every build, so a reconstitution reaches
+# breadth within a day with nobody touching it. This used to be a hand-edited
+# tuple of the same 503 names,
 # and by September 2026 it had drifted five names from the index — RDDT, BE,
 # ILMN, P and VMRK missing, AVB, BLDR, EQR, TAP and TTD long gone — while the
 # snapshot beside it was current. Two lists of one index drift apart; one does
-# not, and regenerating the snapshot now moves breadth, the SPY forward P/E in
-# valuation.py and the GICS panel together.
+# not, and a refresh now moves breadth, the SPY forward P/E in valuation.py and
+# the GICS panel together.
 #
-# Still static, which was the point of the tuple: a committed file refreshed on
-# a code change, never a constituent-list scrape at runtime. Membership changes
-# ~20 names a year, which moves a 500-name diffusion index by well under a
-# point, so a few months between regenerations costs nothing visible.
+# The refresh is in the background build, never a request, and a failed one
+# keeps the list in force, which was the point of the old static tuple.
 #
 # An unreadable snapshot degrades to an empty universe and says so, rather than
 # failing the import: this module is imported by the app factory, and a bad
@@ -291,8 +291,20 @@ def _weekly_last(series, digits: int = 2) -> dict[str, list]:
 
 def _build_cache() -> dict[str, Any]:
     """Download the universe and compute every breadth series. Slow (~25s)."""
+    global SP500_UNIVERSE
     import pandas as pd
     import yfinance as yf
+
+    # The index's membership first, so the download below already covers
+    # today's names. At most once a day, two small files, and it never raises:
+    # a failed refresh keeps the snapshot in force (see gics.refresh_snapshot).
+    # Rebinding the module attribute is what moves valuation.py too, which
+    # reads SP500_UNIVERSE from here at call time. It lands only in this
+    # process — under --preload the master, which is where this build and
+    # valuation's refresh both run.
+    snap = gics.refresh_snapshot()
+    if snap:
+        SP500_UNIVERSE = tuple(gics.tickers(snap))
 
     # Imported here rather than at module scope: valuation.py reads
     # SP500_UNIVERSE back out of this module, so a top-level import would make
@@ -305,9 +317,6 @@ def _build_cache() -> dict[str, Any]:
     ndx = tuple(dict.fromkeys(NDX100))
     extra = [t for t in ndx if t not in SP500_UNIVERSE]
     tickers = list(SP500_UNIVERSE) + [_RSP, _SPY] + extra
-    # The GICS breakdown rides this same call; SP500_UNIVERSE is read from its
-    # snapshot, so every member it needs is already in `tickers`.
-    snap = gics.load_snapshot()
     t0 = time.time()
     df = yf.download(tickers, period=_HISTORY_PERIOD, interval="1d",
                      auto_adjust=True, progress=False, threads=True)
