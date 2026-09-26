@@ -1,0 +1,198 @@
+{#  Research Lab: "TSM at a P/E of 1.01" (2026-09-19), a post-mortem.
+
+    Built from the fix commit of 2026-09-19 ("dca: reconcile an ADR's quote with
+    its filer's currency and share basis") and its follow-up the same afternoon
+    that put the reconciliation on the page ("dca: surface the listing basis in
+    the API response"); CLAUDE.md, the listing.py section and the V definition in
+    "The DCA Valuation Engine"; the listing.py docstrings; tests/test_listing.py
+    (52 tests) and ListingBasisIntegrationTests in tests/test_dca_history.py (9).
+
+    Every figure is as measured on 2026-09-19 and none is recomputed here: where
+    the source says "~73", so does the post. #}
+<div data-l="en"><p class="w-article-lead">On 2026-09-19 a reader reported that our DCA page had Taiwan Semiconductor's New York-listed shares at a price-to-earnings ratio of 1.01. The true figure was 32.46. No number from the data feed was wrong on its own: three were in different units, and nothing reconciled them. Every figure the mistake touched came out cheaper than the truth — on a page whose only output is a judgement of how cheap a stock is.</p></div>
+<div data-l="zh"><p class="w-article-lead">2026-09-19，一位读者反馈：我们的定投估值页面显示，台积电在纽约上市的 ADR 市盈率只有 1.01 倍，而真实数字是 32.46 倍。数据源的每个数字单独看都没错，错在其中三个单位各不相同，却没有任何一步把它们对齐。这个错误波及的每一个数字都比真实值更“便宜”——而这个页面唯一的产出，恰恰就是判断一只股票有多便宜。</p></div>
+
+<div class="w-prose">
+<section id="tldr">
+  <h2><span data-l="en">TL;DR</span><span data-l="zh">要点</span></h2>
+  <div data-l="en">
+    <p>TSM is an American depositary receipt: a dollar-priced certificate for five ordinary shares of a company that reports in New Taiwan dollars. The page divided a dollar price by a Taiwan-dollar EPS, and counted ordinary shares instead of ADRs. The fix makes both corrections together, and checks the result against a per-ADR figure the feed publishes separately.</p>
+  </div>
+  <div data-l="zh">
+    <p>TSM 是一只美国存托凭证（ADR）：以美元计价，每份代表 5 股普通股，而公司以新台币编制财报。页面用美元股价除以新台币每股收益，又用普通股股数代替了 ADR 份数。修复后两处校正同时进行，结果再用数据源另行公布的每份 ADR 数字核验。</p>
+  </div>
+  <div class="w-stats">
+    <div>
+      <span class="w-stat-label"><span data-l="en">P/E on the page</span><span data-l="zh">页面显示的市盈率</span></span>
+      <span class="w-stat-value is-bad">1.01</span>
+      <span class="w-stat-note"><span data-l="en">The true trailing P/E that day was 32.46.</span><span data-l="zh">当天真实的滚动市盈率为 32.46。</span></span>
+    </div>
+    <div>
+      <span class="w-stat-label"><span data-l="en">Headline V, inflated by</span><span data-l="zh">V 总分被抬高</span></span>
+      <span class="w-stat-value is-bad"><span data-l="en">~12 pts</span><span data-l="zh">约 12 分</span></span>
+      <span class="w-stat-note"><span data-l="en">Through the DCF branch, whose own score read about 83.</span><span data-l="zh">来自 DCF 分支，其分支得分约为 83。</span></span>
+    </div>
+    <div>
+      <span class="w-stat-label"><span data-l="en">Tracked names affected</span><span data-l="zh">受影响的跟踪标的</span></span>
+      <span class="w-stat-value is-num">1 / 60</span>
+      <span class="w-stat-note"><span data-l="en">Only ADRs — and the tracked list changes whenever someone opens a new name.</span><span data-l="zh">仅限 ADR——而且每当有人打开新的标的，跟踪名单就会随之变化。</span></span>
+    </div>
+  </div>
+  <div class="w-callout"><span data-l="en">Figures: the feed's own fields for TSM, measured on 2026-09-19, the day the report came in, and the corrected values the fix produced from that same data, which our tests pin. None recomputed since.</span><span data-l="zh">数字来源：2026-09-19（收到反馈当天）实测的 TSM 原始数据字段，以及修复程序基于同一批数据给出、由我们的测试锁定的修正值。此后均未重算。</span></div>
+</section>
+
+<section id="what-the-page-showed">
+  <h2><span data-l="en">What the page showed</span><span data-l="zh">页面显示了什么</span></h2>
+  <div data-l="en">
+    <p>The DCA page scores each company from 0 to 100 on V, a cheapness score: today's multiples ranked against the company's own history, blended with a discounted-cash-flow (DCF) valuation. V sets a multiplier on a recurring contribution — 0.5× at 0, 1.0× at 50, 1.5× at 100 — so an error toward cheap sizes the next contribution up. On 2026-09-19 the page printed:</p>
+    <div class="w-table-wrap"><table>
+      <thead><tr><th>Figure</th><th class="num">Page showed</th><th class="num">True</th></tr></thead>
+      <tbody>
+        <tr><td>Trailing P/E</td><td class="num bad">1.01</td><td class="num">32.46</td></tr>
+        <tr><td>Price / free cash flow</td><td class="num bad">11.4</td><td class="num">~73</td></tr>
+      </tbody>
+    </table></div>
+    <p>The DCF branch compares a discounted value per share with the price, and was setting Taiwan dollars against US dollars. Its score came out at about 83, deep in cheap territory, pulling TSM's headline V up by about 12 points. None of it was real.</p>
+  </div>
+  <div data-l="zh">
+    <p>定投估值页面给每家公司打一个 0 到 100 的“便宜度”分数 V：把今天的估值倍数放进公司自身历史中排百分位，再与现金流折现（DCF）估值加权合成。V 决定定期投入金额的调节系数——0 分为 0.5 倍，50 分为 1.0 倍，100 分为 1.5 倍——所以偏向“便宜”的错误会把下一笔投入调大。2026-09-19，页面显示的是：</p>
+    <div class="w-table-wrap"><table>
+      <thead><tr><th>指标</th><th class="num">页面显示</th><th class="num">真实值</th></tr></thead>
+      <tbody>
+        <tr><td>滚动市盈率</td><td class="num bad">1.01</td><td class="num">32.46</td></tr>
+        <tr><td>市价 / 自由现金流</td><td class="num bad">11.4</td><td class="num">~73</td></tr>
+      </tbody>
+    </table></div>
+    <p>DCF 分支拿折现得到的每股价值与股价比较，而它当时是拿新台币去比美元。分支得分约为 83，明显落在“便宜”区间，把 TSM 的 V 总分抬高了约 12 分。这些都不是真的。</p>
+  </div>
+</section>
+
+<section id="three-bases">
+  <h2><span data-l="en">Three bases in one feed</span><span data-l="zh">一个数据源，三种口径</span></h2>
+  <div data-l="en">
+    <p>An American depositary receipt (ADR) trades in New York and stands for a fixed number of a foreign company's ordinary shares, held by a depositary bank. It is priced in dollars while the company files at home, in its own currency. The fixed number is the depositary ratio — five for TSM. The feed returned all of this for one ticker and labelled none of the units:</p>
+    <div class="w-table-wrap"><table>
+      <thead><tr><th>Field</th><th class="num">Value</th><th>Unit</th></tr></thead>
+      <tbody>
+        <tr><td>Share price</td><td class="num">434.67</td><td>US dollars per ADR</td></tr>
+        <tr><td>Diluted EPS, trailing twelve months</td><td class="num">431.35</td><td>Taiwan dollars per ADR</td></tr>
+        <tr><td>Ordinary shares (balance sheet)</td><td class="num">25.93 bn</td><td>ordinary shares</td></tr>
+        <tr><td>Shares outstanding (quote summary)</td><td class="num">5.19 bn</td><td>ADRs — exactly a fifth of the line above</td></tr>
+        <tr><td>Trailing EPS (quote summary)</td><td class="num">13.39</td><td>US dollars per ADR</td></tr>
+      </tbody>
+    </table></div>
+    <p>The P/E divided the first line by the second. A Taiwan-dollar EPS and a dollar price happen to be the same order of magnitude, so the ratio lands near 1 and reads like a glitch rather than a unit error. The factor of 32 between 1.01 and 32.46 is the exchange rate.</p>
+    <p>Market value used the ordinary-share count — five times too many for a per-ADR price. So price-to-free-cash-flow carried two errors pulling opposite ways: the currency made TSM look far cheaper, the share count five times dearer. The 11.4 was their net, and still cheap.</p>
+  </div>
+  <div data-l="zh">
+    <p>美国存托凭证（ADR）在纽约交易，每份代表存托银行持有的、固定数量的外国公司普通股。它以美元计价，公司则继续在本国、以本币编制财报。这个固定数量就是存托比例，TSM 为 5。同一个代码下，数据源返回了下面这些数字，却没有标明任何一个的单位：</p>
+    <div class="w-table-wrap"><table>
+      <thead><tr><th>字段</th><th class="num">数值</th><th>单位</th></tr></thead>
+      <tbody>
+        <tr><td>股价</td><td class="num">434.67</td><td>每份 ADR，美元</td></tr>
+        <tr><td>稀释每股收益，过去十二个月</td><td class="num">431.35</td><td>每份 ADR，新台币</td></tr>
+        <tr><td>普通股股数（资产负债表）</td><td class="num">259.3 亿</td><td>普通股</td></tr>
+        <tr><td>流通股数（行情摘要）</td><td class="num">51.9 亿</td><td>ADR 份数——恰好是上一行的五分之一</td></tr>
+        <tr><td>滚动每股收益（行情摘要）</td><td class="num">13.39</td><td>每份 ADR，美元</td></tr>
+      </tbody>
+    </table></div>
+    <p>市盈率用的是第一行除以第二行。新台币每股收益与美元股价恰好处在同一数量级，比值于是落在 1 附近，看上去像数据故障，而不像单位错误。1.01 与 32.46 之间那 32 倍的差距，就是汇率。</p>
+    <p>市值用的是普通股股数——对按每份 ADR 报价的价格来说，多了 5 倍。所以市价 / 自由现金流同时带着两个方向相反的错误：币种让 TSM 看起来便宜得多，股数又让它贵了 5 倍。11.4 是两者相抵的结果，仍然偏便宜。</p>
+  </div>
+</section>
+
+<section id="only-adrs">
+  <h2><span data-l="en">What we found: only ADRs</span><span data-l="zh">排查结果：只有 ADR</span></h2>
+  <div data-l="en">
+    <p>Only ADRs are affected — a description of the whole population, not a rule of thumb. A home-market listing prices and files in one currency, one share per share, so its arithmetic was always right:</p>
+    <div class="w-table-wrap"><table>
+      <thead><tr><th>Listing</th><th>Priced in</th><th>Files in</th><th class="num">Reconstructed P/E</th><th>Right?</th></tr></thead>
+      <tbody>
+        <tr><td>TSM — ADR in New York</td><td>US dollar</td><td>New Taiwan dollar</td><td class="num">1.01</td><td class="bad">No — true 32.46</td></tr>
+        <tr><td>Samsung — Korean listing</td><td>Korean won</td><td>Korean won</td><td class="num">40.9</td><td class="good">Yes</td></tr>
+        <tr><td>Itochu — Tokyo listing</td><td>Japanese yen</td><td>Japanese yen</td><td class="num">18.0</td><td class="good">Yes</td></tr>
+      </tbody>
+    </table></div>
+    <p>Screening every name the page tracked that day against a P/E converted independently elsewhere in our data, exactly one of 60 disagreed: TSM. Reassuring about the day, not about the future — a company joins the tracked list whenever someone opens its page and it can be scored.</p>
+  </div>
+  <div data-l="zh">
+    <p>只有 ADR 受影响——这是对全部受影响范围的描述，而不是经验法则。本国上市的股票，报价与财报使用同一币种、一股就是一股，所以计算一直是对的：</p>
+    <div class="w-table-wrap"><table>
+      <thead><tr><th>上市地</th><th>报价币种</th><th>财报币种</th><th class="num">重建市盈率</th><th>是否正确</th></tr></thead>
+      <tbody>
+        <tr><td>TSM——纽约 ADR</td><td>美元</td><td>新台币</td><td class="num">1.01</td><td class="bad">否——真实值 32.46</td></tr>
+        <tr><td>三星——韩国上市</td><td>韩元</td><td>韩元</td><td class="num">40.9</td><td class="good">是</td></tr>
+        <tr><td>伊藤忠——东京上市</td><td>日元</td><td>日元</td><td class="num">18.0</td><td class="good">是</td></tr>
+      </tbody>
+    </table></div>
+    <p>把页面当天跟踪的每一只标的，与自有数据中另行独立换算的市盈率逐一比对，60 只里恰好 1 只对不上：TSM。这对当天令人放心，对未来却说明不了什么——只要有人打开某家公司的页面且它能够打分，它就会加入跟踪名单。</p>
+  </div>
+</section>
+
+<section id="the-fix">
+  <h2><span data-l="en">The fix: two corrections and a check</span><span data-l="zh">修复：两处校正，一道核验</span></h2>
+  <div data-l="en">
+    <h3>Both corrections, or neither</h3>
+    <p>Currency and share basis are independent, and fixing one is worse than fixing neither. Convert only the currency and the P/E comes out right at 32.46, while price-to-free-cash-flow, EV/EBITDA and price-to-tangible-book stay wrong by a factor of five — with nothing to say which columns were repaired.</p>
+    <h3>The ratio is derived, not looked up</h3>
+    <p>Ordinary shares divided by ADRs gives 5.0 for TSM, so there is no table of known ratios to go stale. Counts that differ only slightly — treasury stock, basic versus diluted — are left alone; a ratio too extreme to be real is refused.</p>
+    <h3>The earnings basis is checked, not assumed</h3>
+    <p>Dividing EPS by five as well would have been wrong: the feed's EPS line for TSM is already per ADR — 5.06 times what net income over ordinary shares implies. Assuming that holds for every ADR is the kind of guess that caused this, so <code>eps_scale()</code> converts the statement EPS to dollars and compares it with the per-ADR trailing EPS the feed publishes separately, 13.39. It applies one of two corrections — none, or exactly the share ratio — whichever makes the figures agree, and names any other answer as unexplained rather than splitting the difference. Its first catch was our own test data, which quotes EPS per ordinary share.</p>
+    <h3>Historical exchange rates, not today's</h3>
+    <p>Converting a 2021 statement at a 2026 rate, then ranking today's multiple against the result, is the trap from <a href="{{ url_for('main.research_post', slug='forward-history') }}">A forward multiple needs a forward history</a> in another costume. Each filing converts at the rate in force when it became public. Without a rate history, today's rate is used and labelled; with no rate at all, the page publishes no multiples.</p>
+    <p>We convert the statements, not the price — identical for the multiples, as a test pins, but it keeps the DCF's fair value in the currency the reader sees quoted. And the first version converted correctly without saying so; a follow-up that afternoon made the page say what it had converted.</p>
+  </div>
+  <div data-l="zh">
+    <h3>两处一起改，否则都别改</h3>
+    <p>币种与股本口径相互独立，只修一个比两个都不修更糟。只换算币种，市盈率会正确地变成 32.46，而市价 / 自由现金流、EV/EBITDA 和市价 / 有形净资产仍错 5 倍——也没有任何信息说明哪几列已经修好。</p>
+    <h3>比例靠推算，不靠查表</h3>
+    <p>普通股股数除以 ADR 份数，TSM 得 5.0，所以不需要一张会过时的已知比例表。两个股数只差一点点时（库存股、基本与稀释股本之别）不做调整；比例离谱到不可能为真时，直接拒绝。</p>
+    <h3>每股收益口径靠核验，不靠假设</h3>
+    <p>把每股收益也除以 5 是错的：数据源给 TSM 的每股收益本来就是按每份 ADR 计的——是“净利润 ÷ 普通股股数”的 5.06 倍。假设这一点适用于所有 ADR，正是造成这次问题的那类猜测，所以 <code>eps_scale()</code> 把财报每股收益换算成美元，再与数据源另行按每份 ADR 公布的滚动每股收益 13.39 比对：它只在两种校正中选一种——不校正，或恰好按存托比例校正——取能让两个数字对上的那一种，其他任何结果都标为“无法解释”，而不是取个折中。它抓到的第一个问题是我们自己的测试数据：那份数据的每股收益按普通股计。</p>
+    <h3>用历史汇率，不用今天的汇率</h3>
+    <p>用 2026 年的汇率换算 2021 年的财报、再拿今天的倍数与之比较排名，是<a href="{{ url_for('main.research_post', slug='forward-history') }}">《前瞻倍数，需要前瞻的历史》</a>里那个陷阱换了身衣服。每期财报都按公开当时的汇率换算；拿不到汇率历史时改用当天汇率并注明；连当天汇率都拿不到时，页面不公布任何倍数。</p>
+    <p>我们换算的是财报而不是股价——对倍数而言两者等价，有测试锁定——但这样 DCF 的公允价值会保持为读者看到的报价币种。另外，修复的第一版换算正确却只字未提；同一个下午的后续修改，让页面说明了它换算了什么。</p>
+  </div>
+</section>
+
+<section id="caveats">
+  <h2><span data-l="en">Caveats — what it still does not do</span><span data-l="zh">局限：它仍然做不到什么</span></h2>
+  <div data-l="en">
+    <ul>
+      <li><strong>The ratio can go stale.</strong> It is derived from today's counts and applied to the whole history — right, since the deposit agreement fixes it, until a ratio-change corporate action, which no field in the feed announces.</li>
+      <li><strong>The fallback carries drift.</strong> Without a rate history, today's rate covers the whole window. The page says so, but the older points carry the drift.</li>
+      <li><strong>A blank currency field reads as a match.</strong> If the feed omits either currency, nothing is converted — right for a home-market listing, wrong for an ADR.</li>
+      <li><strong>One effect on the score was measured.</strong> The ~12 points is the DCF branch's pull on the headline V, and the only effect on the score we quantified.</li>
+    </ul>
+  </div>
+  <div data-l="zh">
+    <ul>
+      <li><strong>比例可能悄悄过时。</strong>存托比例按今天的股数推算，再套用到整段历史——存托协议固定了它，所以这样做没错，直到发生调整存托比例的公司行动，而数据源里没有任何字段会预告。</li>
+      <li><strong>兜底方案带着汇率漂移。</strong>拿不到汇率历史时，整段区间统一按当天汇率换算。页面会注明，但较早的点位带着这段漂移。</li>
+      <li><strong>缺失的币种字段会被当作一致。</strong>数据源若缺少任一币种字段，就不做换算——对本国上市的股票是对的，对 ADR 则是错的。</li>
+      <li><strong>对分数的影响只量化了一项。</strong>约 12 分是 DCF 分支对 V 总分的拉动，也是我们唯一量化过的对分数的影响。</li>
+    </ul>
+  </div>
+</section>
+
+<section id="check-it-yourself">
+  <h2><span data-l="en">Check it yourself</span><span data-l="zh">亲自验证</span></h2>
+  <div data-l="en">
+    <p>The TSM page is public. At the foot of the card headed <strong>What the percentiles are measured against</strong> is a line, <strong>Quote and filings reconciled</strong>, saying what was converted: filed in TWD, quoted in USD, each filing at the rate in force when it became public, share counts restated at five filed shares per quoted share. A US listing has no such line. The page's P/E will not match your broker's to the decimal — ours uses the last weekly close — but a factor of 32 would be hard to miss.</p>
+    <p>For the record: 52 tests pin the reconciliation, anchored on TSM's measured figures and checked against the feed's own trailing EPS, share count and market value. Nine more run the whole reconstruction with the data stubbed out, because arithmetic that is right and arithmetic that is used are different questions — removing the call left the first 52 passing.</p>
+  </div>
+  <div data-l="zh">
+    <p>TSM 的页面是公开的。在标题为<strong>“分位的比较基准”</strong>的卡片底部，有一行<strong>“报价与财报口径已对齐”</strong>，说明换算了什么：财报以 TWD 编制、股价以 USD 报价，每期财报按公开当时的汇率换算，股本数量按每 1 份报价股对应 5 股财报股本折算。美国上市公司没有这一行。页面上的市盈率不会与券商的数字精确到小数点后一致——我们用的是最近一周的收盘价——但 32 倍的差距很难看漏。</p>
+    <p>备查：52 个测试锁定这套换算，以 TSM 的实测数字为锚，并与数据源自己公布的滚动每股收益、股数和市值核对。另有 9 个测试在屏蔽数据源的情况下跑完整个估值重建，因为“算得对”和“真的被用上”是两个问题——把换算调用删掉，前 52 个测试依然全部通过。</p>
+  </div>
+  <div class="w-actions">
+    <a class="w-btn w-btn-primary" href="{{ url_for('main.dca_page', ticker='TSM') }}"><span data-l="en">Open TSM on the DCA page</span><span data-l="zh">打开 TSM 定投估值页</span> <span aria-hidden="true">→</span></a>
+    <a class="w-btn" href="{{ url_for('main.research_lab') }}"><span data-l="en">All Research Lab posts</span><span data-l="zh">全部研究文章</span></a>
+  </div>
+</section>
+</div>
+
+<div class="w-article-foot">
+  <div data-l="en"><p>Sources: the fix of 2026-09-19 and its same-afternoon follow-up; listing.py and the DCA reconstruction that calls it; tests/test_listing.py and the listing-basis integration tests in tests/test_dca_history.py. Figures as measured on 2026-09-19. This describes a measurement; it is not a recommendation about any security.</p></div>
+  <div data-l="zh"><p>资料来源：2026-09-19 的修复及同一个下午的后续修改；listing.py 与调用它的定投估值重建；tests/test_listing.py 与 tests/test_dca_history.py 中的口径集成测试。数字均为 2026-09-19 实测。本文描述的是一次测量，不构成对任何证券的建议。</p></div>
+</div>

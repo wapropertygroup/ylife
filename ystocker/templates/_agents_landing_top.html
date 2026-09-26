@@ -1,0 +1,315 @@
+{#  The /agents landing, top half: hero, how a run works, the desk, capabilities.
+
+    What a signed-out visitor sees at trade-agents.com's front door (nginx maps
+    `/` to /agents) and at /agents on every other host. Included by agents.html
+    only when nobody is signed in and the page is not the embedded panel -- the
+    floating launcher's 240px frame keeps the compact sign-in card instead.
+
+    Every number is read from `landing` (routes._wiki_facts), not typed here: a
+    page that said "3 free runs" would go on saying it after the quota moved.
+    The sample-report section between this file and _agents_landing_bottom.html
+    stays in agents.html, because its script and the owner's view share state. #}
+{% import "wiki/_macros.html" as w %}
+{% set product = 'TradeAgents' if brand_is_ta else 'Trading Agents' %}
+{% set signin_href = url_for('main.login', next=url_for('main.agents_page')) %}
+{% set rounds = landing.debate_rounds %}
+{% set risk_rounds = landing.risk_rounds %}
+
+<div class="w-wrap">
+
+<!-- ── Hero ──────────────────────────────────────────────────────────── -->
+<section class="w-hero" aria-labelledby="lpTitle">
+  <div>
+    <p class="w-kicker"><span data-l="en">Multi-agent equity research</span><span data-l="zh">多智能体股票研究</span></p>
+    <h1 class="w-display" id="lpTitle">
+      <span data-l="en">Every ticker gets a research committee.</span>
+      <span data-l="zh">每只股票，都配一个<wbr>投研委员会。</span>
+    </h1>
+    <p class="w-lead">
+      <span data-l="en">{{ product }} seats a team of AI analysts on one stock and one date, then makes them argue it out — bull against bear, then risk against risk — until a portfolio manager signs a decision you can read turn by turn.</span>
+      <span data-l="zh">{{ product }} 让一组 AI 分析师围绕一只股票、一个日期开展研究，再让他们正面交锋——先是多空辩论，再是风险辩论——直到投资组合经理签发一份可以逐轮查看的决策。</span>
+    </p>
+    <div class="w-actions">
+      <a class="w-btn w-btn-primary" href="{{ signin_href }}">
+        <span data-l="en">Sign in and run</span><span data-l="zh">登录并开始分析</span> <span aria-hidden="true">→</span>
+      </a>
+      <a class="w-btn" href="{{ url_for('main.docs_home') }}"><span data-l="en">Read the docs</span><span data-l="zh">阅读文档</span></a>
+      {% if showcase %}
+      <a class="w-textlink" href="#samples"><span data-l="en">or read a sample report ↓</span><span data-l="zh">或先看一份报告样例 ↓</span></a>
+      {% endif %}
+    </div>
+    <p class="w-hero-note">
+      <span data-l="en">{{ landing.free_runs }} free runs a day with Google sign-in · reports in English or 中文 · no card needed</span>
+      <span data-l="zh">Google 登录后每天 {{ landing.free_runs }} 次免费分析 · 报告可选中文或英文 · 无需绑卡</span>
+    </p>
+  </div>
+
+  <figure class="w-run" data-lp-run>
+    <figcaption class="w-sr">
+      <span data-l="en">An example run: {{ landing.n_base }} analysts report, a bull and a bear debate, the research manager rules, the trader proposes a plan, the risk team reviews it and the portfolio manager signs the rating. A-share runs add three specialists.</span>
+      <span data-l="zh">一次分析示例：{{ landing.n_base }} 位分析师提交报告，多空研究员辩论，研究主管裁决，交易员提出方案，风险团队审议，最后由投资组合经理签发评级。A 股分析额外加入三位专项分析师。</span>
+    </figcaption>
+    <div class="w-term" aria-hidden="true">
+      <div class="w-term-bar"><i></i><i></i><i></i><b>{{ product | lower | replace(' ', '-') }}</b><em data-lp-status>● <span data-l="en">streaming</span><span data-l="zh">生成中</span></em></div>
+      <div class="w-term-body">
+        <div class="w-term-cmd">run <span data-lp-ticker>NVDA</span> --date {{ agent_env.today }} --thinking high</div>
+        <ol class="w-log" data-lp-log>
+          {% for team in landing.desk if team.key == 'analysts' %}
+            {% for r in team.roles %}
+          <li data-state="todo" style="--seat: {{ r.color }}"{% if r.a_share_only %} data-ashare hidden{% endif %}>
+            <span class="w-log-ico">{{ r.icon }}</span>
+            <span class="w-log-who"><span data-l="en">{{ r.name }}</span><span data-l="zh">{{ r.zh }}</span></span>
+            <span class="w-log-what">{% if r.short %}{{ w.t2(r.short) }}{% endif %}</span>
+            <span class="w-log-state"></span>
+          </li>
+            {% endfor %}
+          {% endfor %}
+          <li data-state="todo" data-weight="{{ rounds }}">
+            <span class="w-log-ico">🐂</span>
+            <span class="w-log-who"><span data-l="en">Bull ⇄ Bear</span><span data-l="zh">多头 ⇄ 空头</span></span>
+            <span class="w-log-what"><span data-l="en">{{ rounds }} rounds of debate</span><span data-l="zh">{{ rounds }} 轮辩论</span></span>
+            <span class="w-log-state"></span>
+          </li>
+          <li data-state="todo">
+            <span class="w-log-ico">⚖️</span>
+            <span class="w-log-who"><span data-l="en">Research Manager</span><span data-l="zh">研究主管</span></span>
+            <span class="w-log-what"><span data-l="en">rules, writes the plan</span><span data-l="zh">裁决并撰写计划</span></span>
+            <span class="w-log-state"></span>
+          </li>
+          <li data-state="todo">
+            <span class="w-log-ico">🎯</span>
+            <span class="w-log-who"><span data-l="en">Trader</span><span data-l="zh">交易员</span></span>
+            <span class="w-log-what"><span data-l="en">entry, stop &amp; size</span><span data-l="zh">入场、止损与仓位</span></span>
+            <span class="w-log-state"></span>
+          </li>
+          <li data-state="todo" data-weight="{{ risk_rounds }}">
+            <span class="w-log-ico">🛡️</span>
+            <span class="w-log-who"><span data-l="en">Risk debate</span><span data-l="zh">风险辩论</span></span>
+            <span class="w-log-what"><span data-l="en">aggressive · conservative · neutral</span><span data-l="zh">激进 · 保守 · 中立</span></span>
+            <span class="w-log-state"></span>
+          </li>
+          <li data-state="todo">
+            <span class="w-log-ico">🏛️</span>
+            <span class="w-log-who"><span data-l="en">Portfolio Manager</span><span data-l="zh">投资组合经理</span></span>
+            <span class="w-log-what"><span data-l="en">signs the rating</span><span data-l="zh">签发最终评级</span></span>
+            <span class="w-log-state"></span>
+          </li>
+        </ol>
+        <div class="w-term-foot" data-lp-done hidden>
+          <b><span data-l="en">report ready</span><span data-l="zh">报告完成</span></b>
+          <span data-l="en">— Buy · Overweight · Hold · Underweight · Sell, with PDF and share link</span>
+          <span data-l="zh">— 买入 · 增持 · 持有 · 减持 · 卖出，附 PDF 与分享链接</span>
+        </div>
+      </div>
+    </div>
+    {#  Examples of what the desk accepts, one per kind of listing. Buttons, not
+        decoration: picking an A-share code reruns the log with the three
+        specialists that only A-share runs seat, which is the one difference
+        between markets that a visitor cannot otherwise see before signing in. #}
+    <div class="w-chips" role="group" aria-label="Example tickers">
+      <button type="button" class="w-chip" data-lp-chip="NVDA" aria-pressed="true">NVDA<small><span data-l="en">US</span><span data-l="zh">美股</span></small></button>
+      <button type="button" class="w-chip" data-lp-chip="TSM" aria-pressed="false">TSM<small>ADR</small></button>
+      <button type="button" class="w-chip" data-lp-chip="600519" data-ashare aria-pressed="false">600519<small><span data-l="en">Shanghai</span><span data-l="zh">沪市</span></small></button>
+      <button type="button" class="w-chip" data-lp-chip="300750" data-ashare aria-pressed="false">300750<small><span data-l="en">Shenzhen</span><span data-l="zh">深市</span></small></button>
+    </div>
+  </figure>
+</section>
+
+<!-- ── How a run works ───────────────────────────────────────────────── -->
+<section class="w-section" aria-labelledby="lpLoop">
+  <div class="w-section-head">
+    <p class="w-kicker"><span data-l="en">How a run works</span><span data-l="zh">运作方式</span></p>
+    <h2 class="w-h2" id="lpLoop"><span data-l="en">Every decision keeps its paper trail.</span><span data-l="zh">每一个决策，都留有完整的推理记录。</span></h2>
+  </div>
+  <div class="w-grid5">
+    <div class="w-card">
+      <span class="w-card-num">01</span>
+      <span class="w-card-title"><span data-l="en">Gather</span><span data-l="zh">收集</span></span>
+      <span class="w-card-body">
+        <span data-l="en">{{ landing.n_base }} analysts — {{ landing.n_astock }} for A-shares — each write a report from data dated to the run: prices, filings, estimates, news and sentiment.</span>
+        <span data-l="zh">{{ landing.n_base }} 位分析师（A 股为 {{ landing.n_astock }} 位）各自基于截至分析日期的数据撰写报告：价格、财报、盈利预期、新闻与情绪。</span>
+      </span>
+    </div>
+    <div class="w-card">
+      <span class="w-card-num">02</span>
+      <span class="w-card-title"><span data-l="en">Debate</span><span data-l="zh">辩论</span></span>
+      <span class="w-card-body">
+        <span data-l="en">A bull and a bear argue over those reports for {{ rounds }} rounds. A research manager rules and writes the plan.</span>
+        <span data-l="zh">看涨与看跌研究员围绕这些报告辩论 {{ rounds }} 轮，由研究主管裁决并撰写投资计划。</span>
+      </span>
+    </div>
+    <div class="w-card">
+      <span class="w-card-num">03</span>
+      <span class="w-card-title"><span data-l="en">Plan</span><span data-l="zh">计划</span></span>
+      <span class="w-card-body">
+        <span data-l="en">The trader turns the plan into a proposal: a direction, an entry and a stop stated as prices, and a size.</span>
+        <span data-l="zh">交易员把计划变成具体方案：方向、以价格表示的入场位与止损位，以及仓位。</span>
+      </span>
+    </div>
+    <div class="w-card">
+      <span class="w-card-num">04</span>
+      <span class="w-card-title"><span data-l="en">Stress-test</span><span data-l="zh">压力测试</span></span>
+      <span class="w-card-body">
+        <span data-l="en">Aggressive, conservative and neutral risk analysts attack the proposal from three sides for {{ risk_rounds }} rounds.</span>
+        <span data-l="zh">激进、保守、中立三位风险分析师从三个方向质询方案，共 {{ risk_rounds }} 轮。</span>
+      </span>
+    </div>
+    <div class="w-card">
+      <span class="w-card-num">05</span>
+      <span class="w-card-title"><span data-l="en">Decide</span><span data-l="zh">决策</span></span>
+      <span class="w-card-body">
+        <span data-l="en">The portfolio manager signs one rating — Buy, Overweight, Hold, Underweight or Sell — with the reasoning attached.</span>
+        <span data-l="zh">投资组合经理签发唯一评级——买入、增持、持有、减持或卖出——并附上理由。</span>
+      </span>
+    </div>
+  </div>
+</section>
+
+<!-- ── The desk ──────────────────────────────────────────────────────── -->
+<section class="w-section" aria-labelledby="lpDesk">
+  <div class="w-section-head">
+    <p class="w-kicker"><span data-l="en">The desk</span><span data-l="zh">投研团队</span></p>
+    <h2 class="w-h2" id="lpDesk"><span data-l="en">Every seat has a name. Every turn is on the record.</span><span data-l="zh">每个席位都有名字，每一轮发言都有记录。</span></h2>
+    <p class="w-lead">
+      <span data-l="en">A report is drawn as a conversation between these roles, in the order they spoke — so you can read the bear's best argument before you read the verdict.</span>
+      <span data-l="zh">报告按照这些角色的发言顺序以对话形式呈现——你可以在看结论之前，先读完看跌研究员最有力的论点。</span>
+    </p>
+  </div>
+  <div class="w-desk">
+    {% for team in landing.desk %}
+    <div class="w-desk-row">
+      <p class="w-desk-team">{{ w.t2(team.title) }}</p>
+      <div class="w-desk-seats">
+        {% for r in team.roles %}
+        <span class="w-seat" style="--seat: {{ r.color }}">
+          <span aria-hidden="true">{{ r.icon }}</span>
+          <span data-l="en">{{ r.name }}</span><span data-l="zh">{{ r.zh }}</span>
+          {% if r.a_share_only %}<span class="w-seat-tag"><span data-l="en">A-shares</span><span data-l="zh">A 股</span></span>{% endif %}
+        </span>
+        {% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  <p class="w-more"><a class="w-textlink" href="{{ url_for('main.docs_page', slug='desk') }}"><span data-l="en">What each seat reads and writes →</span><span data-l="zh">每个席位读什么、写什么 →</span></a></p>
+</section>
+
+<!-- ── Capabilities ──────────────────────────────────────────────────── -->
+<section class="w-section" aria-labelledby="lpCaps">
+  <div class="w-section-head">
+    <p class="w-kicker"><span data-l="en">Capabilities</span><span data-l="zh">能力</span></p>
+    <h2 class="w-h2" id="lpCaps"><span data-l="en">Built for reading the argument, not just the answer.</span><span data-l="zh">为阅读论证而设计，而不只是给出答案。</span></h2>
+  </div>
+  <div class="w-grid4">
+    <div class="w-card">
+      <span class="w-card-icon" aria-hidden="true"><svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path stroke-linecap="round" d="M3.5 10h17M8 3v4M16 3v4M8 14h3"/></svg></span>
+      <span class="w-card-title"><span data-l="en">Dated to the run</span><span data-l="zh">以分析日期为准</span></span>
+      <span class="w-card-body">
+        <span data-l="en">The data tools are asked for what was known on the run's date, so a report dated in the past is written from that day's information.</span>
+        <span data-l="zh">数据工具只被询问在分析日期当天已知的信息，因此日期在过去的报告，是基于当天的信息写成的。</span>
+      </span>
+    </div>
+    <div class="w-card">
+      <span class="w-card-icon" aria-hidden="true"><svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" d="M4 6h16M4 10h11M4 14h14M4 18h7"/></svg></span>
+      <span class="w-card-title"><span data-l="en">Streams as it works</span><span data-l="zh">边写边看</span></span>
+      <span class="w-card-body">
+        <span data-l="en">Each section lands on the page the moment its author finishes. A deep run takes ten minutes or more — you read while it works.</span>
+        <span data-l="zh">每个章节在作者写完的那一刻就出现在页面上。一次深度分析需要十分钟或更久——你可以边运行边阅读。</span>
+      </span>
+    </div>
+    <div class="w-card">
+      <span class="w-card-icon" aria-hidden="true"><svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" d="M5 7h9M18 7h1M5 17h3M12 17h7"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg></span>
+      {% if landing.model_choice %}
+      <span class="w-card-title"><span data-l="en">Your model, your depth</span><span data-l="zh">自选模型与深度</span></span>
+      <span class="w-card-body">
+        <span data-l="en">{{ landing.models | length }} model choices from Gemini to DeepSeek, and a thinking-depth control. Every report records exactly what ran.</span>
+        <span data-l="zh">从 Gemini 到 DeepSeek 共 {{ landing.models | length }} 种模型可选，并可调节思考深度。每份报告都如实记录实际运行的模型。</span>
+      </span>
+      {% else %}
+      {# The picker can be switched off server-side; the card must not promise it. #}
+      <span class="w-card-title"><span data-l="en">It says what ran</span><span data-l="zh">如实记录模型</span></span>
+      <span class="w-card-body">
+        <span data-l="en">Every report records exactly which models wrote it, and says so when a fallback model had to step in.</span>
+        <span data-l="zh">每份报告都如实记录撰写它的模型；如果中途启用了备用模型，也会明确标出。</span>
+      </span>
+      {% endif %}
+    </div>
+    <div class="w-card">
+      <span class="w-card-icon" aria-hidden="true"><svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7M12 3v12M12 3 8 7m4-4 4 4"/></svg></span>
+      <span class="w-card-title"><span data-l="en">Share it anywhere</span><span data-l="zh">随处分享</span></span>
+      <span class="w-card-body">
+        <span data-l="en">Email, text or a WeChat QR code. The link opens without an account, expires in {{ landing.share_days }} days, and you can revoke it.</span>
+        <span data-l="zh">邮件、短信或微信二维码均可。链接无需账号即可打开，{{ landing.share_days }} 天后过期，你也可以随时撤回。</span>
+      </span>
+    </div>
+  </div>
+</section>
+
+</div>
+
+<script>
+(function () {
+  // ── The hero's run log ───────────────────────────────────────────────────
+  // An illustration of the order a run happens in, not a live run: no request
+  // is made and nothing here claims to be a result. Rows tick from todo to
+  // active to done; debate rows carry data-weight (their round count) and stay
+  // active for longer, which is roughly true of the real thing. Reduced motion
+  // gets the finished state and no timers at all.
+  const fig = document.querySelector('[data-lp-run]');
+  if (!fig) return;
+  const log = fig.querySelector('[data-lp-log]');
+  const done = fig.querySelector('[data-lp-done]');
+  const status = fig.querySelector('[data-lp-status]');
+  const tickerEl = fig.querySelector('[data-lp-ticker]');
+  const chips = [...fig.querySelectorAll('[data-lp-chip]')];
+  const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let timer = null;
+
+  const rows = () => [...log.children].filter(li => !li.hidden);
+
+  function finish() {
+    rows().forEach(li => { li.dataset.state = 'done'; });
+    done.hidden = false;
+    status.style.visibility = 'hidden';
+  }
+
+  function play() {
+    clearTimeout(timer);
+    const list = rows();
+    list.forEach(li => { li.dataset.state = 'todo'; });
+    done.hidden = true;
+    status.style.visibility = '';
+    if (still) { finish(); return; }
+    let i = 0;
+    const step = () => {
+      if (i > 0) list[i - 1].dataset.state = 'done';
+      if (i >= list.length) {
+        finish();
+        timer = setTimeout(play, 4200);     // hold the finished log, then loop
+        return;
+      }
+      list[i].dataset.state = 'active';
+      const weight = Math.min(Number(list[i].dataset.weight) || 1, 4);
+      i += 1;
+      timer = setTimeout(step, 520 + 380 * weight);
+    };
+    timer = setTimeout(step, 400);
+  }
+
+  function select(chip) {
+    const aShare = chip.hasAttribute('data-ashare');
+    chips.forEach(c => c.setAttribute('aria-pressed', String(c === chip)));
+    tickerEl.textContent = chip.dataset.lpChip;
+    log.querySelectorAll('[data-ashare]').forEach(li => { li.hidden = !aShare; });
+    play();
+  }
+
+  chips.forEach(c => c.addEventListener('click', () => select(c)));
+  // Stop cycling while nobody can see it: a background tab should not keep
+  // re-running an animation for nobody.
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) clearTimeout(timer); else play();
+  });
+  play();
+})();
+</script>

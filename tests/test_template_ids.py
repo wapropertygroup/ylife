@@ -94,7 +94,8 @@ def _can_co_occur(a: tuple, b: tuple) -> bool:
 class DuplicateIdTests(unittest.TestCase):
     def test_no_template_renders_an_id_twice(self):
         offenders: dict[str, list[str]] = {}
-        for path in sorted(TEMPLATES.glob("*.html")):
+        # rglob so templates/wiki/ is checked too -- see test_theme_classes.templates().
+        for path in sorted(TEMPLATES.rglob("*.html")):
             markup = _SCRIPT.sub("", path.read_text())
             dupes = []
             for name, paths in _id_paths(markup).items():
@@ -105,7 +106,7 @@ class DuplicateIdTests(unittest.TestCase):
                        for j in range(i + 1, len(paths))):
                     dupes.append(name)
             if dupes:
-                offenders[path.name] = sorted(dupes)
+                offenders[str(path.relative_to(TEMPLATES))] = sorted(dupes)
 
         self.assertEqual(
             offenders, {},

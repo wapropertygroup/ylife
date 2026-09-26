@@ -1,0 +1,224 @@
+{#  Research Lab post: "Rotation happens a level down" (/research/gics-industry-groups).
+    Built from the write-ups of bae8c9d (the GICS sectors-and-industry-groups panel),
+    8bd8fed (one rule for where a period starts, and the two bugs the panel exposed),
+    b54023e (the industry-group rotation map) and 6c5928f (the map's trails), all
+    2026-09-26, and from the module docstrings of ystocker/gics.py and
+    ystocker/periods.py. Figures are quoted as those sources state them. Test counts
+    are grep counts of tests/test_gics.py and tests/test_periods.py at 6c5928f; the
+    check count is what tests/check_gics_panel.mjs prints. #}
+<div data-l="en"><p class="w-article-lead">In the year to 25 September 2026, the S&amp;P 500’s Information Technology sector returned 33%. Inside it, semiconductors returned 57% and Software &amp; Services lost 2%. A sector is an average of businesses that can move in opposite directions, and an eleven-row sector table — the kind most market dashboards show, ours included until now — stops exactly where the interesting part begins.</p></div>
+<div data-l="zh"><p class="w-article-lead">截至 2026 年 9 月 25 日的一年里，标普 500 的信息技术板块上涨 33%。拆开来看，半导体行业组涨了 57%，软件与服务却跌了 2%。板块只是若干门生意的平均数，而这些生意完全可能背道而驰；大多数行情面板只有一张 11 行的板块表——我们的也不例外，直到现在——恰好停在了最值得看的地方。</p></div>
+
+<div class="w-prose">
+<section id="tldr">
+  <h2><span data-l="en">TL;DR</span><span data-l="zh">要点</span></h2>
+  <div data-l="en"><p>The S&amp;P 500’s 11 GICS sectors split into 25 industry groups, and this year’s rotation happened at that level. Only 8 of S&amp;P’s 36 official GICS index symbols carry any price history on Yahoo Finance, so we rebuilt all 25 groups from the index’s own members, cap-weighted, and checked them against those 8: one-day moves match to the hundredth of a point. The shortcut we refused on the way — pricing the past with today’s members — read the S&amp;P 500’s year at +18.37% against an official +17.24%.</p></div>
+  <div data-l="zh"><p>标普 500 的 11 个 GICS 板块之下共有 25 个行业组，今年的轮动正发生在这一层。在 Yahoo Finance 上，标普 36 个官方 GICS 指数代码中只有 8 个带有历史价格，于是我们用指数自己的成分股、按市值加权重建了全部 25 个行业组，再拿这 8 个官方指数核对：单日涨跌幅精确到 0.01 个百分点完全一致。途中我们拒绝了一条捷径——“用今天的成分股给过去定价”——它算出的标普 500 一年回报是 +18.37%，而官方数字是 +17.24%。</p></div>
+  <div class="w-stats">
+    <div>
+      <span class="w-stat-label"><span data-l="en">Semiconductors</span><span data-l="zh">半导体行业组</span></span>
+      <span class="w-stat-value is-good">+57%</span>
+      <span class="w-stat-note"><span data-l="en">Year to 25 Sep 2026, inside an IT sector up 33%</span><span data-l="zh">截至 2026-09-25 的一年；所在的信息技术板块上涨 33%</span></span>
+    </div>
+    <div>
+      <span class="w-stat-label"><span data-l="en">Software &amp; Services</span><span data-l="zh">软件与服务</span></span>
+      <span class="w-stat-value is-bad">−2%</span>
+      <span class="w-stat-note"><span data-l="en">Same sector, same year — the half an average hides</span><span data-l="zh">同一板块、同一年——被平均数掩盖的另一半</span></span>
+    </div>
+    <div>
+      <span class="w-stat-label"><span data-l="en">Backcast S&amp;P 500</span><span data-l="zh">回溯法下的标普 500</span></span>
+      <span class="w-stat-value is-num">+18.37%</span>
+      <span class="w-stat-note"><span data-l="en">Today’s members priced back a year. Official index +17.24%; counted from add dates, +17.31%</span><span data-l="zh">用今天的成分股回溯一年。官方指数 +17.24%；按纳入日期计入后为 +17.31%</span></span>
+    </div>
+  </div>
+  <div class="w-callout"><span data-l="en">Year figures run to the 25 September 2026 close; validation figures were recorded when the panel shipped on 26 September 2026. Group returns include dividends, as on the panel; comparisons with official S&amp;P indices use price-only closes, as those indices do.</span><span data-l="zh">年度数字截至 2026 年 9 月 25 日收盘；核对数字记录于 2026 年 9 月 26 日面板上线之时。行业组回报含股息，与面板口径一致；与标普官方指数的比较则和官方指数一样，使用不含股息的价格数据。</span></div>
+</section>
+
+<section id="background">
+  <h2><span data-l="en">Why sector tables stop too early</span><span data-l="zh">为什么板块表停得太早</span></h2>
+  <div data-l="en">
+    <p>Most sector views, including the two already on our Markets page, are ETF prices — the Select Sector SPDRs, one fund per sector. They answer “which sector?” and stop. Yet rotation usually happens a level down: semiconductors against software inside Information Technology, banks against insurers inside Financials. A sector fund averages the two halves, so the move is invisible by construction.</p>
+    <p>GICS, the classification S&amp;P and MSCI use to file every listed company, splits the 11 sectors into 25 industry groups, and almost none of them has an ETF on the S&amp;P 500’s own definition. Even the sector funds are not quite their sectors: the Select Sector SPDRs cap single names, and three companies are over half of S&amp;P 500 IT.</p>
+    <p>S&amp;P’s official indices would be the obvious source (<code>^SP500-4530</code> is semiconductors). We measured them on Yahoo Finance: 35 of the 36 symbols resolve, but only 8 carry any history. The rest return today’s quote alone — not even a one-week return.</p>
+  </div>
+  <div data-l="zh">
+    <p>大多数板块视图——包括我们市场页上原有的两个——用的都是 ETF 价格：Select Sector SPDR 系列，每个板块一只基金。它们回答“哪个板块”，然后就止步了。可轮动通常发生在更细的一层：信息技术内部是半导体对软件，金融内部是银行对保险。板块基金把两半平均在一起，这种分化在结构上就看不到。</p>
+    <p>GICS（全球行业分类标准）是标普与 MSCI 给每家上市公司归类的体系，它把 11 个板块细分为 25 个行业组，而这些行业组几乎都没有按标普 500 自身口径跟踪的 ETF。就连板块基金也不完全等于板块本身：Select Sector SPDR 对单一个股设有权重上限，而标普 500 信息技术板块一半以上的权重集中在三家公司身上。</p>
+    <p>最直接的数据源本应是标普的官方指数（半导体的代码是 <code>^SP500-4530</code>）。我们在 Yahoo Finance 上实测过：36 个代码中有 35 个能查到，但只有 8 个带有历史数据，其余只返回当天的报价——连一周的回报都算不出来。</p>
+  </div>
+</section>
+
+<section id="method">
+  <h2><span data-l="en">Rebuilding 25 indices from 503 companies</span><span data-l="zh">用 503 家公司重建 25 个指数</span></h2>
+  <div data-l="en">
+    <p>Each group is rebuilt as a cap-weighted index, in which a company counts in proportion to its market value. The inputs are public: weights from the daily holdings of SPY, an ETF that replicates the index; each company’s GICS sub-industry and the date it joined, from Wikipedia’s list of S&amp;P 500 companies; and daily adjusted closes (prices restated for splits and dividends) for all 503 names.</p>
+    <p>Each member’s weight on the snapshot date becomes a fixed share count — weight divided by that day’s adjusted close — so a group’s value on any day is the sum of shares times price. That is buy-and-hold with constant shares, which is what a cap-weighted index is between rebalances.</p>
+    <h3>Three things that had to be right</h3>
+    <p>Each is pinned by a test that fails without it.</p>
+    <ol>
+      <li><strong>Each window counts only companies already in the index when it began.</strong> The usual shortcut prices today’s members back through time, which builds in survivorship bias — judging the past by the companies still here. Companies join the S&amp;P 500 after they have risen, so today’s list imports their pre-entry gains into the index’s past.</li>
+      <li><strong>Share counts are struck against the same adjusted series the returns come from.</strong> Adjusted prices are rewritten after every split, dividend and spin-off; pairing a raw price with an adjusted one would misweight every company that has split since, by exactly the split ratio. Spin-offs are covered too: DD→Q, FDX→FDXF and HON→HONA show no cliff.</li>
+      <li><strong>Year-to-date starts from last year’s final close,</strong> not January’s first, which would throw away 2 January’s move. A figure computed mid-session drops today’s unfinished bar rather than mixing a live quote into a column of closes.</li>
+    </ol>
+    <h3>Checked against the official indices</h3>
+    <p>The 8 official indices with history, plus the S&amp;P 500 itself, are an independent answer key. On price-only closes, to match them, one-day moves reproduce to the hundredth — Semiconductors +0.48% against +0.48%, Banks +1.30% against +1.30%, the S&amp;P 500 +0.51% against +0.51% — and one week to three months land within about 0.1 percentage points for every group of ten or more names.</p>
+  </div>
+  <div data-l="zh">
+    <p>每个行业组都按市值加权指数（公司按市值大小计入）的方式重建。输入都是公开数据：权重来自 SPY（一只完全复制标普 500 的 ETF）每日公布的持仓；每家公司的 GICS 子行业及纳入指数的日期，来自维基百科的标普 500 成分股列表；以及全部 503 只成分股的每日复权收盘价（按拆股和分红调整后的价格）。</p>
+    <p>每只成分股在快照日的权重被折算成固定的“股数”——权重除以当天的复权收盘价——于是某个行业组在任意一天的市值，就是各成员股数乘以当天价格之和。这相当于股数不变的买入并持有，而这正是市值加权指数在两次调整之间的样子。</p>
+    <h3>必须做对的三件事</h3>
+    <p>每一条都有测试锁定，去掉它，测试就会失败。</p>
+    <ol>
+      <li><strong>每个区间只计入区间开始时已经在指数里的公司。</strong>常见的捷径是拿今天的成分股一路往回算，这就自带了幸存者偏差——用今天还留在场上的公司去评判过去。公司往往是大涨之后才被纳入标普 500 的，于是今天的名单把它们入选前的涨幅也带进了指数的过去。</li>
+      <li><strong>股数用与回报同一条复权价格序列来折算。</strong>每次拆股、分红和分拆之后，复权价格都会被整体改写；若把未复权价格与复权价格混用，所有在快照之后拆过股的公司都会被错配权重，误差恰好等于拆股比例。分拆同样覆盖在内：DD→Q、FDX→FDXF、HON→HONA 都没有出现断崖。</li>
+      <li><strong>年初至今从去年最后一个收盘价算起，</strong>而不是 1 月的第一个——那样会把 1 月 2 日当天的涨跌整个丢掉。盘中计算时则舍弃当天尚未收盘的那根 K 线，不把实时报价混进一列收盘价里。</li>
+    </ol>
+    <h3>与官方指数核对</h3>
+    <p>有历史数据的 8 个官方指数，加上标普 500 本身，构成一份独立的“标准答案”。为与之匹配，核对时使用不含股息的价格数据：单日涨跌幅精确到 0.01 个百分点完全一致——半导体 +0.48% 对 +0.48%，银行 +1.30% 对 +1.30%，标普 500 +0.51% 对 +0.51%；从 1 周到 3 个月，凡成分股在十家及以上的行业组，误差都在约 0.1 个百分点以内。</p>
+  </div>
+</section>
+
+<section id="what-we-found">
+  <h2><span data-l="en">What we found</span><span data-l="zh">我们发现了什么</span></h2>
+  <h3><span data-l="en">One sector, three directions</span><span data-l="zh">一个板块，三个方向</span></h3>
+  <div class="w-hbars">
+    <div class="w-hbar-row"><span class="w-hbar-label"><span data-l="en">IT sector</span><span data-l="zh">信息技术板块</span></span><span class="w-hbar-track"><span class="w-hbar-zero" style="left:6%"></span><span class="w-hbar-fill" style="left:6%;width:49.5%"></span></span><span class="w-hbar-val">+33%</span></div>
+    <div class="w-hbar-row"><span class="w-hbar-label"><span data-l="en">Semiconductors</span><span data-l="zh">半导体与半导体设备</span></span><span class="w-hbar-track"><span class="w-hbar-zero" style="left:6%"></span><span class="w-hbar-fill" style="left:6%;width:85.5%"></span></span><span class="w-hbar-val">+57%</span></div>
+    <div class="w-hbar-row"><span class="w-hbar-label"><span data-l="en">Tech hardware</span><span data-l="zh">技术硬件与设备</span></span><span class="w-hbar-track"><span class="w-hbar-zero" style="left:6%"></span><span class="w-hbar-fill" style="left:6%;width:64.5%"></span></span><span class="w-hbar-val">+43%</span></div>
+    <div class="w-hbar-row"><span class="w-hbar-label"><span data-l="en">Software &amp; services</span><span data-l="zh">软件与服务</span></span><span class="w-hbar-track"><span class="w-hbar-zero" style="left:6%"></span><span class="w-hbar-fill is-neg" style="left:3%;width:3%"></span></span><span class="w-hbar-val">−2%</span></div>
+  </div>
+  <div data-l="en"><p>Year to the 25 September 2026 close, total return. The sector figure is not wrong; it averages a group up 57% with a group down 2%, and shows neither.</p></div>
+  <div data-l="zh"><p>截至 2026 年 9 月 25 日收盘的一年，总回报。板块数字本身没有错，只是它把一个涨了 57% 的行业组和一个跌了 2% 的行业组平均在了一起，结果两者都看不见。</p></div>
+
+  <h3><span data-l="en">Did it matter? The weight view</span><span data-l="zh">这对指数重要吗？看权重</span></h3>
+  <div data-l="en"><p>A return alone does not say whether a move mattered: +20% on a group that is 1% of the index is a fifth of a point. So the panel also shows each group’s change in index weight, in percentage points (pp). IT gained 4.2pp over the year, and its three groups sum to it:</p></div>
+  <div data-l="zh"><p>单看涨跌幅，说明不了一次上涨对指数有多重要：一个只占指数 1% 的行业组涨 20%，也只相当于指数的五分之一个百分点。所以面板还给出每个行业组的指数权重变化，单位是百分点。这一年里信息技术板块的指数权重上升了 4.2 个百分点，正好是其下三个行业组之和：</p></div>
+  <div class="w-table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th><span data-l="en">Industry group</span><span data-l="zh">行业组</span></th>
+          <th class="num"><span data-l="en">Return</span><span data-l="zh">涨跌幅</span></th>
+          <th class="num"><span data-l="en">Index weight change (pp)</span><span data-l="zh">指数权重变化（百分点）</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td><strong><span data-l="en">Information Technology (sector)</span><span data-l="zh">信息技术（板块）</span></strong></td><td class="num good">+33%</td><td class="num good">+4.2</td></tr>
+        <tr><td><span data-l="en">Semiconductors &amp; Semiconductor Equipment</span><span data-l="zh">半导体与半导体设备</span></td><td class="num good">+57%</td><td class="num good">+4.50</td></tr>
+        <tr><td><span data-l="en">Technology Hardware &amp; Equipment</span><span data-l="zh">技术硬件与设备</span></td><td class="num good">+43%</td><td class="num good">+1.84</td></tr>
+        <tr><td><span data-l="en">Software &amp; Services</span><span data-l="zh">软件与服务</span></td><td class="num bad">−2%</td><td class="num bad">−2.13</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3><span data-l="en">Survivorship, measured</span><span data-l="zh">幸存者偏差，实测</span></h3>
+  <div data-l="en"><p>The same year, three ways — price-only, to match the official indices:</p></div>
+  <div data-l="zh"><p>同一年用三种方法计算——为与官方指数一致，均为不含股息的价格回报：</p></div>
+  <div class="w-table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th></th>
+          <th class="num"><span data-l="en">Today’s members, backcast</span><span data-l="zh">今天的成分股回溯</span></th>
+          <th class="num"><span data-l="en">Counted from add date</span><span data-l="zh">按纳入日期计入</span></th>
+          <th class="num"><span data-l="en">Official index</span><span data-l="zh">官方指数</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td><span data-l="en">S&amp;P 500</span><span data-l="zh">标普 500</span></td><td class="num">+18.37%</td><td class="num">+17.31%</td><td class="num">+17.24%</td></tr>
+        <tr><td><span data-l="en">Semiconductors &amp; Semiconductor Equipment</span><span data-l="zh">半导体与半导体设备</span></td><td class="num">+58.0%</td><td class="num">+56.6%</td><td class="num">+55.8%</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div data-l="en"><p>Dating each company’s entry closes most of the gap, without touching the arithmetic.</p></div>
+  <div data-l="zh"><p>按纳入日期计入每家公司之后，缺口基本被补上，而计算公式本身一处都没改。</p></div>
+
+  <h3><span data-l="en">The rotation map</span><span data-l="zh">行业组轮动象限图</span></h3>
+  <div data-l="en"><p>Below the table, a map plots each group’s return against the S&amp;P 500 over a longer window (across) and a shorter one (up), bubble area its index weight. Ahead of the index on both windows is <em>leading</em>, behind on both <em>lagging</em>; ahead on the longer only is <em>weakening</em>, on the shorter only <em>improving</em>. On the 25 September 2026 close, at one month against three, Technology Hardware, Software &amp; Services and Media &amp; Entertainment led (30% of the index), Semiconductors and Autos were improving (20%), and sixteen of the 25 groups lagged — together, 32% of the index.</p></div>
+  <div data-l="zh"><p>表格下方的象限图，横轴是每个行业组在较长区间内相对标普 500 的超额回报，纵轴是较短区间内的，气泡面积代表指数权重。两个区间都跑赢指数为「领先」，都跑输为「落后」；只在长区间跑赢为「转弱」，只在短区间跑赢为「改善」。以 2026 年 9 月 25 日收盘、1 个月对 3 个月来看：技术硬件与设备、软件与服务、媒体与娱乐处于领先（合计占指数 30%），半导体和汽车两个行业组处于改善（20%），25 个行业组中有 16 个处于落后——合计占指数的 32%。</p></div>
+</section>
+
+<section id="what-changed">
+  <h2><span data-l="en">Two bugs it found in our own pages</span><span data-l="zh">它揪出了我们自己页面上的两个错误</span></h2>
+  <div data-l="en"><p>The panel also exposed that the two older sector sections beside it each had their own idea of where a period starts, and both were wrong without looking it. Both turned up while the panel was being built, and were fixed on 26 September 2026:</p></div>
+  <div data-l="zh"><p>面板还暴露出，同页两个旧板块模块对“一个区间从哪里开始”各有各的算法，而且都错了，却看不出任何异常。两处都是在搭建面板时发现的，并于 2026 年 9 月 26 日修复：</p></div>
+  <div class="w-table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th><span data-l="en">Where</span><span data-l="zh">位置</span></th>
+          <th class="num"><span data-l="en">Shown</span><span data-l="zh">显示值</span></th>
+          <th class="num"><span data-l="en">Correct</span><span data-l="zh">正确值</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td><span data-l="en">Rotation ranking — Health Care “YTD”</span><span data-l="zh">轮动排名——医疗保健「年初至今」</span></td><td class="num">+28.1%</td><td class="num">+11.6%</td></tr>
+        <tr><td><span data-l="en">Rotation ranking — XLK “YTD”</span><span data-l="zh">轮动排名——XLK「年初至今」</span></td><td class="num">+41.5%</td><td class="num">+36.8%</td></tr>
+        <tr><td><span data-l="en">Rotation grid — Energy YTD</span><span data-l="zh">轮动表——能源 年初至今</span></td><td class="num">+38.6%</td><td class="num">+41.5%</td></tr>
+        <tr><td><span data-l="en">Rotation grid — Industrials YTD</span><span data-l="zh">轮动表——工业 年初至今</span></td><td class="num">+8.7%</td><td class="num">+10.8%</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div data-l="en">
+    <ul>
+      <li><strong>The ranking’s “YTD” was a one-year return:</strong> it divided by the first weekly close in a year of data, so XLK’s “YTD” was exactly its one-year figure. The Health Care and XLK rows were measured on 25 September 2026.</li>
+      <li><strong>The grid dropped every window’s first session,</strong> starting at the first close inside the window, so year-to-date lost all of 2 January and disagreed with the panel beside it.</li>
+    </ul>
+    <h3>One rule, in one place</h3>
+    <p>All three sections now call one rule: a period’s base is the last close on or before its anniversary — the close before the window, not the first one inside it — and year-to-date’s anniversary is 31 December. A series too short to reach it reports nothing rather than a shorter period’s return under a longer heading, which is exactly how “YTD” had become one year. Three rules fixed in place would agree today and drift the next time one was edited.</p>
+  </div>
+  <div data-l="zh">
+    <ul>
+      <li><strong>排名表里的「年初至今」其实是一年回报：</strong>它除以的是一年数据里的第一个周收盘价，所以 XLK 的「年初至今」恰好等于它的一年回报。医疗保健和 XLK 两行数字测于 2026 年 9 月 25 日。</li>
+      <li><strong>轮动表丢掉了每个区间的第一个交易日：</strong>它从区间内的第一个收盘价起算，于是年初至今丢掉了 1 月 2 日一整天的涨跌，和旁边的面板说法不一。</li>
+    </ul>
+    <h3>一条规则，只写在一处</h3>
+    <p>现在三个模块调用同一条规则：一个区间的基准，是其周年日当天或之前的最后一个收盘价——区间开始之前的那个收盘价，而不是区间内的第一个；年初至今的周年日是上一年的 12 月 31 日。数据太短、够不到周年日的序列直接不报数，而不是把较短区间的回报挂在较长区间的标题下——「年初至今」当初就是这样变成了一年回报。三条规则各自就地修补，今天一致，下次谁一改就会各自漂移。</p>
+  </div>
+</section>
+
+<section id="caveats">
+  <h2><span data-l="en">What it still gets wrong</span><span data-l="zh">它仍然不完美的地方</span></h2>
+  <div data-l="en">
+    <ul>
+      <li><strong>Removed members are missing from history.</strong> Date-gating handles companies that joined, not those that left, so long horizons drift: Media &amp; Entertainment’s one-year figure is 1.5pp under the official index.</li>
+      <li><strong>Small groups can miss by more than a point.</strong> Telecommunication Services is four names, and EchoStar alone accounts for its gap — so every row shows its constituent count.</li>
+      <li><strong>Share counts are held at the latest snapshot’s.</strong> Buybacks and float changes move them a few percent a year at most.</li>
+      <li><strong>Ours are total returns, and uncapped.</strong> A high-yield sector reads above S&amp;P’s price-only headline index by its dividend, and our IT row can disagree with the capped XLK with neither broken.</li>
+      <li><strong>The map’s windows overlap</strong> — the longer contains the shorter — so its axes are not independent. We did not chain-link them apart: each window counts its own membership, and the quotient would mix two.</li>
+      <li><strong>A quadrant describes where relative returns have been,</strong> not where they are going. Nothing here recommends buying or selling any group.</li>
+    </ul>
+  </div>
+  <div data-l="zh">
+    <ul>
+      <li><strong>已被剔除的成分股不在历史里。</strong>按纳入日期过滤解决的是“后来加入”的公司，补不回“中途离开”的公司，所以区间越长越会漂移：媒体与娱乐的一年回报比官方指数低 1.5 个百分点。</li>
+      <li><strong>小行业组的误差可能超过 1 个百分点。</strong>电信服务只有四家公司，它与官方指数的差距完全来自 EchoStar 一家——所以页面上每一行都标明了成分股数量。</li>
+      <li><strong>股数沿用最新快照的数值。</strong>回购和流通股变化一年最多影响几个百分点。</li>
+      <li><strong>我们用的是总回报，且不设个股上限。</strong>高股息板块会比只算价格的标普主流指数高出其间的股息；我们的信息技术板块也可能与设有上限的 XLK 不一致，但两者都没有错。</li>
+      <li><strong>象限图的两个区间是重叠的</strong>——较长区间包含较短区间——所以两条坐标轴并不独立。我们没有用链式拆分把两者分开：每个区间只计入自己起点时的成分股，相除会把两套成分混在一起。</li>
+      <li><strong>象限描述的是相对回报过去所处的位置，</strong>而不是未来的方向。本文不构成买入或卖出任何行业组的建议。</li>
+    </ul>
+  </div>
+</section>
+
+<section id="check-it-yourself">
+  <h2><span data-l="en">Check it yourself</span><span data-l="zh">亲自验证</span></h2>
+  <div data-l="en">
+    <p>On the Markets page, under Sector Rotation, the table “GICS Sectors &amp; Industry Groups — S&amp;P 500” opens each sector into its groups and switches between <em>Return</em>, <em>vs S&amp;P 500</em> and <em>Weight change</em>. The rotation map below it offers four window pairs — 1W/1M, 1M/3M (the default), 1M/6M and 3M/1Y — and trails each bubble back through its last five weekly closes. Every coordinate is a cell from the table’s <em>vs S&amp;P 500</em> view, so any bubble can be checked against its row. The data is today’s, not 25 September’s.</p>
+    <p>What pins it: <code>tests/test_gics.py</code> (57 tests, 12 of them on the arithmetic, on prices small enough to check by hand), <code>tests/test_periods.py</code> (12, including a year that ends on a weekend), a 109-check script for the table and map, and a separate comparison against the official indices, run on live market data.</p>
+  </div>
+  <div data-l="zh">
+    <p>在市场页的「板块轮动」下方，名为「GICS 行业表现 — 标普500一级行业与行业组」的表格可以把每个板块展开为行业组，并在「涨跌幅」「相对标普500」「权重变化」三种视图间切换。表格下方的轮动象限图提供四组区间搭配——1 周/1 月、1 月/3 月（默认）、1 月/6 月、3 月/1 年——每个气泡身后拖着一条轨迹，回溯它过去五个周收盘时的位置。每个坐标都是表格「相对标普500」视图里的一格，任何一个气泡都可以回到它那一行去核对。页面上是最新数据，而不是 9 月 25 日的数据。</p>
+    <p>测试锁定：<code>tests/test_gics.py</code>（57 个测试，其中 12 个针对计算本身，用的是足以手算核对的价格）、<code>tests/test_periods.py</code>（12 个，包括一年恰好在周末结束的情形）、一个 109 项检查的表格与象限图脚本，以及一个单独的、需用实时行情数据运行的官方指数比对脚本。</p>
+  </div>
+  <div class="w-actions">
+    <a class="w-btn w-btn-primary" href="{{ url_for('main.markets') }}"><span data-l="en">Open the GICS panel on Markets</span><span data-l="zh">打开市场页的 GICS 面板</span></a>
+    <a class="w-btn" href="{{ url_for('main.research_lab') }}"><span data-l="en">All Research Lab posts</span><span data-l="zh">全部研究文章</span></a>
+  </div>
+</section>
+</div>
+
+<div class="w-article-foot">
+  <div data-l="en"><p>Sources: the GICS panel (bae8c9d), the shared period rule and the fixes it made (8bd8fed), the rotation map (b54023e) and its trails (6c5928f), all dated 26 September 2026; the method notes in <code>ystocker/gics.py</code> and <code>ystocker/periods.py</code>.</p></div>
+  <div data-l="zh"><p>资料来源：GICS 面板（bae8c9d）、统一的区间规则及其修复（8bd8fed）、轮动象限图（b54023e）及其轨迹（6c5928f），均为 2026 年 9 月 26 日；方法说明见 <code>ystocker/gics.py</code> 与 <code>ystocker/periods.py</code>。</p></div>
+</div>

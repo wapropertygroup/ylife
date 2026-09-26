@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{#  Shared chrome for /docs and /research: the paper plane, the product bar under
+    the site header, a footer strip, and a browser tab that follows the language
+    toggle.
+
+    `product` is the name these pages give the agents. It follows the host for
+    the reason base.html's brand_name does -- trade-agents.com is TradeAgents,
+    every other host is yStocker, whose agents page is "Trading Agents". Set at
+    this template's top level so every block and every included content file
+    sees it. #}
+{% import "wiki/_macros.html" as w %}
+{% set product = 'TradeAgents' if brand_is_ta else 'Trading Agents' %}
+{% set home_href = '/' if brand_is_ta else url_for('main.agents_page') %}
+
+{% block body_class %} w-paper{% endblock %}
+
+{% block head_extra %}
+{% include "wiki/_head.html" %}
+{#  The tab title in both languages. I18n.apply() retitles the tab only from an
+    i18n.js key, and a page title here comes from the ystocker/wiki.py registry,
+    so the script at the end of `content` does it from these two attributes. #}
+<meta name="w-title" data-en="{% block title_en %}{{ product }}{% endblock %}"
+      data-zh="{% block title_zh %}{{ product }}{% endblock %}">
+{% block wiki_head %}{% endblock %}
+{% endblock %}
+
+{% block content %}
+<div class="w-wide">
+  <div class="w-bar">
+    <a class="w-bar-brand" href="{{ home_href }}">{{ product }}
+      <small>{% if section == 'research' %}<span data-l="en">Research Lab</span><span data-l="zh">研究实验室</span>{% else %}<span data-l="en">Docs</span><span data-l="zh">文档</span>{% endif %}</small>
+    </a>
+    <nav class="w-bar-nav" aria-label="{{ product }}">
+      <a href="{{ home_href }}"><span data-l="en">Home</span><span data-l="zh">首页</span></a>
+      <a href="{{ url_for('main.docs_home') }}"{% if section == 'docs' %} class="is-current" aria-current="page"{% endif %}><span data-l="en">Docs</span><span data-l="zh">文档</span></a>
+      <a href="{{ url_for('main.research_lab') }}"{% if section == 'research' %} class="is-current" aria-current="page"{% endif %}><span data-l="en">Research Lab</span><span data-l="zh">研究实验室</span></a>
+      <a href="{{ home_href }}#samples"><span data-l="en">Sample reports</span><span data-l="zh">报告样例</span></a>
+      <a href="{{ url_for('main.docs_page', slug='pricing') }}"><span data-l="en">Pricing</span><span data-l="zh">价格</span></a>
+    </nav>
+    <a class="w-btn w-btn-primary w-btn-sm" href="{{ url_for('main.agents_page') }}">
+      <span data-l="en">Run an analysis</span><span data-l="zh">开始分析</span> <span aria-hidden="true">→</span>
+    </a>
+  </div>
+
+  {% block wiki_body %}{% endblock %}
+
+  <div class="w-foot">
+    <b>{{ product }}</b>
+    <nav aria-label="{{ product }}">
+      <a href="{{ url_for('main.docs_home') }}"><span data-l="en">Docs</span><span data-l="zh">文档</span></a>
+      <a href="{{ url_for('main.research_lab') }}"><span data-l="en">Research Lab</span><span data-l="zh">研究实验室</span></a>
+      <a href="{{ url_for('main.docs_page', slug='changelog') }}"><span data-l="en">What's new</span><span data-l="zh">更新日志</span></a>
+      <a href="{{ url_for('main.markets') }}"><span data-l="en">Markets</span><span data-l="zh">市场</span></a>
+      <a href="{{ url_for('main.contact') }}"><span data-l="en">Contact</span><span data-l="zh">联系我们</span></a>
+    </nav>
+  </div>
+</div>
+
+<script>
+(function () {
+  // Tab title per language. Runs during parse, so the first paint already has
+  // the right title, and again on every toggle.
+  const meta = document.querySelector('meta[name="w-title"]');
+  if (!meta) return;
+  const sync = () => {
+    const zh = (document.documentElement.lang || '').indexOf('zh') === 0;
+    const v = zh ? meta.dataset.zh : meta.dataset.en;
+    if (v) document.title = v;
+  };
+  sync();
+  document.addEventListener('i18n:langchange', sync);
+})();
+</script>
+{% block wiki_scripts %}{% endblock %}
+{% endblock %}

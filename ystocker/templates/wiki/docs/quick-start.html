@@ -1,0 +1,113 @@
+{#  /docs/quick-start. Limits come from `facts` (routes._wiki_facts), never typed
+    in. The ticker forms mirror agents._TICKER_RE / _ASHARE_RE: a letter first,
+    or six digits with an optional SH/SZ/BJ prefix or .SS/.SZ/.SH/.BJ suffix. #}
+{% set signin_href = url_for('main.login', next=url_for('main.agents_page')) %}
+<section id="first-run">
+  <h2><span data-l="en">Your first run</span><span data-l="zh">第一次运行</span></h2>
+  <div data-l="en">
+    <ol>
+      <li><strong>Sign in with Google.</strong> <a href="{{ signin_href }}">Sign in</a> and you are brought straight back to the run form. Every run makes paid model calls, so the form is for signed-in accounts only, and each account gets {{ facts.free_runs }} free runs a day.</li>
+      <li><strong>Enter a ticker.</strong> A US symbol such as <code>NVDA</code>, an ADR such as <code>TSM</code>, or a six-digit China A-share code such as <code>600519</code>. <a href="#tickers">What the box accepts</a> is below.</li>
+      <li><strong>Pick the analysis date.</strong> It starts on today. An earlier date asks the desk to work from what was known that day, as far as each source can say — see <a href="{{ url_for('main.docs_page', slug='workflow') }}#point-in-time">Dated to the run</a>. A date after today is refused when the run starts.</li>
+      {% if facts.model_choice %}
+      <li><strong>Choose a model and thinking depth</strong>, or keep the defaults. The page remembers your choice on this browser, and <a href="{{ url_for('main.docs_page', slug='models') }}">Models and thinking depth</a> compares them. The report is written in the page's language: switch with the 中文 / EN button in the header before you start, because the language is fixed the moment you press Run.</li>
+      {% else %}
+      <li><strong>Check the model and language.</strong> Model choice is switched off at the moment, so every run uses the server's default, named under the form. The report is written in the page's language: switch with the 中文 / EN button in the header before you start, because the language is fixed the moment you press Run.</li>
+      {% endif %}
+      <li><strong>Press ▶ Run analysis.</strong> The run shows as queued, then running, and each agent's section appears as that agent finishes. You can close the tab: when the run finishes, the report is emailed to the address you signed in with.</li>
+    </ol>
+  </div>
+  <div data-l="zh">
+    <ol>
+      <li><strong>用 Google 账号登录。</strong><a href="{{ signin_href }}">登录</a>后会直接回到分析页面。每次分析都会产生付费的模型调用，所以只有登录用户才能发起分析；每个账号每天有 {{ facts.free_runs }} 次免费额度。</li>
+      <li><strong>输入股票代码。</strong>美股代码如 <code>NVDA</code>，ADR 如 <code>TSM</code>，或 6 位 A 股代码如 <code>600519</code>。具体可以怎么写，见下文的<a href="#tickers">代码格式</a>。</li>
+      <li><strong>选择分析日期。</strong>默认是今天。选择更早的日期，投研台会在各数据源能力所及的范围内，依据当天已知的信息来分析——详见<a href="{{ url_for('main.docs_page', slug='workflow') }}#point-in-time">以分析日期为准</a>。晚于今天的日期会在分析启动时被拒绝。</li>
+      {% if facts.model_choice %}
+      <li><strong>选择模型与思考深度</strong>，也可以直接用默认值。页面会在本浏览器中记住你的选择，各选项的区别见<a href="{{ url_for('main.docs_page', slug='models') }}">模型与思考深度</a>。报告语言跟随页面语言：请在开始前用页面顶部的 EN / 中文 按钮切换，因为点击运行的那一刻，语言就定下来了。</li>
+      {% else %}
+      <li><strong>确认模型与语言。</strong>目前未开放模型选择，所有分析都使用服务器默认模型，表单下方会注明。报告语言跟随页面语言：请在开始前用页面顶部的 EN / 中文 按钮切换，因为点击运行的那一刻，语言就定下来了。</li>
+      {% endif %}
+      <li><strong>点击“▶ 运行分析”。</strong>任务会先显示 queued（排队），再变为 running（运行中）；每位智能体写完自己的部分，页面上就会随之出现。你可以关掉页面：分析完成后，报告会发送到你登录所用的邮箱。</li>
+    </ol>
+  </div>
+</section>
+
+<section id="tickers">
+  <h2><span data-l="en">What the ticker box accepts</span><span data-l="zh">代码格式</span></h2>
+  <div data-l="en">
+    <ul>
+      <li><strong>US listings and ADRs</strong> — letters, optionally followed by digits, a dot or a hyphen: <code>NVDA</code>, <code>TSM</code>, <code>BRK-B</code>. Case does not matter. Use Yahoo Finance's spelling for a share class, <code>BRK-B</code> rather than <code>BRK.B</code>: the symbol reaches the data sources as you typed it.</li>
+      <li><strong>China A-shares</strong> — six digits, bare or with an exchange marker: <code>600519</code>, <code>SH600519</code>, <code>600519.SS</code> or <code>600519.SH</code> for Shanghai, <code>SZ</code> / <code>.SZ</code> for Shenzhen, <code>BJ</code> / <code>.BJ</code> for Beijing. Any of these seats the {{ facts.n_astock - facts.n_base }} A-share specialists.</li>
+      <li><strong>Not accepted</strong> — any other symbol that starts with a digit, such as Hong Kong's <code>0700.HK</code> or Tokyo's <code>7203.T</code>, and symbols with characters other than letters, digits, dots and hyphens, such as <code>^GSPC</code>. The form refuses them and nothing is charged.</li>
+    </ul>
+    <p>The form checks a symbol's shape, not whether the company exists. A symbol that looks right but has no data behind it — a typo, say — still starts a run and uses it up, and the analysts will report that they found nothing. <a href="{{ url_for('main.docs_page', slug='markets') }}">Markets and data</a> has the full list, and where each analyst's evidence comes from.</p>
+  </div>
+  <div data-l="zh">
+    <ul>
+      <li><strong>美股与 ADR</strong>——以字母开头，后面可以跟数字、点号或连字符：<code>NVDA</code>、<code>TSM</code>、<code>BRK-B</code>。不区分大小写。股票类别请按 Yahoo Finance 的写法，用 <code>BRK-B</code> 而不是 <code>BRK.B</code>：代码会按你输入的原样交给数据源。</li>
+      <li><strong>A 股</strong>——6 位数字，可以不加前后缀，也可以标明交易所：沪市写 <code>600519</code>、<code>SH600519</code>、<code>600519.SS</code> 或 <code>600519.SH</code>；深市用 <code>SZ</code> 前缀或 <code>.SZ</code> 后缀；北交所用 <code>BJ</code> 前缀或 <code>.BJ</code> 后缀。以上任何一种写法，都会加入 {{ facts.n_astock - facts.n_base }} 位 A 股专项分析师。</li>
+      <li><strong>不支持</strong>——其他以数字开头的代码，比如港股 <code>0700.HK</code>、东京的 <code>7203.T</code>；以及含有字母、数字、点号、连字符以外字符的代码，比如 <code>^GSPC</code>。表单会直接拒绝，不扣任何次数。</li>
+    </ul>
+    <p>表单只检查代码的格式，不检查这家公司是否存在。格式正确但背后没有数据的代码——比如输错了——照样会启动分析并消耗一次额度，分析师只会报告“查无数据”。完整的格式清单，以及每位分析师的证据来自哪里，见<a href="{{ url_for('main.docs_page', slug='markets') }}">市场与数据</a>。</p>
+  </div>
+</section>
+
+<section id="while-it-runs">
+  <h2><span data-l="en">While it runs</span><span data-l="zh">运行期间</span></h2>
+  <div data-l="en">
+    <ul>
+      <li><strong>It may queue first.</strong> If the server is busy with other runs, yours waits as queued and starts when a slot frees up.</li>
+      <li><strong>Sections stream in.</strong> The analysts' reports arrive one by one, then the debate, the trader's proposal and the risk debate, with the decision last — so you can start reading long before the end.</li>
+      <li><strong>Nothing is lost if you leave.</strong> Closing the tab does not stop the run. Reopen it from Recent runs, or wait for the email.</li>
+    </ul>
+  </div>
+  <div data-l="zh">
+    <ul>
+      <li><strong>可能要先排队。</strong>如果服务器正在处理其他分析，你的任务会显示为排队，等空出位置后再开始。</li>
+      <li><strong>内容边写边出。</strong>分析师报告逐份出现，接着是多空辩论、交易员方案和风险辩论，最终决策最后出现——不必等到结束就可以开始阅读。</li>
+      <li><strong>离开页面也不会丢。</strong>关掉页面不会中止分析。之后可以从“最近运行”重新打开，或者等邮件通知。</li>
+    </ul>
+  </div>
+</section>
+
+<section id="after-the-run">
+  <h2><span data-l="en">When it finishes</span><span data-l="zh">分析完成之后</span></h2>
+  <div data-l="en">
+    <ul>
+      <li><strong>Read it.</strong> The decision — one of Buy, Overweight, Hold, Underweight or Sell — sits at the top, then the report as a conversation, one turn per agent, with a bar for jumping between speakers.</li>
+      <li><strong>Find it again.</strong> Recent runs, under the form, lists your runs grouped by analysis date, newest first. Search by ticker or by date — <code>2026-09</code> finds every run dated September 2026 — and narrow by status. A search result carries each hit's portfolio-manager section, so calls can be compared without opening every report.</li>
+      <li><strong>Keep it.</strong> ⬇ Download PDF on the report, or PDF in the list, saves the whole report with its charts.</li>
+      <li><strong>Share it.</strong> The Share button beside your account sends a finished report by email, text or a WeChat QR code. The link opens without an account for {{ facts.share_days }} days, and you can revoke it sooner.</li>
+      <li><strong>Question it.</strong> Under a finished report, ask the portfolio manager a follow-up. Answers come from that report alone, and say so when it does not cover the question. You get {{ facts.chat_limit }} questions a day, counted separately from runs.</li>
+    </ul>
+  </div>
+  <div data-l="zh">
+    <ul>
+      <li><strong>阅读。</strong>最上方是最终决策——买入、增持、持有、减持、卖出五选一；下面是以对话形式呈现的报告，每位智能体一轮发言，并有一条导航栏可以在发言人之间跳转。</li>
+      <li><strong>查找。</strong>表单下方的“最近运行”按分析日期分组列出你的分析，最新的在前。可以按代码或日期搜索——输入 <code>2026-09</code> 会找出分析日期在 2026 年 9 月的全部报告——也可以按状态筛选。搜索结果会直接附上每份报告中投资组合经理的发言，不用逐一打开就能对比结论。</li>
+      <li><strong>保存。</strong>在报告上点“⬇ 下载 PDF”，或在列表里点“PDF”，即可保存含图表的完整报告。</li>
+      <li><strong>分享。</strong>账号旁边的“分享”按钮可以通过邮件、短信或微信二维码发送已完成的报告。对方无需账号即可打开，链接有效期 {{ facts.share_days }} 天，你也可以提前撤回。</li>
+      <li><strong>追问。</strong>在已完成的报告下方，可以向投资组合经理追问。回答只依据这份报告；报告没有涉及的问题，它会直接说明。每天可以追问 {{ facts.chat_limit }} 次，与分析次数分开计算。</li>
+    </ul>
+  </div>
+</section>
+
+<section id="next-steps">
+  <h2><span data-l="en">Where to go next</span><span data-l="zh">接下来读什么</span></h2>
+  <div data-l="en">
+    <ul>
+      <li><a href="{{ url_for('main.docs_page', slug='workflow') }}">How a run works</a> — every stage, and what each one hands the next.</li>
+      <li><a href="{{ url_for('main.docs_page', slug='reports') }}">Reading a report</a> — the conversation view, the decision, the PDF and follow-ups.</li>
+      <li><a href="{{ url_for('main.docs_page', slug='sharing') }}">Sharing a report</a> — email, text or WeChat, and taking a link back.</li>
+      <li><a href="{{ url_for('main.docs_page', slug='pricing') }}">Pricing and credits</a> — free runs, run packs, and when a run is given back.</li>
+    </ul>
+  </div>
+  <div data-l="zh">
+    <ul>
+      <li><a href="{{ url_for('main.docs_page', slug='workflow') }}">一次分析如何运作</a>——每个阶段，以及它交给下一阶段什么。</li>
+      <li><a href="{{ url_for('main.docs_page', slug='reports') }}">阅读报告</a>——对话视图、最终决策、PDF 与追问。</li>
+      <li><a href="{{ url_for('main.docs_page', slug='sharing') }}">分享报告</a>——邮件、短信或微信，以及如何撤回链接。</li>
+      <li><a href="{{ url_for('main.docs_page', slug='pricing') }}">价格与次数</a>——免费额度、次数包，以及哪些情况会退还次数。</li>
+    </ul>
+  </div>
+</section>

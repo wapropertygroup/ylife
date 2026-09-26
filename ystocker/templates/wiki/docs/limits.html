@@ -1,0 +1,106 @@
+{#  /docs/limits. Every figure is read from `facts` (routes._wiki_facts), i.e. from
+    quota.py and share.py, so this table cannot quote a ceiling the code no
+    longer enforces. The run-time ceiling (agents.RUN_TIMEOUT) and the queue
+    (agents._slot) are not in `facts`, so they are described without a number.
+    Refund rules are agents._refund_preflight and routes.api_agents_run. #}
+{% set reset_en = 'midnight Pacific time' if facts.quota_tz == 'America/Los_Angeles' else 'midnight (' ~ facts.quota_tz ~ ')' %}
+{% set reset_zh = '美国太平洋时间零点' if facts.quota_tz == 'America/Los_Angeles' else facts.quota_tz ~ ' 时区零点' %}
+<section id="why-limits">
+  <h2><span data-l="en">Why there are limits</span><span data-l="zh">为什么设有限额</span></h2>
+  <div data-l="en">
+    <p>Anyone with a Google account can sign in and start a run, and every run is paid for in model calls — a deep run on the default model makes dozens of calls to the most capable model. Without ceilings, a public sign-in button would be an open-ended bill.</p>
+    <p>A limit per person is not enough on its own, because there is no limit to how many Google accounts can sign in. So there is also a ceiling for the whole site, and it counts purchased runs too: it measures what the service can deliver in a day, not what has been paid for.</p>
+  </div>
+  <div data-l="zh">
+    <p>任何拥有 Google 账号的人都可以登录并发起分析，而每一次分析都要为模型调用付费——使用默认模型的一次深度分析，要调用最强的模型几十次。如果不设上限，一个公开的登录按钮就等于一张没有上限的账单。</p>
+    <p>仅按人设限还不够，因为能登录的 Google 账号数量没有上限。所以全站还有一个总上限，购买的次数同样计入其中：它衡量的是服务一天能交付多少，而不是有多少人付了费。</p>
+  </div>
+</section>
+
+<section id="ceilings">
+  <h2><span data-l="en">Every ceiling</span><span data-l="zh">全部上限</span></h2>
+  <div data-l="en">
+    <div class="w-table-wrap">
+      <table>
+        <thead><tr><th>Limit</th><th>Value</th><th>Why</th></tr></thead>
+        <tbody>
+          <tr><td>Free runs</td><td>{{ facts.free_runs }} per person per day</td><td>Each run is paid for in model calls. Free runs are always spent before purchased ones.</td></tr>
+          <tr><td>Site-wide runs</td><td>{{ facts.global_runs }} per day, shared by everyone</td><td>On its own, a per-person limit bounds nothing on a public site. Purchased runs count too: this is a capacity limit, not a billing one.</td></tr>
+          <tr><td>Runs in progress</td><td>They take turns; the rest wait as <em>queued</em></td><td>Runs share limited server capacity. A queued run that cannot start in time is cancelled and given back.</td></tr>
+          <tr><td>Length of a run</td><td>A fixed ceiling, far longer than a normal deep run</td><td>Stops a stuck run holding its place for ever. A run stopped this way is not given back.</td></tr>
+          <tr><td>Follow-up questions</td><td>{{ facts.chat_limit }} per person per day</td><td>Each is one quick model call — far cheaper than a run, but still billed. Counted apart from runs.</td></tr>
+          <tr><td>Shares</td><td>{{ facts.share_limit }} per person per day, all channels</td><td>Protects the site's email reputation; see <a href="{{ url_for('main.docs_page', slug='sharing') }}#daily-limit">Sharing a report</a>.</td></tr>
+          <tr><td>Share link lifetime</td><td>{{ facts.share_days }} days</td><td>Bounds how long a forwarded link keeps working.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div data-l="zh">
+    <div class="w-table-wrap">
+      <table>
+        <thead><tr><th>限额</th><th>数值</th><th>原因</th></tr></thead>
+        <tbody>
+          <tr><td>免费分析</td><td>每人每天 {{ facts.free_runs }} 次</td><td>每次分析都要为模型调用付费。系统总是先消耗免费次数，再动用购买的次数。</td></tr>
+          <tr><td>全站分析</td><td>每天共 {{ facts.global_runs }} 次，所有人共享</td><td>在公开网站上，仅按人设限什么也限制不住。购买的次数同样计入：这是容量上限，而非计费上限。</td></tr>
+          <tr><td>同时运行</td><td>轮流进行，其余显示为 <em>queued</em>（排队中）</td><td>分析共用的服务器资源有限。排队的分析如果迟迟无法开始，会被取消并退还次数。</td></tr>
+          <tr><td>单次运行时长</td><td>有固定上限，远长于一次正常的深度分析</td><td>防止卡住的分析一直占着位置。以这种方式被终止的分析不退还次数。</td></tr>
+          <tr><td>追问</td><td>每人每天 {{ facts.chat_limit }} 次</td><td>每个问题只是一次快速的模型调用，远比一次分析便宜，但仍需付费；与分析次数分开计算。</td></tr>
+          <tr><td>分享</td><td>每人每天 {{ facts.share_limit }} 次，各种方式合计</td><td>保护网站的邮件发送信誉，详见<a href="{{ url_for('main.docs_page', slug='sharing') }}#daily-limit">分享报告</a>。</td></tr>
+          <tr><td>分享链接有效期</td><td>{{ facts.share_days }} 天</td><td>限定被转发的链接还能用多久。</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section id="resets">
+  <h2><span data-l="en">When counters reset</span><span data-l="zh">计数何时重置</span></h2>
+  <div data-l="en">
+    <p>Every daily counter — your free runs, questions and shares, and the site-wide total — resets at {{ reset_en }}. A run is counted when you submit it, not when it finishes, so starting several at once does not get around the limit. A run that is given back returns to the day it was charged to, even if it failed after midnight. Purchased runs never reset: they carry over until you use them.</p>
+  </div>
+  <div data-l="zh">
+    <p>所有每日计数——你的免费分析、追问和分享次数，以及全站总数——都在{{ reset_zh }}重置。分析在提交时即计数，而不是在完成时，所以同时发起多个分析也绕不过上限。被退还的次数会回到当初扣除的那一天，即使分析是在午夜之后才失败的。购买的次数不会重置，会一直保留到你用完为止。</p>
+  </div>
+</section>
+
+<section id="refunds">
+  <h2><span data-l="en">When a run is given back</span><span data-l="zh">何时退还次数</span></h2>
+  <div data-l="en">
+    <ul>
+      <li><strong>Refused when you submit it</strong> — a ticker or date the form cannot accept, or a model that is not available: given back at once.</li>
+      <li><strong>Failed before any model was called</strong> — it never got a slot, or the analysis could not start: given back.</li>
+      <li><strong>Stopped because the model provider's daily capacity ran out</strong>, with no report: given back, even though some calls were made.</li>
+      <li><strong>Failed after the models started work</strong>: not given back, because by then an unknown number of model calls have been paid for.</li>
+      <li><strong>Broke near the end</strong>: the report is rebuilt from the sections already streamed, marked <em>recovered from stream</em>, and counts as a finished run.</li>
+    </ul>
+    <p>A free run goes back to that day's allowance, and a purchased run goes back to your balance.</p>
+  </div>
+  <div data-l="zh">
+    <ul>
+      <li><strong>提交时被拒绝</strong>——股票代码或日期无法识别，或所选模型不可用：立即退还。</li>
+      <li><strong>在调用任何模型之前失败</strong>——一直没排到运行位置，或分析未能启动：退还。</li>
+      <li><strong>因模型服务商当日额度用尽而中止</strong>，且没有产出报告：退还，即使已经调用过一些模型。</li>
+      <li><strong>模型开始工作之后失败</strong>：不退还，因为此时已经为数量不明的模型调用付了费。</li>
+      <li><strong>在接近尾声时出错</strong>：报告会用已经实时输出的章节重建，标注 <em>“由实时流恢复”</em>，按已完成的分析计算。</li>
+    </ul>
+    <p>免费次数退回当天的免费额度，购买的次数退回你的余额。</p>
+  </div>
+</section>
+
+<section id="at-a-limit">
+  <h2><span data-l="en">When you reach a limit</span><span data-l="zh">达到上限时</span></h2>
+  <div data-l="en">
+    <ul>
+      <li><strong>Out of free runs</strong> — the page offers run packs, when they are on sale. See <a href="{{ url_for('main.docs_page', slug='pricing') }}">Pricing and credits</a>.</li>
+      <li><strong>Site-wide ceiling reached</strong> — the page says so and offers no pack, because buying a run cannot add capacity that is not there. Try again after the reset.</li>
+      <li><strong>Out of questions or shares</strong> — they come back at the reset.</li>
+    </ul>
+  </div>
+  <div data-l="zh">
+    <ul>
+      <li><strong>免费次数用完</strong>——页面会提供次数包（在售时）。详见<a href="{{ url_for('main.docs_page', slug='pricing') }}">价格与次数</a>。</li>
+      <li><strong>达到全站上限</strong>——页面会明确告知，而且不会推荐购买次数包，因为花钱也买不来并不存在的容量。请在重置后再试。</li>
+      <li><strong>追问或分享次数用完</strong>——重置后即可恢复。</li>
+    </ul>
+  </div>
+</section>

@@ -1,0 +1,165 @@
+{% extends "wiki/_layout.html" %}
+{#  One docs page: sidebar, the content file for `page.slug`, an "On this page"
+    list built from that content's sections, and prev/next in reading order.
+
+    Content files (templates/wiki/docs/<slug>.html) are written as
+      <section id="anchor">
+        <h2><span data-l="en">…</span><span data-l="zh">…</span></h2>
+        <div data-l="en">…</div><div data-l="zh">…</div>
+      </section>
+    and nothing else is needed: the contents list is read off the section ids
+    and their h2s, so a heading cannot be renamed in the page and left stale in
+    a second list. `page` is None for an unknown slug, which renders the sidebar
+    and a not-found note with a 404 (routes.docs_page). #}
+{% set section = 'docs' %}
+
+{% block title %}{% if page %}{{ page.title.en }} — {% endif %}{{ product }} Docs{% endblock %}
+{% block title_en %}{% if page %}{{ page.title.en }} — {% endif %}{{ product }} Docs{% endblock %}
+{% block title_zh %}{% if page %}{{ page.title.zh }} — {% endif %}{{ product }} 文档{% endblock %}
+{% block wiki_head %}
+{% if page %}<meta name="description" content="{{ page.summary.en }}">{% endif %}
+{% endblock %}
+
+{% block wiki_body %}
+<div class="w-docs">
+  <details class="w-side" open data-wiki-side>
+    <summary><span><span data-l="en">Docs menu</span><span data-l="zh">文档目录</span></span></summary>
+    <div class="w-side-inner">
+      <div class="w-side-search">
+        <label for="wDocSearch"><span data-l="en">Search</span><span data-l="zh">搜索</span></label>
+        <input id="wDocSearch" type="search" autocomplete="off" spellcheck="false"
+               placeholder="Search docs" data-i18n-placeholder="wiki.search_ph">
+      </div>
+      {% for g in nav %}
+      <div data-wiki-group>
+        <p class="w-side-group">{{ w.t2(g.title) }}</p>
+        {% for p in g.pages %}
+        <a class="w-side-link{% if page and p.slug == page.slug %} is-current{% endif %}"
+           href="{{ url_for('main.docs_page', slug=p.slug) }}"
+           {% if page and p.slug == page.slug %}aria-current="page"{% endif %}
+           data-search="{{ (p.title.en ~ ' ' ~ p.title.zh ~ ' ' ~ p.summary.en ~ ' ' ~ p.summary.zh) | lower }}">
+          <b>{{ w.t2(p.title) }}</b>
+          <span class="w-side-desc">{{ w.t2(p.summary) }}</span>
+        </a>
+        {% endfor %}
+      </div>
+      {% endfor %}
+      <p class="w-side-empty" data-wiki-empty><span data-l="en">No page matches.</span><span data-l="zh">没有匹配的页面。</span></p>
+    </div>
+  </details>
+
+  <article class="w-doc" aria-labelledby="wDocTitle">
+    {% if page %}
+    <header class="w-doc-head">
+      <p class="w-kicker">{{ w.t2(group) }}</p>
+      <h1 class="w-doc-title" id="wDocTitle">{{ w.t2(page.title) }}</h1>
+      <p class="w-doc-lead">{{ w.t2(page.summary) }}</p>
+    </header>
+
+    <div class="w-prose" data-wiki-prose>
+      {% include "wiki/docs/" ~ page.slug ~ ".html" %}
+    </div>
+
+    <nav class="w-pager" aria-label="Docs pages">
+      {% if prev_page %}
+      <a href="{{ url_for('main.docs_page', slug=prev_page.slug) }}" rel="prev">
+        <small><span data-l="en">Previous</span><span data-l="zh">上一篇</span></small>
+        <b>← {{ w.t2(prev_page.title) }}</b>
+      </a>
+      {% endif %}
+      {% if next_page %}
+      <a class="is-next" href="{{ url_for('main.docs_page', slug=next_page.slug) }}" rel="next">
+        <small><span data-l="en">Next</span><span data-l="zh">下一篇</span></small>
+        <b>{{ w.t2(next_page.title) }} →</b>
+      </a>
+      {% endif %}
+    </nav>
+    {% else %}
+    <header class="w-doc-head">
+      <p class="w-kicker">404</p>
+      <h1 class="w-doc-title" id="wDocTitle"><span data-l="en">No such page</span><span data-l="zh">页面不存在</span></h1>
+      <p class="w-doc-lead">
+        <span data-l="en">That docs page does not exist — it may have moved. Everything that does is in the list on the left.</span>
+        <span data-l="zh">该文档页面不存在，可能已经移动。所有现有页面都在左侧目录中。</span>
+      </p>
+    </header>
+    {% endif %}
+  </article>
+
+  <aside class="w-toc" data-wiki-toc hidden>
+    <p class="w-kicker"><span data-l="en">On this page</span><span data-l="zh">本页内容</span></p>
+    <ol></ol>
+  </aside>
+</div>
+{% endblock %}
+
+{% block wiki_scripts %}
+<script>
+(function () {
+  // ── The phone layout starts with the menu folded ─────────────────────────
+  // Open in the markup and closed here, not the other way round: if this
+  // script never runs the menu is merely long, whereas closed-by-default with
+  // a failed script would leave a desktop reader with no navigation at all
+  // (the summary that could reopen it is hidden at that width).
+  const side = document.querySelector('[data-wiki-side]');
+  if (side && window.matchMedia('(max-width: 860px)').matches) side.open = false;
+
+  // ── Sidebar filter ───────────────────────────────────────────────────────
+  // Matches both languages' titles and summaries whatever the page language,
+  // so a reader can type either and find the page.
+  const input = document.getElementById('wDocSearch');
+  const empty = document.querySelector('[data-wiki-empty]');
+  if (input) {
+    input.addEventListener('input', () => {
+      const q = input.value.trim().toLowerCase();
+      let shown = 0;
+      document.querySelectorAll('[data-wiki-group]').forEach(group => {
+        let inGroup = 0;
+        group.querySelectorAll('.w-side-link').forEach(a => {
+          const hit = !q || (a.dataset.search || '').indexOf(q) !== -1;
+          a.hidden = !hit;
+          if (hit) inGroup += 1;
+        });
+        group.hidden = inGroup === 0;
+        shown += inGroup;
+      });
+      if (empty) empty.style.display = shown ? 'none' : 'block';
+    });
+  }
+
+  // ── On this page ─────────────────────────────────────────────────────────
+  // Read off the content's own sections, so it cannot disagree with them. The
+  // h2's markup is copied rather than its text: it carries both languages as
+  // [data-l] spans, and the copy then follows the toggle like the heading does.
+  const toc = document.querySelector('[data-wiki-toc]');
+  const prose = document.querySelector('[data-wiki-prose]');
+  if (!toc || !prose) return;
+  const sections = [...prose.querySelectorAll(':scope > section[id]')]
+    .filter(s => s.querySelector(':scope > h2'));
+  if (sections.length < 2) return;
+  const list = toc.querySelector('ol');
+  const links = new Map();
+  sections.forEach(s => {
+    const li = document.createElement('li');
+    const a = document.createElement('a');
+    a.href = '#' + s.id;
+    a.innerHTML = s.querySelector(':scope > h2').innerHTML;
+    li.appendChild(a);
+    list.appendChild(li);
+    links.set(s.id, a);
+  });
+  toc.hidden = false;
+
+  if (!('IntersectionObserver' in window)) return;
+  const obs = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (!e.isIntersecting) return;
+      links.forEach(a => a.classList.remove('is-active'));
+      const a = links.get(e.target.id);
+      if (a) a.classList.add('is-active');
+    });
+  }, { rootMargin: '-15% 0px -70% 0px' });
+  sections.forEach(s => obs.observe(s));
+})();
+</script>
+{% endblock %}

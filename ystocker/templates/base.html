@@ -466,6 +466,15 @@
     /* Hide x-cloak elements until Alpine.js initializes */
     [x-cloak] { display: none !important; }
     body.agents-embedded > main { max-width: none; padding: 12px; }
+    /* Paired-language blocks for long-form pages (/docs, /research, the /agents
+       landing): the English and Chinese text are both in the markup and <html
+       lang> picks one. i18n.js sets that attribute from a blocking <head> script,
+       so the right block is the one painted first, and I18n.setLang() flips it
+       with no re-render. Used where a page is prose rather than labels — a
+       paragraph per i18n.js key would be hundreds of entries for one article.
+       tests/test_wiki.py asserts every "en" block has its "zh" partner. */
+    html[lang^="zh"] [data-l="en"],
+    html:not([lang^="zh"]) [data-l="zh"] { display: none !important; }
   </style>
   {#  Open Graph / Twitter Card tags, for the one page that needs them:
       templates/shared.html overrides this to describe the report a
@@ -477,7 +486,7 @@
   {% block head_extra %}{% endblock %}
 </head>
 
-<body class="bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 min-h-screen flex flex-col{% if _agents_embedded %} agents-embedded{% endif %}"
+<body class="bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 min-h-screen flex flex-col{% if _agents_embedded %} agents-embedded{% endif %}{% block body_class %}{% endblock %}"
       x-data='{ navOpen: false, user: {{ current_user|tojson if current_user is defined else "{\"email\":\"\",\"name\":\"\",\"picture\":\"\"}"|safe }} }'>
 
   {% if not _agents_embedded %}
@@ -1029,6 +1038,13 @@
       key cannot drift from the other.
     #}
     <a href="{{ url_for('main.guide') }}" class="hover:text-brand transition" data-i18n="nav.guide">Guide</a>
+    &nbsp;·&nbsp;
+    {# The agents' docs and Research Lab, for the same reason Guide is here: a
+       signed-out reader has no account menu, and on trade-agents.com these are
+       the pages a first-time visitor is looking for. #}
+    <a href="{{ url_for('main.docs_home') }}" class="hover:text-brand transition" data-i18n="nav.docs">Docs</a>
+    &nbsp;·&nbsp;
+    <a href="{{ url_for('main.research_lab') }}" class="hover:text-brand transition" data-i18n="nav.research">Research Lab</a>
     &nbsp;·&nbsp;
     <a href="{{ url_for('main.contact') }}" class="hover:text-brand transition" data-i18n="footer.contact">Contact Us</a>
     &nbsp;·&nbsp;

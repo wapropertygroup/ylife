@@ -1,0 +1,9 @@
+{#  Helpers for the paired-language markup the wiki pages are written in.
+
+    `t2` renders a registry pair ({"en": ..., "zh": ...} from ystocker/wiki.py)
+    as two spans, one per language; base.html's [data-l] rule shows the one that
+    matches <html lang>. Autoescaped like any other expression: registry text is
+    plain text, never markup. #}
+{% macro t2(d) -%}
+<span data-l="en">{{ d.en }}</span><span data-l="zh">{{ d.zh }}</span>
+{%- endmacro %}

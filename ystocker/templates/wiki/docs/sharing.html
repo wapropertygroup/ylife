@@ -1,0 +1,95 @@
+{#  /docs/sharing. Numbers come from `facts` (routes._wiki_facts): the link
+    lifetime is share.TTL_DAYS and the daily cap quota.limit_share(). Behaviour
+    is described from share.py, static/share.js, _share_modal.html, shared.html,
+    share_card.py and routes.api_agents_share*; re-read them before editing. #}
+{% set reset_en = 'midnight Pacific time' if facts.quota_tz == 'America/Los_Angeles' else 'midnight (' ~ facts.quota_tz ~ ')' %}
+{% set reset_zh = '美国太平洋时间零点' if facts.quota_tz == 'America/Los_Angeles' else facts.quota_tz ~ ' 时区零点' %}
+<section id="how-to-share">
+  <h2><span data-l="en">Sharing a report</span><span data-l="zh">如何分享</span></h2>
+  <div data-l="en">
+    <p><strong>Share</strong> sits in the header beside your account, on every page. Pick one of your finished reports — the one you are reading is already selected — add a note if you like, and choose how to send it. Every channel creates the same kind of link: it opens without an account, and each share makes a new one.</p>
+  </div>
+  <div data-l="zh">
+    <p>每个页面顶部、账号旁边都有“分享”按钮。选一份你已完成的报告（正在阅读的那份会自动选中），可以附上一段留言，再选择发送方式。无论选哪种方式，生成的都是同一种链接：无需账号即可打开，而且每分享一次都会生成一个新链接。</p>
+  </div>
+</section>
+
+<section id="channels">
+  <h2><span data-l="en">Three ways to send it</span><span data-l="zh">三种发送方式</span></h2>
+  <div data-l="en">
+    <div class="w-table-wrap">
+      <table>
+        <thead><tr><th>Channel</th><th>What happens</th><th>What we learn about the recipient</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Email</strong></td><td>We send the report itself — ending at a whole section if it is very long — with your note and a button to open it. The email names you, by your address, as the person who shared it.</td><td>The address you typed, since we send the mail.</td></tr>
+          <tr><td><strong>Text message</strong></td><td>Your phone's Messages app opens with the link ready, and you pick the contact there. On a computer with no messaging app, copy the link instead.</td><td>Nothing. No phone number is collected.</td></tr>
+          <tr><td><strong>WeChat</strong></td><td>A QR code appears; scanning it with WeChat's own scanner opens the report. WeChat gives an ordinary website no way to hand it a link, so the link travels as a QR code instead.</td><td>Nothing.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>You cannot email a report to your own address — the completion email already went there. If an email fails to send, the link still works: copy it from the dialog and pass it on yourself.</p>
+  </div>
+  <div data-l="zh">
+    <div class="w-table-wrap">
+      <table>
+        <thead><tr><th>方式</th><th>发生什么</th><th>我们对接收方了解多少</th></tr></thead>
+        <tbody>
+          <tr><td><strong>邮件</strong></td><td>我们直接发送报告正文（篇幅过长时在某个完整章节处截止），附上你的留言和打开报告的按钮。邮件会写明分享者是你，并显示你的邮箱地址。</td><td>你填写的邮箱地址——因为邮件由我们发出。</td></tr>
+          <tr><td><strong>短信</strong></td><td>手机自带的“信息”应用会打开，链接已填好，由你在其中选择联系人。电脑上如果没有短信应用，请改为复制链接。</td><td>一无所知，我们不收集任何手机号。</td></tr>
+          <tr><td><strong>微信</strong></td><td>页面显示一个二维码，用微信“扫一扫”即可打开报告。微信不允许普通网站直接把链接交给它，所以改用二维码来传递链接。</td><td>一无所知。</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>报告不能通过邮件分享给你自己——完成通知邮件已经发到这个地址了。如果邮件发送失败，链接依然有效：从对话框中复制链接，自行转发即可。</p>
+  </div>
+</section>
+
+<section id="what-they-see">
+  <h2><span data-l="en">What the recipient sees</span><span data-l="zh">对方看到什么</span></h2>
+  <div data-l="en">
+    <p>A read-only page, no sign-in needed: the whole report as a conversation, the decision, the models that produced it, a PDF download and your note. You appear as <code>alice@…</code> — your address masked — because anyone the link reaches can open that page. It does not show your follow-up questions, your other reports or the run's log.</p>
+    <p>Pasted into a chat app that shows link previews, the link unfolds as a card with the ticker, the first line of the decision, the analysis date and the site's mark, in the report's language. Your note is never part of the preview.</p>
+  </div>
+  <div data-l="zh">
+    <p>对方看到的是一个只读页面，无需登录：完整的对话式报告、最终决策、生成报告的模型、PDF 下载，以及你的留言。你的身份显示为 <code>alice@…</code>，邮箱被部分隐藏——因为任何拿到链接的人都能打开这个页面。页面不会显示你的追问、你的其他报告或运行日志。</p>
+    <p>把链接粘贴到支持链接预览的聊天应用中，会显示一张卡片：股票代码、决策的第一行、分析日期和网站标志，语言与报告一致。你的留言永远不会出现在预览里。</p>
+  </div>
+</section>
+
+<section id="expiry">
+  <h2><span data-l="en">Expiry and revoking</span><span data-l="zh">有效期与撤回</span></h2>
+  <div data-l="en">
+    <p>A link stops working after {{ facts.share_days }} days. To end it sooner, press <strong>Revoke</strong> in the share dialog right after making it. There is no list of past links to revoke later, so a link you keep stays valid until it expires. Revoking one link leaves your other shares of the same report working. Anyone who opens a dead link is told it is no longer valid and asked to request a fresh one.</p>
+  </div>
+  <div data-l="zh">
+    <p>链接在 {{ facts.share_days }} 天后失效。如需提前终止，请在生成链接后，直接在分享对话框中点击“撤销”。目前没有可供事后撤回的历史链接列表，因此当时没有撤销的链接，会一直有效到过期为止。撤销某一个链接，不影响你对同一份报告的其他分享。打开已失效链接的人会看到“此链接已失效”的提示，并被建议向你索取新链接。</p>
+  </div>
+</section>
+
+<section id="before-you-send">
+  <h2><span data-l="en">Before you send</span><span data-l="zh">发送之前</span></h2>
+  <div data-l="en">
+    <div class="w-callout is-warn">
+      <p><strong>Anyone holding the link can read the report.</strong> A share link is a secret address, not a sign-in, so forwarding it shares the report again. Revoking cannot recall what was already read — a page someone opened, a PDF they downloaded, a preview already shown in a chat.</p>
+      <p>If the run used your holdings from My Assets, the dialog warns you before you pass the link on: the report may quote your positions or weights.</p>
+    </div>
+  </div>
+  <div data-l="zh">
+    <div class="w-callout is-warn">
+      <p><strong>任何拿到链接的人都能阅读报告。</strong>分享链接是一个保密的网址，而不是登录凭证，因此转发链接就等于再次分享。撤回也无法收回已经被阅读的内容——别人已经打开的页面、已经下载的 PDF、聊天里已经显示的预览，都收不回来。</p>
+      <p>如果这次分析使用了你在“我的资产”中的持仓信息，对话框会在你转发前提醒：报告中可能提到你的具体仓位或占比。</p>
+    </div>
+  </div>
+</section>
+
+<section id="daily-limit">
+  <h2><span data-l="en">The daily limit</span><span data-l="zh">每日上限</span></h2>
+  <div data-l="en">
+    <p>You can make {{ facts.share_limit }} shares a day, on any mix of channels; the count resets at {{ reset_en }}. A share is counted when its link is made, and is not given back if the email then fails to send.</p>
+    <p>The limit is low for a different reason than the run limits. A share costs almost nothing to compute, but every email share sends mail from our domain to an address we have never seen. What has to be bounded is how much unsolicited mail one account can cause before the domain is reported.</p>
+  </div>
+  <div data-l="zh">
+    <p>你每天最多可以分享 {{ facts.share_limit }} 次，各种方式合并计算，计数在{{ reset_zh }}重置。每生成一个链接就计一次；即使随后邮件发送失败，这一次也不会退还。</p>
+    <p>这个上限定得低，理由和分析次数的上限不同。分享几乎不耗费算力，但每次邮件分享，都是从我们的域名向一个我们从未接触过的地址发信。真正需要限制的，是单个账号在我们的域名被举报之前，能发出多少封对方并未要求的邮件。</p>
+  </div>
+</section>

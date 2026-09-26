@@ -1,0 +1,87 @@
+{#  /docs/overview. Numbers come from `facts` (routes._wiki_facts), never typed
+    in, so this page cannot quote a roster or a limit the code no longer has. #}
+<section id="what-it-is">
+  <h2><span data-l="en">What it is</span><span data-l="zh">它是什么</span></h2>
+  <div data-l="en">
+    <p>{{ product }} is a research desk made of language-model agents. You give it one ticker and one date. It seats a team of analysts to study that company as of that date, makes a bull and a bear argue over what they found, has a trader turn the verdict into a plan and a risk team attack the plan, and ends with a portfolio manager signing a rating.</p>
+    <p>The point is not to replace your judgment. It is to put a whole desk's worth of argument in front of you — every turn in the open, with the evidence each role worked from — so you can see where a conclusion came from, and where it is weakest.</p>
+  </div>
+  <div data-l="zh">
+    <p>{{ product }} 是一个由大语言模型智能体组成的投研台。你给它一只股票和一个日期，它会组建一支分析师团队，研究这家公司在那一天的状况；让看涨与看跌研究员就研究结果展开辩论；由交易员把结论变成交易计划，再由风险团队对计划发起质询；最后由投资组合经理签发评级。</p>
+    <p>它的目的不是替你做判断，而是把一整个投研团队的论证摆在你面前——每一轮发言都公开，并附上每个角色所依据的证据——让你看清结论从何而来，又在哪里最站不住脚。</p>
+  </div>
+</section>
+
+<section id="what-a-run-produces">
+  <h2><span data-l="en">What a run produces</span><span data-l="zh">一次分析产出什么</span></h2>
+  <div data-l="en">
+    <ul>
+      <li><strong>A report written as a conversation</strong> — one turn per role, in the order the desk spoke, each with its own link.</li>
+      <li><strong>A decision</strong> — exactly one of Buy, Overweight, Hold, Underweight or Sell, with the portfolio manager's reasoning and the price levels and sizing behind it.</li>
+      <li><strong>A PDF</strong> of the whole report, charts included, and an email to you when the run finishes.</li>
+      <li><strong>A link you can share</strong> with somebody who has no account, and take back later.</li>
+    </ul>
+  </div>
+  <div data-l="zh">
+    <ul>
+      <li><strong>一份以对话形式呈现的报告</strong>——每个角色一轮发言，按投研台的发言顺序排列，每一轮都有独立链接。</li>
+      <li><strong>一个决策</strong>——在买入、增持、持有、减持、卖出中五选一，附投资组合经理的理由，以及背后的价位与仓位建议。</li>
+      <li><strong>一份 PDF</strong>，包含完整报告与图表；分析完成后还会发邮件通知你。</li>
+      <li><strong>一个可分享的链接</strong>，对方无需账号即可打开，你也可以随时撤回。</li>
+    </ul>
+  </div>
+</section>
+
+<section id="boundaries">
+  <h2><span data-l="en">Boundaries</span><span data-l="zh">边界</span></h2>
+  <div data-l="en">
+    <p>{{ product }} is built for research. It places no orders, connects to no brokerage account and holds no money. A report is a model's argument, not investment advice: it can be wrong, and it can be confidently wrong. Nothing here is a recommendation to buy or sell anything — the rating a run ends on is the desk's conclusion, and the decision is yours.</p>
+  </div>
+  <div data-l="zh">
+    <p>{{ product }} 为研究而生。它不下单、不连接任何券商账户，也不持有任何资金。报告是模型的论证，而不是投资建议：它可能出错，而且可能错得很自信。本站的任何内容都不构成买入或卖出任何资产的建议——一次分析最后给出的评级只是投研台的结论，决定权在你。</p>
+  </div>
+</section>
+
+<section id="core-capabilities">
+  <h2><span data-l="en">Core capabilities</span><span data-l="zh">核心能力</span></h2>
+  <div data-l="en">
+    <ul>
+      <li><strong>{{ facts.n_base }} analysts on every run</strong> — market, sentiment, news, earnings, quality and valuation — and {{ facts.n_astock }} for China A-shares, which add policy, hot-money and lock-up specialists.</li>
+      <li><strong>Structured debate</strong> — {{ facts.debate_rounds }} bull-versus-bear rounds and {{ facts.risk_rounds }} risk rounds by default, each argued from the analysts' reports.</li>
+      <li><strong>Dated to the run</strong> — the data tools are asked for what was known on the run's date, so a report dated in the past is written from that day's information, as far as each source can supply it.</li>
+      <li><strong>Streams as it works</strong> — each section appears on the page the moment its author finishes, so a long run can be read while it is still going.</li>
+      <li><strong>Your choice of model and thinking depth</strong>, recorded on every report so a cheap-tier run never passes for the most capable one.</li>
+      <li><strong>English or Chinese</strong> — the report, its PDF and the completion email are written in the language the run was started in.</li>
+    </ul>
+  </div>
+  <div data-l="zh">
+    <ul>
+      <li><strong>每次分析 {{ facts.n_base }} 位分析师</strong>——市场、情绪、新闻、盈利、质量与估值；A 股分析为 {{ facts.n_astock }} 位，额外加入政策、游资与解禁三位专项分析师。</li>
+      <li><strong>结构化辩论</strong>——默认进行 {{ facts.debate_rounds }} 轮多空辩论与 {{ facts.risk_rounds }} 轮风险辩论，每一轮都以分析师报告为依据。</li>
+      <li><strong>以分析日期为准</strong>——数据工具只被询问在分析日期当天已知的信息，因此一份日期在过去的报告，会在各数据源所能提供的范围内，基于当天的信息写成。</li>
+      <li><strong>边写边看</strong>——每个章节在作者写完的那一刻就出现在页面上，耗时较长的分析也可以边运行边阅读。</li>
+      <li><strong>可自选模型与思考深度</strong>，并记录在每份报告上，低价档位的分析不会被误认为最高档位。</li>
+      <li><strong>中文或英文</strong>——报告、PDF 和完成通知邮件都使用发起分析时选择的语言。</li>
+    </ul>
+  </div>
+</section>
+
+<section id="where-next">
+  <h2><span data-l="en">Where to go next</span><span data-l="zh">接下来读什么</span></h2>
+  <div data-l="en">
+    <ul>
+      <li><a href="{{ url_for('main.docs_page', slug='quick-start') }}">Quick start</a> — your first report in five steps.</li>
+      <li><a href="{{ url_for('main.docs_page', slug='workflow') }}">How a run works</a> — every stage, and what each one hands the next.</li>
+      <li><a href="{{ url_for('main.docs_page', slug='desk') }}">The desk</a> — every role on the team.</li>
+      <li><a href="{{ url_for('main.research_lab') }}">Research Lab</a> — what we have measured, including where we were wrong.</li>
+    </ul>
+  </div>
+  <div data-l="zh">
+    <ul>
+      <li><a href="{{ url_for('main.docs_page', slug='quick-start') }}">快速开始</a>——五步完成第一份报告。</li>
+      <li><a href="{{ url_for('main.docs_page', slug='workflow') }}">一次分析如何运作</a>——每个阶段，以及它交给下一阶段什么。</li>
+      <li><a href="{{ url_for('main.docs_page', slug='desk') }}">投研团队</a>——团队中的每个角色。</li>
+      <li><a href="{{ url_for('main.research_lab') }}">研究实验室</a>——我们测量过的东西，包括我们曾经错在哪里。</li>
+    </ul>
+  </div>
+</section>

@@ -1,0 +1,124 @@
+{#  /docs/reports. The one enforced number here (follow-up questions) comes from
+    `facts` (routes._wiki_facts). Behaviour is described from agents.html (the
+    owner's view and the anonymous sample view), report_pdf.py, report_charts.py,
+    report_email.py and the /api/agents/* routes; re-read them before editing a
+    claim. #}
+<section id="conversation">
+  <h2><span data-l="en">The conversation view</span><span data-l="zh">对话视图</span></h2>
+  <div data-l="en">
+    <p>A finished report reads as the desk's conversation: one turn per role, in speaking order, under a divider for each team, with every role in its own colour and icon.</p>
+    <ul>
+      <li><strong>Jump bar</strong> — the chips above the report reach any speaker and mark the one you are reading.</li>
+      <li><strong>Folding</strong> — click a name to fold that turn to one line. <em>Collapse all</em>, in the jump bar or the floating control beside the report, is remembered for your next report.</li>
+      <li><strong>Turn links</strong> — the link icon beside a name copies a link that opens the report at that turn.</li>
+    </ul>
+  </div>
+  <div data-l="zh">
+    <p>已完成的报告以投研台内部对话的形式呈现：每个角色一轮发言，按发言顺序排列，每个团队前有分隔标题，每个角色都有固定的颜色和图标。</p>
+    <ul>
+      <li><strong>跳转栏</strong>——报告上方的一排标签可直达任意发言者，并标出你正在阅读的那一位。</li>
+      <li><strong>折叠</strong>——点击名字即可把这一轮折叠成一行。跳转栏和报告旁的浮动按钮都提供“全部折叠”，页面会记住这个选择，下次打开报告时沿用。</li>
+      <li><strong>发言链接</strong>——名字旁的链接图标会复制一条链接，打开后直接定位到这一轮发言。</li>
+    </ul>
+  </div>
+</section>
+
+<section id="decision">
+  <h2><span data-l="en">The decision</span><span data-l="zh">最终决策</span></h2>
+  <div data-l="en">
+    <p>Above the conversation is the decision: the portfolio manager's rating, exactly one of Buy, Overweight, Hold, Underweight or Sell, argued in full — with price levels and position size — in the last turn. If no rating can be read from that turn, it shows <strong>REVIEW</strong> rather than a guessed Hold.</p>
+  </div>
+  <div data-l="zh">
+    <p>对话上方是最终决策：投资组合经理的评级，以英文显示，五选一——Buy（买入）、Overweight（增持）、Hold（持有）、Underweight（减持）、Sell（卖出）；完整论证以及价位与仓位，都在最后一轮发言中。如果无法从这一轮读出评级，决策处会显示 <strong>REVIEW</strong>，而不是替你猜一个“持有”。</p>
+  </div>
+</section>
+
+<section id="labels">
+  <h2><span data-l="en">What the header tells you</span><span data-l="zh">报告顶部的提示</span></h2>
+  <div data-l="en">
+    <ul>
+      <li><strong>Model</strong> — the provider, model and thinking depth the run started with.</li>
+      <li><strong>ran on fallback model</strong> — your model hit its daily limit with the provider mid-run, and the model named finished the run. Part of the report is a weaker model's work.</li>
+      <li><strong>recovered from stream</strong> — the run failed before filing its report, which was rebuilt from the sections already streamed; the final synthesis may be missing.</li>
+    </ul>
+    <p>Both caveats are repeated in the PDF and the completion email.</p>
+  </div>
+  <div data-l="zh">
+    <ul>
+      <li><strong>模型</strong>——本次分析启动时使用的服务商、模型与思考深度。</li>
+      <li><strong>“已降级模型”</strong>——你选的模型在运行途中用完了服务商的当日额度，由标出的模型接手完成。报告中有一部分出自能力较弱的模型。</li>
+      <li><strong>“由实时流恢复”</strong>——分析在生成报告前失败，报告是用已经实时输出的章节重建的，最后的综合结论可能缺失。</li>
+    </ul>
+    <p>这两项提示也会出现在 PDF 和完成通知邮件中。</p>
+  </div>
+</section>
+
+<section id="while-running">
+  <h2><span data-l="en">While it runs</span><span data-l="zh">运行期间</span></h2>
+  <div data-l="en">
+    <p>A deep run takes ten minutes or more. Each role's section appears as soon as it is written, so you can read while it works; a run waiting its turn shows as <em>queued</em>. Closing the tab does not stop it — the report will be in your history and your inbox.</p>
+  </div>
+  <div data-l="zh">
+    <p>一次深度分析需要十分钟或更久。每个角色的章节一写完就会出现在页面上，你可以边运行边阅读；正在排队的分析显示为 <em>queued</em>（排队中）。关闭页面也不会中断分析——完成后，报告会出现在历史记录和你的邮箱里。</p>
+  </div>
+</section>
+
+<section id="history">
+  <h2><span data-l="en">Your history</span><span data-l="zh">历史记录</span></h2>
+  <div data-l="en">
+    <p><strong>Recent runs</strong> lists your runs by analysis date, newest first, with <em>View</em> and <em>PDF</em>. Search by ticker (<code>NV</code> finds <code>NVDA</code>) or by date (<code>2026-08</code> for a month) — each hit shows the portfolio manager's turn in full — filter by status, or click a ticker to see only its runs.</p>
+  </div>
+  <div data-l="zh">
+    <p><strong>最近运行</strong>按分析日期列出你的分析，最新的在前，并提供“查看”和“PDF”。可按股票代码（输入 <code>NV</code> 即可找到 <code>NVDA</code>）或日期（如 <code>2026-08</code> 查找整个月）搜索，每条结果都会完整展示投资组合经理的发言；也可按状态筛选，或点击某个代码只看它的分析。</p>
+  </div>
+</section>
+
+<section id="pdf">
+  <h2><span data-l="en">The PDF</span><span data-l="zh">PDF 报告</span></h2>
+  <div data-l="en">
+    <p>The PDF is typeset as a research note: a first page with the decision, the run's facts, caveats and contents; charts of the prices the agents analysed — moving averages, volume, RSI, and the 52-week range against the report's price target — whenever that data is available; then each team and speaker, bookmarked. It is stamped with the time it was generated, in your own time zone.</p>
+  </div>
+  <div data-l="zh">
+    <p>PDF 按研究报告的格式排版：首页包含决策、本次运行的基本信息、各项提示和目录；只要能取到相应数据，就附上智能体所分析价格的图表——均线、成交量、RSI，以及 52 周区间与报告目标价的对照；随后是各个团队和发言者的内容，并生成书签。文档上的生成时间按你所在的时区标注。</p>
+  </div>
+</section>
+
+<section id="email">
+  <h2><span data-l="en">The completion email</span><span data-l="zh">完成通知邮件</span></h2>
+  <div data-l="en">
+    <p>When a run finishes, the report is emailed once to the address you signed in with, in the report's language: the decision, models and caveats first, then the report. Gmail clips mail over about 102 KB, so a long report stops at the end of a whole section with a link to the rest — and the portfolio manager's section is always kept. A run that ends in an error sends nothing.</p>
+  </div>
+  <div data-l="zh">
+    <p>分析完成后，报告会以报告本身的语言发送到你登录时使用的邮箱，只发一次：开头是决策、所用模型和各项提示，然后是报告正文。Gmail 会截断超过约 102 KB 的邮件，所以篇幅很长的报告会停在某个完整章节的末尾，并附上查看全文的链接——投资组合经理的章节则总会保留。以出错告终的分析不会发送邮件。</p>
+  </div>
+</section>
+
+<section id="follow-up">
+  <h2><span data-l="en">Follow-up questions</span><span data-l="zh">追问</span></h2>
+  <div data-l="en">
+    <p>Under a finished report, <em>Ask the Portfolio Manager</em> answers questions about it — from the report alone, in its language, and saying so when the report does not cover the question. Each question is one quick model call, not a run: {{ facts.chat_limit }} a day across your reports, saved with the report, and never part of a shared one.</p>
+  </div>
+  <div data-l="zh">
+    <p>在已完成的报告下方，可以通过“追问投资组合经理”就报告提问。回答只依据这份报告、使用报告的语言；报告没有涉及的问题，它会直接说明。每个问题只是一次快速的模型调用，而不是一次分析：每天在所有报告中累计可问 {{ facts.chat_limit }} 次，问答随报告保存，分享出去的报告不会包含这些问答。</p>
+  </div>
+</section>
+
+<section id="who-can-see">
+  <h2><span data-l="en">Who can see a report</span><span data-l="zh">谁能看到报告</span></h2>
+  <div data-l="en">
+    <p>Your history, and a report's full view with its questions and sharing, belong to your account: another signed-in user who opens your report's address gets a not-found error. A finished report can still be read anonymously, without your address:</p>
+    <ul>
+      <li>visitors who are not signed in are shown a random sample of finished reports;</li>
+      <li>anyone not signed in who opens a report's address — turn links included — gets that anonymous view: the report, decision, models and PDF, without your questions. Unlike a share link, it does not expire and cannot be revoked.</li>
+    </ul>
+    <p>Runs that used your holdings from My Assets are excluded from both. To choose your readers, use a <a href="{{ url_for('main.docs_page', slug='sharing') }}">share link</a>.</p>
+  </div>
+  <div data-l="zh">
+    <p>你的历史记录，以及报告的完整视图（含追问和分享），都只属于你的账号：其他已登录用户打开你的报告地址，只会看到“找不到”的错误。不过，已完成的报告仍可能被匿名阅读，页面上不会出现你的邮箱：</p>
+    <ul>
+      <li>未登录的访客会看到随机挑选的若干份已完成报告作为样例；</li>
+      <li>未登录的人打开报告地址（包括发言链接），看到的也是这种匿名视图：报告、决策、所用模型和 PDF，但不含你的追问。与分享链接不同，报告地址不会过期，也无法撤回。</li>
+    </ul>
+    <p>使用了你在“我的资产”中持仓信息的分析，不会以上述任何方式公开。想自己决定谁能阅读，请使用<a href="{{ url_for('main.docs_page', slug='sharing') }}">分享链接</a>。</p>
+  </div>
+</section>

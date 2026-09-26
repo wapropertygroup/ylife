@@ -43,7 +43,8 @@ _BARE_HIDDEN = re.compile(r"\shidden(?=[\s/>])")
 
 
 def _iter_templates() -> list[Path]:
-    return sorted(TEMPLATES.glob("*.html"))
+    # rglob so templates/wiki/ is checked too -- see test_theme_classes.templates().
+    return sorted(TEMPLATES.rglob("*.html"))
 
 
 def _find_open_tag(html: str, ident: str) -> str | None:

@@ -316,7 +316,7 @@ def valid_ticker(ticker: str) -> bool:
 
 
 def analysts_for_ticker(ticker: str) -> tuple[str, ...]:
-    """Seven analysts for A shares; the established four for other markets."""
+    """Nine analysts for A shares; the base six (BASE_ANALYSTS) everywhere else."""
     return ASTOCK_ANALYSTS if _ASHARE_RE.match((ticker or "").strip().upper()) else BASE_ANALYSTS
 
 # One run at a time; further submissions queue behind it.
@@ -1828,6 +1828,13 @@ def submit(ticker: str, day: str, user: str,
         _date.fromisoformat(day)
     except ValueError:
         return None, "Invalid date"
+    # The graph refuses a future trade date itself (trading_graph.
+    # _validate_trade_date, against this same process clock), but only once the
+    # child is running -- after the quota was taken, and a failure there is not
+    # one _refund_preflight gives back. Refused here instead, where it is free:
+    # the route refunds on any submit() error. Found while writing /docs.
+    if day > _date.today().isoformat():
+        return None, "Date is in the future"
 
     # Ignored wholesale when the deployment has taken the choice away, so that
     # the kill switch cannot be bypassed by a client that keeps sending one.

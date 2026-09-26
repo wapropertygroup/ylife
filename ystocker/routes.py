@@ -4366,6 +4366,94 @@ def videos():
 
 
 # ---------------------------------------------------------------------------
+# The TradeAgents wiki: product docs (/docs) and the Research Lab (/research)
+# ---------------------------------------------------------------------------
+#
+# Reached under trade-agents.com with no nginx change: that vhost proxies every
+# path but `/` straight through to this app. The page list, titles and dates live
+# in ystocker/wiki.py; each page's body is a content file under templates/wiki/.
+
+def _wiki_facts() -> dict[str, Any]:
+    """The live numbers the docs quote, read from the modules that enforce them.
+
+    A page that said "3 free runs a day" in prose would go on saying it after the
+    quota changed, so every limit, price and model a doc mentions is passed in
+    from the code that actually applies it — the same reason /guide reads its
+    pack ladder from credits rather than from its own table. Nothing here may
+    raise: a docs page must render even when, say, the credits module cannot.
+    """
+    from ystocker import agent_models, agent_roles, quota, share, wiki
+    from ystocker.agents import (ASTOCK_ANALYSTS, BASE_ANALYSTS, DEFAULT_DEBATE_ROUNDS,
+                                 DEFAULT_RISK_ROUNDS, model_choice_enabled)
+
+    return {
+        "free_runs": quota.limit_default(),
+        "global_runs": quota.limit_global(),
+        "chat_limit": quota.limit_chat(),
+        "share_limit": quota.limit_share(),
+        "quota_tz": quota.QUOTA_TZ,
+        "share_days": share.TTL_DAYS,
+        "debate_rounds": DEFAULT_DEBATE_ROUNDS,
+        "risk_rounds": DEFAULT_RISK_ROUNDS,
+        "desk": wiki.desk(agent_roles.ROLES, BASE_ANALYSTS, ASTOCK_ANALYSTS),
+        "n_base": len(BASE_ANALYSTS),
+        "n_astock": len(ASTOCK_ANALYSTS),
+        "models": agent_models.options_public(),
+        "model_choice": model_choice_enabled(),
+        "agent_packs": _agent_packs_for_page(),
+    }
+
+
+@bp.route("/docs")
+def docs_home():
+    from ystocker import wiki
+    # A redirect rather than a second address for the same page, so the sidebar's
+    # "current" marker and a shared link agree. Query args ride along: ?lang=zh is
+    # how a Chinese reader's links carry their language between pages.
+    return redirect(url_for("main.docs_page", slug=wiki.DEFAULT_DOC, **request.args.to_dict()))
+
+
+@bp.route("/docs/<slug>")
+def docs_page(slug):
+    from ystocker import wiki
+
+    page = wiki.doc(slug)
+    prev_page, next_page = wiki.neighbours(slug)
+    # An unknown slug still gets the sidebar, so a stale link lands somewhere the
+    # reader can navigate from rather than on a bare 404.
+    return render_template(
+        "wiki/doc.html",
+        page=page,
+        nav=wiki.docs_nav(),
+        group=wiki.group_title(page["group"]) if page else None,
+        prev_page=prev_page, next_page=next_page,
+        latest_posts=wiki.posts()[:3],
+        facts=_wiki_facts(),
+        peer_groups=list(PEER_GROUPS.keys()),
+    ), (200 if page else 404)
+
+
+@bp.route("/research")
+def research_lab():
+    from ystocker import wiki
+    return render_template("wiki/research_index.html", posts=wiki.posts(),
+                           peer_groups=list(PEER_GROUPS.keys()))
+
+
+@bp.route("/research/<slug>")
+def research_post(slug):
+    from ystocker import wiki
+
+    entry = wiki.post(slug)
+    if entry is None:
+        return render_template("wiki/research_index.html", posts=wiki.posts(),
+                               missing=slug, peer_groups=list(PEER_GROUPS.keys())), 404
+    newer, older = wiki.post_neighbours(slug)
+    return render_template("wiki/post.html", post=entry, newer=newer, older=older,
+                           peer_groups=list(PEER_GROUPS.keys()))
+
+
+# ---------------------------------------------------------------------------
 # Federal Reserve H.4.1 balance-sheet page
 # ---------------------------------------------------------------------------
 
@@ -4559,6 +4647,14 @@ def agents_page():
     from ystocker import quota
     from ystocker.agent_roles import roles_json
 
+    # The landing page's figures (roster, rounds, limits, prices), only for the
+    # view that renders it: signed out and full-page. The embedded panel is too
+    # small for a landing and a signed-in reader is here to run something.
+    landing = None
+    if not email and not embedded:
+        from ystocker import wiki
+        landing = {**_wiki_facts(), "posts": wiki.posts()}
+
     return render_template(
         "agents.html",
         peer_groups=list(PEER_GROUPS.keys()),
@@ -4575,6 +4671,7 @@ def agents_page():
         # Only consulted by the not-signed-in branch, which shows a sample of
         # finished reports instead of a dead end.
         showcase=showcase_enabled(),
+        landing=landing,
     )
 
 

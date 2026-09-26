@@ -216,6 +216,9 @@ Each app follows the same pattern:
   recipient/note validation and the field allowlist that keeps the owner's address
   out of an unauthenticated response. Holds no mail code — the mail is
   `report_email.send_share()`, so there is one renderer.
+- `wiki.py` — the registry behind `/docs` and `/research` (page list, dates,
+  bilingual titles) and the `/agents` landing's roster. Pure; see "The
+  TradeAgents wiki" below.
 - `portfolio.py` / `portfolio_csv.py` / `funddata.py` / `lookthrough.py` /
   `assets.py` — the `/assets` asset tracker and its 穿透 (look-through). See the
   section below; `lookthrough.py` is pure and injectable, which is what makes the
@@ -1420,6 +1423,103 @@ Note the free tier premium-gates `EARNINGS_ESTIMATES` and
 `EARNINGS_CALL_TRANSCRIPT`. Those degrade to a stated data gap rather than
 failing the run, so the practical purchase is announcement dates, release timing
 and the drift figures that depend on them.
+
+### The TradeAgents wiki (`/docs`, `/research`) and the `/agents` landing
+
+Modelled on vibetrading.wiki: product docs with a sidebar, an "On this page" list
+and prev/next; a Research Lab of long-form, dated posts; and a landing page in
+the same editorial style (serif display type, mono kickers, a paper-and-grid
+plane). No nginx change was needed — the trade-agents.com vhost proxies every
+path but `/` straight through, so `trade-agents.com/docs` just works.
+
+**The landing is the signed-out `/agents`, and only the full-page one.**
+`routes.agents_page` passes `landing` only when nobody is signed in and the page
+is not `?embed=1` — the floating launcher's frame is 240px tall and keeps its
+compact sign-in card, and a signed-in reader is there to run something. The
+landing is split into `_agents_landing_top.html` and `_agents_landing_bottom.html`
+with the sample-report block left *between* them in `agents.html`, because that
+block's script also serves a shared `?job=` link and its ids (`agSample`,
+`agSampleCard`) are read there; moving the markup into a partial would have
+split one script's DOM across two files.
+
+**The page list is a registry, the bodies are files.** `ystocker/wiki.py` holds
+every docs page and post — slug, group, dates, and titles/summaries/tags as
+`{"en", "zh"}` pairs — and the sidebar, pager, index and browser tab all read it.
+Bodies live in `templates/wiki/docs/<slug>.html` and
+`templates/wiki/research/<slug>.html`. `tests/test_wiki.py` asserts both
+directions: an entry with no file is a 500 on click, and a file with no entry is
+an orphan that silently stops being linked.
+
+**Long-form text is paired `data-l` blocks, not i18n.js keys.** A paragraph per
+key would be hundreds of entries per article, so both languages are in the markup
+(`<div data-l="en">…</div><div data-l="zh">…</div>`) and a two-line rule in
+`base.html` hides the one `<html lang>` does not name. That attribute is set by
+i18n.js from a blocking `<head>` script, so the right block is the first one
+painted, and `I18n.setLang()` flips it with no re-render. The trap is that a
+missing Chinese block is not a visible gap on the English page — it is a
+paragraph that vanishes from the Chinese one, which no English reader would ever
+notice — so `test_wiki` requires equal en/zh counts in every wiki file and in the
+landing partials. i18n.js keys remain for the few strings outside these pages
+(`nav.docs`, `nav.research`, `wiki.search_ph`, `agents.docs_models`).
+
+**Every enforced number is passed in, never typed.** `routes._wiki_facts()`
+reads free runs, the site-wide ceiling, chat and share limits, the share-link
+lifetime, debate rounds, the roster, the model table and the pack ladder from the
+modules that enforce them, the same reason `/guide` reads its prices from
+`credits`. A docs page that said "3 free runs" in prose would go on saying it
+after the quota moved. `tests/check_wiki_pages.py` asserts the pricing and sharing
+pages quote the live values.
+
+**The roster is the runner's, not `agent_roles`'.** `wiki.desk()` is built from
+`agents.BASE_ANALYSTS` / `ASTOCK_ANALYSTS`, mapping the package's `social` to the
+report's "Sentiment Analyst". `agent_roles.ROLES` still carries the Fundamentals
+Analyst so pre-2026-08-30 reports render its turn; listing it would advertise a
+seat nobody has run since quality and valuation replaced it. `wiki.ROLE_NOTES`
+describes each seat from the fork's own prompts — the sentiment analyst reads
+StockTwits and Reddit as well as headlines, and the quality/valuation analysts
+only narrate numbers code computed — rather than from what the names suggest.
+The same pass fixed three strings that still said A-share runs had "seven"
+analysts; the roster is six, nine for A-shares.
+
+**Research Lab posts are dated to the measurement, and sourced.** Each is built
+from a commit message or module docstring that already recorded the finding —
+`bae8c9d`/`b54023e`/`8bd8fed` (GICS), `fec1338` (forward history), `27dd9c9`
+(TSM), `4ef9a69` (the ledger), the `/assets` section above (look-through) — with
+the numbers quoted as measured and the date on the post. Every post ends with
+"Check it yourself": the live page that shows the result, and the test that pins
+the fix. No post publishes an agent performance number; the decision-ledger post
+says why.
+
+Three CSS traps, all in `static/wiki.css` (hand-written, because Tailwind here is
+compiled and a class only these pages use can be missing from the bundle):
+
+- **`hidden` loses to any author `display`.** The UA's `[hidden]` rule has the
+  specificity of one class and wiki.css loads after it, so `.w-log li
+  { display: grid }` kept the A-share rows showing on a US ticker and the sidebar
+  filter hid nothing. `.w-run [hidden]` / `.w-docs [hidden]` restore it.
+- **Chinese display lines broke mid-word** (投 / 研), because CJK may break
+  between any two characters. Headings get `word-break: keep-all` with
+  `overflow-wrap: anywhere` as the net, and a `<wbr>` where a long run needs a
+  break point.
+- **The page plane is on `<body>`** (`{% block body_class %}` in base.html), so
+  the grid runs edge to edge under a centred column without a 100vw trick, which
+  overflows by the scrollbar's width on Windows. `html.dark body.w-paper` is
+  spelled out because Tailwind's `.dark .dark\:bg-slate-950` would outrank it.
+
+Fraunces is loaded **non-blocking** (`media="print"` swapped on load), unlike the
+Inter link in base.html: it only changes headings, each of which has a system
+serif to fall back on, so a slow font host costs Georgia for a moment rather than
+a blank page. `cache_bust` is computed once at app start, so a CSS edit needs a
+restart before a browser that has the service worker will see it.
+
+The three template guards (`test_template_ids`, `test_theme_classes`,
+`test_deferload_anchors`) now `rglob` rather than `glob`, because a guard that
+reads only the top level passes on a subdirectory it never saw.
+
+Tests: `tests/test_wiki.py` (no app — registry, content files both ways, en/zh
+pairing, the roster) and `tests/check_wiki_pages.py` (every page through the Flask
+test client; the landing shown to exactly one audience; 404s that keep their
+navigation). `check_` so `unittest discover` skips it.
 
 ### The AI Markets Brief (`/api/market-brief`)
 
