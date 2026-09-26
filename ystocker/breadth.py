@@ -67,6 +67,8 @@ import time
 from pathlib import Path
 from typing import Any, Optional
 
+from ystocker import gics
+
 log = logging.getLogger(__name__)
 
 _CACHE_FILE = Path(__file__).parent.parent / "cache" / "breadth_cache.json"
@@ -240,6 +242,12 @@ def _load_disk_cache(ignore_ttl: bool = False) -> Optional[dict[str, Any]]:
         if not ignore_ttl and "adv_dec" not in payload:
             log.info("Breadth: disk cache predates adv_dec — will recompute")
             return None
+        # And for the GICS breakdown, on the same terms: absent means an older
+        # schema and costs one rebuild after the deploy that adds it; None means
+        # the build ran without a usable snapshot, which a refetch cannot fix.
+        if not ignore_ttl and "gics" not in payload:
+            log.info("Breadth: disk cache predates the GICS breakdown — will recompute")
+            return None
         return payload
     except Exception as exc:
         log.warning("Breadth: failed to read disk cache: %s", exc)
@@ -354,6 +362,14 @@ def _build_cache() -> dict[str, Any]:
     # advance/decline costs 13 extra symbols on a call that fetches 505.
     ndx = tuple(dict.fromkeys(NDX100))
     extra = [t for t in ndx if t not in SP500_UNIVERSE]
+    # The GICS breakdown rides this same call. Its snapshot is regenerated from
+    # the live constituent list while SP500_UNIVERSE is edited by hand, so the
+    # two drift apart by a reconstitution or two (five names at the time of
+    # writing); fetching the union costs a handful of symbols, where leaving
+    # them out would drop the newest members from every sector.
+    snap = gics.load_snapshot()
+    seen = set(SP500_UNIVERSE) | {_RSP, _SPY} | set(extra)
+    extra += [t for t in (gics.tickers(snap) if snap else []) if t not in seen]
     tickers = list(SP500_UNIVERSE) + [_RSP, _SPY] + extra
     t0 = time.time()
     df = yf.download(tickers, period=_HISTORY_PERIOD, interval="1d",
@@ -361,7 +377,7 @@ def _build_cache() -> dict[str, Any]:
     if df is None or df.empty:
         raise RuntimeError("yfinance returned no data for the S&P 500 universe")
     closes = df["Close"]
-    log.info("Breadth: downloaded %d/%d tickers in %.1fs (%d extra for NDX)",
+    log.info("Breadth: downloaded %d/%d tickers in %.1fs (%d extra for NDX/GICS)",
              int(closes.notna().any().sum()), len(tickers), time.time() - t0,
              len(extra))
 
@@ -405,6 +421,19 @@ def _build_cache() -> dict[str, Any]:
         log.warning("Breadth: RSP/SPY unavailable — concentration ratio skipped")
         rsp_spy = {"dates": [], "values": []}
 
+    # ── GICS sectors and industry groups ────────────────────────────────────
+    # Arithmetic on the frame already in hand; see ystocker/gics.py. Isolated so
+    # a bad snapshot costs the GICS panel and never the breadth charts, which
+    # are the reason this download exists. None (not an absent key) records
+    # "the build ran and had nothing to publish", so the schema check in
+    # _load_disk_cache does not read it as an old cache and refetch forever.
+    gics_block = None
+    if snap:
+        try:
+            gics_block = gics.performance(closes, snap, now=time.time())
+        except Exception as exc:
+            log.warning("Breadth: GICS breakdown skipped: %s", exc)
+
     universe_used = int(live.any().sum())
     asof = pct_above_ma[str(MA_PERIODS[0])]["dates"][-1:] or [""]
     return {
@@ -414,6 +443,7 @@ def _build_cache() -> dict[str, Any]:
         "latest":       latest,
         "rsp_spy":      rsp_spy,
         "adv_dec":      adv_dec,
+        "gics":         gics_block,
         "universe":     universe_used,
         "asof":         asof[0],
         # Back-compat aliases for any older client still reading these keys.
@@ -655,6 +685,10 @@ def write_baseline() -> Path:
     # adv_dec is dropped on read as well, but there is no reason to carry a
     # single session's count in a file that will sit in git for months.
     data.pop("adv_dec", None)
+    # Same for the GICS breakdown: a baseline is served to a box with no cache,
+    # and returns "as of" a date months back would sit under a panel headed as
+    # the current state of the market.
+    data.pop("gics", None)
     _BASELINE_FILE.parent.mkdir(parents=True, exist_ok=True)
     _BASELINE_FILE.write_text(json.dumps(data, separators=(",", ":")))
     log.info("Breadth: baseline written to %s (asof %s, %d bytes)",
