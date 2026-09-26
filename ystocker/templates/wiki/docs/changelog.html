@@ -1,0 +1,277 @@
+{#  /docs/changelog. Built only from `git log --date=short` of this repo (the
+    agents files: agents.py, agent_models.py, agent_roles.py, share.py,
+    share_card.py, qr.py, report_email.py, report_pdf.py, credits.py, quota.py,
+    templates/agents.html, templates/shared.html) and from the TradingAgents
+    fork's merges of upstream (37629ce on 2026-09-19 brought upstream 0.4.0
+    through 0.5.0; d7d968d on 2026-09-26 brought 0.5.1) read against its
+    CHANGELOG.md. Many commits here are titled "improvements", so each entry was
+    matched to its diff, not its title.
+
+    Historical entries deliberately carry no figures that have since moved (the
+    free allowance went 5 -> 3, the roster 4 -> 5 -> 6): a number from `facts`
+    would rewrite history, and a typed one would read as current. #}
+<section id="2026-09">
+  <h2><span data-l="en">September 2026</span><span data-l="zh">2026 年 9 月</span></h2>
+
+  <h3><time datetime="2026-09-26">2026-09-26</time></h3>
+  <div data-l="en">
+    <ul>
+      <li>Docs and Research Lab launched, with a new landing page for visitors who are not signed in.</li>
+      <li>A run dated in the future is refused before it is queued, so it costs nothing.</li>
+      <li>With the analysis engine on TradingAgents 0.5.1, a report dated in the past is no longer told today's date, or any date after the run.</li>
+    </ul>
+  </div>
+  <div data-l="zh">
+    <ul>
+      <li>上线产品文档与研究实验室，并为未登录的访客推出全新首页。</li>
+      <li>分析日期在未来的请求，会在排队之前就被拒绝，不消耗任何次数。</li>
+      <li>分析引擎升级至 TradingAgents 0.5.1：日期在过去的报告，不会再被告知今天的日期或分析日之后的任何日期。</li>
+    </ul>
+  </div>
+
+  <h3><time datetime="2026-09-19">2026-09-19</time></h3>
+  <div data-l="en">
+    <ul>
+      <li>Every run now includes an Earnings Analyst, who reads consensus estimates, how they have been revised and the company's record of surprises.</li>
+      <li>The analysis engine caught up with TradingAgents 0.5.0. For a report dated in the past, every data tool now takes the run's date, macro data is read as it was published at the time, and social posts are trimmed to the analysis window.</li>
+      <li>A news or social feed with nothing for the analysis window now says the data is unavailable, instead of passing for a quiet week.</li>
+      <li>A decision whose rating cannot be read now shows as REVIEW, rather than being recorded as Hold.</li>
+      <li>In each debate, the side that speaks first opens with its own case instead of rebutting an argument nobody had made yet.</li>
+    </ul>
+  </div>
+  <div data-l="zh">
+    <ul>
+      <li>每次分析新增盈利预期修正分析师，解读一致预期、预期的修正轨迹，以及公司过往的业绩超预期记录。</li>
+      <li>分析引擎同步至 TradingAgents 0.5.0。对于日期在过去的报告，所有数据工具都以分析日期为准，宏观数据按当时发布的版本读取，社交媒体帖子也只截取分析窗口内的内容。</li>
+      <li>新闻或社交数据源在分析窗口内没有数据时，会明确注明数据不可用，不再被误读为“风平浪静”。</li>
+      <li>无法读出评级的决策现在显示为 REVIEW，不再被记作“持有”。</li>
+      <li>每轮辩论中先发言的一方，会先陈述自己的观点，不再去反驳一个对方还没有提出的论点。</li>
+    </ul>
+  </div>
+</section>
+
+<section id="2026-08">
+  <h2><span data-l="en">August 2026</span><span data-l="zh">2026 年 8 月</span></h2>
+
+  <h3><time datetime="2026-08-31">2026-08-31</time></h3>
+  <div data-l="en">
+    <ul>
+      <li>Share to WeChat: the share dialog shows a QR code that WeChat's own scanner opens.</li>
+      <li>Your reports, shared and sample reports, and the completion email now name the models and thinking depth that produced them.</li>
+    </ul>
+  </div>
+  <div data-l="zh">
+    <ul>
+      <li>新增分享至微信：分享对话框会显示二维码，用微信“扫一扫”即可打开。</li>
+      <li>你的报告、分享的报告、报告样例以及完成通知邮件，都会注明生成报告的模型和思考深度。</li>
+    </ul>
+  </div>
+
+  <h3><time datetime="2026-08-30">2026-08-30</time></h3>
+  <div data-l="en">
+    <ul>
+      <li>Choose the model and thinking depth for each run.</li>
+      <li>Quality and Valuation analysts replace the single Fundamentals Analyst: one asks whether it is a good business, the other whether it is a good price.</li>
+      <li>The desk now weighs the broad market's regime — index valuation, breadth, systematic positioning and rate expectations — and how analysts rate the company's peers.</li>
+      <li>If you keep holdings in My Assets, the decision agents now see them, and a proposed position size is checked against any concentration limits you have set there.</li>
+      <li>Share by text message: the dialog opens your phone's Messages app with the link ready.</li>
+      <li>A shared link unfolds as a preview card — ticker, decision and date — in apps that show link previews.</li>
+      <li>A run that used your holdings can now be shared, with a warning that the report may quote them.</li>
+    </ul>
+  </div>
+  <div data-l="zh">
+    <ul>
+      <li>每次分析都可以自选模型和思考深度。</li>
+      <li>经营质量分析师与估值分析师取代了原来的基本面分析师：一位回答“这是不是一门好生意”，另一位回答“这是不是一个好价格”。</li>
+      <li>投研台开始参考大盘所处的市场环境——指数估值、市场宽度、系统性资金仓位与利率预期——以及分析师对同业公司的评价。</li>
+      <li>如果你在“我的资产”中记录了持仓，负责决策的智能体会参考这些持仓，拟议仓位也会按你在那里设定的集中度上限接受检查。</li>
+      <li>新增短信分享：分享对话框会打开手机的“信息”应用，并填好链接。</li>
+      <li>在支持链接预览的应用中，分享链接会显示为一张预览卡片，包含股票代码、决策和日期。</li>
+      <li>使用了你持仓信息的分析现在也可以分享，并会提醒你报告中可能提到这些持仓。</li>
+    </ul>
+  </div>
+
+  <h3><time datetime="2026-08-29">2026-08-29</time></h3>
+  <div data-l="en">
+    <ul>
+      <li>A finished report is emailed to you, in the report's language.</li>
+      <li>Share a finished report by email, with a link that opens without an account.</li>
+    </ul>
+  </div>
+  <div data-l="zh">
+    <ul>
+      <li>分析完成后，报告会以报告本身的语言发到你的邮箱。</li>
+      <li>可以通过邮件分享已完成的报告，并附带无需账号即可打开的链接。</li>
+    </ul>
+  </div>
+
+  <h3><time datetime="2026-08-28">2026-08-28</time></h3>
+  <div data-l="en">
+    <ul>
+      <li>Click a ticker in your history to show only that ticker's runs.</li>
+    </ul>
+  </div>
+  <div data-l="zh">
+    <ul>
+      <li>在历史记录中点击股票代码，即可只看该代码的分析。</li>
+    </ul>
+  </div>
+
+  <h3><time datetime="2026-08-27">2026-08-27</time></h3>
+  <div data-l="en">
+    <ul>
+      <li>A floating control beside the report folds every turn at once, or takes you back to the top.</li>
+      <li>Searching your history shows each hit's portfolio-manager turn in full.</li>
+    </ul>
+  </div>
+  <div data-l="zh">
+    <ul>
+      <li>报告旁新增浮动按钮，可一键折叠全部发言，或返回顶部。</li>
+      <li>搜索历史记录时，每条结果都会完整展示投资组合经理的发言。</li>
+    </ul>
+  </div>
+
+  <h3><time datetime="2026-08-26">2026-08-26</time></h3>
+  <div data-l="en">
+    <ul>
+      <li>Every turn has its own link, which opens the report at that speaker.</li>
+    </ul>
+  </div>
+  <div data-l="zh">
+    <ul>
+      <li>每一轮发言都有自己的链接，打开后直接定位到该发言者。</li>
+    </ul>
+  </div>
+
+  <h3><time datetime="2026-08-25">2026-08-25</time></h3>
+  <div data-l="en">
+    <ul>
+      <li>A-share runs add policy, hot-money and lock-up specialists.</li>
+    </ul>
+  </div>
+  <div data-l="zh">
+    <ul>
+      <li>A 股分析新增政策、游资与解禁三位专项分析师。</li>
+    </ul>
+  </div>
+
+  <h3><time datetime="2026-08-23">2026-08-23</time></h3>
+  <div data-l="en">
+    <ul>
+      <li>trade-agents.com launched, with checkout on pay.trade-agents.com.</li>
+    </ul>
+  </div>
+  <div data-l="zh">
+    <ul>
+      <li>trade-agents.com 上线，支付页面位于 pay.trade-agents.com。</li>
+    </ul>
+  </div>
+
+  <h3><time datetime="2026-08-21">2026-08-21</time></h3>
+  <div data-l="en">
+    <ul>
+      <li>A daily allowance of free runs, then run packs to buy; purchased runs never expire.</li>
+      <li>Times on reports and in PDFs are shown in your own time zone, with the zone named.</li>
+    </ul>
+  </div>
+  <div data-l="zh">
+    <ul>
+      <li>每天提供一定次数的免费分析，用完后可购买次数包；购买的次数永不过期。</li>
+      <li>报告和 PDF 中的时间按你所在的时区显示，并注明时区。</li>
+    </ul>
+  </div>
+
+  <h3><time datetime="2026-08-20">2026-08-20</time></h3>
+  <div data-l="en">
+    <ul>
+      <li>A report's address opens it directly: the full report for you, and the anonymous view for anyone who is not signed in.</li>
+    </ul>
+  </div>
+  <div data-l="zh">
+    <ul>
+      <li>报告地址可以直接打开报告：你看到的是完整报告，未登录的人看到的是匿名视图。</li>
+    </ul>
+  </div>
+
+  <h3><time datetime="2026-08-19">2026-08-19</time></h3>
+  <div data-l="en">
+    <ul>
+      <li>Ask the portfolio manager follow-up questions about a finished report.</li>
+      <li>China A-share codes are accepted.</li>
+    </ul>
+  </div>
+  <div data-l="zh">
+    <ul>
+      <li>可以就已完成的报告向投资组合经理追问。</li>
+      <li>支持输入 A 股代码。</li>
+    </ul>
+  </div>
+
+  <h3><time datetime="2026-08-18">2026-08-18</time></h3>
+  <div data-l="en">
+    <ul>
+      <li>Reports are written in the language the page is in when you start the run.</li>
+    </ul>
+  </div>
+  <div data-l="zh">
+    <ul>
+      <li>报告改为使用你发起分析时页面所用的语言撰写。</li>
+    </ul>
+  </div>
+
+  <h3><time datetime="2026-08-17">2026-08-17</time></h3>
+  <div data-l="en">
+    <ul>
+      <li>The desk opened to anyone who signs in with Google, with daily run limits.</li>
+      <li>The report reads as a conversation: one turn per role, with the teams as dividers.</li>
+      <li>Each role's section appears on the page as soon as it is written.</li>
+      <li>A jump bar takes you to any speaker, and turns can be folded one at a time or all at once.</li>
+      <li>Your history is grouped by analysis date and can be searched by ticker or date.</li>
+      <li>Reports say when a fallback model stepped in.</li>
+      <li>A run that fails before any model is called, or is stopped by the provider's daily limit, is given back.</li>
+      <li>A run that fails near the end is recovered from what it had already streamed.</li>
+      <li>Your reports are no longer visible to other signed-in users.</li>
+      <li>Visitors who are not signed in can read a sample of finished reports.</li>
+      <li>The PDF became a typeset research note, with charts, a contents page and bookmarks.</li>
+    </ul>
+  </div>
+  <div data-l="zh">
+    <ul>
+      <li>投研台向所有使用 Google 登录的用户开放，并设有每日分析次数上限。</li>
+      <li>报告改为对话形式：每个角色一轮发言，并以团队作为分隔。</li>
+      <li>每个角色的章节一写完就会出现在页面上。</li>
+      <li>新增跳转栏，可直达任意发言者；发言可以逐轮折叠，也可以一次全部折叠。</li>
+      <li>历史记录按分析日期分组，并可按股票代码或日期搜索。</li>
+      <li>如果中途启用了备用模型，报告会明确标出。</li>
+      <li>在调用任何模型之前就失败的分析，以及因服务商当日额度用尽而中止的分析，都会退还次数。</li>
+      <li>在接近尾声时失败的分析，会用已经实时输出的内容恢复报告。</li>
+      <li>你的报告不再对其他已登录用户可见。</li>
+      <li>未登录的访客可以阅读部分已完成的报告作为样例。</li>
+      <li>PDF 改为研究报告式排版，包含图表、目录和书签。</li>
+    </ul>
+  </div>
+
+  <h3><time datetime="2026-08-16">2026-08-16</time></h3>
+  <div data-l="en">
+    <ul>
+      <li>The desk opened, at first to invited accounts: choose a ticker and a date, and a team of agents analyses it.</li>
+      <li>Download the full report as a PDF, Chinese text included.</li>
+    </ul>
+  </div>
+  <div data-l="zh">
+    <ul>
+      <li>投研台上线，最初只对受邀账号开放：选择一只股票和一个日期，由一支智能体团队进行分析。</li>
+      <li>可将完整报告下载为 PDF，中文内容也能正常显示。</li>
+    </ul>
+  </div>
+</section>
+
+<section id="about-this-log">
+  <h2><span data-l="en">About this log</span><span data-l="zh">关于本日志</span></h2>
+  <div data-l="en">
+    <p>Each entry is dated to the day the change was made, and lists only what you can notice while using {{ product }}. The analysis engine is built on the open-source TradingAgents framework, and its upgrades are listed on the day they reached the desk. Older entries leave out figures that have changed since; the current ones are in <a href="{{ url_for('main.docs_page', slug='limits') }}">Limits and quotas</a>.</p>
+  </div>
+  <div data-l="zh">
+    <p>每条记录的日期就是改动完成的日期，只列出你在使用 {{ product }} 时能感受到的变化。分析引擎基于开源的 TradingAgents 框架构建，其版本升级按接入投研台的日期列出。早期条目略去了此后有过调整的数字，当前数值请见<a href="{{ url_for('main.docs_page', slug='limits') }}">限额与配额</a>。</p>
+  </div>
+</section>

@@ -963,10 +963,14 @@ def performance(closes: Any, snap: dict[str, Any], *, now: Optional[float] = Non
 
 
 # The rotation map's trails: the windows its axes pair, and how far back a
-# trail reaches — the latest close and the five weekly closes before it, which
-# is the tail length a weekly relative-rotation chart draws.
+# trail reaches — the latest close and the weekly close before it, so each
+# group draws one line, from where it stood a week earlier into its bubble.
+# Five weekly closes, the tail a weekly relative-rotation chart draws, were a
+# tangle here: that chart plots smoothed ratios, these are raw window returns,
+# which zigzag from week to week. On the 2026-09-25 close at 1M/3M the median
+# group's five-week path ran 29 points, about half the width of the plot.
 TRAIL_PERIODS: tuple[str, ...] = ("1W", "1M", "3M", "6M", "1Y")
-TRAIL_POINTS = 6
+TRAIL_POINTS = 2
 TRAIL_STEP_DAYS = 7
 
 
@@ -979,19 +983,25 @@ def trail(closes: Any, snap: dict[str, Any], latest: dict[str, Any], *,
     week further back. Same constituents, same share counts, same date-gating,
     so a trail moves only because prices did — and its head is exactly the
     table's figure. History that runs out ends the trail early rather than
-    padding it.
+    padding it, and so does a step with no usable close inside it: the map
+    labels the point before the bubble "a week earlier", so a close from a
+    week further back is left out rather than drawn there.
     """
     import pandas as pd
 
     end = pd.Timestamp(latest["asof"])
     results = [latest]
     for k in range(1, points):
+        step = end - pd.Timedelta(days=step_days * k)
         try:
-            res = performance(closes, snap, until=end - pd.Timedelta(days=step_days * k))
+            res = performance(closes, snap, until=step)
         except ValueError:
             break
-        if res["asof"] == results[-1]["asof"]:
-            break   # a gap longer than a step: no earlier session to add
+        # The last usable session on or before the step, but not a whole step
+        # before it: past a gap that long, the close found belongs to an older
+        # step, or is the one already in hand.
+        if pd.Timestamp(res["asof"]) <= step - pd.Timedelta(days=step_days):
+            break
         results.append(res)
 
     rel: dict[str, dict[str, list[Optional[float]]]] = {}

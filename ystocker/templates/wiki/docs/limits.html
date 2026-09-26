@@ -27,7 +27,7 @@
           <tr><td>Free runs</td><td>{{ facts.free_runs }} per person per day</td><td>Each run is paid for in model calls. Free runs are always spent before purchased ones.</td></tr>
           <tr><td>Site-wide runs</td><td>{{ facts.global_runs }} per day, shared by everyone</td><td>On its own, a per-person limit bounds nothing on a public site. Purchased runs count too: this is a capacity limit, not a billing one.</td></tr>
           <tr><td>Runs in progress</td><td>They take turns; the rest wait as <em>queued</em></td><td>Runs share limited server capacity. A queued run that cannot start in time is cancelled and given back.</td></tr>
-          <tr><td>Length of a run</td><td>A fixed ceiling, far longer than a normal deep run</td><td>Stops a stuck run holding its place for ever. A run stopped this way is not given back.</td></tr>
+          <tr><td>Length of a run</td><td>A fixed ceiling, far longer than a normal deep run</td><td>Stops a stuck run holding its place indefinitely. A run stopped this way is not given back.</td></tr>
           <tr><td>Follow-up questions</td><td>{{ facts.chat_limit }} per person per day</td><td>Each is one quick model call — far cheaper than a run, but still billed. Counted apart from runs.</td></tr>
           <tr><td>Shares</td><td>{{ facts.share_limit }} per person per day, all channels</td><td>Protects the site's email reputation; see <a href="{{ url_for('main.docs_page', slug='sharing') }}#daily-limit">Sharing a report</a>.</td></tr>
           <tr><td>Share link lifetime</td><td>{{ facts.share_days }} days</td><td>Bounds how long a forwarded link keeps working.</td></tr>
@@ -67,7 +67,7 @@
   <h2><span data-l="en">When a run is given back</span><span data-l="zh">何时退还次数</span></h2>
   <div data-l="en">
     <ul>
-      <li><strong>Refused when you submit it</strong> — a ticker or date the form cannot accept, or a model that is not available: given back at once.</li>
+      <li><strong>Refused when you submit it</strong> — a ticker the form cannot accept, a malformed or future date, or a model that is not available: stopped before it is queued, and given back at once.</li>
       <li><strong>Failed before any model was called</strong> — it never got a slot, or the analysis could not start: given back.</li>
       <li><strong>Stopped because the model provider's daily capacity ran out</strong>, with no report: given back, even though some calls were made.</li>
       <li><strong>Failed after the models started work</strong>: not given back, because by then an unknown number of model calls have been paid for.</li>
@@ -77,11 +77,11 @@
   </div>
   <div data-l="zh">
     <ul>
-      <li><strong>提交时被拒绝</strong>——股票代码或日期无法识别，或所选模型不可用：立即退还。</li>
+      <li><strong>提交时被拒绝</strong>——股票代码无法识别、日期格式有误或日期在未来，或所选模型不可用：在排队之前就被拒绝，并立即退还。</li>
       <li><strong>在调用任何模型之前失败</strong>——一直没排到运行位置，或分析未能启动：退还。</li>
       <li><strong>因模型服务商当日额度用尽而中止</strong>，且没有产出报告：退还，即使已经调用过一些模型。</li>
       <li><strong>模型开始工作之后失败</strong>：不退还，因为此时已经为数量不明的模型调用付了费。</li>
-      <li><strong>在接近尾声时出错</strong>：报告会用已经实时输出的章节重建，标注 <em>“由实时流恢复”</em>，按已完成的分析计算。</li>
+      <li><strong>在接近尾声时出错</strong>：报告会用已经实时输出的章节重建，标注为<em>“由实时流恢复”</em>，按已完成的分析计算。</li>
     </ul>
     <p>免费次数退回当天的免费额度，购买的次数退回你的余额。</p>
   </div>

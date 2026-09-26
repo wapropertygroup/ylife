@@ -1,0 +1,130 @@
+{#  /docs/models. The table is facts.models (agent_models.options_public): every id
+    is copied from TradingAgents' model catalog there, and `available` is whether
+    this server holds that provider's credential. Deep vs quick is GraphSetup in
+    tradingagents/graph/setup.py: deep_thinking_llm backs only the Research
+    Manager and Portfolio Manager. Labels reuse the run form's i18n keys
+    (m.label_key) so the Chinese rows say what the menu says. #}
+{% set think_en = {'minimal': 'Minimal', 'low': 'Low', 'medium': 'Medium', 'high': 'High'} %}
+{% set think_zh = {'minimal': '最小', 'low': '低', 'medium': '中', 'high': '高'} %}
+{% set provider_names = {'google': 'Google', 'deepseek': 'DeepSeek'} %}
+<section id="choices">
+  <h2><span data-l="en">The choices</span><span data-l="zh">可选模型</span></h2>
+  <div data-l="en">
+    {% if facts.model_choice %}
+    <p>Pick one from the Model menu on the run form; the Thinking menu beside it then offers only the levels that model accepts. The menu starts on the server's default, or on the choice you last used in this browser.</p>
+    {% else %}
+    <div class="w-callout is-warn"><p>Model choice is switched off at the moment. Every run uses the server's default, named under the run form, and a choice sent anyway is ignored. The table shows what the menu offers when it is on.</p></div>
+    {% endif %}
+    <div class="w-table-wrap">
+      <table>
+        <thead><tr><th>Choice</th><th>Provider</th><th>Deep model</th><th>Quick model</th><th>Thinking levels</th><th>Default</th></tr></thead>
+        <tbody>
+          {% for m in facts.models %}
+          <tr>
+            <td>{{ m.label }}{% if not m.available %} — <em>not configured here</em>{% endif %}</td>
+            <td>{{ provider_names.get(m.provider, m.provider) }}</td>
+            <td><code>{{ m.deep_model }}</code></td>
+            <td><code>{{ m.quick_model }}</code></td>
+            <td>{% if m.thinking %}{% for t in m.thinking %}{{ think_en.get(t, t) }}{% if not loop.last %}, {% endif %}{% endfor %}{% else %}Not applicable{% endif %}</td>
+            <td>{% if m.thinking_default %}{{ think_en.get(m.thinking_default, m.thinking_default) }}{% else %}—{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p>A choice marked <em>not configured here</em> is listed but disabled in the menu: this server holds no credential for that provider, and a run started on it could not begin.</p>
+  </div>
+  <div data-l="zh">
+    {% if facts.model_choice %}
+    <p>在分析表单的“模型”菜单中选择一项；旁边的“思考深度”菜单只会列出该模型支持的档位。菜单默认停在服务器的默认选项，或者你在这个浏览器上最近一次的选择。</p>
+    {% else %}
+    <div class="w-callout is-warn"><p>目前未开放模型选择。所有分析都使用服务器的默认模型（表单下方会注明），即使请求中带有其他选择也会被忽略。下表列出的是开放选择时菜单提供的选项。</p></div>
+    {% endif %}
+    <div class="w-table-wrap">
+      <table>
+        <thead><tr><th>选项</th><th>服务商</th><th>深度模型</th><th>快速模型</th><th>思考深度档位</th><th>默认</th></tr></thead>
+        <tbody>
+          {% for m in facts.models %}
+          <tr>
+            <td><span data-i18n="{{ m.label_key }}">{{ m.label }}</span>{% if not m.available %} — <em>本站未配置</em>{% endif %}</td>
+            <td>{{ provider_names.get(m.provider, m.provider) }}</td>
+            <td><code>{{ m.deep_model }}</code></td>
+            <td><code>{{ m.quick_model }}</code></td>
+            <td>{% if m.thinking %}{% for t in m.thinking %}{{ think_zh.get(t, t) }}{% if not loop.last %}、{% endif %}{% endfor %}{% else %}不适用{% endif %}</td>
+            <td>{% if m.thinking_default %}{{ think_zh.get(m.thinking_default, m.thinking_default) }}{% else %}—{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p>标注<em>本站未配置</em>的选项会列在菜单中，但无法选择：本站没有该服务商的调用凭证，用它发起的分析根本无法启动。</p>
+  </div>
+</section>
+
+<section id="deep-and-quick">
+  <h2><span data-l="en">Deep and quick</span><span data-l="zh">深度模型与快速模型</span></h2>
+  <div data-l="en">
+    <p>Every choice names two models, because a run gives them different jobs:</p>
+    <ul>
+      <li><strong>The quick model</strong> does most of the work: every analyst and their many data-tool calls, both researchers, the trader and the three risk analysts.</li>
+      <li><strong>The deep model</strong> is used by exactly two seats — the research manager and the portfolio manager — which is where the rulings are made.</li>
+    </ul>
+    <p>That is why a choice can pair a stronger deep model with a lighter quick one: the many tool calls are what make a run expensive, and the decision you read keeps the more capable model. Follow-up questions on a finished report are answered by a separate fast model working from the report's text, whichever models wrote it.</p>
+  </div>
+  <div data-l="zh">
+    <p>每个选项都包含两个模型，因为一次分析会给它们分配不同的工作：</p>
+    <ul>
+      <li><strong>快速模型</strong>承担大部分工作：所有分析师及其大量的数据工具调用、两位研究员、交易员和三位风险分析师。</li>
+      <li><strong>深度模型</strong>只用于两个席位——研究主管和投资组合经理——也就是做出裁决的地方。</li>
+    </ul>
+    <p>所以一个选项可以把较强的深度模型和较轻的快速模型搭配在一起：让一次分析变贵的，正是大量的工具调用，而你最终读到的决策仍然由能力更强的模型做出。对已完成报告的追问由另一个独立的快速模型根据报告原文作答，与报告由哪个模型写成无关。</p>
+  </div>
+</section>
+
+<section id="thinking">
+  <h2><span data-l="en">Thinking depth</span><span data-l="zh">思考深度</span></h2>
+  <div data-l="en">
+    <p>Thinking depth sets how much the model reasons before it answers — depth, not length. The levels are Minimal, Low, Medium and High, and each model accepts its own subset, shown in the table above.</p>
+    <ul>
+      <li>The Thinking menu only ever offers the chosen model's levels, and switching models resets it to that model's default.</li>
+      <li>That strictness is deliberate: offering a level the provider silently rewrites would misdescribe the run, and some providers reject an unsupported level outright — minutes into a run you have paid for.</li>
+      <li>A model with no thinking setting shows <em>Not applicable</em>, and nothing is sent.</li>
+    </ul>
+  </div>
+  <div data-l="zh">
+    <p>思考深度决定模型在作答之前推理多少——是深度，而不是篇幅。档位依次为最小、低、中、高，每个模型只支持其中一部分，见上表。</p>
+    <ul>
+      <li>“思考深度”菜单只会列出当前模型支持的档位；切换模型时，会重置为该模型的默认档位。</li>
+      <li>这样严格是有意为之：如果提供一个会被服务商悄悄改写的档位，就等于错误描述了这次分析；而有些服务商会直接拒绝不支持的档位——那时分析已经开始好几分钟，次数也已经付出。</li>
+      <li>没有思考深度设置的模型会显示<em>不适用</em>，也不会发送这一参数。</li>
+    </ul>
+  </div>
+</section>
+
+<section id="recorded">
+  <h2><span data-l="en">Recorded on every report</span><span data-l="zh">每份报告都记录实际运行的模型</span></h2>
+  <div data-l="en">
+    <p>The provider, the models and the thinking level are fixed when you press Run; a queued run uses exactly what you chose, even if the menu changes meanwhile. Every finished report names them — on the report page, in the completion email, on a shared link and on the public sample reports — so a run on the cheapest tier cannot pass for one on the most capable.</p>
+    <ul>
+      <li><strong>Fallback.</strong> If a Gemini model runs out of its daily capacity mid-run, the run continues on a fallback Gemini model instead of failing, and the report is labelled <em>ran on fallback model</em> with the models it used — the PDF included.</li>
+      <li><strong>Stale choices.</strong> If your browser remembered a choice that no longer exists, the run uses the server default and records that instead.</li>
+    </ul>
+  </div>
+  <div data-l="zh">
+    <p>服务商、模型和思考深度在你点击运行时就已确定；排队中的任务会严格按照你的选择运行，即使菜单在此期间有所变化。每份完成的报告都会注明这些信息——在报告页面、完成通知邮件、分享链接和公开的报告样例中——所以低价档位的分析，不会被误认为最高档位。</p>
+    <ul>
+      <li><strong>降级。</strong>如果某个 Gemini 模型在运行中途用完了当日额度，分析会换用备用的 Gemini 模型继续，而不是直接失败；报告会标注<em>已降级模型</em>并列出实际使用的模型，PDF 中也一样。</li>
+      <li><strong>过期的选择。</strong>如果浏览器记住的选项已经不存在，分析会使用服务器默认模型，并如实记录。</li>
+    </ul>
+  </div>
+</section>
+
+<section id="cost">
+  <h2><span data-l="en">What it costs</span><span data-l="zh">费用</span></h2>
+  <div data-l="en">
+    <p>Nothing extra. Every analysis costs one run — a free one or a credit — whichever model and thinking level you choose, because the allowances count runs, not tokens. A choice that is not available here cannot be picked, and a request for one is refused without costing anything. See <a href="{{ url_for('main.docs_page', slug='pricing') }}">Pricing and credits</a>.</p>
+  </div>
+  <div data-l="zh">
+    <p>不额外收费。无论选择哪个模型、哪种思考深度，每次分析都只算一次——免费次数或已购次数——因为额度按分析次数计算，而不是按 token 计算。本站不可用的选项无法选中；即使直接请求，也会被拒绝，不扣任何次数。详见<a href="{{ url_for('main.docs_page', slug='pricing') }}">价格与次数</a>。</p>
+  </div>
+</section>

@@ -65,7 +65,7 @@
         </tbody>
       </table>
     </div>
-    <p><strong>Buy more runs</strong>, which appears on the run form once your free runs are gone, opens the payments page. Payment is by card through Stripe: a one-off charge in US dollars, not a subscription. You need to be signed in, because the runs are added to the account you were signed in with — even if the card's receipt goes to a different address — once Stripe confirms the payment.</p>
+    <p><strong>Buy more runs</strong>, which appears on the run form once you have no free or purchased runs left, opens the payments page. Payment is by card through Stripe: a one-off charge in US dollars, not a subscription. You need to be signed in, because the runs are added to the account you were signed in with — even if the card's receipt goes to a different address — once Stripe confirms the payment.</p>
     {% else %}
     <p>Run packs are not on sale at the moment. The free allowance works as usual.</p>
     {% endif %}
@@ -83,7 +83,7 @@
         </tbody>
       </table>
     </div>
-    <p>免费次数用完后，分析表单上会出现<strong>“购买更多次数”</strong>，点击即进入支付页面。付款通过 Stripe 以银行卡完成：以美元一次性支付，不是订阅。购买时需要保持登录，因为次数会加到你登录所用的账号上——即使银行卡收据发往另一个邮箱也一样——Stripe 确认付款后即到账。</p>
+    <p>当免费次数和已购次数都用完时，分析表单上会出现<strong>“购买更多次数”</strong>，点击即进入支付页面。付款通过 Stripe 以银行卡完成：以美元一次性支付，不是订阅。购买时需要保持登录，因为次数会加到你登录所用的账号上——即使银行卡收据发往另一个邮箱也一样——Stripe 确认付款后即到账。</p>
     {% else %}
     <p>次数包目前暂停销售，免费额度照常可用。</p>
     {% endif %}
@@ -97,7 +97,7 @@
       <li><strong>One analysis is one run</strong>, free or purchased, whatever model and thinking depth you choose, and whether it is a US or an A-share run. The allowances count runs, not model tokens.</li>
       <li><strong>It counts when you press Run</strong>, not when the run finishes — a queued run has already been counted.</li>
       <li><strong>Reading costs nothing.</strong> Opening your reports, downloading PDFs and opening a shared link never use a run.</li>
-      <li><strong>Follow-up questions have their own allowance</strong> — {{ facts.chat_limit }} a day — and never draw on your runs. So does sharing: up to {{ facts.share_limit }} shares a day.</li>
+      <li><strong>Follow-up questions have their own allowance</strong> — {{ facts.chat_limit }} a day — and never draw on your runs. Sharing has its own too: up to {{ facts.share_limit }} shares a day.</li>
     </ul>
   </div>
   <div data-l="zh">
@@ -105,7 +105,7 @@
       <li><strong>一次分析就是一次</strong>，无论用的是免费次数还是购买的次数，无论选择哪个模型、哪种思考深度，也无论分析的是美股还是 A 股。额度按分析次数计算，而不是按模型 token 计算。</li>
       <li><strong>点击运行时即计数</strong>，而不是等分析完成——排队中的任务已经计入。</li>
       <li><strong>阅读不花钱。</strong>打开自己的报告、下载 PDF、打开分享链接，都不消耗次数。</li>
-      <li><strong>追问有单独的额度</strong>——每天 {{ facts.chat_limit }} 次——不会占用分析次数。分享也是如此：每天最多 {{ facts.share_limit }} 次。</li>
+      <li><strong>追问有单独的额度</strong>——每天 {{ facts.chat_limit }} 次——不会占用分析次数。分享同样单独计算：每天最多 {{ facts.share_limit }} 次。</li>
     </ul>
   </div>
 </section>

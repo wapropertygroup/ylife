@@ -612,19 +612,25 @@ class TrailTests(unittest.TestCase):
                          "the trap until= exists to avoid")
 
     def test_history_that_runs_out_ends_the_trail_early(self):
-        px = self._px().loc["2026-06-15":]
+        # Nothing on or before 23 June: the bubble alone, which draws no line.
+        px = self._px().loc["2026-06-24":]
         _latest, t = self._trail(px)
-        self.assertEqual(t["dates"], ["2026-06-30", "2026-06-23", "2026-06-16"])
+        self.assertEqual(t["dates"], ["2026-06-30"])
         # A window with no base date is a gap in the trail, not a zero.
-        self.assertEqual(t["rel"]["4530"]["1Y"], [None, None, None])
+        self.assertEqual(t["rel"]["4530"]["1Y"], [None])
+        # A longer trail stops where the history does, not at its length.
+        _latest, t = self._trail(self._px().loc["2026-06-15":], points=6)
+        self.assertEqual(t["dates"], ["2026-06-30", "2026-06-23", "2026-06-16"])
 
     def test_a_gap_longer_than_a_step_ends_the_trail(self):
         days = pd.bdate_range("2026-05-01", "2026-06-30")
         days = days[(days < "2026-06-08") | (days > "2026-06-26")]
         px = _flat(days, SEMI=100, SOFT=100, BANK=100)
         _latest, t = self._trail(px)
-        # Two steps back both land on 5 June; the second would repeat the first.
-        self.assertEqual(t["dates"], ["2026-06-30", "2026-06-05"])
+        # The step to 23 June finds 5 June, three weeks older than the week the
+        # map would call it; with a longer trail, the next step would repeat it.
+        self.assertEqual(t["dates"], ["2026-06-30"])
+        self.assertEqual(self._trail(px, points=4)[1]["dates"], ["2026-06-30"])
 
     def test_breadth_attaches_it_and_survives_it_failing(self):
         from ystocker import breadth

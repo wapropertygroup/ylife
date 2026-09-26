@@ -1,0 +1,110 @@
+{#  /docs/desk. The roster is rendered from facts.desk (wiki.desk over the analyst
+    tuples agents.py actually passes), never typed here: agent_roles.ROLES still
+    carries the retired Fundamentals Analyst so old reports render, and listing
+    it would describe a desk nobody runs. Seat notes are wiki.ROLE_NOTES. #}
+{% set analyst_team = facts.desk | selectattr('key', 'equalto', 'analysts') | list %}
+{% set analysts = analyst_team[0].roles if analyst_team else [] %}
+{% set ashare_seats = analysts | selectattr('a_share_only') | list %}
+<section id="organisation">
+  <h2><span data-l="en">How the desk is organised</span><span data-l="zh">团队如何分工</span></h2>
+  <div data-l="en">
+    <p>The desk has {{ facts.desk | length }} teams, and a report reads in the order they speak: {{ facts.desk | map(attribute='title') | map(attribute='en') | map('lower') | join(', ') }}. Every analyst writes one report. Both debates — bull against bear, and the three-way risk debate — argue from those reports, and the two managers reread the key ones themselves rather than trusting a debate to have quoted them.</p>
+    <p>Each seat's name below is the heading its turn carries in the report, and its colour is the one the report page and the PDF use for it.</p>
+  </div>
+  <div data-l="zh">
+    <p>投研台由 {{ facts.desk | length }} 个团队组成，报告按它们的发言顺序排列：{{ facts.desk | map(attribute='title') | map(attribute='zh') | join('、') }}。每位分析师写一份报告；两场辩论——多空辩论和三方风险辩论——都以这些报告为依据；两位主管还会亲自重读其中的关键报告，而不是指望辩论中已经有人引用过。</p>
+    <p>下面每个席位的名称，就是它在报告中那一轮发言的标题；它的颜色，也与报告页面和 PDF 中使用的颜色一致。</p>
+  </div>
+</section>
+
+<section id="two-questions">
+  <h2><span data-l="en">Quality and valuation: two questions, two seats</span><span data-l="zh">质量与估值：两个问题，两个席位</span></h2>
+  <div data-l="en">
+    <p>Until 30 August 2026 a single fundamentals analyst covered the company's books. It was split in two because “is this a good business?” and “is this a good price?” are different questions — the distinction Buffett and Munger draw — and one generic report kept blurring them: a fine business can still be an expensive stock.</p>
+    <ul>
+      <li><strong>Quality</strong> works from returns, margins, leverage, liquidity and cash generation, and how steady margins have been over several years.</li>
+      <li><strong>Valuation</strong> works from trailing and forward P/E, PEG, price-to-book and dividend yield.</li>
+    </ul>
+    <p>Both are built like the earnings analyst, which joined the desk on 19 September 2026: code fetches the evidence, computes every figure and assigns the tier, and the model may only add judgement around it — a moat assessment and red flags; what the valuation tier means and what could re-rate the multiple — without restating, rounding or correcting a single number. Reports written before the split still show their Fundamentals Analyst turn.</p>
+  </div>
+  <div data-l="zh">
+    <p>2026 年 8 月 30 日之前，公司的财务状况由一位基本面分析师统一负责。之后它被拆成两个席位，因为“这是不是一门好生意？”和“这是不是一个好价格？”是两个不同的问题——这正是巴菲特和芒格所强调的区分——而一份笼统的报告总是把两者混在一起：好公司的股票，照样可能很贵。</p>
+    <ul>
+      <li><strong>质量</strong>依据回报率、利润率、杠杆、流动性与现金创造能力，以及多年来利润率是否稳定。</li>
+      <li><strong>估值</strong>依据滚动市盈率与预期市盈率、PEG、市净率和股息率。</li>
+    </ul>
+    <p>两者的构造与 2026 年 9 月 19 日加入团队的盈利分析师相同：证据由代码获取，每一个数字由代码计算，评级档位也由代码给出；模型只能在此基础上补充判断——护城河评估与风险警示，或者估值档位意味着什么、哪些因素可能让估值倍数重估——不得复述、四舍五入或修改任何一个数字。拆分之前的旧报告里，仍然保留着基本面分析师的发言。</p>
+  </div>
+</section>
+
+<section id="a-share-seats">
+  <h2><span data-l="en">A-share specialists</span><span data-l="zh">A 股专项分析师</span></h2>
+  <div data-l="en">
+    <p>A run on a Shanghai, Shenzhen or Beijing code seats {{ facts.n_astock - facts.n_base }} more analysts, {{ facts.n_astock }} in all — {% for r in ashare_seats %}{% if loop.last and not loop.first %} and {% elif not loop.first %}, {% endif %}the {{ r.name }}{% endfor %} — for what moves A-shares that a US-style desk would miss: policy transmission, Dragon-Tiger List seats and capital flows, and restricted-share unlocks. The research manager is told to reconcile all three explicitly, and the trader and portfolio manager to respect the market's mechanics, from T+1 settlement to daily price limits.</p>
+  </div>
+  <div data-l="zh">
+    <p>分析沪市、深市或北交所代码时，会再加入 {{ facts.n_astock - facts.n_base }} 位分析师，共 {{ facts.n_astock }} 位——{{ ashare_seats | map(attribute='zh') | join('、') }}——专门覆盖美股式投研台容易忽略、却会驱动 A 股的因素：政策传导、龙虎榜席位与资金流向，以及限售股解禁。研究主管被要求逐一权衡这三份报告；交易员和投资组合经理则被要求遵守 A 股的交易规则，从 T+1 交收到涨跌停限制。</p>
+  </div>
+</section>
+
+<section id="seats">
+  <h2><span data-l="en">Every seat</span><span data-l="zh">每一个席位</span></h2>
+  <div data-l="en">
+    <p>Grouped by team, in the order a report is read.</p>
+  </div>
+  <div data-l="zh">
+    <p>按团队分组，顺序与阅读报告的顺序一致。</p>
+  </div>
+  {% for team in facts.desk %}
+  <h3><span data-l="en">{{ team.title.en }}</span><span data-l="zh">{{ team.title.zh }}</span></h3>
+  <div class="w-roles">
+    {% for r in team.roles %}
+    <div class="w-role" style="--seat: {{ r.color }}">
+      <div class="w-role-name">
+        <span aria-hidden="true">{{ r.icon }}</span>
+        <span data-l="en">{{ r.name }}</span><span data-l="zh">{{ r.zh }}</span>
+        <small data-l="en">{{ r.zh }}</small><small data-l="zh">{{ r.name }}</small>
+        {% if r.a_share_only %}<small data-l="en">· A-shares only</small><small data-l="zh">· 仅限 A 股</small>{% endif %}
+      </div>
+      {% if r.desc %}<p data-l="en">{{ r.desc.en }}</p><p data-l="zh">{{ r.desc.zh }}</p>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endfor %}
+</section>
+
+<section id="reads-and-writes">
+  <h2><span data-l="en">Who reads what</span><span data-l="zh">谁读什么、写什么</span></h2>
+  <div data-l="en">
+    <div class="w-table-wrap">
+      <table>
+        <thead><tr><th>Seat</th><th>Reads</th><th>Writes</th></tr></thead>
+        <tbody>
+          <tr><td>Analysts</td><td>Their own data tools, dated to the run</td><td>One report each</td></tr>
+          <tr><td>Bull and bear researchers</td><td>Every analyst report, and the debate so far</td><td>Alternating arguments</td></tr>
+          <tr><td>Research manager</td><td>The debate, plus the earnings, quality, valuation and A-share reports directly</td><td>A rating and an investment plan</td></tr>
+          <tr><td>Trader</td><td>The plan, the market report, the earnings, quality and valuation reports, and the context notes</td><td>A direction, price levels and a size</td></tr>
+          <tr><td>Risk team</td><td>The proposal, every analyst report, the context notes and any portfolio-limit ruling</td><td>A three-way debate</td></tr>
+          <tr><td>Portfolio manager</td><td>The plan, the proposal, the risk debate, the numeric reports, the context notes and lessons from earlier calls</td><td>The signed rating</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>The context notes — market regime, relative strength and your own portfolio — are described in <a href="{{ url_for('main.docs_page', slug='workflow') }}#added-context">How a run works</a>.</p>
+  </div>
+  <div data-l="zh">
+    <div class="w-table-wrap">
+      <table>
+        <thead><tr><th>席位</th><th>读什么</th><th>写什么</th></tr></thead>
+        <tbody>
+          <tr><td>分析师</td><td>各自的数据工具，以分析日期为准</td><td>各写一份报告</td></tr>
+          <tr><td>看涨与看跌研究员</td><td>全部分析师报告，以及此前的辩论</td><td>轮流发言的论点</td></tr>
+          <tr><td>研究主管</td><td>辩论内容，并直接读取盈利、质量、估值与 A 股专项报告</td><td>评级与投资计划</td></tr>
+          <tr><td>交易员</td><td>投资计划、市场报告，盈利、质量、估值报告，以及背景信息</td><td>方向、价位与仓位</td></tr>
+          <tr><td>风险团队</td><td>交易方案、全部分析师报告、背景信息，以及组合上限检查的裁定（如有）</td><td>三方辩论</td></tr>
+          <tr><td>投资组合经理</td><td>投资计划、交易方案、风险辩论、几份量化报告、背景信息，以及过往判断的经验</td><td>签发的最终评级</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>背景信息——市场环境、相对强弱以及你自己的持仓——的说明见<a href="{{ url_for('main.docs_page', slug='workflow') }}#added-context">一次分析如何运作</a>。</p>
+  </div>
+</section>

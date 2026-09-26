@@ -105,12 +105,15 @@
     {#  Examples of what the desk accepts, one per kind of listing. Buttons, not
         decoration: picking an A-share code reruns the log with the three
         specialists that only A-share runs seat, which is the one difference
-        between markets that a visitor cannot otherwise see before signing in. #}
+        between markets that a visitor cannot otherwise see before signing in.
+        The A-share codes carry their exchange suffix because that is the form
+        Yahoo resolves: a bare code still runs, but the Yahoo-only evidence
+        (quality, valuation, revision history) finds less behind it. #}
     <div class="w-chips" role="group" aria-label="Example tickers">
       <button type="button" class="w-chip" data-lp-chip="NVDA" aria-pressed="true">NVDA<small><span data-l="en">US</span><span data-l="zh">美股</span></small></button>
       <button type="button" class="w-chip" data-lp-chip="TSM" aria-pressed="false">TSM<small>ADR</small></button>
-      <button type="button" class="w-chip" data-lp-chip="600519" data-ashare aria-pressed="false">600519<small><span data-l="en">Shanghai</span><span data-l="zh">沪市</span></small></button>
-      <button type="button" class="w-chip" data-lp-chip="300750" data-ashare aria-pressed="false">300750<small><span data-l="en">Shenzhen</span><span data-l="zh">深市</span></small></button>
+      <button type="button" class="w-chip" data-lp-chip="600519.SS" data-ashare aria-pressed="false">600519.SS<small><span data-l="en">Shanghai</span><span data-l="zh">沪市</span></small></button>
+      <button type="button" class="w-chip" data-lp-chip="300750.SZ" data-ashare aria-pressed="false">300750.SZ<small><span data-l="en">Shenzhen</span><span data-l="zh">深市</span></small></button>
     </div>
   </figure>
 </section>
@@ -238,8 +241,8 @@
       <span class="w-card-icon" aria-hidden="true"><svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7M12 3v12M12 3 8 7m4-4 4 4"/></svg></span>
       <span class="w-card-title"><span data-l="en">Share it anywhere</span><span data-l="zh">随处分享</span></span>
       <span class="w-card-body">
-        <span data-l="en">Email, text or a WeChat QR code. The link opens without an account, expires in {{ landing.share_days }} days, and you can revoke it.</span>
-        <span data-l="zh">邮件、短信或微信二维码均可。链接无需账号即可打开，{{ landing.share_days }} 天后过期，你也可以随时撤回。</span>
+        <span data-l="en">Email, text or a WeChat QR code. The link opens without an account and expires in {{ landing.share_days }} days.</span>
+        <span data-l="zh">邮件、短信或微信二维码均可。链接无需账号即可打开，{{ landing.share_days }} 天后过期。</span>
       </span>
     </div>
   </div>
