@@ -36,6 +36,7 @@ from ystocker import charts
 from ystocker import dca_history
 from ystocker import fetchguard
 from ystocker import freshness
+from ystocker import periods
 from ystocker import futu
 # Plain client UA for every fred.stlouisfed.org request. A spoofed browser UA is
 # silently blackholed by FRED's Akamai bot detection — see fed.py for details.
@@ -3419,7 +3420,11 @@ def api_sector_ranking():
     results = []
     try:
         tickers = list(ETF_MAP.keys())
-        batch = yf.download(tickers, period="1y", interval="1wk",
+        # Daily, and read through ystocker/periods.py. The "ytd" column used to
+        # be the first *weekly* close of a one-year download — a one-year return
+        # under a YTD heading, 18.7% where 14.5% was meant S&P-wide — with 1M and
+        # 6M counted in bars back from a last bar that may be a partial week.
+        batch = yf.download(tickers, period="1y", interval="1d",
                             auto_adjust=True, progress=False, group_by="ticker")
         for etf, sector in ETF_MAP.items():
             try:
@@ -3430,18 +3435,18 @@ def api_sector_ranking():
                 if len(closes) < 4:
                     continue
                 info = yf.Ticker(etf).info
-                ytd_ret = closes.iloc[-1] / closes.iloc[0] * 100 - 100
-                m6_ret  = closes.iloc[-1] / closes.iloc[max(0, len(closes)-26)] * 100 - 100
-                m1_ret  = closes.iloc[-1] / closes.iloc[max(0, len(closes)-4)]  * 100 - 100
+                ytd_ret = periods.period_return(closes, "YTD")
+                m6_ret  = periods.period_return(closes, "6M")
+                m1_ret  = periods.period_return(closes, "1M")
                 results.append({
                     "ticker":      etf,
                     "sector":      sector,
                     "pe":          _safe(round(info.get("trailingPE"), 1)) if info.get("trailingPE") else None,
                     "pb":          _safe(round(info.get("priceToBook"), 2)) if info.get("priceToBook") else None,
                     "div_yield":   _safe(dividend_yield_pct(info)),
-                    "ytd":         round(float(ytd_ret), 1),
-                    "m6":          round(float(m6_ret), 1),
-                    "m1":          round(float(m1_ret), 1),
+                    "ytd":         None if ytd_ret is None else round(ytd_ret, 1),
+                    "m6":          None if m6_ret is None else round(m6_ret, 1),
+                    "m1":          None if m1_ret is None else round(m1_ret, 1),
                     "price":       round(float(closes.iloc[-1]), 2),
                 })
             except Exception:
@@ -9565,37 +9570,37 @@ _SECTOR_PERIODS = ["1W", "1M", "3M", "6M", "YTD", "1Y"]
 
 @bp.route("/api/sector-rotation-grid")
 def api_sector_rotation_grid():
-    """Multi-period sector performance vs SPY for the rotation heatmap."""
+    """Multi-period sector performance vs SPY for the rotation heatmap.
+
+    Where each window starts is ystocker/periods.py's, shared with the ranking
+    and the GICS panel beside it. This used to start each window at the first
+    close *inside* it, which dropped that session's move — for YTD, all of
+    2 January's — so the grid and the GICS panel disagreed on the same year.
+    """
     import yfinance as yf
-    import datetime as _dt
     with _SECTOR_GRID_LOCK:
         entry = _SECTOR_GRID_CACHE.get("data")
         if entry and time.time() - entry["ts"] < _SECTOR_GRID_TTL:
             return jsonify(entry["data"])
     try:
         tickers = list(_SECTOR_GRID_ETFS.keys()) + ["SPY"]
-        df = yf.download(tickers, period="1y", interval="1d",
+        # Two years, not one: a 1Y window starts from the close on or before
+        # this date last year, which a one-year download does not always reach
+        # — and a series that does not reach it now reports nothing rather than
+        # a shorter period under the 1Y heading.
+        df = yf.download(tickers, period="2y", interval="1d",
                          auto_adjust=True, progress=False)
         closes = df["Close"]
-        today = _dt.date.today()
-        ytd_start = _dt.date(today.year, 1, 1)
-        def _back(days):
-            return (today - _dt.timedelta(days=days)).isoformat()
-        cutoffs = {
-            "1W": _back(7), "1M": _back(31), "3M": _back(92),
-            "6M": _back(183), "YTD": ytd_start.isoformat(), "1Y": _back(365),
-        }
-        def _ret(sym, cutoff):
-            s = closes[sym].dropna()
-            s = s[s.index.date >= _dt.date.fromisoformat(cutoff)]
-            if len(s) < 2: return None
-            return round((float(s.iloc[-1]) / float(s.iloc[0]) - 1) * 100, 2)
-        spy_rets = {p: _ret("SPY", c) for p, c in cutoffs.items()}
+
+        def _ret(sym, period):
+            return periods.period_return(closes[sym], period) if sym in closes.columns else None
+
+        spy_rets = {p: _ret("SPY", p) for p in _SECTOR_PERIODS}
         rows = []
         for etf, name in _SECTOR_GRID_ETFS.items():
             rets = {}
-            for period, cutoff in cutoffs.items():
-                abs_ret = _ret(etf, cutoff)
+            for period in _SECTOR_PERIODS:
+                abs_ret = _ret(etf, period)
                 spy_ret = spy_rets[period]
                 rets[period] = round(abs_ret - spy_ret, 2) if (abs_ret is not None and spy_ret is not None) else None
             rows.append({"etf": etf, "name": name, "returns": rets})

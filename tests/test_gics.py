@@ -11,7 +11,8 @@ what is pinned here is everything that can be proven without a market:
 * the arithmetic — cap weighting, the YTD base, date-gating, the partial-bar
   guard, the end-date coverage floor and split invariance — on prices small
   enough to check by hand;
-* breadth actually calls it, on the union of tickers, and survives it failing.
+* breadth actually calls it, reads its universe from the same snapshot, and
+  survives it failing.
 """
 from __future__ import annotations
 
@@ -390,18 +391,33 @@ class BreadthIntegrationTests(unittest.TestCase):
             return pd.DataFrame(data, index=days, columns=cols)
         return types.SimpleNamespace(download=download)
 
-    def test_breadth_downloads_the_union_and_publishes_the_block(self):
+    def test_breadth_downloads_the_members_and_publishes_the_block(self):
         from ystocker import breadth
         members = {"ZZZZ": _member("Semiconductors", 5.0), "AAPL": _member(
             "Technology Hardware, Storage & Peripherals", 7.0)}
         requested: list = []
         with mock.patch.dict(sys.modules, {"yfinance": self._fake_yf(requested)}), \
+             mock.patch.object(breadth, "SP500_UNIVERSE", tuple(members)), \
              mock.patch.object(gics, "load_snapshot", return_value=_snap(members)):
             data = breadth._build_cache()
-        self.assertIn("ZZZZ", requested, "a snapshot name outside SP500_UNIVERSE was not fetched")
-        self.assertEqual(requested.count("AAPL"), 1, "a name in both lists was fetched twice")
+        self.assertEqual(requested.count("ZZZZ"), 1)
+        self.assertEqual(requested.count("AAPL"), 1, "a member was fetched twice")
         self.assertTrue(data["gics"] and data["gics"]["sectors"])
         self.assertEqual(data["gics"]["coverage"]["priced"], 2)
+
+    def test_the_breadth_universe_is_the_snapshot(self):
+        # One list, so they cannot drift: the hand-edited tuple this replaced
+        # was five names out of date while the snapshot beside it was current.
+        from ystocker import breadth
+        self.assertEqual(set(breadth.SP500_UNIVERSE), set(gics.load_snapshot()["members"]))
+        self.assertEqual(len(breadth.SP500_UNIVERSE), len(set(breadth.SP500_UNIVERSE)))
+
+    def test_an_unreadable_snapshot_empties_the_universe_rather_than_the_app(self):
+        from ystocker import breadth
+        with mock.patch.object(gics, "load_snapshot", return_value=None), \
+             self.assertLogs("ystocker.breadth", level="ERROR") as logs:
+            self.assertEqual(breadth._load_universe(), ())
+        self.assertIn("universe is empty", logs.output[0])
 
     def test_a_failing_breakdown_costs_only_itself(self):
         from ystocker import breadth
