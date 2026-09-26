@@ -429,6 +429,27 @@
     body { font-family: 'Inter', 'PingFang SC', 'Hiragino Sans GB',
                         'Microsoft YaHei', 'Noto Sans SC', sans-serif; }
     .app-container { max-width: 1475px; }
+    /* Where the header trades its full bar for the hamburger. The bar does not
+       shrink (logo, nine links, the right-hand controls, none of them
+       wrappable), and it needs ~1214px signed out and ~1366px signed in, where
+       Share and the account chip join it. It used to switch on at md (768px),
+       so from there up to that width every page on the site scrolled sideways:
+       by 446px on an iPad held upright.
+       The header carries its own switch point, set by the server from the
+       sign-in state, since only the server knows which bar it is drawing. This
+       is written here rather than as xl: utilities because the compiled bundle
+       has none of them. The selectors include `header` to outrank .md\:flex and
+       .md\:hidden, and Alpine's inline display:none still closes the menu,
+       since an inline style beats any rule without !important. */
+    @media (min-width: 768px) and (max-width: 1279.98px) {
+      header [data-nav="desktop"] { display: none; }
+      header [data-nav="burger"], header [data-nav="drawer"] { display: block; }
+    }
+    @media (min-width: 1280px) and (max-width: 1399.98px) {
+      header[data-nav-fit="1400"] [data-nav="desktop"] { display: none; }
+      header[data-nav-fit="1400"] [data-nav="burger"],
+      header[data-nav-fit="1400"] [data-nav="drawer"] { display: block; }
+    }
     .chart-container { position: relative; }
     /* Custom scrollbar */
     ::-webkit-scrollbar { width: 6px; height: 6px; }
@@ -461,7 +482,7 @@
 
   {% if not _agents_embedded %}
   <!-- ── Top navigation bar ──────────────────────────────────────────── -->
-  <header class="sticky top-0 z-50 bg-white/80 dark:bg-slate-900/80 backdrop-blur border-b border-slate-200 dark:border-slate-800">
+  <header data-nav-fit="{{ 1400 if current_user.email else 1280 }}" class="sticky top-0 z-50 bg-white/80 dark:bg-slate-900/80 backdrop-blur border-b border-slate-200 dark:border-slate-800">
     <div class="app-container mx-auto px-4 sm:px-6 flex items-center h-14 gap-4">
 
       <!-- Logo -->
@@ -470,7 +491,7 @@
       </a>
 
       <!-- Desktop nav -->
-      <nav class="hidden md:flex items-center gap-1 ml-4 flex-1">
+      <nav data-nav="desktop" class="hidden md:flex items-center gap-1 ml-4 flex-1">
         <a href="{{ url_for('main.markets') }}"
            class="px-3 py-1.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition"
            data-i18n="markets.nav">Markets</a>
@@ -583,7 +604,7 @@
       </nav>
 
       <!-- Refresh button + Language toggle -->
-      <div class="relative ml-auto hidden md:flex items-center gap-2">
+      <div data-nav="desktop" class="relative ml-auto hidden md:flex items-center gap-2">
         {#
           Ticker search. This was a bare link to /lookup, which meant a full
           page load before you could type a single character. The box now opens
@@ -778,7 +799,7 @@
       </div>
 
       <!-- Mobile hamburger -->
-      <button class="md:hidden ml-auto p-2 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800" @click="navOpen = !navOpen">
+      <button data-nav="burger" title="Menu" data-i18n-title="nav.menu" class="md:hidden ml-auto p-2 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800" @click="navOpen = !navOpen">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                 d="M4 6h16M4 12h16M4 18h16"/>
@@ -801,7 +822,7 @@
        pulltorefresh.js arms on a touch that starts at `scrollTop === 0`, so
        without it an overscroll at the top of the menu would trigger a page
        reload while the reader was only trying to reach the first link. #}
-    <div x-show="navOpen" x-transition
+    <div data-nav="drawer" x-show="navOpen" x-transition
          class="md:hidden border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 pb-4 overflow-y-auto"
          style="max-height: calc(100dvh - 3.5rem); overscroll-behavior: contain">
       <div class="flex flex-col gap-1 pt-2">

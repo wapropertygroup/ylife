@@ -130,6 +130,8 @@ const I18n = (() => {
     'nav.theme':          { en: 'Toggle light / dark', zh: '切换浅色 / 深色' },
     'nav.theme_light':    { en: 'Light mode', zh: '浅色模式' },
     'nav.theme_dark':     { en: 'Dark mode', zh: '深色模式' },
+    // The hamburger's tooltip, and its accessible name: it is icon-only.
+    'nav.menu':           { en: 'Menu', zh: '菜单' },
     'nav.refresh_title':  { en: 'Refresh data', zh: '刷新数据' },
     'nav.refresh_body':   { en: 'Clears the in-memory cache and re-fetches live prices, PE ratios, and analyst targets for all tickers from Yahoo Finance.',
                             zh: '清除内存缓存，从 Yahoo Finance 重新获取所有股票的最新价格、市盈率及分析师目标价。' },
