@@ -181,6 +181,12 @@
   .gics-muted { color: var(--t-ink-dim); }
   .gics-note { font-size: 11px; line-height: 1.6; color: var(--t-ink-dim); margin-top: 10px; }
   .gics-note p + p { margin-top: 2px; }
+  /* The rotation map. With maintainAspectRatio off, Chart.js fills its parent,
+     so the parent needs a height; the axis labels are drawn inside the canvas,
+     so this height already includes them. Shorter on a phone, where the plot
+     is a third as wide and the same height would make it a tall strip. */
+  .gics-map-box { position: relative; height: 460px; }
+  @media (max-width: 640px) { .gics-map-box { height: 380px; } }
   /* AI Markets Brief — rendered Markdown, including pipe tables. Mirrors the
      .md-body rules on /history so LLM output reads the same everywhere. */
   .brief-md { font-size: 13px; line-height: 1.75; color: var(--t-ink); overflow-wrap: break-word; }
@@ -748,6 +754,23 @@
     <div class="text-xs text-slate-500 dark:text-slate-600 animate-pulse" data-i18n="markets.gics_loading">Loading…</div>
   </div>
   <div id="gicsNote" class="gics-note"></div>
+</div>
+
+<!-- The same industry groups as a rotation map. Its own card, so the table's
+     Return / vs S&P 500 / Weight change toggle is not read as steering it; hidden
+     until /api/gics answers, since the table above already says why when it
+     cannot. Its buttons are written by renderGicsMap(): their labels are period
+     names composed in JS. -->
+<div class="hidden bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6 fade-up mb-6" id="gicsMapSection">
+  <div class="flex flex-wrap items-start justify-between gap-3 mb-3">
+    <div class="gics-head-text">
+      <h2 class="text-base font-semibold text-slate-700 dark:text-slate-200" data-i18n="markets.gics_map_title">Industry-Group Rotation Map — vs S&amp;P 500</h2>
+      <p class="text-xs text-slate-500 mt-0.5" data-i18n="markets.gics_map_desc">Each bubble is an industry group, its area its weight in the index.</p>
+    </div>
+    <div id="gicsMapPairs" class="flex gap-1 shrink-0"></div>
+  </div>
+  <div class="gics-map-box"><canvas id="gicsMapCanvas" role="img"></canvas></div>
+  <div id="gicsMapNote" class="gics-note"></div>
 </div>
 
 <!-- ── VIX vs PCR Correlation ──────────────────────────────────────────── -->
@@ -5744,9 +5767,11 @@ function _gicsTone(v, period) {
   return _GICS_TONES[i];
 }
 
-function _gicsFmt(v) {
+// `mode` defaults to the table's; the rotation map passes 'rel', since its
+// coordinates are relative returns whichever view the table is showing.
+function _gicsFmt(v, mode) {
   if (v == null) return '—';
-  const wchg = _GICS.mode === 'wchg';
+  const wchg = (mode || _GICS.mode) === 'wchg';
   // toFixed(1) prints -0.04 as "-0.0", a sign on a number that rounds to zero.
   const txt = v.toFixed(wchg ? 2 : 1).replace(/^-(0\.0+)$/, '$1');
   const sign = v > 0 && Number(txt) !== 0 ? '+' : '';
@@ -5874,7 +5899,319 @@ document.querySelectorAll('[data-gics-mode]').forEach(btn => {
     renderGics();
   });
 });
-document.addEventListener('i18n:langchange', () => { if (_GICS.data) renderGics(); });
+
+/* ── GICS rotation map ──────────────────────────────────────────────────────
+   The table's "vs S&P 500" view as coordinates: each industry group sits at
+   its return against the index over a longer window (across) and a shorter
+   one (up), its bubble's area its weight. The origin is the index itself, so
+   the quadrants read as a rotation chart's do — leading, weakening, lagging,
+   improving — and every coordinate is a cell of the table above, which is
+   this chart's table view.
+
+   The two windows overlap — three months contain the last one — so the axes
+   are not independent, and a group that moved hard lately is pulled toward
+   the diagonal. Chaining the longer return down to "before the shorter
+   window" would remove that, but not exactly here: each horizon counts only
+   the companies in the index at its own start, so the quotient would mix two
+   memberships. A coordinate the reader can find in the table beats one that
+   is nearly right.
+
+   One hue for every bubble. Twenty-five groups in eleven sectors is far past
+   what colour can keep apart on a scatter, so a group is named by its label
+   and tooltip, and a sector by hovering: its groups keep their colour and the
+   rest fade — the within-sector comparison this panel exists for. */
+// [shorter, longer] — the y axis, then the x. 1M against 3M is the default as
+// the pair nearest a weekly relative-rotation chart's usual windows.
+const _GICS_MAP_PAIRS = [['1W', '1M'], ['1M', '3M'], ['1M', '6M'], ['3M', '1Y']];
+const _GICS_MAP = { pair: '1M|3M', focus: null, chart: null };
+// Written out whole rather than built from a prefix, so test_gics.py's scan
+// of this template finds each key and checks it exists in both languages.
+// Clockwise from top right, the order a group rotates through them.
+const _GICS_MAP_Q = { lead: 'markets.gics_map_q_lead', weak: 'markets.gics_map_q_weak',
+                      lag: 'markets.gics_map_q_lag', improve: 'markets.gics_map_q_improve' };
+const _GICS_MAP_COL = {
+  fill: CT.c('rgba(129,140,248,0.7)'), faded: CT.c('rgba(100,116,139,0.3)'),
+  hover: CT.c('#818cf8'), ring: CT.c('#0f172a'), zero: CT.c('#475569'),
+  ink: CT.c('#cbd5e1'), inkStrong: CT.c('#e2e8f0'), quad: CT.c('#64748b'),
+};
+
+// On an axis counts as ahead: a group level with the index has not lagged it.
+const _gicsQuad = (x, y) => x >= 0 ? (y >= 0 ? 'lead' : 'weak') : (y >= 0 ? 'improve' : 'lag');
+
+function _gicsMapPoints(d, ys, xs) {
+  const pts = [];
+  let missing = 0;
+  (d.sectors || []).forEach(sec => (sec.groups || []).forEach(g => {
+    const x = (g.rel || {})[xs], y = (g.rel || {})[ys];
+    if (x == null || y == null || !(g.weight > 0)) { missing++; return; }
+    pts.push({ x, y, w: g.weight, n: g.n, code: g.code, name: g.name, top: g.top || [],
+               sector: sec.code, sectorName: sec.name, q: _gicsQuad(x, y) });
+  }));
+  // Largest first: a small group is then painted over a large one rather than
+  // hidden beneath it, and when there is not room to label every bubble the
+  // labels go to the largest.
+  pts.sort((a, b) => b.w - a.w);
+  return { pts, missing };
+}
+
+// Area, not radius, in proportion to weight. The scale follows the canvas, so
+// a phone is not one semiconductor bubble; the floor keeps a 0.1% group big
+// enough to see and to hover.
+function _gicsMapRadius(w, width) {
+  const k = Math.min(5, Math.max(2.4, width / 220));
+  return Math.max(3, k * Math.sqrt(w));
+}
+
+// Fitted to the points, padded, and always reaching past zero, so both zero
+// lines — the index — stay in view. Not held symmetric about zero: the groups
+// are cap-weighted around the index, so a few large ones sit far out on one
+// side and most small ones bunch on the other, and a symmetric frame spent a
+// third of the plot on empty space while the bunch went unlabelled for want of
+// room. The ticks are left to Chart.js, on round numbers only.
+function _gicsMapBound(vals) {
+  const lo = Math.min(0, ...vals), hi = Math.max(0, ...vals);
+  const pad = Math.max(1, (hi - lo) * 0.08);
+  return { min: lo - pad, max: hi + pad };
+}
+
+// Greedy, largest first: each label tries the right of its bubble, then the
+// left, above, below and the four diagonals, and takes the first spot that
+// stays inside the plot and clears every label placed so far and every other
+// bubble. One that fits nowhere is dropped — its tooltip and the table still
+// carry it — because a label nudged away from its own bubble reads as
+// belonging to the next one.
+function _gicsPlaceLabels(items, area, measure, h, reserved = []) {
+  const taken = reserved.slice(), out = [];
+  const PAD = 2, GAP = 3;
+  const overlaps = (a, b) => a.l < b.r + PAD && b.l < a.r + PAD && a.t < b.b + PAD && b.t < a.b + PAD;
+  const onBubble = (bx, c) => {
+    const nx = Math.max(bx.l, Math.min(c.x, bx.r)), ny = Math.max(bx.t, Math.min(c.y, bx.b));
+    return (nx - c.x) ** 2 + (ny - c.y) ** 2 < c.r * c.r;
+  };
+  items.forEach(it => {
+    if (!it.text) return;
+    const w = measure(it.text), d = it.r * Math.SQRT1_2;
+    const spot = [
+      [it.x + it.r + GAP, it.y - h / 2],
+      [it.x - it.r - GAP - w, it.y - h / 2],
+      [it.x - w / 2, it.y - it.r - GAP - h],
+      [it.x - w / 2, it.y + it.r + GAP],
+      [it.x + d + GAP, it.y - d - GAP - h],
+      [it.x + d + GAP, it.y + d + GAP],
+      [it.x - d - GAP - w, it.y - d - GAP - h],
+      [it.x - d - GAP - w, it.y + d + GAP],
+    ].map(([l, t]) => ({ l, t, r: l + w, b: t + h }))
+     .find(bx => bx.l >= area.left && bx.r <= area.right && bx.t >= area.top && bx.b <= area.bottom
+       && !taken.some(o => overlaps(bx, o)) && !items.some(o => o !== it && onBubble(bx, o)));
+    if (spot) { taken.push(spot); out.push({ text: it.text, box: spot }); }
+  });
+  return out;
+}
+
+const _gicsMapPlugin = {
+  id: 'gicsMap',
+  // Quadrant names in the corners, under the bubbles. Their boxes are kept so
+  // the bubble labels, drawn afterwards, steer around them.
+  beforeDatasetsDraw(chart) {
+    const { ctx, chartArea: a } = chart;
+    const INSET = 8, H = 13;
+    ctx.save();
+    ctx.font = `600 11px ${Chart.defaults.font.family}`;
+    ctx.fillStyle = _GICS_MAP_COL.quad;
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    chart.$gicsQuad = [['lead', 1, 0], ['weak', 1, 1], ['lag', 0, 1], ['improve', 0, 0]].map(([q, right, bottom]) => {
+      const text = I18n.t(_GICS_MAP_Q[q]) || q, w = ctx.measureText(text).width;
+      const l = right ? a.right - INSET - w : a.left + INSET;
+      const top = bottom ? a.bottom - INSET - H : a.top + INSET;
+      ctx.fillText(text, l, top + H / 2);
+      return { l, t: top, r: l + w, b: top + H };
+    });
+    ctx.restore();
+  },
+  afterDatasetsDraw(chart) {
+    const { ctx, chartArea } = chart;
+    const pts = chart.data.datasets[0].data, focus = _GICS_MAP.focus, H = 13;
+    // Hovering a sector labels its groups alone: the rest have faded, and
+    // their labels would only crowd the ones being compared.
+    const items = chart.getDatasetMeta(0).data
+      .map((el, i) => ({ el, p: pts[i] }))
+      .filter(({ p }) => p && (!focus || p.sector === focus))
+      .map(({ el, p }) => ({ x: el.x, y: el.y, r: el.options.radius,
+        text: I18n.t('gics_short.' + p.code) || I18n.t('gics.' + p.code) || p.name }));
+    ctx.save();
+    ctx.font = `${focus ? 600 : 500} 11px ${Chart.defaults.font.family}`;
+    const placed = _gicsPlaceLabels(items, chartArea, s => ctx.measureText(s).width, H, chart.$gicsQuad || []);
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    // A halo in the card's colour lifts a label off the gridlines behind it.
+    ctx.lineJoin = 'round'; ctx.lineWidth = 3; ctx.strokeStyle = _GICS_MAP_COL.ring;
+    ctx.fillStyle = focus ? _GICS_MAP_COL.inkStrong : _GICS_MAP_COL.ink;
+    placed.forEach(({ text, box }) => {
+      ctx.strokeText(text, box.l, box.t + H / 2);
+      ctx.fillText(text, box.l, box.t + H / 2);
+    });
+    ctx.restore();
+  },
+  // A hovered bubble brings its sector forward. Read off the chart's own
+  // active set rather than onHover, which Chart.js does not call when the
+  // pointer leaves the canvas — the fade would stick.
+  afterEvent(chart) {
+    const act = chart.getActiveElements();
+    const p = act.length ? chart.data.datasets[0].data[act[0].index] : null;
+    const focus = p ? p.sector : null;
+    if (focus !== _GICS_MAP.focus) {
+      _GICS_MAP.focus = focus;
+      chart.update('none');
+    }
+  },
+};
+
+function _gicsMapTipTitle(items) {
+  const p = items.length ? items[0].raw : null;
+  return p ? (I18n.t('gics.' + p.code) || p.name) : '';
+}
+
+function _gicsMapTipLines(item) {
+  const t = (k, fb) => I18n.t(k) || fb;
+  const per = k => t('markets.gics_p_' + k, k);
+  const p = item.raw, [ys, xs] = _GICS_MAP.pair.split('|');
+  return [
+    `${t(_GICS_MAP_Q[p.q], p.q)} · ${per(ys)} ${_gicsFmt(p.y, 'rel')} · ${per(xs)} ${_gicsFmt(p.x, 'rel')}`,
+    t('markets.gics_map_tip_weight', 'Weight {w} · {n} names').replace('{w}', p.w.toFixed(1) + '%').replace('{n}', p.n),
+    [t('gics.' + p.sector, p.sectorName), p.top.map(x => x.t).join(' ')].filter(Boolean).join(' · '),
+  ];
+}
+
+function _gicsMapScale(b, text) {
+  return {
+    type: 'linear', min: b.min, max: b.max,
+    // Round ticks only: the fitted bounds themselves are not round numbers.
+    ticks: { includeBounds: false, color: TICK_COL, font: { size: 10 }, callback: v => (v > 0 ? '+' : '') + v + '%' },
+    // The zero lines are the index: one rung stronger than the grid.
+    grid: { color: c => (c.tick && c.tick.value === 0 ? _GICS_MAP_COL.zero : GRID_COL),
+            lineWidth: c => (c.tick && c.tick.value === 0 ? 1.5 : 1) },
+    border: { display: false },
+    title: { display: true, text, color: TICK_COL, font: { size: 11 } },
+  };
+}
+
+function _gicsMapConfig(data, bx, by, xTitle, yTitle) {
+  return {
+    type: 'bubble',
+    data: { datasets: [{
+      data,
+      backgroundColor: c => (!_GICS_MAP.focus || (c.raw && c.raw.sector === _GICS_MAP.focus)
+        ? _GICS_MAP_COL.fill : _GICS_MAP_COL.faded),
+      // A ring in the card's own colour rather than a border: it is what keeps
+      // two overlapping bubbles legible as two.
+      borderColor: _GICS_MAP_COL.ring, borderWidth: 1.5,
+      hoverBackgroundColor: _GICS_MAP_COL.hover, hoverBorderColor: _GICS_MAP_COL.inkStrong,
+      hoverBorderWidth: 2, hoverRadius: 2,
+      // Added to the radius when hit-testing, so a 3px bubble is a 26px target.
+      hitRadius: 10,
+    }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'nearest', intersect: true },
+      // Radii are pixels, so they follow the width; the update that a resize
+      // triggers picks the new ones up.
+      onResize: (chart, size) => chart.data.datasets[0].data.forEach(p => { p.r = _gicsMapRadius(p.w, size.width); }),
+      scales: { x: _gicsMapScale(bx, xTitle), y: _gicsMapScale(by, yTitle) },
+      plugins: {
+        legend: { display: false },
+        tooltip: { displayColors: false, callbacks: { title: _gicsMapTipTitle, label: _gicsMapTipLines } },
+      },
+    },
+    plugins: [_gicsMapPlugin],
+  };
+}
+
+function _renderGicsMapPairs(usable, t, per) {
+  const host = document.getElementById('gicsMapPairs');
+  if (!host) return;
+  host.innerHTML = usable.map(key => {
+    const [s, l] = key.split('|');
+    const tip = t('markets.gics_map_pair_tip', 'Up: {y} · across: {x}').replace('{y}', per(s)).replace('{x}', per(l));
+    return `<button type="button" class="gics-btn${key === _GICS_MAP.pair ? ' active' : ''}" data-gics-pair="${key}"`
+      + ` title="${_gicsEsc(tip)}">${_gicsEsc(per(s))} / ${_gicsEsc(per(l))}</button>`;
+  }).join('');
+}
+
+function _renderGicsMapNote(pts, missing, t) {
+  const el = document.getElementById('gicsMapNote');
+  if (!el) return;
+  const by = { lead: [0, 0], weak: [0, 0], lag: [0, 0], improve: [0, 0] };
+  pts.forEach(p => { by[p.q][0] += 1; by[p.q][1] += p.w; });
+  // Weights are already percentages of the index, so the four shares add up
+  // to the plotted part of it — short of 100 by exactly what is not plotted.
+  const counts = Object.keys(_GICS_MAP_Q).map(q => t('markets.gics_map_count', '{q}: {n} ({w})')
+    .replace('{q}', t(_GICS_MAP_Q[q], q)).replace('{n}', by[q][0]).replace('{w}', by[q][1].toFixed(0) + '%'));
+  const lines = [
+    t('markets.gics_map_counts', '{list}').replace('{list}', counts.join(' · ')),
+    t('markets.gics_map_note', ''),
+    missing ? t('markets.gics_map_missing', '{n} groups are not plotted.').replace('{n}', missing) : '',
+    t('markets.gics_asof', 'As of the {date} close.').replace('{date}', _GICS.data.asof),
+  ].filter(Boolean);
+  el.innerHTML = lines.map(x => `<p>${_gicsEsc(x)}</p>`).join('');
+}
+
+function renderGicsMap() {
+  const d = _GICS.data;
+  const card = document.getElementById('gicsMapSection');
+  const canvas = document.getElementById('gicsMapCanvas');
+  if (!d || !card || !canvas) return;
+  // The table is already drawn, and this runs inside its loader's try: a chart
+  // that throws must cost the chart, not turn the table into "unavailable".
+  try {
+    const avail = d.periods || [];
+    const usable = _GICS_MAP_PAIRS.filter(p => p.every(k => avail.includes(k))).map(p => p.join('|'));
+    if (!usable.length) return;
+    if (!usable.includes(_GICS_MAP.pair)) _GICS_MAP.pair = usable[0];
+    const [ys, xs] = _GICS_MAP.pair.split('|');
+    const { pts, missing } = _gicsMapPoints(d, ys, xs);
+    if (!pts.length) return;
+
+    const t = (k, fb) => I18n.t(k) || fb;
+    const per = k => t('markets.gics_p_' + k, k);
+    const title = k => t('markets.gics_map_axis', '{p} vs S&P 500').replace('{p}', per(k));
+    _renderGicsMapPairs(usable, t, per);
+    // Revealed before the chart is built, since it sizes itself to its box.
+    card.classList.remove('hidden');
+    canvas.setAttribute('aria-label', t('markets.gics_map_aria', '{n}').replace('{n}', pts.length));
+
+    const width = (canvas.parentNode && canvas.parentNode.clientWidth) || 600;
+    const data = pts.map(p => ({ ...p, r: _gicsMapRadius(p.w, width) }));
+    const bx = _gicsMapBound(pts.map(p => p.x)), by = _gicsMapBound(pts.map(p => p.y));
+    const chart = _GICS_MAP.chart;
+    // The same groups in the same order are moved, so a pair switch shows each
+    // bubble travelling; a different set would animate one group into another,
+    // so it is rebuilt instead.
+    if (chart && chart.data.datasets[0].data.map(p => p.code).join() === data.map(p => p.code).join()) {
+      chart.data.datasets[0].data = data;
+      [[chart.options.scales.x, bx, xs], [chart.options.scales.y, by, ys]].forEach(([s, b, k]) => {
+        s.min = b.min; s.max = b.max; s.title.text = title(k);
+      });
+      chart.update();
+    } else {
+      if (chart) chart.destroy();
+      _GICS_MAP.focus = null;
+      _GICS_MAP.chart = new Chart(canvas, _gicsMapConfig(data, bx, by, title(xs), title(ys)));
+    }
+    _renderGicsMapNote(pts, missing, t);
+  } catch (e) {
+    // Hidden again rather than left as a card of buttons around an empty box.
+    card.classList.add('hidden');
+    console.warn('GICS map failed:', e);
+  }
+}
+
+// Delegated, because renderGicsMap() rewrites the buttons on every render.
+document.getElementById('gicsMapPairs')?.addEventListener('click', ev => {
+  const btn = ev.target.closest('[data-gics-pair]');
+  if (!btn || btn.dataset.gicsPair === _GICS_MAP.pair) return;
+  _GICS_MAP.pair = btn.dataset.gicsPair;
+  renderGicsMap();
+});
+document.addEventListener('i18n:langchange', () => { if (_GICS.data) { renderGics(); renderGicsMap(); } });
 
 DeferLoad.when('#gicsTable', async function() {
   // Bounded, and it always ends on something the reader can see: a stopped
@@ -5899,6 +6236,7 @@ DeferLoad.when('#gicsTable', async function() {
       }
       _GICS.data = await resp.json();
       renderGics();
+      renderGicsMap();
       return;
     }
   } catch (e) {

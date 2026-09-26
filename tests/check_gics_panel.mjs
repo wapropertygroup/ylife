@@ -33,8 +33,16 @@ const t = (label, cond, detail = '') => {
 // ── A page, just big enough ─────────────────────────────────────────────────
 function makePage() {
   const els = {};
-  const el = id => (els[id] ??= { id, innerHTML: '', _handlers: {},
-    addEventListener(ev, fn) { this._handlers[ev] = fn; } });
+  // The map's card starts hidden, as it does in the template.
+  const el = id => {
+    if (els[id]) return els[id];
+    const cls = new Set(id === 'gicsMapSection' ? ['hidden'] : []);
+    return (els[id] = { id, innerHTML: '', _handlers: {}, attrs: {}, cls,
+      classList: { add: c => cls.add(c), remove: c => cls.delete(c), contains: c => cls.has(c) },
+      setAttribute(k, v) { this.attrs[k] = String(v); },
+      parentNode: { clientWidth: 880 },
+      addEventListener(ev, fn) { this._handlers[ev] = fn; } });
+  };
   const modeBtns = ['ret', 'rel', 'wchg'].map(m => ({
     dataset: { gicsMode: m }, _cls: new Set(m === 'ret' ? ['active'] : []),
     classList: { toggle(c, on) { on ? this._o._cls.add(c) : this._o._cls.delete(c); } },
@@ -54,22 +62,52 @@ function makePage() {
 // and a wrong key would pass unnoticed.
 // The two interpolating labels resolve to real templates, because a bracketed
 // key has no {date} in it and the date would vanish unnoticed; test_gics.py
-// asserts both languages keep the placeholder.
+// asserts both languages keep the placeholder. The map's templates likewise,
+// so a count or a window that failed to land in its sentence shows up here.
 const TEMPLATES = { 'markets.gics_asof': 'As of the {date} close.',
-                    'markets.gics_note_method': 'Weights from SPY holdings ({date}).' };
+                    'markets.gics_note_method': 'Weights from SPY holdings ({date}).',
+                    'markets.gics_map_axis': '{p} vs index',
+                    'markets.gics_map_count': '{q}: {n} ({w})',
+                    'markets.gics_map_counts': 'By quadrant: {list}',
+                    'markets.gics_map_missing': '{n} not plotted.',
+                    'markets.gics_map_tip_weight': 'Weight {w} · {n} names',
+                    'markets.gics_map_pair_tip': 'Up {y}, across {x}',
+                    'markets.gics_map_aria': 'Map of {n} groups.' };
 const I18n = { t: k => TEMPLATES[k] ?? `[${k}]` };
 
-function load({ fetch = async () => ({ status: 200, ok: true, json: async () => ({}) }) } = {}) {
+function load({ fetch = async () => ({ status: 200, ok: true, json: async () => ({}) }), chartThrows = false } = {}) {
   const page = makePage();
   let loader = null;
   const DeferLoad = { when: (_sel, fn) => { loader = fn; } };
   let clock = 0;
   const fakeDate = { now: () => clock, parse: s => Date.parse(s) };
   const fakeTimeout = (fn, ms) => { clock += ms; fn(); };
+  // Chart.js, as far as the map touches it outside a real canvas: the config
+  // it was built with, and every update and destroy after that.
+  const charts = [];
+  class Chart {
+    static defaults = { font: { family: 'test-sans' } };
+    constructor(canvas, config) {
+      if (chartThrows) throw new Error('no canvas here');
+      Object.assign(this, { canvas, config, data: config.data, options: config.options,
+                            updates: [], destroyed: false, _active: [] });
+      charts.push(this);
+    }
+    update(mode) { this.updates.push(mode ?? 'default'); }
+    destroy() { this.destroyed = true; }
+    getActiveElements() { return this._active; }
+  }
+  const warnings = [];
+  const console_ = { warn: (...a) => warnings.push(a.map(String).join(' ')), info() {} };
+  // CT, GRID_COL and TICK_COL are the page's globals, set up by base.html and
+  // the top of the page script; the dark theme is the one written in the file.
+  const CT = { c: x => x, dark: true };
   const api = new Function('document', 'DeferLoad', 'I18n', 'fetch', 'setTimeout', 'Date', 'console',
-    `${block}\nreturn { _GICS, renderGics, _gicsTone, _gicsFmt, _gicsSorted };`)(
-    page.document, DeferLoad, I18n, fetch, fakeTimeout, fakeDate, { warn() {}, info() {} });
-  return { ...api, page, loader: () => loader() };
+    'Chart', 'CT', 'GRID_COL', 'TICK_COL',
+    `${block}\nreturn { _GICS, renderGics, _gicsTone, _gicsFmt, _gicsSorted, _GICS_MAP, renderGicsMap,
+      _gicsQuad, _gicsMapRadius, _gicsMapBound, _gicsPlaceLabels, _gicsMapPlugin, _gicsMapTipLines, _gicsMapTipTitle };`)(
+    page.document, DeferLoad, I18n, fetch, fakeTimeout, fakeDate, console_, Chart, CT, '#1e293b', '#64748b');
+  return { ...api, page, charts, warnings, loader: () => loader() };
 }
 
 // ── Fixture: three sectors, one of them single-group ────────────────────────
@@ -204,6 +242,182 @@ console.log('\nthe loader always ends on something visible');
   const g = load({ fetch: async () => { throw new TypeError('network'); } });
   await g.loader();
   t('a thrown fetch says unavailable', g.page.els.gicsTable.innerHTML.includes('[markets.gics_unavailable]'));
+}
+
+console.log('\nrotation map');
+const GROUPS = DATA.sectors.flatMap(s => s.groups);
+const pairClick = (g, pair) => g.page.els.gicsMapPairs._handlers.click(
+  { target: { closest: s => (s === '[data-gics-pair]' ? { dataset: { gicsPair: pair } } : null) } });
+{
+  const g = load(); g._GICS.data = DATA; g.renderGics(); g.renderGicsMap();
+  t('the card is revealed once there is data', !g.page.els.gicsMapSection.cls.has('hidden'));
+  t('one chart, and a bubble chart', g.charts.length === 1 && g.charts[0].config.type === 'bubble');
+  const c = g.charts[0], pts = c.data.datasets[0].data;
+  t('every group is plotted', pts.length === GROUPS.length, `${pts.length} of ${GROUPS.length}`);
+  // The chart's whole claim to be checkable: a coordinate is a table cell.
+  t("coordinates are the table's own vs-S&P cells, 3M across and 1M up", GROUPS.every(gr => {
+    const p = pts.find(q => q.code === gr.code);
+    return p && p.x === gr.rel['3M'] && p.y === gr.rel['1M'];
+  }));
+  t('largest first, so a small bubble paints over a large one', pts.every((p, i) => !i || pts[i - 1].w >= p.w));
+  const k = pts.filter(p => p.r > 3).map(p => p.r * p.r / p.w);
+  t('area, not radius, follows weight', k.length >= 2 && Math.max(...k) / Math.min(...k) < 1.0001,
+    k.map(v => v.toFixed(2)).join(' '));
+  t('and nothing is below the 3px floor', pts.every(p => p.r >= 3));
+  const { x, y } = c.options.scales;
+  t('both axes reach past zero, so the index lines stay in view', x.min < 0 && x.max > 0 && y.min < 0 && y.max > 0);
+  t('…tick on round numbers only, not on the fitted bounds', x.ticks.includeBounds === false && y.ticks.includeBounds === false);
+  t('…and clear every point', pts.every(p => p.x > x.min && p.x < x.max && p.y > y.min && p.y < y.max));
+  t('axis titles name their window', x.title.text === '[markets.gics_p_3M] vs index' && y.title.text === '[markets.gics_p_1M] vs index',
+    `${x.title.text} / ${y.title.text}`);
+  const q = Object.fromEntries(pts.map(p => [p.code, p.q]));
+  t('each group knows its quadrant', q['4530'] === 'lead' && q['4510'] === 'weak' && q['4010'] === 'lag', JSON.stringify(q));
+  const note = g.page.els.gicsMapNote.innerHTML;
+  // Semis 14.2 + Hardware 9.4 lead; Software 10.5 weakens; the other three lag.
+  t('the note counts each quadrant and its share of the index', note.includes('By quadrant: [markets.gics_map_q_lead]: 2 (24%) · '
+    + '[markets.gics_map_q_weak]: 1 (11%) · [markets.gics_map_q_lag]: 3 (13%) · [markets.gics_map_q_improve]: 0 (0%)'), note.slice(0, 200));
+  t('…says nothing is missing by saying nothing', !note.includes('not plotted'));
+  t('…and carries the as-of date', note.includes('As of the 2026-09-25 close.'));
+  t('the canvas has a text alternative', g.page.els.gicsMapCanvas.attrs['aria-label'] === 'Map of 6 groups.');
+  const btns = [...g.page.els.gicsMapPairs.innerHTML.matchAll(/data-gics-pair="([^"]+)"/g)].map(m => m[1]);
+  t('four window pairs are offered', btns.join() === '1W|1M,1M|3M,1M|6M,3M|1Y', btns.join());
+  t('…with the default marked', /class="gics-btn active" data-gics-pair="1M\|3M"/.test(g.page.els.gicsMapPairs.innerHTML));
+
+  pairClick(g, '1M|6M');
+  const moved = c.data.datasets[0].data;
+  t('a pair switch moves the same chart rather than building another', g.charts.length === 1 && c.updates.length === 1);
+  t('…onto the new windows', GROUPS.every(gr => {
+    const p = moved.find(r => r.code === gr.code);
+    return p.x === gr.rel['6M'] && p.y === gr.rel['1M'];
+  }));
+  t('…with the axis refitted and retitled', moved.every(p => p.x > c.options.scales.x.min && p.x < c.options.scales.x.max)
+    && c.options.scales.x.title.text === '[markets.gics_p_6M] vs index');
+  t('…and the button following', /class="gics-btn active" data-gics-pair="1M\|6M"/.test(g.page.els.gicsMapPairs.innerHTML));
+  pairClick(g, '1M|6M');
+  t('clicking the active pair again does nothing', c.updates.length === 1);
+}
+{
+  // The table's view must not leak into the map's figures: weight change is
+  // in percentage points, and the map is always relative return.
+  const g = load(); g._GICS.data = DATA; g._GICS.mode = 'wchg'; g.renderGicsMap();
+  const p = g.charts[0].data.datasets[0].data.find(r => r.code === '4530');
+  const lines = g._gicsMapTipLines({ raw: p });
+  t('tooltip leads with the quadrant and both figures, in percent whatever the table shows',
+    lines[0] === '[markets.gics_map_q_lead] · [markets.gics_p_1M] +8.7% · [markets.gics_p_3M] +0.6%', lines[0]);
+  t('…then the weight and the count', lines[1] === 'Weight 14.2% · 20 names', lines[1]);
+  t('…then the sector and its largest names', lines[2].startsWith('[gics.45] · NVDA'), lines[2]);
+  t('its title is the full name', g._gicsMapTipTitle([{ raw: p }]) === '[gics.4530]');
+}
+{
+  const g = load(); g._GICS.data = DATA; g.renderGicsMap();
+  const c = g.charts[0], ds = c.data.datasets[0];
+  const colour = code => ds.backgroundColor({ raw: ds.data.find(p => p.code === code) });
+  c._active = [{ datasetIndex: 0, index: ds.data.findIndex(p => p.code === '4510') }];
+  g._gicsMapPlugin.afterEvent(c);
+  t('hovering a bubble brings its sector forward', g._GICS_MAP.focus === '45' && c.updates.length === 1);
+  t('…its groups keep the colour and the rest fade', colour('4530') === colour('4510') && colour('4010') !== colour('4510'));
+  g._gicsMapPlugin.afterEvent(c);
+  t('the same hover again does not redraw', c.updates.length === 1);
+  c._active = [];
+  g._gicsMapPlugin.afterEvent(c);
+  t('leaving the canvas clears it', g._GICS_MAP.focus === null && c.updates.length === 2 && colour('4010') === colour('4510'));
+}
+{
+  const data = structuredClone(DATA);
+  data.sectors[0].groups[2].rel['3M'] = null;   // Hardware: no 3M figure
+  const g = load(); g._GICS.data = data; g.renderGicsMap();
+  const pts = g.charts[0].data.datasets[0].data;
+  t('a group missing one window is left off, not put at zero', pts.length === 5 && !pts.some(p => p.code === '4520'));
+  t('…and the note says how many', g.page.els.gicsMapNote.innerHTML.includes('<p>1 not plotted.</p>'));
+  pairClick(g, '1M|6M');
+  t('a pair that changes which groups plot rebuilds, rather than morph one group into another',
+    g.charts.length === 2 && g.charts[0].destroyed && g.charts[1].data.datasets[0].data.length === 6);
+}
+{
+  const g = load(); g._GICS.data = { ...DATA, periods: ['1D', '1W', '1M', '3M', '6M', 'YTD'] }; g.renderGicsMap();
+  const btns = [...g.page.els.gicsMapPairs.innerHTML.matchAll(/data-gics-pair="([^"]+)"/g)].map(m => m[1]);
+  t('a pair is offered only when both its windows exist', btns.join() === '1W|1M,1M|3M,1M|6M', btns.join());
+  g._GICS_MAP.pair = '3M|1Y'; g.renderGicsMap();
+  t('…and a stale choice falls back to one that does', g._GICS_MAP.pair === '1W|1M');
+}
+{
+  const g = load(); g._GICS.data = { ...DATA, periods: ['1D'] }; g.renderGicsMap();
+  t('no usable pair keeps the card hidden and builds nothing', g.page.els.gicsMapSection.cls.has('hidden') && !g.charts.length);
+}
+{
+  const g = load({ chartThrows: true, fetch: async () => ({ status: 200, ok: true, json: async () => DATA }) });
+  await g.loader();
+  t('a chart that throws leaves the table drawn', g.page.els.gicsTable.innerHTML.startsWith('<table'));
+  t('…hides its own card again', g.page.els.gicsMapSection.cls.has('hidden'));
+  t('…and says why in the console', g.warnings.some(w => w.includes('GICS map failed')));
+}
+{
+  const g = load();
+  t('on an axis counts as ahead of the index', g._gicsQuad(0, 0) === 'lead');
+  t('the four quadrants, clockwise from top right', [g._gicsQuad(1, 1), g._gicsQuad(1, -1), g._gicsQuad(-1, -1), g._gicsQuad(-1, 1)].join()
+    === 'lead,weak,lag,improve');
+  const b = g._gicsMapBound([30.5, -18.7]), above = g._gicsMapBound([2, 5]);
+  t('bounds are fitted to the points, with room either side', b.min < -18.7 && b.min > -25 && b.max > 30.5 && b.max < 36,
+    JSON.stringify(b));
+  t('…and reach zero even when every point is on one side of it', above.min < 0 && above.max > 5, JSON.stringify(above));
+  t('bubble scale follows the canvas, within limits',
+    g._gicsMapRadius(16, 330) < g._gicsMapRadius(16, 880) && g._gicsMapRadius(16, 5000) === g._gicsMapRadius(16, 1100));
+}
+
+console.log('\nbubble labels');
+{
+  const g = load();
+  const area = { left: 0, top: 0, right: 400, bottom: 300 };
+  const measure = s => s.length * 6, H = 13;
+  const place = (items, reserved) => g._gicsPlaceLabels(items, area, measure, H, reserved);
+  const one = place([{ x: 100, y: 100, r: 10, text: 'Alpha' }]);
+  t('the first choice is to the right of the bubble', one.length === 1 && one[0].box.l === 113 && one[0].box.t === 93.5,
+    JSON.stringify(one[0] && one[0].box));
+  const edge = place([{ x: 390, y: 100, r: 6, text: 'Alpha' }]);
+  t('against the right edge it goes left', edge.length === 1 && edge[0].box.r === 381, JSON.stringify(edge[0] && edge[0].box));
+  // Four neighbours sitting on all four of its spots.
+  const boxed = place([{ x: 200, y: 150, r: 5, text: 'Hemmed' },
+                       { x: 230, y: 150, r: 22, text: '' }, { x: 170, y: 150, r: 22, text: '' },
+                       { x: 200, y: 125, r: 10, text: '' }, { x: 200, y: 175, r: 10, text: '' }]);
+  t('a label that fits nowhere is dropped, not stacked', boxed.length === 0, JSON.stringify(boxed));
+  // Small neighbours on all four sides, none on the diagonals.
+  const diag = place([{ x: 200, y: 150, r: 5, text: 'Hemmed' },
+                      { x: 215, y: 150, r: 6, text: '' }, { x: 185, y: 150, r: 6, text: '' },
+                      { x: 200, y: 134, r: 6, text: '' }, { x: 200, y: 166, r: 6, text: '' }]);
+  t('blocked on four sides, it takes a diagonal', diag.length === 1 && diag[0].box.l > 205 && diag[0].box.b < 145,
+    JSON.stringify(diag[0] && diag[0].box));
+  const rival = place([{ x: 100, y: 100, r: 10, text: 'First' }, { x: 100, y: 118, r: 4, text: 'Second' }]);
+  t('the larger bubble, coming first, keeps its spot', rival[0] && rival[0].text === 'First' && rival[0].box.l === 113);
+  const reserved = [{ l: 100, t: 80, r: 200, b: 120 }];
+  const avoid = place([{ x: 90, y: 100, r: 5, text: 'Alpha' }], reserved);
+  t('the quadrant names are avoided', avoid.length === 1 && !(avoid[0].box.l < 202 && avoid[0].box.r > 98), JSON.stringify(avoid[0] && avoid[0].box));
+
+  // A crowd: whatever survives must not touch another label or another bubble,
+  // and must sit inside the plot. Deterministic, so a failure reproduces.
+  let s = 7;
+  const rnd = () => ((s = (s * 16807) % 2147483647) / 2147483647);
+  const crowd = Array.from({ length: 40 }, (_, i) => ({ x: 20 + rnd() * 360, y: 20 + rnd() * 260, r: 3 + rnd() * 14, text: 'Group ' + i }));
+  const got = place(crowd);
+  const hit = (a, b) => a.l < b.r && b.l < a.r && a.t < b.b && b.t < a.b;
+  const onCircle = (bx, c) => {
+    const nx = Math.max(bx.l, Math.min(c.x, bx.r)), ny = Math.max(bx.t, Math.min(c.y, bx.b));
+    return (nx - c.x) ** 2 + (ny - c.y) ** 2 < c.r * c.r;
+  };
+  t('in a crowd, some labels still land', got.length >= 8, `${got.length} of 40`);
+  t('…none overlaps another', got.every((a, i) => got.every((b, j) => i === j || !hit(a.box, b.box))));
+  t('…or sits on another bubble', got.every(a => crowd.every(c => c.text === a.text || !onCircle(a.box, c))));
+  t('…or leaves the plot', got.every(({ box }) => box.l >= 0 && box.r <= 400 && box.t >= 0 && box.b <= 300));
+}
+
+console.log('\nshort names');
+{
+  // Composed in JS as 'gics_short.' + code, which neither I18n.apply() nor
+  // test_gics.py's scan of `markets.gics_*` keys can see.
+  const src = readFileSync(join(here, '..', 'ystocker', 'static', 'i18n.js'), 'utf8');
+  const codes = [...src.matchAll(/'gics\.(\d{4})'\s*:/g)].map(m => m[1]);
+  const missing = codes.filter(c => !new RegExp(`'gics_short\\.${c}'\\s*:\\s*\\{\\s*en:\\s*'[^']+',\\s*zh:\\s*'[^']+'\\s*\\}`).test(src));
+  t('every industry group has a short label in both languages', codes.length === 25 && !missing.length,
+    `${codes.length} groups; missing ${missing.join(' ')}`);
 }
 
 console.log('\nthe block runs at all');
