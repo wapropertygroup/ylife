@@ -2549,8 +2549,8 @@ const I18n = (() => {
     // The rotation map below the GICS table: the same groups, the table's
     // "vs S&P 500" cells as coordinates.
     'markets.gics_map_title':  { en: 'Industry-Group Rotation Map — vs S&P 500', zh: '行业组轮动象限 — 相对标普500' },
-    'markets.gics_map_desc':   { en: 'Each bubble is an industry group, its area its weight in the index. Across: its return against the S&P 500 over the longer window; up: over the shorter one. Where the two zero lines cross is the index itself.',
-                                 zh: '每个气泡是一个行业组，面积代表它在指数中的权重。横轴是较长区间相对标普500的超额收益，纵轴是较短区间的。两条零线的交点就是标普500本身。' },
+    'markets.gics_map_desc':   { en: 'Each bubble is an industry group, its area its weight in the index. Across: its return against the S&P 500 over the longer window; up: over the shorter one. Colour marks the quadrant; where the two zero lines cross is the index itself.',
+                                 zh: '每个气泡是一个行业组，面积代表它在指数中的权重。横轴是较长区间相对标普500的超额收益，纵轴是较短区间的。颜色表示所在象限；两条零线的交点就是标普500本身。' },
     'markets.gics_map_q_lead':    { en: 'Leading',   zh: '领先' },
     'markets.gics_map_q_weak':    { en: 'Weakening', zh: '转弱' },
     'markets.gics_map_q_lag':     { en: 'Lagging',   zh: '落后' },
@@ -2558,6 +2558,9 @@ const I18n = (() => {
     'markets.gics_map_axis':      { en: '{p} vs S&P 500', zh: '{p} 相对标普500' },
     'markets.gics_map_pair_tip':  { en: 'Up: {y} · across: {x}', zh: '纵轴 {y}，横轴 {x}' },
     'markets.gics_map_tip_weight': { en: 'Weight {w} · {n} names', zh: '权重 {w} · {n} 只成分股' },
+    'markets.gics_map_tip_then':  { en: '{n} weeks ago: {at}', zh: '{n} 周前：{at}' },
+    'markets.gics_map_trail_note': { en: 'Each line runs from where a group stood {n} weeks ago, one dot per weekly close, to its bubble now; the heavier the group, the heavier its line. The usual rotation turns clockwise: improving, leading, weakening, lagging.',
+                                     zh: '每条线从行业组 {n} 周前的位置出发，每个点是一个周收盘，一直连到现在的气泡；权重越大，线越粗越深。典型的轮动方向是顺时针：改善 → 领先 → 转弱 → 落后。' },
     'markets.gics_map_counts':    { en: 'Groups per quadrant, with their share of the index: {list}', zh: '各象限的行业组数与指数占比：{list}' },
     'markets.gics_map_count':     { en: '{q}: {n} ({w})', zh: '{q} {n} 组（{w}）' },
     'markets.gics_map_note':      { en: 'Every coordinate is a cell of the table above in its vs S&P 500 view. The longer window contains the shorter one, so a group that moved hard lately is pulled toward the diagonal. Hover a bubble to bring its sector’s groups forward.',

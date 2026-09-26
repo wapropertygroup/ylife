@@ -65,7 +65,7 @@ CHROME_KEYS = {
 # one). The 3:1 bar exists because a colour chosen to glow on near-black washes
 # out on white; this one is ~1.3:1 on the dark card too, so the mapping keeps it
 # exactly as faint as it was meant to be. A faded mark that cleared 3:1 would sit
-# beside the 3.4:1 fill it is meant to recede from and emphasise nothing.
+# beside the full-strength fills it is meant to recede from and emphasise nothing.
 FADED_KEYS = {"rgba(100,116,139,0.3)"}
 
 

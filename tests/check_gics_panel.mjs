@@ -72,6 +72,8 @@ const TEMPLATES = { 'markets.gics_asof': 'As of the {date} close.',
                     'markets.gics_map_missing': '{n} not plotted.',
                     'markets.gics_map_tip_weight': 'Weight {w} · {n} names',
                     'markets.gics_map_pair_tip': 'Up {y}, across {x}',
+                    'markets.gics_map_tip_then': '{n}w ago: {at}',
+                    'markets.gics_map_trail_note': 'Trails of {n} weeks.',
                     'markets.gics_map_aria': 'Map of {n} groups.' };
 const I18n = { t: k => TEMPLATES[k] ?? `[${k}]` };
 
@@ -105,7 +107,8 @@ function load({ fetch = async () => ({ status: 200, ok: true, json: async () => 
   const api = new Function('document', 'DeferLoad', 'I18n', 'fetch', 'setTimeout', 'Date', 'console',
     'Chart', 'CT', 'GRID_COL', 'TICK_COL',
     `${block}\nreturn { _GICS, renderGics, _gicsTone, _gicsFmt, _gicsSorted, _GICS_MAP, renderGicsMap,
-      _gicsQuad, _gicsMapRadius, _gicsMapBound, _gicsPlaceLabels, _gicsMapPlugin, _gicsMapTipLines, _gicsMapTipTitle };`)(
+      _gicsQuad, _gicsMapRadius, _gicsMapBound, _gicsPlaceLabels, _gicsMapPlugin, _gicsMapTipLines, _gicsMapTipTitle,
+      _GICS_MAP_QCOL, _GICS_MAP_COL, _gicsDrawTrails };`)(
     page.document, DeferLoad, I18n, fetch, fakeTimeout, fakeDate, console_, Chart, CT, '#1e293b', '#64748b');
   return { ...api, page, charts, warnings, loader: () => loader() };
 }
@@ -137,6 +140,18 @@ const DATA = {
       groups: [{ ...row('5510', 'Utilities', 2.3, 31, [0.4, -3.2, -8.4, -13.8, -12.7, -7.5, -7.5]), top: [] }] },
   ],
 };
+
+// The rotation map's trail, shaped as gics.trail() sends it: six weekly closes,
+// newest first, the head equal to the table's own figure and every earlier
+// week one point lower. Hardware is missing its 1M figure two weeks back.
+DATA.trail = {
+  dates: ['2026-09-25', '2026-09-18', '2026-09-11', '2026-09-04', '2026-08-28', '2026-08-21'],
+  step_days: 7,
+  rel: Object.fromEntries(DATA.sectors.flatMap(s => s.groups).map(g => [g.code,
+    Object.fromEntries(['1W', '1M', '3M', '6M', '1Y'].map(p => [p,
+      [0, 1, 2, 3, 4, 5].map(k => (g.rel[p] == null ? null : +(g.rel[p] - k).toFixed(2)))]))])),
+};
+DATA.trail.rel['4520']['1M'][2] = null;
 
 // Row order as rendered: "S" for a sector, "G" for a group, with its code.
 const order = html => [...html.matchAll(/<tr class="gics-(index|sector|group)[^"]*"[^>]*>(?:<td>(?:<span class="gics-caret">[^<]*<\/span>)?\[gics\.(\d+)\])?/g)]
@@ -304,23 +319,37 @@ const pairClick = (g, pair) => g.page.els.gicsMapPairs._handlers.click(
   const lines = g._gicsMapTipLines({ raw: p });
   t('tooltip leads with the quadrant and both figures, in percent whatever the table shows',
     lines[0] === '[markets.gics_map_q_lead] · [markets.gics_p_1M] +8.7% · [markets.gics_p_3M] +0.6%', lines[0]);
-  t('…then the weight and the count', lines[1] === 'Weight 14.2% · 20 names', lines[1]);
-  t('…then the sector and its largest names', lines[2].startsWith('[gics.45] · NVDA'), lines[2]);
+  // The trail's oldest week, five back: 8.7 - 5 up and 0.6 - 5 across, which
+  // is the improving quadrant — so the line says where it came from, too.
+  t('…then where it was at the start of its trail',
+    lines[1] === '5w ago: [markets.gics_map_q_improve] · [markets.gics_p_1M] +3.7% · [markets.gics_p_3M] -4.4%', lines[1]);
+  t('…then the weight and the count', lines[2] === 'Weight 14.2% · 20 names', lines[2]);
+  t('…then the sector and its largest names', lines[3].startsWith('[gics.45] · NVDA'), lines[3]);
   t('its title is the full name', g._gicsMapTipTitle([{ raw: p }]) === '[gics.4530]');
+  const bare = { ...p, trail: [] };
+  t('no trail, no line for it', g._gicsMapTipLines({ raw: bare }).length === 3);
 }
 {
   const g = load(); g._GICS.data = DATA; g.renderGicsMap();
   const c = g.charts[0], ds = c.data.datasets[0];
-  const colour = code => ds.backgroundColor({ raw: ds.data.find(p => p.code === code) });
+  const raw = code => ds.data.find(p => p.code === code);
+  const colour = code => ds.backgroundColor({ raw: raw(code) });
+  const Q = g._GICS_MAP_QCOL;
+  t('four quadrants, four fills', new Set(Object.values(Q).map(q => q.fill)).size === 4);
+  t('each bubble wears its quadrant', colour('4530') === Q.lead.fill && colour('4510') === Q.weak.fill
+    && colour('4010') === Q.lag.fill, `${colour('4530')} ${colour('4510')} ${colour('4010')}`);
+  t('…hovered, the solid of the same hue', ds.hoverBackgroundColor({ raw: raw('4510') }) === Q.weak.solid);
   c._active = [{ datasetIndex: 0, index: ds.data.findIndex(p => p.code === '4510') }];
   g._gicsMapPlugin.afterEvent(c);
   t('hovering a bubble brings its sector forward', g._GICS_MAP.focus === '45' && c.updates.length === 1);
-  t('…its groups keep the colour and the rest fade', colour('4530') === colour('4510') && colour('4010') !== colour('4510'));
+  t('…its groups keep their quadrant colours and the rest fade', colour('4530') === Q.lead.fill
+    && colour('4510') === Q.weak.fill && colour('4010') === g._GICS_MAP_COL.faded);
   g._gicsMapPlugin.afterEvent(c);
   t('the same hover again does not redraw', c.updates.length === 1);
   c._active = [];
   g._gicsMapPlugin.afterEvent(c);
-  t('leaving the canvas clears it', g._GICS_MAP.focus === null && c.updates.length === 2 && colour('4010') === colour('4510'));
+  t('leaving the canvas clears it', g._GICS_MAP.focus === null && c.updates.length === 2 && colour('4010') === Q.lag.fill);
+  t('the chart does not animate', c.options.animation === false);
 }
 {
   const data = structuredClone(DATA);
@@ -330,8 +359,8 @@ const pairClick = (g, pair) => g.page.els.gicsMapPairs._handlers.click(
   t('a group missing one window is left off, not put at zero', pts.length === 5 && !pts.some(p => p.code === '4520'));
   t('…and the note says how many', g.page.els.gicsMapNote.innerHTML.includes('<p>1 not plotted.</p>'));
   pairClick(g, '1M|6M');
-  t('a pair that changes which groups plot rebuilds, rather than morph one group into another',
-    g.charts.length === 2 && g.charts[0].destroyed && g.charts[1].data.datasets[0].data.length === 6);
+  t('a pair that changes which groups plot updates the same chart with the new set',
+    g.charts.length === 1 && g.charts[0].data.datasets[0].data.length === 6);
 }
 {
   const g = load(); g._GICS.data = { ...DATA, periods: ['1D', '1W', '1M', '3M', '6M', 'YTD'] }; g.renderGicsMap();
@@ -362,6 +391,58 @@ const pairClick = (g, pair) => g.page.els.gicsMapPairs._handlers.click(
   t('…and reach zero even when every point is on one side of it', above.min < 0 && above.max > 5, JSON.stringify(above));
   t('bubble scale follows the canvas, within limits',
     g._gicsMapRadius(16, 330) < g._gicsMapRadius(16, 880) && g._gicsMapRadius(16, 5000) === g._gicsMapRadius(16, 1100));
+}
+
+console.log('\nrotation trails');
+{
+  const g = load(); g._GICS.data = DATA; g.renderGicsMap();
+  const c = g.charts[0], pts = c.data.datasets[0].data;
+  const semi = pts.find(p => p.code === '4530'), hw = pts.find(p => p.code === '4520');
+  t('each group carries its trail for the pair, newest first', semi.trail.length === 6
+    && semi.trail.every((pt, k) => pt.x === +(0.6 - k).toFixed(2) && pt.y === +(8.7 - k).toFixed(2)),
+    JSON.stringify(semi.trail));
+  t('…headed by the bubble itself', semi.trail[0].x === semi.x && semi.trail[0].y === semi.y);
+  t('a week missing either figure is a gap, not a point at zero', hw.trail[2] === null && hw.trail[3] !== null);
+  const { x, y } = c.options.scales;
+  t('the axes fit the trails too, so no line runs off the plot',
+    pts.every(p => p.trail.every(q => !q || (q.x > x.min && q.x < x.max && q.y > y.min && q.y < y.max))));
+  t('the note says how far back the lines reach', g.page.els.gicsMapNote.innerHTML.includes('<p>Trails of 5 weeks.</p>'));
+
+  // Drawn on a canvas that only records: one stroke per segment, in the
+  // group's quadrant colour, fading toward the oldest week.
+  const draw = (data = c.data) => {
+    const rec = { strokes: [], save() {}, restore() {}, beginPath() {}, moveTo() {}, lineTo() {}, arc() {}, fill() {},
+      stroke() { this.strokes.push({ col: this.strokeStyle, a: this.globalAlpha, lw: this.lineWidth }); } };
+    g._gicsDrawTrails({ ctx: rec, data,
+      scales: { x: { getPixelForValue: v => v * 10 }, y: { getPixelForValue: v => -v * 10 } } });
+    return rec.strokes;
+  };
+  const all = draw();
+  // Five groups with five segments each; Hardware's gap costs it the two
+  // segments either side of the missing week.
+  t('one segment per week, and none across a gap', all.length === 5 * 5 + 3, `${all.length} strokes`);
+  t('…in the quadrant colour', all.some(s => s.col === g._GICS_MAP_QCOL.lead.fill)
+    && all.some(s => s.col === g._GICS_MAP_QCOL.lag.fill));
+  t('…fading toward the oldest week', Math.max(...all.map(s => s.a)) === 1 && Math.min(...all.map(s => s.a)) < 0.4);
+  g._GICS_MAP.focus = '45';
+  t('hovering a sector keeps only its trails', draw().length === 5 + 5 + 3, `${draw().length} strokes`);
+  g._GICS_MAP.focus = null;
+  // The same trail drawn for an 18% group and a 0.1% one: the first stroke of
+  // each is its newest segment, before any fading toward the past.
+  const one = w => draw({ datasets: [{ data: [{ ...semi, w }] }] })[0];
+  const big = one(18), small = one(0.1);
+  t('a line is as heavy as its group', big.a === 1 && small.a < 0.2 && big.lw > small.lw, JSON.stringify({ big, small }));
+  g._GICS_MAP.focus = semi.sector;
+  const lifted = one(0.1);
+  t('…unless its sector is hovered, which draws it in full', lifted.a === 1 && lifted.lw === 2, JSON.stringify(lifted));
+  g._GICS_MAP.focus = null;
+}
+{
+  const { trail, ...bare } = DATA;
+  const g = load(); g._GICS.data = bare; g.renderGicsMap();
+  const pts = g.charts[0].data.datasets[0].data;
+  t('a payload from before the trails still draws the bubbles', pts.length === 6 && pts.every(p => p.trail.length === 0));
+  t('…and says nothing about lines it does not have', !g.page.els.gicsMapNote.innerHTML.includes('Trails of'));
 }
 
 console.log('\nbubble labels');

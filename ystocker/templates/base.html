@@ -245,11 +245,9 @@
       'rgba(167,139,250,0.7)':'rgba(124,58,237,0.9)',
       'rgba(251,146,60,0.6)': 'rgba(234,88,12,0.95)',   // orange
       'rgba(99,102,241,0.75)':'rgba(79,70,229,1)',      // indigo
-      // Translucent fills that overlap, so the alpha stays and only the step
-      // moves. The indigo clears 3:1 in both themes at 0.7; the slate is the
-      // faded state beside it, faint in both on purpose (the GICS rotation map;
-      // see FADED_KEYS in tests/test_chart_theme_map.py).
-      'rgba(129,140,248,0.7)':'rgba(79,70,229,0.7)',    // indigo-400 -> 600
+      // The faded state of a mark while another group is emphasised (the GICS
+      // rotation map), faint in both themes on purpose — see FADED_KEYS in
+      // tests/test_chart_theme_map.py.
       'rgba(100,116,139,0.3)':'rgba(148,163,184,0.4)',  // slate-500 -> 400
       // Slate, for zero lines and unhighlighted comparison series. These are the
       // one family where the source alpha spans 0.3 to 0.9, so the ordering has
