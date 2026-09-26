@@ -106,92 +106,34 @@ _ADV_MIN_SHARE = 0.5
 # ---------------------------------------------------------------------------
 # S&P 500 universe (Yahoo ticker format: dots -> dashes, e.g. BRK.B -> BRK-B)
 #
-# Intentionally static, like heatmap_meta.py. Index membership changes ~20
-# names/year, which moves a 500-name diffusion index by well under a point, so
-# a static list is refreshed on a code change rather than at runtime (avoiding
-# a hard dependency on a constituent-list scraper in the request path).
+# Read from the committed GICS snapshot (ystocker/data/gics_sp500.json), which
+# is built from the live constituent list by `python -m ystocker.gics
+# --write-snapshot`. This used to be a hand-edited tuple of the same 503 names,
+# and by September 2026 it had drifted five names from the index — RDDT, BE,
+# ILMN, P and VMRK missing, AVB, BLDR, EQR, TAP and TTD long gone — while the
+# snapshot beside it was current. Two lists of one index drift apart; one does
+# not, and regenerating the snapshot now moves breadth, the SPY forward P/E in
+# valuation.py and the GICS panel together.
+#
+# Still static, which was the point of the tuple: a committed file refreshed on
+# a code change, never a constituent-list scrape at runtime. Membership changes
+# ~20 names a year, which moves a 500-name diffusion index by well under a
+# point, so a few months between regenerations costs nothing visible.
+#
+# An unreadable snapshot degrades to an empty universe and says so, rather than
+# failing the import: this module is imported by the app factory, and a bad
+# data file should cost the breadth panel, not every page on the site.
+# tests/test_gics.py pins that the committed file loads and holds the index.
 # ---------------------------------------------------------------------------
-SP500_UNIVERSE: tuple[str, ...] = (
-    # ── Industrials (83) ──────────────────────────────────────────────
-    "ADP", "ALLE", "AME", "AOS", "AXON", "BA", "BLDR", "BR",
-    "CARR", "CAT", "CHRW", "CMI", "CPRT", "CSX", "CTAS", "DAL",
-    "DD", "DE", "DOV", "EFX", "EME", "EMR", "ETN", "EXPD",
-    "FAST", "FDX", "FDXF", "FERG", "FIX", "FTV", "GD", "GE",
-    "GEV", "GNRC", "GWW", "HII", "HON", "HONA", "HUBB", "HWM",
-    "IEX", "IR", "ITW", "J", "JBHT", "JCI", "LDOS", "LHX",
-    "LII", "LMT", "LUV", "MAS", "MMM", "NDSN", "NOC", "NSC",
-    "ODFL", "OTIS", "PAYX", "PCAR", "PH", "PNR", "PWR", "ROK",
-    "ROL", "RSG", "RTX", "SNA", "SWK", "TDG", "TT", "TXT",
-    "UAL", "UBER", "UNP", "UPS", "URI", "VLTO", "VRSK", "VRT",
-    "WAB", "WM", "XYL",
-    # ── Financials (76) ───────────────────────────────────────────────
-    "ACGL", "AFL", "AIG", "AIZ", "AJG", "ALL", "AMP", "AON",
-    "APO", "ARES", "AXP", "BAC", "BEN", "BLK", "BNY", "BRK-B",
-    "BRO", "BX", "C", "CB", "CBOE", "CFG", "CINF", "CME",
-    "COF", "COIN", "CPAY", "EG", "ERIE", "FDS", "FIS", "FISV",
-    "FITB", "GL", "GPN", "GS", "HBAN", "HIG", "HOOD", "IBKR",
-    "ICE", "IVZ", "JKHY", "JPM", "KEY", "KKR", "L", "MA",
-    "MCO", "MET", "MRSH", "MS", "MSCI", "MTB", "NDAQ", "NTRS",
-    "PFG", "PGR", "PNC", "PRU", "PYPL", "RF", "RJF", "SCHW",
-    "SPGI", "STT", "SYF", "TFC", "TROW", "TRV", "USB", "V",
-    "WFC", "WRB", "WTW", "XYZ",
-    # ── Information Technology (73) ───────────────────────────────────
-    "AAPL", "ACN", "ADBE", "ADI", "ADSK", "AKAM", "AMAT", "AMD",
-    "ANET", "APH", "AVGO", "CDNS", "CDW", "CIEN", "COHR", "CRM",
-    "CRWD", "CSCO", "CTSH", "DDOG", "DELL", "FFIV", "FICO", "FLEX",
-    "FSLR", "FTNT", "GDDY", "GEN", "GLW", "HPE", "HPQ", "IBM",
-    "INTC", "INTU", "IT", "JBL", "KEYS", "KLAC", "LITE", "LRCX",
-    "MCHP", "MPWR", "MRVL", "MSFT", "MSI", "MU", "NOW", "NTAP",
-    "NVDA", "NXPI", "ON", "ORCL", "PANW", "PLTR", "PTC", "Q",
-    "QCOM", "ROP", "SMCI", "SNDK", "SNPS", "STX", "SWKS", "TDY",
-    "TEL", "TER", "TRMB", "TXN", "TYL", "VRSN", "WDAY", "WDC",
-    "ZBRA",
-    # ── Health Care (59) ──────────────────────────────────────────────
-    "A", "ABBV", "ABT", "ALGN", "AMGN", "BAX", "BDX", "BIIB",
-    "BMY", "BSX", "CAH", "CI", "CNC", "COO", "COR", "CRL",
-    "CVS", "DGX", "DHR", "DVA", "DXCM", "ELV", "EW", "GEHC",
-    "GILD", "HCA", "HSIC", "HUM", "IDXX", "INCY", "IQV", "ISRG",
-    "JNJ", "LH", "LLY", "MCK", "MDT", "MRK", "MRNA", "MTD",
-    "PFE", "PODD", "REGN", "RMD", "RVTY", "SOLV", "STE", "SYK",
-    "TECH", "TMO", "UHS", "UNH", "VEEV", "VRTX", "VTRS", "WAT",
-    "WST", "ZBH", "ZTS",
-    # ── Consumer Discretionary (47) ───────────────────────────────────
-    "ABNB", "AMZN", "APTV", "AZO", "BBY", "BKNG", "CCL", "CMG",
-    "CVNA", "DASH", "DECK", "DHI", "DPZ", "DRI", "EBAY", "EXPE",
-    "F", "GM", "GPC", "GRMN", "HAS", "HD", "HLT", "LEN",
-    "LOW", "LULU", "LVS", "MAR", "MCD", "MGM", "NCLH", "NKE",
-    "NVR", "ORLY", "PHM", "RCL", "RL", "ROST", "SBUX", "TJX",
-    "TPR", "TSCO", "TSLA", "ULTA", "WSM", "WYNN", "YUM",
-    # ── Consumer Staples (34) ─────────────────────────────────────────
-    "ADM", "BF-B", "BG", "CASY", "CHD", "CL", "CLX", "COST",
-    "DG", "DLTR", "EL", "GIS", "HRL", "HSY", "KDP", "KHC",
-    "KMB", "KO", "KR", "KVUE", "MDLZ", "MKC", "MNST", "MO",
-    "PEP", "PG", "PM", "SJM", "STZ", "SYY", "TAP", "TGT",
-    "TSN", "WMT",
-    # ── Utilities (31) ────────────────────────────────────────────────
-    "AEE", "AEP", "AES", "ATO", "AWK", "CEG", "CMS", "CNP",
-    "D", "DTE", "DUK", "ED", "EIX", "ES", "ETR", "EVRG",
-    "EXC", "FE", "LNT", "NEE", "NI", "NRG", "PCG", "PEG",
-    "PNW", "PPL", "SO", "SRE", "VST", "WEC", "XEL",
-    # ── Real Estate (31) ──────────────────────────────────────────────
-    "AMT", "ARE", "AVB", "BXP", "CBRE", "CCI", "CPT", "CSGP",
-    "DLR", "DOC", "EQIX", "EQR", "ESS", "EXR", "FRT", "HST",
-    "INVH", "IRM", "KIM", "MAA", "O", "PLD", "PSA", "REG",
-    "SBAC", "SPG", "UDR", "VICI", "VTR", "WELL", "WY",
-    # ── Materials (25) ────────────────────────────────────────────────
-    "ALB", "AMCR", "APD", "AVY", "BALL", "CF", "CRH", "CTVA",
-    "DOW", "ECL", "FCX", "IFF", "IP", "LIN", "LYB", "MLM",
-    "MOS", "NEM", "NUE", "PKG", "PPG", "SHW", "STLD", "SW",
-    "VMC",
-    # ── Communication Services (23) ───────────────────────────────────
-    "APP", "CHTR", "CMCSA", "DIS", "ECHO", "FOX", "FOXA", "GOOG",
-    "GOOGL", "LYV", "META", "NFLX", "NWS", "NWSA", "OMC", "PSKY",
-    "T", "TKO", "TMUS", "TTD", "TTWO", "VZ", "WBD",
-    # ── Energy (21) ───────────────────────────────────────────────────
-    "APA", "BKR", "COP", "CVX", "DVN", "EOG", "EQT", "EXE",
-    "FANG", "HAL", "KMI", "MPC", "OKE", "OXY", "PSX", "SLB",
-    "TPL", "TRGP", "VLO", "WMB", "XOM",
-)
+def _load_universe() -> tuple[str, ...]:
+    snap = gics.load_snapshot()
+    if not snap:
+        log.error("Breadth: GICS snapshot unreadable — S&P 500 universe is empty")
+        return ()
+    return tuple(gics.tickers(snap))
+
+
+SP500_UNIVERSE: tuple[str, ...] = _load_universe()
 
 
 # ---------------------------------------------------------------------------
@@ -362,22 +304,17 @@ def _build_cache() -> dict[str, Any]:
     # advance/decline costs 13 extra symbols on a call that fetches 505.
     ndx = tuple(dict.fromkeys(NDX100))
     extra = [t for t in ndx if t not in SP500_UNIVERSE]
-    # The GICS breakdown rides this same call. Its snapshot is regenerated from
-    # the live constituent list while SP500_UNIVERSE is edited by hand, so the
-    # two drift apart by a reconstitution or two (five names at the time of
-    # writing); fetching the union costs a handful of symbols, where leaving
-    # them out would drop the newest members from every sector.
-    snap = gics.load_snapshot()
-    seen = set(SP500_UNIVERSE) | {_RSP, _SPY} | set(extra)
-    extra += [t for t in (gics.tickers(snap) if snap else []) if t not in seen]
     tickers = list(SP500_UNIVERSE) + [_RSP, _SPY] + extra
+    # The GICS breakdown rides this same call; SP500_UNIVERSE is read from its
+    # snapshot, so every member it needs is already in `tickers`.
+    snap = gics.load_snapshot()
     t0 = time.time()
     df = yf.download(tickers, period=_HISTORY_PERIOD, interval="1d",
                      auto_adjust=True, progress=False, threads=True)
     if df is None or df.empty:
         raise RuntimeError("yfinance returned no data for the S&P 500 universe")
     closes = df["Close"]
-    log.info("Breadth: downloaded %d/%d tickers in %.1fs (%d extra for NDX/GICS)",
+    log.info("Breadth: downloaded %d/%d tickers in %.1fs (%d extra for NDX)",
              int(closes.notna().any().sum()), len(tickers), time.time() - t0,
              len(extra))
 
