@@ -557,6 +557,100 @@ class PerformanceTests(unittest.TestCase):
             self._run(px)
 
 
+class TrailTests(unittest.TestCase):
+    """The rotation map's trails: the table's arithmetic, re-run at past closes."""
+
+    MEMBERS = PerformanceTests.MEMBERS
+
+    def _px(self):
+        # Semiconductors climb all year, software slides, banks stand still,
+        # so every group's relative return differs from one week to the next.
+        days = _days()
+        n = len(days)
+        return pd.DataFrame({"SEMI": [100 + 0.2 * i for i in range(n)],
+                             "SOFT": [100 - 0.1 * i for i in range(n)],
+                             "BANK": [100.0] * n}, index=days)
+
+    def _trail(self, px, **kw):
+        snap = _snap(self.MEMBERS)
+        latest = gics.performance(px, snap)
+        return latest, gics.trail(px, snap, latest, **kw)
+
+    def test_the_head_is_the_table(self):
+        latest, t = self._trail(self._px())
+        self.assertEqual(t["dates"][0], latest["asof"])
+        for code in ("4530", "4510", "4010"):
+            for p in gics.TRAIL_PERIODS:
+                self.assertEqual(t["rel"][code][p][0], _find(latest, code)["rel"].get(p), (code, p))
+
+    def test_each_point_is_the_same_arithmetic_a_week_earlier(self):
+        px = self._px()
+        latest, t = self._trail(px)
+        self.assertEqual(len(t["dates"]), gics.TRAIL_POINTS)
+        end = pd.Timestamp(latest["asof"])
+        for k, d in enumerate(t["dates"][1:], start=1):
+            day = pd.Timestamp(d)
+            # The last session on or before each weekly step, never after it.
+            self.assertLessEqual(day, end - pd.Timedelta(days=7 * k))
+            self.assertGreater(day, end - pd.Timedelta(days=7 * k + 7))
+            then = gics.performance(px, _snap(self.MEMBERS), until=d)
+            for p in gics.TRAIL_PERIODS:
+                self.assertEqual(t["rel"]["4530"][p][k], _find(then, "4530")["rel"].get(p), (d, p))
+        # …and the points differ, or this proves nothing about the stepping.
+        self.assertEqual(len(set(t["rel"]["4530"]["1M"])), gics.TRAIL_POINTS)
+
+    def test_a_past_end_keeps_the_snapshot_anchor(self):
+        # Slicing the frame instead would re-anchor the share counts on the new
+        # last row, as if the snapshot had been taken that day. Semis double
+        # after 1 June, so on 1 June they were 3 of 3+3+1, not 6 of 10.
+        days = _days()
+        px = _flat(days, SEMI=100, SOFT=100, BANK=100)
+        px.loc["2026-06-02":, "SEMI"] = 200.0
+        snap = _snap(self.MEMBERS)
+        self.assertEqual(_find(gics.performance(px, snap, until="2026-06-01"), "4530")["weight"], 42.86)
+        self.assertEqual(_find(gics.performance(px.loc[:"2026-06-01"], snap), "4530")["weight"], 60.0,
+                         "the trap until= exists to avoid")
+
+    def test_history_that_runs_out_ends_the_trail_early(self):
+        px = self._px().loc["2026-06-15":]
+        _latest, t = self._trail(px)
+        self.assertEqual(t["dates"], ["2026-06-30", "2026-06-23", "2026-06-16"])
+        # A window with no base date is a gap in the trail, not a zero.
+        self.assertEqual(t["rel"]["4530"]["1Y"], [None, None, None])
+
+    def test_a_gap_longer_than_a_step_ends_the_trail(self):
+        days = pd.bdate_range("2026-05-01", "2026-06-30")
+        days = days[(days < "2026-06-08") | (days > "2026-06-26")]
+        px = _flat(days, SEMI=100, SOFT=100, BANK=100)
+        _latest, t = self._trail(px)
+        # Two steps back both land on 5 June; the second would repeat the first.
+        self.assertEqual(t["dates"], ["2026-06-30", "2026-06-05"])
+
+    def test_breadth_attaches_it_and_survives_it_failing(self):
+        from ystocker import breadth
+        px, snap = self._px(), _snap(self.MEMBERS)
+        block = breadth._gics_block(px, snap)
+        self.assertEqual(block["trail"]["dates"][0], block["asof"])
+        with mock.patch.object(gics, "trail", side_effect=RuntimeError("boom")), \
+             self.assertLogs("ystocker.breadth", level="WARNING"):
+            block = breadth._gics_block(px, snap)
+        self.assertIsNone(block["trail"], "None records a failed trail, not an old cache")
+        self.assertTrue(block["sectors"], "a failed trail must cost only the lines")
+
+    def test_the_disk_cache_schema_check_covers_the_trail(self):
+        from ystocker import breadth
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "breadth_cache.json"
+            base = {"_ts": dt.datetime.now().timestamp(), "adv_dec": {},
+                    "pct_above_ma": {str(p): {"dates": [], "values": []} for p in breadth.MA_PERIODS}}
+            with mock.patch.object(breadth, "_CACHE_FILE", path):
+                path.write_text(json.dumps({**base, "gics": {"sectors": []}}))
+                self.assertIsNone(breadth._load_disk_cache(), "a block from before the trail must rebuild once")
+                self.assertIsNotNone(breadth._load_disk_cache(ignore_ttl=True), "…while the stale path serves it")
+                path.write_text(json.dumps({**base, "gics": {"sectors": [], "trail": None}}))
+                self.assertIsNotNone(breadth._load_disk_cache(), "None means the trail failed; do not refetch")
+
+
 class I18nTests(unittest.TestCase):
     """Names and labels are composed in JS, where I18n.apply() cannot reach."""
 

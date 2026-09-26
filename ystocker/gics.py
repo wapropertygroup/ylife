@@ -816,13 +816,16 @@ def _r(x: float, digits: int = 2) -> Optional[float]:
     return round(float(x), digits) if x is not None and math.isfinite(x) else None
 
 
-def performance(closes: Any, snap: dict[str, Any], *, now: Optional[float] = None) -> dict[str, Any]:
+def performance(closes: Any, snap: dict[str, Any], *, now: Optional[float] = None,
+                until: Any = None) -> dict[str, Any]:
     """Cap-weighted GICS sector and industry-group returns and weights.
 
     ``closes`` is a DataFrame of adjusted daily closes, one column per Yahoo
     symbol, as breadth.py downloads it. ``now`` (epoch seconds) is used only to
     decide whether the newest bar is a finished session; pass None to trust it.
-    Returns a JSON-ready dict; see the module docstring for the method.
+    ``until`` ends on the last usable session on or before that date instead of
+    the newest — see :func:`trail`. Returns a JSON-ready dict; see the module
+    docstring for the method.
     """
     import pandas as pd
 
@@ -854,6 +857,11 @@ def performance(closes: Any, snap: dict[str, Any], *, now: Optional[float] = Non
     if len(days) and not _session_is_final(days[-1].date(), now):
         days = days[:-1]
         partial_dropped = True
+    # A past end is a shorter list of sessions, never a shorter frame: slicing
+    # `closes` would move the anchor above to the new last row, re-weighting
+    # every name as though the snapshot had been taken that day.
+    if until is not None:
+        days = days[days <= pd.Timestamp(until)]
     ends = [d for d in days if cover[d] >= MIN_END_COVERAGE]
     if not ends:
         raise ValueError("no session with enough constituent coverage to end on")
@@ -952,6 +960,48 @@ def performance(closes: Any, snap: dict[str, Any], *, now: Optional[float] = Non
             "excluded_new": excluded_new,
         },
     }
+
+
+# The rotation map's trails: the windows its axes pair, and how far back a
+# trail reaches — the latest close and the five weekly closes before it, which
+# is the tail length a weekly relative-rotation chart draws.
+TRAIL_PERIODS: tuple[str, ...] = ("1W", "1M", "3M", "6M", "1Y")
+TRAIL_POINTS = 6
+TRAIL_STEP_DAYS = 7
+
+
+def trail(closes: Any, snap: dict[str, Any], latest: dict[str, Any], *,
+          points: int = TRAIL_POINTS, step_days: int = TRAIL_STEP_DAYS) -> dict[str, Any]:
+    """Each industry group's relative returns at the last few weekly closes.
+
+    ``latest`` is :func:`performance`'s result for the newest close and is the
+    first point; each earlier one is :func:`performance` again with ``until`` a
+    week further back. Same constituents, same share counts, same date-gating,
+    so a trail moves only because prices did — and its head is exactly the
+    table's figure. History that runs out ends the trail early rather than
+    padding it.
+    """
+    import pandas as pd
+
+    end = pd.Timestamp(latest["asof"])
+    results = [latest]
+    for k in range(1, points):
+        try:
+            res = performance(closes, snap, until=end - pd.Timedelta(days=step_days * k))
+        except ValueError:
+            break
+        if res["asof"] == results[-1]["asof"]:
+            break   # a gap longer than a step: no earlier session to add
+        results.append(res)
+
+    rel: dict[str, dict[str, list[Optional[float]]]] = {}
+    for i, res in enumerate(results):
+        for sec in res["sectors"]:
+            for g in sec["groups"]:
+                row = rel.setdefault(g["code"], {p: [None] * len(results) for p in TRAIL_PERIODS})
+                for p in TRAIL_PERIODS:
+                    row[p][i] = g["rel"].get(p)
+    return {"dates": [r["asof"] for r in results], "step_days": step_days, "rel": rel}
 
 
 if __name__ == "__main__":  # pragma: no cover - developer entry point

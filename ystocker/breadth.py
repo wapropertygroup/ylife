@@ -190,6 +190,11 @@ def _load_disk_cache(ignore_ttl: bool = False) -> Optional[dict[str, Any]]:
         if not ignore_ttl and "gics" not in payload:
             log.info("Breadth: disk cache predates the GICS breakdown — will recompute")
             return None
+        # And its trail, one level down: a block without the key predates it,
+        # while None records a trail that failed on a build that otherwise ran.
+        if not ignore_ttl and isinstance(payload["gics"], dict) and "trail" not in payload["gics"]:
+            log.info("Breadth: disk cache predates the GICS trail — will recompute")
+            return None
         return payload
     except Exception as exc:
         log.warning("Breadth: failed to read disk cache: %s", exc)
@@ -368,17 +373,8 @@ def _build_cache() -> dict[str, Any]:
         rsp_spy = {"dates": [], "values": []}
 
     # ── GICS sectors and industry groups ────────────────────────────────────
-    # Arithmetic on the frame already in hand; see ystocker/gics.py. Isolated so
-    # a bad snapshot costs the GICS panel and never the breadth charts, which
-    # are the reason this download exists. None (not an absent key) records
-    # "the build ran and had nothing to publish", so the schema check in
-    # _load_disk_cache does not read it as an old cache and refetch forever.
-    gics_block = None
-    if snap:
-        try:
-            gics_block = gics.performance(closes, snap, now=time.time())
-        except Exception as exc:
-            log.warning("Breadth: GICS breakdown skipped: %s", exc)
+    # Arithmetic on the frame already in hand; see _gics_block().
+    gics_block = _gics_block(closes, snap)
 
     universe_used = int(live.any().sum())
     asof = pct_above_ma[str(MA_PERIODS[0])]["dates"][-1:] or [""]
@@ -396,6 +392,32 @@ def _build_cache() -> dict[str, Any]:
         "pct_above_50ma":  pct_above_ma.get("50",  {"dates": [], "values": []}),
         "pct_above_200ma": pct_above_ma.get("200", {"dates": [], "values": []}),
     }
+
+
+def _gics_block(closes: Any, snap: Optional[dict[str, Any]]) -> Optional[dict[str, Any]]:
+    """The GICS breakdown and its rotation-map trail, from the closes in hand.
+
+    Isolated so a bad snapshot costs the GICS panel and never the breadth
+    charts, which are the reason the download exists; and the trail, which
+    re-runs the same arithmetic at the last few weekly closes, is isolated
+    again, so a failure there costs the lines and not the table. None rather
+    than an absent key, at both levels, records "the build ran and had nothing
+    to publish", so the schema check in _load_disk_cache does not read it as an
+    old cache and refetch forever.
+    """
+    if not snap:
+        return None
+    try:
+        block = gics.performance(closes, snap, now=time.time())
+    except Exception as exc:
+        log.warning("Breadth: GICS breakdown skipped: %s", exc)
+        return None
+    try:
+        block["trail"] = gics.trail(closes, snap, block)
+    except Exception as exc:
+        log.warning("Breadth: GICS trail skipped: %s", exc)
+        block["trail"] = None
+    return block
 
 
 # ---------------------------------------------------------------------------
