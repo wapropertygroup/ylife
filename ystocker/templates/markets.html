@@ -129,6 +129,58 @@
   }
   .sector-period-btn:hover { color: var(--t-ink); border-color: var(--t-line-hover); }
   .sector-period-btn.active { color: var(--t-accent-ink); border-color: var(--t-accent); background: rgba(99,102,241,0.15); }
+  /* GICS panel. Hand-written rather than Tailwind utilities: the bundle is
+     compiled, so a class that only ever appears in this panel's JS would be
+     missing from it. Its toggle cannot reuse .sector-period-btn either — the
+     Day/Week handler binds to every element with that class on the page, so a
+     GICS button would set the sector bars' period to undefined. The cell
+     colours are the rotation grid's own classes, reused verbatim so the two
+     tables sit on one colour scale. */
+  .gics-btn {
+    font-size: 10px; padding: 2px 8px; border-radius: 4px;
+    border: 1px solid var(--t-line-strong); background: transparent; color: var(--t-ink-dim); cursor: pointer;
+    transition: all 0.15s;
+  }
+  .gics-btn:hover { color: var(--t-ink); border-color: var(--t-line-hover); }
+  .gics-btn.active { color: var(--t-accent-ink); border-color: var(--t-accent); background: rgba(99,102,241,0.15); }
+  /* An 18rem basis, not flex-1: with a zero basis the title shrank to ~100px
+     beside the toggle on a phone, measured at 390px wide, instead of letting
+     the toggle wrap beneath it. */
+  .gics-head-text { flex: 1 1 18rem; min-width: 0; }
+  .gics-wrap { overflow-x: auto; }
+  /* Ink on the table, not on the cells: set on `td` it would outrank the
+     rotation grid's colour classes (0,1,1 beats .text-emerald-700's 0,1,0) and
+     repaint every green and red cell in light mode. Set nowhere, the plain
+     cells inherited whatever the page had — dark ink on the dark card. */
+  .gics-table { width: 100%; min-width: 46rem; border-collapse: collapse; font-size: 12px; color: var(--t-ink); }
+  .gics-table th {
+    font-weight: 500; color: var(--t-ink-dim); padding: 6px 8px; text-align: right;
+    white-space: nowrap; border-bottom: 1px solid var(--t-line-strong);
+  }
+  .gics-table th[data-sort] { cursor: pointer; user-select: none; }
+  .gics-table th[data-sort]:hover { color: var(--t-ink); }
+  .gics-table th.gics-sorted { color: var(--t-accent-ink); }
+  .gics-table td {
+    padding: 4px 8px; text-align: right; white-space: nowrap;
+    font-variant-numeric: tabular-nums; border-bottom: 1px solid var(--t-line);
+  }
+  .gics-table .gics-num { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  /* The name column stays put while the periods scroll under it on a phone,
+     so it needs the card's own colour behind it or the numbers show through. */
+  .gics-table th:first-child, .gics-table td:first-child {
+    text-align: left; position: sticky; left: 0; z-index: 1; background: var(--t-surface);
+  }
+  .gics-table td:first-child { white-space: normal; min-width: 13rem; max-width: 19rem; }
+  .gics-index td { font-weight: 600; color: var(--t-ink-strong); border-bottom: 1px solid var(--t-line-strong); }
+  .gics-sector td:first-child { font-weight: 600; color: var(--t-ink-strong); }
+  .gics-sector[data-toggle] td:first-child { cursor: pointer; }
+  .gics-group td:first-child { padding-left: 26px; color: var(--t-ink); }
+  .gics-caret { display: inline-block; width: 12px; color: var(--t-ink-dim); transition: transform 0.15s; }
+  .gics-sector.gics-collapsed .gics-caret { transform: rotate(-90deg); }
+  .gics-top { display: block; font-size: 10px; font-weight: 400; color: var(--t-ink-dim); margin-top: 1px; }
+  .gics-muted { color: var(--t-ink-dim); }
+  .gics-note { font-size: 11px; line-height: 1.6; color: var(--t-ink-dim); margin-top: 10px; }
+  .gics-note p + p { margin-top: 2px; }
   /* AI Markets Brief — rendered Markdown, including pipe tables. Mirrors the
      .md-body rules on /history so LLM output reads the same everywhere. */
   .brief-md { font-size: 13px; line-height: 1.75; color: var(--t-ink); overflow-wrap: break-word; }
@@ -677,6 +729,25 @@
   <div id="sectorRankingTable" class="overflow-x-auto">
     <div class="text-xs text-slate-500 dark:text-slate-600 animate-pulse">Loading sector ranking…</div>
   </div>
+</div>
+
+<!-- GICS sectors and industry groups, from the S&P 500's own constituents -->
+<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6 fade-up mb-6" id="gicsSection">
+  <div class="flex flex-wrap items-start justify-between gap-3 mb-3">
+    <div class="gics-head-text">
+      <h2 class="text-base font-semibold text-slate-700 dark:text-slate-200" data-i18n="markets.gics_title">GICS Sectors &amp; Industry Groups — S&amp;P 500</h2>
+      <p class="text-xs text-slate-500 mt-0.5" data-i18n="markets.gics_desc">The rotation grid above tracks eleven sector ETFs. This splits each GICS sector into its industry groups.</p>
+    </div>
+    <div id="gicsModeToggle" class="flex gap-1 shrink-0">
+      <button type="button" class="gics-btn active" data-gics-mode="ret" data-i18n="markets.gics_mode_ret">Return</button>
+      <button type="button" class="gics-btn" data-gics-mode="rel" data-i18n="markets.gics_mode_rel">vs S&amp;P 500</button>
+      <button type="button" class="gics-btn" data-gics-mode="wchg" data-i18n="markets.gics_mode_wchg">Weight change</button>
+    </div>
+  </div>
+  <div id="gicsTable" class="gics-wrap">
+    <div class="text-xs text-slate-500 dark:text-slate-600 animate-pulse" data-i18n="markets.gics_loading">Loading…</div>
+  </div>
+  <div id="gicsNote" class="gics-note"></div>
 </div>
 
 <!-- ── VIX vs PCR Correlation ──────────────────────────────────────────── -->
@@ -5578,6 +5649,216 @@ DeferLoad.when('#sectorRankingTable', async function() {
       </table>`;
   } catch(e) { document.getElementById('sectorRankingTable').innerHTML = ''; }
 }, { label: 'sector-ranking' });
+
+/* ── GICS sectors and industry groups ──────────────────────────────────────
+   /api/gics is computed inside breadth's daily build from the S&P 500's own
+   constituents (ystocker/gics.py), so it can reach the 25 industry groups the
+   sector ETFs above average away. Three views of one table: the return, the
+   return against the index, and the change in index weight that the relative
+   return produced — the last is what says whether a move was big enough to
+   matter, since +20% on a 1% group is a fifth of a point of the index.
+
+   Sectors sort among themselves and groups within their sector, so a sort can
+   never lift a group out from under its own heading. */
+// Its own escape: the page's only esc() is local to another panel's closure.
+// Every string here is ours or Yahoo's, but a ticker is still data.
+const _gicsEsc = v => String(v == null ? '' : v).replace(/[&<>"']/g,
+  c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const _GICS = { data: null, mode: 'ret', sort: 'weight', dir: -1, collapsed: new Set() };
+const _GICS_FIELD = { ret: 'returns', rel: 'rel', wchg: 'weight_chg' };
+// The rotation grid's classes, verbatim — they are known to be in the compiled
+// bundle, and the two tables then read on the same scale of colour.
+const _GICS_TONES = [
+  'bg-rose-50 dark:bg-rose-900/60 text-rose-700 dark:text-rose-300',
+  'bg-rose-50 dark:bg-rose-900/30 text-rose-700 dark:text-rose-400',
+  'text-slate-500 dark:text-slate-400',
+  'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400',
+  'bg-emerald-50 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300',
+];
+
+// Thresholds scale with the square root of the horizon's length, because
+// that is how dispersion grows: fixed ±0.5/±2 cut-offs colour a one-year
+// column solid and leave a one-day column grey.
+function _gicsScale(period) {
+  const d = _GICS.data;
+  const a = d && d.asof ? Date.parse(d.asof) : NaN;
+  const b = d && d.base_dates && d.base_dates[period] ? Date.parse(d.base_dates[period]) : NaN;
+  const cal = isFinite(a) && isFinite(b) ? Math.max(1, (a - b) / 86400000) : 1;
+  return Math.sqrt(Math.max(1, cal * 252 / 365));
+}
+
+function _gicsTone(v, period) {
+  if (v == null) return 'text-slate-500 dark:text-slate-600';
+  const s = _gicsScale(period);
+  const [weak, strong] = _GICS.mode === 'wchg' ? [0.02 * s, 0.08 * s]
+                       : _GICS.mode === 'rel'  ? [0.25 * s, 0.9 * s]
+                       :                         [0.35 * s, 1.2 * s];
+  const i = v <= -strong ? 0 : v <= -weak ? 1 : v < weak ? 2 : v < strong ? 3 : 4;
+  return _GICS_TONES[i];
+}
+
+function _gicsFmt(v) {
+  if (v == null) return '—';
+  const wchg = _GICS.mode === 'wchg';
+  // toFixed(1) prints -0.04 as "-0.0", a sign on a number that rounds to zero.
+  const txt = v.toFixed(wchg ? 2 : 1).replace(/^-(0\.0+)$/, '$1');
+  const sign = v > 0 && Number(txt) !== 0 ? '+' : '';
+  return `${sign}${txt}${wchg ? 'pp' : '%'}`;
+}
+
+function _gicsKey(row) {
+  if (_GICS.sort === 'weight') return row.weight;
+  const v = (row[_GICS_FIELD[_GICS.mode]] || {})[_GICS.sort];
+  return v == null ? null : v;
+}
+
+// Nulls last in both directions: "could not be measured" is not "lowest".
+function _gicsSorted(rows) {
+  return rows.slice().sort((a, b) => {
+    const x = _gicsKey(a), y = _gicsKey(b);
+    if (x == null && y == null) return 0;
+    if (x == null) return 1;
+    if (y == null) return -1;
+    return (x - y) * _GICS.dir;
+  });
+}
+
+function _gicsCells(row, periods) {
+  const vals = row[_GICS_FIELD[_GICS.mode]] || {};
+  return periods.map(p => {
+    const v = vals[p];
+    return `<td class="gics-num rounded ${_gicsTone(v, p)}">${_gicsFmt(v)}</td>`;
+  }).join('');
+}
+
+function renderGics() {
+  const d = _GICS.data;
+  const host = document.getElementById('gicsTable');
+  if (!d || !host) return;
+  const t = (k, fb) => I18n.t(k) || fb;
+  const periods = d.periods || [];
+  const head = [
+    `<th>${_gicsEsc(t('markets.gics_col_name', 'Sector / industry group'))}</th>`,
+    `<th data-sort="weight" title="${_gicsEsc(t('markets.gics_sort_tip', 'Sort by this column'))}"`
+      + `${_GICS.sort === 'weight' ? ' class="gics-sorted"' : ''}>${_gicsEsc(t('markets.gics_col_weight', 'Weight'))}</th>`,
+    `<th>${_gicsEsc(t('markets.gics_col_n', 'Names'))}</th>`,
+    ...periods.map(p => `<th data-sort="${p}" title="${_gicsEsc(t('markets.gics_sort_tip', 'Sort by this column'))}"`
+      + `${_GICS.sort === p ? ' class="gics-sorted"' : ''}>${_gicsEsc(t('markets.gics_p_' + p, p))}</th>`),
+  ].join('');
+
+  // The index row: its own return in the first view; in the other two it is
+  // zero by construction, which is shown as a dash rather than a column of 0s.
+  const idx = d.index && d.index.returns || {};
+  const idxCells = periods.map(p => {
+    const v = _GICS.mode === 'ret' ? idx[p] : null;
+    return `<td class="gics-num ${_GICS.mode === 'ret' ? 'rounded ' + _gicsTone(v, p) : 'gics-muted'}">${_GICS.mode === 'ret' ? _gicsFmt(v) : '—'}</td>`;
+  }).join('');
+  const rows = [`<tr class="gics-index"><td>${_gicsEsc(t('markets.gics_index', 'S&P 500'))}</td>`
+    + `<td class="gics-num">100%</td><td class="gics-num gics-muted">${d.coverage ? d.coverage.priced : ''}</td>${idxCells}</tr>`];
+
+  _gicsSorted(d.sectors || []).forEach(sec => {
+    // Energy, Materials and Utilities are one group each; a child row would
+    // only repeat the sector, so they are not expandable.
+    const multi = (sec.groups || []).length > 1;
+    const open = multi && !_GICS.collapsed.has(sec.code);
+    const caret = multi ? '<span class="gics-caret">▾</span>' : '<span class="gics-caret"></span>';
+    rows.push(`<tr class="gics-sector${multi && !open ? ' gics-collapsed' : ''}"`
+      + `${multi ? ` data-toggle="${sec.code}" title="${_gicsEsc(t('markets.gics_toggle_tip', 'Show or hide its industry groups'))}"` : ''}>`
+      + `<td>${caret}${_gicsEsc(t('gics.' + sec.code, sec.name))}</td>`
+      + `<td class="gics-num">${sec.weight == null ? '—' : sec.weight.toFixed(1) + '%'}</td>`
+      + `<td class="gics-num gics-muted">${sec.n}</td>${_gicsCells(sec, periods)}</tr>`);
+    if (!open) return;
+    _gicsSorted(sec.groups).forEach(g => {
+      const top = (g.top || []).map(x => _gicsEsc(x.t)).join(' · ');
+      rows.push(`<tr class="gics-group"><td>${_gicsEsc(t('gics.' + g.code, g.name))}`
+        + `${top ? `<span class="gics-top">${top}</span>` : ''}</td>`
+        + `<td class="gics-num">${g.weight == null ? '—' : g.weight.toFixed(1) + '%'}</td>`
+        + `<td class="gics-num gics-muted">${g.n}</td>${_gicsCells(g, periods)}</tr>`);
+    });
+  });
+
+  host.innerHTML = `<table class="gics-table"><thead><tr>${head}</tr></thead><tbody>${rows.join('')}</tbody></table>`;
+  _renderGicsNote();
+}
+
+function _renderGicsNote() {
+  const d = _GICS.data;
+  const el = document.getElementById('gicsNote');
+  if (!d || !el) return;
+  const t = (k, fb) => I18n.t(k) || fb;
+  const lines = [
+    t('markets.gics_asof', 'As of the {date} close.').replace('{date}', d.asof)
+      + (d.stale ? ' ' + t('markets.gics_stale', 'Not refreshed since — a rebuild is pending.') : ''),
+    t('markets.gics_note_etf', ''),
+    t('markets.gics_note_method', '').replace('{date}', d.weights_asof || ''),
+    _GICS.mode === 'wchg' ? t('markets.gics_note_wchg', '') : t('markets.gics_note_small', ''),
+  ].filter(Boolean);
+  el.innerHTML = lines.map(x => `<p>${_gicsEsc(x)}</p>`).join('');
+}
+
+function _gicsMessage(key, fallback) {
+  const host = document.getElementById('gicsTable');
+  if (host) host.innerHTML = `<div class="text-xs text-slate-500 dark:text-slate-600">${_gicsEsc(I18n.t(key) || fallback)}</div>`;
+}
+
+// Delegated once, so a re-render never stacks a listener per row.
+document.getElementById('gicsTable')?.addEventListener('click', ev => {
+  const th = ev.target.closest('th[data-sort]');
+  if (th) {
+    const key = th.dataset.sort;
+    // A new column starts descending — "what rose most" is the first question
+    // asked of a performance table; clicking it again reverses.
+    _GICS.dir = _GICS.sort === key ? -_GICS.dir : -1;
+    _GICS.sort = key;
+    renderGics();
+    return;
+  }
+  const tr = ev.target.closest('tr[data-toggle]');
+  if (tr) {
+    const code = tr.dataset.toggle;
+    if (_GICS.collapsed.has(code)) _GICS.collapsed.delete(code); else _GICS.collapsed.add(code);
+    renderGics();
+  }
+});
+document.querySelectorAll('[data-gics-mode]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    _GICS.mode = btn.dataset.gicsMode;
+    document.querySelectorAll('[data-gics-mode]').forEach(b => b.classList.toggle('active', b === btn));
+    renderGics();
+  });
+});
+document.addEventListener('i18n:langchange', () => { if (_GICS.data) renderGics(); });
+
+DeferLoad.when('#gicsTable', async function() {
+  // Bounded, and it always ends on something the reader can see: a stopped
+  // timer alone would leave "Loading…" on screen for ever. The build that
+  // produces this runs ~90s after a restart, so 180s covers a deploy.
+  const EVERY_MS = 5000, MAX_WAIT_MS = 180000, started = Date.now();
+  try {
+    for (;;) {
+      const resp = await fetch('/api/gics');
+      if (resp.status === 202) {
+        if (Date.now() - started > MAX_WAIT_MS) {
+          _gicsMessage('markets.gics_gave_up', 'Still computing. Reload in a few minutes.');
+          return;
+        }
+        _gicsMessage('markets.gics_warming', 'Computing from the constituents’ prices…');
+        await new Promise(r => setTimeout(r, EVERY_MS));
+        continue;
+      }
+      if (!resp.ok) {
+        _gicsMessage('markets.gics_unavailable', 'The GICS breakdown is unavailable right now.');
+        return;
+      }
+      _GICS.data = await resp.json();
+      renderGics();
+      return;
+    }
+  } catch (e) {
+    console.warn('GICS panel failed:', e);
+    _gicsMessage('markets.gics_unavailable', 'The GICS breakdown is unavailable right now.');
+  }
+}, { label: 'gics' });
 
 /* ── Upcoming earnings ──────────────────────────────────────────────────────
    Its own fetch, deliberately. /api/markets is the screen's spine and this is

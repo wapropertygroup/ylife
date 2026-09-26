@@ -9505,7 +9505,10 @@ def api_breadth():
             # passing week-old data off as current. The client shows the date.
             ts = cached.get("_ts") or 0
             stale = (time.time() - ts) >= breadth.CACHE_TTL if ts else True
-            return jsonify({**cached, "stale": stale or bool(cached.get("stale"))})
+            # The GICS block rides the same build but has its own endpoint and
+            # panel; shipping it here would add it to every breadth chart load.
+            body = {k: v for k, v in cached.items() if k != "gics"}
+            return jsonify({**body, "stale": stale or bool(cached.get("stale"))})
 
         if breadth.is_warming():
             log.info("API breadth: build in progress, returning 202")
@@ -9517,6 +9520,30 @@ def api_breadth():
         return jsonify({"status": "initializing", "warming": True}), 202
     except Exception as exc:
         log.warning("api_breadth failed: %s", exc)
+        return jsonify({"error": str(exc)}), 502
+
+
+@bp.route("/api/gics")
+def api_gics():
+    """S&P 500 GICS sectors and industry groups, from the constituents.
+
+    Computed inside breadth's daily build (see ystocker/gics.py) and served on
+    the same terms as /api/breadth: never built in the request, stale served
+    and labelled rather than withheld, 202 while nothing is available yet. A
+    build that ran without a usable snapshot publishes ``gics: None``, which is
+    reported as unavailable rather than "warming" — waiting will not fix it.
+    """
+    try:
+        cached = breadth.peek()
+        if cached and cached.get("gics"):
+            ts = cached.get("_ts") or 0
+            stale = (time.time() - ts) >= breadth.CACHE_TTL if ts else True
+            return jsonify({**cached["gics"], "stale": stale})
+        if cached and "gics" in cached and not breadth.is_warming():
+            return jsonify({"status": "unavailable"}), 503
+        return jsonify({"status": "warming", "warming": True}), 202
+    except Exception as exc:
+        log.warning("api_gics failed: %s", exc)
         return jsonify({"error": str(exc)}), 502
 
 
