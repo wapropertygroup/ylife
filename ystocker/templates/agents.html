@@ -3,6 +3,19 @@
    base.html would otherwise render "TradeAgents — Trading Agents". #}
 {% block title %}{% if brand_is_ta %}TradeAgents{% else %}yStocker — Trading Agents{% endif %}{% endblock %}
 
+{#  The landing page: what a visitor who is not signed in sees here, and so what
+    trade-agents.com's front door shows (nginx maps `/` to this page). `landing`
+    is only passed for a signed-out, full-page view (routes.agents_page); the
+    embedded panel keeps its compact sign-in card, because the launcher's frame
+    is 240px tall. The hero and sections live in _agents_landing_top/bottom.html;
+    the sample-report block between them stays in this file, since its script is
+    shared with the shared-link (?job=) path below. #}
+{% set _landing = landing %}
+{% block body_class %}{% if _landing %} w-paper{% endif %}{% endblock %}
+{% block head_extra %}{% if _landing %}{% include "wiki/_head.html" %}
+<meta name="description" content="{{ 'TradeAgents' if brand_is_ta else 'Trading Agents' }} seats a team of AI analysts on one stock and one date, makes a bull and a bear argue it out, and ends with a portfolio manager's rating you can read turn by turn. Research, not advice.">
+{% endif %}{% endblock %}
+
 {% block content %}
 <script src="{{ url_for('static', filename='markdown.js') }}?v={{ cache_bust or 'dev' }}"></script>
 
@@ -821,19 +834,29 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
 </style>
 
 <!-- ── Header ─────────────────────────────────────────────────────────── -->
-{% if not agent_embedded %}
+{% if not agent_embedded and not _landing %}
 <div class="mb-6 fade-up">
   <h1 class="text-2xl sm:text-3xl font-bold grad-text mb-1" data-i18n="agents.title">Trading Agents</h1>
   <p class="text-slate-500 dark:text-slate-400 text-sm" data-i18n="agents.subtitle">
     Runs the TradingAgents multi-agent analysis — analyst, researcher and risk debate rounds — for one ticker and date.
   </p>
   <p class="text-slate-500 text-xs mt-1" data-i18n="agents.astock_roles">
-    A-share runs add Policy, Hot Money and Lock-up analysts; all seven reports feed both research and risk debates.
+    A-share runs add Policy, Hot Money and Lock-up analysts; all nine reports feed both research and risk debates.
+  </p>
+  {# The wiki is otherwise reachable only from the footer once signed in, and a
+     reader in the middle of choosing a model is who the docs are for. #}
+  <p class="text-xs mt-2 flex flex-wrap gap-x-4 gap-y-1">
+    <a href="{{ url_for('main.docs_home') }}" class="text-indigo-700 dark:text-indigo-400 hover:underline" data-i18n="nav.docs">Docs</a>
+    <a href="{{ url_for('main.docs_page', slug='models') }}" class="text-indigo-700 dark:text-indigo-400 hover:underline" data-i18n="agents.docs_models">Choosing a model</a>
+    <a href="{{ url_for('main.research_lab') }}" class="text-indigo-700 dark:text-indigo-400 hover:underline" data-i18n="nav.research">Research Lab</a>
   </p>
 </div>
 {% endif %}
 
 {% if not signed_in %}
+{% if _landing %}
+{% include "_agents_landing_top.html" %}
+{% else %}
 <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 fade-up text-center">
   <p class="text-slate-600 dark:text-slate-300 text-sm mb-1" data-i18n="agents.need_signin">Sign in to run an analysis.</p>
   <p class="text-xs text-slate-500 mb-4" data-i18n="agents.need_signin_why">Each run makes live LLM calls that cost real money, so this page is restricted.</p>
@@ -841,18 +864,34 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
      {% if agent_embedded %}target="_top"{% endif %}
      class="ag-btn ag-signin-btn" data-i18n="nav.sign_in">Sign In</a>
 </div>
+{% endif %}
 
 {% if showcase %}
 {# A visitor who cannot run anything still deserves to see what a run produces,
    so the page samples finished reports instead of stopping at the card above.
    The sample is anonymous: the API hands over an allowlist of fields and never
    says who ran a report (ystocker/agents.py:_PUBLIC_FIELDS). #}
+{% if _landing %}
+{# On the landing the samples are a section of their own, headed like the rest,
+   so the list's own small heading below is dropped rather than said twice. #}
+<section class="w-wrap w-section" id="samples" aria-labelledby="lpSamples">
+  <div class="w-section-head">
+    <p class="w-kicker"><span data-l="en">Sample reports</span><span data-l="zh">报告样例</span></p>
+    <h2 class="w-h2" id="lpSamples"><span data-l="en">Read a finished report before you run one.</span><span data-l="zh">先读一份完成的报告，再决定是否运行。</span></h2>
+    <p class="w-lead">
+      <span data-l="en">A random selection of finished analyses, anonymous by design. Open one to read every turn, or take the PDF.</span>
+      <span data-l="zh">随机抽取的已完成分析，均已匿名处理。打开任意一份即可逐轮阅读，也可以下载 PDF。</span>
+    </p>
+  </div>
+{% endif %}
 <!-- ── Sample reports (not signed in) ─────────────────────────────────── -->
-<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 mt-6 fade-up">
+<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 {% if not _landing %}mt-6 {% endif %}fade-up">
+  {% if not _landing %}
   <div class="ag-hist-head">
     <h3 class="text-sm font-semibold text-slate-600 dark:text-slate-300" data-i18n="agents.sample">Sample reports</h3>
     <p class="text-xs text-slate-500 dark:text-slate-600" data-i18n="agents.sample_why">A random selection of finished analyses. Sign in to run your own.</p>
   </div>
+  {% endif %}
   <div id="agSample" class="text-xs text-slate-500" data-i18n="agents.sample_loading">Loading…</div>
 </div>
 
@@ -887,6 +926,7 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
        class="text-indigo-700 dark:text-indigo-400 hover:underline" data-i18n="nav.sign_in">Sign In</a>
   </p>
 </div>
+{% if _landing %}</section>{% endif %}
 
 <script>
 (function() {
@@ -1256,6 +1296,10 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
   })();
 })();
 </script>
+{% endif %}
+
+{% if _landing %}
+{% include "_agents_landing_bottom.html" %}
 {% endif %}
 
 {% elif not allowed %}

@@ -1,0 +1,47 @@
+{% extends "wiki/_layout.html" %}
+{#  One Research Lab post. The header comes from the ystocker/wiki.py registry;
+    the body is templates/wiki/research/<slug>.html, which opens with its own
+    lead paragraph and is otherwise written like a docs page: <section id> blocks
+    with a bilingual h2, and paired [data-l] bodies. #}
+{% set section = 'research' %}
+
+{% block title %}{{ post.title.en }} — {{ product }} Research Lab{% endblock %}
+{% block title_en %}{{ post.title.en }} — {{ product }} Research Lab{% endblock %}
+{% block title_zh %}{{ post.title.zh }} — {{ product }} 研究实验室{% endblock %}
+{% block wiki_head %}
+<meta name="description" content="{{ post.summary.en }}">
+{% endblock %}
+
+{% block wiki_body %}
+<article class="w-article" aria-labelledby="wPostTitle">
+  <p class="w-article-trail">
+    <a href="{{ url_for('main.research_lab') }}"><span data-l="en">Research Lab</span><span data-l="zh">研究实验室</span></a>
+    · {{ w.t2(post.kicker) }}
+  </p>
+  <h1 class="w-article-title" id="wPostTitle">{{ w.t2(post.title) }}</h1>
+  <p class="w-article-meta">
+    <time datetime="{{ post.date }}">{{ post.date }}</time>
+    · <span data-l="en">{{ post.minutes }} min read</span><span data-l="zh">约 {{ post.minutes }} 分钟</span>
+  </p>
+  <div class="w-tags">
+    {% for t in post.tags %}<span class="w-tag">{{ w.t2(t) }}</span>{% endfor %}
+  </div>
+
+  {% include "wiki/research/" ~ post.slug ~ ".html" %}
+
+  <nav class="w-pager" aria-label="Research Lab posts">
+    {% if newer %}
+    <a href="{{ url_for('main.research_post', slug=newer.slug) }}">
+      <small><span data-l="en">Newer</span><span data-l="zh">较新</span></small>
+      <b>← {{ w.t2(newer.title) }}</b>
+    </a>
+    {% endif %}
+    {% if older %}
+    <a class="is-next" href="{{ url_for('main.research_post', slug=older.slug) }}">
+      <small><span data-l="en">Older</span><span data-l="zh">较早</span></small>
+      <b>{{ w.t2(older.title) }} →</b>
+    </a>
+    {% endif %}
+  </nav>
+</article>
+{% endblock %}

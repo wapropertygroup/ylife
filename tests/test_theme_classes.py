@@ -38,7 +38,9 @@ SELECTOR_CALL = re.compile(
 
 
 def templates() -> list[Path]:
-    return sorted(p for p in TEMPLATES.glob("*.html") if p.name != KIOSK)
+    # rglob, not glob: templates/wiki/ holds the docs and Research Lab pages, and
+    # a guard that only reads the top level passes on a subdirectory it never saw.
+    return sorted(p for p in TEMPLATES.rglob("*.html") if p.name != KIOSK)
 
 
 def _call_args(text: str, open_paren_end: int) -> str:

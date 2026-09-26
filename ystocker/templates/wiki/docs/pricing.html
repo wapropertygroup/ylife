@@ -1,0 +1,145 @@
+{#  /docs/pricing. Every limit and price comes from `facts` (routes._wiki_facts):
+    quota.limit_default / limit_global / limit_chat / limit_share / QUOTA_TZ, and
+    credits.packs_public via _agent_packs_for_page, which is [] whenever selling
+    is not safe -- so the empty case is a real state, not a fallback. The refund
+    rules are quota.py's docstring and agents._run's _refund_preflight calls. #}
+{% set pacific = facts.quota_tz == 'America/Los_Angeles' %}
+<section id="free-runs">
+  <h2><span data-l="en">Free runs</span><span data-l="zh">免费额度</span></h2>
+  <div data-l="en">
+    <div class="w-stats">
+      <div>
+        <span class="w-stat-label">Free runs a day</span>
+        <span class="w-stat-value">{{ facts.free_runs }}</span>
+        <span class="w-stat-note">for every signed-in account</span>
+      </div>
+      <div>
+        <span class="w-stat-label">Resets</span>
+        <span class="w-stat-value">Midnight</span>
+        <span class="w-stat-note">{% if pacific %}Pacific time{% else %}{{ facts.quota_tz }}{% endif %}</span>
+      </div>
+      <div>
+        <span class="w-stat-label">Purchased runs</span>
+        <span class="w-stat-value">No expiry</span>
+        <span class="w-stat-note">they carry over from day to day</span>
+      </div>
+    </div>
+    <p>Free runs are always spent first. A purchased run is touched only once today's free runs are gone, so you are never charged while a free one is left. Unused free runs do not carry over to the next day.</p>
+    <p>The counter beside ▶ Run analysis shows how many free runs are left today and, separately, how many you have bought — kept apart because only one of the two comes back at midnight.</p>
+  </div>
+  <div data-l="zh">
+    <div class="w-stats">
+      <div>
+        <span class="w-stat-label">每日免费次数</span>
+        <span class="w-stat-value">{{ facts.free_runs }}</span>
+        <span class="w-stat-note">每个登录账号都有</span>
+      </div>
+      <div>
+        <span class="w-stat-label">重置时间</span>
+        <span class="w-stat-value">零点</span>
+        <span class="w-stat-note">{% if pacific %}太平洋时间{% else %}{{ facts.quota_tz }}{% endif %}</span>
+      </div>
+      <div>
+        <span class="w-stat-label">购买的次数</span>
+        <span class="w-stat-value">永不过期</span>
+        <span class="w-stat-note">可以跨日累积使用</span>
+      </div>
+    </div>
+    <p>系统总是先用免费次数。只有当天的免费次数用完之后，才会动用购买的次数，所以只要还有免费次数，就不会扣费。当天没用完的免费次数不会留到第二天。</p>
+    <p>“▶ 运行分析”旁边的计数会分别显示今天剩余的免费次数和你购买的次数——之所以分开显示，是因为只有前者会在零点恢复。</p>
+  </div>
+</section>
+
+<section id="run-packs">
+  <h2><span data-l="en">Run packs</span><span data-l="zh">次数包</span></h2>
+  <div data-l="en">
+    {% if facts.agent_packs %}
+    <p>When the free allowance is not enough, buy a pack.</p>
+    <div class="w-table-wrap">
+      <table>
+        <thead><tr><th>Pack</th><th class="num">Price</th><th class="num">Per run</th></tr></thead>
+        <tbody>
+          {% for p in facts.agent_packs %}
+          <tr><td>{{ p.credits }} runs</td><td class="num">${{ '%g' % p.price }}</td><td class="num">${{ '%.2f' % p.per_run }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p><strong>Buy more runs</strong>, which appears on the run form once your free runs are gone, opens the payments page. Payment is by card through Stripe: a one-off charge in US dollars, not a subscription. You need to be signed in, because the runs are added to the account you were signed in with — even if the card's receipt goes to a different address — once Stripe confirms the payment.</p>
+    {% else %}
+    <p>Run packs are not on sale at the moment. The free allowance works as usual.</p>
+    {% endif %}
+  </div>
+  <div data-l="zh">
+    {% if facts.agent_packs %}
+    <p>免费额度不够用时，可以购买次数包。</p>
+    <div class="w-table-wrap">
+      <table>
+        <thead><tr><th>次数包</th><th class="num">价格</th><th class="num">每次</th></tr></thead>
+        <tbody>
+          {% for p in facts.agent_packs %}
+          <tr><td>{{ p.credits }} 次</td><td class="num">${{ '%g' % p.price }}</td><td class="num">${{ '%.2f' % p.per_run }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p>免费次数用完后，分析表单上会出现<strong>“购买更多次数”</strong>，点击即进入支付页面。付款通过 Stripe 以银行卡完成：以美元一次性支付，不是订阅。购买时需要保持登录，因为次数会加到你登录所用的账号上——即使银行卡收据发往另一个邮箱也一样——Stripe 确认付款后即到账。</p>
+    {% else %}
+    <p>次数包目前暂停销售，免费额度照常可用。</p>
+    {% endif %}
+  </div>
+</section>
+
+<section id="what-counts">
+  <h2><span data-l="en">What counts as a run</span><span data-l="zh">怎样算一次</span></h2>
+  <div data-l="en">
+    <ul>
+      <li><strong>One analysis is one run</strong>, free or purchased, whatever model and thinking depth you choose, and whether it is a US or an A-share run. The allowances count runs, not model tokens.</li>
+      <li><strong>It counts when you press Run</strong>, not when the run finishes — a queued run has already been counted.</li>
+      <li><strong>Reading costs nothing.</strong> Opening your reports, downloading PDFs and opening a shared link never use a run.</li>
+      <li><strong>Follow-up questions have their own allowance</strong> — {{ facts.chat_limit }} a day — and never draw on your runs. So does sharing: up to {{ facts.share_limit }} shares a day.</li>
+    </ul>
+  </div>
+  <div data-l="zh">
+    <ul>
+      <li><strong>一次分析就是一次</strong>，无论用的是免费次数还是购买的次数，无论选择哪个模型、哪种思考深度，也无论分析的是美股还是 A 股。额度按分析次数计算，而不是按模型 token 计算。</li>
+      <li><strong>点击运行时即计数</strong>，而不是等分析完成——排队中的任务已经计入。</li>
+      <li><strong>阅读不花钱。</strong>打开自己的报告、下载 PDF、打开分享链接，都不消耗次数。</li>
+      <li><strong>追问有单独的额度</strong>——每天 {{ facts.chat_limit }} 次——不会占用分析次数。分享也是如此：每天最多 {{ facts.share_limit }} 次。</li>
+    </ul>
+  </div>
+</section>
+
+<section id="refunds">
+  <h2><span data-l="en">When a run is given back</span><span data-l="zh">哪些情况会退还</span></h2>
+  <div data-l="en">
+    <p>A run that is given back returns to where it came from: today's free allowance, or your credit balance.</p>
+    <ul>
+      <li><strong>Refused at the door.</strong> The server rejects the request before queuing it — a ticker or date it cannot read, or a model that is not available here.</li>
+      <li><strong>Never started.</strong> The run waited too long for a free slot, or the analysis engine could not be started.</li>
+      <li><strong>Out of model capacity.</strong> The model provider's daily capacity ran out and the run ended with no report at all.</li>
+    </ul>
+    <p>Anything else is not given back: once the analysis has started, an unknown number of model calls may already have been paid for. That covers a run that fails partway, one stopped by its time limit, and one dated after today, which is refused only once it has started.</p>
+  </div>
+  <div data-l="zh">
+    <p>退还的次数会回到原来的地方：当天的免费额度，或者你购买的余额。</p>
+    <ul>
+      <li><strong>请求被拒。</strong>服务器在排队前就拒绝了请求——代码或日期无法识别，或者所选模型在本站不可用。</li>
+      <li><strong>没有启动。</strong>等待空闲位置的时间过长，或者分析引擎无法启动。</li>
+      <li><strong>模型额度耗尽。</strong>模型服务商当天的额度用完，分析结束时没有产出任何报告。</li>
+    </ul>
+    <p>其他情况一律不退：分析一旦开始，就可能已经产生了数量不定、且已付费的模型调用。这包括中途失败的分析、因超时被终止的分析，以及日期晚于今天的分析——后者要到启动时才会被拒绝。</p>
+  </div>
+</section>
+
+<section id="site-limit">
+  <h2><span data-l="en">The site-wide daily limit</span><span data-l="zh">全站每日上限</span></h2>
+  <div data-l="en">
+    <p>Separately from your own allowance, the whole site runs at most {{ facts.global_runs }} analyses a day, across every account. Purchased runs count toward it too. It is a limit on what the server and its model quota can deliver in a day, not a billing rule, so buying a pack cannot raise it.</p>
+    <p>When it is reached, the run form says so and offers no pack, since there is no capacity left to sell. Your own free runs and credits are untouched, and runs start again after midnight{% if pacific %} Pacific time{% else %} ({{ facts.quota_tz }}){% endif %}.</p>
+  </div>
+  <div data-l="zh">
+    <p>在个人额度之外，全站所有账号加起来每天最多运行 {{ facts.global_runs }} 次分析，购买的次数同样计入。这是服务器和模型配额每天能承担的容量上限，不是计费规则，所以购买次数包并不能提高它。</p>
+    <p>达到上限时，分析表单会给出提示，并且不会推荐购买——因为已经没有容量可卖。你自己的免费次数和已购次数都不受影响，{% if pacific %}太平洋时间{% else %}{{ facts.quota_tz }} {% endif %}零点过后即可继续运行。</p>
+  </div>
+</section>

@@ -1,0 +1,52 @@
+{% extends "wiki/_layout.html" %}
+{#  The Research Lab index: every post, newest first, from ystocker/wiki.py.
+    `missing` is set when /research/<slug> named no post, so a dead link lands
+    here with a note rather than on a bare 404 page. #}
+{% set section = 'research' %}
+
+{% block title %}Research Lab — {{ product }}{% endblock %}
+{% block title_en %}Research Lab — {{ product }}{% endblock %}
+{% block title_zh %}研究实验室 — {{ product }}{% endblock %}
+{% block wiki_head %}
+<meta name="description" content="Long-form analyses and post-mortems from the {{ product }} desk.">
+{% endblock %}
+
+{% block wiki_body %}
+<div class="w-wrap">
+  <header class="w-lab-hero">
+    <p class="w-kicker is-quiet"><span data-l="en">Research Lab</span><span data-l="zh">研究实验室</span></p>
+    <h1 class="w-display"><span data-l="en">Research Lab.</span><span data-l="zh">研究实验室。</span></h1>
+    <p class="w-lead">
+      <span data-l="en">Long-form analyses and post-mortems from the desk. Every figure is from our own data on the date shown, every fix it led to is pinned by a test, and each post ends with a way to check it yourself.</span>
+      <span data-l="zh">来自投研台的长文分析与事后复盘。每个数字都来自我们自己在文中日期的数据，每一处由此而来的修正都有测试锁定，每篇文章结尾都告诉你如何亲自验证。</span>
+    </p>
+  </header>
+
+  {% if missing %}
+  <div class="w-callout is-warn" role="status">
+    <span data-l="en">There is no post at <code>/research/{{ missing }}</code>. Everything published is listed below.</span>
+    <span data-l="zh"><code>/research/{{ missing }}</code> 没有对应的文章。已发布的文章都列在下方。</span>
+  </div>
+  {% endif %}
+
+  <ol class="w-postlist">
+    {% for p in posts %}
+    <li>
+      <div class="w-post-date">
+        <time datetime="{{ p.date }}">{{ p.date }}</time>
+        <small><span data-l="en">{{ p.minutes }} min read</span><span data-l="zh">约 {{ p.minutes }} 分钟</span></small>
+      </div>
+      <div>
+        <a class="w-post-link" href="{{ url_for('main.research_post', slug=p.slug) }}">
+          <h2>{{ w.t2(p.title) }}</h2>
+        </a>
+        <p class="w-post-sum">{{ w.t2(p.summary) }}</p>
+        <div class="w-tags">
+          {% for t in p.tags %}<span class="w-tag">{{ w.t2(t) }}</span>{% endfor %}
+        </div>
+      </div>
+    </li>
+    {% endfor %}
+  </ol>
+</div>
+{% endblock %}

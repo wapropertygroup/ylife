@@ -1,0 +1,191 @@
+{#  Research Lab post: "A forward multiple needs a forward history" (/research/forward-history).
+    Built from the write-up of fec1338 (the reconstructed forward history and its
+    22-ticker measurement, 2026-09-20) and the forward-basis half of a6ae58d (every
+    ticker moved onto that basis, 2026-09-20); from CLAUDE.md's "The relative branch";
+    and from the docstrings of ystocker/dca_history.py (reconstruct,
+    reconstruct_forward, percentile_series, build_quarterly_ttm, _year_ago, the lag
+    constants, forward_basis) and ystocker/dca.py (MIN_OBSERVATIONS, percentile_rank).
+    The two reconstruction traps shipped with the engine in 399f8fd (2026-09-11). The
+    baseline the percentile shifts are measured against -- the trailing-on-trailing
+    rank -- is the one f368128 (2026-09-19) describes and forward_basis() keeps as
+    `trailing_percentile`. Test counts are grep counts of tests/test_dca_history.py. #}
+<div data-l="en"><p class="w-article-lead">Our DCA valuation pages score a company by asking where today’s multiples sit in its own history — a percentile. That only works if today’s number and the history are the same kind of number. Rank a forward P/E against a history of trailing P/Es and every growing company looks cheap, and nothing on the page looks wrong: the output is still a tidy number between 0 and 100.</p></div>
+<div data-l="zh"><p class="w-article-lead">我们的定投估值页用百分位给公司的估值打分：看今天的各项倍数处在这家公司自身历史的什么位置。前提是，今天的数字和历史必须是同一种数字。把前瞻市盈率放进一段滚动市盈率的历史里排名，每一家成长型公司都会显得便宜——而页面上看不出任何异常：结果依然是一个介于 0 到 100 之间、整整齐齐的数字。</p></div>
+
+<div class="w-prose">
+<section id="tldr">
+  <h2><span data-l="en">TL;DR</span><span data-l="zh">要点</span></h2>
+  <div data-l="en"><p>On 20 September 2026 we measured, across 22 tickers, what happens when today’s forward P/E is ranked against a company’s trailing history instead of the like-for-like trailing ranking: the median shift was −11.3 percentile points, and 11 of the 22 landed at exactly 0.0 — below every week of that history. So we built a forward history, dividing each past week’s price by the earnings that fiscal year turned out to deliver. Ranked against it, the median shift shrinks to −3.5 points, and names move in both directions. It still leans slightly cheap, and every rank built this way is labelled on the page.</p></div>
+  <div data-l="zh"><p>2026 年 9 月 20 日，我们在 22 只股票上测量了一件事：把今天的前瞻市盈率放进公司的滚动市盈率历史里排名，与同口径的滚动排名相比，百分位变化的中位数是 −11.3 个百分位点，22 只里有 11 只正好落在 0.0——低于那段历史里的每一周。于是我们重建了一段前瞻历史：用每个历史周的股价，除以那个财年事后实际交出的盈利。放进这段历史里排名，中位数变化缩小到 −3.5 个百分位点，而且有升有降。它仍然略微偏向便宜，所有这样得出的排名都会在页面上标明。</p></div>
+  <div class="w-stats">
+    <div>
+      <span class="w-stat-label"><span data-l="en">Pinned at 0.0</span><span data-l="zh">卡在 0.0</span></span>
+      <span class="w-stat-value is-bad">11/22</span>
+      <span class="w-stat-note"><span data-l="en">Forward P/E ranked in trailing history: below every week of it</span><span data-l="zh">前瞻市盈率放进滚动历史排名：低于其中每一周</span></span>
+    </div>
+    <div>
+      <span class="w-stat-label"><span data-l="en">Median shift, naive</span><span data-l="zh">直接排名·中位数</span></span>
+      <span class="w-stat-value is-bad">−11.3</span>
+      <span class="w-stat-note"><span data-l="en">Percentile points, forward into trailing history; mean −15.9</span><span data-l="zh">个百分位点，前瞻值放进滚动历史；均值 −15.9</span></span>
+    </div>
+    <div>
+      <span class="w-stat-label"><span data-l="en">Median shift, rebuilt</span><span data-l="zh">重建后·中位数</span></span>
+      <span class="w-stat-value is-num">−3.5</span>
+      <span class="w-stat-note"><span data-l="en">Forward into reconstructed forward history; mean −7.3, and it moves both ways</span><span data-l="zh">前瞻值放进重建的前瞻历史；均值 −7.3，且有升有降</span></span>
+    </div>
+  </div>
+  <div class="w-callout"><span data-l="en">Measured on 22 tickers from our live universe on 20 September 2026. Every shift is in percentile points against the ranking the engine already used — today’s trailing P/E ranked in its own trailing history — so a negative shift reads cheaper than that. A percentile here is the share of past weeks at or below today’s value, so 0.0 means below every one of them.</span><span data-l="zh">测量于 2026 年 9 月 20 日，样本为我们正在跟踪的 22 只股票。所有变化均以百分位点计，比较基准是估值引擎原本使用的排名——今天的滚动市盈率在其自身滚动历史中的百分位——负值即比基准更便宜。这里的百分位，是历史上小于或等于今天数值的周数所占的比例，所以 0.0 表示低于其中每一周。</span></div>
+</section>
+
+<section id="the-question">
+  <h2><span data-l="en">Two P/E ratios, one company</span><span data-l="zh">同一家公司，两个市盈率</span></h2>
+  <div data-l="en">
+    <p>A trailing P/E divides the price by the last twelve months of reported earnings. A forward P/E divides it by analysts’ consensus estimate for the coming year. They are different numbers about the same company, and for anything growing the forward one is lower.</p>
+    <p>Our DCA engine ranks each multiple against the company’s own history. A percentile answers “how does today compare with this company’s past?”: 0 is the cheapest it has been, 100 the dearest. The score built from those percentiles sets the pace of a recurring contribution — it never answers whether to buy — so a bias here does not stay on the page. It changes how much a plan puts in.</p>
+    <p>The history the engine has is trailing: about five years of weekly prices, each divided by the statements that were public that week. A forward history cannot be downloaded, because nothing sells back yesterday’s consensus, so we began banking one row per ticker per day — but that series started empty and is months from useful. The tempting shortcut is to rank today’s forward P/E in the trailing history anyway. For a growing company it reads cheap every single time.</p>
+  </div>
+  <div data-l="zh">
+    <p>滚动市盈率用股价除以过去十二个月已公布的盈利；前瞻市盈率则除以分析师对未来一年盈利的一致预期。两者是同一家公司的两个不同数字，而只要公司在增长，前瞻市盈率就更低。</p>
+    <p>我们的定投估值引擎，把每一项倍数放进这家公司自身的历史里排名。百分位回答的是“今天和它自己的过去相比如何”：0 是历史上最便宜的时候，100 是最贵的时候。由这些百分位构成的分数决定定期投入的节奏——它从不回答“该不该买”——所以这里的偏差不会只停留在页面上，它会改变一份定投计划实际投入的金额。</p>
+    <p>引擎手里的历史是滚动口径的：约五年的周度股价，每一周都除以当周已经公开的财报数据。前瞻历史无从下载——没有人出售昨天的一致预期——所以我们开始每天为每只股票存下一行记录，但这条序列从零开始，距离可用还要好几个月。诱人的捷径是：干脆把今天的前瞻市盈率放进滚动历史里排名。对成长型公司而言，结果每一次都偏便宜。</p>
+  </div>
+</section>
+
+<section id="method">
+  <h2><span data-l="en">Building a forward history</span><span data-l="zh">重建一段前瞻历史</span></h2>
+  <div data-l="en">
+    <h3>First, a trailing history that does not cheat</h3>
+    <p>The forward history is built from the same weekly prices and the same annual reports as the trailing one, so the trailing one has to be right first.</p>
+    <ul>
+      <li><strong>Point-in-time.</strong> A fiscal year ending 31 December is not knowable on 1 January; the 10-K lands 60–90 days later. Pricing January on it is look-ahead bias — using information nobody had at the time — so each annual report is held back 90 days and each quarterly one 45.</li>
+      <li><strong>Each week is ranked only against the weeks before it.</strong> Ranking against the whole sample is what makes a backtest look prescient: a 2022 trough only registers as a trough because 2024 is in the denominator.</li>
+      <li><strong>At least 60 observations before any percentile is reported.</strong> A rank over eleven points can only return eleven answers, and will happily say 100.0.</li>
+      <li><strong>Quarterly earnings are summed into a trailing twelve months.</strong> A quarterly statement reports that quarter’s EPS, and dividing by it reports a P/E about four times too high — for a mega-cap, 90x instead of 23x — while the history grows a sawtooth that reads as multiple expansion.</li>
+      <li><strong>Growth for PEG is measured against the report about a year back,</strong> found in a 300–430 day window, not the adjacent one. The neighbour is often a quarter back, which read ~3.7% where the truth was ~10% and inflated PEG about 2.7x.</li>
+    </ul>
+    <p>The last two traps were caught by rendering the numbers while the engine was being built; it shipped on 11 September 2026.</p>
+    <h3>Then, the year ahead</h3>
+    <p>The forward history divides each past week’s price by the earnings that fiscal year turned out to deliver — the same quantity today’s consensus forward EPS is an estimate of — using the same prices and annual reports, with nothing extra to fetch. The year ahead at any week is the earliest fiscal year whose annual report was not yet public: keyed on when the report landed rather than when the year ended, because until its 10-K arrives the forward figure still refers to that year. For price to free cash flow the share count is the one in force at the time; a forward multiple has a forward denominator, not a forward share count.</p>
+    <p>This deliberately uses hindsight: the denominator is knowledge nobody had that week. It is not a backtest. The question a forward multiple asks is “is 9x next year’s earnings cheap <em>for this company</em>?”, and the only honest denominator for the historical half of that comparison is what next year’s earnings actually were. It lives in a separate function, <code>reconstruct_forward()</code>, so the look-ahead cannot leak into the trailing series, whose whole value is that it has none.</p>
+  </div>
+  <div data-l="zh">
+    <h3>先要有一段不作弊的滚动历史</h3>
+    <p>前瞻历史和滚动历史用的是同一批周度股价、同一批年报，所以首先得把滚动历史做对。</p>
+    <ul>
+      <li><strong>时点一致。</strong>12 月 31 日结束的财年，1 月 1 日还无从知晓；10-K 年报要在 60–90 天之后才发布。拿它给 1 月定价就是前视偏差——用了当时没人拥有的信息——所以每份年报推迟 90 天、每份季报推迟 45 天才计入。</li>
+      <li><strong>每一周只和它之前的周比较。</strong>拿整段样本来排名，正是回测显得“未卜先知”的原因：2022 年的低谷之所以算低谷，只因为分母里有 2024 年。</li>
+      <li><strong>至少 60 个观测值才报告百分位。</strong>在 11 个点上排名，只可能给出 11 种答案，而且会毫不犹豫地报出 100.0。</li>
+      <li><strong>季度盈利要加总成滚动十二个月。</strong>季报给出的是单季每股收益，直接拿来做分母，市盈率会高出约四倍——对一家超大市值公司来说，是 90 倍而不是 23 倍——历史曲线上还会长出一排锯齿，看上去像真实的估值扩张。</li>
+      <li><strong>PEG 里的增长率，要和大约一年前的那份财报比，</strong>在 300–430 天的窗口里寻找，而不是取相邻的那一份。相邻的往往只隔一个季度，曾把增长读成约 3.7%，而真实值约为 10%，使 PEG 虚高约 2.7 倍。</li>
+    </ul>
+    <p>最后这两个陷阱，都是在搭建估值引擎时把数字实际渲染出来才发现的；引擎于 2026 年 9 月 11 日上线。</p>
+    <h3>然后，是“未来一年”</h3>
+    <p>前瞻历史用每个历史周的股价，除以那个财年事后实际交出的盈利——这正是今天一致预期的前瞻 EPS 所要估计的那个量——用的是同样的股价和年报，不需要额外抓取任何数据。任意一周的“未来一年”，是那一周尚未公布年报的最早一个财年：以年报实际发布的日期为准，而不是以财年结束日为准，因为在 10-K 发布之前，前瞻数字指的仍是这个财年。计算市价/自由现金流时，股本取当时有效的数值；前瞻倍数“前瞻”的是分母，而不是股本。</p>
+    <p>这里刻意用了后见之明：分母是那一周没人知道的信息。但这不是回测。前瞻倍数要回答的问题是“以明年盈利 9 倍的价格，<em>对这家公司来说</em>算不算便宜”，而这个比较的历史那一半，唯一诚实的分母就是明年盈利的实际值。它放在一个单独的函数 <code>reconstruct_forward()</code> 里，这样后见之明就不会渗进滚动序列——那条序列的全部价值，就在于毫无前视。</p>
+  </div>
+</section>
+
+<section id="what-we-found">
+  <h2><span data-l="en">What we found</span><span data-l="zh">我们发现了什么</span></h2>
+  <div class="w-hbars">
+    <div class="w-hbar-row"><span class="w-hbar-label"><span data-l="en">Trailing · median</span><span data-l="zh">滚动历史 · 中位数</span></span><span class="w-hbar-track"><span class="w-hbar-zero" style="left:90%"></span><span class="w-hbar-fill is-neg" style="left:33.5%;width:56.5%"></span></span><span class="w-hbar-val">−11.3</span></div>
+    <div class="w-hbar-row"><span class="w-hbar-label"><span data-l="en">Trailing · mean</span><span data-l="zh">滚动历史 · 均值</span></span><span class="w-hbar-track"><span class="w-hbar-zero" style="left:90%"></span><span class="w-hbar-fill is-neg" style="left:10.5%;width:79.5%"></span></span><span class="w-hbar-val">−15.9</span></div>
+    <div class="w-hbar-row"><span class="w-hbar-label"><span data-l="en">Forward · median</span><span data-l="zh">重建前瞻 · 中位数</span></span><span class="w-hbar-track"><span class="w-hbar-zero" style="left:90%"></span><span class="w-hbar-fill is-neg" style="left:72.5%;width:17.5%"></span></span><span class="w-hbar-val">−3.5</span></div>
+    <div class="w-hbar-row"><span class="w-hbar-label"><span data-l="en">Forward · mean</span><span data-l="zh">重建前瞻 · 均值</span></span><span class="w-hbar-track"><span class="w-hbar-zero" style="left:90%"></span><span class="w-hbar-fill is-neg" style="left:53.5%;width:36.5%"></span></span><span class="w-hbar-val">−7.3</span></div>
+  </div>
+  <div data-l="en">
+    <p>Today’s forward P/E ranked in trailing history (“Trailing”) and in the reconstructed forward history (“Forward”); shifts in percentile points against the trailing ranking, 22 tickers, 20 September 2026. The medians understate the difference, because the naive version put 11 of the 22 at exactly 0.0: the forward multiple sat below every trailing observation, so the percentile saturated and stopped discriminating at all. That is not a bias that could be calibrated out. It is the ranking thrown away for half the sample.</p>
+    <p>Against the reconstructed forward history the ranking stays informative, and it moves both ways:</p>
+  </div>
+  <div data-l="zh">
+    <p>把今天的前瞻市盈率分别放进滚动历史（“滚动历史”）和重建的前瞻历史（“重建前瞻”）里排名；变化以相对滚动排名的百分位点计，22 只股票，2026 年 9 月 20 日。中位数低估了两者的差距，因为直接排名时 22 只里有 11 只正好落在 0.0：前瞻倍数低于每一个滚动观测值，百分位触底饱和，完全失去了区分能力。这不是一种可以校准掉的偏差，而是半数样本的排名被整个丢掉了。</p>
+    <p>放进重建的前瞻历史里排名，结果依然有信息量，而且有升有降：</p>
+  </div>
+  <div class="w-table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th><span data-l="en">Ticker</span><span data-l="zh">股票</span></th>
+          <th class="num"><span data-l="en">Shift against the trailing ranking</span><span data-l="zh">相对滚动排名的变化</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>CEG</td><td class="num"><span data-l="en">+10.9 · dearer</span><span data-l="zh">+10.9 · 更贵</span></td></tr>
+        <tr><td>MEDP</td><td class="num"><span data-l="en">+35.6 · dearer</span><span data-l="zh">+35.6 · 更贵</span></td></tr>
+        <tr><td>T</td><td class="num"><span data-l="en">+43.7 · dearer</span><span data-l="zh">+43.7 · 更贵</span></td></tr>
+        <tr><td>ADBE, ORCL, NVDA</td><td class="num"><span data-l="en">cheaper</span><span data-l="zh">更便宜</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div data-l="en"><p>That is a re-ranking — which is what was wanted — rather than one discount applied to everything that grows.</p></div>
+  <div data-l="zh"><p>这是一次重新排序——这正是我们想要的——而不是给所有成长股统一打一个折扣。</p></div>
+</section>
+
+<section id="what-changed">
+  <h2><span data-l="en">What the page does now</span><span data-l="zh">页面现在怎么做</span></h2>
+  <div data-l="en">
+    <p>Each factor takes the first forward history that can rank it, in a fixed order, and a factor with neither stays exactly where it was:</p>
+    <ol>
+      <li><strong>Banked</strong> — one row per ticker per day of what the consensus actually was. Point-in-time and the most honest; months from usable.</li>
+      <li><strong>Reconstructed</strong> — the hindsight denominator above. Available on first page load.</li>
+      <li><strong>Trailing</strong> — today’s trailing multiple in its own trailing history, the fallback the whole design rests on.</li>
+    </ol>
+    <p>The page never hides which one produced a rank. A factor ranked on the reconstruction is marked “(hindsight)” beside its multiple, and the line under the score reads “from reconstructed forward history (hindsight denominator)”. The two histories are never spliced into one series, and the trailing multiple is shown beside the forward one.</p>
+    <p>The same day, every ticker moved onto this basis at once: the forward history needs only the prices and annual reports each ticker’s reconstruction already holds, so it is derived on first read instead of waiting for a rebuild. We checked the derived series against one rebuilt from scratch for ADBE, and they matched exactly — 209 weekly P/E points and 156 P/FCF points.</p>
+  </div>
+  <div data-l="zh">
+    <p>现在，每个因子按固定顺序，采用第一段能为它排名的前瞻历史；两段都没有的因子，保持原样不动：</p>
+    <ol>
+      <li><strong>逐日累积的历史</strong>——每只股票每天一行，记录当时真实的一致预期。时点一致、最诚实，但还要几个月才能用。</li>
+      <li><strong>重建的历史</strong>——即上文分母用事后实际值的那一段。页面第一次打开就能用。</li>
+      <li><strong>滚动历史</strong>——今天的滚动倍数在自身滚动历史中的排名，是整个设计赖以兜底的后备。</li>
+    </ol>
+    <p>页面从不隐瞒某个排名出自哪一段历史。按重建历史排名的因子，倍数旁会标注「（事后口径）」，分数下方的说明写着「基于重建的预测口径历史（分母用事后实际值）」。两段历史永远不会拼接成一条序列，滚动倍数也始终与前瞻倍数并列显示。</p>
+    <p>同一天，所有股票一起切换到了这一口径：前瞻历史只需要每只股票的重建数据里已有的股价和年报，所以在第一次读取时就地推导，不必等待重建。我们用 ADBE 做了核对：推导出的序列与从头重建的完全一致——209 个周度市盈率数据点，156 个市价/自由现金流数据点。</p>
+  </div>
+</section>
+
+<section id="caveats">
+  <h2><span data-l="en">What it still gets wrong</span><span data-l="zh">它仍然存在的偏差</span></h2>
+  <div data-l="en">
+    <ul>
+      <li><strong>It still leans cheap.</strong> The median −3.5 and mean −7.3 are not zero. One cause is structural: consensus runs more optimistic than outturn, so today’s denominator is a little larger than the historical ones. That is the gap between an estimate and a result, not between two measures of earnings, and every rank it touches is labelled.</li>
+      <li><strong>The most recent year is missing from the distribution.</strong> The last ~1 year of weeks drops out, because no fiscal year after them has reported yet, so today’s value is ranked against a history that lacks the current regime.</li>
+      <li><strong>It is hindsight.</strong> The history records what buyers paid for the earnings that actually arrived, not what they thought they were paying. The banked, point-in-time series takes over factor by factor as soon as it holds the 60 observations a rank needs.</li>
+      <li><strong>One day, 22 names.</strong> Enough to show the direction and rough size of the bias, not a precise estimate of it.</li>
+      <li><strong>A percentile compares a company with its own past.</strong> A low one means cheap against its own history on a like-for-like basis. It is not a ranking between companies, and not a recommendation to buy or sell anything.</li>
+    </ul>
+  </div>
+  <div data-l="zh">
+    <ul>
+      <li><strong>它仍然偏向便宜。</strong>中位数 −3.5、均值 −7.3 都不是零。其中一个原因是结构性的：一致预期通常比实际结果乐观，所以今天的分母略大于历史上的分母。这是“预期与结果”之间的差距，而不是“两种盈利口径”之间的差距，受它影响的每个排名都有标注。</li>
+      <li><strong>最近一年不在分布里。</strong>最后大约一年的周数据会被剔除，因为其后的财年还没有公布年报，所以今天的数值是放在一段缺少当前阶段的历史里排名的。</li>
+      <li><strong>它是后见之明。</strong>这段历史记录的是买家为最终兑现的盈利付出的价格，而不是他们当时以为自己付出的价格。逐日累积、时点一致的序列一旦某个因子攒够排名所需的 60 个观测值，就会逐个因子接替它。</li>
+      <li><strong>一天、22 只股票。</strong>足以说明偏差的方向和大致规模，但不是对它的精确估计。</li>
+      <li><strong>百分位比较的是公司与它自己的过去。</strong>百分位低，意味着在同口径下相对自身历史便宜；它不是公司之间的排名，也不构成买入或卖出任何资产的建议。</li>
+    </ul>
+  </div>
+</section>
+
+<section id="check-it-yourself">
+  <h2><span data-l="en">Check it yourself</span><span data-l="zh">亲自验证</span></h2>
+  <div data-l="en">
+    <p>Open any ticker’s valuation page — NVDA’s, say. In the factor table, a multiple ranked on the reconstructed forward history reads “forward (hindsight)”, with its trailing (TTM) value beside it; one that has a forward value but no forward history to rank it against says “ranked on TTM”. Under the headline score, a “Ranked on” line states the basis and which forward history produced it. The ranked overview scores every tracked name the same way. The data is today’s, so the percentiles will not match 20 September’s.</p>
+    <p>What pins it: <code>tests/test_dca_history.py</code> holds 111 tests. Thirteen cover the forward reconstruction — the year-ahead denominator, keying on publication rather than period end, the recent weeks dropping out, quarterly reports excluded, the point-in-time share count, banked winning over reconstructed — and the look-ahead guards have their own: 6 on the publication lags, 4 on ranking only against the past, 8 on the four-quarter sums and 4 on the year-ago growth window.</p>
+  </div>
+  <div data-l="zh">
+    <p>打开任意一只股票的估值页，比如 NVDA。在因子表里，按重建前瞻历史排名的倍数会标为「预测（事后口径）」，旁边列出它的滚动（TTM）数值；有前瞻数值、但还没有前瞻历史可供排名的因子，则标为「按滚动值排名」。主分数下方的「排名口径」一行，说明分数的口径及其出自哪一段前瞻历史。排名总览页用同样的方式为每只跟踪的股票打分。页面上是最新数据，所以百分位不会与 9 月 20 日的一致。</p>
+    <p>测试锁定：<code>tests/test_dca_history.py</code> 共 111 个测试。其中 13 个针对前瞻重建——“未来一年”的分母、以年报发布日而非财年结束日为准、最近几周因尚无实际值而剔除、排除季报、时点一致的股本、逐日累积优先于重建——前视偏差的各道防线也各有测试：发布滞后 6 个，只与过去比较 4 个，四季度加总 8 个，一年期增长窗口 4 个。</p>
+  </div>
+  <div class="w-actions">
+    <a class="w-btn w-btn-primary" href="{{ url_for('main.dca_page', ticker='NVDA') }}"><span data-l="en">Open NVDA’s valuation page</span><span data-l="zh">打开 NVDA 的估值页</span></a>
+    <a class="w-btn" href="{{ url_for('main.dca_index') }}"><span data-l="en">The ranked overview</span><span data-l="zh">排名总览</span></a>
+    <a class="w-btn" href="{{ url_for('main.research_lab') }}"><span data-l="en">All Research Lab posts</span><span data-l="zh">全部研究文章</span></a>
+  </div>
+</section>
+</div>
+
+<div class="w-article-foot">
+  <div data-l="en"><p>Sources: the forward reconstruction and its 22-ticker measurement (fec1338) and its extension to every ticker (a6ae58d), both 20 September 2026; the point-in-time rules and the two reconstruction traps, from the engine’s release (399f8fd, 11 September 2026); method notes in <code>ystocker/dca_history.py</code> and <code>ystocker/dca.py</code>.</p></div>
+  <div data-l="zh"><p>资料来源：前瞻重建及其 22 只股票的测量（fec1338）与推广到全部股票（a6ae58d），均为 2026 年 9 月 20 日；时点一致规则与两个重建陷阱，来自估值引擎的上线（399f8fd，2026 年 9 月 11 日）；方法说明见 <code>ystocker/dca_history.py</code> 与 <code>ystocker/dca.py</code>。</p></div>
+</div>

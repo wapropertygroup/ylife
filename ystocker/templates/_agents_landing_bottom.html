@@ -1,0 +1,114 @@
+{#  The /agents landing, bottom half: pricing, explore, the boundary, and the
+    footer strip. See _agents_landing_top.html for when this renders and why
+    every figure comes from `landing`. #}
+{% import "wiki/_macros.html" as w %}
+{% set product = 'TradeAgents' if brand_is_ta else 'Trading Agents' %}
+{% set signin_href = url_for('main.login', next=url_for('main.agents_page')) %}
+
+<div class="w-wrap">
+
+<!-- ── Pricing ───────────────────────────────────────────────────────── -->
+<section class="w-section" id="pricing" aria-labelledby="lpPricing">
+  <div class="w-section-head">
+    <p class="w-kicker"><span data-l="en">Pricing</span><span data-l="zh">价格</span></p>
+    <h2 class="w-h2" id="lpPricing">
+      <span data-l="en">{{ landing.free_runs }} free runs a day. Packs when you need more.</span>
+      <span data-l="zh">每天 {{ landing.free_runs }} 次免费。需要更多时，再买次数包。</span>
+    </h2>
+    <p class="w-lead">
+      <span data-l="en">Free runs are always spent first, so you are never charged while one is left. Purchased runs never expire and carry over between days.</span>
+      <span data-l="zh">系统总是优先消耗免费次数，只要还有免费次数就不会扣费。购买的次数永不过期，可跨日累积使用。</span>
+    </p>
+  </div>
+  <div class="w-grid-auto">
+    <div class="w-card is-free">
+      <span class="w-kicker"><span data-l="en">Free</span><span data-l="zh">免费</span></span>
+      <span class="w-price-num">{{ landing.free_runs }}<small><span data-l="en">runs / day</span><span data-l="zh">次 / 天</span></small></span>
+      <span class="w-price-per">
+        {% if landing.quota_tz == 'America/Los_Angeles' %}
+        <span data-l="en">resets at midnight Pacific</span><span data-l="zh">太平洋时间零点重置</span>
+        {% else %}
+        <span data-l="en">resets at midnight, {{ landing.quota_tz }}</span><span data-l="zh">{{ landing.quota_tz }} 零点重置</span>
+        {% endif %}
+      </span>
+    </div>
+    {% for p in landing.agent_packs %}
+    <div class="w-card">
+      <span class="w-kicker is-quiet"><span data-l="en">{{ p.credits }} runs</span><span data-l="zh">{{ p.credits }} 次</span></span>
+      <span class="w-price-num">${{ '%g' % p.price }}</span>
+      <span class="w-price-per"><span data-l="en">${{ '%.2f' % p.per_run }} per run</span><span data-l="zh">每次 ${{ '%.2f' % p.per_run }}</span></span>
+    </div>
+    {% endfor %}
+  </div>
+  {% if not landing.agent_packs %}
+  <p class="w-more w-muted"><span data-l="en">Run packs are not on sale at the moment.</span><span data-l="zh">次数包当前暂不销售。</span></p>
+  {% endif %}
+  <p class="w-more"><a class="w-textlink" href="{{ url_for('main.docs_page', slug='pricing') }}"><span data-l="en">How runs and credits are counted →</span><span data-l="zh">次数如何计算 →</span></a></p>
+</section>
+
+<!-- ── Explore ───────────────────────────────────────────────────────── -->
+<section class="w-section" aria-labelledby="lpExplore">
+  <div class="w-section-head">
+    <p class="w-kicker"><span data-l="en">Explore</span><span data-l="zh">探索</span></p>
+    <h2 class="w-h2" id="lpExplore"><span data-l="en">Explore {{ product }}.</span><span data-l="zh">探索 {{ product }}。</span></h2>
+  </div>
+  <div class="w-grid4">
+    <a class="w-card" href="{{ url_for('main.docs_home') }}">
+      <span class="w-card-title is-serif"><span data-l="en">Product docs</span><span data-l="zh">产品文档</span></span>
+      <span class="w-card-body"><span data-l="en">How a run works, every role on the desk, models, markets, limits and pricing.</span><span data-l="zh">分析如何运作、每个团队角色、模型、市场、限额与价格。</span></span>
+      <span class="w-card-foot"><span data-l="en">Read the docs →</span><span data-l="zh">阅读文档 →</span></span>
+    </a>
+    <a class="w-card" href="{{ url_for('main.research_lab') }}">
+      <span class="w-card-title is-serif"><span data-l="en">Research Lab</span><span data-l="zh">研究实验室</span></span>
+      <span class="w-card-body">
+        {% if landing.posts %}
+        <span data-l="en">Latest: “{{ landing.posts[0].title.en }}”</span><span data-l="zh">最新：“{{ landing.posts[0].title.zh }}”</span>
+        {% else %}
+        <span data-l="en">Long-form analyses and post-mortems.</span><span data-l="zh">长文分析与事后复盘。</span>
+        {% endif %}
+      </span>
+      <span class="w-card-foot"><span data-l="en">{{ landing.posts | length }} posts →</span><span data-l="zh">{{ landing.posts | length }} 篇文章 →</span></span>
+    </a>
+    <a class="w-card" href="{{ url_for('main.docs_page', slug='changelog') }}">
+      <span class="w-card-title is-serif"><span data-l="en">What's new</span><span data-l="zh">更新日志</span></span>
+      <span class="w-card-body"><span data-l="en">Dated changes to the desk — new analysts, models and ways to share.</span><span data-l="zh">投研台的更新记录——新的分析师、模型与分享方式。</span></span>
+      <span class="w-card-foot"><span data-l="en">See the changelog →</span><span data-l="zh">查看更新 →</span></span>
+    </a>
+    <a class="w-card" href="{{ url_for('main.markets') }}">
+      <span class="w-card-title is-serif"><span data-l="en">Market dashboards</span><span data-l="zh">市场看板</span></span>
+      <span class="w-card-body"><span data-l="en">Markets, valuation, sectors, rates, the Fed and 13F filings — free, no sign-in.</span><span data-l="zh">市场、估值、板块、利率、美联储与 13F 持仓——免费，无需登录。</span></span>
+      <span class="w-card-foot"><span data-l="en">Open the markets →</span><span data-l="zh">打开市场看板 →</span></span>
+    </a>
+  </div>
+</section>
+
+<!-- ── Boundary ──────────────────────────────────────────────────────── -->
+<section class="w-boundary" aria-labelledby="lpBoundary">
+  <div>
+    <p class="w-kicker"><span data-l="en">Boundary</span><span data-l="zh">边界</span></p>
+    <h2 class="w-h2" id="lpBoundary"><span data-l="en">You make the call.</span><span data-l="zh">决定权在你。</span></h2>
+  </div>
+  <div>
+    <p>
+      <span data-l="en">{{ product }} is built for research. It places no orders, connects to no brokerage account and holds no money. A report is a model's argument, not investment advice — it can be wrong, and it can be confidently wrong. Read the turns, check the numbers, and decide for yourself.</span>
+      <span data-l="zh">{{ product }} 为研究而生。它不下单、不连接任何券商账户，也不持有任何资金。报告是模型的论证，而不是投资建议——它可能出错，而且可能错得很自信。请逐轮阅读、核对数字，然后自己做决定。</span>
+    </p>
+    <div class="w-actions">
+      <a class="w-btn w-btn-primary" href="{{ signin_href }}"><span data-l="en">Sign in and run</span><span data-l="zh">登录并开始分析</span> <span aria-hidden="true">→</span></a>
+      <a class="w-btn" href="{{ url_for('main.docs_page', slug='overview') }}#boundaries"><span data-l="en">Read the boundary in full</span><span data-l="zh">阅读完整说明</span></a>
+    </div>
+  </div>
+</section>
+
+<div class="w-foot">
+  <b>{{ product }}</b>
+  <nav aria-label="{{ product }}">
+    <a href="{{ url_for('main.docs_home') }}"><span data-l="en">Docs</span><span data-l="zh">文档</span></a>
+    <a href="{{ url_for('main.research_lab') }}"><span data-l="en">Research Lab</span><span data-l="zh">研究实验室</span></a>
+    {% if showcase %}<a href="#samples"><span data-l="en">Sample reports</span><span data-l="zh">报告样例</span></a>{% endif %}
+    <a href="#pricing"><span data-l="en">Pricing</span><span data-l="zh">价格</span></a>
+    <a href="{{ url_for('main.contact') }}"><span data-l="en">Contact</span><span data-l="zh">联系我们</span></a>
+  </nav>
+</div>
+
+</div>

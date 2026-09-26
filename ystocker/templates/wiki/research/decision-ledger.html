@@ -1,0 +1,205 @@
+{#  Research Lab: "Grading the desk without flattering it" (2026-08-30), a
+    methodology note on the decision ledger, written before any results.
+
+    Built from the ledger commit of 2026-08-30 ("feat(decisions): the decision
+    ledger, and a settlement pass that fills it"), the decisions.py and settle.py
+    docstrings, tests/test_decisions.py (44 tests; the worked dates and times in
+    the tables are its fixtures), and the TradingAgents fork's CHANGELOG for
+    release 0.5.0 (2026-09-18): "Decisions and evaluation" and "Highlights".
+
+    It publishes no performance figure, on purpose, and promises no date for one. #}
+<div data-l="en"><p class="w-article-lead">Every analysis {{ product }} finishes ends in one rating: Buy, Overweight, Hold, Underweight or Sell. Whether those ratings are any good is the question the rest of our work exists to serve, and reading reports cannot answer it. On 2026-08-30 we began keeping a ledger of every decision and what followed it. This is its method, written down before its results — so there are no performance numbers in it at all.</p></div>
+<div data-l="zh"><p class="w-article-lead">{{ product }} 完成的每一次分析，最后都落在一个评级上：买入、增持、持有、减持或卖出。这些评级到底好不好，是我们其他所有工作最终要回答的问题，而光读报告回答不了。2026-08-30 起，我们为每一个决策以及它之后发生的事记账。本文是这本台账的方法，写在结果出来之前——所以文中没有任何业绩数字。</p></div>
+
+<div class="w-prose">
+<section id="tldr">
+  <h2><span data-l="en">TL;DR</span><span data-l="zh">要点</span></h2>
+  <div data-l="en">
+    <p>One row per finished analysis: what was decided, the moment the decision existed, and — as sessions pass — the stock's return over the next 1, 5, 20 and 60 trading sessions, with SPY's return over the same sessions beside it. Every return starts from the first close the decision could actually have traded. An unmatured horizon stays empty, never zero; a settled one is never rewritten; and the ledger stores no score of its own.</p>
+  </div>
+  <div data-l="zh">
+    <p>每完成一次分析记一行：决定了什么、这个决定产生的时刻，以及——随着交易日推移——该股票在之后 1、5、20、60 个交易日的收益，旁边并列 SPY 在相同交易日内的收益。每一笔收益都从这个决策真正能够成交的第一个收盘价算起。尚未到期的观察期留空，绝不记为零；已结算的观察期永不改写；台账本身不保存任何评分。</p>
+  </div>
+  <div class="w-stats">
+    <div>
+      <span class="w-stat-label"><span data-l="en">Horizons, in sessions</span><span data-l="zh">观察期（交易日）</span></span>
+      <span class="w-stat-value is-num">1 · 5 · 20 · 60</span>
+      <span class="w-stat-note"><span data-l="en">Counted on the stock's own trading days.</span><span data-l="zh">按该股票自身的交易日计数。</span></span>
+    </div>
+    <div>
+      <span class="w-stat-label"><span data-l="en">Longest horizon</span><span data-l="zh">最长观察期</span></span>
+      <span class="w-stat-value is-num"><span data-l="en">~84 days</span><span data-l="zh">约 84 天</span></span>
+      <span class="w-stat-note"><span data-l="en">Calendar days for 60 sessions: about three months per row.</span><span data-l="zh">60 个交易日约合的自然日：每行约三个月。</span></span>
+    </div>
+    <div>
+      <span class="w-stat-label"><span data-l="en">Scores stored</span><span data-l="zh">保存的评分</span></span>
+      <span class="w-stat-value is-good">0</span>
+      <span class="w-stat-note"><span data-l="en">No Sharpe, no hit rate, no alpha.</span><span data-l="zh">没有夏普比率、命中率或阿尔法。</span></span>
+    </div>
+  </div>
+  <div class="w-callout is-warn"><span data-l="en">No results here, by design: this note was written before them, and each row's longest horizon takes about 84 calendar days to mature. Rules first and numbers after, so the rules cannot be bent to fit the numbers. The rules are as built on 2026-08-30; the example dates come from the ledger's test suite.</span><span data-l="zh">本文刻意不含结果：它写在结果之前，而每一行最长的观察期约需 84 个自然日才能到期。先定规则、后看数字，规则才不会被数字牵着走。文中规则以 2026-08-30 建成时为准；示例日期来自台账的测试用例。</span></div>
+</section>
+
+<section id="why-a-ledger">
+  <h2><span data-l="en">Why a ledger</span><span data-l="zh">为什么要记账</span></h2>
+  <div data-l="en">
+    <p>One analysis yields one decision, and one decision cannot say whether the desk decides well. Pieces of the pipeline — the reader's portfolio as input, the look-through exposure bands, a risk gate that can cut a position, explicit price levels — are each defensible on their own reasoning, and none has been shown to improve a decision. A ledger cannot prove that any did, either. It is the difference between "we believe this helped" and a measurement.</p>
+    <p>Nor can it be rebuilt later: a row captures a decision made on one day, from inputs that are not kept, by a model that will change. So each row is written the moment a run finishes, and kept.</p>
+  </div>
+  <div data-l="zh">
+    <p>一次分析只产生一个决策，而一个决策说明不了投研台的决策水平。流程中的几个环节——以读者持仓作为输入、穿透后的敞口区间、可以削减仓位的风控闸门、明确的价位——各自都有站得住的理由，但没有一个被证明能改善决策。台账同样无法证明哪一个有用；它是“我们相信这有帮助”与“一次测量”之间的差别。</p>
+    <p>它也无法事后重建：一行记下的，是某一天、基于不会保存的输入、由一个之后会更换的模型做出的决定。所以每一行都在分析完成的那一刻写入，并永久保留。</p>
+  </div>
+</section>
+
+<section id="the-reference-close">
+  <h2><span data-l="en">The close the call could have traded</span><span data-l="zh">决策真正能成交的收盘价</span></h2>
+  <div data-l="en">
+    <p>Look-ahead bias is letting a measurement use information that did not exist at the moment measured. Here it is simple: an analysis is written for a trade date but finishes later, often after the close. Measure from that close and you credit the desk with a move that printed before it spoke — and the number looks entirely ordinary.</p>
+    <p>So returns start from the first session whose close was still ahead when the run finished: before 16:00 New York time, that session; from 16:00, the next. The row is dated by when the decision existed, not by the day it was about. From the test suite:</p>
+    <div class="w-table-wrap"><table>
+      <thead><tr><th>Run finished (New York time)</th><th>Returns measured from</th></tr></thead>
+      <tbody>
+        <tr><td>Fri 2026-08-28, 14:00</td><td>Fri 2026-08-28 close</td></tr>
+        <tr><td>Fri 2026-08-28, 15:59</td><td>Fri 2026-08-28 close</td></tr>
+        <tr><td>Fri 2026-08-28, 16:00</td><td>Mon 2026-08-31 close</td></tr>
+        <tr><td>Fri 2026-08-28, 17:00</td><td>Mon 2026-08-31 close</td></tr>
+        <tr><td>Sat 2026-08-29</td><td>Mon 2026-08-31 close</td></tr>
+      </tbody>
+    </table></div>
+    <p>New York time, not a fixed UTC hour: 20:00 UTC is 16:00 in New York in August and 15:00 in January, so a UTC rule would be a session wrong for months of every year.</p>
+  </div>
+  <div data-l="zh">
+    <p>前视偏差，是指在测量中用到了被测时刻尚不存在的信息。在这里它很直接：分析针对某个交易日而写，却在之后才完成，往往已经过了收盘。若从那个收盘价起算，就等于把投研台开口之前已经发生的涨跌算在它头上——而这个数字看起来完全正常。</p>
+    <p>因此，收益从分析完成时仍未收盘的第一个交易日算起：纽约时间 16:00 之前完成，用当天收盘价；16:00 起完成，用下一个交易日的。每一行按决策产生的时间记日期，而不是按分析所针对的那一天。以下示例取自测试用例：</p>
+    <div class="w-table-wrap"><table>
+      <thead><tr><th>分析完成时间（纽约）</th><th>收益起算于</th></tr></thead>
+      <tbody>
+        <tr><td>2026-08-28 周五 14:00</td><td>2026-08-28 周五收盘价</td></tr>
+        <tr><td>2026-08-28 周五 15:59</td><td>2026-08-28 周五收盘价</td></tr>
+        <tr><td>2026-08-28 周五 16:00</td><td>2026-08-31 周一收盘价</td></tr>
+        <tr><td>2026-08-28 周五 17:00</td><td>2026-08-31 周一收盘价</td></tr>
+        <tr><td>2026-08-29 周六</td><td>2026-08-31 周一收盘价</td></tr>
+      </tbody>
+    </table></div>
+    <p>按纽约时间，而不是固定的 UTC 钟点：UTC 20:00 在 8 月是纽约 16:00，在 1 月则是纽约 15:00；按 UTC 定规则，每年都会有好几个月错开一个交易日。</p>
+  </div>
+</section>
+
+<section id="sessions-not-days">
+  <h2><span data-l="en">Sessions, not days</span><span data-l="zh">按交易日，不按自然日</span></h2>
+  <div data-l="en">
+    <p>A trading session is a day the market is open; a calendar day is any day. Horizons count the stock's own sessions, so weekends, holidays and suspensions simply do not appear. In calendar days, a Friday's one-day return would land on a Saturday with no close, and every 60-day window would be a different length. In sessions, Friday 2026-08-28's one-session return runs to Monday 2026-08-31, and three sessions after Wednesday 2026-09-02 is Tuesday 2026-09-08 — the weekend and Labor Day skipped.</p>
+    <p>Beside each return sits the benchmark's: SPY, an ETF tracking the S&amp;P 500, from the same starting close over the same number of sessions. The difference is the excess return — how the stock did against simply holding the market. The ledger stores both and does not subtract.</p>
+  </div>
+  <div data-l="zh">
+    <p>交易日是市场开市的日子，自然日是任何一天。观察期按该股票自身的交易日计数，周末、节假日和停牌日本来就不会出现。若按自然日，周五的“1 天”收益会落在没有收盘价的周六，而每个“60 天”窗口的长度也各不相同。按交易日，2026-08-28（周五）的 1 个交易日收益算到 2026-08-31（周一）；2026-09-02（周三）之后第 3 个交易日是 2026-09-08（周二）——跳过了周末和美国劳动节。</p>
+    <p>每一笔收益旁边都并列基准的收益：SPY，一只跟踪标普 500 的 ETF，从同一个起算收盘价开始、经过同样数量的交易日。两者之差就是超额收益——这只股票相对于单纯持有大盘表现如何。台账两边都记，但不做这道减法。</p>
+  </div>
+</section>
+
+<section id="what-a-row-holds">
+  <h2><span data-l="en">What a row holds, and what it refuses to</span><span data-l="zh">一行记什么，拒绝记什么</span></h2>
+  <div data-l="en">
+    <div class="w-table-wrap"><table>
+      <thead><tr><th>Item</th><th>Stored</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td>The rating, and the portfolio manager's entry, stop, target and size</td><td class="good">Yes</td><td>The claim under test</td></tr>
+        <tr><td>The trader's proposal, the risk gate's verdict and approved size, whether the run had the reader's portfolio</td><td class="good">Yes</td><td>To test each piece of the pipeline later</td></tr>
+        <tr><td>Which model actually answered</td><td class="good">Yes</td><td>A run that fell back to a weaker model is no evidence about the one configured</td></tr>
+        <tr><td>Starting close; stock and SPY returns per horizon; settlement dates</td><td class="good">Yes</td><td>The outcome</td></tr>
+        <tr><td>Who ran it</td><td class="bad">No</td><td>The ledger is not user data</td></tr>
+        <tr><td>The report</td><td class="bad">No</td><td>Already kept with the run</td></tr>
+        <tr><td>Sharpe ratio, hit rate, alpha</td><td class="bad">No</td><td>Each bakes in choices that belong to whoever is asking</td></tr>
+      </tbody>
+    </table></div>
+    <ul>
+      <li><strong>Empty, never zero.</strong> An unmatured horizon and one that returned exactly nothing are different facts, and a zero would enter every average taken over the table. Filling gaps — with zero or the last close — would make the ledger untrustworthy, and a ledger nobody trusts is worse than none, because it still gets quoted.</li>
+      <li><strong>Settled once, never rewritten.</strong> Splits, dividend adjustments and vendor corrections restate price histories; re-deriving every return on each pass would silently rewrite history. The first settlement of each horizon is kept, with its date.</li>
+      <li><strong>Bookkeeping never breaks a report.</strong> If the row cannot be written, the analysis is still delivered: the report is the deliverable, the row is bookkeeping about it.</li>
+    </ul>
+  </div>
+  <div data-l="zh">
+    <div class="w-table-wrap"><table>
+      <thead><tr><th>项目</th><th>是否记录</th><th>原因</th></tr></thead>
+      <tbody>
+        <tr><td>评级，以及投资组合经理给出的入场价、止损价、目标价和仓位</td><td class="good">是</td><td>被检验的主张</td></tr>
+        <tr><td>交易员的方案、风控闸门的结论与批准仓位、分析是否使用了读者持仓</td><td class="good">是</td><td>以便日后检验流程中的每个环节</td></tr>
+        <tr><td>实际作答的模型</td><td class="good">是</td><td>中途降级到较弱模型的分析，不能作为所配置模型的证据</td></tr>
+        <tr><td>起算收盘价；各观察期的个股与 SPY 收益；结算日期</td><td class="good">是</td><td>结果本身</td></tr>
+        <tr><td>由谁发起</td><td class="bad">否</td><td>台账不是用户数据</td></tr>
+        <tr><td>报告全文</td><td class="bad">否</td><td>已随分析保存</td></tr>
+        <tr><td>夏普比率、命中率、阿尔法</td><td class="bad">否</td><td>每一种都内含选择，而这些选择属于提问的人</td></tr>
+      </tbody>
+    </table></div>
+    <ul>
+      <li><strong>留空，绝不记零。</strong>尚未到期的观察期与收益恰好为零的观察期是两件不同的事，而一个零会进入表上的每一次平均计算。用零或最近的收盘价去填空，会让台账失信——一本没人信的台账比没有更糟，因为它照样会被引用。</li>
+      <li><strong>只结算一次，永不改写。</strong>拆股、分红调整和数据商更正都会修订价格历史；每次都重算全部收益，就会悄无声息地改写历史。每个观察期保留第一次结算的结果，并记下结算日期。</li>
+      <li><strong>记账失败不影响报告。</strong>这一行写不进去时，分析照常交付：报告才是交付物，这一行只是关于它的记账。</li>
+    </ul>
+  </div>
+</section>
+
+<section id="what-a-hit-means">
+  <h2><span data-l="en">What a hit has to mean</span><span data-l="zh">“命中”该怎么算</span></h2>
+  <div data-l="en">
+    <p>The ledger stores no hit rate, but it is what most readers will want, and the naive version — did the price rise? — is wrong. The engine beneath the desk, our fork of the open-source TradingAgents framework, wrote the answer into its 0.5.0 release on 2026-09-18:</p>
+    <ul>
+      <li><em>"Backtest scoring reads the direction each rating claimed: a Sell that fell is a hit, and Hold reports no hit rate."</em></li>
+      <li><em>"An unreadable decision is flagged for review everywhere instead of becoming a tradeable Hold."</em></li>
+    </ul>
+    <p>The first grades a rating on what it claimed: a Sell that fell was right, and calling it a miss would grade the desk on the market's direction rather than its own. A Hold claims no direction, so no outcome proves it right or wrong. The second keeps decisions nobody made out of the tally: a rating that cannot be read is not quietly scored as a Hold.</p>
+  </div>
+  <div data-l="zh">
+    <p>台账不保存命中率，但这恰恰是多数读者最想要的数字，而最朴素的算法——股价涨了没有？——是错的。投研台底层的引擎，也就是我们维护的开源 TradingAgents 框架分支，在 2026-09-18 发布的 0.5.0 版本中写下了答案（译自英文原文）：</p>
+    <ul>
+      <li><em>“回测评分读取每个评级所主张的方向：卖出之后下跌算命中，持有不计算命中率。”</em></li>
+      <li><em>“无法读取的决策在所有环节都会被标记为待复核，而不是变成一个可交易的持有。”</em></li>
+    </ul>
+    <p>第一条按评级自己的主张打分：卖出之后下跌，说明它是对的；把它算作失误，等于按市场的方向、而不是投研台自己的判断打分。持有不主张任何方向，所以没有任何结果能证明它对或错。第二条把没人做过的决定挡在统计之外：读不出的评级，不会被悄悄当成持有来计分。</p>
+  </div>
+</section>
+
+<section id="caveats">
+  <h2><span data-l="en">Caveats — what it still does not do</span><span data-l="zh">局限：它仍然做不到什么</span></h2>
+  <div data-l="en">
+    <ul>
+      <li><strong>It cannot establish cause.</strong> A good record would not say which piece of the pipeline earned it; the columns make comparisons possible, not conclusive.</li>
+      <li><strong>It measures close to close.</strong> Entry, stop and target are recorded, not simulated — no fills, costs or stop-outs — so a return is what the stock did, not what a trade would have made.</li>
+      <li><strong>The cut-off is the regular US close.</strong> On a US half-day, and for markets that close at other hours — the desk also covers China A-shares — a run finishing between that market's close and 16:00 New York time is measured from a close that had already printed. That is the very look-ahead the rule exists to prevent, and it is not fixed yet.</li>
+      <li><strong>One benchmark for every row.</strong> SPY is the yardstick even for listings outside the US, where the S&amp;P 500 is not the natural comparison; the raw return is stored so another can be applied later.</li>
+    </ul>
+  </div>
+  <div data-l="zh">
+    <ul>
+      <li><strong>它无法证明因果。</strong>即便记录很好，也说明不了是流程中的哪个环节带来的；这些字段让比较成为可能，但得不出定论。</li>
+      <li><strong>它只衡量收盘到收盘。</strong>入场价、止损价和目标价只记录、不模拟——没有成交、成本或止损出场——所以这里的收益是股票本身的表现，而不是一笔交易能赚到的钱。</li>
+      <li><strong>截止时间是美股的常规收盘。</strong>遇到提前收盘的美股半日交易，或收盘时间不同的其他市场——投研台也覆盖中国 A 股——在该市场收盘之后、纽约时间 16:00 之前完成的分析，会从一个已经产生的收盘价起算。这正是这条规则要防止的前视偏差，目前尚未修正。</li>
+      <li><strong>所有行共用一个基准。</strong>即使是美国以外的股票也以 SPY 为尺度，而标普 500 并不是它们天然的比较对象；台账保存了原始收益，日后可以换用其他基准。</li>
+    </ul>
+  </div>
+</section>
+
+<section id="check-it-yourself">
+  <h2><span data-l="en">Check it yourself</span><span data-l="zh">亲自验证</span></h2>
+  <div data-l="en">
+    <p>There is nothing to check yet, and we would rather say so than point at something that looks like evidence. The ledger has no public page, and this post quotes nothing from it.</p>
+    <p>You can keep the same ledger for your own reports. Each shows its trade date, its rating and when it finished: take the first close after that moment, count sessions rather than days, and set SPY's return over the same sessions beside the stock's. A Sell that fell is a hit; a Hold is not scored.</p>
+    <p>For the record, 44 tests pin these rules without touching a network — above all, that a run finishing after the close cannot use that close, and that an unmatured horizon is absent, not zero.</p>
+  </div>
+  <div data-l="zh">
+    <p>现在还没有什么可以验证的，我们宁可直说，也不愿给你指一个看起来像证据的东西。台账没有公开页面，本文也没有引用其中的任何内容。</p>
+    <p>你可以为自己的报告记同样一本账。每份报告都显示交易日期、评级和完成时间：取那一刻之后的第一个收盘价，按交易日而不是自然日计数，再把 SPY 在相同交易日内的收益放在旁边。卖出之后下跌算命中；持有不计分。</p>
+    <p>备查：44 个无需联网的测试锁定了这些规则——其中最关键的是：收盘之后才完成的分析不能使用当天的收盘价；尚未到期的观察期是空缺，而不是零。</p>
+  </div>
+  <div class="w-actions">
+    <a class="w-btn w-btn-primary" href="{{ url_for('main.docs_page', slug='workflow') }}"><span data-l="en">How a run works</span><span data-l="zh">一次分析如何运作</span> <span aria-hidden="true">→</span></a>
+    <a class="w-btn" href="{{ url_for('main.research_lab') }}"><span data-l="en">All Research Lab posts</span><span data-l="zh">全部研究文章</span></a>
+  </div>
+</section>
+</div>
+
+<div class="w-article-foot">
+  <div data-l="en"><p>Sources: the decision ledger and its daily settlement pass, built 2026-08-30 (decisions.py, settle.py), and tests/test_decisions.py; the TradingAgents fork's changelog for release 0.5.0, 2026-09-18. No performance figures are quoted, and nothing here is investment advice.</p></div>
+  <div data-l="zh"><p>资料来源：2026-08-30 建成的决策台账及其每日结算流程（decisions.py、settle.py）与 tests/test_decisions.py；TradingAgents 分支的更新日志，2026-09-18 发布的 0.5.0 版本。本文不引用任何业绩数字，也不构成投资建议。</p></div>
+</div>

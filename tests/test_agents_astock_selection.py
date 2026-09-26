@@ -30,5 +30,47 @@ class AgentSelectionTests(unittest.TestCase):
             self.assertIn(field, MODULE._RUNNER)
 
 
+class SubmitDateTests(unittest.TestCase):
+    """A future date must be refused by submit(), not by the child.
+
+    TradingAgents' graph raises on a future trade date, but only after the child
+    has launched — after the quota was taken, and not among the failures
+    _refund_preflight gives back — so a reader who picked tomorrow paid for a run
+    that could never start. submit() errors are refunded by the route. Found
+    2026-09-26 while writing /docs/quick-start, which had to warn about it.
+    Every case returns during validation, so nothing is queued or launched —
+    and the write and the thread are patched to fail loudly, so a regression
+    that let a case through fails here instead of queueing a real run (and
+    writing a job record) from inside the test suite.
+    """
+
+    def setUp(self):
+        from unittest import mock
+
+        def _refuse(*_a, **_k):
+            raise AssertionError("submit() got past validation")
+
+        for target in ("_write",):
+            patcher = mock.patch.object(MODULE, target, _refuse)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        patcher = mock.patch.object(MODULE.threading, "Thread", _refuse)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_a_future_date_is_refused_before_anything_is_queued(self):
+        from datetime import date, timedelta
+        tomorrow = (date.today() + timedelta(days=1)).isoformat()
+        job_id, err = MODULE.submit("NVDA", tomorrow, "reader@example.com")
+        self.assertIsNone(job_id)
+        self.assertIn("future", err.lower())
+
+    def test_the_other_date_refusals_still_hold(self):
+        self.assertEqual(MODULE.submit("NVDA", "2026/09/25", "r@example.com")[1],
+                         "Invalid date (expected YYYY-MM-DD)")
+        self.assertEqual(MODULE.submit("NVDA", "2026-02-30", "r@example.com")[1],
+                         "Invalid date")
+
+
 if __name__ == "__main__":
     unittest.main()

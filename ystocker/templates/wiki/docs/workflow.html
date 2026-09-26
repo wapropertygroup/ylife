@@ -1,0 +1,156 @@
+{#  /docs/workflow. The pipeline is TradingAgents' graph (tradingagents/graph/
+    setup.py): analysts in sequence, Bull opens the research debate, Research
+    Manager, Trader, a deterministic Risk Gate, Aggressive/Conservative/Neutral in
+    that order, Portfolio Manager. Rounds, counts and names come from `facts`; the
+    analyst names are read off facts.desk so the roster is never typed twice. #}
+{% set analyst_team = facts.desk | selectattr('key', 'equalto', 'analysts') | list %}
+{% set analysts = analyst_team[0].roles if analyst_team else [] %}
+{% set base_seats = analysts | rejectattr('a_share_only') | list %}
+{% set ashare_seats = analysts | selectattr('a_share_only') | list %}
+<section id="stages">
+  <h2><span data-l="en">Stage by stage</span><span data-l="zh">逐个阶段</span></h2>
+  <div data-l="en">
+    <ol>
+      <li><strong>Analysts.</strong> {{ facts.n_base }} analysts — {{ base_seats | map(attribute='name') | map('replace', ' Analyst', '') | map('lower') | join(', ') }} — work in turn, each with its own data tools, each writing one report. A China A-share run adds {% for r in ashare_seats %}{% if loop.last and not loop.first %}and {% endif %}a {{ r.name | lower }}{% if not loop.last %}, {% endif %}{% endfor %}, {{ facts.n_astock }} in all. For the earnings, quality and valuation analysts, code makes the data calls and computes every figure; the model only interprets them, and says so when there is nothing to measure, such as a fund.</li>
+      <li><strong>Research debate.</strong> A bull and a bear researcher argue over those reports for {{ facts.debate_rounds }} rounds, one turn each per round, the bull first.</li>
+      <li><strong>Ruling.</strong> The research manager weighs the debate and hands the trader a plan: a recommendation on the same five-point scale as the final decision, the arguments that decided it, and concrete steps. It rereads the numeric reports itself, and is told that conflict alone is no reason to rate Hold.</li>
+      <li><strong>Proposal.</strong> The trader turns the plan into a trade: Buy, Hold or Sell, with — where it can state them — an entry, a stop and a target as prices in the quote currency, and a position size, anchored in the market analyst's price levels. On an A-share it is told to respect T+1 settlement, daily price limits and 100-share lots.</li>
+      <li><strong>Risk debate.</strong> Aggressive, conservative and neutral risk analysts attack the proposal in that order, one turn each per round for {{ facts.risk_rounds }} rounds.</li>
+      <li><strong>Decision.</strong> The portfolio manager reads the plan, the proposal and the whole risk debate, and signs the rating.</li>
+    </ol>
+    <p>The two managers use the run's deep model and everyone else its quick model — see <a href="{{ url_for('main.docs_page', slug='models') }}">Models and thinking depth</a>. <a href="{{ url_for('main.docs_page', slug='desk') }}">The desk</a> describes every seat.</p>
+  </div>
+  <div data-l="zh">
+    <ol>
+      <li><strong>分析师。</strong>{{ facts.n_base }} 位分析师——{{ base_seats | map(attribute='zh') | join('、') }}——依次工作，各用自己的数据工具，各写一份报告。A 股分析另加入{{ ashare_seats | map(attribute='zh') | join('、') }}，共 {{ facts.n_astock }} 位。盈利、质量与估值三位分析师的数据调用和每一个数字都由代码完成，模型只负责解读；遇到无从衡量的对象（比如基金），它们会直接说明。</li>
+      <li><strong>多空辩论。</strong>看涨与看跌研究员围绕这些报告辩论 {{ facts.debate_rounds }} 轮，每轮各发言一次，看涨方先发言。</li>
+      <li><strong>裁决。</strong>研究主管权衡辩论，向交易员交付投资计划：一个与最终决策同样采用五档评级的建议、决定性的论据，以及具体步骤。它会亲自重读几份量化报告，并被明确告知：仅仅存在分歧，不足以给出“持有”。</li>
+      <li><strong>交易方案。</strong>交易员把计划变成一笔交易：买入、持有或卖出；能够明确给出时，以报价币种的价格写出入场价、止损价和目标价，并给出仓位大小，价位以市场分析师报告中的价格结构为依据。对于 A 股，它被要求遵守 T+1 交收、涨跌停限制和 100 股一手的规则。</li>
+      <li><strong>风险辩论。</strong>激进、保守、中立三位风险分析师按此顺序质询方案，每轮各发言一次，共 {{ facts.risk_rounds }} 轮。</li>
+      <li><strong>决策。</strong>投资组合经理通读投资计划、交易方案和整场风险辩论，签发最终评级。</li>
+    </ol>
+    <p>两位主管使用本次分析的深度模型，其余角色使用快速模型——详见<a href="{{ url_for('main.docs_page', slug='models') }}">模型与思考深度</a>。每个席位的介绍见<a href="{{ url_for('main.docs_page', slug='desk') }}">投研团队</a>。</p>
+  </div>
+</section>
+
+<section id="decision">
+  <h2><span data-l="en">The decision</span><span data-l="zh">最终决策</span></h2>
+  <div data-l="en">
+    <p>The portfolio manager signs exactly one of five ratings, defined for it as:</p>
+    <div class="w-table-wrap">
+      <table>
+        <thead><tr><th>Rating</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Buy</strong></td><td>Strong conviction to enter or add to a position</td></tr>
+          <tr><td><strong>Overweight</strong></td><td>Favourable outlook; increase exposure gradually</td></tr>
+          <tr><td><strong>Hold</strong></td><td>Keep the current position; no action needed</td></tr>
+          <tr><td><strong>Underweight</strong></td><td>Reduce exposure; take partial profits</td></tr>
+          <tr><td><strong>Sell</strong></td><td>Exit the position, or avoid entering</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>It comes with an executive summary and a thesis — what decided it, and what would change it — plus, where it can state them, a size, entry, stop, target and holding period. A final text with no readable rating shows as <code>REVIEW</code>, never as a silent Hold. The manager also sees how the desk's earlier calls on the same ticker turned out, once enough trading has passed to judge them.</p>
+  </div>
+  <div data-l="zh">
+    <p>投资组合经理在五档评级中签发唯一一个，各档含义如下：</p>
+    <div class="w-table-wrap">
+      <table>
+        <thead><tr><th>评级</th><th>含义</th></tr></thead>
+        <tbody>
+          <tr><td><strong>买入</strong></td><td>信心强，建仓或加仓</td></tr>
+          <tr><td><strong>增持</strong></td><td>前景向好，逐步提高仓位</td></tr>
+          <tr><td><strong>持有</strong></td><td>维持现有仓位，无需操作</td></tr>
+          <tr><td><strong>减持</strong></td><td>降低仓位，部分获利了结</td></tr>
+          <tr><td><strong>卖出</strong></td><td>清仓，或不建仓</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>评级附有执行摘要和投资逻辑——是什么决定了它，什么情况会改变它；能够明确给出时，还附上仓位、入场价、止损价、目标价和持有期限。最终文本里读不出评级时，会显示 <code>REVIEW</code>（待复核），绝不会悄悄当作“持有”。投资组合经理还能看到投研台过去对同一只股票的判断，在经过足够的交易日之后表现如何。</p>
+  </div>
+</section>
+
+<section id="added-context">
+  <h2><span data-l="en">What else the desk is told</span><span data-l="zh">数据之外的背景信息</span></h2>
+  <div data-l="en">
+    <p>Three notes go to the trader, the risk team and the portfolio manager — not to the analysts:</p>
+    <ul>
+      <li><strong>Market regime</strong> — a summary from this site's <a href="{{ url_for('main.markets') }}">market dashboards</a>: S&amp;P 500 valuation against its history, market breadth, CTA positioning and the odds priced for Fed policy, labelled as describing the market rather than the company. Anything that could not be read is left out, not guessed.</li>
+      <li><strong>Relative strength</strong> — when the ticker is in one of the site's peer groups, how its analyst-estimate revisions compare with a few peers', in Yahoo's own figures.</li>
+      <li><strong>Your portfolio</strong> — holdings from the <a href="{{ url_for('main.assets_page') }}">Assets</a> page, read when the run starts and looked through funds to the companies inside, with any limits you set there. With a limit set, an arithmetic check between the trader and the risk debate keeps the proposed size, cuts it to the largest your limits and investable cash allow, or blocks the trade — when no size fits, or when the proposal's numbers are missing or inconsistent. A final size beyond that ruling is flagged on the report. A run that used your holdings never appears among the public sample reports. With no holdings, nothing is passed: the desk does not assume you start from zero.</li>
+    </ul>
+  </div>
+  <div data-l="zh">
+    <p>有三类信息只提供给交易员、风险团队和投资组合经理，分析师看不到：</p>
+    <ul>
+      <li><strong>市场环境</strong>——来自本站<a href="{{ url_for('main.markets') }}">市场看板</a>的摘要：标普 500 估值在历史中的位置、市场宽度、CTA 仓位，以及市场对美联储政策的定价概率，并注明描述的是大盘而非这家公司。读不到的数据直接略去，不做猜测。</li>
+      <li><strong>相对强弱</strong>——当该股票属于本站某个同业组时，给出它的分析师预期修正与少数同业的对比，数字直接取自 Yahoo。</li>
+      <li><strong>你的持仓</strong>——来自<a href="{{ url_for('main.assets_page') }}">资产</a>页面，在分析启动时读取，并穿透基金看到其中的公司，同时带上你在那里设定的上限。设定了上限时，交易员与风险辩论之间有一道纯算术的检查：维持原定仓位；削减到上限和可投现金所允许的最大仓位；或者否决这笔交易——当任何仓位都无法满足上限，或者方案数字缺失、自相矛盾时。最终仓位若超出这一裁定，报告会明确标注。使用过你持仓的分析，永远不会出现在公开的报告样例中。没有持仓时，系统不传入任何组合信息——投研台不会因此假定你从零仓位开始。</li>
+    </ul>
+  </div>
+</section>
+
+<section id="point-in-time">
+  <h2><span data-l="en">Dated to the run</span><span data-l="zh">以分析日期为准</span></h2>
+  <div data-l="en">
+    <p>Every dated data tool takes its date from the run, so a model cannot ask a source for anything later, and a date after today is refused. Not every source can look back, though:</p>
+    <div class="w-table-wrap">
+      <table>
+        <thead><tr><th>Evidence</th><th>On a run dated in the past</th></tr></thead>
+        <tbody>
+          <tr><td>Prices and indicators</td><td>Cut off at the analysis date.</td></tr>
+          <tr><td>News, StockTwits, Reddit</td><td>Trimmed to a window ending on the date. These feeds serve only recent items, so a window they never saw is reported as unavailable, not as “no news”.</td></tr>
+          <tr><td>FRED macro series</td><td>As they stood on the date, before later revisions.</td></tr>
+          <tr><td>Prediction-market odds</td><td>Withheld: Polymarket serves only live odds.</td></tr>
+          <tr><td>Earnings estimates</td><td>From snapshots the desk recorded on or before the date; with none, no numbers.</td></tr>
+          <tr><td>Quality and valuation figures</td><td><strong>Not dated.</strong> Yahoo Finance's company snapshot has no history, so these are today's ratios and multiples.</td></tr>
+          <tr><td>A-share forecasts, flows, rankings</td><td>Today's snapshot, flagged as not being that day's.</td></tr>
+          <tr><td>Market-regime and peer notes</td><td>The market as the run starts, with their own dates.</td></tr>
+          <tr><td>Lessons from earlier calls</td><td>Only outcomes known by the date.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>So the further back the date, the more a report rests on prices and macro data — and the more of its other sources say they could not see that day.</p>
+  </div>
+  <div data-l="zh">
+    <p>每个带日期的数据工具都从分析任务本身读取日期，模型无法向数据源索取更晚的数据，晚于今天的日期也会被拒绝。不过，并非每个数据源都能回溯：</p>
+    <div class="w-table-wrap">
+      <table>
+        <thead><tr><th>证据</th><th>分析日期在过去时</th></tr></thead>
+        <tbody>
+          <tr><td>价格与技术指标</td><td>截止到分析日期。</td></tr>
+          <tr><td>新闻、StockTwits、Reddit</td><td>裁剪到截至该日期的时间窗口。这些数据源只提供近期内容，从未覆盖到的窗口会标为“不可用”，而不是“没有新闻”。</td></tr>
+          <tr><td>FRED 宏观数据</td><td>采用当天的数据版本，不含之后的修订。</td></tr>
+          <tr><td>预测市场赔率</td><td>不提供：Polymarket 只有实时赔率。</td></tr>
+          <tr><td>盈利预期</td><td>读取投研台在该日期当天或之前记录的快照；没有快照就不给数字。</td></tr>
+          <tr><td>质量与估值数据</td><td><strong>不按日期回溯。</strong>Yahoo Finance 的公司快照没有历史版本，看到的是今天的比率与估值倍数。</td></tr>
+          <tr><td>A 股一致预期、资金流向、排名</td><td>当前快照，并注明并非当天的版本。</td></tr>
+          <tr><td>市场环境与同业对比</td><td>分析启动时的市场状况，标注各自数据的日期。</td></tr>
+          <tr><td>过往判断的经验</td><td>只包含该日期之前已知结果的判断。</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>因此，日期越早，报告就越依赖价格与宏观数据，也会有越多的数据源说明自己看不到那一天。</p>
+  </div>
+</section>
+
+<section id="while-it-runs">
+  <h2><span data-l="en">Queueing, streaming and time limits</span><span data-l="zh">排队、实时输出与时限</span></h2>
+  <div data-l="en">
+    <ul>
+      <li><strong>Queue.</strong> If the server is busy, your run shows as queued until a slot frees up; one that waits too long is cancelled and handed back.</li>
+      <li><strong>Streaming.</strong> Each agent's turn is published as soon as it exists, so a long run can be read while it is still going.</li>
+      <li><strong>Time limit.</strong> A run that passes the limit shown under the run form is stopped and marked as an error.</li>
+      <li><strong>Interruptions.</strong> If a run is cut off after the agents have written — a server restart, say — the report is rebuilt from what had streamed and marked <em>recovered from stream</em>, since its final synthesis may be missing.</li>
+      <li><strong>Email.</strong> A finished report is mailed to the address you signed in with, in its own language. A run that ends in an error sends nothing.</li>
+    </ul>
+  </div>
+  <div data-l="zh">
+    <ul>
+      <li><strong>排队。</strong>服务器繁忙时，你的任务会显示为排队，直到空出位置；等待过久的任务会被取消，并退还次数。</li>
+      <li><strong>实时输出。</strong>每位智能体的发言一生成就会发布，耗时较长的分析可以边运行边阅读。</li>
+      <li><strong>时限。</strong>超过表单下方所示时限的分析会被终止，并标记为出错。</li>
+      <li><strong>中断。</strong>如果分析在智能体已经写出内容之后被打断——比如服务器重启——系统会用已输出的内容重建报告，并标注<em>由实时流恢复</em>，因为最后的综合结论可能缺失。</li>
+      <li><strong>邮件。</strong>分析完成后，报告会以其撰写语言发送到你登录所用的邮箱。以出错告终的分析不发邮件。</li>
+    </ul>
+  </div>
+</section>
