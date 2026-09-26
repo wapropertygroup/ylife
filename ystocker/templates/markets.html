@@ -252,6 +252,78 @@
   .brief-md th { background: var(--t-surface-alt); color: var(--t-ink-muted); font-weight: 600; }
   .brief-md td:not(:first-child) { font-variant-numeric: tabular-nums; }
   .brief-md tbody tr:nth-child(even) { background: var(--t-row-alt); }
+
+  /* ── Section jump bar and banners ────────────────────────────────────────
+     Hand-written for the GICS panel's reason: the bundle is compiled, and the
+     chips' state class is only ever set from JS.
+     The bar stacks under the site header (sticky at top 0, h-14 = 56px) and
+     below its z-50, so the header's own menus still cover it — the slot
+     /agents' jump bar uses. Its fill is the page plane, not the card, since
+     that is what it floats over between cards. */
+  :root { --mk-jump-fill: rgba(248,250,252,0.92); }   /* slate-50  */
+  .dark { --mk-jump-fill: rgba(2,6,23,0.88); }        /* slate-950 */
+  .mk-jump {
+    position: sticky; top: 56px; z-index: 30;
+    display: flex; align-items: center; gap: 6px;
+    overflow-x: auto; scrollbar-width: thin;
+    /* Bleeds to the edge of <main>'s padding, as the header does. */
+    margin: -8px -16px 16px; padding: 8px 16px;
+    background: var(--mk-jump-fill);
+    -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+    border-bottom: 1px solid var(--t-line);
+  }
+  @media (min-width: 640px) { .mk-jump { margin-left: -24px; margin-right: -24px; padding-left: 24px; padding-right: 24px; } }
+  .mk-jump::-webkit-scrollbar { height: 4px; }
+  .mk-jump::-webkit-scrollbar-thumb { background: var(--t-line-strong); border-radius: 2px; }
+  /* Says what the chips are. Styled like the page's filter toggles, they would
+     otherwise read as a filter. A phone has no room for it; the nav's
+     accessible name still comes from it there, as aria-labelledby reads
+     hidden text. */
+  .mk-jump-label {
+    flex: none; margin-right: 4px; white-space: nowrap;
+    font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--t-ink-dim);
+  }
+  @media (max-width: 639px) { .mk-jump-label { display: none; } }
+  .mk-chip {
+    flex: none; padding: 4px 11px; border-radius: 999px; white-space: nowrap;
+    font-size: 12px; font-weight: 600; line-height: 16px; text-decoration: none;
+    color: var(--t-ink-muted); border: 1px solid var(--t-line-strong);
+    transition: color 0.15s, border-color 0.15s, background 0.15s;
+  }
+  .mk-chip:hover { color: var(--t-ink-strong); border-color: var(--t-line-hover); }
+  .mk-chip.is-active { color: var(--t-accent-ink); border-color: var(--t-accent); background: rgba(99,102,241,0.15); }
+  .mk-chip:focus-visible { outline: 2px solid var(--t-accent); outline-offset: 1px; }
+  /* Every scroll to an element on this page lands clear of the header plus the
+     bar: a chip, a shared #section link, the index tabs' scrollIntoView and the
+     brief's collapse alike. 56 + the bar's ~41 + a gap. */
+  html { scroll-padding-top: 108px; }
+  /* Collapses with the last card's own mb-6, so the gap above a banner is the
+     same whether or not that card carries one — #idxDetail does not. */
+  .mk-section + .mk-section { margin-top: 44px; }
+  .mk-banner { margin-bottom: 14px; }
+  .mk-banner-title {
+    display: flex; align-items: center; gap: 12px;
+    font-size: 12px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--t-accent-ink);
+  }
+  .mk-banner-title::after { content: ""; flex: 1; height: 1px; background: var(--t-line-strong); }
+  /* Latin tracking spreads Han characters apart; they need far less. */
+  :lang(zh) .mk-banner-title, :lang(zh) .mk-jump-label { letter-spacing: 0.04em; }
+  /* A chip moves focus here so the next Tab continues inside the section; the
+     ring is for keyboard arrivals only. */
+  .mk-banner-title:focus { outline: none; }
+  .mk-banner-title:focus-visible { outline: 2px solid var(--t-accent); outline-offset: 4px; border-radius: 4px; }
+  .mk-banner-desc { font-size: 12px; color: var(--t-ink-dim); margin-top: 4px; }
+  /* Economic events beside the earnings list. Flex rather than a grid: the
+     earnings card is hidden until its fetch lands, or for good if it fails,
+     and a grid would hold its column open as a blank strip. */
+  .mk-cal { display: flex; flex-direction: column; gap: 16px; }
+  @media (min-width: 1024px) {
+    .mk-cal { flex-direction: row; align-items: flex-start; }
+    .mk-cal > #econSection { flex: 1 1 0; min-width: 0; }
+    .mk-cal > #earnCard { flex: 0 0 24rem; }
+  }
 </style>
 
 <!-- ── Fullscreen chart modal ────────────────────────────────────────── -->
@@ -283,6 +355,30 @@
   <p class="text-slate-500 dark:text-slate-400 mt-1 text-xs" data-i18n="markets.subtitle">S&amp;P 500 · Nasdaq · Dow Jones — live snapshot &amp; historical charts</p>
 </div>
 
+{# Section jump bar: the table of contents and the "you are here" in one.
+   Twenty-one panels ran ~14,000px with nothing to say what was further down,
+   and they sat in the order they were built rather than by subject, so the
+   VIX / put-call chart was eight panels from VIX and put-call. The panels are
+   now grouped into the <section>s below, and each chip names one. Short labels
+   here, full names on the banners: the bar has to fit a phone, where it scrolls
+   sideways and a long label would leave room for two chips.
+
+   Links rather than buttons, so a chip can be copied or opened in a new tab.
+   A plain click is handled in JS, though (see "Section jump bar" in the
+   script): i18n's _injectLangLinks rewrites every href to carry ?lang=, and
+   following that from a URL without it would reload the page. #}
+<nav id="mkJump" class="mk-jump" aria-labelledby="mkJumpLabel">
+  <span id="mkJumpLabel" class="mk-jump-label" data-i18n="markets.jump_label">On this page</span>
+  <a href="#market-summary" class="mk-chip" data-mk-target="market-summary" data-i18n="markets.jump_summary">Summary</a>
+  <a href="#sentiment-volatility" class="mk-chip" data-mk-target="sentiment-volatility" data-i18n="markets.jump_sentiment" data-i18n-title="markets.sec_sentiment" title="Sentiment &amp; Volatility">Sentiment</a>
+  <a href="#sectors-rotation" class="mk-chip" data-mk-target="sectors-rotation" data-i18n="markets.jump_sectors" data-i18n-title="markets.sec_sectors" title="Sectors &amp; Rotation">Sectors</a>
+  <a href="#breadth-positioning" class="mk-chip" data-mk-target="breadth-positioning" data-i18n="markets.jump_breadth" data-i18n-title="markets.sec_breadth" title="Breadth &amp; Positioning">Breadth</a>
+  <a href="#rates-credit" class="mk-chip" data-mk-target="rates-credit" data-i18n="markets.jump_rates" data-i18n-title="markets.sec_rates" title="Rates &amp; Credit">Rates</a>
+  <a href="#global-cross-asset" class="mk-chip" data-mk-target="global-cross-asset" data-i18n="markets.jump_global" data-i18n-title="markets.sec_global" title="Global &amp; Cross-Asset">Global</a>
+  <a href="#price-technicals" class="mk-chip" data-mk-target="price-technicals" data-i18n="markets.jump_technicals" data-i18n-title="markets.sec_technicals" title="Price &amp; Technicals">Technicals</a>
+  <a href="#event-calendar" class="mk-chip" data-mk-target="event-calendar" data-i18n="markets.jump_calendar" data-i18n-title="markets.sec_calendar" title="Calendar">Calendar</a>
+</nav>
+
 <!-- ── Loading overlay ────────────────────────────────────────────────── -->
 <div id="marketsLoading" class="flex items-center gap-2 text-slate-500 text-sm mb-6">
   <svg class="animate-spin w-4 h-4 text-brand" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -292,6 +388,9 @@
   <span data-i18n="markets.loading">Loading market data…</span>
 </div>
 <div id="marketsContent">
+
+<!-- ═══ market-summary ════════════════════════════════════════════════════ -->
+<section id="market-summary" class="mk-section">
 
 {# The "This Week" recap card was removed rather than repaired.
    Two of its four tiles could never have shown anything: SPX Week read
@@ -335,6 +434,15 @@
   {% for _ in range(16) %}
   <div class="animate-pulse bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-3 h-24"></div>
   {% endfor %}
+</div>
+
+</section>
+
+<!-- ═══ sentiment-volatility ══════════════════════════════════════════════ -->
+<section id="sentiment-volatility" class="mk-section" aria-labelledby="sentiment-volatility-h">
+<div class="mk-banner">
+  <h2 id="sentiment-volatility-h" class="mk-banner-title" tabindex="-1" data-i18n="markets.sec_sentiment">Sentiment &amp; Volatility</h2>
+  <p class="mk-banner-desc" data-i18n="markets.sec_sentiment_desc">How nervous the market is, and whether the options market agrees</p>
 </div>
 
 <!-- ── VIX + Fear & Greed row (2 per row) ─────────────────────────── -->
@@ -557,43 +665,8 @@
   </div>
 </div>
 
-<!-- ── Equity Risk Premium card ─────────────────────────────────────── -->
-<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 fade-up mb-6" id="erpCard">
-  <div class="flex items-center justify-between mb-1">
-    <h3 class="text-sm font-semibold text-slate-600 dark:text-slate-300" data-i18n="markets.erp_title">Equity Risk Premium</h3>
-    <span class="text-[10px] text-slate-500 dark:text-slate-600" data-i18n="markets.erp_formula">ERP = S&amp;P Earnings Yield – 10Y</span>
-  </div>
-  <div class="flex items-end gap-3">
-    <div id="erpValue" class="text-2xl font-bold font-mono text-slate-800 dark:text-slate-100">—</div>
-    <div id="erpLabel" class="text-xs text-slate-500 pb-1"></div>
-  </div>
-  <p class="text-[11px] text-slate-500 dark:text-slate-600 mt-2" data-i18n="markets.erp_note">Above 3% = stocks attractive vs bonds. Below 1% = bonds competitive. Negative = bonds preferred.</p>
-
-  {# Representative ETFs for each side of the ERP argument, with what they have
-     actually returned. The side the current reading favours is highlighted; both
-     are always shown, because the comparison is the point and hiding the losing
-     side would turn a valuation reading into a tip. #}
-  <div id="erpEtf" class="mt-4 pt-3 border-t border-slate-200 dark:border-slate-800" style="display:none">
-    <div class="flex items-baseline justify-between mb-2">
-      <p class="text-[10px] font-semibold tracking-widest uppercase text-slate-500"
-         data-i18n="markets.erp_etf_title">Representative ETFs</p>
-      <p class="text-[10px] text-slate-500 dark:text-slate-600">
-        <span data-i18n="markets.erp_etf_basis">Total return · 3Y/5Y annualised</span>
-        <span id="erpEtfAsof" class="ml-1"></span>
-      </p>
-    </div>
-    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-      <div id="erpEtfStocks"></div>
-      <div id="erpEtfBonds"></div>
-    </div>
-    <p class="text-[10px] text-slate-500 dark:text-slate-600 mt-2" data-i18n="markets.erp_etf_disclaimer">
-      Past returns, not a forecast or a recommendation to buy.
-    </p>
-  </div>
-</div>
-
-<!-- ── AAII Sentiment + Put/Call Ratio + Sector Performance row ─────── -->
-<div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6 fade-up">
+<!-- ── AAII Sentiment + Put/Call Ratio row ─────────────────────────── -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6 fade-up">
 
   <!-- AAII Sentiment Survey card -->
   <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 sm:p-6">
@@ -679,21 +752,34 @@
     </div>
   </div>
 
-  <!-- Upcoming earnings ───────────────────────────────────────────────────
-       "What reports this week" is a question this site could not answer, while
-       the date sat in every cached record being refreshed every eight hours and
-       discarded. The forward P/E and last quarter's growth ride along because
-       when a company reports is only useful next to what it is expected to say.
-       Hidden until loaded; an empty *result* still renders, with a count, since
-       between seasons no reporters is the correct answer and an empty list on
-       its own reads as a failure. -->
-  <div id="earnCard" class="hidden bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 sm:p-6">
-    <div class="flex items-baseline justify-between mb-3 gap-3 flex-wrap">
-      <h2 class="text-base font-semibold text-slate-700 dark:text-slate-200" data-i18n="markets.earnings_title">Reporting soon</h2>
-      <span id="earnMeta" class="text-xs text-slate-500"></span>
-    </div>
-    <div id="earnBody" class="overflow-x-auto"></div>
+</div>
+
+<!-- ── VIX vs PCR Correlation ──────────────────────────────────────────── -->
+<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 fade-up mb-6" id="vixPcrCorrelSection">
+  <div class="mb-3">
+    <h3 class="text-sm font-semibold text-slate-600 dark:text-slate-300" data-i18n="markets.vix_pcr_title">VIX vs Put/Call Ratio — Correlation</h3>
+    <p class="text-xs text-slate-500 mt-0.5" data-i18n="markets.vix_pcr_desc">When VIX spikes but PCR stays low, hedging demand lags — often a signal that complacency persists. Divergence (one high, one low) = contrarian warning.</p>
   </div>
+  <div class="flex items-center gap-3 mb-2 text-xs">
+    <span class="flex items-center gap-1 text-rose-700 dark:text-rose-400"><span class="w-3 h-0.5 bg-rose-400 inline-block"></span> VIX</span>
+    <span class="flex items-center gap-1 text-amber-700 dark:text-amber-400"><span class="w-3 h-0.5 border-dashed border border-amber-400 inline-block"></span> Put/Call Ratio</span>
+  </div>
+  <div class="chart-container" style="height:200px">
+    <canvas id="vixPcrChart"></canvas>
+  </div>
+</div>
+
+</section>
+
+<!-- ═══ sectors-rotation ══════════════════════════════════════════════════ -->
+<section id="sectors-rotation" class="mk-section" aria-labelledby="sectors-rotation-h">
+<div class="mk-banner">
+  <h2 id="sectors-rotation-h" class="mk-banner-title" tabindex="-1" data-i18n="markets.sec_sectors">Sectors &amp; Rotation</h2>
+  <p class="mk-banner-desc" data-i18n="markets.sec_sectors_desc">Where money is moving inside the index</p>
+</div>
+
+<!-- ── Sector Performance + Sector Rotation row ─────────────────────── -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6 fade-up">
 
   <!-- Sector ETF performance -->
   <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 sm:p-6">
@@ -715,15 +801,15 @@
     <div id="sectorMomentumGrid" class="flex flex-wrap gap-1 mt-2"></div>
   </div>
 
-</div>
-
-<!-- Sector Rotation Heatmap -->
-<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6 fade-up mb-6" id="sectorGridSection">
-  <div class="mb-3">
-    <h2 class="text-base font-semibold text-slate-700 dark:text-slate-200" data-i18n="markets.sector_rot_title">Sector Rotation — vs S&amp;P 500 Performance</h2>
-    <p class="text-xs text-slate-500 mt-0.5" data-i18n="markets.sector_rot_desc">Green = outperforming S&amp;P 500, Red = underperforming. Shows rotation signals across multiple time horizons.</p>
+  <!-- Sector Rotation Heatmap -->
+  <div class="lg:col-span-2 min-w-0 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6" id="sectorGridSection">
+    <div class="mb-3">
+      <h2 class="text-base font-semibold text-slate-700 dark:text-slate-200" data-i18n="markets.sector_rot_title">Sector Rotation — vs S&amp;P 500 Performance</h2>
+      <p class="text-xs text-slate-500 mt-0.5" data-i18n="markets.sector_rot_desc">Green = outperforming S&amp;P 500, Red = underperforming. Shows rotation signals across multiple time horizons.</p>
+    </div>
+    <div id="sectorGridTable" class="overflow-x-auto"></div>
   </div>
-  <div id="sectorGridTable" class="overflow-x-auto"></div>
+
 </div>
 
 <!-- Sector Ranking Leaderboard -->
@@ -773,21 +859,6 @@
   <div id="gicsMapNote" class="gics-note"></div>
 </div>
 
-<!-- ── VIX vs PCR Correlation ──────────────────────────────────────────── -->
-<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 fade-up mb-6" id="vixPcrCorrelSection">
-  <div class="mb-3">
-    <h3 class="text-sm font-semibold text-slate-600 dark:text-slate-300" data-i18n="markets.vix_pcr_title">VIX vs Put/Call Ratio — Correlation</h3>
-    <p class="text-xs text-slate-500 mt-0.5" data-i18n="markets.vix_pcr_desc">When VIX spikes but PCR stays low, hedging demand lags — often a signal that complacency persists. Divergence (one high, one low) = contrarian warning.</p>
-  </div>
-  <div class="flex items-center gap-3 mb-2 text-xs">
-    <span class="flex items-center gap-1 text-rose-700 dark:text-rose-400"><span class="w-3 h-0.5 bg-rose-400 inline-block"></span> VIX</span>
-    <span class="flex items-center gap-1 text-amber-700 dark:text-amber-400"><span class="w-3 h-0.5 border-dashed border border-amber-400 inline-block"></span> Put/Call Ratio</span>
-  </div>
-  <div class="chart-container" style="height:200px">
-    <canvas id="vixPcrChart"></canvas>
-  </div>
-</div>
-
 <!-- ── Growth vs Broad Market Rotation ──────────────────────── -->
 <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6 fade-up mb-6" id="rotationSection">
   <div class="flex items-start justify-between mb-3">
@@ -802,106 +873,54 @@
   </div>
 </div>
 
-<!-- ── Crypto ──────────────────────────────────────────────────────────── -->
-<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 fade-up mb-4" id="cryptoCard">
-  <h3 class="text-sm font-semibold text-slate-600 dark:text-slate-300 mb-3" data-i18n="markets.crypto_title">Crypto</h3>
-  <div class="grid grid-cols-2 gap-3" id="cryptoGrid">
-    <div class="bg-slate-100/40 dark:bg-slate-800/40 rounded-xl p-3">
-      <div class="text-xs text-slate-500 mb-0.5" data-i18n="markets.btc_label">Bitcoin</div>
-      <div id="btcPrice" class="text-base font-bold font-mono text-amber-700 dark:text-amber-400">—</div>
-      <div id="btcChg" class="text-xs font-medium mt-0.5">—</div>
-    </div>
-    <div class="bg-slate-100/40 dark:bg-slate-800/40 rounded-xl p-3">
-      <div class="text-xs text-slate-500 mb-0.5" data-i18n="markets.eth_label">Ethereum</div>
-      <div id="ethPrice" class="text-base font-bold font-mono text-sky-700 dark:text-sky-400">—</div>
-      <div id="ethChg" class="text-xs font-medium mt-0.5">—</div>
-    </div>
-  </div>
-    <!-- BTC/ETH 1Y chart -->
-    <div class="mt-3 chart-container" style="height:180px" id="cryptoChartWrap">
-      <canvas id="cryptoChart"></canvas>
-    </div>
-    <p class="text-[10px] text-slate-500 dark:text-slate-600 mt-2">
-      <span data-i18n="markets.btc_halving_note">▼ Bitcoin halving dates marked. Next halving: ~April 2028.</span>
-    </p>
+</section>
+
+<!-- ═══ breadth-positioning ═══════════════════════════════════════════════ -->
+<section id="breadth-positioning" class="mk-section" aria-labelledby="breadth-positioning-h">
+<div class="mk-banner">
+  <h2 id="breadth-positioning-h" class="mk-banner-title" tabindex="-1" data-i18n="markets.sec_breadth">Breadth &amp; Positioning</h2>
+  <p class="mk-banner-desc" data-i18n="markets.sec_breadth_desc">How broad the rally is, and how systematic funds are positioned</p>
 </div>
 
-<!-- ── Gold Ratios row ───────────────────────────────────────────────── -->
-<div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6 fade-up">
-
-  <!-- Gold/Silver Ratio -->
-  <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 sm:p-6">
-    <div class="flex items-start justify-between mb-4">
-      <div>
-        <h2 class="text-base font-semibold text-slate-700 dark:text-slate-200" data-i18n="markets.gs_title">Gold / Silver Ratio</h2>
-        <p class="text-xs text-slate-500 mt-0.5" data-i18n="markets.gs_desc">oz of silver per oz of gold — higher = gold relatively expensive</p>
-      </div>
-      <div class="flex items-center gap-1">
-        <div id="gsBadge" class="text-right"></div>
-        <button onclick="expandMktsChart('gs')" title="Expand"
-                class="text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 transition p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 shrink-0">
-          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                  d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"/>
-          </svg>
-        </button>
-      </div>
-    </div>
-    <div id="gsLoading" class="text-xs text-slate-500 dark:text-slate-600 py-2">Loading…</div>
-    <div id="gsBody" style="display:none">
-      <div class="grid grid-cols-3 gap-2 mb-4" id="gsStats"></div>
-      <div style="height:140px"><canvas id="gsChart"></canvas></div>
-    </div>
-  </div>
-
-  <!-- Gold/Copper Ratio -->
-  <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 sm:p-6">
-    <div class="flex items-start justify-between mb-4">
-      <div>
-        <h2 class="text-base font-semibold text-slate-700 dark:text-slate-200" data-i18n="markets.gc_title">Gold / Copper Ratio</h2>
-        <p class="text-xs text-slate-500 mt-0.5" data-i18n="markets.gc_desc">gold ($/oz) ÷ copper ($/lb) — economic risk indicator</p>
-      </div>
-      <div class="flex items-center gap-1">
-        <div id="gcBadge" class="text-right"></div>
-        <button onclick="expandMktsChart('gc')" title="Expand"
-                class="text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 transition p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 shrink-0">
-          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                  d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"/>
-          </svg>
-        </button>
-      </div>
-    </div>
-    <div id="gcLoading" class="text-xs text-slate-500 dark:text-slate-600 py-2">Loading…</div>
-    <div id="gcBody" style="display:none">
-      <div class="grid grid-cols-3 gap-2 mb-4" id="gcStats"></div>
-      <div style="height:140px"><canvas id="gcChart"></canvas></div>
-    </div>
-  </div>
-
-</div>
-
-<!-- ── Credit Spread (HYG / TLT) ──────────────────────────────────────── -->
-<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6 fade-up mb-6" id="creditSpreadSection">
-  <div class="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-0 sm:justify-between mb-3">
+<!-- Market Breadth -->
+<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6 fade-up mb-6" id="breadthSection">
+  <div class="flex items-start justify-between mb-3">
     <div>
-      <h2 class="text-base font-semibold text-slate-700 dark:text-slate-200" data-i18n="markets.credit_title">Credit Spread (HYG / TLT)</h2>
-      <p class="text-xs text-slate-500" data-i18n="markets.credit_desc">HYG ÷ TLT ratio — rising = risk-on (credit outperforms treasuries), falling = risk-off / credit stress</p>
+      <h2 class="text-base font-semibold text-slate-700 dark:text-slate-200" data-i18n="markets.breadth_title">Market Breadth &amp; Concentration</h2>
+      <p class="text-xs text-slate-500 mt-0.5" data-i18n="markets.breadth_desc">Is the rally broad or narrow? High concentration risk = fragile bull market.</p>
     </div>
-    <div class="flex items-center gap-2 flex-wrap justify-end">
-      <span id="hygCard" class="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400"></span>
-      <span id="tltCard" class="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 mr-1"></span>
-      <div class="flex gap-1" id="creditRangeBtns">
-        <button class="range-btn active" data-period="1y" onclick="loadCreditSpread('1y')">1Y</button>
-        <button class="range-btn"        data-period="2y" onclick="loadCreditSpread('2y')">2Y</button>
-        <button class="range-btn"        data-period="3y" onclick="loadCreditSpread('3y')">3Y</button>
-        <button class="range-btn"        data-period="5y" onclick="loadCreditSpread('5y')">5Y</button>
-        <button class="range-btn"        data-period="10y" onclick="loadCreditSpread('10y')">10Y</button>
-      </div>
+    <div class="flex gap-1" id="breadthRangeBtns">
+      <button class="range-btn" data-breadth-range="1y">1Y</button>
+      <button class="range-btn active" data-breadth-range="3y">3Y</button>
+      <button class="range-btn" data-breadth-range="5y">5Y</button>
+      <button class="range-btn" data-breadth-range="10y">10Y</button>
     </div>
   </div>
-  <div class="relative chart-container" style="height:200px" id="creditChartWrap">
-    <canvas id="creditSpreadChart"></canvas>
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+    <div>
+      <p class="text-xs text-slate-500 mb-1" data-i18n="markets.breadth_ma_label">% S&amp;P 500 Above Moving Averages</p>
+      <!-- Legend doubles as the current-reading table: every series is named and
+           valued in text, so identity is never carried by colour alone. -->
+      <div id="breadthMaLegend" class="flex flex-wrap items-center gap-x-2.5 gap-y-1 mb-1.5"></div>
+      <div class="chart-container" style="height:196px"><canvas id="breadth50Chart"></canvas></div>
+      <p class="text-[10px] text-slate-500 dark:text-slate-600 mt-1.5" id="breadthFootnote"></p>
+    </div>
+    <div>
+      <p class="text-xs text-slate-500 mb-1" data-i18n="markets.breadth_rsp_label">Equal-Weight / Cap-Weight (RSP/SPY) Ratio</p>
+      <p class="text-[10px] text-slate-500 dark:text-slate-600 mb-1" data-i18n="markets.breadth_rsp_note">Rising = breadth expanding. Falling = mega-cap concentration increasing.</p>
+      <div class="chart-container" style="height:196px"><canvas id="rspSpyChart"></canvas></div>
+    </div>
+  </div>
+  <!-- ── Advancers / decliners, per index ────────────────────────────────────
+       The diffusion indices above answer "how much of the index is in an
+       uptrend"; this answers "how many names rose in the last session", which is
+       a different and more immediate question. Populated from the same download,
+       so it costs nothing extra, and it is the only place on this page where the
+       Nasdaq-100 gets a breadth reading of its own. -->
+  <div id="advDecBlock" class="mt-4 pt-4 border-t border-slate-200 dark:border-slate-800" style="display:none">
+    <p class="text-xs text-slate-500 mb-2" data-i18n="markets.advdec_label">Advancers vs Decliners — last completed session</p>
+    <div id="advDecRows" class="grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
+    <p class="text-[10px] text-slate-500 dark:text-slate-600 mt-2" id="advDecNote"></p>
   </div>
 </div>
 
@@ -1001,46 +1020,13 @@
   </div>
 </div>
 
-<!-- Market Breadth -->
-<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6 fade-up mb-6" id="breadthSection">
-  <div class="flex items-start justify-between mb-3">
-    <div>
-      <h2 class="text-base font-semibold text-slate-700 dark:text-slate-200" data-i18n="markets.breadth_title">Market Breadth &amp; Concentration</h2>
-      <p class="text-xs text-slate-500 mt-0.5" data-i18n="markets.breadth_desc">Is the rally broad or narrow? High concentration risk = fragile bull market.</p>
-    </div>
-    <div class="flex gap-1" id="breadthRangeBtns">
-      <button class="range-btn" data-breadth-range="1y">1Y</button>
-      <button class="range-btn active" data-breadth-range="3y">3Y</button>
-      <button class="range-btn" data-breadth-range="5y">5Y</button>
-      <button class="range-btn" data-breadth-range="10y">10Y</button>
-    </div>
-  </div>
-  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-    <div>
-      <p class="text-xs text-slate-500 mb-1" data-i18n="markets.breadth_ma_label">% S&amp;P 500 Above Moving Averages</p>
-      <!-- Legend doubles as the current-reading table: every series is named and
-           valued in text, so identity is never carried by colour alone. -->
-      <div id="breadthMaLegend" class="flex flex-wrap items-center gap-x-2.5 gap-y-1 mb-1.5"></div>
-      <div class="chart-container" style="height:196px"><canvas id="breadth50Chart"></canvas></div>
-      <p class="text-[10px] text-slate-500 dark:text-slate-600 mt-1.5" id="breadthFootnote"></p>
-    </div>
-    <div>
-      <p class="text-xs text-slate-500 mb-1" data-i18n="markets.breadth_rsp_label">Equal-Weight / Cap-Weight (RSP/SPY) Ratio</p>
-      <p class="text-[10px] text-slate-500 dark:text-slate-600 mb-1" data-i18n="markets.breadth_rsp_note">Rising = breadth expanding. Falling = mega-cap concentration increasing.</p>
-      <div class="chart-container" style="height:196px"><canvas id="rspSpyChart"></canvas></div>
-    </div>
-  </div>
-  <!-- ── Advancers / decliners, per index ────────────────────────────────────
-       The diffusion indices above answer "how much of the index is in an
-       uptrend"; this answers "how many names rose in the last session", which is
-       a different and more immediate question. Populated from the same download,
-       so it costs nothing extra, and it is the only place on this page where the
-       Nasdaq-100 gets a breadth reading of its own. -->
-  <div id="advDecBlock" class="mt-4 pt-4 border-t border-slate-200 dark:border-slate-800" style="display:none">
-    <p class="text-xs text-slate-500 mb-2" data-i18n="markets.advdec_label">Advancers vs Decliners — last completed session</p>
-    <div id="advDecRows" class="grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
-    <p class="text-[10px] text-slate-500 dark:text-slate-600 mt-2" id="advDecNote"></p>
-  </div>
+</section>
+
+<!-- ═══ rates-credit ══════════════════════════════════════════════════════ -->
+<section id="rates-credit" class="mk-section" aria-labelledby="rates-credit-h">
+<div class="mk-banner">
+  <h2 id="rates-credit-h" class="mk-banner-title" tabindex="-1" data-i18n="markets.sec_rates">Rates &amp; Credit</h2>
+  <p class="mk-banner-desc" data-i18n="markets.sec_rates_desc">Yield curves, credit stress, and what stocks pay over bonds</p>
 </div>
 
 <!-- ── Treasury Yield Curve row ──────────────────────────────────────────── -->
@@ -1158,6 +1144,74 @@
   <p class="text-[11px] text-slate-500 dark:text-slate-600 mt-2">Current spread: <span id="spreadCurrent" class="font-mono font-semibold"></span> · Source: FRED (DGS10 – DGS2)</p>
 </div>
 
+<!-- ── Credit Spread (HYG / TLT) ──────────────────────────────────────── -->
+<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6 fade-up mb-6" id="creditSpreadSection">
+  <div class="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-0 sm:justify-between mb-3">
+    <div>
+      <h2 class="text-base font-semibold text-slate-700 dark:text-slate-200" data-i18n="markets.credit_title">Credit Spread (HYG / TLT)</h2>
+      <p class="text-xs text-slate-500" data-i18n="markets.credit_desc">HYG ÷ TLT ratio — rising = risk-on (credit outperforms treasuries), falling = risk-off / credit stress</p>
+    </div>
+    <div class="flex items-center gap-2 flex-wrap justify-end">
+      <span id="hygCard" class="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400"></span>
+      <span id="tltCard" class="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 mr-1"></span>
+      <div class="flex gap-1" id="creditRangeBtns">
+        <button class="range-btn active" data-period="1y" onclick="loadCreditSpread('1y')">1Y</button>
+        <button class="range-btn"        data-period="2y" onclick="loadCreditSpread('2y')">2Y</button>
+        <button class="range-btn"        data-period="3y" onclick="loadCreditSpread('3y')">3Y</button>
+        <button class="range-btn"        data-period="5y" onclick="loadCreditSpread('5y')">5Y</button>
+        <button class="range-btn"        data-period="10y" onclick="loadCreditSpread('10y')">10Y</button>
+      </div>
+    </div>
+  </div>
+  <div class="relative chart-container" style="height:200px" id="creditChartWrap">
+    <canvas id="creditSpreadChart"></canvas>
+  </div>
+</div>
+
+<!-- ── Equity Risk Premium card ─────────────────────────────────────── -->
+<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 fade-up mb-6" id="erpCard">
+  <div class="flex items-center justify-between mb-1">
+    <h3 class="text-sm font-semibold text-slate-600 dark:text-slate-300" data-i18n="markets.erp_title">Equity Risk Premium</h3>
+    <span class="text-[10px] text-slate-500 dark:text-slate-600" data-i18n="markets.erp_formula">ERP = S&amp;P Earnings Yield – 10Y</span>
+  </div>
+  <div class="flex items-end gap-3">
+    <div id="erpValue" class="text-2xl font-bold font-mono text-slate-800 dark:text-slate-100">—</div>
+    <div id="erpLabel" class="text-xs text-slate-500 pb-1"></div>
+  </div>
+  <p class="text-[11px] text-slate-500 dark:text-slate-600 mt-2" data-i18n="markets.erp_note">Above 3% = stocks attractive vs bonds. Below 1% = bonds competitive. Negative = bonds preferred.</p>
+
+  {# Representative ETFs for each side of the ERP argument, with what they have
+     actually returned. The side the current reading favours is highlighted; both
+     are always shown, because the comparison is the point and hiding the losing
+     side would turn a valuation reading into a tip. #}
+  <div id="erpEtf" class="mt-4 pt-3 border-t border-slate-200 dark:border-slate-800" style="display:none">
+    <div class="flex items-baseline justify-between mb-2">
+      <p class="text-[10px] font-semibold tracking-widest uppercase text-slate-500"
+         data-i18n="markets.erp_etf_title">Representative ETFs</p>
+      <p class="text-[10px] text-slate-500 dark:text-slate-600">
+        <span data-i18n="markets.erp_etf_basis">Total return · 3Y/5Y annualised</span>
+        <span id="erpEtfAsof" class="ml-1"></span>
+      </p>
+    </div>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <div id="erpEtfStocks"></div>
+      <div id="erpEtfBonds"></div>
+    </div>
+    <p class="text-[10px] text-slate-500 dark:text-slate-600 mt-2" data-i18n="markets.erp_etf_disclaimer">
+      Past returns, not a forecast or a recommendation to buy.
+    </p>
+  </div>
+</div>
+
+</section>
+
+<!-- ═══ global-cross-asset ════════════════════════════════════════════════ -->
+<section id="global-cross-asset" class="mk-section" aria-labelledby="global-cross-asset-h">
+<div class="mk-banner">
+  <h2 id="global-cross-asset-h" class="mk-banner-title" tabindex="-1" data-i18n="markets.sec_global">Global &amp; Cross-Asset</h2>
+  <p class="mk-banner-desc" data-i18n="markets.sec_global_desc">World indices side by side, plus metals and crypto</p>
+</div>
+
 <!-- Global Markets 1Y Normalized -->
 <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6 fade-up mb-6" id="globalNormSection">
   <div class="flex items-start justify-between mb-3">
@@ -1172,6 +1226,94 @@
     </div>
   </div>
   <div class="chart-container" style="height:260px"><canvas id="globalNormChart"></canvas></div>
+</div>
+
+<!-- ── Gold Ratios row ───────────────────────────────────────────────── -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6 fade-up">
+
+  <!-- Gold/Silver Ratio -->
+  <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 sm:p-6">
+    <div class="flex items-start justify-between mb-4">
+      <div>
+        <h2 class="text-base font-semibold text-slate-700 dark:text-slate-200" data-i18n="markets.gs_title">Gold / Silver Ratio</h2>
+        <p class="text-xs text-slate-500 mt-0.5" data-i18n="markets.gs_desc">oz of silver per oz of gold — higher = gold relatively expensive</p>
+      </div>
+      <div class="flex items-center gap-1">
+        <div id="gsBadge" class="text-right"></div>
+        <button onclick="expandMktsChart('gs')" title="Expand"
+                class="text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 transition p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 shrink-0">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+    <div id="gsLoading" class="text-xs text-slate-500 dark:text-slate-600 py-2">Loading…</div>
+    <div id="gsBody" style="display:none">
+      <div class="grid grid-cols-3 gap-2 mb-4" id="gsStats"></div>
+      <div style="height:140px"><canvas id="gsChart"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Gold/Copper Ratio -->
+  <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 sm:p-6">
+    <div class="flex items-start justify-between mb-4">
+      <div>
+        <h2 class="text-base font-semibold text-slate-700 dark:text-slate-200" data-i18n="markets.gc_title">Gold / Copper Ratio</h2>
+        <p class="text-xs text-slate-500 mt-0.5" data-i18n="markets.gc_desc">gold ($/oz) ÷ copper ($/lb) — economic risk indicator</p>
+      </div>
+      <div class="flex items-center gap-1">
+        <div id="gcBadge" class="text-right"></div>
+        <button onclick="expandMktsChart('gc')" title="Expand"
+                class="text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 transition p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 shrink-0">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+    <div id="gcLoading" class="text-xs text-slate-500 dark:text-slate-600 py-2">Loading…</div>
+    <div id="gcBody" style="display:none">
+      <div class="grid grid-cols-3 gap-2 mb-4" id="gcStats"></div>
+      <div style="height:140px"><canvas id="gcChart"></canvas></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ── Crypto ──────────────────────────────────────────────────────────── -->
+<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 fade-up mb-4" id="cryptoCard">
+  <h3 class="text-sm font-semibold text-slate-600 dark:text-slate-300 mb-3" data-i18n="markets.crypto_title">Crypto</h3>
+  <div class="grid grid-cols-2 gap-3" id="cryptoGrid">
+    <div class="bg-slate-100/40 dark:bg-slate-800/40 rounded-xl p-3">
+      <div class="text-xs text-slate-500 mb-0.5" data-i18n="markets.btc_label">Bitcoin</div>
+      <div id="btcPrice" class="text-base font-bold font-mono text-amber-700 dark:text-amber-400">—</div>
+      <div id="btcChg" class="text-xs font-medium mt-0.5">—</div>
+    </div>
+    <div class="bg-slate-100/40 dark:bg-slate-800/40 rounded-xl p-3">
+      <div class="text-xs text-slate-500 mb-0.5" data-i18n="markets.eth_label">Ethereum</div>
+      <div id="ethPrice" class="text-base font-bold font-mono text-sky-700 dark:text-sky-400">—</div>
+      <div id="ethChg" class="text-xs font-medium mt-0.5">—</div>
+    </div>
+  </div>
+    <!-- BTC/ETH 1Y chart -->
+    <div class="mt-3 chart-container" style="height:180px" id="cryptoChartWrap">
+      <canvas id="cryptoChart"></canvas>
+    </div>
+    <p class="text-[10px] text-slate-500 dark:text-slate-600 mt-2">
+      <span data-i18n="markets.btc_halving_note">▼ Bitcoin halving dates marked. Next halving: ~April 2028.</span>
+    </p>
+</div>
+
+</section>
+
+<!-- ═══ price-technicals ══════════════════════════════════════════════════ -->
+<section id="price-technicals" class="mk-section" aria-labelledby="price-technicals-h">
+<div class="mk-banner">
+  <h2 id="price-technicals-h" class="mk-banner-title" tabindex="-1" data-i18n="markets.sec_technicals">Price &amp; Technicals</h2>
+  <p class="mk-banner-desc" data-i18n="markets.sec_technicals_desc">One index or commodity at a time: trend, momentum and forecast</p>
 </div>
 
 <!-- ── Per-index detail tabs ──────────────────────────────────────────── -->
@@ -1326,78 +1468,110 @@
 
 </div>
 
-<!-- ── Economic Events Calendar ──────────────────────────────────────── -->
-<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6 mt-6 fade-up" id="econSection">
-  <!-- Header row -->
-  <div class="flex items-center justify-between cursor-pointer" onclick="toggleEconSection()">
-    <div>
-      <h2 class="text-sm font-semibold text-slate-700 dark:text-slate-200" data-i18n="markets.econ_events_title">Economic Events</h2>
-      <p class="text-xs text-slate-500 mt-0.5" data-i18n="markets.econ_events_desc">Key macro releases &amp; central bank decisions this week</p>
-    </div>
-    <div class="flex items-center gap-2" onclick="event.stopPropagation()">
-      <button id="econTranslateBtn" onclick="translateEconEvents()"
-              class="text-xs px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400
-                     hover:border-indigo-500 hover:text-indigo-700 dark:hover:text-indigo-300 transition-all">
-        <span data-i18n="markets.econ_translate">Translate to Chinese</span>
-      </button>
-      <span onclick="event.stopPropagation(); toggleEconSection()" class="cursor-pointer p-1">
-        <svg id="econChevron" class="w-4 h-4 text-slate-500 transition-transform duration-200 rotate-180"
-             fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-        </svg>
-      </span>
-    </div>
-  </div>
-  <!-- Collapsible body -->
-  <div id="econCollapse">
-    <div id="econLoading" class="text-xs text-slate-500 dark:text-slate-600 py-2 mt-3" data-i18n="markets.loading">Loading…</div>
-    <div id="econBody" style="display:none" class="mt-3">
-      <!-- Region filter buttons -->
-      <div id="econFilters" class="flex flex-wrap gap-1.5 mb-3">
-        <button onclick="filterEcon('all')" id="econFilter-all"
-                class="econ-filter-btn px-2.5 py-1 rounded-lg text-[11px] font-medium border border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:border-indigo-500 hover:text-indigo-700 dark:hover:text-indigo-300 transition-all"
-                data-i18n="markets.econ_filter_all">All</button>
-        <button onclick="filterEcon('us')" id="econFilter-us"
-                class="econ-filter-btn px-2.5 py-1 rounded-lg text-[11px] font-medium border border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:border-indigo-500 hover:text-indigo-700 dark:hover:text-indigo-300 transition-all"
-                data-i18n="markets.econ_filter_us">US</button>
-        <button onclick="filterEcon('eu')" id="econFilter-eu"
-                class="econ-filter-btn px-2.5 py-1 rounded-lg text-[11px] font-medium border border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:border-indigo-500 hover:text-indigo-700 dark:hover:text-indigo-300 transition-all"
-                data-i18n="markets.econ_filter_eu">EU</button>
-        <button onclick="filterEcon('cn')" id="econFilter-cn"
-                class="econ-filter-btn px-2.5 py-1 rounded-lg text-[11px] font-medium border border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:border-indigo-500 hover:text-indigo-700 dark:hover:text-indigo-300 transition-all"
-                data-i18n="markets.econ_filter_cn">CN</button>
-        <button onclick="filterEcon('jp')" id="econFilter-jp"
-                class="econ-filter-btn px-2.5 py-1 rounded-lg text-[11px] font-medium border border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:border-indigo-500 hover:text-indigo-700 dark:hover:text-indigo-300 transition-all"
-                data-i18n="markets.econ_filter_jp">JP</button>
-        <button onclick="filterEcon('high')" id="econFilter-high"
-                class="econ-filter-btn active px-2.5 py-1 rounded-lg text-[11px] font-medium border border-rose-500 text-rose-700 dark:text-rose-300 hover:border-rose-500 hover:text-rose-700 dark:hover:text-rose-300 transition-all"
-                data-i18n="markets.econ_filter_high">High Impact</button>
-        <label class="flex items-center gap-1.5 ml-auto text-[11px] text-slate-500 dark:text-slate-400 cursor-pointer select-none">
-          <input type="checkbox" id="econHidePast" onchange="_renderEconTable(_econData)"
-                 class="rounded border-slate-300 dark:border-slate-600 bg-slate-100 dark:bg-slate-800 text-brand focus:ring-brand" checked>
-          <span data-i18n="markets.econ_hide_past">Hide past</span>
-        </label>
-      </div>
-      <div class="overflow-x-auto">
-        <table class="w-full text-xs text-left">
-          <thead>
-            <tr class="border-b border-slate-200 dark:border-slate-800 text-slate-500 text-[10px] uppercase tracking-wider">
-              <th class="pb-2 pr-3 font-medium" data-i18n="markets.econ_col_date">Date</th>
-              <th class="pb-2 pr-3 font-medium" id="econTimeColHeader"><span data-i18n="markets.econ_col_time">Time</span></th>
-              <th class="pb-2 pr-3 font-medium" data-i18n="markets.econ_col_country">Country</th>
-              <th class="pb-2 pr-3 font-medium" data-i18n="markets.econ_col_event">Event</th>
-              <th class="pb-2 pr-3 font-medium" data-i18n="markets.econ_col_impact">Impact</th>
-              <th class="pb-2 pr-3 font-medium text-right" data-i18n="markets.econ_col_actual">Actual</th>
-              <th class="pb-2 pr-3 font-medium text-right" data-i18n="markets.econ_col_forecast">Forecast</th>
-              <th class="pb-2 font-medium text-right" data-i18n="markets.econ_col_previous">Previous</th>
-            </tr>
-          </thead>
-          <tbody id="econTableBody" class="divide-y divide-slate-200/60 dark:divide-slate-800/60"></tbody>
-        </table>
-      </div>
-    </div>
-  </div>
+</section>
+
+<!-- ═══ event-calendar ════════════════════════════════════════════════════ -->
+<section id="event-calendar" class="mk-section" aria-labelledby="event-calendar-h">
+<div class="mk-banner">
+  <h2 id="event-calendar-h" class="mk-banner-title" tabindex="-1" data-i18n="markets.sec_calendar">Calendar</h2>
+  <p class="mk-banner-desc" data-i18n="markets.sec_calendar_desc">Macro releases and earnings coming up</p>
 </div>
+
+<!-- ── Economic Events + upcoming earnings row ──────────────────────── -->
+<div class="mk-cal fade-up">
+
+  <!-- ── Economic Events Calendar ──────────────────────────────────────── -->
+  <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6" id="econSection">
+    <!-- Header row -->
+    <div class="flex items-center justify-between cursor-pointer" onclick="toggleEconSection()">
+      <div>
+        <h2 class="text-sm font-semibold text-slate-700 dark:text-slate-200" data-i18n="markets.econ_events_title">Economic Events</h2>
+        <p class="text-xs text-slate-500 mt-0.5" data-i18n="markets.econ_events_desc">Key macro releases &amp; central bank decisions this week</p>
+      </div>
+      <div class="flex items-center gap-2" onclick="event.stopPropagation()">
+        <button id="econTranslateBtn" onclick="translateEconEvents()"
+                class="text-xs px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400
+                       hover:border-indigo-500 hover:text-indigo-700 dark:hover:text-indigo-300 transition-all">
+          <span data-i18n="markets.econ_translate">Translate to Chinese</span>
+        </button>
+        <span onclick="event.stopPropagation(); toggleEconSection()" class="cursor-pointer p-1">
+          <svg id="econChevron" class="w-4 h-4 text-slate-500 transition-transform duration-200 rotate-180"
+               fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+          </svg>
+        </span>
+      </div>
+    </div>
+    <!-- Collapsible body -->
+    <div id="econCollapse">
+      <div id="econLoading" class="text-xs text-slate-500 dark:text-slate-600 py-2 mt-3" data-i18n="markets.loading">Loading…</div>
+      <div id="econBody" style="display:none" class="mt-3">
+        <!-- Region filter buttons -->
+        <div id="econFilters" class="flex flex-wrap gap-1.5 mb-3">
+          <button onclick="filterEcon('all')" id="econFilter-all"
+                  class="econ-filter-btn px-2.5 py-1 rounded-lg text-[11px] font-medium border border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:border-indigo-500 hover:text-indigo-700 dark:hover:text-indigo-300 transition-all"
+                  data-i18n="markets.econ_filter_all">All</button>
+          <button onclick="filterEcon('us')" id="econFilter-us"
+                  class="econ-filter-btn px-2.5 py-1 rounded-lg text-[11px] font-medium border border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:border-indigo-500 hover:text-indigo-700 dark:hover:text-indigo-300 transition-all"
+                  data-i18n="markets.econ_filter_us">US</button>
+          <button onclick="filterEcon('eu')" id="econFilter-eu"
+                  class="econ-filter-btn px-2.5 py-1 rounded-lg text-[11px] font-medium border border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:border-indigo-500 hover:text-indigo-700 dark:hover:text-indigo-300 transition-all"
+                  data-i18n="markets.econ_filter_eu">EU</button>
+          <button onclick="filterEcon('cn')" id="econFilter-cn"
+                  class="econ-filter-btn px-2.5 py-1 rounded-lg text-[11px] font-medium border border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:border-indigo-500 hover:text-indigo-700 dark:hover:text-indigo-300 transition-all"
+                  data-i18n="markets.econ_filter_cn">CN</button>
+          <button onclick="filterEcon('jp')" id="econFilter-jp"
+                  class="econ-filter-btn px-2.5 py-1 rounded-lg text-[11px] font-medium border border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:border-indigo-500 hover:text-indigo-700 dark:hover:text-indigo-300 transition-all"
+                  data-i18n="markets.econ_filter_jp">JP</button>
+          <button onclick="filterEcon('high')" id="econFilter-high"
+                  class="econ-filter-btn active px-2.5 py-1 rounded-lg text-[11px] font-medium border border-rose-500 text-rose-700 dark:text-rose-300 hover:border-rose-500 hover:text-rose-700 dark:hover:text-rose-300 transition-all"
+                  data-i18n="markets.econ_filter_high">High Impact</button>
+          <label class="flex items-center gap-1.5 ml-auto text-[11px] text-slate-500 dark:text-slate-400 cursor-pointer select-none">
+            <input type="checkbox" id="econHidePast" onchange="_renderEconTable(_econData)"
+                   class="rounded border-slate-300 dark:border-slate-600 bg-slate-100 dark:bg-slate-800 text-brand focus:ring-brand" checked>
+            <span data-i18n="markets.econ_hide_past">Hide past</span>
+          </label>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs text-left">
+            <thead>
+              <tr class="border-b border-slate-200 dark:border-slate-800 text-slate-500 text-[10px] uppercase tracking-wider">
+                <th class="pb-2 pr-3 font-medium" data-i18n="markets.econ_col_date">Date</th>
+                <th class="pb-2 pr-3 font-medium" id="econTimeColHeader"><span data-i18n="markets.econ_col_time">Time</span></th>
+                <th class="pb-2 pr-3 font-medium" data-i18n="markets.econ_col_country">Country</th>
+                <th class="pb-2 pr-3 font-medium" data-i18n="markets.econ_col_event">Event</th>
+                <th class="pb-2 pr-3 font-medium" data-i18n="markets.econ_col_impact">Impact</th>
+                <th class="pb-2 pr-3 font-medium text-right" data-i18n="markets.econ_col_actual">Actual</th>
+                <th class="pb-2 pr-3 font-medium text-right" data-i18n="markets.econ_col_forecast">Forecast</th>
+                <th class="pb-2 font-medium text-right" data-i18n="markets.econ_col_previous">Previous</th>
+              </tr>
+            </thead>
+            <tbody id="econTableBody" class="divide-y divide-slate-200/60 dark:divide-slate-800/60"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Upcoming earnings ───────────────────────────────────────────────────
+       "What reports this week" is a question this site could not answer, while
+       the date sat in every cached record being refreshed every eight hours and
+       discarded. The forward P/E and last quarter's growth ride along because
+       when a company reports is only useful next to what it is expected to say.
+       Hidden until loaded; an empty *result* still renders, with a count, since
+       between seasons no reporters is the correct answer and an empty list on
+       its own reads as a failure. -->
+  <div id="earnCard" class="hidden bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 sm:p-6">
+    <div class="flex items-baseline justify-between mb-3 gap-3 flex-wrap">
+      <h2 class="text-base font-semibold text-slate-700 dark:text-slate-200" data-i18n="markets.earnings_title">Reporting soon</h2>
+      <span id="earnMeta" class="text-xs text-slate-500"></span>
+    </div>
+    <div id="earnBody" class="overflow-x-auto"></div>
+  </div>
+
+</div>
+
+</section>
 
 </div><!-- #marketsContent -->
 
@@ -6405,6 +6579,128 @@ DeferLoad.when('#gicsTable', async function() {
       </div>
     </div>`;
   }).join('');
+})();
+
+/* ── Section jump bar ────────────────────────────────────────────────────────
+   Highlights the section being read and jumps to one on a click. The rules
+   are the ones /agents' jump bar arrived at the hard way:
+
+   - The current section is recomputed from geometry on each scrolled frame:
+     the last one whose top has passed under the bar. Above the first, that is
+     the first; at the very bottom it is the last, which can never climb that
+     far because the page runs out of scroll.
+   - A click holds its highlight until the reader's next scroll gesture, so the
+     chip just pressed is the one lit even where geometry would disagree.
+   - The jump is instant, not smooth. A smooth scroll drags every panel in
+     between past the viewport, and each one's DeferLoad fetch fires on the way
+     — the burst of simultaneous requests deferload.js exists to prevent. */
+(function mkJumpBar() {
+  const bar = document.getElementById('mkJump');
+  if (!bar) return;
+  const chips = [...bar.querySelectorAll('[data-mk-target]')];
+  const sections = chips.map(c => document.getElementById(c.dataset.mkTarget));
+  if (!sections.length || sections.some(s => !s)) return;
+  const GESTURES = ['wheel', 'touchstart', 'keydown', 'mousedown'];
+  let held = null;   // id of the section an explicit jump owns
+
+  // Horizontally, by hand. chip.scrollIntoView would scroll the page as well,
+  // on every change of section.
+  function revealChip(chip) {
+    const pad = 16;
+    const left = chip.offsetLeft, right = left + chip.offsetWidth;
+    if (left - pad < bar.scrollLeft) bar.scrollLeft = left - pad;
+    else if (right + pad > bar.scrollLeft + bar.clientWidth) bar.scrollLeft = right + pad - bar.clientWidth;
+  }
+
+  function mark(id) {
+    for (const chip of chips) {
+      const on = chip.dataset.mkTarget === id;
+      if (on === chip.classList.contains('is-active')) continue;
+      chip.classList.toggle('is-active', on);
+      if (on) { chip.setAttribute('aria-current', 'location'); revealChip(chip); }
+      else chip.removeAttribute('aria-current');
+    }
+  }
+
+  function current() {
+    if (held) return held;
+    // Tolerance, not equality: fractional device pixels and zoom mean the sum
+    // rarely lands exactly on the document height.
+    if (innerHeight + scrollY >= document.documentElement.scrollHeight - 12) {
+      return sections[sections.length - 1].id;
+    }
+    // Measured off the bar, not a constant, so it follows the bar's real
+    // height; 24px of slack over the 108px scroll-padding a jump lands at.
+    const band = bar.getBoundingClientRect().bottom + 24;
+    let cur = sections[0].id;
+    for (const s of sections) {
+      if (s.getBoundingClientRect().top <= band) cur = s.id;
+      else break;                       // sections are in document order
+    }
+    return cur;
+  }
+
+  let queued = false;
+  const refresh = () => {
+    if (queued) return;
+    queued = true;
+    requestAnimationFrame(() => { queued = false; mark(current()); });
+  };
+  addEventListener('scroll', refresh, { passive: true });
+  addEventListener('resize', refresh, { passive: true });
+  for (const ev of GESTURES) {
+    addEventListener(ev, () => { if (held) { held = null; refresh(); } }, { passive: true });
+  }
+  // Labels change width with the language, which can push the lit chip out of
+  // the bar's visible stretch on a phone.
+  document.addEventListener('i18n:langchange', () => {
+    const lit = chips.find(c => c.classList.contains('is-active'));
+    if (lit) revealChip(lit);
+  });
+
+  bar.addEventListener('click', e => {
+    const chip = e.target.closest('[data-mk-target]');
+    // Modified clicks keep the link's own meaning: a new tab or window.
+    if (!chip || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    const target = document.getElementById(chip.dataset.mkTarget);
+    if (!target) return;
+    e.preventDefault();
+    held = target.id;
+    mark(held);
+    const first = target === sections[0];
+    // replaceState, not location.hash: assigning the hash pushes a history
+    // entry per chip, which turns Back into a walk through every section
+    // glanced at. The address bar still ends up a link to what is on screen.
+    try {
+      history.replaceState(history.state, '',
+        first ? location.pathname + location.search : '#' + target.id);
+    } catch (_) {}
+    if (first) scrollTo(0, 0);
+    else target.scrollIntoView({ block: 'start' });
+    // Focus follows the jump, so the next Tab continues inside the section
+    // rather than along the chips.
+    const heading = target.querySelector('.mk-banner-title');
+    if (heading) heading.focus({ preventScroll: true });
+  });
+
+  // A shared /markets#rates-credit lands before the panels above it have
+  // drawn, and each one that grows afterwards pushes the section down. Chrome's
+  // scroll anchoring absorbs that; Safari has none. So hold the section in
+  // place while the page settles, and let go at the reader's first gesture.
+  const linked = sections.find(s => '#' + s.id === location.hash);
+  if (linked && linked !== sections[0] && 'ResizeObserver' in window) {
+    held = linked.id;
+    const ro = new ResizeObserver(() => linked.scrollIntoView({ block: 'start' }));
+    const release = () => {
+      ro.disconnect();
+      clearTimeout(timer);
+      for (const ev of GESTURES) removeEventListener(ev, release);
+    };
+    const timer = setTimeout(release, 10000);
+    for (const ev of GESTURES) addEventListener(ev, release, { passive: true });
+    ro.observe(document.getElementById('marketsContent'));
+  }
+  refresh();
 })();
 
 </script>
