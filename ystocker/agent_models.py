@@ -36,7 +36,7 @@ choice's default. An out-of-range thinking value is therefore unrepresentable
 downstream.
 
 Providers with no thinking knob at all get an empty set. Only ``google``,
-``openai`` and ``anthropic`` are read by ``TradingAgentsGraph._get_provider_kwargs``;
+``openai`` and ``anthropic`` are read by ``tradingagents.llm_clients.build_llm_kwargs``;
 for everything else the parameter is inert, so offering the control would be a
 lie about what the run does.
 
