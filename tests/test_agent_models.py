@@ -76,7 +76,7 @@ class ResolveTests(unittest.TestCase):
                          "high")
 
     def test_provider_without_a_thinking_knob_gets_none(self):
-        # Only google/openai/anthropic are read by _get_provider_kwargs. Carrying
+        # Only google/openai/anthropic are read by build_llm_kwargs. Carrying
         # a level for DeepSeek would claim the run did something it did not.
         for level in ("", "high", "medium", "nonsense"):
             with self.subTest(level=level):

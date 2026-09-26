@@ -1316,7 +1316,7 @@ than reproduce that asymmetry in the UI and hope, each choice carries the exact
 set it accepts and `resolve()` clamps anything else to that choice's default, so
 an out-of-range level is unrepresentable downstream. Providers with no thinking
 knob get an empty set and the control is disabled outright: only `google`,
-`openai` and `anthropic` are read by `TradingAgentsGraph._get_provider_kwargs`,
+`openai` and `anthropic` are read by `tradingagents.llm_clients.build_llm_kwargs`,
 so for DeepSeek the parameter is inert and offering it would be a lie about what
 the run does.
 

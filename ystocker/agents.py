@@ -114,7 +114,7 @@ DEFAULT_THINKING = os.environ.get("TRADINGAGENTS_GOOGLE_THINKING_LEVEL", "high")
 DEFAULT_DEBATE_ROUNDS = os.environ.get("TRADINGAGENTS_MAX_DEBATE_ROUNDS", "3")
 DEFAULT_RISK_ROUNDS = os.environ.get("TRADINGAGENTS_MAX_RISK_ROUNDS", "3")
 
-# Report language. agent_utils appends "Write your entire response in {lang}."
+# Report language. agents/context.py appends "Write your entire response in {lang}."
 # to the report prompts; the internal debate stays English by the package's own
 # design, for reasoning quality, so this changes the deliverable and not the
 # reasoning.
