@@ -1,7 +1,13 @@
 #!/usr/bin/env bash
-# Regenerate ystocker/data/gics_sp500.json on the box and bring it back.
+# Regenerate the committed GICS baseline (ystocker/data/gics_sp500.json) on the
+# box and bring it back.
 #
 #   bash deploy/gics-snapshot.sh
+#
+# Optional upkeep, not something the page depends on: the box refreshes its own
+# copy every day (gics.refresh_snapshot, cache/gics_sp500.json). The committed
+# file is only what a fresh box starts from and what the tests check, so moving
+# it a few times a year keeps that baseline close to the index.
 #
 # The snapshot is built from Wikipedia's S&P 500 constituent list and SPY's
 # daily holdings file (www.ssga.com). Where this machine can reach both,

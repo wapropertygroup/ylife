@@ -6,8 +6,9 @@ what is pinned here is everything that can be proven without a market:
 
 * the hierarchy is the whole of GICS and hangs together;
 * the committed snapshot agrees with it, name by name;
-* the snapshot builder refuses each of its three failure modes instead of
-  writing a plausible-looking file with a row quietly wrong;
+* the snapshot builder refuses each of its failure modes instead of writing a
+  plausible-looking file with a row quietly wrong, and the box's daily refresh
+  keeps the last good snapshot through every one of them;
 * the arithmetic — cap weighting, the YTD base, date-gating, the partial-bar
   guard, the end-date coverage floor and split invariance — on prices small
   enough to check by hand;
@@ -18,9 +19,11 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import os
 import re
 import sys
 import tempfile
+import time
 import types
 import unittest
 from pathlib import Path
@@ -101,7 +104,9 @@ class SnapshotFileTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.snap = gics.load_snapshot()
+        # By path: with no argument load_snapshot() prefers the box's cached
+        # refresh, which is not the file under test here.
+        cls.snap = gics.load_snapshot(gics.SNAPSHOT_FILE)
 
     def test_loads(self):
         self.assertIsNotNone(self.snap)
@@ -171,6 +176,15 @@ class BuildSnapshotTests(unittest.TestCase):
     def test_refuses_a_partial_scrape(self):
         rows, w = self._rows(60)
         with self.assertRaisesRegex(ValueError, "only 60 members"):
+            gics.build_snapshot(rows, w, weights_asof="x", members_asof="x")
+
+    def test_refuses_a_list_that_misses_part_of_spys_weight(self):
+        # 460 rows clears the count floor; the second source says a slice of
+        # the index is missing from the first, which is what a table that lost
+        # rows looks like.
+        rows, w = self._rows()
+        w.update({"LOST1": 3.0, "LOST2": 2.5})
+        with self.assertRaisesRegex(ValueError, r"cover only 94\.4% of SPY"):
             gics.build_snapshot(rows, w, weights_asof="x", members_asof="x")
 
 
@@ -288,6 +302,97 @@ class HoldingsFileTests(unittest.TestCase):
     def test_column_letters(self):
         self.assertEqual([gics._xlsx_column(r) for r in ("A1", "B7", "Z3", "AA10", "AZ2")],
                          [0, 1, 25, 26, 51])
+
+
+class RefreshTests(unittest.TestCase):
+    """The box refreshes the snapshot itself, once a day, and never breaks on it."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.cache = Path(self.tmp.name) / "gics_sp500.json"
+        self._saved = gics._snapshot_cache
+        gics._snapshot_cache = None
+        self.patches = [mock.patch.object(gics, "CACHE_SNAPSHOT_FILE", self.cache),
+                        mock.patch.object(gics, "REFRESH_ENABLED", True)]
+        for p in self.patches:
+            p.start()
+        self.committed = gics.load_snapshot(gics.SNAPSHOT_FILE)
+
+    def tearDown(self):
+        for p in reversed(self.patches):
+            p.stop()
+        gics._snapshot_cache = self._saved
+        self.tmp.cleanup()
+
+    def _fresh(self, **overrides):
+        snap = json.loads(json.dumps(self.committed))
+        snap.update({"weights_asof": "2026-10-01", "members_asof": "2026-10-02", **overrides})
+        return snap
+
+    def test_a_refresh_is_written_and_used(self):
+        new = self._fresh()
+        del new["members"]["TTWO"]
+        new["members"]["NEWCO"] = _member("Application Software", 0.1, added="2026-10-01")
+        with mock.patch.object(gics, "fetch_snapshot", return_value=new), \
+             self.assertLogs("ystocker.gics", level="INFO") as logs:
+            got = gics.refresh_snapshot()
+        self.assertEqual(got["weights_asof"], "2026-10-01")
+        self.assertEqual(gics.load_snapshot()["weights_asof"], "2026-10-01", "not the snapshot in force")
+        self.assertEqual(gics.load_snapshot(self.cache)["weights_asof"], "2026-10-01", "not saved")
+        self.assertTrue(any("joined ['NEWCO']; left ['TTWO']" in m for m in logs.output), logs.output)
+
+    def test_a_recent_refresh_is_not_repeated(self):
+        self.cache.write_text(gics.dumps_snapshot(self._fresh()))
+        with mock.patch.object(gics, "fetch_snapshot", side_effect=AssertionError("fetched again")):
+            self.assertEqual(gics.refresh_snapshot()["weights_asof"], "2026-10-01")
+
+    def test_a_newer_file_beats_an_older_copy_in_memory(self):
+        # Another process refreshed the file while this one held the baseline.
+        gics._snapshot_cache = self.committed
+        self.cache.write_text(gics.dumps_snapshot(self._fresh()))
+        with mock.patch.object(gics, "fetch_snapshot", side_effect=AssertionError("fetched again")):
+            self.assertEqual(gics.refresh_snapshot()["weights_asof"], "2026-10-01")
+        self.assertEqual(gics.load_snapshot()["weights_asof"], "2026-10-01")
+
+    def test_an_old_refresh_is_redone(self):
+        self.cache.write_text(gics.dumps_snapshot(self._fresh()))
+        old = time.time() - gics.REFRESH_AFTER_SECONDS - 60
+        os.utime(self.cache, (old, old))
+        newer = self._fresh(weights_asof="2026-10-02")
+        with mock.patch.object(gics, "fetch_snapshot", return_value=newer) as fetch:
+            self.assertEqual(gics.refresh_snapshot()["weights_asof"], "2026-10-02")
+        fetch.assert_called_once()
+
+    def test_a_failed_refresh_keeps_the_snapshot_in_force(self):
+        for exc in (gics.SnapshotFetchError("wikipedia down"), ValueError("members cover only 80%")):
+            gics._snapshot_cache = None
+            with mock.patch.object(gics, "fetch_snapshot", side_effect=exc), \
+                 self.assertLogs("ystocker.gics", level="WARNING"):
+                got = gics.refresh_snapshot()
+            self.assertEqual(got["weights_asof"], self.committed["weights_asof"])
+            self.assertFalse(self.cache.exists(), "a failed refresh wrote something")
+
+    def test_the_kill_switch(self):
+        with mock.patch.object(gics, "REFRESH_ENABLED", False), \
+             mock.patch.object(gics, "fetch_snapshot", side_effect=AssertionError("fetched")):
+            self.assertEqual(gics.refresh_snapshot()["weights_asof"], self.committed["weights_asof"])
+
+    def test_a_cut_short_cache_file_loses_to_the_committed_one(self):
+        short = self._fresh()
+        short["members"] = dict(list(short["members"].items())[:100])
+        self.cache.write_text(gics.dumps_snapshot(short))
+        with self.assertLogs("ystocker.gics", level="WARNING"):
+            self.assertEqual(len(gics.load_snapshot()["members"]), len(self.committed["members"]))
+
+    def test_both_sources_go_through_fetchguard(self):
+        import requests
+
+        from ystocker import fetchguard
+        for exc in (requests.ConnectionError("refused"), fetchguard.CooldownActive("ssga", 30, "HTTP 503")):
+            with mock.patch.object(fetchguard, "request", side_effect=exc) as req, \
+                 self.assertRaises(gics.SnapshotFetchError):
+                gics.fetch_snapshot()
+            self.assertEqual(req.call_args.args[0], "wikipedia")
 
 
 class PerformanceTests(unittest.TestCase):
@@ -513,9 +618,12 @@ class BreadthIntegrationTests(unittest.TestCase):
             "Technology Hardware, Storage & Peripherals", 7.0)}
         requested: list = []
         with mock.patch.dict(sys.modules, {"yfinance": self._fake_yf(requested)}), \
-             mock.patch.object(breadth, "SP500_UNIVERSE", tuple(members)), \
-             mock.patch.object(gics, "load_snapshot", return_value=_snap(members)):
+             mock.patch.object(breadth, "SP500_UNIVERSE", ("STALE",)), \
+             mock.patch.object(gics, "refresh_snapshot", return_value=_snap(members)):
             data = breadth._build_cache()
+            universe = breadth.SP500_UNIVERSE
+        self.assertEqual(set(universe), set(members), "the build did not take the refreshed membership")
+        self.assertNotIn("STALE", requested)
         self.assertEqual(requested.count("ZZZZ"), 1)
         self.assertEqual(requested.count("AAPL"), 1, "a member was fetched twice")
         self.assertTrue(data["gics"] and data["gics"]["sectors"])
@@ -538,7 +646,8 @@ class BreadthIntegrationTests(unittest.TestCase):
     def test_a_failing_breakdown_costs_only_itself(self):
         from ystocker import breadth
         with mock.patch.dict(sys.modules, {"yfinance": self._fake_yf([])}), \
-             mock.patch.object(gics, "load_snapshot", return_value=_snap({"ZZZZ": _member("Semiconductors", 5.0)})), \
+             mock.patch.object(breadth, "SP500_UNIVERSE", breadth.SP500_UNIVERSE), \
+             mock.patch.object(gics, "refresh_snapshot", return_value=_snap({"ZZZZ": _member("Semiconductors", 5.0)})), \
              mock.patch.object(gics, "performance", side_effect=RuntimeError("boom")):
             data = breadth._build_cache()
         self.assertIn("gics", data)
