@@ -303,6 +303,26 @@
           (el && el.isContentEditable)) return;
       var mount = document.querySelector('[data-navsearch] [data-navsearch-toggle]');
       if (!mount) return;
+      if (mount.offsetParent === null) {
+        /* Below the full bar's breakpoint the toggle is hidden along with the
+           rest of the bar, and clicking it would open a panel nobody can see
+           while eating the keystroke. The hamburger menu has a search box of
+           its own, so open that instead. */
+        var burger = document.querySelector('[data-nav="burger"]');
+        var field = document.querySelector('[data-nav="drawer"] [data-navsearch-input]');
+        if (!burger || !field || burger.offsetParent === null) return;
+        e.preventDefault();
+        if (field.offsetParent === null) burger.click();
+        /* Alpine reveals the menu in an animation frame of its own, scheduled
+           after this handler's, so one frame is not enough: a focus() on a
+           field still display:none does nothing, and says so nowhere. */
+        var frames = 0;
+        (function focusWhenShown() {
+          if (field.offsetParent !== null) field.focus();
+          else if (++frames < 30) requestAnimationFrame(focusWhenShown);
+        })();
+        return;
+      }
       e.preventDefault();
       mount.click();
     });
