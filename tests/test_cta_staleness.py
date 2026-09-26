@@ -876,5 +876,63 @@ class FetchDiagnosis(unittest.TestCase):
         self.assertNotIn("\n", reason)
 
 
+class PositioningRegions(unittest.TestCase):
+    """A reading counts if it carries *either* region's figure.
+
+    Requiring the global one dropped the 2026-09-17 note — US length near a
+    one-year low, two weeks and a Fed hike after the global figure sat near the
+    top of its range — and left the card headlining the older, higher number as
+    the latest word on positioning.
+    """
+
+    def setUp(self):
+        from unittest import mock
+        self.mock = mock
+
+    def _payload(self, points):
+        import os
+        with self.mock.patch.object(cta, "_read_fetched", return_value=None), \
+             self.mock.patch.dict(os.environ, {
+                 "GOLDMAN_CTA_DATA_JSON": json.dumps({"positioning": points})}):
+            return cta.get_cta_positioning()
+
+    def test_a_us_only_reading_is_kept(self):
+        points = cta._positioning_points(
+            [{"date": "2026-09-17", "us_equity_bn": 37.3}])
+        self.assertEqual(len(points), 1)
+        self.assertEqual(points[0]["us_equity_bn"], 37.3)
+        self.assertNotIn("global_equity_bn", points[0])
+
+    def test_a_reading_with_no_region_is_still_dropped(self):
+        """A percentile alone is not a position."""
+        self.assertEqual(cta._positioning_points(
+            [{"date": "2026-09-17", "percentile": 12.0}]), [])
+
+    def test_the_headline_is_the_newest_global_reading_not_the_newest_point(self):
+        """The card's headline is global; the last point may now have no
+        global figure to show."""
+        out = self._payload([
+            {"date": "2026-09-02", "global_equity_bn": 146.5},
+            {"date": "2026-09-17", "us_equity_bn": 37.3},
+        ])
+        self.assertEqual(out["latest_positioning"]["date"], "2026-09-02")
+        self.assertEqual(out["latest_us_positioning"]["date"], "2026-09-17")
+
+    def test_no_us_reading_is_none_rather_than_a_global_one(self):
+        out = self._payload([{"date": "2026-09-02", "global_equity_bn": 146.5}])
+        self.assertIsNone(out["latest_us_positioning"])
+
+    def test_the_built_in_series_carries_both_september_readings(self):
+        with self.mock.patch.object(cta, "_read_fetched", return_value=None):
+            out = cta.get_cta_positioning()
+        by_date = {p["date"]: p for p in out["positioning"]}
+        self.assertEqual(by_date["2026-09-02"]["global_equity_bn"], 146.5)
+        self.assertEqual(by_date["2026-09-17"]["us_equity_bn"], 37.3)
+        # Positioning moved on and the triggers did not: no public source has
+        # printed new levels since the 2026-07-28 report, so its date — and the
+        # stale badge that follows from it — must not ride along.
+        self.assertEqual(out["latest"]["report_date"], "2026-07-28")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
