@@ -60,6 +60,14 @@ CHROME_KEYS = {
     "#cbd5e1", "#e2e8f0", "rgba(51,65,85,0.3)",
 }
 
+# Faint in *both* themes, on purpose: the state a mark fades to while another
+# group is emphasised (the GICS rotation map dims every sector but the hovered
+# one). The 3:1 bar exists because a colour chosen to glow on near-black washes
+# out on white; this one is ~1.3:1 on the dark card too, so the mapping keeps it
+# exactly as faint as it was meant to be. A faded mark that cleared 3:1 would sit
+# beside the 3.4:1 fill it is meant to recede from and emphasise nothing.
+FADED_KEYS = {"rgba(100,116,139,0.3)"}
+
 
 def _map_from_base() -> dict[str, str]:
     """Read window.CT's MAP out of base.html as a dict, preserving duplicates."""
@@ -90,20 +98,27 @@ def _rgba(colour: str) -> tuple[float, float, float, float] | None:
     return r, g, b, float(parts[3]) if len(parts) > 3 else 1.0
 
 
-def _contrast_on_white(colour: str) -> float | None:
-    """WCAG contrast ratio against white, compositing any alpha over white."""
+def _contrast(colour: str, bg: tuple[int, int, int]) -> float | None:
+    """WCAG contrast ratio against ``bg``, compositing any alpha over it."""
     parsed = _rgba(colour)
     if parsed is None:
         return None
     r, g, b, a = parsed
-    r, g, b = (v * a + 255 * (1 - a) for v in (r, g, b))
+    fg = tuple(v * a + s * (1 - a) for v, s in zip((r, g, b), bg))
 
-    def lin(v: float) -> float:
-        v /= 255.0
-        return v / 12.92 if v <= 0.03928 else ((v + 0.055) / 1.055) ** 2.4
+    def lum(rgb: tuple[float, ...]) -> float:
+        def lin(v: float) -> float:
+            v /= 255.0
+            return v / 12.92 if v <= 0.03928 else ((v + 0.055) / 1.055) ** 2.4
+        return 0.2126 * lin(rgb[0]) + 0.7152 * lin(rgb[1]) + 0.0722 * lin(rgb[2])
 
-    lum = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b)
-    return round(1.05 / (lum + 0.05), 2)
+    hi, lo = sorted((lum(fg), lum(bg)), reverse=True)
+    return round((hi + 0.05) / (lo + 0.05), 2)
+
+
+def _contrast_on_white(colour: str) -> float | None:
+    """WCAG contrast ratio against white, compositing any alpha over white."""
+    return _contrast(colour, (255, 255, 255))
 
 
 class ThemeTable(unittest.TestCase):
@@ -133,7 +148,7 @@ class ThemeTable(unittest.TestCase):
         """The light value must clear 3:1, or the mapping achieved nothing."""
         failures = []
         for key, light in self.map.items():
-            if key in CHROME_KEYS:
+            if key in CHROME_KEYS or key in FADED_KEYS:
                 continue
             ratio = _contrast_on_white(light)
             self.assertIsNotNone(ratio, f"unparseable light value for {key}: {light}")
@@ -144,6 +159,17 @@ class ThemeTable(unittest.TestCase):
             "mapped light-mode colours below 3:1 on white (WCAG 1.4.11): "
             + "; ".join(failures),
         )
+
+    def test_a_faded_colour_is_faint_in_both_themes(self) -> None:
+        """The exemption holds only for a colour that was faint to begin with.
+
+        Otherwise FADED_KEYS is a way to wave through exactly the washed-out
+        series line the 3:1 bar exists to catch.
+        """
+        for key in FADED_KEYS:
+            self.assertIn(key, self.map, f"{key} is exempted but not in the MAP")
+            self.assertLess(_contrast(key, (15, 23, 42)), 2.0, f"{key} is not faint on the dark card")
+            self.assertLess(_contrast_on_white(self.map[key]), 2.0, f"{key}'s light value is not faint")
 
     def test_one_colour_maps_to_one_colour(self) -> None:
         """Two spellings of the same dark colour must not disagree.

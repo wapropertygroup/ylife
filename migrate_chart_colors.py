@@ -50,6 +50,8 @@ LITERALS = [
     "rgba(251,191,36,0.6)", "rgba(251,191,36,0.7)", "rgba(245,158,11,0.6)",
     "rgba(167,139,250,0.5)", "rgba(167,139,250,0.6)", "rgba(167,139,250,0.7)",
     "rgba(251,146,60,0.6)", "rgba(99,102,241,0.75)",
+    # translucent overlapping fills: a mark, and its faded state
+    "rgba(129,140,248,0.7)", "rgba(100,116,139,0.3)",
     # slate zero lines / muted comparison series. Both alpha spellings occur in
     # the templates and MAP lookup only lowercases and strips spaces — it does
     # not rewrite ".6" into "0.6" — so each spelling is its own key.
