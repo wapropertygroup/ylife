@@ -1,9 +1,11 @@
 {#  The /agents landing, top half: hero, how a run works, the desk, capabilities.
 
     What a signed-out visitor sees at trade-agents.com's front door (nginx maps
-    `/` to /agents) and at /agents on every other host. Included by agents.html
-    only when nobody is signed in and the page is not the embedded panel -- the
-    floating launcher's 240px frame keeps the compact sign-in card instead.
+    `/` to /agents) and at /agents on every other host, and what anyone sees at
+    /home (routes.home), signed in or not. Included by agents.html only for
+    those two views -- never for the embedded panel, whose 240px frame keeps
+    the compact sign-in card. On trade-agents.com it sits under the product's
+    own masthead, _agents_landing_header.html.
 
     Every number is read from `landing` (routes._wiki_facts), not typed here: a
     page that said "3 free runs" would go on saying it after the quota moved.
@@ -11,7 +13,10 @@
     stays in agents.html, because its script and the owner's view share state. #}
 {% import "wiki/_macros.html" as w %}
 {% set product = 'TradeAgents' if brand_is_ta else 'Trading Agents' %}
-{% set signin_href = url_for('main.login', next=url_for('main.agents_page')) %}
+{#  A signed-in reader only reaches this page at /home, and is sent straight to
+    the run form rather than asked to sign in again. #}
+{% set run_href = url_for('main.agents_page') if signed_in
+                  else url_for('main.login', next=url_for('main.agents_page')) %}
 {% set rounds = landing.debate_rounds %}
 {% set risk_rounds = landing.risk_rounds %}
 
@@ -30,8 +35,8 @@
       <span data-l="zh">{{ product }} 让一组 AI 分析师围绕一只股票、一个日期开展研究，再让他们正面交锋——先是多空辩论，再是风险辩论——直到投资组合经理签发一份可以逐轮查看的决策。</span>
     </p>
     <div class="w-actions">
-      <a class="w-btn w-btn-primary" href="{{ signin_href }}">
-        <span data-l="en">Sign in and run</span><span data-l="zh">登录并开始分析</span> <span aria-hidden="true">→</span>
+      <a class="w-btn w-btn-primary" href="{{ run_href }}">
+        {% if signed_in %}<span data-l="en">Run an analysis</span><span data-l="zh">开始分析</span>{% else %}<span data-l="en">Sign in and run</span><span data-l="zh">登录并开始分析</span>{% endif %} <span aria-hidden="true">→</span>
       </a>
       <a class="w-btn" href="{{ url_for('main.docs_home') }}"><span data-l="en">Read the docs</span><span data-l="zh">阅读文档</span></a>
       {% if showcase %}

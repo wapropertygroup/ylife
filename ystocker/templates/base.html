@@ -1,11 +1,12 @@
 {% set _agents_embedded = agent_embedded|default(false) %}
 {# The research-desk launcher is suppressed on /agents itself (it is that page),
+   on /home (the same page's landing, whose every button already leads there),
    and on /login. On a phone the panel is a full-screen sheet, so a launcher there
    competes with the one control the page exists for -- and Google blocks its
    sign-in flow inside an iframe, so the framed copy could not sign anyone in
    anyway. #}
 {% set _agents_floating = not _agents_embedded
-       and request.endpoint not in ('main.agents_page', 'main.login') %}
+       and request.endpoint not in ('main.agents_page', 'main.home', 'main.login') %}
 {#  The share dialog. Gated server-side on being signed in so an anonymous
     reader — including the recipient of a shared link, who lands on a page that
     also extends this template — downloads neither the CSS, the JS nor the markup.
@@ -490,6 +491,12 @@
       x-data='{ navOpen: false, user: {{ current_user|tojson if current_user is defined else "{\"email\":\"\",\"name\":\"\",\"picture\":\"\"}"|safe }} }'>
 
   {% if not _agents_embedded %}
+  {#  A block so one page can swap the whole bar: trade-agents.com's homepage
+      carries the product's own masthead (_agents_landing_header.html) instead
+      of the dashboards. Every script below that reaches into this bar -- the
+      refresh cooldown, navsearch.js, i18n's .lang-toggle-btn -- already
+      tolerates it being absent, because the embedded /agents view omits it. #}
+  {% block site_header %}
   <!-- ── Top navigation bar ──────────────────────────────────────────── -->
   <header data-nav-fit="{{ 1400 if current_user.email else 1280 }}" class="sticky top-0 z-50 bg-white/80 dark:bg-slate-900/80 backdrop-blur border-b border-slate-200 dark:border-slate-800">
     <div class="app-container mx-auto px-4 sm:px-6 flex items-center h-14 gap-4">
@@ -993,6 +1000,7 @@
       </div>
     </div>
   </header>
+  {% endblock %}
   {% endif %}
 
   <!-- ── Main content ─────────────────────────────────────────────────── -->

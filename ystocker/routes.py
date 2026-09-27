@@ -4649,11 +4649,11 @@ def agents_page():
 
     # The landing page's figures (roster, rounds, limits, prices), only for the
     # view that renders it: signed out and full-page. The embedded panel is too
-    # small for a landing and a signed-in reader is here to run something.
+    # small for a landing and a signed-in reader is here to run something --
+    # /home is where a signed-in reader sees it.
     landing = None
     if not email and not embedded:
-        from ystocker import wiki
-        landing = {**_wiki_facts(), "posts": wiki.posts()}
+        landing = _landing_facts()
 
     return render_template(
         "agents.html",
@@ -4672,6 +4672,60 @@ def agents_page():
         # finished reports instead of a dead end.
         showcase=showcase_enabled(),
         landing=landing,
+    )
+
+
+def _landing_facts() -> dict[str, Any]:
+    """What the landing quotes: _wiki_facts, the Research Lab list, and its host.
+
+    ``site`` is the https origin the page's canonical and Open Graph tags are
+    built on -- ``_share_base()``, because ``request.host_url`` says http:// here
+    (no ProxyFix), and a preview card that links to http:// looks broken.
+    """
+    from ystocker import wiki
+
+    return {**_wiki_facts(), "posts": wiki.posts(), "site": _share_base()}
+
+
+@bp.route("/home", strict_slashes=False)
+def home():
+    """The homepage: the /agents landing, whoever is reading.
+
+    /agents shows its landing only to a signed-out visitor, which left the
+    product with no front page its own readers could open -- the owner checking
+    a deploy, or a reader fetching the link to send somebody, got the run form.
+    This is the same page at a stable address, the shape of vibetrading.wiki's
+    /home/ (which the landing is modelled on; the trailing slash is accepted
+    for that reason).
+
+    It renders agents.html's landing branch rather than a copy of it: the
+    sample-report script there also serves a shared ``?job=`` link, and its
+    markup and ids stay in one file. ``signed_in`` stays truthful so the calls
+    to action can say "Run an analysis" instead of asking a signed-in reader to
+    sign in; ``allowed`` and ``quota`` feed only the run form, which the landing
+    branch replaces, so neither is looked up.
+
+    nginx still maps trade-agents.com's ``/`` to /agents, so a signed-in reader's
+    front door is still the run form. This adds a page; it moves nothing.
+    """
+    from ystocker.agent_roles import roles_json
+    from ystocker.agents import environment_report, showcase_enabled
+
+    email = _agent_user()
+    log.info("GET /home (user=%s)", email or "anon")
+    return render_template(
+        "agents.html",
+        peer_groups=list(PEER_GROUPS.keys()),
+        agent_env=environment_report(),
+        signed_in=bool(email),
+        allowed=False,
+        user_email=email or "",
+        quota=None,
+        agent_packs=_agent_packs_for_page(),
+        agent_roles=roles_json(),
+        agent_embedded=False,
+        showcase=showcase_enabled(),
+        landing=_landing_facts(),
     )
 
 

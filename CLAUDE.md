@@ -1442,6 +1442,32 @@ block's script also serves a shared `?job=` link and its ids (`agSample`,
 `agSampleCard`) are read there; moving the markup into a partial would have
 split one script's DOM across two files.
 
+**`/home` is the same landing for everyone, signed in or not** (`routes.home`,
+trailing slash accepted, as on vibetrading.wiki/home/). It exists because the
+rule above left the product with no front page its own readers could see: the
+owner, always signed in, got the run form at trade-agents.com and could not
+check the landing after a deploy. It renders `agents.html`'s landing branch
+(`{% if _landing or not signed_in %}`) rather than a copy, and keeps `signed_in`
+truthful so every call to action says "Run an analysis" → `/agents` instead of
+asking a signed-in reader to sign in. The docs/research bar's Home and "Sample
+reports" links point here, because `/` and `/agents` are the run form once
+signed in — which has no `#samples` to land on. nginx is unchanged: `/` still
+maps to `/agents`.
+
+**On trade-agents.com the landing wears its own masthead**
+(`_agents_landing_header.html`, `.w-top*` in wiki.css) instead of the dashboards
+bar: mark, serif wordmark, Docs · Research Lab · Samples · Pricing · Markets,
+language and theme toggles, one CTA. `agents.html` swaps it in through base.html's
+`{% block site_header %}`; every other page, and the landing on every other host,
+calls `super()` and renders the bar unchanged. Two traps: the masthead must carry
+no `data-nav` attributes (base.html's breakpoint CSS selects
+`header [data-nav="desktop"]` and would hide it), and a test probing for the
+dashboards bar cannot use that string either — the inline CSS spells it on every
+page, so `check_wiki_pages` looks for `id="refreshBtn"`. The landing also names
+`https://trade-agents.com/` as canonical and `og:url` for all three addresses
+that serve it (`/`, `/agents`, `/home`); the preview image's absolute URL is built
+on `_share_base()`, which forces https because no app here installs ProxyFix.
+
 **The page list is a registry, the bodies are files.** `ystocker/wiki.py` holds
 every docs page and post — slug, group, dates, and titles/summaries/tags as
 `{"en", "zh"}` pairs — and the sidebar, pager, index and browser tab all read it.
