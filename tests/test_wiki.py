@@ -142,6 +142,7 @@ class ContentFileTests(unittest.TestCase):
 
     def test_every_english_block_has_its_chinese_partner(self):
         paths = [*WIKI.rglob("*.html"),
+                 TEMPLATES / "_agents_landing_header.html",
                  TEMPLATES / "_agents_landing_top.html",
                  TEMPLATES / "_agents_landing_bottom.html",
                  TEMPLATES / "agents.html"]

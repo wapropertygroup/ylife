@@ -11,9 +11,12 @@ broken Homebrew pyexpat this repo's dev checkout has (see
 
 What it pins, beyond "every page answers 200":
 
-* the landing is shown to exactly one audience — signed out, full page — and
-  never to the embedded panel (a 240px frame) or to a signed-in reader, who is
-  here to run something;
+* /agents shows the landing to exactly one audience — signed out, full page —
+  and never to the embedded panel (a 240px frame) or to a signed-in reader, who
+  is here to run something; /home shows it to everyone, and does not ask a
+  signed-in reader to sign in;
+* the landing wears trade-agents.com's own masthead there and only there, and
+  names one canonical address for the three that serve it;
 * an unknown docs or post slug is a 404 that still renders navigation, not a
   bare error page;
 * the figures the pages quote are the ones the code enforces (free runs, the
@@ -87,6 +90,17 @@ def _build_app():
 
 
 LANDING_MARK = 'id="lpTitle"'
+# The run page's own heading, which the landing replaces. Not the run button:
+# that sits behind the allowlist, which this hermetic app's reader is not on.
+RUN_PAGE_MARK = 'data-i18n="agents.title"'
+MASTHEAD_MARK = "data-w-top"
+# An element only base.html's bar renders. Not `data-nav="desktop"`, which the
+# page's inline breakpoint CSS spells out on every page, bar or no bar.
+DASHBOARD_BAR_MARK = 'id="refreshBtn"'
+FLOAT_MARK = 'id="agentsFloatingRoot"'
+SIGNIN_NEXT = "/agents"
+LOCAL = "http://localhost"
+TA = "http://trade-agents.com"      # plain http: nginx terminates TLS in front
 
 
 class WikiPages(unittest.TestCase):
@@ -204,6 +218,100 @@ class WikiPages(unittest.TestCase):
         html = self._get("/guide").get_data(as_text=True)
         self.assertIn('href="/docs"', html)
         self.assertIn('href="/research"', html)
+
+    # ── /home ─────────────────────────────────────────────────────────────
+    def _as_reader(self, path, base_url=LOCAL):
+        """GET `path` signed in. The session is set on the host being asked:
+        a cookie minted for localhost is not sent to trade-agents.com."""
+        with self.client.session_transaction(base_url=base_url) as s:
+            s["user_email"] = "reader@example.com"
+        try:
+            return self._get(path, base_url=base_url).get_data(as_text=True)
+        finally:
+            with self.client.session_transaction(base_url=base_url) as s:
+                s.clear()
+
+    def test_home_is_the_landing_for_a_signed_out_visitor(self):
+        r = self._get("/home")
+        self.assertEqual(r.status_code, 200)
+        html = r.get_data(as_text=True)
+        self.assertIn(LANDING_MARK, html)
+        self.assertIn('id="samples"', html)
+        self.assertIn('id="pricing"', html)
+        self.assertIn(f"login?next={SIGNIN_NEXT}", html)
+
+    def test_home_takes_vibetradings_trailing_slash_too(self):
+        r = self._get("/home/")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn(LANDING_MARK, r.get_data(as_text=True))
+
+    def test_home_is_the_landing_for_a_signed_in_reader_too(self):
+        # The whole point of the page: /agents gives this reader the run form.
+        html = self._as_reader("/home")
+        self.assertIn(LANDING_MARK, html)
+        self.assertIn('id="agSample"', html)
+        self.assertNotIn(RUN_PAGE_MARK, html)
+
+    def test_home_does_not_ask_a_signed_in_reader_to_sign_in(self):
+        html = self._as_reader("/home")
+        self.assertNotIn(f"login?next={SIGNIN_NEXT}", html)
+        self.assertIn('<a class="w-btn w-btn-primary" href="/agents">', html)
+        self.assertIn("Run an analysis", html)
+
+    def test_home_does_not_float_a_launcher_for_the_page_it_is(self):
+        self.assertNotIn(FLOAT_MARK, self._get("/home").get_data(as_text=True))
+        self.assertIn(FLOAT_MARK, self._get("/guide").get_data(as_text=True))
+
+    def test_the_wiki_bar_goes_home_to_home(self):
+        # Not `/` or /agents, which a signed-in reader gets as the run form --
+        # with no #samples for the bar's "Sample reports" link to land on.
+        html = self._get("/docs/overview").get_data(as_text=True)
+        self.assertIn('<a class="w-bar-brand" href="/home">', html)
+        self.assertIn('href="/home#samples"', html)
+
+    # ── the masthead ──────────────────────────────────────────────────────
+    def test_trade_agents_landing_wears_its_own_masthead(self):
+        # /agents is what nginx serves for trade-agents.com's `/`.
+        for path in ("/agents", "/home"):
+            with self.subTest(path=path):
+                html = self._get(path, base_url=TA).get_data(as_text=True)
+                self.assertIn(LANDING_MARK, html)
+                self.assertIn(MASTHEAD_MARK, html)
+                self.assertNotIn(DASHBOARD_BAR_MARK, html)
+                self.assertIn('class="w-top-btn lang-toggle-btn"', html)
+                self.assertIn('onclick="toggleTheme()"', html)
+
+    def test_the_masthead_follows_sign_in(self):
+        out = self._get("/home", base_url=TA).get_data(as_text=True)
+        self.assertIn(f'<a class="w-btn w-btn-sm" href="/login?next={SIGNIN_NEXT}">', out)
+        inside = self._as_reader("/home", base_url=TA)
+        self.assertIn(MASTHEAD_MARK, inside)
+        self.assertIn('<a class="w-btn w-btn-primary w-btn-sm" href="/agents">', inside)
+
+    def test_yStocker_keeps_its_own_bar_on_the_landing(self):
+        # Off trade-agents.com the landing is one section of yStocker.
+        for path in ("/agents", "/home"):
+            with self.subTest(path=path):
+                html = self._get(path).get_data(as_text=True)
+                self.assertIn(LANDING_MARK, html)
+                self.assertIn(DASHBOARD_BAR_MARK, html)
+                self.assertNotIn(MASTHEAD_MARK, html)
+
+    def test_the_run_page_keeps_the_dashboard_bar_on_trade_agents_too(self):
+        html = self._as_reader("/agents", base_url=TA)
+        self.assertIn(RUN_PAGE_MARK, html)
+        self.assertIn(DASHBOARD_BAR_MARK, html)
+        self.assertNotIn(MASTHEAD_MARK, html)
+
+    def test_the_landing_names_one_address_for_its_three(self):
+        for path in ("/agents", "/home"):
+            with self.subTest(path=path):
+                html = self._get(path, base_url=TA).get_data(as_text=True)
+                self.assertIn('<link rel="canonical" href="https://trade-agents.com/">', html)
+                self.assertIn('<meta property="og:url" content="https://trade-agents.com/">', html)
+                # https even though the request reached Flask as plain http.
+                self.assertIn('<meta property="og:image" content="https://trade-agents.com/static/', html)
+        self.assertNotIn('rel="canonical"', self._get("/home").get_data(as_text=True))
 
 
 if __name__ == "__main__":

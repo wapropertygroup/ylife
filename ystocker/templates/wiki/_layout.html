@@ -10,7 +10,10 @@
     sees it. #}
 {% import "wiki/_macros.html" as w %}
 {% set product = 'TradeAgents' if brand_is_ta else 'Trading Agents' %}
-{% set home_href = '/' if brand_is_ta else url_for('main.agents_page') %}
+{#  /home, not `/` or /agents: both of those are the run form once a reader is
+    signed in, which is not a home, and has no #samples for the "Sample reports"
+    link below to land on. /home is the landing whoever is reading. #}
+{% set home_href = url_for('main.home') %}
 
 {% block body_class %} w-paper{% endblock %}
 

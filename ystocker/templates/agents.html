@@ -13,8 +13,28 @@
 {% set _landing = landing %}
 {% block body_class %}{% if _landing %} w-paper{% endif %}{% endblock %}
 {% block head_extra %}{% if _landing %}{% include "wiki/_head.html" %}
-<meta name="description" content="{{ 'TradeAgents' if brand_is_ta else 'Trading Agents' }} seats a team of AI analysts on one stock and one date, makes a bull and a bear argue it out, and ends with a portfolio manager's rating you can read turn by turn. Research, not advice.">
+{% set _lp_name = 'TradeAgents' if brand_is_ta else 'Trading Agents' %}
+{% set _lp_desc = _lp_name ~ " seats a team of AI analysts on one stock and one date, makes a bull and a bear argue it out, and ends with a portfolio manager's rating you can read turn by turn. Research, not advice." %}
+<meta name="description" content="{{ _lp_desc }}">
+{#  One page, three addresses on trade-agents.com -- `/` (nginx maps it here),
+    /agents and /home -- so a crawler, which is always signed out, is told which
+    one to index. The preview tags are what a pasted link shows in WeChat,
+    iMessage or Slack; the image is the app icon, as a small summary card, since
+    a homepage has no report to draw a 1200x630 card from. #}
+{% if brand_is_ta %}<link rel="canonical" href="https://trade-agents.com/">{% endif %}
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="{{ _lp_name }}">
+<meta property="og:title" content="{{ _lp_name }} — every ticker gets a research committee">
+<meta property="og:description" content="{{ _lp_desc }}">
+{% if brand_is_ta %}<meta property="og:url" content="https://trade-agents.com/">{% endif %}
+<meta property="og:image" content="{{ _landing.site }}{{ url_for('static', filename='img/pwa-icon-512.png') }}">
+<meta name="twitter:card" content="summary">
 {% endif %}{% endblock %}
+
+{#  trade-agents.com's landing wears the product's own masthead, as its model
+    vibetrading.wiki/home/ does, instead of the dashboards bar. On every other
+    host the landing is one section of yStocker and keeps yStocker's bar. #}
+{% block site_header %}{% if _landing and brand_is_ta %}{% include "_agents_landing_header.html" %}{% else %}{{ super() }}{% endif %}{% endblock %}
 
 {% block content %}
 <script src="{{ url_for('static', filename='markdown.js') }}?v={{ cache_bust or 'dev' }}"></script>
@@ -853,7 +873,10 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
 </div>
 {% endif %}
 
-{% if not signed_in %}
+{#  The landing whenever one was built for this page (signed out, or /home for
+    anyone); otherwise the compact card for a signed-out reader, and the run
+    form below for everyone else. #}
+{% if _landing or not signed_in %}
 {% if _landing %}
 {% include "_agents_landing_top.html" %}
 {% else %}
@@ -921,9 +944,16 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
   <div class="ag-report" id="agSampleReport"></div>
   <p class="text-xs text-slate-500 mt-5 pt-4 border-t border-slate-200 dark:border-slate-800">
     <span data-i18n="agents.sample_cta">Want this for your own ticker and date?</span>
+    {% if signed_in %}
+    {# Only reachable on /home: a signed-in reader anywhere else gets the run
+       form, not the samples. #}
+    <a href="{{ url_for('main.agents_page') }}"
+       class="text-indigo-700 dark:text-indigo-400 hover:underline" data-i18n="agents.run">▶ Run analysis</a>
+    {% else %}
     <a href="{{ url_for('main.login', next=url_for('main.agents_page')) }}"
        {% if agent_embedded %}target="_top"{% endif %}
        class="text-indigo-700 dark:text-indigo-400 hover:underline" data-i18n="nav.sign_in">Sign In</a>
+    {% endif %}
   </p>
 </div>
 {% if _landing %}</section>{% endif %}
