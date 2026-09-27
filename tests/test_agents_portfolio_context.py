@@ -9,20 +9,25 @@ run.
 The tests that matter most are the disclosure ones, and the two guards are
 deliberately *not* symmetric. ``build_portfolio_context`` failing open
 (returning "") is safe on its own, but what happens next to a report built from
-that block differs by path: the anonymous showcase (``agents._is_showcase``)
-refuses one unconditionally, because that path publishes automatically, to
-strangers, with no owner in the loop at all. Explicit sharing (``share.create``)
-does not refuse — the account holder may send their own portfolio-bearing
-report to somebody they choose, because it is their report and their call, made
-by their own signed-in action. Once such a link is sent it is still not
-recoverable — the recipient needs no sign-in and the report text can still
-quote specific positions — which is why the UI shows a stronger warning for
-exactly this case (share.js) rather than treating it like any other share.
+that block differs by path: the anonymous showcase publishes automatically, to
+strangers, with no owner in the loop at all, so it serves such a run only
+through ``agents.portfolio_blind_report`` -- the turns written before the block
+was read, never the five seats that were handed it (``TestPortfolioWiring``
+reads which seats those are out of the TradingAgents checkout). Explicit sharing
+(``share.create``) does not withhold anything -- the account holder may send
+their own portfolio-bearing report to somebody they choose, because it is their
+report and their call, made by their own signed-in action. Once such a link is
+sent it is still not recoverable — the recipient needs no sign-in and the report
+text can still quote specific positions — which is why the UI shows a stronger
+warning for exactly this case (share.js) rather than treating it like any other
+share.
 """
 
 from __future__ import annotations
 
+import re
 import unittest
+from pathlib import Path
 from unittest import mock
 
 from ystocker import agents
@@ -158,8 +163,8 @@ class TestBuildPortfolioContext(unittest.TestCase):
 
 
 class TestDisclosureGuards(unittest.TestCase):
-    """The showcase never publishes a portfolio-bearing run; sharing it
-    explicitly is the account holder's own call to make.
+    """The showcase never publishes what a portfolio-bearing run's decision
+    seats wrote; sharing it explicitly is the account holder's own call to make.
     """
 
     def _job(self, **over):
@@ -168,22 +173,23 @@ class TestDisclosureGuards(unittest.TestCase):
         job.update(over)
         return job
 
-    def test_showcase_excludes_a_portfolio_run(self):
-        # The riskier of the two paths, and the one guard that stays absolute:
-        # the showcase needs no token and no owner action at all.
+    def test_showcase_lists_a_portfolio_run(self):
+        # It used to be refused outright, and since every run by a holder with
+        # positions carries a portfolio, that froze the public sample at the
+        # day the feature shipped. Listing it is safe because the body is only
+        # ever served through the withholding copy -- see TestShowcaseCopy.
         with mock.patch.object(agents, "showcase_enabled", return_value=True), \
              mock.patch.object(agents, "showcase_emails", return_value=set()):
             self.assertTrue(agents._is_showcase(self._job()))
-            self.assertFalse(
+            self.assertTrue(
                 agents._is_showcase(self._job(portfolio_context=True)))
 
-    def test_showcase_exclusion_hides_it_from_the_listing_too(self):
-        # Checked in _is_showcase rather than _publishable, so the run does not
-        # appear as a title whose body then 404s.
-        import inspect
-
-        self.assertIn("portfolio_context",
-                      inspect.getsource(agents._is_showcase))
+    def test_the_listing_never_carries_a_body_or_the_flag(self):
+        listed = agents._publishable(self._job(portfolio_context=True,
+                                               pm_levels={"position_size_pct": 20}))
+        self.assertNotIn("report", listed)
+        self.assertNotIn("portfolio_context", listed)
+        self.assertNotIn("pm_levels", listed)
 
     def test_share_now_allows_a_portfolio_run(self):
         # Reversed from a hard refusal, at the account holder's own request --
@@ -320,3 +326,206 @@ class TestStructuredTail(unittest.TestCase):
     def test_child_emits_the_fields(self):
         for key in ("pm_levels", "gate_compliance", "trader_levels", "risk_gate"):
             self.assertIn(f'"{key}": _plain', agents._RUNNER, key)
+
+
+# A report in the package's own shape (tradingagents/reporting.py): the title
+# and stamp, then five numbered team blocks of ``### Seat`` turns. Every turn
+# names its speaker twice -- once before and once after a subheading of its own,
+# which must stay inside the turn -- so a test can say exactly who a copy kept.
+_TEAMS = {
+    "I. Analyst Team Reports": ["Market Analyst", "Sentiment Analyst",
+                                "News Analyst", "Quality Analyst", "Valuation Analyst"],
+    "II. Research Team Decision": ["Bull Researcher", "Bear Researcher",
+                                   "Research Manager"],
+    "III. Trading Team Plan": ["Trader"],
+    "IV. Risk Management Team Decision": ["Aggressive Analyst",
+                                          "Conservative Analyst", "Neutral Analyst"],
+    "V. Portfolio Manager Decision": ["Portfolio Manager"],
+}
+_PUBLISHED = {s for team in list(_TEAMS)[:2] for s in _TEAMS[team]}
+_WITHHELD = {s for team in list(_TEAMS)[2:] for s in _TEAMS[team]}
+
+
+def _report(preamble_extra: str = "") -> str:
+    lines = ["# Trading Analysis Report: NVDA", "", "Generated: 2026-09-21 19:16:50", ""]
+    if preamble_extra:
+        lines += [preamble_extra, ""]
+    for team, seats in _TEAMS.items():
+        lines += [f"## {team}", ""]
+        for seat in seats:
+            lines += [f"### {seat}", f"said-by<{seat}>", "",
+                      "## 1. A subheading of its own", f"more-from<{seat}>", ""]
+    return "\n".join(lines)
+
+
+class TestShowcaseCopy(unittest.TestCase):
+    """What a stranger may read of a run that was handed the holder's portfolio."""
+
+    def test_keeps_every_seat_written_before_the_portfolio_was_read(self):
+        copy = agents.portfolio_blind_report(_report(), "en")
+        for seat in _PUBLISHED:
+            self.assertIn(f"said-by<{seat}>", copy, seat)
+            self.assertIn(f"more-from<{seat}>", copy, seat)
+
+    def test_drops_every_seat_that_was_handed_it(self):
+        copy = agents.portfolio_blind_report(_report(), "en")
+        for seat in _WITHHELD:
+            self.assertNotIn(f"<{seat}>", copy, seat)
+
+    def test_reads_back_as_the_same_turns_under_the_same_teams(self):
+        # The page and the PDF both split the copy with split_sections, so the
+        # copy must re-parse into exactly the kept turns -- subheadings still
+        # inside them, team dividers still above them.
+        from ystocker.agent_roles import split_sections
+
+        original = [s for s in split_sections(_report())
+                    if s["role"] and s["role"]["key"] in agents._PORTFOLIO_BLIND_ROLES]
+        copy = [s for s in split_sections(agents.portfolio_blind_report(_report()))
+                if s["role"]]
+        self.assertEqual([(s["role"]["key"], s["team"], s["body"]) for s in copy],
+                         [(s["role"]["key"], s["team"], s["body"]) for s in original])
+
+    def test_says_what_is_missing_in_the_reports_own_language(self):
+        from ystocker.agent_roles import split_sections
+
+        for lang, words in (("zh", "本公开版略去了"), ("en", "This public copy omits"),
+                            ("", "This public copy omits")):
+            with self.subTest(lang=lang):
+                sections = split_sections(agents.portfolio_blind_report(_report(), lang))
+                # In the preamble, which the page and the PDF both print.
+                self.assertIsNone(sections[0]["role"])
+                self.assertIn(words, sections[0]["body"])
+
+    def test_the_preamble_keeps_only_its_title_and_stamp(self):
+        copy = agents.portfolio_blind_report(
+            _report(preamble_extra="Holder exposure: NVDA at least 6.2%"), "en")
+        self.assertIn("# Trading Analysis Report: NVDA", copy)
+        self.assertIn("Generated: 2026-09-21 19:16:50", copy)
+        self.assertNotIn("6.2%", copy)
+
+    def test_a_report_it_cannot_parse_publishes_none_of_its_body(self):
+        # Fails closed: no role headings means no turns it can vouch for.
+        copy = agents.portfolio_blind_report("Hold 12% of NVDA, cap is 10%.", "en")
+        self.assertNotIn("12%", copy)
+        self.assertIn("This public copy omits", copy)
+
+    def _served(self, **over):
+        job = {"id": "j1", "user": "owner@example.com", "status": "done",
+               "ticker": "NVDA", "lang": "en", "decision": "Hold",
+               "report": _report(), **over}
+        with mock.patch.object(agents, "get_job", return_value=job), \
+             mock.patch.object(agents, "showcase_enabled", return_value=True), \
+             mock.patch.object(agents, "showcase_emails", return_value=set()):
+            return agents.showcase_job("j1")
+
+    def test_showcase_job_serves_a_portfolio_run_only_as_the_copy(self):
+        out = self._served(portfolio_context=True)
+        for seat in _WITHHELD:
+            self.assertNotIn(f"<{seat}>", out["report"], seat)
+        for seat in _PUBLISHED:
+            self.assertIn(f"said-by<{seat}>", out["report"], seat)
+        # The rating still travels: it is the one line the listing always had.
+        self.assertEqual(out["decision"], "Hold")
+        self.assertNotIn("portfolio_context", out)
+
+    def test_showcase_job_serves_a_run_without_a_portfolio_whole(self):
+        out = self._served()
+        self.assertEqual(out["report"], _report())
+
+    def test_both_public_routes_take_the_body_from_showcase_job(self):
+        # Read, not imported: routes.py pulls in matplotlib, which this
+        # checkout's Homebrew pyexpat cannot load. The JSON view and the PDF are
+        # the only two ways a showcased body leaves the server, and the filter
+        # lives in showcase_job -- a route that read get_job() itself would
+        # serve the whole report.
+        src = (Path(agents.__file__).parent / "routes.py").read_text(encoding="utf-8")
+        for name in ("api_agents_showcase_job", "api_agents_showcase_job_pdf"):
+            with self.subTest(route=name):
+                body = re.search(rf"def {name}\(.*?(?=\n@bp\.route|\ndef |\Z)", src, re.S)
+                self.assertIsNotNone(body, name)
+                self.assertIn("showcase_job(job_id)", body.group(0))
+                self.assertNotIn("get_job(", body.group(0))
+
+
+class TestPortfolioWiring(unittest.TestCase):
+    """Which seats are handed the holder's block, read out of TradingAgents.
+
+    ``agents._PORTFOLIO_BLIND_ROLES`` is a claim about another repository's
+    prompt wiring. A module that starts reading the portfolio -- a new seat, or
+    an existing one rewired upstream -- has to fail here rather than publish.
+    """
+
+    # The agent modules that may read it, and the seat each one speaks as.
+    SPEAKERS = {
+        "trader/trader.py": "trader",
+        "risk_mgmt/aggressive_debator.py": "aggressive",
+        "risk_mgmt/conservative_debator.py": "conservative",
+        "risk_mgmt/neutral_debator.py": "neutral",
+        "managers/portfolio_manager.py": "portfolio",
+    }
+    # Where the block and the gate's ruling are defined, declared or computed.
+    # None of these writes a turn of the report (tradingagents/reporting.py).
+    PLUMBING = {"context.py", "state.py", "risk_mgmt/risk_gate.py"}
+    READS = re.compile(r"get_portfolio_block|get_risk_gate_block|portfolio_context"
+                       r"|portfolio_data|risk_gate")
+
+    def test_only_the_withheld_seats_read_the_portfolio(self):
+        root = Path(agents.TA_DIR) / "tradingagents" / "agents"
+        if not root.is_dir():
+            self.skipTest(f"no TradingAgents checkout at {agents.TA_DIR}")
+        readers = {p.relative_to(root).as_posix() for p in root.rglob("*.py")
+                   if self.READS.search(p.read_text(encoding="utf-8"))}
+        self.assertTrue(readers, "the pattern found nothing; it has gone stale")
+        self.assertEqual(readers - self.PLUMBING - set(self.SPEAKERS), set(),
+                         "a module now reads the holder's portfolio: decide which "
+                         "side of agents._PORTFOLIO_BLIND_ROLES its seat is on")
+
+    def test_no_seat_that_reads_it_is_published(self):
+        for key in self.SPEAKERS.values():
+            self.assertNotIn(key, agents._PORTFOLIO_BLIND_ROLES, key)
+
+    def test_every_published_seat_is_a_real_role_ahead_of_every_withheld_one(self):
+        # Ahead in the cast's order matters as well as membership: a heading
+        # split_sections does not recognise is folded into the turn before it,
+        # and with every withheld seat last, anything unrecognised after the
+        # Trader is folded into a withheld turn rather than a published one.
+        from ystocker.agent_roles import ROLES
+
+        order = [r["key"] for r in ROLES]
+        self.assertLessEqual(agents._PORTFOLIO_BLIND_ROLES, set(order))
+        self.assertLess(max(order.index(k) for k in agents._PORTFOLIO_BLIND_ROLES),
+                        min(order.index(k) for k in self.SPEAKERS.values()))
+
+
+class TestShowcaseSampling(unittest.TestCase):
+    """The newest runs are always on the page; the rest is a stable sample."""
+
+    def _pool(self, n):
+        return [{"id": f"j{i:02d}"} for i in range(n)]    # newest first
+
+    def _jobs(self, pool, **kw):
+        with mock.patch.object(agents, "_showcase_pool", return_value=pool):
+            return agents.showcase_jobs(**kw)
+
+    def test_the_newest_runs_lead_the_list(self):
+        pool = self._pool(40)
+        got = self._jobs(pool)
+        self.assertEqual(len(got), agents.SHOWCASE_SIZE)
+        self.assertEqual(got[:agents.SHOWCASE_NEWEST], pool[:agents.SHOWCASE_NEWEST])
+
+    def test_the_rest_is_sampled_in_order_without_repeats(self):
+        pool = self._pool(40)
+        idx = [pool.index(j) for j in self._jobs(pool)]
+        self.assertEqual(idx, sorted(set(idx)))
+
+    def test_the_sample_holds_still_within_the_hour(self):
+        pool = self._pool(40)
+        self.assertEqual(self._jobs(pool), self._jobs(pool))
+
+    def test_a_small_pool_is_shown_whole(self):
+        pool = self._pool(7)
+        self.assertEqual(self._jobs(pool), pool)
+
+    def test_a_small_limit_is_all_newest(self):
+        pool = self._pool(40)
+        self.assertEqual(self._jobs(pool, limit=2), pool[:2])

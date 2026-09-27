@@ -5102,13 +5102,14 @@ def api_agents_share():
     # It no longer is -- see share.create()'s docstring for the full reasoning,
     # in short: this is always the owner's own report, gated on the `owns()`
     # check above, shared by the owner's own deliberate action to a recipient
-    # the owner chose, which is a different shape of exposure from
-    # agents._is_showcase's *own*, still-unconditional portfolio_context check
-    # (that one publishes automatically to anonymous strangers with no owner in
-    # the loop at all). What the removal does not change: the report text can
-    # still quote specific position weights, and the recipient still needs no
-    # sign-in -- so the flag rides along in the response instead, purely so the
-    # client can show a stronger warning for this case (share.js's showSent()).
+    # the owner chose, which is a different shape of exposure from the
+    # anonymous showcase (that one publishes automatically to strangers with no
+    # owner in the loop at all, so it serves such a run only through
+    # agents.portfolio_blind_report, never whole). What the removal does not
+    # change: the report text can still quote specific position weights, and
+    # the recipient still needs no sign-in -- so the flag rides along in the
+    # response instead, purely so the client can show a stronger warning for
+    # this case (share.js's showSent()).
 
     # Anything unrecognised collapses to "email" -- an older client can only
     # ever send that anyway, and a client sending a channel from the future

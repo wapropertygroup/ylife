@@ -1468,6 +1468,25 @@ page, so `check_wiki_pages` looks for `id="refreshBtn"`. The landing also names
 that serve it (`/`, `/agents`, `/home`); the preview image's absolute URL is built
 on `_share_base()`, which forces https because no app here installs ProxyFix.
 
+**The sample reports publish a portfolio run's first half only.** Since
+2026-08-30 `_run()` attaches the holder's `/assets` portfolio to every run by
+anybody with positions, and `_is_showcase` used to refuse any such run outright.
+That quietly froze the landing's samples at 08-29: on 2026-09-27, 35 of the latest
+60 finished runs were excluded, and the rolling 60-run window was about 25 runs
+from showing nothing at all. Now they are listed, and `showcase_job()` — the one
+door for both the JSON and the PDF route — serves them through
+`portfolio_blind_report()`: title and stamp, every analyst turn, both researchers
+and the Research Manager, then a note in the report's own language. The Trader,
+the three risk debaters and the Portfolio Manager are withheld, because they are
+exactly the five prompts TradingAgents' `get_portfolio_block` feeds, all
+downstream of the Research Manager. The rating still shows; the listing's fields
+are unchanged. `TestPortfolioWiring` reads that wiring out of the TradingAgents
+checkout, so a seat that starts receiving the block fails a test here instead of
+publishing. On the 35 real runs the block's own vocabulary (BREACH, INDETERMINATE,
+持仓上限) occurred only in the withheld turns. The first `SHOWCASE_NEWEST` (4)
+samples are always the newest runs and the rest is the hourly draw, so a finished
+run reaches the landing within the pool's 60s TTL.
+
 **The page list is a registry, the bodies are files.** `ystocker/wiki.py` holds
 every docs page and post — slug, group, dates, and titles/summaries/tags as
 `{"en", "zh"}` pairs — and the sidebar, pager, index and browser tab all read it.
