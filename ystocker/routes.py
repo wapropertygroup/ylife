@@ -4583,6 +4583,18 @@ def _agent_user() -> Optional[str]:
     return session.get("user_email")
 
 
+def _on_trade_agents() -> bool:
+    """Whether this request came in on trade-agents.com.
+
+    The same verdict as the ``brand_is_ta`` template variable -- one host set,
+    ``ystocker.TA_HOSTS``, with the port stripped -- so a route and the page it
+    renders cannot disagree about which brand they are serving.
+    """
+    from ystocker import TA_HOSTS
+
+    return (request.host or "").split(":")[0].lower() in TA_HOSTS
+
+
 def _reader_tz() -> str:
     """The IANA zone the browser reported, or "" .
 
@@ -4644,6 +4656,26 @@ def agents_page():
     email = _agent_user()
     embedded = request.args.get("embed") == "1"
     log.info("GET /agents (user=%s, embedded=%s)", email or "anon", embedded)
+
+    # trade-agents.com's front door goes to the homepage for a visitor who is
+    # not signed in, as vibetrading.wiki's root 302s to /home/. nginx proxies
+    # `/` to this route, so this is where a bare visit to the domain arrives,
+    # and a redirect is what puts "home" in the address bar -- the landing was
+    # already what rendered here. A 302 and no-store, because the answer depends
+    # on the session: a reader who signs in must get the run form at the same
+    # address. Three things keep rendering in place: a signed-in reader, the
+    # embedded panel, and a ?job= deep link, which report emails and shared
+    # /agents?job= URLs point at and whose scripts read the id off this page.
+    # Other hosts are unchanged, including the deploy's health probe.
+    if (not email and not embedded and "job" not in request.args
+            and _on_trade_agents()):
+        target = url_for("main.home")
+        if request.query_string:          # ?lang=zh and campaign tags ride along
+            target += "?" + request.query_string.decode("latin-1")
+        resp = redirect(target, 302)
+        resp.headers["Cache-Control"] = "no-store"
+        return resp
+
     from ystocker import quota
     from ystocker.agent_roles import roles_json
 
@@ -4705,8 +4737,10 @@ def home():
     sign in; ``allowed`` and ``quota`` feed only the run form, which the landing
     branch replaces, so neither is looked up.
 
-    nginx still maps trade-agents.com's ``/`` to /agents, so a signed-in reader's
-    front door is still the run form. This adds a page; it moves nothing.
+    On trade-agents.com this is also where a signed-out visit to the bare domain
+    ends up: nginx proxies `/` to /agents, and agents_page redirects a signed-out
+    visitor here, as vibetrading.wiki's root does to /home/. A signed-in reader's
+    front door is still the run form.
     """
     from ystocker.agent_roles import roles_json
     from ystocker.agents import environment_report, showcase_enabled

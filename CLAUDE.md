@@ -36,7 +36,9 @@ which `li-family.us` cannot. The DNS move has been done: `trade-agents.com`,
 `www.trade-agents.com` and `pay.trade-agents.com` all resolve to the box, the
 apex certificate issued (expires 2026-11-21), and `https://trade-agents.com/`
 serves `/agents` — verified from the box, since the vhost only answers to its own
-`server_name` and a local `curl` needs `--resolve`.
+`server_name` and a local `curl` needs `--resolve`. What `/agents` does with a
+signed-out visitor on this host is a 302 to `/home` (see the TradeAgents wiki
+section below); signed in, the bare domain is the run form.
 
 Two things remain:
 
@@ -1451,8 +1453,19 @@ check the landing after a deploy. It renders `agents.html`'s landing branch
 truthful so every call to action says "Run an analysis" → `/agents` instead of
 asking a signed-in reader to sign in. The docs/research bar's Home and "Sample
 reports" links point here, because `/` and `/agents` are the run form once
-signed in — which has no `#samples` to land on. nginx is unchanged: `/` still
-maps to `/agents`.
+signed in — which has no `#samples` to land on.
+
+**A signed-out visit to trade-agents.com goes to `/home`**, as vibetrading.wiki's
+root 302s to `/home/`. nginx is unchanged — it still proxies `/` to `/agents`,
+so Flask cannot tell the bare domain from `/agents` — and the redirect lives in
+`routes.agents_page`: a 302 with `Cache-Control: no-store`, because the answer
+depends on the session. Three cases stay put, all asserted in
+`check_wiki_pages`: a signed-in reader (the run form, as before); a `?job=` deep
+link, which report emails and shared `/agents?job=` URLs point at and whose
+scripts read the id off that page; and `?embed=1`. The query string rides along,
+so `?lang=zh` survives. It is scoped to the TradeAgents host
+(`_on_trade_agents()`, the same `TA_HOSTS` verdict as `brand_is_ta`), which also
+keeps the deploy's health probe — `stock.li-family.us/agents` — at 200.
 
 **On trade-agents.com the landing wears its own masthead**
 (`_agents_landing_header.html`, `.w-top*` in wiki.css) instead of the dashboards
@@ -1463,10 +1476,11 @@ calls `super()` and renders the bar unchanged. Two traps: the masthead must carr
 no `data-nav` attributes (base.html's breakpoint CSS selects
 `header [data-nav="desktop"]` and would hide it), and a test probing for the
 dashboards bar cannot use that string either — the inline CSS spells it on every
-page, so `check_wiki_pages` looks for `id="refreshBtn"`. The landing also names
-`https://trade-agents.com/` as canonical and `og:url` for all three addresses
-that serve it (`/`, `/agents`, `/home`); the preview image's absolute URL is built
-on `_share_base()`, which forces https because no app here installs ProxyFix.
+page, so `check_wiki_pages` looks for `id="refreshBtn"`. The landing names
+`https://trade-agents.com/home` as canonical and `og:url`, since every signed-out
+road — and a crawler is always signed out — now ends there; the preview image's
+absolute URL is built on `_share_base()`, which forces https because no app here
+installs ProxyFix.
 
 **The sample reports publish a portfolio run's first half only.** Since
 2026-08-30 `_run()` attaches the holder's `/assets` portfolio to every run by
