@@ -101,6 +101,9 @@
   </div>
 </section>
 
+{#  Off trade-agents.com only: there the shell's footer (_ta_footer.html) closes
+    every page, this one included, and a second strip would repeat it. #}
+{% if not _ta_shell %}
 <div class="w-foot">
   <b>{{ product }}</b>
   <nav aria-label="{{ product }}">
@@ -111,5 +114,6 @@
     <a href="{{ url_for('main.contact') }}"><span data-l="en">Contact</span><span data-l="zh">联系我们</span></a>
   </nav>
 </div>
+{% endif %}
 
 </div>

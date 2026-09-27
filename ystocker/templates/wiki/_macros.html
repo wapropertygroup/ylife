@@ -7,3 +7,16 @@
 {% macro t2(d) -%}
 <span data-l="en">{{ d.en }}</span><span data-l="zh">{{ d.zh }}</span>
 {%- endmacro %}
+
+{#  The product mark: the favicon's bars, inline so it is painted with the page
+    rather than fetched after it -- the same mark report_email draws in the mail.
+    One definition for the masthead and the footer, which draw it at two sizes. #}
+{% macro mark(cls) -%}
+<svg class="{{ cls }}" viewBox="0 0 32 32" aria-hidden="true">
+  <rect width="32" height="32" rx="8" fill="#1e293b"/>
+  <rect x="4" y="18" width="5" height="10" rx="1.5" fill="#6366f1"/>
+  <rect x="11" y="12" width="5" height="16" rx="1.5" fill="#38bdf8"/>
+  <rect x="18" y="7" width="5" height="21" rx="1.5" fill="#34d399"/>
+  <rect x="25" y="14" width="3" height="14" rx="1.5" fill="#6366f1" opacity="0.6"/>
+</svg>
+{%- endmacro %}

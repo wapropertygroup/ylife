@@ -1,7 +1,45 @@
 {% extends "base.html" %}
+{#  Contact. On trade-agents.com a TradeAgents page in the product's shell
+    (`ta_page`), laid out like its sign-in page; everywhere else yStocker's
+    card. The same mailto form either way -- nothing is sent from this server --
+    and the address follows the host (brand_email). #}
+{% set ta_page = true %}
+{% set section = 'contact' %}
 {% block title %}yStocker — Contact{% endblock %}
+{% block main_class %}{% if _ta_shell %}w-main{% else %}{{ super() }}{% endif %}{% endblock %}
 
 {% block content %}
+{% if _ta_shell %}
+<div class="w-split">
+  <header class="w-page-head">
+    <p class="w-kicker"><span data-l="en">Contact</span><span data-l="zh">联系我们</span></p>
+    <h1 class="w-page-title"><span data-l="en">Write to the desk.</span><span data-l="zh">给投研台写信。</span></h1>
+    <p class="w-page-lead">
+      <span data-l="en">A question about a run, a report that looks wrong, or something you would like the desk to do — we would like to hear it.</span>
+      <span data-l="zh">关于某次分析的疑问、看起来有误的报告，或是希望投研台具备的功能——都欢迎告诉我们。</span>
+    </p>
+    <p class="w-page-meta"><b>Yuanxi Li</b> · <a class="w-textlink" href="mailto:{{ brand_email }}">{{ brand_email }}</a></p>
+  </header>
+
+  <div class="w-card w-panel">
+    <h2 class="w-panel-title"><span data-l="en">Send a message</span><span data-l="zh">发送消息</span></h2>
+    <p class="w-panel-sub"><span data-l="en">This opens your own mail app with the message filled in.</span><span data-l="zh">将打开你自己的邮件应用，并填好内容。</span></p>
+    <form action="mailto:{{ brand_email }}" method="get" enctype="text/plain">
+      <label class="w-field"><span data-i18n="contact.subject">Subject</span>
+        <input class="w-input" type="text" name="subject" placeholder="e.g. Bug report, feature request…"
+               data-i18n-placeholder="contact.subject_ph">
+      </label>
+      <label class="w-field"><span data-i18n="contact.message">Message</span>
+        <textarea class="w-input" name="body" rows="5" placeholder="Describe your question or feedback…"
+                  data-i18n-placeholder="contact.message_ph"></textarea>
+      </label>
+      <div class="w-actions">
+        <button type="submit" class="w-btn w-btn-primary" data-i18n="contact.send_btn">Open in mail app</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% else %}
 
 <div class="max-w-lg mx-auto fade-up">
 
@@ -59,4 +97,5 @@
 
 </div>
 
+{% endif %}
 {% endblock %}

@@ -20,6 +20,12 @@ What it pins, beyond "every page answers 200":
   link and the embedded panel stay put, and no other host is redirected;
 * the landing wears trade-agents.com's own masthead there and only there, and
   names /home as its canonical address;
+* so does every other TradeAgents page there -- docs, research, sign-in,
+  contact, the run page, shared reports -- with the paper plane and one footer,
+  the product's; the same pages elsewhere, and the dashboards everywhere, keep
+  yStocker's bar and footer;
+* sign-in sends a signed-in reader where the link was going, and never off the
+  site, whatever `next` says;
 * an unknown docs or post slug is a 404 that still renders navigation, not a
   bare error page;
 * the figures the pages quote are the ones the code enforces (free runs, the
@@ -93,17 +99,32 @@ def _build_app():
 
 
 LANDING_MARK = 'id="lpTitle"'
-# The run page's own heading, which the landing replaces. Not the run button:
-# that sits behind the allowlist, which this hermetic app's reader is not on.
-RUN_PAGE_MARK = 'data-i18n="agents.title"'
+# The run page's own heading, which the landing replaces -- carried by both its
+# variants, yStocker's and trade-agents.com's. Not the run button: that sits
+# behind the allowlist, which this hermetic app's reader is not on.
+RUN_PAGE_MARK = 'id="agPageTitle"'
 MASTHEAD_MARK = "data-w-top"
 # An element only base.html's bar renders. Not `data-nav="desktop"`, which the
 # page's inline breakpoint CSS spells out on every page, bar or no bar.
 DASHBOARD_BAR_MARK = 'id="refreshBtn"'
 FLOAT_MARK = 'id="agentsFloatingRoot"'
+TA_FOOTER_MARK = '<footer class="w-footer">'
+# The dashboards' footer. Its first line, which only that footer carries.
+YSTOCKER_FOOTER_MARK = 'data-i18n="footer.text"'
+# The menu's markup. Not `data-w-acct` alone, which the masthead's script
+# spells on every page, signed in or not.
+ACCOUNT_MARK = '<div class="w-acct" data-w-acct>'
+RUN_CTA = '<a class="w-btn w-btn-primary w-btn-sm" href="/agents">'
 SIGNIN_NEXT = "/agents"
 LOCAL = "http://localhost"
 TA = "http://trade-agents.com"      # plain http: nginx terminates TLS in front
+
+# Every TradeAgents page there is, signed out: the ones base.html's `_ta_shell`
+# should dress on trade-agents.com and leave as yStocker's everywhere else. A
+# share token that is not one renders the dead-link page, which is the page a
+# stale share mail opens.
+SHELL_PAGES = ("/home", "/docs/overview", "/research", f"/research/{wiki.POSTS[0]['slug']}",
+               "/login", "/contact", "/agents/shared/not-a-token")
 
 
 class WikiPages(unittest.TestCase):
@@ -301,11 +322,23 @@ class WikiPages(unittest.TestCase):
                 self.assertIn(DASHBOARD_BAR_MARK, html)
                 self.assertNotIn(MASTHEAD_MARK, html)
 
-    def test_the_run_page_keeps_the_dashboard_bar_on_trade_agents_too(self):
+    def test_the_run_page_wears_the_masthead_on_trade_agents(self):
+        # A TradeAgents page like the rest: the dashboards' bar is yStocker's.
         html = self._as_reader("/agents", base_url=TA)
         self.assertIn(RUN_PAGE_MARK, html)
+        self.assertIn(MASTHEAD_MARK, html)
+        self.assertNotIn(DASHBOARD_BAR_MARK, html)
+        # Headed in the shell's type, and set in the masthead's column.
+        self.assertIn('<h1 class="w-page-title" id="agPageTitle">', html)
+        self.assertIn('<main class="flex-1 w-main ', html)
+
+    def test_the_run_page_keeps_the_dashboard_bar_elsewhere(self):
+        html = self._as_reader("/agents")
+        self.assertIn(RUN_PAGE_MARK, html)
+        self.assertIn('data-i18n="agents.title"', html)
         self.assertIn(DASHBOARD_BAR_MARK, html)
         self.assertNotIn(MASTHEAD_MARK, html)
+        self.assertIn('<main class="flex-1 app-container mx-auto ', html)
 
     def test_the_landing_names_home_as_its_address(self):
         # A signed-out visit to `/` or /agents lands on /home, and a crawler is
@@ -362,6 +395,146 @@ class WikiPages(unittest.TestCase):
                 r = self._get("/agents", base_url=base)
                 self.assertEqual(r.status_code, 200)
                 self.assertIn(LANDING_MARK, r.get_data(as_text=True))
+
+    # ── trade-agents.com's shell ──────────────────────────────────────────
+    # base.html dresses every TradeAgents page there in the landing's
+    # masthead, paper and footer (`_ta_shell`); elsewhere they are yStocker's.
+    def _shell(self, html, where):
+        self.assertIn(MASTHEAD_MARK, html, where)
+        self.assertNotIn(DASHBOARD_BAR_MARK, html, where)
+        self.assertIn(" w-paper", html, where)
+        self.assertIn("wiki.css", html, where)
+        # One footer, and it is the product's: the landing and the docs each
+        # used to close with a strip of their own above yStocker's footer.
+        self.assertEqual(html.count("<footer"), 1, where)
+        self.assertIn(TA_FOOTER_MARK, html, where)
+        self.assertNotIn(YSTOCKER_FOOTER_MARK, html, where)
+        self.assertNotIn('class="w-foot"', html, where)
+        # The masthead leads to the desk from every page, as /home's did.
+        self.assertNotIn(FLOAT_MARK, html, where)
+
+    def test_every_trade_agents_page_wears_the_shell(self):
+        for path in SHELL_PAGES:
+            with self.subTest(path=path):
+                self._shell(self._get(path, base_url=TA).get_data(as_text=True), path)
+        self._shell(self._as_reader("/agents", base_url=TA), "/agents signed in")
+
+    def test_the_same_pages_are_yStockers_elsewhere(self):
+        for path in SHELL_PAGES:
+            with self.subTest(path=path):
+                html = self._get(path).get_data(as_text=True)
+                self.assertIn(DASHBOARD_BAR_MARK, html)
+                self.assertNotIn(MASTHEAD_MARK, html)
+                self.assertNotIn(TA_FOOTER_MARK, html)
+                self.assertIn(YSTOCKER_FOOTER_MARK, html)
+
+    def test_the_dashboards_keep_their_bar_on_trade_agents(self):
+        # Their bar is how they are navigated. Its logo names TradeAgents there,
+        # so it leads to TradeAgents' front page -- and to the dashboards'
+        # first one everywhere else.
+        html = self._get("/guide", base_url=TA).get_data(as_text=True)
+        self.assertIn(DASHBOARD_BAR_MARK, html)
+        self.assertNotIn(MASTHEAD_MARK, html)
+        self.assertIn(YSTOCKER_FOOTER_MARK, html)
+        self.assertIn('<a href="/home" class="flex items-center gap-2 font-bold text-lg shrink-0">', html)
+        local = self._get("/guide").get_data(as_text=True)
+        self.assertIn('<a href="/markets" class="flex items-center gap-2 font-bold text-lg shrink-0">', local)
+
+    def test_the_masthead_leads_back_to_the_landing_from_elsewhere(self):
+        # Sample reports and Pricing are sections of the landing: anchors there,
+        # links to it everywhere else.
+        home = self._get("/home", base_url=TA).get_data(as_text=True)
+        self.assertIn('href="#samples"', home)
+        self.assertIn('href="#pricing"', home)
+        docs = self._get("/docs/overview", base_url=TA).get_data(as_text=True)
+        self.assertIn('href="/home#samples"', docs)
+        self.assertIn('href="/home#pricing"', docs)
+        self.assertNotIn('href="#pricing"', docs)
+
+    def test_the_masthead_marks_the_section(self):
+        docs = self._get("/docs/overview", base_url=TA).get_data(as_text=True)
+        self.assertIn('<a href="/docs" class="is-current" aria-current="true">', docs)
+        self.assertNotIn('<a href="/research" class="is-current"', docs)
+        post = self._get(f"/research/{wiki.POSTS[0]['slug']}", base_url=TA).get_data(as_text=True)
+        self.assertIn('<a href="/research" class="is-current" aria-current="true">', post)
+        # The wordmark carries the section, as the product bar did.
+        self.assertIn('TradeAgents<small><span data-l="en">Research Lab</span>', post)
+
+    def test_the_wiki_drops_its_own_bar_on_trade_agents(self):
+        # The masthead replaces it; off trade-agents.com it is still the
+        # product's only bar, under yStocker's.
+        self.assertNotIn('class="w-bar"', self._get("/docs/overview", base_url=TA).get_data(as_text=True))
+        self.assertIn('class="w-bar"', self._get("/docs/overview").get_data(as_text=True))
+
+    def test_signed_in_the_masthead_has_an_account_menu(self):
+        docs = self._as_reader("/docs/overview", base_url=TA)
+        self.assertIn(ACCOUNT_MARK, docs)
+        self.assertIn("data-w-signout", docs)
+        self.assertIn("reader@example.com", docs)
+        self.assertIn(RUN_CTA, docs)
+        # Share opens the same dialog it does from the dashboards' bar.
+        self.assertIn('class="w-acct-item" data-share-open=""', docs)
+        # The run page drops the call to action that would lead to itself.
+        run = self._as_reader("/agents", base_url=TA)
+        self.assertIn(ACCOUNT_MARK, run)
+        self.assertNotIn(RUN_CTA, run)
+        self.assertNotIn(ACCOUNT_MARK, self._get("/docs/overview", base_url=TA).get_data(as_text=True))
+
+    def test_the_sign_in_page_is_the_products_on_trade_agents(self):
+        html = self._get("/login", base_url=TA).get_data(as_text=True)
+        self.assertIn('class="w-split"', html)
+        self.assertIn(f"{quota.limit_default()} free runs a day", html)
+        # No Sign in button on the page that is the sign-in.
+        self.assertNotIn(f'href="/login?next={SIGNIN_NEXT}"', html)
+        self.assertNotIn('data-i18n="login.subtitle"', html)
+        self.assertIn('data-i18n="login.subtitle"', self._get("/login").get_data(as_text=True))
+
+    def test_sign_in_sends_a_signed_in_reader_where_the_link_was_going(self):
+        def login(query, base):
+            with self.client.session_transaction(base_url=base) as s:
+                s["user_email"] = "reader@example.com"
+            try:
+                r = self._get("/login" + query, base_url=base)
+            finally:
+                with self.client.session_transaction(base_url=base) as s:
+                    s.clear()
+            self.assertEqual(r.status_code, 302)
+            return r.headers["Location"]
+
+        self.assertEqual(login("?next=/docs/overview", TA), "/docs/overview")
+        # With nowhere named, the run form there -- not the dashboards.
+        self.assertEqual(login("", TA), "/agents")
+        self.assertEqual(login("", LOCAL), "/markets")
+        # Never off the site: each of these is a URL a browser resolves
+        # elsewhere, and `next` is whatever the link's author put in it.
+        for bad in ("https://evil.example/", "//evil.example/", "/\\evil.example",
+                    "/%09/evil.example", "javascript:alert(1)"):
+            with self.subTest(next=bad):
+                self.assertEqual(login("?next=" + bad, TA), "/agents")
+
+    def test_the_dead_share_link_page_quotes_the_enforced_lifetime(self):
+        r = self._get("/agents/shared/not-a-token", base_url=TA)
+        self.assertEqual(r.status_code, 404)
+        self.assertIn(f"after {share.TTL_DAYS} days", r.get_data(as_text=True))
+
+    def test_a_shared_report_is_rendered_and_dressed(self):
+        from unittest import mock
+        from ystocker import routes
+
+        row = {"sharer": "alice@example.com", "note": "Worth a read.",
+               "created_at": "2026-09-27T10:00:00+00:00", "expires_at": 4102444800}
+        job = {"id": "0123456789abcdef", "ticker": "NVDA", "status": "done",
+               "lang": "en", "date": "2026-09-26", "decision": "Buy", "report": "# NVDA"}
+        with mock.patch.object(routes, "_shared_or_404", return_value=(None, row, job)):
+            ta = self._get("/agents/shared/sometoken", base_url=TA).get_data(as_text=True)
+            local = self._get("/agents/shared/sometoken").get_data(as_text=True)
+        self._shell(ta, "/agents/shared/<token>")
+        self.assertIn('<div class="w-callout w-share-note">Worth a read.</div>', ta)
+        self.assertIn(DASHBOARD_BAR_MARK, local)
+        # Both load the Markdown renderer the turns go through. The page never
+        # did, so every shared report arrived as Markdown source.
+        for html in (ta, local):
+            self.assertIn("/static/markdown.js", html)
 
 
 if __name__ == "__main__":
