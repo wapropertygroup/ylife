@@ -86,6 +86,11 @@ MAX_JOBS = 60
 # report on disk.
 SHOWCASE_SIZE = 10
 
+# How many of those are always the newest runs, the rest being sampled. A page
+# that says it shows "finished analyses" and whose top row is a month old reads
+# as abandoned, and a visitor checking whether this is live looks at the top.
+SHOWCASE_NEWEST = 4
+
 # Default to Gemini because this app already holds a Gemini key: SSM parameter
 # /ystocker/GEMINI_API_KEY is loaded into os.environ by _load_secrets_from_ssm()
 # at startup, so a run needs no extra secret in production.
@@ -1669,14 +1674,14 @@ def _is_showcase(job: Optional[dict[str, Any]]) -> bool:
         return False
     if not (job.get("report") or "").strip():
         return False
-    # A run that was given the holder's portfolio is never public. The block
-    # reached only the decision agents, but they write prose and quote what they
-    # were told, so the report can carry position weights and stated limits. This
-    # path is more exposed than sharing: the showcase needs no token, only the
-    # ``/agents`` page. Checked here rather than in ``_publishable`` so it also
-    # excludes the run from the *listing*, not just from having its body served.
-    if job.get("portfolio_context"):
-        return False
+    # A run that was given the holder's portfolio used to be refused here
+    # outright. Since 2026-08-30 every run by a holder with /assets positions
+    # carries one, so the refusal quietly froze the sample: 35 of the latest 60
+    # runs excluded, the newest shown a month old, and the window a few weeks
+    # from empty. It is now listed, and ``showcase_job`` serves it only through
+    # ``portfolio_blind_report``, which keeps the turns that never saw the
+    # block. The rule that makes that safe is the same one as before: nothing
+    # written after the portfolio was read is published to a stranger.
     only = showcase_emails()
     if only and (job.get("user") or "").strip().lower() not in only:
         return False
@@ -1688,6 +1693,75 @@ def _publishable(job: dict[str, Any]) -> dict[str, Any]:
     out = {k: job[k] for k in _PUBLIC_FIELDS if k in job}
     out["has_report"] = bool((job.get("report") or "").strip())
     return out
+
+
+# The turns of a report written before anyone read the holder's portfolio, and
+# so publishable from a run that had one. An allowlist of roles, as
+# ``_PUBLIC_FIELDS`` is of fields. TradingAgents hands the block -- and the risk
+# gate's ruling, which is computed from it -- to exactly five prompts, all
+# downstream of the Research Manager: the Trader, the three risk debaters and
+# the Portfolio Manager (``get_portfolio_block`` in
+# tradingagents/agents/context.py). tests/test_agents_portfolio_context.py reads
+# that wiring out of the TradingAgents checkout, so a seat that starts receiving
+# the block fails a test here instead of publishing. A seat added to the cast
+# later is withheld until somebody puts it on this list.
+#
+# Measured on the 35 portfolio runs in production on 2026-09-27: the block's own
+# vocabulary (BREACH, INDETERMINATE, 持仓上限, "no limits were set") occurs only
+# in those five turns. The turns kept here say "existing holders" and "look
+# through to the constituents" the way every report before 2026-08-30 did.
+_PORTFOLIO_BLIND_ROLES = frozenset({
+    "market", "sentiment", "news", "fundamentals", "earnings", "quality",
+    "valuation", "policy", "hot_money", "lockup",
+    "bull", "bear", "research_mgr",
+})
+
+# The preamble is the package's title and generation stamp. Only those lines
+# survive, so a report builder that one day puts more before the first turn
+# does not publish it by default.
+_PREAMBLE_KEEP = re.compile(r"^(#\s+\S|Generated:)")
+
+# In the report's language, like the report itself -- the page and the PDF both
+# print it where the dropped turns would have begun.
+_WITHHELD_NOTE = {
+    "en": ("> This public copy omits the Trader, the risk team and the Portfolio "
+           "Manager: their turns can quote the account holder's own positions. "
+           "The rating shown is the Portfolio Manager's."),
+    "zh": ("> 本公开版略去了交易员、风险管理团队与投资组合经理的发言：这些发言可能"
+           "引用报告所有者本人的持仓。所示评级为投资组合经理的结论。"),
+}
+
+
+def portfolio_blind_report(report: str, lang: str = "") -> str:
+    """``report`` without the turns that saw the holder's portfolio.
+
+    For the anonymous showcase, and only for a run that carried a portfolio:
+    the preamble's title and stamp, every turn in ``_PORTFOLIO_BLIND_ROLES``
+    under its own team heading, and a note in place of the rest. Re-emitted as
+    the package's own ``## team`` / ``### Role`` headings, so ``split_sections``
+    reads the copy back exactly as it read those turns in the original.
+
+    Fails closed: a report with no role headings at all comes back as its title
+    and the note, never as its body.
+    """
+    from ystocker.agent_roles import split_sections
+
+    head: list[str] = []
+    turns: list[str] = []
+    team: Optional[str] = None
+    for sec in split_sections(report or ""):
+        role = sec.get("role")
+        if role is None:
+            head = [ln for ln in sec["body"].splitlines() if _PREAMBLE_KEEP.match(ln)]
+            continue
+        if role["key"] not in _PORTFOLIO_BLIND_ROLES:
+            continue
+        if sec.get("team") and sec["team"] != team:
+            team = sec["team"]
+            turns.append(f"## {team}")
+        turns.append(f"### {role['name']}\n\n{sec['body']}")
+    note = _WITHHELD_NOTE["zh" if (lang or "").lower().startswith("zh") else "en"]
+    return "\n\n".join([*head, note, *turns]).strip() + "\n"
 
 
 # Pool cache. Building the pool loads up to ``MAX_JOBS`` durable job records
@@ -1727,21 +1801,25 @@ def _showcase_pool() -> list[dict[str, Any]]:
 
 
 def showcase_jobs(limit: int = SHOWCASE_SIZE) -> list[dict[str, Any]]:
-    """A random sample of finished reports, anonymised, newest first.
+    """The newest few finished reports and a sample of the rest, newest first.
 
-    Sampled rather than truncated because that is the honest impression to give:
-    always showing the newest ten would hide everything older, and a visitor who
+    The first ``SHOWCASE_NEWEST`` are always the latest runs, so a report that
+    has just finished is on the page within a minute (the pool's TTL): a list
+    of finished analyses whose top row is weeks old reads as a site nobody
+    uses. The remainder is sampled rather than truncated, because always
+    showing the newest ten would hide everything older, and a visitor who
     reloads learns there is more here than one screenful. The durable query
     returns the latest ``MAX_JOBS`` completed records, so the pool is a rolling
     window over recent work.
 
-    The draw is stable for an hour rather than fresh per request -- see the seed
-    below for why.
+    The sampled part is stable for an hour rather than fresh per request -- see
+    the seed below for why.
     """
     pool = _showcase_pool()
     if len(pool) <= limit:
         sample = list(pool)
     else:
+        newest = min(SHOWCASE_NEWEST, limit)
         # Seeded with the current UTC hour rather than drawn from the global RNG,
         # so the ten hold still for an hour. Re-rolling per request meant a
         # visitor who opened one report and came back to the list found it
@@ -1757,7 +1835,8 @@ def showcase_jobs(limit: int = SHOWCASE_SIZE) -> list[dict[str, Any]]:
         # Sampled by index and re-sorted so the newest-first order of
         # the durable query survives into the result; ``random.sample`` on the
         # records themselves would also shuffle them, and the page groups by date.
-        sample = [pool[i] for i in sorted(rng.sample(range(len(pool)), limit))]
+        rest = sorted(rng.sample(range(newest, len(pool)), limit - newest))
+        sample = pool[:newest] + [pool[i] for i in rest]
     log.info("agents: showcase served %d of %d eligible reports", len(sample), len(pool))
     return sample
 
@@ -1774,7 +1853,12 @@ def showcase_job(job_id: str) -> Optional[dict[str, Any]]:
     if not _is_showcase(job):
         return None
     out = _publishable(job)
-    out["report"] = job.get("report") or ""
+    report = job.get("report") or ""
+    # The one place a showcased body leaves the server -- the JSON route and the
+    # PDF route both come through here -- so the one place it is filtered.
+    if job.get("portfolio_context"):
+        report = portfolio_blind_report(report, job.get("lang") or "")
+    out["report"] = report
     return out
 
 
