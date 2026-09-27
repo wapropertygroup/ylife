@@ -1467,20 +1467,56 @@ so `?lang=zh` survives. It is scoped to the TradeAgents host
 (`_on_trade_agents()`, the same `TA_HOSTS` verdict as `brand_is_ta`), which also
 keeps the deploy's health probe — `stock.li-family.us/agents` — at 200.
 
-**On trade-agents.com the landing wears its own masthead**
-(`_agents_landing_header.html`, `.w-top*` in wiki.css) instead of the dashboards
-bar: mark, serif wordmark, Docs · Research Lab · Samples · Pricing · Markets,
-language and theme toggles, one CTA. `agents.html` swaps it in through base.html's
-`{% block site_header %}`; every other page, and the landing on every other host,
-calls `super()` and renders the bar unchanged. Two traps: the masthead must carry
-no `data-nav` attributes (base.html's breakpoint CSS selects
-`header [data-nav="desktop"]` and would hide it), and a test probing for the
-dashboards bar cannot use that string either — the inline CSS spells it on every
-page, so `check_wiki_pages` looks for `id="refreshBtn"`. The landing names
-`https://trade-agents.com/home` as canonical and `og:url`, since every signed-out
-road — and a crawler is always signed out — now ends there; the preview image's
-absolute URL is built on `_share_base()`, which forces https because no app here
-installs ProxyFix.
+**On trade-agents.com every TradeAgents page wears the landing's shell** —
+the masthead (`_ta_masthead.html`, `.w-top*` in wiki.css), the paper-and-grid
+plane and one footer (`_ta_footer.html`) — in place of the dashboards' bar and
+footer: the landing, docs, research, sign-in, contact, the signed-in run page,
+shared reports and the dead-share-link page. A page opts in with
+`{% set ta_page = true %}` and base.html's `_ta_shell` holds only when the host is
+trade-agents.com too, so on every other host those pages are yStocker's, byte for
+byte. The dashboards never opt in, on any host: their bar is how they are
+navigated, and the masthead's "Markets" leads to them. Their logo does lead to
+`/home` there, since it names TradeAgents. `editorial = true` is the plane and
+wiki.css without the shell, for the landing and the wiki, which are editorial
+everywhere.
+
+The masthead is one bar on every page, as vibetrading.wiki's is: mark, serif
+wordmark (plus "Docs"/"Research Lab" on those sections), Docs · Research Lab ·
+Samples · Pricing · Markets, language and theme toggles, and the call to action.
+It reads the page's `section`: `home` makes Samples and Pricing in-page anchors
+(elsewhere they lead to `/home#…`), `docs`/`research` mark their link current,
+`run` drops the CTA and `login` the Sign in button, each of which would lead to
+the page already open. Signed in it adds an account menu (Portfolio, Share a
+report through share.js's `[data-share-open]`, Sign out, which reloads), and it
+reads sign-in from `current_user`, not the landing's `signed_in`, which only two
+routes pass. `showcase_enabled()` is a Jinja global for the same reason — only
+the landing's routes pass `showcase`. Pages in the shell drop what the shell
+replaces: the wiki's `.w-bar` and the landing's and wiki's `.w-foot` strips render
+off trade-agents.com only, and the floating research-desk launcher is not drawn
+at all, since the masthead leads to the desk from every page. The run page, the
+sign-in and the contact page take `.w-main` as `<main>`'s class, the masthead's
+1228px column, so their edge lines up with the wordmark; `#agDock` and the run
+page's sticky jump bar are re-measured for it (`--w-top-h`, the masthead's
+height), as are the docs sidebar's sticky offsets.
+
+Three traps. The masthead must carry no `data-nav` attributes (base.html's
+breakpoint CSS selects `header [data-nav="desktop"]` and would hide it), and a
+test probing for the dashboards bar cannot use that string either — the inline
+CSS spells it on every page, so `check_wiki_pages` looks for `id="refreshBtn"`;
+likewise the account menu's marker is its markup, because the masthead's script
+spells `data-w-acct` on every page. And under 520px a signed-in reader's CTA gives
+way to the account button — the two do not fit beside the wordmark at 390px.
+
+`/login` now sends a reader who is already signed in to a safe `next`, else to
+the run form on trade-agents.com (it used to be `/markets` on every host), and
+both it and the page's post-Google script accept `next` only as a path on this
+site (`routes._safe_next`): an absolute URL, `//host`, `/\host` or a tab between
+two slashes would make sign-in an open redirect.
+
+The landing names `https://trade-agents.com/home` as canonical and `og:url`,
+since every signed-out road — and a crawler is always signed out — now ends
+there; the preview image's absolute URL is built on `_share_base()`, which forces
+https because no app here installs ProxyFix.
 
 **The sample reports publish a portfolio run's first half only.** Since
 2026-08-30 `_run()` attaches the holder's `/assets` portfolio to every run by
@@ -1578,7 +1614,10 @@ reads only the top level passes on a subdirectory it never saw.
 Tests: `tests/test_wiki.py` (no app — registry, content files both ways, en/zh
 pairing, the roster) and `tests/check_wiki_pages.py` (every page through the Flask
 test client; the landing shown to exactly one audience; 404s that keep their
-navigation). `check_` so `unittest discover` skips it.
+navigation; trade-agents.com's shell on every TradeAgents page there and on none
+elsewhere; sign-in's `next` never leaving the site). `check_` so `unittest
+discover` skips it. `test_wiki`'s en/zh pairing guard reads every template, not a
+list of them, so a new page in the shell is covered without joining one.
 
 ### The AI Markets Brief (`/api/market-brief`)
 

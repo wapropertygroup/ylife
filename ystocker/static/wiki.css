@@ -1,5 +1,7 @@
 /*
- * wiki.css — the editorial pages: the /agents landing, /docs and /research.
+ * wiki.css — the editorial pages: the /agents landing, /docs and /research, and
+ * on trade-agents.com the product's shell around every TradeAgents page there
+ * (masthead, paper plane, footer; see `_ta_shell` in base.html).
  *
  * Hand-written rather than Tailwind utilities for the reason CLAUDE.md gives for
  * the DCA peer panel: css/tailwind.css is *compiled*, so a class that only these
@@ -51,6 +53,10 @@
   --w-read:  Georgia, 'Iowan Old Style', 'Palatino Linotype', 'Songti SC',
              'Noto Serif SC', 'PingFang SC', 'Microsoft YaHei', serif;
   --w-mono:  'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* The masthead's height, border included, for whatever sticks beneath it:
+     the docs sidebar here, the run page's jump bar in agents.html. */
+  --w-top-h: 69px;
 }
 
 .dark {
@@ -119,7 +125,7 @@ html[lang^="zh"] .w-h2 { font-size: clamp(28px, 3.6vw, 46px); line-height: 1.2; 
    through the middle of a word. keep-all confines breaks to punctuation and to
    <wbr> hints placed in the markup; overflow-wrap is the net for a run that
    still does not fit a narrow screen, so it wraps rather than overflows. */
-html[lang^="zh"] :is(.w-display, .w-h2, .w-doc-title, .w-article-title, .w-post-link h2,
+html[lang^="zh"] :is(.w-display, .w-h2, .w-doc-title, .w-page-title, .w-article-title, .w-post-link h2,
                      .w-prose h2, .w-card-title.is-serif) {
   word-break: keep-all; overflow-wrap: anywhere;
 }
@@ -175,12 +181,15 @@ html[lang^="zh"] :is(.w-display, .w-h2, .w-doc-title, .w-article-title, .w-post-
   .w-bar-nav a { white-space: nowrap; }
 }
 
-/* ── Masthead (trade-agents.com's landing) ────────────────────────────────────
-   Stands in for base.html's bar on that one page (_agents_landing_header.html).
-   Sticky and translucent over the paper grid; the rule beneath it appears only
-   once the page scrolls (.is-scrolled), so at the top the bar and the hero read
-   as one plane. The inner column is .w-wrap's 1180px plus <main>'s own side
-   padding, so the wordmark sits flush over the hero's first letter.
+/* ── Masthead (trade-agents.com) ──────────────────────────────────────────────
+   Stands in for base.html's bar on every TradeAgents page there
+   (_ta_masthead.html, drawn when base.html's `_ta_shell` holds). Sticky and
+   translucent over the paper grid; the rule beneath it appears only once the
+   page scrolls (.is-scrolled), so at the top the bar and the page read as one
+   plane. The inner column is .w-wrap's 1180px plus <main>'s own side padding,
+   so the wordmark sits flush over the landing's first letter and the run
+   page's form -- the same on every page, as vibetrading.wiki's bar is, even
+   where a page's own column is wider (the docs).
    The opaque background is the fallback: a browser without color-mix() drops
    that declaration and keeps this one, which is legible if less pretty. */
 .w-top {
@@ -206,12 +215,20 @@ html[lang^="zh"] :is(.w-display, .w-h2, .w-doc-title, .w-article-title, .w-post-
   font-family: var(--w-serif); font-weight: 700; font-size: 20px;
   letter-spacing: -.01em; color: var(--w-ink); white-space: nowrap;
 }
+/* The section a docs or Research Lab page belongs to, set after the wordmark
+   in the mono of the kickers -- the label the product bar carried there. */
+.w-top-name small {
+  margin-left: 8px; font-family: var(--w-mono); font-size: 11px; font-weight: 500;
+  letter-spacing: .12em; text-transform: uppercase; color: var(--w-muted);
+}
+html[lang^="zh"] .w-top-name small { letter-spacing: .06em; }
 .w-top-nav { display: flex; align-items: center; gap: 24px; margin: 0 auto; }
 .w-top-nav a {
   padding: 6px 0; font-size: 14.5px; font-weight: 600; white-space: nowrap;
   color: var(--w-muted); text-decoration: none;
 }
 .w-top-nav a:hover { color: var(--w-ink); }
+.w-top-nav a.is-current { color: var(--w-ink); box-shadow: inset 0 -2px 0 var(--w-accent); }
 .w-top-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 .w-top-btn {
   display: inline-flex; align-items: center; justify-content: center;
@@ -232,18 +249,64 @@ html[lang^="zh"] :is(.w-display, .w-h2, .w-doc-title, .w-article-title, .w-post-
 .dark .w-top-sun { display: block; }
 .dark .w-top-moon { display: none; }
 .w-top-short { display: none; }
+
+/* The account menu, signed in: the reader's picture (or initial) opens a panel
+   under the bar. `hidden` is restated because the UA's [hidden] loses to an
+   author display rule, as .w-run and .w-docs note below. */
+.w-acct { position: relative; }
+.w-acct-btn { width: 36px; padding: 0; overflow: hidden; border-radius: 50%; }
+.w-acct-btn img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.w-acct-initial { font-family: var(--w-serif); font-size: 15px; color: var(--w-accent); }
+.w-acct-menu {
+  position: absolute; top: calc(100% + 10px); right: 0; z-index: 60; width: 248px;
+  padding: 6px; border: 1px solid var(--w-line); border-radius: 8px;
+  background: var(--w-card); box-shadow: var(--w-shadow);
+}
+.w-acct-menu[hidden] { display: none; }
+.w-acct-who { margin: 0 0 6px; padding: 8px 10px 10px; border-bottom: 1px solid var(--w-line); }
+.w-acct-who b { display: block; font-size: 14px; font-weight: 650; color: var(--w-ink); }
+.w-acct-who span {
+  display: block; margin-top: 2px; font-size: 12.5px; color: var(--w-muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.w-acct-item {
+  display: flex; align-items: center; width: 100%; padding: 9px 10px; border: 0; border-radius: 6px;
+  background: none; font: inherit; font-size: 14px; color: var(--w-body);
+  text-align: left; text-decoration: none; cursor: pointer;
+}
+.w-acct-item:hover { background: var(--w-well); color: var(--w-ink); }
+.w-acct-item:focus-visible { outline: 2px solid var(--w-accent); outline-offset: -2px; }
+.w-acct-item:disabled { opacity: .55; cursor: default; }
+.w-acct-sep { height: 1px; margin: 6px 4px; background: var(--w-line); }
+
 @media (max-width: 1040px) {
   .w-top-inner { gap: 20px; }
   .w-top-nav { gap: 18px; }
 }
-/* Below this the links would crowd the controls. They are not lost: the hero,
-   Explore and the footer strip link the same pages, as on vibetrading.wiki,
-   which likewise drops its nav on a phone. */
+/* The full bar -- a section label, five links, and signed in a long call to
+   action beside the account button -- needs about 1130px on a Research Lab page,
+   and measured, it ran the docs page 120px past the viewport at 881px. So the
+   label goes first and a signed-in reader's "Run an analysis" becomes "Run",
+   with a Windows scrollbar's 17px to spare; then, signed in, the links, which a
+   signed-out bar can keep down to 880px. */
+@media (max-width: 1180px) {
+  .w-top-name small { display: none; }
+  .w-top[data-signed-in] .w-top-long { display: none; }
+  .w-top[data-signed-in] .w-top-short { display: inline; }
+}
+@media (max-width: 960px) {
+  .w-top[data-signed-in] .w-top-nav { display: none; }
+  .w-top[data-signed-in] .w-top-actions { margin-left: auto; }
+}
+/* Below this the links would crowd the controls. They are not lost: the
+   landing's hero and Explore, and the footer on every page, link the same
+   pages, as on vibetrading.wiki, which likewise drops its nav on a phone. */
 @media (max-width: 880px) {
   .w-top-nav { display: none; }
   .w-top-actions { margin-left: auto; }
 }
 @media (max-width: 640px) {
+  :root { --w-top-h: 61px; }
   .w-top-inner { min-height: 60px; padding: 0 16px; gap: 12px; }
   .w-top-mark { width: 30px; height: 30px; }
   .w-top-name { font-size: 18px; }
@@ -251,6 +314,20 @@ html[lang^="zh"] :is(.w-display, .w-h2, .w-doc-title, .w-article-title, .w-post-
 @media (max-width: 520px) {
   .w-top-long { display: none; }
   .w-top-short { display: inline; }
+  /* Signed in, the account button takes the call to action's place: at 390px
+     the two do not fit beside the wordmark, and the menu leads to the desk. */
+  .w-top[data-signed-in] .w-top-actions > .w-btn-primary { display: none; }
+}
+/* 360px, the common Android width, ran the signed-out bar 5px past the edge,
+   and 320px by 45: tighter gaps and a smaller wordmark, then the mark itself. */
+@media (max-width: 400px) {
+  .w-top-inner { gap: 10px; }
+  .w-top-actions { gap: 6px; }
+  .w-top-name { font-size: 17px; }
+  .w-top .lang-toggle-btn { padding: 0 8px; }
+}
+@media (max-width: 355px) {
+  .w-top-mark { display: none; }
 }
 
 /* ── Sections ─────────────────────────────────────────────────────────────── */
@@ -427,6 +504,10 @@ a.w-card:focus-visible { outline: 2px solid var(--w-accent); outline-offset: 2px
    the paragraph in the next column. */
 .w-boundary .w-kicker { margin: 26px 0 10px; }
 @media (max-width: 860px) { .w-boundary { grid-template-columns: minmax(0, 1fr); gap: 0; margin-top: 72px; } }
+/* One column, for a reading-width page (a shared report is 56rem): side by side
+   there, the heading broke into four lines beside a two-line paragraph. */
+.w-boundary.is-stacked { grid-template-columns: minmax(0, 1fr); gap: 0; }
+.w-boundary.is-stacked p:not(.w-kicker) { max-width: 40rem; margin-top: 18px; }
 
 .w-foot {
   display: flex; flex-wrap: wrap; gap: 14px 28px; justify-content: space-between; align-items: center;
@@ -437,6 +518,119 @@ a.w-card:focus-visible { outline: 2px solid var(--w-accent); outline-offset: 2px
 .w-foot nav { display: flex; flex-wrap: wrap; gap: 18px; }
 .w-foot a { color: var(--w-body); text-decoration: none; }
 .w-foot a:hover { color: var(--w-ink); }
+
+/* ── trade-agents.com's shell: footer and page column ────────────────────────
+   The footer (_ta_footer.html) closes every page in the shell, in the
+   masthead's column so the two frame the page alike. <main>'s own bottom
+   padding sits above it, which is why its margin is small. */
+.w-footer { margin-top: 40px; border-top: 1px solid var(--w-line); }
+.w-footer-inner { max-width: calc(1180px + 48px); margin: 0 auto; padding: 22px 24px 36px; }
+.w-footer-row {
+  display: flex; flex-wrap: wrap; gap: 14px 28px; justify-content: space-between; align-items: center;
+}
+.w-footer-brand {
+  display: inline-flex; align-items: center; gap: 9px; text-decoration: none;
+  font-family: var(--w-serif); font-weight: 700; font-size: 17px; color: var(--w-ink);
+}
+.w-footer-mark { display: block; width: 24px; height: 24px; flex-shrink: 0; }
+.w-footer nav { display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: 13.5px; }
+.w-footer nav a { color: var(--w-body); text-decoration: none; }
+.w-footer nav a:hover { color: var(--w-ink); }
+.w-footer-brand:focus-visible, .w-footer nav a:focus-visible { outline: 2px solid var(--w-accent); outline-offset: 2px; }
+.w-footer-note { margin: 14px 0 0; max-width: 52rem; font-size: 12.5px; line-height: 1.6; color: var(--w-muted); }
+@media (max-width: 640px) { .w-footer-inner { padding: 20px 16px 30px; } }
+
+/* A page whose content should sit in the masthead's column: <main> takes this
+   in place of the dashboards' .app-container, keeping its own side padding,
+   so 1228px less 2 x 24px is .w-wrap's 1180. */
+.w-main { max-width: calc(1180px + 48px); margin-left: auto; margin-right: auto; }
+
+/* A page head -- kicker, serif title, lead -- for the shell's pages that are
+   not documents: the run page, a shared report, sign-in, contact. The type is
+   .w-doc-title's, a step smaller, since these heads sit above a working page. */
+.w-page-head { padding: 26px 0 30px; }
+.w-page-title {
+  font-family: var(--w-serif); font-weight: 700; color: var(--w-ink);
+  font-size: clamp(36px, 4.6vw, 58px); line-height: 1.02; letter-spacing: -.024em;
+  margin: 12px 0 0; text-wrap: balance;
+}
+html[lang^="zh"] .w-page-title { font-size: clamp(30px, 3.8vw, 46px); line-height: 1.2; letter-spacing: 0; }
+.w-page-title small {
+  margin-left: .35em; font-family: var(--w-read); font-size: .42em; font-weight: 400;
+  letter-spacing: 0; color: var(--w-muted);
+}
+.w-page-lead { margin: 18px 0 0; max-width: 44rem; font-size: 18px; line-height: 1.62; color: var(--w-body); }
+.w-page-note { margin: 10px 0 0; max-width: 44rem; font-size: 14px; line-height: 1.55; color: var(--w-muted); }
+.w-page-meta { margin: 12px 0 0; font-size: 14px; line-height: 1.55; color: var(--w-muted); }
+.w-page-meta b { font-weight: 600; color: var(--w-body); }
+.w-page-links { display: flex; flex-wrap: wrap; gap: 6px 22px; margin: 18px 0 0; }
+
+/* A shared report's head: the ticker as the title, its verdict and the PDF on
+   the same line, and the sharer's note -- typed text, so its line breaks are
+   kept. */
+.w-share-head {
+  display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 24px;
+}
+.w-share-actions { display: flex; align-items: center; gap: 10px; padding-bottom: 6px; }
+.w-share-note { white-space: pre-wrap; margin-bottom: 0; }
+/* A dead share link: nothing else on the page, so the head is set lower and
+   narrower, in the reading measure. */
+.w-gone { max-width: 46rem; padding-top: 72px; min-height: 46vh; }
+
+/* Two columns, words then the thing to do: sign-in and contact. */
+.w-split {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 440px);
+  gap: 72px; align-items: start; padding: 48px 0 16px;
+}
+.w-split .w-page-head { padding: 0; }
+@media (max-width: 900px) {
+  .w-split { grid-template-columns: minmax(0, 1fr); gap: 28px; padding-top: 12px; }
+}
+.w-panel { padding: 26px 26px 24px; }
+.w-panel-title { margin: 0; font-family: var(--w-serif); font-weight: 700; font-size: 22px; line-height: 1.2; color: var(--w-ink); }
+.w-panel-sub { margin: 6px 0 0; font-size: 14px; line-height: 1.55; color: var(--w-muted); }
+.w-btn-wide { width: 100%; }
+/* Google's button, drawn into this box when its script arrives. The height is
+   held in advance so the panel does not jump when it does. */
+.w-gsi { margin-top: 20px; min-height: 40px; }
+
+.w-checks { list-style: none; margin: 22px 0 0; padding: 0; display: grid; gap: 10px; }
+.w-checks li {
+  display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 10px;
+  font-size: 15px; line-height: 1.55; color: var(--w-body);
+}
+.w-checks li::before { content: '✓'; font-weight: 700; color: var(--w-good); }
+
+.w-or {
+  display: flex; align-items: center; gap: 12px; margin: 20px 0;
+  font-family: var(--w-mono); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--w-muted);
+}
+.w-or::before, .w-or::after { content: ''; flex: 1; height: 1px; background: var(--w-line); }
+
+.w-field { display: block; margin-top: 16px; }
+.w-field > span {
+  display: block; margin-bottom: 6px; font-family: var(--w-mono); font-size: 11px;
+  letter-spacing: .12em; text-transform: uppercase; color: var(--w-muted);
+}
+html[lang^="zh"] .w-field > span { letter-spacing: .06em; }
+.w-input {
+  display: block; width: 100%; min-height: 44px; padding: 10px 12px; border-radius: 6px;
+  font: inherit; font-size: 15px; line-height: 1.5; color: var(--w-ink);
+  background: var(--w-well); border: 1px solid var(--w-line);
+}
+.w-input::placeholder { color: var(--w-muted); opacity: 1; }
+.w-input:focus { outline: 2px solid var(--w-accent); outline-offset: 0; border-color: transparent; }
+textarea.w-input { min-height: 140px; resize: vertical; }
+
+/* The shell's sticky things sit under the masthead, which is taller than the
+   dashboards' 56px bar the defaults below were set for. The sidebar only above
+   the width where it stops being sticky: these selectors outrank that media
+   query's plain `.w-side`, and would otherwise cap the phone's open menu. */
+@media (min-width: 861px) {
+  .w-top ~ main .w-side { top: calc(var(--w-top-h) + 16px); max-height: calc(100vh - var(--w-top-h) - 32px); }
+}
+.w-top ~ main .w-toc { top: calc(var(--w-top-h) + 32px); }
+.w-top ~ main .w-prose h2 { scroll-margin-top: calc(var(--w-top-h) + 24px); }
 
 /* ── Docs layout ──────────────────────────────────────────────────────────── */
 .w-docs {

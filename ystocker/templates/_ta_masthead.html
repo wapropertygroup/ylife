@@ -1,0 +1,157 @@
+{#  trade-agents.com's masthead: the product's own bar, on every TradeAgents page
+    there -- the landing, the docs and the Research Lab, sign-in, contact, the
+    run page and a shared report -- in place of the dashboards'. base.html draws
+    it when a page sets `ta_page` and the request came in on trade-agents.com
+    (`_ta_shell`). On every other host those pages are sections of yStocker and
+    keep yStocker's bar; on trade-agents.com the dashboards keep theirs, because
+    it is how they are navigated.
+
+    Modelled on vibetrading.wiki's, which is one bar on every page: a mark and a
+    serif wordmark, a few links, the page's controls. It keeps what a visitor
+    needs (language, theme, one way in, and once signed in an account menu) and
+    drops what belongs to the dashboards -- their nav, ticker search, and
+    ↻ Refresh, which purges the cache and refetches from Yahoo and has nothing to
+    refresh here. They stay one click away through "Markets".
+
+    `section` is set by the page. 'home' makes Sample reports and Pricing in-page
+    anchors, since they are sections of the landing; everywhere else they lead
+    back to it. 'docs' and 'research' mark their link current and label the
+    wordmark, as the product bar those pages carry off trade-agents.com does.
+    'run' drops the call to action that would lead to the page already open, and
+    'login' the Sign in button, for the same reason.
+
+    Signed-in state is read from `current_user`, which every template has, not
+    the landing's `signed_in`, which only agents_page and home pass.
+
+    No `data-nav` attributes: base.html's breakpoint rules select
+    `header [data-nav="desktop"]` and would hide this bar's pieces too.
+    Hand-written CSS (.w-top* in wiki.css), because the Tailwind bundle is
+    compiled and a class only this bar used could be missing from it. #}
+{% import "wiki/_macros.html" as w %}
+{% set product = 'TradeAgents' if brand_is_ta else 'Trading Agents' %}
+{% set _here = section | default('') %}
+{% set _home = '' if _here == 'home' else url_for('main.home') %}
+<header class="w-top" data-w-top{% if current_user.email %} data-signed-in{% endif %}>
+  <div class="w-top-inner">
+    <a class="w-top-brand" href="{{ url_for('main.home') }}">
+      {{ w.mark('w-top-mark') }}
+      <span class="w-top-name">{{ product }}
+        {%- if _here == 'docs' %}<small><span data-l="en">Docs</span><span data-l="zh">文档</span></small>
+        {%- elif _here == 'research' %}<small><span data-l="en">Research Lab</span><span data-l="zh">研究实验室</span></small>
+        {%- endif %}</span>
+    </a>
+
+    <nav class="w-top-nav" aria-label="{{ product }}">
+      <a href="{{ url_for('main.docs_home') }}"{% if _here == 'docs' %} class="is-current" aria-current="true"{% endif %}><span data-l="en">Docs</span><span data-l="zh">文档</span></a>
+      <a href="{{ url_for('main.research_lab') }}"{% if _here == 'research' %} class="is-current" aria-current="true"{% endif %}><span data-l="en">Research Lab</span><span data-l="zh">研究实验室</span></a>
+      {% if showcase_enabled() %}<a href="{{ _home }}#samples"><span data-l="en">Sample reports</span><span data-l="zh">报告样例</span></a>{% endif %}
+      <a href="{{ _home }}#pricing"><span data-l="en">Pricing</span><span data-l="zh">价格</span></a>
+      <a href="{{ url_for('main.markets') }}"><span data-l="en">Markets</span><span data-l="zh">市场</span></a>
+    </nav>
+
+    <div class="w-top-actions">
+      {# `.lang-toggle-btn` is the hook i18n.js relabels (中文 ⇄ EN) on load and
+         on every toggle, exactly as it does the button in base.html's bar. #}
+      <button type="button" class="w-top-btn lang-toggle-btn" onclick="I18n.toggle()"
+              title="English / 中文">中文</button>
+      <button type="button" class="w-top-btn w-top-icon" onclick="toggleTheme()"
+              title="Toggle light / dark" data-i18n-title="nav.theme" aria-label="Toggle light / dark">
+        <svg class="w-top-sun" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/>
+        </svg>
+        <svg class="w-top-moon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
+        </svg>
+      </button>
+      {% if current_user.email %}
+      {% if _here != 'run' %}
+      {# The long label does not fit a phone beside the wordmark and two
+         buttons, so under 520px the bar says only "Run" -- and beside the
+         account button it is dropped there altogether: the menu leads to the
+         same page. #}
+      <a class="w-btn w-btn-primary w-btn-sm" href="{{ url_for('main.agents_page') }}">
+        <span class="w-top-long"><span data-l="en">Run an analysis</span><span data-l="zh">开始分析</span></span>
+        <span class="w-top-short"><span data-l="en">Run</span><span data-l="zh">分析</span></span>
+        <span aria-hidden="true">→</span>
+      </a>
+      {% endif %}
+      {# A disclosure, not an ARIA menu: a few links and two buttons, reached
+         with Tab like any other, so it needs no arrow-key handling to be
+         correct. Sign out reloads the page rather than patching it in place --
+         the run page has nothing to show a signed-out reader, and on
+         trade-agents.com it redirects one to /home. #}
+      <div class="w-acct" data-w-acct>
+        <button type="button" class="w-top-btn w-acct-btn" data-w-acct-btn
+                aria-expanded="false" aria-controls="wAcctMenu" title="{{ current_user.email }}">
+          {% if current_user.picture %}
+          <img src="{{ current_user.picture }}" alt="" width="28" height="28" referrerpolicy="no-referrer">
+          {% else %}
+          <span class="w-acct-initial" aria-hidden="true">{{ (current_user.name or current_user.email)[:1] | upper }}</span>
+          {% endif %}
+          <span class="w-sr"><span data-l="en">Account</span><span data-l="zh">账户</span></span>
+        </button>
+        <div class="w-acct-menu" id="wAcctMenu" hidden>
+          <p class="w-acct-who">
+            {% if current_user.name %}<b>{{ current_user.name }}</b>{% endif %}
+            <span>{{ current_user.email }}</span>
+          </p>
+          {% if _here != 'run' %}
+          <a class="w-acct-item" href="{{ url_for('main.agents_page') }}"><span data-l="en">Run an analysis</span><span data-l="zh">开始分析</span></a>
+          {% endif %}
+          {# Where the positions every run is given live (agents._run attaches
+             them). The page itself is one of the dashboards. #}
+          <a class="w-acct-item" href="{{ url_for('main.assets_page') }}"><span data-l="en">Portfolio</span><span data-l="zh">我的持仓</span></a>
+          {% if _share_ui %}
+          {# share.js binds one delegated listener for [data-share-open]; an
+             empty value opens its report picker. #}
+          <button type="button" class="w-acct-item" data-share-open=""><span data-l="en">Share a report</span><span data-l="zh">分享报告</span></button>
+          {% endif %}
+          <div class="w-acct-sep"></div>
+          <button type="button" class="w-acct-item" data-w-signout><span data-l="en">Sign out</span><span data-l="zh">退出登录</span></button>
+        </div>
+      </div>
+      {% elif _here != 'login' %}
+      <a class="w-btn w-btn-sm" href="{{ url_for('main.login', next=url_for('main.agents_page')) }}">
+        <span data-l="en">Sign in</span><span data-l="zh">登录</span>
+      </a>
+      {% endif %}
+    </div>
+  </div>
+</header>
+<script>
+(function () {
+  // The rule under the bar appears once the page has moved, so at the top the
+  // hero and the bar read as one plane. Passive: it never holds up a scroll.
+  const bar = document.querySelector('[data-w-top]');
+  if (!bar) return;
+  const sync = () => { bar.classList.toggle('is-scrolled', window.scrollY > 8); };
+  sync();
+  window.addEventListener('scroll', sync, { passive: true });
+
+  // The account menu: opens on its button, closes on Escape, on a click
+  // anywhere else, and after any choice in it.
+  const acct = bar.querySelector('[data-w-acct]');
+  if (!acct) return;
+  const btn = acct.querySelector('[data-w-acct-btn]');
+  const menu = acct.querySelector('#wAcctMenu');
+  const setOpen = open => {
+    menu.hidden = !open;
+    btn.setAttribute('aria-expanded', String(open));
+  };
+  btn.addEventListener('click', () => setOpen(menu.hidden));
+  menu.addEventListener('click', e => { if (e.target.closest('a, button')) setOpen(false); });
+  document.addEventListener('click', e => { if (!acct.contains(e.target)) setOpen(false); });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && !menu.hidden) { setOpen(false); btn.focus(); }
+  });
+  const out = menu.querySelector('[data-w-signout]');
+  out.addEventListener('click', () => {
+    out.disabled = true;
+    fetch('/api/auth/logout', { method: 'POST' })
+      .catch(() => {})
+      .then(() => location.reload());
+  });
+})();
+</script>

@@ -1,7 +1,12 @@
 {% extends "base.html" %}
+{#  A TradeAgents page: on trade-agents.com, where share links point, it wears
+    the product's shell (`ta_page`, see base.html) and is headed like the rest
+    of its pages; elsewhere it is yStocker's card. #}
+{% set ta_page = true %}
+{% set section = 'shared' %}
 
 {% block title %}{{ brand_name }} — {{ 'Link expired' }}{% endblock %}
-{% block main_class %}max-w-lg mx-auto{% endblock %}
+{% block main_class %}{% if _ta_shell %}w-main{% else %}max-w-lg mx-auto{% endif %}{% endblock %}
 
 {#  A dedicated 404 rather than error.html, which says "this usually means Yahoo
     Finance could not be reached" and offers a Retry button wired to the cache
@@ -12,6 +17,24 @@
     you can do instead". #}
 
 {% block content %}
+{% if _ta_shell %}
+<header class="w-page-head w-gone">
+  <p class="w-kicker is-quiet" data-i18n="shared.badge">Shared report</p>
+  <h1 class="w-page-title"><span data-l="en">This link is no longer valid.</span><span data-l="zh">此链接已失效。</span></h1>
+  <p class="w-page-lead">
+    <span data-l="en">Shared reports stop working after {{ share_days }} days, and whoever sent it can also revoke it at any time. Ask them for a fresh link, or run an analysis of your own.</span>
+    <span data-l="zh">分享链接在 {{ share_days }} 天后失效，分享者也可以随时撤销。请向对方索取新的链接，或者自己运行一次分析。</span>
+  </p>
+  <div class="w-actions">
+    <a class="w-btn w-btn-primary" href="{{ url_for('main.agents_page') if current_user.email else url_for('main.login', next=url_for('main.agents_page')) }}">
+      <span data-l="en">Run your own analysis</span><span data-l="zh">运行你自己的分析</span> <span aria-hidden="true">→</span>
+    </a>
+    {% if showcase_enabled() %}
+    <a class="w-btn" href="{{ url_for('main.home') }}#samples"><span data-l="en">Read a sample report</span><span data-l="zh">看一份报告样例</span></a>
+    {% endif %}
+  </div>
+</header>
+{% else %}
 <div class="min-h-[60vh] flex items-center justify-center">
   <div class="w-full max-w-md text-center fade-up">
     <div class="inline-flex items-center justify-center w-14 h-14 rounded-2xl border border-slate-300 dark:border-slate-700 mb-5">
@@ -31,4 +54,5 @@
        data-i18n="shared.gone_cta">Run your own analysis</a>
   </div>
 </div>
+{% endif %}
 {% endblock %}

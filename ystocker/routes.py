@@ -82,14 +82,39 @@ def _get_current_user() -> dict:
     return {"email": "", "name": "Anonymous", "picture": ""}
 
 
+def _safe_next(raw: Optional[str]) -> Optional[str]:
+    """``raw`` if it is a path on this site, else None.
+
+    ``next`` comes from the query string, so anything else would make sign-in an
+    open redirect: an absolute URL, a scheme-relative ``//host``, and the
+    near-misses a browser still resolves off-site -- ``/\\host``, and a slash, a
+    tab and a slash, since the URL parser drops tabs and newlines. login.html's
+    script applies the same rule to where it sends a reader after Google.
+    """
+    if not raw or not raw.startswith("/") or raw.startswith("//"):
+        return None
+    if "\\" in raw or any(ord(c) < 0x20 or ord(c) == 0x7F for c in raw):
+        return None
+    return raw
+
+
 @bp.route("/login")
 def login():
     """Dedicated sign-in page."""
     if session.get("user_email"):
-        return redirect(url_for("main.markets"))
+        # Already signed in: go where the link was going. On trade-agents.com
+        # that is the run form by default -- every "Sign in and run" there asks
+        # for it -- not the dashboards, which nobody signed in there for.
+        return redirect(_safe_next(request.args.get("next")) or url_for(
+            "main.agents_page" if _on_trade_agents() else "main.markets"))
+    from ystocker import quota
+
     return render_template(
         "login.html",
         google_client_id=os.environ.get("GOOGLE_CLIENT_ID", ""),
+        # trade-agents.com's sign-in page quotes the allowance, from the module
+        # that enforces it, for the reason routes._wiki_facts gives.
+        free_runs=quota.limit_default(),
     )
 
 
@@ -5299,7 +5324,7 @@ def agents_shared_page(token):
     if err:
         # A rendered page, not JSON: this URL is opened from a mail client by a
         # person, and a bare JSON error is the worst possible landing.
-        return render_template("shared_gone.html"), 404
+        return render_template("shared_gone.html", share_days=share.TTL_DAYS), 404
     log.info("agents: served shared report %s via %s…", job.get("id"), token[:6])
 
     lang = str(row.get("lang") or job.get("lang") or "en")

@@ -141,17 +141,24 @@ class ContentFileTests(unittest.TestCase):
                              f"templates/wiki/{sub}/ files nothing links to")
 
     def test_every_english_block_has_its_chinese_partner(self):
-        paths = [*WIKI.rglob("*.html"),
-                 TEMPLATES / "_agents_landing_header.html",
-                 TEMPLATES / "_agents_landing_top.html",
-                 TEMPLATES / "_agents_landing_bottom.html",
-                 TEMPLATES / "agents.html"]
+        # Every template, not a list of them: the pairing spread beyond the wiki
+        # to the landing, and then to trade-agents.com's shell and the pages in
+        # it (sign-in, contact, the run page, shared reports), and a list is the
+        # thing a new page forgets to join.
+        paths = sorted(TEMPLATES.rglob("*.html"))
         uneven = {}
         for path in paths:
             en, zh = _pair_counts(path)
             if en != zh:
                 uneven[str(path.relative_to(TEMPLATES))] = (en, zh)
         self.assertEqual(uneven, {}, "data-l en/zh counts differ (en, zh)")
+
+    def test_the_pairing_guard_reads_the_shell(self):
+        # Non-vacuous: the masthead and the footer are paired markup, and the
+        # rglob above has to have reached them.
+        for name in ("_ta_masthead.html", "_ta_footer.html"):
+            en, zh = _pair_counts(TEMPLATES / name)
+            self.assertGreater(en, 3, name)
 
     def test_the_pair_count_is_not_vacuous(self):
         en, zh = _pair_counts(WIKI / "docs" / "overview.html")

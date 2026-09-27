@@ -1,7 +1,14 @@
 {% extends "base.html" %}
-{#  Shared chrome for /docs and /research: the paper plane, the product bar under
-    the site header, a footer strip, and a browser tab that follows the language
-    toggle.
+{#  Shared chrome for /docs and /research: the product bar under the site
+    header, a footer strip, and a browser tab that follows the language toggle.
+    The paper plane and wiki.css come from base.html (`editorial`).
+
+    On trade-agents.com these are TradeAgents pages (`ta_page`), so base.html
+    draws the product's masthead and footer around them instead of the
+    dashboards' -- and this layout drops its own bar and strip there, which
+    would only repeat them. The masthead marks the section current in their
+    place, from `section`, which doc.html, post.html and research_index.html
+    set.
 
     `product` is the name these pages give the agents. It follows the host for
     the reason base.html's brand_name does -- trade-agents.com is TradeAgents,
@@ -9,16 +16,15 @@
     this template's top level so every block and every included content file
     sees it. #}
 {% import "wiki/_macros.html" as w %}
+{% set ta_page = true %}
+{% set editorial = true %}
 {% set product = 'TradeAgents' if brand_is_ta else 'Trading Agents' %}
 {#  /home, not `/` or /agents: both of those are the run form once a reader is
     signed in, which is not a home, and has no #samples for the "Sample reports"
     link below to land on. /home is the landing whoever is reading. #}
 {% set home_href = url_for('main.home') %}
 
-{% block body_class %} w-paper{% endblock %}
-
 {% block head_extra %}
-{% include "wiki/_head.html" %}
 {#  The tab title in both languages. I18n.apply() retitles the tab only from an
     i18n.js key, and a page title here comes from the ystocker/wiki.py registry,
     so the script at the end of `content` does it from these two attributes. #}
@@ -29,6 +35,7 @@
 
 {% block content %}
 <div class="w-wide">
+  {% if not _ta_shell %}
   <div class="w-bar">
     <a class="w-bar-brand" href="{{ home_href }}">{{ product }}
       <small>{% if section == 'research' %}<span data-l="en">Research Lab</span><span data-l="zh">研究实验室</span>{% else %}<span data-l="en">Docs</span><span data-l="zh">文档</span>{% endif %}</small>
@@ -44,9 +51,11 @@
       <span data-l="en">Run an analysis</span><span data-l="zh">开始分析</span> <span aria-hidden="true">→</span>
     </a>
   </div>
+  {% endif %}
 
   {% block wiki_body %}{% endblock %}
 
+  {% if not _ta_shell %}
   <div class="w-foot">
     <b>{{ product }}</b>
     <nav aria-label="{{ product }}">
@@ -57,6 +66,7 @@
       <a href="{{ url_for('main.contact') }}"><span data-l="en">Contact</span><span data-l="zh">联系我们</span></a>
     </nav>
   </div>
+  {% endif %}
 </div>
 
 <script>

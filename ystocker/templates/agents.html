@@ -14,8 +14,14 @@
     in this file, since its script is shared with the shared-link (?job=) path
     below. #}
 {% set _landing = landing %}
-{% block body_class %}{% if _landing %} w-paper{% endif %}{% endblock %}
-{% block head_extra %}{% if _landing %}{% include "wiki/_head.html" %}
+{#  A TradeAgents page: on trade-agents.com it wears the product's shell (see
+    `_ta_shell` in base.html), signed in or out. Elsewhere only the landing is
+    editorial -- the run form stays one of yStocker's pages. `section` tells the
+    masthead which of the two this is. #}
+{% set ta_page = true %}
+{% set editorial = true if landing else false %}
+{% set section = 'home' if landing else 'run' %}
+{% block head_extra %}{% if _landing %}
 {% set _lp_name = 'TradeAgents' if brand_is_ta else 'Trading Agents' %}
 {% set _lp_desc = _lp_name ~ " seats a team of AI analysts on one stock and one date, makes a bull and a bear argue it out, and ends with a portfolio manager's rating you can read turn by turn. Research, not advice." %}
 <meta name="description" content="{{ _lp_desc }}">
@@ -35,10 +41,11 @@
 <meta name="twitter:card" content="summary">
 {% endif %}{% endblock %}
 
-{#  trade-agents.com's landing wears the product's own masthead, as its model
-    vibetrading.wiki/home/ does, instead of the dashboards bar. On every other
-    host the landing is one section of yStocker and keeps yStocker's bar. #}
-{% block site_header %}{% if _landing and brand_is_ta %}{% include "_agents_landing_header.html" %}{% else %}{{ super() }}{% endif %}{% endblock %}
+{#  The run page sits in the masthead's column on trade-agents.com (wiki.css
+    .w-main), so the form's edge lines up with the wordmark above it; the
+    landing sets its own column, and off trade-agents.com the run page keeps
+    the dashboards' width. #}
+{% block main_class %}{% if _ta_shell and not _landing %}w-main{% else %}{{ super() }}{% endif %}{% endblock %}
 
 {% block content %}
 <script src="{{ url_for('static', filename='markdown.js') }}?v={{ cache_bust or 'dev' }}"></script>
@@ -379,6 +386,9 @@ window.YSTime = (function () {
   background: var(--ag-float-blur); backdrop-filter: blur(6px);
   border-bottom: 1px solid var(--ag-line);
 }
+/* trade-agents.com's masthead is taller than the dashboards' bar, and says how
+   tall in --w-top-h (wiki.css). */
+.w-top ~ main .ag-jump { top: var(--w-top-h); }
 .ag-jump::-webkit-scrollbar { height: 4px; }
 .ag-jump::-webkit-scrollbar-thumb { background: var(--ag-thumb); border-radius: 2px; }
 .ag-chip {
@@ -433,6 +443,9 @@ window.YSTime = (function () {
   /* The dock is only a positioner; clicks must reach the report underneath. */
   pointer-events: none;
 }
+/* On trade-agents.com <main> is the masthead's column instead (.w-main in
+   wiki.css, 1228px), so half of that. */
+.w-main #agDock { right: max(14px, calc(50vw - 614px)); }
 .ag-dock-btn {
   pointer-events: auto;
   width: 40px; height: 40px; border-radius: 50%;
@@ -523,6 +536,7 @@ window.YSTime = (function () {
      bars and the bubble you asked for is the one thing you cannot see. */
   scroll-margin-top: 112px;
 }
+.w-top ~ main .ag-turn { scroll-margin-top: calc(var(--w-top-h) + 56px); }
 .ag-avatar {
   flex: 0 0 auto; width: 34px; height: 34px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
@@ -859,8 +873,30 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
 
 <!-- ── Header ─────────────────────────────────────────────────────────── -->
 {% if not agent_embedded and not _landing %}
+{% if _ta_shell %}
+{#  trade-agents.com's run page is headed like the rest of its pages -- a
+    kicker, a serif title, a lead -- where yStocker's (below) is one of the
+    dashboards'. The masthead already links Docs and the Research Lab, so only
+    the two pages a reader choosing a model and reading a run is after are
+    repeated here. #}
+<header class="w-page-head">
+  <p class="w-kicker"><span data-l="en">Research desk</span><span data-l="zh">投研台</span></p>
+  <h1 class="w-page-title" id="agPageTitle"><span data-l="en">Run an analysis.</span><span data-l="zh">开始一次分析。</span></h1>
+  <p class="w-page-lead">
+    <span data-l="en">Pick a ticker and a date. The analysts report, a bull and a bear argue it out, the risk team pushes back and a portfolio manager signs the rating — each turn appears here as it is written.</span>
+    <span data-l="zh">选一只股票和一个日期。分析师提交报告，多空双方交锋，风险团队提出质疑，最后由投资组合经理签发评级——每一轮发言写完即出现在这里。</span>
+  </p>
+  <p class="w-page-note" data-i18n="agents.astock_roles">
+    A-share runs add Policy, Hot Money and Lock-up analysts; all nine reports feed both research and risk debates.
+  </p>
+  <p class="w-page-links">
+    <a class="w-textlink" href="{{ url_for('main.docs_page', slug='workflow') }}"><span data-l="en">How a run works →</span><span data-l="zh">一次分析如何运作 →</span></a>
+    <a class="w-textlink" href="{{ url_for('main.docs_page', slug='models') }}"><span data-l="en">Choosing a model →</span><span data-l="zh">如何选择模型 →</span></a>
+  </p>
+</header>
+{% else %}
 <div class="mb-6 fade-up">
-  <h1 class="text-2xl sm:text-3xl font-bold grad-text mb-1" data-i18n="agents.title">Trading Agents</h1>
+  <h1 class="text-2xl sm:text-3xl font-bold grad-text mb-1" id="agPageTitle" data-i18n="agents.title">Trading Agents</h1>
   <p class="text-slate-500 dark:text-slate-400 text-sm" data-i18n="agents.subtitle">
     Runs the TradingAgents multi-agent analysis — analyst, researcher and risk debate rounds — for one ticker and date.
   </p>
@@ -875,6 +911,7 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
     <a href="{{ url_for('main.research_lab') }}" class="text-indigo-700 dark:text-indigo-400 hover:underline" data-i18n="nav.research">Research Lab</a>
   </p>
 </div>
+{% endif %}
 {% endif %}
 
 {#  The landing whenever one was built for this page (signed out, or /home for

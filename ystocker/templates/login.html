@@ -1,10 +1,78 @@
 {% extends "base.html" %}
+{#  Sign-in. Two pages in one file, because the two brands sign in for
+    different things: on trade-agents.com a TradeAgents page in the product's
+    shell (`ta_page`), headed like the landing and selling what an account buys
+    there -- runs -- and everywhere else yStocker's card, which sells the
+    dashboards'. They share the Google handler at the bottom. #}
+{% set ta_page = true %}
+{% set section = 'login' %}
 
 {% block title %}yStocker — {{ 'Sign In' }}{% endblock %}
 
-{% block main_class %}max-w-md mx-auto{% endblock %}
+{% block main_class %}{% if _ta_shell %}w-main{% else %}max-w-md mx-auto{% endif %}{% endblock %}
 
 {% block content %}
+{% if _ta_shell %}
+<div class="w-split">
+  <header class="w-page-head">
+    <p class="w-kicker"><span data-l="en">Sign in</span><span data-l="zh">登录</span></p>
+    <h1 class="w-page-title"><span data-l="en">Sign in to run your first analysis.</span><span data-l="zh">登录，开始你的<wbr>第一次分析。</span></h1>
+    <p class="w-page-lead">
+      <span data-l="en">{{ brand_name }} signs you in with your Google account: no password to create and no card to add. Your free runs start the moment you are in.</span>
+      <span data-l="zh">{{ brand_name }} 使用你的 Google 账号登录：无需设置密码，也无需绑卡。登录后即可开始使用免费次数。</span>
+    </p>
+    <ul class="w-checks">
+      <li><span data-l="en">{{ free_runs }} free runs a day, always spent before any run you buy</span><span data-l="zh">每天 {{ free_runs }} 次免费分析，总是先于购买的次数使用</span></li>
+      <li><span data-l="en">Reports in English or 中文, turn by turn, with a PDF of each</span><span data-l="zh">报告可选中文或英文，逐轮呈现，并附 PDF</span></li>
+      <li><span data-l="en">Share any report with a link that opens without an account</span><span data-l="zh">任何报告都能以链接分享，对方无需账号即可打开</span></li>
+    </ul>
+  </header>
+
+  <div class="w-card w-panel">
+    <h2 class="w-panel-title"><span data-l="en">Continue with Google</span><span data-l="zh">使用 Google 继续</span></h2>
+    <p class="w-panel-sub"><span data-l="en">You come back to the run form once you are signed in.</span><span data-l="zh">登录后将回到分析页面。</span></p>
+    {% if google_client_id %}
+    <div id="g_id_onload"
+         data-client_id="{{ google_client_id }}"
+         data-callback="handleGoogleLoginRedirect"
+         data-auto_prompt="false"></div>
+    <div class="g_id_signin w-gsi"
+         data-type="standard"
+         data-shape="rectangular"
+         data-theme="filled_black"
+         data-text="signin_with"
+         data-size="large"
+         data-width="320"></div>
+    <script>
+      // Google draws its button once, from these attributes, when its script
+      // (async) arrives -- which is after this runs. So they are set to fit the
+      // panel it sits in: the width of the column (within Google's 200-400px),
+      // and on the light theme the outlined button, since a black slab on the
+      // paper reads as a different page's control.
+      (function () {
+        const el = document.currentScript.previousElementSibling;
+        const w = Math.round(el.parentElement.clientWidth
+                             - parseFloat(getComputedStyle(el.parentElement).paddingLeft)
+                             - parseFloat(getComputedStyle(el.parentElement).paddingRight));
+        if (w > 0) el.dataset.width = String(Math.max(200, Math.min(400, w)));
+        if (!document.documentElement.classList.contains('dark')) el.dataset.theme = 'outline';
+      })();
+    </script>
+    {% else %}
+    <div class="w-callout is-warn">
+      <span data-l="en"><strong>Google Sign-In is not configured.</strong> Set <code>GOOGLE_CLIENT_ID</code> in <code>.env</code> to enable it.</span>
+      <span data-l="zh"><strong>尚未配置 Google 登录。</strong>请在 <code>.env</code> 中设置 <code>GOOGLE_CLIENT_ID</code>。</span>
+    </div>
+    {% endif %}
+    <div class="w-or"><span data-l="en">or</span><span data-l="zh">或</span></div>
+    {% if showcase_enabled() %}
+    <a class="w-btn w-btn-wide" href="{{ url_for('main.home') }}#samples"><span data-l="en">Read a sample report first</span><span data-l="zh">先看一份报告样例</span></a>
+    {% else %}
+    <a class="w-btn w-btn-wide" href="{{ url_for('main.docs_home') }}"><span data-l="en">Read the docs first</span><span data-l="zh">先读一读文档</span></a>
+    {% endif %}
+  </div>
+</div>
+{% else %}
 <div class="min-h-[70vh] flex items-center justify-center">
   <div class="w-full max-w-sm">
 
@@ -87,6 +155,7 @@
 
   </div>
 </div>
+{% endif %}
 {% endblock %}
 
 {% block scripts %}
@@ -98,7 +167,12 @@ function handleGoogleLoginRedirect(response) {
     body: JSON.stringify({ credential: response.credential }),
   }).then(r => r.json()).then(data => {
     if (data.ok) {
-      const next = new URLSearchParams(window.location.search).get('next') || '/';
+      // Only to a path on this site. `next` arrives in the query string, and an
+      // absolute or scheme-relative URL here -- or `/\host`, or a tab between two
+      // slashes, which the URL parser drops -- would make this page an open
+      // redirect. routes._safe_next applies the same rule server-side.
+      const raw = new URLSearchParams(window.location.search).get('next') || '';
+      const next = /^\/(?!\/)/.test(raw) && !/[\\\u0000-\u001f\u007f]/.test(raw) ? raw : '/';
       window.location.href = next;
     } else {
       const msg = (window.I18n && I18n.t)

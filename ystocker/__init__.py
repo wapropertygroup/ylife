@@ -413,6 +413,16 @@ def create_app() -> Flask:
                 "brand_is_ta": is_ta,
                 "brand_email": TA_CONTACT_EMAIL if is_ta else CONTACT_EMAIL}
 
+    # trade-agents.com's masthead and footer link "Sample reports" from every page
+    # they sit on, and only the landing's own routes pass `showcase`. A global the
+    # template calls, rather than one more context value, so the dashboards --
+    # which never draw either -- do not look it up on every render.
+    def _showcase_enabled() -> bool:
+        from ystocker.agents import showcase_enabled
+        return showcase_enabled()
+
+    app.jinja_env.globals["showcase_enabled"] = _showcase_enabled
+
     @app.context_processor
     def _inject_auth_context():
         """Make google_client_id + current_user available in every template."""
