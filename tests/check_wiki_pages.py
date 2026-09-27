@@ -15,8 +15,11 @@ What it pins, beyond "every page answers 200":
   and never to the embedded panel (a 240px frame) or to a signed-in reader, who
   is here to run something; /home shows it to everyone, and does not ask a
   signed-in reader to sign in;
+* on trade-agents.com a signed-out visit to the bare domain (which nginx
+  proxies to /agents) is a 302 to /home, while a signed-in reader, a ?job= deep
+  link and the embedded panel stay put, and no other host is redirected;
 * the landing wears trade-agents.com's own masthead there and only there, and
-  names one canonical address for the three that serve it;
+  names /home as its canonical address;
 * an unknown docs or post slug is a 404 that still renders navigation, not a
   bare error page;
 * the figures the pages quote are the ones the code enforces (free runs, the
@@ -271,8 +274,9 @@ class WikiPages(unittest.TestCase):
 
     # ── the masthead ──────────────────────────────────────────────────────
     def test_trade_agents_landing_wears_its_own_masthead(self):
-        # /agents is what nginx serves for trade-agents.com's `/`.
-        for path in ("/agents", "/home"):
+        # /home, and the one /agents view on this host that still renders the
+        # landing in place: a ?job= deep link.
+        for path in ("/home", "/agents?job=0123456789abcdef"):
             with self.subTest(path=path):
                 html = self._get(path, base_url=TA).get_data(as_text=True)
                 self.assertIn(LANDING_MARK, html)
@@ -303,15 +307,61 @@ class WikiPages(unittest.TestCase):
         self.assertIn(DASHBOARD_BAR_MARK, html)
         self.assertNotIn(MASTHEAD_MARK, html)
 
-    def test_the_landing_names_one_address_for_its_three(self):
-        for path in ("/agents", "/home"):
+    def test_the_landing_names_home_as_its_address(self):
+        # A signed-out visit to `/` or /agents lands on /home, and a crawler is
+        # always signed out, so /home is the address to index.
+        for path in ("/home", "/agents?job=0123456789abcdef"):
             with self.subTest(path=path):
                 html = self._get(path, base_url=TA).get_data(as_text=True)
-                self.assertIn('<link rel="canonical" href="https://trade-agents.com/">', html)
-                self.assertIn('<meta property="og:url" content="https://trade-agents.com/">', html)
+                self.assertIn('<link rel="canonical" href="https://trade-agents.com/home">', html)
+                self.assertIn('<meta property="og:url" content="https://trade-agents.com/home">', html)
                 # https even though the request reached Flask as plain http.
                 self.assertIn('<meta property="og:image" content="https://trade-agents.com/static/', html)
         self.assertNotIn('rel="canonical"', self._get("/home").get_data(as_text=True))
+
+    # ── trade-agents.com's front door ─────────────────────────────────────
+    # nginx proxies the bare domain to /agents, so these requests are what
+    # https://trade-agents.com/ turns into by the time Flask sees it.
+    def test_the_bare_domain_sends_a_signed_out_visitor_home(self):
+        r = self._get("/agents", base_url=TA)
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(r.headers["Location"], "/home")
+        # The answer depends on the session, so nothing may keep it.
+        self.assertEqual(r.headers.get("Cache-Control"), "no-store")
+
+    def test_the_redirect_keeps_the_language(self):
+        r = self._get("/agents?lang=zh", base_url=TA)
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(r.headers["Location"], "/home?lang=zh")
+
+    def test_a_signed_in_reader_keeps_the_run_page_at_the_bare_domain(self):
+        with self.client.session_transaction(base_url=TA) as s:
+            s["user_email"] = "reader@example.com"
+        try:
+            r = self._get("/agents", base_url=TA)
+        finally:
+            with self.client.session_transaction(base_url=TA) as s:
+                s.clear()
+        self.assertEqual(r.status_code, 200)
+        self.assertIn(RUN_PAGE_MARK, r.get_data(as_text=True))
+
+    def test_a_deep_link_and_the_embedded_panel_are_not_redirected(self):
+        # Report emails and shared /agents?job= links point here and the page's
+        # scripts read the id off it; the launcher's frame keeps its compact card.
+        deep = self._get("/agents?job=0123456789abcdef", base_url=TA)
+        self.assertEqual(deep.status_code, 200)
+        self.assertIn('id="agSample"', deep.get_data(as_text=True))
+        embed = self._get("/agents?embed=1", base_url=TA)
+        self.assertEqual(embed.status_code, 200)
+        self.assertIn('data-i18n="agents.need_signin"', embed.get_data(as_text=True))
+
+    def test_other_hosts_keep_the_landing_at_agents(self):
+        # Including the deploy's health probe, which asks stock.li-family.us.
+        for base in (LOCAL, "http://stock.li-family.us"):
+            with self.subTest(host=base):
+                r = self._get("/agents", base_url=base)
+                self.assertEqual(r.status_code, 200)
+                self.assertIn(LANDING_MARK, r.get_data(as_text=True))
 
 
 if __name__ == "__main__":

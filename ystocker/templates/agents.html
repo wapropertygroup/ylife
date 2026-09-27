@@ -3,30 +3,34 @@
    base.html would otherwise render "TradeAgents — Trading Agents". #}
 {% block title %}{% if brand_is_ta %}TradeAgents{% else %}yStocker — Trading Agents{% endif %}{% endblock %}
 
-{#  The landing page: what a visitor who is not signed in sees here, and so what
-    trade-agents.com's front door shows (nginx maps `/` to this page). `landing`
-    is only passed for a signed-out, full-page view (routes.agents_page); the
-    embedded panel keeps its compact sign-in card, because the launcher's frame
-    is 240px tall. The hero and sections live in _agents_landing_top/bottom.html;
-    the sample-report block between them stays in this file, since its script is
-    shared with the shared-link (?job=) path below. #}
+{#  The landing page: what /home shows everyone, what a signed-out visitor sees
+    here on hosts other than trade-agents.com, and what a ?job= deep link opens
+    over. On trade-agents.com a signed-out visit to this route -- which is what
+    nginx proxies the bare domain to -- is redirected to /home first
+    (routes.agents_page). `landing` is only passed for a full-page view that
+    renders it; the embedded panel keeps its compact sign-in card, because the
+    launcher's frame is 240px tall. The hero and sections live in
+    _agents_landing_top/bottom.html; the sample-report block between them stays
+    in this file, since its script is shared with the shared-link (?job=) path
+    below. #}
 {% set _landing = landing %}
 {% block body_class %}{% if _landing %} w-paper{% endif %}{% endblock %}
 {% block head_extra %}{% if _landing %}{% include "wiki/_head.html" %}
 {% set _lp_name = 'TradeAgents' if brand_is_ta else 'Trading Agents' %}
 {% set _lp_desc = _lp_name ~ " seats a team of AI analysts on one stock and one date, makes a bull and a bear argue it out, and ends with a portfolio manager's rating you can read turn by turn. Research, not advice." %}
 <meta name="description" content="{{ _lp_desc }}">
-{#  One page, three addresses on trade-agents.com -- `/` (nginx maps it here),
-    /agents and /home -- so a crawler, which is always signed out, is told which
-    one to index. The preview tags are what a pasted link shows in WeChat,
-    iMessage or Slack; the image is the app icon, as a small summary card, since
-    a homepage has no report to draw a 1200x630 card from. #}
-{% if brand_is_ta %}<link rel="canonical" href="https://trade-agents.com/">{% endif %}
+{#  On trade-agents.com a signed-out visit to `/` or /agents is redirected to
+    /home (routes.agents_page); only a ?job= deep link still renders the landing
+    at /agents. A crawler is always signed out, so /home is the address to index.
+    The preview tags are what a pasted link shows in WeChat, iMessage or Slack;
+    the image is the app icon, as a small summary card, since a homepage has no
+    report to draw a 1200x630 card from. #}
+{% if brand_is_ta %}<link rel="canonical" href="https://trade-agents.com/home">{% endif %}
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="{{ _lp_name }}">
 <meta property="og:title" content="{{ _lp_name }} — every ticker gets a research committee">
 <meta property="og:description" content="{{ _lp_desc }}">
-{% if brand_is_ta %}<meta property="og:url" content="https://trade-agents.com/">{% endif %}
+{% if brand_is_ta %}<meta property="og:url" content="https://trade-agents.com/home">{% endif %}
 <meta property="og:image" content="{{ _landing.site }}{{ url_for('static', filename='img/pwa-icon-512.png') }}">
 <meta name="twitter:card" content="summary">
 {% endif %}{% endblock %}

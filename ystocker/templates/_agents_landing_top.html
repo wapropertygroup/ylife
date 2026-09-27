@@ -1,11 +1,12 @@
 {#  The /agents landing, top half: hero, how a run works, the desk, capabilities.
 
-    What a signed-out visitor sees at trade-agents.com's front door (nginx maps
-    `/` to /agents) and at /agents on every other host, and what anyone sees at
-    /home (routes.home), signed in or not. Included by agents.html only for
-    those two views -- never for the embedded panel, whose 240px frame keeps
-    the compact sign-in card. On trade-agents.com it sits under the product's
-    own masthead, _agents_landing_header.html.
+    What anyone sees at /home (routes.home), signed in or not -- and so what a
+    signed-out visitor to trade-agents.com's bare domain lands on, since
+    agents_page redirects them there -- and what a signed-out visitor sees at
+    /agents on every other host. Included by agents.html only for those views --
+    never for the embedded panel, whose 240px frame keeps the compact sign-in
+    card. On trade-agents.com it sits under the product's own masthead,
+    _agents_landing_header.html.
 
     Every number is read from `landing` (routes._wiki_facts), not typed here: a
     page that said "3 free runs" would go on saying it after the quota moved.
