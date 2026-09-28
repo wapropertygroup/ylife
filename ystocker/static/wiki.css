@@ -1,7 +1,8 @@
 /*
  * wiki.css — the editorial pages: the /agents landing, /docs and /research, and
- * on trade-agents.com the product's shell around every TradeAgents page there
- * (masthead, paper plane, footer; see `_ta_shell` in base.html).
+ * on trade-agents.com the product's shell around every page there (masthead,
+ * Markets bar on the dashboards, paper plane, footer, one column; see
+ * `_ta_shell` in base.html).
  *
  * Hand-written rather than Tailwind utilities for the reason CLAUDE.md gives for
  * the DCA peer panel: css/tailwind.css is *compiled*, so a class that only these
@@ -54,9 +55,12 @@
              'Noto Serif SC', 'PingFang SC', 'Microsoft YaHei', serif;
   --w-mono:  'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
-  /* The masthead's height, border included, for whatever sticks beneath it:
-     the docs sidebar here, the run page's jump bar in agents.html. */
+  /* The masthead's height, border included, and the Markets bar's under it
+     on a dashboard (0 elsewhere). Whatever sticks beneath the header reads
+     their sum, --w-head-h: the docs sidebar here, the run page's jump bar in
+     agents.html, the dashboards' section bars in their own templates. */
   --w-top-h: 69px;
+  --w-sub-h: 0px;
 }
 
 .dark {
@@ -95,6 +99,11 @@ html.dark body.w-paper {
   background-size: 44px 44px;
   background-position: center -1px;
 }
+/* The sticky header's full height. Declared on <body>, not :root, because a
+   custom property's var()s resolve where it is declared: on :root this would
+   read :root's --w-sub-h and never see the dashboards' own below. */
+body.w-paper { --w-head-h: calc(var(--w-top-h) + var(--w-sub-h)); }
+body.w-markets { --w-sub-h: 45px; }
 
 .w-wrap { max-width: 1180px; margin: 0 auto; }
 .w-wide { max-width: 1260px; margin: 0 auto; }
@@ -182,8 +191,8 @@ html[lang^="zh"] :is(.w-display, .w-h2, .w-doc-title, .w-page-title, .w-article-
 }
 
 /* ── Masthead (trade-agents.com) ──────────────────────────────────────────────
-   Stands in for base.html's bar on every TradeAgents page there
-   (_ta_masthead.html, drawn when base.html's `_ta_shell` holds). Sticky and
+   Stands in for base.html's bar on every page there (_ta_masthead.html,
+   drawn when base.html's `_ta_shell` holds). Sticky and
    translucent over the paper grid; the rule beneath it appears only once the
    page scrolls (.is-scrolled), so at the top the bar and the page read as one
    plane. The inner column is .w-wrap's 1180px plus <main>'s own side padding,
@@ -328,6 +337,119 @@ html[lang^="zh"] .w-top-name small { letter-spacing: .06em; }
 }
 @media (max-width: 355px) {
   .w-top-mark { display: none; }
+}
+
+/* ── Markets bar (trade-agents.com's dashboards) ─────────────────────────────
+   The dashboards' own navigation, as a second row under the masthead
+   (_ta_markets_bar.html), in the masthead's column so its first link sits
+   under the wordmark. Sticky beneath the masthead, and under its z-index, so
+   the account menu still opens over it; the dashboards' section bars stick
+   under both (--w-head-h). The masthead's own rule appears as the page scrolls,
+   and so parts the two rows exactly when there is content behind them. */
+.w-sub {
+  position: sticky; top: var(--w-top-h); z-index: 45;
+  background: var(--w-paper);
+  border-bottom: 1px solid var(--w-line);
+}
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .w-sub {
+    background: color-mix(in srgb, var(--w-paper) 84%, transparent);
+    -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px);
+  }
+}
+.w-sub-inner {
+  display: flex; align-items: center; gap: 20px;
+  max-width: calc(1180px + 48px); min-height: 44px; margin: 0 auto; padding: 0 24px;
+}
+.w-sub-links { display: flex; align-items: center; gap: 20px; min-width: 0; }
+.w-sub-link {
+  display: inline-flex; align-items: center; gap: 5px; height: 44px; padding: 0;
+  border: 0; background: none; font: inherit; font-size: 13.5px; font-weight: 600;
+  white-space: nowrap; color: var(--w-muted); text-decoration: none; cursor: pointer;
+}
+.w-sub-link:hover { color: var(--w-ink); }
+.w-sub-link.is-current { color: var(--w-ink); box-shadow: inset 0 -2px 0 var(--w-accent); }
+.w-sub-link:focus-visible { outline: 2px solid var(--w-accent); outline-offset: -2px; }
+.w-sub-chev { width: 10px; height: 10px; transition: transform .15s; }
+.w-sub-link[aria-expanded="true"] .w-sub-chev { transform: rotate(180deg); }
+.w-sub-flat { display: none; }
+.w-sub-drop { position: relative; }
+.w-sub-tools { display: flex; align-items: center; gap: 8px; flex-shrink: 0; margin-left: auto; }
+
+/* Menus: Sectors, Macro and the ticker search's panel. No display of their
+   own, so the `hidden` attribute that opens and closes them is not overruled --
+   except by hover on a mouse, which is meant to. The ::before bridges the gap
+   under the button, or the pointer would leave the hover on its way down. */
+.w-sub-menu {
+  position: absolute; top: calc(100% + 6px); left: -12px; z-index: 60; min-width: 220px;
+  padding: 6px; border: 1px solid var(--w-line); border-radius: 8px;
+  background: var(--w-card); box-shadow: var(--w-shadow);
+}
+.w-sub-menu::before { content: ''; position: absolute; left: 0; right: 0; top: -8px; height: 8px; }
+@media (hover: hover) { .w-sub-drop:hover > .w-sub-menu { display: block; } }
+.w-sub-menu > a, .w-sub-grid a {
+  display: block; padding: 8px 10px; border-radius: 6px;
+  font-size: 14px; color: var(--w-body); text-decoration: none;
+}
+.w-sub-menu > a:hover, .w-sub-grid a:hover { background: var(--w-well); color: var(--w-ink); }
+.w-sub-menu.is-wide { width: 380px; }
+.w-sub-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px; }
+.w-sub-grid a { padding: 7px 10px; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.w-sub-menu-head {
+  margin: 6px 10px 4px; font-family: var(--w-mono); font-size: 11px;
+  letter-spacing: .12em; text-transform: uppercase; color: var(--w-muted);
+}
+.w-sub-menu > a.w-sub-menu-foot {
+  margin-top: 4px; padding-top: 9px; border-top: 1px solid var(--w-line); border-radius: 0 0 6px 6px;
+  font-size: 13px; font-weight: 600; color: var(--w-accent); text-align: center;
+}
+.w-sub-search { position: relative; }
+.w-sub-search .w-top-icon svg { width: 16px; height: 16px; }
+.w-sub-panel { left: auto; right: 0; width: min(340px, calc(100vw - 32px)); padding: 0; overflow: hidden; }
+.w-sub-panel-field { padding: 8px; border-bottom: 1px solid var(--w-line); }
+.w-sub-panel-field .w-input { min-height: 38px; padding: 7px 10px; font-family: var(--w-mono); text-transform: uppercase; }
+.w-sub-panel-field .w-input::placeholder { text-transform: none; font-family: inherit; }
+.w-sub-panel-results { max-height: 18rem; overflow-y: auto; padding: 4px 0; }
+.w-sub-panel > a.w-sub-menu-foot { margin: 0; padding: 9px 10px; border-radius: 0; }
+
+/* ↻ Refresh and the tooltip saying what it refetches. base.html's cooldown
+   dims the button and takes its href away, and turns pointer events back on
+   for this wrapper so the tooltip still explains why. */
+.w-sub-refresh { position: relative; }
+.w-sub-tip {
+  position: absolute; top: calc(100% + 8px); right: 0; z-index: 60; width: 264px;
+  padding: 10px 12px; border: 1px solid var(--w-line); border-radius: 8px;
+  background: var(--w-card); box-shadow: var(--w-shadow);
+  font-size: 12.5px; line-height: 1.5; color: var(--w-body);
+  opacity: 0; pointer-events: none; transition: opacity .15s;
+}
+.w-sub-tip p:first-child { margin-bottom: 4px; font-weight: 650; color: var(--w-ink); }
+.w-sub-refresh:hover .w-sub-tip, .w-sub-refresh:focus-within .w-sub-tip { opacity: 1; }
+
+/* A phone: the row scrolls away with the page instead of stacking a second
+   sticky row under the masthead, and its links scroll sideways -- which would
+   clip a menu, so Sectors and Macro become the plain links beside them. */
+@media (max-width: 880px) {
+  body.w-markets { --w-sub-h: 0px; }
+  .w-sub { position: static; }
+  .w-sub-links {
+    flex: 1; overflow-x: auto; scrollbar-width: none; overscroll-behavior-x: contain;
+    -webkit-mask-image: linear-gradient(90deg, #000 88%, transparent);
+            mask-image: linear-gradient(90deg, #000 88%, transparent);
+  }
+  .w-sub-links::-webkit-scrollbar { display: none; }
+  .w-sub-links { gap: 18px; padding-right: 24px; }
+  .w-sub-drop { display: none; }
+  .w-sub-flat { display: inline-flex; }
+  /* Right-aligned to its icon, the search panel's 340px ran off the left edge
+     of a phone; here it spans the row instead, inset like the page. */
+  .w-sub-inner { position: relative; }
+  .w-sub-search { position: static; }
+  .w-sub-panel { left: 24px; right: 24px; width: auto; top: calc(100% + 4px); }
+}
+@media (max-width: 640px) {
+  .w-sub-inner { padding: 0 16px; gap: 12px; }
+  .w-sub-panel { left: 16px; right: 16px; }
 }
 
 /* ── Sections ─────────────────────────────────────────────────────────────── */
@@ -627,10 +749,10 @@ textarea.w-input { min-height: 140px; resize: vertical; }
    the width where it stops being sticky: these selectors outrank that media
    query's plain `.w-side`, and would otherwise cap the phone's open menu. */
 @media (min-width: 861px) {
-  .w-top ~ main .w-side { top: calc(var(--w-top-h) + 16px); max-height: calc(100vh - var(--w-top-h) - 32px); }
+  .w-top ~ main .w-side { top: calc(var(--w-head-h) + 16px); max-height: calc(100vh - var(--w-head-h) - 32px); }
 }
-.w-top ~ main .w-toc { top: calc(var(--w-top-h) + 32px); }
-.w-top ~ main .w-prose h2 { scroll-margin-top: calc(var(--w-top-h) + 24px); }
+.w-top ~ main .w-toc { top: calc(var(--w-head-h) + 32px); }
+.w-top ~ main .w-prose h2 { scroll-margin-top: calc(var(--w-head-h) + 24px); }
 
 /* ── Docs layout ──────────────────────────────────────────────────────────── */
 .w-docs {

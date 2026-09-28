@@ -1467,43 +1467,67 @@ so `?lang=zh` survives. It is scoped to the TradeAgents host
 (`_on_trade_agents()`, the same `TA_HOSTS` verdict as `brand_is_ta`), which also
 keeps the deploy's health probe — `stock.li-family.us/agents` — at 200.
 
-**On trade-agents.com every TradeAgents page wears the landing's shell** —
-the masthead (`_ta_masthead.html`, `.w-top*` in wiki.css), the paper-and-grid
-plane and one footer (`_ta_footer.html`) — in place of the dashboards' bar and
-footer: the landing, docs, research, sign-in, contact, the signed-in run page,
-shared reports and the dead-share-link page. A page opts in with
-`{% set ta_page = true %}` and base.html's `_ta_shell` holds only when the host is
-trade-agents.com too, so on every other host those pages are yStocker's, byte for
-byte. The dashboards never opt in, on any host: their bar is how they are
-navigated, and the masthead's "Markets" leads to them. Their logo does lead to
-`/home` there, since it names TradeAgents. `editorial = true` is the plane and
-wiki.css without the shell, for the landing and the wiki, which are editorial
-everywhere.
+**On trade-agents.com every page wears the landing's shell** — the masthead
+(`_ta_masthead.html`, `.w-top*` in wiki.css), the paper-and-grid plane, one footer
+(`_ta_footer.html`) and one column, the masthead's 1180px (`.w-main` as `<main>`'s
+default class there) — so moving between the landing, the docs and a chart never
+shifts an edge or swaps the bar. That last part was reported from the live site
+on 2026-09-27: `/home` sat in a 1180px column under the masthead and `/markets`
+ran 1386px wide under the dashboards' own bar, and switching between them jumped
+by 103px a side. `base.html`'s `_ta_shell` is simply "the host is
+trade-agents.com"; on every other host every page is yStocker's, byte for byte.
+
+A TradeAgents page sets `{% set ta_page = true %}` (the landing, docs, research,
+sign-in, contact, the run page, shared reports, the dead-link page). Every other
+page is one of the dashboards (`_ta_markets`), and in the shell it adds the Markets
+bar (`_ta_markets_bar.html`, `.w-sub*`): their own links, Sectors and Macro
+menus, ticker search and ↻ Refresh, as a second row under the masthead in the
+same column. That is where their navigation went — the masthead has no room
+for it. It carries the hooks base.html's scripts need (`[data-navsearch]`,
+`#refreshBtn`/`#refreshWrap`/`#refreshTooltipBody`), with `_refresh_map` moved to
+base.html's top level so both bars read it. It is sticky under the masthead from
+881px and scrolls away below that; its links scroll sideways on a phone, where
+Sectors and Macro become plain links because the scroller would clip a menu. The
+dashboards keep the floating research-desk launcher, which is how a reader runs
+the desk from a chart; the product pages drop it, since their masthead leads to
+the desk from every page. The footer adds the dashboards' Guide, RSS and FOMC
+calendar links on a dashboard. `editorial = true` is the plane and wiki.css
+without the shell, for the landing and the wiki, which are editorial everywhere.
 
 The masthead is one bar on every page, as vibetrading.wiki's is: mark, serif
-wordmark (plus "Docs"/"Research Lab" on those sections), Docs · Research Lab ·
-Samples · Pricing · Markets, language and theme toggles, and the call to action.
-It reads the page's `section`: `home` makes Samples and Pricing in-page anchors
-(elsewhere they lead to `/home#…`), `docs`/`research` mark their link current,
-`run` drops the CTA and `login` the Sign in button, each of which would lead to
-the page already open. Signed in it adds an account menu (Portfolio, Share a
-report through share.js's `[data-share-open]`, Sign out, which reloads), and it
-reads sign-in from `current_user`, not the landing's `signed_in`, which only two
-routes pass. `showcase_enabled()` is a Jinja global for the same reason — only
-the landing's routes pass `showcase`. Pages in the shell drop what the shell
-replaces: the wiki's `.w-bar` and the landing's and wiki's `.w-foot` strips render
-off trade-agents.com only, and the floating research-desk launcher is not drawn
-at all, since the masthead leads to the desk from every page. The run page, the
-sign-in and the contact page take `.w-main` as `<main>`'s class, the masthead's
-1228px column, so their edge lines up with the wordmark; `#agDock` and the run
-page's sticky jump bar are re-measured for it (`--w-top-h`, the masthead's
-height), as are the docs sidebar's sticky offsets.
+wordmark (plus "Docs"/"Research Lab"/"Markets" on those sections), Docs ·
+Research Lab · Samples · Pricing · Markets, language and theme toggles, and the
+call to action. It reads the page's `section` — a dashboard's is `markets` —
+where `home` makes Samples and Pricing in-page anchors (elsewhere they lead to
+`/home#…`), `docs`/`research`/`markets` mark their link current, and `run` and
+`login` drop the CTA and the Sign in button, each of which would lead to the page
+already open. Signed in it adds an account menu (Portfolio, Posts, Share a report
+through share.js's `[data-share-open]`, Sign out, which reloads), and it reads
+sign-in from `current_user`, not the landing's `signed_in`, which only two routes
+pass. `showcase_enabled()` is a Jinja global for the same reason — only the
+landing's routes pass `showcase`. The wiki's `.w-bar` and the landing's and wiki's
+`.w-foot` strips render off trade-agents.com only.
+
+One column costs width somewhere, and it is paid in two places. The docs'
+1260px `.w-wide` is capped to 1180 there (a 630px prose measure). And the
+heatmap's own 1800px, and the dashboards' 1475px `app-container`, give way on
+trade-agents.com only. The dashboards' Tailwind breakpoints are viewport-based,
+so at 1440px `/markets` still sets eight index cards to a row in the narrower
+column and truncates a few names — which is what a 1280px laptop already shows
+on yStocker. Everything that sticks under the header reads `--w-head-h`, the
+masthead's height plus the Markets bar's (`--w-sub-h`, 0 off the dashboards and
+on a phone). That covers the docs sidebar and contents, the run page's jump bar
+and `#agDock`, `/markets`' section bar, `/history`'s `#sectionNav` and
+`/guide`'s contents list, each overridden next to the rule it re-measures.
+`--w-head-h` is declared on `<body>`, not `:root`, because a custom property's
+`var()`s resolve where it is declared.
 
 Three traps. The masthead must carry no `data-nav` attributes (base.html's
 breakpoint CSS selects `header [data-nav="desktop"]` and would hide it), and a
-test probing for the dashboards bar cannot use that string either — the inline
-CSS spells it on every page, so `check_wiki_pages` looks for `id="refreshBtn"`;
-likewise the account menu's marker is its markup, because the masthead's script
+test probing for the dashboards' own bar cannot use that string either — the
+inline CSS spells it on every page — nor `id="refreshBtn"`, which the Markets bar
+carries too; `check_wiki_pages` looks for the drawer's `id="refreshBtnMobile"`.
+Likewise the account menu's marker is its markup, because the masthead's script
 spells `data-w-acct` on every page. And under 520px a signed-in reader's CTA gives
 way to the account button — the two do not fit beside the wordmark at 390px.
 
@@ -1614,8 +1638,9 @@ reads only the top level passes on a subdirectory it never saw.
 Tests: `tests/test_wiki.py` (no app — registry, content files both ways, en/zh
 pairing, the roster) and `tests/check_wiki_pages.py` (every page through the Flask
 test client; the landing shown to exactly one audience; 404s that keep their
-navigation; trade-agents.com's shell on every TradeAgents page there and on none
-elsewhere; sign-in's `next` never leaving the site). `check_` so `unittest
+navigation; trade-agents.com's shell and its one column on every page there, the
+Markets bar on the dashboards, and none of it elsewhere; sign-in's `next` never
+leaving the site). `check_` so `unittest
 discover` skips it. `test_wiki`'s en/zh pairing guard reads every template, not a
 list of them, so a new page in the shell is covered without joining one.
 

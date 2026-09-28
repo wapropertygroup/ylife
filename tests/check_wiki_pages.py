@@ -104,9 +104,12 @@ LANDING_MARK = 'id="lpTitle"'
 # behind the allowlist, which this hermetic app's reader is not on.
 RUN_PAGE_MARK = 'id="agPageTitle"'
 MASTHEAD_MARK = "data-w-top"
-# An element only base.html's bar renders. Not `data-nav="desktop"`, which the
-# page's inline breakpoint CSS spells out on every page, bar or no bar.
-DASHBOARD_BAR_MARK = 'id="refreshBtn"'
+# An element only base.html's own bar renders: its drawer's Refresh link. Not
+# `data-nav="desktop"`, which the page's inline breakpoint CSS spells out on
+# every page, bar or no bar -- nor `id="refreshBtn"` any more, which the
+# Markets bar on trade-agents.com carries too, for the cooldown script.
+DASHBOARD_BAR_MARK = 'id="refreshBtnMobile"'
+MARKETS_BAR_MARK = '<nav class="w-sub" aria-label="Markets" data-w-sub>'
 FLOAT_MARK = 'id="agentsFloatingRoot"'
 TA_FOOTER_MARK = '<footer class="w-footer">'
 # The dashboards' footer. Its first line, which only that footer carries.
@@ -399,7 +402,7 @@ class WikiPages(unittest.TestCase):
     # ── trade-agents.com's shell ──────────────────────────────────────────
     # base.html dresses every TradeAgents page there in the landing's
     # masthead, paper and footer (`_ta_shell`); elsewhere they are yStocker's.
-    def _shell(self, html, where):
+    def _shell(self, html, where, dashboard=False):
         self.assertIn(MASTHEAD_MARK, html, where)
         self.assertNotIn(DASHBOARD_BAR_MARK, html, where)
         self.assertIn(" w-paper", html, where)
@@ -410,8 +413,15 @@ class WikiPages(unittest.TestCase):
         self.assertIn(TA_FOOTER_MARK, html, where)
         self.assertNotIn(YSTOCKER_FOOTER_MARK, html, where)
         self.assertNotIn('class="w-foot"', html, where)
-        # The masthead leads to the desk from every page, as /home's did.
-        self.assertNotIn(FLOAT_MARK, html, where)
+        if dashboard:
+            # Their own navigation as a second row, and the research-desk
+            # launcher, which is how a reader runs the desk from a chart.
+            self.assertIn(MARKETS_BAR_MARK, html, where)
+            self.assertIn(FLOAT_MARK, html, where)
+        else:
+            # The masthead leads to the desk from every page, as /home's did.
+            self.assertNotIn(MARKETS_BAR_MARK, html, where)
+            self.assertNotIn(FLOAT_MARK, html, where)
 
     def test_every_trade_agents_page_wears_the_shell(self):
         for path in SHELL_PAGES:
@@ -428,17 +438,48 @@ class WikiPages(unittest.TestCase):
                 self.assertNotIn(TA_FOOTER_MARK, html)
                 self.assertIn(YSTOCKER_FOOTER_MARK, html)
 
-    def test_the_dashboards_keep_their_bar_on_trade_agents(self):
-        # Their bar is how they are navigated. Its logo names TradeAgents there,
-        # so it leads to TradeAgents' front page -- and to the dashboards'
-        # first one everywhere else.
-        html = self._get("/guide", base_url=TA).get_data(as_text=True)
+    def test_the_dashboards_share_the_shell_on_trade_agents(self):
+        # Same masthead, plane, footer and column as the landing, so switching
+        # to them moves no edge; their own navigation is the Markets bar.
+        for path in ("/guide", "/videos"):
+            with self.subTest(path=path):
+                html = self._get(path, base_url=TA).get_data(as_text=True)
+                self._shell(html, path, dashboard=True)
+                self.assertIn('<main class="flex-1 w-main ', html)
+                self.assertIn(" w-markets", html)
+                # Search and ↻ Refresh keep the hooks base.html's scripts find.
+                self.assertIn("data-navsearch-toggle", html)
+                self.assertIn('id="refreshBtn"', html)
+                self.assertIn('id="refreshTooltipBody"', html)
+                # What the dashboards' footer carried.
+                for href in ('href="/guide"', 'href="/rss.xml"', "webcal://trade-agents.com/calendar.ics"):
+                    self.assertIn(href, html)
+
+    def test_the_dashboards_keep_their_bar_elsewhere(self):
+        html = self._get("/guide").get_data(as_text=True)
         self.assertIn(DASHBOARD_BAR_MARK, html)
         self.assertNotIn(MASTHEAD_MARK, html)
+        self.assertNotIn(MARKETS_BAR_MARK, html)
         self.assertIn(YSTOCKER_FOOTER_MARK, html)
-        self.assertIn('<a href="/home" class="flex items-center gap-2 font-bold text-lg shrink-0">', html)
-        local = self._get("/guide").get_data(as_text=True)
-        self.assertIn('<a href="/markets" class="flex items-center gap-2 font-bold text-lg shrink-0">', local)
+        self.assertIn('<a href="/markets" class="flex items-center gap-2 font-bold text-lg shrink-0">', html)
+        self.assertIn('<main class="flex-1 app-container mx-auto ', html)
+
+    def test_every_page_on_trade_agents_shares_one_column(self):
+        # The masthead's; a shared report keeps its narrower reading measure,
+        # centred in it, as a Research Lab post does.
+        for path in (*SHELL_PAGES, "/guide", "/videos"):
+            with self.subTest(path=path):
+                html = self._get(path, base_url=TA).get_data(as_text=True)
+                self.assertIn('<main class="flex-1 w-main ', html)
+        self.assertIn('<main class="flex-1 w-main ', self._as_reader("/agents", base_url=TA))
+
+    def test_the_markets_bar_marks_the_page(self):
+        html = self._get("/videos", base_url=TA).get_data(as_text=True)
+        self.assertIn('<a class="w-sub-link is-current" href="/videos"', html)
+        self.assertNotIn('<a class="w-sub-link is-current" href="/markets"', html)
+        # And the masthead marks the section every dashboard is in.
+        self.assertIn('<a href="/markets" class="is-current" aria-current="true">', html)
+        self.assertIn('TradeAgents<small><span data-l="en">Markets</span>', html)
 
     def test_the_masthead_leads_back_to_the_landing_from_elsewhere(self):
         # Sample reports and Pricing are sections of the landing: anchors there,
@@ -474,6 +515,9 @@ class WikiPages(unittest.TestCase):
         self.assertIn(RUN_CTA, docs)
         # Share opens the same dialog it does from the dashboards' bar.
         self.assertIn('class="w-acct-item" data-share-open=""', docs)
+        # And the per-reader pages the dashboards' account menu lists.
+        self.assertIn('<a class="w-acct-item" href="/assets">', docs)
+        self.assertIn('<a class="w-acct-item" href="/posts">', docs)
         # The run page drops the call to action that would lead to itself.
         run = self._as_reader("/agents", base_url=TA)
         self.assertIn(ACCOUNT_MARK, run)

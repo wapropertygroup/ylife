@@ -41,12 +41,6 @@
 <meta name="twitter:card" content="summary">
 {% endif %}{% endblock %}
 
-{#  The run page sits in the masthead's column on trade-agents.com (wiki.css
-    .w-main), so the form's edge lines up with the wordmark above it; the
-    landing sets its own column, and off trade-agents.com the run page keeps
-    the dashboards' width. #}
-{% block main_class %}{% if _ta_shell and not _landing %}w-main{% else %}{{ super() }}{% endif %}{% endblock %}
-
 {% block content %}
 <script src="{{ url_for('static', filename='markdown.js') }}?v={{ cache_bust or 'dev' }}"></script>
 
@@ -386,9 +380,9 @@ window.YSTime = (function () {
   background: var(--ag-float-blur); backdrop-filter: blur(6px);
   border-bottom: 1px solid var(--ag-line);
 }
-/* trade-agents.com's masthead is taller than the dashboards' bar, and says how
-   tall in --w-top-h (wiki.css). */
-.w-top ~ main .ag-jump { top: var(--w-top-h); }
+/* trade-agents.com's sticky header is taller than the dashboards' bar, and
+   says how tall in --w-head-h (wiki.css). */
+.w-top ~ main .ag-jump { top: var(--w-head-h); }
 .ag-jump::-webkit-scrollbar { height: 4px; }
 .ag-jump::-webkit-scrollbar-thumb { background: var(--ag-thumb); border-radius: 2px; }
 .ag-chip {
@@ -536,7 +530,7 @@ window.YSTime = (function () {
      bars and the bubble you asked for is the one thing you cannot see. */
   scroll-margin-top: 112px;
 }
-.w-top ~ main .ag-turn { scroll-margin-top: calc(var(--w-top-h) + 56px); }
+.w-top ~ main .ag-turn { scroll-margin-top: calc(var(--w-head-h) + 56px); }
 .ag-avatar {
   flex: 0 0 auto; width: 34px; height: 34px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;

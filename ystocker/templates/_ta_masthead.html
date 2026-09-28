@@ -1,24 +1,23 @@
-{#  trade-agents.com's masthead: the product's own bar, on every TradeAgents page
-    there -- the landing, the docs and the Research Lab, sign-in, contact, the
-    run page and a shared report -- in place of the dashboards'. base.html draws
-    it when a page sets `ta_page` and the request came in on trade-agents.com
-    (`_ta_shell`). On every other host those pages are sections of yStocker and
-    keep yStocker's bar; on trade-agents.com the dashboards keep theirs, because
-    it is how they are navigated.
+{#  trade-agents.com's masthead: the product's own bar, on every page there --
+    the landing, the docs and the Research Lab, sign-in, contact, the run page,
+    a shared report, and the dashboards, which add the Markets bar
+    (_ta_markets_bar.html) as a second row beneath it. base.html draws it
+    whenever the request came in on trade-agents.com (`_ta_shell`). On every
+    other host every page keeps yStocker's bar.
 
     Modelled on vibetrading.wiki's, which is one bar on every page: a mark and a
     serif wordmark, a few links, the page's controls. It keeps what a visitor
     needs (language, theme, one way in, and once signed in an account menu) and
-    drops what belongs to the dashboards -- their nav, ticker search, and
-    ↻ Refresh, which purges the cache and refetches from Yahoo and has nothing to
-    refresh here. They stay one click away through "Markets".
+    leaves what belongs to the dashboards -- their nav, ticker search, and
+    ↻ Refresh, which purges the cache and refetches from Yahoo -- to the Markets
+    bar, which only the dashboards draw.
 
     `section` is set by the page. 'home' makes Sample reports and Pricing in-page
     anchors, since they are sections of the landing; everywhere else they lead
-    back to it. 'docs' and 'research' mark their link current and label the
-    wordmark, as the product bar those pages carry off trade-agents.com does.
-    'run' drops the call to action that would lead to the page already open, and
-    'login' the Sign in button, for the same reason.
+    back to it. 'docs', 'research' and 'markets' (every dashboard) mark their
+    link current and label the wordmark, as the product bar the docs carry off
+    trade-agents.com does. 'run' drops the call to action that would lead to the
+    page already open, and 'login' the Sign in button, for the same reason.
 
     Signed-in state is read from `current_user`, which every template has, not
     the landing's `signed_in`, which only agents_page and home pass.
@@ -29,7 +28,9 @@
     compiled and a class only this bar used could be missing from it. #}
 {% import "wiki/_macros.html" as w %}
 {% set product = 'TradeAgents' if brand_is_ta else 'Trading Agents' %}
-{% set _here = section | default('') %}
+{#  A dashboard sets no section of its own: every one of them is Markets, the
+    section the Markets bar under this one navigates. #}
+{% set _here = section | default('markets' if _ta_markets else '') %}
 {% set _home = '' if _here == 'home' else url_for('main.home') %}
 <header class="w-top" data-w-top{% if current_user.email %} data-signed-in{% endif %}>
   <div class="w-top-inner">
@@ -38,6 +39,7 @@
       <span class="w-top-name">{{ product }}
         {%- if _here == 'docs' %}<small><span data-l="en">Docs</span><span data-l="zh">文档</span></small>
         {%- elif _here == 'research' %}<small><span data-l="en">Research Lab</span><span data-l="zh">研究实验室</span></small>
+        {%- elif _here == 'markets' %}<small><span data-l="en">Markets</span><span data-l="zh">市场</span></small>
         {%- endif %}</span>
     </a>
 
@@ -46,7 +48,7 @@
       <a href="{{ url_for('main.research_lab') }}"{% if _here == 'research' %} class="is-current" aria-current="true"{% endif %}><span data-l="en">Research Lab</span><span data-l="zh">研究实验室</span></a>
       {% if showcase_enabled() %}<a href="{{ _home }}#samples"><span data-l="en">Sample reports</span><span data-l="zh">报告样例</span></a>{% endif %}
       <a href="{{ _home }}#pricing"><span data-l="en">Pricing</span><span data-l="zh">价格</span></a>
-      <a href="{{ url_for('main.markets') }}"><span data-l="en">Markets</span><span data-l="zh">市场</span></a>
+      <a href="{{ url_for('main.markets') }}"{% if _here == 'markets' %} class="is-current" aria-current="true"{% endif %}><span data-l="en">Markets</span><span data-l="zh">市场</span></a>
     </nav>
 
     <div class="w-top-actions">
@@ -103,6 +105,9 @@
           {# Where the positions every run is given live (agents._run attaches
              them). The page itself is one of the dashboards. #}
           <a class="w-acct-item" href="{{ url_for('main.assets_page') }}"><span data-l="en">Portfolio</span><span data-l="zh">我的持仓</span></a>
+          {# The external write door's feed -- on the dashboards' own account
+             menu too, and signed-in only like this one. #}
+          <a class="w-acct-item" href="{{ url_for('main.posts_page') }}"><span data-l="en">Posts</span><span data-l="zh">推送</span></a>
           {% if _share_ui %}
           {# share.js binds one delegated listener for [data-share-open]; an
              empty value opens its report picker. #}

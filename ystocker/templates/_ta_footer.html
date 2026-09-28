@@ -1,10 +1,8 @@
-{#  trade-agents.com's footer: one strip under every TradeAgents page there, in
-    place of the dashboards' footer -- whose RSS feed, FOMC calendar and
-    "data via Yahoo Finance" line describe the dashboards -- and of the strips
-    the landing and the docs each close with off trade-agents.com, where they
-    still sit above yStocker's footer. Drawn by base.html under the same
-    `_ta_shell` condition as _ta_masthead.html, so a page cannot get one without
-    the other.
+{#  trade-agents.com's footer: one strip under every page there, in place of
+    the dashboards' footer and of the strips the landing and the docs each close
+    with off trade-agents.com, where they still sit above yStocker's footer.
+    Drawn by base.html under the same `_ta_shell` condition as _ta_masthead.html,
+    so a page cannot get one without the other.
 
     Its links are the masthead's plus the few a reader looks for at the bottom
     of a page, and they follow `section` the same way: in-page anchors on the
@@ -24,6 +22,15 @@
         <a href="{{ url_for('main.docs_page', slug='changelog') }}"><span data-l="en">What's new</span><span data-l="zh">更新日志</span></a>
         <a href="{{ url_for('main.markets') }}"><span data-l="en">Markets</span><span data-l="zh">市场</span></a>
         <a href="{{ url_for('main.contact') }}"><span data-l="en">Contact</span><span data-l="zh">联系我们</span></a>
+        {% if _ta_markets %}
+        {#  What the dashboards' own footer carried and a dashboard reader still
+            looks for: the guide to them, the commentary feed, and the FOMC
+            dates. webcal:// is what makes a calendar client offer to
+            subscribe; an https:// link only downloads one snapshot. #}
+        <a href="{{ url_for('main.guide') }}" data-i18n="nav.guide">Guide</a>
+        <a href="{{ url_for('main.rss_feed') }}" data-i18n="footer.rss">RSS</a>
+        <a href="webcal://{{ request.host }}{{ url_for('main.fomc_calendar') }}" data-i18n="footer.ical">FOMC Calendar</a>
+        {% endif %}
       </nav>
     </div>
     <p class="w-footer-note">
