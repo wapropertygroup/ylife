@@ -1,6 +1,9 @@
 {% extends "base.html" %}
 {% block title %}yStocker — Sector Heatmap{% endblock %}
-{% block main_class %}max-w-[1800px] mx-auto{% endblock %}
+{#  Wider than the dashboards' column elsewhere, for a treemap that uses every
+    pixel. On trade-agents.com it keeps the column every page there shares, so
+    the one visualisation does not throw the page edges out on arrival. #}
+{% block main_class %}{% if _ta_shell %}w-main{% else %}max-w-[1800px] mx-auto{% endif %}{% endblock %}
 
 {% block content %}
 <style>

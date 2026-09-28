@@ -114,6 +114,10 @@
     transition: all 0.15s; flex-shrink: 0;
   }
   .section-nav-btn:hover { color: var(--t-ink); border-color: var(--t-line-hover); background: var(--hi-fill); }
+  /* On trade-agents.com the section bar sticks under the masthead and the
+     Markets bar, and its fill is the paper plane's, not slate-50. */
+  .w-top ~ main #sectionNav { top: var(--w-head-h); }
+  html:not(.dark) body.w-paper #sectionNav { background-color: rgba(246,246,241,0.95); }
   .scrollbar-hide::-webkit-scrollbar { display: none; }
   .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
 

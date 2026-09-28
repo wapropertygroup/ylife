@@ -1,25 +1,33 @@
 {% set _agents_embedded = agent_embedded|default(false) %}
-{#  trade-agents.com's own shell: the product masthead (_ta_masthead.html), the
-    paper plane and one footer (_ta_footer.html), in place of the dashboards'
-    bar and footer. A TradeAgents page opts in with `{% set ta_page = true %}`
-    -- the landing, docs, research, sign-in, contact, the run page and shared
-    reports -- and gets it only on trade-agents.com: on every other host those
-    pages are sections of yStocker. The dashboards never opt in, on any host,
-    because their bar is how they are navigated.
+{#  trade-agents.com's own shell, on every page there: the product masthead
+    (_ta_masthead.html), the paper plane, one footer (_ta_footer.html), and one
+    column -- the masthead's -- for the page itself, so moving between the
+    landing, the docs and the dashboards never shifts an edge or swaps the bar.
+    On every other host every page is yStocker's, exactly as before.
+
+    A TradeAgents page sets `{% set ta_page = true %}` -- the landing, docs,
+    research, sign-in, contact, the run page, shared reports. Every other page
+    is one of the dashboards, and in the shell it also gets the Markets bar
+    (_ta_markets_bar.html): its own links, ticker search and ↻ Refresh, as a
+    second row under the masthead, since that navigation is how the dashboards
+    are used and the masthead has no room for it.
 
     `editorial` is the plane and wiki.css without the shell, for the pages that
     are editorial wherever they are served (the landing, docs, research): off
     trade-agents.com they sit on the paper under yStocker's bar. #}
-{% set _ta_shell = brand_is_ta and not _agents_embedded and ta_page|default(false) %}
+{% set _ta_shell = brand_is_ta and not _agents_embedded %}
+{% set _ta_product = _ta_shell and ta_page|default(false) %}
+{% set _ta_markets = _ta_shell and not _ta_product %}
 {% set _editorial = _ta_shell or editorial|default(false) %}
 {# The research-desk launcher is suppressed on /agents itself (it is that page),
    on /home (the same page's landing, whose every button already leads there),
    and on /login. On a phone the panel is a full-screen sheet, so a launcher there
    competes with the one control the page exists for -- and Google blocks its
    sign-in flow inside an iframe, so the framed copy could not sign anyone in
-   anyway. Nor is it on any page in trade-agents.com's shell, whose masthead
-   leads to the desk from every page, as /home's always did. #}
-{% set _agents_floating = not _agents_embedded and not _ta_shell
+   anyway. Nor is it on trade-agents.com's own pages, whose masthead leads to
+   the desk from every page, as /home's always did; the dashboards keep it
+   there, since it is how a reader runs the desk without leaving a chart. #}
+{% set _agents_floating = not _agents_embedded and not _ta_product
        and request.endpoint not in ('main.agents_page', 'main.home', 'main.login') %}
 {#  The share dialog. Gated server-side on being signed in so an anonymous
     reader — including the recipient of a shared link, who lands on a page that
@@ -29,6 +37,21 @@
     chip beside it. Suppressed in the embedded /agents iframe: a modal inside a
     240px-tall frame is unusable, and the hosting page has its own. #}
 {% set _share_ui = current_user.email and not _agents_embedded %}
+{#  Per-page refresh target, for whichever bar draws ↻ Refresh -- the
+    dashboards' own, or the Markets bar on trade-agents.com. Adding a page used
+    to mean extending a nested ternary in three separate places (both Refresh
+    links and the tooltip body); a lookup keyed by endpoint means a new page adds
+    one row here and nothing else. #}
+{% set _refresh_map = {
+  'main.thirteenf': ('main.thirteenf_refresh', 'Re-fetches all 13F institutional holdings from SEC EDGAR.'),
+  'main.fed':       ('main.fed_refresh',       'Re-fetches Federal Reserve balance-sheet data from FRED.'),
+  'main.fedwatch':  ('main.fedwatch_refresh',  'Re-reads the CME Fed Funds futures curve and recomputes FOMC rate probabilities.'),
+  'main.housing':   ('main.housing_refresh',   'Re-downloads the Zillow Research and Redfin datasets plus the FRED housing series.'),
+  'main.multiples': ('main.multiples_refresh', 'Re-reads the S&P 500 P/E history and recomputes forward P/E from constituent fundamentals.'),
+  'main.housing':   ('main.housing_refresh',   'Re-downloads the Zillow Research and Redfin Data Center housing datasets.'),
+} %}
+{% set _refresh = _refresh_map.get(request.endpoint) %}
+{% set refresh_url = url_for(_refresh[0]) if _refresh else url_for('main.refresh') %}
 <!doctype html>
 <html lang="en" class="h-full dark">
 <head>
@@ -502,29 +525,29 @@
   {% block head_extra %}{% endblock %}
 </head>
 
-<body class="bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 min-h-screen flex flex-col{% if _agents_embedded %} agents-embedded{% endif %}{% if _editorial %} w-paper{% endif %}{% block body_class %}{% endblock %}"
+<body class="bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 min-h-screen flex flex-col{% if _agents_embedded %} agents-embedded{% endif %}{% if _editorial %} w-paper{% endif %}{% if _ta_markets %} w-markets{% endif %}{% block body_class %}{% endblock %}"
       x-data='{ navOpen: false, user: {{ current_user|tojson if current_user is defined else "{\"email\":\"\",\"name\":\"\",\"picture\":\"\"}"|safe }} }'>
 
   {% if not _agents_embedded %}
   {#  A block so one page can swap the whole bar, though none does now: on
-      trade-agents.com every TradeAgents page carries the product's own
-      masthead (_ta_masthead.html, see `_ta_shell` at the top) instead of the
-      dashboards'. Every script below that reaches into this bar -- the refresh
-      cooldown, navsearch.js, i18n's .lang-toggle-btn -- already tolerates it
-      being absent, because the embedded /agents view omits it. #}
+      trade-agents.com every page carries the product's own masthead
+      (_ta_masthead.html, see `_ta_shell` at the top), and a dashboard the
+      Markets bar beneath it, instead of the bar below. Every script below that
+      reaches into this bar -- the refresh cooldown, navsearch.js, i18n's
+      .lang-toggle-btn -- already tolerates it being absent, because the
+      embedded /agents view omits it; the Markets bar carries the ids and hooks
+      the first two look for. #}
   {% block site_header %}
   {% if _ta_shell %}
   {% include "_ta_masthead.html" %}
+  {% if _ta_markets %}{% include "_ta_markets_bar.html" %}{% endif %}
   {% else %}
   <!-- ── Top navigation bar ──────────────────────────────────────────── -->
   <header data-nav-fit="{{ 1400 if current_user.email else 1280 }}" class="sticky top-0 z-50 bg-white/80 dark:bg-slate-900/80 backdrop-blur border-b border-slate-200 dark:border-slate-800">
     <div class="app-container mx-auto px-4 sm:px-6 flex items-center h-14 gap-4">
 
       <!-- Logo -->
-      {# On trade-agents.com it names TradeAgents, so it leads to TradeAgents'
-         front page rather than to the dashboards' first one, which "Markets"
-         beside it already reaches. #}
-      <a href="{{ url_for('main.home') if brand_is_ta else url_for('main.markets') }}" class="flex items-center gap-2 font-bold text-lg shrink-0">
+      <a href="{{ url_for('main.markets') }}" class="flex items-center gap-2 font-bold text-lg shrink-0">
         <span class="grad-text">{{ brand_name }}</span>
       </a>
 
@@ -802,22 +825,6 @@
                        hover:border-brand hover:text-brand transition font-medium whitespace-nowrap shrink-0">
           中文
         </button>
-        {#
-          Per-page refresh target. Adding a page used to mean extending a
-          nested ternary in three separate places (both Refresh links and the
-          tooltip body); a lookup keyed by endpoint means a new page adds one
-          row here and nothing else.
-        #}
-        {% set _refresh_map = {
-          'main.thirteenf': ('main.thirteenf_refresh', 'Re-fetches all 13F institutional holdings from SEC EDGAR.'),
-          'main.fed':       ('main.fed_refresh',       'Re-fetches Federal Reserve balance-sheet data from FRED.'),
-          'main.fedwatch':  ('main.fedwatch_refresh',  'Re-reads the CME Fed Funds futures curve and recomputes FOMC rate probabilities.'),
-          'main.housing':   ('main.housing_refresh',   'Re-downloads the Zillow Research and Redfin datasets plus the FRED housing series.'),
-          'main.multiples': ('main.multiples_refresh', 'Re-reads the S&P 500 P/E history and recomputes forward P/E from constituent fundamentals.'),
-          'main.housing':   ('main.housing_refresh',   'Re-downloads the Zillow Research and Redfin Data Center housing datasets.'),
-        } %}
-        {% set _refresh = _refresh_map.get(request.endpoint) %}
-        {% set refresh_url = url_for(_refresh[0]) if _refresh else url_for('main.refresh') %}
         <div class="relative group" id="refreshWrap">
           <a id="refreshBtn"
              href="{{ refresh_url }}"
@@ -1030,8 +1037,11 @@
   {# The reading column is capped at 1341px. The nav bar above uses the same
      value so the logo stays flush with the content beneath it, and agents.html's
      #agDock mirrors half of it (670.5px) in a calc(). Those three are one
-     measurement: change them together. #}
-  <main class="flex-1 {% block main_class %}app-container mx-auto{% endblock %} w-full px-4 sm:px-6 py-6 sm:py-8">
+     measurement: change them together.
+     On trade-agents.com the column is the masthead's instead (.w-main in
+     wiki.css, 1180px of content), on every page -- the dashboards included --
+     so that switching pages there never moves the page's edges. #}
+  <main class="flex-1 {% block main_class %}{{ 'w-main' if _ta_shell else 'app-container mx-auto' }}{% endblock %} w-full px-4 sm:px-6 py-6 sm:py-8">
 
     <!-- Flash messages -->
     {% with messages = get_flashed_messages(with_categories=true) %}

@@ -273,6 +273,11 @@
     border-bottom: 1px solid var(--t-line);
   }
   @media (min-width: 640px) { .mk-jump { margin-left: -24px; margin-right: -24px; padding-left: 24px; padding-right: 24px; } }
+  /* On trade-agents.com it sticks under the masthead and the Markets bar
+     instead, and floats over the paper plane rather than the slate one. */
+  .w-top ~ main .mk-jump { top: var(--w-head-h); }
+  body.w-paper { --mk-jump-fill: rgba(246,246,241,0.92); }
+  html.dark body.w-paper { --mk-jump-fill: rgba(2,6,23,0.88); }
   .mk-jump::-webkit-scrollbar { height: 4px; }
   .mk-jump::-webkit-scrollbar-thumb { background: var(--t-line-strong); border-radius: 2px; }
   /* Says what the chips are. Styled like the page's filter toggles, they would

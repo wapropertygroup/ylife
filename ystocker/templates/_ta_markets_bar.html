@@ -1,0 +1,128 @@
+{#  trade-agents.com's Markets bar: the dashboards' own navigation, as a second
+    row under the masthead on every dashboard there (base.html's `_ta_markets`).
+    Off trade-agents.com the dashboards keep the bar they always had. This is
+    that bar's navigation set in the shell's column and type, so that between
+    the landing and a chart the page's edges, the masthead and the wordmark stay
+    where they are and only the page changes.
+
+    Sticky under the masthead from 881px up; below that it scrolls away with
+    the page, since two stacked sticky rows would take a sixth of a phone's
+    screen. The height it adds to the sticky header is --w-sub-h (wiki.css),
+    which the dashboards' own sticky bars read through --w-head-h.
+
+    It carries the hooks the scripts in base.html look for: navsearch.js binds
+    any [data-navsearch] mount, and the refresh cooldown finds #refreshBtn,
+    #refreshWrap and #refreshTooltipBody by id. Sectors and Macro are
+    disclosures that also open on hover with a mouse. On a phone the row scrolls
+    sideways, which would clip a menu, so there they are flattened into plain
+    links (.w-sub-flat) instead. #}
+{% set _ep = request.endpoint %}
+{% set _macro = ('main.fed', 'main.fedwatch', 'main.housing', 'main.multiples') %}
+<nav class="w-sub" aria-label="Markets" data-w-sub>
+  <div class="w-sub-inner">
+    <div class="w-sub-links">
+      <a class="w-sub-link{% if _ep == 'main.markets' %} is-current{% endif %}" href="{{ url_for('main.markets') }}" data-i18n="markets.nav">Markets</a>
+      <a class="w-sub-link{% if _ep == 'main.evaluation' %} is-current{% endif %}" href="{{ url_for('main.evaluation') }}" data-i18n="nav.home">Valuation</a>
+      <a class="w-sub-link{% if _ep in ('main.dca_index', 'main.dca_page') %} is-current{% endif %}" href="{{ url_for('main.dca_index') }}" data-i18n="nav.dca">DCA</a>
+
+      <div class="w-sub-drop" data-w-drop>
+        <button type="button" class="w-sub-link{% if _ep == 'main.sector' %} is-current{% endif %}"
+                aria-expanded="false" aria-controls="wSubSectors" data-w-drop-btn>
+          <span data-i18n="nav.sectors">Sectors</span>
+          <svg class="w-sub-chev" viewBox="0 0 12 8" aria-hidden="true"><path d="M1 1.6 6 6.4l5-4.8" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <div class="w-sub-menu is-wide" id="wSubSectors" hidden>
+          <p class="w-sub-menu-head" data-i18n="nav.peer_groups">Peer Groups</p>
+          <div class="w-sub-grid">
+            {% for g in peer_groups %}
+            <a href="{{ url_for('main.sector', sector_name=g) }}" data-i18n="sector.name.{{ g }}">{{ g }}</a>
+            {% endfor %}
+          </div>
+          <a class="w-sub-menu-foot" href="{{ url_for('main.evaluation') }}#sectors" data-i18n="nav.view_all">View all sectors ↓</a>
+        </div>
+      </div>
+      <a class="w-sub-link w-sub-flat{% if _ep == 'main.sector' %} is-current{% endif %}" href="{{ url_for('main.evaluation') }}#sectors" data-i18n="nav.sectors">Sectors</a>
+
+      <a class="w-sub-link{% if _ep == 'main.commodities' %} is-current{% endif %}" href="{{ url_for('main.commodities') }}" data-i18n="nav.commodities">Commodities</a>
+      <a class="w-sub-link{% if _ep == 'main.thirteenf' %} is-current{% endif %}" href="{{ url_for('main.thirteenf') }}" data-i18n="nav.thirteenf">13F</a>
+
+      <div class="w-sub-drop" data-w-drop>
+        <button type="button" class="w-sub-link{% if _ep in _macro %} is-current{% endif %}"
+                aria-expanded="false" aria-controls="wSubMacro" data-w-drop-btn>
+          <span data-i18n="nav.macro">Macro</span>
+          <svg class="w-sub-chev" viewBox="0 0 12 8" aria-hidden="true"><path d="M1 1.6 6 6.4l5-4.8" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <div class="w-sub-menu" id="wSubMacro" hidden>
+          <a href="{{ url_for('main.fed') }}" data-i18n="nav.fed_long">Fed Balance Sheet</a>
+          <a href="{{ url_for('main.fedwatch') }}" data-i18n="nav.fedwatch_long">Interest Rates</a>
+          <a href="{{ url_for('main.housing') }}" data-i18n="nav.housing_long">Housing Market</a>
+          <a href="{{ url_for('main.multiples') }}" data-i18n="nav.multiples_long">P/E Multiples</a>
+        </div>
+      </div>
+      <a class="w-sub-link w-sub-flat{% if _ep == 'main.fed' %} is-current{% endif %}" href="{{ url_for('main.fed') }}" data-i18n="nav.fed">Fed</a>
+      <a class="w-sub-link w-sub-flat{% if _ep == 'main.fedwatch' %} is-current{% endif %}" href="{{ url_for('main.fedwatch') }}" data-i18n="nav.fedwatch">Rates</a>
+      <a class="w-sub-link w-sub-flat{% if _ep == 'main.housing' %} is-current{% endif %}" href="{{ url_for('main.housing') }}" data-i18n="nav.housing">Housing</a>
+      <a class="w-sub-link w-sub-flat{% if _ep == 'main.multiples' %} is-current{% endif %}" href="{{ url_for('main.multiples') }}" data-i18n="nav.multiples">P/E</a>
+
+      <a class="w-sub-link{% if _ep == 'main.daily_report' %} is-current{% endif %}" href="{{ url_for('main.daily_report') }}" data-i18n="nav.daily">Daily</a>
+      <a class="w-sub-link{% if _ep == 'main.videos' %} is-current{% endif %}" href="{{ url_for('main.videos') }}" data-i18n="nav.videos">Videos</a>
+    </div>
+
+    <div class="w-sub-tools">
+      <div class="w-sub-search" data-navsearch>
+        <button type="button" class="w-top-btn w-top-icon" data-navsearch-toggle
+                title="Search Ticker" data-i18n-title="nav.search_ticker"
+                aria-label="Search Ticker" aria-expanded="false">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+          </svg>
+        </button>
+        <div class="w-sub-menu w-sub-panel" data-navsearch-panel hidden>
+          <div class="w-sub-panel-field">
+            <input class="w-input" data-navsearch-input type="text"
+                   placeholder="Ticker, e.g. AAPL" data-i18n-placeholder="nav.search_ph"
+                   maxlength="12" autocomplete="off" spellcheck="false">
+          </div>
+          <div class="w-sub-panel-results" data-navsearch-results></div>
+          <a class="w-sub-menu-foot" data-navsearch-full href="{{ url_for('main.lookup') }}" data-i18n="nav.search_full">Full lookup page →</a>
+        </div>
+      </div>
+      {#  Purges the server cache and refetches from Yahoo, FRED and SEC, which
+          is why base.html's script cools it down for 10 minutes. The tooltip
+          says which source this page's refresh goes to. #}
+      <div class="w-sub-refresh" id="refreshWrap">
+        <a id="refreshBtn" class="w-top-btn" href="{{ refresh_url }}" data-i18n="nav.refresh">↻ Refresh</a>
+        <div class="w-sub-tip" id="refreshTooltip" role="tooltip">
+          <p id="refreshTooltipTitle" data-i18n="nav.refresh_title">Refresh data</p>
+          <p id="refreshTooltipBody" {% if not _refresh %}data-i18n="nav.refresh_body"{% endif %}>{% if _refresh %}{{ _refresh[1] }}{% else %}Clears the in-memory cache and re-fetches live prices, PE ratios, and analyst targets for all tickers from Yahoo Finance.{% endif %}</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</nav>
+<script>
+(function () {
+  // Sectors and Macro open on a click or Enter as well as on hover, one at a
+  // time, and close on Escape or a click anywhere else.
+  const drops = [...document.querySelectorAll('[data-w-drop]')];
+  if (!drops.length) return;
+  const parts = d => [d.querySelector('[data-w-drop-btn]'), d.querySelector('.w-sub-menu')];
+  const shut = keep => drops.forEach(d => {
+    if (d === keep) return;
+    const [btn, menu] = parts(d);
+    menu.hidden = true;
+    btn.setAttribute('aria-expanded', 'false');
+  });
+  drops.forEach(d => {
+    const [btn, menu] = parts(d);
+    btn.addEventListener('click', () => {
+      const open = menu.hidden;
+      shut(d);
+      menu.hidden = !open;
+      btn.setAttribute('aria-expanded', String(open));
+    });
+  });
+  document.addEventListener('click', e => { if (!e.target.closest('[data-w-drop]')) shut(null); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') shut(null); });
+})();
+</script>
