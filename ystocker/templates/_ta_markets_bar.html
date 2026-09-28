@@ -15,12 +15,13 @@
     #refreshWrap and #refreshTooltipBody by id. Sectors and Macro are
     disclosures that also open on hover with a mouse. On a phone the row scrolls
     sideways, which would clip a menu, so there they are flattened into plain
-    links (.w-sub-flat) instead. #}
+    links (.w-sub-flat) instead -- and the row opens scrolled to the page's own
+    link, which on the pages at its far end was otherwise out of sight. #}
 {% set _ep = request.endpoint %}
 {% set _macro = ('main.fed', 'main.fedwatch', 'main.housing', 'main.multiples') %}
 <nav class="w-sub" aria-label="Markets" data-w-sub>
   <div class="w-sub-inner">
-    <div class="w-sub-links">
+    <div class="w-sub-links" data-w-sub-row>
       <a class="w-sub-link{% if _ep == 'main.markets' %} is-current{% endif %}" href="{{ url_for('main.markets') }}" data-i18n="markets.nav">Markets</a>
       <a class="w-sub-link{% if _ep == 'main.evaluation' %} is-current{% endif %}" href="{{ url_for('main.evaluation') }}" data-i18n="nav.home">Valuation</a>
       <a class="w-sub-link{% if _ep in ('main.dca_index', 'main.dca_page') %} is-current{% endif %}" href="{{ url_for('main.dca_index') }}" data-i18n="nav.dca">DCA</a>
@@ -89,9 +90,15 @@
       </div>
       {#  Purges the server cache and refetches from Yahoo, FRED and SEC, which
           is why base.html's script cools it down for 10 minutes. The tooltip
-          says which source this page's refresh goes to. #}
+          says which source this page's refresh goes to. On a phone it is the
+          icon alone, like search beside it; the label stays as its name. #}
       <div class="w-sub-refresh" id="refreshWrap">
-        <a id="refreshBtn" class="w-top-btn" href="{{ refresh_url }}" data-i18n="nav.refresh">↻ Refresh</a>
+        <a id="refreshBtn" class="w-top-btn w-sub-refresh-btn" href="{{ refresh_url }}">
+          <svg class="w-sub-refresh-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 4v5h-5M19.36 14.5a7.5 7.5 0 1 1-1.77-7.8L20 9"/>
+          </svg>
+          <span class="w-sub-refresh-label" data-i18n="nav.refresh">↻ Refresh</span>
+        </a>
         <div class="w-sub-tip" id="refreshTooltip" role="tooltip">
           <p id="refreshTooltipTitle" data-i18n="nav.refresh_title">Refresh data</p>
           <p id="refreshTooltipBody" {% if not _refresh %}data-i18n="nav.refresh_body"{% endif %}>{% if _refresh %}{{ _refresh[1] }}{% else %}Clears the in-memory cache and re-fetches live prices, PE ratios, and analyst targets for all tickers from Yahoo Finance.{% endif %}</p>
@@ -124,5 +131,44 @@
   });
   document.addEventListener('click', e => { if (!e.target.closest('[data-w-drop]')) shut(null); });
   document.addEventListener('keydown', e => { if (e.key === 'Escape') shut(null); });
+})();
+
+(function () {
+  // On a phone the links scroll sideways (wiki.css). The row opens with the
+  // page's own link in the middle of it: at 390px it shows about a third of
+  // its links, so Housing or Videos opened on Markets, Valuation and DCA and
+  // the bar said nothing about where the reader was. Instant rather than
+  // smooth, since this is where the row starts, not a movement; and redone
+  // until the reader scrolls it, because i18n.js swaps the labels at
+  // DOMContentLoaded and the web font lands later, and each moves the link.
+  // The fade is kept to the sides that have more to see (data-fade).
+  const row = document.querySelector('[data-w-sub-row]');
+  if (!row) return;
+  let moved = false;
+  const fade = () => {
+    const end = row.scrollWidth - row.clientWidth;
+    const left = row.scrollLeft > 1, right = row.scrollLeft < end - 1;
+    const v = left && right ? 'both' : left ? 'left' : right ? 'right' : 'none';
+    if (row.dataset.fade !== v) row.dataset.fade = v;
+  };
+  const place = () => {
+    // Visible, since Sectors and Macro are marked twice: the menu button a
+    // phone hides and the plain link it shows.
+    const here = [...row.querySelectorAll('.is-current')].find(el => el.offsetWidth);
+    if (here && !moved && row.scrollWidth > row.clientWidth) {
+      const a = here.getBoundingClientRect(), b = row.getBoundingClientRect();
+      row.scrollLeft += (a.left + a.width / 2) - (b.left + b.width / 2);
+    }
+    fade();
+  };
+  place();
+  ['touchstart', 'pointerdown', 'wheel'].forEach(t =>
+    row.addEventListener(t, () => { moved = true; }, { passive: true }));
+  row.addEventListener('scroll', fade, { passive: true });
+  document.addEventListener('DOMContentLoaded', place);
+  document.addEventListener('i18n:langchange', () => { moved = false; place(); });
+  if (document.fonts) document.fonts.ready.then(place);
+  if (window.ResizeObserver) new ResizeObserver(place).observe(row);
+  else window.addEventListener('resize', place);
 })();
 </script>
