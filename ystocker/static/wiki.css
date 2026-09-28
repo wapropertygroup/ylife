@@ -416,6 +416,7 @@ html[lang^="zh"] .w-top-name small { letter-spacing: .06em; }
    dims the button and takes its href away, and turns pointer events back on
    for this wrapper so the tooltip still explains why. */
 .w-sub-refresh { position: relative; }
+.w-sub-refresh-icon { display: none; width: 16px; height: 16px; }
 .w-sub-tip {
   position: absolute; top: calc(100% + 8px); right: 0; z-index: 60; width: 264px;
   padding: 10px 12px; border: 1px solid var(--w-line); border-radius: 8px;
@@ -428,27 +429,59 @@ html[lang^="zh"] .w-top-name small { letter-spacing: .06em; }
 
 /* A phone: the row scrolls away with the page instead of stacking a second
    sticky row under the masthead, and its links scroll sideways -- which would
-   clip a menu, so Sectors and Macro become the plain links beside them. */
+   clip a menu, so Sectors and Macro become the plain links beside them.
+   The links get the row but for two icons: at 390px "↻ Refresh" beside the
+   search button left twelve links 220px, three and a half of them in English.
+   The row runs out to the screen's edge, so a link scrolls off the side rather
+   than being cut short of it; each link's hit area spans the gap to the next,
+   so a 13F is not a 22px target; and the fade is only on a side with more to
+   see -- data-fade, set by the bar's script, whose page link it keeps in view.
+   Without the script the row keeps the right-hand fade it starts with. */
 @media (max-width: 880px) {
   body.w-markets { --w-sub-h: 0px; }
   .w-sub { position: static; }
+  .w-sub-inner { position: relative; gap: 8px; }
   .w-sub-links {
-    flex: 1; overflow-x: auto; scrollbar-width: none; overscroll-behavior-x: contain;
-    -webkit-mask-image: linear-gradient(90deg, #000 88%, transparent);
-            mask-image: linear-gradient(90deg, #000 88%, transparent);
+    flex: 1; align-self: stretch; gap: 0; margin-left: -24px; padding-left: 14px;
+    overflow-x: auto; scrollbar-width: none; overscroll-behavior-x: contain;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 32px), transparent);
+            mask-image: linear-gradient(90deg, #000 calc(100% - 32px), transparent);
   }
   .w-sub-links::-webkit-scrollbar { display: none; }
-  .w-sub-links { gap: 18px; padding-right: 24px; }
+  .w-sub-links[data-fade="none"] { -webkit-mask-image: none; mask-image: none; }
+  .w-sub-links[data-fade="left"] {
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 32px);
+            mask-image: linear-gradient(90deg, transparent, #000 32px);
+  }
+  .w-sub-links[data-fade="both"] {
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 32px, #000 calc(100% - 32px), transparent);
+            mask-image: linear-gradient(90deg, transparent, #000 32px, #000 calc(100% - 32px), transparent);
+  }
+  .w-sub-link { padding: 0 10px; font-size: 14px; }
+  .w-sub-link:active { color: var(--w-ink); }
+  /* Under the word, not the padding either side of it. */
+  .w-sub-link.is-current {
+    box-shadow: none;
+    background: linear-gradient(var(--w-accent), var(--w-accent)) no-repeat center bottom / calc(100% - 20px) 2px;
+  }
   .w-sub-drop { display: none; }
   .w-sub-flat { display: inline-flex; }
+  .w-sub-tools { gap: 6px; }
+  .w-sub-refresh-btn { width: 36px; padding: 0; }
+  .w-sub-refresh-icon { display: block; }
+  .w-sub-refresh-label {
+    position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden;
+    clip: rect(0, 0, 0, 0); white-space: nowrap;
+  }
   /* Right-aligned to its icon, the search panel's 340px ran off the left edge
      of a phone; here it spans the row instead, inset like the page. */
-  .w-sub-inner { position: relative; }
   .w-sub-search { position: static; }
   .w-sub-panel { left: 24px; right: 24px; width: auto; top: calc(100% + 4px); }
 }
 @media (max-width: 640px) {
-  .w-sub-inner { padding: 0 16px; gap: 12px; }
+  .w-sub-inner { padding: 0 16px; }
+  .w-sub-links { margin-left: -16px; padding-left: 6px; }
   .w-sub-panel { left: 16px; right: 16px; }
 }
 
