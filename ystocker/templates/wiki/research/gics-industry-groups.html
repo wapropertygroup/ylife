@@ -204,11 +204,11 @@
 <section id="check-it-yourself">
   <h2><span data-l="en">Check it yourself</span><span data-l="zh">亲自验证</span></h2>
   <div data-l="en">
-    <p>On the Markets page, under Sector Rotation, the table “GICS Sectors &amp; Industry Groups — S&amp;P 500” opens each sector into its groups and switches between <em>Return</em>, <em>vs S&amp;P 500</em> and <em>Weight change</em>. The rotation map below it offers four window pairs — 1W/1M, 1M/3M (the default), 1M/6M and 3M/1Y — and trails each bubble back through its last five weekly closes. Every coordinate is a cell from the table’s <em>vs S&amp;P 500</em> view, so any bubble can be checked against its row. The data is today’s, not 25 September’s.</p>
+    <p>On the Markets page, under Sector Rotation, the table “GICS Sectors &amp; Industry Groups — S&amp;P 500” opens each sector into its groups and switches between <em>Return</em>, <em>vs S&amp;P 500</em> and <em>Weight change</em>. The rotation map below it offers four window pairs — 1W/1M, 1M/3M (the default), 1M/6M and 3M/1Y — and draws a line from where each group stood a week earlier into its bubble. Every coordinate is a cell from the table’s <em>vs S&amp;P 500</em> view, so any bubble can be checked against its row. The data is today’s, not 25 September’s.</p>
     <p>What pins it: <code>tests/test_gics.py</code> (57 tests, 12 of them on the arithmetic, on prices small enough to check by hand), <code>tests/test_periods.py</code> (12, including a year that ends on a weekend), a 109-check script for the table and map, and a separate comparison against the official indices, run on live market data.</p>
   </div>
   <div data-l="zh">
-    <p>在市场页的「板块轮动」下方，名为「GICS 行业表现 — 标普500一级行业与行业组」的表格可以把每个板块展开为行业组，并在「涨跌幅」「相对标普500」「权重变化」三种视图间切换。表格下方的轮动象限图提供四组区间搭配——1 周/1 月、1 月/3 月（默认）、1 月/6 月、3 月/1 年——每个气泡身后拖着一条轨迹，回溯它过去五个周收盘时的位置。每个坐标都是表格「相对标普500」视图里的一格，任何一个气泡都可以回到它那一行去核对。页面上是最新数据，而不是 9 月 25 日的数据。</p>
+    <p>在市场页的「板块轮动」下方，名为「GICS 行业表现 — 标普500一级行业与行业组」的表格可以把每个板块展开为行业组，并在「涨跌幅」「相对标普500」「权重变化」三种视图间切换。表格下方的轮动象限图提供四组区间搭配——1 周/1 月、1 月/3 月（默认）、1 月/6 月、3 月/1 年——每个气泡身后连着一条线段，起点是它一周前的位置。每个坐标都是表格「相对标普500」视图里的一格，任何一个气泡都可以回到它那一行去核对。页面上是最新数据，而不是 9 月 25 日的数据。</p>
     <p>测试锁定：<code>tests/test_gics.py</code>（57 个测试，其中 12 个针对计算本身，用的是足以手算核对的价格）、<code>tests/test_periods.py</code>（12 个，包括一年恰好在周末结束的情形）、一个 109 项检查的表格与象限图脚本，以及一个单独的、需用实时行情数据运行的官方指数比对脚本。</p>
   </div>
   <div class="w-actions">
