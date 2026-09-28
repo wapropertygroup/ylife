@@ -1426,6 +1426,52 @@ Note the free tier premium-gates `EARNINGS_ESTIMATES` and
 failing the run, so the practical purchase is announcement dates, release timing
 and the drift figures that depend on them.
 
+### The progress bar on a running report (`/agents`)
+
+While a run is queued or running, the current-run card shows how far it has
+got: the turn under way ("Now: 🐂 Bull Researcher, round 2 of 3"), the percentage,
+"9 of 24 steps", a clock since the run started, and the six stages
+underneath. It is **counted, not timed**. Turns take anything from twenty seconds
+to several minutes, so a bar driven by elapsed time would be a guess drawn as a
+measurement.
+
+The count works because a run is a fixed sequence and every turn publishes
+exactly one progress event. _RUNNER writes when a role's text changes, and a
+debater's history grows by one speech a turn. The sequence is:
+
+1. each analyst, in roster order;
+2. bull and bear alternating for `2 × debate_rounds` turns;
+3. the Research Manager, then the Trader;
+4. aggressive, conservative and neutral in turn for `3 × risk_rounds`;
+5. the Portfolio Manager.
+
+These are the counts TradingAgents' `conditional_logic` stops at: 24 steps at
+the default 3+3, 27 for an A-share run.
+
+`agents.run_plan(job)` rides the job poll as `plan`, so the page never carries
+its own copy of the A-share rule `_run` picks the roster by. It maps the package's
+`social` onto the `sentiment` its events carry, the one key that differs. The
+arithmetic is `static/agent_progress.js`, pure and Node-tested; agents.html only
+draws it.
+
+Three rules in it:
+
+- **Everything before a turn that has reported counts as done**, because the
+  graph only moves forward. An analyst that publishes nothing (an empty report is
+  never written) must not hold the bar at 5/6 while the debate runs.
+- **Every count is clamped to its phase**, so a re-publishing role cannot push
+  past it.
+- **It never shows 100% while running.** Once every turn has reported, it says
+  "Writing up the report…" and shimmers across the whole track.
+
+The page counts events by `seq` as a set, not by a high-water mark, so two polls
+answering out of order cannot drop a turn or count one twice.
+
+Tests: `node tests/check_agent_progress.mjs` (25, a whole run event by event,
+naming the speaker at each step) and `tests/test_agents_progress.py` (8,
+including that every planned role is one the runner actually publishes, since a
+name the events never carry leaves the bar at zero for the whole run).
+
 ### The TradeAgents wiki (`/docs`, `/research`) and the `/agents` landing
 
 Modelled on vibetrading.wiki: product docs with a sidebar, an "On this page" list
@@ -2003,6 +2049,17 @@ Started in `create_app()`, all daemon threads:
   starting on a module, because a commit from ten minutes ago means another
   session is probably still in it.
 
+- **Tailwind's `.hidden` loses to a page's own `display`.** It is a plain
+  `.hidden { display: none }` in the compiled bundle, and a template's `<style>`
+  comes after it, so any hand-written rule of the same specificity that sets a
+  display wins and the element never hides. On `/agents` that was `.ag-pill`,
+  `.ag-btn` and `.ag-jump`: from 2026-08-17 to 2026-09-27 every report, the
+  landing's samples included, carried a "recovered from stream" badge and an
+  empty fallback-model pill whether or not either was true, and a running job
+  offered its PDF. Nothing errors and the toggling code is correct, which is why
+  it lasted six weeks. The fix there is `.ag-pill.hidden, .ag-btn.hidden,
+  .ag-jump.hidden { display: none }`: two classes outrank one whatever the order.
+  It is the class twin of the `[hidden]` trap wiki.css notes.
 - **A Tailwind class pair is not a DOM token.** Light mode turned every hardcoded
   colour utility into a pair (`bg-slate-100 dark:bg-slate-800`), which is fine in
   a `class=` attribute and broken everywhere a template passed the same string to

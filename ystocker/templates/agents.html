@@ -43,6 +43,7 @@
 
 {% block content %}
 <script src="{{ url_for('static', filename='markdown.js') }}?v={{ cache_bust or 'dev' }}"></script>
+<script src="{{ url_for('static', filename='agent_progress.js') }}?v={{ cache_bust or 'dev' }}"></script>
 
 <script>
 /* Timestamps, in the reader's own zone and saying so.
@@ -295,6 +296,14 @@ window.YSTime = (function () {
   display: inline-flex; align-items: center; gap: 5px;
   padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 600;
 }
+/* `hidden` here is Tailwind's plain `.hidden { display: none }`, and this block
+   comes after the bundle, so any rule above or below that sets a display at
+   the same specificity -- .ag-pill, .ag-btn, .ag-jump -- beat it and nothing
+   hidden that way ever hid. Every report, the samples on the landing
+   included, carried "recovered from stream" and an empty fallback-model pill
+   whether or not either was true, and a running job offered its PDF. Two
+   classes outrank one, whatever the order. */
+.ag-pill.hidden, .ag-btn.hidden, .ag-jump.hidden { display: none; }
 .ag-queued  { background: rgba(148,163,184,.15); color: var(--ag-queued-ink); }
 .ag-running { background: rgba(99,102,241,.18);  color: var(--ag-accent-ink); }
 .ag-done    { background: rgba(25,158,112,.18);  color: var(--ag-green-ink); }
@@ -466,6 +475,65 @@ window.YSTime = (function () {
 /* Honour a reduced-motion preference: still shows progress, just calmly. */
 @media (prefers-reduced-motion: reduce) {
   .ag-spinner { animation-duration: 2.2s; }
+}
+
+/* ── Progress bar ───────────────────────────────────────────────────────── */
+/* The run's progress while it works (#agProgress). The fill is the turns that
+   have finished; the lighter segment after it is the one under way, which
+   shimmers so a turn that takes three minutes still reads as working rather
+   than stuck. Under the bar, the six stages the landing's run log names. */
+.ag-prog { margin: 2px 0 18px; }
+.ag-prog-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  flex-wrap: wrap; gap: 4px 14px; margin-bottom: 8px;
+}
+.ag-prog-now { font-size: 13.5px; font-weight: 600; color: var(--ag-ink); }
+.ag-prog-now small { margin-left: 6px; font-size: 12px; font-weight: 500; color: var(--ag-ink-muted); }
+.ag-prog-meta {
+  display: inline-flex; gap: 10px; font-size: 12px; color: var(--ag-ink-muted);
+  font-variant-numeric: tabular-nums;
+}
+.ag-prog-meta b { font-weight: 700; color: var(--ag-accent-ink); }
+.ag-prog-track {
+  position: relative; height: 8px; overflow: hidden; border-radius: 999px;
+  background: var(--ag-inset); box-shadow: inset 0 0 0 1px var(--ag-line);
+}
+.ag-prog-fill {
+  position: absolute; top: 0; bottom: 0; left: 0; width: 0; border-radius: 999px;
+  background: linear-gradient(90deg, var(--ag-accent), var(--ag-violet));
+  transition: width .6s ease;
+}
+.ag-prog-cur {
+  position: absolute; top: 0; bottom: 0; width: 0;
+  background: linear-gradient(90deg, rgba(99,102,241,.1) 0%, rgba(99,102,241,.45) 50%, rgba(99,102,241,.1) 100%);
+  background-size: 200% 100%;
+  animation: ag-prog-shimmer 1.6s linear infinite;
+  transition: left .6s ease, width .6s ease;
+}
+/* Queued: nothing to count yet, so the whole track (set from the script)
+   breathes instead, more slowly. */
+.ag-prog.is-queued .ag-prog-cur { animation-duration: 2.4s; }
+@keyframes ag-prog-shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+.ag-prog-phases {
+  display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 10px 0 0; padding: 0;
+  list-style: none; font-size: 12px; color: var(--ag-ink-faint);
+}
+.ag-prog-phases li { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.ag-prog-phases li::before {
+  content: ''; width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto;
+  border: 1.5px solid var(--ag-ring);
+}
+.ag-prog-phases li[data-state="done"] { color: var(--ag-ink-muted); }
+.ag-prog-phases li[data-state="done"]::before { background: var(--ag-ok); border-color: var(--ag-ok); }
+.ag-prog-phases li[data-state="active"] { color: var(--ag-ink); font-weight: 600; }
+.ag-prog-phases li[data-state="active"]::before {
+  background: var(--ag-accent); border-color: var(--ag-accent);
+  box-shadow: 0 0 0 3px rgba(99,102,241,.22);
+}
+.ag-prog-phases em { font-style: normal; font-weight: 500; color: var(--ag-ink-faint); font-variant-numeric: tabular-nums; }
+@media (prefers-reduced-motion: reduce) {
+  .ag-prog-cur { animation: none; background: rgba(99,102,241,.3); }
+  .ag-prog-fill, .ag-prog-cur { transition: none; }
 }
 .ag-hist-load {
   display: flex; align-items: center; gap: 9px;
@@ -1604,6 +1672,24 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
       <button id="agHide" class="ag-btn ag-btn-ghost" data-i18n="agents.dismiss">Dismiss</button>
     </div>
   </div>
+  {# How far the run has got, while it is queued or running. Counted from the
+     events the child publishes, one per finished turn, against the turns the
+     run will take (agents.run_plan, the poll's `plan`) -- so it moves when an
+     agent finishes and not with the clock, which only says how long it has
+     been going. Drawn by renderProgress() below from static/agent_progress.js;
+     hidden once the run is done or has failed. #}
+  <div id="agProgress" class="ag-prog hidden">
+    <div class="ag-prog-head">
+      <span class="ag-prog-now" id="agProgNow" aria-live="polite"></span>
+      <span class="ag-prog-meta"><b id="agProgPct"></b><span id="agProgSteps"></span><span id="agProgClock"></span></span>
+    </div>
+    <div class="ag-prog-track" id="agProgBar" role="progressbar" aria-valuemin="0" aria-valuemax="100"
+         aria-valuenow="0" aria-label="Analysis progress">
+      <div class="ag-prog-fill" id="agProgFill"></div>
+      <div class="ag-prog-cur" id="agProgCur"></div>
+    </div>
+    <ol class="ag-prog-phases" id="agProgPhases"></ol>
+  </div>
   <div id="agDecisionWrap" class="hidden mb-4">
     <p class="text-xs text-slate-500 mb-1" data-i18n="agents.decision">Decision</p>
     <p class="text-2xl font-semibold text-slate-800 dark:text-slate-100" id="agDecision">—</p>
@@ -1741,6 +1827,11 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
   // previous one instead of appending a duplicate.
   let evCursor = 0;
   let liveByRole = new Map();
+  // Finished turns per role, for the progress bar: one event is one turn. The
+  // seqs already counted are kept, rather than a high-water mark, so that two
+  // polls answering out of order cannot drop a turn or count one twice.
+  let turnsByRole = new Map();
+  let countedSeqs = new Set();
   // Signed-in address, filled from the jobs/search response. Used only to decide
   // which history rows belong to someone else.
   let viewer = '';
@@ -1886,8 +1977,16 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
     pdf.classList.toggle('hidden', !hasPdf);
     if (hasPdf) pdf.href = `/api/agents/job/${job.id}/pdf?tz=${encodeURIComponent(YSTime.zone())}`;
 
-    for (const ev of job.events || []) liveByRole.set(ev.role, ev.body);
+    for (const ev of job.events || []) {
+      liveByRole.set(ev.role, ev.body);
+      const seq = Number(ev.seq) || 0;
+      if (seq && !countedSeqs.has(seq)) {
+        countedSeqs.add(seq);
+        turnsByRole.set(ev.role, (turnsByRole.get(ev.role) || 0) + 1);
+      }
+    }
     if (typeof job.event_cursor === 'number') evCursor = job.event_cursor;
+    renderProgress(job);
 
     // The finished report is authoritative: it carries the team dividers and
     // the report's own structure. Until it exists, show the live turns.
@@ -1935,6 +2034,112 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
     }
     return out;
   }
+
+  // ── Progress bar ───────────────────────────────────────────────────────────
+  // #agProgress, while a run is queued or running. The arithmetic -- which of
+  // the plan's turns are done and whose turn it is -- is agent_progress.js;
+  // this only draws it. Every string is set from here, so it is redrawn on a
+  // language switch as well as on each poll.
+  const progEl = document.getElementById('agProgress');
+  let progJob = null;
+  let progClock = null;
+
+  const roleOf = key => ROLES.find(r => r.key === key);
+  const roleName = key => {
+    const r = roleOf(key);
+    if (!r) return key;
+    return (I18n.getLang() === 'zh' && r.zh) ? r.zh : r.name;
+  };
+  const PHASE_KEYS = { analysts: ['agents.prog_analysts', 'Analysts'],
+                       debate: ['agents.prog_debate', 'Bull ⇄ Bear'],
+                       risk: ['agents.prog_risk', 'Risk debate'] };
+  const phaseName = key => PHASE_KEYS[key]
+    ? (I18n.t(PHASE_KEYS[key][0]) || PHASE_KEYS[key][1])
+    : roleName(key);
+  const fillIn = (tpl, vars) => String(tpl).replace(/\{(\w+)\}/g, (_, k) => (k in vars ? vars[k] : ''));
+  const clockText = secs => {
+    const s = Math.max(0, Math.floor(secs));
+    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), r = s % 60;
+    return (h ? `${h}:${String(m).padStart(2, '0')}` : String(m)) + ':' + String(r).padStart(2, '0');
+  };
+
+  // How long it has been going: since the run started, or since it was queued.
+  function tickProgress() {
+    const clock = document.getElementById('agProgClock');
+    if (!progJob || progEl.classList.contains('hidden')) {
+      clearInterval(progClock); progClock = null; return;
+    }
+    const since = Date.parse(progJob.status === 'running' ? progJob.started_at : progJob.created_at);
+    clock.textContent = isNaN(since) ? '' : clockText((Date.now() - since) / 1000);
+  }
+
+  function renderProgress(job) {
+    const on = (job.status === 'queued' || job.status === 'running') && window.AgentProgress;
+    progEl.classList.toggle('hidden', !on);
+    if (!on) { progJob = null; tickProgress(); return; }
+    progJob = job;
+    const queued = job.status === 'queued';
+    const p = AgentProgress.compute(job.plan, Object.fromEntries(turnsByRole));
+    const donePct = p.total ? (p.done / p.total) * 100 : 0;
+
+    const nowEl = document.getElementById('agProgNow');
+    nowEl.textContent = '';
+    if (queued) {
+      nowEl.textContent = I18n.t('agents.prog_queued') || 'Queued — starts when the run ahead of it finishes';
+    } else if (!p.current) {
+      nowEl.textContent = I18n.t('agents.prog_finishing') || 'Writing up the report…';
+    } else {
+      const r = roleOf(p.current.role);
+      nowEl.textContent = fillIn(I18n.t('agents.prog_now') || 'Now: {who}',
+                                 { who: `${r && r.icon ? r.icon + ' ' : ''}${roleName(p.current.role)}` });
+      if (p.current.round) {
+        const small = document.createElement('small');
+        small.textContent = fillIn(I18n.t('agents.prog_round') || 'round {n} of {m}',
+                                   { n: p.current.round, m: p.current.rounds });
+        nowEl.appendChild(small);
+      }
+    }
+
+    // Never 100% while the run is still going: the last turn has reported but
+    // the report is not written yet.
+    const pct = Math.min(99, Math.floor(donePct));
+    document.getElementById('agProgPct').textContent = queued ? '' : `${pct}%`;
+    document.getElementById('agProgSteps').textContent = queued ? ''
+      : fillIn(I18n.t('agents.prog_steps') || '{done} of {total} steps', { done: p.done, total: p.total });
+
+    const bar = document.getElementById('agProgBar');
+    bar.setAttribute('aria-label', I18n.t('agents.prog_label') || 'Analysis progress');
+    bar.setAttribute('aria-valuenow', String(queued ? 0 : pct));
+    bar.setAttribute('aria-valuetext', nowEl.textContent);
+    // The turn under way is the segment after the fill. Queued, and wrapping
+    // up once every turn has reported, the whole track shimmers instead: there
+    // is no next turn, but the run is still working.
+    const fill = document.getElementById('agProgFill');
+    const cur = document.getElementById('agProgCur');
+    const whole = queued || !p.current;
+    fill.style.width = (queued ? 0 : donePct) + '%';
+    cur.style.left = (whole ? 0 : donePct) + '%';
+    cur.style.width = (whole ? 100 : 100 / p.total) + '%';
+    progEl.classList.toggle('is-queued', queued);
+
+    const list = document.getElementById('agProgPhases');
+    list.textContent = '';
+    for (const ph of p.phases) {
+      const li = document.createElement('li');
+      li.dataset.state = queued ? 'todo' : ph.state;
+      li.textContent = phaseName(ph.key);
+      if (ph.total > 1) {
+        const em = document.createElement('em');
+        em.textContent = `${ph.done}/${ph.total}`;
+        li.appendChild(em);
+      }
+      list.appendChild(li);
+    }
+
+    if (!progClock) progClock = setInterval(tickProgress, 1000);
+    tickProgress();
+  }
+  document.addEventListener('i18n:langchange', () => { if (progJob) renderProgress(progJob); });
 
   // Each report section is one agent's turn. The server does the splitting
   // (ystocker/agent_roles.py), so this only has to draw it.
@@ -2477,7 +2682,7 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
       // -- several times gunicorn's 200-request worker-recycle budget, so the
       // run's own status polling would recycle the worker supervising it.
       if (poll) clearTimeout(poll);
-      evCursor = 0; liveByRole = new Map();
+      evCursor = 0; liveByRole = new Map(); turnsByRole = new Map(); countedSeqs = new Set();
       chatJobId = null; renderChat([]);
       // A new run gets its own history entry, so back returns to whatever was
       // being read before it started.
@@ -2526,7 +2731,7 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
     const push = !(opts && opts.push === false);
     if (!id) return;
     if (poll) { clearTimeout(poll); poll = null; }
-    evCursor = 0; liveByRole = new Map();
+    evCursor = 0; liveByRole = new Map(); turnsByRole = new Map(); countedSeqs = new Set();
     chatJobId = null; renderChat([]);
     syncJobUrl(id, push);
     announceJob(id);
@@ -3408,6 +3613,7 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
   document.getElementById('agHide').addEventListener('click', () => {
     card.classList.add('hidden');
     if (poll) { clearTimeout(poll); poll = null; }
+    progJob = null; tickProgress();
     runBtn.disabled = false;
   });
   loadHistory();

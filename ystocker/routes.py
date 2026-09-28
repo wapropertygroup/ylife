@@ -4886,7 +4886,7 @@ def api_agents_job(job_id):
     # runs 2 gunicorn workers, and an SSE connection held open for a
     # thirteen-minute run would occupy half the server's capacity per viewer.
     from ystocker import quota
-    from ystocker.agents import read_events
+    from ystocker.agents import read_events, run_plan
 
     try:
         since = int(request.args.get("since", 0))
@@ -4895,6 +4895,10 @@ def api_agents_job(job_id):
     events = read_events(job_id, since) if job.get("status") != "done" or since == 0 else []
     payload["events"] = events
     payload["event_cursor"] = max([since] + [int(e.get("seq", 0)) for e in events])
+    # The turns this run will take, which the page counts the events against to
+    # draw its progress bar (agents.run_plan). A few dozen bytes, so it rides
+    # every poll rather than being cached client-side per job.
+    payload["plan"] = run_plan(job)
     # The raw markdown is dropped from the response because nothing on the page
     # needs it once it is split, and it would double a 40 KB payload on every
     # poll. The PDF route reads the job from disk, so it is unaffected.
