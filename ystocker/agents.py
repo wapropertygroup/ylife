@@ -324,6 +324,43 @@ def analysts_for_ticker(ticker: str) -> tuple[str, ...]:
     """Nine analysts for A shares; the base six (BASE_ANALYSTS) everywhere else."""
     return ASTOCK_ANALYSTS if _ASHARE_RE.match((ticker or "").strip().upper()) else BASE_ANALYSTS
 
+
+#: The one analyst whose progress event is not named after its package key:
+#: _RUNNER publishes ``sentiment_report`` as "sentiment", after the report
+#: heading agent_roles reads, while TradingAgents calls the analyst ``social``
+#: (the same mismatch wiki._ANALYST_ROLE records for the roster page).
+_EVENT_ROLES = {"social": "sentiment"}
+
+
+def _rounds(raw: Any) -> int:
+    try:
+        return max(1, int(raw))
+    except (TypeError, ValueError):
+        return 1
+
+
+def run_plan(job: Optional[dict[str, Any]]) -> dict[str, Any]:
+    """The turns a run takes, for the page's progress bar.
+
+    A run is a fixed sequence, and every turn in it publishes exactly one
+    progress event (_RUNNER writes when a role's text changes, and a debater's
+    history grows by one speech a turn). The sequence is each analyst in roster
+    order, bull and bear alternating for ``2 × debate_rounds`` turns, the
+    Research Manager, the Trader, then aggressive, conservative and neutral in
+    turn for ``3 × risk_rounds``, and the Portfolio Manager: the counts
+    TradingAgents' conditional_logic stops at. So counting events per role says
+    which turns are done, with no timing guess. Returned rather than inferred on
+    the page, whose own copy of the A-share rule would drift from the one _run
+    uses to pick the roster. The rounds are the deployment's, which is what
+    _child_env gives the child.
+    """
+    roster = analysts_for_ticker((job or {}).get("ticker") or "")
+    return {
+        "analysts": [_EVENT_ROLES.get(key, key) for key in roster],
+        "debate_rounds": _rounds(DEFAULT_DEBATE_ROUNDS),
+        "risk_rounds": _rounds(DEFAULT_RISK_ROUNDS),
+    }
+
 # One run at a time; further submissions queue behind it.
 _slot = threading.Semaphore(1)
 _io_lock = threading.Lock()

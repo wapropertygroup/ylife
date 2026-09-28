@@ -2126,6 +2126,18 @@ const I18n = (() => {
     'agents.status_running':{ en: 'Running',      zh: '运行中' },
     'agents.status_queued': { en: 'Queued',       zh: '排队中' },
     'agents.status_error':  { en: 'Error',        zh: '出错' },
+    // The progress bar over a running report. {who} is a role's icon and name,
+    // {n}/{m} a debate's round, {done}/{total} the turns finished and in all.
+    'agents.prog_label':    { en: 'Analysis progress', zh: '分析进度' },
+    'agents.prog_now':      { en: 'Now: {who}',   zh: '正在进行：{who}' },
+    'agents.prog_round':    { en: 'round {n} of {m}', zh: '第 {n}/{m} 轮' },
+    'agents.prog_steps':    { en: '{done} of {total} steps', zh: '{done}/{total} 步' },
+    'agents.prog_queued':   { en: 'Queued — starts when the run ahead of it finishes',
+                              zh: '排队中——前一个分析结束后即开始' },
+    'agents.prog_finishing':{ en: 'Writing up the report…', zh: '正在整理报告…' },
+    'agents.prog_analysts': { en: 'Analysts',     zh: '分析师' },
+    'agents.prog_debate':   { en: 'Bull ⇄ Bear',  zh: '多空辩论' },
+    'agents.prog_risk':     { en: 'Risk debate',  zh: '风险辩论' },
     // Names what the status listbox's visible value is *of*, since the button's
     // own text is the value: without it a screen reader announces a bare "Done".
     'agents.status_label':  { en: 'Status filter', zh: '状态筛选' },
