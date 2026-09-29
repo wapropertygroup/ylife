@@ -108,6 +108,13 @@ def pack(pack_id: str) -> Optional[dict[str, Any]]:
     return PACKS.get((pack_id or "").strip())
 
 
+# What a credit is shown as in dollars: the account menu quotes a balance as an
+# amount rather than a count of runs. $1, the price of a run in the smallest
+# pack. Display only -- nothing is charged or refunded at this rate, and a run
+# bought in a bigger pack for less still shows as $1 left.
+USD_PER_CREDIT = 1
+
+
 def selling_enabled() -> tuple[bool, str]:
     """Whether it is safe to offer packs for sale, and why not if it is not.
 
@@ -192,18 +199,23 @@ def _now() -> str:
 # Reading
 # ---------------------------------------------------------------------------
 
-def balance(email: Optional[str]) -> int:
-    """Credits available to this address. 0 when unknown or unreachable."""
+def peek_balance(email: Optional[str]) -> Optional[int]:
+    """Credits available to this address, or None when the ledger could not be
+    read. 0 means the ledger answered and the balance is empty.
+
+    For display, where the two must not look alike: a paying reader told "$0"
+    because DynamoDB was unreachable has been told their money is gone.
+    """
     if not (email or "").strip():
-        return 0
+        return None
     table = _get_table()
     if table is None:
-        return 0
+        return None
     try:
         got = table.get_item(Key={"id": _key(email)}, ConsistentRead=True)
     except Exception as exc:  # noqa: BLE001
         log.warning("credits: balance read failed for %s: %s", email, exc)
-        return 0
+        return None
     item = got.get("Item") or {}
     try:
         return max(0, int(item.get("balance", 0)))
@@ -211,35 +223,59 @@ def balance(email: Optional[str]) -> int:
         return 0
 
 
-def summary(email: Optional[str]) -> dict[str, Any]:
-    """Balance plus what the page needs to offer a top-up."""
-    # The address is appended because ypay hides the run packs without it -- see
-    # its index.html -- so the bare link led to a page with nothing to buy, and
-    # /api/checkout refuses an emailless purchase anyway. `next` brings the buyer
-    # back to the brand they started from rather than always to li-family.us.
-    base = pay_url()
+def balance(email: Optional[str]) -> int:
+    """Credits available to this address. 0 when unknown or unreachable, which
+    is the safe answer for spending: an unreadable ledger funds no run."""
+    return peek_balance(email) or 0
+
+
+def topup_url(email: Optional[str]) -> str:
+    """The pay page for this reader: this brand's checkout host, with their
+    address and the way back to the agents page on the query string.
+
+    The address is appended because ypay hides the run packs without it -- see
+    its index.html -- so the bare link led to a page with nothing to buy, and
+    /api/checkout refuses an emailless purchase anyway. `next` brings the buyer
+    back to the brand they started from rather than always to li-family.us.
+    """
     query = {}
     if email:
         query["email"] = email
     back = _return_to()
     if back:
         query["next"] = back
+    base = pay_url()
+    return base + ("?" + urlencode(query) if query else "")
+
+
+def summary(email: Optional[str]) -> dict[str, Any]:
+    """Balance plus what the page needs to offer a top-up."""
     return {
         "balance": balance(email),
-        "pay_url": base + ("?" + urlencode(query) if query else ""),
+        "pay_url": topup_url(email),
         "packs": packs_public(),
     }
 
 
 def _return_to() -> str:
-    """Absolute https URL of the agents page on the host being used, or ""."""
+    """Absolute https URL of the agents page on the host being used, or "".
+
+    The scheme is https whatever request.url_root says, as routes._share_base()
+    explains: nginx terminates TLS and no app here installs ProxyFix, so the root
+    reads http:// in production, and requiring it to start with https:// dropped
+    `next` from every top-up link. ypay takes only an https `next`, so a local
+    host, the one place with no TLS in front, gets none.
+    """
     try:
         from flask import request, url_for
 
-        url = request.url_root.rstrip("/") + url_for("main.agents")
-    except Exception:  # noqa: BLE001
+        host = (request.host or "").strip()
+        path = url_for("main.agents_page")
+    except Exception:  # noqa: BLE001 - no request context (thread, CLI)
         return ""
-    return url if url.startswith("https://") else ""
+    if not host or host.split(":")[0] in ("localhost", "127.0.0.1", "[::1]"):
+        return ""
+    return f"https://{host}{path}"
 
 
 # ---------------------------------------------------------------------------

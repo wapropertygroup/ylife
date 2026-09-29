@@ -4817,7 +4817,7 @@ def api_agents_run():
             msg = (f"You have used your {info['limit']} free runs for today "
                    f"(resets at midnight, {info['tz']}). "
                    f"Buy more runs to keep going.")
-            buy = {"url": credits.PAY_URL, "packs": credits.packs_public()}
+            buy = {"url": credits.pay_url(), "packs": credits.packs_public()}
         log.info("agents: quota denied (%s) for %s: %s", reason, email, info)
         payload = {"error": msg, "reason": "quota", "quota": info}
         if buy:
@@ -5030,6 +5030,29 @@ def api_agents_jobs():
                     # The page labels rows it does not own, which it can only do
                     # if it knows who is looking.
                     "viewer": viewer or "", "vip": vip})
+
+
+@bp.route("/api/agents/balance")
+def api_agents_balance():
+    """The signed-in reader's run credits, for the account menu.
+
+    Fetched when the menu opens rather than read on every render: every page on
+    trade-agents.com draws the masthead, and a DynamoDB read per page view would
+    cost all of them the ledger's latency. Signed in is the whole requirement --
+    AGENTS_ALLOWED_EMAILS decides who may run, not who may see their own money.
+    ``credits`` is null when the ledger could not be read, which the menu shows
+    as unknown rather than $0. ``usd`` is the same balance at
+    credits.USD_PER_CREDIT, a display rate that nothing is charged at.
+    """
+    email = _agent_user()
+    if not email:
+        return jsonify({"error": "Sign in required", "reason": "auth"}), 401
+    from ystocker import credits
+
+    n = credits.peek_balance(email)
+    resp = jsonify({"credits": n, "usd": None if n is None else n * credits.USD_PER_CREDIT})
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
 
 
 @bp.route("/api/agents/search")

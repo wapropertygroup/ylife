@@ -35,10 +35,13 @@ Run:  venv/bin/python -m tests.check_wiki_pages
 """
 from __future__ import annotations
 
+import html
 import os
+import re
 import sys
 import types
 import unittest
+from unittest import mock
 
 
 class _Any:
@@ -523,6 +526,39 @@ class WikiPages(unittest.TestCase):
         self.assertIn(ACCOUNT_MARK, run)
         self.assertNotIn(RUN_CTA, run)
         self.assertNotIn(ACCOUNT_MARK, self._get("/docs/overview", base_url=TA).get_data(as_text=True))
+
+    def test_the_account_menu_shows_the_balance_and_a_way_to_add_to_it(self):
+        # The line starts as "…" and is filled from /api/agents/balance when the
+        # menu opens. Prepay is the existing pack page on this brand's pay host,
+        # with the reader's address (ypay shows no pack without one) and the way
+        # back -- https, although Flask sees http behind nginx.
+        docs = self._as_reader("/docs/overview", base_url=TA)
+        self.assertIn('<b data-w-balance>…</b>', docs)
+        link = re.search(r'<a class="w-acct-item" href="([^"]+)" data-w-topup>', docs)
+        self.assertTrue(link, "no Prepay link in the account menu")
+        href = html.unescape(link.group(1))
+        self.assertTrue(href.startswith("https://pay.trade-agents.com?"), href)
+        self.assertIn("email=reader%40example.com", href)
+        self.assertIn("next=https%3A%2F%2Ftrade-agents.com%2Fagents", href)
+
+    def test_the_balance_endpoint(self):
+        from ystocker import credits
+
+        self.assertEqual(self._get("/api/agents/balance", base_url=TA).status_code, 401)
+        with self.client.session_transaction(base_url=TA) as s:
+            s["user_email"] = "reader@example.com"
+        try:
+            with mock.patch.object(credits, "peek_balance", return_value=7):
+                r = self._get("/api/agents/balance", base_url=TA)
+            self.assertEqual(r.get_json(), {"credits": 7, "usd": 7})
+            self.assertEqual(r.headers.get("Cache-Control"), "no-store")
+            # An unreadable ledger is unknown, not an empty balance.
+            with mock.patch.object(credits, "peek_balance", return_value=None):
+                r = self._get("/api/agents/balance", base_url=TA)
+            self.assertEqual(r.get_json(), {"credits": None, "usd": None})
+        finally:
+            with self.client.session_transaction(base_url=TA) as s:
+                s.clear()
 
     def test_the_sign_in_page_is_the_products_on_trade_agents(self):
         html = self._get("/login", base_url=TA).get_data(as_text=True)

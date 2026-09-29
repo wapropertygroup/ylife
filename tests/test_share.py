@@ -1636,7 +1636,7 @@ class ShareQuotaTests(unittest.TestCase):
         # counter can be exercised without a DynamoDB ledger.
         self._saved_credits = sys.modules.get("ystocker.credits")
         sys.modules["ystocker.credits"] = types.SimpleNamespace(
-            PAY_URL="https://pay.test", balance=lambda e: 0,
+            PAY_URL="https://pay.test", pay_url=lambda: "https://pay.test", balance=lambda e: 0,
             spend=lambda e, n=1: False, refund=lambda e, n=1: None)
 
     def tearDown(self):

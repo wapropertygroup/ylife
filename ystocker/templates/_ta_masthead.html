@@ -99,6 +99,17 @@
             {% if current_user.name %}<b>{{ current_user.name }}</b>{% endif %}
             <span>{{ current_user.email }}</span>
           </p>
+          {#  What is left to spend, as an amount at $1 a run
+              (credits.USD_PER_CREDIT), and the way to add to it: the existing
+              pack page on this brand's pay host. Read from /api/agents/balance
+              each time the menu opens, not on every render -- "…" until the
+              first answer, "—" when the ledger cannot be read, and never a $0
+              it does not know. #}
+          <p class="w-acct-balance">
+            <span><span data-l="en">Balance</span><span data-l="zh">余额</span></span>
+            <b data-w-balance>…</b>
+          </p>
+          <a class="w-acct-item" href="{{ agents_topup_url() }}" data-w-topup><span data-l="en">Prepay</span><span data-l="zh">充值</span></a>
           {% if _here != 'run' %}
           <a class="w-acct-item" href="{{ url_for('main.agents_page') }}"><span data-l="en">Run an analysis</span><span data-l="zh">开始分析</span></a>
           {% endif %}
@@ -162,9 +173,26 @@
   if (!acct) return;
   const btn = acct.querySelector('[data-w-acct-btn]');
   const menu = acct.querySelector('#wAcctMenu');
+  // The balance line, read on every open: a reader back from the pay page sees
+  // the new figure the next time they look, without a reload. The last figure
+  // stays up while it refreshes, so the line does not flicker; "—" says the
+  // ledger could not be read, which is not the same as having nothing.
+  const bal = menu.querySelector('[data-w-balance]');
+  const loadBalance = () => {
+    if (!bal) return;
+    fetch('/api/agents/balance', { cache: 'no-store', credentials: 'same-origin' })
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => {
+        bal.textContent = d && d.usd != null
+          ? '$' + Number(d.usd).toLocaleString('en-US', { maximumFractionDigits: 2 })
+          : '—';
+      })
+      .catch(() => { bal.textContent = '—'; });
+  };
   const setOpen = open => {
     menu.hidden = !open;
     btn.setAttribute('aria-expanded', String(open));
+    if (open) loadBalance();
   };
   btn.addEventListener('click', () => setOpen(menu.hidden));
   menu.addEventListener('click', e => { if (e.target.closest('a, button')) setOpen(false); });

@@ -423,6 +423,16 @@ def create_app() -> Flask:
 
     app.jinja_env.globals["showcase_enabled"] = _showcase_enabled
 
+    # The account menu's Prepay link: this brand's pay page with the reader's
+    # address and the way back (credits.topup_url). No ledger read -- the host,
+    # the session and a url_for -- and called only inside the signed-in menu.
+    def _agents_topup_url() -> str:
+        from flask import session
+        from ystocker import credits
+        return credits.topup_url(session.get("user_email"))
+
+    app.jinja_env.globals["agents_topup_url"] = _agents_topup_url
+
     @app.context_processor
     def _inject_auth_context():
         """Make google_client_id + current_user available in every template."""
