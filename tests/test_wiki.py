@@ -238,6 +238,32 @@ class PhoneHeaderTests(unittest.TestCase):
         self.assertIn(":root:has(> body.w-markets) { scroll-padding-top: 0; }", tpl)
         self.assertIn("body.w-markets main :not(.mk-jump, .mk-jump *) { scroll-margin-top:", tpl)
 
+    def test_off_the_dashboards_the_links_get_a_row_of_their_own(self):
+        # Below 960px the bar has no room for its links, and a phone had no way
+        # to them at all. Off the dashboards they become a second, sideways-
+        # scrolling row inside the masthead -- whose height every sticky offset
+        # reads as --w-top-h, so the declared height must be the rows it draws
+        # plus the 1px rule under the masthead, or everything pinned under it
+        # sits a few pixels wrong without anything failing.
+        blocks = dict((q, b) for q, b in _media_blocks(_CSS) if "w-markets" in b and ".w-top-nav" in b)
+        for query, top_h, first in (("(max-width: 960px)", 114, 68), ("(max-width: 640px)", 106, 60)):
+            body = blocks.get(query, "")
+            self.assertIn(f"body:not(.w-markets) {{ --w-top-h: {top_h}px; }}", body, query)
+            rows = re.search(r"grid-template-rows:\s*(\d+)px\s+(\d+)px", body)
+            self.assertTrue(rows, query)
+            self.assertEqual(int(rows.group(1)), first, query)
+            self.assertEqual(int(rows.group(1)) + int(rows.group(2)) + 1, top_h, query)
+        row = re.search(r"body:not\(\.w-markets\) \.w-top \.w-top-nav \{([^}]*)\}", blocks["(max-width: 960px)"])
+        self.assertTrue(row and "display: flex" in row.group(1) and "overflow-x: auto" in row.group(1))
+
+    def test_the_footer_links_are_a_grid_on_a_phone(self):
+        # A wrapping line broke seven links after "What's new" at 390px, each a
+        # 20px target; on a phone they are 40px rows in columns.
+        phone = "".join(b for q, b in _media_blocks(_CSS) if q == "(max-width: 640px)")
+        nav = re.search(r"\.w-footer nav \{([^}]*)\}", phone)
+        self.assertTrue(nav and "display: grid" in nav.group(1))
+        self.assertRegex(phone, r"\.w-footer nav a \{[^}]*min-height: 40px")
+
 
 class DeskTests(unittest.TestCase):
     def setUp(self):
