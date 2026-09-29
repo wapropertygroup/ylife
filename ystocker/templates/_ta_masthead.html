@@ -135,6 +135,27 @@
   sync();
   window.addEventListener('scroll', sync, { passive: true });
 
+  // Where the links have a row of their own (a phone, off the dashboards;
+  // wiki.css) it scrolls sideways, and its fade marks only a side with more to
+  // see, as the Markets bar's does. A language switch or the web font landing
+  // changes how wide the labels are. In the bar itself nothing overflows, so
+  // this says "none" and the fade rules never match.
+  const row = bar.querySelector('.w-top-nav');
+  if (row) {
+    const fade = () => {
+      const end = row.scrollWidth - row.clientWidth;
+      const left = row.scrollLeft > 1, right = row.scrollLeft < end - 1;
+      const v = left && right ? 'both' : left ? 'left' : right ? 'right' : 'none';
+      if (row.dataset.fade !== v) row.dataset.fade = v;
+    };
+    fade();
+    row.addEventListener('scroll', fade, { passive: true });
+    document.addEventListener('i18n:langchange', fade);
+    if (document.fonts) document.fonts.ready.then(fade);
+    if (window.ResizeObserver) new ResizeObserver(fade).observe(row);
+    else window.addEventListener('resize', fade);
+  }
+
   // The account menu: opens on its button, closes on Escape, on a click
   // anywhere else, and after any choice in it.
   const acct = bar.querySelector('[data-w-acct]');

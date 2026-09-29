@@ -1559,6 +1559,23 @@ pass. `showcase_enabled()` is a Jinja global for the same reason — only the
 landing's routes pass `showcase`. The wiki's `.w-bar` and the landing's and wiki's
 `.w-foot` strips render off trade-agents.com only.
 
+**On a phone the masthead's links get a row of their own.** Below 960px (880px
+signed out) the bar has no room for them. Before, a phone then had no way to
+Docs, the Research Lab, Samples or Pricing from the header at all. Off the
+dashboards the same `<nav>` becomes a second row inside the masthead, pinned
+with it and scrolling sideways like the Markets bar. It is a grid, not a wrap,
+because a wrapped flex line is only as tall as its items and the bar's own row
+shrank to its 36px buttons. `--w-top-h` grows to match (114px, 106px on a
+phone), and `PhoneHeaderTests` asserts that it equals the rows drawn plus the
+masthead's 1px rule. A dashboard does without the row: the Markets bar holds
+that slot, and a third pinned row would be a quarter of a phone's screen. The
+footer carries the links on every page, and on a phone they are a grid of 40px
+rows rather than a line that wraps wherever a label runs out. The landing's
+sections get a `scroll-margin-top` in the row's range, since their top padding
+alone had cleared a 61px masthead and not a 106px one. A docs section now
+carries its own too: links target the `<section>`, and the existing `h2` rule
+had never applied to one.
+
 One column costs width somewhere, and it is paid in two places. The docs'
 1260px `.w-wide` is capped to 1180 there (a 630px prose measure). And the
 heatmap's own 1800px, and the dashboards' 1475px `app-container`, give way on
@@ -1566,7 +1583,8 @@ trade-agents.com only. The dashboards' Tailwind breakpoints are viewport-based,
 so at 1440px `/markets` still sets eight index cards to a row in the narrower
 column and truncates a few names — which is what a 1280px laptop already shows
 on yStocker. Everything that sticks under the header reads `--w-head-h`, the
-masthead's height plus the Markets bar's (`--w-sub-h`, 45px on a dashboard and
+masthead's height (`--w-top-h`, which includes the links' row on a phone off the
+dashboards) plus the Markets bar's (`--w-sub-h`, 45px on a dashboard and
 0 elsewhere). That covers the docs sidebar and contents, the run page's jump bar
 and `#agDock`, `/markets`' section bar, `/history`'s `#sectionNav` and
 `/guide`'s contents list, each overridden next to the rule it re-measures.

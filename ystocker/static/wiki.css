@@ -307,9 +307,9 @@ html[lang^="zh"] .w-top-name small { letter-spacing: .06em; }
   .w-top[data-signed-in] .w-top-nav { display: none; }
   .w-top[data-signed-in] .w-top-actions { margin-left: auto; }
 }
-/* Below this the links would crowd the controls. They are not lost: the
-   landing's hero and Explore, and the footer on every page, link the same
-   pages, as on vibetrading.wiki, which likewise drops its nav on a phone. */
+/* Below this the links would crowd the controls, so they leave the bar: for a
+   row of their own under it on a page without the Markets bar (below), and on
+   a dashboard, where that bar holds the row, for the footer. */
 @media (max-width: 880px) {
   .w-top-nav { display: none; }
   .w-top-actions { margin-left: auto; }
@@ -342,6 +342,62 @@ html[lang^="zh"] .w-top-name small { letter-spacing: .06em; }
 }
 @media (max-width: 355px) {
   .w-top-mark { display: none; }
+}
+
+/* The links' own row, on a page without the Markets bar, once the bar has let
+   them go (960px signed in, 880px out; one breakpoint here, so a signed-out
+   page moves them 80px early). It is inside the masthead, pinned with it, and
+   scrolls sideways as the Markets bar's links do on a dashboard -- where that
+   bar takes this row's place, since a third pinned row would be a quarter of a
+   phone's screen. A grid rather than a wrap, because a wrapped flex line is
+   only as tall as its tallest item and the bar's own row would shrink to its
+   36px buttons. --w-top-h is the new height: 68 + 45 + the 1px rule under the
+   masthead, 60 + 45 + 1 on a phone. The fade is kept to a side with more to
+   see (data-fade, set by the masthead's script). The landing's sections are
+   given back the clearance their top padding gave them under a 61px masthead,
+   or Pricing and Samples land under this one. */
+@media (max-width: 960px) {
+  body:not(.w-markets) { --w-top-h: 114px; }
+  body:not(.w-markets) .w-top-inner {
+    display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-rows: 68px 45px;
+    row-gap: 0; align-items: center;
+  }
+  body:not(.w-markets) .w-top-brand { grid-area: 1 / 1; }
+  body:not(.w-markets) .w-top-actions { grid-area: 1 / 3; }
+  body:not(.w-markets) .w-top .w-top-nav {
+    display: flex; grid-area: 2 / 1 / 3 / -1; align-self: stretch; align-items: stretch; gap: 0;
+    margin: 0 -24px; padding: 0 14px; border-top: 1px solid var(--w-line);
+    overflow-x: auto; scrollbar-width: none; overscroll-behavior-x: contain;
+    -webkit-tap-highlight-color: transparent;
+  }
+  body:not(.w-markets) .w-top-nav::-webkit-scrollbar { display: none; }
+  body:not(.w-markets) .w-top-nav[data-fade="right"] {
+    -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 32px), transparent);
+            mask-image: linear-gradient(90deg, #000 calc(100% - 32px), transparent);
+  }
+  body:not(.w-markets) .w-top-nav[data-fade="left"] {
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 32px);
+            mask-image: linear-gradient(90deg, transparent, #000 32px);
+  }
+  body:not(.w-markets) .w-top-nav[data-fade="both"] {
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 32px, #000 calc(100% - 32px), transparent);
+            mask-image: linear-gradient(90deg, transparent, #000 32px, #000 calc(100% - 32px), transparent);
+  }
+  body:not(.w-markets) .w-top-nav a {
+    display: inline-flex; align-items: center; flex-shrink: 0; padding: 0 10px; font-size: 14px;
+  }
+  body:not(.w-markets) .w-top-nav a:active { color: var(--w-ink); }
+  /* Under the word, not the padding either side of it. */
+  body:not(.w-markets) .w-top-nav a.is-current {
+    box-shadow: none;
+    background: linear-gradient(var(--w-accent), var(--w-accent)) no-repeat center bottom / calc(100% - 20px) 2px;
+  }
+  body:not(.w-markets) .w-top ~ main .w-section[id] { scroll-margin-top: calc(var(--w-head-h) - 48px); }
+}
+@media (max-width: 640px) {
+  body:not(.w-markets) { --w-top-h: 106px; }
+  body:not(.w-markets) .w-top-inner { grid-template-rows: 60px 45px; }
+  body:not(.w-markets) .w-top .w-top-nav { margin: 0 -16px; padding: 0 6px; }
 }
 
 /* ── Markets bar (trade-agents.com's dashboards) ─────────────────────────────
@@ -698,7 +754,19 @@ a.w-card:focus-visible { outline: 2px solid var(--w-accent); outline-offset: 2px
 .w-footer nav a:hover { color: var(--w-ink); }
 .w-footer-brand:focus-visible, .w-footer nav a:focus-visible { outline: 2px solid var(--w-accent); outline-offset: 2px; }
 .w-footer-note { margin: 14px 0 0; max-width: 52rem; font-size: 12.5px; line-height: 1.6; color: var(--w-muted); }
-@media (max-width: 640px) { .w-footer-inner { padding: 20px 16px 30px; } }
+/* On a phone the links are a grid rather than a line that wraps wherever a
+   label runs out: at 390px seven of them broke after "What's new", leaving
+   "Markets" and "Contact" on a second line, each a 20px-tall target. Here
+   every link is a 40px row in columns that fit the screen -- three from 375px,
+   two at 360 and below -- and a dashboard's ten fill the same grid. */
+@media (max-width: 640px) {
+  .w-footer-inner { padding: 20px 16px 30px; }
+  .w-footer nav {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+    gap: 0 12px; width: 100%; font-size: 14px;
+  }
+  .w-footer nav a { display: flex; align-items: center; min-height: 40px; }
+}
 
 /* A page whose content should sit in the masthead's column: <main> takes this
    in place of the dashboards' .app-container, keeping its own side padding,
@@ -791,6 +859,12 @@ textarea.w-input { min-height: 140px; resize: vertical; }
 }
 .w-top ~ main .w-toc { top: calc(var(--w-head-h) + 32px); }
 .w-top ~ main .w-prose h2 { scroll-margin-top: calc(var(--w-head-h) + 24px); }
+/* A link to a docs section targets the <section>, not its h2, so the rule above
+   never applied to one: the heading landed under the masthead, and 59px under
+   it once the phone's masthead grew its row of links. A section opens with 8px
+   of padding, a 1px rule and the h2's 38px margin, so this lands the heading
+   24px under the header, where the h2 rule meant it to be. */
+.w-top ~ main .w-prose section[id] { scroll-margin-top: calc(var(--w-head-h) - 23px); }
 
 /* ── Docs layout ──────────────────────────────────────────────────────────── */
 .w-docs {
