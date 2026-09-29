@@ -313,6 +313,12 @@ html[lang^="zh"] .w-top-name small { letter-spacing: .06em; }
 @media (max-width: 880px) {
   .w-top-nav { display: none; }
   .w-top-actions { margin-left: auto; }
+  /* One size for the controls in both rows. The language toggle is a 36px
+     square like theme, search and ↻: its label made it 36px wide in Chinese
+     ("EN") and 44px in English ("中文"), so every switch moved the bar. The
+     call to action beside it keeps its label and takes their type. */
+  .w-top .lang-toggle-btn { width: 36px; padding: 0; }
+  .w-top-actions > .w-btn { padding: 0 12px; font-size: 13px; font-weight: 600; }
 }
 @media (max-width: 640px) {
   :root { --w-top-h: 61px; }
@@ -333,7 +339,6 @@ html[lang^="zh"] .w-top-name small { letter-spacing: .06em; }
   .w-top-inner { gap: 10px; }
   .w-top-actions { gap: 6px; }
   .w-top-name { font-size: 17px; }
-  .w-top .lang-toggle-btn { padding: 0 8px; }
 }
 @media (max-width: 355px) {
   .w-top-mark { display: none; }
@@ -427,8 +432,10 @@ html[lang^="zh"] .w-top-name small { letter-spacing: .06em; }
 .w-sub-tip p:first-child { margin-bottom: 4px; font-weight: 650; color: var(--w-ink); }
 .w-sub-refresh:hover .w-sub-tip, .w-sub-refresh:focus-within .w-sub-tip { opacity: 1; }
 
-/* A phone: the row scrolls away with the page instead of stacking a second
-   sticky row under the masthead, and its links scroll sideways -- which would
+/* A phone: the row stays pinned under the masthead, as it is on a laptop. It
+   used to scroll away with the page, to save the 45px a second pinned row
+   costs, and then a reader who had scrolled a dashboard had to go back to the
+   top to find its navigation. Its links scroll sideways -- which would
    clip a menu, so Sectors and Macro become the plain links beside them.
    The links get the row but for two icons: at 390px "↻ Refresh" beside the
    search button left twelve links 220px, three and a half of them in English.
@@ -438,8 +445,6 @@ html[lang^="zh"] .w-top-name small { letter-spacing: .06em; }
    see -- data-fade, set by the bar's script, whose page link it keeps in view.
    Without the script the row keeps the right-hand fade it starts with. */
 @media (max-width: 880px) {
-  body.w-markets { --w-sub-h: 0px; }
-  .w-sub { position: static; }
   .w-sub-inner { position: relative; gap: 8px; }
   .w-sub-links {
     flex: 1; align-self: stretch; gap: 0; margin-left: -24px; padding-left: 14px;

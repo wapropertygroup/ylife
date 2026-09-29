@@ -5,10 +5,11 @@
     the landing and a chart the page's edges, the masthead and the wordmark stay
     where they are and only the page changes.
 
-    Sticky under the masthead from 881px up; below that it scrolls away with
-    the page, since two stacked sticky rows would take a sixth of a phone's
-    screen. The height it adds to the sticky header is --w-sub-h (wiki.css),
-    which the dashboards' own sticky bars read through --w-head-h.
+    Sticky under the masthead at every width. On a phone it used to scroll
+    away with the page, to save the 45px a second pinned row costs, and then
+    it was hard to find again from halfway down a dashboard. The height it adds
+    to the sticky header is --w-sub-h (wiki.css), which the dashboards' own
+    sticky bars read through --w-head-h.
 
     It carries the hooks the scripts in base.html look for: navsearch.js binds
     any [data-navsearch] mount, and the refresh cooldown finds #refreshBtn,

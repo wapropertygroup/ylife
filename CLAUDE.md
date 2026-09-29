@@ -1531,9 +1531,14 @@ menus, ticker search and ↻ Refresh, as a second row under the masthead in the
 same column. That is where their navigation went — the masthead has no room
 for it. It carries the hooks base.html's scripts need (`[data-navsearch]`,
 `#refreshBtn`/`#refreshWrap`/`#refreshTooltipBody`), with `_refresh_map` moved to
-base.html's top level so both bars read it. It is sticky under the masthead from
-881px and scrolls away below that; its links scroll sideways on a phone, where
-Sectors and Macro become plain links because the scroller would clip a menu. The
+base.html's top level so both bars read it. It is sticky under the masthead at
+every width. On a phone it used to scroll away, which put a dashboard's
+navigation out of reach from halfway down it. Its links scroll sideways on a
+phone, where Sectors and Macro become plain links because the scroller would
+clip a menu. At 880px and below every control in the two rows is 36px tall in
+13px type, and the language toggle, theme, search and ↻ are 36px squares. Sized
+by its label, the toggle had been 36px in Chinese and 44px in English, so each
+switch moved the bar. The
 dashboards keep the floating research-desk launcher, which is how a reader runs
 the desk from a chart; the product pages drop it, since their masthead leads to
 the desk from every page. The footer adds the dashboards' Guide, RSS and FOMC
@@ -1561,8 +1566,8 @@ trade-agents.com only. The dashboards' Tailwind breakpoints are viewport-based,
 so at 1440px `/markets` still sets eight index cards to a row in the narrower
 column and truncates a few names — which is what a 1280px laptop already shows
 on yStocker. Everything that sticks under the header reads `--w-head-h`, the
-masthead's height plus the Markets bar's (`--w-sub-h`, 0 off the dashboards and
-on a phone). That covers the docs sidebar and contents, the run page's jump bar
+masthead's height plus the Markets bar's (`--w-sub-h`, 45px on a dashboard and
+0 elsewhere). That covers the docs sidebar and contents, the run page's jump bar
 and `#agDock`, `/markets`' section bar, `/history`'s `#sectionNav` and
 `/guide`'s contents list, each overridden next to the rule it re-measures.
 `--w-head-h` is declared on `<body>`, not `:root`, because a custom property's
@@ -1576,6 +1581,17 @@ carries too; `check_wiki_pages` looks for the drawer's `id="refreshBtnMobile"`.
 Likewise the account menu's marker is its markup, because the masthead's script
 spells `data-w-acct` on every page. And under 520px a signed-in reader's CTA gives
 way to the account button — the two do not fit beside the wordmark at 390px.
+
+**A `scroll-padding-top` on `<html>` covers the pinned header's own controls.**
+It is meant to keep a jump's target clear of the sticky bars, but it applies to
+anything scrolled into view, the header's buttons included. With /markets'
+padding, opening ticker search from 2,200px down a phone scrolled the page
+1,100px up to "reveal" an input that was already on screen. Focusing the theme
+button scrolled it too, by 440px on a desktop at the 108px yStocker has always
+used. So on trade-agents.com /markets zeroes it and puts the clearance on what is
+scrolled to: `scroll-margin-top` on everything in `<main>` except its own pinned
+chip bar. `tests/test_wiki.py`'s `PhoneHeaderTests` pin this and the two phone
+rules above, since all three are CSS that no rendered-HTML check can see.
 
 `/login` now sends a reader who is already signed in to a safe `next`, else to
 the run form on trade-agents.com (it used to be `/markets` on every host), and

@@ -303,6 +303,16 @@
      bar: a chip, a shared #section link, the index tabs' scrollIntoView and the
      brief's collapse alike. 56 + the bar's ~41 + a gap. */
   html { scroll-padding-top: 108px; }
+  /* On trade-agents.com the header is the masthead plus the Markets bar, both
+     pinned at every width, and the clearance goes on what is scrolled to
+     rather than on <html>. A padding there covers the header's own controls
+     too: from 2,200px down a phone, opening ticker search scrolled the page
+     1,100px up to "reveal" an input that was already on screen, and focusing
+     the theme button scrolled it too. --w-head-h is the masthead and the bar
+     (wiki.css); then this bar's 43px and the same 9px gap. The chips are left
+     out, being pinned themselves. */
+  :root:has(> body.w-markets) { scroll-padding-top: 0; }
+  body.w-markets main :not(.mk-jump, .mk-jump *) { scroll-margin-top: calc(var(--w-head-h) + 52px); }
   /* Collapses with the last card's own mb-6, so the gap above a banner is the
      same whether or not that card carries one — #idxDetail does not. */
   .mk-section + .mk-section { margin-top: 44px; }
