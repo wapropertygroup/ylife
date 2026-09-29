@@ -4,7 +4,7 @@ Needs no app, no network and no browser — it reads ``ystocker/wiki.py`` and th
 template files as text, in the house style of ``test_template_ids`` and
 ``test_i18n_completeness``.
 
-Three failures this exists to catch, all of which render without complaint:
+Four failures this exists to catch, all of which render without complaint:
 
 * **A page nobody can reach, or a link to a page that is not there.** The
   sidebar, prev/next and the Research Lab index are built from the registry; the
@@ -20,6 +20,10 @@ Three failures this exists to catch, all of which render without complaint:
   the analyst tuples the runner actually passes, and ``agent_roles.ROLES`` still
   carries the retired Fundamentals Analyst so old reports render. Listing it on
   the landing would advertise a seat that has not existed since 2026-08-30.
+* **The phone header sliding back.** On trade-agents.com the Markets bar stays
+  pinned under the masthead at every width, and the header's controls share one
+  size, both asked for from a phone on 2026-09-29. Both live in CSS, which no
+  rendered-HTML check can see.
 """
 from __future__ import annotations
 
@@ -181,6 +185,58 @@ class ContentFileTests(unittest.TestCase):
         base = (TEMPLATES / "base.html").read_text(encoding="utf-8")
         self.assertIn('html[lang^="zh"] [data-l="en"]', base)
         self.assertIn('html:not([lang^="zh"]) [data-l="zh"]', base)
+
+
+_CSS = re.sub(r"/\*.*?\*/", "", (ROOT / "ystocker" / "static" / "wiki.css").read_text(encoding="utf-8"),
+              flags=re.S)
+
+
+def _media_blocks(css: str) -> list[tuple[str, str]]:
+    """Each @media block as (query, body), by brace matching. Comments are gone
+    first, since several quote a rule, braces and all."""
+    out = []
+    for m in re.finditer(r"@media([^{]*)\{", css):
+        depth, i = 1, m.end()
+        while depth:
+            depth += {"{": 1, "}": -1}.get(css[i], 0)
+            i += 1
+        out.append((m.group(1).strip(), css[m.end():i - 1]))
+    return out
+
+
+class PhoneHeaderTests(unittest.TestCase):
+    """trade-agents.com's header on a phone: CSS, so asserted as text."""
+
+    def test_the_markets_bar_is_pinned_at_every_width(self):
+        # It used to scroll away below 881px, which left a dashboard's navigation
+        # out of reach from halfway down it. Pinned also means --w-sub-h keeps the
+        # bar's height there, since the pages' own sticky bars sit under it.
+        self.assertRegex(_CSS, r"\.w-sub \{\s*position: sticky;")
+        self.assertIn("body.w-markets { --w-sub-h: 45px; }", _CSS)
+        blocks = _media_blocks(_CSS)
+        self.assertTrue(any(q == "(max-width: 880px)" for q, _ in blocks), "the phone block moved")
+        for query, body in blocks:
+            self.assertNotRegex(body, r"\.w-sub\s*\{[^}]*position:\s*static", query)
+            self.assertNotRegex(body, r"--w-sub-h:\s*0", query)
+
+    def test_the_language_toggle_is_a_fixed_square_on_a_phone(self):
+        # Sized by its label it was 36px wide in Chinese ("EN") and 44px in
+        # English ("中文"), beside 36px squares, so every switch moved the bar.
+        phone = [body for query, body in _media_blocks(_CSS) if query == "(max-width: 880px)"]
+        self.assertTrue(any(".w-top .lang-toggle-btn { width: 36px; padding: 0; }" in b for b in phone))
+        # A narrower block padding it again would squeeze 中文 out of the box.
+        for query, body in _media_blocks(_CSS):
+            width = re.search(r"max-width:\s*(\d+)px", query)
+            if width and int(width.group(1)) < 880:
+                self.assertNotIn("lang-toggle-btn", body, query)
+
+    def test_markets_keeps_its_clearance_off_html_there(self):
+        # A scroll-padding on <html> covers the pinned header's own controls:
+        # opening ticker search from 2,200px down a phone scrolled the page up
+        # 1,100px. The clearance is a scroll-margin on what is scrolled to.
+        tpl = (TEMPLATES / "markets.html").read_text(encoding="utf-8")
+        self.assertIn(":root:has(> body.w-markets) { scroll-padding-top: 0; }", tpl)
+        self.assertIn("body.w-markets main :not(.mk-jump, .mk-jump *) { scroll-margin-top:", tpl)
 
 
 class DeskTests(unittest.TestCase):
