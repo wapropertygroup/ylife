@@ -65,9 +65,34 @@ Nothing about the payment differs. ypay builds its Stripe success and cancel URL
 from `request.host_url`, so it follows whichever host serves it with **no
 Stripe-side configuration**. The buyer handoff is by email in the query string,
 not a shared session — `SESSION_COOKIE_DOMAIN` is unset in both apps, so the
-session does not even cross `stock.` to `pay.`, which is why `credits.summary()`
+session does not even cross `stock.` to `pay.`, which is why `credits.topup_url()`
 appends `?email=` and `?next=`. Without the address ypay hides the run packs
 entirely, so a bare link led to a page with nothing to buy.
+
+Until 2026-09-29 the brand mapping reached only `credits.summary()`, which
+nothing called. The run page's top-up link came from `quota._credit_info()` and
+the 429 upsell, both on the bare `PAY_URL`, so a buyer on trade-agents.com was
+handed to pay.li-family.us after all. Both now call `credits.pay_url()`. `next`
+had also never been sent, for two reasons at once: `url_for("main.agents")`
+names no endpoint (it is `main.agents_page`), and `request.url_root` reads
+http:// behind nginx, so the https check ypay applies failed anyway.
+`_return_to()` now forces https as `_share_base()` does. `tests/test_credits.py`
+pins all three.
+
+**The account menu on trade-agents.com shows the balance and a way to add to
+it.** The balance is quoted as an amount, a run at `credits.USD_PER_CREDIT` ($1,
+the smallest pack's price). That is a display rate only: nothing is charged at
+it, and a run bought for less in a bigger pack still shows as $1 left. Prepay
+(充值) is simply the pack page on this brand's pay host, through
+`agents_topup_url()`, a Jinja global that reads no ledger. The figure comes from
+`GET /api/agents/balance` each time the menu opens, not on every render, since
+every page there draws the masthead. It is sign-in gated only (the allowlist
+decides who may run, not who may see their own money), and `credits` is null
+when the ledger cannot be read. `credits.peek_balance()` exists for that
+distinction, and the menu shows "—" rather than $0: a paying reader told they
+have nothing has been told their money is gone. `balance()` still answers 0,
+because an unreadable ledger must fund no run. stock.li-family.us's own account
+menu does not carry either yet.
 
 `AGENTS_PAY_URL` still overrides everything for staging, but it is read once at
 import and so is process-global — which is exactly why the per-brand mapping is a
@@ -1552,7 +1577,9 @@ call to action. It reads the page's `section` — a dashboard's is `markets` —
 where `home` makes Samples and Pricing in-page anchors (elsewhere they lead to
 `/home#…`), `docs`/`research`/`markets` mark their link current, and `run` and
 `login` drop the CTA and the Sign in button, each of which would lead to the page
-already open. Signed in it adds an account menu (Portfolio, Posts, Share a report
+already open. Signed in it adds an account menu (the balance as an amount and
+Prepay — see the pay.trade-agents.com notes at the top — then Portfolio, Posts,
+Share a report
 through share.js's `[data-share-open]`, Sign out, which reloads), and it reads
 sign-in from `current_user`, not the landing's `signed_in`, which only two routes
 pass. `showcase_enabled()` is a Jinja global for the same reason — only the

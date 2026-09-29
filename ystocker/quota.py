@@ -375,12 +375,14 @@ def _credit_info(email: str) -> dict[str, Any]:
     """Credit balance and where to buy more, for the response payload.
 
     Never raises: the quota answer must not depend on the ledger being reachable,
-    and a missing balance shows as 0 with the buy link still offered.
+    and a missing balance shows as 0 with the buy link still offered. The link is
+    this brand's checkout host (credits.pay_url): PAY_URL alone sent a buyer on
+    trade-agents.com to pay.li-family.us, the moment a strange domain costs most.
     """
     try:
         from ystocker import credits
 
-        return {"credits": credits.balance(email), "pay_url": credits.PAY_URL}
+        return {"credits": credits.balance(email), "pay_url": credits.pay_url()}
     except Exception as exc:  # noqa: BLE001
         log.warning("quota: credit balance unavailable: %s", exc)
         return {"credits": 0, "pay_url": ""}
