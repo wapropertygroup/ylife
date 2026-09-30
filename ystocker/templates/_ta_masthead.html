@@ -109,7 +109,9 @@
             <span><span data-l="en">Balance</span><span data-l="zh">余额</span></span>
             <b data-w-balance>…</b>
           </p>
-          <a class="w-acct-item" href="{{ agents_topup_url() }}" data-w-topup><span data-l="en">Prepay</span><span data-l="zh">充值</span></a>
+          {# data-carry-prefs: the pay page is another origin, so the script
+             below hands it this page's language and theme at the click. #}
+          <a class="w-acct-item" href="{{ agents_topup_url() }}" data-w-topup data-carry-prefs><span data-l="en">Prepay</span><span data-l="zh">充值</span></a>
           {% if _here != 'run' %}
           <a class="w-acct-item" href="{{ url_for('main.agents_page') }}"><span data-l="en">Run an analysis</span><span data-l="zh">开始分析</span></a>
           {% endif %}
@@ -145,6 +147,24 @@
   const sync = () => { bar.classList.toggle('is-scrolled', window.scrollY > 8); };
   sync();
   window.addEventListener('scroll', sync, { passive: true });
+
+  // A link to the pay page (pay.trade-agents.com) hands it this page's language
+  // and theme, which it cannot read for itself: it is another origin, with its
+  // own localStorage, and would otherwise open in English and dark whatever the
+  // reader had chosen here. Set as the link is followed rather than at render,
+  // so a switch made since the page loaded rides along too -- the account
+  // menu's Prepay, and the run page's "Buy more runs" (agents.html).
+  const carry = e => {
+    const a = e.target.closest && e.target.closest('a[data-carry-prefs]');
+    if (!a) return;
+    try {
+      const u = new URL(a.href);
+      u.searchParams.set('lang', window.I18n ? I18n.getLang() : 'en');
+      u.searchParams.set('theme', document.documentElement.classList.contains('dark') ? 'dark' : 'light');
+      a.href = u.toString();
+    } catch (_) { /* leave the link as rendered */ }
+  };
+  ['click', 'auxclick', 'contextmenu'].forEach(t => document.addEventListener(t, carry, true));
 
   // Where the links have a row of their own (a phone, off the dashboards;
   // wiki.css) it scrolls sideways, and its fade marks only a side with more to

@@ -1,0 +1,23 @@
+{% extends "ta/base.html" %}
+{#  A TradeAgents checkout abandoned on Stripe's page. New sessions cancel back
+    to the pack page instead (routes.api_checkout), where the buyer can choose
+    again; this answers only a session opened before that, whose cancel URL
+    carries no address to show packs for -- so it points at where one starts. #}
+{% set title_en = "Checkout cancelled" %}
+{% set title_zh = "已取消支付" %}
+
+{% block content %}
+<div class="p-note-page">
+  <header class="w-page-head">
+    <p class="w-kicker"><span data-l="en">Checkout cancelled</span><span data-l="zh">已取消支付</span></p>
+    <h1 class="w-page-title"><span data-l="en">Nothing was charged.</span><span data-l="zh">没有产生任何扣费。</span></h1>
+    <p class="w-page-lead">
+      <span data-l="en">You left Stripe's page before paying. To try again, choose Prepay in the account menu on trade-agents.com.</span>
+      <span data-l="zh">你在付款前离开了 Stripe 页面。如需重试，请在 trade-agents.com 的账户菜单中选择“充值”。</span>
+    </p>
+    <div class="w-actions">
+      <a class="w-btn w-btn-primary" href="{{ return_to }}" data-ta-link><span data-l="en">Back to the desk</span><span data-l="zh">返回投研台</span> <span aria-hidden="true">→</span></a>
+    </div>
+  </header>
+</div>
+{% endblock %}

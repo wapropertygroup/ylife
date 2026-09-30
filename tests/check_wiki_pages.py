@@ -541,12 +541,16 @@ class WikiPages(unittest.TestCase):
         # back -- https, although Flask sees http behind nginx.
         docs = self._as_reader("/docs/overview", base_url=TA)
         self.assertIn('<b data-w-balance>…</b>', docs)
-        link = re.search(r'<a class="w-acct-item" href="([^"]+)" data-w-topup>', docs)
+        link = re.search(r'<a class="w-acct-item" href="([^"]+)" data-w-topup data-carry-prefs>', docs)
         self.assertTrue(link, "no Prepay link in the account menu")
         href = html.unescape(link.group(1))
         self.assertTrue(href.startswith("https://pay.trade-agents.com?"), href)
         self.assertIn("email=reader%40example.com", href)
         self.assertIn("next=https%3A%2F%2Ftrade-agents.com%2Fagents", href)
+        # The pay page is another origin and cannot read this one's storage, so
+        # the masthead's script hands it the language and theme at the click.
+        self.assertIn("a[data-carry-prefs]", docs)
+        self.assertIn("u.searchParams.set('theme'", docs)
 
     def test_the_balance_endpoint(self):
         from ystocker import credits
