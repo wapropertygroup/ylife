@@ -1,0 +1,214 @@
+{% extends "ta/base.html" %}
+{#  pay.trade-agents.com's Prepay (充值) page: run packs, in the site's frame.
+
+    Three states, from what the query string and the pack table say:
+    - packs and an address: the chooser. The address is who gets the runs, and
+      is not proof of anything -- it only decides who benefits from a payment
+      somebody actually makes (routes.index).
+    - packs, no address: the prices, and the way to sign in. /api/checkout
+      refuses a pack with nowhere to deliver it, so offering one here would be
+      a dead end at the card form.
+    - no packs: selling is off (credits.selling_enabled), and the page says
+      nothing can be charged rather than offering what would be refused.
+
+    Every figure comes from the pack table through routes._ta_packs, never from
+    this file. `canceled` is set when Stripe's back button returns here. #}
+{% set title_en = "Prepay" %}
+{% set title_zh = "充值" %}
+
+{% macro pack_row(p) -%}
+<span class="p-pack-what">
+  <b><span data-l="en">{{ p.credits }} runs</span><span data-l="zh">{{ p.credits }} 次</span></b>
+  <small><span data-l="en">${{ '%.2f' % p.per_run }} per run</span><span data-l="zh">每次 ${{ '%.2f' % p.per_run }}</span>
+    {%- if p.save_pct %} <span class="p-save"><span data-l="en">save {{ p.save_pct }}%</span><span data-l="zh">省 {{ p.save_pct }}%</span></span>{% endif %}</small>
+</span>
+<span class="p-pack-price">${{ '%g' % p.price }}</span>
+{%- endmacro %}
+
+{% block content %}
+{% if not packs %}
+<div class="p-note-page">
+  <header class="w-page-head">
+    <p class="w-kicker"><span data-l="en">Prepay</span><span data-l="zh">充值</span></p>
+    <h1 class="w-page-title"><span data-l="en">Run packs are paused.</span><span data-l="zh">次数包暂停销售。</span></h1>
+    <p class="w-page-lead">
+      <span data-l="en">Run packs are not on sale at the moment, so nothing can be charged here. Your free runs work as usual.</span>
+      <span data-l="zh">次数包目前暂停销售，这里不会产生任何扣费。免费额度照常可用。</span>
+    </p>
+    <div class="w-actions">
+      <a class="w-btn w-btn-primary" href="{{ return_to }}" data-ta-link><span data-l="en">Back to the desk</span><span data-l="zh">返回投研台</span> <span aria-hidden="true">→</span></a>
+    </div>
+  </header>
+</div>
+{% else %}
+<div class="p-split">
+  <header class="w-page-head">
+    <p class="w-kicker"><span data-l="en">Prepay</span><span data-l="zh">充值</span></p>
+    {% if buyer_email %}
+    <h1 class="w-page-title"><span data-l="en">Add runs to your account.</span><span data-l="zh">为账户充值<wbr>分析次数。</span></h1>
+    <p class="w-page-lead">
+      <span data-l="en">One run is one full analysis: the analysts report, bull and bear argue it out, and the portfolio manager signs a decision. Runs come in packs, and the bigger the pack, the less each run costs.</span>
+      <span data-l="zh">一次就是一次完整的分析：分析师提交报告，多空双方展开辩论，最后由投资组合经理签发决策。次数按包购买，包越大，每次越便宜。</span>
+    </p>
+    {% else %}
+    <h1 class="w-page-title"><span data-l="en">Sign in to add runs.</span><span data-l="zh">登录后<wbr>即可充值。</span></h1>
+    <p class="w-page-lead">
+      <span data-l="en">Runs are added to the account you sign in with on trade-agents.com, so a purchase starts there. Once you are in, open the account menu under your picture and choose Prepay.</span>
+      <span data-l="zh">次数会加到你在 trade-agents.com 登录的账号上，所以购买要从那里开始。登录后，点开头像下的账户菜单，选择“充值”。</span>
+    </p>
+    <div class="w-actions">
+      <a class="w-btn w-btn-primary" href="{{ ta_site }}/login?next=/agents" data-ta-link><span data-l="en">Sign in on trade-agents.com</span><span data-l="zh">在 trade-agents.com 登录</span> <span aria-hidden="true">→</span></a>
+    </div>
+    {% endif %}
+  </header>
+
+  <section class="w-card w-panel p-panel" aria-labelledby="payPacksTitle">
+    {% if canceled and buyer_email %}
+    <p class="w-callout p-notice" role="status">
+      <span data-l="en">Checkout cancelled — nothing was charged. Choose a pack to try again.</span>
+      <span data-l="zh">已取消支付——没有产生任何扣费。可以重新选择次数包。</span>
+    </p>
+    {% endif %}
+    {% if buyer_email %}
+    <h2 class="w-panel-title" id="payPacksTitle"><span data-l="en">Choose a pack</span><span data-l="zh">选择次数包</span></h2>
+    <p class="w-panel-sub">
+      <span data-l="en">Runs are added to <b class="p-who">{{ buyer_email }}</b>, the account you are signed in with.</span>
+      <span data-l="zh">次数将加到 <b class="p-who">{{ buyer_email }}</b>，即你登录所用的账号。</span>
+    </p>
+    <form class="p-form" data-pay-form novalidate>
+      <fieldset class="p-packs">
+        <legend class="w-sr"><span data-l="en">Run packs</span><span data-l="zh">次数包</span></legend>
+        {% for p in packs %}
+        <div class="p-pack">
+          <input type="radio" name="pack" id="pk-{{ p.id }}" value="{{ p.id }}"
+                 data-price="${{ '%g' % p.price }}"{% if loop.first %} checked{% endif %}>
+          <label class="p-pack-card" for="pk-{{ p.id }}">
+            <span class="p-pack-dot" aria-hidden="true"></span>
+            {{ pack_row(p) }}
+          </label>
+        </div>
+        {% endfor %}
+      </fieldset>
+      <button type="submit" class="w-btn w-btn-primary w-btn-wide p-pay" data-pay-btn aria-busy="false">
+        <span class="p-pay-idle"><span data-l="en">Pay <span data-pay-amount></span></span><span data-l="zh">支付 <span data-pay-amount></span></span> <span aria-hidden="true">→</span></span>
+        <span class="p-pay-busy"><span class="p-spin" aria-hidden="true"></span><span data-l="en">Opening Stripe…</span><span data-l="zh">正在打开 Stripe…</span></span>
+      </button>
+      <p class="p-error" data-pay-err role="alert" hidden></p>
+    </form>
+    <p class="p-secure">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+      </svg>
+      <span>
+        <span data-l="en">You pay on Stripe's secure page: a one-off charge in US dollars, not a subscription. Your card details never reach this site.</span>
+        <span data-l="zh">付款在 Stripe 的安全页面完成：以美元一次性支付，不是订阅。银行卡信息不会经过本站。</span>
+      </span>
+    </p>
+    {% else %}
+    <h2 class="w-panel-title" id="payPacksTitle"><span data-l="en">Prices</span><span data-l="zh">价格</span></h2>
+    <p class="w-panel-sub"><span data-l="en">Paid by card through Stripe, once, in US dollars.</span><span data-l="zh">通过 Stripe 以银行卡、美元一次性支付。</span></p>
+    <ul class="p-prices">
+      {% for p in packs %}
+      <li>{{ pack_row(p) }}</li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </section>
+
+  <ul class="w-checks p-notes">
+    <li><span data-l="en">Purchased runs never expire and carry over between days.</span><span data-l="zh">购买的次数永不过期，可跨日累积使用。</span></li>
+    <li><span data-l="en">Free runs are always spent first: a bought run is used only once today's free ones are gone.</span><span data-l="zh">系统总是先用免费次数：当天的免费次数用完后，才会动用购买的次数。</span></li>
+    <li><span data-l="en">Runs arrive as soon as Stripe confirms the payment, usually within seconds.</span><span data-l="zh">Stripe 确认付款后即到账，通常只需几秒。</span></li>
+    <li><span data-l="en">The account menu shows your balance as an amount, each run counted at $1.</span><span data-l="zh">账户菜单以金额显示余额，每次分析按 $1 计。</span></li>
+  </ul>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if packs and buyer_email %}
+<script>
+(function () {
+  const form = document.querySelector('[data-pay-form]');
+  if (!form) return;
+  const btn = form.querySelector('[data-pay-btn]');
+  const err = form.querySelector('[data-pay-err]');
+  const inputs = Array.from(form.querySelectorAll('input[name="pack"]'));
+  const email = {{ buyer_email | tojson }};
+  const next = {{ return_to | tojson }};
+
+  // One line per code /api/checkout sends, in both languages: its `error` is
+  // English only, and this page may be in Chinese.
+  const MSG = {
+    unavailable: ['Run packs are unavailable right now. Nothing has been charged.',
+                  '次数包暂时无法购买，没有产生任何扣费。'],
+    sign_in:     ['Sign in on trade-agents.com first, so the runs have an account to go to.',
+                  '请先在 trade-agents.com 登录，次数才能加到你的账号上。'],
+    not_found:   ['That pack is no longer offered. Reload the page and choose again.',
+                  '该次数包已不再提供，请刷新页面后重新选择。'],
+    failed:      ['Stripe could not open the checkout. Nothing has been charged — please try again.',
+                  'Stripe 未能打开支付页面，没有产生任何扣费——请重试。'],
+    network:     ['Could not reach the payment service. Check your connection and try again.',
+                  '无法连接支付服务，请检查网络后重试。'],
+  };
+  const say = key => {
+    const [en, zh] = MSG[key] || MSG.failed;
+    err.replaceChildren();
+    [['en', en], ['zh', zh]].forEach(([l, text]) => {
+      const s = document.createElement('span');
+      s.dataset.l = l;
+      s.textContent = text;
+      err.append(s);
+    });
+    err.hidden = false;
+  };
+
+  const chosen = () => inputs.find(i => i.checked);
+  const paint = () => {
+    const c = chosen();
+    form.querySelectorAll('[data-pay-amount]').forEach(s => { s.textContent = c ? c.dataset.price : ''; });
+    btn.disabled = !c;
+  };
+  const busy = on => {
+    btn.setAttribute('aria-busy', on ? 'true' : 'false');
+    // Every choice, not only the button: a second submit while the browser is
+    // on its way to Stripe would open a second Checkout session.
+    inputs.forEach(i => { i.disabled = on; });
+    btn.disabled = on || !chosen();
+  };
+  inputs.forEach(i => i.addEventListener('change', () => { err.hidden = true; paint(); }));
+  paint();
+
+  // The browser's own back button from Stripe restores this page from the
+  // back-forward cache exactly as it was left: busy, every choice disabled.
+  window.addEventListener('pageshow', e => { if (e.persisted) busy(false); });
+
+  form.addEventListener('submit', async e => {
+    e.preventDefault();
+    const c = chosen();
+    if (!c || btn.getAttribute('aria-busy') === 'true') return;
+    busy(true);
+    err.hidden = true;
+    let key = 'failed';
+    try {
+      const r = await fetch('/api/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          item_id: c.value, email: email, next: next,
+          lang: document.documentElement.lang.indexOf('zh') === 0 ? 'zh' : 'en',
+        }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (r.ok && d.checkout_url) { window.location.href = d.checkout_url; return; }
+      key = Object.prototype.hasOwnProperty.call(MSG, d.code) ? d.code : 'failed';
+    } catch (_) {
+      key = 'network';
+    }
+    say(key);
+    busy(false);
+  });
+})();
+</script>
+{% endif %}
+{% endblock %}

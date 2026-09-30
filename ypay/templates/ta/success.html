@@ -1,0 +1,43 @@
+{% extends "ta/base.html" %}
+{#  Where Stripe sends a TradeAgents buyer once the card has been charged.
+
+    The runs themselves are granted by the webhook (routes._grant_agent_runs),
+    usually seconds later and never by this page, so it says they are on the
+    way rather than that they have landed. `pack` is looked up in the pack
+    table from the id Stripe echoes back in the success URL; the count is the
+    table's. `return_to` is the `next` the buyer arrived with, refused unless it
+    is one of our own sites (routes._safe_return). #}
+{% set title_en = "Payment received" %}
+{% set title_zh = "付款成功" %}
+
+{% block content %}
+<div class="p-note-page">
+  <header class="w-page-head">
+    <p class="w-kicker p-ok"><span aria-hidden="true">✓ </span><span data-l="en">Payment received</span><span data-l="zh">付款成功</span></p>
+    <h1 class="w-page-title"><span data-l="en">Your runs are on the way.</span><span data-l="zh">次数正在到账。</span></h1>
+    <p class="w-page-lead">
+      {% if pack %}
+      <span data-l="en">Stripe has confirmed the payment, and {{ pack.credits }} runs are being added to the account you were signed in with — usually within a few seconds.</span>
+      <span data-l="zh">Stripe 已确认付款，{{ pack.credits }} 次分析正在加到你登录所用的账号上，通常几秒内到账。</span>
+      {% else %}
+      <span data-l="en">Stripe has confirmed the payment, and your runs are being added to the account you were signed in with — usually within a few seconds.</span>
+      <span data-l="zh">Stripe 已确认付款，购买的次数正在加到你登录所用的账号上，通常几秒内到账。</span>
+      {% endif %}
+    </p>
+    <p class="w-page-note">
+      <span data-l="en">Purchased runs never expire, and each day your free runs are still spent first. The balance in your account menu updates the next time you open it.</span>
+      <span data-l="zh">购买的次数永不过期，每天仍会先用免费次数。下次打开账户菜单时，余额就会更新。</span>
+    </p>
+    <div class="w-actions">
+      <a class="w-btn w-btn-primary" href="{{ return_to }}" data-ta-link><span data-l="en">Back to the desk</span><span data-l="zh">返回投研台</span> <span aria-hidden="true">→</span></a>
+    </div>
+    {% if session_id %}
+    <p class="p-ref"><span data-l="en">Reference</span><span data-l="zh">参考编号</span> <code>{{ session_id }}</code></p>
+    <p class="p-help">
+      <span data-l="en">Runs not there after a minute? <a href="{{ ta_site }}/contact" data-ta-link>Write to us</a> with this reference.</span>
+      <span data-l="zh">一分钟后仍未到账？请<a href="{{ ta_site }}/contact" data-ta-link>联系我们</a>，并附上这个编号。</span>
+    </p>
+    {% endif %}
+  </header>
+</div>
+{% endblock %}

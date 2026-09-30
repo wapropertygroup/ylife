@@ -62,12 +62,36 @@ unfamiliar domain while being asked for card details. It has its own A record an
 its own certificate (expires 2026-11-21) and serves 200.
 
 Nothing about the payment differs. ypay builds its Stripe success and cancel URLs
-from `request.host_url`, so it follows whichever host serves it with **no
+from the request's host (forced to https, as `_share_base()` is), so it follows
+whichever host serves it with **no
 Stripe-side configuration**. The buyer handoff is by email in the query string,
 not a shared session — `SESSION_COOKIE_DOMAIN` is unset in both apps, so the
 session does not even cross `stock.` to `pay.`, which is why `credits.topup_url()`
 appends `?email=` and `?next=`. Without the address ypay hides the run packs
 entirely, so a bare link led to a page with nothing to buy.
+
+**On that host the pay pages are TradeAgents pages** (`ypay/templates/ta/`,
+chosen by host in `ypay/routes.py`; pay.li-family.us keeps yPay's, untouched).
+Until 2026-09-29 a reader who pressed 充值 got yPay's donation page — "Support the
+apps", a coffee, the Li Family apps — and Stripe's page called the pack
+"yStocker — 28 runs". Now it is the Prepay page in the site's frame: the
+masthead and footer, `wiki.css` served verbatim from ystocker's checkout at
+`/ta/wiki.css` (not under `/static/`, which nginx maps to ypay's own folder on
+both pay hosts), the mark from ystocker's `wiki/_macros.html` through a
+`ystocker/` prefix loader, and run packs only. It is bilingual, and being
+another origin it cannot read trade-agents.com's localStorage, so the Prepay and
+"Buy more runs" links carry `?lang=` and `?theme=` as they are followed
+(`data-carry-prefs`, handled in `_ta_masthead.html`) and every link back carries
+`?lang=`. Stripe's page opens in the same language (`locale`), and each refusal
+from `/api/checkout` carries a `code` the page words in both.
+
+Three flow faults went with it. Stripe's back button now returns to the pack
+page with the address (`/cancel` had nothing to buy on it). The success page
+says how many runs are coming and links back to `next`, which is honoured only
+over https on trade-agents.com or li-family.us, since it sits beside "payment
+received". And the return URLs were http://, so Stripe sent the buyer back over
+plain HTTP, address included, for nginx to redirect. `tests/test_ypay_brand.py`
+(22, no network, AWS or Stripe).
 
 Until 2026-09-29 the brand mapping reached only `credits.summary()`, which
 nothing called. The run page's top-up link came from `quota._credit_info()` and

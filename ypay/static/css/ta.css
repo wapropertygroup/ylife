@@ -1,0 +1,164 @@
+/*
+ * ta.css — what pay.trade-agents.com draws that trade-agents.com does not: the
+ * pack chooser and the lines around it, plus the page frame the site gets from
+ * its base.html utilities. Everything else on these pages is the site's own
+ * wiki.css (/ta/wiki.css, served from yStocker's checkout), so the masthead,
+ * buttons, cards, type and footer are the site's, not copies that can drift.
+ *
+ * Colours are wiki.css's --w-* tokens only, so light and dark come with them.
+ * Hand-written for the reason wiki.css is: the Tailwind bundle is compiled, and
+ * a class only these pages used could be missing from it.
+ */
+
+/* ── The frame ───────────────────────────────────────────────────────────────
+   What ystocker's base.html gives <body> and <main> in utilities there: a
+   column that keeps the footer at the bottom, Inter with a named Han face per
+   platform (see the note on body's font-family in that file), and the page
+   padding, in the masthead's 1180px column (.w-main). */
+body.w-pay {
+  display: flex; flex-direction: column; min-height: 100vh;
+  color: var(--w-ink);
+  font-family: 'Inter', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+body.w-pay > main { flex: 1; width: 100%; padding: 24px 16px; }
+@media (min-width: 640px) { body.w-pay > main { padding: 32px 24px; } }
+
+/* ── Masthead ────────────────────────────────────────────────────────────────
+   The site's, with one difference on a phone. There the links move to a second
+   row of the masthead; a pay page leaves them to the footer instead, as the
+   dashboards do, so the packs start 45px higher on a small screen. And the
+   section label, which the site drops at 1180px to make room for the links,
+   comes back once they have gone, while there is room for it. Each rule here
+   matches the specificity of the one it answers in wiki.css and comes later. */
+@media (max-width: 960px) {
+  body.w-pay { --w-top-h: 69px; }
+  body.w-pay .w-top-inner { display: flex; }
+  body.w-pay .w-top .w-top-nav { display: none; }
+  body.w-pay .w-top-actions { margin-left: auto; }
+  body.w-pay .w-top-name small { display: inline; }
+}
+@media (max-width: 640px) { body.w-pay { --w-top-h: 61px; } }
+@media (max-width: 520px) { body.w-pay .w-top-name small { display: none; } }
+
+/* ── Layout ──────────────────────────────────────────────────────────────────
+   Words on the left, the thing to do on the right, as sign-in and contact are
+   laid out on the site (.w-split) -- with the notes under the words, so on a
+   phone the order is head, packs, notes and the packs are reached first. The
+   second row takes the panel's extra height, or it would open a gap between
+   the head and the notes. */
+.p-split {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 460px);
+  grid-template-rows: auto 1fr; grid-template-areas: "head panel" "notes panel";
+  column-gap: 72px; align-items: start; padding: 40px 0 16px;
+}
+.p-split > .w-page-head { grid-area: head; padding: 0; }
+.p-split > .p-panel { grid-area: panel; }
+.p-split > .p-notes { grid-area: notes; margin-top: 28px; }
+@media (max-width: 900px) {
+  .p-split {
+    grid-template-columns: minmax(0, 1fr); grid-template-rows: none;
+    grid-template-areas: "head" "panel" "notes"; row-gap: 26px; padding-top: 12px;
+  }
+  /* Stacked on a tablet, the full column put each price 700px from its pack. */
+  .p-split > .p-panel { max-width: 600px; }
+  .p-split > .p-notes { margin-top: 0; }
+}
+
+/* A page with one thing to say: paid, cancelled, or nothing on sale. Set lower
+   and narrower, in the reading measure, as the site's dead-share page is. */
+.p-note-page { max-width: 46rem; padding-top: 56px; min-height: 46vh; }
+.p-note-page > .w-page-head { padding-top: 0; }
+@media (max-width: 640px) { .p-note-page { padding-top: 20px; } }
+.w-kicker.p-ok { color: var(--w-good); }
+
+/* ── The panel ───────────────────────────────────────────────────────────── */
+@media (max-width: 420px) { .p-panel.w-panel { padding: 22px 16px 20px; } }
+.p-who { font-weight: 600; color: var(--w-ink); overflow-wrap: anywhere; }
+.w-callout.p-notice { margin: 0 0 20px; padding: 10px 14px; font-size: 14.5px; }
+
+/* The packs: a radio each, drawn as a row. The input stays in the page for the
+   keyboard and a screen reader, and the row after it is what is seen, so a
+   checked or focused pack is styled from `input:checked + label` -- which, unlike
+   :has(), every browser in use reads. */
+.p-packs { display: grid; gap: 10px; min-width: 0; margin: 18px 0 0; padding: 0; border: 0; }
+.p-pack { position: relative; }
+.p-pack input {
+  position: absolute; top: 50%; left: 16px; width: 1px; height: 1px; margin: 0;
+  opacity: 0; pointer-events: none;
+}
+.p-pack-card, .p-prices li {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 4px 16px;
+  padding: 14px 16px; border: 1px solid var(--w-line); border-radius: 8px; background: var(--w-card);
+}
+.p-pack-card {
+  grid-template-columns: 18px minmax(0, 1fr) auto; cursor: pointer;
+  transition: border-color .15s, box-shadow .15s, background-color .15s;
+}
+.p-pack-card:hover { border-color: var(--w-line-strong); }
+.p-pack input:checked + .p-pack-card {
+  border-color: var(--w-accent); background: var(--w-accent-soft);
+  box-shadow: inset 0 0 0 1px var(--w-accent);
+}
+.p-pack input:focus-visible + .p-pack-card { outline: 2px solid var(--w-accent); outline-offset: 2px; }
+.p-pack input:disabled + .p-pack-card { cursor: default; opacity: .6; }
+.p-pack-dot {
+  display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%;
+  border: 1.5px solid var(--w-line-strong);
+}
+.p-pack-dot::after {
+  content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--w-accent);
+  transform: scale(0); transition: transform .15s;
+}
+.p-pack input:checked + .p-pack-card .p-pack-dot { border-color: var(--w-accent); }
+.p-pack input:checked + .p-pack-card .p-pack-dot::after { transform: scale(1); }
+.p-pack-what b { display: block; font-size: 16px; font-weight: 650; line-height: 1.3; color: var(--w-ink); }
+.p-pack-what small { display: block; margin-top: 3px; font-family: var(--w-mono); font-size: 12.5px; color: var(--w-muted); }
+/* Each figure wraps whole: at 390px the 130-run row, beside the widest price,
+   broke "save 23%" across two lines. */
+.p-pack-what small > span { white-space: nowrap; }
+.p-save { margin-left: 6px; color: var(--w-good); }
+/* The price in the reading serif the site sets its prices in (.w-price-num):
+   Georgia's old-style figures are part of the look. */
+.p-pack-price { font-family: var(--w-read); font-size: 28px; font-weight: 700; line-height: 1; color: var(--w-ink); }
+.p-prices { display: grid; gap: 10px; margin: 18px 0 0; padding: 0; list-style: none; }
+@media (max-width: 420px) {
+  .p-pack-card, .p-prices li { gap: 4px 12px; padding: 13px 14px; }
+  .p-pack-what small { font-size: 12px; }
+  .p-pack-price { font-size: 25px; }
+}
+
+/* Pay, and the moment between the click and Stripe's page. */
+.p-pay { margin-top: 18px; min-height: 50px; font-size: 16px; }
+.p-pay:disabled { opacity: .55; cursor: default; }
+.p-pay:disabled:hover { transform: none; }
+.p-pay-busy { display: none; align-items: center; gap: 10px; }
+.p-pay[aria-busy="true"] { opacity: 1; }
+.p-pay[aria-busy="true"] .p-pay-idle { display: none; }
+.p-pay[aria-busy="true"] .p-pay-busy { display: inline-flex; }
+.p-spin {
+  width: 16px; height: 16px; border-radius: 50%;
+  border: 2px solid currentColor; border-right-color: transparent;
+  animation: pSpin .7s linear infinite;
+}
+@keyframes pSpin { to { transform: rotate(360deg); } }
+
+.p-error { margin: 12px 0 0; font-size: 14px; line-height: 1.5; color: var(--w-bad); }
+.p-secure {
+  display: flex; align-items: flex-start; gap: 8px; margin: 16px 0 0;
+  font-size: 13px; line-height: 1.55; color: var(--w-muted);
+}
+.p-secure svg { flex: none; width: 14px; height: 14px; margin-top: 3px; }
+
+/* ── After paying ────────────────────────────────────────────────────────── */
+.p-ref { margin: 32px 0 0; font-size: 13px; color: var(--w-muted); }
+.p-ref code {
+  display: block; margin-top: 4px; font-family: var(--w-mono); font-size: 12.5px;
+  color: var(--w-body); overflow-wrap: anywhere;
+}
+.p-help { margin: 8px 0 0; font-size: 14px; line-height: 1.55; color: var(--w-muted); }
+.p-help a { font-weight: 600; color: var(--w-accent); text-decoration: underline; text-underline-offset: 3px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .p-pack-card, .p-pack-dot::after { transition: none; }
+}

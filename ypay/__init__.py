@@ -82,6 +82,21 @@ def create_app() -> Flask:
     app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
     app.config["SESSION_COOKIE_HTTPONLY"] = True
 
+    # The TradeAgents pay pages (templates/ta/) draw trade-agents.com's product
+    # mark from yStocker's own macro rather than a copy of it. Under an explicit
+    # prefix -- {% import "ystocker/wiki/_macros.html" %} -- so a page here names
+    # what it borrows, and no ypay template can be shadowed by one of the same
+    # name over there (both apps have a base.html and an index.html).
+    from jinja2 import ChoiceLoader, FileSystemLoader, PrefixLoader
+
+    ystocker_templates = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "ystocker", "templates")
+    app.jinja_env.loader = ChoiceLoader([
+        app.jinja_env.loader,
+        PrefixLoader({"ystocker": FileSystemLoader(ystocker_templates)}),
+    ])
+
     from ypay.routes import bp
     app.register_blueprint(bp)
 

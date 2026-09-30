@@ -1,0 +1,206 @@
+{#  pay.trade-agents.com's frame: trade-agents.com's masthead, paper plane and
+    footer around the pay pages, so a buyer who came from the account menu's
+    Prepay (充值) or the run page's "Buy more runs" is still on TradeAgents at
+    the moment they are asked for money. routes.py picks this over yPay's
+    base.html by host; pay.li-family.us is untouched.
+
+    Drawn with the site's own stylesheet -- wiki.css, served from yStocker's
+    checkout at /ta/wiki.css -- over the Tailwind bundle, whose preflight is what
+    wiki.css is written against. css/ta.css holds only what a pay page has and
+    the site does not: the pack chooser and the lines around it.
+
+    The masthead is the site's (.w-top), with its links to the site; a phone,
+    where the site gives the links a second row, leaves them to the footer
+    instead, so the packs start higher. In place of the site's call to action
+    it offers the way back to the desk: `return_to`, the `next` yStocker sent.
+
+    Language and theme belong to this origin. pay.trade-agents.com cannot read
+    trade-agents.com's localStorage, so the links that lead here carry ?lang=
+    and ?theme= (data-carry-prefs in _ta_masthead.html), which win here and are
+    stored as ypay_lang / ypay_theme. Text is paired [data-l] markup, as on the
+    site, and every link back there carries ?lang= in turn. #}
+{% import "ystocker/wiki/_macros.html" as w %}
+<!doctype html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ title_en }} — TradeAgents</title>
+  <meta name="ta-title" data-en="{{ title_en }} — TradeAgents" data-zh="{{ title_zh }} — TradeAgents">
+  {# Before any stylesheet, so the first frame is already in the right theme
+     and language: a ?theme= / ?lang= in the address is a choice made on
+     trade-agents.com and wins; otherwise the last one made here; dark and
+     English when neither says, as on the site. #}
+  <script>
+    (function () {
+      var d = document.documentElement, q = new URLSearchParams(location.search);
+      function pick(param, key, ok) {
+        var v = q.get(param);
+        try {
+          if (ok.indexOf(v) >= 0) localStorage.setItem(key, v);
+          else v = localStorage.getItem(key);
+        } catch (_) { /* private mode: the address alone decides */ }
+        return ok.indexOf(v) >= 0 ? v : ok[0];
+      }
+      if (pick('theme', 'ypay_theme', ['dark', 'light']) === 'light') d.classList.remove('dark');
+      var zh = pick('lang', 'ypay_lang', ['en', 'zh']) === 'zh';
+      d.lang = zh ? 'zh-CN' : 'en';
+      var t = document.querySelector('meta[name="ta-title"]');
+      if (zh && t) document.title = t.getAttribute('data-zh');
+    })();
+  </script>
+  <meta name="theme-color" id="themeColorMeta" content="#020617">
+  <script>
+    if (!document.documentElement.classList.contains('dark')) {
+      document.getElementById('themeColorMeta').setAttribute('content', '#f6f6f1');
+    }
+  </script>
+  <meta name="robots" content="noindex">
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('pay.ta_asset', name='favicon.svg') }}">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap">
+  {# Non-blocking, as on the site (wiki/_head.html): Fraunces only changes the
+     headings, and each has a system serif to fall back on. #}
+  <link rel="stylesheet" media="print" onload="this.media='all'"
+        href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap">
+  <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap"></noscript>
+
+  <link rel="stylesheet" href="{{ url_for('pay.static', filename='css/tailwind.css') }}">
+  <link rel="stylesheet" href="{{ url_for('pay.ta_asset', name='wiki.css', v=ta_asset_ver) }}">
+  <link rel="stylesheet" href="{{ url_for('pay.static', filename='css/ta.css', v=ta_asset_ver) }}">
+  {# Inline rather than in ta.css, so a stylesheet that fails to load cannot
+     leave both languages on screen: the rule base.html hides the unpaired
+     block with on the site. #}
+  <style>
+    html[lang^="zh"] [data-l="en"],
+    html:not([lang^="zh"]) [data-l="zh"] { display: none !important; }
+  </style>
+</head>
+
+<body class="w-paper w-pay">
+<header class="w-top" data-w-top>
+  <div class="w-top-inner">
+    <a class="w-top-brand" href="{{ ta_site }}/home" data-ta-link>
+      {{ w.mark('w-top-mark') }}
+      <span class="w-top-name">TradeAgents<small><span data-l="en">Prepay</span><span data-l="zh">充值</span></small></span>
+    </a>
+
+    <nav class="w-top-nav" aria-label="TradeAgents">
+      <a href="{{ ta_site }}/docs" data-ta-link><span data-l="en">Docs</span><span data-l="zh">文档</span></a>
+      <a href="{{ ta_site }}/research" data-ta-link><span data-l="en">Research Lab</span><span data-l="zh">研究实验室</span></a>
+      <a href="{{ ta_site }}/home#pricing" data-ta-link><span data-l="en">Pricing</span><span data-l="zh">价格</span></a>
+      <a href="{{ ta_site }}/markets" data-ta-link><span data-l="en">Markets</span><span data-l="zh">市场</span></a>
+    </nav>
+
+    <div class="w-top-actions">
+      <button type="button" class="w-top-btn lang-toggle-btn" data-lang-toggle title="English / 中文">中文</button>
+      <button type="button" class="w-top-btn w-top-icon" data-theme-toggle
+              title="Toggle light / dark" aria-label="Toggle light / dark">
+        <svg class="w-top-sun" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/>
+        </svg>
+        <svg class="w-top-moon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
+        </svg>
+      </button>
+      <a class="w-btn w-btn-sm" href="{{ return_to }}" data-ta-link>
+        <span aria-hidden="true">←</span>
+        <span class="w-top-long"><span data-l="en">Back to the desk</span><span data-l="zh">返回投研台</span></span>
+        <span class="w-top-short"><span data-l="en">Back</span><span data-l="zh">返回</span></span>
+      </a>
+    </div>
+  </div>
+</header>
+
+<main class="w-main">
+  {% block content %}{% endblock %}
+</main>
+
+<footer class="w-footer">
+  <div class="w-footer-inner">
+    <div class="w-footer-row">
+      <a class="w-footer-brand" href="{{ ta_site }}/home" data-ta-link>{{ w.mark('w-footer-mark') }}TradeAgents</a>
+      <nav aria-label="TradeAgents">
+        <a href="{{ ta_site }}/docs" data-ta-link><span data-l="en">Docs</span><span data-l="zh">文档</span></a>
+        <a href="{{ ta_site }}/research" data-ta-link><span data-l="en">Research Lab</span><span data-l="zh">研究实验室</span></a>
+        <a href="{{ ta_site }}/docs/pricing" data-ta-link><span data-l="en">Pricing</span><span data-l="zh">价格</span></a>
+        <a href="{{ ta_site }}/docs/changelog" data-ta-link><span data-l="en">What's new</span><span data-l="zh">更新日志</span></a>
+        <a href="{{ ta_site }}/markets" data-ta-link><span data-l="en">Markets</span><span data-l="zh">市场</span></a>
+        <a href="{{ ta_site }}/contact" data-ta-link><span data-l="en">Contact</span><span data-l="zh">联系我们</span></a>
+      </nav>
+    </div>
+    <p class="w-footer-note">
+      <span data-l="en">Payments are processed by Stripe: your card details never reach TradeAgents. For research only — a report is a model's argument, not investment advice, and it can be wrong.</span>
+      <span data-l="zh">付款由 Stripe 处理：银行卡信息不会经过 TradeAgents。仅供研究使用——报告是模型的论证，而不是投资建议，而且可能出错。</span>
+    </p>
+  </div>
+</footer>
+
+<script>
+(function () {
+  const d = document.documentElement;
+
+  // The rule under the masthead appears once the page has moved, as on the
+  // site, so at the top the bar and the page read as one plane.
+  const bar = document.querySelector('[data-w-top]');
+  const scrolled = () => { bar.classList.toggle('is-scrolled', window.scrollY > 8); };
+  scrolled();
+  window.addEventListener('scroll', scrolled, { passive: true });
+
+  const lang = () => (d.lang.indexOf('zh') === 0 ? 'zh' : 'en');
+  const title = document.querySelector('meta[name="ta-title"]');
+  const url = new URL(location.href);
+
+  // A ?theme= has been stored by now (the script in <head>), and left in the
+  // address it would undo a switch made here on the next reload.
+  if (url.searchParams.has('theme')) {
+    url.searchParams.delete('theme');
+    history.replaceState(history.state, '', url);
+  }
+
+  // Everything that depends on the language but is not paired markup: the
+  // toggle's own label, the tab, and the links back to trade-agents.com, which
+  // read ?lang= before their own storage -- so a reader who switched here is
+  // not switched back on arrival.
+  const paint = () => {
+    const l = lang();
+    document.querySelectorAll('[data-lang-toggle]').forEach(b => { b.textContent = l === 'zh' ? 'EN' : '中文'; });
+    if (title) document.title = title.getAttribute('data-' + l) || document.title;
+    document.querySelectorAll('a[data-ta-link]').forEach(a => {
+      try {
+        const u = new URL(a.href);
+        u.searchParams.set('lang', l);
+        a.href = u.toString();
+      } catch (_) { /* leave it as rendered */ }
+    });
+  };
+  paint();
+
+  document.querySelectorAll('[data-lang-toggle]').forEach(b => b.addEventListener('click', () => {
+    const l = lang() === 'zh' ? 'en' : 'zh';
+    d.lang = l === 'zh' ? 'zh-CN' : 'en';
+    try { localStorage.setItem('ypay_lang', l); } catch (_) {}
+    // The address follows, as on the site, so a reload or a copied link opens
+    // in the language on screen.
+    const u = new URL(location.href);
+    u.searchParams.set('lang', l);
+    history.replaceState(history.state, '', u);
+    paint();
+  }));
+
+  document.querySelectorAll('[data-theme-toggle]').forEach(b => b.addEventListener('click', () => {
+    const toLight = d.classList.contains('dark');
+    d.classList.toggle('dark', !toLight);
+    try { localStorage.setItem('ypay_theme', toLight ? 'light' : 'dark'); } catch (_) {}
+    const meta = document.getElementById('themeColorMeta');
+    if (meta) meta.setAttribute('content', toLight ? '#f6f6f1' : '#020617');
+  }));
+})();
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

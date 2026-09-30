@@ -12,9 +12,11 @@ import os
 import time
 from datetime import datetime, timezone
 from decimal import Decimal
+from urllib.parse import urlencode, urlsplit
 
 from flask import (
-    Blueprint, render_template, request, jsonify, redirect, url_for, session,
+    Blueprint, abort, render_template, request, jsonify, redirect, url_for,
+    send_from_directory, session,
 )
 
 bp = Blueprint("pay", __name__, template_folder="templates", static_folder="static")
@@ -165,15 +167,25 @@ def index():
     where to return afterwards. The address is not proof of anything on its own,
     and it does not need to be -- it only decides who benefits from a payment
     somebody actually makes.
+
+    On pay.trade-agents.com this is the Prepay (充值) page in that site's frame,
+    selling run packs only; see "The TradeAgents brand" below.
     """
     stripe_pk = os.environ.get("STRIPE_PUBLISHABLE_KEY", "")
     email = (request.args.get("email") or "").strip()[:200]
-    nxt = (request.args.get("next") or "").strip()[:300]
+    buyer_email = email if "@" in email else ""
+    nxt = _safe_return(request.args.get("next"))
+    if _is_ta_host():
+        return render_template("ta/index.html",
+                               packs=_ta_packs(_agent_packs()),
+                               buyer_email=buyer_email,
+                               return_to=nxt or TA_RETURN,
+                               canceled=request.args.get("canceled") == "1")
     return render_template("index.html",
                            items=DEFAULT_ITEMS,
                            agent_packs=_agent_packs(),
-                           buyer_email=email if "@" in email else "",
-                           return_to=nxt if nxt.startswith("https://") else "",
+                           buyer_email=buyer_email,
+                           return_to=nxt,
                            stripe_pk=stripe_pk,
                            stripe_configured=bool(stripe_pk))
 
@@ -182,13 +194,136 @@ def index():
 def success():
     """Payment success page."""
     session_id = request.args.get("session_id", "")
+    if _is_ta_host():
+        return render_template("ta/success.html",
+                               session_id=session_id[:200],
+                               pack=_pack(request.args.get("pack")),
+                               return_to=_safe_return(request.args.get("next")) or TA_RETURN)
     return render_template("success.html", session_id=session_id)
 
 
 @bp.route("/cancel")
 def cancel():
-    """Payment cancelled page."""
+    """Payment cancelled page.
+
+    A TradeAgents checkout no longer cancels to here -- it goes back to the pack
+    page (see api_checkout) -- so on that host this only answers a session
+    opened before that change, and says so in the site's own frame.
+    """
+    if _is_ta_host():
+        return render_template("ta/cancel.html",
+                               return_to=_safe_return(request.args.get("next")) or TA_RETURN)
     return render_template("cancel.html")
+
+
+# ---------------------------------------------------------------------------
+# The TradeAgents brand
+# ---------------------------------------------------------------------------
+# pay.trade-agents.com is this same app, but a buyer there came from that site's
+# account menu (Prepay, 充值) or from its run page, and is still on TradeAgents
+# while being asked for money. So on that host the pages are drawn in the site's
+# frame -- its masthead, paper plane, type and footer, in English or Chinese --
+# and sell run packs only: the donation card and its "Li Family apps" copy mean
+# nothing there. pay.li-family.us keeps yPay's own pages, unchanged.
+
+#: Where a TradeAgents buyer goes back to when `next` is absent or refused: the
+#: run form, which is where both links that lead here were clicked from.
+TA_SITE = "https://trade-agents.com"
+TA_RETURN = TA_SITE + "/agents"
+
+# `next` arrives in the query string and is shown as a link on the page that
+# says "payment received" -- the one place a planted address would be believed
+# most -- so only this monorepo's own sites are honoured, over https. A backslash
+# is refused outright because Python and browsers disagree about it:
+# urlsplit("https://evil.example\\@trade-agents.com") names trade-agents.com as
+# the host, and a browser goes to evil.example.
+_RETURN_DOMAINS = ("trade-agents.com", "li-family.us")
+
+
+def _safe_return(url) -> str:
+    """``url`` if it is an https address on one of our domains, else ""."""
+    url = (url or "").strip()[:300]
+    if not url or "\\" in url or any(ord(c) < 0x21 or ord(c) == 0x7f for c in url):
+        return ""
+    try:
+        parts = urlsplit(url)
+        host = (parts.hostname or "").lower()
+    except ValueError:
+        return ""
+    if parts.scheme != "https" or "@" in parts.netloc:
+        return ""
+    if not any(host == d or host.endswith("." + d) for d in _RETURN_DOMAINS):
+        return ""
+    return url
+
+
+def _ta_packs(packs: list) -> list:
+    """The packs as the TradeAgents page lists them: each with what it saves
+    per run against the dearest one (the smallest pack), so the ladder reads
+    at a glance. Whole percent, and 0 for the pack everything is measured by."""
+    if not packs:
+        return []
+    base = max(p["per_run"] for p in packs)
+    out = []
+    for p in packs:
+        save = round((1 - p["per_run"] / base) * 100) if base else 0
+        out.append({**p, "save_pct": max(0, save)})
+    return out
+
+
+def _pack(pack_id):
+    """A run pack by id from yStocker's table, or None -- for the success page,
+    which says how many runs are on the way. The count comes from the table,
+    never from the query string that names the pack."""
+    try:
+        from ystocker import credits
+
+        return credits.pack(pack_id or "")
+    except Exception:  # noqa: BLE001 - the page falls back to "your runs"
+        return None
+
+
+# What the TradeAgents pages borrow from yStocker's static folder: the site's
+# stylesheet and its mark. Served from that checkout rather than copied, so the
+# pay page cannot drift from the site it belongs to -- both apps run from one
+# checkout on one box, the reason the run packs are a plain import of
+# ystocker.credits. By name, so this host serves exactly these two files, and not
+# under /static/, which nginx maps to this app's own folder on both pay hosts.
+_YSTOCKER_STATIC = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "ystocker", "static")
+_TA_ASSETS = {"wiki.css": "text/css", "favicon.svg": "image/svg+xml"}
+
+
+def _asset_version() -> str:
+    """A stamp for the pages' own stylesheets, taken once at import: the deploy
+    restarts this app whenever either file changes, and nginx serves /static/
+    with a 7-day expiry, so a URL that does not change is a stale page."""
+    stamps = []
+    for path in (os.path.join(_YSTOCKER_STATIC, "wiki.css"),
+                 os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                              "static", "css", "ta.css")):
+        try:
+            stamps.append(int(os.path.getmtime(path)))
+        except OSError:
+            pass
+    return str(max(stamps, default=0))
+
+
+TA_ASSET_VER = _asset_version()
+
+
+@bp.app_context_processor
+def _inject_ta_asset_ver():
+    return {"ta_asset_ver": TA_ASSET_VER, "ta_site": TA_SITE}
+
+
+@bp.route("/ta/<name>")
+def ta_asset(name: str):
+    """trade-agents.com's stylesheet or mark, read from yStocker's checkout."""
+    if name not in _TA_ASSETS:
+        abort(404)
+    return send_from_directory(_YSTOCKER_STATIC, name,
+                               mimetype=_TA_ASSETS[name], max_age=7 * 86400)
 
 
 # ---------------------------------------------------------------------------
@@ -222,11 +357,16 @@ def _agent_packs():
         return []
 
 
-def _agent_pack_item(pack_id: str):
+def _agent_pack_item(pack_id: str, locale: str | None = None):
     """A pack as a checkout line item, or None when the id is unknown.
 
     The price comes from the pack table, never from the request, so a caller
     cannot buy the 130-run pack for $5.
+
+    The name and description are what Stripe's page and its receipt show, so
+    they carry the brand of the host the buyer is on -- "yStocker — 28 runs" in
+    front of a TradeAgents buyer was the one line on Stripe's page naming a
+    site they had never visited -- and, from that brand's page, its language.
     """
     try:
         from ystocker import credits
@@ -236,15 +376,26 @@ def _agent_pack_item(pack_id: str):
         return None
     if not p:
         return None
+    n = int(p["credits"])
+    if not _is_ta_host():
+        name = f"yStocker — {p['label']}"
+        description = (f"{n} Trading Agents analysis runs. "
+                       "Credits never expire and carry over between days.")
+    elif locale == "zh":
+        name = f"TradeAgents — {n} 次分析"
+        description = f"TradeAgents {n} 次分析。购买的次数永不过期，可跨日累积使用。"
+    else:
+        name = f"TradeAgents — {n} runs"
+        description = (f"{n} analysis runs on TradeAgents. "
+                       "Runs never expire and carry over between days.")
     return {
         "id": pack_id,
-        "name": f"yStocker — {p['label']}",
-        "description": (f"{p['credits']} Trading Agents analysis runs. "
-                        "Credits never expire and carry over between days."),
+        "name": name,
+        "description": description,
         "price": float(p["price"]),
         "emoji": "\U0001f4c8",
         "category": "agent_runs",
-        "credits": int(p["credits"]),
+        "credits": n,
     }
 
 
@@ -254,19 +405,28 @@ def _agent_pack_item(pack_id: str):
 
 @bp.route("/api/checkout", methods=["POST"])
 def api_checkout():
-    """Create a Stripe Checkout session. Body: {"item_id": "...", "amount": 5.00}"""
+    """Create a Stripe Checkout session. Body: {"item_id": "...", "amount": 5.00}
+
+    Every refusal carries a ``code`` beside its English ``error``: the
+    TradeAgents page is in English or Chinese and says it in the reader's
+    language from the code, where yPay's page shows ``error`` as it always has.
+    """
     stripe = _get_stripe()
     if not stripe:
-        return jsonify({"error": "Stripe is not configured. Add STRIPE_SECRET_KEY to .env"}), 503
+        return jsonify({"error": "Stripe is not configured. Add STRIPE_SECRET_KEY to .env",
+                        "code": "unavailable"}), 503
 
     body = request.get_json(force=True, silent=True) or {}
     item_id = body.get("item_id", "")
     custom_amount = body.get("amount")
     buyer_email = (body.get("email") or "").strip().lower()[:200]
-    return_to = (body.get("next") or "").strip()[:300]
+    return_to = _safe_return(body.get("next"))
+    # The page's language, sent only by the TradeAgents page: Stripe's own page
+    # then opens in it too, rather than in whatever the browser's locale says.
+    locale = {"en": "en", "zh": "zh"}.get((body.get("lang") or "").strip().lower())
 
     # An agent run pack, or one of the donation items.
-    item = _agent_pack_item(item_id)
+    item = _agent_pack_item(item_id, locale)
     if item:
         # Re-checked here and not only on the page: the page could have been
         # loaded while selling was possible and submitted after it stopped being.
@@ -279,7 +439,8 @@ def api_checkout():
         if not sellable:
             log.error("ypay: refusing to sell %s — %s", item_id, why)
             return jsonify({"error": "Run packs are temporarily unavailable. "
-                                     "No charge has been made."}), 503
+                                     "No charge has been made.",
+                            "code": "unavailable"}), 503
     if item and not (buyer_email and "@" in buyer_email):
         # Refused rather than sold: a run pack with nowhere to deliver the credits
         # is a payment we would have to refund by hand.
@@ -288,28 +449,53 @@ def api_checkout():
         # seen, at the one moment they are being asked to trust the page.
         _origin = "trade-agents.com" if _is_ta_host() else "stock.li-family.us"
         return jsonify({"error": f"Sign in on {_origin} first so the "
-                                 "runs can be added to your account."}), 400
-    if not item:
+                                 "runs can be added to your account.",
+                        "code": "sign_in"}), 400
+    if not item and not _is_ta_host():
         item = next((i for i in DEFAULT_ITEMS if i["id"] == item_id), None)
     if not item:
-        return jsonify({"error": "Item not found"}), 404
+        # Donations are yPay's, and the TradeAgents page sells none: an item id
+        # that is not a pack there is not something that page offered.
+        return jsonify({"error": "Item not found", "code": "not_found"}), 404
 
     # Determine price
     if item_id == "custom":
         try:
             amount = float(custom_amount or 0)
             if amount < 1:
-                return jsonify({"error": "Minimum amount is $1.00"}), 400
+                return jsonify({"error": "Minimum amount is $1.00", "code": "amount"}), 400
             if amount > 9999:
-                return jsonify({"error": "Maximum amount is $9,999"}), 400
+                return jsonify({"error": "Maximum amount is $9,999", "code": "amount"}), 400
         except (ValueError, TypeError):
-            return jsonify({"error": "Invalid amount"}), 400
+            return jsonify({"error": "Invalid amount", "code": "amount"}), 400
     else:
         amount = item["price"]
 
-    # Determine base URL for success/cancel redirects
+    # Determine base URL for success/cancel redirects. https whatever host_url
+    # says: nginx terminates TLS and no app here installs ProxyFix, so it reads
+    # http:// in production, and Stripe then sent the buyer back over plain
+    # HTTP -- the address in the cancel URL included -- for nginx to redirect.
+    # ystocker's _share_base() forces it for the same reason. A local host, with
+    # no TLS in front, keeps what it has.
     base_url = request.host_url.rstrip("/")
+    if request.host.split(":")[0] not in ("localhost", "127.0.0.1"):
+        base_url = "https://" + request.host
+    success_url = f"{base_url}/success?session_id={{CHECKOUT_SESSION_ID}}"
+    cancel_url = f"{base_url}/cancel"
+    if _is_ta_host() and item.get("category") == "agent_runs":
+        # Back on Stripe's page means back to the packs, with the address the
+        # pack page needs to show any: /cancel had nothing to buy on it, and
+        # "Try again" from there led to a pack page with no address, which
+        # shows none. The success page is told the pack, so it can say how many
+        # runs are coming, and the way back to the desk.
+        again = {"email": buyer_email, "canceled": "1"}
+        done = {"pack": item_id}
+        if return_to:
+            again["next"] = done["next"] = return_to
+        cancel_url = f"{base_url}/?{urlencode(again)}"
+        success_url += "&" + urlencode(done)
 
+    extra = {"locale": locale} if locale else {}
     try:
         checkout_session = stripe.checkout.Session.create(
             payment_method_types=["card"],
@@ -325,8 +511,8 @@ def api_checkout():
                 "quantity": 1,
             }],
             mode="payment",
-            success_url=f"{base_url}/success?session_id={{CHECKOUT_SESSION_ID}}",
-            cancel_url=f"{base_url}/cancel",
+            success_url=success_url,
+            cancel_url=cancel_url,
             # Metadata is the only thing the webhook gets to work with, and it is
             # echoed back by Stripe rather than re-sent by the browser, so it is
             # the right place for the address to credit. The credit *count* is
@@ -342,6 +528,7 @@ def api_checkout():
             # Prefill and pin the address so the receipt goes to the same account
             # the runs land in.
             customer_email=buyer_email or None,
+            **extra,
         )
 
         log.info("Stripe checkout created: %s ($%.2f) → %s", item["name"], amount, checkout_session.id)
@@ -353,7 +540,7 @@ def api_checkout():
 
     except Exception as exc:
         log.exception("Stripe checkout failed")
-        return jsonify({"error": f"Payment failed: {exc}"}), 500
+        return jsonify({"error": f"Payment failed: {exc}", "code": "failed"}), 500
 
 
 # ---------------------------------------------------------------------------
