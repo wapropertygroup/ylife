@@ -19,6 +19,12 @@
 {% set _ta_product = _ta_shell and ta_page|default(false) %}
 {% set _ta_markets = _ta_shell and not _ta_product %}
 {% set _editorial = _ta_shell or editorial|default(false) %}
+{#  The reading wall (_ta_wall.html): a signed-out reader of a dashboard on
+    trade-agents.com sees its top and the rest under a blur, with a way to sign
+    in. A page with no data of its own to wall -- instructions, a search box, a
+    list of videos, a page that is sign-in only anyway, an error -- sets
+    `{% set no_wall = true %}`. stock.li-family.us never walls anything. #}
+{% set _ta_wall = _ta_markets and not current_user.email and not no_wall|default(false) %}
 {# The research-desk launcher is suppressed on /agents itself (it is that page),
    on /home (the same page's landing, whose every button already leads there),
    and on /login. On a phone the panel is a full-screen sheet, so a launcher there
@@ -525,7 +531,7 @@
   {% block head_extra %}{% endblock %}
 </head>
 
-<body class="bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 min-h-screen flex flex-col{% if _agents_embedded %} agents-embedded{% endif %}{% if _editorial %} w-paper{% endif %}{% if _ta_markets %} w-markets{% endif %}{% block body_class %}{% endblock %}"
+<body class="bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 min-h-screen flex flex-col{% if _agents_embedded %} agents-embedded{% endif %}{% if _editorial %} w-paper{% endif %}{% if _ta_markets %} w-markets{% endif %}{% if _ta_wall %} w-walled{% endif %}{% block body_class %}{% endblock %}"
       x-data='{ navOpen: false, user: {{ current_user|tojson if current_user is defined else "{\"email\":\"\",\"name\":\"\",\"picture\":\"\"}"|safe }} }'>
 
   {% if not _agents_embedded %}
@@ -1057,6 +1063,7 @@
     {% endwith %}
 
     {% block content %}{% endblock %}
+    {% if _ta_wall %}{% include "_ta_wall.html" %}{% endif %}
   </main>
 
   {% if _agents_floating %}

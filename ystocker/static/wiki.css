@@ -775,6 +775,40 @@ a.w-card:focus-visible { outline: 2px solid var(--w-accent); outline-offset: 2px
   .w-footer nav a { display: flex; align-items: center; min-height: 40px; }
 }
 
+/* ── The reading wall (trade-agents.com's dashboards, signed out) ─────────────
+   _ta_wall.html. Everything in <main> below the fold sits under a blur and a
+   veil of the paper, with the card pinned in view while the reader scrolls
+   through it. Absolute in <main>, so it grows with the page as panels load,
+   and the footer below stays readable. Its z-index is under the pages' own
+   pinned bars (/markets' section bar is 30, /history's 20), which stay usable
+   above it, and the blur fades in over 96px rather than starting at a hard
+   edge. The fold defaults to about one screen down; a page moves it with
+   `data-wall-start`. Without color-mix() the veil is the paper itself, which
+   hides more than it blurs and still walls. */
+body.w-walled main { position: relative; }
+.w-wall {
+  position: absolute; left: 0; right: 0; bottom: 0; top: var(--w-wall-top, max(560px, 72vh));
+  z-index: 15; padding: 132px 16px 56px;
+  background: var(--w-paper);
+  background: linear-gradient(color-mix(in srgb, var(--w-paper) 30%, transparent),
+                              color-mix(in srgb, var(--w-paper) 78%, transparent) 480px);
+  -webkit-backdrop-filter: blur(7px); backdrop-filter: blur(7px);
+  -webkit-mask-image: linear-gradient(transparent, #000 96px);
+          mask-image: linear-gradient(transparent, #000 96px);
+}
+.w-wall-card {
+  position: sticky; top: calc(var(--w-head-h) + 14vh);
+  max-width: 440px; margin: 0 auto; padding: 24px 22px; text-align: center;
+  background: var(--w-card); border: 1px solid var(--w-line); border-radius: 10px;
+  box-shadow: var(--w-shadow);
+}
+.w-wall-title {
+  margin: 8px 0 0; font-family: var(--w-serif); font-weight: 700; font-size: 24px;
+  line-height: 1.2; color: var(--w-ink);
+}
+html[lang^="zh"] .w-wall-title { word-break: keep-all; overflow-wrap: anywhere; }
+.w-wall-lead { margin: 10px 0 18px; font-size: 15px; line-height: 1.55; color: var(--w-body); }
+
 /* A page whose content should sit in the masthead's column: <main> takes this
    in place of the dashboards' .app-container, keeping its own side padding,
    so 1228px less 2 x 24px is .w-wrap's 1180. */

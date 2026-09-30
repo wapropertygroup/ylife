@@ -42,6 +42,7 @@ import sys
 import types
 import unittest
 from unittest import mock
+from urllib.parse import parse_qs, urlsplit
 
 
 class _Any:
@@ -131,6 +132,12 @@ TA = "http://trade-agents.com"      # plain http: nginx terminates TLS in front
 # stale share mail opens.
 SHELL_PAGES = ("/home", "/docs/overview", "/research", f"/research/{wiki.POSTS[0]['slug']}",
                "/login", "/contact", "/agents/shared/not-a-token")
+
+# The reading wall (_ta_wall.html): a signed-out reader of a dashboard on
+# trade-agents.com, and nobody else.
+WALL_MARK = '<div class="w-wall" data-wall>'
+# The pages with nothing of their own to wall, which set `no_wall`.
+UNWALLED_DASHBOARDS = ("/guide", "/lookup", "/videos", "/assets", "/posts")
 
 
 class WikiPages(unittest.TestCase):
@@ -559,6 +566,43 @@ class WikiPages(unittest.TestCase):
         finally:
             with self.client.session_transaction(base_url=TA) as s:
                 s.clear()
+
+    # ── the reading wall ──────────────────────────────────────────────────
+    def test_a_signed_out_reader_meets_the_wall_on_a_dashboard(self):
+        for path in ("/markets", "/fed"):
+            with self.subTest(path=path):
+                html_ = self._get(path, base_url=TA).get_data(as_text=True)
+                self.assertIn(WALL_MARK, html_)
+                self.assertIn(" w-walled", html_)
+                # Inside <main>, which it covers from the fold down.
+                self.assertLess(html_.index(WALL_MARK), html_.index("</main>"))
+                # Signing in comes back to the page the reader was walled on.
+                link = re.search(re.escape(WALL_MARK) + r'.*?href="([^"]+)"', html_, re.S).group(1)
+                target = urlsplit(html.unescape(link))
+                self.assertEqual(target.path, "/login")
+                self.assertEqual(parse_qs(target.query)["next"], [path])
+
+    def test_markets_walls_after_its_brief_and_index_cards(self):
+        # As asked: the index cards and the AI brief stay readable.
+        html = self._get("/markets", base_url=TA).get_data(as_text=True)
+        marks = re.findall(r"<[a-z]+\b[^>]*\sdata-wall-start[\s>]", html)
+        self.assertEqual(len(marks), 1, marks)
+        self.assertIn('id="sentiment-volatility"', marks[0])
+        fold = html.index(marks[0])
+        self.assertLess(html.index('id="aiMarketsBriefCard"'), fold)
+        self.assertLess(html.index('id="indexCards"'), fold)
+
+    def test_no_wall_for_a_known_reader_elsewhere_or_on_a_page_without_data(self):
+        self.assertNotIn(WALL_MARK, self._as_reader("/markets", base_url=TA))
+        # stock.li-family.us walls nothing.
+        local = self._get("/markets").get_data(as_text=True)
+        self.assertNotIn(WALL_MARK, local)
+        self.assertNotIn(" w-walled", local)
+        for path in (*UNWALLED_DASHBOARDS, *SHELL_PAGES):
+            with self.subTest(path=path):
+                html = self._get(path, base_url=TA).get_data(as_text=True)
+                self.assertNotIn(WALL_MARK, html)
+                self.assertNotIn(" w-walled", html)
 
     def test_the_sign_in_page_is_the_products_on_trade_agents(self):
         html = self._get("/login", base_url=TA).get_data(as_text=True)
