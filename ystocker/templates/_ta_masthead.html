@@ -154,13 +154,21 @@
   // reader had chosen here. Set as the link is followed rather than at render,
   // so a switch made since the page loaded rides along too -- the account
   // menu's Prepay, and the run page's "Buy more runs" (agents.html).
+  //
+  // The language is the one on screen: <html lang>, which i18n.js keeps in step
+  // with its choice from a blocking <head> script and on every switch. Not
+  // window.I18n -- i18n.js declares I18n as a top-level const, which is never a
+  // property of window, so a guard on it always fell back to English and every
+  // Chinese reader who pressed 充值 arrived at an English page. See
+  // tests/check_carry_prefs.mjs, which runs this against the real i18n.js.
   const carry = e => {
     const a = e.target.closest && e.target.closest('a[data-carry-prefs]');
     if (!a) return;
     try {
       const u = new URL(a.href);
-      u.searchParams.set('lang', window.I18n ? I18n.getLang() : 'en');
-      u.searchParams.set('theme', document.documentElement.classList.contains('dark') ? 'dark' : 'light');
+      const d = document.documentElement;
+      u.searchParams.set('lang', (d.lang || '').indexOf('zh') === 0 ? 'zh' : 'en');
+      u.searchParams.set('theme', d.classList.contains('dark') ? 'dark' : 'light');
       a.href = u.toString();
     } catch (_) { /* leave the link as rendered */ }
   };

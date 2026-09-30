@@ -82,7 +82,10 @@ both pay hosts), the mark from ystocker's `wiki/_macros.html` through a
 another origin it cannot read trade-agents.com's localStorage, so the Prepay and
 "Buy more runs" links carry `?lang=` and `?theme=` as they are followed
 (`data-carry-prefs`, handled in `_ta_masthead.html`) and every link back carries
-`?lang=`. Stripe's page opens in the same language (`locale`), and each refusal
+`?lang=`. The handler reads the language from `<html lang>`: it first read
+`window.I18n`, which does not exist (i18n.js's `const I18n` is script-scoped),
+so every 充值 opened in English — `node tests/check_carry_prefs.mjs` runs it
+against the real i18n.js. Stripe's page opens in the same language (`locale`), and each refusal
 from `/api/checkout` carries a `code` the page words in both.
 
 Three flow faults went with it. Stripe's back button now returns to the pack
