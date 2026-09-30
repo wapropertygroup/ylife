@@ -1,0 +1,39 @@
+{#  trade-agents.com's reading wall, for a signed-out reader of a dashboard
+    (base.html's `_ta_wall`). The top of the page reads as it always does; below
+    the fold everything sits under a blur, with a card that signs the reader in
+    and brings them back to this page.
+
+    A soft wall, as chosen: the data is still in the page and in the APIs, and
+    anyone who reads the markup can have it. It is market data that is public
+    anyway, and the wall is there to ask for an account, not to protect it.
+
+    The fold is where the page marks it -- `data-wall-start` on the first thing
+    to wall, as /markets does after its brief and index cards -- or about one
+    screen down (wiki.css's default). A page's own pinned bars stay above the
+    blur, so its sections can still be reached; they arrive walled. #}
+<div class="w-wall" data-wall>
+  <div class="w-wall-card">
+    <p class="w-kicker"><span data-l="en">Free with an account</span><span data-l="zh">免费注册即可查看</span></p>
+    <h2 class="w-wall-title"><span data-l="en">Sign in to see every dashboard in full</span><span data-l="zh">登录后查看全部行情数据</span></h2>
+    <p class="w-wall-lead"><span data-l="en">Sign in with Google. It is free and needs no card.</span><span data-l="zh">用 Google 账号登录，免费，无需绑卡。</span></p>
+    <a class="w-btn w-btn-primary" href="{{ url_for('main.login', next=request.full_path.rstrip('?')) }}"><span data-l="en">Sign in</span><span data-l="zh">登录</span> <span aria-hidden="true">→</span></a>
+  </div>
+</div>
+<script>
+(function () {
+  // The fold, where the page marks one: measured from <main>'s top, and again
+  // whenever <main> changes size, since the panels above it load after this
+  // runs and each one that grows pushes the mark down. Without a mark, or
+  // without this script, wiki.css's default stands.
+  const main = document.querySelector('main');
+  const start = main && main.querySelector('[data-wall-start]');
+  if (!start) return;
+  const place = () => {
+    const top = start.getBoundingClientRect().top - main.getBoundingClientRect().top;
+    main.style.setProperty('--w-wall-top', Math.max(0, Math.round(top)) + 'px');
+  };
+  place();
+  if (window.ResizeObserver) new ResizeObserver(place).observe(main);
+  else window.addEventListener('resize', place);
+})();
+</script>

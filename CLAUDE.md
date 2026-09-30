@@ -1603,6 +1603,28 @@ alone had cleared a 61px masthead and not a 106px one. A docs section now
 carries its own too: links target the `<section>`, and the existing `h2` rule
 had never applied to one.
 
+**A signed-out reader of a dashboard on trade-agents.com meets a reading wall**
+(`_ta_wall.html`, base.html's `_ta_wall`). The top of the page reads as usual.
+Below the fold everything in `<main>` sits under a blur, with a card that signs
+the reader in and returns them to the page (`/login?next=<this page>`). The
+footer stays readable. It is **soft by choice**: the data is still in the page
+and in the APIs, since it is public market data and the wall asks for an
+account rather than protecting anything, so it walls nothing server-side. The
+fold is one screen down (`max(560px, 72vh)` from `<main>`'s top) unless a page
+marks it with `data-wall-start`. /markets does, on the section after its AI
+brief and index cards, and a small script keeps the mark measured as the panels
+above it load. The overlay is `position: absolute` in `<main>`, so it grows with
+the page, and it sits at z-index 15, under the pages' own pinned bars (/markets'
+chips 30, /history's `#sectionNav` 20). Those stay usable and take the reader to
+walled sections. `<main>` becomes `position: relative` only while walled;
+measured on every walled dashboard, nothing else in it used `<main>` as its
+containing block. A page with no data of its own sets `{% set no_wall = true %}`:
+/guide, /lookup, /videos, /assets and /posts (sign-in only anyway), and the
+error, warming and unsubscribe pages, whose one job is a message. Never walled:
+stock.li-family.us, a signed-in reader, and every TradeAgents page (the landing,
+docs, research and shared reports, the last of which exist to be read without
+an account). `check_wiki_pages` asserts each of those.
+
 One column costs width somewhere, and it is paid in two places. The docs'
 1260px `.w-wide` is capped to 1180 there (a 630px prose measure). And the
 heatmap's own 1800px, and the dashboards' 1475px `app-container`, give way on
