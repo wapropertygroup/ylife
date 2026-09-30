@@ -28,23 +28,147 @@
     --dr-up:   #34d399;
     --dr-down: #f87171;
   }
-  .dr-md { font-size:13px; line-height:1.75; color:var(--t-ink); overflow-wrap:break-word; }
-  .dr-md h2 { font-size:14px; font-weight:700; color:var(--t-ink-strong); margin:18px 0 8px;
-              padding-bottom:6px; border-bottom:1px solid var(--t-line); }
-  .dr-md h2:first-child { margin-top:0; }
-  .dr-md h3 { font-size:13px; font-weight:600; color:var(--t-accent-ink); margin:14px 0 6px; }
-  .dr-md p { margin:8px 0; }
-  .dr-md ul, .dr-md ol { margin:8px 0 8px 20px; }
-  .dr-md li { margin:3px 0; }
+
+  /* ── Head ────────────────────────────────────────────────────────────── */
+  .dr-head { display:flex; flex-wrap:wrap; align-items:flex-end; justify-content:space-between;
+             gap:12px 24px; margin-bottom:22px; }
+  .dr-title { margin:0; font-size:30px; line-height:1.15; font-weight:700; }
+  .dr-head-meta { display:flex; flex-wrap:wrap; align-items:center; gap:6px 18px; margin-top:8px;
+                  font-size:14px; color:var(--t-ink-dim); }
+  .dr-history { display:inline-flex; align-items:center; gap:8px; font-size:12.5px; }
+  #drDatePicker { color-scheme:light; }
+  .dark #drDatePicker { color-scheme:dark; }
+  /* On trade-agents.com the head is the shell's: a serif page title in ink,
+     as sign-in, contact and the docs set theirs, not yStocker's gradient. */
+  .w-top ~ main .dr-title { font-family:var(--w-serif); font-size:clamp(32px, 4vw, 46px);
+                            letter-spacing:-.02em; background:none; color:var(--w-ink);
+                            -webkit-text-fill-color:currentColor; }
+  html[lang^="zh"] .w-top ~ main .dr-title { letter-spacing:0; }
+
+  /* ── The report ───────────────────────────────────────────────────────────
+     The two AI reports, one at a time: a tab each, a contents list built from
+     the report's own `## ` sections, and a reading measure. They used to sit
+     side by side at 13px -- two ~470px columns, each a nine-section report with
+     a dozen tables, which could be read as neither. Hand-written, because the
+     Tailwind bundle is compiled and a class only this page used could be
+     missing from it; and `hidden` is restated, since the UA's [hidden] loses to
+     any display set here. */
+  .dr-report { margin-bottom:24px; background:var(--t-surface); border:1px solid var(--t-line);
+               border-radius:14px; scroll-margin-top:72px; }
+  .w-top ~ main .dr-report { scroll-margin-top:calc(var(--w-head-h) + 12px); }
+  .dr-report [hidden] { display:none !important; }
+  .dr-bar { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between;
+            gap:0 16px; padding:0 22px; border-bottom:1px solid var(--t-line); }
+  .dr-tabs { display:flex; gap:6px; }
+  .dr-tab { padding:15px 12px 14px; border:0; background:none; font:inherit; font-size:15px;
+            font-weight:600; color:var(--t-ink-muted); cursor:pointer;
+            box-shadow:inset 0 -2px 0 transparent; }
+  .dr-tab:hover { color:var(--t-ink-strong); }
+  .dr-tab[aria-selected="true"] { color:var(--t-ink-strong); box-shadow:inset 0 -2px 0 var(--t-accent); }
+  .dr-tab:focus-visible { outline:2px solid var(--t-accent); outline-offset:-4px; border-radius:6px; }
+  .dr-bar-side { display:flex; align-items:center; gap:12px; padding:10px 0; font-size:12.5px;
+                 color:var(--t-ink-dim); }
+  .dr-btn { padding:5px 12px; border:1px solid var(--t-line-strong); border-radius:8px; background:none;
+            font:inherit; font-size:12.5px; color:var(--t-ink-muted); cursor:pointer; }
+  .dr-btn:hover { border-color:var(--t-accent); color:var(--t-accent-ink); }
+  .dr-body { display:grid; grid-template-columns:196px minmax(0, 1fr); gap:44px; padding:32px 36px 34px; }
+  .dr-panels { min-width:0; max-width:760px; }
+
+  /* Contents: the open report's sections, pinned beside it as the docs' are. */
+  .dr-toc { position:sticky; top:80px; align-self:start; max-height:calc(100vh - 110px);
+            overflow-y:auto; font-size:13px; }
+  .w-top ~ main .dr-toc { top:calc(var(--w-head-h) + 24px);
+                          max-height:calc(100vh - var(--w-head-h) - 48px); }
+  .dr-toc-title { margin:0 0 10px; font-size:11px; font-weight:700; letter-spacing:.08em;
+                  text-transform:uppercase; color:var(--t-ink-dim); }
+  .dr-toc ol { margin:0; padding:0; list-style:none; border-left:1px solid var(--t-line); }
+  .dr-toc a { display:block; margin-left:-1px; padding:5px 0 5px 12px; border-left:2px solid transparent;
+              line-height:1.45; color:var(--t-ink-muted); text-decoration:none; }
+  .dr-toc a:hover { color:var(--t-ink-strong); }
+  .dr-toc a.is-active { color:var(--t-ink-strong); border-left-color:var(--t-accent); }
+  .dr-next { margin:30px 0 0; padding-top:18px; border-top:1px solid var(--t-line); font-size:14.5px; }
+  .dr-next a { font-weight:600; color:var(--t-accent-ink); text-decoration:none; }
+  .dr-next a:hover { text-decoration:underline; text-underline-offset:3px; }
+
+  /* The report's own type: a 16px body in a measure of about 45 Han characters
+     or 80 Latin ones, sections parted by a rule, and the headings in the site's
+     serif on trade-agents.com (--w-serif is wiki.css's, so elsewhere they keep
+     the body face). */
+  .dr-md { font-size:16px; line-height:1.75; color:var(--t-ink); overflow-wrap:break-word; }
+  html[lang^="zh"] .dr-md { line-height:1.85; }
+  .dr-md > :first-child { margin-top:0; }
+  .dr-md p { margin:0 0 14px; }
+  .dr-md h2 { margin:40px 0 14px; padding-top:28px; border-top:1px solid var(--t-line);
+              font-family:var(--w-serif, inherit); font-size:23px; line-height:1.3; font-weight:700;
+              color:var(--t-ink-strong); scroll-margin-top:80px; }
+  .w-top ~ main .dr-md h2 { scroll-margin-top:calc(var(--w-head-h) + 16px); }
+  html[lang^="zh"] .dr-md h2 { font-size:21px; }
+  .dr-md h2:first-child { padding-top:0; border-top:0; }
+  .dr-md h3 { margin:28px 0 10px; font-size:17px; line-height:1.4; font-weight:650; color:var(--t-accent-ink); }
+  /* A line that is nothing but bold is a sub-heading in all but name -- the
+     English brief writes its sub-sections that way -- so it is set as one. */
+  .dr-md h4, .dr-md p.dr-sub { margin:26px 0 8px; font-size:15.5px; line-height:1.45; font-weight:650;
+                               color:var(--t-ink-strong); }
   .dr-md strong { color:var(--t-ink-strong); font-weight:600; }
   .dr-md em { color:var(--t-ink-muted); }
-  .dr-md table { width:100%; border-collapse:collapse; margin:10px 0; font-size:11.5px;
-                 display:block; overflow-x:auto; }
-  .dr-md th, .dr-md td { border:1px solid var(--t-line); padding:4px 8px; text-align:left;
-                         white-space:nowrap; }
-  .dr-md th { background:var(--t-surface-alt); color:var(--t-ink-muted); font-weight:600; }
-  .dr-md td:not(:first-child) { font-variant-numeric:tabular-nums; }
-  .dr-md tbody tr:nth-child(even) { background:var(--t-row-alt); }
+  .dr-md ul, .dr-md ol { margin:0 0 16px; padding-left:1.4em; }
+  .dr-md ul { list-style:disc; }
+  .dr-md ol { list-style:decimal; }
+  .dr-md li { margin:8px 0; padding-left:2px; }
+  .dr-md li::marker { color:var(--t-ink-dim); }
+  /* Every section heading already carries a rule; the `---` between sections
+     would draw a second one. */
+  .dr-md hr { display:none; }
+  .dr-md blockquote { margin:16px 0; padding:10px 16px; border-left:3px solid var(--t-accent-line);
+                      border-radius:0 8px 8px 0; background:var(--t-surface-deep); color:var(--t-ink-muted); }
+  .dr-md code { padding:1px 5px; border-radius:4px; background:var(--t-surface-alt);
+                font-family:'JetBrains Mono', ui-monospace, monospace; font-size:.88em; }
+
+  /* Tables: framed, scrolling sideways on a phone rather than squeezing, with
+     the figures right-aligned in tabular numerals and a signed change in the
+     site's up/down ink -- both set per column by enhanceReport(), since
+     markdown.js carries no alignment. Sized to their content rather than to
+     the column: stretched to 760px, a two-column table put "27.2%" a hand's
+     width from the "20日均线" it belongs to. */
+  .dr-table { width:fit-content; min-width:min(100%, 360px); max-width:100%; margin:18px 0 22px;
+              overflow-x:auto; -webkit-overflow-scrolling:touch;
+              border:1px solid var(--t-line); border-radius:10px; }
+  .dr-table table { width:100%; border-collapse:collapse; font-size:14px; line-height:1.45;
+                    font-variant-numeric:tabular-nums; }
+  .dr-table th { padding:9px 14px; text-align:left; white-space:nowrap; font-size:12.5px; font-weight:600;
+                 color:var(--t-ink-muted); background:var(--t-surface-alt); border-bottom:1px solid var(--t-line-strong); }
+  .dr-table td { padding:9px 14px; white-space:nowrap; color:var(--t-ink); border-bottom:1px solid var(--t-line); }
+  .dr-table tr:last-child td { border-bottom:0; }
+  .dr-table td:first-child { font-weight:500; color:var(--t-ink-strong); }
+  .dr-table .num { text-align:right; }
+  .dr-table td.wrap { min-width:12em; white-space:normal; }
+  .dr-table .up { color:var(--dr-up); }
+  .dr-table .down { color:var(--dr-down); }
+
+  @media (max-width:1023.98px) {
+    .dr-body { grid-template-columns:minmax(0, 1fr); gap:20px; padding:22px 20px 26px; }
+    .dr-panels { max-width:none; }
+    /* The contents become a row of chips above the report, scrolled sideways. */
+    .dr-toc { position:static; max-height:none; overflow:visible; }
+    .w-top ~ main .dr-toc { max-height:none; }
+    .dr-toc-title { display:none; }
+    .dr-toc ol { display:flex; gap:8px; overflow-x:auto; padding-bottom:4px; border-left:0;
+                 scrollbar-width:none; }
+    .dr-toc ol::-webkit-scrollbar { display:none; }
+    .dr-toc li { flex:none; }
+    .dr-toc a { margin:0; padding:6px 12px; border:1px solid var(--t-line); border-radius:999px;
+                white-space:nowrap; font-size:12.5px; }
+    .dr-toc a.is-active { border-color:var(--t-accent); }
+  }
+  @media (max-width:640px) {
+    .dr-bar { padding:0 12px; }
+    .dr-tab { padding:13px 8px 12px; font-size:14.5px; }
+    .dr-body { padding:18px 14px 22px; }
+    .dr-md { font-size:15.5px; }
+    .dr-md h2 { font-size:20px; }
+    html[lang^="zh"] .dr-md h2 { font-size:19px; }
+  }
+
   .card { background:var(--t-surface); border:1px solid var(--t-line); border-radius:14px; padding:16px 18px; }
   .card-title { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.07em; color:var(--dr-ink-dim); margin-bottom:10px; }
   .idx-row { display:flex; align-items:center; justify-content:space-between; padding:6px 0; border-bottom:1px solid var(--t-line); }
@@ -72,45 +196,60 @@
 </style>
 
 <!-- Header -->
-<div class="mb-5 fade-up flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-  <div>
-    <h1 class="text-2xl sm:text-3xl font-bold grad-text" data-i18n="daily.title">Daily Markets Report</h1>
-    <div class="flex items-center gap-3 mt-1 flex-wrap">
-      <p class="text-slate-500 dark:text-slate-400 text-sm" id="reportDate"></p>
-      <div class="flex items-center gap-2">
-        <label class="text-xs text-slate-500 dark:text-slate-600" data-i18n="daily.date_picker_label">Browse past reports</label>
+<header class="dr-head fade-up">
+  <div class="min-w-0">
+    <h1 class="dr-title grad-text" data-i18n="daily.title">Daily Markets Report</h1>
+    <div class="dr-head-meta">
+      <span id="reportDate"></span>
+      <span class="dr-history">
+        <label for="drDatePicker" data-i18n="daily.date_picker_label">Browse past reports</label>
         <input id="drDatePicker" type="date"
                class="bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-600 dark:text-slate-300
-                      focus:outline-none focus:border-brand transition"
-               style="color-scheme:dark">
-      </div>
+                      focus:outline-none focus:border-brand transition">
+      </span>
     </div>
   </div>
   <button onclick="location.reload()"
           class="px-4 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300
                  hover:border-brand hover:text-brand transition shrink-0"
           data-i18n="daily.refresh">Refresh</button>
-</div>
+</header>
 
-<!-- ── Email / Subscribe ───────────────────────────────────────── -->
-<div class="card mb-6 fade-up">
-  <div class="card-title" data-i18n="daily.email_title">Email This Report</div>
-  <p class="text-xs text-slate-500 mb-3" data-i18n="daily.email_desc">Send today's report to your inbox, or subscribe for future daily emails.</p>
-  <div class="flex gap-2">
-    <input id="drEmailInput" type="email"
-           class="flex-1 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-700 dark:text-slate-200
-                  placeholder-slate-500 dark:placeholder-slate-600 focus:outline-none focus:border-brand transition"
-           data-i18n-placeholder="daily.email_ph"
-           placeholder="your@email.com">
-    <button id="drEmailBtn" onclick="sendDailyEmail()"
-            class="px-4 py-2 text-sm rounded-lg border border-brand/50 text-brand hover:bg-brand/10 transition shrink-0"
-            data-i18n="daily.email_send">Send</button>
-    <button id="drSubBtn" onclick="subscribeEmail()"
-            class="px-4 py-2 text-sm rounded-lg border border-emerald-300/50 dark:border-emerald-600/50 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition shrink-0"
-            data-i18n="daily.subscribe">Subscribe</button>
+{#  The two AI reports, one open at a time (see "The report" in the <style>
+    above). Both are fetched on load, so switching is instant; the open one is
+    in the address (#us, #cn, or a section's own #dr-us-3), so a link can name
+    either. Loaded straight away rather than after the data cards below, which
+    they do not depend on: /api/market-brief collects its own sources. #}
+<section class="dr-report fade-up" id="drReport">
+  <div class="dr-bar">
+    <div class="dr-tabs" role="tablist">
+      <button type="button" class="dr-tab" role="tab" id="drTabUs" data-market="us"
+              aria-controls="drAiUs" aria-selected="true"><span data-i18n="daily.tab_us">US Market</span></button>
+      <button type="button" class="dr-tab" role="tab" id="drTabCn" data-market="cn"
+              aria-controls="drAiCn" aria-selected="false" tabindex="-1"><span data-i18n="daily.tab_cn">CN / Asia</span></button>
+    </div>
+    <div class="dr-bar-side">
+      <span id="drBriefMeta"></span>
+      <button type="button" id="drTranslateBtn" class="dr-btn" hidden
+              onclick="translateAiSummary(_activeMarket)" data-i18n="daily.translate">Translate</button>
+    </div>
   </div>
-  <p id="drEmailStatus" class="text-xs mt-2 hidden"></p>
-</div>
+  <div class="dr-body">
+    <nav class="dr-toc" id="drToc" aria-labelledby="drTocTitle" hidden>
+      <p class="dr-toc-title" id="drTocTitle" data-i18n="daily.toc">On this page</p>
+      <ol id="drTocList"></ol>
+    </nav>
+    <div class="dr-panels">
+      <article id="drAiUs" class="dr-md" role="tabpanel" aria-labelledby="drTabUs">
+        <div class="flex items-center gap-2 text-slate-500 text-sm"><svg class="animate-spin w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24"><circle style="opacity:.25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path style="opacity:.75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/></svg><span data-i18n="daily.thinking">Thinking…</span></div>
+      </article>
+      <article id="drAiCn" class="dr-md" role="tabpanel" aria-labelledby="drTabCn" hidden>
+        <div class="flex items-center gap-2 text-slate-500 text-sm"><svg class="animate-spin w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24"><circle style="opacity:.25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path style="opacity:.75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/></svg><span data-i18n="daily.thinking">Thinking…</span></div>
+      </article>
+      <p class="dr-next"><a href="#cn" id="drNext"><span id="drNextLabel" data-i18n="daily.next_cn">Next: the CN / Asia report →</span></a></p>
+    </div>
+  </div>
+</section>
 
 <!-- Loading -->
 <div id="drLoading" class="flex items-center gap-2 text-slate-500 text-sm py-8">
@@ -122,34 +261,6 @@
 </div>
 
 <div id="drContent" style="display:none">
-
-<!-- ── AI Commentary — two cards side by side ─────────────────────── -->
-<div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6 fade-up">
-  <!-- US Market card -->
-  <div class="card" id="drAiCardUs">
-    <div class="flex items-center justify-between mb-3">
-      <div class="card-title" style="margin-bottom:0" data-i18n="daily.tab_us">US Market</div>
-      <button id="drTranslateBtnUs" onclick="translateAiSummary('us')"
-              class="px-3 py-1 text-xs rounded-lg border border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-400 hover:border-brand hover:text-brand transition hidden"
-              data-i18n="daily.translate">Translate</button>
-    </div>
-    <div id="drAiUs" class="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
-      <div class="flex items-center gap-2 text-slate-500 text-sm"><svg class="animate-spin w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24"><circle style="opacity:.25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path style="opacity:.75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/></svg><span data-i18n="daily.thinking">Thinking…</span></div>
-    </div>
-  </div>
-  <!-- CN / Asia card -->
-  <div class="card" id="drAiCardCn">
-    <div class="flex items-center justify-between mb-3">
-      <div class="card-title" style="margin-bottom:0" data-i18n="daily.tab_cn">CN / Asia</div>
-      <button id="drTranslateBtnCn" onclick="translateAiSummary('cn')"
-              class="px-3 py-1 text-xs rounded-lg border border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-400 hover:border-brand hover:text-brand transition hidden"
-              data-i18n="daily.translate">Translate</button>
-    </div>
-    <div id="drAiCn" class="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
-      <div class="flex items-center gap-2 text-slate-500 text-sm"><svg class="animate-spin w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24"><circle style="opacity:.25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path style="opacity:.75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/></svg><span data-i18n="daily.thinking">Thinking…</span></div>
-    </div>
-  </div>
-</div>
 
 <!-- ── All Indices Time Series + Sentiment ──────────────────────── -->
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6 fade-up">
@@ -237,6 +348,28 @@
 
 </div><!-- /drContent -->
 
+<!-- ── Email / Subscribe ─────────────────────────────────────────────
+     After the report and the data rather than above them: it is what a reader
+     does once they have read the page, not what they came to it for. -->
+<div class="card mb-6 fade-up">
+  <div class="card-title" data-i18n="daily.email_title">Email This Report</div>
+  <p class="text-xs text-slate-500 mb-3" data-i18n="daily.email_desc">Send today's report to your inbox, or subscribe for future daily emails.</p>
+  <div class="flex gap-2">
+    <input id="drEmailInput" type="email"
+           class="flex-1 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-700 dark:text-slate-200
+                  placeholder-slate-500 dark:placeholder-slate-600 focus:outline-none focus:border-brand transition"
+           data-i18n-placeholder="daily.email_ph"
+           placeholder="your@email.com">
+    <button id="drEmailBtn" onclick="sendDailyEmail()"
+            class="px-4 py-2 text-sm rounded-lg border border-brand/50 text-brand hover:bg-brand/10 transition shrink-0"
+            data-i18n="daily.email_send">Send</button>
+    <button id="drSubBtn" onclick="subscribeEmail()"
+            class="px-4 py-2 text-sm rounded-lg border border-emerald-300/50 dark:border-emerald-600/50 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition shrink-0"
+            data-i18n="daily.subscribe">Subscribe</button>
+  </div>
+  <p id="drEmailStatus" class="text-xs mt-2 hidden"></p>
+</div>
+
 <script>
 const GRID_COL = CT.c('#1e293b'), TICK_COL = CT.c('#64748b');
 let _goldRatiosData     = null;
@@ -271,25 +404,32 @@ function _fgColor(r) {
   return CT.c('#94a3b8');
 }
 
-// Track loads and auto-trigger AI when ready
+// Reveal the data cards once their four feeds are in. The reports above no
+// longer wait for this: they are fetched at boot (see the end of this script).
 function _onLoadDone() {
   _loadsDone++;
   if (_loadsDone >= _LOADS_NEEDED) {
     document.getElementById('drContent').style.display = '';
     document.getElementById('drLoading').style.display = 'none';
-    generateAllSummaries();
   }
 }
 
-// ── AI Tab switching (removed — now two separate cards) ────────────
+// The date in the page's language, not the browser's: toLocaleDateString(undefined)
+// printed "Wednesday, September 30, 2026" on a Chinese page.
+function renderReportDate() {
+  const el = document.getElementById('reportDate');
+  if (!el) return;
+  el.textContent = new Date().toLocaleDateString(
+    I18n.getLang() === 'zh' ? 'zh-CN' : 'en-US',
+    { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+}
 
 // ── Markets data ──────────────────────────────────────────────────
 async function loadMarkets() {
   const resp = await fetch('/api/markets');
   const data = await resp.json();
   const now  = new Date();
-  document.getElementById('reportDate').textContent =
-    now.toLocaleDateString(undefined, { weekday:'long', year:'numeric', month:'long', day:'numeric' });
+  renderReportDate();
   // Set date picker max to today
   const todayStr = now.toISOString().slice(0, 10);
   document.getElementById('drDatePicker').max = todayStr;
@@ -744,25 +884,223 @@ async function loadMovers() {
   }
 }
 
-// ── AI Commentary ─────────────────────────────────────────────────
-let _summaryGenerating = { us: false, cn: false };
-
-// Both cards are now the market-scoped AI brief: the same server-side snapshot
-// of every dashboard that /markets shows, rendered for "us" or "cn". It arrives
-// as Markdown with tables, so it goes through the shared markdown.js rather than
-// being split into <p> on blank lines the way the prose summary was.
+// ── The reports ───────────────────────────────────────────────────
+// Both are the market-scoped AI brief: the same server-side snapshot of every
+// dashboard that /markets shows, rendered for "us" or "cn". It arrives as
+// Markdown with tables, so it goes through the shared markdown.js -- which
+// escapes model output before adding any tag -- and then enhanceReport().
 //
 // /api/daily-summary is deliberately still there and untouched: it feeds the
 // subscriber email, whose builder splits on blank lines into <p> tags, so a brief
 // with pipe tables would arrive as literal pipes in somebody's inbox.
+const _PANEL = { us: 'drAiUs', cn: 'drAiCn' };
+const _TAB   = { us: 'drTabUs', cn: 'drTabCn' };
+let _activeMarket = 'us';
+// Per report, once it is on screen: when it was generated, how many of its
+// sources were cold, and whether Translate applies (not to a past date's).
+let _briefMeta = { us: null, cn: null };
+let _summaryGenerating = { us: false, cn: false };
+// Set while a past date is shown, so a report still loading for today cannot
+// land on top of it.
+let _historyDate = '';
+
+const _reduced = () => !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+const _spinner = () => `<div class="flex items-center gap-2 text-slate-500 text-sm"><svg class="animate-spin w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24"><circle style="opacity:.25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path style="opacity:.75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/></svg>${I18n.t('daily.thinking') || 'Thinking…'}</div>`;
+
+// What markdown.js cannot say about a table: which columns hold figures, so
+// they right-align, and which figures are signed changes, so they take the
+// up/down ink. Decided per column from its own cells -- 60% of the filled ones
+// must read as numbers -- so a label column holding one number stays left, and
+// only an explicit sign is coloured: "90%" (a range position) is not a change.
+// Also frames each table in a sideways scroller, sets a bold-only line as the
+// sub-heading it is, and ids each `## ` section for the contents list.
+const _NUM    = /^[+\-−]?\s?[$€£¥]?\d[\d,]*(?:\.\d+)?\s?(?:%|x|×|倍|bps?|pp|pts?|[KMBT])?$/i;
+const _BLANK  = /^(?:|—|–|-|n\/?a|\.\.\.|…)$/i;
+const _SIGNED = /^([+\-−])\s?[$€£¥]?(\d[\d,]*(?:\.\d+)?)/;
+
+function enhanceReport(el, market) {
+  el.querySelectorAll('table').forEach(table => {
+    const frame = document.createElement('div');
+    frame.className = 'dr-table';
+    table.parentNode.insertBefore(frame, table);
+    frame.appendChild(table);
+
+    const rows = [...table.querySelectorAll('tbody tr')];
+    const width = Math.max(0, ...rows.map(r => r.cells.length));
+    for (let c = 1; c < width; c++) {          // column 0 is the row's label
+      let filled = 0, numeric = 0;
+      for (const r of rows) {
+        const t = (r.cells[c] ? r.cells[c].textContent : '').trim();
+        if (_BLANK.test(t)) continue;
+        filled++;
+        if (_NUM.test(t)) numeric++;
+      }
+      if (!numeric || numeric / filled < 0.6) continue;
+      table.querySelectorAll('thead tr').forEach(r => { if (r.cells[c]) r.cells[c].classList.add('num'); });
+      for (const r of rows) {
+        const cell = r.cells[c];
+        if (!cell) continue;
+        cell.classList.add('num');
+        const t = cell.textContent.trim();
+        const m = _NUM.test(t) && t.match(_SIGNED);
+        if (m && parseFloat(m[2].replace(/,/g, '')) !== 0) cell.classList.add(m[1] === '+' ? 'up' : 'down');
+      }
+    }
+    // A sentence in a cell wraps, rather than dragging the whole table sideways.
+    rows.forEach(r => [...r.cells].forEach(cell => {
+      if (!cell.classList.contains('num') && cell.textContent.trim().length > 28) cell.classList.add('wrap');
+    }));
+  });
+
+  el.querySelectorAll('p').forEach(p => {
+    const bold = p.querySelectorAll('strong');
+    if (bold.length === 1 && p.textContent.trim() === bold[0].textContent.trim()) p.classList.add('dr-sub');
+  });
+
+  el.querySelectorAll('h2').forEach((h, i) => { h.id = `dr-${market}-${i + 1}`; });
+}
+
+// ── Contents ──────────────────────────────────────────────────────
+// The open report's `## ` sections. Shown only when there are two or more: a
+// past date's summary is prose with none.
+function buildToc() {
+  const nav  = document.getElementById('drToc');
+  const list = document.getElementById('drTocList');
+  const heads = [...document.getElementById(_PANEL[_activeMarket]).querySelectorAll('h2')];
+  list.replaceChildren(...heads.map(h => {
+    const li = document.createElement('li');
+    const a = document.createElement('a');
+    a.href = '#' + h.id;
+    // The target rides on a data attribute, not the href: a language switch
+    // has i18n.js rewrite every same-page link to /daily?lang=zh#dr-us-3.
+    a.dataset.target = h.id;
+    a.textContent = h.textContent;
+    li.appendChild(a);
+    return li;
+  }));
+  nav.hidden = heads.length < 2;
+  _spy();
+}
+
+document.getElementById('drTocList').addEventListener('click', e => {
+  const a = e.target.closest('a[data-target]');
+  const target = a && document.getElementById(a.dataset.target);
+  if (!target) return;
+  e.preventDefault();
+  target.scrollIntoView({ behavior: _reduced() ? 'auto' : 'smooth', block: 'start' });
+  history.replaceState(history.state, '', location.pathname + location.search + '#' + target.id);
+});
+
+// The section being read is the last one whose heading has passed under the
+// pinned header. Measured off that header itself -- yStocker's bar, or on
+// trade-agents.com the masthead with the Markets bar under it -- because
+// --w-head-h is a calc() and reads back from getComputedStyle as text.
+function _headBottom() {
+  const bar = document.querySelector('.w-sub') || document.querySelector('.w-top')
+           || document.querySelector('body > header');
+  return bar ? Math.max(0, bar.getBoundingClientRect().bottom) : 0;
+}
+let _spyQueued = false;
+function _spy() {
+  _spyQueued = false;
+  const links = [...document.querySelectorAll('#drTocList a[data-target]')];
+  if (!links.length) return;
+  const line = _headBottom() + 32;
+  let current = links[0];
+  for (const a of links) {
+    const h = document.getElementById(a.dataset.target);
+    if (h && h.getBoundingClientRect().top <= line) current = a;
+  }
+  links.forEach(a => a.classList.toggle('is-active', a === current));
+}
+window.addEventListener('scroll', () => {
+  if (!_spyQueued) { _spyQueued = true; requestAnimationFrame(_spy); }
+}, { passive: true });
+
+// ── Tabs ──────────────────────────────────────────────────────────
+function _marketFromHash() {
+  const h = decodeURIComponent(location.hash.slice(1));
+  return (h === 'cn' || h.startsWith('dr-cn-')) ? 'cn' : 'us';
+}
+
+function paintMeta() {
+  const meta = _briefMeta[_activeMarket];
+  const parts = [];
+  if (meta && meta.generated_at) parts.push(`${I18n.t('daily.generated') || 'Generated'} ${meta.generated_at}`);
+  if (meta && meta.cold) parts.push((I18n.t('daily.sources_cold') || '{n} sources unavailable').replace('{n}', meta.cold));
+  document.getElementById('drBriefMeta').textContent = parts.join(' · ');
+  document.getElementById('drTranslateBtn').hidden = !(meta && meta.translatable);
+}
+
+function selectMarket(market, opts = {}) {
+  if (!_PANEL[market]) market = 'us';
+  _activeMarket = market;
+  for (const m of Object.keys(_PANEL)) {
+    const on = m === market;
+    const tab = document.getElementById(_TAB[m]);
+    tab.setAttribute('aria-selected', on ? 'true' : 'false');
+    tab.tabIndex = on ? 0 : -1;
+    document.getElementById(_PANEL[m]).hidden = !on;
+  }
+  // The foot of each report leads to the other one.
+  const other = market === 'us' ? 'cn' : 'us';
+  const label = document.getElementById('drNextLabel');
+  document.getElementById('drNext').setAttribute('href', '#' + other);
+  label.dataset.i18n = other === 'cn' ? 'daily.next_cn' : 'daily.next_us';
+  label.textContent = I18n.t(label.dataset.i18n) || label.textContent;
+  paintMeta();
+  buildToc();
+  if (opts.hash !== false) {
+    history.replaceState(history.state, '', location.pathname + location.search + '#' + market);
+  }
+  if (opts.focus) document.getElementById(_TAB[market]).focus();
+  if (opts.scroll) {
+    document.getElementById('drReport').scrollIntoView({ behavior: _reduced() ? 'auto' : 'smooth', block: 'start' });
+  }
+}
+
+document.querySelectorAll('.dr-tab').forEach(tab => {
+  tab.addEventListener('click', () => selectMarket(tab.dataset.market));
+  // Arrow keys move between the tabs, as the ARIA tabs pattern has it.
+  tab.addEventListener('keydown', e => {
+    const order = Object.keys(_PANEL);
+    let i = order.indexOf(tab.dataset.market);
+    if (e.key === 'ArrowRight') i = (i + 1) % order.length;
+    else if (e.key === 'ArrowLeft') i = (i + order.length - 1) % order.length;
+    else if (e.key === 'Home') i = 0;
+    else if (e.key === 'End') i = order.length - 1;
+    else return;
+    e.preventDefault();
+    selectMarket(order[i], { focus: true });
+  });
+});
+document.getElementById('drNext').addEventListener('click', e => {
+  e.preventDefault();
+  selectMarket(_activeMarket === 'us' ? 'cn' : 'us', { scroll: true });
+});
+
+// A link to one of the report's sections (#dr-us-3) lands on it once the
+// report it belongs to has rendered.
+let _hashJumped = false;
+function _jumpToHashSection() {
+  if (_hashJumped) return;
+  const id = decodeURIComponent(location.hash.slice(1));
+  const h = id.startsWith(`dr-${_activeMarket}-`) && document.getElementById(id);
+  if (!h) return;
+  _hashJumped = true;
+  h.scrollIntoView({ block: 'start' });
+}
+
+// ── Loading the reports ───────────────────────────────────────────
 async function generateAiSummary(forceLang, market) {
   if (_summaryGenerating[market]) return;
   _summaryGenerating[market] = true;
 
-  const contentEl = document.getElementById(market === 'us' ? 'drAiUs' : 'drAiCn');
+  const contentEl = document.getElementById(_PANEL[market]);
   const lang = forceLang || I18n.getLang();
-  const spinner = `<div class="flex items-center gap-2 text-slate-500 text-sm"><svg class="animate-spin w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24"><circle style="opacity:.25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path style="opacity:.75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/></svg>${I18n.t('daily.thinking') || 'Thinking…'}</div>`;
-  contentEl.innerHTML = spinner;
+  contentEl.innerHTML = _spinner();
+  _briefMeta[market] = null;
+  if (market === _activeMarket) { paintMeta(); buildToc(); }
 
   try {
     const resp = await fetch('/api/market-brief', {
@@ -775,41 +1113,35 @@ async function generateAiSummary(forceLang, market) {
 
     const md = result.brief || '';
     if (!md) throw new Error('empty brief');
+    if (_historyDate) return;
     if (market === 'us') { _latestSummaryUs = md; _summaryLangUs = lang; }
     else                 { _latestSummaryCn = md; _summaryLangCn = lang; }
 
     // innerHTML of *rendered* markup only. markdown.js escapes text before
     // adding tags; model output is not trusted.
-    contentEl.classList.add('dr-md');
-    contentEl.innerHTML = (typeof Markdown !== 'undefined')
-      ? Markdown.render(md)
-      : '<pre style="white-space:pre-wrap"></pre>';
-    if (typeof Markdown === 'undefined') {
-      contentEl.querySelector('pre').textContent = md;   // escaped fallback
+    if (typeof Markdown !== 'undefined') {
+      contentEl.innerHTML = Markdown.render(md);
+    } else {
+      const pre = document.createElement('pre');
+      pre.style.whiteSpace = 'pre-wrap';
+      pre.textContent = md;                     // escaped fallback
+      contentEl.replaceChildren(pre);
     }
-
-    const meta = [];
-    if (result.generated_at) meta.push(`Generated ${result.generated_at}`);
-    const cold = (result.sources_cold || []).length;
-    if (cold) meta.push(`${cold} source${cold > 1 ? 's' : ''} unavailable`);
-    if (meta.length) {
-      const p = document.createElement('p');
-      p.className = 'text-xs text-slate-500 dark:text-slate-600 mt-3';
-      p.textContent = meta.join(' · ');
-      contentEl.appendChild(p);
-    }
-
-    const btnId = market === 'us' ? 'drTranslateBtnUs' : 'drTranslateBtnCn';
-    document.getElementById(btnId)?.classList.remove('hidden');
-  } catch(e) {
-    contentEl.innerHTML = `<span class="text-rose-700 dark:text-rose-400 text-xs">⚠ ${e.message}</span>`;
+    enhanceReport(contentEl, market);
+    _briefMeta[market] = { generated_at: result.generated_at || '',
+                           cold: (result.sources_cold || []).length, translatable: true };
+  } catch (e) {
+    const p = document.createElement('p');
+    p.className = 'text-rose-700 dark:text-rose-400 text-sm';
+    p.textContent = '⚠ ' + e.message;
+    contentEl.replaceChildren(p);
+  } finally {
+    _summaryGenerating[market] = false;
   }
-  _summaryGenerating[market] = false;
+  if (market === _activeMarket) { paintMeta(); buildToc(); _jumpToHashSection(); }
 }
 
 async function generateAllSummaries(forceLang) {
-  document.getElementById('drTranslateBtnUs').classList.add('hidden');
-  document.getElementById('drTranslateBtnCn').classList.add('hidden');
   await Promise.all([
     generateAiSummary(forceLang, 'us'),
     generateAiSummary(forceLang, 'cn'),
@@ -823,28 +1155,33 @@ async function translateAiSummary(market) {
 }
 
 // ── Render stored (historical) summaries from date picker ─────────
+// A past date's summary is the short prose one (/api/daily-summary), rendered
+// through markdown.js as well -- it used to be inserted as raw HTML -- and set
+// in the same type. Translate is hidden: it would fetch *today's* report.
 function renderStoredSummaries(data, date) {
-  const isZh = I18n.getLang() === 'zh';
-  document.getElementById('drTranslateBtnUs').classList.add('hidden');
-  document.getElementById('drTranslateBtnCn').classList.add('hidden');
-  for (const market of ['us', 'cn']) {
-    const contentEl = document.getElementById(market === 'us' ? 'drAiUs' : 'drAiCn');
-    const btnId = market === 'us' ? 'drTranslateBtnUs' : 'drTranslateBtnCn';
+  _historyDate = date;
+  for (const market of Object.keys(_PANEL)) {
+    const contentEl = document.getElementById(_PANEL[market]);
     const stored = data[market];
-    if (stored && stored.summary) {
-      const paras = stored.summary.split(/\n\n+/).filter(Boolean);
-      let html = paras.map(p => `<p class="mb-3 last:mb-0">${p.replace(/\n/g,'<br>')}</p>`).join('');
-      if (stored.generated_at) {
-        html += `<p class="text-xs text-slate-500 dark:text-slate-600 mt-3">${stored.generated_at}</p>`;
-      }
-      contentEl.innerHTML = html;
-      document.getElementById(btnId).classList.remove('hidden');
+    if (stored && stored.summary && typeof Markdown !== 'undefined') {
+      contentEl.innerHTML = Markdown.render(stored.summary);
+      enhanceReport(contentEl, market);
     } else {
-      const noSummaryMsg = I18n.t('daily.no_history') || 'No summary available for this date.';
-      contentEl.innerHTML = `<span class="text-slate-500 dark:text-slate-600 text-sm">${noSummaryMsg}</span>`;
+      const p = document.createElement('p');
+      p.className = 'text-slate-500 dark:text-slate-600 text-sm';
+      p.textContent = stored && stored.summary
+        ? stored.summary
+        : (I18n.t('daily.no_history') || 'No summary available for this date.');
+      contentEl.replaceChildren(p);
     }
+    _briefMeta[market] = { generated_at: (stored && stored.generated_at) || date,
+                           cold: 0, translatable: false };
   }
+  paintMeta();
+  buildToc();
 }
+
+document.addEventListener('i18n:langchange', () => { renderReportDate(); paintMeta(); });
 
 // ── Email send ────────────────────────────────────────────────────
 async function sendDailyEmail() {
@@ -966,7 +1303,11 @@ async function subscribeEmail() {
   } catch(e) {}
 })();
 
-// Boot
+// Boot. The reports first and on their own: they depend on none of the feeds
+// the data cards wait for.
+renderReportDate();
+selectMarket(_marketFromHash(), { hash: false });
+generateAllSummaries();
 Promise.all([loadMarkets(), loadSentiment(), loadGoldRatios(), loadEconEvents(), loadMovers()]);
 </script>
 {% endblock %}

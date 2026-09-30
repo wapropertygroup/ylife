@@ -39,6 +39,7 @@ This module only formats what it is handed.
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any, Optional
 
 log = logging.getLogger(__name__)
@@ -1216,3 +1217,30 @@ def build_prompt(snapshot: str, lang: str, market: str = "us") -> str:
         "no preamble.\n\n"
         f"Market snapshot:\n{snapshot}"
     )
+
+
+# A level-two heading and nothing deeper: "## 1. Indices", not "### Title".
+_SECTION_HEADING = re.compile(r"^##(?!#)[ \t]", re.M)
+
+
+def strip_preamble(md: str) -> str:
+    """The brief from its first ``## `` section on.
+
+    The prompt asks for exactly N sections, each opening with a ``## `` heading,
+    and forbids a preamble in both languages (不要寒暄 / "no preamble"). The
+    model writes one anyway on some days -- a title, "尊敬的专业投资者：", a
+    sentence saying the report is based on the snapshot, a rule -- and on
+    /daily that made the report open like a letter, under a page that already
+    carries its own title and date. Whatever comes before the first section
+    heading is not one of the sections asked for, so it goes.
+
+    Applied where a brief is produced and where a stored one is read back, so a
+    copy saved before this existed is served without it too. A brief with no
+    ``## `` heading at all is returned as it is: that is a malformed answer, and
+    cutting it would leave the reader nothing.
+    """
+    text = md or ""
+    m = _SECTION_HEADING.search(text)
+    if not m:
+        return text
+    return text[m.start():]

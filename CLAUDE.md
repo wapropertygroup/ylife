@@ -262,9 +262,20 @@ Each app follows the same pattern:
   `cache/futu_ids.json`.
 - `report_email.py` — Mails a finished `/agents` report as HTML. Owns its own
   Markdown→HTML renderer (a server-side port of `static/markdown.js`, emitting
-  inline styles) rather than reusing `_build_email_sections`, which splits on
-  blank lines into `<p>` and would deliver a report's pipe tables as literal
-  pipes.
+  inline styles), which the daily email now uses too.
+- `daily_email.py` — The daily markets email: the 16:45 ET broadcast and the
+  Send button on `/daily`. Pure (data in, strings out) and moved out of
+  `routes.py`, which keeps only the SES wrappers. It is one 640px column built
+  from tables, with the commentaries stacked; it used to be 1,200px wide with
+  them in side-by-side cells, which could not reflow, so a phone got two ~180px
+  columns. It borrows `report_email`'s palette, mark and escaping renderer, and
+  is localised per language: the Chinese edition used to be dated in English,
+  with English sector names. Each mail is branded for, and links to, the reader's
+  own site. `/api/subscribe` records that as `site` on the subscriber row. Older
+  rows fall back to `APP_BASE_URL`, then stock.li-family.us. The fallback this
+  replaced was ystocker.com, which this box does not serve, so an unsubscribe
+  link built on it could not have worked. Tests: `tests/test_daily_email.py`,
+  and `tests/check_daily_email_endpoints.py` through the app.
 - `share.py` — Sharing a finished report with somebody who did not run it: mints
   and resolves the capability tokens behind `/agents/shared/<token>`, and owns the
   recipient/note validation and the field allowlist that keeps the owner's address
@@ -1809,10 +1820,29 @@ and formatted by `brief.py`. Output is Markdown, rendered through the shared
 `static/markdown.js`, because the point of the brief is a table per section.
 
 It is deliberately **not** a mode of `/api/daily-summary`. That endpoint still
-feeds `/daily` and the subscriber email, and `_build_email_sections` splits its
-text on blank lines into `<p>` tags — so a brief containing pipe tables would
-arrive as literal pipes in somebody's inbox. Two consumers, two shapes, two
-routes, two DynamoDB key namespaces (`{lang}_brief_v1` vs `{lang}_{market}`).
+feeds the subscriber email (daily_email.py) and a past date on `/daily`, and is
+short prose by design, where the brief is a dozen tables. Two consumers, two
+shapes, two routes, two DynamoDB key namespaces (`{lang}_brief_v1` vs
+`{lang}_{market}`).
+
+**Nothing before the first `## ` is served.** The prompt asks for exactly N
+sections and forbids a preamble (不要寒暄 / "no preamble"), and on some days the
+model writes one anyway: a title, "尊敬的专业投资者：", a sentence saying the
+report is based on the snapshot. On `/daily` that made the report open like a
+letter. `brief.strip_preamble` drops it at generation and when a stored row is
+read back (`_brief_from_ddb_item`), so a copy saved before the rule is fixed too.
+A brief with no `## ` at all is left whole.
+
+**`/daily` shows one report at a time.** It has a tab each for 美国市场 and
+中国 / 亚洲, a contents list built from the report's `## ` sections (a chip row
+on a phone), and a 760px reading column at 16px. The two reports used to sit
+side by side at 13px in two ~470px columns. `enhanceReport()` supplies what
+`markdown.js` cannot: a column is right-aligned when 60% of its filled cells
+are figures, and only an explicitly signed figure is coloured, so "90%" (a
+range position) stays uncoloured. The report is fetched at boot rather than
+after the data cards, which it never depended on. The contents links keep their
+target in `data-target`, because a language switch has i18n.js rewrite every
+same-page link to `/daily?lang=zh#dr-us-3`.
 
 Three rules hold the thing together, and breaking any of them degrades quietly:
 
