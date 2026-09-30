@@ -634,5 +634,50 @@ class SnapshotAndPrompt(unittest.TestCase):
         self.assertIn("DATE:", brief.build_snapshot({}, "2026-08-27"))
 
 
+class Preamble(unittest.TestCase):
+    """strip_preamble: the brief is its `## ` sections and nothing before them.
+
+    The fixture is how 2026-09-30's Chinese US brief actually opened, although
+    the prompt forbids exactly this (不要寒暄).
+    """
+
+    LETTER = ("### 每日市场简报 —— 2026年9月30日\n\n"
+              "尊敬的专业投资者：\n\n"
+              "本报告基于2026年9月30日的市场快照数据，为您提供全面的市场策略分析。\n\n"
+              "---\n\n"
+              "## 1. 指数与市场广度\n\n美国主要股指今日小幅下跌。\n\n"
+              "---\n\n## 2. 估值与倍数\n\n估值偏高。\n")
+
+    def test_everything_before_the_first_section_goes(self):
+        out = brief.strip_preamble(self.LETTER)
+        self.assertTrue(out.startswith("## 1. 指数与市场广度"), out[:40])
+        for gone in ("尊敬", "每日市场简报", "本报告基于"):
+            self.assertNotIn(gone, out)
+        # The sections themselves, and the rules between them, are untouched.
+        self.assertIn("---\n\n## 2. 估值与倍数\n\n估值偏高。", out)
+
+    def test_a_clean_brief_is_unchanged(self):
+        clean = "## 1. Indices & Breadth\n\n| a | b |\n|---|---|\n| 1 | 2 |\n"
+        self.assertEqual(brief.strip_preamble(clean), clean)
+
+    def test_a_deeper_heading_is_not_a_section(self):
+        # The letter's own title is `###`: finding it would keep the preamble.
+        self.assertTrue(brief.strip_preamble("### Title\n\ntext\n\n## 1. A\n\nx")
+                        .startswith("## 1. A"))
+        # `##` must be a heading, not the start of a longer run of hashes.
+        self.assertEqual(brief.strip_preamble("####x\n\n## 1. A"), "## 1. A")
+
+    def test_a_brief_with_no_section_is_left_whole(self):
+        # Malformed, but cutting it would leave the reader nothing.
+        self.assertEqual(brief.strip_preamble("Just prose.\n\nMore prose."),
+                         "Just prose.\n\nMore prose.")
+        self.assertEqual(brief.strip_preamble(""), "")
+        self.assertEqual(brief.strip_preamble(None), "")
+
+    def test_a_section_heading_mid_line_does_not_count(self):
+        text = "Intro mentions ## not a heading.\n\n## 1. Real"
+        self.assertEqual(brief.strip_preamble(text), "## 1. Real")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

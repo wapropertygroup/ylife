@@ -11915,7 +11915,7 @@ def _generate_market_brief(lang: str, warm: bool = False, app=None,
         http_options=genai_types.HttpOptions(timeout=_BRIEF_GEMINI_TIMEOUT_MS),
     )
     resp = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
-    text = (resp.text or "").strip()
+    text = brief_mod.strip_preamble((resp.text or "").strip())
     if not text:
         raise RuntimeError("Gemini returned an empty brief")
 
@@ -12022,9 +12022,14 @@ def _brief_from_ddb_item(item: dict) -> dict:
     "N sources unavailable" note works on a cache hit too — which is the common
     path, the brief being pre-generated daily. Without them the note only ever
     appeared on the rare fresh generation.
+
+    The preamble rule (brief.strip_preamble) is applied here as well as at
+    generation, so a row stored before it existed is served without one.
     """
+    from ystocker import brief as brief_mod
+
     return {
-        "brief":         item["summary"],
+        "brief":         brief_mod.strip_preamble(item["summary"]),
         "generated_at":  item.get("generated_at", ""),
         "sources_used":  list(item.get("sources_used") or []),
         "sources_cold":  list(item.get("sources_cold") or []),
@@ -12539,14 +12544,23 @@ def api_subscribe():
             return jsonify({"ok": True, "already": True})
 
         token = _secrets.token_urlsafe(32)
-        table.put_item(Item={
+        item = {
             "email":             email,
             "lang":              lang,
             "subscribed_at":     _dt.utcnow().isoformat(),
             "active":            True,
             "unsubscribe_token": token,
-        })
-        log.info("New subscriber: %s (lang=%s)", email, lang)
+        }
+        # The site this reader subscribed on: the daily mail is branded for it
+        # and links back to it (daily_email.site_for_host). Absent on a local
+        # host, which no mail should link to, and on every row written before
+        # this, which daily_email.default_site() then covers.
+        from ystocker import daily_email
+        site = daily_email.site_for_host(request.host)
+        if site:
+            item["site"] = site
+        table.put_item(Item=item)
+        log.info("New subscriber: %s (lang=%s site=%s)", email, lang, site or "-")
         return jsonify({"ok": True, "already": False})
     except Exception as exc:
         log.error("Subscribe failed for %s: %s", email, exc, exc_info=True)
@@ -12589,364 +12603,37 @@ def unsubscribe_page():
 
 # ---------------------------------------------------------------------------
 # Daily email helpers — shared by the HTTP endpoint and the auto-broadcast
-# scheduler so all email rendering logic lives in one place.
+# scheduler. The mail itself is ystocker/daily_email.py, which is pure; what
+# stays here is the send.
 # ---------------------------------------------------------------------------
-
-_EMAIL_CELL  = 'style="padding:5px 8px;border-bottom:1px solid #1e293b;font-size:13px;color:#cbd5e1"'
-_EMAIL_HDR   = 'style="padding:5px 8px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#64748b;border-bottom:1px solid #334155"'
-_EMAIL_TABLE = 'width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-bottom:4px"'
-_EMAIL_SEC   = 'style="margin:0 0 8px 0;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#64748b"'
-_EMAIL_DIV   = '<tr><td colspan="10" style="padding:14px 0"><div style="height:1px;background:#1e293b"></div></td></tr>'
-
-
-def _email_chg_html(v):
-    if v is None:
-        return '<span style="color:#94a3b8">—</span>'
-    col = '#34d399' if v >= 0 else '#f87171'
-    return f'<span style="color:{col}">{("+" if v >= 0 else "")}{v:.2f}%</span>'
-
-
-def _build_email_sections(
-    is_zh: bool, ai_us: str, ai_cn: str,
-    indices: dict, sectors: list, vix_data: dict, gold: dict,
-    sentiment: dict, events: list, gainers: list, losers: list,
-    today_str: str, today_iso: str,
-) -> tuple:
-    """Return (body_rows_html, text_lines_list) for one language."""
-    CELL  = _EMAIL_CELL
-    HDR   = _EMAIL_HDR
-    TABLE = _EMAIL_TABLE
-    SEC   = _EMAIL_SEC
-    DIV   = _EMAIL_DIV
-
-    # ── AI Commentary — two side-by-side cards ────────────────────────────
-    def _ai_card(title: str, text: str) -> str:
-        paras = "".join(
-            f'<p style="margin:0 0 12px 0;color:#cbd5e1;line-height:1.7;font-size:13px">{p.strip()}</p>'
-            for p in text.split("\n\n") if p.strip()
-        )
-        return f'<p {SEC}>{title}</p>{paras}' if paras else ''
-
-    us_card = _ai_card("美股市场解读" if is_zh else "US Market Commentary", ai_us)
-    cn_card = _ai_card("A股市场解读"  if is_zh else "CN Market Commentary", ai_cn)
-
-    if us_card and cn_card:
-        ai_section = (
-            f'<table width="100%" cellpadding="0" cellspacing="8">'
-            f'<tr>'
-            f'<td width="49%" valign="top" style="background:#263348;border-radius:8px;padding:12px 14px">{us_card}</td>'
-            f'<td width="2%"></td>'
-            f'<td width="49%" valign="top" style="background:#263348;border-radius:8px;padding:12px 14px">{cn_card}</td>'
-            f'</tr>'
-            f'</table>'
-        )
-    elif us_card or cn_card:
-        ai_section = us_card or cn_card
-    else:
-        ai_section = ''
-
-    # ── Indices ────────────────────────────────────────────────────────────
-    IDX_META = [
-        ('spx','S&P 500'), ('ixic','NASDAQ'), ('dji','Dow Jones'),
-        ('ftse','FTSE 100'), ('n225','Nikkei 225'), ('sse','上证' if is_zh else 'Shanghai'),
-        ('csi500','中证500' if is_zh else 'CSI 500'), ('twii','台湾加权' if is_zh else 'Taiwan'), ('kospi','KOSPI'),
-    ]
-    idx_rows = ''
-    for k, lbl in IDX_META:
-        d = indices.get(k, {})
-        price = d.get('current')
-        if price is None:
-            continue
-        idx_rows += (
-            f'<tr>'
-            f'<td {CELL} style="padding:5px 8px;font-size:13px;color:#e2e8f0;font-weight:600">{lbl}</td>'
-            f'<td {CELL} align="right" style="font-family:monospace">{price:,.2f}</td>'
-            f'<td {CELL} align="right">{_email_chg_html(d.get("day_chg"))}</td>'
-            f'</tr>'
-        )
-    indices_section = (
-        f'<p {SEC}>{"指数" if is_zh else "Indices"}</p>'
-        f'<table {TABLE}>'
-        f'<tr><th {HDR}>{"指数" if is_zh else "Index"}</th>'
-        f'<th {HDR} align="right">{"价格" if is_zh else "Price"}</th>'
-        f'<th {HDR} align="right">{"今日" if is_zh else "Day %"}</th></tr>'
-        f'{idx_rows}</table>'
-    ) if idx_rows else ''
-
-    # ── Market Metrics ─────────────────────────────────────────────────────
-    fg   = sentiment.get('fg', {})
-    pcr  = sentiment.get('pcr', {})
-    aaii = sentiment.get('aaii', {})
-    vix_v = vix_data.get('current')
-    met_rows = ''
-    if vix_v is not None:
-        met_rows += (f'<tr><td {CELL}>VIX</td>'
-                     f'<td {CELL} align="right" style="font-family:monospace">{vix_v:.2f}</td>'
-                     f'<td {CELL} align="right">{_email_chg_html(vix_data.get("day_chg"))}</td></tr>')
-    if pcr.get('current') is not None:
-        met_rows += (f'<tr><td {CELL}>{"看跌/看涨比" if is_zh else "Put/Call Ratio"}</td>'
-                     f'<td {CELL} align="right" style="font-family:monospace">{pcr["current"]:.2f}</td>'
-                     f'<td {CELL}></td></tr>')
-    if fg.get('score') is not None:
-        fgv = round(fg['score'])
-        met_rows += (f'<tr><td {CELL}>{"恐惧/贪婪" if is_zh else "Fear & Greed"}</td>'
-                     f'<td {CELL} align="right" style="font-family:monospace">{fgv}</td>'
-                     f'<td {CELL} style="color:#94a3b8;font-size:12px">{fg.get("rating","")}</td></tr>')
-    if aaii.get('bullish') is not None:
-        bull = aaii['bullish']; bear = aaii.get('bearish')
-        spread = aaii.get('bull_bear_spread')
-        met_rows += (f'<tr><td {CELL}>AAII {"看多" if is_zh else "Bullish"}</td>'
-                     f'<td {CELL} align="right" style="color:#34d399;font-family:monospace">{bull:.1f}%</td>'
-                     f'<td {CELL} align="right" style="color:#f87171;font-family:monospace">'
-                     f'{"空" if is_zh else "Bear"}: {bear:.1f}%</td></tr>' if bear else
-                     f'<tr><td {CELL}>AAII</td><td {CELL} align="right" style="color:#34d399">{bull:.1f}%</td>'
-                     f'<td {CELL}></td></tr>')
-        if spread is not None:
-            met_rows += (f'<tr><td {CELL}>{"牛熊差" if is_zh else "Bull-Bear Spread"}</td>'
-                         f'<td {CELL} align="right">{_email_chg_html(spread)}</td>'
-                         f'<td {CELL}></td></tr>')
-    metrics_section = (
-        f'<p {SEC}>{"市场情绪与指标" if is_zh else "Market Metrics"}</p>'
-        f'<table {TABLE}>'
-        f'<tr><th {HDR}>{"指标" if is_zh else "Indicator"}</th>'
-        f'<th {HDR} align="right">{"值" if is_zh else "Value"}</th>'
-        f'<th {HDR}></th></tr>'
-        f'{met_rows}</table>'
-    ) if met_rows else ''
-
-    # ── Sectors ────────────────────────────────────────────────────────────
-    sorted_sectors = sorted(sectors, key=lambda s: (s.get('day_chg') or -999), reverse=True)
-    sec_rows = ''.join(
-        f'<tr><td {CELL}>{s.get("label","")}</td>'
-        f'<td {CELL} align="right">{_email_chg_html(s.get("day_chg"))}</td></tr>'
-        for s in sorted_sectors
-    )
-    sectors_section = (
-        f'<p {SEC}>{"板块表现" if is_zh else "Sector Performance"}</p>'
-        f'<table {TABLE}>'
-        f'<tr><th {HDR}>{"板块" if is_zh else "Sector"}</th>'
-        f'<th {HDR} align="right">{"今日" if is_zh else "Day %"}</th></tr>'
-        f'{sec_rows}</table>'
-    ) if sec_rows else ''
-
-    # ── Commodity Ratios ───────────────────────────────────────────────────
-    gold_rows = ''
-    if gold:
-        gp = gold.get('gold_price'); sp_v = gold.get('silver_price')
-        gs = gold.get('current_gs'); gc = gold.get('current_gc')
-        if gp is not None:
-            gold_rows += (f'<tr><td {CELL}>{"黄金" if is_zh else "Gold"}</td>'
-                          f'<td {CELL} align="right" style="color:#fbbf24;font-family:monospace">${gp:,.0f}</td>'
-                          f'<td {CELL}></td></tr>')
-        if sp_v is not None:
-            gold_rows += (f'<tr><td {CELL}>{"白银" if is_zh else "Silver"}</td>'
-                          f'<td {CELL} align="right" style="color:#94a3b8;font-family:monospace">${sp_v:,.2f}</td>'
-                          f'<td {CELL}></td></tr>')
-        if gs is not None:
-            gold_rows += (f'<tr><td {CELL}>{"金银比" if is_zh else "G/S Ratio"}</td>'
-                          f'<td {CELL} align="right" style="font-family:monospace">{gs:.1f}</td>'
-                          f'<td {CELL} align="right">{_email_chg_html(gold.get("gs_day_chg"))}</td></tr>')
-        if gc is not None:
-            gold_rows += (f'<tr><td {CELL}>{"金铜比" if is_zh else "G/C Ratio"}</td>'
-                          f'<td {CELL} align="right" style="font-family:monospace">{gc:.1f}</td>'
-                          f'<td {CELL} align="right">{_email_chg_html(gold.get("gc_day_chg"))}</td></tr>')
-    gold_section = (
-        f'<p {SEC}>{"商品比率" if is_zh else "Commodity Ratios"}</p>'
-        f'<table {TABLE}>'
-        f'<tr><th {HDR}>{"品种" if is_zh else "Commodity"}</th>'
-        f'<th {HDR} align="right">{"值" if is_zh else "Value"}</th>'
-        f'<th {HDR} align="right">{"今日" if is_zh else "Day %"}</th></tr>'
-        f'{gold_rows}</table>'
-    ) if gold_rows else ''
-
-    # ── Economic Events ────────────────────────────────────────────────────
-    upcoming = [e for e in events if (e.get('date') or '') >= today_iso]
-    show_ev  = [e for e in upcoming if e.get('impact') == 'High'][:8] or upcoming[:8]
-    IMP_COL  = {'High': '#f87171', 'Medium': '#fbbf24', 'Low': '#64748b'}
-    ev_rows  = ''.join(
-        f'<tr>'
-        f'<td {CELL} style="padding:5px 8px;font-size:11px;color:#64748b;white-space:nowrap">{e.get("date","")}</td>'
-        f'<td {CELL} style="padding:5px 8px;font-size:11px;color:#94a3b8;white-space:nowrap">{e.get("time","")}</td>'
-        f'<td {CELL} style="padding:5px 8px;font-size:12px;color:#cbd5e1">{e.get("event","")}</td>'
-        f'<td {CELL} style="padding:5px 8px;font-size:10px;font-weight:700;'
-        f'color:{IMP_COL.get(e.get("impact",""),"#64748b")};white-space:nowrap">{e.get("impact","")}</td>'
-        f'</tr>'
-        for e in show_ev
-    )
-    events_section = (
-        f'<p {SEC}>{"经济事件" if is_zh else "Economic Events"}</p>'
-        f'<table {TABLE}>'
-        f'<tr><th {HDR}>{"日期" if is_zh else "Date"}</th>'
-        f'<th {HDR}>{"时间" if is_zh else "Time"}</th>'
-        f'<th {HDR}>{"事件" if is_zh else "Event"}</th>'
-        f'<th {HDR}>{"影响" if is_zh else "Impact"}</th></tr>'
-        f'{ev_rows}</table>'
-    ) if ev_rows else ''
-
-    # ── Top Movers ─────────────────────────────────────────────────────────
-    def _mover_rows(movers, is_gain):
-        rows = ''
-        for m in movers:
-            price   = m.get('price')
-            chg     = m.get('day_chg')
-            col     = '#34d399' if is_gain else '#f87171'
-            p_str   = f'${price:,.2f}' if price is not None else '—'
-            chg_str = f'{("+" if chg >= 0 else "")}{chg:.2f}%' if chg is not None else '—'
-            rows   += (
-                f'<tr>'
-                f'<td {CELL} style="font-weight:600;color:#e2e8f0">{m.get("ticker","")}</td>'
-                f'<td {CELL} style="font-size:12px;color:#64748b">{(m.get("name") or "")[:28]}</td>'
-                f'<td {CELL} align="right" style="font-family:monospace;color:#94a3b8">{p_str}</td>'
-                f'<td {CELL} align="right" style="color:{col};font-weight:700">{chg_str}</td>'
-                f'</tr>'
-            )
-        return rows
-
-    gr = _mover_rows(gainers, True)
-    lr = _mover_rows(losers, False)
-    movers_section = (
-        f'<p {SEC}>{"今日榜单" if is_zh else "Top Movers"}</p>'
-        f'<table {TABLE}>'
-        f'<tr><th {HDR} colspan="2">{"涨幅榜" if is_zh else "Top Gainers"}</th>'
-        f'<th {HDR} align="right">{"价格" if is_zh else "Price"}</th>'
-        f'<th {HDR} align="right">%</th></tr>'
-        f'{gr}'
-        f'<tr><td colspan="4" style="padding:6px 0"></td></tr>'
-        f'<tr><th {HDR} colspan="2">{"跌幅榜" if is_zh else "Top Losers"}</th>'
-        f'<th {HDR} align="right">{"价格" if is_zh else "Price"}</th>'
-        f'<th {HDR} align="right">%</th></tr>'
-        f'{lr}'
-        f'</table>'
-    ) if (gr or lr) else ''
-
-    # ── Assemble ───────────────────────────────────────────────────────────
-    all_sections = [s for s in [
-        ai_section, indices_section, metrics_section,
-        sectors_section, gold_section, events_section, movers_section,
-    ] if s]
-    body_rows = f'<tr>{DIV}</tr>'.join(
-        f'<tr><td style="padding:0">{s}</td></tr>' for s in all_sections
-    )
-
-    # Plain-text fallback
-    txt = [f'{"每日市场报告" if is_zh else "Daily Markets Report"} — {today_str}', ""]
-    if ai_us:
-        txt += [f'=== {"美股市场解读" if is_zh else "US Market Commentary"} ===', "", ai_us, ""]
-    if ai_cn:
-        txt += [f'=== {"A股市场解读" if is_zh else "CN Market Commentary"} ===', "", ai_cn, ""]
-    for k, lbl in IDX_META:
-        d = indices.get(k, {})
-        if d.get('current') is not None:
-            chg   = d.get('day_chg')
-            chg_s = f"  {('+' if chg >= 0 else '')}{chg:.2f}%" if chg is not None else ''
-            txt.append(f"{lbl}: {d['current']:,.2f}{chg_s}")
-
-    return body_rows, txt
-
-
-def _wrap_email_html(subject_str: str, header_str: str, today: str,
-                     body_rows: str, footer_str: str) -> str:
-    return f"""<!DOCTYPE html>
-<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>{subject_str}</title></head>
-<body style="margin:0;padding:0;background:#0f172a;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background:#0f172a;padding:32px 16px">
-    <tr><td align="center">
-      <table width="1200" cellpadding="0" cellspacing="0"
-             style="max-width:1200px;width:100%;background:#1e293b;border-radius:16px;overflow:hidden">
-        <tr><td style="background:linear-gradient(135deg,#1d4ed8,#7c3aed);padding:28px 32px">
-          <h1 style="margin:0;font-size:22px;font-weight:700">
-            <a href="https://stock.li-family.us" style="color:#fff;text-decoration:none">yStocker</a>
-          </h1>
-          <p style="margin:6px 0 0;color:#bfdbfe;font-size:15px">{header_str}</p>
-          <p style="margin:4px 0 0;color:#93c5fd;font-size:13px">{today}</p>
-        </td></tr>
-        <tr><td style="padding:24px 28px">
-          <table width="100%" cellpadding="0" cellspacing="0">{body_rows}</table>
-        </td></tr>
-        <tr><td style="padding:14px 28px 24px;border-top:1px solid #334155">
-          <p style="margin:0;color:#64748b;font-size:12px;line-height:1.6">{footer_str}</p>
-          <p style="margin:8px 0 0">__UNSUB__</p>
-        </td></tr>
-      </table>
-    </td></tr>
-  </table>
-</body></html>"""
-
 
 def _build_daily_email_cache(
     indices: dict, sectors: list, vix_data: dict, gold: dict,
     sentiment: dict, events: list, gainers: list, losers: list,
-    summaries_us: dict, summaries_cn: dict,
-    today_str: str, today_iso: str, fallback_lang: str = "en",
+    summaries_us: dict, summaries_cn: dict, today_iso: str,
+    sites, fallback_lang: str = "en",
 ) -> dict:
-    """Build HTML/text email templates for 'en' and 'zh'. Returns {lang: {subject, html_tmpl, text_base}}."""
-    cached: dict = {}
-    for _l in ("en", "zh"):
-        _is_zh = _l == "zh"
-        _subj  = f"yStocker {'每日市场报告' if _is_zh else 'Daily Markets Report'} — {today_str}"
-        _hdr   = "每日市场报告" if _is_zh else "Daily Markets Report"
-        _foot  = ("本报告由 yStocker 自动生成。数据来自 Yahoo Finance、CBOE 及美联储。"
-                  if _is_zh else
-                  "Auto-generated by yStocker. Data sourced from Yahoo Finance, CBOE, and the Federal Reserve.")
-        _ai_us = summaries_us.get(_l) or summaries_us.get(fallback_lang, "")
-        _ai_cn = summaries_cn.get(_l) or summaries_cn.get(fallback_lang, "")
-        _brows, _txt = _build_email_sections(
-            _is_zh, _ai_us, _ai_cn, indices, sectors, vix_data, gold,
-            sentiment, events, gainers, losers, today_str, today_iso,
-        )
-        _txt += ["", _foot]
-        cached[_l] = {
-            "subject":   _subj,
-            "html_tmpl": _wrap_email_html(_subj, _hdr, today_str, _brows, _foot),
-            "text_base": "\n".join(_txt),
-        }
-    return cached
+    """Every mail a send needs, ``{(site, lang): {subject, html_tmpl, text_base}}``."""
+    from ystocker import daily_email
+
+    return daily_email.build_all(
+        sites, summaries_us, summaries_cn, fallback_lang=fallback_lang,
+        indices=indices, sectors=sectors, vix=vix_data, gold=gold,
+        sentiment=sentiment, events=events, gainers=gainers, losers=losers,
+        today_iso=today_iso,
+    )
 
 
-def _ses_send_to_recipients(
-    ses_client, recipients: list, cached_templates: dict,
-    base_url: str, ses_from: str,
-) -> tuple:
-    """Send daily report emails. Returns (sent_count, error_addresses)."""
-    sent_count = 0
-    errors: list = []
-    for rec in recipients:
-        rec_lang  = rec.get("lang", "en")
-        rec_is_zh = rec_lang == "zh"
-        token     = rec.get("token", "")
-        tmpl      = cached_templates.get(rec_lang) or cached_templates["en"]
+def _ses_send_to_recipients(ses_client, recipients: list, mails: dict,
+                            ses_from: str) -> tuple:
+    """Send daily report emails. Returns (sent_count, error_addresses).
 
-        if token:
-            unsub_url  = f"{base_url}/unsubscribe?token={token}"
-            unsub_html = (f'<a href="{unsub_url}" style="color:#4b5563;font-size:11px;text-decoration:underline">'
-                          f'{"退订每日报告" if rec_is_zh else "Unsubscribe from daily reports"}</a>')
-            unsub_txt  = f'{"退订" if rec_is_zh else "Unsubscribe"}: {unsub_url}'
-        else:
-            unsub_html = (f'<span style="color:#475569;font-size:11px">'
-                          f'{"此邮件为一次性发送。" if rec_is_zh else "You received this as a one-time send."}</span>')
-            unsub_txt  = "此邮件为一次性发送。" if rec_is_zh else "You received this as a one-time send."
+    Each recipient carries the ``site`` their mail is branded for and links to;
+    ``mails`` holds one per (site, language), from _build_daily_email_cache.
+    """
+    from ystocker import daily_email
 
-        html_body = tmpl["html_tmpl"].replace("__UNSUB__", unsub_html)
-        text_body = tmpl["text_base"] + f"\n{unsub_txt}"
-        try:
-            ses_client.send_email(
-                Source=ses_from,
-                Destination={"ToAddresses": [rec["email"]]},
-                Message={
-                    "Subject": {"Data": tmpl["subject"], "Charset": "UTF-8"},
-                    "Body": {
-                        "Html": {"Data": html_body, "Charset": "UTF-8"},
-                        "Text": {"Data": text_body, "Charset": "UTF-8"},
-                    },
-                },
-            )
-            sent_count += 1
-            log.info("Daily report sent to %s (lang=%s)", rec["email"], rec_lang)
-        except Exception as exc:
-            log.warning("SES send failed for %s: %s", rec["email"], exc)
-            errors.append(rec["email"])
-    return sent_count, errors
+    return daily_email.send_all(ses_client, recipients, mails, ses_from)
 
 
 # ---------------------------------------------------------------------------
@@ -12984,9 +12671,12 @@ def api_send_daily_email():
         return jsonify({"error": "Invalid email address"}), 400
 
     from datetime import date as _date_cls
-    today_str = _date_cls.today().strftime("%B %d, %Y")
+    from ystocker import daily_email
     today_iso = _date_cls.today().isoformat()
-    base_url  = os.environ.get("APP_BASE_URL", request.host_url).rstrip("/")
+    # The mail is branded for, and links to, the site this page was read on:
+    # "Send" on trade-agents.com/daily mails a TradeAgents report. Read here,
+    # before the request context is gone.
+    site = daily_email.site_for_host(request.host) or daily_email.default_site()
 
     # Snapshot in-memory summaries now (before leaving request context)
     summaries_us: dict = {lang: summary_us_raw} if summary_us_raw else {}
@@ -13006,15 +12696,16 @@ def api_send_daily_email():
     # ── Fire-and-forget: all SES I/O runs in a background thread ─────────────
     def _send_bg():
         try:
-            cached = _build_daily_email_cache(
+            mails = _build_daily_email_cache(
                 indices, sectors, vix_data, gold, sentiment, events,
-                gainers, losers, summaries_us, summaries_cn, today_str, today_iso, lang,
+                gainers, losers, summaries_us, summaries_cn, today_iso,
+                sites=[site], fallback_lang=lang,
             )
-            recipients = [{"email": email, "lang": lang, "token": ""}]
+            recipients = [{"email": email, "lang": lang, "token": "", "site": site}]
             import boto3
             ses = boto3.client("ses", region_name="us-east-1")
-            sent, errors = _ses_send_to_recipients(ses, recipients, cached, base_url, SES_FROM)
-            log.info("send-daily-email bg: sent=%d errors=%d to=%s", sent, errors, email)
+            sent, errors = _ses_send_to_recipients(ses, recipients, mails, SES_FROM)
+            log.info("send-daily-email bg: sent=%d errors=%d to=%s", sent, len(errors), email)
         except Exception:
             log.exception("send-daily-email bg: unhandled error for %s", email)
 
@@ -13530,8 +13221,6 @@ def _do_auto_broadcast() -> None:
         return
 
     GEMINI_KEY = os.environ.get("GEMINI_API_KEY")
-    base_url   = os.environ.get("APP_BASE_URL", "https://ystocker.com").rstrip("/")
-    today_str  = _dt_mod.date.today().strftime("%B %d, %Y")
     today_iso  = _dt_mod.date.today().isoformat()
 
     # ── Dedup guard: atomic DynamoDB lock prevents duplicate sends when
@@ -13751,9 +13440,13 @@ def _do_auto_broadcast() -> None:
 
     try:
         from boto3.dynamodb.conditions import Attr as _Attr
+        from ystocker import daily_email
+        # `site` is where the subscriber signed up (api_subscribe records it);
+        # a row from before that falls back to daily_email.default_site().
         recipients = [
             {"email": item["email"], "lang": item.get("lang", "en"),
-             "token": item.get("unsubscribe_token", "")}
+             "token": item.get("unsubscribe_token", ""),
+             "site": item.get("site") or daily_email.default_site()}
             for item in sub_tbl.scan(FilterExpression=_Attr("active").eq(True)).get("Items", [])
         ]
     except Exception as exc:
@@ -13765,15 +13458,16 @@ def _do_auto_broadcast() -> None:
         return
 
     # ── Build and send ────────────────────────────────────────────────────────
-    cached_templates = _build_daily_email_cache(
+    mails = _build_daily_email_cache(
         indices, sectors, vix_data, gold_d, sentiment, events,
-        gainers, losers, summaries_us, summaries_cn, today_str, today_iso,
+        gainers, losers, summaries_us, summaries_cn, today_iso,
+        sites={r["site"] for r in recipients},
     )
 
     try:
         import boto3
         ses = boto3.client("ses", region_name="us-east-1")
-        sent, errors = _ses_send_to_recipients(ses, recipients, cached_templates, base_url, SES_FROM)
+        sent, errors = _ses_send_to_recipients(ses, recipients, mails, SES_FROM)
         log.info("Auto-broadcast: sent=%d, failed=%d", sent, len(errors))
         if errors:
             log.warning("Auto-broadcast: failed recipients: %s", errors)

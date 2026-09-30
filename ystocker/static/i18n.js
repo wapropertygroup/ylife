@@ -2368,6 +2368,13 @@ const I18n = (() => {
     'daily.no_history':       { en: 'No summary available for this date.', zh: '该日期暂无摘要。' },
     'daily.history_us':       { en: 'US Market (historical)',   zh: '美国市场（历史）' },
     'daily.history_cn':       { en: 'CN / Asia (historical)',   zh: '中国 / 亚洲（历史）' },
+    // The reports' reading chrome: contents list, generation stamp, and the
+    // link at the foot of each report to the other one.
+    'daily.toc':              { en: 'On this page',             zh: '本页目录' },
+    'daily.generated':        { en: 'Generated',                zh: '生成于' },
+    'daily.sources_cold':     { en: '{n} sources unavailable',  zh: '{n} 个数据源暂不可用' },
+    'daily.next_cn':          { en: 'Next: the CN / Asia report →', zh: '接着读：中国 / 亚洲市场报告 →' },
+    'daily.next_us':          { en: 'Next: the US Market report →', zh: '接着读：美国市场报告 →' },
 
     // Economic Events — country code localization
     'events.country.US': { en: 'US',  zh: '美国' },
