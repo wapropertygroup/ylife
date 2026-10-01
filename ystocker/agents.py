@@ -1633,6 +1633,84 @@ def search_jobs(query: str = "", user: Optional[str] = None,
     }
 
 
+#: How many of one ticker's runs ``ticker_runs`` returns. A ticker page lists
+#: them; nobody reads the twelfth run of one symbol from a side panel.
+TICKER_RUNS_MAX = 10
+
+#: How far back ``ticker_runs`` reads. ``_records``' usual MAX_JOBS (60) is a
+#: recency window across *every* ticker, so a symbol last analysed before the 60
+#: newest runs -- NBIS on 2026-10-01, run on 08-27 with 182 records behind it --
+#: had no runs at all as far as that window could tell. Bounded so the read
+#: cannot grow with the table for ever.
+_TICKER_SCAN_MAX = 1000
+
+
+def ticker_runs(ticker: str, user: Optional[str], all_users: bool = False,
+                limit: int = TICKER_RUNS_MAX) -> dict[str, Any]:
+    """Runs of exactly ``ticker`` this viewer may open, newest first.
+
+    For the TradeAgents card on ``/history/<ticker>``. Returns ``{"runs": [...],
+    "found": int}``, ``found`` counting every match so the card can say it is
+    showing ten of twelve.
+
+    Three ways it differs from ``search_jobs``, each on purpose:
+
+    * **Exact ticker.** A search ranks prefixes as hits, and the NBIS page must
+      not list NBISX.
+    * **Every status.** A search by ``q`` drops runs with no report; here a run
+      still queued or running is the most useful thing the card can say.
+    * **An allowlist, not the whole record.** Each entry is ``_PUBLIC_FIELDS``
+      plus what the card draws (``lang``, ``has_report``, ``tone``, ``mine``),
+      not the record minus two fields: a side panel has no use for the runner's
+      pid or the follow-up conversation, and a VIP looking at someone else's run
+      gets the owner masked (``share.mask_email``) rather than their address.
+
+    Only the newest finished run with a report carries its Portfolio Manager's
+    turn (``portfolio``): that turn is up to ``_PM_MAX_CHARS`` and JSON-escaped
+    Chinese costs ~6 bytes a character, so ten of them would be a quarter of a
+    megabyte for a card that shows one. The others are opened on demand.
+
+    Ownership as everywhere else: ``owns`` per record, ``all_users`` lifting it
+    for a VIP as ``can_read`` does, and no viewer means no runs.
+    """
+    from ystocker.report_pdf import verdict_tone
+    from ystocker.share import mask_email
+
+    t = (ticker or "").strip().upper()
+    if not t or (not all_users and not user):
+        return {"runs": [], "found": 0}
+    limit = max(1, min(int(limit or TICKER_RUNS_MAX), 50))
+
+    runs: list[dict[str, Any]] = []
+    found = 0
+    pm_attached = False
+    for job in _records(user=None if all_users else user, limit=_TICKER_SCAN_MAX):
+        if (job.get("ticker") or "").strip().upper() != t:
+            continue
+        mine = owns(job, user)
+        if not all_users and not mine:
+            continue
+        found += 1
+        if len(runs) >= limit:
+            continue
+        report = job.get("report") or ""
+        entry = {k: job.get(k) for k in _PUBLIC_FIELDS if k in job}
+        entry["lang"] = job.get("lang") or ""
+        entry["has_report"] = bool(report.strip())
+        entry["tone"] = verdict_tone(job.get("decision") or "") if job.get("decision") else ""
+        entry["mine"] = mine
+        if not mine:
+            entry["owner"] = mask_email(job.get("user"))
+        if (not pm_attached and entry["has_report"]
+                and (job.get("status") or "") == "done"):
+            entry["portfolio"] = portfolio_section(report)
+            pm_attached = True
+        runs.append(entry)
+    log.info("agents: %d run(s) of %s for %s%s", found, t, user or "?",
+             " (all users)" if all_users else "")
+    return {"runs": runs, "found": found}
+
+
 # ---------------------------------------------------------------------------
 # Public showcase — finished reports shown to visitors who are not signed in
 # ---------------------------------------------------------------------------

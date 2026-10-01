@@ -1147,9 +1147,7 @@ def build_research_prompt(
     ident = bundle.get("identity") or {}
     name = _txt(ident.get("name"))
     is_etf = str(ident.get("quote_type") or "").upper() == "ETF"
-    port = bundle.get("portfolio") or {}
-    has_portfolio = bool(port.get("total_account_value") or port.get("direct_value")
-                         or port.get("holdings"))
+    has_port = has_portfolio(bundle)
 
     if zh:
         system = (
@@ -1242,11 +1240,23 @@ def build_research_prompt(
         "",
         "---",
         "",
-        _template_instructions(lang, has_portfolio),
+        _template_instructions(lang, has_port),
     ])
     log.debug("Research prompt built: ticker=%s lang=%s chars=%d portfolio=%s",
-              ticker, lang, len(prompt), has_portfolio)
+              ticker, lang, len(prompt), has_port)
     return system, prompt
+
+
+def has_portfolio(bundle: dict) -> bool:
+    """Whether the reader filled in the position form for this bundle.
+
+    One definition for the two places that ask: the prompt, which writes §1 and
+    §12–§14 around the position only when there is one, and the saved report's
+    ``has_portfolio`` flag, which tells its owner the copy states their numbers.
+    """
+    port = bundle.get("portfolio") or {}
+    return bool(port.get("total_account_value") or port.get("direct_value")
+                or port.get("holdings"))
 
 
 def bundle_fingerprint(bundle: dict) -> str:
