@@ -3,6 +3,7 @@
 
 {% block content %}
 <script src="{{ url_for('static', filename='markdown.js') }}?v={{ cache_bust or 'dev' }}"></script>
+<script src="{{ url_for('static', filename='ystime.js') }}?v={{ cache_bust or 'dev' }}"></script>
 <style>
   /* ── Theme tokens ────────────────────────────────────────────────────────
      Hand-written CSS, so Tailwind's `dark:` variant reaches none of it. The
@@ -178,6 +179,93 @@
     border: 1px solid var(--t-line); padding: 5px 9px; text-align: left; white-space: nowrap;
   }
   .md-body th { background: var(--t-surface-alt); color: var(--t-ink-muted); font-weight: 600; }
+
+  /* ── Saved reports + the TradeAgents card (Research tab) ─────────────────
+     Hand-written for the same reason as everything above: most of this markup
+     is built in JS, and a Tailwind class that appears only inside a script is
+     absent from the compiled bundle. Light-first, .dark overriding. */
+  .rs-saved { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .rs-saved-label { font-size: 11px; color: var(--t-ink-dim); }
+  .rs-saved-select { width: auto; max-width: 100%; min-width: 14rem; }
+  .rs-note { font-size: 12px; color: var(--t-ink-dim); line-height: 1.55; }
+  .rs-note.ok { color: #047857; }
+  .rs-note.warn { color: #b45309; }
+  .dark .rs-note.ok { color: #34d399; }
+  .dark .rs-note.warn { color: #f59e0b; }
+  .rs-note a, .rs-note button.rs-link, .ta-body a.ta-link, .ta-body button.ta-link {
+    color: var(--t-accent-ink); text-decoration: underline; text-underline-offset: 2px;
+    background: none; border: 0; padding: 0; cursor: pointer; font: inherit;
+  }
+
+  .ta-body { font-size: 12px; color: var(--t-ink-dim); }
+  .ta-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-bottom: 10px; }
+  .ta-chip {
+    display: inline-block; padding: 2px 10px; border-radius: 999px;
+    font-size: 12px; font-weight: 700; letter-spacing: .02em;
+    color: #334155; background: #e8eefc;
+  }
+  /* The PDF's tones (report_pdf._TONES) in light, the report mail's in dark. */
+  .ta-chip.buy  { color: #166534; background: #dcfce7; }
+  .ta-chip.sell { color: #991b1b; background: #fee2e2; }
+  .ta-chip.hold { color: #92400e; background: #fef3c7; }
+  .dark .ta-chip      { color: #cbd5e1; background: #1e293b; }
+  .dark .ta-chip.buy  { color: #4ade80; background: #052e16; }
+  .dark .ta-chip.sell { color: #f87171; background: #450a0a; }
+  .dark .ta-chip.hold { color: #fbbf24; background: #451a03; }
+  .ta-pill {
+    display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px;
+    border: 1px solid var(--t-line-strong); color: var(--t-ink-dim);
+  }
+  .ta-meta { color: var(--t-ink-dim); }
+  .ta-banner {
+    margin-bottom: 10px; padding: 8px 12px; border-radius: 8px;
+    border: 1px solid var(--t-accent-line); background: rgba(99,102,241,0.06);
+    color: var(--t-ink);
+  }
+  .ta-role {
+    display: flex; align-items: baseline; gap: 8px; margin: 2px 0 6px;
+    font-size: 13px; font-weight: 600; color: var(--t-ink-strong);
+  }
+  .ta-role-alt { font-size: 11px; font-weight: 400; color: var(--t-ink-dim); }
+  /* A role's turn, edged in its own colour the way the conversation view is. */
+  .ta-turn { border-left: 3px solid var(--role, var(--t-accent)); padding-left: 12px; }
+  .ta-md.md-body { padding: 12px 14px; font-size: 13px; }
+  .ta-clamp { position: relative; max-height: 22rem; overflow: hidden; }
+  .ta-clamp::after {
+    content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 4rem;
+    background: linear-gradient(var(--t-fade-from), var(--t-fade-to));
+    pointer-events: none;
+  }
+  .ta-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; }
+  .ta-note { margin-top: 6px; font-size: 11px; color: var(--t-ink-dim); }
+  .ta-team {
+    margin: 14px 0 6px; font-size: 10px; font-weight: 700; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--t-ink-dim);
+  }
+  .ta-sec { margin: 6px 0; border: 1px solid var(--t-line); border-radius: 8px; }
+  .ta-sec > summary {
+    cursor: pointer; padding: 7px 12px; font-size: 12.5px; font-weight: 600;
+    color: var(--t-ink); list-style: none; border-left: 3px solid var(--role, var(--t-accent));
+    border-radius: 8px;
+  }
+  .ta-sec > summary::-webkit-details-marker { display: none; }
+  .ta-sec > summary::before { content: "▸ "; color: var(--t-ink-dim); }
+  .ta-sec[open] > summary::before { content: "▾ "; }
+  .ta-sec > .md-body { margin: 0 10px 10px; }
+  .ta-others { margin-top: 14px; border-top: 1px solid var(--t-line); padding-top: 10px; }
+  .ta-others-title {
+    font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--t-ink-dim); margin-bottom: 6px;
+  }
+  .ta-other {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; width: 100%;
+    text-align: left; padding: 6px 8px; border-radius: 6px; border: 1px solid transparent;
+    background: transparent; color: var(--t-ink); cursor: pointer; font-size: 12px;
+  }
+  .ta-other:hover { background: var(--hi-fill); }
+  .ta-other.is-on { border-color: var(--t-accent-line); background: rgba(99,102,241,0.06); }
+  /* `hidden` loses to any author `display` (the wiki.css trap), so restore it. */
+  .ta-body [hidden], .rs-saved[hidden], .rs-note[hidden] { display: none !important; }
 </style>
 
 <div class="mb-6 sm:mb-8 fade-up">
@@ -1477,14 +1565,32 @@
 <!-- ── Research panel (full stock-research template) ──────────────── -->
 <div id="panelResearch" style="display:none">
 
+  <!-- TradeAgents: this ticker's /agents runs (agents.ticker_runs). Filled by
+       the card's script when the tab first opens, never on page load. -->
+  <div id="taCard" class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 mb-4">
+    <div class="flex items-start justify-between gap-3 mb-3">
+      <div>
+        <p class="text-sm font-semibold text-slate-700 dark:text-slate-200" data-i18n="research.ta_title">🤖 TradeAgents multi-agent analysis</p>
+        <p class="text-xs text-slate-500 mt-0.5" data-i18n="research.ta_hint">
+          Analysts, a bull–bear debate, a trader, a risk team and a portfolio manager — your runs of this ticker on the research desk.
+        </p>
+      </div>
+      <a id="taRunLink" href="{{ url_for('main.agents_page', ticker=ticker) }}" class="explain-btn shrink-0"
+         data-i18n="research.ta_run">Run an analysis ↗</a>
+    </div>
+    <div id="taBody" class="ta-body"></div>
+  </div>
+
   <!-- Position inputs — feed template §1 / §12 / §13 / §14 -->
   <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 mb-4">
     <div class="flex items-start justify-between gap-3 mb-3">
       <div>
         <p class="text-sm font-semibold text-slate-700 dark:text-slate-200" data-i18n="research.pos_title">Your position &amp; account</p>
         <p class="text-xs text-slate-500 mt-0.5" data-i18n="research.pos_hint">
-          Saved in this browser only (localStorage). Used for §1 position, §12 portfolio fit,
+          These inputs stay in this browser (localStorage). Used for §1 position, §12 portfolio fit,
           §13 position tier and §14 buy plan. Leave blank to get a recommendation-only report.
+          Signed in, each report you generate is saved to your account, visible only to you —
+          including any position figures it quotes.
         </p>
       </div>
       <button id="researchFormToggle" onclick="_toggleResearchForm()" class="explain-btn shrink-0"
@@ -1560,6 +1666,17 @@
     <span id="researchStatus" class="text-xs text-slate-500"></span>
   </div>
 
+  <!-- The reader's saved reports (research_store): a picker over the newest
+       twenty, and what the report on screen is -- saved when, at what price,
+       whether it quotes their position, or why it was not saved. -->
+  <div id="researchSavedBar" class="rs-saved mb-3" hidden>
+    <label class="rs-saved-label" for="researchSavedSelect" data-i18n="research.saved_label">Saved reports</label>
+    <select id="researchSavedSelect" class="research-input rs-saved-select"></select>
+    <button id="researchDeleteBtn" type="button" class="explain-btn"
+            data-i18n="research.saved_delete">Delete</button>
+  </div>
+  <div id="researchSavedNote" class="rs-note mb-3" hidden></div>
+
   <div id="researchSources" class="mb-3 text-[11px] text-slate-500 dark:text-slate-600" style="display:none"></div>
   <div id="researchReport" class="md-body" style="display:none"></div>
 
@@ -1574,6 +1691,28 @@
 
 <script>
 const TICKER = {{ ticker | tojson }};
+// Whether a session exists, from the server. Decides only which requests are
+// worth making (saved reports, the TradeAgents card); every one of them is
+// gated server-side regardless.
+const SIGNED_IN = {{ (current_user.email != '') | tojson }};
+// The Charts tab's deferred panels (forecast, peers, 13F) register only while
+// that tab is on screen. They register after the history data arrives, and if
+// another tab is showing by then -- a ?tab=research link, or a reader who opened
+// one early -- every anchor has no box, so deferload would fetch all three at
+// once, the forecast's model fit included, for a tab nobody is looking at.
+// Held here instead, and flushed by switchTab('charts').
+const _chartsQueue = [];
+function _whenChartsShown(fn) {
+  const panel = document.getElementById('panelCharts');
+  if (!panel || panel.style.display !== 'none') fn();
+  else _chartsQueue.push(fn);
+}
+// /login, coming back to this ticker's Research tab (see ?tab= at the end).
+function researchSignInHref() {
+  const u = new URL(location.href);
+  u.searchParams.set('tab', 'research');
+  return '/login?next=' + encodeURIComponent(u.pathname + u.search);
+}
 
 // ── FuTu button: open the native app, fall back to the web quote page ────────
 //
@@ -2804,7 +2943,7 @@ function _yieldCurve() {
       return started;
     };
   })();
-  DeferLoad.when('#forecastLoading', _forecastLoad, { label: 'forecast' });
+  _whenChartsShown(() => DeferLoad.when('#forecastLoading', _forecastLoad, { label: 'forecast' }));
 
   // ── Insider Transactions
   // Peer comparison — fetched on approach.
@@ -2814,7 +2953,7 @@ function _yieldCurve() {
   // lowest element that actually has a box at registration time. It fires
   // earlier than the peer card's own position would, which is still far better
   // than firing on load.
-  DeferLoad.when('#forecastSection', async () => {
+  _whenChartsShown(() => DeferLoad.when('#forecastSection', async () => {
     try {
       const pr = await fetch(`/api/peers/${encodeURIComponent(TICKER)}`);
       const pd = await pr.json();
@@ -2868,7 +3007,7 @@ function _yieldCurve() {
         }
       } catch(e) {}
     } catch(e) {}
-  }, { label: 'peers' });
+  }, { label: 'peers' }));
 
   if (data.insider_trades && data.insider_trades.length > 0) {
     document.getElementById('insiderSection').style.display = 'block';
@@ -2894,7 +3033,7 @@ function _yieldCurve() {
   // Bottom of #panelCharts, ~6000px down. Anchored on #forecastSection for the
   // same reason as the peer card: #instHoldersSection is display:none until this
   // loader reveals it.
-  DeferLoad.when('#forecastSection', function() {
+  _whenChartsShown(() => DeferLoad.when('#forecastSection', function() {
     const section = document.getElementById('instHoldersSection');
     const thead   = document.getElementById('instHoldersHead');
     const tbody   = document.getElementById('instHoldersBody');
@@ -2998,7 +3137,7 @@ function _yieldCurve() {
         }).join('');
       })
       .catch(err => console.warn('13F fetch failed:', err));
-  }, { label: '13f' });
+  }, { label: '13f' }));
 })();
 
 // ── Options data — async loader ───────────────────────────────────────────────
@@ -4298,6 +4437,7 @@ function switchTab(tab) {
   researchBtn.className = isResearch ? activeClass : inactiveClass;
 
   if (typeof _updateSectionNav === 'function') _updateSectionNav();
+  if (isCharts) while (_chartsQueue.length) _chartsQueue.shift()();
 
   if (isNews) {
     if (!_newsLoaded) loadNews(false);
@@ -4777,6 +4917,12 @@ async function explainChart(chartKey) {
   let _reportMarkdown = '';
   let _exposure = null;      // last computed look-through result
   let _etfCache = {};        // ticker → /api/etf-holdings response
+  // The reader's saved reports (newest first, metadata only), which one is on
+  // screen, and what the note under the buttons says about it. The note is kept
+  // as state rather than as HTML so a language switch can re-render it.
+  let _saved = { reports: [], current: null };
+  let _note = null;
+  let _running = false;      // a generation is streaming into the report box
 
   // ── Indicator helpers (self-contained; chart code keeps its own copies) ────
   function _ma(arr, n) {
@@ -4998,6 +5144,11 @@ async function explainChart(chartKey) {
   window._initResearchPanel = function() {
     if (_initialised) return;
     _initialised = true;
+    // The TradeAgents card and the saved reports both load on the first open of
+    // this tab, not with the page: most readers of /history never open it.
+    if (typeof window._initAgentsCard === 'function') window._initAgentsCard();
+    if (SIGNED_IN) _fetchSavedReports();
+    else _setNote({ kind: 'sign_in' });
     const s = _loadSaved();
     if (s.account) document.getElementById('rfAccount').value = s.account;
     if (s.shares)  document.getElementById('rfShares').value  = s.shares;
@@ -5392,6 +5543,234 @@ async function explainChart(chartKey) {
   const _inline = (x) => Markdown.inline(x);
   const _renderMd = (x) => Markdown.render(x);
 
+  const _t = (key, fallback) => I18n.t(key) || fallback;
+
+  // One renderer for the finished report box, whether the text just streamed in
+  // or came back from the store, so a saved report reads exactly as it did on
+  // the day it was made -- flags, sources and all.
+  function _paintFinal(r) {
+    const report = document.getElementById('researchReport');
+    const srcBox = document.getElementById('researchSources');
+    const copyBtn = document.getElementById('researchCopyBtn');
+    const notes = [];
+    if (r.degraded) notes.push(I18n.t('research.degraded') ||
+      'Web search was unavailable — this report uses in-app data only.');
+    if (r.truncated) notes.push(I18n.t('research.truncated') ||
+      'Output hit the length limit and may be cut short.');
+    report.style.display = 'block';
+    report.innerHTML =
+      (notes.length ? `<p class="text-amber-700 dark:text-amber-500">⚠ ${notes.map(_esc).join(' ')}</p>` : '') +
+      _renderMd(_reportMarkdown) +
+      (r.error ? `<p class="text-rose-700 dark:text-rose-400 mt-3">⚠ ${_esc(r.error)}</p>` : '');
+    const sources = r.sources || [];
+    if (sources.length) {
+      srcBox.textContent = (I18n.t('research.sources') || 'Web sources consulted: ') +
+                           sources.join(' · ');
+      srcBox.style.display = '';
+    } else {
+      srcBox.style.display = 'none';
+    }
+    copyBtn.style.display = _reportMarkdown ? '' : 'none';
+  }
+
+  // ── Saved reports (research_store) ────────────────────────────────────────
+  // The reader's own, newest first. Nothing here decides who may read what:
+  // the server builds every key from the session, so this script can only ever
+  // be handed the signed-in reader's rows.
+  let _openSeq = 0;          // the newest saved-report fetch; older answers are dropped
+
+  const _fmtPrice = p => Number(p) >= 1 ? Number(p).toFixed(2) : Number(p).toFixed(4);
+  const _langName = code => code === 'zh'
+    ? _t('research.saved_lang_zh', 'Chinese') : _t('research.saved_lang_en', 'English');
+
+  function _savedLabel(m) {
+    const bits = [YSTime.when(m.created_at) || m.created_at || '—', _langName(m.lang)];
+    if (m.price != null) bits.push('$' + _fmtPrice(m.price));
+    if (m.has_portfolio) bits.push(_t('research.saved_with_pos', 'includes your position'));
+    return bits.join(' · ');
+  }
+
+  function _renderSavedPicker() {
+    const bar = document.getElementById('researchSavedBar');
+    const sel = document.getElementById('researchSavedSelect');
+    const del = document.getElementById('researchDeleteBtn');
+    const list = _saved.reports || [];
+    bar.hidden = !list.length;
+    sel.innerHTML = list.map(m =>
+      `<option value="${_esc(m.ref)}">${_esc(_savedLabel(m))}</option>`).join('');
+    // A report on screen that is not one of these (not saved, or deleted) must
+    // not leave the picker claiming it is the first row.
+    sel.value = list.some(m => m.ref === _saved.current) ? _saved.current : '';
+    sel.disabled = _running;
+    del.disabled = _running || !_saved.current;
+  }
+
+  function _setNote(n) { _note = n; _renderNote(); }
+
+  function _renderNote() {
+    const el = document.getElementById('researchSavedNote');
+    const n = _note;
+    el.className = 'rs-note mb-3';
+    let html = '', tone = '';
+    const signIn = () => ` <a href="${_esc(researchSignInHref())}">${_esc(_t('research.sign_in', 'Sign in'))}</a>`;
+    if (n && (n.kind === 'saved' || n.kind === 'fresh')) {
+      const m = n.meta || {};
+      const when = YSTime.full(m.created_at) || m.created_at || '';
+      const head = n.kind === 'fresh'
+        ? _t('research.saved_now', '✓ Saved to your account · {when}')
+        : _t('research.saved_on', 'Saved report · {when}');
+      const bits = [head.replace('{when}', when)];
+      if (m.price != null) {
+        bits.push(_t('research.saved_price', 'price then ${price}').replace('{price}', _fmtPrice(m.price)));
+      }
+      if (m.has_portfolio) bits.push(_t('research.saved_with_pos', 'includes your position'));
+      html = _esc(bits.join(' · '));
+      if (n.kind === 'fresh') tone = 'ok';
+    } else if (n && n.kind === 'not_saved') {
+      const key = { signed_out: 'research.save_signed_out', store: 'research.save_store',
+                    incomplete: 'research.save_incomplete' }[n.reason] || 'research.save_invalid';
+      html = _esc(_t(key, 'Not saved.')) + (n.reason === 'signed_out' ? signIn() : '');
+      tone = 'warn';
+    } else if (n && n.kind === 'sign_in') {
+      html = _esc(_t('research.sign_in_hint',
+        'Sign in and each report you generate is saved here, visible only to you.')) + signIn();
+    } else if (n && n.kind === 'load_error') {
+      html = _esc(_t('research.saved_load_error', 'Could not load your saved reports.')) +
+        ` <button type="button" class="rs-link" data-rs-retry>${_esc(_t('research.retry', 'Retry'))}</button>`;
+      tone = 'warn';
+    } else if (n && n.kind === 'delete_error') {
+      html = _esc(_t('research.saved_delete_error', 'Could not delete the report — try again.'));
+      tone = 'warn';
+    } else if (n && n.kind === 'deleted') {
+      html = _esc(_t('research.saved_deleted', 'Report deleted'));
+    }
+    if (tone) el.classList.add(tone);
+    el.innerHTML = html;
+    el.hidden = !html;
+    const retry = el.querySelector('[data-rs-retry]');
+    if (retry) retry.onclick = () => _fetchSavedReports();
+  }
+
+  function _showSavedReport(row) {
+    _saved.current = row.ref;
+    if (row.unreadable) {
+      _reportMarkdown = '';
+      const report = document.getElementById('researchReport');
+      report.style.display = 'block';
+      report.innerHTML = `<p class="text-rose-700 dark:text-rose-400">⚠ ${_esc(
+        _t('research.saved_unreadable', 'This saved report could not be read.'))}</p>`;
+      document.getElementById('researchSources').style.display = 'none';
+      document.getElementById('researchCopyBtn').style.display = 'none';
+    } else {
+      _reportMarkdown = row.text || '';
+      _paintFinal({ degraded: row.degraded, truncated: row.truncated, sources: row.sources });
+    }
+    document.getElementById('researchStatus').textContent =
+      _t('research.saved_status', 'Your saved report — press Regenerate for a fresh one');
+    _renderSavedPicker();
+    _setNote({ kind: 'saved', meta: row });
+  }
+
+  async function _fetchSavedReports() {
+    const seq = ++_openSeq;
+    let r = null, data = {};
+    try {
+      r = await fetch(`/api/history/${encodeURIComponent(TICKER)}/research/saved` +
+                      `?lang=${encodeURIComponent(I18n.getLang())}`);
+      data = await r.json().catch(() => ({}));
+    } catch (e) { r = null; }
+    if (seq !== _openSeq) return;
+    if (r && r.status === 401) {
+      _saved = { reports: [], current: null };
+      _renderSavedPicker();
+      _setNote({ kind: 'sign_in' });
+      return;
+    }
+    // Said, never shown as an empty picker: "no saved reports" when the store is
+    // down would tell a reader their reports are gone.
+    if (!r || !r.ok) { _setNote({ kind: 'load_error' }); return; }
+    _saved.reports = data.reports || [];
+    // The tab opens on the newest -- but never over a report the reader is
+    // generating, or one already on screen.
+    if (data.latest && !_running && !_reportMarkdown) {
+      _showSavedReport(data.latest);
+    } else {
+      _renderSavedPicker();
+      if (_note && _note.kind === 'load_error') _setNote(null);
+    }
+  }
+
+  async function _openSaved(ref) {
+    if (_running || !ref) return;
+    const seq = ++_openSeq;
+    const status = document.getElementById('researchStatus');
+    status.textContent = _t('research.saved_loading', 'Loading saved report…');
+    let r = null, data = {};
+    try {
+      r = await fetch(`/api/history/${encodeURIComponent(TICKER)}/research/saved/${encodeURIComponent(ref)}`);
+      data = await r.json().catch(() => ({}));
+    } catch (e) { r = null; }
+    if (seq !== _openSeq || _running) return;
+    if (!r || !r.ok) {
+      status.textContent = '';
+      _renderSavedPicker();          // back to the report actually on screen
+      _setNote({ kind: 'load_error' });
+      return;
+    }
+    _showSavedReport(data);
+  }
+
+  async function _deleteSaved() {
+    const ref = _saved.current;
+    if (_running || !ref) return;
+    if (!window.confirm(_t('research.saved_delete_confirm',
+        'Delete this saved report? This cannot be undone.'))) return;
+    let r = null;
+    try {
+      r = await fetch(`/api/history/${encodeURIComponent(TICKER)}/research/saved/${encodeURIComponent(ref)}`,
+                      { method: 'DELETE' });
+    } catch (e) { r = null; }
+    // 404 is "already gone", which is what the reader asked for.
+    if (!r || (!r.ok && r.status !== 404)) { _setNote({ kind: 'delete_error' }); return; }
+    _saved.reports = _saved.reports.filter(m => m.ref !== ref);
+    _saved.current = null;
+    // Off the screen too: a deleted report left in view reads as a delete that
+    // did not happen.
+    _reportMarkdown = '';
+    const report = document.getElementById('researchReport');
+    report.innerHTML = '';
+    report.style.display = 'none';
+    document.getElementById('researchSources').style.display = 'none';
+    document.getElementById('researchCopyBtn').style.display = 'none';
+    document.getElementById('researchStatus').textContent = '';
+    _renderSavedPicker();
+    _setNote({ kind: 'deleted' });
+  }
+
+  // What the stream's `save` event says about the report just shown.
+  function _applySave(save) {
+    if (!save) return;              // no text was shown, so nothing to say
+    if (save.ok && save.report) {
+      const m = save.report;
+      if (!save.existing) {
+        _saved.reports = [m, ..._saved.reports.filter(x => x.ref !== m.ref)].slice(0, 20);
+      } else if (!_saved.reports.some(x => x.ref === m.ref)) {
+        _saved.reports = [m, ..._saved.reports];
+      }
+      _saved.current = m.ref;
+      _setNote({ kind: save.existing ? 'saved' : 'fresh', meta: m });
+    } else {
+      _saved.current = null;
+      _setNote({ kind: 'not_saved', reason: save.reason });
+    }
+  }
+
+  document.getElementById('researchSavedSelect')
+    .addEventListener('change', e => _openSaved(e.target.value));
+  document.getElementById('researchDeleteBtn').addEventListener('click', _deleteSaved);
+  // Both are composed in JS, where I18n.apply() cannot reach them.
+  document.addEventListener('i18n:langchange', () => { _renderSavedPicker(); _renderNote(); });
+
   // ── Run ───────────────────────────────────────────────────────────────────
   window.runResearch = async function(refresh) {
     const btn    = document.getElementById('researchRunBtn');
@@ -5403,6 +5782,10 @@ async function explainChart(chartKey) {
 
     btn.disabled = true;
     btn.style.opacity = '0.6';
+    _running = true;
+    _openSeq++;                     // a saved report still loading must not land on this run
+    _setNote(null);
+    _renderSavedPicker();
     srcBox.style.display = 'none';
     copyBtn.style.display = 'none';
     status.textContent = I18n.t('research.gathering') || 'Gathering data…';
@@ -5415,6 +5798,9 @@ async function explainChart(chartKey) {
     } catch(e) {
       report.innerHTML = `<p class="text-rose-700 dark:text-rose-400">⚠ ${_esc(e.message)}</p>`;
       btn.disabled = false; btn.style.opacity = ''; status.textContent = '';
+      _running = false;
+      _saved.current = null;
+      _renderSavedPicker();
       return;
     }
 
@@ -5422,6 +5808,7 @@ async function explainChart(chartKey) {
     status.textContent = I18n.t('research.searching') || 'Searching the web & writing…';
     report.innerHTML = `<p class="text-slate-500">${I18n.t('research.searching') || 'Searching the web & writing…'}</p>`;
     _reportMarkdown = '';
+    _saved.current = null;
 
     try {
       const resp = await fetch(`/api/history/${encodeURIComponent(TICKER)}/research`, {
@@ -5438,7 +5825,7 @@ async function explainChart(chartKey) {
       const reader = resp.body.getReader();
       const decoder = new TextDecoder();
       let buf = '', sources = [], cached = false, painting = false;
-      let degraded = false, truncated = false, streamError = null;
+      let degraded = false, truncated = false, streamError = null, save = null;
       const paint = () => {
         if (painting) return;
         painting = true;
@@ -5465,38 +5852,29 @@ async function explainChart(chartKey) {
           if (msg.degraded)  degraded = true;
           if (msg.truncated) truncated = true;
           if (msg.sources)   sources = msg.sources;
+          if (msg.save)      save = msg.save;
           if (msg.text) { _reportMarkdown += msg.text; paint(); }
         }
       }
 
-      const notes = [];
-      if (degraded) notes.push(I18n.t('research.degraded') ||
-        'Web search was unavailable — this report uses in-app data only.');
-      if (truncated) notes.push(I18n.t('research.truncated') ||
-        'Output hit the length limit and may be cut short.');
-      report.innerHTML =
-        (notes.length ? `<p class="text-amber-700 dark:text-amber-500">⚠ ${notes.map(_esc).join(' ')}</p>` : '') +
-        _renderMd(_reportMarkdown) +
-        (streamError ? `<p class="text-rose-700 dark:text-rose-400 mt-3">⚠ ${_esc(streamError)}</p>` : '');
-
-      if (sources.length) {
-        srcBox.textContent = (I18n.t('research.sources') || 'Web sources consulted: ') +
-                             sources.join(' · ');
-        srcBox.style.display = '';
-      }
+      _paintFinal({ degraded, truncated, error: streamError, sources });
       if (!_reportMarkdown) {
         status.textContent = I18n.t('research.failed') || 'No report generated';
       } else {
-        status.textContent = cached
-          ? (I18n.t('research.from_cache') || 'From cache — hit Regenerate for a fresh run')
-          : (I18n.t('research.done') || 'Done');
-        copyBtn.style.display = '';
+        status.textContent = (save && save.ok && save.existing)
+          ? _t('research.from_saved', 'From your saved reports — press Regenerate for a fresh run')
+          : cached
+            ? (I18n.t('research.from_cache') || 'From cache — hit Regenerate for a fresh run')
+            : (I18n.t('research.done') || 'Done');
+        _applySave(save);
       }
     } catch(e) {
       report.innerHTML = `<p class="text-rose-700 dark:text-rose-400">⚠ ${_esc(e.message)}</p>`;
     } finally {
       btn.disabled = false;
       btn.style.opacity = '';
+      _running = false;
+      _renderSavedPicker();
     }
   };
 
@@ -5510,5 +5888,301 @@ async function explainChart(chartKey) {
     }).catch(() => {});
   };
 })();
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TradeAgents card — this ticker's /agents runs (GET /api/history/<t>/agents)
+// ═══════════════════════════════════════════════════════════════════════════════
+// Loaded on the first open of the Research tab (from _initResearchPanel), never
+// with the page. Shows only what the reader may open -- the endpoint applies the
+// owner-or-VIP rule every other agent read does -- and draws the newest finished
+// run: its rating, its Portfolio Manager's turn, and on request every other turn,
+// fetched from the same /api/agents/job/<id> the research desk itself reads.
+(function() {
+  const esc = (x) => Markdown.escape(x);
+  const t = (key, fallback) => I18n.t(key) || fallback;
+  let loaded = false;
+  let state = 'idle';        // loading | signed_out | restricted | error | ready
+  let runs = [], found = 0, selId = null;
+  let expanded = false;      // the selected run's PM turn shown unclamped
+  let showAll = false;       // every agent's turn listed under it
+  const turns = {};          // job id -> sections | 'loading' | {error: true}
+  const openSecs = new Set();  // "<id>:<index>" of turns the reader has opened
+
+  const deskHref = id => '/agents' + (id ? '?job=' + encodeURIComponent(id) : '');
+  // The first line of the decision without its Markdown emphasis -- the same
+  // reduction the research desk's own history rows apply.
+  const decPlain = s => String(s || '').split('\n')[0]
+    .replace(/\*\*(.+?)\*\*/g, '$1')
+    .replace(/(^|[^*])\*([^*\n]+?)\*/g, '$1$2')
+    .replace(/`([^`]+)`/g, '$1')
+    .trim().slice(0, 80);
+  // Role colours come from agent_roles, so this only guards the attribute.
+  const color = c => /^#[0-9a-fA-F]{3,8}$/.test(c || '') ? c : '#8b5cf6';
+  const langName = code => code === 'zh'
+    ? t('research.saved_lang_zh', 'Chinese') : t('research.saved_lang_en', 'English');
+  const isLive = j => j.status === 'queued' || j.status === 'running';
+  const readable = j => j.status === 'done' && j.has_report;
+
+  window._initAgentsCard = function() {
+    if (loaded) return;
+    loaded = true;
+    load();
+  };
+
+  async function load() {
+    if (!SIGNED_IN) { state = 'signed_out'; render(); return; }
+    state = 'loading';
+    render();
+    let r = null, data = {};
+    try {
+      r = await fetch(`/api/history/${encodeURIComponent(TICKER)}/agents`);
+      data = await r.json().catch(() => ({}));
+    } catch (e) { r = null; }
+    if (r && r.status === 401) state = 'signed_out';
+    else if (r && r.status === 403) state = 'restricted';
+    else if (!r || !r.ok) state = 'error';
+    else {
+      runs = data.runs || [];
+      found = data.found || runs.length;
+      const first = runs.find(readable) || runs[0];
+      selId = first ? first.id : null;
+      state = 'ready';
+    }
+    render();
+  }
+
+  async function loadTurns(id) {
+    turns[id] = 'loading';
+    let r = null, data = {};
+    try {
+      // events=0: the finished turns only, not the run's replayed progress.
+      r = await fetch(`/api/agents/job/${encodeURIComponent(id)}?events=0`);
+      data = await r.json().catch(() => ({}));
+    } catch (e) { r = null; }
+    turns[id] = (r && r.ok && Array.isArray(data.sections)) ? data.sections : { error: true };
+    render();
+  }
+
+  // The Portfolio Manager's turn for a run: the full section once the run has
+  // been opened, else the listing's copy (the newest finished run carries one,
+  // clipped at the server's cap and flagged when it was).
+  function pmFor(j) {
+    const secs = turns[j.id];
+    if (Array.isArray(secs)) {
+      const s = secs.find(x => x.role && x.role.key === 'portfolio');
+      return s ? { state: 'ok', pm: Object.assign({}, s.role, { body: s.body }) } : { state: 'none' };
+    }
+    if ('portfolio' in j) return j.portfolio ? { state: 'ok', pm: j.portfolio } : { state: 'none' };
+    if (secs && secs.error) return { state: 'error' };
+    return { state: 'loading' };
+  }
+
+  function roleHead(role) {
+    const zh = I18n.getLang() === 'zh';
+    const name = (zh && role.zh) ? role.zh : role.name;
+    const alt = (zh && role.zh) ? role.name : '';
+    return `<div class="ta-role"><span>${esc((role.icon ? role.icon + ' ' : '') + (name || ''))}</span>`
+      + (alt ? `<span class="ta-role-alt">${esc(alt)}</span>` : '') + `</div>`;
+  }
+
+  function renderPm(j) {
+    if (isLive(j)) {
+      return `<p class="ta-banner"><a class="ta-link" href="${esc(deskHref(j.id))}">`
+        + `${esc(t('research.ta_inflight', 'An analysis is in progress — follow it on the research desk ↗'))}</a></p>`;
+    }
+    if (!readable(j)) {
+      return `<p class="ta-note">${esc(t('research.ta_no_report', 'This run produced no report.'))}</p>`;
+    }
+    const got = pmFor(j);
+    if (got.state === 'loading') {
+      return `<p class="ta-note">${esc(t('research.ta_turns_loading', 'Loading the turns…'))}</p>`;
+    }
+    if (got.state === 'error') {
+      return `<p class="ta-note">${esc(t('research.ta_turns_error', 'Could not load this report.'))} `
+        + `<button type="button" class="ta-link" data-ta-reload>${esc(t('research.retry', 'Retry'))}</button></p>`;
+    }
+    if (got.state === 'none') {
+      return `<p class="ta-note">${esc(t('agents.pm_none', 'No Portfolio Manager section in this report.'))}</p>`;
+    }
+    const pm = got.pm;
+    return `<div class="ta-turn" style="--role:${color(pm.color)}">${roleHead(pm)}`
+      + `<div class="md-body ta-md${expanded ? '' : ' ta-clamp'}" data-ta-pm>${Markdown.render(pm.body || '')}</div>`
+      + (pm.truncated ? `<p class="ta-note">${esc(t('agents.pm_truncated',
+          'Section truncated — open the report for the full text.'))}</p>` : '')
+      + `<p class="ta-note"><button type="button" class="ta-link" data-ta-more>`
+      + `${esc(expanded ? t('research.ta_less', '▴ Show less') : t('research.ta_more', '▾ Read all'))}</button></p>`
+      + `</div>`;
+  }
+
+  // Every other turn, in report order under its team's label, each folded until
+  // opened -- a whole report is ~40 KB of Markdown, rendered only as it is read.
+  function renderTurns(j) {
+    const secs = turns[j.id];
+    if (secs === undefined || secs === 'loading') {
+      return `<p class="ta-note">${esc(t('research.ta_turns_loading', 'Loading the turns…'))}</p>`;
+    }
+    if (!Array.isArray(secs)) {
+      return `<p class="ta-note">${esc(t('research.ta_turns_error', 'Could not load this report.'))} `
+        + `<button type="button" class="ta-link" data-ta-reload>${esc(t('research.retry', 'Retry'))}</button></p>`;
+    }
+    const zh = I18n.getLang() === 'zh';
+    let team = null;
+    const out = [];
+    secs.forEach((sec, i) => {
+      // The preamble (title, stamp) has no speaker; the manager is drawn above.
+      if (!sec.role || sec.role.key === 'portfolio') return;
+      if (sec.team && sec.team !== team) {
+        team = sec.team;
+        out.push(`<div class="ta-team">${esc(zh && sec.team_zh ? sec.team_zh : sec.team)}</div>`);
+      }
+      out.push(`<details class="ta-sec" data-ta-sec="${i}" style="--role:${color(sec.role.color)}">`
+        + `<summary>${esc((sec.role.icon ? sec.role.icon + ' ' : '')
+            + ((zh && sec.role.zh) ? sec.role.zh : sec.role.name))}</summary>`
+        + `<div class="md-body ta-md" data-ta-body></div></details>`);
+    });
+    return `<div class="ta-turns">${out.join('')}</div>`;
+  }
+
+  function renderRun(j) {
+    const head = [];
+    if (j.decision) head.push(`<span class="ta-chip ${esc(j.tone || '')}">${esc(decPlain(j.decision))}</span>`);
+    if (j.status !== 'done') head.push(`<span class="ta-pill">${esc(t('agents.status_' + j.status, j.status))}</span>`);
+    if (j.date) head.push(`<span class="ta-meta">${esc(t('research.ta_date', 'Analysis date {date}').replace('{date}', j.date))}</span>`);
+    const when = j.finished_at || j.started_at || j.created_at;
+    if (when) head.push(`<span class="ta-meta" title="${esc(YSTime.full(when))}">${esc(YSTime.when(when))}</span>`);
+    if (j.elapsed_sec) {
+      const mins = Math.max(1, Math.round(Number(j.elapsed_sec) / 60));
+      head.push(`<span class="ta-meta">${esc(t('research.ta_minutes', '{n} min').replace('{n}', mins))}</span>`);
+    }
+    if (j.lang) head.push(`<span class="ta-meta">${esc(langName(j.lang))}</span>`);
+    if (j.deep_model) head.push(`<span class="ta-meta">${esc(j.deep_model)}</span>`);
+    if (!j.mine && j.owner) head.push(`<span class="ta-meta">${esc(t('research.ta_by', 'run by {who}').replace('{who}', j.owner))}</span>`);
+
+    const actions = [`<a class="explain-btn" href="${esc(deskHref(j.id))}">${esc(t('research.ta_open', 'Open the full report ↗'))}</a>`];
+    if (readable(j)) {
+      actions.push(`<a class="explain-btn" download href="/api/agents/job/${encodeURIComponent(j.id)}/pdf`
+        + `?tz=${encodeURIComponent(YSTime.zone())}">${esc(t('agents.pdf_short', 'PDF'))}</a>`);
+      actions.push(`<button type="button" class="explain-btn" data-ta-all>${esc(showAll
+        ? t('research.ta_all_hide', '▴ Hide the turns')
+        : t('research.ta_all', "▾ Every agent's turn"))}</button>`);
+    }
+    return `<div class="ta-head">${head.join('')}</div>${renderPm(j)}`
+      + `<div class="ta-actions">${actions.join('')}</div>`
+      + (showAll && readable(j) ? renderTurns(j) : '');
+  }
+
+  function renderOthers(list) {
+    const rows = list.map(j => {
+      const when = j.finished_at || j.started_at || j.created_at;
+      const bits = [`<span class="ta-meta">${esc(j.date || '—')}</span>`];
+      if (j.decision) bits.push(`<span class="ta-chip ${esc(j.tone || '')}">${esc(decPlain(j.decision))}</span>`);
+      if (j.status !== 'done') bits.push(`<span class="ta-pill">${esc(t('agents.status_' + j.status, j.status))}</span>`);
+      if (when) bits.push(`<span class="ta-meta">${esc(YSTime.when(when))}</span>`);
+      if (!j.mine && j.owner) bits.push(`<span class="ta-meta">${esc(j.owner)}</span>`);
+      return `<button type="button" class="ta-other" data-ta-pick="${esc(j.id)}">${bits.join('')}</button>`;
+    });
+    return `<div class="ta-others"><div class="ta-others-title">${esc(t('research.ta_others', 'Other analyses'))}</div>`
+      + rows.join('') + `</div>`;
+  }
+
+  function render() {
+    const el = document.getElementById('taBody');
+    if (!el) return;
+    if (state === 'loading') {
+      el.innerHTML = `<p>${esc(t('research.ta_loading', 'Loading analyses…'))}</p>`;
+      return;
+    }
+    if (state === 'signed_out') {
+      el.innerHTML = `<p>${esc(t('research.ta_signed_out', 'Sign in to see your TradeAgents analyses of this ticker here.'))} `
+        + `<a class="ta-link" href="${esc(researchSignInHref())}">${esc(t('research.sign_in', 'Sign in'))}</a></p>`;
+      return;
+    }
+    if (state === 'restricted') {
+      el.innerHTML = `<p>${esc(t('research.ta_restricted', 'TradeAgents is currently restricted to specific accounts.'))}</p>`;
+      return;
+    }
+    if (state === 'error') {
+      el.innerHTML = `<p>${esc(t('research.ta_error', 'Could not load the analyses.'))} `
+        + `<button type="button" class="ta-link" data-ta-retry>${esc(t('research.retry', 'Retry'))}</button></p>`;
+      el.querySelector('[data-ta-retry]').onclick = () => load();
+      return;
+    }
+    if (state !== 'ready') { el.innerHTML = ''; return; }
+    if (!runs.length) {
+      el.innerHTML = `<p>${esc(t('research.ta_none', 'No TradeAgents analysis of this ticker yet.'))}</p>`;
+      return;
+    }
+    const sel = runs.find(j => j.id === selId) || runs[0];
+    const parts = [];
+    // A run in flight is news even while an older finished one is on show.
+    const live = runs.find(isLive);
+    if (live && live.id !== sel.id) {
+      parts.push(`<p class="ta-banner"><a class="ta-link" href="${esc(deskHref(live.id))}">`
+        + `${esc(t('research.ta_inflight', 'An analysis is in progress — follow it on the research desk ↗'))}</a></p>`);
+    }
+    parts.push(renderRun(sel));
+    const others = runs.filter(j => j.id !== sel.id);
+    if (others.length) parts.push(renderOthers(others));
+    if (found > runs.length) {
+      parts.push(`<p class="ta-note"><a class="ta-link" href="${esc(deskHref())}">${esc(
+        t('research.ta_showing', 'Showing {shown} of {found} — the research desk has them all ↗')
+          .replace('{shown}', runs.length).replace('{found}', found))}</a></p>`);
+    }
+    el.innerHTML = parts.join('');
+    bind(el, sel);
+  }
+
+  function bind(el, sel) {
+    el.querySelectorAll('[data-ta-pick]').forEach(b => {
+      b.onclick = () => {
+        selId = b.dataset.taPick;
+        expanded = false;
+        showAll = false;
+        const j = runs.find(x => x.id === selId);
+        if (j && readable(j) && !('portfolio' in j) && turns[j.id] === undefined) loadTurns(j.id);
+        render();
+      };
+    });
+    const all = el.querySelector('[data-ta-all]');
+    if (all) all.onclick = () => {
+      showAll = !showAll;
+      if (showAll && turns[sel.id] === undefined) loadTurns(sel.id);
+      render();
+    };
+    const more = el.querySelector('[data-ta-more]');
+    if (more) more.onclick = () => { expanded = !expanded; render(); };
+    el.querySelectorAll('[data-ta-reload]').forEach(b => {
+      b.onclick = () => { loadTurns(sel.id); render(); };
+    });
+    const secs = Array.isArray(turns[sel.id]) ? turns[sel.id] : null;
+    el.querySelectorAll('details[data-ta-sec]').forEach(d => {
+      const i = Number(d.dataset.taSec);
+      const key = sel.id + ':' + i;
+      const fill = () => {
+        const box = d.querySelector('[data-ta-body]');
+        if (box && !box.innerHTML && secs && secs[i]) box.innerHTML = Markdown.render(secs[i].body || '');
+      };
+      if (openSecs.has(key)) { fill(); d.open = true; }
+      d.addEventListener('toggle', () => {
+        if (d.open) { openSecs.add(key); fill(); } else { openSecs.delete(key); }
+      });
+    });
+    // The clamp only where there is something to clamp: a short verdict under a
+    // fade and a "Read all" that reveals nothing would read as a broken page.
+    // Measured only while visible -- a hidden box has no height to compare.
+    const pm = el.querySelector('[data-ta-pm].ta-clamp');
+    if (pm && pm.offsetParent !== null && pm.scrollHeight <= pm.clientHeight + 4) {
+      pm.classList.remove('ta-clamp');
+      if (more) more.parentElement.hidden = true;
+    }
+  }
+
+  // Everything here is composed in JS, where I18n.apply() cannot reach it.
+  document.addEventListener('i18n:langchange', () => { if (state !== 'idle') render(); });
+})();
+
+// ?tab=research opens straight onto the Research tab: where /login sends a
+// reader who signed in from it, and a link to this ticker's research can land.
+if (new URLSearchParams(location.search).get('tab') === 'research') switchTab('research');
 </script>
 {% endblock %}

@@ -4892,7 +4892,13 @@ def api_agents_job(job_id):
         since = int(request.args.get("since", 0))
     except (TypeError, ValueError):
         since = 0
-    events = read_events(job_id, since) if job.get("status") != "done" or since == 0 else []
+    # ``events=0`` is for a caller that wants the finished turns and not the
+    # replay: /history's TradeAgents card opens a done run for its sections, and
+    # a first poll (since=0) would otherwise ship every progress event as well --
+    # each one a role's whole text again, doubling a payload already ~40 KB.
+    want_events = request.args.get("events") != "0"
+    events = (read_events(job_id, since)
+              if want_events and (job.get("status") != "done" or since == 0) else [])
     payload["events"] = events
     payload["event_cursor"] = max([since] + [int(e.get("seq", 0)) for e in events])
     # The turns this run will take, which the page counts the events against to
@@ -7236,16 +7242,26 @@ def api_history_research(ticker: str):
     result, guidance, announcements and analyst estimates — the in-app figures
     still take precedence, per the system instruction in ``research.py``.
 
+    A signed-in reader's report is saved to ``ystocker-research-reports``
+    (``research_store``) and their own saved reports are their cache; a reader
+    who is not signed in gets the 8-hour disk cache as before and nothing is
+    saved. Saving never gates the report: it happens after the last chunk, and
+    the stream says how it went.
+
     Request body:
         {"bundle": {...}, "lang": "en"|"zh", "refresh": bool}
     Response:
-        SSE stream of ``data: {"text": "..."}`` then ``data: [DONE]``.
+        SSE stream of ``data: {"text": "..."}`` chunks, flag events
+        (``cached``/``degraded``/``truncated``/``sources``/``error``), one
+        ``save`` event -- ``{"ok": true, "report": {...}}`` or ``{"ok": false,
+        "reason": "signed_out"|"store"|"incomplete"|"invalid"}`` -- then
+        ``data: [DONE]``.
     """
     import os
     from google import genai
     from google.genai import types as genai_types
 
-    from . import research
+    from . import research, research_store
 
     ticker = ticker.strip().upper()
     body   = request.get_json(force=True, silent=True) or {}
@@ -7262,19 +7278,64 @@ def api_history_research(ticker: str):
         return jsonify({"error": "GEMINI_API_KEY not configured"}), 503
 
     fingerprint = research.bundle_fingerprint(bundle)
-    log.info("API history/research: ticker=%s lang=%s fp=%s refresh=%s",
-             ticker, lang, fingerprint, refresh)
+    # Read here, not inside the generator: the stream runs after this view has
+    # returned, where the session is no longer in reach.
+    owner = research_store.normalise_owner(_agent_user())
+    log.info("API history/research: ticker=%s lang=%s fp=%s refresh=%s user=%s",
+             ticker, lang, fingerprint, refresh, owner or "anon")
+
+    _RESEARCH_CACHE_DIR = Path(__file__).parent.parent / "cache" / "research"
+    _RESEARCH_CACHE_TTL = 8 * 60 * 60   # 8 hours, matches the main data cache
+    _RESEARCH_MODEL = "gemini-2.5-flash"
+
+    def _sse(obj) -> str:
+        return f"data: {json.dumps(obj)}\n\n"
+
+    def _respond(gen):
+        return Response(gen, mimetype="text/event-stream", headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        })
+
+    # ── The reader's own saved reports ────────────────────────────────────────
+    # For a signed-in reader these replace the shared disk cache rather than sit
+    # in front of it. The disk file is keyed by a fingerprint of the portfolio
+    # inputs, EPS and latest quarter only, and the bundle behind it came from
+    # whoever POSTed first -- fine for an 8-hour cache, wrong as the source of a
+    # report saved permanently into somebody else's account. A store that cannot
+    # be read falls back to the disk cache, which is exactly the old behaviour.
+    store_ok = True
+    if owner and not refresh:
+        try:
+            mine = research_store.list_for(ticker, owner)
+        except research_store.StoreUnavailable:
+            mine, store_ok = [], False
+        hit = research_store.cache_hit(mine, lang=lang, fingerprint=fingerprint,
+                                       template=research.TEMPLATE_VERSION,
+                                       max_age=_RESEARCH_CACHE_TTL)
+        if hit:
+            log.debug("Research saved-report hit: %s lang=%s ref=%s", ticker, lang, hit["ref"])
+
+            def stream_saved():
+                yield _sse({"cached": True})
+                if hit.get("degraded"):
+                    yield _sse({"degraded": True})
+                if hit.get("sources"):
+                    yield _sse({"sources": hit["sources"]})
+                yield _sse({"text": hit["text"]})
+                yield _sse({"save": {"ok": True, "existing": True,
+                                     "report": research_store.meta(hit)}})
+                yield "data: [DONE]\n\n"
+
+            return _respond(stream_saved())
 
     # ── Disk cache ────────────────────────────────────────────────────────────
     # Keyed on the portfolio inputs + reporting period, not on live price, so a
     # tick-by-tick price change does not force a 40 s regeneration.
-    _RESEARCH_CACHE_DIR = Path(__file__).parent.parent / "cache" / "research"
-    _RESEARCH_CACHE_TTL = 8 * 60 * 60   # 8 hours, matches the main data cache
-
     safe_ticker = ticker.replace("/", "-")
     cache_file  = _RESEARCH_CACHE_DIR / f"{safe_ticker}_{lang}_{fingerprint}.json"
 
-    if not refresh:
+    if not refresh and (not owner or not store_ok):
         try:
             if cache_file.exists():
                 payload = json.loads(cache_file.read_text())
@@ -7282,16 +7343,18 @@ def api_history_research(ticker: str):
                     cached_text = payload.get("text", "")
                     if cached_text:
                         log.debug("Research cache hit: %s lang=%s", ticker, lang)
+                        not_saved = {"ok": False,
+                                     "reason": "store" if owner else "signed_out"}
 
                         def stream_cached():
-                            yield f"data: {json.dumps({'cached': True})}\n\n"
-                            yield f"data: {json.dumps({'text': cached_text})}\n\n"
+                            yield _sse({"cached": True})
+                            if payload.get("sources"):
+                                yield _sse({"sources": payload["sources"]})
+                            yield _sse({"text": cached_text})
+                            yield _sse({"save": not_saved})
                             yield "data: [DONE]\n\n"
 
-                        return Response(stream_cached(), mimetype="text/event-stream", headers={
-                            "Cache-Control": "no-cache",
-                            "X-Accel-Buffering": "no",
-                        })
+                        return _respond(stream_cached())
         except (OSError, ValueError):
             log.debug("Research cache read failed for %s — will re-generate", ticker)
 
@@ -7323,7 +7386,7 @@ def api_history_research(ticker: str):
         if use_search:
             kwargs["tools"] = [genai_types.Tool(google_search=genai_types.GoogleSearch())]
         return client.models.generate_content_stream(
-            model="gemini-2.5-flash", contents=contents,
+            model=_RESEARCH_MODEL, contents=contents,
             config=genai_types.GenerateContentConfig(**kwargs))
 
     def generate():
@@ -7398,12 +7461,128 @@ def api_history_research(ticker: str):
                 log.debug("Research cached: %s lang=%s fp=%s", ticker, lang, fingerprint)
             except OSError:
                 log.debug("Failed to write research cache for %s", ticker)
+
+        # Save what the reader was shown. Wider than the disk rule above: a
+        # truncated report is kept (flagged), because it is what is on their
+        # screen and "saved" must not quietly mean "unless it was long". A run
+        # that died mid-stream is not -- that is a fragment, not a report.
+        if error:
+            yield _sse({"save": {"ok": False, "reason": "incomplete"}})
+        elif not owner:
+            yield _sse({"save": {"ok": False, "reason": "signed_out"}})
+        else:
+            try:
+                saved = research_store.save(
+                    ticker=ticker, owner=owner, text=full_text, lang=lang,
+                    fingerprint=fingerprint, template=research.TEMPLATE_VERSION,
+                    model=_RESEARCH_MODEL, sources=sources[:12],
+                    degraded=degraded, truncated=truncated,
+                    has_portfolio=research.has_portfolio(bundle),
+                    price=(bundle.get("identity") or {}).get("price"))
+                yield _sse({"save": {"ok": True, "report": research_store.meta(saved)}})
+            except research_store.StoreUnavailable:
+                yield _sse({"save": {"ok": False, "reason": "store"}})
+            except ValueError as exc:
+                log.warning("History research: not saving %s for %s: %s", ticker, owner, exc)
+                yield _sse({"save": {"ok": False, "reason": "invalid"}})
         yield "data: [DONE]\n\n"
 
-    return Response(generate(), mimetype="text/event-stream", headers={
-        "Cache-Control": "no-cache",
-        "X-Accel-Buffering": "no",
-    })
+    return _respond(generate())
+
+
+def _no_store(resp):
+    """Mark a per-reader JSON answer uncacheable. These depend on the session,
+    and a shared cache or the service worker serving one reader's list to the
+    next is the failure this prevents."""
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
+@bp.route("/api/history/<ticker>/research/saved")
+def api_history_research_saved(ticker: str):
+    """The signed-in reader's saved deep-research reports on ``ticker``.
+
+    Returns ``{"reports": [meta, ...], "latest": {meta + text + sources} | null}``,
+    newest first. ``latest`` is the one the tab opens on -- newest in ``?lang=``,
+    else newest at all -- so opening the tab costs one request, not two.
+
+    401 signed out; 503 when the table cannot be read, never ``reports: []``,
+    which would tell a reader their reports are gone (see research_store).
+    """
+    from . import research_store
+
+    owner = research_store.normalise_owner(_agent_user())
+    if not owner:
+        return jsonify({"error": "Sign in required", "reason": "auth"}), 401
+    t = research_store.normalise_ticker(ticker)
+    if not t:
+        return jsonify({"error": "Invalid ticker"}), 400
+    lang = "zh" if request.args.get("lang") == "zh" else "en"
+    try:
+        rows = research_store.list_for(t, owner)
+    except research_store.StoreUnavailable:
+        return jsonify({"error": "Saved reports are unavailable right now",
+                        "reason": "store"}), 503
+    latest = research_store.pick_latest(rows, lang)
+    return _no_store(jsonify({
+        "reports": [research_store.meta(r) for r in rows],
+        "latest": research_store.with_text(latest) if latest else None,
+        "limit": research_store.LIST_LIMIT,
+    }))
+
+
+@bp.route("/api/history/<ticker>/research/saved/<ref>", methods=["GET", "DELETE"])
+def api_history_research_saved_one(ticker: str, ref: str):
+    """Read or delete one of the signed-in reader's saved reports.
+
+    404 for a ref that is not theirs as for one that does not exist: the key is
+    built from the session's address, so another reader's ref is simply a miss,
+    and the two are indistinguishable by construction rather than by care.
+    """
+    from . import research_store
+
+    owner = research_store.normalise_owner(_agent_user())
+    if not owner:
+        return jsonify({"error": "Sign in required", "reason": "auth"}), 401
+    t = research_store.normalise_ticker(ticker)
+    if not t or not research_store.valid_ref(ref):
+        return jsonify({"error": "No such report"}), 404
+    try:
+        if request.method == "DELETE":
+            if not research_store.delete(t, owner, ref):
+                return jsonify({"error": "No such report"}), 404
+            return _no_store(jsonify({"ok": True, "ref": ref}))
+        row = research_store.get(t, owner, ref)
+    except research_store.StoreUnavailable:
+        return jsonify({"error": "Saved reports are unavailable right now",
+                        "reason": "store"}), 503
+    if not row:
+        return jsonify({"error": "No such report"}), 404
+    return _no_store(jsonify(research_store.with_text(row)))
+
+
+@bp.route("/api/history/<ticker>/agents")
+def api_history_agents(ticker: str):
+    """This ticker's TradeAgents runs the reader may open, for /history's Research tab.
+
+    The same gate and the same privacy rule as every other agent read: signed in,
+    the reader's own runs, a VIP everyone's (``agents.can_read``). Returns
+    ``{"runs": [...], "found": int, "vip": bool}`` -- see ``agents.ticker_runs``
+    for the fields. A symbol the agents cannot run (an index, a future) answers
+    no runs rather than 400, since every /history page asks.
+    """
+    gate = _agent_gate()
+    if gate:
+        return gate
+    from ystocker import quota
+    from ystocker.agents import ticker_runs, valid_ticker
+
+    t = ticker.strip().upper()
+    viewer = _agent_user()
+    vip = quota.is_vip(viewer)
+    out = (ticker_runs(t, user=viewer, all_users=vip) if valid_ticker(t)
+           else {"runs": [], "found": 0})
+    return _no_store(jsonify({**out, "vip": vip}))
 
 
 @bp.route("/api/news/<ticker>")

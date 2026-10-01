@@ -284,6 +284,9 @@ Each app follows the same pattern:
 - `wiki.py` — the registry behind `/docs` and `/research` (page list, dates,
   bilingual titles) and the `/agents` landing's roster. Pure; see "The
   TradeAgents wiki" below.
+- `research_store.py` — the deep-research reports a signed-in reader generated
+  on `/history/<ticker>` (`ystocker-research-reports`), owner-scoped by the key
+  itself. See "Deep research on /history" below.
 - `portfolio.py` / `portfolio_csv.py` / `funddata.py` / `lookthrough.py` /
   `assets.py` — the `/assets` asset tracker and its 穿透 (look-through). See the
   section below; `lookthrough.py` is pure and injectable, which is what makes the
@@ -1352,6 +1355,83 @@ this repo's dev checkout intermittently cannot import `matplotlib.pyplot` at
 all (the same broken Homebrew `pyexpat` `tests/test_import_graph.py`'s module
 docstring already works around) — proving the layout correct needed a second,
 throwaway venv with a working one the one time this checkout's own was down.
+
+### Deep research on /history, saved (`research_store.py`), and the TradeAgents card
+
+The ✦ Research tab (深度研究) on `/history/<ticker>` streams a 17-section Gemini
+report from a bundle the browser assembles. Until 2026-10-01 that report lived
+only in an 8-hour disk cache (`cache/research/`), so reopening the tab the next
+day showed nothing and each box rebuild deleted every report ever made. Now a
+signed-in reader's report is saved to `ystocker-research-reports`, the tab opens
+on their newest one (in the page's language if they have one), and a picker
+lists the last twenty with a delete. The same tab carries a TradeAgents card:
+this ticker's `/agents` runs, the newest one's rating and Portfolio Manager
+turn, every other turn on request, and links to the full report and PDF.
+
+**Only the reader who generated a report can read it, and that is the key
+schema, not a check.** `ticker` HASH + `sk` RANGE = `<owner>#<ref>`, with
+`ref` = `YYYYMMDDTHHMMSSffffffZ-<id>`. Every read builds the sort key from the
+session's address, so another reader's ref simply misses (404 to GET and
+DELETE alike). A report written with the position form filled in states the
+account value, shares and cost, which is why `agents.owns` keeps a run private
+too. An address containing `#` is refused, not escaped: it is the delimiter, and
+`tests/test_research_store.py` pins that `a@b.co` cannot see `a@b.com`'s rows
+(proven by mutating the `#` out of the `begins_with`).
+
+**Nothing is published to other readers, deliberately.** The bundle is assembled
+in the browser, so the server cannot vouch for a number in it; showing one
+reader's report to everyone would make the POST a way to put arbitrary text on
+trade-agents.com. A signed-out reader still gets a report, unsaved, and the
+stream says so.
+
+**A signed-in reader's own rows are their cache, and they never read the disk
+cache.** The disk file is keyed by a fingerprint of the portfolio inputs, EPS
+and latest quarter only, and its bundle came from whoever POSTed first. That is
+tolerable for an 8-hour anonymous cache and wrong as the source of a report
+saved permanently into someone's account. If the table cannot be read the route
+falls back to the disk cache, which is exactly the old behaviour, and reports
+"not saved".
+
+**The stream ends with a `save` event**: `{"ok": true, "report": meta}`
+(`existing: true` when it came from the reader's own rows), or `{"ok": false,
+"reason": "signed_out"|"store"|"incomplete"|"invalid"}`. A truncated report is
+saved, flagged, because it is what the reader was shown; a stream that died
+mid-report is not. Reads fail closed: `/api/history/<t>/research/saved` answers
+503 when the table is unreachable, never `reports: []`, which would tell a
+reader their reports are gone.
+
+**The card is `agents.ticker_runs`, through `/api/history/<t>/agents`**, gated
+like every agent read (owner, or a VIP for everyone's with the owner masked). It
+reads up to 1000 records, not `_records`' usual 60: that window is the newest 60
+across every ticker, and NBIS's only run (08-27) sat behind 182 newer ones, so
+the card would have said "no analysis yet" about a ticker that had one. Exact
+ticker, every status (a running job is news), an allowlist of fields, and only
+the newest finished run carries its PM turn. The rest open on demand through
+`/api/agents/job/<id>?events=0`, which skips the progress replay. A rating's
+colour is `report_pdf.verdict_tone`, so it matches the PDF.
+
+The card and the saved reports load on the first open of the tab, never with the
+page. `?tab=research` opens straight onto it (and is where `/login` returns a
+reader who signed in from it); `/agents?ticker=NBIS` pre-fills the run form. The
+Charts tab's deferred panels (forecast, peers, 13F) now register only while that
+tab is shown: registered behind another tab, every anchor had no box, so
+DeferLoad fetched all three at once, the forecast's model fit included.
+`YSTime` moved from agents.html to `static/ystime.js`, shared by both pages.
+
+```bash
+aws dynamodb create-table --table-name ystocker-research-reports --region us-west-2 \
+  --billing-mode PAY_PER_REQUEST \
+  --attribute-definitions AttributeName=ticker,AttributeType=S \
+                          AttributeName=sk,AttributeType=S \
+  --key-schema AttributeName=ticker,KeyType=HASH \
+               AttributeName=sk,KeyType=RANGE
+```
+
+Not in `deploy/cloudformation.yaml`, matching every other hand-made table, and
+IAM already grants `table/ystocker-*`. No TTL. Tests:
+`tests/test_research_store.py` (25, an in-memory table that evaluates the real
+boto3 key conditions), `tests/test_agents_ticker_runs.py` (10) and
+`tests/check_research_endpoints.py` (22, hermetic, through the Flask test client).
 
 ### Choosing the model and thinking depth (`agent_models.py`)
 
