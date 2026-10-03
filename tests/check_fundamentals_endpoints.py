@@ -282,6 +282,48 @@ class Page(unittest.TestCase):
         cls.app.config["TESTING"] = True
         cls.client = cls.app.test_client()
 
+    def test_companies_directory_is_one_card_per_company_largest_first(self):
+        from ystocker import routes
+        data = {
+            "Tech": {"MSFT": {"Name": "Microsoft", "Current Price": 517.5, "Day Change (%)": 0.9,
+                              "Market Cap ($B)": 3842.9, "PE (TTM)": 28.6, "52W Return (%)": -2.1},
+                     "AAPL": {"Name": "Apple", "Current Price": 333.7, "Day Change (%)": float("nan"),
+                              "Market Cap ($B)": 4910.1}},
+            "Software": {"MSFT": {"Name": "Microsoft", "Market Cap ($B)": 3842.9}},
+        }
+        rows = routes._company_cards(data)
+        self.assertEqual([r["t"] for r in rows], ["AAPL", "MSFT"])
+        self.assertEqual(rows[1]["g"], ["Tech", "Software"])      # one card, every group
+        self.assertIsNone(rows[0]["c"])                            # NaN is not a 0% day
+        self.assertEqual(routes._company_cards(None), [])
+
+    def test_companies_page_renders_and_links_into_the_tab(self):
+        from ystocker import routes
+        saved = routes._cache
+        routes._cache = {"Tech": {"MSFT": {"Name": "Microsoft", "Current Price": 517.5,
+                                           "Day Change (%)": 0.9, "Market Cap ($B)": 3842.9}}}
+        try:
+            html = self.client.get("/companies").get_data(as_text=True)
+        finally:
+            routes._cache = saved
+        self.assertIn('"t": "MSFT"', html)
+        self.assertIn("?tab=fundamentals", html)
+        self.assertIn('data-i18n="companies.title"', html)
+        i18n = I18N.read_text()
+        for key in re.findall(r"tr\('(companies\.[a-z0-9_]+)'", (ROOT / "ystocker/templates/companies.html").read_text()):
+            self.assertRegex(i18n, r"'%s':\s*\{\s*en: '[^']+',\s*zh: '[^']+'" % re.escape(key))
+
+    def test_companies_page_survives_a_cold_cache(self):
+        from ystocker import routes
+        saved = routes._cache
+        routes._cache = None
+        try:
+            resp = self.client.get("/companies")
+        finally:
+            routes._cache = saved
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("const WARMING = true", resp.get_data(as_text=True))
+
     def test_page_carries_the_tab_panel_and_script(self):
         html = self.client.get("/history/NVDA").get_data(as_text=True)
         self.assertIn('id="tabFundBtn"', html)

@@ -280,7 +280,8 @@
   .fd-title { font-size: 16px; font-weight: 600; color: var(--t-ink-strong); }
   .fd-sub { font-size: 12px; color: var(--t-ink-dim); margin-top: 2px; line-height: 1.5; }
   .fd-sub a { color: var(--t-accent-ink); }
-  .fd-sub a:hover { text-decoration: underline; }
+  .fd-sub a:hover, .fd-browse:hover { text-decoration: underline; }
+  .fd-browse { display: inline-block; margin-top: 3px; font-size: 11.5px; color: var(--t-accent-ink); }
   .fd-controls { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; }
   .fd-seg { display: inline-flex; gap: 4px; }
   .fd-seg .range-btn:disabled { opacity: .4; cursor: not-allowed; }
@@ -1616,6 +1617,7 @@
     <div>
       <h2 class="fd-title" data-i18n="fund.title">Fundamentals</h2>
       <p class="fd-sub" id="fundSub"></p>
+      <a class="fd-browse" href="{{ url_for('main.companies') }}" data-i18n="fund.browse">Browse all companies →</a>
     </div>
     <div class="fd-controls" id="fundControls" hidden>
       <div class="fd-seg" role="group">

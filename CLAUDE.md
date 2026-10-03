@@ -1500,9 +1500,18 @@ bounded poll ends on "couldn't load" + Retry (`?retry=1`) rather than spinning.
 All EDGAR traffic goes through `sec13f.edgar_get`: SEC's rate limit is per
 client, not per module.
 
+**`/companies` is the way in** ("Find your next move", after alphascope's
+`/dashboard`): every company the ticker cache follows (~300) as a card — monogram
+tile (no third-party logo CDN: it would hand every reader's IP to a vendor for
+decoration), price, day change, market cap, P/E, 52-week return — largest first,
+with Gainers / Losers and a sector filter, each card opening its Fundamentals
+tab. It reads `_get_data()` only, so it costs nothing to serve; those quotes
+refresh a few at a time through the day, and the page says so. Enter in its
+search opens any ticker, listed or not.
+
 Tests: `tests/test_xbrl.py` (51, NVIDIA's filings), `tests/test_statements.py`
 (12, Yahoo's tables as served), `node tests/check_fundamentals_js.mjs` (40, the
-range/YoY/cap arithmetic) and `tests/check_fundamentals_endpoints.py` (18,
+range/YoY/cap arithmetic) and `tests/check_fundamentals_endpoints.py` (21,
 hermetic). Not a DynamoDB table: every figure can be fetched again.
 
 ### Choosing the model and thinking depth (`agent_models.py`)

@@ -605,7 +605,10 @@
                 {% endfor %}
               </div>
             </div>
-            <div class="border-t border-slate-200 dark:border-slate-800 px-3 py-2 mt-1">
+            <div class="border-t border-slate-200 dark:border-slate-800 px-3 py-2 mt-1 flex items-center justify-between gap-3">
+              <a href="{{ url_for('main.companies') }}"
+                 class="flex items-center justify-center gap-1 text-xs text-slate-500 hover:text-brand transition"
+                 data-i18n="nav.all_companies">All companies →</a>
               <a href="{{ url_for('main.evaluation') }}#sectors"
                  class="flex items-center justify-center gap-1 text-xs text-slate-500 hover:text-brand transition"
                  data-i18n="nav.view_all">View all sectors ↓</a>
@@ -899,6 +902,7 @@
         <a href="{{ url_for('main.markets') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800" data-i18n="markets.nav">Markets</a>
         <a href="{{ url_for('main.evaluation') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800" data-i18n="nav.home">Valuation</a>
         <a href="{{ url_for('main.dca_index') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800" data-i18n="nav.dca">DCA</a>
+        <a href="{{ url_for('main.companies') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800" data-i18n="nav.companies">Companies</a>
         {#
           Sectors and Commodities collapse, and the remaining links sit in
           two-column grids. Flat, the menu measured 1279px on an 844px screen —

@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+{% block title %}yStocker — Companies{% endblock %}
+{% block title_key %}companies.page_title{% endblock %}
+
+{% block content %}
+<style>
+  /* Hand-written: the cards are built in JS, and a Tailwind class that only
+     ever appears in a template literal can be missing from the compiled
+     bundle. Shared roles come from base.html's --t-* vocabulary; up/down ink is
+     light-first with .dark overriding, as base.html does. */
+  :root { --co-up: #047857; --co-down: #be123c; --co-up-bg: rgba(16,185,129,.12); --co-down-bg: rgba(244,63,94,.12); }
+  .dark { --co-up: #34d399; --co-down: #fb7185; --co-up-bg: rgba(52,211,153,.14); --co-down-bg: rgba(251,113,133,.14); }
+  .co-bar { display: flex; flex-direction: column; gap: 10px; margin-bottom: 10px; }
+  .co-search {
+    width: 100%; padding: 11px 14px; border-radius: 12px; font-size: 14px;
+    border: 1px solid var(--t-line-strong); background: var(--t-surface); color: var(--t-ink-strong);
+  }
+  .co-search:focus { outline: none; border-color: var(--t-accent); box-shadow: 0 0 0 3px rgba(99,102,241,.18); }
+  .co-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .co-chip {
+    font-size: 12px; font-weight: 500; padding: 5px 11px; border-radius: 999px; cursor: pointer;
+    border: 1px solid var(--t-line-strong); background: transparent; color: var(--t-ink-muted);
+  }
+  .co-chip:hover { color: var(--t-ink); border-color: var(--t-line-hover); }
+  .co-chip.is-on { color: var(--t-accent-ink); border-color: var(--t-accent); background: rgba(99,102,241,.12); }
+  .co-select {
+    font-size: 12px; padding: 5px 10px; border-radius: 999px; cursor: pointer;
+    border: 1px solid var(--t-line-strong); background: var(--t-surface); color: var(--t-ink-muted);
+  }
+  .co-meta { font-size: 11.5px; color: var(--t-ink-dim); margin: 2px 0 12px; }
+  .co-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  @media (min-width: 560px) { .co-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (min-width: 900px) { .co-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+  @media (min-width: 1200px) { .co-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+  .co-card {
+    display: grid; grid-template-columns: 38px minmax(0, 1fr) auto; gap: 4px 10px; align-items: center;
+    padding: 11px 12px; border-radius: 12px; border: 1px solid var(--t-line); background: var(--t-surface);
+    color: inherit; text-decoration: none; transition: border-color .15s, transform .15s;
+  }
+  .co-card:hover { border-color: var(--t-accent); transform: translateY(-1px); }
+  .co-tile {
+    grid-row: span 2; width: 38px; height: 38px; border-radius: 10px; display: flex; align-items: center;
+    justify-content: center; font: 700 12px/1 'JetBrains Mono', ui-monospace, monospace; letter-spacing: -.02em;
+  }
+  .co-ticker { font: 700 13px/1.2 'JetBrains Mono', ui-monospace, monospace; color: var(--t-ink-strong); }
+  .co-name { font-size: 11.5px; color: var(--t-ink-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .co-price { font-size: 13px; font-weight: 600; color: var(--t-ink-strong); text-align: right; font-variant-numeric: tabular-nums; }
+  .co-chg {
+    justify-self: end; font-size: 11px; font-weight: 600; padding: 1px 6px; border-radius: 6px;
+    font-variant-numeric: tabular-nums; color: var(--t-ink-dim);
+  }
+  .co-chg.up { color: var(--co-up); background: var(--co-up-bg); }
+  .co-chg.down { color: var(--co-down); background: var(--co-down-bg); }
+  .co-foot { grid-column: 2 / -1; font-size: 10.5px; color: var(--t-ink-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .co-empty { font-size: 13px; color: var(--t-ink-muted); padding: 18px 0; }
+  #coEmpty[hidden] { display: none; }
+</style>
+
+<div class="mb-5">
+  <h1 class="text-2xl sm:text-3xl font-bold grad-text" data-i18n="companies.title">Find your next move</h1>
+  <p class="text-slate-500 dark:text-slate-400 text-sm mt-1" data-i18n="companies.subtitle">Every company this site follows, largest first. Open one for its quarterly history from its own filings.</p>
+</div>
+
+<div class="co-bar">
+  <input id="coSearch" type="search" class="co-search" autocomplete="off" spellcheck="false"
+         placeholder="Search a company or ticker — Enter opens any ticker"
+         data-i18n-placeholder="companies.search_ph">
+  <div class="co-filters">
+    <button type="button" class="co-chip is-on" data-co-view="all" data-i18n="companies.all">All</button>
+    <button type="button" class="co-chip" data-co-view="gainers" data-i18n="companies.gainers">Gainers</button>
+    <button type="button" class="co-chip" data-co-view="losers" data-i18n="companies.losers">Losers</button>
+    <select id="coGroup" class="co-select" aria-label="Sector">
+      <option value="" data-i18n="companies.all_groups">All sectors</option>
+      {% for g in peer_groups %}
+      <option value="{{ g }}" data-i18n="sector.name.{{ g }}">{{ g }}</option>
+      {% endfor %}
+    </select>
+  </div>
+</div>
+<p id="coMeta" class="co-meta"></p>
+<div id="coGrid" class="co-grid"></div>
+<p id="coEmpty" class="co-empty" hidden></p>
+
+<script>
+// The cards: tickers from the cache the rolling refresher keeps warm (routes.
+// _company_cards), each a link into its Fundamentals tab. Everything below is
+// composed here, where I18n.apply() cannot reach, so it re-renders on a
+// language switch.
+(function () {
+  const ROWS = {{ companies | tojson }};
+  const UPDATED = {{ updated | tojson }};
+  const WARMING = {{ warming | tojson }};
+  const F = s => document.getElementById(s);
+  const tr = (key, fallback) => I18n.t(key) || fallback;
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g,
+    c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  // Monogram tiles instead of logos: a third-party logo CDN on every card would
+  // hand each reader's IP to that vendor for decoration.
+  const HUES = [[99, 102, 241], [56, 189, 248], [52, 211, 153], [251, 191, 36],
+                [244, 114, 182], [167, 139, 250], [45, 212, 191], [251, 146, 60]];
+  let view = 'all';
+
+  function tile(t) {
+    let h = 0;
+    for (const ch of t) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+    const [r, g, b] = HUES[h % HUES.length];
+    const letters = t.replace(/[^A-Z0-9]/g, '').slice(0, t.length > 4 ? 3 : 4);
+    // The hue as it is on near-black; darkened to read on white.
+    const k = window.CT && CT.dark ? 1 : 0.55;
+    const ink = `rgb(${Math.round(r * k)},${Math.round(g * k)},${Math.round(b * k)})`;
+    return `<span class="co-tile" style="background: rgba(${r},${g},${b},.16); color: ${ink}">${esc(letters)}</span>`;
+  }
+
+  function mcap(b) {
+    if (typeof b !== 'number') return null;
+    return b >= 1000 ? `$${(b / 1000).toFixed(2)}T` : b >= 1 ? `$${b.toFixed(b >= 100 ? 0 : 1)}B` : `$${(b * 1000).toFixed(0)}M`;
+  }
+
+  function matches(row, q) {
+    if (!q) return true;
+    const name = (I18n.stockName ? I18n.stockName(row.t, row.n) : row.n) || '';
+    return row.t.startsWith(q.toUpperCase()) || name.toLowerCase().includes(q.toLowerCase())
+      || (row.n || '').toLowerCase().includes(q.toLowerCase());
+  }
+
+  function render() {
+    const q = F('coSearch').value.trim();
+    const group = F('coGroup').value;
+    let rows = ROWS.filter(r => (!group || r.g.includes(group)) && matches(r, q));
+    if (view === 'gainers') rows = rows.filter(r => typeof r.c === 'number' && r.c > 0).sort((a, b) => b.c - a.c);
+    if (view === 'losers') rows = rows.filter(r => typeof r.c === 'number' && r.c < 0).sort((a, b) => a.c - b.c);
+    F('coGrid').innerHTML = rows.map(r => {
+      const name = I18n.stockName ? I18n.stockName(r.t, r.n) : r.n;
+      const chg = typeof r.c === 'number'
+        ? `<span class="co-chg ${r.c > 0 ? 'up' : r.c < 0 ? 'down' : ''}">${r.c > 0 ? '+' : ''}${r.c.toFixed(2)}%</span>`
+        : '<span class="co-chg">—</span>';
+      const foot = [mcap(r.m) && `${tr('companies.mcap', 'Mkt cap')} ${mcap(r.m)}`,
+                    typeof r.pe === 'number' && r.pe > 0 && `${tr('companies.pe', 'P/E')} ${r.pe.toFixed(1)}`,
+                    typeof r.y === 'number' && `${tr('companies.y52', '52W')} ${r.y > 0 ? '+' : ''}${r.y.toFixed(1)}%`]
+        .filter(Boolean).join(' · ');
+      return `<a class="co-card" href="/history/${encodeURIComponent(r.t)}?tab=fundamentals">
+        ${tile(r.t)}
+        <span class="co-ticker">${esc(r.t)}</span>
+        <span class="co-price">${typeof r.p === 'number' ? '$' + r.p.toFixed(2) : '—'}</span>
+        <span class="co-name" title="${esc(name)}">${esc(name)}</span>
+        ${chg}
+        <span class="co-foot">${esc(foot)}</span>
+      </a>`;
+    }).join('');
+    const empty = F('coEmpty');
+    if (rows.length) {
+      empty.hidden = true;
+    } else {
+      empty.hidden = false;
+      empty.textContent = WARMING ? tr('companies.warming', 'Quotes are still loading — try again in a minute.')
+        : q ? tr('companies.empty', 'No company here matches. Press Enter to open “{q}” anyway.').replace('{q}', q.toUpperCase())
+        : tr('companies.none', 'Nothing to show for this filter.');
+    }
+    const parts = [tr('companies.count', '{n} companies').replace('{n}', rows.length)];
+    if (UPDATED) parts.push(tr('companies.updated', 'quotes refresh in rotation · last update {t}')
+      .replace('{t}', I18n.datetime(UPDATED)));
+    F('coMeta').textContent = parts.join(' · ');
+  }
+
+  document.addEventListener('click', e => {
+    const chip = e.target.closest('[data-co-view]');
+    if (!chip) return;
+    view = chip.dataset.coView;
+    document.querySelectorAll('[data-co-view]').forEach(b => b.classList.toggle('is-on', b === chip));
+    render();
+  });
+  F('coGroup').addEventListener('change', render);
+  F('coSearch').addEventListener('input', render);
+  // Enter opens the one match, or any ticker typed: the Fundamentals tab works
+  // for every symbol, not only the ones listed here.
+  F('coSearch').addEventListener('keydown', e => {
+    if (e.key !== 'Enter') return;
+    const q = F('coSearch').value.trim();
+    if (!q) return;
+    const hits = ROWS.filter(r => matches(r, q));
+    const exact = ROWS.find(r => r.t === q.toUpperCase());
+    // Lower-case words are a name being searched ("apple"): the largest match.
+    // Anything else is a ticker, listed or not ("AA" must not become AAPL).
+    const byName = /^[a-z][a-z\s.&'-]*$/.test(q) && hits.length;
+    const symbol = exact ? exact.t : hits.length === 1 ? hits[0].t
+      : byName ? hits[0].t : q.toUpperCase().replace(/\s+/g, '');
+    location.href = `/history/${encodeURIComponent(symbol)}?tab=fundamentals`;
+  });
+  document.addEventListener('i18n:langchange', render);
+  render();
+})();
+</script>
+{% endblock %}

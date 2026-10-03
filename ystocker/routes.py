@@ -3998,6 +3998,55 @@ def lookup():
                            fetch_errors=[])
 
 
+def _company_cards(data: Optional[Dict[str, Dict[str, dict]]]) -> list[dict]:
+    """One compact row per tracked company, largest first, with its groups.
+
+    A ticker sits in several peer groups (MSFT is in four); it is one card here
+    and carries every group, so the sector filter finds it under each.
+    """
+    rows: dict[str, dict] = {}
+    for group, tickers in (data or {}).items():
+        for symbol, raw in (tickers or {}).items():
+            if not isinstance(raw, dict):
+                continue
+            row = rows.get(symbol)
+            if row is None:
+                row = rows[symbol] = {
+                    "t": symbol,
+                    "n": raw.get("Name") or symbol,
+                    "p": _safe(raw.get("Current Price")),
+                    "c": _safe(raw.get("Day Change (%)")),
+                    "m": _safe(raw.get("Market Cap ($B)")),
+                    "pe": _safe(raw.get("PE (TTM)")),
+                    "y": _safe(raw.get("52W Return (%)")),
+                    "g": [],
+                }
+            row["g"].append(group)
+    return sorted(rows.values(), key=lambda r: -(r["m"] or 0))
+
+
+@bp.route("/companies")
+def companies():
+    """Every company the site follows, as cards -- the way into each one's
+    Fundamentals tab on /history.
+
+    Modelled on alphascope.trade's dashboard ("Find your next move"). Built from
+    the ticker cache the rolling refresher keeps warm, so it fetches nothing and
+    costs nothing to serve. Quotes there refresh a few at a time through the
+    day, which the page says rather than implying one snapshot.
+    """
+    log.info("GET /companies")
+    data = _get_data()
+    with _cache_lock:
+        updated = _cache_last_updated
+    return render_template("companies.html",
+                           peer_groups=list(PEER_GROUPS.keys()),
+                           companies=_company_cards(data),
+                           updated=updated,
+                           warming=data is None,
+                           fetch_errors=[])
+
+
 @bp.route("/api/ticker/<ticker>")
 def api_ticker(ticker: str):
     """

@@ -40,6 +40,7 @@
             <a href="{{ url_for('main.sector', sector_name=g) }}" data-i18n="sector.name.{{ g }}">{{ g }}</a>
             {% endfor %}
           </div>
+          <a class="w-sub-menu-foot" href="{{ url_for('main.companies') }}" data-i18n="nav.all_companies">All companies →</a>
           <a class="w-sub-menu-foot" href="{{ url_for('main.evaluation') }}#sectors" data-i18n="nav.view_all">View all sectors ↓</a>
         </div>
       </div>
