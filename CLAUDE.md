@@ -295,6 +295,10 @@ Each app follows the same pattern:
   the `/dca` valuation engine. `dca.py` and `dcf.py` are **pure** for the same
   reason `lookthrough.py` is: a DCF is mostly assumption, so the arithmetic on
   top of those assumptions is the one part that can actually be proven.
+- `xbrl.py` / `statements.py` / `fundamentals.py` — the Fundamentals tab on
+  `/history/<ticker>`: a company's quarterly figures from its own SEC filings
+  (XBRL companyfacts), Yahoo's statement tables where SEC has none. The first two
+  are pure. See "The Fundamentals tab" below.
 - `predictions.py` / `odds.py` / `odds_ai.py` / `odds_ledger.py` — `/predictions`:
   live Polymarket and Kalshi odds, the Fed decision three ways (futures vs both
   venues), and the AI read with its scored track record. `odds.py` is pure. See
@@ -1436,6 +1440,70 @@ IAM already grants `table/ystocker-*`. No TTL. Tests:
 `tests/test_research_store.py` (25, an in-memory table that evaluates the real
 boto3 key conditions), `tests/test_agents_ticker_runs.py` (10) and
 `tests/check_research_endpoints.py` (22, hermetic, through the Flask test client).
+
+### The Fundamentals tab on /history (`xbrl.py`, `statements.py`, `fundamentals.py`)
+
+Modelled on alphascope.trade's company page (2026-10-03): a grid of small
+multiples — revenue, gross profit, margins, operating and net income, EPS,
+operating and free cash flow, capex, cash and debt, diluted shares, buybacks and
+dividends, P/E and P/S — each a bar chart with its latest value, the change on a
+year ago and an expand button, switchable between quarterly, trailing twelve
+months and annual, over 3/5/10 years or everything. The Charts tab's "Annual
+Financials" card is Yahoo's four years; this is the company's own filings back to
+the 2009–2011 XBRL phase-in, from EDGAR's keyless companyfacts document (one
+request, 3–8 MB, ~0.1 s to parse on the box).
+
+**Every ticker gets the tab.** EDGAR first; where SEC has nothing — Tokyo,
+Seoul, Hong Kong, Shanghai listings — Yahoo's statement tables (about four years
+and the latest quarters), and the payload's `source` says which. A 20-F filer
+(TSM, ASML, SAP) is annual-only from EDGAR and is **never** topped up with Yahoo
+quarters: Yahoo states TSMC's EPS per ADR and EDGAR per ordinary share, and one
+chart would show a five-fold unit change as growth. An index, ETF, coin or
+currency is answered `not_a_company` without a request.
+
+What the filings do not say, and how `xbrl.py` closes each gap — all pinned
+against NVIDIA's real figures in `tests/test_xbrl.py`:
+
+- **Nobody files a Q4, and 10-Q cash flows are year-to-date.** One rule covers
+  both: two cumulative figures with the same start, a quarter apart, differ by
+  that quarter (FY − 9M, H1 − Q1, 9M − H1). Every such figure carries a code
+  (`ytd`, `q4`, `fyq`, `avg4`, `calc`) and the tooltip words it.
+- **A split re-bases per-share figures from the next filing on.** Facts are
+  re-based by the splits *after their filed date* (NVIDIA's Q1 FY25 EPS is $5.98
+  as filed, $0.60 restated). The split history rides the one Yahoo price request;
+  if it cannot be read, EPS and shares are withheld (`splits_unknown`), not drawn
+  across a split as a cliff.
+- **Tags change** (`SalesRevenueNet` → ASC 606 in 2018; Oracle's bonds as notes
+  payable). Candidates splice only if they agree within 2% on their *oldest*
+  shared periods — the newest overlap is where restatements live (Coca-Cola
+  2018) — so a component can never be stitched onto a total.
+- **Computed gross profit is refused for an insurer** (UnitedHealth's
+  "cost of goods" is the pharmacy alone: an 88% margin) **and for a cost line
+  under 25% of total costs** (McDonald's: 90%).
+- **Fiscal labels come from the filing whose own year it is**, never the earliest
+  mention: TSMC's first XBRL 20-F tags 2015 and 2016 fy=2017. Quarters are named
+  by where they fall in their fiscal year.
+- **Cash excludes marketable securities**, deliberately: NVIDIA moved that line
+  between concepts with no overlapping period, and a sum would drop $50B on a
+  relabel. **P/E and P/S only for a domestic USD filer** (or a Yahoo listing
+  quoted in its reporting currency) — the TSM-P/E-of-1.01 trap again.
+
+The page caps a ratio bar at 4× its median (INTC's 1,149× would flatten ten
+years) and says so in the tooltip; a negative TTM EPS is `n/m`, never an old P/E.
+
+**The request path never fetches.** `/api/fundamentals/<t>` reads the disk cache
+(`cache/fundamentals/`, 12 h TTL, stale served while it rebuilds); a cold ticker
+is 202 and one background build per symbol, under a budget of 2 in flight and
+3 s between starts (8 s extra after an 8-request Yahoo-statements build). A
+failed build leaves a 10-minute marker read by every worker, so the page's
+bounded poll ends on "couldn't load" + Retry (`?retry=1`) rather than spinning.
+All EDGAR traffic goes through `sec13f.edgar_get`: SEC's rate limit is per
+client, not per module.
+
+Tests: `tests/test_xbrl.py` (51, NVIDIA's filings), `tests/test_statements.py`
+(12, Yahoo's tables as served), `node tests/check_fundamentals_js.mjs` (40, the
+range/YoY/cap arithmetic) and `tests/check_fundamentals_endpoints.py` (18,
+hermetic). Not a DynamoDB table: every figure can be fetched again.
 
 ### Choosing the model and thinking depth (`agent_models.py`)
 

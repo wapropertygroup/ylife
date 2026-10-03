@@ -689,6 +689,16 @@ def _get(url: str, **kwargs) -> requests.Response:
     )
 
 
+def edgar_get(url: str, **kwargs) -> requests.Response:
+    """:func:`_get` for callers outside this module (``fundamentals.py``).
+
+    SEC's rate limit is per client, not per module, so every EDGAR request in
+    the process goes through the one throttle and the one breaker here rather
+    than each caller pacing itself and the sum exceeding the limit.
+    """
+    return _get(url, **kwargs)
+
+
 def _get_maybe(url: str, **kwargs) -> Optional[requests.Response]:
     """
     Rate-limited GET that returns None on 404/403/503 instead of raising.

@@ -3693,6 +3693,51 @@ def api_financials(ticker: str):
     return jsonify(result)
 
 
+@bp.route("/api/fundamentals/<ticker>")
+def api_fundamentals(ticker: str):
+    """A company's quarterly figures from its SEC filings, or Yahoo's statements.
+
+    Backs the Fundamentals tab on /history, for any ticker. Only ever reads the
+    cache (``fundamentals.peek``): a cold ticker answers 202 and starts one
+    background build -- one EDGAR and one Yahoo request, or eight Yahoo ones for
+    a listing SEC does not cover. A stale payload is served, flagged, while its
+    rebuild runs behind it: quarterly figures a few hours past their TTL are
+    still the right answer.
+
+    ``unavailable`` payloads (not a company, no statements anywhere) are answers
+    and come back 200. A recent build *failure* is 503, so the page's poll ends
+    on a message rather than at its attempt cap -- and while that failure is
+    recent, a stale copy is served without asking again.
+    """
+    from ystocker import fundamentals
+
+    symbol = fundamentals.normalise(ticker)
+    if symbol is None:
+        return jsonify({"error": "invalid ticker"}), 400
+
+    payload = fundamentals.peek(symbol)
+    if payload is not None:
+        stale = fundamentals.is_stale(payload)
+        if stale and fundamentals.recent_failure(symbol) is None:
+            fundamentals.kick(symbol)
+        body = {k: v for k, v in payload.items() if not k.startswith("_")}
+        body["as_of"] = payload.get("_ts")
+        body["stale"] = stale
+        return jsonify(body)
+
+    failed = fundamentals.recent_failure(symbol)
+    if failed is not None and not fundamentals.building(symbol) \
+            and request.args.get("retry") != "1":
+        return jsonify({"ticker": symbol, "status": "failed",
+                        "reason": failed.get("reason")}), 503
+
+    started = fundamentals.kick(symbol)
+    # "queued" means no slot was free, so nothing has started yet -- the page
+    # can say "waiting" instead of implying progress.
+    return jsonify({"ticker": symbol, "status": "warming",
+                    "queued": not (started or fundamentals.building(symbol))}), 202
+
+
 @bp.route("/api/peers/<ticker>")
 def api_peers(ticker: str):
     """Return peer group metrics for the given ticker from the in-memory cache."""

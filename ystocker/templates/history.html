@@ -4,6 +4,7 @@
 {% block content %}
 <script src="{{ url_for('static', filename='markdown.js') }}?v={{ cache_bust or 'dev' }}"></script>
 <script src="{{ url_for('static', filename='ystime.js') }}?v={{ cache_bust or 'dev' }}"></script>
+<script src="{{ url_for('static', filename='fundamentals.js') }}?v={{ cache_bust or 'dev' }}"></script>
 <style>
   /* ── Theme tokens ────────────────────────────────────────────────────────
      Hand-written CSS, so Tailwind's `dark:` variant reaches none of it. The
@@ -266,6 +267,44 @@
   .ta-other.is-on { border-color: var(--t-accent-line); background: rgba(99,102,241,0.06); }
   /* `hidden` loses to any author `display` (the wiki.css trap), so restore it. */
   .ta-body [hidden], .rs-saved[hidden], .rs-note[hidden] { display: none !important; }
+
+  /* ── Fundamentals tab (#panelFund) ──────────────────────────────────────
+     Hand-written: its cards are built in JS, and a Tailwind class that only
+     ever appears in a template literal can be missing from the compiled
+     bundle. Up/down ink is light-first with .dark overriding, as above. */
+  :root { --fd-up: #047857; --fd-down: #be123c; }
+  .dark { --fd-up: #34d399; --fd-down: #fb7185; }
+  #panelFund [hidden] { display: none !important; }
+  .fd-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between;
+             gap: 10px 16px; margin-bottom: 14px; }
+  .fd-title { font-size: 16px; font-weight: 600; color: var(--t-ink-strong); }
+  .fd-sub { font-size: 12px; color: var(--t-ink-dim); margin-top: 2px; line-height: 1.5; }
+  .fd-sub a { color: var(--t-accent-ink); }
+  .fd-sub a:hover { text-decoration: underline; }
+  .fd-controls { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; }
+  .fd-seg { display: inline-flex; gap: 4px; }
+  .fd-seg .range-btn:disabled { opacity: .4; cursor: not-allowed; }
+  .fd-status { font-size: 13px; color: var(--t-ink-muted); padding: 14px 0; }
+  .fd-status .explain-btn { margin-left: 8px; }
+  .fd-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  @media (min-width: 640px) { .fd-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (min-width: 1100px) { .fd-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+  .fd-card { background: var(--t-surface); border: 1px solid var(--t-line); border-radius: 12px;
+             padding: 12px 12px 8px; display: flex; flex-direction: column; min-width: 0; }
+  .fd-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+  .fd-card-title { font-size: 12px; font-weight: 600; color: var(--t-ink-muted); }
+  .fd-card-value { font-size: 18px; font-weight: 700; color: var(--t-ink-strong);
+                   font-variant-numeric: tabular-nums; margin-top: 2px; }
+  .fd-chip { font-size: 11px; font-weight: 600; margin-left: 6px; white-space: nowrap; }
+  .fd-chip.up { color: var(--fd-up); }
+  .fd-chip.down { color: var(--fd-down); }
+  .fd-card-meta { font-size: 10.5px; color: var(--t-ink-dim); margin-top: 1px; min-height: 1.3em; }
+  .fd-canvas { position: relative; height: 150px; margin-top: 8px; }
+  .fd-card-foot { font-size: 10px; color: var(--t-ink-dim); margin-top: 4px; min-height: 1.2em; }
+  .fd-missing { margin-top: 12px; font-size: 12px; color: var(--t-ink-dim); }
+  .fd-notes { margin-top: 14px; padding-left: 1.1em; list-style: disc; font-size: 11.5px;
+              color: var(--t-ink-dim); line-height: 1.6; }
+  .fd-notes li { margin: 2px 0; }
 </style>
 
 <div class="mb-6 sm:mb-8 fade-up">
@@ -326,18 +365,21 @@
 </div>
 
 <!-- ── Tab switcher ──────────────────────────────────────────────────── -->
-<div class="flex gap-1 mb-6 border-b border-slate-200 dark:border-slate-800">
+<div class="flex gap-1 mb-6 border-b border-slate-200 dark:border-slate-800 overflow-x-auto scrollbar-hide">
   <button id="tabChartsBtn" onclick="switchTab('charts')"
-          class="px-4 py-2 text-sm font-medium border-b-2 border-brand text-brand -mb-px transition"
+          class="px-4 py-2 text-sm font-medium border-b-2 border-brand text-brand -mb-px transition whitespace-nowrap shrink-0"
           data-i18n="history.tab_charts">Charts &amp; Holdings</button>
+  <button id="tabFundBtn" onclick="switchTab('fundamentals')"
+          class="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 -mb-px transition whitespace-nowrap shrink-0"
+          data-i18n="history.tab_fund">Fundamentals</button>
   <button id="tabNewsBtn" onclick="switchTab('news')"
-          class="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 -mb-px transition"
+          class="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 -mb-px transition whitespace-nowrap shrink-0"
           data-i18n="history.tab_news">News</button>
   <button id="tabVideosBtn" onclick="switchTab('videos')"
-          class="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 -mb-px transition"
+          class="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 -mb-px transition whitespace-nowrap shrink-0"
           data-i18n="history.tab_videos">Videos</button>
   <button id="tabResearchBtn" onclick="switchTab('research')"
-          class="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 -mb-px transition"
+          class="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 -mb-px transition whitespace-nowrap shrink-0"
           data-i18n="history.tab_research">✦ Research</button>
 </div>
 
@@ -1356,6 +1398,8 @@
       <div>
         <h2 class="text-base font-semibold text-slate-700 dark:text-slate-200" data-i18n="history.financials_title">Annual Financials</h2>
         <p class="text-xs text-slate-500" data-i18n="history.financials_desc">3-year actuals · 2-year forward estimates · values in $B except EPS</p>
+        <button type="button" onclick="switchTab('fundamentals'); window.scrollTo({top: 0, behavior: 'smooth'})"
+                class="explain-btn mt-2" data-i18n="fund.open_tab">10+ years of quarterly history →</button>
       </div>
       <div class="flex items-center gap-2 flex-wrap justify-end">
         <span class="flex items-center gap-1.5 text-xs text-sky-700 dark:text-sky-400"><span class="inline-block w-2 h-2 rounded-sm bg-sky-500/70"></span> Revenue</span>
@@ -1458,24 +1502,6 @@
 
 </div>
 
-<!-- ── Expand modal ──────────────────────────────────────────────────── -->
-<div id="chartModal" class="fixed inset-0 z-50 items-center justify-center bg-black/80 backdrop-blur-sm" style="display:none">
-  <div class="relative bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-2xl shadow-2xl w-[95vw] max-w-6xl p-5 sm:p-8">
-    <div class="flex items-start justify-between mb-4">
-      <div>
-        <h3 id="modalTitle" class="text-base font-semibold text-slate-700 dark:text-slate-200"></h3>
-        <p id="modalDesc"  class="text-xs text-slate-500 mt-0.5"></p>
-      </div>
-      <button onclick="closeModal()" class="text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 transition ml-4 flex-shrink-0">
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-      </button>
-    </div>
-    <div style="height:65vh; min-height:300px; position:relative">
-      <canvas id="modalCanvas"></canvas>
-    </div>
-  </div>
-</div>
-
 <!-- Insider Transactions -->
 <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6 fade-up" id="insiderSection" style="display:none">
   <div class="flex items-baseline gap-3 mb-3">
@@ -1520,6 +1546,24 @@
 
 </div><!-- end #panelCharts -->
 
+<!-- ── Expand modal ──────────────────────────────────────────────────── -->
+<div id="chartModal" class="fixed inset-0 z-50 items-center justify-center bg-black/80 backdrop-blur-sm" style="display:none">
+  <div class="relative bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-2xl shadow-2xl w-[95vw] max-w-6xl p-5 sm:p-8">
+    <div class="flex items-start justify-between mb-4">
+      <div>
+        <h3 id="modalTitle" class="text-base font-semibold text-slate-700 dark:text-slate-200"></h3>
+        <p id="modalDesc"  class="text-xs text-slate-500 mt-0.5"></p>
+      </div>
+      <button onclick="closeModal()" class="text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 transition ml-4 flex-shrink-0">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div style="height:65vh; min-height:300px; position:relative">
+      <canvas id="modalCanvas"></canvas>
+    </div>
+  </div>
+</div>
+
 <!-- ── News panel ────────────────────────────────────────────────────── -->
 <div id="panelNews" style="display:none">
 
@@ -1560,6 +1604,37 @@
        data-i18n="history.videos_open_yt">Open on YouTube ↗</a>
   </div>
   <div id="videosFeed" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+</div>
+
+<!-- ── Fundamentals panel ─────────────────────────────────────────────
+     Ten-plus years of quarterly figures from the company's own SEC filings
+     (/api/fundamentals, ystocker/xbrl.py), or Yahoo's statement tables for a
+     listing SEC does not cover. Filled by the script near the end of this
+     page on the tab's first open. -->
+<div id="panelFund" style="display:none">
+  <div class="fd-head">
+    <div>
+      <h2 class="fd-title" data-i18n="fund.title">Fundamentals</h2>
+      <p class="fd-sub" id="fundSub"></p>
+    </div>
+    <div class="fd-controls" id="fundControls" hidden>
+      <div class="fd-seg" role="group">
+        <button type="button" class="range-btn" data-fund-view="quarterly" data-i18n="fund.view_quarterly">Quarterly</button>
+        <button type="button" class="range-btn" data-fund-view="ttm" data-i18n="fund.view_ttm">TTM</button>
+        <button type="button" class="range-btn" data-fund-view="annual" data-i18n="fund.view_annual">Annual</button>
+      </div>
+      <div class="fd-seg" role="group">
+        <button type="button" class="range-btn" data-fund-range="3y">3Y</button>
+        <button type="button" class="range-btn" data-fund-range="5y">5Y</button>
+        <button type="button" class="range-btn" data-fund-range="10y">10Y</button>
+        <button type="button" class="range-btn" data-fund-range="max" data-i18n="fund.range_max">Max</button>
+      </div>
+    </div>
+  </div>
+  <div id="fundStatus" class="fd-status"></div>
+  <div id="fundGrid" class="fd-grid"></div>
+  <p id="fundMissing" class="fd-missing" hidden></p>
+  <ul id="fundNotes" class="fd-notes"></ul>
 </div>
 
 <!-- ── Research panel (full stock-research template) ──────────────── -->
@@ -4307,6 +4382,12 @@ function expandChart(key) {
   document.getElementById('modalDesc').textContent  = cfg._desc  || '';
   modal.style.display = 'flex';
   if (_modalChart) { _modalChart.destroy(); _modalChart = null; }
+  // A Fundamentals card registers a builder: the JSON clone below drops every
+  // function, and its tooltips and tick formats are all functions.
+  if (typeof cfg._rebuild === 'function') {
+    _modalChart = new Chart(document.getElementById('modalCanvas'), cfg._rebuild());
+    return;
+  }
   const plugins = cfg.plugins;
   const clone = JSON.parse(JSON.stringify(cfg, (k, v) => k.startsWith('_') ? undefined : v));
   if (plugins) clone.plugins = plugins;
@@ -4420,7 +4501,9 @@ function switchTab(tab) {
   const isNews     = tab === 'news';
   const isVideos   = tab === 'videos';
   const isResearch = tab === 'research';
+  const isFund     = tab === 'fundamentals';
   document.getElementById('panelCharts').style.display   = isCharts   ? '' : 'none';
+  document.getElementById('panelFund').style.display     = isFund     ? '' : 'none';
   document.getElementById('panelNews').style.display     = isNews     ? '' : 'none';
   document.getElementById('panelVideos').style.display   = isVideos   ? '' : 'none';
   document.getElementById('panelResearch').style.display = isResearch ? '' : 'none';
@@ -4429,9 +4512,11 @@ function switchTab(tab) {
   const newsBtn     = document.getElementById('tabNewsBtn');
   const videosBtn   = document.getElementById('tabVideosBtn');
   const researchBtn = document.getElementById('tabResearchBtn');
-  const activeClass   = 'px-4 py-2 text-sm font-medium border-b-2 -mb-px transition border-brand text-brand';
-  const inactiveClass = 'px-4 py-2 text-sm font-medium border-b-2 -mb-px transition border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200';
+  const fundBtn     = document.getElementById('tabFundBtn');
+  const activeClass   = 'px-4 py-2 text-sm font-medium border-b-2 -mb-px transition border-brand text-brand whitespace-nowrap shrink-0';
+  const inactiveClass = 'px-4 py-2 text-sm font-medium border-b-2 -mb-px transition border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 whitespace-nowrap shrink-0';
   chartsBtn.className   = isCharts   ? activeClass : inactiveClass;
+  fundBtn.className     = isFund     ? activeClass : inactiveClass;
   newsBtn.className     = isNews     ? activeClass : inactiveClass;
   videosBtn.className   = isVideos   ? activeClass : inactiveClass;
   researchBtn.className = isResearch ? activeClass : inactiveClass;
@@ -4450,6 +4535,7 @@ function switchTab(tab) {
   }
   if (isVideos && !_videosLoaded) loadVideos();
   if (isResearch && typeof _initResearchPanel === 'function') _initResearchPanel();
+  if (isFund && typeof _initFundPanel === 'function') _initFundPanel();
 }
 
 // ── News feed ─────────────────────────────────────────────────────────────────
@@ -6181,8 +6267,412 @@ async function explainChart(chartKey) {
   document.addEventListener('i18n:langchange', () => { if (state !== 'idle') render(); });
 })();
 
+// ── Fundamentals tab ─────────────────────────────────────────────────────────
+// A company's quarterly figures from its own filings, ten years and more back:
+// SEC EDGAR's XBRL (ystocker/xbrl.py), or Yahoo's statement tables for a
+// listing SEC does not cover (ystocker/statements.py). Loaded on the tab's
+// first open, never with the page. The arithmetic -- which periods a range
+// shows, what "a year ago" compares, where a ratio chart is capped -- is
+// static/fundamentals.js, which tests/check_fundamentals_js.mjs pins.
+//
+// The cards are built here rather than in the markup, so their styling is the
+// hand-written .fd-* rules at the top of this page: a Tailwind class that only
+// ever appears in a template literal can be missing from the compiled bundle.
+(function () {
+  const F = window.Fundamentals;
+  // Mapped once, here: CT.c() turns each dark-theme hue into its light-mode
+  // counterpart, and tests/test_chart_theme_map.py checks every literal is wrapped.
+  const SKY = CT.c('rgba(56,189,248,0.6)'), EMERALD = CT.c('rgba(52,211,153,0.6)'),
+        VIOLET = CT.c('rgba(167,139,250,0.6)'), AMBER = CT.c('rgba(251,191,36,0.6)'),
+        RED = CT.c('rgba(248,113,113,0.6)'), INDIGO = CT.c('rgba(99,102,241,0.75)'),
+        ORANGE = CT.c('rgba(251,146,60,0.6)'), MEDIAN = CT.c('rgba(148,163,184,0.7)');
+  // Order reads like the statements: income, cash, balance sheet, per share,
+  // what the market pays for it.
+  const CARDS = [
+    { key: 'revenue', metrics: ['revenue'], kind: 'money', colors: [SKY] },
+    { key: 'gross_profit', metrics: ['gross_profit'], kind: 'money', colors: [EMERALD] },
+    { key: 'margins', metrics: ['gross_margin', 'operating_margin', 'net_margin'], kind: 'pct',
+      type: 'line', colors: [EMERALD, SKY, VIOLET] },
+    { key: 'operating_income', metrics: ['operating_income'], kind: 'money', colors: [SKY] },
+    { key: 'net_income', metrics: ['net_income'], kind: 'money', colors: [EMERALD] },
+    { key: 'eps', metrics: ['eps'], kind: 'eps', colors: [VIOLET] },
+    { key: 'ocf', metrics: ['ocf'], kind: 'money', colors: [SKY] },
+    { key: 'fcf', metrics: ['fcf'], kind: 'money', colors: [EMERALD] },
+    // Drawn below zero, as the cash it is leaving.
+    { key: 'capex', metrics: ['capex'], kind: 'money', colors: [AMBER], negate: true },
+    // Balances, not flows: two lines read better than eighty interleaved bars.
+    { key: 'cash_debt', metrics: ['cash', 'debt'], kind: 'money', type: 'line', zero: true,
+      colors: [EMERALD, RED], noChange: true },
+    { key: 'shares', metrics: ['shares'], kind: 'shares', colors: [INDIGO] },
+    { key: 'returns', metrics: ['buybacks', 'dividends'], kind: 'money', colors: [SKY, VIOLET],
+      stacked: true, noChange: true },
+    { key: 'pe', metrics: ['pe'], valuation: true, kind: 'x', colors: [AMBER] },
+    { key: 'ps', metrics: ['ps'], valuation: true, kind: 'x', colors: [AMBER] },
+  ];
+  const STORE_VIEW = 'ystocker_fund_view', STORE_RANGE = 'ystocker_fund_range';
+  const POLL_MS = [1500, 2000, 3000, 4000, 5000, 6000, 8000, 10000, 10000, 10000];
+
+  let payload = null, started = false, loading = false;
+  let view = localStorage.getItem(STORE_VIEW) || 'quarterly';
+  let range = localStorage.getItem(STORE_RANGE) || '10y';
+  const charts = {};
+  const $ = id => document.getElementById(id);
+  const tr = (key, fallback) => I18n.t(key) || fallback;
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g,
+    c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+  function setStatus(state, extra) {
+    const el = $('fundStatus');
+    const messages = {
+      loading: tr('fund.loading', 'Loading fundamentals…'),
+      building: tr('fund.building', 'Reading this company’s filings — the first view of a ticker takes a few seconds…'),
+      queued: tr('fund.queued', 'Waiting for a slot — another company is being read…'),
+      failed: tr('fund.failed', 'Couldn’t load the filings just now.'),
+      timeout: tr('fund.timeout', 'Still working on it — this is taking longer than usual.'),
+      invalid: tr('fund.invalid', 'This is not a ticker the filings can be looked up by.'),
+    };
+    if (!state) { el.hidden = true; el.innerHTML = ''; return; }
+    el.hidden = false;
+    const msg = state === 'unavailable'
+      ? tr('fund.un_' + extra, tr('fund.un_no_statements', 'No financial statements were found for this listing.'))
+      : messages[state];
+    const retry = (state === 'failed' || state === 'timeout')
+      ? ` <button type="button" class="explain-btn" data-fund-retry>${esc(tr('fund.retry', 'Retry'))}</button>` : '';
+    const pulse = (state === 'loading' || state === 'building' || state === 'queued') ? ' animate-pulse' : '';
+    el.innerHTML = `<span class="${pulse.trim()}">${esc(msg)}</span>${retry}`;
+  }
+
+  async function load(retry) {
+    if (loading) return;
+    loading = true;
+    setStatus('loading');
+    try {
+      for (let attempt = 0; attempt <= POLL_MS.length; attempt++) {
+        let resp = null, data = null;
+        try {
+          const q = retry && attempt === 0 ? '?retry=1' : '';
+          resp = await fetch(`/api/fundamentals/${encodeURIComponent(TICKER)}${q}`);
+          data = await resp.json();
+        } catch (_) { /* network: falls through to failed */ }
+        if (resp && resp.ok && data) { payload = data; render(); return; }
+        if (resp && resp.status === 400) { setStatus('invalid'); return; }
+        if (!resp || resp.status !== 202) { setStatus('failed'); return; }
+        if (attempt === POLL_MS.length) break;
+        setStatus(data && data.queued ? 'queued' : 'building');
+        await new Promise(r => setTimeout(r, POLL_MS[attempt]));
+      }
+      // The poll is bounded, and its last state must be drawn: stopping the
+      // timer alone would leave "Reading…" on screen for ever.
+      setStatus('timeout');
+    } finally {
+      loading = false;
+    }
+  }
+
+  // What each view reads. TTM shares the quarterly periods; valuation rides
+  // the quarterly ends, so the annual view picks the quarters that end a year.
+  function source() {
+    const q = payload.quarterly, a = payload.annual;
+    if (view === 'annual') return { ends: a.end, labels: a.label, values: a.values, how: a.how };
+    if (view === 'ttm') return { ends: q.end, labels: q.label, values: payload.ttm.values, how: {} };
+    return { ends: q.end, labels: q.label, values: q.values, how: q.how };
+  }
+
+  function series(src, card, metric) {
+    if (!card.valuation) return src.values[metric] || [];
+    const val = payload.valuation;
+    if (!val) return src.ends.map(() => null);
+    if (view !== 'annual') return val[metric] || [];
+    const at = {};
+    payload.quarterly.end.forEach((e, i) => { at[e] = i; });
+    return src.ends.map(e => (e in at ? val[metric][at[e]] : null));
+  }
+
+  function periodTitle(src, i) {
+    const label = src.labels[i];
+    const end = src.ends[i];
+    const prefix = view === 'ttm' ? tr('fund.ttm_to', 'TTM to') + ' ' : '';
+    return prefix + (label ? `${label} · ${end}` : end);
+  }
+
+  function currency() { return (payload.basis || {}).currency || 'USD'; }
+
+  function destroyCharts() {
+    Object.keys(charts).forEach(k => { try { charts[k].destroy(); } catch (_) {} delete charts[k]; });
+  }
+
+  function buildConfig(card, src, idx, big) {
+    const cur = currency();
+    const labels = idx.map(i => F.tick(src.ends[i], src.labels[i], view));
+    const isLine = card.type === 'line';
+    let cap = null, clipped = [];
+    const datasets = card.metrics.map((metric, n) => {
+      let raw = idx.map(i => series(src, card, metric)[i]);
+      if (card.negate) raw = raw.map(v => (typeof v === 'number' ? -v : v));
+      let data = raw.slice();
+      if (card.valuation) {
+        const c = F.capRatios(raw, 4);
+        cap = c.cap; clipped = c.clipped;
+        if (cap !== null) data = raw.map((v, k) => (c.clipped[k] ? cap : v));
+      }
+      const base = card.colors[n] || card.colors[0];
+      const colors = data.map((v, k) => {
+        if (card.valuation && clipped[k]) return ORANGE;
+        if (!card.negate && !isLine && card.metrics.length === 1 && typeof v === 'number' && v < 0) return RED;
+        return base;
+      });
+      const ds = {
+        ...I18n.label('fund.s_' + metric, metric), data, _raw: raw, _metric: metric,
+        backgroundColor: isLine ? base : colors, borderColor: base,
+      };
+      if (isLine) Object.assign(ds, { type: 'line', fill: false, tension: 0.25, pointRadius: 0,
+                                      pointHoverRadius: 3, borderWidth: 1.6, spanGaps: false });
+      else Object.assign(ds, { borderRadius: 2, borderWidth: 0, barPercentage: 0.92,
+                               categoryPercentage: card.stacked ? 0.92 : 0.86,
+                               stack: card.stacked ? 'returns' : undefined });
+      return ds;
+    });
+    let median = null;
+    if (card.valuation) {
+      median = F.median(datasets[0]._raw.filter(v => typeof v === 'number' && v > 0));
+      if (median !== null) datasets.push({
+        ...I18n.label('fund.s_median', 'Median'), type: 'line', data: idx.map(() => median),
+        borderColor: MEDIAN, borderDash: [4, 3], borderWidth: 1, pointRadius: 0, pointHoverRadius: 0,
+        fill: false, _raw: idx.map(() => median), _median: true,
+      });
+    }
+    const tick = { color: CT.c('#64748b'), font: { size: big ? 11 : 9 } };
+    return {
+      type: 'bar',
+      data: { labels, datasets },
+      options: {
+        responsive: true, maintainAspectRatio: false, animation: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { display: big && datasets.length > 1, labels: { color: CT.c('#94a3b8'), boxWidth: 10 } },
+          tooltip: {
+            filter: item => !item.dataset._median,
+            callbacks: {
+              title: items => (items.length ? periodTitle(src, idx[items[0].dataIndex]) : ''),
+              label: item => {
+                const ds = item.dataset;
+                let v = ds._raw[item.dataIndex];
+                if (card.negate && typeof v === 'number') v = -v;
+                let text = `${ds.label}: ${F.format(v, card.kind, cur)}`;
+                if (card.valuation && clipped[item.dataIndex]) {
+                  text += ' — ' + tr('fund.capped', 'bar capped at 4× the median');
+                }
+                return text;
+              },
+              afterBody: items => {
+                if (!items.length) return [];
+                const i = idx[items[0].dataIndex];
+                const notes = [];
+                card.metrics.forEach(m => {
+                  const code = (src.how[m] || {})[String(i)];
+                  if (code) notes.push(tr('fund.how_' + code, code));
+                });
+                if (median !== null) notes.push(`${tr('fund.s_median', 'Median')}: ${F.format(median, 'x')}`);
+                return Array.from(new Set(notes));
+              },
+            },
+          },
+        },
+        scales: {
+          x: { stacked: !!card.stacked, grid: { display: false },
+               ticks: { ...tick, maxRotation: 0, autoSkip: true, maxTicksLimit: big ? 12 : 5 } },
+          y: { stacked: !!card.stacked, beginAtZero: !isLine || !!card.zero,
+               max: cap === null ? undefined : cap * 1.04,
+               grid: { color: CT.c('#1e293b') },
+               ticks: { ...tick, maxTicksLimit: big ? 8 : 4, callback: v => F.axis(v, card.kind, cur) } },
+        },
+      },
+    };
+  }
+
+  function headline(card, src, idx) {
+    const cur = currency();
+    const first = series(src, card, card.metrics[0]);
+    const newest = idx[idx.length - 1];
+    if (card.valuation && newest !== undefined && typeof first[newest] !== 'number') {
+      // The newest period has no multiple. Say why, rather than headline one
+      // from a year ago: a P/E of 1,149 from last spring is not today's.
+      const eps = (view === 'annual' ? payload.annual.values.eps : payload.ttm.values.eps) || [];
+      const loss = card.key === 'pe' && typeof eps[newest] === 'number' && eps[newest] <= 0;
+      return { html: `<div class="fd-card-value">${loss ? 'n/m' : '—'}</div>`,
+               meta: `${periodTitle(src, newest)} · ${loss
+                 ? tr('fund.pe_nm', 'not meaningful: trailing earnings are negative')
+                 : tr('fund.na', 'not available for this period')}`,
+               derived: '' };
+    }
+    const i = F.latest(first, idx);
+    if (i === null) return null;
+    let value = first[i];
+    let html = `<div class="fd-card-value">${esc(F.format(value, card.kind, cur))}`;
+    if (!card.noChange && !card.valuation) {
+      const ch = F.change(first, src.ends, i, view, card.kind);
+      if (ch) {
+        const up = (ch.rel !== undefined ? ch.rel : ch.pp) >= 0;
+        const txt = ch.rel !== undefined
+          ? `${up ? '+' : ''}${(ch.rel * 100).toFixed(Math.abs(ch.rel) < 0.1 ? 1 : 0)}%`
+          : `${up ? '+' : ''}${ch.pp.toFixed(1)}pp`;
+        html += `<span class="fd-chip ${up ? 'up' : 'down'}">${esc(txt)} ${esc(tr('fund.yoy', 'YoY'))}</span>`;
+      }
+    }
+    html += '</div>';
+    const meta = [periodTitle(src, i)];
+    if (card.metrics.length > 1) {
+      meta.unshift(card.metrics.map(m => {
+        const v = series(src, card, m)[i];
+        return `${tr('fund.s_' + m, m)} ${F.format(v, card.kind, cur)}`;
+      }).join(' · '));
+    }
+    if (card.valuation) {
+      const med = F.median(idx.map(k => first[k]).filter(v => typeof v === 'number' && v > 0));
+      if (med !== null) meta.push(`${tr('fund.s_median', 'Median')} ${F.format(med, 'x')}`);
+    }
+    const code = (src.how[card.metrics[0]] || {})[String(i)];
+    return { html, meta: meta.join(' · '), derived: code ? tr('fund.how_' + code, code) : '' };
+  }
+
+  function render() {
+    if (!payload) return;
+    destroyCharts();
+    const grid = $('fundGrid');
+    grid.innerHTML = '';
+    $('fundMissing').hidden = true;
+    $('fundNotes').innerHTML = '';
+    if (payload.unavailable) {
+      $('fundControls').hidden = true;
+      $('fundSub').textContent = payload.entity || '';
+      setStatus('unavailable', payload.unavailable);
+      return;
+    }
+    setStatus(null);
+    const annualOnly = !payload.quarterly.end.length;
+    if (annualOnly) view = 'annual';
+    $('fundControls').hidden = false;
+    document.querySelectorAll('[data-fund-view]').forEach(b => {
+      b.classList.toggle('active', b.dataset.fundView === view);
+      b.disabled = annualOnly && b.dataset.fundView !== 'annual';
+    });
+    document.querySelectorAll('[data-fund-range]').forEach(b => b.classList.toggle('active', b.dataset.fundRange === range));
+    renderSub();
+
+    const src = source();
+    const anchors = ['revenue', 'net_income'];
+    const idx = F.window(src.ends, range, i => anchors.some(m => typeof (src.values[m] || [])[i] === 'number'));
+    const missing = [];
+    let anyCapped = false;
+    CARDS.forEach(card => {
+      const has = card.metrics.some(m => idx.some(i => typeof series(src, card, m)[i] === 'number'));
+      if (!has) {
+        // P/E and P/S withheld on purpose (a currency or ADR mismatch) are
+        // explained in the notes; they are not missing from the filings.
+        if (!(card.valuation && !payload.valuation)) missing.push(tr('fund.card_' + card.key, card.key));
+        return;
+      }
+      const head = headline(card, src, idx);
+      const el = document.createElement('div');
+      el.className = 'fd-card';
+      const title = tr('fund.card_' + card.key, card.key);
+      el.innerHTML = `
+        <div class="fd-card-head">
+          <div class="fd-card-title">${esc(title)}</div>
+          <button type="button" class="expand-btn" data-fund-expand="${card.key}" title="${esc(tr('fund.expand', 'Expand'))}">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
+          </button>
+        </div>
+        ${head ? head.html : ''}
+        <div class="fd-card-meta">${esc(head ? head.meta : '')}</div>
+        <div class="fd-canvas"><canvas></canvas></div>
+        <div class="fd-card-foot"><span>${esc(head ? head.derived : '')}</span></div>`;
+      grid.appendChild(el);
+      const cfg = buildConfig(card, src, idx, false);
+      if (cfg.options.scales.y.max !== undefined) anyCapped = true;
+      charts[card.key] = new Chart(el.querySelector('canvas'), cfg);
+      // The expand modal clones a config without its functions, so it is
+      // handed a builder instead and gets the tooltips and tick formats too.
+      const bigCfg = { _title: `${TICKER} · ${title}`, _desc: subText(), _rebuild: () => buildConfig(card, source(), idx, true) };
+      _registerChart('fund_' + card.key, bigCfg, charts[card.key]);
+    });
+    if (missing.length) {
+      $('fundMissing').textContent = `${tr('fund.not_reported', 'Not in this company’s filings:')} ${missing.join(', ')}`;
+      $('fundMissing').hidden = false;
+    }
+    renderNotes(anyCapped, annualOnly);
+  }
+
+  function subText() {
+    const parts = [];
+    if (payload.entity) parts.push(payload.entity);
+    const b = payload.basis || {};
+    parts.push(b.taxonomy === 'yahoo' ? tr('fund.src_yahoo', 'Yahoo Finance statements')
+      : b.filer === 'foreign' ? tr('fund.src_sec_foreign', 'SEC filings (20-F)')
+      : tr('fund.src_sec', 'SEC filings (10-K / 10-Q)'));
+    const src = view === 'annual' ? payload.annual : payload.quarterly;
+    if (src.end.length) {
+      const first = src.label[0] || src.end[0], last = src.label[src.label.length - 1] || src.end[src.end.length - 1];
+      parts.push(`${first} – ${last}`);
+    }
+    if (b.currency && b.currency !== 'USD') parts.push(b.currency);
+    return parts.join(' · ');
+  }
+
+  function renderSub() {
+    const el = $('fundSub');
+    let html = esc(subText());
+    const latest = payload.latest || {};
+    if (latest.form && latest.filed) {
+      html += ' · ' + esc(tr('fund.filed', 'latest {form} filed {date}')
+        .replace('{form}', latest.form).replace('{date}', latest.filed));
+    }
+    if (payload.cik) {
+      const url = `https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${encodeURIComponent(payload.cik)}&type=10-&dateb=&owner=include&count=40`;
+      html += ` · <a href="${url}" target="_blank" rel="noopener">${esc(tr('fund.edgar', 'Filings on EDGAR ↗'))}</a>`;
+    }
+    el.innerHTML = html;
+  }
+
+  function renderNotes(anyCapped, annualOnly) {
+    const notes = [];
+    const b = payload.basis || {};
+    if (b.taxonomy === 'yahoo') notes.push(tr('fund.note_yahoo', ''));
+    else if (!annualOnly) notes.push(tr('fund.note_derived', ''));
+    notes.push(tr(b.taxonomy === 'yahoo' ? 'fund.note_cash_yahoo' : 'fund.note_cash_sec', ''));
+    (payload.notes || []).forEach(code => notes.push(tr('fund.note_' + code, '')));
+    if (payload.stale) notes.push(tr('fund.note_stale', ''));
+    if (anyCapped) notes.push(tr('fund.note_capped', ''));
+    notes.push(tr('fund.note_disclaimer', ''));
+    $('fundNotes').innerHTML = notes.filter(Boolean).map(n => `<li>${esc(n)}</li>`).join('');
+  }
+
+  // Expose for switchTab() and the ?tab=fundamentals deep link.
+  window._initFundPanel = function () {
+    if (started) return;
+    started = true;
+    load(false);
+  };
+
+  document.addEventListener('click', e => {
+    const v = e.target.closest('[data-fund-view]');
+    if (v && !v.disabled) { view = v.dataset.fundView; localStorage.setItem(STORE_VIEW, view); render(); return; }
+    const r = e.target.closest('[data-fund-range]');
+    if (r) { range = r.dataset.fundRange; localStorage.setItem(STORE_RANGE, range); render(); return; }
+    const x = e.target.closest('[data-fund-expand]');
+    if (x) { expandChart('fund_' + x.dataset.fundExpand); return; }
+    if (e.target.closest('[data-fund-retry]')) load(true);
+  });
+  // Everything on the cards is composed here, where I18n.apply() cannot reach.
+  document.addEventListener('i18n:langchange', () => { if (payload) render(); });
+})();
+
 // ?tab=research opens straight onto the Research tab: where /login sends a
 // reader who signed in from it, and a link to this ticker's research can land.
-if (new URLSearchParams(location.search).get('tab') === 'research') switchTab('research');
+// ?tab=fundamentals is the Fundamentals tab's own link.
+{
+  const _tab = new URLSearchParams(location.search).get('tab');
+  if (_tab === 'research' || _tab === 'fundamentals') switchTab(_tab);
+}
 </script>
 {% endblock %}
