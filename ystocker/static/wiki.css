@@ -429,7 +429,28 @@ html[lang^="zh"] .w-top-name small { letter-spacing: .06em; }
   display: flex; align-items: center; gap: 20px;
   max-width: calc(1180px + 48px); min-height: 44px; margin: 0 auto; padding: 0 24px;
 }
-.w-sub-links { display: flex; align-items: center; gap: 20px; min-width: 0; }
+/* The links scroll sideways at any width they do not fit, fading on the side
+   with more to see (data-fade, set by the bar's script). Only the phone had
+   this while the row held the Sectors and Macro menus, which a scrolling box
+   would clip; with every link a plain link, a laptop narrower than the row
+   scrolls it too, rather than letting it run under ↻ Refresh. */
+.w-sub-links {
+  display: flex; align-items: center; gap: 20px; min-width: 0;
+  overflow-x: auto; scrollbar-width: none; overscroll-behavior-x: contain;
+}
+.w-sub-links::-webkit-scrollbar { display: none; }
+.w-sub-links[data-fade="right"] {
+  -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 32px), transparent);
+          mask-image: linear-gradient(90deg, #000 calc(100% - 32px), transparent);
+}
+.w-sub-links[data-fade="left"] {
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 32px);
+          mask-image: linear-gradient(90deg, transparent, #000 32px);
+}
+.w-sub-links[data-fade="both"] {
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 32px, #000 calc(100% - 32px), transparent);
+          mask-image: linear-gradient(90deg, transparent, #000 32px, #000 calc(100% - 32px), transparent);
+}
 .w-sub-link {
   display: inline-flex; align-items: center; gap: 5px; height: 44px; padding: 0;
   border: 0; background: none; font: inherit; font-size: 13.5px; font-weight: 600;
@@ -438,35 +459,20 @@ html[lang^="zh"] .w-top-name small { letter-spacing: .06em; }
 .w-sub-link:hover { color: var(--w-ink); }
 .w-sub-link.is-current { color: var(--w-ink); box-shadow: inset 0 -2px 0 var(--w-accent); }
 .w-sub-link:focus-visible { outline: 2px solid var(--w-accent); outline-offset: -2px; }
-.w-sub-chev { width: 10px; height: 10px; transition: transform .15s; }
-.w-sub-link[aria-expanded="true"] .w-sub-chev { transform: rotate(180deg); }
-.w-sub-flat { display: none; }
-.w-sub-drop { position: relative; }
 .w-sub-tools { display: flex; align-items: center; gap: 8px; flex-shrink: 0; margin-left: auto; }
 
-/* Menus: Sectors, Macro and the ticker search's panel. No display of their
-   own, so the `hidden` attribute that opens and closes them is not overruled --
-   except by hover on a mouse, which is meant to. The ::before bridges the gap
-   under the button, or the pointer would leave the hover on its way down. */
+/* The ticker search's panel, the one menu left in the bar. No display of its
+   own, so the `hidden` attribute that opens and closes it is not overruled. */
 .w-sub-menu {
   position: absolute; top: calc(100% + 6px); left: -12px; z-index: 60; min-width: 220px;
   padding: 6px; border: 1px solid var(--w-line); border-radius: 8px;
   background: var(--w-card); box-shadow: var(--w-shadow);
 }
-.w-sub-menu::before { content: ''; position: absolute; left: 0; right: 0; top: -8px; height: 8px; }
-@media (hover: hover) { .w-sub-drop:hover > .w-sub-menu { display: block; } }
-.w-sub-menu > a, .w-sub-grid a {
+.w-sub-menu > a {
   display: block; padding: 8px 10px; border-radius: 6px;
   font-size: 14px; color: var(--w-body); text-decoration: none;
 }
-.w-sub-menu > a:hover, .w-sub-grid a:hover { background: var(--w-well); color: var(--w-ink); }
-.w-sub-menu.is-wide { width: 380px; }
-.w-sub-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px; }
-.w-sub-grid a { padding: 7px 10px; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.w-sub-menu-head {
-  margin: 6px 10px 4px; font-family: var(--w-mono); font-size: 11px;
-  letter-spacing: .12em; text-transform: uppercase; color: var(--w-muted);
-}
+.w-sub-menu > a:hover { background: var(--w-well); color: var(--w-ink); }
 .w-sub-menu > a.w-sub-menu-foot {
   margin-top: 4px; padding-top: 9px; border-top: 1px solid var(--w-line); border-radius: 0 0 6px 6px;
   font-size: 13px; font-weight: 600; color: var(--w-accent); text-align: center;
@@ -498,8 +504,8 @@ html[lang^="zh"] .w-top-name small { letter-spacing: .06em; }
 /* A phone: the row stays pinned under the masthead, as it is on a laptop. It
    used to scroll away with the page, to save the 45px a second pinned row
    costs, and then a reader who had scrolled a dashboard had to go back to the
-   top to find its navigation. Its links scroll sideways -- which would
-   clip a menu, so Sectors and Macro become the plain links beside them.
+   top to find its navigation. Its links scroll sideways, as they do at any
+   width they do not fit.
    The links get the row but for two icons: at 390px "↻ Refresh" beside the
    search button left twelve links 220px, three and a half of them in English.
    The row runs out to the screen's edge, so a link scrolls off the side rather
@@ -511,20 +517,12 @@ html[lang^="zh"] .w-top-name small { letter-spacing: .06em; }
   .w-sub-inner { position: relative; gap: 8px; }
   .w-sub-links {
     flex: 1; align-self: stretch; gap: 0; margin-left: -24px; padding-left: 14px;
-    overflow-x: auto; scrollbar-width: none; overscroll-behavior-x: contain;
     -webkit-tap-highlight-color: transparent;
+  }
+  /* Before the script has measured anything, a phone's row is sure to run on. */
+  .w-sub-links:not([data-fade]) {
     -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 32px), transparent);
             mask-image: linear-gradient(90deg, #000 calc(100% - 32px), transparent);
-  }
-  .w-sub-links::-webkit-scrollbar { display: none; }
-  .w-sub-links[data-fade="none"] { -webkit-mask-image: none; mask-image: none; }
-  .w-sub-links[data-fade="left"] {
-    -webkit-mask-image: linear-gradient(90deg, transparent, #000 32px);
-            mask-image: linear-gradient(90deg, transparent, #000 32px);
-  }
-  .w-sub-links[data-fade="both"] {
-    -webkit-mask-image: linear-gradient(90deg, transparent, #000 32px, #000 calc(100% - 32px), transparent);
-            mask-image: linear-gradient(90deg, transparent, #000 32px, #000 calc(100% - 32px), transparent);
   }
   .w-sub-link { padding: 0 10px; font-size: 14px; }
   .w-sub-link:active { color: var(--w-ink); }
@@ -533,8 +531,6 @@ html[lang^="zh"] .w-top-name small { letter-spacing: .06em; }
     box-shadow: none;
     background: linear-gradient(var(--w-accent), var(--w-accent)) no-repeat center bottom / calc(100% - 20px) 2px;
   }
-  .w-sub-drop { display: none; }
-  .w-sub-flat { display: inline-flex; }
   .w-sub-tools { gap: 6px; }
   .w-sub-refresh-btn { width: 36px; padding: 0; }
   .w-sub-refresh-icon { display: block; }

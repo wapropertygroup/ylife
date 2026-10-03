@@ -1750,16 +1750,14 @@ trade-agents.com"; on every other host every page is yStocker's, byte for byte.
 A TradeAgents page sets `{% set ta_page = true %}` (the landing, docs, research,
 sign-in, contact, the run page, shared reports, the dead-link page). Every other
 page is one of the dashboards (`_ta_markets`), and in the shell it adds the Markets
-bar (`_ta_markets_bar.html`, `.w-sub*`): their own links, Sectors and Macro
-menus, ticker search and ↻ Refresh, as a second row under the masthead in the
-same column. That is where their navigation went — the masthead has no room
+bar (`_ta_markets_bar.html`, `.w-sub*`): their own links, ticker search and
+↻ Refresh, as a second row under the masthead in the same column. That is where their navigation went — the masthead has no room
 for it. It carries the hooks base.html's scripts need (`[data-navsearch]`,
 `#refreshBtn`/`#refreshWrap`/`#refreshTooltipBody`), with `_refresh_map` moved to
 base.html's top level so both bars read it. It is sticky under the masthead at
 every width. On a phone it used to scroll away, which put a dashboard's
-navigation out of reach from halfway down it. Its links scroll sideways on a
-phone, where Sectors and Macro become plain links because the scroller would
-clip a menu. At 880px and below every control in the two rows is 36px tall in
+navigation out of reach from halfway down it. Its links scroll sideways at any
+width they do not fit. At 880px and below every control in the two rows is 36px tall in
 13px type, and the language toggle, theme, search and ↻ are 36px squares. Sized
 by its label, the toggle had been 36px in Chinese and 44px in English, so each
 switch moved the bar. The
@@ -1784,6 +1782,19 @@ sign-in from `current_user`, not the landing's `signed_in`, which only two route
 pass. `showcase_enabled()` is a Jinja global for the same reason — only the
 landing's routes pass `showcase`. The wiki's `.w-bar` and the landing's and wiki's
 `.w-foot` strips render off trade-agents.com only.
+
+**Both bars are one row of plain links (2026-10-03).** Asked for: "Sectors is
+unnecessary, drop it; put Macro's pages at the top level." So the yStocker
+header and the Markets bar list Markets, Valuation, DCA, Companies,
+Commodities, 13F, Fed, Rates, Housing, P/E, Odds, Daily, Videos — no menus.
+The 26 peer groups are still listed on Valuation, and a sector page marks
+Valuation as current. Macro's pages take their short labels, with the long
+name as the tooltip. Both bars are built from one list in their template.
+Thirteen links fit because the header's links went from px-3/gap-1 to
+px-2/gap-0.5 and Share became its icon. Its switch point moved from 1280/1400
+to 1320/1420, measured: 1301px signed out in English, ~1410 signed in with a
+name the chip truncates. With no menu left in the row, the Markets bar
+scrolls sideways at any width it does not fit, not just on a phone.
 
 **On a phone the masthead's links get a row of their own.** Below 960px (880px
 signed out) the bar has no room for them. Before, a phone then had no way to
@@ -2053,7 +2064,7 @@ The page has four parts:
   Polymarket and Kalshi price it. Also shown as a card on `/fedwatch`.
 * **The AI read and its track record** — see below.
 
-In the Macro menu, after P/E.
+In the top-level nav, after P/E.
 
 | Module | Job | Pure? |
 |---|---|---|

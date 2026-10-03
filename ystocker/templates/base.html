@@ -475,25 +475,28 @@
                         'Microsoft YaHei', 'Noto Sans SC', sans-serif; }
     .app-container { max-width: 1475px; }
     /* Where the header trades its full bar for the hamburger. The bar does not
-       shrink (logo, nine links, the right-hand controls, none of them
-       wrappable), and it needs ~1214px signed out and ~1366px signed in, where
-       Share and the account chip join it. It used to switch on at md (768px),
-       so from there up to that width every page on the site scrolled sideways:
-       by 446px on an iPad held upright.
+       shrink (logo, thirteen links, the right-hand controls, none of them
+       wrappable). Measured with the flat row that replaced the Sectors and
+       Macro menus (2026-10-03): 1301px signed out in English (1127 in
+       Chinese); signed in, where Share's icon and the account chip join it,
+       1336px with a short name and ~1410 with one the chip's 8rem cap
+       truncates. It used to switch on at md (768px), so from there up to that
+       width every page on the site scrolled sideways: by 446px on an iPad
+       held upright.
        The header carries its own switch point, set by the server from the
        sign-in state, since only the server knows which bar it is drawing. This
        is written here rather than as xl: utilities because the compiled bundle
        has none of them. The selectors include `header` to outrank .md\:flex and
        .md\:hidden, and Alpine's inline display:none still closes the menu,
        since an inline style beats any rule without !important. */
-    @media (min-width: 768px) and (max-width: 1279.98px) {
+    @media (min-width: 768px) and (max-width: 1319.98px) {
       header [data-nav="desktop"] { display: none; }
       header [data-nav="burger"], header [data-nav="drawer"] { display: block; }
     }
-    @media (min-width: 1280px) and (max-width: 1399.98px) {
-      header[data-nav-fit="1400"] [data-nav="desktop"] { display: none; }
-      header[data-nav-fit="1400"] [data-nav="burger"],
-      header[data-nav-fit="1400"] [data-nav="drawer"] { display: block; }
+    @media (min-width: 1320px) and (max-width: 1419.98px) {
+      header[data-nav-fit="1420"] [data-nav="desktop"] { display: none; }
+      header[data-nav-fit="1420"] [data-nav="burger"],
+      header[data-nav-fit="1420"] [data-nav="drawer"] { display: block; }
     }
     .chart-container { position: relative; }
     /* Custom scrollbar */
@@ -550,7 +553,7 @@
   {% if _ta_markets %}{% include "_ta_markets_bar.html" %}{% endif %}
   {% else %}
   <!-- ── Top navigation bar ──────────────────────────────────────────── -->
-  <header data-nav-fit="{{ 1400 if current_user.email else 1280 }}" class="sticky top-0 z-50 bg-white/80 dark:bg-slate-900/80 backdrop-blur border-b border-slate-200 dark:border-slate-800">
+  <header data-nav-fit="{{ 1420 if current_user.email else 1320 }}" class="sticky top-0 z-50 bg-white/80 dark:bg-slate-900/80 backdrop-blur border-b border-slate-200 dark:border-slate-800">
     <div class="app-container mx-auto px-4 sm:px-6 flex items-center h-14 gap-4">
 
       <!-- Logo -->
@@ -559,117 +562,37 @@
       </a>
 
       <!-- Desktop nav -->
-      <nav data-nav="desktop" class="hidden md:flex items-center gap-1 ml-4 flex-1">
-        <a href="{{ url_for('main.markets') }}"
-           class="px-3 py-1.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition"
-           data-i18n="markets.nav">Markets</a>
-        <a href="{{ url_for('main.evaluation') }}"
-           class="px-3 py-1.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition"
-           data-i18n="nav.home">Valuation</a>
-        <a href="{{ url_for('main.dca_index') }}"
-           class="px-3 py-1.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition"
-           data-i18n="nav.dca">DCA</a>
-
-        <!-- Sectors dropdown -->
-        <div class="relative" x-data="{ open: false }" @mouseenter="open=true" @mouseleave="open=false">
-          <button class="flex items-center gap-1 px-3 py-1.5 rounded-md text-sm text-slate-600 dark:text-slate-300
-                         hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition"
-                  :class="open && 'text-white bg-slate-100 dark:bg-slate-800'">
-            <span data-i18n="nav.sectors">Sectors</span>
-            <svg class="w-3.5 h-3.5 mt-0.5 transition-transform duration-200" :class="open && 'rotate-180'"
-                 fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-            </svg>
-          </button>
-          <div x-show="open"
-               x-transition:enter="transition ease-out duration-150"
-               x-transition:enter-start="opacity-0 -translate-y-1"
-               x-transition:enter-end="opacity-100 translate-y-0"
-               x-transition:leave="transition ease-in duration-100"
-               x-transition:leave-start="opacity-100 translate-y-0"
-               x-transition:leave-end="opacity-0 -translate-y-1"
-               class="absolute left-0 top-full mt-1.5 bg-white dark:bg-slate-900 border border-slate-300/80 dark:border-slate-700/80
-                      rounded-2xl shadow-2xl shadow-black/60 z-50 overflow-hidden"
-               style="min-width:220px">
-            <div class="px-3 pt-2.5 pb-1">
-              <p class="text-[10px] font-semibold tracking-widest uppercase text-slate-500 px-1 mb-1.5" data-i18n="nav.peer_groups">Peer Groups</p>
-              <div class="grid grid-cols-2 gap-x-1 gap-y-0.5">
-                {% for g in peer_groups %}
-                <a href="{{ url_for('main.sector', sector_name=g) }}"
-                   class="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs text-slate-600 dark:text-slate-300
-                          hover:text-slate-900 dark:hover:text-white hover:bg-brand/20 hover:border-brand/30
-                          border border-transparent transition-all duration-100 truncate">
-                  <span class="w-1.5 h-1.5 rounded-full bg-brand/50 shrink-0"></span>
-                  <span data-i18n="sector.name.{{ g }}">{{ g }}</span>
-                </a>
-                {% endfor %}
-              </div>
-            </div>
-            <div class="border-t border-slate-200 dark:border-slate-800 px-3 py-2 mt-1 flex items-center justify-between gap-3">
-              <a href="{{ url_for('main.companies') }}"
-                 class="flex items-center justify-center gap-1 text-xs text-slate-500 hover:text-brand transition"
-                 data-i18n="nav.all_companies">All companies →</a>
-              <a href="{{ url_for('main.evaluation') }}#sectors"
-                 class="flex items-center justify-center gap-1 text-xs text-slate-500 hover:text-brand transition"
-                 data-i18n="nav.view_all">View all sectors ↓</a>
-            </div>
-          </div>
-        </div>
-
-        <!-- Commodities — direct link (no dropdown needed, everything is on one page) -->
-        <a href="{{ url_for('main.commodities') }}"
-           class="px-3 py-1.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition"
-           data-i18n="nav.commodities">Commodities</a>
-
-        <a href="{{ url_for('main.thirteenf') }}"
-           class="px-3 py-1.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition"
-           data-i18n="nav.thirteenf">13F</a>
-        <!-- Macro dropdown: Fed, Rates, Housing and P/E as one item. Four
-             separate links pushed the bar past its width and made the
-             right-hand buttons wrap. -->
-        <div class="relative" x-data="{ open: false }" @mouseenter="open=true" @mouseleave="open=false">
-          <button class="flex items-center gap-1 px-3 py-1.5 rounded-md text-sm text-slate-600 dark:text-slate-300
-                         hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition whitespace-nowrap"
-                  :class="open && 'text-white bg-slate-100 dark:bg-slate-800'">
-            <span data-i18n="nav.macro">Macro</span>
-            <svg class="w-3.5 h-3.5 mt-0.5 transition-transform duration-200" :class="open && 'rotate-180'"
-                 fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-            </svg>
-          </button>
-          <div x-show="open"
-               x-transition:enter="transition ease-out duration-150"
-               x-transition:enter-start="opacity-0 -translate-y-1"
-               x-transition:enter-end="opacity-100 translate-y-0"
-               x-transition:leave="transition ease-in duration-100"
-               x-transition:leave-start="opacity-100 translate-y-0"
-               x-transition:leave-end="opacity-0 -translate-y-1"
-               class="absolute left-0 top-full mt-1.5 bg-white dark:bg-slate-900 border border-slate-300/80 dark:border-slate-700/80
-                      rounded-2xl shadow-2xl shadow-black/60 z-50 overflow-hidden py-2"
-               style="min-width:190px">
-            <a href="{{ url_for('main.fed') }}"
-               class="block px-4 py-2 text-xs text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-brand/20 transition"
-               data-i18n="nav.fed_long">Fed Balance Sheet</a>
-            <a href="{{ url_for('main.fedwatch') }}"
-               class="block px-4 py-2 text-xs text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-brand/20 transition"
-               data-i18n="nav.fedwatch_long">Interest Rates</a>
-            <a href="{{ url_for('main.housing') }}"
-               class="block px-4 py-2 text-xs text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-brand/20 transition"
-               data-i18n="nav.housing_long">Housing Market</a>
-            <a href="{{ url_for('main.multiples') }}"
-               class="block px-4 py-2 text-xs text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-brand/20 transition"
-               data-i18n="nav.multiples_long">P/E Multiples</a>
-            <a href="{{ url_for('main.predictions_page') }}"
-               class="block px-4 py-2 text-xs text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-brand/20 transition"
-               data-i18n="nav.predictions_long">Prediction Markets</a>
-          </div>
-        </div>
-        <a href="{{ url_for('main.daily_report') }}"
-           class="px-3 py-1.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition"
-           data-i18n="nav.daily">Daily</a>
-        <a href="{{ url_for('main.videos') }}"
-           class="px-3 py-1.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition"
-           data-i18n="nav.videos">Videos</a>
+      {#  One row of plain links, nothing behind a menu. Sectors went: its 26
+          peer groups are listed on Valuation, which is where a sector page now
+          counts as being. Macro's five pages sit in the bar itself, under
+          short labels with the full name as the tooltip. Thirteen links at
+          px-2/gap-0.5 cost about what nine did at px-3/gap-1 plus two menu
+          buttons; the bar's switch point (data-nav-fit, and the CSS above) is
+          measured against this row. The page's own link is marked. #}
+      {% set _ep = request.endpoint %}
+      {% set _nav = [
+        ('main.markets',          'markets.nav',     'Markets',     '',                     '',                   ('main.markets',)),
+        ('main.evaluation',       'nav.home',        'Valuation',   '',                     '',                   ('main.evaluation', 'main.sector')),
+        ('main.dca_index',        'nav.dca',         'DCA',         '',                     '',                   ('main.dca_index', 'main.dca_page')),
+        ('main.companies',        'nav.companies',   'Companies',   '',                     '',                   ('main.companies',)),
+        ('main.commodities',      'nav.commodities', 'Commodities', '',                     '',                   ('main.commodities',)),
+        ('main.thirteenf',        'nav.thirteenf',   '13F',         '',                     '',                   ('main.thirteenf',)),
+        ('main.fed',              'nav.fed',         'Fed',         'nav.fed_long',         'Fed Balance Sheet',  ('main.fed',)),
+        ('main.fedwatch',         'nav.fedwatch',    'Rates',       'nav.fedwatch_long',    'Interest Rates',     ('main.fedwatch',)),
+        ('main.housing',          'nav.housing',     'Housing',     'nav.housing_long',     'Housing Market',     ('main.housing',)),
+        ('main.multiples',        'nav.multiples',   'P/E',         'nav.multiples_long',   'P/E Multiples',      ('main.multiples',)),
+        ('main.predictions_page', 'nav.predictions', 'Odds',        'nav.predictions_long', 'Prediction Markets', ('main.predictions_page',)),
+        ('main.daily_report',     'nav.daily',       'Daily',       '',                     '',                   ('main.daily_report',)),
+        ('main.videos',           'nav.videos',      'Videos',      '',                     '',                   ('main.videos',)),
+      ] %}
+      <nav data-nav="desktop" class="hidden md:flex items-center gap-0.5 ml-2 flex-1">
+        {% for ep, key, label, tip_key, tip, here in _nav %}
+        <a href="{{ url_for(ep) }}"
+           class="px-2 py-1.5 rounded-md text-sm whitespace-nowrap transition {{ 'text-slate-900 dark:text-white bg-slate-100 dark:bg-slate-800' if _ep in here else 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800' }}"
+           {%- if _ep in here %} aria-current="page"{% endif %}
+           {%- if tip_key %} title="{{ tip }}" data-i18n-title="{{ tip_key }}"{% endif %}
+           data-i18n="{{ key }}">{{ label }}</a>
+        {% endfor %}
         {# Guide moved into the account dropdown, and into the footer so that a
            signed-out reader still has a link to it — the dropdown only renders
            for a signed-in session, and the guide documents the agent packs,
@@ -736,7 +659,6 @@
             <path stroke-linecap="round" stroke-linejoin="round"
                   d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7M12 3v12M12 3 8 7m4-4 4 4"/>
           </svg>
-          <span class="hidden lg:inline" data-i18n="share.nav">Share</span>
         </button>
         {% endif %}
         {% if current_user.email %}
@@ -904,30 +826,11 @@
         <a href="{{ url_for('main.dca_index') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800" data-i18n="nav.dca">DCA</a>
         <a href="{{ url_for('main.companies') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800" data-i18n="nav.companies">Companies</a>
         {#
-          Sectors and Commodities collapse, and the remaining links sit in
-          two-column grids. Flat, the menu measured 1279px on an 844px screen —
-          1.5 screens, with the 26 peer groups alone accounting for 516px of it,
-          so Guide and Sign In were below the fold.
+          Commodities collapses and the remaining links sit in a two-column
+          grid. Flat, the menu once measured 1279px on an 844px screen, 516px of
+          it the 26 peer groups -- which are gone from it now, with the Sectors
+          menu, and listed on Valuation instead.
         #}
-        <div x-data="{ open: false }">
-          <button @click="open = !open"
-                  class="w-full flex items-center justify-between px-3 py-2.5 rounded-md text-sm
-                         text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800">
-            <span data-i18n="nav.sectors">Sectors</span>
-            <svg class="w-3.5 h-3.5 transition-transform duration-200" :class="open && 'rotate-180'"
-                 fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-            </svg>
-          </button>
-          <div x-show="open" x-transition class="grid grid-cols-2 gap-1 mb-1 mt-1">
-            {% for g in peer_groups %}
-            <a href="{{ url_for('main.sector', sector_name=g) }}"
-               class="px-3 py-2 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 truncate"
-               data-i18n="sector.name.{{ g }}">{{ g }}</a>
-            {% endfor %}
-          </div>
-        </div>
-
         <div x-data="{ open: false }">
           <button @click="open = !open"
                   class="w-full flex items-center justify-between px-3 py-2.5 rounded-md text-sm
@@ -948,20 +851,15 @@
           </div>
         </div>
 
-        <div class="px-3 py-1.5 text-[10px] font-semibold tracking-widest uppercase text-slate-500 dark:text-slate-600 mt-1" data-i18n="nav.macro">Macro</div>
-        <div class="grid grid-cols-2 gap-1 mb-1">
-          <a href="{{ url_for('main.fed') }}"       class="px-3 py-2 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 truncate" data-i18n="nav.fed">Fed</a>
-          <a href="{{ url_for('main.fedwatch') }}"  class="px-3 py-2 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 truncate" data-i18n="nav.fedwatch">Rates</a>
-          <a href="{{ url_for('main.housing') }}"   class="px-3 py-2 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 truncate" data-i18n="nav.housing">Housing</a>
+        <div class="grid grid-cols-2 gap-1 mt-1">
+          <a href="{{ url_for('main.thirteenf') }}" class="px-3 py-2 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 truncate" data-i18n="nav.thirteenf">13F</a>
+          <a href="{{ url_for('main.fed') }}" class="px-3 py-2 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 truncate" data-i18n="nav.fed">Fed</a>
+          <a href="{{ url_for('main.fedwatch') }}" class="px-3 py-2 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 truncate" data-i18n="nav.fedwatch">Rates</a>
+          <a href="{{ url_for('main.housing') }}" class="px-3 py-2 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 truncate" data-i18n="nav.housing">Housing</a>
           <a href="{{ url_for('main.multiples') }}" class="px-3 py-2 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 truncate" data-i18n="nav.multiples">P/E</a>
           <a href="{{ url_for('main.predictions_page') }}" class="px-3 py-2 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 truncate" data-i18n="nav.predictions">Odds</a>
-        </div>
-
-        <div class="grid grid-cols-2 gap-1">
-          <a href="{{ url_for('main.thirteenf') }}"    class="px-3 py-2 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 truncate" data-i18n="nav.thirteenf">13F</a>
-          {# Daily was absent from the mobile list entirely while desktop had it. #}
           <a href="{{ url_for('main.daily_report') }}" class="px-3 py-2 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 truncate" data-i18n="nav.daily">Daily</a>
-          <a href="{{ url_for('main.videos') }}"       class="px-3 py-2 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 truncate" data-i18n="nav.videos">Videos</a>
+          <a href="{{ url_for('main.videos') }}" class="px-3 py-2 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 truncate" data-i18n="nav.videos">Videos</a>
         </div>
 
         <a id="refreshBtnMobile" href="{{ refresh_url }}" class="px-3 py-2.5 rounded-md text-sm text-brand hover:bg-slate-100 dark:hover:bg-slate-800 mt-1" data-i18n="nav.refresh">↻ Refresh</a>

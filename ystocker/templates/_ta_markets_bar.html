@@ -13,64 +13,36 @@
 
     It carries the hooks the scripts in base.html look for: navsearch.js binds
     any [data-navsearch] mount, and the refresh cooldown finds #refreshBtn,
-    #refreshWrap and #refreshTooltipBody by id. Sectors and Macro are
-    disclosures that also open on hover with a mouse. On a phone the row scrolls
-    sideways, which would clip a menu, so there they are flattened into plain
-    links (.w-sub-flat) instead -- and the row opens scrolled to the page's own
-    link, which on the pages at its far end was otherwise out of sight. #}
+    #refreshWrap and #refreshTooltipBody by id. Every link is a plain link:
+    the Sectors menu went (its peer groups are listed on Valuation, which marks
+    itself current on a sector page) and Macro's five pages sit in the row. With
+    no menu left to clip, the row scrolls sideways at any width it does not fit
+    (wiki.css), and opens scrolled to the page's own link, which on the pages
+    at its far end was otherwise out of sight. #}
 {% set _ep = request.endpoint %}
-{% set _macro = ('main.fed', 'main.fedwatch', 'main.housing', 'main.multiples', 'main.predictions_page') %}
+{% set _links = [
+  ('main.markets',          'markets.nav',     'Markets',     '',                     '',                   ('main.markets',)),
+  ('main.evaluation',       'nav.home',        'Valuation',   '',                     '',                   ('main.evaluation', 'main.sector')),
+  ('main.dca_index',        'nav.dca',         'DCA',         '',                     '',                   ('main.dca_index', 'main.dca_page')),
+  ('main.companies',        'nav.companies',   'Companies',   '',                     '',                   ('main.companies',)),
+  ('main.commodities',      'nav.commodities', 'Commodities', '',                     '',                   ('main.commodities',)),
+  ('main.thirteenf',        'nav.thirteenf',   '13F',         '',                     '',                   ('main.thirteenf',)),
+  ('main.fed',              'nav.fed',         'Fed',         'nav.fed_long',         'Fed Balance Sheet',  ('main.fed',)),
+  ('main.fedwatch',         'nav.fedwatch',    'Rates',       'nav.fedwatch_long',    'Interest Rates',     ('main.fedwatch',)),
+  ('main.housing',          'nav.housing',     'Housing',     'nav.housing_long',     'Housing Market',     ('main.housing',)),
+  ('main.multiples',        'nav.multiples',   'P/E',         'nav.multiples_long',   'P/E Multiples',      ('main.multiples',)),
+  ('main.predictions_page', 'nav.predictions', 'Odds',        'nav.predictions_long', 'Prediction Markets', ('main.predictions_page',)),
+  ('main.daily_report',     'nav.daily',       'Daily',       '',                     '',                   ('main.daily_report',)),
+  ('main.videos',           'nav.videos',      'Videos',      '',                     '',                   ('main.videos',)),
+] %}
 <nav class="w-sub" aria-label="Markets" data-w-sub>
   <div class="w-sub-inner">
     <div class="w-sub-links" data-w-sub-row>
-      <a class="w-sub-link{% if _ep == 'main.markets' %} is-current{% endif %}" href="{{ url_for('main.markets') }}" data-i18n="markets.nav">Markets</a>
-      <a class="w-sub-link{% if _ep == 'main.evaluation' %} is-current{% endif %}" href="{{ url_for('main.evaluation') }}" data-i18n="nav.home">Valuation</a>
-      <a class="w-sub-link{% if _ep in ('main.dca_index', 'main.dca_page') %} is-current{% endif %}" href="{{ url_for('main.dca_index') }}" data-i18n="nav.dca">DCA</a>
-
-      <div class="w-sub-drop" data-w-drop>
-        <button type="button" class="w-sub-link{% if _ep == 'main.sector' %} is-current{% endif %}"
-                aria-expanded="false" aria-controls="wSubSectors" data-w-drop-btn>
-          <span data-i18n="nav.sectors">Sectors</span>
-          <svg class="w-sub-chev" viewBox="0 0 12 8" aria-hidden="true"><path d="M1 1.6 6 6.4l5-4.8" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </button>
-        <div class="w-sub-menu is-wide" id="wSubSectors" hidden>
-          <p class="w-sub-menu-head" data-i18n="nav.peer_groups">Peer Groups</p>
-          <div class="w-sub-grid">
-            {% for g in peer_groups %}
-            <a href="{{ url_for('main.sector', sector_name=g) }}" data-i18n="sector.name.{{ g }}">{{ g }}</a>
-            {% endfor %}
-          </div>
-          <a class="w-sub-menu-foot" href="{{ url_for('main.companies') }}" data-i18n="nav.all_companies">All companies →</a>
-          <a class="w-sub-menu-foot" href="{{ url_for('main.evaluation') }}#sectors" data-i18n="nav.view_all">View all sectors ↓</a>
-        </div>
-      </div>
-      <a class="w-sub-link w-sub-flat{% if _ep == 'main.sector' %} is-current{% endif %}" href="{{ url_for('main.evaluation') }}#sectors" data-i18n="nav.sectors">Sectors</a>
-
-      <a class="w-sub-link{% if _ep == 'main.commodities' %} is-current{% endif %}" href="{{ url_for('main.commodities') }}" data-i18n="nav.commodities">Commodities</a>
-      <a class="w-sub-link{% if _ep == 'main.thirteenf' %} is-current{% endif %}" href="{{ url_for('main.thirteenf') }}" data-i18n="nav.thirteenf">13F</a>
-
-      <div class="w-sub-drop" data-w-drop>
-        <button type="button" class="w-sub-link{% if _ep in _macro %} is-current{% endif %}"
-                aria-expanded="false" aria-controls="wSubMacro" data-w-drop-btn>
-          <span data-i18n="nav.macro">Macro</span>
-          <svg class="w-sub-chev" viewBox="0 0 12 8" aria-hidden="true"><path d="M1 1.6 6 6.4l5-4.8" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </button>
-        <div class="w-sub-menu" id="wSubMacro" hidden>
-          <a href="{{ url_for('main.fed') }}" data-i18n="nav.fed_long">Fed Balance Sheet</a>
-          <a href="{{ url_for('main.fedwatch') }}" data-i18n="nav.fedwatch_long">Interest Rates</a>
-          <a href="{{ url_for('main.housing') }}" data-i18n="nav.housing_long">Housing Market</a>
-          <a href="{{ url_for('main.multiples') }}" data-i18n="nav.multiples_long">P/E Multiples</a>
-          <a href="{{ url_for('main.predictions_page') }}" data-i18n="nav.predictions_long">Prediction Markets</a>
-        </div>
-      </div>
-      <a class="w-sub-link w-sub-flat{% if _ep == 'main.fed' %} is-current{% endif %}" href="{{ url_for('main.fed') }}" data-i18n="nav.fed">Fed</a>
-      <a class="w-sub-link w-sub-flat{% if _ep == 'main.fedwatch' %} is-current{% endif %}" href="{{ url_for('main.fedwatch') }}" data-i18n="nav.fedwatch">Rates</a>
-      <a class="w-sub-link w-sub-flat{% if _ep == 'main.housing' %} is-current{% endif %}" href="{{ url_for('main.housing') }}" data-i18n="nav.housing">Housing</a>
-      <a class="w-sub-link w-sub-flat{% if _ep == 'main.multiples' %} is-current{% endif %}" href="{{ url_for('main.multiples') }}" data-i18n="nav.multiples">P/E</a>
-      <a class="w-sub-link w-sub-flat{% if _ep == 'main.predictions_page' %} is-current{% endif %}" href="{{ url_for('main.predictions_page') }}" data-i18n="nav.predictions">Odds</a>
-
-      <a class="w-sub-link{% if _ep == 'main.daily_report' %} is-current{% endif %}" href="{{ url_for('main.daily_report') }}" data-i18n="nav.daily">Daily</a>
-      <a class="w-sub-link{% if _ep == 'main.videos' %} is-current{% endif %}" href="{{ url_for('main.videos') }}" data-i18n="nav.videos">Videos</a>
+      {% for ep, key, label, tip_key, tip, here in _links %}
+      <a class="w-sub-link{% if _ep in here %} is-current{% endif %}" href="{{ url_for(ep) }}"
+         {%- if _ep in here %} aria-current="page"{% endif %}
+         {%- if tip_key %} title="{{ tip }}" data-i18n-title="{{ tip_key }}"{% endif %} data-i18n="{{ key }}">{{ label }}</a>
+      {% endfor %}
     </div>
 
     <div class="w-sub-tools">
@@ -113,33 +85,9 @@
 </nav>
 <script>
 (function () {
-  // Sectors and Macro open on a click or Enter as well as on hover, one at a
-  // time, and close on Escape or a click anywhere else.
-  const drops = [...document.querySelectorAll('[data-w-drop]')];
-  if (!drops.length) return;
-  const parts = d => [d.querySelector('[data-w-drop-btn]'), d.querySelector('.w-sub-menu')];
-  const shut = keep => drops.forEach(d => {
-    if (d === keep) return;
-    const [btn, menu] = parts(d);
-    menu.hidden = true;
-    btn.setAttribute('aria-expanded', 'false');
-  });
-  drops.forEach(d => {
-    const [btn, menu] = parts(d);
-    btn.addEventListener('click', () => {
-      const open = menu.hidden;
-      shut(d);
-      menu.hidden = !open;
-      btn.setAttribute('aria-expanded', String(open));
-    });
-  });
-  document.addEventListener('click', e => { if (!e.target.closest('[data-w-drop]')) shut(null); });
-  document.addEventListener('keydown', e => { if (e.key === 'Escape') shut(null); });
-})();
-
-(function () {
-  // On a phone the links scroll sideways (wiki.css). The row opens with the
-  // page's own link in the middle of it: at 390px it shows about a third of
+  // When the links do not fit -- on a phone, or a window narrower than the
+  // row -- they scroll sideways (wiki.css). The row opens with the page's
+  // own link in the middle of it: at 390px it shows about a third of
   // its links, so Housing or Videos opened on Markets, Valuation and DCA and
   // the bar said nothing about where the reader was. Instant rather than
   // smooth, since this is where the row starts, not a movement; and redone
@@ -156,8 +104,8 @@
     if (row.dataset.fade !== v) row.dataset.fade = v;
   };
   const place = () => {
-    // Visible, since Sectors and Macro are marked twice: the menu button a
-    // phone hides and the plain link it shows.
+    // The first current link with a box. Nothing is marked twice now that the
+    // menus are gone, but a link a breakpoint hides must not be scrolled to.
     const here = [...row.querySelectorAll('.is-current')].find(el => el.offsetWidth);
     if (here && !moved && row.scrollWidth > row.clientWidth) {
       const a = here.getBoundingClientRect(), b = row.getBoundingClientRect();

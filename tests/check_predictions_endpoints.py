@@ -212,7 +212,7 @@ class PredictionsEndpoints(unittest.TestCase):
         html = r.get_data(as_text=True)
         self.assertEqual(r.status_code, 200)
         self.assertIn("data-w-sub", html)
-        self.assertRegex(html, r'w-sub-flat is-current"\s+href="/predictions"')
+        self.assertRegex(html, r'class="w-sub-link is-current" href="/predictions"\s+aria-current="page"')
         self.assertIn(WALL_MARK, html)
         self.sign_in(READER, base_url="https://trade-agents.com")
         try:
