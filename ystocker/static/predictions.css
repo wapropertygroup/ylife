@@ -1,0 +1,397 @@
+/* Prediction markets — /predictions, and the "three ways" card on /fedwatch.
+ *
+ * Hand-written with its own `pm-` prefix rather than Tailwind utilities, for the
+ * reason share.css gives: the bundle is compiled, and almost everything here is
+ * drawn by predictions.js from API data, so a utility that only ever appears in
+ * a script would be missing from it. Colours come from base.html's shared
+ * `--t-*` vocabulary where one exists; the few this page adds are declared
+ * light-first with `.dark` overriding, at the contrast rungs base.html uses —
+ * 700 for text on white, 400 on near-black.
+ */
+
+:root {
+  --pm-up:        #047857;   /* emerald-700 */
+  --pm-down:      #b91c1c;   /* red-700     */
+  --pm-poly:      #1d4ed8;   /* blue-700    */
+  --pm-poly-bg:   rgba(59, 130, 246, .10);
+  --pm-kalshi:    #0f766e;   /* teal-700    */
+  --pm-kalshi-bg: rgba(20, 184, 166, .12);
+  --pm-fut:       #b45309;   /* amber-700   */
+  --pm-fut-bg:    rgba(245, 158, 11, .12);
+  --pm-ai:        #6d28d9;   /* violet-700  */
+  --pm-ai-bg:     rgba(139, 92, 246, .07);
+  --pm-ai-line:   rgba(139, 92, 246, .28);
+  --pm-bar:       rgba(79, 70, 229, .55);
+  --pm-bar-track: #eef2f7;
+  --pm-heat:      79, 70, 229;
+}
+.dark {
+  --pm-up:        #34d399;
+  --pm-down:      #f87171;
+  --pm-poly:      #60a5fa;
+  --pm-poly-bg:   rgba(96, 165, 250, .12);
+  --pm-kalshi:    #2dd4bf;
+  --pm-kalshi-bg: rgba(45, 212, 191, .12);
+  --pm-fut:       #fbbf24;
+  --pm-fut-bg:    rgba(251, 191, 36, .12);
+  --pm-ai:        #a78bfa;
+  --pm-ai-bg:     rgba(167, 139, 250, .06);
+  --pm-ai-line:   rgba(167, 139, 250, .25);
+  --pm-bar:       rgba(129, 140, 248, .65);
+  --pm-bar-track: #1e293b;
+  --pm-heat:      99, 102, 241;
+}
+
+/* ── Cards and sections ──────────────────────────────────────────────── */
+.pm-section {
+  background: var(--t-surface);
+  border: 1px solid var(--t-line);
+  border-radius: 16px;
+  padding: 16px 18px;
+  margin-bottom: 20px;
+}
+.pm-section > h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 650;
+  color: var(--t-ink-strong);
+}
+.pm-section-sub {
+  margin: 3px 0 12px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--t-ink-dim);
+}
+.pm-note {
+  margin: 10px 0 0;
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--t-ink-dim);
+}
+.pm-link { color: var(--t-accent-ink); text-decoration: none; }
+.pm-link:hover { text-decoration: underline; }
+.pm-muted { color: var(--t-ink-dim); }
+.pm-up { color: var(--pm-up); }
+.pm-down { color: var(--pm-down); }
+
+.pm-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: .02em;
+  white-space: nowrap;
+}
+.pm-badge-polymarket { color: var(--pm-poly); background: var(--pm-poly-bg); }
+.pm-badge-kalshi     { color: var(--pm-kalshi); background: var(--pm-kalshi-bg); }
+.pm-badge-futures    { color: var(--pm-fut); background: var(--pm-fut-bg); }
+.pm-badge-ai         { color: var(--pm-ai); background: var(--pm-ai-bg); }
+
+/* ── The Fed, three ways ─────────────────────────────────────────────── */
+.pm-fed { display: grid; gap: 14px; }
+@media (min-width: 900px) { .pm-fed { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.pm-fed-meeting {
+  border: 1px solid var(--t-line);
+  border-radius: 12px;
+  padding: 10px 12px 8px;
+  background: var(--t-surface-deep);
+  min-width: 0;
+}
+.pm-fed-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 10px;
+  margin-bottom: 6px;
+}
+.pm-fed-date { font-size: 13px; font-weight: 650; color: var(--t-ink-strong); }
+.pm-fed-verdict { font-size: 11.5px; color: var(--t-ink-dim); }
+.pm-fed-verdict b { color: var(--t-ink); font-weight: 600; }
+.pm-fed-scroll { overflow-x: auto; }
+.pm-fed-table { width: 100%; border-collapse: separate; border-spacing: 2px; }
+.pm-fed-table th, .pm-fed-table td {
+  padding: 5px 6px;
+  font-size: 11.5px;
+  text-align: center;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  border-radius: 5px;
+}
+.pm-fed-table thead th { color: var(--t-ink-dim); font-weight: 600; font-size: 10.5px; }
+.pm-fed-table thead th.pm-gap-col { color: var(--t-accent-ink); }
+.pm-fed-table tbody th { text-align: left; padding-left: 0; font-weight: 500; }
+.pm-fed-table td { color: var(--t-ink-strong); }
+.pm-fed-table td.pm-zero { color: var(--t-ink-dim); }
+.pm-fed-table td.pm-exp { color: var(--t-ink); font-weight: 600; }
+.pm-fed-src { display: inline-flex; align-items: center; gap: 4px; }
+
+/* ── Movers ──────────────────────────────────────────────────────────── */
+.pm-movers { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); }
+.pm-mover {
+  display: block;
+  padding: 9px 11px;
+  border: 1px solid var(--t-line);
+  border-radius: 10px;
+  background: var(--t-surface-deep);
+  color: inherit;
+  text-decoration: none;
+  min-width: 0;
+}
+.pm-mover:hover { border-color: var(--t-line-hover); }
+.pm-mover-q {
+  display: block;
+  font-size: 12px;
+  color: var(--t-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pm-mover-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 3px;
+  font-variant-numeric: tabular-nums;
+}
+.pm-mover-label { font-size: 11.5px; color: var(--t-ink-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pm-mover-move { font-size: 13px; font-weight: 650; white-space: nowrap; }
+
+/* ── Toolbar ─────────────────────────────────────────────────────────── */
+.pm-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-bottom: 14px;
+}
+.pm-chips { display: flex; flex-wrap: wrap; gap: 6px; flex: 1 1 auto; }
+.pm-chip {
+  padding: 4px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--t-line-strong);
+  background: transparent;
+  color: var(--t-ink-muted);
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.pm-chip:hover { border-color: var(--t-line-hover); color: var(--t-ink); }
+.pm-chip[aria-pressed="true"] {
+  background: var(--t-accent);
+  border-color: var(--t-accent);
+  color: #fff;
+}
+.pm-chip-n { opacity: .7; margin-left: 3px; font-variant-numeric: tabular-nums; }
+.pm-select {
+  padding: 5px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--t-line-strong);
+  background: var(--t-surface);
+  color: var(--t-ink);
+  font-size: 12px;
+}
+
+/* ── The board ───────────────────────────────────────────────────────── */
+.pm-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(310px, 1fr)); }
+.pm-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 13px 14px 11px;
+  border: 1px solid var(--t-line);
+  border-radius: 14px;
+  background: var(--t-surface);
+}
+.pm-card[data-open="1"] { grid-column: 1 / -1; }
+/* Opened across the grid, a card's outcome rows would stretch the bar to the
+   far edge, a long way from the label it belongs to. */
+.pm-card[data-open="1"] .pm-outcomes { max-width: 36rem; }
+.pm-card-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--t-ink-dim);
+}
+.pm-card-top .pm-closes { margin-left: auto; white-space: nowrap; }
+.pm-q {
+  margin: 7px 0 9px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--t-ink-strong);
+}
+.pm-q a { color: inherit; text-decoration: none; }
+.pm-q a:hover { text-decoration: underline; }
+.pm-q-sub { display: block; margin-top: 1px; font-size: 11.5px; font-weight: 400; color: var(--t-ink-dim); }
+
+.pm-outcomes { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; }
+.pm-outcome {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 52px 44px 50px;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+/* Two lines before it clips: "December 31, 2028" and "6,800 to 6,999.99" are
+   the whole answer, and one line at a 310px card cut them to "December 31, 20…". */
+.pm-olabel {
+  color: var(--t-ink);
+  line-height: 1.3;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow-wrap: anywhere;
+}
+.pm-obar { height: 6px; border-radius: 3px; background: var(--pm-bar-track); overflow: hidden; }
+.pm-obar > i { display: block; height: 100%; border-radius: 3px; background: var(--pm-bar); }
+.pm-op { text-align: right; font-weight: 650; color: var(--t-ink-strong); }
+.pm-od { text-align: right; font-size: 11px; color: var(--t-ink-dim); }
+.pm-more-btn {
+  align-self: flex-start;
+  margin-top: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--t-accent-ink);
+  font-size: 11.5px;
+  cursor: pointer;
+}
+
+.pm-card-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  margin-top: auto;
+  padding-top: 10px;
+  font-size: 11px;
+  color: var(--t-ink-dim);
+  font-variant-numeric: tabular-nums;
+}
+.pm-ai-btn {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 7px;
+  border: 1px solid var(--t-line-strong);
+  background: transparent;
+  color: var(--t-ink-muted);
+  font-size: 11.5px;
+  font-weight: 550;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.pm-ai-btn:hover { color: var(--pm-ai); border-color: var(--pm-ai-line); }
+.pm-ai-btn[data-ready="1"] { color: var(--pm-ai); border-color: var(--pm-ai-line); background: var(--pm-ai-bg); }
+.pm-ai-btn:disabled { opacity: .55; cursor: default; }
+
+/* ── The AI read ─────────────────────────────────────────────────────── */
+.pm-ai {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--pm-ai-line);
+  background: var(--pm-ai-bg);
+  color: var(--t-ink);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+.pm-ai[hidden] { display: none; }
+.pm-ai-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  font-size: 11px;
+  color: var(--t-ink-dim);
+}
+.pm-ai-title { font-weight: 650; color: var(--pm-ai); font-size: 12px; }
+.pm-ai-table { margin: 10px 0 6px; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.pm-ai-table th, .pm-ai-table td { padding: 3px 14px 3px 0; text-align: right; font-size: 12px; }
+.pm-ai-table th:first-child, .pm-ai-table td:first-child { text-align: left; max-width: 18rem; }
+.pm-ai-table thead th { color: var(--t-ink-dim); font-weight: 600; font-size: 10.5px; }
+.pm-ai-table td { color: var(--t-ink-strong); }
+.pm-ai-summary { margin: 8px 0; color: var(--t-ink); }
+.pm-ai-cols { display: grid; gap: 4px 20px; }
+@media (min-width: 720px) { .pm-ai-cols { grid-template-columns: 1fr 1fr; } }
+.pm-ai-cols h4 { margin: 4px 0 2px; font-size: 11px; font-weight: 650; color: var(--t-ink-muted); text-transform: uppercase; letter-spacing: .05em; }
+/* Tailwind's preflight strips list markers; these lists are lists. */
+.pm-ai-cols ul, .pm-ai details ul, .pm-list { list-style: disc; }
+.pm-ai-cols ul { margin: 0; padding-left: 16px; }
+.pm-list { margin: 8px 0 0; padding-left: 18px; }
+.pm-list li + li { margin-top: 3px; }
+.pm-ai details { margin-top: 8px; font-size: 11.5px; color: var(--t-ink-muted); }
+.pm-ai summary { cursor: pointer; color: var(--t-ink-muted); }
+.pm-ai details ul { margin: 4px 0 0; padding-left: 16px; }
+.pm-ai details p { margin: 4px 0 0; }
+.pm-ai-foot { margin: 8px 0 0; font-size: 11px; color: var(--t-ink-dim); }
+.pm-ai-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px; }
+.pm-thinking { display: inline-flex; align-items: center; gap: 6px; color: var(--pm-ai); font-style: italic; }
+.pm-thinking i {
+  width: 5px; height: 5px; border-radius: 50%;
+  background: var(--pm-ai);
+  animation: pmBounce 1.2s infinite ease-in-out;
+}
+.pm-thinking i:nth-child(2) { animation-delay: .2s; }
+.pm-thinking i:nth-child(3) { animation-delay: .4s; }
+@keyframes pmBounce {
+  0%, 80%, 100% { transform: scale(.6); opacity: .4; }
+  40%           { transform: scale(1);  opacity: 1; }
+}
+
+/* ── Track record ────────────────────────────────────────────────────── */
+.pm-score { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); margin-bottom: 12px; }
+.pm-stat {
+  padding: 9px 11px;
+  border: 1px solid var(--t-line);
+  border-radius: 10px;
+  background: var(--t-surface-deep);
+}
+.pm-stat-k { font-size: 11px; color: var(--t-ink-dim); }
+.pm-stat-v { margin-top: 2px; font-size: 18px; font-weight: 650; color: var(--t-ink-strong); font-variant-numeric: tabular-nums; }
+.pm-ledger-scroll { overflow-x: auto; }
+.pm-ledger { width: 100%; min-width: 40rem; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+.pm-ledger th, .pm-ledger td { padding: 6px 8px; border-top: 1px solid var(--t-line); text-align: right; vertical-align: top; }
+.pm-ledger th:first-child, .pm-ledger td:first-child { text-align: left; }
+.pm-ledger thead th { border-top: 0; color: var(--t-ink-dim); font-weight: 600; font-size: 11px; }
+.pm-ledger td { color: var(--t-ink); }
+.pm-ledger td .pm-q-sub { font-size: 11px; }
+
+/* ── States ──────────────────────────────────────────────────────────── */
+.pm-empty, .pm-wait {
+  padding: 22px 12px;
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--t-ink-dim);
+}
+.pm-spin {
+  display: inline-block;
+  width: 14px; height: 14px;
+  margin-right: 6px;
+  vertical-align: -2px;
+  border: 2px solid var(--t-line-strong);
+  border-top-color: var(--t-accent);
+  border-radius: 50%;
+  animation: pmSpin .8s linear infinite;
+}
+@keyframes pmSpin { to { transform: rotate(360deg); } }
+.pm-alert {
+  padding: 10px 12px;
+  margin-bottom: 14px;
+  border-radius: 10px;
+  border: 1px solid var(--t-line-strong);
+  background: var(--t-surface-alt);
+  font-size: 12.5px;
+  color: var(--t-ink);
+}
+.pm-hidden, .pm-section.pm-hidden { display: none; }

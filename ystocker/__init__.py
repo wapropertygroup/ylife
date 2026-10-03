@@ -520,6 +520,15 @@ def create_app() -> Flask:
     from ystocker.settle import start as _start_settle_thread
     _start_settle_thread()
 
+    # Polymarket and Kalshi odds for /predictions and /fedwatch's cross-check:
+    # about twenty small public-API requests every ten minutes, never on the
+    # request path. The ledger thread settles AI reads whose markets have
+    # resolved, every six hours. See ystocker/predictions.py, odds_ledger.py.
+    from ystocker.predictions import start_background_thread as _start_predictions_thread
+    _start_predictions_thread()
+    from ystocker.odds_ledger import start_background_thread as _start_odds_ledger_thread
+    _start_odds_ledger_thread()
+
     # Start markets cache warm-up (pre-fetches index/VIX/sector data every 5 min)
     _start_markets_warmup_thread(app)
     # Keeps the long ^GSPC series off the request path; see its docstring for the

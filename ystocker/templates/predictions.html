@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}yStocker — Prediction Markets{% endblock %}
+{% block title_key %}pm.page_title{% endblock %}
+
+{% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('static', filename='predictions.css') }}?v={{ cache_bust or 'dev' }}">
+{% endblock %}
+
+{% block content %}
+{#  /predictions: what Polymarket and Kalshi price for the events that move
+    markets, the Fed decision three ways, and the AI read with its track record.
+    Everything below the header is drawn by static/predictions.js from
+    /api/predictions*; this template is the frame and the static words.
+    Sections that need the payload start hidden (data-pm-needs-data) so a cold
+    cache shows one waiting line rather than four empty cards. #}
+
+<div class="mb-6 sm:mb-7 fade-up">
+  <h1 class="text-2xl sm:text-3xl font-bold grad-text mb-1" data-i18n="pm.title">Prediction Markets</h1>
+  <p class="text-slate-500 dark:text-slate-400 text-sm" data-i18n="pm.subtitle">What Polymarket and Kalshi traders are pricing for the events that move markets — the Fed, inflation, jobs, growth, stocks, IPOs, commodities and crypto.</p>
+  <p class="text-xs text-slate-500 dark:text-slate-600 mt-1">
+    <span id="pmStamp">{% if cache_last_updated %}<span data-i18n="pm.as_of">Odds as of</span> <span data-ts="{{ cache_last_updated | int }}">{{ cache_last_updated | int | datetimeformat }}</span>{% endif %}</span>
+    &nbsp;·&nbsp;
+    <a href="{{ url_for('main.predictions_refresh') }}" class="text-brand hover:underline" data-i18n="pm.refresh">↻ Refresh</a>
+  </p>
+  <p id="pmVenueNote" class="pm-note pm-hidden"></p>
+</div>
+
+<p id="pmWait" class="pm-wait"><span class="pm-spin"></span><span data-i18n="pm.loading">Fetching odds from Polymarket and Kalshi…</span></p>
+<div id="pmError" class="pm-alert pm-hidden"></div>
+
+<!-- ── The Fed, three ways ─────────────────────────────────────────────── -->
+<section class="pm-section fade-up pm-hidden" data-pm-needs-data>
+  <h2 data-i18n="pm.fed_title">The Fed, three ways</h2>
+  <p class="pm-section-sub" data-i18n="pm.fed_sub">Each upcoming FOMC decision as the Fed Funds futures, Polymarket and Kalshi price it — the decision at that meeting, not the cumulative path shown on Interest Rates.</p>
+  <div id="pmFed"></div>
+  <p class="pm-note" data-i18n="pm.fed_note">Futures carry only an expected rate, so their odds name two outcomes per meeting: the expected move split between the 25bp steps either side of it, as CME's FedWatch does. The venues price every outcome, tails included. Venue odds are normalised to 100% (hover a row for the sum of the quoted prices), and the expected move counts a 50bp-or-more outcome as exactly 50bp.</p>
+  <p class="pm-note"><a class="pm-link" href="{{ url_for('main.fedwatch') }}" data-i18n="pm.fed_link">Full futures curve on Interest Rates →</a></p>
+</section>
+
+<!-- ── Movers ──────────────────────────────────────────────────────────── -->
+<section class="pm-section fade-up pm-hidden" data-pm-needs-data>
+  <h2 data-i18n="pm.movers_title">Biggest moves today</h2>
+  <p class="pm-section-sub" data-i18n="pm.movers_sub">The outcome that moved most in each market over the past day, among markets with at least $5k traded.</p>
+  <div id="pmMovers"></div>
+</section>
+
+<!-- ── The board ───────────────────────────────────────────────────────── -->
+<section class="pm-section fade-up pm-hidden" data-pm-needs-data data-wall-start>
+  <h2 data-i18n="pm.board_title">Markets</h2>
+  <p class="pm-section-sub" data-i18n="pm.board_sub">The busiest open markets on the events this site covers, no more than fifteen from any one topic. Titles and outcomes are as each venue publishes them.</p>
+  <div class="pm-toolbar">
+    <div class="pm-chips" id="pmTopics" role="group" aria-label="Topics"></div>
+    <input id="pmSearch" class="pm-select" type="search" maxlength="60" autocomplete="off"
+           placeholder="Filter markets" data-i18n-placeholder="pm.search_ph" aria-label="Filter markets">
+    <select id="pmPlatform" class="pm-select" aria-label="Venue">
+      <option value="all" data-i18n="pm.venue_all">All venues</option>
+      <option value="polymarket">Polymarket</option>
+      <option value="kalshi">Kalshi</option>
+    </select>
+    <select id="pmSort" class="pm-select" aria-label="Sort">
+      <option value="hot" data-i18n="pm.sort_hot">Most traded today</option>
+      <option value="closing" data-i18n="pm.sort_closing">Closing soonest</option>
+      <option value="moved" data-i18n="pm.sort_moved">Biggest move</option>
+    </select>
+  </div>
+  <div id="pmBoard" class="pm-grid"></div>
+  <p id="pmEmpty" class="pm-empty pm-hidden" data-i18n="pm.empty">No markets match these filters.</p>
+</section>
+
+<!-- ── Track record ────────────────────────────────────────────────────── -->
+<section class="pm-section fade-up pm-hidden" data-pm-needs-data>
+  <h2 data-i18n="pm.ledger_title">AI read track record</h2>
+  <p class="pm-section-sub" data-i18n="pm.ledger_sub">Every AI read is written down with the market's price at that moment and scored when the market resolves, by the Brier score: the mean squared error of the probabilities, so lower is better. 0 is perfect; always answering 50% scores 0.25.</p>
+  <div id="pmLedger"><p id="pmLedgerAnchor" class="pm-wait"><span class="pm-spin"></span></p></div>
+</section>
+
+<!-- ── How to read this page ───────────────────────────────────────────── -->
+<section class="pm-section fade-up">
+  <h2 data-i18n="pm.method_title">How to read this page</h2>
+  <ul class="pm-note pm-list">
+    <li data-i18n="pm.method_1">A price is the crowd's odds, not a certainty: a contract at 82¢ is a market pricing an 82% chance, before fees and the spread.</li>
+    <li data-i18n="pm.method_2">Liquidity decides whether a gap is real. A large disagreement in a thin market can vanish the moment anyone trades it, so check the volume and depth on each card.</li>
+    <li data-i18n="pm.method_3">Futures and prediction markets answer the Fed question differently: the futures price an average rate, the venues price discrete outcomes, and the gap between them is information about the tails.</li>
+    <li data-i18n="pm.method_4">An AI read is an input to your own estimate, not an order ticket. It sits beside the price so the gap is visible, and it is recorded so that, over time, the record says whether it was worth reading.</li>
+  </ul>
+  <p class="pm-note">
+    <span data-i18n="pm.sources">Sources</span>:
+    <a class="pm-link" href="https://docs.polymarket.com/" target="_blank" rel="noopener">Polymarket Gamma API</a> ·
+    <a class="pm-link" href="https://docs.kalshi.com/" target="_blank" rel="noopener">Kalshi API</a> ·
+    <span data-i18n="pm.sources_tail">CME ZQ futures via Yahoo Finance. Not affiliated with any venue. Not financial advice.</span>
+  </p>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='predictions.js') }}?v={{ cache_bust or 'dev' }}"></script>
+<script>
+  PM.boot({ aiEnabled: {{ 'true' if ai_enabled else 'false' }} });
+</script>
+{% endblock %}

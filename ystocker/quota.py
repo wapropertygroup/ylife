@@ -185,6 +185,77 @@ def try_consume_share(email: Optional[str]) -> tuple[bool, dict[str, Any]]:
                   "remaining": max(0, lim - used - 1), "tz": QUOTA_TZ}
 
 
+def limit_odds_read(email: Optional[str] = None) -> int:
+    """AI reads of a prediction market a user may *start* per day.
+
+    One read is one grounded Flash call -- cheap next to a run, dear next to
+    nothing -- and a fresh read is shared by every reader for twelve hours, so
+    viewing one costs nothing and only starting one is counted. VIPs get more
+    for the same reason they get more runs.
+    """
+    if is_vip(email):
+        return _int_env("PREDICTIONS_AI_VIP_DAILY_LIMIT", 25)
+    return _int_env("PREDICTIONS_AI_DAILY_LIMIT", 5)
+
+
+def limit_odds_read_global() -> int:
+    """AI reads started by everyone together per day: the ceiling that bounds
+    the bill however many accounts sign in."""
+    return _int_env("PREDICTIONS_AI_GLOBAL_DAILY_LIMIT", 60)
+
+
+def try_consume_odds_read(email: Optional[str]) -> tuple[bool, Optional[str], dict[str, Any]]:
+    """Reserve one AI read. Returns (ok, reason, usage-after), reason being
+    ``"user"``, ``"global"`` or ``"auth"`` as for runs.
+
+    Same file and lock as the other counters, under its own keys, so reading a
+    market can never eat into the allowance for running an analysis.
+    """
+    key = (email or "").strip().lower()
+    lim, g_lim = limit_odds_read(email), limit_odds_read_global()
+    if not key:
+        return False, "auth", {"used": 0, "limit": lim, "remaining": 0}
+    day = today()
+    with _Guard():
+        data = _read(day)
+        reads = data.setdefault("odds_read", {})
+        used = int(reads.get(key, 0))
+        total = int(data.get("odds_read_total", 0))
+        if total >= g_lim:
+            reason: Optional[str] = "global"
+        elif used >= lim:
+            reason = "user"
+        else:
+            reason = None
+            reads[key] = used + 1
+            data["odds_read_total"] = total + 1
+            data["day"] = day
+            _write(day, data)
+            used, total = used + 1, total + 1
+    return reason is None, reason, {
+        "used": used, "limit": lim, "remaining": max(0, lim - used),
+        "global_remaining": max(0, g_lim - total), "tz": QUOTA_TZ,
+    }
+
+
+def refund_odds_read(email: Optional[str]) -> None:
+    """Give back a read reservation that started nothing -- the event turned
+    out to have a fresh read already, or another request was making one."""
+    key = (email or "").strip().lower()
+    if not key:
+        return
+    day = today()
+    with _Guard():
+        data = _read(day)
+        reads = data.setdefault("odds_read", {})
+        used = int(reads.get(key, 0))
+        if used <= 0:
+            return
+        reads[key] = used - 1
+        data["odds_read_total"] = max(0, int(data.get("odds_read_total", 0)) - 1)
+        _write(day, data)
+
+
 def today() -> str:
     """Current quota day as YYYY-MM-DD in the configured timezone."""
     try:

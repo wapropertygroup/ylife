@@ -54,6 +54,7 @@
   'main.fedwatch':  ('main.fedwatch_refresh',  'Re-reads the CME Fed Funds futures curve and recomputes FOMC rate probabilities.'),
   'main.housing':   ('main.housing_refresh',   'Re-downloads the Zillow Research and Redfin datasets plus the FRED housing series.'),
   'main.multiples': ('main.multiples_refresh', 'Re-reads the S&P 500 P/E history and recomputes forward P/E from constituent fundamentals.'),
+  'main.predictions_page': ('main.predictions_refresh', 'Re-reads the live odds from Polymarket and Kalshi.'),
   'main.housing':   ('main.housing_refresh',   'Re-downloads the Zillow Research and Redfin Data Center housing datasets.'),
 } %}
 {% set _refresh = _refresh_map.get(request.endpoint) %}
@@ -655,6 +656,9 @@
             <a href="{{ url_for('main.multiples') }}"
                class="block px-4 py-2 text-xs text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-brand/20 transition"
                data-i18n="nav.multiples_long">P/E Multiples</a>
+            <a href="{{ url_for('main.predictions_page') }}"
+               class="block px-4 py-2 text-xs text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-brand/20 transition"
+               data-i18n="nav.predictions_long">Prediction Markets</a>
           </div>
         </div>
         <a href="{{ url_for('main.daily_report') }}"
@@ -946,6 +950,7 @@
           <a href="{{ url_for('main.fedwatch') }}"  class="px-3 py-2 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 truncate" data-i18n="nav.fedwatch">Rates</a>
           <a href="{{ url_for('main.housing') }}"   class="px-3 py-2 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 truncate" data-i18n="nav.housing">Housing</a>
           <a href="{{ url_for('main.multiples') }}" class="px-3 py-2 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 truncate" data-i18n="nav.multiples">P/E</a>
+          <a href="{{ url_for('main.predictions_page') }}" class="px-3 py-2 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 truncate" data-i18n="nav.predictions">Odds</a>
         </div>
 
         <div class="grid grid-cols-2 gap-1">

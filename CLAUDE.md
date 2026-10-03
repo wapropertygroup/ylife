@@ -295,6 +295,10 @@ Each app follows the same pattern:
   the `/dca` valuation engine. `dca.py` and `dcf.py` are **pure** for the same
   reason `lookthrough.py` is: a DCF is mostly assumption, so the arithmetic on
   top of those assumptions is the one part that can actually be proven.
+- `predictions.py` / `odds.py` / `odds_ai.py` / `odds_ledger.py` — `/predictions`:
+  live Polymarket and Kalshi odds, the Fed decision three ways (futures vs both
+  venues), and the AI read with its scored track record. `odds.py` is pure. See
+  "Prediction markets" below.
 
 ### The asset tracker and 穿透 (`/assets`)
 
@@ -1954,6 +1958,160 @@ payloads use `day_chg` vs `day_chg_pct`, `ytd` vs `ret_ytd`, `pct` vs `pct_dec`)
 The `tests/check_brief_*.py` scripts are diagnostics that need live caches, a
 Flask app, or a Gemini key, and are named `check_` so `unittest discover` skips
 them; `check_brief_live.py` does one real generation and prints it.
+
+### Prediction markets (`/predictions`)
+
+Built 2026-10-03 from three ideas on alphascope.app/predictions, an AI-forecast
+site for Polymarket and Kalshi. First, a forecast without the live price beside
+it is half a thought. Second, the gap between the two is where a thesis starts.
+Third, write the forecast down before the market resolves so it can be scored.
+The page has four parts:
+
+* **The board** — the busiest open markets on the events this site covers (Fed,
+  inflation, jobs, growth, stocks, companies/IPOs, commodities, crypto, policy),
+  with topic chips, venue and sort filters, liquidity or open interest, and a
+  link out to each venue.
+* **Biggest moves today**, one row per market.
+* **The Fed, three ways** — each upcoming FOMC decision as the ZQ futures,
+  Polymarket and Kalshi price it. Also shown as a card on `/fedwatch`.
+* **The AI read and its track record** — see below.
+
+In the Macro menu, after P/E.
+
+| Module | Job | Pure? |
+|---|---|---|
+| `odds.py` | Both venues normalised, topics, card selection, movers, the Fed cross-check, the AI prompt and parser, Brier scoring | **yes** |
+| `predictions.py` | Fetch both venues, cache, background thread, `peek()` | no |
+| `odds_ai.py` | One grounded Gemini read per market, cached and shared, 202-and-poll | no |
+| `odds_ledger.py` | Every read recorded with the market's price, settled when it resolves | no |
+
+**Both APIs are public and keyless**: Polymarket's Gamma API and Kalshi's trade
+API v2, each behind its own `fetchguard` breaker (`polymarket`, `kalshi`).
+Gamma is read by tag, busiest first (`PM_QUERIES`). Kalshi has no category
+filter on its events endpoint, and its Economics category alone has about 900
+series, mostly dead. It is read from a curated list of series instead
+(`KS_SERIES`): the Fed, CPI, payrolls, GDP, recession and the year-end index
+ranges. A refresh is about twenty requests every ten minutes. Gamma repeats
+every market's full description inside every listing, so the nine listings
+measured 10.4 MB of JSON (about a tenth of that gzipped on the wire). Each is
+parsed and dropped before the next is fetched.
+
+The usual rules hold. `peek()` never fetches, and a cold cache answers 202
+while one refresh is kicked. A worker re-reads the cache file when its mtime
+moves, because under `--preload` the refresh thread lives only in the master.
+A venue that fails outright has its previous events carried forward, labelled
+with `stale_since`, rather than the board losing half its rows.
+
+Traps in the two vocabularies, each found on live data:
+
+- **An absent change field is unknown, not zero.** Gamma omits
+  `oneDayPriceChange` on markets that plainly moved: October's "No change" had
+  +49pp on the week and no daily field. Reading it as 0 hides the biggest mover.
+- **Open events hold closed and placeholder markets.** "How high will inflation
+  get?" keeps its resolved rungs at a price of 1. "Largest Company end of
+  October" carries "Company F" through "T", each `active: false` at a 0.5 price
+  nobody quotes. Both are dropped. Whether an event is a single question is
+  read *before* that filter, or a group left with one live outcome is labelled
+  "Yes" instead of "NVIDIA".
+- **The price shown is each venue's own display rule**: the midpoint while the
+  spread is at most 10¢, otherwise the last trade. Polymarket's `outcomePrices`
+  already is that number. Kalshi's is computed by the same rule.
+- **A Kalshi contract pays $1**, so its contract count is its notional. That is
+  close enough to rank one board on, but not to quote as the same measurement,
+  so the card labels Kalshi's depth as open interest.
+- **Rolling daily ladders crowd out everything.** "Bitcoin above ___ on
+  October 6" are the busiest contracts on either venue. Equities, commodities
+  and crypto markets must run at least a week to be listed. Scheduled macro
+  releases are exempt, since a CPI market closing tomorrow is the one to see.
+  `rank_board` caps any one topic at fifteen.
+
+**The Fed cross-check compares per-meeting decisions, never the grid.**
+`/fedwatch`'s grid is *cumulative*: the chance the range is still unchanged by
+December. Both venues price the decision *at* each meeting. On 2026-10-03,
+December read off the grid would have been 14.6% "no change" beside
+Polymarket's 23.5%: a nine-point disagreement between two different questions.
+So the futures are restated per meeting from `change_bp`, split between the
+two 25bp steps either side as `fedwatch._probability_tree`'s leg already does
+(`odds.futures_split`). That leg can only ever name two outcomes; the venues
+price the tails too, which is the point of showing them together. Venue odds
+are normalised to 100% and the overround is kept (shown on hover). The expected
+move counts a "50bp+" outcome as exactly 50bp, so it is a floor. Measured that
+day: the venues agreed with the futures on October (2.8pp apart) and not on
+December (futures 81.6% hike, Polymarket 72.9%, Kalshi 68.8%).
+
+**The AI read is price-blind on purpose.** The first live read was shown the
+prices. It answered "No change 82.5%" to a market at 82.5%, and the prompt's
+own format example said 82.5 as well. A read that copies the market has no gap
+to show and gives the ledger nothing to measure. So `odds.build_read_prompt`
+gives the model the question, the outcomes, the rules and the clock, but no
+price, volume or recent move. `tests/test_odds.py` asserts that none of them
+leak. The page sets the read beside the price afterwards. The second live read
+said 90% against the market's 82.5%, with sources.
+
+How a read is made:
+
+- One `gemini-2.5-flash` call with Google Search grounding returns one JSON
+  block carrying an English and a Chinese summary. One call serves both
+  languages, and one event cannot get two disagreeing forecasts.
+- The parser refuses rather than repairs. A missing outcome, or a full
+  one-of-many set summing outside 90–110, is an error the reader can retry.
+- **0.5 is half a percent.** Fractions are accepted only for a complete
+  one-of-many set summing to about 1. Anywhere else a "fraction guess" would
+  record a long shot at 0.5% as 50%.
+- POST claims the market with an `O_CREAT|O_EXCL` marker, starts a thread and
+  answers 202. The page polls with a bounded loop that ends on a rendered
+  state. A marker older than four minutes is a dead run.
+- A fresh read (12 h) is shared by everyone and holds nothing about who asked.
+  GET is open; POST is gated like other model calls (signed in, plus the
+  agents' allowlist when one is set).
+- Starting a read spends `quota.try_consume_odds_read`: 5 a day per user, 25 for
+  a VIP, 60 for everyone together. The counter lives in the same locked file as
+  runs, chats and shares. Asking for a market that already has a fresh read, or
+  one being made, spends nothing.
+- `PREDICTIONS_AI=0` is the kill switch. `PREDICTIONS_AI_MODEL`,
+  `PREDICTIONS_AI_DAILY_LIMIT`, `PREDICTIONS_AI_VIP_DAILY_LIMIT` and
+  `PREDICTIONS_AI_GLOBAL_DAILY_LIMIT` tune the rest.
+
+**The ledger is an observed series.** Each read is written down when it exists:
+the model's probabilities, the market's from the same snapshot, the time and
+the model. A thread every six hours settles rows whose markets have resolved
+(Gamma `closed` with prices at 0/1; Kalshi `result`). Both the AI and the market
+are scored by Brier over exactly the same outcomes. A void outcome drops from
+both scores; a row with nothing left is `void`. With nothing settled, the means
+are `None`, never 0, which would read as perfect. No page claims the reads are
+good; the ledger is where that gets found out.
+
+Key schema: `bucket` (`YYYY-MM`) HASH + `sk` (`<iso>#<event key>`) RANGE, one
+JSON `payload` attribute, read by a Query per month back. It degrades to the
+disk mirror (`cache/predictions/ledger.json`) when the table is missing, and the
+two are unioned on read. A settled copy beats an open one.
+
+```bash
+aws dynamodb create-table --table-name ystocker-prediction-reads --region us-west-2 \
+  --billing-mode PAY_PER_REQUEST \
+  --attribute-definitions AttributeName=bucket,AttributeType=S \
+                          AttributeName=sk,AttributeType=S \
+  --key-schema AttributeName=bucket,KeyType=HASH \
+               AttributeName=sk,KeyType=RANGE
+```
+
+The table is not in `deploy/cloudformation.yaml`, like every other hand-made
+table, and IAM already grants `table/ystocker-*`. No TTL.
+
+The page's cards, Fed table, AI panel and ledger are drawn by
+`static/predictions.js` (`const PM`, script-scoped like `I18n`) with
+hand-written `static/predictions.css`, since Tailwind here is compiled and a
+class built in JS would be missing from the bundle. Every venue and model
+string is escaped before it reaches innerHTML. A collapsed card shows a
+ladder's rungs nearest 50% and a bucketed field's likeliest buckets. Showing
+the first four instead put "Anthropic IPO Closing Market Cap" up as four
+buckets under 1%, with its 94% bucket hidden.
+
+Tests: `tests/test_odds.py` (58, real 2026-10-03 payloads from both venues),
+`tests/test_odds_ledger.py` (17: the read's lifecycle, settlement, the quota),
+`tests/check_predictions_endpoints.py` (16 through the Flask test client,
+hermetic) and `node tests/check_predictions_render.mjs` (54, the real i18n.js
+and predictions.js in a vm).
 
 ### Caching (yStocker)
 Two-tier: in-memory dict + on-disk JSON in `cache/`. All cache access guarded by `threading.Lock`. Disk writes use atomic temp file + `os.replace()`.

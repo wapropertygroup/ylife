@@ -4600,6 +4600,192 @@ def api_fedwatch_history():
 
 
 # ---------------------------------------------------------------------------
+# Prediction markets — Polymarket and Kalshi odds, the Fed three ways, AI reads
+# ---------------------------------------------------------------------------
+#
+# The feed is predictions.py (fetch + cache, never on the request path), the
+# arithmetic odds.py (pure), the AI read odds_ai.py and its record
+# odds_ledger.py. Every view here only peeks.
+
+#: A refresh is ~20 upstream requests. The header's ↻ Refresh is cooled down
+#: client-side; this is the server's own floor, so a script hammering the
+#: route cannot turn it into a request multiplier.
+_PREDICTIONS_REFRESH_FLOOR = 60
+
+
+def _predictions_fed_rows(payload: Optional[dict]) -> list[dict]:
+    """The Fed cross-check: /fedwatch's futures beside both venues' markets.
+
+    Peeks the futures too. A payload from this morning still answers "what do
+    the futures price for December", and the rows carry its ``as_of``.
+    """
+    from ystocker import fedwatch, odds
+
+    return odds.fed_crosscheck(fedwatch.peek(), (payload or {}).get("fed_events") or [])
+
+
+def _predictions_board_event(event: dict) -> dict:
+    """A board row without the resolution text, which is most of its bytes and
+    is fetched per market when a reader opens one."""
+    return {k: v for k, v in event.items() if k not in ("rules", "tags")}
+
+
+@bp.route("/predictions")
+def predictions_page():
+    """What Polymarket and Kalshi price for the events that move markets."""
+    from ystocker import odds_ai, predictions
+
+    log.info("GET /predictions")
+    payload = predictions.peek()
+    return render_template(
+        "predictions.html",
+        peer_groups=list(PEER_GROUPS.keys()),
+        cache_last_updated=(payload or {}).get("fetched_at"),
+        ai_enabled=odds_ai.enabled(),
+    )
+
+
+@bp.route("/predictions/refresh")
+def predictions_refresh():
+    """Re-read both venues in the background, unless the odds are under a minute old."""
+    from ystocker import predictions
+
+    age = predictions.age_seconds()
+    if age is None or age >= _PREDICTIONS_REFRESH_FLOOR:
+        predictions.kick()
+    return redirect(url_for("main.predictions_page"))
+
+
+@bp.route("/api/predictions")
+def api_predictions():
+    """JSON API — the board, the day's movers and the Fed cross-check.
+
+    202 while the first payload is being fetched. A payload past its ten-minute
+    TTL is still served (labelled ``stale``) while a refresh runs behind it:
+    odds from twelve minutes ago beat a spinner.
+    """
+    from ystocker import odds, odds_ai, predictions
+
+    payload = predictions.peek()
+    if not payload:
+        started = predictions.kick()
+        log.info("API predictions: cold cache (refresh started=%s)", started)
+        return jsonify({"status": "warming", "warming": True}), 202
+    fresh = predictions.is_fresh()
+    # The master's thread refreshes every TTL, landing a few seconds after the
+    # payload turns stale. Kicking at TTL would have every worker race it; at
+    # twice the TTL the thread has evidently stopped, and a worker steps in.
+    age = predictions.age_seconds(payload) or 0.0
+    if age > 2 * predictions.TTL_SECONDS:
+        predictions.kick()
+
+    events = payload.get("events") or []
+    return jsonify({
+        "status": "ok",
+        "fetched_at": payload.get("fetched_at"),
+        "age_seconds": predictions.age_seconds(payload),
+        "ttl_seconds": predictions.TTL_SECONDS,
+        "stale": not fresh,
+        "sources": payload.get("sources") or {},
+        "topics": list(odds.TOPICS),
+        "events": [_predictions_board_event(e) for e in events],
+        "movers": odds.movers(events),
+        "fed": _predictions_fed_rows(payload),
+        "reads": sorted(odds_ai.fresh_keys(e.get("key") for e in events)),
+        "ai": {"enabled": odds_ai.enabled(), "signed_in": bool(_agent_user())},
+    })
+
+
+@bp.route("/api/predictions/fed")
+def api_predictions_fed():
+    """JSON API — the Fed cross-check alone, for the card on /fedwatch."""
+    from ystocker import predictions
+
+    payload = predictions.peek()
+    if not payload:
+        predictions.kick()
+        return jsonify({"status": "warming", "warming": True, "rows": []}), 202
+    return jsonify({"status": "ok", "fetched_at": payload.get("fetched_at"),
+                    "rows": _predictions_fed_rows(payload)})
+
+
+@bp.route("/api/predictions/read", methods=["GET", "POST"])
+def api_predictions_read():
+    """One market's AI read: GET its state, POST to ask for one.
+
+    GET is open to anyone: a read is about public market data, holds nothing
+    about who asked, and is shared by every reader for twelve hours. It also
+    carries the market's resolution rules, which the board leaves out.
+
+    POST is gated like every other model call here (signed in, and the agents'
+    allowlist when one is set) and spends one of the reader's daily reads --
+    unless a fresh read already exists or another request is making it, which
+    cost nothing and are answered without touching the quota.
+    """
+    from ystocker import odds_ai, predictions, quota
+
+    if request.method == "GET":
+        key = (request.args.get("key") or "").strip()
+        event = predictions.find(key) if key else None
+        state = odds_ai.status(key) if key else {"status": "none"}
+        if not event and state.get("status") == "none":
+            return jsonify({"status": "unknown", "error": "No such market"}), 404
+        state["rules"] = (event or {}).get("rules") or ""
+        state["enabled"] = odds_ai.enabled()
+        return jsonify(state)
+
+    gate = _agent_gate()
+    if gate:
+        return gate
+    if not odds_ai.enabled():
+        return jsonify({"error": "AI reads are switched off", "reason": "disabled"}), 503
+    body = request.get_json(force=True, silent=True) or {}
+    key = str(body.get("key") or "").strip()
+    event = predictions.find(key)
+    if not event:
+        return jsonify({"error": "No such market", "reason": "unknown"}), 404
+
+    state = odds_ai.status(key)
+    if state["status"] == "done" and state.get("fresh"):
+        return jsonify(state)
+    if state["status"] == "running":
+        return jsonify(state), 202
+
+    email = _agent_user()
+    ok, reason, info = quota.try_consume_odds_read(email)
+    if not ok:
+        log.info("API predictions/read: refused %s for %s (%s)", key, email, reason)
+        return jsonify({"error": "Daily AI reads used up", "reason": reason, "quota": info}), 429
+    payload = predictions.peek() or {}
+    outcome = odds_ai.start(event, market_as_of=payload.get("fetched_at"))
+    if outcome != "started":
+        quota.refund_odds_read(email)
+    log.info("API predictions/read: %s for %s -> %s", key, email, outcome)
+    state = odds_ai.status(key)
+    state["quota"] = info
+    return jsonify(state), (202 if state["status"] == "running" else 200)
+
+
+@bp.route("/api/predictions/ledger")
+def api_predictions_ledger():
+    """JSON API — every AI read recorded, and how the settled ones scored
+    against the market price beside them."""
+    from ystocker import odds, odds_ledger
+
+    rows = odds_ledger.rows(limit=1000)
+    public = ("key", "platform", "title", "subtitle", "url", "kind", "topic", "closes",
+              "created_at", "model", "confidence", "status", "brier_ai", "brier_market",
+              "settled_at")
+    shown = []
+    for row in rows[:60]:
+        item = {k: row.get(k) for k in public}
+        item["outcomes"] = [{k: o.get(k) for k in ("label", "market_p", "ai_p", "result")}
+                            for o in row.get("outcomes") or []]
+        shown.append(item)
+    return jsonify({"status": "ok", "summary": odds.ledger_summary(rows), "rows": shown})
+
+
+# ---------------------------------------------------------------------------
 # Trading agents — gated, subprocess-per-run
 # ---------------------------------------------------------------------------
 

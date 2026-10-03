@@ -1,6 +1,10 @@
 {% extends "base.html" %}
 {% block title %}yStocker — Interest Rate Probabilities (FedWatch){% endblock %}
 
+{% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('static', filename='predictions.css') }}?v={{ cache_bust or 'dev' }}">
+{% endblock %}
+
 {% block content %}
 <style>
 /* Violet is the ✦ Explain accent and has no shared --t-* equivalent, so this
@@ -198,6 +202,29 @@
     </div>
     <div id="fedwatchExplainPanel" class="explain-panel"></div>
   </div>
+
+  <!-- ── The same decisions as Polymarket and Kalshi price them ─────────── -->
+  {#  Drawn by static/predictions.js from /api/predictions/fed, the same
+      renderer /predictions uses, so the two pages cannot show one meeting two
+      ways. Per meeting, which is why it sits apart from the grid below: the
+      grid is cumulative, and December read off it beside a venue's December
+      market would compare two different questions. #}
+  <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
+    <div class="mb-3">
+      <h3 class="text-sm font-semibold text-slate-600 dark:text-slate-300" data-i18n="pm.fw_card_title">Futures vs. prediction markets</h3>
+      <p class="text-xs text-slate-500 mt-0.5" data-i18n="pm.fw_card_sub">The decision at each meeting as the futures above, Polymarket and Kalshi price it. Per meeting, not cumulative like the grid.</p>
+    </div>
+    <div id="fwVenues"><p id="fwVenuesLoading" class="pm-wait"><span class="pm-spin"></span></p></div>
+    <p class="text-xs text-slate-500 mt-2">
+      <a href="{{ url_for('main.predictions_page') }}" class="text-brand hover:underline" data-i18n="pm.fw_card_link">All prediction markets →</a>
+    </p>
+  </div>
+  <script src="{{ url_for('static', filename='predictions.js') }}?v={{ cache_bust or 'dev' }}"></script>
+  <script>
+    // Registered at parse time, not after the futures load: a DeferLoad anchor
+    // is measured against the layout when when() is called.
+    DeferLoad.when('#fwVenuesLoading', () => PM.bootFed(document.getElementById('fwVenues')));
+  </script>
 
   <!-- ── Secondary: the implied policy path (single series, no legend) ──── -->
   <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">

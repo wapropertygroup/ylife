@@ -19,7 +19,7 @@
     links (.w-sub-flat) instead -- and the row opens scrolled to the page's own
     link, which on the pages at its far end was otherwise out of sight. #}
 {% set _ep = request.endpoint %}
-{% set _macro = ('main.fed', 'main.fedwatch', 'main.housing', 'main.multiples') %}
+{% set _macro = ('main.fed', 'main.fedwatch', 'main.housing', 'main.multiples', 'main.predictions_page') %}
 <nav class="w-sub" aria-label="Markets" data-w-sub>
   <div class="w-sub-inner">
     <div class="w-sub-links" data-w-sub-row>
@@ -59,12 +59,14 @@
           <a href="{{ url_for('main.fedwatch') }}" data-i18n="nav.fedwatch_long">Interest Rates</a>
           <a href="{{ url_for('main.housing') }}" data-i18n="nav.housing_long">Housing Market</a>
           <a href="{{ url_for('main.multiples') }}" data-i18n="nav.multiples_long">P/E Multiples</a>
+          <a href="{{ url_for('main.predictions_page') }}" data-i18n="nav.predictions_long">Prediction Markets</a>
         </div>
       </div>
       <a class="w-sub-link w-sub-flat{% if _ep == 'main.fed' %} is-current{% endif %}" href="{{ url_for('main.fed') }}" data-i18n="nav.fed">Fed</a>
       <a class="w-sub-link w-sub-flat{% if _ep == 'main.fedwatch' %} is-current{% endif %}" href="{{ url_for('main.fedwatch') }}" data-i18n="nav.fedwatch">Rates</a>
       <a class="w-sub-link w-sub-flat{% if _ep == 'main.housing' %} is-current{% endif %}" href="{{ url_for('main.housing') }}" data-i18n="nav.housing">Housing</a>
       <a class="w-sub-link w-sub-flat{% if _ep == 'main.multiples' %} is-current{% endif %}" href="{{ url_for('main.multiples') }}" data-i18n="nav.multiples">P/E</a>
+      <a class="w-sub-link w-sub-flat{% if _ep == 'main.predictions_page' %} is-current{% endif %}" href="{{ url_for('main.predictions_page') }}" data-i18n="nav.predictions">Odds</a>
 
       <a class="w-sub-link{% if _ep == 'main.daily_report' %} is-current{% endif %}" href="{{ url_for('main.daily_report') }}" data-i18n="nav.daily">Daily</a>
       <a class="w-sub-link{% if _ep == 'main.videos' %} is-current{% endif %}" href="{{ url_for('main.videos') }}" data-i18n="nav.videos">Videos</a>
