@@ -2972,6 +2972,20 @@ Started in `create_app()`, all daemon threads:
 1. `_load_secrets_from_ssm()` in each app's `__init__.py` tries AWS SSM first
 2. Falls back to `python-dotenv` loading `.env` from project root
 3. Key secrets: `GEMINI_API_KEY`, `GOOGLE_MAPS_API_KEY`, `GOOGLE_CLIENT_ID`, `YOUTUBE_API_KEY`, `SES_FROM_EMAIL`
+4. **Session keys never fall back to a constant.** Each app reads
+   `<APP>_SECRET_KEY` (`YSTOCKER_SECRET_KEY`, …, `YHOME_SECRET_KEY`). Without one
+   it draws a random key for the process and logs a warning. Under `--preload`
+   the master makes it once and both workers share it, so sessions last until
+   the next restart. Until 2026-10-04 every app fell back to a `"<app>-dev-secret"`
+   spelled out in this repository, and yHome hardcoded its key. Production
+   ystocker ran on its constant because the SSM parameter had never been
+   created, and a forged cookie was accepted. yBG's admin login was forgeable
+   the same way.
+   - **Which apps have a parameter:** ystocker, yPlanner and yTracker. The
+     other five, including yBG, sign out on each deploy.
+   - **Making a session survive restarts** takes a SecureString
+     `/<app>/<APP>_SECRET_KEY` plus a line in that app's `SSM_PARAMS`.
+   - `tests/test_session_keys.py` pins all of it.
 
 ## Production
 

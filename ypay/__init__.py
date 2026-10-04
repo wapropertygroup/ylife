@@ -6,7 +6,9 @@ Accept payments via Stripe Checkout for products, services, or donations.
 """
 from __future__ import annotations
 
+import logging
 import os
+import secrets
 
 from flask import Flask
 
@@ -62,7 +64,16 @@ def create_app() -> Flask:
         pass
 
     app = Flask(__name__)
-    app.secret_key = os.environ.get("YPAY_SECRET_KEY", "ypay-dev-secret")
+    # A real key comes from YPAY_SECRET_KEY (SSM or .env). Without one, a random key for
+    # this process, never a constant: a constant in this repository lets anyone
+    # sign a session cookie. Under gunicorn --preload it is made once in the
+    # master, so both workers share it; sessions last until the next restart.
+    _key = os.environ.get("YPAY_SECRET_KEY")
+    if not _key:
+        _key = secrets.token_hex(32)
+        logging.getLogger(__name__).warning(
+            "YPAY_SECRET_KEY is not set: sessions are signed with a key that lasts until the next restart")
+    app.secret_key = _key
     # Brand by hostname, mirroring ystocker/__init__.py. This app answers on
     # pay.li-family.us and on pay.trade-agents.com, and a buyer who started on
     # trade-agents.com must not be handed to a page called yPay at the exact

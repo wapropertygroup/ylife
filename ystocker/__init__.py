@@ -345,8 +345,21 @@ def create_app() -> Flask:
         pass
 
     app = Flask(__name__)
+    import logging as _logging
     import os as _os
-    app.secret_key = _os.environ.get("YSTOCKER_SECRET_KEY", "ystocker-dev-secret")  # needed for flash + session
+    import secrets as _secrets
+    # Needed for flash and the session. A real key comes from YSTOCKER_SECRET_KEY
+    # (SSM). Without one, a random key for this process, never a constant: until
+    # 2026-10-04 the parameter did not exist, production signed sessions with
+    # the constant this line used to name, and a cookie forged with it was
+    # accepted. Under --preload the key is made once in the master and shared by
+    # the workers; sessions last until the next restart.
+    _key = _os.environ.get("YSTOCKER_SECRET_KEY")
+    if not _key:
+        _key = _secrets.token_hex(32)
+        _logging.getLogger(__name__).warning(
+            "YSTOCKER_SECRET_KEY is not set: sessions are signed with a key that lasts until the next restart")
+    app.secret_key = _key
     app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
     app.config["SESSION_COOKIE_HTTPONLY"] = True
     # Google Sign-In sets session.permanent = True (routes.py auth_google), so

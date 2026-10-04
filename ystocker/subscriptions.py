@@ -500,8 +500,10 @@ class HandoffUnavailable(RuntimeError):
 
 def _serializer():
     """Signs with YSTOCKER_SECRET_KEY and nothing else. yStocker's session falls
-    back to a dev key when that is unset; a handoff must not, because the key is
-    in this repository and a token forged with it opens anyone's billing portal."""
+    back to a random per-process key when that is unset, which is safe for a
+    session; a handoff must not fall back at all. ypay verifies it in another
+    process, so only the shared key can work, and a constant would be in this
+    repository: a token forged with it opens anyone's billing portal."""
     from itsdangerous import URLSafeTimedSerializer
 
     secret = os.environ.get("YSTOCKER_SECRET_KEY", "").strip()
