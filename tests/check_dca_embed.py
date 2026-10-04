@@ -13,7 +13,7 @@ itself rather than copying it, so these pin the seams that framing creates:
 * a rebuild started in the tab comes back to the framed page, not to the full
   page inside the frame;
 * /history carries the tab, the panel, the frame's loader and its ``?tab=dca``
-  link, and the header's DCA button opens the tab;
+  link;
 * every tab has a deep link: switching writes ``?tab=`` and each opens from it.
 
 Named ``check_`` so ``unittest discover`` skips it: it builds a real app.
@@ -153,7 +153,7 @@ class DcaEmbed(unittest.TestCase):
         self.assertIn("e.source !== frame.contentWindow", html)   # only this frame's messages
         self.assertRegex(html, r"const HISTORY_TABS = \[[^\]]*'dca'")
         self.assertIn("HISTORY_TABS.includes(_tab)", html)      # ?tab=dca opens it
-        self.assertIn("switchTab('dca')", html)                  # the header button opens it
+        self.assertIn('id="tabDcaBtn" onclick="switchTab(\'dca\')"', html)
 
     def test_every_tab_has_a_deep_link(self):
         # Asked for: "each tab can have a deep link". Switching writes ?tab=,

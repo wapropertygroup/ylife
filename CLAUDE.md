@@ -484,8 +484,8 @@ DCA = Base × M_valuation × M_earnings × M_portfolio
 ```
 
 so V=0 → 0.50x, V=50 → 1.00x, V=100 → 1.50x. Valuation sets the pace of
-buying; it never answers whether to buy. Linked from the `/history/<ticker>`
-header; the page is public, like `/history`.
+buying; it never answers whether to buy. It is a tab on `/history/<ticker>`
+(below); the page is public, like `/history`.
 
 **It is also a tab on `/history/<ticker>` (2026-10-04)**, and that tab is this
 page itself, framed: `/dca/<t>?embed=1` renders through base.html's embedded
@@ -501,9 +501,9 @@ level and share ids such as `#stockName`. Inside the frame:
   keeps `embed=1` through `dca_refresh`'s redirect.
 - **Indexing and language.** The framed copy carries noindex. A language switch
   on /history reloads the frame with `?lang=`.
-The header's DCA button opens the tab, as does a modified click. Every link to
-one company's DCA goes to that tab too: the overview's rows and search box,
-/assets' DCA tab, the peer panel, and the Research Lab and docs. `/dca/<t>` still
+/history's header has no DCA button: the tab replaced it. Every link to one
+company's DCA goes to that tab: the overview's rows and search box, /assets'
+DCA tab, the peer panel, and the Research Lab and docs. `/dca/<t>` still
 serves the full page, for old links and for the tab's "Full page ↗" button.
 Tests: `tests/check_dca_embed.py` (7, hermetic).
 
