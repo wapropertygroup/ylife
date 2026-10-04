@@ -278,8 +278,10 @@ class DcaEndpoints(unittest.TestCase):
         self.assertIn('const TICKER = "MSFT"', self.client.get("/dca/msft").data.decode())
 
     def test_history_page_links_to_dca(self):
+        # The header button opens the page's own DCA tab, which frames /dca/<t>.
         body = self.client.get("/history/MSFT").data.decode()
-        self.assertIn("/dca/MSFT", body)
+        self.assertIn('href="/history/MSFT?tab=dca"', body)
+        self.assertIn("/dca/${encodeURIComponent(TICKER)}?embed=1", body)
 
     # ── the API ───────────────────────────────────────────────────────────
     def test_api_returns_a_score_and_an_equation(self):

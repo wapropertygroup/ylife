@@ -157,7 +157,7 @@ console.log('coverageCell');
 /* ── The fund filter ──────────────────────────────────────────────────────
    A fund publishes no statements, so following one from this page costs six
    Yahoo reads and about a minute to arrive at "no published statements". SPY
-   and XTL were both being suggested. Three entry points reach /dca/<t> — the
+   and XTL were both being suggested. Three entry points reach a company's DCA tab — the
    suggestion list, the Enter key and the Score button — and the last two take
    whatever is in the box, so filtering the list alone leaves two ways through.
    That is what these checks are for. */
@@ -231,7 +231,7 @@ console.log('\nfund filter');
 
   navigated = null;
   fns.goTo('MSFT');
-  check('a company still navigates', navigated === '/dca/MSFT');
+  check('a company still navigates, to its DCA tab', navigated === '/history/MSFT?tab=dca');
 
   // RECENT_KEY is shared with navsearch and /lookup, so a fund opened on
   // /history arrives here as a chip linking to a page that cannot score it.
@@ -240,6 +240,25 @@ console.log('\nfund filter');
         !dom.recentList.innerHTML.includes('SPY'));
   check('companies stay in the recent chips',
         dom.recentList.innerHTML.includes('MSFT'));
+}
+
+/* ── V ≤ 20 is left off the page ───────────────────────────────────────────
+   Asked for 2026-10-04. The cut is made on V as the table shows it, so a 20.3
+   that reads "20" cannot sit on the page under a rule that says "≤ 20 hidden",
+   and a name that could not be scored is not "≤ 20". The threshold is read
+   from the template, so this cannot pass against a copy of it. */
+console.log('\nV ≤ 20 hidden');
+{
+  const max = Number((/const DEAR_MAX_V = (\d+);/.exec(tpl) || [])[1]);
+  check('the threshold is 20', max === 20);
+  const hiddenAsDear = new Function(`const DEAR_MAX_V = ${max}; ${extract('hiddenAsDear')}; return hiddenAsDear;`)();
+  check('V 19.6 is hidden', hiddenAsDear({ V: 19.6 }));
+  check('V exactly 20 is hidden', hiddenAsDear({ V: 20 }));
+  check('a 20.3 that reads "20" is hidden', hiddenAsDear({ V: 20.3 }));
+  check('a 20.6 that reads "21" stays', !hiddenAsDear({ V: 20.6 }));
+  check('V 0 is hidden', hiddenAsDear({ V: 0 }));
+  check('a cheap name stays', !hiddenAsDear({ V: 93.3 }));
+  check('an unscored name is not "≤ 20"', !hiddenAsDear({ V: null }) && !hiddenAsDear({}));
 }
 
 console.log(failed ? `\n${failed} check(s) failed` : '\nall checks passed');

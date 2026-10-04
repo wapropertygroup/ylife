@@ -117,6 +117,7 @@
   <div class="flex items-center justify-between mb-3 gap-2 flex-wrap">
     <h2 class="text-sm font-semibold" data-i18n="dcx.table_title">All scored names</h2>
     <div id="totalLine" class="text-xs text-slate-500"></div>
+    <div id="dearNote" class="hidden text-xs text-slate-500"></div>
     <div id="portfolioHint" class="hidden text-xs mt-1 text-slate-500">
       <span data-i18n="dcx.port_signed_out">Sign in to let M_portfolio size by your own look-through exposure; it stays at 1.00× until then.</span>
       <a href="/login" class="underline hover:no-underline ml-1" data-i18n="dcx.sign_in">Sign in</a>
@@ -157,6 +158,23 @@
 const BASE_KEY = 'ystocker_dca_base';
 let _rows = [], _sort = { key: 'V', dir: -1 }, _data = null, _pollTimer = null, _polls = 0;
 let _allPortfolioUnknown = false;
+
+/* Names at V ≤ 20 are left off this page unless asked for (2026-10-04): off the
+   table, both summary cards and the period total -- the "dearest" card would
+   otherwise list exactly what was asked to be hidden, and a total over rows
+   nobody can see does not add up. V is compared as it is shown, so a 20.3 that
+   reads "20" is hidden too. Never silently: #dearNote says how many, with a
+   way to show them. A name that could not be scored (V null) is not "≤ 20". */
+const DEAR_MAX_V = 20;
+let _showDear = false;
+function hiddenAsDear(r) {
+  return r.V != null && Number(r.V.toFixed(0)) <= DEAR_MAX_V;
+}
+function emptyText(hiddenCount) {
+  return hiddenCount
+    ? (I18n.t('dcx.dear_all_hidden') || 'Every scored name has V ≤ 20, and those are hidden.')
+    : (I18n.t('dcx.none_yet') || 'Nothing scored yet.');
+}
 
 const fmtMoney = v => v == null ? '—'
   : v.toLocaleString(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
@@ -266,7 +284,7 @@ function coverageCell(r, need) {
 }
 
 function summaryRow(r) {
-  return `<a href="/dca/${encodeURIComponent(r.ticker)}"
+  return `<a href="/history/${encodeURIComponent(r.ticker)}?tab=dca"
              class="flex items-center gap-3 px-3 py-2 rounded-lg well hover:border-slate-400 dark:hover:border-slate-600 transition">
     <span class="font-mono font-semibold text-sm w-16">${esc(r.ticker)}</span>
     <span class="pct-track flex-1"><span class="pct-fill" style="width:${r.V == null ? 0 : r.V}%;background:${vColor(r.V)}"></span></span>
@@ -294,16 +312,27 @@ function render() {
     warn.classList.add('hidden');
   }
 
+  const dear = _rows.filter(hiddenAsDear);
+  const rows = _showDear ? _rows : _rows.filter(r => !hiddenAsDear(r));
+  const hiddenCount = _showDear ? 0 : dear.length;
+  const note = document.getElementById('dearNote');
+  note.classList.toggle('hidden', !dear.length);
+  note.innerHTML = !dear.length ? '' :
+    esc((I18n.t(_showDear ? 'dcx.dear_shown' : 'dcx.dear_hidden')
+         || (_showDear ? 'Showing {n} with V ≤ 20' : '{n} with V ≤ 20 hidden')).replace('{n}', dear.length)) +
+    ` <button type="button" class="underline hover:no-underline ml-1" data-dear-toggle>${
+      esc(I18n.t(_showDear ? 'dcx.dear_hide' : 'dcx.dear_show') || (_showDear ? 'Hide them' : 'Show them'))}</button>`;
+
   // Sorted copies for the two summary cards. A null V sorts out of both, since
   // "could not be measured" belongs in neither "cheapest" nor "dearest".
-  const scored = _rows.filter(r => r.V != null);
+  const scored = rows.filter(r => r.V != null);
   const byV = scored.slice().sort((a, b) => b.V - a.V);
   document.getElementById('cheapList').innerHTML =
     byV.slice(0, 5).map(summaryRow).join('') ||
-    `<p class="text-xs text-slate-500">${esc(I18n.t('dcx.none_yet') || 'Nothing scored yet.')}</p>`;
+    `<p class="text-xs text-slate-500">${esc(emptyText(hiddenCount))}</p>`;
   document.getElementById('dearList').innerHTML =
     byV.slice(-5).reverse().map(summaryRow).join('') ||
-    `<p class="text-xs text-slate-500">${esc(I18n.t('dcx.none_yet') || 'Nothing scored yet.')}</p>`;
+    `<p class="text-xs text-slate-500">${esc(emptyText(hiddenCount))}</p>`;
 
   const total = scored.reduce((s, r) => s + (r.amount || 0), 0);
   const flat = scored.length * d.base_dca;
@@ -325,7 +354,7 @@ function render() {
     banner.classList.toggle('hidden', !_allPortfolioUnknown);
   }
 
-  const sorted = _rows.slice().sort((a, b) => {
+  const sorted = rows.slice().sort((a, b) => {
     const k = _sort.key;
     const av = a[k], bv = b[k];
     if (av == null && bv == null) return 0;
@@ -338,7 +367,7 @@ function render() {
   document.getElementById('rankBody').innerHTML = sorted.map(r => `
     <tr class="rank-row">
       <td>
-        <a href="/dca/${encodeURIComponent(r.ticker)}" class="font-mono font-semibold hover:underline">${esc(r.ticker)}</a>
+        <a href="/history/${encodeURIComponent(r.ticker)}?tab=dca" class="font-mono font-semibold hover:underline">${esc(r.ticker)}</a>
         <div class="text-[10px] text-slate-500 truncate max-w-[11rem]">${esc(r.name || '')}</div>
       </td>
       <td><span class="chip">${esc(label('dca.model_', r.model))}</span></td>
@@ -362,12 +391,18 @@ function render() {
                  title="${esc(I18n.t('dcx.untrack_tip') || 'Stop tracking this name')}">✕</button>`}</td>
     </tr>`).join('') ||
     `<tr><td colspan="10" class="text-xs text-slate-500 py-6 text-center">${
-      esc(I18n.t('dcx.none_yet') || 'Nothing scored yet.')}</td></tr>`;
+      esc(emptyText(hiddenCount))}</td></tr>`;
 
   document.querySelectorAll('#rankBody .untrack').forEach(btn => {
     btn.addEventListener('click', () => untrack(btn.dataset.ticker));
   });
 }
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('[data-dear-toggle]')) return;
+  _showDear = !_showDear;
+  render();
+});
 
 async function untrack(ticker) {
   if (!ticker) return;
@@ -438,7 +473,7 @@ document.querySelectorAll('th.sortable').forEach(th => {
    is copied deliberately is its two non-obvious decisions —
 
    1. The typed symbol always leads the list. /api/search only knows
-      PEER_GROUPS members, but /dca/<TICKER> takes anything, so without a lead
+      PEER_GROUPS members, but a company's DCA tab takes anything, so without a lead
       row most of the market would look unsearchable.
    2. I18n is a script-scoped `const`, not a property of window, so guarding on
       `window.I18n` fails open and silently drops ?lang=zh from every link.   */
@@ -470,8 +505,10 @@ function langSuffix() {
   catch (_) { return ''; }
 }
 
+// A company's DCA lives in its /history page's DCA tab, which frames the
+// /dca/<ticker> page itself. langSuffix() starts with "?", so it follows as "&".
 function dcaUrl(ticker) {
-  return '/dca/' + encodeURIComponent(ticker) + langSuffix();
+  return '/history/' + encodeURIComponent(ticker) + '?tab=dca' + langSuffix().replace('?', '&');
 }
 
 function getRecent() {

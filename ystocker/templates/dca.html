@@ -1558,7 +1558,7 @@ function renderPeers(d) {
       const colour = pctColor(v == null ? null : 100 - v);
       const cell = r.self
         ? `<span class="font-mono font-semibold">${esc(r.ticker)}</span>`
-        : `<a href="/dca/${encodeURIComponent(r.ticker)}" class="font-mono font-semibold hover:underline">${esc(r.ticker)}</a>`;
+        : `<a href="/history/${encodeURIComponent(r.ticker)}?tab=dca" class="font-mono font-semibold hover:underline">${esc(r.ticker)}</a>`;
       // A template mismatch is stated, never inferred from the chip text. Two V
       // scores off different five-factor templates are less comparable than two
       // off the same one, and that is precisely what the reader is doing here.
@@ -1610,7 +1610,7 @@ function renderPeers(d) {
     document.getElementById('peersUnscored').innerHTML = list.map(u => {
       const why = I18n.t('dca.peers_r_' + u.reason) || u.reason;
       const pe = u.value == null ? '' : ` <span class="pe">${u.value.toFixed(1)}</span>`;
-      return `<a href="/dca/${encodeURIComponent(u.ticker)}" title="${esc(why)}"
+      return `<a href="/history/${encodeURIComponent(u.ticker)}?tab=dca" title="${esc(why)}"
               ><span class="font-mono">${esc(u.ticker)}</span>${pe}</a>`;
     }).join('');
   }

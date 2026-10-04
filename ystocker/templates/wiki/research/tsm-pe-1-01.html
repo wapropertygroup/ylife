@@ -186,7 +186,7 @@
     <p>备查：52 个测试锁定这套换算，以 TSM 的实测数字为锚，并与数据源自己公布的滚动每股收益、股数和市值核对。另有 9 个测试在屏蔽数据源的情况下跑完整个估值重建，因为“算得对”和“真的被用上”是两个问题——把换算调用删掉，前 52 个测试依然全部通过。</p>
   </div>
   <div class="w-actions">
-    <a class="w-btn w-btn-primary" href="{{ url_for('main.dca_page', ticker='TSM') }}"><span data-l="en">Open TSM on the DCA page</span><span data-l="zh">打开 TSM 定投估值页</span> <span aria-hidden="true">→</span></a>
+    <a class="w-btn w-btn-primary" href="{{ url_for('main.history', ticker='TSM', tab='dca') }}"><span data-l="en">Open TSM on the DCA page</span><span data-l="zh">打开 TSM 定投估值页</span> <span aria-hidden="true">→</span></a>
     <a class="w-btn" href="{{ url_for('main.research_lab') }}"><span data-l="en">All Research Lab posts</span><span data-l="zh">全部研究文章</span></a>
   </div>
 </section>

@@ -180,7 +180,7 @@
     <p>测试锁定：<code>tests/test_dca_history.py</code> 共 111 个测试。其中 13 个针对前瞻重建——“未来一年”的分母、以年报发布日而非财年结束日为准、最近几周因尚无实际值而剔除、排除季报、时点一致的股本、逐日累积优先于重建——前视偏差的各道防线也各有测试：发布滞后 6 个，只与过去比较 4 个，四季度加总 8 个，一年期增长窗口 4 个。</p>
   </div>
   <div class="w-actions">
-    <a class="w-btn w-btn-primary" href="{{ url_for('main.dca_page', ticker='NVDA') }}"><span data-l="en">Open NVDA’s valuation page</span><span data-l="zh">打开 NVDA 的估值页</span></a>
+    <a class="w-btn w-btn-primary" href="{{ url_for('main.history', ticker='NVDA', tab='dca') }}"><span data-l="en">Open NVDA’s valuation page</span><span data-l="zh">打开 NVDA 的估值页</span></a>
     <a class="w-btn" href="{{ url_for('main.dca_index') }}"><span data-l="en">The ranked overview</span><span data-l="zh">排名总览</span></a>
     <a class="w-btn" href="{{ url_for('main.research_lab') }}"><span data-l="en">All Research Lab posts</span><span data-l="zh">全部研究文章</span></a>
   </div>

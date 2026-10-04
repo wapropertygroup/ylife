@@ -501,8 +501,11 @@ level and share ids such as `#stockName`. Inside the frame:
   keeps `embed=1` through `dca_refresh`'s redirect.
 - **Indexing and language.** The framed copy carries noindex. A language switch
   on /history reloads the frame with `?lang=`.
-The header's DCA button opens the tab; a modified click still opens the full
-page. Tests: `tests/check_dca_embed.py` (6, hermetic).
+The header's DCA button opens the tab, as does a modified click. Every link to
+one company's DCA goes to that tab too: the overview's rows and search box,
+/assets' DCA tab, the peer panel, and the Research Lab and docs. `/dca/<t>` still
+serves the full page, for old links and for the tab's "Full page ↗" button.
+Tests: `tests/check_dca_embed.py` (7, hermetic).
 
 Five modules, split by what can be tested without I/O:
 
@@ -889,6 +892,13 @@ lookups that are per-request rather than per-ticker are hoisted out of it:
 `peer_percentiles` re-parses a ~170 KB file when not handed records, and the
 look-through behind `M_portfolio` is a whole-portfolio walk — doing either per
 row makes a twenty-row table twenty times the work for the same answer.
+
+**Names at V ≤ 20 are left off the overview unless asked for** (2026-10-04):
+off the table, both summary cards and the period total. The "dearest" card
+would otherwise list exactly those names, and a total over rows nobody can see
+does not add up. The cut is on V as displayed, so a 20.3 that reads "20" goes
+too. A V of null is not "≤ 20" and stays. Never silently: `#dearNote` says how
+many are hidden, with Show/Hide.
 
 The table sorts cheapest-first and an **unscorable row sorts last, not as V=0**:
 "could not be measured" is not "at its most expensive ever", and putting it at

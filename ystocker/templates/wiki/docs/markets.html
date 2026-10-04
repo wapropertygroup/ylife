@@ -115,10 +115,10 @@
   <h2><span data-l="en">Why the listing basis matters</span><span data-l="zh">为什么上市口径很重要</span></h2>
   <div data-l="en">
     <p>An ADR is priced in dollars per receipt, while the company reports in its home currency and per ordinary share. A figure that mixes the two can be off by an exchange rate and a share ratio at the same time. The valuation analyst quotes the multiples Yahoo Finance publishes for the listing rather than rebuilding them from statements.</p>
-    <p>For how badly the mix can go wrong, read <a href="{{ url_for('main.research_post', slug='tsm-pe-1-01') }}">TSM at a P/E of 1.01</a> in the Research Lab. It is a post-mortem from this site's valuation pages — the <a href="{{ url_for('main.dca_page', ticker='TSM') }}">DCA page for TSM</a> — not from the agents, but it is the same trap: three incompatible bases from one data feed, and every one of them pointing cheap.</p>
+    <p>For how badly the mix can go wrong, read <a href="{{ url_for('main.research_post', slug='tsm-pe-1-01') }}">TSM at a P/E of 1.01</a> in the Research Lab. It is a post-mortem from this site's valuation pages — the <a href="{{ url_for('main.history', ticker='TSM', tab='dca') }}">DCA page for TSM</a> — not from the agents, but it is the same trap: three incompatible bases from one data feed, and every one of them pointing cheap.</p>
   </div>
   <div data-l="zh">
     <p>ADR 以美元按每份存托凭证计价，而公司以本国货币、按普通股披露财务数据。把两者混在一起算出的数字，可能同时差了一个汇率和一个换股比例。估值分析师直接引用 Yahoo Finance 为该上市证券发布的估值倍数，而不是用财务报表重新计算。</p>
-    <p>混用口径会错到什么程度，可以读研究实验室的<a href="{{ url_for('main.research_post', slug='tsm-pe-1-01') }}">《市盈率 1.01 倍的台积电》</a>。那是本站估值页面——<a href="{{ url_for('main.dca_page', ticker='TSM') }}">台积电的定投估值（DCA）页面</a>——的事后复盘，而不是投研台的，但陷阱是同一个：同一个数据源给出了三种互不兼容的口径，而且每一个都指向“更便宜”。</p>
+    <p>混用口径会错到什么程度，可以读研究实验室的<a href="{{ url_for('main.research_post', slug='tsm-pe-1-01') }}">《市盈率 1.01 倍的台积电》</a>。那是本站估值页面——<a href="{{ url_for('main.history', ticker='TSM', tab='dca') }}">台积电的定投估值（DCA）页面</a>——的事后复盘，而不是投研台的，但陷阱是同一个：同一个数据源给出了三种互不兼容的口径，而且每一个都指向“更便宜”。</p>
   </div>
 </section>

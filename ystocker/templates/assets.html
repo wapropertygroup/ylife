@@ -908,11 +908,11 @@
     return '';
   }
 
-  /* The company cell. Links to that name's own DCA page, which is where the
-     equation and the multiple history live. */
+  /* The company cell. Links to that name's DCA tab on its /history page,
+     which is where the equation and the multiple history live. */
   function nameCell(r) {
-    return '<td><a href="/dca/' + encodeURIComponent(r.ticker) +
-      '" class="font-mono font-semibold hover:underline">' + esc(r.ticker) + '</a>' +
+    return '<td><a href="/history/' + encodeURIComponent(r.ticker) +
+      '?tab=dca" class="font-mono font-semibold hover:underline">' + esc(r.ticker) + '</a>' +
       '<div style="color:var(--as-muted)" class="truncate">' + esc(r.name || '') + '</div></td>';
   }
 

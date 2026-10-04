@@ -145,14 +145,15 @@ check('every element it reaches for exists in the template', () => {
 
 check('a peer links through to its own page', () => {
   const html = render(FULL).peersBody.innerHTML;
-  assert(html.includes('href="/dca/ADBE"'), 'no link to the peer');
+  // A peer opens on its own /history page's DCA tab, which frames its DCA page.
+  assert(html.includes('href="/history/ADBE?tab=dca"'), 'no link to the peer');
 });
 
 // The reader's own row must not be a link to the page they are already on.
 check('the self row is marked and is not a link to itself', () => {
   const html = render(FULL).peersBody.innerHTML;
   assert(html.includes('peer-self'), 'self row not marked');
-  assert(!html.includes('href="/dca/MSFT"'), 'self row links to itself');
+  assert(!html.includes('href="/history/MSFT?tab=dca"'), 'self row links to itself');
 });
 
 /* A row that could not be scored must say why, not show an empty band. "Could
@@ -191,7 +192,7 @@ check('an unknown template comparison marks nothing', () => {
 check('unbuilt members are listed with a reason and a way to build them', () => {
   const dom = render(FULL);
   assert(!dom.peersUnscoredRow._classes.has('hidden'), 'unscored block hidden');
-  assert(dom.peersUnscored.innerHTML.includes('href="/dca/TSLA"'), 'no link');
+  assert(dom.peersUnscored.innerHTML.includes('href="/history/TSLA?tab=dca"'), 'no link');
   assert(asked.includes('dca.peers_r_not_built'), 'not_built key not composed');
   assert(asked.includes('dca.peers_r_unavailable'), 'unavailable key not composed');
 });
