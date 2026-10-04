@@ -622,6 +622,18 @@ US_GAAP: dict[str, Spec] = {
         "CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents",
         "Cash",
     )),
+    # Parent-only first: ROE is the owners' return, so noncontrolling interests
+    # are spliced in only where the parent figure is not filed.
+    "equity": Spec("instant", (
+        "StockholdersEquity",
+        "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest",
+    )),
+    # Declared per quarter, so a year adds up and Q4 is FY - 9M like any flow;
+    # per share, so it is re-based across splits like EPS.
+    "dps": Spec("per_share", (
+        "CommonStockDividendsPerShareDeclared",
+        "CommonStockDividendsPerShareCashPaid",
+    )),
     "debt_total": Spec("instant", ("LongTermDebt", "DebtLongtermAndShorttermCombinedAmount")),
     # Oracle files its bonds as notes payable, not as long-term debt -- and
     # under a different notes concept in its 10-Qs than in its 10-Ks.
@@ -670,6 +682,8 @@ IFRS: dict[str, Spec] = {
     "dividends": Spec("flow", ("DividendsPaidClassifiedAsFinancingActivities", "DividendsPaid")),
     "shares": Spec("average", ("AdjustedWeightedAverageShares", "WeightedAverageShares")),
     "cash": Spec("instant", ("CashAndCashEquivalents",)),
+    "equity": Spec("instant", ("EquityAttributableToOwnersOfParent", "Equity")),
+    "dps": Spec("per_share", ()),
     "debt_total": Spec("instant", ("Borrowings",)),
     "debt_noncurrent": Spec("instant", ("NoncurrentPortionOfNoncurrentBorrowings",)),
     "debt_current": Spec("instant", ("CurrentPortionOfNoncurrentBorrowings",)),
@@ -680,10 +694,14 @@ TAXONOMIES: dict[str, dict[str, Spec]] = {"us-gaap": US_GAAP, "ifrs-full": IFRS}
 #: The metrics the page draws, in payload order. Flows sum to a TTM; the rest
 #: are carried across from the quarter.
 FLOW_METRICS = ("revenue", "gross_profit", "operating_income", "net_income", "eps",
-                "ocf", "capex", "fcf", "rnd", "sbc", "buybacks", "dividends")
-POINT_METRICS = ("shares", "cash", "debt")
-RATIO_METRICS = ("gross_margin", "operating_margin", "net_margin")
+                "ocf", "capex", "fcf", "rnd", "sbc", "buybacks", "dividends", "dps")
+POINT_METRICS = ("shares", "cash", "debt", "equity")
+#: Computed from the lines above, per view: margins, return on equity and
+#: revenue growth on a year earlier.
+RATIO_METRICS = ("gross_margin", "operating_margin", "net_margin", "roe", "revenue_yoy")
 METRICS = FLOW_METRICS + POINT_METRICS + RATIO_METRICS
+#: Rounded to 4 decimals, not to the unit: $0.01 a quarter is NVIDIA's dividend.
+PER_SHARE_METRICS = ("eps", "dps")
 
 #: Lines that define which periods exist. Everything else is aligned to these,
 #: so one stray fact under an obscure concept cannot add a column of blanks.
@@ -807,7 +825,7 @@ def _ratio(num: Optional[float], den: Optional[float]) -> Optional[float]:
 def _round(metric: str, value: Optional[float]) -> Optional[float]:
     if value is None or not math.isfinite(value):
         return None
-    if metric == "eps":
+    if metric in PER_SHARE_METRICS:
         return round(value, 4)
     if metric in RATIO_METRICS:
         return round(value, 4)
@@ -950,7 +968,7 @@ def assemble(quarterly: dict[str, dict[date, Point]], annual: dict[str, dict[dat
     if not splits_known:
         notes.append("splits_unknown")
         for view in (quarterly, annual):
-            view["eps"], view["shares"] = {}, {}
+            view["eps"], view["shares"], view["dps"] = {}, {}, {}
 
     q_ends = _fill_gaps(_canonical_ends([quarterly.get(m, {}) for m in ANCHORS]))[-MAX_QUARTERS:]
     a_ends = sorted(d for d in years if any(d in annual.get(m, {}) for m in ANCHORS))[-MAX_YEARS:]
@@ -972,6 +990,17 @@ def assemble(quarterly: dict[str, dict[date, Point]], annual: dict[str, dict[dat
     for metric in POINT_METRICS:
         ttm[metric] = list(q_block["values"][metric])
     _add_margins(ttm)
+    # A quarter's ROE is the trailing year's income on the average equity of
+    # its two ends -- a single quarter's income on a year's equity is a quarter
+    # of a return, not a return.
+    q_roe = return_on_equity(q_ends, ttm["net_income"], q_block["values"]["equity"])
+    q_block["values"]["roe"] = q_roe
+    ttm["roe"] = list(q_roe)
+    a_block["values"]["roe"] = return_on_equity(
+        a_ends, a_block["values"]["net_income"], a_block["values"]["equity"], annual=True)
+    q_block["values"]["revenue_yoy"] = growth(q_ends, q_block["values"]["revenue"])
+    ttm["revenue_yoy"] = growth(q_ends, ttm["revenue"])
+    a_block["values"]["revenue_yoy"] = growth(a_ends, a_block["values"]["revenue"], annual=True)
 
     valuation = None
     if valuation_block:
@@ -993,6 +1022,61 @@ def assemble(quarterly: dict[str, dict[date, Point]], annual: dict[str, dict[dat
         "latest": latest,
         "notes": notes,
     }
+
+
+def year_earlier(ends: Sequence[date], i: int, *, annual: bool = False) -> Optional[int]:
+    """The index of the period a year before ``ends[i]``, found by date.
+
+    Never "four bars back": a missing quarter, or an empty one filled into a
+    gap, would make that a comparison with the wrong season.
+    """
+    if i <= 0:
+        return None
+    target = ends[i] - timedelta(days=365 if annual else 364)
+    best, best_gap = None, 25
+    for j in range(i - 1, -1, -1):
+        gap = abs((ends[j] - target).days)
+        if gap <= best_gap:
+            best, best_gap = j, gap
+        if ends[j] < target - timedelta(days=40):
+            break
+    return best
+
+
+def growth(ends: Sequence[date], values: Sequence[Optional[float]], *,
+           annual: bool = False) -> list[Optional[float]]:
+    """Change on the same period a year earlier, as a fraction.
+
+    Only from a positive base: growth from a loss is not a percentage.
+    """
+    out: list[Optional[float]] = []
+    for i, v in enumerate(values):
+        j = year_earlier(ends, i, annual=annual)
+        base = values[j] if j is not None else None
+        out.append(_round("revenue_yoy", v / base - 1) if v is not None and base and base > 0 else None)
+    return out
+
+
+def return_on_equity(ends: Sequence[date], income: Sequence[Optional[float]],
+                     equity: Sequence[Optional[float]], *, annual: bool = False) -> list[Optional[float]]:
+    """Trailing income over average equity, as a fraction.
+
+    The average of the period's two ends where both are known, else the end
+    alone. Negative equity -- McDonald's, Starbucks and Home Depot have bought
+    back past their book value -- gives no ROE at all: a loss-making company
+    would read as a high return.
+    """
+    out: list[Optional[float]] = []
+    for i, ni in enumerate(income):
+        eq = equity[i]
+        j = year_earlier(ends, i, annual=annual)
+        prev = equity[j] if j is not None else None
+        if ni is None or eq is None or eq <= 0 or (prev is not None and prev <= 0):
+            out.append(None)
+            continue
+        base = (eq + prev) / 2 if prev is not None else eq
+        out.append(_round("roe", ni / base))
+    return out
 
 
 def _add_margins(values: dict[str, list[Optional[float]]]) -> None:

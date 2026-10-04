@@ -59,6 +59,7 @@ ROWS: dict[str, tuple[str, tuple[str, ...], int]] = {
     "sbc": ("cash", ("Stock Based Compensation",), 1),
     "cash": ("balance", ("Cash And Cash Equivalents",), 1),
     "debt": ("balance", ("Total Debt",), 1),
+    "equity": ("balance", ("Stockholders Equity", "Common Stock Equity"), 1),
 }
 
 #: Yahoo quote types that have no statements at all.

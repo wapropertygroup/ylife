@@ -1631,6 +1631,8 @@
         <button type="button" class="range-btn" data-fund-range="10y">10Y</button>
         <button type="button" class="range-btn" data-fund-range="max" data-i18n="fund.range_max">Max</button>
       </div>
+      <button type="button" class="range-btn" data-fund-csv title="Download these figures as CSV"
+              data-i18n-title="fund.csv_title" data-i18n="fund.csv">⬇ CSV</button>
     </div>
   </div>
   <div id="fundStatus" class="fd-status"></div>
@@ -5401,6 +5403,43 @@ async function explainChart(chartKey) {
     } catch(e) { return null; }
   }
 
+  // The Fundamentals payload, cut down to what a report reads: ten fiscal
+  // years and eight trailing-twelve-month quarters, newest first, in billions
+  // and percent, plus where today's P/E sits in its own ten-year range.
+  function _longHistory(fd) {
+    if (!fd || fd.unavailable || !fd.quarterly || !fd.annual) return null;
+    const num = v => (typeof v === 'number' && isFinite(v) ? v : null);
+    const bn = v => (num(v) === null ? null : Math.round(v / 1e7) / 100);
+    const pc = v => (num(v) === null ? null : Math.round(v * 1000) / 10);
+    const a = fd.annual, av = a.values || {};
+    const annual = a.end.map((end, i) => ({
+      fy: a.label[i] || end.slice(0, 4), end,
+      revenue: bn((av.revenue || [])[i]), revenue_yoy: pc((av.revenue_yoy || [])[i]),
+      gross_margin: pc((av.gross_margin || [])[i]), operating_margin: pc((av.operating_margin || [])[i]),
+      net_margin: pc((av.net_margin || [])[i]), eps: num((av.eps || [])[i]),
+      fcf: bn((av.fcf || [])[i]), roe: pc((av.roe || [])[i]),
+      shares: bn((av.shares || [])[i]),
+    })).filter(r => r.revenue !== null || r.eps !== null).reverse().slice(0, 10);
+    const q = fd.quarterly, tv = (fd.ttm && fd.ttm.values) || {};
+    const ttm = q.end.map((end, i) => ({
+      end, period: q.label[i] || '',
+      revenue: bn((tv.revenue || [])[i]), revenue_yoy: pc((tv.revenue_yoy || [])[i]),
+      net_income: bn((tv.net_income || [])[i]), fcf: bn((tv.fcf || [])[i]),
+      gross_margin: pc((tv.gross_margin || [])[i]), roe: pc((tv.roe || [])[i]),
+    })).filter(r => r.revenue !== null).reverse().slice(0, 8);
+    let pe = null;
+    const series = ((fd.valuation && fd.valuation.pe) || []).slice(-40).filter(v => num(v) !== null && v > 0);
+    if (series.length >= 8) {
+      const sorted = series.slice().sort((x, y) => x - y);
+      const now = num(fd.valuation.now && fd.valuation.now.pe);   // null, never undefined
+      pe = { now, median: sorted[Math.floor(sorted.length / 2)], low: sorted[0],
+             high: sorted[sorted.length - 1], quarters: series.length,
+             percentile: now === null ? null : Math.round(100 * sorted.filter(v => v <= now).length / sorted.length) };
+    }
+    return { source: fd.source, currency: (fd.basis || {}).currency,
+             latest: fd.latest || null, annual, ttm, pe_10y: pe };
+  }
+
   async function _buildBundle() {
     // The forecast card is deferred, so on a report requested without scrolling
     // that far _forecastResult is still null. Force the load and wait for it —
@@ -5410,7 +5449,11 @@ async function explainChart(chartKey) {
     }
     // Daily bars (3mo) for short-term technicals; weekly bars (2y) for the
     // long moving averages and multi-horizon relative strength.
-    const [daily, weekly, fin, peers, news, opts, thirteenF] = await Promise.all([
+    // The Fundamentals tab's payload rides along when it is already built: a
+    // decade of the company's own filings instead of Yahoo's three to five
+    // years. A cold ticker answers 202 and is simply left out -- the report
+    // does not wait on a build -- while that request starts one for next time.
+    const [daily, weekly, fin, peers, news, opts, thirteenF, fundTen] = await Promise.all([
       _fetchPeriod('3mo').catch(() => null),
       _fetchPeriod('2y').catch(() => null),
       _json(`/api/financials/${encodeURIComponent(TICKER)}`),
@@ -5418,6 +5461,7 @@ async function explainChart(chartKey) {
       _json(`/api/news/${encodeURIComponent(TICKER)}`),
       _json(`/api/options/${encodeURIComponent(TICKER)}`),
       _json(`/api/13f/ticker/${encodeURIComponent(TICKER)}`),
+      _json(`/api/fundamentals/${encodeURIComponent(TICKER)}`),
     ]);
     const base = daily || weekly || _periodCache['1y'];
     if (!base) throw new Error('No price data available');
@@ -5605,6 +5649,7 @@ async function explainChart(chartKey) {
       held_institutions: base.held_institutions, held_insiders: base.held_insiders,
       short_float: base.short_float, short_ratio: base.short_ratio,
       forecast: _forecastSummary(),
+      long_history: _longHistory(fundTen),
       portfolio: exposure || {},
     };
   }
@@ -6292,12 +6337,17 @@ async function explainChart(chartKey) {
   // what the market pays for it.
   const CARDS = [
     { key: 'revenue', metrics: ['revenue'], kind: 'money', colors: [SKY] },
+    // Growth on the same period a year earlier, worked out by date server-side
+    // (xbrl.growth), so a missing quarter is a gap and not the wrong season.
+    { key: 'revenue_yoy', metrics: ['revenue_yoy'], kind: 'chg', colors: [SKY], noChange: true },
     { key: 'gross_profit', metrics: ['gross_profit'], kind: 'money', colors: [EMERALD] },
     { key: 'margins', metrics: ['gross_margin', 'operating_margin', 'net_margin'], kind: 'pct',
       type: 'line', colors: [EMERALD, SKY, VIOLET] },
     { key: 'operating_income', metrics: ['operating_income'], kind: 'money', colors: [SKY] },
     { key: 'net_income', metrics: ['net_income'], kind: 'money', colors: [EMERALD] },
     { key: 'eps', metrics: ['eps'], kind: 'eps', colors: [VIOLET] },
+    // Trailing income on average equity; none where equity is negative.
+    { key: 'roe', metrics: ['roe'], kind: 'pct', type: 'line', zero: true, colors: [VIOLET], noChange: true },
     { key: 'ocf', metrics: ['ocf'], kind: 'money', colors: [SKY] },
     { key: 'fcf', metrics: ['fcf'], kind: 'money', colors: [EMERALD] },
     // Drawn below zero, as the cash it is leaving.
@@ -6305,9 +6355,11 @@ async function explainChart(chartKey) {
     // Balances, not flows: two lines read better than eighty interleaved bars.
     { key: 'cash_debt', metrics: ['cash', 'debt'], kind: 'money', type: 'line', zero: true,
       colors: [EMERALD, RED], noChange: true },
+    { key: 'rnd_sbc', metrics: ['rnd', 'sbc'], kind: 'money', colors: [INDIGO, AMBER], noChange: true },
     { key: 'shares', metrics: ['shares'], kind: 'shares', colors: [INDIGO] },
     { key: 'returns', metrics: ['buybacks', 'dividends'], kind: 'money', colors: [SKY, VIOLET],
       stacked: true, noChange: true },
+    { key: 'dps', metrics: ['dps'], kind: 'eps', colors: [VIOLET] },
     { key: 'pe', metrics: ['pe'], valuation: true, kind: 'x', colors: [AMBER] },
     { key: 'ps', metrics: ['ps'], valuation: true, kind: 'x', colors: [AMBER] },
   ];
@@ -6330,6 +6382,7 @@ async function explainChart(chartKey) {
       building: tr('fund.building', 'Reading this company’s filings — the first view of a ticker takes a few seconds…'),
       queued: tr('fund.queued', 'Waiting for a slot — another company is being read…'),
       failed: tr('fund.failed', 'Couldn’t load the filings just now.'),
+      capped: tr('fund.capped_day', 'Today’s allowance for reading new companies’ filings is used up. This one will be ready tomorrow; companies already read still open.'),
       timeout: tr('fund.timeout', 'Still working on it — this is taking longer than usual.'),
       invalid: tr('fund.invalid', 'This is not a ticker the filings can be looked up by.'),
     };
@@ -6358,6 +6411,7 @@ async function explainChart(chartKey) {
         } catch (_) { /* network: falls through to failed */ }
         if (resp && resp.ok && data) { payload = data; render(); return; }
         if (resp && resp.status === 400) { setStatus('invalid'); return; }
+        if (resp && resp.status === 503 && data && data.reason === 'daily_cap') { setStatus('capped'); return; }
         if (!resp || resp.status !== 202) { setStatus('failed'); return; }
         if (attempt === POLL_MS.length) break;
         setStatus(data && data.queued ? 'queued' : 'building');
@@ -6649,6 +6703,40 @@ async function explainChart(chartKey) {
     $('fundNotes').innerHTML = notes.filter(Boolean).map(n => `<li>${esc(n)}</li>`).join('');
   }
 
+  // The figures behind the cards, for a spreadsheet: the view and range on
+  // screen, raw numbers (ratios as fractions), one row per period, oldest
+  // first. Built here from the payload already loaded -- no second request.
+  const CSV_COLUMNS = ['revenue', 'revenue_yoy', 'gross_profit', 'gross_margin', 'operating_income',
+    'operating_margin', 'net_income', 'net_margin', 'eps', 'roe', 'ocf', 'capex', 'fcf', 'rnd', 'sbc',
+    'cash', 'debt', 'equity', 'shares', 'buybacks', 'dividends', 'dps'];
+  function downloadCsv() {
+    if (!payload || payload.unavailable) return;
+    const src = source();
+    const idx = F.window(src.ends, range, i => ['revenue', 'net_income'].some(
+      m => typeof (src.values[m] || [])[i] === 'number'));
+    const val = { valuation: true };
+    const cols = CSV_COLUMNS.filter(m => idx.some(i => typeof (src.values[m] || [])[i] === 'number'));
+    const extra = ['price', 'pe', 'ps'].filter(m => idx.some(i => typeof series(src, val, m)[i] === 'number'));
+    const cell = v => {
+      if (v === null || v === undefined) return '';
+      const t = String(v);
+      return /[",\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t;
+    };
+    const head = ['period_end', 'fiscal_period'].concat(cols, extra);
+    const lines = [head.join(',')];
+    idx.forEach(i => {
+      lines.push([src.ends[i], src.labels[i] || ''].concat(
+        cols.map(m => (src.values[m] || [])[i]), extra.map(m => series(src, val, m)[i])).map(cell).join(','));
+    });
+    const blob = new Blob([lines.join('\n') + '\n'], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `${TICKER}_fundamentals_${view}_${(payload.basis || {}).currency || 'USD'}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 0);
+  }
+
   // Expose for switchTab() and the ?tab=fundamentals deep link.
   window._initFundPanel = function () {
     if (started) return;
@@ -6664,6 +6752,7 @@ async function explainChart(chartKey) {
     const x = e.target.closest('[data-fund-expand]');
     if (x) { expandChart('fund_' + x.dataset.fundExpand); return; }
     if (e.target.closest('[data-fund-retry]')) load(true);
+    if (e.target.closest('[data-fund-csv]')) downloadCsv();
   });
   // Everything on the cards is composed here, where I18n.apply() cannot reach.
   document.addEventListener('i18n:langchange', () => { if (payload) render(); });

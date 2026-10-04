@@ -545,6 +545,58 @@ class BasisTests(unittest.TestCase):
 
 class HelperTests(unittest.TestCase):
 
+    QE = [D("2024-04-28"), D("2024-07-28"), D("2024-10-27"), D("2025-01-26"), D("2025-04-27")]
+
+    def test_growth_is_on_the_same_quarter_a_year_earlier_by_date(self):
+        self.assertEqual(xbrl.growth(self.QE, [26.0, 30.0, 35.0, 39.0, 52.0]),
+                         [None, None, None, None, 1.0])
+        # The year-earlier quarter missing: no growth, not a neighbour's.
+        ends = [D("2024-01-28"), D("2024-07-28"), D("2024-10-27"), D("2025-01-26"), D("2025-04-27")]
+        self.assertIsNone(xbrl.growth(ends, [26.0, 30.0, 35.0, 39.0, 52.0])[4])
+        # Growth from a loss is not a percentage.
+        self.assertIsNone(xbrl.growth(self.QE, [-2.0, 1, 1, 1, 3.0])[4])
+
+    def test_annual_growth_steps_one_year(self):
+        ends = [D("2024-01-28"), D("2025-01-26"), D("2026-01-25")]
+        self.assertEqual(xbrl.growth(ends, [60.0, 130.0, 260.0], annual=True), [None, 1.1667, 1.0])
+
+    def test_roe_is_trailing_income_on_average_equity(self):
+        equity = [40.0, 45.0, 50.0, 55.0, 60.0]
+        income = [None, None, None, 80.0, 100.0]
+        roe = xbrl.return_on_equity(self.QE, income, equity)
+        self.assertEqual(roe[3], round(80.0 / 55.0, 4))  # no year-earlier end: the end alone
+        self.assertEqual(roe[4], round(100.0 / ((60.0 + 40.0) / 2), 4))
+
+    def test_negative_equity_has_no_roe(self):
+        # McDonald's and Starbucks have bought back past their book value.
+        roe = xbrl.return_on_equity(self.QE, [5.0] * 5, [-2.0, -1.8, -1.5, -1.3, -1.0])
+        self.assertEqual(roe, [None] * 5)
+
+    def test_dividends_per_share_derive_q4_rebase_and_keep_their_cents(self):
+        dps = [row(*Q1, 0.04, "2024-05-29", "10-Q", 2025, "Q1"),            # pre-split, as filed
+               row(*H1, 0.05, "2024-08-28", "10-Q", 2025, "Q2"),
+               row(*M9, 0.06, "2024-11-20", "10-Q", 2025, "Q3"),
+               row(*FY25, 0.07, "2025-02-26", "10-K", 2025, "FY")]
+        out = xbrl.build(nvda(CommonStockDividendsPerShareDeclared=("USD/shares", dps)),
+                         splits=SPLITS, prices=PRICES)
+        q = out["quarterly"]
+        self.assertAlmostEqual(q["values"]["dps"][0], 0.004)                # 0.04 / 10
+        self.assertAlmostEqual(q["values"]["dps"][3], 0.01)                 # FY - 9M, after the split
+        self.assertEqual(q["how"]["dps"]["3"], "q4")
+        self.assertIn("dps", xbrl.PER_SHARE_METRICS)
+
+    def test_equity_and_roe_in_a_build(self):
+        eq = [row(None, e, v, f, "10-Q") for e, v, f in (
+            ("2024-04-28", 60e9, "2024-05-29"), ("2025-01-26", 79e9, "2025-02-26"),
+            ("2025-04-27", 83e9, "2025-05-28"))]
+        out = xbrl.build(nvda(StockholdersEquity=("USD", eq)), splits=SPLITS, prices=PRICES)
+        q = out["quarterly"]
+        i = q["end"].index("2025-04-27")
+        ttm_ni = out["ttm"]["values"]["net_income"][i]
+        self.assertEqual(q["values"]["roe"][i], round(ttm_ni / ((83e9 + 60e9) / 2), 4))
+        self.assertEqual(out["ttm"]["values"]["roe"], q["values"]["roe"])
+        self.assertEqual(q["values"]["equity"][i], 83e9)
+
     def test_a_year_seen_only_as_a_comparative_is_not_named_after_its_filing(self):
         # TSMC's first XBRL 20-F is fiscal 2017 and carries 2015 and 2016 as
         # comparatives, every one tagged fy=2017.

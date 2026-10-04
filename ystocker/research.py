@@ -513,6 +513,65 @@ def build_chart_prompt(
 # Full research report prompt
 # ---------------------------------------------------------------------------
 
+def _long_history_blocks(lh: dict, L: Any) -> list[str]:
+    """The Fundamentals tab's decade, when the browser could send it.
+
+    Yahoo's statements above reach back three to five years, which cannot show
+    a cycle; this is the company's own filings (or, for a listing SEC does not
+    cover, Yahoo's statement tables -- ``source`` says which), assembled in
+    the page by ``_longHistory`` from ``/api/fundamentals``. Absent when that
+    ticker had not been built yet: the report never waits on a build, so the
+    block is simply left out rather than stated empty.
+    """
+    if not isinstance(lh, dict) or not (lh.get("annual") or lh.get("ttm")):
+        return []
+    src = (L("SEC filings", "SEC 财报") if lh.get("source") == "sec"
+           else L("Yahoo Finance statements", "雅虎财经报表"))
+    cur = _txt(lh.get("currency"))
+    latest = lh.get("latest") or {}
+    blocks = [_block(
+        L(f"Ten-year history from the company's filings ({src}; {cur} billions, "
+          "margins and growth in %; newest first)",
+          f"公司财报中的十年历史（{src}；单位：十亿{cur}，利润率与增速为 %；新到旧）"),
+        _table(lh.get("annual") or [], [
+            ("fy", L("Year", "年度")), ("revenue", L("Revenue", "收入")),
+            ("revenue_yoy", L("Growth %", "增速%")), ("gross_margin", L("GM%", "毛利率%")),
+            ("operating_margin", L("OM%", "营业利润率%")), ("net_margin", L("NM%", "净利率%")),
+            ("eps", "EPS"), ("fcf", "FCF"), ("roe", "ROE%"),
+            ("shares", L("Diluted shares (B)", "摊薄股数（十亿）")),
+        ], 10))]
+    blocks.append(_block(
+        L("Trailing twelve months, last 8 quarters (from the filings)",
+          "滚动十二个月，最近 8 个季度（来自财报）"),
+        _table(lh.get("ttm") or [], [
+            ("end", L("Quarter end", "季末")), ("period", L("Fiscal period", "财季")),
+            ("revenue", L("Revenue", "收入")), ("revenue_yoy", L("Growth %", "增速%")),
+            ("net_income", L("Net income", "净利润")), ("fcf", "FCF"),
+            ("gross_margin", L("GM%", "毛利率%")), ("roe", "ROE%"),
+        ], 8)))
+    pe = lh.get("pe_10y") or {}
+    if pe:
+        blocks.append(_block(
+            L("P/E against its own ten-year range (trailing EPS at each quarter end)",
+              "市盈率相对自身十年区间（各季末的滚动 EPS）"),
+            _lines([
+                (L("Now", "当前"), _num(pe.get("now"), 1, "x")),
+                (L("Median", "中位数"), _num(pe.get("median"), 1, "x")),
+                (L("Low / high", "最低 / 最高"),
+                 f"{_num(pe.get('low'), 1, 'x')} / {_num(pe.get('high'), 1, 'x')}"
+                 if pe.get("low") is not None else "n/a"),
+                (L("Percentile of the range", "在区间中的百分位"), _pct(pe.get("percentile"), 0)),
+                (L("Quarters in the range", "区间季度数"), _txt(pe.get("quarters"))),
+            ])))
+    if latest.get("filed"):
+        blocks.append(_block(L("Latest filing", "最新财报"), _lines([
+            (L("Form", "表格"), _txt(latest.get("form"))),
+            (L("Period end", "报告期末"), _txt(latest.get("end"))),
+            (L("Filed", "提交日期"), _txt(latest.get("filed"))),
+        ])))
+    return [b for b in blocks if b]
+
+
 def _render_data_pack(bundle: dict, lang: str) -> str:
     """Render every verified metric we hold into labelled blocks for the prompt."""
     zh = lang == "zh"
@@ -632,6 +691,8 @@ def _render_data_pack(bundle: dict, lang: str) -> str:
             ("gross_profit", L("Gross profit", "毛利")),
             ("net_income", L("Net income", "净利润")), ("eps_basic", "EPS"),
         ], _MAX_QUARTERS)))
+
+    blocks.extend(_long_history_blocks(bundle.get("long_history") or {}, L))
 
     # ── §8 earnings surprises ─────────────────────────────────────────────
     blocks.append(_block(

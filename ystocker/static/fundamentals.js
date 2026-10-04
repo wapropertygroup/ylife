@@ -57,7 +57,8 @@
   }
 
   /**
-   * One value in the unit its card uses. `kind`: money | eps | pct | x | shares.
+   * One value in the unit its card uses. `kind`: money | eps | pct | chg | x |
+   * shares, where `chg` is a signed percentage change.
    */
   function format(v, kind, currency) {
     if (!isNum(v)) return '—';
@@ -68,6 +69,7 @@
         return (v < 0 ? '-' : '') + symbol(currency) + Math.abs(v).toFixed(d);
       }
       case 'pct': return (v * 100).toFixed(1) + '%';
+      case 'chg': return (v > 0 ? '+' : '') + (v * 100).toFixed(1) + '%';
       case 'x': return v.toFixed(v >= 100 ? 0 : 1) + '×';
       case 'shares': return compact(Math.abs(v));
       default: return String(v);
@@ -77,7 +79,7 @@
   /** An axis tick: as short as the unit allows. */
   function axis(v, kind, currency) {
     if (!isNum(v)) return '';
-    if (kind === 'pct') return Math.round(v * 100) + '%';
+    if (kind === 'pct' || kind === 'chg') return Math.round(v * 100) + '%';
     if (kind === 'x') return Math.round(v) + '×';
     if (kind === 'eps') return symbol(currency) + (Math.abs(v) < 1 ? v.toFixed(2) : v.toFixed(Math.abs(v) < 10 ? 1 : 0));
     var s = format(v, kind, currency);
