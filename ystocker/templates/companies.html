@@ -128,7 +128,6 @@
   // hand each reader's IP to that vendor for decoration.
   const HUES = [[99, 102, 241], [56, 189, 248], [52, 211, 153], [251, 191, 36],
                 [244, 114, 182], [167, 139, 250], [45, 212, 191], [251, 146, 60]];
-  const FOLLOWED = new Set(ROWS.map(r => r.t));
   let DIR = [];
   let dirState = 'loading';            // loading | ready | failed
   let dirAsOf = null;
@@ -256,11 +255,15 @@
       } catch (_) { r = null; }
       if (r && r.status === 200 && body && Array.isArray(body.companies)) {
         DIR = [];
+        const byT = new Map(ROWS.map(row => [row.t, row]));
         for (const [t, n, x, also] of body.companies) {
           const others = also ? also.split(' ') : [];
           EXCH[t] = x;
           others.forEach(a => { EXCH[a] = x; });
-          if (FOLLOWED.has(t) || others.some(a => FOLLOWED.has(a))) continue;
+          // A followed company keeps its quoted card, and takes its other
+          // tickers from SEC so a search for GOOGN or BRK-A still finds it.
+          const mine = byT.get(t) || others.map(a => byT.get(a)).find(Boolean);
+          if (mine) { mine.also = [t].concat(others).filter(a => a !== mine.t); continue; }
           DIR.push({ t, n, x, also: others, d: 1 });
         }
         dirAsOf = body.as_of || null;
