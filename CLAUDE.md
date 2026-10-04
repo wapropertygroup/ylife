@@ -240,8 +240,7 @@ Each app follows the same pattern:
 ### yStocker-specific modules
 - `data.py` — Yahoo Finance fetching (`fetch_ticker_data`, `FetchError`)
 - `fed.py` — Federal Reserve H.4.1 from FRED (no API key needed)
-- `sec13f.py` — SEC EDGAR 13F institutional holdings (48 funds; see the 13F
-  notes under Known Pitfalls before adding one)
+- `sec13f.py` — SEC EDGAR 13F institutional holdings (22 funds tracked)
 - `forecast.py` — Prophet / ARIMA / Linear price forecasting
 - `charts.py` — Matplotlib/Seaborn → base64 PNG (server-side, no disk I/O)
 - `heatmap_meta.py` — Static S&P 500 metadata for market heatmap tile sizing
