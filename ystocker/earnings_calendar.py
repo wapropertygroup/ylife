@@ -274,7 +274,13 @@ def is_stale(day: dt.date, fetched_at: float, now: float, today: dt.date) -> boo
 
 
 def warm_window(today: dt.date) -> list[dt.date]:
-    start = monday_of(today) - dt.timedelta(weeks=WARM_WEEKS_BACK)
+    """Last week to three weeks ahead of the week the page opens on.
+
+    Counted from :func:`default_week`, not the calendar week: at a weekend the
+    page opens on the coming week, and a window counted from the week just
+    ended left its third week cold (2026-10-04: Oct 26-30 answered 202).
+    """
+    start = default_week(today) - dt.timedelta(weeks=WARM_WEEKS_BACK)
     span = (WARM_WEEKS_BACK + WARM_WEEKS_AHEAD + 1) * 7
     days = (start + dt.timedelta(days=i) for i in range(span))
     return [d for d in days if d.weekday() < 5]

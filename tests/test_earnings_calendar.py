@@ -177,6 +177,11 @@ class DateTests(unittest.TestCase):
         self.assertEqual(len(days), 25)
         self.assertTrue(all(d.weekday() < 5 for d in days))
 
+    def test_at_a_weekend_the_window_follows_the_week_the_page_opens_on(self):
+        days = ec.warm_window(dt.date(2026, 10, 4))      # Sunday: the page opens on Oct 5
+        self.assertEqual(days[0], dt.date(2026, 9, 28))
+        self.assertEqual(days[-1], dt.date(2026, 10, 30))
+
 
 class CacheTests(unittest.TestCase):
     def setUp(self):
