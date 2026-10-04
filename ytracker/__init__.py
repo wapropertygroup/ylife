@@ -26,6 +26,9 @@ def _load_secrets_from_ssm() -> None:
     SSM_PARAMS = {
         "/ystocker/GEMINI_API_KEY": "GEMINI_API_KEY",
         "/ystocker/SES_FROM_EMAIL": "SES_FROM_EMAIL",
+        # Created in June and never read until 2026-10-04: without this line the
+        # app signed its account sessions with the constant it used to fall back on.
+        "/ytracker/YTRACKER_SECRET_KEY": "YTRACKER_SECRET_KEY",
     }
 
     needed = {k: v for k, v in SSM_PARAMS.items() if not os.environ.get(v)}

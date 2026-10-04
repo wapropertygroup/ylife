@@ -2982,7 +2982,10 @@ Started in `create_app()`, all daemon threads:
    created, and a forged cookie was accepted. yBG's admin login was forgeable
    the same way.
    - **Which apps have a parameter:** ystocker, yPlanner and yTracker. The
-     other five, including yBG, sign out on each deploy.
+     other five, including yBG, sign out on each deploy. yTracker's parameter
+     had existed since June unread, because its `SSM_PARAMS` did not name it.
+     So an app with real Google and Apple sign-in signed sessions with its
+     constant, until the new warning gave it away.
    - **Making a session survive restarts** takes a SecureString
      `/<app>/<APP>_SECRET_KEY` plus a line in that app's `SSM_PARAMS`.
    - `tests/test_session_keys.py` pins all of it.

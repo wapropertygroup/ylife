@@ -42,6 +42,23 @@ class NoConstantSessionKey(unittest.TestCase):
                 self.assertIn(f'"{env} is not set', src)    # and it says so in the log
 
 
+class KeysInSsmAreLoaded(unittest.TestCase):
+    """The apps whose key exists in SSM must map it, or the parameter sits unread.
+
+    yTracker's /ytracker/YTRACKER_SECRET_KEY was created in June 2026 and never
+    loaded: its SSM_PARAMS named only two /ystocker/ keys, so an app with real
+    Google and Apple sign-in signed sessions with "ytracker-dev-secret" until
+    2026-10-04. Found by the warning the random-key fallback now logs.
+    """
+
+    def test_each_parameter_is_mapped(self):
+        for app in ("ystocker", "yplanner", "ytracker"):
+            src = (ROOT / app / "__init__.py").read_text()
+            env = f"{app.upper()}_SECRET_KEY"
+            with self.subTest(app=app):
+                self.assertIn(f'"/{app}/{env}": "{env}"', src)
+
+
 def _without(*names):
     env = {k: v for k, v in os.environ.items() if k not in names}
     return mock.patch.dict(os.environ, env, clear=True)
