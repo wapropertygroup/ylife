@@ -1102,7 +1102,7 @@ def get_cache_ts() -> Optional[float]:
     Not freshness-filtered on purpose — it is the honest "data as of" value.
     Never branch page layout on it alone; pair it with :func:`is_cache_fresh`,
     or a worker holding an expired payload renders a confident header above
-    empty charts (the bug fixed in 77d41db).
+    empty charts (the bug fixed in 048dd99).
     """
     with _cache_lock:
         if _cache_ts:
@@ -1169,7 +1169,7 @@ def start_background_thread() -> None:
         while True:
             # Sleep until the payload we hold expires, not a full TTL from
             # startup: a deploy restarts this thread, so a fixed sleep meant
-            # frequent deploys could stop the refresh ever firing (77d41db).
+            # frequent deploys could stop the refresh ever firing (048dd99).
             with _cache_lock:
                 ts = _cache_ts
             age = (time.time() - ts) if ts else _CACHE_TTL

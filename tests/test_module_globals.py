@@ -1,7 +1,7 @@
 """No module-level constant may be used without being defined.
 
 ``/api/options/<ticker>`` returned 500 to every visitor for several commits
-because ``fe5ea3b`` deleted ``_OPTIONS_CACHE``, ``_OPTIONS_CACHE_LOCK`` and
+because ``f4e7fda`` deleted ``_OPTIONS_CACHE``, ``_OPTIONS_CACHE_LOCK`` and
 ``_OPTIONS_CACHE_TTL`` while leaving all five uses of them in place. Nothing
 catches that: Python binds a global when the line *runs*, not when the module is
 imported, so the app started cleanly, every other route worked, and the only

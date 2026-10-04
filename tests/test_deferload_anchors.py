@@ -13,7 +13,7 @@ quietest ways this codebase has:
   ``IntersectionObserver`` could never fire for it; deferload loads it eagerly
   instead. The page still works, which is the problem — it looks like it defers
   while fetching everything on load. ``#yieldSpreadChartWrap`` shipped like this
-  and was only caught by reading the code (52e09ae).
+  and was only caught by reading the code (6ed8ddd).
 
 Neither shows up in a smoke test of the page, so this asserts it from the text:
 every anchor exists in the template that references it, and is in flow at parse

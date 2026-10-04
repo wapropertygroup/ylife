@@ -164,6 +164,16 @@ corporate certificate in the commit. Keep internal hostnames and work tooling
 out of the tree, and keep agent configuration (`.claude/`, `.agents/`) out of
 git, both of which `.gitignore` now covers.
 
+**Its whole history was rewritten the same day** (git-filter-repo, at the
+user's request), along with the TradingAgents fork's 20 own commits. Every
+commit's work address became the personal one, every signature was dropped,
+and the internal hostname and the agent-config files were scrubbed from old
+file versions; the current files did not change. **Every commit ID from before
+2026-10-04 23:30 UTC changed.** The IDs cited in the tree (this file, the
+Research Lab posts, a few code comments) were remapped to the new ones, but an
+old ID quoted anywhere else, in memory or a chat log, no longer resolves: find
+the commit by its subject instead.
+
 `/opt/tradingagents` tracks **15th-Ave-NE/TradingAgents** (our fork), not
 TauricResearch; `deploy.sh` and `install-tradingagents.sh` repoint that one checkout
 if they still find the old remote. They do **not** rewrite ystocker's remote — a
@@ -2336,8 +2346,8 @@ analysts; the roster is six, nine for A-shares.
 
 **Research Lab posts are dated to the measurement, and sourced.** Each is built
 from a commit message or module docstring that already recorded the finding —
-`bae8c9d`/`b54023e`/`8bd8fed` (GICS), `fec1338` (forward history), `27dd9c9`
-(TSM), `4ef9a69` (the ledger), the `/assets` section above (look-through) — with
+`742b10d`/`e2fbbc0`/`ea479b5` (GICS), `80d379e` (forward history), `8e11ada`
+(TSM), `935b4b9` (the ledger), the `/assets` section above (look-through) — with
 the numbers quoted as measured and the date on the post. Every post ends with
 "Check it yourself": the live page that shows the result, and the test that pins
 the fix. No post publishes an agent performance number; the decision-ledger post
@@ -3108,13 +3118,13 @@ Started in `create_app()`, all daemon threads:
 - **Several agent sessions share this one checkout, so `git commit -a` commits
   other people's work.** There is no auto-committer and no hook — it is simply
   four Claude sessions in `/Users/yuanxili/workspace/ystocker` at once, each
-  with files mid-edit in the same working tree. `625d2ef` ("history: give
+  with files mid-edit in the same working tree. `c348a8c` ("history: give
   indicators a warm-up…") therefore also contains an unrelated `/evaluation`
   P/FCF sort fix and its test, pushed under a message that does not mention
   them: nothing was lost, but the attribution is wrong and reverting that commit
   would now undo a second change. It is not one-directional and not confined to
   this repo — the same sweep put four of another session's in-flight test files
-  into `d7a4860` ("add more features") over in `/Users/yuanxili/workspace/
+  into `ff9694d` ("add more features") over in `/Users/yuanxili/workspace/
   TradingAgents`, a commit that contains no features.
 
   So: `git add <the files you actually touched>` for an ordinary commit, and

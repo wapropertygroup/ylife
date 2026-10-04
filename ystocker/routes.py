@@ -3514,7 +3514,7 @@ def api_insiders_company(ticker: str):
 # Separated from /api/history so the price/stats page loads instantly.
 # Uses a ThreadPoolExecutor to fetch all expirations in parallel.
 #
-# These four were deleted by fe5ea3b (the earnings calendar) while every use of
+# These four were deleted by f4e7fda (the earnings calendar) while every use of
 # them stayed, so `/api/options/<ticker>` raised `NameError` on its first line
 # and 500'd for every visitor from that commit onward. Nothing failed at import
 # or at startup — a name only has to exist when the line runs — so the endpoint

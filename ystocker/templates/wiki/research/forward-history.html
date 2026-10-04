@@ -1,13 +1,13 @@
 {#  Research Lab post: "A forward multiple needs a forward history" (/research/forward-history).
-    Built from the write-up of fec1338 (the reconstructed forward history and its
-    22-ticker measurement, 2026-09-20) and the forward-basis half of a6ae58d (every
+    Built from the write-up of 80d379e (the reconstructed forward history and its
+    22-ticker measurement, 2026-09-20) and the forward-basis half of afe0b8a (every
     ticker moved onto that basis, 2026-09-20); from CLAUDE.md's "The relative branch";
     and from the docstrings of ystocker/dca_history.py (reconstruct,
     reconstruct_forward, percentile_series, build_quarterly_ttm, _year_ago, the lag
     constants, forward_basis) and ystocker/dca.py (MIN_OBSERVATIONS, percentile_rank).
-    The two reconstruction traps shipped with the engine in 399f8fd (2026-09-11). The
+    The two reconstruction traps shipped with the engine in 07a2c28 (2026-09-11). The
     baseline the percentile shifts are measured against -- the trailing-on-trailing
-    rank -- is the one f368128 (2026-09-19) describes and forward_basis() keeps as
+    rank -- is the one 1069afb (2026-09-19) describes and forward_basis() keeps as
     `trailing_percentile`. Test counts are grep counts of tests/test_dca_history.py. #}
 <div data-l="en"><p class="w-article-lead">Our DCA valuation pages score a company by asking where today’s multiples sit in its own history — a percentile. That only works if today’s number and the history are the same kind of number. Rank a forward P/E against a history of trailing P/Es and every growing company looks cheap, and nothing on the page looks wrong: the output is still a tidy number between 0 and 100.</p></div>
 <div data-l="zh"><p class="w-article-lead">我们的定投估值页用百分位给公司的估值打分：看今天的各项倍数处在这家公司自身历史的什么位置。前提是，今天的数字和历史必须是同一种数字。把前瞻市盈率放进一段滚动市盈率的历史里排名，每一家成长型公司都会显得便宜——而页面上看不出任何异常：结果依然是一个介于 0 到 100 之间、整整齐齐的数字。</p></div>
@@ -188,6 +188,6 @@
 </div>
 
 <div class="w-article-foot">
-  <div data-l="en"><p>Sources: the forward reconstruction and its 22-ticker measurement (fec1338) and its extension to every ticker (a6ae58d), both 20 September 2026; the point-in-time rules and the two reconstruction traps, from the engine’s release (399f8fd, 11 September 2026); method notes in <code>ystocker/dca_history.py</code> and <code>ystocker/dca.py</code>.</p></div>
-  <div data-l="zh"><p>资料来源：前瞻重建及其 22 只股票的测量（fec1338）与推广到全部股票（a6ae58d），均为 2026 年 9 月 20 日；时点一致规则与两个重建陷阱，来自估值引擎的上线（399f8fd，2026 年 9 月 11 日）；方法说明见 <code>ystocker/dca_history.py</code> 与 <code>ystocker/dca.py</code>。</p></div>
+  <div data-l="en"><p>Sources: the forward reconstruction and its 22-ticker measurement (80d379e) and its extension to every ticker (afe0b8a), both 20 September 2026; the point-in-time rules and the two reconstruction traps, from the engine’s release (07a2c28, 11 September 2026); method notes in <code>ystocker/dca_history.py</code> and <code>ystocker/dca.py</code>.</p></div>
+  <div data-l="zh"><p>资料来源：前瞻重建及其 22 只股票的测量（80d379e）与推广到全部股票（afe0b8a），均为 2026 年 9 月 20 日；时点一致规则与两个重建陷阱，来自估值引擎的上线（07a2c28，2026 年 9 月 11 日）；方法说明见 <code>ystocker/dca_history.py</code> 与 <code>ystocker/dca.py</code>。</p></div>
 </div>

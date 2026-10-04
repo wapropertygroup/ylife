@@ -437,7 +437,7 @@ const _explainData = {};
 
   // A worker holding an expired in-memory payload still reports a "data as of"
   // timestamp, so this branch renders instead of the warming panel — the 202
-  // has to be handled here or the page sits blank. Same fix as 77d41db.
+  // has to be handled here or the page sits blank. Same fix as 048dd99.
   async function loadWithRetry() {
     const MAX_WAIT_MS = 120000, EVERY_MS = 3000;
     const started = Date.now();
