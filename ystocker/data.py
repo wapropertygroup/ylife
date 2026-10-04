@@ -236,7 +236,9 @@ def ps_ratio(info: dict) -> float | None:
 # trailingPE 1.82 and forwardPE 1.03 -- while marketCap / netIncomeToCommon,
 # which no share count enters, says 26.7. One name like that is enough to move an
 # index: /multiples cap-weights `cap / pe`, so Tokio Marine alone booked ~$88B of
-# forward earnings into the Nikkei that do not exist.
+# forward earnings into the Nikkei that do not exist. The guard's first hour in
+# production caught Tokyo Electron (8035.T) too: split 5:1 on 2026-09-29, price
+# and share count re-based, both EPS not -- 9.7x where cap / net income says 44.
 #
 # So trailingPE is checked against marketCap / netIncomeToCommon, and outside
 # this band both P/Es and the PEG built from them are dropped. Across thirty

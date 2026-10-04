@@ -2851,13 +2851,19 @@ Started in `create_app()`, all daemon threads:
   the PEG outside `PE_BASIS_BAND` (0.55–1.8; thirty same-currency listings
   surveyed sat at 0.90–1.23). It skips ADRs, whose net income is in another
   currency, and it fails a positive P/E against negative net income (FUBO and
-  PSKY that day).
+  PSKY that day). Its first hour in production caught a second split as well:
+  Tokyo Electron (8035.T) split 5:1 on 2026-09-29, and Yahoo re-based the
+  price and the share count but not either EPS. Its P/E read 9.7, where cap ÷
+  net income says 44.
 - **A ticker can be handed to a different company, and the quote stays
   plausible.** Yahoo's PARA has been Banzai International, a $2M shell, since
-  Paramount moved to PSKY. The box's saved `peer_groups.json` went on tracking
-  it (P/E 0.03, cap 0.0), and it topped "Lowest P/E first" on /companies.
-  `SYMBOL_RENAMES` in `__init__.py` rewrites the saved file at load, because
-  editing the code defaults never reaches a box with a saved copy.
+  Paramount moved to PSKY. The "Streaming / Media" default went on tracking it
+  (P/E 0.03, cap 0.0), and it topped "Lowest P/E first" on /companies. The
+  default now says PSKY. `SYMBOL_RENAMES` in `__init__.py` also rewrites a saved
+  `peer_groups.json` at load, because a box holding one (written by the
+  /groups UI) replaces the defaults with it, and a code edit alone would never
+  reach that box. The current box has no saved file (none survived its
+  rebuilds), so there the default was all that mattered.
 - **A `check_` script that calls `create_app()` hands its threads this laptop's
   production credentials.** The markets warm-up writes `ystocker-markets-cache`,
   and the observed-series threads write their tables. Strip `AWS_*` (credentials
