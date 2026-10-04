@@ -1787,6 +1787,60 @@ naming the speaker at each step) and `tests/test_agents_progress.py` (8,
 including that every planned role is one the runner actually publishes, since a
 name the events never carry leaves the bar at zero for the whole run).
 
+### The decision calendar (`/agents`)
+
+Asked for on 2026-10-04: a way to see "the same ticker's decision on each day
+from a clear perspective". The history list could not show that. It is sorted
+by when runs were made, every ticker mixed, so a reader had to assemble one
+ticker's story in their head. A card under the history list, for a signed-in
+reader only (not the landing, not the launcher's embedded frame), has three
+parts:
+
+- **A month grid**, Monday first. Each day holds that day's runs as chips
+  coloured by rating. Under "All tickers" a chip names the ticker; with one
+  ticker picked it names the rating.
+- **The picked ticker's timeline**: every run in date order, each change of
+  rating marked ↑ upgraded, ↓ downgraded or → unchanged.
+- **A price chart**: `/api/history/<T>` with each decision placed on its day.
+  `period=3mo` (daily bars) when the first run is recent, else `1y`. The axis
+  is linear over epoch ms because there is no date adapter (see Known
+  Pitfalls).
+
+A chip opens the report in place through `window.agOpenJob`, the page's own
+`openJob`, exposed for it. `?ticker=` from the run form opens on that ticker.
+
+**A run is placed by the trade date it analysed** (`job.date`), not by when it
+ran: a Sunday run about Friday's close belongs on Friday.
+
+**The rating keeps all five steps**, from `agents.rating_level`: 2 Buy,
+1 Overweight, 0 Hold, -1 Underweight, -2 Sell. `report_pdf.verdict_tone` folds
+these into three tones, right for the colour behind a decision box and wrong
+here, since Overweight → Buy is exactly the change a ticker's calendar is read
+for. The rating word that comes first in the text wins, so "Hold -- upgrade to
+Buy above $210" is a Hold. No rating is `None`, never a Hold. A change is
+measured only between two rated runs, so a failed run in between cannot fake an
+upgrade.
+
+On the chart, strength is in the marker as well as the colour: Buy and Sell are
+the largest, and Hold is a diamond, because Buy and Overweight are two greens.
+On a phone the day cells use OW / UW (`.s` spans swapped in by CSS under
+640px).
+
+`/api/agents/calendar` has the same gate and privacy rule as
+`/api/agents/jobs`: signed in, the reader's own runs, a VIP everyone's with the
+owner masked. It is never cached. One response carries up to
+`agents.CALENDAR_MAX` (1000) runs, so the page draws any month and any ticker
+without asking again. It reads up to `_TICKER_SCAN_MAX` records, not the 60 most
+recent that every listing reads, or an older run would be missing from its
+month. The grid and timeline logic is `static/agent_calendar.js`, pure, as
+`agent_progress.js` is.
+
+Tests: `tests/test_agents_calendar.py` (13: the five steps in EN and ZH, the
+first-word rule, the privacy rule), `node tests/check_agent_calendar.mjs` (30:
+the grid's weekdays, leap years, the timeline's changes across an unrated run)
+and `tests/check_agents_calendar.py` (5, hermetic: the gate, the card's
+audience, both languages).
+
 ### The TradeAgents wiki (`/docs`, `/research`) and the `/agents` landing
 
 Modelled on vibetrading.wiki: product docs with a sidebar, an "On this page" list

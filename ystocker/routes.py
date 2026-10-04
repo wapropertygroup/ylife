@@ -5521,6 +5521,29 @@ def api_agents_jobs():
                     "viewer": viewer or "", "vip": vip})
 
 
+@bp.route("/api/agents/calendar")
+def api_agents_calendar():
+    """Every run the caller may open, compact, for /agents' decision calendar.
+
+    The same gate and privacy rule as /api/agents/jobs: signed in, the caller's
+    own runs, a VIP everyone's with the owner masked. One response carries the
+    lot (up to ``agents.CALENDAR_MAX``), so the page draws any month and any
+    ticker's timeline without asking again. Never cached: it is per viewer.
+    """
+    gate = _agent_gate()
+    if gate:
+        return gate
+    from ystocker import quota
+    from ystocker.agents import calendar_runs
+
+    viewer = _agent_user()
+    vip = quota.is_vip(viewer)
+    out = calendar_runs(viewer, all_users=vip)
+    log.info("API agents/calendar: %d run(s), %d ticker(s) for %s%s",
+             len(out["runs"]), len(out["tickers"]), viewer or "?", " (vip)" if vip else "")
+    return _no_store(jsonify({**out, "vip": vip}))
+
+
 @bp.route("/api/agents/balance")
 def api_agents_balance():
     """The signed-in reader's run credits, for the account menu.

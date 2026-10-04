@@ -1712,6 +1712,102 @@ def ticker_runs(ticker: str, user: Optional[str], all_users: bool = False,
 
 
 # ---------------------------------------------------------------------------
+# The decision calendar on /agents
+# ---------------------------------------------------------------------------
+#
+# Every run the viewer may open, compact, so the page can draw any month and any
+# ticker's timeline without another request. The question it answers is "what
+# did the desk say about this ticker on each day it was asked" -- which a list of
+# recent runs, newest first and mixed across tickers, makes the reader assemble
+# in their head.
+
+#: How many runs the calendar carries: the newest this many the viewer may open.
+CALENDAR_MAX = 1000
+
+# The Portfolio Manager's rating, on the five-step scale the reports use (Buy,
+# Overweight, Hold, Underweight, Sell), plus the words the Chinese reports and
+# older runs used for the same steps. report_pdf.verdict_tone folds the scale
+# into three tones, which is right for a colour behind a decision box and wrong
+# here: a calendar of one ticker is read for its *changes*, and Overweight ->
+# Buy is a change the three-tone scale cannot show.
+_RATING_WORDS: tuple[tuple[int, tuple[str, ...]], ...] = (
+    (2,  ("buy", "买入")),
+    (1,  ("overweight", "accumulate", "outperform", "增持", "加仓", "超配")),
+    (0,  ("hold", "neutral", "market perform", "持有", "观望", "中性", "标配")),
+    (-1, ("underweight", "reduce", "减持", "减仓", "低配")),
+    (-2, ("sell", "short", "卖出", "做空")),
+)
+
+
+def rating_level(decision: str) -> Optional[int]:
+    """2 Buy, 1 Overweight, 0 Hold, -1 Underweight, -2 Sell; None if no rating.
+
+    The rating word that comes *first* in the text wins, so "Hold -- upgrade to
+    Buy above $210" is a Hold and "Strong Sell" a Sell; where two words start at
+    the same place the longer one wins. ``None`` is a run with no decision
+    (queued, running, failed, or a report whose Portfolio Manager named no
+    rating), never a Hold: a calendar that filled the gaps with Hold would show a
+    steady view on days the desk said nothing.
+    """
+    low = (decision or "").casefold()
+    best: Optional[tuple[int, int, int]] = None      # (position, -length, level)
+    for level, words in _RATING_WORDS:
+        for word in words:
+            pos = low.find(word)
+            if pos >= 0 and (best is None or (pos, -len(word)) < best[:2]):
+                best = (pos, -len(word), level)
+    return best[2] if best else None
+
+
+def calendar_runs(user: Optional[str], all_users: bool = False,
+                  limit: int = CALENDAR_MAX) -> dict[str, Any]:
+    """The runs behind /agents' decision calendar, newest first.
+
+    Each is the ticker, the trade date analysed (``date``, which is what the
+    calendar is laid out by -- a run made on Sunday about Friday's close belongs
+    on Friday), the decision and its ``level``, the status, and the id that opens
+    it. Ownership as everywhere else: ``owns`` per record, ``all_users`` lifting
+    it for a VIP, the owner masked on a run that is not the viewer's, and no
+    viewer means no runs. ``tickers`` counts runs per ticker for the picker.
+    """
+    from ystocker.share import mask_email
+
+    if not all_users and not user:
+        return {"runs": [], "tickers": []}
+    limit = max(1, min(int(limit or CALENDAR_MAX), CALENDAR_MAX))
+    runs: list[dict[str, Any]] = []
+    counts: dict[str, int] = {}
+    for job in _records(user=None if all_users else user, limit=_TICKER_SCAN_MAX):
+        mine = owns(job, user)
+        if not all_users and not mine:
+            continue
+        day = str(job.get("date") or "")[:10]
+        ticker = (job.get("ticker") or "").strip().upper()
+        if not ticker or not _DATE_RE.match(day):
+            continue
+        decision = str(job.get("decision") or "")
+        entry = {
+            "id": job.get("id"),
+            "ticker": ticker,
+            "date": day,
+            "status": job.get("status") or "",
+            "decision": decision,
+            "level": rating_level(decision),
+            "created_at": job.get("created_at"),
+            "mine": mine,
+        }
+        if not mine:
+            entry["owner"] = mask_email(job.get("user"))
+        runs.append(entry)
+        counts[ticker] = counts.get(ticker, 0) + 1
+        if len(runs) >= limit:
+            break
+    tickers = [{"ticker": t, "runs": n}
+               for t, n in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))]
+    return {"runs": runs, "tickers": tickers}
+
+
+# ---------------------------------------------------------------------------
 # Public showcase — finished reports shown to visitors who are not signed in
 # ---------------------------------------------------------------------------
 #

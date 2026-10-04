@@ -1762,6 +1762,350 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
       data-i18n="agents.history_loading">Loading your reports…</span></div>
   </div>
 </div>
+{% if not agent_embedded %}
+<!-- ── Decision calendar ────────────────────────────────────────────────
+     Every run the reader may open, laid out by the trading day it analysed,
+     so one ticker's ratings read across the days rather than being assembled
+     from a list sorted by when each run happened to be made. Drawn from
+     /api/agents/calendar by static/agent_calendar.js (pure, Node-tested);
+     its CSS is here, hand-written, because every chip is built in JS. -->
+<div id="agCal" class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 mt-6 fade-up">
+  <style>
+    #agCal { --cal-buy: #065f46; --cal-buy-bg: rgba(16,185,129,.24); --cal-ow: #047857; --cal-ow-bg: rgba(16,185,129,.11);
+             --cal-hold: #92400e; --cal-hold-bg: rgba(245,158,11,.15); --cal-uw: #be123c; --cal-uw-bg: rgba(244,63,94,.11);
+             --cal-sell: #9f1239; --cal-sell-bg: rgba(244,63,94,.24); }
+    .dark #agCal { --cal-buy: #6ee7b7; --cal-buy-bg: rgba(52,211,153,.24); --cal-ow: #34d399; --cal-ow-bg: rgba(52,211,153,.11);
+                   --cal-hold: #fcd34d; --cal-hold-bg: rgba(251,191,36,.14); --cal-uw: #fda4af; --cal-uw-bg: rgba(251,113,133,.11);
+                   --cal-sell: #fb7185; --cal-sell-bg: rgba(251,113,133,.24); }
+    .ag-cal-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+    .ag-cal-sub { font-size: 11.5px; color: var(--ag-ink-dim); margin-top: 3px; max-width: 34rem; }
+    .ag-cal-nav { display: flex; align-items: center; gap: 6px; }
+    .ag-cal-arrow { width: 32px; height: 32px; border-radius: 9px; border: 1px solid var(--ag-ring); background: var(--ag-surface);
+                    color: var(--ag-ink); font-size: 16px; line-height: 1; cursor: pointer; }
+    .ag-cal-arrow:disabled { opacity: .35; cursor: default; }
+    .ag-cal-month { min-width: 8.5rem; text-align: center; font-size: 13.5px; font-weight: 600; color: var(--ag-ink-strong); }
+    .ag-cal-tickers { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; margin-bottom: 8px; scrollbar-width: thin; }
+    .ag-cal-tk { flex: 0 0 auto; font: 600 12px/1 'JetBrains Mono', ui-monospace, monospace; padding: 7px 10px; border-radius: 999px;
+                 border: 1px solid var(--ag-ring); background: transparent; color: var(--ag-ink-muted); cursor: pointer; }
+    .ag-cal-tk span { font: 500 10.5px/1 Inter, system-ui, sans-serif; color: var(--ag-ink-dim); margin-left: 4px; }
+    .ag-cal-tk.is-on { color: var(--ag-accent-ink); border-color: var(--ag-accent); background: rgba(99,102,241,.12); }
+    .ag-cal-meta { font-size: 11.5px; color: var(--ag-ink-dim); margin: 2px 0 10px; }
+    .ag-cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); border: 1px solid var(--ag-line);
+                   border-radius: 12px; overflow: hidden; }
+    .ag-cal-wd { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .03em; color: var(--ag-ink-dim);
+                 padding: 6px 7px; background: var(--ag-inset); }
+    .ag-cal-day { min-height: 74px; padding: 5px 5px 6px; border-top: 1px solid var(--ag-line); border-left: 1px solid var(--ag-line);
+                  display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+    .ag-cal-day:nth-child(7n + 1) { border-left: 0; }
+    .ag-cal-day.out { background: var(--ag-inset); }
+    .ag-cal-day.out .ag-cal-num { opacity: .45; }
+    .ag-cal-num { font-size: 11px; font-weight: 600; color: var(--ag-ink-faint); }
+    .ag-cal-day.today .ag-cal-num { color: var(--ag-accent-ink); }
+    .ag-cal-day.today { box-shadow: inset 0 0 0 2px rgba(99,102,241,.45); }
+    .ag-cal-chip { display: block; width: 100%; text-align: left; border: 0; cursor: pointer; border-radius: 6px; padding: 3px 5px;
+                   font: 600 10.5px/1.25 'JetBrains Mono', ui-monospace, monospace; white-space: nowrap; overflow: hidden;
+                   text-overflow: ellipsis; color: var(--ag-ink-faint); background: var(--ag-fill); }
+    .ag-cal-chip.txt { font-family: Inter, system-ui, sans-serif; }
+    .ag-cal-chip .s { display: none; }
+    .ag-cal-chip.buy { color: var(--cal-buy); background: var(--cal-buy-bg); }
+    .ag-cal-chip.ow { color: var(--cal-ow); background: var(--cal-ow-bg); }
+    .ag-cal-chip.hold { color: var(--cal-hold); background: var(--cal-hold-bg); }
+    .ag-cal-chip.uw { color: var(--cal-uw); background: var(--cal-uw-bg); }
+    .ag-cal-chip.sell { color: var(--cal-sell); background: var(--cal-sell-bg); }
+    .ag-cal-chip:hover { filter: brightness(.96); outline: 1px solid currentColor; }
+    .ag-cal-more { font-size: 10.5px; color: var(--ag-ink-dim); border: 0; background: none; padding: 1px 4px; text-align: left; cursor: pointer; }
+    .ag-cal-empty { font-size: 12.5px; color: var(--ag-ink-muted); padding: 14px 2px; }
+    .ag-cal-empty[hidden], #agCalTrack[hidden] { display: none; }
+    #agCalTrack { margin-bottom: 12px; }
+    .ag-cal-chart { position: relative; height: 190px; margin-bottom: 8px; }
+    .ag-cal-strip { display: flex; gap: 6px; overflow-x: auto; padding: 2px 0 6px; scrollbar-width: thin; }
+    .ag-cal-step { flex: 0 0 auto; display: flex; flex-direction: column; align-items: flex-start; gap: 3px; padding: 6px 8px; border-radius: 10px;
+                   border: 1px solid var(--ag-line); background: var(--ag-surface); cursor: pointer; min-width: 5.5rem; text-align: left; }
+    .ag-cal-step:hover { border-color: var(--ag-accent); }
+    .ag-cal-step-date { font-size: 10.5px; color: var(--ag-ink-dim); }
+    .ag-cal-step .ag-cal-chip { width: auto; }
+    .ag-cal-arrowmark { font-size: 10.5px; font-weight: 600; }
+    .ag-cal-arrowmark.up { color: var(--cal-ow); }
+    .ag-cal-arrowmark.down { color: var(--cal-uw); }
+    .ag-cal-arrowmark.same, .ag-cal-arrowmark.first { color: var(--ag-ink-dim); }
+    .ag-cal-legend { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+    .ag-cal-legend .ag-cal-chip { width: auto; cursor: default; }
+    .ag-cal-legend .ag-cal-chip:hover { outline: 0; filter: none; }
+    @media (max-width: 640px) {
+      .ag-cal-day { min-height: 54px; padding: 3px 2px 4px; }
+      .ag-cal-chip { font-size: 9px; padding: 2px 3px; border-radius: 4px; }
+      .ag-cal-day .ag-cal-chip .l { display: none; }
+      .ag-cal-day .ag-cal-chip .s { display: inline; }
+      .ag-cal-wd { padding: 5px 3px; font-size: 9.5px; }
+      .ag-cal-arrow { width: 40px; height: 40px; }
+    }
+  </style>
+  <div class="ag-cal-head">
+    <div>
+      <h3 class="text-sm font-semibold text-slate-600 dark:text-slate-300" data-i18n="agents.cal_title">Decision calendar</h3>
+      <p class="ag-cal-sub" data-i18n="agents.cal_sub">Each run sits on the trading day it analysed. Pick a ticker to follow its rating day by day.</p>
+    </div>
+    <div class="ag-cal-nav">
+      <button type="button" class="ag-cal-arrow" id="agCalPrev" aria-label="Previous month" title="Previous month" data-i18n-title="agents.cal_prev">‹</button>
+      <span id="agCalMonth" class="ag-cal-month">—</span>
+      <button type="button" class="ag-cal-arrow" id="agCalNext" aria-label="Next month" title="Next month" data-i18n-title="agents.cal_next">›</button>
+    </div>
+  </div>
+  <div id="agCalTickers" class="ag-cal-tickers" role="tablist" aria-label="Tickers"></div>
+  <p id="agCalMeta" class="ag-cal-meta" data-i18n="agents.cal_loading">Loading your decisions…</p>
+  <div id="agCalTrack" hidden>
+    <div class="ag-cal-chart"><canvas id="agCalChart"></canvas></div>
+    <div id="agCalStrip" class="ag-cal-strip"></div>
+  </div>
+  <div id="agCalGrid" class="ag-cal-grid"></div>
+  <p id="agCalEmpty" class="ag-cal-empty" hidden></p>
+  <div id="agCalLegend" class="ag-cal-legend"></div>
+</div>
+<script src="{{ url_for('static', filename='agent_calendar.js') }}?v={{ cache_bust or 'dev' }}"></script>
+<script>
+(function () {
+  const root = document.getElementById('agCal');
+  if (!root || !window.AgentCalendar) return;
+  const AC = window.AgentCalendar;
+  const F = id => document.getElementById(id);
+  const T = (k, f) => (typeof I18n !== 'undefined' && I18n.t(k)) || f;
+  const zh = () => (document.documentElement.lang || '').indexOf('zh') === 0;
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g,
+    c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const LABELS = { buy: ['agents.cal_buy', 'Buy'], ow: ['agents.cal_ow', 'Overweight'], hold: ['agents.cal_hold', 'Hold'],
+                   uw: ['agents.cal_uw', 'Underweight'], sell: ['agents.cal_sell', 'Sell'] };
+  const STATUS = { running: ['agents.status_running', 'Running'], queued: ['agents.status_queued', 'Queued'],
+                   error: ['agents.status_error', 'Error'] };
+  const ARROWS = { up: '↑', down: '↓', same: '→', first: '•' };
+  let data = null, ticker = '', month = null, chart = null, chartFor = null;
+
+  const label = r => {
+    const k = AC.levelKey(r.level);
+    if (LABELS[k]) return T(LABELS[k][0], LABELS[k][1]);
+    const s = STATUS[r.status];
+    return s ? T(s[0], s[1]) : T('agents.cal_none', 'No rating');
+  };
+  const fmtMonth = ym => new Date(ym + '-01T12:00:00Z').toLocaleDateString(zh() ? 'zh-CN' : 'en-US',
+    { month: 'long', year: 'numeric', timeZone: 'UTC' });
+  const fmtDay = (iso, opts) => new Date(iso + 'T12:00:00Z').toLocaleDateString(zh() ? 'zh-CN' : 'en-US',
+    Object.assign({ timeZone: 'UTC' }, opts));
+  const todayIso = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+
+  function open(id) {
+    if (!id) return;
+    if (typeof window.agOpenJob === 'function') {
+      window.agOpenJob(id);
+      const card = F('agCurrent');
+      if (card) setTimeout(() => card.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
+    } else {
+      location.href = '/agents?job=' + encodeURIComponent(id);
+    }
+  }
+
+  // Overweight and Underweight do not fit a phone's day cell, so a short form
+  // rides along and the CSS swaps it in under 640px.
+  const SHORT = { ow: ['agents.cal_ow_s', 'OW'], uw: ['agents.cal_uw_s', 'UW'] };
+  function chip(r, withTicker) {
+    const k = AC.levelKey(r.level);
+    const text = withTicker ? r.ticker : label(r);
+    const short = !withTicker && SHORT[k] ? T(SHORT[k][0], SHORT[k][1]) : '';
+    const tip = [r.ticker, label(r), fmtDay(r.date, { month: 'short', day: 'numeric', year: 'numeric' }),
+                 r.owner ? T('agents.cal_owner', 'ran by {o}').replace('{o}', r.owner) : ''].filter(Boolean).join(' · ');
+    const body = short ? `<span class="l">${esc(text)}</span><span class="s">${esc(short)}</span>` : esc(text);
+    return `<button type="button" class="ag-cal-chip ${k}${withTicker ? '' : ' txt'}" data-cal-job="${esc(r.id)}" title="${esc(tip)}">${body}</button>`;
+  }
+
+  function renderTickers() {
+    const list = (data.tickers || []);
+    F('agCalTickers').innerHTML = [`<button type="button" class="ag-cal-tk${ticker ? '' : ' is-on'}" data-cal-tk="">${esc(T('agents.cal_all', 'All tickers'))}</button>`]
+      .concat(list.map(t => `<button type="button" class="ag-cal-tk${t.ticker === ticker ? ' is-on' : ''}" data-cal-tk="${esc(t.ticker)}">${esc(t.ticker)}<span>${t.runs}</span></button>`))
+      .join('');
+  }
+
+  function renderMeta() {
+    const s = AC.summary(data.runs, ticker);
+    let text;
+    if (!data.runs.length) text = '';
+    else if (!ticker) {
+      text = T('agents.cal_meta_all', '{n} runs across {k} tickers · {r} with a rating')
+        .replace('{n}', s.total).replace('{k}', (data.tickers || []).length).replace('{r}', s.rated);
+    } else {
+      text = T('agents.cal_meta_ticker', '{t}: {n} runs · {r} with a rating').replace('{t}', ticker)
+        .replace('{n}', s.total).replace('{r}', s.rated);
+      if (s.latest) text += ' · ' + T('agents.cal_latest', 'latest {rating} on {d}')
+        .replace('{rating}', label(s.latest)).replace('{d}', fmtDay(s.latest.date, { month: 'short', day: 'numeric' }));
+    }
+    F('agCalMeta').textContent = text;
+  }
+
+  function renderGrid() {
+    const empty = F('agCalEmpty');
+    if (!data.runs.length) {
+      F('agCalGrid').innerHTML = '';
+      F('agCalMonth').textContent = '—';
+      F('agCalPrev').disabled = F('agCalNext').disabled = true;
+      empty.hidden = false;
+      empty.textContent = T('agents.cal_empty', 'No runs yet. Your analyses will appear here, each on the trading day it analysed.');
+      return;
+    }
+    const span = AC.months(data.runs, ticker);
+    const nowYm = todayIso().slice(0, 7);
+    const first = span[0] || nowYm, last = [span[span.length - 1] || nowYm, nowYm].sort()[1];
+    if (!month || month < first || month > last) month = AC.latestMonth(data.runs, ticker) || nowYm;
+    F('agCalMonth').textContent = fmtMonth(month);
+    F('agCalPrev').disabled = month <= first;
+    F('agCalNext').disabled = month >= last;
+    const weeks = AC.monthGrid(+month.slice(0, 4), +month.slice(5, 7));
+    const days = AC.byDate(data.runs, ticker);
+    const today = todayIso();
+    // Weekday names from a known Monday, in the page's language.
+    const head = [0, 1, 2, 3, 4, 5, 6].map(i => `<div class="ag-cal-wd">${esc(
+      new Date(Date.UTC(2026, 8, 28 + i, 12)).toLocaleDateString(zh() ? 'zh-CN' : 'en-US', { weekday: 'short', timeZone: 'UTC' }))}</div>`);
+    const cells = [];
+    let shown = 0;
+    weeks.forEach(week => week.forEach(cell => {
+      const runs = days[cell.date] || [];
+      if (!cell.out) shown += runs.length;
+      const cap = ticker ? 4 : 3;
+      const chips = runs.slice(0, cap).map(r => chip(r, !ticker)).join('');
+      const more = runs.length > cap
+        ? `<button type="button" class="ag-cal-more" data-cal-more="${cell.date}">${esc(T('agents.cal_more', '+{n} more').replace('{n}', runs.length - cap))}</button>` : '';
+      cells.push(`<div class="ag-cal-day${cell.out ? ' out' : ''}${cell.date === today ? ' today' : ''}" data-date="${cell.date}">
+        <span class="ag-cal-num">${cell.day}</span>${chips}${more}</div>`);
+    }));
+    F('agCalGrid').innerHTML = head.join('') + cells.join('');
+    empty.hidden = shown > 0;
+    if (!shown) empty.textContent = T('agents.cal_empty_month', 'No runs in this month.');
+  }
+
+  function renderLegend() {
+    F('agCalLegend').innerHTML = ['buy', 'ow', 'hold', 'uw', 'sell']
+      .map(k => `<span class="ag-cal-chip txt ${k}">${esc(T(LABELS[k][0], LABELS[k][1]))}</span>`).join('');
+  }
+
+  // One ticker: its runs in order with every change of rating marked, and the
+  // price over the same days with each decision placed on it.
+  function renderTrack() {
+    const track = F('agCalTrack');
+    if (!ticker) { track.hidden = true; return; }
+    track.hidden = false;
+    const line = AC.timeline(data.runs, ticker);
+    F('agCalStrip').innerHTML = line.map(r => {
+      const mark = r.change ? `<span class="ag-cal-arrowmark ${r.change}">${ARROWS[r.change]} ${esc(T('agents.cal_' + r.change, r.change))}</span>` : '';
+      return `<button type="button" class="ag-cal-step" data-cal-job="${esc(r.id)}" title="${esc(T('agents.cal_open', 'Open the report'))}">
+        <span class="ag-cal-step-date">${esc(fmtDay(r.date, { month: 'short', day: 'numeric' }))}</span>${chip(r, false).replace('<button', '<span').replace('</button>', '</span>')}${mark}</button>`;
+    }).join('');
+    const strip = F('agCalStrip');
+    strip.scrollLeft = strip.scrollWidth;
+    drawChart(line);
+  }
+
+  async function drawChart(line) {
+    const canvas = F('agCalChart');
+    if (!window.Chart || !canvas || !line.length) return;
+    const key = ticker;
+    if (chartFor === key && chart) return;
+    if (chart) { chart.destroy(); chart = null; }
+    chartFor = key;
+    const firstRun = line[0].date;
+    const ageDays = (Date.now() - Date.parse(firstRun + 'T00:00:00Z')) / 86400000;
+    const period = ageDays <= 80 ? '3mo' : '1y';
+    let hist;
+    try {
+      const r = await fetch(`/api/history/${encodeURIComponent(key)}?period=${period}`, { credentials: 'same-origin' });
+      if (!r.ok) throw new Error(String(r.status));
+      hist = await r.json();
+    } catch (_) { canvas.parentElement.hidden = true; return; }
+    if (ticker !== key) return;                       // the reader moved on
+    const from = Date.parse(firstRun + 'T00:00:00Z') - 21 * 86400000;
+    const pts = [];
+    (hist.dates || []).forEach((d, i) => {
+      const x = Date.parse(d + 'T00:00:00Z'), y = (hist.prices || [])[i];
+      if (typeof y === 'number' && x >= from) pts.push({ x, y });
+    });
+    if (!pts.length) { canvas.parentElement.hidden = true; return; }
+    canvas.parentElement.hidden = false;
+    const css = getComputedStyle(root);
+    const colour = k => ({ buy: css.getPropertyValue('--cal-buy'), ow: css.getPropertyValue('--cal-ow'),
+                           hold: css.getPropertyValue('--cal-hold'), uw: css.getPropertyValue('--cal-uw'),
+                           sell: css.getPropertyValue('--cal-sell') }[k] || CT.c('#94a3b8')).trim();
+    // A decision sits on the price of the last bar on or before its date.
+    const priceAt = x => { let y = null; for (const p of pts) { if (p.x <= x) y = p.y; else break; } return y == null ? pts[0].y : y; };
+    const marks = line.filter(r => r.level !== null && r.level !== undefined)
+      .map(r => ({ x: Date.parse(r.date + 'T00:00:00Z'), y: priceAt(Date.parse(r.date + 'T00:00:00Z')), r }));
+    const dateTick = v => new Date(v).toLocaleDateString(zh() ? 'zh-CN' : 'en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+    // A linear axis over epoch ms: there is no Chart.js date adapter here, and a
+    // category axis would space the runs evenly whatever the days between them.
+    chart = new Chart(canvas, {
+      type: 'line',
+      data: { datasets: [
+        { data: pts, borderColor: CT.c('#818cf8'), borderWidth: 1.6, pointRadius: 0, tension: 0.15, order: 2 },
+        // Strength in the size as well as the colour: Buy and Overweight are
+        // two greens, and a run of one ticker is read for which steps it took.
+        { type: 'scatter', data: marks, order: 1,
+          pointRadius: marks.map(m => Math.abs(m.r.level) === 2 ? 8 : Math.abs(m.r.level) === 1 ? 6 : 5),
+          pointHoverRadius: marks.map(m => Math.abs(m.r.level) === 2 ? 10 : 8),
+          pointStyle: marks.map(m => m.r.level === 0 ? 'rectRot' : 'circle'),
+          pointBackgroundColor: marks.map(m => colour(AC.levelKey(m.r.level))),
+          pointBorderColor: CT.c('#0f172a'), pointBorderWidth: 1.5 },
+      ] },
+      options: {
+        responsive: true, maintainAspectRatio: false, animation: false, parsing: false,
+        plugins: { legend: { display: false }, tooltip: { callbacks: {
+          title: items => dateTick(items[0].parsed.x),
+          label: c => c.datasetIndex === 1 ? ` ${label(marks[c.dataIndex].r)} · $${c.parsed.y.toFixed(2)}` : ` $${c.parsed.y.toFixed(2)}`,
+        } } },
+        onClick: (evt, els) => { const el = els.find(e => e.datasetIndex === 1); if (el) open(marks[el.index].r.id); },
+        scales: {
+          x: { type: 'linear', ticks: { callback: dateTick, maxTicksLimit: 6, color: CT.c('#94a3b8'), font: { size: 10 } },
+               grid: { color: CT.c('#1e293b') } },
+          y: { ticks: { color: CT.c('#94a3b8'), font: { size: 10 } }, grid: { color: CT.c('#1e293b') } },
+        },
+      },
+    });
+  }
+
+  function render() {
+    if (!data) return;
+    renderTickers();
+    renderMeta();
+    renderTrack();
+    renderGrid();
+    renderLegend();
+  }
+
+  root.addEventListener('click', e => {
+    const job = e.target.closest('[data-cal-job]');
+    if (job) { open(job.dataset.calJob); return; }
+    const tk = e.target.closest('[data-cal-tk]');
+    if (tk) { ticker = tk.dataset.calTk; month = null; render(); return; }
+    const more = e.target.closest('[data-cal-more]');
+    if (more) {                                   // show a crowded day in full
+      const cell = more.closest('.ag-cal-day');
+      const runs = AC.byDate(data.runs, ticker)[more.dataset.calMore] || [];
+      cell.querySelectorAll('.ag-cal-chip, .ag-cal-more').forEach(n => n.remove());
+      cell.insertAdjacentHTML('beforeend', runs.map(r => chip(r, !ticker)).join(''));
+    }
+  });
+  F('agCalPrev').addEventListener('click', () => { month = AC.shiftMonth(month, -1); renderGrid(); });
+  F('agCalNext').addEventListener('click', () => { month = AC.shiftMonth(month, 1); renderGrid(); });
+  document.addEventListener('i18n:langchange', () => { chartFor = null; render(); });
+
+  fetch('/api/agents/calendar', { credentials: 'same-origin' })
+    .then(r => { if (!r.ok) throw new Error(String(r.status)); return r.json(); })
+    .then(body => {
+      data = { runs: body.runs || [], tickers: body.tickers || [] };
+      // ?ticker= on the run page already names one; open on it when it has runs.
+      const wanted = (new URLSearchParams(location.search).get('ticker') || '').toUpperCase();
+      if (wanted && data.tickers.some(t => t.ticker === wanted)) ticker = wanted;
+      render();
+    })
+    .catch(() => {
+      F('agCalMeta').textContent = T('agents.cal_failed', 'The calendar could not be loaded.');
+    });
+})();
+</script>
+{% endif %}
 {% endif %}
 
 <script>
@@ -3579,6 +3923,8 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
     runBtn.disabled = false;
   });
   loadHistory();
+  // The decision calendar below opens a report in place, as a history row does.
+  window.agOpenJob = openJob;
 
   // Deep link: /agents?job=<id> opens that report straight away. replaceState
   // rather than push, so the first back press leaves the page instead of
