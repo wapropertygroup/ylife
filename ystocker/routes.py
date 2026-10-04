@@ -991,28 +991,52 @@ _HISTORY_CACHE_LOCK = threading.Lock()
 _HISTORY_CACHE_TTL = 60 * 60   # 1 hour
 
 def _get_insider_trades(ticker: str) -> list[dict]:
-    """Return the most recent 10 insider transactions for *ticker*."""
+    """Return the most recent 10 insider transactions for *ticker*.
+
+    Every /history page showed none for weeks: Apple had 73 rows at Yahoo and
+    0 on the page (2026-10-04). Yahoo leaves ``Value`` as NaN where no price was
+    reported, NaN is truthy, so ``int(row.get("Value") or 0)`` raised on the
+    first such row and the blanket ``except`` returned an empty list for the
+    whole ticker. The columns had also moved -- ``Insider`` and ``Position``
+    now, and ``Transaction`` is usually blank with the description in ``Text``
+    ("Sale at price 230.00 per share.") -- so the names read "—" even when it
+    worked. Each field is now read on its own; one bad cell costs that cell.
+    A value that was not reported is ``None`` (the page draws "—"), not $0.
+    """
     try:
         import yfinance as yf
-        tk = yf.Ticker(ticker)
-        df = tk.insider_transactions
-        if df is None or df.empty:
-            return []
-        # Normalise column names (yfinance sometimes returns camelCase)
-        df = df.head(10).copy()
-        rows = []
-        for _, row in df.iterrows():
-            rows.append({
-                "date":        str(row.get("Start Date") or row.get("startDate") or ""),
-                "insider":     str(row.get("Name") or row.get("name") or "—"),
-                "title":       str(row.get("Title") or row.get("title") or "—"),
-                "transaction": str(row.get("Transaction") or row.get("transaction") or "—"),
-                "shares":      int(row.get("Shares") or row.get("shares") or 0),
-                "value":       int(row.get("Value") or row.get("value") or 0),
-            })
-        return rows
-    except Exception:
+        df = yf.Ticker(ticker).insider_transactions
+    except Exception as exc:  # noqa: BLE001 - a missing panel, not a page error
+        log.debug("insider trades for %s unavailable: %s", ticker, exc)
         return []
+    if df is None or getattr(df, "empty", True):
+        return []
+
+    def _text(row, *keys) -> str:
+        for key in keys:
+            value = row.get(key)
+            if value is not None and value == value and str(value).strip():
+                return str(value).strip()
+        return "—"
+
+    def _int(value) -> Optional[int]:
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            return None
+        return int(number) if number == number else None
+
+    rows = []
+    for _, row in df.head(10).iterrows():
+        rows.append({
+            "date":        _text(row, "Start Date", "startDate"),
+            "insider":     _text(row, "Insider", "Name", "name"),
+            "title":       _text(row, "Position", "Title", "title"),
+            "transaction": _text(row, "Transaction", "Text", "transaction"),
+            "shares":      _int(row.get("Shares", row.get("shares"))) or 0,
+            "value":       _int(row.get("Value", row.get("value"))),
+        })
+    return rows
 
 
 def _get_institutional_holders(ticker: str) -> list:

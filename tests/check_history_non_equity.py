@@ -153,6 +153,52 @@ class NonEquityRequests(unittest.TestCase):
         self.assertEqual(self._asked("AAPLX"), {"income_stmt", "eps_trend", "quarterly_income_stmt"})
 
 
+class InsiderTradesTests(unittest.TestCase):
+    """Yahoo's insider table as served on 2026-10-04: ``Insider`` and ``Position``
+    columns, ``Transaction`` blank with the description in ``Text``, and NaN in
+    ``Value`` where no price was reported -- the NaN that used to empty the panel
+    for every ticker."""
+
+    def _frame(self):
+        nan = float("nan")
+        return pd.DataFrame([
+            {"Shares": 25_000, "Value": 5_750_000.0, "URL": "", "Text": "Sale at price 230.00 per share.",
+             "Insider": "COOK TIMOTHY D", "Position": "Chief Executive Officer", "Transaction": "",
+             "Start Date": pd.Timestamp("2026-09-29")},
+            {"Shares": 1_200, "Value": nan, "URL": "", "Text": "Stock Award(Grant) at price 0.00 per share.",
+             "Insider": "LEVINSON ARTHUR D", "Position": "Director", "Transaction": "",
+             "Start Date": pd.Timestamp("2026-09-15")},
+            {"Shares": nan, "Value": nan, "URL": "", "Text": nan,
+             "Insider": nan, "Position": "Officer", "Transaction": "",
+             "Start Date": pd.Timestamp("2026-09-01")},
+        ])
+
+    def test_a_nan_value_costs_the_cell_not_the_panel(self):
+        from ystocker import routes
+        fake = types.SimpleNamespace(insider_transactions=self._frame())
+        with mock.patch("yfinance.Ticker", lambda symbol: fake):
+            rows = routes._get_insider_trades("AAPL")
+        self.assertEqual(len(rows), 3)
+        self.assertEqual((rows[0]["insider"], rows[0]["title"], rows[0]["value"], rows[0]["shares"]),
+                         ("COOK TIMOTHY D", "Chief Executive Officer", 5_750_000, 25_000))
+        self.assertEqual(rows[0]["transaction"], "Sale at price 230.00 per share.")
+        self.assertIsNone(rows[1]["value"])                 # not reported, not $0
+        self.assertEqual(rows[2]["insider"], "—")
+        self.assertEqual(rows[2]["shares"], 0)
+        self.assertTrue(rows[0]["date"].startswith("2026-09-29"))
+
+    def test_a_vendor_failure_is_an_empty_panel(self):
+        from ystocker import routes
+
+        class Boom:
+            @property
+            def insider_transactions(self):
+                raise RuntimeError("401 Invalid Crumb")
+
+        with mock.patch("yfinance.Ticker", lambda symbol: Boom()):
+            self.assertEqual(routes._get_insider_trades("AAPL"), [])
+
+
 class SweepTests(unittest.TestCase):
     def test_the_sweep_skips_recorded_funds_only(self):
         records = {"SPY": {"Quote Type": "ETF"}, "GLD": {"Quote Type": "ETF"},
