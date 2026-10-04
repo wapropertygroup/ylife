@@ -1445,7 +1445,12 @@ colour is `report_pdf.verdict_tone`, so it matches the PDF.
 
 The card and the saved reports load on the first open of the tab, never with the
 page. `?tab=research` opens straight onto it (and is where `/login` returns a
-reader who signed in from it); `/agents?ticker=NBIS` pre-fills the run form. The
+reader who signed in from it); `/agents?ticker=NBIS` pre-fills the run form.
+Every /history tab has such a link (`HISTORY_TABS`: charts, fundamentals, dca,
+news, videos, research). `switchTab` writes `?tab=` into the address on every
+switch, keeping `?lang=` and `?range=`. It uses `replaceState`, so Back leaves
+the page instead of walking back through the tabs. The 🔗 Copy link button
+carries the tab too. The
 Charts tab's deferred panels (forecast, peers, 13F) now register only while that
 tab is shown: registered behind another tab, every anchor had no box, so
 DeferLoad fetched all three at once, the forecast's model fit included.

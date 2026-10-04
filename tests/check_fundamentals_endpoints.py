@@ -393,7 +393,8 @@ class Page(unittest.TestCase):
         self.assertIn('id="panelFund"', html)
         self.assertIn("fundamentals.js", html)
         self.assertIn("_initFundPanel", html)
-        self.assertIn("_tab === 'fundamentals'", html)
+        self.assertRegex(html, r"const HISTORY_TABS = \[[^\]]*'fundamentals'")
+        self.assertIn("HISTORY_TABS.includes(_tab)", html)      # ?tab=fundamentals opens it
         # The expand modal sits outside #panelCharts, or a Fundamentals card
         # would open a modal inside a display:none panel.
         charts_end = html.index("end #panelCharts")

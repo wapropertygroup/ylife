@@ -4454,7 +4454,11 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal()
 // ── Copy Price Alert ─────────────────────────────────────────────────────────
 function _copyPermalink() {
   const period = document.querySelector('#priceRangeBtns .range-btn.active')?.dataset?.period || '1y';
-  const url = window.location.origin + window.location.pathname + '?range=' + period;
+  const u = new URL(window.location.origin + window.location.pathname);
+  u.searchParams.set('range', period);
+  // The tab on screen too, so the link opens where the reader is.
+  if (window._activeTab && window._activeTab !== 'charts') u.searchParams.set('tab', window._activeTab);
+  const url = u.href;
   navigator.clipboard.writeText(url).then(() => {
     const btn = document.getElementById('copyLinkBtn');
     if (btn) { btn.textContent = '✓'; setTimeout(() => { btn.textContent = '🔗'; }, 2000); }
@@ -4541,8 +4545,24 @@ let _newsLoaded = false;
 let _newsAutoRefresh = null;
 let _videosLoaded = false;
 
+// Every tab has its own address: switching writes ?tab=<name> (Charts, the
+// default, has none), so the tab on screen can be copied, shared and reloaded
+// onto, and the block at the end of this page opens it. Other parameters
+// (?lang=, ?range=) and the hash are kept. replaceState, not pushState: Back
+// leaves the page instead of stepping back through tabs.
+const HISTORY_TABS = ['charts', 'fundamentals', 'dca', 'news', 'videos', 'research'];
+function _writeTabToAddress(tab) {
+  try {
+    const u = new URL(location.href);
+    if (tab === 'charts') u.searchParams.delete('tab'); else u.searchParams.set('tab', tab);
+    if (u.href !== location.href) history.replaceState(history.state, '', u);
+  } catch (_) { /* a sandboxed frame: the tab still switches */ }
+}
+
 function switchTab(tab) {
+  if (!HISTORY_TABS.includes(tab)) tab = 'charts';
   window._activeTab = tab;
+  _writeTabToAddress(tab);
   const isCharts   = tab === 'charts';
   const isNews     = tab === 'news';
   const isVideos   = tab === 'videos';
@@ -6836,13 +6856,13 @@ async function explainChart(chartKey) {
   document.addEventListener('i18n:langchange', () => { if (payload) render(); });
 })();
 
-// ?tab=research opens straight onto the Research tab: where /login sends a
-// reader who signed in from it, and a link to this ticker's research can land.
-// ?tab=fundamentals is the Fundamentals tab's own link, and ?tab=dca the DCA
-// tab's (a peer's link inside that tab opens its company here).
+// ?tab=<name> opens straight onto that tab -- every tab has one (see
+// switchTab). Among the links that use it: /login returns a reader who signed in
+// from the Research tab to ?tab=research, the Fundamentals tab's own link is
+// ?tab=fundamentals, and a peer's link inside the DCA tab lands on ?tab=dca.
 {
   const _tab = new URLSearchParams(location.search).get('tab');
-  if (_tab === 'research' || _tab === 'fundamentals' || _tab === 'dca') switchTab(_tab);
+  if (HISTORY_TABS.includes(_tab) && _tab !== 'charts') switchTab(_tab);
 }
 </script>
 {% endblock %}

@@ -13,7 +13,8 @@ itself rather than copying it, so these pin the seams that framing creates:
 * a rebuild started in the tab comes back to the framed page, not to the full
   page inside the frame;
 * /history carries the tab, the panel, the frame's loader and its ``?tab=dca``
-  link, and the header's DCA button opens the tab.
+  link, and the header's DCA button opens the tab;
+* every tab has a deep link: switching writes ``?tab=`` and each opens from it.
 
 Named ``check_`` so ``unittest discover`` skips it: it builds a real app.
 Built hermetically, as ``check_fundamentals_endpoints`` is -- no background
@@ -150,8 +151,22 @@ class DcaEmbed(unittest.TestCase):
         self.assertIn("function _initDcaPanel()", html)
         self.assertIn("?embed=1&lang=", html)
         self.assertIn("e.source !== frame.contentWindow", html)   # only this frame's messages
-        self.assertIn("_tab === 'dca'", html)
+        self.assertRegex(html, r"const HISTORY_TABS = \[[^\]]*'dca'")
+        self.assertIn("HISTORY_TABS.includes(_tab)", html)      # ?tab=dca opens it
         self.assertIn("switchTab('dca')", html)                  # the header button opens it
+
+    def test_every_tab_has_a_deep_link(self):
+        # Asked for: "each tab can have a deep link". Switching writes ?tab=,
+        # and every tab button names a tab the deep-link block accepts.
+        import re
+        html = self._page("/history/ADBE")
+        tabs = re.search(r"const HISTORY_TABS = \[([^\]]*)\]", html).group(1)
+        listed = set(re.findall(r"'(\w+)'", tabs))
+        buttons = set(re.findall(r'onclick="switchTab\(\'(\w+)\'\)"', html))
+        self.assertEqual(buttons, listed)
+        self.assertEqual(listed, {"charts", "fundamentals", "dca", "news", "videos", "research"})
+        self.assertIn("_writeTabToAddress(tab)", html)
+        self.assertIn("history.replaceState", html)
 
 
 if __name__ == "__main__":
