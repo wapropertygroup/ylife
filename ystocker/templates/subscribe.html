@@ -162,7 +162,8 @@
     <ul class="w-checks">
       <li><span data-l="en"><strong>{{ sub.runs_per_day }} analyses a day</strong>, against {{ free_runs }} on the free plan, resetting at midnight Pacific</span><span data-l="zh"><strong>每天 {{ sub.runs_per_day }} 次分析</strong>（免费版为 {{ free_runs }} 次），太平洋时间零点重置</span></li>
       <li><span data-l="en"><strong>Every dashboard in full</strong> on trade-agents.com: markets, valuation, DCA, companies, 13F, the Fed, rates, housing and the odds</span><span data-l="zh"><strong>trade-agents.com 全部看板完整可见</strong>：市场、估值、定投、公司、13F、美联储、利率、房地产与预测市场</span></li>
-      <li><span data-l="en">Every model and thinking depth, reports in English or 中文, a PDF of each, and sharing</span><span data-l="zh">所有模型与思考深度，中英文报告，每份报告附 PDF，并可分享</span></li>
+      <li><span data-l="en"><strong>Every model</strong> in the menu, Gemini and DeepSeek, at any thinking depth (free runs use {{ free_model }})</span><span data-l="zh"><strong>菜单中的全部模型</strong>，Gemini 与 DeepSeek 均可，任选思考深度（免费分析使用 {{ free_model }}）</span></li>
+      <li><span data-l="en">Reports in English or 中文, a PDF of each, and sharing</span><span data-l="zh">中英文报告，每份报告附 PDF，并可分享</span></li>
       <li><span data-l="en">Run packs you have bought stay on your account, used only after the day's {{ sub.runs_per_day }}</span><span data-l="zh">已购买的次数包保留在账号中，仅在当天 {{ sub.runs_per_day }} 次用完后才使用</span></li>
       <li><span data-l="en">Cancel, or switch between monthly and yearly, any time in billing</span><span data-l="zh">随时可在账单中取消，或在月付与年付之间切换</span></li>
     </ul>
@@ -175,6 +176,7 @@
         <thead><tr><th></th><th><span data-l="en">Free</span><span data-l="zh">免费版</span></th><th>Pro</th></tr></thead>
         <tbody>
           <tr><td><span data-l="en">Analyses a day</span><span data-l="zh">每日分析次数</span></td><td class="w-pro-fig">{{ free_runs }}</td><td class="w-pro-fig">{{ sub.runs_per_day }}</td></tr>
+          <tr><td><span data-l="en">Models</span><span data-l="zh">模型</span></td><td>{{ free_model }}</td><td><span data-l="en">Every Gemini and DeepSeek model</span><span data-l="zh">全部 Gemini 与 DeepSeek 模型</span></td></tr>
           <tr><td><span data-l="en">Dashboards on trade-agents.com</span><span data-l="zh">trade-agents.com 看板</span></td><td><span data-l="en">The top of each page</span><span data-l="zh">每页仅前半部分</span></td><td><span data-l="en">In full</span><span data-l="zh">完整可见</span></td></tr>
           <tr><td><span data-l="en">Reports, PDFs and sharing</span><span data-l="zh">报告、PDF 与分享</span></td><td>✓</td><td>✓</td></tr>
           <tr><td><span data-l="en">Run packs</span><span data-l="zh">次数包</span></td><td><span data-l="en">Buy any time</span><span data-l="zh">随时购买</span></td><td><span data-l="en">Used after the day's {{ sub.runs_per_day }}</span><span data-l="zh">当天 {{ sub.runs_per_day }} 次用完后使用</span></td></tr>

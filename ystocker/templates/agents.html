@@ -801,9 +801,23 @@
    came looking for DeepSeek that it is absent by configuration rather than
    missing from the list. Contrast stays at the muted-text floor rather than
    going paler — see the light-mode note in CLAUDE.md. */
-.ag-sel-opt[data-unavailable] { cursor: not-allowed; color: var(--ag-ink-faint); }
+.ag-sel-opt[data-unavailable], .ag-sel-opt[data-locked] { cursor: not-allowed; color: var(--ag-ink-faint); }
 .ag-sel-opt[data-unavailable]:hover,
-.ag-sel-opt[data-unavailable].is-active { background: none; color: var(--ag-ink-faint); }
+.ag-sel-opt[data-unavailable].is-active,
+.ag-sel-opt[data-locked]:hover,
+.ag-sel-opt[data-locked].is-active { background: none; color: var(--ag-ink-faint); }
+/* Which plan a row belongs to: "Free" on the free run's model, "Pro" on the
+   rest -- on every row, so a subscriber sees what the plan opened too. */
+.ag-sel-tier {
+  margin-left: auto; padding: 0 6px; border-radius: 999px; font-style: normal;
+  font-size: 10px; font-weight: 700; letter-spacing: .04em; line-height: 16px;
+  color: var(--ag-accent-ink); border: 1px solid currentColor; opacity: .85;
+}
+.ag-sel-tier.is-free { color: var(--ag-green-ink); }
+.ag-tier-note { margin: 8px 0 0; font-size: 12px; line-height: 1.5; color: var(--ag-ink-muted); }
+.ag-tier-note[hidden] { display: none; }
+.ag-tier-note.is-flash { color: var(--ag-ink); animation: agTierFlash .7s ease-out; border-radius: 6px; }
+@keyframes agTierFlash { from { background: rgba(99,102,241,.2); } to { background: transparent; } }
 .ag-sel-na {
   font-style: normal; font-size: 10px; margin-left: auto; padding-left: 12px;
   text-transform: uppercase; letter-spacing: .04em; color: var(--ag-ink-faint);
@@ -1507,20 +1521,35 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
              thinking value, so an enabled control there would do nothing. #}
           {% if not agent_env.model_choice_default %}
           <div class="ag-sel-opt" role="option" id="agModelOpt0" data-value=""
+               data-tier="pro"
                aria-selected="true" data-thinking="" data-thinking-default="">
             <span data-i18n="agents.model_server_default">Server default</span>
           </div>
           {% endif %}
+          {#  Free runs use one row; the rest are for a paid run (Pro, a trial, a
+              VIP, or a purchased run once today's free ones are gone) and are
+              drawn locked otherwise -- named, so a reader learns what Pro
+              opens, but unpickable. The server holds a free run to the free
+              row whatever is sent (agents.choose_models); the script below
+              unlocks the rows as soon as the next run would be paid. #}
+          {% set _premium_ok = quota and (quota.vip or quota.subscribed
+                                          or (quota.remaining == 0 and (quota.credits or 0) > 0)) %}
           {% for m in agent_env.model_choices %}
           <div class="ag-sel-opt" role="option" id="agModelOpt{{ loop.index }}"
                data-value="{{ m.key }}"
+               data-tier="{{ m.tier }}"
                aria-selected="false"
                data-thinking="{{ m.thinking | join(',') }}"
                data-thinking-default="{{ m.thinking_default }}"
-               {% if not m.available %}data-unavailable="1" aria-disabled="true"{% endif %}>
+               {% if not m.available %}data-unavailable="1" aria-disabled="true"
+               {%- elif m.tier != 'free' and not _premium_ok %}data-locked="1" aria-disabled="true"{% endif %}>
             <span data-i18n="{{ m.label_key }}">{{ m.label }}</span>
             {% if not m.available %}
             <em class="ag-sel-na" data-i18n="agents.model_unavailable">not configured</em>
+            {% elif m.tier == 'free' %}
+            <em class="ag-sel-tier is-free" data-i18n="agents.tier_free">Free</em>
+            {% else %}
+            <em class="ag-sel-tier">Pro</em>
             {% endif %}
           </div>
           {% endfor %}
@@ -1542,9 +1571,9 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
         </button>
         {# All four levels are rendered and the model's own set decides which stay
            visible. Which levels a model accepts differs per model and the
-           mismatch is silent — "medium" on Gemini Pro is forwarded to the API
-           verbatim and rejected — so the visible set is filtered from the
-           selected option's data-thinking rather than assumed here. #}
+           mismatch is silent — "minimal" on Gemini Pro or 3.8 Flash is a 400
+           from the API — so the visible set is filtered from the selected
+           option's data-thinking rather than assumed here. #}
         <div class="ag-sel-menu" id="agThinkMenu" role="listbox" tabindex="-1"
              aria-label="Thinking level" hidden>
           <div class="ag-sel-opt" role="option" id="agThinkOpt0" data-value="minimal"
@@ -1559,6 +1588,10 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
       </div>
     </div>
   </div>
+  <p id="agTierNote" class="ag-tier-note"{% if _premium_ok %} hidden{% endif %}>
+    <span data-i18n="agents.tier_note_a">Free runs use</span> <b>{{ agent_env.model_free_name }}</b><span data-i18n="agents.tier_note_b">. Every other Gemini and DeepSeek model is for paid runs: </span>{#
+    no space here: after the Chinese full-width colon one reads as a gap #}<a class="ag-pro-link" href="{{ url_for('main.subscribe_page') }}" data-i18n="agents.tier_note_pro">TradeAgents Pro</a><span data-i18n="agents.tier_note_credit">, or a purchased run once the free runs for today are used.</span>
+  </p>
   {% endif %}
   {# Shown once the free runs are gone and nothing is banked. Hidden by default
      so it never flashes on a page that has runs available. #}
@@ -2220,6 +2253,8 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
     // rather than waiting for a submit to be refused.
     paintBuy(Number(q.remaining || 0) === 0 && Number(q.credits || 0) === 0
              ? { url: q.pay_url } : null);
+    // Which models the next run may use follows the same numbers.
+    if (window.agApplyTier) window.agApplyTier(q);
   }
 
   // Top-up prompt. Built from the server's pay_url so a staging box can point
@@ -3016,7 +3051,12 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
       });
       const d = await r.json().catch(() => ({}));
       if (!r.ok) {
-        showErr(d.error || `HTTP ${r.status}`);
+        // A paid model on a free run: worded here, in the page's language,
+        // since the server's sentence is English. paintQuota then relocks the
+        // rows from the quota that came back with it.
+        showErr(d.reason === 'model_pro'
+          ? (I18n.t('agents.model_needs_pro') || d.error)
+          : (d.error || `HTTP ${r.status}`));
         if (d.quota) paintQuota(d.quota);
         // The API says whether a top-up is on offer. It deliberately is not for
         // the site-wide cap, which no amount of money can lift today.
@@ -3619,6 +3659,12 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
       // dimmed, because the dimming is only a hint and Enter on the row would
       // otherwise queue a run that dies on a missing key.
       if (opt.dataset.unavailable) return;
+      // A paid model on a run nobody is paying for: refused the same way, and
+      // announced, so the picker can point at what would unlock it.
+      if (opt.dataset.locked) {
+        wrap.dispatchEvent(new CustomEvent('ag:locked'));
+        return;
+      }
       all.forEach(o => o.setAttribute('aria-selected', String(o === opt)));
       const next = opt.dataset.value || '';
       const changed = next !== input.value;
@@ -3643,6 +3689,9 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
       if (!opt) return;
       e.preventDefault();
       if (opt.dataset.unavailable) return;
+      // Kept open on a locked row: closing would hide the very list the
+      // reader was reading, and the note below it says what unlocks the row.
+      if (opt.dataset.locked) { choose(opt); return; }
       choose(opt);
       closeMenu({ focus: true });
     });
@@ -3725,8 +3774,8 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
 
   // ── Model + thinking pickers ─────────────────────────────────────────────
   // The two are coupled: which thinking levels exist is a property of the model,
-  // and the mismatch is silent upstream -- "medium" on Gemini Pro is forwarded to
-  // the API verbatim and rejected, minutes into a paid run. So the model's own
+  // and the mismatch is silent upstream -- "minimal" on Gemini Pro or 3.8 Flash is
+  // a 400 from the API, minutes into a paid run. So the model's own
   // data-thinking is what decides which rows the thinking menu shows, and the
   // value is re-clamped every time the model changes.
   const modelSel = makeListbox('agModelSel', 'agModel', 'agModelBtn',
@@ -3772,9 +3821,9 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
       else thinkSel.refresh();
     }
 
-    // Restore, most specific first. An unavailable or retired row simply fails to
-    // select, leaving the server-rendered default in place -- which is why select()
-    // reports whether it matched.
+    // Restore, most specific first. An unavailable, retired or locked row simply
+    // fails to select, leaving the server-rendered default in place -- which is
+    // why select() reports whether it matched.
     const storedModel = lsGet(MODEL_LS);
     if (storedModel) modelSel.select(storedModel, { notify: false });
     if (!modelSel.value()) {
@@ -3784,6 +3833,48 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
     const storedThink = lsGet(THINK_LS);
     if (storedThink) thinkSel.select(storedThink, { notify: false });
     syncThinking();
+
+    // ── Which rows this run may use ────────────────────────────────────────
+    // Free runs use FREE_KEY; every other row is for a paid run: Pro or a
+    // trial, a VIP, or a purchased credit -- which pays for a run only once
+    // today's free runs are gone, so it unlocks the rows exactly then. Re-run
+    // whenever the server reports the quota (window.agApplyTier, called by
+    // paintQuota), so the rows unlock or lock as runs are spent, with no
+    // reload. A forced pick is not stored: a subscriber whose free-plan visit
+    // fell back to the free row keeps their own preference for later.
+    const FREE_KEY = '{{ agent_env.model_free_choice }}';
+    const tierNote = document.getElementById('agTierNote');
+    const premiumOk = q => !!q && (!!q.vip || !!q.subscribed
+      || (Number(q.remaining || 0) === 0 && Number(q.credits || 0) > 0));
+    function applyTier(q) {
+      const ok = premiumOk(q);
+      modelSel.options().forEach(o => {
+        if (o.dataset.tier !== 'pro' || o.dataset.unavailable) return;
+        if (ok) { delete o.dataset.locked; o.removeAttribute('aria-disabled'); }
+        else { o.dataset.locked = '1'; o.setAttribute('aria-disabled', 'true'); }
+      });
+      if (tierNote) tierNote.hidden = ok;
+      const cur = modelSel.selected();
+      if (!ok && (!cur || cur.dataset.locked || !modelSel.value())) {
+        modelSel.select(FREE_KEY, { notify: false });
+        syncThinking({ reset: true });
+      } else if (ok && modelSel.value() === FREE_KEY) {
+        const stored = lsGet(MODEL_LS);
+        if (stored && stored !== FREE_KEY && modelSel.select(stored, { notify: false })) {
+          syncThinking();
+        }
+      }
+    }
+    window.agApplyTier = applyTier;
+    applyTier({{ (quota or none) | tojson }});
+    // A click on a locked row draws the eye to the note that says what opens it.
+    document.getElementById('agModelSel')?.addEventListener('ag:locked', () => {
+      if (!tierNote) return;
+      tierNote.hidden = false;
+      tierNote.classList.remove('is-flash');
+      void tierNote.offsetWidth;
+      tierNote.classList.add('is-flash');
+    });
 
     document.getElementById('agModel')?.addEventListener('change', () => {
       lsSet(MODEL_LS, modelSel.value());

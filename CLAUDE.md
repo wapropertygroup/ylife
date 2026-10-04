@@ -1668,11 +1668,56 @@ against a fake DOM and the real watchlist.js) and `node tests/check_watchlist.mj
 ### Choosing the model and thinking depth (`agent_models.py`)
 
 The run form on `/agents` lets a reader pick which models write their report and
-how hard the model thinks. `agent_models.py` is a pure table of five choices —
-`google-pro`, `google-flash`, `google-lite`, `deepseek-pro`, `deepseek-flash` —
-each naming a provider, a `deep_think_llm`, a `quick_think_llm`, the thinking
-levels it accepts and its default. Every model id is copied from
-`tradingagents/llm_clients/model_catalog.py`, never invented.
+how hard the model thinks. `agent_models.py` is a pure table of eight choices
+(2026-10-04), each naming a provider, a `deep_think_llm`, a `quick_think_llm`,
+the thinking levels it accepts and its default:
+
+| Key | Plan | Deep | Quick |
+|---|---|---|---|
+| `deepseek-flash` | **Free** | deepseek-v4-flash | deepseek-v4-flash |
+| `google-pro` | Pro | gemini-3.1-pro-preview | gemini-3.1-pro-preview |
+| `google-pro-flash` | Pro | gemini-3.1-pro-preview | gemini-3.8-flash |
+| `google-flash` | Pro | gemini-3.8-flash (was 3.5) | gemini-3.8-flash |
+| `google-flash-lite` | Pro | gemini-3.8-flash | gemini-3.5-flash-lite |
+| `google-lite` | Pro | gemini-3.5-flash | gemini-3.1-flash-lite |
+| `deepseek-pro-max` | Pro | deepseek-v4-pro | deepseek-v4-pro |
+| `deepseek-pro` | Pro | deepseek-v4-pro | deepseek-v4-flash |
+
+Every model id is in `tradingagents/llm_clients/model_catalog.py` (or its
+`LEGACY_MODELS`), and every one was checked against the vendor's own model list
+on the box the same day.
+
+**Free runs use DeepSeek V4 Flash, and nothing else** (asked for 2026-10-04).
+Every other row is for a paid run: Pro or a trial, a VIP, or a run paid with a
+purchased credit. The route decides from how *this* run is funded
+(`premium = paid_run or is_vip or is_subscribed`, after `try_consume`), and
+`agents.choose_models()` holds a free run to `agent_models.free_choice()`
+whatever was sent: no choice, a retired key, or the kill switch on. A paid key
+named outright is refused (`MODEL_NEEDS_PRO`, 403 `model_pro`, refunded), which
+only a stale tab can send. Never the deployment default for a free run, which is
+the most expensive configuration there is. A credit pays only once the day's
+free runs are gone, so it unlocks the models exactly then. The page mirrors that
+from the quota (`window.agApplyTier`, run by `paintQuota`): paid rows are drawn
+locked with a Pro badge, the picker falls back to the free row without
+overwriting the reader's stored preference, and they unlock with no reload.
+`AGENTS_FREE_MODEL` names another key; an unknown one falls back to
+`deepseek-flash`. Prose that names the free model reads `free_choice_name()`.
+
+**Two DeepSeek facts behind the table, both measured on the box.** DeepSeek
+lists only `deepseek-flash` and `deepseek-v4-pro` now and answers
+`deepseek-v4-flash` as `deepseek-flash`, but the table keeps the versioned id:
+TradingAgents keys DeepSeek's thinking-model handling (no `tool_choice`,
+reasoning echoed back each turn) on `deepseek-v4-*` in `capabilities.py`, and
+the bare alias would fall through to generic defaults. The versioned id is what
+29 finished `deepseek-pro` runs used for every analyst. And V4 Pro was tried in
+the analysts' seat before `deepseek-pro-max` was offered: a tool call and the
+turn after it through TradingAgents' own client.
+
+**The DeepSeek balance now gates every free run.** It was ¥61.77 (about $8.60)
+and $0.00 on 2026-10-04 (`GET api.deepseek.com/user/balance`), and an empty
+balance fails runs with 402 "Insufficient Balance", as one did on 2026-08-30.
+`_run` now refunds that error like Gemini's `RESOURCE_EXHAUSTED`: the vendor ran
+out and the reader got nothing.
 
 **The client sends a table key, never a model id.** TradingAgents does not fail
 fast on an unknown model: `base_client.warn_if_unknown_model()` emits a
@@ -1688,10 +1733,13 @@ one that can. The keys carry **no version** for the same reason
 catalog bump does not invalidate every reader's stored preference or make
 historical jobs unreadable.
 
-**Accepted thinking levels are per model, and the mismatch is silent.** Gemini
-Pro takes `low`/`high`; Flash also takes `minimal`/`medium`. `google_client.py`
-remaps exactly one of the four mismatches — `minimal` on Pro becomes `low` — and
-forwards `medium` on Pro **verbatim**, so it reaches the API and 400s. Rather
+**Accepted thinking levels are per model, and the mismatch is silent.**
+Re-measured against the API on 2026-10-04: Pro and 3.8 Flash refuse `minimal`
+(400) and take `low`/`medium`/`high`; 3.5 Flash and both Flash Lites take all
+four. Pro used to 400 on `medium` too; it no longer does. `google_client.py`
+remaps `minimal` to `low` for Pro and for 3.8+, and forwards everything else
+verbatim. A choice pairing two models offers what both take, since one level is
+sent to each. Rather
 than reproduce that asymmetry in the UI and hope, each choice carries the exact
 set it accepts and `resolve()` clamps anything else to that choice's default, so
 an out-of-range level is unrepresentable downstream. Providers with no thinking
@@ -1746,8 +1794,11 @@ SSM (already set, and IAM's `parameter/ystocker/*` needed no change); without it
 `agent_models.provider_available()` reports it unavailable and the rows are
 disabled rather than offering a run that would die on a missing key.
 
-Tests: `tests/test_agent_models.py` (43, no app/network/subprocess), including a
-cross-check that every offered id appears in TradingAgents' own catalog file.
+Tests: `tests/test_agent_models.py` (52, no app/network/subprocess), including a
+cross-check that every offered id appears in TradingAgents' own catalog file and
+the free/paid rule in `choose_models`, and `tests/check_subscription_pages.py`
+(the rows drawn locked or open by plan, and the route refusing and refunding a
+paid model on a free run).
 
 ### The Earnings Analyst, and the Alpha Vantage key behind it
 

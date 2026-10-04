@@ -19,8 +19,8 @@
       <span data-l="zh">每天 {{ landing.free_runs }} 次免费。想要更多，就开通 Pro。</span>
     </h2>
     <p class="w-lead">
-      <span data-l="en">Pro is {{ sub.runs_per_day }} analyses a day and every dashboard in full{% if sub.trial_days %}, with {{ sub.trial_days }} days free to start{% endif %}. Packs are still there for the odd extra run, and never expire.</span>
-      <span data-l="zh">Pro 每天 {{ sub.runs_per_day }} 次分析，全部看板完整可见{% if sub.trial_days %}，并可先免费试用 {{ sub.trial_days }} 天{% endif %}。偶尔多跑几次，也可以买次数包，永不过期。</span>
+      <span data-l="en">Pro is {{ sub.runs_per_day }} analyses a day on every Gemini and DeepSeek model, and every dashboard in full{% if sub.trial_days %}, with {{ sub.trial_days }} days free to start{% endif %}. Free runs use {{ landing.free_model }}. Packs are still there for the odd extra run, and never expire.</span>
+      <span data-l="zh">Pro 每天 {{ sub.runs_per_day }} 次分析，可选全部 Gemini 与 DeepSeek 模型，全部看板完整可见{% if sub.trial_days %}，并可先免费试用 {{ sub.trial_days }} 天{% endif %}。免费分析使用 {{ landing.free_model }}。偶尔多跑几次，也可以买次数包，永不过期。</span>
     </p>
     {% else %}
     <h2 class="w-h2" id="lpPricing">

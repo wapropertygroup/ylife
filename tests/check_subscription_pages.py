@@ -281,5 +281,76 @@ class SubscriptionPages(unittest.TestCase):
         self.assertIn(f"/{subscriptions.RUNS_PER_DAY}", paid)
 
 
+    # ── models by plan (2026-10-04) ───────────────────────────────────────
+    @staticmethod
+    def _rows(page):
+        """Each model row's key, and whether it is drawn locked."""
+        import re
+        out = {}
+        for m in re.finditer(r'<div class="ag-sel-opt" role="option" id="agModelOpt\d+"(.*?)>', page, re.S):
+            attrs = m.group(1)
+            key = re.search(r'data-value="([^"]*)"', attrs).group(1)
+            out[key] = "data-locked" in attrs
+        return out
+
+    def _usage(self, **over):
+        base = {"day": "2026-10-04", "used": 0, "limit": 3, "remaining": 3, "vip": False,
+                "subscribed": False, "global_used": 0, "global_limit": 60,
+                "global_remaining": 60, "tz": "America/Los_Angeles",
+                "credits": 0, "pay_url": "https://pay.li-family.us"}
+        base.update(over)
+        return base
+
+    def test_a_free_reader_sees_the_paid_models_locked(self):
+        with mock.patch.object(quota, "usage", return_value=self._usage()):
+            page = self._page("/agents", base=LI)
+        rows = self._rows(page)
+        self.assertEqual(rows.pop("deepseek-flash"), False)
+        self.assertTrue(rows and all(rows.values()), rows)
+        self.assertIn('id="agTierNote" class="ag-tier-note">', page)       # shown
+        self.assertIn("DeepSeek V4 Flash</b>", page)
+
+    def test_paid_runs_unlock_every_model(self):
+        cases = {
+            "pro": self._usage(subscribed=True, limit=10, remaining=10),
+            "vip": self._usage(vip=True, limit=15, remaining=15),
+            # Free runs gone and a credit banked: the next run is paid.
+            "credit": self._usage(used=3, remaining=0, credits=5),
+        }
+        for name, usage in cases.items():
+            with self.subTest(plan=name), mock.patch.object(quota, "usage", return_value=usage):
+                page = self._page("/agents", base=LI)
+                self.assertFalse(any(self._rows(page).values()))
+                self.assertIn('id="agTierNote" class="ag-tier-note" hidden>', page)
+        # Free runs left, credits banked: the credit is not what pays next.
+        with mock.patch.object(quota, "usage", return_value=self._usage(credits=5)):
+            self.assertTrue(self._rows(self._page("/agents", base=LI))["google-pro"])
+
+    def _run(self, model, info):
+        refund = mock.MagicMock()
+        with mock.patch.object(quota, "try_consume", return_value=(True, None, info)), \
+                mock.patch.object(quota, "refund", refund), \
+                mock.patch.object(quota, "usage", return_value=self._usage()), \
+                mock.patch.object(quota, "is_vip", return_value=False), \
+                mock.patch.object(quota, "is_subscribed", return_value=False):
+            with self.client.session_transaction(base_url=LI) as s:
+                s["user_email"] = READER
+            try:
+                r = self.client.post("/api/agents/run", base_url=LI,
+                                     json={"ticker": "AAPL", "date": "2026-10-02", "model": model})
+            finally:
+                with self.client.session_transaction(base_url=LI) as s:
+                    s.clear()
+        return r, refund
+
+    def test_a_free_run_asking_for_a_paid_model_is_refused_and_refunded(self):
+        r, refund = self._run("google-pro", {"paid": False})
+        self.assertEqual(r.status_code, 403)
+        body = r.get_json()
+        self.assertEqual(body["reason"], "model_pro")
+        self.assertEqual(body["pro_url"], "/subscribe")
+        refund.assert_called_once_with(READER, paid=False)
+
+
 if __name__ == "__main__":
     unittest.main()

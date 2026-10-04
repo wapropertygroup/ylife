@@ -4883,6 +4883,7 @@ def _wiki_facts() -> dict[str, Any]:
         "n_base": len(BASE_ANALYSTS),
         "n_astock": len(ASTOCK_ANALYSTS),
         "models": agent_models.options_public(),
+        "free_model": agent_models.free_choice_name(),
         "model_choice": model_choice_enabled(),
         "agent_packs": _agent_packs_for_page(),
         "sub": _sub_facts(),
@@ -5486,6 +5487,10 @@ def api_agents_run():
             payload["buy"] = buy
         return jsonify(payload), 429
     paid_run = bool(info.get("paid"))
+    # Every model is for a paid run: Pro or a trial, a VIP, or a run this
+    # request just paid for with a purchased credit. A free-allowance run gets
+    # DeepSeek V4 Flash (agents.choose_models).
+    premium = paid_run or quota.is_vip(email) or quota.is_subscribed(email)
 
     job_id, err = submit(
         ticker=body.get("ticker", ""),
@@ -5502,11 +5507,21 @@ def api_agents_run():
         # the child as a model id.
         model=str(body.get("model", "") or "")[:64],
         thinking=str(body.get("thinking", "") or "")[:32],
+        premium=premium,
     )
     if err:
         # Rejected before anything was spent, so hand the run back. Every run
         # reaching here was charged: the un-metered path returned above.
         quota.refund(email, paid=paid_run)
+        from ystocker.agents import MODEL_NEEDS_PRO
+
+        if err == MODEL_NEEDS_PRO:
+            # A stale tab: the page locks these rows for a free run. Answered
+            # with the way to Pro, and 403 rather than 400 -- nothing about the
+            # request is malformed, it is a model this run may not use.
+            return jsonify({"error": err, "reason": "model_pro",
+                            "pro_url": url_for("main.subscribe_page"),
+                            "quota": quota.usage(email)}), 403
         return jsonify({"error": err, "quota": quota.usage(email)}), 400
     return jsonify({"job_id": job_id, "status": "queued",
                     "quota": quota.usage(email)}), 202
@@ -5803,7 +5818,7 @@ def _sub_notice(active: bool) -> Optional[str]:
 def subscribe_page():
     """TradeAgents Pro: the plans, the trial, and a subscriber's status."""
     from flask import make_response
-    from ystocker import quota, subscriptions
+    from ystocker import agent_models, quota, subscriptions
 
     email = _agent_user()
     # Straight back from Stripe: read the row consistently, so the page does
@@ -5818,6 +5833,7 @@ def subscribe_page():
         sub=sub, sub_enabled=ok, signed_in=bool(email),
         vip=quota.is_vip(email), vip_runs=quota.limit_vip(),
         free_runs=quota.limit_default(), global_runs=quota.limit_global(),
+        free_model=agent_models.free_choice_name(),
         notice=_sub_notice(sub["active"]),
         peer_groups=list(PEER_GROUPS.keys()),
     ))

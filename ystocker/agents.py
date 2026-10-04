@@ -191,6 +191,35 @@ def resolve_models(choice: str = "", thinking: str = "") -> dict[str, str]:
     }
 
 
+#: What a free run that asked for a paid model is told. A constant so the route
+#: can recognise it and answer with the way to Pro rather than a bare 400.
+MODEL_NEEDS_PRO = ("That model is for paid runs: TradeAgents Pro, or a purchased "
+                   "run once today's free runs are used.")
+
+
+def choose_models(model: str = "", thinking: str = "",
+                  premium: bool = True) -> tuple[Optional[dict[str, str]], Optional[str]]:
+    """The models a run gets, given what was asked for and who is paying.
+
+    A paid run (``premium``) resolves as it always has: the chosen key, or the
+    deployment's default when none is chosen or model choice is switched off. A
+    free run gets the free choice whatever happens -- no choice sent, a retired
+    key, the kill switch on -- and is refused only when it named a paid model
+    outright, which the page never sends (those rows are locked), so a refusal
+    means a stale tab and costs nothing: the route refunds. Falling back to the
+    deployment default here instead would put a free run on the most expensive
+    configuration there is.
+    """
+    from ystocker import agent_models
+
+    asked = (model or "").strip() if model_choice_enabled() else ""
+    if not premium:
+        if asked in agent_models.CHOICES and agent_models.tier(asked) != "free":
+            return None, MODEL_NEEDS_PRO
+        asked = agent_models.free_choice()
+    return resolve_models(asked, thinking), None
+
+
 def job_models(job: dict[str, Any]) -> dict[str, str]:
     """The models recorded on a job, or this deployment's defaults.
 
@@ -2097,7 +2126,8 @@ def _prune() -> None:
 
 def submit(ticker: str, day: str, user: str,
            lang: str = "", paid: bool = False,
-           model: str = "", thinking: str = "") -> tuple[Optional[str], Optional[str]]:
+           model: str = "", thinking: str = "",
+           premium: bool = True) -> tuple[Optional[str], Optional[str]]:
     """Validate and queue a run. Returns (job_id, error).
 
     ``lang`` is the caller's UI language code, which selects the language the
@@ -2107,6 +2137,10 @@ def submit(ticker: str, day: str, user: str,
     ``thinking`` a level that choice accepts. Both are advisory: an unknown key
     or an unsupported level resolves to a working configuration rather than
     failing, and what was actually used is recorded on the job.
+
+    ``premium`` is whether this run is paid for (Pro, a trial, a VIP, or a
+    purchased credit); a run that is not may only use the free choice. See
+    :func:`choose_models`.
     """
     from ystocker import agent_models
 
@@ -2132,8 +2166,11 @@ def submit(ticker: str, day: str, user: str,
         return None, "Date is in the future"
 
     # Ignored wholesale when the deployment has taken the choice away, so that
-    # the kill switch cannot be bypassed by a client that keeps sending one.
-    models = resolve_models(model if model_choice_enabled() else "", thinking)
+    # the kill switch cannot be bypassed by a client that keeps sending one --
+    # and a free run is held to the free choice either way.
+    models, refused = choose_models(model, thinking, premium)
+    if refused:
+        return None, refused
 
     # The one case that is an error rather than a fallback. A provider with no
     # credential cannot run at all -- TradingAgents raises before the first
@@ -2537,9 +2574,15 @@ def _run(job_id: str) -> None:
         # no amount of retrying today will change that. Charging the user for a
         # capacity failure they cannot influence, and got nothing from, is not
         # defensible -- so this one is refunded even though calls were spent.
+        # DeepSeek's 402 "Insufficient Balance" is the same failure in another
+        # vendor's words: our account ran dry, which since 2026-10-04 stops
+        # every free run (they all use DeepSeek).
         elif (job.get("status") == "error"
               and "RESOURCE_EXHAUSTED" in (job.get("error") or "")):
             _refund_preflight(job, "provider daily quota exhausted")
+        elif (job.get("status") == "error"
+              and "Insufficient Balance" in (job.get("error") or "")):
+            _refund_preflight(job, "provider account balance exhausted")
         log.info("agents: %s finished status=%s rc=%s in %.1fs",
                  job_id, job.get("status"), rc, elapsed)
     finally:
@@ -2651,7 +2694,7 @@ def environment_report() -> dict[str, Any]:
         # The picker. ``model_choices`` carries each option's accepted thinking
         # levels because the client rebuilds that control when the model changes
         # and the accepted set is a property of the model -- shipping it from one
-        # place stops the two ends disagreeing about whether Pro takes "medium".
+        # place stops the two ends disagreeing about whether Pro takes "minimal".
         "model_choices": agent_models.options_public(),
         # Which row to preselect. Empty when this box is configured for a triple
         # the table cannot express, in which case the page offers an explicit
@@ -2660,6 +2703,9 @@ def environment_report() -> dict[str, Any]:
         "model_choice_default": agent_models.choice_for(
             DEFAULT_PROVIDER, DEFAULT_DEEP_MODEL, DEFAULT_QUICK_MODEL),
         "model_choice_enabled": model_choice_enabled(),
+        # The row a free run is held to; every other row is locked for it.
+        "model_free_choice": agent_models.free_choice(),
+        "model_free_name": agent_models.free_choice_name(),
         "debate_rounds": DEFAULT_DEBATE_ROUNDS,
         "risk_rounds": DEFAULT_RISK_ROUNDS,
         # Only set when a deployment pinned one language for everybody. Normally

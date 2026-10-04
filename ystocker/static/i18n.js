@@ -2624,13 +2624,34 @@ const I18n = (() => {
     'agents.model_server_default': { en: 'Server default', zh: '服务器默认' },
     'agents.model_google_pro':   { en: 'Gemini 3.1 Pro — highest quality',
                                    zh: 'Gemini 3.1 Pro — 质量最高' },
-    'agents.model_google_flash': { en: 'Gemini 3.5 Flash — faster',
-                                   zh: 'Gemini 3.5 Flash — 更快' },
+    'agents.model_google_pro_flash': { en: 'Gemini 3.1 Pro + 3.8 Flash — balanced',
+                                       zh: 'Gemini 3.1 Pro + 3.8 Flash — 均衡' },
+    'agents.model_google_flash': { en: 'Gemini 3.8 Flash — fast',
+                                   zh: 'Gemini 3.8 Flash — 快速' },
+    'agents.model_google_flash_lite': { en: 'Gemini 3.8 Flash + 3.5 Flash Lite — economical',
+                                        zh: 'Gemini 3.8 Flash + 3.5 Flash Lite — 经济' },
     'agents.model_google_lite':  { en: 'Gemini 3.5 Flash + 3.1 Flash Lite — cheapest',
                                    zh: 'Gemini 3.5 Flash + 3.1 Flash Lite — 最省' },
-    'agents.model_deepseek_pro':   { en: 'DeepSeek V4 Pro', zh: 'DeepSeek V4 Pro' },
-    'agents.model_deepseek_flash': { en: 'DeepSeek V4 Flash — fastest',
-                                     zh: 'DeepSeek V4 Flash — 最快' },
+    'agents.model_deepseek_pro_max': { en: 'DeepSeek V4 Pro — every role',
+                                       zh: 'DeepSeek V4 Pro — 全程' },
+    'agents.model_deepseek_pro':   { en: 'DeepSeek V4 Pro + V4 Flash', zh: 'DeepSeek V4 Pro + V4 Flash' },
+    'agents.model_deepseek_flash': { en: 'DeepSeek V4 Flash — free',
+                                     zh: 'DeepSeek V4 Flash — 免费' },
+    // Free runs use one model; the rest are for paid runs (Pro, a trial, a VIP,
+    // or a purchased run once the free ones are gone). The badge on each row,
+    // the note under the pickers while the paid rows are locked, and what a
+    // stale tab is told when it sends a paid model on a free run.
+    'agents.tier_free':        { en: 'Free', zh: '免费' },
+    // The free model's name sits between _a and _b, from agent_models, so the
+    // note follows AGENTS_FREE_MODEL.
+    'agents.tier_note_a':      { en: 'Free runs use', zh: '免费分析使用' },
+    'agents.tier_note_b':      { en: '. Every other Gemini and DeepSeek model is for paid runs: ',
+                                 zh: '。其他 Gemini 与 DeepSeek 模型供付费分析使用：' },
+    'agents.tier_note_pro':    { en: 'TradeAgents Pro', zh: 'TradeAgents Pro' },
+    'agents.tier_note_credit': { en: ', or a purchased run once the free runs for today are used.',
+                                 zh: '，或在当天免费次数用完后使用已购次数。' },
+    'agents.model_needs_pro':  { en: 'That model is for paid runs: TradeAgents Pro, or a purchased run once the free runs for today are used.',
+                                 zh: '该模型仅供付费分析：开通 TradeAgents Pro，或在当天免费次数用完后使用已购次数。' },
     // Shown on a row whose provider has no API key on this box. Named rather
     // than hidden: a reader who has heard of the model should learn it is not
     // configured here, not silently fail to find it.

@@ -5,9 +5,9 @@ Two things are being defended here, and both fail *quietly* in production if the
 regress:
 
 1. **An unsupported thinking level must be unrepresentable.** TradingAgents does
-   not validate one. ``google_client.py`` remaps ``minimal`` on Pro to ``low``
-   and forwards everything else verbatim, so ``medium`` on Pro reaches the API
-   and 400s -- minutes into a run, after the credit was spent.
+   not validate one, and the API refuses a level the model does not take with a
+   400 -- minutes into a run, after the credit was spent. Measured 2026-10-04:
+   Pro and Flash 3.8 refuse ``minimal``; 3.5 Flash and both Lites take all four.
 2. **A per-job model choice must beat the inherited environment.** ``_child_env``
    builds the child's environment with ``setdefault`` for the shared knobs, which
    means "whatever this process inherited wins". A choice written with
@@ -51,25 +51,30 @@ class ResolveTests(unittest.TestCase):
         self.assertEqual(got["thinking"], "high")
         self.assertEqual(got["model_choice"], "google-pro")
 
-    def test_pro_never_receives_medium(self):
-        """The 400. Pro accepts low/high and medium is *not* remapped upstream."""
+    def test_pro_takes_medium_now(self):
+        """It used to 400; measured accepted on 2026-10-04."""
         self.assertEqual(agent_models.resolve("google-pro", "medium")["thinking"],
-                         "high")
+                         "medium")
 
-    def test_pro_never_receives_minimal(self):
-        """Accepted upstream only by being silently rewritten to "low"."""
-        self.assertEqual(agent_models.resolve("google-pro", "minimal")["thinking"],
-                         "high")
+    def test_no_minimal_reaches_pro_or_flash_38(self):
+        """The API refuses it (400) on Pro and on 3.8 Flash, so every choice
+        with either model clamps it -- a pairing takes what both models take."""
+        for key in ("google-pro", "google-pro-flash", "google-flash", "google-flash-lite"):
+            with self.subTest(choice=key):
+                self.assertNotIn("minimal", agent_models.CHOICES[key]["thinking"])
+                self.assertNotEqual(agent_models.resolve(key, "minimal")["thinking"],
+                                    "minimal")
 
     def test_pro_honours_its_own_levels(self):
-        self.assertEqual(agent_models.resolve("google-pro", "low")["thinking"], "low")
-        self.assertEqual(agent_models.resolve("google-pro", "high")["thinking"], "high")
+        for level in ("low", "medium", "high"):
+            with self.subTest(level=level):
+                self.assertEqual(agent_models.resolve("google-pro", level)["thinking"], level)
 
-    def test_flash_takes_all_four(self):
+    def test_the_older_lite_pair_takes_all_four(self):
         for level in ("minimal", "low", "medium", "high"):
             with self.subTest(level=level):
                 self.assertEqual(
-                    agent_models.resolve("google-flash", level)["thinking"], level)
+                    agent_models.resolve("google-lite", level)["thinking"], level)
 
     def test_thinking_is_case_and_space_insensitive(self):
         self.assertEqual(agent_models.resolve("google-flash", " HIGH ")["thinking"],
@@ -82,6 +87,18 @@ class ResolveTests(unittest.TestCase):
             with self.subTest(level=level):
                 self.assertEqual(
                     agent_models.resolve("deepseek-pro", level)["thinking"], "")
+
+    def test_flash_follows_the_newest_flash(self):
+        got = agent_models.resolve("google-flash")
+        self.assertEqual((got["deep_model"], got["quick_model"]),
+                         ("gemini-3.8-flash", "gemini-3.8-flash"))
+
+    def test_deepseek_flash_keeps_the_versioned_id(self):
+        """DeepSeek serves deepseek-v4-flash and deepseek-flash as one model,
+        but TradingAgents' DeepSeek handling is keyed on the versioned id."""
+        got = agent_models.resolve("deepseek-flash")
+        self.assertEqual((got["deep_model"], got["quick_model"]),
+                         ("deepseek-v4-flash", "deepseek-v4-flash"))
 
     def test_garbage_thinking_clamps_to_the_choice_default(self):
         self.assertEqual(
@@ -199,7 +216,7 @@ class AvailabilityTests(unittest.TestCase):
         self.assertTrue(by_key["google-pro"]["available"])
         self.assertFalse(by_key["deepseek-pro"]["available"])
         # The client rebuilds the thinking control from this, so it has to travel.
-        self.assertEqual(by_key["google-pro"]["thinking"], ["low", "high"])
+        self.assertEqual(by_key["google-pro"]["thinking"], ["low", "medium", "high"])
         self.assertEqual(by_key["deepseek-pro"]["thinking"], [])
 
 
@@ -386,6 +403,71 @@ class PublishedFieldsTests(unittest.TestCase):
         from ystocker import share
         self.assertNotIn("user", agents._PUBLIC_FIELDS)
         self.assertNotIn("user", share._SHAREABLE_JOB_FIELDS)
+
+
+class TierTests(unittest.TestCase):
+    """Free runs use one model; every other row is for a paid run (2026-10-04)."""
+
+    def setUp(self):
+        os.environ.pop("AGENTS_FREE_MODEL", None)
+        os.environ.pop("AGENTS_MODEL_CHOICE", None)
+
+    def tearDown(self):
+        os.environ.pop("AGENTS_FREE_MODEL", None)
+        os.environ.pop("AGENTS_MODEL_CHOICE", None)
+
+    def test_exactly_one_free_row(self):
+        free = [k for k in agent_models.CHOICES if agent_models.tier(k) == "free"]
+        self.assertEqual(free, ["deepseek-flash"])
+        self.assertEqual(agent_models.free_choice_name(), "DeepSeek V4 Flash")
+        tiers = {o["key"]: o["tier"] for o in agent_models.options_public()}
+        self.assertEqual(tiers["deepseek-flash"], "free")
+        self.assertEqual({t for k, t in tiers.items() if k != "deepseek-flash"}, {"pro"})
+
+    def test_an_unknown_free_model_falls_back_to_the_default_free_one(self):
+        """Not to the deployment default, which is the most expensive choice."""
+        os.environ["AGENTS_FREE_MODEL"] = "google-pro-2030"
+        self.assertEqual(agent_models.free_choice(), "deepseek-flash")
+        os.environ["AGENTS_FREE_MODEL"] = "google-lite"
+        self.assertEqual(agent_models.free_choice(), "google-lite")
+        self.assertEqual(agent_models.tier("deepseek-flash"), "pro")
+
+    def test_every_row_has_a_name(self):
+        for key, spec in agent_models.CHOICES.items():
+            with self.subTest(choice=key):
+                self.assertTrue(spec["name"].strip())
+                self.assertTrue(spec["label"].startswith(spec["name"].split(" + ")[0]))
+
+    def test_a_free_run_gets_the_free_model_whatever_it_sends(self):
+        for asked in ("", "deepseek-flash", "google-pro-2019", "../../etc"):
+            with self.subTest(asked=asked):
+                models, err = agents.choose_models(asked, "high", premium=False)
+                self.assertIsNone(err)
+                self.assertEqual(models["model_choice"], "deepseek-flash")
+                self.assertEqual(models["deep_model"], "deepseek-v4-flash")
+
+    def test_a_free_run_asking_for_a_paid_model_is_refused(self):
+        for asked in ("google-pro", "google-flash", "deepseek-pro", "deepseek-pro-max"):
+            with self.subTest(asked=asked):
+                models, err = agents.choose_models(asked, "", premium=False)
+                self.assertIsNone(models)
+                self.assertEqual(err, agents.MODEL_NEEDS_PRO)
+
+    def test_a_paid_run_gets_what_it_asks_for(self):
+        models, err = agents.choose_models("google-pro-flash", "medium", premium=True)
+        self.assertIsNone(err)
+        self.assertEqual((models["deep_model"], models["quick_model"], models["thinking"]),
+                         ("gemini-3.1-pro-preview", "gemini-3.8-flash", "medium"))
+        models, _ = agents.choose_models("", "", premium=True)
+        self.assertEqual(models["deep_model"], agents.DEFAULT_DEEP_MODEL)
+
+    def test_the_kill_switch_still_holds_a_free_run_to_the_free_model(self):
+        os.environ["AGENTS_MODEL_CHOICE"] = "0"
+        free, err = agents.choose_models("google-pro", "", premium=False)
+        self.assertIsNone(err)                      # the choice is ignored, not refused
+        self.assertEqual(free["model_choice"], "deepseek-flash")
+        paid, _ = agents.choose_models("deepseek-pro", "", premium=True)
+        self.assertEqual(paid["deep_model"], agents.DEFAULT_DEEP_MODEL)
 
 
 if __name__ == "__main__":

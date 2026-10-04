@@ -17,11 +17,12 @@
     {% endif %}
     <div class="w-table-wrap">
       <table>
-        <thead><tr><th>Choice</th><th>Provider</th><th>Deep model</th><th>Quick model</th><th>Thinking levels</th><th>Default</th></tr></thead>
+        <thead><tr><th>Choice</th><th>Plan</th><th>Provider</th><th>Deep model</th><th>Quick model</th><th>Thinking levels</th><th>Default</th></tr></thead>
         <tbody>
           {% for m in facts.models %}
           <tr>
             <td>{{ m.label }}{% if not m.available %} — <em>not configured here</em>{% endif %}</td>
+            <td>{{ 'Free' if m.tier == 'free' else 'Pro' }}</td>
             <td>{{ provider_names.get(m.provider, m.provider) }}</td>
             <td><code>{{ m.deep_model }}</code></td>
             <td><code>{{ m.quick_model }}</code></td>
@@ -33,6 +34,7 @@
       </table>
     </div>
     <p>A choice marked <em>not configured here</em> is listed but disabled in the menu: this server holds no credential for that provider, and a run started on it could not begin.</p>
+    <p><strong>Free runs use {{ facts.free_model }}.</strong> Every other choice is for a paid run: with <a href="{{ url_for('main.subscribe_page') }}">TradeAgents Pro</a> or a trial, on every run; or with a purchased run, which is spent only once the free runs for the day are gone, so the other choices unlock exactly then. Until then they are listed in the menu but locked. A free run is held to {{ facts.free_model }} on the server too, whatever a request asks for.</p>
   </div>
   <div data-l="zh">
     {% if facts.model_choice %}
@@ -42,11 +44,12 @@
     {% endif %}
     <div class="w-table-wrap">
       <table>
-        <thead><tr><th>选项</th><th>服务商</th><th>深度模型</th><th>快速模型</th><th>思考深度档位</th><th>默认</th></tr></thead>
+        <thead><tr><th>选项</th><th>方案</th><th>服务商</th><th>深度模型</th><th>快速模型</th><th>思考深度档位</th><th>默认</th></tr></thead>
         <tbody>
           {% for m in facts.models %}
           <tr>
             <td><span data-i18n="{{ m.label_key }}">{{ m.label }}</span>{% if not m.available %} — <em>本站未配置</em>{% endif %}</td>
+            <td>{{ '免费' if m.tier == 'free' else 'Pro' }}</td>
             <td>{{ provider_names.get(m.provider, m.provider) }}</td>
             <td><code>{{ m.deep_model }}</code></td>
             <td><code>{{ m.quick_model }}</code></td>
@@ -58,6 +61,7 @@
       </table>
     </div>
     <p>标注<em>本站未配置</em>的选项会列在菜单中，但无法选择：本站没有该服务商的调用凭证，用它发起的分析根本无法启动。</p>
+    <p><strong>免费分析使用 {{ facts.free_model }}。</strong>其他选项供付费分析使用：开通 <a href="{{ url_for('main.subscribe_page') }}">TradeAgents Pro</a> 或试用期间，每次分析都可选；使用已购次数时也可选——已购次数只在当天免费次数用完后才会使用，所以其他选项正是在那时解锁。在此之前，它们会列在菜单中但处于锁定状态。服务器同样会把免费分析限定为 {{ facts.free_model }}，无论请求中选择了什么。</p>
   </div>
 </section>
 
