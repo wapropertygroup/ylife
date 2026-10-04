@@ -41,10 +41,30 @@ for _name in ("matplotlib", "matplotlib.pyplot", "matplotlib.ticker",
 
 os.environ.setdefault("YSTOCKER_SECRET_KEY", "check-inbox-secret")
 os.environ["INBOX_TOKEN"] = "test-token-value"
+# No AWS and no SSM: create_app() starts the background threads -- the markets
+# warm-up, the observed-series writers -- and this laptop's credentials reach
+# production DynamoDB, so a check must not hand them over. Threads are held only
+# while the app is built (_build_app), so one a test starts itself still runs.
+for _k in ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN", "AWS_PROFILE"):
+    os.environ.pop(_k, None)
+os.environ["AWS_SHARED_CREDENTIALS_FILE"] = os.devnull
+os.environ["AWS_CONFIG_FILE"] = os.devnull
+os.environ["AWS_EC2_METADATA_DISABLED"] = "true"
 
 from ystocker import create_app, inbox                              # noqa: E402
 
 TOKEN = "test-token-value"
+def _build_app():
+    import threading
+    import ystocker
+    ystocker._load_secrets_from_ssm = lambda *a, **k: None
+    real_start = threading.Thread.start
+    threading.Thread.start = lambda self: None
+    try:
+        return create_app()
+    finally:
+        threading.Thread.start = real_start
+
 
 
 class _MemStore:
@@ -73,7 +93,7 @@ class InboxEndpoints(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.app = create_app()
+        cls.app = _build_app()
         cls.app.config["TESTING"] = True
         cls.client = cls.app.test_client()
 

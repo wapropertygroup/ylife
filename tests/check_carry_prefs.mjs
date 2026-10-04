@@ -60,7 +60,9 @@ function page(search, stored = {}) {
   };
   const ctx = {
     document, URL, URLSearchParams, console,
-    location: { search, origin: 'https://trade-agents.com',
+    // A real Location always has hostname: i18n.js reads it at load to pick the
+    // brand, and an absent one threw before any check here could run.
+    location: { search, origin: 'https://trade-agents.com', hostname: 'trade-agents.com',
                 href: 'https://trade-agents.com/docs/overview' + search },
     Event: class { constructor(type) { this.type = type; } },
     history: { replaceState: () => {} },

@@ -57,11 +57,32 @@ for name in ("matplotlib", "matplotlib.pyplot", "matplotlib.ticker",
 
 os.environ["ASSETS_LOCAL_STORE"] = "1"
 os.environ.setdefault("YSTOCKER_SECRET_KEY", "check-assets-secret")
+# No AWS and no SSM: create_app() starts the background threads -- the markets
+# warm-up, the observed-series writers -- and this laptop's credentials reach
+# production DynamoDB, so a check must not hand them over. Threads are held only
+# while the app is built (_build_app), so one a test starts itself still runs.
+for _k in ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN", "AWS_PROFILE"):
+    os.environ.pop(_k, None)
+os.environ["AWS_SHARED_CREDENTIALS_FILE"] = os.devnull
+os.environ["AWS_CONFIG_FILE"] = os.devnull
+os.environ["AWS_EC2_METADATA_DISABLED"] = "true"
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from ystocker import create_app                                  # noqa: E402
 from ystocker import funddata, portfolio                         # noqa: E402
+
+def _build_app():
+    import threading
+    import ystocker
+    ystocker._load_secrets_from_ssm = lambda *a, **k: None
+    real_start = threading.Thread.start
+    threading.Thread.start = lambda self: None
+    try:
+        return create_app()
+    finally:
+        threading.Thread.start = real_start
+
 
 EMAIL = "check-assets@example.com"
 
@@ -129,7 +150,7 @@ def check(label: str, cond: bool, detail: str = "") -> None:
 
 
 def main() -> int:
-    app = create_app()
+    app = _build_app()
     app.config["TESTING"] = True
     seed_cache()
     portfolio.save(EMAIL, [])
