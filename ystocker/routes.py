@@ -2920,9 +2920,15 @@ def api_history(ticker: str):
     except Exception as exc:
         return jsonify({"error": str(exc)}), 502
 
-    # Quarterly earnings markers (best-effort; many tickers lack this data)
+    # Quarterly earnings markers (best-effort; many tickers lack this data).
+    # Not asked for a fund or an index: Yahoo has none, and the scrape that
+    # finds none still costs a request (see data.NON_EQUITY_QUOTE_TYPES).
+    from ystocker.data import is_non_equity
+    _no_company = is_non_equity((info or {}).get("quoteType"))
     earnings_markers = []
     try:
+        if _no_company:
+            raise LookupError("no earnings dates for a non-equity")
         ed = yf.Ticker(ticker).earnings_dates
         if ed is not None and not ed.empty:
             for dt, row in ed.head(12).iterrows():
@@ -3138,7 +3144,7 @@ def api_history(ticker: str):
         "target_low":        _safe(info.get("targetLowPrice")),
         "target_median":     _safe(info.get("targetMedianPrice")),
         # Insider transactions (most recent 10)
-        "insider_trades":    _get_insider_trades(ticker),
+        "insider_trades":    [] if _no_company else _get_insider_trades(ticker),
         # Relative performance vs sector (current day_chg - sector ETF day_chg)
         "revenue_growth":    _safe(round(info.get("revenueGrowth") * 100, 1)) if info.get("revenueGrowth") else None,
         "operating_margin":  _safe(round(info.get("operatingMargins") * 100, 1)) if info.get("operatingMargins") else None,
@@ -3619,9 +3625,14 @@ def api_financials(ticker: str):
             return None
 
     financials_table: list = []
+    # A fund or an index has no statements or estimates to ask Yahoo for; the
+    # price history behind the Z-score below is still fetched for it.
+    from ystocker.data import is_non_equity
+    no_company = False
     try:
         tk   = yf.Ticker(ticker)
         info = tk.info
+        no_company = is_non_equity((info or {}).get("quoteType"))
 
         ROW_MAP = [
             ("Total Revenue",  "revenue"),
@@ -3634,7 +3645,7 @@ def api_financials(ticker: str):
 
         actuals: dict = {}
         try:
-            stmt = tk.income_stmt
+            stmt = None if no_company else tk.income_stmt
             if stmt is not None and not stmt.empty:
                 for col in list(stmt.columns)[:3]:
                     yr = str(col.year)
@@ -3654,7 +3665,7 @@ def api_financials(ticker: str):
 
         # Fallback via eps_trend
         try:
-            et = tk.eps_trend
+            et = None if no_company else tk.eps_trend
             if et is not None and not et.empty:
                 if est_eps_cyr is None and "current" in et.index and "current" in et.columns:
                     est_eps_cyr = _to_f(et.loc["current", "current"])
@@ -3754,7 +3765,7 @@ def api_financials(ticker: str):
     # Quarterly revenue + EPS vs estimates (last 8 quarters)
     quarterly_table = []
     try:
-        q_stmt = tk.quarterly_income_stmt
+        q_stmt = None if no_company else tk.quarterly_income_stmt
         if q_stmt is not None and not q_stmt.empty:
             q_dates = sorted(q_stmt.columns, reverse=True)[:8]
             for col in q_dates:
@@ -9400,12 +9411,20 @@ def api_markets():
     def _fetch_index(symbol: str) -> dict:
         try:
             tk   = yf.Ticker(symbol)
-            info = tk.info
 
             # 3-year weekly for medium-term chart
             hist_wk = tk.history(period="3y", interval="1wk")
             # 1-year daily for MA-50 / MA-200 / RSI-14
             hist_1d = tk.history(period="1y", interval="1d")
+            # The chart response behind the daily history already carries the
+            # name, the 52-week range and the volume, so `tk.info` is not asked:
+            # it is a crumb-bearing quoteSummary call per index per 5-minute
+            # cycle, and the one that failed with 401 "Invalid Crumb" in 46 of
+            # 291 cycles on 2026-10-03/04. Its P/E was null for every index.
+            try:
+                info = dict(tk.history_metadata or {})
+            except Exception:  # noqa: BLE001 - the closes below still stand
+                info = {}
             # 5-year monthly for long-term chart
             hist_5y = tk.history(period="5y", interval="1mo")
 
@@ -9454,9 +9473,21 @@ def api_markets():
             ma200 = _ma(prices_1d, 200)
             rsi14 = _rsi(prices_1d, 14)
 
-            # 52-week high/low
+            # 52-week high/low, from the daily bars where the chart metadata
+            # leaves them out.
             hi52 = info.get("fiftyTwoWeekHigh")
             lo52 = info.get("fiftyTwoWeekLow")
+            try:
+                # NaN is truthy and jsonify would emit it as a bare NaN, which
+                # JSON.parse refuses -- so an all-NaN column stays None.
+                if not hi52 and len(hist_1d):
+                    v = float(hist_1d["High"].max())
+                    hi52 = v if v == v else None
+                if not lo52 and len(hist_1d):
+                    v = float(hist_1d["Low"].min())
+                    lo52 = v if v == v else None
+            except Exception:  # noqa: BLE001
+                pass
 
             # Volume
             volume = info.get("regularMarketVolume") or info.get("volume")
@@ -10434,7 +10465,6 @@ def api_sector_rotation_grid():
 
 _AAII_CACHE: dict = {}
 _AAII_CACHE_LOCK = threading.Lock()
-_AAII_CACHE_TTL  = 6 * 3600  # 6 hours (published weekly)
 _AAII_FILE       = Path(__file__).parent.parent / "cache" / "aaii_cache.json"
 
 # DynamoDB fallback — serves last-known-good data when live XLS is unavailable
@@ -10511,6 +10541,37 @@ _AAII_HEADERS = {
 }
 
 _AAII_XLS_URL = "https://www.aaii.com/files/surveys/sentiment.xls"
+#: After a download that brought no newer survey (a holiday week, a late
+#: release), how long before asking again.
+_AAII_RECHECK_SECONDS = 3 * 3600
+
+
+def _aaii_release_due(latest: Optional[dict], now: float) -> bool:
+    """Whether AAII can have published a survey newer than *latest*.
+
+    The XLS dates each week by the Thursday it is published, around 15:00 UTC
+    (the file's Last-Modified on 2026-10-01 read 15:01 GMT). Until the next
+    Thursday at 15:30 UTC the copy already held is the newest there is, and
+    downloading the 1.3 MB file again only asks Imperva's bot wall to notice:
+    the three "returned HTML instead of XLS" failures on 2026-10-03 were the
+    sixth to eighth downloads in 33 minutes, during back-to-back deploys, each
+    restart fetching it once per process because nothing read the disk first.
+    """
+    import datetime as _dt
+    try:
+        d = _dt.date.fromisoformat(str((latest or {}).get("date") or "")[:10])
+    except ValueError:
+        return True
+    due = _dt.datetime(d.year, d.month, d.day, 15, 30, tzinfo=_dt.timezone.utc) + _dt.timedelta(days=7)
+    return now >= due.timestamp()
+
+
+def _aaii_read_disk() -> Optional[dict]:
+    try:
+        data = json.loads(_AAII_FILE.read_text())
+    except (OSError, ValueError):
+        return None
+    return data if isinstance(data, dict) and data.get("latest") else None
 
 
 # ---------------------------------------------------------------------------
@@ -11516,10 +11577,28 @@ def api_aaii_sentiment():
     import requests as req_lib
     import io
 
+    now = time.time()
     with _AAII_CACHE_LOCK:
         entry = _AAII_CACHE.get("data")
-        if entry and time.time() - entry["ts"] < _AAII_CACHE_TTL:
-            return jsonify(entry["data"])
+    if entry is None:
+        held = _aaii_read_disk()
+        if held is not None:
+            held.pop("_stale", None)
+            try:
+                checked = _AAII_FILE.stat().st_mtime
+            except OSError:
+                checked = 0.0
+            entry = {"ts": checked, "data": held}
+            with _AAII_CACHE_LOCK:
+                _AAII_CACHE.setdefault("data", entry)
+    if entry is not None:
+        held = entry["data"]
+        if not _aaii_release_due(held.get("latest"), now):
+            # Nothing newer can exist, so what is held is current, whatever an
+            # earlier failed attempt marked it.
+            return jsonify({k: v for k, v in held.items() if k != "_stale"})
+        if now - entry["ts"] < (_AAII_RECHECK_SECONDS if not held.get("_stale") else 300):
+            return jsonify(held)
 
     try:
         resp = req_lib.get(_AAII_XLS_URL, headers=_AAII_HEADERS, timeout=20)
@@ -11621,9 +11700,13 @@ def api_aaii_sentiment():
             if fallback:
                 log.info("AAII: serving DynamoDB cache as fallback")
         if fallback:
-            fallback["_stale"] = True
+            fallback = dict(fallback)
+            if _aaii_release_due(fallback.get("latest"), now):
+                fallback["_stale"] = True
+            else:
+                fallback.pop("_stale", None)
             with _AAII_CACHE_LOCK:
-                _AAII_CACHE["data"] = {"ts": time.time() - _AAII_CACHE_TTL + 300, "data": fallback}
+                _AAII_CACHE["data"] = {"ts": now, "data": fallback}
             return jsonify(fallback)
         return jsonify({"error": str(exc)}), 502
 

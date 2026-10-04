@@ -327,6 +327,29 @@ def _universe() -> list[str]:
     return sorted({t for group in PEER_GROUPS.values() for t in group})
 
 
+def _companies(universe: list[str]) -> list[str]:
+    """The universe less every symbol the ticker cache knows is a fund or index.
+
+    Analysts estimate companies. Asking Yahoo for an ETF's estimates was three
+    requests per fund per sweep, each answered with a 404 -- 155 of the ~270 a
+    day that also reset the cookie and crumb the rest of the process shares
+    (data.NON_EQUITY_QUOTE_TYPES). The type rides along in ticker_cache.json, so
+    knowing costs nothing; a symbol with no recorded type is still swept.
+    """
+    from ystocker.data import is_non_equity
+    from ystocker.valuation import _cached_fundamentals
+
+    try:
+        records = _cached_fundamentals()
+    except Exception as exc:  # noqa: BLE001 - without the cache, sweep everything
+        log.info("analyst: ticker cache unreadable (%s); sweeping all", exc)
+        return universe
+    keep = [t for t in universe if not is_non_equity((records.get(t) or {}).get("Quote Type"))]
+    if len(keep) < len(universe):
+        log.info("analyst: skipping %d funds and indices", len(universe) - len(keep))
+    return keep
+
+
 def get(force: bool = False) -> dict[str, Any]:
     """Revision data for the peer-group universe. Never raises.
 
@@ -344,7 +367,7 @@ def get(force: bool = False) -> dict[str, Any]:
             return disk
 
     try:
-        fresh = _fetch(_universe())
+        fresh = _fetch(_companies(_universe()))
     except Exception as exc:  # noqa: BLE001
         log.warning("analyst: sweep failed (%s); serving cache", exc)
         stale = _mem or _read_disk()

@@ -2707,6 +2707,33 @@ Started in `create_app()`, all daemon threads:
   sub-header on top), not the menu. Note the status filter never hit this only
   because it lives in the last card on the page — so "the existing dropdown
   works" is not evidence that a new one will.
+- **A fund has no company data, and asking Yahoo for it anyway is not free.**
+  An ETF's earnings dates, insider trades, statements and EPS trend all come
+  back as a 404 ("No fundamentals data found for symbol: SPY"). That was about
+  270 requests a day, measured 2026-10-04, from `/api/history`,
+  `/api/financials` and the analyst sweep. Each 404 makes yfinance reset the
+  cookie and crumb that every thread in the process shares. `data.is_non_equity`
+  names the quote types with no company (ETF, MUTUALFUND, INDEX, CURRENCY,
+  CRYPTOCURRENCY, MONEYMARKET, FUTURE) and gates all three. The ticker record
+  carries `"Quote Type"`, so the sweep knows without asking. An unknown or
+  missing type is still asked: skipping a real company because one `info` call
+  came back thin is the worse error. The markets warm-up likewise reads an
+  index's name, 52-week range and volume from the chart response's
+  `history_metadata` rather than `tk.info`. That call failed with 401 "Invalid
+  Crumb" in 46 of 291 cycles, and its P/E was null for every index anyway.
+  Tests: `tests/check_history_non_equity.py`.
+- **A weekly file is downloaded when a newer one can exist, not on every
+  restart.** AAII's 1.3 MB sentiment XLS used to be fetched once per process
+  after each restart (the master's brief pre-gen, then each worker), because
+  nothing read `cache/aaii_cache.json` first. Four back-to-back deploys on
+  2026-10-03 made that eight downloads in 33 minutes. Imperva answered the last
+  three with its bot challenge, which arrives as HTTP 200 HTML.
+  `_aaii_release_due` encodes the release: each row is dated by its Thursday,
+  published around 15:00 UTC. So the disk copy is served until the next
+  Thursday at 15:30 UTC, a download that brings nothing newer waits 3 h, and
+  `_stale` means only "a newer survey was due and could not be had". It used to
+  mean "this fetch failed", which put an amber "(cached)" on the current week.
+  Tests: `tests/check_aaii_fetch.py`.
 - **`routes.py` is monolithic** (5200+ lines in yStocker) — all routes, API endpoints, cache logic, and background tasks in one file.
 - **Google Maps API** on yPlanner requires a valid billing-enabled API key; errors show "Oops! Something went wrong" with a purple stripe.
 - **SSH deploy** requires a `.pem` key file; the `id_ed25519` key on this machine doesn't have EC2 access. Use SSM `send-command` instead.

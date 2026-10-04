@@ -48,6 +48,22 @@ PROVIDER = "yahoo"
 #: being retried at once on the next restart.
 TICKER_BACKOFF = fetchguard.FailureBackoff("tickers", base_seconds=120, max_seconds=3600)
 
+#: Yahoo quote types with no company behind them: no statements, estimates,
+#: earnings dates or insider filings. Asking anyway is a request Yahoo answers
+#: with a 404 ("No fundamentals data found for symbol: SPY") -- about 270 a day
+#: from /history, /api/financials and the analyst sweep, measured 2026-10-04 --
+#: and each one makes yfinance reset the cookie and crumb every thread in the
+#: process shares, which is what the warm-up's "Invalid Crumb" 401s follow.
+NON_EQUITY_QUOTE_TYPES = frozenset({"ETF", "MUTUALFUND", "MONEYMARKET", "INDEX",
+                                    "CURRENCY", "CRYPTOCURRENCY", "FUTURE"})
+
+
+def is_non_equity(quote_type: object) -> bool:
+    """True only for a type known to have no company data. An unknown or
+    missing type is False: skipping a real company's statements because one
+    ``info`` call came back thin would be the worse mistake."""
+    return str(quote_type or "").upper() in NON_EQUITY_QUOTE_TYPES
+
 
 class FetchError(Exception):
     """Raised when Yahoo Finance data cannot be retrieved."""
@@ -412,6 +428,8 @@ def fetch_ticker_data(ticker: str) -> dict:
         # Yahoo's `earningsTimestamp` is the *last* report on some tickers and
         # the next on others. See ystocker.earnings.
         "Earnings Date":   earnings_mod.next_earnings(info),
+        # So the analyst sweep can skip a fund without asking Yahoo first.
+        "Quote Type":      info.get("quoteType"),
     }
 
 
