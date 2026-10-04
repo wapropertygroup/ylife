@@ -161,15 +161,25 @@ trap 'rm -f "$notes"' EXIT
 
 # Unsigned whatever the global config says: commits here are signed with an
 # x509 helper that can wait on a prompt, and a deploy must not hang at the end.
-if ! g -c tag.gpgSign=false tag -a "$tag" "$SHA" -F "$notes" 2>/dev/null; then
+made=0
+if g -c tag.gpgSign=false tag -a "$tag" "$SHA" -F "$notes" 2>/dev/null; then
+  made=1
+elif [[ "$(g rev-parse -q --verify "refs/tags/$tag^{commit}" 2>/dev/null)" == "$SHA" ]]; then
+  # Two deploys from this shared checkout in the same minute compute the same
+  # name, and the first makes the tag (2026-10-04, 20:36). That tag is on this
+  # commit, so the work is done, not failed.
+  say "$tag was made for ${SHA:0:7} by a concurrent run"
+else
   say "could not create tag $tag"
   exit 0
 fi
+# Pushing a tag the remote already has, unchanged, is a no-op that succeeds.
 if ! gn push -q origin "refs/tags/$tag" 2>/dev/null; then
-  g tag -d "$tag" >/dev/null 2>&1 || true
+  # Only a tag this run made is withdrawn; a concurrent run's is left alone.
+  [[ $made -eq 1 ]] && g tag -d "$tag" >/dev/null 2>&1
   say "could not push tag $tag, nothing recorded"
   exit 0
 fi
-say "tagged ${SHA:0:7} as $tag"
+[[ $made -eq 1 ]] && say "tagged ${SHA:0:7} as $tag"
 publish_owed
 exit 0
