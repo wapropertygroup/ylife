@@ -136,8 +136,9 @@ SHELL_PAGES = ("/home", "/docs/overview", "/research", f"/research/{wiki.POSTS[0
 # The reading wall (_ta_wall.html): a signed-out reader of a dashboard on
 # trade-agents.com, and nobody else.
 WALL_MARK = '<div class="w-wall" data-wall>'
-# The pages with nothing of their own to wall, which set `no_wall`.
-UNWALLED_DASHBOARDS = ("/guide", "/lookup", "/videos", "/assets", "/posts")
+# The pages that set `no_wall`: those with nothing of their own to wall, and
+# /markets, which everyone reads in full (asked for 2026-10-04).
+UNWALLED_DASHBOARDS = ("/guide", "/lookup", "/videos", "/assets", "/posts", "/markets")
 
 
 class WikiPages(unittest.TestCase):
@@ -585,7 +586,7 @@ class WikiPages(unittest.TestCase):
 
     # ── the reading wall ──────────────────────────────────────────────────
     def test_a_signed_out_reader_meets_the_wall_on_a_dashboard(self):
-        for path in ("/markets", "/fed"):
+        for path in ("/fed", "/commodities"):
             with self.subTest(path=path):
                 html_ = self._get(path, base_url=TA).get_data(as_text=True)
                 self.assertIn(WALL_MARK, html_)
@@ -615,7 +616,7 @@ class WikiPages(unittest.TestCase):
 
     def test_with_pro_on_sale_the_wall_asks_for_a_trial(self):
         live = {"status": "active", "plan": "month", "period_end": 4_102_444_800}
-        html_ = self._walled_as("/markets", None, email=None)
+        html_ = self._walled_as("/fed", None, email=None)
         self.assertIn(WALL_MARK, html_)
         card = html_[html_.index(WALL_MARK):html_.index("</main>")]
         self.assertIn("free trial", card)
@@ -624,43 +625,44 @@ class WikiPages(unittest.TestCase):
         # device signs in back to this page.
         self.assertEqual(urlsplit(hrefs[0]).path, "/login")
         self.assertEqual(parse_qs(urlsplit(hrefs[0]).query)["next"], ["/subscribe"])
-        self.assertEqual(parse_qs(urlsplit(hrefs[1]).query)["next"], ["/markets"])
+        self.assertEqual(parse_qs(urlsplit(hrefs[1]).query)["next"], ["/fed"])
         # Signed in without Pro: walled, and the way in is the plans page.
-        signed_in = self._walled_as("/markets", None)
+        signed_in = self._walled_as("/fed", None)
         self.assertIn(WALL_MARK, signed_in)
         card = signed_in[signed_in.index(WALL_MARK):signed_in.index("</main>")]
         self.assertIn('href="/subscribe"', card)
         self.assertNotIn("/login", card)
         # A trial already taken is not offered again.
-        taken = self._walled_as("/markets", {"status": "canceled", "trial_used": True})
+        taken = self._walled_as("/fed", {"status": "canceled", "trial_used": True})
         card = taken[taken.index(WALL_MARK):taken.index("</main>")]
         self.assertNotIn("free trial", card)
         self.assertIn("Subscribe to see every dashboard", card)
         # A subscriber, a trial and a VIP read everything.
-        self.assertNotIn(WALL_MARK, self._walled_as("/markets", live))
-        self.assertNotIn(WALL_MARK, self._walled_as("/markets", dict(live, status="trialing")))
-        self.assertNotIn(WALL_MARK, self._walled_as("/markets", None, email=sorted(quota.vip_emails())[0]))
+        self.assertNotIn(WALL_MARK, self._walled_as("/fed", live))
+        self.assertNotIn(WALL_MARK, self._walled_as("/fed", dict(live, status="trialing")))
+        self.assertNotIn(WALL_MARK, self._walled_as("/fed", None, email=sorted(quota.vip_emails())[0]))
         # A lapsed card holds for the grace week, then the wall returns.
-        self.assertNotIn(WALL_MARK, self._walled_as("/markets", dict(live, status="past_due")))
+        self.assertNotIn(WALL_MARK, self._walled_as("/fed", dict(live, status="past_due")))
         self.assertIn(WALL_MARK, self._walled_as(
-            "/markets", dict(live, status="past_due", period_end=1_000_000_000)))
+            "/fed", dict(live, status="past_due", period_end=1_000_000_000)))
         # Still nothing walled off trade-agents.com, or on a page without data.
         with mock.patch.object(subscriptions, "enabled", return_value=(True, "")):
-            self.assertNotIn(WALL_MARK, self._get("/markets").get_data(as_text=True))
+            self.assertNotIn(WALL_MARK, self._get("/fed").get_data(as_text=True))
         self.assertNotIn(WALL_MARK, self._walled_as("/guide", None))
 
-    def test_markets_walls_after_its_brief_and_index_cards(self):
-        # As asked: the index cards and the AI brief stay readable.
-        html = self._get("/markets", base_url=TA).get_data(as_text=True)
-        marks = re.findall(r"<[a-z]+\b[^>]*\sdata-wall-start[\s>]", html)
-        self.assertEqual(len(marks), 1, marks)
-        self.assertIn('id="sentiment-volatility"', marks[0])
-        fold = html.index(marks[0])
-        self.assertLess(html.index('id="aiMarketsBriefCard"'), fold)
-        self.assertLess(html.index('id="indexCards"'), fold)
+    def test_markets_is_never_walled(self):
+        # Asked for 2026-10-04: /markets is read in full, signed out or without
+        # Pro, while the other dashboards keep the wall.
+        for email in (None, "reader@example.com"):
+            with self.subTest(email=email):
+                html_ = self._walled_as("/markets", None, email=email)
+                self.assertNotIn(WALL_MARK, html_)
+                self.assertNotIn(" w-walled", html_)
+                self.assertNotIn("data-wall-start", html_)
+        self.assertIn(WALL_MARK, self._walled_as("/fed", None, email=None))
 
     def test_no_wall_for_a_known_reader_elsewhere_or_on_a_page_without_data(self):
-        self.assertNotIn(WALL_MARK, self._as_reader("/markets", base_url=TA))
+        self.assertNotIn(WALL_MARK, self._as_reader("/fed", base_url=TA))
         # stock.li-family.us walls nothing.
         local = self._get("/markets").get_data(as_text=True)
         self.assertNotIn(WALL_MARK, local)

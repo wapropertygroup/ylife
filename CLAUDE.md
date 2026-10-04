@@ -2146,9 +2146,10 @@ footer stays readable. It is **soft by choice**: the data is still in the page
 and in the APIs, since it is public market data and the wall asks for an
 account rather than protecting anything, so it walls nothing server-side. The
 fold is one screen down (`max(560px, 72vh)` from `<main>`'s top) unless a page
-marks it with `data-wall-start`. /markets does, on the section after its AI
-brief and index cards, and a small script keeps the mark measured as the panels
-above it load. The overlay is `position: absolute` in `<main>`, so it grows with
+marks it with `data-wall-start`, and a small script keeps the mark measured
+as the panels above it load. (/markets marked its section after the AI brief
+and index cards, until 2026-10-04, when it was asked to be read in full and
+left the wall entirely.) The overlay is `position: absolute` in `<main>`, so it grows with
 the page, and it sits at z-index 15, under the pages' own pinned bars (/markets'
 chips 30, /history's `#sectionNav` 20). It stands down (`hidden`) while less of
 `<main>` lies below the fold than its card and padding need: its box then ran
@@ -2159,7 +2160,9 @@ walled sections. `<main>` becomes `position: relative` only while walled;
 measured on every walled dashboard, nothing else in it used `<main>` as its
 containing block. A page with no data of its own sets `{% set no_wall = true %}`:
 /guide, /lookup, /videos, /assets and /posts (sign-in only anyway), and the
-error, warming and unsubscribe pages, whose one job is a message. Never walled:
+error, warming and unsubscribe pages, whose one job is a message. So does
+/markets, the one dashboard everyone reads in full (asked for 2026-10-04); the
+wall tests use /fed as their walled dashboard instead. Never walled:
 stock.li-family.us, a subscriber, a trial or a VIP, and every TradeAgents page (the landing,
 docs, research and shared reports, the last of which exist to be read without
 an account). `check_wiki_pages` asserts each of those.
