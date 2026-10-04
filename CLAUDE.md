@@ -1498,6 +1498,27 @@ against NVIDIA's real figures in `tests/test_xbrl.py`:
 The page caps a ratio bar at 4× its median (INTC's 1,149× would flatten ten
 years) and says so in the tooltip; a negative TTM EPS is `n/m`, never an old P/E.
 
+**Four more cards (2026-10-04):** revenue growth, return on equity, R&D beside
+stock-based compensation, and dividends per share; equity is fetched for ROE.
+Growth and ROE are worked out in `xbrl.py`, not on the page. `year_earlier()`
+finds the comparison period by date (±25 days), so a missing quarter is a gap
+rather than the wrong season, and `growth()` answers only from a positive base.
+ROE is trailing income over the *average* of two equity ends and is `None`
+wherever either is at or below zero: McDonald's and Starbucks carry negative
+equity, and a ratio over it reads as a loss on a profitable company. Measured on
+the box: NVDA ~117%, AAPL ~149%, MSFT 34%, JPM 18%. EPS and DPS
+(`PER_SHARE_METRICS`) keep four decimals through `_round`, which had rounded
+every dividend to a whole dollar. A CSV button exports the view and range on
+screen from the payload already loaded.
+
+**The ✦ Research report reads the decade too.** `_buildBundle` asks for
+`/api/fundamentals/<t>` alongside its other requests and sends it as
+`long_history` (`_longHistory`: ten fiscal years, eight TTM quarters, newest
+first, and where today's P/E sits in its own ten-year range), which
+`research._long_history_blocks` renders as tables. A cold ticker answers 202
+and is left out rather than holding the report. Before, the report saw Yahoo's
+three to five years.
+
 **The request path never fetches.** `/api/fundamentals/<t>` reads the disk cache
 (`cache/fundamentals/`, 12 h TTL, stale served while it rebuilds); a cold ticker
 is 202 and one background build per symbol, under a budget of 2 in flight and
@@ -1538,12 +1559,42 @@ CBOE, OTC) and a Followed view. Companies listed only abroad (Tokyo, Hong Kong,
 Shanghai) are not in SEC's file. Enter in the search still opens any ticker,
 listed or not, and the Fundamentals tab answers them from Yahoo's statements.
 
-Tests: `tests/test_xbrl.py` (51, NVIDIA's filings), `tests/test_statements.py`
+**A sort and a watchlist (2026-10-04).** The sort (largest first, best today,
+lowest P/E, best 52 weeks, ticker A–Z) orders each part *separately*, the
+quoted companies and then SEC's list, so the divider between them is drawn
+once; sorting the two together drew it at every crossing. A missing figure
+sorts last whichever way the sort runs, and a loss's P/E is not a measurement,
+so it is never "lowest". Gainers and Losers are rankings of their own and hide
+the sort. The view and sort ride in the address (`?view=watch&sort=pe`).
+
+The star on every card writes to `static/watchlist.js`, one store shared by
+three pages. /lookup had a watchlist first, so its key (`ystocker_watchlist`)
+and shape (`{ticker, name}`, newest first) were kept and a list built there
+carries over. /history's header carries the same star.
+- **The cap.** /lookup capped the list at 12 for its chip panel, which with a
+  star on 8,000 cards would have dropped picks silently. The cap is now `MAX`
+  (200), once, in the module; the panel shows twelve and links to the rest.
+- **Storage that refuses** (private mode, a full quota) keeps the list in memory
+  for the visit, so a star still toggles.
+- **One event.** Every change, from this tab or another (the `storage` event),
+  arrives as one `watchlist:change`.
+- **Tickers in neither list.** A starred ticker that is in neither list (a
+  foreign listing starred on /history) still gets a card in the Watchlist view,
+  so it can be opened and unstarred. That waits until SEC's list has answered,
+  or every starred SEC company would flash up as a bare card first.
+- **Markup.** The star sits beside the card's link in a `.co-cell`, not inside
+  it: a button inside an `<a>` is invalid, and its click would follow the link.
+
+Tests: `tests/test_xbrl.py` (57, NVIDIA's filings), `tests/test_statements.py`
 (12, Yahoo's tables as served), `node tests/check_fundamentals_js.mjs` (40, the
-range/YoY/cap arithmetic), `tests/check_fundamentals_endpoints.py` (21,
-hermetic), `tests/test_directory.py` (13, SEC's real rows) and
-`tests/check_companies_directory.py` (6, hermetic). Not a DynamoDB table: every
-figure can be fetched again.
+range/YoY/cap arithmetic), `tests/check_fundamentals_endpoints.py` (23,
+hermetic), `tests/test_directory.py` (13, SEC's real rows),
+`tests/check_companies_directory.py` (6, hermetic),
+`tests/test_research_long_history.py` (5) with
+`node tests/check_research_long_history.mjs` (16, `_longHistory` extracted from
+the template), `node tests/check_companies_page.mjs` (44, the page's own script
+against a fake DOM and the real watchlist.js) and `node tests/check_watchlist.mjs`
+(29). Not a DynamoDB table: every figure can be fetched again.
 
 ### Choosing the model and thinking depth (`agent_models.py`)
 
@@ -2304,6 +2355,42 @@ Tests: `tests/test_odds.py` (58, real 2026-10-03 payloads from both venues),
 hermetic) and `node tests/check_predictions_render.mjs` (54, the real i18n.js
 and predictions.js in a vm).
 
+### Crawlers (`crawlers.py`, `/robots.txt`, `/sitemap.xml`)
+
+On 2026-10-04 Meta's AI crawler (`meta-externalagent`) rendered
+trade-agents.com's dashboards and called every API on them. That was about
+6,000 requests in a few hours, including:
+- Fundamentals and DCA rebuilds, each an EDGAR fetch or six Yahoo reads, for a
+  client that never read the answer;
+- 179 forced `/dca/<T>/refresh` rebuilds;
+- DCA registry churn that evicted real readers' names from the 60-slot ranked
+  universe.
+There was no robots.txt route. Three layers now, with the rules pure in
+`crawlers.py`:
+
+- **`/robots.txt` and `/sitemap.xml`, per host** (`_share_base()`, so each
+  brand names its own pages). The API, the refresh routes and sign-in are
+  disallowed. `/api/agents/shared/` is allowed back, because a shared report's
+  preview card is fetched by exactly these bots. The sitemap lists the landing,
+  docs and Research Lab posts on trade-agents.com, and the dashboards on both
+  hosts.
+- **A 403 for a declared crawler on `/api/` and on GET refresh routes**
+  (`_refuse_crawlers`, ahead of every other hook). robots.txt asks; this
+  refuses the bots that do not ask first. "Declared" means the user agent says
+  so: a token list plus a `bot/`/`crawler`/`spider` shape, which matches
+  neither "CUBOT X30" (a phone), curl nor python-requests. The share card and
+  the write door (`/api/posts`, `/api/inbox`) are exempt; their callers are
+  scripts.
+- **A daily cap on Fundamentals builds** (`FUNDAMENTALS_DAILY_BUILDS`, 600, on
+  quota.py's flocked counter), taken when a build slot is reserved. A crawler
+  that ignores both layers still cannot turn the build budget into an all-day
+  EDGAR sweep. The cold path answers 503 `daily_cap`, and the page says "ready
+  tomorrow" rather than spinning. A ticker already cached is unaffected.
+
+`shared.html` carries `noindex, nofollow`, since a capability link is meant to
+be pasted, not found. Tests: `tests/test_crawlers.py` (9) and
+`tests/check_crawler_endpoints.py` (6, hermetic, both hosts).
+
 ### Caching (yStocker)
 Two-tier: in-memory dict + on-disk JSON in `cache/`. All cache access guarded by `threading.Lock`. Disk writes use atomic temp file + `os.replace()`.
 
@@ -2745,3 +2832,27 @@ Started in `create_app()`, all daemon threads:
 - **reportlab fails loudly on height and silently on width.** A flowable taller than the frame raises `LayoutError` and kills the whole PDF (a single-cell `Table` cannot split between rows — pass `splitInRow=1`); a flowable *wider* than the frame is simply drawn through the margin, or off the paper. So every fixed-width flowable in `report_pdf.py` is clamped to the measure, and preformatted text is hard-wrapped before it is handed over. Separately, the CJK line breaker deliberately overruns the measure by up to one em rather than start a line with `、` or `。`, which is why the Chinese path lays out to a slightly narrower measure and leaves a gutter for that overhang.
 - **An `https://` link opens a vendor's app only for the paths that vendor's association file claims.** Universal links feel automatic, so the natural assumption is that pointing at `futunn.com/en/stock/SMCI-US` will open Futubull on a phone that has it. It will not, and nothing reports the miss — Futu's `/.well-known/apple-app-site-association` claims only `/qq_conn/1101195293/*`, `/weixin_ios/*`, `/app/*` and `/deeplink/*`, so `/en/stock/*` is a plain web page on iOS forever, however the anchor is written. **Read the vendor's `apple-app-site-association` and `assetlinks.json` before assuming, and before hand-rolling a scheme.** The verified route for Futu is the scheme `ftnn://quote/stockDetail/<stockId>/1` (from Futu's own `al:ios:url` tag and its `af_dp=` AppsFlyer parameter; Android package `cn.futu.trader`, iOS App Store id `592031984`; moomoo is `ftmm`). Two traps behind it: `stockId` is Futu's **opaque internal id, not the ticker** — SMCI is `203319`, and HK/A-share ids are 14-digit strings (`00700-HK` is `54047868453564`), so anything that narrows the type breaks exactly the non-US venues `_futu_symbol` exists to support — and the quote page carries **dozens of unrelated `stockId`s** in its "hot stocks" rails, so a positional parse links to the wrong company, which is worse than not linking. `futu.py` round-trips `stockCode` + `marketLabel` back into the requested symbol and refuses a mismatch. Note the Android side is the easy one only because `intent://` carries a declarative `S.browser_fallback_url` (percent-encoded — `intent://` is `;`-delimited, so a raw URL truncates); iOS has no equivalent, so it needs a visibility-timer fallback, and `window.open` after that timer can be popup-blocked because the click gesture has expired.
 - **A test that greps rendered HTML for `onerror=` passes on its own escaping.** `&lt;img src=x onerror=alert(1)&gt;` is inert — a string the client displays, not an element it runs — but it contains the needle, so a naive substring assertion reports a vulnerability that is not there, and (worse) an assertion written to accommodate that noise stops catching the real thing. `tests/test_report_email.py` strips `&lt;…&gt;` before checking, so it only ever asserts on *live* markup. Same trap with `href=`: it appears in escaped text too. Note also that `<a>` is deliberately absent from the inline-tag restore list in both `report_email.py` and `static/markdown.js` — honouring it would mean emitting an attribute without vetting it — so a bare inline `<a href>` in model output is shown as text unless the body *opens* with a block-level tag and takes the allowlist path.
+- **Yahoo's EPS can sit on a different share basis from its price, and nothing
+  in `info` says so.** Tokio Marine (8766.T), 2026-10-04: ¥507.4 against a
+  trailing EPS of ¥279.17. That made trailingPE 1.82 and forwardPE 1.03, where
+  cap ÷ net income says 26.7. Because /multiples cap-weights `cap / pe`, that
+  one name booked ~$88B of forward earnings that do not exist into the Nikkei.
+  `data.pe_basis_ok()` checks trailingPE against `marketCap /
+  netIncomeToCommon`, which no share count enters, and blanks both P/Es and
+  the PEG outside `PE_BASIS_BAND` (0.55–1.8; thirty same-currency listings
+  surveyed sat at 0.90–1.23). It skips ADRs, whose net income is in another
+  currency, and it fails a positive P/E against negative net income (FUBO and
+  PSKY that day).
+- **A ticker can be handed to a different company, and the quote stays
+  plausible.** Yahoo's PARA has been Banzai International, a $2M shell, since
+  Paramount moved to PSKY. The box's saved `peer_groups.json` went on tracking
+  it (P/E 0.03, cap 0.0), and it topped "Lowest P/E first" on /companies.
+  `SYMBOL_RENAMES` in `__init__.py` rewrites the saved file at load, because
+  editing the code defaults never reaches a box with a saved copy.
+- **A `check_` script that calls `create_app()` hands its threads this laptop's
+  production credentials.** The markets warm-up writes `ystocker-markets-cache`,
+  and the observed-series threads write their tables. Strip `AWS_*` (credentials
+  and config files pointed at /dev/null), stub SSM, and no-op `Thread.start`
+  around `create_app()`, as `check_research_endpoints.py` does.
+  `check_inbox_endpoints.py` and `check_assets_endpoints.py` did none of that
+  until 2026-10-04.
