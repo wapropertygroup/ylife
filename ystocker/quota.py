@@ -508,3 +508,43 @@ def _prune_locked(day: str) -> None:
                 p.unlink(missing_ok=True)
     except Exception as exc:  # noqa: BLE001 - housekeeping only
         log.debug("quota: prune skipped: %s", exc)
+
+
+def limit_fundamentals_builds() -> int:
+    """Fundamentals builds the box starts per day, every reader together.
+
+    A build is one EDGAR request and one Yahoo request (eight Yahoo ones for a
+    listing SEC does not cover), and /companies links every company SEC lists,
+    so the number of distinct tickers that can be asked for is ~8,000. Readers
+    open tens to low hundreds a day; on 2026-10-04 one crawler opened 271 in an
+    hour before the crawler guard existed. This is the backstop for the clients
+    that guard cannot name: once spent, cached tickers are still served and
+    only *new* builds wait for tomorrow. ``FUNDAMENTALS_DAILY_BUILDS`` tunes it.
+    """
+    return _int_env("FUNDAMENTALS_DAILY_BUILDS", 600)
+
+
+def try_consume_fundamentals_build() -> bool:
+    """Spend one of today's Fundamentals builds, or return ``False``.
+
+    Same file and lock as every other counter here, under its own key, so two
+    workers cannot both read the last slot and both spend it.
+    """
+    day, lim = today(), limit_fundamentals_builds()
+    with _Guard():
+        data = _read(day)
+        used = int(data.get("fund_builds", 0))
+        if used >= lim:
+            return False
+        data["fund_builds"] = used + 1
+        data["day"] = day
+        _write(day, data)
+    return True
+
+
+def fundamentals_builds_left() -> int:
+    """Builds left today. Reads only; spends nothing."""
+    day = today()
+    with _Guard():
+        data = _read(day)
+    return max(0, limit_fundamentals_builds() - int(data.get("fund_builds", 0)))

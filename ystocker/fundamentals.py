@@ -518,6 +518,13 @@ def _release() -> None:
         _inflight = max(0, _inflight - 1)
 
 
+def capped() -> bool:
+    """Whether today's build allowance (``quota.limit_fundamentals_builds``) is spent."""
+    from ystocker import quota
+
+    return quota.fundamentals_builds_left() <= 0
+
+
 def building(symbol: str) -> bool:
     with _budget_lock:
         return symbol in _building
@@ -534,6 +541,11 @@ def kick(symbol: str) -> bool:
         if symbol in _building:
             return False
     if not _try_reserve():
+        return False
+    from ystocker import quota
+
+    if not quota.try_consume_fundamentals_build():
+        _release()
         return False
 
     def _run() -> None:

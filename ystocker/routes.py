@@ -47,6 +47,29 @@ log = logging.getLogger(__name__)
 
 
 @bp.before_app_request
+def _refuse_crawlers():
+    """Keep declared crawlers off the API and the refresh routes.
+
+    Rules in ``ystocker.crawlers``. On 2026-10-04 Meta's AI crawler rendered
+    trade-agents.com's dashboards and called every API on them: ~6,000 requests
+    in a few hours, Fundamentals and DCA builds among them (each an EDGAR or
+    six-Yahoo-read rebuild for a client that never read the answer), 179
+    forced ``/dca/<T>/refresh`` rebuilds, and DCA registry churn that evicted
+    real readers' names from the 60-slot ranked universe. robots.txt asks;
+    this refuses those that do not ask first.
+    """
+    from ystocker import crawlers
+
+    if crawlers.refused(request.path, request.headers.get("User-Agent")):
+        resp = jsonify({"error": "crawlers are not served the API or refresh routes; "
+                                 "see /robots.txt"})
+        resp.status_code = 403
+        resp.headers["Cache-Control"] = "no-store"
+        return resp
+    return None
+
+
+@bp.before_app_request
 def _yf_fork_safety():
     """Give this worker its own yfinance singleton before it serves anything.
 
@@ -3833,6 +3856,10 @@ def api_fundamentals(ticker: str):
             and request.args.get("retry") != "1":
         return jsonify({"ticker": symbol, "status": "failed",
                         "reason": failed.get("reason")}), 503
+    if not fundamentals.building(symbol) and fundamentals.capped():
+        # Today's build allowance is spent: say so, rather than let the page
+        # poll a build that will not start until tomorrow.
+        return jsonify({"ticker": symbol, "status": "failed", "reason": "daily_cap"}), 503
 
     started = fundamentals.kick(symbol)
     # "queued" means no slot was free, so nothing has started yet -- the page
@@ -4175,6 +4202,53 @@ def api_companies_directory():
     resp.headers["Cache-Control"] = "public, max-age=3600"
     return resp
 
+
+def _sitemap_pages() -> list[tuple[str, Optional[str]]]:
+    """(path, lastmod) for this host's sitemap.
+
+    trade-agents.com's content is the product: the landing, every docs page and
+    every Research Lab post (dated), then the dashboards. stock.li-family.us
+    lists its dashboards only -- the wiki is canonical on trade-agents.com, and
+    listing it on both hosts would offer a crawler two copies of every page.
+    """
+    from ystocker import wiki
+
+    dashboards = ["/markets", "/companies", "/evaluation", "/dca", "/commodities",
+                  "/13f", "/fed", "/fedwatch", "/housing", "/multiples",
+                  "/predictions", "/daily"]
+    if not _on_trade_agents():
+        return [(p, None) for p in dashboards + ["/guide"]]
+    pages: list[tuple[str, Optional[str]]] = [("/home", None), ("/docs", None)]
+    pages += [(f"/docs/{d['slug']}", d.get("updated")) for d in wiki.DOCS]
+    posts = wiki.posts()
+    pages.append(("/research", posts[0].get("date") if posts else None))
+    pages += [(f"/research/{p['slug']}", p.get("date")) for p in posts]
+    return pages + [(p, None) for p in dashboards]
+
+
+@bp.route("/robots.txt")
+def robots_txt():
+    """Per-host robots.txt: off the API and the refresh routes, sitemap named.
+
+    See ``ystocker.crawlers`` for why each line is there. Served by the app
+    rather than nginx so the Sitemap line names the host that was asked.
+    """
+    from ystocker import crawlers
+
+    resp = Response(crawlers.robots_txt(_share_base()), mimetype="text/plain")
+    resp.headers["Cache-Control"] = "public, max-age=3600"
+    return resp
+
+
+@bp.route("/sitemap.xml")
+def sitemap_xml():
+    """This host's pages, for search engines. Built from the wiki registry."""
+    from ystocker import crawlers
+
+    resp = Response(crawlers.sitemap_xml(_share_base(), _sitemap_pages()),
+                    mimetype="application/xml")
+    resp.headers["Cache-Control"] = "public, max-age=3600"
+    return resp
 
 @bp.route("/api/ticker/<ticker>")
 def api_ticker(ticker: str):

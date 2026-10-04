@@ -17,6 +17,10 @@
     the same report by construction rather than by two call sites agreeing to
     stay in sync. #}
 {% block head_extra %}
+{#  A capability URL: anyone holding it may read the report, so a search engine
+    must not index it -- link-preview bots still fetch the page and the card,
+    which noindex does not stop (see ystocker/crawlers.py). #}
+<meta name="robots" content="noindex, nofollow">
 <meta property="og:type" content="article">
 <meta property="og:site_name" content="{{ brand_name }}">
 <meta property="og:title" content="{{ og_title }}">

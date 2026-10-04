@@ -119,9 +119,13 @@ class FundamentalsEndpoint(unittest.TestCase):
         self._kick = fundamentals.kick
         fundamentals.kick = lambda s: (self.kicks.append(s), self.kick_result)[1]
         self.kick_result = True
+        self._capped = fundamentals.capped
+        self.cap_spent = False
+        fundamentals.capped = lambda: self.cap_spent
 
     def tearDown(self):
         fundamentals.kick = self._kick
+        fundamentals.capped = self._capped
         fundamentals.CACHE_DIR = self._dir
         fundamentals._memo.clear()
         self.tmp.cleanup()
@@ -197,6 +201,44 @@ class FundamentalsEndpoint(unittest.TestCase):
                                  {"ts": time.time() - fundamentals.FAIL_TTL_SECONDS - 5,
                                   "reason": "sec_unavailable"})
         self.assertEqual(self.client.get("/api/fundamentals/NVDA").status_code, 202)
+
+    def test_a_spent_daily_allowance_is_a_message_not_a_spinner(self):
+        # Once today's builds are spent, a cold ticker must not be polled for a
+        # build that will not start until tomorrow -- and a cached one is still
+        # served.
+        self.cap_spent = True
+        resp = self.client.get("/api/fundamentals/NVDA")
+        self.assertEqual(resp.status_code, 503)
+        self.assertEqual(resp.get_json()["reason"], "daily_cap")
+        self.assertEqual(self.kicks, [])
+        fundamentals._write_json(fundamentals._path("AAPL"), _payload("AAPL"))
+        self.assertEqual(self.client.get("/api/fundamentals/AAPL").status_code, 200)
+
+    def test_the_cap_is_spent_by_a_build_and_then_refuses(self):
+        import tempfile as _tf
+        from ystocker import quota
+        saved = (quota.QUOTA_DIR, quota._LOCK_PATH, os.environ.get("FUNDAMENTALS_DAILY_BUILDS"))
+        quota.QUOTA_DIR = Path(_tf.mkdtemp())
+        quota._LOCK_PATH = quota.QUOTA_DIR / ".lock"
+        os.environ["FUNDAMENTALS_DAILY_BUILDS"] = "1"
+        fundamentals.kick, fundamentals.capped = self._kick, self._capped
+        real_start, threading.Thread.start = threading.Thread.start, lambda t: None
+        try:
+            fundamentals._last_start = 0.0
+            self.assertTrue(fundamentals.kick("ZZCAP1"))
+            fundamentals._release()
+            fundamentals._building.clear()
+            fundamentals._last_start = 0.0
+            self.assertFalse(fundamentals.kick("ZZCAP2"))       # the one build is spent
+            self.assertTrue(fundamentals.capped())
+        finally:
+            threading.Thread.start = real_start
+            fundamentals._building.clear()
+            quota.QUOTA_DIR, quota._LOCK_PATH = saved[0], saved[1]
+            if saved[2] is None:
+                os.environ.pop("FUNDAMENTALS_DAILY_BUILDS", None)
+            else:
+                os.environ["FUNDAMENTALS_DAILY_BUILDS"] = saved[2]
 
     def test_unavailable_is_an_answer(self):
         fundamentals._write_json(fundamentals._path("SPY"),
