@@ -3227,6 +3227,98 @@ def api_upcoming_earnings():
 
 
 # ---------------------------------------------------------------------------
+# Earnings calendar  (/earnings, /api/earnings)
+# Every US-listed company reporting in a week, from Nasdaq; see
+# ystocker/earnings_calendar.py. /api/upcoming-earnings above stays: it is the
+# followed companies' next dates, for /markets' card, from Yahoo's own fields.
+# ---------------------------------------------------------------------------
+
+
+def _followed_tickers() -> set[str]:
+    """Every ticker the rolling refresher follows, from the ticker cache."""
+    with _cache_lock:
+        snapshot = _cache or {}
+        return {t for group in snapshot.values() if isinstance(group, dict) for t in group}
+
+
+def _held_tickers() -> set[str]:
+    """The signed-in reader's own positions, or nothing.
+
+    Best effort, unlike /assets: the calendar is complete without it, so a
+    position store that cannot be read costs the highlight, not the page.
+    """
+    email = session.get("user_email")
+    if not email:
+        return set()
+    try:
+        from ystocker import portfolio
+
+        return {p["symbol"] for p in portfolio.load(email) if p.get("symbol")}
+    except Exception as exc:  # noqa: BLE001 - a highlight is not worth a 503
+        log.info("earnings: holdings not read for the calendar: %s", exc)
+        return set()
+
+
+@bp.route("/earnings")
+def earnings_page():
+    """The week's earnings calendar. The page draws itself from /api/earnings."""
+    log.info("GET /earnings")
+    return render_template("earnings.html")
+
+
+@bp.route("/api/earnings")
+def api_earnings():
+    """One week, Monday to Friday: who reports, the consensus, and -- once a
+    day has passed -- the reported EPS and the surprise.
+
+    ``?week=`` is any date in the week wanted; without it, the current week (the
+    coming one at a weekend). Outside the bounds the week is clamped, and the
+    response says so. Never fetches: a missing day is queued for the background
+    worker and the answer is 202 until every day of the week is in, with what is
+    already in. ``followed`` and ``held`` name the week's tickers the site
+    follows and the reader holds, so the page can mark them without the rows --
+    which are shared, cached copies -- being touched.
+    """
+    import datetime as _dt
+
+    from ystocker import earnings_calendar as ec
+
+    today = ec.today_et()
+    raw = (request.args.get("week") or "").strip()
+    try:
+        asked = _dt.date.fromisoformat(raw) if raw else None
+    except ValueError:
+        return jsonify({"error": "week must be a date, YYYY-MM-DD"}), 400
+    monday = ec.monday_of(asked) if asked else ec.default_week(today)
+    monday, clamped = ec.clamp_week(monday, today)
+    view = ec.week_view(monday)
+
+    present = {r["t"] for day in view["days"] for r in day["rows"]}
+    lo, hi = ec.week_bounds(today)
+    week = {
+        "start": monday.isoformat(),
+        "end": (monday + _dt.timedelta(days=4)).isoformat(),
+        "prev": (monday - _dt.timedelta(days=7)).isoformat() if monday > lo else None,
+        "next": (monday + _dt.timedelta(days=7)).isoformat() if monday < hi else None,
+        "current": ec.default_week(today).isoformat(),
+        "clamped": clamped,
+    }
+    pending = sum(1 for d in view["days"] if d["status"] == "pending")
+    body = {
+        "status": "warming" if pending else "ok",
+        "week": week,
+        "today": view["today"],
+        "days": view["days"],
+        "followed": sorted(present & _followed_tickers()),
+        "held": sorted(present & _held_tickers()),
+        "source": ec.SOURCE,
+    }
+    log.info("API earnings: week %s, %d companies, %d day(s) pending",
+             monday, len(present), pending)
+    return jsonify(body), (202 if pending else 200)
+
+
+# ---------------------------------------------------------------------------
 # Options walls endpoint  (/api/options/<ticker>)
 # Separated from /api/history so the price/stats page loads instantly.
 # Uses a ThreadPoolExecutor to fetch all expirations in parallel.

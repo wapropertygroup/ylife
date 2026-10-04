@@ -1,0 +1,356 @@
+{% extends "base.html" %}
+{% block title %}yStocker — Earnings calendar{% endblock %}
+{% block title_key %}earnings.page_title{% endblock %}
+
+{% block content %}
+<style>
+  /* Hand-written, as on /companies: every row is built in JS, and a Tailwind
+     class that only appears in a template literal can be missing from the
+     compiled bundle. Shared roles come from base.html's --t-* vocabulary;
+     beat/miss ink is light-first with .dark overriding. */
+  :root { --ec-up: #047857; --ec-down: #be123c; --ec-up-bg: rgba(16,185,129,.12); --ec-down-bg: rgba(244,63,94,.12); }
+  .dark { --ec-up: #34d399; --ec-down: #fb7185; --ec-up-bg: rgba(52,211,153,.14); --ec-down-bg: rgba(251,113,133,.14); }
+  .ec-week { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+  .ec-arrow {
+    width: 34px; height: 34px; border-radius: 10px; cursor: pointer; font-size: 16px; line-height: 1;
+    border: 1px solid var(--t-line-strong); background: var(--t-surface); color: var(--t-ink);
+  }
+  .ec-arrow:disabled { opacity: .35; cursor: default; }
+  .ec-arrow:not(:disabled):hover { border-color: var(--t-accent); color: var(--t-accent-ink); }
+  .ec-range { font-size: 15px; font-weight: 600; color: var(--t-ink-strong); min-width: 11rem; text-align: center; }
+  .ec-chip {
+    font-size: 12px; font-weight: 500; padding: 5px 11px; border-radius: 999px; cursor: pointer;
+    border: 1px solid var(--t-line-strong); background: transparent; color: var(--t-ink-muted);
+  }
+  .ec-chip:hover { color: var(--t-ink); border-color: var(--t-line-hover); }
+  .ec-chip.is-on { color: var(--t-accent-ink); border-color: var(--t-accent); background: rgba(99,102,241,.12); }
+  .ec-chip[hidden] { display: none; }
+  .ec-days { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; margin-bottom: 14px; }
+  .ec-day {
+    text-align: left; padding: 9px 10px; border-radius: 12px; cursor: pointer; min-width: 0;
+    border: 1px solid var(--t-line); background: var(--t-surface); color: inherit;
+  }
+  .ec-day:hover { border-color: var(--t-line-hover); }
+  .ec-day.is-on { border-color: var(--t-accent); box-shadow: 0 0 0 2px rgba(99,102,241,.18); }
+  .ec-day-head { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; }
+  .ec-day-name { font-size: 12px; font-weight: 600; color: var(--t-ink-strong); white-space: nowrap; }
+  .ec-day-name.is-today::after { content: " •"; color: var(--t-accent-ink); }
+  .ec-day-date { display: block; font-size: 11px; color: var(--t-ink-dim); white-space: nowrap; }
+  .ec-day-count { font-size: 18px; font-weight: 700; color: var(--t-ink-strong); font-variant-numeric: tabular-nums; }
+  .ec-day-top { margin-top: 3px; font: 600 10.5px/1.3 'JetBrains Mono', ui-monospace, monospace; color: var(--t-ink-dim);
+                white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ec-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 8px; }
+  .ec-search {
+    flex: 1 1 14rem; min-width: 0; padding: 7px 12px; border-radius: 999px; font-size: 13px;
+    border: 1px solid var(--t-line-strong); background: var(--t-surface); color: var(--t-ink-strong);
+  }
+  .ec-search:focus { outline: none; border-color: var(--t-accent); box-shadow: 0 0 0 3px rgba(99,102,241,.18); }
+  .ec-meta { font-size: 11.5px; color: var(--t-ink-dim); margin: 4px 0 12px; }
+  .ec-section { margin-bottom: 18px; }
+  .ec-list { border: 1px solid var(--t-line); border-radius: 12px; background: var(--t-surface); overflow: hidden; }
+  /* One grid for the head and every row, so the columns line up without a
+     table -- and the whole row can be the link. */
+  .ec-row, .ec-head {
+    display: grid; align-items: center; gap: 2px 12px; padding: 8px 12px;
+    grid-template-columns: 30px minmax(0, 1fr) 5.5rem 6.5rem 5.5rem 4.75rem;
+  }
+  .ec-head { font-size: 10.5px; font-weight: 600; color: var(--t-ink-dim); text-transform: uppercase;
+             letter-spacing: .03em; border-bottom: 1px solid var(--t-line); }
+  .ec-row { color: inherit; text-decoration: none; border-top: 1px solid var(--t-line); }
+  .ec-head + .ec-row { border-top: 0; }
+  .ec-row:hover { background: var(--t-surface-alt); }
+  .ec-num { text-align: right; font-variant-numeric: tabular-nums; font-size: 13px; color: var(--t-ink); white-space: nowrap; }
+  .ec-head .ec-num { font-size: 10.5px; color: var(--t-ink-dim); }
+  .ec-tile { width: 30px; height: 30px; border-radius: 8px; display: flex; align-items: center; justify-content: center;
+             font: 700 10.5px/1 'JetBrains Mono', ui-monospace, monospace; letter-spacing: -.03em; }
+  .ec-co { min-width: 0; }
+  .ec-ticker { font: 700 13px/1.2 'JetBrains Mono', ui-monospace, monospace; color: var(--t-ink-strong); }
+  .ec-name { display: block; font-size: 11.5px; color: var(--t-ink-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ec-badge { margin-left: 6px; font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 999px; vertical-align: 1px; }
+  .ec-badge.f { color: var(--t-accent-ink); background: rgba(99,102,241,.12); }
+  .ec-badge.h { color: #b45309; background: rgba(245,158,11,.14); }
+  .dark .ec-badge.h { color: #fbbf24; }
+  .ec-badge.w { color: var(--t-ink-muted); background: var(--t-surface-alt); font-weight: 500; }
+  .ec-sub { display: block; font-size: 10.5px; color: var(--t-ink-dim); }
+  .ec-up { color: var(--ec-up); }
+  .ec-down { color: var(--ec-down); }
+  .ec-pill { font-size: 11.5px; font-weight: 600; padding: 1px 6px; border-radius: 6px; }
+  .ec-pill.ec-up { background: var(--ec-up-bg); }
+  .ec-pill.ec-down { background: var(--ec-down-bg); }
+  .ec-empty { font-size: 13px; color: var(--t-ink-muted); padding: 18px 2px; }
+  .ec-empty[hidden] { display: none; }
+  .ec-note { font-size: 11px; color: var(--t-ink-dim); margin-top: 6px; }
+  @media (max-width: 720px) {
+    .ec-days { gap: 6px; }
+    .ec-day { padding: 8px 7px; }
+    .ec-day-head { flex-direction: column; align-items: flex-start; gap: 2px; }
+    .ec-day-count { font-size: 16px; }
+    .ec-day-top { display: none; }
+    .ec-row, .ec-head { grid-template-columns: 30px minmax(0, 1fr) 5.5rem 4.75rem; gap: 2px 10px; }
+    .ec-hide-sm { display: none; }
+  }
+</style>
+
+<div class="mb-4">
+  <h1 class="text-2xl sm:text-3xl font-bold grad-text" data-i18n="earnings.title">Earnings calendar</h1>
+  <p class="text-slate-500 dark:text-slate-400 text-sm mt-1" data-i18n="earnings.subtitle">Every US-listed company reporting this week, with the consensus it has to beat — and, once it has reported, whether it did. Open any for its quarterly history.</p>
+</div>
+
+<div class="ec-week">
+  <button type="button" id="ecPrev" class="ec-arrow" aria-label="Previous week" data-i18n-title="earnings.prev" title="Previous week">‹</button>
+  <div id="ecRange" class="ec-range">—</div>
+  <button type="button" id="ecNext" class="ec-arrow" aria-label="Next week" data-i18n-title="earnings.next" title="Next week">›</button>
+  <button type="button" id="ecThis" class="ec-chip" data-i18n="earnings.this_week">This week</button>
+</div>
+
+<div id="ecDays" class="ec-days" role="tablist" aria-label="Days"></div>
+
+<div class="ec-filters">
+  <button type="button" class="ec-chip" data-ec-cap="0" data-i18n="earnings.cap_all">All sizes</button>
+  <button type="button" class="ec-chip is-on" data-ec-cap="2e9" data-i18n="earnings.cap_2b">≥ $2B</button>
+  <button type="button" class="ec-chip" data-ec-cap="1e10" data-i18n="earnings.cap_10b">≥ $10B</button>
+  <button type="button" class="ec-chip" data-ec-cap="1e11" data-i18n="earnings.cap_100b">≥ $100B</button>
+  <button type="button" class="ec-chip" id="ecFollowed" data-i18n="earnings.followed">Followed</button>
+  <button type="button" class="ec-chip" id="ecHeld" data-i18n="earnings.held" hidden>My holdings</button>
+  <input id="ecSearch" class="ec-search" type="search" autocomplete="off" spellcheck="false"
+         placeholder="Filter by company or ticker" data-i18n-placeholder="earnings.search_ph">
+</div>
+<p id="ecMeta" class="ec-meta"></p>
+<div id="ecList"></div>
+<p id="ecEmpty" class="ec-empty" hidden></p>
+<p id="ecNote" class="ec-note"></p>
+
+<script>
+// The week comes from /api/earnings (ystocker/earnings_calendar.py): five days
+// of rows, largest company first, cached per day and refreshed in the
+// background. A day still being fetched answers 202 and the page polls, with a
+// bound, and always ends on a drawn state. Everything here is composed where
+// I18n.apply() cannot reach, so it re-renders on a language switch.
+(function () {
+  const F = id => document.getElementById(id);
+  const tr = (key, fallback) => (typeof I18n !== 'undefined' && I18n.t(key)) || fallback;
+  const zh = () => (document.documentElement.lang || '').indexOf('zh') === 0;
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g,
+    c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const HUES = [[99, 102, 241], [56, 189, 248], [52, 211, 153], [251, 191, 36],
+                [244, 114, 182], [167, 139, 250], [45, 212, 191], [251, 146, 60]];
+  const POLLS = 20, POLL_MS = 3000;
+
+  const params = new URLSearchParams(location.search);
+  let state = { week: params.get('week') || '', day: params.get('day') || '' };
+  let data = null, polls = 0, timer = null, failed = false;
+  let minCap = (() => { const v = localStorage.getItem('earnings_cap'); return v === null ? 2e9 : Number(v) || 0; })();
+  let onlyFollowed = false, onlyHeld = false;
+
+  function tile(t) {
+    let h = 0;
+    for (const c of t) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+    const [r, g, b] = HUES[h % HUES.length];
+    return `<span class="ec-tile" style="background: rgba(${r},${g},${b},.16); color: rgb(${r},${g},${b})">${esc(t.replace(/[-.].*$/, '').slice(0, 4))}</span>`;
+  }
+  const date = iso => new Date(iso + 'T12:00:00Z');
+  const fmtDay = (iso, opts) => date(iso).toLocaleDateString(zh() ? 'zh-CN' : 'en-US', Object.assign({ timeZone: 'UTC' }, opts));
+  function fmtCap(v) {
+    if (typeof v !== 'number' || !(v > 0)) return '—';
+    if (v >= 1e12) return '$' + (v / 1e12).toFixed(2) + 'T';
+    if (v >= 1e9) return '$' + (v / 1e9).toFixed(v >= 1e11 ? 0 : 1) + 'B';
+    return '$' + (v / 1e6).toFixed(0) + 'M';
+  }
+  const fmtEps = v => typeof v === 'number' ? (v < 0 ? '−$' + Math.abs(v).toFixed(2) : '$' + v.toFixed(2)) : '—';
+  const fmtPct = v => (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v).toFixed(1) + '%';
+
+  function load() {
+    clearTimeout(timer);
+    const q = state.week ? '?week=' + encodeURIComponent(state.week) : '';
+    fetch('/api/earnings' + q, { credentials: 'same-origin' })
+      .then(r => r.json().then(body => ({ status: r.status, body })))
+      .then(({ status, body }) => {
+        if (!body || !body.week) throw new Error('bad payload');
+        data = body; failed = false;
+        state.week = body.week.start;
+        if (!state.day || state.day < body.week.start || state.day > body.week.end) state.day = pickDay(body);
+        render();
+        if (status === 202 && ++polls < POLLS) timer = setTimeout(load, POLL_MS);
+      })
+      .catch(() => { failed = true; render(); });
+  }
+
+  // Today if it falls in the week, else the first day with anyone reporting.
+  function pickDay(body) {
+    const inWeek = body.days.find(d => d.date === body.today);
+    if (inWeek) return inWeek.date;
+    const busy = body.days.find(d => d.rows.length);
+    return (busy || body.days[0]).date;
+  }
+
+  const followed = () => new Set((data && data.followed) || []);
+  const held = () => new Set((data && data.held) || []);
+  function visible(rows) {
+    const q = F('ecSearch').value.trim().toLowerCase();
+    const f = followed(), h = held();
+    return rows.filter(r => (!minCap || (r.cap || 0) >= minCap || h.has(r.t))
+      && (!onlyFollowed || f.has(r.t))
+      && (!onlyHeld || h.has(r.t))
+      && (!q || r.t.toLowerCase().startsWith(q) || (r.n || '').toLowerCase().includes(q)));
+  }
+
+  function syncUrl() {
+    const u = new URL(location.href);
+    u.searchParams.set('week', state.week);
+    u.searchParams.set('day', state.day);
+    history.replaceState(null, '', u.pathname + '?' + u.searchParams.toString());
+  }
+
+  function renderDays() {
+    F('ecDays').innerHTML = data.days.map(d => {
+      const rows = visible(d.rows);
+      const top = rows.slice(0, 3).map(r => r.t).join(' ');
+      // Weekday, date and count as three short pieces rather than one long
+      // locale string: 10月12日星期一 left no room for the count on a phone.
+      const wd = fmtDay(d.date, { weekday: 'short' });
+      const md = fmtDay(d.date, { month: 'short', day: 'numeric' });
+      const count = d.status === 'ok' ? rows.length : '…';
+      return `<button type="button" role="tab" class="ec-day${d.date === state.day ? ' is-on' : ''}" data-ec-day="${d.date}"
+                aria-selected="${d.date === state.day}">
+        <span class="ec-day-head"><span><span class="ec-day-name${d.date === data.today ? ' is-today' : ''}">${esc(wd)}</span>
+          <span class="ec-day-date">${esc(md)}</span></span>
+          <span class="ec-day-count">${count}</span></span>
+        <span class="ec-day-top">${esc(top) || '&nbsp;'}</span>
+      </button>`;
+    }).join('');
+  }
+
+  function row(r, past, f, h) {
+    const badges = (h.has(r.t) ? `<span class="ec-badge h" title="${esc(tr('earnings.held_badge', 'you hold this'))}">◆</span>` : '')
+      + (f.has(r.t) ? `<span class="ec-badge f" title="${esc(tr('earnings.followed_badge', 'followed'))}">★</span>` : '')
+      + (r.when ? `<span class="ec-badge w">${esc(r.when === 'bmo' ? tr('earnings.bmo', 'Before open') : tr('earnings.amc', 'After close'))}</span>` : '');
+    const fq = r.fq ? tr('earnings.fq', 'quarter ending {q}').replace('{q}', r.fq) : '';
+    const ests = typeof r.ests === 'number' ? tr('earnings.ests', '{n} estimates').replace('{n}', r.ests) : '';
+    const head = `${tile(r.t)}
+      <span class="ec-co"><span class="ec-ticker">${esc(r.t)}</span>${badges}
+        <span class="ec-name" title="${esc(r.n + (fq ? ' · ' + fq : ''))}">${esc(r.n)}</span></span>
+      <span class="ec-num ec-hide-sm">${fmtCap(r.cap)}</span>`;
+    let cells;
+    if (past) {
+      const cls = r.beat > 0 ? 'ec-up' : r.beat < 0 ? 'ec-down' : '';
+      const surp = typeof r.surp === 'number' ? `<span class="ec-pill ${cls}">${fmtPct(r.surp)}</span>`
+        : r.beat === 0 ? `<span class="ec-sub">${esc(tr('earnings.in_line', 'in line'))}</span>` : '—';
+      cells = `<span class="ec-num"><span class="${cls}">${fmtEps(r.eps)}</span></span>
+        <span class="ec-num ec-hide-sm">${fmtEps(r.est)}${ests ? `<span class="ec-sub">${esc(ests)}</span>` : ''}</span>
+        <span class="ec-num">${surp}</span>`;
+    } else {
+      const g = typeof r.g === 'number' ? `<span class="${r.g > 0 ? 'ec-up' : r.g < 0 ? 'ec-down' : ''}">${fmtPct(r.g)}</span>`
+        : (typeof r.ly === 'number' && r.ly <= 0 && typeof r.est === 'number'
+           ? `<span class="ec-sub" title="${esc(tr('earnings.growth_nm', 'Not meaningful: last year was a loss'))}">n/m</span>` : '—');
+      const ly = r.ly_date ? tr('earnings.ly_reported', 'reported {d}').replace('{d}', fmtDay(r.ly_date, { month: 'short', day: 'numeric', year: 'numeric' })) : '';
+      cells = `<span class="ec-num">${fmtEps(r.est)}${ests ? `<span class="ec-sub">${esc(ests)}</span>` : ''}</span>
+        <span class="ec-num ec-hide-sm" title="${esc(ly)}">${fmtEps(r.ly)}</span>
+        <span class="ec-num">${g}</span>`;
+    }
+    return `<a class="ec-row" href="/history/${encodeURIComponent(r.t)}?tab=fundamentals">${head}${cells}</a>`;
+  }
+
+  function header(past) {
+    const c = (k, f, cls) => `<span class="ec-num${cls || ''}">${esc(tr(k, f))}</span>`;
+    return `<div class="ec-head"><span></span><span>${esc(tr('earnings.col_company', 'Company'))}</span>
+      ${c('earnings.col_cap', 'Mkt cap', ' ec-hide-sm')}
+      ${past ? c('earnings.col_reported', 'Reported') + c('earnings.col_est', 'EPS est.', ' ec-hide-sm') + c('earnings.col_surprise', 'Surprise')
+             : c('earnings.col_est', 'EPS est.') + c('earnings.col_ly', 'Last year', ' ec-hide-sm') + c('earnings.col_growth', 'Growth')}
+    </div>`;
+  }
+
+  function renderList() {
+    const day = data.days.find(d => d.date === state.day) || data.days[0];
+    const empty = F('ecEmpty');
+    const list = F('ecList');
+    const meta = [];
+    meta.push(fmtDay(day.date, { weekday: 'long', month: 'long', day: 'numeric' }));
+    if (day.status !== 'ok') {
+      list.innerHTML = '';
+      empty.hidden = false;
+      empty.textContent = day.status === 'failed' || polls >= POLLS
+        ? tr('earnings.failed_day', 'This day could not be loaded. Try again in a few minutes.')
+        : tr('earnings.pending_day', 'Still loading this day…');
+      F('ecMeta').textContent = meta.join(' · ');
+      return;
+    }
+    const rows = visible(day.rows);
+    // A day is "past" once it carries reported figures: the same request drops
+    // the time of day and last year's EPS then, so the columns change with it.
+    const past = day.rows.some(r => typeof r.eps === 'number' || typeof r.surp === 'number');
+    meta.push(tr('earnings.count', '{n} companies').replace('{n}', rows.length.toLocaleString()));
+    if (past) {
+      const rep = rows.filter(r => r.beat !== null && r.beat !== undefined);
+      const beats = rep.filter(r => r.beat > 0).length, misses = rep.filter(r => r.beat < 0).length;
+      if (rep.length) meta.push(tr('earnings.beat_summary', '{r} with a consensus: {b} beat ({p}%), {m} missed')
+        .replace('{r}', rep.length).replace('{b}', beats).replace('{p}', Math.round(beats / rep.length * 100)).replace('{m}', misses));
+    }
+    F('ecMeta').textContent = meta.join(' · ');
+    if (!rows.length) {
+      list.innerHTML = '';
+      empty.hidden = false;
+      empty.textContent = day.rows.length ? tr('earnings.none_filter', 'Nothing on this day matches the filter.')
+        : tr('earnings.none_day', 'No company reports on this day.');
+      return;
+    }
+    empty.hidden = true;
+    const f = followed(), h = held();
+    // One list, largest first, with the time of day as a badge. Grouping by the
+    // time buried the day's biggest names: on 2026-10-29, 249 of 307 rows had
+    // no time supplied -- Apple, Amazon and Mastercard among them -- and sat
+    // under 42 smaller pre-market reporters.
+    list.innerHTML = `<section class="ec-section"><div class="ec-list">${header(past)}${rows.map(r => row(r, past, f, h)).join('')}</div></section>`;
+  }
+
+  function render() {
+    if (!data) {
+      F('ecMeta').textContent = failed ? tr('earnings.failed', 'The calendar is unavailable right now.')
+        : tr('earnings.loading', 'Loading the calendar…');
+      return;
+    }
+    const w = data.week;
+    const a = fmtDay(w.start, { month: 'short', day: 'numeric' }), b = fmtDay(w.end, { month: 'short', day: 'numeric', year: 'numeric' });
+    F('ecRange').textContent = a + ' – ' + b;
+    F('ecPrev').disabled = !w.prev;
+    F('ecNext').disabled = !w.next;
+    F('ecThis').classList.toggle('is-on', w.start === w.current);
+    F('ecHeld').hidden = !(data.held || []).length;
+    document.querySelectorAll('[data-ec-cap]').forEach(b2 => b2.classList.toggle('is-on', Number(b2.dataset.ecCap) === minCap));
+    F('ecFollowed').classList.toggle('is-on', onlyFollowed);
+    F('ecHeld').classList.toggle('is-on', onlyHeld);
+    renderDays();
+    renderList();
+    const stamp = Math.max(0, ...data.days.map(d => d.as_of || 0));
+    const note = [tr('earnings.source', 'Source: Nasdaq, with the Zacks consensus · updated {t}')
+      .replace('{t}', stamp ? I18n.datetime(stamp) : '—')];
+    if (w.clamped) note.push(tr('earnings.clamped', 'The calendar covers eight weeks either side of today, so the nearest week is shown.'));
+    F('ecNote').textContent = note.join(' · ');
+    syncUrl();
+  }
+
+  function go(week) { state.week = week; state.day = ''; polls = 0; data = data && Object.assign({}, data); load(); }
+  F('ecPrev').addEventListener('click', () => data && data.week.prev && go(data.week.prev));
+  F('ecNext').addEventListener('click', () => data && data.week.next && go(data.week.next));
+  F('ecThis').addEventListener('click', () => data && go(data.week.current));
+  F('ecDays').addEventListener('click', e => {
+    const b = e.target.closest('[data-ec-day]');
+    if (!b) return;
+    state.day = b.dataset.ecDay;
+    render();
+  });
+  document.addEventListener('click', e => {
+    const b = e.target.closest('[data-ec-cap]');
+    if (!b) return;
+    minCap = Number(b.dataset.ecCap) || 0;
+    localStorage.setItem('earnings_cap', String(minCap));
+    render();
+  });
+  F('ecFollowed').addEventListener('click', () => { onlyFollowed = !onlyFollowed; render(); });
+  F('ecHeld').addEventListener('click', () => { onlyHeld = !onlyHeld; render(); });
+  F('ecSearch').addEventListener('input', () => data && render());
+  document.addEventListener('i18n:langchange', () => render());
+  render();
+  load();
+})();
+</script>
+{% endblock %}

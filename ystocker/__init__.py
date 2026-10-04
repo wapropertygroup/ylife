@@ -534,6 +534,11 @@ def create_app() -> Flask:
     from ystocker.directory import start_background_thread as _start_directory_thread
     _start_directory_thread()
 
+    # Who reports earnings when (/earnings): Nasdaq's calendar, one request a
+    # day for last week to three weeks ahead. See ystocker/earnings_calendar.py.
+    from ystocker.earnings_calendar import start_background_thread as _start_earnings_calendar_thread
+    _start_earnings_calendar_thread()
+
     # Start markets cache warm-up (pre-fetches index/VIX/sector data every 5 min)
     _start_markets_warmup_thread(app)
     # Keeps the long ^GSPC series off the request path; see its docstring for the

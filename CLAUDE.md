@@ -302,6 +302,10 @@ Each app follows the same pattern:
 - `directory.py` — every company listed with the SEC, for `/companies`' full
   directory: SEC's `company_tickers_exchange.json`, daily, one card per filer.
   `parse` is pure. See "The Fundamentals tab" below.
+- `earnings_calendar.py` — `/earnings`: every US-listed company reporting in a
+  week, with the consensus and, once reported, the surprise, from Nasdaq's
+  keyless calendar API. `parse_day` and the date rules are pure. See "The
+  earnings calendar" below.
 - `predictions.py` / `odds.py` / `odds_ai.py` / `odds_ledger.py` — `/predictions`:
   live Polymarket and Kalshi odds, the Fed decision three ways (futures vs both
   venues), and the AI read with its scored track record. `odds.py` is pure. See
@@ -2077,6 +2081,74 @@ payloads use `day_chg` vs `day_chg_pct`, `ytd` vs `ret_ytd`, `pct` vs `pct_dec`)
 The `tests/check_brief_*.py` scripts are diagnostics that need live caches, a
 Flask app, or a Gemini key, and are named `check_` so `unittest discover` skips
 them; `check_brief_live.py` does one real generation and prints it.
+
+### The earnings calendar (`/earnings`)
+
+Added 2026-10-04. The page shows one week, Monday to Friday, of every US-listed
+company reporting. Each row has the consensus EPS (Zacks, via Nasdaq), how many
+estimates make it up, last year's EPS and the growth that implies. Once a day
+has passed, it shows the reported EPS, the surprise and the day's beat rate.
+Rows are largest first, with market-cap, Followed and My-holdings filters, and
+every row opens that company's Fundamentals tab. `/markets`' "Reporting soon"
+card (`/api/upcoming-earnings`, `earnings.py`) is unchanged: it gives the
+followed companies' next dates from Yahoo's own fields, and now links here.
+
+**One request per day, from Nasdaq**
+(`api.nasdaq.com/api/calendar/earnings?date=`). Measured from the box on
+2026-10-04: 307 companies on Oct 29, 188 on Oct 27, 15 on Oct 13, none at a
+weekend. The client matters:
+
+- With no User-Agent, a plain `requests` call hangs until it times out.
+- With a browser User-Agent it is answered, but in 2–3 s.
+- curl_cffi impersonating Chrome, already installed for yfinance, is answered
+  in 0.03–0.14 s. `earnings_calendar._http()` uses it, behind the `nasdaq`
+  breaker in fetchguard.
+
+The laptop cannot reach the API. Fetch real days on the box.
+
+**A past day is a different shape, not a superset.** The same request returns
+the reported EPS and the surprise after the fact, and drops the time of day and
+last year's figures. `parse_day` reads whichever fields are present. The page
+switches columns per day: estimate, last year and growth before; reported,
+estimate and surprise after. Money arrives as text. `($0.05)` is a loss and a
+blank is absent, never zero. Growth from a loss is `None` ("n/m"), not +200%.
+Share classes come as `GEF.B` and are rewritten to Yahoo's `GEF-B` by
+`portfolio_csv`'s narrow rule, so the /history link resolves.
+
+**One list, largest first, with the time of day as a badge.** Grouping by time
+buried the biggest names. On 2026-10-29, 249 of 307 rows had no time supplied,
+Apple, Amazon and Mastercard among them, and they sat under 42 smaller
+pre-market reporters.
+
+**The request path never fetches.** There is one file per day in
+`cache/earnings_calendar/`:
+
+- Future days are re-read every 6 h.
+- The three days up to today are re-read hourly, since that is when actuals
+  land.
+- An older day is final once it has been read three days after the fact.
+
+A missing day is queued for one worker per process, paced 1 s apart, and the
+API answers 202 with whatever days are already in. The page polls 20 times, 3 s
+apart, and ends on a drawn state. A failed day is not queued again for 10
+minutes, so a polling page cannot turn one failure into a request every few
+seconds. A busy day that comes back empty keeps its copy, because the vendor's
+"no rows" looks the same as a glitch. The background thread keeps last week to
+three weeks ahead fresh: about 25 requests cold, then a handful an hour. Weeks
+are clamped to ±8 around today, so a crawler walking `?week=` back to 1990 is
+answered with the nearest allowed week rather than fetched.
+
+**It is in the Companies section, not the nav row.** The header fits 13 links at
+its 1320px switch point with 19px to spare. A fourteenth link would push 1440px
+laptops onto the compact menu. So `/earnings` marks Companies as current, as a
+sector page marks Valuation. It is linked from the mobile drawer, both footers
+and the `/markets` card. `held` comes from the reader's `/assets` positions,
+best effort: an unreadable store costs the highlight, not the page.
+
+Tests: `tests/test_earnings_calendar.py` (21, Nasdaq's real rows: losses,
+blanks, share classes, the dates, the cache) and
+`tests/check_earnings_endpoints.py` (7, hermetic). Not a DynamoDB table: every
+day can be fetched again.
 
 ### Prediction markets (`/predictions`)
 
