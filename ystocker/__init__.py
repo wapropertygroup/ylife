@@ -39,7 +39,7 @@ PEER_GROUPS: dict[str, list[str]] = {
     "Retail":            ["WMT", "AMZN", "COST", "TGT", "HD", "LOW", "TJX", "DG"],
     "E-commerce":        ["AMZN", "SHOP", "MELI", "EBAY", "ETSY", "CHWY", "W", "PDD", "JD",
                          "BABA", "DASH"],
-    "Streaming / Media": ["NFLX", "DIS", "PARA", "CMCSA", "SPOT", "ROKU", "FUBO", "TME",
+    "Streaming / Media": ["NFLX", "DIS", "PSKY", "CMCSA", "SPOT", "ROKU", "FUBO", "TME",
                          "BIDU", "FOX", "WBD"],
     "Real Estate":       ["AMT", "PLD", "EQIX", "SPG", "O", "DLR", "PSA", "WELL", "SEG"],
     "Metals & Mining":   ["FCX", "NEM", "BHP", "RIO", "VALE", "GOLD", "SCCO", "WPM", "TECK"],
@@ -121,6 +121,15 @@ REQUIRED_GROUPS: frozenset[str] = frozenset({
 })
 
 
+# Symbols Yahoo has handed to a different company. A saved peer-group file keeps
+# a symbol for ever, so without this a group goes on tracking whatever trades
+# under the old name now -- and nothing errors, because that is a real quote.
+# PARA has been Banzai International (a $2M shell: P/E 0.03, cap 0.0) since
+# Paramount merged with Skydance and moved to PSKY; "Lowest P/E first" on
+# /companies put it at the top as the cheapest stock on the site.
+SYMBOL_RENAMES: dict[str, str] = {"PARA": "PSKY"}
+
+
 def merge_saved_groups(saved: dict[str, list[str]],
                        defaults: dict[str, list[str]]) -> dict[str, list[str]]:
     """Combine a saved peer-group file with the code defaults.
@@ -128,12 +137,18 @@ def merge_saved_groups(saved: dict[str, list[str]],
     The saved copy wins for everything a user browses, which is the long-standing
     behaviour of the /groups UI. :data:`REQUIRED_GROUPS` are the exception: those
     are unioned, defaults first, so a group a computed feature depends on cannot
-    be starved by a file written before that feature existed.
+    be starved by a file written before that feature existed. A symbol in
+    :data:`SYMBOL_RENAMES` is replaced by the one its company trades under now.
 
     Pure and I/O-free so it can be tested without importing ``routes`` (which
     pulls in matplotlib). ``routes._load_groups`` supplies the file handling.
     """
-    merged: dict[str, list[str]] = {name: list(tickers) for name, tickers in saved.items()}
+    # Renamed in place, keeping the user's order; a file holding both the old
+    # and the new symbol keeps one.
+    merged: dict[str, list[str]] = {
+        name: list(dict.fromkeys(SYMBOL_RENAMES.get(t, t) for t in tickers))
+        for name, tickers in saved.items()
+    }
     for name in REQUIRED_GROUPS:
         want = defaults.get(name)
         if not want:

@@ -420,6 +420,20 @@ class RequiredGroupReconciliation(unittest.TestCase):
         group = got["Semiconductors"]
         self.assertEqual(len(group), len(set(group)))
 
+    def test_a_reassigned_symbol_is_renamed_in_a_saved_file(self):
+        """PARA quotes a $2M shell now; the box's saved file still says PARA."""
+        got = self._run_load({"Streaming / Media": ["NFLX", "PARA", "DIS"]})
+        self.assertEqual(got["Streaming / Media"], ["NFLX", "PSKY", "DIS"])
+
+    def test_a_file_holding_both_names_keeps_one(self):
+        got = self._run_load({"Streaming / Media": ["PSKY", "PARA"]})
+        self.assertEqual(got["Streaming / Media"], ["PSKY"])
+
+    def test_no_default_group_still_carries_a_renamed_symbol(self):
+        from ystocker import SYMBOL_RENAMES
+        held = {t for group in self.defaults.values() for t in group}
+        self.assertFalse(held & set(SYMBOL_RENAMES), held & set(SYMBOL_RENAMES))
+
     def test_every_required_group_actually_exists_in_the_defaults(self):
         """A typo in REQUIRED_GROUPS would be a silent no-op."""
         for name in self.REQUIRED:
