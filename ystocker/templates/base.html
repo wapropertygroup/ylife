@@ -574,7 +574,7 @@
         ('main.markets',          'markets.nav',     'Markets',     '',                     '',                   ('main.markets',)),
         ('main.evaluation',       'nav.home',        'Valuation',   '',                     '',                   ('main.evaluation', 'main.sector')),
         ('main.dca_index',        'nav.dca',         'DCA',         '',                     '',                   ('main.dca_index', 'main.dca_page')),
-        ('main.companies',        'nav.companies',   'Companies',   '',                     '',                   ('main.companies', 'main.earnings_page')),
+        ('main.companies',        'nav.companies',   'Companies',   '',                     '',                   ('main.companies', 'main.earnings_page', 'main.insiders_page')),
         ('main.commodities',      'nav.commodities', 'Commodities', '',                     '',                   ('main.commodities',)),
         ('main.thirteenf',        'nav.thirteenf',   '13F',         '',                     '',                   ('main.thirteenf',)),
         ('main.fed',              'nav.fed',         'Fed',         'nav.fed_long',         'Fed Balance Sheet',  ('main.fed',)),
@@ -826,6 +826,7 @@
         <a href="{{ url_for('main.dca_index') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800" data-i18n="nav.dca">DCA</a>
         <a href="{{ url_for('main.companies') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800" data-i18n="nav.companies">Companies</a>
         <a href="{{ url_for('main.earnings_page') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800" data-i18n="nav.earnings">Earnings calendar</a>
+        <a href="{{ url_for('main.insiders_page') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800" data-i18n="nav.insiders">Insider trades</a>
         {#
           Commodities collapses and the remaining links sit in a two-column
           grid. Flat, the menu once measured 1279px on an 844px screen, 516px of
@@ -1023,6 +1024,8 @@
     </a>
     &nbsp;·&nbsp;
     <a href="{{ url_for('main.earnings_page') }}" class="hover:text-brand transition" data-i18n="nav.earnings">Earnings calendar</a>
+    &nbsp;·&nbsp;
+    <a href="{{ url_for('main.insiders_page') }}" class="hover:text-brand transition" data-i18n="nav.insiders">Insider trades</a>
     &nbsp;·&nbsp; <span data-i18n="footer.copyright">© 2025 {{ brand_name }}. All rights reserved.</span>
   </footer>
   {% endif %}

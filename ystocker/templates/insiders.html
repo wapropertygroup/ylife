@@ -1,0 +1,554 @@
+{% extends "base.html" %}
+{% block title %}yStocker — Insider trades{% endblock %}
+{% block title_key %}insiders.page_title{% endblock %}
+
+{% block content %}
+<style>
+  /* Hand-written, as on /earnings: every row and card is built in JS, and a
+     Tailwind class that only appears in a template literal can be missing
+     from the compiled bundle. Shared roles come from base.html's --t-*
+     vocabulary; buy/sell ink is light-first with .dark overriding. */
+  :root { --in-up: #047857; --in-down: #be123c; --in-up-bg: rgba(16,185,129,.12); --in-down-bg: rgba(244,63,94,.12);
+          --in-amber: #b45309; --in-amber-bg: rgba(245,158,11,.14); }
+  .dark { --in-up: #34d399; --in-down: #fb7185; --in-up-bg: rgba(52,211,153,.14); --in-down-bg: rgba(251,113,133,.14);
+          --in-amber: #fbbf24; }
+  .in-summary { font-size: 14px; line-height: 1.55; color: var(--t-ink); margin: 0 0 12px; }
+  .in-summary b { color: var(--t-ink-strong); font-weight: 600; }
+  .in-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-bottom: 12px; }
+  .in-group { display: flex; flex-wrap: wrap; gap: 6px; }
+  .in-chip {
+    font-size: 12px; font-weight: 500; padding: 5px 11px; border-radius: 999px; cursor: pointer; line-height: 1.3;
+    border: 1px solid var(--t-line-strong); background: transparent; color: var(--t-ink-muted);
+  }
+  .in-chip:hover { color: var(--t-ink); border-color: var(--t-line-hover); }
+  .in-chip.is-on { color: var(--t-accent-ink); border-color: var(--t-accent); background: rgba(99,102,241,.12); }
+  .in-chip[hidden] { display: none; }
+  .in-search {
+    flex: 1 1 16rem; min-width: 0; padding: 7px 12px; border-radius: 999px; font-size: 13px;
+    border: 1px solid var(--t-line-strong); background: var(--t-surface); color: var(--t-ink-strong);
+  }
+  .in-search:focus { outline: none; border-color: var(--t-accent); box-shadow: 0 0 0 3px rgba(99,102,241,.18); }
+  .in-section { margin-bottom: 18px; }
+  .in-section[hidden], .in-lookup[hidden], .in-empty[hidden], .in-more[hidden] { display: none; }
+  .in-h2 { display: flex; align-items: baseline; gap: 8px; font-size: 15px; font-weight: 600; color: var(--t-ink-strong); margin: 0 0 2px; }
+  .in-count { font-size: 12px; font-weight: 600; color: var(--t-ink-dim); }
+  .in-note { font-size: 11.5px; line-height: 1.5; color: var(--t-ink-dim); margin: 2px 0 10px; }
+  .in-meta { font-size: 11.5px; color: var(--t-ink-dim); margin: 0 0 8px; }
+  .in-empty { font-size: 13px; color: var(--t-ink-muted); padding: 14px 2px; }
+
+  /* Cluster buys: a card per company. */
+  .in-clusters { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+  .in-cluster { min-width: 0; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--t-line); background: var(--t-surface); }
+  .in-cl-head { display: flex; align-items: center; gap: 10px; min-width: 0; color: inherit; text-decoration: none; }
+  .in-cl-head:hover .in-ticker { color: var(--t-accent-ink); }
+  .in-cl-stats { margin: 7px 0 4px; font-size: 12px; color: var(--t-ink-muted); }
+  .in-cl-stats b { color: var(--t-ink-strong); }
+  .in-cl-who { list-style: none; margin: 0; padding: 0; }
+  .in-cl-who li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0 10px; align-items: baseline;
+                  padding: 4px 0; border-top: 1px dashed var(--t-line); font-size: 12px; color: var(--t-ink); }
+  .in-cl-who .in-role { grid-column: 1 / -1; }
+
+  /* One grid for the head and every row, so the columns line up without a
+     table. The company cell is the link: a row holds a second link (the
+     filing), and a link inside a link is invalid. */
+  .in-list { border: 1px solid var(--t-line); border-radius: 12px; background: var(--t-surface); overflow: hidden; }
+  .in-row, .in-head {
+    display: grid; align-items: center; gap: 2px 12px; padding: 8px 12px;
+    grid-template-columns: 8.4rem minmax(0, 1.1fr) minmax(0, 1.4fr) 6.2rem 5.6rem 6.4rem 4.6rem;
+  }
+  .in-head { font-size: 10.5px; font-weight: 600; color: var(--t-ink-dim); text-transform: uppercase;
+             letter-spacing: .03em; border-bottom: 1px solid var(--t-line); }
+  .in-row { border-top: 1px solid var(--t-line); }
+  .in-head + .in-row { border-top: 0; }
+  .in-row:hover { background: var(--t-surface-alt); }
+  .in-num { text-align: right; font-variant-numeric: tabular-nums; font-size: 13px; color: var(--t-ink); white-space: nowrap; }
+  .in-head .in-num { font-size: 10.5px; color: var(--t-ink-dim); }
+  .in-date { min-width: 0; font-size: 12.5px; color: var(--t-ink-strong); font-variant-numeric: tabular-nums; }
+  .in-when { white-space: nowrap; }
+  .in-sub { display: block; font-size: 10.5px; color: var(--t-ink-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  a.in-sub, .in-sub a { color: var(--t-ink-dim); text-decoration: none; }
+  a.in-sub:hover, .in-sub a:hover { color: var(--t-accent-ink); text-decoration: underline; }
+  .in-kind { display: inline-block; margin-right: 5px; font-size: 10px; font-weight: 700; padding: 1px 5px; border-radius: 5px;
+             vertical-align: 1px; text-transform: uppercase; letter-spacing: .02em; }
+  .in-kind.buy { color: var(--in-up); background: var(--in-up-bg); }
+  .in-kind.sell { color: var(--in-down); background: var(--in-down-bg); }
+  .in-kind.other { color: var(--t-ink-muted); background: var(--t-surface-alt); }
+  .in-co { display: flex; align-items: center; gap: 10px; min-width: 0; color: inherit; text-decoration: none; }
+  .in-co:hover .in-ticker { color: var(--t-accent-ink); }
+  .in-tile { flex: none; width: 30px; height: 30px; border-radius: 8px; display: flex; align-items: center; justify-content: center;
+             font: 700 10.5px/1 'JetBrains Mono', ui-monospace, monospace; letter-spacing: -.03em; }
+  .in-co-txt { min-width: 0; }
+  .in-ticker { font: 700 13px/1.2 'JetBrains Mono', ui-monospace, monospace; color: var(--t-ink-strong); }
+  .in-name { display: block; font-size: 11.5px; color: var(--t-ink-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .in-who { min-width: 0; font-size: 13px; }
+  .in-owner { font-size: 13px; color: var(--t-ink-strong); }
+  .in-joint { font-size: 11.5px; color: var(--t-ink-dim); white-space: nowrap; }
+  .in-role { display: block; font-size: 11px; color: var(--t-ink-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .in-badge { display: inline-block; margin-left: 6px; font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 999px;
+              vertical-align: 1px; white-space: nowrap; }
+  .in-badge.h { color: var(--in-amber); background: var(--in-amber-bg); }
+  .in-badge.f { color: var(--t-accent-ink); background: rgba(99,102,241,.12); }
+  .in-badge.p { color: var(--t-ink-muted); background: var(--t-surface-alt); border: 1px solid var(--t-line); }
+  .in-badge.a { color: var(--t-ink-muted); background: var(--t-surface-alt); }
+  .in-badge.o { color: var(--in-amber); background: var(--in-amber-bg); }
+  .in-up { color: var(--in-up); }
+  .in-down { color: var(--in-down); }
+  .in-dim { color: var(--t-ink-dim); }
+  .in-meta-sm { display: none; }
+  .in-more { margin-top: 10px; }
+
+  /* The look-up of a company outside the feed, opened from the search box. */
+  .in-lookup { margin-bottom: 16px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--t-accent-line); background: var(--t-surface); }
+  .in-lookup-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 6px; }
+  .in-lookup-title { font-size: 14px; font-weight: 600; color: var(--t-ink-strong); min-width: 0; }
+  .in-lookup .in-list { margin-top: 6px; }
+  .in-x { flex: none; width: 28px; height: 28px; border-radius: 8px; cursor: pointer; font-size: 15px; line-height: 1;
+          border: 1px solid var(--t-line-strong); background: transparent; color: var(--t-ink-muted); }
+  .in-x:hover { color: var(--t-ink); border-color: var(--t-line-hover); }
+
+  @media (max-width: 1080px) {
+    .in-row, .in-head { grid-template-columns: 8rem minmax(0, 1fr) minmax(0, 1.3fr) 6.2rem 4.6rem; }
+    .in-hide-md { display: none; }
+  }
+  /* A phone gets three lines per trade: company and value, insider and
+     stake, then the date, the size and the filing. Seven columns at 390px
+     would be a horizontal scroll, which a feed should never need. */
+  @media (max-width: 720px) {
+    .in-head { display: none; }
+    .in-row { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "co val" "who st" "meta meta"; gap: 3px 10px; padding: 9px 10px; }
+    .in-row > .in-date, .in-row > .in-hide-md { display: none; }
+    .in-row > .in-co { grid-area: co; }
+    .in-row > .in-who { grid-area: who; }
+    .in-row > .in-val { grid-area: val; }
+    .in-row > .in-st { grid-area: st; font-size: 12px; }
+    .in-row > .in-meta-sm { grid-area: meta; display: block; font-size: 11px; color: var(--t-ink-dim); min-width: 0;
+                            white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .in-role { white-space: normal; }
+    .in-controls { gap: 8px; }
+    .in-search { flex-basis: 100%; }
+    .in-clusters { grid-template-columns: minmax(0, 1fr); }
+  }
+</style>
+
+<div class="mb-4">
+  <h1 class="text-2xl sm:text-3xl font-bold grad-text" data-i18n="insiders.title">Insider trades</h1>
+  <p class="text-slate-500 dark:text-slate-400 text-sm mt-1" data-i18n="insiders.subtitle">What officers, directors and 10% owners bought and sold in the open market, from their SEC Form 4 filings. Buying is the rarer signal and the louder one; several insiders buying together, louder still. Open any company for its quarterly history.</p>
+</div>
+
+<p id="inSummary" class="in-summary">—</p>
+
+<div class="in-controls">
+  <div class="in-group" role="group" aria-label="Kind">
+    <button type="button" class="in-chip" data-in-kind="buy" data-i18n="insiders.kind_buy">Buys</button>
+    <button type="button" class="in-chip" data-in-kind="sell" data-i18n="insiders.kind_sell">Sells</button>
+    <button type="button" class="in-chip" data-in-kind="all" data-i18n="insiders.kind_all">All</button>
+  </div>
+  <div class="in-group" role="group" aria-label="Period">
+    <button type="button" class="in-chip" data-in-days="7" data-i18n="insiders.days_7">7 days</button>
+    <button type="button" class="in-chip" data-in-days="30" data-i18n="insiders.days_30">30 days</button>
+    <button type="button" class="in-chip" data-in-days="90" data-i18n="insiders.days_90">90 days</button>
+  </div>
+  <div class="in-group" role="group" aria-label="Sort">
+    <button type="button" class="in-chip" data-in-sort="value" data-i18n="insiders.sort_value">Largest</button>
+    <button type="button" class="in-chip" data-in-sort="newest" data-i18n="insiders.sort_newest">Newest</button>
+  </div>
+  <div class="in-group">
+    <button type="button" class="in-chip" id="inFollowed" data-i18n="insiders.followed" hidden>Followed</button>
+    <button type="button" class="in-chip" id="inHeld" data-i18n="insiders.held" hidden>My holdings</button>
+  </div>
+  {# Enter on a ticker that matches nothing looks it up; the empty state says
+     so the moment it applies, which a placeholder long enough to say it first
+     was not (it truncated at 390px). #}
+  <input id="inSearch" class="in-search" type="search" autocomplete="off" spellcheck="false"
+         placeholder="Filter by company, ticker or insider" data-i18n-placeholder="insiders.search_ph">
+</div>
+
+<div id="inLookup" class="in-lookup" hidden></div>
+
+<section id="inClusters" class="in-section" hidden>
+  <h2 class="in-h2"><span data-i18n="insiders.clusters_title">Cluster buys</span><span id="inClusterN" class="in-count"></span></h2>
+  <p class="in-note" data-i18n="insiders.clusters_note">Companies where two or more insiders bought shares in the open market in this window. Joint filers count once, and purchases in an offering or a private placement are left out.</p>
+  <div id="inClusterList" class="in-clusters"></div>
+</section>
+
+<section class="in-section">
+  <p id="inMeta" class="in-meta"></p>
+  <div id="inList"></div>
+  <p id="inEmpty" class="in-empty" hidden></p>
+  <button type="button" id="inMore" class="in-chip in-more" hidden></button>
+</section>
+<p id="inNote" class="in-note"></p>
+
+<script>
+// The feed comes from /api/insiders (ystocker/insiders.py): open-market buys
+// and sells from the followed companies' Form 4s, cached per company and
+// refreshed in the background. While the first sweep is still reaching some
+// companies the API answers 202 and the page polls, with a bound, and always
+// ends on a drawn state. Everything here is composed where I18n.apply()
+// cannot reach, so it re-renders on a language switch.
+(function () {
+  const F = id => document.getElementById(id);
+  const tr = (key, fallback) => (typeof I18n !== 'undefined' && I18n.t(key)) || fallback;
+  const fill = (s, vals) => s.replace(/\{(\w+)\}/g, (m, k) => (k in vals ? vals[k] : m));
+  const zh = () => (document.documentElement.lang || '').indexOf('zh') === 0;
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g,
+    c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  // English needs a singular; Chinese has none, so both keys carry one string.
+  const plural = (n, one, many, fbOne, fbMany) => fill(n === 1 ? tr(one, fbOne) : tr(many, fbMany), { n: n.toLocaleString() });
+  const HUES = [[99, 102, 241], [56, 189, 248], [52, 211, 153], [251, 191, 36],
+                [244, 114, 182], [167, 139, 250], [45, 212, 191], [251, 146, 60]];
+  const POLLS = 20, POLL_MS = 3000, PAGE = 200;
+  const pick = (v, ok, dflt) => (ok.indexOf(v) >= 0 ? v : dflt);
+
+  const params = new URLSearchParams(location.search);
+  const state = {
+    kind: pick(params.get('kind'), ['buy', 'sell', 'all'], 'buy'),
+    days: pick(params.get('days'), ['7', '30', '90'], '30'),
+    sort: pick(params.get('sort'), ['value', 'newest'], 'value'),
+  };
+  let data = null, polls = 0, timer = null, failed = false, shown = PAGE;
+  let onlyFollowed = false, onlyHeld = false;
+  let lookup = null;                         // {t, status, body, polls, timer}
+
+  function tile(t) {
+    let h = 0;
+    for (const c of t) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+    const [r, g, b] = HUES[h % HUES.length];
+    return `<span class="in-tile" style="background: rgba(${r},${g},${b},.16); color: rgb(${r},${g},${b})">${esc(t.replace(/[-.].*$/, '').slice(0, 4))}</span>`;
+  }
+  const date = iso => new Date(iso + 'T12:00:00Z');
+  const fmtDay = (iso, opts) => date(iso).toLocaleDateString(zh() ? 'zh-CN' : 'en-US', Object.assign({ timeZone: 'UTC' }, opts));
+  const short = iso => (iso ? fmtDay(iso, { month: 'short', day: 'numeric' }) : '—');
+  function span(a, b) {
+    if (!b || b === a) return short(a);
+    const sameMonth = a.slice(0, 7) === b.slice(0, 7);
+    // Sep 28–30 within a month and Sep 29 – Oct 2 across one; in Chinese
+    // 9月28–30日 and 9月29日–10月2日, which fit the date column on one line
+    // where "9月28日 – 9月30日" wrapped mid-date.
+    if (zh()) {
+      return sameMonth ? `${date(a).getUTCMonth() + 1}月${date(a).getUTCDate()}–${date(b).getUTCDate()}日`
+        : short(a) + '–' + short(b);
+    }
+    return sameMonth ? short(a) + '–' + fmtDay(b, { day: 'numeric' }) : short(a) + ' – ' + short(b);
+  }
+  function money(v) {
+    if (typeof v !== 'number' || !isFinite(v)) return '—';
+    const a = Math.abs(v);
+    // Thresholds sit where the rounding lands, or $999,960 reads "$1000K".
+    if (a >= 999.5e6) return '$' + (v / 1e9).toFixed(a >= 9.995e9 ? 1 : 2) + 'B';
+    if (a >= 999.5e3) return '$' + (v / 1e6).toFixed(a >= 99.95e6 ? 0 : 1) + 'M';
+    if (a >= 999.5) return '$' + (v / 1e3).toFixed(0) + 'K';
+    return '$' + v.toFixed(0);
+  }
+  const joint = n => (n ? ' <span class="in-joint">' + esc(plural(n, 'insiders.joint_one', 'insiders.joint_many', '+{n} joint filer', '+{n} joint filers')) + '</span>' : '');
+  const shares = v => (typeof v !== 'number' ? '—'
+    : v.toLocaleString('en-US', { maximumFractionDigits: Number.isInteger(v) ? 0 : 2 }));
+  const price = v => (typeof v !== 'number' ? '—' : '$' + v.toFixed(v < 1 ? 4 : 2));
+  function stake(r) {
+    if (typeof r.sp !== 'number') return '—';
+    if (r.sp >= 99.95) return r.k === 'buy' ? tr('insiders.stake_new', 'new') : tr('insiders.stake_all', 'all');
+    return (r.k === 'buy' ? '+' : r.k === 'sell' ? '−' : '') + r.sp.toFixed(r.sp < 10 ? 1 : 0) + '%';
+  }
+  function roles(r) {
+    const parts = [];
+    if (r.ro && r.ro.indexOf('o') >= 0) parts.push(r.ti || tr('insiders.role_off', 'Officer'));
+    if (r.ro && r.ro.indexOf('d') >= 0) parts.push(tr('insiders.role_dir', 'Director'));
+    if (r.ro && r.ro.indexOf('t') >= 0) parts.push(tr('insiders.role_ten', '10% owner'));
+    if (r.ro && r.ro.indexOf('x') >= 0 && !(r.ro.indexOf('o') >= 0 && r.ti)) parts.push(r.ti || tr('insiders.role_oth', 'Other'));
+    return parts.join(' · ');
+  }
+  const kindLabel = k => (k === 'buy' ? tr('insiders.buy', 'Buy') : k === 'sell' ? tr('insiders.sell', 'Sell') : tr('insiders.other', 'Other'));
+  function filingUrl(r) {
+    const folder = String(r.a || '').replace(/-/g, '');
+    const doc = r.pd || (r.a + '-index.htm');
+    return `https://www.sec.gov/Archives/edgar/data/${encodeURIComponent(r.c)}/${folder}/${doc.split('/').map(encodeURIComponent).join('/')}`;
+  }
+  const historyUrl = t => '/history/' + encodeURIComponent(t) + '?tab=fundamentals';
+
+  const followed = () => new Set((data && data.followed) || []);
+  const held = () => new Set((data && data.held) || []);
+
+  function row(r, ctx) {
+    const filedTitle = esc(tr('insiders.form4_title', 'Open the Form 4 on SEC EDGAR'));
+    const filed = fill(tr('insiders.filed', 'filed {d}'), { d: short(r.f) });
+    const badgesCo = (ctx.held.has(r.t) ? `<span class="in-badge h" title="${esc(tr('insiders.held_badge', 'you hold this'))}">◆</span>` : '')
+      + (ctx.markFollowed && ctx.followed.has(r.t) ? `<span class="in-badge f" title="${esc(tr('insiders.followed_badge', 'followed by this site'))}">★</span>` : '');
+    const badgesTx = (r.pl ? `<span class="in-badge p" title="${esc(tr('insiders.plan_title', 'Made under a Rule 10b5-1 plan: scheduled in advance, so it says less about what the insider thinks now.'))}">${esc(tr('insiders.plan', '10b5-1'))}</span>` : '')
+      + (r.of ? `<span class="in-badge o" title="${esc(tr('insiders.offering_title', 'Bought in an offering or a private placement, not on the open market.'))}">${esc(tr('insiders.offering', 'Offering'))}</span>` : '')
+      + (r.am ? `<span class="in-badge a" title="${esc(tr('insiders.amended_title', 'From an amended filing (4/A); it replaces the original where both are here.'))}">4/A</span>` : '');
+    const valCls = r.k === 'buy' ? 'in-up' : r.k === 'sell' ? 'in-down' : '';
+    const valTitle = r.pa ? tr('insiders.price_partial', 'Lines filed without a price are left out of this total and the average.')
+      : (typeof r.v !== 'number' ? (r.pn || tr('insiders.price_none', 'No price filed')) : '');
+    const val = typeof r.v === 'number' ? (r.pa ? '≥ ' : '') + money(r.v) : '—';
+    const pxTitle = r.pn || (typeof r.px !== 'number' ? tr('insiders.price_none', 'No price filed') : '');
+    const when = span(r.d, r.d2);
+    const name = r.n && r.n !== r.t ? r.n : '';
+    return `<div class="in-row" data-in-k="${r.k}">
+      <span class="in-date"><span class="in-kind ${r.k}">${esc(kindLabel(r.k))}</span><span class="in-when">${esc(when)}</span>
+        <a class="in-sub" href="${esc(filingUrl(r))}" target="_blank" rel="noopener noreferrer" title="${filedTitle}">${esc(filed)} ↗</a></span>
+      <a class="in-co" href="${historyUrl(r.t)}">${tile(r.t)}<span class="in-co-txt"><span class="in-ticker">${esc(r.t)}</span>${badgesCo}
+        <span class="in-name" title="${esc(name)}">${esc(name) || '&nbsp;'}</span></span></a>
+      <span class="in-who"><span class="in-owner">${esc(r.o)}</span>${joint(r.on)}${badgesTx}
+        <span class="in-role" title="${esc(roles(r))}">${esc(roles(r)) || '&nbsp;'}</span></span>
+      <span class="in-num in-hide-md">${shares(r.sh)}</span>
+      <span class="in-num in-hide-md" title="${esc(pxTitle)}">${price(r.px)}${r.pa ? '*' : ''}</span>
+      <span class="in-num in-val" title="${esc(valTitle)}"><span class="${valCls}">${val}</span></span>
+      <span class="in-num in-st" title="${esc(tr('insiders.stake_title', 'The trade as a share of the holding it moved: a buy against what they own after it, a sale against what they owned before it. 100% is a new position, or a full exit.'))}">${stake(r)}</span>
+      <span class="in-meta-sm"><span class="in-kind ${r.k}">${esc(kindLabel(r.k))}</span>${esc(when)} · ${shares(r.sh)} @ ${price(r.px)} ·
+        <a class="in-sub" style="display:inline" href="${esc(filingUrl(r))}" target="_blank" rel="noopener noreferrer" title="${filedTitle}">${esc(filed)} ↗</a></span>
+    </div>`;
+  }
+
+  function header() {
+    const c = (k, f, cls) => `<span class="${cls || ''}">${esc(tr(k, f))}</span>`;
+    return `<div class="in-head">${c('insiders.col_date', 'Date')}${c('insiders.col_company', 'Company')}${c('insiders.col_insider', 'Insider')}
+      ${c('insiders.col_shares', 'Shares', 'in-num in-hide-md')}${c('insiders.col_price', 'Price', 'in-num in-hide-md')}
+      ${c('insiders.col_value', 'Value', 'in-num')}${c('insiders.col_stake', 'Stake', 'in-num')}</div>`;
+  }
+
+  function context() {
+    const f = followed();
+    const present = new Set((data.rows || []).map(r => r.t).concat((data.clusters || []).map(c => c.t)));
+    // A star on every row says nothing when every company in the feed is a
+    // followed one; it is drawn only once some row is not.
+    const markFollowed = [...present].some(t => !f.has(t));
+    return { followed: f, held: held(), markFollowed };
+  }
+
+  function visible(rows, ctx) {
+    const q = F('inSearch').value.trim().toLowerCase();
+    return rows.filter(r => (!onlyFollowed || ctx.followed.has(r.t))
+      && (!onlyHeld || ctx.held.has(r.t))
+      && (!q || r.t.toLowerCase().startsWith(q) || (r.n || '').toLowerCase().includes(q)
+          || (r.o || '').toLowerCase().includes(q)));
+  }
+
+  function renderSummary() {
+    const s = data.summary || {};
+    const lead = fill(tr('insiders.sum_lead', 'Last {d} days'), { d: data.days });
+    const part = (side) => {
+      const x = s[side] || {};
+      if (!x.trades) return side === 'buy' ? tr('insiders.sum_no_buys', 'no open-market buys') : tr('insiders.sum_no_sells', 'no sells');
+      const vals = {
+        n: side === 'buy' ? plural(x.trades, 'insiders.buys_one', 'insiders.buys_many', '{n} open-market buy', '{n} open-market buys')
+                          : plural(x.trades, 'insiders.sells_one', 'insiders.sells_many', '{n} sell', '{n} sells'),
+        v: typeof x.value === 'number' ? fill(tr('insiders.worth', 'worth {v}'), { v: money(x.value) }) : '',
+        i: plural(x.insiders, 'insiders.by_one', 'insiders.by_many', 'by {n} insider', 'by {n} insiders'),
+        c: plural(x.companies, 'insiders.at_one', 'insiders.at_many', 'at {n} company', 'at {n} companies'),
+      };
+      const tpl = side === 'buy' ? tr('insiders.sum_buys', '{n} {v} {i} {c}') : tr('insiders.sum_sells', '{n} {v} {c}');
+      // A side with no priced trade has no "worth" piece; drop the space and,
+      // in Chinese, the comma that would have introduced it.
+      return fill(tpl, vals).replace(/\s+/g, ' ').replace(/\s([，,])/g, '$1').replace(/[，,]\s*$/, '').trim();
+    };
+    F('inSummary').innerHTML = esc(fill(tr('insiders.sum_join', '{lead}: {buys} · {sells}'),
+      { lead, buys: part('buy'), sells: part('sell') })).replace(/^([^:：]+[:：])/, '<b>$1</b>');
+  }
+
+  function renderClusters(ctx) {
+    const list = (data.clusters || []).filter(c => (!onlyFollowed || ctx.followed.has(c.t)) && (!onlyHeld || ctx.held.has(c.t)));
+    F('inClusters').hidden = state.kind === 'sell';
+    F('inClusterN').textContent = list.length ? String(list.length) : '';
+    if (!list.length) {
+      F('inClusterList').innerHTML = `<p class="in-empty">${esc(tr('insiders.cluster_none', 'No company had two or more insiders buying in this window.'))}</p>`;
+      return;
+    }
+    F('inClusterList').innerHTML = list.map(c => {
+      const who = c.who.map(w => `<li><span class="in-owner">${esc(w.o)}${joint(w.on)}</span>
+          <span class="in-num in-up">${money(w.v)}</span><span class="in-role">${esc(roles(w))}</span></li>`).join('');
+      const badges = (ctx.held.has(c.t) ? `<span class="in-badge h" title="${esc(tr('insiders.held_badge', 'you hold this'))}">◆</span>` : '')
+        + (ctx.markFollowed && ctx.followed.has(c.t) ? `<span class="in-badge f" title="${esc(tr('insiders.followed_badge', 'followed by this site'))}">★</span>` : '');
+      return `<div class="in-cluster">
+        <a class="in-cl-head" href="${historyUrl(c.t)}">${tile(c.t)}<span class="in-co-txt"><span class="in-ticker">${esc(c.t)}</span>${badges}
+          <span class="in-name">${esc(c.n && c.n !== c.t ? c.n : '')}</span></span></a>
+        <div class="in-cl-stats"><b>${esc(plural(c.insiders, 'insiders.n_insider', 'insiders.n_insiders', '{n} insider', '{n} insiders'))}</b>
+          · <span class="in-up">${money(c.v)}</span> · ${esc(span(c.first, c.last))}</div>
+        <ul class="in-cl-who">${who}</ul>
+      </div>`;
+    }).join('');
+  }
+
+  function renderTable(ctx) {
+    const rows = visible(data.rows || [], ctx);
+    const list = F('inList'), empty = F('inEmpty'), more = F('inMore');
+    const meta = [plural(rows.length, 'insiders.count_one', 'insiders.count_many', '{n} trade', '{n} trades')];
+    if (data.truncated) meta.push(fill(tr('insiders.truncated', 'the first {n} of {m} by this order'), { n: (data.rows || []).length.toLocaleString(), m: data.total.toLocaleString() }));
+    F('inMeta').textContent = meta.join(' · ');
+    if (!rows.length) {
+      list.innerHTML = '';
+      more.hidden = true;
+      empty.hidden = false;
+      const q = F('inSearch').value.trim();
+      const looked = lookup && q && lookup.t === q.toUpperCase();
+      empty.textContent = looked
+        ? fill(tr('insiders.see_lookup', 'Nothing in this feed matches {t}; its own filings are above.'), { t: lookup.t })
+        : q && /^[A-Za-z][A-Za-z0-9.\-]{0,9}$/.test(q)
+        ? fill(tr('insiders.lookup_hint', 'Nothing here matches. Press Enter to look up {t} on SEC EDGAR.'), { t: q.toUpperCase() })
+        : (data.rows || []).length ? tr('insiders.none_filter', 'No trade here matches the filter.')
+          : tr('insiders.none_window', 'No open-market trades of this kind in this window.');
+      return;
+    }
+    empty.hidden = true;
+    list.innerHTML = `<div class="in-list">${header()}${rows.slice(0, shown).map(r => row(r, ctx)).join('')}</div>`;
+    const left = rows.length - Math.min(shown, rows.length);
+    more.hidden = left <= 0;
+    more.textContent = fill(tr('insiders.show_more', 'Show more ({n} left)'), { n: left.toLocaleString() });
+  }
+
+  function renderNote() {
+    const c = data.coverage || {};
+    const parts = [];
+    const stamp = c.newest_check;
+    parts.push(fill(tr('insiders.source', 'Source: SEC EDGAR Form 4 filings · {n} of {u} followed companies checked · updated {t}'),
+      { n: (c.checked || 0).toLocaleString(), u: (c.universe || 0).toLocaleString(), t: stamp ? I18n.datetime(stamp) : '—' }));
+    if (c.extra) parts.push(plural(c.extra, 'insiders.extra_one', 'insiders.extra_many', 'plus {n} company a reader looked up', 'plus {n} companies readers looked up'));
+    if (c.failed) parts.push(fill(tr('insiders.failed_n', '{n} could not be checked'), { n: c.failed }));
+    if (c.unread) parts.push(fill(tr('insiders.unread', '{n} filings could not be read'), { n: c.unread }));
+    if (c.complete_from && data.since && c.complete_from > data.since) {
+      parts.push(fill(tr('insiders.short_record', 'The record starts {d}, so this view covers less than {days} days.'),
+        { d: fmtDay(c.complete_from, { month: 'short', day: 'numeric', year: 'numeric' }), days: data.days }));
+    }
+    F('inNote').textContent = parts.join(' · ');
+  }
+
+  function renderLookup() {
+    const box = F('inLookup');
+    if (!lookup) { box.hidden = true; box.innerHTML = ''; return; }
+    box.hidden = false;
+    const b = lookup.body || {};
+    const t = lookup.t;
+    const title = b.name ? `${t} · ${b.name}` : t;
+    let inner = '';
+    if (lookup.status === 'ok') {
+      const kinds = state.kind === 'all' ? ['buy', 'sell'] : [state.kind];
+      const rows = (b.rows || []).filter(r => kinds.indexOf(r.k) >= 0);
+      const others = (b.rows || []).filter(r => r.k === 'other').length;
+      const notes = [];
+      if (!b.followed) notes.push(tr('insiders.not_followed', 'Not followed here: refreshed when looked up.'));
+      if (others) notes.push(plural(others, 'insiders.others_one', 'insiders.others_many', '{n} other transaction (an award, exercise, tax withholding or gift) is on its filings.', '{n} other transactions (awards, exercises, tax withholding, gifts) are on its filings.'));
+      const ctx = { followed: new Set(b.followed ? [t] : []), held: new Set(b.held ? [t] : []), markFollowed: false };
+      inner = rows.length ? `<div class="in-list">${header()}${rows.map(r => row(r, ctx)).join('')}</div>`
+        : `<p class="in-empty">${esc(fill(tr('insiders.lookup_none', 'No open-market trades of this kind at {t} in the last {d} days.'), { t, d: b.days || 90 }))}</p>`;
+      inner += notes.length ? `<p class="in-note">${esc(notes.join(' '))}</p>` : '';
+    } else {
+      const msg = {
+        pending: fill(tr('insiders.lookup_pending', 'Fetching {t}’s Form 4 filings from SEC…'), { t }),
+        not_sec_filer: fill(tr('insiders.lookup_not_sec', '{t} is not listed with the SEC, so it files no Form 4.'), { t }),
+        not_a_company: fill(tr('insiders.lookup_not_company', '{t} is a fund or an index: it has no insiders to report.'), { t }),
+        capped: tr('insiders.lookup_cap', 'Today’s look-ups are used up. Try again tomorrow.'),
+        failed: fill(tr('insiders.lookup_failed', 'Could not load {t} right now. Try again in a few minutes.'), { t }),
+      }[lookup.status] || fill(tr('insiders.lookup_failed', 'Could not load {t} right now. Try again in a few minutes.'), { t });
+      inner = `<p class="in-empty">${esc(msg)}</p>`;
+    }
+    box.innerHTML = `<div class="in-lookup-head"><span class="in-lookup-title">${esc(fill(tr('insiders.lookup_title', '{t}: insider trades'), { t: title }))}</span>
+      <button type="button" class="in-x" data-in-close aria-label="${esc(tr('insiders.lookup_close', 'Close'))}" title="${esc(tr('insiders.lookup_close', 'Close'))}">×</button></div>${inner}`;
+  }
+
+  function startLookup(t) {
+    if (lookup && lookup.timer) clearTimeout(lookup.timer);
+    lookup = { t, status: 'pending', body: null, polls: 0, timer: null };
+    render();
+    pollLookup();
+  }
+  function pollLookup() {
+    const L = lookup;
+    if (!L) return;
+    fetch('/api/insiders/' + encodeURIComponent(L.t) + '?days=' + encodeURIComponent(state.days === '7' ? '30' : state.days),
+          { credentials: 'same-origin' })
+      .then(r => r.json().then(body => ({ status: r.status, body })))
+      .then(({ status, body }) => {
+        if (lookup !== L) return;
+        L.body = body;
+        if (status === 202 && ++L.polls < POLLS) { L.status = 'pending'; L.timer = setTimeout(pollLookup, POLL_MS); }
+        else if (status === 202) L.status = 'failed';
+        else if (body.reason === 'daily_cap') L.status = 'capped';
+        else L.status = body.status || 'failed';
+        renderLookup();
+      })
+      .catch(() => { if (lookup === L) { L.status = 'failed'; renderLookup(); } });
+  }
+
+  function syncUrl() {
+    const u = new URL(location.href);
+    u.searchParams.set('kind', state.kind);
+    u.searchParams.set('days', state.days);
+    u.searchParams.set('sort', state.sort);
+    history.replaceState(null, '', u.pathname + '?' + u.searchParams.toString());
+  }
+
+  function render() {
+    document.querySelectorAll('[data-in-kind]').forEach(b => b.classList.toggle('is-on', b.dataset.inKind === state.kind));
+    document.querySelectorAll('[data-in-days]').forEach(b => b.classList.toggle('is-on', b.dataset.inDays === state.days));
+    document.querySelectorAll('[data-in-sort]').forEach(b => b.classList.toggle('is-on', b.dataset.inSort === state.sort));
+    renderLookup();
+    if (!data) {
+      F('inSummary').textContent = failed ? tr('insiders.failed', 'Insider trades are unavailable right now.')
+        : tr('insiders.loading', 'Loading insider trades…');
+      return;
+    }
+    const ctx = context();
+    F('inFollowed').hidden = !ctx.markFollowed;
+    F('inHeld').hidden = !ctx.held.size;
+    F('inFollowed').classList.toggle('is-on', onlyFollowed);
+    F('inHeld').classList.toggle('is-on', onlyHeld);
+    renderSummary();
+    renderClusters(ctx);
+    renderTable(ctx);
+    renderNote();
+    if (data.status === 'warming') {
+      const c = data.coverage || {};
+      const msg = polls >= POLLS
+        ? fill(tr('insiders.warming_end', 'Still gathering filings: {n} of {u} companies checked so far. Try again in a few minutes.'), { n: c.checked || 0, u: c.universe || 0 })
+        : fill(tr('insiders.warming', 'Still gathering filings: {n} of {u} companies checked so far…'), { n: c.checked || 0, u: c.universe || 0 });
+      F('inNote').textContent = msg + (F('inNote').textContent ? ' · ' + F('inNote').textContent : '');
+    }
+    syncUrl();
+  }
+
+  function load() {
+    clearTimeout(timer);
+    const q = `?days=${encodeURIComponent(state.days)}&kind=${encodeURIComponent(state.kind)}&sort=${encodeURIComponent(state.sort)}`;
+    const asked = q;
+    fetch('/api/insiders' + q, { credentials: 'same-origin' })
+      .then(r => r.json().then(body => ({ status: r.status, body })))
+      .then(({ status, body }) => {
+        if (asked !== `?days=${encodeURIComponent(state.days)}&kind=${encodeURIComponent(state.kind)}&sort=${encodeURIComponent(state.sort)}`) return;
+        if (!body || !Array.isArray(body.rows)) throw new Error('bad payload');
+        data = body; failed = false;
+        render();
+        if (status === 202 && ++polls < POLLS) timer = setTimeout(load, POLL_MS);
+      })
+      .catch(() => { failed = true; if (!data) render(); });
+  }
+
+  function choose(key, value) { if (state[key] === value) return; state[key] = value; polls = 0; shown = PAGE; render(); load(); }
+  document.addEventListener('click', e => {
+    const k = e.target.closest('[data-in-kind]');
+    if (k) return choose('kind', k.dataset.inKind);
+    const d = e.target.closest('[data-in-days]');
+    if (d) return choose('days', d.dataset.inDays);
+    const s = e.target.closest('[data-in-sort]');
+    if (s) return choose('sort', s.dataset.inSort);
+    if (e.target.closest('[data-in-close]')) { if (lookup && lookup.timer) clearTimeout(lookup.timer); lookup = null; render(); }
+  });
+  F('inFollowed').addEventListener('click', () => { onlyFollowed = !onlyFollowed; shown = PAGE; render(); });
+  F('inHeld').addEventListener('click', () => { onlyHeld = !onlyHeld; shown = PAGE; render(); });
+  F('inMore').addEventListener('click', () => { shown += PAGE; render(); });
+  F('inSearch').addEventListener('input', () => { shown = PAGE; if (data) render(); });
+  // Enter on a ticker nobody in the feed matches looks it up: one company's
+  // filings, fetched by the server's look-up worker and polled with a bound.
+  F('inSearch').addEventListener('keydown', e => {
+    if (e.key !== 'Enter') return;
+    const q = F('inSearch').value.trim();
+    if (!/^[A-Za-z][A-Za-z0-9.\-]{0,9}$/.test(q)) return;
+    const t = q.toUpperCase();
+    if (data && (data.rows || []).some(r => r.t === t) && !(lookup && lookup.t === t)) return;
+    e.preventDefault();
+    startLookup(t);
+  });
+  document.addEventListener('i18n:langchange', () => render());
+  render();
+  load();
+})();
+</script>
+{% endblock %}

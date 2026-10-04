@@ -3320,7 +3320,8 @@ def _held_tickers() -> set[str]:
 
         return {p["symbol"] for p in portfolio.load(email) if p.get("symbol")}
     except Exception as exc:  # noqa: BLE001 - a highlight is not worth a 503
-        log.info("earnings: holdings not read for the calendar: %s", exc)
+        # Shared by /api/earnings and /api/insiders, so the path says which.
+        log.info("%s: holdings not read for the highlight: %s", request.path, exc)
         return set()
 
 
@@ -3381,6 +3382,131 @@ def api_earnings():
     log.info("API earnings: week %s, %d companies, %d day(s) pending",
              monday, len(present), pending)
     return jsonify(body), (202 if pending else 200)
+
+
+# ---------------------------------------------------------------------------
+# Insider trades  (/insiders, /api/insiders, /api/insiders/<ticker>)
+# What officers, directors and 10% owners bought and sold, from their SEC
+# Form 4s; see ystocker/insiders.py. The followed companies are swept in the
+# master's background thread; any other company is fetched when a reader asks
+# for it by ticker. Neither route fetches on the request path.
+# ---------------------------------------------------------------------------
+
+
+def _insider_args(default_days: int):
+    """``(days, kind, sort)`` from the query string, or a 400 to return.
+
+    Days are clamped to 1..90, the window the cache keeps whole. kind and sort
+    are refused rather than defaulted when wrong: a typo that quietly showed
+    sells under a "buys" label would be the worse answer.
+    """
+    from ystocker import insiders
+
+    try:
+        days = max(1, min(insiders.WINDOW_DAYS, int(request.args.get("days", default_days))))
+    except (TypeError, ValueError):
+        return None, jsonify({"error": "days must be a whole number of days"}), 400
+    kind = (request.args.get("kind") or "buy").strip().lower()
+    sort = (request.args.get("sort") or "value").strip().lower()
+    if kind not in insiders.KINDS:
+        return None, jsonify({"error": "kind must be buy, sell or all"}), 400
+    if sort not in insiders.SORTS:
+        return None, jsonify({"error": "sort must be value or newest"}), 400
+    return (days, kind, sort), None, None
+
+
+def _ticker_record(symbol: str) -> Optional[dict]:
+    """The followed ticker's cached record, for its quote type."""
+    with _cache_lock:
+        for group in (_cache or {}).values():
+            if isinstance(group, dict) and isinstance(group.get(symbol), dict):
+                return group[symbol]
+    return None
+
+
+@bp.route("/insiders")
+def insiders_page():
+    """Insider buying and selling. The page draws itself from /api/insiders."""
+    log.info("GET /insiders")
+    return render_template("insiders.html")
+
+
+@bp.route("/api/insiders")
+def api_insiders():
+    """The market-wide feed of open-market buys and sells, cluster buys on
+    top, and how much of the followed universe the cache covers.
+
+    ``?days=`` (30), ``?kind=buy|sell|all`` (buy), ``?sort=value|newest``
+    (value). Never fetches: 202 while the background sweep has not yet reached
+    every followed company, with what it has. ``followed`` and ``held`` name
+    the answer's tickers the site follows and the reader holds; the rows are
+    shared copies and are not touched.
+    """
+    from ystocker import insiders
+
+    args, error, code = _insider_args(30)
+    if error is not None:
+        return error, code
+    days, kind, sort = args
+    view = insiders.feed_view(days=days, kind_=kind, sort=sort)
+    present = set(view.pop("present"))
+    view["followed"] = sorted(present & _followed_tickers())
+    view["held"] = sorted(present & _held_tickers())
+    warming = view["status"] == "warming"
+    cov = view["coverage"]
+    log.info("API insiders: %dd %s by %s, %d of %d rows, %d cluster(s), %d of %d issuers checked",
+             days, kind, sort, len(view["rows"]), view["total"], len(view["clusters"]),
+             cov["checked"], cov["universe"])
+    return jsonify(view), (202 if warming else 200)
+
+
+@bp.route("/api/insiders/<ticker>")
+def api_insiders_company(ticker: str):
+    """One company's Form 4 trades of every kind over ``?days=`` (90).
+
+    A company never fetched is queued for this worker's look-up thread and
+    answers 202; the page polls. A followed company is the sweep's to keep
+    fresh, so only a stale company outside that set is queued again on view.
+    A recent look-up failure is 503 (``?retry=1`` asks again), as is today's
+    look-up allowance being spent, so the poll ends on a message.
+    """
+    from ystocker import fundamentals, insiders
+    from ystocker.data import is_non_equity
+
+    symbol = fundamentals.normalise(ticker)
+    if symbol is None:
+        return jsonify({"error": "invalid ticker"}), 400
+    args, error, code = _insider_args(90)
+    if error is not None:
+        return error, code
+    days = args[0]
+    base = {"ticker": symbol, "days": days, "rows": [], "source": insiders.SOURCE}
+
+    record = _ticker_record(symbol)
+    if record is not None and is_non_equity(record.get("Quote Type")):
+        return jsonify({**base, "status": "not_a_company"})
+    cik, known = insiders.peek_cik(symbol)
+    if (known and cik is None) or insiders.no_cik(symbol):
+        return jsonify({**base, "status": "not_sec_filer"})
+
+    base["followed"] = symbol in _followed_tickers()
+    base["held"] = symbol in _held_tickers()
+    view = insiders.company_view(cik, days=days) if cik is not None else None
+    if view is not None and view["checked"]:
+        refreshing = False
+        if view["stale"] and not insiders.in_universe(cik) and not insiders.recently_failed(symbol):
+            refreshing = insiders.kick(symbol) in ("queued", "already")
+        log.info("API insiders/%s: %d trade(s) over %dd", symbol, len(view["rows"]), days)
+        return jsonify({**base, **view, "ticker": view["ticker"] or symbol,
+                        "status": "ok", "refreshing": refreshing})
+
+    if insiders.recently_failed(symbol) and request.args.get("retry") != "1":
+        return jsonify({**base, "status": "failed"}), 503
+    outcome = insiders.kick(symbol)
+    if outcome == "capped":
+        return jsonify({**base, "status": "failed", "reason": "daily_cap"}), 503
+    log.info("API insiders/%s: cold, look-up %s", symbol, outcome)
+    return jsonify({**base, "status": "pending", "queued": outcome != "full"}), 202
 
 
 # ---------------------------------------------------------------------------

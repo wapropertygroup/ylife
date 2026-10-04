@@ -554,6 +554,12 @@ def create_app() -> Flask:
     from ystocker.earnings_calendar import start_background_thread as _start_earnings_calendar_thread
     _start_earnings_calendar_thread()
 
+    # Insider trades (/insiders): the followed companies' SEC Form 4s, one
+    # submissions request per issuer every 6 h plus one per new Form 4, paced
+    # 1.5 s apart through sec13f.edgar_get. See ystocker/insiders.py.
+    from ystocker.insiders import start_background_thread as _start_insiders_thread
+    _start_insiders_thread()
+
     # Start markets cache warm-up (pre-fetches index/VIX/sector data every 5 min)
     _start_markets_warmup_thread(app)
     # Keeps the long ^GSPC series off the request path; see its docstring for the

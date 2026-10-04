@@ -1,0 +1,248 @@
+<?xml version="1.0"?>
+<ownershipDocument>
+
+    <schemaVersion>X0609</schemaVersion>
+
+    <documentType>4</documentType>
+
+    <periodOfReport>2026-10-01</periodOfReport>
+
+    <notSubjectToSection16>0</notSubjectToSection16>
+
+    <issuer>
+        <issuerCik>0001782223</issuerCik>
+        <issuerName>Pyxis Oncology, Inc.</issuerName>
+        <issuerTradingSymbol>PYXS</issuerTradingSymbol>
+        <issuerForeignTradingSymbol></issuerForeignTradingSymbol>
+    </issuer>
+
+    <reportingOwner>
+        <reportingOwnerId>
+            <rptOwnerCik>0002039349</rptOwnerCik>
+            <rptOwnerName>GordonMD Global Investments LP</rptOwnerName>
+        </reportingOwnerId>
+        <reportingOwnerAddress>
+            <rptOwnerNonUSAddressFlag>false</rptOwnerNonUSAddressFlag>
+            <rptOwnerStreet1>9460 WILSHIRE BLVD</rptOwnerStreet1>
+            <rptOwnerStreet2>SUITE 420</rptOwnerStreet2>
+            <rptOwnerCity>BEVERELY HILLS</rptOwnerCity>
+            <rptOwnerState>CA</rptOwnerState>
+            <rptOwnerZipCode>90212</rptOwnerZipCode>
+            <rptOwnerStateDescription></rptOwnerStateDescription>
+        </reportingOwnerAddress>
+        <reportingOwnerRelationship>
+            <isDirector>0</isDirector>
+            <isOfficer>0</isOfficer>
+            <isTenPercentOwner>1</isTenPercentOwner>
+            <isOther>0</isOther>
+            <officerTitle></officerTitle>
+            <otherText></otherText>
+        </reportingOwnerRelationship>
+    </reportingOwner>
+
+    <reportingOwner>
+        <reportingOwnerId>
+            <rptOwnerCik>0002103789</rptOwnerCik>
+            <rptOwnerName>GordonMD Long Biased Master Fund LP</rptOwnerName>
+        </reportingOwnerId>
+        <reportingOwnerAddress>
+            <rptOwnerNonUSAddressFlag>false</rptOwnerNonUSAddressFlag>
+            <rptOwnerStreet1>9460 WILSHIRE BLVD</rptOwnerStreet1>
+            <rptOwnerStreet2>SUITE 420</rptOwnerStreet2>
+            <rptOwnerCity>BEVERLY HILLS</rptOwnerCity>
+            <rptOwnerState>CA</rptOwnerState>
+            <rptOwnerZipCode>90212</rptOwnerZipCode>
+            <rptOwnerStateDescription></rptOwnerStateDescription>
+        </reportingOwnerAddress>
+        <reportingOwnerRelationship>
+            <isDirector>0</isDirector>
+            <isOfficer>0</isOfficer>
+            <isTenPercentOwner>1</isTenPercentOwner>
+            <isOther>0</isOther>
+            <officerTitle></officerTitle>
+            <otherText></otherText>
+        </reportingOwnerRelationship>
+    </reportingOwner>
+
+    <reportingOwner>
+        <reportingOwnerId>
+            <rptOwnerCik>0002103778</rptOwnerCik>
+            <rptOwnerName>GordonMD Long Biased GP LLC</rptOwnerName>
+        </reportingOwnerId>
+        <reportingOwnerAddress>
+            <rptOwnerNonUSAddressFlag>false</rptOwnerNonUSAddressFlag>
+            <rptOwnerStreet1>9460 WILSHIRE BLVD</rptOwnerStreet1>
+            <rptOwnerStreet2>SUITE 420</rptOwnerStreet2>
+            <rptOwnerCity>BEVERLY HILLS</rptOwnerCity>
+            <rptOwnerState>CA</rptOwnerState>
+            <rptOwnerZipCode>90212</rptOwnerZipCode>
+            <rptOwnerStateDescription></rptOwnerStateDescription>
+        </reportingOwnerAddress>
+        <reportingOwnerRelationship>
+            <isDirector>0</isDirector>
+            <isOfficer>0</isOfficer>
+            <isTenPercentOwner>1</isTenPercentOwner>
+            <isOther>0</isOther>
+            <officerTitle></officerTitle>
+            <otherText></otherText>
+        </reportingOwnerRelationship>
+    </reportingOwner>
+
+    <reportingOwner>
+        <reportingOwnerId>
+            <rptOwnerCik>0002103811</rptOwnerCik>
+            <rptOwnerName>Gordon Craig D</rptOwnerName>
+        </reportingOwnerId>
+        <reportingOwnerAddress>
+            <rptOwnerNonUSAddressFlag>false</rptOwnerNonUSAddressFlag>
+            <rptOwnerStreet1>9460 WILSHIRE BLVD</rptOwnerStreet1>
+            <rptOwnerStreet2>SUITE 420</rptOwnerStreet2>
+            <rptOwnerCity>BEVERLY HILLS</rptOwnerCity>
+            <rptOwnerState>CA</rptOwnerState>
+            <rptOwnerZipCode>90212</rptOwnerZipCode>
+            <rptOwnerStateDescription></rptOwnerStateDescription>
+        </reportingOwnerAddress>
+        <reportingOwnerRelationship>
+            <isDirector>0</isDirector>
+            <isOfficer>0</isOfficer>
+            <isTenPercentOwner>1</isTenPercentOwner>
+            <isOther>0</isOther>
+            <officerTitle></officerTitle>
+            <otherText></otherText>
+        </reportingOwnerRelationship>
+    </reportingOwner>
+
+    <aff10b5One>0</aff10b5One>
+
+    <nonDerivativeTable>
+        <nonDerivativeTransaction>
+            <securityTitle>
+                <value>Common Stock, par value $0.001 per share (&quot;Common Stock&quot;)</value>
+            </securityTitle>
+            <transactionDate>
+                <value>2026-10-01</value>
+            </transactionDate>
+            <deemedExecutionDate></deemedExecutionDate>
+            <transactionCoding>
+                <transactionFormType>4</transactionFormType>
+                <transactionCode>P</transactionCode>
+                <equitySwapInvolved>0</equitySwapInvolved>
+            </transactionCoding>
+            <transactionTimeliness></transactionTimeliness>
+            <transactionAmounts>
+                <transactionShares>
+                    <value>5517000</value>
+                </transactionShares>
+                <transactionPricePerShare>
+                    <footnoteId id="F2"/>
+                </transactionPricePerShare>
+                <transactionAcquiredDisposedCode>
+                    <value>A</value>
+                </transactionAcquiredDisposedCode>
+            </transactionAmounts>
+            <postTransactionAmounts>
+                <sharesOwnedFollowingTransaction>
+                    <value>15541909</value>
+                </sharesOwnedFollowingTransaction>
+            </postTransactionAmounts>
+            <ownershipNature>
+                <directOrIndirectOwnership>
+                    <value>I</value>
+                </directOrIndirectOwnership>
+                <natureOfOwnership>
+                    <value>See footnote</value>
+                    <footnoteId id="F1"/>
+                </natureOfOwnership>
+            </ownershipNature>
+        </nonDerivativeTransaction>
+    </nonDerivativeTable>
+
+    <derivativeTable>
+        <derivativeTransaction>
+            <securityTitle>
+                <value>Common Stock Purchase Warrant</value>
+            </securityTitle>
+            <conversionOrExercisePrice>
+                <value>3.5</value>
+                <footnoteId id="F3"/>
+            </conversionOrExercisePrice>
+            <transactionDate>
+                <value>2026-10-01</value>
+            </transactionDate>
+            <deemedExecutionDate></deemedExecutionDate>
+            <transactionCoding>
+                <transactionFormType>4</transactionFormType>
+                <transactionCode>P</transactionCode>
+                <equitySwapInvolved>0</equitySwapInvolved>
+            </transactionCoding>
+            <transactionTimeliness></transactionTimeliness>
+            <transactionAmounts>
+                <transactionShares>
+                    <value>7546766</value>
+                </transactionShares>
+                <transactionPricePerShare>
+                    <footnoteId id="F2"/>
+                </transactionPricePerShare>
+                <transactionAcquiredDisposedCode>
+                    <value>A</value>
+                </transactionAcquiredDisposedCode>
+            </transactionAmounts>
+            <exerciseDate>
+                <footnoteId id="F4"/>
+            </exerciseDate>
+            <expirationDate>
+                <footnoteId id="F5"/>
+            </expirationDate>
+            <underlyingSecurity>
+                <underlyingSecurityTitle>
+                    <value>Common Stock</value>
+                </underlyingSecurityTitle>
+                <underlyingSecurityShares>
+                    <value>7546766</value>
+                </underlyingSecurityShares>
+            </underlyingSecurity>
+            <postTransactionAmounts>
+                <sharesOwnedFollowingTransaction>
+                    <value>7546766</value>
+                </sharesOwnedFollowingTransaction>
+            </postTransactionAmounts>
+            <ownershipNature>
+                <directOrIndirectOwnership>
+                    <value>I</value>
+                </directOrIndirectOwnership>
+                <natureOfOwnership>
+                    <value>See footnote</value>
+                    <footnoteId id="F1"/>
+                </natureOfOwnership>
+            </ownershipNature>
+        </derivativeTransaction>
+    </derivativeTable>
+
+    <footnotes>
+        <footnote id="F1">The securities to which this filing relates are held directly by GordonMD Long Biased Master Fund LP (the &quot;Master Fund&quot;) to which GordonMD Global Investments LP (the &quot;Investment Manager&quot;) serves as investment manager. Craig D. Gordon (&quot;Mr. Gordon&quot;) is the managing member of GordonMD Long Biased GP LLC (the &quot;GP&quot;), the general partner of the Master Fund. Each of the Master Fund, the GP and Mr. Gordon disclaims beneficial ownership of the securities to which this filing relates for purposes of Section 16 of the Securities and Exchange Act of 1934, as amended, except to the extent of his or its pecuniary interest therein, if any.</footnote>
+        <footnote id="F2">The combined public offering price for each share of common stock and accompanying Common Stock Purchase Warrant is $2.90.</footnote>
+        <footnote id="F3">Exercise price of $3.5, subject to adjustments as set forth in the Common Stock Purchase Warrant.</footnote>
+        <footnote id="F4">The Common Stock Purchase Warrant will not be exercisable unless and until (i) the issuer's stockholders approve an amendment to the issuer's amended and restated certificate of incorporation to increase the number of authorized shares of Common Stock (the &quot;Charter Amendment&quot;) and (ii) the Charter Amendment is filed with, and becomes effective under the laws of, the State of Delaware (the date on which the Charter Amendment becomes effective, the &quot;Charter Amendment Effective Date&quot;).</footnote>
+        <footnote id="F5">The Common Stock Purchase Warrant will expire on the earlier of (i) the fifth anniversary of the Charter Amendment Effective Date and (ii) the 30th calendar day following the later of the Charter Amendment Effective Date and the date on which the issuer publicly discloses the results of the overall survival analysis for its Phase 1 monotherapy study of MICVO in second-line and later recurrent or metastatic head and neck squamous cell carcinoma.</footnote>
+    </footnotes>
+
+    <ownerSignature>
+        <signatureName>GordonMD Global Investments LP, By: GordonMD Global Investments GP LLC, By: /s/ Craig D. Gordon, Managing Member</signatureName>
+        <signatureDate>2026-10-02</signatureDate>
+    </ownerSignature>
+
+    <ownerSignature>
+        <signatureName>GordonMD Long Biased Master Fund LP, By: GordonMD Long Biased GP LLC, By: /s/ Craig D. Gordon, Managing Member</signatureName>
+        <signatureDate>2026-10-02</signatureDate>
+    </ownerSignature>
+
+    <ownerSignature>
+        <signatureName>GordonMD Long Biased GP LLC, By: /s/ Craig D. Gordon, Managing Member</signatureName>
+        <signatureDate>2026-10-02</signatureDate>
+    </ownerSignature>
+
+    <ownerSignature>
+        <signatureName>Craig D. Gordon, /s/ Craig D. Gordon</signatureName>
+        <signatureDate>2026-10-02</signatureDate>
+    </ownerSignature>
+</ownershipDocument>

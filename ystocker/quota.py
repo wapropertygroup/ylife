@@ -548,3 +548,30 @@ def fundamentals_builds_left() -> int:
     with _Guard():
         data = _read(day)
     return max(0, limit_fundamentals_builds() - int(data.get("fund_builds", 0)))
+
+
+def limit_insider_lookups() -> int:
+    """Look-ups by ticker on /insiders the box starts per day, every reader together.
+
+    A look-up is one SEC submissions request plus one per Form 4 filed in the
+    last 30 days -- usually under ten, though NIKE filed 34 in 90 days. The
+    ~215 followed companies are swept anyway and never spend this; it bounds
+    the rest of SEC's ~8,000 tickers, which any client can ask for one by one.
+    ``INSIDERS_DAILY_LOOKUPS`` tunes it.
+    """
+    return _int_env("INSIDERS_DAILY_LOOKUPS", 300)
+
+
+def try_consume_insider_lookup() -> bool:
+    """Spend one of today's insider look-ups, or return ``False``. Same file
+    and lock as the other counters, under its own key."""
+    day, lim = today(), limit_insider_lookups()
+    with _Guard():
+        data = _read(day)
+        used = int(data.get("insider_lookups", 0))
+        if used >= lim:
+            return False
+        data["insider_lookups"] = used + 1
+        data["day"] = day
+        _write(day, data)
+    return True
