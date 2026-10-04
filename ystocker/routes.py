@@ -4047,6 +4047,32 @@ def companies():
                            fetch_errors=[])
 
 
+@bp.route("/api/companies/directory")
+def api_companies_directory():
+    """Every company listed with the SEC, for /companies' full directory.
+
+    One compact row per company (``directory.wire``), built once per load of
+    SEC's daily file and served as the same bytes to every reader, with an
+    hour's browser cache: it changes when a company lists or delists. A cold
+    cache answers 202 and kicks the one fetch; the page shows the followed
+    companies meanwhile.
+    """
+    from ystocker import directory
+
+    got = directory.peek()
+    if not got:
+        started = directory.kick()
+        log.info("API companies/directory: cold (fetch started=%s)", started)
+        return jsonify({"status": "warming", "warming": True}), 202
+    # The master's thread refreshes daily; a list two days old means it has
+    # stopped, and a worker steps in.
+    if time.time() - float(got["as_of"]) > 2 * directory.TTL_SECONDS:
+        directory.kick()
+    resp = Response(got["json"], mimetype="application/json")
+    resp.headers["Cache-Control"] = "public, max-age=3600"
+    return resp
+
+
 @bp.route("/api/ticker/<ticker>")
 def api_ticker(ticker: str):
     """

@@ -53,12 +53,28 @@
   .co-chg.down { color: var(--co-down); background: var(--co-down-bg); }
   .co-foot { grid-column: 2 / -1; font-size: 10.5px; color: var(--t-ink-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .co-empty { font-size: 13px; color: var(--t-ink-muted); padding: 18px 0; }
-  #coEmpty[hidden] { display: none; }
+  #coEmpty[hidden], #coMore[hidden] { display: none; }
+  /* A card with no quote: its exchange sits where the price would. */
+  .co-x {
+    justify-self: end; font: 600 10.5px/1 'JetBrains Mono', ui-monospace, monospace; letter-spacing: .02em;
+    padding: 3px 6px; border-radius: 6px; color: var(--t-ink-muted); background: var(--t-surface-alt);
+  }
+  .co-more {
+    display: block; margin: 16px auto 4px; padding: 9px 18px; border-radius: 999px; cursor: pointer;
+    font-size: 13px; font-weight: 600; border: 1px solid var(--t-line-strong); background: var(--t-surface);
+    color: var(--t-ink);
+  }
+  .co-more:hover { border-color: var(--t-accent); color: var(--t-accent-ink); }
+  /* Where the quoted companies end and the rest of SEC's list begins. */
+  .co-divider {
+    grid-column: 1 / -1; margin-top: 8px; padding: 12px 2px 2px; border-top: 1px solid var(--t-line);
+    font-size: 12px; color: var(--t-ink-muted);
+  }
 </style>
 
 <div class="mb-5">
   <h1 class="text-2xl sm:text-3xl font-bold grad-text" data-i18n="companies.title">Find your next move</h1>
-  <p class="text-slate-500 dark:text-slate-400 text-sm mt-1" data-i18n="companies.subtitle">Every company this site follows, largest first. Open one for its quarterly history from its own filings.</p>
+  <p class="text-slate-500 dark:text-slate-400 text-sm mt-1" data-i18n="companies.subtitle">Every company listed with the SEC (US exchanges and OTC, ADRs included), largest first, with live quotes for the ones this site follows. Open any for its quarterly history from its own filings.</p>
 </div>
 
 <div class="co-bar">
@@ -67,6 +83,7 @@
          data-i18n-placeholder="companies.search_ph">
   <div class="co-filters">
     <button type="button" class="co-chip is-on" data-co-view="all" data-i18n="companies.all">All</button>
+    <button type="button" class="co-chip" data-co-view="followed" data-i18n="companies.followed">Followed</button>
     <button type="button" class="co-chip" data-co-view="gainers" data-i18n="companies.gainers">Gainers</button>
     <button type="button" class="co-chip" data-co-view="losers" data-i18n="companies.losers">Losers</button>
     <select id="coGroup" class="co-select" aria-label="Sector">
@@ -75,21 +92,34 @@
       <option value="{{ g }}" data-i18n="sector.name.{{ g }}">{{ g }}</option>
       {% endfor %}
     </select>
+    <select id="coExch" class="co-select" aria-label="Exchange">
+      <option value="" data-i18n="companies.all_exchanges">All exchanges</option>
+      <option value="NYSE">NYSE</option>
+      <option value="Nasdaq">Nasdaq</option>
+      <option value="CBOE">CBOE</option>
+      <option value="OTC">OTC</option>
+    </select>
   </div>
 </div>
 <p id="coMeta" class="co-meta"></p>
 <div id="coGrid" class="co-grid"></div>
 <p id="coEmpty" class="co-empty" hidden></p>
+<button type="button" id="coMore" class="co-more" hidden></button>
 
 <script>
-// The cards: tickers from the cache the rolling refresher keeps warm (routes.
-// _company_cards), each a link into its Fundamentals tab. Everything below is
+// Two lists. ROWS: the companies the ticker cache follows, with quotes
+// (routes._company_cards), largest first. DIR: every other company listed with
+// the SEC (directory.py, /api/companies/directory), in SEC's order, which is
+// roughly largest first -- no quotes, since quoting 8,000 would be the bulk
+// Yahoo sweep valuation.py records getting this box blocked. Every card links
+// into its Fundamentals tab, which works for any SEC filer. Everything below is
 // composed here, where I18n.apply() cannot reach, so it re-renders on a
 // language switch.
 (function () {
   const ROWS = {{ companies | tojson }};
   const UPDATED = {{ updated | tojson }};
   const WARMING = {{ warming | tojson }};
+  const PAGE = 240;
   const F = s => document.getElementById(s);
   const tr = (key, fallback) => I18n.t(key) || fallback;
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g,
@@ -98,7 +128,13 @@
   // hand each reader's IP to that vendor for decoration.
   const HUES = [[99, 102, 241], [56, 189, 248], [52, 211, 153], [251, 191, 36],
                 [244, 114, 182], [167, 139, 250], [45, 212, 191], [251, 146, 60]];
+  const FOLLOWED = new Set(ROWS.map(r => r.t));
+  let DIR = [];
+  let dirState = 'loading';            // loading | ready | failed
+  let dirAsOf = null;
+  const EXCH = {};                     // ticker -> exchange, from SEC's list
   let view = 'all';
+  let shown = PAGE;
 
   function tile(t) {
     let h = 0;
@@ -118,76 +154,159 @@
 
   function matches(row, q) {
     if (!q) return true;
+    const Q = q.toUpperCase(), lq = q.toLowerCase();
     const name = (I18n.stockName ? I18n.stockName(row.t, row.n) : row.n) || '';
-    return row.t.startsWith(q.toUpperCase()) || name.toLowerCase().includes(q.toLowerCase())
-      || (row.n || '').toLowerCase().includes(q.toLowerCase());
+    return row.t.startsWith(Q) || name.toLowerCase().includes(lq)
+      || (row.n || '').toLowerCase().includes(lq)
+      || (row.also || []).some(a => a.startsWith(Q));
+  }
+
+  // The rows a view draws from. Quotes exist only for followed companies, so
+  // Gainers and Losers are theirs, and so is a sector: the peer groups are this
+  // site's, and SEC's list carries none.
+  function pool() {
+    const group = F('coGroup').value;
+    const exch = F('coExch').value;
+    const q = F('coSearch').value.trim();
+    let rows = (view === 'all' && !group) ? ROWS.concat(DIR) : ROWS;
+    rows = rows.filter(r => (!group || (r.g || []).includes(group))
+      && (!exch || (r.x || EXCH[r.t] || '') === exch)
+      && matches(r, q));
+    if (view === 'gainers') rows = rows.filter(r => typeof r.c === 'number' && r.c > 0).sort((a, b) => b.c - a.c);
+    if (view === 'losers') rows = rows.filter(r => typeof r.c === 'number' && r.c < 0).sort((a, b) => a.c - b.c);
+    return rows;
+  }
+
+  function card(r) {
+    const name = I18n.stockName ? I18n.stockName(r.t, r.n) : r.n;
+    const href = `/history/${encodeURIComponent(r.t)}?tab=fundamentals`;
+    if (r.d) {
+      const also = (r.also || []).length
+        ? tr('companies.also', 'also {t}').replace('{t}', r.also.slice(0, 3).join(', ')) : '';
+      return `<a class="co-card" href="${href}">
+        ${tile(r.t)}
+        <span class="co-ticker">${esc(r.t)}</span>
+        ${r.x ? `<span class="co-x" title="${esc(tr('companies.no_quote', 'SEC filer · no live quote'))}">${esc(r.x)}</span>` : '<span></span>'}
+        <span class="co-name" title="${esc(name)}">${esc(name)}</span>
+        <span></span>
+        <span class="co-foot">${esc(also)}</span>
+      </a>`;
+    }
+    const chg = typeof r.c === 'number'
+      ? `<span class="co-chg ${r.c > 0 ? 'up' : r.c < 0 ? 'down' : ''}">${r.c > 0 ? '+' : ''}${r.c.toFixed(2)}%</span>`
+      : '<span class="co-chg">—</span>';
+    const foot = [mcap(r.m) && `${tr('companies.mcap', 'Mkt cap')} ${mcap(r.m)}`,
+                  typeof r.pe === 'number' && r.pe > 0 && `${tr('companies.pe', 'P/E')} ${r.pe.toFixed(1)}`,
+                  typeof r.y === 'number' && `${tr('companies.y52', '52W')} ${r.y > 0 ? '+' : ''}${r.y.toFixed(1)}%`]
+      .filter(Boolean).join(' · ');
+    return `<a class="co-card" href="${href}">
+      ${tile(r.t)}
+      <span class="co-ticker">${esc(r.t)}</span>
+      <span class="co-price">${typeof r.p === 'number' ? '$' + r.p.toFixed(2) : '—'}</span>
+      <span class="co-name" title="${esc(name)}">${esc(name)}</span>
+      ${chg}
+      <span class="co-foot">${esc(foot)}</span>
+    </a>`;
   }
 
   function render() {
     const q = F('coSearch').value.trim();
-    const group = F('coGroup').value;
-    let rows = ROWS.filter(r => (!group || r.g.includes(group)) && matches(r, q));
-    if (view === 'gainers') rows = rows.filter(r => typeof r.c === 'number' && r.c > 0).sort((a, b) => b.c - a.c);
-    if (view === 'losers') rows = rows.filter(r => typeof r.c === 'number' && r.c < 0).sort((a, b) => a.c - b.c);
-    F('coGrid').innerHTML = rows.map(r => {
-      const name = I18n.stockName ? I18n.stockName(r.t, r.n) : r.n;
-      const chg = typeof r.c === 'number'
-        ? `<span class="co-chg ${r.c > 0 ? 'up' : r.c < 0 ? 'down' : ''}">${r.c > 0 ? '+' : ''}${r.c.toFixed(2)}%</span>`
-        : '<span class="co-chg">—</span>';
-      const foot = [mcap(r.m) && `${tr('companies.mcap', 'Mkt cap')} ${mcap(r.m)}`,
-                    typeof r.pe === 'number' && r.pe > 0 && `${tr('companies.pe', 'P/E')} ${r.pe.toFixed(1)}`,
-                    typeof r.y === 'number' && `${tr('companies.y52', '52W')} ${r.y > 0 ? '+' : ''}${r.y.toFixed(1)}%`]
-        .filter(Boolean).join(' · ');
-      return `<a class="co-card" href="/history/${encodeURIComponent(r.t)}?tab=fundamentals">
-        ${tile(r.t)}
-        <span class="co-ticker">${esc(r.t)}</span>
-        <span class="co-price">${typeof r.p === 'number' ? '$' + r.p.toFixed(2) : '—'}</span>
-        <span class="co-name" title="${esc(name)}">${esc(name)}</span>
-        ${chg}
-        <span class="co-foot">${esc(foot)}</span>
-      </a>`;
-    }).join('');
+    const rows = pool();
+    // A line where the quoted companies end and SEC's list begins, so a card
+    // with an exchange where its price would be does not read as a broken quote.
+    F('coGrid').innerHTML = rows.slice(0, shown).map((r, i) =>
+      (r.d && i > 0 && !rows[i - 1].d
+        ? `<p class="co-divider">${esc(tr('companies.divider', 'Every other company listed with the SEC · no live quote here, each opens its own filings'))}</p>`
+        : '') + card(r)).join('');
+    const more = F('coMore');
+    const left = rows.length - Math.min(shown, rows.length);
+    more.hidden = left <= 0;
+    if (left > 0) more.textContent = tr('companies.more', 'Show more ({n} left)').replace('{n}', left.toLocaleString());
     const empty = F('coEmpty');
     if (rows.length) {
       empty.hidden = true;
     } else {
       empty.hidden = false;
-      empty.textContent = WARMING ? tr('companies.warming', 'Quotes are still loading — try again in a minute.')
+      empty.textContent = (WARMING && dirState !== 'ready') ? tr('companies.warming', 'Quotes are still loading — try again in a minute.')
         : q ? tr('companies.empty', 'No company here matches. Press Enter to open “{q}” anyway.').replace('{q}', q.toUpperCase())
         : tr('companies.none', 'Nothing to show for this filter.');
     }
-    const parts = [tr('companies.count', '{n} companies').replace('{n}', rows.length)];
+    const whole = view === 'all' && !F('coGroup').value && dirState === 'ready';
+    const parts = [whole
+      ? tr('companies.count_all', '{n} companies · {q} with live quotes')
+          .replace('{n}', rows.length.toLocaleString()).replace('{q}', rows.filter(r => !r.d).length.toLocaleString())
+      : tr('companies.count', '{n} companies').replace('{n}', rows.length.toLocaleString())];
     if (UPDATED) parts.push(tr('companies.updated', 'quotes refresh in rotation · last update {t}')
       .replace('{t}', I18n.datetime(UPDATED)));
+    if (dirState === 'loading' && view === 'all') parts.push(tr('companies.dir_loading', 'loading every SEC-listed company…'));
+    if (dirState === 'failed' && view === 'all') parts.push(tr('companies.dir_failed', 'the full SEC list is unavailable right now, so only the companies this site follows are shown'));
+    if (dirState === 'ready' && dirAsOf && whole) parts.push(tr('companies.dir_asof', 'SEC list as of {d}').replace('{d}', I18n.datetime(dirAsOf)));
     F('coMeta').textContent = parts.join(' · ');
   }
 
+  // A bounded wait: the list is cached on the server and normally answers at
+  // once; a cold box answers 202 while it fetches SEC's file. Either way the
+  // loop ends on a drawn state, never a line saying "loading" for ever.
+  async function loadDirectory() {
+    for (let i = 0; i < 15; i++) {
+      let r, body = null;
+      try {
+        r = await fetch('/api/companies/directory', { credentials: 'same-origin' });
+        body = await r.json();
+      } catch (_) { r = null; }
+      if (r && r.status === 200 && body && Array.isArray(body.companies)) {
+        DIR = [];
+        for (const [t, n, x, also] of body.companies) {
+          const others = also ? also.split(' ') : [];
+          EXCH[t] = x;
+          others.forEach(a => { EXCH[a] = x; });
+          if (FOLLOWED.has(t) || others.some(a => FOLLOWED.has(a))) continue;
+          DIR.push({ t, n, x, also: others, d: 1 });
+        }
+        dirAsOf = body.as_of || null;
+        dirState = 'ready';
+        render();
+        return;
+      }
+      if (!r || r.status !== 202) break;
+      await new Promise(res => setTimeout(res, 4000));
+    }
+    dirState = 'failed';
+    render();
+  }
+
+  const reset = () => { shown = PAGE; render(); };
   document.addEventListener('click', e => {
     const chip = e.target.closest('[data-co-view]');
     if (!chip) return;
     view = chip.dataset.coView;
     document.querySelectorAll('[data-co-view]').forEach(b => b.classList.toggle('is-on', b === chip));
-    render();
+    reset();
   });
-  F('coGroup').addEventListener('change', render);
-  F('coSearch').addEventListener('input', render);
+  F('coMore').addEventListener('click', () => { shown += PAGE; render(); });
+  F('coGroup').addEventListener('change', reset);
+  F('coExch').addEventListener('change', reset);
+  F('coSearch').addEventListener('input', reset);
   // Enter opens the one match, or any ticker typed: the Fundamentals tab works
   // for every symbol, not only the ones listed here.
   F('coSearch').addEventListener('keydown', e => {
     if (e.key !== 'Enter') return;
     const q = F('coSearch').value.trim();
     if (!q) return;
-    const hits = ROWS.filter(r => matches(r, q));
-    const exact = ROWS.find(r => r.t === q.toUpperCase());
+    const all = ROWS.concat(DIR);
+    const Q = q.toUpperCase().replace(/\s+/g, '');
+    const exact = all.find(r => r.t === Q || (r.also || []).includes(Q));
+    const hits = all.filter(r => matches(r, q));
     // Lower-case words are a name being searched ("apple"): the largest match.
     // Anything else is a ticker, listed or not ("AA" must not become AAPL).
     const byName = /^[a-z][a-z\s.&'-]*$/.test(q) && hits.length;
-    const symbol = exact ? exact.t : hits.length === 1 ? hits[0].t
-      : byName ? hits[0].t : q.toUpperCase().replace(/\s+/g, '');
+    const symbol = exact ? (exact.t === Q ? exact.t : Q) : hits.length === 1 ? hits[0].t
+      : byName ? hits[0].t : Q;
     location.href = `/history/${encodeURIComponent(symbol)}?tab=fundamentals`;
   });
   document.addEventListener('i18n:langchange', render);
   render();
+  loadDirectory();
 })();
 </script>
 {% endblock %}

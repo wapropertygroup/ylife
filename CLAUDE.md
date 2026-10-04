@@ -299,6 +299,9 @@ Each app follows the same pattern:
   `/history/<ticker>`: a company's quarterly figures from its own SEC filings
   (XBRL companyfacts), Yahoo's statement tables where SEC has none. The first two
   are pure. See "The Fundamentals tab" below.
+- `directory.py` — every company listed with the SEC, for `/companies`' full
+  directory: SEC's `company_tickers_exchange.json`, daily, one card per filer.
+  `parse` is pure. See "The Fundamentals tab" below.
 - `predictions.py` / `odds.py` / `odds_ai.py` / `odds_ledger.py` — `/predictions`:
   live Polymarket and Kalshi odds, the Fed decision three ways (futures vs both
   venues), and the AI read with its scored track record. `odds.py` is pure. See
@@ -1501,18 +1504,42 @@ All EDGAR traffic goes through `sec13f.edgar_get`: SEC's rate limit is per
 client, not per module.
 
 **`/companies` is the way in** ("Find your next move", after alphascope's
-`/dashboard`): every company the ticker cache follows (~300) as a card — monogram
-tile (no third-party logo CDN: it would hand every reader's IP to a vendor for
-decoration), price, day change, market cap, P/E, 52-week return — largest first,
-with Gainers / Losers and a sector filter, each card opening its Fundamentals
-tab. It reads `_get_data()` only, so it costs nothing to serve; those quotes
-refresh a few at a time through the day, and the page says so. Enter in its
-search opens any ticker, listed or not.
+`/dashboard`). Each company is a card with a monogram tile — no third-party logo
+CDN, which would hand every reader's IP to a vendor for decoration — and each
+card opens that company's Fundamentals tab. The page has two parts:
+
+* **The ~300 companies the ticker cache follows**, with price, day change,
+  market cap, P/E and 52-week return, largest first. Gainers / Losers and the
+  sector filter apply to these. They read `_get_data()` only, so they cost
+  nothing to serve; the quotes refresh a few at a time through the day, and the
+  page says so.
+* **Every other company listed with the SEC** (`directory.py`), added
+  2026-10-03 when asked "why doesn't every company have fundamentals?". Every
+  SEC filer already had them (`fundamentals.cik_for` maps any ticker); only the
+  directory was narrow. SEC's keyless `company_tickers_exchange.json` lists
+  10,434 tickers for 8,008 filers (565 KB, refreshed daily through
+  `sec13f.edgar_get`), roughly largest first. A company is one card under its
+  first-listed ticker, GOOGL rather than GOOG, with the rest shown as "also",
+  where search still finds them. These cards carry no quote: quoting 8,000
+  companies would be a bulk Yahoo sweep, the kind `valuation.py` records
+  having got this box blocked. The exchange sits where the price would, with a
+  divider where the quoted cards end.
+
+`/api/companies/directory` serves one compact JSON (372 KB, 118 KB gzipped by
+nginx) built once per load of the file, with an hour's browser cache. A cold
+box answers 202 while one fetch runs, and the page shows the followed
+companies meanwhile; a failed refresh keeps the last copy. The page draws 240
+cards at a time with "Show more", and adds an exchange filter (NYSE, Nasdaq,
+CBOE, OTC) and a Followed view. Companies listed only abroad (Tokyo, Hong Kong,
+Shanghai) are not in SEC's file. Enter in the search still opens any ticker,
+listed or not, and the Fundamentals tab answers them from Yahoo's statements.
 
 Tests: `tests/test_xbrl.py` (51, NVIDIA's filings), `tests/test_statements.py`
 (12, Yahoo's tables as served), `node tests/check_fundamentals_js.mjs` (40, the
-range/YoY/cap arithmetic) and `tests/check_fundamentals_endpoints.py` (21,
-hermetic). Not a DynamoDB table: every figure can be fetched again.
+range/YoY/cap arithmetic), `tests/check_fundamentals_endpoints.py` (21,
+hermetic), `tests/test_directory.py` (13, SEC's real rows) and
+`tests/check_companies_directory.py` (6, hermetic). Not a DynamoDB table: every
+figure can be fetched again.
 
 ### Choosing the model and thinking depth (`agent_models.py`)
 
