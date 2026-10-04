@@ -1979,10 +1979,10 @@ and the unit sets no environment — so `app.secret_key` was the fallback
 read the code could sign in as anyone, the VIP owner included, and read every
 reader's reports and portfolio. The parameter was created that day
 (SecureString, random), which signed every reader out once and nothing else —
-only the session is signed with it. yPlanner and yTracker have their keys;
-yPlanter, yPay and yBG still fall back to dev keys (yPay keeps nothing in its
-session; yBG's admin session is forgeable, but it has no SSM parameters at all
-and appears unused).
+only the session is signed with it. The other apps' constants were closed the
+same day (Secrets flow, item 4). yTracker turned out to sign real accounts
+with its constant too. The handoff never falls back: ypay checks the
+token in another process, so only the shared key from SSM can work.
 
 Stripe setup (live, done 2026-10-04): product `tradeagents_pro` with prices
 under lookup keys `tradeagents_pro_month` / `tradeagents_pro_year` (made by
