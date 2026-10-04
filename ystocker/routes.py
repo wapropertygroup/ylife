@@ -7389,10 +7389,11 @@ def api_13f_aum_explain():
     """Stream an AI explanation of a fund's quarterly AUM trend via SSE."""
     import os
     from google import genai
-    from ystocker.sec13f import get_all_holdings
+    from ystocker.sec13f import get_all_holdings, resolve_fund_name
 
     body = request.get_json(force=True, silent=True) or {}
     fund = (body.get("fund") or "").strip()
+    fund = resolve_fund_name(fund) or fund
     lang = body.get("lang", "en")
     log.info("API 13f/aum-explain: fund=%s lang=%s", fund, lang)
 
@@ -7422,7 +7423,7 @@ def api_13f_aum_explain():
     prev_aum = None
     for q in chronological:
         period = q.get("period", "?")
-        aum_m  = float(q.get("total_value_millions") or 0)
+        aum_m  = float(q.get("reported_value_millions", q.get("total_value_millions")) or 0)
         aum_b  = aum_m / 1000
         change_str = ""
         if prev_aum and prev_aum > 0:
@@ -7431,8 +7432,8 @@ def api_13f_aum_explain():
         aum_lines.append(f"  {period}: ${aum_b:,.1f}B{change_str}")
         prev_aum = aum_m
 
-    first_aum_b = float(chronological[0].get("total_value_millions", 0)) / 1000
-    last_aum_b  = float(chronological[-1].get("total_value_millions", 0)) / 1000
+    first_aum_b = float(chronological[0].get("reported_value_millions", chronological[0].get("total_value_millions", 0)) or 0) / 1000
+    last_aum_b  = float(chronological[-1].get("reported_value_millions", chronological[-1].get("total_value_millions", 0)) or 0) / 1000
     overall_pct = ((last_aum_b - first_aum_b) / first_aum_b * 100) if first_aum_b else 0
 
     summary = (
@@ -7588,12 +7589,11 @@ def thirteenf_refresh():
 def api_thirteenf(fund_slug: str):
     """JSON API — return holdings for a single fund by slug."""
     log.info("API 13f: fund=%s", fund_slug)
-    from ystocker.sec13f import get_all_holdings, FUNDS
+    from ystocker.sec13f import get_all_holdings, resolve_fund_name
     holdings = get_all_holdings()
-    name = next(
-        (n for n in FUNDS if n.lower().replace(" ", "-") == fund_slug.lower()),
-        None
-    )
+    # Through the resolver, so a slug for a former alias ("buffett-family-office")
+    # still reaches the one fund it names rather than a 404.
+    name = resolve_fund_name(fund_slug)
     if not name:
         log.warning("API 13f: fund not found: %s", fund_slug)
         return jsonify({"error": "Fund not found"}), 404

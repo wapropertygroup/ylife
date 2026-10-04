@@ -240,7 +240,8 @@ Each app follows the same pattern:
 ### yStocker-specific modules
 - `data.py` — Yahoo Finance fetching (`fetch_ticker_data`, `FetchError`)
 - `fed.py` — Federal Reserve H.4.1 from FRED (no API key needed)
-- `sec13f.py` — SEC EDGAR 13F institutional holdings (22 funds tracked)
+- `sec13f.py` — SEC EDGAR 13F institutional holdings (48 funds; see the 13F
+  notes under Known Pitfalls before adding one)
 - `forecast.py` — Prophet / ARIMA / Linear price forecasting
 - `charts.py` — Matplotlib/Seaborn → base64 PNG (server-side, no disk I/O)
 - `heatmap_meta.py` — Static S&P 500 metadata for market heatmap tile sizing
@@ -2874,6 +2875,44 @@ Started in `create_app()`, all daemon threads:
   sub-header on top), not the menu. Note the status filter never hit this only
   because it lives in the last card on the page — so "the existing dropdown
   works" is not evidence that a new one will.
+- **A 13F fund's CIK is the entity filing its 13F-HR today, and nothing
+  checks it at run time.** A wrong CIK does not fail; it shows someone else's
+  book under the fund's name. The 2026-10-04 audit found 16 of 51 wrong:
+  "Jane Street" was Barber Financial, "Capital Group" was Royal Bank of Canada,
+  and "Coatue" was Pershing Square Capital Management. Check EDGAR's entity name
+  before adding one. The table has three parts:
+  - **`PREDECESSORS`**: firms whose filer changed. Periods up to the cutover
+    come from the old entity only.
+  - **`COFILERS`**: firms filing through several entities, summed by CUSIP.
+    Vanguard is nine since 2026-03-31; Vanguard Group's own last report was a
+    combination report that covered them all.
+  - **`ALIASES`**: second names, resolved with `resolve_fund_name` and never
+    fetched or counted. Each used to double a portfolio in the consensus tables.
+
+  Three traps in the filings themselves:
+  - **Units.** `<value>` is whole dollars for filings since 2023-01-03, but T.
+    Rowe Price Associates, Baupost and Duquesne still file thousands, so
+    `decide_value_unit` decides per filing. The date sets the default; a median
+    value per share under $1 means thousands, over $50 means dollars. Storage
+    is always thousands. The site showed Berkshire at $299 trillion until then.
+  - **Amendments.** A 13F-HR/A is a RESTATEMENT, which replaces the original,
+    or NEW HOLDINGS, which adds only what confidential treatment hid. Its cover
+    says which. Preferring amendments blindly put Berkshire's 2025-03-31 at
+    $1.1B.
+  - **Options.** The cover's `tableValueTotal` counts options at underlying
+    value, so every quarter carries `reported_value_millions`, the cover's
+    figure. The AUM chart plots it. Jane Street jumped from $62B to $397B where
+    the old code switched from parsed positions to cover totals.
+    `total_value_millions` stays positions only, the base for `pct_portfolio`
+    and for cross-fund rankings, where options notional would put Jane Street
+    at $1.2T.
+
+  The infotable is the INFORMATION TABLE row's raw file, never an
+  `xslForm13F_X0n/` view. An X01 view slipping past a literal X02 filter was the
+  long-running "mismatched tag: line 33, column 2". A slow refresh keeps
+  finished funds and carries the rest forward, and `_CACHE_VER` (3) forces a
+  refetch when the payload's meaning changes. Tests: `tests/test_sec13f.py`
+  (77). Five need pyexpat, which only the box has; run them there.
 - **A fund has no company data, and asking Yahoo for it anyway is not free.**
   An ETF's earnings dates, insider trades, statements and EPS trend all come
   back as a 404 ("No fundamentals data found for symbol: SPY"). That was about

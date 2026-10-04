@@ -22,7 +22,7 @@ Three rules every section builder follows:
   training data; in a dated, numeric brief an invented number is far worse than
   an admitted hole.
 * **Every series is reduced before it is sent.** These payloads run large — the
-  housing one is ~10 MB cold, and 13F carries 50 holdings for each of 22 funds.
+  housing one is ~10 MB cold, and 13F carries 50 holdings for each of 48 funds.
   What a brief can use is the latest value, its change, and its position in
   range, so that is what each builder emits. Row caps are named constants
   below, not magic numbers buried in slices.

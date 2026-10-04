@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<edgarSubmission xmlns="http://www.sec.gov/edgar/thirteenffiler" xmlns:com="http://www.sec.gov/edgar/common">
+  <schemaVersion>X0202</schemaVersion>
+  <headerData>
+    <submissionType>13F-HR/A</submissionType>
+    <filerInfo>
+      <liveTestFlag>LIVE</liveTestFlag>
+      <flags>
+        <confirmingCopyFlag>false</confirmingCopyFlag>
+        <returnCopyFlag>true</returnCopyFlag>
+        <overrideInternetFlag>false</overrideInternetFlag>
+      </flags>
+      <filer>
+        <credentials>
+          <cik>0001595888</cik>
+          <ccc>XXXXXXXX</ccc>
+        </credentials>
+      </filer>
+      <periodOfReport>03-31-2025</periodOfReport>
+    </filerInfo>
+  </headerData>
+  <formData>
+    <coverPage>
+      <reportCalendarOrQuarter>03-31-2025</reportCalendarOrQuarter>
+      <isAmendment>true</isAmendment>
+      <amendmentNo>1</amendmentNo>
+      <amendmentInfo>
+        <amendmentType>RESTATEMENT</amendmentType>
+      </amendmentInfo>
+      <filingManager>
+        <name>JANE STREET GROUP, LLC</name>
+        <address>
+          <com:street1>250 VESEY STREET</com:street1>
+          <com:street2>6TH FLOOR</com:street2>
+          <com:city>NEW YORK</com:city>
+          <com:stateOrCountry>NY</com:stateOrCountry>
+          <com:zipCode>10281</com:zipCode>
+        </address>
+      </filingManager>
+      <reportType>13F HOLDINGS REPORT</reportType>
+      <form13FFileNumber>028-16162</form13FFileNumber>
+      <provideInfoForInstruction5>Y</provideInfoForInstruction5>
+      <additionalInformation>This amendment restates the entries to Schedule 13F for the quarter ended March 31, 2025. Following submission, it was identified that certain entries incorrectly included shares that are out of scope for reporting on Form 13F. Additionally eleven (11) entries are updated and three (3) are added to include certain shares that were inadvertently omitted. The 13F Holdings Report includes options that deliver two different securities and each has been reflected separately. The 13F Holdings Report includes options that deliver securities which are not on the SEC's Official List of Section 13(F) Securities.</additionalInformation>
+    </coverPage>
+    <signatureBlock>
+      <name>Tien-Fu Liu</name>
+      <title>Managing Director</title>
+      <phone>212-651-6069</phone>
+      <signature>Tien-Fu Liu</signature>
+      <city>New York</city>
+      <stateOrCountry>NY</stateOrCountry>
+      <signatureDate>05-19-2025</signatureDate>
+    </signatureBlock>
+    <summaryPage>
+      <otherIncludedManagersCount>6</otherIncludedManagersCount>
+      <tableEntryTotal>13402</tableEntryTotal>
+      <tableValueTotal>396972524215</tableValueTotal>
+      <isConfidentialOmitted>false</isConfidentialOmitted>
+      <otherManagers2Info>
+        <otherManager2>
+          <sequenceNumber>1</sequenceNumber>
+          <otherManager>
+            <cik>0001450698</cik>
+            <form13FFileNumber>028-13277</form13FFileNumber>
+            <crdNumber>000103782</crdNumber>
+            <name>Jane Street Capital, LLC</name>
+          </otherManager>
+        </otherManager2>
+        <otherManager2>
+          <sequenceNumber>2</sequenceNumber>
+          <otherManager>
+            <cik>0001450709</cik>
+            <form13FFileNumber>028-13276</form13FFileNumber>
+            <crdNumber>000134159</crdNumber>
+            <name>Jane Street Options, LLC</name>
+          </otherManager>
+        </otherManager2>
+        <otherManager2>
+          <sequenceNumber>3</sequenceNumber>
+          <otherManager>
+            <cik>0001450705</cik>
+            <form13FFileNumber>028-13275</form13FFileNumber>
+            <name>Jane Street Global Trading, LLC</name>
+          </otherManager>
+        </otherManager2>
+        <otherManager2>
+          <sequenceNumber>4</sequenceNumber>
+          <otherManager>
+            <cik>0001556329</cik>
+            <form13FFileNumber>028-15040</form13FFileNumber>
+            <name>JSOIN (BVI), Ltd.</name>
+          </otherManager>
+        </otherManager2>
+        <otherManager2>
+          <sequenceNumber>5</sequenceNumber>
+          <otherManager>
+            <cik>0001907807</cik>
+            <form13FFileNumber>028-22194</form13FFileNumber>
+            <name>Jane Street Europe Ltd</name>
+          </otherManager>
+        </otherManager2>
+        <otherManager2>
+          <sequenceNumber>6</sequenceNumber>
+          <otherManager>
+            <cik>0002057057</cik>
+            <form13FFileNumber>028-25383</form13FFileNumber>
+            <name>Jane Street Singapore Pte. Ltd</name>
+          </otherManager>
+        </otherManager2>
+      </otherManagers2Info>
+    </summaryPage>
+  </formData>
+</edgarSubmission>

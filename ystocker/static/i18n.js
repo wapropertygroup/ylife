@@ -975,6 +975,7 @@ const I18n = (() => {
     'thirteenf.legend_closed':{ en: 'Position exited (prior quarter only)', zh: '已清仓（仅上季度持有）' },
     'thirteenf.source':      { en: 'Data source:', zh: '数据来源：' },
     'thirteenf.shown_value': { en: 'Shown value:', zh: '显示持仓总值：' },
+    'thirteenf.of_positions':  { en: 'of positions', zh: '占持仓' },
     'thirteenf.total_shown': { en: 'Total (shown)', zh: '合计（已显示）' },
     'thirteenf.aum_history': { en: 'AUM by Quarter', zh: '按季度持仓规模' },
     'thirteenf.explain_aum': { en: 'AI Explain',      zh: 'AI 解读' },

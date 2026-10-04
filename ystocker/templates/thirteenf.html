@@ -2,6 +2,14 @@
 {% block title %}yStocker — 13F Institutional Holdings{% endblock %}
 
 {% block content %}
+{#  Millions of dollars, at a readable scale: Vanguard's book is $6.9T, which
+    as "$6,899,300M" has to be counted rather than read. #}
+{% macro usd_m(m) -%}
+  {%- if m is none -%}—
+  {%- elif m >= 1000000 -%}${{ '%.2f' | format(m / 1000000) }}T
+  {%- elif m >= 1000 -%}${{ '%.1f' | format(m / 1000) }}B
+  {%- else -%}${{ '%.0f' | format(m) }}M{%- endif -%}
+{%- endmacro %}
 
 <!-- ── Header ────────────────────────────────────────────────────────── -->
 <div class="mb-6 sm:mb-8 fade-up">
@@ -233,7 +241,7 @@ function buildSectorDonut(fundSlug, holdingsArray) {
       <span><span data-i18n="thirteenf.period">Period:</span> <span class="text-slate-600 dark:text-slate-300 font-medium">{{ fd.period_of_report }}</span></span>
       <span><span data-i18n="thirteenf.aum">Reported AUM:</span>
         <span class="text-slate-800 dark:text-slate-100 font-bold">
-          ${{ "{:,.0f}".format(fd.total_value_millions) }}M
+          {{ usd_m(fd.reported_value_millions if fd.reported_value_millions is defined and fd.reported_value_millions is not none else fd.total_value_millions) }}
         </span>
       </span>
       <span><span data-i18n="thirteenf.shown">Holdings shown:</span> <span class="text-slate-600 dark:text-slate-300">{{ fd.holdings | length }} / {{ fd.total_holdings }}</span></span>
@@ -241,8 +249,11 @@ function buildSectorDonut(fundSlug, holdingsArray) {
       {% set shown_pct = (shown_total / fd.total_value_millions * 100) if fd.total_value_millions else 0 %}
       <span class="text-slate-500 dark:text-slate-400">·</span>
       <span><span data-i18n="thirteenf.shown_value">Shown value:</span>
-        <span class="text-emerald-700 dark:text-emerald-400 font-bold">${{ "{:,.0f}".format(shown_total) }}M</span>
-        <span class="text-slate-500 dark:text-slate-600 ml-1">({{ "{:.1f}".format(shown_pct) }}% of AUM)</span>
+        <span class="text-emerald-700 dark:text-emerald-400 font-bold">{{ usd_m(shown_total) }}</span>
+        {#  Of positions, not of the reported total: an options book reports
+            its options at underlying value, so Jane Street's top fifty would read
+            as ~13% of a $1.2T total. #}
+        <span class="text-slate-500 dark:text-slate-600 ml-1">({{ "{:.1f}".format(shown_pct) }}% <span data-i18n="thirteenf.of_positions">of positions</span>)</span>
       </span>
     </div>
 
@@ -275,10 +286,17 @@ function buildSectorDonut(fundSlug, holdingsArray) {
     <script>
     (function(){
       const labels = [{% for q in fd.quarters | reverse %}"{{ q.period }}"{% if not loop.last %},{% endif %}{% endfor %}];
-      const values = [{% for q in fd.quarters | reverse %}{{ q.total_value_millions }}{% if not loop.last %},{% endif %}{% endfor %}];
-      const aum_only = [{% for q in fd.quarters | reverse %}{{ 'true' if q.get('aum_only') else 'false' }}{% if not loop.last %},{% endif %}{% endfor %}];
+      // The filing's reported total for every quarter: the cover page's
+      // tableValueTotal, options included. The five newest quarters used to plot
+      // their parsed positions and the older ones the cover total, so an options
+      // book jumped where the method changed (Jane Street: $62B, then $397B).
+      const values = [{% for q in fd.quarters | reverse %}{{ q.reported_value_millions if q.reported_value_millions is defined and q.reported_value_millions is not none else q.total_value_millions }}{% if not loop.last %},{% endif %}{% endfor %}];
       const ctx = document.getElementById('aumChart_{{ slug }}');
       if (!ctx) return;
+      // Values are millions of dollars. Both labels used to read them as
+      // billions ("$299.25T" for Berkshire's $299B).
+      const money = (v, digits) => v >= 1e6 ? '$' + (v / 1e6).toFixed(digits) + 'T'
+        : v >= 1e3 ? '$' + (v / 1e3).toFixed(digits) + 'B' : '$' + Math.round(v) + 'M';
       const colors = values.map((v, i) => i === values.length - 1 ? CT.c('#6366f1') : 'rgba(99,102,241,0.5)');
       new Chart(ctx, {
         type: 'bar',
@@ -297,17 +315,13 @@ function buildSectorDonut(fundSlug, holdingsArray) {
           plugins: {
             legend: { display: false },
             tooltip: { callbacks: {
-              label: c => {
-                const v = c.raw;
-                const suffix = aum_only[c.dataIndex] ? ' (est.)' : '';
-                return v >= 1000 ? ` $${(v/1000).toFixed(2)}T${suffix}` : ` $${v.toFixed(0)}M${suffix}`;
-              }
+              label: c => ' ' + money(c.raw, 2)
             }},
           },
           scales: {
             x: { grid: { color: CT.c('#1e293b') }, ticks: { color: CT.c('#64748b'), font: { size: 9 }, maxRotation: 45 } },
             y: { grid: { color: CT.c('#1e293b') }, ticks: { color: CT.c('#64748b'), font: { size: 9 },
-              callback: v => v >= 1000 ? '$'+(v/1000).toFixed(1)+'T' : '$'+v+'B'
+              callback: v => money(v, v >= 1e6 ? 1 : 0)
             }},
           },
         },

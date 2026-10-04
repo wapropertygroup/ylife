@@ -1,0 +1,20 @@
+<?xml version="1.0" ?>
+<informationTable xsi:schemaLocation="http://www.sec.gov/edgar/document/thirteenf/informationtable eis_13FDocument.xsd" xmlns="http://www.sec.gov/edgar/document/thirteenf/informationtable" xmlns:n1="http://www.sec.gov/edgar/document/thirteenf/informationtable" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <infoTable>
+    <nameOfIssuer>FGL HLDGS</nameOfIssuer>
+    <titleOfClass>*W EXP 11/30/202</titleOfClass>
+    <cusip>G3402M110</cusip>
+    <value>1201</value>
+    <shrsOrPrnAmt>
+      <sshPrnamt>779991</sshPrnamt>
+      <sshPrnamtType>SH</sshPrnamtType>
+    </shrsOrPrnAmt>
+    <investmentDiscretion>DFND</investmentDiscretion>
+    <otherManager>1</otherManager>
+    <votingAuthority>
+      <Sole>779991</Sole>
+      <Shared>0</Shared>
+      <None>0</None>
+    </votingAuthority>
+  </infoTable>
+</informationTable>

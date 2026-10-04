@@ -14,7 +14,7 @@ simultaneously, and those are not small:
 * breadth: 518 tickers x 11 years, measured at **81.9s** on the box
 * housing: ~10 MB across 8 Zillow/Redfin files
 * valuation: multpl scrape + constituent fundamentals
-* sec13f: 22 funds of EDGAR filings
+* sec13f: 48 funds of EDGAR filings
 * markets warm-up + the rolling ticker refresher, both hitting Yahoo
 
 The instance is a t3.medium: **2 vCPU**, 2 Gunicorn workers, 4 GB. Running those
