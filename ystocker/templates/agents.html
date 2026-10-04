@@ -684,8 +684,21 @@
   display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
   justify-content: space-between; margin-bottom: 12px;
 }
+.ag-hist-head:has(.ag-hist-toggle[aria-expanded="false"]) { margin-bottom: 0; }
 .ag-hist-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .ag-hist-tools .ag-input { padding: 6px 10px; font-size: 12px; }
+.ag-hist-tools[hidden], #agHistBody[hidden] { display: none; }
+/* The collapsed card's whole head is the toggle. */
+.ag-hist-toggle {
+  display: inline-flex; align-items: center; gap: 7px; padding: 4px 6px 4px 2px; margin: -4px 0;
+  border: 0; background: none; color: inherit; font: inherit; cursor: pointer; border-radius: 8px;
+}
+.ag-hist-toggle:hover { color: var(--ag-ink-strong); }
+.ag-hist-toggle:focus-visible { outline: 2px solid var(--ag-accent); outline-offset: 2px; }
+.ag-hist-chev { width: 12px; height: 8px; color: var(--ag-ink-dim); transform: rotate(-90deg); transition: transform .15s; }
+.ag-hist-toggle[aria-expanded="true"] .ag-hist-chev { transform: none; }
+.ag-hist-count { font-size: 11.5px; font-weight: 500; color: var(--ag-ink-dim); }
+.ag-hist-count:empty { display: none; }
 /* The clear button sits inside the field's trailing padding. */
 .ag-search-wrap { position: relative; display: inline-flex; }
 .ag-search-wrap .ag-input { padding-right: 26px; }
@@ -1693,9 +1706,23 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
 
 <!-- ── History ────────────────────────────────────────────────────────── -->
 <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 fade-up">
+  {#  Collapsed until opened (asked for 2026-10-04): the run form and the
+      decision calendar are what a returning reader came for, and twenty rows
+      of history pushed the calendar a screen down. The list still loads with
+      the page, so the closed card can say how many runs there are. #}
   <div class="ag-hist-head">
-    <h3 class="text-sm font-semibold text-slate-600 dark:text-slate-300" data-i18n="agents.history">Recent runs</h3>
-    <div class="ag-hist-tools">
+    <h3 class="text-sm font-semibold text-slate-600 dark:text-slate-300">
+      <button type="button" id="agHistToggle" class="ag-hist-toggle" aria-expanded="false" aria-controls="agHistBody"
+              title="Show recent runs" data-i18n-title="agents.history_show">
+        <svg class="ag-hist-chev" viewBox="0 0 12 8" aria-hidden="true">
+          <path d="M1 1.6 6 6.4l5-4.8" fill="none" stroke="currentColor" stroke-width="1.7"
+                stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span data-i18n="agents.history">Recent runs</span>
+        <span id="agHistCount" class="ag-hist-count"></span>
+      </button>
+    </h3>
+    <div class="ag-hist-tools" hidden>
       <div class="ag-search-wrap">
         <input id="agSearch" type="search" class="ag-input w-44" maxlength="32"
                autocomplete="off" spellcheck="false"
@@ -1756,10 +1783,12 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
       </div>
     </div>
   </div>
+  <div id="agHistBody" hidden>
   <p id="agSearchMeta" class="ag-search-meta hidden"></p>
   <div id="agHistory" class="text-xs text-slate-500">
     <div class="ag-hist-load"><span class="ag-spinner"></span><span
       data-i18n="agents.history_loading">Loading your reports…</span></div>
+  </div>
   </div>
 </div>
 {% if not agent_embedded %}
@@ -3142,6 +3171,23 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
     box.appendChild(row);
   }
 
+  // Recent runs start collapsed; the head's title opens and closes the list.
+  const histToggle = document.getElementById('agHistToggle');
+  const histBodyEl = document.getElementById('agHistBody');
+  const histToolsEl = document.querySelector('.ag-hist-tools');
+  const histCountEl = document.getElementById('agHistCount');
+  function setHistOpen(open) {
+    if (!histToggle) return;
+    histToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    const tip = open ? (I18n.t('agents.history_hide') || 'Hide recent runs')
+                     : (I18n.t('agents.history_show') || 'Show recent runs');
+    histToggle.title = tip;
+    histToggle.setAttribute('data-i18n-title', open ? 'agents.history_hide' : 'agents.history_show');
+    if (histBodyEl) histBodyEl.hidden = !open;
+    if (histToolsEl) histToolsEl.hidden = !open;
+  }
+  if (histToggle) histToggle.addEventListener('click', () => setHistOpen(histBodyEl ? histBodyEl.hidden : true));
+
   async function loadHistory() {
     const q = (searchEl?.value || '').trim();
     const status = statusFilterEl?.value || '';
@@ -3177,6 +3223,9 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
       viewer = res.viewer || '';
       const box = document.getElementById('agHistory');
       const filtering = !!(q || status);
+      // The closed card's count is the unfiltered list's, so a search typed
+      // and then hidden does not leave the head saying "3".
+      if (histCountEl && !filtering) histCountEl.textContent = jobs.length ? '· ' + jobs.length : '';
 
       // Found-count line: the point of a search is knowing whether the thing
       // exists, so say so explicitly rather than leaving an empty list to mean

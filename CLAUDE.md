@@ -1840,7 +1840,9 @@ parts:
   Pitfalls).
 
 A chip opens the report in place through `window.agOpenJob`, the page's own
-`openJob`, exposed for it. `?ticker=` from the run form opens on that ticker.
+`openJob`, exposed for it. The "Recent runs" card above it starts collapsed
+(asked for 2026-10-04). Its title is the toggle and carries the run count, and
+the list still loads with the page so the count is there. `?ticker=` from the run form opens on that ticker.
 
 **A run is placed by the trade date it analysed** (`job.date`), not by when it
 ran: a Sunday run about Friday's close belongs on Friday.
@@ -1946,9 +1948,16 @@ calendar links on a dashboard. `editorial = true` is the plane and wiki.css
 without the shell, for the landing and the wiki, which are editorial everywhere.
 
 The masthead is one bar on every page, as vibetrading.wiki's is: mark, serif
-wordmark (plus "Docs"/"Research Lab"/"Markets" on those sections), Docs ·
-Research Lab · Samples · Pricing · Markets, language and theme toggles, and the
-call to action. It reads the page's `section` — a dashboard's is `markets` —
+wordmark (plus "Docs"/"Research Lab"/"Markets"/"Research desk" on those
+sections), Docs · Research Lab · Samples · Pricing · Markets, language and theme
+toggles, and the call to action. A signed-in reader's bar also starts with
+**Research desk** (投研台), marked current on the run page (asked for 2026-10-04).
+It is not shown signed out, because /agents sends a signed-out visitor on this
+host to /home. It reads "Desk" below 1260px, and a signed-in bar drops its
+section label and long forms at 1260px rather than 1180. Measured with the extra
+link, the full-length bar ran a Research Lab page 49px past the viewport at
+1181px, and the long tab ran Docs, Research Lab and Markets 39px wide at 961px,
+both in English. It reads the page's `section` — a dashboard's is `markets` —
 where `home` makes Samples and Pricing in-page anchors (elsewhere they lead to
 `/home#…`), `docs`/`research`/`markets` mark their link current, and `run` and
 `login` drop the CTA and the Sign in button, each of which would lead to the page
@@ -2921,6 +2930,15 @@ Started in `create_app()`, all daemon threads:
     `total_value_millions` stays positions only, the base for `pct_portfolio`
     and for cross-fund rankings, where options notional would put Jane Street
     at $1.2T.
+
+  /13f's two tables separate money held from money moved (asked 2026-10-04).
+  Consensus shows "Combined holdings", the funds' whole positions, beside "Net
+  added this quarter". Net Buys shows "Bought this quarter". Both value columns
+  used to sum the funds' whole positions, so a fund adding 1% to a $66B Apple
+  stake put $66B under net buys. Money moved is shares changed × quarter-end
+  price, from `change_shares` or `change_pct`. A full exit is invisible, since
+  the fund no longer holds the stock, and the tooltip says so. Both count each
+  fund's top 50 positions, which is what `holdings` carries.
 
   The infotable is the INFORMATION TABLE row's raw file, never an
   `xslForm13F_X0n/` view. An X01 view slipping past a literal X02 filter was the

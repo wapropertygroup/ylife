@@ -310,6 +310,15 @@ html[lang^="zh"] .w-top-name small { letter-spacing: .06em; }
   .w-top[data-signed-in] .w-top-long { display: none; }
   .w-top[data-signed-in] .w-top-short { display: inline; }
 }
+/* Signed in, the bar also carries the Research desk link (2026-10-04), and at
+   full length -- label, "Research desk", "Run an analysis" -- it measured 49px
+   past the viewport on a Research Lab page at 1181px in English. So for a
+   signed-in reader the label and the long forms go 80px sooner. */
+@media (max-width: 1260px) {
+  .w-top[data-signed-in] .w-top-name small { display: none; }
+  .w-top[data-signed-in] .w-top-long { display: none; }
+  .w-top[data-signed-in] .w-top-short { display: inline; }
+}
 @media (max-width: 960px) {
   .w-top[data-signed-in] .w-top-nav { display: none; }
   .w-top[data-signed-in] .w-top-actions { margin-left: auto; }

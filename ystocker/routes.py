@@ -7528,11 +7528,38 @@ def thirteenf():
     from collections import defaultdict
     ticker_funds: dict[str, list] = defaultdict(list)
     ticker_value: dict[str, float] = defaultdict(float)
+    # Money moved, beside money held (asked 2026-10-04: is the value new money
+    # or total holdings?). The value columns summed each fund's *whole*
+    # position, so a fund adding 1% to a $66B Apple stake put $66B under "net
+    # buys". `_added_m` is what the shares bought or sold this quarter were
+    # worth at quarter-end; a fund that sold out entirely is not in its current
+    # holdings, so net figures cannot see an exit -- the page says so.
+    ticker_added: dict[str, float] = defaultdict(float)
+    ticker_added_known: dict[str, int] = defaultdict(int)
     buy_funds: dict[str, list] = defaultdict(list)
-    buy_value: dict[str, float] = defaultdict(float)
+    buy_added: dict[str, float] = defaultdict(float)
     buy_new_count: dict[str, int] = defaultdict(int)
     buy_increased_count: dict[str, int] = defaultdict(int)
     buy_new_value: dict[str, float] = defaultdict(float)
+
+    def _added_m(h: dict) -> Optional[float]:
+        v = h.get("value_millions") or 0
+        change = h.get("change")
+        if change == "new":
+            return float(v)
+        if change == "unchanged":
+            return 0.0
+        if change in ("increased", "reduced"):
+            shares = h.get("shares") or 0
+            delta = h.get("change_shares")
+            pct = h.get("change_pct")
+            if delta is None and pct is not None and shares and pct > -100:
+                delta = shares - shares / (1 + pct / 100)
+            if delta is None or not shares:
+                return None
+            return float(v) * delta / shares
+        return None                      # "unknown": an implausible swing
+
     for fund_name, fd in holdings.items():
         if not isinstance(fd, dict) or fd.get("error"):
             continue
@@ -7543,10 +7570,15 @@ def thirteenf():
             v = h.get("value_millions", 0) or 0
             ticker_funds[t].append(fund_name)
             ticker_value[t] += v
+            added = _added_m(h)
+            if added is not None:
+                ticker_added[t] += added
+                ticker_added_known[t] += 1
             change = h.get("change")
             if change in ("new", "increased"):
                 buy_funds[t].append(fund_name)
-                buy_value[t] += v
+                if added is not None:
+                    buy_added[t] += added
                 if change == "new":
                     buy_new_count[t] += 1
                     buy_new_value[t] += v
@@ -7559,6 +7591,7 @@ def thirteenf():
                 "ticker": t,
                 "fund_count": len(fnames),
                 "total_value_m": round(ticker_value[t]),
+                "added_value_m": round(ticker_added[t]) if ticker_added_known[t] else None,
                 "fund_names": fnames,
             }
             for t, fnames in ticker_funds.items()
@@ -7579,13 +7612,13 @@ def thirteenf():
                 "new_count": buy_new_count[t],
                 "increased_count": buy_increased_count[t],
                 "new_value_m": round(buy_new_value[t]),
-                "total_value_m": round(buy_value[t]),
+                "added_value_m": round(buy_added[t]),
                 "fund_names": fnames,
             }
             for t, fnames in buy_funds.items()
             if len(fnames) >= 2
         ],
-        key=lambda x: (-x["fund_count"], -x["total_value_m"]),
+        key=lambda x: (-x["fund_count"], -x["added_value_m"]),
     )[:25]
 
     return render_template(

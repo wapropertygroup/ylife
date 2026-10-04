@@ -10,6 +10,12 @@
   {%- elif m >= 1000 -%}${{ '%.1f' | format(m / 1000) }}B
   {%- else -%}${{ '%.0f' | format(m) }}M{%- endif -%}
 {%- endmacro %}
+{% macro usd_m_signed(m) -%}
+  {%- if m is none -%}—
+  {%- elif m > 0 -%}+{{ usd_m(m) }}
+  {%- elif m < 0 -%}−{{ usd_m(-m) }}
+  {%- else -%}$0{%- endif -%}
+{%- endmacro %}
 
 <!-- ── Header ────────────────────────────────────────────────────────── -->
 <div class="mb-6 sm:mb-8 fade-up">
@@ -38,7 +44,7 @@
 <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 fade-up mb-6">
   <div class="flex items-baseline gap-3 mb-3">
     <h2 class="text-base font-semibold text-slate-700 dark:text-slate-200" data-i18n="thirteenf.consensus_title">Top Consensus Positions</h2>
-    <span class="text-xs text-slate-500" data-i18n="thirteenf.consensus_desc">Stocks held by the most funds — reflects institutional conviction</span>
+    <span class="text-xs text-slate-500" data-i18n="thirteenf.consensus_desc">Stocks held by the most funds, counting the 50 largest positions of each fund</span>
   </div>
   <div class="overflow-x-auto">
     <table class="w-full text-xs">
@@ -46,7 +52,8 @@
         <th class="text-left py-2 px-2 font-medium" data-i18n="thirteenf.th_rank">#</th>
         <th class="text-left py-2 px-2 font-medium" data-i18n="thirteenf.th_ticker">Ticker</th>
         <th class="text-right py-2 px-2 font-medium" data-i18n="thirteenf.th_funds">Funds</th>
-        <th class="text-right py-2 px-2 font-medium" data-i18n="thirteenf.th_total_value">Total Value ($M)</th>
+        <th class="text-right py-2 px-2 font-medium" title="The whole positions these funds hold in the stock, at the end of the latest quarter each has reported: what they hold in total, not money added this quarter." data-i18n-title="thirteenf.th_holdings_tip"><span data-i18n="thirteenf.th_holdings">Combined holdings</span> ⓘ</th>
+        <th class="text-right py-2 px-2 font-medium" title="What the shares these funds bought or sold this quarter were worth at quarter-end. A fund that sold out entirely no longer holds the stock, so its exit is not counted." data-i18n-title="thirteenf.th_net_added_tip"><span data-i18n="thirteenf.th_net_added">Net added this quarter</span> ⓘ</th>
         <th class="text-left py-2 px-2 font-medium" data-i18n="thirteenf.th_held_by">Held By</th>
       </tr></thead>
       <tbody>
@@ -57,9 +64,9 @@
           <td class="py-1.5 px-2 text-right">
             <span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-brand/15 text-brand">{{ pos.fund_count }} funds</span>
           </td>
-          <td class="py-1.5 px-2 text-right font-mono text-slate-600 dark:text-slate-300">
-            ${{ '{:,.0f}'.format(pos.total_value_m) }}M
-          </td>
+          <td class="py-1.5 px-2 text-right font-mono text-slate-600 dark:text-slate-300">{{ usd_m(pos.total_value_m) }}</td>
+          {% set added = pos.added_value_m %}
+          <td class="py-1.5 px-2 text-right font-mono {{ 'text-emerald-700 dark:text-emerald-400' if added and added > 0 else ('text-rose-700 dark:text-rose-400' if added and added < 0 else 'text-slate-500') }}">{{ usd_m_signed(added) }}</td>
           <td class="py-1.5 px-2 text-slate-500 text-[10px]">{{ pos.fund_names[:3] | join(', ') }}{% if pos.fund_names|length > 3 %} +{{ pos.fund_names|length - 3 }}{% endif %}</td>
         </tr>
         {% endfor %}
@@ -84,9 +91,9 @@
         <th class="text-left  py-2 px-2 font-medium" data-i18n="thirteenf.th_ticker">Ticker</th>
         <th class="text-right py-2 px-2 font-medium" data-i18n="thirteenf.th_funds_buying">Funds Buying</th>
         <th class="text-right py-2 px-2 font-medium"><span class="text-emerald-700 dark:text-emerald-400" data-i18n="inst.change_new">New</span></th>
-        <th class="text-right py-2 px-2 font-medium"><span class="text-emerald-700 dark:text-emerald-400" data-i18n="thirteenf.th_new_value">New Value ($M)</span></th>
+        <th class="text-right py-2 px-2 font-medium"><span class="text-emerald-700 dark:text-emerald-400" data-i18n="thirteenf.th_new_value">Value of new positions</span></th>
         <th class="text-right py-2 px-2 font-medium"><span class="text-sky-700 dark:text-sky-400" data-i18n="thirteenf.th_increased">Increased</span></th>
-        <th class="text-right py-2 px-2 font-medium" data-i18n="thirteenf.th_combined_value">Combined Value ($M)</th>
+        <th class="text-right py-2 px-2 font-medium" title="What these funds put into the stock this quarter, at quarter-end prices: new positions plus additions, not the size of their whole positions." data-i18n-title="thirteenf.th_bought_tip"><span data-i18n="thirteenf.th_bought">Bought this quarter</span> ⓘ</th>
         <th class="text-left  py-2 px-2 font-medium" data-i18n="thirteenf.th_held_by">Held By</th>
       </tr></thead>
       <tbody>
@@ -98,11 +105,9 @@
             <span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-brand/15 text-brand">{{ pos.fund_count }}</span>
           </td>
           <td class="py-1.5 px-2 text-right font-mono text-emerald-700 dark:text-emerald-400">{{ pos.new_count or '—' }}</td>
-          <td class="py-1.5 px-2 text-right font-mono text-emerald-700 dark:text-emerald-400">{% if pos.new_value_m %}${{ '{:,.0f}'.format(pos.new_value_m) }}M{% else %}—{% endif %}</td>
+          <td class="py-1.5 px-2 text-right font-mono text-emerald-700 dark:text-emerald-400">{% if pos.new_value_m %}{{ usd_m(pos.new_value_m) }}{% else %}—{% endif %}</td>
           <td class="py-1.5 px-2 text-right font-mono text-sky-700 dark:text-sky-400">{{ pos.increased_count or '—' }}</td>
-          <td class="py-1.5 px-2 text-right font-mono text-slate-600 dark:text-slate-300">
-            ${{ '{:,.0f}'.format(pos.total_value_m) }}M
-          </td>
+          <td class="py-1.5 px-2 text-right font-mono text-emerald-700 dark:text-emerald-400">{{ usd_m(pos.added_value_m) }}</td>
           <td class="py-1.5 px-2 text-slate-500 text-[10px]">{{ pos.fund_names[:3] | join(', ') }}{% if pos.fund_names|length > 3 %} +{{ pos.fund_names|length - 3 }}{% endif %}</td>
         </tr>
         {% endfor %}

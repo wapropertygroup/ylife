@@ -40,10 +40,19 @@
         {%- if _here == 'docs' %}<small><span data-l="en">Docs</span><span data-l="zh">文档</span></small>
         {%- elif _here == 'research' %}<small><span data-l="en">Research Lab</span><span data-l="zh">研究实验室</span></small>
         {%- elif _here == 'markets' %}<small><span data-l="en">Markets</span><span data-l="zh">市场</span></small>
+        {%- elif _here == 'run' %}<small><span data-l="en">Research desk</span><span data-l="zh">投研台</span></small>
         {%- endif %}</span>
     </a>
 
     <nav class="w-top-nav" aria-label="{{ product }}">
+      {#  The research desk, first: it is what a signed-in reader came for, and
+          on its own page the bar had nothing marked current (asked for
+          2026-10-04). Signed in only: on this host /agents sends anyone else
+          to /home, so for them the tab would lead back to where they are. #}
+      {#  "Desk" under 1180px, as the call to action becomes "Run" there: the
+          bar's switch points were measured without this link, and in English it
+          ran Docs, Research Lab and Markets 39px wide at 961px. #}
+      {% if current_user.email %}<a href="{{ url_for('main.agents_page') }}"{% if _here == 'run' %} class="is-current" aria-current="true"{% endif %}><span class="w-top-long"><span data-l="en">Research desk</span><span data-l="zh">投研台</span></span><span class="w-top-short"><span data-l="en">Desk</span><span data-l="zh">投研台</span></span></a>{% endif %}
       <a href="{{ url_for('main.docs_home') }}"{% if _here == 'docs' %} class="is-current" aria-current="true"{% endif %}><span data-l="en">Docs</span><span data-l="zh">文档</span></a>
       <a href="{{ url_for('main.research_lab') }}"{% if _here == 'research' %} class="is-current" aria-current="true"{% endif %}><span data-l="en">Research Lab</span><span data-l="zh">研究实验室</span></a>
       {% if showcase_enabled() %}<a href="{{ _home }}#samples"><span data-l="en">Sample reports</span><span data-l="zh">报告样例</span></a>{% endif %}
