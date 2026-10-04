@@ -32,12 +32,30 @@
   @media (min-width: 560px) { .co-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   @media (min-width: 900px) { .co-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
   @media (min-width: 1200px) { .co-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+  /* A card and its star are siblings in a cell, not one inside the other: a
+     button inside a link is invalid, and its click would also follow the link. */
+  .co-cell { position: relative; display: grid; transition: transform .15s; }
+  .co-cell:hover { transform: translateY(-1px); }
   .co-card {
     display: grid; grid-template-columns: 38px minmax(0, 1fr) auto; gap: 4px 10px; align-items: center;
     padding: 11px 12px; border-radius: 12px; border: 1px solid var(--t-line); background: var(--t-surface);
-    color: inherit; text-decoration: none; transition: border-color .15s, transform .15s;
+    color: inherit; text-decoration: none; transition: border-color .15s;
   }
-  .co-card:hover { border-color: var(--t-accent); transform: translateY(-1px); }
+  .co-cell:hover .co-card { border-color: var(--t-accent); }
+  .co-star {
+    position: absolute; right: 5px; bottom: 4px; width: 24px; height: 24px; border-radius: 7px;
+    display: flex; align-items: center; justify-content: center; cursor: pointer;
+    font-size: 14px; line-height: 1; border: 0; background: transparent; color: var(--t-ink-dim); opacity: .55;
+  }
+  .co-star:hover, .co-star:focus-visible { opacity: 1; color: var(--t-ink); background: var(--t-surface-alt); }
+  .co-star.is-on { opacity: 1; color: #d97706; }
+  .dark .co-star.is-on { color: #fbbf24; }
+  .co-chip-n {
+    margin-left: 5px; padding: 0 5px; border-radius: 999px; font-size: 10.5px; font-variant-numeric: tabular-nums;
+    background: var(--t-surface-alt); color: var(--t-ink-muted);
+  }
+  .co-chip-n:empty { display: none; }
+  #coSort[hidden] { display: none; }
   .co-tile {
     grid-row: span 2; width: 38px; height: 38px; border-radius: 10px; display: flex; align-items: center;
     justify-content: center; font: 700 12px/1 'JetBrains Mono', ui-monospace, monospace; letter-spacing: -.02em;
@@ -51,7 +69,8 @@
   }
   .co-chg.up { color: var(--co-up); background: var(--co-up-bg); }
   .co-chg.down { color: var(--co-down); background: var(--co-down-bg); }
-  .co-foot { grid-column: 2 / -1; font-size: 10.5px; color: var(--t-ink-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .co-foot { grid-column: 2 / -1; font-size: 10.5px; color: var(--t-ink-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+             padding-right: 22px; min-height: 1.4em; }
   .co-empty { font-size: 13px; color: var(--t-ink-muted); padding: 18px 0; }
   #coEmpty[hidden], #coMore[hidden] { display: none; }
   /* A card with no quote: its exchange sits where the price would. */
@@ -83,6 +102,7 @@
          data-i18n-placeholder="companies.search_ph">
   <div class="co-filters">
     <button type="button" class="co-chip is-on" data-co-view="all" data-i18n="companies.all">All</button>
+    <button type="button" class="co-chip" data-co-view="watch"><span data-i18n="companies.watch">★ Watchlist</span><span id="coWatchN" class="co-chip-n"></span></button>
     <button type="button" class="co-chip" data-co-view="followed" data-i18n="companies.followed">Followed</button>
     <button type="button" class="co-chip" data-co-view="gainers" data-i18n="companies.gainers">Gainers</button>
     <button type="button" class="co-chip" data-co-view="losers" data-i18n="companies.losers">Losers</button>
@@ -99,6 +119,15 @@
       <option value="CBOE">CBOE</option>
       <option value="OTC">OTC</option>
     </select>
+    {#  Gainers and Losers are rankings of their own (by today's change), so the
+        sort hides there rather than showing an order the list is not in.  #}
+    <select id="coSort" class="co-select" aria-label="Sort" data-i18n-title="companies.sort">
+      <option value="" data-i18n="companies.sort_mcap">Largest first</option>
+      <option value="chg" data-i18n="companies.sort_chg">Best today first</option>
+      <option value="pe" data-i18n="companies.sort_pe">Lowest P/E first</option>
+      <option value="y52" data-i18n="companies.sort_y52">Best 52 weeks first</option>
+      <option value="az" data-i18n="companies.sort_az">Ticker A–Z</option>
+    </select>
   </div>
 </div>
 <p id="coMeta" class="co-meta"></p>
@@ -106,6 +135,7 @@
 <p id="coEmpty" class="co-empty" hidden></p>
 <button type="button" id="coMore" class="co-more" hidden></button>
 
+<script src="{{ url_for('static', filename='watchlist.js') }}?v={{ cache_bust or 'dev' }}"></script>
 <script>
 // Two lists. ROWS: the companies the ticker cache follows, with quotes
 // (routes._company_cards), largest first. DIR: every other company listed with
@@ -132,8 +162,20 @@
   let dirState = 'loading';            // loading | ready | failed
   let dirAsOf = null;
   const EXCH = {};                     // ticker -> exchange, from SEC's list
-  let view = 'all';
+  const VIEWS = ['all', 'watch', 'followed', 'gainers', 'losers'];
+  // sort key -> [row field, direction]; '' is the lists' own order (largest
+  // first), 'az' is by ticker.
+  const SORTS = { chg: ['c', -1], pe: ['pe', 1], y52: ['y', -1] };
+  // The view and the sort ride in the address, so a reload keeps them and a
+  // link can open straight onto the Watchlist.
+  const QS = new URLSearchParams(location.search);
+  let view = VIEWS.includes(QS.get('view')) ? QS.get('view') : 'all';
+  const isSort = s => s === 'az' || Object.prototype.hasOwnProperty.call(SORTS, s);
+  if (isSort(QS.get('sort'))) F('coSort').value = QS.get('sort');
   let shown = PAGE;
+  // static/watchlist.js: the same list /lookup's star and /history's star keep.
+  const WL = window.Watchlist || null;
+  let WATCH = new Set(WL ? WL.tickers() : []);
 
   function tile(t) {
     let h = 0;
@@ -146,8 +188,10 @@
     return `<span class="co-tile" style="background: rgba(${r},${g},${b},.16); color: ${ink}">${esc(letters)}</span>`;
   }
 
+  // A cap of zero is not a measurement (a symbol Yahoo has reassigned to a
+  // shell reports 0.0), so it shows nothing rather than "$0M".
   function mcap(b) {
-    if (typeof b !== 'number') return null;
+    if (typeof b !== 'number' || !(b > 0)) return null;
     return b >= 1000 ? `$${(b / 1000).toFixed(2)}T` : b >= 1 ? `$${b.toFixed(b >= 100 ? 0 : 1)}B` : `$${(b * 1000).toFixed(0)}M`;
   }
 
@@ -167,13 +211,78 @@
     const group = F('coGroup').value;
     const exch = F('coExch').value;
     const q = F('coSearch').value.trim();
-    let rows = (view === 'all' && !group) ? ROWS.concat(DIR) : ROWS;
+    let rows;
+    if (view === 'watch') {
+      rows = ROWS.concat(DIR).filter(r => WATCH.has(r.t));
+      // A starred ticker in neither list -- starred on /lookup or /history, or a
+      // listing SEC does not carry -- still gets a card, so it can be opened and
+      // unstarred. Only once SEC's list has answered, or every starred SEC
+      // company would flash up as a bare card first.
+      if (dirState !== 'loading' && WL) {
+        const seen = new Set(rows.map(r => r.t));
+        for (const w of WL.list()) {
+          if (!seen.has(w.ticker)) rows.push({ t: w.ticker, n: w.name !== w.ticker ? w.name : '', d: 1 });
+        }
+      }
+    } else {
+      rows = (view === 'all' && !group) ? ROWS.concat(DIR) : ROWS;
+    }
     rows = rows.filter(r => (!group || (r.g || []).includes(group))
       && (!exch || (r.x || EXCH[r.t] || '') === exch)
       && matches(r, q));
-    if (view === 'gainers') rows = rows.filter(r => typeof r.c === 'number' && r.c > 0).sort((a, b) => b.c - a.c);
-    if (view === 'losers') rows = rows.filter(r => typeof r.c === 'number' && r.c < 0).sort((a, b) => a.c - b.c);
-    return rows;
+    if (view === 'gainers') return rows.filter(r => typeof r.c === 'number' && r.c > 0).sort((a, b) => b.c - a.c);
+    if (view === 'losers') return rows.filter(r => typeof r.c === 'number' && r.c < 0).sort((a, b) => a.c - b.c);
+    // Each part sorts within itself -- the quoted companies, then SEC's list --
+    // so the one divider between them stays one. SEC's rows carry no quote, so
+    // only A-Z moves them.
+    return sorted(rows.filter(r => !r.d)).concat(sorted(rows.filter(r => r.d)));
+  }
+
+  const hasFig = (r, k) => typeof r[k] === 'number' && isFinite(r[k]) && (k !== 'pe' || r[k] > 0);
+  function sorted(rows) {
+    const s = F('coSort').value;
+    if (s === 'az') return rows.slice().sort((a, b) => (a.t < b.t ? -1 : a.t > b.t ? 1 : 0));
+    if (!s || !isSort(s)) return rows;
+    const [k, dir] = SORTS[s];
+    // A company with no figure goes last whichever way the sort runs: a P/E
+    // that is not a measurement (a loss) is not the cheapest one. Ties keep
+    // the lists' own order, since Array.sort is stable.
+    return rows.slice().sort((a, b) => (hasFig(b, k) - hasFig(a, k)) || (hasFig(a, k) ? dir * (a[k] - b[k]) : 0));
+  }
+
+  function starLabel(on) {
+    return on ? tr('companies.star_remove', 'Remove from watchlist') : tr('companies.star_add', 'Add to watchlist');
+  }
+
+  function star(r) {
+    if (!WL) return '';
+    const on = WATCH.has(r.t);
+    return `<button type="button" class="co-star${on ? ' is-on' : ''}" data-co-star="${esc(r.t)}"
+      aria-pressed="${on}" title="${esc(starLabel(on))}" aria-label="${esc(`${starLabel(on)}: ${r.t}`)}">${on ? '★' : '☆'}</button>`;
+  }
+
+  // In place rather than a re-render, so the star a reader just pressed keeps
+  // keyboard focus. Also how another tab's change arrives.
+  function paintStars() {
+    document.querySelectorAll('[data-co-star]').forEach(b => {
+      const t = b.dataset.coStar;
+      const on = WATCH.has(t);
+      b.classList.toggle('is-on', on);
+      b.textContent = on ? '★' : '☆';
+      b.setAttribute('aria-pressed', String(on));
+      b.title = starLabel(on);
+      b.setAttribute('aria-label', `${starLabel(on)}: ${t}`);
+    });
+    F('coWatchN').textContent = WATCH.size ? WATCH.size.toLocaleString() : '';
+  }
+
+  function syncControls() {
+    document.querySelectorAll('[data-co-view]').forEach(b => b.classList.toggle('is-on', b.dataset.coView === view));
+    F('coSort').hidden = view === 'gainers' || view === 'losers';
+    const u = new URL(location.href);
+    if (view === 'all') u.searchParams.delete('view'); else u.searchParams.set('view', view);
+    if (F('coSort').value) u.searchParams.set('sort', F('coSort').value); else u.searchParams.delete('sort');
+    try { history.replaceState(history.state, '', u); } catch (_) { /* a sandboxed frame */ }
   }
 
   function card(r) {
@@ -213,10 +322,13 @@
     const rows = pool();
     // A line where the quoted companies end and SEC's list begins, so a card
     // with an exchange where its price would be does not read as a broken quote.
+    const divider = view === 'watch'
+      ? tr('companies.divider_watch', 'Not followed here · no live quote, each opens its own filings')
+      : tr('companies.divider', 'Every other company listed with the SEC · no live quote here, each opens its own filings');
     F('coGrid').innerHTML = rows.slice(0, shown).map((r, i) =>
-      (r.d && i > 0 && !rows[i - 1].d
-        ? `<p class="co-divider">${esc(tr('companies.divider', 'Every other company listed with the SEC · no live quote here, each opens its own filings'))}</p>`
-        : '') + card(r)).join('');
+      (r.d && i > 0 && !rows[i - 1].d ? `<p class="co-divider">${esc(divider)}</p>` : '')
+      + `<div class="co-cell">${card(r)}${star(r)}</div>`).join('');
+    F('coWatchN').textContent = WATCH.size ? WATCH.size.toLocaleString() : '';
     const more = F('coMore');
     const left = rows.length - Math.min(shown, rows.length);
     more.hidden = left <= 0;
@@ -226,7 +338,9 @@
       empty.hidden = true;
     } else {
       empty.hidden = false;
-      empty.textContent = (WARMING && dirState !== 'ready') ? tr('companies.warming', 'Quotes are still loading — try again in a minute.')
+      empty.textContent = (view === 'watch' && !WATCH.size)
+          ? tr('companies.watch_empty', 'Your watchlist is empty. Tap ☆ on any company to keep it here.')
+        : (WARMING && dirState !== 'ready') ? tr('companies.warming', 'Quotes are still loading — try again in a minute.')
         : q ? tr('companies.empty', 'No company here matches. Press Enter to open “{q}” anyway.').replace('{q}', q.toUpperCase())
         : tr('companies.none', 'Nothing to show for this filter.');
     }
@@ -237,9 +351,11 @@
       : tr('companies.count', '{n} companies').replace('{n}', rows.length.toLocaleString())];
     if (UPDATED) parts.push(tr('companies.updated', 'quotes refresh in rotation · last update {t}')
       .replace('{t}', I18n.datetime(UPDATED)));
-    if (dirState === 'loading' && view === 'all') parts.push(tr('companies.dir_loading', 'loading every SEC-listed company…'));
-    if (dirState === 'failed' && view === 'all') parts.push(tr('companies.dir_failed', 'the full SEC list is unavailable right now, so only the companies this site follows are shown'));
+    const listing = view === 'all' || view === 'watch';
+    if (dirState === 'loading' && listing) parts.push(tr('companies.dir_loading', 'loading every SEC-listed company…'));
+    if (dirState === 'failed' && listing) parts.push(tr('companies.dir_failed', 'the full SEC list is unavailable right now, so only the companies this site follows are shown'));
     if (dirState === 'ready' && dirAsOf && whole) parts.push(tr('companies.dir_asof', 'SEC list as of {d}').replace('{d}', I18n.datetime(dirAsOf)));
+    if (view === 'watch') parts.push(tr('companies.watch_local', 'your watchlist is kept in this browser'));
     F('coMeta').textContent = parts.join(' · ');
   }
 
@@ -280,15 +396,29 @@
 
   const reset = () => { shown = PAGE; render(); };
   document.addEventListener('click', e => {
+    const s = e.target.closest('[data-co-star]');
+    if (s && WL) {
+      const t = s.dataset.coStar;
+      const row = ROWS.find(r => r.t === t) || DIR.find(r => r.t === t);
+      WL.toggle(t, row && row.n);        // announces watchlist:change, below
+      return;
+    }
     const chip = e.target.closest('[data-co-view]');
     if (!chip) return;
     view = chip.dataset.coView;
-    document.querySelectorAll('[data-co-view]').forEach(b => b.classList.toggle('is-on', b === chip));
+    syncControls();
     reset();
+  });
+  // This tab's star or another tab's: the Watchlist view redraws (a removed
+  // company leaves it), every other view just repaints its stars.
+  document.addEventListener('watchlist:change', () => {
+    WATCH = new Set(WL.tickers());
+    if (view === 'watch') render(); else paintStars();
   });
   F('coMore').addEventListener('click', () => { shown += PAGE; render(); });
   F('coGroup').addEventListener('change', reset);
   F('coExch').addEventListener('change', reset);
+  F('coSort').addEventListener('change', () => { syncControls(); reset(); });
   F('coSearch').addEventListener('input', reset);
   // Enter opens the one match, or any ticker typed: the Fundamentals tab works
   // for every symbol, not only the ones listed here.
@@ -308,6 +438,11 @@
     location.href = `/history/${encodeURIComponent(symbol)}?tab=fundamentals`;
   });
   document.addEventListener('i18n:langchange', render);
+  if (!WL) {                          // watchlist.js did not load: no stars, no view
+    document.querySelector('[data-co-view="watch"]').hidden = true;
+    if (view === 'watch') view = 'all';
+  }
+  syncControls();
   render();
   loadDirectory();
 })();

@@ -5,6 +5,7 @@
 <script src="{{ url_for('static', filename='markdown.js') }}?v={{ cache_bust or 'dev' }}"></script>
 <script src="{{ url_for('static', filename='ystime.js') }}?v={{ cache_bust or 'dev' }}"></script>
 <script src="{{ url_for('static', filename='fundamentals.js') }}?v={{ cache_bust or 'dev' }}"></script>
+<script src="{{ url_for('static', filename='watchlist.js') }}?v={{ cache_bust or 'dev' }}"></script>
 <style>
   /* ── Theme tokens ────────────────────────────────────────────────────────
      Hand-written CSS, so Tailwind's `dark:` variant reaches none of it. The
@@ -306,6 +307,10 @@
   .fd-notes { margin-top: 14px; padding-left: 1.1em; list-style: disc; font-size: 11.5px;
               color: var(--t-ink-dim); line-height: 1.6; }
   .fd-notes li { margin: 2px 0; }
+  /* The header's watchlist star when on: two classes outrank the button's one-class
+     Tailwind ink whatever the order. */
+  .hist-watch.is-on { color: #d97706; border-color: rgba(217,119,6,.45); }
+  .dark .hist-watch.is-on { color: #fbbf24; border-color: rgba(251,191,36,.4); }
 </style>
 
 <div class="mb-6 sm:mb-8 fade-up">
@@ -360,6 +365,8 @@
     <button id="copyLinkBtn" onclick="_copyPermalink()"
       class="text-slate-500 dark:text-slate-600 hover:text-slate-500 dark:hover:text-slate-400 transition text-xs px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-600"
       title="Copy link">🔗</button>
+    <button id="watchBtn" type="button" hidden aria-pressed="false" title="Add to watchlist"
+      class="hist-watch text-slate-500 dark:text-slate-600 hover:text-slate-500 dark:hover:text-slate-400 transition text-xs px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-600">☆</button>
     <span id="dataCacheBadge" class="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 ml-2 align-middle"></span>
   </h1>
   <p class="text-slate-500 text-sm mt-1" data-i18n="history.subtitle">Historical PE ratio &amp; price</p>
@@ -4408,6 +4415,30 @@ document.getElementById('chartModal').addEventListener('click', function(e) {
   if (e.target === this) closeModal();
 });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+// ── Watchlist star ───────────────────────────────────────────────────────────
+// static/watchlist.js: the same list as the stars on /companies and /lookup, so
+// a company starred here is in /companies' Watchlist view with its quote.
+(function () {
+  const btn = document.getElementById('watchBtn');
+  const WL = window.Watchlist;
+  if (!btn || !WL) return;
+  const paint = () => {
+    const on = WL.has(TICKER);
+    btn.textContent = on ? '★' : '☆';
+    btn.classList.toggle('is-on', on);
+    btn.setAttribute('aria-pressed', String(on));
+    btn.title = on ? (I18n.t('companies.star_remove') || 'Remove from watchlist')
+                   : (I18n.t('companies.star_add') || 'Add to watchlist');
+  };
+  btn.addEventListener('click', () => {
+    WL.toggle(TICKER, (document.getElementById('stockName')?.textContent || '').trim());
+  });
+  document.addEventListener('watchlist:change', paint);
+  document.addEventListener('i18n:langchange', paint);
+  btn.hidden = false;
+  paint();
+})();
 
 // ── Copy Price Alert ─────────────────────────────────────────────────────────
 function _copyPermalink() {

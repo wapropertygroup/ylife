@@ -3,6 +3,7 @@
 {% block title %}yStocker — Ticker Lookup{% endblock %}
 
 {% block content %}
+<script src="{{ url_for('static', filename='watchlist.js') }}?v={{ cache_bust or 'dev' }}"></script>
 
 <div class="mb-8 fade-up">
   <h1 class="text-3xl font-bold grad-text mb-1" data-i18n="lookup.title">Ticker Lookup</h1>
@@ -275,21 +276,23 @@ function _renderRecent() {
 }
 _renderRecent();
 
-const WL_KEY = 'ystocker_watchlist';
-function _getWatchlist() { try { return JSON.parse(localStorage.getItem(WL_KEY)||'[]'); } catch(e) { return []; } }
-function _saveWatchlist(arr) { try { localStorage.setItem(WL_KEY, JSON.stringify(arr)); } catch(e) {} }
-function _addToWatchlist(ticker, name) {
-  let wl = _getWatchlist().filter(w => w.ticker !== ticker);
-  wl.unshift({ ticker, name: name || ticker });
-  wl = wl.slice(0, 12);
-  _saveWatchlist(wl);
-  _renderWatchlist();
+// The list itself is static/watchlist.js -- the same one the stars on
+// /companies and on every /history page keep, which is why it is no longer
+// capped at 12 here (that cap silently dropped picks starred elsewhere). The
+// panel still shows twelve and links to the rest.
+const WL_SHOWN = 12;
+const _wlEsc = s => String(s == null ? '' : s).replace(/[&<>"']/g,
+  c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+function _getWatchlist() { return window.Watchlist ? Watchlist.list() : []; }
+function _addToWatchlist(ticker, name) { if (window.Watchlist) Watchlist.add(ticker, name); }
+function _removeFromWatchlist(ticker) { if (window.Watchlist) Watchlist.remove(ticker); }
+function _clearWatchlist() {
+  // One click used to clear a 12-name list kept on this page; it now clears the
+  // stars on every page, so it asks.
+  if (!window.Watchlist || !confirm(I18n.t('lookup.watch_clear_confirm')
+      || 'Clear your whole watchlist? It is the same list as the stars on Companies and on each company page.')) return;
+  Watchlist.clear();
 }
-function _removeFromWatchlist(ticker) {
-  _saveWatchlist(_getWatchlist().filter(w => w.ticker !== ticker));
-  _renderWatchlist();
-}
-function _clearWatchlist() { _saveWatchlist([]); _renderWatchlist(); }
 function _renderWatchlist() {
   const wl = _getWatchlist();
   const panel = document.getElementById('watchlistPanel');
@@ -297,13 +300,29 @@ function _renderWatchlist() {
   if (!panel || !chips) return;
   if (!wl.length) { panel.classList.add('hidden'); return; }
   panel.classList.remove('hidden');
-  chips.innerHTML = wl.map(w => `
+  // Tickers and names can come from SEC's company list via /companies, so both
+  // are escaped, and the ticker reaches the handlers through a data attribute
+  // rather than being spliced into an onclick string.
+  chips.innerHTML = wl.slice(0, WL_SHOWN).map(w => `
     <span class="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-600 transition">
-      <button onclick="quickLookup('${w.ticker}')" class="text-brand font-medium">${w.ticker}</button>
-      <span class="text-slate-500 text-[10px]">${w.name}</span>
-      <button onclick="_removeFromWatchlist('${w.ticker}')" class="text-slate-700 hover:text-slate-500 dark:hover:text-slate-400 ml-0.5">×</button>
-    </span>`).join('');
+      <button type="button" data-wl-open="${_wlEsc(w.ticker)}" class="text-brand font-medium">${_wlEsc(w.ticker)}</button>
+      ${w.name && w.name !== w.ticker ? `<span class="text-slate-500 text-[10px]">${_wlEsc(w.name)}</span>` : ''}
+      <button type="button" data-wl-remove="${_wlEsc(w.ticker)}" class="text-slate-700 hover:text-slate-500 dark:hover:text-slate-400 ml-0.5">×</button>
+    </span>`).join('')
+    + `<a href="/companies?view=watch" class="inline-flex items-center text-xs px-2 py-1 text-brand font-medium">${
+        _wlEsc(wl.length > WL_SHOWN
+          ? (I18n.t('lookup.watch_more') || '+{n} more on Companies →').replace('{n}', wl.length - WL_SHOWN)
+          : (I18n.t('lookup.watch_open') || 'Open on Companies →'))}</a>`;
 }
+document.getElementById('watchlistChips')?.addEventListener('click', e => {
+  const open = e.target.closest('[data-wl-open]');
+  if (open) { quickLookup(open.dataset.wlOpen); return; }
+  const rm = e.target.closest('[data-wl-remove]');
+  if (rm) _removeFromWatchlist(rm.dataset.wlRemove);
+});
+// A star here, on /companies or in another tab: one event, one redraw.
+document.addEventListener('watchlist:change', _renderWatchlist);
+document.addEventListener('i18n:langchange', _renderWatchlist);
 _renderWatchlist();
 
 // ── Single ticker lookup
