@@ -307,6 +307,10 @@ Each app follows the same pattern:
   week, with the consensus and, once reported, the surprise, from Nasdaq's
   keyless calendar API. `parse_day` and the date rules are pure. See "The
   earnings calendar" below.
+- `insiders.py` — `/insiders`: open-market buys and sells by officers,
+  directors and 10% owners, from each followed issuer's SEC Form 4s, with
+  cluster buys. `parse_form4` and the aggregation are pure. See "Insider
+  trades" below.
 - `predictions.py` / `odds.py` / `odds_ai.py` / `odds_ledger.py` — `/predictions`:
   live Polymarket and Kalshi odds, the Fed decision three ways (futures vs both
   venues), and the AI read with its scored track record. `odds.py` is pure. See
@@ -2305,6 +2309,103 @@ Tests: `tests/test_earnings_calendar.py` (21, Nasdaq's real rows: losses,
 blanks, share classes, the dates, the cache) and
 `tests/check_earnings_endpoints.py` (7, hermetic). Not a DynamoDB table: every
 day can be fetched again.
+
+### Insider trades (`/insiders`)
+
+Added 2026-10-04. The page shows what officers, directors and 10% owners bought
+and sold in the open market, from their SEC Form 4s:
+- buys (code P) and sells (S) at the followed companies;
+- over 7, 30 or 90 days, largest or newest first;
+- cluster buys on top: companies where two or more insiders bought in the window.
+
+Each row has the trade date, insider and role, shares, weighted price, value,
+stake change and a 10b5-1 badge. It links to the filing on EDGAR and opens the
+company's Fundamentals tab. Awards, exercises, tax withholding and gifts are
+kept, but only on a company's own view (`/api/insiders/<T>`), which the page's
+search opens for any SEC ticker on Enter.
+
+**Per issuer, not per day.** SEC's daily form index lists a Form 4 once (3,097
+on 2026-10-02), often under the reporting owner's CIK, so it cannot be filtered
+by issuer. An issuer's submissions JSON can: `filings.recent` covers at least a
+year (JPMorgan's 26,300 entries and 4.5 MB reach exactly a year), at 0.02–0.34
+s a request from the box. `primaryDocument` names the XSL-rendered HTML
+(`xslF345X06/form4.xml`), the 13F trap again. The raw `ownershipDocument` is the
+same file name at the accession root, under the *issuer's* CIK. The accession
+prefix is the filing agent's, and its path 404s.
+
+**What it costs.** Measured 2026-10-04:
+- **Universe**: the ticker cache's 308 tickers are 215 issuers. 51 funds are
+  skipped on `"Quote Type"`, and 42 have no CIK (40 Tokyo listings, EA, TCEHY).
+- **Filing rate**: a random 30 issuers filed 23 Form 4s in 7 days, 61 in 30
+  and 270 in 90, so about 15–23 a day across the universe.
+- **Per refresh**: one submissions request, plus one per Form 4 filed within 90
+  days and not yet cached.
+- **Cold start**: an issuer's first fill looks back 30 days, so a cold box's
+  first pass is ~215 + ~440 requests (~16 minutes at 1.5 s). Days 31–90
+  (~1,500 requests) come on the next pass.
+- **Steady state**: a parsed accession is never fetched again, and files keep
+  120 days. The sweep starts a minute after boot, checks issuers due after 6 h
+  (`INSIDERS_RECHECK_HOURS`), paces 1.5 s through `sec13f.edgar_get`, and stops
+  at the first `CooldownActive`. That is about 860 submissions requests a day.
+
+**What the filings do not say.** Each of these is pinned on a real filing in
+`tests/test_insiders.py`:
+
+- **Rows**: a filing's lines become one row per code, security and ownership
+  line. A plan sale arrives as one line per price band, and a filing can span
+  days, but rows never mix share classes. Berkshire's Lennar filing bought
+  Class A at ~$82 and Class B at $80 on the same days; its total, $53,882,588,
+  matches OpenInsider's to the dollar.
+- **Prices**: a price given only in a footnote is unknown, not $0, and has no
+  value (ZDGE, PYXS).
+- **Code P** is "open market or private purchase". A purchase in an offering or
+  a private placement (from the footnotes) is badged and kept out of cluster
+  buys.
+- **Joint filers** count as one buyer (Berkshire and Buffett; PYXS's four
+  GordonMD entities). Insiders are grouped on shared reporting-owner CIKs.
+- **Amendments**: a 4/A replaces its original only when it restates the
+  non-derivative lines itself. TPR's 4/A of 2026-09-03 restates only the
+  derivative table, and dropping the original would delete an award and a tax
+  withholding nobody amended.
+- **10b5-1** is the `aff10b5One` box (written `true` or `1`) or a footnote
+  saying so. A footnote that denies it is not a plan, and the box alone marks
+  only the P and S lines.
+- **Stake**: the trade as a share of the holding it moved. A buy is measured
+  against the holding after it (100% is a new position), a sale against the
+  holding before it (100% is a full exit). Measured against the holding after,
+  a sale has no ceiling: NVIDIA director Mark Stevens would read 141% where he
+  sold 58%.
+
+Parsed with lxml (entities and network off), not ElementTree, because pyexpat
+cannot load on the dev Mac (gics.py says why) and lxml is already a dependency.
+
+**The request path never fetches.** There is one file per issuer in
+`cache/insiders/`, plus `_universe.json`, which the sweep writes.
+`/api/insiders` answers 202, with what is in, until every followed issuer has
+been checked once. `coverage` says how many are in and from when the record is
+whole (`complete_from`): right after the first pass, a 90-day view holds 30
+days, and the page says so rather than letting the gap read as quiet.
+
+`/api/insiders/<T>` answers a cold company 202 and queues just that issuer for
+one worker per process:
+- a claim file (`.lookup-<T>`) stops the other gunicorn worker queuing it too;
+- a failure pauses it for 10 minutes;
+- look-ups are capped at 300 a day (`INSIDERS_DAILY_LOOKUPS`, on quota.py's
+  flocked counter), since any of ~8,000 SEC tickers can be asked for.
+
+A followed company is the sweep's to refresh; only a stale look-up is queued
+again on view. A looked-up company joins the market-wide feed for 24 h after
+its last check, marked not followed, so the Followed chip has something to
+filter. It is not swept, so it drops out rather than going stale.
+
+It is in the Companies section, as `/earnings` is: Companies is marked current,
+and it is linked from the mobile drawer and both footers. `held` comes from
+`/assets`, best effort.
+
+Tests: `tests/test_insiders.py` (65, on 26 real Form 4s fetched from the box,
+in `tests/fixtures/insiders/`, with each filing's listing row in `index.json`)
+and `tests/check_insiders_endpoints.py` (15, hermetic). Not a DynamoDB table:
+every filing can be fetched again.
 
 ### Prediction markets (`/predictions`)
 
