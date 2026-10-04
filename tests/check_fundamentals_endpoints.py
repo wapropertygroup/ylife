@@ -168,6 +168,27 @@ class FundamentalsEndpoint(unittest.TestCase):
         self.assertTrue(body["stale"])
         self.assertEqual(self.kicks, ["NVDA"])
 
+    def test_a_payload_from_an_older_revision_is_served_and_rebuilt(self):
+        # Built before the new metrics existed: drawn as it is, rebuilt behind.
+        old = _payload("NVDA")
+        old.pop("_rev")
+        fundamentals._write_json(fundamentals._path("NVDA"), old)
+        resp = self.client.get("/api/fundamentals/NVDA")
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.get_json()["stale"])
+        self.assertEqual(self.kicks, ["NVDA"])
+
+    def test_a_fresh_build_carries_the_current_revision(self):
+        self.assertEqual(_payload("NVDA")["_rev"], fundamentals.CACHE_REV)
+        self.assertFalse(fundamentals.is_stale(_payload("NVDA")))
+
+    def test_an_unavailable_answer_is_not_rebuilt_for_a_new_revision(self):
+        # An ETF or a non-filer gains nothing from a new metric.
+        old = fundamentals._stamped({"ticker": "SPY", "unavailable": "not_a_company"},
+                                    fundamentals.UNAVAILABLE_TTL_SECONDS)
+        old.pop("_rev")
+        self.assertFalse(fundamentals.is_stale(old))
+
     def test_a_stale_copy_during_an_outage_does_not_ask_again(self):
         # SEC is down: every view of a stale ticker would otherwise re-send the
         # request that just failed.

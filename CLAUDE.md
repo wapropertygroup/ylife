@@ -240,7 +240,8 @@ Each app follows the same pattern:
 ### yStocker-specific modules
 - `data.py` — Yahoo Finance fetching (`fetch_ticker_data`, `FetchError`)
 - `fed.py` — Federal Reserve H.4.1 from FRED (no API key needed)
-- `sec13f.py` — SEC EDGAR 13F institutional holdings (22 funds tracked)
+- `sec13f.py` — SEC EDGAR 13F institutional holdings (48 funds; see the 13F
+  notes under Known Pitfalls before adding one)
 - `forecast.py` — Prophet / ARIMA / Linear price forecasting
 - `charts.py` — Matplotlib/Seaborn → base64 PNG (server-side, no disk I/O)
 - `heatmap_meta.py` — Static S&P 500 metadata for market heatmap tile sizing
@@ -1527,6 +1528,15 @@ failed build leaves a 10-minute marker read by every worker, so the page's
 bounded poll ends on "couldn't load" + Retry (`?retry=1`) rather than spinning.
 All EDGAR traffic goes through `sec13f.edgar_get`: SEC's rate limit is per
 client, not per module.
+
+Two version stamps, for two kinds of change. `CACHE_VER` is a shape the page
+cannot read: a bump drops every cached copy, so each ticker is cold again on its
+next view. `CACHE_REV` is a build that carries something an older copy lacks but
+can be drawn without, such as a new metric: the old copy is still served and counts
+as stale, so it rebuilds in the background on its next view. It went to 2 with
+the four cards below. Before it, every ticker cached before that deploy drew
+them empty for up to the 12-hour TTL. An `unavailable` answer gains nothing
+from a new metric and is left alone.
 
 **`/companies` is the way in** ("Find your next move", after alphascope's
 `/dashboard`). Each company is a card with a monogram tile — no third-party logo

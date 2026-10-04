@@ -67,6 +67,16 @@ COMPANYFACTS_URL = "https://data.sec.gov/api/xbrl/companyfacts/CIK{cik:010d}.jso
 #: Bump when the payload's shape changes. A bump costs one EDGAR and one Yahoo
 #: request per ticker on its next view, not a sweep: nothing pre-builds.
 CACHE_VER = "v1"
+#: Bump when a build starts carrying something an older payload lacks but can
+#: be drawn without -- a new metric. That copy is still served, and counts as
+#: stale, so it rebuilds in the background on its next view instead of every
+#: cached ticker going back to "building..." at once (which bumping CACHE_VER,
+#: a shape the page cannot read, does). An `unavailable` answer gains nothing
+#: from a new metric and is left alone.
+#: 2: equity, ROE, revenue growth, dividends per share (2026-10-04). Before
+#: it, every ticker cached before that deploy drew those cards empty for up
+#: to the 12-hour TTL.
+CACHE_REV = 2
 
 TTL_SECONDS = fetchguard.env_float("FUNDAMENTALS_TTL_HOURS", 12.0, 1.0) * 3600
 #: A build that got the filings but not the prices is re-tried sooner.
@@ -267,6 +277,7 @@ def _prices(symbol: str) -> tuple[Optional[list[tuple[date, float]]],
 
 def _stamped(payload: dict[str, Any], ttl: float) -> dict[str, Any]:
     payload["_ver"] = CACHE_VER
+    payload["_rev"] = CACHE_REV
     payload["_ts"] = time.time()
     payload["_ttl"] = ttl
     return payload
@@ -448,6 +459,8 @@ def peek(symbol: str) -> Optional[dict[str, Any]]:
 
 
 def is_stale(payload: dict[str, Any], *, now: Optional[float] = None) -> bool:
+    if not payload.get("unavailable") and (payload.get("_rev") or 1) < CACHE_REV:
+        return True
     stamp, ttl = payload.get("_ts"), payload.get("_ttl")
     if not isinstance(stamp, (int, float)) or not isinstance(ttl, (int, float)):
         return True
