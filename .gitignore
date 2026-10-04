@@ -222,3 +222,7 @@ DerivedData/
 .preview.py
 .*_preview.py
 .*_smoke.py
+
+# Agent configuration stays on the laptop: local settings and skills are not
+# part of the app, and do not belong in a repository (2026-10-04).
+.agents/

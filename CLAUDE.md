@@ -152,6 +152,18 @@ additionally converges the machine over SSH (CloudFormation, pip, systemd units,
 nginx, certbot, swap, CJK font) and needs a `.pem`; use it for a new box or after
 editing a unit file, not to ship code.
 
+**The repository is private (since 2026-10-04), and this is a personal
+project.** The box fetches `/opt/ystocker` over SSH with a read-only deploy key
+(`/root/.ssh/ylife_deploy`, `Host github-ylife` in `/root/.ssh/config`, origin
+`git@github-ylife:wapropertygroup/ylife.git`), so every deploy prints "?? box
+origin is git@github-ylife:…, laptop origin is https://…". That line is
+expected. Commits here use the repo-local `user.email` (personal), never the
+global work address, and signing is off (`commit.gpgsign` / `tag.gpgSign`
+false in `.git/config`): a signature made with the work signing helper embeds a
+corporate certificate in the commit. Keep internal hostnames and work tooling
+out of the tree, and keep agent configuration (`.claude/`, `.agents/`) out of
+git, both of which `.gitignore` now covers.
+
 `/opt/tradingagents` tracks **15th-Ave-NE/TradingAgents** (our fork), not
 TauricResearch; `deploy.sh` and `install-tradingagents.sh` repoint that one checkout
 if they still find the old remote. They do **not** rewrite ystocker's remote — a
@@ -187,8 +199,8 @@ notes: commits since the previous deploy tag, the TradingAgents commit, and the
 health line. It then publishes a GitHub Release for every deploy tag without
 one, oldest first, from the tag's own subject and body.
 - **Two credentials, deliberately.** The tag needs only `git push`. The release
-  needs `gh` on **github.com**, while this laptop's `gh` is logged in to
-  another host (`GH_HOST`). Until `gh auth login --hostname github.com`
+  needs `gh` on **github.com**, while this laptop's `gh` is logged in to another
+  host (`GH_HOST`). Until `gh auth login --hostname github.com`
   the deploy prints a reminder, and the tags carry the history the releases
   will be built from.
 - **Which commit.** The deployed SHA is read from the box's own verified
