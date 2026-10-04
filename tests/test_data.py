@@ -45,3 +45,95 @@ class DayChangePctTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# Real `info` values from the box, 2026-10-04 (the survey behind PE_BASIS_BAND).
+AAPL = {"currency": "USD", "financialCurrency": "USD", "trailingPE": 38.31114, "forwardPE": 34.821583,
+        "marketCap": 4869931925504, "netIncomeToCommon": 128929996800, "pegRatio": 2.1,
+        "currentPrice": 333.69}
+TOKIO_MARINE = {"currency": "JPY", "financialCurrency": "JPY", "trailingPE": 1.8175304,
+                "forwardPE": 1.0291672, "marketCap": 14382213890048,
+                "netIncomeToCommon": 539595997184, "trailingEps": 279.17, "forwardEps": 493.02,
+                "currentPrice": 507.4, "shortName": "TOKIO MARINE HOLDINGS INC"}
+ADVANTEST = {"currency": "JPY", "financialCurrency": "JPY", "trailingPE": 74.62715,
+             "marketCap": 27889042980864, "netIncomeToCommon": 459953012736}
+TSM_ADR = {"currency": "USD", "financialCurrency": "TWD", "trailingPE": 35.334827,
+           "marketCap": 2452061159424, "netIncomeToCommon": 2216808415232}
+FUBO = {"currency": "USD", "financialCurrency": "USD", "trailingPE": 2.2552083,
+        "marketCap": 261569024, "netIncomeToCommon": -55064000}
+
+
+class PeBasisTests(unittest.TestCase):
+    """Yahoo's per-share P/E against cap / net income, which no share count enters."""
+
+    def setUp(self) -> None:
+        from ystocker import data
+        self.data = data
+
+    def test_agreeing_figures_pass(self) -> None:
+        self.assertAlmostEqual(self.data.pe_basis_ratio(AAPL), 1.014, places=3)
+        self.assertTrue(self.data.pe_basis_ok(AAPL))
+
+    def test_tokio_marine_is_caught(self) -> None:
+        """¥507 a share against a ¥279 EPS from before a split: P/E 1.8, truly ~27."""
+        self.assertAlmostEqual(self.data.pe_basis_ratio(TOKIO_MARINE), 0.068, places=3)
+        self.assertFalse(self.data.pe_basis_ok(TOKIO_MARINE))
+
+    def test_the_widest_legitimate_gap_surveyed_passes(self) -> None:
+        # Advantest's TTM EPS and net income cover slightly different windows.
+        self.assertTrue(self.data.pe_basis_ok(ADVANTEST))
+
+    def test_a_split_either_way_lands_outside_the_band(self) -> None:
+        for factor in (2.0, 0.5, 3.0, 10.0):
+            info = dict(AAPL, trailingPE=AAPL["trailingPE"] * factor)
+            self.assertFalse(self.data.pe_basis_ok(info), factor)
+
+    def test_an_adr_is_not_measured(self) -> None:
+        """Net income in TWD against a cap in USD would measure the exchange rate."""
+        self.assertIsNone(self.data.pe_basis_ratio(TSM_ADR))
+        self.assertTrue(self.data.pe_basis_ok(TSM_ADR))
+
+    def test_a_positive_pe_on_negative_earnings_fails(self) -> None:
+        self.assertEqual(self.data.pe_basis_ratio(FUBO), 0.0)
+        self.assertFalse(self.data.pe_basis_ok(FUBO))
+
+    def test_what_cannot_be_measured_passes(self) -> None:
+        for info in ({}, dict(AAPL, trailingPE=None), dict(AAPL, netIncomeToCommon=None),
+                     dict(AAPL, financialCurrency=None), dict(AAPL, marketCap=0),
+                     dict(AAPL, trailingPE=float("inf")), dict(AAPL, trailingPE=-5.0)):
+            self.assertIsNone(self.data.pe_basis_ratio(info), info)
+            self.assertTrue(self.data.pe_basis_ok(info))
+
+    def test_currency_codes_compare_case_insensitively(self) -> None:
+        self.assertIsNotNone(self.data.pe_basis_ratio(dict(AAPL, financialCurrency="usd ")))
+
+
+class FetchTickerDataPeBasisTests(unittest.TestCase):
+    """The guard as fetch_ticker_data applies it, with Yahoo stubbed."""
+
+    def _fetch(self, info: dict, fx: float) -> dict:
+        from unittest import mock
+        from ystocker import data
+
+        class _T:
+            def __init__(self, _symbol: str) -> None:
+                self.info = info
+
+        with mock.patch.object(data.yf, "Ticker", _T), \
+             mock.patch.object(data, "usd_rate", lambda _c: fx), \
+             mock.patch.object(data.fetchguard, "guard", lambda _p: None):
+            return data.fetch_ticker_data("TEST")
+
+    def test_a_disagreeing_listing_loses_its_multiples_and_keeps_its_quote(self) -> None:
+        row = self._fetch(TOKIO_MARINE, 0.006335931)
+        self.assertIsNone(row["PE (TTM)"])
+        self.assertIsNone(row["PE (Forward)"])
+        self.assertIsNone(row["PEG"])
+        self.assertAlmostEqual(row["Current Price"], 3.2148, places=3)
+        self.assertAlmostEqual(row["Market Cap ($B)"], 91.1, places=1)
+
+    def test_an_agreeing_listing_is_untouched(self) -> None:
+        row = self._fetch(AAPL, 1.0)
+        self.assertEqual(row["PE (TTM)"], AAPL["trailingPE"])
+        self.assertEqual(row["PE (Forward)"], AAPL["forwardPE"])
+        self.assertEqual(row["PEG"], 2.1)

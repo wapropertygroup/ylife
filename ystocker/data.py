@@ -6,6 +6,7 @@ Fetches financial metrics from Yahoo Finance for a single ticker.
 from __future__ import annotations
 
 import logging
+import math
 import os
 import threading
 import time
@@ -229,6 +230,54 @@ def ps_ratio(info: dict) -> float | None:
     return None
 
 
+# Yahoo's per-share earnings can sit on a different share basis from its price,
+# and nothing in `info` says so. Measured 2026-10-04: Tokio Marine (8766.T) at
+# ¥507.4 against a trailing EPS of ¥279.17 and a forward EPS of ¥493.02, so
+# trailingPE 1.82 and forwardPE 1.03 -- while marketCap / netIncomeToCommon,
+# which no share count enters, says 26.7. One name like that is enough to move an
+# index: /multiples cap-weights `cap / pe`, so Tokio Marine alone booked ~$88B of
+# forward earnings into the Nikkei that do not exist.
+#
+# So trailingPE is checked against marketCap / netIncomeToCommon, and outside
+# this band both P/Es and the PEG built from them are dropped. Across thirty
+# same-currency listings surveyed that day the ratio sat between 0.90 (TSLA) and
+# 1.23 (6857.T: Yahoo's TTM EPS and net income cover slightly different
+# windows); a split applied to one figure and not the other is a factor of two at
+# the least, which lands outside it.
+PE_BASIS_BAND = (0.55, 1.8)
+
+
+def pe_basis_ratio(info: dict) -> float | None:
+    """``trailingPE`` over ``marketCap / netIncomeToCommon``: about 1.0 when
+    Yahoo's per-share and whole-company figures agree.
+
+    None when it cannot be measured, which is not a failure: no P/E, no cap or
+    no net income, or a listing quoted in one currency and reporting in another
+    (an ADR: TSM's net income is in TWD and its cap in USD, so the ratio would
+    measure the exchange rate). A positive P/E against net income at or below
+    zero returns 0.0 -- the two figures disagree on whether there are earnings
+    at all, which is as far outside the band as anything can be.
+    """
+    pe = info.get("trailingPE")
+    cap = info.get("marketCap")
+    ni = info.get("netIncomeToCommon")
+    cur = (info.get("currency") or "").strip().upper()
+    fin = (info.get("financialCurrency") or "").strip().upper()
+    if not all(isinstance(v, (int, float)) and math.isfinite(v) for v in (pe, cap, ni)):
+        return None
+    if pe <= 0 or cap <= 0 or not cur or cur != fin:
+        return None
+    if ni <= 0:
+        return 0.0
+    return pe / (cap / ni)
+
+
+def pe_basis_ok(info: dict) -> bool:
+    """False only when :func:`pe_basis_ratio` measured a disagreement."""
+    ratio = pe_basis_ratio(info)
+    return ratio is None or PE_BASIS_BAND[0] <= ratio <= PE_BASIS_BAND[1]
+
+
 # ---------------------------------------------------------------------------
 # Currency — the "$B" and price fields must actually be dollars
 # ---------------------------------------------------------------------------
@@ -355,6 +404,14 @@ def fetch_ticker_data(ticker: str) -> dict:
                       ticker, pe_ttm, growth * 100, peg)
         else:
             log.debug("%s: PEG unavailable - no earnings growth data", ticker)
+
+    # Both P/Es and the PEG divide by an EPS that may be on another share basis
+    # from the price; see PE_BASIS_BAND. Blank beats a multiple off by a split.
+    basis = pe_basis_ratio(info)
+    if not pe_basis_ok(info):
+        log.warning("%s: trailing P/E %.2f disagrees with cap / net income (ratio %.3f) -- "
+                    "dropping P/E (TTM), P/E (Forward) and PEG", ticker, pe_ttm, basis)
+        pe_ttm = pe_fwd = peg = None
 
     upside = None
     if current_price and target_price:
