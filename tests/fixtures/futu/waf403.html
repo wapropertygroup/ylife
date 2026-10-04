@@ -1,0 +1,524 @@
+<!doctype html>
+<html>
+
+<head>
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=0,viewport-fit=cover">
+  <meta http-equiv="X-UA-Compatible" content="IE=Edge,chrome=1">
+  <meta name="format-detection" content="telephone=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <title>403</title>
+  <style>
+    body,
+    html {
+      font-size: 14px;
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      position: relative
+    }
+
+    *,
+    body,
+    html {
+      -webkit-tap-highlight-color: transparent
+    }
+
+    * {
+      word-wrap: break-word;
+      box-sizing: border-box;
+      outline: 0
+    }
+
+    a,
+    a:active,
+    a:hover,
+    a:link,
+    a:visited {
+      -webkit-text-decoration: none;
+      text-decoration: none
+    }
+
+    :root,
+    body.lang-hans {
+      --nn-font-regular: var("PingFangSC-Regular", "Microsoft YaHei", "HelveticaNeue", Helvetica, sans-serif, "-apple-system", system-ui);
+    }
+
+    body.lang-hk {
+      --nn-font-regular: var("PingFangHK-Regular", "Microsoft YaHei", "HelveticaNeue", Helvetica, sans-serif, "-apple-system", system-ui);
+    }
+
+    body.lang-en {
+      --nn-font-regular: var("BRHendrix-Regular", "HelveticaNeue", Helvetica, sans-serif, "-apple-system", system-ui);
+    }
+
+    body {
+      font-family: "PingFangSC-Regular", "Microsoft YaHei", "HelveticaNeue", Helvetica, sans-serif, "-apple-system", system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans;
+      font-family: var(--nn-font-regular)
+    }
+
+    body,
+    html {
+      min-width: 0;
+      min-width: auto
+    }
+
+    img {
+      max-width: 100%
+    }
+
+    a {
+      -webkit-text-decoration: none;
+      text-decoration: none
+    }
+
+    .header {
+      align-items: center;
+      display: flex;
+      height: 84px;
+      padding: 0 60px
+    }
+
+    .header .logo {
+      background: url(https://static.futunn.com/nuxt_www_futunn/img/nn-logo-white.fb93497.png) no-repeat;
+      background-size: 100%;
+      cursor: pointer;
+      display: inline-block;
+      height: 24px;
+      width: 111px
+    }
+
+    .en-us .header .logo {
+      background: url(https://static.futunn.com/nuxt_www_futunn/img/nn-logo-en-white.eedf307.svg) no-repeat;
+      background-size: 100%;
+      height: 24px;
+      width: 122px
+    }
+
+    .footer {
+      background: #fff;
+      bottom: 0;
+      color: #aaa;
+      font-size: 12px;
+      line-height: 20px;
+      padding: 12px 0;
+      position: absolute;
+      text-align: center;
+      width: 100%
+    }
+
+    .container {
+      min-height: 100vh
+    }
+
+    @media screen and (max-width:768px) {
+      .header {
+        height: 50px;
+        padding: 0 16px
+      }
+
+      .container-403 {
+        height: 490px;
+        overflow: hidden;
+        position: relative
+      }
+
+      .container-403 .content {
+        background-color: #fff;
+        height: 100%;
+        left: 50%;
+        position: absolute;
+        transform: translateX(-50%);
+        width: 100%
+      }
+
+      .container-403 .content .text {
+        color: #000;
+        left: 50%;
+        min-height: 200px;
+        padding-bottom: 40px;
+        position: absolute;
+        text-align: center;
+        top: 225px;
+        transform: translateX(-50%)
+      }
+
+      .container-403 .content .text .codeMessage {
+        line-height: 1.2;
+        width: 325px
+      }
+
+      .container-403 .content .text .codeMessage .message {
+        font-size: 24px
+      }
+
+      .container-403 .content .text .desc {
+        font-size: 17px;
+        line-height: 1.4;
+        margin-top: 20px
+      }
+
+      .container-403 .content .text .btn {
+        background: #000;
+        border-radius: 50px;
+        bottom: 0;
+        color: #fff;
+        font-size: 16px;
+        font-weight: 700;
+        left: 50%;
+        line-height: 40px;
+        margin-top: 33px;
+        position: absolute;
+        text-align: center;
+        transform: translateX(-50%);
+        width: 225px
+      }
+
+      .container-403 .content .img {
+        height: 160px;
+        left: 50%;
+        position: absolute;
+        top: 40px;
+        transform: translateX(-50%);
+        width: 280px
+      }
+    }
+
+    @media screen and (min-width:768.5px) and (max-width:1000px) {
+      .container-403 {
+        height: 286px;
+        overflow: hidden;
+        padding-top: 40px;
+        position: relative
+      }
+
+      .container-403 .content {
+        background-color: #fff;
+        height: 100%;
+        left: 50%;
+        position: absolute;
+        transform: translateX(-50%);
+        width: 700px
+      }
+
+      .container-403 .content .text {
+        color: #000;
+        left: calc(50% - 300px);
+        max-width: 250px;
+        position: absolute;
+        top: 52px
+      }
+
+      .container-403 .content .text .codeMessage {
+        line-height: 1.2
+      }
+
+      .container-403 .content .text .codeMessage .message {
+        font-size: 20px
+      }
+
+      .container-403 .content .text .desc {
+        font-size: 12px;
+        line-height: 1.5;
+        margin-top: 10px
+      }
+
+      .container-403 .content .text .btn {
+        background: #000;
+        border-radius: 18px;
+        color: #fff;
+        display: inline-block;
+        font-size: 12px;
+        line-height: 38px;
+        margin-top: 42px;
+        padding: 0 30px;
+        text-align: center
+      }
+
+      .container-403 .content .img {
+        height: 201px;
+        left: 50%;
+        position: absolute;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 350px
+      }
+    }
+
+    @media screen and (min-width:1000.5px) and (max-width:1200px) {
+      .container-403 {
+        height: 380px;
+        overflow: hidden;
+        padding-top: 40px;
+        position: relative
+      }
+
+      .container-403 .content {
+        background-color: #fff;
+        height: 100%;
+        left: 50%;
+        position: absolute;
+        transform: translateX(-50%);
+        width: 940px
+      }
+
+      .container-403 .content .text {
+        color: #000;
+        left: calc(50% - 350px);
+        max-width: 320px;
+        position: absolute;
+        top: 60px
+      }
+
+      .container-403 .content .text .codeMessage {
+        line-height: 1.2
+      }
+
+      .container-403 .content .text .codeMessage .message {
+        font-size: 28px
+      }
+
+      .container-403 .content .text .desc {
+        font-size: 12px;
+        line-height: 1.5;
+        margin-top: 10px
+      }
+
+      .container-403 .content .text .btn {
+        background: #000;
+        border-radius: 20px;
+        color: #fff;
+        display: inline-block;
+        font-size: 14px;
+        line-height: 40px;
+        margin-top: 68px;
+        padding: 0 30px;
+        text-align: center
+      }
+
+      .container-403 .content .img {
+        height: 284px;
+        left: 50%;
+        position: absolute;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 492px
+      }
+    }
+
+    @media screen and (min-width:1200.5px) {
+      .container-403 {
+        height: 787px;
+        overflow: hidden;
+        padding-top: 40px;
+        position: relative
+      }
+
+      .container-403 .content {
+        background-color: #fff;
+        height: 100%;
+        left: 50%;
+        position: absolute;
+        transform: translateX(-50%);
+        width: 1920px
+      }
+
+      .container-403 .content .text {
+        color: #000;
+        left: calc(50% - 600px);
+        max-width: 465px;
+        position: absolute;
+        top: 180px
+      }
+
+      .container-403 .content .text .codeMessage {
+        line-height: 1.2
+      }
+
+      .container-403 .content .text .codeMessage .message {
+        font-size: 32px
+      }
+
+      .container-403 .content .text .desc {
+        font-size: 18px;
+        line-height: 1.5;
+        margin-top: 20px
+      }
+
+      .container-403 .content .text .btn {
+        background: #000;
+        border-radius: 100px;
+        color: #fff;
+        display: inline-block;
+        font-size: 24px;
+        line-height: 78px;
+        margin-top: 110px;
+        padding: 0 40px;
+        text-align: center
+      }
+
+      .container-403 .content .img {
+        height: 378px;
+        left: calc(50% - 100px);
+        position: absolute;
+        top: 45%;
+        transform: translateY(-50%);
+        width: 656px
+      }
+    }
+  </style>
+</head>
+
+<body class="body">
+  <div class="app-container">
+    <div class="Page403">
+      <div class="container">
+        <div class="header"><a href="https://www.futunn.com/" class="logo"></a>
+        </div>
+        <div class="container-403">
+          <div class="content">
+            <div class="text">
+              <div class="codeMessage">
+                <div class="message">访问频繁，请稍后重试</div>
+              </div>
+              <div class="desc">您所要访问的页面不在这儿，它可能正忙着刷牛牛圈，稍后就能恢复正常</div> <a href="https://www.futunn.com/"
+                class="btn">返回主页</a>
+            </div> <img src="https://static.futunn.com/nuxt_www_futunn/img/403.3a98b7e.jpg" alt="403" class="img">
+          </div>
+        </div>
+        <div class="footer">© 2025 FUTU</div>
+      </div>
+    </div>
+  </div>
+  <script>
+    // 多语言配置
+    var i18n = {
+      'zh-cn': {
+        message: '访问频繁，请稍后重试',
+        desc: '您所要访问的页面不在这儿，它可能正忙着刷牛牛圈，稍后就能恢复正常',
+        btn: '返回主页',
+        homeLink: 'https://www.futunn.com/'
+      },
+      'zh-hk': {
+        message: '操作頻繁，請稍後重試',
+        desc: '您所要訪問的頁面不在這兒，它可能正忙著刷牛牛圈，稍後就能恢復正常',
+        btn: '返回主頁',
+        homeLink: 'https://www.futunn.com/hk'
+      },
+      'en-us': {
+        message: 'Operations too frequent.<br>Try again later',
+        desc: 'Page not found, please try again later.',
+        btn: 'Take me home',
+        homeLink: 'https://www.futunn.com/en'
+      }
+    };
+
+    // 读取 Cookie
+    function getCookie(name) {
+      var value = '; ' + document.cookie;
+      var parts = value.split('; ' + name + '=');
+      if (parts.length === 2) return parts.pop().split(';').shift();
+      return '';
+    }
+
+    // 获取语言
+    function getLocale() {
+      var locale = getCookie('locale');
+      if (!locale || !i18n[locale]) {
+        return 'zh-cn';
+      }
+      return locale;
+    }
+
+    // 获取 body class
+    function getBodyClass(locale) {
+      var classMap = {
+        'zh-cn': 'zh-cn',
+        'zh-hk': 'zh-hk',
+        'en-us': 'en-us'
+      };
+      return classMap[locale] || 'zh-hk';
+    }
+
+    // 更新 body class
+    function updateBodyClass(locale) {
+      var body = document.body;
+      body.classList.remove('zh-cn', 'zh-hk', 'en-us');
+      body.classList.add(getBodyClass(locale));
+    }
+
+    // 更新容器 class
+    function updateContainerClass(locale) {
+      var container = document.querySelector('.app-container');
+      if (container) {
+        container.classList.remove('zh-cn', 'zh-hk', 'en-us');
+        container.classList.add(locale);
+      }
+    }
+
+    // 应用语言
+    function applyLanguage(locale) {
+      var texts = i18n[locale];
+      if (!texts) return;
+
+      // 更新 message
+      var messageEl = document.querySelector('.message');
+      if (messageEl) {
+        messageEl.innerHTML = texts.message;
+      }
+
+      // 更新 desc
+      var descEl = document.querySelector('.desc');
+      if (descEl) {
+        descEl.textContent = texts.desc;
+      }
+
+      // 更新 btn 文字
+      var btnEl = document.querySelector('.btn');
+      if (btnEl) {
+        btnEl.textContent = texts.btn;
+      }
+
+      // 更新 btn 链接
+      if (btnEl && texts.homeLink) {
+        btnEl.href = texts.homeLink;
+      }
+
+      // 更新 header logo 链接
+      var logoEl = document.querySelector('.header .logo');
+      if (logoEl && texts.homeLink) {
+        logoEl.href = texts.homeLink;
+      }
+
+      // 更新 footer 年份
+      var footerEl = document.querySelector('.footer');
+      if (footerEl) {
+        var currentYear = new Date().getFullYear();
+        footerEl.textContent = '© ' + currentYear + ' FUTU';
+      }
+
+      // 更新 class
+      updateBodyClass(locale);
+      updateContainerClass(locale);
+    }
+
+    // 初始化
+    function init() {
+      var locale = getLocale();
+      applyLanguage(locale);
+    }
+
+    // DOM 加载完成后执行
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', init);
+    } else {
+      init();
+    }
+  </script>
+</body>
+
+</html>
