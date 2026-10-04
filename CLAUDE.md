@@ -208,9 +208,9 @@ one, oldest first, from the tag's own subject and body.
   out of the log), not from the laptop's idea of main.
 - **When nothing is released.** A redeploy of an already-tagged commit is not a
   new release. A tag read that fails tags nothing, rather than risk a duplicate.
-- **What can fail.** Tags are made with `tag.gpgSign=false`, because commits
-  here are signed by an x509 helper that can wait on a prompt. The step always
-  exits 0, so it cannot fail a deploy.
+- **What can fail.** Tags are made with `tag.gpgSign=false`, whatever the
+  global config says, because a signing helper can wait on a prompt. The step
+  always exits 0, so it cannot fail a deploy.
 
 All 8 apps get a full `systemctl restart`, **not** `kill -HUP`. HUP looks like a
 graceful reload but under `--preload` it ships stale code: gunicorn's HUP handler

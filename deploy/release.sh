@@ -159,8 +159,8 @@ trap 'rm -f "$notes"' EXIT
   fi
 } > "$notes"
 
-# Unsigned whatever the global config says: commits here are signed with an
-# x509 helper that can wait on a prompt, and a deploy must not hang at the end.
+# Unsigned whatever the global config says: a signing helper can wait on a
+# prompt, and a deploy must not hang at its last step.
 made=0
 if g -c tag.gpgSign=false tag -a "$tag" "$SHA" -F "$notes" 2>/dev/null; then
   made=1
