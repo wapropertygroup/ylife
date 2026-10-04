@@ -4,7 +4,7 @@ A Flask monorepo hosting eight web apps at **li-family.us**, plus two bonus
 domains that front pieces of the flagship app under a different brand. The
 flagship, **yStocker**, is a stock-research dashboard that has grown a second
 identity: `/agents` runs a multi-agent AI equity-research framework
-([TradingAgents](https://github.com/15th-Ave-NE/TradingAgents), our fork of
+([TradingAgents](https://github.com/wapropertygroup/TradingAgents), our fork of
 [TauricResearch/TradingAgents](https://github.com/TauricResearch/TradingAgents))
 against any ticker, including mainland China A-shares.
 
@@ -66,9 +66,10 @@ which is why the two open items below are also manual:
 - [Auth](#auth)
 - [Secrets](#secrets)
 - [Production infrastructure](#production-infrastructure)
-- [Deploying](#deploying)
+- [Deploying](#deploying) (and [releases](#releases))
 - [Testing](#testing)
 - [Dependencies](#dependencies)
+- [Security](#security)
 - [License](#license)
 
 ---
@@ -86,17 +87,30 @@ ystocker/                       <- git repo root (remote is wapropertygroup/ylif
 |
 +-- ystocker/                   <- stock research + AI agents (the flagship app)
 |   +-- __init__.py             <- Flask factory, SSM secret loading, PEER_GROUPS config
-|   +-- routes.py               <- every route, JSON API, and background-job glue (5,200+ lines)
+|   +-- routes.py               <- every route, JSON API, and background-job glue (15,000+ lines)
 |   +-- data.py / fed.py / sec13f.py        <- Yahoo Finance / FRED / SEC EDGAR fetchers
+|   +-- xbrl.py / statements.py / fundamentals.py
+|   |                           <- the Fundamentals tab: a company's own SEC filings (XBRL)
+|   +-- directory.py            <- every company listed with the SEC, for /companies
+|   +-- dca.py / dcf.py / listing.py / dca_history.py / dca_universe.py / dcf_store.py
+|   |                           <- the DCA valuation engine (/dca and each company's DCA tab)
+|   +-- predictions.py / odds.py / odds_ai.py / odds_ledger.py
+|   |                           <- /predictions: Polymarket + Kalshi, and a scored AI read
+|   +-- earnings.py / earnings_calendar.py / insiders.py
+|   |                           <- the earnings calendar and the Form 4 insider tracker
 |   +-- forecast.py             <- Prophet / ARIMA / linear forecasting, run out-of-process
 |   +-- charts.py / report_charts.py / report_pdf.py  <- server-side chart + PDF rendering
 |   +-- fetchguard.py           <- circuit breakers + backoff shared by every outbound vendor call
 |   +-- freshness.py            <- cache age vs. market-hours staleness vs. upstream-death detection
-|   +-- brief.py                <- the AI Markets Brief (/api/market-brief)
-|   +-- agents.py, agent_models.py, agent_roles.py, analyst.py, research.py
-|   |                           <- the /agents job runner and its model/thinking-level picker
+|   +-- crawlers.py             <- robots.txt, the sitemap, and the crawler guard on the API
+|   +-- brief.py / daily_email.py           <- the AI Markets Brief and the daily email
+|   +-- agents.py, agent_models.py, agent_roles.py, analyst.py, research.py, research_store.py
+|   |                           <- the /agents job runner, its model picker, and saved research
 |   +-- credits.py, quota.py    <- per-run credits, daily/global quotas, brand→pay-host map
-|   +-- report_email.py, share.py           <- email a finished report / share it via a link
+|   +-- report_email.py, share.py, share_card.py, qr.py
+|   |                           <- email a finished report / share it by link, SMS or QR
+|   +-- inbox.py                <- /api/posts, the token-gated external write door
+|   +-- wiki.py                 <- the registry behind trade-agents.com's /docs and /research
 |   +-- portfolio.py, portfolio_csv.py, portfolio_import.py, funddata.py, lookthrough.py, assets.py
 |   |                           <- the /assets tracker and its recursive 穿透 look-through
 |   +-- futu.py                 <- deep-links the FuTu button on /history into the Futubull app
@@ -106,17 +120,20 @@ ystocker/                       <- git repo root (remote is wapropertygroup/ylif
 |   |                              tracker, ETF pages, Fed-funds-futures odds, housing, sector
 |   |                              rotation, valuation history, exposure, news feeds, cache warm-up)
 |   +-- heatmap_meta.py         <- static S&P 500 metadata for heatmap tile sizing
-|   +-- templates/              <- 30+ Jinja2 templates, all extending base.html
-|   +-- static/                 <- css, i18n.js, markdown.js, sw.js, manifest.json, ...
+|   +-- templates/              <- 60+ Jinja2 templates, all extending base.html
+|   +-- static/                 <- css, i18n.js, markdown.js, watchlist.js, fundamentals.js, sw.js, ...
 |
 +-- yhome/  yplanner/  yplanter/  ytracker/  ypay/  yimage/  ybg/   <- the other seven apps
 |                                (each: __init__.py, routes.py, templates/, static/)
 |
 +-- cache/                      <- on-disk JSON cache, auto-created (yStocker's primary store)
-+-- deploy/                     <- deploy.sh, install-tradingagents.sh, sync-ssm.sh, cloudformation.yaml
-+-- tests/                      <- test_*.py (unittest discover) + check_*.py (live-network diagnostics)
++-- deploy/                     <- deploy.sh, release.sh, install-tradingagents.sh, sync-ssm.sh,
+|                                  cloudformation.yaml
++-- tests/                      <- test_*.py (unittest discover), check_*.py (app-level checks),
+|                                  check_*.mjs (Node checks of the pages' own scripts)
 +-- requirements_<app>.txt      <- one dependency file per app, plus requirements_build.txt (Tailwind)
 +-- CLAUDE.md                   <- the deep internals doc: architecture rationale, gotchas, the "why"
++-- SECURITY.md                 <- how to report a vulnerability, and what is in scope
 +-- LICENSE                     <- MIT
 ```
 
@@ -167,37 +184,74 @@ explanations, the Markets Brief, `/agents`) are disabled. See
 
 ## yStocker feature tour
 
-### Peer group valuation dashboard
-Forward PE, TTM PE, PEG, analyst targets, upside %, EPS growth, and market cap
-for every ticker in each peer group, plus a valuation scatter (Forward PE vs.
-upside) and a colour-coded heatmap. Peer groups are editable at `/groups` and
-persist to `cache/peer_groups.json`.
+### Markets dashboards
+`/markets` (indices, commodities, crypto, Fear & Greed, put/call), `/evaluation`
+(every peer group's forward and trailing P/E, PEG, analyst upside, with a
+valuation scatter and two heatmap tables that start collapsed), `/commodities`,
+`/13f` (48 tracked funds' SEC EDGAR holdings), `/fed` (the weekly H.4.1
+balance sheet), `/fedwatch` (FOMC odds from fed-funds futures), `/housing`,
+`/multiples` (index P/E for the S&P 500, Nasdaq-100, SOX and Nikkei),
+`/heatmap`, `/daily` and `/videos`. Each dashboard carries an AI explainer over
+the data actually on the page.
 
-### Single-ticker analysis (`/history/<ticker>`)
-Historical PE/PEG/price charts, an options wall (aggregated call/put open
-interest across expirations), institutional holders, AI chart explanation
-(streamed, EN/中文), recent news with importance scoring, and — for phones
-with the Futu/moomoo app installed — a deep link straight into it.
+### AI Markets Brief
+The card atop `/markets` is generated from *all eight* dashboards at once:
+one Gemini call, one Markdown response, a table per section. A cold upstream
+is stated (`DATA UNAVAILABLE`) rather than silently dropped, because an omitted
+section reads to the model as "nothing to say" and invites it to invent a
+number instead.
+
+### A company page with six tabs (`/history/<ticker>`)
+**Charts & Holdings** (P/E, PEG and price history, the options wall, holders,
+13F owners, the forecast), **Fundamentals**, **DCA Valuation**, **News**,
+**Videos** and **✦ Research** (a 17-section deep-research report, saved per
+reader). Every tab has its own address (`?tab=fundamentals`, `?tab=dca`, …),
+so the tab on screen can be shared or reloaded onto. A ☆ in the header adds
+the company to your watchlist.
+
+### Fundamentals from the company's own filings
+Quarterly, trailing-twelve-month and annual figures straight from SEC EDGAR's
+XBRL filings, back to the 2009–2011 phase-in: revenue and growth, gross,
+operating and net margins, EPS, cash flows and capex, cash and debt, return
+on equity, R&D beside stock-based pay, buybacks, dividends per share, and P/E
+and P/S. A listing SEC does not cover (Tokyo, Seoul, Hong Kong, Shanghai) falls
+back to Yahoo's statement tables. What filings leave unsaid is worked out and
+labelled rather than guessed: nobody files a Q4, 10-Q cash flows are
+year-to-date, a split re-bases every per-share figure after it, and tags change
+names across a decade. Any view exports as CSV.
+
+### Every company listed with the SEC (`/companies`)
+The ~300 companies this site follows, with live quotes, and the other 8,000
+or so SEC filers, each a card that opens its Fundamentals tab. Sort by size,
+today's move, P/E or 52-week return, filter by sector or exchange, and keep a
+★ watchlist that is shared with `/lookup` and every company page.
+
+### The DCA valuation engine (`/dca`)
+Scores a company 0–100 on how cheap it is against *its own* history: each
+multiple ranked point-in-time against its own reconstructed past, blended with
+a discounted-cash-flow branch weighted by how forecastable the business is.
+The score sizes a recurring contribution (0.5× to 1.5× of your base), adjusted
+for analyst revisions and your own concentration. `/dca` ranks the tracked
+names, leaving out V ≤ 20 unless you ask for them, and each company's full
+workings are its DCA tab on `/history`.
+
+### Prediction markets (`/predictions`)
+The busiest Polymarket and Kalshi markets on the events this site covers,
+today's biggest moves, and each FOMC decision three ways (fed-funds futures
+against both venues). The AI read is price-blind on purpose, so it cannot
+simply echo the market, and every read is written down and scored by Brier
+once its market resolves.
+
+### Earnings and insiders (`/earnings`, `/insiders`)
+The week's earnings calendar for every US-listed company, with the consensus
+and the surprise, and insider buying and selling from SEC Form 4 filings.
 
 ### Price forecasting (`/api/forecast/<ticker>`)
 Prophet, AutoARIMA, and linear regression, 6 months out with 80% confidence
-intervals. The fit itself runs in a `subprocess`, never in a gunicorn worker —
+intervals. The fit itself runs in a `subprocess`, never in a gunicorn worker:
 Prophet and `pmdarima` each leak hundreds of MB that the process never gives
 back, so fitting in-request turned into nine OOM kills in 48 hours across
 *every* app on the box before this was isolated.
-
-### Market heatmap, broad markets, Fed, and 13F
-`/heatmap` (S&P 500 by sector, sized by market cap), `/markets` (indices,
-commodities, crypto, Fear & Greed, put/call ratio), `/fed` (weekly FRED H.4.1
-balance-sheet series), and `/13f` (22 tracked funds' SEC EDGAR holdings) — each
-with an AI explainer over the data actually on the page.
-
-### AI Markets Brief
-The card atop `/markets` is generated from *all eight* dashboards at once —
-one Gemini call, one Markdown response, a table per section. A cold upstream
-is stated (`DATA UNAVAILABLE`) rather than silently dropped, because an
-omitted section reads to the model as "nothing to say" and invites it to
-invent a number instead.
 
 ### Asset tracker & 穿透 look-through (`/assets`)
 Import a broker CSV (Fidelity, Schwab, Vanguard, IBKR, Robinhood, E\*TRADE,
@@ -207,11 +261,35 @@ largest holding is another fund. Every figure is reported as a **floor**
 (Yahoo discloses only a fund's top ten holdings) with a coverage percentage
 alongside it, because a guessed number is indistinguishable from a measured
 one to the reader, at exactly the moment they're making a concentration call.
+A Dollar-Cost Averaging tab sizes the next contribution by the companies you
+actually own after look-through.
+
+### Posts (`/posts`)
+A write-only door for scripts, webhooks and forwarded email (`POST /api/posts`
+with a bearer token, JSON or raw `message/rfc822`, inline `cid:` images
+resolved on arrival) and a signed-in feed that renders what came through it.
+No token configured means the door is shut, not open.
+
+### Numbers you can trust
+A wrong number looks exactly like a right one, so the site would rather show a
+gap than a guess. Look-through exposures are floors with their coverage
+stated. A P/E whose earnings per share sit on a different share basis from
+the price (Tokio Marine and Tokyo Electron after recent splits) is dropped.
+A ticker Yahoo has handed to another company (PARA, now a shell; Paramount is
+PSKY) is renamed in the peer groups. An ADR's currency and depositary ratio are
+reconciled before any multiple is ranked.
 
 ### Sharing and emailing reports
 A finished `/agents` report can be mailed to the account that ran it, or
-shared as a link to someone with no account at all — see the dedicated
-section below.
+shared by link, text message or QR code with someone who has no account at
+all. See the dedicated section below.
+
+### Crawlers
+`/robots.txt` and `/sitemap.xml` are built per host. A crawler that says what
+it is gets a 403 on the JSON API and the refresh routes (shared reports'
+preview cards excepted), and new Fundamentals builds are capped per day as a
+backstop. One AI crawler made ~6,000 API requests in a few hours before this
+existed.
 
 ### Internationalisation & theme
 Every app ships English + Simplified Chinese (`static/i18n.js`) and a
@@ -224,17 +302,21 @@ light/dark toggle that defaults to dark and flips before first paint.
 `/agents` streams a full multi-agent equity-research report for any ticker —
 Bull/Bear researcher debate, an aggressive/conservative/neutral risk debate,
 and a Portfolio Manager's final call — by launching the separate
-[`15th-Ave-NE/TradingAgents`](https://github.com/15th-Ave-NE/TradingAgents)
+[`wapropertygroup/TradingAgents`](https://github.com/wapropertygroup/TradingAgents)
 framework (our fork of `TauricResearch/TradingAgents`) as a short-lived
 subprocess. It is a second product bolted onto a stock dashboard, and most of
 what's interesting about yStocker's backend exists to support it safely.
 
-### Four analysts, or seven for A-shares
-Non-A-share tickers get the framework's established four analysts
-(Fundamentals, Sentiment, News, Technical). Mainland China A-share codes get
-seven — the four above plus **Market, Policy, Hot Money, and Lock-up** — and
-all seven reports are explicit inputs to both debates, not just background
-colour. A-share data is fetched keyless: mootdx/通达信 TCP when it's reachable,
+### Six analysts, or nine for A-shares
+Every run draws six analysts: **Market**, **Sentiment** (StockTwits and Reddit
+as well as headlines), **News**, **Earnings** (estimate revisions, plus
+announcement dates and post-earnings drift from Alpha Vantage when its key is
+set), **Quality** and **Valuation** (the last two narrate numbers code
+computed, rather than estimating them). Mainland China A-share codes add
+**Policy, Hot Money, and Lock-up**, and every report is an explicit input to
+both debates, not just background colour. The page shows a run's progress
+counted turn by turn (24 steps by default), never timed, and finished runs are
+filed on a calendar by the trading day they analysed. A-share data is fetched keyless: mootdx/通达信 TCP when it's reachable,
 falling through to Tencent/Eastmoney/Sina/同花顺 over HTTP when it isn't, with
 Eastmoney calls serialized and rate-limited. Changing how yStocker *renders*
 a role doesn't add an analyst to the decision graph — that lives entirely in
@@ -298,6 +380,15 @@ its API spend. Restarts (not `kill -HUP`) are load-bearing for a second
 reason: under `--preload`, HUP only re-reads gunicorn's *config file*, not the
 already-imported app, so new code silently never runs.
 
+### The TradeAgents site (trade-agents.com)
+On its own domain `/agents` wears its own brand: a landing page at `/home`
+(where a signed-out visit to the bare domain goes), product docs at `/docs`, a
+Research Lab of dated, sourced posts at `/research`, and an account menu
+showing the reader's balance with a Prepay link to `pay.trade-agents.com`.
+Every dashboard there shares one masthead and one column, and a signed-out
+reader sees each dashboard's first screen with the rest under a soft reading
+wall that asks for an account.
+
 ### Wanting more detail
 `CLAUDE.md` in this repo has the rest — byte-budget arithmetic for the email
 clip, the residual-partition invariant behind `/assets`, the exact race
@@ -329,21 +420,37 @@ conditions each guard closes, and the reasoning behind every one of the
 
 | URL | Description |
 |---|---|
-| `/` | Home — sector cards, valuation scatter, PEG map, cross-sector heatmap |
-| `/sector/<name>` | One peer group: PE, upside, PEG charts + data table |
-| `/history/<ticker>` | PE/PEG history, options wall, holders, news, AI explainer, FuTu deep link |
-| `/lookup` | Search any ticker, or discover tickers by sector/industry |
-| `/groups` | Add, remove, and manage peer groups (persisted to disk) |
-| `/fed` | Federal Reserve balance sheet charts + AI trend explanation |
-| `/13f` | Institutional 13F holdings from 22 tracked funds |
-| `/heatmap` | S&P 500 market heatmap by sector |
+| `/` | Redirects to `/markets` |
 | `/markets` | Broad market overview + the AI Markets Brief |
-| `/assets` | Your asset tracker and its 穿透 look-through |
+| `/evaluation` | Every peer group: P/E, PEG, upside, a valuation scatter and heatmaps |
+| `/sector/<name>` | One peer group: P/E, upside and PEG charts + data table |
+| `/history/<ticker>` | A company: Charts & Holdings, Fundamentals, DCA Valuation, News, Videos, ✦ Research (`?tab=` names one) |
+| `/companies` | Every company listed with the SEC, live quotes for the ones followed, a watchlist |
+| `/dca` | The DCA ranking: valuation score and contribution sizing for the tracked names |
+| `/dca/<ticker>` | One company's DCA page (also its DCA tab on `/history`) |
+| `/predictions` | Polymarket and Kalshi odds, the Fed three ways, a scored AI read |
+| `/earnings` | This week's earnings calendar, with consensus and surprise |
+| `/insiders` | Insider buying and selling from SEC Form 4 |
+| `/commodities` | Futures across metals, energy and agriculture |
+| `/13f` | Institutional 13F holdings from 48 tracked funds |
+| `/fed` | Federal Reserve balance sheet charts + AI trend explanation |
+| `/fedwatch` | Implied FOMC rate-move probabilities from fed-funds futures |
+| `/housing` | Zillow, Redfin, realtor.com and FRED housing series |
+| `/multiples` | Index P/E: S&P 500, Nasdaq-100, SOX, Nikkei |
+| `/heatmap` | S&P 500 market heatmap by sector |
+| `/daily` | The daily markets report, US and China/Asia |
+| `/lookup` | Search any ticker, or discover tickers by sector/industry |
+| `/groups` | Add, remove, and manage peer groups |
+| `/assets` | Your asset tracker, its 穿透 look-through, and DCA sizing |
 | `/agents` | Submit and read multi-agent equity-research reports |
 | `/agents/shared/<token>` | A shared report, no sign-in required |
+| `/posts` | The signed-in feed behind `/api/posts` |
+| `/home`, `/docs`, `/research` | trade-agents.com's landing page, product docs and Research Lab |
 | `/guide` | Help documentation and feature overview |
 | `/videos` | Curated YouTube finance channels |
-| `/refresh` | Clears the cache and triggers a background re-fetch (cooldown-gated) |
+| `/tv` | A kiosk dashboard for a television (`tv.li-family.us`) |
+| `/robots.txt`, `/sitemap.xml` | Built per host |
+| `/rss.xml` (or `/feed.xml`), `/fomc.ics` (or `/calendar.ics`) | The daily commentary as RSS; FOMC decision dates as iCalendar |
 
 ---
 
@@ -376,6 +483,47 @@ conditions each guard closes, and the reasoning behind every one of the
 | `/api/assets/template.csv` | GET | Download the plain `symbol,quantity` template |
 | `/api/assets/analyze` | POST | Stream an AI risk memo over your current positions (SSE) |
 | `/api/assets/policy` | GET/PUT/POST | Read/write per-user analysis preferences |
+
+### Company pages, fundamentals and the directory
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/api/fundamentals/<ticker>` | GET | A company's quarterly/TTM/annual figures from its filings (202 while a cold ticker builds) |
+| `/api/companies/directory` | GET | Every SEC filer, compact, for `/companies` |
+| `/api/history/<ticker>/research` | POST | Stream the 17-section deep-research report (SSE) |
+| `/api/history/<ticker>/research/saved` | GET | Your saved research reports for a ticker |
+| `/api/history/<ticker>/research/saved/<ref>` | GET/DELETE | Read or delete one saved report |
+| `/api/history/<ticker>/agents` | GET | This ticker's `/agents` runs, for the Research tab |
+
+### DCA valuation engine
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/api/dca` | GET | The ranking: every tracked name's score and contribution |
+| `/api/dca/<ticker>` | GET | One company's score, workings and history (202 while it builds) |
+| `/api/dca/<ticker>/peers` | GET | The same for its peer group, without building any |
+| `/api/dca/<ticker>/dcf` | GET/POST/DELETE | Read or override the DCF inputs (writing is VIP-only) |
+| `/api/dca/portfolio` | GET | DCA sizing for your `/assets` companies after look-through |
+| `/api/dca/track/<ticker>` | POST/DELETE | Add or drop a name from the ranked universe |
+| `/api/dca/pin/<ticker>` | POST/DELETE | Keep a name in the universe |
+
+### Prediction markets, earnings and insiders
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/api/predictions` | GET | The Polymarket + Kalshi board and today's movers |
+| `/api/predictions/fed` | GET | Each FOMC decision: futures vs both venues |
+| `/api/predictions/read` | GET/POST | Read, or start, the AI read for one market (quota-limited) |
+| `/api/predictions/ledger` | GET | Every AI read so far, scored once its market resolved |
+| `/api/earnings` | GET | The week's earnings calendar |
+| `/api/insiders`, `/api/insiders/<ticker>` | GET | Form 4 insider transactions, overall or for one company |
+
+### Posts
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/api/posts` | POST | Write a post: bearer token, JSON or raw email (`/api/inbox` is an alias) |
+| `/api/posts` | GET | Read the feed (signed in) |
 
 ### AI brief & daily summary
 
@@ -411,7 +559,7 @@ conditions each guard closes, and the reasoning behind every one of the
 | `/api/videos/<ticker>` | GET | Financial videos for a ticker |
 | `/api/fed` | GET | H.4.1 balance sheet data |
 | `/api/fed/explain` | POST | AI Fed data explanation (SSE stream) |
-| `/api/13f/<fund_slug>` | GET | Holdings for one fund |
+| `/api/13f/<fund_slug>` | GET | Holdings for one of the 48 tracked funds |
 | `/api/13f/ticker/<ticker>` | GET | Which funds own this stock |
 
 ---
@@ -426,21 +574,31 @@ Two-tier cache: an in-memory dict plus on-disk JSON in `cache/`, guarded by
 | Stock metrics | 8 hours | `cache/ticker_cache.json` |
 | Fed balance sheet | 24 hours | `cache/fed_cache.json` |
 | 13F holdings | 24 hours | `cache/sec13f_cache.json` |
+| Fundamentals (per ticker) | 12 hours, served stale while it rebuilds | `cache/fundamentals/` |
+| DCA reconstructions (per ticker) | 24 hours | `cache/dca/` |
+| The SEC company directory | 24 hours | `cache/sec_company_tickers_exchange.json` |
+| Earnings calendar | 1–6 hours | `cache/earnings_calendar/` |
+| Prediction markets | 10 minutes | `cache/predictions/` |
 | News | 5 minutes | in-memory only |
 
-### Observed series (DynamoDB, not cache)
+None of these is fetched on the request path: a cold entry answers `202`, one
+background build runs under a shared budget, and the page polls with a bounded
+loop that always ends on a drawn state.
 
-A handful of series accumulate one row per day and **cannot be recomputed**
-from anything upstream, so a cache-file-only copy is lost the moment the EC2
-instance is replaced. These live in DynamoDB in addition to their on-disk
-mirror: `ystocker-valuation-history`, `ystocker-fear-greed`,
-`ystocker-pcr-history`, `ystocker-cta-history`, `ystocker-fedwatch-history` —
-plus `ystocker-assets` (portfolios) and `ystocker-agent-shares` (share
-tokens), which are records rather than time series but share the same "must
-outlive the box" reasoning. None of the seven are in
-`deploy/cloudformation.yaml` — CloudFormation can't adopt a table that
-already exists, so they're created by hand once (see `CLAUDE.md` for the
-exact `aws dynamodb create-table` calls).
+### Observed series and records (DynamoDB, not cache)
+
+Some series accumulate one row per day and **cannot be recomputed** from
+anything upstream, so a cache-file-only copy is lost the moment the EC2
+instance is replaced. Those live in DynamoDB as well as their on-disk mirror:
+`ystocker-valuation-history`, `-fear-greed`, `-pcr-history`, `-cta-history`,
+`-fedwatch-history` and `-dca-history`. Records that must outlive the box live
+there too: portfolios (`-assets`), agent jobs, credits and share tokens,
+saved research reports, the DCA universe and its DCF overrides, posts
+(`-inbox`), and the prediction-market ledger. None of these tables are in
+`deploy/cloudformation.yaml`. CloudFormation can't adopt a table that already
+exists, so each is created by hand once (see `CLAUDE.md` for the exact `aws
+dynamodb create-table` calls). The instance role grants `table/ystocker-*`,
+so a new table needs no IAM change.
 
 ---
 
@@ -464,10 +622,10 @@ also why the eight services must be `systemctl restart`ed and never `kill
 
 ## Frontend
 
-- **Tailwind CSS** via CDN for every page, plus a small compiled bundle
-  (`css/tailwind.css`, rebuilt by `build_css.sh`) for the few contexts that
-  can't reach the CDN, like the offline page and pull-to-refresh's
-  dynamically-injected classes.
+- **Tailwind CSS**, compiled per app into `static/css/tailwind.css` (rebuilt by
+  `build_css.sh`); only yHome still loads it from the CDN. Because the bundle
+  is compiled, a class that appears only inside a JavaScript string can be
+  missing from it, which is why panels drawn from JS use hand-written CSS.
 - **Alpine.js** for yPlanner's interactivity; **Chart.js 4** for every
   yStocker chart; the **Google Maps JavaScript API** for yPlanner.
 - **i18n**: every app ships `static/i18n.js` with English + Simplified
@@ -556,11 +714,11 @@ bash deploy/deploy.sh --full       # also converge the box itself; needs -i key.
 
 The default path runs over **SSM**, so it needs no SSH key: `fetch` + `reset
 --hard` on both the yStocker and TradingAgents checkouts, restart all eight
-services, health-check — about a minute. It refuses to proceed if your local
-`main` is ahead of or diverged from GitHub (`reset --hard` takes what GitHub
-has), and it re-reads `main` from the remote after resetting to confirm the
-checkout actually landed, rather than trusting a chained `&&` that could
-report success while shipping nothing.
+services, health-check — about a minute. It warns when your checkout has
+uncommitted or unpushed work, because `reset --hard` takes what GitHub has.
+After resetting, it re-reads `main` from the remote and aborts before the
+restart unless the checkout matches, rather than trusting a chained `&&` that
+could report success while shipping nothing.
 
 `--full` additionally converges the machine itself over SSH — CloudFormation,
 pip, systemd units, nginx, certbot, swap, the CJK font — and needs a `.pem`.
@@ -585,6 +743,33 @@ aws ssm get-command-invocation --command-id <CMD_ID> --instance-id "$IID" \
 ```
 
 </details>
+
+### Releases
+
+Every deploy that lands is recorded on GitHub, by `deploy/release.sh`.
+`deploy.sh` calls it after a successful ship or `--full` deploy; `--check`
+releases nothing.
+
+1. It tags the deployed commit `deploy-YYYY-MM-DD-HHMM` (UTC) and pushes the
+   tag. The tag's message is the release notes: the commits since the previous
+   deploy tag, the TradingAgents commit that shipped with it, and the health
+   check after the restart.
+2. It publishes a GitHub Release for every deploy tag that does not have one
+   yet, oldest first, titled and described by the tag's own message. A release
+   published later therefore says exactly what one published on the day would
+   have.
+
+The tag needs only what `git push` already uses. The release needs `gh`
+logged in to github.com:
+
+```bash
+gh auth login --hostname github.com
+```
+
+Until then the deploy prints that line as a reminder, and the first deploy
+after logging in publishes every release that is owed. A redeploy of a commit
+that is already released is not a new release, and the release step can never
+turn a good deploy into a failed one.
 
 ### Provisioning a new box
 
@@ -628,22 +813,26 @@ gunicorn "ystocker:create_app()" --bind 0.0.0.0:8000
 ## Testing
 
 ```bash
-python -m unittest discover -s tests          # everything named test_*.py
-python -m pytest tests/                        # equivalent, if pytest is installed
+python -m unittest discover -s tests              # every test_*.py: ~2,300 tests, no network
+for f in tests/check_*.mjs; do node "$f"; done    # the pages' own scripts, extracted and run in Node
+python -m unittest tests.check_dca_endpoints      # one app-level check; each check_*.py runs on its own
 ```
 
-Files named `check_*.py` are excluded from `unittest discover` on purpose —
-they need a live cache, a running Flask app, or a real Gemini/network call
-(`tests/check_assets_endpoints.py`, `tests/check_brief_live.py`), so they're
-diagnostics you run by hand, not part of CI. The `test_*.py` suite needs
-neither a network nor a database: `tests/test_lookthrough.py` (the `/assets`
-look-through math, including the summation invariant), `tests/
-test_portfolio_csv.py` (65 real broker-export shapes), `tests/
-test_agent_models.py` (43, cross-checked against TradingAgents' own model
-catalog), `tests/test_report_email.py` (76), `tests/test_brief_formatters.py`
-(60), and `tests/test_theme_classes.py` among them.
-
----
+- **`test_*.py`** (78 files) need neither a network nor a database. Examples:
+  - `test_xbrl.py` pins the filings arithmetic against NVIDIA's real figures;
+  - `test_lookthrough.py` holds the `/assets` summation invariant;
+  - `test_portfolio_csv.py` covers 65 real broker-export shapes;
+  - `test_dca.py` and `test_dcf.py` cover the valuation engine, both worked
+    examples included;
+  - `test_odds.py` runs on real Polymarket and Kalshi payloads.
+- **`check_*.py`** build a real Flask app, so `unittest discover` skips them on
+  purpose. Most are hermetic: no AWS, no threads, no network, with every store
+  and every build stubbed. A few named diagnostics (`check_brief_live.py`) do
+  one real call and say so in their docstring.
+- **`check_*.mjs`** load a template's inline script, or a `static/` module,
+  into Node and run the real code against a small fake DOM. That covers the
+  companies page, the watchlist, the DCA panels, the Fundamentals arithmetic,
+  pull-to-refresh and the service worker's routing, without a browser.
 
 ## Dependencies
 
@@ -665,13 +854,21 @@ catalog), `tests/test_report_email.py` (76), `tests/test_brief_formatters.py`
 
 ### TradingAgents runtime
 
-The paired [`15th-Ave-NE/TradingAgents`](https://github.com/15th-Ave-NE/TradingAgents)
+The paired [`wapropertygroup/TradingAgents`](https://github.com/wapropertygroup/TradingAgents)
 checkout is a separate Python environment, installed and updated by
 `deploy/install-tradingagents.sh` — not a pip dependency of yStocker itself,
 since it runs as a subprocess rather than an import. It keeps a modern
 `httpx` (needed for Gemini) and installs `mootdx` without dependency
 resolution, because `mootdx`'s published metadata pins an incompatible old
 `httpx` range.
+
+---
+
+## Security
+
+Please report vulnerabilities privately; [SECURITY.md](SECURITY.md) says how,
+what is in scope, and which behaviours are deliberate. Secrets live in AWS SSM
+Parameter Store, never in the repository.
 
 ---
 

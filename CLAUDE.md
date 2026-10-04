@@ -180,6 +180,26 @@ forked from — so a bare push goes somewhere harmless. `deploy.sh` was already
 URL-matching rather than name-matching, which is why the swap needed no change
 there.
 
+**Every deploy that lands is released** (`deploy/release.sh`, called by both the
+ship and `--full` paths after success; `--check` never releases). It tags the
+deployed commit `deploy-YYYY-MM-DD-HHMM` (UTC). The tag's message is the release
+notes: commits since the previous deploy tag, the TradingAgents commit, and the
+health line. It then publishes a GitHub Release for every deploy tag without
+one, oldest first, from the tag's own subject and body.
+- **Two credentials, deliberately.** The tag needs only `git push`. The release
+  needs `gh` on **github.com**, while this laptop's `gh` is logged in to
+  another host (`GH_HOST`). Until `gh auth login --hostname github.com`
+  the deploy prints a reminder, and the tags carry the history the releases
+  will be built from.
+- **Which commit.** The deployed SHA is read from the box's own verified
+  checkout (an `::deployed::` line the remote body prints and the laptop filters
+  out of the log), not from the laptop's idea of main.
+- **When nothing is released.** A redeploy of an already-tagged commit is not a
+  new release. A tag read that fails tags nothing, rather than risk a duplicate.
+- **What can fail.** Tags are made with `tag.gpgSign=false`, because commits
+  here are signed by an x509 helper that can wait on a prompt. The step always
+  exits 0, so it cannot fail a deploy.
+
 All 8 apps get a full `systemctl restart`, **not** `kill -HUP`. HUP looks like a
 graceful reload but under `--preload` it ships stale code: gunicorn's HUP handler
 re-reads the *config file* only, and the WSGI app was imported once by the master

@@ -7,6 +7,9 @@
 #   bash deploy/deploy.sh --full          # also converge the box (see below)
 #   bash deploy/deploy.sh -i key.pem      # implies --full
 #
+# Every deploy that lands is tagged deploy-YYYY-MM-DD-HHMM and published as a
+# GitHub Release (deploy/release.sh); --check releases nothing.
+#
 # The default path is code-only and runs over SSM, so it needs no SSH key: fetch
 # + `reset --hard` both checkouts, restart the services, health-check. That is
 # every ordinary deploy, and it takes about a minute.
@@ -99,7 +102,7 @@ while [[ $# -gt 0 ]]; do
     -s)         SKIP_CF=true ;;
     -i)         SSH_KEY="${2:-}"; MODE=full; shift ;;
     -i*)        SSH_KEY="${1#-i}"; MODE=full ;;
-    -h|--help)  sed -n '2,16p' "$0"; exit 0 ;;
+    -h|--help)  sed -n '2,19p' "$0"; exit 0 ;;
     *) echo "unknown option: $1" >&2; exit 2 ;;
   esac
   shift
@@ -264,6 +267,8 @@ sync_repo() {
     echo "   updated ${before:0:7} -> ${after:0:7}"
     sudo git -C "$dir" log --oneline "$before..$after" 2>/dev/null | sed 's/^/     + /' || true
   fi
+  # For the release step on the laptop (release.sh); filtered out of the log.
+  echo "::deployed:: $label $after"
 }
 
 rc=0
@@ -305,8 +310,20 @@ TA_REMOTE='$TA_REMOTE'
 SERVICES='$SERVICES'
 WITH_TA='$WITH_TA'
 $_BODY"
-  run_remote "$STEPS"
-  exit $?
+  # Every deploy that lands is tagged, and published as a GitHub Release when gh
+  # can reach github.com (deploy/release.sh). Only after success: a deploy that
+  # aborted before the restart shipped nothing. The release step can never turn
+  # a good deploy into a failed one -- it always exits 0.
+  _RC=0
+  _OUT="$(run_remote "$STEPS")" || _RC=$?
+  printf '%s\n' "$_OUT" | grep -v '^::deployed:: ' || true
+  if [[ $_RC -eq 0 ]]; then
+    _SHA="$(printf '%s\n' "$_OUT" | awk '$1 == "::deployed::" && $2 == "ystocker" {print $3}')"
+    _TA="$(printf '%s\n' "$_OUT" | awk '$1 == "::deployed::" && $2 == "tradingagents" {print $3}')"
+    _HEALTH="$(printf '%s\n' "$_OUT" | awk '$1 == "http" {$1 = ""; sub(/^ +/, ""); print}' | tail -1)"
+    bash "$_ROOT/deploy/release.sh" "$_SHA" "${_TA:--}" "$_HEALTH" || true
+  fi
+  exit $_RC
 fi
 
 # ══ Full path: converge the machine over SSH ══════════════════════════════════
@@ -1040,3 +1057,9 @@ for app in "${APPS[@]}"; do
   IFS='|' read -r name port domain req static cert_name <<< "$app"
   log "  $name → https://$domain"
 done
+
+# Tagged and released like a code-only deploy. The box pulled origin/main, so
+# that is the commit it is running.
+_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+_SHA="$(GIT_TERMINAL_PROMPT=0 git -C "$_ROOT" ls-remote origin refs/heads/main 2>/dev/null | awk '{print $1; exit}' || true)"
+bash "$_ROOT/deploy/release.sh" "$_SHA" - "" || true
