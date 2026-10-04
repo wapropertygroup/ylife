@@ -4,6 +4,57 @@
     is not safe -- so the empty case is a real state, not a fallback. The refund
     rules are quota.py's docstring and agents._run's _refund_preflight calls. #}
 {% set pacific = facts.quota_tz == 'America/Los_Angeles' %}
+{#  Pro: subscriptions.offer() through _wiki_facts' `sub`, left out entirely
+    when it is not on sale (`sub.enabled`). #}
+{% set sub = facts.sub %}
+{% if sub.enabled %}
+<section id="pro">
+  <h2><span data-l="en">TradeAgents Pro</span><span data-l="zh">TradeAgents Pro</span></h2>
+  <div data-l="en">
+    <div class="w-stats">
+      <div>
+        <span class="w-stat-label">Analyses a day</span>
+        <span class="w-stat-value">{{ sub.runs_per_day }}</span>
+        <span class="w-stat-note">instead of {{ facts.free_runs }}</span>
+      </div>
+      <div>
+        <span class="w-stat-label">Price</span>
+        <span class="w-stat-value">${{ '%g' % sub.month }}</span>
+        <span class="w-stat-note">a month, or ${{ '%g' % sub.year }} a year (save {{ sub.saving_pct }}%)</span>
+      </div>
+      <div>
+        <span class="w-stat-label">Free trial</span>
+        <span class="w-stat-value">{% if sub.trial_days %}{{ sub.trial_days }} days{% else %}None{% endif %}</span>
+        <span class="w-stat-note">{% if sub.trial_days %}card required, one per account{% else %}billed from day one{% endif %}</span>
+      </div>
+    </div>
+    <p>Pro raises your allowance to {{ sub.runs_per_day }} analyses a day and opens every dashboard on trade-agents.com in full; without it, a dashboard there shows its top and the rest sits under a blur. Everything else on this page still applies: the runs reset at midnight{% if pacific %} Pacific time{% endif %}, packs you have bought are spent only after the day's {{ sub.runs_per_day }}, and the site-wide daily limit below counts subscribers too.</p>
+    <p>{% if sub.trial_days %}The trial needs a card, and nothing is charged for {{ sub.trial_days }} days; then the plan you picked starts unless you cancelled first. {% endif %}Cancel, switch between monthly and yearly, update the card or download invoices from <strong>Manage billing</strong> on the <a href="{{ url_for('main.subscribe_page') }}">plans page</a>. A cancelled plan runs to the end of the period paid for. Promotion codes are entered on Stripe's checkout page.</p>
+  </div>
+  <div data-l="zh">
+    <div class="w-stats">
+      <div>
+        <span class="w-stat-label">每日分析次数</span>
+        <span class="w-stat-value">{{ sub.runs_per_day }}</span>
+        <span class="w-stat-note">免费版为 {{ facts.free_runs }} 次</span>
+      </div>
+      <div>
+        <span class="w-stat-label">价格</span>
+        <span class="w-stat-value">${{ '%g' % sub.month }}</span>
+        <span class="w-stat-note">每月，或每年 ${{ '%g' % sub.year }}（省 {{ sub.saving_pct }}%）</span>
+      </div>
+      <div>
+        <span class="w-stat-label">免费试用</span>
+        <span class="w-stat-value">{% if sub.trial_days %}{{ sub.trial_days }} 天{% else %}无{% endif %}</span>
+        <span class="w-stat-note">{% if sub.trial_days %}需绑定银行卡，每个账号限一次{% else %}从第一天开始计费{% endif %}</span>
+      </div>
+    </div>
+    <p>Pro 把你的额度提高到每天 {{ sub.runs_per_day }} 次分析，并完整开放 trade-agents.com 上的全部看板；未开通时，看板只显示前半部分，其余内容会被模糊遮挡。本页其他规则照常适用：次数在{% if pacific %}太平洋时间{% endif %}零点重置，已购买的次数包只在当天 {{ sub.runs_per_day }} 次用完后才使用，下文的全站每日上限同样计入订阅用户。</p>
+    <p>{% if sub.trial_days %}试用需要绑定银行卡，{{ sub.trial_days }} 天内不收费；之后你选择的方案开始生效，除非你提前取消。{% endif %}在<a href="{{ url_for('main.subscribe_page') }}">方案页面</a>点击<strong>“管理账单”</strong>，即可取消订阅、在月付与年付之间切换、更新银行卡或下载发票。取消后方案会一直有效到已付费周期结束。优惠码可在 Stripe 结账页面输入。</p>
+  </div>
+</section>
+{% endif %}
+
 <section id="free-runs">
   <h2><span data-l="en">Free runs</span><span data-l="zh">免费额度</span></h2>
   <div data-l="en">

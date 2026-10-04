@@ -105,8 +105,33 @@ def is_vip(email: Optional[str]) -> bool:
     return bool(email) and email.strip().lower() in vip_emails()
 
 
+def is_subscribed(email: Optional[str]) -> bool:
+    """An active TradeAgents Pro trial or subscription (ystocker.subscriptions).
+
+    Never raises: a run limit must not depend on the subscription row being
+    readable, and an unreadable row falls back to the free allowance.
+    """
+    if not email:
+        return False
+    try:
+        from ystocker import subscriptions
+
+        return subscriptions.is_entitled(email)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("quota: subscription unreadable for %s: %s", email, exc)
+        return False
+
+
 def limit_for(email: Optional[str]) -> int:
-    return limit_vip() if is_vip(email) else limit_default()
+    """Runs a day: a VIP's, else a subscriber's (10, never fewer than the free
+    allowance), else the free allowance."""
+    if is_vip(email):
+        return limit_vip()
+    if is_subscribed(email):
+        from ystocker import subscriptions
+
+        return max(limit_default(), subscriptions.RUNS_PER_DAY)
+    return limit_default()
 
 
 def limit_chat() -> int:
@@ -361,6 +386,7 @@ def usage(email: Optional[str]) -> dict[str, Any]:
         "limit": lim,
         "remaining": max(0, lim - used),
         "vip": is_vip(email),
+        "subscribed": is_subscribed(email),
         "global_used": g_used,
         "global_limit": g_lim,
         "global_remaining": max(0, g_lim - g_used),
@@ -434,6 +460,7 @@ def try_consume(email: Optional[str]) -> tuple[bool, Optional[str], dict[str, An
     info = {
         "day": day, "used": used, "limit": lim,
         "remaining": max(0, lim - used), "vip": is_vip(email),
+        "subscribed": is_subscribed(email),
         "global_used": total, "global_limit": g_lim,
         "global_remaining": max(0, g_lim - total), "tz": QUOTA_TZ,
         "paid": paid,

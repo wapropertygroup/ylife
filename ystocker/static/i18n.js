@@ -2758,6 +2758,13 @@ const I18n = (() => {
     'agents.buy_why':       { en: 'Buy a pack to keep going. Purchased runs never expire and carry over between days.',
                               zh: '购买次数包即可继续。已购次数永不过期，可跨天累积。' },
     'agents.buy_cta':       { en: 'Buy more runs', zh: '购买更多次数' },
+    // TradeAgents Pro, offered beside the packs once the free runs are gone.
+    'agents.buy_pro_why':   { en: 'Run out most days? Pro gives you', zh: '经常不够用？Pro 每天提供' },
+    'agents.buy_pro_runs':  { en: 'analyses a day', zh: '次分析' },
+    'agents.buy_pro_month': { en: '/month', zh: '/月' },
+    'agents.buy_pro_trial': { en: 'Try it free for', zh: '免费试用' },
+    'agents.buy_pro_days':  { en: 'days', zh: '天' },
+    'agents.buy_pro_cta':   { en: 'See Pro plans', zh: '查看 Pro 方案' },
     'agents.sample_none':   { en: 'No finished reports to show yet.', zh: '暂无可展示的已完成报告。' },
     'agents.sample_cta':    { en: 'Want this for your own ticker and date?',
                               zh: '想分析你自己的股票和日期?' },

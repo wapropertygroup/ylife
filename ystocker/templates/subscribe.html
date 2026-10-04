@@ -1,0 +1,265 @@
+{% extends "base.html" %}
+{#  /subscribe: TradeAgents Pro -- the plans, the trial, and for a subscriber
+    their status and the way into Stripe's billing portal.
+
+    Every figure comes from the route (subscriptions.offer() and quota), never
+    from this file, for the reason routes._wiki_facts gives: prose that said
+    "$29" would go on saying it after the price moved.
+
+    The buttons lead to /subscribe/checkout and /subscribe/manage, which sign a
+    short-lived token for yPay (subscriptions.handoff) and redirect there; this
+    app holds no Stripe secret. A TradeAgents page (`ta_page`) on
+    trade-agents.com and editorial everywhere else, so the same markup serves
+    stock.li-family.us, where Pro buys the same runs. #}
+{% set ta_page = true %}
+{% set editorial = true %}
+{% set section = 'subscribe' %}
+{% block title %}TradeAgents Pro{% endblock %}
+{% block main_class %}w-main{% endblock %}
+
+{% macro cta(pid) -%}
+  {%- if not sub_enabled -%}
+    <span class="w-btn w-btn-wide" aria-disabled="true"><span data-l="en">Not available</span><span data-l="zh">暂不可用</span></span>
+  {%- elif sub.active and sub.plan == pid -%}
+    <span class="w-btn w-btn-wide" aria-disabled="true"><span data-l="en">Your plan</span><span data-l="zh">当前方案</span></span>
+  {%- elif sub.active -%}
+    <a class="w-btn w-btn-wide" href="{{ url_for('main.subscribe_manage') }}"><span data-l="en">Switch in billing</span><span data-l="zh">在账单中切换</span></a>
+  {%- else -%}
+    {% set href = url_for('main.subscribe_checkout', plan=pid) if signed_in
+                  else url_for('main.login', next=url_for('main.subscribe_checkout', plan=pid)) %}
+    <a class="w-btn w-btn-wide{{ ' w-btn-primary' if pid == 'year' else '' }}" href="{{ href }}">
+      {%- if sub.trial_available and sub.trial_days -%}
+      <span data-l="en">Start {{ sub.trial_days }}-day free trial</span><span data-l="zh">开始 {{ sub.trial_days }} 天免费试用</span>
+      {%- else -%}
+      <span data-l="en">Subscribe</span><span data-l="zh">立即订阅</span>
+      {%- endif %} <span aria-hidden="true">→</span></a>
+  {%- endif -%}
+{%- endmacro %}
+
+{% macro date(ts) -%}
+<time data-pro-date="{{ ts }}">{{ (ts | datetimeformat)[:12] }}</time>
+{%- endmacro %}
+
+{% block content %}
+<div class="w-pro">
+  <header class="w-page-head">
+    <p class="w-kicker">TradeAgents Pro</p>
+    <h1 class="w-page-title">
+      <span data-l="en">{{ sub.runs_per_day }} analyses a day, and every dashboard in full.</span>
+      <span data-l="zh">每天 {{ sub.runs_per_day }} 次分析，<wbr>全部看板完整呈现。</span>
+    </h1>
+    <p class="w-page-lead">
+      {% if sub.trial_days %}
+      <span data-l="en">Start with {{ sub.trial_days }} days free. Cancel before the trial ends and you pay nothing.</span>
+      <span data-l="zh">先免费试用 {{ sub.trial_days }} 天。试用结束前取消，不收取任何费用。</span>
+      {% else %}
+      <span data-l="en">Monthly or yearly, and you can cancel any time.</span>
+      <span data-l="zh">按月或按年订阅，随时可以取消。</span>
+      {% endif %}
+    </p>
+  </header>
+
+  {% if notice == 'welcome' %}
+  <div class="w-callout is-good" role="status">
+    <span data-l="en"><strong>Welcome to Pro.</strong> {{ sub.runs_per_day }} analyses a day and every dashboard are yours from now on.</span>
+    <span data-l="zh"><strong>欢迎加入 Pro。</strong>从现在起，每天 {{ sub.runs_per_day }} 次分析和全部看板都已为你开放。</span>
+    <a class="w-textlink" href="{{ url_for('main.agents_page') }}"><span data-l="en">Run an analysis →</span><span data-l="zh">开始分析 →</span></a>
+  </div>
+  {% elif notice == 'activating' %}
+  {#  Back from Stripe before the subscription could be read: poll until it is,
+      within a bound, and say so when the bound is reached -- a spinner left
+      running is the one ending this must not have. #}
+  <div class="w-callout" role="status" data-pro-activating>
+    <span data-pro-wait><span data-l="en">Payment received — activating your subscription…</span><span data-l="zh">已收到付款，正在开通订阅……</span></span>
+    <span data-pro-late hidden><span data-l="en">Still activating. Stripe can take a minute to confirm; refresh this page shortly. Nothing is charged twice.</span><span data-l="zh">仍在开通中。Stripe 确认可能需要一分钟，请稍后刷新本页。不会重复扣费。</span></span>
+  </div>
+  {% elif notice == 'canceled' %}
+  <div class="w-callout" role="status"><span data-l="en">Checkout was cancelled. Nothing was charged.</span><span data-l="zh">已取消结账，没有产生任何费用。</span></div>
+  {% elif notice == 'already' %}
+  <div class="w-callout" role="status"><span data-l="en">You already have Pro, so there is nothing more to buy.</span><span data-l="zh">你已开通 Pro，无需再次购买。</span></div>
+  {% elif notice == 'error_expired' %}
+  <div class="w-callout is-warn" role="alert"><span data-l="en">That link has expired. Please try again.</span><span data-l="zh">链接已过期，请重试。</span></div>
+  {% elif notice == 'error_unavailable' %}
+  <div class="w-callout is-warn" role="alert"><span data-l="en">Subscriptions are unavailable right now. Nothing was charged.</span><span data-l="zh">订阅服务暂时不可用，没有产生任何费用。</span></div>
+  {% elif notice == 'error_checkout' %}
+  <div class="w-callout is-warn" role="alert"><span data-l="en">Checkout could not be opened. Nothing was charged — please try again.</span><span data-l="zh">无法打开结账页面，没有产生任何费用，请重试。</span></div>
+  {% elif notice == 'error_portal' %}
+  <div class="w-callout is-warn" role="alert"><span data-l="en">Billing could not be opened. Please try again.</span><span data-l="zh">无法打开账单页面，请重试。</span></div>
+  {% elif notice == 'error_no_billing' %}
+  <div class="w-callout is-warn" role="alert"><span data-l="en">There is no billing account for this address yet.</span><span data-l="zh">这个账号还没有账单记录。</span></div>
+  {% elif notice == 'error_plan' %}
+  <div class="w-callout is-warn" role="alert"><span data-l="en">That plan does not exist. Pick one below.</span><span data-l="zh">该方案不存在，请在下方选择。</span></div>
+  {% endif %}
+
+  {% if sub.active %}
+  <div class="w-card w-panel w-pro-status">
+    <h2 class="w-panel-title"><span data-l="en">You are on TradeAgents Pro</span><span data-l="zh">你已开通 TradeAgents Pro</span></h2>
+    <p class="w-panel-sub">
+      {% if sub.status == 'past_due' %}
+      <span data-l="en">Your last payment did not go through. Update your card in billing to keep Pro; access holds while Stripe retries.</span>
+      <span data-l="zh">上一笔付款未能完成。请在账单中更新银行卡以继续使用 Pro；Stripe 重试期间权益照常保留。</span>
+      {% elif sub.trialing and sub.cancel_at_period_end %}
+      <span data-l="en">Free trial until {{ date(sub.trial_end or sub.period_end) }}. It will not turn into a paid plan.</span>
+      <span data-l="zh">免费试用至 {{ date(sub.trial_end or sub.period_end) }}，到期后不会转为付费方案。</span>
+      {% elif sub.trialing %}
+      <span data-l="en">Free trial until {{ date(sub.trial_end or sub.period_end) }}. After that the {{ 'yearly' if sub.plan == 'year' else 'monthly' }} plan starts, unless you cancel first.</span>
+      <span data-l="zh">免费试用至 {{ date(sub.trial_end or sub.period_end) }}。之后将开始{{ '年付' if sub.plan == 'year' else '月付' }}方案，除非你提前取消。</span>
+      {% elif sub.cancel_at_period_end %}
+      <span data-l="en">{{ 'Yearly' if sub.plan == 'year' else 'Monthly' }} plan. It ends on {{ date(sub.period_end) }} and will not renew.</span>
+      <span data-l="zh">{{ '年付' if sub.plan == 'year' else '月付' }}方案，将于 {{ date(sub.period_end) }} 结束，不再续订。</span>
+      {% else %}
+      <span data-l="en">{{ 'Yearly' if sub.plan == 'year' else 'Monthly' }} plan. Renews on {{ date(sub.period_end) }}.</span>
+      <span data-l="zh">{{ '年付' if sub.plan == 'year' else '月付' }}方案，将于 {{ date(sub.period_end) }} 续订。</span>
+      {% endif %}
+    </p>
+    {% if sub.has_customer and sub_enabled %}
+    <div class="w-actions">
+      <a class="w-btn w-btn-primary" href="{{ url_for('main.subscribe_manage') }}"><span data-l="en">Manage billing</span><span data-l="zh">管理账单</span> <span aria-hidden="true">→</span></a>
+      <span class="w-muted"><span data-l="en">Card, invoices, switch plan or cancel, on Stripe.</span><span data-l="zh">在 Stripe 上更新银行卡、查看发票、切换方案或取消。</span></span>
+    </div>
+    {% endif %}
+  </div>
+  {% elif vip %}
+  <div class="w-callout"><span data-l="en">As a VIP you already have every dashboard in full and {{ vip_runs }} analyses a day, so there is no need to subscribe.</span><span data-l="zh">作为 VIP，你已可完整查看全部看板，并享有每天 {{ vip_runs }} 次分析，无需订阅。</span></div>
+  {% elif sub.status in ('canceled', 'unpaid', 'incomplete_expired') %}
+  <div class="w-callout"><span data-l="en">Your Pro subscription has ended. You can subscribe again any time.</span><span data-l="zh">你的 Pro 订阅已结束，可随时重新订阅。</span></div>
+  {% endif %}
+
+  {% if not sub_enabled %}
+  <div class="w-callout is-warn"><span data-l="en">Subscriptions are not available at the moment. The free runs and run packs work as usual.</span><span data-l="zh">订阅暂不可用。免费次数和次数包照常可用。</span></div>
+  {% endif %}
+
+  <div class="w-pro-plans">
+    <div class="w-card w-pro-plan">
+      <span class="w-kicker is-quiet"><span data-l="en">Monthly</span><span data-l="zh">月付</span></span>
+      <span class="w-price-num">${{ '%g' % sub.month }}<small><span data-l="en">/ month</span><span data-l="zh">/ 月</span></small></span>
+      <span class="w-price-per"><span data-l="en">billed every month</span><span data-l="zh">按月计费</span></span>
+      <div class="w-pro-cta">{{ cta('month') }}</div>
+    </div>
+    <div class="w-card w-pro-plan is-featured">
+      {% if sub.saving_pct %}<span class="w-pro-badge"><span data-l="en">Save {{ sub.saving_pct }}%</span><span data-l="zh">省 {{ sub.saving_pct }}%</span></span>{% endif %}
+      <span class="w-kicker"><span data-l="en">Yearly</span><span data-l="zh">年付</span></span>
+      <span class="w-price-num">${{ '%g' % sub.year }}<small><span data-l="en">/ year</span><span data-l="zh">/ 年</span></small></span>
+      <span class="w-price-per">
+        <span data-l="en">${{ '%.2f' % sub.year_per_month }} a month, billed yearly{% if sub.months_free %} — {{ sub.months_free }} months free{% endif %}</span>
+        <span data-l="zh">折合每月 ${{ '%.2f' % sub.year_per_month }}，按年计费{% if sub.months_free %}，相当于免费 {{ sub.months_free }} 个月{% endif %}</span>
+      </span>
+      <div class="w-pro-cta">{{ cta('year') }}</div>
+    </div>
+  </div>
+  <p class="w-pro-fine">
+    {% if sub.trial_days and (sub.trial_available or not signed_in) and not sub.active %}
+    <span data-l="en">A card is needed to start the trial. You are charged when the {{ sub.trial_days }} days are up — ${{ '%g' % sub.month }} a month or ${{ '%g' % sub.year }} a year — unless you cancel first. One free trial per account. Have a promotion code? Enter it at checkout.</span>
+    <span data-l="zh">开始试用需要绑定银行卡。{{ sub.trial_days }} 天试用期结束时才扣费（每月 ${{ '%g' % sub.month }} 或每年 ${{ '%g' % sub.year }}），在此之前取消则不收费。每个账号限试用一次。有优惠码？可在结账页面输入。</span>
+    {% else %}
+    <span data-l="en">Billed in US dollars through Stripe. Have a promotion code? Enter it at checkout.</span>
+    <span data-l="zh">通过 Stripe 以美元计费。有优惠码？可在结账页面输入。</span>
+    {% endif %}
+  </p>
+
+  <section class="w-pro-section" aria-labelledby="proIncludes">
+    <h2 class="w-pro-h" id="proIncludes"><span data-l="en">What Pro includes</span><span data-l="zh">Pro 包含什么</span></h2>
+    <ul class="w-checks">
+      <li><span data-l="en"><strong>{{ sub.runs_per_day }} analyses a day</strong>, against {{ free_runs }} on the free plan, resetting at midnight Pacific</span><span data-l="zh"><strong>每天 {{ sub.runs_per_day }} 次分析</strong>（免费版为 {{ free_runs }} 次），太平洋时间零点重置</span></li>
+      <li><span data-l="en"><strong>Every dashboard in full</strong> on trade-agents.com: markets, valuation, DCA, companies, 13F, the Fed, rates, housing and the odds</span><span data-l="zh"><strong>trade-agents.com 全部看板完整可见</strong>：市场、估值、定投、公司、13F、美联储、利率、房地产与预测市场</span></li>
+      <li><span data-l="en">Every model and thinking depth, reports in English or 中文, a PDF of each, and sharing</span><span data-l="zh">所有模型与思考深度，中英文报告，每份报告附 PDF，并可分享</span></li>
+      <li><span data-l="en">Run packs you have bought stay on your account, used only after the day's {{ sub.runs_per_day }}</span><span data-l="zh">已购买的次数包保留在账号中，仅在当天 {{ sub.runs_per_day }} 次用完后才使用</span></li>
+      <li><span data-l="en">Cancel, or switch between monthly and yearly, any time in billing</span><span data-l="zh">随时可在账单中取消，或在月付与年付之间切换</span></li>
+    </ul>
+  </section>
+
+  <section class="w-pro-section" aria-labelledby="proCompare">
+    <h2 class="w-pro-h" id="proCompare"><span data-l="en">Free and Pro, side by side</span><span data-l="zh">免费版与 Pro 对比</span></h2>
+    <div class="w-prose w-table-wrap">
+      <table>
+        <thead><tr><th></th><th><span data-l="en">Free</span><span data-l="zh">免费版</span></th><th>Pro</th></tr></thead>
+        <tbody>
+          <tr><td><span data-l="en">Analyses a day</span><span data-l="zh">每日分析次数</span></td><td class="w-pro-fig">{{ free_runs }}</td><td class="w-pro-fig">{{ sub.runs_per_day }}</td></tr>
+          <tr><td><span data-l="en">Dashboards on trade-agents.com</span><span data-l="zh">trade-agents.com 看板</span></td><td><span data-l="en">The top of each page</span><span data-l="zh">每页仅前半部分</span></td><td><span data-l="en">In full</span><span data-l="zh">完整可见</span></td></tr>
+          <tr><td><span data-l="en">Reports, PDFs and sharing</span><span data-l="zh">报告、PDF 与分享</span></td><td>✓</td><td>✓</td></tr>
+          <tr><td><span data-l="en">Run packs</span><span data-l="zh">次数包</span></td><td><span data-l="en">Buy any time</span><span data-l="zh">随时购买</span></td><td><span data-l="en">Used after the day's {{ sub.runs_per_day }}</span><span data-l="zh">当天 {{ sub.runs_per_day }} 次用完后使用</span></td></tr>
+          <tr><td><span data-l="en">Price</span><span data-l="zh">价格</span></td><td class="w-pro-fig">$0</td><td class="w-pro-fig"><span data-l="en">${{ '%g' % sub.month }} / month or ${{ '%g' % sub.year }} / year</span><span data-l="zh">每月 ${{ '%g' % sub.month }} 或每年 ${{ '%g' % sub.year }}</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="w-pro-section w-pro-faq" aria-labelledby="proFaq">
+    <h2 class="w-pro-h" id="proFaq"><span data-l="en">Questions</span><span data-l="zh">常见问题</span></h2>
+    {% if sub.trial_days %}
+    <details>
+      <summary><span data-l="en">How does the free trial work?</span><span data-l="zh">免费试用如何运作？</span></summary>
+      <p><span data-l="en">Pick a plan and add a card. Nothing is charged for {{ sub.trial_days }} days; when they are up, the plan you picked starts and the card is charged, unless you cancelled in billing before then. Each account can have one free trial.</span><span data-l="zh">选择方案并绑定银行卡。{{ sub.trial_days }} 天内不收任何费用；试用期满后，你选择的方案开始生效并扣费，除非你在此之前已在账单中取消。每个账号限试用一次。</span></p>
+    </details>
+    {% endif %}
+    <details>
+      <summary><span data-l="en">Can I cancel any time?</span><span data-l="zh">可以随时取消吗？</span></summary>
+      <p><span data-l="en">Yes. Manage billing opens Stripe's billing page, where you can cancel, switch between monthly and yearly, update your card and download invoices. A cancelled plan keeps working until the end of the period you paid for.</span><span data-l="zh">可以。“管理账单”会打开 Stripe 的账单页面，你可以在那里取消订阅、在月付与年付之间切换、更新银行卡并下载发票。取消后，方案会一直有效到已付费周期结束。</span></p>
+    </details>
+    <details>
+      <summary><span data-l="en">Are there discounts?</span><span data-l="zh">有折扣吗？</span></summary>
+      <p><span data-l="en">The yearly plan costs {{ sub.saving_pct }}% less than twelve months of the monthly one. We also hand out promotion codes from time to time; enter one on Stripe's checkout page.</span><span data-l="zh">年付方案比按月付十二个月便宜 {{ sub.saving_pct }}%。我们也会不定期发放优惠码，可在 Stripe 结账页面输入。</span></p>
+    </details>
+    <details>
+      <summary><span data-l="en">What happens to run packs I bought?</span><span data-l="zh">已购买的次数包怎么办？</span></summary>
+      <p><span data-l="en">They stay on your account and never expire. With Pro, a purchased run is used only once the day's {{ sub.runs_per_day }} are gone.</span><span data-l="zh">它们会保留在你的账号中，永不过期。开通 Pro 后，只有当天 {{ sub.runs_per_day }} 次用完，才会使用购买的次数。</span></p>
+    </details>
+    <details>
+      <summary><span data-l="en">Is there any other limit?</span><span data-l="zh">还有其他限制吗？</span></summary>
+      <p><span data-l="en">The whole site runs at most {{ global_runs }} analyses a day across every account, a limit on what the server and its model quota can deliver. Subscribers count toward it like everyone else; when it is reached, runs start again after midnight Pacific.</span><span data-l="zh">全站所有账号加起来每天最多运行 {{ global_runs }} 次分析，这是服务器和模型配额的容量上限。订阅用户同样计入；达到上限后，太平洋时间零点过后即可继续运行。</span></p>
+    </details>
+    <details>
+      <summary><span data-l="en">Which account is subscribed?</span><span data-l="zh">订阅绑定在哪个账号上？</span></summary>
+      <p>{% if signed_in %}<span data-l="en">The Google account you are signed in with, {{ current_user.email }}. Sign in with it on any device.</span><span data-l="zh">你当前登录的 Google 账号：{{ current_user.email }}。在任何设备上用它登录即可。</span>{% else %}<span data-l="en">The Google account you sign in with. Sign in with it on any device.</span><span data-l="zh">你登录所用的 Google 账号。在任何设备上用它登录即可。</span>{% endif %}</p>
+    </details>
+    <p class="w-more"><a class="w-textlink" href="{{ url_for('main.docs_page', slug='pricing') }}"><span data-l="en">How runs and credits are counted →</span><span data-l="zh">次数如何计算 →</span></a></p>
+  </section>
+</div>
+
+<script>
+(function () {
+  // Dates in the reader's own zone and language. The server writes the UTC
+  // date as a fallback; a period ending at 03:00 UTC is the evening before in
+  // Pacific time, which is the day a reader there would call it.
+  const fmt = () => {
+    const zh = (document.documentElement.lang || '').toLowerCase().startsWith('zh');
+    document.querySelectorAll('[data-pro-date]').forEach(el => {
+      const d = new Date(Number(el.dataset.proDate) * 1000);
+      if (!Number(el.dataset.proDate) || isNaN(d.getTime())) return;
+      el.textContent = d.toLocaleDateString(zh ? 'zh-CN' : 'en-US',
+        { year: 'numeric', month: zh ? 'long' : 'short', day: 'numeric' });
+    });
+  };
+  fmt();
+  document.addEventListener('i18n:langchange', fmt);
+
+  // Back from Stripe with the subscription not yet readable: ask again, a
+  // bounded number of times, and end on words either way.
+  const box = document.querySelector('[data-pro-activating]');
+  if (!box) return;
+  const MAX_TRIES = 12, GAP_MS = 2500;
+  let tries = 0;
+  const giveUp = () => {
+    box.querySelector('[data-pro-wait]').hidden = true;
+    box.querySelector('[data-pro-late]').hidden = false;
+  };
+  const tick = () => {
+    tries += 1;
+    fetch('/api/subscription?fresh=1', { cache: 'no-store', credentials: 'same-origin' })
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => {
+        if (d && d.active) {
+          const u = new URL(location.href);
+          u.searchParams.delete('pending');
+          u.searchParams.set('welcome', '1');
+          location.replace(u.toString());
+          return;
+        }
+        if (tries >= MAX_TRIES) giveUp(); else setTimeout(tick, GAP_MS);
+      })
+      .catch(() => { if (tries >= MAX_TRIES) giveUp(); else setTimeout(tick, GAP_MS); });
+  };
+  setTimeout(tick, 1500);
+})();
+</script>
+{% endblock %}

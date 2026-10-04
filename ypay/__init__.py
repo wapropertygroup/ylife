@@ -24,6 +24,10 @@ def _load_secrets_from_ssm() -> None:
         "/ypay/STRIPE_SECRET_KEY":      "STRIPE_SECRET_KEY",
         "/ypay/STRIPE_PUBLISHABLE_KEY": "STRIPE_PUBLISHABLE_KEY",
         "/ypay/STRIPE_WEBHOOK_SECRET":  "STRIPE_WEBHOOK_SECRET",
+        # yStocker's key, to verify the subscription handoff tokens it signs
+        # for a signed-in reader (ystocker.subscriptions.handoff). Without it
+        # every subscribe or billing link is refused, never trusted.
+        "/ystocker/YSTOCKER_SECRET_KEY": "YSTOCKER_SECRET_KEY",
     }
 
     needed = {k: v for k, v in SSM_PARAMS.items() if not os.environ.get(v)}
@@ -97,7 +101,15 @@ def create_app() -> Flask:
         PrefixLoader({"ystocker": FileSystemLoader(ystocker_templates)}),
     ])
 
-    from ypay.routes import bp
+    from ypay.routes import _get_stripe, bp
     app.register_blueprint(bp)
+
+    # TradeAgents Pro: re-read subscriptions near the end of their period, so a
+    # renewal, a failed card or a cancellation is recorded even if its webhook
+    # never arrives. One thread, in the master under --preload.
+    if os.environ.get("YPAY_RECONCILE", "1") != "0":
+        from ypay import billing
+
+        billing.start_reconcile_thread(_get_stripe)
 
     return app

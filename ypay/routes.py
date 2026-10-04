@@ -544,6 +544,117 @@ def api_checkout():
 
 
 # ---------------------------------------------------------------------------
+# TradeAgents Pro: the subscription checkout, its return, and the billing portal
+# ---------------------------------------------------------------------------
+# Every request arrives as a token yStocker signed for a signed-in reader
+# (ystocker.subscriptions.handoff): this host shares no session with yStocker,
+# and the portal manages a subscription, so a bare address must not open it.
+
+def _pay_base() -> str:
+    base = request.host_url.rstrip("/")
+    if request.host.split(":")[0] not in ("localhost", "127.0.0.1"):
+        base = "https://" + request.host
+    return base
+
+
+@bp.route("/subscribe/start")
+def subscribe_start():
+    """Open Stripe Checkout for a plan, with the trial if this account has not had one."""
+    from ystocker import subscriptions
+
+    payload = subscriptions.read_handoff(request.args.get("t", ""), "checkout")
+    if not payload:
+        return redirect(subscriptions.DEFAULT_ORIGIN + "/subscribe?error=expired")
+    origin, email = payload["o"], payload["e"]
+    plan_id = payload.get("plan") or "month"
+    if subscriptions.plan(plan_id) is None:
+        return redirect(origin + "/subscribe?error=plan")
+    # One strict read decides all three: already subscribed, trial taken, and
+    # the existing Stripe customer. Unreadable is a refusal, not "none" -- that
+    # would offer a second trial, or a second subscription on top of the first.
+    try:
+        row = subscriptions.load(email) or {}
+    except subscriptions.StoreUnavailable as exc:
+        log.error("ypay: subscription row unreadable for %s: %s", email, exc)
+        return redirect(origin + "/subscribe?error=unavailable")
+    if subscriptions.entitled(row):
+        return redirect(origin + "/subscribe?already=1")
+    stripe = _get_stripe()
+    if not stripe:
+        return redirect(origin + "/subscribe?error=unavailable")
+    trial = subscriptions.TRIAL_DAYS if not row.get("trial_used") else 0
+    try:
+        from ypay import billing
+
+        price_id = billing.ensure_price(stripe, plan_id)
+        params = billing.checkout_params(
+            plan_id=plan_id, email=email, price_id=price_id,
+            customer=str(row.get("customer") or ""), trial_days=trial,
+            origin=origin, pay_base=_pay_base(), lang=payload.get("lang") or "")
+        session_obj = stripe.checkout.Session.create(**params)
+    except Exception:  # noqa: BLE001
+        log.exception("ypay: subscription checkout failed for %s", email)
+        return redirect(origin + "/subscribe?error=checkout")
+    log.info("ypay: subscription checkout %s for %s (%s, trial %d days)",
+             session_obj.id, email, plan_id, trial)
+    return redirect(session_obj.url, code=303)
+
+
+@bp.route("/subscribe/done")
+def subscribe_done():
+    """Stripe's return: record the subscription now, then send the reader home."""
+    from ystocker import subscriptions
+
+    session_id = request.args.get("session_id", "")
+    origin = subscriptions.DEFAULT_ORIGIN
+    stripe = _get_stripe()
+    if not stripe or not session_id.startswith("cs_"):
+        return redirect(origin + "/subscribe?error=unavailable")
+    try:
+        from ypay import billing
+
+        session_obj = billing._as_dict(stripe.checkout.Session.retrieve(session_id))
+        meta = session_obj.get("metadata") or {}
+        origin = subscriptions.origin_ok(meta.get("origin", ""))
+        lang = meta.get("lang") if meta.get("lang") in ("en", "zh") else ""
+        row = billing.record_session(stripe, session_id)
+    except Exception:  # noqa: BLE001 - the webhook and the reconciliation will catch up
+        log.exception("ypay: could not record subscription session %s", session_id)
+        return redirect(origin + "/subscribe?pending=1")
+    tail = f"&lang={lang}" if lang else ""
+    return redirect(origin + ("/subscribe?welcome=1" if row else "/subscribe?pending=1") + tail)
+
+
+@bp.route("/subscribe/portal")
+def subscribe_portal():
+    """Stripe's billing portal: card, invoices, switch plan, cancel."""
+    from ystocker import subscriptions
+
+    payload = subscriptions.read_handoff(request.args.get("t", ""), "portal")
+    if not payload:
+        return redirect(subscriptions.DEFAULT_ORIGIN + "/subscribe?error=expired")
+    origin, email = payload["o"], payload["e"]
+    customer = subscriptions.customer_for(email)
+    stripe = _get_stripe()
+    if not customer:
+        return redirect(origin + "/subscribe?error=no_billing")
+    if not stripe:
+        return redirect(origin + "/subscribe?error=unavailable")
+    try:
+        from ypay import billing
+
+        lang = payload.get("lang") if payload.get("lang") in ("en", "zh") else ""
+        extra = {"locale": lang} if lang else {}
+        portal = stripe.billing_portal.Session.create(
+            customer=customer, return_url=origin + "/subscribe" + (f"?lang={lang}" if lang else ""),
+            configuration=billing.ensure_portal_config(stripe), **extra)
+    except Exception:  # noqa: BLE001
+        log.exception("ypay: billing portal failed for %s", email)
+        return redirect(origin + "/subscribe?error=portal")
+    return redirect(portal.url, code=303)
+
+
+# ---------------------------------------------------------------------------
 # API: Stripe webhook (payment confirmation)
 # ---------------------------------------------------------------------------
 
@@ -567,7 +678,13 @@ def api_webhook():
     verified = False
     try:
         if webhook_secret:
-            event = stripe.Webhook.construct_event(payload, sig_header, webhook_secret)
+            # construct_event verifies the signature; the event is then read
+            # from the payload as a plain dict. stripe 15's objects are not
+            # dicts, and every `.get` below raised AttributeError on one: a
+            # verified run-pack payment would have 500'd and never been
+            # credited (found 2026-10-04, before any customer hit it).
+            stripe.Webhook.construct_event(payload, sig_header, webhook_secret)
+            event = json.loads(payload)
             verified = True
         else:
             log.error("ypay: STRIPE_WEBHOOK_SECRET is not set — event accepted "
@@ -579,9 +696,35 @@ def api_webhook():
         log.warning("Webhook signature verification failed: %s", exc)
         return "Invalid signature", 400
 
+    etype = event.get("type") or ""
+    obj = (event.get("data") or {}).get("object") or {}
+
+    # TradeAgents Pro: a subscription checkout, and the subscription's own
+    # lifecycle. Recorded only from a verified event; see ypay.billing.
+    if etype == "checkout.session.completed" and obj.get("mode") == "subscription":
+        if verified:
+            try:
+                from ypay import billing
+
+                billing.record_session(stripe, obj.get("id", ""))
+            except Exception:  # noqa: BLE001 - Stripe retries a non-2xx
+                log.exception("ypay: could not record subscription checkout %s", obj.get("id"))
+                return "retry", 500
+        return "OK", 200
+    if etype.startswith("customer.subscription."):
+        if verified:
+            try:
+                from ypay import billing
+
+                billing.record_event_subscription(obj, int(event.get("created") or 0))
+            except Exception:  # noqa: BLE001
+                log.exception("ypay: could not record %s for %s", etype, obj.get("id"))
+                return "retry", 500
+        return "OK", 200
+
     # Handle checkout.session.completed
-    if event.get("type") == "checkout.session.completed":
-        session_data = event["data"]["object"]
+    if etype == "checkout.session.completed":
+        session_data = obj
         session_id = session_data.get("id", "")
         amount = session_data.get("amount_total", 0) / 100
         email = session_data.get("customer_details", {}).get("email", "")

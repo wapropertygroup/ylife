@@ -56,7 +56,9 @@
       <a href="{{ url_for('main.docs_home') }}"{% if _here == 'docs' %} class="is-current" aria-current="true"{% endif %}><span data-l="en">Docs</span><span data-l="zh">文档</span></a>
       <a href="{{ url_for('main.research_lab') }}"{% if _here == 'research' %} class="is-current" aria-current="true"{% endif %}><span data-l="en">Research Lab</span><span data-l="zh">研究实验室</span></a>
       {% if showcase_enabled() %}<a href="{{ _home }}#samples"><span data-l="en">Sample reports</span><span data-l="zh">报告样例</span></a>{% endif %}
-      <a href="{{ _home }}#pricing"><span data-l="en">Pricing</span><span data-l="zh">价格</span></a>
+      {#  Pricing is /subscribe, the Pro plans with the free plan and the packs
+          beside them, rather than the landing's #pricing section. #}
+      <a href="{{ url_for('main.subscribe_page') }}"{% if _here == 'subscribe' %} class="is-current" aria-current="true"{% endif %}><span data-l="en">Pricing</span><span data-l="zh">价格</span></a>
       <a href="{{ url_for('main.markets') }}"{% if _here == 'markets' %} class="is-current" aria-current="true"{% endif %}><span data-l="en">Markets</span><span data-l="zh">市场</span></a>
     </nav>
 
@@ -118,6 +120,13 @@
             <span><span data-l="en">Balance</span><span data-l="zh">余额</span></span>
             <b data-w-balance>…</b>
           </p>
+          {#  The plan, from the same fetch as the balance: hidden until it
+              answers, and for good when Pro is switched off (`pro` null). #}
+          <p class="w-acct-balance" data-w-plan-row hidden>
+            <span><span data-l="en">Plan</span><span data-l="zh">方案</span></span>
+            <b data-w-plan></b>
+          </p>
+          <a class="w-acct-item" href="{{ url_for('main.subscribe_page') }}" data-w-pro hidden></a>
           {# data-carry-prefs: the pay page is another origin, so the script
              below hands it this page's language and theme at the click. #}
           <a class="w-acct-item" href="{{ agents_topup_url() }}" data-w-topup data-carry-prefs><span data-l="en">Prepay</span><span data-l="zh">充值</span></a>
@@ -215,6 +224,22 @@
   // stays up while it refreshes, so the line does not flicker; "—" says the
   // ledger could not be read, which is not the same as having nothing.
   const bal = menu.querySelector('[data-w-balance]');
+  // The plan line and the Pro link, in both languages at once (the data-l
+  // rule shows one), so a language switch needs no re-render.
+  const planRow = menu.querySelector('[data-w-plan-row]');
+  const plan = menu.querySelector('[data-w-plan]');
+  const proLink = menu.querySelector('[data-w-pro]');
+  const both = (en, zh) => '<span data-l="en">' + en + '</span><span data-l="zh">' + zh + '</span>';
+  const paintPlan = pro => {
+    if (!planRow || !pro) return;
+    plan.innerHTML = pro.vip ? both('VIP', 'VIP')
+      : pro.active ? (pro.trialing ? both('Pro · trial', 'Pro · 试用中') : both('Pro', 'Pro'))
+      : both('Free', '免费版');
+    proLink.innerHTML = pro.active ? both('Subscription', '订阅管理')
+      : pro.trial_available ? both('Try Pro free', '免费试用 Pro') : both('Upgrade to Pro', '升级到 Pro');
+    planRow.hidden = false;
+    proLink.hidden = !!pro.vip && !pro.active;
+  };
   const loadBalance = () => {
     if (!bal) return;
     fetch('/api/agents/balance', { cache: 'no-store', credentials: 'same-origin' })
@@ -223,6 +248,7 @@
         bal.textContent = d && d.usd != null
           ? '$' + Number(d.usd).toLocaleString('en-US', { maximumFractionDigits: 2 })
           : '—';
+        if (d) paintPlan(d.pro);
       })
       .catch(() => { bal.textContent = '—'; });
   };

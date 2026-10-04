@@ -18,7 +18,7 @@
         <a href="{{ url_for('main.docs_home') }}"><span data-l="en">Docs</span><span data-l="zh">文档</span></a>
         <a href="{{ url_for('main.research_lab') }}"><span data-l="en">Research Lab</span><span data-l="zh">研究实验室</span></a>
         {% if showcase_enabled() %}<a href="{{ _home }}#samples"><span data-l="en">Sample reports</span><span data-l="zh">报告样例</span></a>{% endif %}
-        <a href="{{ _home }}#pricing"><span data-l="en">Pricing</span><span data-l="zh">价格</span></a>
+        <a href="{{ url_for('main.subscribe_page') }}"><span data-l="en">Pricing</span><span data-l="zh">价格</span></a>
         <a href="{{ url_for('main.docs_page', slug='changelog') }}"><span data-l="en">What's new</span><span data-l="zh">更新日志</span></a>
         <a href="{{ url_for('main.markets') }}"><span data-l="en">Markets</span><span data-l="zh">市场</span></a>
         <a href="{{ url_for('main.contact') }}"><span data-l="en">Contact</span><span data-l="zh">联系我们</span></a>

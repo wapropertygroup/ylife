@@ -87,7 +87,7 @@ sys.modules["dotenv"] = _dotenv
 import threading                                          # noqa: E402
 
 import ystocker                                           # noqa: E402
-from ystocker import quota, share, wiki                   # noqa: E402
+from ystocker import quota, share, subscriptions, wiki    # noqa: E402
 
 ystocker._load_secrets_from_ssm = lambda *a, **k: None
 
@@ -492,15 +492,17 @@ class WikiPages(unittest.TestCase):
         self.assertIn('TradeAgents<small><span data-l="en">Markets</span>', html)
 
     def test_the_masthead_leads_back_to_the_landing_from_elsewhere(self):
-        # Sample reports and Pricing are sections of the landing: anchors there,
-        # links to it everywhere else.
+        # Sample reports is a section of the landing: an anchor there, a link
+        # to it everywhere else. Pricing is the plans page, from every page.
         home = self._get("/home", base_url=TA).get_data(as_text=True)
         self.assertIn('href="#samples"', home)
-        self.assertIn('href="#pricing"', home)
+        self.assertIn('href="/subscribe"', home)
         docs = self._get("/docs/overview", base_url=TA).get_data(as_text=True)
         self.assertIn('href="/home#samples"', docs)
-        self.assertIn('href="/home#pricing"', docs)
-        self.assertNotIn('href="#pricing"', docs)
+        self.assertIn('href="/subscribe"', docs)
+        self.assertNotIn('#pricing"', docs)
+        plans = self._get("/subscribe", base_url=TA).get_data(as_text=True)
+        self.assertIn('<a href="/subscribe" class="is-current" aria-current="true">', plans)
 
     def test_the_masthead_marks_the_section(self):
         docs = self._get("/docs/overview", base_url=TA).get_data(as_text=True)
@@ -561,12 +563,22 @@ class WikiPages(unittest.TestCase):
         try:
             with mock.patch.object(credits, "peek_balance", return_value=7):
                 r = self._get("/api/agents/balance", base_url=TA)
-            self.assertEqual(r.get_json(), {"credits": 7, "usd": 7})
+            # `pro` is null while Pro is not on sale, as it is not here.
+            self.assertEqual(r.get_json(), {"credits": 7, "usd": 7, "pro": None})
             self.assertEqual(r.headers.get("Cache-Control"), "no-store")
             # An unreadable ledger is unknown, not an empty balance.
             with mock.patch.object(credits, "peek_balance", return_value=None):
                 r = self._get("/api/agents/balance", base_url=TA)
-            self.assertEqual(r.get_json(), {"credits": None, "usd": None})
+            self.assertEqual(r.get_json(), {"credits": None, "usd": None, "pro": None})
+            # On sale: the plan line's facts, from the subscription row.
+            row = {"status": "trialing", "plan": "year", "period_end": 4_102_444_800,
+                   "trial_used": True}
+            with mock.patch.object(credits, "peek_balance", return_value=0), \
+                    mock.patch.object(subscriptions, "enabled", return_value=(True, "")), \
+                    mock.patch.object(subscriptions, "status", return_value=row):
+                pro = self._get("/api/agents/balance", base_url=TA).get_json()["pro"]
+            self.assertEqual(pro, {"active": True, "trialing": True, "plan": "year",
+                                   "vip": False, "trial_available": False})
         finally:
             with self.client.session_transaction(base_url=TA) as s:
                 s.clear()
@@ -585,6 +597,57 @@ class WikiPages(unittest.TestCase):
                 target = urlsplit(html.unescape(link))
                 self.assertEqual(target.path, "/login")
                 self.assertEqual(parse_qs(target.query)["next"], [path])
+
+    def _walled_as(self, path, row, email="reader@example.com"):
+        """`path` on trade-agents.com with Pro on sale, signed in as `email`
+        (or signed out for None) with `row` as their subscription."""
+        with mock.patch.object(subscriptions, "enabled", return_value=(True, "")), \
+                mock.patch.object(subscriptions, "status", return_value=row):
+            if email is None:
+                return self._get(path, base_url=TA).get_data(as_text=True)
+            with self.client.session_transaction(base_url=TA) as s:
+                s["user_email"] = email
+            try:
+                return self._get(path, base_url=TA).get_data(as_text=True)
+            finally:
+                with self.client.session_transaction(base_url=TA) as s:
+                    s.clear()
+
+    def test_with_pro_on_sale_the_wall_asks_for_a_trial(self):
+        live = {"status": "active", "plan": "month", "period_end": 4_102_444_800}
+        html_ = self._walled_as("/markets", None, email=None)
+        self.assertIn(WALL_MARK, html_)
+        card = html_[html_.index(WALL_MARK):html_.index("</main>")]
+        self.assertIn("free trial", card)
+        hrefs = [html.unescape(h) for h in re.findall(r'href="([^"]+)"', card)]
+        # Signed out: through sign-in to the plans, and a subscriber on a new
+        # device signs in back to this page.
+        self.assertEqual(urlsplit(hrefs[0]).path, "/login")
+        self.assertEqual(parse_qs(urlsplit(hrefs[0]).query)["next"], ["/subscribe"])
+        self.assertEqual(parse_qs(urlsplit(hrefs[1]).query)["next"], ["/markets"])
+        # Signed in without Pro: walled, and the way in is the plans page.
+        signed_in = self._walled_as("/markets", None)
+        self.assertIn(WALL_MARK, signed_in)
+        card = signed_in[signed_in.index(WALL_MARK):signed_in.index("</main>")]
+        self.assertIn('href="/subscribe"', card)
+        self.assertNotIn("/login", card)
+        # A trial already taken is not offered again.
+        taken = self._walled_as("/markets", {"status": "canceled", "trial_used": True})
+        card = taken[taken.index(WALL_MARK):taken.index("</main>")]
+        self.assertNotIn("free trial", card)
+        self.assertIn("Subscribe to see every dashboard", card)
+        # A subscriber, a trial and a VIP read everything.
+        self.assertNotIn(WALL_MARK, self._walled_as("/markets", live))
+        self.assertNotIn(WALL_MARK, self._walled_as("/markets", dict(live, status="trialing")))
+        self.assertNotIn(WALL_MARK, self._walled_as("/markets", None, email=sorted(quota.vip_emails())[0]))
+        # A lapsed card holds for the grace week, then the wall returns.
+        self.assertNotIn(WALL_MARK, self._walled_as("/markets", dict(live, status="past_due")))
+        self.assertIn(WALL_MARK, self._walled_as(
+            "/markets", dict(live, status="past_due", period_end=1_000_000_000)))
+        # Still nothing walled off trade-agents.com, or on a page without data.
+        with mock.patch.object(subscriptions, "enabled", return_value=(True, "")):
+            self.assertNotIn(WALL_MARK, self._get("/markets").get_data(as_text=True))
+        self.assertNotIn(WALL_MARK, self._walled_as("/guide", None))
 
     def test_markets_walls_after_its_brief_and_index_cards(self):
         # As asked: the index cards and the AI brief stay readable.

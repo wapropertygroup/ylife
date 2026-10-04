@@ -19,12 +19,16 @@
 {% set _ta_product = _ta_shell and ta_page|default(false) %}
 {% set _ta_markets = _ta_shell and not _ta_product %}
 {% set _editorial = _ta_shell or editorial|default(false) %}
-{#  The reading wall (_ta_wall.html): a signed-out reader of a dashboard on
-    trade-agents.com sees its top and the rest under a blur, with a way to sign
-    in. A page with no data of its own to wall -- instructions, a search box, a
-    list of videos, a page that is sign-in only anyway, an error -- sets
-    `{% set no_wall = true %}`. stock.li-family.us never walls anything. #}
-{% set _ta_wall = _ta_markets and not current_user.email and not no_wall|default(false) %}
+{#  The reading wall (_ta_wall.html): a reader of a dashboard on
+    trade-agents.com without TradeAgents Pro -- signed out, or signed in with no
+    trial or subscription -- sees its top and the rest under a blur, with the
+    way in. A VIP is never walled, and with Pro switched off a signed-in reader
+    is not either (ta_full_access, subscriptions.full_access_for_page). A page
+    with no data of its own to wall -- instructions, a search box, a list of
+    videos, a page that is sign-in only anyway, an error -- sets
+    `{% set no_wall = true %}`. stock.li-family.us never walls anything.
+    Ordered so the subscription read happens only where the wall could stand. #}
+{% set _ta_wall = _ta_markets and not no_wall|default(false) and not ta_full_access() %}
 {# The research-desk launcher is suppressed on /agents itself (it is that page),
    on /home (the same page's landing, whose every button already leads there),
    and on /login. On a phone the panel is a full-screen sheet, so a launcher there

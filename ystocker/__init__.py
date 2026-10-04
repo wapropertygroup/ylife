@@ -448,6 +448,30 @@ def create_app() -> Flask:
 
     app.jinja_env.globals["agents_topup_url"] = _agents_topup_url
 
+    # TradeAgents Pro, for the reading wall (base.html's `_ta_wall`): whether
+    # this reader sees every dashboard in full, and the offer the wall quotes.
+    # Globals the template calls, so only a dashboard on trade-agents.com -- the
+    # one place the wall can stand -- pays for the subscription read.
+    def _ta_full_access() -> bool:
+        from flask import session
+        from ystocker import subscriptions
+        return subscriptions.full_access_for_page(session.get("user_email"))
+
+    def _sub_offer() -> dict:
+        from flask import session
+        from ystocker import subscriptions
+        out = subscriptions.offer()
+        out["enabled"] = subscriptions.enabled()[0]
+        email = session.get("user_email")
+        # The wall's button reads "start a free trial" only if one is left; the
+        # row was read moments ago by _ta_full_access, so this is the cache.
+        row = subscriptions.status(email) if email and out["enabled"] else None
+        out["trial_available"] = bool(out["trial_days"]) and not (row or {}).get("trial_used")
+        return out
+
+    app.jinja_env.globals["ta_full_access"] = _ta_full_access
+    app.jinja_env.globals["sub_offer"] = _sub_offer
+
     @app.context_processor
     def _inject_auth_context():
         """Make google_client_id + current_user available in every template."""

@@ -302,6 +302,9 @@ Each app follows the same pattern:
   recipient/note validation and the field allowlist that keeps the owner's address
   out of an unauthenticated response. Holds no mail code — the mail is
   `report_email.send_share()`, so there is one renderer.
+- `subscriptions.py` — TradeAgents Pro's state: the offer, who is entitled,
+  the `sub#` rows in the credits table, and the signed handoff to yPay. Stripe
+  itself is `ypay/billing.py`. See "TradeAgents Pro" below.
 - `wiki.py` — the registry behind `/docs` and `/research` (page list, dates,
   bilingual titles) and the `/agents` landing's roster. Pure; see "The
   TradeAgents wiki" below.
@@ -1900,6 +1903,113 @@ the grid's weekdays, leap years, the timeline's changes across an unrated run)
 and `tests/check_agents_calendar.py` (5, hermetic: the gate, the card's
 audience, both languages).
 
+### TradeAgents Pro (`/subscribe`, `subscriptions.py`, `ypay/billing.py`)
+
+A monthly or yearly subscription, asked for on 2026-10-04: **$29/month or
+$290/year** (two months free, 17%), a **7-day free trial with a card**, and for
+that **10 analyses a day** and **every dashboard on trade-agents.com in full**.
+Discounts are Stripe promotion codes (`allow_promotion_codes`), made in Stripe's
+dashboard and redeemed at checkout, so a discount needs no deploy. Prices,
+trial and runs are env-tunable (`SUB_PRICE_MONTH`, `SUB_PRICE_YEAR`,
+`SUB_TRIAL_DAYS`, `AGENTS_SUB_DAILY_LIMIT`); `SUBSCRIPTIONS=0` is the kill switch.
+
+**yStocker holds no Stripe secret, and this does not change that.** Every
+Stripe call is in yPay (`ypay/billing.py`, three routes in `ypay/routes.py`).
+yStocker owns only the *state*: one `sub#<email>` row per subscriber in the
+existing credits table (`ystocker-agent-credits`, key `id`), plus a `cus#<id>`
+row mapping a Stripe customer back to an address, for an event that names only
+the customer. No new table, and IAM already allowed `UpdateItem`.
+
+The signed-in actions cross to yPay as a **15-minute token signed with
+`YSTOCKER_SECRET_KEY`** (`subscriptions.handoff`), which yPay now reads from
+SSM. Not an address in the query string, which is how a run pack is bought: the
+billing portal shows invoices and the card and can cancel, so `?email=` would
+let anyone open anyone's. The signer has **no dev fallback** — yStocker's own
+session falls back to a key that is in this repository, and a handoff signed
+with it would be forgeable — so with no key, Pro is simply not offered.
+
+**Three paths write a row**, so none has to be relied on alone: Stripe's return
+to `pay.<brand>/subscribe/done` retrieves the session and records it before the
+reader lands (access does not wait for a webhook); the webhook records
+`checkout.session.completed` and `customer.subscription.*`; and an hourly thread
+in yPay's master re-reads any subscription at or near the end of its period, so
+a renewal, a failed card or a cancellation is caught even if its event never
+arrives. A row is only replaced by a newer account of it (`event_created`,
+conditional write), so a late webhook cannot undo the return's record, and
+`trial_used` is only ever set.
+
+**Entitlement is read from the row, never from Stripe on a page view**
+(`subscriptions.entitled`): `trialing`/`active` until the period end plus a day
+for a renewal not yet reported, `past_due` for a week while Stripe retries the
+card, nothing otherwise. The read is cached 60s per process and a row read
+within the hour is still trusted if DynamoDB blips, so a paying reader is not
+walled by a network fault. Checkout's own read is the opposite —
+`subscriptions.load` raises `StoreUnavailable` rather than answering "none",
+because "none" would offer a second trial or start a second subscription.
+
+**The reading wall now covers everyone without Pro** on trade-agents.com,
+signed in or not (`ta_full_access()` in base.html's `_ta_wall`); a VIP is never
+walled, and stock.li-family.us still walls nothing. It is still the **soft**
+wall described under the wiki section — the data stays in the page and the APIs,
+and stock.li-family.us serves the same dashboards unwalled — so Pro's "all the
+data" is a presentation gate, not a lock. With Pro switched off (or not
+configured) the wall reverts to signed-out readers only, with the old sign-in
+card: a wall with nothing to buy behind it would be a dead end.
+
+**Runs**: `quota.limit_for` gives a subscriber `max(free, 10)`; a VIP keeps 15.
+Free runs are spent before credits as before, so a subscriber's packs are used
+only after the day's 10. **Subscribers still count against the 60/day global
+ceiling** — it is a capacity limit, the docs and the page say so — which means
+six subscribers using every run would exhaust it: raise
+`AGENTS_GLOBAL_DAILY_LIMIT` as subscribers arrive.
+
+**Found on the way: the run-pack webhook had been failing on every verified
+payment.** stripe 15's `construct_event` returns a `StripeObject`, which is not
+a dict, and the handler's `event.get("type")` raised `AttributeError` — a 500,
+so Stripe retried and no run was ever credited. It now verifies with
+`construct_event` and reads the payload as JSON. `tests/test_billing.py` drives
+it with a real Stripe signature, so the library's own verification runs.
+
+**And production had no session key at all.** `/ystocker/YSTOCKER_SECRET_KEY`
+was listed in `SSM_PARAMS` but had never been created, the box has no `.env`,
+and the unit sets no environment — so `app.secret_key` was the fallback
+`"ystocker-dev-secret"`, which is in this repository. Verified on the box on
+2026-10-04: a session cookie for a made-up address signed with that string got
+200 from `/api/agents/balance`, which answers 401 without one. Anyone who had
+read the code could sign in as anyone, the VIP owner included, and read every
+reader's reports and portfolio. The parameter was created that day
+(SecureString, random), which signed every reader out once and nothing else —
+only the session is signed with it. yPlanner and yTracker have their keys;
+yPlanter, yPay and yBG still fall back to dev keys (yPay keeps nothing in its
+session; yBG's admin session is forgeable, but it has no SSM parameters at all
+and appears unused).
+
+Stripe setup (live, done 2026-10-04): product `tradeagents_pro` with prices
+under lookup keys `tradeagents_pro_month` / `tradeagents_pro_year` (made by
+`billing.ensure_price` on first use; a changed amount makes a new price under
+the same key, and existing subscribers keep theirs), a billing-portal
+configuration tagged `metadata.app=tradeagents` (cancel at period end, switch
+monthly/yearly), and the existing webhook endpoint
+(`pay.li-family.us/api/webhook`) subscribed to
+`customer.subscription.created/updated/deleted` as well as
+`checkout.session.completed`.
+
+Tests: `tests/test_subscriptions.py` (25, no app/AWS/Stripe — entitlement, the
+conditional store, fail-closed reads, the handoff's refusals),
+`tests/test_billing.py` (19 — checkout parameters, price reuse, reconciliation,
+the webhook with real signatures, the three yPay routes) and
+`tests/check_subscription_pages.py` (14, hermetic — the page, its doors, the
+status API, the run page's offer). `check_wiki_pages` covers the wall.
+
+Two traps the tests found before shipping: the portal configuration took the
+price cache's lock and then called `ensure_price`, which takes it again —
+`threading.Lock` is not reentrant, so the first "Manage billing" would have hung
+a ypay worker for good (`_portal_lock` now). And a test that wraps
+`sys.modules` in `mock.patch.dict` drops every module imported inside it on
+exit, so the next `create_app()` re-imported an *unpatched* `ypay.routes` and a
+"hermetic" test reached api.stripe.com with the dummy key; import ypay once at
+module level instead.
+
 ### The TradeAgents wiki (`/docs`, `/research`) and the `/agents` landing
 
 Modelled on vibetrading.wiki: product docs with a sidebar, an "On this page" list
@@ -2024,10 +2134,14 @@ alone had cleared a 61px masthead and not a 106px one. A docs section now
 carries its own too: links target the `<section>`, and the existing `h2` rule
 had never applied to one.
 
-**A signed-out reader of a dashboard on trade-agents.com meets a reading wall**
-(`_ta_wall.html`, base.html's `_ta_wall`). The top of the page reads as usual.
-Below the fold everything in `<main>` sits under a blur, with a card that signs
-the reader in and returns them to the page (`/login?next=<this page>`). The
+**A reader of a dashboard on trade-agents.com without TradeAgents Pro meets a
+reading wall** (`_ta_wall.html`, base.html's `_ta_wall`) — signed out, or since
+2026-10-04 signed in with no trial or subscription (see "TradeAgents Pro"). The
+top of the page reads as usual. Below the fold everything in `<main>` sits under
+a blur, with a card leading to the free trial: through sign-in for a signed-out
+reader, who also gets "Already subscribed? Sign in" back to this page. With Pro
+switched off it is the old card that signs the reader in and returns them
+(`/login?next=<this page>`). The
 footer stays readable. It is **soft by choice**: the data is still in the page
 and in the APIs, since it is public market data and the wall asks for an
 account rather than protecting anything, so it walls nothing server-side. The
@@ -2046,7 +2160,7 @@ measured on every walled dashboard, nothing else in it used `<main>` as its
 containing block. A page with no data of its own sets `{% set no_wall = true %}`:
 /guide, /lookup, /videos, /assets and /posts (sign-in only anyway), and the
 error, warming and unsubscribe pages, whose one job is a message. Never walled:
-stock.li-family.us, a signed-in reader, and every TradeAgents page (the landing,
+stock.li-family.us, a subscriber, a trial or a VIP, and every TradeAgents page (the landing,
 docs, research and shared reports, the last of which exist to be read without
 an account). `check_wiki_pages` asserts each of those.
 

@@ -1,7 +1,9 @@
-{#  trade-agents.com's reading wall, for a signed-out reader of a dashboard
-    (base.html's `_ta_wall`). The top of the page reads as it always does; below
-    the fold everything sits under a blur, with a card that signs the reader in
-    and brings them back to this page.
+{#  trade-agents.com's reading wall, for a reader of a dashboard without
+    TradeAgents Pro (base.html's `_ta_wall`). The top of the page reads as it
+    always does; below the fold everything sits under a blur, with a card that
+    leads to the free trial: through sign-in for a signed-out reader, straight
+    to /subscribe for a signed-in one. A subscriber who is not signed in on this
+    device gets a second link that signs them in and brings them back here.
 
     A soft wall, as chosen: the data is still in the page and in the APIs, and
     anyone who reads the markup can have it. It is market data that is public
@@ -11,13 +13,36 @@
     to wall, as /markets does after its brief and index cards -- or about one
     screen down (wiki.css's default). A page's own pinned bars stay above the
     blur, so its sections can still be reached; they arrive walled. #}
+{% set _offer = sub_offer() %}
+{% set _here_path = request.full_path.rstrip('?') %}
+{% set _trial = _offer.trial_available and _offer.trial_days %}
 <div class="w-wall" data-wall>
+  {% if not _offer.enabled %}
+  {#  Pro switched off: only a signed-out reader is walled (see base.html), and
+      signing in is the whole way through, as before Pro existed. #}
   <div class="w-wall-card">
     <p class="w-kicker"><span data-l="en">Free with an account</span><span data-l="zh">免费注册即可查看</span></p>
     <h2 class="w-wall-title"><span data-l="en">Sign in to see every dashboard in full</span><span data-l="zh">登录后查看全部行情数据</span></h2>
     <p class="w-wall-lead"><span data-l="en">Sign in with Google. It is free and needs no card.</span><span data-l="zh">用 Google 账号登录，免费，无需绑卡。</span></p>
-    <a class="w-btn w-btn-primary" href="{{ url_for('main.login', next=request.full_path.rstrip('?')) }}"><span data-l="en">Sign in</span><span data-l="zh">登录</span> <span aria-hidden="true">→</span></a>
+    <a class="w-btn w-btn-primary" href="{{ url_for('main.login', next=_here_path) }}"><span data-l="en">Sign in</span><span data-l="zh">登录</span> <span aria-hidden="true">→</span></a>
   </div>
+  {% else %}
+  <div class="w-wall-card">
+    <p class="w-kicker">TradeAgents Pro</p>
+    {% if _trial %}
+    <h2 class="w-wall-title"><span data-l="en">Start a {{ _offer.trial_days }}-day free trial to see every dashboard in full</span><span data-l="zh">开始 {{ _offer.trial_days }} 天免费试用，查看全部行情数据</span></h2>
+    {% else %}
+    <h2 class="w-wall-title"><span data-l="en">Subscribe to see every dashboard in full</span><span data-l="zh">订阅后查看全部行情数据</span></h2>
+    {% endif %}
+    <p class="w-wall-lead"><span data-l="en">Pro is ${{ '%g' % _offer.month }} a month or ${{ '%g' % _offer.year }} a year, with {{ _offer.runs_per_day }} analyses a day.{% if _trial %} Cancel before the trial ends and you pay nothing.{% endif %}</span><span data-l="zh">Pro 每月 ${{ '%g' % _offer.month }} 或每年 ${{ '%g' % _offer.year }}，每天 {{ _offer.runs_per_day }} 次分析。{% if _trial %}试用结束前取消，不收取任何费用。{% endif %}</span></p>
+    {% if current_user.email %}
+    <a class="w-btn w-btn-primary" href="{{ url_for('main.subscribe_page') }}">{% if _trial %}<span data-l="en">Start free trial</span><span data-l="zh">开始免费试用</span>{% else %}<span data-l="en">See plans</span><span data-l="zh">查看方案</span>{% endif %} <span aria-hidden="true">→</span></a>
+    {% else %}
+    <a class="w-btn w-btn-primary" href="{{ url_for('main.login', next=url_for('main.subscribe_page')) }}">{% if _trial %}<span data-l="en">Start free trial</span><span data-l="zh">开始免费试用</span>{% else %}<span data-l="en">See plans</span><span data-l="zh">查看方案</span>{% endif %} <span aria-hidden="true">→</span></a>
+    <span class="w-wall-alt"><span data-l="en">Already subscribed?</span><span data-l="zh">已经订阅？</span> <a href="{{ url_for('main.login', next=_here_path) }}"><span data-l="en">Sign in</span><span data-l="zh">登录</span></a></span>
+    {% endif %}
+  </div>
+  {% endif %}
 </div>
 <script>
 (function () {

@@ -4885,7 +4885,22 @@ def _wiki_facts() -> dict[str, Any]:
         "models": agent_models.options_public(),
         "model_choice": model_choice_enabled(),
         "agent_packs": _agent_packs_for_page(),
+        "sub": _sub_facts(),
     }
+
+
+def _sub_facts() -> dict[str, Any]:
+    """TradeAgents Pro's offer for the landing and the docs, with ``enabled``
+    False whenever it is not on sale -- the pages then leave it out."""
+    from ystocker import subscriptions
+
+    out = subscriptions.offer()
+    try:
+        out["enabled"] = subscriptions.enabled()[0]
+    except Exception as exc:  # noqa: BLE001 - a docs page must render regardless
+        log.warning("wiki: subscription state unknown: %s", exc)
+        out["enabled"] = False
+    return out
 
 
 @bp.route("/docs")
@@ -5368,6 +5383,8 @@ def agents_page():
         # The ladder is rendered server-side so the prices are visible without a
         # round trip, and come from one table shared with yPay.
         agent_packs=_agent_packs_for_page(),
+        # The out-of-runs box offers Pro beside the packs, when it is on sale.
+        pro_offer=_sub_facts() if email else None,
         agent_roles=roles_json(),
         agent_embedded=embedded,
         # Only consulted by the not-signed-in branch, which shows a sample of
@@ -5724,7 +5741,137 @@ def api_agents_balance():
     from ystocker import credits
 
     n = credits.peek_balance(email)
-    resp = jsonify({"credits": n, "usd": None if n is None else n * credits.USD_PER_CREDIT})
+    resp = jsonify({"credits": n, "usd": None if n is None else n * credits.USD_PER_CREDIT,
+                    "pro": _pro_for_menu(email)})
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
+def _pro_for_menu(email: str) -> Optional[dict[str, Any]]:
+    """The account menu's plan line: null when Pro is switched off (the menu
+    then shows no plan at all), else whether this reader has it."""
+    from ystocker import quota, subscriptions
+
+    try:
+        if not subscriptions.enabled()[0]:
+            return None
+        s = subscriptions.summary(email)
+    except Exception as exc:  # noqa: BLE001 - the menu must open regardless
+        log.warning("balance: subscription unreadable for %s: %s", email, exc)
+        return None
+    return {"active": s["active"], "trialing": s["trialing"], "plan": s["plan"],
+            "vip": quota.is_vip(email), "trial_available": s["trial_available"]}
+
+
+# ── TradeAgents Pro (/subscribe) ─────────────────────────────────────────────
+# The page, and two doors to yPay: Checkout and Stripe's billing portal. Each
+# door signs a short-lived token for the signed-in reader
+# (subscriptions.handoff) and redirects to this brand's pay host; this app holds
+# no Stripe secret, and the pay hosts share no session with it.
+
+_SUB_ERRORS = frozenset({"expired", "unavailable", "checkout", "portal", "no_billing", "plan"})
+
+
+def _sub_origin() -> str:
+    """Where yPay sends the reader back: this host, over https (no ProxyFix, so
+    request.host_url says http://), or the dev server as it is."""
+    host = (request.host or "").split(":")[0].lower()
+    if host in ("localhost", "127.0.0.1"):
+        return request.host_url.rstrip("/")
+    return _share_base().rstrip("/")
+
+
+def _sub_lang() -> Optional[str]:
+    """The page's language, as i18n.js carries it on internal links (?lang=)."""
+    lang = (request.args.get("lang") or "").strip().lower()
+    return lang if lang in ("en", "zh") else None
+
+
+def _sub_notice(active: bool) -> Optional[str]:
+    args = request.args
+    if args.get("welcome") or args.get("pending"):
+        return "welcome" if active else "activating"
+    if args.get("canceled"):
+        return "canceled"
+    if args.get("already"):
+        return "already"
+    err = (args.get("error") or "").strip()
+    return "error_" + err if err in _SUB_ERRORS else None
+
+
+@bp.route("/subscribe")
+def subscribe_page():
+    """TradeAgents Pro: the plans, the trial, and a subscriber's status."""
+    from flask import make_response
+    from ystocker import quota, subscriptions
+
+    email = _agent_user()
+    # Straight back from Stripe: read the row consistently, so the page does
+    # not tell a new subscriber they have nothing.
+    landed = bool(request.args.get("welcome") or request.args.get("pending"))
+    sub = subscriptions.summary(email, fresh=landed)
+    ok, why = subscriptions.enabled()
+    if not ok:
+        log.info("GET /subscribe: Pro not offered (%s)", why)
+    resp = make_response(render_template(
+        "subscribe.html",
+        sub=sub, sub_enabled=ok, signed_in=bool(email),
+        vip=quota.is_vip(email), vip_runs=quota.limit_vip(),
+        free_runs=quota.limit_default(), global_runs=quota.limit_global(),
+        notice=_sub_notice(sub["active"]),
+        peer_groups=list(PEER_GROUPS.keys()),
+    ))
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
+@bp.route("/subscribe/checkout")
+def subscribe_checkout():
+    """Start a checkout for ?plan=month|year, through sign-in if need be."""
+    from urllib.parse import urlencode
+    from ystocker import credits, subscriptions
+
+    plan_id = (request.args.get("plan") or "").strip().lower()
+    if subscriptions.plan(plan_id) is None:
+        plan_id = "year"
+    email = _agent_user()
+    if not email:
+        return redirect(url_for("main.login", next=url_for("main.subscribe_checkout", plan=plan_id)))
+    if not subscriptions.enabled()[0]:
+        return redirect(url_for("main.subscribe_page", error="unavailable"))
+    if subscriptions.is_entitled(email, fresh=True):
+        return redirect(url_for("main.subscribe_page", already=1))
+    token = subscriptions.handoff(email, "checkout", _sub_origin(), plan=plan_id, lang=_sub_lang())
+    log.info("subscribe: %s to checkout (%s)", email, plan_id)
+    return redirect(credits.pay_url().rstrip("/") + "/subscribe/start?" + urlencode({"t": token}))
+
+
+@bp.route("/subscribe/manage")
+def subscribe_manage():
+    """Stripe's billing portal for the signed-in reader."""
+    from urllib.parse import urlencode
+    from ystocker import credits, subscriptions
+
+    email = _agent_user()
+    if not email:
+        return redirect(url_for("main.login", next=url_for("main.subscribe_page")))
+    if not subscriptions.enabled()[0]:
+        return redirect(url_for("main.subscribe_page", error="unavailable"))
+    token = subscriptions.handoff(email, "portal", _sub_origin(), lang=_sub_lang())
+    return redirect(credits.pay_url().rstrip("/") + "/subscribe/portal?" + urlencode({"t": token}))
+
+
+@bp.route("/api/subscription")
+def api_subscription():
+    """The reader's Pro status. ``fresh=1`` reads consistently, for the page a
+    reader lands on from Stripe, which polls it until the row appears."""
+    from ystocker import quota, subscriptions
+
+    email = _agent_user()
+    out = subscriptions.summary(email, fresh=bool(email) and request.args.get("fresh") == "1")
+    out.update(signed_in=bool(email), enabled=subscriptions.enabled()[0],
+               vip=quota.is_vip(email))
+    resp = jsonify(out)
     resp.headers["Cache-Control"] = "no-store"
     return resp
 

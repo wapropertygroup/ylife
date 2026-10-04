@@ -12,6 +12,17 @@
 <section class="w-section" id="pricing" aria-labelledby="lpPricing">
   <div class="w-section-head">
     <p class="w-kicker"><span data-l="en">Pricing</span><span data-l="zh">价格</span></p>
+    {% set sub = landing.sub %}
+    {% if sub.enabled %}
+    <h2 class="w-h2" id="lpPricing">
+      <span data-l="en">{{ landing.free_runs }} free runs a day. Pro when you want more.</span>
+      <span data-l="zh">每天 {{ landing.free_runs }} 次免费。想要更多，就开通 Pro。</span>
+    </h2>
+    <p class="w-lead">
+      <span data-l="en">Pro is {{ sub.runs_per_day }} analyses a day and every dashboard in full{% if sub.trial_days %}, with {{ sub.trial_days }} days free to start{% endif %}. Packs are still there for the odd extra run, and never expire.</span>
+      <span data-l="zh">Pro 每天 {{ sub.runs_per_day }} 次分析，全部看板完整可见{% if sub.trial_days %}，并可先免费试用 {{ sub.trial_days }} 天{% endif %}。偶尔多跑几次，也可以买次数包，永不过期。</span>
+    </p>
+    {% else %}
     <h2 class="w-h2" id="lpPricing">
       <span data-l="en">{{ landing.free_runs }} free runs a day. Packs when you need more.</span>
       <span data-l="zh">每天 {{ landing.free_runs }} 次免费。需要更多时，再买次数包。</span>
@@ -20,6 +31,7 @@
       <span data-l="en">Free runs are always spent first, so you are never charged while one is left. Purchased runs never expire and carry over between days.</span>
       <span data-l="zh">系统总是优先消耗免费次数，只要还有免费次数就不会扣费。购买的次数永不过期，可跨日累积使用。</span>
     </p>
+    {% endif %}
   </div>
   <div class="w-grid-auto">
     <div class="w-card is-free">
@@ -33,6 +45,14 @@
         {% endif %}
       </span>
     </div>
+    {% if sub.enabled %}
+    <a class="w-card is-pro" href="{{ url_for('main.subscribe_page') }}">
+      <span class="w-kicker"><span data-l="en">Pro</span><span data-l="zh">Pro</span></span>
+      <span class="w-price-num">{{ sub.runs_per_day }}<small><span data-l="en">runs / day</span><span data-l="zh">次 / 天</span></small></span>
+      <span class="w-price-per"><span data-l="en">${{ '%g' % sub.month }} a month or ${{ '%g' % sub.year }} a year</span><span data-l="zh">每月 ${{ '%g' % sub.month }} 或每年 ${{ '%g' % sub.year }}</span></span>
+      <span class="w-card-foot">{% if sub.trial_days %}<span data-l="en">Try {{ sub.trial_days }} days free →</span><span data-l="zh">免费试用 {{ sub.trial_days }} 天 →</span>{% else %}<span data-l="en">See plans →</span><span data-l="zh">查看方案 →</span>{% endif %}</span>
+    </a>
+    {% endif %}
     {% for p in landing.agent_packs %}
     <div class="w-card">
       <span class="w-kicker is-quiet"><span data-l="en">{{ p.credits }} runs</span><span data-l="zh">{{ p.credits }} 次</span></span>

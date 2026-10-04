@@ -331,6 +331,8 @@
   border: 1px solid var(--ag-line); border-radius: 999px; background: var(--ag-inset);
   color: var(--ag-ink-muted); font-variant-numeric: tabular-nums;
 }
+.ag-pro-link { color: var(--ag-accent-ink); font-weight: 600; text-decoration: none; }
+.ag-pro-link:hover { text-decoration: underline; text-underline-offset: 3px; }
 .ag-quota-out { border-color: var(--ag-red-line); }
 .ag-quota-out b { color: var(--ag-red-ink); }
 
@@ -1467,7 +1469,7 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
         <b>{{ quota.remaining }}</b>/{{ quota.limit }}
         <span data-i18n="agents.runs_left">runs left today</span>
         {% if quota.credits %}<span class="ag-credits">+{{ quota.credits }} <span data-i18n="agents.credits">bought</span></span>{% endif %}
-        {% if quota.vip %}<em data-i18n="agents.vip">VIP</em>{% endif %}
+        {% if quota.vip %}<em data-i18n="agents.vip">VIP</em>{% elif quota.subscribed %}<em>Pro</em>{% endif %}
       </span>
     </div>
     {% endif %}
@@ -1569,6 +1571,16 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
       <a id="agBuyLink" class="ag-btn" href="{{ quota.pay_url if quota else '' }}" rel="noopener"
          data-carry-prefs data-i18n="agents.buy_cta">Buy more runs</a>
     </div>
+    {#  Pro, beside the packs: for a reader who runs out most days, ten a day is
+        the better buy. Not offered to a subscriber (who has it) or a VIP. #}
+    {% if pro_offer and pro_offer.enabled and quota and not quota.subscribed and not quota.vip %}
+    <p class="text-xs text-slate-600 dark:text-slate-300 mt-3">
+      <span data-i18n="agents.buy_pro_why">Run out most days? Pro gives you</span>
+      <b>{{ pro_offer.runs_per_day }}</b> <span data-i18n="agents.buy_pro_runs">analyses a day</span>
+      · ${{ '%g' % pro_offer.month }}<span data-i18n="agents.buy_pro_month">/month</span>
+      — <a class="ag-pro-link" href="{{ url_for('main.subscribe_page') }}">{% if pro_offer.trial_days %}<span data-i18n="agents.buy_pro_trial">Try it free for</span> {{ pro_offer.trial_days }} <span data-i18n="agents.buy_pro_days">days</span>{% else %}<span data-i18n="agents.buy_pro_cta">See Pro plans</span>{% endif %} →</a>
+    </p>
+    {% endif %}
     <p class="text-xs text-slate-500 mt-3">
       {% for p in agent_packs %}<span class="ag-pack">${{ '%g' % p.price }} → {{ p.credits }}</span>{% endfor %}
     </p>
@@ -2195,7 +2207,8 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
     el.dataset.limit = q.limit;
     el.classList.toggle('ag-quota-out', q.remaining === 0);
     const label = I18n.t('agents.runs_left') || 'runs left today';
-    const vip = q.vip ? '<em>' + (I18n.t('agents.vip') || 'VIP') + '</em>' : '';
+    const vip = q.vip ? '<em>' + (I18n.t('agents.vip') || 'VIP') + '</em>'
+      : q.subscribed ? '<em>Pro</em>' : '';
     // Purchased credits are shown separately from the free allowance rather than
     // added to it: they do not reset at midnight, and a single "8 left" would
     // hide which part comes back tomorrow and which was paid for.

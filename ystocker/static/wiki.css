@@ -293,6 +293,10 @@ html[lang^="zh"] .w-top-name small { letter-spacing: .06em; }
 .w-acct-item:hover { background: var(--w-well); color: var(--w-ink); }
 .w-acct-item:focus-visible { outline: 2px solid var(--w-accent); outline-offset: -2px; }
 .w-acct-item:disabled { opacity: .55; cursor: default; }
+/* Both set a display, which beats the UA's [hidden]: the plan line and the Pro
+   link start hidden until /api/agents/balance answers, and stay hidden when Pro
+   is switched off. */
+.w-acct-balance[hidden], .w-acct-item[hidden] { display: none; }
 .w-acct-sep { height: 1px; margin: 6px 4px; background: var(--w-line); }
 
 @media (max-width: 1040px) {
@@ -719,6 +723,8 @@ a.w-card:focus-visible { outline: 2px solid var(--w-accent); outline-offset: 2px
 .w-price-num small { font-family: var(--w-mono); font-size: 13px; font-weight: 500; color: var(--w-muted); margin-left: 6px; }
 .w-price-per { display: block; margin-top: 8px; font-family: var(--w-mono); font-size: 12.5px; color: var(--w-muted); }
 .w-card.is-free { background: var(--w-accent-soft); border-color: var(--w-accent-line); }
+.w-card.is-pro { border-color: var(--w-accent-line); box-shadow: var(--w-shadow); }
+.w-card.is-pro .w-card-foot { margin-top: 14px; }
 
 /* ── Boundary + footer strip ──────────────────────────────────────────────── */
 .w-boundary {
@@ -1033,6 +1039,7 @@ html[lang^="zh"] .w-doc-title { font-size: clamp(34px, 4.4vw, 54px); line-height
 }
 .w-callout.is-warn { border-left-color: var(--w-num); }
 .w-callout p:last-child { margin-bottom: 0; }
+.w-callout.is-good { border-left-color: var(--w-good); }
 
 .w-stats {
   display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px 24px;
@@ -1124,3 +1131,54 @@ html[lang^="zh"] .w-article-title { font-size: clamp(32px, 4.4vw, 50px); line-he
   a.w-card:hover, .w-btn-primary:hover { transform: none; }
   .w-log li[data-state="active"] .w-log-state::before { animation: none; }
 }
+
+/* ── /subscribe: TradeAgents Pro ──────────────────────────────────────────────
+   Two plan cards, the yearly one marked, then what Pro includes, the
+   comparison and the questions. `.w-pro-*`, not `.w-sub-*`: that prefix is the
+   Markets bar's. [hidden] is restated because .w-callout's children set no
+   display of their own but a later rule could, the trap noted at .w-run. */
+.w-pro { padding-bottom: 32px; }
+.w-pro [hidden] { display: none; }
+.w-pro .w-callout { max-width: 860px; margin: 0 0 22px; }
+.w-pro .w-callout .w-textlink { margin-left: 8px; font-size: inherit; }
+.w-pro-status { max-width: 860px; margin: 0 0 26px; }
+.w-pro-status .w-actions { margin-top: 20px; gap: 10px 16px; }
+.w-pro-status .w-actions .w-muted { font-size: 13.5px; }
+.w-pro-plans {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px;
+  max-width: 860px; padding-top: 12px;
+}
+@media (max-width: 720px) { .w-pro-plans { grid-template-columns: minmax(0, 1fr); } }
+.w-pro-plan { display: flex; flex-direction: column; padding: 24px 24px 22px; }
+.w-pro-plan .w-price-num { margin-top: 16px; }
+.w-pro-plan.is-featured { border-color: var(--w-accent-line); box-shadow: var(--w-shadow); }
+.w-pro-badge {
+  position: absolute; top: -12px; right: 18px; padding: 4px 10px; border-radius: 999px;
+  font-family: var(--w-mono); font-size: 11px; font-weight: 600; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--w-paper); background: var(--w-accent);
+}
+html[lang^="zh"] .w-pro-badge { letter-spacing: .04em; }
+.w-pro-cta { margin-top: auto; padding-top: 22px; }
+.w-btn[aria-disabled="true"] { opacity: .55; cursor: default; }
+.w-btn[aria-disabled="true"]:hover { border-color: var(--w-line-strong); transform: none; }
+.w-pro-fine { max-width: 860px; margin: 16px 0 0; font-size: 13.5px; line-height: 1.6; color: var(--w-muted); }
+.w-pro-section { max-width: 860px; padding-top: 56px; }
+.w-pro-h {
+  margin: 0; font-family: var(--w-serif); font-weight: 700; color: var(--w-ink);
+  font-size: clamp(24px, 2.6vw, 32px); line-height: 1.15; letter-spacing: -.01em;
+}
+html[lang^="zh"] .w-pro-h { letter-spacing: 0; }
+.w-pro-section .w-table-wrap { margin-top: 18px; overflow-x: auto; }
+.w-pro-section table td:first-child { color: var(--w-ink); }
+/* Figures stay in the column's own alignment, under its heading. */
+.w-pro-section table td.w-pro-fig { font-family: var(--w-mono); font-size: 13.5px; font-variant-numeric: tabular-nums; }
+.w-pro-faq details { border-bottom: 1px solid var(--w-line); padding: 14px 0; }
+.w-pro-faq details:first-of-type { margin-top: 14px; border-top: 1px solid var(--w-line); }
+.w-pro-faq summary { cursor: pointer; font-weight: 650; color: var(--w-ink); font-size: 16px; line-height: 1.45; }
+.w-pro-faq summary:focus-visible { outline: 2px solid var(--w-accent); outline-offset: 2px; }
+.w-pro-faq details p { margin: 10px 0 0; font-size: 15px; line-height: 1.65; color: var(--w-body); }
+
+/* The reading wall's second button, for a reader who is already subscribed. */
+.w-wall-alt { display: block; margin-top: 12px; font-size: 13.5px; color: var(--w-muted); }
+.w-wall-alt a { color: var(--w-accent); font-weight: 600; text-decoration: none; }
+.w-wall-alt a:hover { text-decoration: underline; text-underline-offset: 3px; }
