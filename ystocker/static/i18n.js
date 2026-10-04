@@ -1010,6 +1010,7 @@ const I18n = (() => {
                              zh: 'DCA 估值引擎 — 估值分位、V 分数与定投金额调节' },
     'dca.to_history':      { en: 'Price & PE history', zh: '价格与市盈率历史' },
     'dca.all_names':       { en: 'All names', zh: '全部股票' },
+    'dca.open_full':       { en: 'Full page ↗', zh: '完整页面 ↗' },
     'dca.rebuild':         { en: '↻ Rebuild', zh: '↻ 重建' },
     'dca.rebuild_tip':     { en: "Re-reads this ticker's filings from Yahoo. Limited to once every 10 minutes.",
                              zh: '重新读取该股票的财报数据。每 10 分钟最多一次。' },

@@ -486,6 +486,23 @@ so V=0 → 0.50x, V=50 → 1.00x, V=100 → 1.50x. Valuation sets the pace of
 buying; it never answers whether to buy. Linked from the `/history/<ticker>`
 header; the page is public, like `/history`.
 
+**It is also a tab on `/history/<ticker>` (2026-10-04)**, and that tab is this
+page itself, framed: `/dca/<t>?embed=1` renders through base.html's embedded
+mode (no site chrome, wall or launcher), with its own header cut to its actions.
+The tab never copies the page, so it cannot drift from it. Including the
+template instead was not an option: both pages declare `const TICKER` at top
+level and share ids such as `#stockName`. Inside the frame:
+- **Height.** The page posts its height (`dca:height`, measured on `#dcaRoot`,
+  because `<main>` is flex-1 in a body at least a screen tall) and never scrolls
+  itself. /history accepts the message only from that frame and origin.
+- **Links.** A peer's `/dca/X` link opens `/history/X?tab=dca` in the top
+  window, other links on this site also open in the top window, and Rebuild
+  keeps `embed=1` through `dca_refresh`'s redirect.
+- **Indexing and language.** The framed copy carries noindex. A language switch
+  on /history reloads the frame with `?lang=`.
+The header's DCA button opens the tab; a modified click still opens the full
+page. Tests: `tests/check_dca_embed.py` (6, hermetic).
+
 Five modules, split by what can be tested without I/O:
 
 | Module | Job | Pure? |

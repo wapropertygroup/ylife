@@ -1123,12 +1123,20 @@ def dca_page(ticker: str):
 
     Renders unconditionally, like ``/history``: the reconstruction behind it can
     take a minute cold, so the page paints and ``/api/dca/<ticker>`` fills it.
+
+    ``?embed=1`` is the same page framed inside ``/history``'s DCA tab: base.html's
+    embedded mode (no site chrome, no wall, no launcher), the page's own header
+    cut to its actions, and links that leave it opened in the top window. One
+    template serves both, so the tab cannot drift from the page.
     """
     ticker = ticker.strip().upper()
-    log.info("GET /dca/%s", ticker)
+    embedded = request.args.get("embed") == "1"
+    log.info("GET /dca/%s%s", ticker, " (embedded)" if embedded else "")
     return render_template("dca.html",
                            ticker=ticker,
-                           peer_groups=list(PEER_GROUPS.keys()))
+                           peer_groups=list(PEER_GROUPS.keys()),
+                           embedded=embedded,
+                           agent_embedded=embedded)
 
 
 #: Tickers currently being rebuilt, so N concurrent readers of one cold symbol
@@ -2789,6 +2797,10 @@ def dca_refresh(ticker: str):
         log.info("DCA refresh for %s ignored - rebuilt %.0fs ago", symbol, age)
     else:
         _dca_kick(symbol)
+    # A rebuild asked for from /history's DCA tab returns to the framed page,
+    # not to the full one inside the frame.
+    if request.args.get("embed") == "1":
+        return redirect(url_for("main.dca_page", ticker=symbol, embed=1))
     return redirect(url_for("main.dca_page", ticker=symbol))
 
 

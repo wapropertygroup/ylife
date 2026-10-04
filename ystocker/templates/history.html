@@ -320,6 +320,7 @@
     <span class="text-slate-600 dark:text-slate-300 text-sm font-mono font-semibold">{{ ticker }}</span>
     <div class="ml-auto flex items-center gap-2">
       <a href="{{ url_for('main.dca_page', ticker=ticker) }}"
+         onclick="if (event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) { switchTab('dca'); document.getElementById('tabDcaBtn').scrollIntoView({block: 'nearest'}); return false; }"
          class="flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400 border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800
                 hover:text-slate-700 dark:hover:text-slate-200 hover:border-slate-400 dark:hover:border-slate-500 transition px-2.5 py-1 rounded-lg">
         <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -380,6 +381,9 @@
   <button id="tabFundBtn" onclick="switchTab('fundamentals')"
           class="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 -mb-px transition whitespace-nowrap shrink-0"
           data-i18n="history.tab_fund">Fundamentals</button>
+  <button id="tabDcaBtn" onclick="switchTab('dca')"
+          class="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 -mb-px transition whitespace-nowrap shrink-0"
+          data-i18n="history.dca">DCA Valuation</button>
   <button id="tabNewsBtn" onclick="switchTab('news')"
           class="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 -mb-px transition whitespace-nowrap shrink-0"
           data-i18n="history.tab_news">News</button>
@@ -1647,6 +1651,13 @@
   <p id="fundMissing" class="fd-missing" hidden></p>
   <ul id="fundNotes" class="fd-notes"></ul>
 </div>
+
+<!-- ── DCA panel ──────────────────────────────────────────────────────
+     /dca/<ticker>?embed=1 framed (routes.dca_page): the same template as the
+     full page, so the tab cannot drift from it. The frame is created on the
+     tab's first open, and its height follows the page inside it, which posts
+     it (dca.html, embedded only). -->
+<div id="panelDca" style="display:none"></div>
 
 <!-- ── Research panel (full stock-research template) ──────────────── -->
 <div id="panelResearch" style="display:none">
@@ -4537,8 +4548,10 @@ function switchTab(tab) {
   const isVideos   = tab === 'videos';
   const isResearch = tab === 'research';
   const isFund     = tab === 'fundamentals';
+  const isDca      = tab === 'dca';
   document.getElementById('panelCharts').style.display   = isCharts   ? '' : 'none';
   document.getElementById('panelFund').style.display     = isFund     ? '' : 'none';
+  document.getElementById('panelDca').style.display      = isDca      ? '' : 'none';
   document.getElementById('panelNews').style.display     = isNews     ? '' : 'none';
   document.getElementById('panelVideos').style.display   = isVideos   ? '' : 'none';
   document.getElementById('panelResearch').style.display = isResearch ? '' : 'none';
@@ -4548,10 +4561,12 @@ function switchTab(tab) {
   const videosBtn   = document.getElementById('tabVideosBtn');
   const researchBtn = document.getElementById('tabResearchBtn');
   const fundBtn     = document.getElementById('tabFundBtn');
+  const dcaBtn      = document.getElementById('tabDcaBtn');
   const activeClass   = 'px-4 py-2 text-sm font-medium border-b-2 -mb-px transition border-brand text-brand whitespace-nowrap shrink-0';
   const inactiveClass = 'px-4 py-2 text-sm font-medium border-b-2 -mb-px transition border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 whitespace-nowrap shrink-0';
   chartsBtn.className   = isCharts   ? activeClass : inactiveClass;
   fundBtn.className     = isFund     ? activeClass : inactiveClass;
+  dcaBtn.className      = isDca      ? activeClass : inactiveClass;
   newsBtn.className     = isNews     ? activeClass : inactiveClass;
   videosBtn.className   = isVideos   ? activeClass : inactiveClass;
   researchBtn.className = isResearch ? activeClass : inactiveClass;
@@ -4571,7 +4586,39 @@ function switchTab(tab) {
   if (isVideos && !_videosLoaded) loadVideos();
   if (isResearch && typeof _initResearchPanel === 'function') _initResearchPanel();
   if (isFund && typeof _initFundPanel === 'function') _initFundPanel();
+  if (isDca) _initDcaPanel();
 }
+
+// ── DCA tab ───────────────────────────────────────────────────────────────────
+// The /dca page framed (?embed=1), created on the tab's first open, in the
+// language on screen. The page inside posts its height on every change, so the
+// frame grows and shrinks with it rather than scrolling on its own; the message
+// is accepted only from this frame and this origin.
+function _dcaSrc() {
+  const lang = (document.documentElement.lang || '').toLowerCase().startsWith('zh') ? 'zh' : 'en';
+  return `/dca/${encodeURIComponent(TICKER)}?embed=1&lang=${lang}`;
+}
+function _initDcaPanel() {
+  const panel = document.getElementById('panelDca');
+  if (panel.querySelector('iframe')) return;
+  const frame = document.createElement('iframe');
+  frame.id = 'dcaFrame';
+  frame.title = I18n.t('history.dca') || 'DCA Valuation';
+  frame.src = _dcaSrc();
+  frame.style.cssText = 'display:block;width:100%;height:640px;border:0;background:transparent';
+  panel.appendChild(frame);
+}
+window.addEventListener('message', e => {
+  const frame = document.getElementById('dcaFrame');
+  if (!frame || e.origin !== location.origin || e.source !== frame.contentWindow) return;
+  const h = e.data && e.data.type === 'dca:height' ? Number(e.data.height) : 0;
+  if (h > 0) frame.style.height = Math.min(Math.max(h, 320), 20000) + 'px';
+});
+// The page inside reads its language once; a switch here reloads it in the new one.
+document.addEventListener('i18n:langchange', () => {
+  const frame = document.getElementById('dcaFrame');
+  if (frame) frame.src = _dcaSrc();
+});
 
 // ── News feed ─────────────────────────────────────────────────────────────────
 async function loadNews(force) {
@@ -6791,10 +6838,11 @@ async function explainChart(chartKey) {
 
 // ?tab=research opens straight onto the Research tab: where /login sends a
 // reader who signed in from it, and a link to this ticker's research can land.
-// ?tab=fundamentals is the Fundamentals tab's own link.
+// ?tab=fundamentals is the Fundamentals tab's own link, and ?tab=dca the DCA
+// tab's (a peer's link inside that tab opens its company here).
 {
   const _tab = new URLSearchParams(location.search).get('tab');
-  if (_tab === 'research' || _tab === 'fundamentals') switchTab(_tab);
+  if (_tab === 'research' || _tab === 'fundamentals' || _tab === 'dca') switchTab(_tab);
 }
 </script>
 {% endblock %}

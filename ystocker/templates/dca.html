@@ -2,6 +2,8 @@
 {% block title %}yStocker — {{ ticker }} DCA Valuation{% endblock %}
 {% block title_key %}dca.doc_title{% endblock %}
 {% block title_arg %}{{ ticker }}{% endblock %}
+{#  ?embed=1 is this page framed inside /history's DCA tab (routes.dca_page). #}
+{% block head_extra %}{% if embedded %}<meta name="robots" content="noindex">{% endif %}{% endblock %}
 
 {% block content %}
 <style>
@@ -102,14 +104,29 @@
   }
   .peer-unscored a { display: inline-block; margin: 0 14px 4px 0; }
   .peer-unscored .pe { color: var(--t-ink-dim); opacity: .8; }
+{% if embedded %}
+  /* Framed in /history's DCA tab: the host page owns the margins and the
+     plane (trade-agents.com's grid shows through rather than a solid block). */
+  body.agents-embedded > main { padding: 0; }
+  body.agents-embedded, html.dark body.agents-embedded { background: transparent; }
+  /* The host page sizes the frame to this page, so the frame never scrolls; a
+     pixel of overflow between a change and its height message would otherwise
+     draw a scrollbar down the tab's edge. */
+  html, body.agents-embedded { overflow: hidden; }
+{% endif %}
 </style>
+{% if embedded %}<div id="dcaRoot">{% endif %}
 
 <!-- ── Header ──────────────────────────────────────────────────────────── -->
 <div class="mb-6 fade-up">
-  <div class="flex items-center gap-3 mb-1">
+  <div class="flex {{ 'flex-wrap' if embedded }} items-center gap-3 mb-1">
+    {% if embedded %}
+    <p class="text-slate-500 text-sm" data-i18n="dca.subtitle">DCA Valuation Engine — valuation percentile, V score and contribution sizing</p>
+    {% else %}
     <button onclick="history.back()" class="text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 text-sm transition" data-i18n="dca.back">← Back</button>
     <span class="text-slate-400 dark:text-slate-700">/</span>
     <span class="text-slate-600 dark:text-slate-300 text-sm font-mono font-semibold">{{ ticker }}</span>
+    {% endif %}
     <div class="ml-auto flex items-center gap-2">
       <!-- Keep this name in the ranked universe. Hidden until the payload says
            this visitor may write, and hidden for a seed name, which is already
@@ -118,23 +135,35 @@
            of the reader's own. -->
       <button id="pinBtn" type="button" onclick="togglePin()"
               class="hidden items-center gap-1 text-xs border px-2 py-1 rounded transition"></button>
-      <a href="{{ url_for('main.dca_index') }}"
+      <a href="{{ url_for('main.dca_index') }}"{% if embedded %} target="_top"{% endif %}
          class="flex items-center gap-1 text-xs text-slate-600 dark:text-slate-400 border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-200 px-2 py-1 rounded transition"
          data-i18n="dca.all_names">All names</a>
+      {% if embedded %}
+      <a href="{{ url_for('main.dca_page', ticker=ticker) }}" target="_top"
+         class="flex items-center gap-1 text-xs text-slate-600 dark:text-slate-400 border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-200 px-2 py-1 rounded transition"
+         data-i18n="dca.open_full">Full page ↗</a>
+      {% else %}
       <a href="{{ url_for('main.history', ticker=ticker) }}"
          class="flex items-center gap-1 text-xs text-slate-600 dark:text-slate-400 border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-200 px-2 py-1 rounded transition"
          data-i18n="dca.to_history">Price &amp; PE history</a>
-      <a href="{{ url_for('main.dca_refresh', ticker=ticker) }}"
+      {% endif %}
+      <a href="{{ url_for('main.dca_refresh', ticker=ticker, embed=1) if embedded else url_for('main.dca_refresh', ticker=ticker) }}"
          class="flex items-center gap-1 text-xs text-slate-600 dark:text-slate-400 border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-200 px-2 py-1 rounded transition"
          data-i18n="dca.rebuild" data-i18n-title="dca.rebuild_tip"
          title="Re-reads this ticker's filings from Yahoo. Limited to once every 10 minutes.">↻ Rebuild</a>
     </div>
   </div>
+  {% if embedded %}
+  {#  The host page's header already names the company; the script still
+      writes the name here, so the element stays. #}
+  <span id="stockName" hidden></span>
+  {% else %}
   <h1 class="text-2xl sm:text-3xl font-bold">
     <span class="font-mono grad-text">{{ ticker }}</span>
     <span id="stockName" class="text-slate-500 dark:text-slate-400 text-lg sm:text-xl font-normal ml-2 sm:ml-3"></span>
   </h1>
   <p class="text-slate-500 text-sm mt-1" data-i18n="dca.subtitle">DCA Valuation Engine — valuation percentile, V score and contribution sizing</p>
+  {% endif %}
 </div>
 
 <!-- ── Warming / error ─────────────────────────────────────────────────── -->
@@ -537,6 +566,7 @@
   </p>
 </div>
 
+{% if embedded %}</div>{% endif %}
 <script>
 const TICKER = {{ ticker | tojson }};
 const BASE_KEY = 'ystocker_dca_base';
@@ -1656,5 +1686,37 @@ baseInput.addEventListener('input', () => {
 document.addEventListener('i18n:langchange', () => { if (_dcaData) renderAll(_dcaData); });
 
 load();
+{% if embedded %}
+// Framed inside /history's DCA tab (?embed=1). Two duties. Report this page's
+// height, so the frame grows and shrinks with it and never scrolls on its own;
+// it is #dcaRoot that is measured, since <main> is flex-1 in a body at least a
+// screen tall and would never let the frame shrink. And leave the frame on
+// navigation: a peer opens that company's /history on its DCA tab, anything
+// else on this site opens in the top window, and Rebuild (embed=1) stays here.
+(function () {
+  if (window.parent === window) return;
+  const root = document.getElementById('dcaRoot');
+  let last = 0;
+  const post = () => {
+    const h = Math.ceil(root.getBoundingClientRect().bottom + window.scrollY) + 16;
+    if (Math.abs(h - last) < 2) return;
+    last = h;
+    window.parent.postMessage({ type: 'dca:height', height: h }, location.origin);
+  };
+  new ResizeObserver(post).observe(root);
+  window.addEventListener('load', post);
+  post();
+  document.addEventListener('click', e => {
+    const a = e.target.closest('a[href]');
+    if (!a || a.target || e.defaultPrevented || e.button !== 0
+        || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    const url = new URL(a.href, location.href);
+    if (url.origin !== location.origin || url.searchParams.get('embed') === '1') return;
+    e.preventDefault();
+    const peer = url.pathname.match(/^\/dca\/([^/]+)\/?$/);
+    window.top.location.href = peer ? `/history/${peer[1]}?tab=dca` : url.href;
+  });
+})();
+{% endif %}
 </script>
 {% endblock %}
