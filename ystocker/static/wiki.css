@@ -792,6 +792,8 @@ body.w-walled main { position: relative; }
   -webkit-mask-image: linear-gradient(transparent, #000 96px);
           mask-image: linear-gradient(transparent, #000 96px);
 }
+/* Stood down by _ta_wall.html's script where <main> is too short to hold it. */
+.w-wall[hidden] { display: none; }
 .w-wall-card {
   position: sticky; top: calc(var(--w-head-h) + 14vh);
   max-width: 440px; margin: 0 auto; padding: 24px 22px; text-align: center;

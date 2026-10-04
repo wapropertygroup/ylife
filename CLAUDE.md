@@ -1852,7 +1852,11 @@ marks it with `data-wall-start`. /markets does, on the section after its AI
 brief and index cards, and a small script keeps the mark measured as the panels
 above it load. The overlay is `position: absolute` in `<main>`, so it grows with
 the page, and it sits at z-index 15, under the pages' own pinned bars (/markets'
-chips 30, /history's `#sectionNav` 20). Those stay usable and take the reader to
+chips 30, /history's `#sectionNav` 20). It stands down (`hidden`) while less of
+`<main>` lies below the fold than its card and padding need: its box then ran
+out of `<main>` over the footer and the sticky card stretched the page, as on
+/companies searched down to one result (2026-10-04). Its script re-measures
+whenever `<main>` resizes, so the wall returns as the page grows. Those stay usable and take the reader to
 walled sections. `<main>` becomes `position: relative` only while walled;
 measured on every walled dashboard, nothing else in it used `<main>` as its
 containing block. A page with no data of its own sets `{% set no_wall = true %}`:

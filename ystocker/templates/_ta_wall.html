@@ -25,12 +25,28 @@
   // whenever <main> changes size, since the panels above it load after this
   // runs and each one that grows pushes the mark down. Without a mark, or
   // without this script, wiki.css's default stands.
+  //
+  // And the wall stands only where it fits. With less of <main> below the fold
+  // than the card and its padding need, the wall's box runs out of <main> and
+  // over the footer, and the sticky card stretches the page past it -- measured
+  // on /companies searched down to one result: <main> 728px, the wall 834-1022,
+  // the footer 882-1000. On such a page there is next to nothing to wall, so
+  // it stands down until <main> grows again.
   const main = document.querySelector('main');
-  const start = main && main.querySelector('[data-wall-start]');
-  if (!start) return;
+  const wall = main && main.querySelector('[data-wall]');
+  if (!wall) return;
+  const start = main.querySelector('[data-wall-start]');
+  const card = wall.querySelector('.w-wall-card');
+  let need = 0;
   const place = () => {
-    const top = start.getBoundingClientRect().top - main.getBoundingClientRect().top;
-    main.style.setProperty('--w-wall-top', Math.max(0, Math.round(top)) + 'px');
+    if (start) {
+      const top = start.getBoundingClientRect().top - main.getBoundingClientRect().top;
+      main.style.setProperty('--w-wall-top', Math.max(0, Math.round(top)) + 'px');
+    }
+    // Measured while it shows; hidden, the card has no height to read.
+    const cs = getComputedStyle(wall);
+    if (!wall.hidden) need = card.offsetHeight + parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+    wall.hidden = main.clientHeight - (parseFloat(cs.top) || 0) < need;
   };
   place();
   if (window.ResizeObserver) new ResizeObserver(place).observe(main);
