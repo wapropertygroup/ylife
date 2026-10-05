@@ -1508,11 +1508,13 @@ const I18n = (() => {
     'dcx.none_yet':     { en: 'Nothing scored yet.', zh: '暂无评分。' },
     'dcx.table_title':  { en: 'All scored names', zh: '全部已评分股票' },
     'dcx.total_pre':    { en: 'Total this period', zh: '本期合计' },
-    'dcx.dear_hidden':  { en: '{n} with V ≤ 20 hidden', zh: '已隐藏 {n} 个 V ≤ 20 的股票' },
-    'dcx.dear_shown':   { en: 'Showing {n} with V ≤ 20', zh: '正在显示 {n} 个 V ≤ 20 的股票' },
-    'dcx.dear_show':    { en: 'Show them', zh: '显示' },
-    'dcx.dear_hide':    { en: 'Hide them', zh: '隐藏' },
-    'dcx.dear_all_hidden': { en: 'Every scored name has V ≤ 20, and those are hidden.', zh: '所有已评分股票的 V 都 ≤ 20，已全部隐藏。' },
+    // Names whose V reads below 60 start folded; the total then covers only
+    // the names shown, and says so.
+    'dcx.total_shown':  { en: 'Total this period, {n} shown', zh: '本期合计（已显示 {n} 只）' },
+    'dcx.fold_show':    { en: '{n} more with V below 60 — show them', zh: '另有 {n} 只 V 低于 60 的股票 — 展开' },
+    'dcx.fold_hide':    { en: 'Fold the {n} with V below 60', zh: '收起 {n} 只 V 低于 60 的股票' },
+    'dcx.fold_card':    { en: '{n} names with V below 60 are folded.', zh: '{n} 只 V 低于 60 的股票已收起。' },
+    'dcx.fold_open':    { en: 'Show them', zh: '展开' },
     'dcx.vs_flat':      { en: 'vs', zh: '对比' },
     'dcx.flat':         { en: 'flat', zh: '等额定投' },
     'dcx.filings':      { en: 'filings', zh: '期财报' },

@@ -27,6 +27,23 @@
     padding: 3px 6px; border-radius: 4px; border: 1px solid var(--t-line-strong);
     color: var(--t-ink-dim); white-space: nowrap;
   }
+  /* The fold over names below V 60: a full-width row in the table, and a link
+     in the "dearest" card. Built in JS, so styled here rather than with
+     Tailwind classes the compiled bundle may not carry. */
+  .fold-row td { padding: 0; border-top: 1px solid var(--t-line); }
+  .fold-btn {
+    display: flex; align-items: center; gap: 8px; width: 100%;
+    padding: 10px; font-size: 12px; text-align: left; cursor: pointer;
+    color: var(--t-ink-dim); background: var(--dcx-well); border: 0;
+  }
+  .fold-btn:hover { color: var(--t-ink); }
+  .fold-btn:focus-visible { outline: 2px solid var(--t-line-strong); outline-offset: -2px; }
+  .fold-caret { display: inline-block; width: 1em; text-align: center; }
+  .fold-link {
+    margin-left: 4px; padding: 0; border: 0; background: none; font: inherit;
+    color: inherit; text-decoration: underline; cursor: pointer;
+  }
+  .fold-link:hover { text-decoration: none; }
   /* Search. Positioned relative so the suggestion list can hang off it — note
      the card must NOT be a .fade-up: `animation: … both` makes every card a
      permanent stacking context, and an absolutely-positioned dropdown inside
@@ -117,7 +134,6 @@
   <div class="flex items-center justify-between mb-3 gap-2 flex-wrap">
     <h2 class="text-sm font-semibold" data-i18n="dcx.table_title">All scored names</h2>
     <div id="totalLine" class="text-xs text-slate-500"></div>
-    <div id="dearNote" class="hidden text-xs text-slate-500"></div>
     <div id="portfolioHint" class="hidden text-xs mt-1 text-slate-500">
       <span data-i18n="dcx.port_signed_out">Sign in to let M_portfolio size by your own look-through exposure; it stays at 1.00× until then.</span>
       <a href="/login" class="underline hover:no-underline ml-1" data-i18n="dcx.sign_in">Sign in</a>
@@ -159,22 +175,48 @@ const BASE_KEY = 'ystocker_dca_base';
 let _rows = [], _sort = { key: 'V', dir: -1 }, _data = null, _pollTimer = null, _polls = 0;
 let _allPortfolioUnknown = false;
 
-/* Names at V ≤ 20 are left off this page unless asked for (2026-10-04): off the
-   table, both summary cards and the period total -- the "dearest" card would
-   otherwise list exactly what was asked to be hidden, and a total over rows
-   nobody can see does not add up. V is compared as it is shown, so a 20.3 that
-   reads "20" is hidden too. Never silently: #dearNote says how many, with a
-   way to show them. A name that could not be scored (V null) is not "≤ 20". */
-const DEAR_MAX_V = 20;
-let _showDear = false;
-function hiddenAsDear(r) {
-  return r.V != null && Number(r.V.toFixed(0)) <= DEAR_MAX_V;
+/* Names whose V reads below 60 start folded (2026-10-05). This absorbed the
+   2026-10-04 rule that left V ≤ 20 off the page: the table opens on the names
+   cheap enough to speed contributions up (V 60 is M_val 1.10×), and one toggle
+   unfolds the rest in place. V is compared as it is shown, so a 59.6 that reads
+   "60" stays open. A name that could not be scored (V null) is not "below 60":
+   it stays open, last, as it always sorts.
+
+   While folded, the folded names are off the period total, which then says how
+   many names it covers, and off both cards. The "dearest" card lists names below
+   60 by nature, so it folds too, behind the same toggle -- computed over the
+   open names it would call a 61 "dearest". */
+const FOLD_BELOW_V = 60;
+let _unfolded = false;
+function folded(r) {
+  return r.V != null && Number(r.V.toFixed(0)) < FOLD_BELOW_V;
 }
-function emptyText(hiddenCount) {
-  return hiddenCount
-    ? (I18n.t('dcx.dear_all_hidden') || 'Every scored name has V ≤ 20, and those are hidden.')
-    : (I18n.t('dcx.none_yet') || 'Nothing scored yet.');
+function foldRow(n, open) {
+  const text = (I18n.t(open ? 'dcx.fold_hide' : 'dcx.fold_show')
+    || (open ? 'Fold the {n} with V below 60' : '{n} more with V below 60 — show them'))
+    .replace('{n}', n);
+  return `<tr class="fold-row"><td colspan="10"><button type="button" class="fold-btn"`
+    + ` data-fold-toggle aria-expanded="${open}"><span class="fold-caret" aria-hidden="true">`
+    + `${open ? '▾' : '▸'}</span>${esc(text)}</button></td></tr>`;
 }
+function foldNote(n) {
+  return `<p class="text-xs text-slate-500">${
+    esc((I18n.t('dcx.fold_card') || '{n} names with V below 60 are folded.').replace('{n}', n))}`
+    + `<button type="button" class="fold-link" data-fold-toggle>${
+    esc(I18n.t('dcx.fold_open') || 'Show them')}</button></p>`;
+}
+/* The table body in three runs, each in the chosen order: the open names, the
+   fold and (unfolded) what it holds, then the names that could not be scored. */
+function tableBody(all, unfolded, cmp, rowHtml) {
+  const open = all.filter(r => r.V != null && !folded(r)).sort(cmp);
+  const low = all.filter(folded).sort(cmp);
+  const unscored = all.filter(r => r.V == null).sort(cmp);
+  return open.map(rowHtml).join('')
+    + (low.length ? foldRow(low.length, unfolded) + (unfolded ? low.map(rowHtml).join('') : '') : '')
+    + unscored.map(rowHtml).join('');
+}
+const noneYet = () =>
+  `<p class="text-xs text-slate-500">${esc(I18n.t('dcx.none_yet') || 'Nothing scored yet.')}</p>`;
 
 const fmtMoney = v => v == null ? '—'
   : v.toLocaleString(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
@@ -293,78 +335,8 @@ function summaryRow(r) {
   </a>`;
 }
 
-function render() {
-  const d = _data;
-  if (!d) return;
-
-  document.getElementById('coverage').textContent =
-    d.scored + ' / ' + d.universe + ' ' + (I18n.t('dcx.scored') || 'scored') +
-    (d.registry ? ' · ' + (I18n.t('dcx.tracking') || 'tracking') + ' ' +
-      d.registry.effective + '/' + d.registry.max : '');
-
-  const warn = document.getElementById('warmNote');
-  if (d.pending && d.pending.length) {
-    warn.textContent = '⏳ ' + (I18n.t('dcx.pending_pre') || 'Still rebuilding:') + ' ' +
-      d.pending.join(', ') + '. ' +
-      (I18n.t('dcx.pending_note') || 'Each name is six filings reads, paced to stay well inside Yahoo’s limits — this page fills itself over a few minutes.');
-    warn.classList.remove('hidden');
-  } else {
-    warn.classList.add('hidden');
-  }
-
-  const dear = _rows.filter(hiddenAsDear);
-  const rows = _showDear ? _rows : _rows.filter(r => !hiddenAsDear(r));
-  const hiddenCount = _showDear ? 0 : dear.length;
-  const note = document.getElementById('dearNote');
-  note.classList.toggle('hidden', !dear.length);
-  note.innerHTML = !dear.length ? '' :
-    esc((I18n.t(_showDear ? 'dcx.dear_shown' : 'dcx.dear_hidden')
-         || (_showDear ? 'Showing {n} with V ≤ 20' : '{n} with V ≤ 20 hidden')).replace('{n}', dear.length)) +
-    ` <button type="button" class="underline hover:no-underline ml-1" data-dear-toggle>${
-      esc(I18n.t(_showDear ? 'dcx.dear_hide' : 'dcx.dear_show') || (_showDear ? 'Hide them' : 'Show them'))}</button>`;
-
-  // Sorted copies for the two summary cards. A null V sorts out of both, since
-  // "could not be measured" belongs in neither "cheapest" nor "dearest".
-  const scored = rows.filter(r => r.V != null);
-  const byV = scored.slice().sort((a, b) => b.V - a.V);
-  document.getElementById('cheapList').innerHTML =
-    byV.slice(0, 5).map(summaryRow).join('') ||
-    `<p class="text-xs text-slate-500">${esc(emptyText(hiddenCount))}</p>`;
-  document.getElementById('dearList').innerHTML =
-    byV.slice(-5).reverse().map(summaryRow).join('') ||
-    `<p class="text-xs text-slate-500">${esc(emptyText(hiddenCount))}</p>`;
-
-  const total = scored.reduce((s, r) => s + (r.amount || 0), 0);
-  const flat = scored.length * d.base_dca;
-  document.getElementById('totalLine').textContent = scored.length
-    ? (I18n.t('dcx.total_pre') || 'Total this period') + ': ' + fmtMoney(total) +
-      ' ' + (I18n.t('dcx.vs_flat') || 'vs') + ' ' + fmtMoney(flat) + ' ' +
-      (I18n.t('dcx.flat') || 'flat') +
-      ' (' + (total >= flat ? '+' : '') + ((total / flat - 1) * 100).toFixed(1) + '%)'
-    : '';
-
-  /* True when the portfolio overlay is switched off for the whole table, which
-     is every signed-out visitor. The multiplier is 1.00x on all sixty rows and
-     the only thing saying why was a `title="not signed in"` tooltip. Said once,
-     above the table, with a way to act on it. */
-  _allPortfolioUnknown = _rows.length > 0 &&
-    _rows.every(r => !r.portfolio_band || r.portfolio_band === 'unknown');
-  const banner = document.getElementById('portfolioHint');
-  if (banner) {
-    banner.classList.toggle('hidden', !_allPortfolioUnknown);
-  }
-
-  const sorted = rows.slice().sort((a, b) => {
-    const k = _sort.key;
-    const av = a[k], bv = b[k];
-    if (av == null && bv == null) return 0;
-    if (av == null) return 1;            // unscored always last, either direction
-    if (bv == null) return -1;
-    if (typeof av === 'string') return _sort.dir * av.localeCompare(bv);
-    return _sort.dir * (av - bv);
-  });
-
-  document.getElementById('rankBody').innerHTML = sorted.map(r => `
+function rankRow(r) {
+  return `
     <tr class="rank-row">
       <td>
         <a href="/history/${encodeURIComponent(r.ticker)}?tab=dca" class="font-mono font-semibold hover:underline">${esc(r.ticker)}</a>
@@ -389,9 +361,77 @@ function render() {
         `<button type="button" class="untrack text-slate-400 hover:text-red-600 dark:hover:text-red-400 transition px-1"
                  data-ticker="${esc(r.ticker)}"
                  title="${esc(I18n.t('dcx.untrack_tip') || 'Stop tracking this name')}">✕</button>`}</td>
-    </tr>`).join('') ||
+    </tr>`;
+}
+
+function render() {
+  const d = _data;
+  if (!d) return;
+
+  document.getElementById('coverage').textContent =
+    d.scored + ' / ' + d.universe + ' ' + (I18n.t('dcx.scored') || 'scored') +
+    (d.registry ? ' · ' + (I18n.t('dcx.tracking') || 'tracking') + ' ' +
+      d.registry.effective + '/' + d.registry.max : '');
+
+  const warn = document.getElementById('warmNote');
+  if (d.pending && d.pending.length) {
+    warn.textContent = '⏳ ' + (I18n.t('dcx.pending_pre') || 'Still rebuilding:') + ' ' +
+      d.pending.join(', ') + '. ' +
+      (I18n.t('dcx.pending_note') || 'Each name is six filings reads, paced to stay well inside Yahoo’s limits — this page fills itself over a few minutes.');
+    warn.classList.remove('hidden');
+  } else {
+    warn.classList.add('hidden');
+  }
+
+  const below = _rows.filter(folded);
+  const hiding = !_unfolded && below.length > 0;
+  const rows = hiding ? _rows.filter(r => !folded(r)) : _rows;
+
+  // Sorted copies for the two summary cards. A null V sorts out of both, since
+  // "could not be measured" belongs in neither "cheapest" nor "dearest".
+  const scored = rows.filter(r => r.V != null);
+  const byV = scored.slice().sort((a, b) => b.V - a.V);
+  document.getElementById('cheapList').innerHTML =
+    byV.slice(0, 5).map(summaryRow).join('') || (hiding ? foldNote(below.length) : noneYet());
+  document.getElementById('dearList').innerHTML = hiding ? foldNote(below.length)
+    : (byV.slice(-5).reverse().map(summaryRow).join('') || noneYet());
+
+  const total = scored.reduce((s, r) => s + (r.amount || 0), 0);
+  const flat = scored.length * d.base_dca;
+  const totalPre = hiding
+    ? (I18n.t('dcx.total_shown') || 'Total this period, {n} shown').replace('{n}', scored.length)
+    : (I18n.t('dcx.total_pre') || 'Total this period');
+  document.getElementById('totalLine').textContent = scored.length
+    ? totalPre + ': ' + fmtMoney(total) +
+      ' ' + (I18n.t('dcx.vs_flat') || 'vs') + ' ' + fmtMoney(flat) + ' ' +
+      (I18n.t('dcx.flat') || 'flat') +
+      ' (' + (total >= flat ? '+' : '') + ((total / flat - 1) * 100).toFixed(1) + '%)'
+    : '';
+
+  /* True when the portfolio overlay is switched off for the whole table, which
+     is every signed-out visitor. The multiplier is 1.00x on all sixty rows and
+     the only thing saying why was a `title="not signed in"` tooltip. Said once,
+     above the table, with a way to act on it. */
+  _allPortfolioUnknown = _rows.length > 0 &&
+    _rows.every(r => !r.portfolio_band || r.portfolio_band === 'unknown');
+  const banner = document.getElementById('portfolioHint');
+  if (banner) {
+    banner.classList.toggle('hidden', !_allPortfolioUnknown);
+  }
+
+  const byKey = (a, b) => {
+    const k = _sort.key;
+    const av = a[k], bv = b[k];
+    if (av == null && bv == null) return 0;
+    if (av == null) return 1;            // unscored always last, either direction
+    if (bv == null) return -1;
+    if (typeof av === 'string') return _sort.dir * av.localeCompare(bv);
+    return _sort.dir * (av - bv);
+  };
+
+  document.getElementById('rankBody').innerHTML = tableBody(_rows, _unfolded, byKey, rankRow) ||
     `<tr><td colspan="10" class="text-xs text-slate-500 py-6 text-center">${
-      esc(emptyText(hiddenCount))}</td></tr>`;
+      esc(I18n.t('dcx.none_yet') || 'Nothing scored yet.')}</td></tr>`;
 
   document.querySelectorAll('#rankBody .untrack').forEach(btn => {
     btn.addEventListener('click', () => untrack(btn.dataset.ticker));
@@ -399,9 +439,16 @@ function render() {
 }
 
 document.addEventListener('click', e => {
-  if (!e.target.closest('[data-dear-toggle]')) return;
-  _showDear = !_showDear;
+  const toggle = e.target.closest('[data-fold-toggle]');
+  if (!toggle) return;
+  const inTable = !!toggle.closest('#rankBody');
+  _unfolded = !_unfolded;
   render();
+  // The row's button is rebuilt in the same place; keep keyboard focus on it.
+  if (inTable) {
+    const again = document.querySelector('#rankBody [data-fold-toggle]');
+    if (again) again.focus({ preventScroll: true });
+  }
 });
 
 async function untrack(ticker) {

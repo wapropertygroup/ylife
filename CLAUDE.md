@@ -945,12 +945,24 @@ lookups that are per-request rather than per-ticker are hoisted out of it:
 look-through behind `M_portfolio` is a whole-portfolio walk — doing either per
 row makes a twenty-row table twenty times the work for the same answer.
 
-**Names at V ≤ 20 are left off the overview unless asked for** (2026-10-04):
-off the table, both summary cards and the period total. The "dearest" card
-would otherwise list exactly those names, and a total over rows nobody can see
-does not add up. The cut is on V as displayed, so a 20.3 that reads "20" goes
-too. A V of null is not "≤ 20" and stays. Never silently: `#dearNote` says how
-many are hidden, with Show/Hide.
+**Names whose V reads below 60 start folded** (2026-10-05). This replaced the
+2026-10-04 rule that left V ≤ 20 off the overview. The table opens on the names
+cheap enough to speed contributions up: V 60 is M_val 1.10×, and on the day it
+shipped that was 25 of 60 names. One full-width row in the table, "29 more with
+V below 60", unfolds the rest in place, and the "dearest" card offers the same
+toggle.
+- **Display, not data.** The cut is on V as displayed, so a 59.6 that reads
+  "60" stays open. A V of null is not "below 60": unscored names stay open, and
+  last.
+- **Where folded names go.** The table body is three runs, each in the chosen
+  sort: the open names, the fold and what it holds, then the unscored.
+- **The total.** While folded, the period total covers only the names shown,
+  and says how many ("Total this period, 25 shown").
+- **The "dearest" card.** It folds too. It lists names below 60 by nature, and
+  computed over the open names it would call a 61 "dearest".
+
+`node tests/check_dca_row_cells.mjs` pins the threshold, the three runs and the
+strings, all read from the template.
 
 The table sorts cheapest-first and an **unscorable row sorts last, not as V=0**:
 "could not be measured" is not "at its most expensive ever", and putting it at

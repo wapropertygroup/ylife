@@ -47,6 +47,10 @@ const STRINGS = {
   'dcx.dropped': 'dropped',
   'dcx.already_scored': 'scored',
   'dcx.not_scorable': 'A fund publishes no statements, so it has no valuation history to score.',
+  'dcx.fold_show': '{n} more with V below 60 — show them',
+  'dcx.fold_hide': 'Fold the {n} with V below 60',
+  'dcx.fold_card': '{n} names with V below 60 are folded.',
+  'dcx.fold_open': 'Show them',
 };
 const asked = [];
 const I18n = { t: (k) => { asked.push(k); return STRINGS[k] ?? null; } };
@@ -242,23 +246,53 @@ console.log('\nfund filter');
         dom.recentList.innerHTML.includes('MSFT'));
 }
 
-/* ── V ≤ 20 is left off the page ───────────────────────────────────────────
-   Asked for 2026-10-04. The cut is made on V as the table shows it, so a 20.3
-   that reads "20" cannot sit on the page under a rule that says "≤ 20 hidden",
-   and a name that could not be scored is not "≤ 20". The threshold is read
-   from the template, so this cannot pass against a copy of it. */
-console.log('\nV ≤ 20 hidden');
+/* ── Names below V 60 start folded ─────────────────────────────────────────
+   Asked for 2026-10-05, absorbing the 2026-10-04 rule that left V ≤ 20 off the
+   page. The cut is made on V as the table shows it, so a 59.6 that reads "60"
+   is not folded under a rule that says "below 60", and a name that could not be
+   scored is not "below 60". The threshold and the functions are read from the
+   template, so this cannot pass against a copy of them. */
+console.log('\nV below 60 folded');
 {
-  const max = Number((/const DEAR_MAX_V = (\d+);/.exec(tpl) || [])[1]);
-  check('the threshold is 20', max === 20);
-  const hiddenAsDear = new Function(`const DEAR_MAX_V = ${max}; ${extract('hiddenAsDear')}; return hiddenAsDear;`)();
-  check('V 19.6 is hidden', hiddenAsDear({ V: 19.6 }));
-  check('V exactly 20 is hidden', hiddenAsDear({ V: 20 }));
-  check('a 20.3 that reads "20" is hidden', hiddenAsDear({ V: 20.3 }));
-  check('a 20.6 that reads "21" stays', !hiddenAsDear({ V: 20.6 }));
-  check('V 0 is hidden', hiddenAsDear({ V: 0 }));
-  check('a cheap name stays', !hiddenAsDear({ V: 93.3 }));
-  check('an unscored name is not "≤ 20"', !hiddenAsDear({ V: null }) && !hiddenAsDear({}));
+  const below = Number((/const FOLD_BELOW_V = (\d+);/.exec(tpl) || [])[1]);
+  check('the threshold is 60', below === 60);
+  const fold = new Function('I18n', 'esc',
+    `const FOLD_BELOW_V = ${below};
+     ${['folded', 'foldRow', 'foldNote', 'tableBody'].map(extract).join('\n')}
+     return { folded, foldRow, foldNote, tableBody };`)(I18n, esc);
+  check('V 59.4 is folded', fold.folded({ V: 59.4 }));
+  check('a 59.6 that reads "60" stays open', !fold.folded({ V: 59.6 }));
+  check('V exactly 60 stays open', !fold.folded({ V: 60 }));
+  check('V ≤ 20 is folded too', fold.folded({ V: 20 }) && fold.folded({ V: 0 }));
+  check('a cheap name stays open', !fold.folded({ V: 93.3 }));
+  check('an unscored name is not "below 60"', !fold.folded({ V: null }) && !fold.folded({}));
+
+  const rows = [
+    { ticker: 'LOW', V: 31 }, { ticker: 'NONE', V: null }, { ticker: 'TOP', V: 92 },
+    { ticker: 'MID', V: 61 }, { ticker: 'DEAR', V: 4 },
+  ];
+  const byV = (a, b) => (a.V == null) - (b.V == null) || (b.V ?? 0) - (a.V ?? 0);
+  const cell = (r) => `[${r.ticker}]`;
+  const closed = fold.tableBody(rows, false, byV, cell);
+  check('folded: the open names, the fold, then the unscored',
+        /^\[TOP\]\[MID\]<tr class="fold-row">.*<\/tr>\[NONE\]$/.test(closed));
+  check('folded: nothing below 60 is drawn',
+        !closed.includes('[LOW]') && !closed.includes('[DEAR]'));
+  check('the fold counts what it holds and says it is closed',
+        closed.includes('2 more with V below 60') && closed.includes('aria-expanded="false"'));
+  const open = fold.tableBody(rows, true, byV, cell);
+  check('unfolded: the folded names follow the fold, in order, before the unscored',
+        open.startsWith('[TOP][MID]<tr') && /<\/tr>\[LOW\]\[DEAR\]\[NONE\]$/.test(open));
+  check('unfolded: the fold offers to close again',
+        open.includes('Fold the 2 with V below 60') && open.includes('aria-expanded="true"'));
+  check('with nothing below 60 there is no fold row',
+        !fold.tableBody([{ ticker: 'A', V: 70 }, { ticker: 'B', V: null }], false, byV, cell)
+          .includes('fold-row'));
+  const note = fold.foldNote(29);
+  check('the card note says how many and carries the same toggle',
+        note.includes('29 names with V below 60 are folded.') && note.includes('data-fold-toggle'));
+  check('every fold string is asked for by key',
+        ['dcx.fold_show', 'dcx.fold_hide', 'dcx.fold_card', 'dcx.fold_open'].every((k) => asked.includes(k)));
 }
 
 console.log(failed ? `\n${failed} check(s) failed` : '\nall checks passed');

@@ -232,8 +232,8 @@ multiple ranked point-in-time against its own reconstructed past, blended with
 a discounted-cash-flow branch weighted by how forecastable the business is.
 The score sizes a recurring contribution (0.5× to 1.5× of your base), adjusted
 for analyst revisions and your own concentration. `/dca` ranks the tracked
-names, leaving out V ≤ 20 unless you ask for them, and each company's full
-workings are its DCA tab on `/history`.
+names and opens on those with V of 60 or more, with the rest folded behind one
+toggle; each company's full workings are its DCA tab on `/history`.
 
 ### Prediction markets (`/predictions`)
 The busiest Polymarket and Kalshi markets on the events this site covers,
