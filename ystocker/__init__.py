@@ -597,6 +597,12 @@ def create_app() -> Flask:
     from ystocker.insiders import start_background_thread as _start_insiders_thread
     _start_insiders_thread()
 
+    # Sign-up mails to the owner: seeds ystocker-users once from the tables that
+    # already hold readers' addresses, so nobody who was here before the mails
+    # began is announced as new. See ystocker/signups.py.
+    from ystocker.signups import start_background_thread as _start_signups_thread
+    _start_signups_thread()
+
     # Start markets cache warm-up (pre-fetches index/VIX/sector data every 5 min)
     _start_markets_warmup_thread(app)
     # Keeps the long ^GSPC series off the request path; see its docstring for the

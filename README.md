@@ -360,8 +360,20 @@ Gmail silently clips long HTML mail around 102 KB; the cutoff lands on a
 section boundary with a link to the rest, rather than mid-table.
 `AGENTS_EMAIL_REPORT=0` disables sending.
 
+### Sign-up notifications
+There is no sign-up form: an account is a Google address that has signed in.
+The first time an address does, `signups.py` mails admin@li-family.us with
+the name, the address, the site and page it signed in from, its language and
+the time. `ystocker-users` remembers who has signed in. The first sign-in
+claims that address's row with a conditional write, so one address gets one
+mail, whichever worker handles it. Every address the site already held was
+written into the table before the mails began, so returning readers are not
+announced as new. `SIGNUP_NOTIFY=0` stops the mails,
+`SIGNUP_NOTIFY_EMAIL` sends them elsewhere, and at most
+`SIGNUP_NOTIFY_DAILY_LIMIT` (50) go out a day.
+
 ### Sharing a report with someone who has no account
-yStocker keeps no user table at all — every gate keys off the session email
+No gate in yStocker reads a user table — every gate keys off the session email
 at the moment it's used — so there's no notion of "share with this person."
 Instead, `share.py` mints a capability token (`secrets.token_urlsafe(16)`,
 30-day expiry, revocable) and `GET /agents/shared/<token>` renders that one

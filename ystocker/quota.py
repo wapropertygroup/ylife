@@ -602,3 +602,29 @@ def try_consume_insider_lookup() -> bool:
         data["day"] = day
         _write(day, data)
     return True
+
+
+def limit_signup_notices() -> int:
+    """Mails to the owner about first sign-ins per day (``ystocker.signups``).
+
+    A Google account costs nothing to make, so without a bound a script signing
+    in with many could fill the owner's inbox and spend the box's SES reputation
+    on it. Past the cap a first sign-in is still recorded, just not mailed.
+    ``SIGNUP_NOTIFY_DAILY_LIMIT`` tunes it.
+    """
+    return _int_env("SIGNUP_NOTIFY_DAILY_LIMIT", 50)
+
+
+def try_consume_signup_notice() -> bool:
+    """Spend one of today's sign-up mails, or return ``False``. Same file and
+    lock as the other counters, under its own key."""
+    day, lim = today(), limit_signup_notices()
+    with _Guard():
+        data = _read(day)
+        used = int(data.get("signup_notices", 0))
+        if used >= lim:
+            return False
+        data["signup_notices"] = used + 1
+        data["day"] = day
+        _write(day, data)
+    return True

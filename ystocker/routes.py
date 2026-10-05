@@ -173,6 +173,13 @@ def auth_google():
         session["user_name"]    = name
         session["user_picture"] = picture
 
+        # An address's first sign-in is its sign-up: ystocker.signups records it
+        # and mails the owner, on its own thread, so this answer never waits.
+        from ystocker import signups
+        signups.record_sign_in(email, name, host=request.host,
+                               page=signups.page_of(request.referrer, request.host),
+                               lang=data.get("lang"))
+
         return jsonify({
             "ok": True,
             "user": {"email": email, "name": name, "picture": picture},

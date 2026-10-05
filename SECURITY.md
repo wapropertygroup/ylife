@@ -78,9 +78,10 @@ the reasoning for each.
 - **The market-data APIs are public by design** (quotes, filings, odds, every
   dashboard's JSON). Crawlers that declare themselves are refused on `/api/*`;
   that is cost control, not access control.
-- **yStocker keeps no user table.** Every gate (credits, quotas, ownership of
-  `/assets` positions and `/agents` runs) checks the signed-in session's email
-  at the moment it is used.
+- **No gate in yStocker reads a user table.** Every gate (credits, quotas,
+  ownership of `/assets` positions and `/agents` runs) checks the signed-in
+  session's email at the moment it is used. `ystocker-users` records only who
+  has signed in, so the owner can be told about new sign-ups.
 - **`/api/posts`** accepts writes from anyone holding its bearer token, and the
   feed it fills can only be read when signed in. With no token configured, the
   endpoint refuses every write.

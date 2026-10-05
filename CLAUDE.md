@@ -360,6 +360,9 @@ Each app follows the same pattern:
   live Polymarket and Kalshi odds, the Fed decision three ways (futures vs both
   venues), and the AI read with its scored track record. `odds.py` is pure. See
   "Prediction markets" below.
+- `signups.py` — mails admin@li-family.us when an address signs in for the
+  first time, remembered in `ystocker-users`. See "Sign-up mails to the owner"
+  below.
 
 ### The asset tracker and 穿透 (`/assets`)
 
@@ -1313,9 +1316,10 @@ monorepo. The unit of sharing is a **capability**: a row keyed by
 /agents/shared/<token>` will render whatever job that row names, to anyone,
 with no sign-in.
 
-That shape is forced, not chosen. yStocker **persists no user record at all** —
+That shape is forced, not chosen. No gate in yStocker reads a user record —
 every gate, quota and credit balance keys off `session["user_email"]` at use
-time, so there is nothing to grant permission *to*, no way to check a typed
+time (`ystocker-users` only remembers who has signed in, for the owner's
+sign-up mail) — so there is nothing to grant permission *to*, no way to check a typed
 recipient is real, and no way to tell a typo from a stranger. And the recipient
 is by design somebody with no account: `/agents` is the paid surface, so the
 whole point of sharing is to show a report to someone who has not run one.
@@ -2818,6 +2822,57 @@ There was no robots.txt route. Three layers now, with the rules pure in
 be pasted, not found. Tests: `tests/test_crawlers.py` (9) and
 `tests/check_crawler_endpoints.py` (6, hermetic, both hosts).
 
+### Sign-up mails to the owner (`signups.py`, `ystocker-users`)
+
+Asked for 2026-10-05: "an email notification to admin@li-family.us for anyone
+who signed up". There is no sign-up form, so a sign-up is an address's first
+completed `/api/auth/google`. `ystocker-users` remembers which addresses have
+signed in: one row each, with the Google name, the first and last sign-in, how
+many there have been, and the site, page and language of the first. It is the
+closest thing yStocker has to a user record, and no gate reads it.
+
+- **One mail per address.** The route hands the sign-in to
+  `signups.record_sign_in`, which works on its own thread, so sign-in never
+  waits on DynamoDB or SES. The first sign-in claims the row with a conditional
+  put (`attribute_not_exists`) and mails. A later one, from either worker, only
+  moves `last_seen` and `sign_ins`.
+- **Seeded before anything is announced.** At launch 13 addresses already had
+  runs, portfolios or research reports and no row, so each would have been
+  announced on its next sign-in. A thread that `create_app` starts writes a row
+  for every address in the runs, portfolio, research, credits and shares tables,
+  plus the VIP list and the allowlist, and then the `_meta:seed` row that
+  switches mails on. It runs once, since the marker stays. A first sign-in
+  before it finishes is recorded without a mail. A reader who signed in before
+  but stored nothing can still be announced once.
+- **Silent when unsure.** If the table cannot be reached, nothing is recorded
+  or mailed: guessing "new" would mail on every sign-in for as long as the
+  outage lasted. That reader is announced on their next sign-in instead.
+- **Bounded and switchable.** `SIGNUP_NOTIFY_DAILY_LIMIT` (50) caps the mails
+  a day, on quota.py's flocked counter. `SIGNUP_NOTIFY=0` stops the mail but
+  not the recording, so switching it back on announces no backlog.
+  `SIGNUP_NOTIFY_EMAIL` sends them somewhere other than `CONTACT_EMAIL`. Mail
+  goes through `report_email._ses_send`, so it needs `SES_FROM_EMAIL`.
+
+The mail names the site (TradeAgents or yStocker, from the host) and the page
+the reader signed in from, taken from a same-site Referer, so
+`/login?next=/agents` says where they were going. It also gives the language
+`login.html` now posts with the credential, the time in UTC and Pacific, and
+the number of addresses on record. The name and the page come from the reader:
+both are escaped, and the subject is flattened to one line. No IP address or
+picture is stored.
+
+```bash
+aws dynamodb create-table --table-name ystocker-users --region us-west-2 \
+  --billing-mode PAY_PER_REQUEST \
+  --attribute-definitions AttributeName=email,AttributeType=S \
+  --key-schema AttributeName=email,KeyType=HASH
+```
+
+Created 2026-10-05. It is not in `deploy/cloudformation.yaml`, like every
+hand-made table, and IAM already grants `table/ystocker-*`. No TTL. Tests:
+`tests/test_signups.py` (27, no app, AWS or SES) and
+`tests/check_signup_route.py` (5, hermetic: the route's hook).
+
 ### Caching (yStocker)
 Two-tier: in-memory dict + on-disk JSON in `cache/`. All cache access guarded by `threading.Lock`. Disk writes use atomic temp file + `os.replace()`.
 
@@ -3053,7 +3108,9 @@ Started in `create_app()`, all daemon threads:
 
 ### Auth
 - yPlanner/yTracker: Google Sign-In + Apple Sign-In → Flask session → DynamoDB users table
-- yStocker/yPlanter/yHome: Public, no auth
+- yStocker: Google Sign-In → Flask session, which every gate reads at use time;
+  `ystocker-users` only remembers who has signed in (see "Sign-up mails")
+- yPlanter/yHome: Public, no auth
 
 ### Secrets flow
 1. `_load_secrets_from_ssm()` in each app's `__init__.py` tries AWS SSM first
