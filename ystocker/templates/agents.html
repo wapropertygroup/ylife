@@ -331,6 +331,14 @@
   border: 1px solid var(--ag-line); border-radius: 999px; background: var(--ag-inset);
   color: var(--ag-ink-muted); font-variant-numeric: tabular-nums;
 }
+.ag-hint {
+  margin: 0 0 12px; padding: 10px 12px; border-radius: 10px; font-size: 13px; line-height: 1.55;
+  color: var(--ag-ink); border: 1px solid var(--ag-amber-line); box-shadow: inset 3px 0 0 var(--ag-warn-ink);
+}
+.ag-hint[hidden], .ag-hint [hidden] { display: none; }
+.ag-hint p { margin: 0; }
+.ag-hint p + p { margin-top: 4px; color: var(--ag-ink-muted); }
+.ag-hint-title b { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 .ag-pro-link { color: var(--ag-accent-ink); font-weight: 600; text-decoration: none; }
 .ag-pro-link:hover { text-decoration: underline; text-underline-offset: 3px; }
 .ag-quota-out { border-color: var(--ag-red-line); }
@@ -1734,6 +1742,17 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
     <div id="agChatErr" class="ag-chat-err hidden"></div>
   </div>
 
+  {#  A run that stopped because its ticker has no price history at Yahoo
+      (agents.is_no_price_data, error_code "no_market_data"): a typo, an index,
+      or a listing outside the US without its exchange suffix. Said in words,
+      in the page's language, above the log that only says NoMarketDataError --
+      and whether the run was given back, which _run does for these. #}
+  <div id="agNoDataHint" class="ag-hint" role="status" hidden>
+    <p class="ag-hint-title"><b data-hint-ticker></b> <span data-i18n="agents.nodata_a">has no price history on Yahoo Finance, so the run stopped before any analysis.</span>
+      <span data-hint-refunded hidden data-i18n="agents.nodata_refunded">The run was given back.</span></p>
+    <p data-i18n="agents.nodata_tip">Use the symbol as Yahoo Finance lists it. A listing outside the US takes its exchange suffix, such as TCS.NS for the National Stock Exchange of India. An index cannot be analysed: try one of its stocks, or an ETF that tracks it.</p>
+  </div>
+
   <div id="agLogWrap" class="hidden">
     <p class="text-xs text-slate-500 mb-1" data-i18n="agents.log">Runner output (tail)</p>
     <div class="ag-log" id="agLog"></div>
@@ -2391,6 +2410,18 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
       : liveSections();
     show('agReportWrap', secs.length > 0);
     if (secs.length) renderConversation(document.getElementById('agReport'), secs);
+
+    // A ticker with no prices: name it and say what to type instead, rather
+    // than leaving the reader with a vendor exception in the log.
+    const noData = document.getElementById('agNoDataHint');
+    if (noData) {
+      const on = job.error_code === 'no_market_data';
+      noData.hidden = !on;
+      if (on) {
+        noData.querySelector('[data-hint-ticker]').textContent = job.ticker || '';
+        noData.querySelector('[data-hint-refunded]').hidden = !job.quota_refunded;
+      }
+    }
 
     const logText = job.error ? ('ERROR: ' + job.error + (job.log ? '\n\n' + job.log : '')) : (job.log || '');
     show('agLogWrap', !!logText);

@@ -2375,14 +2375,36 @@ def _try_salvage(job: dict[str, Any], why: str) -> bool:
     return True
 
 
+#: A run that stops because its ticker has no price history at Yahoo -- a typo,
+#: an index, or a listing outside the US typed without its exchange suffix
+#: ("TCS" for TCS.NS) -- fails at TradingAgents' first price fetch. The two that
+#: did on 2026-10-05 ("NIFTY50", "TCS") ended in 7 and 9 seconds, one reader's
+#: free runs spent on nothing. They are refunded, as a ticker the server could not
+#: read at the door would have been, and coded so the page can say what to type
+#: instead. The time bound keeps the refund to failures that cannot have spent
+#: anything worth counting.
+NO_DATA_REFUND_MAX_SECONDS = 180
+
+
+def is_no_price_data(job: dict[str, Any]) -> bool:
+    """Whether a finished job failed for want of any price history. Pure."""
+    err = job.get("error") or ""
+    return (job.get("status") == "error"
+            and "NoMarketDataError" in err and "price rows" in err
+            and float(job.get("elapsed_sec") or 0) <= NO_DATA_REFUND_MAX_SECONDS)
+
+
 def _refund_preflight(job: dict[str, Any], why: str) -> None:
     """Return the quota for a run that never reached an LLM.
 
     Only called on failures that provably happened before the child could make
-    a request: no slot, no interpreter, or an import error inside the child. A
-    failure after that point may already have spent an unknown number of calls,
-    so it is not refunded -- silently handing quota back for those would let a
-    run that burns credits and then dies be repeated for free.
+    a request: no slot, no interpreter, or an import error inside the child --
+    and on the few that came back with nothing at all and spent nothing worth
+    counting: a provider out of capacity, and a ticker with no prices
+    (:func:`is_no_price_data`). A failure after that point may already have
+    spent an unknown number of calls, so it is not refunded -- silently handing
+    quota back for those would let a run that burns credits and then dies be
+    repeated for free.
     """
     if job.get("quota_refunded"):
         return          # never charged
@@ -2583,6 +2605,10 @@ def _run(job_id: str) -> None:
         elif (job.get("status") == "error"
               and "Insufficient Balance" in (job.get("error") or "")):
             _refund_preflight(job, "provider account balance exhausted")
+        elif is_no_price_data(job):
+            job["error_code"] = "no_market_data"
+            _write(job)
+            _refund_preflight(job, "no price data for the ticker")
         log.info("agents: %s finished status=%s rc=%s in %.1fs",
                  job_id, job.get("status"), rc, elapsed)
     finally:

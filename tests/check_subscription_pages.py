@@ -310,6 +310,14 @@ class SubscriptionPages(unittest.TestCase):
         self.assertIn('id="agTierNote" class="ag-tier-note">', page)       # shown
         self.assertIn("DeepSeek V4 Flash</b>", page)
 
+    def test_the_run_page_carries_the_no_price_data_hint(self):
+        """Hidden until a job comes back coded no_market_data (2026-10-05)."""
+        with mock.patch.object(quota, "usage", return_value=self._usage()):
+            page = self._page("/agents", base=LI)
+        self.assertIn('<div id="agNoDataHint" class="ag-hint" role="status" hidden>', page)
+        self.assertIn('data-i18n="agents.nodata_tip"', page)
+        self.assertIn("job.error_code === 'no_market_data'", page)
+
     def test_paid_runs_unlock_every_model(self):
         cases = {
             "pro": self._usage(subscribed=True, limit=10, remaining=10),

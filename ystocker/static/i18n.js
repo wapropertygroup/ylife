@@ -2780,6 +2780,13 @@ const I18n = (() => {
                               zh: '购买次数包即可继续。已购次数永不过期，可跨天累积。' },
     'agents.buy_cta':       { en: 'Buy more runs', zh: '购买更多次数' },
     // TradeAgents Pro, offered beside the packs once the free runs are gone.
+    // A run that stopped because its ticker has no price history at Yahoo
+    // (error_code no_market_data); the ticker itself is bold before _a.
+    'agents.nodata_a':        { en: 'has no price history on Yahoo Finance, so the run stopped before any analysis.',
+                                zh: '在雅虎财经上没有价格数据，分析在开始前就停止了。' },
+    'agents.nodata_refunded': { en: 'The run was given back.', zh: '本次次数已退还。' },
+    'agents.nodata_tip':      { en: 'Use the symbol as Yahoo Finance lists it. A listing outside the US takes its exchange suffix, such as TCS.NS for the National Stock Exchange of India. An index cannot be analysed: try one of its stocks, or an ETF that tracks it.',
+                                zh: '请使用雅虎财经上的代码：美国以外的股票需要加上交易所后缀，例如印度国家证券交易所的 TCS.NS。指数无法分析，可以改为分析它的成分股，或跟踪该指数的 ETF。' },
     'agents.buy_pro_why':   { en: 'Run out most days? Pro gives you', zh: '经常不够用？Pro 每天提供' },
     'agents.buy_pro_runs':  { en: 'analyses a day', zh: '次分析' },
     'agents.buy_pro_month': { en: '/month', zh: '/月' },
