@@ -1741,6 +1741,17 @@ balance fails runs with 402 "Insufficient Balance", as one did on 2026-08-30.
 `_run` now refunds that error like Gemini's `RESOURCE_EXHAUSTED`: the vendor ran
 out and the reader got nothing.
 
+**A ticker with no price history is refunded too** (2026-10-05). The first two
+runs on the free tier both died in 7-9 seconds with `NoMarketDataError … no
+price rows`: one reader typed "NIFTY50" (an index) and "TCS" (Tata Consultancy
+is TCS.NS on Yahoo). `agents.is_no_price_data` matches that error within
+`NO_DATA_REFUND_MAX_SECONDS` (180, so nothing worth counting was spent), and
+`_run` refunds it and codes the job `no_market_data`. The run page then shows a
+hint in both languages, with the symbol as Yahoo lists it and the exchange
+suffix outside the US. Note that `_TICKER_RE` must start with a letter, so `^NSEI`,
+`0700.HK` and `7203.T` cannot be submitted at all; widening it is a separate
+decision, since TradingAgents' A-share routing keys on six-digit codes.
+
 **The client sends a table key, never a model id.** TradingAgents does not fail
 fast on an unknown model: `base_client.warn_if_unknown_model()` emits a
 `RuntimeWarning` reading "Continuing anyway" and the run then dies inside the
